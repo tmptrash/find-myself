@@ -75,55 +75,7 @@ export function menuScene(k) {
         color: k.rgb(62, 39, 35), // Темно-коричневый
       })
       
-      // Глючная ломаная линия разделения
-      const segments = []
-      const segmentHeight = 15
-      const numSegments = Math.ceil(k.height() / segmentHeight)
-      
-      for (let i = 0; i < numSegments; i++) {
-        const y = i * segmentHeight
-        // Каждый сегмент имеет своё смещение с разной частотой
-        const glitchX = Math.sin(bgOffset * 5 + i * 0.5) * 8 + 
-                       Math.sin(bgOffset * 12 + i) * 4 +
-                       (k.rand(0, 1) > 0.95 ? k.rand(-20, 20) : 0) // Случайные резкие скачки
-        
-        segments.push({
-          x: centerX + currentBgShift + glitchX - 22, // Сдвиг на 22 пикселя левее
-          y: y
-        })
-      }
-      
-      // Рисуем ломаную линию
-      for (let i = 0; i < segments.length - 1; i++) {
-        const current = segments[i]
-        const next = segments[i + 1]
-        
-        // Случайный глюк цвета в оранжевой палитре
-        const hasColorGlitch = k.rand(0, 1) > 0.97
-        const lineColor = hasColorGlitch 
-          ? k.choose([k.rgb(255, 165, 0), k.rgb(255, 140, 0), k.rgb(255, 200, 100)])
-          : k.rgb(255, 140, 0) // Темно-оранжевый по умолчанию
-        
-        // Рисуем линию между сегментами
-        k.drawLine({
-          p1: k.vec2(current.x, current.y),
-          p2: k.vec2(next.x, next.y),
-          width: k.rand(0, 1) > 0.95 ? k.rand(2, 8) : 3, // Случайная толщина
-          color: lineColor,
-          opacity: 0.7 + k.rand(0, 0.3)
-        })
-        
-        // Дополнительные глюк-артефакты на линии в оранжевой палитре
-        if (k.rand(0, 1) > 0.9) {
-          k.drawRect({
-            pos: k.vec2(current.x - 5, current.y),
-            width: k.rand(5, 15),
-            height: k.rand(2, 5),
-            color: k.choose([k.rgb(255, 165, 0), k.rgb(255, 140, 0), k.rgb(255, 200, 100)]),
-            opacity: 0.5
-          })
-        }
-      }
+      // Линия разделения убрана
       
       // Рисуем глюки в оранжевой палитре
       for (const glitch of glitches) {

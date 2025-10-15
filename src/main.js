@@ -8,13 +8,15 @@ import {
   createAntiHeroWithEyes,
   createHeroIdleSprite,
   createHeroWalkSprite,
-  createHeroJumpSprite
+  createHeroJumpSprite,
+  createHeroRunSprite,
+  createHeroJumpSpriteWithEyes
 } from "./components/hero.js"
 
 // Инициализация игры
 const k = kaplay({
-  width: 1024,
-  height: 768,
+  width: 1280,
+  height: 920,
   scale: 1,
   background: [0, 0, 0],
   font: "jetbrains", // Устанавливаем шрифт по умолчанию
@@ -36,17 +38,19 @@ for (let x = -1; x <= 1; x++) {
 k.loadSprite("hero-idle", createHeroIdleSprite())
 k.loadSprite("hero-jump", createHeroJumpSprite())
 
-// Анимация ходьбы (2 кадра)
-k.loadSprite("hero-walk", createHeroWalkSprite(0), {
-  sliceX: 1,
-  anims: {
-    walk: { from: 0, to: 0, speed: 10, loop: true }
-  }
-})
-
-// Загружаем оба кадра ходьбы
+// Загружаем кадры ходьбы (2 кадра)
 k.loadSprite("hero-walk-0", createHeroWalkSprite(0))
 k.loadSprite("hero-walk-1", createHeroWalkSprite(1))
+
+// Загружаем кадры бега (8 кадров для плавной анимации как на референсе)
+k.loadSprite("hero-run-0", createHeroRunSprite(0))
+k.loadSprite("hero-run-1", createHeroRunSprite(1))
+k.loadSprite("hero-run-2", createHeroRunSprite(2))
+k.loadSprite("hero-run-3", createHeroRunSprite(3))
+k.loadSprite("hero-run-4", createHeroRunSprite(4))
+k.loadSprite("hero-run-5", createHeroRunSprite(5))
+k.loadSprite("hero-run-6", createHeroRunSprite(6))
+k.loadSprite("hero-run-7", createHeroRunSprite(7))
 
 // Загрузка ресурсов
 k.loadBean()
@@ -60,5 +64,5 @@ gameScene(k)
 
 // Запуск игры после загрузки ресурсов
 k.onLoad(() => {
-  k.go("menu")
+  k.go("game")
 })

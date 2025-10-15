@@ -1,5 +1,5 @@
 {
-	"name": "holy-crab",
+	"name": "find-you",
 	"type": "module",
 	"scripts": {
 		"build": "vite build",

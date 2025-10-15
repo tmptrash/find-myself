@@ -5,6 +5,66 @@ export function gameScene(k) {
     
     k.setGravity(2200) // Очень высокая гравитация для резкого падения
     
+    // Флаг дебаг режима (переключается по F1)
+    let debugMode = false
+    
+    // Аудио контекст для звуковых эффектов
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    
+    // Функция для звука приземления
+    function playLandSound() {
+      // Возобновляем контекст если он приостановлен
+      if (audioContext.state === 'suspended') {
+        audioContext.resume()
+      }
+      
+      const now = audioContext.currentTime
+      
+      // Легкий мягкий звук приземления
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(250, now) // Выше частота = легче звук
+      oscillator.frequency.exponentialRampToValueAtTime(80, now + 0.08)
+      
+      gainNode.gain.setValueAtTime(0.12, now) // Тише громкость
+      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1) // Короче
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.start(now)
+      oscillator.stop(now + 0.1)
+    }
+    
+    // Функция для звука шагов при беге
+    function playStepSound() {
+      // Возобновляем контекст если он приостановлен
+      if (audioContext.state === 'suspended') {
+        audioContext.resume()
+      }
+      
+      const now = audioContext.currentTime
+      
+      // Короткий щелчок для шага
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(180, now)
+      oscillator.frequency.exponentialRampToValueAtTime(60, now + 0.03)
+      
+      gainNode.gain.setValueAtTime(0.08, now) // Тихий звук шага
+      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05)
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.start(now)
+      oscillator.stop(now + 0.05)
+    }
+    
     // Фон - фиксированный к камере
     k.add([
       k.rect(k.width(), k.height()),
@@ -22,245 +82,33 @@ export function gameScene(k) {
         k.area(),
         k.body({ isStatic: true }),
         k.color(62, 39, 35), // Темно-коричневый
-        k.outline(2, k.rgb(0, 0, 0)),
         "platform"
       ])
     }
     
-    // Земля (основная платформа) - увеличена для более длинного уровня
-    const ground = addPlatform(0, k.height() - 60, k.width() * 3, 60)
+    // Нижняя платформа (широкая)
+    const ground = addPlatform(0, k.height() - 150, k.width(), 150)
     
-    // Дополнительные платформы - больше для тестирования динамики
-    addPlatform(200, k.height() - 200, 200, 20)
-    addPlatform(500, k.height() - 320, 180, 20)
-    addPlatform(800, k.height() - 180, 150, 20)
-    addPlatform(1100, k.height() - 380, 200, 20)
-    addPlatform(1400, k.height() - 250, 180, 20)
-    addPlatform(1700, k.height() - 400, 220, 20)
-    addPlatform(2000, k.height() - 300, 200, 20)
-    addPlatform(100, k.height() - 450, 120, 20)
+    // Верхняя платформа (широкая, той же высоты)
+    addPlatform(0, 0, k.width(), 150)
     
-    // ОТЛАДКА: Показываем все кадры анимации бега
-    const debugY = 120
-    const debugScale = 2.5
-    const debugSpacing = 100
+    // Левая стена (коридор)
+    addPlatform(0, 150, 30, k.height() - 300)
     
-    // Idle с анимацией глаз
-    const debugIdleSprite = k.add([
-      k.sprite('hero_0_0'),
-      k.pos(100, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200),
-      {
-        eyeOffsetX: 0,
-        eyeOffsetY: 0,
-        targetEyeX: 0,
-        targetEyeY: 0,
-        eyeTimer: 0,
-        currentEyeSprite: null
-      }
-    ])
-    k.add([
-      k.text("IDLE", { size: 16 }),
-      k.pos(100, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
+    // Правая стена (коридор)
+    addPlatform(k.width() - 30, 150, 30, k.height() - 300)
     
-    // Анимация глаз для отладочного IDLE спрайта
-    k.onUpdate(() => {
-      debugIdleSprite.eyeTimer += k.dt()
-      
-      if (debugIdleSprite.eyeTimer > k.rand(1.5, 3.5)) {
-        debugIdleSprite.targetEyeX = k.choose([-1, 0, 1])
-        debugIdleSprite.targetEyeY = k.choose([-1, 0, 1])
-        debugIdleSprite.eyeTimer = 0
-      }
-      
-      debugIdleSprite.eyeOffsetX = k.lerp(debugIdleSprite.eyeOffsetX, debugIdleSprite.targetEyeX, 0.1)
-      debugIdleSprite.eyeOffsetY = k.lerp(debugIdleSprite.eyeOffsetY, debugIdleSprite.targetEyeY, 0.1)
-      
-      const roundedX = Math.round(debugIdleSprite.eyeOffsetX)
-      const roundedY = Math.round(debugIdleSprite.eyeOffsetY)
-      
-      const spriteName = `hero_${roundedX}_${roundedY}`
-      
-      if (!debugIdleSprite.currentEyeSprite || debugIdleSprite.currentEyeSprite !== spriteName) {
-        debugIdleSprite.use(k.sprite(spriteName))
-        debugIdleSprite.currentEyeSprite = spriteName
-      }
-    })
+    // Дополнительные платформы в коридоре
+    addPlatform(100, k.height() - 300, 150, 20)
+    addPlatform(300, k.height() - 350, 180, 20)
+    addPlatform(550, k.height() - 400, 150, 20)
+    addPlatform(800, k.height() - 320, 180, 20)
+    addPlatform(1000, k.height() - 380, 150, 20)
     
-    // Кадр 0 бега
-    k.add([
-      k.sprite('hero-run-0'),
-      k.pos(100 + debugSpacing, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 0", { size: 16 }),
-      k.pos(100 + debugSpacing, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 1 бега
-    k.add([
-      k.sprite('hero-run-1'),
-      k.pos(100 + debugSpacing * 2, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 1", { size: 16 }),
-      k.pos(100 + debugSpacing * 2, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 2 бега
-    k.add([
-      k.sprite('hero-run-2'),
-      k.pos(100 + debugSpacing * 3, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 2", { size: 16 }),
-      k.pos(100 + debugSpacing * 3, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 3 бега
-    k.add([
-      k.sprite('hero-run-3'),
-      k.pos(100 + debugSpacing * 4, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 3", { size: 16 }),
-      k.pos(100 + debugSpacing * 4, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 4 бега
-    k.add([
-      k.sprite('hero-run-4'),
-      k.pos(100 + debugSpacing * 5, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 4", { size: 16 }),
-      k.pos(100 + debugSpacing * 5, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 5 бега
-    k.add([
-      k.sprite('hero-run-5'),
-      k.pos(100 + debugSpacing * 6, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 5", { size: 16 }),
-      k.pos(100 + debugSpacing * 6, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 6 бега
-    k.add([
-      k.sprite('hero-run-6'),
-      k.pos(100 + debugSpacing * 7, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 6", { size: 16 }),
-      k.pos(100 + debugSpacing * 7, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Кадр 7 бега
-    k.add([
-      k.sprite('hero-run-7'),
-      k.pos(100 + debugSpacing * 8, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("RUN 7", { size: 16 }),
-      k.pos(100 + debugSpacing * 8, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Прыжок
-    k.add([
-      k.sprite('hero-jump'),
-      k.pos(100 + debugSpacing * 9, debugY),
-      k.anchor("center"),
-      k.scale(debugScale),
-      k.fixed(),
-      k.z(200)
-    ])
-    k.add([
-      k.text("JUMP", { size: 16 }),
-      k.pos(100 + debugSpacing * 9, debugY + 80),
-      k.anchor("center"),
-      k.color(62, 39, 35),
-      k.fixed(),
-      k.z(200)
-    ])
-    
-    // Добавляем героя
+    // Добавляем героя (падает на первую платформу слева)
     const player = k.add([
       k.sprite('hero_0_0'), // Используем спрайт с глазами
-      k.pos(100, 400),
+      k.pos(175, 200),
       k.area({ 
         shape: new k.Rect(k.vec2(0, 0), 14, 25), // Collision box возвращен к исходной ширине
         collisionIgnore: []
@@ -294,6 +142,7 @@ export function gameScene(k) {
       // Если был в прыжке, мгновенно переключаемся на idle
       if (player.wasJumping) {
         player.wasJumping = false
+        playLandSound() // Звук приземления
         const roundedX = Math.round(player.eyeOffsetX)
         const roundedY = Math.round(player.eyeOffsetY)
         const heroSpriteName = `hero_${roundedX}_${roundedY}`
@@ -321,10 +170,15 @@ export function gameScene(k) {
         // Бег - переключаем кадры плавно (8 кадров как на референсе)
         player.isRunning = true // Устанавливаем флаг бега
         player.runTimer += k.dt()
-        if (player.runTimer > 0.04) { // Меняем кадр каждые 0.08 секунды для плавной анимации
+        if (player.runTimer > 0.04) { // Меняем кадр каждые 0.04 секунды для плавной анимации
           player.runFrame = (player.runFrame + 1) % 6 // 6 кадров для плавности
           player.use(k.sprite(`hero-run-${player.runFrame}`))
           player.runTimer = 0
+          
+          // Звук шага на кадрах 0 и 3 (когда нога касается земли)
+          if (player.runFrame === 0 || player.runFrame === 3) {
+            playStepSound()
+          }
         }
       } else {
         // Idle - с анимацией глаз (как на заставке)
@@ -372,6 +226,28 @@ export function gameScene(k) {
       
       // Отзеркаливание в зависимости от направления
       player.flipX = player.direction === -1
+      
+      // Ограничиваем игрока в пределах коридора
+      const leftBound = 60  // После левой стены
+      const rightBound = k.width() - 60  // До правой стены
+      const topBound = 180  // После верхней платформы
+      const bottomBound = k.height() - 180  // До нижней платформы
+      
+      // Ограничиваем по X
+      if (player.pos.x < leftBound) {
+        player.pos.x = leftBound
+      }
+      if (player.pos.x > rightBound) {
+        player.pos.x = rightBound
+      }
+      
+      // Ограничиваем по Y
+      if (player.pos.y < topBound) {
+        player.pos.y = topBound
+      }
+      if (player.pos.y > bottomBound) {
+        player.pos.y = bottomBound
+      }
     })
     
     // Управление движением (стрелки)
@@ -421,12 +297,12 @@ export function gameScene(k) {
     
     // Инструкции
     const instructions = k.add([
-      k.text("Arrow Keys / WASD to move\nUP / W / SPACE to jump\nESC to return to menu", {
-        size: 20,
+      k.text("WASD/← ↑ → - Move\nSpace - jump\nESC - menu", {
+        size: 14,
         width: k.width() - 40
       }),
       k.pos(20, 20),
-      k.color(62, 39, 35),
+      k.color(255, 218, 185), // Светлый персиковый (как фон)
       k.z(100),
       k.fixed() // Фиксируем к экрану
     ])
@@ -440,21 +316,24 @@ export function gameScene(k) {
       k.fixed()
     ])
     
+    // Переключение дебаг режима по F1
+    k.onKeyPress("f1", () => {
+      debugMode = !debugMode
+    })
+    
     // Визуализация collision box отключена
     
     // Камера и дебаг - обновляем вместе
     k.onUpdate(() => {
-      // Камера следует за игроком
-      const targetCamPos = player.pos
-      k.camPos(targetCamPos.x, k.height() / 2)
+      // Камера фиксирована в центре экрана (не следует за игроком)
+      k.camPos(k.width() / 2, k.height() / 2)
       
-      // Ограничиваем камеру
-      if (k.camPos().x < k.width() / 2) {
-        k.camPos(k.width() / 2, k.height() / 2)
+      // Обновляем дебаг текст (только если дебаг режим включен)
+      if (debugMode) {
+        debugText.text = `Pos: ${Math.round(player.pos.x)}, ${Math.round(player.pos.y)}\nVel: ${Math.round(player.vel?.x || 0)}, ${Math.round(player.vel?.y || 0)}\nCan Jump: ${player.canJump}`
+      } else {
+        debugText.text = ""
       }
-      
-      // Обновляем дебаг текст
-      debugText.text = `Pos: ${Math.round(player.pos.x)}, ${Math.round(player.pos.y)}\nVel: ${Math.round(player.vel?.x || 0)}, ${Math.round(player.vel?.y || 0)}\nCan Jump: ${player.canJump}`
     })
     
     // Возврат в меню по ESC

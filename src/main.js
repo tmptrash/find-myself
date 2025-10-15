@@ -64,5 +64,5 @@ gameScene(k)
 
 // Запуск игры после загрузки ресурсов
 k.onLoad(() => {
-  k.go("game")
+  k.go("menu")
 })

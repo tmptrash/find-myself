@@ -486,7 +486,7 @@ export function menuScene(k) {
       if (ambientMusic.masterGain && ambientMusic.masterGain.gain.value > 0) {
         ambientMusic.setVolume(0)
       } else {
-        ambientMusic.setVolume(0.15)
+        ambientMusic.setVolume(0.4)
       }
     })
     

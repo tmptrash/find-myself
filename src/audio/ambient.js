@@ -16,9 +16,14 @@ export class AmbientMusic {
     // Создаём аудио контекст
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)()
     
+    // Возобновляем контекст если он приостановлен
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume()
+    }
+    
     // Главный регулятор громкости
     this.masterGain = this.audioContext.createGain()
-    this.masterGain.gain.value = 0.15
+    this.masterGain.gain.value = 0.4
     this.masterGain.connect(this.audioContext.destination)
   }
 
@@ -26,6 +31,12 @@ export class AmbientMusic {
     if (this.isPlaying) return
     
     this.init()
+    
+    // Убеждаемся что контекст запущен
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume()
+    }
+    
     this.isPlaying = true
     
     // Низкий дрон (основа)
@@ -56,7 +67,7 @@ export class AmbientMusic {
     oscillator.frequency.value = frequency
     
     gain.gain.value = 0
-    gain.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 2)
+    gain.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 0.5)
     
     oscillator.connect(gain)
     gain.connect(this.masterGain)
@@ -85,7 +96,7 @@ export class AmbientMusic {
     lfoGain.connect(oscillator.frequency)
     
     gain.gain.value = 0
-    gain.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 3)
+    gain.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 0.5)
     
     oscillator.connect(gain)
     gain.connect(this.masterGain)

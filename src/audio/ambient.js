@@ -13,13 +13,8 @@ export class AmbientMusic {
   init() {
     if (this.audioContext) return
     
-    // Создаём аудио контекст
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)()
-    
-    // Возобновляем контекст если он приостановлен
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume()
-    }
+    // Используем глобальный аудио контекст
+    this.audioContext = window.gameAudioContext
     
     // Главный регулятор громкости
     this.masterGain = this.audioContext.createGain()
@@ -27,16 +22,10 @@ export class AmbientMusic {
     this.masterGain.connect(this.audioContext.destination)
   }
 
-  start() {
+  async start() {
     if (this.isPlaying) return
     
     this.init()
-    
-    // Убеждаемся что контекст запущен
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume()
-    }
-    
     this.isPlaying = true
     
     // Низкий дрон (основа)

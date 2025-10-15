@@ -8,16 +8,11 @@ export function gameScene(k) {
     // Флаг дебаг режима (переключается по F1)
     let debugMode = false
     
-    // Аудио контекст для звуковых эффектов
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    // Используем глобальный аудио контекст
+    const audioContext = window.gameAudioContext
     
     // Функция для звука приземления
     function playLandSound() {
-      // Возобновляем контекст если он приостановлен
-      if (audioContext.state === 'suspended') {
-        audioContext.resume()
-      }
-      
       const now = audioContext.currentTime
       
       // Легкий мягкий звук приземления
@@ -40,11 +35,6 @@ export function gameScene(k) {
     
     // Функция для звука шагов при беге
     function playStepSound() {
-      // Возобновляем контекст если он приостановлен
-      if (audioContext.state === 'suspended') {
-        audioContext.resume()
-      }
-      
       const now = audioContext.currentTime
       
       // Короткий щелчок для шага

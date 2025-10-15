@@ -5,9 +5,21 @@ export function menuScene(k) {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
-    // Запускаем ambient музыку
+    // Запускаем ambient музыку сразу
     const ambientMusic = new AmbientMusic()
     ambientMusic.start()
+    
+    // На всякий случай возобновляем при взаимодействии
+    k.onKeyPress(() => {
+      if (window.gameAudioContext.state === 'suspended') {
+        window.gameAudioContext.resume()
+      }
+    })
+    k.onMousePress(() => {
+      if (window.gameAudioContext.state === 'suspended') {
+        window.gameAudioContext.resume()
+      }
+    })
     
     // Переменные для анимации глаз
     let eyeOffsetX = 0

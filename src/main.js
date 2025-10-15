@@ -13,6 +13,31 @@ import {
   createHeroJumpSpriteWithEyes
 } from "./components/hero.js"
 
+// Глобальный AudioContext для всех звуков
+window.gameAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+
+// Пытаемся запустить контекст сразу
+window.gameAudioContext.resume().catch(() => {
+  // Если не получилось, попробуем при первом взаимодействии
+})
+
+// Возобновляем контекст при любом взаимодействии (на всякий случай)
+const resumeAudio = () => {
+  if (window.gameAudioContext.state === 'suspended') {
+    window.gameAudioContext.resume()
+  }
+}
+
+document.addEventListener('click', resumeAudio, { once: false })
+document.addEventListener('keydown', resumeAudio, { once: false })
+document.addEventListener('touchstart', resumeAudio, { once: false })
+document.addEventListener('touchend', resumeAudio, { once: false })
+
+// Пытаемся возобновить при загрузке страницы
+window.addEventListener('load', () => {
+  window.gameAudioContext.resume()
+})
+
 // Инициализация игры
 const k = kaplay({
   width: 1280,

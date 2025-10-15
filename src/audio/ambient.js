@@ -151,7 +151,9 @@ export class AmbientMusic {
     const frequencies = [110, 165, 220, 330, 440, 660]
     const frequency = frequencies[Math.floor(Math.random() * frequencies.length)]
     
-    oscillator.type = Math.random() > 0.5 ? 'sine' : 'triangle'
+    // Разные типы осцилляторов для разнообразия звуков
+    const oscillatorTypes = ['sine', 'triangle', 'square', 'sawtooth']
+    oscillator.type = oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)]
     oscillator.frequency.value = frequency
     
     filter.type = 'lowpass'

@@ -199,7 +199,7 @@ export function menuScene(k) {
     })
     
     // Название игры с глюк-эффектами
-    const titleLetters = "FIND YOURSELF".split("")
+    const titleLetters = "FIND YOU".split("")
     const titleObjects = []
     
     titleLetters.forEach((letter, i) => {
@@ -210,13 +210,13 @@ export function menuScene(k) {
       
       const letterObj = k.add([
         k.text(letter, { size: isSpace ? 20 : 48 }),
-        k.pos(startX + i * spacing, 80),
+        k.pos(startX + i * spacing, centerY),
         k.anchor("center"),
         k.opacity(1),
         k.color(255, 140, 0), // Темно-оранжевый по умолчанию
         {
           baseX: startX + i * spacing,
-          baseY: 80,
+          baseY: centerY,
           index: i,
           glitchOffsetX: 0,
           glitchOffsetY: 0,

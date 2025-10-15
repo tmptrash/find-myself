@@ -131,8 +131,8 @@ export class AmbientMusic {
   scheduleRandomBlips() {
     if (!this.isPlaying) return
     
-    // Случайный звук каждые 3-8 секунд
-    const delay = Math.random() * 5000 + 3000
+    // Случайный звук каждые 1-3 секунды
+    const delay = Math.random() * 2000 + 1000
     
     setTimeout(() => {
       if (this.isPlaying) {
@@ -160,7 +160,7 @@ export class AmbientMusic {
     // Envelope
     const now = this.audioContext.currentTime
     gain.gain.value = 0
-    gain.gain.linearRampToValueAtTime(0.05, now + 0.1)
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.1)
     gain.gain.exponentialRampToValueAtTime(0.001, now + 2)
     
     oscillator.connect(filter)

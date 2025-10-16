@@ -39,6 +39,13 @@ export class AmbientMusic {
       }
     }
     
+    // КРИТИЧЕСКАЯ ПРОВЕРКА: если контекст все еще не running после resume,
+    // НЕ создаем осцилляторы (они будут ждать и запустятся при первой интеракции)
+    if (this.audioContext.state !== 'running') {
+      this.isPlaying = false
+      return
+    }
+    
     // Если музыка реально играет (не просто флаг, а реально), не перезапускаем
     if (this.isActuallyPlaying() && !wasSuspended) {
       return
@@ -202,35 +209,46 @@ export class AmbientMusic {
     oscillator.stop(now + 2)
   }
 
-  stop() {
-    if (!this.isPlaying) return
-    
+  stop() {    
     this.isPlaying = false
     
-    // Плавно затухаем
-    const now = this.audioContext.currentTime
-    this.masterGain.gain.exponentialRampToValueAtTime(0.001, now + 2)
-    
-    setTimeout(() => {
-      this.oscillators.forEach(osc => {
-        try {
-          osc.stop()
-        } catch (e) {
-          // ignore
-        }
-      })
-      
-      if (this.noiseNode) {
-        try {
-          this.noiseNode.stop()
-        } catch (e) {
-          // ignore
-        }
+    // Мгновенно останавливаем все осцилляторы
+    this.oscillators.forEach(osc => {
+      try {
+        osc.stop()
+        osc.disconnect()
+      } catch (e) {
+        // Осциллятор уже остановлен
       }
-      
-      this.oscillators = []
-      this.gains = []
-    }, 2100)
+    })
+    
+    if (this.noiseNode) {
+      try {
+        this.noiseNode.stop()
+        this.noiseNode.disconnect()
+      } catch (e) {
+        // Нода уже остановлена
+      }
+    }
+    
+    // Отключаем все gain узлы
+    this.gains.forEach(gain => {
+      try {
+        gain.disconnect()
+      } catch (e) {
+        // Gain уже отключен
+      }
+    })
+    
+    // Сбрасываем громкость мастер-канала
+    if (this.masterGain) {
+      this.masterGain.gain.cancelScheduledValues(this.audioContext.currentTime)
+      this.masterGain.gain.value = 0.4 // Восстанавливаем громкость для следующего запуска
+    }
+    
+    this.oscillators = []
+    this.gains = []
+    this.noiseNode = null
   }
 
   setVolume(volume) {

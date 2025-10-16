@@ -23,9 +23,31 @@ export class AmbientMusic {
   }
 
   async start() {
-    if (this.isPlaying) return
-    
     this.init()
+    
+    // Убеждаемся что контекст запущен
+    if (this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume()
+      } catch (e) {
+        // Устанавливаем флаг что музыка НЕ играет
+        this.isPlaying = false
+        return
+      }
+    }
+    
+    // Если уже есть осцилляторы и контекст запущен, музыка уже играет
+    if (this.isPlaying && this.oscillators.length > 0 && this.audioContext.state === 'running') {
+      return
+    }
+    
+    // Если есть старые осцилляторы но контекст был suspended, очищаем их
+    if (this.oscillators.length > 0) {
+      this.stop()
+      // Небольшая задержка для очистки
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    
     this.isPlaying = true
     
     // Низкий дрон (основа)
@@ -49,22 +71,26 @@ export class AmbientMusic {
   }
 
   createDrone(frequency, volume) {
-    const oscillator = this.audioContext.createOscillator()
-    const gain = this.audioContext.createGain()
-    
-    oscillator.type = 'sine'
-    oscillator.frequency.value = frequency
-    
-    gain.gain.value = 0
-    gain.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 0.5)
-    
-    oscillator.connect(gain)
-    gain.connect(this.masterGain)
-    
-    oscillator.start()
-    
-    this.oscillators.push(oscillator)
-    this.gains.push(gain)
+    try {
+      const oscillator = this.audioContext.createOscillator()
+      const gain = this.audioContext.createGain()
+      
+      oscillator.type = 'sine'
+      oscillator.frequency.value = frequency
+      
+      gain.gain.value = 0
+      gain.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 0.5)
+      
+      oscillator.connect(gain)
+      gain.connect(this.masterGain)
+      
+      oscillator.start()
+      
+      this.oscillators.push(oscillator)
+      this.gains.push(gain)
+    } catch (e) {
+      // Игнорируем ошибки
+    }
   }
 
   createOscillatingDrone(baseFrequency, volume, modulationDepth) {
@@ -208,6 +234,23 @@ export class AmbientMusic {
     if (this.masterGain) {
       this.masterGain.gain.value = volume
     }
+  }
+  
+  getStatus() {
+    return {
+      isPlaying: this.isPlaying,
+      audioContextState: this.audioContext ? this.audioContext.state : 'not initialized',
+      oscillatorsCount: this.oscillators.length,
+      volume: this.masterGain ? this.masterGain.gain.value : 0
+    }
+  }
+  
+  isActuallyPlaying() {
+    // Проверяем реально ли играет музыка
+    return this.isPlaying && 
+           this.audioContext && 
+           this.audioContext.state === 'running' && 
+           this.oscillators.length > 0
   }
 }
 

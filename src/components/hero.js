@@ -389,10 +389,6 @@ export function createHeroRunSprite(frame, eyeOffsetX = 0, eyeOffsetY = 0) {
   return createHeroFrameWithEyes('run', frame, eyeOffsetX, eyeOffsetY)
 }
 
-export function createHeroJumpSpriteWithEyes(eyeOffsetX = 0, eyeOffsetY = 0) {
-  return createHeroFrameWithEyes('jump', 0, eyeOffsetX, eyeOffsetY)
-}
-
 export function createAntiHeroWithEyes(k, eyeOffsetX = 0, eyeOffsetY = 0) {
   return createAntiHeroFrameWithEyes('idle', 0, eyeOffsetX, eyeOffsetY)
 }

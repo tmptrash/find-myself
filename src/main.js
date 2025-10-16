@@ -9,8 +9,7 @@ import {
   createHeroIdleSprite,
   createHeroWalkSprite,
   createHeroJumpSprite,
-  createHeroRunSprite,
-  createHeroJumpSpriteWithEyes
+  createHeroRunSprite
 } from "./components/hero.js"
 
 // Глобальный AudioContext для всех звуков

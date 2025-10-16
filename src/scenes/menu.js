@@ -26,8 +26,12 @@ export function menuScene(k) {
       }
     }
     
-    // Возобновляем при любом взаимодействии
-    k.onKeyPress(() => ensureAudio())
+    // Возобновляем при любом взаимодействии (кроме M и Space - у них свои обработчики)
+    k.onKeyPress((key) => {
+      if (key !== 'm' && key !== 'space') {
+        ensureAudio()
+      }
+    })
     k.onMousePress(() => ensureAudio())
     
     // Переменные для анимации глаз
@@ -506,14 +510,17 @@ export function menuScene(k) {
     
     // Дополнительно: управление громкостью (опционально)
     k.onKeyPress("m", async () => {
-      // Сначала убеждаемся что аудио работает
-      await ensureAudio()
+      // Убеждаемся что аудио работает (но не перезапускаем если уже играет)
+      const isPlaying = ambientMusic.isActuallyPlaying()
       
       // Переключаем громкость
-      if (ambientMusic.masterGain && ambientMusic.masterGain.gain.value > 0) {
-        ambientMusic.setVolume(0)
-      } else {
-        ambientMusic.setVolume(0.4)
+      if (ambientMusic.masterGain) {
+        const currentVolume = ambientMusic.masterGain.gain.value
+        if (isPlaying && currentVolume > 0.01) {
+          ambientMusic.setVolume(0)
+        } else {
+          ambientMusic.setVolume(0.4)
+        }
       }
     })
     

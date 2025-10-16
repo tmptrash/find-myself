@@ -25,8 +25,11 @@ export class AmbientMusic {
   async start() {
     this.init()
     
+    // Запоминаем был ли контекст suspended
+    const wasSuspended = this.audioContext.state === 'suspended'
+    
     // Убеждаемся что контекст запущен
-    if (this.audioContext.state === 'suspended') {
+    if (wasSuspended) {
       try {
         await this.audioContext.resume()
       } catch (e) {
@@ -36,12 +39,12 @@ export class AmbientMusic {
       }
     }
     
-    // Если уже есть осцилляторы и контекст запущен, музыка уже играет
-    if (this.isPlaying && this.oscillators.length > 0 && this.audioContext.state === 'running') {
+    // Если музыка реально играет (не просто флаг, а реально), не перезапускаем
+    if (this.isActuallyPlaying() && !wasSuspended) {
       return
     }
     
-    // Если есть старые осцилляторы но контекст был suspended, очищаем их
+    // Если контекст был suspended или есть "мертвые" осцилляторы, очищаем их
     if (this.oscillators.length > 0) {
       this.stop()
       // Небольшая задержка для очистки
@@ -250,6 +253,7 @@ export class AmbientMusic {
     return this.isPlaying && 
            this.audioContext && 
            this.audioContext.state === 'running' && 
+           window.gameAudioContext.state === 'running' &&
            this.oscillators.length > 0
   }
 }

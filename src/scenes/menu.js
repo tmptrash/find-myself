@@ -492,6 +492,9 @@ export function menuScene(k) {
           ambientMusic.setVolume(0)
         } else {
           ambientMusic.setVolume(0.4)
+          if (window.gameAudioContext.state === 'suspended') {
+            window.gameAudioContext.resume()
+          }
         }
       }
     })

@@ -9,31 +9,6 @@ export function menuScene(k) {
     const ambientMusic = new AmbientMusic()
     ambientMusic.start()
     
-    
-    // Функция для обеспечения работы аудио
-    const ensureAudio = async () => {
-      // Возобновляем контекст если приостановлен
-      if (window.gameAudioContext.state === 'suspended') {
-        await window.gameAudioContext.resume()
-      }
-      
-      // Проверяем реально ли играет музыка
-      const actuallyPlaying = ambientMusic.isActuallyPlaying()
-      
-      // Если музыка на самом деле не играет, запускаем её
-      if (!actuallyPlaying) {
-        await ambientMusic.start()
-      }
-    }
-    
-    // Возобновляем при любом взаимодействии (кроме M и Space - у них свои обработчики)
-    k.onKeyPress((key) => {
-      if (key !== 'm' && key !== 'space') {
-        ensureAudio()
-      }
-    })
-    k.onMousePress(() => ensureAudio())
-    
     // Переменные для анимации глаз
     let eyeOffsetX = 0
     let eyeOffsetY = 0
@@ -501,16 +476,13 @@ export function menuScene(k) {
     })
     
     // Переход к игре
-    k.onKeyPress("space", async () => {
-      // Убеждаемся что аудио работает перед переходом
-      await ensureAudio()
+    k.onKeyPress("space", () => {
       ambientMusic.stop()
       k.go("game")
     })
     
-    // Дополнительно: управление громкостью (опционально)
+    // Управление музыкой (вкл/выкл)
     k.onKeyPress("m", async () => {
-      // Убеждаемся что аудио работает (но не перезапускаем если уже играет)
       const isPlaying = ambientMusic.isActuallyPlaying()
       
       // Переключаем громкость

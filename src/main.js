@@ -7,7 +7,6 @@ import {
   createHeroWithEyes, 
   createAntiHeroWithEyes,
   createHeroIdleSprite,
-  createHeroWalkSprite,
   createHeroJumpSprite,
   createHeroRunSprite
 } from "./components/hero.js"
@@ -61,10 +60,6 @@ for (let x = -1; x <= 1; x++) {
 // Загрузка анимаций героя для игры
 k.loadSprite("hero-idle", createHeroIdleSprite())
 k.loadSprite("hero-jump", createHeroJumpSprite())
-
-// Загружаем кадры ходьбы (2 кадра)
-k.loadSprite("hero-walk-0", createHeroWalkSprite(0))
-k.loadSprite("hero-walk-1", createHeroWalkSprite(1))
 
 // Загружаем кадры бега (8 кадров для плавной анимации как на референсе)
 k.loadSprite("hero-run-0", createHeroRunSprite(0))

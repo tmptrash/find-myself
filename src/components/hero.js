@@ -27,23 +27,6 @@ function createHeroFrame(animation, frame) {
   let leftLegX = 12
   let rightLegX = 17
   
-  // Анимация ходьбы (2 кадра)
-  if (animation === 'walk') {
-    if (frame === 0) {
-      // Кадр 1: левая нога вперед, правая назад
-      leftLegY = 21
-      rightLegY = 23
-      leftArmY = 16
-      rightArmY = 14
-    } else {
-      // Кадр 2: правая нога вперед, левая назад
-      leftLegY = 23
-      rightLegY = 21
-      leftArmY = 14
-      rightArmY = 16
-    }
-  }
-  
   // Анимация прыжка - боковой вид, короткие ноги раздвинуты симметрично
   if (animation === 'jump') {
     headY = 6
@@ -153,10 +136,6 @@ function createHeroFrame(animation, frame) {
 // Экспорт функций для создания анимаций
 export function createHeroIdleSprite() {
   return createHeroFrame('idle', 0)
-}
-
-export function createHeroWalkSprite(frame) {
-  return createHeroFrame('walk', frame)
 }
 
 export function createHeroJumpSprite() {

@@ -146,6 +146,41 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
 }
 
 // ============================================
+// ЗАГРУЗКА ВСЕХ СПРАЙТОВ
+// ============================================
+
+/**
+ * Загружает все спрайты для героя и анти-героя
+ * Должна быть вызвана один раз при инициализации игры
+ * @param {Object} k - Kaplay инстанс
+ */
+export function loadAllSprites(k) {
+  // Загружаем спрайты для обоих персонажей
+  const types = ['hero', 'antihero']
+  
+  types.forEach(type => {
+    const prefix = type
+    
+    // Загружаем все варианты глаз (9 позиций) для idle анимации
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        const spriteName = `${prefix}_${x}_${y}`
+        const spriteData = createCharacterFrame(type, 'idle', 0, x, y)
+        k.loadSprite(spriteName, spriteData)
+      }
+    }
+    
+    // Загружаем анимацию прыжка
+    k.loadSprite(`${prefix}-jump`, createCharacterFrame(type, 'jump', 0))
+    
+    // Загружаем кадры бега (6 кадров)
+    for (let frame = 0; frame < CONFIG.gameplay.runFrameCount; frame++) {
+      k.loadSprite(`${prefix}-run-${frame}`, createCharacterFrame(type, 'run', frame))
+    }
+  })
+}
+
+// ============================================
 // ЭКСПОРТИРУЕМЫЕ ФУНКЦИИ ДЛЯ ГЕРОЯ
 // ============================================
 

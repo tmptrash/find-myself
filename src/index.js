@@ -4,15 +4,7 @@ import { readyScene } from "./scenes/ready.js"
 import { menuScene } from "./scenes/menu.js"
 import { level1Scene } from "./scenes/level1.js"
 import { level2Scene } from "./scenes/level2.js"
-import { 
-  createHeroSprite, 
-  createAntiHeroSprite, 
-  createHeroWithEyes, 
-  createAntiHeroWithEyes,
-  createHeroIdleSprite,
-  createHeroJumpSprite,
-  createHeroRunSprite
-} from "./components/hero.js"
+import { loadAllSprites } from "./components/hero.js"
 
 // Глобальный AudioContext для всех звуков
 window.gameAudioContext = new (window.AudioContext || window.webkitAudioContext)()
@@ -38,35 +30,12 @@ const k = kaplay({
   // Kaplay автоматически обрабатывает delta time для всех движений
 })
 
-// Создаём и загружаем спрайты героев
-const heroSprite = createHeroSprite(k)
-const antiHeroSprite = createAntiHeroSprite(k)
-
-// Предзагружаем все варианты глаз (9 позиций) для меню
-for (let x = -1; x <= 1; x++) {
-  for (let y = -1; y <= 1; y++) {
-    k.loadSprite(`hero_${x}_${y}`, createHeroWithEyes(k, x, y))
-    k.loadSprite(`antihero_${x}_${y}`, createAntiHeroWithEyes(k, x, y))
-  }
-}
-
-// Загрузка анимаций героя для игры
-k.loadSprite("hero-idle", createHeroIdleSprite())
-k.loadSprite("hero-jump", createHeroJumpSprite())
-
-// Загружаем кадры бега (6 кадров)
-k.loadSprite("hero-run-0", createHeroRunSprite(0))
-k.loadSprite("hero-run-1", createHeroRunSprite(1))
-k.loadSprite("hero-run-2", createHeroRunSprite(2))
-k.loadSprite("hero-run-3", createHeroRunSprite(3))
-k.loadSprite("hero-run-4", createHeroRunSprite(4))
-k.loadSprite("hero-run-5", createHeroRunSprite(5))
+// Загружаем все спрайты персонажей (инкапсулировано в hero.js)
+loadAllSprites(k)
 
 // Загрузка ресурсов
 k.loadBean()
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
-k.loadSprite("hero", heroSprite)
-k.loadSprite("antihero", antiHeroSprite)
 
 // Регистрация всех сцен
 readyScene(k)

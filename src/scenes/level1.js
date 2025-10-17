@@ -1,6 +1,7 @@
 import { CONFIG, getColor } from '../config.js'
 import * as SFX from '../audio/sfx.js'
 import { addBackground } from '../components/background.js'
+import { addInstructions, setupBackToMenu } from '../components/instructions.js'
 import * as Hero from '../components/hero.js'
 
 export function level1Scene(k) {
@@ -80,17 +81,8 @@ export function level1Scene(k) {
       k.go("level2")
     })
     
-    // Инструкции
-    const instructions = k.add([
-      k.text("WASD/← ↑ → - Move\nSpace - jump\nESC - menu", {
-        size: CONFIG.visual.instructionsFontSize,
-        width: k.width() - 40
-      }),
-      k.pos(CONFIG.visual.instructionsX, CONFIG.visual.instructionsY),
-      getColor(k, CONFIG.colors.level1.instructions),
-      k.z(CONFIG.visual.zIndex.ui),
-      k.fixed() // Фиксируем к экрану
-    ])
+    // Инструкции (используем общий модуль)
+    const instructions = addInstructions(k, { showDebugHint: true })
     
     // Дебаг информация (в правом верхнем углу)
     const debugText = k.add([
@@ -126,12 +118,8 @@ export function level1Scene(k) {
       }
     })
     
-    // Возврат в меню (используем конфиг)
-    CONFIG.controls.backToMenu.forEach(key => {
-      k.onKeyPress(key, () => {
-        k.go("menu")
-      })
-    })
+    // Возврат в меню (используем общий модуль)
+    setupBackToMenu(k)
   })
 }
 

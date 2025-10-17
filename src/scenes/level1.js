@@ -1,4 +1,5 @@
 import { CONFIG, getColor, isAnyKeyDown } from '../config.js'
+import * as SFX from '../audio/sfx.js'
 
 export function level1Scene(k) {
   k.scene("level1", () => {
@@ -14,52 +15,8 @@ export function level1Scene(k) {
     
     k.setGravity(GRAVITY)
     
-    // Используем глобальный аудио контекст
-    const audioContext = window.gameAudioContext
-    
-    // Функция для звука приземления
-    function playLandSound() {
-      const now = audioContext.currentTime
-      
-      // Легкий мягкий звук приземления
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(CONFIG.audio.sfx.landFreqStart, now)
-      oscillator.frequency.exponentialRampToValueAtTime(CONFIG.audio.sfx.landFreqEnd, now + 0.08)
-      
-      gainNode.gain.setValueAtTime(CONFIG.audio.sfx.landVolume, now)
-      gainNode.gain.exponentialRampToValueAtTime(CONFIG.audio.sfx.landFade, now + CONFIG.audio.sfx.landDuration)
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      oscillator.start(now)
-      oscillator.stop(now + CONFIG.audio.sfx.landDuration)
-    }
-    
-    // Функция для звука шагов при беге
-    function playStepSound() {
-      const now = audioContext.currentTime
-      
-      // Короткий щелчок для шага
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(CONFIG.audio.sfx.stepFreqStart, now)
-      oscillator.frequency.exponentialRampToValueAtTime(CONFIG.audio.sfx.stepFreqEnd, now + 0.03)
-      
-      gainNode.gain.setValueAtTime(CONFIG.audio.sfx.stepVolume, now)
-      gainNode.gain.exponentialRampToValueAtTime(CONFIG.audio.sfx.stepFade, now + CONFIG.audio.sfx.stepDuration)
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      oscillator.start(now)
-      oscillator.stop(now + CONFIG.audio.sfx.stepDuration)
-    }
+    // Создаём инстанс звуковых эффектов (получаем AudioContext)
+    const sfx = SFX.create()
     
     // Фон - фиксированный к камере
     k.add([
@@ -113,6 +70,7 @@ export function level1Scene(k) {
       k.body(),
       k.anchor("center"),
       k.scale(CONFIG.gameplay.heroScale),
+      k.z(CONFIG.visual.zIndex.player),
     ])
     
     // Добавляем кастомные свойства после создания
@@ -139,7 +97,7 @@ export function level1Scene(k) {
       // Если был в прыжке, мгновенно переключаемся на idle
       if (player.wasJumping) {
         player.wasJumping = false
-        playLandSound() // Звук приземления
+        SFX.playLandSound(sfx) // Звук приземления
         const roundedX = Math.round(player.eyeOffsetX)
         const roundedY = Math.round(player.eyeOffsetY)
         const heroSpriteName = `hero_${roundedX}_${roundedY}`
@@ -147,6 +105,381 @@ export function level1Scene(k) {
         player.currentEyeSprite = heroSpriteName
       }
     })
+    
+    // ============================================
+    // АНТИ-ГЕРОЙ в правом нижнем углу
+    // ============================================
+    // Вычисляем Y координату так, чтобы анти-герой стоял НА платформе
+    const antiHeroY = k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
+    
+    const antiHero = k.add([
+      k.sprite('antihero_0_0'), // Используем спрайт анти-героя с глазами
+      k.pos(k.width() - 100, antiHeroY), // Правый нижний угол, стоит на платформе
+      k.area({
+        shape: new k.Rect(
+          k.vec2(CONFIG.gameplay.collisionOffsetX, CONFIG.gameplay.collisionOffsetY), 
+          CONFIG.gameplay.collisionWidth, 
+          CONFIG.gameplay.collisionHeight
+        ),
+        collisionIgnore: []
+      }),
+      k.body(), // Добавляем физику - гравитация будет влиять
+      k.anchor("center"),
+      k.scale(CONFIG.gameplay.heroScale),
+      k.z(CONFIG.visual.zIndex.player),
+    ])
+    
+    // Переменные для анимации глаз анти-героя
+    antiHero.eyeOffsetX = 0
+    antiHero.eyeOffsetY = 0
+    antiHero.targetEyeX = 0
+    antiHero.targetEyeY = 0
+    antiHero.eyeTimer = 0
+    antiHero.currentEyeSprite = null
+    
+    // ============================================
+    // АННИГИЛЯЦИЯ при столкновении
+    // ============================================
+    let isAnnihilating = false
+    
+    player.onCollide("annihilationTarget", () => {
+      if (!isAnnihilating) {
+        isAnnihilating = true
+        
+        // Останавливаем управление
+        player.paused = true
+        antiHero.paused = true
+        
+        // Центр между персонажами
+        const centerX = (player.pos.x + antiHero.pos.x) / 2
+        const centerY = (player.pos.y + antiHero.pos.y) / 2
+        
+        // ============================================
+        // ФАЗА 1: МИГАНИЕ ПЕРСОНАЖЕЙ (0.3 сек)
+        // ============================================
+        let blinkTime = 0
+        const blinkDuration = 0.3
+        const blinkSpeed = 20 // Быстрое мигание
+        
+        const blinkInterval = k.onUpdate(() => {
+          blinkTime += k.dt()
+          if (blinkTime < blinkDuration) {
+            const visible = Math.floor(blinkTime * blinkSpeed) % 2 === 0
+            player.opacity = visible ? 1 : 0.3
+            antiHero.opacity = visible ? 1 : 0.3
+          } else {
+            player.opacity = 1
+            antiHero.opacity = 1
+            blinkInterval.cancel()
+            
+            // ============================================
+            // ФАЗА 2: ПРИТЯЖЕНИЕ К ЦЕНТРУ (0.25 сек)
+            // ============================================
+            const pullDuration = 0.25
+            let pullTime = 0
+            const startPlayerPos = k.vec2(player.pos.x, player.pos.y)
+            const startAntiHeroPos = k.vec2(antiHero.pos.x, antiHero.pos.y)
+            
+            const pullInterval = k.onUpdate(() => {
+              pullTime += k.dt()
+              const progress = Math.min(pullTime / pullDuration, 1)
+              const easeProgress = 1 - Math.pow(1 - progress, 3) // Ease-out cubic
+              
+              player.pos.x = startPlayerPos.x + (centerX - startPlayerPos.x) * easeProgress
+              player.pos.y = startPlayerPos.y + (centerY - startPlayerPos.y) * easeProgress
+              antiHero.pos.x = startAntiHeroPos.x + (centerX - startAntiHeroPos.x) * easeProgress
+              antiHero.pos.y = startAntiHeroPos.y + (centerY - startAntiHeroPos.y) * easeProgress
+              
+              if (pullTime >= pullDuration) {
+                pullInterval.cancel()
+                
+                // ============================================
+                // ФАЗА 3: СХЛОПЫВАНИЕ И ЭФФЕКТЫ
+                // ============================================
+                
+                // ЗВУК АННИГИЛЯЦИИ (низкий мощный)
+                const now = sfx.currentTime
+                
+                // Глубокий бас
+                const bass = sfx.createOscillator()
+                const bassGain = sfx.createGain()
+                bass.type = 'sine'
+                bass.frequency.setValueAtTime(50, now)
+                bass.frequency.exponentialRampToValueAtTime(20, now + 0.5)
+                bassGain.gain.setValueAtTime(0.7, now)
+                bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
+                bass.connect(bassGain)
+                bassGain.connect(sfx.destination)
+                bass.start(now)
+                bass.stop(now + 0.5)
+                
+                // Очень низкий "гул"
+                const subBass = sfx.createOscillator()
+                const subBassGain = sfx.createGain()
+                subBass.type = 'sine'
+                subBass.frequency.setValueAtTime(30, now)
+                subBassGain.gain.setValueAtTime(0.6, now)
+                subBassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6)
+                subBass.connect(subBassGain)
+                subBassGain.connect(sfx.destination)
+                subBass.start(now)
+                subBass.stop(now + 0.6)
+                
+                // ВСПЫШКА ЭКРАНА
+                const screenFlash = k.add([
+                  k.rect(k.width(), k.height()),
+                  k.pos(0, 0),
+                  k.color(255, 255, 255),
+                  k.opacity(1),
+                  k.fixed(),
+                  k.z(CONFIG.visual.zIndex.ui + 1)
+                ])
+                
+                let flashTime = 0
+                screenFlash.onUpdate(() => {
+                  flashTime += k.dt()
+                  screenFlash.opacity = Math.max(0, 1 - flashTime * 8)
+                  if (flashTime > 0.125) {
+                    k.destroy(screenFlash)
+                  }
+                })
+                
+                // ТРЯСКА КАМЕРЫ
+                let shakeTime = 0
+                const shakeIntensity = 15
+                const originalCamX = k.width() / 2
+                const originalCamY = k.height() / 2
+                
+                const shakeInterval = k.onUpdate(() => {
+                  shakeTime += k.dt()
+                  if (shakeTime < 0.4) {
+                    const intensity = shakeIntensity * (1 - shakeTime / 0.4)
+                    k.camPos(
+                      originalCamX + k.rand(-intensity, intensity),
+                      originalCamY + k.rand(-intensity, intensity)
+                    )
+                  } else {
+                    k.camPos(originalCamX, originalCamY)
+                    shakeInterval.cancel()
+                  }
+                })
+                
+                // ============================================
+                // ЧАСТИЦЫ - выберите один из вариантов:
+                // ============================================
+                
+                const allColors = [
+                  CONFIG.colors.hero.body,
+                  CONFIG.colors.hero.outline,
+                  CONFIG.colors.antiHero.body,
+                  CONFIG.colors.antiHero.outline,
+                ]
+                
+                // ВАРИАНТ 1: "ПИКСЕЛЬНЫЙ ВЗРЫВ" - много мелких квадратов
+                // ============================================
+                const pixelCount1 = 24
+                for (let i = 0; i < pixelCount1; i++) {
+                  const angle = (Math.PI * 2 * i) / pixelCount1 + k.rand(-0.3, 0.3)
+                  const speed = k.rand(100, 400)
+                  const size = k.rand(3, 7)
+                  const color = k.choose(allColors)
+                  
+                  const pixel = k.add([
+                    k.rect(size, size),
+                    k.pos(centerX, centerY),
+                    k.color(color[0], color[1], color[2]),
+                    k.anchor("center"),
+                    k.rotate(k.rand(0, 360)),
+                    k.z(CONFIG.visual.zIndex.player)
+                  ])
+                  
+                  pixel.vx = Math.cos(angle) * speed
+                  pixel.vy = Math.sin(angle) * speed
+                  pixel.lifetime = 0
+                  pixel.rotSpeed = k.rand(-720, 720)
+                  
+                  pixel.onUpdate(() => {
+                    pixel.lifetime += k.dt()
+                    pixel.pos.x += pixel.vx * k.dt()
+                    pixel.pos.y += pixel.vy * k.dt()
+                    pixel.angle += pixel.rotSpeed * k.dt()
+                    pixel.opacity = Math.max(0, 1 - pixel.lifetime * 2.5)
+                    
+                    if (pixel.lifetime > 0.4) {
+                      k.destroy(pixel)
+                    }
+                  })
+                }
+                
+                // ВАРИАНТ 2: "ВОЛНЫ" - 3 волны частиц с задержкой
+                // ============================================
+                for (let wave = 0; wave < 3; wave++) {
+                  k.wait(wave * 0.1, () => {
+                    const waveCount = 8
+                    for (let i = 0; i < waveCount; i++) {
+                      const angle = (Math.PI * 2 * i) / waveCount
+                      const speed = 200 + wave * 100
+                      const size = 8 - wave * 2
+                      const color = k.choose(allColors)
+                      
+                      const pixel = k.add([
+                        k.rect(size, size),
+                        k.pos(centerX, centerY),
+                        k.color(color[0], color[1], color[2]),
+                        k.anchor("center"),
+                        k.z(CONFIG.visual.zIndex.player)
+                      ])
+                      
+                      pixel.vx = Math.cos(angle) * speed
+                      pixel.vy = Math.sin(angle) * speed
+                      pixel.lifetime = 0
+                      
+                      pixel.onUpdate(() => {
+                        pixel.lifetime += k.dt()
+                        pixel.pos.x += pixel.vx * k.dt()
+                        pixel.pos.y += pixel.vy * k.dt()
+                        pixel.opacity = Math.max(0, 1 - pixel.lifetime * 3)
+                        
+                        if (pixel.lifetime > 0.33) {
+                          k.destroy(pixel)
+                        }
+                      })
+                    }
+                  })
+                }
+                
+                // ВАРИАНТ 3: "КРЕСТ" - частицы строго по 4 направлениям
+                // ============================================
+                const directions = [
+                  { x: 1, y: 0 },   // Вправо
+                  { x: -1, y: 0 },  // Влево
+                  { x: 0, y: -1 },  // Вверх
+                  { x: 0, y: 1 },   // Вниз
+                ]
+                
+                directions.forEach((dir, idx) => {
+                  for (let j = 0; j < 5; j++) {
+                    k.wait(j * 0.03, () => {
+                      const speed = 200 + j * 50
+                      const size = 8 - j
+                      const color = allColors[idx % allColors.length]
+                      
+                      const pixel = k.add([
+                        k.rect(size, size),
+                        k.pos(centerX, centerY),
+                        k.color(color[0], color[1], color[2]),
+                        k.anchor("center"),
+                        k.z(CONFIG.visual.zIndex.player)
+                      ])
+                      
+                      pixel.vx = dir.x * speed
+                      pixel.vy = dir.y * speed
+                      pixel.lifetime = 0
+                      
+                      pixel.onUpdate(() => {
+                        pixel.lifetime += k.dt()
+                        pixel.pos.x += pixel.vx * k.dt()
+                        pixel.pos.y += pixel.vy * k.dt()
+                        pixel.opacity = Math.max(0, 1 - pixel.lifetime * 2.5)
+                        
+                        if (pixel.lifetime > 0.4) {
+                          k.destroy(pixel)
+                        }
+                      })
+                    })
+                  }
+                })
+                
+                // ВАРИАНТ 4: "ФЕЙЕРВЕРК" - вверх, потом в стороны
+                // ============================================
+                const sparkCount = 6
+                for (let i = 0; i < sparkCount; i++) {
+                  const upSpeed = k.rand(-400, -200)
+                  const sideSpeed = k.rand(-50, 50)
+                  const color = k.choose(allColors)
+                  
+                  const spark = k.add([
+                    k.rect(6, 6),
+                    k.pos(centerX, centerY),
+                    k.color(color[0], color[1], color[2]),
+                    k.anchor("center"),
+                    k.z(CONFIG.visual.zIndex.player)
+                  ])
+                  
+                  spark.vx = sideSpeed
+                  spark.vy = upSpeed
+                  spark.lifetime = 0
+                  spark.hasExploded = false
+                  
+                  spark.onUpdate(() => {
+                    spark.lifetime += k.dt()
+                    
+                    // Гравитация
+                    spark.vy += CONFIG.gameplay.gravity * k.dt()
+                    
+                    spark.pos.x += spark.vx * k.dt()
+                    spark.pos.y += spark.vy * k.dt()
+                    
+                    // Взрыв на вершине траектории
+                    if (!spark.hasExploded && spark.vy > 0 && spark.lifetime > 0.15) {
+                      spark.hasExploded = true
+                      
+                      // Мини-взрыв
+                      for (let j = 0; j < 6; j++) {
+                        const angle = (Math.PI * 2 * j) / 6
+                        const miniSpeed = 100
+                        const miniColor = k.choose(allColors)
+                        
+                        const mini = k.add([
+                          k.rect(3, 3),
+                          k.pos(spark.pos.x, spark.pos.y),
+                          k.color(miniColor[0], miniColor[1], miniColor[2]),
+                          k.anchor("center"),
+                          k.z(CONFIG.visual.zIndex.player)
+                        ])
+                        
+                        mini.vx = Math.cos(angle) * miniSpeed
+                        mini.vy = Math.sin(angle) * miniSpeed
+                        mini.lifetime = 0
+                        
+                        mini.onUpdate(() => {
+                          mini.lifetime += k.dt()
+                          mini.pos.x += mini.vx * k.dt()
+                          mini.pos.y += mini.vy * k.dt()
+                          mini.opacity = Math.max(0, 1 - mini.lifetime * 4)
+                          
+                          if (mini.lifetime > 0.25) {
+                            k.destroy(mini)
+                          }
+                        })
+                      }
+                    }
+                    
+                    spark.opacity = Math.max(0, 1 - spark.lifetime * 2)
+                    
+                    if (spark.lifetime > 0.5) {
+                      k.destroy(spark)
+                    }
+                  })
+                }
+                
+                // Скрываем персонажей
+                k.destroy(player)
+                k.destroy(antiHero)
+                
+                // Переход на следующий уровень
+                k.wait(1.2, () => {
+                  k.go("level2")
+                })
+              }
+            })
+          }
+        })
+      }
+    })
+    
+    // Добавляем тег для столкновения к анти-герою
+    antiHero.use("annihilationTarget")
     
     // Анимация бега и глаз
     k.onUpdate(() => {
@@ -174,7 +507,7 @@ export function level1Scene(k) {
           
           // Звук шага на кадрах 0 и 3 (когда нога касается земли)
           if (player.runFrame === 0 || player.runFrame === 3) {
-            playStepSound()
+            SFX.playStepSound(sfx)
           }
         }
       } else {
@@ -223,6 +556,37 @@ export function level1Scene(k) {
       
       // Отзеркаливание в зависимости от направления
       player.flipX = player.direction === -1
+      
+      // ============================================
+      // АНИМАЦИЯ ГЛАЗ АНТИ-ГЕРОЯ (idle mode)
+      // ============================================
+      antiHero.eyeTimer += k.dt()
+      
+      // Выбираем новую целевую позицию для глаз анти-героя
+      if (antiHero.eyeTimer > k.rand(CONFIG.gameplay.eyeAnimMinDelay, CONFIG.gameplay.eyeAnimMaxDelay)) {
+        antiHero.targetEyeX = k.choose([-1, 0, 1])
+        antiHero.targetEyeY = k.choose([-1, 0, 1])
+        antiHero.eyeTimer = 0
+      }
+      
+      // Плавно интерполируем к целевой позиции
+      antiHero.eyeOffsetX = k.lerp(antiHero.eyeOffsetX, antiHero.targetEyeX, CONFIG.gameplay.eyeLerpSpeed)
+      antiHero.eyeOffsetY = k.lerp(antiHero.eyeOffsetY, antiHero.targetEyeY, CONFIG.gameplay.eyeLerpSpeed)
+      
+      // Округляем для пиксель-арт стиля
+      const antiHeroRoundedX = Math.round(antiHero.eyeOffsetX)
+      const antiHeroRoundedY = Math.round(antiHero.eyeOffsetY)
+      
+      // Переключаем на предзагруженный спрайт анти-героя с глазами
+      const antiHeroSpriteName = `antihero_${antiHeroRoundedX}_${antiHeroRoundedY}`
+      
+      // Обновляем спрайт только если позиция глаз изменилась
+      if (antiHero.currentEyeSprite !== antiHeroSpriteName) {
+        antiHero.use(k.sprite(antiHeroSpriteName))
+        antiHero.currentEyeSprite = antiHeroSpriteName
+      }
+      
+      // ============================================
       
       // Ограничиваем игрока в пределах коридора (используем конфиг)
       const leftBound = CONFIG.visual.playerBounds.leftOffset

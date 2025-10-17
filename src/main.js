@@ -3,6 +3,7 @@ import { CONFIG } from "./config.js"
 import { startScene } from "./scenes/start.js"
 import { menuScene } from "./scenes/menu.js"
 import { level1Scene } from "./scenes/level1.js"
+import { level2Scene } from "./scenes/level2.js"
 import { 
   createHeroSprite, 
   createAntiHeroSprite, 
@@ -71,6 +72,7 @@ k.loadSprite("antihero", antiHeroSprite)
 startScene(k)
 menuScene(k)
 level1Scene(k)
+level2Scene(k)
 
 // Запуск игры после загрузки ресурсов
 k.onLoad(() => {

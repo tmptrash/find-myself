@@ -1,9 +1,18 @@
 export function level1Scene(k) {
   k.scene("level1", () => {
-    const MOVE_SPEED = 450 // Очень высокая скорость движения
-    const JUMP_FORCE = 800 // Очень высокая сила прыжка
+    // ========================================
+    // TIME-BASED СИСТЕМА: независима от FPS
+    // ========================================
+    // Все скорости измеряются в пикселях в секунду (px/s)
+    // Kaplay автоматически умножает move() на k.dt()
+    // Анимации используют k.dt() для time-based обновлений
     
-    k.setGravity(2200) // Очень высокая гравитация для резкого падения
+    const MOVE_SPEED = 450 // Скорость движения (px/s)
+    const JUMP_FORCE = 800 // Сила прыжка (px/s)
+    const GRAVITY = 2200 // Гравитация (px/s²)
+    const RUN_ANIM_SPEED = 0.04 // Скорость анимации бега (секунды на кадр)
+    
+    k.setGravity(GRAVITY)
     
     // Флаг дебаг режима (переключается по F1)
     let debugMode = false
@@ -23,8 +32,8 @@ export function level1Scene(k) {
       oscillator.frequency.setValueAtTime(250, now) // Выше частота = легче звук
       oscillator.frequency.exponentialRampToValueAtTime(80, now + 0.08)
       
-      gainNode.gain.setValueAtTime(0.12, now) // Тише громкость
-      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1) // Короче
+      gainNode.gain.setValueAtTime(0.343, now) // Громкость (0.264 * 1.3 = +30%, итого +186% от оригинала)
+      gainNode.gain.exponentialRampToValueAtTime(0.029, now + 0.1) // Затухание
       
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
@@ -45,8 +54,8 @@ export function level1Scene(k) {
       oscillator.frequency.setValueAtTime(180, now)
       oscillator.frequency.exponentialRampToValueAtTime(60, now + 0.03)
       
-      gainNode.gain.setValueAtTime(0.08, now) // Тихий звук шага
-      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05)
+      gainNode.gain.setValueAtTime(0.176, now) // Громкость звука шага (0.135 * 1.3 = +30%, итого +120% от оригинала)
+      gainNode.gain.exponentialRampToValueAtTime(0.022, now + 0.05)
       
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
@@ -77,7 +86,7 @@ export function level1Scene(k) {
     }
     
     // Нижняя платформа (широкая)
-    const ground = addPlatform(0, k.height() - 150, k.width(), 150)
+    addPlatform(0, k.height() - 150, k.width(), 150)
     
     // Верхняя платформа (широкая, той же высоты)
     addPlatform(0, 0, k.width(), 150)
@@ -88,17 +97,10 @@ export function level1Scene(k) {
     // Правая стена (коридор)
     addPlatform(k.width() - 30, 150, 30, k.height() - 300)
     
-    // Дополнительные платформы в коридоре
-    addPlatform(100, k.height() - 250, 150, 20)  // Опущена ниже для доступности первого прыжка
-    addPlatform(300, k.height() - 350, 180, 20)
-    addPlatform(550, k.height() - 400, 150, 20)
-    addPlatform(800, k.height() - 320, 180, 20)
-    addPlatform(1000, k.height() - 380, 150, 20)
-    
-    // Добавляем героя (падает на первую платформу слева)
+    // Добавляем героя (падает на нижнюю платформу)
     const player = k.add([
       k.sprite('hero_0_0'), // Используем спрайт с глазами
-      k.pos(175, 200),
+      k.pos(k.width() / 2, 300), // Стартуем по центру коридора
       k.area({
         shape: new k.Rect(k.vec2(0, 0), 14, 25), // Collision box возвращен к исходной ширине
         collisionIgnore: []
@@ -157,10 +159,10 @@ export function level1Scene(k) {
         player.isRunning = false // Сбрасываем флаг бега
         player.wasJumping = true // Устанавливаем флаг прыжка
       } else if (isMoving) {
-        // Бег - переключаем кадры плавно (8 кадров как на референсе)
+        // Бег - переключаем кадры плавно (time-based анимация)
         player.isRunning = true // Устанавливаем флаг бега
         player.runTimer += k.dt()
-        if (player.runTimer > 0.04) { // Меняем кадр каждые 0.04 секунды для плавной анимации
+        if (player.runTimer > RUN_ANIM_SPEED) { // Меняем кадр через заданное время
           player.runFrame = (player.runFrame + 1) % 6 // 6 кадров для плавности
           player.use(k.sprite(`hero-run-${player.runFrame}`))
           player.runTimer = 0

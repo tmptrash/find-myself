@@ -31,7 +31,9 @@ const k = kaplay({
   height: 920,
   scale: 1,
   background: [0, 0, 0],
-  font: "jetbrains", // Устанавливаем шрифт по умолчанию
+  font: "jetbrains",
+  // TIME-BASED система: используем k.dt() для независимости от FPS
+  // Kaplay автоматически обрабатывает delta time для всех движений
 })
 
 // Создаём и загружаем спрайты героев
@@ -50,15 +52,13 @@ for (let x = -1; x <= 1; x++) {
 k.loadSprite("hero-idle", createHeroIdleSprite())
 k.loadSprite("hero-jump", createHeroJumpSprite())
 
-// Загружаем кадры бега (8 кадров для плавной анимации как на референсе)
+// Загружаем кадры бега (6 кадров)
 k.loadSprite("hero-run-0", createHeroRunSprite(0))
 k.loadSprite("hero-run-1", createHeroRunSprite(1))
 k.loadSprite("hero-run-2", createHeroRunSprite(2))
 k.loadSprite("hero-run-3", createHeroRunSprite(3))
 k.loadSprite("hero-run-4", createHeroRunSprite(4))
 k.loadSprite("hero-run-5", createHeroRunSprite(5))
-k.loadSprite("hero-run-6", createHeroRunSprite(6))
-k.loadSprite("hero-run-7", createHeroRunSprite(7))
 
 // Загрузка ресурсов
 k.loadBean()

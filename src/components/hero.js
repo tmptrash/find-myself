@@ -234,26 +234,6 @@ function createHeroFrameWithEyes(animation, frame, eyeOffsetX = 0, eyeOffsetY = 
       rightLegY = 20
       leftLegX = 14  // Практически в одной точке
       rightLegX = 14
-    } else if (frame === 6) {
-      // Кадр 6 не используется
-      headY = 6
-      bodyY = 14
-      headX = 12
-      bodyX = 10
-      leftLegY = 22
-      rightLegY = 22
-      leftLegX = 14
-      rightLegX = 14
-    } else {
-      // Кадр 7 не используется
-      headY = 6
-      bodyY = 14
-      headX = 12
-      bodyX = 10
-      leftLegY = 22
-      rightLegY = 22
-      leftLegX = 14
-      rightLegX = 14
     }
   }
   
@@ -458,26 +438,6 @@ function createAntiHeroFrameWithEyes(animation, frame, eyeOffsetX = 0, eyeOffset
       leftLegY = 20  // Обе ноги подняты
       rightLegY = 20
       leftLegX = 14  // Практически в одной точке
-      rightLegX = 14
-    } else if (frame === 6) {
-      // Кадр 6 не используется
-      headY = 6
-      bodyY = 14
-      headX = 12
-      bodyX = 10
-      leftLegY = 22
-      rightLegY = 22
-      leftLegX = 14
-      rightLegX = 14
-    } else {
-      // Кадр 7 не используется
-      headY = 6
-      bodyY = 14
-      headX = 12
-      bodyX = 10
-      leftLegY = 22
-      rightLegY = 22
-      leftLegX = 14
       rightLegX = 14
     }
   }

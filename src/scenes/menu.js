@@ -491,7 +491,7 @@ export function menuScene(k) {
         if (isPlaying && currentVolume > 0.01) {
           Ambient.setVolume(ambientMusic, 0)
         } else {
-          Ambient.setVolume(ambientMusic, 0.4)
+          Ambient.setVolume(ambientMusic, 0.52) // +30% от 0.4
           if (window.gameAudioContext.state === 'suspended') {
             window.gameAudioContext.resume()
           }

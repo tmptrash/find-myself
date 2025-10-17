@@ -22,7 +22,7 @@ function init(instance) {
   
   // Главный регулятор громкости
   instance.masterGain = instance.audioContext.createGain()
-  instance.masterGain.gain.value = 0.4
+  instance.masterGain.gain.value = 0.52 // +30% от 0.4
   instance.masterGain.connect(instance.audioContext.destination)
 }
 
@@ -254,7 +254,7 @@ export function stop(instance) {
   // Сбрасываем громкость мастер-канала
   if (instance.masterGain) {
     instance.masterGain.gain.cancelScheduledValues(instance.audioContext.currentTime)
-    instance.masterGain.gain.value = 0.4 // Восстанавливаем громкость для следующего запуска
+    instance.masterGain.gain.value = 0.52 // Восстанавливаем громкость для следующего запуска (+30%)
   }
   
   instance.oscillators = []

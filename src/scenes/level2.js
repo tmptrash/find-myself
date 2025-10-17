@@ -50,69 +50,16 @@ export function level2Scene(k) {
     const startX = 150 // Левая часть экрана
     const startY = k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
     
-    // Создаем частицы для эффекта сборки
-    const particles = []
-    const particleCount = 20
-    
-    for (let i = 0; i < particleCount; i++) {
-      const particle = k.add([
-        k.rect(6, 6),
-        k.pos(
-          startX + k.rand(-100, 100),
-          startY + k.rand(-100, 100)
-        ),
-        k.color(CONFIG.colors.hero.body[0], CONFIG.colors.hero.body[1], CONFIG.colors.hero.body[2]),
-        k.anchor("center"),
-        k.z(CONFIG.visual.zIndex.player),
-        "particle"
-      ])
-      
-      particle.targetX = startX
-      particle.targetY = startY
-      particle.speed = k.rand(200, 400)
-      
-      particles.push(particle)
-    }
-    
-    // Анимируем частицы к центру
-    let particlesGathered = false
+    // Используем функцию сборки из hero.js
     let player = null
-    
-    k.onUpdate(() => {
-      if (!particlesGathered) {
-        let allGathered = true
-        
-        particles.forEach(particle => {
-          const dx = particle.targetX - particle.pos.x
-          const dy = particle.targetY - particle.pos.y
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          
-          if (dist > 5) {
-            allGathered = false
-            const moveSpeed = particle.speed * k.dt()
-            particle.pos.x += (dx / dist) * moveSpeed
-            particle.pos.y += (dy / dist) * moveSpeed
-          }
-        })
-        
-        if (allGathered && !player) {
-          particlesGathered = true
-          
-          // Удаляем частицы
-          particles.forEach(p => k.destroy(p))
-          
-          // Звук появления героя
-          SFX.playSpawnSound(sfx)
-          
-          // Создаем героя
-          player = Hero.create(k, {
-            x: startX,
-            y: startY,
-            type: 'hero',
-            controllable: true,
-            sfx: sfx
-          })
-        }
+    Hero.spawnWithAssembly(k, {
+      x: startX,
+      y: startY,
+      type: 'hero',
+      controllable: true,
+      sfx: sfx,
+      onComplete: (character) => {
+        player = character
       }
     })
     

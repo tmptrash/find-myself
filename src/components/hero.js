@@ -419,6 +419,134 @@ export function create(k, config) {
 }
 
 // ============================================
+// ЭФФЕКТ СБОРКИ ГЕРОЯ ИЗ ЧАСТИЦ
+// ============================================
+
+/**
+ * Создаёт эффект сборки героя из частиц
+ * @param {Object} k - Kaplay инстанс
+ * @param {Object} config - Конфигурация
+ * @param {number} config.x - Позиция X для появления
+ * @param {number} config.y - Позиция Y для появления
+ * @param {string} [config.type='hero'] - Тип персонажа ('hero' или 'antihero')
+ * @param {boolean} [config.controllable=true] - Управляется ли клавиатурой
+ * @param {Object} [config.sfx] - AudioContext для звуковых эффектов
+ * @param {Function} [config.onComplete] - Callback с созданным героем после завершения
+ * @returns {Object} Объект с методом cancel() для прерывания эффекта
+ */
+export function spawnWithAssembly(k, config) {
+  const {
+    x,
+    y,
+    type = 'hero',
+    controllable = true,
+    sfx = null,
+    onComplete = null
+  } = config
+  
+  // Определяем цвет частиц в зависимости от типа
+  const particleColor = type === 'hero' ? CONFIG.colors.hero.body : CONFIG.colors.antiHero.body
+  
+  // Создаем частицы для эффекта сборки
+  const particles = []
+  const particleCount = 20
+  
+  for (let i = 0; i < particleCount; i++) {
+    const particle = k.add([
+      k.rect(6, 6),
+      k.pos(
+        x + k.rand(-100, 100),
+        y + k.rand(-100, 100)
+      ),
+      k.color(particleColor[0], particleColor[1], particleColor[2]),
+      k.anchor("center"),
+      k.z(CONFIG.visual.zIndex.player),
+      "assemblyParticle"
+    ])
+    
+    particle.targetX = x
+    particle.targetY = y
+    particle.speed = k.rand(200, 400)
+    
+    particles.push(particle)
+  }
+  
+  // Анимируем частицы к центру
+  let particlesGathered = false
+  let character = null
+  let cancelled = false
+  
+  const updateHandler = k.onUpdate(() => {
+    if (cancelled) {
+      // Если эффект отменен, удаляем все частицы
+      particles.forEach(p => {
+        if (p.exists()) k.destroy(p)
+      })
+      updateHandler.cancel()
+      return
+    }
+    
+    if (!particlesGathered) {
+      let allGathered = true
+      
+      particles.forEach(particle => {
+        if (!particle.exists()) return
+        
+        const dx = particle.targetX - particle.pos.x
+        const dy = particle.targetY - particle.pos.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        
+        if (dist > 5) {
+          allGathered = false
+          const moveSpeed = particle.speed * k.dt()
+          particle.pos.x += (dx / dist) * moveSpeed
+          particle.pos.y += (dy / dist) * moveSpeed
+        }
+      })
+      
+      if (allGathered && !character) {
+        particlesGathered = true
+        
+        // Удаляем частицы
+        particles.forEach(p => {
+          if (p.exists()) k.destroy(p)
+        })
+        
+        // Звук появления героя
+        if (sfx) {
+          SFX.playSpawnSound(sfx)
+        }
+        
+        // Создаем героя
+        character = create(k, {
+          x,
+          y,
+          type,
+          controllable,
+          sfx
+        })
+        
+        // Вызываем callback
+        if (onComplete) {
+          onComplete(character)
+        }
+        
+        // Отменяем обновление
+        updateHandler.cancel()
+      }
+    }
+  })
+  
+  // Возвращаем объект с методом отмены
+  return {
+    cancel: () => {
+      cancelled = true
+    },
+    getCharacter: () => character
+  }
+}
+
+// ============================================
 // ЭФФЕКТ АННИГИЛЯЦИИ
 // ============================================
 

@@ -70,7 +70,7 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     }
   }
   
-  // Анимация прыжка - боковой вид, короткие ноги
+  // Анимация прыжка - боковой вид, ноги согнуты и разведены
   if (animation === 'jump') {
     headY = 6
     bodyY = 14
@@ -78,32 +78,22 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     bodyX = 10
     leftArmY = 15
     rightArmY = 15
+    // Правая нога спереди - согнута сильнее (выше)
+    rightLegY = 20
+    rightLegX = 18
+    // Левая нога сзади - согнута меньше (ниже)
     leftLegY = 22
-    rightLegY = 22
+    leftLegX = 10
     leftArmX = 9
     rightArmX = 21
-    leftLegX = 11
-    rightLegX = 17
   }
   
   // Черный контур (универсальный)
   ctx.fillStyle = getHex(colors.outline)
   ctx.fillRect(headX - 1, headY - 1, 10, 10)
   
-  // Контур тела - при прыжке рисуем нижнюю линию с пропусками для ног
-  if (animation === 'jump') {
-    ctx.fillRect(bodyX - 1, bodyY - 1, 1, 9)
-    ctx.fillRect(bodyX - 1, bodyY - 1, 14, 1)
-    ctx.fillRect(bodyX + 12, bodyY - 1, 1, 9)
-    ctx.fillRect(bodyX - 1, bodyY + 7, 2, 1)
-    ctx.fillRect(leftLegX, bodyY + 7, 1, 1)
-    ctx.fillRect(leftLegX + 3, bodyY + 7, 1, 1)
-    ctx.fillRect(rightLegX - 1, bodyY + 7, 1, 1)
-    ctx.fillRect(rightLegX + 2, bodyY + 7, 1, 1)
-    ctx.fillRect(rightLegX + 3, bodyY + 7, 2, 1)
-  } else {
-    ctx.fillRect(bodyX - 1, bodyY - 1, 14, 10)
-  }
+  // Контур тела (для всех анимаций одинаковый)
+  ctx.fillRect(bodyX - 1, bodyY - 1, 14, 10)
   
   // Контуры рук - не рисуем при беге и прыжке
   if (animation !== 'run' && animation !== 'jump') {
@@ -111,14 +101,9 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
   }
   
-  // Контуры ног
-  if (animation === 'jump') {
-    ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 6)
-    ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 6)
-  } else {
-    ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
-    ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
-  }
+  // Контуры ног (для всех анимаций одинаковые)
+  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
+  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
   
   // Голова (универсальный цвет тела)
   ctx.fillStyle = getHex(colors.body)
@@ -152,18 +137,9 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     ctx.fillRect(rightArmX, rightArmY, 2, 7)
   }
   
-  // Ноги
-  if (animation === 'jump') {
-    ctx.fillRect(leftLegX, leftLegY, 3, 4)
-    ctx.fillRect(rightLegX, rightLegY, 3, 4)
-    
-    // Горизонтальная линия между туловищем и ногами
-    ctx.fillStyle = getHex(colors.outline)
-    ctx.fillRect(bodyX - 1, leftLegY - 1, 14, 1)
-  } else {
-    ctx.fillRect(leftLegX, leftLegY, 3, 6)
-    ctx.fillRect(rightLegX, rightLegY, 3, 6)
-  }
+  // Ноги (для всех анимаций одинаковые)
+  ctx.fillRect(leftLegX, leftLegY, 3, 6)
+  ctx.fillRect(rightLegX, rightLegY, 3, 6)
   
   return canvas.toDataURL()
 }

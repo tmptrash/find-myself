@@ -1,5 +1,6 @@
 import { CONFIG, getColor, isAnyKeyDown } from '../config.js'
 import * as SFX from '../audio/sfx.js'
+import { addBackground } from '../components/background.js'
 
 export function level2Scene(k) {
   k.scene("level2", () => {
@@ -17,14 +18,8 @@ export function level2Scene(k) {
     // Создаём инстанс звуковых эффектов (получаем AudioContext)
     const sfx = SFX.create()
     
-    // Фон - фиксированный к камере
-    k.add([
-      k.rect(k.width(), k.height()),
-      getColor(k, CONFIG.colors.level1.background),
-      k.pos(0, 0),
-      k.fixed(),
-      k.z(CONFIG.visual.zIndex.background)
-    ])
+    // Фон - используем общий модуль
+    addBackground(k, CONFIG.colors.level1.background)
     
     // Создаем платформы
     function addPlatform(x, y, width, height) {

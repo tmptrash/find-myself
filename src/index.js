@@ -1,6 +1,6 @@
 import kaplay from "kaplay"
 import { CONFIG } from "./config.js"
-import { startScene } from "./scenes/start.js"
+import { readyScene } from "./scenes/ready.js"
 import { menuScene } from "./scenes/menu.js"
 import { level1Scene } from "./scenes/level1.js"
 import { level2Scene } from "./scenes/level2.js"
@@ -69,7 +69,7 @@ k.loadSprite("hero", heroSprite)
 k.loadSprite("antihero", antiHeroSprite)
 
 // Регистрация всех сцен
-startScene(k)
+readyScene(k)
 menuScene(k)
 level1Scene(k)
 level2Scene(k)
@@ -78,3 +78,4 @@ level2Scene(k)
 k.onLoad(() => {
   k.go("start")
 })
+

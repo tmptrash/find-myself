@@ -1,7 +1,7 @@
 import kaplay from "kaplay"
 import { startScene } from "./scenes/start.js"
 import { menuScene } from "./scenes/menu.js"
-import { gameScene } from "./scenes/game.js"
+import { level1Scene } from "./scenes/level1.js"
 import { 
   createHeroSprite, 
   createAntiHeroSprite, 
@@ -69,7 +69,7 @@ k.loadSprite("antihero", antiHeroSprite)
 // Регистрация всех сцен
 startScene(k)
 menuScene(k)
-gameScene(k)
+level1Scene(k)
 
 // Запуск игры после загрузки ресурсов
 k.onLoad(() => {

@@ -1,4 +1,4 @@
-import { AmbientMusic } from "../audio/ambient.js"
+import * as Ambient from "../audio/ambient.js"
 
 export function menuScene(k) {
   k.scene("menu", () => {
@@ -6,8 +6,8 @@ export function menuScene(k) {
     const centerY = k.height() / 2
     
     // Запускаем ambient музыку сразу
-    const ambientMusic = new AmbientMusic()
-    ambientMusic.start()
+    const ambientMusic = Ambient.create()
+    Ambient.start(ambientMusic)
     
     // Переменные для анимации глаз
     let eyeOffsetX = 0
@@ -477,21 +477,21 @@ export function menuScene(k) {
     
     // Переход к игре
     k.onKeyPress("space", () => {
-      ambientMusic.stop()
-      k.go("game")
+      Ambient.stop(ambientMusic)
+      k.go("level1")
     })
     
     // Управление музыкой (вкл/выкл)
     k.onKeyPress("m", async () => {
-      const isPlaying = ambientMusic.isActuallyPlaying()
+      const isPlaying = Ambient.isActuallyPlaying(ambientMusic)
       
       // Переключаем громкость
       if (ambientMusic.masterGain) {
         const currentVolume = ambientMusic.masterGain.gain.value
         if (isPlaying && currentVolume > 0.01) {
-          ambientMusic.setVolume(0)
+          Ambient.setVolume(ambientMusic, 0)
         } else {
-          ambientMusic.setVolume(0.4)
+          Ambient.setVolume(ambientMusic, 0.4)
           if (window.gameAudioContext.state === 'suspended') {
             window.gameAudioContext.resume()
           }
@@ -501,7 +501,7 @@ export function menuScene(k) {
     
     // Остановка музыки при выходе из сцены
     k.onSceneLeave(() => {
-      ambientMusic.stop()
+      Ambient.stop(ambientMusic)
     })
   })
 }

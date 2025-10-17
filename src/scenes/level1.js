@@ -1,5 +1,5 @@
-export function gameScene(k) {
-  k.scene("game", () => {
+export function level1Scene(k) {
+  k.scene("level1", () => {
     const MOVE_SPEED = 450 // Очень высокая скорость движения
     const JUMP_FORCE = 800 // Очень высокая сила прыжка
     
@@ -89,7 +89,7 @@ export function gameScene(k) {
     addPlatform(k.width() - 30, 150, 30, k.height() - 300)
     
     // Дополнительные платформы в коридоре
-    addPlatform(100, k.height() - 300, 150, 20)
+    addPlatform(100, k.height() - 250, 150, 20)  // Опущена ниже для доступности первого прыжка
     addPlatform(300, k.height() - 350, 180, 20)
     addPlatform(550, k.height() - 400, 150, 20)
     addPlatform(800, k.height() - 320, 180, 20)
@@ -99,7 +99,7 @@ export function gameScene(k) {
     const player = k.add([
       k.sprite('hero_0_0'), // Используем спрайт с глазами
       k.pos(175, 200),
-      k.area({ 
+      k.area({
         shape: new k.Rect(k.vec2(0, 0), 14, 25), // Collision box возвращен к исходной ширине
         collisionIgnore: []
       }),

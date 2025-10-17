@@ -1,4 +1,5 @@
 // Процедурная генерация мрачной ambient музыки
+import { CONFIG } from '../config.js'
 
 // Создание инстанса ambient музыки
 export function create() {
@@ -20,9 +21,9 @@ function init(instance) {
   // Используем глобальный аудио контекст
   instance.audioContext = window.gameAudioContext
   
-  // Главный регулятор громкости
+  // Главный регулятор громкости (из конфига)
   instance.masterGain = instance.audioContext.createGain()
-  instance.masterGain.gain.value = 0.52 // +30% от 0.4
+  instance.masterGain.gain.value = CONFIG.audio.ambient.masterVolume
   instance.masterGain.connect(instance.audioContext.destination)
 }
 
@@ -65,18 +66,18 @@ export async function start(instance) {
   
   instance.isPlaying = true
   
-  // Низкий дрон (основа)
-  createDrone(instance, 55, 0.08) // A1
-  createDrone(instance, 82.5, 0.06) // E2 (квинта)
-  createDrone(instance, 110, 0.05) // A2 (октава)
+  // Низкий дрон (основа) - используем конфиг
+  createDrone(instance, 55, CONFIG.audio.ambient.bassVolume) // A1
+  createDrone(instance, 82.5, CONFIG.audio.ambient.bassVolume * 0.75) // E2 (квинта)
+  createDrone(instance, 110, CONFIG.audio.ambient.bassVolume * 0.625) // A2 (октава)
   
-  // Средние тона (загадочность)
-  createOscillatingDrone(instance, 220, 0.03, 0.002) // A3 с модуляцией
-  createOscillatingDrone(instance, 329.63, 0.02, 0.003) // E4
+  // Средние тона (загадочность) - используем конфиг
+  createOscillatingDrone(instance, 220, CONFIG.audio.ambient.midVolume, 0.002) // A3 с модуляцией
+  createOscillatingDrone(instance, 329.63, CONFIG.audio.ambient.midVolume * 0.67, 0.003) // E4
   
-  // Высокие призрачные тона
-  createOscillatingDrone(instance, 440, 0.015, 0.001) // A4
-  createOscillatingDrone(instance, 554.37, 0.01, 0.0015) // C#5
+  // Высокие призрачные тона - используем конфиг
+  createOscillatingDrone(instance, 440, CONFIG.audio.ambient.highVolume, 0.001) // A4
+  createOscillatingDrone(instance, 554.37, CONFIG.audio.ambient.highVolume * 0.67, 0.0015) // C#5
   
   // Добавляем шум для атмосферности
   createNoise(instance)
@@ -95,7 +96,7 @@ function createDrone(instance, frequency, volume) {
     oscillator.frequency.value = frequency
     
     gain.gain.value = 0
-    gain.gain.linearRampToValueAtTime(volume, instance.audioContext.currentTime + 0.5)
+    gain.gain.linearRampToValueAtTime(volume, instance.audioContext.currentTime + CONFIG.audio.ambient.fadeInTime)
     
     oscillator.connect(gain)
     gain.connect(instance.masterGain)
@@ -128,7 +129,7 @@ function createOscillatingDrone(instance, baseFrequency, volume, modulationDepth
   lfoGain.connect(oscillator.frequency)
   
   gain.gain.value = 0
-  gain.gain.linearRampToValueAtTime(volume, instance.audioContext.currentTime + 0.5)
+  gain.gain.linearRampToValueAtTime(volume, instance.audioContext.currentTime + CONFIG.audio.ambient.fadeInTime)
   
   oscillator.connect(gain)
   gain.connect(instance.masterGain)
@@ -163,7 +164,7 @@ function createNoise(instance) {
   instance.filterNode.Q.value = 0.5
   
   const noiseGain = instance.audioContext.createGain()
-  noiseGain.gain.value = 0.03
+  noiseGain.gain.value = CONFIG.audio.ambient.noiseVolume
   
   instance.noiseNode.connect(instance.filterNode)
   instance.filterNode.connect(noiseGain)
@@ -208,7 +209,7 @@ function playBlip(instance) {
   // Envelope
   const now = instance.audioContext.currentTime
   gain.gain.value = 0
-  gain.gain.linearRampToValueAtTime(0.08, now + 0.1)
+  gain.gain.linearRampToValueAtTime(CONFIG.audio.ambient.blipVolume, now + 0.1)
   gain.gain.exponentialRampToValueAtTime(0.001, now + 2)
   
   oscillator.connect(filter)
@@ -251,10 +252,10 @@ export function stop(instance) {
     }
   })
   
-  // Сбрасываем громкость мастер-канала
+  // Сбрасываем громкость мастер-канала (из конфига)
   if (instance.masterGain) {
     instance.masterGain.gain.cancelScheduledValues(instance.audioContext.currentTime)
-    instance.masterGain.gain.value = 0.52 // Восстанавливаем громкость для следующего запуска (+30%)
+    instance.masterGain.gain.value = CONFIG.audio.ambient.masterVolume
   }
   
   instance.oscillators = []

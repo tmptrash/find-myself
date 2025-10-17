@@ -1,4 +1,5 @@
 import * as Ambient from "../audio/ambient.js"
+import { CONFIG, getRGB } from "../config.js"
 
 export function menuScene(k) {
   k.scene("menu", () => {
@@ -82,7 +83,7 @@ export function menuScene(k) {
       const boundaryCenter = centerX + currentBgShift
       const rotationOffset = Math.tan(boundaryRotation) * (k.height() / 2)
       
-      // Левая сторона - светлый персиковый (полигон)
+      // Левая сторона - светлый персиковый (полигон) - из конфига
       k.drawPolygon({
         pts: [
           k.vec2(waveX - padding, waveY - padding),
@@ -90,10 +91,10 @@ export function menuScene(k) {
           k.vec2(boundaryCenter - rotationOffset + padding, k.height() - waveY + padding),
           k.vec2(waveX - padding, k.height() - waveY + padding)
         ],
-        color: k.rgb(255, 218, 185), // Светлый персиковый
+        color: getRGB(k, CONFIG.colors.level1.background),
       })
       
-      // Правая сторона - темно-коричневый (полигон)
+      // Правая сторона - темно-коричневый (полигон) - из конфига
       k.drawPolygon({
         pts: [
           k.vec2(boundaryCenter + rotationOffset - padding, -waveY - padding),
@@ -101,7 +102,7 @@ export function menuScene(k) {
           k.vec2(k.width() - waveX + padding, k.height() + waveY + padding),
           k.vec2(boundaryCenter - rotationOffset - padding, k.height() + waveY + padding)
         ],
-        color: k.rgb(62, 39, 35), // Темно-коричневый
+        color: getRGB(k, CONFIG.colors.level1.platform),
       })
       
       // Свечение вокруг правого героя для контраста (следует за героем)
@@ -475,28 +476,32 @@ export function menuScene(k) {
       startText.opacity = 0.5 + Math.sin(k.time() * 3) * 0.5
     })
     
-    // Переход к игре
-    k.onKeyPress("space", () => {
-      Ambient.stop(ambientMusic)
-      k.go("level1")
+    // Переход к игре (используем конфиг)
+    CONFIG.controls.startGame.forEach(key => {
+      k.onKeyPress(key, () => {
+        Ambient.stop(ambientMusic)
+        k.go("level1")
+      })
     })
     
-    // Управление музыкой (вкл/выкл)
-    k.onKeyPress("m", async () => {
-      const isPlaying = Ambient.isActuallyPlaying(ambientMusic)
-      
-      // Переключаем громкость
-      if (ambientMusic.masterGain) {
-        const currentVolume = ambientMusic.masterGain.gain.value
-        if (isPlaying && currentVolume > 0.01) {
-          Ambient.setVolume(ambientMusic, 0)
-        } else {
-          Ambient.setVolume(ambientMusic, 0.52) // +30% от 0.4
-          if (window.gameAudioContext.state === 'suspended') {
-            window.gameAudioContext.resume()
+    // Управление музыкой (используем конфиг)
+    CONFIG.controls.toggleMute.forEach(key => {
+      k.onKeyPress(key, async () => {
+        const isPlaying = Ambient.isActuallyPlaying(ambientMusic)
+        
+        // Переключаем громкость
+        if (ambientMusic.masterGain) {
+          const currentVolume = ambientMusic.masterGain.gain.value
+          if (isPlaying && currentVolume > 0.01) {
+            Ambient.setVolume(ambientMusic, 0)
+          } else {
+            Ambient.setVolume(ambientMusic, CONFIG.audio.ambient.masterVolume)
+            if (window.gameAudioContext.state === 'suspended') {
+              window.gameAudioContext.resume()
+            }
           }
         }
-      }
+      })
     })
     
     // Остановка музыки при выходе из сцены

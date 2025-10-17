@@ -1,21 +1,18 @@
+import { CONFIG, getColor, isAnyKeyDown } from '../config.js'
+
 export function level1Scene(k) {
   k.scene("level1", () => {
     // ========================================
     // TIME-BASED СИСТЕМА: независима от FPS
     // ========================================
-    // Все скорости измеряются в пикселях в секунду (px/s)
-    // Kaplay автоматически умножает move() на k.dt()
-    // Анимации используют k.dt() для time-based обновлений
+    // Все параметры импортированы из глобального CONFIG
     
-    const MOVE_SPEED = 450 // Скорость движения (px/s)
-    const JUMP_FORCE = 800 // Сила прыжка (px/s)
-    const GRAVITY = 2200 // Гравитация (px/s²)
-    const RUN_ANIM_SPEED = 0.04 // Скорость анимации бега (секунды на кадр)
+    const MOVE_SPEED = CONFIG.gameplay.moveSpeed
+    const JUMP_FORCE = CONFIG.gameplay.jumpForce
+    const GRAVITY = CONFIG.gameplay.gravity
+    const RUN_ANIM_SPEED = CONFIG.gameplay.runAnimSpeed
     
     k.setGravity(GRAVITY)
-    
-    // Флаг дебаг режима (переключается по F1)
-    let debugMode = false
     
     // Используем глобальный аудио контекст
     const audioContext = window.gameAudioContext
@@ -29,17 +26,17 @@ export function level1Scene(k) {
       const gainNode = audioContext.createGain()
       
       oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(250, now) // Выше частота = легче звук
-      oscillator.frequency.exponentialRampToValueAtTime(80, now + 0.08)
+      oscillator.frequency.setValueAtTime(CONFIG.audio.sfx.landFreqStart, now)
+      oscillator.frequency.exponentialRampToValueAtTime(CONFIG.audio.sfx.landFreqEnd, now + 0.08)
       
-      gainNode.gain.setValueAtTime(0.343, now) // Громкость (0.264 * 1.3 = +30%, итого +186% от оригинала)
-      gainNode.gain.exponentialRampToValueAtTime(0.029, now + 0.1) // Затухание
+      gainNode.gain.setValueAtTime(CONFIG.audio.sfx.landVolume, now)
+      gainNode.gain.exponentialRampToValueAtTime(CONFIG.audio.sfx.landFade, now + CONFIG.audio.sfx.landDuration)
       
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
       
       oscillator.start(now)
-      oscillator.stop(now + 0.1)
+      oscillator.stop(now + CONFIG.audio.sfx.landDuration)
     }
     
     // Функция для звука шагов при беге
@@ -51,26 +48,26 @@ export function level1Scene(k) {
       const gainNode = audioContext.createGain()
       
       oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(180, now)
-      oscillator.frequency.exponentialRampToValueAtTime(60, now + 0.03)
+      oscillator.frequency.setValueAtTime(CONFIG.audio.sfx.stepFreqStart, now)
+      oscillator.frequency.exponentialRampToValueAtTime(CONFIG.audio.sfx.stepFreqEnd, now + 0.03)
       
-      gainNode.gain.setValueAtTime(0.176, now) // Громкость звука шага (0.135 * 1.3 = +30%, итого +120% от оригинала)
-      gainNode.gain.exponentialRampToValueAtTime(0.022, now + 0.05)
+      gainNode.gain.setValueAtTime(CONFIG.audio.sfx.stepVolume, now)
+      gainNode.gain.exponentialRampToValueAtTime(CONFIG.audio.sfx.stepFade, now + CONFIG.audio.sfx.stepDuration)
       
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
       
       oscillator.start(now)
-      oscillator.stop(now + 0.05)
+      oscillator.stop(now + CONFIG.audio.sfx.stepDuration)
     }
     
     // Фон - фиксированный к камере
     k.add([
       k.rect(k.width(), k.height()),
-      k.color(255, 218, 185), // Светлый персиковый
+      getColor(k, CONFIG.colors.level1.background),
       k.pos(0, 0),
       k.fixed(),
-      k.z(-100)
+      k.z(CONFIG.visual.zIndex.background)
     ])
     
     // Создаем платформы
@@ -80,34 +77,42 @@ export function level1Scene(k) {
         k.pos(x, y),
         k.area(),
         k.body({ isStatic: true }),
-        k.color(62, 39, 35), // Темно-коричневый
+        getColor(k, CONFIG.colors.level1.platform),
         "platform"
       ])
     }
     
+    const platformHeight = CONFIG.visual.platformHeight
+    const wallWidth = CONFIG.visual.wallWidth
+    
     // Нижняя платформа (широкая)
-    addPlatform(0, k.height() - 150, k.width(), 150)
+    addPlatform(0, k.height() - platformHeight, k.width(), platformHeight)
     
     // Верхняя платформа (широкая, той же высоты)
-    addPlatform(0, 0, k.width(), 150)
+    addPlatform(0, 0, k.width(), platformHeight)
     
     // Левая стена (коридор)
-    addPlatform(0, 150, 30, k.height() - 300)
+    addPlatform(0, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
     // Правая стена (коридор)
-    addPlatform(k.width() - 30, 150, 30, k.height() - 300)
+    addPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
     // Добавляем героя (падает на нижнюю платформу)
+    const startX = CONFIG.levels.level1.startPosX === 'center' ? k.width() / 2 : CONFIG.levels.level1.startPosX
     const player = k.add([
       k.sprite('hero_0_0'), // Используем спрайт с глазами
-      k.pos(k.width() / 2, 300), // Стартуем по центру коридора
+      k.pos(startX, CONFIG.levels.level1.startPosY),
       k.area({
-        shape: new k.Rect(k.vec2(0, 0), 14, 25), // Collision box возвращен к исходной ширине
+        shape: new k.Rect(
+          k.vec2(CONFIG.gameplay.collisionOffsetX, CONFIG.gameplay.collisionOffsetY), 
+          CONFIG.gameplay.collisionWidth, 
+          CONFIG.gameplay.collisionHeight
+        ),
         collisionIgnore: []
       }),
       k.body(),
       k.anchor("center"),
-      k.scale(3),
+      k.scale(CONFIG.gameplay.heroScale),
     ])
     
     // Добавляем кастомные свойства после создания
@@ -163,7 +168,7 @@ export function level1Scene(k) {
         player.isRunning = true // Устанавливаем флаг бега
         player.runTimer += k.dt()
         if (player.runTimer > RUN_ANIM_SPEED) { // Меняем кадр через заданное время
-          player.runFrame = (player.runFrame + 1) % 6 // 6 кадров для плавности
+          player.runFrame = (player.runFrame + 1) % CONFIG.gameplay.runFrameCount
           player.use(k.sprite(`hero-run-${player.runFrame}`))
           player.runTimer = 0
           
@@ -191,16 +196,16 @@ export function level1Scene(k) {
         // Анимация глаз - плавное движение
         player.eyeTimer += k.dt()
         
-        // Выбираем новую целевую позицию каждые 1.5-3.5 секунды
-        if (player.eyeTimer > k.rand(1.5, 3.5)) {
+        // Выбираем новую целевую позицию
+        if (player.eyeTimer > k.rand(CONFIG.gameplay.eyeAnimMinDelay, CONFIG.gameplay.eyeAnimMaxDelay)) {
           player.targetEyeX = k.choose([-1, 0, 1])
           player.targetEyeY = k.choose([-1, 0, 1])
           player.eyeTimer = 0
         }
         
         // Плавно интерполируем к целевой позиции
-        player.eyeOffsetX = k.lerp(player.eyeOffsetX, player.targetEyeX, 0.1)
-        player.eyeOffsetY = k.lerp(player.eyeOffsetY, player.targetEyeY, 0.1)
+        player.eyeOffsetX = k.lerp(player.eyeOffsetX, player.targetEyeX, CONFIG.gameplay.eyeLerpSpeed)
+        player.eyeOffsetY = k.lerp(player.eyeOffsetY, player.targetEyeY, CONFIG.gameplay.eyeLerpSpeed)
         
         // Округляем для пиксель-арт стиля
         const roundedX = Math.round(player.eyeOffsetX)
@@ -219,11 +224,11 @@ export function level1Scene(k) {
       // Отзеркаливание в зависимости от направления
       player.flipX = player.direction === -1
       
-      // Ограничиваем игрока в пределах коридора
-      const leftBound = 60  // После левой стены
-      const rightBound = k.width() - 60  // До правой стены
-      const topBound = 180  // После верхней платформы
-      const bottomBound = k.height() - 180  // До нижней платформы
+      // Ограничиваем игрока в пределах коридора (используем конфиг)
+      const leftBound = CONFIG.visual.playerBounds.leftOffset
+      const rightBound = k.width() - CONFIG.visual.playerBounds.rightOffset
+      const topBound = CONFIG.visual.playerBounds.topOffset
+      const bottomBound = k.height() - CONFIG.visual.playerBounds.bottomOffset
       
       // Ограничиваем по X
       if (player.pos.x < leftBound) {
@@ -242,75 +247,60 @@ export function level1Scene(k) {
       }
     })
     
-    // Управление движением (стрелки)
-    k.onKeyDown("left", () => {
-      player.move(-player.speed, 0)
-      player.direction = -1
+    // Управление движением (используем конфиг)
+    CONFIG.controls.moveLeft.forEach(key => {
+      k.onKeyDown(key, () => {
+        player.move(-player.speed, 0)
+        player.direction = -1
+      })
     })
     
-    k.onKeyDown("right", () => {
-      player.move(player.speed, 0)
-      player.direction = 1
+    CONFIG.controls.moveRight.forEach(key => {
+      k.onKeyDown(key, () => {
+        player.move(player.speed, 0)
+        player.direction = 1
+      })
     })
     
-    // Управление движением (WASD)
-    k.onKeyDown("a", () => {
-      player.move(-player.speed, 0)
-      player.direction = -1
-    })
-    
-    k.onKeyDown("d", () => {
-      player.move(player.speed, 0)
-      player.direction = 1
-    })
-    
-    // Прыжок (стрелка вверх или W)
-    k.onKeyPress("up", () => {
-      if (player.canJump) {
-        player.vel.y = -player.myJumpForce
-        player.canJump = false
-      }
-    })
-    
-    k.onKeyPress("w", () => {
-      if (player.canJump) {
-        player.vel.y = -player.myJumpForce
-        player.canJump = false
-      }
-    })
-    
-    // Пробел для прыжка (дополнительно)
-    k.onKeyPress("space", () => {
-      if (player.canJump) {
-        player.vel.y = -player.myJumpForce
-        player.canJump = false
-      }
+    // Прыжок (используем конфиг)
+    CONFIG.controls.jump.forEach(key => {
+      k.onKeyPress(key, () => {
+        if (player.canJump) {
+          player.vel.y = -player.myJumpForce
+          player.canJump = false
+        }
+      })
     })
     
     // Инструкции
     const instructions = k.add([
       k.text("WASD/← ↑ → - Move\nSpace - jump\nESC - menu", {
-        size: 14,
+        size: CONFIG.visual.instructionsFontSize,
         width: k.width() - 40
       }),
-      k.pos(20, 20),
-      k.color(255, 218, 185), // Светлый персиковый (как фон)
-      k.z(100),
+      k.pos(CONFIG.visual.instructionsX, CONFIG.visual.instructionsY),
+      getColor(k, CONFIG.colors.level1.instructions),
+      k.z(CONFIG.visual.zIndex.ui),
       k.fixed() // Фиксируем к экрану
     ])
     
     // Дебаг информация (в правом верхнем углу)
     const debugText = k.add([
-      k.text("", { size: 14 }),
-      k.pos(k.width() - 220, 20),
-      k.color(62, 39, 35),
-      k.z(100),
+      k.text("", { size: CONFIG.visual.debugFontSize }),
+      k.pos(k.width() + CONFIG.visual.debugX, CONFIG.visual.debugY),
+      getColor(k, CONFIG.colors.level1.debug),
+      k.z(CONFIG.visual.zIndex.ui),
       k.fixed()
     ])
     
-    // Переключение дебаг режима по F1
-    k.onKeyPress("f1", () => {
-      debugMode = !debugMode
+    // Инициализация дебаг режима из конфига
+    let debugMode = CONFIG.debug.startInDebugMode
+    
+    // Переключение дебаг режима (используем конфиг)
+    CONFIG.controls.toggleDebug.forEach(key => {
+      k.onKeyPress(key, () => {
+        debugMode = !debugMode
+      })
     })
     
     // Визуализация collision box отключена
@@ -328,9 +318,11 @@ export function level1Scene(k) {
       }
     })
     
-    // Возврат в меню по ESC
-    k.onKeyPress("escape", () => {
-      k.go("menu")
+    // Возврат в меню (используем конфиг)
+    CONFIG.controls.backToMenu.forEach(key => {
+      k.onKeyPress(key, () => {
+        k.go("menu")
+      })
     })
   })
 }

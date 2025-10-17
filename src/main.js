@@ -1,4 +1,5 @@
 import kaplay from "kaplay"
+import { CONFIG } from "./config.js"
 import { startScene } from "./scenes/start.js"
 import { menuScene } from "./scenes/menu.js"
 import { level1Scene } from "./scenes/level1.js"
@@ -25,10 +26,10 @@ window.addEventListener('load', () => {
   window.gameAudioContext.resume()
 })
 
-// Инициализация игры
+// Инициализация игры (параметры из конфига)
 const k = kaplay({
-  width: 1280,
-  height: 920,
+  width: CONFIG.visual.windowWidth,
+  height: CONFIG.visual.windowHeight,
   scale: 1,
   background: [0, 0, 0],
   font: "jetbrains",

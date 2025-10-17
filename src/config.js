@@ -92,7 +92,15 @@ export const CONFIG = {
     
     // Цвета героя (для процедурной генерации)
     hero: {
-      skin: [255, 204, 170],        // Цвет кожи
+      body: [255, 140, 0],          // Оранжевый цвет тела (#FF8C00)
+      outline: [0, 0, 0],           // Черный контур
+      eyeWhite: [255, 255, 255],    // Белок глаза
+      eyePupil: [0, 0, 0],          // Зрачок
+    },
+    
+    // Цвета анти-героя
+    antiHero: {
+      body: [62, 39, 35],           // Темно-коричневый (#3E2723)
       outline: [0, 0, 0],           // Черный контур
       eyeWhite: [255, 255, 255],    // Белок глаза
       eyePupil: [0, 0, 0],          // Зрачок
@@ -209,6 +217,14 @@ export function getColor(k, colorArray) {
 // Получить RGB цвет как объект Kaplay
 export function getRGB(k, colorArray) {
   return k.rgb(colorArray[0], colorArray[1], colorArray[2])
+}
+
+// Получить hex строку цвета для Canvas API
+export function getHex(colorArray) {
+  const r = colorArray[0].toString(16).padStart(2, '0')
+  const g = colorArray[1].toString(16).padStart(2, '0')
+  const b = colorArray[2].toString(16).padStart(2, '0')
+  return `#${r}${g}${b}`
 }
 
 // Проверить нажата ли одна из клавиш

@@ -7,10 +7,6 @@ import * as Hero from '../components/hero.js'
 
 export function level2Scene(k) {
   k.scene("level2", () => {
-    // ========================================
-    // TIME-BASED SYSTEM: FPS independent
-    // ========================================
-    
     k.setGravity(CONFIG.gameplay.gravity)
     
     // Create sound instance

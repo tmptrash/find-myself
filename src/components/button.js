@@ -14,8 +14,7 @@ import { getColor, getRGB } from '../utils/helpers.js'
  * @param {number} config.y - Y position (button center)
  * @param {number} [config.width=450] - Button width
  * @param {number} [config.height=90] - Button height
- * @param {string} [config.targetScene] - Target scene (if null, uses onClick)
- * @param {Function} [config.onClick] - Click callback
+ * @param {string} config.targetScene - Target scene to navigate to on click
  * @param {number} [config.textOffsetY=0] - Text vertical offset
  * @returns {Object} Object with button elements (button, text, shadow)
  */
@@ -26,8 +25,7 @@ export function create(k, config) {
     y,
     width = 450,
     height = 90,
-    targetScene = null,
-    onClick = null,
+    targetScene,
     textOffsetY = 0,
   } = config
   
@@ -89,11 +87,7 @@ export function create(k, config) {
   
   // Button click
   button.onClick(() => {
-    if (targetScene) {
-      k.go(targetScene)
-    } else if (onClick) {
-      onClick()
-    }
+    k.go(targetScene)
   })
   
   // Pulse animation and smooth scale change

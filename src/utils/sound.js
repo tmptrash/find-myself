@@ -228,20 +228,6 @@ export function setAmbientVolume(instance, volume) {
 }
 
 /**
- * Get ambient music status
- * @param {Object} instance - Sound instance
- * @returns {Object} Status object with playing state and details
- */
-export function getAmbientStatus(instance) {
-  return {
-    isPlaying: instance.ambientIsPlaying,
-    audioContextState: instance.audioContext ? instance.audioContext.state : 'not initialized',
-    oscillatorsCount: instance.ambientOscillators.length,
-    volume: instance.ambientMasterGain ? instance.ambientMasterGain.gain.value : 0
-  }
-}
-
-/**
  * Check if ambient music is actually playing
  * @param {Object} instance - Sound instance
  * @returns {boolean} True if music is actively playing

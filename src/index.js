@@ -19,7 +19,6 @@ const k = kaplay({
 loadAllSprites(k)
 
 // Load resources
-k.loadBean()
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
 
 // Register all scenes
@@ -29,7 +28,5 @@ level1Scene(k)
 level2Scene(k)
 
 // Start game after resources loaded
-k.onLoad(() => {
-  k.go("start")
-})
+k.onLoad(() => k.go("start"))
 

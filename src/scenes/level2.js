@@ -1,8 +1,7 @@
 import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
-import * as Sound from '../audio/sound.js'
-import { addBackground } from '../components/background.js'
-import { addInstructions, setupBackToMenu } from '../components/instructions.js'
+import * as Sound from '../utils/sound.js'
+import { addBackground, addInstructions, setupBackToMenu } from '../components/scene.js'
 import * as Hero from '../components/hero.js'
 
 export function level2Scene(k) {

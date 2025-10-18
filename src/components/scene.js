@@ -2,13 +2,36 @@ import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
 
 // ============================================
-// CONTROL INSTRUCTIONS FOR LEVELS
+// UNIVERSAL SCENE COMPONENTS
+// ============================================
+
+// ============================================
+// BACKGROUND
+// ============================================
+
+/**
+ * Adds background to the scene
+ * @param {Object} k - Kaplay instance
+ * @param {String} color - Background color in hex format
+ * @returns {Object} Background object
+ */
+export function addBackground(k, color) {
+  return k.add([
+    k.rect(k.width(), k.height()),
+    getColor(k, color),
+    k.pos(0, 0),
+    k.fixed(),
+    k.z(CONFIG.visual.zIndex.background)
+  ])
+}
+
+// ============================================
+// INSTRUCTIONS
 // ============================================
 
 /**
  * Adds control instructions to the screen
  * @param {Object} k - Kaplay instance
- * @param {Object} [options] - Additional options
  * @returns {Object} Created instructions object
  */
 export function addInstructions(k) {
@@ -42,3 +65,4 @@ export function setupBackToMenu(k) {
     })
   })
 }
+

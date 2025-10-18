@@ -55,8 +55,3 @@ export function getHex(colorHex) {
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => k.isKeyDown(key))
 }
-
-// Check if any of the keys is pressed (press)
-export function isAnyKeyPressed(k, keys) {
-  return keys.some(key => k.isKeyPressed(key))
-}

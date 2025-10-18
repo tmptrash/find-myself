@@ -1,4 +1,4 @@
-import * as Sound from "../audio/sound.js"
+import * as Sound from "../utils/sound.js"
 import { CONFIG } from "../config.js"
 import { getRGB } from "../utils/helpers.js"
 

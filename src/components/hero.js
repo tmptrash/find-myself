@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
-import * as Sound from '../audio/sound.js'
+import * as Sound from '../utils/sound.js'
 
 // ============================================
 // UNIVERSAL FUNCTION FOR CHARACTER CREATION
@@ -179,50 +179,6 @@ export function loadAllSprites(k) {
       k.loadSprite(`${prefix}-run-${frame}`, createCharacterFrame(type, 'run', frame))
     }
   })
-}
-
-// ============================================
-// EXPORTED FUNCTIONS FOR HERO
-// ============================================
-
-export function createHeroSprite(k) {
-  return createCharacterFrame('hero', 'idle', 0)
-}
-
-export function createHeroIdleSprite() {
-  return createCharacterFrame('hero', 'idle', 0)
-}
-
-export function createHeroJumpSprite() {
-  return createCharacterFrame('hero', 'jump', 0)
-}
-
-export function createHeroWithEyes(k, eyeOffsetX = 0, eyeOffsetY = 0) {
-  return createCharacterFrame('hero', 'idle', 0, eyeOffsetX, eyeOffsetY)
-}
-
-export function createHeroRunSprite(frame, eyeOffsetX = 0, eyeOffsetY = 0) {
-  return createCharacterFrame('hero', 'run', frame, eyeOffsetX, eyeOffsetY)
-}
-
-// ============================================
-// EXPORTED FUNCTIONS FOR ANTI-HERO
-// ============================================
-
-export function createAntiHeroSprite(k) {
-  return createCharacterFrame('antihero', 'idle', 0)
-}
-
-export function createAntiHeroWithEyes(k, eyeOffsetX = 0, eyeOffsetY = 0) {
-  return createCharacterFrame('antihero', 'idle', 0, eyeOffsetX, eyeOffsetY)
-}
-
-export function createAntiHeroRunSprite(frame, eyeOffsetX = 0, eyeOffsetY = 0) {
-  return createCharacterFrame('antihero', 'run', frame, eyeOffsetX, eyeOffsetY)
-}
-
-export function createAntiHeroJumpSpriteWithEyes(eyeOffsetX = 0, eyeOffsetY = 0) {
-  return createCharacterFrame('antihero', 'jump', 0, eyeOffsetX, eyeOffsetY)
 }
 
 // ============================================

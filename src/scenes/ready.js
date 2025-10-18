@@ -8,27 +8,27 @@ export function readyScene(k) {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
-    // Рисуем фон (используем общий модуль)
+    // Draw background (use common module)
     addBackground(k, CONFIG.colors.start.background)
     
-    // Кнопка "Are you ready?" (используем модуль кнопки)
+    // "Are you ready?" button (use button module)
     Button.create(k, {
       text: "ARE YOU READY?",
       x: centerX,
       y: centerY - 50,
-      width: 360, // Ширина с равномерными отступами
+      width: 360, // Width with even padding
       targetScene: "menu",
-      textOffsetY: 3, // Опускаем текст немного ниже для выравнивания
+      textOffsetY: 3, // Lower text slightly for alignment
     })
     
-    // Также можно нажать клавиши (используем конфиг)
+    // Can also press keys (use config)
     CONFIG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
         k.go("menu")
       })
     })
     
-    // Подсказка (из конфига)
+    // Hint (from config)
     k.add([
       k.text("Click the button or press Enter/Space", { size: 20 }),
       k.pos(centerX, k.height() - 80),
@@ -38,4 +38,3 @@ export function readyScene(k) {
     ])
   })
 }
-

@@ -1,19 +1,20 @@
 import { CONFIG } from '../config.js'
+import { getAudioContext } from './context.js'
 
 // ============================================
-// ЗВУКОВЫЕ ЭФФЕКТЫ ДЛЯ ИГРЫ
+// SOUND EFFECTS FOR THE GAME
 // ============================================
 
 /**
- * Создание инстанса звуковых эффектов с переиспользуемыми GainNode
- * @returns {Object} Объект с AudioContext и мастер-гейнами для каждого типа звука
+ * Create sound effects instance with reusable GainNodes
+ * @returns {Object} Object with AudioContext and master gains for each sound type
  */
 export function create() {
-  const ctx = window.gameAudioContext
+  const ctx = getAudioContext()
   
-  // Создаем мастер-гейны для каждого типа звука (переиспользуемые)
-  // Они позволяют управлять общей громкостью звуков каждого типа
-  // и избегают создания новых GainNode при каждом воспроизведении
+  // Create master gains for each sound type (reusable)
+  // They allow controlling overall volume for each sound type
+  // and avoid creating new GainNodes on each playback
   const landGain = ctx.createGain()
   landGain.connect(ctx.destination)
   
@@ -28,7 +29,7 @@ export function create() {
     landGain,
     stepGain,
     spawnGain,
-    // Добавляем для обратной совместимости (используется в hero.js для аннигиляции)
+    // Add for backward compatibility (used in hero.js for annihilation)
     get currentTime() { return ctx.currentTime },
     createOscillator: () => ctx.createOscillator(),
     createGain: () => ctx.createGain(),
@@ -36,13 +37,13 @@ export function create() {
   }
 }
 
-// Звук приземления
+// Landing sound
 export function playLandSound(sfx) {
   const now = sfx.context.currentTime
   
-  // Oscillator создаем каждый раз (они одноразовые)
+  // Oscillators are created each time (they're disposable)
   const oscillator = sfx.context.createOscillator()
-  // Создаем временный GainNode для envelope звука
+  // Create temporary GainNode for sound envelope
   const envelope = sfx.context.createGain()
   
   oscillator.type = 'sine'
@@ -52,7 +53,7 @@ export function playLandSound(sfx) {
   envelope.gain.setValueAtTime(CONFIG.audio.sfx.landVolume, now)
   envelope.gain.exponentialRampToValueAtTime(CONFIG.audio.sfx.landFade, now + CONFIG.audio.sfx.landDuration)
   
-  // Подключаем через мастер-гейн
+  // Connect through master gain
   oscillator.connect(envelope)
   envelope.connect(sfx.landGain)
   
@@ -60,7 +61,7 @@ export function playLandSound(sfx) {
   oscillator.stop(now + CONFIG.audio.sfx.landDuration)
 }
 
-// Звук шагов при беге
+// Running step sound
 export function playStepSound(sfx) {
   const now = sfx.context.currentTime
   
@@ -74,7 +75,7 @@ export function playStepSound(sfx) {
   envelope.gain.setValueAtTime(CONFIG.audio.sfx.stepVolume, now)
   envelope.gain.exponentialRampToValueAtTime(CONFIG.audio.sfx.stepFade, now + CONFIG.audio.sfx.stepDuration)
   
-  // Подключаем через мастер-гейн
+  // Connect through master gain
   oscillator.connect(envelope)
   envelope.connect(sfx.stepGain)
   
@@ -82,12 +83,12 @@ export function playStepSound(sfx) {
   oscillator.stop(now + CONFIG.audio.sfx.stepDuration)
 }
 
-// Звук появления героя после аннигиляции
-// "Импульс энергии" - быстрое нарастание + щелчок
+// Hero spawn sound after annihilation
+// "Energy pulse" - quick rise + click
 export function playSpawnSound(sfx) {
   const now = sfx.context.currentTime
   
-  // Быстрое нарастание (волна энергии)
+  // Quick rise (energy wave)
   const sweep = sfx.context.createOscillator()
   const sweepEnvelope = sfx.context.createGain()
   
@@ -98,14 +99,14 @@ export function playSpawnSound(sfx) {
   sweepEnvelope.gain.setValueAtTime(0.4, now)
   sweepEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
   
-  // Подключаем через мастер-гейн
+  // Connect through master gain
   sweep.connect(sweepEnvelope)
   sweepEnvelope.connect(sfx.spawnGain)
   
   sweep.start(now)
   sweep.stop(now + 0.15)
   
-  // Щелчок в момент появления
+  // Click at spawn moment
   const click = sfx.context.createOscillator()
   const clickEnvelope = sfx.context.createGain()
   
@@ -115,11 +116,10 @@ export function playSpawnSound(sfx) {
   clickEnvelope.gain.setValueAtTime(0.3, now + 0.15)
   clickEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.20)
   
-  // Подключаем через мастер-гейн
+  // Connect through master gain
   click.connect(clickEnvelope)
   clickEnvelope.connect(sfx.spawnGain)
   
   click.start(now + 0.15)
   click.stop(now + 0.20)
 }
-

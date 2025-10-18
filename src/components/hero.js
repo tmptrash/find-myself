@@ -3,16 +3,16 @@ import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
 import * as SFX from '../audio/sfx.js'
 
 // ============================================
-// УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ДЛЯ СОЗДАНИЯ ПЕРСОНАЖА
+// UNIVERSAL FUNCTION FOR CHARACTER CREATION
 // ============================================
-// Одна функция для героя и анти-героя
-// type: 'hero' или 'antihero'
+// Single function for hero and anti-hero
+// type: 'hero' or 'antihero'
 // animation: 'idle', 'run', 'jump'
-// frame: номер кадра (для анимаций)
-// eyeOffsetX, eyeOffsetY: смещение зрачков
+// frame: frame number (for animations)
+// eyeOffsetX, eyeOffsetY: pupil offset
 
 function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
-  // Выбираем цветовую схему на основе типа
+  // Choose color scheme based on type
   const colors = type === 'hero' ? CONFIG.colors.hero : CONFIG.colors.antiHero
   
   const size = 32
@@ -23,7 +23,7 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
   
   ctx.clearRect(0, 0, size, size)
   
-  // Базовые параметры для разных анимаций
+  // Base parameters for different animations
   let headY = 6
   let bodyY = 14
   let headX = 12
@@ -37,7 +37,7 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
   let leftLegX = 12
   let rightLegX = 17
   
-  // Анимация бега (6 кадров)
+  // Run animation (6 frames)
   if (animation === 'run') {
     if (frame === 0) {
       leftLegY = 20
@@ -72,7 +72,7 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     }
   }
   
-  // Анимация прыжка - боковой вид, ноги согнуты и разведены
+  // Jump animation - side view, legs bent and spread
   if (animation === 'jump') {
     headY = 6
     bodyY = 14
@@ -80,38 +80,38 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     bodyX = 10
     leftArmY = 15
     rightArmY = 15
-    // Правая нога спереди - согнута сильнее (выше)
+    // Right leg in front - bent more (higher)
     rightLegY = 20
     rightLegX = 18
-    // Левая нога сзади - согнута меньше (ниже)
+    // Left leg behind - bent less (lower)
     leftLegY = 22
     leftLegX = 10
     leftArmX = 9
     rightArmX = 21
   }
   
-  // Черный контур (универсальный)
+  // Black outline (universal)
   ctx.fillStyle = getHex(colors.outline)
   ctx.fillRect(headX - 1, headY - 1, 10, 10)
   
-  // Контур тела (для всех анимаций одинаковый)
+  // Body outline (same for all animations)
   ctx.fillRect(bodyX - 1, bodyY - 1, 14, 10)
   
-  // Контуры рук - не рисуем при беге и прыжке
+  // Arm outlines - don't draw while running and jumping
   if (animation !== 'run' && animation !== 'jump') {
     ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 9)
     ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
   }
   
-  // Контуры ног (для всех анимаций одинаковые)
+  // Leg outlines (same for all animations)
   ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
   ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
   
-  // Голова (универсальный цвет тела)
+  // Head (universal body color)
   ctx.fillStyle = getHex(colors.body)
   ctx.fillRect(headX, headY, 8, 8)
   
-  // Глаза - для бега и прыжка рисуем только ОДИН глаз (боковой вид)
+  // Eyes - for run and jump draw only ONE eye (side view)
   ctx.fillStyle = getHex(colors.eyeWhite)
   if (animation === 'run' || animation === 'jump') {
     ctx.fillRect(headX + 6, headY + 2, 3, 3)
@@ -120,7 +120,7 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     ctx.fillRect(headX + 6, headY + 2, 3, 3)
   }
   
-  // Зрачки (универсальный цвет)
+  // Pupils (universal color)
   ctx.fillStyle = getHex(colors.outline)
   if (animation === 'run' || animation === 'jump') {
     ctx.fillRect(headX + 7, headY + 3, 1, 1)
@@ -129,17 +129,17 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
     ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
   }
   
-  // Тело (универсальный цвет)
+  // Body (universal color)
   ctx.fillStyle = getHex(colors.body)
   ctx.fillRect(bodyX, bodyY, 12, 8)
   
-  // Руки - не рисуем при беге и прыжке
+  // Arms - don't draw while running and jumping
   if (animation !== 'run' && animation !== 'jump') {
     ctx.fillRect(leftArmX, leftArmY, 2, 7)
     ctx.fillRect(rightArmX, rightArmY, 2, 7)
   }
   
-  // Ноги (для всех анимаций одинаковые)
+  // Legs (same for all animations)
   ctx.fillRect(leftLegX, leftLegY, 3, 6)
   ctx.fillRect(rightLegX, rightLegY, 3, 6)
   
@@ -147,22 +147,22 @@ function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeO
 }
 
 // ============================================
-// ЗАГРУЗКА ВСЕХ СПРАЙТОВ
+// LOAD ALL SPRITES
 // ============================================
 
 /**
- * Загружает все спрайты для героя и анти-героя
- * Должна быть вызвана один раз при инициализации игры
- * @param {Object} k - Kaplay инстанс
+ * Loads all sprites for hero and anti-hero
+ * Should be called once on game initialization
+ * @param {Object} k - Kaplay instance
  */
 export function loadAllSprites(k) {
-  // Загружаем спрайты для обоих персонажей
+  // Load sprites for both characters
   const types = ['hero', 'antihero']
   
   types.forEach(type => {
     const prefix = type
     
-    // Загружаем все варианты глаз (9 позиций) для idle анимации
+    // Load all eye variants (9 positions) for idle animation
     for (let x = -1; x <= 1; x++) {
       for (let y = -1; y <= 1; y++) {
         const spriteName = `${prefix}_${x}_${y}`
@@ -171,10 +171,10 @@ export function loadAllSprites(k) {
       }
     }
     
-    // Загружаем анимацию прыжка
+    // Load jump animation
     k.loadSprite(`${prefix}-jump`, createCharacterFrame(type, 'jump', 0))
     
-    // Загружаем кадры бега (6 кадров)
+    // Load run frames (6 frames)
     for (let frame = 0; frame < CONFIG.gameplay.runFrameCount; frame++) {
       k.loadSprite(`${prefix}-run-${frame}`, createCharacterFrame(type, 'run', frame))
     }
@@ -182,7 +182,7 @@ export function loadAllSprites(k) {
 }
 
 // ============================================
-// ЭКСПОРТИРУЕМЫЕ ФУНКЦИИ ДЛЯ ГЕРОЯ
+// EXPORTED FUNCTIONS FOR HERO
 // ============================================
 
 export function createHeroSprite(k) {
@@ -206,7 +206,7 @@ export function createHeroRunSprite(frame, eyeOffsetX = 0, eyeOffsetY = 0) {
 }
 
 // ============================================
-// ЭКСПОРТИРУЕМЫЕ ФУНКЦИИ ДЛЯ АНТИ-ГЕРОЯ
+// EXPORTED FUNCTIONS FOR ANTI-HERO
 // ============================================
 
 export function createAntiHeroSprite(k) {
@@ -226,19 +226,19 @@ export function createAntiHeroJumpSpriteWithEyes(eyeOffsetX = 0, eyeOffsetY = 0)
 }
 
 // ============================================
-// СОЗДАНИЕ ИГРОВОГО ОБЪЕКТА ГЕРОЯ
+// CREATE GAME OBJECT FOR HERO
 // ============================================
 
 /**
- * Создаёт героя или анти-героя с полной настройкой логики
- * @param {Object} k - Kaplay инстанс
- * @param {Object} config - Конфигурация героя
- * @param {number} config.x - Позиция X
- * @param {number} config.y - Позиция Y
- * @param {string} [config.type='hero'] - Тип персонажа ('hero' или 'antihero')
- * @param {boolean} [config.controllable=true] - Управляется ли клавиатурой
- * @param {Object} [config.sfx] - AudioContext для звуковых эффектов
- * @returns {Object} Созданный объект героя
+ * Creates hero or anti-hero with full logic setup
+ * @param {Object} k - Kaplay instance
+ * @param {Object} config - Hero configuration
+ * @param {number} config.x - X position
+ * @param {number} config.y - Y position
+ * @param {string} [config.type='hero'] - Character type ('hero' or 'antihero')
+ * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
+ * @param {Object} [config.sfx] - AudioContext for sound effects
+ * @returns {Object} Created hero object
  */
 export function create(k, config) {
   const {
@@ -253,10 +253,10 @@ export function create(k, config) {
   const JUMP_FORCE = CONFIG.gameplay.jumpForce
   const RUN_ANIM_SPEED = CONFIG.gameplay.runAnimSpeed
   
-  // Определяем имя спрайта в зависимости от типа
+  // Determine sprite name based on type
   const spritePrefix = type === 'hero' ? 'hero' : 'antihero'
   
-  // Создаём объект героя
+  // Create hero object
   const character = k.add([
     k.sprite(`${spritePrefix}_0_0`),
     k.pos(x, y),
@@ -274,18 +274,18 @@ export function create(k, config) {
     k.z(CONFIG.visual.zIndex.player),
   ])
   
-  // Добавляем кастомные свойства
+  // Add custom properties
   character.speed = MOVE_SPEED
   character.myJumpForce = JUMP_FORCE
   character.runFrame = 0
   character.runTimer = 0
-  character.direction = 1 // 1 = вправо, -1 = влево
+  character.direction = 1 // 1 = right, -1 = left
   character.canJump = true
   character.isRunning = false
   character.wasJumping = false
   character.type = type
   
-  // Переменные для анимации глаз
+  // Variables for eye animation
   character.eyeOffsetX = 0
   character.eyeOffsetY = 0
   character.targetEyeX = 0
@@ -294,16 +294,16 @@ export function create(k, config) {
   character.currentEyeSprite = null
   
   // ============================================
-  // ОБРАБОТЧИКИ СТОЛКНОВЕНИЙ
+  // COLLISION HANDLERS
   // ============================================
   
-  // Проверка касания земли через столкновения
+  // Check ground touch through collisions
   character.onCollide("platform", () => {
     character.canJump = true
-    // Если был в прыжке, мгновенно переключаемся на idle
+    // If was jumping, instantly switch to idle
     if (character.wasJumping && sfx) {
       character.wasJumping = false
-      SFX.playLandSound(sfx) // Звук приземления
+      SFX.playLandSound(sfx) // Landing sound
       const roundedX = Math.round(character.eyeOffsetX)
       const roundedY = Math.round(character.eyeOffsetY)
       const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
@@ -313,11 +313,11 @@ export function create(k, config) {
   })
   
   // ============================================
-  // УПРАВЛЕНИЕ (если персонаж управляем)
+  // CONTROLS (if character is controllable)
   // ============================================
   
   if (controllable) {
-    // Управление движением влево
+    // Move left control
     CONFIG.controls.moveLeft.forEach(key => {
       k.onKeyDown(key, () => {
         character.move(-character.speed, 0)
@@ -325,7 +325,7 @@ export function create(k, config) {
       })
     })
     
-    // Управление движением вправо
+    // Move right control
     CONFIG.controls.moveRight.forEach(key => {
       k.onKeyDown(key, () => {
         character.move(character.speed, 0)
@@ -333,7 +333,7 @@ export function create(k, config) {
       })
     })
     
-    // Прыжок
+    // Jump
     CONFIG.controls.jump.forEach(key => {
       k.onKeyPress(key, () => {
         if (character.canJump) {
@@ -345,28 +345,28 @@ export function create(k, config) {
   }
   
   // ============================================
-  // ОБНОВЛЕНИЕ АНИМАЦИЙ
+  // ANIMATION UPDATE
   // ============================================
   
   character.onUpdate(() => {
-    // Определяем состояние движения (только для управляемых персонажей)
+    // Determine movement state (only for controllable characters)
     const isMoving = controllable && (
       isAnyKeyDown(k, CONFIG.controls.moveLeft) || 
       isAnyKeyDown(k, CONFIG.controls.moveRight)
     )
     
-    // Проверяем, на земле ли персонаж
+    // Check if character is grounded
     const isGrounded = character.canJump && Math.abs(character.vel.y) < 10
     
     if (!isGrounded) {
-      // В прыжке
+      // Jumping
       character.use(k.sprite(`${spritePrefix}-jump`))
       character.runFrame = 0
       character.runTimer = 0
       character.isRunning = false
       character.wasJumping = true
     } else if (isMoving) {
-      // Бег - переключаем кадры плавно (time-based анимация)
+      // Running - switch frames smoothly (time-based animation)
       character.isRunning = true
       character.runTimer += k.dt()
       if (character.runTimer > RUN_ANIM_SPEED) {
@@ -374,20 +374,20 @@ export function create(k, config) {
         character.use(k.sprite(`${spritePrefix}-run-${character.runFrame}`))
         character.runTimer = 0
         
-        // Звук шага на кадрах 0 и 3 (когда нога касается земли)
+        // Step sound on frames 0 and 3 (when foot touches ground)
         if (sfx && (character.runFrame === 0 || character.runFrame === 3)) {
           SFX.playStepSound(sfx)
         }
       }
     } else {
-      // Idle - с анимацией глаз
+      // Idle - with eye animation
       
-      // Если только что закончили бег, мгновенно переключаемся на idle
+      // If just stopped running, instantly switch to idle
       if (character.isRunning) {
         character.isRunning = false
         character.runFrame = 0
         character.runTimer = 0
-        // Мгновенно переключаемся на текущий idle спрайт
+        // Instantly switch to current idle sprite
         const roundedX = Math.round(character.eyeOffsetX)
         const roundedY = Math.round(character.eyeOffsetY)
         const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
@@ -395,45 +395,45 @@ export function create(k, config) {
         character.currentEyeSprite = spriteName
       }
       
-      // Анимация глаз - плавное движение
+      // Eye animation - smooth movement
       character.eyeTimer += k.dt()
       
-      // Выбираем новую целевую позицию
+      // Choose new target position
       if (character.eyeTimer > k.rand(CONFIG.gameplay.eyeAnimMinDelay, CONFIG.gameplay.eyeAnimMaxDelay)) {
         character.targetEyeX = k.choose([-1, 0, 1])
         character.targetEyeY = k.choose([-1, 0, 1])
         character.eyeTimer = 0
       }
       
-      // Плавно интерполируем к целевой позиции
+      // Smoothly interpolate to target position
       character.eyeOffsetX = k.lerp(character.eyeOffsetX, character.targetEyeX, CONFIG.gameplay.eyeLerpSpeed)
       character.eyeOffsetY = k.lerp(character.eyeOffsetY, character.targetEyeY, CONFIG.gameplay.eyeLerpSpeed)
       
-      // Округляем для пиксель-арт стиля
+      // Round for pixel-art style
       const roundedX = Math.round(character.eyeOffsetX)
       const roundedY = Math.round(character.eyeOffsetY)
       
-      // Переключаем на предзагруженный спрайт с глазами
+      // Switch to preloaded sprite with eyes
       const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
       
-      // Обновляем спрайт только если позиция глаз изменилась
+      // Update sprite only if eye position changed
       if (character.currentEyeSprite !== spriteName) {
         character.use(k.sprite(spriteName))
         character.currentEyeSprite = spriteName
       }
     }
     
-    // Отзеркаливание в зависимости от направления
+    // Mirror based on direction
     character.flipX = character.direction === -1
     
-    // Ограничиваем персонажа в пределах экрана (только для управляемых)
+    // Constrain character within screen bounds (only for controllable)
     if (controllable) {
       const leftBound = CONFIG.visual.playerBounds.leftOffset
       const rightBound = k.width() - CONFIG.visual.playerBounds.rightOffset
       const topBound = CONFIG.visual.playerBounds.topOffset
       const bottomBound = k.height() - CONFIG.visual.playerBounds.bottomOffset
       
-      // Ограничиваем по X
+      // Constrain X
       if (character.pos.x < leftBound) {
         character.pos.x = leftBound
       }
@@ -441,7 +441,7 @@ export function create(k, config) {
         character.pos.x = rightBound
       }
       
-      // Ограничиваем по Y
+      // Constrain Y
       if (character.pos.y < topBound) {
         character.pos.y = topBound
       }
@@ -455,20 +455,20 @@ export function create(k, config) {
 }
 
 // ============================================
-// ЭФФЕКТ СБОРКИ ГЕРОЯ ИЗ ЧАСТИЦ
+// HERO ASSEMBLY EFFECT FROM PARTICLES
 // ============================================
 
 /**
- * Создаёт эффект сборки героя из частиц
- * @param {Object} k - Kaplay инстанс
- * @param {Object} config - Конфигурация
- * @param {number} config.x - Позиция X для появления
- * @param {number} config.y - Позиция Y для появления
- * @param {string} [config.type='hero'] - Тип персонажа ('hero' или 'antihero')
- * @param {boolean} [config.controllable=true] - Управляется ли клавиатурой
- * @param {Object} [config.sfx] - AudioContext для звуковых эффектов
- * @param {Function} [config.onComplete] - Callback с созданным героем после завершения
- * @returns {Object} Объект с методом cancel() для прерывания эффекта
+ * Creates hero assembly effect from particles
+ * @param {Object} k - Kaplay instance
+ * @param {Object} config - Configuration
+ * @param {number} config.x - X position for spawn
+ * @param {number} config.y - Y position for spawn
+ * @param {string} [config.type='hero'] - Character type ('hero' or 'antihero')
+ * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
+ * @param {Object} [config.sfx] - AudioContext for sound effects
+ * @param {Function} [config.onComplete] - Callback with created hero after completion
+ * @returns {Object} Object with cancel() method to abort effect
  */
 export function spawnWithAssembly(k, config) {
   const {
@@ -480,10 +480,10 @@ export function spawnWithAssembly(k, config) {
     onComplete = null
   } = config
   
-  // Определяем цвет частиц в зависимости от типа
+  // Determine particle color based on type
   const particleColor = type === 'hero' ? CONFIG.colors.hero.body : CONFIG.colors.antiHero.body
   
-  // Создаем частицы для эффекта сборки
+  // Create particles for assembly effect
   const particles = []
   const particleCount = 20
   
@@ -507,14 +507,14 @@ export function spawnWithAssembly(k, config) {
     particles.push(particle)
   }
   
-  // Анимируем частицы к центру
+  // Animate particles to center
   let particlesGathered = false
   let character = null
   let cancelled = false
   
   const updateHandler = k.onUpdate(() => {
     if (cancelled) {
-      // Если эффект отменен, удаляем все частицы
+      // If effect cancelled, remove all particles
       particles.forEach(p => {
         if (p.exists()) k.destroy(p)
       })
@@ -543,17 +543,17 @@ export function spawnWithAssembly(k, config) {
       if (allGathered && !character) {
         particlesGathered = true
         
-        // Удаляем частицы
+        // Remove particles
         particles.forEach(p => {
           if (p.exists()) k.destroy(p)
         })
         
-        // Звук появления героя
+        // Hero spawn sound
         if (sfx) {
           SFX.playSpawnSound(sfx)
         }
         
-        // Создаем героя
+        // Create hero
         character = create(k, {
           x,
           y,
@@ -562,18 +562,18 @@ export function spawnWithAssembly(k, config) {
           sfx
         })
         
-        // Вызываем callback
+        // Call callback
         if (onComplete) {
           onComplete(character)
         }
         
-        // Отменяем обновление
+        // Cancel update
         updateHandler.cancel()
       }
     }
   })
   
-  // Возвращаем объект с методом отмены
+  // Return object with cancel method
   return {
     cancel: () => {
       cancelled = true
@@ -583,16 +583,16 @@ export function spawnWithAssembly(k, config) {
 }
 
 // ============================================
-// ЭФФЕКТ АННИГИЛЯЦИИ
+// ANNIHILATION EFFECT
 // ============================================
 
 /**
- * Настраивает эффект аннигиляции между двумя персонажами
- * @param {Object} k - Kaplay инстанс
- * @param {Object} player - Первый персонаж (обычно герой)
- * @param {Object} target - Второй персонаж (обычно анти-герой)
- * @param {Object} sfx - AudioContext для звуковых эффектов
- * @param {Function} onComplete - Callback после завершения аннигиляции
+ * Sets up annihilation effect between two characters
+ * @param {Object} k - Kaplay instance
+ * @param {Object} player - First character (usually hero)
+ * @param {Object} target - Second character (usually anti-hero)
+ * @param {Object} sfx - AudioContext for sound effects
+ * @param {Function} onComplete - Callback after annihilation completion
  */
 export function setupAnnihilation(k, player, target, sfx, onComplete) {
   let isAnnihilating = false
@@ -601,20 +601,20 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
     if (!isAnnihilating) {
       isAnnihilating = true
       
-      // Останавливаем управление
+      // Stop control
       player.paused = true
       target.paused = true
       
-      // Центр между персонажами
+      // Center between characters
       const centerX = (player.pos.x + target.pos.x) / 2
       const centerY = (player.pos.y + target.pos.y) / 2
       
       // ============================================
-      // ФАЗА 1: МИГАНИЕ ПЕРСОНАЖЕЙ (0.3 сек)
+      // PHASE 1: CHARACTER BLINKING (0.3 sec)
       // ============================================
       let blinkTime = 0
       const blinkDuration = 0.3
-      const blinkSpeed = 20 // Быстрое мигание
+      const blinkSpeed = 20 // Fast blinking
       
       const blinkInterval = k.onUpdate(() => {
         blinkTime += k.dt()
@@ -628,7 +628,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
           blinkInterval.cancel()
           
           // ============================================
-          // ФАЗА 2: ПРИТЯЖЕНИЕ К ЦЕНТРУ (0.25 сек)
+          // PHASE 2: PULL TO CENTER (0.25 sec)
           // ============================================
           const pullDuration = 0.25
           let pullTime = 0
@@ -649,13 +649,13 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
               pullInterval.cancel()
               
               // ============================================
-              // ФАЗА 3: СХЛОПЫВАНИЕ И ЭФФЕКТЫ
+              // PHASE 3: COLLAPSE AND EFFECTS
               // ============================================
               
-              // ЗВУК АННИГИЛЯЦИИ (низкий мощный)
+              // ANNIHILATION SOUND (deep powerful)
               const now = sfx.currentTime
               
-              // Глубокий бас
+              // Deep bass
               const bass = sfx.createOscillator()
               const bassGain = sfx.createGain()
               bass.type = 'sine'
@@ -668,7 +668,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
               bass.start(now)
               bass.stop(now + 0.5)
               
-              // Очень низкий "гул"
+              // Very low "hum"
               const subBass = sfx.createOscillator()
               const subBassGain = sfx.createGain()
               subBass.type = 'sine'
@@ -680,7 +680,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
               subBass.start(now)
               subBass.stop(now + 0.6)
               
-              // ВСПЫШКА ЭКРАНА
+              // SCREEN FLASH
               const screenFlash = k.add([
                 k.rect(k.width(), k.height()),
                 k.pos(0, 0),
@@ -699,7 +699,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
                 }
               })
               
-              // ТРЯСКА КАМЕРЫ
+              // CAMERA SHAKE
               let shakeTime = 0
               const shakeIntensity = 15
               const originalCamX = k.width() / 2
@@ -720,7 +720,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
               })
               
               // ============================================
-              // ЭФФЕКТ ЧАСТИЦ
+              // PARTICLE EFFECT
               // ============================================
               
               const allColors = [
@@ -730,7 +730,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
                 CONFIG.colors.antiHero.outline,
               ]
               
-              // Пиксельный взрыв - мелкие вращающиеся квадраты
+              // Pixel explosion - small rotating squares
               const pixelCount = 24
               for (let i = 0; i < pixelCount; i++) {
                 const angle = (Math.PI * 2 * i) / pixelCount + k.rand(-0.3, 0.3)
@@ -765,11 +765,11 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
                 })
               }
               
-              // Скрываем персонажей
+              // Hide characters
               k.destroy(player)
               k.destroy(target)
               
-              // Вызываем callback после завершения
+              // Call callback after completion
               k.wait(1.2, () => {
                 if (onComplete) {
                   onComplete()

@@ -8,18 +8,18 @@ import * as Hero from '../components/hero.js'
 export function level1Scene(k) {
   k.scene("level1", () => {
     // ========================================
-    // TIME-BASED СИСТЕМА: независима от FPS
+    // TIME-BASED SYSTEM: FPS independent
     // ========================================
     
     k.setGravity(CONFIG.gameplay.gravity)
     
-    // Создаём инстанс звуковых эффектов (получаем AudioContext)
+    // Create sound effects instance (get AudioContext)
     const sfx = SFX.create()
     
-    // Фон - используем общий модуль
+    // Background - use common module
     addBackground(k, CONFIG.colors.level1.background)
     
-    // Создаем платформы
+    // Create platforms
     function addPlatform(x, y, width, height) {
       return k.add([
         k.rect(width, height),
@@ -34,22 +34,22 @@ export function level1Scene(k) {
     const platformHeight = CONFIG.visual.platformHeight
     const wallWidth = CONFIG.visual.wallWidth
     
-    // Нижняя платформа (широкая)
+    // Bottom platform (wide)
     addPlatform(0, k.height() - platformHeight, k.width(), platformHeight)
     
-    // Верхняя платформа (широкая, той же высоты)
+    // Top platform (wide, same height)
     addPlatform(0, 0, k.width(), platformHeight)
     
-    // Левая стена (коридор)
+    // Left wall (corridor)
     addPlatform(0, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
-    // Правая стена (коридор)
+    // Right wall (corridor)
     addPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
     // ============================================
-    // ГЕРОЙ появляется с эффектом сборки
+    // HERO spawns with assembly effect
     // ============================================
-    // Получаем координаты из конфига
+    // Get coordinates from config
     const heroStartX = CONFIG.levels.level1.heroSpawn.x
     const heroStartY = CONFIG.levels.level1.heroSpawn.onPlatform
       ? k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
@@ -65,7 +65,7 @@ export function level1Scene(k) {
       onComplete: (character) => {
         player = character
         
-        // Настраиваем эффект аннигиляции после создания героя
+        // Set up annihilation effect after hero creation
         Hero.setupAnnihilation(k, player, antiHero, sfx, () => {
           k.go("level2")
         })
@@ -73,9 +73,9 @@ export function level1Scene(k) {
     })
     
     // ============================================
-    // АНТИ-ГЕРОЙ в правом нижнем углу
+    // ANTI-HERO in bottom-right corner
     // ============================================
-    // Вычисляем Y координату так, чтобы анти-герой стоял НА платформе
+    // Calculate Y coordinate so anti-hero stands ON the platform
     const antiHeroY = k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
     
     const antiHero = Hero.create(k, {
@@ -86,13 +86,13 @@ export function level1Scene(k) {
       sfx: sfx
     })
     
-    // Добавляем тег для столкновения к анти-герою
+    // Add collision tag to anti-hero
     antiHero.use("annihilationTarget")
     
-    // Инструкции (используем общий модуль)
+    // Instructions (use common module)
     const instructions = addInstructions(k, { showDebugHint: true })
     
-    // Дебаг информация (в правом верхнем углу)
+    // Debug info (top-right corner)
     const debugText = k.add([
       k.text("", { size: CONFIG.visual.debugFontSize }),
       k.pos(k.width() + CONFIG.visual.debugX, CONFIG.visual.debugY),
@@ -101,24 +101,24 @@ export function level1Scene(k) {
       k.fixed()
     ])
     
-    // Инициализация дебаг режима из конфига
+    // Initialize debug mode from config
     let debugMode = CONFIG.debug.startInDebugMode
     
-    // Переключение дебаг режима (используем конфиг)
+    // Toggle debug mode (use config)
     CONFIG.controls.toggleDebug.forEach(key => {
       k.onKeyPress(key, () => {
         debugMode = !debugMode
       })
     })
     
-    // Визуализация collision box отключена
+    // Collision box visualization disabled
     
-    // Камера и дебаг - обновляем вместе
+    // Camera and debug - update together
     k.onUpdate(() => {
-      // Камера фиксирована в центре экрана (не следует за игроком)
+      // Camera fixed in screen center (doesn't follow player)
       k.camPos(k.width() / 2, k.height() / 2)
       
-      // Обновляем дебаг текст (только если дебаг режим включен и герой создан)
+      // Update debug text (only if debug mode enabled and hero created)
       if (debugMode && player) {
         debugText.text = `Pos: ${Math.round(player.pos.x)}, ${Math.round(player.pos.y)}\nVel: ${Math.round(player.vel?.x || 0)}, ${Math.round(player.vel?.y || 0)}\nCan Jump: ${player.canJump}`
       } else {
@@ -126,8 +126,7 @@ export function level1Scene(k) {
       }
     })
     
-    // Возврат в меню (используем общий модуль)
+    // Return to menu (use common module)
     setupBackToMenu(k)
   })
 }
-

@@ -2,14 +2,14 @@ import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
 
 // ============================================
-// УНИВЕРСАЛЬНЫЙ ФОН ДЛЯ ВСЕХ СЦЕН
+// UNIVERSAL BACKGROUND FOR ALL SCENES
 // ============================================
 
 /**
- * Добавляет фон в сцену
- * @param {Object} k - Kaplay инстанс
- * @param {Array} color - Цвет фона в формате [r, g, b]
- * @returns {Object} Объект фона
+ * Adds background to the scene
+ * @param {Object} k - Kaplay instance
+ * @param {String} color - Background color in hex format
+ * @returns {Object} Background object
  */
 export function addBackground(k, color) {
   return k.add([
@@ -20,4 +20,3 @@ export function addBackground(k, color) {
     k.z(CONFIG.visual.zIndex.background)
   ])
 }
-

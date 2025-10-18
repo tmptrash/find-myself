@@ -1,24 +1,25 @@
 import * as Ambient from "../audio/ambient.js"
 import { CONFIG } from "../config.js"
 import { getRGB } from "../utils/helpers.js"
+import { resumeAudioContext } from "../audio/context.js"
 
 export function menuScene(k) {
   k.scene("menu", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
-    // Запускаем ambient музыку сразу
+    // Start ambient music immediately
     const ambientMusic = Ambient.create()
     Ambient.start(ambientMusic)
     
-    // Переменные для анимации глаз
+    // Variables for eye animation
     let eyeOffsetX = 0
     let eyeOffsetY = 0
     let targetEyeX = 0
     let targetEyeY = 0
     let eyeTimer = 0
     
-    // Переменные для анимации фона
+    // Variables for background animation
     let bgOffset = 0
     let glitchTimer = 0
     let titleGlitchTimer = 0
@@ -26,18 +27,18 @@ export function menuScene(k) {
     let targetBgShift = 0
     let currentBgShift = 0
     
-    // Массив глюков на фоне
+    // Array of glitches on background
     let glitches = []
     
-    // Переменные для глючной линии разделения
+    // Variables for glitchy dividing line
     let lineGlitchTimer = 0
     
-    // Переменные для вращения вертикальной границы
-    let boundaryRotation = 0 // Текущий угол наклона
-    let targetBoundaryRotation = 0 // Целевой угол
+    // Variables for vertical boundary rotation
+    let boundaryRotation = 0 // Current angle
+    let targetBoundaryRotation = 0 // Target angle
     let boundaryRotationTimer = 0
     
-    // Переменные для плавного движения героев (независимые таймеры)
+    // Variables for smooth hero movement (independent timers)
     let leftHeroTimer = 0
     let rightHeroTimer = 0
     let leftHeroTargetX = 0
@@ -45,10 +46,10 @@ export function menuScene(k) {
     let rightHeroTargetX = 0
     let rightHeroTargetY = 0
     
-    // Переменные для энергетической связи между героями
+    // Variables for energy connection between heroes
     let connectionPulse = 0
     
-    // Создаём случайные глюки на фоне
+    // Create random background glitches
     function createGlitch() {
       const side = k.rand(0, 1) > 0.5 ? "left" : "right"
       const boundary = centerX + currentBgShift
@@ -64,27 +65,27 @@ export function menuScene(k) {
       }
     }
     
-    // Фоновый слой с анимацией
+    // Background layer with animation
     k.onDraw(() => {
-      // Движущийся фон - простая волнообразная траектория
+      // Moving background - simple wave trajectory
       bgOffset += k.dt() * 10
       const waveX = Math.sin(bgOffset * 0.1) * 5
       const waveY = Math.cos(bgOffset * 0.15) * 5
       
-      // Плавная интерполяция к целевому смещению
+      // Smooth interpolation to target shift
       currentBgShift = k.lerp(currentBgShift, targetBgShift, 0.05)
       
-      // Плавная интерполяция к целевому углу вращения границы
+      // Smooth interpolation to target rotation angle
       boundaryRotation = k.lerp(boundaryRotation, targetBoundaryRotation, 0.03)
       
-      // Добавляем запас для движения фона (padding)
+      // Add padding for background movement
       const padding = 20
       
-      // Вычисляем смещение границы по вертикали из-за вращения
+      // Calculate vertical boundary offset due to rotation
       const boundaryCenter = centerX + currentBgShift
       const rotationOffset = Math.tan(boundaryRotation) * (k.height() / 2)
       
-      // Левая сторона - светлый персиковый (полигон) - из конфига
+      // Left side - light peach (polygon) - from config
       k.drawPolygon({
         pts: [
           k.vec2(waveX - padding, waveY - padding),
@@ -95,7 +96,7 @@ export function menuScene(k) {
         color: getRGB(k, CONFIG.colors.level1.background),
       })
       
-      // Правая сторона - темно-коричневый (полигон) - из конфига
+      // Right side - dark brown (polygon) - from config
       k.drawPolygon({
         pts: [
           k.vec2(boundaryCenter + rotationOffset - padding, -waveY - padding),
@@ -106,7 +107,7 @@ export function menuScene(k) {
         color: getRGB(k, CONFIG.colors.level1.platform),
       })
       
-      // Свечение вокруг правого героя для контраста (следует за героем)
+      // Glow around right hero for contrast (follows hero)
       connectionPulse += k.dt() * 2
       const glowSize = 40 + Math.sin(connectionPulse) * 10
       const glowOpacity = 0.3 + Math.sin(connectionPulse * 1.5) * 0.15
@@ -118,30 +119,30 @@ export function menuScene(k) {
         opacity: glowOpacity
       })
       
-      // Звуковая волна между героями (диагональная, выходит из-за них)
+      // Sound wave between heroes (diagonal, emerges from behind them)
       const connectionSegments = []
-      const segmentWidth = 8 // Меньшая ширина для более плавной волны
-      const startX = leftHero.pos.x // Начало от центра левого героя
+      const segmentWidth = 8 // Smaller width for smoother wave
+      const startX = leftHero.pos.x // Start from left hero center
       const startY = leftHero.pos.y
-      const endX = rightHero.pos.x // Конец в центре правого героя
+      const endX = rightHero.pos.x // End at right hero center
       const endY = rightHero.pos.y
       const lineWidth = endX - startX
       const numConnectionSegments = Math.ceil(lineWidth / segmentWidth)
       
       for (let i = 0; i <= numConnectionSegments; i++) {
-        const t = i / numConnectionSegments // Прогресс от 0 до 1
+        const t = i / numConnectionSegments // Progress from 0 to 1
         const x = startX + (endX - startX) * t
-        const baseY = startY + (endY - startY) * t // Линейная интерполяция по Y
+        const baseY = startY + (endY - startY) * t // Linear Y interpolation
         
-        // Звуковая волна: несколько частот с переменной амплитудой
+        // Sound wave: multiple frequencies with variable amplitude
         const mainWave = Math.sin(k.time() * 4 + i * 0.5) * 12
         const harmonic1 = Math.sin(k.time() * 8 + i * 1.0) * 6
         const harmonic2 = Math.sin(k.time() * 12 + i * 1.5) * 3
         
-        // Амплитудная модуляция (эффект "пульса")
+        // Amplitude modulation ("pulse" effect)
         const amplitude = 0.8 + Math.sin(k.time() * 2) * 0.3
         
-        // Случайные микроколебания для живости
+        // Random micro-oscillations for liveliness
         const noise = (k.rand(0, 1) - 0.5) * 2
         
         const waveY = (mainWave + harmonic1 + harmonic2 + noise) * amplitude
@@ -152,7 +153,7 @@ export function menuScene(k) {
         })
       }
       
-      // Рисуем несколько звуковых волн с разной толщиной
+      // Draw multiple sound waves with different thickness
       for (let i = 0; i < connectionSegments.length - 1; i++) {
         const current = connectionSegments[i]
         const next = connectionSegments[i + 1]
@@ -161,7 +162,7 @@ export function menuScene(k) {
           ? k.choose([k.rgb(255, 165, 0), k.rgb(255, 200, 100), k.rgb(255, 100, 50)]) 
           : k.rgb(255, 140, 0)
         
-        // Основная волна
+        // Main wave
         k.drawLine({
           p1: k.vec2(current.x, current.y),
           p2: k.vec2(next.x, next.y),
@@ -170,7 +171,7 @@ export function menuScene(k) {
           opacity: 0.7
         })
         
-        // Вторая волна (толще, со смещением)
+        // Second wave (thicker, with offset)
         const offset1 = Math.sin(k.time() * 5 + i * 0.3) * 5
         k.drawLine({
           p1: k.vec2(current.x, current.y + offset1),
@@ -180,7 +181,7 @@ export function menuScene(k) {
           opacity: 0.4
         })
         
-        // Третья волна (тонкая, с другим смещением)
+        // Third wave (thin, with different offset)
         const offset2 = Math.sin(k.time() * 7 + i * 0.6) * 8
         k.drawLine({
           p1: k.vec2(current.x, current.y + offset2),
@@ -191,16 +192,16 @@ export function menuScene(k) {
         })
       }
       
-      // Рисуем глюки в оранжевой палитре
+      // Draw glitches in orange palette
       for (const glitch of glitches) {
         const isLeft = glitch.side === "left"
-        // Глюки: разные оттенки оранжевого
+        // Glitches: different orange shades
         const colorType = k.rand(0, 3)
         const glitchColor = colorType < 1 
-          ? k.rgb(255, 165, 0)     // Оранжевый
+          ? k.rgb(255, 165, 0)     // Orange
           : colorType < 2 
-          ? k.rgb(255, 140, 0)     // Темно-оранжевый
-          : k.rgb(255, 200, 100)   // Светло-оранжевый
+          ? k.rgb(255, 140, 0)     // Dark orange
+          : k.rgb(255, 200, 100)   // Light orange
         
         k.drawRect({
           pos: k.vec2(glitch.x, glitch.y),
@@ -211,16 +212,16 @@ export function menuScene(k) {
         })
       }
       
-      // Линия разделения убрана - остались только дергающиеся сегменты фона
+      // Dividing line removed - only jerky background segments remain
     })
     
-    // Обновление глюков и анимаций
+    // Update glitches and animations
     k.onUpdate(() => {
       glitchTimer += k.dt()
       bgShiftTimer += k.dt()
       boundaryRotationTimer += k.dt()
       
-      // Создаём новые глюки
+      // Create new glitches
       if (glitchTimer > 0.1) {
         if (k.rand(0, 1) > 0.7) {
           glitches.push(createGlitch())
@@ -228,51 +229,51 @@ export function menuScene(k) {
         glitchTimer = 0
       }
       
-      // Удаляем старые глюки
+      // Remove old glitches
       glitches = glitches.filter(g => {
         g.age += k.dt()
         return g.age < g.lifetime
       })
       
-      // Случайное смещение фона влево-вправо
+      // Random background shift left-right
       if (bgShiftTimer > k.rand(0.3, 1.5)) {
-        // Сильный глюк - редко, большое смещение
+        // Strong glitch - rare, large shift
         if (k.rand(0, 1) > 0.85) {
           targetBgShift = k.rand(-150, 150)
         } 
-        // Средний глюк
+        // Medium glitch
         else if (k.rand(0, 1) > 0.6) {
           targetBgShift = k.rand(-60, 60)
         }
-        // Слабый глюк - чаще, маленькое смещение
+        // Weak glitch - frequent, small shift
         else {
           targetBgShift = k.rand(-25, 25)
         }
         bgShiftTimer = 0
       }
       
-      // Плавное вращение вертикальной границы
+      // Smooth rotation of vertical boundary
       if (boundaryRotationTimer > k.rand(3, 6)) {
-        // Иногда поворачиваем границу
+        // Sometimes rotate boundary
         if (k.rand(0, 1) > 0.3) {
-          // Случайный угол в радианах (±15 градусов)
+          // Random angle in radians (±15 degrees)
           targetBoundaryRotation = k.rand(-0.26, 0.26)
         } else {
-          // Возвращаемся к вертикали
+          // Return to vertical
           targetBoundaryRotation = 0
         }
         boundaryRotationTimer = 0
       }
     })
     
-    // Левый герой (нормальный - желтый) - начинаем с центральным взглядом
+    // Left hero (normal - yellow) - start with center gaze
     const leftHero = k.add([
       k.sprite("hero_0_0"),
       k.pos(centerX * 0.5, centerY),
       k.anchor("center"),
       k.scale(3),
       k.opacity(1),
-      k.z(10), // Рисуем поверх линии
+      k.z(10), // Draw over line
       {
         baseX: centerX * 0.5,
         baseY: centerY,
@@ -281,14 +282,14 @@ export function menuScene(k) {
       }
     ])
     
-    // Правый герой (антиверсия - черный) - начинаем с центральным взглядом
+    // Right hero (anti-version - black) - start with center gaze
     const rightHero = k.add([
       k.sprite("antihero_0_0"),
       k.pos(centerX * 1.5, centerY),
       k.anchor("center"),
       k.scale(3),
       k.opacity(1),
-      k.z(10), // Рисуем поверх линии
+      k.z(10), // Draw over line
       {
         baseX: centerX * 1.5,
         baseY: centerY,
@@ -297,32 +298,32 @@ export function menuScene(k) {
       }
     ])
     
-    // Анимация героев - плавное движение в случайные стороны
+    // Hero animation - smooth movement in random directions
     k.onUpdate(() => {
-      // Независимое движение левого героя
+      // Independent left hero movement
       leftHeroTimer += k.dt()
-      if (leftHeroTimer > k.rand(1.5, 2.5)) { // Каждые 1.5-2.5 секунды новая цель
+      if (leftHeroTimer > k.rand(1.5, 2.5)) { // New target every 1.5-2.5 seconds
         leftHeroTargetX = k.rand(-100, 100)
         leftHeroTargetY = k.rand(-100, 100)
         leftHeroTimer = 0
       }
       
-      // Независимое движение правого героя
+      // Independent right hero movement
       rightHeroTimer += k.dt()
-      if (rightHeroTimer > k.rand(1.5, 2.5)) { // Каждые 1.5-2.5 секунды новая цель
+      if (rightHeroTimer > k.rand(1.5, 2.5)) { // New target every 1.5-2.5 seconds
         rightHeroTargetX = k.rand(-100, 100)
         rightHeroTargetY = k.rand(-100, 100)
         rightHeroTimer = 0
       }
       
-      // Плавно двигаемся к целевым позициям
+      // Smoothly move to target positions
       leftHero.glitchOffsetX = k.lerp(leftHero.glitchOffsetX, leftHeroTargetX, 0.02)
       leftHero.glitchOffsetY = k.lerp(leftHero.glitchOffsetY, leftHeroTargetY, 0.02)
       
       rightHero.glitchOffsetX = k.lerp(rightHero.glitchOffsetX, rightHeroTargetX, 0.02)
       rightHero.glitchOffsetY = k.lerp(rightHero.glitchOffsetY, rightHeroTargetY, 0.02)
       
-      // Герои полностью непрозрачные
+      // Heroes fully opaque
       leftHero.opacity = 1
       rightHero.opacity = 1
       
@@ -332,29 +333,29 @@ export function menuScene(k) {
       rightHero.pos.y = centerY - wave + rightHero.glitchOffsetY
       rightHero.pos.x = rightHero.baseX + rightHero.glitchOffsetX
       
-      // Анимация глаз - плавное движение
+      // Eye animation - smooth movement
       eyeTimer += k.dt()
       
-      // Выбираем новую целевую позицию каждые 1.5-3.5 секунды
+      // Choose new target position every 1.5-3.5 seconds
       if (eyeTimer > k.rand(1.5, 3.5)) {
         targetEyeX = k.choose([-1, 0, 1])
         targetEyeY = k.choose([-1, 0, 1])
         eyeTimer = 0
       }
       
-      // Плавно интерполируем к целевой позиции
+      // Smoothly interpolate to target position
       eyeOffsetX = k.lerp(eyeOffsetX, targetEyeX, 0.1)
       eyeOffsetY = k.lerp(eyeOffsetY, targetEyeY, 0.1)
       
-      // Округляем для пиксель-арт стиля
+      // Round for pixel-art style
       const roundedX = Math.round(eyeOffsetX)
       const roundedY = Math.round(eyeOffsetY)
       
-      // Переключаем на предзагруженный спрайт
+      // Switch to preloaded sprite
       const heroSpriteName = `hero_${roundedX}_${roundedY}`
       const antiHeroSpriteName = `antihero_${roundedX}_${roundedY}`
       
-      // Сохраняем текущий спрайт для проверки изменений
+      // Save current sprite for change detection
       if (!leftHero.currentEyeSprite || leftHero.currentEyeSprite !== heroSpriteName) {
         leftHero.use(k.sprite(heroSpriteName))
         leftHero.currentEyeSprite = heroSpriteName
@@ -365,7 +366,7 @@ export function menuScene(k) {
       }
     })
     
-    // Название игры с глюк-эффектами
+    // Game title with glitch effects
     const titleLetters = "FIND YOU".split("")
     const titleObjects = []
     
@@ -380,7 +381,7 @@ export function menuScene(k) {
         k.pos(startX + i * spacing, centerY - 150),
         k.anchor("center"),
         k.opacity(1),
-        k.color(255, 140, 0), // Темно-оранжевый по умолчанию
+        k.color(255, 140, 0), // Dark orange by default
         {
           baseX: startX + i * spacing,
           baseY: centerY - 150,
@@ -393,49 +394,49 @@ export function menuScene(k) {
       titleObjects.push(letterObj)
     })
     
-    // Глюк-эффекты для названия (более инертные)
+    // Glitch effects for title (more inertial)
     k.onUpdate(() => {
       titleGlitchTimer += k.dt()
       
-      if (titleGlitchTimer > 0.08) { // Реже обновляем для большей инертности
+      if (titleGlitchTimer > 0.08) { // Update less frequently for more inertia
         titleObjects.forEach((obj, i) => {
-          // Мягкие случайные смещения
-          if (k.rand(0, 1) > 0.92) { // Редкие глюки (8% шанс)
-            obj.glitchOffsetX = k.rand(-5, 5) // Меньшая амплитуда
+          // Soft random shifts
+          if (k.rand(0, 1) > 0.92) { // Rare glitches (8% chance)
+            obj.glitchOffsetX = k.rand(-5, 5) // Smaller amplitude
             obj.glitchOffsetY = k.rand(-3, 3)
           } else {
-            // Плавное затухание
+            // Smooth fade
             obj.glitchOffsetX *= 0.9
             obj.glitchOffsetY *= 0.9
           }
           
-          // Плавное движение к целевой позиции
+          // Smooth movement to target position
           obj.pos.x = k.lerp(obj.pos.x, obj.baseX + obj.glitchOffsetX, 0.15)
           obj.pos.y = k.lerp(obj.pos.y, obj.baseY + obj.glitchOffsetY, 0.15)
           
-          // Редкое изменение цвета - оранжевая палитра
-          if (k.rand(0, 1) > 0.97) { // Реже меняем цвет
+          // Rare color change - orange palette
+          if (k.rand(0, 1) > 0.97) { // Less frequent color change
             const colors = [
-              k.rgb(255, 140, 0),   // Темно-оранжевый (основной)
-              k.rgb(255, 165, 0),   // Оранжевый
-              k.rgb(62, 39, 35),    // Темно-коричневый фон
-              k.rgb(255, 100, 50),  // Красно-оранжевый акцент
-              k.rgb(255, 218, 185), // Светлый персиковый
-              k.rgb(255, 200, 100), // Светло-оранжевый
+              k.rgb(255, 140, 0),   // Dark orange (main)
+              k.rgb(255, 165, 0),   // Orange
+              k.rgb(62, 39, 35),    // Dark brown background
+              k.rgb(255, 100, 50),  // Red-orange accent
+              k.rgb(255, 218, 185), // Light peach
+              k.rgb(255, 200, 100), // Light orange
             ]
             obj.color = k.choose(colors)
           }
           
-          // Мягкое мерцание
-          if (k.rand(0, 1) > 0.95) { // Редкое мерцание (5% шанс)
-            obj.opacity = k.rand(0.6, 1) // Меньший диапазон
+          // Soft flicker
+          if (k.rand(0, 1) > 0.95) { // Rare flicker (5% chance)
+            obj.opacity = k.rand(0.6, 1) // Smaller range
           } else {
             obj.opacity = k.lerp(obj.opacity, 1, 0.08)
           }
           
-          // Очень редкое изменение размера
+          // Very rare size change
           if (k.rand(0, 1) > 0.98) {
-            obj.scale = k.vec2(k.rand(0.9, 1.2), k.rand(0.9, 1.2)) // Меньший диапазон
+            obj.scale = k.vec2(k.rand(0.9, 1.2), k.rand(0.9, 1.2)) // Smaller range
           } else {
             if (obj.scale) {
               obj.scale = k.lerp(obj.scale, k.vec2(1, 1), 0.15)
@@ -446,38 +447,38 @@ export function menuScene(k) {
         titleGlitchTimer = 0
       }
       
-      // Плавная волна через все буквы
+      // Smooth wave across all letters
       titleObjects.forEach((obj, i) => {
         obj.pos.y = obj.baseY + obj.glitchOffsetY + Math.sin(k.time() * 2 + i * 0.3) * 5
       })
     })
     
-    // Подсказка для начала игры
+    // Hint to start game
     const startText = k.add([
       k.text("PRESS SPACE TO BEGIN", { size: 24 }),
       k.pos(centerX, k.height() - 80),
       k.anchor("center"),
       k.opacity(1),
-      k.color(255, 100, 50), // Красно-оранжевый акцент
+      k.color(255, 100, 50), // Red-orange accent
       k.outline(4, k.rgb(62, 39, 35)),
     ])
     
-    // Подсказка о звуке
+    // Sound hint
     const muteText = k.add([
       k.text("Press M to mute/unmute", { size: 16 }),
       k.pos(centerX, k.height() - 50),
       k.anchor("center"),
       k.opacity(1),
-      k.color(255, 165, 0), // Оранжевый
+      k.color(255, 165, 0), // Orange
       k.outline(3, k.rgb(62, 39, 35)),
     ])
     
-    // Мигание подсказки
+    // Hint blinking
     k.onUpdate(() => {
       startText.opacity = 0.5 + Math.sin(k.time() * 3) * 0.5
     })
     
-    // Переход к игре (используем конфиг)
+    // Transition to game (use config)
     CONFIG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
         Ambient.stop(ambientMusic)
@@ -485,30 +486,27 @@ export function menuScene(k) {
       })
     })
     
-    // Управление музыкой (используем конфиг)
+    // Music control (use config)
     CONFIG.controls.toggleMute.forEach(key => {
       k.onKeyPress(key, async () => {
         const isPlaying = Ambient.isActuallyPlaying(ambientMusic)
         
-        // Переключаем громкость
+        // Toggle volume
         if (ambientMusic.masterGain) {
           const currentVolume = ambientMusic.masterGain.gain.value
           if (isPlaying && currentVolume > 0.01) {
             Ambient.setVolume(ambientMusic, 0)
           } else {
             Ambient.setVolume(ambientMusic, CONFIG.audio.ambient.masterVolume)
-            if (window.gameAudioContext.state === 'suspended') {
-              window.gameAudioContext.resume()
-            }
+            resumeAudioContext()
           }
         }
       })
     })
     
-    // Остановка музыки при выходе из сцены
+    // Stop music when leaving scene
     k.onSceneLeave(() => {
       Ambient.stop(ambientMusic)
     })
   })
 }
-

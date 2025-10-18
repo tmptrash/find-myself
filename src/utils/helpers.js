@@ -1,13 +1,13 @@
 // ============================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// UTILITY FUNCTIONS
 // ============================================
 
-// Парсинг hex строки в RGB компоненты
+// Parse hex string into RGB components
 function parseHex(colorHex) {
-  // Проверка типа и конвертация
+  // Type check and conversion
   if (typeof colorHex !== 'string') {
     console.error('parseHex: expected string, got', typeof colorHex, colorHex)
-    // Если это массив, возвращаем его как есть
+    // If it's an array, return it as is
     if (Array.isArray(colorHex) && colorHex.length === 3) {
       return colorHex
     }
@@ -21,24 +21,24 @@ function parseHex(colorHex) {
   return [r, g, b]
 }
 
-// Получить цвет как объект Kaplay
+// Get color as Kaplay object
 export function getColor(k, colorHex) {
   const [r, g, b] = parseHex(colorHex)
   return k.color(r, g, b)
 }
 
-// Получить RGB цвет как объект Kaplay
+// Get RGB color as Kaplay object
 export function getRGB(k, colorHex) {
   const [r, g, b] = parseHex(colorHex)
   return k.rgb(r, g, b)
 }
 
-// Получить hex строку цвета для Canvas API
+// Get hex string for Canvas API
 export function getHex(colorHex) {
-  // Проверка типа
+  // Type check
   if (typeof colorHex !== 'string') {
     console.error('getHex: expected string, got', typeof colorHex, colorHex)
-    // Если это массив RGB, конвертируем в hex
+    // If it's an RGB array, convert to hex
     if (Array.isArray(colorHex) && colorHex.length === 3) {
       const r = colorHex[0].toString(16).padStart(2, '0')
       const g = colorHex[1].toString(16).padStart(2, '0')
@@ -51,13 +51,12 @@ export function getHex(colorHex) {
   return `#${colorHex.replace('#', '')}`
 }
 
-// Проверить нажата ли одна из клавиш
+// Check if any of the keys is pressed (down)
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => k.isKeyDown(key))
 }
 
-// Проверить нажата ли одна из клавиш (press)
+// Check if any of the keys is pressed (press)
 export function isAnyKeyPressed(k, keys) {
   return keys.some(key => k.isKeyPressed(key))
 }
-

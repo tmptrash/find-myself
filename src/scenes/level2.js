@@ -8,18 +8,18 @@ import * as Hero from '../components/hero.js'
 export function level2Scene(k) {
   k.scene("level2", () => {
     // ========================================
-    // TIME-BASED СИСТЕМА: независима от FPS
+    // TIME-BASED SYSTEM: FPS independent
     // ========================================
     
     k.setGravity(CONFIG.gameplay.gravity)
     
-    // Создаём инстанс звуковых эффектов (получаем AudioContext)
+    // Create sound effects instance (get AudioContext)
     const sfx = SFX.create()
     
-    // Фон - используем общий модуль
+    // Background - use common module
     addBackground(k, CONFIG.colors.level1.background)
     
-    // Создаем платформы
+    // Create platforms
     function addPlatform(x, y, width, height) {
       return k.add([
         k.rect(width, height),
@@ -34,28 +34,28 @@ export function level2Scene(k) {
     const platformHeight = CONFIG.visual.platformHeight
     const wallWidth = CONFIG.visual.wallWidth
     
-    // Нижняя платформа (широкая)
+    // Bottom platform (wide)
     addPlatform(0, k.height() - platformHeight, k.width(), platformHeight)
     
-    // Верхняя платформа (широкая, той же высоты)
+    // Top platform (wide, same height)
     addPlatform(0, 0, k.width(), platformHeight)
     
-    // Левая стена (коридор)
+    // Left wall (corridor)
     addPlatform(0, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
-    // Правая стена (коридор)
+    // Right wall (corridor)
     addPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
     // ============================================
-    // ГЕРОЙ появляется слева с эффектом сборки
+    // HERO spawns on left with assembly effect
     // ============================================
-    // Получаем координаты из конфига
+    // Get coordinates from config
     const startX = CONFIG.levels.level2.heroSpawn.x
     const startY = CONFIG.levels.level2.heroSpawn.onPlatform
       ? k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
       : CONFIG.levels.level2.heroSpawn.y
     
-    // Используем функцию сборки из hero.js
+    // Use assembly function from hero.js
     let player = null
     Hero.spawnWithAssembly(k, {
       x: startX,
@@ -68,16 +68,15 @@ export function level2Scene(k) {
       }
     })
     
-    // Камера
+    // Camera
     k.onUpdate(() => {
       k.camPos(k.width() / 2, k.height() / 2)
     })
     
-    // Инструкции (используем общий модуль)
+    // Instructions (use common module)
     addInstructions(k, { showDebugHint: false })
     
-    // Возврат в меню (используем общий модуль)
+    // Return to menu (use common module)
     setupBackToMenu(k)
   })
 }
-

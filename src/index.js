@@ -6,44 +6,29 @@ import { level1Scene } from "./scenes/level1.js"
 import { level2Scene } from "./scenes/level2.js"
 import { loadAllSprites } from "./components/hero.js"
 
-// Глобальный AudioContext для всех звуков
-window.gameAudioContext = new (window.AudioContext || window.webkitAudioContext)()
-
-// Пытаемся запустить контекст сразу
-window.gameAudioContext.resume().catch(() => {
-  // Если не получилось, попробуем при первом взаимодействии
-})
-
-// Пытаемся возобновить при загрузке страницы
-window.addEventListener('load', () => {
-  window.gameAudioContext.resume()
-})
-
-// Инициализация игры (параметры из конфига)
+// Game initialization (parameters from config)
 const k = kaplay({
   width: CONFIG.visual.windowWidth,
   height: CONFIG.visual.windowHeight,
   scale: 1,
   background: [0, 0, 0],
-  font: "jetbrains",
-  // TIME-BASED система: используем k.dt() для независимости от FPS
-  // Kaplay автоматически обрабатывает delta time для всех движений
+  font: "jetbrains"
 })
 
-// Загружаем все спрайты персонажей (инкапсулировано в hero.js)
+// Load all character sprites (encapsulated in hero.js)
 loadAllSprites(k)
 
-// Загрузка ресурсов
+// Load resources
 k.loadBean()
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
 
-// Регистрация всех сцен
+// Register all scenes
 readyScene(k)
 menuScene(k)
 level1Scene(k)
 level2Scene(k)
 
-// Запуск игры после загрузки ресурсов
+// Start game after resources loaded
 k.onLoad(() => {
   k.go("start")
 })

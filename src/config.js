@@ -1,174 +1,174 @@
 // ============================================
-// ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ ИГРЫ
+// GLOBAL GAME CONFIGURATION
 // ============================================
-// Все настраиваемые параметры в одном месте
+// All configurable parameters in one place
 
 export const CONFIG = {
   // ==========================================
-  // АУДИО
+  // AUDIO
   // ==========================================
   audio: {
-    // Ambient музыка (заставка/меню)
+    // Ambient music (splash/menu)
     ambient: {
-      masterVolume: 0.52,        // Общая громкость ambient музыки
-      bassVolume: 0.08,          // Громкость низких дронов
-      midVolume: 0.03,           // Громкость средних тонов
-      highVolume: 0.015,         // Громкость высоких тонов
-      noiseVolume: 0.03,         // Громкость шума
-      blipVolume: 0.08,          // Громкость случайных звуков
-      fadeInTime: 0.5,           // Время fade-in (секунды)
+      masterVolume: 0.52,        // Overall ambient music volume
+      bassVolume: 0.08,          // Low drones volume
+      midVolume: 0.03,           // Mid tones volume
+      highVolume: 0.015,         // High tones volume
+      noiseVolume: 0.03,         // Noise volume
+      blipVolume: 0.08,          // Random sounds volume
+      fadeInTime: 0.5,           // Fade-in time (seconds)
     },
     
-    // Звуковые эффекты уровня
+    // Level sound effects
     sfx: {
-      landVolume: 0.343,         // Громкость звука приземления
-      landFade: 0.029,           // Затухание приземления
-      landDuration: 0.1,         // Длительность звука (секунды)
-      landFreqStart: 250,        // Начальная частота (Hz)
-      landFreqEnd: 80,           // Конечная частота (Hz)
+      landVolume: 0.343,         // Landing sound volume
+      landFade: 0.029,           // Landing fade
+      landDuration: 0.1,         // Sound duration (seconds)
+      landFreqStart: 250,        // Start frequency (Hz)
+      landFreqEnd: 80,           // End frequency (Hz)
       
-      stepVolume: 0.176,         // Громкость звука шагов
-      stepFade: 0.022,           // Затухание шагов
-      stepDuration: 0.05,        // Длительность звука (секунды)
-      stepFreqStart: 180,        // Начальная частота (Hz)
-      stepFreqEnd: 60,           // Конечная частота (Hz)
+      stepVolume: 0.176,         // Step sound volume
+      stepFade: 0.022,           // Step fade
+      stepDuration: 0.05,        // Sound duration (seconds)
+      stepFreqStart: 180,        // Start frequency (Hz)
+      stepFreqEnd: 60,           // End frequency (Hz)
     }
   },
 
   // ==========================================
-  // ГЕЙМПЛЕЙ
+  // GAMEPLAY
   // ==========================================
   gameplay: {
-    // Физика
-    moveSpeed: 450,              // Скорость движения героя (px/s)
-    jumpForce: 800,              // Сила прыжка (px/s)
-    gravity: 2200,               // Гравитация (px/s²)
+    // Physics
+    moveSpeed: 450,              // Hero movement speed (px/s)
+    jumpForce: 800,              // Jump force (px/s)
+    gravity: 2200,               // Gravity (px/s²)
     
-    // Анимации
-    runAnimSpeed: 0.04,          // Скорость анимации бега (сек на кадр)
-    runFrameCount: 6,            // Количество кадров бега
-    eyeAnimMinDelay: 1.5,        // Мин задержка анимации глаз (сек)
-    eyeAnimMaxDelay: 3.5,        // Макс задержка анимации глаз (сек)
-    eyeLerpSpeed: 0.1,           // Скорость интерполяции глаз
+    // Animations
+    runAnimSpeed: 0.04,          // Run animation speed (sec per frame)
+    runFrameCount: 6,            // Number of run frames
+    eyeAnimMinDelay: 1.5,        // Min eye animation delay (sec)
+    eyeAnimMaxDelay: 3.5,        // Max eye animation delay (sec)
+    eyeLerpSpeed: 0.1,           // Eye interpolation speed
     
-    // Размеры героя и коллизий
-    heroScale: 3,                // Масштаб спрайта героя
-    collisionWidth: 14,          // Ширина collision box (px)
-    collisionHeight: 25,         // Высота collision box (px)
-    collisionOffsetX: 0,         // Смещение collision box по X
-    collisionOffsetY: 0,         // Смещение collision box по Y
+    // Hero and collision sizes
+    heroScale: 3,                // Hero sprite scale
+    collisionWidth: 14,          // Collision box width (px)
+    collisionHeight: 25,         // Collision box height (px)
+    collisionOffsetX: 0,         // Collision box X offset
+    collisionOffsetY: 0,         // Collision box Y offset
   },
 
   // ==========================================
-  // ЦВЕТА
+  // COLORS
   // ==========================================
   colors: {
-    // Цвета уровня 1
+    // Level 1 colors
     level1: {
-      background: "FFDAB9",         // Светлый персиковый фон
-      platform: "3E2723",           // Темно-коричневые платформы
-      instructions: "FFDAB9",       // Цвет текста инструкций
-      debug: "3E2723",              // Цвет debug текста
+      background: "FFDAB9",         // Light peach background
+      platform: "3E2723",           // Dark brown platforms
+      instructions: "FFDAB9",       // Instructions text color
+      debug: "3E2723",              // Debug text color
     },
     
-    // Цвета заставки/меню
+    // Splash/menu colors
     menu: {
-      background: "191919",         // Темно-серый фон
-      gridLines: "323232",          // Линии сетки
-      titleBase: "FF8C00",          // Базовый цвет заголовка
-      startButton: "FF6432",        // Цвет кнопки старта
-      muteText: "FFA500",           // Цвет текста mute
-      dividerLine: "FF8C00",        // Разделительная линия
+      background: "191919",         // Dark gray background
+      gridLines: "323232",          // Grid lines
+      titleBase: "FF8C00",          // Title base color
+      startButton: "FF6432",        // Start button color
+      muteText: "FFA500",           // Mute text color
+      dividerLine: "FF8C00",        // Divider line
     },
     
-    // Цвета стартового экрана
+    // Start screen colors
     start: {
-      background: "191919",         // Темный фон
-      button: "FF6432",             // Кнопка "Are you ready?"
-      buttonText: "FFFFFF",         // Текст на кнопке
-      buttonOutline: "000000",      // Обводка кнопки
-      hint: "969696",               // Цвет подсказки
+      background: "191919",         // Dark background
+      button: "FF6432",             // "Are you ready?" button
+      buttonText: "FFFFFF",         // Button text
+      buttonOutline: "000000",      // Button outline
+      hint: "969696",               // Hint color
     },
     
-    // Цвета героя (для процедурной генерации)
+    // Hero colors (for procedural generation)
     hero: {
-      body: "FF8C00",               // Оранжевый цвет тела
-      outline: "000000",            // Черный контур
-      eyeWhite: "FFFFFF",           // Белок глаза
-      eyePupil: "000000",           // Зрачок
+      body: "FF8C00",               // Orange body color
+      outline: "000000",            // Black outline
+      eyeWhite: "FFFFFF",           // Eye white
+      eyePupil: "000000",           // Pupil
     },
     
-    // Цвета анти-героя
+    // Anti-hero colors
     antiHero: {
-      body: "8B5A50",               // Красновато-коричневый
-      outline: "000000",            // Черный контур
-      eyeWhite: "FFFFFF",           // Белок глаза
-      eyePupil: "000000",           // Зрачок
+      body: "8B5A50",               // Reddish-brown
+      outline: "000000",            // Black outline
+      eyeWhite: "FFFFFF",           // Eye white
+      eyePupil: "000000",           // Pupil
     }
   },
 
   // ==========================================
-  // УПРАВЛЕНИЕ (КЛАВИШИ)
+  // CONTROLS (KEYS)
   // ==========================================
   controls: {
-    // Движение
-    moveLeft: ['left', 'a'],       // Движение влево
-    moveRight: ['right', 'd'],     // Движение вправо
-    moveUp: ['up', 'w'],           // Движение вверх (для прыжка)
+    // Movement
+    moveLeft: ['left', 'a'],       // Move left
+    moveRight: ['right', 'd'],     // Move right
+    moveUp: ['up', 'w'],           // Move up (for jump)
     
-    // Действия
-    jump: ['up', 'w', 'space'],    // Прыжок
+    // Actions
+    jump: ['up', 'w', 'space'],    // Jump
     
-    // Система
-    toggleDebug: ['f1'],           // Включить/выключить debug режим
-    toggleMute: ['m'],             // Включить/выключить звук
-    backToMenu: ['escape'],        // Вернуться в меню
-    startGame: ['space', 'enter'], // Начать игру (из меню/старта)
+    // System
+    toggleDebug: ['f1'],           // Toggle debug mode
+    toggleMute: ['m'],             // Toggle sound
+    backToMenu: ['escape'],        // Return to menu
+    startGame: ['space', 'enter'], // Start game (from menu/start)
   },
 
   // ==========================================
-  // ВИЗУАЛ
+  // VISUAL
   // ==========================================
   visual: {
-    // Размеры окна
+    // Window dimensions
     windowWidth: 1280,
     windowHeight: 920,
     
-    // Размеры платформ
-    platformHeight: 150,           // Высота больших платформ
-    wallWidth: 30,                 // Ширина стен коридора
-    smallPlatformHeight: 20,       // Высота маленьких платформ
+    // Platform dimensions
+    platformHeight: 150,           // Large platform height
+    wallWidth: 30,                 // Corridor wall width
+    smallPlatformHeight: 20,       // Small platform height
     
-    // Размеры UI
-    instructionsFontSize: 14,      // Размер шрифта инструкций
-    debugFontSize: 14,             // Размер шрифта debug
-    titleFontSize: 64,             // Размер шрифта заголовка
-    buttonFontSize: 36,            // Размер шрифта на кнопках
+    // UI dimensions
+    instructionsFontSize: 14,      // Instructions font size
+    debugFontSize: 14,             // Debug font size
+    titleFontSize: 64,             // Title font size
+    buttonFontSize: 36,            // Button font size
     
-    // Позиции UI
-    instructionsX: 20,             // X позиция инструкций
-    instructionsY: 20,             // Y позиция инструкций
-    debugX: -220,                  // X offset от правого края для debug
-    debugY: 20,                    // Y позиция debug
+    // UI positions
+    instructionsX: 20,             // Instructions X position
+    instructionsY: 20,             // Instructions Y position
+    debugX: -220,                  // X offset from right edge for debug
+    debugY: 20,                    // Debug Y position
     
-    // Границы игрока (level1)
+    // Player bounds (level1)
     playerBounds: {
-      leftOffset: 60,              // Отступ от левой стены
-      rightOffset: 60,             // Отступ от правой стены  
-      topOffset: 180,              // Отступ от верхней платформы
-      bottomOffset: 180,           // Отступ от нижней платформы
+      leftOffset: 60,              // Left wall offset
+      rightOffset: 60,             // Right wall offset  
+      topOffset: 180,              // Top platform offset
+      bottomOffset: 180,           // Bottom platform offset
     },
     
-    // Анимации меню
+    // Menu animations
     menu: {
-      bgScrollSpeed: 0.5,          // Скорость прокрутки фона
-      glitchFrequency: 0.5,        // Частота глитчей (секунды)
-      titlePulseSpeed: 3,          // Скорость пульсации заголовка
-      buttonPulseAmount: 0.03,     // Амплитуда пульсации кнопки
-      buttonHoverScale: 1.08,      // Масштаб кнопки при наведении
+      bgScrollSpeed: 0.5,          // Background scroll speed
+      glitchFrequency: 0.5,        // Glitch frequency (seconds)
+      titlePulseSpeed: 3,          // Title pulse speed
+      buttonPulseAmount: 0.03,     // Button pulse amplitude
+      buttonHoverScale: 1.08,      // Button scale on hover
     },
     
-    // Z-индексы (слои)
+    // Z-indices (layers)
     zIndex: {
       background: -100,
       platforms: 0,
@@ -178,19 +178,19 @@ export const CONFIG = {
   },
 
   // ==========================================
-  // УРОВНИ
+  // LEVELS
   // ==========================================
   levels: {
     level1: {
       name: "Level 1",
       
-      // Позиция появления героя
+      // Hero spawn position
       heroSpawn: {
-        x: 150,                    // Левая часть экрана
-        onPlatform: true,          // Появляется на платформе (Y рассчитывается)
+        x: 150,                    // Left side of screen
+        onPlatform: true,          // Spawns on platform (Y calculated)
       },
       
-      // Конфигурация платформ
+      // Platform configuration
       platforms: {
         bottom: { height: 150 },
         top: { height: 150 },
@@ -202,13 +202,13 @@ export const CONFIG = {
     level2: {
       name: "Level 2",
       
-      // Позиция появления героя
+      // Hero spawn position
       heroSpawn: {
-        x: 150,                    // Левая часть экрана
-        onPlatform: true,          // Появляется на платформе (Y рассчитывается)
+        x: 150,                    // Left side of screen
+        onPlatform: true,          // Spawns on platform (Y calculated)
       },
       
-      // Конфигурация платформ
+      // Platform configuration
       platforms: {
         bottom: { height: 150 },
         top: { height: 150 },
@@ -219,13 +219,12 @@ export const CONFIG = {
   },
 
   // ==========================================
-  // ДЕБАГ
+  // DEBUG
   // ==========================================
   debug: {
-    startInDebugMode: false,       // Начинать в режиме отладки
-    showFPS: false,                // Показывать FPS
-    showCollisionBoxes: false,     // Показывать collision boxes
-    logAudioEvents: false,         // Логировать аудио события
+    startInDebugMode: false,       // Start in debug mode
+    showFPS: false,                // Show FPS
+    showCollisionBoxes: false,     // Show collision boxes
+    logAudioEvents: false,         // Log audio events
   }
 }
-

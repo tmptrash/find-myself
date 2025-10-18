@@ -2,22 +2,22 @@ import { CONFIG } from '../config.js'
 import { getColor, getRGB } from '../utils/helpers.js'
 
 // ============================================
-// УНИВЕРСАЛЬНАЯ КНОПКА ДЛЯ МЕНЮ
+// UNIVERSAL MENU BUTTON
 // ============================================
 
 /**
- * Создаёт кнопку с текстом и анимациями
- * @param {Object} k - Kaplay инстанс
- * @param {Object} config - Конфигурация кнопки
- * @param {string} config.text - Текст на кнопке
- * @param {number} config.x - Позиция X (центр кнопки)
- * @param {number} config.y - Позиция Y (центр кнопки)
- * @param {number} [config.width=450] - Ширина кнопки
- * @param {number} [config.height=90] - Высота кнопки
- * @param {string} [config.targetScene] - Целевая сцена (если null, используется onClick)
- * @param {Function} [config.onClick] - Callback при клике
- * @param {number} [config.textOffsetY=0] - Смещение текста по вертикали
- * @returns {Object} Объект с элементами кнопки (button, text, shadow)
+ * Creates a button with text and animations
+ * @param {Object} k - Kaplay instance
+ * @param {Object} config - Button configuration
+ * @param {string} config.text - Button text
+ * @param {number} config.x - X position (button center)
+ * @param {number} config.y - Y position (button center)
+ * @param {number} [config.width=450] - Button width
+ * @param {number} [config.height=90] - Button height
+ * @param {string} [config.targetScene] - Target scene (if null, uses onClick)
+ * @param {Function} [config.onClick] - Click callback
+ * @param {number} [config.textOffsetY=0] - Text vertical offset
+ * @returns {Object} Object with button elements (button, text, shadow)
  */
 export function create(k, config) {
   const {
@@ -31,7 +31,7 @@ export function create(k, config) {
     textOffsetY = 0,
   } = config
   
-  // Общие параметры для всех кнопок
+  // Common parameters for all buttons
   const fontSize = CONFIG.visual.buttonFontSize
   const buttonColor = CONFIG.colors.start.button
   const textColor = CONFIG.colors.start.buttonText
@@ -39,7 +39,7 @@ export function create(k, config) {
   const pulse = true
   const colorShift = true
   
-  // Тень кнопки
+  // Button shadow
   const buttonShadow = k.add([
     k.rect(width, height, { radius: 12 }),
     k.pos(x + 4, y + 4),
@@ -49,7 +49,7 @@ export function create(k, config) {
     k.z(0),
   ])
   
-  // Фон кнопки
+  // Button background
   const button = k.add([
     k.rect(width, height, { radius: 12 }),
     k.pos(x, y),
@@ -62,7 +62,7 @@ export function create(k, config) {
     "button",
   ])
   
-  // Текст на кнопке
+  // Button text
   const buttonText = k.add([
     k.text(text, { size: fontSize }),
     k.pos(x, y + textOffsetY),
@@ -72,11 +72,11 @@ export function create(k, config) {
     k.z(2),
   ])
   
-  // Переменные для плавной анимации scale
+  // Variables for smooth scale animation
   let targetScale = 1
   let currentScale = 1
   
-  // Эффект hover
+  // Hover effect
   button.onHoverUpdate(() => {
     targetScale = CONFIG.visual.menu.buttonHoverScale
     k.setCursor("pointer")
@@ -87,7 +87,7 @@ export function create(k, config) {
     k.setCursor("default")
   })
   
-  // Клик по кнопке
+  // Button click
   button.onClick(() => {
     if (targetScene) {
       k.go(targetScene)
@@ -96,34 +96,34 @@ export function create(k, config) {
     }
   })
   
-  // Анимация пульсации и плавное изменение scale
+  // Pulse animation and smooth scale change
   k.onUpdate(() => {
-    // Определяем базовый targetScale
+    // Determine base targetScale
     let baseTargetScale = targetScale
     
-    // Добавляем пульсацию только если не наведена мышь
+    // Add pulse only if not hovering
     if (!button.isHovering() && pulse) {
       const pulseValue = 1.0 + Math.sin(k.time() * CONFIG.visual.menu.titlePulseSpeed) * CONFIG.visual.menu.buttonPulseAmount
       baseTargetScale = pulseValue
     }
     
-    // Плавно интерполируем к целевому scale
+    // Smoothly interpolate to target scale
     currentScale = k.lerp(currentScale, baseTargetScale, 0.2)
     
-    // Применяем scale ко всем элементам
+    // Apply scale to all elements
     button.scale = k.vec2(currentScale)
     buttonText.scale = k.vec2(currentScale)
     buttonShadow.scale = k.vec2(currentScale)
     
-    // Анимация цвета
+    // Color animation
     if (colorShift) {
-      // Парсим hex цвет в RGB компоненты
+      // Parse hex color to RGB components
       const hex = buttonColor.replace('#', '')
       const r = parseInt(hex.substring(0, 2), 16)
       const g = parseInt(hex.substring(2, 4), 16)
       const b = parseInt(hex.substring(4, 6), 16)
       
-      // Добавляем небольшой сдвиг к зеленому каналу для живости
+      // Add small shift to green channel for liveliness
       const shift = Math.sin(k.time() * 2) * 15
       button.color = k.rgb(r, Math.max(0, Math.min(255, g + shift)), b)
     }

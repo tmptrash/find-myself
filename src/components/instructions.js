@@ -2,23 +2,23 @@ import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
 
 // ============================================
-// ИНСТРУКЦИИ ПО УПРАВЛЕНИЮ ДЛЯ УРОВНЕЙ
+// CONTROL INSTRUCTIONS FOR LEVELS
 // ============================================
 
 /**
- * Добавляет инструкции по управлению на экран
- * @param {Object} k - Kaplay инстанс
- * @param {Object} [options] - Дополнительные опции
- * @param {boolean} [options.showDebugHint=true] - Показывать ли подсказку про F1
- * @returns {Object} Созданный объект с инструкциями
+ * Adds control instructions to the screen
+ * @param {Object} k - Kaplay instance
+ * @param {Object} [options] - Additional options
+ * @param {boolean} [options.showDebugHint=true] - Whether to show F1 hint
+ * @returns {Object} Created instructions object
  */
 export function addInstructions(k, options = {}) {
   const { showDebugHint = true } = options
   
-  // Базовый текст инструкций (без пробелов между стрелками)
-  const baseText = "WASD/←↑→ - move\nSpace - jump\nESC - menu"
+  // Base instruction text (no spaces between arrows)
+  const baseText = "AWD/←↑→ - move\nSpace   - jump\nESC     - menu"
   const fullText = showDebugHint 
-    ? `${baseText}\nF1 - debug info` 
+    ? `${baseText}\nF1      - debug info` 
     : baseText
   
   return k.add([
@@ -34,12 +34,12 @@ export function addInstructions(k, options = {}) {
 }
 
 // ============================================
-// НАВИГАЦИЯ
+// NAVIGATION
 // ============================================
 
 /**
- * Настраивает возврат в меню по нажатию ESC
- * @param {Object} k - Kaplay инстанс
+ * Sets up return to menu on ESC key press
+ * @param {Object} k - Kaplay instance
  */
 export function setupBackToMenu(k) {
   CONFIG.controls.backToMenu.forEach(key => {
@@ -48,4 +48,3 @@ export function setupBackToMenu(k) {
     })
   })
 }
-

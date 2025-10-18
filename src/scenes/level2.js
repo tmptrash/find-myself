@@ -1,4 +1,5 @@
-import { CONFIG, getColor } from '../config.js'
+import { CONFIG } from '../config.js'
+import { getColor } from '../utils/helpers.js'
 import * as SFX from '../audio/sfx.js'
 import { addBackground } from '../components/background.js'
 import { addInstructions, setupBackToMenu } from '../components/instructions.js'
@@ -48,8 +49,11 @@ export function level2Scene(k) {
     // ============================================
     // ГЕРОЙ появляется слева с эффектом сборки
     // ============================================
-    const startX = 150 // Левая часть экрана
-    const startY = k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
+    // Получаем координаты из конфига
+    const startX = CONFIG.levels.level2.heroSpawn.x
+    const startY = CONFIG.levels.level2.heroSpawn.onPlatform
+      ? k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
+      : CONFIG.levels.level2.heroSpawn.y
     
     // Используем функцию сборки из hero.js
     let player = null

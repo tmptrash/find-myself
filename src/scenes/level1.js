@@ -1,4 +1,5 @@
-import { CONFIG, getColor } from '../config.js'
+import { CONFIG } from '../config.js'
+import { getColor } from '../utils/helpers.js'
 import * as SFX from '../audio/sfx.js'
 import { addBackground } from '../components/background.js'
 import { addInstructions, setupBackToMenu } from '../components/instructions.js'
@@ -45,14 +46,30 @@ export function level1Scene(k) {
     // Правая стена (коридор)
     addPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
     
-    // Добавляем героя (падает на нижнюю платформу)
-    const startX = CONFIG.levels.level1.startPosX === 'center' ? k.width() / 2 : CONFIG.levels.level1.startPosX
-    const player = Hero.create(k, {
-      x: startX,
-      y: CONFIG.levels.level1.startPosY,
+    // ============================================
+    // ГЕРОЙ появляется с эффектом сборки
+    // ============================================
+    // Получаем координаты из конфига
+    const heroStartX = CONFIG.levels.level1.heroSpawn.x
+    const heroStartY = CONFIG.levels.level1.heroSpawn.onPlatform
+      ? k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
+      : CONFIG.levels.level1.heroSpawn.y
+    
+    let player = null
+    Hero.spawnWithAssembly(k, {
+      x: heroStartX,
+      y: heroStartY,
       type: 'hero',
       controllable: true,
-      sfx: sfx
+      sfx: sfx,
+      onComplete: (character) => {
+        player = character
+        
+        // Настраиваем эффект аннигиляции после создания героя
+        Hero.setupAnnihilation(k, player, antiHero, sfx, () => {
+          k.go("level2")
+        })
+      }
     })
     
     // ============================================
@@ -69,17 +86,8 @@ export function level1Scene(k) {
       sfx: sfx
     })
     
-    // ============================================
-    // АННИГИЛЯЦИЯ при столкновении
-    // ============================================
-    
     // Добавляем тег для столкновения к анти-герою
     antiHero.use("annihilationTarget")
-    
-    // Настраиваем эффект аннигиляции
-    Hero.setupAnnihilation(k, player, antiHero, sfx, () => {
-      k.go("level2")
-    })
     
     // Инструкции (используем общий модуль)
     const instructions = addInstructions(k, { showDebugHint: true })
@@ -110,8 +118,8 @@ export function level1Scene(k) {
       // Камера фиксирована в центре экрана (не следует за игроком)
       k.camPos(k.width() / 2, k.height() / 2)
       
-      // Обновляем дебаг текст (только если дебаг режим включен)
-      if (debugMode) {
+      // Обновляем дебаг текст (только если дебаг режим включен и герой создан)
+      if (debugMode && player) {
         debugText.text = `Pos: ${Math.round(player.pos.x)}, ${Math.round(player.pos.y)}\nVel: ${Math.round(player.vel?.x || 0)}, ${Math.round(player.vel?.y || 0)}\nCan Jump: ${player.canJump}`
       } else {
         debugText.text = ""

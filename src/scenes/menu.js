@@ -1,5 +1,6 @@
 import * as Ambient from "../audio/ambient.js"
-import { CONFIG, getRGB } from "../config.js"
+import { CONFIG } from "../config.js"
+import { getRGB } from "../utils/helpers.js"
 
 export function menuScene(k) {
   k.scene("menu", () => {

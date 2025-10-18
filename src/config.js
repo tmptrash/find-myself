@@ -65,45 +65,45 @@ export const CONFIG = {
   colors: {
     // Цвета уровня 1
     level1: {
-      background: [255, 218, 185],  // Светлый персиковый фон
-      platform: [62, 39, 35],       // Темно-коричневые платформы
-      instructions: [255, 218, 185], // Цвет текста инструкций
-      debug: [62, 39, 35],          // Цвет debug текста
+      background: "FFDAB9",         // Светлый персиковый фон
+      platform: "3E2723",           // Темно-коричневые платформы
+      instructions: "FFDAB9",       // Цвет текста инструкций
+      debug: "3E2723",              // Цвет debug текста
     },
     
     // Цвета заставки/меню
     menu: {
-      background: [25, 25, 25],     // Темно-серый фон
-      gridLines: [50, 50, 50],      // Линии сетки
-      titleBase: [255, 140, 0],     // Базовый цвет заголовка
-      startButton: [255, 100, 50],  // Цвет кнопки старта
-      muteText: [255, 165, 0],      // Цвет текста mute
-      dividerLine: [255, 140, 0],   // Разделительная линия
+      background: "191919",         // Темно-серый фон
+      gridLines: "323232",          // Линии сетки
+      titleBase: "FF8C00",          // Базовый цвет заголовка
+      startButton: "FF6432",        // Цвет кнопки старта
+      muteText: "FFA500",           // Цвет текста mute
+      dividerLine: "FF8C00",        // Разделительная линия
     },
     
     // Цвета стартового экрана
     start: {
-      background: [25, 25, 25],     // Темный фон
-      button: [255, 100, 50],       // Кнопка "Are you ready?"
-      buttonText: [255, 255, 255],  // Текст на кнопке
-      buttonOutline: [0, 0, 0],     // Обводка кнопки
-      hint: [150, 150, 150],        // Цвет подсказки
+      background: "191919",         // Темный фон
+      button: "FF6432",             // Кнопка "Are you ready?"
+      buttonText: "FFFFFF",         // Текст на кнопке
+      buttonOutline: "000000",      // Обводка кнопки
+      hint: "969696",               // Цвет подсказки
     },
     
     // Цвета героя (для процедурной генерации)
     hero: {
-      body: [255, 140, 0],          // Оранжевый цвет тела (#FF8C00)
-      outline: [0, 0, 0],           // Черный контур
-      eyeWhite: [255, 255, 255],    // Белок глаза
-      eyePupil: [0, 0, 0],          // Зрачок
+      body: "FF8C00",               // Оранжевый цвет тела
+      outline: "000000",            // Черный контур
+      eyeWhite: "FFFFFF",           // Белок глаза
+      eyePupil: "000000",           // Зрачок
     },
     
     // Цвета анти-героя
     antiHero: {
-      body: [139, 90, 80],          // Гораздо светлее - красновато-коричневый
-      outline: [0, 0, 0],           // Черный контур
-      eyeWhite: [255, 255, 255],    // Белок глаза
-      eyePupil: [0, 0, 0],          // Зрачок
+      body: "8B5A50",               // Красновато-коричневый
+      outline: "000000",            // Черный контур
+      eyeWhite: "FFFFFF",           // Белок глаза
+      eyePupil: "000000",           // Зрачок
     }
   },
 
@@ -183,8 +183,30 @@ export const CONFIG = {
   levels: {
     level1: {
       name: "Level 1",
-      startPosX: 'center',         // 'center' или число
-      startPosY: 300,              // Начальная Y позиция
+      
+      // Позиция появления героя
+      heroSpawn: {
+        x: 150,                    // Левая часть экрана
+        onPlatform: true,          // Появляется на платформе (Y рассчитывается)
+      },
+      
+      // Конфигурация платформ
+      platforms: {
+        bottom: { height: 150 },
+        top: { height: 150 },
+        leftWall: { width: 30 },
+        rightWall: { width: 30 },
+      }
+    },
+    
+    level2: {
+      name: "Level 2",
+      
+      // Позиция появления героя
+      heroSpawn: {
+        x: 150,                    // Левая часть экрана
+        onPlatform: true,          // Появляется на платформе (Y рассчитывается)
+      },
       
       // Конфигурация платформ
       platforms: {
@@ -205,35 +227,5 @@ export const CONFIG = {
     showCollisionBoxes: false,     // Показывать collision boxes
     logAudioEvents: false,         // Логировать аудио события
   }
-}
-
-// Вспомогательные функции для работы с конфигом
-
-// Получить цвет как объект Kaplay
-export function getColor(k, colorArray) {
-  return k.color(colorArray[0], colorArray[1], colorArray[2])
-}
-
-// Получить RGB цвет как объект Kaplay
-export function getRGB(k, colorArray) {
-  return k.rgb(colorArray[0], colorArray[1], colorArray[2])
-}
-
-// Получить hex строку цвета для Canvas API
-export function getHex(colorArray) {
-  const r = colorArray[0].toString(16).padStart(2, '0')
-  const g = colorArray[1].toString(16).padStart(2, '0')
-  const b = colorArray[2].toString(16).padStart(2, '0')
-  return `#${r}${g}${b}`
-}
-
-// Проверить нажата ли одна из клавиш
-export function isAnyKeyDown(k, keys) {
-  return keys.some(key => k.isKeyDown(key))
-}
-
-// Проверить нажата ли одна из клавиш (press)
-export function isAnyKeyPressed(k, keys) {
-  return keys.some(key => k.isKeyPressed(key))
 }
 

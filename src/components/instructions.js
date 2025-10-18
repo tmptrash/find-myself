@@ -1,4 +1,5 @@
-import { CONFIG, getColor } from '../config.js'
+import { CONFIG } from '../config.js'
+import { getColor } from '../utils/helpers.js'
 
 // ============================================
 // ИНСТРУКЦИИ ПО УПРАВЛЕНИЮ ДЛЯ УРОВНЕЙ

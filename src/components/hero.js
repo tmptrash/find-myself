@@ -1,4 +1,5 @@
-import { CONFIG, getHex, isAnyKeyDown } from '../config.js'
+import { CONFIG } from '../config.js'
+import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
 import * as SFX from '../audio/sfx.js'
 
 // ============================================
@@ -493,7 +494,7 @@ export function spawnWithAssembly(k, config) {
         x + k.rand(-100, 100),
         y + k.rand(-100, 100)
       ),
-      k.color(particleColor[0], particleColor[1], particleColor[2]),
+      getColor(k, particleColor),
       k.anchor("center"),
       k.z(CONFIG.visual.zIndex.player),
       "assemblyParticle"
@@ -740,7 +741,7 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
                 const pixel = k.add([
                   k.rect(size, size),
                   k.pos(centerX, centerY),
-                  k.color(color[0], color[1], color[2]),
+                  getColor(k, color),
                   k.anchor("center"),
                   k.rotate(k.rand(0, 360)),
                   k.z(CONFIG.visual.zIndex.player)

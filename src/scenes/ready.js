@@ -1,4 +1,5 @@
-import { CONFIG, getColor, getRGB } from '../config.js'
+import { CONFIG } from '../config.js'
+import { getColor, getRGB } from '../utils/helpers.js'
 import { addBackground } from '../components/background.js'
 import * as Button from '../components/button.js'
 

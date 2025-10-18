@@ -1,4 +1,5 @@
-import { CONFIG, getColor, getRGB } from '../config.js'
+import { CONFIG } from '../config.js'
+import { getColor, getRGB } from '../utils/helpers.js'
 
 // ============================================
 // УНИВЕРСАЛЬНАЯ КНОПКА ДЛЯ МЕНЮ
@@ -43,7 +44,7 @@ export function create(k, config) {
     k.rect(width, height, { radius: 12 }),
     k.pos(x + 4, y + 4),
     k.anchor("center"),
-    getColor(k, [0, 0, 0]),
+    getColor(k, "000000"),
     k.opacity(0.3),
     k.z(0),
   ])
@@ -116,8 +117,15 @@ export function create(k, config) {
     
     // Анимация цвета
     if (colorShift) {
-      const shift = Math.sin(k.time() * 2) * 30
-      button.color = getRGB(k, [buttonColor[0], buttonColor[1] + shift, buttonColor[2]])
+      // Парсим hex цвет в RGB компоненты
+      const hex = buttonColor.replace('#', '')
+      const r = parseInt(hex.substring(0, 2), 16)
+      const g = parseInt(hex.substring(2, 4), 16)
+      const b = parseInt(hex.substring(4, 6), 16)
+      
+      // Добавляем небольшой сдвиг к зеленому каналу для живости
+      const shift = Math.sin(k.time() * 2) * 15
+      button.color = k.rgb(r, Math.max(0, Math.min(255, g + shift)), b)
     }
   })
   

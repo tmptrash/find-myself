@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
-import * as SFX from '../audio/sfx.js'
+import * as Sound from '../audio/sound.js'
 import { addBackground } from '../components/background.js'
 import { addInstructions, setupBackToMenu } from '../components/instructions.js'
 import * as Hero from '../components/hero.js'
@@ -13,8 +13,8 @@ export function level2Scene(k) {
     
     k.setGravity(CONFIG.gameplay.gravity)
     
-    // Create sound effects instance (get AudioContext)
-    const sfx = SFX.create()
+    // Create sound instance
+    const sound = Sound.create()
     
     // Background - use common module
     addBackground(k, CONFIG.colors.level1.background)
@@ -62,7 +62,7 @@ export function level2Scene(k) {
       y: startY,
       type: 'hero',
       controllable: true,
-      sfx: sfx,
+      sfx: sound,
       onComplete: (character) => {
         player = character
       }
@@ -74,7 +74,7 @@ export function level2Scene(k) {
     })
     
     // Instructions (use common module)
-    addInstructions(k, { showDebugHint: false })
+    addInstructions(k)
     
     // Return to menu (use common module)
     setupBackToMenu(k)

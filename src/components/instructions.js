@@ -9,20 +9,14 @@ import { getColor } from '../utils/helpers.js'
  * Adds control instructions to the screen
  * @param {Object} k - Kaplay instance
  * @param {Object} [options] - Additional options
- * @param {boolean} [options.showDebugHint=true] - Whether to show F1 hint
  * @returns {Object} Created instructions object
  */
-export function addInstructions(k, options = {}) {
-  const { showDebugHint = true } = options
-  
+export function addInstructions(k) {
   // Base instruction text (no spaces between arrows)
   const baseText = "AWD/←↑→ - move\nSpace   - jump\nESC     - menu"
-  const fullText = showDebugHint 
-    ? `${baseText}\nF1      - debug info` 
-    : baseText
   
   return k.add([
-    k.text(fullText, {
+    k.text(baseText, {
       size: CONFIG.visual.instructionsFontSize,
       width: k.width() - 40
     }),

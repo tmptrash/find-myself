@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
-import * as SFX from '../audio/sfx.js'
+import * as Sound from '../audio/sound.js'
 import { addBackground } from '../components/background.js'
 import { addInstructions, setupBackToMenu } from '../components/instructions.js'
 import * as Hero from '../components/hero.js'
@@ -13,8 +13,8 @@ export function level1Scene(k) {
     
     k.setGravity(CONFIG.gameplay.gravity)
     
-    // Create sound effects instance (get AudioContext)
-    const sfx = SFX.create()
+    // Create sound instance
+    const sound = Sound.create()
     
     // Background - use common module
     addBackground(k, CONFIG.colors.level1.background)
@@ -61,12 +61,12 @@ export function level1Scene(k) {
       y: heroStartY,
       type: 'hero',
       controllable: true,
-      sfx: sfx,
+      sfx: sound,
       onComplete: (character) => {
         player = character
         
         // Set up annihilation effect after hero creation
-        Hero.setupAnnihilation(k, player, antiHero, sfx, () => {
+        Hero.setupAnnihilation(k, player, antiHero, sound, () => {
           k.go("level2")
         })
       }
@@ -83,14 +83,14 @@ export function level1Scene(k) {
       y: antiHeroY,
       type: 'antihero',
       controllable: false,
-      sfx: sfx
+      sfx: sound
     })
     
     // Add collision tag to anti-hero
     antiHero.use("annihilationTarget")
     
     // Instructions (use common module)
-    const instructions = addInstructions(k, { showDebugHint: true })
+    const instructions = addInstructions(k)
     
     // Debug info (top-right corner)
     const debugText = k.add([

@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
-import * as SFX from '../audio/sfx.js'
+import * as Sound from '../audio/sound.js'
 
 // ============================================
 // UNIVERSAL FUNCTION FOR CHARACTER CREATION
@@ -303,7 +303,7 @@ export function create(k, config) {
     // If was jumping, instantly switch to idle
     if (character.wasJumping && sfx) {
       character.wasJumping = false
-      SFX.playLandSound(sfx) // Landing sound
+      Sound.playLandSound(sfx) // Landing sound
       const roundedX = Math.round(character.eyeOffsetX)
       const roundedY = Math.round(character.eyeOffsetY)
       const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
@@ -376,7 +376,7 @@ export function create(k, config) {
         
         // Step sound on frames 0 and 3 (when foot touches ground)
         if (sfx && (character.runFrame === 0 || character.runFrame === 3)) {
-          SFX.playStepSound(sfx)
+          Sound.playStepSound(sfx)
         }
       }
     } else {
@@ -550,7 +550,7 @@ export function spawnWithAssembly(k, config) {
         
         // Hero spawn sound
         if (sfx) {
-          SFX.playSpawnSound(sfx)
+          Sound.playSpawnSound(sfx)
         }
         
         // Create hero

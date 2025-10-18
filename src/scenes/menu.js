@@ -1,7 +1,6 @@
-import * as Ambient from "../audio/ambient.js"
+import * as Sound from "../audio/sound.js"
 import { CONFIG } from "../config.js"
 import { getRGB } from "../utils/helpers.js"
-import { resumeAudioContext } from "../audio/context.js"
 
 export function menuScene(k) {
   k.scene("menu", () => {
@@ -9,8 +8,8 @@ export function menuScene(k) {
     const centerY = k.height() / 2
     
     // Start ambient music immediately
-    const ambientMusic = Ambient.create()
-    Ambient.start(ambientMusic)
+    const sound = Sound.create()
+    Sound.startAmbient(sound)
     
     // Variables for eye animation
     let eyeOffsetX = 0
@@ -481,7 +480,7 @@ export function menuScene(k) {
     // Transition to game (use config)
     CONFIG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
-        Ambient.stop(ambientMusic)
+        Sound.stopAmbient(sound)
         k.go("level1")
       })
     })
@@ -489,16 +488,16 @@ export function menuScene(k) {
     // Music control (use config)
     CONFIG.controls.toggleMute.forEach(key => {
       k.onKeyPress(key, async () => {
-        const isPlaying = Ambient.isActuallyPlaying(ambientMusic)
+        const isPlaying = Sound.isAmbientPlaying(sound)
         
         // Toggle volume
-        if (ambientMusic.masterGain) {
-          const currentVolume = ambientMusic.masterGain.gain.value
+        if (sound.ambientMasterGain) {
+          const currentVolume = sound.ambientMasterGain.gain.value
           if (isPlaying && currentVolume > 0.01) {
-            Ambient.setVolume(ambientMusic, 0)
+            Sound.setAmbientVolume(sound, 0)
           } else {
-            Ambient.setVolume(ambientMusic, CONFIG.audio.ambient.masterVolume)
-            resumeAudioContext()
+            Sound.setAmbientVolume(sound, CONFIG.audio.ambient.masterVolume)
+            Sound.resumeAudioContext(sound)
           }
         }
       })
@@ -506,7 +505,7 @@ export function menuScene(k) {
     
     // Stop music when leaving scene
     k.onSceneLeave(() => {
-      Ambient.stop(ambientMusic)
+      Sound.stopAmbient(sound)
     })
   })
 }

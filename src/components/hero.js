@@ -112,17 +112,17 @@ export function loadHeroSprites(k) {
     for (let x = -1; x <= 1; x++) {
       for (let y = -1; y <= 1; y++) {
         const spriteName = `${prefix}_${x}_${y}`
-        const spriteData = createCharacterFrame(type, 'idle', 0, x, y)
+        const spriteData = createFrame(type, 'idle', 0, x, y)
         k.loadSprite(spriteName, spriteData)
       }
     }
     
     // Load jump animation
-    k.loadSprite(`${prefix}-jump`, createCharacterFrame(type, 'jump', 0))
+    k.loadSprite(`${prefix}-jump`, createFrame(type, 'jump', 0))
     
     // Load run frames (6 frames)
     for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-      k.loadSprite(`${prefix}-run-${frame}`, createCharacterFrame(type, 'run', frame))
+      k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame))
     }
   })
 }
@@ -518,7 +518,7 @@ function onAnnihilationCollide(inst, targetInst, onAnnihilation) {
  * @param {number} eyeOffsetY - Pupil Y offset
  * @returns {string} Base64 encoded sprite data
  */
-function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
+function createFrame(type = 'hero', animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
   // Choose color scheme based on type
   const colors = type === 'hero' ? CONFIG.colors.hero : CONFIG.colors.antiHero
   

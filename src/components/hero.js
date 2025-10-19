@@ -1,11 +1,6 @@
 import { CONFIG } from '../config.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
 import * as Sound from '../utils/sound.js'
-
-// ============================================
-// PUBLIC API
-// ============================================
-
 /**
  * Loads all sprites for hero and anti-hero
  * Should be called once on game initialization

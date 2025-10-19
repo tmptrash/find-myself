@@ -2,7 +2,7 @@ import { CONFIG } from '../config.js'
 import { initLevel, spawnHero, spawnAntiHero } from '../components/scene.js'
 import * as Hero from '../components/hero.js'
 
-export function level1Scene(k) {
+export function sceneLevel1(k) {
   k.scene("level1", () => {
     // Initialize level with common setup
     const { sound } = initLevel(k, {

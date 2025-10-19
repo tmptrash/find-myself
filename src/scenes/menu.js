@@ -2,7 +2,7 @@ import * as Sound from "../utils/sound.js"
 import { CONFIG } from "../config.js"
 import { getRGB } from "../utils/helpers.js"
 
-export function menuScene(k) {
+export function sceneMenu(k) {
   k.scene("menu", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2

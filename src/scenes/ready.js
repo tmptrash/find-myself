@@ -3,7 +3,7 @@ import { getColor, getRGB } from '../utils/helpers.js'
 import { addBackground } from '../components/scene.js'
 import * as Button from '../components/button.js'
 
-export function readyScene(k) {
+export function sceneReady(k) {
   k.scene("ready", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2

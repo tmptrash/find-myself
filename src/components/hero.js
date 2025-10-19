@@ -347,33 +347,9 @@ function onCollisionPlatform(inst) {
   const wasInAir = !inst.canJump
   inst.canJump = true
   
-  // If was jumping, immediately switch to idle
-  if (wasInAir && inst.wasJumping) {
-    // Play landing sound
-    if (inst.sfx) {
-      Sound.playLandSound(inst.sfx)
-    }
-    
-    // Check if moving (to decide between idle or run animation will be set in next update)
-    const isMovingNow = inst.controllable && (
-      isAnyKeyDown(inst.k, CONFIG.controls.moveLeft) || 
-      isAnyKeyDown(inst.k, CONFIG.controls.moveRight)
-    )
-    
-    // If not moving, immediately switch to idle
-    if (!isMovingNow) {
-      inst.wasJumping = false
-      inst.isRunning = false
-      inst.runFrame = 0
-      inst.runTimer = 0
-      
-      // Switch to idle sprite immediately
-      const roundedX = Math.round(inst.eyeOffsetX)
-      const roundedY = Math.round(inst.eyeOffsetY)
-      const spriteName = `${inst.type}_${roundedX}_${roundedY}`
-      inst.character.use(inst.k.sprite(spriteName))
-      inst.currentEyeSprite = spriteName
-    }
+  // Play landing sound if was in air
+  if (wasInAir && inst.wasJumping && inst.sfx) {
+    Sound.playLandSound(inst.sfx)
   }
 }
 

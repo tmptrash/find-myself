@@ -32,17 +32,8 @@ export function getHex(colorHex) {
   return `#${colorHex.replace('#', '')}`
 }
 
-// Check if any of the keys is pressed (down)
-export function isAnyKeyDown(k, keys) {
-  return keys.some(key => k.isKeyDown(key))
-}
-
-// ============================================
-// PRIVATE FUNCTIONS
-// ============================================
-
 // Parse hex string into RGB components
-function parseHex(colorHex) {
+export function parseHex(colorHex) {
   // Type check and conversion
   if (typeof colorHex !== 'string') {
     console.error('parseHex: expected string, got', typeof colorHex, colorHex)
@@ -58,4 +49,9 @@ function parseHex(colorHex) {
   const g = parseInt(hex.substring(2, 4), 16)
   const b = parseInt(hex.substring(4, 6), 16)
   return [r, g, b]
+}
+
+// Check if any of the keys is pressed (down)
+export function isAnyKeyDown(k, keys) {
+  return keys.some(key => k.isKeyDown(key))
 }

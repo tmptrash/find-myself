@@ -17,12 +17,12 @@ export function sceneLevel1(k) {
     })
     
     // Spawn hero with assembly effect
-    let player = null
-    spawnHero(k, 'level1', sound, (character) => {
-      player = character
+    let playerInst = null
+    spawnHero(k, 'level1', sound, (heroInst) => {
+      playerInst = heroInst
       
       // Setup annihilation effect
-      Hero.setupAnnihilation(k, player, antiHero, sound, () => {
+      Hero.setupAnnihilation(k, playerInst, antiHero, sound, () => {
         k.go("level2")
       })
     })

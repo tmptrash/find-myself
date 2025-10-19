@@ -1,5 +1,8 @@
-import { getColor, getRGB } from '../utils/helpers.js'
-
+import { getColor, getRGB, parseHex } from '../utils/helpers.js'
+/**
+ * All buttons should be the same, so we incapsulate their properties inside
+ * this module. It should not be in a global config.
+ */
 const BTN_SHADOW_COLOR = '000000'
 const BTN_COLOR = 'FF6432'
 const BTN_TEXT_COLOR = 'FFFFFF'
@@ -47,10 +50,10 @@ export function create(k, config) {
     k.rect(width, height, { radius: 12 }),
     k.pos(x, y),
     k.anchor("center"),
+    k.color(getRGB(k, BTN_COLOR)),
     getColor(k, BTN_COLOR),
     k.outline(6, getRGB(k, BTN_OUTLINE_COLOR)),
     k.area(),
-    k.scale(1),
     k.z(1),
     "button",
   ])
@@ -76,15 +79,13 @@ export function create(k, config) {
     targetScale: 1,
     currentScale: 1,
     pulse: true,
-    colorShift: true,
-    buttonColor: BTN_COLOR,
     onClick
   }
   
   // Bind event handlers
   button.onHoverUpdate(() => onHoverUpdate(inst))
   button.onHoverEnd(() => onHoverEnd(inst))
-  button.onClick(() => onClick(inst))
+  button.onClick(() => inst?.onClick?.())
   k.onUpdate(() => onUpdate(inst))
   
   return inst
@@ -109,19 +110,11 @@ function onHoverEnd(inst) {
 }
 
 /**
- * Handle button click
- * @param {Object} inst - Button inst
- */
-function onClick(inst) {
-  inst?.onClick?.()
-}
-
-/**
  * Update button animations (scale, pulse, color)
  * @param {Object} inst - Button inst
  */
 function onUpdate(inst) {
-  const { k, button, buttonText, buttonShadow, targetScale, currentScale, pulse, colorShift, buttonColor } = inst
+  const { k, button, buttonText, buttonShadow, targetScale, currentScale, pulse } = inst
   
   // Determine base targetScale
   let baseTargetScale = targetScale
@@ -138,17 +131,5 @@ function onUpdate(inst) {
   button.scale = k.vec2(inst.currentScale)
   buttonText.scale = k.vec2(inst.currentScale)
   buttonShadow.scale = k.vec2(inst.currentScale)
-  
-  // Color animation
-  if (colorShift) {
-    // Parse hex color to RGB components
-    const hex = buttonColor.replace('#', '')
-    const r = parseInt(hex.substring(0, 2), 16)
-    const g = parseInt(hex.substring(2, 4), 16)
-    const b = parseInt(hex.substring(4, 6), 16)
-    
-    // Add small shift to green channel for liveliness
-    button.color = k.rgb(r, Math.max(0, Math.min(255, g + Math.sin(k.time() * 2) * 15)), b)
-  }
 }
 

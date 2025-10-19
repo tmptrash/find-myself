@@ -197,12 +197,12 @@ export function spawnHero(k, levelName, sound, onComplete) {
  * @param {Object} config - Anti-hero configuration
  * @param {Number} config.x - X position
  * @param {Number} config.y - Y position
- * @returns {Object} Anti-hero object
+ * @returns {Object} Anti-hero instance
  */
 export function spawnAntiHero(k, sound, config) {
   const { x, y } = config
   
-  const antiHero = Hero.create(k, {
+  const antiHeroInst = Hero.create(k, {
     x,
     y,
     type: 'antihero',
@@ -210,9 +210,9 @@ export function spawnAntiHero(k, sound, config) {
     sfx: sound
   })
   
-  // Add collision tag
-  antiHero.use("annihilationTarget")
+  // Add collision tag to character
+  antiHeroInst.character.use("annihilationTarget")
   
-  return antiHero
+  return antiHeroInst
 }
 

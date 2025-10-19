@@ -43,21 +43,6 @@ export const CONFIG = {
     moveSpeed: 450,              // Hero movement speed (px/s)
     jumpForce: 800,              // Jump force (px/s)
     gravity: 2200,               // Gravity (px/s²)
-    
-    // Animations
-    runAnimSpeed: 0.04,          // Run animation speed (sec per frame)
-    runFrameCount: 6,            // Number of run frames
-    eyeAnimMinDelay: 1.5,        // Min eye animation delay (sec)
-    eyeAnimMaxDelay: 3.5,        // Max eye animation delay (sec)
-    eyeLerpSpeed: 0.1,           // Eye interpolation speed
-    
-    // Hero and collision sizes
-    heroScale: 3,                // Hero sprite scale
-    spriteSize: 32,              // Base sprite size (px, before scaling)
-    collisionWidth: 14,          // Collision box width (px)
-    collisionHeight: 25,         // Collision box height (px)
-    collisionOffsetX: 0,         // Collision box X offset
-    collisionOffsetY: 0,         // Collision box Y offset
   },
 
   // ==========================================

@@ -1,36 +1,20 @@
 import { CONFIG } from '../config.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
 import * as Sound from '../utils/sound.js'
-/**
- * Loads all sprites for hero and anti-hero
- * Should be called once on game initialization
- * @param {Object} k - Kaplay instance
- */
-export function loadAllSprites(k) {
-  // Load sprites for both characters
-  const types = ['hero', 'antihero']
-  
-  types.forEach(type => {
-    const prefix = type
-    
-    // Load all eye variants (9 positions) for idle animation
-    for (let x = -1; x <= 1; x++) {
-      for (let y = -1; y <= 1; y++) {
-        const spriteName = `${prefix}_${x}_${y}`
-        const spriteData = createCharacterFrame(type, 'idle', 0, x, y)
-        k.loadSprite(spriteName, spriteData)
-      }
-    }
-    
-    // Load jump animation
-    k.loadSprite(`${prefix}-jump`, createCharacterFrame(type, 'jump', 0))
-    
-    // Load run frames (6 frames)
-    for (let frame = 0; frame < CONFIG.gameplay.runFrameCount; frame++) {
-      k.loadSprite(`${prefix}-run-${frame}`, createCharacterFrame(type, 'run', frame))
-    }
-  })
-}
+
+// Collision box parameters
+const COLLISION_WIDTH = 14
+const COLLISION_HEIGHT = 25
+const COLLISION_OFFSET_X = 0
+const COLLISION_OFFSET_Y = 0
+
+// Hero parameters
+const HERO_SCALE = 3
+const RUN_ANIM_SPEED = 0.04
+const RUN_FRAME_COUNT = 6
+const EYE_ANIM_MIN_DELAY = 1.5
+const EYE_ANIM_MAX_DELAY = 3.5
+const EYE_LERP_SPEED = 0.1
 
 /**
  * Creates hero or anti-hero with full logic setup
@@ -41,7 +25,7 @@ export function loadAllSprites(k) {
  * @param {string} [config.type='hero'] - Character type ('hero' or 'antihero')
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
- * @returns {Object} Created hero object
+ * @returns {Object} Hero instance with character and animation state
  */
 export function create(k, config) {
   const {
@@ -52,53 +36,44 @@ export function create(k, config) {
     sfx = null
   } = config
   
-  const MOVE_SPEED = CONFIG.gameplay.moveSpeed
-  const JUMP_FORCE = CONFIG.gameplay.jumpForce
-  const RUN_ANIM_SPEED = CONFIG.gameplay.runAnimSpeed
-  
-  // Determine sprite name based on type
-  const spritePrefix = type === 'hero' ? 'hero' : 'antihero'
-  
   // Create hero object
   const character = k.add([
-    k.sprite(`${spritePrefix}_0_0`),
+    k.sprite(`${type}_0_0`),
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
-        k.vec2(CONFIG.gameplay.collisionOffsetX, CONFIG.gameplay.collisionOffsetY), 
-        CONFIG.gameplay.collisionWidth, 
-        CONFIG.gameplay.collisionHeight
-      ),
-      collisionIgnore: []
+        k.vec2(COLLISION_OFFSET_X, COLLISION_OFFSET_Y), 
+        COLLISION_WIDTH, 
+        COLLISION_HEIGHT
+      )
     }),
     k.body(),
     k.anchor("center"),
-    k.scale(CONFIG.gameplay.heroScale),
+    k.scale(HERO_SCALE),
     k.z(CONFIG.visual.zIndex.player),
   ])
   
-  // Add custom properties
-  character.speed = MOVE_SPEED
-  character.myJumpForce = JUMP_FORCE
-  character.runFrame = 0
-  character.runTimer = 0
+  // Add engine-required properties to character
+  character.speed = CONFIG.gameplay.moveSpeed
+  character.myJumpForce = CONFIG.gameplay.jumpForce
   character.direction = 1 // 1 = right, -1 = left
   character.canJump = true
-  character.isRunning = false
-  character.wasJumping = false
   character.type = type
   
-  // Variables for eye animation
-  character.eyeOffsetX = 0
-  character.eyeOffsetY = 0
-  character.targetEyeX = 0
-  character.targetEyeY = 0
-  character.eyeTimer = 0
-  character.currentEyeSprite = null
-  
-  // ============================================
-  // COLLISION HANDLERS
-  // ============================================
+  // Create instance with character and animation state
+  const inst = {
+    character,
+    runFrame: 0,
+    runTimer: 0,
+    isRunning: false,
+    wasJumping: false,
+    eyeOffsetX: 0,
+    eyeOffsetY: 0,
+    targetEyeX: 0,
+    targetEyeY: 0,
+    eyeTimer: 0,
+    currentEyeSprite: null
+  }
   
   // Check ground touch through collisions
   character.onCollide("platform", () => {
@@ -107,7 +82,7 @@ export function create(k, config) {
     character.canJump = true
     
     // If was jumping, immediately switch to idle
-    if (wasInAir && character.wasJumping) {
+    if (wasInAir && inst.wasJumping) {
       // Play landing sound
       if (sfx) {
         Sound.playLandSound(sfx)
@@ -121,24 +96,20 @@ export function create(k, config) {
       
       // If not moving, immediately switch to idle
       if (!isMovingNow) {
-        character.wasJumping = false
-        character.isRunning = false
-        character.runFrame = 0
-        character.runTimer = 0
+        inst.wasJumping = false
+        inst.isRunning = false
+        inst.runFrame = 0
+        inst.runTimer = 0
         
         // Switch to idle sprite immediately
-        const roundedX = Math.round(character.eyeOffsetX)
-        const roundedY = Math.round(character.eyeOffsetY)
-        const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
+        const roundedX = Math.round(inst.eyeOffsetX)
+        const roundedY = Math.round(inst.eyeOffsetY)
+        const spriteName = `${type}_${roundedX}_${roundedY}`
         character.use(k.sprite(spriteName))
-        character.currentEyeSprite = spriteName
+        inst.currentEyeSprite = spriteName
       }
     }
   })
-  
-  // ============================================
-  // CONTROLS (if character is controllable)
-  // ============================================
   
   if (controllable) {
     // Move left control
@@ -168,10 +139,6 @@ export function create(k, config) {
     })
   }
   
-  // ============================================
-  // ANIMATION UPDATE
-  // ============================================
-  
   character.onUpdate(() => {
     // Determine movement state (only for controllable characters)
     const isMoving = controllable && (
@@ -184,32 +151,32 @@ export function create(k, config) {
     
     if (!isGrounded) {
       // Jumping - only set sprite once when starting jump
-      if (!character.wasJumping) {
-        character.use(k.sprite(`${spritePrefix}-jump`))
-        character.runFrame = 0
-        character.runTimer = 0
-        character.isRunning = false
-        character.wasJumping = true
+      if (!inst.wasJumping) {
+        character.use(k.sprite(`${type}-jump`))
+        inst.runFrame = 0
+        inst.runTimer = 0
+        inst.isRunning = false
+        inst.wasJumping = true
       }
     } else if (isMoving) {
       // Running - switch frames smoothly (time-based animation)
       // If just landed, immediately start running animation
-      if (character.wasJumping) {
-        character.wasJumping = false
-        character.runFrame = 0
-        character.runTimer = 0
-        character.use(k.sprite(`${spritePrefix}-run-0`))
+      if (inst.wasJumping) {
+        inst.wasJumping = false
+        inst.runFrame = 0
+        inst.runTimer = 0
+        character.use(k.sprite(`${type}-run-0`))
       }
       
-      character.isRunning = true
-      character.runTimer += k.dt()
-      if (character.runTimer > RUN_ANIM_SPEED) {
-        character.runFrame = (character.runFrame + 1) % CONFIG.gameplay.runFrameCount
-        character.use(k.sprite(`${spritePrefix}-run-${character.runFrame}`))
-        character.runTimer = 0
+      inst.isRunning = true
+      inst.runTimer += k.dt()
+      if (inst.runTimer > RUN_ANIM_SPEED) {
+        inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
+        character.use(k.sprite(`${type}-run-${inst.runFrame}`))
+        inst.runTimer = 0
         
         // Step sound on frames 0 and 3 (when foot touches ground)
-        if (sfx && (character.runFrame === 0 || character.runFrame === 3)) {
+        if (sfx && (inst.runFrame === 0 || inst.runFrame === 3)) {
           Sound.playStepSound(sfx)
         }
       }
@@ -217,44 +184,44 @@ export function create(k, config) {
       // Idle - with eye animation
       
       // If just stopped running or just landed, instantly switch to idle
-      if (character.isRunning || character.wasJumping) {
-        character.isRunning = false
-        character.wasJumping = false
-        character.runFrame = 0
-        character.runTimer = 0
+      if (inst.isRunning || inst.wasJumping) {
+        inst.isRunning = false
+        inst.wasJumping = false
+        inst.runFrame = 0
+        inst.runTimer = 0
         // Instantly switch to current idle sprite
-        const roundedX = Math.round(character.eyeOffsetX)
-        const roundedY = Math.round(character.eyeOffsetY)
-        const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
+        const roundedX = Math.round(inst.eyeOffsetX)
+        const roundedY = Math.round(inst.eyeOffsetY)
+        const spriteName = `${type}_${roundedX}_${roundedY}`
         character.use(k.sprite(spriteName))
-        character.currentEyeSprite = spriteName
+        inst.currentEyeSprite = spriteName
       }
       
       // Eye animation - smooth movement
-      character.eyeTimer += k.dt()
+      inst.eyeTimer += k.dt()
       
       // Choose new target position
-      if (character.eyeTimer > k.rand(CONFIG.gameplay.eyeAnimMinDelay, CONFIG.gameplay.eyeAnimMaxDelay)) {
-        character.targetEyeX = k.choose([-1, 0, 1])
-        character.targetEyeY = k.choose([-1, 0, 1])
-        character.eyeTimer = 0
+      if (inst.eyeTimer > k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
+        inst.targetEyeX = k.choose([-1, 0, 1])
+        inst.targetEyeY = k.choose([-1, 0, 1])
+        inst.eyeTimer = 0
       }
       
       // Smoothly interpolate to target position
-      character.eyeOffsetX = k.lerp(character.eyeOffsetX, character.targetEyeX, CONFIG.gameplay.eyeLerpSpeed)
-      character.eyeOffsetY = k.lerp(character.eyeOffsetY, character.targetEyeY, CONFIG.gameplay.eyeLerpSpeed)
+      inst.eyeOffsetX = k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
+      inst.eyeOffsetY = k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
       
       // Round for pixel-art style
-      const roundedX = Math.round(character.eyeOffsetX)
-      const roundedY = Math.round(character.eyeOffsetY)
+      const roundedX = Math.round(inst.eyeOffsetX)
+      const roundedY = Math.round(inst.eyeOffsetY)
       
       // Switch to preloaded sprite with eyes
-      const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
+      const spriteName = `${type}_${roundedX}_${roundedY}`
       
       // Update sprite only if eye position changed
-      if (character.currentEyeSprite !== spriteName) {
+      if (inst.currentEyeSprite !== spriteName) {
         character.use(k.sprite(spriteName))
-        character.currentEyeSprite = spriteName
+        inst.currentEyeSprite = spriteName
       }
     }
     
@@ -262,9 +229,38 @@ export function create(k, config) {
     character.flipX = character.direction === -1
   })
   
-  return character
+  return inst
 }
-
+/**
+ * Loads all sprites for hero and anti-hero
+ * Should be called once on game initialization
+ * @param {Object} k - Kaplay instance
+ */
+export function loadAllSprites(k) {
+  // Load sprites for both characters
+  const types = ['hero', 'antihero']
+  
+  types.forEach(type => {
+    const prefix = type
+    
+    // Load all eye variants (9 positions) for idle animation
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        const spriteName = `${prefix}_${x}_${y}`
+        const spriteData = createCharacterFrame(type, 'idle', 0, x, y)
+        k.loadSprite(spriteName, spriteData)
+      }
+    }
+    
+    // Load jump animation
+    k.loadSprite(`${prefix}-jump`, createCharacterFrame(type, 'jump', 0))
+    
+    // Load run frames (6 frames)
+    for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
+      k.loadSprite(`${prefix}-run-${frame}`, createCharacterFrame(type, 'run', frame))
+    }
+  })
+}
 /**
  * Creates hero assembly effect from particles
  * @param {Object} k - Kaplay instance
@@ -316,7 +312,7 @@ export function spawnWithAssembly(k, config) {
   
   // Animate particles to center
   let particlesGathered = false
-  let character = null
+  let inst = null
   let cancelled = false
   
   const updateHandler = k.onUpdate(() => {
@@ -347,7 +343,7 @@ export function spawnWithAssembly(k, config) {
         }
       })
       
-      if (allGathered && !character) {
+      if (allGathered && !inst) {
         particlesGathered = true
         
         // Remove particles
@@ -361,7 +357,7 @@ export function spawnWithAssembly(k, config) {
         }
         
         // Create hero
-        character = create(k, {
+        inst = create(k, {
           x,
           y,
           type,
@@ -371,7 +367,7 @@ export function spawnWithAssembly(k, config) {
         
         // Call callback
         if (onComplete) {
-          onComplete(character)
+          onComplete(inst)
         }
         
         // Cancel update
@@ -385,20 +381,23 @@ export function spawnWithAssembly(k, config) {
     cancel: () => {
       cancelled = true
     },
-    getCharacter: () => character
+    getInstance: () => inst
   }
 }
 
 /**
  * Sets up annihilation effect between two characters
  * @param {Object} k - Kaplay instance
- * @param {Object} player - First character (usually hero)
- * @param {Object} target - Second character (usually anti-hero)
+ * @param {Object} playerInst - First character instance (usually hero)
+ * @param {Object} targetInst - Second character instance (usually anti-hero)
  * @param {Object} sfx - AudioContext for sound effects
  * @param {Function} onComplete - Callback after annihilation completion
  */
-export function setupAnnihilation(k, player, target, sfx, onComplete) {
+export function setupAnnihilation(k, playerInst, targetInst, sfx, onComplete) {
   let isAnnihilating = false
+  
+  const player = playerInst.character
+  const target = targetInst.character
   
   player.onCollide("annihilationTarget", () => {
     if (!isAnnihilating) {

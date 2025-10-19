@@ -1,13 +1,9 @@
-// ============================================
-// UNIFIED SOUND MODULE
-// ============================================
-// Combines AudioContext management, ambient music, and sound effects
-
 import { CONFIG } from '../config.js'
 
-// ============================================
-// AUDIO CONTEXT SINGLETON
-// ============================================
+/**
+ * Audio context singleton
+ * @returns {AudioContext} The single AudioContext instance
+ */
 
 let audioContext = null
 

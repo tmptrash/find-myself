@@ -460,11 +460,10 @@ export function playStepSound(instance) {
 }
 
 /**
- * Play hero spawn sound after annihilation
- * "Energy pulse" - quick rise + click
+ * Play hero spawn sweep sound (energy wave)
  * @param {Object} instance - Sound instance
  */
-export function playSpawnSound(instance) {
+export function playSpawnSweep(instance) {
   const now = instance.audioContext.currentTime
   
   // Quick rise (energy wave)
@@ -484,23 +483,31 @@ export function playSpawnSound(instance) {
   
   sweep.start(now)
   sweep.stop(now + 0.15)
+}
+
+/**
+ * Play hero spawn click sound ("chpok")
+ * @param {Object} instance - Sound instance
+ */
+export function playSpawnClick(instance) {
+  const now = instance.audioContext.currentTime
   
-  // Click at spawn moment (delayed to match hero appearance)
+  // Click at spawn moment
   const click = instance.audioContext.createOscillator()
   const clickEnvelope = instance.audioContext.createGain()
   
   click.type = 'sine'
-  click.frequency.setValueAtTime(800, now + 0.35)
+  click.frequency.setValueAtTime(800, now)
   
-  clickEnvelope.gain.setValueAtTime(0.3, now + 0.35)
-  clickEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.40)
+  clickEnvelope.gain.setValueAtTime(0.3, now)
+  clickEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.05)
   
   // Connect through master gain
   click.connect(clickEnvelope)
   clickEnvelope.connect(instance.spawnGain)
   
-  click.start(now + 0.35)
-  click.stop(now + 0.40)
+  click.start(now)
+  click.stop(now + 0.05)
 }
 
 /**

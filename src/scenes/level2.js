@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js'
-import { initLevel, spawnHero } from '../components/scene.js'
+import { initLevel } from '../components/scene.js'
+import * as Hero from '../components/hero.js'
 
 export function sceneLevel2(k) {
   k.scene("level2", () => {
@@ -9,7 +10,19 @@ export function sceneLevel2(k) {
       platformColor: CONFIG.colors.level1.platform
     })
     
+    // Get hero spawn position from config
+    const { x, y } = CONFIG.levels.level2.heroSpawn
+    
+    // Create hero instance
+    const hero = Hero.create(k, {
+      x,
+      y,
+      type: 'hero',
+      controllable: true,
+      sfx: sound
+    })
+    
     // Spawn hero with assembly effect
-    spawnHero(k, 'level2', sound)
+    Hero.spawn(hero)
   })
 }

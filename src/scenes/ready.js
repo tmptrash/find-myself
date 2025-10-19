@@ -17,7 +17,7 @@ export function readyScene(k) {
       x: centerX,
       y: centerY - 50,
       width: 360, // Width with even padding
-      targetScene: "menu",
+      onClick: () => k.go("menu"),
       textOffsetY: 3, // Lower text slightly for alignment
     })
     

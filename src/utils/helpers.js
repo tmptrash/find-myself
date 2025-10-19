@@ -1,25 +1,6 @@
 // ============================================
-// UTILITY FUNCTIONS
+// PUBLIC API
 // ============================================
-
-// Parse hex string into RGB components
-function parseHex(colorHex) {
-  // Type check and conversion
-  if (typeof colorHex !== 'string') {
-    console.error('parseHex: expected string, got', typeof colorHex, colorHex)
-    // If it's an array, return it as is
-    if (Array.isArray(colorHex) && colorHex.length === 3) {
-      return colorHex
-    }
-    throw new Error(`parseHex: colorHex must be a string, got ${typeof colorHex}`)
-  }
-  
-  const hex = colorHex.replace('#', '')
-  const r = parseInt(hex.substring(0, 2), 16)
-  const g = parseInt(hex.substring(2, 4), 16)
-  const b = parseInt(hex.substring(4, 6), 16)
-  return [r, g, b]
-}
 
 // Get color as Kaplay object
 export function getColor(k, colorHex) {
@@ -54,4 +35,27 @@ export function getHex(colorHex) {
 // Check if any of the keys is pressed (down)
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => k.isKeyDown(key))
+}
+
+// ============================================
+// PRIVATE FUNCTIONS
+// ============================================
+
+// Parse hex string into RGB components
+function parseHex(colorHex) {
+  // Type check and conversion
+  if (typeof colorHex !== 'string') {
+    console.error('parseHex: expected string, got', typeof colorHex, colorHex)
+    // If it's an array, return it as is
+    if (Array.isArray(colorHex) && colorHex.length === 3) {
+      return colorHex
+    }
+    throw new Error(`parseHex: colorHex must be a string, got ${typeof colorHex}`)
+  }
+  
+  const hex = colorHex.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  return [r, g, b]
 }

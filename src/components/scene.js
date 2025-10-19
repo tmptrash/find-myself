@@ -130,7 +130,7 @@ export function setupCamera(k) {
  * @param {String} config.platformColor - Platform color
  * @returns {Object} Object with sound instance and other utilities
  */
-export function initLevel(k, config) {
+export function initScene(k, config) {
   const { backgroundColor, platformColor } = config
   
   // Set gravity

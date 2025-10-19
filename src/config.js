@@ -147,8 +147,12 @@ export const CONFIG = {
       
       // Hero spawn position (on bottom platform)
       heroSpawn: {
-        x: 250,                    // Left side of screen
-        y: 801,                    // On bottom platform (calculated: 840 - 39px offset)
+        x: 250,
+        y: 801
+      },
+      antiHeroSpawn: {
+        x: 1100,
+        y: 801
       },
       
       // Platform configuration
@@ -165,8 +169,8 @@ export const CONFIG = {
       
       // Hero spawn position (on bottom platform)
       heroSpawn: {
-        x: 250,                    // Left side of screen
-        y: 801,                    // On bottom platform (calculated: 840 - 39px offset)
+        x: 250,
+        y: 801
       },
       
       // Platform configuration

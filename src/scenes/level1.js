@@ -1,25 +1,21 @@
 import { CONFIG } from '../config.js'
-import { initLevel } from '../components/scene.js'
+import { initScene } from '../components/scene.js'
 import * as Hero from '../components/hero.js'
 
 export function sceneLevel1(k) {
   k.scene("level1", () => {
     // Initialize level with common setup
-    const { sound } = initLevel(k, {
+    const { sound } = initScene(k, {
       backgroundColor: CONFIG.colors.level1.background,
       platformColor: CONFIG.colors.level1.platform
     })
     
-    // Get hero spawn position from config
-    const { x: heroX, y: heroY } = CONFIG.levels.level1.heroSpawn
-    
     // Create anti-hero instance
     const antiHero = Hero.create({
       k,
-      x: k.width() - 100,
-      y: 801,
+      x: CONFIG.levels.level1.antiHeroSpawn.x,
+      y: CONFIG.levels.level1.antiHeroSpawn.y,
       type: 'antihero',
-      controllable: false,
       sfx: sound
     })
     
@@ -29,13 +25,12 @@ export function sceneLevel1(k) {
     // Create hero instance with annihilation setup
     const hero = Hero.create({
       k,
-      x: heroX,
-      y: heroY,
+      x: CONFIG.levels.level1.heroSpawn.x,
+      y: CONFIG.levels.level1.heroSpawn.y,
       type: 'hero',
-      controllable: true,
       sfx: sound,
       antiHero,
-      onAnnihilationComplete: () => k.go("level2")
+      onAnnihilation: () => k.go("level2")
     })
     
     // Spawn hero with assembly effect

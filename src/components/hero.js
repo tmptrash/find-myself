@@ -26,7 +26,7 @@ const EYE_LERP_SPEED = 0.1
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
  * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
- * @param {Function} [config.onAnnihilationComplete] - Callback when annihilation completes
+ * @param {Function} [config.onAnnihilation] - Callback when annihilation completes
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -35,10 +35,10 @@ export function create(config) {
     x,
     y,
     type = 'hero',
-    controllable = true,
+    controllable = config.type === 'hero',
     sfx = null,
     antiHero = null,
-    onAnnihilationComplete = null
+    onAnnihilation = null
   } = config
   
   // Create hero object
@@ -58,13 +58,6 @@ export function create(config) {
     k.z(CONFIG.visual.zIndex.player),
   ])
   
-  // Add engine-required properties to character
-  character.speed = CONFIG.gameplay.moveSpeed
-  character.myJumpForce = CONFIG.gameplay.jumpForce
-  character.direction = 1 // 1 = right, -1 = left
-  character.canJump = true
-  character.type = type
-  
   // Create instance with character and animation state
   const inst = {
     character,
@@ -72,6 +65,10 @@ export function create(config) {
     type,
     controllable,
     sfx,
+    speed: CONFIG.gameplay.moveSpeed,
+    jumpForce: CONFIG.gameplay.jumpForce,
+    direction: 1, // 1 = right, -1 = left
+    canJump: true,
     runFrame: 0,
     runTimer: 0,
     isRunning: false,
@@ -81,7 +78,8 @@ export function create(config) {
     targetEyeX: 0,
     targetEyeY: 0,
     eyeTimer: 0,
-    currentEyeSprite: null
+    currentEyeSprite: null,
+    isAnnihilating: false
   }
   
   // Check ground touch through collisions
@@ -91,7 +89,9 @@ export function create(config) {
   
   // Setup annihilation if anti-hero is provided
   if (antiHero) {
-    setupAnnihilation(inst, antiHero, onAnnihilationComplete)
+    character.onCollide("annihilationTarget", () => {
+      onAnnihilationCollide(inst, antiHero, onAnnihilation)
+    })
   }
   
   return inst
@@ -226,7 +226,7 @@ function onUpdate(inst) {
     isAnyKeyDown(inst.k, CONFIG.controls.moveRight)
   )
   // Check if character is grounded (use canJump flag set by collision)
-  const isGrounded = inst.character.canJump
+  const isGrounded = inst.canJump
   
   if (!isGrounded) {
     // Jumping - only set sprite once when starting jump
@@ -305,7 +305,7 @@ function onUpdate(inst) {
   }
   
   // Mirror based on direction
-  inst.character.flipX = inst.character.direction === -1
+  inst.character.flipX = inst.direction === -1
 }
 
 /**
@@ -316,25 +316,25 @@ function setupControls(inst) {
   // Move left control
   CONFIG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
-      inst.character.move(-inst.character.speed, 0)
-      inst.character.direction = -1
+      inst.character.move(-inst.speed, 0)
+      inst.direction = -1
     })
   })
   
   // Move right control
   CONFIG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
-      inst.character.move(inst.character.speed, 0)
-      inst.character.direction = 1
+      inst.character.move(inst.speed, 0)
+      inst.direction = 1
     })
   })
   
   // Jump
   CONFIG.controls.jump.forEach(key => {
     inst.k.onKeyPress(key, () => {
-      if (inst.character.canJump) {
-        inst.character.vel.y = -inst.character.myJumpForce
-        inst.character.canJump = false
+      if (inst.canJump) {
+        inst.character.vel.y = -inst.jumpForce
+        inst.canJump = false
       }
     })
   })
@@ -346,8 +346,8 @@ function setupControls(inst) {
  */
 function onCollisionPlatform(inst) {
   // Set canJump flag when touching platform
-  const wasInAir = !inst.character.canJump
-  inst.character.canJump = true
+  const wasInAir = !inst.canJump
+  inst.canJump = true
   
   // If was jumping, immediately switch to idle
   if (wasInAir && inst.wasJumping) {
@@ -380,157 +380,153 @@ function onCollisionPlatform(inst) {
 }
 
 /**
- * Setup annihilation effect between hero and anti-hero
- * @param {Object} playerInst - Hero instance
+ * Handle annihilation collision between hero and anti-hero
+ * @param {Object} inst - Hero instance
  * @param {Object} targetInst - Anti-hero instance
- * @param {Function} onComplete - Callback when annihilation completes
+ * @param {Function} onAnnihilation - Callback when annihilation completes
  */
-function setupAnnihilation(playerInst, targetInst, onComplete) {
-  let isAnnihilating = false
+function onAnnihilationCollide(inst, targetInst, onAnnihilation) {
+  if (inst.isAnnihilating) return
   
-  const { k, character: player, sfx } = playerInst
+  inst.isAnnihilating = true
+  
+  const { k, character: player, sfx } = inst
   const target = targetInst.character
   
-  player.onCollide("annihilationTarget", () => {
-    if (!isAnnihilating) {
-      isAnnihilating = true
+  // Stop control
+  player.paused = true
+  target.paused = true
+  
+  // Center between characters
+  const centerX = (player.pos.x + target.pos.x) / 2
+  const centerY = (player.pos.y + target.pos.y) / 2
+  
+  // PHASE 1: CHARACTER BLINKING (0.3 sec)
+  let blinkTime = 0
+  const blinkDuration = 0.3
+  const blinkSpeed = 20
+  
+  const blinkInterval = k.onUpdate(() => {
+    blinkTime += k.dt()
+    if (blinkTime < blinkDuration) {
+      const visible = Math.floor(blinkTime * blinkSpeed) % 2 === 0
+      player.opacity = visible ? 1 : 0.3
+      target.opacity = visible ? 1 : 0.3
+    } else {
+      player.opacity = 1
+      target.opacity = 1
+      blinkInterval.cancel()
       
-      // Stop control
-      player.paused = true
-      target.paused = true
+      // PHASE 2: PULL TO CENTER (0.25 sec)
+      const pullDuration = 0.25
+      let pullTime = 0
+      const startPlayerPos = k.vec2(player.pos.x, player.pos.y)
+      const startTargetPos = k.vec2(target.pos.x, target.pos.y)
       
-      // Center between characters
-      const centerX = (player.pos.x + target.pos.x) / 2
-      const centerY = (player.pos.y + target.pos.y) / 2
-      
-      // PHASE 1: CHARACTER BLINKING (0.3 sec)
-      let blinkTime = 0
-      const blinkDuration = 0.3
-      const blinkSpeed = 20
-      
-      const blinkInterval = k.onUpdate(() => {
-        blinkTime += k.dt()
-        if (blinkTime < blinkDuration) {
-          const visible = Math.floor(blinkTime * blinkSpeed) % 2 === 0
-          player.opacity = visible ? 1 : 0.3
-          target.opacity = visible ? 1 : 0.3
-        } else {
-          player.opacity = 1
-          target.opacity = 1
-          blinkInterval.cancel()
+      const pullInterval = k.onUpdate(() => {
+        pullTime += k.dt()
+        const progress = Math.min(pullTime / pullDuration, 1)
+        const easeProgress = 1 - Math.pow(1 - progress, 3)
+        
+        player.pos.x = startPlayerPos.x + (centerX - startPlayerPos.x) * easeProgress
+        player.pos.y = startPlayerPos.y + (centerY - startPlayerPos.y) * easeProgress
+        target.pos.x = startTargetPos.x + (centerX - startTargetPos.x) * easeProgress
+        target.pos.y = startTargetPos.y + (centerY - startTargetPos.y) * easeProgress
+        
+        if (pullTime >= pullDuration) {
+          pullInterval.cancel()
           
-          // PHASE 2: PULL TO CENTER (0.25 sec)
-          const pullDuration = 0.25
-          let pullTime = 0
-          const startPlayerPos = k.vec2(player.pos.x, player.pos.y)
-          const startTargetPos = k.vec2(target.pos.x, target.pos.y)
+          // PHASE 3: COLLAPSE AND EFFECTS
+          Sound.playAnnihilationSound(sfx)
           
-          const pullInterval = k.onUpdate(() => {
-            pullTime += k.dt()
-            const progress = Math.min(pullTime / pullDuration, 1)
-            const easeProgress = 1 - Math.pow(1 - progress, 3)
-            
-            player.pos.x = startPlayerPos.x + (centerX - startPlayerPos.x) * easeProgress
-            player.pos.y = startPlayerPos.y + (centerY - startPlayerPos.y) * easeProgress
-            target.pos.x = startTargetPos.x + (centerX - startTargetPos.x) * easeProgress
-            target.pos.y = startTargetPos.y + (centerY - startTargetPos.y) * easeProgress
-            
-            if (pullTime >= pullDuration) {
-              pullInterval.cancel()
-              
-              // PHASE 3: COLLAPSE AND EFFECTS
-              Sound.playAnnihilationSound(sfx)
-              
-              // Screen flash
-              const screenFlash = k.add([
-                k.rect(k.width(), k.height()),
-                k.pos(0, 0),
-                k.color(255, 255, 255),
-                k.opacity(1),
-                k.fixed(),
-                k.z(CONFIG.visual.zIndex.ui + 1)
-              ])
-              
-              let flashTime = 0
-              screenFlash.onUpdate(() => {
-                flashTime += k.dt()
-                screenFlash.opacity = Math.max(0, 1 - flashTime * 8)
-                if (flashTime > 0.125) {
-                  k.destroy(screenFlash)
-                }
-              })
-              
-              // Camera shake
-              let shakeTime = 0
-              const shakeIntensity = 15
-              const originalCamX = k.width() / 2
-              const originalCamY = k.height() / 2
-              
-              const shakeInterval = k.onUpdate(() => {
-                shakeTime += k.dt()
-                if (shakeTime < 0.4) {
-                  const intensity = shakeIntensity * (1 - shakeTime / 0.4)
-                  k.camPos(
-                    originalCamX + k.rand(-intensity, intensity),
-                    originalCamY + k.rand(-intensity, intensity)
-                  )
-                } else {
-                  k.camPos(originalCamX, originalCamY)
-                  shakeInterval.cancel()
-                }
-              })
-              
-              // Particle effect
-              const allColors = [
-                CONFIG.colors.hero.body,
-                CONFIG.colors.hero.outline,
-                CONFIG.colors.antiHero.body,
-                CONFIG.colors.antiHero.outline,
-              ]
-              
-              const pixelCount = 24
-              for (let i = 0; i < pixelCount; i++) {
-                const angle = (Math.PI * 2 * i) / pixelCount + k.rand(-0.3, 0.3)
-                const speed = k.rand(100, 400)
-                const size = k.rand(3, 7)
-                const color = k.choose(allColors)
-                
-                const pixel = k.add([
-                  k.rect(size, size),
-                  k.pos(centerX, centerY),
-                  getColor(k, color),
-                  k.anchor("center"),
-                  k.rotate(k.rand(0, 360)),
-                  k.z(CONFIG.visual.zIndex.player)
-                ])
-                
-                pixel.vx = Math.cos(angle) * speed
-                pixel.vy = Math.sin(angle) * speed
-                pixel.lifetime = 0
-                pixel.rotSpeed = k.rand(-720, 720)
-                
-                pixel.onUpdate(() => {
-                  pixel.lifetime += k.dt()
-                  pixel.pos.x += pixel.vx * k.dt()
-                  pixel.pos.y += pixel.vy * k.dt()
-                  pixel.angle += pixel.rotSpeed * k.dt()
-                  pixel.opacity = Math.max(0, 1 - pixel.lifetime * 2.5)
-                  
-                  if (pixel.lifetime > 0.4) {
-                    k.destroy(pixel)
-                  }
-                })
-              }
-              
-              // Hide characters
-              k.destroy(player)
-              k.destroy(target)
-              
-              // Call callback after completion
-              k.wait(1.2, () => {
-                onComplete?.()
-              })
+          // Screen flash
+          const screenFlash = k.add([
+            k.rect(k.width(), k.height()),
+            k.pos(0, 0),
+            k.color(255, 255, 255),
+            k.opacity(1),
+            k.fixed(),
+            k.z(CONFIG.visual.zIndex.ui + 1)
+          ])
+          
+          let flashTime = 0
+          screenFlash.onUpdate(() => {
+            flashTime += k.dt()
+            screenFlash.opacity = Math.max(0, 1 - flashTime * 8)
+            if (flashTime > 0.125) {
+              k.destroy(screenFlash)
             }
+          })
+          
+          // Camera shake
+          let shakeTime = 0
+          const shakeIntensity = 15
+          const originalCamX = k.width() / 2
+          const originalCamY = k.height() / 2
+          
+          const shakeInterval = k.onUpdate(() => {
+            shakeTime += k.dt()
+            if (shakeTime < 0.4) {
+              const intensity = shakeIntensity * (1 - shakeTime / 0.4)
+              k.camPos(
+                originalCamX + k.rand(-intensity, intensity),
+                originalCamY + k.rand(-intensity, intensity)
+              )
+            } else {
+              k.camPos(originalCamX, originalCamY)
+              shakeInterval.cancel()
+            }
+          })
+          
+          // Particle effect
+          const allColors = [
+            CONFIG.colors.hero.body,
+            CONFIG.colors.hero.outline,
+            CONFIG.colors.antiHero.body,
+            CONFIG.colors.antiHero.outline,
+          ]
+          
+          const pixelCount = 24
+          for (let i = 0; i < pixelCount; i++) {
+            const angle = (Math.PI * 2 * i) / pixelCount + k.rand(-0.3, 0.3)
+            const speed = k.rand(100, 400)
+            const size = k.rand(3, 7)
+            const color = k.choose(allColors)
+            
+            const pixel = k.add([
+              k.rect(size, size),
+              k.pos(centerX, centerY),
+              getColor(k, color),
+              k.anchor("center"),
+              k.rotate(k.rand(0, 360)),
+              k.z(CONFIG.visual.zIndex.player)
+            ])
+            
+            pixel.vx = Math.cos(angle) * speed
+            pixel.vy = Math.sin(angle) * speed
+            pixel.lifetime = 0
+            pixel.rotSpeed = k.rand(-720, 720)
+            
+            pixel.onUpdate(() => {
+              pixel.lifetime += k.dt()
+              pixel.pos.x += pixel.vx * k.dt()
+              pixel.pos.y += pixel.vy * k.dt()
+              pixel.angle += pixel.rotSpeed * k.dt()
+              pixel.opacity = Math.max(0, 1 - pixel.lifetime * 2.5)
+              
+              if (pixel.lifetime > 0.4) {
+                k.destroy(pixel)
+              }
+            })
+          }
+          
+          // Hide characters
+          k.destroy(player)
+          k.destroy(target)
+          
+          // Call callback after completion
+          k.wait(1.2, () => {
+            onAnnihilation?.()
           })
         }
       })

@@ -1,77 +1,17 @@
 import { CONFIG } from '../config.js'
-import { getColor } from '../utils/helpers.js'
-import * as Sound from '../utils/sound.js'
-import { addBackground, addInstructions, setupBackToMenu } from '../components/scene.js'
-import * as Hero from '../components/hero.js'
+import { initLevel, spawnHero } from '../components/scene.js'
 
 export function level2Scene(k) {
   k.scene("level2", () => {
-    k.setGravity(CONFIG.gameplay.gravity)
-    
-    // Create sound instance
-    const sound = Sound.create()
-    
-    // Background - use common module
-    addBackground(k, CONFIG.colors.level1.background)
-    
-    // Create platforms
-    function addPlatform(x, y, width, height) {
-      return k.add([
-        k.rect(width, height),
-        k.pos(x, y),
-        k.area(),
-        k.body({ isStatic: true }),
-        getColor(k, CONFIG.colors.level1.platform),
-        "platform"
-      ])
-    }
-    
-    const platformHeight = CONFIG.visual.platformHeight
-    const wallWidth = CONFIG.visual.wallWidth
-    
-    // Bottom platform (wide)
-    addPlatform(0, k.height() - platformHeight, k.width(), platformHeight)
-    
-    // Top platform (wide, same height)
-    addPlatform(0, 0, k.width(), platformHeight)
-    
-    // Left wall (corridor)
-    addPlatform(0, platformHeight, wallWidth, k.height() - platformHeight * 2)
-    
-    // Right wall (corridor)
-    addPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
-    
-    // ============================================
-    // HERO spawns on left with assembly effect
-    // ============================================
-    // Get coordinates from config
-    const startX = CONFIG.levels.level2.heroSpawn.x
-    const startY = CONFIG.levels.level2.heroSpawn.onPlatform
-      ? k.height() - platformHeight - (CONFIG.gameplay.collisionHeight / 2) * CONFIG.gameplay.heroScale
-      : CONFIG.levels.level2.heroSpawn.y
-    
-    // Use assembly function from hero.js
-    let player = null
-    Hero.spawnWithAssembly(k, {
-      x: startX,
-      y: startY,
-      type: 'hero',
-      controllable: true,
-      sfx: sound,
-      onComplete: (character) => {
-        player = character
-      }
+    // Initialize level with common setup
+    const { sound } = initLevel(k, {
+      backgroundColor: CONFIG.colors.level1.background,
+      platformColor: CONFIG.colors.level1.platform
     })
     
-    // Camera
-    k.onUpdate(() => {
-      k.camPos(k.width() / 2, k.height() / 2)
+    // Spawn hero with assembly effect
+    spawnHero(k, 'level2', sound, (character) => {
+      // Hero spawned successfully
     })
-    
-    // Instructions (use common module)
-    addInstructions(k)
-    
-    // Return to menu (use common module)
-    setupBackToMenu(k)
   })
 }

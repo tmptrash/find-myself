@@ -7,8 +7,11 @@ export function menuScene(k) {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
-    // Start ambient music immediately
+    // Create sound instance and start audio context
     const sound = Sound.create()
+    Sound.startAudioContext(sound)
+    
+    // Start ambient music
     Sound.startAmbient(sound)
     
     // Variables for eye animation

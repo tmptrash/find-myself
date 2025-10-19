@@ -18,19 +18,29 @@ let audioContext = null
 function getAudioContext() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)()
-    
-    // Try to start context immediately
-    audioContext.resume().catch(() => {
-      // If failed, will try on first user interaction
-    })
-    
-    // Try to resume on page load
-    window.addEventListener('load', () => {
-      audioContext.resume()
-    })
   }
   
   return audioContext
+}
+
+/**
+ * Start audio context - initializes and resumes the audio context
+ * Should be called once when sound instance is created
+ * @param {Object} instance - Sound instance
+ * @returns {Promise<void>}
+ */
+export async function startAudioContext(instance) {
+  const ctx = instance.audioContext
+  
+  // Try to start context immediately
+  ctx.resume().catch(() => {
+    // If failed, will try on first user interaction
+  })
+  
+  // Try to resume on page load
+  window.addEventListener('load', () => {
+    ctx.resume()
+  })
 }
 
 /**
@@ -495,5 +505,38 @@ export function playSpawnSound(instance) {
   
   click.start(now + 0.15)
   click.stop(now + 0.20)
+}
+
+/**
+ * Play annihilation sound effect (deep powerful explosion)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playAnnihilationSound(instance) {
+  const now = instance.audioContext.currentTime
+  
+  // Deep bass (50Hz -> 20Hz)
+  const bass = instance.audioContext.createOscillator()
+  const bassGain = instance.audioContext.createGain()
+  bass.type = 'sine'
+  bass.frequency.setValueAtTime(50, now)
+  bass.frequency.exponentialRampToValueAtTime(20, now + 0.5)
+  bassGain.gain.setValueAtTime(0.7, now)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
+  bass.connect(bassGain)
+  bassGain.connect(instance.audioContext.destination)
+  bass.start(now)
+  bass.stop(now + 0.5)
+  
+  // Very low "hum" (30Hz)
+  const subBass = instance.audioContext.createOscillator()
+  const subBassGain = instance.audioContext.createGain()
+  subBass.type = 'sine'
+  subBass.frequency.setValueAtTime(30, now)
+  subBassGain.gain.setValueAtTime(0.6, now)
+  subBassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6)
+  subBass.connect(subBassGain)
+  subBassGain.connect(instance.audioContext.destination)
+  subBass.start(now)
+  subBass.stop(now + 0.6)
 }
 

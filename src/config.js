@@ -53,6 +53,7 @@ export const CONFIG = {
     
     // Hero and collision sizes
     heroScale: 3,                // Hero sprite scale
+    spriteSize: 32,              // Base sprite size (px, before scaling)
     collisionWidth: 14,          // Collision box width (px)
     collisionHeight: 25,         // Collision box height (px)
     collisionOffsetX: 0,         // Collision box X offset
@@ -68,7 +69,6 @@ export const CONFIG = {
       background: "FFDAB9",         // Light peach background
       platform: "3E2723",           // Dark brown platforms
       instructions: "FFDAB9",       // Instructions text color
-      debug: "3E2723",              // Debug text color
     },
     
     // Splash/menu colors
@@ -120,7 +120,6 @@ export const CONFIG = {
     jump: ['up', 'w', 'space'],    // Jump
     
     // System
-    toggleDebug: ['f1'],           // Toggle debug mode
     toggleMute: ['m'],             // Toggle sound
     backToMenu: ['escape'],        // Return to menu
     startGame: ['space', 'enter'], // Start game (from menu/start)
@@ -135,29 +134,18 @@ export const CONFIG = {
     windowHeight: 920,
     
     // Platform dimensions
-    platformHeight: 150,           // Large platform height
+    platformHeight: 80,            // Large platform height
     wallWidth: 30,                 // Corridor wall width
     smallPlatformHeight: 20,       // Small platform height
     
     // UI dimensions
     instructionsFontSize: 14,      // Instructions font size
-    debugFontSize: 14,             // Debug font size
     titleFontSize: 64,             // Title font size
     buttonFontSize: 36,            // Button font size
     
     // UI positions
     instructionsX: 20,             // Instructions X position
     instructionsY: 20,             // Instructions Y position
-    debugX: -220,                  // X offset from right edge for debug
-    debugY: 20,                    // Debug Y position
-    
-    // Player bounds (level1)
-    playerBounds: {
-      leftOffset: 60,              // Left wall offset
-      rightOffset: 60,             // Right wall offset  
-      topOffset: 180,              // Top platform offset
-      bottomOffset: 180,           // Bottom platform offset
-    },
     
     // Menu animations
     menu: {
@@ -184,10 +172,10 @@ export const CONFIG = {
     level1: {
       name: "Level 1",
       
-      // Hero spawn position
+      // Hero spawn position (on bottom platform)
       heroSpawn: {
-        x: 150,                    // Left side of screen
-        onPlatform: true,          // Spawns on platform (Y calculated)
+        x: 250,                    // Left side of screen
+        y: 801,                    // On bottom platform (calculated: 840 - 39px offset)
       },
       
       // Platform configuration
@@ -202,10 +190,10 @@ export const CONFIG = {
     level2: {
       name: "Level 2",
       
-      // Hero spawn position
+      // Hero spawn position (on bottom platform)
       heroSpawn: {
-        x: 150,                    // Left side of screen
-        onPlatform: true,          // Spawns on platform (Y calculated)
+        x: 250,                    // Left side of screen
+        y: 801,                    // On bottom platform (calculated: 840 - 39px offset)
       },
       
       // Platform configuration
@@ -217,14 +205,4 @@ export const CONFIG = {
       }
     }
   },
-
-  // ==========================================
-  // DEBUG
-  // ==========================================
-  debug: {
-    startInDebugMode: false,       // Start in debug mode
-    showFPS: false,                // Show FPS
-    showCollisionBoxes: false,     // Show collision boxes
-    logAudioEvents: false,         // Log audio events
-  }
 }

@@ -1,5 +1,7 @@
 import { CONFIG } from '../config.js'
 import { getColor } from '../utils/helpers.js'
+import * as Sound from '../utils/sound.js'
+import * as Hero from './hero.js'
 
 // ============================================
 // UNIVERSAL SCENE COMPONENTS
@@ -64,5 +66,153 @@ export function setupBackToMenu(k) {
       k.go("menu")
     })
   })
+}
+
+// ============================================
+// PLATFORMS
+// ============================================
+
+/**
+ * Adds standard platforms to the level (top, bottom, left wall, right wall)
+ * @param {Object} k - Kaplay instance
+ * @param {String} color - Platform color in hex format
+ * @returns {Array} Array of platform objects
+ */
+export function addPlatforms(k, color) {
+  const platformHeight = CONFIG.visual.platformHeight
+  const wallWidth = CONFIG.visual.wallWidth
+  
+  function createPlatform(x, y, width, height) {
+    return k.add([
+      k.rect(width, height),
+      k.pos(x, y),
+      k.area(),
+      k.body({ isStatic: true }),
+      getColor(k, color),
+      "platform"
+    ])
+  }
+  
+  return [
+    // Bottom platform
+    createPlatform(0, k.height() - platformHeight, k.width(), platformHeight),
+    // Top platform
+    createPlatform(0, 0, k.width(), platformHeight),
+    // Left wall
+    createPlatform(0, platformHeight, wallWidth, k.height() - platformHeight * 2),
+    // Right wall
+    createPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
+  ]
+}
+
+// ============================================
+// CAMERA
+// ============================================
+
+/**
+ * Sets up fixed camera in the center of the screen
+ * @param {Object} k - Kaplay instance
+ */
+export function setupCamera(k) {
+  k.onUpdate(() => {
+    k.camPos(k.width() / 2, k.height() / 2)
+  })
+}
+
+// ============================================
+// LEVEL INITIALIZATION
+// ============================================
+
+/**
+ * Initializes a level with common setup (gravity, sound, background, platforms, camera, instructions, controls)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} config - Level configuration
+ * @param {String} config.backgroundColor - Background color
+ * @param {String} config.platformColor - Platform color
+ * @returns {Object} Object with sound instance and other utilities
+ */
+export function initLevel(k, config) {
+  const { backgroundColor, platformColor } = config
+  
+  // Set gravity
+  k.setGravity(CONFIG.gameplay.gravity)
+  
+  // Create sound instance and start audio context
+  const sound = Sound.create()
+  Sound.startAudioContext(sound)
+  
+  // Add background
+  addBackground(k, backgroundColor)
+  
+  // Add platforms
+  addPlatforms(k, platformColor)
+  
+  // Setup camera
+  setupCamera(k)
+  
+  // Add instructions
+  addInstructions(k)
+  
+  // Setup back to menu
+  setupBackToMenu(k)
+  
+  return { sound }
+}
+
+// ============================================
+// CHARACTER SPAWNING
+// ============================================
+
+/**
+ * Spawns hero with assembly effect at configured position
+ * @param {Object} k - Kaplay instance
+ * @param {String} levelName - Level name to get spawn coordinates from config
+ * @param {Object} sound - Sound instance
+ * @param {Function} onComplete - Callback when spawn is complete
+ */
+export function spawnHero(k, levelName, sound, onComplete) {
+  const levelConfig = CONFIG.levels[levelName]
+  if (!levelConfig) {
+    console.error(`Level config not found for: ${levelName}`)
+    return
+  }
+  
+  // Get spawn position directly from config
+  const { x, y } = levelConfig.heroSpawn
+  
+  Hero.spawnWithAssembly(k, {
+    x,
+    y,
+    type: 'hero',
+    controllable: true,
+    sfx: sound,
+    onComplete
+  })
+}
+
+/**
+ * Creates anti-hero at specified position
+ * @param {Object} k - Kaplay instance
+ * @param {Object} sound - Sound instance
+ * @param {Object} config - Anti-hero configuration
+ * @param {Number} config.x - X position
+ * @param {Number} config.y - Y position
+ * @returns {Object} Anti-hero object
+ */
+export function spawnAntiHero(k, sound, config) {
+  const { x, y } = config
+  
+  const antiHero = Hero.create(k, {
+    x,
+    y,
+    type: 'antihero',
+    controllable: false,
+    sfx: sound
+  })
+  
+  // Add collision tag
+  antiHero.use("annihilationTarget")
+  
+  return antiHero
 }
 

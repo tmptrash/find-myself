@@ -6,6 +6,51 @@ import { getColor, getRGB } from '../utils/helpers.js'
 // ============================================
 
 /**
+ * Update button animations (scale, pulse, color)
+ * @param {Object} instance - Button animation instance
+ * @param {Object} instance.k - Kaplay instance
+ * @param {Object} instance.state - Animation state (targetScale, currentScale)
+ * @param {Object} instance.elements - Button elements (button, buttonText, buttonShadow)
+ * @param {boolean} instance.pulse - Enable pulse animation
+ * @param {boolean} instance.colorShift - Enable color shift animation
+ * @param {string} instance.buttonColor - Button color in hex format
+ */
+function updateButtonAnimation(instance) {
+  const { k, state, elements, pulse, colorShift, buttonColor } = instance
+  const { button, buttonText, buttonShadow } = elements
+  
+  // Determine base targetScale
+  let baseTargetScale = state.targetScale
+  
+  // Add pulse only if not hovering
+  if (!button.isHovering() && pulse) {
+    const pulseValue = 1.0 + Math.sin(k.time() * CONFIG.visual.menu.titlePulseSpeed) * CONFIG.visual.menu.buttonPulseAmount
+    baseTargetScale = pulseValue
+  }
+  
+  // Smoothly interpolate to target scale
+  state.currentScale = k.lerp(state.currentScale, baseTargetScale, 0.2)
+  
+  // Apply scale to all elements
+  button.scale = k.vec2(state.currentScale)
+  buttonText.scale = k.vec2(state.currentScale)
+  buttonShadow.scale = k.vec2(state.currentScale)
+  
+  // Color animation
+  if (colorShift) {
+    // Parse hex color to RGB components
+    const hex = buttonColor.replace('#', '')
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    
+    // Add small shift to green channel for liveliness
+    const shift = Math.sin(k.time() * 2) * 15
+    button.color = k.rgb(r, Math.max(0, Math.min(255, g + shift)), b)
+  }
+}
+
+/**
  * Creates a button with text and animations
  * @param {Object} k - Kaplay instance
  * @param {Object} config - Button configuration
@@ -70,18 +115,37 @@ export function create(k, config) {
     k.z(2),
   ])
   
-  // Variables for smooth scale animation
-  let targetScale = 1
-  let currentScale = 1
+  // Animation state
+  const animationState = {
+    targetScale: 1,
+    currentScale: 1
+  }
+  
+  // Button elements
+  const elements = {
+    button,
+    buttonText,
+    buttonShadow
+  }
+  
+  // Animation instance
+  const animationInstance = {
+    k,
+    state: animationState,
+    elements,
+    pulse,
+    colorShift,
+    buttonColor
+  }
   
   // Hover effect
   button.onHoverUpdate(() => {
-    targetScale = CONFIG.visual.menu.buttonHoverScale
+    animationState.targetScale = CONFIG.visual.menu.buttonHoverScale
     k.setCursor("pointer")
   })
   
   button.onHoverEnd(() => {
-    targetScale = 1
+    animationState.targetScale = 1
     k.setCursor("default")
   })
   
@@ -92,35 +156,7 @@ export function create(k, config) {
   
   // Pulse animation and smooth scale change
   k.onUpdate(() => {
-    // Determine base targetScale
-    let baseTargetScale = targetScale
-    
-    // Add pulse only if not hovering
-    if (!button.isHovering() && pulse) {
-      const pulseValue = 1.0 + Math.sin(k.time() * CONFIG.visual.menu.titlePulseSpeed) * CONFIG.visual.menu.buttonPulseAmount
-      baseTargetScale = pulseValue
-    }
-    
-    // Smoothly interpolate to target scale
-    currentScale = k.lerp(currentScale, baseTargetScale, 0.2)
-    
-    // Apply scale to all elements
-    button.scale = k.vec2(currentScale)
-    buttonText.scale = k.vec2(currentScale)
-    buttonShadow.scale = k.vec2(currentScale)
-    
-    // Color animation
-    if (colorShift) {
-      // Parse hex color to RGB components
-      const hex = buttonColor.replace('#', '')
-      const r = parseInt(hex.substring(0, 2), 16)
-      const g = parseInt(hex.substring(2, 4), 16)
-      const b = parseInt(hex.substring(4, 6), 16)
-      
-      // Add small shift to green channel for liveliness
-      const shift = Math.sin(k.time() * 2) * 15
-      button.color = k.rgb(r, Math.max(0, Math.min(255, g + shift)), b)
-    }
+    updateButtonAnimation(animationInstance)
   })
   
   return {

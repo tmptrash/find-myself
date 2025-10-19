@@ -255,16 +255,37 @@ export function create(k, config) {
   
   // Check ground touch through collisions
   character.onCollide("platform", () => {
+    // Set canJump flag when touching platform
+    const wasInAir = !character.canJump
     character.canJump = true
-    // If was jumping, instantly switch to idle
-    if (character.wasJumping && sfx) {
-      character.wasJumping = false
-      Sound.playLandSound(sfx) // Landing sound
-      const roundedX = Math.round(character.eyeOffsetX)
-      const roundedY = Math.round(character.eyeOffsetY)
-      const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
-      character.use(k.sprite(spriteName))
-      character.currentEyeSprite = spriteName
+    
+    // If was jumping, immediately switch to idle
+    if (wasInAir && character.wasJumping) {
+      // Play landing sound
+      if (sfx) {
+        Sound.playLandSound(sfx)
+      }
+      
+      // Check if moving (to decide between idle or run animation will be set in next update)
+      const isMovingNow = controllable && (
+        isAnyKeyDown(k, CONFIG.controls.moveLeft) || 
+        isAnyKeyDown(k, CONFIG.controls.moveRight)
+      )
+      
+      // If not moving, immediately switch to idle
+      if (!isMovingNow) {
+        character.wasJumping = false
+        character.isRunning = false
+        character.runFrame = 0
+        character.runTimer = 0
+        
+        // Switch to idle sprite immediately
+        const roundedX = Math.round(character.eyeOffsetX)
+        const roundedY = Math.round(character.eyeOffsetY)
+        const spriteName = `${spritePrefix}_${roundedX}_${roundedY}`
+        character.use(k.sprite(spriteName))
+        character.currentEyeSprite = spriteName
+      }
     }
   })
   
@@ -311,18 +332,28 @@ export function create(k, config) {
       isAnyKeyDown(k, CONFIG.controls.moveRight)
     )
     
-    // Check if character is grounded
-    const isGrounded = character.canJump && Math.abs(character.vel.y) < 10
+    // Check if character is grounded (use canJump flag set by collision)
+    const isGrounded = character.canJump
     
     if (!isGrounded) {
-      // Jumping
-      character.use(k.sprite(`${spritePrefix}-jump`))
-      character.runFrame = 0
-      character.runTimer = 0
-      character.isRunning = false
-      character.wasJumping = true
+      // Jumping - only set sprite once when starting jump
+      if (!character.wasJumping) {
+        character.use(k.sprite(`${spritePrefix}-jump`))
+        character.runFrame = 0
+        character.runTimer = 0
+        character.isRunning = false
+        character.wasJumping = true
+      }
     } else if (isMoving) {
       // Running - switch frames smoothly (time-based animation)
+      // If just landed, immediately start running animation
+      if (character.wasJumping) {
+        character.wasJumping = false
+        character.runFrame = 0
+        character.runTimer = 0
+        character.use(k.sprite(`${spritePrefix}-run-0`))
+      }
+      
       character.isRunning = true
       character.runTimer += k.dt()
       if (character.runTimer > RUN_ANIM_SPEED) {
@@ -338,9 +369,10 @@ export function create(k, config) {
     } else {
       // Idle - with eye animation
       
-      // If just stopped running, instantly switch to idle
-      if (character.isRunning) {
+      // If just stopped running or just landed, instantly switch to idle
+      if (character.isRunning || character.wasJumping) {
         character.isRunning = false
+        character.wasJumping = false
         character.runFrame = 0
         character.runTimer = 0
         // Instantly switch to current idle sprite
@@ -381,30 +413,6 @@ export function create(k, config) {
     
     // Mirror based on direction
     character.flipX = character.direction === -1
-    
-    // Constrain character within screen bounds (only for controllable)
-    if (controllable) {
-      const leftBound = CONFIG.visual.playerBounds.leftOffset
-      const rightBound = k.width() - CONFIG.visual.playerBounds.rightOffset
-      const topBound = CONFIG.visual.playerBounds.topOffset
-      const bottomBound = k.height() - CONFIG.visual.playerBounds.bottomOffset
-      
-      // Constrain X
-      if (character.pos.x < leftBound) {
-        character.pos.x = leftBound
-      }
-      if (character.pos.x > rightBound) {
-        character.pos.x = rightBound
-      }
-      
-      // Constrain Y
-      if (character.pos.y < topBound) {
-        character.pos.y = topBound
-      }
-      if (character.pos.y > bottomBound) {
-        character.pos.y = bottomBound
-      }
-    }
   })
   
   return character
@@ -608,33 +616,8 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
               // PHASE 3: COLLAPSE AND EFFECTS
               // ============================================
               
-              // ANNIHILATION SOUND (deep powerful)
-              const now = sfx.currentTime
-              
-              // Deep bass
-              const bass = sfx.createOscillator()
-              const bassGain = sfx.createGain()
-              bass.type = 'sine'
-              bass.frequency.setValueAtTime(50, now)
-              bass.frequency.exponentialRampToValueAtTime(20, now + 0.5)
-              bassGain.gain.setValueAtTime(0.7, now)
-              bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
-              bass.connect(bassGain)
-              bassGain.connect(sfx.destination)
-              bass.start(now)
-              bass.stop(now + 0.5)
-              
-              // Very low "hum"
-              const subBass = sfx.createOscillator()
-              const subBassGain = sfx.createGain()
-              subBass.type = 'sine'
-              subBass.frequency.setValueAtTime(30, now)
-              subBassGain.gain.setValueAtTime(0.6, now)
-              subBassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6)
-              subBass.connect(subBassGain)
-              subBassGain.connect(sfx.destination)
-              subBass.start(now)
-              subBass.stop(now + 0.6)
+              // Play annihilation sound
+              Sound.playAnnihilationSound(sfx)
               
               // SCREEN FLASH
               const screenFlash = k.add([

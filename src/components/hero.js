@@ -89,7 +89,7 @@ export function create(config) {
   
   // Setup annihilation if anti-hero is provided
   if (antiHero) {
-    character.onCollide("annihilationTarget", () => {
+    character.onCollide("annihilation", () => {
       onAnnihilationCollide(inst, antiHero, onAnnihilation)
     })
   }
@@ -166,9 +166,7 @@ export function spawn(inst) {
   }
   
   // Play sweep sound at the start of assembly effect
-  if (sfx) {
-    Sound.playSpawnSweep(sfx)
-  }
+  sfx && Sound.playSpawnSweep(sfx)
   
   // Animate particles to center
   let particlesGathered = false

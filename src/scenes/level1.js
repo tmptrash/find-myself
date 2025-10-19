@@ -20,7 +20,7 @@ export function sceneLevel1(k) {
     })
     
     // Add collision tag to anti-hero
-    antiHero.character.use("annihilationTarget")
+    antiHero.character.use("annihilation")
     
     // Create hero instance with annihilation setup
     const hero = Hero.create({

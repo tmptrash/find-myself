@@ -14,7 +14,8 @@ export function sceneLevel1(k) {
     const { x: heroX, y: heroY } = CONFIG.levels.level1.heroSpawn
     
     // Create anti-hero instance
-    const antiHero = Hero.create(k, {
+    const antiHero = Hero.create({
+      k,
       x: k.width() - 100,
       y: 801,
       type: 'antihero',
@@ -26,7 +27,8 @@ export function sceneLevel1(k) {
     antiHero.character.use("annihilationTarget")
     
     // Create hero instance with annihilation setup
-    const hero = Hero.create(k, {
+    const hero = Hero.create({
+      k,
       x: heroX,
       y: heroY,
       type: 'hero',

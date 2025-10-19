@@ -14,7 +14,8 @@ export function sceneLevel2(k) {
     const { x, y } = CONFIG.levels.level2.heroSpawn
     
     // Create hero instance
-    const hero = Hero.create(k, {
+    const hero = Hero.create({
+      k,
       x,
       y,
       type: 'hero',

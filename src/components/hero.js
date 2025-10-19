@@ -18,8 +18,8 @@ const EYE_LERP_SPEED = 0.1
 
 /**
  * Creates hero or anti-hero with full logic setup
- * @param {Object} k - Kaplay instance
  * @param {Object} config - Hero configuration
+ * @param {Object} config.k - Kaplay instance
  * @param {number} config.x - X position
  * @param {number} config.y - Y position
  * @param {string} [config.type='hero'] - Character type ('hero' or 'antihero')
@@ -29,8 +29,9 @@ const EYE_LERP_SPEED = 0.1
  * @param {Function} [config.onAnnihilationComplete] - Callback when annihilation completes
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
-export function create(k, config) {
+export function create(config) {
   const {
+    k,
     x,
     y,
     type = 'hero',
@@ -224,7 +225,6 @@ function onUpdate(inst) {
     isAnyKeyDown(inst.k, CONFIG.controls.moveLeft) || 
     isAnyKeyDown(inst.k, CONFIG.controls.moveRight)
   )
-  
   // Check if character is grounded (use canJump flag set by collision)
   const isGrounded = inst.character.canJump
   
@@ -255,13 +255,13 @@ function onUpdate(inst) {
       inst.runTimer = 0
       
       // Step sound on frames 0 and 3 (when foot touches ground)
-      if (inst.sfx && (inst.runFrame === 0 || inst.runFrame === 3)) {
+      if (inst.sfx && (inst.runFrame === 0 || inst.runFrame === RUN_FRAME_COUNT / 2)) {
         Sound.playStepSound(inst.sfx)
       }
     }
   } else {
     // Idle - with eye animation
-    
+
     // If just stopped running or just landed, instantly switch to idle
     if (inst.isRunning || inst.wasJumping) {
       inst.isRunning = false

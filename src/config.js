@@ -76,13 +76,13 @@ export const CONFIG = {
       background: "191919",         // Dark gray background
       gridLines: "323232",          // Grid lines
       titleBase: "FF8C00",          // Title base color
-      startButton: "FF6432",        // Start button color
+      startButton: "FF6432",        // Ready button color
       muteText: "FFA500",           // Mute text color
       dividerLine: "FF8C00",        // Divider line
     },
     
-    // Start screen colors
-    start: {
+    // Ready screen colors
+    ready: {
       background: "191919",         // Dark background
       button: "FF6432",             // "Are you ready?" button
       buttonText: "FFFFFF",         // Button text

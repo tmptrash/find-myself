@@ -4,12 +4,12 @@ import { addBackground } from '../components/scene.js'
 import * as Button from '../components/button.js'
 
 export function readyScene(k) {
-  k.scene("start", () => {
+  k.scene("ready", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
     // Draw background (use common module)
-    addBackground(k, CONFIG.colors.start.background)
+    addBackground(k, CONFIG.colors.ready.background)
     
     // "Are you ready?" button (use button module)
     Button.create(k, {
@@ -33,8 +33,8 @@ export function readyScene(k) {
       k.text("Click the button or press Enter/Space", { size: 20 }),
       k.pos(centerX, k.height() - 80),
       k.anchor("center"),
-      getColor(k, CONFIG.colors.start.hint),
-      k.outline(2, getRGB(k, CONFIG.colors.start.buttonOutline)),
+      getColor(k, CONFIG.colors.ready.hint),
+      k.outline(2, getRGB(k, CONFIG.colors.ready.buttonOutline)),
     ])
   })
 }

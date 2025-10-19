@@ -28,5 +28,5 @@ level1Scene(k)
 level2Scene(k)
 
 // Start game after resources loaded
-k.onLoad(() => k.go("start"))
+k.onLoad(() => k.go("ready"))
 

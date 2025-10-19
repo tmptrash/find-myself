@@ -44,8 +44,8 @@ export function create(k, config) {
     k.rect(width, height, { radius: 12 }),
     k.pos(x, y),
     k.anchor("center"),
-    getColor(k, CONFIG.colors.start.button),
-    k.outline(6, getRGB(k, CONFIG.colors.start.buttonOutline)),
+    getColor(k, CONFIG.colors.ready.button),
+    k.outline(6, getRGB(k, CONFIG.colors.ready.buttonOutline)),
     k.area(),
     k.scale(1),
     k.z(1),
@@ -57,8 +57,8 @@ export function create(k, config) {
     k.text(text, { size: CONFIG.visual.buttonFontSize }),
     k.pos(x, y + textOffsetY),
     k.anchor("center"),
-    getColor(k, CONFIG.colors.start.buttonText),
-    k.outline(3, getRGB(k, CONFIG.colors.start.buttonOutline)),
+    getColor(k, CONFIG.colors.ready.buttonText),
+    k.outline(3, getRGB(k, CONFIG.colors.ready.buttonOutline)),
     k.z(2),
   ])
   
@@ -74,7 +74,7 @@ export function create(k, config) {
     },
     pulse: true,
     colorShift: true,
-    buttonColor: CONFIG.colors.start.button,
+    buttonColor: CONFIG.colors.ready.button,
     onClickCallback
   }
   

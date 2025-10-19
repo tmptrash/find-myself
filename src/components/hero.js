@@ -3,151 +3,7 @@ import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
 import * as Sound from '../utils/sound.js'
 
 // ============================================
-// UNIVERSAL FUNCTION FOR CHARACTER CREATION
-// ============================================
-// Single function for hero and anti-hero
-// type: 'hero' or 'antihero'
-// animation: 'idle', 'run', 'jump'
-// frame: frame number (for animations)
-// eyeOffsetX, eyeOffsetY: pupil offset
-
-function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
-  // Choose color scheme based on type
-  const colors = type === 'hero' ? CONFIG.colors.hero : CONFIG.colors.antiHero
-  
-  const size = 32
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  
-  ctx.clearRect(0, 0, size, size)
-  
-  // Base parameters for different animations
-  let headY = 6
-  let bodyY = 14
-  let headX = 12
-  let bodyX = 10
-  let leftArmY = 15
-  let rightArmY = 15
-  let leftLegY = 22
-  let rightLegY = 22
-  let leftArmX = 9
-  let rightArmX = 21
-  let leftLegX = 12
-  let rightLegX = 17
-  
-  // Run animation (6 frames)
-  if (animation === 'run') {
-    if (frame === 0) {
-      leftLegY = 20
-      rightLegY = 22
-      leftLegX = 10
-      rightLegX = 18
-    } else if (frame === 1) {
-      leftLegY = 18
-      rightLegY = 22
-      leftLegX = 12
-      rightLegX = 17
-    } else if (frame === 2) {
-      leftLegY = 20
-      rightLegY = 20
-      leftLegX = 14
-      rightLegX = 14
-    } else if (frame === 3) {
-      leftLegY = 22
-      rightLegY = 20
-      leftLegX = 18
-      rightLegX = 10
-    } else if (frame === 4) {
-      leftLegY = 22
-      rightLegY = 18
-      leftLegX = 17
-      rightLegX = 12
-    } else if (frame === 5) {
-      leftLegY = 20
-      rightLegY = 20
-      leftLegX = 14
-      rightLegX = 14
-    }
-  }
-  
-  // Jump animation - side view, legs bent and spread
-  if (animation === 'jump') {
-    headY = 6
-    bodyY = 14
-    headX = 12
-    bodyX = 10
-    leftArmY = 15
-    rightArmY = 15
-    // Right leg in front - bent more (higher)
-    rightLegY = 20
-    rightLegX = 18
-    // Left leg behind - bent less (lower)
-    leftLegY = 22
-    leftLegX = 10
-    leftArmX = 9
-    rightArmX = 21
-  }
-  
-  // Black outline (universal)
-  ctx.fillStyle = getHex(colors.outline)
-  ctx.fillRect(headX - 1, headY - 1, 10, 10)
-  
-  // Body outline (same for all animations)
-  ctx.fillRect(bodyX - 1, bodyY - 1, 14, 10)
-  
-  // Arm outlines - don't draw while running and jumping
-  if (animation !== 'run' && animation !== 'jump') {
-    ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 9)
-    ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
-  }
-  
-  // Leg outlines (same for all animations)
-  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
-  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
-  
-  // Head (universal body color)
-  ctx.fillStyle = getHex(colors.body)
-  ctx.fillRect(headX, headY, 8, 8)
-  
-  // Eyes - for run and jump draw only ONE eye (side view)
-  ctx.fillStyle = getHex(colors.eyeWhite)
-  if (animation === 'run' || animation === 'jump') {
-    ctx.fillRect(headX + 6, headY + 2, 3, 3)
-  } else {
-    ctx.fillRect(headX + 1, headY + 2, 3, 3)
-    ctx.fillRect(headX + 6, headY + 2, 3, 3)
-  }
-  
-  // Pupils (universal color)
-  ctx.fillStyle = getHex(colors.outline)
-  if (animation === 'run' || animation === 'jump') {
-    ctx.fillRect(headX + 7, headY + 3, 1, 1)
-  } else {
-    ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
-    ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
-  }
-  
-  // Body (universal color)
-  ctx.fillStyle = getHex(colors.body)
-  ctx.fillRect(bodyX, bodyY, 12, 8)
-  
-  // Arms - don't draw while running and jumping
-  if (animation !== 'run' && animation !== 'jump') {
-    ctx.fillRect(leftArmX, leftArmY, 2, 7)
-    ctx.fillRect(rightArmX, rightArmY, 2, 7)
-  }
-  
-  // Legs (same for all animations)
-  ctx.fillRect(leftLegX, leftLegY, 3, 6)
-  ctx.fillRect(rightLegX, rightLegY, 3, 6)
-  
-  return canvas.toDataURL()
-}
-
-// ============================================
-// LOAD ALL SPRITES
+// PUBLIC API
 // ============================================
 
 /**
@@ -180,10 +36,6 @@ export function loadAllSprites(k) {
     }
   })
 }
-
-// ============================================
-// CREATE GAME OBJECT FOR HERO
-// ============================================
 
 /**
  * Creates hero or anti-hero with full logic setup
@@ -418,10 +270,6 @@ export function create(k, config) {
   return character
 }
 
-// ============================================
-// HERO ASSEMBLY EFFECT FROM PARTICLES
-// ============================================
-
 /**
  * Creates hero assembly effect from particles
  * @param {Object} k - Kaplay instance
@@ -545,10 +393,6 @@ export function spawnWithAssembly(k, config) {
     getCharacter: () => character
   }
 }
-
-// ============================================
-// ANNIHILATION EFFECT
-// ============================================
 
 /**
  * Sets up annihilation effect between two characters
@@ -720,4 +564,153 @@ export function setupAnnihilation(k, player, target, sfx, onComplete) {
       })
     }
   })
+}
+
+// ============================================
+// PRIVATE FUNCTIONS
+// ============================================
+
+/**
+ * Universal function for character creation
+ * Single function for hero and anti-hero
+ * @param {string} type - Character type: 'hero' or 'antihero'
+ * @param {string} animation - Animation type: 'idle', 'run', 'jump'
+ * @param {number} frame - Frame number (for animations)
+ * @param {number} eyeOffsetX - Pupil X offset
+ * @param {number} eyeOffsetY - Pupil Y offset
+ * @returns {string} Base64 encoded sprite data
+ */
+function createCharacterFrame(type = 'hero', animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
+  // Choose color scheme based on type
+  const colors = type === 'hero' ? CONFIG.colors.hero : CONFIG.colors.antiHero
+  
+  const size = 32
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  
+  ctx.clearRect(0, 0, size, size)
+  
+  // Base parameters for different animations
+  let headY = 6
+  let bodyY = 14
+  let headX = 12
+  let bodyX = 10
+  let leftArmY = 15
+  let rightArmY = 15
+  let leftLegY = 22
+  let rightLegY = 22
+  let leftArmX = 9
+  let rightArmX = 21
+  let leftLegX = 12
+  let rightLegX = 17
+  
+  // Run animation (6 frames)
+  if (animation === 'run') {
+    if (frame === 0) {
+      leftLegY = 20
+      rightLegY = 22
+      leftLegX = 10
+      rightLegX = 18
+    } else if (frame === 1) {
+      leftLegY = 18
+      rightLegY = 22
+      leftLegX = 12
+      rightLegX = 17
+    } else if (frame === 2) {
+      leftLegY = 20
+      rightLegY = 20
+      leftLegX = 14
+      rightLegX = 14
+    } else if (frame === 3) {
+      leftLegY = 22
+      rightLegY = 20
+      leftLegX = 18
+      rightLegX = 10
+    } else if (frame === 4) {
+      leftLegY = 22
+      rightLegY = 18
+      leftLegX = 17
+      rightLegX = 12
+    } else if (frame === 5) {
+      leftLegY = 20
+      rightLegY = 20
+      leftLegX = 14
+      rightLegX = 14
+    }
+  }
+  
+  // Jump animation - side view, legs bent and spread
+  if (animation === 'jump') {
+    headY = 6
+    bodyY = 14
+    headX = 12
+    bodyX = 10
+    leftArmY = 15
+    rightArmY = 15
+    // Right leg in front - bent more (higher)
+    rightLegY = 20
+    rightLegX = 18
+    // Left leg behind - bent less (lower)
+    leftLegY = 22
+    leftLegX = 10
+    leftArmX = 9
+    rightArmX = 21
+  }
+  
+  // Black outline (universal)
+  ctx.fillStyle = getHex(colors.outline)
+  ctx.fillRect(headX - 1, headY - 1, 10, 10)
+  
+  // Body outline (same for all animations)
+  ctx.fillRect(bodyX - 1, bodyY - 1, 14, 10)
+  
+  // Arm outlines - don't draw while running and jumping
+  if (animation !== 'run' && animation !== 'jump') {
+    ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 9)
+    ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
+  }
+  
+  // Leg outlines (same for all animations)
+  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
+  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
+  
+  // Head (universal body color)
+  ctx.fillStyle = getHex(colors.body)
+  ctx.fillRect(headX, headY, 8, 8)
+  
+  // Eyes - for run and jump draw only ONE eye (side view)
+  ctx.fillStyle = getHex(colors.eyeWhite)
+  if (animation === 'run' || animation === 'jump') {
+    ctx.fillRect(headX + 6, headY + 2, 3, 3)
+  } else {
+    ctx.fillRect(headX + 1, headY + 2, 3, 3)
+    ctx.fillRect(headX + 6, headY + 2, 3, 3)
+  }
+  
+  // Pupils (universal color)
+  ctx.fillStyle = getHex(colors.outline)
+  if (animation === 'run' || animation === 'jump') {
+    ctx.fillRect(headX + 7, headY + 3, 1, 1)
+  } else {
+    ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
+    ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
+  }
+  
+  // Body (universal color)
+  ctx.fillStyle = getHex(colors.body)
+  ctx.fillRect(bodyX, bodyY, 12, 8)
+  
+  // Arms - don't draw while running and jumping
+  if (animation !== 'run' && animation !== 'jump') {
+    ctx.fillRect(leftArmX, leftArmY, 2, 7)
+    ctx.fillRect(rightArmX, rightArmY, 2, 7)
+  }
+  
+  // Legs (same for all animations)
+  ctx.fillRect(leftLegX, leftLegY, 3, 6)
+  ctx.fillRect(rightLegX, rightLegY, 3, 6)
+  
+  return canvas.toDataURL()
 }

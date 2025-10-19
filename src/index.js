@@ -4,7 +4,7 @@ import { sceneReady } from "./scenes/ready.js"
 import { sceneMenu } from "./scenes/menu.js"
 import { sceneLevel1 } from "./scenes/level1.js"
 import { sceneLevel2 } from "./scenes/level2.js"
-import { loadAllSprites } from "./components/hero.js"
+import { loadHeroSprites } from "./components/hero.js"
 
 // Game initialization (parameters from config)
 const k = kaplay({
@@ -17,7 +17,7 @@ const k = kaplay({
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
 
 // Load all character sprites (encapsulated in hero.js)
-loadAllSprites(k)
+loadHeroSprites(k)
 
 // Register all scenes
 sceneReady(k)

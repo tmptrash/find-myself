@@ -10,8 +10,6 @@ export function sceneLevel2(k) {
     })
     
     // Spawn hero with assembly effect
-    spawnHero(k, 'level2', sound, (character) => {
-      // Hero spawned successfully
-    })
+    spawnHero(k, 'level2', sound)
   })
 }

@@ -1,6 +1,5 @@
 import { CONFIG } from '../config.js'
 import { initLevel, spawnHero, spawnAntiHero } from '../components/scene.js'
-import * as Hero from '../components/hero.js'
 
 export function sceneLevel1(k) {
   k.scene("level1", () => {
@@ -16,15 +15,10 @@ export function sceneLevel1(k) {
       y: 801  // Same as hero Y position (on bottom platform)
     })
     
-    // Spawn hero with assembly effect
-    let playerInst = null
-    spawnHero(k, 'level1', sound, (heroInst) => {
-      playerInst = heroInst
-      
-      // Setup annihilation effect
-      Hero.setupAnnihilation(k, playerInst, antiHero, sound, () => {
-        k.go("level2")
-      })
+    // Spawn hero with assembly effect and annihilation setup
+    spawnHero(k, 'level1', sound, {
+      antiHero,
+      onAnnihilationComplete: () => k.go("level2")
     })
   })
 }

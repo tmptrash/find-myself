@@ -25,7 +25,7 @@ const EYE_LERP_SPEED = 0.1
  * @param {string} [config.type='hero'] - Character type ('hero' or 'antihero')
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
- * @returns {Object} Hero instance with character and animation state
+ * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(k, config) {
   const {
@@ -63,6 +63,10 @@ export function create(k, config) {
   // Create instance with character and animation state
   const inst = {
     character,
+    k,
+    type,
+    controllable,
+    sfx,
     runFrame: 0,
     runTimer: 0,
     isRunning: false,
@@ -76,158 +80,9 @@ export function create(k, config) {
   }
   
   // Check ground touch through collisions
-  character.onCollide("platform", () => {
-    // Set canJump flag when touching platform
-    const wasInAir = !character.canJump
-    character.canJump = true
-    
-    // If was jumping, immediately switch to idle
-    if (wasInAir && inst.wasJumping) {
-      // Play landing sound
-      if (sfx) {
-        Sound.playLandSound(sfx)
-      }
-      
-      // Check if moving (to decide between idle or run animation will be set in next update)
-      const isMovingNow = controllable && (
-        isAnyKeyDown(k, CONFIG.controls.moveLeft) || 
-        isAnyKeyDown(k, CONFIG.controls.moveRight)
-      )
-      
-      // If not moving, immediately switch to idle
-      if (!isMovingNow) {
-        inst.wasJumping = false
-        inst.isRunning = false
-        inst.runFrame = 0
-        inst.runTimer = 0
-        
-        // Switch to idle sprite immediately
-        const roundedX = Math.round(inst.eyeOffsetX)
-        const roundedY = Math.round(inst.eyeOffsetY)
-        const spriteName = `${type}_${roundedX}_${roundedY}`
-        character.use(k.sprite(spriteName))
-        inst.currentEyeSprite = spriteName
-      }
-    }
-  })
-  
-  if (controllable) {
-    // Move left control
-    CONFIG.controls.moveLeft.forEach(key => {
-      k.onKeyDown(key, () => {
-        character.move(-character.speed, 0)
-        character.direction = -1
-      })
-    })
-    
-    // Move right control
-    CONFIG.controls.moveRight.forEach(key => {
-      k.onKeyDown(key, () => {
-        character.move(character.speed, 0)
-        character.direction = 1
-      })
-    })
-    
-    // Jump
-    CONFIG.controls.jump.forEach(key => {
-      k.onKeyPress(key, () => {
-        if (character.canJump) {
-          character.vel.y = -character.myJumpForce
-          character.canJump = false
-        }
-      })
-    })
-  }
-  
-  character.onUpdate(() => {
-    // Determine movement state (only for controllable characters)
-    const isMoving = controllable && (
-      isAnyKeyDown(k, CONFIG.controls.moveLeft) || 
-      isAnyKeyDown(k, CONFIG.controls.moveRight)
-    )
-    
-    // Check if character is grounded (use canJump flag set by collision)
-    const isGrounded = character.canJump
-    
-    if (!isGrounded) {
-      // Jumping - only set sprite once when starting jump
-      if (!inst.wasJumping) {
-        character.use(k.sprite(`${type}-jump`))
-        inst.runFrame = 0
-        inst.runTimer = 0
-        inst.isRunning = false
-        inst.wasJumping = true
-      }
-    } else if (isMoving) {
-      // Running - switch frames smoothly (time-based animation)
-      // If just landed, immediately start running animation
-      if (inst.wasJumping) {
-        inst.wasJumping = false
-        inst.runFrame = 0
-        inst.runTimer = 0
-        character.use(k.sprite(`${type}-run-0`))
-      }
-      
-      inst.isRunning = true
-      inst.runTimer += k.dt()
-      if (inst.runTimer > RUN_ANIM_SPEED) {
-        inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
-        character.use(k.sprite(`${type}-run-${inst.runFrame}`))
-        inst.runTimer = 0
-        
-        // Step sound on frames 0 and 3 (when foot touches ground)
-        if (sfx && (inst.runFrame === 0 || inst.runFrame === 3)) {
-          Sound.playStepSound(sfx)
-        }
-      }
-    } else {
-      // Idle - with eye animation
-      
-      // If just stopped running or just landed, instantly switch to idle
-      if (inst.isRunning || inst.wasJumping) {
-        inst.isRunning = false
-        inst.wasJumping = false
-        inst.runFrame = 0
-        inst.runTimer = 0
-        // Instantly switch to current idle sprite
-        const roundedX = Math.round(inst.eyeOffsetX)
-        const roundedY = Math.round(inst.eyeOffsetY)
-        const spriteName = `${type}_${roundedX}_${roundedY}`
-        character.use(k.sprite(spriteName))
-        inst.currentEyeSprite = spriteName
-      }
-      
-      // Eye animation - smooth movement
-      inst.eyeTimer += k.dt()
-      
-      // Choose new target position
-      if (inst.eyeTimer > k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
-        inst.targetEyeX = k.choose([-1, 0, 1])
-        inst.targetEyeY = k.choose([-1, 0, 1])
-        inst.eyeTimer = 0
-      }
-      
-      // Smoothly interpolate to target position
-      inst.eyeOffsetX = k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
-      inst.eyeOffsetY = k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
-      
-      // Round for pixel-art style
-      const roundedX = Math.round(inst.eyeOffsetX)
-      const roundedY = Math.round(inst.eyeOffsetY)
-      
-      // Switch to preloaded sprite with eyes
-      const spriteName = `${type}_${roundedX}_${roundedY}`
-      
-      // Update sprite only if eye position changed
-      if (inst.currentEyeSprite !== spriteName) {
-        character.use(k.sprite(spriteName))
-        inst.currentEyeSprite = spriteName
-      }
-    }
-    
-    // Mirror based on direction
-    character.flipX = character.direction === -1
-  })
+  character.onCollide("platform", () => onCollisionPlatform(inst))
+  character.onUpdate(() => onUpdate(inst))
+  controllable && setupControls(inst)
   
   return inst
 }
@@ -236,7 +91,7 @@ export function create(k, config) {
  * Should be called once on game initialization
  * @param {Object} k - Kaplay instance
  */
-export function loadAllSprites(k) {
+export function loadHeroSprites(k) {
   // Load sprites for both characters
   const types = ['hero', 'antihero']
   
@@ -273,7 +128,7 @@ export function loadAllSprites(k) {
  * @param {Function} [config.onComplete] - Callback with created hero after completion
  * @returns {Object} Object with cancel() method to abort effect
  */
-export function spawnWithAssembly(k, config) {
+export function spawn(k, config) {
   const {
     x,
     y,
@@ -308,6 +163,11 @@ export function spawnWithAssembly(k, config) {
     particle.speed = k.rand(200, 400)
     
     particles.push(particle)
+  }
+  
+  // Play spawn sound at the start of assembly effect
+  if (sfx) {
+    Sound.playSpawnSound(sfx)
   }
   
   // Animate particles to center
@@ -351,11 +211,6 @@ export function spawnWithAssembly(k, config) {
           if (p.exists()) k.destroy(p)
         })
         
-        // Hero spawn sound
-        if (sfx) {
-          Sound.playSpawnSound(sfx)
-        }
-        
         // Create hero
         inst = create(k, {
           x,
@@ -366,9 +221,7 @@ export function spawnWithAssembly(k, config) {
         })
         
         // Call callback
-        if (onComplete) {
-          onComplete(inst)
-        }
+        onComplete?.(inst)
         
         // Cancel update
         updateHandler.cancel()
@@ -386,183 +239,169 @@ export function spawnWithAssembly(k, config) {
 }
 
 /**
- * Sets up annihilation effect between two characters
- * @param {Object} k - Kaplay instance
- * @param {Object} playerInst - First character instance (usually hero)
- * @param {Object} targetInst - Second character instance (usually anti-hero)
- * @param {Object} sfx - AudioContext for sound effects
- * @param {Function} onComplete - Callback after annihilation completion
+ * Update character animation and state
+ * @param {Object} inst - Hero instance
  */
-export function setupAnnihilation(k, playerInst, targetInst, sfx, onComplete) {
-  let isAnnihilating = false
+function onUpdate(inst) {
+  // Determine movement state (only for controllable characters)
+  const isMoving = inst.controllable && (
+    isAnyKeyDown(inst.k, CONFIG.controls.moveLeft) || 
+    isAnyKeyDown(inst.k, CONFIG.controls.moveRight)
+  )
   
-  const player = playerInst.character
-  const target = targetInst.character
+  // Check if character is grounded (use canJump flag set by collision)
+  const isGrounded = inst.character.canJump
   
-  player.onCollide("annihilationTarget", () => {
-    if (!isAnnihilating) {
-      isAnnihilating = true
-      
-      // Stop control
-      player.paused = true
-      target.paused = true
-      
-      // Center between characters
-      const centerX = (player.pos.x + target.pos.x) / 2
-      const centerY = (player.pos.y + target.pos.y) / 2
-      
-      // ============================================
-      // PHASE 1: CHARACTER BLINKING (0.3 sec)
-      // ============================================
-      let blinkTime = 0
-      const blinkDuration = 0.3
-      const blinkSpeed = 20 // Fast blinking
-      
-      const blinkInterval = k.onUpdate(() => {
-        blinkTime += k.dt()
-        if (blinkTime < blinkDuration) {
-          const visible = Math.floor(blinkTime * blinkSpeed) % 2 === 0
-          player.opacity = visible ? 1 : 0.3
-          target.opacity = visible ? 1 : 0.3
-        } else {
-          player.opacity = 1
-          target.opacity = 1
-          blinkInterval.cancel()
-          
-          // ============================================
-          // PHASE 2: PULL TO CENTER (0.25 sec)
-          // ============================================
-          const pullDuration = 0.25
-          let pullTime = 0
-          const startPlayerPos = k.vec2(player.pos.x, player.pos.y)
-          const startTargetPos = k.vec2(target.pos.x, target.pos.y)
-          
-          const pullInterval = k.onUpdate(() => {
-            pullTime += k.dt()
-            const progress = Math.min(pullTime / pullDuration, 1)
-            const easeProgress = 1 - Math.pow(1 - progress, 3) // Ease-out cubic
-            
-            player.pos.x = startPlayerPos.x + (centerX - startPlayerPos.x) * easeProgress
-            player.pos.y = startPlayerPos.y + (centerY - startPlayerPos.y) * easeProgress
-            target.pos.x = startTargetPos.x + (centerX - startTargetPos.x) * easeProgress
-            target.pos.y = startTargetPos.y + (centerY - startTargetPos.y) * easeProgress
-            
-            if (pullTime >= pullDuration) {
-              pullInterval.cancel()
-              
-              // ============================================
-              // PHASE 3: COLLAPSE AND EFFECTS
-              // ============================================
-              
-              // Play annihilation sound
-              Sound.playAnnihilationSound(sfx)
-              
-              // SCREEN FLASH
-              const screenFlash = k.add([
-                k.rect(k.width(), k.height()),
-                k.pos(0, 0),
-                k.color(255, 255, 255),
-                k.opacity(1),
-                k.fixed(),
-                k.z(CONFIG.visual.zIndex.ui + 1)
-              ])
-              
-              let flashTime = 0
-              screenFlash.onUpdate(() => {
-                flashTime += k.dt()
-                screenFlash.opacity = Math.max(0, 1 - flashTime * 8)
-                if (flashTime > 0.125) {
-                  k.destroy(screenFlash)
-                }
-              })
-              
-              // CAMERA SHAKE
-              let shakeTime = 0
-              const shakeIntensity = 15
-              const originalCamX = k.width() / 2
-              const originalCamY = k.height() / 2
-              
-              const shakeInterval = k.onUpdate(() => {
-                shakeTime += k.dt()
-                if (shakeTime < 0.4) {
-                  const intensity = shakeIntensity * (1 - shakeTime / 0.4)
-                  k.camPos(
-                    originalCamX + k.rand(-intensity, intensity),
-                    originalCamY + k.rand(-intensity, intensity)
-                  )
-                } else {
-                  k.camPos(originalCamX, originalCamY)
-                  shakeInterval.cancel()
-                }
-              })
-              
-              // ============================================
-              // PARTICLE EFFECT
-              // ============================================
-              
-              const allColors = [
-                CONFIG.colors.hero.body,
-                CONFIG.colors.hero.outline,
-                CONFIG.colors.antiHero.body,
-                CONFIG.colors.antiHero.outline,
-              ]
-              
-              // Pixel explosion - small rotating squares
-              const pixelCount = 24
-              for (let i = 0; i < pixelCount; i++) {
-                const angle = (Math.PI * 2 * i) / pixelCount + k.rand(-0.3, 0.3)
-                const speed = k.rand(100, 400)
-                const size = k.rand(3, 7)
-                const color = k.choose(allColors)
-                
-                const pixel = k.add([
-                  k.rect(size, size),
-                  k.pos(centerX, centerY),
-                  getColor(k, color),
-                  k.anchor("center"),
-                  k.rotate(k.rand(0, 360)),
-                  k.z(CONFIG.visual.zIndex.player)
-                ])
-                
-                pixel.vx = Math.cos(angle) * speed
-                pixel.vy = Math.sin(angle) * speed
-                pixel.lifetime = 0
-                pixel.rotSpeed = k.rand(-720, 720)
-                
-                pixel.onUpdate(() => {
-                  pixel.lifetime += k.dt()
-                  pixel.pos.x += pixel.vx * k.dt()
-                  pixel.pos.y += pixel.vy * k.dt()
-                  pixel.angle += pixel.rotSpeed * k.dt()
-                  pixel.opacity = Math.max(0, 1 - pixel.lifetime * 2.5)
-                  
-                  if (pixel.lifetime > 0.4) {
-                    k.destroy(pixel)
-                  }
-                })
-              }
-              
-              // Hide characters
-              k.destroy(player)
-              k.destroy(target)
-              
-              // Call callback after completion
-              k.wait(1.2, () => {
-                if (onComplete) {
-                  onComplete()
-                }
-              })
-            }
-          })
-        }
-      })
+  if (!isGrounded) {
+    // Jumping - only set sprite once when starting jump
+    if (!inst.wasJumping) {
+      inst.character.use(inst.k.sprite(`${inst.type}-jump`))
+      inst.runFrame = 0
+      inst.runTimer = 0
+      inst.isRunning = false
+      inst.wasJumping = true
     }
+  } else if (isMoving) {
+    // Running - switch frames smoothly (time-based animation)
+    // If just landed, immediately start running animation
+    if (inst.wasJumping) {
+      inst.wasJumping = false
+      inst.runFrame = 0
+      inst.runTimer = 0
+      inst.character.use(inst.k.sprite(`${inst.type}-run-0`))
+    }
+    
+    inst.isRunning = true
+    inst.runTimer += inst.k.dt()
+    if (inst.runTimer > RUN_ANIM_SPEED) {
+      inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
+      inst.character.use(inst.k.sprite(`${inst.type}-run-${inst.runFrame}`))
+      inst.runTimer = 0
+      
+      // Step sound on frames 0 and 3 (when foot touches ground)
+      if (inst.sfx && (inst.runFrame === 0 || inst.runFrame === 3)) {
+        Sound.playStepSound(inst.sfx)
+      }
+    }
+  } else {
+    // Idle - with eye animation
+    
+    // If just stopped running or just landed, instantly switch to idle
+    if (inst.isRunning || inst.wasJumping) {
+      inst.isRunning = false
+      inst.wasJumping = false
+      inst.runFrame = 0
+      inst.runTimer = 0
+      // Instantly switch to current idle sprite
+      const roundedX = Math.round(inst.eyeOffsetX)
+      const roundedY = Math.round(inst.eyeOffsetY)
+      const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+      inst.character.use(inst.k.sprite(spriteName))
+      inst.currentEyeSprite = spriteName
+    }
+    
+    // Eye animation - smooth movement
+    inst.eyeTimer += inst.k.dt()
+    
+    // Choose new target position
+    if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
+      inst.targetEyeX = inst.k.choose([-1, 0, 1])
+      inst.targetEyeY = inst.k.choose([-1, 0, 1])
+      inst.eyeTimer = 0
+    }
+    
+    // Smoothly interpolate to target position
+    inst.eyeOffsetX = inst.k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
+    inst.eyeOffsetY = inst.k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
+    
+    // Round for pixel-art style
+    const roundedX = Math.round(inst.eyeOffsetX)
+    const roundedY = Math.round(inst.eyeOffsetY)
+    
+    // Switch to preloaded sprite with eyes
+    const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+    
+    // Update sprite only if eye position changed
+    if (inst.currentEyeSprite !== spriteName) {
+      inst.character.use(inst.k.sprite(spriteName))
+      inst.currentEyeSprite = spriteName
+    }
+  }
+  
+  // Mirror based on direction
+  inst.character.flipX = inst.character.direction === -1
+}
+
+/**
+ * Setup keyboard controls for character
+ * @param {Object} inst - Hero instance
+ */
+function setupControls(inst) {
+  // Move left control
+  CONFIG.controls.moveLeft.forEach(key => {
+    inst.k.onKeyDown(key, () => {
+      inst.character.move(-inst.character.speed, 0)
+      inst.character.direction = -1
+    })
+  })
+  
+  // Move right control
+  CONFIG.controls.moveRight.forEach(key => {
+    inst.k.onKeyDown(key, () => {
+      inst.character.move(inst.character.speed, 0)
+      inst.character.direction = 1
+    })
+  })
+  
+  // Jump
+  CONFIG.controls.jump.forEach(key => {
+    inst.k.onKeyPress(key, () => {
+      if (inst.character.canJump) {
+        inst.character.vel.y = -inst.character.myJumpForce
+        inst.character.canJump = false
+      }
+    })
   })
 }
 
-// ============================================
-// PRIVATE FUNCTIONS
-// ============================================
+/**
+ * Handle collision with platform
+ * @param {Object} inst - Hero instance
+ */
+function onCollisionPlatform(inst) {
+  // Set canJump flag when touching platform
+  const wasInAir = !inst.character.canJump
+  inst.character.canJump = true
+  
+  // If was jumping, immediately switch to idle
+  if (wasInAir && inst.wasJumping) {
+    // Play landing sound
+    if (inst.sfx) {
+      Sound.playLandSound(inst.sfx)
+    }
+    
+    // Check if moving (to decide between idle or run animation will be set in next update)
+    const isMovingNow = inst.controllable && (
+      isAnyKeyDown(inst.k, CONFIG.controls.moveLeft) || 
+      isAnyKeyDown(inst.k, CONFIG.controls.moveRight)
+    )
+    
+    // If not moving, immediately switch to idle
+    if (!isMovingNow) {
+      inst.wasJumping = false
+      inst.isRunning = false
+      inst.runFrame = 0
+      inst.runTimer = 0
+      
+      // Switch to idle sprite immediately
+      const roundedX = Math.round(inst.eyeOffsetX)
+      const roundedY = Math.round(inst.eyeOffsetY)
+      const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+      inst.character.use(inst.k.sprite(spriteName))
+      inst.currentEyeSprite = spriteName
+    }
+  }
+}
 
 /**
  * Universal function for character creation

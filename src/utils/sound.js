@@ -485,22 +485,22 @@ export function playSpawnSound(instance) {
   sweep.start(now)
   sweep.stop(now + 0.15)
   
-  // Click at spawn moment
+  // Click at spawn moment (delayed to match hero appearance)
   const click = instance.audioContext.createOscillator()
   const clickEnvelope = instance.audioContext.createGain()
   
   click.type = 'sine'
-  click.frequency.setValueAtTime(800, now + 0.15)
+  click.frequency.setValueAtTime(800, now + 0.35)
   
-  clickEnvelope.gain.setValueAtTime(0.3, now + 0.15)
-  clickEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.20)
+  clickEnvelope.gain.setValueAtTime(0.3, now + 0.35)
+  clickEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.40)
   
   // Connect through master gain
   click.connect(clickEnvelope)
   clickEnvelope.connect(instance.spawnGain)
   
-  click.start(now + 0.15)
-  click.stop(now + 0.20)
+  click.start(now + 0.35)
+  click.stop(now + 0.40)
 }
 
 /**

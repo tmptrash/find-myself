@@ -64,6 +64,7 @@ export const CONFIG = {
   // COLORS
   // ==========================================
   colors: {
+    outlineTextColor: "000000",
     // Level 1 colors
     level1: {
       background: "FFDAB9",         // Light peach background
@@ -83,10 +84,7 @@ export const CONFIG = {
     
     // Ready screen colors
     ready: {
-      background: "191919",         // Dark background
-      button: "FF6432",             // "Are you ready?" button
-      buttonText: "FFFFFF",         // Button text
-      buttonOutline: "000000",      // Button outline
+      background: "191919",         // Dark background      
       hint: "969696",               // Hint color
     },
     
@@ -141,20 +139,10 @@ export const CONFIG = {
     // UI dimensions
     instructionsFontSize: 14,      // Instructions font size
     titleFontSize: 64,             // Title font size
-    buttonFontSize: 36,            // Button font size
     
     // UI positions
     instructionsX: 20,             // Instructions X position
     instructionsY: 20,             // Instructions Y position
-    
-    // Menu animations
-    menu: {
-      bgScrollSpeed: 0.5,          // Background scroll speed
-      glitchFrequency: 0.5,        // Glitch frequency (seconds)
-      titlePulseSpeed: 3,          // Title pulse speed
-      buttonPulseAmount: 0.03,     // Button pulse amplitude
-      buttonHoverScale: 1.08,      // Button scale on hover
-    },
     
     // Z-indices (layers)
     zIndex: {

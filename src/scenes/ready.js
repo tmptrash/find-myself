@@ -34,7 +34,7 @@ export function sceneReady(k) {
       k.pos(centerX, k.height() - 80),
       k.anchor("center"),
       getColor(k, CONFIG.colors.ready.hint),
-      k.outline(2, getRGB(k, CONFIG.colors.ready.buttonOutline)),
+      k.outline(2, getRGB(k, CONFIG.colors.outlineTextColor)),
     ])
   })
 }

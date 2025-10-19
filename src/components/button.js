@@ -1,13 +1,16 @@
-import { CONFIG } from '../config.js'
 import { getColor, getRGB } from '../utils/helpers.js'
 
-// ============================================
-// PUBLIC API
-// ============================================
-
+const BTN_SHADOW_COLOR = '000000'
+const BTN_COLOR = 'FF6432'
+const BTN_TEXT_COLOR = 'FFFFFF'
+const BTN_OUTLINE_COLOR = '000000'
+const BTN_FONT_SIZE = 36
+const BTN_HOVER_SCALE = 1.08
+const BTN_PULSE_SPEED = 3
+const BTN_PULSE_AMOUNT = 0.03
 /**
  * Creates a button with text and animations
- * @param {Object} k - Kaplay instance
+ * @param {Object} k - Kaplay inst
  * @param {Object} config - Button configuration
  * @param {string} config.text - Button text
  * @param {number} config.x - X position (button center)
@@ -16,7 +19,7 @@ import { getColor, getRGB } from '../utils/helpers.js'
  * @param {number} [config.height=90] - Button height
  * @param {Function} config.onClick - Callback function when button is clicked
  * @param {number} [config.textOffsetY=0] - Text vertical offset
- * @returns {Object} Object with button elements (button, text, shadow)
+ * @returns {Object} Button inst with all properties and elements
  */
 export function create(k, config) {
   const {
@@ -25,7 +28,7 @@ export function create(k, config) {
     y,
     width = 450,
     height = 90,
-    onClick: onClickCallback,
+    onClick,
     textOffsetY = 0,
   } = config
   
@@ -34,7 +37,7 @@ export function create(k, config) {
     k.rect(width, height, { radius: 12 }),
     k.pos(x + 4, y + 4),
     k.anchor("center"),
-    getColor(k, "000000"),
+    getColor(k, BTN_SHADOW_COLOR),
     k.opacity(0.3),
     k.z(0),
   ])
@@ -44,8 +47,8 @@ export function create(k, config) {
     k.rect(width, height, { radius: 12 }),
     k.pos(x, y),
     k.anchor("center"),
-    getColor(k, CONFIG.colors.ready.button),
-    k.outline(6, getRGB(k, CONFIG.colors.ready.buttonOutline)),
+    getColor(k, BTN_COLOR),
+    k.outline(6, getRGB(k, BTN_OUTLINE_COLOR)),
     k.area(),
     k.scale(1),
     k.z(1),
@@ -54,93 +57,87 @@ export function create(k, config) {
   
   // Button text
   const buttonText = k.add([
-    k.text(text, { size: CONFIG.visual.buttonFontSize }),
+    k.text(text, { size: BTN_FONT_SIZE }),
     k.pos(x, y + textOffsetY),
     k.anchor("center"),
-    getColor(k, CONFIG.colors.ready.buttonText),
-    k.outline(3, getRGB(k, CONFIG.colors.ready.buttonOutline)),
+    getColor(k, BTN_TEXT_COLOR),
+    k.outline(3, getRGB(k, BTN_OUTLINE_COLOR)),
     k.z(2),
   ])
   
-  // Create button instance
-  const instance = {
+  // Create button inst
+  const inst = {
     k,
     button,
+    text: buttonText,
     buttonText,
+    shadow: buttonShadow,
     buttonShadow,
-    state: {
-      targetScale: 1,
-      currentScale: 1
-    },
+    targetScale: 1,
+    currentScale: 1,
     pulse: true,
     colorShift: true,
-    buttonColor: CONFIG.colors.ready.button,
-    onClickCallback
+    buttonColor: BTN_COLOR,
+    onClick
   }
   
   // Bind event handlers
-  button.onHoverUpdate(() => onHoverUpdate(instance))
-  button.onHoverEnd(() => onHoverEnd(instance))
-  button.onClick(() => handleClick(instance))
-  k.onUpdate(() => onUpdate(instance))
+  button.onHoverUpdate(() => onHoverUpdate(inst))
+  button.onHoverEnd(() => onHoverEnd(inst))
+  button.onClick(() => onClick(inst))
+  k.onUpdate(() => onUpdate(inst))
   
-  return {
-    button,
-    text: buttonText,
-    shadow: buttonShadow
-  }
+  return inst
 }
 
 /**
  * Handle button hover start
- * @param {Object} instance - Button instance
+ * @param {Object} inst - Button inst
  */
-function onHoverUpdate(instance) {
-  instance.state.targetScale = CONFIG.visual.menu.buttonHoverScale
-  instance.k.setCursor("pointer")
+function onHoverUpdate(inst) {
+  inst.targetScale = BTN_HOVER_SCALE
+  inst.k.setCursor("pointer")
 }
 
 /**
  * Handle button hover end
- * @param {Object} instance - Button instance
+ * @param {Object} inst - Button inst
  */
-function onHoverEnd(instance) {
-  instance.state.targetScale = 1
-  instance.k.setCursor("default")
+function onHoverEnd(inst) {
+  inst.targetScale = 1
+  inst.k.setCursor("default")
 }
 
 /**
  * Handle button click
- * @param {Object} instance - Button instance
+ * @param {Object} inst - Button inst
  */
-function handleClick(instance) {
-  if (instance.onClickCallback) {
-    instance.onClickCallback()
-  }
+function onClick(inst) {
+  inst?.onClick?.()
 }
 
 /**
  * Update button animations (scale, pulse, color)
- * @param {Object} instance - Button instance
+ * @param {Object} inst - Button inst
  */
-function onUpdate(instance) {
-  const { k, button, buttonText, buttonShadow, state, pulse, colorShift, buttonColor } = instance
+function onUpdate(inst) {
+  const { k, button, buttonText, buttonShadow, targetScale, currentScale, pulse, colorShift, buttonColor } = inst
   
   // Determine base targetScale
-  let baseTargetScale = state.targetScale
+  let baseTargetScale = targetScale
   
   // Add pulse only if not hovering
   if (!button.isHovering() && pulse) {
-    baseTargetScale = 1.0 + Math.sin(k.time() * CONFIG.visual.menu.titlePulseSpeed) * CONFIG.visual.menu.buttonPulseAmount
+    baseTargetScale = 1.0 + Math.sin(k.time() * BTN_PULSE_SPEED) * BTN_PULSE_AMOUNT
   }
   
   // Smoothly interpolate to target scale
-  state.currentScale = k.lerp(state.currentScale, baseTargetScale, 0.2)
+  inst.currentScale = k.lerp(currentScale, baseTargetScale, 0.2)
   
   // Apply scale to all elements
-  button.scale = k.vec2(state.currentScale)
-  buttonText.scale = k.vec2(state.currentScale)
-  buttonShadow.scale = k.vec2(state.currentScale)
+  button.scale = k.vec2(inst.currentScale)
+  buttonText.scale = k.vec2(inst.currentScale)
+  buttonShadow.scale = k.vec2(inst.currentScale)
   
   // Color animation
   if (colorShift) {

@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js'
-import { getColor } from '../utils/helper.js'
-import * as Sound from '../utils/sound.js'
+import { getColor } from './helper.js'
+import * as Sound from './sound.js'
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance

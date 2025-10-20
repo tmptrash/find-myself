@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js'
-import { initScene } from './scene.js'
+import { initScene } from '../utils/scene.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
 

@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js'
 import { getColor, getRGB } from '../utils/helper.js'
-import { addBackground } from './scene.js'
+import { addBackground } from '../utils/scene.js'
 import * as Button from '../components/button.js'
 
 export function sceneReady(k) {

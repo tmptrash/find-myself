@@ -21,9 +21,6 @@ export function sceneLevel1(k) {
       sfx: sound
     })
     
-    // Add collision tag to anti-hero
-    antiHero.character.use("annihilation")
-    
     // Create hero instance with annihilation setup
     const hero = Hero.create({
       k,

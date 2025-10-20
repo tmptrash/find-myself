@@ -15,6 +15,7 @@ const RUN_FRAME_COUNT = 6
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
+const ANTIHERO_TAG = 'annihilation'
 
 export const HEROES = {
   HERO: 'hero',
@@ -60,6 +61,7 @@ export function create(config) {
     k.scale(HERO_SCALE),
     k.z(CONFIG.visual.zIndex.player),
   ])
+  type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)
   
   const inst = {
     character,
@@ -90,7 +92,7 @@ export function create(config) {
   character.onCollide("platform", () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
-  antiHero && character.onCollide("annihilation", () => onAnnihilationCollide(inst))
+  antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
   
   return inst
 }

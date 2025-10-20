@@ -9,6 +9,7 @@ export function sceneMenu(k) {
     
     // Create sound instance and start audio context
     const sound = Sound.create()
+    // Before this call user should click on something, otherwise the music will not work
     Sound.startAudioContext(sound)
     
     // Start ambient music

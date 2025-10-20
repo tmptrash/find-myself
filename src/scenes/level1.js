@@ -44,7 +44,7 @@ export function sceneLevel1(k) {
     Spikes.create({
       k,
       x: centerX,
-      y: platformY - spikeHeight / 2,  // Position spikes ON platform, not inside it
+      y: platformY - spikeHeight / 2 + 5,  // Position spikes slightly lower
       orientation: Spikes.ORIENTATIONS.FLOOR,
       onHit: () => {
         // Restart level when hero hits spikes

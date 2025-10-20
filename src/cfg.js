@@ -29,7 +29,7 @@ export const CFG = {
   gameplay: {
     // Physics
     moveSpeed: 450,              // Hero movement speed (px/s)
-    jumpForce: 800,              // Jump force (px/s)
+    jumpForce: 600,              // Jump force (px/s)
     gravity: 2200,               // Gravity (px/s²)
   },
   colors: {

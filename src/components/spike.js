@@ -129,9 +129,9 @@ function createSpikeSprite(orientation) {
     canvas.height = SPIKE_HEIGHT
   }
 
-  // Use orange color for spikes
-  const spikeColor = getHex('FF6432')  // Red-orange color
-  const outlineColor = getHex('000000')
+  // Use platform color for spikes (same color for outline and fill)
+  const spikeColor = getHex(CFG.colors.level1.platform)
+  const outlineColor = getHex(CFG.colors.level1.platform)
 
   // Draw spikes as triangles with lineWidth for outline
   const spikeWidth = canvas.width / SPIKE_COUNT

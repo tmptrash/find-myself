@@ -33,9 +33,6 @@ export function sceneMenu(k) {
     // Array of glitches on background
     let glitches = []
     
-    // Variables for glitchy dividing line
-    let lineGlitchTimer = 0
-    
     // Variables for vertical boundary rotation
     let boundaryRotation = 0 // Current angle
     let targetBoundaryRotation = 0 // Target angle

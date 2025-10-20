@@ -412,6 +412,15 @@ const controllable = type === HEROES.HERO
 const value = a ? b ? c : d : e ? f : g
 ```
 
+### Function calling
+```javascript
+// Good: call the function with embedded check
+doSomething?.(inst)
+
+// Bad: Do additional function check
+if (doSomething) doSomething(inst)
+```
+
 ### Early Returns
 ```javascript
 // Good: Guard clauses
@@ -434,6 +443,7 @@ function onAnnihilationCollide(inst) {
 ---
 
 ## 11. File Structure
+- File names should be in singular form
 
 ```
 src/
@@ -467,6 +477,7 @@ src/
 - ❌ Use RGB arrays for colors (use hex strings)
 - ❌ Write comments in languages other than English
 - ❌ Put exported functions at the bottom of files
+- ❌ Do not put comments separated by many = symbol
 
 ### Do
 - ✅ Use factory functions with `create()` pattern

@@ -1,4 +1,4 @@
-import { getColor, getRGB, parseHex } from '../utils/helpers.js'
+import { getColor, getRGB, parseHex } from '../utils/helper.js'
 /**
  * All buttons should be the same, so we incapsulate their properties inside
  * this module. It should not be in a global config.

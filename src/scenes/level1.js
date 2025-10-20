@@ -1,11 +1,13 @@
 import { CONFIG } from '../config.js'
-import { initScene } from '../components/scene.js'
+import { initScene } from './scene.js'
 import * as Hero from '../components/hero.js'
+import { HEROES } from '../components/hero.js'
 
 export function sceneLevel1(k) {
   k.scene("level1", () => {
     // Initialize level with common setup
-    const { sound } = initScene(k, {
+    const { sound } = initScene({
+      k,
       backgroundColor: CONFIG.colors.level1.background,
       platformColor: CONFIG.colors.level1.platform
     })
@@ -27,7 +29,7 @@ export function sceneLevel1(k) {
       k,
       x: CONFIG.levels.level1.heroSpawn.x,
       y: CONFIG.levels.level1.heroSpawn.y,
-      type: 'hero',
+      type: HEROES.HERO,
       sfx: sound,
       antiHero,
       onAnnihilation: () => k.go("level2")

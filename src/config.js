@@ -1,12 +1,4 @@
-// ============================================
-// GLOBAL GAME CONFIGURATION
-// ============================================
-// All configurable parameters in one place
-
 export const CONFIG = {
-  // ==========================================
-  // AUDIO
-  // ==========================================
   audio: {
     // Ambient music (splash/menu)
     ambient: {
@@ -34,20 +26,12 @@ export const CONFIG = {
       stepFreqEnd: 60,           // End frequency (Hz)
     }
   },
-
-  // ==========================================
-  // GAMEPLAY
-  // ==========================================
   gameplay: {
     // Physics
     moveSpeed: 450,              // Hero movement speed (px/s)
     jumpForce: 800,              // Jump force (px/s)
     gravity: 2200,               // Gravity (px/s²)
   },
-
-  // ==========================================
-  // COLORS
-  // ==========================================
   colors: {
     outlineTextColor: "000000",
     // Level 1 colors
@@ -89,10 +73,6 @@ export const CONFIG = {
       eyePupil: "000000",           // Pupil
     }
   },
-
-  // ==========================================
-  // CONTROLS (KEYS)
-  // ==========================================
   controls: {
     // Movement
     moveLeft: ['left', 'a'],       // Move left
@@ -107,10 +87,6 @@ export const CONFIG = {
     backToMenu: ['escape'],        // Return to menu
     startGame: ['space', 'enter'], // Start game (from menu/start)
   },
-
-  // ==========================================
-  // VISUAL
-  // ==========================================
   visual: {
     // Window dimensions
     windowWidth: 1280,
@@ -137,10 +113,6 @@ export const CONFIG = {
       ui: 100,
     }
   },
-
-  // ==========================================
-  // LEVELS
-  // ==========================================
   levels: {
     level1: {
       name: "Level 1",

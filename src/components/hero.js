@@ -1,5 +1,5 @@
 import { CONFIG } from '../config.js'
-import { getHex, isAnyKeyDown, getColor } from '../utils/helpers.js'
+import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 
 // Collision box parameters
@@ -16,6 +16,10 @@ const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
 
+export const HEROES = {
+  HERO: 'hero',
+  ANTIHERO: 'antihero'
+}
 /**
  * Creates hero or anti-hero with full logic setup
  * @param {Object} config - Hero configuration
@@ -34,16 +38,15 @@ export function create(config) {
     k,
     x,
     y,
-    type = 'hero',
-    controllable = config.type === 'hero',
+    type = HEROES.HERO,
+    controllable = type === HEROES.HERO,
     sfx = null,
     antiHero = null,
     onAnnihilation = null
   } = config
   
-  // Create hero object
   const character = k.add([
-    k.sprite(`${type}_0_0`),
+    k.sprite(`${type.toLowerCase()}_0_0`),
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
@@ -58,13 +61,14 @@ export function create(config) {
     k.z(CONFIG.visual.zIndex.player),
   ])
   
-  // Create instance with character and animation state
   const inst = {
     character,
     k,
     type,
     controllable,
     sfx,
+    antiHero,
+    onAnnihilation,
     speed: CONFIG.gameplay.moveSpeed,
     jumpForce: CONFIG.gameplay.jumpForce,
     direction: 1, // 1 = right, -1 = left
@@ -86,13 +90,7 @@ export function create(config) {
   character.onCollide("platform", () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
-  
-  // Setup annihilation if anti-hero is provided
-  if (antiHero) {
-    character.onCollide("annihilation", () => {
-      onAnnihilationCollide(inst, antiHero, onAnnihilation)
-    })
-  }
+  antiHero && character.onCollide("annihilation", () => onAnnihilationCollide(inst))
   
   return inst
 }
@@ -101,11 +99,8 @@ export function create(config) {
  * Should be called once on game initialization
  * @param {Object} k - Kaplay instance
  */
-export function loadHeroSprites(k) {
-  // Load sprites for both characters
-  const types = ['hero', 'antihero']
-  
-  types.forEach(type => {
+export function loadHeroSprites(k) {    
+  Object.values(HEROES).forEach(type => {
     const prefix = type
     
     // Load all eye variants (9 positions) for idle animation
@@ -139,7 +134,8 @@ export function spawn(inst) {
   character.hidden = true
   
   // Determine particle color based on type
-  const particleColor = type === 'hero' ? CONFIG.colors.hero.body : CONFIG.colors.antiHero.body
+  const colors = CONFIG.colors
+  const particleColor = type === HEROES.HERO ? colors.hero.body : colors.antiHero.body
   
   // Create particles for assembly effect
   const particles = []
@@ -356,16 +352,14 @@ function onCollisionPlatform(inst) {
 /**
  * Handle annihilation collision between hero and anti-hero
  * @param {Object} inst - Hero instance
- * @param {Object} targetInst - Anti-hero instance
- * @param {Function} onAnnihilation - Callback when annihilation completes
  */
-function onAnnihilationCollide(inst, targetInst, onAnnihilation) {
+function onAnnihilationCollide(inst) {
   if (inst.isAnnihilating) return
   
   inst.isAnnihilating = true
   
   const { k, character: player, sfx } = inst
-  const target = targetInst.character
+  const target = inst.antiHero.character
   
   // Stop control
   player.paused = true
@@ -499,9 +493,7 @@ function onAnnihilationCollide(inst, targetInst, onAnnihilation) {
           k.destroy(target)
           
           // Call callback after completion
-          k.wait(1.2, () => {
-            onAnnihilation?.()
-          })
+          k.wait(1.2, inst.onAnnihilation)
         }
       })
     }
@@ -518,9 +510,9 @@ function onAnnihilationCollide(inst, targetInst, onAnnihilation) {
  * @param {number} eyeOffsetY - Pupil Y offset
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = 'hero', animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
   // Choose color scheme based on type
-  const colors = type === 'hero' ? CONFIG.colors.hero : CONFIG.colors.antiHero
+  const colors = type === HEROES.HERO ? CONFIG.colors.hero : CONFIG.colors.antiHero
   
   const size = 32
   const canvas = document.createElement('canvas')

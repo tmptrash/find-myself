@@ -1,6 +1,6 @@
 import * as Sound from "../utils/sound.js"
 import { CONFIG } from "../config.js"
-import { getRGB } from "../utils/helpers.js"
+import { getRGB } from "../utils/helper.js"
 
 export function sceneMenu(k) {
   k.scene("menu", () => {

@@ -1,0 +1,550 @@
+# Find You - Coding Rules
+
+## Project Overview
+This is a Kaplay.js-based 2D platformer game with procedural graphics and audio. Follow these architectural patterns and conventions when contributing to the codebase.
+
+---
+
+## 1. Module Organization
+
+### Structure
+- **Every module should export create() function & it should be on the top**
+- **All exported functions at the top**
+- **All private functions at the bottom**
+- Use `export function name()` syntax (not `export default`)
+
+### Example
+```javascript
+import { cfg } from '../cfg.js'
+
+// Module constants
+const SOME_CONSTANT = 42
+
+// Exported constants (if needed)
+export const TYPES = {
+  TYPE_A: 'a',
+  TYPE_B: 'b'
+}
+
+export function create(cfg) {
+  const inst = {}
+  // Implementation
+  return inst
+}
+
+export function loadSprites(inst) {
+  // Implementation
+}
+
+function privateHelper(inst) {
+  // Implementation
+}
+
+function anotherHelper(inst) {
+  // Implementation
+}
+```
+
+---
+
+## 2. Factory Function Pattern
+
+### Core Principle
+All modules export a `create()` function that returns an instance object (`inst`).
+
+### Instance Object Pattern
+- Contains all related state and references
+- Private and other exported functions accept `inst` as first parameter returned from `create()` function
+
+### Example from hero.js
+```javascript
+export function create(cfg) {
+  const { k, x, y, type } = cfg
+  
+  const character = k.add([...])
+  
+  const inst = {
+    character,    // Kaplay game object
+    k,           // Kaplay inst
+    type,        // Instance-specific data
+    speed: cfg.gameplay.moveSpeed,
+    canJump: true,
+    // ... all state goes here
+  }
+  
+  // Setup using private functions
+  character.onUpdate(() => onUpdate(inst))
+  setupControls(inst)
+  
+  return inst
+}
+
+// Private function receives inst
+function onUpdate(inst) {
+  // Use inst.character, inst.k, etc.
+}
+
+function setupControls(inst) {
+  inst.k.onKeyDown('left', () => {
+    inst.character.move(-inst.speed, 0)
+  })
+}
+```
+
+---
+
+## 3. Configuration Management
+
+### Rules
+- Centralized in `src/cfg.js`
+- **Only data, no business logic**
+- Export single `cfg` object
+
+### Structure
+```javascript
+export const cfg = {
+  audio: {
+    ambient: { masterVolume: 0.52 },
+    sfx: { landVolume: 0.343 }
+  },
+  gameplay: {
+    moveSpeed: 450,      // Hero movement speed (px/s)
+    jumpForce: 800,      // Jump force (px/s)
+    gravity: 2200        // Gravity (px/s²)
+  },
+  colors: {
+    hero: {
+      body: "FF8C00",    // Hex string format
+      outline: "000000"
+    }
+  },
+  visual: {
+    zIndex: {
+      background: 0,
+      platform: 1,
+      player: 10,
+      ui: 100
+    }
+  }
+}
+```
+
+### Color Format
+- Always use hex strings: `"FF8C00"` (not arrays or objects)
+- Include descriptive comments
+
+---
+
+## 4. Kaplay.js Conventions
+
+### Parameter Naming
+- **Kaplay inst**: Always use `k`
+- **Config object**: Always use `cfg`
+- **Instance object**: Always use `inst`
+
+### Scene Functions
+```javascript
+export function sceneMenu(k) {
+  k.scene("menu", () => {
+    // Scene implementation
+  })
+}
+
+export function sceneLevel1(k) {
+  k.scene("level1", () => {
+    // Scene implementation
+  })
+}
+```
+
+### Collision Detection
+- Use string tags: `"platform"`, `"annihilation"`, `"player"`
+- Add tags with `character.use("tagName")`
+- Listen with `character.onCollide("tagName", callback)`
+
+### Instance-Based Design
+```javascript
+// Good: Create inst, pass to functions
+const heroInst = Hero.create({ k, x: 100, y: 200 })
+Hero.spawn(heroInst)
+
+// Bad: Manipulating objects directly without inst pattern
+const hero = k.add([...])
+hero.x = 100
+```
+
+---
+
+## 5. Component Patterns
+
+### Hero Component
+```javascript
+// Create hero inst
+const heroInst = Hero.create({
+  k,
+  x: 250,
+  y: 800,
+  type: Hero.HEROES.HERO,
+  controllable: true,
+  sfx: sound,
+  antiHero: antiHeroInst,
+  onAnnihilation: () => k.go("level2")
+})
+
+// Access Kaplay character
+heroInst.character.pos.x = 100
+
+// Call inst methods
+Hero.spawn(heroInst)
+```
+
+### Sound Component
+```javascript
+// Create sound inst once
+const sound = Sound.create()
+
+// Pass inst as first parameter
+Sound.startAudioContext(sound)
+Sound.startAmbient(sound)
+Sound.playLandSound(sound)
+Sound.setAmbientVolume(sound, 0.5)
+```
+
+### Button Component
+```javascript
+// Create returns complete button inst
+const buttonInst = Button.create({
+  k,
+  text: "START GAME",
+  x: centerX,
+  y: centerY,
+  width: 360,
+  onClick: () => k.go("level1")
+})
+
+// Access elements
+buttonInst.button.opacity = 0.5
+buttonInst.text.color = k.rgb(255, 0, 0)
+```
+
+### Export Constants When Needed
+```javascript
+export const HEROES = {
+  HERO: 'hero',
+  ANTIHERO: 'antihero'
+}
+
+// Usage
+Hero.create({ type: Hero.HEROES.HERO })
+```
+
+---
+
+## 6. Naming Conventions
+
+### Functions
+- **Scene functions**: `sceneMenu()`, `sceneReady()`, `sceneLevel1()`
+- **Private functions**: `camelCase` (e.g., `updateHeroMovement()`, `drawBackground()`)
+- **Exported functions**: `camelCase` (e.g., `create()`, `loadSprites()`)
+
+### Variables
+- **Instance objects**: `inst`
+- **Kaplay inst**: `k`
+- **Configuration**: `cfg`
+- **Sound inst**: `sound` or `sfx`
+- **Constants**: `UPPER_CASE` (e.g., `HERO_SCALE`, `COLLISION_WIDTH`)
+
+### Files
+- **Scenes**: `menu.js`, `ready.js`, `level1.js`
+- **Components**: `hero.js`, `button.js`
+- **Utilities**: `helper.js`, `sound.js`, `scene.js`
+- **Config**: `cfg.js`, `index.js`
+
+---
+
+## 7. Code Organization
+
+### Extract Complex Logic
+```javascript
+// Good: Extracted to private function
+k.onDraw(() => drawScene(inst))
+k.onUpdate(() => updateBackgroundEffects(inst))
+
+// Bad: Inline complex logic
+k.onDraw(() => {
+  // 50 lines of drawing code...
+})
+```
+
+### State Objects for Scenes
+```javascript
+export function sceneMenu(k) {
+  k.scene("menu", () => {
+    const centerX = k.width() / 2
+    const centerY = k.height() / 2
+    
+    // Centralize all scene state
+    const inst = {
+      centerX,
+      centerY,
+      k,
+      bgOffset: 0,
+      glitchTimer: 0,
+      glitches: [],
+      targetBgShift: 0,
+      currentBgShift: 0
+    }
+    
+    k.onDraw(() => drawScene(inst))
+    k.onUpdate(() => updateEffects(inst))
+  })
+}
+```
+
+### Group Related Functionality
+- Keep related functions together
+- Organize by feature, not by type
+- Use section comments to separate concerns
+
+---
+
+## 8. Sound Management
+
+### Web Audio API
+- All sounds procedurally generated (no audio files)
+- Use `OscillatorNode`, `GainNode`, `BiquadFilterNode`
+
+### Instance Pattern
+```javascript
+// sound.js
+export function create() {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+  
+  const inst = {
+    audioContext,
+    landGain: audioContext.createGain(),
+    stepGain: audioContext.createGain(),
+    // ... other nodes
+  }
+  
+  return inst
+}
+
+export function playLandSound(inst) {
+  const { audioContext, landGain } = inst
+  const now = audioContext.currentTime
+  
+  const oscillator = audioContext.createOscillator()
+  const envelope = audioContext.createGain()
+  
+  oscillator.frequency.setValueAtTime(cfg.audio.sfx.landFreqStart, now)
+  // ... configure sound
+  
+  oscillator.connect(envelope)
+  envelope.connect(landGain)
+  
+  oscillator.start(now)
+  oscillator.stop(now + cfg.audio.sfx.landDuration)
+}
+```
+
+---
+
+## 9. Comments
+
+### Language
+- **English only** for all comments
+
+### JSDoc for Exported Functions
+```javascript
+/**
+ * Creates hero or anti-hero with full logic setup
+ * @param {Object} cfg - Hero configuration
+ * @param {Object} cfg.k - Kaplay inst
+ * @param {number} cfg.x - X position
+ * @param {number} cfg.y - Y position
+ * @param {string} [cfg.type='hero'] - Character type
+ * @returns {Object} Hero inst with character and state
+ */
+export function create(cfg) {
+  // Implementation
+}
+```
+
+### Inline Comments
+```javascript
+// Good: Explain why, not what
+// Use short-circuit evaluation to avoid null checks
+sfx && Sound.playLandSound(sfx)
+
+// Calculate center between characters for annihilation effect
+const centerX = (player.pos.x + target.pos.x) / 2
+
+// Bad: State the obvious
+// Set x to 100
+x = 100
+```
+
+---
+
+## 10. Conditional Logic
+
+### Short-Circuit Evaluation
+```javascript
+// Good: Concise and clear
+sfx && Sound.playSound(sfx)
+antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
+type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)
+
+// Bad: Unnecessary if statement
+if (sfx) {
+  Sound.playSound(sfx)
+}
+```
+
+### Ternary Operators
+```javascript
+// Good: Simple conditionals
+const particleColor = type === HEROES.HERO ? colors.hero.body : colors.antiHero.body
+const controllable = type === HEROES.HERO
+
+// Bad: Complex nested ternaries (use if/else instead)
+const value = a ? b ? c : d : e ? f : g
+```
+
+### Early Returns
+```javascript
+// Good: Guard clauses
+function onAnnihilationCollide(inst) {
+  if (inst.isAnnihilating) return
+  
+  inst.isAnnihilating = true
+  // ... rest of logic
+}
+
+// Bad: Deep nesting
+function onAnnihilationCollide(inst) {
+  if (!inst.isAnnihilating) {
+    inst.isAnnihilating = true
+    // ... deep nested logic
+  }
+}
+```
+
+---
+
+## 11. File Structure
+
+```
+src/
+├── index.js             # Entry point, Kaplay initialization
+├── cfg.js               # Pure configuration data
+├── components/          # Reusable game components
+│   ├── hero.js          # Hero/anti-hero with create() pattern
+│   └── button.js        # Button component
+├── scenes/              # Game scenes
+│   ├── ready.js         # sceneReady()
+│   ├── menu.js          # sceneMenu()
+│   ├── level1.js        # sceneLevel1()
+│   └── level2.js        # sceneLevel2()
+└── utils/               # Utility functions and helpers
+    ├── helper.js        # Color helpers, key checks
+    ├── sound.js         # Audio management
+    └── scene.js         # Common scene utilities
+```
+
+---
+
+## 12. Anti-Patterns to Avoid
+
+### Don't
+- ❌ Mix business logic in `cfg.js`
+- ❌ Use global variables
+- ❌ Manipulate Kaplay objects without inst wrapper
+- ❌ Put complex logic in `onUpdate()`/`onDraw()` callbacks
+- ❌ Use default exports (`export default`)
+- ❌ Create multiple `AudioContext` instances
+- ❌ Use RGB arrays for colors (use hex strings)
+- ❌ Write comments in languages other than English
+- ❌ Put exported functions at the bottom of files
+
+### Do
+- ✅ Use factory functions with `create()` pattern
+- ✅ Pass instances to functions
+- ✅ Extract complex logic to private functions
+- ✅ Use centralized configuration
+- ✅ Use hex strings for colors
+- ✅ Write descriptive JSDoc comments
+- ✅ Use short-circuit evaluation
+- ✅ Keep callbacks minimal
+- ✅ Put exported functions at the top
+
+---
+
+## Example: Complete Module
+
+```javascript
+import { cfg } from '../cfg.js'
+import * as Sound from '../utils/sound.js'
+
+// Module constants
+const ANIMATION_SPEED = 0.04
+const FRAME_COUNT = 6
+
+export const TYPES = {
+  TYPE_A: 'typeA',
+  TYPE_B: 'typeB'
+}
+
+/**
+ * Creates a game component
+ * @param {Object} cfg - Configuration
+ * @param {Object} cfg.k - Kaplay inst
+ * @param {number} cfg.x - X position
+ * @returns {Object} Component inst
+ */
+export function create(cfg) {
+  const { k, x, y, type = TYPES.TYPE_A } = cfg
+  
+  const gameObject = k.add([
+    k.sprite('sprite'),
+    k.pos(x, y),
+    k.area(),
+    k.body()
+  ])
+  
+  const inst = {
+    gameObject,
+    k,
+    type,
+    frame: 0,
+    timer: 0
+  }
+  
+  gameObject.onUpdate(() => onUpdate(inst))
+  
+  return inst
+}
+
+export function loadSprites(inst) {
+  inst.k.loadSprite('sprite', 'path/to/sprite.png')
+}
+
+function onUpdate(inst) {
+  inst.timer += inst.k.dt()
+  
+  if (inst.timer > ANIMATION_SPEED) {
+    inst.frame = (inst.frame + 1) % FRAME_COUNT
+    inst.timer = 0
+  }
+}
+```
+
+---
+
+## Notes
+
+- Follow these patterns consistently across the codebase
+- When in doubt, reference existing components (`hero.js`, `button.js`, `sound.js`)
+- Prioritize readability and maintainability
+- Keep it simple: don't over-engineer solutions

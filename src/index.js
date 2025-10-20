@@ -1,5 +1,5 @@
 import kaplay from "kaplay"
-import { CONFIG } from "./config.js"
+import { CFG } from "./cfg.js"
 import { sceneReady } from "./scenes/ready.js"
 import { sceneMenu } from "./scenes/menu.js"
 import { sceneLevel1 } from "./scenes/level1.js"
@@ -8,8 +8,8 @@ import { loadHeroSprites } from "./components/hero.js"
 
 // Game initialization (parameters from config)
 const k = kaplay({
-  width: CONFIG.visual.windowWidth,
-  height: CONFIG.visual.windowHeight,
+  width: CFG.visual.windowWidth,
+  height: CFG.visual.windowHeight,
   font: "jetbrains"
 })
 

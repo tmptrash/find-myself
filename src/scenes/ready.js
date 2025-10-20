@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js'
+import { CFG } from '../cfg.js'
 import { getColor, getRGB } from '../utils/helper.js'
 import { addBackground } from '../utils/scene.js'
 import * as Button from '../components/button.js'
@@ -9,7 +9,7 @@ export function sceneReady(k) {
     const centerY = k.height() / 2
     
     // Draw background (use common module)
-    addBackground(k, CONFIG.colors.ready.background)
+    addBackground(k, CFG.colors.ready.background)
     
     // "Are you ready?" button (use button module)
     Button.create(k, {
@@ -22,7 +22,7 @@ export function sceneReady(k) {
     })
     
     // Can also press keys (use config)
-    CONFIG.controls.startGame.forEach(key => {
+    CFG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
         k.go("menu")
       })
@@ -33,8 +33,8 @@ export function sceneReady(k) {
       k.text("Click the button or press Enter/Space", { size: 20 }),
       k.pos(centerX, k.height() - 80),
       k.anchor("center"),
-      getColor(k, CONFIG.colors.ready.hint),
-      k.outline(2, getRGB(k, CONFIG.colors.outlineTextColor)),
+      getColor(k, CFG.colors.ready.hint),
+      k.outline(2, getRGB(k, CFG.colors.outlineTextColor)),
     ])
   })
 }

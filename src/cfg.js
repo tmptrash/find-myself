@@ -1,4 +1,4 @@
-export const CONFIG = {
+export const CFG = {
   audio: {
     // Ambient music (splash/menu)
     ambient: {

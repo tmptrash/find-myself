@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js'
+import { CFG } from '../cfg.js'
 import { getColor } from './helper.js'
 import * as Sound from './sound.js'
 /**
@@ -13,7 +13,7 @@ export function addBackground(k, color) {
     getColor(k, color),
     k.pos(0, 0),
     k.fixed(),
-    k.z(CONFIG.visual.zIndex.background)
+    k.z(CFG.visual.zIndex.background)
   ])
 }
 /**
@@ -28,7 +28,7 @@ export function initScene(config) {
   const { k, backgroundColor, platformColor } = config
   
   // Set gravity
-  k.setGravity(CONFIG.gameplay.gravity)
+  k.setGravity(CFG.gameplay.gravity)
   
   // Create sound instance and start audio context
   const sound = Sound.create()
@@ -46,7 +46,7 @@ export function initScene(config) {
   addInstructions(k)
   
   // Setup back to menu
-  CONFIG.controls.backToMenu.forEach(key => {
+  CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => k.go("menu"))
   })
   
@@ -63,12 +63,12 @@ function addInstructions(k) {
   
   return k.add([
     k.text(baseText, {
-      size: CONFIG.visual.instructionsFontSize,
+      size: CFG.visual.instructionsFontSize,
       width: k.width() - 40
     }),
-    k.pos(CONFIG.visual.instructionsX, CONFIG.visual.instructionsY),
-    getColor(k, CONFIG.colors.level1.instructions),
-    k.z(CONFIG.visual.zIndex.ui),
+    k.pos(CFG.visual.instructionsX, CFG.visual.instructionsY),
+    getColor(k, CFG.colors.level1.instructions),
+    k.z(CFG.visual.zIndex.ui),
     k.fixed()
   ])
 }
@@ -88,8 +88,8 @@ function setupCamera(k) {
  * @returns {Array} Array of platform objects
  */
 function addPlatforms(k, color) {
-  const platformHeight = CONFIG.visual.platformHeight
-  const wallWidth = CONFIG.visual.wallWidth
+  const platformHeight = CFG.visual.platformHeight
+  const wallWidth = CFG.visual.wallWidth
   
   function createPlatform(x, y, width, height) {
     return k.add([

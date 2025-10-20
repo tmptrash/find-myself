@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js'
+import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 
@@ -59,7 +59,7 @@ export function create(config) {
     k.body(),
     k.anchor("center"),
     k.scale(HERO_SCALE),
-    k.z(CONFIG.visual.zIndex.player),
+    k.z(CFG.visual.zIndex.player),
   ])
   type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)
   
@@ -71,8 +71,8 @@ export function create(config) {
     sfx,
     antiHero,
     onAnnihilation,
-    speed: CONFIG.gameplay.moveSpeed,
-    jumpForce: CONFIG.gameplay.jumpForce,
+    speed: CFG.gameplay.moveSpeed,
+    jumpForce: CFG.gameplay.jumpForce,
     direction: 1, // 1 = right, -1 = left
     canJump: true,
     runFrame: 0,
@@ -136,7 +136,7 @@ export function spawn(inst) {
   character.hidden = true
   
   // Determine particle color based on type
-  const colors = CONFIG.colors
+  const colors = CFG.colors
   const particleColor = type === HEROES.HERO ? colors.hero.body : colors.antiHero.body
   
   // Create particles for assembly effect
@@ -152,7 +152,7 @@ export function spawn(inst) {
       ),
       getColor(k, particleColor),
       k.anchor("center"),
-      k.z(CONFIG.visual.zIndex.player),
+      k.z(CFG.visual.zIndex.player),
       "assemblyParticle"
     ])
     
@@ -218,8 +218,8 @@ export function spawn(inst) {
 function onUpdate(inst) {
   // Determine movement state (only for controllable characters)
   const isMoving = inst.controllable && (
-    isAnyKeyDown(inst.k, CONFIG.controls.moveLeft) || 
-    isAnyKeyDown(inst.k, CONFIG.controls.moveRight)
+    isAnyKeyDown(inst.k, CFG.controls.moveLeft) || 
+    isAnyKeyDown(inst.k, CFG.controls.moveRight)
   )
   // Check if character is grounded (use canJump flag set by collision)
   const isGrounded = inst.canJump
@@ -310,7 +310,7 @@ function onUpdate(inst) {
  */
 function setupControls(inst) {
   // Move left control
-  CONFIG.controls.moveLeft.forEach(key => {
+  CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
       inst.character.move(-inst.speed, 0)
       inst.direction = -1
@@ -318,7 +318,7 @@ function setupControls(inst) {
   })
   
   // Move right control
-  CONFIG.controls.moveRight.forEach(key => {
+  CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
       inst.character.move(inst.speed, 0)
       inst.direction = 1
@@ -326,7 +326,7 @@ function setupControls(inst) {
   })
   
   // Jump
-  CONFIG.controls.jump.forEach(key => {
+  CFG.controls.jump.forEach(key => {
     inst.k.onKeyPress(key, () => {
       if (inst.canJump) {
         inst.character.vel.y = -inst.jumpForce
@@ -416,7 +416,7 @@ function onAnnihilationCollide(inst) {
             k.color(255, 255, 255),
             k.opacity(1),
             k.fixed(),
-            k.z(CONFIG.visual.zIndex.ui + 1)
+            k.z(CFG.visual.zIndex.ui + 1)
           ])
           
           let flashTime = 0
@@ -450,10 +450,10 @@ function onAnnihilationCollide(inst) {
           
           // Particle effect
           const allColors = [
-            CONFIG.colors.hero.body,
-            CONFIG.colors.hero.outline,
-            CONFIG.colors.antiHero.body,
-            CONFIG.colors.antiHero.outline,
+            CFG.colors.hero.body,
+            CFG.colors.hero.outline,
+            CFG.colors.antiHero.body,
+            CFG.colors.antiHero.outline,
           ]
           
           const pixelCount = 24
@@ -469,7 +469,7 @@ function onAnnihilationCollide(inst) {
               getColor(k, color),
               k.anchor("center"),
               k.rotate(k.rand(0, 360)),
-              k.z(CONFIG.visual.zIndex.player)
+              k.z(CFG.visual.zIndex.player)
             ])
             
             pixel.vx = Math.cos(angle) * speed
@@ -514,7 +514,7 @@ function onAnnihilationCollide(inst) {
  */
 function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
   // Choose color scheme based on type
-  const colors = type === HEROES.HERO ? CONFIG.colors.hero : CONFIG.colors.antiHero
+  const colors = type === HEROES.HERO ? CFG.colors.hero : CFG.colors.antiHero
   
   const size = 32
   const canvas = document.createElement('canvas')

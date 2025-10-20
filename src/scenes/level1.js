@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js'
+import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
@@ -8,15 +8,15 @@ export function sceneLevel1(k) {
     // Initialize level with common setup
     const { sound } = initScene({
       k,
-      backgroundColor: CONFIG.colors.level1.background,
-      platformColor: CONFIG.colors.level1.platform
+      backgroundColor: CFG.colors.level1.background,
+      platformColor: CFG.colors.level1.platform
     })
     
     // Create anti-hero instance
     const antiHero = Hero.create({
       k,
-      x: CONFIG.levels.level1.antiHeroSpawn.x,
-      y: CONFIG.levels.level1.antiHeroSpawn.y,
+      x: CFG.levels.level1.antiHeroSpawn.x,
+      y: CFG.levels.level1.antiHeroSpawn.y,
       type: 'antihero',
       sfx: sound
     })
@@ -24,8 +24,8 @@ export function sceneLevel1(k) {
     // Create hero instance with annihilation setup
     const hero = Hero.create({
       k,
-      x: CONFIG.levels.level1.heroSpawn.x,
-      y: CONFIG.levels.level1.heroSpawn.y,
+      x: CFG.levels.level1.heroSpawn.x,
+      y: CFG.levels.level1.heroSpawn.y,
       type: HEROES.HERO,
       sfx: sound,
       antiHero,

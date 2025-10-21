@@ -37,7 +37,7 @@ export const CFG = {
     // Level 1 colors
     level1: {
       background: "FFDAB9",         // Light peach background
-      platform: "3E2723",           // Dark brown platforms
+      platform: "2C3E50",           // Dark brown platforms
       instructions: "FFDAB9",       // Instructions text color
     },
     

@@ -9,7 +9,7 @@ const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0
 
 // Hero parameters
-const HERO_SCALE = 3
+const HERO_SCALE = 2
 const RUN_ANIM_SPEED = 0.04
 const RUN_FRAME_COUNT = 6
 const EYE_ANIM_MIN_DELAY = 1.5
@@ -42,6 +42,7 @@ export function create(config) {
     type = HEROES.HERO,
     controllable = type === HEROES.HERO,
     sfx = null,
+    scale = HERO_SCALE,
     antiHero = null,
     onAnnihilation = null
   } = config
@@ -58,7 +59,7 @@ export function create(config) {
     }),
     k.body(),
     k.anchor("center"),
-    k.scale(HERO_SCALE),
+    k.scale(scale),
     k.z(CFG.visual.zIndex.player),
   ])
   type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)

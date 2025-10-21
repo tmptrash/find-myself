@@ -27,8 +27,8 @@ export function addBackground(k, color) {
 export function initScene(config) {
   const { k, backgroundColor, platformColor } = config
   
-  // Set gravity
-  k.setGravity(CFG.gameplay.gravity)
+  // Set gravity (scaled to screen height for resolution independence)
+  k.setGravity(CFG.gameplay.gravityRatio * k.height())
   
   // Create sound instance and start audio context
   const sound = Sound.create()

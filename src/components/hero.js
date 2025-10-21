@@ -72,8 +72,8 @@ export function create(config) {
     sfx,
     antiHero,
     onAnnihilation,
-    speed: CFG.gameplay.moveSpeed,
-    jumpForce: CFG.gameplay.jumpForce,
+    speed: CFG.gameplay.moveSpeedRatio * k.height(),      // Scale with screen height
+    jumpForce: CFG.gameplay.jumpForceRatio * k.height(),  // Scale with screen height
     direction: 1, // 1 = right, -1 = left
     canJump: true,
     runFrame: 0,

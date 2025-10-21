@@ -19,7 +19,7 @@ export function sceneMenu(k) {
       x: centerX * 0.5,
       y: centerY,
       type: Hero.HEROES.HERO,
-      scale: 4
+      scale: 5
     })
     
     const rightHeroInst = Hero.create({
@@ -27,7 +27,7 @@ export function sceneMenu(k) {
       x: centerX * 1.5,
       y: centerY,
       type: Hero.HEROES.ANTIHERO,
-      scale: 4
+      scale: 5
     })
     
     // Get character references

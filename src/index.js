@@ -7,11 +7,13 @@ import { sceneLevel2 } from "./scenes/level2.js"
 import { loadHeroSprites } from "./components/hero.js"
 import { loadSprites as loadSpikeSprites } from "./components/spike.js"
 
-// Game initialization (parameters from config)
+// Game initialization (fullscreen)
 const k = kaplay({
-  width: CFG.visual.windowWidth,
-  height: CFG.visual.windowHeight,
-  font: "jetbrains"
+  width: window.innerWidth,
+  height: window.innerHeight,
+  font: "jetbrains",
+  letterbox: true,
+  stretch: true
 })
 
 // Load resources

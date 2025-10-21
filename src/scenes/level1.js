@@ -16,8 +16,8 @@ export function sceneLevel1(k) {
     // Create anti-hero instance
     const antiHero = Hero.create({
       k,
-      x: CFG.levels.level1.antiHeroSpawn.x,
-      y: CFG.levels.level1.antiHeroSpawn.y,
+      x: k.width() * CFG.levels.level1.antiHeroSpawn.x / 100,
+      y: k.height() * CFG.levels.level1.antiHeroSpawn.y / 100,
       type: 'antihero',
       sfx: sound
     })
@@ -25,8 +25,8 @@ export function sceneLevel1(k) {
     // Create hero instance with annihilation setup
     const hero = Hero.create({
       k,
-      x: CFG.levels.level1.heroSpawn.x,
-      y: CFG.levels.level1.heroSpawn.y,
+      x: k.width() * CFG.levels.level1.heroSpawn.x / 100,
+      y: k.height() * CFG.levels.level1.heroSpawn.y / 100,
       type: HEROES.HERO,
       sfx: sound,
       antiHero,
@@ -38,13 +38,14 @@ export function sceneLevel1(k) {
     
     // Create spikes in the middle of the level
     const centerX = k.width() / 2
-    const platformY = k.height() - CFG.visual.platformHeight
+    const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
+    const platformY = k.height() - bottomPlatformHeight
     const spikeHeight = 20  // From spikes.js SPIKE_HEIGHT constant
     
     Spikes.create({
       k,
       x: centerX,
-      y: platformY - spikeHeight / 2 + 5,  // Position spikes slightly lower
+      y: platformY - spikeHeight / 2,
       orientation: Spikes.ORIENTATIONS.FLOOR,
       onHit: () => {
         // Restart level when hero hits spikes

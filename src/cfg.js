@@ -28,7 +28,7 @@ export const CFG = {
   },
   gameplay: {
     // Physics
-    moveSpeed: 450,              // Hero movement speed (px/s)
+    moveSpeed: 350,              // Hero movement speed (px/s)
     jumpForce: 600,              // Jump force (px/s)
     gravity: 2200,               // Gravity (px/s²)
   },
@@ -88,17 +88,13 @@ export const CFG = {
     startGame: ['space', 'enter'], // Start game (from menu/start)
   },
   visual: {
-    // Window dimensions
-    windowWidth: 1280,
-    windowHeight: 920,
-    
-    // Platform dimensions
-    platformHeight: 80,            // Large platform height
-    wallWidth: 30,                 // Corridor wall width
-    smallPlatformHeight: 20,       // Small platform height
+    // Platform dimensions (in % of screen dimensions)
+    bottomPlatformHeight: 33.3,    // Bottom platform height (% of screen height)
+    topPlatformHeight: 33.3,       // Top platform height (% of screen height)
+    sideWallWidth: 10,             // Side walls width (% of screen width)
     
     // UI dimensions
-    instructionsFontSize: 14,      // Instructions font size
+    instructionsFontSize: 18,      // Instructions font size
     titleFontSize: 64,             // Title font size
     
     // UI positions
@@ -117,40 +113,25 @@ export const CFG = {
     level1: {
       name: "Level 1",
       
-      // Hero spawn position (on bottom platform)
+      // Hero spawn position (% of screen dimensions)
+      // Heroes spawn on bottom platform (33.3% height starts at 66.7% Y)
       heroSpawn: {
-        x: 250,
-        y: 801
+        x: 12,    // % of screen width (left side, after left wall at 20%)
+        y: 64     // % of screen height (on bottom platform)
       },
       antiHeroSpawn: {
-        x: 1100,
-        y: 801
-      },
-      
-      // Platform configuration
-      platforms: {
-        bottom: { height: 150 },
-        top: { height: 150 },
-        leftWall: { width: 30 },
-        rightWall: { width: 30 },
+        x: 88,    // % of screen width (right side, before right wall at 80%)
+        y: 64     // % of screen height (on bottom platform)
       }
     },
     
     level2: {
       name: "Level 2",
       
-      // Hero spawn position (on bottom platform)
+      // Hero spawn position (% of screen dimensions)
       heroSpawn: {
-        x: 250,
-        y: 801
-      },
-      
-      // Platform configuration
-      platforms: {
-        bottom: { height: 150 },
-        top: { height: 150 },
-        leftWall: { width: 30 },
-        rightWall: { width: 30 },
+        x: 25,    // % of screen width (left side)
+        y: 64     // % of screen height (on bottom platform)
       }
     }
   },

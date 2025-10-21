@@ -88,8 +88,10 @@ function setupCamera(k) {
  * @returns {Array} Array of platform objects
  */
 function addPlatforms(k, color) {
-  const platformHeight = CFG.visual.platformHeight
-  const wallWidth = CFG.visual.wallWidth
+  // Calculate platform dimensions from percentages
+  const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
+  const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
+  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
   
   function createPlatform(x, y, width, height) {
     return k.add([
@@ -103,13 +105,13 @@ function addPlatforms(k, color) {
   }
   
   return [
-    // Bottom platform
-    createPlatform(0, k.height() - platformHeight, k.width(), platformHeight),
-    // Top platform
-    createPlatform(0, 0, k.width(), platformHeight),
-    // Left wall
-    createPlatform(0, platformHeight, wallWidth, k.height() - platformHeight * 2),
-    // Right wall
-    createPlatform(k.width() - wallWidth, platformHeight, wallWidth, k.height() - platformHeight * 2)
+    // Bottom platform (1/3 of screen height)
+    createPlatform(0, k.height() - bottomPlatformHeight, k.width(), bottomPlatformHeight),
+    // Top platform (drops down 1/3 of screen height)
+    createPlatform(0, 0, k.width(), topPlatformHeight),
+    // Left wall (20% from left edge)
+    createPlatform(0, topPlatformHeight, sideWallWidth, k.height() - topPlatformHeight - bottomPlatformHeight),
+    // Right wall (20% from right edge)
+    createPlatform(k.width() - sideWallWidth, topPlatformHeight, sideWallWidth, k.height() - topPlatformHeight - bottomPlatformHeight)
   ]
 }

@@ -129,34 +129,31 @@ function createSpikeSprite(orientation) {
     canvas.height = SPIKE_HEIGHT
   }
 
-  // Use platform color for spikes (same color for outline and fill)
+  // Use platform color for spikes
   const spikeColor = getHex(CFG.colors.level1.platform)
-  const outlineColor = getHex(CFG.colors.level1.platform)
 
-  // Draw spikes as triangles with lineWidth for outline
+  // Draw all spikes as one continuous path (no gaps between spikes)
   const spikeWidth = canvas.width / SPIKE_COUNT
-  const outlineWidth = 3  // Outline thickness in pixels
   
+  // Create single path for all spikes
+  ctx.beginPath()
+  ctx.moveTo(0, canvas.height)  // Start at bottom left
+  
+  // Draw zigzag pattern for all spikes
   for (let i = 0; i < SPIKE_COUNT; i++) {
     const x = i * spikeWidth
-    
-    // Draw triangle path
-    ctx.beginPath()
-    ctx.moveTo(x, canvas.height)
-    ctx.lineTo(x + spikeWidth / 2, 0)
-    ctx.lineTo(x + spikeWidth, canvas.height)
-    ctx.closePath()
-    
-    // Fill with orange color
-    ctx.fillStyle = spikeColor
-    ctx.fill()
-    
-    // Draw outline with lineWidth
-    ctx.strokeStyle = outlineColor
-    ctx.lineWidth = outlineWidth
-    ctx.lineJoin = 'miter'  // Sharp corners for pixel-art style
-    ctx.stroke()
+    ctx.lineTo(x + spikeWidth / 2, 0)  // Up to peak
+    ctx.lineTo(x + spikeWidth, canvas.height)  // Down to base
   }
+  
+  // Explicitly draw along the bottom to close the shape
+  ctx.lineTo(canvas.width, canvas.height)  // Move along bottom edge to right
+  ctx.lineTo(0, canvas.height)  // Move along bottom edge to start
+  ctx.closePath()  // Close path back to start
+  
+  // Fill with spike color (no outline)
+  ctx.fillStyle = spikeColor
+  ctx.fill()
 
   return canvas.toDataURL()
 }

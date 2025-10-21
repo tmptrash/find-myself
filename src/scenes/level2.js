@@ -15,8 +15,8 @@ export function sceneLevel2(k) {
     // Create hero instance
     const hero = Hero.create({
       k,
-      x: CFG.levels.level2.heroSpawn.x,
-      y: CFG.levels.level2.heroSpawn.y,
+      x: k.width() * CFG.levels.level2.heroSpawn.x / 100,
+      y: k.height() * CFG.levels.level2.heroSpawn.y / 100,
       type: HEROES.HERO,
       sfx: sound
     })

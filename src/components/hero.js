@@ -9,7 +9,8 @@ const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0
 
 // Hero parameters
-const HERO_SCALE = 2
+const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
+const HERO_HEIGHT_RATIO = 12  // Hero height = screen height / this ratio
 const RUN_ANIM_SPEED = 0.04
 const RUN_FRAME_COUNT = 6
 const EYE_ANIM_MIN_DELAY = 1.5
@@ -42,11 +43,10 @@ export function create(config) {
     type = HEROES.HERO,
     controllable = type === HEROES.HERO,
     sfx = null,
-    scale = HERO_SCALE,
+    scale = getHeroScale(config.k),
     antiHero = null,
     onAnnihilation = null
   } = config
-  
   const character = k.add([
     k.sprite(`${type.toLowerCase()}_0_0`),
     k.pos(x, y),
@@ -646,4 +646,13 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   ctx.fillRect(rightLegX, rightLegY, 3, 6)
   
   return canvas.toDataURL()
+}
+/**
+ * Calculate hero scale based on screen height
+ * Hero should occupy 1/HERO_HEIGHT_RATIO of screen height
+ * @param {Object} k - Kaplay instance
+ * @returns {number} Scale factor for hero
+ */
+function getHeroScale(k) {
+  return k.height() / HERO_HEIGHT_RATIO / HERO_SPRITE_SIZE
 }

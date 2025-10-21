@@ -654,5 +654,5 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
  * @returns {number} Scale factor for hero
  */
 function getHeroScale(k) {
-  return k.height() / HERO_HEIGHT_RATIO / HERO_SPRITE_SIZE
+  return Math.round(k.height() / HERO_HEIGHT_RATIO / HERO_SPRITE_SIZE)
 }

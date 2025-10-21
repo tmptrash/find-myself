@@ -40,7 +40,7 @@ export function sceneLevel1(k) {
     const centerX = k.width() / 2
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
-    const spikeHeight = 20  // From spikes.js SPIKE_HEIGHT constant
+    const spikeHeight = Spikes.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
     
     Spikes.create({
       k,

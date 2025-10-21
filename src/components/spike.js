@@ -2,9 +2,10 @@ import { CFG } from '../cfg.js'
 import { getHex, getColor } from '../utils/helper.js'
 
 // Spike parameters
-const SPIKE_WIDTH = 100       // Width that hero can jump over
-const SPIKE_HEIGHT = 20       // Height of spikes
-const SPIKE_COUNT = 4         // Number of triangle spikes
+const SPIKE_COUNT = 3         // Number of triangle spikes
+const SPIKE_HEIGHT_BLOCKS = 4 // Height in blocks (pattern: 1, 3, 5, 7)
+const SINGLE_SPIKE_WIDTH_BLOCKS = 7  // Width of one spike in blocks (for pattern: 1, 3, 5, 7)
+const SPIKE_GAP_BLOCKS = 1    // Gap between spikes in blocks
 const SPIKE_SCALE = 1
 
 export const ORIENTATIONS = {
@@ -12,6 +13,26 @@ export const ORIENTATIONS = {
   CEILING: 'ceiling',
   LEFT: 'left',
   RIGHT: 'right'
+}
+
+/**
+ * Calculate spike block size based on screen height
+ * Block size scales with screen resolution
+ * @param {Object} k - Kaplay instance
+ * @returns {number} Size of one block in pixels
+ */
+function getSpikeBlockSize(k) {
+  // Base calculation: screen height / ratio to get proportional block size
+  return Math.max(2, Math.round(k.height() / 200))
+}
+
+/**
+ * Get spike height in pixels for current screen resolution
+ * @param {Object} k - Kaplay instance
+ * @returns {number} Spike height in pixels
+ */
+export function getSpikeHeight(k) {
+  return SPIKE_HEIGHT_BLOCKS * getSpikeBlockSize(k)
 }
 
 /**
@@ -33,9 +54,14 @@ export function create(config) {
     onHit = null
   } = config
 
+  // Calculate dynamic sizes based on screen resolution
+  const blockSize = getSpikeBlockSize(k)
+  const spikeHeight = SPIKE_HEIGHT_BLOCKS * blockSize
+  const spikeWidth = (SINGLE_SPIKE_WIDTH_BLOCKS * SPIKE_COUNT + SPIKE_GAP_BLOCKS * (SPIKE_COUNT - 1)) * blockSize
+
   // Determine rotation and collision box based on orientation
   const rotation = getRotation(orientation)
-  const collisionSize = getCollisionSize(orientation)
+  const collisionSize = getCollisionSize(orientation, spikeWidth, spikeHeight)
 
   const spike = k.add([
     k.sprite(`spike_${orientation}`),
@@ -73,8 +99,9 @@ export function create(config) {
  * @param {Object} k - Kaplay instance
  */
 export function loadSprites(k) {
+  const blockSize = getSpikeBlockSize(k)
   Object.values(ORIENTATIONS).forEach(orientation => {
-    const spriteData = createSpikeSprite(orientation)
+    const spriteData = createSpikeSprite(orientation, blockSize)
     k.loadSprite(`spike_${orientation}`, spriteData)
   })
 }
@@ -102,58 +129,82 @@ function getRotation(orientation) {
 /**
  * Get collision box size based on orientation
  * @param {string} orientation - Spike orientation
+ * @param {number} width - Spike width in pixels
+ * @param {number} height - Spike height in pixels
  * @returns {Object} Width and height for collision box
  */
-function getCollisionSize(orientation) {
+function getCollisionSize(orientation, width, height) {
   if (orientation === ORIENTATIONS.LEFT || orientation === ORIENTATIONS.RIGHT) {
-    return { width: SPIKE_HEIGHT, height: SPIKE_WIDTH }
+    return { width: height, height: width }
   }
-  return { width: SPIKE_WIDTH, height: SPIKE_HEIGHT }
+  return { width, height }
 }
 
 /**
  * Create spike sprite procedurally
  * @param {string} orientation - Spike orientation
+ * @param {number} blockSize - Size of one block in pixels
  * @returns {string} Base64 encoded sprite data
  */
-function createSpikeSprite(orientation) {
+function createSpikeSprite(orientation, blockSize) {
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   
+  // Calculate canvas dimensions based on block size
+  const spikeHeight = SPIKE_HEIGHT_BLOCKS * blockSize
+  const singleSpikeWidth = SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
+  const spikeGap = SPIKE_GAP_BLOCKS * blockSize
+  const spikeWidth = singleSpikeWidth * SPIKE_COUNT + spikeGap * (SPIKE_COUNT - 1)
+  
   // Canvas size based on orientation
   if (orientation === ORIENTATIONS.LEFT || orientation === ORIENTATIONS.RIGHT) {
-    canvas.width = SPIKE_HEIGHT
-    canvas.height = SPIKE_WIDTH
+    canvas.width = spikeHeight
+    canvas.height = spikeWidth
   } else {
-    canvas.width = SPIKE_WIDTH
-    canvas.height = SPIKE_HEIGHT
+    canvas.width = spikeWidth
+    canvas.height = spikeHeight
   }
 
   // Use platform color for spikes
   const spikeColor = getHex(CFG.colors.level1.platform)
-
-  // Draw all spikes as one continuous path (no gaps between spikes)
-  const spikeWidth = canvas.width / SPIKE_COUNT
-  
-  // Create single path for all spikes
-  ctx.beginPath()
-  ctx.moveTo(0, canvas.height)  // Start at bottom left
-  
-  // Draw zigzag pattern for all spikes
-  for (let i = 0; i < SPIKE_COUNT; i++) {
-    const x = i * spikeWidth
-    ctx.lineTo(x + spikeWidth / 2, 0)  // Up to peak
-    ctx.lineTo(x + spikeWidth, canvas.height)  // Down to base
-  }
-  
-  // Explicitly draw along the bottom to close the shape
-  ctx.lineTo(canvas.width, canvas.height)  // Move along bottom edge to right
-  ctx.lineTo(0, canvas.height)  // Move along bottom edge to start
-  ctx.closePath()  // Close path back to start
-  
-  // Fill with spike color (no outline)
   ctx.fillStyle = spikeColor
-  ctx.fill()
+
+  // Draw pixelated spikes using fillRect for 8-bit style (45° stepped pyramids)
+  
+  // Draw each spike as stepped pyramid (45° sides, sharp point on top)
+  for (let i = 0; i < SPIKE_COUNT; i++) {
+    const baseX = i * (singleSpikeWidth + spikeGap)
+    const centerX = baseX + singleSpikeWidth / 2
+    
+    // Calculate number of steps (each step is blockSize high)
+    const numSteps = Math.floor(canvas.height / blockSize)
+    
+    // Draw pyramid from bottom to top, step by step
+    for (let step = 0; step < numSteps; step++) {
+      const y = step * blockSize
+      
+      // For 45° angle: each step is 1 block narrower on each side
+      const blocksFromEachEdge = step
+      const rowWidth = singleSpikeWidth - (blocksFromEachEdge * 2 * blockSize)
+      
+      // Stop if width becomes zero or negative
+      if (rowWidth <= 0) break
+      
+      // Draw the row of pixels centered
+      const startX = baseX + blocksFromEachEdge * blockSize
+      const numBlocks = Math.floor(rowWidth / blockSize)
+      
+      // Draw blocks for this row
+      for (let b = 0; b < numBlocks; b++) {
+        ctx.fillRect(
+          Math.floor(startX + b * blockSize), 
+          canvas.height - y - blockSize, 
+          blockSize, 
+          blockSize
+        )
+      }
+    }
+  }
 
   return canvas.toDataURL()
 }

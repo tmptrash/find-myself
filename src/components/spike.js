@@ -65,6 +65,7 @@ export function create(config) {
     k.rotate(rotation),
     k.scale(SPIKE_SCALE),
     k.z(CFG.visual.zIndex.platforms),
+    k.opacity(0),
     "spike"
   ])
 
@@ -72,10 +73,16 @@ export function create(config) {
     spike,
     k,
     orientation,
-    onHit
+    onHit,
+    isVisible: false,
+    animationTimer: 0,
+    fadeInDuration: 0.5,   // Fade-in duration (0.5 seconds)
+    visibleDuration: 0.5,  // Stay visible (0.5 seconds)
+    fadeOutDuration: 0.5,  // Fade-out duration (0.5 seconds)
+    animationComplete: false
   }
 
-  // Setup collision detection with hero
+  // Setup collision detection with hero (works even when invisible)
   spike.onCollide("player", () => onHit?.(inst))
 
   return inst
@@ -92,6 +99,59 @@ export function loadSprites(k) {
     const spriteData = createSpikeSprite(orientation, blockSize)
     k.loadSprite(`spike_${orientation}`, spriteData)
   })
+}
+
+/**
+ * Starts the spike animation cycle with delay
+ * @param {Object} inst - Spike instance
+ * @param {number} delaySeconds - Delay before first appearance
+ */
+export function startAnimation(inst, delaySeconds = 2) {
+  const { spike, k } = inst
+  
+  // Wait for initial delay, then start animation cycle
+  k.wait(delaySeconds, () => {
+    spike.onUpdate(() => updateAnimation(inst))
+  })
+}
+
+/**
+ * Update spike animation (fade in, stay visible, fade out once)
+ * @param {Object} inst - Spike instance
+ */
+function updateAnimation(inst) {
+  const { spike, k, fadeInDuration, visibleDuration, fadeOutDuration } = inst
+  
+  // Stop updating if animation is complete
+  if (inst.animationComplete) return
+  
+  inst.animationTimer += k.dt()
+  const elapsed = inst.animationTimer
+  
+  // Phase 1: Fade in
+  if (elapsed < fadeInDuration) {
+    const progress = elapsed / fadeInDuration
+    spike.opacity = progress
+    inst.isVisible = true
+  }
+  // Phase 2: Stay visible
+  else if (elapsed < fadeInDuration + visibleDuration) {
+    spike.opacity = 1
+    inst.isVisible = true
+  }
+  // Phase 3: Fade out
+  else if (elapsed < fadeInDuration + visibleDuration + fadeOutDuration) {
+    const fadeOutElapsed = elapsed - fadeInDuration - visibleDuration
+    const progress = fadeOutElapsed / fadeOutDuration
+    spike.opacity = 1 - progress
+    inst.isVisible = progress < 0.5
+  }
+  // Phase 4: Stay invisible forever
+  else {
+    spike.opacity = 0
+    inst.isVisible = false
+    inst.animationComplete = true
+  }
 }
 /**
  * Calculate spike block size based on screen height

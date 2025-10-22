@@ -42,7 +42,7 @@ export function sceneLevel1(k) {
     const platformY = k.height() - bottomPlatformHeight
     const spikeHeight = Spikes.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
     
-    Spikes.create({
+    const spikes = Spikes.create({
       k,
       x: centerX,
       y: platformY - spikeHeight / 2,
@@ -52,6 +52,9 @@ export function sceneLevel1(k) {
         k.go("level1")
       }
     })
+    
+    // Start spike animation after 2 seconds
+    Spikes.startAnimation(spikes)
     
     // Spawn hero with assembly effect
     Hero.spawn(hero)

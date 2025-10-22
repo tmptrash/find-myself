@@ -86,7 +86,8 @@ export function create(config) {
     targetEyeY: 0,
     eyeTimer: 0,
     currentEyeSprite: null,
-    isAnnihilating: false
+    isAnnihilating: false,
+    isDying: false
   }
   
   // Check ground touch through collisions
@@ -124,6 +125,80 @@ export function loadHeroSprites(k) {
     }
   })
 }
+/**
+ * Death effect with particle explosion
+ * @param {Object} inst - Hero instance
+ * @param {Function} onComplete - Callback when death animation completes
+ */
+export function death(inst, onComplete) {
+  // Prevent multiple death triggers
+  if (inst.isDying) return
+  
+  inst.isDying = true
+  
+  const { k, character, type, sfx } = inst
+  const centerX = character.pos.x
+  const centerY = character.pos.y
+  
+  // Stop control
+  character.paused = true
+  inst.controllable = false
+  
+  // Play sound
+  sfx && Sound.playLandSound(sfx)
+  
+  // Determine particle color based on type
+  const colors = CFG.colors
+  const particleColors = type === HEROES.HERO 
+    ? [colors.hero.body, colors.hero.outline]
+    : [colors.antiHero.body, colors.antiHero.outline]
+  
+  // Create particle explosion
+  const particleCount = 16
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
+    const speed = k.rand(150, 350)
+    const size = k.rand(4, 8)
+    const color = k.choose(particleColors)
+    
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(centerX, centerY),
+      getColor(k, color),
+      k.anchor("center"),
+      k.rotate(k.rand(0, 360)),
+      k.z(CFG.visual.zIndex.player)
+    ])
+    
+    particle.vx = Math.cos(angle) * speed
+    particle.vy = Math.sin(angle) * speed
+    particle.lifetime = 0
+    particle.rotSpeed = k.rand(-540, 540)
+    
+    particle.onUpdate(() => {
+      particle.lifetime += k.dt()
+      particle.pos.x += particle.vx * k.dt()
+      particle.pos.y += particle.vy * k.dt()
+      particle.angle += particle.rotSpeed * k.dt()
+      
+      // Fade out
+      particle.opacity = Math.max(0, 1 - particle.lifetime * 2)
+      
+      if (particle.lifetime > 0.5) {
+        k.destroy(particle)
+      }
+    })
+  }
+  
+  // Hide character immediately
+  if (character.exists()) {
+    k.destroy(character)
+  }
+  
+  // Call callback after particles finish
+  k.wait(0.6, () => onComplete?.())
+}
+
 /**
  * Spawn hero with assembly effect from particles
  * @param {Object} inst - Hero instance

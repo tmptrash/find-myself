@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, getColor } from '../utils/helper.js'
+import { getHex } from '../utils/helper.js'
 
 // Spike parameters
 const SPIKE_COUNT = 3         // Number of triangle spikes
@@ -14,18 +14,6 @@ export const ORIENTATIONS = {
   LEFT: 'left',
   RIGHT: 'right'
 }
-
-/**
- * Calculate spike block size based on screen height
- * Block size scales with screen resolution
- * @param {Object} k - Kaplay instance
- * @returns {number} Size of one block in pixels
- */
-function getSpikeBlockSize(k) {
-  // Base calculation: screen height / ratio to get proportional block size
-  return Math.max(2, Math.round(k.height() / 200))
-}
-
 /**
  * Get spike height in pixels for current screen resolution
  * @param {Object} k - Kaplay instance
@@ -105,7 +93,16 @@ export function loadSprites(k) {
     k.loadSprite(`spike_${orientation}`, spriteData)
   })
 }
-
+/**
+ * Calculate spike block size based on screen height
+ * Block size scales with screen resolution
+ * @param {Object} k - Kaplay instance
+ * @returns {number} Size of one block in pixels
+ */
+function getSpikeBlockSize(k) {
+  // Base calculation: screen height / ratio to get proportional block size
+  return Math.max(2, Math.round(k.height() / 200))
+}
 /**
  * Get rotation angle based on orientation
  * @param {string} orientation - Spike orientation

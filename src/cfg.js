@@ -36,10 +36,10 @@ export const CFG = {
     outlineTextColor: "000000",
     // Level 1 colors
     level1: {
-      background: "FFDAB9",         // Light peach background
-      platform: "2C3E50",           // Dark brown platforms
+      background: "3E3E3E",         // Dark gray (foggy gloom)
+      platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (danger!)
-      instructions: "FFDAB9",       // Instructions text color
+      instructions: "CCCCCC",       // Light gray instructions
     },
     
     // Splash/menu colors

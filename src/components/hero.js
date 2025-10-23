@@ -311,8 +311,8 @@ function onUpdate(inst) {
     }
   } else if (isMoving) {
     // Running - switch frames smoothly (time-based animation)
-    // If just landed, immediately start running animation
-    if (inst.wasJumping) {
+    // If just landed or just started running, immediately start animation
+    if (inst.wasJumping || !inst.isRunning) {
       inst.wasJumping = false
       inst.runFrame = 0
       inst.runTimer = 0

@@ -118,6 +118,12 @@ export function createLightningState() {
 export function updateLightning(inst) {
   const { k, hero, antiHero } = inst
   
+  // Stop lightning effects if annihilation or death has started
+  if (hero.isAnnihilating || antiHero.isAnnihilating || hero.isDying || antiHero.isDying) {
+    inst.showLightning = false
+    return
+  }
+  
   // Calculate distance between heroes
   const distance = Math.sqrt(
     Math.pow(hero.character.pos.x - antiHero.character.pos.x, 2) +

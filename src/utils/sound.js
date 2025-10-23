@@ -435,6 +435,44 @@ export function playLandSound(instance) {
 }
 
 /**
+ * Play lightning/electric discharge sound effect
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playLightningSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.08
+  
+  // Create white noise for electric crackle
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  
+  // High-pass filter for electric snap
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'highpass'
+  filter.frequency.setValueAtTime(2000, now)
+  filter.Q.value = 1
+  
+  const gain = instance.audioContext.createGain()
+  gain.gain.setValueAtTime(0.015, now)  // Extremely quiet background sound
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  noiseSource.connect(filter)
+  filter.connect(gain)
+  gain.connect(instance.audioContext.destination)
+  
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+/**
  * Play katana slash sound effect (sword swing)
  * @param {Object} instance - Sound instance from create()
  */

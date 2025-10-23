@@ -4,6 +4,7 @@ import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
 import * as Spikes from '../components/spike.js'
 import * as Sound from '../utils/sound.js'
+import { createLightningState, updateLightning, drawLightning } from '../utils/connection.js'
 
 export function sceneLevel1(k) {
   k.scene("level1", () => {
@@ -62,11 +63,17 @@ export function sceneLevel1(k) {
     const inst = {
       k,
       sound,
-      soundTimer: k.rand(3, 6)
+      soundTimer: k.rand(3, 6),
+      hero,
+      antiHero,
+      ...createLightningState()
     }
     
-    // Setup eerie sound effect
-    k.onUpdate(() => updateEerieSound(inst))
+    // Setup eerie sound effect and lightning
+    k.onUpdate(() => updateLevel(inst))
+    
+    // Draw lightning effect
+    k.onDraw(() => drawLightning(inst))
   })
 }
 
@@ -82,6 +89,15 @@ function onSpikeHit(k, hero, spikes) {
   
   // Death effect when hero hits spikes
   Hero.death(hero, () => k.go("level1"))
+}
+
+/**
+ * Update level logic (sound, lightning)
+ * @param {Object} inst - Scene instance
+ */
+function updateLevel(inst) {
+  updateEerieSound(inst)
+  updateLightning(inst)
 }
 
 /**

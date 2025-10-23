@@ -2,6 +2,7 @@ import * as Sound from "../utils/sound.js"
 import { CFG } from "../cfg.js"
 import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
+import { drawConnectionWave } from "../utils/connection.js"
 
 export function sceneMenu(k) {
   k.scene("menu", () => {
@@ -19,7 +20,8 @@ export function sceneMenu(k) {
       x: centerX * 0.5,
       y: centerY,
       type: Hero.HEROES.HERO,
-      scale: 5
+      scale: 5,
+      controllable: false
     })
     
     const rightHeroInst = Hero.create({
@@ -27,7 +29,8 @@ export function sceneMenu(k) {
       x: centerX * 1.5,
       y: centerY,
       type: Hero.HEROES.ANTIHERO,
-      scale: 5
+      scale: 5,
+      controllable: false
     })
     
     // Get character references
@@ -212,7 +215,7 @@ function drawScene(inst) {
   
   inst.connectionPulse += k.dt() * 2
   drawHeroGlow(k, rightHero, inst.connectionPulse)
-  drawConnectionWave(k, leftHero, rightHero)
+  drawConnectionWave(k, leftHero.pos, rightHero.pos)
   drawGlitches(k, inst.glitches)
 }
 
@@ -267,67 +270,6 @@ function drawHeroGlow(k, rightHero, connectionPulse) {
     color: k.rgb(255, 140, 0),
     opacity: glowOpacity
   })
-}
-
-function drawConnectionWave(k, leftHero, rightHero) {
-  const connectionSegments = []
-  const segmentWidth = 8
-  const startX = leftHero.pos.x
-  const startY = leftHero.pos.y
-  const endX = rightHero.pos.x
-  const endY = rightHero.pos.y
-  const lineWidth = endX - startX
-  const numConnectionSegments = Math.ceil(lineWidth / segmentWidth)
-  
-  for (let i = 0; i <= numConnectionSegments; i++) {
-    const t = i / numConnectionSegments
-    const x = startX + (endX - startX) * t
-    const baseY = startY + (endY - startY) * t
-    
-    const mainWave = Math.sin(k.time() * 4 + i * 0.5) * 12
-    const harmonic1 = Math.sin(k.time() * 8 + i * 1.0) * 6
-    const harmonic2 = Math.sin(k.time() * 12 + i * 1.5) * 3
-    const amplitude = 0.8 + Math.sin(k.time() * 2) * 0.3
-    const noise = (k.rand(0, 1) - 0.5) * 2
-    const waveY = (mainWave + harmonic1 + harmonic2 + noise) * amplitude
-    
-    connectionSegments.push({ x, y: baseY + waveY })
-  }
-  
-  // Draw multiple waves
-  for (let i = 0; i < connectionSegments.length - 1; i++) {
-    const current = connectionSegments[i]
-    const next = connectionSegments[i + 1]
-    const lineColor = k.rand(0, 1) > 0.95 
-      ? k.choose([k.rgb(255, 165, 0), k.rgb(255, 200, 100), k.rgb(255, 100, 50)]) 
-      : k.rgb(255, 140, 0)
-    
-    k.drawLine({
-      p1: k.vec2(current.x, current.y),
-      p2: k.vec2(next.x, next.y),
-      width: 4,
-      color: lineColor,
-      opacity: 0.7
-    })
-    
-    const offset1 = Math.sin(k.time() * 5 + i * 0.3) * 5
-    k.drawLine({
-      p1: k.vec2(current.x, current.y + offset1),
-      p2: k.vec2(next.x, next.y + offset1),
-      width: 2,
-      color: lineColor,
-      opacity: 0.4
-    })
-    
-    const offset2 = Math.sin(k.time() * 7 + i * 0.6) * 8
-    k.drawLine({
-      p1: k.vec2(current.x, current.y + offset2),
-      p2: k.vec2(next.x, next.y + offset2),
-      width: 1,
-      color: lineColor,
-      opacity: 0.3
-    })
-  }
 }
 
 function drawGlitches(k, glitches) {

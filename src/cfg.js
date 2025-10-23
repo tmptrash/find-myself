@@ -54,7 +54,9 @@ export const CFG = {
     
     // Ready screen colors
     ready: {
-      background: "191919",         // Dark background      
+      background: "191919",         // Dark background
+      title: "FF8C00",              // Orange title (hero color)
+      text: "CCCCCC",               // Light gray text
       hint: "969696",               // Hint color
     },
     

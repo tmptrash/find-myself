@@ -311,12 +311,15 @@ function onUpdate(inst) {
     }
   } else if (isMoving) {
     // Running - switch frames smoothly (time-based animation)
-    // If just landed or just started running, immediately start animation
-    if (inst.wasJumping || !inst.isRunning) {
-      inst.wasJumping = false
+    // Only reset animation if starting from idle (not from jump)
+    if (!inst.isRunning && !inst.wasJumping) {
       inst.runFrame = 0
       inst.runTimer = 0
       inst.character.use(inst.k.sprite(`${inst.type}-run-0`))
+    } else if (inst.wasJumping) {
+      // Just landed - continue with current frame, just update sprite
+      inst.wasJumping = false
+      inst.character.use(inst.k.sprite(`${inst.type}-run-${inst.runFrame}`))
     }
     
     inst.isRunning = true
@@ -333,7 +336,6 @@ function onUpdate(inst) {
     }
   } else {
     // Idle - with eye animation
-
     // If just stopped running or just landed, instantly switch to idle
     if (inst.isRunning || inst.wasJumping) {
       inst.isRunning = false

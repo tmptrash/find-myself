@@ -435,6 +435,32 @@ export function playLandSound(instance) {
 }
 
 /**
+ * Play katana slash sound effect (sword swing)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playKatanaSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.1
+  
+  // Short air burst (minimalistic slash)
+  const burst = instance.audioContext.createOscillator()
+  const burstGain = instance.audioContext.createGain()
+  
+  burst.type = 'sine'
+  burst.frequency.setValueAtTime(2000, now)
+  burst.frequency.exponentialRampToValueAtTime(600, now + duration)
+  
+  burstGain.gain.setValueAtTime(0.20, now)
+  burstGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  burst.connect(burstGain)
+  burstGain.connect(instance.audioContext.destination)
+  
+  burst.start(now)
+  burst.stop(now + duration)
+}
+
+/**
  * Play jump sound effect (upward bounce)
  * @param {Object} instance - Sound instance from create()
  */

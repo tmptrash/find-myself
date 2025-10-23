@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getHex } from '../utils/helper.js'
+import * as Sound from '../utils/sound.js'
 
 // Spike parameters
 const SPIKE_COUNT = 3         // Number of triangle spikes
@@ -31,6 +32,7 @@ export function getSpikeHeight(k) {
  * @param {number} config.y - Y position
  * @param {string} [config.orientation='floor'] - Spike orientation
  * @param {Function} [config.onHit] - Callback when hero hits spikes
+ * @param {Object} [config.sfx] - Sound instance for audio effects
  * @returns {Object} Spikes instance with spike object and state
  */
 export function create(config) {
@@ -39,7 +41,8 @@ export function create(config) {
     x,
     y,
     orientation = ORIENTATIONS.FLOOR,
-    onHit = null
+    onHit = null,
+    sfx = null
   } = config
 
   // Calculate dynamic sizes based on screen resolution
@@ -74,11 +77,12 @@ export function create(config) {
     k,
     orientation,
     onHit,
+    sfx,
     isVisible: false,
     animationTimer: 0,
-    fadeInDuration: 0.5,   // Fade-in duration (0.5 seconds)
-    visibleDuration: 0.5,  // Stay visible (0.5 seconds)
-    fadeOutDuration: 0.5,  // Fade-out duration (0.5 seconds)
+    fadeInDuration: 0.3,   // Fade-in duration (0.5 seconds)
+    visibleDuration: 0.3,  // Stay visible (0.5 seconds)
+    fadeOutDuration: 0.3,  // Fade-out duration (0.5 seconds)
     animationComplete: false,
     wasShownOnDeath: false  // Flag to prevent auto-animation if shown on death
   }
@@ -108,12 +112,15 @@ export function loadSprites(k) {
  * @param {number} delaySeconds - Delay before first appearance
  */
 export function startAnimation(inst, delaySeconds = 1) {
-  const { spike, k } = inst
+  const { spike, k, sfx } = inst
   
   // Wait for initial delay, then start animation cycle
   k.wait(delaySeconds, () => {
     // Don't start animation if spikes were already shown on death
     if (inst.wasShownOnDeath) return
+    
+    // Play katana sound when spikes start appearing
+    sfx && Sound.playKatanaSound(sfx)
     
     spike.onUpdate(() => updateAnimation(inst))
   })

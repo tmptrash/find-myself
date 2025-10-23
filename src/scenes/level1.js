@@ -48,7 +48,8 @@ export function sceneLevel1(k) {
       x: centerX,
       y: platformY - spikeHeight / 2,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => onSpikeHit(k, hero, spikes)
+      onHit: () => onSpikeHit(k, hero, spikes),
+      sfx: sound
     })
     
     // Start spike animation after 2 seconds

@@ -407,6 +407,9 @@ function setupControls(inst) {
       if (inst.canJump) {
         inst.character.vel.y = -inst.jumpForce
         inst.canJump = false
+        
+        // Play jump sound
+        inst.sfx && Sound.playJumpSound(inst.sfx)
       }
     })
   })

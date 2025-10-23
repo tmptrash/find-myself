@@ -94,6 +94,6 @@ function updateEerieSound(inst) {
   
   if (inst.soundTimer <= 0) {
     sound && Sound.playGlitchSound(sound)
-    inst.soundTimer = k.rand(4, 8)  // Next sound in 4-8 seconds
+    inst.soundTimer = k.rand(2, 6)  // Next sound in 2-6 seconds
   }
 }

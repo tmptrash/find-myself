@@ -435,6 +435,32 @@ export function playLandSound(instance) {
 }
 
 /**
+ * Play jump sound effect (upward bounce)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playJumpSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.12
+  
+  // Upward pitch sweep
+  const jump = instance.audioContext.createOscillator()
+  const jumpGain = instance.audioContext.createGain()
+  
+  jump.type = 'sine'
+  jump.frequency.setValueAtTime(200, now)
+  jump.frequency.exponentialRampToValueAtTime(400, now + duration)
+  
+  jumpGain.gain.setValueAtTime(0.18, now)
+  jumpGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  jump.connect(jumpGain)
+  jumpGain.connect(instance.audioContext.destination)
+  
+  jump.start(now)
+  jump.stop(now + duration)
+}
+
+/**
  * Play running step sound
  * @param {Object} instance - Sound instance
  */
@@ -558,15 +584,15 @@ function createCrack(instance, time, freq, volume) {
 
 /**
  * Play eerie/creepy sound effect (disturbing low frequency drone)
- * @param {Object} instance - Sound instance from create()
+ * @param {Object} inst - Sound instance from create()
  */
-export function playGlitchSound(instance) {
-  const now = instance.audioContext.currentTime
+export function playGlitchSound(inst) {
+  const now = inst.audioContext.currentTime
   const duration = 1.5
   
   // Deep unsettling bass (40-60 Hz range - creates unease)
-  const bass = instance.audioContext.createOscillator()
-  const bassGain = instance.audioContext.createGain()
+  const bass = inst.audioContext.createOscillator()
+  const bassGain = inst.audioContext.createGain()
   
   bass.type = 'sine'
   const baseFreq = 40 + Math.random() * 20
@@ -581,11 +607,11 @@ export function playGlitchSound(instance) {
   bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   bass.connect(bassGain)
-  bassGain.connect(instance.audioContext.destination)
+  bassGain.connect(inst.audioContext.destination)
   
   // Dissonant high overtone (tritone interval - "devil's interval")
-  const dissonant = instance.audioContext.createOscillator()
-  const dissonantGain = instance.audioContext.createGain()
+  const dissonant = inst.audioContext.createOscillator()
+  const dissonantGain = inst.audioContext.createGain()
   
   dissonant.type = 'triangle'
   const tritone = baseFreq * Math.sqrt(2) * 8  // Tritone relationship
@@ -597,7 +623,7 @@ export function playGlitchSound(instance) {
   dissonantGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   dissonant.connect(dissonantGain)
-  dissonantGain.connect(instance.audioContext.destination)
+  dissonantGain.connect(inst.audioContext.destination)
   
   // Start all oscillators
   bass.start(now)

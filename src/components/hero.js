@@ -3,7 +3,7 @@ import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 
 // Collision box parameters
-const COLLISION_WIDTH = 14
+const COLLISION_WIDTH = 10
 const COLLISION_HEIGHT = 25
 const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0

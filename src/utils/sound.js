@@ -511,6 +511,56 @@ export function playSpawnClick(instance) {
 }
 
 /**
+ * Play eerie/creepy sound effect (disturbing low frequency drone)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playGlitchSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 1.5
+  
+  // Deep unsettling bass (40-60 Hz range - creates unease)
+  const bass = instance.audioContext.createOscillator()
+  const bassGain = instance.audioContext.createGain()
+  
+  bass.type = 'sine'
+  const baseFreq = 40 + Math.random() * 20
+  bass.frequency.setValueAtTime(baseFreq, now)
+  bass.frequency.linearRampToValueAtTime(baseFreq + 5, now + duration * 0.5)
+  bass.frequency.linearRampToValueAtTime(baseFreq, now + duration)
+  
+  // Slow crescendo then fade out
+  bassGain.gain.setValueAtTime(0.001, now)
+  bassGain.gain.exponentialRampToValueAtTime(0.25, now + 0.4)
+  bassGain.gain.setValueAtTime(0.25, now + duration * 0.6)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  bass.connect(bassGain)
+  bassGain.connect(instance.audioContext.destination)
+  
+  // Dissonant high overtone (tritone interval - "devil's interval")
+  const dissonant = instance.audioContext.createOscillator()
+  const dissonantGain = instance.audioContext.createGain()
+  
+  dissonant.type = 'triangle'
+  const tritone = baseFreq * Math.sqrt(2) * 8  // Tritone relationship
+  dissonant.frequency.setValueAtTime(tritone, now)
+  dissonant.frequency.linearRampToValueAtTime(tritone * 1.02, now + duration)
+  
+  dissonantGain.gain.setValueAtTime(0.001, now)
+  dissonantGain.gain.exponentialRampToValueAtTime(0.08, now + 0.5)
+  dissonantGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  dissonant.connect(dissonantGain)
+  dissonantGain.connect(instance.audioContext.destination)
+  
+  // Start all oscillators
+  bass.start(now)
+  bass.stop(now + duration)
+  dissonant.start(now)
+  dissonant.stop(now + duration)
+}
+
+/**
  * Play annihilation sound effect (deep powerful explosion)
  * @param {Object} instance - Sound instance from create()
  */

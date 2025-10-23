@@ -3,6 +3,7 @@ import { initScene } from '../utils/scene.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
 import * as Spikes from '../components/spike.js'
+import * as Sound from '../utils/sound.js'
 
 export function sceneLevel1(k) {
   k.scene("level1", () => {
@@ -61,5 +62,17 @@ export function sceneLevel1(k) {
     
     // Spawn hero with assembly effect
     Hero.spawn(hero)
+    
+    // Random eerie sound effect
+    let soundTimer = k.rand(3, 6)
+    
+    k.onUpdate(() => {
+      soundTimer -= k.dt()
+      
+      if (soundTimer <= 0) {
+        sound && Sound.playGlitchSound(sound)
+        soundTimer = k.rand(4, 8)  // Next sound in 4-8 seconds
+      }
+    })
   })
 }

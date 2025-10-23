@@ -38,6 +38,7 @@ export const CFG = {
     level1: {
       background: "FFDAB9",         // Light peach background
       platform: "2C3E50",           // Dark brown platforms
+      spikes: "DC143C",             // Crimson red spikes (danger!)
       instructions: "FFDAB9",       // Instructions text color
     },
     

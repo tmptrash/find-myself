@@ -48,6 +48,9 @@ export function sceneLevel1(k) {
       y: platformY - spikeHeight / 2,
       orientation: Spikes.ORIENTATIONS.FLOOR,
       onHit: () => {
+        // Show spikes when hero hits them
+        Spikes.show(spikes)
+        
         // Death effect when hero hits spikes
         Hero.death(hero, () => k.go("level1"))
       }

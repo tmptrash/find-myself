@@ -79,7 +79,8 @@ export function create(config) {
     fadeInDuration: 0.5,   // Fade-in duration (0.5 seconds)
     visibleDuration: 0.5,  // Stay visible (0.5 seconds)
     fadeOutDuration: 0.5,  // Fade-out duration (0.5 seconds)
-    animationComplete: false
+    animationComplete: false,
+    wasShownOnDeath: false  // Flag to prevent auto-animation if shown on death
   }
 
   // Setup collision detection with hero (works even when invisible)
@@ -111,8 +112,21 @@ export function startAnimation(inst, delaySeconds = 3) {
   
   // Wait for initial delay, then start animation cycle
   k.wait(delaySeconds, () => {
+    // Don't start animation if spikes were already shown on death
+    if (inst.wasShownOnDeath) return
+    
     spike.onUpdate(() => updateAnimation(inst))
   })
+}
+
+/**
+ * Shows spikes instantly (used when hero dies)
+ * @param {Object} inst - Spike instance
+ */
+export function show(inst) {
+  inst.spike.opacity = 1
+  inst.isVisible = true
+  inst.wasShownOnDeath = true  // Mark that spikes were shown on death
 }
 
 /**
@@ -222,8 +236,8 @@ function createSpikeSprite(orientation, blockSize) {
     canvas.height = spikeHeight
   }
 
-  // Use platform color for spikes
-  const spikeColor = getHex(CFG.colors.level1.platform)
+  // Use red color for spikes (danger!)
+  const spikeColor = getHex(CFG.colors.level1.spikes)
   ctx.fillStyle = spikeColor
 
   // Draw pixelated spikes using fillRect for 8-bit style (45° stepped pyramids)

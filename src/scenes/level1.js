@@ -48,13 +48,7 @@ export function sceneLevel1(k) {
       x: centerX,
       y: platformY - spikeHeight / 2,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => {
-        // Show spikes when hero hits them
-        Spikes.show(spikes)
-        
-        // Death effect when hero hits spikes
-        Hero.death(hero, () => k.go("level1"))
-      }
+      onHit: () => onSpikeHit(k, hero, spikes)
     })
     
     // Start spike animation after 2 seconds
@@ -63,16 +57,43 @@ export function sceneLevel1(k) {
     // Spawn hero with assembly effect
     Hero.spawn(hero)
     
-    // Random eerie sound effect
-    let soundTimer = k.rand(3, 6)
+    // Scene instance with state
+    const inst = {
+      k,
+      sound,
+      soundTimer: k.rand(3, 6)
+    }
     
-    k.onUpdate(() => {
-      soundTimer -= k.dt()
-      
-      if (soundTimer <= 0) {
-        sound && Sound.playGlitchSound(sound)
-        soundTimer = k.rand(4, 8)  // Next sound in 4-8 seconds
-      }
-    })
+    // Setup eerie sound effect
+    k.onUpdate(() => updateEerieSound(inst))
   })
+}
+
+/**
+ * Handle spike collision with hero
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} spikes - Spikes instance
+ */
+function onSpikeHit(k, hero, spikes) {
+  // Show spikes when hero hits them
+  Spikes.show(spikes)
+  
+  // Death effect when hero hits spikes
+  Hero.death(hero, () => k.go("level1"))
+}
+
+/**
+ * Update eerie sound timer and play sound randomly
+ * @param {Object} inst - Scene instance
+ */
+function updateEerieSound(inst) {
+  const { k, sound } = inst
+  
+  inst.soundTimer -= k.dt()
+  
+  if (inst.soundTimer <= 0) {
+    sound && Sound.playGlitchSound(sound)
+    inst.soundTimer = k.rand(4, 8)  // Next sound in 4-8 seconds
+  }
 }

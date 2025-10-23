@@ -511,6 +511,52 @@ export function playSpawnClick(instance) {
 }
 
 /**
+ * Play death sound effect (bone cracking/breaking)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playDeathSound(instance) {
+  const now = instance.audioContext.currentTime
+  
+  // First crack
+  createCrack(instance, now, 180, 0.28)
+  
+  // Second crack (slightly delayed)
+  createCrack(instance, now + 0.08, 150, 0.24)
+  
+  // Third crack (final)
+  createCrack(instance, now + 0.15, 120, 0.20)
+}
+
+/**
+ * Create single bone crack sound
+ * @param {Object} instance - Sound instance
+ * @param {number} time - Start time
+ * @param {number} freq - Base frequency
+ * @param {number} volume - Volume level
+ */
+function createCrack(instance, time, freq, volume) {
+  const duration = 0.08
+  
+  // Sharp crack sound
+  const crack = instance.audioContext.createOscillator()
+  const crackGain = instance.audioContext.createGain()
+  
+  crack.type = 'sawtooth'
+  crack.frequency.setValueAtTime(freq, time)
+  crack.frequency.exponentialRampToValueAtTime(freq * 0.3, time + duration)
+  
+  // Very sharp attack, quick decay
+  crackGain.gain.setValueAtTime(volume, time)
+  crackGain.gain.exponentialRampToValueAtTime(0.001, time + duration)
+  
+  crack.connect(crackGain)
+  crackGain.connect(instance.audioContext.destination)
+  
+  crack.start(time)
+  crack.stop(time + duration)
+}
+
+/**
  * Play eerie/creepy sound effect (disturbing low frequency drone)
  * @param {Object} instance - Sound instance from create()
  */

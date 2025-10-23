@@ -144,8 +144,8 @@ export function death(inst, onComplete) {
   character.paused = true
   inst.controllable = false
   
-  // Play sound
-  sfx && Sound.playLandSound(sfx)
+  // Play death sound
+  sfx && Sound.playDeathSound(sfx)
   
   // Determine particle color based on type
   const colors = CFG.colors

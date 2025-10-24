@@ -479,6 +479,7 @@ export function playLightningSound(instance) {
 export function playSpikeSound(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.3
+  const fadeOutTime = 0.08  // Longer fade out to avoid click
   
   // Create white noise for friction texture
   const bufferSize = instance.audioContext.sampleRate * duration
@@ -507,13 +508,14 @@ export function playSpikeSound(instance) {
   
   const rumbleGain = instance.audioContext.createGain()
   rumbleGain.gain.setValueAtTime(0.12, now)
-  rumbleGain.gain.linearRampToValueAtTime(0.10, now + duration)
+  rumbleGain.gain.setValueAtTime(0.10, now + duration - fadeOutTime)
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   // Main friction gain (softer, more "shhhh")
   const frictionGain = instance.audioContext.createGain()
   frictionGain.gain.setValueAtTime(0.001, now)
   frictionGain.gain.exponentialRampToValueAtTime(0.20, now + 0.05)
-  frictionGain.gain.setValueAtTime(0.20, now + duration - 0.05)
+  frictionGain.gain.setValueAtTime(0.20, now + duration - fadeOutTime)
   frictionGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   // Connect friction chain

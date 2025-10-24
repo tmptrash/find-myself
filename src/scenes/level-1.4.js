@@ -77,7 +77,7 @@ export function sceneLevel4(k) {
     const ceilingSpikeY = topPlatformHeight + spikeHeight / 2
     
     // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
-    const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 1.5
+    const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 2.5
     const hiddenY1 = floorSpikeY + spikeHeight + 4  // Below platform + 4px lower
     const spikes1 = Spikes.create({
       k,
@@ -147,14 +147,14 @@ export function sceneLevel4(k) {
       spike3State: 'waiting',
       animationTimer: 0,
       cycleTimer: 0,
-      animationSpeed: 0.5,   // Seconds for extend/retract (up/down movement)
-      spikeDelay: 0.5,       // Seconds between spikes
-      cycleDelay: 0.5,       // Seconds after last spike before restart
+      animationSpeed: 0.15,   // Seconds for extend/retract (up/down movement)
+      spikeDelay: 0.15,      // Seconds between spikes (pause between spike1->spike2 and spike2->spike3)
+      cycleDelay: 0.15,      // Seconds after last spike before restart
       firstCycleComplete: false
     }
     
-    // Start spike animation after 1 second
-    k.wait(1, () => {
+    // Start spike animation after 0.5 second
+    k.wait(0.5, () => {
       inst.spike1State = 'extending'
       inst.animationTimer = 0
       sound && Sound.playSpikeSound(sound)
@@ -214,7 +214,7 @@ function updateSpikesAnimation(inst) {
   inst.animationTimer += k.dt()
   inst.cycleTimer += k.dt()
   
-  // SPIKE 1 STATE MACHINE
+  // SPIKE 1 STATE MACHINE (Left spikes - first)
   if (inst.spike1State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     spikes1.spike.pos.y = targetY1 + (visibleY1 - targetY1) * progress
@@ -230,19 +230,19 @@ function updateSpikesAnimation(inst) {
     
     if (progress >= 1) {
       spikes1.spike.pos.y = targetY1
-      inst.spike1State = 'waiting-for-spike2'
+      inst.spike1State = 'waiting-for-spike3'
       inst.animationTimer = 0
     }
-  } else if (inst.spike1State === 'waiting-for-spike2') {
+  } else if (inst.spike1State === 'waiting-for-spike3') {
     if (inst.animationTimer >= inst.spikeDelay) {
-      inst.spike2State = 'extending'
-      inst.spike1State = 'spike2-active'
+      inst.spike3State = 'extending'
+      inst.spike1State = 'spike3-active'
       inst.animationTimer = 0
       sound && Sound.playSpikeSound(sound)
     }
   }
   
-  // SPIKE 2 STATE MACHINE
+  // SPIKE 2 STATE MACHINE (Center spikes - third/last)
   if (inst.spike2State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     spikes2.spike.pos.y = targetY2 + (visibleY2 - targetY2) * progress
@@ -258,19 +258,23 @@ function updateSpikesAnimation(inst) {
     
     if (progress >= 1) {
       spikes2.spike.pos.y = targetY2
-      inst.spike2State = 'waiting-for-spike3'
+      inst.spike2State = 'cycle-complete'
+      inst.spike1State = 'cycle-complete'
+      inst.spike3State = 'cycle-complete'
       inst.animationTimer = 0
-    }
-  } else if (inst.spike2State === 'waiting-for-spike3') {
-    if (inst.animationTimer >= inst.spikeDelay) {
-      inst.spike3State = 'extending'
-      inst.spike2State = 'spike3-active'
-      inst.animationTimer = 0
-      sound && Sound.playSpikeSound(sound)
+      inst.cycleTimer = 0
+      
+      // After first cycle, make spikes invisible
+      if (!inst.firstCycleComplete) {
+        inst.firstCycleComplete = true
+        spikes1.spike.opacity = 0
+        spikes2.spike.opacity = 0
+        spikes3.spike.opacity = 0
+      }
     }
   }
   
-  // SPIKE 3 STATE MACHINE
+  // SPIKE 3 STATE MACHINE (Right spikes - second)
   if (inst.spike3State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     spikes3.spike.pos.y = targetY3 + (visibleY3 - targetY3) * progress
@@ -286,19 +290,15 @@ function updateSpikesAnimation(inst) {
     
     if (progress >= 1) {
       spikes3.spike.pos.y = targetY3
-      inst.spike3State = 'cycle-complete'
-      inst.spike1State = 'cycle-complete'
-      inst.spike2State = 'cycle-complete'
+      inst.spike3State = 'waiting-for-spike2'
       inst.animationTimer = 0
-      inst.cycleTimer = 0
-      
-      // After first cycle, make spikes invisible
-      if (!inst.firstCycleComplete) {
-        inst.firstCycleComplete = true
-        spikes1.spike.opacity = 0
-        spikes2.spike.opacity = 0
-        spikes3.spike.opacity = 0
-      }
+    }
+  } else if (inst.spike3State === 'waiting-for-spike2') {
+    if (inst.animationTimer >= inst.spikeDelay) {
+      inst.spike2State = 'extending'
+      inst.spike3State = 'spike2-active'
+      inst.animationTimer = 0
+      sound && Sound.playSpikeSound(sound)
     }
   }
   

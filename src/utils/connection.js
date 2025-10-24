@@ -1,5 +1,6 @@
 import * as Sound from './sound.js'
 
+const FRAMES_FOR_LIGHTNING = 3;
 /**
  * Draw electric connection wave between two points
  * @param {Object} k - Kaplay instance
@@ -139,7 +140,7 @@ export function updateLightning(inst) {
   inst.lightningTimer -= k.dt()
   
   if (inst.lightningTimer <= 0) {
-    inst.lightningFramesLeft = 2  // Show lightning for 2 frames
+    inst.lightningFramesLeft = FRAMES_FOR_LIGHTNING  // Show lightning for 2 frames
     inst.lightningTimer = inst.lightningInterval
   }
 }
@@ -156,7 +157,7 @@ export function drawLightning(inst) {
   drawConnectionWave(k, hero.character.pos, antiHero.character.pos)
   
   // Play sound only on first frame
-  if (inst.lightningFramesLeft === 2) {
+  if (inst.lightningFramesLeft === FRAMES_FOR_LIGHTNING) {
     sound && Sound.playLightningSound(sound)
   }
   

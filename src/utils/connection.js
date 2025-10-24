@@ -1,6 +1,7 @@
 import * as Sound from './sound.js'
 
 const FRAMES_FOR_LIGHTNING = 3;
+const MAX_LIGHTING_DELAY = 8.0
 /**
  * Draw electric connection wave between two points
  * @param {Object} k - Kaplay instance
@@ -91,7 +92,7 @@ export function drawConnectionWave(k, pos1, pos2, options = {}) {
  * @param {number} maxInterval - Maximum interval at far range (seconds)
  * @returns {number} Time interval in seconds
  */
-export function calculateLightningInterval(distance, minDistance = 50, maxDistance = 1000, minInterval = 0.1, maxInterval = 5.0) {
+export function calculateLightningInterval(distance, minDistance = 50, maxDistance = 1000, minInterval = 0.1, maxInterval = MAX_LIGHTING_DELAY) {
   // Clamp distance to valid range
   const clampedDistance = Math.max(minDistance, Math.min(maxDistance, distance))
   
@@ -134,7 +135,7 @@ export function updateLightning(inst) {
   // Calculate lightning interval based on distance
   // Closer = more frequent lightning
   const maxDistance = k.width() // Maximum distance (opposite sides of screen)
-  inst.lightningInterval = calculateLightningInterval(distance, 50, maxDistance, 0.1, 5.0)
+  inst.lightningInterval = calculateLightningInterval(distance, 50, maxDistance, 0.1, MAX_LIGHTING_DELAY)
   
   // Update timer
   inst.lightningTimer -= k.dt()

@@ -12,7 +12,8 @@ export function sceneLevel1(k) {
     const { sound } = initScene({
       k,
       backgroundColor: CFG.colors['level-1.1'].background,
-      platformColor: CFG.colors['level-1.1'].platform
+      platformColor: CFG.colors['level-1.1'].platform,
+      showInstructions: true
     })
     
     // Create anti-hero instance

@@ -25,10 +25,11 @@ export function addBackground(k, color) {
  * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
  * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
+ * @param {Boolean} [config.showInstructions=false] - If true, show control instructions
  * @returns {Object} Object with sound instance and other utilities
  */
 export function initScene(config) {
-  const { k, backgroundColor, platformColor, bottomPlatformHeight, topPlatformHeight, skipPlatforms } = config
+  const { k, backgroundColor, platformColor, bottomPlatformHeight, topPlatformHeight, skipPlatforms, showInstructions = false } = config
   
   // Set gravity (scaled to screen height for resolution independence)
   k.setGravity(CFG.gameplay.gravityRatio * k.height())
@@ -47,8 +48,10 @@ export function initScene(config) {
   // Setup camera
   setupCamera(k)
   
-  // Add instructions
-  addInstructions(k)
+  // Add instructions (only if requested)
+  if (showInstructions) {
+    addInstructions(k)
+  }
   
   // Setup back to menu
   CFG.controls.backToMenu.forEach(key => {

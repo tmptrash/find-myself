@@ -473,14 +473,14 @@ export function playLightningSound(instance) {
 }
 
 /**
- * Play katana slash sound effect (sword swing)
+ * Play spike emerging sound effect (rusty metal scrape)
  * @param {Object} instance - Sound instance from create()
  */
-export function playKatanaSound(instance) {
+export function playSpikeSound(instance) {
   const now = instance.audioContext.currentTime
-  const duration = 0.25
+  const duration = 0.3
   
-  // Create white noise for rusty scrape texture
+  // Create white noise for friction texture
   const bufferSize = instance.audioContext.sampleRate * duration
   const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
@@ -489,71 +489,48 @@ export function playKatanaSound(instance) {
     noiseData[i] = Math.random() * 2 - 1
   }
   
-  const noise = instance.audioContext.createBufferSource()
-  noise.buffer = noiseBuffer
+  const friction = instance.audioContext.createBufferSource()
+  friction.buffer = noiseBuffer
   
-  // Low-pass filter for deep, gritty rust scrape (300-450 Hz)
-  const filter = instance.audioContext.createBiquadFilter()
-  filter.type = 'lowpass'
-  filter.Q.value = 2
-  filter.frequency.setValueAtTime(300, now)
-  filter.frequency.linearRampToValueAtTime(450, now + duration)
+  // Low-pass filter for soft dragging sound (like carpet/floor)
+  const lpFilter = instance.audioContext.createBiquadFilter()
+  lpFilter.type = 'lowpass'
+  lpFilter.Q.value = 1
+  lpFilter.frequency.setValueAtTime(800, now)
+  lpFilter.frequency.linearRampToValueAtTime(600, now + duration)
   
-  // Deep grinding oscillator (very low)
-  const grind = instance.audioContext.createOscillator()
-  grind.type = 'sawtooth'
-  grind.frequency.setValueAtTime(45, now)
-  grind.frequency.linearRampToValueAtTime(70, now + duration)
+  // Low rumble for heavy object weight
+  const rumble = instance.audioContext.createOscillator()
+  rumble.type = 'sine'
+  rumble.frequency.setValueAtTime(60, now)
+  rumble.frequency.linearRampToValueAtTime(55, now + duration)
   
-  const grindGain = instance.audioContext.createGain()
-  grindGain.gain.setValueAtTime(0.25, now)
-  grindGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const rumbleGain = instance.audioContext.createGain()
+  rumbleGain.gain.setValueAtTime(0.12, now)
+  rumbleGain.gain.linearRampToValueAtTime(0.10, now + duration)
   
-  // Main noise gain
-  const noiseGain = instance.audioContext.createGain()
-  noiseGain.gain.setValueAtTime(0.35, now)
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  // Main friction gain (softer, more "shhhh")
+  const frictionGain = instance.audioContext.createGain()
+  frictionGain.gain.setValueAtTime(0.001, now)
+  frictionGain.gain.exponentialRampToValueAtTime(0.20, now + 0.05)
+  frictionGain.gain.setValueAtTime(0.20, now + duration - 0.05)
+  frictionGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
-  // Connect noise chain
-  noise.connect(filter)
-  filter.connect(noiseGain)
-  noiseGain.connect(instance.audioContext.destination)
+  // Connect friction chain
+  friction.connect(lpFilter)
+  lpFilter.connect(frictionGain)
+  frictionGain.connect(instance.audioContext.destination)
   
-  // Connect grind chain
-  grind.connect(grindGain)
-  grindGain.connect(instance.audioContext.destination)
+  // Connect rumble chain
+  rumble.connect(rumbleGain)
+  rumbleGain.connect(instance.audioContext.destination)
   
-  // Start all
-  noise.start(now)
-  grind.start(now)
-  grind.stop(now + duration)
+  // Start
+  friction.start(now)
+  rumble.start(now)
+  rumble.stop(now + duration)
 }
 
-/**
- * Play reverse katana sound effect (spike retracting)
- * @param {Object} instance - Sound instance from create()
- */
-export function playKatanaReverseSound(instance) {
-  const now = instance.audioContext.currentTime
-  const duration = 0.1
-  
-  // Reverse sweep (rising pitch)
-  const burst = instance.audioContext.createOscillator()
-  const burstGain = instance.audioContext.createGain()
-  
-  burst.type = 'sine'
-  burst.frequency.setValueAtTime(600, now)
-  burst.frequency.exponentialRampToValueAtTime(2000, now + duration)
-  
-  burstGain.gain.setValueAtTime(0.20, now)
-  burstGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  
-  burst.connect(burstGain)
-  burstGain.connect(instance.audioContext.destination)
-  
-  burst.start(now)
-  burst.stop(now + duration)
-}
 
 /**
  * Play jump sound effect (upward bounce)

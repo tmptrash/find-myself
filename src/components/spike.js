@@ -119,8 +119,8 @@ export function startAnimation(inst, delaySeconds = 1) {
     // Don't start animation if spikes were already shown on death
     if (inst.wasShownOnDeath) return
     
-    // Play katana sound when spikes start appearing
-    sfx && Sound.playKatanaSound(sfx)
+    // Play spike sound when spikes start appearing
+    sfx && Sound.playSpikeSound(sfx)
     
     spike.onUpdate(() => updateAnimation(inst))
   })

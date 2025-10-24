@@ -109,7 +109,7 @@ export function sceneLevel3(k) {
     k.wait(1, () => {
       inst.spike1State = 'extending'
       inst.animationTimer = 0  // Reset timer for smooth animation
-      sound && Sound.playKatanaSound(sound)
+      sound && Sound.playSpikeSound(sound)
     })
     
     // Setup eerie sound effect and lightning
@@ -176,7 +176,7 @@ function updateSpikesAnimation(inst) {
     if (inst.animationTimer >= inst.spikeDelay) {
       inst.spike2State = 'extending'
       inst.animationTimer = 0
-      sound && Sound.playKatanaSound(sound)
+      sound && Sound.playSpikeSound(sound)
     }
   }
   
@@ -214,7 +214,7 @@ function updateSpikesAnimation(inst) {
     inst.animationTimer = 0
     inst.spike1State = 'extending'
     inst.spike2State = 'waiting'  // Reset spike2 state for next cycle
-    sound && Sound.playKatanaSound(sound)
+    sound && Sound.playSpikeSound(sound)
   }
 }
 

@@ -46,7 +46,7 @@ export function sceneLevel1(k) {
     
     const spikes = Spikes.create({
       k,
-      x: centerX,
+      x: centerX + k.width() * 0.15,  // Shifted right by 15% of screen width
       y: platformY - spikeHeight / 2,
       orientation: Spikes.ORIENTATIONS.FLOOR,
       onHit: () => onSpikeHit(k, hero, spikes),

@@ -98,10 +98,10 @@ export function sceneLevel3(k) {
       targetY: platformY - spikeHeight / 2,
       hiddenY,
       animationTimer: 0,
-      animationSpeed: 0.3,  // seconds for extend/retract
+      animationSpeed: 0.15,  // seconds for extend/retract
       cycleTimer: 0,
-      cycleDelay: 0.3,  // seconds after spike2 before restarting
-      spikeDelay: 0.3,  // seconds between spike1 and spike2
+      cycleDelay: 0.15,  // seconds after spike2 before restarting (reduced 2x)
+      spikeDelay: 0.15,  // seconds between spike1 and spike2 (reduced 2x)
       firstCycleComplete: false  // Track if first visible cycle is done
     }
     

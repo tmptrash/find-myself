@@ -45,10 +45,10 @@ export function sceneLevel2(k) {
     const rightX = Math.max(heroX, antiHeroX)
     const distance = rightX - leftX
     
-    // First spike at 1/3 distance
-    const spike1X = leftX + distance / 3
-    // Second spike at 2/3 distance
-    const spike2X = leftX + distance * 2 / 3
+    // First spike at 0.42 distance (shifted right, leaving landing space)
+    const spike1X = leftX + distance * 0.42
+    // Second spike at 0.73 distance (shifted further right)
+    const spike2X = leftX + distance * 0.73
     
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight

@@ -182,7 +182,7 @@ function updateAnimation(inst) {
  */
 function getSpikeBlockSize(k) {
   // Base calculation: screen height / ratio to get proportional block size
-  return Math.max(2, Math.round(k.height() / 200))
+  return Math.max(2, Math.round(k.height() / 250))
 }
 /**
  * Get rotation angle based on orientation

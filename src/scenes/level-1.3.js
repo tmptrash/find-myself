@@ -93,20 +93,20 @@ export function sceneLevel3(k) {
       // Spike animation state
       spikes1,
       spikes2,
-      spike1State: 'waiting',  // waiting, extending, retracting, waiting-for-spike2, cycle-complete
+      spike1State: 'waiting',  // waiting, extending, retracting, waiting-for-spike2, spike2-active, cycle-complete
       spike2State: 'waiting',
       targetY: platformY - spikeHeight / 2,
       hiddenY,
       animationTimer: 0,
-      animationSpeed: 0.5,  // seconds for extend/retract
+      animationSpeed: 0.3,  // seconds for extend/retract
       cycleTimer: 0,
-      cycleDelay: 1,  // seconds after spike2 before restarting
-      spikeDelay: 1,  // seconds between spike1 and spike2
+      cycleDelay: 0.3,  // seconds after spike2 before restarting
+      spikeDelay: 0.3,  // seconds between spike1 and spike2
       firstCycleComplete: false  // Track if first visible cycle is done
     }
     
-    // Start spike animation after 1 second
-    k.wait(1, () => {
+    // Start spike animation after 0.5 second
+    k.wait(0.5, () => {
       inst.spike1State = 'extending'
       inst.animationTimer = 0  // Reset timer for smooth animation
       sound && Sound.playSpikeSound(sound)
@@ -175,6 +175,7 @@ function updateSpikesAnimation(inst) {
     // Wait for spikeDelay before starting spike2
     if (inst.animationTimer >= inst.spikeDelay) {
       inst.spike2State = 'extending'
+      inst.spike1State = 'spike2-active'  // Prevent re-triggering
       inst.animationTimer = 0
       sound && Sound.playSpikeSound(sound)
     }

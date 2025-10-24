@@ -41,6 +41,20 @@ export const CFG = {
       spikes: "DC143C",             // Crimson red spikes (danger!)
       instructions: "CCCCCC",       // Light gray instructions
     },
+    // Level 2 colors
+    "level-1.2": {
+      background: "3E3E3E",         // Dark gray (foggy gloom)
+      platform: "1A1A1A",           // Nearly black platforms
+      spikes: "DC143C",             // Crimson red spikes (danger!)
+      instructions: "CCCCCC",       // Light gray instructions
+    },
+    // Level 3 colors
+    "level-1.3": {
+      background: "3E3E3E",         // Dark gray (foggy gloom)
+      platform: "1A1A1A",           // Nearly black platforms
+      spikes: "DC143C",             // Crimson red spikes (danger!)
+      instructions: "CCCCCC",       // Light gray instructions
+    },
     
     // Splash/menu colors
     menu: {
@@ -134,6 +148,24 @@ export const CFG = {
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {
         x: 12,    // % of screen width (left side)
+        y: 64     // % of screen height (on bottom platform)
+      },
+      antiHeroSpawn: {
+        x: 88,    // % of screen width (right side, before right wall at 80%)
+        y: 64     // % of screen height (on bottom platform)
+      }
+    },
+    
+    "level-1.3": {
+      name: "Level 3",
+      
+      // Hero spawn position (% of screen dimensions)
+      heroSpawn: {
+        x: 12,    // % of screen width (left side)
+        y: 64     // % of screen height (on bottom platform)
+      },
+      antiHeroSpawn: {
+        x: 88,    // % of screen width (right side, before right wall at 80%)
         y: 64     // % of screen height (on bottom platform)
       }
     }

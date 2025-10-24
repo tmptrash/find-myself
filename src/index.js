@@ -4,6 +4,7 @@ import { sceneReady } from "./scenes/ready.js"
 import { sceneMenu } from "./scenes/menu.js"
 import { sceneLevel1 } from "./scenes/level-1.1.js"
 import { sceneLevel2 } from "./scenes/level-1.2.js"
+import { sceneLevel3 } from "./scenes/level-1.3.js"
 import { loadHeroSprites } from "./components/hero.js"
 import { loadSprites as loadSpikeSprites } from "./components/spike.js"
 
@@ -30,6 +31,7 @@ sceneReady(k)
 sceneMenu(k)
 sceneLevel1(k)
 sceneLevel2(k)
+sceneLevel3(k)
 
 // Start game after resources loaded
 k.onLoad(() => k.go("ready"))

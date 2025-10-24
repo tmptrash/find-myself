@@ -11,15 +11,15 @@ export function sceneLevel2(k) {
     // Initialize level with common setup
     const { sound } = initScene({
       k,
-      backgroundColor: CFG.colors.level-1.1.background,
-      platformColor: CFG.colors.level-1.1.platform
+      backgroundColor: CFG.colors['level-1.2'].background,
+      platformColor: CFG.colors['level-1.2'].platform
     })
     
     // Create anti-hero instance (same position as level 1)
     const antiHero = Hero.create({
       k,
-      x: k.width() * CFG.levels.level-1.1.antiHeroSpawn.x / 100,
-      y: k.height() * CFG.levels.level-1.1.antiHeroSpawn.y / 100,
+      x: k.width() * CFG.levels['level-1.2'].antiHeroSpawn.x / 100,
+      y: k.height() * CFG.levels['level-1.2'].antiHeroSpawn.y / 100,
       type: 'antihero',
       sfx: sound
     })
@@ -27,23 +27,20 @@ export function sceneLevel2(k) {
     // Create hero instance with annihilation setup
     const hero = Hero.create({
       k,
-      x: k.width() * CFG.levels.level-1.2.heroSpawn.x / 100,
-      y: k.height() * CFG.levels.level-1.2.heroSpawn.y / 100,
+      x: k.width() * CFG.levels['level-1.2'].heroSpawn.x / 100,
+      y: k.height() * CFG.levels['level-1.2'].heroSpawn.y / 100,
       type: HEROES.HERO,
       sfx: sound,
       antiHero,
-      onAnnihilation: () => {
-        // TODO: Add next level or end screen
-        k.go("menu")
-      }
+      onAnnihilation: () => k.go("level-1.3")
     })
     
     // Add spike tag to hero for collision detection
     hero.character.use("player")
     
     // Calculate spike positions between heroes
-    const heroX = k.width() * CFG.levels.level-1.2.heroSpawn.x / 100
-    const antiHeroX = k.width() * CFG.levels.level-1.1.antiHeroSpawn.x / 100
+    const heroX = k.width() * CFG.levels['level-1.2'].heroSpawn.x / 100
+    const antiHeroX = k.width() * CFG.levels['level-1.2'].antiHeroSpawn.x / 100
     const leftX = Math.min(heroX, antiHeroX)
     const rightX = Math.max(heroX, antiHeroX)
     const distance = rightX - leftX

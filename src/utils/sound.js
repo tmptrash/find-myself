@@ -499,6 +499,32 @@ export function playKatanaSound(instance) {
 }
 
 /**
+ * Play reverse katana sound effect (spike retracting)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playKatanaReverseSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.1
+  
+  // Reverse sweep (rising pitch)
+  const burst = instance.audioContext.createOscillator()
+  const burstGain = instance.audioContext.createGain()
+  
+  burst.type = 'sine'
+  burst.frequency.setValueAtTime(600, now)
+  burst.frequency.exponentialRampToValueAtTime(2000, now + duration)
+  
+  burstGain.gain.setValueAtTime(0.20, now)
+  burstGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  burst.connect(burstGain)
+  burstGain.connect(instance.audioContext.destination)
+  
+  burst.start(now)
+  burst.stop(now + duration)
+}
+
+/**
  * Play jump sound effect (upward bounce)
  * @param {Object} instance - Sound instance from create()
  */

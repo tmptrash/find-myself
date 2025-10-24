@@ -22,31 +22,27 @@ export function sceneReady(k) {
     // Story text
     const storyLines = [
       "The Division shattered your soul in two.",
-      "",
-      "Light and Darkness — two halves of one whole,",
+      "Light and Darkness — two halves of one,",
       "wandering through distorted realities.",
       "",
-      "The electric discharges between you —",
-      "echoes of your lost wholeness.",
-      "",
-      "The closer — the more dangerous.",
-      "The farther — the more painful.",
+      "The electric discharges between you are",
+      "the echoes of your lost wholeness.",
+      "The closer you get — more dangerous.",
+      "The farther apart — the more painful.",
       "",
       "Upon meeting, you annihilate each other,",
-      "awakening in a new distorted world.",
-      "",
-      "But you keep searching.",
-      "Again. And again. And again.",
-      "",
-      "Because giving up on yourself is impossible.",
+      "awakening in the new distorted world.",
+      "But you keep searching. Again and again.",
+      "Giving up on yourself is impossible...",
     ]
     
-    const lineHeight = 28
-    const startY = centerY - (storyLines.length * lineHeight) / 2
+    const textWidth = 650  // Fixed width for all text lines
+    const lineHeight = 32
+    const startY = centerY - (storyLines.length * lineHeight) / 2 + 20
     
     storyLines.forEach((line, index) => {
       k.add([
-        k.text(line, { size: 24 }),
+        k.text(line, { size: 24, width: textWidth, align: "center" }),
         k.pos(centerX, startY + index * lineHeight),
         k.anchor("center"),
         getColor(k, CFG.colors.ready.text),

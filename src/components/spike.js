@@ -26,6 +26,16 @@ export function getSpikeHeight(k) {
 }
 
 /**
+ * Get spike width in pixels for current screen resolution
+ * @param {Object} k - Kaplay instance
+ * @returns {number} Spike width in pixels
+ */
+export function getSpikeWidth(k) {
+  const blockSize = getSpikeBlockSize(k)
+  return (SINGLE_SPIKE_WIDTH_BLOCKS * SPIKE_COUNT + SPIKE_GAP_BLOCKS * (SPIKE_COUNT - 1)) * blockSize
+}
+
+/**
  * Creates spikes with collision detection
  * @param {Object} config - Spike configuration
  * @param {Object} config.k - Kaplay instance

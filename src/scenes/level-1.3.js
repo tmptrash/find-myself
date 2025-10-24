@@ -32,7 +32,7 @@ export function sceneLevel3(k) {
       type: HEROES.HERO,
       sfx: sound,
       antiHero,
-      onAnnihilation: () => k.go("menu")
+      onAnnihilation: () => k.go("level-1.4")
     })
     
     // Add spike tag to hero for collision detection

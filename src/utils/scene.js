@@ -22,10 +22,13 @@ export function addBackground(k, color) {
  * @param {Object} config - Level configuration
  * @param {String} config.backgroundColor - Background color
  * @param {String} config.platformColor - Platform color
+ * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
+ * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
+ * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
  * @returns {Object} Object with sound instance and other utilities
  */
 export function initScene(config) {
-  const { k, backgroundColor, platformColor } = config
+  const { k, backgroundColor, platformColor, bottomPlatformHeight, topPlatformHeight, skipPlatforms } = config
   
   // Set gravity (scaled to screen height for resolution independence)
   k.setGravity(CFG.gameplay.gravityRatio * k.height())
@@ -36,8 +39,10 @@ export function initScene(config) {
   // Add background
   addBackground(k, backgroundColor)
   
-  // Add platforms
-  addPlatforms(k, platformColor)
+  // Add platforms (unless skipped)
+  if (!skipPlatforms) {
+    addPlatforms(k, platformColor, bottomPlatformHeight, topPlatformHeight)
+  }
   
   // Setup camera
   setupCamera(k)
@@ -85,12 +90,14 @@ function setupCamera(k) {
  * Adds standard platforms to the level (top, bottom, left wall, right wall)
  * @param {Object} k - Kaplay instance
  * @param {String} color - Platform color in hex format
+ * @param {Number} [customBottomHeight] - Custom bottom platform height (% of screen height)
+ * @param {Number} [customTopHeight] - Custom top platform height (% of screen height)
  * @returns {Array} Array of platform objects
  */
-function addPlatforms(k, color) {
-  // Calculate platform dimensions from percentages
-  const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
-  const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
+function addPlatforms(k, color, customBottomHeight, customTopHeight) {
+  // Calculate platform dimensions from percentages (use custom or default)
+  const bottomPlatformHeight = k.height() * (customBottomHeight || CFG.visual.bottomPlatformHeight) / 100
+  const topPlatformHeight = k.height() * (customTopHeight || CFG.visual.topPlatformHeight) / 100
   const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
   
   function createPlatform(x, y, width, height) {

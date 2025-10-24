@@ -107,20 +107,20 @@ export function createLightningState() {
   return {
     lightningTimer: 0,
     lightningInterval: 5,
-    showLightning: false
+    lightningFramesLeft: 0
   }
 }
 
 /**
  * Update lightning based on distance between heroes
- * @param {Object} inst - Scene instance with k, hero, antiHero, lightningTimer, lightningInterval, showLightning
+ * @param {Object} inst - Scene instance with k, hero, antiHero, lightningTimer, lightningInterval, lightningFramesLeft
  */
 export function updateLightning(inst) {
   const { k, hero, antiHero } = inst
   
   // Stop lightning effects if annihilation or death has started
   if (hero.isAnnihilating || antiHero.isAnnihilating || hero.isDying || antiHero.isDying) {
-    inst.showLightning = false
+    inst.lightningFramesLeft = 0
     return
   }
   
@@ -139,26 +139,28 @@ export function updateLightning(inst) {
   inst.lightningTimer -= k.dt()
   
   if (inst.lightningTimer <= 0) {
-    inst.showLightning = true
+    inst.lightningFramesLeft = 2  // Show lightning for 2 frames
     inst.lightningTimer = inst.lightningInterval
   }
 }
 
 /**
  * Draw lightning effect between heroes with sound
- * @param {Object} inst - Scene instance with k, hero, antiHero, showLightning, sound (optional)
+ * @param {Object} inst - Scene instance with k, hero, antiHero, lightningFramesLeft, sound (optional)
  */
 export function drawLightning(inst) {
-  if (!inst.showLightning) return
+  if (inst.lightningFramesLeft <= 0) return
   
   const { k, hero, antiHero, sound } = inst
   
   drawConnectionWave(k, hero.character.pos, antiHero.character.pos)
   
-  // Play lightning sound if available
-  sound && Sound.playLightningSound(sound)
+  // Play sound only on first frame
+  if (inst.lightningFramesLeft === 2) {
+    sound && Sound.playLightningSound(sound)
+  }
   
-  // Lightning shows for one frame only
-  inst.showLightning = false
+  // Decrease frame counter
+  inst.lightningFramesLeft--
 }
 

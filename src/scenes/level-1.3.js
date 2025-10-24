@@ -101,12 +101,14 @@ export function sceneLevel3(k) {
       animationSpeed: 0.5,  // seconds for extend/retract
       cycleTimer: 0,
       cycleDelay: 1,  // seconds after spike2 before restarting
-      spikeDelay: 1   // seconds between spike1 and spike2
+      spikeDelay: 1,  // seconds between spike1 and spike2
+      firstCycleComplete: false  // Track if first visible cycle is done
     }
     
     // Start spike animation after 1 second
     k.wait(1, () => {
       inst.spike1State = 'extending'
+      inst.animationTimer = 0  // Reset timer for smooth animation
       sound && Sound.playKatanaSound(sound)
     })
     
@@ -196,6 +198,13 @@ function updateSpikesAnimation(inst) {
       inst.spike1State = 'cycle-complete'
       inst.animationTimer = 0
       inst.cycleTimer = 0  // Reset cycle timer for the pause
+      
+      // After first full cycle, make spikes invisible
+      if (!inst.firstCycleComplete) {
+        inst.firstCycleComplete = true
+        spikes1.spike.opacity = 0
+        spikes2.spike.opacity = 0
+      }
     }
   }
   

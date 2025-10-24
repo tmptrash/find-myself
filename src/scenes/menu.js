@@ -172,7 +172,7 @@ function setupKeyboardControls(inst) {
   CFG.controls.startGame.forEach(key => {
     k.onKeyPress(key, () => {
       Sound.stopAmbient(sound)
-      k.go("level1")
+      k.go("level-1.1")
     })
   })
   
@@ -245,7 +245,7 @@ function drawBackground(k, state) {
       k.vec2(boundaryCenter - rotationOffset + padding, k.height() - waveY + padding),
       k.vec2(waveX - padding, k.height() - waveY + padding)
     ],
-    color: getRGB(k, CFG.colors.level1.background),
+    color: getRGB(k, CFG.colors['level-1.1'].background),  // background color
   })
   
   // Right side - dark brown
@@ -256,7 +256,7 @@ function drawBackground(k, state) {
       k.vec2(k.width() - waveX + padding, k.height() + waveY + padding),
       k.vec2(boundaryCenter - rotationOffset - padding, k.height() + waveY + padding)
     ],
-    color: getRGB(k, CFG.colors.level1.platform),
+    color: getRGB(k, CFG.colors['level-1.1'].platform),  // platform color
   })
 }
 

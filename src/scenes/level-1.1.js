@@ -6,20 +6,20 @@ import * as Spikes from '../components/spike.js'
 import * as Sound from '../utils/sound.js'
 import { createLightningState, updateLightning, drawLightning } from '../utils/connection.js'
 
-export function sceneLevel2(k) {
-  k.scene("level2", () => {
+export function sceneLevel1(k) {
+  k.scene("level-1.1", () => {
     // Initialize level with common setup
     const { sound } = initScene({
       k,
-      backgroundColor: CFG.colors.level1.background,
-      platformColor: CFG.colors.level1.platform
+      backgroundColor: CFG.colors['level-1.1'].background,
+      platformColor: CFG.colors['level-1.1'].platform
     })
     
-    // Create anti-hero instance (same position as level 1)
+    // Create anti-hero instance
     const antiHero = Hero.create({
       k,
-      x: k.width() * CFG.levels.level1.antiHeroSpawn.x / 100,
-      y: k.height() * CFG.levels.level1.antiHeroSpawn.y / 100,
+      x: k.width() * CFG.levels['level-1.1'].antiHeroSpawn.x / 100,
+      y: k.height() * CFG.levels['level-1.1'].antiHeroSpawn.y / 100,
       type: 'antihero',
       sfx: sound
     })
@@ -27,59 +27,34 @@ export function sceneLevel2(k) {
     // Create hero instance with annihilation setup
     const hero = Hero.create({
       k,
-      x: k.width() * CFG.levels.level2.heroSpawn.x / 100,
-      y: k.height() * CFG.levels.level2.heroSpawn.y / 100,
+      x: k.width() * CFG.levels['level-1.1'].heroSpawn.x / 100,
+      y: k.height() * CFG.levels['level-1.1'].heroSpawn.y / 100,
       type: HEROES.HERO,
       sfx: sound,
       antiHero,
-      onAnnihilation: () => {
-        // TODO: Add next level or end screen
-        k.go("menu")
-      }
+      onAnnihilation: () => k.go("level-1.2")
     })
     
     // Add spike tag to hero for collision detection
     hero.character.use("player")
     
-    // Calculate spike positions between heroes
-    const heroX = k.width() * CFG.levels.level2.heroSpawn.x / 100
-    const antiHeroX = k.width() * CFG.levels.level1.antiHeroSpawn.x / 100
-    const leftX = Math.min(heroX, antiHeroX)
-    const rightX = Math.max(heroX, antiHeroX)
-    const distance = rightX - leftX
-    
-    // First spike at 1/3 distance
-    const spike1X = leftX + distance / 3
-    // Second spike at 2/3 distance
-    const spike2X = leftX + distance * 2 / 3
-    
+    // Create spikes in the middle of the level
+    const centerX = k.width() / 2
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
-    const spikeHeight = Spikes.getSpikeHeight(k)
+    const spikeHeight = Spikes.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
     
-    // Create first spike
-    const spikes1 = Spikes.create({
+    const spikes = Spikes.create({
       k,
-      x: spike1X,
+      x: centerX,
       y: platformY - spikeHeight / 2,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => onSpikeHit(k, hero, spikes1),
+      onHit: () => onSpikeHit(k, hero, spikes),
       sfx: sound
     })
     
-    // Create second spike
-    const spikes2 = Spikes.create({
-      k,
-      x: spike2X,
-      y: platformY - spikeHeight / 2,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => onSpikeHit(k, hero, spikes2),
-      sfx: sound
-    })
-    
-    // Start spike animations after 1 second
-    Spikes.startAnimation(spikes1)
-    Spikes.startAnimation(spikes2)
+    // Start spike animation after 2 seconds
+    Spikes.startAnimation(spikes)
     
     // Spawn hero with assembly effect
     Hero.spawn(hero)
@@ -113,7 +88,7 @@ function onSpikeHit(k, hero, spikes) {
   Spikes.show(spikes)
   
   // Death effect when hero hits spikes
-  Hero.death(hero, () => k.go("level2"))
+  Hero.death(hero, () => k.go("level-1.1"))
 }
 
 /**
@@ -136,6 +111,6 @@ function updateEerieSound(inst) {
   
   if (inst.soundTimer <= 0) {
     sound && Sound.playGlitchSound(sound)
-    inst.soundTimer = k.rand(4, 8)  // Next sound in 4-8 seconds
+    inst.soundTimer = k.rand(2, 6)  // Next sound in 2-6 seconds
   }
 }

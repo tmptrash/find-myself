@@ -151,7 +151,7 @@ export function sceneMenu(k) {
 }
 
 export function sceneLevel1(k) {
-  k.scene("level1", () => {
+  k.scene("level-1.1", () => {
     // Scene implementation
   })
 }
@@ -188,7 +188,7 @@ const heroInst = Hero.create({
   controllable: true,
   sfx: sound,
   antiHero: antiHeroInst,
-  onAnnihilation: () => k.go("level2")
+  onAnnihilation: () => k.go("level-1.2")
 })
 
 // Access Kaplay character
@@ -219,7 +219,7 @@ const buttonInst = Button.create({
   x: centerX,
   y: centerY,
   width: 360,
-  onClick: () => k.go("level1")
+  onClick: () => k.go("level-1.1")
 })
 
 // Access elements
@@ -255,7 +255,7 @@ Hero.create({ type: Hero.HEROES.HERO })
 - **Constants**: `UPPER_CASE` (e.g., `HERO_SCALE`, `COLLISION_WIDTH`)
 
 ### Files
-- **Scenes**: `menu.js`, `ready.js`, `level1.js`
+- **Scenes**: `menu.js`, `ready.js`, `level-1.1.js`
 - **Components**: `hero.js`, `button.js`
 - **Utilities**: `helper.js`, `sound.js`, `scene.js`
 - **Config**: `cfg.js`, `index.js`
@@ -455,8 +455,8 @@ src/
 ├── scenes/              # Game scenes
 │   ├── ready.js         # sceneReady()
 │   ├── menu.js          # sceneMenu()
-│   ├── level1.js        # sceneLevel1()
-│   └── level2.js        # sceneLevel2()
+│   ├── level-1.1.js        # sceneLevel1()
+│   └── level-1.2.js        # sceneLevel2()
 └── utils/               # Utility functions and helpers
     ├── helper.js        # Color helpers, key checks
     ├── sound.js         # Audio management

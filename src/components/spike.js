@@ -244,7 +244,7 @@ function createSpikeSprite(orientation, blockSize) {
   }
 
   // Use red color for spikes (danger!)
-  const spikeColor = getHex(CFG.colors.level1.spikes)
+  const spikeColor = getHex(CFG.colors['level-1.1'].spikes)
   ctx.fillStyle = spikeColor
 
   // Draw pixelated spikes using fillRect for 8-bit style (45° stepped pyramids)

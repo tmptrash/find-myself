@@ -35,7 +35,7 @@ export const CFG = {
   colors: {
     outlineTextColor: "000000",
     // Level 1 colors
-    level1: {
+    "level-1.1": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (danger!)
@@ -113,7 +113,7 @@ export const CFG = {
     }
   },
   levels: {
-    level1: {
+    "level-1.1": {
       name: "Level 1",
       
       // Hero spawn position (% of screen dimensions)
@@ -128,7 +128,7 @@ export const CFG = {
       }
     },
     
-    level2: {
+    "level-1.2": {
       name: "Level 2",
       
       // Hero spawn position (% of screen dimensions)

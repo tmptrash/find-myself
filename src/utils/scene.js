@@ -67,7 +67,7 @@ function addInstructions(k) {
       width: k.width() - 40
     }),
     k.pos(CFG.visual.instructionsX, CFG.visual.instructionsY),
-    getColor(k, CFG.colors.level1.instructions),
+    getColor(k, CFG.colors['level-1.1'].instructions),  // instructions color
     k.z(CFG.visual.zIndex.ui),
     k.fixed()
   ])

@@ -8,6 +8,7 @@ const SPIKE_HEIGHT_BLOCKS = 4 // Height in blocks (pattern: 1, 3, 5, 7)
 const SINGLE_SPIKE_WIDTH_BLOCKS = 7  // Width of one spike in blocks (for pattern: 1, 3, 5, 7)
 const SPIKE_GAP_BLOCKS = 1    // Gap between spikes in blocks
 const SPIKE_SCALE = 1
+const SPIKE_HEIGHT_RATIO = 250
 
 export const ORIENTATIONS = {
   FLOOR: 'floor',
@@ -182,7 +183,7 @@ function updateAnimation(inst) {
  */
 function getSpikeBlockSize(k) {
   // Base calculation: screen height / ratio to get proportional block size
-  return Math.max(2, Math.round(k.height() / 250))
+  return Math.max(2, Math.round(k.height() / SPIKE_HEIGHT_RATIO))
 }
 /**
  * Get rotation angle based on orientation

@@ -478,24 +478,55 @@ export function playLightningSound(instance) {
  */
 export function playKatanaSound(instance) {
   const now = instance.audioContext.currentTime
-  const duration = 0.1
+  const duration = 0.25
   
-  // Short air burst (minimalistic slash)
-  const burst = instance.audioContext.createOscillator()
-  const burstGain = instance.audioContext.createGain()
+  // Create white noise for rusty scrape texture
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
   
-  burst.type = 'sine'
-  burst.frequency.setValueAtTime(2000, now)
-  burst.frequency.exponentialRampToValueAtTime(600, now + duration)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
   
-  burstGain.gain.setValueAtTime(0.20, now)
-  burstGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = noiseBuffer
   
-  burst.connect(burstGain)
-  burstGain.connect(instance.audioContext.destination)
+  // Low-pass filter for deep, gritty rust scrape (300-450 Hz)
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.Q.value = 2
+  filter.frequency.setValueAtTime(300, now)
+  filter.frequency.linearRampToValueAtTime(450, now + duration)
   
-  burst.start(now)
-  burst.stop(now + duration)
+  // Deep grinding oscillator (very low)
+  const grind = instance.audioContext.createOscillator()
+  grind.type = 'sawtooth'
+  grind.frequency.setValueAtTime(45, now)
+  grind.frequency.linearRampToValueAtTime(70, now + duration)
+  
+  const grindGain = instance.audioContext.createGain()
+  grindGain.gain.setValueAtTime(0.25, now)
+  grindGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  // Main noise gain
+  const noiseGain = instance.audioContext.createGain()
+  noiseGain.gain.setValueAtTime(0.35, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  // Connect noise chain
+  noise.connect(filter)
+  filter.connect(noiseGain)
+  noiseGain.connect(instance.audioContext.destination)
+  
+  // Connect grind chain
+  grind.connect(grindGain)
+  grindGain.connect(instance.audioContext.destination)
+  
+  // Start all
+  noise.start(now)
+  grind.start(now)
+  grind.stop(now + duration)
 }
 
 /**

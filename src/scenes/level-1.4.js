@@ -43,8 +43,8 @@ export function sceneLevel4(k) {
     // Create bottom of the pit (platform at pit depth)
     const heroHeight = k.height() * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
-    const bottomPlatformHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
-    const pitBottomY = k.height() - bottomPlatformHeight + pitDepth
+    const bottomHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
+    const pitBottomY = k.height() - bottomHeight + pitDepth
     
     // Create pit bottom platform
     k.add([
@@ -58,7 +58,8 @@ export function sceneLevel4(k) {
     
     // Create spikes at the bottom of the pit (pointing up)
     const spikeHeight = Spikes.getSpikeHeight(k)
-    const spikes = Spikes.create({
+    const spikeWidth = Spikes.getSpikeWidth(k)
+    const pitSpikes = Spikes.create({
       k,
       x: pitInfo.centerX,
       y: pitBottomY - spikeHeight / 2,
@@ -66,7 +67,56 @@ export function sceneLevel4(k) {
       onHit: (inst) => onSpikeHit(k, hero, inst),
       sfx: sound
     })
-    spikes.spike.opacity = 1
+    pitSpikes.spike.opacity = 1
+    
+    // Create 3 spikes (left floor, center ceiling, right floor)
+    const bottomPlatformHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
+    const topPlatformHeight = k.height() * CFG.levels['level-1.4'].topPlatformHeight / 100
+    const platformY = k.height() - bottomPlatformHeight
+    const floorSpikeY = platformY - spikeHeight / 2
+    const ceilingSpikeY = topPlatformHeight + spikeHeight / 2
+    
+    // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
+    const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 1.5
+    const hiddenY1 = floorSpikeY + spikeHeight + 4  // Below platform + 4px lower
+    const spikes1 = Spikes.create({
+      k,
+      x: leftSpikeX,
+      y: hiddenY1,
+      orientation: Spikes.ORIENTATIONS.FLOOR,
+      onHit: (inst) => onSpikeHit(k, hero, inst),
+      sfx: sound
+    })
+    spikes1.spike.opacity = 1
+    spikes1.spike.z = -50  // Behind platforms
+    
+    // Center spike (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
+    const hiddenY2 = topPlatformHeight - spikeHeight / 2 - 4  // Inside ceiling platform + 4px higher
+    const visibleCeilingY = topPlatformHeight + spikeHeight / 2  // Extended down from ceiling
+    const spikes2 = Spikes.create({
+      k,
+      x: pitInfo.centerX,
+      y: hiddenY2,
+      orientation: Spikes.ORIENTATIONS.CEILING,
+      onHit: (inst) => onSpikeHit(k, hero, inst),
+      sfx: sound
+    })
+    spikes2.spike.opacity = 1
+    spikes2.spike.z = -50  // Behind platforms
+    
+    // Right spike (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
+    const rightSpikeX = pitInfo.centerX + pitInfo.width / 2 + spikeWidth * 1.5
+    const hiddenY3 = floorSpikeY + spikeHeight + 4  // Below platform + 4px lower
+    const spikes3 = Spikes.create({
+      k,
+      x: rightSpikeX,
+      y: hiddenY3,
+      orientation: Spikes.ORIENTATIONS.FLOOR,
+      onHit: (inst) => onSpikeHit(k, hero, inst),
+      sfx: sound
+    })
+    spikes3.spike.opacity = 1
+    spikes3.spike.z = -50  // Behind platforms
     
     // Add spike tag to hero for collision detection
     hero.character.use("player")
@@ -81,10 +131,36 @@ export function sceneLevel4(k) {
       soundTimer: k.rand(3, 6),
       hero,
       antiHero,
-      ...createLightningState()
+      ...createLightningState(),
+      // Spike animation state
+      spikes1,
+      spikes2,
+      spikes3,
+      targetY1: hiddenY1,      // Hidden position (retracted)
+      visibleY1: floorSpikeY,  // Visible position (extended)
+      targetY2: hiddenY2,      // Hidden position (retracted up)
+      visibleY2: ceilingSpikeY, // Visible position (extended down)
+      targetY3: hiddenY3,      // Hidden position (retracted)
+      visibleY3: floorSpikeY,  // Visible position (extended)
+      spike1State: 'waiting',
+      spike2State: 'waiting',
+      spike3State: 'waiting',
+      animationTimer: 0,
+      cycleTimer: 0,
+      animationSpeed: 0.5,   // Seconds for extend/retract (up/down movement)
+      spikeDelay: 0.5,       // Seconds between spikes
+      cycleDelay: 0.5,       // Seconds after last spike before restart
+      firstCycleComplete: false
     }
     
-    // Setup eerie sound effect and lightning
+    // Start spike animation after 1 second
+    k.wait(1, () => {
+      inst.spike1State = 'extending'
+      inst.animationTimer = 0
+      sound && Sound.playSpikeSound(sound)
+    })
+    
+    // Setup eerie sound effect, lightning and spikes
     k.onUpdate(() => updateLevel(inst))
     
     // Draw lightning effect
@@ -93,12 +169,13 @@ export function sceneLevel4(k) {
 }
 
 /**
- * Update level logic (sound, lightning)
+ * Update level logic (sound, lightning, spikes)
  * @param {Object} inst - Scene instance
  */
 function updateLevel(inst) {
   updateEerieSound(inst)
   updateLightning(inst)
+  updateSpikesAnimation(inst)
 }
 
 /**
@@ -125,6 +202,118 @@ function updateEerieSound(inst) {
 function onSpikeHit(k, hero, spikes) {
   Spikes.show(spikes)
   Hero.death(hero, () => k.go("level-1.4"))
+}
+
+/**
+ * Update spikes animation (cycle: extend, retract, repeat)
+ * @param {Object} inst - Scene instance
+ */
+function updateSpikesAnimation(inst) {
+  const { k, spikes1, spikes2, spikes3, targetY1, visibleY1, targetY2, visibleY2, targetY3, visibleY3, animationSpeed, sound } = inst
+  
+  inst.animationTimer += k.dt()
+  inst.cycleTimer += k.dt()
+  
+  // SPIKE 1 STATE MACHINE
+  if (inst.spike1State === 'extending') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    spikes1.spike.pos.y = targetY1 + (visibleY1 - targetY1) * progress
+    
+    if (progress >= 1) {
+      spikes1.spike.pos.y = visibleY1
+      inst.spike1State = 'retracting'
+      inst.animationTimer = 0
+    }
+  } else if (inst.spike1State === 'retracting') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    spikes1.spike.pos.y = visibleY1 + (targetY1 - visibleY1) * progress
+    
+    if (progress >= 1) {
+      spikes1.spike.pos.y = targetY1
+      inst.spike1State = 'waiting-for-spike2'
+      inst.animationTimer = 0
+    }
+  } else if (inst.spike1State === 'waiting-for-spike2') {
+    if (inst.animationTimer >= inst.spikeDelay) {
+      inst.spike2State = 'extending'
+      inst.spike1State = 'spike2-active'
+      inst.animationTimer = 0
+      sound && Sound.playSpikeSound(sound)
+    }
+  }
+  
+  // SPIKE 2 STATE MACHINE
+  if (inst.spike2State === 'extending') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    spikes2.spike.pos.y = targetY2 + (visibleY2 - targetY2) * progress
+    
+    if (progress >= 1) {
+      spikes2.spike.pos.y = visibleY2
+      inst.spike2State = 'retracting'
+      inst.animationTimer = 0
+    }
+  } else if (inst.spike2State === 'retracting') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    spikes2.spike.pos.y = visibleY2 + (targetY2 - visibleY2) * progress
+    
+    if (progress >= 1) {
+      spikes2.spike.pos.y = targetY2
+      inst.spike2State = 'waiting-for-spike3'
+      inst.animationTimer = 0
+    }
+  } else if (inst.spike2State === 'waiting-for-spike3') {
+    if (inst.animationTimer >= inst.spikeDelay) {
+      inst.spike3State = 'extending'
+      inst.spike2State = 'spike3-active'
+      inst.animationTimer = 0
+      sound && Sound.playSpikeSound(sound)
+    }
+  }
+  
+  // SPIKE 3 STATE MACHINE
+  if (inst.spike3State === 'extending') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    spikes3.spike.pos.y = targetY3 + (visibleY3 - targetY3) * progress
+    
+    if (progress >= 1) {
+      spikes3.spike.pos.y = visibleY3
+      inst.spike3State = 'retracting'
+      inst.animationTimer = 0
+    }
+  } else if (inst.spike3State === 'retracting') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    spikes3.spike.pos.y = visibleY3 + (targetY3 - visibleY3) * progress
+    
+    if (progress >= 1) {
+      spikes3.spike.pos.y = targetY3
+      inst.spike3State = 'cycle-complete'
+      inst.spike1State = 'cycle-complete'
+      inst.spike2State = 'cycle-complete'
+      inst.animationTimer = 0
+      inst.cycleTimer = 0
+      
+      // After first cycle, make spikes invisible
+      if (!inst.firstCycleComplete) {
+        inst.firstCycleComplete = true
+        spikes1.spike.opacity = 0
+        spikes2.spike.opacity = 0
+        spikes3.spike.opacity = 0
+      }
+    }
+  }
+  
+  // RESTART CYCLE after delay
+  if (inst.spike1State === 'cycle-complete' && inst.cycleTimer >= inst.cycleDelay) {
+    inst.cycleTimer = 0
+    inst.animationTimer = 0
+    spikes1.spike.pos.y = targetY1
+    spikes2.spike.pos.y = targetY2
+    spikes3.spike.pos.y = targetY3
+    inst.spike1State = 'extending'
+    inst.spike2State = 'waiting'
+    inst.spike3State = 'waiting'
+    sound && Sound.playSpikeSound(sound)
+  }
 }
 
 /**

@@ -69,12 +69,19 @@ function addInstructions(k) {
   // Base instruction text (no spaces between arrows)
   const baseText = "AWD/←↑→ - move\nSpace   - jump\nESC     - menu"
   
+  // Calculate position: center horizontally, middle of bottom platform
+  const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
+  const centerX = k.width() / 2
+  const bottomY = k.height() - bottomPlatformHeight / 2  // Middle of bottom platform
+  
   return k.add([
     k.text(baseText, {
       size: CFG.visual.instructionsFontSize,
-      width: k.width() - 40
+      width: k.width() - 40,
+      align: "center"
     }),
-    k.pos(CFG.visual.instructionsX, CFG.visual.instructionsY),
+    k.pos(centerX, bottomY),
+    k.anchor("center"),
     getColor(k, CFG.colors['level-1.1'].instructions),  // instructions color
     k.z(CFG.visual.zIndex.ui),
     k.fixed()

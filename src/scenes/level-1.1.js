@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
+import { getColor } from '../utils/helper.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
 import * as Spikes from '../components/spike.js'
@@ -15,6 +16,18 @@ export function sceneLevel1(k) {
       platformColor: CFG.colors['level-1.1'].platform,
       showInstructions: true
     })
+    
+    // Add level number
+    const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
+    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+    k.add([
+      k.text("lv: 1", { size: 20 }),
+      k.pos(sideWallWidth, topPlatformHeight - 30),
+      k.anchor("left"),
+      getColor(k, CFG.colors['level-1.1'].instructions),
+      k.z(CFG.visual.zIndex.ui),
+      k.fixed()
+    ])
     
     // Create anti-hero instance
     const antiHero = Hero.create({
@@ -55,7 +68,7 @@ export function sceneLevel1(k) {
     })
     
     // Start spike animation after 2 seconds
-    Spikes.startAnimation(spikes)
+    Spikes.startAnimation(spikes, 1)
     
     // Spawn hero with assembly effect
     Hero.spawn(hero)

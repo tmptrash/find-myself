@@ -122,7 +122,7 @@ export function loadSprites(k) {
  * @param {Object} inst - Spike instance
  * @param {number} delaySeconds - Delay before first appearance
  */
-export function startAnimation(inst, delaySeconds = .5) {
+export function startAnimation(inst, delaySeconds = 1) {
   const { spike, k, sfx } = inst
   
   // Wait for initial delay, then start animation cycle

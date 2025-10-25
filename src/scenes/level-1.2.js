@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
+import { getColor } from '../utils/helper.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
 import * as Spikes from '../components/spike.js'
@@ -14,6 +15,18 @@ export function sceneLevel2(k) {
       backgroundColor: CFG.colors['level-1.2'].background,
       platformColor: CFG.colors['level-1.2'].platform
     })
+    
+    // Add level number
+    const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
+    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+    k.add([
+      k.text("lv: 2", { size: 20 }),
+      k.pos(sideWallWidth, topPlatformHeight - 30),
+      k.anchor("left"),
+      getColor(k, CFG.colors['level-1.2'].instructions),
+      k.z(CFG.visual.zIndex.ui),
+      k.fixed()
+    ])
     
     // Create anti-hero instance (same position as level 1)
     const antiHero = Hero.create({

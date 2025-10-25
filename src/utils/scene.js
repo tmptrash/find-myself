@@ -111,7 +111,7 @@ export function initScene(config) {
  */
 function addInstructions(k) {
   // Base instruction text (no spaces between arrows)
-  const baseText = "AWD/←↑→ - move\nSpace   - jump\nESC     - menu"
+  const baseText = "AD/←→   - move\nSpace/↑ - jump\nESC     - menu"
   
   // Calculate position: center horizontally, middle of bottom platform
   const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100

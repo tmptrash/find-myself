@@ -7,7 +7,7 @@ import * as Sound from '../utils/sound.js'
 const DETECTION_DISTANCE = 100 // Distance to detect hero
 const DROP_DURATION = 0.2      // Time to drop down (seconds)
 const RAISE_DELAY = 2.0        // Time before raising back up (seconds)
-const RAISE_TIMEOUT = 3.0      // Maximum time platform stays down (seconds)
+const RAISE_TIMEOUT = 4.0      // Maximum time platform stays down (seconds)
 const RAISE_DURATION = 0.5     // Time to raise up (seconds)
 
 /**

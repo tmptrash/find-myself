@@ -153,7 +153,7 @@ function updatePlatform(inst) {
       inst.targetY = originalY
       inst.timer = 0
       
-add      // Hide spikes and disable collision
+      // Hide spikes and disable collision
       k.tween(
         spikes.spike.opacity,
         0,

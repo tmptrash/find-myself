@@ -264,6 +264,17 @@ Hero.create({ type: Hero.HEROES.HERO })
 
 ## 7. Code Organization
 
+### Do not use magic (hard-coded) numbers snd strings. Use constants instead
+```javascript
+// Bad
+k.wait(3, () => Hero.spawn(hero))
+
+// Good
+const HERO_SPAWN_DELAY = 3
+...
+k.wait(HERO_SPAWN_DELAY, () => Hero.spawn(hero))
+```
+
 ### Use import instead of require
 ```javascript
 // Bad

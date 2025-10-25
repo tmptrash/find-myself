@@ -3,6 +3,8 @@ import { getColor, getRGB } from './helper.js'
 import * as Sound from './sound.js'
 import * as Spikes from '../components/spikes.js'
 import * as Hero from '../components/hero.js'
+
+const ANTIHERO_SPAWN_DELAY = 3
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -276,6 +278,9 @@ function createLevelHeroes(k, levelName, sound, nextLevel) {
     sfx: sound
   })
   
+  // Hide anti-hero initially (will be shown when spawned)
+  antiHero.character.hidden = true
+  
   const hero = Hero.create({
     k,
     x: k.width() * CFG.levels[levelName].heroSpawn.x / 100,
@@ -288,6 +293,11 @@ function createLevelHeroes(k, levelName, sound, nextLevel) {
   
   hero.character.use("player")
   Hero.spawn(hero)
+  
+  // Spawn anti-hero with delay
+  k.wait(ANTIHERO_SPAWN_DELAY, () => {
+    Hero.spawn(antiHero)
+  })
   
   return { hero, antiHero }
 }

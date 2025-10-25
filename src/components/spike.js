@@ -44,6 +44,8 @@ export function getSpikeWidth(k) {
  * @param {string} [config.orientation='floor'] - Spike orientation
  * @param {Function} [config.onHit] - Callback when hero hits spikes
  * @param {Object} [config.sfx] - Sound instance for audio effects
+ * @param {string} [config.color] - Hex color for the spike (defaults to level spike color)
+ * @param {number} [config.spikeCount=3] - Number of spike pyramids to draw
  * @returns {Object} Spikes instance with spike object and state
  */
 export function create(config) {
@@ -53,20 +55,28 @@ export function create(config) {
     y,
     orientation = ORIENTATIONS.FLOOR,
     onHit = null,
-    sfx = null
+    sfx = null,
+    color = CFG.colors['level-1.1'].spikes,
+    spikeCount = 3
   } = config
 
   // Calculate dynamic sizes based on screen resolution
   const blockSize = getSpikeBlockSize(k)
   const spikeHeight = SPIKE_HEIGHT_BLOCKS * blockSize
-  const spikeWidth = (SINGLE_SPIKE_WIDTH_BLOCKS * SPIKE_COUNT + SPIKE_GAP_BLOCKS * (SPIKE_COUNT - 1)) * blockSize
+  const spikeWidth = (SINGLE_SPIKE_WIDTH_BLOCKS * spikeCount + SPIKE_GAP_BLOCKS * (spikeCount - 1)) * blockSize
+
+  // Load spike sprite with custom color and spike count
+  const spriteKey = `spike_${orientation}_${color}_${spikeCount}`
+  if (!k.getSprite(spriteKey)) {
+    k.loadSprite(spriteKey, createSpikeSprite(orientation, blockSize, color, spikeCount))
+  }
 
   // Determine rotation and collision box based on orientation
   const rotation = getRotation(orientation)
   const collisionSize = getCollisionSize(orientation, spikeWidth, spikeHeight)
 
   const spike = k.add([
-    k.sprite(`spike_${orientation}`),
+    k.sprite(spriteKey),
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
@@ -111,8 +121,10 @@ export function create(config) {
  */
 export function loadSprites(k) {
   const blockSize = getSpikeBlockSize(k)
+  const defaultColor = CFG.colors['level-1.1'].spikes  // Default red color
+  const defaultSpikeCount = 3  // Default 3 pyramids
   Object.values(ORIENTATIONS).forEach(orientation => {
-    const spriteData = createSpikeSprite(orientation, blockSize)
+    const spriteData = createSpikeSprite(orientation, blockSize, defaultColor, defaultSpikeCount)
     k.loadSprite(`spike_${orientation}`, spriteData)
   })
 }
@@ -233,9 +245,11 @@ function getCollisionSize(orientation, width, height) {
  * Create spike sprite procedurally
  * @param {string} orientation - Spike orientation
  * @param {number} blockSize - Size of one block in pixels
+ * @param {string} color - Hex color string for the spike
+ * @param {number} spikeCount - Number of spike pyramids
  * @returns {string} Base64 encoded sprite data
  */
-function createSpikeSprite(orientation, blockSize) {
+function createSpikeSprite(orientation, blockSize, color, spikeCount = 3) {
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   
@@ -243,7 +257,7 @@ function createSpikeSprite(orientation, blockSize) {
   const spikeHeight = SPIKE_HEIGHT_BLOCKS * blockSize
   const singleSpikeWidth = SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
   const spikeGap = SPIKE_GAP_BLOCKS * blockSize
-  const spikeWidth = singleSpikeWidth * SPIKE_COUNT + spikeGap * (SPIKE_COUNT - 1)
+  const spikeWidth = singleSpikeWidth * spikeCount + spikeGap * (spikeCount - 1)
   
   // Canvas size based on orientation
   if (orientation === ORIENTATIONS.LEFT || orientation === ORIENTATIONS.RIGHT) {
@@ -254,14 +268,14 @@ function createSpikeSprite(orientation, blockSize) {
     canvas.height = spikeHeight
   }
 
-  // Use red color for spikes (danger!)
-  const spikeColor = getHex(CFG.colors['level-1.1'].spikes)
+  // Use provided color for spikes
+  const spikeColor = getHex(color)
   ctx.fillStyle = spikeColor
 
   // Draw pixelated spikes using fillRect for 8-bit style (45° stepped pyramids)
   
   // Draw each spike as stepped pyramid (45° sides, sharp point on top)
-  for (let i = 0; i < SPIKE_COUNT; i++) {
+  for (let i = 0; i < spikeCount; i++) {
     const baseX = i * (singleSpikeWidth + spikeGap)
     const centerX = baseX + singleSpikeWidth / 2
     

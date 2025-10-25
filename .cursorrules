@@ -305,6 +305,7 @@ export function sceneMenu(k) {
 - Keep related functions together
 - Organize by feature, not by type
 - Use section comments to separate concerns
+- If you add similar code into two or more modules put them into separate module and reuse
 
 ---
 

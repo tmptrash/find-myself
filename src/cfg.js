@@ -34,6 +34,11 @@ export const CFG = {
   },
   colors: {
     outlineTextColor: "000000",
+    // Common colors
+    levelIndicator: {
+      active: "DC143C",     // Red for active/completed levels
+      inactive: "555555",   // Gray for inactive/future levels
+    },
     // Level 1 colors
     "level-1.1": {
       background: "3E3E3E",         // Dark gray (foggy gloom)

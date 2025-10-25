@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, addLevelIndicator } from '../utils/scene.js'
 import { getColor } from '../utils/helper.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
@@ -17,17 +17,8 @@ export function sceneLevel4(k) {
       skipPlatforms: true
     })
     
-    // Add level number
-    const topPlatformHeight = k.height() * CFG.levels['level-1.4'].topPlatformHeight / 100
-    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
-    k.add([
-      k.text("lv: 4", { size: 20 }),
-      k.pos(sideWallWidth + 10, topPlatformHeight - 30),
-      k.anchor("left"),
-      getColor(k, CFG.colors['level-1.4'].instructions),
-      k.z(CFG.visual.zIndex.ui),
-      k.fixed()
-    ])
+    // Add level indicator with spikes (using custom top platform height)
+    addLevelIndicator(k, 4, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, CFG.levels['level-1.4'].topPlatformHeight)
     
     // Create custom platforms with pit in the middle
     const pitInfo = createCustomPlatforms(k, CFG.colors['level-1.4'].platform)
@@ -83,6 +74,7 @@ export function sceneLevel4(k) {
     
     // Create 3 spikes (left floor, center ceiling, right floor)
     const bottomPlatformHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
+    const topPlatformHeight = k.height() * CFG.levels['level-1.4'].topPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
     const floorSpikeY = platformY - spikeHeight / 2
     const ceilingSpikeY = topPlatformHeight + spikeHeight / 2

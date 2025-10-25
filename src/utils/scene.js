@@ -1,6 +1,7 @@
 import { CFG } from '../cfg.js'
 import { getColor } from './helper.js'
 import * as Sound from './sound.js'
+import * as Spikes from '../components/spike.js'
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -15,6 +16,49 @@ export function addBackground(k, color) {
     k.fixed(),
     k.z(CFG.visual.zIndex.background)
   ])
+}
+
+/**
+ * Adds level indicator using spikes (5 spikes showing current level progress)
+ * @param {Object} k - Kaplay instance
+ * @param {number} levelNumber - Current level number (1-5)
+ * @param {string} activeColor - Color for active (completed) levels
+ * @param {string} inactiveColor - Color for inactive (not completed) levels
+ * @param {number} [customTopHeight] - Custom top platform height (% of screen height)
+ * @returns {Array} Array of spike instances
+ */
+export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, customTopHeight = null) {
+  const topHeight = customTopHeight || CFG.visual.topPlatformHeight
+  const topPlatformHeight = k.height() * topHeight / 100
+  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+  
+  // Calculate width for single spike (1 pyramid)
+  const blockSize = Math.max(2, Math.round(k.height() / 250))
+  const singleSpikeWidth = 7 * blockSize  // SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
+  const spacing = blockSize  // 1 block between pyramid bases
+  
+  const startX = sideWallWidth + singleSpikeWidth / 2
+  // Position spikes above the top platform
+  const spikeHeight = 4 * blockSize  // SPIKE_HEIGHT_BLOCKS * blockSize
+  const y = topPlatformHeight - spikeHeight / 2 - 4  // Above platform by spike height + 4px
+  
+  const spikes = []
+  for (let i = 0; i < 5; i++) {
+    const color = i < levelNumber ? activeColor : inactiveColor
+    const spike = Spikes.create({
+      k,
+      x: startX + i * (singleSpikeWidth + spacing),
+      y: y,
+      orientation: Spikes.ORIENTATIONS.FLOOR,
+      color: color,
+      spikeCount: 1  // Single pyramid for indicator
+    })
+    spike.spike.opacity = 1  // Make spike visible immediately
+    spike.spike.z = CFG.visual.zIndex.ui  // Show above platforms
+    spikes.push(spike)
+  }
+  
+  return spikes
 }
 /**
  * Initializes a level with common setup (gravity, sound, background, platforms, camera, instructions, controls)

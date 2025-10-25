@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, addLevelIndicator } from '../utils/scene.js'
 import { getColor } from '../utils/helper.js'
 import * as Hero from '../components/hero.js'
 import { HEROES } from '../components/hero.js'
@@ -16,17 +16,8 @@ export function sceneLevel2(k) {
       platformColor: CFG.colors['level-1.2'].platform
     })
     
-    // Add level number
-    const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
-    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
-    k.add([
-      k.text("lv: 2", { size: 20 }),
-      k.pos(sideWallWidth, topPlatformHeight - 30),
-      k.anchor("left"),
-      getColor(k, CFG.colors['level-1.2'].instructions),
-      k.z(CFG.visual.zIndex.ui),
-      k.fixed()
-    ])
+    // Add level indicator with spikes
+    addLevelIndicator(k, 2, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive)
     
     // Create anti-hero instance (same position as level 1)
     const antiHero = Hero.create({

@@ -15,7 +15,8 @@ const k = kaplay({
   height: window.innerHeight,
   font: "jetbrains",
   letterbox: true,
-  stretch: true
+  stretch: true,
+  background: [0, 0, 0]  // Black background, no loading screen
 })
 
 // Load resources

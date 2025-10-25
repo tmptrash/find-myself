@@ -1,6 +1,7 @@
 import { CFG } from '../cfg.js'
 import { getHex } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
+import * as Hero from './hero.js'
 
 // Spike parameters
 const SPIKE_COUNT = 3         // Number of triangle spikes
@@ -41,6 +42,7 @@ export function getSpikeWidth(k) {
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.x - X position
  * @param {number} config.y - Y position
+ * @param {Object} [config.hero] - Hero instance (required for collision handling)
  * @param {string} [config.orientation='floor'] - Spike orientation
  * @param {Function} [config.onHit] - Callback when hero hits spikes
  * @param {Object} [config.sfx] - Sound instance for audio effects
@@ -53,6 +55,7 @@ export function create(config) {
     k,
     x,
     y,
+    hero = null,
     orientation = ORIENTATIONS.FLOOR,
     onHit = null,
     sfx = null,
@@ -96,6 +99,7 @@ export function create(config) {
   const inst = {
     spike,
     k,
+    hero,
     orientation,
     onHit,
     sfx,
@@ -157,6 +161,16 @@ export function show(inst) {
   inst.spike.opacity = 1
   inst.isVisible = true
   inst.wasShownOnDeath = true  // Mark that spikes were shown on death
+}
+
+/**
+ * Handle spike collision with hero (shows spikes and triggers hero death)
+ * @param {Object} inst - Spike instance
+ * @param {string} currentLevel - Level to restart on death
+ */
+export function handleCollision(inst, currentLevel) {
+  show(inst)
+  Hero.death(inst.hero, () => inst.k.go(currentLevel))
 }
 
 /**

@@ -1,46 +1,19 @@
 import { CFG } from '../cfg.js'
-import { initScene, addLevelIndicator } from '../utils/scene.js'
-import { getColor } from '../utils/helper.js'
-import * as Hero from '../components/hero.js'
-import { HEROES } from '../components/hero.js'
-import * as Spikes from '../components/spike.js'
+import { initScene, updateEerieSound } from '../utils/scene.js'
+import * as Spikes from '../components/spikes.js'
 import * as Sound from '../utils/sound.js'
+import * as Hero from '../components/hero.js'
 import { createLightningState, updateLightning, drawLightning } from '../utils/connection.js'
 
 export function sceneLevel3(k) {
   k.scene("level-1.3", () => {
-    // Initialize level with common setup
-    const { sound } = initScene({
+    // Initialize level with heroes
+    const { sound, hero, antiHero } = initScene({
       k,
-      backgroundColor: CFG.colors['level-1.3'].background,
-      platformColor: CFG.colors['level-1.3'].platform
+      levelName: 'level-1.3',
+      levelNumber: 3,
+      nextLevel: 'level-1.4'
     })
-    
-    // Add level indicator with spikes
-    addLevelIndicator(k, 3, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive)
-    
-    // Create anti-hero instance (same position as level 1)
-    const antiHero = Hero.create({
-      k,
-      x: k.width() * CFG.levels['level-1.3'].antiHeroSpawn.x / 100,
-      y: k.height() * CFG.levels['level-1.3'].antiHeroSpawn.y / 100,
-      type: 'antihero',
-      sfx: sound
-    })
-    
-    // Create hero instance with annihilation setup
-    const hero = Hero.create({
-      k,
-      x: k.width() * CFG.levels['level-1.3'].heroSpawn.x / 100,
-      y: k.height() * CFG.levels['level-1.3'].heroSpawn.y / 100,
-      type: HEROES.HERO,
-      sfx: sound,
-      antiHero,
-      onAnnihilation: () => k.go("level-1.4")
-    })
-    
-    // Add spike tag to hero for collision detection
-    hero.character.use("player")
     
     // Calculate spike positions between heroes
     const heroX = k.width() * CFG.levels['level-1.3'].heroSpawn.x / 100
@@ -64,8 +37,12 @@ export function sceneLevel3(k) {
       k,
       x: spike1X,
       y: hiddenY,
+      hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => onSpikeHit(k, hero, spikes1),
+      onHit: () => {
+        spikes1.spike.opacity = 1
+        Hero.death(hero, () => k.go("level-1.3"))
+      },
       sfx: sound
     })
     spikes1.spike.opacity = 1  // Visible from start
@@ -76,15 +53,16 @@ export function sceneLevel3(k) {
       k,
       x: spike2X,
       y: hiddenY,
+      hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => onSpikeHit(k, hero, spikes2),
+      onHit: () => {
+        spikes2.spike.opacity = 1
+        Hero.death(hero, () => k.go("level-1.3"))
+      },
       sfx: sound
     })
     spikes2.spike.opacity = 1  // Visible from start
     spikes2.spike.z = -50  // Behind platforms
-    
-    // Spawn hero with assembly effect
-    Hero.spawn(hero)
     
     // Scene instance with state
     const inst = {
@@ -117,35 +95,15 @@ export function sceneLevel3(k) {
     })
     
     // Setup eerie sound effect and lightning
-    k.onUpdate(() => updateLevel(inst))
+    k.onUpdate(() => {
+      updateEerieSound(inst)
+      updateLightning(inst)
+      updateSpikesAnimation(inst)
+    })
     
     // Draw lightning effect
     k.onDraw(() => drawLightning(inst))
   })
-}
-
-/**
- * Handle spike collision with hero
- * @param {Object} k - Kaplay instance
- * @param {Object} hero - Hero instance
- * @param {Object} spikes - Spikes instance
- */
-function onSpikeHit(k, hero, spikes) {
-  // Show spikes when hero hits them (ensure visibility)
-  spikes.spike.opacity = 1
-  
-  // Death effect when hero hits spikes
-  Hero.death(hero, () => k.go("level-1.3"))
-}
-
-/**
- * Update level logic (sound, lightning, spikes animation)
- * @param {Object} inst - Scene instance
- */
-function updateLevel(inst) {
-  updateEerieSound(inst)
-  updateLightning(inst)
-  updateSpikesAnimation(inst)
 }
 
 /**
@@ -222,19 +180,3 @@ function updateSpikesAnimation(inst) {
     sound && Sound.playSpikeSound(sound)
   }
 }
-
-/**
- * Update eerie sound timer and play sound randomly
- * @param {Object} inst - Scene instance
- */
-function updateEerieSound(inst) {
-  const { k, sound } = inst
-  
-  inst.soundTimer -= k.dt()
-  
-  if (inst.soundTimer <= 0) {
-    sound && Sound.playGlitchSound(sound)
-    inst.soundTimer = k.rand(4, 8)  // Next sound in 4-8 seconds
-  }
-}
-

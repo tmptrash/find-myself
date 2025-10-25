@@ -264,6 +264,15 @@ Hero.create({ type: Hero.HEROES.HERO })
 
 ## 7. Code Organization
 
+### Use import instead of require
+```javascript
+// Bad
+const Hero = require('./hero.js')
+
+// Good
+import * as Hero  from './hero.js'
+```
+
 ### Extract Complex Logic
 ```javascript
 // Good: Extracted to private function
@@ -306,6 +315,19 @@ export function sceneMenu(k) {
 - Organize by feature, not by type
 - Use section comments to separate concerns
 - If you add similar code into two or more modules put them into separate module and reuse
+- If we have an import from the same file, group them into one import like this:
+```javascript
+// Bad
+import * as Hero from '../components/hero.js'
+import { HEROES } from '../components/hero.js'
+...
+const h = HEROES
+
+// Good
+import * as Hero from '../components/hero.js'
+...
+const h = Hero.HEROES
+```
 
 ---
 
@@ -451,7 +473,7 @@ src/
 ├── index.js             # Entry point, Kaplay initialization
 ├── cfg.js               # Pure configuration data
 ├── components/          # Reusable game components
-│   ├── hero.js          # Hero/anti-hero with create() pattern
+│   ├── hero.js          # Hero/anti-hero
 │   └── button.js        # Button component
 ├── scenes/              # Game scenes
 │   ├── ready.js         # sceneReady()
@@ -483,6 +505,7 @@ src/
 
 ### Do
 - ✅ Use factory functions with `create()` pattern
+- ✅ Function `create()` should be at the top of the module
 - ✅ Pass instances to functions
 - ✅ Extract complex logic to private functions
 - ✅ Use centralized configuration

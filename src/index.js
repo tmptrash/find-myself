@@ -7,7 +7,7 @@ import { sceneLevel2 } from "./scenes/level-1.2.js"
 import { sceneLevel3 } from "./scenes/level-1.3.js"
 import { sceneLevel4 } from "./scenes/level-1.4.js"
 import { loadHeroSprites } from "./components/hero.js"
-import { loadSprites as loadSpikeSprites } from "./components/spike.js"
+import { loadSprites as loadSpikeSprites } from "./components/spikes.js"
 
 // Game initialization (fullscreen)
 const k = kaplay({

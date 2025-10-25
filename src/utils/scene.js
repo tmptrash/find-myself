@@ -1,7 +1,8 @@
 import { CFG } from '../cfg.js'
 import { getColor } from './helper.js'
 import * as Sound from './sound.js'
-import * as Spikes from '../components/spike.js'
+import * as Spikes from '../components/spikes.js'
+import * as Hero from '../components/hero.js'
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -62,18 +63,38 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
 }
 /**
  * Initializes a level with common setup (gravity, sound, background, platforms, camera, instructions, controls)
- * @param {Object} k - Kaplay instance
  * @param {Object} config - Level configuration
- * @param {String} config.backgroundColor - Background color
- * @param {String} config.platformColor - Platform color
+ * @param {Object} config.k - Kaplay instance
+ * @param {string} [config.levelName] - Level name (e.g., 'level-1.1') for config lookup
+ * @param {number} [config.levelNumber] - Level number for indicator (1-5)
+ * @param {string} [config.nextLevel] - Next level name for annihilation
+ * @param {String} [config.backgroundColor] - Background color (optional if levelName provided)
+ * @param {String} [config.platformColor] - Platform color (optional if levelName provided)
  * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
  * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
  * @param {Boolean} [config.showInstructions=false] - If true, show control instructions
- * @returns {Object} Object with sound instance and other utilities
+ * @param {Boolean} [config.createHeroes=true] - If true, create hero and anti-hero
+ * @returns {Object} Object with sound, hero, antiHero instances
  */
 export function initScene(config) {
-  const { k, backgroundColor, platformColor, bottomPlatformHeight, topPlatformHeight, skipPlatforms, showInstructions = false } = config
+  const { 
+    k, 
+    levelName,
+    levelNumber,
+    nextLevel,
+    backgroundColor, 
+    platformColor, 
+    bottomPlatformHeight, 
+    topPlatformHeight, 
+    skipPlatforms, 
+    showInstructions = false,
+    createHeroes = true
+  } = config
+  
+  // Use levelName-based colors if not explicitly provided
+  const bgColor = backgroundColor || (levelName && CFG.colors[levelName]?.background)
+  const pfColor = platformColor || (levelName && CFG.colors[levelName]?.platform)
   
   // Set gravity (scaled to screen height for resolution independence)
   k.setGravity(CFG.gameplay.gravityRatio * k.height())
@@ -82,11 +103,11 @@ export function initScene(config) {
   const sound = Sound.create()
   
   // Add background
-  addBackground(k, backgroundColor)
+  addBackground(k, bgColor)
   
   // Add platforms (unless skipped)
   if (!skipPlatforms) {
-    addPlatforms(k, platformColor, bottomPlatformHeight, topPlatformHeight)
+    addPlatforms(k, pfColor, bottomPlatformHeight, topPlatformHeight)
   }
   
   // Setup camera
@@ -97,12 +118,28 @@ export function initScene(config) {
     addInstructions(k)
   }
   
+  // Add level indicator if levelNumber provided
+  if (levelNumber) {
+    const customTopHeight = topPlatformHeight || (skipPlatforms && levelName && CFG.levels[levelName]?.topPlatformHeight)
+    addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, customTopHeight)
+  }
+  
   // Setup back to menu
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => k.go("menu"))
   })
   
-  return { sound }
+  let hero = null
+  let antiHero = null
+  
+  // Create heroes if requested
+  if (createHeroes && levelName && nextLevel) {
+    const heroesResult = createLevelHeroes(k, levelName, sound, nextLevel)
+    hero = heroesResult.hero
+    antiHero = heroesResult.antiHero
+  }
+  
+  return { sound, hero, antiHero }
 }
 /**
  * Adds control instructions to the screen
@@ -175,4 +212,54 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight) {
     // Right wall (20% from right edge)
     createPlatform(k.width() - sideWallWidth, topPlatformHeight, sideWallWidth, k.height() - topPlatformHeight - bottomPlatformHeight)
   ]
+}
+
+/**
+ * Create hero and anti-hero for a level
+ * @param {Object} k - Kaplay instance
+ * @param {string} levelName - Level name (e.g., 'level-1.1')
+ * @param {Object} sound - Sound instance
+ * @param {string} nextLevel - Next level name for annihilation
+ * @returns {Object} {hero, antiHero}
+ */
+function createLevelHeroes(k, levelName, sound, nextLevel) {
+  const antiHero = Hero.create({
+    k,
+    x: k.width() * CFG.levels[levelName].antiHeroSpawn.x / 100,
+    y: k.height() * CFG.levels[levelName].antiHeroSpawn.y / 100,
+    type: 'antihero',
+    sfx: sound
+  })
+  
+  const hero = Hero.create({
+    k,
+    x: k.width() * CFG.levels[levelName].heroSpawn.x / 100,
+    y: k.height() * CFG.levels[levelName].heroSpawn.y / 100,
+    type: Hero.HEROES.HERO,
+    sfx: sound,
+    antiHero,
+    onAnnihilation: () => k.go(nextLevel)
+  })
+  
+  hero.character.use("player")
+  Hero.spawn(hero)
+  
+  return { hero, antiHero }
+}
+
+/**
+ * Update eerie sound timer and play sound randomly
+ * @param {Object} inst - Scene instance
+ * @param {number} [minDelay=4] - Min delay in seconds
+ * @param {number} [maxDelay=8] - Max delay in seconds
+ */
+export function updateEerieSound(inst, minDelay = 4, maxDelay = 8) {
+  const { k, sound } = inst
+  
+  inst.soundTimer -= k.dt()
+  
+  if (inst.soundTimer <= 0) {
+    sound && Sound.playGlitchSound(sound)
+    inst.soundTimer = k.rand(minDelay, maxDelay)
+  }
 }

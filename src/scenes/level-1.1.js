@@ -1,47 +1,18 @@
 import { CFG } from '../cfg.js'
-import { initScene, addLevelIndicator } from '../utils/scene.js'
-import { getColor } from '../utils/helper.js'
-import * as Hero from '../components/hero.js'
-import { HEROES } from '../components/hero.js'
-import * as Spikes from '../components/spike.js'
-import * as Sound from '../utils/sound.js'
+import { initScene, updateEerieSound } from '../utils/scene.js'
+import * as Spikes from '../components/spikes.js'
 import { createLightningState, updateLightning, drawLightning } from '../utils/connection.js'
 
 export function sceneLevel1(k) {
   k.scene("level-1.1", () => {
-    // Initialize level with common setup
-    const { sound } = initScene({
+    // Initialize level with heroes
+    const { sound, hero, antiHero } = initScene({
       k,
-      backgroundColor: CFG.colors['level-1.1'].background,
-      platformColor: CFG.colors['level-1.1'].platform,
+      levelName: 'level-1.1',
+      levelNumber: 1,
+      nextLevel: 'level-1.2',
       showInstructions: true
     })
-    
-    // Add level indicator with spikes
-    addLevelIndicator(k, 1, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive)
-    
-    // Create anti-hero instance
-    const antiHero = Hero.create({
-      k,
-      x: k.width() * CFG.levels['level-1.1'].antiHeroSpawn.x / 100,
-      y: k.height() * CFG.levels['level-1.1'].antiHeroSpawn.y / 100,
-      type: 'antihero',
-      sfx: sound
-    })
-    
-    // Create hero instance with annihilation setup
-    const hero = Hero.create({
-      k,
-      x: k.width() * CFG.levels['level-1.1'].heroSpawn.x / 100,
-      y: k.height() * CFG.levels['level-1.1'].heroSpawn.y / 100,
-      type: HEROES.HERO,
-      sfx: sound,
-      antiHero,
-      onAnnihilation: () => k.go("level-1.2")
-    })
-    
-    // Add spike tag to hero for collision detection
-    hero.character.use("player")
     
     // Create spikes in the middle of the level
     const centerX = k.width() / 2
@@ -53,16 +24,14 @@ export function sceneLevel1(k) {
       k,
       x: centerX + k.width() * 0.15,  // Shifted right by 15% of screen width
       y: platformY - spikeHeight / 2,
+      hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => onSpikeHit(k, hero, spikes),
+      onHit: () => Spikes.handleCollision(spikes, "level-1.1"),
       sfx: sound
     })
     
     // Start spike animation after 2 seconds
     Spikes.startAnimation(spikes, 1)
-    
-    // Spawn hero with assembly effect
-    Hero.spawn(hero)
     
     // Scene instance with state
     const inst = {
@@ -75,47 +44,12 @@ export function sceneLevel1(k) {
     }
     
     // Setup eerie sound effect and lightning
-    k.onUpdate(() => updateLevel(inst))
+    k.onUpdate(() => {
+      updateEerieSound(inst, 2, 6)
+      updateLightning(inst)
+    })
     
     // Draw lightning effect
     k.onDraw(() => drawLightning(inst))
   })
-}
-
-/**
- * Handle spike collision with hero
- * @param {Object} k - Kaplay instance
- * @param {Object} hero - Hero instance
- * @param {Object} spikes - Spikes instance
- */
-function onSpikeHit(k, hero, spikes) {
-  // Show spikes when hero hits them
-  Spikes.show(spikes)
-  
-  // Death effect when hero hits spikes
-  Hero.death(hero, () => k.go("level-1.1"))
-}
-
-/**
- * Update level logic (sound, lightning)
- * @param {Object} inst - Scene instance
- */
-function updateLevel(inst) {
-  updateEerieSound(inst)
-  updateLightning(inst)
-}
-
-/**
- * Update eerie sound timer and play sound randomly
- * @param {Object} inst - Scene instance
- */
-function updateEerieSound(inst) {
-  const { k, sound } = inst
-  
-  inst.soundTimer -= k.dt()
-  
-  if (inst.soundTimer <= 0) {
-    sound && Sound.playGlitchSound(sound)
-    inst.soundTimer = k.rand(2, 6)  // Next sound in 2-6 seconds
-  }
 }

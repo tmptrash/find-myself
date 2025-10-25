@@ -87,7 +87,8 @@ export function create(config) {
     eyeTimer: 0,
     currentEyeSprite: null,
     isAnnihilating: false,
-    isDying: false
+    isDying: false,
+    isSpawned: false  // Flag to prevent controls before spawn completes
   }
   
   // Check ground touch through collisions
@@ -275,6 +276,9 @@ export function spawn(inst) {
         // Show hero
         character.hidden = false
         
+        // Mark hero as spawned (allow controls)
+        inst.isSpawned = true
+        
         // Play click sound after assembly completes
         if (sfx) {
           Sound.playSpawnClick(sfx)
@@ -390,6 +394,7 @@ function setupControls(inst) {
   // Move left control
   CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
+      if (!inst.isSpawned) return  // Prevent movement before spawn
       inst.character.move(-inst.speed, 0)
       inst.direction = -1
     })
@@ -398,6 +403,7 @@ function setupControls(inst) {
   // Move right control
   CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
+      if (!inst.isSpawned) return  // Prevent movement before spawn
       inst.character.move(inst.speed, 0)
       inst.direction = 1
     })
@@ -406,6 +412,7 @@ function setupControls(inst) {
   // Jump
   CFG.controls.jump.forEach(key => {
     inst.k.onKeyPress(key, () => {
+      if (!inst.isSpawned) return  // Prevent jump before spawn
       if (inst.canJump) {
         inst.character.vel.y = -inst.jumpForce
         inst.canJump = false

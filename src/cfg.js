@@ -139,6 +139,7 @@ export const CFG = {
     }
   },
   levels: {
+    platformName: "platform",
     "level-1.1": {
       name: "Level 1",
       

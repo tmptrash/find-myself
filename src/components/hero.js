@@ -91,7 +91,7 @@ export function create(config) {
   }
   
   // Check ground touch through collisions
-  character.onCollide("platform", () => onCollisionPlatform(inst))
+  character.onCollide(CFG.levels.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
   antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))

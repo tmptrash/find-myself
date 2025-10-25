@@ -37,7 +37,7 @@ export function sceneLevel4(k) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, CFG.colors['level-1.4'].platform),
-      "platform"
+      CFG.levels.platformName
     ])
     
     // Create spikes at the bottom of the pit (pointing up)
@@ -299,7 +299,7 @@ function createCustomPlatforms(k, color) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, color),
-      "platform"
+      CFG.levels.platformName
     ])
   }
   

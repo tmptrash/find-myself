@@ -228,7 +228,7 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, color),
-      "platform"
+      CFG.levels.platformName
     ])
   }
   

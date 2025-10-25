@@ -79,7 +79,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * @param {String} [config.platformColor] - Platform color (optional if levelName provided)
  * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
  * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
- * @param {Object} [config.platformGap] - Gap in bottom platform {x, width}
+ * @param {Object|Array} [config.platformGap] - Gap(s) in bottom platform {x, width} or [{x, width}, ...]
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
  * @param {Boolean} [config.showInstructions=false] - If true, show control instructions
  * @param {Boolean} [config.createHeroes=true] - If true, create hero and anti-hero
@@ -217,7 +217,7 @@ function setupCamera(k) {
  * @param {String} color - Platform color in hex format
  * @param {Number} [customBottomHeight] - Custom bottom platform height (% of screen height)
  * @param {Number} [customTopHeight] - Custom top platform height (% of screen height)
- * @param {Object} [gap] - Gap in bottom platform {x, width}
+ * @param {Object|Array} [gap] - Gap(s) in bottom platform {x, width} or [{x, width}, ...]
  * @returns {Array} Array of platform objects
  */
 function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
@@ -239,12 +239,29 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
   
   const platforms = []
   
-  // Bottom platform (with gap if specified)
+  // Bottom platform (with gap(s) if specified)
   if (gap) {
-    // Left part of bottom platform
-    platforms.push(createPlatform(0, k.height() - bottomPlatformHeight, gap.x, bottomPlatformHeight))
-    // Right part of bottom platform
-    platforms.push(createPlatform(gap.x + gap.width, k.height() - bottomPlatformHeight, k.width() - (gap.x + gap.width), bottomPlatformHeight))
+    // Normalize gap to array
+    const gaps = Array.isArray(gap) ? gap : [gap]
+    
+    // Sort gaps by x position
+    const sortedGaps = [...gaps].sort((a, b) => a.x - b.x)
+    
+    // Create platform segments between gaps
+    let lastX = 0
+    
+    sortedGaps.forEach(g => {
+      // Create segment before gap
+      if (g.x > lastX) {
+        platforms.push(createPlatform(lastX, k.height() - bottomPlatformHeight, g.x - lastX, bottomPlatformHeight))
+      }
+      lastX = g.x + g.width
+    })
+    
+    // Create final segment after last gap
+    if (lastX < k.width()) {
+      platforms.push(createPlatform(lastX, k.height() - bottomPlatformHeight, k.width() - lastX, bottomPlatformHeight))
+    }
   } else {
     // Full bottom platform (no gap)
     platforms.push(createPlatform(0, k.height() - bottomPlatformHeight, k.width(), bottomPlatformHeight))

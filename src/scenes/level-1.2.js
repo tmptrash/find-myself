@@ -1,38 +1,74 @@
 import { CFG } from '../cfg.js'
 import { initScene, updateEerieSound } from '../utils/scene.js'
 import * as Spikes from '../components/spikes.js'
+import * as MovingPlatform from '../components/moving-platform.js'
 import { createLightningState, updateLightning, drawLightning } from '../utils/connection.js'
 
 export function sceneLevel2(k) {
   k.scene("level-1.2", () => {
-    // Initialize level with heroes
-    const { sound, hero, antiHero } = initScene({
-      k,
-      levelName: 'level-1.2',
-      levelNumber: 2,
-      nextLevel: 'level-1.3',
-      showInstructions: true,
-      levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-1.2'].spikes,
-      subTitle: "words are blades that never rust",
-      subTitleColor: CFG.colors['level-1.2'].background
-    })
-    
-    // Calculate spike positions between heroes
+    // Calculate moving platform position first (110px from hero start position)
     const heroX = k.width() * CFG.levels['level-1.2'].heroSpawn.x / 100
+    const spikeWidth = Spikes.getSpikeWidth(k)
+    const movingPlatformX = heroX + 110  // 110px from hero
+    
+    // Calculate positions for spike platforms
     const antiHeroX = k.width() * CFG.levels['level-1.2'].antiHeroSpawn.x / 100
     const leftX = Math.min(heroX, antiHeroX)
     const rightX = Math.max(heroX, antiHeroX)
     const distance = rightX - leftX
     
-    // First spike at 0.42 distance (shifted right, leaving landing space)
+    // First spike at 0.42 distance, second spike at 0.73 distance
     const spike1X = leftX + distance * 0.42
-    // Second spike at 0.73 distance (shifted further right)
     const spike2X = leftX + distance * 0.73
+    
+    // Second moving platform before second spike (rightmost)
+    const movingPlatform2X = spike2X - spikeWidth * 1.2  // Before second spike
+    
+    // Initialize level with heroes and gaps in platform
+    const { sound, hero, antiHero } = initScene({
+      k,
+      levelName: 'level-1.2',
+      levelNumber: 2,
+      nextLevel: 'level-1.3',
+      platformGap: [
+        // First gap for first moving platform
+        {
+          x: movingPlatformX - spikeWidth / 2,
+          width: spikeWidth
+        },
+        // Second gap for second moving platform
+        {
+          x: movingPlatform2X - spikeWidth / 2,
+          width: spikeWidth
+        }
+      ]
+    })
     
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
     const spikeHeight = Spikes.getSpikeHeight(k)
+    
+    // Create first moving platform
+    MovingPlatform.create({
+      k,
+      x: movingPlatformX,
+      y: platformY,
+      hero,
+      color: CFG.colors['level-1.2'].platform,
+      currentLevel: 'level-1.2',
+      sfx: sound
+    })
+    
+    // Create second moving platform (before second spike)
+    MovingPlatform.create({
+      k,
+      x: movingPlatform2X,
+      y: platformY,
+      hero,
+      color: CFG.colors['level-1.2'].platform,
+      currentLevel: 'level-1.2',
+      sfx: sound
+    })
     
     // Create first spike
     const spikes1 = Spikes.create({

@@ -18,11 +18,12 @@ const RAISE_DURATION = 0.5     // Time to raise up (seconds)
  * @param {number} config.y - Y position (top of platform, at floor level)
  * @param {Object} config.hero - Hero instance to detect
  * @param {string} config.color - Platform color
+ * @param {string} config.currentLevel - Current level name (e.g., 'level-1.1')
  * @param {Object} [config.sfx] - Sound instance
  * @returns {Object} Platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, color, sfx = null } = config
+  const { k, x, y, hero, color, currentLevel, sfx = null } = config
   
   // Calculate platform dimensions based on spike width
   const platformWidth = Spikes.getSpikeWidth(k)
@@ -48,9 +49,9 @@ export function create(config) {
     y: y - spikeHeight / 2,  // Above platform top
     hero,
     orientation: Spikes.ORIENTATIONS.FLOOR,  // Pointing up
-    onHit: () => Spikes.handleCollision(spikes, "level-1.1"),
+    onHit: () => Spikes.handleCollision(spikes, currentLevel),
     sfx,
-    color: CFG.colors['level-1.1'].spikes
+    color: CFG.colors[currentLevel]?.spikes
   })
   spikes.spike.opacity = 0  // Start hidden
   spikes.spike.z = CFG.visual.zIndex.platforms + 1  // Above platform

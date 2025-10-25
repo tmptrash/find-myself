@@ -43,6 +43,7 @@ export function sceneLevel1(k) {
       y: movingPlatformY,
       hero,
       color: CFG.colors['level-1.1'].platform,
+      currentLevel: 'level-1.1',
       sfx: sound
     })
     

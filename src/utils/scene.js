@@ -77,6 +77,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * @param {String} [config.platformColor] - Platform color (optional if levelName provided)
  * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
  * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
+ * @param {Object} [config.platformGap] - Gap in bottom platform {x, width}
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
  * @param {Boolean} [config.showInstructions=false] - If true, show control instructions
  * @param {Boolean} [config.createHeroes=true] - If true, create hero and anti-hero
@@ -95,7 +96,8 @@ export function initScene(config) {
     backgroundColor, 
     platformColor, 
     bottomPlatformHeight, 
-    topPlatformHeight, 
+    topPlatformHeight,
+    platformGap,
     skipPlatforms, 
     showInstructions = false,
     createHeroes = true
@@ -116,7 +118,7 @@ export function initScene(config) {
   
   // Add platforms (unless skipped)
   if (!skipPlatforms) {
-    addPlatforms(k, pfColor, bottomPlatformHeight, topPlatformHeight)
+    addPlatforms(k, pfColor, bottomPlatformHeight, topPlatformHeight, platformGap)
   }
   
   // Setup camera
@@ -213,9 +215,10 @@ function setupCamera(k) {
  * @param {String} color - Platform color in hex format
  * @param {Number} [customBottomHeight] - Custom bottom platform height (% of screen height)
  * @param {Number} [customTopHeight] - Custom top platform height (% of screen height)
+ * @param {Object} [gap] - Gap in bottom platform {x, width}
  * @returns {Array} Array of platform objects
  */
-function addPlatforms(k, color, customBottomHeight, customTopHeight) {
+function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
   // Calculate platform dimensions from percentages (use custom or default)
   const bottomPlatformHeight = k.height() * (customBottomHeight || CFG.visual.bottomPlatformHeight) / 100
   const topPlatformHeight = k.height() * (customTopHeight || CFG.visual.topPlatformHeight) / 100
@@ -232,9 +235,21 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight) {
     ])
   }
   
+  const platforms = []
+  
+  // Bottom platform (with gap if specified)
+  if (gap) {
+    // Left part of bottom platform
+    platforms.push(createPlatform(0, k.height() - bottomPlatformHeight, gap.x, bottomPlatformHeight))
+    // Right part of bottom platform
+    platforms.push(createPlatform(gap.x + gap.width, k.height() - bottomPlatformHeight, k.width() - (gap.x + gap.width), bottomPlatformHeight))
+  } else {
+    // Full bottom platform (no gap)
+    platforms.push(createPlatform(0, k.height() - bottomPlatformHeight, k.width(), bottomPlatformHeight))
+  }
+  
   return [
-    // Bottom platform (1/3 of screen height)
-    createPlatform(0, k.height() - bottomPlatformHeight, k.width(), bottomPlatformHeight),
+    ...platforms,
     // Top platform (drops down 1/3 of screen height)
     createPlatform(0, 0, k.width(), topPlatformHeight),
     // Left wall (20% from left edge)

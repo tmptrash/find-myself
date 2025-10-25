@@ -109,11 +109,17 @@ export function create(config) {
     visibleDuration: 0.3,  // Stay visible (0.5 seconds)
     fadeOutDuration: 0.3,  // Fade-out duration (0.5 seconds)
     animationComplete: false,
-    wasShownOnDeath: false  // Flag to prevent auto-animation if shown on death
+    wasShownOnDeath: false,  // Flag to prevent auto-animation if shown on death
+    collisionEnabled: true   // Flag to enable/disable collision
   }
 
   // Setup collision detection with hero (works even when invisible)
-  spike.onCollide("player", () => onHit?.(inst))
+  spike.onCollide("player", () => {
+    // Only trigger collision if enabled
+    if (inst.collisionEnabled) {
+      onHit?.(inst)
+    }
+  })
 
   return inst
 }

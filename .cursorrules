@@ -502,6 +502,7 @@ src/
 - ❌ Put exported functions at the bottom of files
 - ❌ Do not put comments separated by many = symbol
 - ❌ Do not put function inside other function. Make it private
+- ❌ Do not put magic (hard-coded) numbers and strings. Put them into the constant at the top or into the config.js if it's a global one
 
 ### Do
 - ✅ Use factory functions with `create()` pattern

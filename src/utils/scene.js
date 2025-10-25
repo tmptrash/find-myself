@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor } from './helper.js'
+import { getColor, getRGB } from './helper.js'
 import * as Sound from './sound.js'
 import * as Spikes from '../components/spikes.js'
 import * as Hero from '../components/hero.js'
@@ -61,6 +61,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
   
   return spikes
 }
+
 /**
  * Initializes a level with common setup (gravity, sound, background, platforms, camera, instructions, controls)
  * @param {Object} config - Level configuration
@@ -68,6 +69,10 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * @param {string} [config.levelName] - Level name (e.g., 'level-1.1') for config lookup
  * @param {number} [config.levelNumber] - Level number for indicator (1-5)
  * @param {string} [config.nextLevel] - Next level name for annihilation
+ * @param {string} [config.levelTitle] - Level title text to display at the top
+ * @param {string} [config.levelTitleColor] - Level title color in hex format
+ * @param {string} [config.subTitle] - Subtitle text to display below the title
+ * @param {string} [config.subTitleColor] - Subtitle color in hex format
  * @param {String} [config.backgroundColor] - Background color (optional if levelName provided)
  * @param {String} [config.platformColor] - Platform color (optional if levelName provided)
  * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
@@ -83,6 +88,10 @@ export function initScene(config) {
     levelName,
     levelNumber,
     nextLevel,
+    levelTitle,
+    levelTitleColor,
+    subTitle,
+    subTitleColor,
     backgroundColor, 
     platformColor, 
     bottomPlatformHeight, 
@@ -115,13 +124,34 @@ export function initScene(config) {
   
   // Add instructions (only if requested)
   if (showInstructions) {
-    addInstructions(k)
+    const instructionsObj = addInstructions(k)
+    
+    // Fade out instructions after 5 seconds
+    k.wait(5, () => {
+      const fadeOutDuration = 1.0  // 1 second fade out
+      let fadeTimer = 0
+      
+      instructionsObj.onUpdate(() => {
+        fadeTimer += k.dt()
+        const progress = Math.min(1, fadeTimer / fadeOutDuration)
+        instructionsObj.opacity = 1 - progress
+        
+        if (progress >= 1) {
+          k.destroy(instructionsObj)
+        }
+      })
+    })
   }
   
   // Add level indicator if levelNumber provided
   if (levelNumber) {
     const customTopHeight = topPlatformHeight || (skipPlatforms && levelName && CFG.levels[levelName]?.topPlatformHeight)
     addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, customTopHeight)
+  }
+  
+  // Add level title if provided
+  if (levelTitle && levelTitleColor) {
+    addLevelTitle(k, levelTitle, levelTitleColor, subTitle, subTitleColor, topPlatformHeight)
   }
   
   // Setup back to menu
@@ -262,4 +292,49 @@ export function updateEerieSound(inst, minDelay = 4, maxDelay = 8) {
     sound && Sound.playGlitchSound(sound)
     inst.soundTimer = k.rand(minDelay, maxDelay)
   }
+}
+
+/**
+ * Adds level title text at the top center of the screen (private function)
+ * @param {Object} k - Kaplay instance
+ * @param {string} text - Text to display
+ * @param {string} color - Text color in hex format
+ * @param {string} [subText] - Subtitle text to display below
+ * @param {string} [subColor] - Subtitle color in hex format
+ * @param {number} [customTopHeight] - Custom top platform height (% of screen height)
+ * @returns {Object} Text object
+ */
+function addLevelTitle(k, text, color, subText = null, subColor = null, customTopHeight = null) {
+  const topHeight = customTopHeight || CFG.visual.topPlatformHeight
+  const topPlatformHeight = k.height() * topHeight / 100
+  const centerX = k.width() / 2
+  const textY = topPlatformHeight / 2  // Middle between top of screen and top platform
+  
+  // Add main title
+  const title = k.add([
+    k.text(text, {
+      size: 40
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    getColor(k, color),
+    k.outline(3, getRGB(k, CFG.colors.outlineTextColor)),
+    k.z(CFG.visual.zIndex.platforms + 1),  // In front of platforms
+  ])
+  
+  // Add subtitle if provided
+  if (subText && subColor) {
+    k.add([
+      k.text(subText, {
+        size: 17
+      }),
+      k.pos(centerX, textY + 30),  // 30px below title
+      k.anchor("center"),
+      getColor(k, subColor),
+      k.outline(2, getRGB(k, CFG.colors.outlineTextColor)),
+      k.z(CFG.visual.zIndex.platforms + 1),  // In front of platforms
+    ])
+  }
+  
+  return title
 }

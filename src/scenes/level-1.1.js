@@ -11,7 +11,11 @@ export function sceneLevel1(k) {
       levelName: 'level-1.1',
       levelNumber: 1,
       nextLevel: 'level-1.2',
-      showInstructions: true
+      showInstructions: true,
+      levelTitle: "words like blades",
+      levelTitleColor: CFG.colors['level-1.1'].spikes,
+      subTitle: "sometimes words cut deeper than blades...",
+      subTitleColor: CFG.colors['level-1.1'].background
     })
     
     // Create spikes in the middle of the level

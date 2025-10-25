@@ -14,7 +14,11 @@ export function sceneLevel4(k) {
       levelName: 'level-1.4',
       levelNumber: 4,
       nextLevel: 'menu',
-      skipPlatforms: true
+      skipPlatforms: true,
+      levelTitle: "words like blades",
+      levelTitleColor: CFG.colors['level-1.4'].spikes,
+      subTitle: "words are blades that leave invisible wounds",
+      subTitleColor: CFG.colors['level-1.4'].background
     })
     
     // Create custom platforms with pit in the middle

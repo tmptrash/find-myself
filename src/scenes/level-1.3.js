@@ -12,7 +12,11 @@ export function sceneLevel3(k) {
       k,
       levelName: 'level-1.3',
       levelNumber: 3,
-      nextLevel: 'level-1.4'
+      nextLevel: 'level-1.4',
+      levelTitle: "words like blades",
+      levelTitleColor: CFG.colors['level-1.3'].spikes,
+      subTitle: "when feelings grow dull, words become sharper",
+      subTitleColor: CFG.colors['level-1.3'].background
     })
     
     // Calculate spike positions between heroes

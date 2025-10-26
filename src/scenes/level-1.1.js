@@ -10,7 +10,7 @@ export function sceneLevel1(k) {
     const centerX = k.width() / 2
     const spikeWidth = Spikes.getSpikeWidth(k)
     const movingPlatformX = centerX + k.width() * 0.05  // Position platform left of center
-    const spikeX = movingPlatformX + spikeWidth * 1.3  // Position spikes right of platform with small gap
+    const spikeX = movingPlatformX + spikeWidth * 1.1  // Position spikes closer to platform
     
     // Initialize level with heroes and gap in platform
     const { sound, hero, antiHero } = initScene({

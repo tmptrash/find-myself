@@ -22,7 +22,7 @@ export function sceneLevel2(k) {
     const spike2X = leftX + distance * 0.73
     
     // Second moving platform before second spike (rightmost)
-    const movingPlatform2X = spike2X - spikeWidth * 1.2  // Before second spike
+    const movingPlatform2X = spike2X - spikeWidth * 1.1  // Closer to second spike
     
     // Initialize level with heroes and gaps in platform
     const { sound, hero, antiHero } = initScene({

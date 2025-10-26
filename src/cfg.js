@@ -29,7 +29,7 @@ export const CFG = {
   gameplay: {
     // Physics (as ratios of screen height for resolution independence)
     moveSpeedRatio: 0.33,        // Hero movement speed (screen heights/s)
-    jumpForceRatio: 0.65,        // Jump force (screen heights/s)
+    jumpForceRatio: 0.55,        // Jump force (screen heights/s)
     gravityRatio: 2.17,          // Gravity (screen heights/s²)
   },
   colors: {

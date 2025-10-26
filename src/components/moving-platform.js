@@ -19,11 +19,13 @@ const RAISE_DURATION = 0.5     // Time to raise up (seconds)
  * @param {Object} config.hero - Hero instance to detect
  * @param {string} config.color - Platform color
  * @param {string} config.currentLevel - Current level name (e.g., 'level-1.1')
+ * @param {boolean} [config.jumpToDisableSpikes=false] - If true, spikes disappear when hero jumps down
+ * @param {boolean} [config.autoOpen=false] - If true, platform opens automatically on level start
  * @param {Object} [config.sfx] - Sound instance
  * @returns {Object} Platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, color, currentLevel, sfx = null } = config
+  const { k, x, y, hero, color, currentLevel, jumpToDisableSpikes = false, autoOpen = false, sfx = null } = config
   
   // Calculate platform dimensions based on spike width
   const platformWidth = Spikes.getSpikeWidth(k)
@@ -63,13 +65,38 @@ export function create(config) {
     k,
     hero,
     sfx,
+    jumpToDisableSpikes,
+    platformWidth,
+    heroInitialY: hero.character.pos.y,  // Store hero's initial Y position
     originalY: y,
     targetY: y,
     currentY: y,
     dropDistance: k.height() * 0.08,  // Drop by hero height (~8% of screen)
-    state: 'idle',  // idle, dropping, waiting, raising, disabled
+    state: 'idle',  // idle, dropping, waiting, disabled
     timer: 0,
     hasActivated: false  // Track if trap was activated at least once
+  }
+  
+  // Auto-open platform if requested
+  if (autoOpen) {
+    // Start dropping immediately
+    inst.state = 'dropping'
+    inst.targetY = y + inst.dropDistance
+    inst.timer = 0
+    inst.hasActivated = true
+    
+    // Play spike sound
+    sfx && Sound.playSpikeSound(sfx)
+    
+    // Show spikes and enable collision
+    k.tween(
+      spikes.spike.opacity,
+      1,
+      0.3,
+      (val) => spikes.spike.opacity = val,
+      k.easings.linear
+    )
+    spikes.collisionEnabled = true
   }
   
   // Update logic
@@ -83,7 +110,7 @@ export function create(config) {
  * @param {Object} inst - Platform instance
  */
 function updatePlatform(inst) {
-  const { k, platform, spikes, hero, originalY, dropDistance, sfx } = inst
+  const { k, platform, spikes, hero, originalY, dropDistance, sfx, jumpToDisableSpikes, platformWidth } = inst
   
   // Check distance to hero (only check X distance, and only from left side)
   if (inst.state === 'idle' && !inst.hasActivated) {
@@ -139,34 +166,55 @@ function updatePlatform(inst) {
   if (inst.state === 'waiting') {
     inst.timer += k.dt()
     
-    // Check if hero is still in detection range
-    const distanceX = Math.abs(platform.pos.x - hero.character.pos.x)
-    const heroStillNear = distanceX <= DETECTION_DISTANCE
-    
-    // Raise platform if: 
-    // 1. Minimum delay passed AND hero left the area, OR
-    // 2. Maximum timeout reached (regardless of hero position)
-    const shouldRaise = (inst.timer >= RAISE_DELAY && !heroStillNear) || 
-                        (inst.timer >= RAISE_TIMEOUT)
-    
-    if (shouldRaise) {
-      inst.state = 'disabled'  // Switch to disabled state (never activates again)
-      inst.targetY = originalY
-      inst.timer = 0
+    // Special mode: hero jumps down to disable spikes
+    if (jumpToDisableSpikes) {
+      // Check if hero's FEET are below his initial spawn position (falling into pit)
+      const heroFeetY = hero.character.pos.y + 12.5  // Hero center + half of collision height (25/2)
+      const heroIsFalling = hero.character.vel && hero.character.vel.y > 0
+      const heroFeetBelowSpawn = heroFeetY >= inst.heroInitialY  // Hero's feet below initial position
+      const heroIsNearPlatform = Math.abs(platform.pos.x - hero.character.pos.x) <= platformWidth / 2
       
-      // Hide spikes and disable collision
-      k.tween(
-        spikes.spike.opacity,
-        0,
-        0.3,
-        (val) => spikes.spike.opacity = val,
-        k.easings.linear
-      )
-      spikes.collisionEnabled = false  // Disable collision when platform raises
+      if (heroIsFalling && heroFeetBelowSpawn && heroIsNearPlatform) {
+        // Hero's feet entered the pit! Disable spikes and start raising platform immediately
+        spikes.spike.opacity = 0
+        spikes.collisionEnabled = false
+        
+        // Start raising platform immediately (no waiting for landing)
+        inst.state = 'disabled'
+        inst.targetY = originalY
+        inst.timer = 0
+      }
+    } else {
+      // Standard mode: timer-based closing
+      // Check if hero is still in detection range
+      const distanceX = Math.abs(platform.pos.x - hero.character.pos.x)
+      const heroStillNear = distanceX <= DETECTION_DISTANCE
+      
+      // Raise platform if: 
+      // 1. Minimum delay passed AND hero left the area, OR
+      // 2. Maximum timeout reached (regardless of hero position)
+      const shouldRaise = (inst.timer >= RAISE_DELAY && !heroStillNear) || 
+                          (inst.timer >= RAISE_TIMEOUT)
+      
+      if (shouldRaise) {
+        inst.state = 'disabled'  // Switch to disabled state (never activates again)
+        inst.targetY = originalY
+        inst.timer = 0
+        
+        // Hide spikes and disable collision
+        k.tween(
+          spikes.spike.opacity,
+          0,
+          0.3,
+          (val) => spikes.spike.opacity = val,
+          k.easings.linear
+        )
+        spikes.collisionEnabled = false  // Disable collision when platform raises
+      }
     }
   }
   
-  // Handle raising state (now called 'disabled' - platform stays down)
+  // Handle raising state (platform returns to original position)
   if (inst.state === 'disabled') {
     inst.timer += k.dt()
     const progress = Math.min(1, inst.timer / RAISE_DURATION)

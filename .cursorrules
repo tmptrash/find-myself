@@ -481,20 +481,25 @@ function onAnnihilationCollide(inst) {
 
 ```
 src/
-├── index.js             # Entry point, Kaplay initialization
-├── cfg.js               # Pure configuration data
-├── components/          # Reusable game components
-│   ├── hero.js          # Hero/anti-hero
-│   └── button.js        # Button component
-├── scenes/              # Game scenes
-│   ├── ready.js         # sceneReady()
-│   ├── menu.js          # sceneMenu()
-│   ├── level-1.1.js        # sceneLevel1()
-│   └── level-1.2.js        # sceneLevel2()
-└── utils/               # Utility functions and helpers
-    ├── helper.js        # Color helpers, key checks
-    ├── sound.js         # Audio management
-    └── scene.js         # Common scene utilities
+├── index.js                    # Entry point, Kaplay initialization
+├── cfg.js                      # Pure configuration data
+├── components/                 # Reusable game components
+│   ├── hero.js                 # Hero/anti-hero component
+│   ├── spikes.js               # Spikes component with animation
+│   └── moving-platform.js      # Moving platform with trap logic
+├── sections/                   # Game sections (menu, levels)
+│   ├── menu.js                 # sceneMenu() - Main menu
+│   ├── ready.js                # sceneReady() - Story/intro screen
+│   └── blades/                 # "Words like blades" chapter
+│       ├── level-1.1.js        # Level 1: Introduction
+│       ├── level-1.2.js        # Level 2: Two spike sets
+│       ├── level-1.3.js        # Level 3: Animated spikes + platforms
+│       └── level-1.4.js        # Level 4: Complex platforming
+└── utils/                      # Utility functions and helpers
+    ├── helper.js               # Color helpers, key checks
+    ├── sound.js                # Procedural audio (Web Audio API)
+    ├── scene.js                # Common scene utilities
+    └── connection.js           # Lightning effect between heroes
 ```
 
 ---
@@ -593,6 +598,6 @@ function onUpdate(inst) {
 ## Notes
 
 - Follow these patterns consistently across the codebase
-- When in doubt, reference existing components (`hero.js`, `button.js`, `sound.js`)
+- When in doubt, reference existing components (`hero.js`, `spikes.js`, `moving-platform.js`, `sound.js`)
 - Prioritize readability and maintainability
 - Keep it simple: don't over-engineer solutions

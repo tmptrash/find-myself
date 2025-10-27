@@ -1,8 +1,8 @@
-import { CFG } from '../../cfg.js'
-import { initScene, updateEerieSound } from '../../utils/scene.js'
-import * as Spikes from '../../components/spikes.js'
-import * as MovingPlatform from '../../components/moving-platform.js'
-import { createLightningState, updateLightning, drawLightning } from '../../utils/connection.js'
+import { CFG } from '../../../cfg.js'
+import { initScene, updateEerieSound } from '../utils/scene.js'
+import * as Spikes from '../components/spikes.js'
+import * as MovingPlatform from '../../../components/moving-platform.js'
+import { createLightningState, updateLightning, drawLightning } from '../../../utils/connection.js'
 
 export function sceneLevel2(k) {
   k.scene("level-1.2", () => {

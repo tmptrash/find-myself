@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getColor } from '../utils/helper.js'
-import * as Spikes from './spikes.js'
+import * as Spikes from '../sections/blades/components/spikes.js'
 import * as Sound from '../utils/sound.js'
 
 // Platform parameters

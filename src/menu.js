@@ -1,8 +1,8 @@
-import * as Sound from "../utils/sound.js"
-import { CFG } from "../cfg.js"
-import { getRGB } from "../utils/helper.js"
-import * as Hero from "../components/hero.js"
-import { drawConnectionWave } from "../utils/connection.js"
+import * as Sound from "./utils/sound.js"
+import { CFG } from "./cfg.js"
+import { getRGB } from "./utils/helper.js"
+import * as Hero from "./components/hero.js"
+import { drawConnectionWave } from "./utils/connection.js"
 
 export function sceneMenu(k) {
   k.scene("menu", () => {

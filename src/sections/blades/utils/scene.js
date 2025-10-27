@@ -1,8 +1,8 @@
-import { CFG } from '../cfg.js'
-import { getColor, getRGB } from './helper.js'
-import * as Sound from './sound.js'
-import * as Spikes from '../components/spikes.js'
-import * as Hero from '../components/hero.js'
+import { CFG } from '../../../cfg.js'
+import { getColor, getRGB } from '../../../utils/helper.js'
+import * as Sound from '../../../utils/sound.js'
+import * as Spikes from '../../../sections/blades/components/spikes.js'
+import * as Hero from '../../../components/hero.js'
 
 const ANTIHERO_SPAWN_DELAY = 3
 /**

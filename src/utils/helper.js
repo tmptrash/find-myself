@@ -1,7 +1,3 @@
-// ============================================
-// PUBLIC API
-// ============================================
-
 // Get color as Kaplay object
 export function getColor(k, colorHex) {
   const [r, g, b] = parseHex(colorHex)

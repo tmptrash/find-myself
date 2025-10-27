@@ -1,6 +1,6 @@
-import { CFG } from '../cfg.js'
-import { getColor, getRGB } from '../utils/helper.js'
-import { addBackground } from '../utils/scene.js'
+import { CFG } from './cfg.js'
+import { getColor, getRGB } from './utils/helper.js'
+import { addBackground } from './sections/blades/utils/scene.js'
 
 export function sceneReady(k) {
   k.scene("ready", () => {

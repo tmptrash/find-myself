@@ -1,13 +1,12 @@
 import kaplay from "kaplay"
-import { CFG } from "./cfg.js"
-import { sceneReady } from "./sections/ready.js"
-import { sceneMenu } from "./sections/menu.js"
-import { sceneLevel1 } from "./sections/blades/level1.js"
-import { sceneLevel2 } from "./sections/blades/level2.js"
-import { sceneLevel3 } from "./sections/blades/level3.js"
-import { sceneLevel4 } from "./sections/blades/level4.js"
+import { sceneReady } from "./ready.js"
+import { sceneMenu } from "./menu.js"
+import { sceneLevel1 } from "./sections/blades/scenes/level1.js"
+import { sceneLevel2 } from "./sections/blades/scenes/level2.js"
+import { sceneLevel3 } from "./sections/blades/scenes/level3.js"
+import { sceneLevel4 } from "./sections/blades/scenes/level4.js"
 import { loadHeroSprites } from "./components/hero.js"
-import { loadSprites as loadSpikeSprites } from "./components/spikes.js"
+import { loadSprites as loadSpikeSprites } from "./sections/blades/components/spikes.js"
 
 // Game initialization (fullscreen)
 const k = kaplay({

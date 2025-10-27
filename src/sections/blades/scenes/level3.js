@@ -1,10 +1,10 @@
-import { CFG } from '../../cfg.js'
-import { initScene, updateEerieSound } from '../../utils/scene.js'
-import * as Spikes from '../../components/spikes.js'
-import * as MovingPlatform from '../../components/moving-platform.js'
-import * as Sound from '../../utils/sound.js'
-import * as Hero from '../../components/hero.js'
-import { createLightningState, updateLightning, drawLightning } from '../../utils/connection.js'
+import { CFG } from '../../../cfg.js'
+import { initScene, updateEerieSound } from '../utils/scene.js'
+import * as Spikes from '../components/spikes.js'
+import * as MovingPlatform from '../../../components/moving-platform.js'
+import * as Sound from '../../../utils/sound.js'
+import * as Hero from '../../../components/hero.js'
+import { createLightningState, updateLightning, drawLightning } from '../../../utils/connection.js'
 
 export function sceneLevel3(k) {
   k.scene("level-1.3", () => {

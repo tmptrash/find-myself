@@ -50,11 +50,6 @@ export async function resumeAudioContext(instance) {
     await ctx.resume()
   }
 }
-
-// ============================================
-// CREATE SOUND INSTANCE
-// ============================================
-
 /**
  * Create sound instance with AudioContext and all audio resources
  * @returns {Object} Sound instance with context, gains, and ambient state

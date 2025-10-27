@@ -1,7 +1,7 @@
-import { CFG } from '../cfg.js'
-import { getHex } from '../utils/helper.js'
-import * as Sound from '../utils/sound.js'
-import * as Hero from './hero.js'
+import { CFG } from '../../../cfg.js'
+import { getHex } from '../../../utils/helper.js'
+import * as Sound from '../../../utils/sound.js'
+import * as Hero from '../../../components/hero.js'
 
 // Spike parameters
 const SPIKE_COUNT = 3         // Number of triangle spikes

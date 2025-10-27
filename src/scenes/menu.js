@@ -131,7 +131,7 @@ export function sceneMenu(k) {
  * @returns {Array} Array of title letter objects
  */
 function createTitle(k, centerX, centerY) {
-  const titleLetters = "FIND YOU".split("")
+  const titleLetters = "FIND MYSELF".split("")
   const titleObjects = []
   
   titleLetters.forEach((letter, i) => {

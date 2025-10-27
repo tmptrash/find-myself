@@ -12,7 +12,7 @@ export function sceneReady(k) {
     
     // Title
     k.add([
-      k.text("FIND YOU", { size: 64 }),
+      k.text("FIND MYSELF", { size: 64 }),
       k.pos(centerX, 100),
       k.anchor("center"),
       getColor(k, CFG.colors.ready.title),

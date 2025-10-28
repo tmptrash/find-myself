@@ -2,7 +2,6 @@ import { CFG } from '../../../cfg.js'
 import { initScene, updateEerieSound } from '../utils/scene.js'
 import * as Spikes from '../components/spikes.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
-import { createLightningState, updateLightning, drawLightning } from '../../../utils/connection.js'
 
 export function sceneLevel2(k) {
   k.scene("level-1.2", () => {
@@ -104,19 +103,12 @@ export function sceneLevel2(k) {
     const inst = {
       k,
       sound,
-      soundTimer: k.rand(3, 6),
-      hero,
-      antiHero,
-      ...createLightningState()
+      soundTimer: k.rand(3, 6)
     }
     
-    // Setup eerie sound effect and lightning
+    // Setup eerie sound effect
     k.onUpdate(() => {
       updateEerieSound(inst)
-      updateLightning(inst)
     })
-    
-    // Draw lightning effect
-    k.onDraw(() => drawLightning(inst))
   })
 }

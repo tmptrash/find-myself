@@ -4,7 +4,6 @@ import * as Spikes from '../components/spikes.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import { createLightningState, updateLightning, drawLightning } from '../../../utils/connection.js'
 
 export function sceneLevel3(k) {
   k.scene("level-1.3", () => {
@@ -118,9 +117,6 @@ export function sceneLevel3(k) {
       k,
       sound,
       soundTimer: k.rand(3, 6),
-      hero,
-      antiHero,
-      ...createLightningState(),
       // Spike animation state
       spikes1,
       spikes2,
@@ -143,15 +139,11 @@ export function sceneLevel3(k) {
       sound && Sound.playSpikeSound(sound)
     })
     
-    // Setup eerie sound effect and lightning
+    // Setup eerie sound effect and spike animation
     k.onUpdate(() => {
       updateEerieSound(inst)
-      updateLightning(inst)
       updateSpikesAnimation(inst)
     })
-    
-    // Draw lightning effect
-    k.onDraw(() => drawLightning(inst))
   })
 }
 

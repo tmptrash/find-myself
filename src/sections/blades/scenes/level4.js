@@ -134,9 +134,9 @@ export function sceneLevel4(k) {
       spike3State: 'waiting',
       animationTimer: 0,
       cycleTimer: 0,
-      animationSpeed: 0.15,   // Seconds for extend/retract (up/down movement)
-      spikeDelay: 0.15,      // Seconds between spikes (pause between spike1->spike2 and spike2->spike3)
-      cycleDelay: 0.15,      // Seconds after last spike before restart
+      animationSpeed: 0.08,   // Seconds for extend/retract (up/down movement)
+      spikeDelay: 0.08,      // Seconds between spikes (pause between spike1->spike2 and spike2->spike3)
+      cycleDelay: 0.08,      // Seconds after last spike before restart
       firstCycleComplete: false
     }
     

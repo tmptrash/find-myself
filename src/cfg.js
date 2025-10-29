@@ -189,16 +189,16 @@ export const CFG = {
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {
         x: 12,    // % of screen width (left side)
-        y: 54     // % of screen height (on bottom platform - higher)
+        y: 52     // % of screen height (on bottom platform - higher)
       },
       antiHeroSpawn: {
         x: 88,    // % of screen width (right side)
-        y: 54     // % of screen height (on bottom platform - higher)
+        y: 52     // % of screen height (on bottom platform - higher)
       },
       
-      // Platform heights (gap approximately equals hero jump height)
-      bottomPlatformHeight: 42.5,    // Bottom platform height (% of screen height) - higher than default
-      topPlatformHeight: 42.5         // Top platform height (% of screen height) - lower than default
+      // Platform heights (gap = hero height, hero touches ceiling when jumping)
+      bottomPlatformHeight: 45.5,    // Bottom platform height (% of screen height) - higher than default
+      topPlatformHeight: 45.5         // Top platform height (% of screen height) - lower than default
     }
   },
 }

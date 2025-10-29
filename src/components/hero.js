@@ -301,8 +301,8 @@ function onUpdate(inst) {
     isAnyKeyDown(inst.k, CFG.controls.moveLeft) || 
     isAnyKeyDown(inst.k, CFG.controls.moveRight)
   )
-  // Check if character is grounded (use canJump flag set by collision)
-  const isGrounded = inst.canJump
+  // Check if character is grounded (use isGrounded method or check if falling/jumping)
+  const isGrounded = inst.character.isGrounded()
   
   if (!isGrounded) {
     // Jumping - only set sprite once when starting jump
@@ -313,6 +313,8 @@ function onUpdate(inst) {
       inst.isRunning = false
       inst.wasJumping = true
     }
+    // While in air, don't process any other animations
+    return
   } else if (isMoving) {
     // Running - switch frames smoothly (time-based animation)
     // Only reset animation if starting from idle (not from jump)

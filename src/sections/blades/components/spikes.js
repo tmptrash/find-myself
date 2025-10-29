@@ -37,6 +37,16 @@ export function getSpikeWidth(k) {
 }
 
 /**
+ * Get single spike (pyramid) width in pixels
+ * @param {Object} k - Kaplay instance
+ * @returns {number} Single spike width in pixels
+ */
+export function getSingleSpikeWidth(k) {
+  const blockSize = getSpikeBlockSize(k)
+  return SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
+}
+
+/**
  * Creates spikes with collision detection
  * @param {Object} config - Spike configuration
  * @param {Object} config.k - Kaplay instance

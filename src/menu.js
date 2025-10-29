@@ -172,7 +172,7 @@ function setupKeyboardControls(inst) {
   CFG.controls.startGame.forEach(key => {
     k.onKeyPress(key, () => {
       Sound.stopAmbient(sound)
-      k.go("level-1.1") 
+      k.go("level-1.3") 
     })
   })
   

@@ -83,6 +83,8 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
  * @param {Boolean} [config.showInstructions=false] - If true, show control instructions
  * @param {Boolean} [config.createHeroes=true] - If true, create hero and anti-hero
+ * @param {Number} [config.heroX] - Custom hero X position (overrides config)
+ * @param {Number} [config.heroY] - Custom hero Y position (overrides config)
  * @returns {Object} Object with sound, hero, antiHero instances
  */
 export function initScene(config) {
@@ -102,7 +104,9 @@ export function initScene(config) {
     platformGap,
     skipPlatforms, 
     showInstructions = false,
-    createHeroes = true
+    createHeroes = true,
+    heroX = null,
+    heroY = null
   } = config
   
   // Use levelName-based colors if not explicitly provided
@@ -168,7 +172,7 @@ export function initScene(config) {
   
   // Create heroes if requested
   if (createHeroes && levelName && nextLevel) {
-    const heroesResult = createLevelHeroes(k, levelName, sound, nextLevel)
+    const heroesResult = createLevelHeroes(k, levelName, sound, nextLevel, heroX, heroY)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
@@ -284,9 +288,11 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
  * @param {string} levelName - Level name (e.g., 'level-1.1')
  * @param {Object} sound - Sound instance
  * @param {string} nextLevel - Next level name for annihilation
+ * @param {Number} [customHeroX] - Custom hero X position (overrides config)
+ * @param {Number} [customHeroY] - Custom hero Y position (overrides config)
  * @returns {Object} {hero, antiHero}
  */
-function createLevelHeroes(k, levelName, sound, nextLevel) {
+function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, customHeroY = null) {
   const antiHero = Hero.create({
     k,
     x: k.width() * CFG.levels[levelName].antiHeroSpawn.x / 100,
@@ -300,8 +306,8 @@ function createLevelHeroes(k, levelName, sound, nextLevel) {
   
   const hero = Hero.create({
     k,
-    x: k.width() * CFG.levels[levelName].heroSpawn.x / 100,
-    y: k.height() * CFG.levels[levelName].heroSpawn.y / 100,
+    x: customHeroX !== null ? customHeroX : k.width() * CFG.levels[levelName].heroSpawn.x / 100,
+    y: customHeroY !== null ? customHeroY : k.height() * CFG.levels[levelName].heroSpawn.y / 100,
     type: Hero.HEROES.HERO,
     sfx: sound,
     antiHero,

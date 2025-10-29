@@ -2,11 +2,14 @@ import { CFG } from '../../../cfg.js'
 import { initScene, updateEerieSound } from '../utils/scene.js'
 import * as Spikes from '../components/spikes.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
+import * as BladeArm from '../components/blade-arm.js'
 
 export function sceneLevel3(k) {
   k.scene("level-1.3", () => {
-    // Calculate spike positions first
-    const heroX = k.width() * CFG.levels['level-1.3'].heroSpawn.x / 100
+    // Calculate hero position shifted right by 2 spike widths
+    const singleSpikeWidth = Spikes.getSingleSpikeWidth(k)
+    const heroXBase = k.width() * CFG.levels['level-1.3'].heroSpawn.x / 100
+    const heroX = heroXBase + singleSpikeWidth * 3  // Shift right by 2 pyramids
     const antiHeroX = k.width() * CFG.levels['level-1.3'].antiHeroSpawn.x / 100
     const leftX = Math.min(heroX, antiHeroX)
     const rightX = Math.max(heroX, antiHeroX)
@@ -24,6 +27,7 @@ export function sceneLevel3(k) {
     const movingPlatform2X = spike2X - spikeWidth * 1.1  // Before second spike
     
     // Initialize level with heroes and TWO gaps in platform
+    const heroY = k.height() * CFG.levels['level-1.3'].heroSpawn.y / 100
     const { sound, hero, antiHero } = initScene({
       k,
       levelName: 'level-1.3',
@@ -33,6 +37,8 @@ export function sceneLevel3(k) {
       levelTitleColor: CFG.colors['level-1.3'].spikes,
       subTitle: "when feelings grow dull, words become sharper",
       subTitleColor: CFG.colors['level-1.3'].background,
+      heroX: heroX,  // Custom hero position (shifted right by 2 pyramids)
+      heroY: heroY,
       platformGap: [
         // First gap for first moving platform (special jump-to-disable)
         {
@@ -102,6 +108,16 @@ export function sceneLevel3(k) {
     // Start spike animations (appear once like in level 1)
     Spikes.startAnimation(spikes1, 1)
     Spikes.startAnimation(spikes2, 1)
+    
+    // Create blade arm that extends from the left (positioned at hero's height)
+    BladeArm.create({
+      k,
+      y: heroY,
+      hero,
+      color: CFG.colors['level-1.3'].spikes,
+      sfx: sound,
+      currentLevel: 'level-1.3'
+    })
     
     // Scene instance with state
     const inst = {

@@ -459,6 +459,7 @@ function onCollisionPlatform(inst) {
 
 /**
  * Handle annihilation collision between hero and anti-hero
+ * Both characters dissolve into particles and merge
  * @param {Object} inst - Hero instance
  */
 function onAnnihilationCollide(inst) {
@@ -473,135 +474,135 @@ function onAnnihilationCollide(inst) {
   player.paused = true
   target.paused = true
   
-  // Center between characters
-  const centerX = (player.pos.x + target.pos.x) / 2
-  const centerY = (player.pos.y + target.pos.y) / 2
+  const playerPos = k.vec2(player.pos.x, player.pos.y)
+  const targetPos = k.vec2(target.pos.x, target.pos.y)
+  const centerX = (playerPos.x + targetPos.x) / 2
+  const centerY = (playerPos.y + targetPos.y) / 2
   
-  // PHASE 1: CHARACTER BLINKING (0.3 sec)
-  let blinkTime = 0
-  const blinkDuration = 0.3
-  const blinkSpeed = 20
+  // Play absorption sound
+  sfx && Sound.playAbsorptionSound(sfx)
   
-  const blinkInterval = k.onUpdate(() => {
-    blinkTime += k.dt()
-    if (blinkTime < blinkDuration) {
-      const visible = Math.floor(blinkTime * blinkSpeed) % 2 === 0
-      player.opacity = visible ? 1 : 0.3
-      target.opacity = visible ? 1 : 0.3
-    } else {
-      player.opacity = 1
-      target.opacity = 1
-      blinkInterval.cancel()
+  // PHASE 1: Both characters move toward center and start dissolving (0.6 sec)
+  const dissolveDuration = 0.6
+  let dissolveTime = 0
+  
+  const particles = []
+  
+  const dissolveInterval = k.onUpdate(() => {
+    dissolveTime += k.dt()
+    const progress = Math.min(dissolveTime / dissolveDuration, 1)
+    
+    // Ease out cubic
+    const easeProgress = 1 - Math.pow(1 - progress, 3)
+    
+    // Move both characters toward center
+    player.pos.x = playerPos.x + (centerX - playerPos.x) * easeProgress * 0.5
+    player.pos.y = playerPos.y + (centerY - playerPos.y) * easeProgress * 0.5
+    target.pos.x = targetPos.x + (centerX - targetPos.x) * easeProgress * 0.5
+    target.pos.y = targetPos.y + (centerY - targetPos.y) * easeProgress * 0.5
+    
+    // Gradually fade out both characters
+    player.opacity = 1 - easeProgress
+    target.opacity = 1 - easeProgress
+    
+    // Create dissolving particles from both characters
+    if (k.rand(0, 1) > 0.3) {
+      // Particles from hero
+      const heroParticle = k.add([
+        k.rect(k.rand(3, 6), k.rand(3, 6)),
+        k.pos(player.pos.x + k.rand(-15, 15), player.pos.y + k.rand(-15, 15)),
+        getColor(k, CFG.colors.hero.body),
+        k.anchor("center"),
+        k.z(CFG.visual.zIndex.player + 1)
+      ])
       
-      // PHASE 2: PULL TO CENTER (0.25 sec)
-      const pullDuration = 0.25
-      let pullTime = 0
-      const startPlayerPos = k.vec2(player.pos.x, player.pos.y)
-      const startTargetPos = k.vec2(target.pos.x, target.pos.y)
+      heroParticle.vx = k.rand(-50, 50)
+      heroParticle.vy = k.rand(-80, -20)
+      heroParticle.lifetime = 0
+      heroParticle.maxLifetime = k.rand(0.8, 1.2)
+      particles.push(heroParticle)
+    }
+    
+    if (k.rand(0, 1) > 0.3) {
+      // Particles from anti-hero
+      const antiHeroParticle = k.add([
+        k.rect(k.rand(3, 6), k.rand(3, 6)),
+        k.pos(target.pos.x + k.rand(-15, 15), target.pos.y + k.rand(-15, 15)),
+        getColor(k, CFG.colors.antiHero.body),
+        k.anchor("center"),
+        k.z(CFG.visual.zIndex.player + 1)
+      ])
       
-      const pullInterval = k.onUpdate(() => {
-        pullTime += k.dt()
-        const progress = Math.min(pullTime / pullDuration, 1)
-        const easeProgress = 1 - Math.pow(1 - progress, 3)
+      antiHeroParticle.vx = k.rand(-50, 50)
+      antiHeroParticle.vy = k.rand(-80, -20)
+      antiHeroParticle.lifetime = 0
+      antiHeroParticle.maxLifetime = k.rand(0.8, 1.2)
+      particles.push(antiHeroParticle)
+    }
+    
+    // Animate particles - float upward and fade
+    particles.forEach(p => {
+      if (!p.exists()) return
+      
+      p.lifetime += k.dt()
+      
+      // Float upward with slight drift
+      p.pos.x += p.vx * k.dt()
+      p.pos.y += p.vy * k.dt()
+      
+      // Slow down over time
+      p.vx *= 0.98
+      p.vy *= 0.98
+      
+      // Fade out
+      const fadeProgress = p.lifetime / p.maxLifetime
+      p.opacity = Math.max(0, 1 - fadeProgress)
+      
+      if (p.lifetime >= p.maxLifetime) {
+        k.destroy(p)
+      }
+    })
+    
+    if (progress >= 1) {
+      dissolveInterval.cancel()
+      
+      // Hide characters
+      k.destroy(player)
+      k.destroy(target)
+      
+      // PHASE 2: Particles continue floating and fading (0.6 sec)
+      let floatTime = 0
+      const floatDuration = 0.6
+      
+      const floatInterval = k.onUpdate(() => {
+        floatTime += k.dt()
         
-        player.pos.x = startPlayerPos.x + (centerX - startPlayerPos.x) * easeProgress
-        player.pos.y = startPlayerPos.y + (centerY - startPlayerPos.y) * easeProgress
-        target.pos.x = startTargetPos.x + (centerX - startTargetPos.x) * easeProgress
-        target.pos.y = startTargetPos.y + (centerY - startTargetPos.y) * easeProgress
-        
-        if (pullTime >= pullDuration) {
-          pullInterval.cancel()
+        // Continue animating existing particles
+        particles.forEach(p => {
+          if (!p.exists()) return
           
-          // PHASE 3: COLLAPSE AND EFFECTS
-          Sound.playAnnihilationSound(sfx)
+          p.lifetime += k.dt()
+          p.pos.x += p.vx * k.dt()
+          p.pos.y += p.vy * k.dt()
+          p.vx *= 0.98
+          p.vy *= 0.98
           
-          // Screen flash
-          const screenFlash = k.add([
-            k.rect(k.width(), k.height()),
-            k.pos(0, 0),
-            k.color(255, 255, 255),
-            k.opacity(1),
-            k.fixed(),
-            k.z(CFG.visual.zIndex.ui + 1)
-          ])
+          const fadeProgress = p.lifetime / p.maxLifetime
+          p.opacity = Math.max(0, 1 - fadeProgress)
           
-          let flashTime = 0
-          screenFlash.onUpdate(() => {
-            flashTime += k.dt()
-            screenFlash.opacity = Math.max(0, 1 - flashTime * 8)
-            if (flashTime > 0.125) {
-              k.destroy(screenFlash)
-            }
-          })
-          
-          // Camera shake
-          let shakeTime = 0
-          const shakeIntensity = 15
-          const originalCamX = k.width() / 2
-          const originalCamY = k.height() / 2
-          
-          const shakeInterval = k.onUpdate(() => {
-            shakeTime += k.dt()
-            if (shakeTime < 0.4) {
-              const intensity = shakeIntensity * (1 - shakeTime / 0.4)
-              k.camPos(
-                originalCamX + k.rand(-intensity, intensity),
-                originalCamY + k.rand(-intensity, intensity)
-              )
-            } else {
-              k.camPos(originalCamX, originalCamY)
-              shakeInterval.cancel()
-            }
-          })
-          
-          // Particle effect
-          const allColors = [
-            CFG.colors.hero.body,
-            CFG.colors.hero.outline,
-            CFG.colors.antiHero.body,
-            CFG.colors.antiHero.outline,
-          ]
-          
-          const pixelCount = 24
-          for (let i = 0; i < pixelCount; i++) {
-            const angle = (Math.PI * 2 * i) / pixelCount + k.rand(-0.3, 0.3)
-            const speed = k.rand(100, 400)
-            const size = k.rand(3, 7)
-            const color = k.choose(allColors)
-            
-            const pixel = k.add([
-              k.rect(size, size),
-              k.pos(centerX, centerY),
-              getColor(k, color),
-              k.anchor("center"),
-              k.rotate(k.rand(0, 360)),
-              k.z(CFG.visual.zIndex.player)
-            ])
-            
-            pixel.vx = Math.cos(angle) * speed
-            pixel.vy = Math.sin(angle) * speed
-            pixel.lifetime = 0
-            pixel.rotSpeed = k.rand(-720, 720)
-            
-            pixel.onUpdate(() => {
-              pixel.lifetime += k.dt()
-              pixel.pos.x += pixel.vx * k.dt()
-              pixel.pos.y += pixel.vy * k.dt()
-              pixel.angle += pixel.rotSpeed * k.dt()
-              pixel.opacity = Math.max(0, 1 - pixel.lifetime * 2.5)
-              
-              if (pixel.lifetime > 0.4) {
-                k.destroy(pixel)
-              }
-            })
+          if (p.lifetime >= p.maxLifetime) {
+            k.destroy(p)
           }
+        })
+        
+        if (floatTime >= floatDuration) {
+          floatInterval.cancel()
           
-          // Hide characters
-          k.destroy(player)
-          k.destroy(target)
+          // Clean up remaining particles
+          particles.forEach(p => p.exists() && k.destroy(p))
           
-          // Call callback after completion
-          k.wait(1.2, inst.onAnnihilation)
+          // Call callback to go to next level
+          k.wait(0.2, inst.onAnnihilation)
         }
       })
     }

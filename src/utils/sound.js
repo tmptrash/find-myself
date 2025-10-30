@@ -731,6 +731,78 @@ export function playGlitchSound(inst) {
  * Play annihilation sound effect (deep powerful explosion)
  * @param {Object} instance - Sound instance from create()
  */
+/**
+ * Play absorption/merging sound effect
+ * @param {Object} instance - Sound instance
+ */
+export function playAbsorptionSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 1.0
+  
+  // Soft harmonic tone that rises and falls
+  const tone1 = instance.audioContext.createOscillator()
+  const tone1Gain = instance.audioContext.createGain()
+  
+  tone1.type = 'sine'
+  tone1.frequency.setValueAtTime(220, now)  // A3
+  tone1.frequency.linearRampToValueAtTime(440, now + duration * 0.5)  // A4
+  tone1.frequency.linearRampToValueAtTime(220, now + duration)  // Back to A3
+  
+  tone1Gain.gain.setValueAtTime(0, now)
+  tone1Gain.gain.linearRampToValueAtTime(0.3, now + 0.1)
+  tone1Gain.gain.linearRampToValueAtTime(0.2, now + duration * 0.5)
+  tone1Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  tone1.connect(tone1Gain)
+  tone1Gain.connect(instance.audioContext.destination)
+  
+  tone1.start(now)
+  tone1.stop(now + duration)
+  
+  // Second harmonic (fifth above)
+  const tone2 = instance.audioContext.createOscillator()
+  const tone2Gain = instance.audioContext.createGain()
+  
+  tone2.type = 'sine'
+  tone2.frequency.setValueAtTime(330, now)  // E4
+  tone2.frequency.linearRampToValueAtTime(660, now + duration * 0.5)  // E5
+  tone2.frequency.linearRampToValueAtTime(330, now + duration)
+  
+  tone2Gain.gain.setValueAtTime(0, now)
+  tone2Gain.gain.linearRampToValueAtTime(0.2, now + 0.15)
+  tone2Gain.gain.linearRampToValueAtTime(0.15, now + duration * 0.5)
+  tone2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  tone2.connect(tone2Gain)
+  tone2Gain.connect(instance.audioContext.destination)
+  
+  tone2.start(now + 0.05)
+  tone2.stop(now + duration)
+  
+  // Soft shimmer effect
+  const shimmer = instance.audioContext.createOscillator()
+  const shimmerGain = instance.audioContext.createGain()
+  const shimmerFilter = instance.audioContext.createBiquadFilter()
+  
+  shimmer.type = 'triangle'
+  shimmer.frequency.setValueAtTime(1760, now)  // A6
+  
+  shimmerFilter.type = 'bandpass'
+  shimmerFilter.frequency.setValueAtTime(2000, now)
+  shimmerFilter.Q.value = 2
+  
+  shimmerGain.gain.setValueAtTime(0, now)
+  shimmerGain.gain.linearRampToValueAtTime(0.15, now + 0.2)
+  shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  shimmer.connect(shimmerFilter)
+  shimmerFilter.connect(shimmerGain)
+  shimmerGain.connect(instance.audioContext.destination)
+  
+  shimmer.start(now + 0.1)
+  shimmer.stop(now + duration)
+}
+
 export function playAnnihilationSound(instance) {
   const now = instance.audioContext.currentTime
   

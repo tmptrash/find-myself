@@ -296,11 +296,17 @@ export function spawn(inst) {
  * @param {Object} inst - Hero instance
  */
 function onUpdate(inst) {
+  // For non-controllable characters (like in menu), always use idle animation
+  if (!inst.controllable) {
+    updateIdleAnimation(inst)
+    inst.character.flipX = inst.direction === -1
+    return
+  }
+  
   // Determine movement state (only for controllable characters)
-  const isMoving = inst.controllable && (
-    isAnyKeyDown(inst.k, CFG.controls.moveLeft) || 
+  const isMoving = isAnyKeyDown(inst.k, CFG.controls.moveLeft) || 
     isAnyKeyDown(inst.k, CFG.controls.moveRight)
-  )
+  
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   const isGrounded = inst.character.isGrounded()
   
@@ -342,50 +348,58 @@ function onUpdate(inst) {
     }
   } else {
     // Idle - with eye animation
-    // If just stopped running or just landed, instantly switch to idle
-    if (inst.isRunning || inst.wasJumping) {
-      inst.isRunning = false
-      inst.wasJumping = false
-      inst.runFrame = 0
-      inst.runTimer = 0
-      // Instantly switch to current idle sprite
-      const roundedX = Math.round(inst.eyeOffsetX)
-      const roundedY = Math.round(inst.eyeOffsetY)
-      const spriteName = `${inst.type}_${roundedX}_${roundedY}`
-      inst.character.use(inst.k.sprite(spriteName))
-      inst.currentEyeSprite = spriteName
-    }
-    
-    // Eye animation - smooth movement
-    inst.eyeTimer += inst.k.dt()
-    
-    // Choose new target position
-    if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
-      inst.targetEyeX = inst.k.choose([-1, 0, 1])
-      inst.targetEyeY = inst.k.choose([-1, 0, 1])
-      inst.eyeTimer = 0
-    }
-    
-    // Smoothly interpolate to target position
-    inst.eyeOffsetX = inst.k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
-    inst.eyeOffsetY = inst.k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
-    
-    // Round for pixel-art style
-    const roundedX = Math.round(inst.eyeOffsetX)
-    const roundedY = Math.round(inst.eyeOffsetY)
-    
-    // Switch to preloaded sprite with eyes
-    const spriteName = `${inst.type}_${roundedX}_${roundedY}`
-    
-    // Update sprite only if eye position changed
-    if (inst.currentEyeSprite !== spriteName) {
-      inst.character.use(inst.k.sprite(spriteName))
-      inst.currentEyeSprite = spriteName
-    }
+    updateIdleAnimation(inst)
   }
   
   // Mirror based on direction
   inst.character.flipX = inst.direction === -1
+}
+
+/**
+ * Update idle animation with eye movement
+ * @param {Object} inst - Hero instance
+ */
+function updateIdleAnimation(inst) {
+  // If just stopped running or just landed, instantly switch to idle
+  if (inst.isRunning || inst.wasJumping) {
+    inst.isRunning = false
+    inst.wasJumping = false
+    inst.runFrame = 0
+    inst.runTimer = 0
+    // Instantly switch to current idle sprite
+    const roundedX = Math.round(inst.eyeOffsetX)
+    const roundedY = Math.round(inst.eyeOffsetY)
+    const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+    inst.character.use(inst.k.sprite(spriteName))
+    inst.currentEyeSprite = spriteName
+  }
+  
+  // Eye animation - smooth movement
+  inst.eyeTimer += inst.k.dt()
+  
+  // Choose new target position
+  if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
+    inst.targetEyeX = inst.k.choose([-1, 0, 1])
+    inst.targetEyeY = inst.k.choose([-1, 0, 1])
+    inst.eyeTimer = 0
+  }
+  
+  // Smoothly interpolate to target position
+  inst.eyeOffsetX = inst.k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
+  inst.eyeOffsetY = inst.k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
+  
+  // Round for pixel-art style
+  const roundedX = Math.round(inst.eyeOffsetX)
+  const roundedY = Math.round(inst.eyeOffsetY)
+  
+  // Switch to preloaded sprite with eyes
+  const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+  
+  // Update sprite only if eye position changed
+  if (inst.currentEyeSprite !== spriteName) {
+    inst.character.use(inst.k.sprite(spriteName))
+    inst.currentEyeSprite = spriteName
+  }
 }
 
 /**

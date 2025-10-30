@@ -6,6 +6,7 @@ import * as Sound from '../utils/sound.js'
 // Platform parameters
 const DETECTION_DISTANCE = 100 // Distance to detect hero
 const DROP_DURATION = 0.2      // Time to drop down (seconds)
+const SPIKE_APPEAR_DELAY = 0.15 // Delay before spikes appear after drop starts (seconds)
 const RAISE_DELAY = 2.0        // Time before raising back up (seconds)
 const RAISE_TIMEOUT = 4.0      // Maximum time platform stays down (seconds)
 const RAISE_DURATION = 0.5     // Time to raise up (seconds)
@@ -85,18 +86,21 @@ export function create(config) {
     inst.timer = 0
     inst.hasActivated = true
     
-    // Play spike sound
-    sfx && Sound.playSpikeSound(sfx)
-    
-    // Show spikes and enable collision
-    k.tween(
-      spikes.spike.opacity,
-      1,
-      0.3,
-      (val) => spikes.spike.opacity = val,
-      k.easings.linear
-    )
-    spikes.collisionEnabled = true
+    // Delay spike appearance - show spikes after platform drops a bit
+    k.wait(SPIKE_APPEAR_DELAY, () => {
+      // Play spike sound
+      sfx && Sound.playSpikeSound(sfx)
+      
+      // Show spikes and enable collision
+      k.tween(
+        spikes.spike.opacity,
+        1,
+        0.3,
+        (val) => spikes.spike.opacity = val,
+        k.easings.linear
+      )
+      spikes.collisionEnabled = true
+    })
   }
   
   // Update logic
@@ -124,18 +128,21 @@ function updatePlatform(inst) {
       inst.timer = 0
       inst.hasActivated = true  // Mark as activated permanently
       
-      // Play spike sound
-      sfx && Sound.playSpikeSound(sfx)
-      
-      // Show spikes and enable collision
-      k.tween(
-        spikes.spike.opacity,
-        1,
-        0.3,
-        (val) => spikes.spike.opacity = val,
-        k.easings.linear
-      )
-      spikes.collisionEnabled = true  // Enable collision when platform drops
+      // Delay spike appearance - show spikes after platform drops a bit
+      k.wait(SPIKE_APPEAR_DELAY, () => {
+        // Play spike sound
+        sfx && Sound.playSpikeSound(sfx)
+        
+        // Show spikes and enable collision
+        k.tween(
+          spikes.spike.opacity,
+          1,
+          0.3,
+          (val) => spikes.spike.opacity = val,
+          k.easings.linear
+        )
+        spikes.collisionEnabled = true  // Enable collision when spikes appear
+      })
     }
   }
   

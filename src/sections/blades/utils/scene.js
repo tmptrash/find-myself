@@ -287,7 +287,7 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
  * @param {Object} k - Kaplay instance
  * @param {string} levelName - Level name (e.g., 'level-1.1')
  * @param {Object} sound - Sound instance
- * @param {string} nextLevel - Next level name for annihilation
+ * @param {string} nextLevel - Next level name for annihilation (deprecated, kept for compatibility)
  * @param {Number} [customHeroX] - Custom hero X position (overrides config)
  * @param {Number} [customHeroY] - Custom hero Y position (overrides config)
  * @returns {Object} {hero, antiHero}
@@ -311,7 +311,7 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
     type: Hero.HEROES.HERO,
     sfx: sound,
     antiHero,
-    onAnnihilation: () => k.go(nextLevel)
+    currentLevel: levelName  // Use new transition system
   })
   
   hero.character.use("player")

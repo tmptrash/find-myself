@@ -1,6 +1,7 @@
 import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
+import { createLevelTransition } from '../utils/transition.js'
 
 // Collision box parameters
 const COLLISION_WIDTH = 10
@@ -32,7 +33,8 @@ export const HEROES = {
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
  * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
- * @param {Function} [config.onAnnihilation] - Callback when annihilation completes
+ * @param {string} [config.currentLevel] - Current level name for transition
+ * @param {Function} [config.onAnnihilation] - Callback when annihilation completes (deprecated, use currentLevel)
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -45,6 +47,7 @@ export function create(config) {
     sfx = null,
     scale = getHeroScale(config.k),
     antiHero = null,
+    currentLevel = null,
     onAnnihilation = null
   } = config
   const character = k.add([
@@ -71,6 +74,7 @@ export function create(config) {
     controllable,
     sfx,
     antiHero,
+    currentLevel,
     onAnnihilation,
     speed: CFG.gameplay.moveSpeedRatio * k.height(),      // Scale with screen height
     jumpForce: CFG.gameplay.jumpForceRatio * k.height(),  // Scale with screen height
@@ -601,8 +605,14 @@ function onAnnihilationCollide(inst) {
           // Clean up remaining particles
           particles.forEach(p => p.exists() && k.destroy(p))
           
-          // Call callback to go to next level
-          k.wait(0.2, inst.onAnnihilation)
+          // Trigger level transition
+          if (inst.currentLevel) {
+            // Use new transition system
+            createLevelTransition(k, inst.currentLevel)
+          } else if (inst.onAnnihilation) {
+            // Fallback to old callback system
+            k.wait(0.2, inst.onAnnihilation)
+          }
         }
       })
     }

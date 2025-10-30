@@ -319,6 +319,8 @@ function onUpdate(inst) {
       inst.isRunning = false
       inst.wasJumping = true
     }
+    // Update direction while in air
+    inst.character.flipX = inst.direction === -1
     // While in air, don't process any other animations
     return
   } else if (isMoving) {

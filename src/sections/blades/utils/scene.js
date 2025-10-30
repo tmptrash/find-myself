@@ -4,7 +4,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as Spikes from '../../../sections/blades/components/spikes.js'
 import * as Hero from '../../../components/hero.js'
 
-const ANTIHERO_SPAWN_DELAY = 3
+const ANTIHERO_SPAWN_DELAY = 1.5
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance

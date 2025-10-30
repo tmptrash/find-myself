@@ -38,6 +38,9 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
  * 3. Subtitle text appears (fade in 1s, hold 2s, fade out 1s)
  * 4. Final pause (0.3s)
  * 5. Load new level
+ * 
+ * User can press SPACE or ENTER to skip the transition and go directly to next level
+ * 
  * @param {Object} k - Kaplay instance
  * @param {string} currentLevel - Current level name (e.g., 'level-1.0' or 'menu')
  * @param {Function} onComplete - Callback when transition completes
@@ -59,7 +62,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   // Instance object to store text reference
   const inst = {
-    textObj: null
+    textObj: null,
+    skipped: false,
+    skipEnabled: false,  // Skip is disabled initially to prevent accidental skip
+    skipEnableTimer: 0
   }
   
   // Create black overlay (starts transparent, fades to opaque)
@@ -72,7 +78,37 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     k.fixed()
   ])
   
+  // Function to skip transition and go directly to next level
+  const skipTransition = () => {
+    if (inst.skipped) return // Already skipped
+    inst.skipped = true
+    
+    console.log('Skipping transition to:', nextLevel)
+    
+    // Clean up
+    transitionInterval.cancel()
+    overlay && overlay.exists() && k.destroy(overlay)
+    inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
+    
+    // Go to next level
+    k.go(nextLevel)
+  }
+  
   const updateTransition = () => {
+    // Enable skip after 0.3 seconds to prevent accidental skip from menu button press
+    if (!inst.skipEnabled) {
+      inst.skipEnableTimer += k.dt()
+      if (inst.skipEnableTimer >= 0.3) {
+        inst.skipEnabled = true
+      }
+    }
+    
+    // Check for skip keys (space or enter) in update loop for better reliability
+    if (inst.skipEnabled && (k.isKeyPressed("space") || k.isKeyPressed("enter"))) {
+      skipTransition()
+      return
+    }
+    
     timer += k.dt()
     
     if (phase === 'fade_to_black') {

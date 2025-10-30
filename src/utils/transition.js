@@ -13,7 +13,7 @@ const LEVEL_TRANSITIONS = {
 }
 
 const LEVEL_SUBTITLES = {
-  'level-1.0': 'some words are sharper than any blade...',
+  'level-1.0': 'some words are sharper than any blade',
   'level-1.1': 'they cut deeper than steel',
   'level-1.2': 'leaving scars that never heal',
   'level-1.3': 'invisible wounds that bleed in silence',
@@ -22,17 +22,19 @@ const LEVEL_SUBTITLES = {
 }
 
 const CRT_SHUTDOWN_DURATION = 0.8    // Duration of CRT shutdown effect
+const BLACK_PAUSE_DURATION = 0.5     // Pause after shutdown before text appears
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const TEXT_HOLD_DURATION = 2.0       // Duration text stays visible
-const TEXT_FADE_OUT_DURATION = 0.5   // Duration of text fade out
-const FINAL_PAUSE_DURATION = 1.0     // Final pause before level load
+const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
+const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 
 /**
  * Creates a CRT TV shutdown transition effect between levels
- * 1. Screen collapse to horizontal line
- * 2. Black screen with subtitle text (fade in 1s, hold 2s, fade out 0.5s)
- * 3. Final pause (1s)
- * 4. Load new level
+ * 1. Screen collapse to horizontal line (0.8s)
+ * 2. Black screen pause (0.5s)
+ * 3. Subtitle text appears (fade in 1s, hold 2s, fade out 1s)
+ * 4. Final pause (0.3s)
+ * 5. Load new level
  * @param {Object} k - Kaplay instance
  * @param {string} currentLevel - Current level name (e.g., 'level-1.0')
  * @param {Function} onComplete - Callback when transition completes
@@ -47,7 +49,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   let timer = 0
-  let phase = 'shutdown' // shutdown -> text_fade_in -> text_hold -> text_fade_out -> final_pause -> load new level
+  let phase = 'shutdown' // shutdown -> black_pause -> text_fade_in -> text_hold -> text_fade_out -> final_pause -> load new level
   const centerX = k.width() / 2
   const centerY = k.height() / 2
   
@@ -108,11 +110,17 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       }
       
       if (progress >= 1) {
-        phase = 'text_fade_in'
+        phase = 'black_pause'
         timer = 0
         
         // Clean up white line
         screenRect.exists() && k.destroy(screenRect)
+      }
+    } else if (phase === 'black_pause') {
+      // Pause with black screen before text appears
+      if (timer >= BLACK_PAUSE_DURATION) {
+        phase = 'text_fade_in'
+        timer = 0
         
         // Create subtitle text for current (completed) level
         const subtitle = LEVEL_SUBTITLES[currentLevel] || ''
@@ -148,8 +156,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // Store text object in inst-like structure
           inst.textObj = textObj
         } else {
-          // No subtitle, skip to final pause
-          phase = 'final_pause'
+          // No subtitle, go to next level immediately
+          transitionInterval.cancel()
+          overlay.exists() && k.destroy(overlay)
+          k.go(nextLevel)
         }
       }
     } else if (phase === 'text_fade_in') {
@@ -187,9 +197,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         timer = 0
       }
     } else if (phase === 'final_pause') {
-      // Final pause before loading new level
+      // Short pause after text fades out before loading new level
       if (timer >= FINAL_PAUSE_DURATION) {
-        // Clean up
+        // Clean up and go to next level
         transitionInterval.cancel()
         overlay.exists() && k.destroy(overlay)
         

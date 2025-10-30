@@ -157,10 +157,10 @@ export function initScene(config) {
     addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, customTopHeight)
   }
   
-  // Add level title if provided
-  if (levelTitle && levelTitleColor) {
-    addLevelTitle(k, levelTitle, levelTitleColor, subTitle, subTitleColor, topPlatformHeight)
-  }
+  // Level title and subtitle removed - cleaner UI
+  // if (levelTitle && levelTitleColor) {
+  //   addLevelTitle(k, levelTitle, levelTitleColor, subTitle, subTitleColor, topPlatformHeight)
+  // }
   
   // Setup back to menu
   CFG.controls.backToMenu.forEach(key => {

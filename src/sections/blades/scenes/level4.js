@@ -62,7 +62,7 @@ export function sceneLevel4(k) {
     
     // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
     const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 2.5
-    const hiddenY1 = floorSpikeY + spikeHeight + 4  // Below platform + 4px lower
+    const hiddenY1 = floorSpikeY + spikeHeight * 1.5  // Deeper: 1.5x spike height below visible position
     const spikes1 = Spikes.create({
       k,
       x: leftSpikeX,
@@ -79,7 +79,7 @@ export function sceneLevel4(k) {
     spikes1.spike.z = -50  // Behind platforms
     
     // Center spike (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
-    const hiddenY2 = topPlatformHeight - spikeHeight / 2 - 4  // Inside ceiling platform + 4px higher
+    const hiddenY2 = topPlatformHeight - spikeHeight * 1.5  // Deeper: 1.5x spike height above visible position
     const visibleCeilingY = topPlatformHeight + spikeHeight / 2  // Extended down from ceiling
     const spikes2 = Spikes.create({
       k,
@@ -98,7 +98,7 @@ export function sceneLevel4(k) {
     
     // Right spike (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
     const rightSpikeX = pitInfo.centerX + pitInfo.width / 2 + spikeWidth * 1.5
-    const hiddenY3 = floorSpikeY + spikeHeight + 4  // Below platform + 4px lower
+    const hiddenY3 = floorSpikeY + spikeHeight * 1.5  // Deeper: 1.5x spike height below visible position
     const spikes3 = Spikes.create({
       k,
       x: rightSpikeX,
@@ -134,7 +134,7 @@ export function sceneLevel4(k) {
       spike3State: 'waiting',
       animationTimer: 0,
       cycleTimer: 0,
-      animationSpeed: 0.08,   // Seconds for extend/retract (up/down movement)
+      animationSpeed: 0.092,   // Seconds for extend/retract (15% slower: 0.08 * 1.15)
       spikeDelay: 0.08,      // Seconds between spikes (pause between spike1->spike2 and spike2->spike3)
       cycleDelay: 0.08,      // Seconds after last spike before restart
       firstCycleComplete: false

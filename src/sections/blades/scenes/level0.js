@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { initScene, updateEerieSound } from '../utils/scene.js'
+import { initScene } from '../utils/scene.js'
 
 /**
  * Level 0 scene - Introduction level
@@ -21,17 +21,7 @@ export function sceneLevel0(k) {
       subTitleColor: CFG.colors['level-1.0'].background,
     })
     
-    // Scene instance with state
-    const inst = {
-      k,
-      sound,
-      soundTimer: k.rand(3, 6)
-    }
-    
-    // Setup eerie sound effect
-    k.onUpdate(() => {
-      updateEerieSound(inst, 2, 6)
-    })
+    // Eerie sound effects removed for cleaner audio experience
   })
 }
 

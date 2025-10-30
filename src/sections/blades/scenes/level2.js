@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { initScene, updateEerieSound } from '../utils/scene.js'
+import { initScene } from '../utils/scene.js'
 import * as Spikes from '../components/spikes.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 
@@ -99,16 +99,6 @@ export function sceneLevel2(k) {
     Spikes.startAnimation(spikes1)
     Spikes.startAnimation(spikes2)
     
-    // Scene instance with state
-    const inst = {
-      k,
-      sound,
-      soundTimer: k.rand(3, 6)
-    }
-    
-    // Setup eerie sound effect
-    k.onUpdate(() => {
-      updateEerieSound(inst)
-    })
+    // Eerie sound effects removed for cleaner audio experience
   })
 }

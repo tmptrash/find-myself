@@ -18,22 +18,22 @@ const LEVEL_SUBTITLES = {
   'menu': '',      // Before Level 0
   'level-1.0': 'words, they cut deeper than steel',            // Before Level 1
   'level-1.1': 'leaving scars that never heal',         // Before Level 2
-  'level-1.2': 'invisible wounds that bleed in silence', // Before Level 3
+  'level-1.2': 'silent wounds that never close', // Before Level 3
   'level-1.3': 'until nothing remains but echoes',      // Before Level 4
   'level-1.4': 'some words are sharper than any blade' // No subtitle when returning to menu
 }
 
-const CRT_SHUTDOWN_DURATION = 0.8    // Duration of CRT shutdown effect
-const BLACK_PAUSE_DURATION = 0.5     // Pause after shutdown before text appears
+const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
+const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const TEXT_HOLD_DURATION = 2.0       // Duration text stays visible
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 
 /**
- * Creates a CRT TV shutdown transition effect between levels
+ * Creates a fade to black transition effect between levels
  * Shows subtitle BEFORE entering the next level
- * 1. Screen collapse to horizontal line (0.8s)
+ * 1. Fade to black (0.8s)
  * 2. Black screen pause (0.5s)
  * 3. Subtitle text appears (fade in 1s, hold 2s, fade out 1s)
  * 4. Final pause (0.3s)
@@ -52,8 +52,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   let timer = 0
-  // Skip shutdown phase if transitioning from menu (no screen to collapse)
-  let phase = currentLevel === 'menu' ? 'black_pause' : 'shutdown'
+  // Start with fade_to_black phase (unless from menu, then skip to black_pause)
+  let phase = currentLevel === 'menu' ? 'black_pause' : 'fade_to_black'
   const centerX = k.width() / 2
   const centerY = k.height() / 2
   
@@ -62,68 +62,27 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     textObj: null
   }
   
-  // Create black background
+  // Create black overlay (starts transparent, fades to opaque)
   let overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
     k.color(0, 0, 0),
-    k.opacity(1),
+    k.opacity(currentLevel === 'menu' ? 1 : 0), // Start opaque if from menu, transparent otherwise
     k.z(CFG.visual.zIndex.ui + 10),
     k.fixed()
   ])
   
-  let screenRect = null
-  
-  // Only create CRT shutdown effect if not from menu
-  if (currentLevel !== 'menu') {
-    // Play CRT shutdown sound
-    playCRTShutdownSound(k)
-    
-    // Create white collapsing screen on top of black
-    screenRect = k.add([
-      k.rect(k.width(), k.height()),
-      k.pos(centerX, centerY),
-      k.anchor("center"),
-      k.color(255, 255, 255),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 11),
-      k.fixed()
-    ])
-  }
-  
   const updateTransition = () => {
     timer += k.dt()
     
-    if (phase === 'shutdown') {
-      const progress = Math.min(timer / CRT_SHUTDOWN_DURATION, 1)
-      
-      if (progress < 0.7) {
-        // Phase 1: Collapse vertically to horizontal line (0-70%)
-        const collapseProgress = progress / 0.7
-        const easeProgress = 1 - Math.pow(1 - collapseProgress, 3)  // Ease out cubic
-        
-        screenRect.height = k.height() * (1 - easeProgress)
-        
-      } else if (progress < 0.9) {
-        // Phase 2: Keep as horizontal white line (70-90%)
-        screenRect.height = 3  // Thin white line
-        screenRect.width = k.width()
-        
-      } else {
-        // Phase 3: Fade out the line (90-100%)
-        const fadeProgress = (progress - 0.9) / 0.1
-        
-        screenRect.height = 3
-        screenRect.width = k.width()
-        screenRect.opacity = 1 - fadeProgress
-      }
+    if (phase === 'fade_to_black') {
+      // Fade overlay from transparent to opaque
+      const progress = Math.min(timer / FADE_TO_BLACK_DURATION, 1)
+      overlay.opacity = progress
       
       if (progress >= 1) {
         phase = 'black_pause'
         timer = 0
-        
-        // Clean up white line (if it exists)
-        screenRect && screenRect.exists() && k.destroy(screenRect)
       }
     } else if (phase === 'black_pause') {
       // Pause with black screen before text appears
@@ -224,7 +183,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   return () => {
     transitionInterval.cancel()
     overlay && overlay.exists() && k.destroy(overlay)
-    screenRect && screenRect.exists() && k.destroy(screenRect)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
   }
 }

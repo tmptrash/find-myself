@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { initScene, updateEerieSound } from '../utils/scene.js'
+import { initScene } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Spikes from '../components/spikes.js'
@@ -147,9 +147,8 @@ export function sceneLevel4(k) {
       sound && Sound.playSpikeSound(sound)
     })
     
-    // Setup eerie sound effect and spike animation
+    // Setup spike animation (eerie sound effects removed)
     k.onUpdate(() => {
-      updateEerieSound(inst)
       updateSpikesAnimation(inst)
     })
   })

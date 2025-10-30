@@ -3,6 +3,7 @@ import { CFG } from "./cfg.js"
 import { getRGB } from "./utils/helper.js"
 import * as Hero from "./components/hero.js"
 import { drawConnectionWave } from "./utils/connection.js"
+import { createLevelTransition } from "./utils/transition.js"
 
 export function sceneMenu(k) {
   k.scene("menu", () => {
@@ -172,7 +173,8 @@ function setupKeyboardControls(inst) {
   CFG.controls.startGame.forEach(key => {
     k.onKeyPress(key, () => {
       Sound.stopAmbient(sound)
-      k.go("level-1.0") 
+      // Use transition effect to show subtitle before Level 0
+      createLevelTransition(k, 'menu')
     })
   })
   

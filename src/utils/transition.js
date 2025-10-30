@@ -5,6 +5,7 @@ import { getRGB } from './helper.js'
  * Level transition configuration - maps current level to next level
  */
 const LEVEL_TRANSITIONS = {
+  'menu': 'level-1.0',
   'level-1.0': 'level-1.1',
   'level-1.1': 'level-1.2',
   'level-1.2': 'level-1.3',
@@ -12,13 +13,14 @@ const LEVEL_TRANSITIONS = {
   'level-1.4': 'menu'
 }
 
+// Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
-  'level-1.0': 'some words are sharper than any blade',
-  'level-1.1': 'they cut deeper than steel',
-  'level-1.2': 'leaving scars that never heal',
-  'level-1.3': 'invisible wounds that bleed in silence',
-  'level-1.4': 'until nothing remains but echoes',
-  'menu': '' // No subtitle for menu
+  'menu': '',      // Before Level 0
+  'level-1.0': 'words, they cut deeper than steel',            // Before Level 1
+  'level-1.1': 'leaving scars that never heal',         // Before Level 2
+  'level-1.2': 'invisible wounds that bleed in silence', // Before Level 3
+  'level-1.3': 'until nothing remains but echoes',      // Before Level 4
+  'level-1.4': 'some words are sharper than any blade' // No subtitle when returning to menu
 }
 
 const CRT_SHUTDOWN_DURATION = 0.8    // Duration of CRT shutdown effect
@@ -30,13 +32,14 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
 
 /**
  * Creates a CRT TV shutdown transition effect between levels
+ * Shows subtitle BEFORE entering the next level
  * 1. Screen collapse to horizontal line (0.8s)
  * 2. Black screen pause (0.5s)
  * 3. Subtitle text appears (fade in 1s, hold 2s, fade out 1s)
  * 4. Final pause (0.3s)
  * 5. Load new level
  * @param {Object} k - Kaplay instance
- * @param {string} currentLevel - Current level name (e.g., 'level-1.0')
+ * @param {string} currentLevel - Current level name (e.g., 'level-1.0' or 'menu')
  * @param {Function} onComplete - Callback when transition completes
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
@@ -49,7 +52,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   let timer = 0
-  let phase = 'shutdown' // shutdown -> black_pause -> text_fade_in -> text_hold -> text_fade_out -> final_pause -> load new level
+  // Skip shutdown phase if transitioning from menu (no screen to collapse)
+  let phase = currentLevel === 'menu' ? 'black_pause' : 'shutdown'
   const centerX = k.width() / 2
   const centerY = k.height() / 2
   
@@ -57,9 +61,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const inst = {
     textObj: null
   }
-  
-  // Play CRT shutdown sound
-  playCRTShutdownSound(k)
   
   // Create black background
   let overlay = k.add([
@@ -71,16 +72,24 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     k.fixed()
   ])
   
-  // Create white collapsing screen on top of black
-  let screenRect = k.add([
-    k.rect(k.width(), k.height()),
-    k.pos(centerX, centerY),
-    k.anchor("center"),
-    k.color(255, 255, 255),
-    k.opacity(1),
-    k.z(CFG.visual.zIndex.ui + 11),
-    k.fixed()
-  ])
+  let screenRect = null
+  
+  // Only create CRT shutdown effect if not from menu
+  if (currentLevel !== 'menu') {
+    // Play CRT shutdown sound
+    playCRTShutdownSound(k)
+    
+    // Create white collapsing screen on top of black
+    screenRect = k.add([
+      k.rect(k.width(), k.height()),
+      k.pos(centerX, centerY),
+      k.anchor("center"),
+      k.color(255, 255, 255),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.fixed()
+    ])
+  }
   
   const updateTransition = () => {
     timer += k.dt()
@@ -113,8 +122,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         phase = 'black_pause'
         timer = 0
         
-        // Clean up white line
-        screenRect.exists() && k.destroy(screenRect)
+        // Clean up white line (if it exists)
+        screenRect && screenRect.exists() && k.destroy(screenRect)
       }
     } else if (phase === 'black_pause') {
       // Pause with black screen before text appears
@@ -122,8 +131,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         phase = 'text_fade_in'
         timer = 0
         
-        // Create subtitle text for current (completed) level
-        const subtitle = LEVEL_SUBTITLES[currentLevel] || ''
+        // Create subtitle text for NEXT level (the one we're transitioning TO)
+        const subtitle = LEVEL_SUBTITLES[nextLevel] || ''
         
         if (subtitle) {
           // Get red color from level config (same as title/spikes)

@@ -175,14 +175,15 @@ function updatePlatform(inst) {
     
     // Special mode: hero jumps down to disable spikes
     if (jumpToDisableSpikes) {
-      // Check if hero's FEET are below his initial spawn position (falling into pit)
-      const heroFeetY = hero.character.pos.y + 12.5  // Hero center + half of collision height (25/2)
+      // Check if hero's CENTER is falling and is below the TOP of the platform
+      const heroY = hero.character.pos.y
       const heroIsFalling = hero.character.vel && hero.character.vel.y > 0
-      const heroFeetBelowSpawn = heroFeetY >= inst.heroInitialY  // Hero's feet below initial position
+      const platformTopY = originalY  // Top of the platform at original position
+      const heroBelowPlatformTop = heroY > platformTopY + 20  // Hero center is 20px below platform top
       const heroIsNearPlatform = Math.abs(platform.pos.x - hero.character.pos.x) <= platformWidth / 2
       
-      if (heroIsFalling && heroFeetBelowSpawn && heroIsNearPlatform) {
-        // Hero's feet entered the pit! Disable spikes and start raising platform immediately
+      if (heroIsFalling && heroBelowPlatformTop && heroIsNearPlatform) {
+        // Hero is falling into the pit! Disable spikes and start raising platform immediately
         spikes.spike.opacity = 0
         spikes.collisionEnabled = false
         

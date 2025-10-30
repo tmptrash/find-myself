@@ -18,7 +18,7 @@ const LEVEL_SUBTITLES = {
   'menu': '',      // Before Level 0
   'level-1.0': 'words, they cut deeper than steel',            // Before Level 1
   'level-1.1': 'leaving scars that never heal',         // Before Level 2
-  'level-1.2': 'silent wounds that never close', // Before Level 3
+  'level-1.2': 'silent wounds that never close',       // Before Level 3
   'level-1.3': 'until nothing remains but echoes',      // Before Level 4
   'level-1.4': 'some words are sharper than any blade' // No subtitle when returning to menu
 }

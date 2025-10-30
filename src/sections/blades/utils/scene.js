@@ -157,10 +157,10 @@ export function initScene(config) {
     addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, customTopHeight)
   }
   
-  // Add "blades" title (without subtitle)
-  if (levelTitleColor) {
-    addLevelTitle(k, "words like blades", levelTitleColor, null, null, topPlatformHeight)
-  }
+  // Level titles removed for cleaner visual experience
+  // if (levelTitleColor) {
+  //   addLevelTitle(k, "words like blades", levelTitleColor, null, null, topPlatformHeight)
+  // }
   
   // Setup back to menu
   CFG.controls.backToMenu.forEach(key => {

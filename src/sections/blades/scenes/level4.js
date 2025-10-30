@@ -11,7 +11,7 @@ export function sceneLevel4(k) {
     const { sound, hero, antiHero } = initScene({
       k,
       levelName: 'level-1.4',
-      levelNumber: 4,
+      levelNumber: 5,  // Show 5 red blades in indicator (all red)
       nextLevel: 'menu',
       skipPlatforms: true,
       levelTitle: "words like blades",

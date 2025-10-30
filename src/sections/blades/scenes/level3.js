@@ -31,7 +31,7 @@ export function sceneLevel3(k) {
     const { sound, hero, antiHero } = initScene({
       k,
       levelName: 'level-1.3',
-      levelNumber: 3,
+      levelNumber: 4,  // Show 4 red blades in indicator
       nextLevel: 'level-1.4',
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-1.3'].spikes,

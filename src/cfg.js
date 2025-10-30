@@ -39,6 +39,13 @@ export const CFG = {
       active: "DC143C",     // Red for active/completed levels
       inactive: "555555",   // Gray for inactive/future levels
     },
+    // Level 0 colors (intro level)
+    "level-1.0": {
+      background: "3E3E3E",         // Dark gray (foggy gloom)
+      platform: "1A1A1A",           // Nearly black platforms
+      spikes: "DC143C",             // Crimson red spikes (for level indicator)
+      instructions: "CCCCCC",       // Light gray instructions
+    },
     // Level 1 colors
     "level-1.1": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
@@ -140,6 +147,21 @@ export const CFG = {
   },
   levels: {
     platformName: "platform",
+    "level-1.0": {
+      name: "Level 0",
+      
+      // Hero spawn position (% of screen dimensions)
+      // Heroes spawn on bottom platform (33.3% height starts at 66.7% Y)
+      heroSpawn: {
+        x: 12,    // % of screen width (left side, after left wall at 10%)
+        y: 64     // % of screen height (on bottom platform)
+      },
+      antiHeroSpawn: {
+        x: 88,    // % of screen width (right side, before right wall at 90%)
+        y: 64     // % of screen height (on bottom platform)
+      }
+    },
+    
     "level-1.1": {
       name: "Level 1",
       

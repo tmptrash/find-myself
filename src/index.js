@@ -1,6 +1,7 @@
 import kaplay from "kaplay"
 import { sceneReady } from "./ready.js"
 import { sceneMenu } from "./menu.js"
+import { sceneLevel0 } from "./sections/blades/scenes/level0.js"
 import { sceneLevel1 } from "./sections/blades/scenes/level1.js"
 import { sceneLevel2 } from "./sections/blades/scenes/level2.js"
 import { sceneLevel3 } from "./sections/blades/scenes/level3.js"
@@ -31,6 +32,7 @@ loadSpikeSprites(k)
 // Register all scenes
 sceneReady(k)
 sceneMenu(k)
+sceneLevel0(k)
 sceneLevel1(k)
 sceneLevel2(k)
 sceneLevel3(k)

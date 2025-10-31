@@ -9,7 +9,7 @@ import { initScene } from '../utils/scene.js'
 export function sceneLevel0(k) {
   k.scene("level-1.0", () => {
     // Initialize level with heroes, no gaps or obstacles
-    const { sound } = initScene({
+    initScene({
       k,
       levelName: 'level-1.0',
       levelNumber: 1,  // Show 1 red blade in indicator
@@ -20,8 +20,6 @@ export function sceneLevel0(k) {
       subTitle: "some words are sharper than any blade...",
       subTitleColor: CFG.colors['level-1.0'].background,
     })
-    
-    // Eerie sound effects removed for cleaner audio experience
   })
 }
 

@@ -136,8 +136,7 @@ export function sceneLevel4(k) {
       cycleTimer: 0,
       animationSpeed: 0.092,   // Seconds for extend/retract (15% slower: 0.08 * 1.15)
       spikeDelay: 0.08,      // Seconds between spikes (pause between spike1->spike2 and spike2->spike3)
-      cycleDelay: 0.08,      // Seconds after last spike before restart
-      firstCycleComplete: false
+      cycleDelay: 0.08       // Seconds after last spike before restart
     }
     
     // Start spike animation after 0.5 second
@@ -213,14 +212,6 @@ function updateSpikesAnimation(inst) {
       inst.spike3State = 'cycle-complete'
       inst.animationTimer = 0
       inst.cycleTimer = 0
-      
-      // After first cycle, make spikes invisible
-      if (!inst.firstCycleComplete) {
-        inst.firstCycleComplete = true
-        spikes1.spike.opacity = 0
-        spikes2.spike.opacity = 0
-        spikes3.spike.opacity = 0
-      }
     }
   }
   
@@ -262,6 +253,7 @@ function updateSpikesAnimation(inst) {
     inst.spike1State = 'extending'
     inst.spike2State = 'waiting'
     inst.spike3State = 'waiting'
+    
     sound && Sound.playSpikeSound(sound)
   }
 }

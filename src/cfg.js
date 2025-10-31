@@ -13,11 +13,11 @@ export const CFG = {
     
     // Level sound effects
     sfx: {
-      landVolume: 0.343,         // Landing sound volume
-      landFade: 0.029,           // Landing fade
-      landDuration: 0.1,         // Sound duration (seconds)
-      landFreqStart: 250,        // Start frequency (Hz)
-      landFreqEnd: 80,           // End frequency (Hz)
+      landVolume: 0.176,         // Landing sound volume (same as step)
+      landFade: 0.022,           // Landing fade (same as step)
+      landDuration: 0.05,        // Sound duration (seconds)
+      landFreqStart: 180,        // Start frequency (Hz) - same as step
+      landFreqEnd: 60,           // End frequency (Hz) - same as step
       
       stepVolume: 0.176,         // Step sound volume
       stepFade: 0.022,           // Step fade

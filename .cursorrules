@@ -386,6 +386,22 @@ export function playLandSound(inst) {
 
 ## 9. Comments
 
+### Comments and an empty lines
+- If a line of code has a comment above you should not add an empty line before this comment
+- Every comment should start and finish with an empty comment - // line. If we use /** comment from the JSDoc it is already has this empty line at the beginning.
+```javascript
+// Bad: extra empty line before the comment and no // at the beginnign and at the end
+
+// var assign
+let a = 123
+
+// Good: no empty line before the comment and has // before and after actual comment
+//
+// var assign
+//
+let a = 123
+```
+
 ### Language
 - **English only** for all comments
 
@@ -401,21 +417,28 @@ export function playLandSound(inst) {
  * @returns {Object} Hero inst with character and state
  */
 export function create(cfg) {
+  //
   // Implementation
+  //
 }
 ```
 
 ### Inline Comments
 ```javascript
 // Good: Explain why, not what
+//
 // Use short-circuit evaluation to avoid null checks
+//
 sfx && Sound.playLandSound(sfx)
-
+//
 // Calculate center between characters for annihilation effect
+//
 const centerX = (player.pos.x + target.pos.x) / 2
 
 // Bad: State the obvious
+//
 // Set x to 100
+//
 x = 100
 ```
 
@@ -469,7 +492,9 @@ function onAnnihilationCollide(inst) {
 function onAnnihilationCollide(inst) {
   if (!inst.isAnnihilating) {
     inst.isAnnihilating = true
+    //
     // ... deep nested logic
+    //
   }
 }
 ```
@@ -518,6 +543,7 @@ src/
 - ❌ Put exported functions at the bottom of files
 - ❌ Do not put comments separated by many = symbol
 - ❌ Do not put function inside other function. Make it private
+- ❌ Do not use console.log() function
 - ❌ Do not put magic (hard-coded) numbers and strings. Put them into the constant at the top or into the config.js if it's a global one
 
 ### Do

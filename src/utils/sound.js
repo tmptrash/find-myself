@@ -779,28 +779,7 @@ export function playAbsorptionSound(instance) {
   tone2.start(now + 0.05)
   tone2.stop(now + duration)
   
-  // Soft shimmer effect
-  const shimmer = instance.audioContext.createOscillator()
-  const shimmerGain = instance.audioContext.createGain()
-  const shimmerFilter = instance.audioContext.createBiquadFilter()
-  
-  shimmer.type = 'triangle'
-  shimmer.frequency.setValueAtTime(1760, now)  // A6
-  
-  shimmerFilter.type = 'bandpass'
-  shimmerFilter.frequency.setValueAtTime(2000, now)
-  shimmerFilter.Q.value = 2
-  
-  shimmerGain.gain.setValueAtTime(0, now)
-  shimmerGain.gain.linearRampToValueAtTime(0.15, now + 0.2)
-  shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  
-  shimmer.connect(shimmerFilter)
-  shimmerFilter.connect(shimmerGain)
-  shimmerGain.connect(instance.audioContext.destination)
-  
-  shimmer.start(now + 0.1)
-  shimmer.stop(now + duration)
+  // Shimmer effect removed (bell-like sound)
 }
 
 export function playAnnihilationSound(instance) {

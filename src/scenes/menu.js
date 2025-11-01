@@ -36,6 +36,18 @@ export function sceneMenu(k) {
     hero.z = 10
     
     //
+    // Add invisible platform under hero to prevent falling
+    //
+    k.add([
+      k.rect(k.width(), 50),
+      k.pos(0, centerY + 50),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),
+      CFG.levels.platformName
+    ])
+    
+    //
     // Scene instance with all state
     //
     const inst = {

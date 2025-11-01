@@ -5,12 +5,12 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
 
 export function sceneLevel3(k) {
-  k.scene("level-1.3", () => {
+  k.scene("level-word.3", () => {
     // Calculate hero position shifted right by 2 spike widths
     const singleSpikeWidth = Spikes.getSingleSpikeWidth(k)
-    const heroXBase = k.width() * CFG.levels['level-1.3'].heroSpawn.x / 100
+    const heroXBase = k.width() * CFG.levels['level-word.3'].heroSpawn.x / 100
     const heroX = heroXBase + singleSpikeWidth * 3  // Shift right by 2 pyramids
-    const antiHeroX = k.width() * CFG.levels['level-1.3'].antiHeroSpawn.x / 100
+    const antiHeroX = k.width() * CFG.levels['level-word.3'].antiHeroSpawn.x / 100
     const leftX = Math.min(heroX, antiHeroX)
     const rightX = Math.max(heroX, antiHeroX)
     const distance = rightX - leftX
@@ -27,16 +27,16 @@ export function sceneLevel3(k) {
     const movingPlatform2X = spike2X - spikeWidth * 1.1  // Before second spike
     
     // Initialize level with heroes and TWO gaps in platform
-    const heroY = k.height() * CFG.levels['level-1.3'].heroSpawn.y / 100
+    const heroY = k.height() * CFG.levels['level-word.3'].heroSpawn.y / 100
     const { sound, hero, antiHero } = initScene({
       k,
-      levelName: 'level-1.3',
+      levelName: 'level-word.3',
       levelNumber: 4,  // Show 4 red blades in indicator
-      nextLevel: 'level-1.4',
+      nextLevel: 'level-word.4',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-1.3'].spikes,
+      levelTitleColor: CFG.colors['level-word.3'].spikes,
       subTitle: "when feelings grow dull, words become sharper",
-      subTitleColor: CFG.colors['level-1.3'].background,
+      subTitleColor: CFG.colors['level-word.3'].background,
       heroX: heroX,  // Custom hero position (shifted right by 2 pyramids)
       heroY: heroY,
       platformGap: [
@@ -63,8 +63,8 @@ export function sceneLevel3(k) {
       x: movingPlatform1X,
       y: platformY,
       hero,
-      color: CFG.colors['level-1.3'].platform,
-      currentLevel: 'level-1.3',
+      color: CFG.colors['level-word.3'].platform,
+      currentLevel: 'level-word.3',
       jumpToDisableSpikes: true,  // Special mode: jump down to disable spikes
       autoOpen: true,  // Auto-open on level start
       sfx: sound
@@ -76,8 +76,8 @@ export function sceneLevel3(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.colors['level-1.3'].platform,
-      currentLevel: 'level-1.3',
+      color: CFG.colors['level-word.3'].platform,
+      currentLevel: 'level-word.3',
       jumpToDisableSpikes: false,  // Normal mode: timer-based (4 seconds)
       autoOpen: false,  // Triggered by hero proximity
       sfx: sound
@@ -90,7 +90,7 @@ export function sceneLevel3(k) {
       y: platformY - spikeHeight / 2,
       hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes1, "level-1.3"),
+      onHit: () => Spikes.handleCollision(spikes1, "level-word.3"),
       sfx: sound
     })
     
@@ -101,7 +101,7 @@ export function sceneLevel3(k) {
       y: platformY - spikeHeight / 2,
       hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes2, "level-1.3"),
+      onHit: () => Spikes.handleCollision(spikes2, "level-word.3"),
       sfx: sound
     })
     
@@ -114,9 +114,9 @@ export function sceneLevel3(k) {
       k,
       y: heroY,
       hero,
-      color: CFG.colors['level-1.3'].spikes,
+      color: CFG.colors['level-word.3'].spikes,
       sfx: sound,
-      currentLevel: 'level-1.3'
+      currentLevel: 'level-word.3'
     })
     
     // Eerie sound effects removed for cleaner audio experience

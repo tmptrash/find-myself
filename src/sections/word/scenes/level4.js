@@ -6,27 +6,27 @@ import * as Spikes from '../components/spikes.js'
 import * as Hero from '../../../components/hero.js'
 
 export function sceneLevel4(k) {
-  k.scene("level-1.4", () => {
+  k.scene("level-word.4", () => {
     // Initialize level with heroes (skip standard platforms)
     const { sound, hero, antiHero } = initScene({
       k,
-      levelName: 'level-1.4',
+      levelName: 'level-word.4',
       levelNumber: 5,  // Show 5 red blades in indicator (all red)
       nextLevel: 'menu',
       skipPlatforms: true,
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-1.4'].spikes,
+      levelTitleColor: CFG.colors['level-word.4'].spikes,
       subTitle: "words are blades that leave invisible wounds",
-      subTitleColor: CFG.colors['level-1.4'].background
+      subTitleColor: CFG.colors['level-word.4'].background
     })
     
     // Create custom platforms with pit in the middle
-    const pitInfo = createCustomPlatforms(k, CFG.colors['level-1.4'].platform)
+    const pitInfo = createCustomPlatforms(k, CFG.colors['level-word.4'].platform)
     
     // Create bottom of the pit (platform at pit depth)
     const heroHeight = k.height() * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
-    const bottomHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
+    const bottomHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
     const pitBottomY = k.height() - bottomHeight + pitDepth
     
     // Create pit bottom platform
@@ -35,7 +35,7 @@ export function sceneLevel4(k) {
       k.pos(pitInfo.centerX - pitInfo.width / 2, pitBottomY),
       k.area(),
       k.body({ isStatic: true }),
-      getColor(k, CFG.colors['level-1.4'].platform),
+      getColor(k, CFG.colors['level-word.4'].platform),
       CFG.levels.platformName
     ])
     
@@ -48,14 +48,14 @@ export function sceneLevel4(k) {
       y: pitBottomY - spikeHeight / 2,
       hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(pitSpikes, "level-1.4"),
+      onHit: () => Spikes.handleCollision(pitSpikes, "level-word.4"),
       sfx: sound
     })
     pitSpikes.spike.opacity = 1
     
     // Create 3 spikes (left floor, center ceiling, right floor)
-    const bottomPlatformHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
-    const topPlatformHeight = k.height() * CFG.levels['level-1.4'].topPlatformHeight / 100
+    const bottomPlatformHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
+    const topPlatformHeight = k.height() * CFG.levels['level-word.4'].topPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
     const floorSpikeY = platformY - spikeHeight / 2
     const ceilingSpikeY = topPlatformHeight + spikeHeight / 2
@@ -71,7 +71,7 @@ export function sceneLevel4(k) {
       orientation: Spikes.ORIENTATIONS.FLOOR,
       onHit: () => {
         spikes1.spike.opacity = 1
-        Hero.death(hero, () => k.go("level-1.4"))
+        Hero.death(hero, () => k.go("level-word.4"))
       },
       sfx: sound
     })
@@ -89,7 +89,7 @@ export function sceneLevel4(k) {
       orientation: Spikes.ORIENTATIONS.CEILING,
       onHit: () => {
         spikes2.spike.opacity = 1
-        Hero.death(hero, () => k.go("level-1.4"))
+        Hero.death(hero, () => k.go("level-word.4"))
       },
       sfx: sound
     })
@@ -107,7 +107,7 @@ export function sceneLevel4(k) {
       orientation: Spikes.ORIENTATIONS.FLOOR,
       onHit: () => {
         spikes3.spike.opacity = 1
-        Hero.death(hero, () => k.go("level-1.4"))
+        Hero.death(hero, () => k.go("level-word.4"))
       },
       sfx: sound
     })
@@ -265,8 +265,8 @@ function updateSpikesAnimation(inst) {
  * @returns {Object} Pit information (centerX, width)
  */
 function createCustomPlatforms(k, color) {
-  const bottomPlatformHeight = k.height() * CFG.levels['level-1.4'].bottomPlatformHeight / 100
-  const topPlatformHeight = k.height() * CFG.levels['level-1.4'].topPlatformHeight / 100
+  const bottomPlatformHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
+  const topPlatformHeight = k.height() * CFG.levels['level-word.4'].topPlatformHeight / 100
   const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
   
   // Calculate pit dimensions (same width as spikes)

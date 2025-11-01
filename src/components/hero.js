@@ -50,8 +50,11 @@ export function create(config) {
     currentLevel = null,
     onAnnihilation = null
   } = config
+  
+  const spriteName = `${type.toLowerCase()}_0_0`
+  
   const character = k.add([
-    k.sprite(`${type.toLowerCase()}_0_0`),
+    k.sprite(spriteName),
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
@@ -375,7 +378,7 @@ function updateIdleAnimation(inst) {
     // Instantly switch to current idle sprite
     const roundedX = Math.round(inst.eyeOffsetX)
     const roundedY = Math.round(inst.eyeOffsetY)
-    const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+    const spriteName = getSpriteName(inst, roundedX, roundedY)
     inst.character.use(inst.k.sprite(spriteName))
     inst.currentEyeSprite = spriteName
   }
@@ -399,7 +402,7 @@ function updateIdleAnimation(inst) {
   const roundedY = Math.round(inst.eyeOffsetY)
   
   // Switch to preloaded sprite with eyes
-  const spriteName = `${inst.type}_${roundedX}_${roundedY}`
+  const spriteName = getSpriteName(inst, roundedX, roundedY)
   
   // Update sprite only if eye position changed
   if (inst.currentEyeSprite !== spriteName) {
@@ -630,7 +633,9 @@ function onAnnihilationCollide(inst) {
  * @returns {string} Base64 encoded sprite data
  */
 function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
+  //
   // Choose color scheme based on type
+  //
   const colors = type === HEROES.HERO ? CFG.colors.hero : CFG.colors.antiHero
   
   const size = 32
@@ -771,4 +776,15 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
  */
 function getHeroScale(k) {
   return Math.round(k.height() / HERO_HEIGHT_RATIO / HERO_SPRITE_SIZE)
+}
+
+/**
+ * Get sprite name for character (supports custom colors)
+ * @param {Object} inst - Hero instance
+ * @param {number} eyeX - Eye X offset (-1, 0, 1)
+ * @param {number} eyeY - Eye Y offset (-1, 0, 1)
+ * @returns {string} Sprite name
+ */
+function getSpriteName(inst, eyeX = 0, eyeY = 0) {
+  return `${inst.type}_${eyeX}_${eyeY}`
 }

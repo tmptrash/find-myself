@@ -1,13 +1,13 @@
 import kaplay from "kaplay"
 import { sceneReady } from "./ready.js"
 import { sceneMenu } from "./menu.js"
-import { sceneLevel0 } from "./sections/blades/scenes/level0.js"
-import { sceneLevel1 } from "./sections/blades/scenes/level1.js"
-import { sceneLevel2 } from "./sections/blades/scenes/level2.js"
-import { sceneLevel3 } from "./sections/blades/scenes/level3.js"
-import { sceneLevel4 } from "./sections/blades/scenes/level4.js"
+import { sceneLevel0 } from "./sections/word/scenes/level0.js"
+import { sceneLevel1 } from "./sections/word/scenes/level1.js"
+import { sceneLevel2 } from "./sections/word/scenes/level2.js"
+import { sceneLevel3 } from "./sections/word/scenes/level3.js"
+import { sceneLevel4 } from "./sections/word/scenes/level4.js"
 import { loadHeroSprites } from "./components/hero.js"
-import { loadSprites as loadSpikeSprites } from "./sections/blades/components/spikes.js"
+import { loadSprites as loadSpikeSprites } from "./sections/word/components/spikes.js"
 
 // Game initialization (fullscreen)
 const k = kaplay({

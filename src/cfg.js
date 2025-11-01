@@ -39,36 +39,36 @@ export const CFG = {
       active: "DC143C",     // Red for active/completed levels
       inactive: "555555",   // Gray for inactive/future levels
     },
-    // Level 0 colors (intro level)
-    "level-1.0": {
+    // Level 0 colors (intro level - word section)
+    "level-word.0": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (for level indicator)
       instructions: "CCCCCC",       // Light gray instructions
     },
-    // Level 1 colors
-    "level-1.1": {
+    // Level 1 colors (word section)
+    "level-word.1": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (danger!)
       instructions: "CCCCCC",       // Light gray instructions
     },
-    // Level 2 colors
-    "level-1.2": {
+    // Level 2 colors (word section)
+    "level-word.2": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (danger!)
       instructions: "CCCCCC",       // Light gray instructions
     },
-    // Level 3 colors
-    "level-1.3": {
+    // Level 3 colors (word section)
+    "level-word.3": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (danger!)
       instructions: "CCCCCC",       // Light gray instructions
     },
-    // Level 4 colors
-    "level-1.4": {
+    // Level 4 colors (word section)
+    "level-word.4": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
       spikes: "DC143C",             // Crimson red spikes (danger!)
@@ -107,6 +107,40 @@ export const CFG = {
       outline: "000000",            // Black outline
       eyeWhite: "FFFFFF",           // Eye white
       eyePupil: "000000",           // Pupil
+    },
+    
+    // Section colors for menu anti-heroes
+    sections: {
+      word: {
+        body: "DC143C",             // Crimson red
+        outline: "8B0000",          // Dark red
+        lightning: "DC143C"
+      },
+      touch: {
+        body: "FF6B35",             // Orange-red
+        outline: "CC4400",          // Dark orange
+        lightning: "FF6B35"
+      },
+      feel: {
+        body: "FFD700",             // Gold
+        outline: "B8860B",          // Dark goldenrod
+        lightning: "FFD700"
+      },
+      memory: {
+        body: "4ECDC4",             // Turquoise
+        outline: "2C7A7B",          // Dark teal
+        lightning: "4ECDC4"
+      },
+      stress: {
+        body: "9B59B6",             // Purple
+        outline: "6C3483",          // Dark purple
+        lightning: "9B59B6"
+      },
+      time: {
+        body: "34495E",             // Dark blue-gray
+        outline: "1C2833",          // Very dark blue
+        lightning: "34495E"
+      }
     }
   },
   controls: {
@@ -147,8 +181,8 @@ export const CFG = {
   },
   levels: {
     platformName: "platform",
-    "level-1.0": {
-      name: "Level 0",
+    "level-word.0": {
+      name: "Level 0 - Word",
       
       // Hero spawn position (% of screen dimensions)
       // Heroes spawn on bottom platform (33.3% height starts at 66.7% Y)
@@ -162,8 +196,8 @@ export const CFG = {
       }
     },
     
-    "level-1.1": {
-      name: "Level 1",
+    "level-word.1": {
+      name: "Level 1 - Word",
       
       // Hero spawn position (% of screen dimensions)
       // Heroes spawn on bottom platform (33.3% height starts at 66.7% Y)
@@ -177,8 +211,8 @@ export const CFG = {
       }
     },
     
-    "level-1.2": {
-      name: "Level 2",
+    "level-word.2": {
+      name: "Level 2 - Word",
       
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {
@@ -191,8 +225,8 @@ export const CFG = {
       }
     },
     
-    "level-1.3": {
-      name: "Level 3",
+    "level-word.3": {
+      name: "Level 3 - Word",
       
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {
@@ -205,8 +239,8 @@ export const CFG = {
       }
     },
     
-    "level-1.4": {
-      name: "Level 4",
+    "level-word.4": {
+      name: "Level 4 - Word",
       
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {

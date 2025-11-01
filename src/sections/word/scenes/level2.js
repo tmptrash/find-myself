@@ -4,14 +4,14 @@ import * as Spikes from '../components/spikes.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 
 export function sceneLevel2(k) {
-  k.scene("level-1.2", () => {
+  k.scene("level-word.2", () => {
     // Calculate moving platform position first (110px from hero start position)
-    const heroX = k.width() * CFG.levels['level-1.2'].heroSpawn.x / 100
+    const heroX = k.width() * CFG.levels['level-word.2'].heroSpawn.x / 100
     const spikeWidth = Spikes.getSpikeWidth(k)
     const movingPlatformX = heroX + 110  // 110px from hero
     
     // Calculate positions for spike platforms
-    const antiHeroX = k.width() * CFG.levels['level-1.2'].antiHeroSpawn.x / 100
+    const antiHeroX = k.width() * CFG.levels['level-word.2'].antiHeroSpawn.x / 100
     const leftX = Math.min(heroX, antiHeroX)
     const rightX = Math.max(heroX, antiHeroX)
     const distance = rightX - leftX
@@ -26,13 +26,13 @@ export function sceneLevel2(k) {
     // Initialize level with heroes and gaps in platform
     const { sound, hero, antiHero } = initScene({
       k,
-      levelName: 'level-1.2',
+      levelName: 'level-word.2',
       levelNumber: 3,  // Show 3 red blades in indicator
-      nextLevel: 'level-1.3',
+      nextLevel: 'level-word.3',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-1.2'].spikes,
+      levelTitleColor: CFG.colors['level-word.2'].spikes,
       subTitle: "words are blades that never rust",
-      subTitleColor: CFG.colors['level-1.2'].background,
+      subTitleColor: CFG.colors['level-word.2'].background,
       platformGap: [
         // First gap for first moving platform
         {
@@ -57,8 +57,8 @@ export function sceneLevel2(k) {
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.colors['level-1.2'].platform,
-      currentLevel: 'level-1.2',
+      color: CFG.colors['level-word.2'].platform,
+      currentLevel: 'level-word.2',
       sfx: sound
     })
     
@@ -68,8 +68,8 @@ export function sceneLevel2(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.colors['level-1.2'].platform,
-      currentLevel: 'level-1.2',
+      color: CFG.colors['level-word.2'].platform,
+      currentLevel: 'level-word.2',
       sfx: sound
     })
     
@@ -80,7 +80,7 @@ export function sceneLevel2(k) {
       y: platformY - spikeHeight / 2,
       hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes1, "level-1.2"),
+      onHit: () => Spikes.handleCollision(spikes1, "level-word.2"),
       sfx: sound
     })
     
@@ -91,7 +91,7 @@ export function sceneLevel2(k) {
       y: platformY - spikeHeight / 2,
       hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes2, "level-1.2"),
+      onHit: () => Spikes.handleCollision(spikes2, "level-word.2"),
       sfx: sound
     })
     

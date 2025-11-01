@@ -4,7 +4,7 @@ import * as Spikes from '../components/spikes.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 
 export function sceneLevel1(k) {
-  k.scene("level-1.1", () => {
+  k.scene("level-word.1", () => {
     // Calculate moving platform position first (needed for gap calculation)
     const centerX = k.width() / 2
     const spikeWidth = Spikes.getSpikeWidth(k)
@@ -14,14 +14,14 @@ export function sceneLevel1(k) {
     // Initialize level with heroes and gap in platform
     const { sound, hero, antiHero } = initScene({
       k,
-      levelName: 'level-1.1',
+      levelName: 'level-word.1',
       levelNumber: 2,  // Show 2 red blades in indicator
-      nextLevel: 'level-1.2',
+      nextLevel: 'level-word.2',
       showInstructions: false,
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-1.1'].spikes,
+      levelTitleColor: CFG.colors['level-word.1'].spikes,
       subTitle: "sometimes words cut deeper than blades...",
-      subTitleColor: CFG.colors['level-1.1'].background,
+      subTitleColor: CFG.colors['level-word.1'].background,
       platformGap: {
         x: movingPlatformX - spikeWidth / 2,  // Start gap before platform
         width: spikeWidth  // Gap width matches spike width
@@ -41,8 +41,8 @@ export function sceneLevel1(k) {
       x: movingPlatformX,
       y: movingPlatformY,
       hero,
-      color: CFG.colors['level-1.1'].platform,
-      currentLevel: 'level-1.1',
+      color: CFG.colors['level-word.1'].platform,
+      currentLevel: 'level-word.1',
       sfx: sound
     })
     
@@ -52,7 +52,7 @@ export function sceneLevel1(k) {
       y: platformY - spikeHeight / 2,
       hero,
       orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes, "level-1.1"),
+      onHit: () => Spikes.handleCollision(spikes, "level-word.1"),
       sfx: sound
     })
     

@@ -7,18 +7,18 @@ import { initScene } from '../utils/scene.js'
  * @param {Object} k - Kaplay instance
  */
 export function sceneLevel0(k) {
-  k.scene("level-1.0", () => {
+  k.scene("level-word.0", () => {
     // Initialize level with heroes, no gaps or obstacles
     initScene({
       k,
-      levelName: 'level-1.0',
+      levelName: 'level-word.0',
       levelNumber: 1,  // Show 1 red blade in indicator
-      nextLevel: 'level-1.1',
+      nextLevel: 'level-word.1',
       showInstructions: true,
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-1.0'].spikes,
+      levelTitleColor: CFG.colors['level-word.0'].spikes,
       subTitle: "some words are sharper than any blade...",
-      subTitleColor: CFG.colors['level-1.0'].background,
+      subTitleColor: CFG.colors['level-word.0'].background,
     })
   })
 }

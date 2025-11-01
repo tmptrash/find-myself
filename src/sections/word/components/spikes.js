@@ -69,7 +69,7 @@ export function create(config) {
     orientation = ORIENTATIONS.FLOOR,
     onHit = null,
     sfx = null,
-    color = CFG.colors['level-1.1'].spikes,
+    color = CFG.colors['level-word.1'].spikes,
     spikeCount = 3
   } = config
 
@@ -141,7 +141,7 @@ export function create(config) {
  */
 export function loadSprites(k) {
   const blockSize = getSpikeBlockSize(k)
-  const defaultColor = CFG.colors['level-1.1'].spikes  // Default red color
+  const defaultColor = CFG.colors['level-word.1'].spikes  // Default red color
   const defaultSpikeCount = 3  // Default 3 pyramids
   Object.values(ORIENTATIONS).forEach(orientation => {
     const spriteData = createSpikeSprite(orientation, blockSize, defaultColor, defaultSpikeCount)

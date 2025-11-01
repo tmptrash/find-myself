@@ -5,22 +5,22 @@ import { getRGB } from './helper.js'
  * Level transition configuration - maps current level to next level
  */
 const LEVEL_TRANSITIONS = {
-  'menu': 'level-1.0',
-  'level-1.0': 'level-1.1',
-  'level-1.1': 'level-1.2',
-  'level-1.2': 'level-1.3',
-  'level-1.3': 'level-1.4',
-  'level-1.4': 'menu'
+  'menu': 'level-word.0',
+  'level-word.0': 'level-word.1',
+  'level-word.1': 'level-word.2',
+  'level-word.2': 'level-word.3',
+  'level-word.3': 'level-word.4',
+  'level-word.4': 'menu'
 }
 
 // Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
   'menu': '',      // Before Level 0
-  'level-1.0': 'words, they cut deeper than steel',     // Before Level 1
-  'level-1.1': 'leaving scars that never heal',         // Before Level 2
-  'level-1.2': 'silent wounds that never close',        // Before Level 3
-  'level-1.3': 'until nothing remains but echoes',      // Before Level 4
-  'level-1.4': 'some words are sharper than any blade'  // No subtitle when returning to menu
+  'level-word.0': 'words, they cut deeper than steel',     // Before Level 1
+  'level-word.1': 'leaving scars that never heal',         // Before Level 2
+  'level-word.2': 'silent wounds that never close',        // Before Level 3
+  'level-word.3': 'until nothing remains but echoes',      // Before Level 4
+  'level-word.4': 'some words are sharper than any blade'  // No subtitle when returning to menu
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

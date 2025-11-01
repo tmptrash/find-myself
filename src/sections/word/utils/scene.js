@@ -1,7 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { getColor, getRGB } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
-import * as Spikes from '../../../sections/blades/components/spikes.js'
+import * as Spikes from '../components/spikes.js'
 import * as Hero from '../../../components/hero.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -68,7 +68,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * Initializes a level with common setup (gravity, sound, background, platforms, camera, instructions, controls)
  * @param {Object} config - Level configuration
  * @param {Object} config.k - Kaplay instance
- * @param {string} [config.levelName] - Level name (e.g., 'level-1.1') for config lookup
+ * @param {string} [config.levelName] - Level name (e.g., 'level-word.1') for config lookup
  * @param {number} [config.levelNumber] - Level number for indicator (1-5)
  * @param {string} [config.nextLevel] - Next level name for annihilation
  * @param {string} [config.levelTitle] - Level title text to display at the top
@@ -201,7 +201,7 @@ function addInstructions(k) {
     }),
     k.pos(centerX, bottomY),
     k.anchor("center"),
-    getColor(k, CFG.colors['level-1.1'].instructions),  // instructions color
+    getColor(k, CFG.colors['level-word.1'].instructions),  // instructions color
     k.z(CFG.visual.zIndex.ui),
     k.fixed()
   ])
@@ -285,7 +285,7 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
 /**
  * Create hero and anti-hero for a level
  * @param {Object} k - Kaplay instance
- * @param {string} levelName - Level name (e.g., 'level-1.1')
+ * @param {string} levelName - Level name (e.g., 'level-word.1')
  * @param {Object} sound - Sound instance
  * @param {string} nextLevel - Next level name for annihilation (deprecated, kept for compatibility)
  * @param {Number} [customHeroX] - Custom hero X position (overrides config)

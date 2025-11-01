@@ -517,9 +517,11 @@ function onAnnihilationCollide(inst) {
   inst.wasJumping = false  // Reset jump flag
   
   //
-  // Force idle sprite (not jump!) using current eye position
+  // Force idle sprite (not jump!) using current eye position (rounded)
   //
-  player.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
+  const eyeX = Math.round(inst.eyeOffsetX)
+  const eyeY = Math.round(inst.eyeOffsetY)
+  player.use(k.sprite(getSpriteName(inst, eyeX, eyeY)))
   
   //
   // Stop horizontal movement but keep vertical (gravity)

@@ -517,11 +517,9 @@ function onAnnihilationCollide(inst) {
   inst.wasJumping = false  // Reset jump flag
   
   //
-  // Force idle sprite (not jump!) using current eye position (rounded)
+  // Force idle sprite (not jump!) using current eye position
   //
-  const eyeX = Math.round(inst.eyeOffsetX)
-  const eyeY = Math.round(inst.eyeOffsetY)
-  player.use(k.sprite(getSpriteName(inst, eyeX, eyeY)))
+  player.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
   
   //
   // Stop horizontal movement but keep vertical (gravity)
@@ -938,5 +936,10 @@ function getHeroScale(k) {
  * @returns {string} Sprite name
  */
 function getSpriteName(inst, eyeX = 0, eyeY = 0) {
-  return `${inst.type}_${eyeX}_${eyeY}`
+  //
+  // Always round eye coordinates to ensure sprite names are clean integers
+  //
+  const roundedX = Math.round(eyeX)
+  const roundedY = Math.round(eyeY)
+  return `${inst.type}_${roundedX}_${roundedY}`
 }

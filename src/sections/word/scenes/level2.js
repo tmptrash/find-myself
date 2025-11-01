@@ -1,13 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
-import * as Spikes from '../components/spikes.js'
+import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 
 export function sceneLevel2(k) {
   k.scene("level-word.2", () => {
     // Calculate moving platform position first (110px from hero start position)
     const heroX = k.width() * CFG.levels['level-word.2'].heroSpawn.x / 100
-    const spikeWidth = Spikes.getSpikeWidth(k)
+    const spikeWidth = Blades.getSpikeWidth(k)
     const movingPlatformX = heroX + 110  // 110px from hero
     
     // Calculate positions for spike platforms
@@ -49,7 +49,7 @@ export function sceneLevel2(k) {
     
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
-    const spikeHeight = Spikes.getSpikeHeight(k)
+    const spikeHeight = Blades.getSpikeHeight(k)
     
     // Create first moving platform
     MovingPlatform.create({
@@ -74,30 +74,30 @@ export function sceneLevel2(k) {
     })
     
     // Create first spike
-    const spikes1 = Spikes.create({
+    const spikes1 = Blades.create({
       k,
       x: spike1X,
       y: platformY - spikeHeight / 2,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes1, "level-word.2"),
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(spikes1, "level-word.2"),
       sfx: sound
     })
     
     // Create second spike
-    const spikes2 = Spikes.create({
+    const spikes2 = Blades.create({
       k,
       x: spike2X,
       y: platformY - spikeHeight / 2,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes2, "level-word.2"),
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(spikes2, "level-word.2"),
       sfx: sound
     })
     
     // Start spike animations after 1 second
-    Spikes.startAnimation(spikes1)
-    Spikes.startAnimation(spikes2)
+    Blades.startAnimation(spikes1)
+    Blades.startAnimation(spikes2)
     
     // Eerie sound effects removed for cleaner audio experience
   })

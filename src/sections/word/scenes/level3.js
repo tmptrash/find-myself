@@ -1,13 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
-import * as Spikes from '../components/spikes.js'
+import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
 
 export function sceneLevel3(k) {
   k.scene("level-word.3", () => {
     // Calculate hero position shifted right by 2 spike widths
-    const singleSpikeWidth = Spikes.getSingleSpikeWidth(k)
+    const singleSpikeWidth = Blades.getSingleSpikeWidth(k)
     const heroXBase = k.width() * CFG.levels['level-word.3'].heroSpawn.x / 100
     const heroX = heroXBase + singleSpikeWidth * 3  // Shift right by 2 pyramids
     const antiHeroX = k.width() * CFG.levels['level-word.3'].antiHeroSpawn.x / 100
@@ -22,7 +22,7 @@ export function sceneLevel3(k) {
     const spike2X = leftX + distance * 2 / 3
     
     // Moving platforms before each spike
-    const spikeWidth = Spikes.getSpikeWidth(k)
+    const spikeWidth = Blades.getSpikeWidth(k)
     const movingPlatform1X = spike1X - spikeWidth * 1.1  // Before first spike
     const movingPlatform2X = spike2X - spikeWidth * 1.1  // Before second spike
     
@@ -55,7 +55,7 @@ export function sceneLevel3(k) {
     
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
-    const spikeHeight = Spikes.getSpikeHeight(k)
+    const spikeHeight = Blades.getSpikeHeight(k)
     
     // Create first special moving platform (jump-to-disable mode)
     MovingPlatform.create({
@@ -84,30 +84,30 @@ export function sceneLevel3(k) {
     })
     
     // Create first spike (static, appears once)
-    const spikes1 = Spikes.create({
+    const spikes1 = Blades.create({
       k,
       x: spike1X,
       y: platformY - spikeHeight / 2,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes1, "level-word.3"),
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(spikes1, "level-word.3"),
       sfx: sound
     })
     
     // Create second spike (static, appears once)
-    const spikes2 = Spikes.create({
+    const spikes2 = Blades.create({
       k,
       x: spike2X,
       y: platformY - spikeHeight / 2,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes2, "level-word.3"),
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(spikes2, "level-word.3"),
       sfx: sound
     })
     
     // Start spike animations (appear once like in level 1)
-    Spikes.startAnimation(spikes1, 1)
-    Spikes.startAnimation(spikes2, 1)
+    Blades.startAnimation(spikes1, 1)
+    Blades.startAnimation(spikes2, 1)
     
     // Create blade arm that extends from the left (positioned at hero's height)
     BladeArm.create({

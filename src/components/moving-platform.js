@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getColor } from '../utils/helper.js'
-import * as Spikes from '../sections/word/components/spikes.js'
+import * as Blades from '../sections/word/components/blades.js'
 import * as Sound from '../utils/sound.js'
 
 // Platform parameters
@@ -29,9 +29,9 @@ export function create(config) {
   const { k, x, y, hero, color, currentLevel, jumpToDisableSpikes = false, autoOpen = false, sfx = null } = config
   
   // Calculate platform dimensions based on spike width
-  const platformWidth = Spikes.getSpikeWidth(k)
+  const platformWidth = Blades.getSpikeWidth(k)
   const platformHeight = k.height() - y  // Height from floor to bottom of screen
-  const spikeHeight = Spikes.getSpikeHeight(k)
+  const spikeHeight = Blades.getSpikeHeight(k)
   
   // Create platform
   const platform = k.add([
@@ -46,13 +46,13 @@ export function create(config) {
   ])
   
   // Create spikes at the TOP of platform (initially hidden)
-  const spikes = Spikes.create({
+  const spikes = Blades.create({
     k,
     x: x,
     y: y - spikeHeight / 2,  // Above platform top
     hero,
-    orientation: Spikes.ORIENTATIONS.FLOOR,  // Pointing up
-    onHit: () => Spikes.handleCollision(spikes, currentLevel),
+    orientation: Blades.ORIENTATIONS.FLOOR,  // Pointing up
+    onHit: () => Blades.handleCollision(spikes, currentLevel),
     sfx,
     color: CFG.colors[currentLevel]?.spikes
   })

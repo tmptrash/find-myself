@@ -151,7 +151,7 @@ export function sceneMenu(k) {
 }
 
 export function sceneLevel1(k) {
-  k.scene("level-1.1", () => {
+  k.scene("level-word.1", () => {
     // Scene implementation
   })
 }
@@ -188,7 +188,7 @@ const heroInst = Hero.create({
   controllable: true,
   sfx: sound,
   antiHero: antiHeroInst,
-  onAnnihilation: () => k.go("level-1.2")
+  onAnnihilation: () => k.go("level-word.2")
 })
 
 // Access Kaplay character
@@ -219,7 +219,7 @@ const buttonInst = Button.create({
   x: centerX,
   y: centerY,
   width: 360,
-  onClick: () => k.go("level-1.1")
+  onClick: () => k.go("level-word.1")
 })
 
 // Access elements
@@ -255,7 +255,7 @@ Hero.create({ type: Hero.HEROES.HERO })
 - **Constants**: `UPPER_CASE` (e.g., `HERO_SCALE`, `COLLISION_WIDTH`)
 
 ### Files
-- **Scenes**: `menu.js`, `ready.js`, `level-1.1.js`
+- **Scenes**: `menu.js`, `ready.js`, `level-word.1.js`
 - **Components**: `hero.js`, `button.js`
 - **Utilities**: `helper.js`, `sound.js`, `scene.js`
 - **Config**: `cfg.js`, `index.js`
@@ -516,10 +516,11 @@ src/
 │   ├── menu.js                 # sceneMenu() - Main menu
 │   ├── ready.js                # sceneReady() - Story/intro screen
 │   └── blades/                 # "Words like blades" chapter
-│       ├── level-1.1.js        # Level 1: Introduction
-│       ├── level-1.2.js        # Level 2: Two spike sets
-│       ├── level-1.3.js        # Level 3: Animated spikes + platforms
-│       └── level-1.4.js        # Level 4: Complex platforming
+│       ├── level-word.0.js     # Level 1
+│       ├── level-word.1.js     # Level 2
+│       ├── level-word.2.js     # Level 3
+│       ├── level-word.3.js     # Level 4
+│       └── level-word.4.js     # Level 5
 └── utils/                      # Utility functions and helpers
     ├── helper.js               # Color helpers, key checks
     ├── sound.js                # Procedural audio (Web Audio API)

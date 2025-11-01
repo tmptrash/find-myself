@@ -1,7 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { getColor, getRGB } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
-import * as Blades from '../components/blades.js'
+import * as Spikes from '../../../sections/blades/components/spikes.js'
 import * as Hero from '../../../components/hero.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -48,11 +48,11 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
   const spikes = []
   for (let i = 0; i < 5; i++) {
     const color = i < levelNumber ? activeColor : inactiveColor
-    const spike = Blades.create({
+    const spike = Spikes.create({
       k,
       x: startX + i * (singleSpikeWidth + spacing),
       y: y,
-      orientation: Blades.ORIENTATIONS.FLOOR,
+      orientation: Spikes.ORIENTATIONS.FLOOR,
       color: color,
       spikeCount: 1  // Single pyramid for indicator
     })

@@ -42,7 +42,7 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
  * User can press SPACE or ENTER to skip the transition and go directly to next level
  * 
  * @param {Object} k - Kaplay instance
- * @param {string} currentLevel - Current level name (e.g., 'level-1.0' or 'menu')
+ * @param {string} currentLevel - Current level name (e.g., 'level-word.0' or 'menu')
  * @param {Function} onComplete - Callback when transition completes
  */
 export function createLevelTransition(k, currentLevel, onComplete) {

@@ -2,7 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
-import * as Spikes from '../components/spikes.js'
+import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 
 export function sceneLevel4(k) {
@@ -40,18 +40,18 @@ export function sceneLevel4(k) {
     ])
     
     // Create spikes at the bottom of the pit (pointing up)
-    const spikeHeight = Spikes.getSpikeHeight(k)
-    const spikeWidth = Spikes.getSpikeWidth(k)
-    const pitSpikes = Spikes.create({
+    const spikeHeight = Blades.getSpikeHeight(k)
+    const spikeWidth = Blades.getSpikeWidth(k)
+    const pitSpikes = Blades.create({
       k,
       x: pitInfo.centerX,
       y: pitBottomY - spikeHeight / 2,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(pitSpikes, "level-word.4"),
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(pitSpikes, "level-word.4"),
       sfx: sound
     })
-    pitSpikes.spike.opacity = 1
+    pitBlades.spike.opacity = 1
     
     // Create 3 spikes (left floor, center ceiling, right floor)
     const bottomPlatformHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
@@ -63,12 +63,12 @@ export function sceneLevel4(k) {
     // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
     const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 2.5
     const hiddenY1 = floorSpikeY + spikeHeight * 1.5  // Deeper: 1.5x spike height below visible position
-    const spikes1 = Spikes.create({
+    const spikes1 = Blades.create({
       k,
       x: leftSpikeX,
       y: hiddenY1,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
+      orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => {
         spikes1.spike.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
@@ -81,12 +81,12 @@ export function sceneLevel4(k) {
     // Center spike (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
     const hiddenY2 = topPlatformHeight - spikeHeight * 1.5  // Deeper: 1.5x spike height above visible position
     const visibleCeilingY = topPlatformHeight + spikeHeight / 2  // Extended down from ceiling
-    const spikes2 = Spikes.create({
+    const spikes2 = Blades.create({
       k,
       x: pitInfo.centerX,
       y: hiddenY2,
       hero,
-      orientation: Spikes.ORIENTATIONS.CEILING,
+      orientation: Blades.ORIENTATIONS.CEILING,
       onHit: () => {
         spikes2.spike.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
@@ -99,12 +99,12 @@ export function sceneLevel4(k) {
     // Right spike (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
     const rightSpikeX = pitInfo.centerX + pitInfo.width / 2 + spikeWidth * 1.5
     const hiddenY3 = floorSpikeY + spikeHeight * 1.5  // Deeper: 1.5x spike height below visible position
-    const spikes3 = Spikes.create({
+    const spikes3 = Blades.create({
       k,
       x: rightSpikeX,
       y: hiddenY3,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
+      orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => {
         spikes3.spike.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
@@ -270,7 +270,7 @@ function createCustomPlatforms(k, color) {
   const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
   
   // Calculate pit dimensions (same width as spikes)
-  const pitWidth = Spikes.getSpikeWidth(k)
+  const pitWidth = Blades.getSpikeWidth(k)
   const centerX = k.width() / 2
   const pitLeft = centerX - pitWidth / 2
   const pitRight = centerX + pitWidth / 2

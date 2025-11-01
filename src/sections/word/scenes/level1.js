@@ -1,13 +1,13 @@
 import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
-import * as Spikes from '../components/spikes.js'
+import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 
 export function sceneLevel1(k) {
   k.scene("level-word.1", () => {
     // Calculate moving platform position first (needed for gap calculation)
     const centerX = k.width() / 2
-    const spikeWidth = Spikes.getSpikeWidth(k)
+    const spikeWidth = Blades.getSpikeWidth(k)
     const movingPlatformX = centerX + k.width() * 0.05  // Position platform left of center
     const spikeX = movingPlatformX + spikeWidth * 1.1  // Position spikes closer to platform
     
@@ -31,7 +31,7 @@ export function sceneLevel1(k) {
     // Create spikes in the middle of the level
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
     const platformY = k.height() - bottomPlatformHeight
-    const spikeHeight = Spikes.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
+    const spikeHeight = Blades.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
     
     // Create moving platform right before spikes (at floor level)
     const movingPlatformY = platformY  // At the same level as bottom platform
@@ -46,18 +46,18 @@ export function sceneLevel1(k) {
       sfx: sound
     })
     
-    const spikes = Spikes.create({
+    const spikes = Blades.create({
       k,
       x: spikeX,
       y: platformY - spikeHeight / 2,
       hero,
-      orientation: Spikes.ORIENTATIONS.FLOOR,
-      onHit: () => Spikes.handleCollision(spikes, "level-word.1"),
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(spikes, "level-word.1"),
       sfx: sound
     })
     
     // Start spike animation after 2 seconds
-    Spikes.startAnimation(spikes, 1)
+    Blades.startAnimation(spikes, 1)
     
     // Eerie sound effects removed for cleaner audio experience
   })

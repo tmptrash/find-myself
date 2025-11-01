@@ -2,7 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import * as Spikes from './spikes.js'
+import * as Blades from './blades.js'
 
 // Blade arm parameters
 const EXTENSION_DURATION = 1.0  // Duration of extension animation (seconds)
@@ -22,9 +22,9 @@ const PAUSE_DURATION = 1.0  // Duration of pause between extensions (seconds)
 export function create(config) {
   const { k, y, hero, color, sfx = null, currentLevel } = config
   
-  const spikeWidth = Spikes.getSpikeWidth(k)
-  const spikeHeight = Spikes.getSpikeHeight(k)
-  const singleSpikeWidth = Spikes.getSingleSpikeWidth(k)
+  const spikeWidth = Blades.getSpikeWidth(k)
+  const spikeHeight = Blades.getSpikeHeight(k)
+  const singleSpikeWidth = Blades.getSingleSpikeWidth(k)
   const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
   const extensionStep = spikeWidth * 2 * 0.8  // Extends by 2 spike widths per cycle, reduced by 20%
   
@@ -35,12 +35,12 @@ export function create(config) {
   const startX = sideWallWidth
   
   // Create the blade at the end of the arm (floor orientation, will be rotated)
-  const blade = Spikes.create({
+  const blade = Blades.create({
     k,
     x: startX,
     y: y,
     hero,
-    orientation: Spikes.ORIENTATIONS.FLOOR,
+    orientation: Blades.ORIENTATIONS.FLOOR,
     onHit: () => handleCollision(inst),
     sfx,
     color: color,

@@ -303,7 +303,16 @@ export function spawn(inst) {
  * @param {Object} inst - Hero instance
  */
 function onUpdate(inst) {
+  //
+  // Skip updates during annihilation (but allow paused for post-absorption idle)
+  //
+  if (inst.isAnnihilating) {
+    return
+  }
+  
+  //
   // For non-controllable characters (like in menu), always use idle animation
+  //
   if (!inst.controllable) {
     updateIdleAnimation(inst)
     inst.character.flipX = inst.direction === -1
@@ -477,146 +486,287 @@ function onAnnihilationCollide(inst) {
   const { k, character: player, sfx } = inst
   const target = inst.antiHero.character
   
-  // Stop control
-  player.paused = true
+  //
+  // Pause anti-hero only
+  //
   target.paused = true
   
   const playerPos = k.vec2(player.pos.x, player.pos.y)
   const targetPos = k.vec2(target.pos.x, target.pos.y)
-  const centerX = (playerPos.x + targetPos.x) / 2
-  const centerY = (playerPos.y + targetPos.y) / 2
   
-  // Play absorption sound
-  sfx && Sound.playAbsorptionSound(sfx)
+  //
+  // INSTANT EXPLOSION: Anti-hero explodes immediately with sound and particles
+  //
   
-  // PHASE 1: Both characters move toward center and start dissolving (0.6 sec)
-  const dissolveDuration = 0.6
-  let dissolveTime = 0
+  //
+  // Play explosion sound (short pop/snap sound)
+  //
+  sfx && Sound.playGlitchSound(sfx)
   
+  //
+  // STEP 2: Immediately hide anti-hero (exploded)
+  //
+  k.destroy(target)
+  
+  //
+  // STEP 3: Force hero to idle state immediately after explosion
+  //
+  inst.isRunning = false
+  inst.runFrame = 0
+  inst.runTimer = 0
+  inst.wasJumping = false  // Reset jump flag
+  
+  //
+  // Force idle sprite (not jump!) using current eye position
+  //
+  player.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
+  
+  //
+  // Stop horizontal movement but keep vertical (gravity)
+  //
+  if (player.vel) {
+    player.vel.x = 0
+  }
+  
+  //
+  // Create explosion particles immediately (all at once)
+  //
   const particles = []
+  const particleCount = 80  // Create many particles at once
   
-  const dissolveInterval = k.onUpdate(() => {
-    dissolveTime += k.dt()
-    const progress = Math.min(dissolveTime / dissolveDuration, 1)
+  for (let i = 0; i < particleCount; i++) {
+    //
+    // Randomly choose body or outline color
+    //
+    const useBodyColor = k.rand(0, 1) > 0.5
+    const particleColor = useBodyColor ? CFG.colors.antiHero.body : CFG.colors.antiHero.outline
     
-    // Ease out cubic
-    const easeProgress = 1 - Math.pow(1 - progress, 3)
+    const particle = k.add([
+      k.rect(k.rand(2, 7), k.rand(2, 7)),
+      k.pos(targetPos.x + k.rand(-20, 20), targetPos.y + k.rand(-20, 20)),
+      getColor(k, particleColor),
+      k.anchor("center"),
+      k.z(CFG.visual.zIndex.player + 1)
+    ])
     
-    // Move both characters toward center
-    player.pos.x = playerPos.x + (centerX - playerPos.x) * easeProgress * 0.5
-    player.pos.y = playerPos.y + (centerY - playerPos.y) * easeProgress * 0.5
-    target.pos.x = targetPos.x + (centerX - targetPos.x) * easeProgress * 0.5
-    target.pos.y = targetPos.y + (centerY - targetPos.y) * easeProgress * 0.5
+    //
+    // Random direction for explosion (scatter in all directions)
+    //
+    const angle = k.rand(0, Math.PI * 2)
+    const speed = k.rand(250, 500)  // High speed explosion
     
-    // Gradually fade out both characters
-    player.opacity = 1 - easeProgress
-    target.opacity = 1 - easeProgress
+    particle.vx = Math.cos(angle) * speed
+    particle.vy = Math.sin(angle) * speed
+    particle.lifetime = 0
+    particle.phase = 'scatter'
+    //
+    // Target will be set AFTER scatter phase
+    //
+    particle.targetX = null
+    particle.targetY = null
     
-    // Create dissolving particles from both characters
-    if (k.rand(0, 1) > 0.3) {
-      // Particles from hero
-      const heroParticle = k.add([
-        k.rect(k.rand(3, 6), k.rand(3, 6)),
-        k.pos(player.pos.x + k.rand(-15, 15), player.pos.y + k.rand(-15, 15)),
-        getColor(k, CFG.colors.hero.body),
-        k.anchor("center"),
-        k.z(CFG.visual.zIndex.player + 1)
-      ])
-      
-      heroParticle.vx = k.rand(-50, 50)
-      heroParticle.vy = k.rand(-80, -20)
-      heroParticle.lifetime = 0
-      heroParticle.maxLifetime = k.rand(0.8, 1.2)
-      particles.push(heroParticle)
-    }
+    particles.push(particle)
+  }
+  
+  //
+  // PHASE 1: Particles scatter outward (0.4 sec)
+  //
+  const scatterDuration = 0.4
+  let scatterTime = 0
+  
+  const scatterInterval = k.onUpdate(() => {
+    scatterTime += k.dt()
+    const progress = Math.min(scatterTime / scatterDuration, 1)
     
-    if (k.rand(0, 1) > 0.3) {
-      // Particles from anti-hero
-      const antiHeroParticle = k.add([
-        k.rect(k.rand(3, 6), k.rand(3, 6)),
-        k.pos(target.pos.x + k.rand(-15, 15), target.pos.y + k.rand(-15, 15)),
-        getColor(k, CFG.colors.antiHero.body),
-        k.anchor("center"),
-        k.z(CFG.visual.zIndex.player + 1)
-      ])
-      
-      antiHeroParticle.vx = k.rand(-50, 50)
-      antiHeroParticle.vy = k.rand(-80, -20)
-      antiHeroParticle.lifetime = 0
-      antiHeroParticle.maxLifetime = k.rand(0.8, 1.2)
-      particles.push(antiHeroParticle)
-    }
-    
-    // Animate particles - float upward and fade
+    //
+    // Animate particles - scatter outward
+    //
     particles.forEach(p => {
       if (!p.exists()) return
       
       p.lifetime += k.dt()
       
-      // Float upward with slight drift
+      //
+      // Move outward (all particles are in scatter phase)
+      //
       p.pos.x += p.vx * k.dt()
       p.pos.y += p.vy * k.dt()
       
-      // Slow down over time
-      p.vx *= 0.98
-      p.vy *= 0.98
-      
-      // Fade out
-      const fadeProgress = p.lifetime / p.maxLifetime
-      p.opacity = Math.max(0, 1 - fadeProgress)
-      
-      if (p.lifetime >= p.maxLifetime) {
-        k.destroy(p)
-      }
+      //
+      // Slow down
+      //
+      p.vx *= 0.96
+      p.vy *= 0.96
     })
     
     if (progress >= 1) {
-      dissolveInterval.cancel()
+      scatterInterval.cancel()
       
-      // Hide characters
-      k.destroy(player)
-      k.destroy(target)
-      
-      // PHASE 2: Particles continue floating and fading (0.6 sec)
-      let floatTime = 0
-      const floatDuration = 0.6
-      
-      const floatInterval = k.onUpdate(() => {
-        floatTime += k.dt()
+      //
+      // STEP 5: Small pause before absorption (0.2 sec)
+      //
+      k.wait(0.2, () => {
+        //
+        // PHASE 2: Particles absorbed into hero with screen shake
+        //
+        let absorbTime = 0
+        const maxAbsorbDuration = 2.0
+        let heroFlickerTimer = 0
+        const heroFlickerInterval = 0.08
         
-        // Continue animating existing particles
+        //
+        // STEP 6: Screen shake starts immediately with absorption
+        //
+        const originalCamPos = k.camPos()
+        const shakeIntensity = 8
+        
+        //
+        // Update all particle targets to hero's current position AFTER scatter
+        //
         particles.forEach(p => {
-          if (!p.exists()) return
-          
-          p.lifetime += k.dt()
-          p.pos.x += p.vx * k.dt()
-          p.pos.y += p.vy * k.dt()
-          p.vx *= 0.98
-          p.vy *= 0.98
-          
-          const fadeProgress = p.lifetime / p.maxLifetime
-          p.opacity = Math.max(0, 1 - fadeProgress)
-          
-          if (p.lifetime >= p.maxLifetime) {
-            k.destroy(p)
+          if (p.exists()) {
+            //
+            // Set target to center of hero (all particles converge to one point)
+            //
+            p.targetX = player.pos.x
+            p.targetY = player.pos.y
+            
+            //
+            // Reset velocity slightly toward hero to ensure movement starts
+            //
+            const dx = p.targetX - p.pos.x
+            const dy = p.targetY - p.pos.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            
+            if (dist > 0) {
+              //
+              // Give initial push toward hero
+              //
+              const initialSpeed = 100
+              p.vx = (dx / dist) * initialSpeed
+              p.vy = (dy / dist) * initialSpeed
+            }
           }
         })
         
-        if (floatTime >= floatDuration) {
-          floatInterval.cancel()
+        const absorbInterval = k.onUpdate(() => {
+          absorbTime += k.dt()
+          heroFlickerTimer += k.dt()
           
-          // Clean up remaining particles
-          particles.forEach(p => p.exists() && k.destroy(p))
-          
-          // Trigger level transition
-          if (inst.currentLevel) {
-            // Use new transition system
-            createLevelTransition(k, inst.currentLevel)
-          } else if (inst.onAnnihilation) {
-            // Fallback to old callback system
-            k.wait(0.2, inst.onAnnihilation)
+          //
+          // Hero flickers during absorption
+          //
+          if (heroFlickerTimer >= heroFlickerInterval) {
+            player.opacity = player.opacity === 1 ? 0.3 : 1
+            heroFlickerTimer = 0
           }
-        }
+          
+          //
+          // STEP 6: Screen shake starts after particles begin flying (delay 0.15 sec)
+          //
+          if (absorbTime > 0.15) {
+            const shakeX = k.rand(-shakeIntensity, shakeIntensity)
+            const shakeY = k.rand(-shakeIntensity, shakeIntensity)
+            k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
+          }
+          
+          //
+          // Count remaining particles
+          //
+          let activeParticles = 0
+          
+          //
+          // Animate particles - accelerate toward hero
+          //
+          particles.forEach(p => {
+            if (!p.exists()) return
+            
+            activeParticles++
+            
+            const dx = p.targetX - p.pos.x
+            const dy = p.targetY - p.pos.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            
+            //
+            // Particle reached target - destroy it (small threshold for center convergence)
+            //
+            if (dist <= 8) {
+              k.destroy(p)
+              return
+            }
+            
+            //
+            // Strong acceleration with progressive time boost
+            // Higher initial acceleration for faster absorption
+            //
+            const timeBoost = 1 + (absorbTime / maxAbsorbDuration) * 5  // Up to 6x boost
+            const baseAcceleration = 1200 / Math.max(dist, 3)  // Higher base, lower min distance
+            const acceleration = baseAcceleration * timeBoost
+            
+            //
+            // Apply acceleration toward target
+            //
+            p.vx += (dx / dist) * acceleration * k.dt() * 60
+            p.vy += (dy / dist) * acceleration * k.dt() * 60
+            
+            //
+            // Move particle
+            //
+            p.pos.x += p.vx * k.dt()
+            p.pos.y += p.vy * k.dt()
+            
+            //
+            // Check if overshot target
+            //
+            const newDist = Math.sqrt(
+              Math.pow(p.targetX - p.pos.x, 2) + 
+              Math.pow(p.targetY - p.pos.y, 2)
+            )
+            
+            if (newDist > dist) {
+              //
+              // Overshot - destroy particle
+              //
+              k.destroy(p)
+              return
+            }
+            
+            p.opacity = 1.0
+          })
+          
+          //
+          // All particles absorbed
+          //
+          if (activeParticles === 0 || absorbTime >= maxAbsorbDuration) {
+            absorbInterval.cancel()
+            
+            //
+            // Clean up
+            //
+            particles.forEach(p => p.exists() && k.destroy(p))
+            
+            //
+            // Stop hero flickering
+            //
+            player.opacity = 1
+            
+            //
+            // Restore camera
+            //
+            k.camPos(originalCamPos)
+            
+            //
+            // STEP 7: Pause after absorption and shake, then fade and show text
+            //
+            k.wait(0.6, () => {
+              if (inst.currentLevel) {
+                createLevelTransition(k, inst.currentLevel)
+              } else if (inst.onAnnihilation) {
+                inst.onAnnihilation()
+              }
+            })
+          }
+        })
       })
     }
   })

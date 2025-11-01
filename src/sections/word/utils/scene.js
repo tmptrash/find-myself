@@ -116,8 +116,11 @@ export function initScene(config) {
   // Set gravity (scaled to screen height for resolution independence)
   k.setGravity(CFG.gameplay.gravityRatio * k.height())
   
-  // Create sound instance and start audio context
+  //
+  // Create sound instance and stop ambient from menu
+  //
   const sound = Sound.create()
+  Sound.stopAmbient(sound)
   
   // Add background
   addBackground(k, bgColor)

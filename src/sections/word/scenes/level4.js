@@ -51,7 +51,7 @@ export function sceneLevel4(k) {
       onHit: () => Blades.handleCollision(pitSpikes, "level-word.4"),
       sfx: sound
     })
-    pitBlades.spike.opacity = 1
+    pitSpikes.spike.opacity = 1
     
     // Create 3 spikes (left floor, center ceiling, right floor)
     const bottomPlatformHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100

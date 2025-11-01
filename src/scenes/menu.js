@@ -88,6 +88,7 @@ export function sceneMenu(k) {
     //
     CFG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
+        Sound.stopAmbient(sound)
         createLevelTransition(k, 'menu')
       })
     })

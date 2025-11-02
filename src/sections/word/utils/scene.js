@@ -113,6 +113,11 @@ export function initScene(config) {
   const bgColor = backgroundColor || (levelName && CFG.colors[levelName]?.background)
   const pfColor = platformColor || (levelName && CFG.colors[levelName]?.platform)
   
+  //
+  // Hide cursor in levels
+  //
+  k.canvas.style.cursor = 'none'
+  
   // Set gravity (scaled to screen height for resolution independence)
   k.setGravity(CFG.gameplay.gravityRatio * k.height())
   

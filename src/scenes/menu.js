@@ -10,6 +10,11 @@ import { createLevelTransition } from "../utils/transition.js"
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
+    //
+    // Show cursor in menu
+    //
+    k.canvas.style.cursor = 'default'
+    
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
@@ -69,7 +74,7 @@ export function sceneMenu(k) {
     //
     const startText = k.add([
       k.text("press Space or Enter to start", { size: 20 }),
-      k.pos(k.width() / 2, k.height() - 80),
+      k.pos(k.width() / 2, k.height() - 50),
       k.anchor("center"),
       k.opacity(1),
       k.color(150, 150, 150), // Gray
@@ -110,8 +115,8 @@ export function sceneMenu(k) {
  * @returns {Array} Array of title objects
  */
 function createTitle(k) {
-  const titleY = k.height() * 0.15
-  const titleSize = k.height() * 0.08
+  const titleY = k.height() * 0.10  // Moved higher (was 0.15)
+  const titleSize = k.height() * 0.06  // Smaller size (was 0.08)
   
   const titleText = "FIND YOURSELF"
   const objects = []

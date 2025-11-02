@@ -38,6 +38,11 @@ sceneLevel2(k)
 sceneLevel3(k)
 sceneLevel4(k)
 
+//
 // Start game after resources loaded
-k.onLoad(() => k.go("ready"))
+// Always show ready screen on page load
+//
+k.onLoad(() => {
+  k.go("ready")
+})
 

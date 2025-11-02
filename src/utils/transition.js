@@ -14,6 +14,15 @@ const LEVEL_TRANSITIONS = {
   'level-word.4': 'menu'
 }
 
+/**
+ * Get next level name
+ * @param {string} currentLevel - Current level name
+ * @returns {string|null} Next level name or null if not found
+ */
+export function getNextLevel(currentLevel) {
+  return LEVEL_TRANSITIONS[currentLevel] || null
+}
+
 // Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
   'menu': '',      // Before Level 0

@@ -29,7 +29,7 @@ export const SECTION_COLORS = {
 
 /**
  * Get all sections progress from localStorage
- * @returns {Object} Progress object with section completion status
+ * @returns {Object} Progress object with section completion status and last level
  */
 export function getProgress() {
   try {
@@ -42,7 +42,7 @@ export function getProgress() {
   }
   
   //
-  // Default progress - all sections incomplete
+  // Default progress - all sections incomplete, no last level
   //
   return {
     word: false,
@@ -50,7 +50,8 @@ export function getProgress() {
     feel: false,
     memory: false,
     stress: false,
-    time: false
+    time: false,
+    lastLevel: null  // Last played level (e.g., 'level-word.2')
   }
 }
 
@@ -77,6 +78,30 @@ export function markSectionComplete(section) {
 export function isSectionComplete(section) {
   const progress = getProgress()
   return progress[section] || false
+}
+
+/**
+ * Save last played level
+ * @param {string} levelName - Level name (e.g., 'level-word.2')
+ */
+export function saveLastLevel(levelName) {
+  const progress = getProgress()
+  progress.lastLevel = levelName
+  
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
+  } catch (error) {
+    // Ignore errors
+  }
+}
+
+/**
+ * Get last played level
+ * @returns {string|null} Last level name or null if no progress
+ */
+export function getLastLevel() {
+  const progress = getProgress()
+  return progress.lastLevel || null
 }
 
 /**

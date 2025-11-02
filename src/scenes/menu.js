@@ -3,7 +3,7 @@ import { CFG } from "../cfg.js"
 import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition } from "../utils/transition.js"
-import { getProgress, getSectionPositions, SECTION_COLORS } from "../utils/progress.js"
+import { getProgress, getSectionPositions, SECTION_COLORS, getLastLevel } from "../utils/progress.js"
 
 /**
  * Menu scene with hero in center-left
@@ -15,6 +15,11 @@ export function sceneMenu(k) {
     // Show cursor in menu
     //
     k.canvas.style.cursor = 'default'
+    
+    //
+    // Disable gravity in menu
+    //
+    k.setGravity(0)
     
     const centerX = k.width() / 2
     //
@@ -43,18 +48,6 @@ export function sceneMenu(k) {
     
     const hero = heroInst.character
     hero.z = 10
-    
-    //
-    // Add invisible platform under hero to prevent falling
-    //
-    k.add([
-      k.rect(k.width(), 50),
-      k.pos(0, centerY + 50),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),
-      CFG.levels.platformName
-    ])
     
     //
     // Create 6 anti-heroes around the main hero (sections)
@@ -127,10 +120,18 @@ export function sceneMenu(k) {
     k.onDraw(() => drawScene(inst))
   
     //
-    // Hint to start game
+    // Check if there's a saved game
     //
+    const lastLevel = getLastLevel()
+    const hasSavedGame = lastLevel !== null
+    
+    //
+    // Hint text - same for both cases (will continue or start new based on save)
+    //
+    const hintText = "press Space or Enter to start"
+    
     const startText = k.add([
-      k.text("press Space or Enter to start", { size: 20 }),
+      k.text(hintText, { size: 20 }),
       k.pos(k.width() / 2, k.height() - 50),
       k.anchor("center"),
       k.opacity(1),
@@ -146,13 +147,37 @@ export function sceneMenu(k) {
     })
     
     //
-    // Start game on space/enter
+    // Start game controls
+    // Space or Enter - Continue from last saved level or start from beginning
     //
-    CFG.controls.startGame.forEach(key => {
-      k.onKeyPress(key, () => {
-        Sound.stopAmbient(sound)
+    k.onKeyPress("space", () => {
+      Sound.stopAmbient(sound)
+      if (hasSavedGame) {
+        //
+        // Continue from last saved level (skip intro phrase)
+        //
+        k.go(lastLevel)
+      } else {
+        //
+        // No save - start from beginning with intro phrase
+        //
         createLevelTransition(k, 'menu')
-      })
+      }
+    })
+    
+    k.onKeyPress("enter", () => {
+      Sound.stopAmbient(sound)
+      if (hasSavedGame) {
+        //
+        // Continue from last saved level (skip intro phrase)
+        //
+        k.go(lastLevel)
+      } else {
+        //
+        // No save - start from beginning with intro phrase
+        //
+        createLevelTransition(k, 'menu')
+      }
     })
     
     //

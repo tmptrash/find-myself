@@ -1,7 +1,8 @@
 import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
-import { createLevelTransition } from '../utils/transition.js'
+import { createLevelTransition, getNextLevel } from '../utils/transition.js'
+import { saveLastLevel } from '../utils/progress.js'
 
 // Collision box parameters
 const COLLISION_WIDTH = 10
@@ -864,6 +865,14 @@ function onAnnihilationCollide(inst) {
             //
             k.wait(0.6, () => {
               if (inst.currentLevel) {
+                //
+                // Save NEXT level progress to localStorage before transition
+                // (so player continues from the next level, not the current one)
+                //
+                const nextLevel = getNextLevel(inst.currentLevel)
+                if (nextLevel && nextLevel !== 'menu') {
+                  saveLastLevel(nextLevel)
+                }
                 createLevelTransition(k, inst.currentLevel)
               } else if (inst.onAnnihilation) {
                 inst.onAnnihilation()

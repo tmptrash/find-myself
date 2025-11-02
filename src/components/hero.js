@@ -425,33 +425,41 @@ function updateIdleAnimation(inst) {
  * @param {Object} inst - Hero instance
  */
 function setupControls(inst) {
+  //
   // Move left control
+  //
   CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
-      if (!inst.isSpawned) return  // Prevent movement before spawn
+      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
       inst.character.move(-inst.speed, 0)
       inst.direction = -1
     })
   })
   
+  //
   // Move right control
+  //
   CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
-      if (!inst.isSpawned) return  // Prevent movement before spawn
+      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
       inst.character.move(inst.speed, 0)
       inst.direction = 1
     })
   })
   
+  //
   // Jump
+  //
   CFG.controls.jump.forEach(key => {
     inst.k.onKeyPress(key, () => {
-      if (!inst.isSpawned) return  // Prevent jump before spawn
+      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent jump before spawn or during annihilation
       if (inst.canJump) {
         inst.character.vel.y = -inst.jumpForce
         inst.canJump = false
         
+        //
         // Play jump sound
+        //
         inst.sfx && Sound.playJumpSound(inst.sfx)
       }
     })

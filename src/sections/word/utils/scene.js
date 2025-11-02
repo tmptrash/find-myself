@@ -305,7 +305,7 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
     k,
     x: k.width() * CFG.levels[levelName].antiHeroSpawn.x / 100,
     y: k.height() * CFG.levels[levelName].antiHeroSpawn.y / 100,
-    type: 'antihero',
+    type: 'antiHero',
     sfx: sound
   })
   

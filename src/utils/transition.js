@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getRGB } from './helper.js'
+import { markSectionComplete } from './progress.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -47,6 +48,20 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
   const nextLevel = LEVEL_TRANSITIONS[currentLevel]
+  
+  //
+  // Check if section is completed (last level of section going back to menu)
+  //
+  if (nextLevel === 'menu') {
+    //
+    // Extract section name from level name (e.g., 'level-word.4' -> 'word')
+    //
+    const sectionMatch = currentLevel.match(/level-(\w+)\.\d+/)
+    if (sectionMatch) {
+      const sectionName = sectionMatch[1]
+      markSectionComplete(sectionName)
+    }
+  }
   
   if (!nextLevel) {
     // No transition defined, go directly

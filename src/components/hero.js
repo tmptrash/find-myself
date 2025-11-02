@@ -21,7 +21,7 @@ const ANTIHERO_TAG = 'annihilation'
 
 export const HEROES = {
   HERO: 'hero',
-  ANTIHERO: 'antihero'
+  ANTIHERO: 'antiHero'  // Lowercase to match sprite names
 }
 /**
  * Creates hero or anti-hero with full logic setup
@@ -29,7 +29,7 @@ export const HEROES = {
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.x - X position
  * @param {number} config.y - Y position
- * @param {string} [config.type='hero'] - Character type ('hero' or 'antihero')
+ * @param {string} [config.type='hero'] - Character type ('hero' or 'antiHero')
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
  * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
@@ -48,10 +48,40 @@ export function create(config) {
     scale = getHeroScale(config.k),
     antiHero = null,
     currentLevel = null,
-    onAnnihilation = null
+    onAnnihilation = null,
+    bodyColor = null      // Custom body color (hex string), outline is always black
   } = config
   
-  const spriteName = `${type.toLowerCase()}_0_0`
+  //
+  // Load custom colored sprites if color is provided
+  //
+  if (bodyColor) {
+    try {
+      loadCustomSprites(k, type, bodyColor)
+    } catch (error) {
+      console.error('Failed to load custom sprites:', error)
+      //
+      // Fall back to standard sprites
+      //
+    }
+  }
+  
+  //
+  // Determine sprite name based on whether custom color is used
+  //
+  let spritePrefix = bodyColor ? `${type}_${bodyColor}` : type
+  let spriteName = `${spritePrefix}_0_0`
+  
+  //
+  // Verify sprite exists, fall back to standard if not
+  //
+  try {
+    k.getSprite(spriteName)
+  } catch (e) {
+    console.warn(`Sprite ${spriteName} not found, using standard sprite`)
+    spritePrefix = type
+    spriteName = `${spritePrefix}_0_0`
+  }
   
   const character = k.add([
     k.sprite(spriteName),
@@ -79,6 +109,8 @@ export function create(config) {
     antiHero,
     currentLevel,
     onAnnihilation,
+    bodyColor,        // Store custom body color
+    spritePrefix,     // Store sprite prefix for animations
     speed: CFG.gameplay.moveSpeedRatio * k.height(),      // Scale with screen height
     jumpForce: CFG.gameplay.jumpForceRatio * k.height(),  // Scale with screen height
     direction: 1, // 1 = right, -1 = left
@@ -106,6 +138,58 @@ export function create(config) {
   
   return inst
 }
+
+/**
+ * Loads sprites with custom colors for a specific hero type
+ * @param {Object} k - Kaplay instance
+ * @param {string} type - Hero type (HERO or ANTIHERO)
+ * @param {string} bodyColor - Body color in hex format
+ */
+function loadCustomSprites(k, type, bodyColor) {
+  const prefix = `${type}_${bodyColor}`
+  
+  //
+  // Check if sprites with this color are already loaded
+  //
+  const testSprite = `${prefix}_0_0`
+  try {
+    const sprite = k.getSprite(testSprite)
+    if (sprite) {
+      //
+      // Sprites already loaded, no need to reload
+      //
+      return
+    }
+  } catch (e) {
+    //
+    // Sprite doesn't exist, proceed with loading
+    //
+  }
+  
+  //
+  // Load all eye variants (9 positions) for idle animation
+  //
+  for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+      const spriteName = `${prefix}_${x}_${y}`
+      const spriteData = createFrame(type, 'idle', 0, x, y, bodyColor)
+      k.loadSprite(spriteName, spriteData)
+    }
+  }
+  
+  //
+  // Load jump animation
+  //
+  k.loadSprite(`${prefix}-jump`, createFrame(type, 'jump', 0, 0, 0, bodyColor))
+  
+  //
+  // Load run frames (6 frames)
+  //
+  for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
+    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor))
+  }
+}
+
 /**
  * Loads all sprites for hero and anti-hero
  * Should be called once on game initialization
@@ -327,36 +411,48 @@ function onUpdate(inst) {
   const isGrounded = inst.character.isGrounded()
   
   if (!isGrounded) {
+    //
     // Jumping - only set sprite once when starting jump
+    //
     if (!inst.wasJumping) {
-      inst.character.use(inst.k.sprite(`${inst.type}-jump`))
+      const prefix = inst.spritePrefix || inst.type
+      inst.character.use(inst.k.sprite(`${prefix}-jump`))
       inst.runFrame = 0
       inst.runTimer = 0
       inst.isRunning = false
       inst.wasJumping = true
     }
+    //
     // Update direction while in air
+    //
     inst.character.flipX = inst.direction === -1
+    //
     // While in air, don't process any other animations
+    //
     return
   } else if (isMoving) {
+    //
     // Running - switch frames smoothly (time-based animation)
     // Only reset animation if starting from idle (not from jump)
+    //
+    const prefix = inst.spritePrefix || inst.type
     if (!inst.isRunning && !inst.wasJumping) {
       inst.runFrame = 0
       inst.runTimer = 0
-      inst.character.use(inst.k.sprite(`${inst.type}-run-0`))
+      inst.character.use(inst.k.sprite(`${prefix}-run-0`))
     } else if (inst.wasJumping) {
+      //
       // Just landed - continue with current frame, just update sprite
+      //
       inst.wasJumping = false
-      inst.character.use(inst.k.sprite(`${inst.type}-run-${inst.runFrame}`))
+      inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
     }
     
     inst.isRunning = true
     inst.runTimer += inst.k.dt()
     if (inst.runTimer > RUN_ANIM_SPEED) {
       inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
-      inst.character.use(inst.k.sprite(`${inst.type}-run-${inst.runFrame}`))
+      inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
       
       // Step sound on frames 0 and 3 (when foot touches ground)
@@ -783,18 +879,31 @@ function onAnnihilationCollide(inst) {
 /**
  * Universal function for character creation
  * Single function for hero and anti-hero
- * @param {string} type - Character type: 'hero' or 'antihero'
+ * @param {string} type - Character type: 'hero' or 'antiHero'
  * @param {string} animation - Animation type: 'idle', 'run', 'jump'
  * @param {number} frame - Frame number (for animations)
  * @param {number} eyeOffsetX - Pupil X offset
  * @param {number} eyeOffsetY - Pupil Y offset
+ * @param {string} [customBodyColor] - Custom body color in hex format (outline is always black)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null) {
   //
-  // Choose color scheme based on type
+  // Choose body color - custom or default
   //
-  const colors = type === HEROES.HERO ? CFG.colors.hero : CFG.colors.antiHero
+  let bodyColor
+  
+  if (customBodyColor) {
+    bodyColor = customBodyColor
+  } else {
+    const colors = type === HEROES.HERO ? CFG.colors.hero : CFG.colors.antiHero
+    bodyColor = colors.body
+  }
+  
+  //
+  // Outline is always black
+  //
+  const outlineColor = '000000'
   
   const size = 32
   const canvas = document.createElement('canvas')
@@ -871,8 +980,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     rightArmX = 21
   }
   
+  //
   // Black outline (universal)
-  ctx.fillStyle = getHex(colors.outline)
+  //
+  ctx.fillStyle = getHex(outlineColor)
   ctx.fillRect(headX - 1, headY - 1, 10, 10)
   
   // Body outline (same for all animations)
@@ -888,12 +999,16 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
   ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
   
+  //
   // Head (universal body color)
-  ctx.fillStyle = getHex(colors.body)
+  //
+  ctx.fillStyle = getHex(bodyColor)
   ctx.fillRect(headX, headY, 8, 8)
   
+  //
   // Eyes - for run and jump draw only ONE eye (side view)
-  ctx.fillStyle = getHex(colors.eyeWhite)
+  //
+  ctx.fillStyle = getHex(CFG.colors[type].eyeWhite)
   if (animation === 'run' || animation === 'jump') {
     ctx.fillRect(headX + 6, headY + 2, 3, 3)
   } else {
@@ -901,8 +1016,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(headX + 6, headY + 2, 3, 3)
   }
   
+  //
   // Pupils (universal color)
-  ctx.fillStyle = getHex(colors.outline)
+  //
+  ctx.fillStyle = getHex(outlineColor)
   if (animation === 'run' || animation === 'jump') {
     ctx.fillRect(headX + 7, headY + 3, 1, 1)
   } else {
@@ -910,8 +1027,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
   }
   
+  //
   // Body (universal color)
-  ctx.fillStyle = getHex(colors.body)
+  //
+  ctx.fillStyle = getHex(bodyColor)
   ctx.fillRect(bodyX, bodyY, 12, 8)
   
   // Arms - don't draw while running and jumping
@@ -949,5 +1068,9 @@ function getSpriteName(inst, eyeX = 0, eyeY = 0) {
   //
   const roundedX = Math.round(eyeX)
   const roundedY = Math.round(eyeY)
-  return `${inst.type}_${roundedX}_${roundedY}`
+  //
+  // Use custom sprite prefix if bodyColor is set
+  //
+  const prefix = inst.spritePrefix || inst.type
+  return `${prefix}_${roundedX}_${roundedY}`
 }

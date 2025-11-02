@@ -3,6 +3,7 @@ import { CFG } from "../cfg.js"
 import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition } from "../utils/transition.js"
+import { getProgress, getSectionPositions, SECTION_COLORS } from "../utils/progress.js"
 
 /**
  * Menu scene with hero in center-left
@@ -16,7 +17,10 @@ export function sceneMenu(k) {
     k.canvas.style.cursor = 'default'
     
     const centerX = k.width() / 2
-    const centerY = k.height() / 2
+    //
+    // Move hero group lower - closer to vertical center
+    //
+    const centerY = k.height() / 2 + 30
     
     //
     // Create sound instance and start audio context
@@ -53,6 +57,57 @@ export function sceneMenu(k) {
     ])
     
     //
+    // Create 6 anti-heroes around the main hero (sections)
+    // Reduced radius to bring them closer
+    //
+    const progress = getProgress()
+    const radius = Math.min(k.width(), k.height()) * 0.28  // Reduced from 0.35 to 0.28
+    const sectionConfigs = getSectionPositions(centerX, centerY, radius)
+    const antiHeroes = []
+    const sectionLabels = []
+    
+    sectionConfigs.forEach(config => {
+      const isCompleted = progress[config.section]
+      
+      //
+      // Determine body color: gray if not completed, section color if completed
+      // Outline is always black
+      //
+      const grayColor = 'A0A0A0'      // Gray body
+      const bodyColor = isCompleted ? config.color.body : grayColor
+      
+      //
+      // Create anti-hero for this section
+      //
+      const antiHeroInst = Hero.create({
+        k,
+        x: config.x,
+        y: config.y,
+        type: Hero.HEROES.ANTIHERO,
+        scale: 3,
+        controllable: false,
+        bodyColor
+      })
+      
+      antiHeroInst.character.z = 10
+      antiHeroes.push(antiHeroInst)
+      
+      //
+      // Add section label below anti-hero
+      //
+      const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
+      const label = k.add([
+        k.text(config.section, { size: 18, font: "jetbrains" }),
+        k.pos(config.x, config.y + 50),
+        k.anchor("center"),
+        k.color(labelColor.r, labelColor.g, labelColor.b),
+        k.z(100)
+      ])
+      
+      sectionLabels.push(label)
+    })
+    
+    //
     // Scene instance with all state
     //
     const inst = {
@@ -61,7 +116,9 @@ export function sceneMenu(k) {
       centerY,
       hero,
       sound,
-      titleObjects: createTitle(k)
+      titleObjects: createTitle(k),
+      antiHeroes,
+      sectionLabels
     }
     
     //

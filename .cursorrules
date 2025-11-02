@@ -231,7 +231,7 @@ buttonInst.text.color = k.rgb(255, 0, 0)
 ```javascript
 export const HEROES = {
   HERO: 'hero',
-  ANTIHERO: 'antihero'
+  ANTIHERO: 'antiHero'
 }
 
 // Usage
@@ -389,6 +389,7 @@ export function playLandSound(inst) {
 ### Comments and an empty lines
 - If a line of code has a comment above you should not add an empty line before this comment
 - Every comment should start and finish with an empty comment - // line. If we use /** comment from the JSDoc it is already has this empty line at the beginning.
+- For the /** ... */ comment it should be above the code. There is no empty between a comment and the code
 ```javascript
 // Bad: extra empty line before the comment and no // at the beginnign and at the end
 

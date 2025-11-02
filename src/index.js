@@ -19,6 +19,7 @@ const k = kaplay({
   background: [0, 0, 0]  // Black background, no loading screen
 })
 
+
 // Load resources
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
 

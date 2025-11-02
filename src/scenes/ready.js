@@ -52,7 +52,7 @@ export function sceneReady(k) {
     
     // Hint at bottom
     k.add([
-      k.text('Press SPACE or Enter to start', { size: 20 }),
+      k.text('press Space or Enter to start', { size: 20 }),
       k.pos(centerX, k.height() - 80),
       k.anchor("center"),
       getColor(k, CFG.colors.ready.hint),

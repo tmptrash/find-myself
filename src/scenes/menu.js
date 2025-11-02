@@ -68,11 +68,11 @@ export function sceneMenu(k) {
     // Hint to start game
     //
     const startText = k.add([
-      k.text("PRESS SPACE TO BEGIN", { size: 24 }),
+      k.text("press Space or Enter to start", { size: 20 }),
       k.pos(k.width() / 2, k.height() - 80),
       k.anchor("center"),
       k.opacity(1),
-      k.color(255, 100, 50), // Red-orange accent
+      k.color(150, 150, 150), // Gray
       k.z(100)
     ])
     

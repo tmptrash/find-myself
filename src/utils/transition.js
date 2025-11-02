@@ -39,7 +39,7 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
  * 4. Final pause (0.3s)
  * 5. Load new level
  * 
- * User can press SPACE or ENTER to skip the transition and go directly to next level
+ * User can press Space or ENTER to skip the transition and go directly to next level
  * 
  * @param {Object} k - Kaplay instance
  * @param {string} currentLevel - Current level name (e.g., 'level-word.0' or 'menu')

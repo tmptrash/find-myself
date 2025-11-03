@@ -112,7 +112,7 @@ export function create(config) {
     onAnnihilation,
     bodyColor,        // Store custom body color
     spritePrefix,     // Store sprite prefix for animations
-    speed: CFG.gameplay.moveSpeedRatio * k.height(),      // Scale with screen height
+    speed: CFG.gameplay.moveSpeedRatio,
     jumpForce: CFG.gameplay.jumpForceRatio * k.height(),  // Scale with screen height
     direction: 1, // 1 = right, -1 = left
     canJump: true,
@@ -128,7 +128,8 @@ export function create(config) {
     currentEyeSprite: null,
     isAnnihilating: false,
     isDying: false,
-    isSpawned: false  // Flag to prevent controls before spawn completes
+    isSpawned: false,  // Flag to prevent controls before spawn completes
+    t: 0
   }
   
   // Check ground touch through collisions
@@ -389,12 +390,14 @@ export function spawn(inst) {
  */
 function onUpdate(inst) {
   //
+  // Update timestamp every frame for consistent movement calculations
+  //
+  inst.t = performance.now()
+  
+  //
   // Skip updates during annihilation (but allow paused for post-absorption idle)
   //
-  if (inst.isAnnihilating) {
-    return
-  }
-  
+  if (inst.isAnnihilating) return
   //
   // For non-controllable characters (like in menu), always use idle animation
   //
@@ -410,7 +413,7 @@ function onUpdate(inst) {
   
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   const isGrounded = inst.character.isGrounded()
-  
+
   if (!isGrounded) {
     //
     // Jumping - only set sprite once when starting jump
@@ -528,8 +531,11 @@ function setupControls(inst) {
   CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      inst.character.move(-inst.speed, 0)
+      const p = performance.now()
+      const dt = p - (inst.t || p)
+      inst.character.move(-inst.speed * dt, 0)
       inst.direction = -1
+      inst.t = p
     })
   })
   
@@ -539,8 +545,11 @@ function setupControls(inst) {
   CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      inst.character.move(inst.speed, 0)
+      const p = performance.now()
+      const dt = p - (inst.t || p)
+      inst.character.move(inst.speed * dt, 0)
       inst.direction = 1
+      inst.t = p
     })
   })
   
@@ -553,7 +562,6 @@ function setupControls(inst) {
       if (inst.canJump) {
         inst.character.vel.y = -inst.jumpForce
         inst.canJump = false
-        
         //
         // Play jump sound
         //

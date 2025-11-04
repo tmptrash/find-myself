@@ -301,12 +301,18 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
  * @returns {Object} {hero, antiHero}
  */
 function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, customHeroY = null) {
+  //
+  // Get dust color from level platform color
+  //
+  const dustColor = CFG.colors[levelName]?.platform || null
+  
   const antiHero = Hero.create({
     k,
     x: k.width() * CFG.levels[levelName].antiHeroSpawn.x / 100,
     y: k.height() * CFG.levels[levelName].antiHeroSpawn.y / 100,
     type: 'antiHero',
-    sfx: sound
+    sfx: sound,
+    dustColor
   })
   
   // Hide anti-hero initially (will be shown when spawned)
@@ -319,7 +325,8 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
     type: Hero.HEROES.HERO,
     sfx: sound,
     antiHero,
-    currentLevel: levelName  // Use new transition system
+    currentLevel: levelName,  // Use new transition system
+    dustColor
   })
   
   hero.character.use("player")

@@ -43,6 +43,7 @@ export const HEROES = {
  * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
  * @param {string} [config.currentLevel] - Current level name for transition
  * @param {Function} [config.onAnnihilation] - Callback when annihilation completes (deprecated, use currentLevel)
+ * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -57,7 +58,8 @@ export function create(config) {
     antiHero = null,
     currentLevel = null,
     onAnnihilation = null,
-    bodyColor = null      // Custom body color (hex string), outline is always black
+    bodyColor = null,      // Custom body color (hex string), outline is always black
+    dustColor = null       // Dust particle color (hex string)
   } = config
   
   //
@@ -119,6 +121,7 @@ export function create(config) {
     onAnnihilation,
     bodyColor,        // Store custom body color
     spritePrefix,     // Store sprite prefix for animations
+    dustColor,        // Store dust particle color
     speed: CFG.gameplay.moveSpeedRatio,
     jumpForce: CFG.gameplay.jumpForceRatio * k.height(),  // Scale with screen height
     direction: 1, // 1 = right, -1 = left
@@ -583,12 +586,17 @@ function setupControls(inst) {
  * @param {Object} inst - Hero instance
  */
 function createLandingDust(inst) {
-  const { k, character } = inst
+  const { k, character, dustColor } = inst
   //
   // Calculate foot position (bottom of collision box)
   //
   const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
   const footX = character.pos.x
+  
+  //
+  // Determine dust color (use custom color or default gray)
+  //
+  const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
   
   //
   // Create dust particles at feet position
@@ -616,7 +624,7 @@ function createLandingDust(inst) {
     const particle = k.add([
       k.rect(DUST_PARTICLE_SIZE, DUST_PARTICLE_SIZE),
       k.pos(footX + offsetX, footY - 2),  // Slightly above ground
-      k.color(150, 150, 150),
+      color,
       k.opacity(0.9),
       k.anchor("center"),
       k.z(CFG.visual.zIndex.player + 1),  // Above player to be visible

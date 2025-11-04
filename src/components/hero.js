@@ -244,6 +244,22 @@ export function death(inst, onComplete) {
   const centerX = character.pos.x
   const centerY = character.pos.y
   
+  //
+  // Slow down time for dramatic effect
+  //
+  const originalTimeScale = k.timeScale ?? 1
+  const slowMotionScale = 0.1
+  const slowMotionDuration = 0.5
+  
+  k.timeScale = slowMotionScale
+  
+  //
+  // Restore normal time after slow motion
+  //
+  k.wait(slowMotionDuration, () => {
+    k.timeScale = originalTimeScale
+  })
+  
   // Stop control
   character.paused = true
   inst.controllable = false
@@ -299,8 +315,11 @@ export function death(inst, onComplete) {
     k.destroy(character)
   }
   
-  // Call callback after particles finish
-  k.wait(0.6, () => onComplete?.())
+  //
+  // Wait for particles to finish + additional pause before callback
+  // 0.6s for particles + 0.5s pause = 1.1s total
+  //
+  k.wait(1.1, () => onComplete?.())
 }
 
 /**
@@ -838,7 +857,7 @@ function onAnnihilationCollide(inst) {
         // STEP 6: Screen shake starts immediately with absorption
         //
         const originalCamPos = k.camPos()
-        const shakeIntensity = 8
+        const shakeIntensity = 20
         
         //
         // Update all particle targets to hero's current position AFTER scatter

@@ -59,11 +59,20 @@ export function sceneReady(k) {
       k.outline(2, getRGB(k, CFG.colors.outlineTextColor)),
     ])
     
-    // Press space to start
+    //
+    // Press space/enter to start
+    //
     CFG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
         k.go("menu")
       })
+    })
+    
+    //
+    // Click anywhere to start (same as space/enter)
+    //
+    k.onClick(() => {
+      k.go("menu")
     })
   })
 }

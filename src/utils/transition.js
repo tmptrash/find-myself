@@ -49,7 +49,7 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
  * 4. Final pause (0.3s)
  * 5. Load new level
  * 
- * User can press Space or ENTER to skip the transition and go directly to next level
+ * User can press Space, ENTER or click mouse to skip the transition and go directly to next level
  * 
  * @param {Object} k - Kaplay instance
  * @param {string} currentLevel - Current level name (e.g., 'level-word.0' or 'menu')
@@ -127,6 +127,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     
     // Check for skip keys (space or enter) in update loop for better reliability
     if (inst.skipEnabled && (k.isKeyPressed("space") || k.isKeyPressed("enter"))) {
+      skipTransition()
+      return
+    }
+    
+    // Check for mouse click to skip (same as space/enter)
+    if (inst.skipEnabled && k.isMousePressed()) {
       skipTransition()
       return
     }

@@ -12,10 +12,6 @@ import { drawConnectionWave } from "../utils/connection.js"
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
-    //
-    // Show cursor in menu
-    //
-    k.canvas.style.cursor = 'default'
     
     //
     // Disable gravity in menu
@@ -93,6 +89,47 @@ export function sceneMenu(k) {
       antiHeroInst.grayColor = grayColor
       antiHeroInst.originalBodyColor = bodyColor
       
+      //
+      // Add click handler for word section (only implemented section)
+      //
+      if (config.section === 'word') {
+        antiHeroInst.character.onClick(() => {
+          //
+          // Mark that we're leaving the scene
+          //
+          inst.isLeavingScene = true
+          
+          //
+          // Stop ambient sound
+          //
+          Sound.stopAmbient(sound)
+          
+          //
+          // Reset cursor to default (removes setCursor, allows CSS to apply)
+          //
+          k.setCursor("default")
+          k.canvas.style.cursor = ''
+          
+          //
+          // Get last level for word section or start from beginning
+          //
+          const lastLevel = getLastLevel()
+          const isWordLevel = lastLevel && lastLevel.startsWith('level-word.')
+          
+          if (isWordLevel) {
+            //
+            // Continue from last word level
+            //
+            k.go(lastLevel)
+          } else {
+            //
+            // Start word section from beginning with intro phrase
+            //
+            createLevelTransition(k, 'menu')
+          }
+        })
+      }
+      
       antiHeroes.push(antiHeroInst)
       
       //
@@ -122,7 +159,8 @@ export function sceneMenu(k) {
       titleObjects: createTitle(k),
       antiHeroes,
       sectionLabels,
-      hoveredAntiHero: null  // Track which anti-hero is hovered
+      hoveredAntiHero: null,  // Track which anti-hero is hovered
+      isLeavingScene: false   // Flag to prevent ambient restart when leaving
     }
     
     //
@@ -182,24 +220,42 @@ export function sceneMenu(k) {
         }
       })
       
+      //
+      // Change cursor to pointer when hovering over word anti-hero
+      // Don't change cursor if leaving scene
+      //
+      if (!inst.isLeavingScene) {
+        if (hoveredInst && hoveredInst.section === 'word') {
+          k.setCursor("pointer")
+        } else {
+          //
+          // Reset to empty string to use CSS cursor
+          //
+          k.canvas.style.cursor = ''
+        }
+      }
+      
       inst.hoveredAntiHero = hoveredInst
       
       //
       // Control ambient sound based on hover state
+      // Don't start ambient if leaving scene
       //
-      if (foundHover) {
-        //
-        // Start ambient if hovering and not already playing
-        //
-        if (!Sound.isAmbientPlaying(sound)) {
-          Sound.startAmbient(sound)
-        }
-      } else {
-        //
-        // Stop ambient if not hovering
-        //
-        if (Sound.isAmbientPlaying(sound)) {
-          Sound.stopAmbient(sound)
+      if (!inst.isLeavingScene) {
+        if (foundHover) {
+          //
+          // Start ambient if hovering and not already playing
+          //
+          if (!Sound.isAmbientPlaying(sound)) {
+            Sound.startAmbient(sound)
+          }
+        } else {
+          //
+          // Stop ambient if not hovering
+          //
+          if (Sound.isAmbientPlaying(sound)) {
+            Sound.stopAmbient(sound)
+          }
         }
       }
     })
@@ -242,6 +298,12 @@ export function sceneMenu(k) {
     //
     k.onKeyPress("space", () => {
       Sound.stopAmbient(sound)
+      //
+      // Reset cursor to default (removes setCursor, allows CSS to apply)
+      //
+      k.setCursor("default")
+      k.canvas.style.cursor = ''
+      
       if (hasSavedGame) {
         //
         // Continue from last saved level (skip intro phrase)
@@ -257,6 +319,12 @@ export function sceneMenu(k) {
     
     k.onKeyPress("enter", () => {
       Sound.stopAmbient(sound)
+      //
+      // Reset cursor to default (removes setCursor, allows CSS to apply)
+      //
+      k.setCursor("default")
+      k.canvas.style.cursor = ''
+      
       if (hasSavedGame) {
         //
         // Continue from last saved level (skip intro phrase)

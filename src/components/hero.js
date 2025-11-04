@@ -730,17 +730,11 @@ function onAnnihilationCollide(inst) {
   //
   target.paused = true
   
-  const playerPos = k.vec2(player.pos.x, player.pos.y)
   const targetPos = k.vec2(target.pos.x, target.pos.y)
   
   //
   // INSTANT EXPLOSION: Anti-hero explodes immediately with sound and particles
   //
-  
-  //
-  // Play explosion sound (short pop/snap sound)
-  //
-  sfx && Sound.playGlitchSound(sfx)
   
   //
   // STEP 2: Immediately hide anti-hero (exploded)
@@ -845,6 +839,10 @@ function onAnnihilationCollide(inst) {
       // STEP 5: Small pause before absorption (0.2 sec)
       //
       k.wait(0.2, () => {
+        //
+        // Play explosion sound (short pop/snap sound)
+        //
+        sfx && Sound.playGlitchSound(sfx)
         //
         // PHASE 2: Particles absorbed into hero with screen shake
         //
@@ -1007,6 +1005,7 @@ function onAnnihilationCollide(inst) {
                 if (nextLevel && nextLevel !== 'menu') {
                   saveLastLevel(nextLevel)
                 }
+                inst.character.hidden = true
                 createLevelTransition(k, inst.currentLevel)
               } else if (inst.onAnnihilation) {
                 inst.onAnnihilation()

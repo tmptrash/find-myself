@@ -124,8 +124,12 @@ export function resetProgress() {
  */
 export function getSectionPositions(centerX, centerY, radius) {
   const sections = ['word', 'touch', 'feel', 'memory', 'stress', 'time']
-  const angleStep = (Math.PI * 2) / 6  // 360 / 6 degrees
-  const startAngle = -Math.PI / 2  // Start at top
+  const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
+  //
+  // Start angle shifted to have 2 anti-heroes at top
+  // -120° puts first anti-hero at top-left, second at top-right
+  //
+  const startAngle = -Math.PI * 2 / 3  // -120 degrees
   
   return sections.map((section, index) => {
     const angle = startAngle + angleStep * index

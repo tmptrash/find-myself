@@ -4,6 +4,7 @@ import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition } from "../utils/transition.js"
 import { getProgress, getSectionPositions, SECTION_COLORS, getLastLevel } from "../utils/progress.js"
+import { drawConnectionWave } from "../utils/connection.js"
 
 /**
  * Menu scene with hero in center-left
@@ -29,10 +30,10 @@ export function sceneMenu(k) {
     
     //
     // Create sound instance and start audio context
+    // Don't start ambient automatically - it will play on hover
     //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    Sound.startAmbient(sound)
 
     //
     // Create hero in center (using HERO type)
@@ -111,8 +112,53 @@ export function sceneMenu(k) {
       sound,
       titleObjects: createTitle(k),
       antiHeroes,
-      sectionLabels
+      sectionLabels,
+      hoveredAntiHero: null  // Track which anti-hero is hovered
     }
+    
+    //
+    // Track mouse position and check for hover over anti-heroes
+    //
+    k.onUpdate(() => {
+      const mousePos = k.mousePos()
+      let foundHover = false
+      
+      //
+      // Check each anti-hero for hover
+      //
+      antiHeroes.forEach(antiHeroInst => {
+        const char = antiHeroInst.character
+        const dx = mousePos.x - char.pos.x
+        const dy = mousePos.y - char.pos.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        const hoverRadius = 60  // Hover detection radius (increased for better detection)
+        
+        if (distance < hoverRadius) {
+          inst.hoveredAntiHero = antiHeroInst
+          foundHover = true
+        }
+      })
+      
+      //
+      // Control ambient sound based on hover state
+      //
+      if (foundHover) {
+        //
+        // Start ambient if hovering and not already playing
+        //
+        if (!Sound.isAmbientPlaying(sound)) {
+          Sound.startAmbient(sound)
+        }
+      } else {
+        //
+        // Stop ambient if not hovering
+        //
+        if (Sound.isAmbientPlaying(sound)) {
+          Sound.stopAmbient(sound)
+        }
+        inst.hoveredAntiHero = null
+      }
+    })
     
     //
     // Background layer with animation
@@ -239,7 +285,7 @@ function createTitle(k) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k } = inst
+  const { k, hero, hoveredAntiHero } = inst
   
   //
   // Draw dark background
@@ -251,4 +297,24 @@ function drawScene(inst) {
     pos: k.vec2(0, 0),
     color: k.rgb(bgRgb.r, bgRgb.g, bgRgb.b)
   })
+  
+  //
+  // Draw lightning between hero and hovered anti-hero
+  //
+  if (hoveredAntiHero) {
+    const heroPos = { x: hero.pos.x, y: hero.pos.y }
+    const antiHeroPos = { 
+      x: hoveredAntiHero.character.pos.x, 
+      y: hoveredAntiHero.character.pos.y 
+    }
+    
+    //
+    // Draw electric connection
+    //
+    drawConnectionWave(k, heroPos, antiHeroPos, {
+      segmentWidth: 8,
+      mainWidth: 3,
+      opacity: 0.6
+    })
+  }
 }

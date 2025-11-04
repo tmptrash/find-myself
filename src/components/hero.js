@@ -14,7 +14,7 @@ const COLLISION_OFFSET_Y = 0
 const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
 const HERO_HEIGHT_RATIO = 12  // Hero height = screen height / this ratio
 const RUN_ANIM_SPEED = 0.04
-const RUN_FRAME_COUNT = 6
+const RUN_FRAME_COUNT = 3
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -195,7 +195,7 @@ function loadCustomSprites(k, type, bodyColor) {
   k.loadSprite(`${prefix}-jump`, createFrame(type, 'jump', 0, 0, 0, bodyColor))
   
   //
-  // Load run frames (6 frames)
+  // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor))
@@ -223,7 +223,7 @@ export function loadHeroSprites(k) {
     // Load jump animation
     k.loadSprite(`${prefix}-jump`, createFrame(type, 'jump', 0))
     
-    // Load run frames (6 frames)
+    // Load run frames (3 frames)
     for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
       k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame))
     }
@@ -488,8 +488,8 @@ function onUpdate(inst) {
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
       
-      // Step sound on frames 0 and 3 (when foot touches ground)
-      if (inst.sfx && (inst.runFrame === 0 || inst.runFrame === RUN_FRAME_COUNT / 2)) {
+      // Step sound on frame 0 (when foot touches ground)
+      if (inst.sfx && inst.runFrame === 0) {
         Sound.playStepSound(inst.sfx)
       }
     }
@@ -1069,7 +1069,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let leftLegX = 12
   let rightLegX = 17
   
-  // Run animation (6 frames)
+  // Run animation (3 frames)
   if (animation === 'run') {
     if (frame === 0) {
       leftLegY = 20
@@ -1082,21 +1082,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       leftLegX = 12
       rightLegX = 17
     } else if (frame === 2) {
-      leftLegY = 20
-      rightLegY = 20
-      leftLegX = 14
-      rightLegX = 14
-    } else if (frame === 3) {
-      leftLegY = 22
-      rightLegY = 20
-      leftLegX = 18
-      rightLegX = 10
-    } else if (frame === 4) {
-      leftLegY = 22
-      rightLegY = 18
-      leftLegX = 17
-      rightLegX = 12
-    } else if (frame === 5) {
       leftLegY = 20
       rightLegY = 20
       leftLegX = 14

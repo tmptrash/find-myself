@@ -3,11 +3,11 @@ import { CFG } from "../cfg.js"
 import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition } from "../utils/transition.js"
-import { getProgress, getSectionPositions, SECTION_COLORS, getLastLevel } from "../utils/progress.js"
+import { getProgress, getSectionPositions, getLastLevel } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 
 /**
- * Menu scene with hero in center-left
+ * Menu scene with hero in center
  * @param {Object} k - Kaplay instance
  */
 export function sceneMenu(k) {
@@ -84,6 +84,15 @@ export function sceneMenu(k) {
       })
       
       antiHeroInst.character.z = 10
+      //
+      // Store section info for hover color change
+      //
+      antiHeroInst.section = config.section
+      antiHeroInst.sectionColor = config.color.body
+      antiHeroInst.isCompleted = isCompleted
+      antiHeroInst.grayColor = grayColor
+      antiHeroInst.originalBodyColor = bodyColor
+      
       antiHeroes.push(antiHeroInst)
       
       //
@@ -122,6 +131,7 @@ export function sceneMenu(k) {
     k.onUpdate(() => {
       const mousePos = k.mousePos()
       let foundHover = false
+      let hoveredInst = null
       
       //
       // Check each anti-hero for hover
@@ -134,10 +144,45 @@ export function sceneMenu(k) {
         const hoverRadius = 60  // Hover detection radius (increased for better detection)
         
         if (distance < hoverRadius) {
-          inst.hoveredAntiHero = antiHeroInst
+          hoveredInst = antiHeroInst
           foundHover = true
         }
       })
+      
+      //
+      // Update colors for all anti-heroes based on hover state
+      //
+      antiHeroes.forEach(antiHeroInst => {
+        if (antiHeroInst === hoveredInst) {
+          //
+          // Hovered: show section color (even if not completed)
+          //
+          if (!antiHeroInst.character.color) {
+            antiHeroInst.character.use(k.color(255, 255, 255))
+          }
+          const sectionRGB = getRGB(k, antiHeroInst.sectionColor)
+          antiHeroInst.character.color = k.rgb(sectionRGB.r, sectionRGB.g, sectionRGB.b)
+        } else {
+          //
+          // Not hovered: restore original color
+          //
+          if (antiHeroInst.isCompleted) {
+            //
+            // Completed: keep section color
+            //
+            const sectionRGB = getRGB(k, antiHeroInst.sectionColor)
+            antiHeroInst.character.color = k.rgb(sectionRGB.r, sectionRGB.g, sectionRGB.b)
+          } else {
+            //
+            // Not completed: gray
+            //
+            const grayRGB = getRGB(k, antiHeroInst.grayColor)
+            antiHeroInst.character.color = k.rgb(grayRGB.r, grayRGB.g, grayRGB.b)
+          }
+        }
+      })
+      
+      inst.hoveredAntiHero = hoveredInst
       
       //
       // Control ambient sound based on hover state
@@ -156,7 +201,6 @@ export function sceneMenu(k) {
         if (Sound.isAmbientPlaying(sound)) {
           Sound.stopAmbient(sound)
         }
-        inst.hoveredAntiHero = null
       }
     })
     

@@ -8,22 +8,22 @@ const STORAGE_KEY = 'find-yourself-progress'
  */
 export const SECTION_COLORS = {
   word: {
-    body: 'FF0000'      // Red
+    body: 'DC143C'      // Crimson red (same as blades) - sharp, cutting
   },
   touch: {
-    body: 'FF8C00'      // Orange
+    body: 'FFC0CB'      // Pink - soft, tactile, skin-like
   },
   feel: {
-    body: 'FFD700'      // Gold
+    body: 'FF69B4'      // Hot pink - emotions, passion, feelings
   },
   memory: {
-    body: '00CED1'      // Dark turquoise
+    body: 'D2B48C'      // Tan/Sepia - old, faded, nostalgic
   },
   stress: {
-    body: '9370DB'      // Medium purple
+    body: '9370DB'      // Medium purple - anxiety, tension, unease
   },
   time: {
-    body: '00FF00'      // Lime green
+    body: '4169E1'      // Royal blue - eternal, flowing, deep
   }
 }
 

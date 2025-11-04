@@ -104,6 +104,13 @@ function handleCollision(inst) {
  * @param {Object} inst - Blade arm instance
  */
 function updateBladeArm(inst) {
+  //
+  // Stop animation and sound if hero is annihilating
+  //
+  if (inst.hero.isAnnihilating) {
+    return
+  }
+  
   const { k, arm, sfx, extensionStep } = inst
   
   inst.timer += k.dt()

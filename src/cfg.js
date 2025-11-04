@@ -216,7 +216,7 @@ export const CFG = {
       
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {
-        x: 12,    // % of screen width (left side)
+        x: 12,    // % of screen width (more to the right)
         y: 64     // % of screen height (on bottom platform)
       },
       antiHeroSpawn: {
@@ -230,7 +230,7 @@ export const CFG = {
       
       // Hero spawn position (% of screen dimensions)
       heroSpawn: {
-        x: 12,    // % of screen width (left side)
+        x: 30,    // % of screen width (left side)
         y: 64     // % of screen height (on bottom platform)
       },
       antiHeroSpawn: {

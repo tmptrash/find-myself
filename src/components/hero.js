@@ -20,6 +20,13 @@ const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
 const ANTIHERO_TAG = 'annihilation'
 
+// Landing dust particles
+const DUST_PARTICLE_COUNT = 6
+const DUST_PARTICLE_SIZE = 4
+const DUST_PARTICLE_SPEED = 80
+const DUST_PARTICLE_LIFETIME = 0.4
+const DUST_PARTICLE_SPREAD = 60
+
 export const HEROES = {
   HERO: 'hero',
   ANTIHERO: 'antiHero'  // Lowercase to match sprite names
@@ -572,6 +579,95 @@ function setupControls(inst) {
 }
 
 /**
+ * Create landing dust particles
+ * @param {Object} inst - Hero instance
+ */
+function createLandingDust(inst) {
+  const { k, character } = inst
+  //
+  // Calculate foot position (bottom of collision box)
+  //
+  const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
+  const footX = character.pos.x
+  
+  //
+  // Create dust particles at feet position
+  //
+  for (let i = 0; i < DUST_PARTICLE_COUNT; i++) {
+    //
+    // Particles spread horizontally like splash from puddle
+    // Half go left, half go right
+    //
+    const side = i < DUST_PARTICLE_COUNT / 2 ? -1 : 1
+    //
+    // Angle: mostly horizontal with slight upward direction (like splash)
+    // Range: 5-30 degrees from horizontal (flatter splash)
+    //
+    const angle = k.rand(5, 30) * (Math.PI / 180)
+    const speed = k.rand(DUST_PARTICLE_SPEED * 0.8, DUST_PARTICLE_SPEED * 1.5)
+    const vx = Math.cos(angle) * speed * side
+    const vy = -Math.sin(angle) * speed  // Negative = upward
+    
+    //
+    // Start from foot position, spread horizontally to sides
+    //
+    const offsetX = side * k.rand(5, 15)
+    
+    const particle = k.add([
+      k.rect(DUST_PARTICLE_SIZE, DUST_PARTICLE_SIZE),
+      k.pos(footX + offsetX, footY - 2),  // Slightly above ground
+      k.color(150, 150, 150),
+      k.opacity(0.9),
+      k.anchor("center"),
+      k.z(CFG.visual.zIndex.player + 1),  // Above player to be visible
+    ])
+    
+    //
+    // Store particle velocity and lifetime
+    //
+    particle.vx = vx
+    particle.vy = vy
+    particle.lifetime = 0
+    particle.maxLifetime = DUST_PARTICLE_LIFETIME
+    
+    //
+    // Update particle position and fade out
+    //
+    particle.onUpdate(() => {
+      particle.lifetime += k.dt()
+      
+      //
+      // Move particle
+      //
+      particle.pos.x += particle.vx * k.dt()
+      particle.pos.y += particle.vy * k.dt()
+      
+      //
+      // Apply gravity (particles fall down after initial splash)
+      //
+      particle.vy += 600 * k.dt()
+      //
+      // Apply friction (horizontal slowdown)
+      //
+      particle.vx *= 0.97
+      
+      //
+      // Fade out based on lifetime
+      //
+      const progress = particle.lifetime / particle.maxLifetime
+      particle.opacity = 0.9 * (1 - progress)
+      
+      //
+      // Destroy when lifetime expires
+      //
+      if (particle.lifetime >= particle.maxLifetime) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+
+/**
  * Handle collision with platform
  * @param {Object} inst - Hero instance
  */
@@ -580,9 +676,12 @@ function onCollisionPlatform(inst) {
   const wasInAir = !inst.canJump
   inst.canJump = true
   
-  // Play landing sound if was in air
-  if (wasInAir && inst.wasJumping && inst.sfx) {
-    Sound.playLandSound(inst.sfx)
+  //
+  // Play landing sound and create dust if was in air
+  //
+  if (wasInAir && inst.wasJumping) {
+    inst.sfx && Sound.playLandSound(inst.sfx)
+    createLandingDust(inst)
   }
 }
 

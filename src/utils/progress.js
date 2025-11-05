@@ -8,7 +8,7 @@ const STORAGE_KEY = 'find-yourself-progress'
  */
 export const SECTION_COLORS = {
   word: {
-    body: 'DC143C'      // Crimson red (same as blades) - sharp, cutting
+    body: 'E74C3C'      // Soft red - warm, muted, less aggressive
   },
   touch: {
     body: 'FFC0CB'      // Pink - soft, tactile, skin-like

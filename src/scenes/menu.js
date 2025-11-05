@@ -3,7 +3,7 @@ import { CFG } from "../cfg.js"
 import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition } from "../utils/transition.js"
-import { getProgress, getSectionPositions, getLastLevel } from "../utils/progress.js"
+import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 
 /**
@@ -272,9 +272,11 @@ export function sceneMenu(k) {
     const hasSavedGame = lastLevel !== null
     
     //
-    // Hint text - same for both cases (will continue or start new based on save)
+    // Hint text - Space to continue, Enter to start new
     //
-    const hintText = "press Space or Enter to start"
+    const hintText = hasSavedGame 
+      ? "Space - continue  |  Enter - new game"
+      : "press Space or Enter to start"
     
     const startText = k.add([
       k.text(hintText, { size: 20 }),
@@ -325,17 +327,11 @@ export function sceneMenu(k) {
       k.setCursor("default")
       k.canvas.style.cursor = ''
       
-      if (hasSavedGame) {
-        //
-        // Continue from last saved level (skip intro phrase)
-        //
-        k.go(lastLevel)
-      } else {
-        //
-        // No save - start from beginning with intro phrase
-        //
-        createLevelTransition(k, 'menu')
-      }
+      //
+      // Enter always resets progress and starts new game
+      //
+      resetProgress()
+      createLevelTransition(k, 'menu')
     })
     
     //

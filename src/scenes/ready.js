@@ -21,28 +21,33 @@ export function sceneReady(k) {
     
     // Story text
     const storyLines = [
-      "The Division shattered your soul in two.",
-      "Light and Darkness — two halves of one,",
-      "wandering through distorted realities.",
+      "Life laughs at your plans.",
+      "Rules bend, promises break, logic fails.",
       "",
-      "The electric discharges between you are",
-      "the echoes of your lost wholeness.",
-      "The closer you get — more dangerous.",
-      "The farther apart — the more painful.",
+      "You move forward — and the floor disappears.",
+      "You wait — and time devours you.",
+      "Every step, every mistake — a reflection of yourself.",
       "",
-      "Upon meeting, you annihilate each other,",
-      "awakening in the new distorted world.",
-      "But you keep searching. Again and again.",
-      "Giving up on yourself is impossible...",
+      "You are searching for what's left of you.",
+      "Fragments scattered across twisted worlds:",
+      "words that cut, memories that fade,",
+      "touches that burn, time that slips away.",
+      "",
+      "Each world hides a piece of who you are.",
+      "Each encounter teaches — and hurts.",
+      "When you find yourself, you absorb your other half…",
+      "and the world changes again.",
+      "",
+      "Because finding yourself",
+      "means surviving every version of you...",
     ]
     
-    const textWidth = 650  // Fixed width for all text lines
     const lineHeight = 32
     const startY = centerY - (storyLines.length * lineHeight) / 2 + 20
     
     storyLines.forEach((line, index) => {
       k.add([
-        k.text(line, { size: 24, width: textWidth, align: "center" }),
+        k.text(line, { size: 24, align: "center" }),
         k.pos(centerX, startY + index * lineHeight),
         k.anchor("center"),
         getColor(k, CFG.colors.ready.text),

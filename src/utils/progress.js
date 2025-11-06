@@ -1,7 +1,7 @@
 /**
  * Progress tracking using localStorage
  */
-const STORAGE_KEY = 'find-yourself-progress'
+const STORAGE_KEY = 'find-myself-progress'
 
 /**
  * Section colors configuration (body color only, outline is always black)

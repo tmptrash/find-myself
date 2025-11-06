@@ -78,6 +78,7 @@ export function sceneMenu(k) {
       })
       
       antiHeroInst.character.z = 10
+      
       //
       // Store section info for hover color change
       //
@@ -189,33 +190,28 @@ export function sceneMenu(k) {
       // Update colors for all anti-heroes based on hover state
       //
       antiHeroes.forEach(antiHeroInst => {
-        if (antiHeroInst === hoveredInst) {
+        //
+        // Determine target color based on state
+        //
+        let targetColor
+        
+        if (antiHeroInst === hoveredInst || antiHeroInst.isCompleted) {
           //
-          // Hovered: show section color (even if not completed)
+          // Hovered OR completed: show section color
           //
-          if (!antiHeroInst.character.color) {
-            antiHeroInst.character.use(k.color(255, 255, 255))
-          }
-          const sectionRGB = getRGB(k, antiHeroInst.sectionColor)
-          antiHeroInst.character.color = k.rgb(sectionRGB.r, sectionRGB.g, sectionRGB.b)
+          targetColor = antiHeroInst.sectionColor
         } else {
           //
-          // Not hovered: restore original color
+          // Not hovered and not completed: gray
           //
-          if (antiHeroInst.isCompleted) {
-            //
-            // Completed: keep section color
-            //
-            const sectionRGB = getRGB(k, antiHeroInst.sectionColor)
-            antiHeroInst.character.color = k.rgb(sectionRGB.r, sectionRGB.g, sectionRGB.b)
-          } else {
-            //
-            // Not completed: gray
-            //
-            const grayRGB = getRGB(k, antiHeroInst.grayColor)
-            antiHeroInst.character.color = k.rgb(grayRGB.r, grayRGB.g, grayRGB.b)
-          }
+          targetColor = antiHeroInst.grayColor
         }
+        
+        //
+        // Apply color tint
+        //
+        const rgb = getRGB(k, targetColor)
+        antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b)
       })
       
       //
@@ -237,19 +233,19 @@ export function sceneMenu(k) {
       
       //
       // Control ambient sound based on hover state
-      // Don't start ambient if leaving scene
+      // Don't start ambient if leaving scene or if section is completed
       //
       if (!inst.isLeavingScene) {
-        if (foundHover) {
+        if (foundHover && hoveredInst && !hoveredInst.isCompleted) {
           //
-          // Start ambient if hovering and not already playing
+          // Start ambient if hovering over incomplete section and not already playing
           //
           if (!Sound.isAmbientPlaying(sound)) {
             Sound.startAmbient(sound)
           }
         } else {
           //
-          // Stop ambient if not hovering
+          // Stop ambient if not hovering or section is completed
           //
           if (Sound.isAmbientPlaying(sound)) {
             Sound.stopAmbient(sound)
@@ -353,7 +349,7 @@ function createTitle(k) {
   const titleY = 108   // k.height() * 0.10 = 1080 * 0.10
   const titleSize = 65  // k.height() * 0.06 = 1080 * 0.06
   
-  const titleText = "FIND YOURSELF"
+  const titleText = "FIND MYSELF"
   const objects = []
   
   //
@@ -407,8 +403,9 @@ function drawScene(inst) {
   
   //
   // Draw lightning between hero and hovered anti-hero
+  // Only for incomplete sections
   //
-  if (hoveredAntiHero) {
+  if (hoveredAntiHero && !hoveredAntiHero.isCompleted) {
     const heroPos = { x: hero.pos.x, y: hero.pos.y }
     const antiHeroPos = { 
       x: hoveredAntiHero.character.pos.x, 

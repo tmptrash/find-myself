@@ -10,9 +10,9 @@ const COLLISION_HEIGHT = 25
 const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0
 
-// Hero parameters
+// Hero parameters (fixed for 1920x1080 resolution)
 const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
-const HERO_HEIGHT_RATIO = 12  // Hero height = screen height / this ratio
+const HERO_SCALE = 3         // Fixed scale for hero sprite
 const RUN_ANIM_SPEED = 0.04
 const RUN_FRAME_COUNT = 3
 const EYE_ANIM_MIN_DELAY = 1.5
@@ -122,8 +122,8 @@ export function create(config) {
     bodyColor,        // Store custom body color
     spritePrefix,     // Store sprite prefix for animations
     dustColor,        // Store dust particle color
-    speed: CFG.gameplay.moveSpeedRatio,
-    jumpForce: CFG.gameplay.jumpForceRatio * k.height(),  // Scale with screen height
+    speed: CFG.gameplay.moveSpeed,      // Fixed speed for 1920x1080
+    jumpForce: CFG.gameplay.jumpForce,  // Fixed jump force for 1920x1080
     direction: 1, // 1 = right, -1 = left
     canJump: true,
     runFrame: 0,
@@ -138,8 +138,7 @@ export function create(config) {
     currentEyeSprite: null,
     isAnnihilating: false,
     isDying: false,
-    isSpawned: false,  // Flag to prevent controls before spawn completes
-    t: 0
+    isSpawned: false   // Flag to prevent controls before spawn completes
   }
   
   // Check ground touch through collisions
@@ -419,11 +418,6 @@ export function spawn(inst) {
  */
 function onUpdate(inst) {
   //
-  // Update timestamp every frame for consistent movement calculations
-  //
-  inst.t = performance.now()
-  
-  //
   // Skip updates during annihilation (but allow paused for post-absorption idle)
   //
   if (inst.isAnnihilating) return
@@ -487,7 +481,6 @@ function onUpdate(inst) {
       inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
-      
       // Step sound on frame 0 (when foot touches ground)
       if (inst.sfx && inst.runFrame === 0) {
         Sound.playStepSound(inst.sfx)
@@ -560,11 +553,8 @@ function setupControls(inst) {
   CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      const p = performance.now()
-      const dt = p - (inst.t || p)
-      inst.character.move(-inst.speed * dt, 0)
+      inst.character.move(-inst.speed, 0)
       inst.direction = -1
-      inst.t = p
     })
   })
   
@@ -574,11 +564,8 @@ function setupControls(inst) {
   CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      const p = performance.now()
-      const dt = p - (inst.t || p)
-      inst.character.move(inst.speed * dt, 0)
+      inst.character.move(inst.speed, 0)
       inst.direction = 1
-      inst.t = p
     })
   })
   
@@ -1173,13 +1160,12 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   return canvas.toDataURL()
 }
 /**
- * Calculate hero scale based on screen height
- * Hero should occupy 1/HERO_HEIGHT_RATIO of screen height
+ * Get hero scale (fixed for 1920x1080 resolution)
  * @param {Object} k - Kaplay instance
  * @returns {number} Scale factor for hero
  */
 function getHeroScale(k) {
-  return Math.round(k.height() / HERO_HEIGHT_RATIO / HERO_SPRITE_SIZE)
+  return HERO_SCALE
 }
 
 /**

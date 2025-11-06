@@ -3,13 +3,13 @@ import { getHex } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 
-// Spike parameters
+// Spike parameters (fixed for 1920x1080 resolution)
 const SPIKE_COUNT = 3         // Number of triangle spikes
 const SPIKE_HEIGHT_BLOCKS = 4 // Height in blocks (pattern: 1, 3, 5, 7)
 const SINGLE_SPIKE_WIDTH_BLOCKS = 7  // Width of one spike in blocks (for pattern: 1, 3, 5, 7)
 const SPIKE_GAP_BLOCKS = 1    // Gap between spikes in blocks
 const SPIKE_SCALE = 1
-const SPIKE_HEIGHT_RATIO = 250
+const SPIKE_BLOCK_SIZE = 4    // Fixed block size for 1920x1080 (1080 / 250 ≈ 4)
 
 export const ORIENTATIONS = {
   FLOOR: 'floor',
@@ -228,14 +228,12 @@ function updateAnimation(inst) {
   }
 }
 /**
- * Calculate spike block size based on screen height
- * Block size scales with screen resolution
+ * Get spike block size (fixed for 1920x1080 resolution)
  * @param {Object} k - Kaplay instance
  * @returns {number} Size of one block in pixels
  */
 function getSpikeBlockSize(k) {
-  // Base calculation: screen height / ratio to get proportional block size
-  return Math.max(2, Math.round(k.height() / SPIKE_HEIGHT_RATIO))
+  return SPIKE_BLOCK_SIZE
 }
 /**
  * Get rotation angle based on orientation

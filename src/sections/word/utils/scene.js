@@ -113,8 +113,8 @@ export function initScene(config) {
   const bgColor = backgroundColor || (levelName && CFG.colors[levelName]?.background)
   const pfColor = platformColor || (levelName && CFG.colors[levelName]?.platform)
   
-  // Set gravity (scaled to screen height for resolution independence)
-  k.setGravity(CFG.gameplay.gravityRatio * k.height())
+  // Set gravity (fixed for 1920x1080 resolution)
+  k.setGravity(CFG.gameplay.gravity)
   
   //
   // Create sound instance and stop ambient from menu

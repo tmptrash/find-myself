@@ -27,10 +27,10 @@ export const CFG = {
     }
   },
   gameplay: {
-    // Physics (as ratios of screen height for resolution independence)
-    moveSpeedRatio: 29,        // Hero movement speed (screen heights/s)
-    jumpForceRatio: 0.6,         // Jump force (screen heights/s)
-    gravityRatio: 2.17,          // Gravity (screen heights/s²)
+    // Physics (fixed values for 1920x1080 resolution)
+    moveSpeed: 280,              // Hero movement speed (px/s)
+    jumpForce: 600,              // Jump force (px/s)
+    gravity: 2000,               // Gravity (px/s²)
   },
   colors: {
     outlineTextColor: "000000",
@@ -87,7 +87,7 @@ export const CFG = {
     
     // Ready screen colors
     ready: {
-      background: "191919",         // Dark background
+      background: "191919",         // Dark background      
       title: "FF8C00",              // Orange title (hero color)
       text: "CCCCCC",               // Light gray text
       hint: "969696",               // Hint color

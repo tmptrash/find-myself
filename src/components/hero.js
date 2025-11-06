@@ -553,8 +553,8 @@ function setupControls(inst) {
   CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      //inst.character.move(-inst.speed, 0)
-      inst.character.pos.x -= inst.speed * inst.k.dt()
+      inst.character.move(-inst.speed, 0)
+      //inst.character.pos.x -= inst.speed * inst.k.dt()
       inst.direction = -1
     })
   })
@@ -564,9 +564,9 @@ function setupControls(inst) {
   //
   CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
-      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      // inst.character.move(inst.speed, 0)
-      inst.character.pos.x += inst.speed * inst.k.dt()
+      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation 
+      inst.character.move(inst.speed, 0)
+      // inst.character.pos.x += inst.speed * inst.k.dt()
       inst.direction = 1
     })
   })

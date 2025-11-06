@@ -18,11 +18,9 @@ export function sceneMenu(k) {
     //
     k.setGravity(0)
     
-    const centerX = k.width() / 2
-    //
-    // Move hero group lower - closer to vertical center
-    //
-    const centerY = k.height() / 2 + 30
+    // Fixed coordinates for 1920x1080 resolution
+    const centerX = 960  // k.width() / 2 = 1920 / 2
+    const centerY = 570  // k.height() / 2 + 30 = 1080 / 2 + 30
     
     //
     // Create sound instance and start audio context
@@ -48,10 +46,10 @@ export function sceneMenu(k) {
     
     //
     // Create 6 anti-heroes around the main hero (sections)
-    // Reduced radius to bring them closer
+    // Fixed radius for 1920x1080 resolution
     //
     const progress = getProgress()
-    const radius = Math.min(k.width(), k.height()) * 0.28  // Reduced from 0.35 to 0.28
+    const radius = 302  // Fixed radius (was: Math.min(1920, 1080) * 0.28)
     const sectionConfigs = getSectionPositions(centerX, centerY, radius)
     const antiHeroes = []
     const sectionLabels = []
@@ -280,7 +278,7 @@ export function sceneMenu(k) {
     
     const startText = k.add([
       k.text(hintText, { size: 20 }),
-      k.pos(k.width() / 2, k.height() - 50),
+      k.pos(960, 1030),  // Fixed: k.width() / 2 = 960, k.height() - 50 = 1030
       k.anchor("center"),
       k.opacity(1),
       k.color(150, 150, 150), // Gray
@@ -351,8 +349,9 @@ export function sceneMenu(k) {
  * @returns {Array} Array of title objects
  */
 function createTitle(k) {
-  const titleY = k.height() * 0.10  // Moved higher (was 0.15)
-  const titleSize = k.height() * 0.06  // Smaller size (was 0.08)
+  // Fixed coordinates for 1920x1080 resolution
+  const titleY = 108   // k.height() * 0.10 = 1080 * 0.10
+  const titleSize = 65  // k.height() * 0.06 = 1080 * 0.06
   
   const titleText = "FIND YOURSELF"
   const objects = []
@@ -362,7 +361,7 @@ function createTitle(k) {
   //
   const letterSpacing = titleSize * 0.6
   const totalWidth = (titleText.length - 1) * letterSpacing
-  const startX = k.width() / 2 - totalWidth / 2
+  const startX = 960 - totalWidth / 2  // k.width() / 2 = 1920 / 2
   
   for (let i = 0; i < titleText.length; i++) {
     const char = titleText[i]

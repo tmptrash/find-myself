@@ -13,7 +13,7 @@ const COLLISION_OFFSET_Y = 0
 // Hero parameters (fixed for 1920x1080 resolution)
 const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
 const HERO_SCALE = 3         // Fixed scale for hero sprite
-const RUN_ANIM_SPEED = 0.04
+const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
@@ -553,7 +553,8 @@ function setupControls(inst) {
   CFG.controls.moveLeft.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      inst.character.move(-inst.speed, 0)
+      //inst.character.move(-inst.speed, 0)
+      inst.character.pos.x -= inst.speed * inst.k.dt()
       inst.direction = -1
     })
   })
@@ -564,7 +565,8 @@ function setupControls(inst) {
   CFG.controls.moveRight.forEach(key => {
     inst.k.onKeyDown(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      inst.character.move(inst.speed, 0)
+      // inst.character.move(inst.speed, 0)
+      inst.character.pos.x += inst.speed * inst.k.dt()
       inst.direction = 1
     })
   })

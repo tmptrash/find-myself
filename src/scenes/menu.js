@@ -5,6 +5,7 @@ import * as Hero from "../components/hero.js"
 import { createLevelTransition } from "../utils/transition.js"
 import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
+import * as Particles from "../utils/particles.js"
 
 /**
  * Menu scene with hero in center
@@ -21,6 +22,19 @@ export function sceneMenu(k) {
     // Fixed coordinates for 1920x1080 resolution
     const centerX = 960  // k.width() / 2 = 1920 / 2
     const centerY = 570  // k.height() / 2 + 30 = 1080 / 2 + 30
+    
+    //
+    // Create firefly particles background
+    //
+    const particlesBg = Particles.create({
+      k,
+      particleCount: 120,  // Fewer particles for firefly effect
+      color: '#D4A574',    // Warm golden-orange (firefly glow)
+      baseOpacity: 0.6,
+      flickerSpeed: 1.5,   // Slower flicker for organic feel
+      trembleRadius: 12,   // Larger floating movement
+      mouseInfluence: 200
+    })
     
     //
     // Create sound instance and start audio context
@@ -136,7 +150,7 @@ export function sceneMenu(k) {
       //
       const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
       const label = k.add([
-        k.text(config.section, { size: 18, font: "jetbrains" }),
+        k.text(config.section, { size: 18 }),
         k.pos(config.x, config.y + 50),
         k.anchor("center"),
         k.color(labelColor.r, labelColor.g, labelColor.b),
@@ -155,6 +169,7 @@ export function sceneMenu(k) {
       centerY,
       hero,
       sound,
+      particlesBg,
       titleObjects: createTitle(k),
       antiHeroes,
       sectionLabels,
@@ -166,6 +181,11 @@ export function sceneMenu(k) {
     // Track mouse position and check for hover over anti-heroes
     //
     k.onUpdate(() => {
+      //
+      // Update trembling particles
+      //
+      Particles.onUpdate(particlesBg)
+      
       const mousePos = k.mousePos()
       let foundHover = false
       let hoveredInst = null
@@ -336,6 +356,31 @@ export function sceneMenu(k) {
         Sound.toggleMute(sound)
       })
     })
+    
+    //
+    // Cleanup when leaving scene
+    //
+    k.onSceneLeave(() => {
+      //
+      // Destroy all game objects
+      //
+      heroInst.character.destroy()
+      antiHeroes.forEach(antiHeroInst => {
+        antiHeroInst.character.destroy()
+      })
+      sectionLabels.forEach(label => {
+        label.destroy()
+      })
+      inst.titleObjects.forEach(obj => {
+        obj.destroy()
+      })
+      startText.destroy()
+      
+      //
+      // Stop ambient sound
+      //
+      Sound.stopAmbient(sound)
+    })
   })
 }
 
@@ -366,10 +411,7 @@ function createTitle(k) {
     const rgb = getRGB(k, CFG.colors.menu.titleBase)
     
     const letter = k.add([
-      k.text(char, {
-        size: titleSize,
-        font: "jetbrains"
-      }),
+      k.text(char, { size: titleSize }),
       k.pos(x, titleY),
       k.anchor("center"),
       k.color(rgb.r, rgb.g, rgb.b),
@@ -388,7 +430,7 @@ function createTitle(k) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero } = inst
+  const { k, hero, hoveredAntiHero, particlesBg } = inst
   
   //
   // Draw dark background
@@ -400,6 +442,11 @@ function drawScene(inst) {
     pos: k.vec2(0, 0),
     color: k.rgb(bgRgb.r, bgRgb.g, bgRgb.b)
   })
+  
+  //
+  // Draw trembling particles
+  //
+  Particles.draw(particlesBg)
   
   //
   // Draw lightning between hero and hovered anti-hero

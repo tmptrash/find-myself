@@ -174,7 +174,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           const textObj = k.add([
             k.text(subtitle, {
               size: k.height() * 0.04,
-              font: "jetbrains",
               align: "center"
             }),
             k.pos(k.width() / 2, k.height() / 2),

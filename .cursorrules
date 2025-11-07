@@ -551,6 +551,8 @@ src/
 ### Do
 - ✅ Use factory functions with `create()` pattern
 - ✅ Function `create()` should be at the top of the module
+- ✅ Function to update calculations should be called `onUpdate()`
+- ✅ Function to draw something should be called `onDraw()`
 - ✅ Pass instances to functions
 - ✅ Extract complex logic to private functions
 - ✅ Use centralized configuration

@@ -5,13 +5,17 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 
 export function sceneLevel1(k) {
   k.scene("level-word.1", () => {
+    //
     // Calculate moving platform position first (needed for gap calculation)
+    //
     const centerX = k.width() / 2
     const spikeWidth = Blades.getSpikeWidth(k)
     const movingPlatformX = centerX + k.width() * 0.05  // Position platform left of center
     const spikeX = movingPlatformX + spikeWidth * 1.1  // Position spikes closer to platform
     
+    //
     // Initialize level with heroes and gap in platform
+    //
     const { sound, hero, antiHero } = initScene({
       k,
       levelName: 'level-word.1',
@@ -28,8 +32,9 @@ export function sceneLevel1(k) {
       }
     })
     
-    // Create spikes in the middle of the level
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
+    
+    // Create spikes in the middle of the level
     const platformY = k.height() - bottomPlatformHeight
     const spikeHeight = Blades.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
     

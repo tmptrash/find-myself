@@ -118,10 +118,9 @@ export function sceneMenu(k) {
           Sound.stopAmbient(sound)
           
           //
-          // Reset cursor to default (removes setCursor, allows CSS to apply)
+          // Reset cursor to default (remove pointer class)
           //
-          k.setCursor("default")
-          k.canvas.style.cursor = ''
+          k.canvas.classList.remove('cursor-pointer')
           
           //
           // Get last level for word section or start from beginning
@@ -240,12 +239,12 @@ export function sceneMenu(k) {
       //
       if (!inst.isLeavingScene) {
         if (hoveredInst && hoveredInst.section === 'word') {
-          k.setCursor("pointer")
+          k.canvas.classList.add('cursor-pointer')
         } else {
           //
-          // Reset to empty string to use CSS cursor
+          // Remove pointer class to use default CSS cursor
           //
-          k.canvas.style.cursor = ''
+          k.canvas.classList.remove('cursor-pointer')
         }
       }
       
@@ -315,10 +314,9 @@ export function sceneMenu(k) {
     k.onKeyPress("space", () => {
       Sound.stopAmbient(sound)
       //
-      // Reset cursor to default (removes setCursor, allows CSS to apply)
+      // Reset cursor to default (remove pointer class)
       //
-      k.setCursor("default")
-      k.canvas.style.cursor = ''
+      k.canvas.classList.remove('cursor-pointer')
       
       if (hasSavedGame) {
         //
@@ -336,10 +334,9 @@ export function sceneMenu(k) {
     k.onKeyPress("enter", () => {
       Sound.stopAmbient(sound)
       //
-      // Reset cursor to default (removes setCursor, allows CSS to apply)
+      // Reset cursor to default (remove pointer class)
       //
-      k.setCursor("default")
-      k.canvas.style.cursor = ''
+      k.canvas.classList.remove('cursor-pointer')
       
       //
       // Enter always resets progress and starts new game

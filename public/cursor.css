@@ -1,8 +1,8 @@
 /**
- * Custom pixel cursor (Kaplay-style chubby triangle without tail)
+ * Custom pixel cursor (chubby triangle with convex sides and thick black outline)
  */
 canvas {
-  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="-4 -4 32 36"><path d="M 5,3 Q 4,9 4,14 Q 4,19 8,22 Q 12,24 16,19 Q 18,16 16,12 Q 14,8 10,6 Q 7,4 5,3 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="miter" stroke-miterlimit="10"/><path d="M 5,3 Q 4,9 4,14 Q 4,19 8,22 Q 12,24 16,19 Q 18,16 16,12 Q 14,8 10,6 Q 7,4 5,3 Z" fill="white"/></svg>') 0 0, auto;
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="-4 -4 32 36"><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="white"/></svg>') 0 0, auto;
 }
 
 /**

@@ -425,6 +425,7 @@ export function create(cfg) {
 ```
 
 ### Inline Comments
+If a line uses comments above, upper line (above this comment) should not empty one.
 ```javascript
 // Good: Explain why, not what
 //
@@ -561,6 +562,7 @@ src/
 - ✅ Use short-circuit evaluation
 - ✅ Keep callbacks minimal
 - ✅ Put exported functions at the top
+- ✅ For the one line arrow function use one line short function version without {} symbols
 
 ---
 

@@ -6,6 +6,7 @@ import { createLevelTransition } from "../utils/transition.js"
 import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
+import * as Fragments from "../utils/fragments.js"
 
 /**
  * Menu scene with hero in center
@@ -34,6 +35,17 @@ export function sceneMenu(k) {
       flickerSpeed: 1.5,   // Slower flicker for organic feel
       trembleRadius: 12,   // Larger floating movement
       mouseInfluence: 200
+    })
+    
+    //
+    // Create fragment shadows (ghostly silhouettes of hero)
+    //
+    const fragmentsBg = Fragments.create({
+      k,
+      fragmentCount: 5,    // 5 ghostly silhouettes
+      speed: 2,            // 2-3 pixels per second
+      baseOpacity: 0.15,   // Very transparent
+      fadeSpeed: 0.3       // Slow fade in/out
     })
     
     //
@@ -169,7 +181,8 @@ export function sceneMenu(k) {
       hero,
       sound,
       particlesBg,
-      titleObjects: createTitle(k),
+      fragmentsBg,
+      title: createTitle(k),
       antiHeroes,
       sectionLabels,
       hoveredAntiHero: null,  // Track which anti-hero is hovered
@@ -184,6 +197,16 @@ export function sceneMenu(k) {
       // Update trembling particles
       //
       Particles.onUpdate(particlesBg)
+      
+      //
+      // Update fragment shadows
+      //
+      Fragments.onUpdate(fragmentsBg)
+      
+      //
+      // Update title effects
+      //
+      updateTitle(inst.title, k)
       
       const mousePos = k.mousePos()
       let foundHover = false
@@ -368,10 +391,19 @@ export function sceneMenu(k) {
       sectionLabels.forEach(label => {
         label.destroy()
       })
-      inst.titleObjects.forEach(obj => {
-        obj.destroy()
-      })
+      
+      //
+      // Destroy title objects
+      //
+      inst.title.findText.destroy()
+      inst.title.myselfText.destroy()
+      
       startText.destroy()
+      
+      //
+      // Destroy fragment shadows
+      //
+      Fragments.destroy(fragmentsBg)
       
       //
       // Stop ambient sound
@@ -382,44 +414,194 @@ export function sceneMenu(k) {
 }
 
 /**
- * Create title objects (static, no glitch animation)
+ * Create title with dynamic effects
  * @param {Object} k - Kaplay instance
- * @returns {Array} Array of title objects
+ * @returns {Object} Title instance with state
  */
 function createTitle(k) {
+  //
   // Fixed coordinates for 1920x1080 resolution
+  //
   const titleY = 108   // k.height() * 0.10 = 1080 * 0.10
   const titleSize = 65  // k.height() * 0.06 = 1080 * 0.06
   
-  const titleText = "FIND MYSELF"
-  const objects = []
+  //
+  // Amber color (#e49b24)
+  //
+  const amberColor = k.rgb(228, 155, 36)
   
   //
-  // Create each letter as separate object
+  // Create "find" text (left word)
   //
-  const letterSpacing = titleSize * 0.6
-  const totalWidth = (titleText.length - 1) * letterSpacing
-  const startX = 960 - totalWidth / 2  // k.width() / 2 = 1920 / 2
+  const findText = k.add([
+    k.text("find", { size: titleSize }),
+    k.pos(960 - 110, titleY),  // Left of center (one letter width spacing)
+    k.anchor("center"),
+    k.color(amberColor),
+    k.z(100),
+    k.fixed()
+  ])
   
-  for (let i = 0; i < titleText.length; i++) {
-    const char = titleText[i]
-    const x = startX + i * letterSpacing
-    
-    const rgb = getRGB(k, CFG.colors.menu.titleBase)
-    
-    const letter = k.add([
-      k.text(char, { size: titleSize }),
-      k.pos(x, titleY),
-      k.anchor("center"),
-      k.color(rgb.r, rgb.g, rgb.b),
-      k.z(100),
-      k.fixed()
-    ])
-    
-    objects.push(letter)
+  //
+  // Create "myself" text (right word, appears later)
+  //
+  const myselfText = k.add([
+    k.text("myself", { size: titleSize }),
+    k.pos(960 + 130, titleY),  // Right of center (one letter width spacing)
+    k.anchor("center"),
+    k.color(amberColor),
+    k.z(100),
+    k.opacity(0),  // Start invisible
+    k.fixed()
+  ])
+  
+  return {
+    findText,
+    myselfText,
+    breathPhase: 0,
+    flickerPhase: Math.PI,  // Start with "myself" invisible
+    lightningPhase: 0,
+    showLightning: false,
+    lightningOpacity: 1,
+    time: 0,
+    findFloatPhase: 0,  // Independent float phase for "find"
+    myselfFloatPhase: Math.PI * 0.5,  // Independent float phase for "myself" (offset)
+    baseFindX: 960 - 110,
+    baseMyselfX: 960 + 130,
+    baseTitleY: 108
+  }
+}
+
+/**
+ * Update title effects
+ * @param {Object} titleInst - Title instance
+ * @param {Object} k - Kaplay instance
+ */
+function updateTitle(titleInst, k) {
+  const dt = k.dt()
+  titleInst.time += dt
+  
+  //
+  // Breathing effect for "find" (period ~3 sec)
+  //
+  titleInst.breathPhase += dt * (Math.PI * 2 / 3)  // 3 second period
+  const breathScale = 1 + Math.sin(titleInst.breathPhase) * 0.05  // ±5% scale
+  titleInst.findText.scale = k.vec2(breathScale, breathScale)
+  
+  //
+  // Independent smooth floating movement for "find"
+  //
+  titleInst.findFloatPhase += dt * 0.4  // Slow floating speed
+  
+  const floatRadius = 12  // Movement radius (like fireflies)
+  const findFloatX = Math.cos(titleInst.findFloatPhase) * floatRadius + Math.sin(titleInst.findFloatPhase * 0.7) * floatRadius * 0.5
+  const findFloatY = Math.sin(titleInst.findFloatPhase * 1.3) * floatRadius + Math.cos(titleInst.findFloatPhase * 0.5) * floatRadius * 0.5
+  
+  //
+  // Apply floating movement to "find"
+  //
+  titleInst.findText.pos.x = titleInst.baseFindX + findFloatX
+  titleInst.findText.pos.y = titleInst.baseTitleY + findFloatY
+  
+  //
+  // Independent smooth floating movement for "myself"
+  //
+  titleInst.myselfFloatPhase += dt * 0.35  // Slightly different speed
+  
+  const myselfFloatX = Math.cos(titleInst.myselfFloatPhase) * floatRadius + Math.sin(titleInst.myselfFloatPhase * 0.8) * floatRadius * 0.5
+  const myselfFloatY = Math.sin(titleInst.myselfFloatPhase * 1.2) * floatRadius + Math.cos(titleInst.myselfFloatPhase * 0.6) * floatRadius * 0.5
+  
+  //
+  // Flickering for both words (slower fade in/out)
+  // Using asymmetric sine wave: long visible period, short invisible period
+  //
+  titleInst.flickerPhase += dt * 0.8  // Slightly faster (was 0.6)
+  
+  //
+  // Transform sine wave to be visible most of the time
+  // Map [-1, 1] to [0.9, 1] for visible, [0, 0.9] for fade
+  //
+  const rawSine = Math.sin(titleInst.flickerPhase)
+  let flickerValue
+  
+  if (rawSine > 0.8) {
+    //
+    // Short invisible period (only when sine > 0.8, ~10% of cycle)
+    //
+    flickerValue = 0
+  } else if (rawSine > 0) {
+    //
+    // Fade out (slow)
+    //
+    flickerValue = Math.pow((0.8 - rawSine) / 0.8, 2)  // Quadratic fade out
+  } else {
+    //
+    // Fully visible (most of the time)
+    //
+    flickerValue = 1
   }
   
-  return objects
+  //
+  // "find" fades in/out
+  //
+  titleInst.findText.opacity = flickerValue
+  
+  //
+  // "myself" fades in/out (with offset phase)
+  //
+  const myselfRawSine = Math.sin(titleInst.flickerPhase + Math.PI * 0.3)  // 54° offset (was 90°)
+  let myselfFlickerValue
+  
+  if (myselfRawSine > 0.8) {
+    myselfFlickerValue = 0
+  } else if (myselfRawSine > 0) {
+    myselfFlickerValue = Math.pow((0.8 - myselfRawSine) / 0.8, 2)
+          } else {
+    myselfFlickerValue = 1
+  }
+  
+  titleInst.myselfText.opacity = myselfFlickerValue
+  titleInst.myselfText.pos.x = titleInst.baseMyselfX + myselfFloatX  // Independent floating
+  titleInst.myselfText.pos.y = titleInst.baseTitleY + myselfFloatY
+  
+  //
+  // Show lightning only when at least one word is visible
+  //
+  const minOpacity = Math.min(flickerValue, myselfFlickerValue)
+  titleInst.showLightning = minOpacity > 0  // Hide when both words are invisible
+  titleInst.lightningOpacity = minOpacity  // Fade with words
+}
+
+/**
+ * Draw lightning between "find" and "myself"
+ * @param {Object} titleInst - Title instance
+ * @param {Object} k - Kaplay instance
+ */
+function drawTitleLightning(titleInst, k) {
+  if (!titleInst.showLightning) return
+  
+  //
+  // From first letter "f" in "find" to last letter "f" in "myself"
+  //
+  const startPos = { 
+    x: titleInst.findText.pos.x - 60,  // Left edge of "find" (first "f")
+    y: titleInst.findText.pos.y 
+  }
+  const endPos = { 
+    x: titleInst.myselfText.pos.x + 85,  // Right edge of "myself" (last "f")
+    y: titleInst.myselfText.pos.y 
+  }
+  
+  //
+  // Draw electric connection (fades with minimum word opacity)
+  //
+  drawConnectionWave(k, startPos, endPos, {
+    color: k.rgb(228, 155, 36),  // Amber
+    segments: 12,  // More segments for longer distance
+    amplitude: 6,
+    thickness: 1.5,
+    opacity: titleInst.lightningOpacity * 0.25  // Very transparent (was 0.7)
+  })
 }
 
 /**
@@ -427,7 +609,7 @@ function createTitle(k) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg } = inst
+  const { k, hero, hoveredAntiHero, particlesBg, title } = inst
   
   //
   // Draw dark background
@@ -444,6 +626,11 @@ function drawScene(inst) {
   // Draw trembling particles
   //
   Particles.draw(particlesBg)
+  
+  //
+  // Draw lightning between "find" and "myself"
+  //
+  drawTitleLightning(title, k)
   
   //
   // Draw lightning between hero and hovered anti-hero

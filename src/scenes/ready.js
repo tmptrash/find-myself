@@ -20,21 +20,18 @@ export function sceneReady(k) {
     
     // Story text
     const storyLines = [
-      "Life laughs at your plans.",
-      "Rules bend, promises break, logic fails.",
-      "You move forward — and the floor disappears.",
-      "You wait — and time devours you.",
-      "Every step, every mistake — a reflection of yourself.",
-      "You are searching for what's left of you.",
-      "Fragments scattered across twisted worlds:",
-      "words that cut, memories that fade,",
-      "touches that burn, time that slips away.",
-      "Each world hides a piece of who you are.",
-      "Each encounter teaches — and hurts.",
-      "When you find yourself, you absorb your other half…",
-      "and the world changes again.",
-      "Because finding yourself",
-      "means surviving every version of you...",
+      "You seek yourself.",
+      "But life has other plans.",
+      "Every step forward — it pulls you back.",
+      "Every truth found — it twists the path.",
+      "Every piece of you — scattered, hidden, guarded.",
+      "The world will not make this easy.",
+      "It will cut, burn, deceive.",
+      "It will test every version of who you are.",
+      "Yet through the chaos, through the pain,",
+      "you must find what was lost.",
+      "Because knowing yourself",
+      "means surviving everything life throws at you.",
     ]
     
     const lineHeight = 34

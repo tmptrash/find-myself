@@ -22,7 +22,7 @@ export function sceneMenu(k) {
     
     // Fixed coordinates for 1920x1080 resolution
     const centerX = 960  // k.width() / 2 = 1920 / 2
-    const centerY = 570  // k.height() / 2 + 30 = 1080 / 2 + 30
+    const centerY = 500  // Higher position (was 570)
     
     //
     // Create firefly particles background
@@ -182,7 +182,7 @@ export function sceneMenu(k) {
       sound,
       particlesBg,
       fragmentsBg,
-      title: createTitle(k),
+      title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
       hoveredAntiHero: null,  // Track which anti-hero is hovered
@@ -202,11 +202,6 @@ export function sceneMenu(k) {
       // Update fragment shadows
       //
       Fragments.onUpdate(fragmentsBg)
-      
-      //
-      // Update title effects
-      //
-      updateTitle(inst.title, k)
       
       const mousePos = k.mousePos()
       let foundHover = false
@@ -263,7 +258,7 @@ export function sceneMenu(k) {
       if (!inst.isLeavingScene) {
         if (hoveredInst && hoveredInst.section === 'word') {
           k.canvas.classList.add('cursor-pointer')
-        } else {
+          } else {
           //
           // Remove pointer class to use default CSS cursor
           //
@@ -272,6 +267,11 @@ export function sceneMenu(k) {
       }
       
       inst.hoveredAntiHero = hoveredInst
+      
+      //
+      // Update title circular movement based on hover
+      //
+      updateTitle(inst.title, k, hoveredInst)
       
       //
       // Control ambient sound based on hover state
@@ -395,8 +395,9 @@ export function sceneMenu(k) {
       //
       // Destroy title objects
       //
-      inst.title.findText.destroy()
-      inst.title.myselfText.destroy()
+      inst.title.letters.forEach(letter => {
+        letter.destroy()
+      })
       
       startText.destroy()
       
@@ -414,193 +415,335 @@ export function sceneMenu(k) {
 }
 
 /**
- * Create title with dynamic effects
+ * Create title with circular motion around anti-heroes
  * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} centerY - Center Y position
+ * @param {number} radius - Radius of anti-heroes circle
  * @returns {Object} Title instance with state
  */
-function createTitle(k) {
-  //
-  // Fixed coordinates for 1920x1080 resolution
-  //
-  const titleY = 108   // k.height() * 0.10 = 1080 * 0.10
-  const titleSize = 65  // k.height() * 0.06 = 1080 * 0.06
-  
-  //
-  // Amber color (#e49b24)
-  //
+function createTitle(k, centerX, centerY, radius) {
+  const fullText = "find myself"
+  const shortText = "find"
+  const titleSize = 32  // Smaller size (was 48)
   const amberColor = k.rgb(228, 155, 36)
+  const dimColor = k.rgb(120, 120, 120)  // Gray (was amber-dimmed)
   
   //
-  // Create "find" text (left word)
+  // Create each letter as separate object (for full text)
   //
-  const findText = k.add([
-    k.text("find", { size: titleSize }),
-    k.pos(960 - 110, titleY),  // Left of center (one letter width spacing)
-    k.anchor("center"),
-    k.color(amberColor),
-    k.z(100),
-    k.fixed()
-  ])
+  const letters = []
+  const circleRadius = radius + 100  // Slightly smaller (was +120)
   
-  //
-  // Create "myself" text (right word, appears later)
-  //
-  const myselfText = k.add([
-    k.text("myself", { size: titleSize }),
-    k.pos(960 + 130, titleY),  // Right of center (one letter width spacing)
-    k.anchor("center"),
-    k.color(amberColor),
-    k.z(100),
-    k.opacity(0),  // Start invisible
-    k.fixed()
-  ])
+  for (let i = 0; i < fullText.length; i++) {
+    const char = fullText[i]
+    
+    const letter = k.add([
+      k.text(char, { size: titleSize }),
+      k.pos(0, 0),
+        k.anchor("center"),
+      k.color(dimColor),  // Start dimmed
+      k.z(100),
+      k.fixed()
+    ])
+    
+    letters.push(letter)
+  }
   
   return {
-    findText,
-    myselfText,
-    breathPhase: 0,
-    flickerPhase: Math.PI,  // Start with "myself" invisible
-    lightningPhase: 0,
-    showLightning: false,
-    lightningOpacity: 1,
-    time: 0,
-    findFloatPhase: 0,  // Independent float phase for "find"
-    myselfFloatPhase: Math.PI * 0.5,  // Independent float phase for "myself" (offset)
-    baseFindX: 960 - 110,
-    baseMyselfX: 960 + 130,
-    baseTitleY: 108
+    letters,
+    fullText,
+    shortText,
+    currentText: fullText,  // Currently displayed text
+    targetText: fullText,   // Target text to display
+    circleRadius,
+    centerX,
+    centerY,
+    angle: 0,  // Current angle on circle
+    targetAngle: 0,  // Target angle when hovering
+    isHovering: false,
+    hoverAngle: 0,  // Angle of hovered anti-hero
+    hoverRange: 0.3,  // Range of movement when hovering (radians)
+    hoverPhase: 0,  // Phase for back-and-forth movement
+    moveSpeed: 0.15,  // Normal rotation speed
+    snapSpeed: 3.0,  // Fast snap to hover position
+    amberColor,
+    dimColor,
+    isReversed: false,  // Current letter order
+    targetReversed: false,  // Target letter order
+    reverseFadePhase: 1.0,  // 1.0 = fully visible, 0.0 = invisible (for reversal)
+    isReverseChanging: false,  // Is reversal fade animation active
+    fadePhase: 1.0,  // 1.0 = fully visible, 0.0 = invisible
+    isFading: false,
+    baseOpacity: 0.3  // Base opacity when not hovering (dimmed)
   }
 }
 
 /**
- * Update title effects
+ * Update title circular movement
  * @param {Object} titleInst - Title instance
  * @param {Object} k - Kaplay instance
+ * @param {Object|null} hoveredAntiHero - Currently hovered anti-hero
  */
-function updateTitle(titleInst, k) {
+function updateTitle(titleInst, k, hoveredAntiHero) {
   const dt = k.dt()
-  titleInst.time += dt
   
   //
-  // Breathing effect for "find" (period ~3 sec)
+  // Update target text based on hover
   //
-  titleInst.breathPhase += dt * (Math.PI * 2 / 3)  // 3 second period
-  const breathScale = 1 + Math.sin(titleInst.breathPhase) * 0.05  // ±5% scale
-  titleInst.findText.scale = k.vec2(breathScale, breathScale)
+  const newTargetText = hoveredAntiHero ? titleInst.shortText : titleInst.fullText
   
   //
-  // Independent smooth floating movement for "find"
+  // Check if text needs to change
   //
-  titleInst.findFloatPhase += dt * 0.4  // Slow floating speed
-  
-  const floatRadius = 12  // Movement radius (like fireflies)
-  const findFloatX = Math.cos(titleInst.findFloatPhase) * floatRadius + Math.sin(titleInst.findFloatPhase * 0.7) * floatRadius * 0.5
-  const findFloatY = Math.sin(titleInst.findFloatPhase * 1.3) * floatRadius + Math.cos(titleInst.findFloatPhase * 0.5) * floatRadius * 0.5
-  
-  //
-  // Apply floating movement to "find"
-  //
-  titleInst.findText.pos.x = titleInst.baseFindX + findFloatX
-  titleInst.findText.pos.y = titleInst.baseTitleY + findFloatY
+  if (newTargetText !== titleInst.targetText) {
+    titleInst.targetText = newTargetText
+    titleInst.isFading = true
+  }
   
   //
-  // Independent smooth floating movement for "myself"
+  // Handle fade animation for text change
   //
-  titleInst.myselfFloatPhase += dt * 0.35  // Slightly different speed
+  if (titleInst.isFading) {
+    if (titleInst.fadePhase > 0 && titleInst.currentText !== titleInst.targetText) {
+      //
+      // Fade out (500ms = 0.5s, so speed = 1/0.5 = 2.0)
+      //
+      titleInst.fadePhase -= dt * 2.0
+      if (titleInst.fadePhase <= 0) {
+        titleInst.fadePhase = 0
+        //
+        // Switch text at complete fade
+        //
+        titleInst.currentText = titleInst.targetText
+      }
+    } else if (titleInst.fadePhase < 1) {
+      //
+      // Fade in (800ms = 0.8s, so speed = 1/0.8 = 1.25) - slower than fade out
+      //
+      titleInst.fadePhase += dt * 1.25
+      if (titleInst.fadePhase >= 1) {
+        titleInst.fadePhase = 1
+        titleInst.isFading = false
+      }
+    }
+  }
   
-  const myselfFloatX = Math.cos(titleInst.myselfFloatPhase) * floatRadius + Math.sin(titleInst.myselfFloatPhase * 0.8) * floatRadius * 0.5
-  const myselfFloatY = Math.sin(titleInst.myselfFloatPhase * 1.2) * floatRadius + Math.cos(titleInst.myselfFloatPhase * 0.6) * floatRadius * 0.5
+  //
+  // Determine if letters should be reversed based on angle
+  // Text direction depends on position on circle (clockwise motion)
+  // 
+  // Angles (starting from -120° = top-left):
+  // - Top-left (240°): 23 hours → normal (inverted)
+  // - Top-right (300°): 13 hours → normal (inverted)
+  // - Right (0°/360°): 15 hours → normal (inverted)
+  // - Bottom-right (60°): 17 hours → reverse (inverted)
+  // - Bottom-left (120°): 19 hours → reverse (inverted)
+  // - Left (180°): 21 hours → reverse (inverted)
+  //
+  const normalizedAngle = ((titleInst.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
   
   //
-  // Flickering for both words (slower fade in/out)
-  // Using asymmetric sine wave: long visible period, short invisible period
+  // Convert to degrees for easier understanding (0° = right, increases counter-clockwise)
   //
-  titleInst.flickerPhase += dt * 0.8  // Slightly faster (was 0.6)
+  const degrees = (normalizedAngle * 180 / Math.PI)
+  
+  let shouldReverse = false
   
   //
-  // Transform sine wave to be visible most of the time
-  // Map [-1, 1] to [0.9, 1] for visible, [0, 0.9] for fade
+  // Top-right quadrant (270° to 30°): normal (inverted from reverse)
+  // This covers 13 hours (top-right) and 15 hours (right)
   //
-  const rawSine = Math.sin(titleInst.flickerPhase)
-  let flickerValue
+  if (degrees >= 270 || degrees < 30) {
+    shouldReverse = false
+  }
+  //
+  // Right to bottom (30° to 150°): reverse (inverted from normal)
+  // This covers 17 hours (bottom-right) and 19 hours (bottom-left)
+  //
+  else if (degrees >= 30 && degrees < 150) {
+    shouldReverse = true
+  }
+  //
+  // Left side (150° to 210°): reverse (inverted from normal)
+  // This covers 21 hours (left)
+  //
+  else if (degrees >= 150 && degrees < 210) {
+    shouldReverse = true
+  }
+  //
+  // Top-left (210° to 270°): normal (inverted from reverse)
+  // This covers 23 hours (top-left)
+  //
+  else if (degrees >= 210 && degrees < 270) {
+    shouldReverse = false
+  }
   
-  if (rawSine > 0.8) {
+  //
+  // Check if reversal state needs to change
+  //
+  if (shouldReverse !== titleInst.targetReversed) {
+    titleInst.targetReversed = shouldReverse
     //
-    // Short invisible period (only when sine > 0.8, ~10% of cycle)
+    // Start fade animation for reversal
     //
-    flickerValue = 0
-  } else if (rawSine > 0) {
+    if (!titleInst.isReverseChanging) {
+      titleInst.isReverseChanging = true
+      titleInst.reverseFadePhase = 1.0
+    }
+  }
+  
+  //
+  // Handle fade animation for reversal change
+  //
+  if (titleInst.isReverseChanging) {
+    if (titleInst.reverseFadePhase > 0 && titleInst.isReversed !== titleInst.targetReversed) {
+      //
+      // Fade out (300ms = 0.3s, so speed = 1/0.3 = 3.33)
+      //
+      titleInst.reverseFadePhase -= dt * 3.33
+      if (titleInst.reverseFadePhase <= 0) {
+        titleInst.reverseFadePhase = 0
+        //
+        // Switch reversal at complete fade
+        //
+        titleInst.isReversed = titleInst.targetReversed
+      }
+    } else if (titleInst.reverseFadePhase < 1) {
+      //
+      // Fade in (400ms = 0.4s, so speed = 1/0.4 = 2.5) - slower than fade out
+      //
+      titleInst.reverseFadePhase += dt * 2.5
+      if (titleInst.reverseFadePhase >= 1) {
+        titleInst.reverseFadePhase = 1
+        titleInst.isReverseChanging = false
+      }
+    }
+  }
+  
+  //
+  // Update hover state
+  //
+  if (hoveredAntiHero) {
+    if (!titleInst.isHovering) {
+      //
+      // Just started hovering - calculate angle to anti-hero
+      //
+      const dx = hoveredAntiHero.character.pos.x - titleInst.centerX
+      const dy = hoveredAntiHero.character.pos.y - titleInst.centerY
+      titleInst.hoverAngle = Math.atan2(dy, dx)
+      titleInst.isHovering = true
+      titleInst.hoverPhase = 0
+    }
+    
     //
-    // Fade out (slow)
+    // Move to hovered position quickly
     //
-    flickerValue = Math.pow((0.8 - rawSine) / 0.8, 2)  // Quadratic fade out
+    let angleDiff = titleInst.hoverAngle - titleInst.angle
+    
+    //
+    // Normalize angle difference to [-PI, PI]
+    //
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+    
+    titleInst.angle += angleDiff * titleInst.snapSpeed * dt
+    
+    //
+    // Update hover phase for back-and-forth movement
+    //
+    titleInst.hoverPhase += dt * 2
+    const hoverOffset = Math.sin(titleInst.hoverPhase) * titleInst.hoverRange
+    titleInst.targetAngle = titleInst.hoverAngle + hoverOffset
+    
+    //
+    // Change to anti-hero's color
+    //
+    const targetColor = hoveredAntiHero.character.color
+    titleInst.letters.forEach(letter => {
+      letter.color.r += (targetColor.r - letter.color.r) * 5 * dt
+      letter.color.g += (targetColor.g - letter.color.g) * 5 * dt
+      letter.color.b += (targetColor.b - letter.color.b) * 5 * dt
+    })
   } else {
+    titleInst.isHovering = false
+    
     //
-    // Fully visible (most of the time)
+    // Rotate slowly around circle
     //
-    flickerValue = 1
+    titleInst.angle += titleInst.moveSpeed * dt
+    titleInst.targetAngle = titleInst.angle
+    
+    //
+    // Dim letters
+    //
+    titleInst.letters.forEach(letter => {
+      const currentR = letter.color.r
+      const targetR = titleInst.dimColor.r
+      letter.color.r += (targetR - currentR) * 3 * dt
+      letter.color.g += (titleInst.dimColor.g - letter.color.g) * 3 * dt
+      letter.color.b += (titleInst.dimColor.b - letter.color.b) * 3 * dt
+    })
   }
   
   //
-  // "find" fades in/out
+  // Position each letter along the arc
   //
-  titleInst.findText.opacity = flickerValue
+  const textLength = titleInst.currentText.length
+  //
+  // Adjust arc length based on text length to maintain natural letter spacing
+  //
+  const arcLength = textLength === titleInst.shortText.length ? 0.3 : 0.8  // Shorter arc for "find"
+  const angleStep = textLength > 1 ? arcLength / (textLength - 1) : 0
   
-  //
-  // "myself" fades in/out (with offset phase)
-  //
-  const myselfRawSine = Math.sin(titleInst.flickerPhase + Math.PI * 0.3)  // 54° offset (was 90°)
-  let myselfFlickerValue
-  
-  if (myselfRawSine > 0.8) {
-    myselfFlickerValue = 0
-  } else if (myselfRawSine > 0) {
-    myselfFlickerValue = Math.pow((0.8 - myselfRawSine) / 0.8, 2)
-          } else {
-    myselfFlickerValue = 1
-  }
-  
-  titleInst.myselfText.opacity = myselfFlickerValue
-  titleInst.myselfText.pos.x = titleInst.baseMyselfX + myselfFloatX  // Independent floating
-  titleInst.myselfText.pos.y = titleInst.baseTitleY + myselfFloatY
-  
-  //
-  // Show lightning only when at least one word is visible
-  //
-  const minOpacity = Math.min(flickerValue, myselfFlickerValue)
-  titleInst.showLightning = minOpacity > 0  // Hide when both words are invisible
-  titleInst.lightningOpacity = minOpacity  // Fade with words
-}
-
-/**
- * Draw lightning between "find" and "myself"
- * @param {Object} titleInst - Title instance
- * @param {Object} k - Kaplay instance
- */
-function drawTitleLightning(titleInst, k) {
-  if (!titleInst.showLightning) return
-  
-  //
-  // From first letter "f" in "find" to last letter "f" in "myself"
-  //
-  const startPos = { 
-    x: titleInst.findText.pos.x - 60,  // Left edge of "find" (first "f")
-    y: titleInst.findText.pos.y 
-  }
-  const endPos = { 
-    x: titleInst.myselfText.pos.x + 85,  // Right edge of "myself" (last "f")
-    y: titleInst.myselfText.pos.y 
-  }
-  
-  //
-  // Draw electric connection (fades with minimum word opacity)
-  //
-  drawConnectionWave(k, startPos, endPos, {
-    color: k.rgb(228, 155, 36),  // Amber
-    segments: 12,  // More segments for longer distance
-    amplitude: 6,
-    thickness: 1.5,
-    opacity: titleInst.lightningOpacity * 0.25  // Very transparent (was 0.7)
+  titleInst.letters.forEach((letter, index) => {
+    //
+    // Only show letters that are part of current text
+    //
+    if (index >= textLength) {
+      letter.opacity = 0
+      return
+    }
+    
+    //
+    // Update letter character if needed
+    //
+    const currentChar = titleInst.currentText[index]
+    if (letter.text !== currentChar) {
+      letter.text = currentChar
+    }
+    
+    //
+    // Determine letter index based on order (reversed or not)
+    //
+    const displayIndex = titleInst.isReversed ? (textLength - 1 - index) : index
+    
+    //
+    // Calculate angle for this letter
+    //
+    const letterAngle = titleInst.angle + (displayIndex - textLength / 2) * angleStep
+    
+    //
+    // Position on circle
+    //
+    const x = titleInst.centerX + Math.cos(letterAngle) * titleInst.circleRadius
+    const y = titleInst.centerY + Math.sin(letterAngle) * titleInst.circleRadius
+    
+    letter.pos.x = x
+    letter.pos.y = y
+    
+    //
+    // Rotate letter to follow arc (tangent to circle)
+    //
+    letter.angle = letterAngle + Math.PI / 2
+    
+    //
+    // Apply fade opacity combined with base opacity for dimming
+    // Also apply reversal fade phase
+    //
+    const baseFinalOpacity = titleInst.fadePhase * (hoveredAntiHero ? 1.0 : titleInst.baseOpacity)
+    const finalOpacity = baseFinalOpacity * titleInst.reverseFadePhase
+    letter.opacity = finalOpacity
   })
 }
 
@@ -609,7 +752,7 @@ function drawTitleLightning(titleInst, k) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg, title } = inst
+  const { k, hero, hoveredAntiHero, particlesBg } = inst
   
   //
   // Draw dark background
@@ -626,11 +769,6 @@ function drawScene(inst) {
   // Draw trembling particles
   //
   Particles.draw(particlesBg)
-  
-  //
-  // Draw lightning between "find" and "myself"
-  //
-  drawTitleLightning(title, k)
   
   //
   // Draw lightning between hero and hovered anti-hero

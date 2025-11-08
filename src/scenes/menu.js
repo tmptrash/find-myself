@@ -6,7 +6,6 @@ import { createLevelTransition } from "../utils/transition.js"
 import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
-import * as Fragments from "../utils/fragments.js"
 
 /**
  * Menu scene with hero in center
@@ -23,40 +22,7 @@ export function sceneMenu(k) {
     // Fixed coordinates for 1920x1080 resolution
     const centerX = 960  // k.width() / 2 = 1920 / 2
     const centerY = 500  // Higher position (was 570)
-    
-    //
-    // Load and add background image
-    //
-    k.loadSprite('menuBg', '/images/menu.jpg')
-    
-    const bgImage = k.add([
-      k.sprite('menuBg'),
-      k.pos(0, 0),
-      k.z(-100),  // Behind everything
-      k.fixed(),
-      k.opacity(0.5),  // Make it much darker (30% opacity)
-      k.color(200, 80, 80)  // Dark gray tint for extra darkness
-    ])
-    
-    //
-    // Scale background to cover entire screen
-    // Wait one frame for sprite to load, then scale
-    //
-    k.wait(0, () => {
-      if (bgImage.width && bgImage.height) {
-        const scaleX = k.width() / bgImage.width
-        const scaleY = k.height() / bgImage.height
-        const scale = Math.max(scaleX, scaleY)
-        bgImage.scale = k.vec2(scale, scale)
         
-        //
-        // Center the image if it overflows
-        //
-        bgImage.pos.x = (k.width() - bgImage.width * scale) / 2
-        bgImage.pos.y = (k.height() - bgImage.height * scale) / 2
-      }
-    })
-    
     //
     // Create firefly particles background
     //
@@ -68,17 +34,6 @@ export function sceneMenu(k) {
       flickerSpeed: 1.5,   // Slower flicker for organic feel
       trembleRadius: 12,   // Larger floating movement
       mouseInfluence: 200
-    })
-    
-    //
-    // Create fragment shadows (ghostly silhouettes of hero)
-    //
-    const fragmentsBg = Fragments.create({
-      k,
-      fragmentCount: 5,    // 5 ghostly silhouettes
-      speed: 2,            // 2-3 pixels per second
-      baseOpacity: 0.15,   // Very transparent
-      fadeSpeed: 0.3       // Slow fade in/out
     })
     
     //
@@ -214,7 +169,6 @@ export function sceneMenu(k) {
       hero,
       sound,
       particlesBg,
-      fragmentsBg,
       title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
@@ -230,11 +184,6 @@ export function sceneMenu(k) {
       // Update trembling particles
       //
       Particles.onUpdate(particlesBg)
-      
-      //
-      // Update fragment shadows
-      //
-      Fragments.onUpdate(fragmentsBg)
       
       const mousePos = k.mousePos()
       let foundHover = false
@@ -438,11 +387,6 @@ export function sceneMenu(k) {
       })
       
       startText.destroy()
-      
-      //
-      // Destroy fragment shadows
-      //
-      Fragments.destroy(fragmentsBg)
       
       //
       // Stop ambient sound

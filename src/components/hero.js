@@ -15,6 +15,8 @@ const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
 const HERO_SCALE = 3         // Fixed scale for hero sprite
 const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
+const JUMP_FRAME_COUNT = 4   // 4 frames for jump animation
+const JUMP_SQUASH_TIME = 0.05 // Time for pre-jump squash animation (150ms, ~9 frames at 60fps)
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -130,6 +132,10 @@ export function create(config) {
     runTimer: 0,
     isRunning: false,
     wasJumping: false,
+    jumpFrame: 0,     // Current jump animation frame
+    jumpPhase: 'none', // 'squashing', 'jumping', 'none'
+    squashTimer: 0,   // Timer for pre-jump squash animation
+    isSquashing: false, // Flag for pre-jump squash
     eyeOffsetX: 0,
     eyeOffsetY: 0,
     targetEyeX: 0,
@@ -189,9 +195,11 @@ function loadCustomSprites(k, type, bodyColor) {
   }
   
   //
-  // Load jump animation
+  // Load jump animation frames (3 frames)
   //
-  k.loadSprite(`${prefix}-jump`, createFrame(type, 'jump', 0, 0, 0, bodyColor))
+  for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
+    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, bodyColor))
+  }
   
   //
   // Load run frames (3 frames)
@@ -219,8 +227,10 @@ export function loadHeroSprites(k) {
       }
     }
     
-    // Load jump animation
-    k.loadSprite(`${prefix}-jump`, createFrame(type, 'jump', 0))
+    // Load jump animation frames (3 frames: stretch up, normal, squash down)
+    for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
+      k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame))
+    }
     
     // Load run frames (3 frames)
     for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
@@ -436,19 +446,95 @@ function onUpdate(inst) {
   
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   const isGrounded = inst.character.isGrounded()
+  
+  //
+  // Handle pre-jump squash animation (only when grounded)
+  //
+  if (inst.isSquashing && isGrounded) {
+    inst.squashTimer += inst.k.dt()
+    const prefix = inst.spritePrefix || inst.type
+    
+    //
+    // Show squash frame during animation (frame 0 only)
+    //
+    if (inst.jumpFrame !== 0) {
+      inst.jumpFrame = 0
+      inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+    }
+    
+    if (inst.squashTimer >= JUMP_SQUASH_TIME) {
+      //
+      // Squash animation complete - actually jump!
+      //
+      inst.character.vel.y = -inst.jumpForce
+      inst.canJump = false
+      inst.isSquashing = false
+      inst.squashTimer = 0
+      inst.jumpPhase = 'jumping'
+      //
+      // Don't set jumpFrame here - let the in-air logic handle it
+      //
+    }
+    
+    //
+    // Update direction during squash
+    //
+    inst.character.flipX = inst.direction === -1
+    
+    //
+    // Don't process other animations during squash
+    //
+    return
+  }
 
   if (!isGrounded) {
     //
-    // Jumping - only set sprite once when starting jump
+    // Jumping - update animation based on velocity
+    //
+    const prefix = inst.spritePrefix || inst.type
+    const velocity = inst.character.vel.y
+    
+    //
+    // Determine jump frame based on vertical velocity
+    // Frame 0: squash (pre-jump, on ground only)
+    // Frame 1: stretch (ascending)
+    // Frame 2: squash (near peak and descending)
+    // Frame 3: normal (transition to idle after landing)
+    //
+    let targetFrame = inst.jumpFrame
+    
+    if (velocity < -150) {
+      //
+      // Fast upward movement - stretched (frame 1)
+      //
+      targetFrame = 1
+    } else {
+      //
+      // Near peak or descending - squashed (frame 2)
+      // Triggers when velocity is > -150 (including negative values near 0 and all positive)
+      //
+      targetFrame = 2
+    }
+    
+    //
+    // Update sprite only if frame changed
+    //
+    if (targetFrame !== inst.jumpFrame) {
+      inst.jumpFrame = targetFrame
+      inst.character.use(inst.k.sprite(`${prefix}-jump-${targetFrame}`))
+    }
+    
+    //
+    // Mark that we're jumping
     //
     if (!inst.wasJumping) {
-      const prefix = inst.spritePrefix || inst.type
-      inst.character.use(inst.k.sprite(`${prefix}-jump`))
       inst.runFrame = 0
       inst.runTimer = 0
       inst.isRunning = false
       inst.wasJumping = true
+      inst.jumpPhase = 'jumping'
     }
+    
     //
     // Update direction while in air
     //
@@ -457,7 +543,19 @@ function onUpdate(inst) {
     // While in air, don't process any other animations
     //
     return
-  } else if (isMoving) {
+  } else {
+    //
+    // Reset jump phase when grounded
+    //
+    if (inst.jumpPhase !== 'none') {
+      inst.jumpPhase = 'none'
+      inst.jumpFrame = 0
+      inst.isSquashing = false
+      inst.squashTimer = 0
+    }
+  }
+  
+  if (isMoving) {
     //
     // Running - switch frames smoothly (time-based animation)
     // Only reset animation if starting from idle (not from jump)
@@ -577,9 +675,18 @@ function setupControls(inst) {
   CFG.controls.jump.forEach(key => {
     inst.k.onKeyPress(key, () => {
       if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent jump before spawn or during annihilation
-      if (inst.canJump) {
-        inst.character.vel.y = -inst.jumpForce
-        inst.canJump = false
+      if (inst.canJump && !inst.isSquashing) {
+        //
+        // Start pre-jump squash animation instead of jumping immediately
+        //
+        inst.isSquashing = true
+        inst.squashTimer = 0
+        inst.jumpFrame = 0
+        //
+        // Immediately set squash sprite (frame 0)
+        //
+        const prefix = inst.spritePrefix || inst.type
+        inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
         //
         // Play jump sound
         //
@@ -1049,6 +1156,8 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let bodyY = 14
   let headX = 12
   let bodyX = 10
+  let bodyHeight = 8   // Body height (for stretching/squashing)
+  let headHeight = 8   // Head height
   let leftArmY = 15
   let rightArmY = 15
   let leftLegY = 22
@@ -1057,6 +1166,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let rightArmX = 21
   let leftLegX = 12
   let rightLegX = 17
+  let legHeight = 6    // Leg height (for stretching/squashing)
   
   // Run animation (3 frames)
   if (animation === 'run') {
@@ -1078,20 +1188,75 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     }
   }
   
-  // Jump animation - side view, legs bent and spread
+  // Jump animation - 4 frames with squash and stretch
   if (animation === 'jump') {
-    headY = 6
-    bodyY = 14
-    headX = 12
-    bodyX = 10
-    leftArmY = 15
-    rightArmY = 15
-    // Right leg in front - bent more (higher)
-    rightLegY = 20
-    rightLegX = 18
-    // Left leg behind - bent less (lower)
-    leftLegY = 22
-    leftLegX = 10
+    if (frame === 0) {
+      //
+      // Frame 0: Squash (pre-jump, on ground) - hero squats down LOW
+      // Everything pushed down, legs also SHORT
+      //
+      headY = 15  // Very low (idle is 6, difference = 9)
+      headHeight = 5  // Shorter head
+      bodyY = 20  // headY + headHeight = 15 + 5
+      bodyHeight = 4  // Very short body
+      leftArmY = 21
+      rightArmY = 21
+      // Legs SHORT and wide
+      rightLegY = 24  // bodyY + bodyHeight = 20 + 4
+      rightLegX = 18
+      leftLegY = 24
+      leftLegX = 11
+      legHeight = 4  // Short legs! Bottom: 24+4=28 (same as idle)
+    } else if (frame === 1) {
+      //
+      // Frame 1: Stretch (ascending, in air) - hero elongated UP
+      //
+      headY = 3  // Very high
+      headHeight = 8
+      bodyY = 11  // headY + headHeight = 3 + 8
+      bodyHeight = 12  // Very tall body
+      leftArmY = 13
+      rightArmY = 13
+      // Legs closer together and shorter
+      rightLegY = 23  // bodyY + bodyHeight = 11 + 12
+      rightLegX = 16
+      leftLegY = 23
+      leftLegX = 13
+      legHeight = 5
+    } else if (frame === 2) {
+      //
+      // Frame 2: Squash (descending, in air) - hero compressed DOWN
+      // Moved to the VERY TOP of the frame
+      //
+      headY = 2   // Very top (was 9)
+      headHeight = 5  // Shorter head
+      bodyY = 7  // headY + headHeight = 2 + 5
+      bodyHeight = 4  // Very short body
+      leftArmY = 8
+      rightArmY = 8
+      // Legs SHORT and spread wider
+      rightLegY = 11  // bodyY + bodyHeight = 7 + 4
+      rightLegX = 19
+      leftLegY = 11
+      leftLegX = 10
+      legHeight = 4  // Short legs! Bottom: 11+4=15 (very high)
+    } else if (frame === 3) {
+      //
+      // Frame 3: Normal (landing/idle) - regular proportions
+      //
+      headY = 6
+      headHeight = 8
+      bodyY = 14  // headY + headHeight = 6 + 8
+      bodyHeight = 8
+      leftArmY = 15
+      rightArmY = 15
+      // Regular legs
+      rightLegY = 22  // bodyY + bodyHeight = 14 + 8
+      rightLegX = 17
+      leftLegY = 22
+      leftLegX = 12
+      legHeight = 6  // Bottom: 22+6=28 (same as idle)
+    }
     leftArmX = 9
     rightArmX = 21
   }
@@ -1102,8 +1267,8 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   ctx.fillStyle = getHex(outlineColor)
   ctx.fillRect(headX - 1, headY - 1, 10, 10)
   
-  // Body outline (same for all animations)
-  ctx.fillRect(bodyX - 1, bodyY - 1, 14, 10)
+  // Body outline - position it right below head
+  ctx.fillRect(bodyX - 1, bodyY - 1, 14, bodyHeight + 2)
   
   // Arm outlines - don't draw while running and jumping
   if (animation !== 'run' && animation !== 'jump') {
@@ -1111,9 +1276,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
   }
   
-  // Leg outlines (same for all animations)
-  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 8)
-  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 8)
+  // Leg outlines
+  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, legHeight + 2)
+  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, legHeight + 2)
   
   //
   // Head (universal body color)
@@ -1147,7 +1312,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   // Body (universal color)
   //
   ctx.fillStyle = getHex(bodyColor)
-  ctx.fillRect(bodyX, bodyY, 12, 8)
+  ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
   
   // Arms - don't draw while running and jumping
   if (animation !== 'run' && animation !== 'jump') {
@@ -1155,9 +1320,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(rightArmX, rightArmY, 2, 7)
   }
   
-  // Legs (same for all animations)
-  ctx.fillRect(leftLegX, leftLegY, 3, 6)
-  ctx.fillRect(rightLegX, rightLegY, 3, 6)
+  // Legs
+  ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
+  ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
   
   return canvas.toDataURL()
 }

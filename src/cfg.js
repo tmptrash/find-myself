@@ -28,8 +28,8 @@ export const CFG = {
   },
   gameplay: {
     // Physics (fixed values for 1920x1080 resolution)
-    moveSpeed: 280,              // Hero movement speed (px/s)
-    jumpForce: 600,              // Jump force (px/s)
+    moveSpeed: 300,              // Hero movement speed (px/s)
+    jumpForce: 620,              // Jump force (px/s)
     gravity: 2000,               // Gravity (px/s²)
   },
   colors: {

@@ -25,6 +25,39 @@ export function sceneMenu(k) {
     const centerY = 500  // Higher position (was 570)
     
     //
+    // Load and add background image
+    //
+    k.loadSprite('menuBg', '/images/menu.jpg')
+    
+    const bgImage = k.add([
+      k.sprite('menuBg'),
+      k.pos(0, 0),
+      k.z(-100),  // Behind everything
+      k.fixed(),
+      k.opacity(0.5),  // Make it much darker (30% opacity)
+      k.color(200, 80, 80)  // Dark gray tint for extra darkness
+    ])
+    
+    //
+    // Scale background to cover entire screen
+    // Wait one frame for sprite to load, then scale
+    //
+    k.wait(0, () => {
+      if (bgImage.width && bgImage.height) {
+        const scaleX = k.width() / bgImage.width
+        const scaleY = k.height() / bgImage.height
+        const scale = Math.max(scaleX, scaleY)
+        bgImage.scale = k.vec2(scale, scale)
+        
+        //
+        // Center the image if it overflows
+        //
+        bgImage.pos.x = (k.width() - bgImage.width * scale) / 2
+        bgImage.pos.y = (k.height() - bgImage.height * scale) / 2
+      }
+    })
+    
+    //
     // Create firefly particles background
     //
     const particlesBg = Particles.create({
@@ -381,6 +414,11 @@ export function sceneMenu(k) {
     // Cleanup when leaving scene
     //
     k.onSceneLeave(() => {
+      //
+      // Destroy background image
+      //
+      bgImage.destroy()
+      
       //
       // Destroy all game objects
       //
@@ -753,17 +791,6 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
  */
 function drawScene(inst) {
   const { k, hero, hoveredAntiHero, particlesBg } = inst
-  
-  //
-  // Draw dark background
-  //
-  const bgRgb = getRGB(k, CFG.colors.menu.background)
-  k.drawRect({
-    width: k.width(),
-    height: k.height(),
-    pos: k.vec2(0, 0),
-    color: k.rgb(bgRgb.r, bgRgb.g, bgRgb.b)
-  })
   
   //
   // Draw trembling particles

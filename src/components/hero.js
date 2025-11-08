@@ -15,8 +15,8 @@ const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
 const HERO_SCALE = 3         // Fixed scale for hero sprite
 const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
-const JUMP_FRAME_COUNT = 4   // 4 frames for jump animation
-const JUMP_SQUASH_TIME = 0.05 // Time for pre-jump squash animation (150ms, ~9 frames at 60fps)
+const JUMP_FRAME_COUNT = 5   // 5 frames for jump animation
+const JUMP_SQUASH_TIME = 0.1 // Time for pre-jump squash animation (100ms, faster)
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -489,31 +489,38 @@ function onUpdate(inst) {
 
   if (!isGrounded) {
     //
-    // Jumping - update animation based on velocity
+    // Jumping - update animation based on velocity (position in jump arc)
     //
     const prefix = inst.spritePrefix || inst.type
     const velocity = inst.character.vel.y
     
     //
     // Determine jump frame based on vertical velocity
-    // Frame 0: squash (pre-jump, on ground only)
-    // Frame 1: stretch (ascending)
-    // Frame 2: squash (near peak and descending)
-    // Frame 3: normal (transition to idle after landing)
+    // Frame 0: squash (pre-jump, on ground only) - 100ms
+    // Frame 1: stretch (ascending, first half) - velocity < -400
+    // Frame 2: normal (ascending, second half) - velocity -400 to 0
+    // Frame 3: squash (descending) - velocity > 0
+    // Frame 4: normal (landing) - after grounding
     //
     let targetFrame = inst.jumpFrame
     
-    if (velocity < -150) {
+    if (velocity < -400) {
       //
-      // Fast upward movement - stretched (frame 1)
+      // First half of ascent - stretched (frame 1)
+      // Hero is at lower half of jump, moving fast upward
       //
       targetFrame = 1
-    } else {
+    } else if (velocity < 0) {
       //
-      // Near peak or descending - squashed (frame 2)
-      // Triggers when velocity is > -150 (including negative values near 0 and all positive)
+      // Second half of ascent - normal height (frame 2)
+      // Hero is at upper half of jump, slowing down
       //
       targetFrame = 2
+    } else {
+      //
+      // Descending - squashed (frame 3)
+      //
+      targetFrame = 3
     }
     
     //
@@ -1188,7 +1195,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     }
   }
   
-  // Jump animation - 4 frames with squash and stretch
+  // Jump animation - 5 frames with squash and stretch
   if (animation === 'jump') {
     if (frame === 0) {
       //
@@ -1210,6 +1217,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     } else if (frame === 1) {
       //
       // Frame 1: Stretch (ascending, in air) - hero elongated UP
+      // Legs spread wider like frame 0
       //
       headY = 3  // Very high
       headHeight = 8
@@ -1217,15 +1225,31 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 12  // Very tall body
       leftArmY = 13
       rightArmY = 13
-      // Legs closer together and shorter
+      // Legs spread wider with gap between them
       rightLegY = 23  // bodyY + bodyHeight = 11 + 12
-      rightLegX = 16
+      rightLegX = 18  // Wide spread (same as frame 0)
       leftLegY = 23
-      leftLegX = 13
+      leftLegX = 11   // Wide spread (same as frame 0)
       legHeight = 5
     } else if (frame === 2) {
       //
-      // Frame 2: Squash (descending, in air) - hero compressed DOWN
+      // Frame 2: Normal (near peak) - regular proportions moved to TOP
+      //
+      headY = 2   // Very top
+      headHeight = 8
+      bodyY = 10  // headY + headHeight = 2 + 8
+      bodyHeight = 8
+      leftArmY = 11
+      rightArmY = 11
+      // Regular legs
+      rightLegY = 18  // bodyY + bodyHeight = 10 + 8
+      rightLegX = 18
+      leftLegY = 18
+      leftLegX = 10
+      legHeight = 6  // Bottom: 18+6=24 (high in frame)
+    } else if (frame === 3) {
+      //
+      // Frame 3: Squash (descending, in air) - hero compressed DOWN
       // Moved to the VERY TOP of the frame
       //
       headY = 2   // Very top (was 9)
@@ -1240,9 +1264,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       leftLegY = 11
       leftLegX = 10
       legHeight = 4  // Short legs! Bottom: 11+4=15 (very high)
-    } else if (frame === 3) {
+    } else if (frame === 4) {
       //
-      // Frame 3: Normal (landing/idle) - regular proportions
+      // Frame 4: Normal (landing/idle) - regular proportions
       //
       headY = 6
       headHeight = 8

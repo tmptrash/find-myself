@@ -364,11 +364,6 @@ export function sceneMenu(k) {
     //
     k.onSceneLeave(() => {
       //
-      // Destroy background image
-      //
-      bgImage.destroy()
-      
-      //
       // Destroy all game objects
       //
       heroInst.character.destroy()
@@ -735,6 +730,17 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
  */
 function drawScene(inst) {
   const { k, hero, hoveredAntiHero, particlesBg } = inst
+  
+  //
+  // Draw gray background (same color as level platforms)
+  //
+  const bgRgb = getRGB(k, CFG.colors["level-word.0"].platform)
+  k.drawRect({
+    width: k.width(),
+    height: k.height(),
+    pos: k.vec2(0, 0),
+    color: k.rgb(bgRgb.r, bgRgb.g, bgRgb.b)
+  })
   
   //
   // Draw trembling particles

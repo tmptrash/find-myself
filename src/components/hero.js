@@ -16,7 +16,8 @@ const HERO_SCALE = 3         // Fixed scale for hero sprite
 const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
 const JUMP_FRAME_COUNT = 5   // 5 frames for jump animation
-const JUMP_SQUASH_TIME = 0.04 // Time for pre-jump squash animation (100ms, faster)
+const JUMP_SQUASH_TIME = 0.15 // Time for pre-jump squash animation (150ms total)
+const JUMP_STRETCH_START = 0.1 // Time when stretch animation starts (100ms into squash)
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -455,11 +456,25 @@ function onUpdate(inst) {
     const prefix = inst.spritePrefix || inst.type
     
     //
-    // Show squash frame during animation (frame 0 only)
+    // Switch between frame 0 (squash) and frame 1 (stretch) while on ground
     //
-    if (inst.jumpFrame !== 0) {
-      inst.jumpFrame = 0
-      inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+    if (inst.squashTimer < JUMP_STRETCH_START) {
+      //
+      // First part: squash (frame 0)
+      //
+      if (inst.jumpFrame !== 0) {
+        inst.jumpFrame = 0
+        inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+      }
+    } else {
+      //
+      // Second part: start stretching while still on ground (frame 1)
+      // This creates anticipation before the actual jump
+      //
+      if (inst.jumpFrame !== 1) {
+        inst.jumpFrame = 1
+        inst.character.use(inst.k.sprite(`${prefix}-jump-1`))
+      }
     }
     
     if (inst.squashTimer >= JUMP_SQUASH_TIME) {
@@ -472,7 +487,7 @@ function onUpdate(inst) {
       inst.squashTimer = 0
       inst.jumpPhase = 'jumping'
       //
-      // Don't set jumpFrame here - let the in-air logic handle it
+      // Keep frame 1 (stretch) for smooth transition to air
       //
     }
     

@@ -317,6 +317,11 @@ export function sceneMenu(k) {
     // Space or Enter - Continue from last saved level or start from beginning
     //
     k.onKeyPress("space", () => {
+      //
+      // Mark that we're leaving the scene
+      //
+      inst.isLeavingScene = true
+      
       Sound.stopAmbient(sound)
       //
       // Reset cursor to default (remove pointer class)
@@ -337,6 +342,11 @@ export function sceneMenu(k) {
     })
     
     k.onKeyPress("enter", () => {
+      //
+      // Mark that we're leaving the scene
+      //
+      inst.isLeavingScene = true
+      
       Sound.stopAmbient(sound)
       //
       // Reset cursor to default (remove pointer class)

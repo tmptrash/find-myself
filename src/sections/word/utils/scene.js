@@ -22,46 +22,50 @@ export function addBackground(k, color) {
 }
 
 /**
- * Adds level indicator using spikes (5 spikes showing current level progress)
+ * Adds level indicator using anti-heroes (5 anti-heroes showing current level progress)
  * @param {Object} k - Kaplay instance
  * @param {number} levelNumber - Current level number (1-5)
  * @param {string} activeColor - Color for active (completed) levels
  * @param {string} inactiveColor - Color for inactive (not completed) levels
  * @param {number} [customTopHeight] - Custom top platform height (% of screen height)
- * @returns {Array} Array of spike instances
+ * @returns {Array} Array of anti-hero instances
  */
 export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, customTopHeight = null) {
   const topHeight = customTopHeight || CFG.visual.topPlatformHeight
   const topPlatformHeight = k.height() * topHeight / 100
   const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
   
-  // Calculate width for single spike (1 pyramid)
-  const blockSize = Math.max(2, Math.round(k.height() / 250))
-  const singleSpikeWidth = 7 * blockSize  // SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
-  const spacing = blockSize  // 1 block between pyramid bases
+  //
+  // Calculate spacing for 5 anti-heroes
+  //
+  const antiHeroScale = 2  // Small size for indicators
+  const antiHeroSize = 32 * antiHeroScale  // Approximate size
+  const spacing = -20  // Strong overlap - very close together
   
-  const startX = sideWallWidth + singleSpikeWidth / 2
-  // Position spikes above the top platform
-  const spikeHeight = 4 * blockSize  // SPIKE_HEIGHT_BLOCKS * blockSize
-  const y = topPlatformHeight - spikeHeight / 2 - 4  // Above platform by spike height + 4px
+  const startX = sideWallWidth + antiHeroSize / 2  // Align left side with platform below
+  //
+  // Position anti-heroes just above the top platform
+  //
+  const y = topPlatformHeight - antiHeroSize / 2 - 5  // Just above platform edge
   
-  const spikes = []
+  const antiHeroes = []
   for (let i = 0; i < 5; i++) {
-    const color = i < levelNumber ? activeColor : inactiveColor
-    const spike = Blades.create({
+    const bodyColor = i < levelNumber ? activeColor : inactiveColor
+    const antiHero = Hero.create({
       k,
-      x: startX + i * (singleSpikeWidth + spacing),
+      x: startX + i * (antiHeroSize + spacing),
       y: y,
-      orientation: Blades.ORIENTATIONS.FLOOR,
-      color: color,
-      spikeCount: 1  // Single pyramid for indicator
+      type: Hero.HEROES.ANTIHERO,
+      controllable: false,
+      bodyColor: bodyColor,
+      scale: antiHeroScale,
+      isStatic: true  // No physics for indicators
     })
-    spike.spike.opacity = 1  // Make spike visible immediately
-    spike.spike.z = CFG.visual.zIndex.ui  // Show above platforms
-    spikes.push(spike)
+    antiHero.character.z = CFG.visual.zIndex.ui  // Show above platforms
+    antiHeroes.push(antiHero)
   }
   
-  return spikes
+  return antiHeroes
 }
 
 /**

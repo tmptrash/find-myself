@@ -62,7 +62,8 @@ export function create(config) {
     currentLevel = null,
     onAnnihilation = null,
     bodyColor = null,      // Custom body color (hex string), outline is always black
-    dustColor = null       // Dust particle color (hex string)
+    dustColor = null,      // Dust particle color (hex string)
+    isStatic = false       // If true, no physics (for indicators)
   } = config
   
   //
@@ -106,7 +107,7 @@ export function create(config) {
         COLLISION_HEIGHT
       )
     }),
-    k.body(),
+    ...(isStatic ? [k.fixed()] : [k.body()]),  // Use fixed() for static, body() for physics
     k.anchor("center"),
     k.scale(scale),
     k.z(CFG.visual.zIndex.player),

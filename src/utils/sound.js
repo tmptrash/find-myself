@@ -64,6 +64,10 @@ export function create() {
   const stepGain = ctx.createGain()
   stepGain.connect(ctx.destination)
   
+  const jumpGain = ctx.createGain()
+  jumpGain.gain.value = CFG.audio.sfx.jumpVolume
+  jumpGain.connect(ctx.destination)
+  
   const spawnGain = ctx.createGain()
   spawnGain.connect(ctx.destination)
   
@@ -74,6 +78,7 @@ export function create() {
     // SFX master gains
     landGain,
     stepGain,
+    jumpGain,
     spawnGain,
     
     // Ambient music state
@@ -539,17 +544,19 @@ export function playJumpSound(instance) {
   
   // Upward pitch sweep
   const jump = instance.audioContext.createOscillator()
-  const jumpGain = instance.audioContext.createGain()
+  const envelope = instance.audioContext.createGain()
   
   jump.type = 'sine'
   jump.frequency.setValueAtTime(200, now)
   jump.frequency.exponentialRampToValueAtTime(400, now + duration)
   
-  jumpGain.gain.setValueAtTime(0.18, now)
-  jumpGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  // Use envelope for fade-out (starts at 1, fades to 0.001)
+  envelope.gain.setValueAtTime(1, now)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
-  jump.connect(jumpGain)
-  jumpGain.connect(instance.audioContext.destination)
+  // Connect through master jumpGain
+  jump.connect(envelope)
+  envelope.connect(instance.jumpGain)
   
   jump.start(now)
   jump.stop(now + duration)

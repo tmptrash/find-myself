@@ -2,25 +2,27 @@ export const CFG = {
   audio: {
     // Ambient music (splash/menu)
     ambient: {
-      masterVolume: 0.52,        // Overall ambient music volume
-      bassVolume: 0.08,          // Low drones volume
-      midVolume: 0.03,           // Mid tones volume
-      highVolume: 0.015,         // High tones volume
-      noiseVolume: 0.03,         // Noise volume
-      blipVolume: 0.08,          // Random sounds volume
+      masterVolume: 0.776,       // Overall ambient music volume (was 0.52, +30%)
+      bassVolume: 0.104,         // Low drones volume (was 0.08, +30%)
+      midVolume: 0.039,          // Mid tones volume (was 0.03, +30%)
+      highVolume: 0.0195,        // High tones volume (was 0.015, +30%)
+      noiseVolume: 0.339,        // Noise volume (was 0.03, +30%)
+      blipVolume: 0.104,         // Random sounds volume (was 0.08, +30%)
       fadeInTime: 0.5,           // Fade-in time (seconds)
     },
     
     // Level sound effects
     sfx: {
-      landVolume: 0.176,         // Landing sound volume (same as step)
-      landFade: 0.022,           // Landing fade (same as step)
+      jumpVolume: 0.434,         // Jump sound volume (was 0.18, +30%)
+      
+      landVolume: 0.4288,        // Landing sound volume (was 0.176, +30%)
+      landFade: 0.4286,          // Landing fade (was 0.022, +30%)
       landDuration: 0.05,        // Sound duration (seconds)
       landFreqStart: 180,        // Start frequency (Hz) - same as step
       landFreqEnd: 60,           // End frequency (Hz) - same as step
       
-      stepVolume: 0.176,         // Step sound volume
-      stepFade: 0.022,           // Step fade
+      stepVolume: 0.4288,        // Step sound volume (was 0.176, +30%)
+      stepFade: 0.0286,          // Step fade (was 0.022, +30%)
       stepDuration: 0.05,        // Sound duration (seconds)
       stepFreqStart: 180,        // Start frequency (Hz)
       stepFreqEnd: 60,           // End frequency (Hz)

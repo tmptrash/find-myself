@@ -15,8 +15,8 @@ const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
 const HERO_SCALE = 3         // Fixed scale for hero sprite
 const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
-const JUMP_FRAME_COUNT = 5   // 5 frames for jump animation
-const JUMP_SQUASH_TIME = 0.05 // Time for pre-jump squash animation (150ms total)
+const JUMP_FRAME_COUNT = 6   // 6 frames for jump animation
+const JUMP_SQUASH_TIME = 0.03 // Time for pre-jump squash animation (150ms total)
 const JUMP_STRETCH_START = 0.1 // Time when stretch animation starts (100ms into squash)
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
@@ -512,31 +512,35 @@ function onUpdate(inst) {
     
     //
     // Determine jump frame based on vertical velocity
-    // Frame 0: squash (pre-jump, on ground only) - 100ms
+    // Frame 0: squash (pre-jump, on ground only)
     // Frame 1: stretch (ascending, first half) - velocity < -400
-    // Frame 2: normal (ascending, second half) - velocity -400 to 0
-    // Frame 3: squash (descending) - velocity > 0
-    // Frame 4: normal (landing) - after grounding
+    // Frame 2: normal (near peak) - velocity -400 to -100
+    // Frame 3: intermediate (start descending) - velocity -100 to 100
+    // Frame 4: squash (descending) - velocity > 100
+    // Frame 5: normal (landing) - after grounding
     //
     let targetFrame = inst.jumpFrame
     
     if (velocity < -400) {
       //
       // First half of ascent - stretched (frame 1)
-      // Hero is at lower half of jump, moving fast upward
       //
       targetFrame = 1
-    } else if (velocity < 0) {
+    } else if (velocity < -100) {
       //
-      // Second half of ascent - normal height (frame 2)
-      // Hero is at upper half of jump, slowing down
+      // Near peak - normal height (frame 2)
       //
       targetFrame = 2
-    } else {
+    } else if (velocity < 100) {
       //
-      // Descending - squashed (frame 3)
+      // At peak and early descent - intermediate (frame 3)
       //
       targetFrame = 3
+    } else {
+      //
+      // Descending fast - squashed (frame 4)
+      //
+      targetFrame = 4
     }
     
     //
@@ -1265,7 +1269,24 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       legHeight = 6  // Bottom: 18+6=24 (high in frame)
     } else if (frame === 3) {
       //
-      // Frame 3: Squash (descending, in air) - hero compressed DOWN
+      // Frame 3: Intermediate (transitioning to squash) - between normal and squash
+      // At very top of frame, slightly taller than before
+      //
+      headY = 2   // Very top
+      headHeight = 7  // Between normal (8) and squash (6)
+      bodyY = 9  // headY + headHeight = 2 + 7
+      bodyHeight = 7  // Taller body (was 6) - +1px
+      leftArmY = 10
+      rightArmY = 10
+      // Legs slightly taller
+      rightLegY = 16  // bodyY + bodyHeight = 9 + 7
+      rightLegX = 19
+      leftLegY = 16
+      leftLegX = 10
+      legHeight = 6  // Taller legs (was 5) - +1px. Bottom: 16+6=22 (was 20)
+    } else if (frame === 4) {
+      //
+      // Frame 4: Squash (descending, in air) - hero compressed DOWN
       // Top stays at very top, but body is slightly taller for smoother transition
       //
       headY = 2   // Very top (same as before)
@@ -1280,9 +1301,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       leftLegY = 13
       leftLegX = 10
       legHeight = 5  // Slightly taller legs (was 4) - Bottom: 13+5=18
-    } else if (frame === 4) {
+    } else if (frame === 5) {
       //
-      // Frame 4: Normal (landing/idle) - regular proportions
+      // Frame 5: Normal (landing/idle) - regular proportions
       //
       headY = 6
       headHeight = 8

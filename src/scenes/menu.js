@@ -332,7 +332,7 @@ export function sceneMenu(k) {
         //
         // Continue from last saved level with transition (show red text)
         //
-        createLevelTransition(k, lastLevel)
+        showTransitionToLevel(k, lastLevel)
       } else {
         //
         // No save - start from beginning with intro phrase

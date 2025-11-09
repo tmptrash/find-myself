@@ -284,8 +284,12 @@ export function death(inst, onComplete) {
     ? [colors.hero.body, colors.hero.outline]
     : [colors.antiHero.body, colors.antiHero.outline]
   
+  //
   // Create particle explosion
+  //
   const particleCount = 16
+  const allParticles = []
+  
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
     const speed = k.rand(150, 350)
@@ -312,6 +316,7 @@ export function death(inst, onComplete) {
     particle.lifetime = 0
     particle.rotSpeed = k.rand(-540, 540)
     particle.maxLifetime = 2.0  // Live longer to see them fall
+    particle.isEye = false
     
     //
     // Apply air friction (slow down horizontal movement)
@@ -345,6 +350,89 @@ export function death(inst, onComplete) {
         k.destroy(particle)
       }
     })
+    
+    allParticles.push(particle)
+  }
+  
+  //
+  // Create two eye particles (same size as hero's real eyes)
+  //
+  const eyeWhiteSize = 3 * HERO_SCALE  // 3x3 pixels scaled by 3 = 9x9
+  const pupilSize = 1 * HERO_SCALE     // 1x1 pixel scaled by 3 = 3x3
+  const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
+  
+  for (let i = 0; i < 2; i++) {
+    const angle = eyeAngles[i]
+    const speed = k.rand(150, 350)
+    
+    //
+    // White eye background
+    //
+    const eyeWhite = k.add([
+      k.rect(eyeWhiteSize, eyeWhiteSize),
+      k.pos(centerX, centerY),
+      k.color(255, 255, 255),
+      k.anchor("center"),
+      k.z(CFG.visual.zIndex.player + 1),
+      k.area(),
+      k.body()
+    ])
+    
+    //
+    // Black pupil (no physics, just visual)
+    //
+    const pupil = eyeWhite.add([
+      k.rect(pupilSize, pupilSize),
+      k.pos(0, 0),  // Relative to parent (eyeWhite)
+      k.color(0, 0, 0),
+      k.anchor("center"),
+      k.z(1)  // Relative z-index
+    ])
+    
+    //
+    // Set initial velocity
+    //
+    eyeWhite.vel.x = Math.cos(angle) * speed
+    eyeWhite.vel.y = Math.sin(angle) * speed
+    
+    eyeWhite.lifetime = 0
+    eyeWhite.maxLifetime = 2.0
+    eyeWhite.isEye = true
+    
+    //
+    // Update eye
+    //
+    eyeWhite.onUpdate(() => {
+      eyeWhite.lifetime += k.dt()
+      
+      //
+      // Apply air friction
+      //
+      eyeWhite.vel.x *= 0.98
+      
+      //
+      // Sync pupil opacity with eye white
+      //
+      pupil.opacity = eyeWhite.opacity
+      
+      //
+      // Fade out over lifetime
+      //
+      const fadeStartTime = 1.0
+      if (eyeWhite.lifetime > fadeStartTime) {
+        const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
+        eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
+      }
+      
+      //
+      // Destroy when max lifetime reached or falls off screen
+      //
+      if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
+        k.destroy(eyeWhite)
+      }
+    })
+    
+    allParticles.push(eyeWhite)
   }
   
   // Hide character immediately

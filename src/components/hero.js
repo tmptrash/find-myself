@@ -592,6 +592,10 @@ function onUpdate(inst) {
       inst.runFrame = 0
       inst.runTimer = 0
       inst.character.use(inst.k.sprite(`${prefix}-run-0`))
+      //
+      // Create dust particles when starting to run
+      //
+      createRunStartDust(inst, inst.direction)
     } else if (inst.wasJumping) {
       //
       // Just landed - continue with current frame, just update sprite
@@ -740,15 +744,62 @@ function createLandingDust(inst) {
   //
   const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
   
+  createDustParticles(inst, footX, footY, color, 'splash')
+}
+
+/**
+ * Create run start dust particles
+ * @param {Object} inst - Hero instance
+ * @param {number} direction - Movement direction (-1 = left, 1 = right)
+ */
+function createRunStartDust(inst, direction) {
+  const { k, character, dustColor } = inst
+  //
+  // Calculate foot position (bottom of collision box)
+  //
+  const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
+  const footX = character.pos.x
+  
+  //
+  // Determine dust color (use custom color or default gray)
+  //
+  const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
+  
+  createDustParticles(inst, footX, footY, color, 'run', direction)
+}
+
+/**
+ * Create dust particles (shared logic for landing and run start)
+ * @param {Object} inst - Hero instance
+ * @param {number} footX - X position of foot
+ * @param {number} footY - Y position of foot
+ * @param {Object} color - Particle color
+ * @param {string} type - 'splash' (both sides) or 'run' (backward direction)
+ * @param {number} direction - Movement direction (for run type)
+ */
+function createDustParticles(inst, footX, footY, color, type = 'splash', direction = 1) {
+  const { k } = inst
+  
   //
   // Create dust particles at feet position
   //
   for (let i = 0; i < DUST_PARTICLE_COUNT; i++) {
     //
-    // Particles spread horizontally like splash from puddle
-    // Half go left, half go right
+    // Determine particle direction based on type
     //
-    const side = i < DUST_PARTICLE_COUNT / 2 ? -1 : 1
+    let side
+    if (type === 'splash') {
+      //
+      // Splash: particles spread to both sides
+      //
+      side = i < DUST_PARTICLE_COUNT / 2 ? -1 : 1
+    } else {
+      //
+      // Run: particles go backward (opposite to movement direction)
+      //
+      side = -direction
+    }
+    
     //
     // Angle: mostly horizontal with slight upward direction (like splash)
     // Range: 5-30 degrees from horizontal (flatter splash)

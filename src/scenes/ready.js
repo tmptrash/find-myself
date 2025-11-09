@@ -20,18 +20,12 @@ export function sceneReady(k) {
     
     // Story text
     const storyLines = [
-      "You seek yourself.",
-      "But life has other plans.",
-      "Every step forward — it pulls you back.",
-      "Every truth found — it twists the path.",
-      "Every piece of you — scattered, hidden, guarded.",
-      "The world will not make this easy.",
-      "It will cut, burn, deceive.",
-      "It will test every version of who you are.",
-      "Yet through the chaos, through the pain,",
-      "you must find what was lost.",
-      "Because knowing yourself",
-      "means surviving everything life throws at you.",
+      "You'll die. Many times.",
+      "You'll fall for lies.",
+      "You'll doubt every step.",
+      "",
+      "But each time you fall —",
+      "you'll remember a little more.",
     ]
     
     const lineHeight = 34
@@ -48,8 +42,8 @@ export function sceneReady(k) {
     
     // Hint at bottom
     k.add([
-      k.text('press Space or Enter to start', { size: 20 }),
-      k.pos(centerX, k.height() - 80),
+      k.text('Space or Enter - start', { size: 20 }),
+      k.pos(centerX, 1030),  // Fixed: same as menu, k.height() - 50 = 1030
       k.anchor("center"),
       getColor(k, CFG.colors.ready.hint),
     ])

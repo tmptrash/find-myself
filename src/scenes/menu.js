@@ -290,11 +290,11 @@ export function sceneMenu(k) {
     const hasSavedGame = lastLevel !== null
     
     //
-    // Hint text - Space to continue, Enter to start new
+    // Hint text - Space to continue, Enter to start new, ESC to go back
     //
     const hintText = hasSavedGame 
-      ? "Space - continue  |  Enter - new game"
-      : "press Space or Enter to start"
+      ? "Space - continue  |  Enter - new game  |  ESC - back"
+      : "Space or Enter - start  |  ESC - back"
     
     const startText = k.add([
       k.text(hintText, { size: 20 }),
@@ -367,6 +367,14 @@ export function sceneMenu(k) {
       k.onKeyPress(key, () => {
         Sound.toggleMute(sound)
       })
+    })
+    
+    //
+    // Back to ready scene (ESC)
+    //
+    k.onKeyPress("escape", () => {
+      Sound.stopAmbient(sound)
+      k.go("ready")
     })
     
     //

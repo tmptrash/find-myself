@@ -298,24 +298,50 @@ export function death(inst, onComplete) {
       getColor(k, color),
       k.anchor("center"),
       k.rotate(k.rand(0, 360)),
-      k.z(CFG.visual.zIndex.player)
+      k.z(CFG.visual.zIndex.player),
+      k.area(),
+      k.body()
     ])
     
-    particle.vx = Math.cos(angle) * speed
-    particle.vy = Math.sin(angle) * speed
+    //
+    // Set initial velocity using Kaplay's body component
+    //
+    particle.vel.x = Math.cos(angle) * speed
+    particle.vel.y = Math.sin(angle) * speed
+    
     particle.lifetime = 0
     particle.rotSpeed = k.rand(-540, 540)
+    particle.maxLifetime = 2.0  // Live longer to see them fall
     
+    //
+    // Apply air friction (slow down horizontal movement)
+    //
     particle.onUpdate(() => {
       particle.lifetime += k.dt()
-      particle.pos.x += particle.vx * k.dt()
-      particle.pos.y += particle.vy * k.dt()
+      
+      //
+      // Apply air friction to horizontal velocity
+      //
+      particle.vel.x *= 0.98
+      
+      //
+      // Rotate particle
+      //
       particle.angle += particle.rotSpeed * k.dt()
       
-      // Fade out
-      particle.opacity = Math.max(0, 1 - particle.lifetime * 2)
+      //
+      // Fade out over lifetime
+      //
+      const fadeStartTime = 1.0  // Start fading after 1 second
+      if (particle.lifetime > fadeStartTime) {
+        const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
+        particle.opacity = Math.max(0, 1 - fadeProgress)
+      }
       
-      if (particle.lifetime > 0.5) {
+      //
+      // Destroy when max lifetime reached or falls off screen
+      //
+      if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
         k.destroy(particle)
       }
     })
@@ -328,9 +354,9 @@ export function death(inst, onComplete) {
   
   //
   // Wait for particles to finish + additional pause before callback
-  // 0.6s for particles + 0.5s pause = 1.1s total
+  // 2.0s for particles to fall + 0.3s pause = 2.3s total
   //
-  k.wait(1.1, () => onComplete?.())
+  k.wait(2.3, () => onComplete?.())
 }
 
 /**

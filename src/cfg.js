@@ -91,7 +91,8 @@ export const CFG = {
     ready: {
       background: "191919",         // Dark background      
       title: "FF8C00",              // Orange title (hero color)
-      text: "CCCCCC",               // Light gray text
+      text: "FFFFFF",               // White text for story lines
+      fireflies: "FF8C00",          // Hero color for fireflies
       hint: "969696",               // Hint color
     },
     

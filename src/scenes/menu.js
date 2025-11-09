@@ -28,12 +28,14 @@ export function sceneMenu(k) {
     //
     const particlesBg = Particles.create({
       k,
-      particleCount: 120,  // Fewer particles for firefly effect
-      color: '#D4A574',    // Warm golden-orange (firefly glow)
+      particleCount: 180,  // More particles for richer background (was 120)
+      color: '#FF8C00',    // Hero color (orange)
       baseOpacity: 0.6,
       flickerSpeed: 1.5,   // Slower flicker for organic feel
       trembleRadius: 12,   // Larger floating movement
-      mouseInfluence: 200
+      mouseInfluence: 200,
+      bounds: null,  // No bounds - particles can fly anywhere on full screen
+      gaussianFactor: 0.35  // More spread out distribution (default 0.15 is too concentrated)
     })
     
     //
@@ -306,10 +308,37 @@ export function sceneMenu(k) {
     ])
     
     //
-    // Pulsing animation for start text
+    // Smooth flicker animation for start text (like in ready scene)
     //
+    const FLICKER_FADE_DURATION = 1.2
+    const FLICKER_MIN_OPACITY = 0.5
+    const FLICKER_MAX_OPACITY = 1.0
+    
+    let hintFlickerTime = FLICKER_FADE_DURATION  // Start at max opacity
+    let hintDirection = -1  // Start fading down
+    
     k.onUpdate(() => {
-      startText.opacity = 0.5 + Math.sin(k.time() * 3) * 0.5
+      //
+      // Update flicker timer
+      //
+      hintFlickerTime += hintDirection * k.dt()
+      
+      //
+      // Reverse direction at bounds
+      //
+      if (hintFlickerTime >= FLICKER_FADE_DURATION) {
+        hintDirection = -1
+        hintFlickerTime = FLICKER_FADE_DURATION
+      } else if (hintFlickerTime <= 0) {
+        hintDirection = 1
+        hintFlickerTime = 0
+      }
+      
+      //
+      // Interpolate opacity between min and max
+      //
+      const progress = hintFlickerTime / FLICKER_FADE_DURATION
+      startText.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
     })
     
     //
@@ -418,20 +447,19 @@ export function sceneMenu(k) {
  * @returns {Object} Title instance with state
  */
 function createTitle(k, centerX, centerY, radius) {
-  const fullText = "find myself"
-  const shortText = "find"
+  const text = "find"  // Only "find" word
   const titleSize = 32  // Smaller size (was 48)
   const amberColor = k.rgb(228, 155, 36)
   const dimColor = k.rgb(120, 120, 120)  // Gray (was amber-dimmed)
   
   //
-  // Create each letter as separate object (for full text)
+  // Create each letter as separate object
   //
   const letters = []
   const circleRadius = radius + 100  // Slightly smaller (was +120)
   
-  for (let i = 0; i < fullText.length; i++) {
-    const char = fullText[i]
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
     
     const letter = k.add([
       k.text(char, { size: titleSize }),
@@ -447,10 +475,7 @@ function createTitle(k, centerX, centerY, radius) {
   
   return {
     letters,
-    fullText,
-    shortText,
-    currentText: fullText,  // Currently displayed text
-    targetText: fullText,   // Target text to display
+    text,  // Single text
     circleRadius,
     centerX,
     centerY,
@@ -468,8 +493,6 @@ function createTitle(k, centerX, centerY, radius) {
     targetReversed: false,  // Target letter order
     reverseFadePhase: 1.0,  // 1.0 = fully visible, 0.0 = invisible (for reversal)
     isReverseChanging: false,  // Is reversal fade animation active
-    fadePhase: 1.0,  // 1.0 = fully visible, 0.0 = invisible
-    isFading: false,
     baseOpacity: 0.3  // Base opacity when not hovering (dimmed)
   }
 }
@@ -482,47 +505,6 @@ function createTitle(k, centerX, centerY, radius) {
  */
 function updateTitle(titleInst, k, hoveredAntiHero) {
   const dt = k.dt()
-  
-  //
-  // Update target text based on hover
-  //
-  const newTargetText = hoveredAntiHero ? titleInst.shortText : titleInst.fullText
-  
-  //
-  // Check if text needs to change
-  //
-  if (newTargetText !== titleInst.targetText) {
-    titleInst.targetText = newTargetText
-    titleInst.isFading = true
-  }
-  
-  //
-  // Handle fade animation for text change
-  //
-  if (titleInst.isFading) {
-    if (titleInst.fadePhase > 0 && titleInst.currentText !== titleInst.targetText) {
-      //
-      // Fade out (500ms = 0.5s, so speed = 1/0.5 = 2.0)
-      //
-      titleInst.fadePhase -= dt * 2.0
-      if (titleInst.fadePhase <= 0) {
-        titleInst.fadePhase = 0
-        //
-        // Switch text at complete fade
-        //
-        titleInst.currentText = titleInst.targetText
-      }
-    } else if (titleInst.fadePhase < 1) {
-      //
-      // Fade in (800ms = 0.8s, so speed = 1/0.8 = 1.25) - slower than fade out
-      //
-      titleInst.fadePhase += dt * 1.25
-      if (titleInst.fadePhase >= 1) {
-        titleInst.fadePhase = 1
-        titleInst.isFading = false
-      }
-    }
-  }
   
   //
   // Determine if letters should be reversed based on angle
@@ -684,26 +666,18 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
   //
   // Position each letter along the arc
   //
-  const textLength = titleInst.currentText.length
+  const textLength = titleInst.text.length
   //
-  // Adjust arc length based on text length to maintain natural letter spacing
+  // Arc length for "find" word
   //
-  const arcLength = textLength === titleInst.shortText.length ? 0.3 : 0.8  // Shorter arc for "find"
+  const arcLength = 0.3
   const angleStep = textLength > 1 ? arcLength / (textLength - 1) : 0
   
   titleInst.letters.forEach((letter, index) => {
     //
-    // Only show letters that are part of current text
-    //
-    if (index >= textLength) {
-      letter.opacity = 0
-      return
-    }
-    
-    //
     // Update letter character if needed
     //
-    const currentChar = titleInst.currentText[index]
+    const currentChar = titleInst.text[index]
     if (letter.text !== currentChar) {
       letter.text = currentChar
     }
@@ -733,10 +707,10 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     letter.angle = letterAngle + Math.PI / 2
     
     //
-    // Apply fade opacity combined with base opacity for dimming
+    // Apply base opacity for dimming based on hover
     // Also apply reversal fade phase
     //
-    const baseFinalOpacity = titleInst.fadePhase * (hoveredAntiHero ? 1.0 : titleInst.baseOpacity)
+    const baseFinalOpacity = hoveredAntiHero ? 1.0 : titleInst.baseOpacity
     const finalOpacity = baseFinalOpacity * titleInst.reverseFadePhase
     letter.opacity = finalOpacity
   })

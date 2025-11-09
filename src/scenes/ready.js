@@ -89,7 +89,7 @@ export function sceneReady(k) {
     //
     const titleY = startY / 2 - 40  // Higher position (was startY / 2)
     const titleText = "find myself"
-    const titleFontSize = 160  // Even bigger font (was 140)
+    const titleFontSize = 140  // Slightly smaller font (was 160)
     
     //
     // Calculate positions for each letter using canvas measurement
@@ -103,14 +103,15 @@ export function sceneReady(k) {
     //
     const padding = 20
     const letterSpacing = 12  // Additional spacing between letters
+    const horizontalScale = 1.15  // Stretch horizontally by 15%
     ctx.font = `bold ${titleFontSize}px monospace`
     
     //
-    // Calculate total width with letter spacing
+    // Calculate total width with letter spacing and horizontal scale
     //
     let totalWidth = 0
     for (let i = 0; i < titleText.length; i++) {
-      const charWidth = ctx.measureText(titleText[i]).width
+      const charWidth = ctx.measureText(titleText[i]).width * horizontalScale
       totalWidth += charWidth
       if (i < titleText.length - 1) {
         totalWidth += letterSpacing
@@ -121,7 +122,7 @@ export function sceneReady(k) {
     canvas.height = titleFontSize + padding * 2
     
     //
-    // Draw text on canvas with letter spacing
+    // Draw text on canvas with letter spacing and horizontal stretch
     //
     ctx.fillStyle = 'white'
     ctx.font = `bold ${titleFontSize}px monospace`
@@ -129,8 +130,16 @@ export function sceneReady(k) {
     
     let currentX = padding
     for (let i = 0; i < titleText.length; i++) {
-      ctx.fillText(titleText[i], currentX, padding)
-      const charWidth = ctx.measureText(titleText[i]).width
+      //
+      // Apply horizontal scale for stretched letters
+      //
+      ctx.save()
+      ctx.translate(currentX, padding)
+      ctx.scale(horizontalScale, 1)
+      ctx.fillText(titleText[i], 0, 0)
+      ctx.restore()
+      
+      const charWidth = ctx.measureText(titleText[i]).width * horizontalScale
       currentX += charWidth + letterSpacing
     }
     
@@ -144,8 +153,8 @@ export function sceneReady(k) {
     // Sample pixels and create particles on letter edges (contours)
     // with minimum distance constraint for even distribution
     //
-    const samplingProbability = 0.212  // Higher probability (+30% from 0.163)
-    const minDistance = 8  // Minimum distance between particles (pixels)
+    const samplingProbability = 0.397  // Higher probability (+30% from 0.305)
+    const minDistance = 4.8  // Minimum distance between particles (reduced for +20% more density)
     const startX = centerX - totalWidth / 2
     
     //
@@ -246,7 +255,7 @@ export function sceneReady(k) {
     const particleSystem = {
       k,
       particles: [],
-      color: CFG.colors.ready.text,
+      color: CFG.colors.ready.fireflies,  // Use fireflies color (hero orange)
       baseOpacity: 0.9,  // Much brighter for clarity (was 0.6)
       flickerSpeed: 2,
       trembleRadius: 0.15,  // Minimal movement for sharp edges (was 0.3)

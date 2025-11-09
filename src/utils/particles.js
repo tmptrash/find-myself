@@ -14,6 +14,7 @@
  * @param {number} [config.trembleRadius=2] - Tremble radius in pixels
  * @param {number} [config.mouseInfluence=150] - Mouse influence radius
  * @param {Object} [config.bounds] - Bounds for particles {x, y, width, height}
+ * @param {number} [config.gaussianFactor=0.15] - Concentration factor (0.15=center, 0.5=spread, 1.0=uniform)
  * @returns {Object} Particle system instance
  */
 export function create(config = {}) {
@@ -25,7 +26,8 @@ export function create(config = {}) {
     flickerSpeed = 2,
     trembleRadius = 2,
     mouseInfluence = 150,
-    bounds = null  // If null, use full screen
+    bounds = null,  // If null, use full screen
+    gaussianFactor = 0.15  // Concentration factor
   } = config
   
   //
@@ -57,9 +59,8 @@ export function create(config = {}) {
     
     //
     // Generate position with bias toward center
-    // gaussianFactor of 0.15 means strong concentration in center, very few at edges
+    // gaussianFactor controls concentration: 0.15=tight center, 0.5=spread, 1.0=uniform
     //
-    const gaussianFactor = 0.15
     const baseX = effectiveBounds.x + effectiveBounds.width / 2 + 
                   randomGaussian() * effectiveBounds.width * gaussianFactor
     const baseY = effectiveBounds.y + effectiveBounds.height / 2 + 
@@ -328,14 +329,14 @@ export function onUpdate(inst) {
 }
 
 /**
- * Draw particles (optimized with Kaplay API)
+ * Draw particles (optimized with Kaplay API - simplified rendering)
  * @param {Object} inst - Particle system instance
  */
 export function draw(inst) {
   const { k, particles, color } = inst
   
   //
-  // Parse color once
+  // Parse color once and create reusable objects
   //
   const r = parseInt(color.slice(1, 3), 16)
   const g = parseInt(color.slice(3, 5), 16)
@@ -344,54 +345,38 @@ export function draw(inst) {
   const coreColor = k.rgb(255, 255, 200)
   
   //
-  // Draw all particles
+  // Draw all particles with simplified rendering (2 circles instead of 4)
   //
-  particles.forEach(particle => {
+  for (let i = 0; i < particles.length; i++) {
+    const particle = particles[i]
     const opacity = particle.opacity
     
-    if (opacity < 0.01) return  // Skip invisible particles
+    if (opacity < 0.01) continue
     
-    const pos = k.vec2(particle.x, particle.y)
+    const x = particle.x
+    const y = particle.y
     
     //
-    // Draw glow layers
+    // Glow (single larger circle) - reduced size
     //
-    
-    // Outer glow
     k.drawCircle({
-      pos,
-      radius: 8,
+      pos: k.vec2(x, y),
+      radius: 4,
       color: colorObj,
-      opacity: opacity * 0.1,
+      opacity: opacity * 0.25,
       fixed: true
     })
     
-    // Middle glow
+    //
+    // Core (bright center) - reduced size
+    //
     k.drawCircle({
-      pos,
-      radius: 5,
-      color: colorObj,
-      opacity: opacity * 0.3,
-      fixed: true
-    })
-    
-    // Inner glow
-    k.drawCircle({
-      pos,
-      radius: 3,
-      color: colorObj,
-      opacity: opacity * 0.6,
-      fixed: true
-    })
-    
-    // Core (brightest)
-    k.drawCircle({
-      pos,
-      radius: 2,
+      pos: k.vec2(x, y),
+      radius: 1.5,
       color: coreColor,
       opacity: opacity,
       fixed: true
     })
-  })
+  }
 }
 

@@ -27,6 +27,33 @@ export function sceneReady(k) {
     readySceneVisited = true
     
     //
+    // Hide cursor on first visit, show it after 4 seconds
+    //
+    let isCursorVisible = !isFirstVisit  // Track cursor visibility
+    let cursorWaitHandle = null  // Store wait handle to cancel it
+    
+    //
+    // Function to show cursor immediately
+    //
+    const showCursor = () => {
+      if (!isCursorVisible) {
+        k.canvas.style.removeProperty('cursor')  // Remove inline style to restore CSS cursor
+        isCursorVisible = true
+        if (cursorWaitHandle) {
+          cursorWaitHandle.cancel()
+          cursorWaitHandle = null
+        }
+      }
+    }
+    
+    if (isFirstVisit) {
+      k.canvas.style.cursor = "none"
+      cursorWaitHandle = k.wait(4, () => {
+        showCursor()
+      })
+    }
+    
+    //
     // Create sound instance
     //
     const sound = Sound.create()
@@ -38,41 +65,8 @@ export function sceneReady(k) {
     addBackground(k, CFG.colors.ready.background)
     
     //
-    // Title
+    // No static title - it will be made of fireflies
     //
-    const title = k.add([
-      k.text("find myself", { size: 64 }),
-      k.pos(centerX, 100),
-      k.anchor("center"),
-      getColor(k, CFG.colors.ready.title),
-    ])
-    
-    //
-    // Flicker effect for title (slow fade in/out)
-    //
-    let titleFlickerTime = FLICKER_FADE_DURATION  // Start at max opacity
-    let titleDirection = -1  // Start going down
-    
-    k.onUpdate(() => {
-      titleFlickerTime += k.dt() * titleDirection
-      
-      //
-      // Reverse direction at bounds
-      //
-      if (titleFlickerTime >= FLICKER_FADE_DURATION) {
-        titleDirection = -1
-        titleFlickerTime = FLICKER_FADE_DURATION
-      } else if (titleFlickerTime <= 0) {
-        titleDirection = 1
-        titleFlickerTime = 0
-      }
-      
-      //
-      // Interpolate opacity between min and max
-      //
-      const progress = titleFlickerTime / FLICKER_FADE_DURATION
-      title.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-    })
     
     //
     // Story text
@@ -88,31 +82,206 @@ export function sceneReady(k) {
     ]
     
     const lineHeight = 34
-    const startY = centerY - (storyLines.length * lineHeight) / 2 + 20
+    const startY = centerY - (storyLines.length * lineHeight) / 2 + 120  // Even lower position (was +80)
     
     //
-    // Calculate bounds for particles (around story text)
+    // Create title "find myself" from fireflies
     //
-    const textBoundsMargin = 200
-    const textBounds = {
-      x: centerX - 400,
-      y: startY - textBoundsMargin,
-      width: 800,
-      height: (storyLines.length * lineHeight) + textBoundsMargin * 2
+    const titleY = startY / 2 - 40  // Higher position (was startY / 2)
+    const titleText = "find myself"
+    const titleFontSize = 160  // Even bigger font (was 140)
+    
+    //
+    // Calculate positions for each letter using canvas measurement
+    //
+    const titleParticles = []
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    
+    //
+    // Set canvas size with padding
+    //
+    const padding = 20
+    const letterSpacing = 12  // Additional spacing between letters
+    ctx.font = `bold ${titleFontSize}px monospace`
+    
+    //
+    // Calculate total width with letter spacing
+    //
+    let totalWidth = 0
+    for (let i = 0; i < titleText.length; i++) {
+      const charWidth = ctx.measureText(titleText[i]).width
+      totalWidth += charWidth
+      if (i < titleText.length - 1) {
+        totalWidth += letterSpacing
+      }
+    }
+    
+    canvas.width = totalWidth + padding * 2
+    canvas.height = titleFontSize + padding * 2
+    
+    //
+    // Draw text on canvas with letter spacing
+    //
+    ctx.fillStyle = 'white'
+    ctx.font = `bold ${titleFontSize}px monospace`
+    ctx.textBaseline = 'top'
+    
+    let currentX = padding
+    for (let i = 0; i < titleText.length; i++) {
+      ctx.fillText(titleText[i], currentX, padding)
+      const charWidth = ctx.measureText(titleText[i]).width
+      currentX += charWidth + letterSpacing
     }
     
     //
-    // Create particles around text
+    // Get pixel data
     //
-    const particleSystem = Particles.create({
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const pixels = imageData.data
+    
+    //
+    // Sample pixels and create particles on letter edges (contours)
+    // with minimum distance constraint for even distribution
+    //
+    const samplingProbability = 0.212  // Higher probability (+30% from 0.163)
+    const minDistance = 8  // Minimum distance between particles (pixels)
+    const startX = centerX - totalWidth / 2
+    
+    //
+    // Helper function to check if pixel is on edge (has transparent neighbors)
+    //
+    const isEdgePixel = (x, y, pixels, width, height) => {
+      const getAlpha = (px, py) => {
+        if (px < 0 || px >= width || py < 0 || py >= height) return 0
+        return pixels[(py * width + px) * 4 + 3]
+      }
+      
+      //
+      // Check all 8 neighbors
+      //
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue
+          if (getAlpha(x + dx, y + dy) < 128) {
+            return true  // Has at least one transparent neighbor
+          }
+        }
+      }
+      return false
+    }
+    
+    //
+    // Helper function to check if position is far enough from existing particles
+    //
+    const isFarEnough = (x, y, existingParticles, minDist) => {
+      const minDistSq = minDist * minDist
+      for (let i = 0; i < existingParticles.length; i++) {
+        const dx = existingParticles[i].x - x
+        const dy = existingParticles[i].y - y
+        if (dx * dx + dy * dy < minDistSq) {
+          return false
+        }
+      }
+      return true
+    }
+    
+    //
+    // Collect all edge pixels first
+    //
+    const edgePixels = []
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const index = (y * canvas.width + x) * 4
+        const alpha = pixels[index + 3]
+        
+        if (alpha > 128 && isEdgePixel(x, y, pixels, canvas.width, canvas.height)) {
+          edgePixels.push({ x, y })
+        }
+      }
+    }
+    
+    //
+    // Shuffle edge pixels for random sampling
+    //
+    for (let i = edgePixels.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const temp = edgePixels[i]
+      edgePixels[i] = edgePixels[j]
+      edgePixels[j] = temp
+    }
+    
+    //
+    // Sample particles with minimum distance constraint
+    //
+    const tempParticles = []
+    for (let i = 0; i < edgePixels.length; i++) {
+      const pixel = edgePixels[i]
+      
+      if (Math.random() < samplingProbability && isFarEnough(pixel.x, pixel.y, tempParticles, minDistance)) {
+        tempParticles.push(pixel)
+        titleParticles.push({
+          targetX: startX + pixel.x - padding,
+          targetY: titleY + pixel.y - padding,
+        })
+      }
+    }
+    
+    //
+    // Use ALL particles for title only (no text area particles)
+    //
+    const allParticlePositions = []
+    
+    //
+    // Add title particles
+    //
+    titleParticles.forEach(p => {
+      allParticlePositions.push({ x: p.targetX, y: p.targetY })
+    })
+    
+    //
+    // Create custom particle system with predefined positions
+    // Use null bounds for unlimited flee behavior
+    //
+    const particleSystem = {
       k,
-      particleCount: 100,
+      particles: [],
       color: CFG.colors.ready.text,
-      baseOpacity: 0.4,
+      baseOpacity: 0.9,  // Much brighter for clarity (was 0.6)
       flickerSpeed: 2,
-      trembleRadius: 3,
+      trembleRadius: 0.15,  // Minimal movement for sharp edges (was 0.3)
+      trembleRadiusAfterFlee: 8,  // Much larger movement after first flee
       mouseInfluence: 150,
-      bounds: textBounds
+      bounds: null,  // No bounds - particles can fly anywhere
+      time: 0,
+      isCursorVisible: () => isCursorVisible  // Function to check cursor visibility
+    }
+    
+    //
+    // Create particles at predefined positions
+    //
+    allParticlePositions.forEach(pos => {
+      particleSystem.particles.push({
+        baseX: pos.x,
+        baseY: pos.y,
+        x: pos.x,
+        y: pos.y,
+        flickerPhase: Math.random() * Math.PI * 2,
+        tremblePhase: Math.random() * Math.PI * 2,
+        trembleSpeed: 0.8 + Math.random() * 0.4,  // Random speed multiplier (0.8-1.2)
+        fleeSpeed: 0.7 + Math.random() * 0.6,     // Random flee speed multiplier (0.7-1.3)
+        opacity: 0.4,
+        isFleeing: false,
+        fleeStartX: pos.x,
+        fleeStartY: pos.y,
+        fleeTargetX: pos.x,
+        fleeTargetY: pos.y,
+        fleeProgress: 0,
+        justLanded: false,
+        landedTimer: 0,
+        floatFadeIn: 0,
+        hasEverFled: false  // Track if particle has fled at least once
+      })
     })
     
     const textObjects = []
@@ -405,6 +574,11 @@ export function sceneReady(k) {
     CFG.controls.startGame.forEach(key => {
       k.onKeyPress(key, () => {
         //
+        // Show cursor immediately if it was hidden
+        //
+        showCursor()
+        
+        //
         // If not all lines revealed yet - skip to end
         //
         if (!allLinesRevealed) {
@@ -424,6 +598,11 @@ export function sceneReady(k) {
     // Click anywhere to start or skip
     //
     k.onClick(() => {
+      //
+      // Show cursor immediately if it was hidden
+      //
+      showCursor()
+      
       //
       // If not all lines revealed yet - skip to end
       //

@@ -20,7 +20,7 @@ const k = kaplay({
 //
 // Remove default cursor style to allow CSS custom cursor
 //
-k.canvas.style.cursor = ''
+k.canvas.style.removeProperty('cursor')
 
 // Load resources
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")

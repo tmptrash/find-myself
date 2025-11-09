@@ -1,5 +1,14 @@
 /**
  * Custom pixel cursor (chubby triangle with convex sides and thick black outline)
+ * Applied to html and body to cover all areas including edges
+ */
+html,
+body {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="-4 -4 32 36"><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="white"/></svg>') 0 0, auto;
+}
+
+/**
+ * Custom pixel cursor for canvas
  */
 canvas {
   cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="-4 -4 32 36"><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="white"/></svg>') 0 0, auto;

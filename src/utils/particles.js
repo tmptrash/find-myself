@@ -57,9 +57,9 @@ export function create(config = {}) {
     
     //
     // Generate position with bias toward center
-    // gaussianFactor of 0.25 means most particles within center 50%, few at edges
+    // gaussianFactor of 0.15 means strong concentration in center, very few at edges
     //
-    const gaussianFactor = 0.25
+    const gaussianFactor = 0.15
     const baseX = effectiveBounds.x + effectiveBounds.width / 2 + 
                   randomGaussian() * effectiveBounds.width * gaussianFactor
     const baseY = effectiveBounds.y + effectiveBounds.height / 2 + 
@@ -78,6 +78,8 @@ export function create(config = {}) {
       y: clampedY,
       flickerPhase: Math.random() * Math.PI * 2,
       tremblePhase: Math.random() * Math.PI * 2,
+      trembleSpeed: 0.8 + Math.random() * 0.4,  // Random speed multiplier (0.8-1.2)
+      fleeSpeed: 0.7 + Math.random() * 0.6,     // Random flee speed multiplier (0.7-1.3)
       opacity: baseOpacity,
       isFleeing: false,      // Is currently fleeing from mouse
       fleeStartX: clampedX,     // Start position when fleeing begins
@@ -117,6 +119,11 @@ export function onUpdate(inst) {
   
   const mousePos = k.mousePos()
   
+  //
+  // Get trembleRadiusAfterFlee if available, otherwise use trembleRadius
+  //
+  const trembleRadiusAfterFlee = inst.trembleRadiusAfterFlee || trembleRadius
+  
   particles.forEach(particle => {
     //
     // Update flicker phase
@@ -140,9 +147,9 @@ export function onUpdate(inst) {
     particle.opacity = inst.baseOpacity * flickerValue  // 0 to baseOpacity
     
     //
-    // Update tremble phase (slower, more organic)
+    // Update tremble phase (slower, more organic) with individual speed
     //
-    particle.tremblePhase += (1 + Math.random() * 0.5) * k.dt()
+    particle.tremblePhase += (1 + Math.random() * 0.5) * k.dt() * particle.trembleSpeed
     
     //
     // Calculate distance to mouse
@@ -152,18 +159,25 @@ export function onUpdate(inst) {
     const distToMouse = Math.sqrt(dx * dx + dy * dy)
     
     //
-    // Calculate mouse influence (closer = stronger effect)
+    // Check if cursor is visible (if isCursorVisible function exists)
     //
-    const mouseEffect = distToMouse < mouseInfluence 
+    const isCursorVisible = inst.isCursorVisible ? inst.isCursorVisible() : true
+    
+    //
+    // Calculate mouse influence (closer = stronger effect)
+    // Only if cursor is visible
+    //
+    const mouseEffect = (isCursorVisible && distToMouse < mouseInfluence)
       ? 1 - (distToMouse / mouseInfluence)
       : 0
     
     //
     // Check if mouse is close and firefly should start fleeing
+    // Only if cursor is visible
     //
     const fleeDistance = 80  // Distance at which firefly starts to flee
     
-    if (!particle.isFleeing && distToMouse < fleeDistance && distToMouse > 0) {
+    if (isCursorVisible && !particle.isFleeing && distToMouse < fleeDistance && distToMouse > 0) {
       //
       // Start fleeing - save current position and calculate new target
       //
@@ -171,6 +185,7 @@ export function onUpdate(inst) {
       particle.fleeProgress = 0
       particle.fleeStartX = particle.x  // Save current position
       particle.fleeStartY = particle.y
+      particle.hasEverFled = true  // Mark that this particle has fled at least once
       
       //
       // Direction away from mouse with random angle deviation
@@ -198,30 +213,44 @@ export function onUpdate(inst) {
       let targetY = particle.y + dirY * fleeDistanceAmount
       
       //
-      // Apply soft boundary repulsion - particles prefer to stay toward center
+      // Apply soft boundary repulsion if bounds are set
       //
-      const centerX = bounds.x + bounds.width / 2
-      const centerY = bounds.y + bounds.height / 2
-      
-      // Calculate how far target is from center (normalized 0-1)
-      const distFromCenterX = Math.abs(targetX - centerX) / (bounds.width / 2)
-      const distFromCenterY = Math.abs(targetY - centerY) / (bounds.height / 2)
-      
-      // If target is near edge, pull it back toward center
-      const edgeThreshold = 0.7  // Start pulling back when 70% toward edge
-      if (distFromCenterX > edgeThreshold) {
-        const pullStrength = (distFromCenterX - edgeThreshold) / (1 - edgeThreshold)
-        targetX = targetX - (targetX - centerX) * pullStrength * 0.5
+      if (bounds) {
+        const centerX = bounds.x + bounds.width / 2
+        const centerY = bounds.y + bounds.height / 2
+        
+        //
+        // Calculate how far target is from center (normalized 0-1)
+        //
+        const distFromCenterX = Math.abs(targetX - centerX) / (bounds.width / 2)
+        const distFromCenterY = Math.abs(targetY - centerY) / (bounds.height / 2)
+        
+        //
+        // If target is near edge, pull it back toward center more aggressively
+        //
+        const edgeThreshold = 0.5  // Start pulling back when 50% toward edge (was 70%)
+        if (distFromCenterX > edgeThreshold) {
+          const pullStrength = (distFromCenterX - edgeThreshold) / (1 - edgeThreshold)
+          targetX = targetX - (targetX - centerX) * pullStrength * 0.7  // Stronger pull (was 0.5)
+        }
+        if (distFromCenterY > edgeThreshold) {
+          const pullStrength = (distFromCenterY - edgeThreshold) / (1 - edgeThreshold)
+          targetY = targetY - (targetY - centerY) * pullStrength * 0.7  // Stronger pull (was 0.5)
+        }
+        
+        //
+        // Keep within bounds (hard limit with larger margin)
+        //
+        const margin = 50  // Larger margin (was 30)
+        particle.fleeTargetX = Math.max(bounds.x + margin, Math.min(bounds.x + bounds.width - margin, targetX))
+        particle.fleeTargetY = Math.max(bounds.y + margin, Math.min(bounds.y + bounds.height - margin, targetY))
+      } else {
+        //
+        // No bounds - particles can fly anywhere
+        //
+        particle.fleeTargetX = targetX
+        particle.fleeTargetY = targetY
       }
-      if (distFromCenterY > edgeThreshold) {
-        const pullStrength = (distFromCenterY - edgeThreshold) / (1 - edgeThreshold)
-        targetY = targetY - (targetY - centerY) * pullStrength * 0.5
-      }
-      
-      // Keep within bounds (hard limit)
-      const margin = 30
-      particle.fleeTargetX = Math.max(bounds.x + margin, Math.min(bounds.x + bounds.width - margin, targetX))
-      particle.fleeTargetY = Math.max(bounds.y + margin, Math.min(bounds.y + bounds.height - margin, targetY))
     }
     
     //
@@ -229,20 +258,22 @@ export function onUpdate(inst) {
     //
     if (particle.isFleeing) {
       //
-      // Fleeing animation - smooth movement
+      // Fleeing animation - slow, smooth movement like random floating
+      // Each particle has individual flee speed
       //
-      particle.fleeProgress += k.dt() * 0.8
+      particle.fleeProgress += k.dt() * 0.4 * particle.fleeSpeed  // Even faster speed (was 0.25)
       
       if (particle.fleeProgress >= 1) {
+        //
         // Finished fleeing - smoothly transition to new base position
+        //
         particle.isFleeing = false
         particle.baseX = particle.fleeTargetX
         particle.baseY = particle.fleeTargetY
         particle.x = particle.fleeTargetX
         particle.y = particle.fleeTargetY
         particle.fleeProgress = 0
-        particle.justLanded = true
-        particle.landedTimer = 0
+        particle.floatFadeIn = 0  // Start floating from 0 amplitude
       } else {
         // Linear interpolation
         const t = particle.fleeProgress
@@ -265,106 +296,99 @@ export function onUpdate(inst) {
       }
     } else {
       //
-      // Check if just landed (pause floating briefly)
+      // Normal floating movement around base position
       //
-      if (particle.justLanded) {
-        particle.landedTimer += k.dt()
-        
-        if (particle.landedTimer > 0.3) {
-          // Resume floating after 0.3 seconds
-          particle.justLanded = false
-          particle.landedTimer = 0
-          particle.floatFadeIn = 0  // Start fade-in from 0
-        } else {
-          // Stay still at landing position
-          particle.x = particle.baseX
-          particle.y = particle.baseY
-        }
-      } else {
-        //
-        // Normal floating movement around base position
-        //
-        const trembleAmount = trembleRadius
-        
-        // Use multiple sin waves for organic movement
-        const offsetX = Math.cos(particle.tremblePhase) * trembleAmount + 
-                        Math.sin(particle.tremblePhase * 0.7) * trembleAmount * 0.5
-        const offsetY = Math.sin(particle.tremblePhase * 1.3) * trembleAmount + 
-                        Math.cos(particle.tremblePhase * 0.5) * trembleAmount * 0.5
-        
-        //
-        // Fade-in floating amplitude after landing
-        //
-        if (particle.floatFadeIn < 1) {
-          particle.floatFadeIn += k.dt() * 2  // Fade in over 0.5 seconds
-          particle.floatFadeIn = Math.min(1, particle.floatFadeIn)
-        }
-        
-        // Apply fade-in multiplier to offset
-        const fadeMultiplier = particle.floatFadeIn
-        
-        particle.x = particle.baseX + offsetX * fadeMultiplier
-        particle.y = particle.baseY + offsetY * fadeMultiplier
+      const trembleAmount = particle.hasEverFled ? trembleRadiusAfterFlee : trembleRadius
+      
+      //
+      // Use multiple sin waves for organic movement
+      //
+      const offsetX = Math.cos(particle.tremblePhase) * trembleAmount + 
+                      Math.sin(particle.tremblePhase * 0.7) * trembleAmount * 0.5
+      const offsetY = Math.sin(particle.tremblePhase * 1.3) * trembleAmount + 
+                      Math.cos(particle.tremblePhase * 0.5) * trembleAmount * 0.5
+      
+      //
+      // Smooth fade-in of floating amplitude after fleeing
+      //
+      if (particle.floatFadeIn < 1) {
+        particle.floatFadeIn += k.dt() * 3  // Fade in quickly over ~0.33 seconds
+        particle.floatFadeIn = Math.min(1, particle.floatFadeIn)
       }
+      
+      //
+      // Apply fade-in multiplier to offset
+      //
+      const fadeMultiplier = particle.floatFadeIn
+      
+      particle.x = particle.baseX + offsetX * fadeMultiplier
+      particle.y = particle.baseY + offsetY * fadeMultiplier
     }
   })
 }
 
 /**
- * Draw particles (call in k.onDraw)
+ * Draw particles (optimized with Kaplay API)
  * @param {Object} inst - Particle system instance
  */
 export function draw(inst) {
   const { k, particles, color } = inst
   
   //
-  // Parse color
+  // Parse color once
   //
   const r = parseInt(color.slice(1, 3), 16)
   const g = parseInt(color.slice(3, 5), 16)
   const b = parseInt(color.slice(5, 7), 16)
+  const colorObj = k.rgb(r, g, b)
+  const coreColor = k.rgb(255, 255, 200)
   
+  //
+  // Draw all particles
+  //
   particles.forEach(particle => {
-    const x = Math.floor(particle.x)
-    const y = Math.floor(particle.y)
     const opacity = particle.opacity
     
+    if (opacity < 0.01) return  // Skip invisible particles
+    
+    const pos = k.vec2(particle.x, particle.y)
+    
     //
-    // Draw glow layers (firefly effect)
+    // Draw glow layers
     //
     
-    // Outer glow (largest, faintest)
+    // Outer glow
     k.drawCircle({
-      pos: k.vec2(x, y),
+      pos,
       radius: 8,
-      color: k.rgb(r, g, b),
+      color: colorObj,
       opacity: opacity * 0.1,
       fixed: true
     })
     
     // Middle glow
     k.drawCircle({
-      pos: k.vec2(x, y),
+      pos,
       radius: 5,
-      color: k.rgb(r, g, b),
+      color: colorObj,
       opacity: opacity * 0.3,
       fixed: true
     })
     
     // Inner glow
     k.drawCircle({
-      pos: k.vec2(x, y),
+      pos,
       radius: 3,
-      color: k.rgb(r, g, b),
+      color: colorObj,
       opacity: opacity * 0.6,
       fixed: true
     })
     
     // Core (brightest)
     k.drawCircle({
-      pos: k.vec2(x, y),
+      pos,
       radius: 2,
-      color: k.rgb(255, 255, 200),  // Warm white center
+      color: coreColor,
       opacity: opacity,
       fixed: true
     })

@@ -13,6 +13,7 @@
  * @param {number} [config.flickerSpeed=2] - Flicker speed
  * @param {number} [config.trembleRadius=2] - Tremble radius in pixels
  * @param {number} [config.mouseInfluence=150] - Mouse influence radius
+ * @param {Object} [config.bounds] - Bounds for particles {x, y, width, height}
  * @returns {Object} Particle system instance
  */
 export function create(config = {}) {
@@ -23,30 +24,66 @@ export function create(config = {}) {
     baseOpacity = 0.3,
     flickerSpeed = 2,
     trembleRadius = 2,
-    mouseInfluence = 150
+    mouseInfluence = 150,
+    bounds = null  // If null, use full screen
   } = config
   
   //
-  // Create particles with random positions
+  // Determine bounds
+  //
+  const effectiveBounds = bounds || {
+    x: 0,
+    y: 0,
+    width: k.width(),
+    height: k.height()
+  }
+  
+  //
+  // Create particles with random positions within bounds
+  // Use gaussian distribution to concentrate particles in center
   //
   const particles = []
   for (let i = 0; i < particleCount; i++) {
-    const baseX = Math.random() * k.width()
-    const baseY = Math.random() * k.height()
+    //
+    // Generate position with gaussian distribution (bell curve)
+    // This makes particles more concentrated in center, fewer at edges
+    //
+    const randomGaussian = () => {
+      // Box-Muller transform for gaussian distribution
+      const u1 = Math.random()
+      const u2 = Math.random()
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    }
+    
+    //
+    // Generate position with bias toward center
+    // gaussianFactor of 0.25 means most particles within center 50%, few at edges
+    //
+    const gaussianFactor = 0.25
+    const baseX = effectiveBounds.x + effectiveBounds.width / 2 + 
+                  randomGaussian() * effectiveBounds.width * gaussianFactor
+    const baseY = effectiveBounds.y + effectiveBounds.height / 2 + 
+                  randomGaussian() * effectiveBounds.height * gaussianFactor
+    
+    //
+    // Clamp to bounds (keep particles inside, but distribution creates soft edges)
+    //
+    const clampedX = Math.max(effectiveBounds.x, Math.min(effectiveBounds.x + effectiveBounds.width, baseX))
+    const clampedY = Math.max(effectiveBounds.y, Math.min(effectiveBounds.y + effectiveBounds.height, baseY))
     
     particles.push({
-      baseX,
-      baseY,
-      x: baseX,
-      y: baseY,
+      baseX: clampedX,
+      baseY: clampedY,
+      x: clampedX,
+      y: clampedY,
       flickerPhase: Math.random() * Math.PI * 2,
       tremblePhase: Math.random() * Math.PI * 2,
       opacity: baseOpacity,
       isFleeing: false,      // Is currently fleeing from mouse
-      fleeStartX: baseX,     // Start position when fleeing begins
-      fleeStartY: baseY,
-      fleeTargetX: baseX,    // Target position when fleeing
-      fleeTargetY: baseY,
+      fleeStartX: clampedX,     // Start position when fleeing begins
+      fleeStartY: clampedY,
+      fleeTargetX: clampedX,    // Target position when fleeing
+      fleeTargetY: clampedY,
       fleeProgress: 0,       // Progress of flee animation (0-1)
       justLanded: false,     // Just finished fleeing (pause floating)
       landedTimer: 0,        // Timer for landing pause
@@ -62,6 +99,7 @@ export function create(config = {}) {
     flickerSpeed,
     trembleRadius,
     mouseInfluence,
+    bounds: effectiveBounds,
     time: 0
   }
   
@@ -73,7 +111,7 @@ export function create(config = {}) {
  * @param {Object} inst - Particle system instance
  */
 export function onUpdate(inst) {
-  const { k, particles, flickerSpeed, trembleRadius, mouseInfluence } = inst
+  const { k, particles, flickerSpeed, trembleRadius, mouseInfluence, bounds } = inst
   
   inst.time += k.dt()
   
@@ -140,12 +178,34 @@ export function onUpdate(inst) {
       
       // New position: 150-200 pixels away from current position
       const fleeDistanceAmount = 150 + Math.random() * 50
-      particle.fleeTargetX = particle.x + dirX * fleeDistanceAmount
-      particle.fleeTargetY = particle.y + dirY * fleeDistanceAmount
+      let targetX = particle.x + dirX * fleeDistanceAmount
+      let targetY = particle.y + dirY * fleeDistanceAmount
       
-      // Keep within screen bounds
-      particle.fleeTargetX = Math.max(50, Math.min(k.width() - 50, particle.fleeTargetX))
-      particle.fleeTargetY = Math.max(50, Math.min(k.height() - 50, particle.fleeTargetY))
+      //
+      // Apply soft boundary repulsion - particles prefer to stay toward center
+      //
+      const centerX = bounds.x + bounds.width / 2
+      const centerY = bounds.y + bounds.height / 2
+      
+      // Calculate how far target is from center (normalized 0-1)
+      const distFromCenterX = Math.abs(targetX - centerX) / (bounds.width / 2)
+      const distFromCenterY = Math.abs(targetY - centerY) / (bounds.height / 2)
+      
+      // If target is near edge, pull it back toward center
+      const edgeThreshold = 0.7  // Start pulling back when 70% toward edge
+      if (distFromCenterX > edgeThreshold) {
+        const pullStrength = (distFromCenterX - edgeThreshold) / (1 - edgeThreshold)
+        targetX = targetX - (targetX - centerX) * pullStrength * 0.5
+      }
+      if (distFromCenterY > edgeThreshold) {
+        const pullStrength = (distFromCenterY - edgeThreshold) / (1 - edgeThreshold)
+        targetY = targetY - (targetY - centerY) * pullStrength * 0.5
+      }
+      
+      // Keep within bounds (hard limit)
+      const margin = 30
+      particle.fleeTargetX = Math.max(bounds.x + margin, Math.min(bounds.x + bounds.width - margin, targetX))
+      particle.fleeTargetY = Math.max(bounds.y + margin, Math.min(bounds.y + bounds.height - margin, targetY))
     }
     
     //

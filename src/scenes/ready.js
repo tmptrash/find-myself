@@ -1,7 +1,8 @@
 import { CFG } from '../cfg.js'
-import { getColor, getRGB } from '../utils/helper.js'
+import { getColor } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
+import * as Particles from '../utils/particles.js'
 
 const LINE_APPEAR_DELAY = 1.5
 const LINE_FADE_IN_DURATION = 0.8
@@ -49,8 +50,8 @@ export function sceneReady(k) {
     //
     // Flicker effect for title (slow fade in/out)
     //
-    let titleFlickerTime = 0
-    let titleDirection = 1
+    let titleFlickerTime = FLICKER_FADE_DURATION  // Start at max opacity
+    let titleDirection = -1  // Start going down
     
     k.onUpdate(() => {
       titleFlickerTime += k.dt() * titleDirection
@@ -89,6 +90,31 @@ export function sceneReady(k) {
     const lineHeight = 34
     const startY = centerY - (storyLines.length * lineHeight) / 2 + 20
     
+    //
+    // Calculate bounds for particles (around story text)
+    //
+    const textBoundsMargin = 200
+    const textBounds = {
+      x: centerX - 400,
+      y: startY - textBoundsMargin,
+      width: 800,
+      height: (storyLines.length * lineHeight) + textBoundsMargin * 2
+    }
+    
+    //
+    // Create particles around text
+    //
+    const particleSystem = Particles.create({
+      k,
+      particleCount: 100,
+      color: CFG.colors.ready.text,
+      baseOpacity: 0.4,
+      flickerSpeed: 2,
+      trembleRadius: 3,
+      mouseInfluence: 150,
+      bounds: textBounds
+    })
+    
     const textObjects = []
     
     //
@@ -106,8 +132,8 @@ export function sceneReady(k) {
       //
       // Add flicker state for each line
       //
-      textObj.flickerTime = 0
-      textObj.flickerDirection = 1
+      textObj.flickerTime = FLICKER_FADE_DURATION  // Start at max opacity
+      textObj.flickerDirection = -1  // Start going down
       textObj.isVisible = false
       textObj.fadeInProgress = 0
       textObj.isFadingIn = false
@@ -136,6 +162,12 @@ export function sceneReady(k) {
     hint.allLinesAppeared = false
     
     //
+    // Flicker effect for hint (slow fade in/out)
+    //
+    let hintFlickerTime = FLICKER_FADE_DURATION  // Start at max opacity
+    let hintDirection = -1  // Start going down
+    
+    //
     // Sequentially reveal lines
     //
     let currentLineIndex = 0
@@ -159,6 +191,11 @@ export function sceneReady(k) {
           textObj.fadeInProgress = 1.0
           textObj.opacity = 1.0
           textObj.allLinesAppeared = true
+          //
+          // Initialize flicker state at max opacity
+          //
+          textObj.flickerTime = FLICKER_FADE_DURATION
+          textObj.flickerDirection = -1
         }
       })
       
@@ -170,6 +207,12 @@ export function sceneReady(k) {
       hint.fadeInProgress = 1.0
       hint.opacity = 1.0
       hint.allLinesAppeared = true
+      
+      //
+      // Initialize hint flicker state at max opacity
+      //
+      hintFlickerTime = FLICKER_FADE_DURATION
+      hintDirection = -1
       
       allLinesRevealed = true
     }
@@ -227,13 +270,9 @@ export function sceneReady(k) {
         waitHandles.push(waitHandle)
       } else {
         //
-        // Wait for last line to finish fading in, then enable flicker
+        // Last story line started fading in - now schedule hint reveal
         //
-        const waitHandle = k.wait(LINE_FADE_IN_DURATION, () => {
-          textObjects.forEach(textObj => {
-            textObj.allLinesAppeared = true
-          })
-        })
+        const waitHandle = k.wait(LINE_APPEAR_DELAY, revealNextLine)
         waitHandles.push(waitHandle)
       }
     }
@@ -302,11 +341,22 @@ export function sceneReady(k) {
     })
     
     //
-    // Flicker effect for hint (slow fade in/out)
+    // Update particles
     //
-    let hintFlickerTime = 0
-    let hintDirection = 1
+    k.onUpdate(() => {
+      Particles.onUpdate(particleSystem)
+    })
     
+    //
+    // Draw particles
+    //
+    k.onDraw(() => {
+      Particles.draw(particleSystem)
+    })
+    
+    //
+    // Hint flicker update loop
+    //
     k.onUpdate(() => {
       //
       // Fade in animation

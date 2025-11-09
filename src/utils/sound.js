@@ -514,8 +514,8 @@ export function playSpikeSound(instance) {
   // Main friction gain (softer, more "shhhh")
   const frictionGain = instance.audioContext.createGain()
   frictionGain.gain.setValueAtTime(0.001, now)
-  frictionGain.gain.exponentialRampToValueAtTime(0.20, now + 0.05)
-  frictionGain.gain.setValueAtTime(0.20, now + duration - fadeOutTime)
+  frictionGain.gain.exponentialRampToValueAtTime(0.40, now + 0.05)  // Increased from 0.20 to 0.40
+  frictionGain.gain.setValueAtTime(0.40, now + duration - fadeOutTime)  // Increased from 0.20 to 0.40
   frictionGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   // Connect friction chain

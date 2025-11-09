@@ -23,6 +23,45 @@ export function getNextLevel(currentLevel) {
   return LEVEL_TRANSITIONS[currentLevel] || null
 }
 
+/**
+ * Get previous level name (reverse lookup in LEVEL_TRANSITIONS)
+ * @param {string} targetLevel - Target level name
+ * @returns {string|null} Previous level name or null if not found
+ */
+function getPreviousLevel(targetLevel) {
+  for (const [current, next] of Object.entries(LEVEL_TRANSITIONS)) {
+    if (next === targetLevel) {
+      return current
+    }
+  }
+  return null
+}
+
+/**
+ * Show transition screen and go to the specified target level
+ * Finds the appropriate previous level to show the correct subtitle
+ * @param {Object} k - Kaplay instance
+ * @param {string} targetLevel - Target level to go to (e.g., 'level-word.2')
+ */
+export function showTransitionToLevel(k, targetLevel) {
+  //
+  // Find previous level to show correct subtitle
+  //
+  const previousLevel = getPreviousLevel(targetLevel)
+  
+  if (previousLevel) {
+    //
+    // Use normal transition from previous level
+    //
+    createLevelTransition(k, previousLevel)
+  } else {
+    //
+    // No previous level found, go directly (shouldn't happen normally)
+    //
+    k.go(targetLevel)
+  }
+}
+
 // Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
   'menu': '',      // Before Level 0

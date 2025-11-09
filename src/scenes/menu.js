@@ -2,7 +2,7 @@ import * as Sound from "../utils/sound.js"
 import { CFG } from "../cfg.js"
 import { getRGB } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
-import { createLevelTransition } from "../utils/transition.js"
+import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
 import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
@@ -132,7 +132,7 @@ export function sceneMenu(k) {
             //
             // Continue from last word level with transition
             //
-            createLevelTransition(k, lastLevel)
+            showTransitionToLevel(k, lastLevel)
           } else {
             //
             // Start word section from beginning with intro phrase

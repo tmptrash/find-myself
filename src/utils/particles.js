@@ -172,12 +172,28 @@ export function onUpdate(inst) {
       particle.fleeStartX = particle.x  // Save current position
       particle.fleeStartY = particle.y
       
-      // Direction away from mouse
-      const dirX = (particle.x - mousePos.x) / distToMouse
-      const dirY = (particle.y - mousePos.y) / distToMouse
+      //
+      // Direction away from mouse with random angle deviation
+      //
+      const baseAngle = Math.atan2(particle.y - mousePos.y, particle.x - mousePos.x)
       
-      // New position: 150-200 pixels away from current position
-      const fleeDistanceAmount = 150 + Math.random() * 50
+      //
+      // Add significant random deviation for more chaotic scatter
+      // Each particle gets its own random direction
+      //
+      const randomDeviation = (Math.random() - 0.5) * (Math.PI * 0.8)  // -72° to +72°
+      const finalAngle = baseAngle + randomDeviation
+      
+      //
+      // Calculate direction with randomized angle
+      //
+      const dirX = Math.cos(finalAngle)
+      const dirY = Math.sin(finalAngle)
+      
+      //
+      // Also randomize the flee distance for more variety
+      //
+      const fleeDistanceAmount = 100 + Math.random() * 150  // 100-250 pixels
       let targetX = particle.x + dirX * fleeDistanceAmount
       let targetY = particle.y + dirY * fleeDistanceAmount
       
@@ -213,40 +229,37 @@ export function onUpdate(inst) {
     //
     if (particle.isFleeing) {
       //
-      // Fleeing animation - smooth arc movement at constant speed
+      // Fleeing animation - smooth movement
       //
-      particle.fleeProgress += k.dt() * 0.8  // Slower, more natural speed
+      particle.fleeProgress += k.dt() * 0.8
       
       if (particle.fleeProgress >= 1) {
         // Finished fleeing - smoothly transition to new base position
         particle.isFleeing = false
         particle.baseX = particle.fleeTargetX
         particle.baseY = particle.fleeTargetY
-        particle.x = particle.fleeTargetX  // Set exact position (no jump)
+        particle.x = particle.fleeTargetX
         particle.y = particle.fleeTargetY
         particle.fleeProgress = 0
-        particle.justLanded = true  // Pause floating briefly
+        particle.justLanded = true
         particle.landedTimer = 0
       } else {
-        // Linear interpolation - constant speed throughout
+        // Linear interpolation
         const t = particle.fleeProgress
         
-        // Calculate arc (slight curve in movement)
         const startX = particle.fleeStartX
         const startY = particle.fleeStartY
         const endX = particle.fleeTargetX
         const endY = particle.fleeTargetY
         
-        // Add perpendicular offset for arc (smaller for gentler curve)
-        const midX = (startX + endX) / 2
-        const midY = (startY + endY) / 2
+        // Add perpendicular offset for arc
         const perpX = -(endY - startY) * 0.15
         const perpY = (endX - startX) * 0.15
         
         // Smooth arc using sine wave
         const arcFactor = Math.sin(t * Math.PI)
         
-        // Movement with arc offset at constant speed
+        // Movement with arc offset
         particle.x = startX + (endX - startX) * t + perpX * arcFactor
         particle.y = startY + (endY - startY) * t + perpY * arcFactor
       }

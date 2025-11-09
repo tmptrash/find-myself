@@ -11,7 +11,6 @@ const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0
 
 // Hero parameters (fixed for 1920x1080 resolution)
-const HERO_SPRITE_SIZE = 32  // Hero sprite canvas size in pixels
 const HERO_SCALE = 3         // Fixed scale for hero sprite
 const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
@@ -28,7 +27,6 @@ const DUST_PARTICLE_COUNT = 6
 const DUST_PARTICLE_SIZE = 4
 const DUST_PARTICLE_SPEED = 80
 const DUST_PARTICLE_LIFETIME = 0.4
-const DUST_PARTICLE_SPREAD = 60
 
 export const HEROES = {
   HERO: 'hero',

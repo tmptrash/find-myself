@@ -130,9 +130,9 @@ export function sceneMenu(k) {
           
           if (isWordLevel) {
             //
-            // Continue from last word level
+            // Continue from last word level with transition
             //
-            k.go(lastLevel)
+            createLevelTransition(k, lastLevel)
           } else {
             //
             // Start word section from beginning with intro phrase
@@ -330,9 +330,9 @@ export function sceneMenu(k) {
       
       if (hasSavedGame) {
         //
-        // Continue from last saved level (skip intro phrase)
+        // Continue from last saved level with transition (show red text)
         //
-        k.go(lastLevel)
+        createLevelTransition(k, lastLevel)
       } else {
         //
         // No save - start from beginning with intro phrase

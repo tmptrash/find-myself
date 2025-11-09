@@ -1266,20 +1266,20 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     } else if (frame === 3) {
       //
       // Frame 3: Squash (descending, in air) - hero compressed DOWN
-      // Moved to the VERY TOP of the frame
+      // Top stays at very top, but body is slightly taller for smoother transition
       //
-      headY = 2   // Very top (was 9)
-      headHeight = 5  // Shorter head
-      bodyY = 7  // headY + headHeight = 2 + 5
-      bodyHeight = 4  // Very short body
-      leftArmY = 8
-      rightArmY = 8
+      headY = 2   // Very top (same as before)
+      headHeight = 6  // Slightly taller head (was 5)
+      bodyY = 8  // headY + headHeight = 2 + 6
+      bodyHeight = 5  // Slightly taller body (was 4)
+      leftArmY = 9
+      rightArmY = 9
       // Legs SHORT and spread wider
-      rightLegY = 11  // bodyY + bodyHeight = 7 + 4
+      rightLegY = 13  // bodyY + bodyHeight = 8 + 5
       rightLegX = 19
-      leftLegY = 11
+      leftLegY = 13
       leftLegX = 10
-      legHeight = 4  // Short legs! Bottom: 11+4=15 (very high)
+      legHeight = 5  // Slightly taller legs (was 4) - Bottom: 13+5=18
     } else if (frame === 4) {
       //
       // Frame 4: Normal (landing/idle) - regular proportions

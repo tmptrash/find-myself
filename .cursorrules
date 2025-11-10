@@ -550,6 +550,7 @@ src/
 - ❌ Do not put magic (hard-coded) numbers and strings. Put them into the constant at the top or into the config.js if it's a global one
 
 ### Do
+- ✅ Scene files should only contain serving code. All logic and behavior should live inside components, utils and so on files
 - ✅ Use factory functions with `create()` pattern
 - ✅ Function `create()` should be at the top of the module
 - ✅ Function to update calculations should be called `onUpdate()`

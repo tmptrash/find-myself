@@ -3,6 +3,7 @@ import { getColor, getRGB } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
+import { isSectionComplete } from '../../../utils/progress.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 /**
@@ -57,9 +58,10 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
       y: y,
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
-      bodyColor: bodyColor,
+      bodyColor,      // Custom body color (section color or gray)
       scale: antiHeroScale,
-      isStatic: true  // No physics for indicators
+      isStatic: true, // No physics for indicators
+      addMouth: true
     })
     antiHero.character.z = CFG.visual.zIndex.ui  // Show above platforms
     antiHeroes.push(antiHero)
@@ -311,7 +313,8 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
     y: k.height() * CFG.levels[levelName].antiHeroSpawn.y / 100,
     type: 'antiHero',
     sfx: sound,
-    dustColor
+    dustColor,
+    addMouth: true
   })
   
   // Hide anti-hero initially (will be shown when spawned)
@@ -325,7 +328,8 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
     sfx: sound,
     antiHero,
     currentLevel: levelName,  // Use new transition system
-    dustColor
+    dustColor,
+    addMouth: isSectionComplete('word')
   })
   
   hero.character.use("player")

@@ -38,6 +38,8 @@ export function sceneMenu(k) {
       gaussianFactor: 0.35  // More spread out distribution (default 0.15 is too concentrated)
     })
     
+    const progress = getProgress()
+    
     //
     // Create sound instance and start audio context
     // Don't start ambient automatically - it will play on hover
@@ -54,7 +56,8 @@ export function sceneMenu(k) {
       y: centerY,
       type: Hero.HEROES.HERO,
       scale: 5,
-      controllable: false
+      controllable: false,
+      addMouth: Boolean(progress.word)
     })
     
     const hero = heroInst.character
@@ -64,7 +67,6 @@ export function sceneMenu(k) {
     // Create 6 anti-heroes around the main hero (sections)
     // Fixed radius for 1920x1080 resolution
     //
-    const progress = getProgress()
     const radius = 302  // Fixed radius (was: Math.min(1920, 1080) * 0.28)
     const sectionConfigs = getSectionPositions(centerX, centerY, radius)
     const antiHeroes = []

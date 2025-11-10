@@ -65,12 +65,16 @@ export function create(config) {
     addMouth = false       // If true, add black horizontal mouth line (only for idle)
   } = config
   
+  const defaultBodyColor = type === HEROES.HERO ? CFG.colors.hero.body : CFG.colors.antiHero.body
+  const effectiveBodyColor = bodyColor ?? defaultBodyColor
+  const shouldLoadCustomSprites = Boolean(bodyColor) || addMouth
+
   //
-  // Load custom colored sprites if color is provided
+  // Load custom colored sprites if color is provided or mouth is required
   //
-  if (bodyColor) {
+  if (shouldLoadCustomSprites) {
     try {
-      loadCustomSprites(k, type, bodyColor, addMouth)
+      loadCustomSprites(k, type, effectiveBodyColor, addMouth)
     } catch (error) {
       console.error('Failed to load custom sprites:', error)
       //
@@ -82,7 +86,9 @@ export function create(config) {
   //
   // Determine sprite name based on whether custom color and mouth are used
   //
-  let spritePrefix = bodyColor ? `${type}_${bodyColor}${addMouth ? '_mouth' : ''}` : type
+  let spritePrefix = shouldLoadCustomSprites
+    ? `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}`
+    : type
   let spriteName = `${spritePrefix}_0_0`
   
   //

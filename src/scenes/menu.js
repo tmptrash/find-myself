@@ -243,9 +243,9 @@ export function sceneMenu(k) {
       // Don't change cursor if leaving scene
       //
       if (!inst.isLeavingScene) {
-        if (hoveredInst && hoveredInst.section === 'word') {
+        if (hoveredInst && hoveredInst.section === 'word' && !hoveredInst.isCompleted) {
           k.canvas.classList.add('cursor-pointer')
-          } else {
+        } else {
           //
           // Remove pointer class to use default CSS cursor
           //

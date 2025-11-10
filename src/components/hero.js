@@ -61,7 +61,8 @@ export function create(config) {
     onAnnihilation = null,
     bodyColor = null,      // Custom body color (hex string), outline is always black
     dustColor = null,      // Dust particle color (hex string)
-    isStatic = false       // If true, no physics (for indicators)
+    isStatic = false,      // If true, no physics (for indicators)
+    addMouth = false       // If true, add black horizontal mouth line (only for idle)
   } = config
   
   //
@@ -69,7 +70,7 @@ export function create(config) {
   //
   if (bodyColor) {
     try {
-      loadCustomSprites(k, type, bodyColor)
+      loadCustomSprites(k, type, bodyColor, addMouth)
     } catch (error) {
       console.error('Failed to load custom sprites:', error)
       //
@@ -79,9 +80,9 @@ export function create(config) {
   }
   
   //
-  // Determine sprite name based on whether custom color is used
+  // Determine sprite name based on whether custom color and mouth are used
   //
-  let spritePrefix = bodyColor ? `${type}_${bodyColor}` : type
+  let spritePrefix = bodyColor ? `${type}_${bodyColor}${addMouth ? '_mouth' : ''}` : type
   let spriteName = `${spritePrefix}_0_0`
   
   //
@@ -161,9 +162,10 @@ export function create(config) {
  * @param {Object} k - Kaplay instance
  * @param {string} type - Hero type (HERO or ANTIHERO)
  * @param {string} bodyColor - Body color in hex format
+ * @param {boolean} [addMouth=false] - Add mouth to idle sprites
  */
-function loadCustomSprites(k, type, bodyColor) {
-  const prefix = `${type}_${bodyColor}`
+function loadCustomSprites(k, type, bodyColor, addMouth = false) {
+  const prefix = `${type}_${bodyColor}${addMouth ? '_mouth' : ''}`
   
   //
   // Check if sprites with this color are already loaded
@@ -189,7 +191,7 @@ function loadCustomSprites(k, type, bodyColor) {
   for (let x = -1; x <= 1; x++) {
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
-      const spriteData = createFrame(type, 'idle', 0, x, y, bodyColor)
+      const spriteData = createFrame(type, 'idle', 0, x, y, bodyColor, addMouth)
       k.loadSprite(spriteName, spriteData)
     }
   }
@@ -198,14 +200,14 @@ function loadCustomSprites(k, type, bodyColor) {
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, bodyColor))
+    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, bodyColor, addMouth))
   }
   
   //
   // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor))
+    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor, addMouth))
   }
 }
 
@@ -1313,9 +1315,10 @@ function onAnnihilationCollide(inst) {
  * @param {number} eyeOffsetX - Pupil X offset
  * @param {number} eyeOffsetY - Pupil Y offset
  * @param {string} [customBodyColor] - Custom body color in hex format (outline is always black)
+ * @param {boolean} [addMouth=false] - Add black horizontal mouth line (only for idle animation)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, addMouth = false) {
   //
   // Choose body color - custom or default
   //
@@ -1530,6 +1533,17 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   } else {
     ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
     ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
+  }
+  
+  //
+  // Mouth (optional, only for idle animation)
+  //
+  if (addMouth && animation === 'idle') {
+    ctx.fillStyle = getHex(outlineColor)  // Black
+    //
+    // Horizontal line below eyes (centered, 4 pixels wide, lower position)
+    //
+    ctx.fillRect(headX + 2, headY + 7, 4, 1)
   }
   
   //

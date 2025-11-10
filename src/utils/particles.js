@@ -83,6 +83,7 @@ export function create(config = {}) {
       fleeSpeed: 0.7 + Math.random() * 0.6,     // Random flee speed multiplier (0.7-1.3)
       opacity: baseOpacity,
       isFleeing: false,      // Is currently fleeing from mouse
+      isAutoFleeing: false,  // Is fleeing automatically (not from mouse)
       fleeStartX: clampedX,     // Start position when fleeing begins
       fleeStartY: clampedY,
       fleeTargetX: clampedX,    // Target position when fleeing
@@ -261,14 +262,17 @@ export function onUpdate(inst) {
       //
       // Fleeing animation - slow, smooth movement like random floating
       // Each particle has individual flee speed
+      // Auto-fleeing is 30% slower than mouse-triggered flee
       //
-      particle.fleeProgress += k.dt() * 0.4 * particle.fleeSpeed  // Even faster speed (was 0.25)
+      const baseSpeed = particle.isAutoFleeing ? 0.28 : 0.4  // 0.28 = 0.4 * 0.7 (30% slower)
+      particle.fleeProgress += k.dt() * baseSpeed * particle.fleeSpeed
       
       if (particle.fleeProgress >= 1) {
         //
         // Finished fleeing - smoothly transition to new base position
         //
         particle.isFleeing = false
+        particle.isAutoFleeing = false  // Reset auto-flee flag
         particle.baseX = particle.fleeTargetX
         particle.baseY = particle.fleeTargetY
         particle.x = particle.fleeTargetX

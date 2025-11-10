@@ -16,7 +16,7 @@ export const SECTION_COLORS = {
   feel: {
     body: 'FF69B4'      // Hot pink - emotions, passion, feelings
   },
-  memory: {
+  mind: {
     body: 'D2B48C'      // Tan/Sepia - old, faded, nostalgic
   },
   stress: {
@@ -48,7 +48,7 @@ export function getProgress() {
     word: false,
     touch: false,
     feel: false,
-    memory: false,
+    mind: false,
     stress: false,
     time: false,
     lastLevel: null  // Last played level (e.g., 'level-word.2')
@@ -123,7 +123,7 @@ export function resetProgress() {
  * @returns {Array} Array of section configs with positions
  */
 export function getSectionPositions(centerX, centerY, radius) {
-  const sections = ['word', 'touch', 'feel', 'memory', 'stress', 'time']
+  const sections = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
   const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
   //
   // Start angle shifted to have 2 anti-heroes at top

@@ -7,8 +7,10 @@ import * as Particles from '../utils/particles.js'
 const LINE_APPEAR_DELAY = 1.5
 const LINE_FADE_IN_DURATION = 0.8
 const FLICKER_FADE_DURATION = 1.2
-const FLICKER_MIN_OPACITY = 0.5
-const FLICKER_MAX_OPACITY = 1.0
+const FLICKER_MIN_OPACITY = 0.4
+const FLICKER_MAX_OPACITY = 0.75
+const FLICKER_CYCLES_BEFORE_FADE = 3  // Number of flicker cycles before fading out
+const FINAL_FADE_OUT_DURATION = 2.0   // Duration of final fade to zero (seconds)
 
 //
 // Track if ready scene was visited before (session-based, not persistent)
@@ -72,13 +74,12 @@ export function sceneReady(k) {
     // Story text
     //
     const storyLines = [
-      "You'll die. Many times.",
-      "You'll fall for lies.",
-      "You'll doubt every step.",
+      "You’ll die. Many times.",
+      "You’ll fall for lies.",
+      "You’ll doubt every step.",
       "",
-      "",
-      "But each time you fall —",
-      "you'll remember a little more.",
+      "But each time you break apart -",
+      "you’ll find a missing piece of who you are.",
     ]
     
     const lineHeight = 34
@@ -263,7 +264,9 @@ export function sceneReady(k) {
       mouseInfluence: 150,
       bounds: null,  // No bounds - particles can fly anywhere
       time: 0,
-      isCursorVisible: () => isCursorVisible  // Function to check cursor visibility
+      isCursorVisible: () => isCursorVisible,  // Function to check cursor visibility
+      autoScatterTimer: null,  // Timer for automatic scatter
+      autoScatterTriggered: false  // Flag to prevent multiple triggers
     }
     
     //
@@ -316,6 +319,9 @@ export function sceneReady(k) {
       textObj.fadeInProgress = 0
       textObj.isFadingIn = false
       textObj.allLinesAppeared = false
+      textObj.flickerCycleCount = 0  // Track number of complete flicker cycles
+      textObj.isFinalFading = false  // Final fade out to zero
+      textObj.finalFadeProgress = 1.0  // 1.0 = visible, 0.0 = invisible
       
       textObjects.push(textObj)
     })
@@ -324,7 +330,7 @@ export function sceneReady(k) {
     // Hint at bottom (initially hidden)
     //
     const hint = k.add([
-      k.text('Space or Enter - start', { size: 20 }),
+      k.text('Space or Enter - start, touch the light — and see what fades', { size: 20 }),
       k.pos(centerX, 1030),  // Fixed: same as menu, k.height() - 50 = 1030
       k.anchor("center"),
       getColor(k, CFG.colors.ready.hint),
@@ -367,8 +373,11 @@ export function sceneReady(k) {
           textObj.isVisible = true
           textObj.isFadingIn = false
           textObj.fadeInProgress = 1.0
-          textObj.opacity = 1.0
+          textObj.opacity = FLICKER_MAX_OPACITY  // Use max flicker opacity (0.75)
           textObj.allLinesAppeared = true
+          textObj.flickerCycleCount = 0
+          textObj.isFinalFading = false
+          textObj.finalFadeProgress = 1.0
           //
           // Initialize flicker state at max opacity
           //
@@ -460,9 +469,12 @@ export function sceneReady(k) {
     //
     if (isFirstVisit) {
       //
-      // First visit - show lines one by one
+      // First visit - show lines one by one with 1 second initial delay
       //
-      revealNextLine()
+      const initialWait = k.wait(1, () => {
+        revealNextLine()
+      })
+      waitHandles.push(initialWait)
     } else {
       //
       // Return visit - show everything instantly
@@ -488,7 +500,10 @@ export function sceneReady(k) {
             textObj.isFadingIn = false
           }
           
-          textObj.opacity = textObj.fadeInProgress
+          //
+          // Fade to FLICKER_MAX_OPACITY instead of 1.0
+          //
+          textObj.opacity = textObj.fadeInProgress * FLICKER_MAX_OPACITY
           return
         }
         
@@ -496,24 +511,109 @@ export function sceneReady(k) {
         // Flicker effect (after all lines appeared)
         //
         if (textObj.allLinesAppeared) {
-          textObj.flickerTime += k.dt() * textObj.flickerDirection
-          
           //
-          // Reverse direction at bounds
+          // Final fade out to zero
           //
-          if (textObj.flickerTime >= FLICKER_FADE_DURATION) {
-            textObj.flickerDirection = -1
-            textObj.flickerTime = FLICKER_FADE_DURATION
-          } else if (textObj.flickerTime <= 0) {
-            textObj.flickerDirection = 1
-            textObj.flickerTime = 0
+          if (textObj.isFinalFading) {
+            textObj.finalFadeProgress -= k.dt() / FINAL_FADE_OUT_DURATION
+            if (textObj.finalFadeProgress <= 0) {
+              textObj.finalFadeProgress = 0
+              textObj.opacity = 0
+              
+              //
+              // Check if all lines have faded out and start auto-scatter timer
+              //
+              const allLinesFaded = textObjects.every(obj => 
+                storyLines[textObjects.indexOf(obj)] === "" || obj.finalFadeProgress <= 0
+              )
+              
+              if (allLinesFaded && !particleSystem.autoScatterTriggered) {
+                particleSystem.autoScatterTriggered = true
+                //
+                // Wait 4 seconds then trigger automatic scatter
+                //
+                particleSystem.autoScatterTimer = k.wait(4, () => {
+                  //
+                  // Trigger flee for all particles in random directions
+                  //
+                  particleSystem.particles.forEach(particle => {
+                    if (!particle.isFleeing) {
+                      particle.isFleeing = true
+                      particle.isAutoFleeing = true  // Mark as automatic flee (slower)
+                      particle.fleeProgress = 0
+                      particle.fleeStartX = particle.x
+                      particle.fleeStartY = particle.y
+                      particle.hasEverFled = true
+                      
+                      //
+                      // Random direction
+                      //
+                      const randomAngle = Math.random() * Math.PI * 2
+                      const dirX = Math.cos(randomAngle)
+                      const dirY = Math.sin(randomAngle)
+                      
+                      //
+                      // Random distance
+                      //
+                      const fleeDistance = 100 + Math.random() * 150
+                      particle.fleeTargetX = particle.x + dirX * fleeDistance
+                      particle.fleeTargetY = particle.y + dirY * fleeDistance
+                    }
+                  })
+                })
+              }
+            } else {
+              //
+              // Continue flicker during fade out
+              //
+              textObj.flickerTime += k.dt() * textObj.flickerDirection
+              
+              if (textObj.flickerTime >= FLICKER_FADE_DURATION) {
+                textObj.flickerDirection = -1
+                textObj.flickerTime = FLICKER_FADE_DURATION
+              } else if (textObj.flickerTime <= 0) {
+                textObj.flickerDirection = 1
+                textObj.flickerTime = 0
+              }
+              
+              const progress = textObj.flickerTime / FLICKER_FADE_DURATION
+              const flickerOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
+              textObj.opacity = flickerOpacity * textObj.finalFadeProgress
+            }
+          } else {
+            //
+            // Normal flicker
+            //
+            textObj.flickerTime += k.dt() * textObj.flickerDirection
+            
+            //
+            // Reverse direction at bounds and count cycles
+            //
+            if (textObj.flickerTime >= FLICKER_FADE_DURATION) {
+              textObj.flickerDirection = -1
+              textObj.flickerTime = FLICKER_FADE_DURATION
+            } else if (textObj.flickerTime <= 0) {
+              textObj.flickerDirection = 1
+              textObj.flickerTime = 0
+              //
+              // Increment cycle count when reaching bottom
+              //
+              textObj.flickerCycleCount++
+              
+              //
+              // Start final fade after N cycles
+              //
+              if (textObj.flickerCycleCount >= FLICKER_CYCLES_BEFORE_FADE) {
+                textObj.isFinalFading = true
+              }
+            }
+            
+            //
+            // Interpolate opacity between min and max
+            //
+            const progress = textObj.flickerTime / FLICKER_FADE_DURATION
+            textObj.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
           }
-          
-          //
-          // Interpolate opacity between min and max
-          //
-          const progress = textObj.flickerTime / FLICKER_FADE_DURATION
-          textObj.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
         }
       })
     })

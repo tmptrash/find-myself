@@ -91,7 +91,7 @@ export const CFG = {
     ready: {
       background: "191919",         // Dark background      
       title: "FF8C00",              // Orange title (hero color)
-      text: "FFFFFF",               // White text for story lines
+      text: "ff930e",               // Yellow-orange for story lines (lighter, more yellow)
       fireflies: "FF8C00",          // Hero color for fireflies
       hint: "969696",               // Hint color
     },
@@ -129,7 +129,7 @@ export const CFG = {
         outline: "B8860B",          // Dark goldenrod
         lightning: "FFD700"
       },
-      memory: {
+      mind: {
         body: "4ECDC4",             // Turquoise
         outline: "2C7A7B",          // Dark teal
         lightning: "4ECDC4"

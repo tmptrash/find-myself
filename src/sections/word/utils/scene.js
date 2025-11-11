@@ -501,8 +501,8 @@ function addWordBackdrop(k, { levelName, platformColor, bottomPercent, topPercen
     ;[edgePixels[i], edgePixels[j]] = [edgePixels[j], edgePixels[i]]
   }
 
-  const samplingProbability = 0.4
-  const minDistance = 5
+  const samplingProbability = 0.52  // +30% from 0.4
+  const minDistance = 4.6  // Reduced for +30% more density
   const selectedPositions = []
 
   const isFarEnough = (x, y) => {

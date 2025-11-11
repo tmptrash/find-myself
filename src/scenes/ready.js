@@ -19,6 +19,11 @@ let readySceneVisited = false
 
 export function sceneReady(k) {
   k.scene("ready", () => {
+    //
+    // Reset cursor to default (remove pointer cursor from menu)
+    //
+    k.canvas.classList.remove('cursor-pointer')
+    
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     

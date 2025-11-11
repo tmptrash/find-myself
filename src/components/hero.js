@@ -45,6 +45,7 @@ export const HEROES = {
  * @param {string} [config.currentLevel] - Current level name for transition
  * @param {Function} [config.onAnnihilation] - Callback when annihilation completes (deprecated, use currentLevel)
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
+ * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -62,7 +63,8 @@ export function create(config) {
     bodyColor = null,      // Custom body color (hex string), outline is always black
     dustColor = null,      // Dust particle color (hex string)
     isStatic = false,      // If true, no physics (for indicators)
-    addMouth = false       // If true, add black horizontal mouth line (only for idle)
+    addMouth = false,      // If true, add black horizontal mouth line (only for idle)
+    hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
   
   const defaultBodyColor = type === HEROES.HERO ? CFG.colors.hero.body : CFG.colors.antiHero.body
@@ -102,14 +104,19 @@ export function create(config) {
     spriteName = `${spritePrefix}_0_0`
   }
   
+  const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
+  const collisionOffsetY = COLLISION_OFFSET_Y - hitboxPadding
+  const collisionWidth = COLLISION_WIDTH + hitboxPadding * 2
+  const collisionHeight = COLLISION_HEIGHT + hitboxPadding * 2
+
   const character = k.add([
     k.sprite(spriteName),
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
-        k.vec2(COLLISION_OFFSET_X, COLLISION_OFFSET_Y), 
-        COLLISION_WIDTH, 
-        COLLISION_HEIGHT
+        k.vec2(collisionOffsetX, collisionOffsetY),
+        collisionWidth,
+        collisionHeight
       )
     }),
     ...(isStatic ? [k.fixed()] : [k.body()]),  // Use fixed() for static, body() for physics

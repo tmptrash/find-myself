@@ -91,7 +91,6 @@ export function sceneReady(k) {
     const titleY = startY / 2 - 40  // Higher position (was startY / 2)
     const titleText = "find myself"
     const titleFontSize = 140  // Slightly smaller font (was 160)
-    
     //
     // Calculate positions for each letter using canvas measurement
     //
@@ -101,61 +100,37 @@ export function sceneReady(k) {
     
     //
     // Set canvas size with padding
+    // Use same font as Kaplay (JetBrains Mono)
     //
     const padding = 20
-    const letterSpacing = 12  // Additional spacing between letters
-    const horizontalScale = 1.15  // Stretch horizontally by 15%
-    ctx.font = `bold ${titleFontSize}px monospace`
+    const fontFamily = "'JetBrains Mono', monospace"
+    ctx.font = `${titleFontSize}px ${fontFamily}`
+
+    const totalWidth = ctx.measureText(titleText).width
+
+    const canvasWidth = Math.ceil(totalWidth + padding * 2)
+    const canvasHeight = Math.ceil(titleFontSize + padding * 2)
+    canvas.width = canvasWidth
+    canvas.height = canvasHeight
     
     //
-    // Calculate total width with letter spacing and horizontal scale
-    //
-    let totalWidth = 0
-    for (let i = 0; i < titleText.length; i++) {
-      const charWidth = ctx.measureText(titleText[i]).width * horizontalScale
-      totalWidth += charWidth
-      if (i < titleText.length - 1) {
-        totalWidth += letterSpacing
-      }
-    }
-    
-    canvas.width = totalWidth + padding * 2
-    canvas.height = titleFontSize + padding * 2
-    
-    //
-    // Draw text on canvas with letter spacing and horizontal stretch
+    // Draw text in white for pixel sampling
     //
     ctx.fillStyle = 'white'
-    ctx.font = `bold ${titleFontSize}px monospace`
-    ctx.textBaseline = 'top'
-    
-    let currentX = padding
-    for (let i = 0; i < titleText.length; i++) {
-      //
-      // Apply horizontal scale for stretched letters
-      //
-      ctx.save()
-      ctx.translate(currentX, padding)
-      ctx.scale(horizontalScale, 1)
-      ctx.fillText(titleText[i], 0, 0)
-      ctx.restore()
-      
-      const charWidth = ctx.measureText(titleText[i]).width * horizontalScale
-      currentX += charWidth + letterSpacing
-    }
-    
-    //
-    // Get pixel data
-    //
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    ctx.font = `${titleFontSize}px ${fontFamily}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(titleText, canvasWidth / 2, canvasHeight / 2)
+
+    const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight)
     const pixels = imageData.data
     
     //
     // Sample pixels and create particles on letter edges (contours)
     // with minimum distance constraint for even distribution
     //
-    const samplingProbability = 0.397  // Higher probability (+30% from 0.305)
-    const minDistance = 4.8  // Minimum distance between particles (reduced for +20% more density)
+    const samplingProbability = 0.805  // Higher probability (+30% from 0.619)
+    const minDistance = 4.0  // Minimum distance between particles (reduced for +30% more density)
     const startX = centerX - totalWidth / 2
     
     //
@@ -200,12 +175,12 @@ export function sceneReady(k) {
     // Collect all edge pixels first
     //
     const edgePixels = []
-    for (let y = 0; y < canvas.height; y++) {
-      for (let x = 0; x < canvas.width; x++) {
-        const index = (y * canvas.width + x) * 4
+    for (let y = 0; y < canvasHeight; y++) {
+      for (let x = 0; x < canvasWidth; x++) {
+        const index = (y * canvasWidth + x) * 4
         const alpha = pixels[index + 3]
         
-        if (alpha > 128 && isEdgePixel(x, y, pixels, canvas.width, canvas.height)) {
+        if (alpha > 128 && isEdgePixel(x, y, pixels, canvasWidth, canvasHeight)) {
           edgePixels.push({ x, y })
         }
       }
@@ -230,9 +205,16 @@ export function sceneReady(k) {
       
       if (Math.random() < samplingProbability && isFarEnough(pixel.x, pixel.y, tempParticles, minDistance)) {
         tempParticles.push(pixel)
+        //
+        // Calculate world position correctly
+        // Canvas coordinates: (0,0) is top-left of canvas
+        // World coordinates: titleY is center of text (anchor: center)
+        //
+        const worldX = centerX - canvasWidth / 2 + pixel.x
+        const worldY = titleY - canvasHeight / 2 + pixel.y
         titleParticles.push({
-          targetX: startX + pixel.x - padding,
-          targetY: titleY + pixel.y - padding,
+          targetX: worldX,
+          targetY: worldY,
         })
       }
     }

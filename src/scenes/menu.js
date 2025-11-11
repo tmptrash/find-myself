@@ -93,7 +93,8 @@ export function sceneMenu(k) {
         scale: 3,
         controllable: false,
         bodyColor,
-        addMouth: config.section === 'word'  // Add mouth only to "word" section anti-hero
+        addMouth: config.section === 'word',  // Add mouth only to "word" section anti-hero
+        hitboxPadding: 18
       })
       
       antiHeroInst.character.z = 10

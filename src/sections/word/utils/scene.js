@@ -3,6 +3,7 @@ import { getColor, getRGB } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
+import * as Particles from '../../../utils/particles.js'
 import { isSectionComplete } from '../../../utils/progress.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -184,6 +185,18 @@ export function initScene(config) {
     const heroesResult = createLevelHeroes(k, levelName, sound, nextLevel, heroX, heroY)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
+  }
+  
+  if (levelName?.startsWith('level-word')) {
+    const resolvedBottomPercent = bottomPlatformHeight ?? CFG.visual.bottomPlatformHeight
+    const resolvedTopPercent = topPlatformHeight ?? CFG.visual.topPlatformHeight
+    addWordBackdrop(k, {
+      levelName,
+      platformColor: pfColor || CFG.colors['level-word.0']?.platform,
+      bottomPercent: resolvedBottomPercent,
+      topPercent: resolvedTopPercent,
+      hero
+    })
   }
   
   return { sound, hero, antiHero }
@@ -403,4 +416,231 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
   }
   
   return title
+}
+
+/**
+ * Adds stylized "word" backdrop between platforms
+ * @param {Object} k - Kaplay instance
+ * @param {Object} params - Backdrop parameters
+ * @param {string} params.levelName - Level name (e.g., 'level-word.1')
+ * @param {string} [params.platformColor] - Platform color to derive tint
+ * @param {number} params.bottomPercent - Bottom platform height percentage
+ * @param {number} params.topPercent - Top platform height percentage
+ */
+function addWordBackdrop(k, { levelName, platformColor, bottomPercent, topPercent, hero }) {
+  const baseBottomPercent = bottomPercent ?? CFG.visual.bottomPlatformHeight
+  const baseTopPercent = topPercent ?? CFG.visual.topPlatformHeight
+  const bottomHeightPx = k.height() * baseBottomPercent / 100
+  const topHeightPx = k.height() * baseTopPercent / 100
+  const sideWallWidthPx = k.width() * CFG.visual.sideWallWidth / 100
+  const playableTop = topHeightPx
+  const playableBottom = k.height() - bottomHeightPx
+  const playableHeight = playableBottom - playableTop
+  const playableWidth = k.width() - sideWallWidthPx * 2
+  const centerY = playableTop + playableHeight / 2
+  const centerX = k.width() / 2
+  const playableLeft = sideWallWidthPx
+  const playableRight = k.width() - sideWallWidthPx
+  const horizontalMargin = 1
+  const verticalMargin = 0
+
+  const baseColorHex = platformColor || CFG.colors[levelName]?.platform || '666666'
+  const rgb = getRGB(k, baseColorHex)
+
+  const tint = (value, factor) => Math.min(255, Math.max(0, Math.round(value * factor)))
+  const dimColor = {
+    r: tint(rgb.r, 0.4),
+    g: tint(rgb.g, 0.4),
+    b: tint(rgb.b, 0.4)
+  }
+
+  const fontSize = Math.min(playableHeight * 0.4, playableWidth * 0.45)
+
+  const canvasWidth = Math.ceil(playableWidth)
+  const canvasHeight = Math.ceil(fontSize * 1.2)
+  const sampleCanvas = document.createElement('canvas')
+  sampleCanvas.width = canvasWidth
+  sampleCanvas.height = canvasHeight
+  const sampleCtx = sampleCanvas.getContext('2d')
+  sampleCtx.fillStyle = '#ffffff'
+  sampleCtx.font = `bold ${fontSize}px monospace`
+  sampleCtx.textAlign = 'center'
+  sampleCtx.textBaseline = 'middle'
+  sampleCtx.fillText('word', canvasWidth / 2, canvasHeight / 2)
+
+  const imageData = sampleCtx.getImageData(0, 0, canvasWidth, canvasHeight)
+  const pixels = imageData.data
+
+  const isEdgePixel = (x, y) => {
+    const getAlpha = (px, py) => {
+      if (px < 0 || px >= canvasWidth || py < 0 || py >= canvasHeight) return 0
+      return pixels[(py * canvasWidth + px) * 4 + 3]
+    }
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue
+        if (getAlpha(x + dx, y + dy) < 128) return true
+      }
+    }
+    return false
+  }
+
+  const edgePixels = []
+  for (let y = 0; y < canvasHeight; y++) {
+    for (let x = 0; x < canvasWidth; x++) {
+      const alpha = pixels[(y * canvasWidth + x) * 4 + 3]
+      if (alpha > 128 && isEdgePixel(x, y)) {
+        edgePixels.push({ x, y })
+      }
+    }
+  }
+
+  for (let i = edgePixels.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[edgePixels[i], edgePixels[j]] = [edgePixels[j], edgePixels[i]]
+  }
+
+  const samplingProbability = 0.4
+  const minDistance = 5
+  const selectedPositions = []
+
+  const isFarEnough = (x, y) => {
+    const minDistSq = minDistance * minDistance
+    for (let i = 0; i < selectedPositions.length; i++) {
+      const dx = selectedPositions[i].x - x
+      const dy = selectedPositions[i].y - y
+      if (dx * dx + dy * dy < minDistSq) return false
+    }
+    return true
+  }
+
+  edgePixels.forEach(pixel => {
+    if (Math.random() > samplingProbability) return
+
+    const worldX = centerX + (pixel.x - canvasWidth / 2)
+    const worldY = centerY + (pixel.y - canvasHeight / 2)
+
+    const clampedX = Math.max(playableLeft + horizontalMargin, Math.min(playableRight - horizontalMargin, worldX))
+    const clampedY = Math.max(playableTop + verticalMargin, Math.min(playableBottom - verticalMargin, worldY))
+
+    if (isFarEnough(clampedX, clampedY)) {
+      selectedPositions.push({ x: clampedX, y: clampedY })
+    }
+  })
+
+  if (selectedPositions.length === 0) {
+    selectedPositions.push({ x: centerX, y: centerY })
+  }
+
+  const fireflyColor = '#FFE2A8'
+  const particleSystem = {
+    k,
+    particles: [],
+    color: fireflyColor,
+    baseOpacity: 0.55,
+    flickerSpeed: 2.4,
+    trembleRadius: 0.7,
+    trembleRadiusAfterFlee: 5.5,
+    mouseInfluence: 0,
+    threatInfluence: 260,
+    fleeDistance: 150,
+    bounds: {
+      x: playableLeft,
+      y: playableTop,
+      width: playableWidth,
+      height: playableHeight
+    },
+    boundsMargin: { horizontal: horizontalMargin, vertical: verticalMargin },
+    time: 0,
+    getThreatPosition: () => {
+      if (!hero || !hero.character || !hero.character.exists()) {
+        return { active: false }
+      }
+      const pos = hero.character.pos
+      return {
+        x: pos.x,
+        y: pos.y,
+        active: true,
+        influence: 200,
+        fleeDistance: 120
+      }
+    },
+    isCursorVisible: () => false
+  }
+
+  selectedPositions.forEach(pos => {
+    particleSystem.particles.push({
+      baseX: pos.x,
+      baseY: pos.y,
+      x: pos.x,
+      y: pos.y,
+      flickerPhase: Math.random() * Math.PI * 2,
+      tremblePhase: Math.random() * Math.PI * 2,
+      trembleSpeed: 0.8 + Math.random() * 0.4,
+      fleeSpeed: 0.7 + Math.random() * 0.6,
+      opacity: 0.4,
+      isFleeing: false,
+      isAutoFleeing: false,
+      fleeStartX: pos.x,
+      fleeStartY: pos.y,
+      fleeTargetX: pos.x,
+      fleeTargetY: pos.y,
+      fleeProgress: 0,
+      justLanded: false,
+      landedTimer: 0,
+      floatFadeIn: 0,
+      hasEverFled: false
+    })
+  })
+
+  const particleDrawLayer = CFG.visual.zIndex.background + 2
+
+  const inst = Particles.create({
+    k,
+    particleCount: 0,
+    color: fireflyColor,
+    baseOpacity: particleSystem.baseOpacity,
+    flickerSpeed: particleSystem.flickerSpeed,
+    trembleRadius: particleSystem.trembleRadius,
+    mouseInfluence: particleSystem.mouseInfluence,
+    bounds: particleSystem.bounds,
+    gaussianFactor: 0.3,
+    boundsMargin: particleSystem.boundsMargin
+  })
+  inst.particles = particleSystem.particles
+  inst.trembleRadiusAfterFlee = particleSystem.trembleRadiusAfterFlee
+  inst.time = particleSystem.time
+  inst.getThreatPosition = particleSystem.getThreatPosition
+  inst.isCursorVisible = () => false
+  inst.threatInfluence = particleSystem.threatInfluence
+  inst.fleeDistance = particleSystem.fleeDistance
+
+  k.onUpdate(() => {
+    Particles.onUpdate(inst)
+  })
+
+  k.onDraw(() => {
+    inst.particles.forEach(particle => {
+      if (particle.opacity < 0.01) return
+      const pos = k.vec2(particle.x, particle.y)
+
+      k.drawCircle({
+        pos,
+        radius: 4.5,
+        color: k.rgb(255, 200, 150),
+        opacity: particle.opacity * 0.3,
+        z: particleDrawLayer,
+        fixed: true
+      })
+      k.drawCircle({
+        pos,
+        radius: 2.1,
+        color: k.rgb(255, 238, 180),
+        opacity: particle.opacity,
+        z: particleDrawLayer + 0.1,
+        fixed: true
+      })
+    })
+  })
 }

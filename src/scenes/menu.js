@@ -13,6 +13,11 @@ import * as Particles from "../utils/particles.js"
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
+    //
+    // Ensure default custom cursor is visible when entering menu
+    //
+    k.canvas.classList.remove('cursor-pointer')
+    k.canvas.style.removeProperty('cursor')
     
     //
     // Disable gravity in menu

@@ -214,7 +214,7 @@ export function onUpdate(inst) {
     }
     
     if (particle.isFleeing) {
-      const baseSpeed = particle.isAutoFleeing ? 0.28 : 0.4
+      const baseSpeed = particle.isAutoFleeing ? 0.32 : 0.46
       particle.fleeProgress += k.dt() * baseSpeed * particle.fleeSpeed
       
       if (particle.fleeProgress >= 1) {
@@ -226,17 +226,23 @@ export function onUpdate(inst) {
         particle.y = particle.fleeTargetY
         particle.fleeProgress = 0
         particle.floatFadeIn = 0
+        particle.fleeCurveX = 0
+        particle.fleeCurveY = 0
       } else {
         const t = particle.fleeProgress
+        const easedStart = t * t
+        const easedEnd = easedStart * (3 - 2 * easedStart)
         const startX = particle.fleeStartX
         const startY = particle.fleeStartY
         const endX = particle.fleeTargetX
         const endY = particle.fleeTargetY
-        const perpX = -(endY - startY) * 0.15
-        const perpY = (endX - startX) * 0.15
-        const arcFactor = Math.sin(t * Math.PI)
-        particle.x = startX + (endX - startX) * t + perpX * arcFactor
-        particle.y = startY + (endY - startY) * t + perpY * arcFactor
+        const sinFactor = Math.sin(easedStart * Math.PI) * (particle.fleeCurveIntensity || 1)
+        
+        const curveX = particle.fleeCurveX * sinFactor
+        const curveY = particle.fleeCurveY * sinFactor
+        
+        particle.x = startX + (endX - startX) * easedEnd + curveX
+        particle.y = startY + (endY - startY) * easedEnd + curveY
       }
     } else {
       const trembleAmount = particle.hasEverFled ? trembleRadiusAfterFlee : trembleRadius
@@ -261,46 +267,35 @@ export function onUpdate(inst) {
 export function draw(inst) {
   const { k, particles, color } = inst
   
-  //
-  // Parse color once and create reusable objects
-  //
   const r = parseInt(color.slice(1, 3), 16)
   const g = parseInt(color.slice(3, 5), 16)
   const b = parseInt(color.slice(5, 7), 16)
-  const colorObj = k.rgb(r, g, b)
+  const glowColor = k.rgb(r, g, b)
   const coreColor = k.rgb(255, 255, 200)
+  const tmpVec = k.vec2(0, 0)
   
-  //
-  // Draw all particles with simplified rendering (2 circles instead of 4)
-  //
   for (let i = 0; i < particles.length; i++) {
     const particle = particles[i]
     const opacity = particle.opacity
     
     if (opacity < 0.01) continue
     
-    const x = particle.x
-    const y = particle.y
+    tmpVec.x = particle.x
+    tmpVec.y = particle.y
     
-    //
-    // Glow (single larger circle) - reduced size
-    //
     k.drawCircle({
-      pos: k.vec2(x, y),
+      pos: tmpVec,
       radius: 4,
-      color: colorObj,
+      color: glowColor,
       opacity: opacity * 0.25,
       fixed: true
     })
     
-    //
-    // Core (bright center) - reduced size
-    //
     k.drawCircle({
-      pos: k.vec2(x, y),
+      pos: tmpVec,
       radius: 1.5,
       color: coreColor,
-      opacity: opacity,
+      opacity,
       fixed: true
     })
   }

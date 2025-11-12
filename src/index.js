@@ -24,6 +24,7 @@ k.canvas.style.removeProperty('cursor')
 
 // Load resources
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
+k.loadFont("jetbrains-thin", "/fonts/JetBrainsMono-Thin.ttf")
 
 // Load all character sprites (encapsulated in hero.js)
 loadHeroSprites(k)

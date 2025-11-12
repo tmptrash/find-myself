@@ -538,23 +538,25 @@ src/
 - ❌ Mix business logic in `cfg.js`
 - ❌ Use global variables
 - ❌ Manipulate Kaplay objects without inst wrapper
-- ❌ Put complex logic in `onUpdate()`/`onDraw()` callbacks
+- ❌ Put update or draw logic into embedded or arrow functions
 - ❌ Use default exports (`export default`)
 - ❌ Create multiple `AudioContext` instances
 - ❌ Use RGB arrays for colors (use hex strings)
 - ❌ Write comments in languages other than English
 - ❌ Put exported functions at the bottom of files
-- ❌ Do not put comments separated by many = symbol
-- ❌ Do not put function inside other function. Make it private
-- ❌ Do not use console.log() function
-- ❌ Do not put magic (hard-coded) numbers and strings. Put them into the constant at the top or into the config.js if it's a global one
+- ❌ Put comments separated by many = symbol
+- ❌ Pput function inside other function. Make it private
+- ❌ Use console.log() function
+- ❌ Put magic (hard-coded) numbers and strings. Put them into the constant at the top or into the config.js if it's a global one
+- ❌ Write functions inside other functions
+
 
 ### Do
 - ✅ Scene files should only contain serving code. All logic and behavior should live inside components, utils and so on files
 - ✅ Use factory functions with `create()` pattern
 - ✅ Function `create()` should be at the top of the module
-- ✅ Function to update calculations should be called `onUpdate()`
-- ✅ Function to draw something should be called `onDraw()`
+- ✅ Function to update calculations should be called `onUpdate()` and be standalone
+- ✅ Function to draw something should be called `onDraw()` and be standalone
 - ✅ Pass instances to functions
 - ✅ Extract complex logic to private functions
 - ✅ Use centralized configuration

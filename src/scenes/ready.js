@@ -4,714 +4,614 @@ import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Particles from '../utils/particles.js'
 
-const LINE_APPEAR_DELAY = 1.5
-const LINE_FADE_IN_DURATION = 0.8
-const FLICKER_FADE_DURATION = 1.2
-const FLICKER_MIN_OPACITY = 0.4
-const FLICKER_MAX_OPACITY = 0.75
-const FLICKER_CYCLES_BEFORE_FADE = 3  // Number of flicker cycles before fading out
-const FINAL_FADE_OUT_DURATION = 2.0   // Duration of final fade to zero (seconds)
+const HINT_FLICKER_DURATION = 1.2
+const HINT_MIN_OPACITY = 0.4
+const HINT_MAX_OPACITY = 0.75
 
-//
-// Track if ready scene was visited before (session-based, not persistent)
-//
-let readySceneVisited = false
+const TITLE_TEXT = 'find myself'
+const QUOTE_PRIMARY_TEXT = 'through death and pain'
+const QUOTE_SECONDARY_TEXT = '(c) someone very wise'
+
+const DENSITY_MULTIPLIER = 1.2
+
+const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
+const QUOTE_FONT_FAMILY = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
+
+const TITLE_FONT_SIZE = 140
+const QUOTE_PRIMARY_FONT_SIZE = 70
+const QUOTE_SECONDARY_FONT_SIZE = 70
+
+const TITLE_HOLD_DURATION = 4
+const QUOTE_PRIMARY_HOLD_DURATION = 3.4
+const QUOTE_SECONDARY_HOLD_DURATION = 3.4
+
+const LAYOUT_HORIZONTAL_MARGIN = 180
+const QUOTE_SECONDARY_VERTICAL_GAP = 72
+
+const TREMOR_FORMATION = 0.05
+const TREMOR_FREE = 8
+const GATHER_SPEED = 0.55
+const SCATTER_DISTANCE_MIN = 95
+const SCATTER_DISTANCE_MAX = 160
+
+const HINT_Y = 1030
 
 export function sceneReady(k) {
-  k.scene("ready", () => {
+  k.scene('ready', () => {
     //
-    // Reset cursor to default (remove pointer cursor from menu)
+    // Reset cursor to invisible state for this scene
     //
     k.canvas.classList.remove('cursor-pointer')
+    k.canvas.style.cursor = 'none'
     
     const centerX = k.width() / 2
     const centerY = k.height() / 2
     
-    //
-    // Check if this is first visit
-    //
-    const isFirstVisit = !readySceneVisited
-    readySceneVisited = true
-    
-    //
-    // Hide cursor on first visit, show it after 4 seconds
-    //
-    let isCursorVisible = !isFirstVisit  // Track cursor visibility
-    let cursorWaitHandle = null  // Store wait handle to cancel it
-    
-    //
-    // Function to show cursor immediately
-    //
-    const showCursor = () => {
-      if (!isCursorVisible) {
-        k.canvas.style.removeProperty('cursor')  // Remove inline style to restore CSS cursor
-        isCursorVisible = true
-        if (cursorWaitHandle) {
-          cursorWaitHandle.cancel()
-          cursorWaitHandle = null
-        }
-      }
-    }
-    
-    if (isFirstVisit) {
-      k.canvas.style.cursor = "none"
-      cursorWaitHandle = k.wait(4, () => {
-        showCursor()
-      })
-    }
-    
-    //
-    // Create sound instance
-    //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     
-    //
-    // Draw background
-    //
     addBackground(k, CFG.colors.ready.background)
     
     //
-    // No static title - it will be made of fireflies
-    //
-    
-    //
-    // Story text
-    //
-    const storyLines = [
-      "You’ll die. Many times.",
-      "You’ll fall for lies.",
-      "You’ll doubt every step.",
-      "",
-      "But each time you break apart -",
-      "you’ll find a missing piece of who you are.",
-    ]
-    
-    const lineHeight = 34
-    const startY = centerY - (storyLines.length * lineHeight) / 2 + 120  // Even lower position (was +80)
-    
-    //
-    // Create title "find myself" from fireflies
-    //
-    const titleY = startY / 2 - 40  // Higher position (was startY / 2)
-    const titleText = "find myself"
-    const titleFontSize = 140  // Slightly smaller font (was 160)
-    //
-    // Calculate positions for each letter using canvas measurement
-    //
-    const titleParticles = []
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    
-    //
-    // Set canvas size with padding
-    // Use same font as Kaplay (JetBrains Mono)
-    //
-    const padding = 20
-    const fontFamily = "'JetBrains Mono', monospace"
-    ctx.font = `${titleFontSize}px ${fontFamily}`
-
-    const totalWidth = ctx.measureText(titleText).width
-
-    const canvasWidth = Math.ceil(totalWidth + padding * 2)
-    const canvasHeight = Math.ceil(titleFontSize + padding * 2)
-    canvas.width = canvasWidth
-    canvas.height = canvasHeight
-    
-    //
-    // Draw text in white for pixel sampling
-    //
-    ctx.fillStyle = 'white'
-    ctx.font = `${titleFontSize}px ${fontFamily}`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(titleText, canvasWidth / 2, canvasHeight / 2)
-
-    const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight)
-    const pixels = imageData.data
-    
-    //
-    // Sample pixels and create particles on letter edges (contours)
-    // with minimum distance constraint for even distribution
-    //
-    const samplingProbability = 0.805  // Higher probability (+30% from 0.619)
-    const minDistance = 4.0  // Minimum distance between particles (reduced for +30% more density)
-    const startX = centerX - totalWidth / 2
-    
-    //
-    // Helper function to check if pixel is on edge (has transparent neighbors)
-    //
-    const isEdgePixel = (x, y, pixels, width, height) => {
-      const getAlpha = (px, py) => {
-        if (px < 0 || px >= width || py < 0 || py >= height) return 0
-        return pixels[(py * width + px) * 4 + 3]
-      }
-      
-      //
-      // Check all 8 neighbors
-      //
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue
-          if (getAlpha(x + dx, y + dy) < 128) {
-            return true  // Has at least one transparent neighbor
-          }
-        }
-      }
-      return false
-    }
-    
-    //
-    // Helper function to check if position is far enough from existing particles
-    //
-    const isFarEnough = (x, y, existingParticles, minDist) => {
-      const minDistSq = minDist * minDist
-      for (let i = 0; i < existingParticles.length; i++) {
-        const dx = existingParticles[i].x - x
-        const dy = existingParticles[i].y - y
-        if (dx * dx + dy * dy < minDistSq) {
-          return false
-        }
-      }
-      return true
-    }
-    
-    //
-    // Collect all edge pixels first
-    //
-    const edgePixels = []
-    for (let y = 0; y < canvasHeight; y++) {
-      for (let x = 0; x < canvasWidth; x++) {
-        const index = (y * canvasWidth + x) * 4
-        const alpha = pixels[index + 3]
-        
-        if (alpha > 128 && isEdgePixel(x, y, pixels, canvasWidth, canvasHeight)) {
-          edgePixels.push({ x, y })
-        }
-      }
-    }
-    
-    //
-    // Shuffle edge pixels for random sampling
-    //
-    for (let i = edgePixels.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      const temp = edgePixels[i]
-      edgePixels[i] = edgePixels[j]
-      edgePixels[j] = temp
-    }
-    
-    //
-    // Sample particles with minimum distance constraint
-    //
-    const tempParticles = []
-    for (let i = 0; i < edgePixels.length; i++) {
-      const pixel = edgePixels[i]
-      
-      if (Math.random() < samplingProbability && isFarEnough(pixel.x, pixel.y, tempParticles, minDistance)) {
-        tempParticles.push(pixel)
-        //
-        // Calculate world position correctly
-        // Canvas coordinates: (0,0) is top-left of canvas
-        // World coordinates: titleY is center of text (anchor: center)
-        //
-        const worldX = centerX - canvasWidth / 2 + pixel.x
-        const worldY = titleY - canvasHeight / 2 + pixel.y
-        titleParticles.push({
-          targetX: worldX,
-          targetY: worldY,
-        })
-      }
-    }
-    
-    //
-    // Use ALL particles for title only (no text area particles)
-    //
-    const allParticlePositions = []
-    
-    //
-    // Add title particles
-    //
-    titleParticles.forEach(p => {
-      allParticlePositions.push({ x: p.targetX, y: p.targetY })
-    })
-    
-    //
-    // Create custom particle system with predefined positions
-    // Use null bounds for unlimited flee behavior
-    //
-    const particleSystem = {
-      k,
-      particles: [],
-      color: CFG.colors.ready.fireflies,  // Use fireflies color (hero orange)
-      baseOpacity: 0.9,  // Much brighter for clarity (was 0.6)
-      flickerSpeed: 2,
-      trembleRadius: 0.15,  // Minimal movement for sharp edges (was 0.3)
-      trembleRadiusAfterFlee: 8,  // Much larger movement after first flee
-      mouseInfluence: 150,
-      bounds: null,  // No bounds - particles can fly anywhere
-      time: 0,
-      isCursorVisible: () => isCursorVisible,  // Function to check cursor visibility
-      autoScatterTimer: null,  // Timer for automatic scatter
-      autoScatterTriggered: false  // Flag to prevent multiple triggers
-    }
-    
-    //
-    // Create particles at predefined positions
-    //
-    allParticlePositions.forEach(pos => {
-      particleSystem.particles.push({
-        baseX: pos.x,
-        baseY: pos.y,
-        x: pos.x,
-        y: pos.y,
-        flickerPhase: Math.random() * Math.PI * 2,
-        tremblePhase: Math.random() * Math.PI * 2,
-        trembleSpeed: 0.8 + Math.random() * 0.4,  // Random speed multiplier (0.8-1.2)
-        fleeSpeed: 0.7 + Math.random() * 0.6,     // Random flee speed multiplier (0.7-1.3)
-        opacity: 0.4,
-        isFleeing: false,
-        fleeStartX: pos.x,
-        fleeStartY: pos.y,
-        fleeTargetX: pos.x,
-        fleeTargetY: pos.y,
-        fleeProgress: 0,
-        justLanded: false,
-        landedTimer: 0,
-        floatFadeIn: 0,
-        hasEverFled: false  // Track if particle has fled at least once
-      })
-    })
-    
-    const textObjects = []
-    
-    //
-    // Create all text objects initially hidden
-    //
-    storyLines.forEach((line, index) => {
-      const textObj = k.add([
-        k.text(line, { size: 26, align: "center" }),
-        k.pos(centerX, startY + index * lineHeight),
-        k.anchor("center"),
-        getColor(k, CFG.colors.ready.text),
-        k.opacity(0)
-      ])
-      
-      //
-      // Add flicker state for each line
-      //
-      textObj.flickerTime = FLICKER_FADE_DURATION  // Start at max opacity
-      textObj.flickerDirection = -1  // Start going down
-      textObj.isVisible = false
-      textObj.fadeInProgress = 0
-      textObj.isFadingIn = false
-      textObj.allLinesAppeared = false
-      textObj.flickerCycleCount = 0  // Track number of complete flicker cycles
-      textObj.isFinalFading = false  // Final fade out to zero
-      textObj.finalFadeProgress = 1.0  // 1.0 = visible, 0.0 = invisible
-      
-      textObjects.push(textObj)
-    })
-    
-    //
-    // Hint at bottom (initially hidden)
+    // Hint text (visible immediately)
     //
     const hint = k.add([
       k.text('Space or Enter - start, touch the light — and see what fades', { size: 20 }),
-      k.pos(centerX, 1030),  // Fixed: same as menu, k.height() - 50 = 1030
-      k.anchor("center"),
+      k.pos(centerX, HINT_Y),
+      k.anchor('center'),
       getColor(k, CFG.colors.ready.hint),
-      k.opacity(0)
+      k.opacity(1)
     ])
     
-    //
-    // Hint state
-    //
-    hint.isVisible = false
-    hint.isFadingIn = false
-    hint.fadeInProgress = 0
-    hint.allLinesAppeared = false
+    let hintFlickerTime = HINT_FLICKER_DURATION
+    let hintDirection = -1
     
     //
-    // Flicker effect for hint (slow fade in/out)
+    // Prepare firefly layouts
     //
-    let hintFlickerTime = FLICKER_FADE_DURATION  // Start at max opacity
-    let hintDirection = -1  // Start going down
+    const availableWidth = k.width() - LAYOUT_HORIZONTAL_MARGIN * 2
     
-    //
-    // Sequentially reveal lines
-    //
-    let currentLineIndex = 0
-    let allLinesRevealed = false
-    const waitHandles = []
-    
-    const skipToEnd = () => {
-      //
-      // Cancel all pending waits
-      //
-      waitHandles.forEach(handle => handle.cancel())
-      waitHandles.length = 0
-      
-      //
-      // Show all lines instantly
-      //
-      textObjects.forEach((textObj, index) => {
-        if (storyLines[index] !== "") {
-          textObj.isVisible = true
-          textObj.isFadingIn = false
-          textObj.fadeInProgress = 1.0
-          textObj.opacity = FLICKER_MAX_OPACITY  // Use max flicker opacity (0.75)
-          textObj.allLinesAppeared = true
-          textObj.flickerCycleCount = 0
-          textObj.isFinalFading = false
-          textObj.finalFadeProgress = 1.0
-          //
-          // Initialize flicker state at max opacity
-          //
-          textObj.flickerTime = FLICKER_FADE_DURATION
-          textObj.flickerDirection = -1
-        }
-      })
-      
-      //
-      // Show hint
-      //
-      hint.isVisible = true
-      hint.isFadingIn = false
-      hint.fadeInProgress = 1.0
-      hint.opacity = 1.0
-      hint.allLinesAppeared = true
-      
-      //
-      // Initialize hint flicker state at max opacity
-      //
-      hintFlickerTime = FLICKER_FADE_DURATION
-      hintDirection = -1
-      
-      allLinesRevealed = true
-    }
-    
-    const revealNextLine = () => {
-      if (currentLineIndex >= storyLines.length) {
-        //
-        // All story lines appeared - now show hint
-        //
-        textObjects.forEach(textObj => {
-          textObj.allLinesAppeared = true
-        })
-        
-        //
-        // Wait for last story line to finish fading in, then show hint
-        //
-        const hintWait = k.wait(LINE_FADE_IN_DURATION, () => {
-          hint.isVisible = true
-          hint.isFadingIn = true
-          hint.fadeInProgress = 0
-          allLinesRevealed = true
-        })
-        waitHandles.push(hintWait)
-        
-        return
-      }
-      
-      const textObj = textObjects[currentLineIndex]
-      
-      //
-      // Skip empty lines (appear instantly)
-      //
-      if (storyLines[currentLineIndex] === "") {
-        textObj.opacity = 0
-        textObj.isVisible = false
-        currentLineIndex++
-        revealNextLine()
-        return
-      }
-      
-      //
-      // Start fade in
-      //
-      textObj.isVisible = true
-      textObj.isFadingIn = true
-      textObj.fadeInProgress = 0
-      
-      currentLineIndex++
-      
-      //
-      // Schedule next line
-      //
-      if (currentLineIndex < storyLines.length) {
-        const waitHandle = k.wait(LINE_APPEAR_DELAY, revealNextLine)
-        waitHandles.push(waitHandle)
-      } else {
-        //
-        // Last story line started fading in - now schedule hint reveal
-        //
-        const waitHandle = k.wait(LINE_APPEAR_DELAY, revealNextLine)
-        waitHandles.push(waitHandle)
-      }
-    }
-    
-    //
-    // Start revealing lines
-    //
-    if (isFirstVisit) {
-      //
-      // First visit - show lines one by one with 1 second initial delay
-      //
-      const initialWait = k.wait(1, () => {
-        revealNextLine()
-      })
-      waitHandles.push(initialWait)
-    } else {
-      //
-      // Return visit - show everything instantly
-      //
-      skipToEnd()
-    }
-    
-    //
-    // Fade-in and flicker effect for text lines
-    //
-    k.onUpdate(() => {
-      textObjects.forEach(textObj => {
-        if (!textObj.isVisible) return
-        
-        //
-        // Fade in animation
-        //
-        if (textObj.isFadingIn) {
-          textObj.fadeInProgress += k.dt() / LINE_FADE_IN_DURATION
-          
-          if (textObj.fadeInProgress >= 1.0) {
-            textObj.fadeInProgress = 1.0
-            textObj.isFadingIn = false
-          }
-          
-          //
-          // Fade to FLICKER_MAX_OPACITY instead of 1.0
-          //
-          textObj.opacity = textObj.fadeInProgress * FLICKER_MAX_OPACITY
-          return
-        }
-        
-        //
-        // Flicker effect (after all lines appeared)
-        //
-        if (textObj.allLinesAppeared) {
-          //
-          // Final fade out to zero
-          //
-          if (textObj.isFinalFading) {
-            textObj.finalFadeProgress -= k.dt() / FINAL_FADE_OUT_DURATION
-            if (textObj.finalFadeProgress <= 0) {
-              textObj.finalFadeProgress = 0
-              textObj.opacity = 0
-              
-              //
-              // Check if all lines have faded out and start auto-scatter timer
-              //
-              const allLinesFaded = textObjects.every(obj => 
-                storyLines[textObjects.indexOf(obj)] === "" || obj.finalFadeProgress <= 0
-              )
-              
-              if (allLinesFaded && !particleSystem.autoScatterTriggered) {
-                particleSystem.autoScatterTriggered = true
-                //
-                // Wait 4 seconds then trigger automatic scatter
-                //
-                particleSystem.autoScatterTimer = k.wait(4, () => {
-                  //
-                  // Trigger flee for all particles in random directions
-                  //
-                  particleSystem.particles.forEach(particle => {
-                    if (!particle.isFleeing) {
-                      particle.isFleeing = true
-                      particle.isAutoFleeing = true  // Mark as automatic flee (slower)
-                      particle.fleeProgress = 0
-                      particle.fleeStartX = particle.x
-                      particle.fleeStartY = particle.y
-                      particle.hasEverFled = true
-                      
-                      //
-                      // Random direction
-                      //
-                      const randomAngle = Math.random() * Math.PI * 2
-                      const dirX = Math.cos(randomAngle)
-                      const dirY = Math.sin(randomAngle)
-                      
-                      //
-                      // Random distance
-                      //
-                      const fleeDistance = 100 + Math.random() * 150
-                      particle.fleeTargetX = particle.x + dirX * fleeDistance
-                      particle.fleeTargetY = particle.y + dirY * fleeDistance
-                    }
-                  })
-                })
-              }
-            } else {
-              //
-              // Continue flicker during fade out
-              //
-              textObj.flickerTime += k.dt() * textObj.flickerDirection
-              
-              if (textObj.flickerTime >= FLICKER_FADE_DURATION) {
-                textObj.flickerDirection = -1
-                textObj.flickerTime = FLICKER_FADE_DURATION
-              } else if (textObj.flickerTime <= 0) {
-                textObj.flickerDirection = 1
-                textObj.flickerTime = 0
-              }
-              
-              const progress = textObj.flickerTime / FLICKER_FADE_DURATION
-              const flickerOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-              textObj.opacity = flickerOpacity * textObj.finalFadeProgress
-            }
-          } else {
-            //
-            // Normal flicker
-            //
-            textObj.flickerTime += k.dt() * textObj.flickerDirection
-            
-            //
-            // Reverse direction at bounds and count cycles
-            //
-            if (textObj.flickerTime >= FLICKER_FADE_DURATION) {
-              textObj.flickerDirection = -1
-              textObj.flickerTime = FLICKER_FADE_DURATION
-            } else if (textObj.flickerTime <= 0) {
-              textObj.flickerDirection = 1
-              textObj.flickerTime = 0
-              //
-              // Increment cycle count when reaching bottom
-              //
-              textObj.flickerCycleCount++
-              
-              //
-              // Start final fade after N cycles
-              //
-              if (textObj.flickerCycleCount >= FLICKER_CYCLES_BEFORE_FADE) {
-                textObj.isFinalFading = true
-              }
-            }
-            
-            //
-            // Interpolate opacity between min and max
-            //
-            const progress = textObj.flickerTime / FLICKER_FADE_DURATION
-            textObj.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-          }
-        }
-      })
+    const titleLayout = generateLayout({
+      text: TITLE_TEXT,
+      fontSize: TITLE_FONT_SIZE,
+      centerX,
+      centerY,
+      fontFamily: TITLE_FONT_FAMILY
     })
     
+    const particleSystem = createParticleSystem(k, titleLayout.positions)
+    
+    const quotePrimaryLayout = generateLayout({
+      text: QUOTE_PRIMARY_TEXT,
+      fontSize: QUOTE_PRIMARY_FONT_SIZE,
+      centerX,
+      centerY,
+      desiredCount: particleSystem.particles.length,
+      maxWidth: availableWidth,
+      samplingProbability: 1,
+      minDistance: 1.2,
+      singlePixelStroke: true,
+      fontFamily: QUOTE_FONT_FAMILY,
+      morphTargets: particleSystem.layoutPositions
+    })
+    
+    const quoteSecondaryCenterY = centerY
+    const quoteSecondaryLayout = generateLayout({
+      text: QUOTE_SECONDARY_TEXT,
+      fontSize: QUOTE_SECONDARY_FONT_SIZE,
+      centerX,
+      centerY: quoteSecondaryCenterY,
+      desiredCount: particleSystem.particles.length,
+      maxWidth: availableWidth,
+      samplingProbability: 1,
+      minDistance: 1.2,
+      singlePixelStroke: true,
+      fontFamily: QUOTE_FONT_FAMILY,
+      morphTargets: quotePrimaryLayout.positions
+    })
+
+    
     //
-    // Update particles
+    // Scene timeline state
+    //
+    const PHASES = {
+      TITLE_HOLD: 'titleHold',
+      TITLE_SCATTER: 'titleScatter',
+      QUOTE_PRIMARY_GATHER: 'quotePrimaryGather',
+      QUOTE_PRIMARY_HOLD: 'quotePrimaryHold',
+      QUOTE_PRIMARY_SCATTER: 'quotePrimaryScatter',
+      QUOTE_SECONDARY_GATHER: 'quoteSecondaryGather',
+      QUOTE_SECONDARY_HOLD: 'quoteSecondaryHold',
+      QUOTE_SECONDARY_SCATTER: 'quoteSecondaryScatter',
+      FREE: 'free'
+    }
+    
+    let currentPhase = PHASES.TITLE_HOLD
+    let phaseTimer = 0
+    
+    const setPhase = phase => {
+      currentPhase = phase
+      phaseTimer = 0
+    }
+    
+    //
+    // Update loop for particles and timeline
     //
     k.onUpdate(() => {
+      phaseTimer += k.dt()
+      
+      switch (currentPhase) {
+        case PHASES.TITLE_HOLD: {
+          if (phaseTimer >= TITLE_HOLD_DURATION) {
+            scatterParticles(particleSystem)
+            setPhase(PHASES.TITLE_SCATTER)
+          }
+          break
+        }
+        case PHASES.TITLE_SCATTER: {
+          if (particlesIdle(particleSystem.particles)) {
+            moveParticlesToLayout(particleSystem, quotePrimaryLayout.positions)
+            setPhase(PHASES.QUOTE_PRIMARY_GATHER)
+          }
+          break
+        }
+        case PHASES.QUOTE_PRIMARY_GATHER: {
+          if (particlesIdle(particleSystem.particles)) {
+            setPhase(PHASES.QUOTE_PRIMARY_HOLD)
+          }
+          break
+        }
+        case PHASES.QUOTE_PRIMARY_HOLD: {
+          if (phaseTimer >= QUOTE_PRIMARY_HOLD_DURATION) {
+            scatterParticles(particleSystem)
+            setPhase(PHASES.QUOTE_PRIMARY_SCATTER)
+          }
+          break
+        }
+        case PHASES.QUOTE_PRIMARY_SCATTER: {
+          if (particlesIdle(particleSystem.particles)) {
+            moveParticlesToLayout(particleSystem, quoteSecondaryLayout.positions)
+            setPhase(PHASES.QUOTE_SECONDARY_GATHER)
+          }
+          break
+        }
+        case PHASES.QUOTE_SECONDARY_GATHER: {
+          if (particlesIdle(particleSystem.particles)) {
+            setPhase(PHASES.QUOTE_SECONDARY_HOLD)
+          }
+          break
+        }
+        case PHASES.QUOTE_SECONDARY_HOLD: {
+          if (phaseTimer >= QUOTE_SECONDARY_HOLD_DURATION) {
+            scatterParticles(particleSystem)
+            setPhase(PHASES.QUOTE_SECONDARY_SCATTER)
+          }
+          break
+        }
+        case PHASES.QUOTE_SECONDARY_SCATTER: {
+          if (particlesIdle(particleSystem.particles)) {
+            setPhase(PHASES.FREE)
+          }
+          break
+        }
+        case PHASES.FREE:
+        default:
+          break
+      }
+      
       Particles.onUpdate(particleSystem)
+
+      //
+      // Hint flicker (always active)
+      //
+      hintFlickerTime += k.dt() * hintDirection
+      if (hintFlickerTime >= HINT_FLICKER_DURATION) {
+        hintDirection = -1
+        hintFlickerTime = HINT_FLICKER_DURATION
+      } else if (hintFlickerTime <= 0) {
+        hintDirection = 1
+        hintFlickerTime = 0
+      }
+      const hintProgress = hintFlickerTime / HINT_FLICKER_DURATION
+      hint.opacity = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * hintProgress
     })
     
-    //
-    // Draw particles
-    //
     k.onDraw(() => {
       Particles.draw(particleSystem)
     })
     
     //
-    // Hint flicker update loop
+    // Controls
     //
-    k.onUpdate(() => {
-      //
-      // Fade in animation
-      //
-      if (hint.isFadingIn) {
-        hint.fadeInProgress += k.dt() / LINE_FADE_IN_DURATION
-        
-        if (hint.fadeInProgress >= 1.0) {
-          hint.fadeInProgress = 1.0
-          hint.isFadingIn = false
-          hint.allLinesAppeared = true
-        }
-        
-        hint.opacity = hint.fadeInProgress
-        return
-      }
-      
-      //
-      // Flicker effect (after fade in complete)
-      //
-      if (hint.allLinesAppeared) {
-        hintFlickerTime += k.dt() * hintDirection
-        
-        //
-        // Reverse direction at bounds
-        //
-        if (hintFlickerTime >= FLICKER_FADE_DURATION) {
-          hintDirection = -1
-          hintFlickerTime = FLICKER_FADE_DURATION
-        } else if (hintFlickerTime <= 0) {
-          hintDirection = 1
-          hintFlickerTime = 0
-        }
-        
-        //
-        // Interpolate opacity between min and max
-        //
-        const progress = hintFlickerTime / FLICKER_FADE_DURATION
-        hint.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-      }
-    })
-    
-    //
-    // Press space/enter to start or skip
-    //
-    CFG.controls.startGame.forEach(key => {
-      k.onKeyPress(key, () => {
-        //
-        // Show cursor immediately if it was hidden
-        //
-        showCursor()
-        
-        //
-        // If not all lines revealed yet - skip to end
-        //
-        if (!allLinesRevealed) {
-          skipToEnd()
-          return
-        }
-        
-        //
-        // Otherwise go to menu
-        //
-        Sound.stopAmbient(sound)
-        k.go("menu")
-      })
-    })
-    
-    //
-    // Click anywhere to start or skip
-    //
-    k.onClick(() => {
-      //
-      // Show cursor immediately if it was hidden
-      //
-      showCursor()
-      
-      //
-      // If not all lines revealed yet - skip to end
-      //
-      if (!allLinesRevealed) {
-        skipToEnd()
-        return
-      }
-      
-      //
-      // Otherwise go to menu
-      //
+    const exitToMenu = () => {
       Sound.stopAmbient(sound)
-      k.go("menu")
+      k.go('menu')
+    }
+    
+    CFG.controls.startGame.forEach(key => {
+      k.onKeyPress(key, exitToMenu)
     })
+    
+    k.onClick(exitToMenu)
   })
+}
+
+function createParticleSystem(k, layoutPositions) {
+  const count = Math.max(1, Math.floor(layoutPositions.length * DENSITY_MULTIPLIER))
+  const extendedPositions = []
+  const particles = []
+  
+  for (let i = 0; i < count; i++) {
+    const base = layoutPositions[i % layoutPositions.length]
+    const pos = { x: base.x, y: base.y }
+    extendedPositions.push(pos)
+    particles.push({
+      baseX: pos.x,
+      baseY: pos.y,
+      x: pos.x,
+      y: pos.y,
+      flickerPhase: Math.random() * Math.PI * 2,
+      tremblePhase: Math.random() * Math.PI * 2,
+      trembleSpeed: 0.8 + Math.random() * 0.4,
+      fleeSpeed: 0.7 + Math.random() * 0.6,
+      opacity: 0.4,
+      isFleeing: false,
+      isAutoFleeing: false,
+      fleeStartX: pos.x,
+      fleeStartY: pos.y,
+      fleeTargetX: pos.x,
+      fleeTargetY: pos.y,
+      fleeProgress: 0,
+      floatFadeIn: 0,
+      hasEverFled: false,
+      fleeCurveX: 0,
+      fleeCurveY: 0,
+      fleeTimeOffset: Math.random() * Math.PI * 2,
+      fleeCurveIntensity: 1 + Math.random() * 0.75
+    })
+  }
+  
+  return {
+    k,
+    particles,
+    color: CFG.colors.ready.fireflies,
+    baseOpacity: 0.9,
+    flickerSpeed: 2,
+    trembleRadius: TREMOR_FORMATION,
+    trembleRadiusAfterFlee: TREMOR_FORMATION,
+    mouseInfluence: 0,
+    bounds: null,
+    time: 0,
+    isCursorVisible: () => false,
+    layoutPositions: extendedPositions.map(pos => ({ x: pos.x, y: pos.y }))
+  }
+}
+
+function generateLayout({
+  text,
+  fontSize,
+  centerX,
+  centerY,
+  desiredCount,
+  samplingProbability = 0.8,
+  minDistance = 4,
+  maxWidth,
+  singlePixelStroke = false,
+  fontFamily = TITLE_FONT_FAMILY,
+  morphTargets
+}) {
+  const lines = text.split('\n')
+  const padding = 24
+  const lineHeight = fontSize * 1.2
+  
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${fontSize}px ${fontFamily}`
+  
+  const maxLineWidth = Math.max(...lines.map(line => ctx.measureText(line).width))
+  const rawCanvasWidth = Math.ceil(maxLineWidth + padding * 2)
+  const canvasHeight = Math.ceil(lineHeight * lines.length + padding * 2)
+  
+  canvas.width = rawCanvasWidth
+  canvas.height = canvasHeight
+  
+  ctx.fillStyle = 'white'
+  ctx.font = `${fontSize}px ${fontFamily}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  
+  const scaleX = maxWidth ? Math.min(1, maxWidth / rawCanvasWidth) : 1
+  const effectiveWidth = rawCanvasWidth * scaleX
+  
+  ctx.save()
+  ctx.translate(rawCanvasWidth / 2, 0)
+  ctx.scale(scaleX, 1)
+  
+  const strokeWidth = singlePixelStroke ? Math.max(0.75, 1 / scaleX) : 1
+  ctx.lineWidth = strokeWidth
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = 'white'
+  
+  lines.forEach((line, index) => {
+    const lineY = padding + lineHeight * index + lineHeight / 2
+    if (singlePixelStroke) {
+      ctx.strokeText(line, 0, lineY)
+    } else {
+      ctx.fillText(line, 0, lineY)
+    }
+  })
+  
+  ctx.restore()
+  
+  const imageData = ctx.getImageData(0, 0, rawCanvasWidth, canvasHeight)
+  const pixels = imageData.data
+  
+  const edgePixels = collectEdgePixels(rawCanvasWidth, canvasHeight, pixels)
+  shuffle(edgePixels)
+  
+  const positions = []
+  const temp = []
+  
+  for (let i = 0; i < edgePixels.length; i++) {
+    const pixel = edgePixels[i]
+    if (Math.random() > samplingProbability) continue
+    if (!isFarEnough(pixel.x, pixel.y, temp, minDistance)) continue
+    temp.push(pixel)
+    
+    const worldX = centerX - effectiveWidth / 2 + pixel.x * scaleX
+    const worldY = centerY - canvasHeight / 2 + pixel.y
+    positions.push({ x: worldX, y: worldY })
+  }
+  
+  let finalPositions = positions
+  if (desiredCount) {
+    finalPositions = normalizeLayoutCount(
+      positions,
+      desiredCount,
+      centerX,
+      centerY,
+      morphTargets
+    )
+  }
+  
+  const metrics = {
+    width: effectiveWidth,
+    height: canvasHeight,
+    lineHeight,
+    lines: lines.length
+  }
+  
+  return {
+    positions: finalPositions,
+    metrics
+  }
+}
+
+function normalizeLayoutCount(positions, desiredCount, centerX, centerY, morphTargets) {
+  if (positions.length === desiredCount) {
+    return positions.map(pos => ({ x: pos.x, y: pos.y }))
+  }
+  
+  let adjusted = positions.map(pos => ({ x: pos.x, y: pos.y }))
+  
+  if (morphTargets && morphTargets.length && adjusted.length) {
+    const matched = []
+    const remaining = [...adjusted]
+    morphTargets.forEach(target => {
+      if (!remaining.length) return
+      let bestIndex = 0
+      let bestDist = Infinity
+      for (let i = 0; i < remaining.length; i++) {
+        const candidate = remaining[i]
+        const dx = candidate.x - target.x
+        const dy = candidate.y - target.y
+        const dist = dx * dx + dy * dy
+        if (dist < bestDist) {
+          bestDist = dist
+          bestIndex = i
+        }
+      }
+      matched.push(remaining.splice(bestIndex, 1)[0])
+    })
+    adjusted = matched.concat(remaining)
+  }
+  
+  if (adjusted.length > desiredCount) {
+    shuffle(adjusted)
+    return adjusted.slice(0, desiredCount)
+  }
+  
+  if (adjusted.length === 0) {
+    const fallbackX = centerX ?? 0
+    const fallbackY = centerY ?? 0
+    while (adjusted.length < desiredCount) {
+      adjusted.push({ x: fallbackX, y: fallbackY })
+    }
+    return adjusted
+  }
+  
+  const baseSource =
+    morphTargets && morphTargets.length ? morphTargets : positions.length ? positions : adjusted
+  let index = 0
+  const jitterAmount = 0.35
+  
+  while (adjusted.length < desiredCount) {
+    const source = baseSource[index % baseSource.length]
+    const fallback = positions[index % positions.length] || adjusted[adjusted.length - 1]
+    const base = source || fallback
+    adjusted.push({
+      x: base.x + (Math.random() - 0.5) * jitterAmount,
+      y: base.y + (Math.random() - 0.5) * jitterAmount
+    })
+    index++
+  }
+  
+  return adjusted
+}
+
+function collectEdgePixels(width, height, pixels) {
+  const edgePixels = []
+  
+  const getAlpha = (x, y) => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return 0
+    return pixels[(y * width + x) * 4 + 3]
+  }
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = getAlpha(x, y)
+      if (alpha <= 128) continue
+      
+      let isEdge = false
+      for (let dy = -1; dy <= 1 && !isEdge; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue
+          if (getAlpha(x + dx, y + dy) < 128) {
+            isEdge = true
+            break
+          }
+        }
+      }
+      
+      if (isEdge) {
+        edgePixels.push({ x, y })
+      }
+    }
+  }
+  
+  return edgePixels
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const temp = array[i]
+    array[i] = array[j]
+    array[j] = temp
+  }
+}
+
+function isFarEnough(x, y, existing, minDistance) {
+  const minDistSq = minDistance * minDistance
+  for (let i = 0; i < existing.length; i++) {
+    const dx = existing[i].x - x
+    const dy = existing[i].y - y
+    if (dx * dx + dy * dy < minDistSq) return false
+  }
+  return true
+}
+
+function scatterParticles(system) {
+  const { particles } = system
+  system.trembleRadius = TREMOR_FREE
+  system.trembleRadiusAfterFlee = TREMOR_FREE
+  particles.forEach(particle => {
+    if (particle.isFleeing) return
+    const angle = Math.random() * Math.PI * 2
+    const distance = SCATTER_DISTANCE_MIN + Math.random() * (SCATTER_DISTANCE_MAX - SCATTER_DISTANCE_MIN)
+    const targetX = particle.x + Math.cos(angle) * distance
+    const targetY = particle.y + Math.sin(angle) * distance
+    
+    particle.isFleeing = true
+    particle.isAutoFleeing = true
+    particle.fleeProgress = 0
+    particle.fleeStartX = particle.x
+    particle.fleeStartY = particle.y
+    particle.fleeTargetX = targetX
+    particle.fleeTargetY = targetY
+    particle.hasEverFled = true
+    particle.floatFadeIn = 0
+  })
+}
+
+function moveParticlesToLayout(system, layoutPositions) {
+  const { particles } = system
+  system.trembleRadius = TREMOR_FORMATION
+  system.trembleRadiusAfterFlee = TREMOR_FORMATION
+  
+  const average = layoutPositions.reduce(
+    (acc, pos) => {
+      acc.x += pos.x
+      acc.y += pos.y
+      return acc
+    },
+    { x: 0, y: 0 }
+  )
+  const count = layoutPositions.length || 1
+  const centerX = average.x / count
+  const centerY = average.y / count
+  
+  const targets = layoutPositions.length
+    ? layoutPositions.map(pos => ({ ...pos }))
+    : [{ x: centerX, y: centerY }]
+  
+  const availableParticles = [...particles]
+  const assignments = []
+  
+  targets.forEach(target => {
+    if (availableParticles.length === 0) return
+    
+    let bestIndex = 0
+    let bestDistance = Infinity
+    
+    for (let i = 0; i < availableParticles.length; i++) {
+      const candidate = availableParticles[i]
+      const dx = target.x - candidate.x
+      const dy = target.y - candidate.y
+      const distSq = dx * dx + dy * dy
+      if (distSq < bestDistance) {
+        bestDistance = distSq
+        bestIndex = i
+      }
+    }
+    
+    const particle = availableParticles.splice(bestIndex, 1)[0]
+    assignments.push({ particle, target })
+  })
+  
+  assignments.forEach(({ particle, target }) => {
+    particle.isFleeing = true
+    particle.isAutoFleeing = true
+    particle.fleeSpeed = GATHER_SPEED + Math.random() * 0.22
+    particle.fleeProgress = 0
+    particle.fleeStartX = particle.x
+    particle.fleeStartY = particle.y
+    particle.fleeTargetX = target.x
+    particle.fleeTargetY = target.y
+    particle.hasEverFled = true
+    particle.floatFadeIn = 0
+    const curveMagnitude = 30 + Math.random() * 55
+    const curveAngle = Math.random() * Math.PI * 2
+    particle.fleeCurveX = Math.cos(curveAngle) * curveMagnitude
+    particle.fleeCurveY = Math.sin(curveAngle) * curveMagnitude
+    particle.fleeCurveIntensity = 1 + Math.random() * 0.75
+  })
+  
+  if (availableParticles.length > 0 && targets.length > 0) {
+    availableParticles.forEach((particle, index) => {
+      const target = targets[index % targets.length]
+      particle.isFleeing = true
+      particle.isAutoFleeing = true
+      particle.fleeSpeed = GATHER_SPEED + Math.random() * 0.22
+      particle.fleeProgress = 0
+      particle.fleeStartX = particle.x
+      particle.fleeStartY = particle.y
+      particle.fleeTargetX = target.x
+      particle.fleeTargetY = target.y
+      particle.hasEverFled = true
+      particle.floatFadeIn = 0
+      const curveMagnitude = 30 + Math.random() * 55
+      const curveAngle = Math.random() * Math.PI * 2
+      particle.fleeCurveX = Math.cos(curveAngle) * curveMagnitude
+      particle.fleeCurveY = Math.sin(curveAngle) * curveMagnitude
+      particle.fleeCurveIntensity = 1 + Math.random() * 0.75
+    })
+  }
+  
+  system.layoutPositions = targets.map(pos => ({ x: pos.x, y: pos.y }))
+}
+
+function particlesIdle(particles) {
+  return particles.every(particle => !particle.isFleeing)
 }

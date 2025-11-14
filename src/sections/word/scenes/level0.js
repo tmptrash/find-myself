@@ -22,7 +22,7 @@ export function sceneLevel0(k) {
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.0'].spikes,
       subTitle: "some words are sharper than any blade...",
-      subTitleColor: CFG.colors['level-word.0'].background,
+      subTitleColor: CFG.colors['level-word.0'].spikes,
     })
     
     //
@@ -30,7 +30,7 @@ export function sceneLevel0(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
-      color: CFG.colors['level-word.0'].spikes
+      color: 'B0B0B0'  // Light gray for ghostly/ethereal flying words
     })
     
     //

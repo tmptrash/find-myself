@@ -45,35 +45,35 @@ export const CFG = {
     "level-word.0": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
-      spikes: "DC143C",             // Crimson red spikes (for level indicator)
+      spikes: "6B8E9F",             // Steel blue blades (cold steel)
       instructions: "CCCCCC",       // Light gray instructions
     },
     // Level 1 colors (word section)
     "level-word.1": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
-      spikes: "DC143C",             // Crimson red spikes (danger!)
+      spikes: "6B8E9F",             // Steel blue blades (cold steel)
       instructions: "CCCCCC",       // Light gray instructions
     },
     // Level 2 colors (word section)
     "level-word.2": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
-      spikes: "DC143C",             // Crimson red spikes (danger!)
+      spikes: "6B8E9F",             // Steel blue blades (cold steel)
       instructions: "CCCCCC",       // Light gray instructions
     },
     // Level 3 colors (word section)
     "level-word.3": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
-      spikes: "DC143C",             // Crimson red spikes (danger!)
+      spikes: "6B8E9F",             // Steel blue blades (cold steel)
       instructions: "CCCCCC",       // Light gray instructions
     },
     // Level 4 colors (word section)
     "level-word.4": {
       background: "3E3E3E",         // Dark gray (foggy gloom)
       platform: "1A1A1A",           // Nearly black platforms
-      spikes: "DC143C",             // Crimson red spikes (danger!)
+      spikes: "6B8E9F",             // Steel blue blades (cold steel)
       instructions: "CCCCCC",       // Light gray instructions
     },
     

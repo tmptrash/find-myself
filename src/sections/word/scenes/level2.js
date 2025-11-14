@@ -32,7 +32,7 @@ export function sceneLevel2(k) {
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.2'].spikes,
       subTitle: "words are blades that never rust",
-      subTitleColor: CFG.colors['level-word.2'].background,
+      subTitleColor: CFG.colors['level-word.2'].spikes,
       platformGap: [
         // First gap for first moving platform
         {

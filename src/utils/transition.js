@@ -197,12 +197,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         const subtitle = LEVEL_SUBTITLES[nextLevel] || ''
         
         if (subtitle) {
-          // Get red color from level config (same as title/spikes)
-          let levelColorHex = "DC143C" // Default crimson red
+          // Get color from next level config (same as title/spikes)
+          let levelColorHex = "6B8E9F" // Default steel blue
           
           try {
-            if (CFG && CFG.colors && CFG.colors[currentLevel] && CFG.colors[currentLevel].spikes) {
-              levelColorHex = CFG.colors[currentLevel].spikes
+            if (CFG && CFG.colors && CFG.colors[nextLevel] && CFG.colors[nextLevel].spikes) {
+              levelColorHex = CFG.colors[nextLevel].spikes
             }
           } catch (e) {
             console.warn('Could not get level color, using default:', e)

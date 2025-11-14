@@ -32,18 +32,20 @@ const LETTERS = [
  * @param {number} [cfg.minSize=18] - Minimum font size
  * @param {number} [cfg.maxSize=30] - Maximum font size
  * @param {number} [cfg.rotationSpeedZ=480] - Maximum Z-axis rotation speed (degrees per second)
+ * @param {number} [cfg.letterToWordRatio=0.8] - Ratio of letters to words (0.8 = 80% letters, 20% words)
  * @returns {Object} Flying words instance
  */
 export function create(cfg) {
   const {
     k,
     color,
-    wordCount = 60,
+    wordCount = 40,
     minSpeed = 50,
-    maxSpeed = 300,
+    maxSpeed = 150,
     minSize = 20,
     maxSize = 28,
-    rotationSpeedZ = 480
+    rotationSpeedZ = 150,
+    letterToWordRatio = 0.75
   } = cfg
 
   const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
@@ -74,7 +76,8 @@ export function create(cfg) {
       playableRight,
       initialSpawn: true,
       isBehindHero,
-      rotationSpeedZ
+      rotationSpeedZ,
+      letterToWordRatio
     })
     words.push(word)
   }
@@ -91,7 +94,8 @@ export function create(cfg) {
     playableBottom,
     playableLeft,
     playableRight,
-    rotationSpeedZ
+    rotationSpeedZ,
+    letterToWordRatio
   }
 
   return inst
@@ -129,8 +133,35 @@ export function onUpdate(inst) {
 
     //
     // Update 2D rotation (spinning in plane) - leaves tumble as they fall
+    // Smoothly change rotation direction over time with random targets
     //
-    word.rotation += word.rotationSpeed * k.dt()
+    if (!word.rotationTargetModifier) {
+      word.rotationTargetModifier = (Math.random() - 0.5) * 2  // -1 to +1
+      word.rotationCurrentModifier = word.rotationTargetModifier
+      word.rotationChangeTimer = 0
+      word.rotationChangeDuration = 2 + Math.random() * 3  // 2-5 seconds between changes
+    }
+    
+    word.rotationChangeTimer += k.dt()
+    
+    //
+    // Time to pick a new random target
+    //
+    if (word.rotationChangeTimer >= word.rotationChangeDuration) {
+      word.rotationTargetModifier = (Math.random() - 0.5) * 2  // New random target -1 to +1
+      word.rotationChangeTimer = 0
+      word.rotationChangeDuration = 2 + Math.random() * 3  // New random duration
+    }
+    
+    //
+    // Smoothly interpolate towards target
+    //
+    const lerpSpeed = 0.5  // Smooth transition speed
+    word.rotationCurrentModifier += (word.rotationTargetModifier - word.rotationCurrentModifier) * lerpSpeed * k.dt()
+    
+    const currentRotationSpeed = word.rotationSpeed * (1 + word.rotationCurrentModifier * 0.7)
+    
+    word.rotation += currentRotationSpeed * k.dt()
     word.textObj.angle = word.rotation
     
     //
@@ -178,8 +209,35 @@ export function onUpdate(inst) {
 
     //
     // Update 3D rotation (turning to face viewer) - realistic tumbling
+    // Smoothly change Z rotation direction over time with random targets
     //
-    word.rotationZ += word.rotationSpeedZ * k.dt()
+    if (!word.rotationZTargetModifier) {
+      word.rotationZTargetModifier = (Math.random() - 0.5) * 2  // -1 to +1
+      word.rotationZCurrentModifier = word.rotationZTargetModifier
+      word.rotationZChangeTimer = 0
+      word.rotationZChangeDuration = 2 + Math.random() * 3  // 2-5 seconds between changes
+    }
+    
+    word.rotationZChangeTimer += k.dt()
+    
+    //
+    // Time to pick a new random target
+    //
+    if (word.rotationZChangeTimer >= word.rotationZChangeDuration) {
+      word.rotationZTargetModifier = (Math.random() - 0.5) * 2  // New random target -1 to +1
+      word.rotationZChangeTimer = 0
+      word.rotationZChangeDuration = 2 + Math.random() * 3  // New random duration
+    }
+    
+    //
+    // Smoothly interpolate towards target
+    //
+    const lerpSpeedZ = 0.4  // Smooth transition speed (slightly slower for Z)
+    word.rotationZCurrentModifier += (word.rotationZTargetModifier - word.rotationZCurrentModifier) * lerpSpeedZ * k.dt()
+    
+    const currentRotationSpeedZ = word.rotationSpeedZ * (1 + word.rotationZCurrentModifier * 0.8)
+    
+    word.rotationZ += currentRotationSpeedZ * k.dt()
     const zRotRad = word.rotationZ * Math.PI / 180
     const scaleX = Math.abs(Math.cos(zRotRad))
     
@@ -353,13 +411,14 @@ function createWord(k, params) {
     playableRight,
     initialSpawn,
     isBehindHero,
-    rotationSpeedZ
+    rotationSpeedZ,
+    letterToWordRatio = 0.8
   } = params
 
   //
-  // 80% chance to be a letter, 20% chance to be a word
+  // Use letterToWordRatio to determine if it's a letter or word
   //
-  const isLetter = Math.random() < 0.8
+  const isLetter = Math.random() < letterToWordRatio
   const text = isLetter
     ? LETTERS[Math.floor(Math.random() * LETTERS.length)]
     : WORDS[Math.floor(Math.random() * WORDS.length)]
@@ -513,12 +572,12 @@ function createWord(k, params) {
  * @param {number} x - New X position
  */
 function resetWord(word, inst, x) {
-  const { playableTop, playableBottom, minSpeed, maxSpeed, minSize, maxSize, rotationSpeedZ } = inst
+  const { playableTop, playableBottom, minSpeed, maxSpeed, minSize, maxSize, rotationSpeedZ, letterToWordRatio } = inst
 
   //
-  // 80% chance to be a letter, 20% chance to be a word
+  // Use letterToWordRatio to determine if it's a letter or word
   //
-  word.isLetter = Math.random() < 0.8
+  word.isLetter = Math.random() < letterToWordRatio
   const text = word.isLetter
     ? LETTERS[Math.floor(Math.random() * LETTERS.length)]
     : WORDS[Math.floor(Math.random() * WORDS.length)]

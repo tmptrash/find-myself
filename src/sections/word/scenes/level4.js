@@ -17,7 +17,7 @@ export function sceneLevel4(k) {
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.4'].spikes,
       subTitle: "words are blades that leave invisible wounds",
-      subTitleColor: CFG.colors['level-word.4'].background
+      subTitleColor: CFG.colors['level-word.4'].spikes
     })
     
     // Create custom platforms with pit in the middle

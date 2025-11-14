@@ -36,7 +36,7 @@ export function sceneLevel3(k) {
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.3'].spikes,
       subTitle: "when feelings grow dull, words become sharper",
-      subTitleColor: CFG.colors['level-word.3'].background,
+      subTitleColor: CFG.colors['level-word.3'].spikes,
       heroX: heroX,  // Custom hero position (shifted right by 2 pyramids)
       heroY: heroY,
       platformGap: [

@@ -25,7 +25,7 @@ export function sceneLevel1(k) {
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.1'].spikes,
       subTitle: "sometimes words cut deeper than blades...",
-      subTitleColor: CFG.colors['level-word.1'].background,
+      subTitleColor: CFG.colors['level-word.1'].spikes,
       platformGap: {
         x: movingPlatformX - spikeWidth / 2,  // Start gap before platform
         width: spikeWidth  // Gap width matches spike width

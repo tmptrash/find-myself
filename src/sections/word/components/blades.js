@@ -58,6 +58,8 @@ export function getSingleSpikeWidth(k) {
  * @param {Object} [config.sfx] - Sound instance for audio effects
  * @param {string} [config.color] - Hex color for the spike (defaults to level spike color)
  * @param {number} [config.spikeCount=3] - Number of spike pyramids to draw
+ * @param {number} [config.scale=1] - Scale multiplier for the spike
+ * @param {number} [config.zIndex] - Custom z-index (defaults to platforms)
  * @returns {Object} Spikes instance with spike object and state
  */
 export function create(config) {
@@ -70,7 +72,9 @@ export function create(config) {
     onHit = null,
     sfx = null,
     color = CFG.colors['level-word.1'].spikes,
-    spikeCount = 3
+    spikeCount = 3,
+    scale = 1,
+    zIndex = CFG.visual.zIndex.platforms
   } = config
 
   // Calculate dynamic sizes based on screen resolution
@@ -79,7 +83,7 @@ export function create(config) {
   const spikeWidth = (SINGLE_SPIKE_WIDTH_BLOCKS * spikeCount + SPIKE_GAP_BLOCKS * (spikeCount - 1)) * blockSize
 
   // Load spike sprite with custom color and spike count
-  const spriteKey = `spike_${orientation}_${color}_${spikeCount}`
+  const spriteKey = `spike_${orientation}_${color}_${spikeCount}_v14`
   if (!k.getSprite(spriteKey)) {
     k.loadSprite(spriteKey, createSpikeSprite(orientation, blockSize, color, spikeCount))
   }
@@ -100,8 +104,8 @@ export function create(config) {
     }),
     k.anchor("center"),
     k.rotate(rotation),
-    k.scale(SPIKE_SCALE),
-    k.z(CFG.visual.zIndex.platforms),
+    k.scale(SPIKE_SCALE * scale),
+    k.z(zIndex),
     k.opacity(0),
     "spike"
   ])
@@ -287,50 +291,104 @@ function createSpikeSprite(orientation, blockSize, color, spikeCount = 3) {
   const spikeGap = SPIKE_GAP_BLOCKS * blockSize
   const spikeWidth = singleSpikeWidth * spikeCount + spikeGap * (spikeCount - 1)
   
+  //
+  // Add extra space for outline (1 block on each side, 1 block top and bottom)
+  //
+  const outlinePadding = blockSize
+  
   // Canvas size based on orientation
   if (orientation === ORIENTATIONS.LEFT || orientation === ORIENTATIONS.RIGHT) {
-    canvas.width = spikeHeight
-    canvas.height = spikeWidth
+    canvas.width = spikeHeight + outlinePadding * 2
+    canvas.height = spikeWidth + outlinePadding * 2
   } else {
-    canvas.width = spikeWidth
-    canvas.height = spikeHeight
+    canvas.width = spikeWidth + outlinePadding * 2
+    canvas.height = spikeHeight + outlinePadding * 2
   }
 
   // Use provided color for spikes
   const spikeColor = getHex(color)
-  ctx.fillStyle = spikeColor
-
-  // Draw pixelated spikes using fillRect for 8-bit style (45° stepped pyramids)
   
+  //
   // Draw each spike as stepped pyramid (45° sides, sharp point on top)
+  //
   for (let i = 0; i < spikeCount; i++) {
-    const baseX = i * (singleSpikeWidth + spikeGap)
-    const centerX = baseX + singleSpikeWidth / 2
+    const baseX = i * (singleSpikeWidth + spikeGap) + outlinePadding
+    const numSteps = Math.floor(spikeHeight / blockSize)
     
-    // Calculate number of steps (each step is blockSize high)
-    const numSteps = Math.floor(canvas.height / blockSize)
+    //
+    // First pass: Draw black outline blocks
+    //
+    ctx.fillStyle = '#000000'
     
-    // Draw pyramid from bottom to top, step by step
     for (let step = 0; step < numSteps; step++) {
       const y = step * blockSize
-      
-      // For 45° angle: each step is 1 block narrower on each side
       const blocksFromEachEdge = step
       const rowWidth = singleSpikeWidth - (blocksFromEachEdge * 2 * blockSize)
       
-      // Stop if width becomes zero or negative
       if (rowWidth <= 0) break
       
-      // Draw the row of pixels centered
+      const startX = baseX + blocksFromEachEdge * blockSize
+      const numBlocks = Math.floor(rowWidth / blockSize)
+      const blockY = canvas.height - y - blockSize - outlinePadding
+      
+      //
+      // Draw left outline block
+      //
+      ctx.fillRect(
+        Math.floor(startX - blockSize),
+        blockY,
+        blockSize,
+        blockSize
+      )
+      
+      //
+      // Draw right outline block
+      //
+      ctx.fillRect(
+        Math.floor(startX + numBlocks * blockSize),
+        blockY,
+        blockSize,
+        blockSize
+      )
+      
+      //
+      // Draw top outline blocks (for the top row)
+      //
+      if (step === numSteps - 1 || rowWidth <= blockSize) {
+        //
+        // Draw the single top block above the pyramid tip (center only)
+        //
+        const topBlockX = baseX + singleSpikeWidth / 2 - blockSize / 2
+        ctx.fillRect(
+          Math.floor(topBlockX),
+          blockY - blockSize,
+          blockSize,
+          blockSize
+        )
+      }
+      
+    }
+    
+    //
+    // Second pass: Draw colored blocks on top
+    //
+    ctx.fillStyle = spikeColor
+    
+    for (let step = 0; step < numSteps; step++) {
+      const y = step * blockSize
+      const blocksFromEachEdge = step
+      const rowWidth = singleSpikeWidth - (blocksFromEachEdge * 2 * blockSize)
+      
+      if (rowWidth <= 0) break
+      
       const startX = baseX + blocksFromEachEdge * blockSize
       const numBlocks = Math.floor(rowWidth / blockSize)
       
-      // Draw blocks for this row
       for (let b = 0; b < numBlocks; b++) {
         ctx.fillRect(
-          Math.floor(startX + b * blockSize), 
-          canvas.height - y - blockSize, 
-          blockSize, 
+          Math.floor(startX + b * blockSize),
+          canvas.height - y - blockSize - outlinePadding,
+          blockSize,
           blockSize
         )
       }

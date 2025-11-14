@@ -33,6 +33,7 @@ const LETTERS = [
  * @param {number} [cfg.maxSize=30] - Maximum font size
  * @param {number} [cfg.rotationSpeedZ=480] - Maximum Z-axis rotation speed (degrees per second)
  * @param {number} [cfg.letterToWordRatio=0.8] - Ratio of letters to words (0.8 = 80% letters, 20% words)
+ * @param {Object} [cfg.customBounds] - Custom playable area bounds {left, right, top, bottom}
  * @returns {Object} Flying words instance
  */
 export function create(cfg) {
@@ -45,17 +46,30 @@ export function create(cfg) {
     minSize = 20,
     maxSize = 28,
     rotationSpeedZ = 150,
-    letterToWordRatio = 0.75
+    letterToWordRatio = 0.75,
+    customBounds = null
   } = cfg
 
-  const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
-  const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
-  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+  //
+  // Use custom bounds if provided, otherwise calculate from platform config
+  //
+  let playableTop, playableBottom, playableLeft, playableRight
+  
+  if (customBounds) {
+    playableLeft = customBounds.left
+    playableRight = customBounds.right
+    playableTop = customBounds.top
+    playableBottom = customBounds.bottom
+  } else {
+    const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
+    const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
+    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
 
-  const playableTop = topPlatformHeight + 20
-  const playableBottom = k.height() - bottomPlatformHeight - 20
-  const playableLeft = sideWallWidth
-  const playableRight = k.width() - sideWallWidth
+    playableTop = topPlatformHeight + 20
+    playableBottom = k.height() - bottomPlatformHeight - 20
+    playableLeft = sideWallWidth
+    playableRight = k.width() - sideWallWidth
+  }
 
   const words = []
 

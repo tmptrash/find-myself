@@ -21,12 +21,25 @@ export function sceneLevel4(k) {
       subTitleColor: CFG.colors['level-word.4'].spikes
     })
     
+    // Create custom platforms with pit in the middle
+    const pitInfo = createCustomPlatforms(k, CFG.colors['level-word.4'].platform)
+    
     //
-    // Create flying words for atmosphere
+    // Create flying words for atmosphere (constrained to narrow pit area between walls)
     //
+    const topPlatformHeightForWords = k.height() * CFG.levels['level-word.4'].topPlatformHeight / 100
+    const bottomPlatformHeightForWords = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
+    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+    
     const flyingWords = FlyingWords.create({
       k,
-      color: 'B0B0B0'  // Light gray for ghostly/ethereal flying words
+      color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
+      customBounds: {
+        left: sideWallWidth + 20,
+        right: k.width() - sideWallWidth - 20,
+        top: topPlatformHeightForWords + 20,
+        bottom: k.height() - bottomPlatformHeightForWords - 20
+      }
     })
     
     //
@@ -35,9 +48,6 @@ export function sceneLevel4(k) {
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    
-    // Create custom platforms with pit in the middle
-    const pitInfo = createCustomPlatforms(k, CFG.colors['level-word.4'].platform)
     
     // Create bottom of the pit (platform at pit depth)
     const heroHeight = k.height() * 0.08  // Approximate hero height (8% of screen)

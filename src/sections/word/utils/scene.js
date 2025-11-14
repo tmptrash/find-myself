@@ -313,7 +313,8 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
     type: 'antiHero',
     sfx: sound,
     dustColor,
-    addMouth: true
+    addMouth: true,
+    bodyColor: 'DC143C'  // Crimson red for anti-hero
   })
   
   // Hide anti-hero initially (will be shown when spawned)

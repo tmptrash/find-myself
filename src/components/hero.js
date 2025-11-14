@@ -465,7 +465,7 @@ export function death(inst, onComplete) {
  * @param {Object} inst - Hero instance
  */
 export function spawn(inst) {
-  const { k, character, type, sfx } = inst
+  const { k, character, type, sfx, bodyColor } = inst
   const x = character.pos.x
   const y = character.pos.y
   
@@ -473,8 +473,9 @@ export function spawn(inst) {
   character.hidden = true
   
   // Determine particle color based on type
+  // Use custom bodyColor if provided, otherwise use default from config
   const colors = CFG.colors
-  const particleColor = type === HEROES.HERO ? colors.hero.body : colors.antiHero.body
+  const particleColor = bodyColor || (type === HEROES.HERO ? colors.hero.body : colors.antiHero.body)
   
   // Create particles for assembly effect
   const particles = []
@@ -1068,12 +1069,18 @@ function onAnnihilationCollide(inst) {
   const particles = []
   const particleCount = 80  // Create many particles at once
   
+  //
+  // Get anti-hero colors (use custom bodyColor if provided, otherwise use default)
+  //
+  const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.colors.antiHero.body
+  const antiHeroOutlineColor = CFG.colors.antiHero.outline
+  
   for (let i = 0; i < particleCount; i++) {
     //
-    // Randomly choose body or outline color
+    // Randomly choose body or outline color (80% body, 20% outline for more red)
     //
-    const useBodyColor = k.rand(0, 1) > 0.5
-    const particleColor = useBodyColor ? CFG.colors.antiHero.body : CFG.colors.antiHero.outline
+    const useBodyColor = k.rand(0, 1) > 0.2
+    const particleColor = useBodyColor ? antiHeroBodyColor : antiHeroOutlineColor
     
     const particle = k.add([
       k.rect(k.rand(2, 7), k.rand(2, 7)),

@@ -1,6 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
+import * as FlyingWords from '../components/flying-words.js'
 
 /**
  * Level 0 scene - Introduction level with blade obstacles
@@ -22,6 +23,21 @@ export function sceneLevel0(k) {
       levelTitleColor: CFG.colors['level-word.0'].spikes,
       subTitle: "some words are sharper than any blade...",
       subTitleColor: CFG.colors['level-word.0'].background,
+    })
+    
+    //
+    // Create flying words for atmosphere
+    //
+    const flyingWords = FlyingWords.create({
+      k,
+      color: CFG.colors['level-word.0'].spikes
+    })
+    
+    //
+    // Update flying words animation
+    //
+    k.onUpdate(() => {
+      FlyingWords.onUpdate(flyingWords)
     })
     
     //

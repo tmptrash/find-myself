@@ -52,12 +52,21 @@ export function create(config) {
   blade.spike.opacity = 1
   blade.spike.z = CFG.visual.zIndex.platforms + 2
   
+  //
+  // Get block size for outline
+  //
+  const blockSize = Blades.getSpikeBlockSize(k)
+  const outlineWidth = blockSize
+  
   // Create the arm (horizontal rectangle with width of spike base)
   // Start with minimal width, will grow over time
+  // Position at top-left corner, so y is the top edge
+  const armY = y - armThickness / 2
+  
   const arm = k.add([
     k.rect(0, armThickness),
-    k.pos(startX, y),
-    k.anchor("left"),
+    k.pos(startX, armY),
+    k.anchor("topleft"),
     k.area(),
     k.body({ isStatic: true }),
     getColor(k, color),
@@ -65,9 +74,33 @@ export function create(config) {
     "blade-arm"
   ])
   
+  //
+  // Create black outline strips (top and bottom)
+  // Outline width = one block size
+  //
+  const armOutlineTop = k.add([
+    k.rect(0, outlineWidth),
+    k.pos(startX, armY - outlineWidth),
+    k.anchor("topleft"),
+    k.color(0, 0, 0),
+    k.z(CFG.visual.zIndex.platforms + 2),
+    "blade-arm-outline"
+  ])
+  
+  const armOutlineBottom = k.add([
+    k.rect(0, outlineWidth),
+    k.pos(startX, armY + armThickness),
+    k.anchor("topleft"),
+    k.color(0, 0, 0),
+    k.z(CFG.visual.zIndex.platforms + 2),
+    "blade-arm-outline"
+  ])
+  
   const inst = {
     k,
     arm,
+    armOutlineTop,
+    armOutlineBottom,
     blade,
     hero,
     sfx,
@@ -129,6 +162,12 @@ function updateBladeArm(inst) {
     const startWidth = inst.targetWidth - extensionStep
     inst.currentWidth = startWidth + (extensionStep * progress)
     arm.width = inst.currentWidth
+    
+    //
+    // Update outline widths to match arm
+    //
+    inst.armOutlineTop.width = inst.currentWidth
+    inst.armOutlineBottom.width = inst.currentWidth
     
     // Update blade position to be at the end of the arm
     updateBladePosition(inst)

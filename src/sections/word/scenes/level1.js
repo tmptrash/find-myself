@@ -2,6 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
+import * as FlyingWords from '../components/flying-words.js'
 
 export function sceneLevel1(k) {
   k.scene("level-word.1", () => {
@@ -30,6 +31,21 @@ export function sceneLevel1(k) {
         x: movingPlatformX - spikeWidth / 2,  // Start gap before platform
         width: spikeWidth  // Gap width matches spike width
       }
+    })
+    
+    //
+    // Create flying words for atmosphere
+    //
+    const flyingWords = FlyingWords.create({
+      k,
+      color: 'B0B0B0'  // Light gray for ghostly/ethereal flying words
+    })
+    
+    //
+    // Update flying words animation
+    //
+    k.onUpdate(() => {
+      FlyingWords.onUpdate(flyingWords)
     })
     
     const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100

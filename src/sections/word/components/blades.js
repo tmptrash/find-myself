@@ -236,7 +236,7 @@ function updateAnimation(inst) {
  * @param {Object} k - Kaplay instance
  * @returns {number} Size of one block in pixels
  */
-function getSpikeBlockSize(k) {
+export function getSpikeBlockSize(k) {
   return SPIKE_BLOCK_SIZE
 }
 /**

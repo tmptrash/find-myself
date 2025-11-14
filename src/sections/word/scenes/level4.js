@@ -4,6 +4,7 @@ import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
+import * as FlyingWords from '../components/flying-words.js'
 
 export function sceneLevel4(k) {
   k.scene("level-word.4", () => {
@@ -18,6 +19,21 @@ export function sceneLevel4(k) {
       levelTitleColor: CFG.colors['level-word.4'].spikes,
       subTitle: "words are blades that leave invisible wounds",
       subTitleColor: CFG.colors['level-word.4'].spikes
+    })
+    
+    //
+    // Create flying words for atmosphere
+    //
+    const flyingWords = FlyingWords.create({
+      k,
+      color: 'B0B0B0'  // Light gray for ghostly/ethereal flying words
+    })
+    
+    //
+    // Update flying words animation
+    //
+    k.onUpdate(() => {
+      FlyingWords.onUpdate(flyingWords)
     })
     
     // Create custom platforms with pit in the middle

@@ -65,11 +65,11 @@ export function showTransitionToLevel(k, targetLevel) {
 // Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
   'menu': '',      // Before Level 0
-  'level-word.0': 'words: they cut deeper than steel',     // Before Level 1
-  'level-word.1': 'leaving scars that never heal',         // Before Level 2
-  'level-word.2': 'silent wounds that never close',        // Before Level 3
-  'level-word.3': 'until nothing remains but echoes',      // Before Level 4
-  'level-word.4': 'some words are sharper than any blade'  // No subtitle when returning to menu
+  'level-word.0': 'words, they cut deeper than blades',
+  'level-word.1': "sharp words don’t cut - they make you fall",
+  'level-word.2': 'the blades you forget hurt the most',
+  'level-word.3': 'hesitation kills',
+  'level-word.4': 'some words are sharper than any blade'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

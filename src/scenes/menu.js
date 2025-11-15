@@ -99,6 +99,7 @@ export function sceneMenu(k) {
         controllable: false,
         bodyColor,
         addMouth: config.section === 'word',  // Add mouth only to "word" section anti-hero
+        addArms: config.section === 'touch',  // Add arms only to "touch" section anti-hero
         hitboxPadding: 5  // Smaller hitbox for better precision
       })
       

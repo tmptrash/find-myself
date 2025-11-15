@@ -64,19 +64,20 @@ export function create(config) {
     dustColor = null,      // Dust particle color (hex string)
     isStatic = false,      // If true, no physics (for indicators)
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
+    addArms = false,       // If true, add simple vertical arms
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
   
   const defaultBodyColor = type === HEROES.HERO ? CFG.colors.hero.body : CFG.colors.antiHero.body
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
-  const shouldLoadCustomSprites = Boolean(bodyColor) || addMouth
+  const shouldLoadCustomSprites = Boolean(bodyColor) || addMouth || addArms
 
   //
-  // Load custom colored sprites if color is provided or mouth is required
+  // Load custom colored sprites if color is provided or mouth/arms are required
   //
   if (shouldLoadCustomSprites) {
     try {
-      loadCustomSprites(k, type, effectiveBodyColor, addMouth)
+      loadCustomSprites(k, type, effectiveBodyColor, addMouth, addArms)
     } catch (error) {
       console.error('Failed to load custom sprites:', error)
       //
@@ -86,10 +87,10 @@ export function create(config) {
   }
   
   //
-  // Determine sprite name based on whether custom color and mouth are used
+  // Determine sprite name based on whether custom color, mouth and arms are used
   //
   let spritePrefix = shouldLoadCustomSprites
-    ? `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}`
+    ? `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
     : type
   let spriteName = `${spritePrefix}_0_0`
   
@@ -176,9 +177,10 @@ export function create(config) {
  * @param {string} type - Hero type (HERO or ANTIHERO)
  * @param {string} bodyColor - Body color in hex format
  * @param {boolean} [addMouth=false] - Add mouth to idle sprites
+ * @param {boolean} [addArms=false] - Add arms to sprites
  */
-function loadCustomSprites(k, type, bodyColor, addMouth = false) {
-  const prefix = `${type}_${bodyColor}${addMouth ? '_mouth' : ''}`
+function loadCustomSprites(k, type, bodyColor, addMouth = false, addArms = false) {
+  const prefix = `${type}_${bodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
   
   //
   // Check if sprites with this color are already loaded
@@ -204,7 +206,7 @@ function loadCustomSprites(k, type, bodyColor, addMouth = false) {
   for (let x = -1; x <= 1; x++) {
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
-      const spriteData = createFrame(type, 'idle', 0, x, y, bodyColor, addMouth)
+      const spriteData = createFrame(type, 'idle', 0, x, y, bodyColor, addMouth, addArms)
       k.loadSprite(spriteName, spriteData)
     }
   }
@@ -213,14 +215,14 @@ function loadCustomSprites(k, type, bodyColor, addMouth = false) {
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, bodyColor, addMouth))
+    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, bodyColor, addMouth, addArms))
   }
   
   //
   // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor, addMouth))
+    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor, addMouth, addArms))
   }
 }
 
@@ -1575,9 +1577,10 @@ function onAnnihilationCollide(inst) {
  * @param {number} eyeOffsetY - Pupil Y offset
  * @param {string} [customBodyColor] - Custom body color in hex format (outline is always black)
  * @param {boolean} [addMouth=false] - Add black horizontal mouth line (only for idle animation)
+ * @param {boolean} [addArms=false] - Add simple vertical arms
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, addMouth = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, addMouth = false, addArms = false) {
   //
   // Choose body color - custom or default
   //
@@ -1820,6 +1823,22 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   // Legs
   ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
   ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
+  
+  //
+  // Custom arms (optional, simple vertical lines drawn on top)
+  //
+  if (addArms) {
+    ctx.fillStyle = getHex(outlineColor)  // Black
+    //
+    // Arms positioned at the same X as legs, shifted outward by arm width
+    //
+    const armStartY = bodyY + 4  // Start lower (was +2, now +4)
+    const armLength = 6  // Length of arms
+    const armWidth = 1  // Arm width
+    
+    ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
+    ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
+  }
   
   return canvas.toDataURL()
 }

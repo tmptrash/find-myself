@@ -2,6 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as FlyingWords from '../components/flying-words.js'
+import { getColor } from '../../../utils/helper.js'
 
 /**
  * Level 0 scene - Introduction level with blade obstacles

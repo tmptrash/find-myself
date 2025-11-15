@@ -306,30 +306,80 @@ export function death(inst, onComplete) {
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
     const speed = k.rand(150, 350)
-    const size = k.rand(4, 8)
-    const color = k.choose(particleColors)
+    const pSize = k.rand(4, 8)
+    const oSize = pSize + 4  // Thicker black outline (was +1)
+    const colorHex = k.choose(particleColors)
     
-    const particle = k.add([
-      k.rect(size, size),
+    //
+    // Parse hex color to RGB
+    //
+    const r = parseInt(colorHex.substring(0, 2), 16)
+    const g = parseInt(colorHex.substring(2, 4), 16)
+    const b = parseInt(colorHex.substring(4, 6), 16)
+    
+    const rotation = k.rand(0, 360)
+    
+    //
+    // Create invisible body for physics
+    //
+    const body = k.add([
+      k.rect(pSize, pSize),
       k.pos(centerX, centerY),
-      getColor(k, color),
       k.anchor("center"),
-      k.rotate(k.rand(0, 360)),
-      k.z(CFG.visual.zIndex.player),
+      k.rotate(rotation),
+      k.z(CFG.visual.zIndex.player - 1),
       k.area(),
-      k.body()
+      k.body(),
+      k.opacity(0)  // Invisible
+    ])
+    
+    //
+    // Create visual particle that follows the body
+    //
+    const particle = k.add([
+      k.pos(centerX, centerY),
+      k.anchor("center"),
+      k.rotate(rotation),
+      k.z(CFG.visual.zIndex.player),
+      k.opacity(1),
+      {
+        draw() {
+          //
+          // Draw black outline first
+          //
+          k.drawRect({
+            width: oSize,
+            height: oSize,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(0, 0, 0)
+          })
+          
+          //
+          // Draw colored particle on top
+          //
+          k.drawRect({
+            width: pSize,
+            height: pSize,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(r, g, b)
+          })
+        }
+      }
     ])
     
     //
     // Set initial velocity using Kaplay's body component
     //
-    particle.vel.x = Math.cos(angle) * speed
-    particle.vel.y = Math.sin(angle) * speed
+    body.vel.x = Math.cos(angle) * speed
+    body.vel.y = Math.sin(angle) * speed
     
     particle.lifetime = 0
     particle.rotSpeed = k.rand(-540, 540)
     particle.maxLifetime = 2.0  // Live longer to see them fall
     particle.isEye = false
+    particle.body = body
     
     //
     // Apply air friction (slow down horizontal movement)
@@ -338,14 +388,20 @@ export function death(inst, onComplete) {
       particle.lifetime += k.dt()
       
       //
+      // Sync visual particle with invisible body
+      //
+      particle.pos = particle.body.pos
+      particle.angle = particle.body.angle
+      
+      //
       // Apply air friction to horizontal velocity
       //
-      particle.vel.x *= 0.98
+      particle.body.vel.x *= 0.98
       
       //
       // Rotate particle
       //
-      particle.angle += particle.rotSpeed * k.dt()
+      particle.body.angle += particle.rotSpeed * k.dt()
       
       //
       // Fade out over lifetime
@@ -360,6 +416,7 @@ export function death(inst, onComplete) {
       // Destroy when max lifetime reached or falls off screen
       //
       if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
+        k.destroy(particle.body)
         k.destroy(particle)
       }
     })
@@ -477,25 +534,116 @@ export function spawn(inst) {
   const colors = CFG.colors
   const particleColor = bodyColor || (type === HEROES.HERO ? colors.hero.body : colors.antiHero.body)
   
+  //
+  // Generate target points along character outline
+  // Character is approximately 32x32 pixels scaled by HERO_SCALE (3)
+  //
+  const charSize = 32 * HERO_SCALE
+  const targetPoints = []
+  
+  // Generate points around the perimeter of the character
+  const pointCount = 20
+  for (let i = 0; i < pointCount; i++) {
+    const angle = (i / pointCount) * Math.PI * 2
+    const radius = charSize / 2 * 0.5  // Reduce radius by 50% (smaller outline)
+    const offsetX = Math.cos(angle) * radius * k.rand(0.5, 1)
+    const offsetY = Math.sin(angle) * radius * k.rand(0.5, 1)
+    
+    targetPoints.push({
+      x: x + offsetX,
+      y: y + offsetY
+    })
+  }
+  
   // Create particles for assembly effect
   const particles = []
   const particleCount = 20
+  const scale = 2
+  const particleSize = 4
+  const outlineSize = particleSize + 1  // Reduced from +2 to +1 (thinner outline)
   
   for (let i = 0; i < particleCount; i++) {
+    const startX = x + k.rand(-100, 100)
+    const startY = y + k.rand(-100, 100)
+    
+    //
+    // Parse hex color to RGB
+    //
+    const r = parseInt(particleColor.substring(0, 2), 16)
+    const g = parseInt(particleColor.substring(2, 4), 16)
+    const b = parseInt(particleColor.substring(4, 6), 16)
+    
+    //
+    // Random shape parameters
+    //
+    const shapeType = k.choose(['square', 'rect_h', 'rect_v', 'small_square'])
+    const rotation = k.rand(0, 360)
+    
+    let pWidth, pHeight, oWidth, oHeight
+    
+    if (shapeType === 'square') {
+      pWidth = pHeight = particleSize * scale
+      oWidth = oHeight = outlineSize * scale
+    } else if (shapeType === 'rect_h') {
+      // Horizontal rectangle
+      pWidth = particleSize * scale * k.rand(1.3, 1.8)
+      pHeight = particleSize * scale * k.rand(0.6, 0.8)
+      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
+      oHeight = pHeight + 1 * scale
+    } else if (shapeType === 'rect_v') {
+      // Vertical rectangle
+      pWidth = particleSize * scale * k.rand(0.6, 0.8)
+      pHeight = particleSize * scale * k.rand(1.3, 1.8)
+      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
+      oHeight = pHeight + 1 * scale
+    } else {
+      // Small square
+      pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
+      oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
+    }
+    
+    //
+    // Create a single game object that will draw both outline and colored part
+    //
     const particle = k.add([
-      k.rect(6, 6),
-      k.pos(
-        x + k.rand(-100, 100),
-        y + k.rand(-100, 100)
-      ),
-      getColor(k, particleColor),
+      k.pos(startX, startY),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.player),
-      "assemblyParticle"
+      k.rotate(rotation),
+      k.z(101),
+      "assemblyParticle",
+      {
+        draw() {
+          //
+          // Draw black outline first (behind)
+          //
+          k.drawRect({
+            width: oWidth,
+            height: oHeight,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(0, 0, 0)
+          })
+          
+          //
+          // Draw colored particle on top
+          //
+          k.drawRect({
+            width: pWidth,
+            height: pHeight,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(r, g, b)
+          })
+        }
+      }
     ])
     
-    particle.targetX = x
-    particle.targetY = y
+    //
+    // Assign target point from the outline (cycle through points)
+    //
+    const targetPoint = targetPoints[i % targetPoints.length]
+    particle.targetX = targetPoint.x
+    particle.targetY = targetPoint.y
     particle.speed = k.rand(200, 400)
     
     particles.push(particle)
@@ -1080,19 +1228,89 @@ function onAnnihilationCollide(inst) {
   const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.colors.antiHero.body
   const antiHeroOutlineColor = CFG.colors.antiHero.outline
   
+  const scale = 2
+  const particleSize = 4
+  const outlineSize = particleSize + 1  // Reduced from +2 to +1 (thinner outline)
+  
   for (let i = 0; i < particleCount; i++) {
     //
     // Randomly choose body or outline color (80% body, 20% outline for more red)
     //
     const useBodyColor = k.rand(0, 1) > 0.2
-    const particleColor = useBodyColor ? antiHeroBodyColor : antiHeroOutlineColor
+    const particleColorHex = useBodyColor ? antiHeroBodyColor : antiHeroOutlineColor
     
+    //
+    // Parse hex color to RGB
+    //
+    const r = parseInt(particleColorHex.substring(0, 2), 16)
+    const g = parseInt(particleColorHex.substring(2, 4), 16)
+    const b = parseInt(particleColorHex.substring(4, 6), 16)
+    
+    const particleX = targetPos.x + k.rand(-20, 20)
+    const particleY = targetPos.y + k.rand(-20, 20)
+    
+    //
+    // Random shape parameters
+    //
+    const shapeType = k.choose(['square', 'rect_h', 'rect_v', 'small_square'])
+    const rotation = k.rand(0, 360)
+    
+    let pWidth, pHeight, oWidth, oHeight
+    
+    if (shapeType === 'square') {
+      pWidth = pHeight = particleSize * scale
+      oWidth = oHeight = outlineSize * scale
+    } else if (shapeType === 'rect_h') {
+      // Horizontal rectangle
+      pWidth = particleSize * scale * k.rand(1.3, 1.8)
+      pHeight = particleSize * scale * k.rand(0.6, 0.8)
+      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
+      oHeight = pHeight + 1 * scale
+    } else if (shapeType === 'rect_v') {
+      // Vertical rectangle
+      pWidth = particleSize * scale * k.rand(0.6, 0.8)
+      pHeight = particleSize * scale * k.rand(1.3, 1.8)
+      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
+      oHeight = pHeight + 1 * scale
+    } else {
+      // Small square
+      pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
+      oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
+    }
+    
+    //
+    // Create a single game object that will draw both outline and colored part
+    //
     const particle = k.add([
-      k.rect(k.rand(2, 7), k.rand(2, 7)),
-      k.pos(targetPos.x + k.rand(-20, 20), targetPos.y + k.rand(-20, 20)),
-      getColor(k, particleColor),
+      k.pos(particleX, particleY),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.player + 1)
+      k.rotate(rotation),
+      k.z(101),
+      {
+        draw() {
+          //
+          // Draw black outline first (behind)
+          //
+          k.drawRect({
+            width: oWidth,
+            height: oHeight,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(0, 0, 0)
+          })
+          
+          //
+          // Draw colored particle on top
+          //
+          k.drawRect({
+            width: pWidth,
+            height: pHeight,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(r, g, b)
+          })
+        }
+      }
     ])
     
     //
@@ -1137,6 +1355,14 @@ function onAnnihilationCollide(inst) {
       //
       p.pos.x += p.vx * k.dt()
       p.pos.y += p.vy * k.dt()
+      
+      //
+      // Update outline position
+      //
+      if (p.outline && p.outline.exists()) {
+        p.outline.pos.x = p.pos.x
+        p.outline.pos.y = p.pos.y
+      }
       
       //
       // Slow down
@@ -1241,6 +1467,7 @@ function onAnnihilationCollide(inst) {
             // Particle reached target - destroy it (small threshold for center convergence)
             //
             if (dist <= 8) {
+              if (p.outline && p.outline.exists()) k.destroy(p.outline)
               k.destroy(p)
               return
             }
@@ -1266,6 +1493,14 @@ function onAnnihilationCollide(inst) {
             p.pos.y += p.vy * k.dt()
             
             //
+            // Update outline position
+            //
+            if (p.outline && p.outline.exists()) {
+              p.outline.pos.x = p.pos.x
+              p.outline.pos.y = p.pos.y
+            }
+            
+            //
             // Check if overshot target
             //
             const newDist = Math.sqrt(
@@ -1277,6 +1512,7 @@ function onAnnihilationCollide(inst) {
               //
               // Overshot - destroy particle
               //
+              if (p.outline && p.outline.exists()) k.destroy(p.outline)
               k.destroy(p)
               return
             }
@@ -1291,9 +1527,12 @@ function onAnnihilationCollide(inst) {
             absorbInterval.cancel()
             
             //
-            // Clean up
+            // Clean up particles and outlines
             //
-            particles.forEach(p => p.exists() && k.destroy(p))
+            particles.forEach(p => {
+              if (p.outline && p.outline.exists()) k.destroy(p.outline)
+              if (p.exists()) k.destroy(p)
+            })
             
             //
             // Stop hero flickering

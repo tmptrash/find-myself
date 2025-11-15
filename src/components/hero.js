@@ -642,9 +642,9 @@ function onUpdate(inst) {
     // Determine jump frame based on vertical velocity
     // Frame 0: squash (pre-jump, on ground only)
     // Frame 1: stretch (ascending, first half) - velocity < -400
-    // Frame 2: normal (near peak) - velocity -400 to -100
-    // Frame 3: intermediate (start descending) - velocity -100 to 100
-    // Frame 4: squash (descending) - velocity > 100
+    // Frame 2: normal (approaching peak) - velocity -400 to -250
+    // Frame 3: intermediate (near peak) - velocity -250 to -100
+    // Frame 4: squash (at peak and early descent) - velocity -100 to 200
     // Frame 5: normal (landing) - after grounding
     //
     let targetFrame = inst.jumpFrame
@@ -654,21 +654,26 @@ function onUpdate(inst) {
       // First half of ascent - stretched (frame 1)
       //
       targetFrame = 1
-    } else if (velocity < -100) {
+    } else if (velocity < -250) {
       //
-      // Near peak - normal height (frame 2)
+      // Approaching peak - normal height (frame 2)
       //
       targetFrame = 2
-    } else if (velocity < 100) {
+    } else if (velocity < -100) {
       //
-      // At peak and early descent - intermediate (frame 3)
+      // Near peak - intermediate (frame 3)
       //
       targetFrame = 3
-    } else {
+    } else if (velocity < 200) {
       //
-      // Descending fast - squashed (frame 4)
+      // At peak and early descent - squashed (frame 4)
       //
       targetFrame = 4
+    } else {
+      //
+      // Descending fast - back to normal for landing preparation (frame 2)
+      //
+      targetFrame = 2
     }
     
     //

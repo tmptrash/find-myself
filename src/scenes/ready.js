@@ -11,6 +11,7 @@ const HINT_MAX_OPACITY = 0.75
 const TITLE_TEXT = 'find myself'
 const QUOTE_PRIMARY_TEXT = 'through death and pain'
 const QUOTE_SECONDARY_TEXT = '(c) someone very wise'
+const ARROW_TEXT = '↓'
 
 const DENSITY_MULTIPLIER = 1.2
 
@@ -20,10 +21,12 @@ const QUOTE_FONT_FAMILY = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
 const TITLE_FONT_SIZE = 140
 const QUOTE_PRIMARY_FONT_SIZE = 70
 const QUOTE_SECONDARY_FONT_SIZE = 70
+const ARROW_FONT_SIZE = 140
 
 const TITLE_HOLD_DURATION = 2
 const QUOTE_PRIMARY_HOLD_DURATION = 2.5
 const QUOTE_SECONDARY_HOLD_DURATION = 2.5
+const ARROW_HOLD_DURATION = 0  // No hold, arrow stays until user presses key
 
 const LAYOUT_HORIZONTAL_MARGIN = 180
 
@@ -108,6 +111,24 @@ export function sceneReady(k) {
       fontFamily: QUOTE_FONT_FAMILY,
       morphTargets: quotePrimaryLayout.positions
     })
+    
+    //
+    // Arrow layout - positioned above hint text
+    //
+    const arrowCenterY = HINT_Y - 180  // Position arrow higher above hint
+    const arrowLayout = generateLayout({
+      text: ARROW_TEXT,
+      fontSize: ARROW_FONT_SIZE,
+      centerX,
+      centerY: arrowCenterY,
+      desiredCount: particleSystem.particles.length,
+      maxWidth: availableWidth,
+      samplingProbability: 1,
+      minDistance: 1.2,
+      singlePixelStroke: true,
+      fontFamily: TITLE_FONT_FAMILY,  // Use same font as title
+      morphTargets: null  // No morphing - gather from scattered positions
+    })
 
     
     //
@@ -122,6 +143,8 @@ export function sceneReady(k) {
       QUOTE_SECONDARY_GATHER: 'quoteSecondaryGather',
       QUOTE_SECONDARY_HOLD: 'quoteSecondaryHold',
       QUOTE_SECONDARY_SCATTER: 'quoteSecondaryScatter',
+      ARROW_GATHER: 'arrowGather',
+      ARROW_HOLD: 'arrowHold',
       FREE: 'free'
     }
     
@@ -189,8 +212,21 @@ export function sceneReady(k) {
         }
         case PHASES.QUOTE_SECONDARY_SCATTER: {
           if (particlesIdle(particleSystem.particles)) {
-            setPhase(PHASES.FREE)
+            moveParticlesToLayout(particleSystem, arrowLayout.positions)
+            setPhase(PHASES.ARROW_GATHER)
           }
+          break
+        }
+        case PHASES.ARROW_GATHER: {
+          if (particlesIdle(particleSystem.particles)) {
+            setPhase(PHASES.ARROW_HOLD)
+          }
+          break
+        }
+        case PHASES.ARROW_HOLD: {
+          //
+          // Arrow stays until user presses key
+          //
           break
         }
         case PHASES.FREE:

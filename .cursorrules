@@ -566,6 +566,7 @@ src/
 - ✅ Keep callbacks minimal
 - ✅ Put exported functions at the top
 - ✅ For the one line arrow function use one line short function version without {} symbols
+- ✅ Comment all code you write
 
 ---
 

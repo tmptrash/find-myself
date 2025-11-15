@@ -22,7 +22,6 @@ export function sceneLevel1(k) {
       levelName: 'level-word.1',
       levelNumber: 2,  // Show 2 red blades in indicator
       nextLevel: 'level-word.2',
-      showInstructions: false,
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.1'].spikes,
       subTitle: "sometimes words cut deeper than blades...",

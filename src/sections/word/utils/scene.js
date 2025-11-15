@@ -70,7 +70,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
 }
 
 /**
- * Initializes a level with common setup (gravity, sound, background, platforms, camera, instructions, controls)
+ * Initializes a level with common setup (gravity, sound, background, platforms, camera, controls)
  * @param {Object} config - Level configuration
  * @param {Object} config.k - Kaplay instance
  * @param {string} [config.levelName] - Level name (e.g., 'level-word.1') for config lookup
@@ -86,7 +86,6 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
  * @param {Object|Array} [config.platformGap] - Gap(s) in bottom platform {x, width} or [{x, width}, ...]
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
- * @param {Boolean} [config.showInstructions=false] - If true, show control instructions
  * @param {Boolean} [config.createHeroes=true] - If true, create hero and anti-hero
  * @param {Number} [config.heroX] - Custom hero X position (overrides config)
  * @param {Number} [config.heroY] - Custom hero Y position (overrides config)
@@ -107,8 +106,7 @@ export function initScene(config) {
     bottomPlatformHeight, 
     topPlatformHeight,
     platformGap,
-    skipPlatforms, 
-    showInstructions = false,
+    skipPlatforms,
     createHeroes = true,
     heroX = null,
     heroY = null
@@ -138,27 +136,6 @@ export function initScene(config) {
   // Setup camera
   setupCamera(k)
   
-  // Add instructions (only if requested)
-  if (showInstructions) {
-    const instructionsObj = addInstructions(k)
-    
-    // Fade out instructions after 5 seconds
-    k.wait(5, () => {
-      const fadeOutDuration = 1.0  // 1 second fade out
-      let fadeTimer = 0
-      
-      instructionsObj.onUpdate(() => {
-        fadeTimer += k.dt()
-        const progress = Math.min(1, fadeTimer / fadeOutDuration)
-        instructionsObj.opacity = 1 - progress
-        
-        if (progress >= 1) {
-          k.destroy(instructionsObj)
-        }
-      })
-    })
-  }
-  
   // Add level indicator if levelNumber provided
   if (levelNumber) {
     const customTopHeight = topPlatformHeight || (skipPlatforms && levelName && CFG.levels[levelName]?.topPlatformHeight)
@@ -187,33 +164,7 @@ export function initScene(config) {
   
   return { sound, hero, antiHero }
 }
-/**
- * Adds control instructions to the screen
- * @param {Object} k - Kaplay instance
- * @returns {Object} Created instructions object
- */
-function addInstructions(k) {
-  // Base instruction text (no spaces between arrows)
-  const baseText = "AD/←→   - move\nSpace/↑ - jump\nESC     - menu"
-  
-  // Calculate position: center horizontally, middle of bottom platform
-  const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
-  const centerX = k.width() / 2
-  const bottomY = k.height() - bottomPlatformHeight / 2  // Middle of bottom platform
-  
-  return k.add([
-    k.text(baseText, {
-      size: CFG.visual.instructionsFontSize,
-      width: k.width() - 40,
-      align: "center"
-    }),
-    k.pos(centerX, bottomY),
-    k.anchor("center"),
-    getColor(k, CFG.colors['level-word.1'].instructions),  // instructions color
-    k.z(CFG.visual.zIndex.ui),
-    k.fixed()
-  ])
-}
+
 /**
  * Sets up fixed camera in the center of the screen
  * @param {Object} k - Kaplay instance

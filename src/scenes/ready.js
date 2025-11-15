@@ -21,12 +21,11 @@ const QUOTE_FONT_FAMILY = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
 const TITLE_FONT_SIZE = 140
 const QUOTE_PRIMARY_FONT_SIZE = 70
 const QUOTE_SECONDARY_FONT_SIZE = 70
-const ARROW_FONT_SIZE = 140
+const ARROW_FONT_SIZE = 240
 
 const TITLE_HOLD_DURATION = 2
 const QUOTE_PRIMARY_HOLD_DURATION = 2.5
 const QUOTE_SECONDARY_HOLD_DURATION = 2.5
-const ARROW_HOLD_DURATION = 0  // No hold, arrow stays until user presses key
 
 const LAYOUT_HORIZONTAL_MARGIN = 180
 
@@ -36,7 +35,7 @@ const GATHER_SPEED = 0.55
 const SCATTER_DISTANCE_MIN = 95
 const SCATTER_DISTANCE_MAX = 160
 
-const HINT_Y = 1030
+const HINT_Y = 1000
 
 export function sceneReady(k) {
   k.scene('ready', () => {
@@ -58,7 +57,7 @@ export function sceneReady(k) {
     // Hint text (visible immediately)
     //
     const hint = k.add([
-      k.text('Space or Enter - start', { size: 20 }),
+      k.text('Space, Enter or click - start', { size: 20 }),
       k.pos(centerX, HINT_Y),
       k.anchor('center'),
       getColor(k, CFG.colors.ready.hint),

@@ -267,7 +267,7 @@ function showIntroSequence(k) {
         //
         inst.instructionsText = k.add([
           k.text("← → - move,   ↑ Space - jump,   ESC - menu", {
-            size: 24,
+            size: 24, 
             align: "center",
             font: "jetbrains"
           }),

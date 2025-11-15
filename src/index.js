@@ -6,6 +6,7 @@ import { sceneLevel1 } from "./sections/word/scenes/level1.js"
 import { sceneLevel2 } from "./sections/word/scenes/level2.js"
 import { sceneLevel3 } from "./sections/word/scenes/level3.js"
 import { sceneLevel4 } from "./sections/word/scenes/level4.js"
+import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
 import { loadHeroSprites } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
 
@@ -40,6 +41,7 @@ sceneLevel1(k)
 sceneLevel2(k)
 sceneLevel3(k)
 sceneLevel4(k)
+sceneWordComplete(k)
 
 //
 // Start game after resources loaded

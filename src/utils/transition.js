@@ -11,7 +11,8 @@ const LEVEL_TRANSITIONS = {
   'level-word.1': 'level-word.2',
   'level-word.2': 'level-word.3',
   'level-word.3': 'level-word.4',
-  'level-word.4': 'menu'
+  'level-word.4': 'word-complete',
+  'word-complete': 'menu'
 }
 
 /**
@@ -69,7 +70,7 @@ const LEVEL_SUBTITLES = {
   'level-word.1': "sharp words don’t cut - they make you fall",
   'level-word.2': 'the blades you forget hurt the most',
   'level-word.3': 'hesitation kills',
-  'level-word.4': 'some words are sharper than any blade'
+  'level-word.4': 'sharp words move fast - so must you'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
@@ -98,9 +99,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const nextLevel = LEVEL_TRANSITIONS[currentLevel]
   
   //
-  // Check if section is completed (last level of section going back to menu)
+  // Check if section is completed (last level of section going to completion screen)
   //
-  if (nextLevel === 'menu') {
+  if (nextLevel === 'word-complete') {
     //
     // Extract section name from level name (e.g., 'level-word.4' -> 'word')
     //

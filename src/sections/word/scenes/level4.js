@@ -13,7 +13,7 @@ export function sceneLevel4(k) {
       k,
       levelName: 'level-word.4',
       levelNumber: 5,  // Show 5 red blades in indicator (all red)
-      nextLevel: 'menu',
+      nextLevel: 'word-complete',
       skipPlatforms: true,
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.4'].spikes,

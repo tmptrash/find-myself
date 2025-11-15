@@ -255,9 +255,9 @@ export const CFG = {
         y: 52     // % of screen height (on bottom platform - higher)
       },
       
-      // Platform heights (gap = hero height, hero touches ceiling when jumping)
-      bottomPlatformHeight: 45.5,    // Bottom platform height (% of screen height) - higher than default
-      topPlatformHeight: 45.5         // Top platform height (% of screen height) - lower than default
+      // Platform heights (gap = hero jump height exactly)
+      bottomPlatformHeight: 44,    // Bottom platform height (% of screen height)
+      topPlatformHeight: 44         // Top platform height (% of screen height)
     }
   },
 }

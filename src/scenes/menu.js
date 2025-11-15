@@ -115,8 +115,9 @@ export function sceneMenu(k) {
       
       //
       // Add click handler for word section (only implemented section)
+      // Only if section is not completed
       //
-      if (config.section === 'word') {
+      if (config.section === 'word' && !isCompleted) {
         antiHeroInst.character.onClick(() => {
           //
           // Mark that we're leaving the scene
@@ -302,10 +303,18 @@ export function sceneMenu(k) {
     
     //
     // Hint text - Space to continue, Enter to start new, ESC to go back
+    // If all sections completed, don't show continue option
     //
-    const hintText = hasSavedGame 
-      ? "Space - continue  |  Enter - new game  |  ESC - back"
-      : "Space or Enter - start  |  ESC - back"
+    const allCompleted = progress.word  // Only word section is implemented
+    
+    let hintText
+    if (allCompleted) {
+      hintText = "Enter - new game  |  ESC - back"
+    } else if (hasSavedGame) {
+      hintText = "Space - continue  |  Enter - new game  |  ESC - back"
+    } else {
+      hintText = "Space or Enter - start  |  ESC - back"
+    }
     
     const startText = k.add([
       k.text(hintText, { size: 20 }),
@@ -355,6 +364,13 @@ export function sceneMenu(k) {
     // Space or Enter - Continue from last saved level or start from beginning
     //
     k.onKeyPress("space", () => {
+      //
+      // Don't allow starting if word section is completed (only implemented section)
+      //
+      if (progress.word) {
+        return
+      }
+      
       //
       // Mark that we're leaving the scene
       //

@@ -718,6 +718,25 @@ function onUpdate(inst) {
     return
   }
   
+  //
+  // Handle movement input (check if spawned first)
+  //
+  if (inst.isSpawned) {
+    const isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
+    const isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
+    
+    //
+    // Apply movement only once per frame, prioritizing last pressed direction
+    //
+    if (isMovingLeft && !isMovingRight) {
+      inst.character.move(-inst.speed, 0)
+      inst.direction = -1
+    } else if (isMovingRight && !isMovingLeft) {
+      inst.character.move(inst.speed, 0)
+      inst.direction = 1
+    }
+  }
+  
   // Determine movement state (only for controllable characters)
   const isMoving = isAnyKeyDown(inst.k, CFG.controls.moveLeft) || 
     isAnyKeyDown(inst.k, CFG.controls.moveRight)
@@ -957,30 +976,6 @@ function updateIdleAnimation(inst) {
  * @param {Object} inst - Hero instance
  */
 function setupControls(inst) {
-  //
-  // Move left control
-  //
-  CFG.controls.moveLeft.forEach(key => {
-    inst.k.onKeyDown(key, () => {
-      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation
-      inst.character.move(-inst.speed, 0)
-      //inst.character.pos.x -= inst.speed * inst.k.dt()
-      inst.direction = -1
-    })
-  })
-  
-  //
-  // Move right control
-  //
-  CFG.controls.moveRight.forEach(key => {
-    inst.k.onKeyDown(key, () => {
-      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent movement before spawn or during annihilation 
-      inst.character.move(inst.speed, 0)
-      // inst.character.pos.x += inst.speed * inst.k.dt()
-      inst.direction = 1
-    })
-  })
-  
   //
   // Jump
   //

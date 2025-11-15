@@ -3,6 +3,16 @@ import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as FlyingWords from '../components/flying-words.js'
 import { getColor } from '../../../utils/helper.js'
+import { getProgress } from '../../../utils/progress.js'
+
+const INTRO_TEXT = "find yourself to know who you are"
+const INTRO_INITIAL_DELAY = 2.0  // Delay before intro starts
+const INTRO_FADE_IN_DURATION = 1.0
+const INTRO_HOLD_DURATION = 3.0
+const INTRO_FADE_OUT_DURATION = 1.0
+const INSTRUCTIONS_FADE_IN_DURATION = 0.8
+const INSTRUCTIONS_HOLD_DURATION = 4.0
+const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
 
 /**
  * Level 0 scene - Introduction level with blade obstacles
@@ -14,17 +24,27 @@ export function sceneLevel0(k) {
     //
     // Initialize level with heroes
     //
+    const progress = getProgress()
+    const isFirstRun = !progress.word
+    
     const { sound, hero, antiHero } = initScene({
       k,
       levelName: 'level-word.0',
       levelNumber: 1,  // Show 1 red blade in indicator
       nextLevel: 'level-word.1',
-      showInstructions: true,
+      showInstructions: !isFirstRun,  // Hide instructions on first run (will show custom intro)
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.0'].spikes,
       subTitle: "some words are sharper than any blade...",
       subTitleColor: CFG.colors['level-word.0'].spikes,
     })
+    
+    //
+    // Show intro sequence on first run only
+    //
+    if (isFirstRun) {
+      showIntroSequence(k)
+    }
     
     //
     // Create flying words for atmosphere
@@ -158,6 +178,140 @@ export function sceneLevel0(k) {
         Blades.startAnimation(trapBlades)
       }
     })
+  })
+}
+
+/**
+ * Show intro sequence with text animations above game area
+ * @param {Object} k - Kaplay instance
+ */
+function showIntroSequence(k) {
+  const centerX = k.width() / 2
+  const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
+  const textY = topPlatformHeight / 2  // Center of top platform area
+  
+  //
+  // Phase 1: Show intro text "find yourself to know who you are"
+  //
+  const introText = k.add([
+    k.text(INTRO_TEXT, {
+      size: 32,
+      align: "center",
+      font: "jetbrains"
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(107, 142, 159),  // Steel blue (blade color - 6B8E9F)
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    introText,
+    instructionsText: null,
+    timer: 0,
+    phase: 'initial_delay'  // Start with delay phase
+  }
+  
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    
+    if (inst.phase === 'initial_delay') {
+      //
+      // Wait for initial delay
+      //
+      if (inst.timer >= INTRO_INITIAL_DELAY) {
+        inst.phase = 'intro_fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'intro_fade_in') {
+      //
+      // Fade in intro text
+      //
+      const progress = Math.min(1, inst.timer / INTRO_FADE_IN_DURATION)
+      introText.opacity = progress
+      
+      if (progress >= 1) {
+        inst.phase = 'intro_hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'intro_hold') {
+      //
+      // Hold intro text
+      //
+      if (inst.timer >= INTRO_HOLD_DURATION) {
+        inst.phase = 'intro_fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'intro_fade_out') {
+      //
+      // Fade out intro text
+      //
+      const progress = Math.min(1, inst.timer / INTRO_FADE_OUT_DURATION)
+      introText.opacity = 1 - progress
+      
+      if (progress >= 1) {
+        k.destroy(introText)
+        inst.phase = 'instructions_fade_in'
+        inst.timer = 0
+        
+        //
+        // Create instructions text
+        //
+        inst.instructionsText = k.add([
+          k.text("← → - move,   ↑ Space - jump,   ESC - menu", {
+            size: 24,
+            align: "center",
+            font: "jetbrains"
+          }),
+          k.pos(centerX, textY),
+          k.anchor("center"),
+          k.color(204, 204, 204),  // Light gray
+          k.opacity(0),
+          k.z(CFG.visual.zIndex.ui + 10)
+        ])
+      }
+    } else if (inst.phase === 'instructions_fade_in') {
+      //
+      // Fade in instructions text
+      //
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
+      inst.instructionsText.opacity = progress
+      
+      if (progress >= 1) {
+        inst.phase = 'instructions_hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'instructions_hold') {
+      //
+      // Hold instructions text
+      //
+      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
+        inst.phase = 'instructions_fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'instructions_fade_out') {
+      //
+      // Fade out instructions text
+      //
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
+      inst.instructionsText.opacity = 1 - progress
+      
+      if (progress >= 1) {
+        //
+        // Clean up and finish
+        //
+        updateInterval.cancel()
+        k.destroy(inst.instructionsText)
+      }
+    }
   })
 }
 

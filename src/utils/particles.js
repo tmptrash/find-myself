@@ -214,7 +214,7 @@ export function onUpdate(inst) {
     }
     
     if (particle.isFleeing) {
-      const baseSpeed = particle.isAutoFleeing ? 0.32 : 0.46
+      const baseSpeed = particle.isAutoFleeing ? 0.55 : 0.46
       particle.fleeProgress += k.dt() * baseSpeed * particle.fleeSpeed
       
       if (particle.fleeProgress >= 1) {

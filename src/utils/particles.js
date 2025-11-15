@@ -106,6 +106,7 @@ export function create(config = {}) {
     mouseInfluence,
     bounds: effectiveBounds,
     boundsMargin,
+    disableMouseInteraction: config.disableMouseInteraction,
     time: 0
   }
   
@@ -121,34 +122,50 @@ export function onUpdate(inst) {
   
   inst.time += k.dt()
   
-  const mousePos = k.mousePos()
+  //
+  // If mouse interaction is disabled, skip all flee logic
+  //
+  const enableMouseInteraction = !inst.disableMouseInteraction
   
-  let threatX = mousePos.x
-  let threatY = mousePos.y
-  let threatActive = inst.isCursorVisible ? inst.isCursorVisible() : true
-  let threatInfluence = inst.threatInfluence ?? mouseInfluence
-  let fleeDistanceDefault = inst.fleeDistance ?? 80
+  let threatX = 0
+  let threatY = 0
+  let threatActive = false
+  let threatInfluence = 0
+  let fleeDistanceDefault = 80
   
-  if (inst.getThreatPosition) {
-    const threat = inst.getThreatPosition()
-    if (threat && threat.active !== false) {
-      threatX = threat.x
-      threatY = threat.y
-      threatActive = true
-      if (typeof threat.influence === 'number') {
-        threatInfluence = threat.influence
+  if (enableMouseInteraction) {
+    const mousePos = k.mousePos()
+    
+    threatX = mousePos.x
+    threatY = mousePos.y
+    threatActive = inst.isCursorVisible ? inst.isCursorVisible() : true
+    threatInfluence = inst.threatInfluence ?? mouseInfluence
+    fleeDistanceDefault = inst.fleeDistance ?? 80
+    
+    if (inst.getThreatPosition) {
+      const threat = inst.getThreatPosition()
+      if (threat && threat.active !== false) {
+        threatX = threat.x
+        threatY = threat.y
+        threatActive = true
+        if (typeof threat.influence === 'number') {
+          threatInfluence = threat.influence
+        }
+        if (typeof threat.fleeDistance === 'number') {
+          fleeDistanceDefault = threat.fleeDistance
+        }
+      } else {
+        threatActive = false
       }
-      if (typeof threat.fleeDistance === 'number') {
-        fleeDistanceDefault = threat.fleeDistance
-      }
-    } else {
-      threatActive = false
     }
   }
   
   const trembleRadiusAfterFlee = inst.trembleRadiusAfterFlee || trembleRadius
   
   particles.forEach(particle => {
+    //
+    // Update flicker animation
+    //
     particle.flickerPhase += flickerSpeed * k.dt()
     const phase = particle.flickerPhase % (Math.PI * 2)
     let flickerValue
@@ -157,11 +174,19 @@ export function onUpdate(inst) {
     } else {
       flickerValue = Math.pow(Math.sin((phase - Math.PI * 0.3) / 1.7 + Math.PI / 2), 2)
     }
+    //
+    // Ensure flickerValue stays in range 0.5 to 1.0 for better visibility
+    //
+    flickerValue = 0.5 + flickerValue * 0.5
     particle.opacity = inst.baseOpacity * flickerValue
     particle.tremblePhase += (1 + Math.random() * 0.5) * k.dt() * particle.trembleSpeed
     
-    const dx = threatX - particle.baseX
-    const dy = threatY - particle.baseY
+    //
+    // Calculate distance to threat using current particle position (not base position)
+    // This ensures particles flee correctly regardless of their base position
+    //
+    const dx = threatX - particle.x
+    const dy = threatY - particle.y
     const distToThreat = Math.sqrt(dx * dx + dy * dy)
     
     const fleeDistance = fleeDistanceDefault
@@ -256,6 +281,13 @@ export function onUpdate(inst) {
       const fadeMultiplier = particle.floatFadeIn
       particle.x = particle.baseX + offsetX * fadeMultiplier
       particle.y = particle.baseY + offsetY * fadeMultiplier
+      
+      //
+      // Keep particles visible on screen (add margin to prevent edge clipping)
+      //
+      const margin = 20
+      particle.x = Math.max(margin, Math.min(k.width() - margin, particle.x))
+      particle.y = Math.max(margin, Math.min(k.height() - margin, particle.y))
     }
   })
 }
@@ -278,7 +310,10 @@ export function draw(inst) {
     const particle = particles[i]
     const opacity = particle.opacity
     
-    if (opacity < 0.01) continue
+    //
+    // Skip only completely transparent particles (lower threshold for better visibility)
+    //
+    if (opacity < 0.001) continue
     
     tmpVec.x = particle.x
     tmpVec.y = particle.y

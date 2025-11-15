@@ -33,14 +33,13 @@ export function sceneMenu(k) {
     //
     const particlesBg = Particles.create({
       k,
-      particleCount: 180,  // More particles for richer background (was 120)
+      particleCount: 180,  // More particles for richer background
       color: '#FF8C00',    // Hero color (orange)
-      baseOpacity: 0.6,
+      baseOpacity: 0.8,    // Higher base opacity for better visibility
       flickerSpeed: 1.5,   // Slower flicker for organic feel
       trembleRadius: 12,   // Larger floating movement
-      mouseInfluence: 200,
-      bounds: null,  // No bounds - particles can fly anywhere on full screen
-      gaussianFactor: 0.35  // More spread out distribution (default 0.15 is too concentrated)
+      gaussianFactor: 0.35,  // More spread out distribution
+      disableMouseInteraction: true  // Completely disable mouse interaction in menu
     })
     
     const progress = getProgress()

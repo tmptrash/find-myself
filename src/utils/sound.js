@@ -71,7 +71,7 @@ export function create() {
   stepGain.connect(ctx.destination)
   
   const jumpGain = ctx.createGain()
-  jumpGain.gain.value = CFG.audio.sfx.jumpVolume
+  jumpGain.gain.value = CFG.audio.sfx.jump
   jumpGain.connect(ctx.destination)
   
   const spawnGain = ctx.createGain()
@@ -113,10 +113,11 @@ export function create() {
  */
 function initAmbient(instance) {
   if (instance.ambientMasterGain) return
-  
+  //
   // Master volume control (from config)
+  //
   instance.ambientMasterGain = instance.audioContext.createGain()
-  instance.ambientMasterGain.gain.value = CFG.audio.ambient.masterVolume
+  instance.ambientMasterGain.gain.value = CFG.audio.ambient.volume
   instance.ambientMasterGain.connect(instance.audioContext.destination)
 }
 
@@ -161,19 +162,22 @@ export async function startAmbient(instance) {
   }
   
   instance.ambientIsPlaying = true
-  
+  //
   // Low drone (foundation) - use config
-  createDrone(instance, 55, CFG.audio.ambient.bassVolume) // A1
-  createDrone(instance, 82.5, CFG.audio.ambient.bassVolume * 0.75) // E2 (fifth)
-  createDrone(instance, 110, CFG.audio.ambient.bassVolume * 0.625) // A2 (octave)
-  
+  //
+  createDrone(instance, 55, CFG.audio.ambient.bass)
+  createDrone(instance, 82.5, CFG.audio.ambient.bass * 0.75)
+  createDrone(instance, 110, CFG.audio.ambient.bass * 0.625)
+  //
   // Mid tones (mystery) - use config
-  createOscillatingDrone(instance, 220, CFG.audio.ambient.midVolume, 0.002) // A3 with modulation
-  createOscillatingDrone(instance, 329.63, CFG.audio.ambient.midVolume * 0.67, 0.003) // E4
-  
+  //
+  createOscillatingDrone(instance, 220, CFG.audio.ambient.mid, 0.002)
+  createOscillatingDrone(instance, 329.63, CFG.audio.ambient.mid * 0.67, 0.003)
+  //
   // High ghostly tones - use config
-  createOscillatingDrone(instance, 440, CFG.audio.ambient.highVolume, 0.001) // A4
-  createOscillatingDrone(instance, 554.37, CFG.audio.ambient.highVolume * 0.67, 0.0015) // C#5
+  //
+  createOscillatingDrone(instance, 440, CFG.audio.ambient.high, 0.001)
+  createOscillatingDrone(instance, 554.37, CFG.audio.ambient.high * 0.67, 0.0015)
   
   // Add noise for atmosphere
   createNoise(instance)
@@ -220,7 +224,7 @@ export function stopAmbient(instance) {
   // Reset master channel volume (from config)
   if (instance.ambientMasterGain) {
     instance.ambientMasterGain.gain.cancelScheduledValues(instance.audioContext.currentTime)
-    instance.ambientMasterGain.gain.value = CFG.audio.ambient.masterVolume
+    instance.ambientMasterGain.gain.value = CFG.audio.ambient.volume
   }
   
   instance.ambientOscillators = []
@@ -347,7 +351,7 @@ function createNoise(instance) {
   instance.ambientFilterNode.Q.value = 0.5
   
   const noiseGain = instance.audioContext.createGain()
-  noiseGain.gain.value = CFG.audio.ambient.noiseVolume
+  noiseGain.gain.value = CFG.audio.ambient.noise
   
   instance.ambientNoiseNode.connect(instance.ambientFilterNode)
   instance.ambientFilterNode.connect(noiseGain)
@@ -398,7 +402,7 @@ function playBlip(instance) {
   // Envelope
   const now = instance.audioContext.currentTime
   gain.gain.value = 0
-  gain.gain.linearRampToValueAtTime(CFG.audio.ambient.blipVolume, now + 0.1)
+  gain.gain.linearRampToValueAtTime(CFG.audio.ambient.blip, now + 0.1)
   gain.gain.exponentialRampToValueAtTime(0.001, now + 2)
   
   oscillator.connect(filter)
@@ -429,10 +433,11 @@ export function playLandSound(instance) {
   oscillator.frequency.setValueAtTime(CFG.audio.sfx.landFreqStart, now)
   oscillator.frequency.exponentialRampToValueAtTime(CFG.audio.sfx.landFreqEnd, now + 0.08)
   
-  envelope.gain.setValueAtTime(CFG.audio.sfx.landVolume, now)
+  envelope.gain.setValueAtTime(CFG.audio.sfx.land, now)
   envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.landFade, now + CFG.audio.sfx.landDuration)
-  
+  //
   // Connect through master gain
+  //
   oscillator.connect(envelope)
   envelope.connect(instance.landGain)
   
@@ -582,10 +587,11 @@ export function playStepSound(instance) {
   oscillator.frequency.setValueAtTime(CFG.audio.sfx.stepFreqStart, now)
   oscillator.frequency.exponentialRampToValueAtTime(CFG.audio.sfx.stepFreqEnd, now + 0.03)
   
-  envelope.gain.setValueAtTime(CFG.audio.sfx.stepVolume, now)
+  envelope.gain.setValueAtTime(CFG.audio.sfx.step, now)
   envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.stepFade, now + CFG.audio.sfx.stepDuration)
-  
+  //
   // Connect through master gain
+  //
   oscillator.connect(envelope)
   envelope.connect(instance.stepGain)
   
@@ -850,7 +856,7 @@ export function startBackgroundMusic(instance, k, trackName) {
   // Play the track
   //
   const music = k.play(trackName, {
-    volume: CFG.audio.backgroundMusic?.volume || 0.5,
+    volume: CFG.audio.backgroundMusic.volume,
     loop: true
   })
   

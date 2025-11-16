@@ -1,3 +1,8 @@
+//
+// Master audio volume - all other volumes are calculated from this
+//
+const MASTER_VOLUME = 0.7
+
 export const CFG = {
   screen: {
     width: 1920,
@@ -5,37 +10,40 @@ export const CFG = {
     background: [0, 0, 0]
   },
   audio: {
-    // Ambient music (splash/menu)
+    masterVolume: MASTER_VOLUME,
+    //
+    // Ambient music (splash/menu) - volumes relative to masterVolume
+    //
     ambient: {
-      masterVolume: 0.776,       // Overall ambient music volume (was 0.52, +30%)
-      bassVolume: 0.104,         // Low drones volume (was 0.08, +30%)
-      midVolume: 0.039,          // Mid tones volume (was 0.03, +30%)
-      highVolume: 0.0195,        // High tones volume (was 0.015, +30%)
-      noiseVolume: 0.339,        // Noise volume (was 0.03, +30%)
-      blipVolume: 0.104,         // Random sounds volume (was 0.08, +30%)
-      fadeInTime: 0.5,           // Fade-in time (seconds)
+      volume: MASTER_VOLUME * 1.11,
+      bass: MASTER_VOLUME * 0.149,
+      mid: MASTER_VOLUME * 0.056,
+      high: MASTER_VOLUME * 0.028,
+      noise: MASTER_VOLUME * 0.484,
+      blip: MASTER_VOLUME * 0.149,
+      fadeInTime: 0.5
     },
-    
+    //
     // Background music for levels
+    //
     backgroundMusic: {
-      volume: 0.1,               // Background music volume
+      volume: MASTER_VOLUME * 0.143
     },
-    
+    //
     // Level sound effects
+    //
     sfx: {
-      jumpVolume: 0.434,         // Jump sound volume (was 0.18, +30%)
-      
-      landVolume: 0.4288,        // Landing sound volume (was 0.176, +30%)
-      landFade: 0.4286,          // Landing fade (was 0.022, +30%)
-      landDuration: 0.05,        // Sound duration (seconds)
-      landFreqStart: 180,        // Start frequency (Hz) - same as step
-      landFreqEnd: 60,           // End frequency (Hz) - same as step
-      
-      stepVolume: 0.4288,        // Step sound volume (was 0.176, +30%)
-      stepFade: 0.0286,          // Step fade (was 0.022, +30%)
-      stepDuration: 0.05,        // Sound duration (seconds)
-      stepFreqStart: 180,        // Start frequency (Hz)
-      stepFreqEnd: 60,           // End frequency (Hz)
+      jump: MASTER_VOLUME * 0.62,
+      land: MASTER_VOLUME * 0.613,
+      landFade: MASTER_VOLUME * 0.612,
+      landDuration: 0.05,
+      landFreqStart: 180,
+      landFreqEnd: 60,
+      step: MASTER_VOLUME * 0.613,
+      stepFade: MASTER_VOLUME * 0.041,
+      stepDuration: 0.05,
+      stepFreqStart: 180,
+      stepFreqEnd: 60
     }
   },
   gameplay: {

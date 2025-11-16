@@ -125,6 +125,11 @@ export function initScene(config) {
   const sound = Sound.create()
   Sound.stopAmbient(sound)
   
+  //
+  // Start background music for word levels
+  //
+  Sound.startBackgroundMusic(sound, k, 'word')
+  
   // Add background
   addBackground(k, bgColor)
   
@@ -149,7 +154,10 @@ export function initScene(config) {
   
   // Setup back to menu
   CFG.controls.backToMenu.forEach(key => {
-    k.onKeyPress(key, () => k.go("menu"))
+    k.onKeyPress(key, () => {
+      Sound.stopBackgroundMusic(sound)
+      k.go("menu")
+    })
   })
   
   let hero = null

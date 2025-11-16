@@ -27,6 +27,11 @@ k.canvas.style.removeProperty('cursor')
 k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
 k.loadFont("jetbrains-thin", "/fonts/JetBrainsMono-Thin.ttf")
 
+//
+// Load audio
+//
+k.loadSound("word", "/word.mp3")
+
 // Load all character sprites (encapsulated in hero.js)
 loadHeroSprites(k)
 

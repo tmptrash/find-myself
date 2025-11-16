@@ -7,6 +7,12 @@ import { CFG } from '../cfg.js'
 
 let audioContext = null
 
+//
+// Global background music state (persists across scene reloads)
+//
+let globalBackgroundMusic = null
+let globalCurrentTrack = null
+
 /**
  * Get or create global AudioContext
  * @returns {AudioContext} The single AudioContext instance
@@ -816,5 +822,61 @@ export function playAnnihilationSound(instance) {
   subBassGain.connect(instance.audioContext.destination)
   subBass.start(now)
   subBass.stop(now + 0.6)
+}
+
+/**
+ * Start background music
+ * @param {Object} instance - Sound instance
+ * @param {Object} k - Kaplay instance
+ * @param {string} trackName - Name of the audio track to play
+ */
+export function startBackgroundMusic(instance, k, trackName) {
+  //
+  // If same track is already playing globally, don't restart it
+  //
+  if (globalBackgroundMusic && globalCurrentTrack === trackName && !globalBackgroundMusic.paused) {
+    return
+  }
+  
+  //
+  // Stop any currently playing music
+  //
+  if (globalBackgroundMusic) {
+    globalBackgroundMusic.paused = false
+    globalBackgroundMusic.stop()
+  }
+  
+  //
+  // Play the track
+  //
+  const music = k.play(trackName, {
+    volume: CFG.audio.backgroundMusic?.volume || 0.5,
+    loop: true
+  })
+  
+  globalBackgroundMusic = music
+  globalCurrentTrack = trackName
+}
+
+/**
+ * Stop background music
+ * @param {Object} instance - Sound instance
+ */
+export function stopBackgroundMusic(instance) {
+  if (globalBackgroundMusic) {
+    globalBackgroundMusic.paused = false
+    globalBackgroundMusic.stop()
+    globalBackgroundMusic = null
+    globalCurrentTrack = null
+  }
+}
+
+/**
+ * Check if background music is playing
+ * @param {Object} instance - Sound instance
+ * @returns {boolean}
+ */
+export function isBackgroundMusicPlaying(instance) {
+  return globalBackgroundMusic && !globalBackgroundMusic.paused
 }
 

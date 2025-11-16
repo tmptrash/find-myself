@@ -11,6 +11,11 @@ export const CFG = {
       fadeInTime: 0.5,           // Fade-in time (seconds)
     },
     
+    // Background music for levels
+    backgroundMusic: {
+      volume: 0.1,               // Background music volume
+    },
+    
     // Level sound effects
     sfx: {
       jumpVolume: 0.434,         // Jump sound volume (was 0.18, +30%)

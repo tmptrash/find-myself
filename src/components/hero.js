@@ -3,26 +3,29 @@ import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { saveLastLevel } from '../utils/progress.js'
-
+//
 // Collision box parameters
+//
 const COLLISION_WIDTH = 10
 const COLLISION_HEIGHT = 25
 const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0
-
-// Hero parameters (fixed for 1920x1080 resolution)
-const HERO_SCALE = 3         // Fixed scale for hero sprite
+//
+// Hero parameters
+//
+const HERO_SCALE = 3
 const RUN_ANIM_SPEED = 0.03333
 const RUN_FRAME_COUNT = 3
-const JUMP_FRAME_COUNT = 6   // 6 frames for jump animation
-const JUMP_SQUASH_TIME = 0.03 // Time for pre-jump squash animation (150ms total)
-const JUMP_STRETCH_START = 0.1 // Time when stretch animation starts (100ms into squash)
+const JUMP_FRAME_COUNT = 6
+const JUMP_SQUASH_TIME = 0.03
+const JUMP_STRETCH_START = 0.1
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
 const ANTIHERO_TAG = 'annihilation'
-
+//
 // Landing dust particles
+//
 const DUST_PARTICLE_COUNT = 6
 const DUST_PARTICLE_SIZE = 4
 const DUST_PARTICLE_SPEED = 80
@@ -30,7 +33,7 @@ const DUST_PARTICLE_LIFETIME = 0.4
 
 export const HEROES = {
   HERO: 'hero',
-  ANTIHERO: 'antiHero'  // Lowercase to match sprite names
+  ANTIHERO: 'antiHero'
 }
 /**
  * Creates hero or anti-hero with full logic setup
@@ -137,11 +140,11 @@ export function create(config) {
     currentLevel,
     onAnnihilation,
     bodyColor,        // Store custom body color
-    spritePrefix,     // Store sprite prefix for animations
-    dustColor,        // Store dust particle color
-    speed: CFG.gameplay.moveSpeed,      // Fixed speed for 1920x1080
-    jumpForce: CFG.gameplay.jumpForce,  // Fixed jump force for 1920x1080
-    direction: 1, // 1 = right, -1 = left
+    spritePrefix,
+    dustColor,
+    speed: CFG.gameplay.moveSpeed,
+    jumpForce: CFG.gameplay.jumpForce,
+    direction: 1,
     canJump: true,
     runFrame: 0,
     runTimer: 0,
@@ -320,7 +323,6 @@ export function death(inst, onComplete) {
     const b = parseInt(colorHex.substring(4, 6), 16)
     
     const rotation = k.rand(0, 360)
-    
     //
     // Create invisible body for physics
     //
@@ -332,9 +334,8 @@ export function death(inst, onComplete) {
       k.z(CFG.visual.zIndex.player - 1),
       k.area(),
       k.body(),
-      k.opacity(0)  // Invisible
+      k.opacity(0)
     ])
-    
     //
     // Create visual particle that follows the body
     //
@@ -1843,7 +1844,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   return canvas.toDataURL()
 }
 /**
- * Get hero scale (fixed for 1920x1080 resolution)
+ * Get hero scale
  * @param {Object} k - Kaplay instance
  * @returns {number} Scale factor for hero
  */

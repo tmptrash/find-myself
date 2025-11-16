@@ -28,12 +28,17 @@ export function getHex(colorHex) {
   return `#${colorHex.replace('#', '')}`
 }
 
+//
 // Parse hex string into RGB components
+//
 export function parseHex(colorHex) {
+  //
   // Type check and conversion
+  //
   if (typeof colorHex !== 'string') {
-    console.error('parseHex: expected string, got', typeof colorHex, colorHex)
+    //
     // If it's an array, return it as is
+    //
     if (Array.isArray(colorHex) && colorHex.length === 3) {
       return colorHex
     }
@@ -46,8 +51,9 @@ export function parseHex(colorHex) {
   const b = parseInt(hex.substring(4, 6), 16)
   return [r, g, b]
 }
-
+//
 // Check if any of the keys is pressed (down)
+//
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => k.isKeyDown(key))
 }

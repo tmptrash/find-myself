@@ -1,4 +1,9 @@
 export const CFG = {
+  screen: {
+    width: 1920,
+    height: 1080,
+    background: [0, 0, 0]
+  },
   audio: {
     // Ambient music (splash/menu)
     ambient: {
@@ -34,10 +39,9 @@ export const CFG = {
     }
   },
   gameplay: {
-    // Physics (fixed values for 1920x1080 resolution)
-    moveSpeed: 300,              // Hero movement speed (px/s)
-    jumpForce: 620,              // Jump force (px/s)
-    gravity: 2000,               // Gravity (px/s²)
+    moveSpeed: 300,
+    jumpForce: 620,
+    gravity: 2000
   },
   colors: {
     outlineTextColor: "000000",

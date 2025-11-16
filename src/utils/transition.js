@@ -295,13 +295,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
  * @param {Object} k - Kaplay instance
  */
 function playCRTShutdownSound(k) {
+  //
   // We need access to AudioContext, so we'll create a simple version
   // In a real implementation, this would use the Sound module
+  //
   try {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)()
     const now = audioContext.currentTime
-    
+    //
     // High frequency sweep down (the "whine")
+    //
     const oscillator = audioContext.createOscillator()
     const gainNode = audioContext.createGain()
     
@@ -317,8 +320,9 @@ function playCRTShutdownSound(k) {
     
     oscillator.start(now)
     oscillator.stop(now + 0.4)
-    
+    //
     // Low "thump" at the end
+    //
     const thump = audioContext.createOscillator()
     const thumpGain = audioContext.createGain()
     
@@ -335,7 +339,8 @@ function playCRTShutdownSound(k) {
     thump.start(now + 0.5)
     thump.stop(now + 0.7)
   } catch (e) {
+    //
     // Silently fail if audio context is not available
-    console.warn('Could not play CRT shutdown sound:', e)
+    //
   }
 }

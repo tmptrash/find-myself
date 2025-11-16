@@ -386,21 +386,37 @@ export function playLandSound(inst) {
 
 ## 9. Comments
 
-### Comments and an empty lines
-- If a line of code has a comment above you should not add an empty line before this comment
-- Every comment should start and finish with an empty comment - // line. If we use /** comment from the JSDoc it is already has this empty line at the beginning.
-- For the /** ... */ comment it should be above the code. There is no empty between a comment and the code
+### Comments and empty lines
+- **NO empty line** should be placed directly before a comment block that describes code below it
+- Every multi-line comment block should start and end with an empty comment line (`//`)
+- For JSDoc comments (`/** ... */`), no empty line is needed between the comment and the code
+- Inline comments (on the same line as code) are allowed for brief clarifications
+
 ```javascript
-// Bad: extra empty line before the comment and no // at the beginnign and at the end
+// Bad: empty line before comment, and missing // wrapper lines
+const x = 10
 
-// var assign
+// This is a comment
 let a = 123
 
-// Good: no empty line before the comment and has // before and after actual comment
+// Good: no empty line before comment, and has // wrapper lines
+const x = 10
 //
-// var assign
+// This is a comment
 //
 let a = 123
+
+// Also good: JSDoc comment (no empty line before function)
+/**
+ * Function description
+ */
+function myFunc() {
+  //
+  // Internal comment with proper wrapping
+  //
+  const value = 42
+  return value
+}
 ```
 
 ### Language
@@ -508,26 +524,44 @@ function onAnnihilationCollide(inst) {
 
 ```
 src/
-├── index.js                    # Entry point, Kaplay initialization
-├── cfg.js                      # Pure configuration data
-├── components/                 # Reusable game components
-│   ├── hero.js                 # Hero/anti-hero component
-│   ├── spikes.js               # Spikes component with animation
-│   └── moving-platform.js      # Moving platform with trap logic
-├── sections/                   # Game sections (menu, levels)
-│   ├── menu.js                 # sceneMenu() - Main menu
-│   ├── ready.js                # sceneReady() - Story/intro screen
-│   └── blades/                 # "Words like blades" chapter
-│       ├── level-word.0.js     # Level 1
-│       ├── level-word.1.js     # Level 2
-│       ├── level-word.2.js     # Level 3
-│       ├── level-word.3.js     # Level 4
-│       └── level-word.4.js     # Level 5
-└── utils/                      # Utility functions and helpers
-    ├── helper.js               # Color helpers, key checks
-    ├── sound.js                # Procedural audio (Web Audio API)
-    ├── scene.js                # Common scene utilities
-    └── connection.js           # Lightning effect between heroes
+├── index.js                          # Entry point, Kaplay initialization
+├── cfg.js                            # Global configuration data
+├── components/                       # Reusable game components
+│   ├── hero.js                       # Hero/anti-hero component
+│   └── moving-platform.js            # Moving platform with trap logic
+├── scenes/                           # Top-level scenes (menu, ready)
+│   ├── menu.js                       # sceneMenu() - Main menu
+│   └── ready.js                      # sceneReady() - Story/intro screen
+├── sections/                         # Game sections organized by name
+│   ├── word/                         # "Words like blades" section
+│   │   ├── components/               # Word section specific components
+│   │   │   ├── blades.js             # Blade spikes (static & animated)
+│   │   │   ├── blade-arm.js          # Moving blade arm obstacle
+│   │   │   └── flying-words.js       # Atmospheric flying words/letters
+│   │   ├── scenes/                   # Word section levels
+│   │   │   ├── level0.js             # Level 0 - Introduction
+│   │   │   ├── level1.js             # Level 1
+│   │   │   ├── level2.js             # Level 2
+│   │   │   ├── level3.js             # Level 3
+│   │   │   ├── level4.js             # Level 4 (final)
+│   │   │   └── word-complete.js      # Section completion scene
+│   │   └── utils/                    # Word section utilities
+│   │       └── scene.js              # Level initialization helper
+└── utils/                            # Global utility functions
+    ├── helper.js                     # Color helpers, key checks
+    ├── sound.js                      # Audio (Web Audio API + background music)
+    ├── particles.js                  # Firefly particle system
+    ├── connection.js                 # Lightning effect between heroes
+    ├── progress.js                   # Game progress tracking (localStorage)
+    └── transition.js                 # Level transition & subtitle system
+
+public/
+├── fonts/                            # Custom fonts
+│   ├── JetBrainsMono-Regular.ttf
+│   ├── JetBrainsMono-Thin.ttf
+│   └── jetbrains-mono.css
+├── word.mp3                          # Background music for word section
+└── cursor.css                        # Custom cursor styles
 ```
 
 ---
@@ -535,6 +569,10 @@ src/
 ## 12. Anti-Patterns to Avoid
 
 ### Don't
+- ❌ Put a ; symbol at the end of the line
+- ❌ Put a coma at the end of a last array or object item
+- ❌ Leave unused function, variable or a comment
+- ❌ Put an empty line before a comment
 - ❌ Mix business logic in `cfg.js`
 - ❌ Use global variables
 - ❌ Manipulate Kaplay objects without inst wrapper
@@ -547,11 +585,13 @@ src/
 - ❌ Put comments separated by many = symbol
 - ❌ Pput function inside other function. Make it private
 - ❌ Use console.log() function
-- ❌ Put magic (hard-coded) numbers and strings. Put them into the constant at the top or into the config.js if it's a global one
+- ❌ Put magic (hard-coded) numbers and strings.
 - ❌ Write functions inside other functions
 
 
 ### Do
+- ✅ Remove unused variable, function or comment
+- ✅ Put magic numbers and strings into the constants at the top or into the cfg.js if it's a global one
 - ✅ Scene files should only contain serving code. All logic and behavior should live inside components, utils and so on files
 - ✅ Use factory functions with `create()` pattern
 - ✅ Function `create()` should be at the top of the module

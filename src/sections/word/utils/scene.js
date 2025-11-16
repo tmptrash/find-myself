@@ -115,8 +115,9 @@ export function initScene(config) {
   // Use levelName-based colors if not explicitly provided
   const bgColor = backgroundColor || (levelName && CFG.colors[levelName]?.background)
   const pfColor = platformColor || (levelName && CFG.colors[levelName]?.platform)
-  
-  // Set gravity (fixed for 1920x1080 resolution)
+  //
+  // Set gravity
+  //
   k.setGravity(CFG.gameplay.gravity)
   
   //

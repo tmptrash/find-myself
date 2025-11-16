@@ -24,22 +24,21 @@ export function sceneMenu(k) {
     //
     k.setGravity(0)
     
-    // Fixed coordinates for 1920x1080 resolution
-    const centerX = 960  // k.width() / 2 = 1920 / 2
-    const centerY = 500  // Higher position (was 570)
-        
+    const centerX = CFG.screen.width / 2
+    const centerY = 500
+    const radius = 302
     //
     // Create firefly particles background
     //
     const particlesBg = Particles.create({
       k,
-      particleCount: 180,  // More particles for richer background
-      color: '#FF8C00',    // Hero color (orange)
-      baseOpacity: 0.8,    // Higher base opacity for better visibility
-      flickerSpeed: 1.5,   // Slower flicker for organic feel
-      trembleRadius: 12,   // Larger floating movement
-      gaussianFactor: 0.35,  // More spread out distribution
-      disableMouseInteraction: true  // Completely disable mouse interaction in menu
+      particleCount: 180,
+      color: '#FF8C00',
+      baseOpacity: 0.8,
+      flickerSpeed: 1.5,
+      trembleRadius: 12,
+      gaussianFactor: 0.35,
+      disableMouseInteraction: true
     })
     
     const progress = getProgress()
@@ -66,26 +65,21 @@ export function sceneMenu(k) {
     
     const hero = heroInst.character
     hero.z = 10
-    
     //
     // Create 6 anti-heroes around the main hero (sections)
-    // Fixed radius for 1920x1080 resolution
     //
-    const radius = 302  // Fixed radius (was: Math.min(1920, 1080) * 0.28)
     const sectionConfigs = getSectionPositions(centerX, centerY, radius)
     const antiHeroes = []
     const sectionLabels = []
     
     sectionConfigs.forEach(config => {
       const isCompleted = progress[config.section]
-      
       //
       // Determine body color: gray if not completed, section color if completed
       // Outline is always black
       //
-      const grayColor = 'A0A0A0'      // Gray body
+      const grayColor = 'A0A0A0'
       const bodyColor = isCompleted ? config.color.body : grayColor
-      
       //
       // Create anti-hero for this section
       //
@@ -97,9 +91,9 @@ export function sceneMenu(k) {
         scale: 3,
         controllable: false,
         bodyColor,
-        addMouth: config.section === 'word',  // Add mouth only to "word" section anti-hero
-        addArms: config.section === 'touch',  // Add arms only to "touch" section anti-hero
-        hitboxPadding: 5  // Smaller hitbox for better precision
+        addMouth: config.section === 'word',
+        addArms: config.section === 'touch',
+        hitboxPadding: 5
       })
       
       antiHeroInst.character.z = 10

@@ -168,8 +168,8 @@ export function initScene(config) {
   let antiHero = null
   
   // Create heroes if requested
-  if (createHeroes && nextLevel) {
-    const heroesResult = createLevelHeroes(k, sound, nextLevel, heroX, heroY, antiHeroX, antiHeroY)
+  if (createHeroes && levelName) {
+    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
@@ -260,7 +260,7 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
  * @param {Number} [customHeroY] - Custom hero Y position (overrides config)
  * @returns {Object} {hero, antiHero}
  */
-function createLevelHeroes(k, sound, nextLevel, heroX, heroY, antiHeroX, antiHeroY) {
+function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY) {
   //
   // Dust color is now always null (no level-specific colors needed)
   //
@@ -287,7 +287,7 @@ function createLevelHeroes(k, sound, nextLevel, heroX, heroY, antiHeroX, antiHer
     type: Hero.HEROES.HERO,
     sfx: sound,
     antiHero,
-    currentLevel: nextLevel,  // Use transition system
+    currentLevel,  // Current level for transition system
     dustColor,
     addMouth: isSectionComplete('word')
   })

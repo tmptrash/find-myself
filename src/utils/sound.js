@@ -544,6 +544,67 @@ export function playSpikeSound(instance) {
   rumble.stop(now + duration)
 }
 
+/**
+ * Play slow text sliding sound effect (for blade arm text)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playTextSlideSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 1.0  // Match blade arm extension duration
+  const fadeOutTime = 0.15  // Longer fade out for smoother ending
+  
+  // Create white noise for friction texture
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  
+  const friction = instance.audioContext.createBufferSource()
+  friction.buffer = noiseBuffer
+  
+  // Low-pass filter for soft dragging sound (like carpet/floor)
+  const lpFilter = instance.audioContext.createBiquadFilter()
+  lpFilter.type = 'lowpass'
+  lpFilter.Q.value = 1
+  lpFilter.frequency.setValueAtTime(800, now)
+  lpFilter.frequency.linearRampToValueAtTime(600, now + duration)
+  
+  // Low rumble for heavy object weight
+  const rumble = instance.audioContext.createOscillator()
+  rumble.type = 'sine'
+  rumble.frequency.setValueAtTime(60, now)
+  rumble.frequency.linearRampToValueAtTime(55, now + duration)
+  
+  const rumbleGain = instance.audioContext.createGain()
+  rumbleGain.gain.setValueAtTime(0.12, now)
+  rumbleGain.gain.setValueAtTime(0.10, now + duration - fadeOutTime)
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  // Main friction gain (softer, more "shhhh")
+  const frictionGain = instance.audioContext.createGain()
+  frictionGain.gain.setValueAtTime(0.001, now)
+  frictionGain.gain.exponentialRampToValueAtTime(0.40, now + 0.05)  // Increased from 0.20 to 0.40
+  frictionGain.gain.setValueAtTime(0.40, now + duration - fadeOutTime)  // Increased from 0.20 to 0.40
+  frictionGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  // Connect friction chain
+  friction.connect(lpFilter)
+  lpFilter.connect(frictionGain)
+  frictionGain.connect(instance.audioContext.destination)
+  
+  // Connect rumble chain
+  rumble.connect(rumbleGain)
+  rumbleGain.connect(instance.audioContext.destination)
+  
+  // Start
+  friction.start(now)
+  rumble.start(now)
+  rumble.stop(now + duration)
+}
+
 
 /**
  * Play jump sound effect (upward bounce)

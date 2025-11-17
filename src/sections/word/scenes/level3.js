@@ -120,10 +120,13 @@ export function sceneLevel3(k) {
       sfx: sound
     })
     
-    // Create blade arm that extends from the left (positioned at hero's height)
+    // Create blade arm that extends from the left (positioned above bottom platform at hero's mid-body height)
+    const bottomPlatformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720
+    const heroHalfHeight = 37  // Half of hero's height
+    const textY = bottomPlatformY - heroHalfHeight - 15    // Text at mid-body height above bottom platform, raised by 30px
     BladeArm.create({
       k,
-      y: HERO_SPAWN_Y,
+      y: textY,
       hero,
       color: CFG.colors['level-word.3'].spikes,
       sfx: sound,

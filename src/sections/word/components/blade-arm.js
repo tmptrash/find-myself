@@ -1,125 +1,128 @@
 import { CFG } from '../../../cfg.js'
-import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import * as Blades from './blades.js'
 
 // Blade arm parameters
 const EXTENSION_DURATION = 1.0  // Duration of extension animation (seconds)
 const PAUSE_DURATION = 1.0  // Duration of pause between extensions (seconds)
+const TEXT_MESSAGE = '⟪ some words mean nothing until you touch them ⟫'
+const TEXT_SIZE = 36
+const OUTLINE_THICKNESS = 2
 
 /**
- * Creates a blade arm that extends from the left side of the screen
+ * Creates a blade arm text that extends from the left side of the screen
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
- * @param {number} config.y - Y position (center of blade)
+ * @param {number} config.y - Y position (center of text)
  * @param {Object} config.hero - Hero instance for collision detection
- * @param {string} config.color - Blade color in hex format
  * @param {Object} [config.sfx] - Sound instance
  * @param {string} config.currentLevel - Current level name for restart
  * @returns {Object} Blade arm instance
  */
 export function create(config) {
-  const { k, y, hero, color, sfx = null, currentLevel } = config
+  const { k, y, hero, sfx = null, currentLevel } = config
   
-  const spikeWidth = Blades.getSpikeWidth(k)
-  const spikeHeight = Blades.getSpikeHeight(k)
-  const singleSpikeWidth = Blades.getSingleSpikeWidth(k)
   const sideWallWidth = 192  // Side walls width (10% of 1920)
-  const extensionStep = spikeWidth * 2 * 0.8  // Extends by 2 spike widths per cycle, reduced by 20%
   
-  // Arm thickness = single spike width (base of one blade when rotated 90 degrees)
-  const armThickness = singleSpikeWidth
-  
-  // Start position: right edge of left wall (inside game room)
+  // Start position: right edge of left wall (text will slide from behind the wall)
   const startX = sideWallWidth
   
-  // Create the blade at the end of the arm (floor orientation, will be rotated)
-  const blade = Blades.create({
-    k,
-    x: startX,
-    y: y,
-    hero,
-    orientation: Blades.ORIENTATIONS.FLOOR,
-    onHit: () => handleCollision(inst),
-    sfx,
-    color: color,
-    spikeCount: 1  // Single pyramid
+  // Create a temporary text to measure full width
+  const tempText = k.add([
+    k.text(TEXT_MESSAGE, {
+      size: TEXT_SIZE,
+      font: CFG.fonts.thin
+    }),
+    k.pos(-10000, -10000),  // Off-screen
+    k.opacity(0)
+  ])
+  const fullTextWidth = tempText.width
+  tempText.destroy()
+  
+  // Calculate how much to extend per step (based on text width)
+  const extensionStep = fullTextWidth / 10  // Extend in 10 steps
+  
+  // Create container for all text elements (z-index below platforms so text appears from behind)
+  const textContainer = k.add([
+    k.pos(startX - fullTextWidth, y),
+    k.z(CFG.visual.zIndex.platforms - 1)
+  ])
+  
+  // Create 8 outline text objects (black, offset in all directions)
+  const offsets = [
+    [-OUTLINE_THICKNESS, -OUTLINE_THICKNESS],
+    [0, -OUTLINE_THICKNESS],
+    [OUTLINE_THICKNESS, -OUTLINE_THICKNESS],
+    [-OUTLINE_THICKNESS, 0],
+    [OUTLINE_THICKNESS, 0],
+    [-OUTLINE_THICKNESS, OUTLINE_THICKNESS],
+    [0, OUTLINE_THICKNESS],
+    [OUTLINE_THICKNESS, OUTLINE_THICKNESS]
+  ]
+  
+  const textObjects = []
+  
+  offsets.forEach(([dx, dy]) => {
+    const outlineText = textContainer.add([
+      k.text(TEXT_MESSAGE, {
+        size: TEXT_SIZE,
+        font: CFG.fonts.thin
+      }),
+      k.pos(dx, dy),
+      k.color(0, 0, 0),
+      k.opacity(0)
+    ])
+    textObjects.push(outlineText)
   })
   
-  // Rotate blade 90 degrees clockwise to point right
-  blade.spike.angle = 90
-  blade.spike.opacity = 1
-  blade.spike.z = CFG.visual.zIndex.platforms + 2
+  // Create main text (steel blue)
+  const mainText = textContainer.add([
+    k.text(TEXT_MESSAGE, {
+      size: TEXT_SIZE,
+      font: CFG.fonts.thin
+    }),
+    k.pos(0, 0),
+    k.color(107, 142, 159),
+    k.opacity(0)
+  ])
+  textObjects.push(mainText)
   
-  //
-  // Get block size for outline
-  //
-  const blockSize = Blades.getSpikeBlockSize(k)
-  const outlineWidth = blockSize
-  
-  // Create the arm (horizontal rectangle with width of spike base)
-  // Start with minimal width, will grow over time
-  // Position at top-left corner, so y is the top edge
-  const armY = y - armThickness / 2
-  
-  const arm = k.add([
-    k.rect(0, armThickness),
-    k.pos(startX, armY),
-    k.anchor("topleft"),
+  // Create collision area (z-index below platforms but collision still works)
+  // Height matches text size with small padding for outline
+  const collisionHeight = TEXT_SIZE + OUTLINE_THICKNESS * 2
+  const collisionArea = k.add([
+    k.pos(startX, y),
+    k.rect(0, collisionHeight),
     k.area(),
     k.body({ isStatic: true }),
-    getColor(k, color),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    "blade-arm"
-  ])
-  
-  //
-  // Create black outline strips (top and bottom)
-  // Outline width = one block size
-  //
-  const armOutlineTop = k.add([
-    k.rect(0, outlineWidth),
-    k.pos(startX, armY - outlineWidth),
-    k.anchor("topleft"),
-    k.color(0, 0, 0),
-    k.z(CFG.visual.zIndex.platforms + 2),
-    "blade-arm-outline"
-  ])
-  
-  const armOutlineBottom = k.add([
-    k.rect(0, outlineWidth),
-    k.pos(startX, armY + armThickness),
-    k.anchor("topleft"),
-    k.color(0, 0, 0),
-    k.z(CFG.visual.zIndex.platforms + 2),
-    "blade-arm-outline"
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms - 1),
+    "blade-arm-text"
   ])
   
   const inst = {
     k,
-    arm,
-    armOutlineTop,
-    armOutlineBottom,
-    blade,
+    textContainer,
+    textObjects,
+    collisionArea,
     hero,
     sfx,
     currentLevel,
     state: 'initial_pause',  // initial_pause, extending or paused
     timer: 0,
     startX,
-    currentWidth: 0,  // Current width of the arm
-    targetWidth: extensionStep,  // Target width for current extension (first step)
-    extensionStep,  // How much to extend per cycle
-    armThickness,
-    spikeHeight
+    currentWidth: 0,  // Current visible width
+    targetWidth: extensionStep,  // Target width for current extension
+    extensionStep,
+    fullTextWidth,
+    soundPlayed: false  // Track if sound was played for current extension
   }
   
   // Start the animation cycle
-  arm.onUpdate(() => updateBladeArm(inst))
+  collisionArea.onUpdate(() => updateBladeArm(inst))
   
-  // Handle collision with arm
-  arm.onCollide("player", () => handleCollision(inst))
+  // Handle collision with text
+  collisionArea.onCollide("player", () => handleCollision(inst))
   
   return inst
 }
@@ -144,7 +147,7 @@ function updateBladeArm(inst) {
     return
   }
   
-  const { k, arm, sfx, extensionStep } = inst
+  const { k, sfx, extensionStep, fullTextWidth } = inst
   
   inst.timer += k.dt()
   
@@ -155,46 +158,57 @@ function updateBladeArm(inst) {
       inst.timer = 0
     }
   } else if (inst.state === 'extending') {
-    // Extending phase: grow width over EXTENSION_DURATION
+    // Extending phase: grow visible width over EXTENSION_DURATION
     const progress = Math.min(1, inst.timer / EXTENSION_DURATION)
+    
+    // Play slow sliding sound at the start of each extension
+    if (!inst.soundPlayed && sfx) {
+      Sound.playTextSlideSound(sfx)
+      inst.soundPlayed = true
+    }
     
     // Smoothly interpolate from current width to target width
     const startWidth = inst.targetWidth - extensionStep
     inst.currentWidth = startWidth + (extensionStep * progress)
-    arm.width = inst.currentWidth
     
-    //
-    // Update outline widths to match arm
-    //
-    inst.armOutlineTop.width = inst.currentWidth
-    inst.armOutlineBottom.width = inst.currentWidth
+    // Update collision area width
+    inst.collisionArea.width = inst.currentWidth
     
-    // Update blade position to be at the end of the arm
-    updateBladePosition(inst)
+    // Move text container to create sliding effect
+    inst.textContainer.pos.x = inst.startX - inst.fullTextWidth + inst.currentWidth
+    
+    // Show text when animation starts
+    updateTextVisibility(inst)
     
     // When extension completes, switch to pause
     if (progress >= 1) {
       inst.state = 'paused'
       inst.timer = 0
-      sfx && Sound.playSpikeSound(sfx)
     }
   } else if (inst.state === 'paused') {
     // Paused phase: wait for PAUSE_DURATION
     if (inst.timer >= PAUSE_DURATION) {
-      inst.state = 'extending'
-      inst.timer = 0
-      inst.targetWidth += extensionStep  // Set new target for next extension
+      // Check if we've reached full width
+      if (inst.currentWidth < fullTextWidth) {
+        inst.state = 'extending'
+        inst.timer = 0
+        inst.targetWidth += extensionStep  // Set new target for next extension
+        inst.soundPlayed = false  // Reset sound flag for next extension
+      }
     }
   }
 }
 
 /**
- * Update blade position to match arm position
+ * Update text visibility
  * @param {Object} inst - Blade arm instance
  */
-function updateBladePosition(inst) {
-  const { arm, blade, startX, currentWidth, spikeHeight } = inst
-  // Position blade at the end of the arm, shifted right by spike height (width of rotated blade)
-  blade.spike.pos.x = startX + currentWidth + spikeHeight
+function updateTextVisibility(inst) {
+  const { textObjects, currentWidth } = inst
+  
+  // Show text when there's visible width
+  textObjects.forEach(textObj => {
+    textObj.opacity = currentWidth > 0 ? 1 : 0
+  })
 }
 

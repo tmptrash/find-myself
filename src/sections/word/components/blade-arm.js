@@ -193,8 +193,8 @@ function updateBladeArm(inst) {
  * @param {Object} inst - Blade arm instance
  */
 function updateBladePosition(inst) {
-  const { arm, blade, startX, currentWidth } = inst
-  // Position blade at the end of the arm
-  blade.spike.pos.x = startX + currentWidth
+  const { arm, blade, startX, currentWidth, spikeHeight } = inst
+  // Position blade at the end of the arm, shifted right by spike height (width of rotated blade)
+  blade.spike.pos.x = startX + currentWidth + spikeHeight
 }
 

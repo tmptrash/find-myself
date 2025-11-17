@@ -24,21 +24,15 @@ export function sceneLevel3(k) {
   k.scene("level-word.3", () => {
     // Calculate hero position shifted right by 3 spike widths
     const singleSpikeWidth = Blades.getSingleSpikeWidth(k)
-    const heroX = HERO_SPAWN_X_BASE + singleSpikeWidth * 3  // Shift right by 3 pyramids
-    const leftX = Math.min(heroX, ANTIHERO_SPAWN_X)
-    const rightX = Math.max(heroX, ANTIHERO_SPAWN_X)
+    const customHeroX = HERO_SPAWN_X_BASE + singleSpikeWidth * 3  // Shift right by 3 pyramids
+    const leftX = Math.min(customHeroX, ANTIHERO_SPAWN_X)
+    const rightX = Math.max(customHeroX, ANTIHERO_SPAWN_X)
     const distance = rightX - leftX
     
-    // First spike at 1/3 distance
-    const spike1X = leftX + distance / 3
-    
-    // Second spike at 2/3 distance
-    const spike2X = leftX + distance * 2 / 3
-    
-    // Moving platforms before each spike
+    // Moving platforms at 1/3 and 2/3 distance
     const spikeWidth = Blades.getSpikeWidth(k)
-    const movingPlatform1X = spike1X - spikeWidth * 1.1  // Before first spike
-    const movingPlatform2X = spike2X - spikeWidth * 1.1  // Before second spike
+    const movingPlatform1X = leftX + distance / 3  // First platform at 1/3 distance
+    const movingPlatform2X = leftX + distance * 2 / 3  // Second platform at 2/3 distance
     
     // Initialize level with heroes and TWO gaps in platform
     const { sound, hero, antiHero } = initScene({
@@ -53,7 +47,7 @@ export function sceneLevel3(k) {
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
-      heroX: heroX,  // Custom hero position (shifted right by 3 pyramids)
+      heroX: customHeroX,  // Custom hero position (shifted right by 3 pyramids)
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
@@ -126,36 +120,10 @@ export function sceneLevel3(k) {
       sfx: sound
     })
     
-    // Create first spike (static, appears once)
-    const spikes1 = Blades.create({
-      k,
-      x: spike1X,
-      y: platformY - spikeHeight / 2,
-      hero,
-      orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(spikes1, "level-word.3"),
-      sfx: sound
-    })
-    
-    // Create second spike (static, appears once)
-    const spikes2 = Blades.create({
-      k,
-      x: spike2X,
-      y: platformY - spikeHeight / 2,
-      hero,
-      orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(spikes2, "level-word.3"),
-      sfx: sound
-    })
-    
-    // Start spike animations (appear once like in level 1)
-    Blades.startAnimation(spikes1, 1)
-    Blades.startAnimation(spikes2, 1)
-    
     // Create blade arm that extends from the left (positioned at hero's height)
     BladeArm.create({
       k,
-      y: heroY,
+      y: HERO_SPAWN_Y,
       hero,
       color: CFG.colors['level-word.3'].spikes,
       sfx: sound,

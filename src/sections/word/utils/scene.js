@@ -168,7 +168,7 @@ export function initScene(config) {
   let antiHero = null
   
   // Create heroes if requested
-  if (createHeroes && levelName) {
+  if (createHeroes && levelName && heroX !== null && heroY !== null && antiHeroX !== null && antiHeroY !== null) {
     const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero

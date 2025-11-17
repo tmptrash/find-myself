@@ -22,15 +22,14 @@ const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
 export function sceneLevel1(k) {
   k.scene("level-word.1", () => {
     //
-    // Calculate moving platform position first (needed for gap calculation)
+    // Calculate moving platform position and gap
     //
     const centerX = CFG.screen.width / 2
     const spikeWidth = Blades.getSpikeWidth(k)
     const movingPlatformX = centerX + CFG.screen.width * 0.05  // Position platform left of center
-    const spikeX = movingPlatformX + spikeWidth * 1.1  // Position spikes closer to platform
     
     //
-    // Initialize level with heroes and gap in platform
+    // Initialize level with heroes and gap in platform (for trap)
     //
     const { sound, hero, antiHero } = initScene({
       k,
@@ -49,7 +48,7 @@ export function sceneLevel1(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       platformGap: {
-        x: movingPlatformX - spikeWidth / 2,  // Start gap before platform
+        x: movingPlatformX - spikeWidth / 2,  // Gap under platform
         width: spikeWidth  // Gap width matches spike width
       }
     })
@@ -80,36 +79,19 @@ export function sceneLevel1(k) {
       FlyingWords.onUpdate(flyingWords)
     })
     
-    // Create spikes in the middle of the level
+    //
+    // Create moving platform (at floor level)
+    //
     const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
-    const spikeHeight = Blades.getSpikeHeight(k)  // Dynamic spike height based on screen resolution
-    
-    // Create moving platform right before spikes (at floor level)
-    const movingPlatformY = platformY  // At the same level as bottom platform
     
     MovingPlatform.create({
       k,
       x: movingPlatformX,
-      y: movingPlatformY,
+      y: platformY,
       hero,
       color: CFG.colors['level-word.1'].platform,
       currentLevel: 'level-word.1',
       sfx: sound
     })
-    
-    const spikes = Blades.create({
-      k,
-      x: spikeX,
-      y: platformY - spikeHeight / 2,
-      hero,
-      orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(spikes, "level-word.1"),
-      sfx: sound
-    })
-    
-    // Start spike animation after 2 seconds
-    Blades.startAnimation(spikes, 1)
-    
-    // Eerie sound effects removed for cleaner audio experience
   })
 }

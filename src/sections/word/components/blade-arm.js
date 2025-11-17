@@ -25,7 +25,7 @@ export function create(config) {
   const spikeWidth = Blades.getSpikeWidth(k)
   const spikeHeight = Blades.getSpikeHeight(k)
   const singleSpikeWidth = Blades.getSingleSpikeWidth(k)
-  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+  const sideWallWidth = 192  // Side walls width (10% of 1920)
   const extensionStep = spikeWidth * 2 * 0.8  // Extends by 2 spike widths per cycle, reduced by 20%
   
   // Arm thickness = single spike width (base of one blade when rotated 90 degrees)

@@ -57,7 +57,7 @@ export function sceneReady(k) {
     // Hint text (visible immediately)
     //
     const hint = k.add([
-      k.text('Space, Enter or click - start', { size: 20 }),
+      k.text('press Space, Enter or click to start', { size: 20 }),
       k.pos(centerX, HINT_Y),
       k.anchor('center'),
       getColor(k, CFG.colors.ready.hint),

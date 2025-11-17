@@ -9,6 +9,12 @@ export const CFG = {
     height: 1080,
     background: [0, 0, 0]
   },
+  fonts: {
+    regular: 'jetbrains',
+    thin: 'jetbrains-thin',
+    regularFull: "'JetBrains Mono'",
+    thinFull: "'JetBrains Mono Thin'"
+  },
   audio: {
     masterVolume: MASTER_VOLUME,
     //
@@ -178,11 +184,6 @@ export const CFG = {
     startGame: ['space', 'enter'], // Start game (from menu/start)
   },
   visual: {
-    // Platform dimensions (in % of screen dimensions)
-    bottomPlatformHeight: 33.3,    // Bottom platform height (% of screen height)
-    topPlatformHeight: 33.3,       // Top platform height (% of screen height)
-    sideWallWidth: 10,             // Side walls width (% of screen width)
-    
     // UI dimensions
     instructionsFontSize: 18,      // Instructions font size
     titleFontSize: 64,             // Title font size
@@ -194,87 +195,13 @@ export const CFG = {
     // Z-indices (layers)
     zIndex: {
       background: -100,
+      flyingWords: -50,
       platforms: 0,
       player: 10,
-      ui: 100,
+      ui: 100
     }
   },
   levels: {
-    platformName: "platform",
-    "level-word.0": {
-      name: "Level 0 - Word",
-      
-      // Hero spawn position (% of screen dimensions)
-      // Heroes spawn on bottom platform (33.3% height starts at 66.7% Y)
-      heroSpawn: {
-        x: 12,    // % of screen width (left side, after left wall at 10%)
-        y: 64     // % of screen height (on bottom platform)
-      },
-      antiHeroSpawn: {
-        x: 88,    // % of screen width (right side, before right wall at 90%)
-        y: 64     // % of screen height (on bottom platform)
-      }
-    },
-    
-    "level-word.1": {
-      name: "Level 1 - Word",
-      
-      // Hero spawn position (% of screen dimensions)
-      // Heroes spawn on bottom platform (33.3% height starts at 66.7% Y)
-      heroSpawn: {
-        x: 12,    // % of screen width (left side, after left wall at 20%)
-        y: 64     // % of screen height (on bottom platform)
-      },
-      antiHeroSpawn: {
-        x: 88,    // % of screen width (right side, before right wall at 80%)
-        y: 64     // % of screen height (on bottom platform)
-      }
-    },
-    
-    "level-word.2": {
-      name: "Level 2 - Word",
-      
-      // Hero spawn position (% of screen dimensions)
-      heroSpawn: {
-        x: 12,    // % of screen width (more to the right)
-        y: 64     // % of screen height (on bottom platform)
-      },
-      antiHeroSpawn: {
-        x: 88,    // % of screen width (right side, before right wall at 80%)
-        y: 64     // % of screen height (on bottom platform)
-      }
-    },
-    
-    "level-word.3": {
-      name: "Level 3 - Word",
-      
-      // Hero spawn position (% of screen dimensions)
-      heroSpawn: {
-        x: 30,    // % of screen width (left side)
-        y: 64     // % of screen height (on bottom platform)
-      },
-      antiHeroSpawn: {
-        x: 88,    // % of screen width (right side, before right wall at 80%)
-        y: 64     // % of screen height (on bottom platform)
-      }
-    },
-    
-    "level-word.4": {
-      name: "Level 4 - Word",
-      
-      // Hero spawn position (% of screen dimensions)
-      heroSpawn: {
-        x: 12,    // % of screen width (left side)
-        y: 52     // % of screen height (on bottom platform - higher)
-      },
-      antiHeroSpawn: {
-        x: 88,    // % of screen width (right side)
-        y: 52     // % of screen height (on bottom platform - higher)
-      },
-      
-      // Platform heights (gap = hero jump height exactly)
-      bottomPlatformHeight: 44,    // Bottom platform height (% of screen height)
-      topPlatformHeight: 44         // Top platform height (% of screen height)
-    }
+    platformName: "platform"
   },
 }

@@ -6,6 +6,22 @@ import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 
+//
+// Platform dimensions (in pixels, for 1920x1080 resolution)
+// Level 4 has narrower playable area (exactly hero jump height)
+//
+const PLATFORM_TOP_HEIGHT = 475      // Top platform height (44% of 1080)
+const PLATFORM_BOTTOM_HEIGHT = 475   // Bottom platform height (44% of 1080)
+const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
+
+//
+// Hero spawn positions (in pixels)
+//
+const HERO_SPAWN_X = 230    // 12% of 1920
+const HERO_SPAWN_Y = 562    // 52% of 1080 (higher due to narrower pit)
+const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
+const ANTIHERO_SPAWN_Y = 562   // 52% of 1080
+
 export function sceneLevel4(k) {
   k.scene("level-word.4", () => {
     // Initialize level with heroes (skip standard platforms)
@@ -18,7 +34,14 @@ export function sceneLevel4(k) {
       levelTitle: "words like blades",
       levelTitleColor: CFG.colors['level-word.4'].spikes,
       subTitle: "words are blades that leave invisible wounds",
-      subTitleColor: CFG.colors['level-word.4'].spikes
+      subTitleColor: CFG.colors['level-word.4'].spikes,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
+      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH,
+      heroX: HERO_SPAWN_X,
+      heroY: HERO_SPAWN_Y,
+      antiHeroX: ANTIHERO_SPAWN_X,
+      antiHeroY: ANTIHERO_SPAWN_Y
     })
     
     // Create custom platforms with pit in the middle
@@ -27,18 +50,14 @@ export function sceneLevel4(k) {
     //
     // Create flying words for atmosphere (constrained to narrow pit area between walls)
     //
-    const topPlatformHeightForWords = k.height() * CFG.levels['level-word.4'].topPlatformHeight / 100
-    const bottomPlatformHeightForWords = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
-    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
-    
     const flyingWords = FlyingWords.create({
       k,
       color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
-        left: sideWallWidth + 20,
-        right: k.width() - sideWallWidth - 20,
-        top: topPlatformHeightForWords + 20,
-        bottom: k.height() - bottomPlatformHeightForWords - 20
+        left: PLATFORM_SIDE_WIDTH + 20,
+        right: CFG.screen.width - PLATFORM_SIDE_WIDTH - 20,
+        top: PLATFORM_TOP_HEIGHT + 20,
+        bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
       }
     })
     
@@ -50,10 +69,9 @@ export function sceneLevel4(k) {
     })
     
     // Create bottom of the pit (platform at pit depth)
-    const heroHeight = k.height() * 0.08  // Approximate hero height (8% of screen)
+    const heroHeight = CFG.screen.height * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
-    const bottomHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
-    const pitBottomY = k.height() - bottomHeight + pitDepth
+    const pitBottomY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT + pitDepth
     
     // Create pit bottom platform
     k.add([
@@ -80,11 +98,9 @@ export function sceneLevel4(k) {
     pitSpikes.spike.opacity = 1
     
     // Create 3 spikes (left floor, center ceiling, right floor)
-    const bottomPlatformHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
-    const topPlatformHeight = k.height() * CFG.levels['level-word.4'].topPlatformHeight / 100
-    const platformY = k.height() - bottomPlatformHeight
+    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
     const floorSpikeY = platformY - spikeHeight / 2
-    const ceilingSpikeY = topPlatformHeight + spikeHeight / 2
+    const ceilingSpikeY = PLATFORM_TOP_HEIGHT + spikeHeight / 2
     
     // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
     const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 2.5
@@ -105,8 +121,8 @@ export function sceneLevel4(k) {
     spikes1.spike.z = -50  // Behind platforms
     
     // Center spike (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
-    const hiddenY2 = topPlatformHeight - spikeHeight * 1.5  // Deeper: 1.5x spike height above visible position
-    const visibleCeilingY = topPlatformHeight + spikeHeight / 2  // Extended down from ceiling
+    const hiddenY2 = PLATFORM_TOP_HEIGHT - spikeHeight * 1.5  // Deeper: 1.5x spike height above visible position
+    const visibleCeilingY = PLATFORM_TOP_HEIGHT + spikeHeight / 2  // Extended down from ceiling
     const spikes2 = Blades.create({
       k,
       x: pitInfo.centerX,
@@ -291,13 +307,9 @@ function updateSpikesAnimation(inst) {
  * @returns {Object} Pit information (centerX, width)
  */
 function createCustomPlatforms(k, color) {
-  const bottomPlatformHeight = k.height() * CFG.levels['level-word.4'].bottomPlatformHeight / 100
-  const topPlatformHeight = k.height() * CFG.levels['level-word.4'].topPlatformHeight / 100
-  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
-  
   // Calculate pit dimensions (same width as spikes)
   const pitWidth = Blades.getSpikeWidth(k)
-  const centerX = k.width() / 2
+  const centerX = CFG.screen.width / 2
   const pitLeft = centerX - pitWidth / 2
   const pitRight = centerX + pitWidth / 2
   
@@ -313,19 +325,19 @@ function createCustomPlatforms(k, color) {
   }
   
   // Top platform (full width)
-  createPlatform(0, 0, k.width(), topPlatformHeight)
+  createPlatform(0, 0, CFG.screen.width, PLATFORM_TOP_HEIGHT)
   
   // Bottom platform - LEFT side (before pit)
-  createPlatform(0, k.height() - bottomPlatformHeight, pitLeft, bottomPlatformHeight)
+  createPlatform(0, CFG.screen.height - PLATFORM_BOTTOM_HEIGHT, pitLeft, PLATFORM_BOTTOM_HEIGHT)
   
   // Bottom platform - RIGHT side (after pit)
-  createPlatform(pitRight, k.height() - bottomPlatformHeight, k.width() - pitRight, bottomPlatformHeight)
+  createPlatform(pitRight, CFG.screen.height - PLATFORM_BOTTOM_HEIGHT, CFG.screen.width - pitRight, PLATFORM_BOTTOM_HEIGHT)
   
   // Left wall
-  createPlatform(0, topPlatformHeight, sideWallWidth, k.height() - topPlatformHeight - bottomPlatformHeight)
+  createPlatform(0, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
   
   // Right wall
-  createPlatform(k.width() - sideWallWidth, topPlatformHeight, sideWallWidth, k.height() - topPlatformHeight - bottomPlatformHeight)
+  createPlatform(CFG.screen.width - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
   
   return { centerX, width: pitWidth }
 }

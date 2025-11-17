@@ -51,25 +51,16 @@ export function create(cfg) {
   } = cfg
 
   //
-  // Use custom bounds if provided, otherwise calculate from platform config
+  // Custom bounds must be provided
   //
-  let playableTop, playableBottom, playableLeft, playableRight
-  
-  if (customBounds) {
-    playableLeft = customBounds.left
-    playableRight = customBounds.right
-    playableTop = customBounds.top
-    playableBottom = customBounds.bottom
-  } else {
-    const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
-    const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
-    const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
-
-    playableTop = topPlatformHeight + 20
-    playableBottom = k.height() - bottomPlatformHeight - 20
-    playableLeft = sideWallWidth
-    playableRight = k.width() - sideWallWidth
+  if (!customBounds) {
+    throw new Error('FlyingWords.create() requires customBounds parameter')
   }
+  
+  const playableLeft = customBounds.left
+  const playableRight = customBounds.right
+  const playableTop = customBounds.top
+  const playableBottom = customBounds.bottom
 
   const words = []
 
@@ -333,14 +324,18 @@ export function onUpdate(inst) {
     }
 
     //
-    // Loop words: when they exit right or bottom, respawn at left/top
-    // Keep words strictly within playable area
+    // Loop words: when they exit beyond right or bottom (by word length), respawn at left/top
+    // Respawn at 2-3 word widths behind platforms
     //
-    if (word.textObj.pos.x > playableRight) {
+    const approximateWordWidth = 150
+    const spawnDistanceLeft = approximateWordWidth * 2
+    const spawnDistanceTop = approximateWordWidth * 2
+    
+    if (word.textObj.pos.x > playableRight + 150) {
       //
-      // Respawn at left edge with random vertical position (within playable area)
+      // Respawn far left (2-3 words behind left platform)
       //
-      word.textObj.pos.x = playableLeft + 10
+      word.textObj.pos.x = playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth
       word.textObj.pos.y = playableTop + Math.random() * (playableBottom - playableTop)
       
       //
@@ -363,11 +358,11 @@ export function onUpdate(inst) {
       word.wavePhase = Math.random() * Math.PI * 2
     }
     
-    if (word.textObj.pos.y > playableBottom) {
+    if (word.textObj.pos.y > playableBottom + 150) {
       //
-      // Respawn at top edge with random horizontal position (within playable area)
+      // Respawn far above (2-3 words above top platform)
       //
-      word.textObj.pos.y = playableTop + 10
+      word.textObj.pos.y = playableTop - spawnDistanceTop - Math.random() * approximateWordWidth
       word.textObj.pos.x = playableLeft + Math.random() * (playableRight - playableLeft)
       
       //
@@ -390,19 +385,19 @@ export function onUpdate(inst) {
       word.wavePhase = Math.random() * Math.PI * 2
     }
     
-    //
-    // Keep words within left boundary
-    //
-    if (word.textObj.pos.x < playableLeft) {
-      word.textObj.pos.x = playableLeft + 10
-    }
+    // //
+    // // Keep words within left boundary
+    // //
+    // if (word.textObj.pos.x < playableLeft) {
+    //   word.textObj.pos.x = playableLeft + 10
+    // }
     
-    //
-    // Keep words within top boundary
-    //
-    if (word.textObj.pos.y < playableTop) {
-      word.textObj.pos.y = playableTop + 10
-    }
+    // //
+    // // Keep words within top boundary
+    // //
+    // if (word.textObj.pos.y < playableTop) {
+    //   word.textObj.pos.y = playableTop + 10
+    // }
   })
 }
 
@@ -451,17 +446,50 @@ function createWord(k, params) {
   const speedY = 2 + Math.random() * 8  // Very slow falling down (2-10 px/s) - minimal vertical drift
 
   //
-  // Random position (always within playable area)
+  // Random position: start from far behind platforms (left or top)
+  // For initial spawn, distribute evenly across the entire path
+  // 70% chance to start from left, 30% from top
   //
-  const x = playableLeft + Math.random() * (playableRight - playableLeft)
-  const y = playableTop + Math.random() * (playableBottom - playableTop)
+  const startFromLeft = Math.random() < 0.7
+  
+  //
+  // Approximate word/letter width for spacing calculation
+  // Average word is ~100-150px, letter is ~40-60px
+  //
+  const approximateWordWidth = 150
+  const spawnDistanceLeft = approximateWordWidth * 2  // 2 words distance behind left platform
+  const spawnDistanceTop = approximateWordWidth * 2   // 2 words distance above top platform
+  
+  let x, y
+  if (initialSpawn) {
+    //
+    // Distribute words evenly across the entire visible path on initial spawn
+    //
+    if (startFromLeft) {
+      // Distribute from far left to far right
+      x = playableLeft - spawnDistanceLeft + Math.random() * (playableRight - playableLeft + spawnDistanceLeft + 150)
+      y = playableTop + Math.random() * (playableBottom - playableTop)
+    } else {
+      // Distribute from far top to far bottom
+      x = playableLeft + Math.random() * (playableRight - playableLeft)
+      y = playableTop - spawnDistanceTop + Math.random() * (playableBottom - playableTop + spawnDistanceTop + 150)
+    }
+  } else {
+    //
+    // Regular spawn: far behind platforms (2 word widths distance)
+    //
+    x = startFromLeft
+      ? playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth  // Start 2-3 words left
+      : playableLeft + Math.random() * (playableRight - playableLeft)
+    y = startFromLeft
+      ? playableTop + Math.random() * (playableBottom - playableTop)
+      : playableTop - spawnDistanceTop - Math.random() * approximateWordWidth  // Start 2-3 words above
+  }
 
   //
-  // Set z-index: behind hero or in front
+  // Set z-index: all flying words behind platforms
   //
-  const zIndex = isBehindHero
-    ? CFG.visual.zIndex.background + 1
-    : CFG.visual.zIndex.player + 1
+  const zIndex = CFG.visual.zIndex.flyingWords
 
   //
   // Opacity based on depth: behind = less transparent (0.4-0.6), front = brighter (0.5-0.7)
@@ -473,7 +501,7 @@ function createWord(k, params) {
   //
   // Use JetBrains Mono font for all words
   //
-  const fontFamily = 'jetbrains'
+  const fontFamily = CFG.fonts.regular
   
   //
   // Font weight simulation: some words will have outline for bold effect

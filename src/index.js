@@ -16,7 +16,7 @@ import { loadSprites as loadBladeSprites } from "./sections/word/components/blad
 const k = kaplay({
   width: CFG.screen.width,
   height: CFG.screen.height,
-  font: "jetbrains",
+  font: CFG.fonts.regular,
   letterbox: true,
   background: CFG.screen.background
 })
@@ -27,8 +27,8 @@ k.canvas.style.removeProperty('cursor')
 //
 // Load resources
 //
-k.loadFont("jetbrains", "/fonts/JetBrainsMono-Regular.ttf")
-k.loadFont("jetbrains-thin", "/fonts/JetBrainsMono-Thin.ttf")
+k.loadFont(CFG.fonts.regular, "/fonts/JetBrainsMono-Regular.ttf")
+k.loadFont(CFG.fonts.thin, "/fonts/JetBrainsMono-Thin.ttf")
 //
 // Load audio
 //

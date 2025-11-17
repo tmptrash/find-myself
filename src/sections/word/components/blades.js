@@ -82,8 +82,14 @@ export function create(config) {
 
   // Calculate dynamic sizes based on screen resolution
   const blockSize = getSpikeBlockSize(k)
-  const spikeHeight = SPIKE_HEIGHT_BLOCKS * blockSize
-  const spikeWidth = (SINGLE_SPIKE_WIDTH_BLOCKS * spikeCount + SPIKE_GAP_BLOCKS * (spikeCount - 1)) * blockSize
+  //
+  // For text-based blades, calculate actual text dimensions
+  //
+  const fontSize = 40
+  const letterSpacing = 0
+  const approximateLetterWidth = fontSize * 0.6
+  const spikeWidth = approximateLetterWidth * spikeCount + letterSpacing * (spikeCount - 1) - 8  // Reduce 4px from each side
+  const spikeHeight = fontSize - 8  // Reduce 12px from bottom total
 
   // Load spike sprite with custom color and spike count
   const spriteKey = `spike_${orientation}_${color}_${spikeCount}_v14`
@@ -100,7 +106,7 @@ export function create(config) {
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
-        k.vec2(0, 0),
+        k.vec2(0, -8),
         collisionSize.width,
         collisionSize.height
       )
@@ -277,125 +283,80 @@ function getCollisionSize(orientation, width, height) {
 }
 
 /**
- * Create spike sprite procedurally
+ * Create spike sprite procedurally - renders letters 'A' instead of pyramids
  * @param {string} orientation - Spike orientation
  * @param {number} blockSize - Size of one block in pixels
  * @param {string} color - Hex color string for the spike
- * @param {number} spikeCount - Number of spike pyramids
+ * @param {number} spikeCount - Number of letters to render
  * @returns {string} Base64 encoded sprite data
  */
 function createSpikeSprite(orientation, blockSize, color, spikeCount = 3) {
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   
-  // Calculate canvas dimensions based on block size
-  const spikeHeight = SPIKE_HEIGHT_BLOCKS * blockSize
-  const singleSpikeWidth = SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
-  const spikeGap = SPIKE_GAP_BLOCKS * blockSize
-  const spikeWidth = singleSpikeWidth * spikeCount + spikeGap * (spikeCount - 1)
+  //
+  // Font settings
+  //
+  const fontSize = 40
+  const fontFamily = CFG.fonts.thinFull
+  const outlineWidth = 2
+  const letterSpacing = 0
   
   //
-  // Add extra space for outline (1 block on each side, 1 block top and bottom)
+  // Measure text to get dimensions
   //
-  const outlinePadding = blockSize
-  
-  // Canvas size based on orientation
-  if (orientation === ORIENTATIONS.LEFT || orientation === ORIENTATIONS.RIGHT) {
-    canvas.width = spikeHeight + outlinePadding * 2
-    canvas.height = spikeWidth + outlinePadding * 2
-  } else {
-    canvas.width = spikeWidth + outlinePadding * 2
-    canvas.height = spikeHeight + outlinePadding * 2
-  }
-
-  // Use provided color for spikes
-  const spikeColor = getHex(color)
+  ctx.font = `${fontSize}px ${fontFamily}`
+  const letterText = 'A'.repeat(spikeCount)
+  const metrics = ctx.measureText(letterText)
+  const textWidth = metrics.width + (spikeCount - 1) * letterSpacing
+  const textHeight = fontSize * 1.4
   
   //
-  // Draw each spike as stepped pyramid (45° sides, sharp point on top)
+  // Set canvas size with padding for outline
   //
+  const padding = outlineWidth * 4
+  canvas.width = textWidth + padding * 2
+  canvas.height = textHeight + padding * 2
+  
+  //
+  // Set text rendering properties
+  //
+  ctx.font = `${fontSize}px ${fontFamily}`
+  ctx.textBaseline = 'bottom'
+  ctx.textAlign = 'left'
+  
+  const baseX = padding
+  const baseY = canvas.height - padding - 12
+  
+  //
+  // Draw black outline by rendering text multiple times with offset
+  //
+  const offsets = [
+    [-outlineWidth, -outlineWidth],
+    [0, -outlineWidth],
+    [outlineWidth, -outlineWidth],
+    [-outlineWidth, 0],
+    [outlineWidth, 0],
+    [-outlineWidth, outlineWidth],
+    [0, outlineWidth],
+    [outlineWidth, outlineWidth]
+  ]
+  
+  ctx.fillStyle = '#000000'
   for (let i = 0; i < spikeCount; i++) {
-    const baseX = i * (singleSpikeWidth + spikeGap) + outlinePadding
-    const numSteps = Math.floor(spikeHeight / blockSize)
-    
-    //
-    // First pass: Draw black outline blocks
-    //
-    ctx.fillStyle = '#000000'
-    
-    for (let step = 0; step < numSteps; step++) {
-      const y = step * blockSize
-      const blocksFromEachEdge = step
-      const rowWidth = singleSpikeWidth - (blocksFromEachEdge * 2 * blockSize)
-      
-      if (rowWidth <= 0) break
-      
-      const startX = baseX + blocksFromEachEdge * blockSize
-      const numBlocks = Math.floor(rowWidth / blockSize)
-      const blockY = canvas.height - y - blockSize - outlinePadding
-      
-      //
-      // Draw left outline block
-      //
-      ctx.fillRect(
-        Math.floor(startX - blockSize),
-        blockY,
-        blockSize,
-        blockSize
-      )
-      
-      //
-      // Draw right outline block
-      //
-      ctx.fillRect(
-        Math.floor(startX + numBlocks * blockSize),
-        blockY,
-        blockSize,
-        blockSize
-      )
-      
-      //
-      // Draw top outline blocks (for the top row)
-      //
-      if (step === numSteps - 1 || rowWidth <= blockSize) {
-        //
-        // Draw the single top block above the pyramid tip (center only)
-        //
-        const topBlockX = baseX + singleSpikeWidth / 2 - blockSize / 2
-        ctx.fillRect(
-          Math.floor(topBlockX),
-          blockY - blockSize,
-          blockSize,
-          blockSize
-        )
-      }
-      
-    }
-    
-    //
-    // Second pass: Draw colored blocks on top
-    //
-    ctx.fillStyle = spikeColor
-    
-    for (let step = 0; step < numSteps; step++) {
-      const y = step * blockSize
-      const blocksFromEachEdge = step
-      const rowWidth = singleSpikeWidth - (blocksFromEachEdge * 2 * blockSize)
-      
-      if (rowWidth <= 0) break
-      
-      const startX = baseX + blocksFromEachEdge * blockSize
-      const numBlocks = Math.floor(rowWidth / blockSize)
-      
-      for (let b = 0; b < numBlocks; b++) {
-        ctx.fillRect(
-          Math.floor(startX + b * blockSize),
-          canvas.height - y - blockSize - outlinePadding,
-          blockSize,
-          blockSize
-        )
-      }
-    }
+    const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
+    offsets.forEach(([offsetX, offsetY]) => {
+      ctx.fillText('A', letterX + offsetX, baseY + offsetY)
+    })
+  }
+  
+  //
+  // Draw main text (colored)
+  //
+  ctx.fillStyle = getHex(color)
+  for (let i = 0; i < spikeCount; i++) {
+    const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
+    ctx.fillText('A', letterX, baseY)
   }
 
   return canvas.toDataURL()

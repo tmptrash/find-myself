@@ -27,13 +27,11 @@ export function addBackground(k, color) {
  * @param {number} levelNumber - Current level number (1-5)
  * @param {string} activeColor - Color for active (completed) levels
  * @param {string} inactiveColor - Color for inactive (not completed) levels
- * @param {number} [customTopHeight] - Custom top platform height (% of screen height)
+ * @param {number} topPlatformHeight - Top platform height in pixels
+ * @param {number} sideWallWidth - Side wall width in pixels
  * @returns {Array} Array of anti-hero instances
  */
-export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, customTopHeight = null) {
-  const topHeight = customTopHeight || CFG.visual.topPlatformHeight
-  const topPlatformHeight = k.height() * topHeight / 100
-  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, topPlatformHeight, sideWallWidth) {
   
   //
   // Calculate spacing for 5 anti-heroes
@@ -82,13 +80,16 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, cu
  * @param {string} [config.subTitleColor] - Subtitle color in hex format
  * @param {String} [config.backgroundColor] - Background color (optional if levelName provided)
  * @param {String} [config.platformColor] - Platform color (optional if levelName provided)
- * @param {Number} [config.bottomPlatformHeight] - Custom bottom platform height (% of screen height)
- * @param {Number} [config.topPlatformHeight] - Custom top platform height (% of screen height)
+ * @param {Number} [config.bottomPlatformHeight] - Bottom platform height in pixels
+ * @param {Number} [config.topPlatformHeight] - Top platform height in pixels
+ * @param {Number} [config.sideWallWidth] - Side wall width in pixels
  * @param {Object|Array} [config.platformGap] - Gap(s) in bottom platform {x, width} or [{x, width}, ...]
  * @param {Boolean} [config.skipPlatforms] - If true, don't create standard platforms
  * @param {Boolean} [config.createHeroes=true] - If true, create hero and anti-hero
- * @param {Number} [config.heroX] - Custom hero X position (overrides config)
- * @param {Number} [config.heroY] - Custom hero Y position (overrides config)
+ * @param {Number} [config.heroX] - Hero X position in pixels
+ * @param {Number} [config.heroY] - Hero Y position in pixels
+ * @param {Number} [config.antiHeroX] - Anti-hero X position in pixels
+ * @param {Number} [config.antiHeroY] - Anti-hero Y position in pixels
  * @returns {Object} Object with sound, hero, antiHero instances
  */
 export function initScene(config) {
@@ -105,11 +106,14 @@ export function initScene(config) {
     platformColor, 
     bottomPlatformHeight, 
     topPlatformHeight,
+    sideWallWidth,
     platformGap,
     skipPlatforms,
     createHeroes = true,
     heroX = null,
-    heroY = null
+    heroY = null,
+    antiHeroX = null,
+    antiHeroY = null
   } = config
   
   // Use levelName-based colors if not explicitly provided
@@ -143,9 +147,8 @@ export function initScene(config) {
   setupCamera(k)
   
   // Add level indicator if levelNumber provided
-  if (levelNumber) {
-    const customTopHeight = topPlatformHeight || (skipPlatforms && levelName && CFG.levels[levelName]?.topPlatformHeight)
-    addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, customTopHeight)
+  if (levelNumber && topPlatformHeight && sideWallWidth) {
+    addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, topPlatformHeight, sideWallWidth)
   }
   
   // Level titles removed for cleaner visual experience
@@ -165,8 +168,8 @@ export function initScene(config) {
   let antiHero = null
   
   // Create heroes if requested
-  if (createHeroes && levelName && nextLevel) {
-    const heroesResult = createLevelHeroes(k, levelName, sound, nextLevel, heroX, heroY)
+  if (createHeroes && nextLevel) {
+    const heroesResult = createLevelHeroes(k, sound, nextLevel, heroX, heroY, antiHeroX, antiHeroY)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
@@ -187,16 +190,13 @@ function setupCamera(k) {
  * Adds standard platforms to the level (top, bottom, left wall, right wall)
  * @param {Object} k - Kaplay instance
  * @param {String} color - Platform color in hex format
- * @param {Number} [customBottomHeight] - Custom bottom platform height (% of screen height)
- * @param {Number} [customTopHeight] - Custom top platform height (% of screen height)
+ * @param {Number} bottomPlatformHeight - Bottom platform height in pixels
+ * @param {Number} topPlatformHeight - Top platform height in pixels
  * @param {Object|Array} [gap] - Gap(s) in bottom platform {x, width} or [{x, width}, ...]
  * @returns {Array} Array of platform objects
  */
-function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
-  // Calculate platform dimensions from percentages (use custom or default)
-  const bottomPlatformHeight = k.height() * (customBottomHeight || CFG.visual.bottomPlatformHeight) / 100
-  const topPlatformHeight = k.height() * (customTopHeight || CFG.visual.topPlatformHeight) / 100
-  const sideWallWidth = k.width() * CFG.visual.sideWallWidth / 100
+function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
+  const sideWallWidth = 192  // Side walls width (10% of 1920)
   
   function createPlatform(x, y, width, height) {
     return k.add([
@@ -260,16 +260,16 @@ function addPlatforms(k, color, customBottomHeight, customTopHeight, gap) {
  * @param {Number} [customHeroY] - Custom hero Y position (overrides config)
  * @returns {Object} {hero, antiHero}
  */
-function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, customHeroY = null) {
+function createLevelHeroes(k, sound, nextLevel, heroX, heroY, antiHeroX, antiHeroY) {
   //
-  // Get dust color from level platform color
+  // Dust color is now always null (no level-specific colors needed)
   //
-  const dustColor = CFG.colors[levelName]?.platform || null
+  const dustColor = null
   
   const antiHero = Hero.create({
     k,
-    x: k.width() * CFG.levels[levelName].antiHeroSpawn.x / 100,
-    y: k.height() * CFG.levels[levelName].antiHeroSpawn.y / 100,
+    x: antiHeroX,
+    y: antiHeroY,
     type: 'antiHero',
     sfx: sound,
     dustColor,
@@ -282,12 +282,12 @@ function createLevelHeroes(k, levelName, sound, nextLevel, customHeroX = null, c
   
   const hero = Hero.create({
     k,
-    x: customHeroX !== null ? customHeroX : k.width() * CFG.levels[levelName].heroSpawn.x / 100,
-    y: customHeroY !== null ? customHeroY : k.height() * CFG.levels[levelName].heroSpawn.y / 100,
+    x: heroX,
+    y: heroY,
     type: Hero.HEROES.HERO,
     sfx: sound,
     antiHero,
-    currentLevel: levelName,  // Use new transition system
+    currentLevel: nextLevel,  // Use transition system
     dustColor,
     addMouth: isSectionComplete('word')
   })

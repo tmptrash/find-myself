@@ -2,8 +2,22 @@ import { CFG } from '../../../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as FlyingWords from '../components/flying-words.js'
-import { getColor } from '../../../utils/helper.js'
 import { getProgress } from '../../../utils/progress.js'
+
+//
+// Platform dimensions (in pixels, for 1920x1080 resolution)
+//
+const PLATFORM_TOP_HEIGHT = 360      // Top platform height (33.3% of 1080)
+const PLATFORM_BOTTOM_HEIGHT = 360   // Bottom platform height (33.3% of 1080)
+const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
+
+//
+// Hero spawn positions (in pixels)
+//
+const HERO_SPAWN_X = 230    // 12% of 1920
+const HERO_SPAWN_Y = 691    // 64% of 1080
+const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
+const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
 
 const INTRO_TEXT = "find yourself to know who you are"
 const INTRO_INITIAL_DELAY = 2.0  // Delay before intro starts
@@ -50,7 +64,7 @@ export function sceneLevel0(k) {
     //
     const shouldShowIntro = isFirstRun && !introShownInSession
     
-    const { sound, hero, antiHero } = initScene({
+    const { sound, hero } = initScene({
       k,
       levelName: 'level-word.0',
       levelNumber: 1,  // Show 1 red blade in indicator
@@ -59,6 +73,13 @@ export function sceneLevel0(k) {
       levelTitleColor: CFG.colors['level-word.0'].spikes,
       subTitle: "some words are sharper than any blade...",
       subTitleColor: CFG.colors['level-word.0'].spikes,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
+      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH,
+      heroX: HERO_SPAWN_X,
+      heroY: HERO_SPAWN_Y,
+      antiHeroX: ANTIHERO_SPAWN_X,
+      antiHeroY: ANTIHERO_SPAWN_Y
     })
     
     //
@@ -82,11 +103,22 @@ export function sceneLevel0(k) {
     }
     
     //
+    // Calculate platform boundaries for flying words
+    //
+    const platformBounds = {
+      left: PLATFORM_SIDE_WIDTH,
+      right: CFG.screen.width - PLATFORM_SIDE_WIDTH,
+      top: PLATFORM_TOP_HEIGHT + 20,
+      bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+    }
+    
+    //
     // Create flying words for atmosphere
     //
     const flyingWords = FlyingWords.create({
       k,
-      color: 'B0B0B0'  // Light gray for ghostly/ethereal flying words
+      color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
+      customBounds: platformBounds
     })
     
     //
@@ -99,21 +131,18 @@ export function sceneLevel0(k) {
     //
     // Calculate positions
     //
-    const heroX = k.width() * CFG.levels['level-word.0'].heroSpawn.x / 100
-    const antiHeroX = k.width() * CFG.levels['level-word.0'].antiHeroSpawn.x / 100
-    const leftX = Math.min(heroX, antiHeroX)
-    const rightX = Math.max(heroX, antiHeroX)
+    const leftX = Math.min(HERO_SPAWN_X, ANTIHERO_SPAWN_X)
+    const rightX = Math.max(HERO_SPAWN_X, ANTIHERO_SPAWN_X)
     const distance = rightX - leftX
     
-    const bottomPlatformHeight = k.height() * CFG.visual.bottomPlatformHeight / 100
-    const platformY = k.height() - bottomPlatformHeight
+    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
     const spikeHeight = Blades.getSpikeHeight(k)
     
     //
     // Three blade blocks at equal distances
-    // Block 1: 0.20 distance (dangerous)
-    // Block 2: 0.40 distance (dangerous)
-    // Block 3: 0.70 distance (safe to pass - trap decoy)
+    // Block 1: 0.20 distance (dangerous) - 2 letters A
+    // Block 2: 0.40 distance (dangerous) - 2 letters A
+    // Block 3: 0.70 distance (safe to pass - trap decoy) - 2 letters A
     //
     const blade1X = leftX + distance * 0.20
     const blade2X = leftX + distance * 0.40
@@ -174,8 +203,8 @@ export function sceneLevel0(k) {
     //
     const trapDistance = 20  // Distance to trigger trap (very close)
     const spikeWidth = Blades.getSpikeWidth(k)
-    const gapWidth = 8  // Very small gap between blade3 and trap
-    const trapBladeX = blade3X + spikeWidth / 2 + gapWidth + spikeWidth / 2  // Position with small gap
+    const gapWidth = -4  // Overlap with blade3
+    const trapBladeX = blade3X + spikeWidth / 2 + gapWidth + spikeWidth / 2  // Position overlapping
     
     let trapBlades = null
     let trapTriggered = false
@@ -221,9 +250,8 @@ export function sceneLevel0(k) {
  * @param {Object} k - Kaplay instance
  */
 function showIntroSequence(k) {
-  const centerX = k.width() / 2
-  const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
-  const textY = topPlatformHeight / 2  // Center of top platform area
+  const centerX = CFG.screen.width / 2
+  const textY = PLATFORM_TOP_HEIGHT / 2  // Center of top platform area
   
   //
   // If intro already complete, show only instructions
@@ -240,7 +268,7 @@ function showIntroSequence(k) {
     k.text(INTRO_TEXT, {
       size: 32,
       align: "center",
-      font: "jetbrains"
+      font: CFG.fonts.regular
     }),
     k.pos(centerX, textY),
     k.anchor("center"),
@@ -309,18 +337,7 @@ function showIntroSequence(k) {
         //
         // Create instructions text
         //
-        inst.instructionsText = k.add([
-          k.text("← → - move,   ↑ Space - jump,   ESC - menu", {
-            size: 24, 
-            align: "center",
-            font: "jetbrains"
-          }),
-          k.pos(centerX, textY),
-          k.anchor("center"),
-          k.color(204, 204, 204),  // Light gray
-          k.opacity(0),
-          k.z(CFG.visual.zIndex.ui + 10)
-        ])
+        inst.instructionsText = createInstructionsText(k, centerX, textY)
       }
     } else if (inst.phase === 'instructions_fade_in') {
       //
@@ -361,22 +378,18 @@ function showIntroSequence(k) {
 }
 
 /**
- * Shows only instructions without intro text
+ * Creates instructions text object
  * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} textY - Text Y position
+ * @returns {Object} Instructions text object
  */
-function showInstructions(k) {
-  const centerX = k.width() / 2
-  const topPlatformHeight = k.height() * CFG.visual.topPlatformHeight / 100
-  const textY = topPlatformHeight / 2
-  
-  //
-  // Create instructions text
-  //
-  const instructionsText = k.add([
+function createInstructionsText(k, centerX, textY) {
+  return k.add([
     k.text("← → - move,   ↑ Space - jump,   ESC - menu", {
-      size: 24, 
+      size: 24,
       align: "center",
-      font: "jetbrains"
+      font: CFG.fonts.regular
     }),
     k.pos(centerX, textY),
     k.anchor("center"),
@@ -384,6 +397,20 @@ function showInstructions(k) {
     k.opacity(0),
     k.z(CFG.visual.zIndex.ui + 10)
   ])
+}
+
+/**
+ * Shows only instructions without intro text
+ * @param {Object} k - Kaplay instance
+ */
+function showInstructions(k) {
+  const centerX = CFG.screen.width / 2
+  const textY = PLATFORM_TOP_HEIGHT / 2
+  
+  //
+  // Create instructions text
+  //
+  const instructionsText = createInstructionsText(k, centerX, textY)
   
   //
   // Animation state

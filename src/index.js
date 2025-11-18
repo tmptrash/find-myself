@@ -56,6 +56,4 @@ sceneWordComplete(k)
 // Start game after resources loaded
 // Always show ready screen on page load
 //
-k.onLoad(() => {
-  k.go("ready")
-})
+k.onLoad(() => k.go("ready"))

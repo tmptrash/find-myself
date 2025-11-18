@@ -68,6 +68,80 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
 }
 
 /**
+ * Add word-based level indicator (letters "WORDS")
+ * @param {Object} k - Kaplay instance
+ * @param {number} levelNumber - Current level (1-5)
+ * @param {string} activeColor - Color for completed levels (hex)
+ * @param {string} inactiveColor - Color for future levels (hex)
+ * @param {number} topPlatformHeight - Height of top platform
+ * @param {number} sideWallWidth - Width of side wall
+ * @returns {Array} Array of letter objects
+ */
+export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor, topPlatformHeight, sideWallWidth) {
+  const letters = ['W', 'O', 'R', 'D', 'S']
+  const fontSize = 48
+  const letterSpacing = -5  // Negative spacing for closer letters
+  const outlineThickness = 2
+  
+  // Default colors if not provided
+  const defaultActive = "DC143C"  // Red
+  const defaultInactive = "555555"  // Gray
+  
+  const startX = sideWallWidth + 20  // Small offset from left wall
+  const y = topPlatformHeight - fontSize - 10  // Position above platform
+  
+  const letterObjects = []
+  
+  letters.forEach((letter, i) => {
+    const isActive = i < levelNumber
+    const colorHex = isActive ? (activeColor || defaultActive) : (inactiveColor || defaultInactive)
+    
+    // Calculate x position for this letter
+    const letterX = startX + i * (fontSize + letterSpacing)
+    
+    // Create outline (8 directions)
+    const offsets = [
+      [-outlineThickness, -outlineThickness],
+      [0, -outlineThickness],
+      [outlineThickness, -outlineThickness],
+      [-outlineThickness, 0],
+      [outlineThickness, 0],
+      [-outlineThickness, outlineThickness],
+      [0, outlineThickness],
+      [outlineThickness, outlineThickness]
+    ]
+    
+    offsets.forEach(([dx, dy]) => {
+      k.add([
+        k.text(letter, {
+          size: fontSize,
+          font: CFG.fonts.thin
+        }),
+        k.pos(letterX + dx, y + dy),
+        k.color(0, 0, 0),
+        k.z(CFG.visual.zIndex.ui)
+      ])
+    })
+    
+    // Create main letter
+    const {r, g, b} = getRGB(k, colorHex)
+    const mainLetter = k.add([
+      k.text(letter, {
+        size: fontSize,
+        font: CFG.fonts.thin
+      }),
+      k.pos(letterX, y),
+      k.color(r, g, b),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+    
+    letterObjects.push(mainLetter)
+  })
+  
+  return letterObjects
+}
+
+/**
  * Initializes a level with common setup (gravity, sound, background, platforms, camera, controls)
  * @param {Object} config - Level configuration
  * @param {Object} config.k - Kaplay instance
@@ -148,7 +222,8 @@ export function initScene(config) {
   
   // Add level indicator if levelNumber provided
   if (levelNumber && topPlatformHeight && sideWallWidth) {
-    addLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, topPlatformHeight, sideWallWidth)
+    // Use word indicator for all levels
+    addWordLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, topPlatformHeight, sideWallWidth)
   }
   
   // Level titles removed for cleaner visual experience

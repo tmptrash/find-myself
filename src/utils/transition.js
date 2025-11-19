@@ -69,7 +69,7 @@ const LEVEL_SUBTITLES = {
   'level-word.0': 'words, they cut deeper than blades',
   'level-word.1': "sharp words don't cut - they make you fall",
   'level-word.2': "the words you can't forget hurt the most",
-  'level-word.3': 'hesitation kills',
+  'level-word.3': 'words that kill',
   'level-word.4': 'sharp words move fast - so must you'
 }
 

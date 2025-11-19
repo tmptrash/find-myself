@@ -5,7 +5,7 @@ import * as Hero from '../../../components/hero.js'
 // Blade arm parameters
 const EXTENSION_DURATION = 1.0  // Duration of extension animation (seconds)
 const PAUSE_DURATION = 1.0  // Duration of pause between extensions (seconds)
-const TEXT_MESSAGE = '⟪ some words mean nothing until you touch them ⟫'
+const TEXT_MESSAGE = '⟪ words that kill ⟫'
 const TEXT_SIZE = 36
 const OUTLINE_THICKNESS = 2
 
@@ -27,6 +27,10 @@ export function create(config) {
   // Start position: right edge of left wall (text will slide from behind the wall)
   const startX = sideWallWidth
   
+  // Calculate maximum width (from left wall to right wall)
+  const screenWidth = CFG.screen.width  // 1920
+  const maxWidth = screenWidth - sideWallWidth * 2  // Distance between walls
+  
   // Create a temporary text to measure full width
   const tempText = k.add([
     k.text(TEXT_MESSAGE, {
@@ -40,7 +44,7 @@ export function create(config) {
   tempText.destroy()
   
   // Calculate how much to extend per step (based on text width)
-  const extensionStep = fullTextWidth / 10  // Extend in 10 steps
+  const extensionStep = fullTextWidth / 5  // Extend in 5 steps (faster movement)
   
   // Create container for all text elements (z-index below platforms so text appears from behind)
   const textContainer = k.add([
@@ -115,6 +119,7 @@ export function create(config) {
     targetWidth: extensionStep,  // Target width for current extension
     extensionStep,
     fullTextWidth,
+    maxWidth,  // Maximum width to right wall
     soundPlayed: false  // Track if sound was played for current extension
   }
   
@@ -188,8 +193,8 @@ function updateBladeArm(inst) {
   } else if (inst.state === 'paused') {
     // Paused phase: wait for PAUSE_DURATION
     if (inst.timer >= PAUSE_DURATION) {
-      // Check if we've reached full width
-      if (inst.currentWidth < fullTextWidth) {
+      // Check if we've reached the right wall
+      if (inst.currentWidth < inst.maxWidth) {
         inst.state = 'extending'
         inst.timer = 0
         inst.targetWidth += extensionStep  // Set new target for next extension

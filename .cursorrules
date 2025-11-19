@@ -391,6 +391,7 @@ export function playLandSound(inst) {
 - Every multi-line comment block should start and end with an empty comment line (`//`)
 - For JSDoc comments (`/** ... */`), no empty line is needed between the comment and the code
 - Inline comments (on the same line as code) are allowed for brief clarifications
+- Every code block should be described by comment.
 
 ```javascript
 // Bad: empty line before comment, and missing // wrapper lines
@@ -601,7 +602,7 @@ public/
 - ✅ Extract complex logic to private functions
 - ✅ Use centralized configuration
 - ✅ Use hex strings for colors
-- ✅ Write descriptive JSDoc comments
+- ✅ Write descriptive JSDoc comments with detailed explanation
 - ✅ Use short-circuit evaluation
 - ✅ Keep callbacks minimal
 - ✅ Put exported functions at the top

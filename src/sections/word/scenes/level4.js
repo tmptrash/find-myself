@@ -99,12 +99,12 @@ export function sceneLevel4(k) {
     
     // Create 3 spikes (left floor, center ceiling, right floor)
     const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
-    const floorSpikeY = platformY - spikeHeight / 2
-    const ceilingSpikeY = PLATFORM_TOP_HEIGHT + spikeHeight / 2
+    const floorSpikeY = platformY - spikeHeight * 1.2  // Extend up from floor
+    const ceilingSpikeY = PLATFORM_TOP_HEIGHT + spikeHeight * 1.2  // Extend down from ceiling
     
     // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
     const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 2.5
-    const hiddenY1 = floorSpikeY + spikeHeight * 1.5  // Deeper: 1.5x spike height below visible position
+    const hiddenY1 = platformY + spikeHeight * 2  // Hidden deep below platform
     const spikes1 = Blades.create({
       k,
       x: leftSpikeX,
@@ -121,8 +121,7 @@ export function sceneLevel4(k) {
     spikes1.spike.z = -50  // Behind platforms
     
     // Center spike (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
-    const hiddenY2 = PLATFORM_TOP_HEIGHT - spikeHeight * 1.5  // Deeper: 1.5x spike height above visible position
-    const visibleCeilingY = PLATFORM_TOP_HEIGHT + spikeHeight / 2  // Extended down from ceiling
+    const hiddenY2 = PLATFORM_TOP_HEIGHT - spikeHeight * 2  // Hidden deep above platform
     const spikes2 = Blades.create({
       k,
       x: pitInfo.centerX,
@@ -140,7 +139,7 @@ export function sceneLevel4(k) {
     
     // Right spike (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
     const rightSpikeX = pitInfo.centerX + pitInfo.width / 2 + spikeWidth * 1.5
-    const hiddenY3 = floorSpikeY + spikeHeight * 1.5  // Deeper: 1.5x spike height below visible position
+    const hiddenY3 = platformY + spikeHeight * 2  // Hidden deep below platform
     const spikes3 = Blades.create({
       k,
       x: rightSpikeX,

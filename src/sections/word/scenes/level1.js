@@ -25,7 +25,7 @@ export function sceneLevel1(k) {
     // Calculate moving platform position and gap
     //
     const centerX = CFG.screen.width / 2
-    const spikeWidth = Blades.getSpikeWidth(k)
+    const bladeWidth = Blades.getBladeWidth(k)
     const movingPlatformX = centerX + CFG.screen.width * 0.05  // Position platform left of center
     
     //
@@ -37,9 +37,9 @@ export function sceneLevel1(k) {
       levelNumber: 2,  // Show 2 red blades in indicator
       nextLevel: 'level-word.2',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.1'].spikes,
+      levelTitleColor: CFG.colors['level-word.1'].blades,
       subTitle: "sometimes words cut deeper than blades...",
-      subTitleColor: CFG.colors['level-word.1'].spikes,
+      subTitleColor: CFG.colors['level-word.1'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -48,8 +48,8 @@ export function sceneLevel1(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       platformGap: {
-        x: movingPlatformX - spikeWidth / 2,  // Gap under platform
-        width: spikeWidth  // Gap width matches spike width
+        x: movingPlatformX - bladeWidth / 2,  // Gap under platform
+        width: bladeWidth  // Gap width matches blade width
       }
     })
     
@@ -68,7 +68,7 @@ export function sceneLevel1(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
-      color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
+      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds
     })
     

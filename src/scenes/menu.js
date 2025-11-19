@@ -78,7 +78,7 @@ export function sceneMenu(k) {
       // Determine body color: gray if not completed, section color if completed
       // Outline is always black
       //
-      const grayColor = 'A0A0A0'
+      const grayColor = '#A0A0A0'
       const bodyColor = isCompleted ? config.color.body : grayColor
       //
       // Create anti-hero for this section

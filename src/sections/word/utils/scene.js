@@ -84,8 +84,8 @@ export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor
   const outlineThickness = 2
   
   // Default colors if not provided
-  const defaultActive = "DC143C"  // Red
-  const defaultInactive = "555555"  // Gray
+  const defaultActive = "#DC143C"  // Red
+  const defaultInactive = "#555555"  // Gray
   
   const startX = sideWallWidth + 20  // Small offset from left wall
   const y = topPlatformHeight - fontSize - 10  // Position above platform

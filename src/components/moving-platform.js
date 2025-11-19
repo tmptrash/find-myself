@@ -6,7 +6,7 @@ import * as Sound from '../utils/sound.js'
 // Platform parameters
 const DETECTION_DISTANCE = 100 // Distance to detect hero
 const DROP_DURATION = 0.2      // Time to drop down (seconds)
-const SPIKE_APPEAR_DELAY = 0.15 // Delay before spikes appear after drop starts (seconds)
+const SPIKE_APPEAR_DELAY = 0.15 // Delay before blades appear after drop starts (seconds)
 const RAISE_DELAY = 2.0        // Time before raising back up (seconds)
 const RAISE_TIMEOUT = 4.0      // Maximum time platform stays down (seconds)
 const RAISE_DURATION = 0.5     // Time to raise up (seconds)
@@ -20,18 +20,18 @@ const RAISE_DURATION = 0.5     // Time to raise up (seconds)
  * @param {Object} config.hero - Hero instance to detect
  * @param {string} config.color - Platform color
  * @param {string} config.currentLevel - Current level name (e.g., 'level-word.1')
- * @param {boolean} [config.jumpToDisableSpikes=false] - If true, spikes disappear when hero jumps down
+ * @param {boolean} [config.jumpToDisableBlades=false] - If true, blades disappear when hero jumps down
  * @param {boolean} [config.autoOpen=false] - If true, platform opens automatically on level start
  * @param {Object} [config.sfx] - Sound instance
  * @returns {Object} Platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, color, currentLevel, jumpToDisableSpikes = false, autoOpen = false, sfx = null } = config
+  const { k, x, y, hero, color, currentLevel, jumpToDisableBlades = false, autoOpen = false, sfx = null } = config
   
-  // Calculate platform dimensions based on spike width
-  const platformWidth = Blades.getSpikeWidth(k)
+  // Calculate platform dimensions based on blade width
+  const platformWidth = Blades.getBladeWidth(k)
   const platformHeight = k.height() - y  // Height from floor to bottom of screen
-  const spikeHeight = Blades.getSpikeHeight(k)
+  const bladeHeight = Blades.getBladeHeight(k)
   
   // Create platform
   const platform = k.add([
@@ -45,28 +45,28 @@ export function create(config) {
     "platform"
   ])
   
-  // Create spikes at the TOP of platform (initially hidden)
-  const spikes = Blades.create({
+  // Create blades at the TOP of platform (initially hidden)
+  const blades = Blades.create({
     k,
     x: x,
-    y: y - spikeHeight / 2,  // Above platform top
+    y: y - bladeHeight / 2,  // Above platform top
     hero,
     orientation: Blades.ORIENTATIONS.FLOOR,  // Pointing up
-    onHit: () => Blades.handleCollision(spikes, currentLevel),
+    onHit: () => Blades.handleCollision(blades, currentLevel),
     sfx,
-    color: CFG.colors[currentLevel]?.spikes
+    color: CFG.colors[currentLevel]?.blades
   })
-  spikes.spike.opacity = 0  // Start hidden
-  spikes.spike.z = CFG.visual.zIndex.platforms + 1  // Above platform
-  spikes.collisionEnabled = false  // Disable collision when platform is up
+  blades.blade.opacity = 0  // Start hidden
+  blades.blade.z = CFG.visual.zIndex.platforms + 1  // Above platform
+  blades.collisionEnabled = false  // Disable collision when platform is up
   
   const inst = {
     platform,
-    spikes,
+    blades,
     k,
     hero,
     sfx,
-    jumpToDisableSpikes,
+    jumpToDisableBlades,
     platformWidth,
     heroInitialY: hero.character.pos.y,  // Store hero's initial Y position
     originalY: y,
@@ -86,20 +86,20 @@ export function create(config) {
     inst.timer = 0
     inst.hasActivated = true
     
-    // Delay spike appearance - show spikes after platform drops a bit
+    // Delay blade appearance - show blades after platform drops a bit
     k.wait(SPIKE_APPEAR_DELAY, () => {
-      // Play spike sound
-      sfx && Sound.playSpikeSound(sfx)
+      // Play blade sound
+      sfx && Sound.playBladeSound(sfx)
       
-      // Show spikes and enable collision
+      // Show blades and enable collision
       k.tween(
-        spikes.spike.opacity,
+        blades.blade.opacity,
         1,
         0.3,
-        (val) => spikes.spike.opacity = val,
+        (val) => blades.blade.opacity = val,
         k.easings.linear
       )
-      spikes.collisionEnabled = true
+      blades.collisionEnabled = true
     })
   }
   
@@ -114,7 +114,7 @@ export function create(config) {
  * @param {Object} inst - Platform instance
  */
 function updatePlatform(inst) {
-  const { k, platform, spikes, hero, originalY, dropDistance, sfx, jumpToDisableSpikes, platformWidth } = inst
+  const { k, platform, blades, hero, originalY, dropDistance, sfx, jumpToDisableBlades, platformWidth } = inst
   
   // Check distance to hero (only check X distance, and only from left side)
   if (inst.state === 'idle' && !inst.hasActivated) {
@@ -128,20 +128,20 @@ function updatePlatform(inst) {
       inst.timer = 0
       inst.hasActivated = true  // Mark as activated permanently
       
-      // Delay spike appearance - show spikes after platform drops a bit
+      // Delay blade appearance - show blades after platform drops a bit
       k.wait(SPIKE_APPEAR_DELAY, () => {
-        // Play spike sound
-        sfx && Sound.playSpikeSound(sfx)
+        // Play blade sound
+        sfx && Sound.playBladeSound(sfx)
         
-        // Show spikes and enable collision
+        // Show blades and enable collision
         k.tween(
-          spikes.spike.opacity,
+          blades.blade.opacity,
           1,
           0.3,
-          (val) => spikes.spike.opacity = val,
+          (val) => blades.blade.opacity = val,
           k.easings.linear
         )
-        spikes.collisionEnabled = true  // Enable collision when spikes appear
+        blades.collisionEnabled = true  // Enable collision when blades appear
       })
     }
   }
@@ -158,8 +158,8 @@ function updatePlatform(inst) {
     // Move platform
     platform.pos.y = newY
     
-    // Move spikes with platform
-    spikes.spike.pos.y += deltaY
+    // Move blades with platform
+    blades.blade.pos.y += deltaY
     
     inst.currentY = newY
     
@@ -173,8 +173,8 @@ function updatePlatform(inst) {
   if (inst.state === 'waiting') {
     inst.timer += k.dt()
     
-    // Special mode: hero jumps down to disable spikes
-    if (jumpToDisableSpikes) {
+    // Special mode: hero jumps down to disable blades
+    if (jumpToDisableBlades) {
       // Check if hero is falling and is above or near the pit
       const heroY = hero.character.pos.y
       const heroIsFalling = hero.character.vel && hero.character.vel.y > 0
@@ -183,9 +183,9 @@ function updatePlatform(inst) {
       const heroIsNearPlatform = Math.abs(platform.pos.x - hero.character.pos.x) <= platformWidth / 2
       
       if (heroIsFalling && heroNearPlatformLevel && heroIsNearPlatform) {
-        // Hero is falling into the pit! Disable spikes immediately and start raising platform
-        spikes.spike.opacity = 0
-        spikes.collisionEnabled = false
+        // Hero is falling into the pit! Disable blades immediately and start raising platform
+        blades.blade.opacity = 0
+        blades.collisionEnabled = false
         
         // Start raising platform immediately (no waiting for landing)
         inst.state = 'disabled'
@@ -209,15 +209,15 @@ function updatePlatform(inst) {
         inst.targetY = originalY
         inst.timer = 0
         
-        // Hide spikes and disable collision
+        // Hide blades and disable collision
         k.tween(
-          spikes.spike.opacity,
+          blades.blade.opacity,
           0,
           0.3,
-          (val) => spikes.spike.opacity = val,
+          (val) => blades.blade.opacity = val,
           k.easings.linear
         )
-        spikes.collisionEnabled = false  // Disable collision when platform raises
+        blades.collisionEnabled = false  // Disable collision when platform raises
       }
     }
   }
@@ -235,8 +235,8 @@ function updatePlatform(inst) {
     // Move platform
     platform.pos.y = newY
     
-    // Move spikes with platform
-    spikes.spike.pos.y += deltaY
+    // Move blades with platform
+    blades.blade.pos.y += deltaY
     
     inst.currentY = newY
     

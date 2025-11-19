@@ -199,7 +199,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         
         if (subtitle) {
           // Get color from next level config (same as title/spikes)
-          let levelColorHex = "6B8E9F" // Default steel blue
+          let levelColorHex = "#6B8E9F" // Default steel blue
           
           try {
             if (CFG && CFG.colors && CFG.colors[nextLevel] && CFG.colors[nextLevel].spikes) {

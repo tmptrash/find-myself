@@ -484,10 +484,10 @@ export function playLightningSound(instance) {
 }
 
 /**
- * Play spike emerging sound effect (rusty metal scrape)
+ * Play blade emerging sound effect (rusty metal scrape)
  * @param {Object} instance - Sound instance from create()
  */
-export function playSpikeSound(instance) {
+export function playBladeSound(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.3
   const fadeOutTime = 0.08  // Longer fade out to avoid click

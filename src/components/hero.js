@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, getColor } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, getColor, parseHex } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { saveLastLevel } from '../utils/progress.js'
@@ -318,9 +318,7 @@ export function death(inst, onComplete) {
     //
     // Parse hex color to RGB
     //
-    const r = parseInt(colorHex.substring(0, 2), 16)
-    const g = parseInt(colorHex.substring(2, 4), 16)
-    const b = parseInt(colorHex.substring(4, 6), 16)
+    const [r, g, b] = parseHex(colorHex)
     
     const rotation = k.rand(0, 360)
     //
@@ -572,9 +570,7 @@ export function spawn(inst) {
     //
     // Parse hex color to RGB
     //
-    const r = parseInt(particleColor.substring(0, 2), 16)
-    const g = parseInt(particleColor.substring(2, 4), 16)
-    const b = parseInt(particleColor.substring(4, 6), 16)
+    const [r, g, b] = parseHex(particleColor)
     
     //
     // Random shape parameters
@@ -1240,9 +1236,7 @@ function onAnnihilationCollide(inst) {
     //
     // Parse hex color to RGB
     //
-    const r = parseInt(particleColorHex.substring(0, 2), 16)
-    const g = parseInt(particleColorHex.substring(2, 4), 16)
-    const b = parseInt(particleColorHex.substring(4, 6), 16)
+    const [r, g, b] = parseHex(particleColorHex)
     
     const particleX = targetPos.x + k.rand(-20, 20)
     const particleY = targetPos.y + k.rand(-20, 20)

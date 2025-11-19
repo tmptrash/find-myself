@@ -22,20 +22,20 @@ const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
 export function sceneLevel2(k) {
   k.scene("level-word.2", () => {
     // Calculate moving platform position first (110px from hero start position)
-    const spikeWidth = Blades.getSpikeWidth(k)
+    const bladeWidth = Blades.getBladeWidth(k)
     const movingPlatformX = HERO_SPAWN_X + 110  // 110px from hero
     
-    // Calculate positions for spike platforms
+    // Calculate positions for blade platforms
     const leftX = Math.min(HERO_SPAWN_X, ANTIHERO_SPAWN_X)
     const rightX = Math.max(HERO_SPAWN_X, ANTIHERO_SPAWN_X)
     const distance = rightX - leftX
     
-    // First spike at 0.42 distance, second spike at 0.73 distance
-    const spike1X = leftX + distance * 0.42
-    const spike2X = leftX + distance * 0.73
+    // First blade at 0.42 distance, second blade at 0.73 distance
+    const blade1X = leftX + distance * 0.42
+    const blade2X = leftX + distance * 0.73
     
-    // Second moving platform before second spike (rightmost)
-    const movingPlatform2X = spike2X - spikeWidth * 1.1  // Closer to second spike
+    // Second moving platform before second blade (rightmost)
+    const movingPlatform2X = blade2X - bladeWidth * 1.1  // Closer to second blade
     
     // Initialize level with heroes and gaps in platform
     const { sound, hero, antiHero } = initScene({
@@ -44,9 +44,9 @@ export function sceneLevel2(k) {
       levelNumber: 3,  // Show 3 red blades in indicator
       nextLevel: 'level-word.3',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.2'].spikes,
+      levelTitleColor: CFG.colors['level-word.2'].blades,
       subTitle: "words are blades that never rust",
-      subTitleColor: CFG.colors['level-word.2'].spikes,
+      subTitleColor: CFG.colors['level-word.2'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -57,13 +57,13 @@ export function sceneLevel2(k) {
       platformGap: [
         // First gap for first moving platform
         {
-          x: movingPlatformX - spikeWidth / 2,
-          width: spikeWidth
+          x: movingPlatformX - bladeWidth / 2,
+          width: bladeWidth
         },
         // Second gap for second moving platform
         {
-          x: movingPlatform2X - spikeWidth / 2,
-          width: spikeWidth
+          x: movingPlatform2X - bladeWidth / 2,
+          width: bladeWidth
         }
       ]
     })
@@ -83,7 +83,7 @@ export function sceneLevel2(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
-      color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
+      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds
     })
     
@@ -95,7 +95,7 @@ export function sceneLevel2(k) {
     })
     
     const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
-    const spikeHeight = Blades.getSpikeHeight(k)
+    const bladeHeight = Blades.getBladeHeight(k)
     
     // Create first moving platform
     MovingPlatform.create({
@@ -108,7 +108,7 @@ export function sceneLevel2(k) {
       sfx: sound
     })
     
-    // Create second moving platform (before second spike)
+    // Create second moving platform (before second blade)
     MovingPlatform.create({
       k,
       x: movingPlatform2X,
@@ -119,31 +119,31 @@ export function sceneLevel2(k) {
       sfx: sound
     })
     
-    // Create first spike
-    const spikes1 = Blades.create({
+    // Create first blade
+    const blades1 = Blades.create({
       k,
-      x: spike1X,
-      y: platformY - spikeHeight / 2,
+      x: blade1X,
+      y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(spikes1, "level-word.2"),
+      onHit: () => Blades.handleCollision(blades1, "level-word.2"),
       sfx: sound
     })
     
-    // Create second spike
-    const spikes2 = Blades.create({
+    // Create second blade
+    const blades2 = Blades.create({
       k,
-      x: spike2X,
-      y: platformY - spikeHeight / 2,
+      x: blade2X,
+      y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(spikes2, "level-word.2"),
+      onHit: () => Blades.handleCollision(blades2, "level-word.2"),
       sfx: sound
     })
     
-    // Start spike animations after 1 second
-    Blades.startAnimation(spikes1)
-    Blades.startAnimation(spikes2)
+    // Start blade animations after 1 second
+    Blades.startAnimation(blades1)
+    Blades.startAnimation(blades2)
     
     // Eerie sound effects removed for cleaner audio experience
   })

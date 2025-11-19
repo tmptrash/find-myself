@@ -32,9 +32,9 @@ export function sceneLevel4(k) {
       nextLevel: 'word-complete',
       skipPlatforms: true,
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.4'].spikes,
+      levelTitleColor: CFG.colors['level-word.4'].blades,
       subTitle: "words are blades that leave invisible wounds",
-      subTitleColor: CFG.colors['level-word.4'].spikes,
+      subTitleColor: CFG.colors['level-word.4'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -52,7 +52,7 @@ export function sceneLevel4(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
-      color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
+      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,
         right: CFG.screen.width - PLATFORM_SIDE_WIDTH - 20,
@@ -83,219 +83,219 @@ export function sceneLevel4(k) {
       CFG.levels.platformName
     ])
     
-    // Create spikes at the bottom of the pit (pointing up)
-    const spikeHeight = Blades.getSpikeHeight(k)
-    const spikeWidth = Blades.getSpikeWidth(k)
-    const pitSpikes = Blades.create({
+    // Create blades at the bottom of the pit (pointing up)
+    const bladeHeight = Blades.getBladeHeight(k)
+    const bladeWidth = Blades.getBladeWidth(k)
+    const pitBlades = Blades.create({
       k,
       x: pitInfo.centerX,
-      y: pitBottomY - spikeHeight / 2,
+      y: pitBottomY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(pitSpikes, "level-word.4"),
+      onHit: () => Blades.handleCollision(pitBlades, "level-word.4"),
       sfx: sound
     })
-    pitSpikes.spike.opacity = 1
+    pitBlades.blade.opacity = 1
     
-    // Create 3 spikes (left floor, center ceiling, right floor)
+    // Create 3 blades (left floor, center ceiling, right floor)
     const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
-    const floorSpikeY = platformY - spikeHeight * 1.2  // Extend up from floor
-    const ceilingSpikeY = PLATFORM_TOP_HEIGHT + spikeHeight * 1.2  // Extend down from ceiling
+    const floorBladeY = platformY - bladeHeight * 1.2  // Extend up from floor
+    const ceilingBladeY = PLATFORM_TOP_HEIGHT + bladeHeight * 1.2  // Extend down from ceiling
     
-    // Left spike (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
-    const leftSpikeX = pitInfo.centerX - pitInfo.width / 2 - spikeWidth * 2.5
-    const hiddenY1 = platformY + spikeHeight * 2  // Hidden deep below platform
-    const spikes1 = Blades.create({
+    // Left blade (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
+    const leftBladeX = pitInfo.centerX - pitInfo.width / 2 - bladeWidth * 2.5
+    const hiddenY1 = platformY + bladeHeight * 2  // Hidden deep below platform
+    const blades1 = Blades.create({
       k,
-      x: leftSpikeX,
+      x: leftBladeX,
       y: hiddenY1,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => {
-        spikes1.spike.opacity = 1
+        blades1.blade.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
       },
       sfx: sound
     })
-    spikes1.spike.opacity = 1
-    spikes1.spike.z = -50  // Behind platforms
+    blades1.blade.opacity = 1
+    blades1.blade.z = -50  // Behind platforms
     
-    // Center spike (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
-    const hiddenY2 = PLATFORM_TOP_HEIGHT - spikeHeight * 2  // Hidden deep above platform
-    const spikes2 = Blades.create({
+    // Center blade (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
+    const hiddenY2 = PLATFORM_TOP_HEIGHT - bladeHeight * 2  // Hidden deep above platform
+    const blades2 = Blades.create({
       k,
       x: pitInfo.centerX,
       y: hiddenY2,
       hero,
       orientation: Blades.ORIENTATIONS.CEILING,
       onHit: () => {
-        spikes2.spike.opacity = 1
+        blades2.blade.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
       },
       sfx: sound
     })
-    spikes2.spike.opacity = 1
-    spikes2.spike.z = -50  // Behind platforms
+    blades2.blade.opacity = 1
+    blades2.blade.z = -50  // Behind platforms
     
-    // Right spike (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
-    const rightSpikeX = pitInfo.centerX + pitInfo.width / 2 + spikeWidth * 1.5
-    const hiddenY3 = platformY + spikeHeight * 2  // Hidden deep below platform
-    const spikes3 = Blades.create({
+    // Right blade (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
+    const rightBladeX = pitInfo.centerX + pitInfo.width / 2 + bladeWidth * 1.5
+    const hiddenY3 = platformY + bladeHeight * 2  // Hidden deep below platform
+    const blades3 = Blades.create({
       k,
-      x: rightSpikeX,
+      x: rightBladeX,
       y: hiddenY3,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => {
-        spikes3.spike.opacity = 1
+        blades3.blade.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
       },
       sfx: sound
     })
-    spikes3.spike.opacity = 1
-    spikes3.spike.z = -50  // Behind platforms
+    blades3.blade.opacity = 1
+    blades3.blade.z = -50  // Behind platforms
     
     // Scene instance with state
     const inst = {
       k,
       sound,
       soundTimer: k.rand(3, 6),
-      // Spike animation state
-      spikes1,
-      spikes2,
-      spikes3,
+      // Blade animation state
+      blades1,
+      blades2,
+      blades3,
       targetY1: hiddenY1,      // Hidden position (retracted)
-      visibleY1: floorSpikeY,  // Visible position (extended)
+      visibleY1: floorBladeY,  // Visible position (extended)
       targetY2: hiddenY2,      // Hidden position (retracted up)
-      visibleY2: ceilingSpikeY, // Visible position (extended down)
+      visibleY2: ceilingBladeY, // Visible position (extended down)
       targetY3: hiddenY3,      // Hidden position (retracted)
-      visibleY3: floorSpikeY,  // Visible position (extended)
-      spike1State: 'waiting',
-      spike2State: 'waiting',
-      spike3State: 'waiting',
+      visibleY3: floorBladeY,  // Visible position (extended)
+      blade1State: 'waiting',
+      blade2State: 'waiting',
+      blade3State: 'waiting',
       animationTimer: 0,
       cycleTimer: 0,
       animationSpeed: 0.15,   // Seconds for extend/retract (slower blade movement)
-      spikeDelay: 0.12,      // Seconds between spikes (pause between spike1->spike2 and spike2->spike3)
-      cycleDelay: 0.12       // Seconds after last spike before restart
+      bladeDelay: 0.12,      // Seconds between blades (pause between blade1->blade2 and blade2->blade3)
+      cycleDelay: 0.12       // Seconds after last blade before restart
     }
     
-    // Start spike animation after 0.5 second
+    // Start blade animation after 0.5 second
     k.wait(0.5, () => {
-      inst.spike1State = 'extending'
+      inst.blade1State = 'extending'
       inst.animationTimer = 0
-      sound && Sound.playSpikeSound(sound)
+      sound && Sound.playBladeSound(sound)
     })
     
-    // Setup spike animation (eerie sound effects removed)
+    // Setup blade animation (eerie sound effects removed)
     k.onUpdate(() => {
-      updateSpikesAnimation(inst)
+      updateBladesAnimation(inst)
     })
   })
 }
 
 /**
- * Update spikes animation (cycle: extend, retract, repeat)
+ * Update blades animation (cycle: extend, retract, repeat)
  * @param {Object} inst - Scene instance
  */
-function updateSpikesAnimation(inst) {
-  const { k, spikes1, spikes2, spikes3, targetY1, visibleY1, targetY2, visibleY2, targetY3, visibleY3, animationSpeed, sound } = inst
+function updateBladesAnimation(inst) {
+  const { k, blades1, blades2, blades3, targetY1, visibleY1, targetY2, visibleY2, targetY3, visibleY3, animationSpeed, sound } = inst
   
   inst.animationTimer += k.dt()
   inst.cycleTimer += k.dt()
   
-  // SPIKE 1 STATE MACHINE (Left spikes - first)
-  if (inst.spike1State === 'extending') {
+  // SPIKE 1 STATE MACHINE (Left blades - first)
+  if (inst.blade1State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
-    spikes1.spike.pos.y = targetY1 + (visibleY1 - targetY1) * progress
+    blades1.blade.pos.y = targetY1 + (visibleY1 - targetY1) * progress
     
     if (progress >= 1) {
-      spikes1.spike.pos.y = visibleY1
-      inst.spike1State = 'retracting'
+      blades1.blade.pos.y = visibleY1
+      inst.blade1State = 'retracting'
       inst.animationTimer = 0
     }
-  } else if (inst.spike1State === 'retracting') {
+  } else if (inst.blade1State === 'retracting') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
-    spikes1.spike.pos.y = visibleY1 + (targetY1 - visibleY1) * progress
+    blades1.blade.pos.y = visibleY1 + (targetY1 - visibleY1) * progress
     
     if (progress >= 1) {
-      spikes1.spike.pos.y = targetY1
-      inst.spike1State = 'waiting-for-spike3'
+      blades1.blade.pos.y = targetY1
+      inst.blade1State = 'waiting-for-blade3'
       inst.animationTimer = 0
     }
-  } else if (inst.spike1State === 'waiting-for-spike3') {
-    if (inst.animationTimer >= inst.spikeDelay) {
-      inst.spike3State = 'extending'
-      inst.spike1State = 'spike3-active'
+  } else if (inst.blade1State === 'waiting-for-blade3') {
+    if (inst.animationTimer >= inst.bladeDelay) {
+      inst.blade3State = 'extending'
+      inst.blade1State = 'blade3-active'
       inst.animationTimer = 0
-      sound && Sound.playSpikeSound(sound)
+      sound && Sound.playBladeSound(sound)
     }
   }
   
-  // SPIKE 2 STATE MACHINE (Center spikes - third/last)
-  if (inst.spike2State === 'extending') {
+  // SPIKE 2 STATE MACHINE (Center blades - third/last)
+  if (inst.blade2State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
-    spikes2.spike.pos.y = targetY2 + (visibleY2 - targetY2) * progress
+    blades2.blade.pos.y = targetY2 + (visibleY2 - targetY2) * progress
     
     if (progress >= 1) {
-      spikes2.spike.pos.y = visibleY2
-      inst.spike2State = 'retracting'
+      blades2.blade.pos.y = visibleY2
+      inst.blade2State = 'retracting'
       inst.animationTimer = 0
     }
-  } else if (inst.spike2State === 'retracting') {
+  } else if (inst.blade2State === 'retracting') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
-    spikes2.spike.pos.y = visibleY2 + (targetY2 - visibleY2) * progress
+    blades2.blade.pos.y = visibleY2 + (targetY2 - visibleY2) * progress
     
     if (progress >= 1) {
-      spikes2.spike.pos.y = targetY2
-      inst.spike2State = 'cycle-complete'
-      inst.spike1State = 'cycle-complete'
-      inst.spike3State = 'cycle-complete'
+      blades2.blade.pos.y = targetY2
+      inst.blade2State = 'cycle-complete'
+      inst.blade1State = 'cycle-complete'
+      inst.blade3State = 'cycle-complete'
       inst.animationTimer = 0
       inst.cycleTimer = 0
     }
   }
   
-  // SPIKE 3 STATE MACHINE (Right spikes - second)
-  if (inst.spike3State === 'extending') {
+  // SPIKE 3 STATE MACHINE (Right blades - second)
+  if (inst.blade3State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
-    spikes3.spike.pos.y = targetY3 + (visibleY3 - targetY3) * progress
+    blades3.blade.pos.y = targetY3 + (visibleY3 - targetY3) * progress
     
     if (progress >= 1) {
-      spikes3.spike.pos.y = visibleY3
-      inst.spike3State = 'retracting'
+      blades3.blade.pos.y = visibleY3
+      inst.blade3State = 'retracting'
       inst.animationTimer = 0
     }
-  } else if (inst.spike3State === 'retracting') {
+  } else if (inst.blade3State === 'retracting') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
-    spikes3.spike.pos.y = visibleY3 + (targetY3 - visibleY3) * progress
+    blades3.blade.pos.y = visibleY3 + (targetY3 - visibleY3) * progress
     
     if (progress >= 1) {
-      spikes3.spike.pos.y = targetY3
-      inst.spike3State = 'waiting-for-spike2'
+      blades3.blade.pos.y = targetY3
+      inst.blade3State = 'waiting-for-blade2'
       inst.animationTimer = 0
     }
-  } else if (inst.spike3State === 'waiting-for-spike2') {
-    if (inst.animationTimer >= inst.spikeDelay) {
-      inst.spike2State = 'extending'
-      inst.spike3State = 'spike2-active'
+  } else if (inst.blade3State === 'waiting-for-blade2') {
+    if (inst.animationTimer >= inst.bladeDelay) {
+      inst.blade2State = 'extending'
+      inst.blade3State = 'blade2-active'
       inst.animationTimer = 0
-      sound && Sound.playSpikeSound(sound)
+      sound && Sound.playBladeSound(sound)
     }
   }
   
   // RESTART CYCLE after delay
-  if (inst.spike1State === 'cycle-complete' && inst.cycleTimer >= inst.cycleDelay) {
+  if (inst.blade1State === 'cycle-complete' && inst.cycleTimer >= inst.cycleDelay) {
     inst.cycleTimer = 0
     inst.animationTimer = 0
-    spikes1.spike.pos.y = targetY1
-    spikes2.spike.pos.y = targetY2
-    spikes3.spike.pos.y = targetY3
-    inst.spike1State = 'extending'
-    inst.spike2State = 'waiting'
-    inst.spike3State = 'waiting'
+    blades1.blade.pos.y = targetY1
+    blades2.blade.pos.y = targetY2
+    blades3.blade.pos.y = targetY3
+    inst.blade1State = 'extending'
+    inst.blade2State = 'waiting'
+    inst.blade3State = 'waiting'
     
-    sound && Sound.playSpikeSound(sound)
+    sound && Sound.playBladeSound(sound)
   }
 }
 
@@ -306,8 +306,8 @@ function updateSpikesAnimation(inst) {
  * @returns {Object} Pit information (centerX, width)
  */
 function createCustomPlatforms(k, color) {
-  // Calculate pit dimensions (same width as spikes)
-  const pitWidth = Blades.getSpikeWidth(k)
+  // Calculate pit dimensions (same width as blades)
+  const pitWidth = Blades.getBladeWidth(k)
   const centerX = CFG.screen.width / 2
   const pitLeft = centerX - pitWidth / 2
   const pitRight = centerX + pitWidth / 2

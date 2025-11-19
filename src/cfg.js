@@ -7,7 +7,7 @@ export const CFG = {
   screen: {
     width: 1920,
     height: 1080,
-    background: [0, 0, 0]
+    background: "#000000"
   },
   fonts: {
     regular: 'jetbrains',
@@ -58,114 +58,114 @@ export const CFG = {
     gravity: 2000
   },
   colors: {
-    outlineTextColor: "000000",
+    outlineTextColor: "#000000",
     // Common colors
     levelIndicator: {
-      active: "DC143C",     // Red for active/completed levels
-      inactive: "555555",   // Gray for inactive/future levels
+      active: "#DC143C",     // Red for active/completed levels
+      inactive: "#555555",   // Gray for inactive/future levels
     },
     // Level 0 colors (intro level - word section)
     "level-word.0": {
-      background: "3E3E3E",         // Dark gray (foggy gloom)
-      platform: "1A1A1A",           // Nearly black platforms
-      spikes: "6B8E9F",             // Steel blue blades (cold steel)
-      instructions: "CCCCCC",       // Light gray instructions
+      background: "#3E3E3E",         // Dark gray (foggy gloom)
+      platform: "#1A1A1A",           // Nearly black platforms
+      blades: "#6B8E9F",             // Steel blue blades (cold steel)
+      instructions: "#CCCCCC",       // Light gray instructions
     },
     // Level 1 colors (word section)
     "level-word.1": {
-      background: "3E3E3E",         // Dark gray (foggy gloom)
-      platform: "1A1A1A",           // Nearly black platforms
-      spikes: "6B8E9F",             // Steel blue blades (cold steel)
-      instructions: "CCCCCC",       // Light gray instructions
+      background: "#3E3E3E",         // Dark gray (foggy gloom)
+      platform: "#1A1A1A",           // Nearly black platforms
+      blades: "#6B8E9F",             // Steel blue blades (cold steel)
+      instructions: "#CCCCCC",       // Light gray instructions
     },
     // Level 2 colors (word section)
     "level-word.2": {
-      background: "3E3E3E",         // Dark gray (foggy gloom)
-      platform: "1A1A1A",           // Nearly black platforms
-      spikes: "6B8E9F",             // Steel blue blades (cold steel)
-      instructions: "CCCCCC",       // Light gray instructions
+      background: "#3E3E3E",         // Dark gray (foggy gloom)
+      platform: "#1A1A1A",           // Nearly black platforms
+      blades: "#6B8E9F",             // Steel blue blades (cold steel)
+      instructions: "#CCCCCC",       // Light gray instructions
     },
     // Level 3 colors (word section)
     "level-word.3": {
-      background: "3E3E3E",         // Dark gray (foggy gloom)
-      platform: "1A1A1A",           // Nearly black platforms
-      spikes: "6B8E9F",             // Steel blue blades (cold steel)
-      instructions: "CCCCCC",       // Light gray instructions
+      background: "#3E3E3E",         // Dark gray (foggy gloom)
+      platform: "#1A1A1A",           // Nearly black platforms
+      blades: "#6B8E9F",             // Steel blue blades (cold steel)
+      instructions: "#CCCCCC",       // Light gray instructions
     },
     // Level 4 colors (word section)
     "level-word.4": {
-      background: "3E3E3E",         // Dark gray (foggy gloom)
-      platform: "1A1A1A",           // Nearly black platforms
-      spikes: "6B8E9F",             // Steel blue blades (cold steel)
-      instructions: "CCCCCC",       // Light gray instructions
+      background: "#3E3E3E",         // Dark gray (foggy gloom)
+      platform: "#1A1A1A",           // Nearly black platforms
+      blades: "#6B8E9F",             // Steel blue blades (cold steel)
+      instructions: "#CCCCCC",       // Light gray instructions
     },
     
     // Splash/menu colors
     menu: {
-      background: "191919",         // Dark gray background
-      gridLines: "323232",          // Grid lines
-      titleBase: "FF8C00",          // Title base color
-      startButton: "FF6432",        // Ready button color
-      muteText: "FFA500",           // Mute text color
-      dividerLine: "FF8C00",        // Divider line
+      background: "#191919",         // Dark gray background
+      gridLines: "#323232",          // Grid lines
+      titleBase: "#FF8C00",          // Title base color
+      startButton: "#FF6432",        // Ready button color
+      muteText: "#FFA500",           // Mute text color
+      dividerLine: "#FF8C00",        // Divider line
     },
     
     // Ready screen colors
     ready: {
-      background: "191919",         // Dark background      
-      title: "FF8C00",              // Orange title (hero color)
-      text: "ff930e",               // Yellow-orange for story lines (lighter, more yellow)
-      fireflies: "FF8C00",          // Hero color for fireflies
-      hint: "969696",               // Hint color
+      background: "#191919",         // Dark background      
+      title: "#FF8C00",              // Orange title (hero color)
+      text: "#ff930e",               // Yellow-orange for story lines (lighter, more yellow)
+      fireflies: "#FF8C00",          // Hero color for fireflies
+      hint: "#969696",               // Hint color
     },
     
     // Hero colors (for procedural generation)
     hero: {
-      body: "FF8C00",               // Orange body color
-      outline: "000000",            // Black outline
-      eyeWhite: "FFFFFF",           // Eye white
-      eyePupil: "000000",           // Pupil
+      body: "#FF8C00",               // Orange body color
+      outline: "#000000",            // Black outline
+      eyeWhite: "#FFFFFF",           // Eye white
+      eyePupil: "#000000",           // Pupil
     },
     
     // Anti-hero colors
     antiHero: {
-      body: "8B5A50",               // Reddish-brown
-      outline: "000000",            // Black outline
-      eyeWhite: "FFFFFF",           // Eye white
-      eyePupil: "000000",           // Pupil
+      body: "#8B5A50",               // Reddish-brown
+      outline: "#000000",            // Black outline
+      eyeWhite: "#FFFFFF",           // Eye white
+      eyePupil: "#000000",           // Pupil
     },
     
     // Section colors for menu anti-heroes
     sections: {
       word: {
-        body: "DC143C",             // Crimson red
-        outline: "8B0000",          // Dark red
-        lightning: "DC143C"
+        body: "#DC143C",             // Crimson red
+        outline: "#8B0000",          // Dark red
+        lightning: "#DC143C"
       },
       touch: {
-        body: "FF6B35",             // Orange-red
-        outline: "CC4400",          // Dark orange
-        lightning: "FF6B35"
+        body: "#FF6B35",             // Orange-red
+        outline: "#CC4400",          // Dark orange
+        lightning: "#FF6B35"
       },
       feel: {
-        body: "FFD700",             // Gold
-        outline: "B8860B",          // Dark goldenrod
-        lightning: "FFD700"
+        body: "#FFD700",             // Gold
+        outline: "#B8860B",          // Dark goldenrod
+        lightning: "#FFD700"
       },
       mind: {
-        body: "4ECDC4",             // Turquoise
-        outline: "2C7A7B",          // Dark teal
-        lightning: "4ECDC4"
+        body: "#4ECDC4",             // Turquoise
+        outline: "#2C7A7B",          // Dark teal
+        lightning: "#4ECDC4"
       },
       stress: {
-        body: "9B59B6",             // Purple
-        outline: "6C3483",          // Dark purple
-        lightning: "9B59B6"
+        body: "#9B59B6",             // Purple
+        outline: "#6C3483",          // Dark purple
+        lightning: "#9B59B6"
       },
       time: {
-        body: "34495E",             // Dark blue-gray
-        outline: "1C2833",          // Very dark blue
-        lightning: "34495E"
+        body: "#34495E",             // Dark blue-gray
+        outline: "#1C2833",          // Very dark blue
+        lightning: "#34495E"
       }
     }
   },

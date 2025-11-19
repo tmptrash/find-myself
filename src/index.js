@@ -1,5 +1,6 @@
 import kaplay from "kaplay"
 import { CFG } from "./cfg.js"
+import { parseHex } from "./utils/helper.js"
 import { sceneReady } from "./scenes/ready.js"
 import { sceneMenu } from "./scenes/menu.js"
 import { sceneLevel0 } from "./sections/word/scenes/level0.js"
@@ -18,7 +19,7 @@ const k = kaplay({
   height: CFG.screen.height,
   font: CFG.fonts.regular,
   letterbox: true,
-  background: CFG.screen.background
+  background: parseHex(CFG.screen.background)
 })
 //
 // Remove default cursor style to allow CSS custom cursor

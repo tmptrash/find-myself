@@ -70,9 +70,9 @@ export function sceneLevel0(k) {
       levelNumber: 1,  // Show 1 red blade in indicator
       nextLevel: 'level-word.1',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.0'].spikes,
+      levelTitleColor: CFG.colors['level-word.0'].blades,
       subTitle: "some words are sharper than any blade...",
-      subTitleColor: CFG.colors['level-word.0'].spikes,
+      subTitleColor: CFG.colors['level-word.0'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -117,7 +117,7 @@ export function sceneLevel0(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
-      color: 'B0B0B0',  // Light gray for ghostly/ethereal flying words
+      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds
     })
     
@@ -136,7 +136,7 @@ export function sceneLevel0(k) {
     const distance = rightX - leftX
     
     const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
-    const spikeHeight = Blades.getSpikeHeight(k)
+    const bladeHeight = Blades.getBladeHeight(k)
     
     //
     // Three blade blocks at equal distances
@@ -149,32 +149,32 @@ export function sceneLevel0(k) {
     const blade3X = leftX + distance * 0.70
     
     //
-    // Create first static blade block (2 spikes)
+    // Create first static blade block (2 blades)
     //
     const blades1 = Blades.create({
       k,
       x: blade1X,
-      y: platformY - spikeHeight / 2,
+      y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => Blades.handleCollision(blades1, "level-word.0"),
       sfx: sound,
-      spikeCount: 2
+      bladeCount: 2
     })
     Blades.show(blades1)  // Show permanently
     
     //
-    // Create second static blade block (2 spikes)
+    // Create second static blade block (2 blades)
     //
     const blades2 = Blades.create({
       k,
       x: blade2X,
-      y: platformY - spikeHeight / 2,
+      y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => Blades.handleCollision(blades2, "level-word.0"),
       sfx: sound,
-      spikeCount: 2
+      bladeCount: 2
     })
     Blades.show(blades2)  // Show permanently
     
@@ -185,26 +185,26 @@ export function sceneLevel0(k) {
     const blades3 = Blades.create({
       k,
       x: blade3X,
-      y: platformY - spikeHeight / 2,
+      y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: null,  // No collision - safe to pass
       sfx: sound,
-      spikeCount: 2
+      bladeCount: 2
     })
     Blades.show(blades3)  // Show permanently
     //
     // Set z-index higher than hero to show in front
     //
-    blades3.spike.z = CFG.visual.zIndex.player + 1
+    blades3.blade.z = CFG.visual.zIndex.player + 1
     
     //
     // Trap blades that appear when hero gets close to blade3
     //
     const trapDistance = 20  // Distance to trigger trap (very close)
-    const spikeWidth = Blades.getSpikeWidth(k)
+    const bladeWidth = Blades.getBladeWidth(k)
     const gapWidth = -4  // Overlap with blade3
-    const trapBladeX = blade3X + spikeWidth / 2 + gapWidth + spikeWidth / 2  // Position overlapping
+    const trapBladeX = blade3X + bladeWidth / 2 + gapWidth + bladeWidth / 2  // Position overlapping
     
     let trapBlades = null
     let trapTriggered = false
@@ -216,7 +216,7 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       if (trapTriggered) return
       
-      const blade3RightEdge = blade3X + spikeWidth / 2
+      const blade3RightEdge = blade3X + bladeWidth / 2
       const distanceToTrap = Math.abs(hero.character.pos.x - blade3RightEdge)
       
       if (distanceToTrap < trapDistance) {
@@ -228,12 +228,12 @@ export function sceneLevel0(k) {
         trapBlades = Blades.create({
           k,
           x: trapBladeX,
-          y: platformY - spikeHeight / 2,
+          y: platformY - bladeHeight / 2,
           hero,
           orientation: Blades.ORIENTATIONS.FLOOR,
           onHit: () => Blades.handleCollision(trapBlades, "level-word.0"),
           sfx: sound,
-          spikeCount: 2
+          bladeCount: 2
         })
         
         //

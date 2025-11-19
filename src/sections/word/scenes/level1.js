@@ -24,9 +24,9 @@ export function sceneLevel1(k) {
     //
     // Calculate moving platform position and gap
     //
-    const centerX = CFG.screen.width / 2
+    const centerX = CFG.visual.screen.width / 2
     const bladeWidth = Blades.getBladeWidth(k)
-    const movingPlatformX = centerX + CFG.screen.width * 0.05  // Position platform left of center
+    const movingPlatformX = centerX + CFG.visual.screen.width * 0.05  // Position platform left of center
     
     //
     // Initialize level with heroes and gap in platform (for trap)
@@ -37,9 +37,9 @@ export function sceneLevel1(k) {
       levelNumber: 2,  // Show 2 red blades in indicator
       nextLevel: 'level-word.2',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.1'].blades,
+      levelTitleColor: CFG.visual.colors['level-word.1'].blades,
       subTitle: "sometimes words cut deeper than blades...",
-      subTitleColor: CFG.colors['level-word.1'].blades,
+      subTitleColor: CFG.visual.colors['level-word.1'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -58,9 +58,9 @@ export function sceneLevel1(k) {
     //
     const platformBounds = {
       left: PLATFORM_SIDE_WIDTH,
-      right: CFG.screen.width - PLATFORM_SIDE_WIDTH,
+      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
       top: PLATFORM_TOP_HEIGHT + 20,
-      bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
     }
     
     //
@@ -82,14 +82,14 @@ export function sceneLevel1(k) {
     //
     // Create moving platform (at floor level)
     //
-    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     
     MovingPlatform.create({
       k,
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.colors['level-word.1'].platform,
+      color: CFG.visual.colors['level-word.1'].platform,
       currentLevel: 'level-word.1',
       sfx: sound
     })

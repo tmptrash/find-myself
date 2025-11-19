@@ -54,7 +54,7 @@ export function create(config) {
     orientation: Blades.ORIENTATIONS.FLOOR,  // Pointing up
     onHit: () => Blades.handleCollision(blades, currentLevel),
     sfx,
-    color: CFG.colors[currentLevel]?.blades
+    color: CFG.visual.colors[currentLevel]?.blades
   })
   blades.blade.opacity = 0  // Start hidden
   blades.blade.z = CFG.visual.zIndex.platforms + 1  // Above platform

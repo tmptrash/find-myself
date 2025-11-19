@@ -44,9 +44,9 @@ export function sceneLevel2(k) {
       levelNumber: 3,  // Show 3 red blades in indicator
       nextLevel: 'level-word.3',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.2'].blades,
+      levelTitleColor: CFG.visual.colors['level-word.2'].blades,
       subTitle: "words are blades that never rust",
-      subTitleColor: CFG.colors['level-word.2'].blades,
+      subTitleColor: CFG.visual.colors['level-word.2'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -73,9 +73,9 @@ export function sceneLevel2(k) {
     //
     const platformBounds = {
       left: PLATFORM_SIDE_WIDTH,
-      right: CFG.screen.width - PLATFORM_SIDE_WIDTH,
+      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
       top: PLATFORM_TOP_HEIGHT + 20,
-      bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
     }
     
     //
@@ -94,7 +94,7 @@ export function sceneLevel2(k) {
       FlyingWords.onUpdate(flyingWords)
     })
     
-    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
     
     // Create first moving platform
@@ -103,7 +103,7 @@ export function sceneLevel2(k) {
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.colors['level-word.2'].platform,
+      color: CFG.visual.colors['level-word.2'].platform,
       currentLevel: 'level-word.2',
       sfx: sound
     })
@@ -114,7 +114,7 @@ export function sceneLevel2(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.colors['level-word.2'].platform,
+      color: CFG.visual.colors['level-word.2'].platform,
       currentLevel: 'level-word.2',
       sfx: sound
     })

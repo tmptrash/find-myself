@@ -115,7 +115,7 @@ export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor
       k.add([
         k.text(letter, {
           size: fontSize,
-          font: CFG.fonts.thin
+          font: CFG.visual.fonts.thin
         }),
         k.pos(letterX + dx, y + dy),
         k.color(0, 0, 0),
@@ -128,7 +128,7 @@ export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor
     const mainLetter = k.add([
       k.text(letter, {
         size: fontSize,
-        font: CFG.fonts.thin
+        font: CFG.visual.fonts.thin
       }),
       k.pos(letterX, y),
       k.color(r, g, b),
@@ -191,12 +191,12 @@ export function initScene(config) {
   } = config
   
   // Use levelName-based colors if not explicitly provided
-  const bgColor = backgroundColor || (levelName && CFG.colors[levelName]?.background)
-  const pfColor = platformColor || (levelName && CFG.colors[levelName]?.platform)
+  const bgColor = backgroundColor || (levelName && CFG.visual.colors[levelName]?.background)
+  const pfColor = platformColor || (levelName && CFG.visual.colors[levelName]?.platform)
   //
   // Set gravity
   //
-  k.setGravity(CFG.gameplay.gravity)
+  k.setGravity(CFG.game.gravity)
   
   //
   // Create sound instance and stop ambient from menu
@@ -223,7 +223,7 @@ export function initScene(config) {
   // Add level indicator if levelNumber provided
   if (levelNumber && topPlatformHeight && sideWallWidth) {
     // Use word indicator for all levels
-    addWordLevelIndicator(k, levelNumber, CFG.colors.levelIndicator.active, CFG.colors.levelIndicator.inactive, topPlatformHeight, sideWallWidth)
+    addWordLevelIndicator(k, levelNumber, CFG.visual.colors.levelIndicator.active, CFG.visual.colors.levelIndicator.inactive, topPlatformHeight, sideWallWidth)
   }
   
   // Level titles removed for cleaner visual experience
@@ -280,7 +280,7 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, color),
-      CFG.levels.platformName
+      CFG.game.platformName
     ])
   }
   
@@ -419,7 +419,7 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
     k.pos(centerX, textY),
     k.anchor("center"),
     getColor(k, color),
-    k.outline(3, getRGB(k, CFG.colors.outlineTextColor)),
+    k.outline(3, getRGB(k, CFG.visual.colors.outlineTextColor)),
     k.z(CFG.visual.zIndex.platforms + 1),  // In front of platforms
   ])
   
@@ -432,7 +432,7 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
       k.pos(centerX, textY + 30),  // 30px below title
       k.anchor("center"),
       getColor(k, subColor),
-      k.outline(2, getRGB(k, CFG.colors.outlineTextColor)),
+      k.outline(2, getRGB(k, CFG.visual.colors.outlineTextColor)),
       k.z(CFG.visual.zIndex.platforms + 1),  // In front of platforms
     ])
   }

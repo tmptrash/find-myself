@@ -501,7 +501,7 @@ function createWord(k, params) {
   //
   // Use JetBrains Mono font for all words
   //
-  const fontFamily = CFG.fonts.regular
+  const fontFamily = CFG.visual.fonts.regular
   
   //
   // Font weight simulation: some words will have outline for bold effect

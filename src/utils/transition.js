@@ -202,8 +202,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           let levelColorHex = "#6B8E9F" // Default steel blue
           
           try {
-            if (CFG && CFG.colors && CFG.colors[nextLevel] && CFG.colors[nextLevel].spikes) {
-              levelColorHex = CFG.colors[nextLevel].spikes
+            if (CFG && CFG.visual.colors && CFG.visual.colors[nextLevel] && CFG.visual.colors[nextLevel].spikes) {
+              levelColorHex = CFG.visual.colors[nextLevel].spikes
             }
           } catch (e) {
             console.warn('Could not get level color, using default:', e)

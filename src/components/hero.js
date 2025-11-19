@@ -71,7 +71,7 @@ export function create(config) {
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
   
-  const defaultBodyColor = type === HEROES.HERO ? CFG.colors.hero.body : CFG.colors.antiHero.body
+  const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
   const shouldLoadCustomSprites = Boolean(bodyColor) || addMouth || addArms
 
@@ -142,8 +142,8 @@ export function create(config) {
     bodyColor,        // Store custom body color
     spritePrefix,
     dustColor,
-    speed: CFG.gameplay.moveSpeed,
-    jumpForce: CFG.gameplay.jumpForce,
+    speed: CFG.game.moveSpeed,
+    jumpForce: CFG.game.jumpForce,
     direction: 1,
     canJump: true,
     runFrame: 0,
@@ -166,7 +166,7 @@ export function create(config) {
   }
   
   // Check ground touch through collisions
-  character.onCollide(CFG.levels.platformName, () => onCollisionPlatform(inst))
+  character.onCollide(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
   antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
@@ -297,7 +297,7 @@ export function death(inst, onComplete) {
   sfx && Sound.playDeathSound(sfx)
   
   // Determine particle color based on type
-  const colors = CFG.colors
+  const colors = CFG.visual.colors
   const particleColors = type === HEROES.HERO 
     ? [colors.hero.body, colors.hero.outline]
     : [colors.antiHero.body, colors.antiHero.outline]
@@ -532,7 +532,7 @@ export function spawn(inst) {
   
   // Determine particle color based on type
   // Use custom bodyColor if provided, otherwise use default from config
-  const colors = CFG.colors
+  const colors = CFG.visual.colors
   const particleColor = bodyColor || (type === HEROES.HERO ? colors.hero.body : colors.antiHero.body)
   
   //
@@ -1219,8 +1219,8 @@ function onAnnihilationCollide(inst) {
   //
   // Get anti-hero colors (use custom bodyColor if provided, otherwise use default)
   //
-  const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.colors.antiHero.body
-  const antiHeroOutlineColor = CFG.colors.antiHero.outline
+  const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.visual.colors.antiHero.body
+  const antiHeroOutlineColor = CFG.visual.colors.antiHero.outline
   
   const scale = 2
   const particleSize = 4
@@ -1584,7 +1584,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   if (customBodyColor) {
     bodyColor = customBodyColor
   } else {
-    const colors = type === HEROES.HERO ? CFG.colors.hero : CFG.colors.antiHero
+    const colors = type === HEROES.HERO ? CFG.visual.colors.hero : CFG.visual.colors.antiHero
     bodyColor = colors.body
   }
   
@@ -1773,7 +1773,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   //
   // Eyes - for run and jump draw only ONE eye (side view)
   //
-  ctx.fillStyle = getHex(CFG.colors[type].eyeWhite)
+  ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
   if (animation === 'run' || animation === 'jump') {
     ctx.fillRect(headX + 6, headY + 2, 3, 3)
   } else {

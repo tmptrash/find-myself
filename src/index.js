@@ -15,11 +15,11 @@ import { loadSprites as loadBladeSprites } from "./sections/word/components/blad
 // Game initialization
 //
 const k = kaplay({
-  width: CFG.screen.width,
-  height: CFG.screen.height,
-  font: CFG.fonts.regular,
+  width: CFG.visual.screen.width,
+  height: CFG.visual.screen.height,
+  font: CFG.visual.fonts.regular,
   letterbox: true,
-  background: parseHex(CFG.screen.background)
+  background: parseHex(CFG.visual.screen.background)
 })
 //
 // Remove default cursor style to allow CSS custom cursor
@@ -28,8 +28,8 @@ k.canvas.style.removeProperty('cursor')
 //
 // Load resources
 //
-k.loadFont(CFG.fonts.regular, "/fonts/JetBrainsMono-Regular.ttf")
-k.loadFont(CFG.fonts.thin, "/fonts/JetBrainsMono-Thin.ttf")
+k.loadFont(CFG.visual.fonts.regular, "/fonts/JetBrainsMono-Regular.ttf")
+k.loadFont(CFG.visual.fonts.thin, "/fonts/JetBrainsMono-Thin.ttf")
 //
 // Load audio
 //

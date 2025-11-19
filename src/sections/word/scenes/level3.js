@@ -41,9 +41,9 @@ export function sceneLevel3(k) {
       levelNumber: 4,  // Show 4 red blades in indicator
       nextLevel: 'level-word.4',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.3'].blades,
+      levelTitleColor: CFG.visual.colors['level-word.3'].blades,
       subTitle: "when feelings grow dull, words become sharper",
-      subTitleColor: CFG.colors['level-word.3'].blades,
+      subTitleColor: CFG.visual.colors['level-word.3'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -70,9 +70,9 @@ export function sceneLevel3(k) {
     //
     const platformBounds = {
       left: PLATFORM_SIDE_WIDTH,
-      right: CFG.screen.width - PLATFORM_SIDE_WIDTH,
+      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
       top: PLATFORM_TOP_HEIGHT + 20,
-      bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
     }
     
     //
@@ -91,7 +91,7 @@ export function sceneLevel3(k) {
       FlyingWords.onUpdate(flyingWords)
     })
     
-    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
     
     // Create first special moving platform (jump-to-disable mode)
@@ -100,7 +100,7 @@ export function sceneLevel3(k) {
       x: movingPlatform1X,
       y: platformY,
       hero,
-      color: CFG.colors['level-word.3'].platform,
+      color: CFG.visual.colors['level-word.3'].platform,
       currentLevel: 'level-word.3',
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
@@ -113,7 +113,7 @@ export function sceneLevel3(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.colors['level-word.3'].platform,
+      color: CFG.visual.colors['level-word.3'].platform,
       currentLevel: 'level-word.3',
       jumpToDisableBlades: false,  // Normal mode: timer-based (4 seconds)
       autoOpen: false,  // Triggered by hero proximity
@@ -121,14 +121,14 @@ export function sceneLevel3(k) {
     })
     
     // Create blade arm that extends from the left (positioned above bottom platform at hero's mid-body height)
-    const bottomPlatformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720
+    const bottomPlatformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720
     const heroHalfHeight = 37  // Half of hero's height
     const textY = bottomPlatformY - heroHalfHeight - 15    // Text at mid-body height above bottom platform, raised by 30px
     BladeArm.create({
       k,
       y: textY,
       hero,
-      color: CFG.colors['level-word.3'].blades,
+      color: CFG.visual.colors['level-word.3'].blades,
       sfx: sound,
       currentLevel: 'level-word.3'
     })

@@ -24,7 +24,7 @@ export function sceneMenu(k) {
     //
     k.setGravity(0)
     
-    const centerX = CFG.screen.width / 2
+    const centerX = CFG.visual.screen.width / 2
     const centerY = 500
     const radius = 302
     //
@@ -745,7 +745,7 @@ function drawScene(inst) {
   //
   // Draw gray background (same color as level platforms)
   //
-  const bgRgb = getRGB(k, CFG.colors["level-word.0"].platform)
+  const bgRgb = getRGB(k, CFG.visual.colors["level-word.0"].platform)
   k.drawRect({
     width: k.width(),
     height: k.height(),

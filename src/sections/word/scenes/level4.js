@@ -32,9 +32,9 @@ export function sceneLevel4(k) {
       nextLevel: 'word-complete',
       skipPlatforms: true,
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.4'].blades,
+      levelTitleColor: CFG.visual.colors['level-word.4'].blades,
       subTitle: "words are blades that leave invisible wounds",
-      subTitleColor: CFG.colors['level-word.4'].blades,
+      subTitleColor: CFG.visual.colors['level-word.4'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -45,7 +45,7 @@ export function sceneLevel4(k) {
     })
     
     // Create custom platforms with pit in the middle
-    const pitInfo = createCustomPlatforms(k, CFG.colors['level-word.4'].platform)
+    const pitInfo = createCustomPlatforms(k, CFG.visual.colors['level-word.4'].platform)
     
     //
     // Create flying words for atmosphere (constrained to narrow pit area between walls)
@@ -55,9 +55,9 @@ export function sceneLevel4(k) {
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,
-        right: CFG.screen.width - PLATFORM_SIDE_WIDTH - 20,
+        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH - 20,
         top: PLATFORM_TOP_HEIGHT + 20,
-        bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
       }
     })
     
@@ -69,9 +69,9 @@ export function sceneLevel4(k) {
     })
     
     // Create bottom of the pit (platform at pit depth)
-    const heroHeight = CFG.screen.height * 0.08  // Approximate hero height (8% of screen)
+    const heroHeight = CFG.visual.screen.height * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
-    const pitBottomY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT + pitDepth
+    const pitBottomY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + pitDepth
     
     // Create pit bottom platform
     k.add([
@@ -79,8 +79,8 @@ export function sceneLevel4(k) {
       k.pos(pitInfo.centerX - pitInfo.width / 2, pitBottomY),
       k.area(),
       k.body({ isStatic: true }),
-      getColor(k, CFG.colors['level-word.4'].platform),
-      CFG.levels.platformName
+      getColor(k, CFG.visual.colors['level-word.4'].platform),
+      CFG.game.platformName
     ])
     
     // Create blades at the bottom of the pit (pointing up)
@@ -98,7 +98,7 @@ export function sceneLevel4(k) {
     pitBlades.blade.opacity = 1
     
     // Create 3 blades (left floor, center ceiling, right floor)
-    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const floorBladeY = platformY - bladeHeight * 1.2  // Extend up from floor
     const ceilingBladeY = PLATFORM_TOP_HEIGHT + bladeHeight * 1.2  // Extend down from ceiling
     
@@ -308,7 +308,7 @@ function updateBladesAnimation(inst) {
 function createCustomPlatforms(k, color) {
   // Calculate pit dimensions (same width as blades)
   const pitWidth = Blades.getBladeWidth(k)
-  const centerX = CFG.screen.width / 2
+  const centerX = CFG.visual.screen.width / 2
   const pitLeft = centerX - pitWidth / 2
   const pitRight = centerX + pitWidth / 2
   
@@ -319,24 +319,24 @@ function createCustomPlatforms(k, color) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, color),
-      CFG.levels.platformName
+      CFG.game.platformName
     ])
   }
   
   // Top platform (full width)
-  createPlatform(0, 0, CFG.screen.width, PLATFORM_TOP_HEIGHT)
+  createPlatform(0, 0, CFG.visual.screen.width, PLATFORM_TOP_HEIGHT)
   
   // Bottom platform - LEFT side (before pit)
-  createPlatform(0, CFG.screen.height - PLATFORM_BOTTOM_HEIGHT, pitLeft, PLATFORM_BOTTOM_HEIGHT)
+  createPlatform(0, CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT, pitLeft, PLATFORM_BOTTOM_HEIGHT)
   
   // Bottom platform - RIGHT side (after pit)
-  createPlatform(pitRight, CFG.screen.height - PLATFORM_BOTTOM_HEIGHT, CFG.screen.width - pitRight, PLATFORM_BOTTOM_HEIGHT)
+  createPlatform(pitRight, CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT, CFG.visual.screen.width - pitRight, PLATFORM_BOTTOM_HEIGHT)
   
   // Left wall
-  createPlatform(0, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
+  createPlatform(0, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.visual.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
   
   // Right wall
-  createPlatform(CFG.screen.width - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
+  createPlatform(CFG.visual.screen.width - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.visual.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
   
   return { centerX, width: pitWidth }
 }

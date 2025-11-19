@@ -74,7 +74,7 @@ export function create(config) {
     orientation = ORIENTATIONS.FLOOR,
     onHit = null,
     sfx = null,
-    color = CFG.colors['level-word.1'].blades,
+    color = CFG.visual.colors['level-word.1'].blades,
     bladeCount = 3,
     scale = 1,
     zIndex = CFG.visual.zIndex.platforms
@@ -154,7 +154,7 @@ export function create(config) {
  */
 export function loadSprites(k) {
   const blockSize = getBladeBlockSize(k)
-  const defaultColor = CFG.colors['level-word.1'].blades  // Default red color
+  const defaultColor = CFG.visual.colors['level-word.1'].blades  // Default red color
   const defaultBladeCount = 3  // Default 3 pyramids
   Object.values(ORIENTATIONS).forEach(orientation => {
     const spriteData = createBladeSprite(orientation, blockSize, defaultColor, defaultBladeCount)
@@ -298,7 +298,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
   // Font settings
   //
   const fontSize = 40
-  const fontFamily = CFG.fonts.thinFull
+  const fontFamily = CFG.visual.fonts.thinFull
   const outlineWidth = 2
   const letterSpacing = 0
   

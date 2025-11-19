@@ -28,14 +28,14 @@ export function create(config) {
   const startX = sideWallWidth
   
   // Calculate maximum width (from left wall to right wall)
-  const screenWidth = CFG.screen.width  // 1920
+  const screenWidth = CFG.visual.screen.width  // 1920
   const maxWidth = screenWidth - sideWallWidth * 2  // Distance between walls
   
   // Create a temporary text to measure full width
   const tempText = k.add([
     k.text(TEXT_MESSAGE, {
       size: TEXT_SIZE,
-      font: CFG.fonts.thin
+      font: CFG.visual.fonts.thin
     }),
     k.pos(-10000, -10000),  // Off-screen
     k.opacity(0)
@@ -70,7 +70,7 @@ export function create(config) {
     const outlineText = textContainer.add([
       k.text(TEXT_MESSAGE, {
         size: TEXT_SIZE,
-        font: CFG.fonts.thin
+        font: CFG.visual.fonts.thin
       }),
       k.pos(dx, dy),
       k.color(0, 0, 0),
@@ -83,7 +83,7 @@ export function create(config) {
   const mainText = textContainer.add([
     k.text(TEXT_MESSAGE, {
       size: TEXT_SIZE,
-      font: CFG.fonts.thin
+      font: CFG.visual.fonts.thin
     }),
     k.pos(0, 0),
     k.color(107, 142, 159),

@@ -51,7 +51,7 @@ export function sceneReady(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     
-    addBackground(k, CFG.colors.ready.background)
+    addBackground(k, CFG.visual.colors.ready.background)
     
     //
     // Hint text (visible immediately)
@@ -60,7 +60,7 @@ export function sceneReady(k) {
       k.text('press Space, Enter or click to start', { size: 20 }),
       k.pos(centerX, HINT_Y),
       k.anchor('center'),
-      getColor(k, CFG.colors.ready.hint),
+      getColor(k, CFG.visual.colors.ready.hint),
       k.opacity(1)
     ])
     
@@ -308,7 +308,7 @@ function createParticleSystem(k, layoutPositions) {
   return {
     k,
     particles,
-    color: CFG.colors.ready.fireflies,
+    color: CFG.visual.colors.ready.fireflies,
     baseOpacity: 0.9,
     flickerSpeed: 2,
     trembleRadius: TREMOR_FORMATION,

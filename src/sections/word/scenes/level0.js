@@ -70,9 +70,9 @@ export function sceneLevel0(k) {
       levelNumber: 1,  // Show 1 red blade in indicator
       nextLevel: 'level-word.1',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.colors['level-word.0'].blades,
+      levelTitleColor: CFG.visual.colors['level-word.0'].blades,
       subTitle: "some words are sharper than any blade...",
-      subTitleColor: CFG.colors['level-word.0'].blades,
+      subTitleColor: CFG.visual.colors['level-word.0'].blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -107,9 +107,9 @@ export function sceneLevel0(k) {
     //
     const platformBounds = {
       left: PLATFORM_SIDE_WIDTH,
-      right: CFG.screen.width - PLATFORM_SIDE_WIDTH,
+      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
       top: PLATFORM_TOP_HEIGHT + 20,
-      bottom: CFG.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
     }
     
     //
@@ -135,7 +135,7 @@ export function sceneLevel0(k) {
     const rightX = Math.max(HERO_SPAWN_X, ANTIHERO_SPAWN_X)
     const distance = rightX - leftX
     
-    const platformY = CFG.screen.height - PLATFORM_BOTTOM_HEIGHT
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
     
     //
@@ -250,7 +250,7 @@ export function sceneLevel0(k) {
  * @param {Object} k - Kaplay instance
  */
 function showIntroSequence(k) {
-  const centerX = CFG.screen.width / 2
+  const centerX = CFG.visual.screen.width / 2
   const textY = PLATFORM_TOP_HEIGHT / 2  // Center of top platform area
   
   //
@@ -268,7 +268,7 @@ function showIntroSequence(k) {
     k.text(INTRO_TEXT, {
       size: 32,
       align: "center",
-      font: CFG.fonts.regular
+      font: CFG.visual.fonts.regular
     }),
     k.pos(centerX, textY),
     k.anchor("center"),
@@ -389,7 +389,7 @@ function createInstructionsText(k, centerX, textY) {
     k.text("← → - move,   ↑ Space - jump,   ESC - menu", {
       size: 24,
       align: "center",
-      font: CFG.fonts.regular
+      font: CFG.visual.fonts.regular
     }),
     k.pos(centerX, textY),
     k.anchor("center"),
@@ -404,7 +404,7 @@ function createInstructionsText(k, centerX, textY) {
  * @param {Object} k - Kaplay instance
  */
 function showInstructions(k) {
-  const centerX = CFG.screen.width / 2
+  const centerX = CFG.visual.screen.width / 2
   const textY = PLATFORM_TOP_HEIGHT / 2
   
   //

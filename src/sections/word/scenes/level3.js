@@ -81,7 +81,8 @@ export function sceneLevel3(k) {
     const flyingWords = FlyingWords.create({
       k,
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
-      customBounds: platformBounds
+      customBounds: platformBounds,
+      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
     })
     
     //

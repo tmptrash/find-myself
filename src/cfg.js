@@ -4,43 +4,6 @@
 const MASTER_VOLUME = 0.7
 
 export const CFG = {
-  audio: {
-    masterVolume: MASTER_VOLUME,
-    //
-    // Ambient music (splash/menu) - volumes relative to masterVolume
-    //
-    ambient: {
-      volume: MASTER_VOLUME * 1.11,
-      bass: MASTER_VOLUME * 0.149,
-      mid: MASTER_VOLUME * 0.056,
-      high: MASTER_VOLUME * 0.028,
-      noise: MASTER_VOLUME * 0.484,
-      blip: MASTER_VOLUME * 0.149,
-      fadeInTime: 0.5
-    },
-    //
-    // Background music for levels
-    //
-    backgroundMusic: {
-      volume: MASTER_VOLUME * 0.143
-    },
-    //
-    // Level sound effects
-    //
-    sfx: {
-      jump: MASTER_VOLUME * 0.62,
-      land: MASTER_VOLUME * 0.613,
-      landFade: MASTER_VOLUME * 0.612,
-      landDuration: 0.05,
-      landFreqStart: 180,
-      landFreqEnd: 60,
-      step: MASTER_VOLUME * 0.613,
-      stepFade: MASTER_VOLUME * 0.041,
-      stepDuration: 0.05,
-      stepFreqStart: 180,
-      stepFreqEnd: 60
-    }
-  },
   game: {
     moveSpeed: 300,
     jumpForce: 620,
@@ -51,15 +14,13 @@ export const CFG = {
     // Movement
     moveLeft: ['left', 'a'],       // Move left
     moveRight: ['right', 'd'],     // Move right
-    moveUp: ['up', 'w'],           // Move up (for jump)
     
     // Actions
     jump: ['up', 'w', 'space'],    // Jump
     
     // System
-    toggleMute: ['m'],             // Toggle sound
     backToMenu: ['escape'],        // Return to menu
-    startGame: ['space', 'enter'], // Start game (from menu/start)
+    startGame: ['space', 'enter']  // Start game (from menu/start)
   },
   visual: {
     screen: {
@@ -192,14 +153,58 @@ export const CFG = {
     // UI positions
     instructionsX: 20,             // Instructions X position
     instructionsY: 20,             // Instructions Y position
-    
+    //
+    // Flying words/letters configuration
+    //
+    flyingWords: {
+      letterToWordRatio: 0.6  // 75% letters, 25% words (0.0 = all words, 1.0 = all letters)
+    },
+    //
     // Z-indices (layers)
+    //
     zIndex: {
       background: -100,
       flyingWords: -50,
       platforms: 0,
       player: 10,
       ui: 100
+    }
+  },
+  audio: {
+    masterVolume: MASTER_VOLUME,
+    //
+    // Ambient music (splash/menu) - volumes relative to masterVolume
+    //
+    ambient: {
+      volume: MASTER_VOLUME * 1.11,
+      bass: MASTER_VOLUME * 0.149,
+      mid: MASTER_VOLUME * 0.056,
+      high: MASTER_VOLUME * 0.028,
+      noise: MASTER_VOLUME * 0.484,
+      blip: MASTER_VOLUME * 0.149,
+      fadeInTime: 0.5
+    },
+    //
+    // Background music for levels
+    //
+    backgroundMusic: {
+      volume: MASTER_VOLUME * 0.143
+    },
+    //
+    // Level sound effects
+    //
+    sfx: {
+      jump: MASTER_VOLUME * 0.62,
+      land: MASTER_VOLUME * 0.613,
+      landFade: MASTER_VOLUME * 0.612,
+      landDuration: 0.05,
+      landFreqStart: 180,
+      landFreqEnd: 60,
+      step: MASTER_VOLUME * 0.613,
+      stepFade: MASTER_VOLUME * 0.041,
+      stepDuration: 0.05,
+      stepFreqStart: 180,
+      stepFreqEnd: 60
     }
   }
 }

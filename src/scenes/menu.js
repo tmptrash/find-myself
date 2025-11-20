@@ -409,15 +409,6 @@ export function sceneMenu(k) {
     })
     
     //
-    // Toggle mute
-    //
-    CFG.controls.toggleMute.forEach(key => {
-      k.onKeyPress(key, () => {
-        Sound.toggleMute(sound)
-      })
-    })
-    
-    //
     // Back to ready scene (ESC)
     //
     k.onKeyPress("escape", () => {

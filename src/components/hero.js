@@ -27,7 +27,7 @@ const ANTIHERO_TAG = 'annihilation'
 // Landing dust particles
 //
 const DUST_PARTICLE_COUNT = 6
-const DUST_PARTICLE_SIZE = 4
+const DUST_PARTICLE_SIZE = 6
 const DUST_PARTICLE_SPEED = 80
 const DUST_PARTICLE_LIFETIME = 0.4
 

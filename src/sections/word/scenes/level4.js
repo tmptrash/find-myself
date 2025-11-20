@@ -58,7 +58,8 @@ export function sceneLevel4(k) {
         right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH - 20,
         top: PLATFORM_TOP_HEIGHT + 20,
         bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
-      }
+      },
+      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
     })
     
     //

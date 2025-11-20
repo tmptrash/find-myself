@@ -244,7 +244,7 @@ export function initScene(config) {
   
   // Create heroes if requested
   if (createHeroes && levelName && heroX !== null && heroY !== null && antiHeroX !== null && antiHeroY !== null) {
-    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY)
+    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
@@ -333,13 +333,14 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
  * @param {string} nextLevel - Next level name for annihilation (deprecated, kept for compatibility)
  * @param {Number} [customHeroX] - Custom hero X position (overrides config)
  * @param {Number} [customHeroY] - Custom hero Y position (overrides config)
+ * @param {string} [platformColor] - Platform color for dust particles
  * @returns {Object} {hero, antiHero}
  */
-function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY) {
+function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY, platformColor = null) {
   //
-  // Dust color is now always null (no level-specific colors needed)
+  // Use platform color for dust particles (black platforms)
   //
-  const dustColor = null
+  const dustColor = platformColor
   
   const antiHero = Hero.create({
     k,

@@ -19,7 +19,7 @@ const k = kaplay({
   height: CFG.visual.screen.height,
   font: CFG.visual.fonts.regular,
   letterbox: true,
-  background: parseHex(CFG.visual.screen.background)
+  background: parseHex(CFG.visual.colors.background)
 })
 //
 // Remove default cursor style to allow CSS custom cursor

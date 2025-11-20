@@ -11,22 +11,16 @@ export const CFG = {
     platformName: "platform"
   },
   controls: {
-    // Movement
     moveLeft: ['left', 'a'],       // Move left
     moveRight: ['right', 'd'],     // Move right
-    
-    // Actions
     jump: ['up', 'w', 'space'],    // Jump
-    
-    // System
     backToMenu: ['escape'],        // Return to menu
     startGame: ['space', 'enter']  // Start game (from menu/start)
   },
   visual: {
     screen: {
       width: 1920,
-      height: 1080,
-      background: "#000000"
+      height: 1080
     },
     fonts: {
       regular: 'jetbrains',
@@ -35,6 +29,7 @@ export const CFG = {
       thinFull: "'JetBrains Mono Thin'"
     },
     colors: {
+      background: "#000000",
       outlineTextColor: "#000000",
       // Common colors
       levelIndicator: {
@@ -146,13 +141,6 @@ export const CFG = {
         }
       }
     },
-    // UI dimensions
-    instructionsFontSize: 18,      // Instructions font size
-    titleFontSize: 64,             // Title font size
-    
-    // UI positions
-    instructionsX: 20,             // Instructions X position
-    instructionsY: 20,             // Instructions Y position
     //
     // Flying words/letters configuration
     //

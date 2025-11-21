@@ -46,7 +46,6 @@ export const HEROES = {
  * @param {Object} [config.sfx] - AudioContext for sound effects
  * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
  * @param {string} [config.currentLevel] - Current level name for transition
- * @param {Function} [config.onAnnihilation] - Callback when annihilation completes (deprecated, use currentLevel)
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
  * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
@@ -59,10 +58,9 @@ export function create(config) {
     type = HEROES.HERO,
     controllable = type === HEROES.HERO,
     sfx = null,
-    scale = getHeroScale(config.k),
+    scale = HERO_SCALE,
     antiHero = null,
     currentLevel = null,
-    onAnnihilation = null,
     bodyColor = null,      // Custom body color (hex string), outline is always black
     dustColor = null,      // Dust particle color (hex string)
     isStatic = false,      // If true, no physics (for indicators)
@@ -73,13 +71,19 @@ export function create(config) {
   
   const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
-  const hasCustomization = Boolean(bodyColor) || addMouth || addArms
   //
   // Load sprites for this hero configuration
   // This will use cached sprites if already loaded
   //
   try {
-    loadHeroSprites(k, type, effectiveBodyColor, addMouth, addArms)
+    loadHeroSprites({
+      k,
+      type,
+      bodyColor: effectiveBodyColor,
+      addMouth,
+      addArms,
+      character: null  // Marker to indicate this is an inst-like object
+    })
   } catch (error) {
     console.error('Failed to load hero sprites:', error)
   }
@@ -87,18 +91,7 @@ export function create(config) {
   // Generate sprite prefix based on customization
   //
   const spritePrefix = `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
-  let spriteName = `${spritePrefix}_0_0`
-  
-  //
-  // Verify sprite exists, fall back to standard if not
-  //
-  try {
-    k.getSprite(spriteName)
-  } catch (e) {
-    console.warn(`Sprite ${spriteName} not found, using standard sprite`)
-    spritePrefix = type
-    spriteName = `${spritePrefix}_0_0`
-  }
+  const spriteName = `${spritePrefix}_0_0`
   
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
   const collisionOffsetY = COLLISION_OFFSET_Y - hitboxPadding
@@ -130,7 +123,6 @@ export function create(config) {
     sfx,
     antiHero,
     currentLevel,
-    onAnnihilation,
     bodyColor,        // Store custom body color
     spritePrefix,
     dustColor,
@@ -168,21 +160,46 @@ export function create(config) {
 
 /**
  * Loads sprites for hero or anti-hero with customizable parameters
- * @param {Object} k - Kaplay instance
- * @param {string} type - Hero type (HERO or ANTIHERO)
+ * Can be called with inst object or individual parameters
+ * @param {Object} inst - Hero instance or Kaplay instance
+ * @param {string} [type] - Hero type (HERO or ANTIHERO) - required if first param is k
  * @param {string} [bodyColor=null] - Body color in hex format (null = use default from config)
  * @param {boolean} [addMouth=false] - Add mouth to idle sprites
  * @param {boolean} [addArms=false] - Add arms to sprites
  */
-export function loadHeroSprites(k, type, bodyColor = null, addMouth = false, addArms = false) {
+export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = false, addArms = false) {
+  //
+  // Determine if called with inst or individual parameters
+  //
+  let k, heroType, color, mouth, arms
+  
+  if (inst.k && inst.type !== undefined) {
+    //
+    // Called with inst-like object (has k and type properties)
+    //
+    k = inst.k
+    heroType = inst.type
+    color = inst.bodyColor
+    mouth = inst.addMouth || false
+    arms = inst.addArms || false
+  } else {
+    //
+    // Called with individual parameters (for preloading)
+    //
+    k = inst
+    heroType = type
+    color = bodyColor
+    mouth = addMouth
+    arms = addArms
+  }
   //
   // Use default color from config if not provided
   //
-  const effectiveBodyColor = bodyColor || (type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
+  const effectiveBodyColor = color || (heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
   //
   // Generate unique prefix for this sprite variant
   //
-  const prefix = `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
+  const prefix = `${heroType}_${effectiveBodyColor}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}`
   //
   // Check if sprites with this configuration are already loaded
   //
@@ -193,7 +210,7 @@ export function loadHeroSprites(k, type, bodyColor = null, addMouth = false, add
   for (let x = -1; x <= 1; x++) {
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
-      const spriteData = createFrame(type, 'idle', 0, x, y, effectiveBodyColor, addMouth, addArms)
+      const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, mouth, arms)
       k.loadSprite(spriteName, spriteData)
     }
   }
@@ -201,77 +218,59 @@ export function loadHeroSprites(k, type, bodyColor = null, addMouth = false, add
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, effectiveBodyColor, addMouth, addArms))
+    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, mouth, arms))
   }
   //
   // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, effectiveBodyColor, addMouth, addArms))
+    k.loadSprite(`${prefix}-run-${frame}`, createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, mouth, arms))
   }
 }
 /**
- * Death effect with particle explosion
- * @param {Object} inst - Hero instance
- * @param {Function} onComplete - Callback when death animation completes
+ * Apply slow motion effect
+ * @param {Object} k - Kaplay instance
  */
-export function death(inst, onComplete) {
-  // Prevent multiple death triggers
-  if (inst.isDying) return
-  
-  inst.isDying = true
-  
-  const { k, character, type, sfx } = inst
-  const centerX = character.pos.x
-  const centerY = character.pos.y
-  
-  //
-  // Slow down time for dramatic effect
-  //
+function applySlowMotion(k) {
   const originalTimeScale = k.timeScale ?? 1
   const slowMotionScale = 0.1
   const slowMotionDuration = 0.5
-  
   k.timeScale = slowMotionScale
-  
-  //
-  // Restore normal time after slow motion
-  //
   k.wait(slowMotionDuration, () => {
     k.timeScale = originalTimeScale
   })
-  
-  // Stop control
-  character.paused = true
-  inst.controllable = false
-  
-  // Play death sound
-  sfx && Sound.playDeathSound(sfx)
-  
-  // Determine particle color based on type
+}
+
+/**
+ * Get particle colors for hero type
+ * @param {string} type - Hero type
+ * @returns {Array<string>} Array of color hex strings
+ */
+function getParticleColors(type) {
   const colors = CFG.visual.colors
-  const particleColors = type === HEROES.HERO 
+  return type === HEROES.HERO 
     ? [colors.hero.body, colors.hero.outline]
     : [colors.antiHero.body, colors.antiHero.outline]
-  
-  //
-  // Create particle explosion
-  //
+}
+
+/**
+ * Create body particles for death explosion
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} centerY - Center Y position
+ * @param {Array<string>} particleColors - Array of color hex strings
+ * @returns {Array} Array of particle objects
+ */
+function createBodyParticles(k, centerX, centerY, particleColors) {
   const particleCount = 16
-  const allParticles = []
-  
+  const particles = []
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
     const speed = k.rand(150, 350)
     const pSize = k.rand(4, 8)
-    const oSize = pSize + 4  // Thicker black outline (was +1)
+    const oSize = pSize + 4
     const colorHex = k.choose(particleColors)
-    
-    //
-    // Parse hex color to RGB
-    //
     const [r, g, b] = parseHex(colorHex)
-    
     const rotation = k.rand(0, 360)
     //
     // Create invisible body for physics
@@ -307,7 +306,6 @@ export function death(inst, onComplete) {
             anchor: "center",
             color: k.rgb(0, 0, 0)
           })
-          
           //
           // Draw colored particle on top
           //
@@ -321,50 +319,32 @@ export function death(inst, onComplete) {
         }
       }
     ])
-    
     //
-    // Set initial velocity using Kaplay's body component
+    // Set initial velocity
     //
     body.vel.x = Math.cos(angle) * speed
     body.vel.y = Math.sin(angle) * speed
-    
     particle.lifetime = 0
     particle.rotSpeed = k.rand(-540, 540)
-    particle.maxLifetime = 2.0  // Live longer to see them fall
-    particle.isEye = false
+    particle.maxLifetime = 2.0
     particle.body = body
-    
     //
-    // Apply air friction (slow down horizontal movement)
+    // Update particle
     //
     particle.onUpdate(() => {
       particle.lifetime += k.dt()
-      
-      //
-      // Sync visual particle with invisible body
-      //
       particle.pos = particle.body.pos
       particle.angle = particle.body.angle
-      
-      //
-      // Apply air friction to horizontal velocity
-      //
       particle.body.vel.x *= 0.98
-      
-      //
-      // Rotate particle
-      //
       particle.body.angle += particle.rotSpeed * k.dt()
-      
       //
       // Fade out over lifetime
       //
-      const fadeStartTime = 1.0  // Start fading after 1 second
+      const fadeStartTime = 1.0
       if (particle.lifetime > fadeStartTime) {
         const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
         particle.opacity = Math.max(0, 1 - fadeProgress)
       }
-      
       //
       // Destroy when max lifetime reached or falls off screen
       //
@@ -373,21 +353,26 @@ export function death(inst, onComplete) {
         k.destroy(particle)
       }
     })
-    
-    allParticles.push(particle)
+    particles.push(particle)
   }
-  
-  //
-  // Create two eye particles (same size as hero's real eyes)
-  //
-  const eyeWhiteSize = 3 * HERO_SCALE  // 3x3 pixels scaled by 3 = 9x9
-  const pupilSize = 1 * HERO_SCALE     // 1x1 pixel scaled by 3 = 3x3
+  return particles
+}
+
+/**
+ * Create eye particles for death explosion
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} centerY - Center Y position
+ * @returns {Array} Array of eye particle objects
+ */
+function createEyeParticles(k, centerX, centerY) {
+  const eyeWhiteSize = 3 * HERO_SCALE
+  const pupilSize = 1 * HERO_SCALE
   const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
-  
+  const particles = []
   for (let i = 0; i < 2; i++) {
     const angle = eyeAngles[i]
     const speed = k.rand(150, 350)
-    
     //
     // White eye background
     //
@@ -400,44 +385,30 @@ export function death(inst, onComplete) {
       k.area(),
       k.body()
     ])
-    
     //
-    // Black pupil (no physics, just visual)
+    // Black pupil
     //
     const pupil = eyeWhite.add([
       k.rect(pupilSize, pupilSize),
-      k.pos(0, 0),  // Relative to parent (eyeWhite)
+      k.pos(0, 0),
       k.color(0, 0, 0),
       k.anchor("center"),
-      k.z(1)  // Relative z-index
+      k.z(1)
     ])
-    
     //
     // Set initial velocity
     //
     eyeWhite.vel.x = Math.cos(angle) * speed
     eyeWhite.vel.y = Math.sin(angle) * speed
-    
     eyeWhite.lifetime = 0
     eyeWhite.maxLifetime = 2.0
-    eyeWhite.isEye = true
-    
     //
     // Update eye
     //
     eyeWhite.onUpdate(() => {
       eyeWhite.lifetime += k.dt()
-      
-      //
-      // Apply air friction
-      //
       eyeWhite.vel.x *= 0.98
-      
-      //
-      // Sync pupil opacity with eye white
-      //
       pupil.opacity = eyeWhite.opacity
-      
       //
       // Fade out over lifetime
       //
@@ -446,7 +417,6 @@ export function death(inst, onComplete) {
         const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
         eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
       }
-      
       //
       // Destroy when max lifetime reached or falls off screen
       //
@@ -454,18 +424,52 @@ export function death(inst, onComplete) {
         k.destroy(eyeWhite)
       }
     })
-    
-    allParticles.push(eyeWhite)
+    particles.push(eyeWhite)
   }
-  
+  return particles
+}
+
+/**
+ * Death effect with particle explosion
+ * @param {Object} inst - Hero instance
+ * @param {Function} onComplete - Callback when death animation completes
+ */
+export function death(inst, onComplete) {
+  if (inst.isDying) return
+  inst.isDying = true
+  const { k, character, type, sfx } = inst
+  const centerX = character.pos.x
+  const centerY = character.pos.y
+  //
+  // Apply slow motion effect
+  //
+  applySlowMotion(k)
+  //
+  // Stop control and play sound
+  //
+  character.paused = true
+  inst.controllable = false
+  sfx && Sound.playDeathSound(sfx)
+  //
+  // Get particle colors for this hero type
+  //
+  const particleColors = getParticleColors(type)
+  //
+  // Create body particles explosion
+  //
+  const bodyParticles = createBodyParticles(k, centerX, centerY, particleColors)
+  //
+  // Create eye particles
+  //
+  const eyeParticles = createEyeParticles(k, centerX, centerY)
+  //
   // Hide character immediately
+  //
   if (character.exists()) {
     k.destroy(character)
   }
-  
   //
   // Wait for particles to finish + additional pause before callback
-  // 2.0s for particles to fall + 0.3s pause = 2.3s total
   //
   k.wait(2.3, () => onComplete?.())
 }
@@ -1503,8 +1507,6 @@ function onAnnihilationCollide(inst) {
                 }
                 inst.character.hidden = true
                 createLevelTransition(k, inst.currentLevel)
-              } else if (inst.onAnnihilation) {
-                inst.onAnnihilation()
               }
             })
           }
@@ -1789,15 +1791,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   
   return canvas.toDataURL()
 }
-/**
- * Get hero scale
- * @param {Object} k - Kaplay instance
- * @returns {number} Scale factor for hero
- */
-function getHeroScale(k) {
-  return HERO_SCALE
-}
-
 /**
  * Get sprite name for character (supports custom colors)
  * @param {Object} inst - Hero instance

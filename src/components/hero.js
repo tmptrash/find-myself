@@ -73,28 +73,20 @@ export function create(config) {
   
   const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
-  const shouldLoadCustomSprites = Boolean(bodyColor) || addMouth || addArms
-
+  const hasCustomization = Boolean(bodyColor) || addMouth || addArms
   //
-  // Load custom colored sprites if color is provided or mouth/arms are required
+  // Load sprites for this hero configuration
+  // This will use cached sprites if already loaded
   //
-  if (shouldLoadCustomSprites) {
-    try {
-      loadCustomSprites(k, type, effectiveBodyColor, addMouth, addArms)
-    } catch (error) {
-      console.error('Failed to load custom sprites:', error)
-      //
-      // Fall back to standard sprites
-      //
-    }
+  try {
+    loadHeroSprites(k, type, effectiveBodyColor, addMouth, addArms)
+  } catch (error) {
+    console.error('Failed to load hero sprites:', error)
   }
-  
   //
-  // Determine sprite name based on whether custom color, mouth and arms are used
+  // Generate sprite prefix based on customization
   //
-  let spritePrefix = shouldLoadCustomSprites
-    ? `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
-    : type
+  const spritePrefix = `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
   let spriteName = `${spritePrefix}_0_0`
   
   //
@@ -175,26 +167,29 @@ export function create(config) {
 }
 
 /**
- * Loads sprites with custom colors for a specific hero type
+ * Loads sprites for hero or anti-hero with customizable parameters
  * @param {Object} k - Kaplay instance
  * @param {string} type - Hero type (HERO or ANTIHERO)
- * @param {string} bodyColor - Body color in hex format
+ * @param {string} [bodyColor=null] - Body color in hex format (null = use default from config)
  * @param {boolean} [addMouth=false] - Add mouth to idle sprites
  * @param {boolean} [addArms=false] - Add arms to sprites
  */
-function loadCustomSprites(k, type, bodyColor, addMouth = false, addArms = false) {
-  const prefix = `${type}_${bodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
-  
+export function loadHeroSprites(k, type, bodyColor = null, addMouth = false, addArms = false) {
   //
-  // Check if sprites with this color are already loaded
+  // Use default color from config if not provided
+  //
+  const effectiveBodyColor = bodyColor || (type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
+  //
+  // Generate unique prefix for this sprite variant
+  //
+  const prefix = `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
+  //
+  // Check if sprites with this configuration are already loaded
   //
   const testSprite = `${prefix}_0_0`
   try {
     const sprite = k.getSprite(testSprite)
     if (sprite) {
-      //
-      // Sprites already loaded, no need to reload
-      //
       return
     }
   } catch (e) {
@@ -202,61 +197,28 @@ function loadCustomSprites(k, type, bodyColor, addMouth = false, addArms = false
     // Sprite doesn't exist, proceed with loading
     //
   }
-  
   //
   // Load all eye variants (9 positions) for idle animation
   //
   for (let x = -1; x <= 1; x++) {
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
-      const spriteData = createFrame(type, 'idle', 0, x, y, bodyColor, addMouth, addArms)
+      const spriteData = createFrame(type, 'idle', 0, x, y, effectiveBodyColor, addMouth, addArms)
       k.loadSprite(spriteName, spriteData)
     }
   }
-  
   //
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, bodyColor, addMouth, addArms))
+    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame, 0, 0, effectiveBodyColor, addMouth, addArms))
   }
-  
   //
   // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, bodyColor, addMouth, addArms))
+    k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame, 0, 0, effectiveBodyColor, addMouth, addArms))
   }
-}
-
-/**
- * Loads all sprites for hero and anti-hero
- * Should be called once on game initialization
- * @param {Object} k - Kaplay instance
- */
-export function loadHeroSprites(k) {    
-  Object.values(HEROES).forEach(type => {
-    const prefix = type
-    
-    // Load all eye variants (9 positions) for idle animation
-    for (let x = -1; x <= 1; x++) {
-      for (let y = -1; y <= 1; y++) {
-        const spriteName = `${prefix}_${x}_${y}`
-        const spriteData = createFrame(type, 'idle', 0, x, y)
-        k.loadSprite(spriteName, spriteData)
-      }
-    }
-    
-    // Load jump animation frames (3 frames: stretch up, normal, squash down)
-    for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-      k.loadSprite(`${prefix}-jump-${frame}`, createFrame(type, 'jump', frame))
-    }
-    
-    // Load run frames (3 frames)
-    for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-      k.loadSprite(`${prefix}-run-${frame}`, createFrame(type, 'run', frame))
-    }
-  })
 }
 /**
  * Death effect with particle explosion

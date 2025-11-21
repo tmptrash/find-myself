@@ -9,7 +9,7 @@ import { sceneLevel2 } from "./sections/word/scenes/level2.js"
 import { sceneLevel3 } from "./sections/word/scenes/level3.js"
 import { sceneLevel4 } from "./sections/word/scenes/level4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
-import { loadHeroSprites } from "./components/hero.js"
+import { loadHeroSprites, HEROES } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
 //
 // Game initialization
@@ -35,9 +35,10 @@ k.loadFont(CFG.visual.fonts.thin, "/fonts/JetBrainsMono-Thin.ttf")
 //
 k.loadSound("word", "/word.mp3")
 //
-// Load all character sprites (encapsulated in hero.js)
+// Load default character sprites for both hero types
 //
-loadHeroSprites(k)
+loadHeroSprites(k, HEROES.HERO)
+loadHeroSprites(k, HEROES.ANTIHERO)
 //
 // Load blade sprites
 //

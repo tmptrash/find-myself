@@ -51,8 +51,8 @@ export const CFG = {
       outlineTextColor: "#000000",
       // Common colors
       levelIndicator: {
-        active: "#DC143C",     // Red for active/completed levels
-        inactive: "#555555"    // Gray for inactive/future levels
+        active: "#DC143C",             // Red for active/completed levels
+        inactive: "#555555"            // Gray for inactive/future levels
       },
       // Splash/menu colors
       menu: {

@@ -186,17 +186,7 @@ export function loadHeroSprites(k, type, bodyColor = null, addMouth = false, add
   //
   // Check if sprites with this configuration are already loaded
   //
-  const testSprite = `${prefix}_0_0`
-  try {
-    const sprite = k.getSprite(testSprite)
-    if (sprite) {
-      return
-    }
-  } catch (e) {
-    //
-    // Sprite doesn't exist, proceed with loading
-    //
-  }
+  try { if (k.getSprite(`${prefix}_0_0`)) return } catch (e) {}
   //
   // Load all eye variants (9 positions) for idle animation
   //

@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import { getHex } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
@@ -74,7 +74,7 @@ export function create(config) {
     orientation = ORIENTATIONS.FLOOR,
     onHit = null,
     sfx = null,
-    color = CFG.visual.colors['level-word.1'].blades,
+    color = CFG.visual.colors.word.blades,
     bladeCount = 3,
     scale = 1,
     zIndex = CFG.visual.zIndex.platforms
@@ -154,7 +154,7 @@ export function create(config) {
  */
 export function loadSprites(k) {
   const blockSize = getBladeBlockSize(k)
-  const defaultColor = CFG.visual.colors['level-word.1'].blades  // Default red color
+  const defaultColor = CFG.visual.colors.word.blades  // Default blade color
   const defaultBladeCount = 3  // Default 3 pyramids
   Object.values(ORIENTATIONS).forEach(orientation => {
     const spriteData = createBladeSprite(orientation, blockSize, defaultColor, defaultBladeCount)

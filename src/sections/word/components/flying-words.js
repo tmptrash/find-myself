@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import { getColor } from '../../../utils/helper.js'
 
 //

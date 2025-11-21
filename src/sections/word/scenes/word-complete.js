@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 
 const FINAL_MESSAGE = "remember - not every word in your head is telling the truth"
 const MESSAGE_HOLD_DURATION = 5.0

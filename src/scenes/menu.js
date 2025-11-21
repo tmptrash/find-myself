@@ -736,7 +736,7 @@ function drawScene(inst) {
   //
   // Draw gray background (same color as level platforms)
   //
-  const bgRgb = getRGB(k, CFG.visual.colors["level-word.0"].platform)
+  const bgRgb = getRGB(k, CFG.visual.colors.menu.platformColor)
   k.drawRect({
     width: k.width(),
     height: k.height(),

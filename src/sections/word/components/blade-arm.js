@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 

@@ -3,6 +3,24 @@
 //
 const MASTER_VOLUME = 0.7
 
+//
+// Deep merge function to combine nested objects
+// Used for merging section-specific configs with global config
+//
+export function deepMerge(target, source) {
+  const result = { ...target }
+  
+  for (const key in source) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(result[key] || {}, source[key])
+    } else {
+      result[key] = source[key]
+    }
+  }
+  
+  return result
+}
+
 export const CFG = {
   game: {
     moveSpeed: 300,
@@ -34,113 +52,32 @@ export const CFG = {
       // Common colors
       levelIndicator: {
         active: "#DC143C",     // Red for active/completed levels
-        inactive: "#555555",   // Gray for inactive/future levels
+        inactive: "#555555"    // Gray for inactive/future levels
       },
-      // Level 0 colors (intro level - word section)
-      "level-word.0": {
-        background: "#3E3E3E",         // Dark gray (foggy gloom)
-        platform: "#1A1A1A",           // Nearly black platforms
-        blades: "#6B8E9F"              // Steel blue blades (cold steel)
-      },
-      // Level 1 colors (word section)
-      "level-word.1": {
-        background: "#3E3E3E",         // Dark gray (foggy gloom)
-        platform: "#1A1A1A",           // Nearly black platforms
-        blades: "#6B8E9F"              // Steel blue blades (cold steel)
-      },
-      // Level 2 colors (word section)
-      "level-word.2": {
-        background: "#3E3E3E",         // Dark gray (foggy gloom)
-        platform: "#1A1A1A",           // Nearly black platforms
-        blades: "#6B8E9F"              // Steel blue blades (cold steel)
-      },
-      // Level 3 colors (word section)
-      "level-word.3": {
-        background: "#3E3E3E",         // Dark gray (foggy gloom)
-        platform: "#1A1A1A",           // Nearly black platforms
-        blades: "#6B8E9F"              // Steel blue blades (cold steel)
-      },
-      // Level 4 colors (word section)
-      "level-word.4": {
-        background: "#3E3E3E",         // Dark gray (foggy gloom)
-        platform: "#1A1A1A",           // Nearly black platforms
-        blades: "#6B8E9F"              // Steel blue blades (cold steel)
-      },
-      
       // Splash/menu colors
       menu: {
-        background: "#191919",         // Dark gray background
-        gridLines: "#323232",          // Grid lines
-        titleBase: "#FF8C00",          // Title base color
-        startButton: "#FF6432",        // Ready button color
-        muteText: "#FFA500",           // Mute text color
-        dividerLine: "#FF8C00",        // Divider line
+        platformColor: "#1A1A1A"       // Platform color (for menu background)
       },
-      
       // Ready screen colors
       ready: {
-        background: "#191919",         // Dark background      
-        title: "#FF8C00",              // Orange title (hero color)
-        text: "#ff930e",               // Yellow-orange for story lines (lighter, more yellow)
+        background: "#191919",         // Dark background
         fireflies: "#FF8C00",          // Hero color for fireflies
-        hint: "#969696",               // Hint color
+        hint: "#969696"                // Hint color
       },
-      
       // Hero colors (for procedural generation)
       hero: {
         body: "#FF8C00",               // Orange body color
         outline: "#000000",            // Black outline
         eyeWhite: "#FFFFFF",           // Eye white
-        eyePupil: "#000000",           // Pupil
+        eyePupil: "#000000"            // Pupil
       },
-      
       // Anti-hero colors
       antiHero: {
         body: "#8B5A50",               // Reddish-brown
         outline: "#000000",            // Black outline
         eyeWhite: "#FFFFFF",           // Eye white
-        eyePupil: "#000000",           // Pupil
-      },
-      
-      // Section colors for menu anti-heroes
-      sections: {
-        word: {
-          body: "#DC143C",             // Crimson red
-          outline: "#8B0000",          // Dark red
-          lightning: "#DC143C"
-        },
-        touch: {
-          body: "#FF6B35",             // Orange-red
-          outline: "#CC4400",          // Dark orange
-          lightning: "#FF6B35"
-        },
-        feel: {
-          body: "#FFD700",             // Gold
-          outline: "#B8860B",          // Dark goldenrod
-          lightning: "#FFD700"
-        },
-        mind: {
-          body: "#4ECDC4",             // Turquoise
-          outline: "#2C7A7B",          // Dark teal
-          lightning: "#4ECDC4"
-        },
-        stress: {
-          body: "#9B59B6",             // Purple
-          outline: "#6C3483",          // Dark purple
-          lightning: "#9B59B6"
-        },
-        time: {
-          body: "#34495E",             // Dark blue-gray
-          outline: "#1C2833",          // Very dark blue
-          lightning: "#34495E"
-        }
+        eyePupil: "#000000"            // Pupil
       }
-    },
-    //
-    // Flying words/letters configuration
-    //
-    flyingWords: {
-      letterToWordRatio: 0.6  // 75% letters, 25% words (0.0 = all words, 1.0 = all letters)
     },
     //
     // Z-indices (layers)

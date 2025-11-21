@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -44,9 +44,9 @@ export function sceneLevel2(k) {
       levelNumber: 3,  // Show 3 red blades in indicator
       nextLevel: 'level-word.3',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.visual.colors['level-word.2'].blades,
+      levelTitleColor: CFG.visual.colors.word.blades,
       subTitle: "words are blades that never rust",
-      subTitleColor: CFG.visual.colors['level-word.2'].blades,
+      subTitleColor: CFG.visual.colors.word.blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -104,7 +104,7 @@ export function sceneLevel2(k) {
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.visual.colors['level-word.2'].platform,
+      color: CFG.visual.colors.word.platform,
       currentLevel: 'level-word.2',
       sfx: sound
     })
@@ -115,7 +115,7 @@ export function sceneLevel2(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.visual.colors['level-word.2'].platform,
+      color: CFG.visual.colors.word.platform,
       currentLevel: 'level-word.2',
       sfx: sound
     })

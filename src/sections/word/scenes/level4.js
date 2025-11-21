@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
@@ -32,9 +32,9 @@ export function sceneLevel4(k) {
       nextLevel: 'word-complete',
       skipPlatforms: true,
       levelTitle: "words like blades",
-      levelTitleColor: CFG.visual.colors['level-word.4'].blades,
+      levelTitleColor: CFG.visual.colors.word.blades,
       subTitle: "words are blades that leave invisible wounds",
-      subTitleColor: CFG.visual.colors['level-word.4'].blades,
+      subTitleColor: CFG.visual.colors.word.blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -45,7 +45,7 @@ export function sceneLevel4(k) {
     })
     
     // Create custom platforms with pit in the middle
-    const pitInfo = createCustomPlatforms(k, CFG.visual.colors['level-word.4'].platform)
+    const pitInfo = createCustomPlatforms(k, CFG.visual.colors.word.platform)
     
     //
     // Create flying words for atmosphere (constrained to narrow pit area between walls)
@@ -80,7 +80,7 @@ export function sceneLevel4(k) {
       k.pos(pitInfo.centerX - pitInfo.width / 2, pitBottomY),
       k.area(),
       k.body({ isStatic: true }),
-      getColor(k, CFG.visual.colors['level-word.4'].platform),
+      getColor(k, CFG.visual.colors.word.platform),
       CFG.game.platformName
     ])
     

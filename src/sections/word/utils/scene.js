@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import { getColor, getRGB } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
@@ -190,9 +190,9 @@ export function initScene(config) {
     antiHeroY = null
   } = config
   
-  // Use levelName-based colors if not explicitly provided
-  const bgColor = backgroundColor || (levelName && CFG.visual.colors[levelName]?.background)
-  const pfColor = platformColor || (levelName && CFG.visual.colors[levelName]?.platform)
+  // Use word section colors if not explicitly provided
+  const bgColor = backgroundColor || CFG.visual.colors.word.background
+  const pfColor = platformColor || CFG.visual.colors.word.platform
   //
   // Set gravity
   //

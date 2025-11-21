@@ -1,4 +1,4 @@
-import { CFG } from '../../../cfg.js'
+import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as FlyingWords from '../components/flying-words.js'
@@ -70,9 +70,9 @@ export function sceneLevel0(k) {
       levelNumber: 1,  // Show 1 red blade in indicator
       nextLevel: 'level-word.1',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.visual.colors['level-word.0'].blades,
+      levelTitleColor: CFG.visual.colors.word.blades,
       subTitle: "some words are sharper than any blade...",
-      subTitleColor: CFG.visual.colors['level-word.0'].blades,
+      subTitleColor: CFG.visual.colors.word.blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,

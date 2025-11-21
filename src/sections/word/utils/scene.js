@@ -191,8 +191,8 @@ export function initScene(config) {
   } = config
   
   // Use word section colors if not explicitly provided
-  const bgColor = backgroundColor || CFG.visual.colors.word.background
-  const pfColor = platformColor || CFG.visual.colors.word.platform
+  const bgColor = backgroundColor || CFG.visual.colors.background
+  const pfColor = platformColor || CFG.visual.colors.platform
   //
   // Set gravity
   //

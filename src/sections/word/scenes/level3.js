@@ -41,9 +41,9 @@ export function sceneLevel3(k) {
       levelNumber: 4,  // Show 4 red blades in indicator
       nextLevel: 'level-word.4',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.visual.colors.word.blades,
+      levelTitleColor: CFG.visual.colors.blades,
       subTitle: "when feelings grow dull, words become sharper",
-      subTitleColor: CFG.visual.colors.word.blades,
+      subTitleColor: CFG.visual.colors.blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -101,7 +101,7 @@ export function sceneLevel3(k) {
       x: movingPlatform1X,
       y: platformY,
       hero,
-      color: CFG.visual.colors.word.platform,
+      color: CFG.visual.colors.platform,
       currentLevel: 'level-word.3',
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
@@ -114,7 +114,7 @@ export function sceneLevel3(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.visual.colors.word.platform,
+      color: CFG.visual.colors.platform,
       currentLevel: 'level-word.3',
       jumpToDisableBlades: false,  // Normal mode: timer-based (4 seconds)
       autoOpen: false,  // Triggered by hero proximity
@@ -129,7 +129,7 @@ export function sceneLevel3(k) {
       k,
       y: textY,
       hero,
-      color: CFG.visual.colors.word.blades,
+      color: CFG.visual.colors.blades,
       sfx: sound,
       currentLevel: 'level-word.3'
     })

@@ -74,7 +74,7 @@ export function create(config) {
     orientation = ORIENTATIONS.FLOOR,
     onHit = null,
     sfx = null,
-    color = CFG.visual.colors.word.blades,
+    color = CFG.visual.colors.blades,
     bladeCount = 3,
     scale = 1,
     zIndex = CFG.visual.zIndex.platforms
@@ -154,7 +154,7 @@ export function create(config) {
  */
 export function loadSprites(k) {
   const blockSize = getBladeBlockSize(k)
-  const defaultColor = CFG.visual.colors.word.blades  // Default blade color
+  const defaultColor = CFG.visual.colors.blades  // Default blade color
   const defaultBladeCount = 3  // Default 3 pyramids
   Object.values(ORIENTATIONS).forEach(orientation => {
     const spriteData = createBladeSprite(orientation, blockSize, defaultColor, defaultBladeCount)

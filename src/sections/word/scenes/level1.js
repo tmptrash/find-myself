@@ -37,9 +37,9 @@ export function sceneLevel1(k) {
       levelNumber: 2,  // Show 2 red blades in indicator
       nextLevel: 'level-word.2',
       levelTitle: "words like blades",
-      levelTitleColor: CFG.visual.colors.word.blades,
+      levelTitleColor: CFG.visual.colors.blades,
       subTitle: "sometimes words cut deeper than blades...",
-      subTitleColor: CFG.visual.colors.word.blades,
+      subTitleColor: CFG.visual.colors.blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -90,7 +90,7 @@ export function sceneLevel1(k) {
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.visual.colors.word.platform,
+      color: CFG.visual.colors.platform,
       currentLevel: 'level-word.1',
       sfx: sound
     })

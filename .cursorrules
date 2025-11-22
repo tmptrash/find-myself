@@ -322,8 +322,6 @@ export function sceneMenu(k) {
 ```
 
 ### Group Related Functionality
-- Keep related functions together
-- Organize by feature, not by type
 - Use section comments to separate concerns
 - If you add similar code into two or more modules put them into separate module and reuse
 - If we have an import from the same file, group them into one import like this:
@@ -584,7 +582,7 @@ public/
 - ❌ Write comments in languages other than English
 - ❌ Put exported functions at the bottom of files
 - ❌ Put comments separated by many = symbol
-- ❌ Pput function inside other function. Make it private
+- ❌ Put function inside other function. Make it private
 - ❌ Use console.log() function
 - ❌ Put magic (hard-coded) numbers and strings.
 - ❌ Write functions inside other functions
@@ -608,6 +606,7 @@ public/
 - ✅ Put exported functions at the top
 - ✅ For the one line arrow function use one line short function version without {} symbols
 - ✅ Comment all code you write
+- ✅ Put all private functions at the bottom
 
 ---
 

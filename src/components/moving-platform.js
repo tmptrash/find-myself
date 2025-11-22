@@ -4,12 +4,12 @@ import * as Blades from '../sections/word/components/blades.js'
 import * as Sound from '../utils/sound.js'
 
 // Platform parameters
-const DETECTION_DISTANCE = 100 // Distance to detect hero
-const DROP_DURATION = 0.2      // Time to drop down (seconds)
+const DETECTION_DISTANCE = 100  // Distance to detect hero
+const DROP_DURATION = 0.2       // Time to drop down (seconds)
 const SPIKE_APPEAR_DELAY = 0.15 // Delay before blades appear after drop starts (seconds)
-const RAISE_DELAY = 2.0        // Time before raising back up (seconds)
-const RAISE_TIMEOUT = 6.0      // Maximum time platform stays down (seconds)
-const RAISE_DURATION = 0.5     // Time to raise up (seconds)
+const RAISE_DELAY = 2.0         // Time before raising back up (seconds)
+const RAISE_TIMEOUT = 6.0       // Maximum time platform stays down (seconds)
+const RAISE_DURATION = 0.5      // Time to raise up (seconds)
 
 /**
  * Creates a moving platform that drops when hero approaches
@@ -117,7 +117,7 @@ export function create(config) {
   }
   
   // Update logic
-  platform.onUpdate(() => updatePlatform(inst))
+  platform.onUpdate(() => onUpdate(inst))
   
   return inst
 }
@@ -126,7 +126,7 @@ export function create(config) {
  * Update platform movement and detection
  * @param {Object} inst - Platform instance
  */
-function updatePlatform(inst) {
+function onUpdate(inst) {
   const { k, platform, blades, hero, originalY, dropDistance, sfx, jumpToDisableBlades, platformWidth } = inst
   
   // Check distance to hero (only check X distance, and only from left side)

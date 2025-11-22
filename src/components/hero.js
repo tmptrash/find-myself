@@ -334,77 +334,15 @@ export function spawn(inst) {
     const startX = x + k.rand(-100, 100)
     const startY = y + k.rand(-100, 100)
     //
-    // Parse hex color to RGB
-    //
-    const [r, g, b] = parseHex(particleColor)
-    //
     // Random shape parameters
     //
     const shapeType = k.choose(PARTICLE_SHAPES)
     const rotation = k.rand(0, 360)
-
-    let pWidth, pHeight, oWidth, oHeight
-
-    if (shapeType === 'square') {
-      pWidth = pHeight = particleSize * scale
-      oWidth = oHeight = outlineSize * scale
-    } else if (shapeType === 'rect_h') {
-      //
-      // Horizontal rectangle
-      //
-      pWidth = particleSize * scale * k.rand(1.3, 1.8)
-      pHeight = particleSize * scale * k.rand(0.6, 0.8)
-      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
-      oHeight = pHeight + 1 * scale
-    } else if (shapeType === 'rect_v') {
-      //
-      // Vertical rectangle
-      //
-      pWidth = particleSize * scale * k.rand(0.6, 0.8)
-      pHeight = particleSize * scale * k.rand(1.3, 1.8)
-      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
-      oHeight = pHeight + 1 * scale
-    } else {
-      //
-      // Small square
-      //
-      pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
-      oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
-    }
     //
-    // Create a single game object that will draw both outline and colored part
+    // Create particle using helper function
     //
-    const particle = k.add([
-      k.pos(startX, startY),
-      k.anchor("center"),
-      k.rotate(rotation),
-      k.z(CFG.visual.zIndex.assemblyParticles),
-      "assemblyParticle",
-      {
-        draw() {
-          //
-          // Draw black outline first (behind)
-          //
-          k.drawRect({
-            width: oWidth,
-            height: oHeight,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: getRGB(k, CFG.visual.colors.outline)
-          })
-          //
-          // Draw colored particle on top
-          //
-          k.drawRect({
-            width: pWidth,
-            height: pHeight,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: k.rgb(r, g, b)
-          })
-        }
-      }
-    ])
+    const particle = createParticleWithOutline(k, startX, startY, particleColor, shapeType, rotation, particleSize, scale)
+    particle.use("assemblyParticle")
     //
     // Assign target point from the outline (cycle through points)
     //
@@ -423,10 +361,12 @@ export function spawn(inst) {
   // Animate particles to center
   //
   let particlesGathered = false
+  let soundPlayed = false
 
   const updateHandler = k.onUpdate(() => {
     if (!particlesGathered) {
       let allGathered = true
+      let allNearTarget = true
 
       particles.forEach(particle => {
         if (!particle.exists()) return
@@ -441,7 +381,20 @@ export function spawn(inst) {
           particle.pos.x += (dx / dist) * moveSpeed
           particle.pos.y += (dy / dist) * moveSpeed
         }
+        //
+        // Check if particles are close to target (for early sound trigger)
+        //
+        if (dist > 20) {
+          allNearTarget = false
+        }
       })
+      //
+      // Play click sound when particles are close but not yet fully assembled
+      //
+      if (!soundPlayed && allNearTarget && sfx) {
+        Sound.playSpawnClick(sfx)
+        soundPlayed = true
+      }
 
       if (allGathered) {
         particlesGathered = true
@@ -459,12 +412,6 @@ export function spawn(inst) {
         // Mark hero as spawned (allow controls)
         //
         inst.isSpawned = true
-        //
-        // Play click sound after assembly completes
-        //
-        if (sfx) {
-          Sound.playSpawnClick(sfx)
-        }
         //
         // Cancel update
         //
@@ -1007,10 +954,6 @@ function onAnnihilationCollide(inst) {
     //
     const useBodyColor = k.rand(0, 1) > 0.2
     const particleColorHex = useBodyColor ? antiHeroBodyColor : antiHeroOutlineColor
-    //
-    // Parse hex color to RGB
-    //
-    const [r, g, b] = parseHex(particleColorHex)
 
     const particleX = targetPos.x + k.rand(-20, 20)
     const particleY = targetPos.y + k.rand(-20, 20)
@@ -1019,73 +962,15 @@ function onAnnihilationCollide(inst) {
     //
     const shapeType = k.choose(PARTICLE_SHAPES)
     const rotation = k.rand(0, 360)
-
-    let pWidth, pHeight, oWidth, oHeight
-
-    if (shapeType === 'square') {
-      pWidth = pHeight = particleSize * scale
-      oWidth = oHeight = outlineSize * scale
-    } else if (shapeType === 'rect_h') {
-      //
-      // Horizontal rectangle
-      //
-      pWidth = particleSize * scale * k.rand(1.3, 1.8)
-      pHeight = particleSize * scale * k.rand(0.6, 0.8)
-      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
-      oHeight = pHeight + 1 * scale
-    } else if (shapeType === 'rect_v') {
-      //
-      // Vertical rectangle
-      //
-      pWidth = particleSize * scale * k.rand(0.6, 0.8)
-      pHeight = particleSize * scale * k.rand(1.3, 1.8)
-      oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
-      oHeight = pHeight + 1 * scale
-    } else {
-      //
-      // Small square
-      //
-      pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
-      oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
-    }
     //
-    // Create a single game object that will draw both outline and colored part
+    // Create particle using helper function
     //
-    const particle = k.add([
-      k.pos(particleX, particleY),
-      k.anchor("center"),
-      k.rotate(rotation),
-      k.z(CFG.visual.zIndex.assemblyParticles),
-      {
-        draw() {
-          //
-          // Draw black outline first (behind)
-          //
-          k.drawRect({
-            width: oWidth,
-            height: oHeight,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: getRGB(k, CFG.visual.colors.outline)
-          })
-          //
-          // Draw colored particle on top
-          //
-          k.drawRect({
-            width: pWidth,
-            height: pHeight,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: k.rgb(r, g, b)
-          })
-        }
-      }
-    ])
+    const particle = createParticleWithOutline(k, particleX, particleY, particleColorHex, shapeType, rotation, particleSize, scale)
     //
     // Random direction for explosion (scatter in all directions)
     //
     const angle = k.rand(0, Math.PI * 2)
-    const speed = k.rand(250, 500)  // High speed explosion
+    const speed = k.rand(250, 500)
 
     particle.vx = Math.cos(angle) * speed
     particle.vy = Math.sin(angle) * speed
@@ -1827,4 +1712,69 @@ function createEyeParticles(inst, centerX, centerY) {
     particles.push(eyeWhite)
   }
   return particles
+}
+//
+// Helper function to calculate particle dimensions based on shape type
+//
+function getParticleDimensions(k, shapeType, particleSize, scale) {
+  const outlineSize = particleSize + 1
+  let pWidth, pHeight, oWidth, oHeight
+
+  if (shapeType === 'square') {
+    pWidth = pHeight = particleSize * scale
+    oWidth = oHeight = outlineSize * scale
+  } else if (shapeType === 'rect_h') {
+    pWidth = particleSize * scale * k.rand(1.3, 1.8)
+    pHeight = particleSize * scale * k.rand(0.6, 0.8)
+    oWidth = pWidth + 1 * scale
+    oHeight = pHeight + 1 * scale
+  } else if (shapeType === 'rect_v') {
+    pWidth = particleSize * scale * k.rand(0.6, 0.8)
+    pHeight = particleSize * scale * k.rand(1.3, 1.8)
+    oWidth = pWidth + 1 * scale
+    oHeight = pHeight + 1 * scale
+  } else {
+    pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
+    oWidth = oHeight = pWidth + 1 * scale
+  }
+
+  return { pWidth, pHeight, oWidth, oHeight }
+}
+//
+// Helper function to create a particle with outline
+//
+function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, particleSize, scale) {
+  const [r, g, b] = parseHex(colorHex)
+  const { pWidth, pHeight, oWidth, oHeight } = getParticleDimensions(k, shapeType, particleSize, scale)
+
+  return k.add([
+    k.pos(x, y),
+    k.anchor("center"),
+    k.rotate(rotation),
+    k.z(CFG.visual.zIndex.assemblyParticles),
+    {
+      draw() {
+        //
+        // Draw outline first (behind)
+        //
+        k.drawRect({
+          width: oWidth,
+          height: oHeight,
+          pos: k.vec2(0, 0),
+          anchor: "center",
+          color: getRGB(k, CFG.visual.colors.outline)
+        })
+        //
+        // Draw colored particle on top
+        //
+        k.drawRect({
+          width: pWidth,
+          height: pHeight,
+          pos: k.vec2(0, 0),
+          anchor: "center",
+          color: k.rgb(r, g, b)
+        })
+      }
+    }
+  ])
 }

@@ -420,7 +420,7 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
     k.pos(centerX, textY),
     k.anchor("center"),
     getColor(k, color),
-    k.outline(3, getRGB(k, CFG.visual.colors.outlineTextColor)),
+    k.outline(3, getRGB(k, CFG.visual.colors.outline)),
     k.z(CFG.visual.zIndex.platforms + 1),  // In front of platforms
   ])
   
@@ -433,7 +433,7 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
       k.pos(centerX, textY + 30),  // 30px below title
       k.anchor("center"),
       getColor(k, subColor),
-      k.outline(2, getRGB(k, CFG.visual.colors.outlineTextColor)),
+      k.outline(2, getRGB(k, CFG.visual.colors.outline)),
       k.z(CFG.visual.zIndex.platforms + 1),  // In front of platforms
     ])
   }

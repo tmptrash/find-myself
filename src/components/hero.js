@@ -14,7 +14,9 @@ const COLLISION_OFFSET_Y = 0
 // Hero parameters
 //
 const HERO_SCALE = 3
+const SPRITE_SIZE = 32
 const RUN_ANIM_SPEED = 0.03333
+const PARTICLE_SHAPES = ['square', 'rect_h', 'rect_v', 'small_square']
 const RUN_FRAME_COUNT = 3
 const JUMP_FRAME_COUNT = 6
 const JUMP_SQUASH_TIME = 0.03
@@ -34,6 +36,7 @@ const DUST_PARTICLE_LIFETIME = 0.4
 // Death animation timing
 //
 const DEATH_ANIMATION_DURATION = 2.3
+const DEATH_PARTICLE_POINTS = 20
 
 export const HEROES = {
   HERO: 'hero',
@@ -292,18 +295,17 @@ export function spawn(inst) {
   // Use custom bodyColor if provided, otherwise use default from config
   const colors = CFG.visual.colors
   const particleColor = bodyColor || (type === HEROES.HERO ? colors.hero.body : colors.antiHero.body)
-  
   //
   // Generate target points along character outline
-  // Character is approximately 32x32 pixels scaled by HERO_SCALE (3)
+  // Character is approximately SPRITE_SIZE x SPRITE_SIZE pixels scaled by HERO_SCALE
   //
-  const charSize = 32 * HERO_SCALE
+  const charSize = SPRITE_SIZE * HERO_SCALE
   const targetPoints = []
-  
+  //
   // Generate points around the perimeter of the character
-  const pointCount = 20
-  for (let i = 0; i < pointCount; i++) {
-    const angle = (i / pointCount) * Math.PI * 2
+  //
+  for (let i = 0; i < DEATH_PARTICLE_POINTS; i++) {
+    const angle = (i / DEATH_PARTICLE_POINTS) * Math.PI * 2
     const radius = charSize / 2 * 0.5  // Reduce radius by 50% (smaller outline)
     const offsetX = Math.cos(angle) * radius * k.rand(0.5, 1)
     const offsetY = Math.sin(angle) * radius * k.rand(0.5, 1)
@@ -313,27 +315,30 @@ export function spawn(inst) {
       y: y + offsetY
     })
   }
-  
+  //
   // Create particles for assembly effect
+  //
   const particles = []
-  const particleCount = 20
+  //
+  // Scale and particle size
+  //
   const scale = 2
   const particleSize = 4
-  const outlineSize = particleSize + 1  // Reduced from +2 to +1 (thinner outline)
-  
-  for (let i = 0; i < particleCount; i++) {
+  const outlineSize = particleSize + 1
+  //
+  // Create particles
+  //
+  for (let i = 0; i < DEATH_PARTICLE_POINTS; i++) {
     const startX = x + k.rand(-100, 100)
     const startY = y + k.rand(-100, 100)
-    
     //
     // Parse hex color to RGB
     //
     const [r, g, b] = parseHex(particleColor)
-    
     //
     // Random shape parameters
     //
-    const shapeType = k.choose(['square', 'rect_h', 'rect_v', 'small_square'])
+    const shapeType = k.choose(PARTICLE_SHAPES)
     const rotation = k.rand(0, 360)
     
     let pWidth, pHeight, oWidth, oHeight
@@ -358,7 +363,6 @@ export function spawn(inst) {
       pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
       oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
     }
-    
     //
     // Create a single game object that will draw both outline and colored part
     //
@@ -366,7 +370,7 @@ export function spawn(inst) {
       k.pos(startX, startY),
       k.anchor("center"),
       k.rotate(rotation),
-      k.z(101),
+      k.z(CFG.visual.zIndex.assemblyParticles),
       "assemblyParticle",
       {
         draw() {
@@ -853,7 +857,7 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
       color,
       k.opacity(0.9),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.player + 1),  // Above player to be visible
+      k.z(CFG.visual.zIndex.playerAbove),
     ])
     
     //
@@ -977,8 +981,10 @@ function onAnnihilationCollide(inst) {
   //
   // Get anti-hero colors (use custom bodyColor if provided, otherwise use default)
   //
+  // Anti-hero colors
+  //
   const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.visual.colors.antiHero.body
-  const antiHeroOutlineColor = CFG.visual.colors.antiHero.outline
+  const antiHeroOutlineColor = CFG.visual.colors.outline
   
   const scale = 2
   const particleSize = 4
@@ -1002,7 +1008,7 @@ function onAnnihilationCollide(inst) {
     //
     // Random shape parameters
     //
-    const shapeType = k.choose(['square', 'rect_h', 'rect_v', 'small_square'])
+    const shapeType = k.choose(PARTICLE_SHAPES)
     const rotation = k.rand(0, 360)
     
     let pWidth, pHeight, oWidth, oHeight
@@ -1035,7 +1041,7 @@ function onAnnihilationCollide(inst) {
       k.pos(particleX, particleY),
       k.anchor("center"),
       k.rotate(rotation),
-      k.z(101),
+      k.z(CFG.visual.zIndex.assemblyParticles),
       {
         draw() {
           //
@@ -1345,17 +1351,15 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   }
   
   //
+  //
   // Outline is always black
   //
-  const outlineColor = '000000'
-  
-  const size = 32
+  const outlineColor = CFG.visual.colors.outline.replace('#', '')
   const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
+  canvas.width = SPRITE_SIZE
+  canvas.height = SPRITE_SIZE
   const ctx = canvas.getContext('2d')
-  
-  ctx.clearRect(0, 0, size, size)
+  ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
   
   // Base parameters for different animations
   let headY = 6
@@ -1637,8 +1641,8 @@ function getParticleColors(inst) {
   const { type } = inst
   const colors = CFG.visual.colors
   return type === HEROES.HERO 
-    ? [colors.hero.body, colors.hero.outline]
-    : [colors.antiHero.body, colors.antiHero.outline]
+    ? [colors.hero.body, colors.outline]
+    : [colors.antiHero.body, colors.outline]
 }
 
 /**
@@ -1669,7 +1673,7 @@ function createBodyParticles(inst, centerX, centerY) {
       k.pos(centerX, centerY),
       k.anchor("center"),
       k.rotate(rotation),
-      k.z(CFG.visual.zIndex.player - 1),
+      k.z(CFG.visual.zIndex.playerShadow),
       k.area(),
       k.body(),
       k.opacity(0)
@@ -1771,7 +1775,7 @@ function createEyeParticles(inst, centerX, centerY) {
       k.pos(centerX, centerY),
       k.color(255, 255, 255),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.player + 1),
+      k.z(CFG.visual.zIndex.playerAbove),
       k.area(),
       k.body()
     ])
@@ -1783,7 +1787,7 @@ function createEyeParticles(inst, centerX, centerY) {
       k.pos(0, 0),
       k.color(0, 0, 0),
       k.anchor("center"),
-      k.z(1)
+      k.z(CFG.visual.zIndex.eyePupil)
     ])
     //
     // Set initial velocity

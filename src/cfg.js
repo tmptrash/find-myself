@@ -48,7 +48,7 @@ export const CFG = {
     },
     colors: {
       background: "#000000",
-      outlineTextColor: "#000000",
+      outline: "#000000",
       // Common colors
       levelIndicator: {
         active: "#DC143C",             // Red for active/completed levels
@@ -67,14 +67,12 @@ export const CFG = {
       // Hero colors (for procedural generation)
       hero: {
         body: "#FF8C00",               // Orange body color
-        outline: "#000000",            // Black outline
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000"            // Pupil
       },
       // Anti-hero colors
       antiHero: {
         body: "#8B5A50",               // Reddish-brown
-        outline: "#000000",            // Black outline
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000"            // Pupil
       }
@@ -87,6 +85,10 @@ export const CFG = {
       flyingWords: -50,
       platforms: 0,
       player: 10,
+      playerShadow: 9,
+      playerAbove: 11,
+      assemblyParticles: 101,
+      eyePupil: 1,
       ui: 100
     }
   },

@@ -116,10 +116,57 @@ export function sceneLevel3(k) {
       hero,
       color: CFG.visual.colors.platform,
       currentLevel: 'level-word.3',
-      jumpToDisableBlades: false,  // Normal mode: timer-based (4 seconds)
+      jumpToDisableBlades: false,  // Normal mode: timer-based (5 seconds)
       autoOpen: false,  // Triggered by hero proximity
-      sfx: sound
+      sfx: sound,
+      raiseTimeout: 6.0  // Close 1 second later than default (4 seconds)
     })
+    //
+    // Create static blades after first pit to prevent jumping over
+    //
+    const firstPitRightEdge = movingPlatform1X + bladeWidth / 2
+    const staticBladesX = firstPitRightEdge + singleBladeWidth * 2  // Position 2 pyramids after pit
+    const staticBladesY = platformY - bladeHeight * 0.5  // Extend up from platform level
+    //
+    // Create tall static blades (always visible, prevent jumping over pit)
+    //
+    const staticBlades = Blades.create({
+      k,
+      x: staticBladesX,
+      y: staticBladesY,
+      hero,
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(staticBlades, 'level-word.3'),
+      sfx: sound,
+      color: CFG.visual.colors.blades
+    })
+    //
+    // Make blades visible immediately
+    //
+    Blades.show(staticBlades)
+    //
+    // Create static blades after second pit to prevent jumping over
+    //
+    const secondPitRightEdge = movingPlatform2X + bladeWidth / 2
+    const staticBlades2X = secondPitRightEdge + singleBladeWidth * 2  // Position 2 pyramids after pit
+    const staticBlades2Y = platformY - bladeHeight * 0.5  // Extend up from platform level
+    //
+    // Create tall static blades (always visible, prevent jumping over pit)
+    //
+    const staticBlades2 = Blades.create({
+      k,
+      x: staticBlades2X,
+      y: staticBlades2Y,
+      hero,
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => Blades.handleCollision(staticBlades2, 'level-word.3'),
+      sfx: sound,
+      color: CFG.visual.colors.blades
+    })
+    //
+    // Make second blades visible immediately
+    //
+    Blades.show(staticBlades2)
     
     // Create blade arm that extends from the left (positioned above bottom platform at hero's mid-body height)
     const bottomPlatformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720

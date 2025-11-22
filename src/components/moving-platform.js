@@ -8,7 +8,7 @@ const DETECTION_DISTANCE = 100 // Distance to detect hero
 const DROP_DURATION = 0.2      // Time to drop down (seconds)
 const SPIKE_APPEAR_DELAY = 0.15 // Delay before blades appear after drop starts (seconds)
 const RAISE_DELAY = 2.0        // Time before raising back up (seconds)
-const RAISE_TIMEOUT = 4.0      // Maximum time platform stays down (seconds)
+const RAISE_TIMEOUT = 6.0      // Maximum time platform stays down (seconds)
 const RAISE_DURATION = 0.5     // Time to raise up (seconds)
 
 /**
@@ -23,10 +23,22 @@ const RAISE_DURATION = 0.5     // Time to raise up (seconds)
  * @param {boolean} [config.jumpToDisableBlades=false] - If true, blades disappear when hero jumps down
  * @param {boolean} [config.autoOpen=false] - If true, platform opens automatically on level start
  * @param {Object} [config.sfx] - Sound instance
+ * @param {number} [config.raiseTimeout] - Custom timeout before platform raises (seconds)
  * @returns {Object} Platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, color, currentLevel, jumpToDisableBlades = false, autoOpen = false, sfx = null } = config
+  const { 
+    k, 
+    x, 
+    y, 
+    hero, 
+    color, 
+    currentLevel, 
+    jumpToDisableBlades = false, 
+    autoOpen = false, 
+    sfx = null,
+    raiseTimeout = RAISE_TIMEOUT
+  } = config
   
   // Calculate platform dimensions based on blade width
   const platformWidth = Blades.getBladeWidth(k)
@@ -67,6 +79,7 @@ export function create(config) {
     hero,
     sfx,
     jumpToDisableBlades,
+    raiseTimeout,
     platformWidth,
     heroInitialY: hero.character.pos.y,  // Store hero's initial Y position
     originalY: y,
@@ -202,7 +215,7 @@ function updatePlatform(inst) {
       // 1. Minimum delay passed AND hero left the area, OR
       // 2. Maximum timeout reached (regardless of hero position)
       const shouldRaise = (inst.timer >= RAISE_DELAY && !heroStillNear) || 
-                          (inst.timer >= RAISE_TIMEOUT)
+                          (inst.timer >= inst.raiseTimeout)
       
       if (shouldRaise) {
         inst.state = 'disabled'  // Switch to disabled state (never activates again)

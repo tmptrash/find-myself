@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, getColor, parseHex } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, getColor, parseHex, getRGB } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { saveLastLevel } from '../utils/progress.js'
@@ -75,11 +75,12 @@ export function create(config) {
     addArms = false,       // If true, add simple vertical arms
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
-  
+
   const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
   //
   // Load sprites for this hero configuration
+  //
   // This will use cached sprites if already loaded
   //
   try {
@@ -99,7 +100,7 @@ export function create(config) {
   //
   const spritePrefix = `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
   const spriteName = `${spritePrefix}_0_0`
-  
+
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
   const collisionOffsetY = COLLISION_OFFSET_Y - hitboxPadding
   const collisionWidth = COLLISION_WIDTH + hitboxPadding * 2
@@ -121,7 +122,7 @@ export function create(config) {
     k.z(CFG.visual.zIndex.player),
   ])
   type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)
-  
+
   const inst = {
     character,
     k,
@@ -155,13 +156,14 @@ export function create(config) {
     isDying: false,
     isSpawned: false   // Flag to prevent controls before spawn completes
   }
-  
+  //
   // Check ground touch through collisions
+  //
   character.onCollide(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
   antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
-  
+
   return inst
 }
 
@@ -179,7 +181,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = 
   // Determine if called with inst or individual parameters
   //
   let k, heroType, color, mouth, arms
-  
+
   if (inst.k && inst.type !== undefined) {
     //
     // Called with inst-like object (has k and type properties)
@@ -287,16 +289,20 @@ export function spawn(inst) {
   const { k, character, type, sfx, bodyColor } = inst
   const x = character.pos.x
   const y = character.pos.y
-  
+  //
   // Hide character initially
+  //
   character.hidden = true
-  
+  //
   // Determine particle color based on type
+  //
   // Use custom bodyColor if provided, otherwise use default from config
+  //
   const colors = CFG.visual.colors
   const particleColor = bodyColor || (type === HEROES.HERO ? colors.hero.body : colors.antiHero.body)
   //
   // Generate target points along character outline
+  //
   // Character is approximately SPRITE_SIZE x SPRITE_SIZE pixels scaled by HERO_SCALE
   //
   const charSize = SPRITE_SIZE * HERO_SCALE
@@ -309,7 +315,7 @@ export function spawn(inst) {
     const radius = charSize / 2 * 0.5  // Reduce radius by 50% (smaller outline)
     const offsetX = Math.cos(angle) * radius * k.rand(0.5, 1)
     const offsetY = Math.sin(angle) * radius * k.rand(0.5, 1)
-    
+
     targetPoints.push({
       x: x + offsetX,
       y: y + offsetY
@@ -340,26 +346,32 @@ export function spawn(inst) {
     //
     const shapeType = k.choose(PARTICLE_SHAPES)
     const rotation = k.rand(0, 360)
-    
+
     let pWidth, pHeight, oWidth, oHeight
-    
+
     if (shapeType === 'square') {
       pWidth = pHeight = particleSize * scale
       oWidth = oHeight = outlineSize * scale
     } else if (shapeType === 'rect_h') {
+      //
       // Horizontal rectangle
+      //
       pWidth = particleSize * scale * k.rand(1.3, 1.8)
       pHeight = particleSize * scale * k.rand(0.6, 0.8)
       oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
       oHeight = pHeight + 1 * scale
     } else if (shapeType === 'rect_v') {
+      //
       // Vertical rectangle
+      //
       pWidth = particleSize * scale * k.rand(0.6, 0.8)
       pHeight = particleSize * scale * k.rand(1.3, 1.8)
       oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
       oHeight = pHeight + 1 * scale
     } else {
+      //
       // Small square
+      //
       pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
       oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
     }
@@ -382,9 +394,8 @@ export function spawn(inst) {
             height: oHeight,
             pos: k.vec2(0, 0),
             anchor: "center",
-            color: k.rgb(0, 0, 0)
+            color: getRGB(k, CFG.visual.colors.outline)
           })
-          
           //
           // Draw colored particle on top
           //
@@ -398,7 +409,6 @@ export function spawn(inst) {
         }
       }
     ])
-    
     //
     // Assign target point from the outline (cycle through points)
     //
@@ -406,27 +416,29 @@ export function spawn(inst) {
     particle.targetX = targetPoint.x
     particle.targetY = targetPoint.y
     particle.speed = k.rand(200, 400)
-    
+
     particles.push(particle)
   }
-  
+  //
   // Play sweep sound at the start of assembly effect
+  //
   sfx && Sound.playSpawnSweep(sfx)
-  
+  //
   // Animate particles to center
+  //
   let particlesGathered = false
-  
+
   const updateHandler = k.onUpdate(() => {
     if (!particlesGathered) {
       let allGathered = true
-      
+
       particles.forEach(particle => {
         if (!particle.exists()) return
-        
+
         const dx = particle.targetX - particle.pos.x
         const dy = particle.targetY - particle.pos.y
         const dist = Math.sqrt(dx * dx + dy * dy)
-        
+
         if (dist > 5) {
           allGathered = false
           const moveSpeed = particle.speed * k.dt()
@@ -434,27 +446,32 @@ export function spawn(inst) {
           particle.pos.y += (dy / dist) * moveSpeed
         }
       })
-      
+
       if (allGathered) {
         particlesGathered = true
-        
+        //
         // Remove particles
+        //
         particles.forEach(p => {
           if (p.exists()) k.destroy(p)
         })
-        
+        //
         // Show hero
+        //
         character.hidden = false
-        
+        //
         // Mark hero as spawned (allow controls)
+        //
         inst.isSpawned = true
-        
+        //
         // Play click sound after assembly completes
+        //
         if (sfx) {
           Sound.playSpawnClick(sfx)
         }
-        
+        //
         // Cancel update
+        //
         updateHandler.cancel()
       }
     }
@@ -478,14 +495,12 @@ function onUpdate(inst) {
     inst.character.flipX = inst.direction === -1
     return
   }
-  
   //
   // Handle movement input (check if spawned first)
   //
   if (inst.isSpawned) {
     const isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
     const isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
-    
     //
     // Apply movement only once per frame, prioritizing last pressed direction
     //
@@ -497,21 +512,21 @@ function onUpdate(inst) {
       inst.direction = 1
     }
   }
-  
+  //
   // Determine movement state (only for controllable characters)
-  const isMoving = isAnyKeyDown(inst.k, CFG.controls.moveLeft) || 
+  //
+  const isMoving = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
     isAnyKeyDown(inst.k, CFG.controls.moveRight)
-  
+  //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
+  //
   const isGrounded = inst.character.isGrounded()
-  
   //
   // Handle pre-jump squash animation (only when grounded)
   //
   if (inst.isSquashing && isGrounded) {
     inst.squashTimer += inst.k.dt()
     const prefix = inst.spritePrefix || inst.type
-    
     //
     // Switch between frame 0 (squash) and frame 1 (stretch) while on ground
     //
@@ -526,6 +541,7 @@ function onUpdate(inst) {
     } else {
       //
       // Second part: start stretching while still on ground (frame 1)
+      //
       // This creates anticipation before the actual jump
       //
       if (inst.jumpFrame !== 1) {
@@ -533,7 +549,7 @@ function onUpdate(inst) {
         inst.character.use(inst.k.sprite(`${prefix}-jump-1`))
       }
     }
-    
+
     if (inst.squashTimer >= JUMP_SQUASH_TIME) {
       //
       // Squash animation complete - actually jump!
@@ -547,12 +563,10 @@ function onUpdate(inst) {
       // Keep frame 1 (stretch) for smooth transition to air
       //
     }
-    
     //
     // Update direction during squash
     //
     inst.character.flipX = inst.direction === -1
-    
     //
     // Don't process other animations during squash
     //
@@ -565,18 +579,23 @@ function onUpdate(inst) {
     //
     const prefix = inst.spritePrefix || inst.type
     const velocity = inst.character.vel.y
-    
     //
     // Determine jump frame based on vertical velocity
+    //
     // Frame 0: squash (pre-jump, on ground only)
+    //
     // Frame 1: stretch (ascending, first half) - velocity < -400
+    //
     // Frame 2: normal (approaching peak) - velocity -400 to -250
+    //
     // Frame 3: intermediate (near peak) - velocity -250 to -100
+    //
     // Frame 4: squash (at peak and early descent) - velocity -100 to 200
+    //
     // Frame 5: normal (landing) - after grounding
     //
     let targetFrame = inst.jumpFrame
-    
+
     if (velocity < -400) {
       //
       // First half of ascent - stretched (frame 1)
@@ -603,7 +622,6 @@ function onUpdate(inst) {
       //
       targetFrame = 2
     }
-    
     //
     // Update sprite only if frame changed
     //
@@ -611,7 +629,6 @@ function onUpdate(inst) {
       inst.jumpFrame = targetFrame
       inst.character.use(inst.k.sprite(`${prefix}-jump-${targetFrame}`))
     }
-    
     //
     // Mark that we're jumping
     //
@@ -622,7 +639,6 @@ function onUpdate(inst) {
       inst.wasJumping = true
       inst.jumpPhase = 'jumping'
     }
-    
     //
     // Update direction while in air
     //
@@ -642,10 +658,11 @@ function onUpdate(inst) {
       inst.squashTimer = 0
     }
   }
-  
+
   if (isMoving) {
     //
     // Running - switch frames smoothly (time-based animation)
+    //
     // Only reset animation if starting from idle (not from jump)
     //
     const prefix = inst.spritePrefix || inst.type
@@ -664,24 +681,29 @@ function onUpdate(inst) {
       inst.wasJumping = false
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
     }
-    
+
     inst.isRunning = true
     inst.runTimer += inst.k.dt()
     if (inst.runTimer > RUN_ANIM_SPEED) {
       inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
+      //
       // Step sound on frame 0 (when foot touches ground)
+      //
       if (inst.sfx && inst.runFrame === 0) {
         Sound.playStepSound(inst.sfx)
       }
     }
   } else {
+    //
     // Idle - with eye animation
+    //
     updateIdleAnimation(inst)
   }
-  
+  //
   // Mirror based on direction
+  //
   inst.character.flipX = inst.direction === -1
 }
 
@@ -690,42 +712,52 @@ function onUpdate(inst) {
  * @param {Object} inst - Hero instance
  */
 function updateIdleAnimation(inst) {
+  //
   // If just stopped running or just landed, instantly switch to idle
+  //
   if (inst.isRunning || inst.wasJumping) {
     inst.isRunning = false
     inst.wasJumping = false
     inst.runFrame = 0
     inst.runTimer = 0
+    //
     // Instantly switch to current idle sprite
+    //
     const roundedX = Math.round(inst.eyeOffsetX)
     const roundedY = Math.round(inst.eyeOffsetY)
     const spriteName = getSpriteName(inst, roundedX, roundedY)
     inst.character.use(inst.k.sprite(spriteName))
     inst.currentEyeSprite = spriteName
   }
-  
+  //
   // Eye animation - smooth movement
+  //
   inst.eyeTimer += inst.k.dt()
-  
+  //
   // Choose new target position
+  //
   if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
     inst.targetEyeX = inst.k.choose([-1, 0, 1])
     inst.targetEyeY = inst.k.choose([-1, 0, 1])
     inst.eyeTimer = 0
   }
-  
+  //
   // Smoothly interpolate to target position
+  //
   inst.eyeOffsetX = inst.k.lerp(inst.eyeOffsetX, inst.targetEyeX, EYE_LERP_SPEED)
   inst.eyeOffsetY = inst.k.lerp(inst.eyeOffsetY, inst.targetEyeY, EYE_LERP_SPEED)
-  
+  //
   // Round for pixel-art style
+  //
   const roundedX = Math.round(inst.eyeOffsetX)
   const roundedY = Math.round(inst.eyeOffsetY)
-  
+  //
   // Switch to preloaded sprite with eyes
+  //
   const spriteName = getSpriteName(inst, roundedX, roundedY)
-  
+  //
   // Update sprite only if eye position changed
+  //
   if (inst.currentEyeSprite !== spriteName) {
     inst.character.use(inst.k.sprite(spriteName))
     inst.currentEyeSprite = spriteName
@@ -775,12 +807,11 @@ function createLandingDust(inst) {
   //
   const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
   const footX = character.pos.x
-  
   //
   // Determine dust color (use custom color or default gray)
   //
   const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
-  
+
   createDustParticles(inst, footX, footY, color, 'splash')
 }
 
@@ -796,12 +827,11 @@ function createRunStartDust(inst, direction) {
   //
   const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
   const footX = character.pos.x
-  
   //
   // Determine dust color (use custom color or default gray)
   //
   const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
-  
+
   createDustParticles(inst, footX, footY, color, 'run', direction)
 }
 
@@ -816,7 +846,6 @@ function createRunStartDust(inst, direction) {
  */
 function createDustParticles(inst, footX, footY, color, type = 'splash', direction = 1) {
   const { k } = inst
-  
   //
   // Create dust particles at feet position
   //
@@ -836,21 +865,20 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
       //
       side = -direction
     }
-    
     //
     // Angle: mostly horizontal with slight upward direction (like splash)
+    //
     // Range: 5-30 degrees from horizontal (flatter splash)
     //
     const angle = k.rand(5, 30) * (Math.PI / 180)
     const speed = k.rand(DUST_PARTICLE_SPEED * 0.8, DUST_PARTICLE_SPEED * 1.5)
     const vx = Math.cos(angle) * speed * side
     const vy = -Math.sin(angle) * speed  // Negative = upward
-    
     //
     // Start from foot position, spread horizontally to sides
     //
     const offsetX = side * k.rand(5, 15)
-    
+
     const particle = k.add([
       k.rect(DUST_PARTICLE_SIZE, DUST_PARTICLE_SIZE),
       k.pos(footX + offsetX, footY - 2),  // Slightly above ground
@@ -859,7 +887,6 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
       k.anchor("center"),
       k.z(CFG.visual.zIndex.playerAbove),
     ])
-    
     //
     // Store particle velocity and lifetime
     //
@@ -867,19 +894,16 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
     particle.vy = vy
     particle.lifetime = 0
     particle.maxLifetime = DUST_PARTICLE_LIFETIME
-    
     //
     // Update particle position and fade out
     //
     particle.onUpdate(() => {
       particle.lifetime += k.dt()
-      
       //
       // Move particle
       //
       particle.pos.x += particle.vx * k.dt()
       particle.pos.y += particle.vy * k.dt()
-      
       //
       // Apply gravity (particles fall down after initial splash)
       //
@@ -888,13 +912,11 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
       // Apply friction (horizontal slowdown)
       //
       particle.vx *= 0.97
-      
       //
       // Fade out based on lifetime
       //
       const progress = particle.lifetime / particle.maxLifetime
       particle.opacity = 0.9 * (1 - progress)
-      
       //
       // Destroy when lifetime expires
       //
@@ -910,10 +932,11 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
  * @param {Object} inst - Hero instance
  */
 function onCollisionPlatform(inst) {
+  //
   // Set canJump flag when touching platform
+  //
   const wasInAir = !inst.canJump
   inst.canJump = true
-  
   //
   // Play landing sound and create dust if was in air
   //
@@ -930,28 +953,24 @@ function onCollisionPlatform(inst) {
  */
 function onAnnihilationCollide(inst) {
   if (inst.isAnnihilating) return
-  
+
   inst.isAnnihilating = true
-  
+
   const { k, character: player, sfx } = inst
   const target = inst.antiHero.character
-  
   //
   // Pause anti-hero only
   //
   target.paused = true
-  
+
   const targetPos = k.vec2(target.pos.x, target.pos.y)
-  
   //
   // INSTANT EXPLOSION: Anti-hero explodes immediately with sound and particles
   //
-  
   //
   // STEP 2: Immediately hide anti-hero (exploded)
   //
   k.destroy(target)
-  
   //
   // STEP 3: Force hero to idle state immediately after explosion
   //
@@ -959,25 +978,21 @@ function onAnnihilationCollide(inst) {
   inst.runFrame = 0
   inst.runTimer = 0
   inst.wasJumping = false  // Reset jump flag
-  
   //
   // Force idle sprite (not jump!) using current eye position
   //
   player.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
-  
   //
   // Stop horizontal movement but keep vertical (gravity)
   //
   if (player.vel) {
     player.vel.x = 0
   }
-  
   //
   // Create explosion particles immediately (all at once)
   //
   const particles = []
   const particleCount = 80  // Create many particles at once
-  
   //
   // Get anti-hero colors (use custom bodyColor if provided, otherwise use default)
   //
@@ -985,55 +1000,58 @@ function onAnnihilationCollide(inst) {
   //
   const antiHeroBodyColor = inst.antiHero.bodyColor || CFG.visual.colors.antiHero.body
   const antiHeroOutlineColor = CFG.visual.colors.outline
-  
+
   const scale = 2
   const particleSize = 4
   const outlineSize = particleSize + 1  // Reduced from +2 to +1 (thinner outline)
-  
+
   for (let i = 0; i < particleCount; i++) {
     //
     // Randomly choose body or outline color (80% body, 20% outline for more red)
     //
     const useBodyColor = k.rand(0, 1) > 0.2
     const particleColorHex = useBodyColor ? antiHeroBodyColor : antiHeroOutlineColor
-    
     //
     // Parse hex color to RGB
     //
     const [r, g, b] = parseHex(particleColorHex)
-    
+
     const particleX = targetPos.x + k.rand(-20, 20)
     const particleY = targetPos.y + k.rand(-20, 20)
-    
     //
     // Random shape parameters
     //
     const shapeType = k.choose(PARTICLE_SHAPES)
     const rotation = k.rand(0, 360)
-    
+
     let pWidth, pHeight, oWidth, oHeight
-    
+
     if (shapeType === 'square') {
       pWidth = pHeight = particleSize * scale
       oWidth = oHeight = outlineSize * scale
     } else if (shapeType === 'rect_h') {
+      //
       // Horizontal rectangle
+      //
       pWidth = particleSize * scale * k.rand(1.3, 1.8)
       pHeight = particleSize * scale * k.rand(0.6, 0.8)
       oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
       oHeight = pHeight + 1 * scale
     } else if (shapeType === 'rect_v') {
+      //
       // Vertical rectangle
+      //
       pWidth = particleSize * scale * k.rand(0.6, 0.8)
       pHeight = particleSize * scale * k.rand(1.3, 1.8)
       oWidth = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
       oHeight = pHeight + 1 * scale
     } else {
+      //
       // Small square
+      //
       pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
       oWidth = oHeight = pWidth + 1 * scale  // Thinner outline (was 2 * scale)
     }
-    
     //
     // Create a single game object that will draw both outline and colored part
     //
@@ -1052,9 +1070,8 @@ function onAnnihilationCollide(inst) {
             height: oHeight,
             pos: k.vec2(0, 0),
             anchor: "center",
-            color: k.rgb(0, 0, 0)
+            color: getRGB(k, CFG.visual.colors.outline)
           })
-          
           //
           // Draw colored particle on top
           //
@@ -1068,13 +1085,12 @@ function onAnnihilationCollide(inst) {
         }
       }
     ])
-    
     //
     // Random direction for explosion (scatter in all directions)
     //
     const angle = k.rand(0, Math.PI * 2)
     const speed = k.rand(250, 500)  // High speed explosion
-    
+
     particle.vx = Math.cos(angle) * speed
     particle.vy = Math.sin(angle) * speed
     particle.lifetime = 0
@@ -1084,34 +1100,30 @@ function onAnnihilationCollide(inst) {
     //
     particle.targetX = null
     particle.targetY = null
-    
+
     particles.push(particle)
   }
-  
   //
   // PHASE 1: Particles scatter outward (0.4 sec)
   //
   const scatterDuration = 0.4
   let scatterTime = 0
-  
+
   const scatterInterval = k.onUpdate(() => {
     scatterTime += k.dt()
     const progress = Math.min(scatterTime / scatterDuration, 1)
-    
     //
     // Animate particles - scatter outward
     //
     particles.forEach(p => {
       if (!p.exists()) return
-      
+
       p.lifetime += k.dt()
-      
       //
       // Move outward (all particles are in scatter phase)
       //
       p.pos.x += p.vx * k.dt()
       p.pos.y += p.vy * k.dt()
-      
       //
       // Update outline position
       //
@@ -1119,17 +1131,15 @@ function onAnnihilationCollide(inst) {
         p.outline.pos.x = p.pos.x
         p.outline.pos.y = p.pos.y
       }
-      
       //
       // Slow down
       //
       p.vx *= 0.96
       p.vy *= 0.96
     })
-    
+
     if (progress >= 1) {
       scatterInterval.cancel()
-      
       //
       // STEP 5: Small pause before absorption (0.2 sec)
       //
@@ -1145,13 +1155,11 @@ function onAnnihilationCollide(inst) {
         const maxAbsorbDuration = 2.0
         let heroFlickerTimer = 0
         const heroFlickerInterval = 0.08
-        
         //
         // STEP 6: Screen shake starts immediately with absorption
         //
         const originalCamPos = k.camPos()
         const shakeIntensity = 20
-        
         //
         // Update all particle targets to hero's current position AFTER scatter
         //
@@ -1162,14 +1170,13 @@ function onAnnihilationCollide(inst) {
             //
             p.targetX = player.pos.x
             p.targetY = player.pos.y
-            
             //
             // Reset velocity slightly toward hero to ensure movement starts
             //
             const dx = p.targetX - p.pos.x
             const dy = p.targetY - p.pos.y
             const dist = Math.sqrt(dx * dx + dy * dy)
-            
+
             if (dist > 0) {
               //
               // Give initial push toward hero
@@ -1180,11 +1187,10 @@ function onAnnihilationCollide(inst) {
             }
           }
         })
-        
+
         const absorbInterval = k.onUpdate(() => {
           absorbTime += k.dt()
           heroFlickerTimer += k.dt()
-          
           //
           // Hero flickers during absorption
           //
@@ -1192,7 +1198,6 @@ function onAnnihilationCollide(inst) {
             player.opacity = player.opacity === 1 ? 0.3 : 1
             heroFlickerTimer = 0
           }
-          
           //
           // STEP 6: Screen shake starts after particles begin flying (delay 0.15 sec)
           //
@@ -1201,24 +1206,21 @@ function onAnnihilationCollide(inst) {
             const shakeY = k.rand(-shakeIntensity, shakeIntensity)
             k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
           }
-          
           //
           // Count remaining particles
           //
           let activeParticles = 0
-          
           //
           // Animate particles - accelerate toward hero
           //
           particles.forEach(p => {
             if (!p.exists()) return
-            
+
             activeParticles++
-            
+
             const dx = p.targetX - p.pos.x
             const dy = p.targetY - p.pos.y
             const dist = Math.sqrt(dx * dx + dy * dy)
-            
             //
             // Particle reached target - destroy it (small threshold for center convergence)
             //
@@ -1227,27 +1229,24 @@ function onAnnihilationCollide(inst) {
               k.destroy(p)
               return
             }
-            
             //
             // Strong acceleration with progressive time boost
+            //
             // Higher initial acceleration for faster absorption
             //
             const timeBoost = 1 + (absorbTime / maxAbsorbDuration) * 5  // Up to 6x boost
             const baseAcceleration = 1200 / Math.max(dist, 3)  // Higher base, lower min distance
             const acceleration = baseAcceleration * timeBoost
-            
             //
             // Apply acceleration toward target
             //
             p.vx += (dx / dist) * acceleration * k.dt() * 60
             p.vy += (dy / dist) * acceleration * k.dt() * 60
-            
             //
             // Move particle
             //
             p.pos.x += p.vx * k.dt()
             p.pos.y += p.vy * k.dt()
-            
             //
             // Update outline position
             //
@@ -1255,15 +1254,14 @@ function onAnnihilationCollide(inst) {
               p.outline.pos.x = p.pos.x
               p.outline.pos.y = p.pos.y
             }
-            
             //
             // Check if overshot target
             //
             const newDist = Math.sqrt(
-              Math.pow(p.targetX - p.pos.x, 2) + 
+              Math.pow(p.targetX - p.pos.x, 2) +
               Math.pow(p.targetY - p.pos.y, 2)
             )
-            
+
             if (newDist > dist) {
               //
               // Overshot - destroy particle
@@ -1272,16 +1270,14 @@ function onAnnihilationCollide(inst) {
               k.destroy(p)
               return
             }
-            
+
             p.opacity = 1.0
           })
-          
           //
           // All particles absorbed
           //
           if (activeParticles === 0 || absorbTime >= maxAbsorbDuration) {
             absorbInterval.cancel()
-            
             //
             // Clean up particles and outlines
             //
@@ -1289,17 +1285,14 @@ function onAnnihilationCollide(inst) {
               if (p.outline && p.outline.exists()) k.destroy(p.outline)
               if (p.exists()) k.destroy(p)
             })
-            
             //
             // Stop hero flickering
             //
             player.opacity = 1
-            
             //
             // Restore camera
             //
             k.camPos(originalCamPos)
-            
             //
             // STEP 7: Pause after absorption and shake, then fade and show text
             //
@@ -1307,6 +1300,7 @@ function onAnnihilationCollide(inst) {
               if (inst.currentLevel) {
                 //
                 // Save NEXT level progress to localStorage before transition
+                //
                 // (so player continues from the next level, not the current one)
                 //
                 const nextLevel = getNextLevel(inst.currentLevel)
@@ -1342,14 +1336,13 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   // Choose body color - custom or default
   //
   let bodyColor
-  
+
   if (customBodyColor) {
     bodyColor = customBodyColor
   } else {
     const colors = type === HEROES.HERO ? CFG.visual.colors.hero : CFG.visual.colors.antiHero
     bodyColor = colors.body
   }
-  
   //
   //
   // Outline is always black
@@ -1360,8 +1353,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   canvas.height = SPRITE_SIZE
   const ctx = canvas.getContext('2d')
   ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
-  
+  //
   // Base parameters for different animations
+  //
   let headY = 6
   let bodyY = 14
   let headX = 12
@@ -1377,8 +1371,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let leftLegX = 12
   let rightLegX = 17
   let legHeight = 6    // Leg height (for stretching/squashing)
-  
+  //
   // Run animation (3 frames)
+  //
   if (animation === 'run') {
     if (frame === 0) {
       leftLegY = 20
@@ -1397,12 +1392,14 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       rightLegX = 14
     }
   }
-  
+  //
   // Jump animation - 5 frames with squash and stretch
+  //
   if (animation === 'jump') {
     if (frame === 0) {
       //
       // Frame 0: Squash (pre-jump, on ground) - hero squats down LOW
+      //
       // Everything pushed down, legs also SHORT
       //
       headY = 15  // Very low (idle is 6, difference = 9)
@@ -1411,7 +1408,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 4  // Very short body
       leftArmY = 21
       rightArmY = 21
+      //
       // Legs SHORT and wide
+      //
       rightLegY = 24  // bodyY + bodyHeight = 20 + 4
       rightLegX = 18
       leftLegY = 24
@@ -1420,6 +1419,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     } else if (frame === 1) {
       //
       // Frame 1: Stretch (ascending, in air) - hero elongated UP
+      //
       // Legs spread wider like frame 0
       //
       headY = 3  // Very high
@@ -1428,7 +1428,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 12  // Very tall body
       leftArmY = 13
       rightArmY = 13
+      //
       // Legs spread wider with gap between them
+      //
       rightLegY = 23  // bodyY + bodyHeight = 11 + 12
       rightLegX = 18  // Wide spread (same as frame 0)
       leftLegY = 23
@@ -1444,7 +1446,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 8
       leftArmY = 11
       rightArmY = 11
+      //
       // Regular legs
+      //
       rightLegY = 18  // bodyY + bodyHeight = 10 + 8
       rightLegX = 18
       leftLegY = 18
@@ -1453,6 +1457,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     } else if (frame === 3) {
       //
       // Frame 3: Intermediate (transitioning to squash) - between normal and squash
+      //
       // At very top of frame, slightly taller than before
       //
       headY = 2   // Very top
@@ -1461,7 +1466,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 7  // Taller body (was 6) - +1px
       leftArmY = 10
       rightArmY = 10
+      //
       // Legs slightly taller
+      //
       rightLegY = 16  // bodyY + bodyHeight = 9 + 7
       rightLegX = 19
       leftLegY = 16
@@ -1470,6 +1477,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     } else if (frame === 4) {
       //
       // Frame 4: Squash (descending, in air) - hero compressed DOWN
+      //
       // Top stays at very top, but body is slightly taller for smoother transition
       //
       headY = 2   // Very top (same as before)
@@ -1478,7 +1486,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 5  // Slightly taller body (was 4)
       leftArmY = 9
       rightArmY = 9
+      //
       // Legs SHORT and spread wider
+      //
       rightLegY = 13  // bodyY + bodyHeight = 8 + 5
       rightLegX = 19
       leftLegY = 13
@@ -1494,7 +1504,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 8
       leftArmY = 15
       rightArmY = 15
+      //
       // Regular legs
+      //
       rightLegY = 22  // bodyY + bodyHeight = 14 + 8
       rightLegX = 17
       leftLegY = 22
@@ -1504,32 +1516,32 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     leftArmX = 9
     rightArmX = 21
   }
-  
   //
   // Black outline (universal)
   //
   ctx.fillStyle = getHex(outlineColor)
   ctx.fillRect(headX - 1, headY - 1, 10, 10)
-  
+  //
   // Body outline - position it right below head
+  //
   ctx.fillRect(bodyX - 1, bodyY - 1, 14, bodyHeight + 2)
-  
+  //
   // Arm outlines - don't draw while running and jumping
+  //
   if (animation !== 'run' && animation !== 'jump') {
     ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 9)
     ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
   }
-  
+  //
   // Leg outlines
+  //
   ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, legHeight + 2)
   ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, legHeight + 2)
-  
   //
   // Head (universal body color)
   //
   ctx.fillStyle = getHex(bodyColor)
   ctx.fillRect(headX, headY, 8, 8)
-  
   //
   // Eyes - for run and jump draw only ONE eye (side view)
   //
@@ -1540,7 +1552,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(headX + 1, headY + 2, 3, 3)
     ctx.fillRect(headX + 6, headY + 2, 3, 3)
   }
-  
   //
   // Pupils (universal color)
   //
@@ -1551,7 +1562,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
     ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
   }
-  
   //
   // Mouth (optional, only for idle animation)
   //
@@ -1562,23 +1572,23 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     //
     ctx.fillRect(headX + 2, headY + 7, 4, 1)
   }
-  
   //
   // Body (universal color)
   //
   ctx.fillStyle = getHex(bodyColor)
   ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
-  
+  //
   // Arms - don't draw while running and jumping
+  //
   if (animation !== 'run' && animation !== 'jump') {
     ctx.fillRect(leftArmX, leftArmY, 2, 7)
     ctx.fillRect(rightArmX, rightArmY, 2, 7)
   }
-  
+  //
   // Legs
+  //
   ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
   ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
-  
   //
   // Custom arms (optional, simple vertical lines drawn on top)
   //
@@ -1590,11 +1600,11 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     const armStartY = bodyY + 4  // Start lower (was +2, now +4)
     const armLength = 6  // Length of arms
     const armWidth = 1  // Arm width
-    
+
     ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
     ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
   }
-  
+
   return canvas.toDataURL()
 }
 /**
@@ -1640,7 +1650,7 @@ function applySlowMotion(inst) {
 function getParticleColors(inst) {
   const { type } = inst
   const colors = CFG.visual.colors
-  return type === HEROES.HERO 
+  return type === HEROES.HERO
     ? [colors.hero.body, colors.outline]
     : [colors.antiHero.body, colors.outline]
 }
@@ -1697,7 +1707,7 @@ function createBodyParticles(inst, centerX, centerY) {
             height: oSize,
             pos: k.vec2(0, 0),
             anchor: "center",
-            color: k.rgb(0, 0, 0)
+            color: getRGB(k, CFG.visual.colors.outline)
           })
           //
           // Draw colored particle on top

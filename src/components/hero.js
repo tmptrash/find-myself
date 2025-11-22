@@ -744,18 +744,14 @@ function setupControls(inst) {
  * @param {Object} inst - Hero instance
  */
 function createLandingDust(inst) {
-  const { k, character, dustColor } = inst
+  const { k, character } = inst
   //
   // Calculate foot position (bottom of collision box)
   //
   const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
   const footX = character.pos.x
-  //
-  // Determine dust color (use custom color or default gray)
-  //
-  const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
 
-  createDustParticles(inst, footX, footY, color, 'splash')
+  createDustParticles(inst, footX, footY, 'splash')
 }
 
 /**
@@ -764,18 +760,14 @@ function createLandingDust(inst) {
  * @param {number} direction - Movement direction (-1 = left, 1 = right)
  */
 function createRunStartDust(inst, direction) {
-  const { k, character, dustColor } = inst
+  const { k, character } = inst
   //
   // Calculate foot position (bottom of collision box)
   //
   const footY = character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y
   const footX = character.pos.x
-  //
-  // Determine dust color (use custom color or default gray)
-  //
-  const color = dustColor ? getColor(k, dustColor) : k.color(150, 150, 150)
 
-  createDustParticles(inst, footX, footY, color, 'run', direction)
+  createDustParticles(inst, footX, footY, 'run', direction)
 }
 
 /**
@@ -783,11 +775,10 @@ function createRunStartDust(inst, direction) {
  * @param {Object} inst - Hero instance
  * @param {number} footX - X position of foot
  * @param {number} footY - Y position of foot
- * @param {Object} color - Particle color
  * @param {string} type - 'splash' (both sides) or 'run' (backward direction)
  * @param {number} direction - Movement direction (for run type)
  */
-function createDustParticles(inst, footX, footY, color, type = 'splash', direction = 1) {
+function createDustParticles(inst, footX, footY, type = 'splash', direction = 1) {
   const { k } = inst
   //
   // Create dust particles at feet position
@@ -822,10 +813,17 @@ function createDustParticles(inst, footX, footY, color, type = 'splash', directi
     //
     const offsetX = side * k.rand(5, 15)
 
+    //
+    // Create particle with gray fill and black outline
+    //
+    const outlineColor = getRGB(k, CFG.visual.colors.outline)
+    const grayColor = k.color(150, 150, 150)
+    
     const particle = k.add([
       k.rect(DUST_PARTICLE_SIZE, DUST_PARTICLE_SIZE),
       k.pos(footX + offsetX, footY - 2),  // Slightly above ground
-      color,
+      grayColor,
+      k.outline(1.5, k.rgb(outlineColor.r, outlineColor.g, outlineColor.b)),
       k.opacity(0.9),
       k.anchor("center"),
       k.z(CFG.visual.zIndex.playerAbove),

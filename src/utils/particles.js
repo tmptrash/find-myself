@@ -283,11 +283,40 @@ export function onUpdate(inst) {
       particle.y = particle.baseY + offsetY * fadeMultiplier
       
       //
-      // Keep particles visible on screen (add margin to prevent edge clipping)
+      // Slowly drift base position for natural movement
+      // Add slow random drift to baseX/baseY instead of hard clamping
       //
-      const margin = 20
-      particle.x = Math.max(margin, Math.min(k.width() - margin, particle.x))
-      particle.y = Math.max(margin, Math.min(k.height() - margin, particle.y))
+      if (bounds) {
+        const driftSpeed = 5
+        const centerX = bounds.x + bounds.width / 2
+        const centerY = bounds.y + bounds.height / 2
+        const margin = inst.boundsMargin || 50
+        
+        //
+        // If particle is outside bounds, gently pull it back
+        //
+        if (particle.baseX < bounds.x + margin) {
+          particle.baseX += (bounds.x + margin - particle.baseX) * 0.5 * k.dt()
+        } else if (particle.baseX > bounds.x + bounds.width - margin) {
+          particle.baseX -= (particle.baseX - (bounds.x + bounds.width - margin)) * 0.5 * k.dt()
+        } else {
+          //
+          // Random drift when inside bounds
+          //
+          particle.baseX += (Math.random() - 0.5) * driftSpeed * k.dt()
+        }
+        
+        if (particle.baseY < bounds.y + margin) {
+          particle.baseY += (bounds.y + margin - particle.baseY) * 0.5 * k.dt()
+        } else if (particle.baseY > bounds.y + bounds.height - margin) {
+          particle.baseY -= (particle.baseY - (bounds.y + bounds.height - margin)) * 0.5 * k.dt()
+        } else {
+          //
+          // Random drift when inside bounds
+          //
+          particle.baseY += (Math.random() - 0.5) * driftSpeed * k.dt()
+        }
+      }
     }
   })
 }

@@ -258,17 +258,13 @@ export function death(inst, onComplete) {
   inst.controllable = false
   sfx && Sound.playDeathSound(sfx)
   //
-  // Get particle colors for this hero type
-  //
-  const particleColors = getParticleColors(inst)
-  //
   // Create body particles explosion
   //
-  const bodyParticles = createBodyParticles(inst, centerX, centerY)
+  createBodyParticles(inst, centerX, centerY)
   //
   // Create eye particles
   //
-  const eyeParticles = createEyeParticles(inst, centerX, centerY)
+  createEyeParticles(inst, centerX, centerY)
   //
   // Hide character immediately
   //

@@ -253,6 +253,23 @@ export function initScene(config) {
 }
 
 /**
+ * Update eerie ambient sound at random intervals
+ * @param {Object} inst - Scene instance
+ * @param {number} [minDelay=4] - Min delay in seconds
+ * @param {number} [maxDelay=8] - Max delay in seconds
+ */
+export function updateEerieSound(inst, minDelay = 4, maxDelay = 8) {
+  const { k, sound } = inst
+  
+  inst.soundTimer -= k.dt()
+  
+  if (inst.soundTimer <= 0) {
+    sound && Sound.playGlitchSound(sound)
+    inst.soundTimer = k.rand(minDelay, maxDelay)
+  }
+}
+
+/**
  * Sets up fixed camera in the center of the screen
  * @param {Object} k - Kaplay instance
  */
@@ -377,23 +394,6 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   })
   
   return { hero, antiHero }
-}
-
-/**
- * Update eerie sound timer and play sound randomly
- * @param {Object} inst - Scene instance
- * @param {number} [minDelay=4] - Min delay in seconds
- * @param {number} [maxDelay=8] - Max delay in seconds
- */
-export function updateEerieSound(inst, minDelay = 4, maxDelay = 8) {
-  const { k, sound } = inst
-  
-  inst.soundTimer -= k.dt()
-  
-  if (inst.soundTimer <= 0) {
-    sound && Sound.playGlitchSound(sound)
-    inst.soundTimer = k.rand(minDelay, maxDelay)
-  }
 }
 
 /**

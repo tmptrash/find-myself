@@ -30,6 +30,10 @@ const DUST_PARTICLE_COUNT = 6
 const DUST_PARTICLE_SIZE = 6
 const DUST_PARTICLE_SPEED = 80
 const DUST_PARTICLE_LIFETIME = 0.4
+//
+// Death animation timing
+//
+const DEATH_ANIMATION_DURATION = 2.3
 
 export const HEROES = {
   HERO: 'hero',
@@ -228,208 +232,6 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = 
   }
 }
 /**
- * Apply slow motion effect
- * @param {Object} k - Kaplay instance
- */
-function applySlowMotion(k) {
-  const originalTimeScale = k.timeScale ?? 1
-  const slowMotionScale = 0.1
-  const slowMotionDuration = 0.5
-  k.timeScale = slowMotionScale
-  k.wait(slowMotionDuration, () => {
-    k.timeScale = originalTimeScale
-  })
-}
-
-/**
- * Get particle colors for hero type
- * @param {string} type - Hero type
- * @returns {Array<string>} Array of color hex strings
- */
-function getParticleColors(type) {
-  const colors = CFG.visual.colors
-  return type === HEROES.HERO 
-    ? [colors.hero.body, colors.hero.outline]
-    : [colors.antiHero.body, colors.antiHero.outline]
-}
-
-/**
- * Create body particles for death explosion
- * @param {Object} k - Kaplay instance
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @param {Array<string>} particleColors - Array of color hex strings
- * @returns {Array} Array of particle objects
- */
-function createBodyParticles(k, centerX, centerY, particleColors) {
-  const particleCount = 16
-  const particles = []
-  for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
-    const speed = k.rand(150, 350)
-    const pSize = k.rand(4, 8)
-    const oSize = pSize + 4
-    const colorHex = k.choose(particleColors)
-    const [r, g, b] = parseHex(colorHex)
-    const rotation = k.rand(0, 360)
-    //
-    // Create invisible body for physics
-    //
-    const body = k.add([
-      k.rect(pSize, pSize),
-      k.pos(centerX, centerY),
-      k.anchor("center"),
-      k.rotate(rotation),
-      k.z(CFG.visual.zIndex.player - 1),
-      k.area(),
-      k.body(),
-      k.opacity(0)
-    ])
-    //
-    // Create visual particle that follows the body
-    //
-    const particle = k.add([
-      k.pos(centerX, centerY),
-      k.anchor("center"),
-      k.rotate(rotation),
-      k.z(CFG.visual.zIndex.player),
-      k.opacity(1),
-      {
-        draw() {
-          //
-          // Draw black outline first
-          //
-          k.drawRect({
-            width: oSize,
-            height: oSize,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: k.rgb(0, 0, 0)
-          })
-          //
-          // Draw colored particle on top
-          //
-          k.drawRect({
-            width: pSize,
-            height: pSize,
-            pos: k.vec2(0, 0),
-            anchor: "center",
-            color: k.rgb(r, g, b)
-          })
-        }
-      }
-    ])
-    //
-    // Set initial velocity
-    //
-    body.vel.x = Math.cos(angle) * speed
-    body.vel.y = Math.sin(angle) * speed
-    particle.lifetime = 0
-    particle.rotSpeed = k.rand(-540, 540)
-    particle.maxLifetime = 2.0
-    particle.body = body
-    //
-    // Update particle
-    //
-    particle.onUpdate(() => {
-      particle.lifetime += k.dt()
-      particle.pos = particle.body.pos
-      particle.angle = particle.body.angle
-      particle.body.vel.x *= 0.98
-      particle.body.angle += particle.rotSpeed * k.dt()
-      //
-      // Fade out over lifetime
-      //
-      const fadeStartTime = 1.0
-      if (particle.lifetime > fadeStartTime) {
-        const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
-        particle.opacity = Math.max(0, 1 - fadeProgress)
-      }
-      //
-      // Destroy when max lifetime reached or falls off screen
-      //
-      if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
-        k.destroy(particle.body)
-        k.destroy(particle)
-      }
-    })
-    particles.push(particle)
-  }
-  return particles
-}
-
-/**
- * Create eye particles for death explosion
- * @param {Object} k - Kaplay instance
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @returns {Array} Array of eye particle objects
- */
-function createEyeParticles(k, centerX, centerY) {
-  const eyeWhiteSize = 3 * HERO_SCALE
-  const pupilSize = 1 * HERO_SCALE
-  const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
-  const particles = []
-  for (let i = 0; i < 2; i++) {
-    const angle = eyeAngles[i]
-    const speed = k.rand(150, 350)
-    //
-    // White eye background
-    //
-    const eyeWhite = k.add([
-      k.rect(eyeWhiteSize, eyeWhiteSize),
-      k.pos(centerX, centerY),
-      k.color(255, 255, 255),
-      k.anchor("center"),
-      k.z(CFG.visual.zIndex.player + 1),
-      k.area(),
-      k.body()
-    ])
-    //
-    // Black pupil
-    //
-    const pupil = eyeWhite.add([
-      k.rect(pupilSize, pupilSize),
-      k.pos(0, 0),
-      k.color(0, 0, 0),
-      k.anchor("center"),
-      k.z(1)
-    ])
-    //
-    // Set initial velocity
-    //
-    eyeWhite.vel.x = Math.cos(angle) * speed
-    eyeWhite.vel.y = Math.sin(angle) * speed
-    eyeWhite.lifetime = 0
-    eyeWhite.maxLifetime = 2.0
-    //
-    // Update eye
-    //
-    eyeWhite.onUpdate(() => {
-      eyeWhite.lifetime += k.dt()
-      eyeWhite.vel.x *= 0.98
-      pupil.opacity = eyeWhite.opacity
-      //
-      // Fade out over lifetime
-      //
-      const fadeStartTime = 1.0
-      if (eyeWhite.lifetime > fadeStartTime) {
-        const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
-        eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
-      }
-      //
-      // Destroy when max lifetime reached or falls off screen
-      //
-      if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
-        k.destroy(eyeWhite)
-      }
-    })
-    particles.push(eyeWhite)
-  }
-  return particles
-}
-
-/**
  * Death effect with particle explosion
  * @param {Object} inst - Hero instance
  * @param {Function} onComplete - Callback when death animation completes
@@ -443,7 +245,7 @@ export function death(inst, onComplete) {
   //
   // Apply slow motion effect
   //
-  applySlowMotion(k)
+  applySlowMotion(inst)
   //
   // Stop control and play sound
   //
@@ -453,15 +255,15 @@ export function death(inst, onComplete) {
   //
   // Get particle colors for this hero type
   //
-  const particleColors = getParticleColors(type)
+  const particleColors = getParticleColors(inst)
   //
   // Create body particles explosion
   //
-  const bodyParticles = createBodyParticles(k, centerX, centerY, particleColors)
+  const bodyParticles = createBodyParticles(inst, centerX, centerY)
   //
   // Create eye particles
   //
-  const eyeParticles = createEyeParticles(k, centerX, centerY)
+  const eyeParticles = createEyeParticles(inst, centerX, centerY)
   //
   // Hide character immediately
   //
@@ -471,7 +273,7 @@ export function death(inst, onComplete) {
   //
   // Wait for particles to finish + additional pause before callback
   //
-  k.wait(2.3, () => onComplete?.())
+  k.wait(DEATH_ANIMATION_DURATION, () => onComplete?.())
 }
 
 /**
@@ -1809,4 +1611,210 @@ function getSpriteName(inst, eyeX = 0, eyeY = 0) {
   //
   const prefix = inst.spritePrefix || inst.type
   return `${prefix}_${roundedX}_${roundedY}`
+}
+
+/**
+ * Apply slow motion effect
+ * @param {Object} inst - Hero instance
+ */
+function applySlowMotion(inst) {
+  const { k } = inst
+  const originalTimeScale = k.timeScale ?? 1
+  const slowMotionScale = 0.1
+  const slowMotionDuration = 0.5
+  k.timeScale = slowMotionScale
+  k.wait(slowMotionDuration, () => {
+    k.timeScale = originalTimeScale
+  })
+}
+
+/**
+ * Get particle colors for hero type
+ * @param {Object} inst - Hero instance
+ * @returns {Array<string>} Array of color hex strings
+ */
+function getParticleColors(inst) {
+  const { type } = inst
+  const colors = CFG.visual.colors
+  return type === HEROES.HERO 
+    ? [colors.hero.body, colors.hero.outline]
+    : [colors.antiHero.body, colors.antiHero.outline]
+}
+
+/**
+ * Create body particles for death explosion
+ * @param {Object} inst - Hero instance
+ * @param {number} centerX - Center X position
+ * @param {number} centerY - Center Y position
+ * @returns {Array} Array of particle objects
+ */
+function createBodyParticles(inst, centerX, centerY) {
+  const { k } = inst
+  const particleColors = getParticleColors(inst)
+  const particleCount = 16
+  const particles = []
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
+    const speed = k.rand(150, 350)
+    const pSize = k.rand(4, 8)
+    const oSize = pSize + 4
+    const colorHex = k.choose(particleColors)
+    const [r, g, b] = parseHex(colorHex)
+    const rotation = k.rand(0, 360)
+    //
+    // Create invisible body for physics
+    //
+    const body = k.add([
+      k.rect(pSize, pSize),
+      k.pos(centerX, centerY),
+      k.anchor("center"),
+      k.rotate(rotation),
+      k.z(CFG.visual.zIndex.player - 1),
+      k.area(),
+      k.body(),
+      k.opacity(0)
+    ])
+    //
+    // Create visual particle that follows the body
+    //
+    const particle = k.add([
+      k.pos(centerX, centerY),
+      k.anchor("center"),
+      k.rotate(rotation),
+      k.z(CFG.visual.zIndex.player),
+      k.opacity(1),
+      {
+        draw() {
+          //
+          // Draw black outline first
+          //
+          k.drawRect({
+            width: oSize,
+            height: oSize,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(0, 0, 0)
+          })
+          //
+          // Draw colored particle on top
+          //
+          k.drawRect({
+            width: pSize,
+            height: pSize,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(r, g, b)
+          })
+        }
+      }
+    ])
+    //
+    // Set initial velocity
+    //
+    body.vel.x = Math.cos(angle) * speed
+    body.vel.y = Math.sin(angle) * speed
+    particle.lifetime = 0
+    particle.rotSpeed = k.rand(-540, 540)
+    particle.maxLifetime = 2.0
+    particle.body = body
+    //
+    // Update particle
+    //
+    particle.onUpdate(() => {
+      particle.lifetime += k.dt()
+      particle.pos = particle.body.pos
+      particle.angle = particle.body.angle
+      particle.body.vel.x *= 0.98
+      particle.body.angle += particle.rotSpeed * k.dt()
+      //
+      // Fade out over lifetime
+      //
+      const fadeStartTime = 1.0
+      if (particle.lifetime > fadeStartTime) {
+        const fadeProgress = (particle.lifetime - fadeStartTime) / (particle.maxLifetime - fadeStartTime)
+        particle.opacity = Math.max(0, 1 - fadeProgress)
+      }
+      //
+      // Destroy when max lifetime reached or falls off screen
+      //
+      if (particle.lifetime > particle.maxLifetime || particle.pos.y > k.height() + 100) {
+        k.destroy(particle.body)
+        k.destroy(particle)
+      }
+    })
+    particles.push(particle)
+  }
+  return particles
+}
+
+/**
+ * Create eye particles for death explosion
+ * @param {Object} inst - Hero instance
+ * @param {number} centerX - Center X position
+ * @param {number} centerY - Center Y position
+ * @returns {Array} Array of eye particle objects
+ */
+function createEyeParticles(inst, centerX, centerY) {
+  const { k } = inst
+  const eyeWhiteSize = 3 * HERO_SCALE
+  const pupilSize = 1 * HERO_SCALE
+  const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
+  const particles = []
+  for (let i = 0; i < 2; i++) {
+    const angle = eyeAngles[i]
+    const speed = k.rand(150, 350)
+    //
+    // White eye background
+    //
+    const eyeWhite = k.add([
+      k.rect(eyeWhiteSize, eyeWhiteSize),
+      k.pos(centerX, centerY),
+      k.color(255, 255, 255),
+      k.anchor("center"),
+      k.z(CFG.visual.zIndex.player + 1),
+      k.area(),
+      k.body()
+    ])
+    //
+    // Black pupil
+    //
+    const pupil = eyeWhite.add([
+      k.rect(pupilSize, pupilSize),
+      k.pos(0, 0),
+      k.color(0, 0, 0),
+      k.anchor("center"),
+      k.z(1)
+    ])
+    //
+    // Set initial velocity
+    //
+    eyeWhite.vel.x = Math.cos(angle) * speed
+    eyeWhite.vel.y = Math.sin(angle) * speed
+    eyeWhite.lifetime = 0
+    eyeWhite.maxLifetime = 2.0
+    //
+    // Update eye
+    //
+    eyeWhite.onUpdate(() => {
+      eyeWhite.lifetime += k.dt()
+      eyeWhite.vel.x *= 0.98
+      pupil.opacity = eyeWhite.opacity
+      //
+      // Fade out over lifetime
+      //
+      const fadeStartTime = 1.0
+      if (eyeWhite.lifetime > fadeStartTime) {
+        const fadeProgress = (eyeWhite.lifetime - fadeStartTime) / (eyeWhite.maxLifetime - fadeStartTime)
+        eyeWhite.opacity = Math.max(0, 1 - fadeProgress)
+      }
+      //
+      // Destroy when max lifetime reached or falls off screen
+      //
+      if (eyeWhite.lifetime > eyeWhite.maxLifetime || eyeWhite.pos.y > k.height() + 100) {
+        k.destroy(eyeWhite)
+      }
+    })
+    particles.push(eyeWhite)
+  }
+  return particles
 }

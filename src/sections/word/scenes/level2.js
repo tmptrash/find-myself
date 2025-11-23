@@ -3,6 +3,7 @@ import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
+import * as WordPile from '../components/word-pile.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -86,6 +87,14 @@ export function sceneLevel2(k) {
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
+    })
+    
+    //
+    // Create word pile for depth atmosphere effect
+    //
+    const wordPile = WordPile.create({
+      k,
+      customBounds: platformBounds
     })
     
     //

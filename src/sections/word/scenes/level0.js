@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as FlyingWords from '../components/flying-words.js'
+import * as WordPile from '../components/word-pile.js'
 import { getProgress } from '../../../utils/progress.js'
 
 //
@@ -111,6 +112,15 @@ export function sceneLevel0(k) {
       top: PLATFORM_TOP_HEIGHT + 20,
       bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
     }
+    
+    //
+    // Create word pile for depth atmosphere effect
+    // Multiple layers of static words at different depths creating "word dump" feeling
+    //
+    const wordPile = WordPile.create({
+      k,
+      customBounds: platformBounds
+    })
     
     //
     // Create flying words for atmosphere

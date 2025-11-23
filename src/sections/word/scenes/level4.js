@@ -5,6 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
+import * as WordPile from '../components/word-pile.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -60,6 +61,19 @@ export function sceneLevel4(k) {
         bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
       },
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
+    })
+    
+    //
+    // Create word pile for depth atmosphere effect
+    //
+    const wordPile = WordPile.create({
+      k,
+      customBounds: {
+        left: PLATFORM_SIDE_WIDTH,
+        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
+        top: PLATFORM_TOP_HEIGHT,
+        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+      }
     })
     
     //

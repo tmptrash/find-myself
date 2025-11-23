@@ -195,9 +195,9 @@ function updateBladeArm(inst) {
     if (inst.timer >= PAUSE_DURATION) {
       // Check if we've reached the right wall
       if (inst.currentWidth < inst.maxWidth) {
-        inst.state = 'extending'
-        inst.timer = 0
-        inst.targetWidth += extensionStep  // Set new target for next extension
+      inst.state = 'extending'
+      inst.timer = 0
+      inst.targetWidth += extensionStep  // Set new target for next extension
         inst.soundPlayed = false  // Reset sound flag for next extension
       }
     }

@@ -82,14 +82,15 @@ export const CFG = {
     //
     zIndex: {
       background: -100,
-      flyingWords: -50,
-      platforms: 0,
+      flyingWords: -25,  // Between near_front (-1) and mid_depth (-50)
+      platforms: 15,  // High z-index so platforms are always on top
       player: 10,
       playerShadow: 9,
       playerAbove: 11,
       assemblyParticles: 101,
       eyePupil: 1,
-      ui: 100
+      ui: 100,
+      blades: 14  // Just below platforms, above everything else including huge words
     }
   },
   audio: {
@@ -127,6 +128,6 @@ export const CFG = {
       stepDuration: 0.05,
       stepFreqStart: 180,
       stepFreqEnd: 60
+      }
     }
-  }
 }

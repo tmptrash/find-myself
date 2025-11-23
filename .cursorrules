@@ -578,7 +578,7 @@ public/
 - ❌ Put update or draw logic into embedded or arrow functions
 - ❌ Use default exports (`export default`)
 - ❌ Create multiple `AudioContext` instances
-- ❌ Use RGB arrays for colors (use hex strings)
+- ❌ Use RGB arrays for colors
 - ❌ Write comments in languages other than English
 - ❌ Put exported functions at the bottom of files
 - ❌ Put comments separated by many = symbol
@@ -607,6 +607,7 @@ public/
 - ✅ For the one line arrow function use one line short function version without {} symbols
 - ✅ Comment all code you write
 - ✅ Put all private functions at the bottom
+- ✅ Use hex color strings like "#xxxxxx"
 
 ---
 

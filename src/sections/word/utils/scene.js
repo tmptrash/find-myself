@@ -182,7 +182,7 @@ export function initScene(config) {
     topPlatformHeight,
     sideWallWidth,
     platformGap,
-    skipPlatforms,
+    skipPlatforms, 
     createHeroes = true,
     heroX = null,
     heroY = null,
@@ -297,7 +297,8 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, color),
-      CFG.game.platformName
+      CFG.game.platformName,
+      k.z(CFG.visual.zIndex.platforms)  // High z-index so platforms are always on top
     ])
   }
   

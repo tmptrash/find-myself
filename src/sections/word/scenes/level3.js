@@ -39,8 +39,9 @@ const DEATH_MESSAGES = [
  * @param {Object} k - Kaplay instance
  * @param {Object} hero - Hero instance
  * @param {Object} bladesInst - Blades instance (optional)
+ * @param {Object} bladeArmInst - Blade arm instance (optional)
  */
-function showDeathMessage(k, hero, bladesInst) {
+function showDeathMessage(k, hero, bladesInst, bladeArmInst = null) {
   //
   // Select random message
   //
@@ -74,6 +75,12 @@ function showDeathMessage(k, hero, bladesInst) {
   const restartLevel = () => {
     if (restartTriggered) return
     restartTriggered = true
+    //
+    // Reset blade arm state if provided
+    //
+    if (bladeArmInst) {
+      bladeArmInst.heroIsDead = false
+    }
     k.destroy(messageText)
     k.go("level-word.3")
   }
@@ -95,19 +102,19 @@ function showDeathMessage(k, hero, bladesInst) {
     timer += k.dt()
     
     if (phase === 'fade_in') {
-      const progress = Math.min(1, timer / 0.3)
+      const progress = Math.min(1, timer / CFG.visual.deathMessage.fadeDuration)
       messageText.opacity = progress
       if (progress >= 1) {
         phase = 'hold'
         timer = 0
       }
     } else if (phase === 'hold') {
-      if (timer >= 1.0) {
+      if (timer >= CFG.visual.deathMessage.duration) {
         phase = 'fade_out'
         timer = 0
       }
     } else if (phase === 'fade_out') {
-      const progress = Math.min(1, timer / 0.3)
+      const progress = Math.min(1, timer / CFG.visual.deathMessage.fadeDuration)
       messageText.opacity = 1 - progress
       if (progress >= 1) {
         updateInterval.cancel()
@@ -191,13 +198,38 @@ export function sceneLevel3(k) {
     }
     
     //
+    // Create blade arm first (needed for death callbacks)
+    //
+    const bottomPlatformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720
+    const heroHalfHeight = 37  // Half of hero's height
+    const textY = bottomPlatformY - heroHalfHeight - 15    // Text at mid-body height above bottom platform, raised by 30px
+    const bladeArm = BladeArm.create({
+      k,
+      y: textY,
+      hero,
+      currentLevel: 'level-word.3',
+      sfx: sound,
+      onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst)  // Custom death callback
+    })
+    
+    //
     // Create flying words for atmosphere
     //
     const flyingWords = FlyingWords.create({
       k,
+      hero,
+      currentLevel: 'level-word.3',
+      onDeath: () => {
+        //
+        // Stop blade arm movement
+        //
+        bladeArm.heroIsDead = true
+        showDeathMessage(k, hero, null, bladeArm)
+      },
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
-      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
+      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
+      killerLetterCount: 6  // Level 3: 6 killer letters
     })
     
     //
@@ -247,7 +279,7 @@ export function sceneLevel3(k) {
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
       sfx: sound,
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades)  // Custom death callback
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm)  // Custom death callback
     })
     
     // Create second normal moving platform (timer-based mode)
@@ -262,7 +294,7 @@ export function sceneLevel3(k) {
       autoOpen: false,  // Triggered by hero proximity
       sfx: sound,
       raiseTimeout: 6.0,  // Close 1 second later than default (4 seconds)
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades)  // Custom death callback
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm)  // Custom death callback
     })
     //
     // Create static blades after first pit to prevent jumping over
@@ -279,7 +311,7 @@ export function sceneLevel3(k) {
       y: staticBladesY,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades),
+      onHit: () => showDeathMessage(k, hero, staticBlades, bladeArm),
       sfx: sound,
       color: CFG.visual.colors.blades,
       disableAnimation: true  // Disable vibration and glint
@@ -303,7 +335,7 @@ export function sceneLevel3(k) {
       y: staticBlades2Y,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades2),
+      onHit: () => showDeathMessage(k, hero, staticBlades2, bladeArm),
       sfx: sound,
       color: CFG.visual.colors.blades,
       disableAnimation: true  // Disable vibration and glint
@@ -312,19 +344,6 @@ export function sceneLevel3(k) {
     // Make second blades visible immediately
     //
     Blades.show(staticBlades2)
-    
-    // Create blade arm that extends from the left (positioned above bottom platform at hero's mid-body height)
-    const bottomPlatformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720
-    const heroHalfHeight = 37  // Half of hero's height
-    const textY = bottomPlatformY - heroHalfHeight - 15    // Text at mid-body height above bottom platform, raised by 30px
-    BladeArm.create({
-      k,
-      y: textY,
-      hero,
-      currentLevel: 'level-word.3',
-      sfx: sound,
-      onHit: (bladeArm) => showDeathMessage(k, hero, null)  // Custom death callback
-    })
     
     // Eerie sound effects removed for cleaner audio experience
   })

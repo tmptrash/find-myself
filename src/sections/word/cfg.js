@@ -12,13 +12,21 @@ export const WORD_CFG = {
     colors: {
       background: "#3E3E3E",         // Dark gray (foggy gloom)
       platform: "#1A1A1A",           // Nearly black platforms
-      blades: "#6B8E9F"              // Steel blue blades (cold steel)
+      blades: "#6B8E9F",             // Steel blue blades (cold steel)
+      killerLetter: "#6B8E9F"        // Steel blue killer letters (same as blades)
     },
     //
     // Flying words/letters configuration for word section
     //
     flyingWords: {
       letterToWordRatio: 0.6  // 60% letters, 40% words (0.0 = all words, 1.0 = all letters)
+    },
+    //
+    // Death message configuration
+    //
+    deathMessage: {
+      duration: 2.0,      // Message display duration (seconds)
+      fadeDuration: 0.3   // Fade in/out duration (seconds)
     }
   }
 }

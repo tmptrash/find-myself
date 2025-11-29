@@ -67,6 +67,25 @@ export function create(config) {
     throw new Error('WordPile.create() requires customBounds parameter')
   }
   
+  //
+  // Check if word-pile objects already exist (from previous level run)
+  // If they exist, don't create new ones - just return empty instance
+  //
+  const existingWords = k.get("word-pile-text")
+  if (existingWords.length > 0) {
+    //
+    // Words already exist, return minimal instance without creating new ones
+    //
+    return {
+      k,
+      layers: [],
+      playableLeft: customBounds.left,
+      playableRight: customBounds.right,
+      playableTop: customBounds.top,
+      playableBottom: customBounds.bottom
+    }
+  }
+  
   const playableLeft = customBounds.left
   const playableRight = customBounds.right
   const playableTop = customBounds.top
@@ -279,7 +298,9 @@ function createWordInLayer(k, params) {
         k.opacity(finalOutlineOpacity),
         k.z(finalZIndex - 0.1),
         k.rotate(baseRotation),
-        k.fixed()
+        k.fixed(),
+        k.stay(),  // Stay persistent across scene changes
+        "word-pile-outline"
       ])
       outlineTexts.push(outlineText)
     })
@@ -305,7 +326,9 @@ function createWordInLayer(k, params) {
     k.opacity(finalTextOpacity),
     k.z(finalZIndex),
     k.rotate(baseRotation),
-    k.fixed()
+    k.fixed(),
+    k.stay(),  // Stay persistent across scene changes
+    "word-pile-text"
   ])
   
   return {

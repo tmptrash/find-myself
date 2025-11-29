@@ -133,6 +133,52 @@ export const cfg = {
 - Always use hex strings: `"FF8C00"` (not arrays or objects)
 - Include descriptive comments
 
+### Color Configuration Rules
+- **Global colors** (hero, platform, UI elements) → `src/cfg.js`
+- **Section-specific colors** (blades, killer letters, section backgrounds) → `src/sections/{section}/cfg.js`
+- **Never hardcode colors** in component files
+- Use `getColor(k, CFG.visual.colors.colorName)` helper to apply colors
+
+#### Example: Global Config
+```javascript
+// src/cfg.js
+export const CFG = {
+  visual: {
+    colors: {
+      hero: {
+        body: "#FF8C00",      // Orange (global across all sections)
+        outline: "#000000"
+      },
+      platform: "#1A1A1A",    // Nearly black (global)
+      ui: "#FFFFFF"           // White (global)
+    }
+  }
+}
+```
+
+#### Example: Section Config
+```javascript
+// src/sections/word/cfg.js
+export const WORD_CFG = {
+  visual: {
+    colors: {
+      background: "#3E3E3E",     // Section-specific background
+      blades: "#6B8E9F",         // Section-specific blades color
+      killerLetter: "#6B8E9F"    // Section-specific killer letter color
+    }
+  }
+}
+```
+
+#### Example: Using Colors in Components
+```javascript
+// Good: Use color from config
+const bladeColor = getColor(k, CFG.visual.colors.blades)
+
+// Bad: Hardcoded color
+const bladeColor = k.rgb(107, 142, 159)  // ❌ Never do this
+```
+
 ---
 
 ## 4. Kaplay.js Conventions

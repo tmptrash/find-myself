@@ -215,7 +215,8 @@ export function create(config) {
     pauseTimer: 1.0,  // Initial pause before starting to walk
     bodyBounceOffset: 0,
     bodyTilt: 0,  // Body tilt angle (horizontal sway)
-    currentSpeed: WALK_SPEED  // Current walking speed
+    currentSpeed: WALK_SPEED,  // Current walking speed
+    heroIsDead: false  // Flag to stop movement after killing hero
   }
   
   //
@@ -241,6 +242,11 @@ export function create(config) {
  * @param {Object} inst - Walking creature instance
  */
 function handleCollision(inst) {
+  //
+  // Mark hero as dead to stop creature movement
+  //
+  inst.heroIsDead = true
+  
   //
   // Use custom death handler if provided, otherwise use default
   //
@@ -418,9 +424,9 @@ function updateProceduralLegs(inst) {
  */
 function updateWalkingCreature(inst) {
   //
-  // Stop animation if hero is annihilating
+  // Stop animation if hero is annihilating or dead
   //
-  if (inst.hero.isAnnihilating) {
+  if (inst.hero.isAnnihilating || inst.heroIsDead) {
     return
   }
   
@@ -541,22 +547,22 @@ function drawLegs(inst) {
     const kneeWorldY = attachWorldY + ik.kneeY
     
     //
-    // Draw black outline for upper leg (thinner)
+    // Draw black outline for upper leg (wider for visibility)
     //
     k.drawLine({
       p1: k.vec2(attachWorldX, attachWorldY),
       p2: k.vec2(kneeWorldX, kneeWorldY),
-      width: 5,
+      width: 7,
       color: k.rgb(0, 0, 0)
     })
     
     //
-    // Draw black outline for lower leg (thinner)
+    // Draw black outline for lower leg (wider for visibility)
     //
     k.drawLine({
       p1: k.vec2(kneeWorldX, kneeWorldY),
       p2: k.vec2(footWorldX, footWorldY),
-      width: 5,
+      width: 7,
       color: k.rgb(0, 0, 0)
     })
     

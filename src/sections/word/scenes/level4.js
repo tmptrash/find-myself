@@ -53,6 +53,16 @@ export function sceneLevel4(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
+      hero,
+      currentLevel: 'level-word.4',
+      onDeath: () => {
+        //
+        // No death messages in level 4 - just direct restart
+        //
+        import('../../../components/hero.js').then(Hero => {
+          Hero.death(hero, () => k.go('level-word.4'))
+        })
+      },
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,
@@ -60,7 +70,8 @@ export function sceneLevel4(k) {
         top: PLATFORM_TOP_HEIGHT + 20,
         bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
       },
-      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
+      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
+      killerLetterCount: 7  // Level 4: 7 killer letters
     })
     
     //

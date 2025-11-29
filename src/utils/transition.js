@@ -65,7 +65,7 @@ export function showTransitionToLevel(k, targetLevel) {
 
 // Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
-  'menu': '',      // Before Level 0
+  'menu': '',
   'level-word.0': 'words, they cut deeper than blades',
   'level-word.1': "sharp words don't cut - they make you fall",
   'level-word.2': "the words you can't forget hurt the most",

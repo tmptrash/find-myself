@@ -18,9 +18,6 @@ const DEATH_MESSAGES = [
   "You forgot them — they didn't forget you."
 ]
 
-const DEATH_MESSAGE_DURATION = 1.0  // Message display duration (seconds)
-const DEATH_MESSAGE_FADE_DURATION = 0.3  // Fade in/out duration
-
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -97,7 +94,9 @@ function showDeathMessage(k, hero, bladesInst) {
   //
   // Show blades and trigger death animation
   //
-  Blades.show(bladesInst)
+  if (bladesInst) {
+    Blades.show(bladesInst)
+  }
   Hero.death(hero, () => {
     // This callback will be called after message sequence completes
   })
@@ -129,7 +128,7 @@ function showDeathMessage(k, hero, bladesInst) {
       //
       // Fade in message
       //
-      const progress = Math.min(1, inst.timer / DEATH_MESSAGE_FADE_DURATION)
+      const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
       messageText.opacity = progress
       
       if (progress >= 1) {
@@ -140,7 +139,7 @@ function showDeathMessage(k, hero, bladesInst) {
       //
       // Hold message
       //
-      if (inst.timer >= DEATH_MESSAGE_DURATION) {
+      if (inst.timer >= CFG.visual.deathMessage.duration) {
         inst.phase = 'fade_out'
         inst.timer = 0
       }
@@ -148,7 +147,7 @@ function showDeathMessage(k, hero, bladesInst) {
       //
       // Fade out message
       //
-      const progress = Math.min(1, inst.timer / DEATH_MESSAGE_FADE_DURATION)
+      const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
       messageText.opacity = 1 - progress
       
       if (progress >= 1) {
@@ -233,9 +232,13 @@ export function sceneLevel2(k) {
     //
     const flyingWords = FlyingWords.create({
       k,
+      hero,
+      currentLevel: 'level-word.2',
+      onDeath: () => showDeathMessage(k, hero, null),  // Use showDeathMessage for killer letter deaths
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
-      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio
+      letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
+      killerLetterCount: 5  // Level 2: 5 killer letters
     })
     
     //

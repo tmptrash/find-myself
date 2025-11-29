@@ -26,7 +26,11 @@ const LETTERS = [
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay instance
  * @param {string} cfg.color - Text color in hex format
+ * @param {Object} [cfg.hero] - Hero instance for killer letter collision
+ * @param {string} [cfg.currentLevel] - Current level name for restart
+ * @param {Function} [cfg.onDeath] - Callback when hero dies from killer letter
  * @param {number} [cfg.wordCount=1440] - Number of words to create
+ * @param {number} [cfg.killerLetterCount=2] - Number of killer letters (default: 2)
  * @param {number} [cfg.minSpeed=3200] - Minimum horizontal speed
  * @param {number} [cfg.maxSpeed=4800] - Maximum horizontal speed
  * @param {number} [cfg.minSize=18] - Minimum font size
@@ -40,7 +44,11 @@ export function create(cfg) {
   const {
     k,
     color,
+    hero = null,
+    currentLevel = null,
+    onDeath = null,
     wordCount = 40,
+    killerLetterCount = 3,
     minSpeed = 50,
     maxSpeed = 150,
     minSize = 20,
@@ -57,12 +65,35 @@ export function create(cfg) {
     throw new Error('FlyingWords.create() requires customBounds parameter')
   }
   
+  //
+  // Check if flying words already exist (from previous level run)
+  // Store instance in a global variable to persist across restarts
+  //
+  if (!k.flyingWordsInstance) {
+    k.flyingWordsInstance = null
+  }
+  
+  if (k.flyingWordsInstance) {
+    //
+    // Instance already exists, just update bounds and hero reference
+    //
+    k.flyingWordsInstance.playableLeft = customBounds.left
+    k.flyingWordsInstance.playableRight = customBounds.right
+    k.flyingWordsInstance.playableTop = customBounds.top
+    k.flyingWordsInstance.playableBottom = customBounds.bottom
+    k.flyingWordsInstance.hero = hero  // Update hero reference for new game session
+    k.flyingWordsInstance.currentLevel = currentLevel
+    k.flyingWordsInstance.onDeath = onDeath
+    return k.flyingWordsInstance
+  }
+  
   const playableLeft = customBounds.left
   const playableRight = customBounds.right
   const playableTop = customBounds.top
   const playableBottom = customBounds.bottom
 
   const words = []
+  const killerLetters = []
 
   //
   // Create initial words (half behind hero, half in front)
@@ -82,14 +113,42 @@ export function create(cfg) {
       initialSpawn: true,
       isBehindHero,
       rotationSpeedZ,
-      letterToWordRatio
+      letterToWordRatio,
+      isKiller: false
     })
     words.push(word)
+  }
+  
+  //
+  // Create killer letters if hero is provided
+  //
+  if (hero && currentLevel) {
+    for (let i = 0; i < killerLetterCount; i++) {
+      const killerLetter = createKillerLetter(k, {
+        hero,
+        currentLevel,
+        onDeath,
+        minSpeed,
+        maxSpeed,
+        minSize: maxSize,  // Killer letters are larger
+        maxSize: maxSize + 8,
+        playableTop,
+        playableBottom,
+        playableLeft,
+        playableRight,
+        initialSpawn: true,
+        rotationSpeedZ
+      })
+      killerLetters.push(killerLetter)
+    }
   }
 
   const inst = {
     k,
     words,
+    killerLetters,
+    hero,
+    currentLevel,
     color,
     minSpeed,
     maxSpeed,
@@ -102,6 +161,11 @@ export function create(cfg) {
     rotationSpeedZ,
     letterToWordRatio
   }
+  
+  //
+  // Store instance globally on k for persistence across scene restarts
+  //
+  k.flyingWordsInstance = inst
 
   return inst
 }
@@ -111,9 +175,33 @@ export function create(cfg) {
  * @param {Object} inst - Flying words instance
  */
 export function onUpdate(inst) {
-  const { k, words, playableRight, playableLeft, playableTop, playableBottom } = inst
+  const { words, killerLetters } = inst
 
+  //
+  // Update regular words
+  //
   words.forEach(word => {
+    updateWord(word, inst)
+  })
+  
+  //
+  // Update killer letters
+  //
+  if (killerLetters && killerLetters.length > 0) {
+    killerLetters.forEach(letter => {
+      updateKillerLetter(letter, inst)
+    })
+  }
+}
+
+/**
+ * Updates a single word animation
+ * @param {Object} word - Word object
+ * @param {Object} inst - Flying words instance
+ */
+function updateWord(word, inst) {
+  const { k, playableRight, playableLeft, playableTop, playableBottom } = inst
+  
     //
     // Update horizontal position (constant wind to the right)
     //
@@ -339,6 +427,22 @@ export function onUpdate(inst) {
       word.textObj.pos.y = playableTop + Math.random() * (playableBottom - playableTop)
       
       //
+      // Sync outline texts position
+      //
+      if (word.outlineTexts) {
+        const outlineOffsets = [
+          [-1, -1], [0, -1], [1, -1],
+          [-1, 0],           [1, 0],
+          [-1, 1],  [0, 1],  [1, 1]
+        ]
+        word.outlineTexts.forEach((outlineText, i) => {
+          const [dx, dy] = outlineOffsets[i]
+          outlineText.pos.x = word.textObj.pos.x + dx
+          outlineText.pos.y = word.textObj.pos.y + dy
+        })
+      }
+      
+      //
       // Sync outline position if it exists
       //
       if (word.outlineObj) {
@@ -364,6 +468,22 @@ export function onUpdate(inst) {
       //
       word.textObj.pos.y = playableTop - spawnDistanceTop - Math.random() * approximateWordWidth
       word.textObj.pos.x = playableLeft + Math.random() * (playableRight - playableLeft)
+      
+      //
+      // Sync outline texts position
+      //
+      if (word.outlineTexts) {
+        const outlineOffsets = [
+          [-1, -1], [0, -1], [1, -1],
+          [-1, 0],           [1, 0],
+          [-1, 1],  [0, 1],  [1, 1]
+        ]
+        word.outlineTexts.forEach((outlineText, i) => {
+          const [dx, dy] = outlineOffsets[i]
+          outlineText.pos.x = word.textObj.pos.x + dx
+          outlineText.pos.y = word.textObj.pos.y + dy
+        })
+      }
       
       //
       // Sync outline position if it exists
@@ -398,7 +518,18 @@ export function onUpdate(inst) {
     // if (word.textObj.pos.y < playableTop) {
     //   word.textObj.pos.y = playableTop + 10
     // }
-  })
+}
+
+/**
+ * Updates a single killer letter animation
+ * @param {Object} letter - Killer letter object
+ * @param {Object} inst - Flying words instance
+ */
+function updateKillerLetter(letter, inst) {
+  //
+  // Use the same update logic as regular words
+  //
+  updateWord(letter, inst)
 }
 
 /**
@@ -530,7 +661,9 @@ function createWord(k, params) {
       k.color(0, 0, 0),  // Black color for outline
       k.opacity(baseOpacity),
       k.z(zIndex - 0.1),  // Slightly behind main text
-      k.fixed()
+      k.fixed(),
+      k.stay(),  // Stay persistent across scene changes
+      "flying-word"
     ])
     outlineTexts.push(outlineText)
   })
@@ -545,7 +678,9 @@ function createWord(k, params) {
     getColor(k, color),
     k.opacity(baseOpacity),
     k.z(zIndex),
-    k.fixed()
+    k.fixed(),
+    k.stay(),  // Stay persistent across scene changes
+    "flying-word"
   ])
   
   //
@@ -565,7 +700,9 @@ function createWord(k, params) {
         k.color(0, 0, 0),  // Black color for outline
         k.opacity(baseOpacity * 0.5),
         k.z(zIndex - 0.05),  // Between outline and main text
-        k.fixed()
+        k.fixed(),
+        k.stay(),  // Stay persistent across scene changes
+        "flying-word"
       ])
       boldOutlineTexts.push(boldOutlineText)
     })
@@ -580,7 +717,9 @@ function createWord(k, params) {
       getColor(k, color),
       k.opacity(baseOpacity * 0.5),
       k.z(zIndex),
-      k.fixed()
+      k.fixed(),
+      k.stay(),  // Stay persistent across scene changes
+      "flying-word"
     ])
   }
 
@@ -664,4 +803,185 @@ function resetWord(word, inst, x) {
   word.textObj.textSize = size
 }
 
+/**
+ * Creates a single killer letter (deadly flying letter)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} params - Letter parameters
+ * @returns {Object} Killer letter object
+ */
+function createKillerLetter(k, params) {
+  const {
+    hero,
+    currentLevel,
+    onDeath,
+    minSpeed,
+    maxSpeed,
+    minSize,
+    maxSize,
+    playableTop,
+    playableBottom,
+    playableLeft,
+    playableRight,
+    initialSpawn,
+    rotationSpeedZ
+  } = params
+
+  //
+  // Always use a single letter
+  //
+  const text = LETTERS[Math.floor(Math.random() * LETTERS.length)]
+
+  //
+  // Killer letters are larger and more visible
+  //
+  const size = minSize + Math.random() * (maxSize - minSize)
+
+  const speedX = minSpeed + Math.random() * (maxSpeed - minSpeed)
+  const speedY = 2 + Math.random() * 8
+
+  //
+  // Random position
+  //
+  const approximateWordWidth = 150
+  const spawnDistanceLeft = approximateWordWidth * 2
+  const spawnDistanceTop = approximateWordWidth * 2
+  const startFromLeft = Math.random() < 0.7
   
+  let x, y
+  if (initialSpawn) {
+    if (startFromLeft) {
+      x = playableLeft - spawnDistanceLeft + Math.random() * (playableRight - playableLeft + spawnDistanceLeft + 150)
+      y = playableTop + Math.random() * (playableBottom - playableTop)
+    } else {
+      x = playableLeft + Math.random() * (playableRight - playableLeft)
+      y = playableTop - spawnDistanceTop + Math.random() * (playableBottom - playableTop + spawnDistanceTop + 150)
+    }
+  } else {
+    x = startFromLeft
+      ? playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth
+      : playableLeft + Math.random() * (playableRight - playableLeft)
+    y = startFromLeft
+      ? playableTop + Math.random() * (playableBottom - playableTop)
+      : playableTop - spawnDistanceTop - Math.random() * approximateWordWidth
+  }
+
+  //
+  // Killer letter color: from config (same as blades)
+  //
+  const killerColor = getColor(k, CFG.visual.colors.killerLetter)
+
+  //
+  // Z-index: same as regular flying words
+  //
+  const zIndex = CFG.visual.zIndex.flyingWords
+
+  //
+  // Higher opacity for visibility (brighter than regular letters)
+  //
+  const baseOpacity = 0.85 + Math.random() * 0.15  // 0.85-1.0 (very bright)
+
+  const fontFamily = CFG.visual.fonts.regular
+  
+  //
+  // Create black outline
+  //
+  const outlineOffsets = [
+    [-1, -1], [0, -1], [1, -1],
+    [-1, 0],           [1, 0],
+    [-1, 1],  [0, 1],  [1, 1]
+  ]
+  
+  const outlineTexts = []
+  outlineOffsets.forEach(([dx, dy]) => {
+    const outlineText = k.add([
+      k.text(text, {
+        size: size,
+        font: fontFamily
+      }),
+      k.pos(x + dx, y + dy),
+      k.anchor('center'),
+      k.color(0, 0, 0),
+      k.opacity(baseOpacity),
+      k.z(zIndex - 0.1),
+      k.fixed(),
+      k.stay(),  // Stay persistent across scene changes
+      "flying-word",
+      "killer-letter-outline"
+    ])
+    outlineTexts.push(outlineText)
+  })
+
+  //
+  // Create main killer letter with collision area
+  //
+  const textObj = k.add([
+    k.text(text, {
+      size: size,
+      font: fontFamily
+    }),
+    k.pos(x, y),
+    k.anchor('center'),
+    killerColor,
+    k.opacity(baseOpacity),
+    k.area({ scale: 0.6 }),  // Collision area (slightly smaller than visual)
+    k.z(zIndex),
+    k.fixed(),
+    k.stay(),  // Stay persistent across scene changes
+    "flying-word",
+    "killer-letter"
+  ])
+  
+  //
+  // Setup collision with hero
+  //
+  textObj.onCollide("player", () => {
+    //
+    // Destroy killer letter and all its outline texts
+    //
+    textObj.destroy()
+    outlineTexts.forEach(outline => outline.destroy())
+    
+    //
+    // Get current instance to access updated hero and onDeath
+    //
+    const currentInst = k.flyingWordsInstance
+    if (!currentInst) return
+    
+    //
+    // Use custom death handler if provided, otherwise use default
+    //
+    if (currentInst.onDeath) {
+      currentInst.onDeath()
+    } else {
+      //
+      // Default: Import Hero module and trigger death
+      //
+      import('../../../components/hero.js').then(Hero => {
+        Hero.death(currentInst.hero, () => k.go(currentInst.currentLevel))
+      })
+    }
+  })
+
+  return {
+    textObj,
+    outlineTexts,
+    outlineObj: null,
+    boldOutlineTexts: [],
+    isBold: false,
+    fontFamily,
+    speedX,
+    speedY,
+    rotation: Math.random() * 360,
+    rotationSpeed: (Math.random() - 0.5) * 120,
+    rotationZ: Math.random() * 360,
+    rotationSpeedZ: (Math.random() - 0.5) * rotationSpeedZ,
+    wavePhase: Math.random() * Math.PI * 2,
+    waveSpeed: 1.5 + Math.random() * 2,
+    waveAmplitude: 8 + Math.random() * 12,
+    baseOpacity,
+    isBehindHero: false,  // Killer letters are always in front
+    isLetter: true,
+    sizeMultiplier: 1,
+    isKiller: true
+  }
+}

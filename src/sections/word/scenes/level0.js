@@ -166,12 +166,13 @@ export function sceneLevel0(k) {
     const blades1 = Blades.create({
       k,
       x: blade1X,
-      y: platformY - bladeHeight / 2,
+      y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => Blades.handleCollision(blades1, "level-word.0"),
       sfx: sound,
-      bladeCount: 2
+      bladeCount: 2,
+      zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
     })
     Blades.show(blades1)  // Show permanently
     
@@ -181,12 +182,13 @@ export function sceneLevel0(k) {
     const blades2 = Blades.create({
       k,
       x: blade2X,
-      y: platformY - bladeHeight / 2,
+      y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => Blades.handleCollision(blades2, "level-word.0"),
       sfx: sound,
-      bladeCount: 2
+      bladeCount: 2,
+      zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
     })
     Blades.show(blades2)  // Show permanently
     
@@ -197,12 +199,13 @@ export function sceneLevel0(k) {
     const blades3 = Blades.create({
       k,
       x: blade3X,
-      y: platformY - bladeHeight / 2,
+      y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: null,  // No collision - safe to pass
       sfx: sound,
-      bladeCount: 2
+      bladeCount: 2,
+      zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
     })
     Blades.show(blades3)  // Show permanently
     //
@@ -259,12 +262,13 @@ export function sceneLevel0(k) {
         trapBlades = Blades.create({
           k,
           x: trapBladeX,
-          y: platformY - bladeHeight / 2,
+          y: platformY - 8,  // Lower by 2px
           hero,
           orientation: Blades.ORIENTATIONS.FLOOR,
           onHit: () => Blades.handleCollision(trapBlades, "level-word.0"),
           sfx: sound,
-          bladeCount: 2
+          bladeCount: 2,
+          zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
         })
         
         //

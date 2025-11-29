@@ -13,6 +13,16 @@ const SPIKE_GAP_BLOCKS = 1
 const SPIKE_SCALE = 1
 const SPIKE_BLOCK_SIZE = 4
 
+//
+// Blade animation parameters - realistic metal vibration
+//
+const VIBRATION_AMPLITUDE = 0.3  // Degrees of subtle vibration
+const VIBRATION_SPEED = 20  // High frequency vibration (realistic metal)
+const MICRO_SHAKE = 0.2  // Tiny position shifts in pixels
+const GLINT_INTERVAL_MIN = 15  // Minimum seconds between glints (increased from 8)
+const GLINT_INTERVAL_MAX = 25  // Maximum seconds between glints (increased from 15)
+const GLINT_DURATION = 0.8  // Duration of light glint effect (slower, was 0.4)
+
 export const ORIENTATIONS = {
   FLOOR: 'floor',
   CEILING: 'ceiling',
@@ -63,6 +73,7 @@ export function getSingleBladeWidth(k) {
  * @param {number} [config.bladeCount=3] - Number of blade pyramids to draw
  * @param {number} [config.scale=1] - Scale multiplier for the blade
  * @param {number} [config.zIndex] - Custom z-index (defaults to platforms)
+ * @param {boolean} [config.disableAnimation=false] - Disable vibration and glint animation
  * @returns {Object} Blades instance with blade object and state
  */
 export function create(config) {
@@ -77,7 +88,8 @@ export function create(config) {
     color = CFG.visual.colors.blades,
     bladeCount = 3,
     scale = 1,
-    zIndex = CFG.visual.zIndex.platforms
+    zIndex = CFG.visual.zIndex.platforms,
+    disableAnimation = false
   } = config
 
   // Calculate dynamic sizes based on screen resolution
@@ -118,9 +130,23 @@ export function create(config) {
     k.opacity(0),
     "blade"
   ])
+  
+  //
+  // Create invisible object for drawing glint on top layer
+  //
+  const glintDrawer = k.add([
+    k.pos(0, 0),
+    k.z(zIndex + 1),  // Above blade
+    {
+      draw() {
+        drawGlint(inst)
+      }
+    }
+  ])
 
   const inst = {
     blade,
+    glintDrawer,
     k,
     hero,
     orientation,
@@ -128,12 +154,27 @@ export function create(config) {
     sfx,
     isVisible: false,
     animationTimer: 0,
-    fadeInDuration: 0.3,   // Fade-in duration (0.5 seconds)
-    visibleDuration: 0.3,  // Stay visible (0.5 seconds)
-    fadeOutDuration: 0.3,  // Fade-out duration (0.5 seconds)
+    fadeInDuration: 0.3,
+    visibleDuration: 0.3,
+    fadeOutDuration: 0.3,
     animationComplete: false,
-    wasShownOnDeath: false,  // Flag to prevent auto-animation if shown on death
-    collisionEnabled: true   // Flag to enable/disable collision
+    wasShownOnDeath: false,
+    collisionEnabled: true,
+    baseX: x,
+    baseY: y,
+    baseRotation: rotation,
+    baseScale: SPIKE_SCALE * scale,
+    bladeWidth: collisionSize.width * SPIKE_SCALE * scale,
+    bladeHeight: collisionSize.height * SPIKE_SCALE * scale,
+    swayTime: Math.random() * Math.PI * 2,
+    squatTime: Math.random() * Math.PI * 2,
+    glintTimer: Math.random() * GLINT_INTERVAL_MAX,
+    glintProgress: 0,
+    isGlinting: false,
+    glintSoundPlayed: false,
+    glintDirection: 0,  // Will be set when glint starts (left or right stroke)
+    glintLetter: 0,  // Will be set when glint starts (left or right 'A')
+    disableAnimation  // Store animation flag
   }
 
   // Setup collision detection with hero (works even when invisible)
@@ -143,6 +184,13 @@ export function create(config) {
       onHit?.(inst)
     }
   })
+  
+  //
+  // Start living animation (only if not disabled)
+  //
+  if (!disableAnimation) {
+    blade.onUpdate(() => updateLivingAnimation(inst))
+  }
 
   return inst
 }
@@ -200,6 +248,92 @@ export function show(inst) {
 export function handleCollision(inst, currentLevel) {
   show(inst)
   Hero.death(inst.hero, () => inst.k.go(currentLevel))
+}
+
+/**
+ * Update living animation for blades (realistic metal vibration with glints)
+ * @param {Object} inst - Blade instance
+ */
+function updateLivingAnimation(inst) {
+  const { blade, k, orientation, baseRotation, sfx } = inst
+  
+  //
+  // Only animate floor-oriented blades
+  //
+  if (orientation !== ORIENTATIONS.FLOOR) return
+  
+  //
+  // Only animate when visible
+  //
+  if (!inst.isVisible && blade.opacity === 0) return
+  
+  const dt = k.dt()
+  
+  //
+  // Update vibration timers (high frequency, subtle)
+  //
+  inst.swayTime += dt * VIBRATION_SPEED
+  inst.squatTime += dt * (VIBRATION_SPEED * 1.3)  // Slightly different frequency
+  
+  //
+  // Realistic metal vibration (very subtle, high frequency)
+  // Combine multiple frequencies for natural resonance
+  //
+  const vibration = Math.sin(inst.swayTime) * VIBRATION_AMPLITUDE * 0.6 +
+                    Math.sin(inst.swayTime * 2.3) * VIBRATION_AMPLITUDE * 0.3 +
+                    Math.sin(inst.swayTime * 4.7) * VIBRATION_AMPLITUDE * 0.1
+  
+  //
+  // Micro position shake (barely visible, adds realism)
+  //
+  const microShakeX = Math.sin(inst.squatTime * 1.1) * MICRO_SHAKE * 0.5 +
+                      Math.sin(inst.squatTime * 3.7) * MICRO_SHAKE * 0.3
+  const microShakeY = Math.cos(inst.squatTime * 1.5) * MICRO_SHAKE * 0.3 +
+                      Math.cos(inst.squatTime * 5.1) * MICRO_SHAKE * 0.2
+  
+  //
+  // Apply vibration
+  //
+  blade.angle = baseRotation + vibration
+  blade.pos.x = inst.baseX + microShakeX
+  blade.pos.y = inst.baseY + microShakeY
+  
+  //
+  // Light glint system (periodic light reflections)
+  //
+  inst.glintTimer -= dt
+  
+  if (inst.glintTimer <= 0 && !inst.isGlinting) {
+    //
+    // Start new glint
+    //
+    inst.isGlinting = true
+    inst.glintProgress = 0
+    inst.glintSoundPlayed = false
+    inst.glintLetter = Math.random() > 0.5 ? -1 : 1  // Choose left (-1) or right (+1) 'A'
+    inst.glintDirection = Math.random() > 0.5 ? -1 : 1  // Choose left or right stroke of that 'A'
+    inst.glintTimer = GLINT_INTERVAL_MIN + Math.random() * (GLINT_INTERVAL_MAX - GLINT_INTERVAL_MIN)
+  }
+  
+  if (inst.isGlinting) {
+    inst.glintProgress += dt / GLINT_DURATION
+    
+    //
+    // Play katana slash sound at glint start
+    //
+    if (!inst.glintSoundPlayed && inst.glintProgress > 0.05 && sfx) {
+      Sound.playMetalPingSound(sfx)
+      inst.glintSoundPlayed = true
+    }
+    
+    if (inst.glintProgress >= 1) {
+      //
+      // End glint
+      //
+      inst.isGlinting = false
+      inst.glintProgress = 0
+    }
+  }
 }
 
 /**
@@ -280,6 +414,129 @@ function getCollisionSize(orientation, width, height) {
     return { width: height, height: width }
   }
   return { width, height }
+}
+
+/**
+ * Draw light glint effect (moving light with rays)
+ * @param {Object} inst - Blade instance
+ */
+function drawGlint(inst) {
+  const { k, isGlinting, glintProgress, blade, baseX, baseY, bladeWidth, bladeHeight, glintDirection, glintLetter } = inst
+  
+  //
+  // Only draw when glinting
+  //
+  if (!isGlinting || glintProgress === 0) return
+  
+  //
+  // Calculate glint position moving along the diagonal of one letter 'A'
+  // Path: top of chosen 'A' stroke → down along that stroke
+  //
+  // "AA" consists of two letters, we choose one
+  // Each 'A' is roughly bladeWidth/2 wide
+  //
+  const letterWidth = bladeWidth / 2.5  // Width of one 'A'
+  const letterCenterX = baseX + (letterWidth / 2) * glintLetter  // Center of chosen 'A'
+  
+  //
+  // Start at the TOP of the chosen stroke
+  // For left stroke: start slightly left of center
+  // For right stroke: start slightly right of center
+  //
+  const topStrokeOffset = (letterWidth / 3.5) * glintDirection  // Offset at top
+  const startX = letterCenterX + topStrokeOffset
+  const startY = baseY - bladeHeight / 2.2  // Top of the 'A'
+  
+  //
+  // End at bottom of the chosen 'A', on left or right stroke
+  // Bottom is MUCH wider than top (letter A shape)
+  // We need strong diagonal movement!
+  //
+  const bottomStrokeOffset = (letterWidth / 1.2) * glintDirection  // Much wider at bottom!
+  const endX = letterCenterX + bottomStrokeOffset
+  const endY = baseY + bladeHeight / 2.5  // Bottom of the 'A'
+  
+  //
+  // Interpolate position along the diagonal stroke
+  //
+  const glintX = startX + (endX - startX) * glintProgress
+  const glintY = startY + (endY - startY) * glintProgress
+  
+  //
+  // Opacity curve (fade in quickly, fade out slowly)
+  //
+  let glintOpacity
+  if (glintProgress < 0.3) {
+    glintOpacity = (glintProgress / 0.3)
+  } else {
+    glintOpacity = ((1 - glintProgress) / 0.7)
+  }
+  
+  //
+  // Draw central bright core (smaller, more focused)
+  //
+  const coreSize = 10
+  
+  k.drawCircle({
+    pos: k.vec2(glintX, glintY),
+    radius: coreSize / 2,
+    color: k.rgb(255, 255, 255),
+    opacity: glintOpacity * 0.95
+  })
+  
+  //
+  // Draw soft glow around core (larger halo)
+  //
+  const glowSize = 24
+  
+  k.drawCircle({
+    pos: k.vec2(glintX, glintY),
+    radius: glowSize / 2,
+    color: k.rgb(255, 255, 255),
+    opacity: glintOpacity * 0.25
+  })
+  
+  //
+  // Draw light rays (6 rays in all directions)
+  //
+  const rayLength = 22
+  const rayWidth = 2
+  const rayAngles = [0, 60, 120, 180, 240, 300]  // 6 rays evenly distributed
+  
+  rayAngles.forEach(angle => {
+    const angleRad = (angle * Math.PI) / 180
+    const endX = glintX + Math.cos(angleRad) * rayLength
+    const endY = glintY + Math.sin(angleRad) * rayLength
+    
+    k.drawLine({
+      p1: k.vec2(glintX, glintY),
+      p2: k.vec2(endX, endY),
+      width: rayWidth,
+      color: k.rgb(255, 255, 255),
+      opacity: glintOpacity * 0.55
+    })
+  })
+  
+  //
+  // Draw extra sparkle (tiny cross)
+  //
+  const sparkleSize = 6
+  
+  k.drawLine({
+    p1: k.vec2(glintX - sparkleSize, glintY),
+    p2: k.vec2(glintX + sparkleSize, glintY),
+    width: 1.5,
+    color: k.rgb(255, 255, 255),
+    opacity: glintOpacity * 0.8
+  })
+  
+  k.drawLine({
+    p1: k.vec2(glintX, glintY - sparkleSize),
+    p2: k.vec2(glintX, glintY + sparkleSize),
+    width: 1.5,
+    color: k.rgb(255, 255, 255),
+    opacity: glintOpacity * 0.8
+  })
 }
 
 /**

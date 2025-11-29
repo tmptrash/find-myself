@@ -44,6 +44,7 @@ export function create(config) {
   const platformWidth = Blades.getBladeWidth(k)
   const platformHeight = k.height() - y  // Height from floor to bottom of screen
   const bladeHeight = Blades.getBladeHeight(k)
+  const dropDistance = k.height() * 0.08  // Drop by hero height (~8% of screen)
   
   // Create platform
   const platform = k.add([
@@ -57,16 +58,18 @@ export function create(config) {
     "platform"
   ])
   
-  // Create blades at the TOP of platform (initially hidden)
+  // Create blades at the BOTTOM of the pit (where platform will drop to)
+  const pitBottomY = y + dropDistance  // Bottom of pit when platform drops
   const blades = Blades.create({
     k,
     x: x,
-    y: y - bladeHeight / 2,  // Above platform top
+    y: pitBottomY - bladeHeight / 2,  // Just above the floor of the pit
     hero,
     orientation: Blades.ORIENTATIONS.FLOOR,  // Pointing up
     onHit: () => Blades.handleCollision(blades, currentLevel),
     sfx,
-    color: CFG.visual.colors[currentLevel]?.blades
+    color: CFG.visual.colors[currentLevel]?.blades,
+    disableAnimation: true  // Disable vibration and glint for trap blades
   })
   blades.blade.opacity = 0  // Start hidden
   blades.blade.z = CFG.visual.zIndex.platforms + 1  // Above platform
@@ -85,7 +88,7 @@ export function create(config) {
     originalY: y,
     targetY: y,
     currentY: y,
-    dropDistance: k.height() * 0.08,  // Drop by hero height (~8% of screen)
+    dropDistance,
     state: 'idle',  // idle, dropping, waiting, disabled
     timer: 0,
     hasActivated: false  // Track if trap was activated at least once
@@ -166,13 +169,9 @@ function onUpdate(inst) {
     
     // Smooth drop animation
     const newY = originalY + dropDistance * progress
-    const deltaY = newY - inst.currentY
     
     // Move platform
     platform.pos.y = newY
-    
-    // Move blades with platform
-    blades.blade.pos.y += deltaY
     
     inst.currentY = newY
     
@@ -248,14 +247,20 @@ function onUpdate(inst) {
     // Move platform
     platform.pos.y = newY
     
-    // Move blades with platform
+    // Move blades with platform (they rise together)
     blades.blade.pos.y += deltaY
+    blades.glintDrawer.pos.y += deltaY  // Move glint drawer too
+    
+    // Fade out blades much faster (disappear at 25% of raise animation)
+    const fadeProgress = Math.min(1, progress * 4)  // 4x faster fade
+    blades.blade.opacity = Math.max(0, 1 - fadeProgress)
     
     inst.currentY = newY
     
     // Stay in disabled state (never reset to idle)
     if (progress >= 1) {
       inst.state = 'disabled'  // Keep disabled, don't reset hasActivated
+      blades.blade.opacity = 0  // Ensure fully hidden
     }
   }
 }

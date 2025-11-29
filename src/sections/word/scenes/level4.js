@@ -6,7 +6,6 @@ import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -84,32 +83,6 @@ export function sceneLevel4(k) {
       FlyingWords.onUpdate(flyingWords)
     })
     
-    //
-    // Create word grass on left and right platforms (not in pit area)
-    //
-    const wordGrass = WordGrass.create({
-      k,
-      customBounds: {
-        left: PLATFORM_SIDE_WIDTH,
-        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
-        top: PLATFORM_TOP_HEIGHT,
-        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
-      },
-      hero,
-      bladePositions: [],  // No static blades on this level
-      platformGaps: [{
-        x: pitInfo.centerX - pitInfo.width / 2,
-        width: pitInfo.width
-      }]  // Pass the pit as a gap so grass doesn't spawn in it
-    })
-    
-    //
-    // Update word grass animation
-    //
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
-    })
-    
     // Create bottom of the pit (platform at pit depth)
     const heroHeight = CFG.visual.screen.height * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
@@ -157,10 +130,11 @@ export function sceneLevel4(k) {
         blades1.blade.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
       },
-      sfx: sound
+      sfx: sound,
+      disableAnimation: true,  // Disable vibration and glint for moving blades
+      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
     })
     blades1.blade.opacity = 1
-    blades1.blade.z = -50  // Behind platforms
     
     // Center blade (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
     const hiddenY2 = PLATFORM_TOP_HEIGHT - bladeHeight * 2  // Hidden deep above platform
@@ -174,10 +148,11 @@ export function sceneLevel4(k) {
         blades2.blade.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
       },
-      sfx: sound
+      sfx: sound,
+      disableAnimation: true,  // Disable vibration and glint for moving blades
+      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
     })
     blades2.blade.opacity = 1
-    blades2.blade.z = -50  // Behind platforms
     
     // Right blade (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
     const rightBladeX = pitInfo.centerX + pitInfo.width / 2 + bladeWidth * 1.5
@@ -192,10 +167,11 @@ export function sceneLevel4(k) {
         blades3.blade.opacity = 1
         Hero.death(hero, () => k.go("level-word.4"))
       },
-      sfx: sound
+      sfx: sound,
+      disableAnimation: true,  // Disable vibration and glint for moving blades
+      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
     })
     blades3.blade.opacity = 1
-    blades3.blade.z = -50  // Behind platforms
     
     // Scene instance with state
     const inst = {

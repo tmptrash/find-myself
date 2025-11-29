@@ -334,6 +334,69 @@ export function playBladeSound(instance) {
   rumble.start(now)
   rumble.stop(now + duration)
 }
+
+/**
+ * Play metal ping sound (for blade glints) - katana-like sound
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playMetalPingSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.6  // Longer for katana resonance
+  
+  //
+  // High pitched "swish" (air cutting sound) - starts high and sweeps down
+  //
+  const swish = instance.audioContext.createOscillator()
+  swish.type = 'sine'
+  swish.frequency.setValueAtTime(3800, now)
+  swish.frequency.exponentialRampToValueAtTime(800, now + duration)  // Long sweep down
+  
+  //
+  // Metallic ring (katana resonance) - pure tone that slowly fades
+  //
+  const ring = instance.audioContext.createOscillator()
+  ring.type = 'triangle'  // Triangle wave for metallic quality
+  ring.frequency.setValueAtTime(5200, now)
+  ring.frequency.exponentialRampToValueAtTime(4800, now + duration)
+  
+  //
+  // Very sharp attack envelope (instant, like katana slash)
+  //
+  const swishGain = instance.audioContext.createGain()
+  swishGain.gain.setValueAtTime(0.15, now)  // Instant, loud attack
+  swishGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  const ringGain = instance.audioContext.createGain()
+  ringGain.gain.setValueAtTime(0, now)
+  ringGain.gain.linearRampToValueAtTime(0.08, now + 0.05)  // Ring starts after swish
+  ringGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  //
+  // High-pass filter for crisp katana sound (removes low frequencies)
+  //
+  const hpFilter = instance.audioContext.createBiquadFilter()
+  hpFilter.type = 'highpass'
+  hpFilter.frequency.value = 1500
+  hpFilter.Q.value = 0.7
+  
+  //
+  // Connect nodes
+  //
+  swish.connect(swishGain)
+  ring.connect(ringGain)
+  swishGain.connect(hpFilter)
+  ringGain.connect(hpFilter)
+  hpFilter.connect(instance.audioContext.destination)
+  
+  //
+  // Start and stop
+  //
+  swish.start(now)
+  ring.start(now)
+  swish.stop(now + duration)
+  ring.stop(now + duration)
+}
+
 /**
  * Play slow text sliding sound effect (for blade arm text)
  * @param {Object} instance - Sound instance from create()

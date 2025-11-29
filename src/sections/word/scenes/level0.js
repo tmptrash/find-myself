@@ -3,6 +3,7 @@ import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 import { getProgress } from '../../../utils/progress.js'
 
 //
@@ -208,6 +209,25 @@ export function sceneLevel0(k) {
     // Set z-index higher than hero to show in front
     //
     blades3.blade.z = CFG.visual.zIndex.player + 1
+    
+    //
+    // Create word grass and trees for additional atmosphere
+    // Pass blade positions so grass doesn't spawn near them
+    //
+    const bladePositions = [blade1X, blade2X, blade3X]
+    const wordGrass = WordGrass.create({
+      k,
+      customBounds: platformBounds,
+      hero,
+      bladePositions
+    })
+    
+    //
+    // Update word grass animation
+    //
+    k.onUpdate(() => {
+      WordGrass.onUpdate(wordGrass)
+    })
     
     //
     // Trap blades that appear when hero gets close to blade3
@@ -484,4 +504,5 @@ function showInstructions(k) {
     }
   })
 }
+
 

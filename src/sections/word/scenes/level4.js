@@ -6,6 +6,7 @@ import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -81,6 +82,32 @@ export function sceneLevel4(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    
+    //
+    // Create word grass on left and right platforms (not in pit area)
+    //
+    const wordGrass = WordGrass.create({
+      k,
+      customBounds: {
+        left: PLATFORM_SIDE_WIDTH,
+        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
+        top: PLATFORM_TOP_HEIGHT,
+        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+      },
+      hero,
+      bladePositions: [],  // No static blades on this level
+      platformGaps: [{
+        x: pitInfo.centerX - pitInfo.width / 2,
+        width: pitInfo.width
+      }]  // Pass the pit as a gap so grass doesn't spawn in it
+    })
+    
+    //
+    // Update word grass animation
+    //
+    k.onUpdate(() => {
+      WordGrass.onUpdate(wordGrass)
     })
     
     // Create bottom of the pit (platform at pit depth)

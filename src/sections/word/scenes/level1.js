@@ -4,6 +4,7 @@ import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -30,6 +31,14 @@ export function sceneLevel1(k) {
     const movingPlatformX = centerX + CFG.visual.screen.width * 0.05  // Position platform left of center
     
     //
+    // Define platform gap
+    //
+    const platformGap = {
+      x: movingPlatformX - bladeWidth / 2,  // Gap under platform
+      width: bladeWidth  // Gap width matches blade width
+    }
+    
+    //
     // Initialize level with heroes and gap in platform (for trap)
     //
     const { sound, hero, antiHero } = initScene({
@@ -48,10 +57,7 @@ export function sceneLevel1(k) {
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
-      platformGap: {
-        x: movingPlatformX - bladeWidth / 2,  // Gap under platform
-        width: bladeWidth  // Gap width matches blade width
-      }
+      platformGap
     })
     
     //
@@ -87,6 +93,24 @@ export function sceneLevel1(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    
+    //
+    // Create word grass on bottom platform (no static blades on this level)
+    //
+    const wordGrass = WordGrass.create({
+      k,
+      customBounds: platformBounds,
+      hero,
+      bladePositions: [],  // No static blades on this level
+      platformGaps: [platformGap]  // Pass the gap so grass doesn't spawn over it
+    })
+    
+    //
+    // Update word grass animation
+    //
+    k.onUpdate(() => {
+      WordGrass.onUpdate(wordGrass)
     })
     
     //

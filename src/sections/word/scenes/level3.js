@@ -5,6 +5,7 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -35,6 +36,22 @@ export function sceneLevel3(k) {
     const movingPlatform1X = leftX + distance / 3  // First platform at 1/3 distance
     const movingPlatform2X = leftX + distance * 2 / 3  // Second platform at 2/3 distance
     
+    //
+    // Define platform gaps
+    //
+    const platformGaps = [
+      // First gap for first moving platform (special jump-to-disable)
+      {
+        x: movingPlatform1X - bladeWidth / 2,
+        width: bladeWidth
+      },
+      // Second gap for second moving platform (normal timer-based)
+      {
+        x: movingPlatform2X - bladeWidth / 2,
+        width: bladeWidth
+      }
+    ]
+    
     // Initialize level with heroes and TWO gaps in platform
     const { sound, hero, antiHero } = initScene({
       k,
@@ -52,18 +69,7 @@ export function sceneLevel3(k) {
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
-      platformGap: [
-        // First gap for first moving platform (special jump-to-disable)
-        {
-          x: movingPlatform1X - bladeWidth / 2,
-          width: bladeWidth
-        },
-        // Second gap for second moving platform (normal timer-based)
-        {
-          x: movingPlatform2X - bladeWidth / 2,
-          width: bladeWidth
-        }
-      ]
+      platformGap: platformGaps
     })
     
     //
@@ -99,6 +105,24 @@ export function sceneLevel3(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    
+    //
+    // Create word grass on bottom platform (no static blades on this level)
+    //
+    const wordGrass = WordGrass.create({
+      k,
+      customBounds: platformBounds,
+      hero,
+      bladePositions: [],  // No static blades on this level
+      platformGaps  // Pass the gaps so grass doesn't spawn over them
+    })
+    
+    //
+    // Update word grass animation
+    //
+    k.onUpdate(() => {
+      WordGrass.onUpdate(wordGrass)
     })
     
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT

@@ -4,6 +4,7 @@ import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -38,6 +39,22 @@ export function sceneLevel2(k) {
     // Second moving platform before second blade (rightmost)
     const movingPlatform2X = blade2X - bladeWidth * 1.1  // Closer to second blade
     
+    //
+    // Define platform gaps
+    //
+    const platformGaps = [
+      // First gap for first moving platform
+      {
+        x: movingPlatformX - bladeWidth / 2,
+        width: bladeWidth
+      },
+      // Second gap for second moving platform
+      {
+        x: movingPlatform2X - bladeWidth / 2,
+        width: bladeWidth
+      }
+    ]
+    
     // Initialize level with heroes and gaps in platform
     const { sound, hero, antiHero } = initScene({
       k,
@@ -55,18 +72,7 @@ export function sceneLevel2(k) {
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
-      platformGap: [
-        // First gap for first moving platform
-        {
-          x: movingPlatformX - bladeWidth / 2,
-          width: bladeWidth
-        },
-        // Second gap for second moving platform
-        {
-          x: movingPlatform2X - bladeWidth / 2,
-          width: bladeWidth
-        }
-      ]
+      platformGap: platformGaps
     })
     
     //
@@ -102,6 +108,24 @@ export function sceneLevel2(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    
+    //
+    // Create word grass on bottom platform (pass blade positions)
+    //
+    const wordGrass = WordGrass.create({
+      k,
+      customBounds: platformBounds,
+      hero,
+      bladePositions: [blade1X, blade2X],  // Two static blades on this level
+      platformGaps  // Pass the gaps so grass doesn't spawn over them
+    })
+    
+    //
+    // Update word grass animation
+    //
+    k.onUpdate(() => {
+      WordGrass.onUpdate(wordGrass)
     })
     
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT

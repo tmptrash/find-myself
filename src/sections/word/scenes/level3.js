@@ -209,8 +209,6 @@ export function sceneLevel3(k) {
       k,
       y: textY,
       hero,
-      color: CFG.visual.colors.blades,
-      sfx: sound,
       currentLevel: 'level-word.3'
     })
     

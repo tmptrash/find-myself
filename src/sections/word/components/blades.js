@@ -19,9 +19,6 @@ const SPIKE_BLOCK_SIZE = 4
 const VIBRATION_AMPLITUDE = 0.3  // Degrees of subtle vibration
 const VIBRATION_SPEED = 20  // High frequency vibration (realistic metal)
 const MICRO_SHAKE = 0.2  // Tiny position shifts in pixels
-const GLINT_INTERVAL_MIN = 15  // Minimum seconds between glints (increased from 8)
-const GLINT_INTERVAL_MAX = 25  // Maximum seconds between glints (increased from 15)
-const GLINT_DURATION = 0.8  // Duration of light glint effect (slower, was 0.4)
 
 export const ORIENTATIONS = {
   FLOOR: 'floor',
@@ -168,7 +165,7 @@ export function create(config) {
     bladeHeight: collisionSize.height * SPIKE_SCALE * scale,
     swayTime: Math.random() * Math.PI * 2,
     squatTime: Math.random() * Math.PI * 2,
-    glintTimer: Math.random() * GLINT_INTERVAL_MAX,
+    glintTimer: Math.random() * CFG.visual.bladeGlint.intervalMax,
     glintProgress: 0,
     isGlinting: false,
     glintSoundPlayed: false,
@@ -237,7 +234,6 @@ export function startAnimation(inst, delaySeconds = 1) {
 export function show(inst) {
   inst.blade.opacity = 1
   inst.isVisible = true
-  inst.wasShownOnDeath = true  // Mark that blades were shown on death
   inst.glintDrawer.hidden = false  // Ensure glint drawer is visible
 }
 
@@ -247,6 +243,7 @@ export function show(inst) {
  * @param {string} currentLevel - Level to restart on death
  */
 export function handleCollision(inst, currentLevel) {
+  inst.wasShownOnDeath = true  // Mark that blades were shown on death (stops glint)
   show(inst)
   Hero.death(inst.hero, () => inst.k.go(currentLevel))
 }
@@ -330,11 +327,11 @@ function updateLivingAnimation(inst) {
     inst.glintSoundPlayed = false
     inst.glintLetter = Math.random() > 0.5 ? -1 : 1  // Choose left (-1) or right (+1) 'A'
     inst.glintDirection = Math.random() > 0.5 ? -1 : 1  // Choose left or right stroke of that 'A'
-    inst.glintTimer = GLINT_INTERVAL_MIN + Math.random() * (GLINT_INTERVAL_MAX - GLINT_INTERVAL_MIN)
+    inst.glintTimer = CFG.visual.bladeGlint.intervalMin + Math.random() * (CFG.visual.bladeGlint.intervalMax - CFG.visual.bladeGlint.intervalMin)
   }
   
   if (inst.isGlinting) {
-    inst.glintProgress += dt / GLINT_DURATION
+    inst.glintProgress += dt / CFG.visual.bladeGlint.duration
     
     //
     // Play katana slash sound at glint start

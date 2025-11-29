@@ -89,6 +89,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null) {
   // Show blades and trigger death animation with particles
   //
   if (bladesInst) {
+    bladesInst.wasShownOnDeath = true  // Stop glint animation on death
     Blades.show(bladesInst)
   }
   Hero.death(hero, () => {

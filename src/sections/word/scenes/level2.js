@@ -95,6 +95,7 @@ function showDeathMessage(k, hero, bladesInst) {
   // Show blades and trigger death animation
   //
   if (bladesInst) {
+    bladesInst.wasShownOnDeath = true  // Stop glint animation on death
     Blades.show(bladesInst)
   }
   Hero.death(hero, () => {

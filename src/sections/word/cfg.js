@@ -27,6 +27,14 @@ export const WORD_CFG = {
     deathMessage: {
       duration: 2.0,      // Message display duration (seconds)
       fadeDuration: 0.3   // Fade in/out duration (seconds)
+    },
+    //
+    // Blade glint effect configuration
+    //
+    bladeGlint: {
+      intervalMin: 10,    // Minimum seconds between glints
+      intervalMax: 25,    // Maximum seconds between glints
+      duration: 0.8       // Duration of light glint effect (seconds)
     }
   }
 }

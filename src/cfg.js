@@ -123,7 +123,7 @@ export const CFG = {
       landDuration: 0.05,
       landFreqStart: 180,
       landFreqEnd: 60,
-      step: MASTER_VOLUME * 0.613,
+      step: MASTER_VOLUME * 0.4,
       stepFade: MASTER_VOLUME * 0.041,
       stepDuration: 0.05,
       stepFreqStart: 180,

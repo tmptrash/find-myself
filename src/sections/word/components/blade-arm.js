@@ -1,10 +1,11 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
+import * as Sound from '../../../utils/sound.js'
 
 //
 // Walking creature parameters
 //
-const TEXT_MESSAGE = '⟪ words that kill ⟫'
+const TEXT_MESSAGE = 'words that kill'
 const TEXT_SIZE = 36
 const OUTLINE_THICKNESS = 2
 const WALK_SPEED = 60  // Pixels per second (slower walking speed)
@@ -24,10 +25,12 @@ const BODY_BOUNCE = 2  // Vertical bounce of body during walk (reduced)
  * @param {number} config.y - Y position (center of text)
  * @param {Object} config.hero - Hero instance for collision detection
  * @param {string} config.currentLevel - Current level name for restart
+ * @param {Object} [config.sfx] - Sound instance for audio effects
+ * @param {Function} [config.onHit] - Optional custom death callback
  * @returns {Object} Walking creature instance
  */
 export function create(config) {
-  const { k, y, hero, currentLevel } = config
+  const { k, y, hero, currentLevel, sfx = null, onHit = null } = config
   
   const sideWallWidth = 192  // Side walls width (10% of 1920)
   
@@ -203,6 +206,8 @@ export function create(config) {
     legs,
     hero,
     currentLevel,
+    sfx,
+    onHit,
     textWidth,
     maxX,
     groundY,
@@ -236,7 +241,14 @@ export function create(config) {
  * @param {Object} inst - Walking creature instance
  */
 function handleCollision(inst) {
-  Hero.death(inst.hero, () => inst.k.go(inst.currentLevel))
+  //
+  // Use custom death handler if provided, otherwise use default
+  //
+  if (inst.onHit) {
+    inst.onHit(inst)
+  } else {
+    Hero.death(inst.hero, () => inst.k.go(inst.currentLevel))
+  }
 }
 
 /**
@@ -289,6 +301,11 @@ function solveIK(targetX, targetY, attachX, attachY, upperLength, lowerLength) {
  */
 function updateProceduralLegs(inst) {
   const { legs, creatureContainer, groundY } = inst
+  
+  //
+  // Track which pair groups just completed a step (to play sound once per group)
+  //
+  const completedPairGroups = new Set()
   
   //
   // Update each leg
@@ -357,6 +374,12 @@ function updateProceduralLegs(inst) {
         leg.stepProgress = 0
         leg.footX = leg.targetX
         leg.footY = leg.targetY
+        
+        //
+        // Mark this pair group as completed (for sound)
+        // Track both near and far legs
+        //
+        completedPairGroups.add(leg.pairGroup)
       } else {
         //
         // Interpolate foot position with arc
@@ -378,6 +401,15 @@ function updateProceduralLegs(inst) {
       }
     }
   })
+  
+  //
+  // Play sound once per completed pair group
+  //
+  if (inst.sfx && completedPairGroups.size > 0) {
+    completedPairGroups.forEach(() => {
+      Sound.playCrunchSound(inst.sfx)
+    })
+  }
 }
 
 /**

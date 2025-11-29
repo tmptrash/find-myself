@@ -24,6 +24,7 @@ const RAISE_DURATION = 0.5      // Time to raise up (seconds)
  * @param {boolean} [config.autoOpen=false] - If true, platform opens automatically on level start
  * @param {Object} [config.sfx] - Sound instance
  * @param {number} [config.raiseTimeout] - Custom timeout before platform raises (seconds)
+ * @param {Function} [config.onBladeHit] - Custom callback when hero hits blades (overrides default)
  * @returns {Object} Platform instance
  */
 export function create(config) {
@@ -37,7 +38,8 @@ export function create(config) {
     jumpToDisableBlades = false, 
     autoOpen = false, 
     sfx = null,
-    raiseTimeout = RAISE_TIMEOUT
+    raiseTimeout = RAISE_TIMEOUT,
+    onBladeHit = null
   } = config
   
   // Calculate platform dimensions based on blade width
@@ -66,7 +68,7 @@ export function create(config) {
     y: pitBottomY - bladeHeight / 2,  // Just above the floor of the pit
     hero,
     orientation: Blades.ORIENTATIONS.FLOOR,  // Pointing up
-    onHit: () => Blades.handleCollision(blades, currentLevel),
+    onHit: onBladeHit ? () => onBladeHit(blades) : () => Blades.handleCollision(blades, currentLevel),
     sfx,
     color: CFG.visual.colors[currentLevel]?.blades,
     disableAnimation: true  // Disable vibration and glint for trap blades

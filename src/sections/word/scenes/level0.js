@@ -1,10 +1,27 @@
 import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
+import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import { getProgress } from '../../../utils/progress.js'
+
+//
+// Death messages (shown randomly on death)
+//
+const DEATH_MESSAGES = [
+  "Cut again.",
+  "Words hurt. Remember?",
+  "Too sharp for you?",
+  "It stings, doesn't it?",
+  "Still bleeding?",
+  "You let it cut you.",
+  "That one went deep."
+]
+
+const DEATH_MESSAGE_DURATION = 1.0  // Message display duration (seconds)
+const DEATH_MESSAGE_FADE_DURATION = 0.3  // Fade in/out duration
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -45,6 +62,134 @@ let introAnimationComplete = false
 // Flag to track if instructions animation is complete (resets only on page reload)
 //
 let instructionsAnimationComplete = false
+
+/**
+ * Shows a random death message and then restarts the level
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} bladesInst - Blades instance that was hit
+ */
+function showDeathMessage(k, hero, bladesInst) {
+  //
+  // Select random message
+  //
+  const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
+  
+  //
+  // Calculate position (below bottom platform, centered)
+  //
+  const centerX = CFG.visual.screen.width / 2
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  
+  //
+  // Create message text
+  //
+  const messageText = k.add([
+    k.text(message, {
+      size: 28,
+      align: "center",
+      font: CFG.visual.fonts.regular
+    }),
+    k.pos(centerX, messageY),
+    k.anchor("center"),
+    k.color(107, 142, 159),  // Blade color (steel blue)
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    messageText,
+    timer: 0,
+    phase: 'fade_in',
+    skipRequested: false
+  }
+  
+  //
+  // Listen for skip inputs (space, enter, mouse click)
+  //
+  const skipHandlers = []
+  
+  const requestSkip = () => {
+    inst.skipRequested = true
+  }
+  
+  skipHandlers.push(k.onKeyPress("space", requestSkip))
+  skipHandlers.push(k.onKeyPress("enter", requestSkip))
+  skipHandlers.push(k.onClick(requestSkip))
+  
+  //
+  // Show blades and trigger death animation
+  //
+  Blades.show(bladesInst)
+  Hero.death(hero, () => {
+    // This callback will be called after message sequence completes
+  })
+  
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    
+    //
+    // Handle skip request
+    //
+    if (inst.skipRequested) {
+      //
+      // Clean up immediately
+      //
+      updateInterval.cancel()
+      skipHandlers.forEach(h => h.cancel())
+      k.destroy(messageText)
+      //
+      // Restart level
+      //
+      k.go("level-word.0")
+      return
+    }
+    
+    if (inst.phase === 'fade_in') {
+      //
+      // Fade in message
+      //
+      const progress = Math.min(1, inst.timer / DEATH_MESSAGE_FADE_DURATION)
+      messageText.opacity = progress
+      
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      //
+      // Hold message
+      //
+      if (inst.timer >= DEATH_MESSAGE_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      //
+      // Fade out message
+      //
+      const progress = Math.min(1, inst.timer / DEATH_MESSAGE_FADE_DURATION)
+      messageText.opacity = 1 - progress
+      
+      if (progress >= 1) {
+        //
+        // Clean up and restart level
+        //
+        updateInterval.cancel()
+        skipHandlers.forEach(h => h.cancel())
+        k.destroy(messageText)
+        k.go("level-word.0")
+      }
+    }
+  })
+}
 
 /**
  * Level 0 scene - Introduction level with blade obstacles
@@ -169,7 +314,7 @@ export function sceneLevel0(k) {
       y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(blades1, "level-word.0"),
+      onHit: () => showDeathMessage(k, hero, blades1),
       sfx: sound,
       bladeCount: 2,
       zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
@@ -185,7 +330,7 @@ export function sceneLevel0(k) {
       y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(blades2, "level-word.0"),
+      onHit: () => showDeathMessage(k, hero, blades2),
       sfx: sound,
       bladeCount: 2,
       zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
@@ -265,7 +410,7 @@ export function sceneLevel0(k) {
           y: platformY - 8,  // Lower by 2px
           hero,
           orientation: Blades.ORIENTATIONS.FLOOR,
-          onHit: () => Blades.handleCollision(trapBlades, "level-word.0"),
+          onHit: () => showDeathMessage(k, hero, trapBlades),
           sfx: sound,
           bladeCount: 2,
           zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform

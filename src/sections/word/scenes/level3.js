@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
+import * as Hero from '../../../components/hero.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
@@ -21,6 +22,113 @@ const HERO_SPAWN_X_BASE = 576   // 30% of 1920 (base position before shift)
 const HERO_SPAWN_Y = 691        // 64% of 1080
 const ANTIHERO_SPAWN_X = 1690   // 88% of 1920
 const ANTIHERO_SPAWN_Y = 691    // 64% of 1080
+
+//
+// Death messages for level 3
+//
+const DEATH_MESSAGES = [
+  "Some words strike first.",
+  "Not every word waits to hurt you.",
+  "Sharp words move faster than you think.",
+  "Watch your step — and your words.",
+  "Words hit harder when you're running."
+]
+
+/**
+ * Show death message and restart level after delay
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} bladesInst - Blades instance (optional)
+ */
+function showDeathMessage(k, hero, bladesInst) {
+  //
+  // Select random message
+  //
+  const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
+  const centerX = CFG.visual.screen.width / 2
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  
+  //
+  // Create message text
+  //
+  const messageText = k.add([
+    k.text(message, {
+      size: 32,
+      align: "center",
+      font: CFG.visual.fonts.regular
+    }),
+    k.pos(centerX, messageY),
+    k.anchor("center"),
+    k.color(107, 142, 159),  // Steel blue (blade color)
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 20)
+  ])
+  
+  let timer = 0
+  let phase = 'fade_in'
+  let restartTriggered = false
+  
+  //
+  // Restart level function
+  //
+  const restartLevel = () => {
+    if (restartTriggered) return
+    restartTriggered = true
+    k.destroy(messageText)
+    k.go("level-word.3")
+  }
+  
+  //
+  // Show blades and trigger death animation with particles
+  //
+  if (bladesInst) {
+    Blades.show(bladesInst)
+  }
+  Hero.death(hero, () => {
+    // Death animation with particles will play
+  })
+  
+  //
+  // Update animation phases
+  //
+  const updateInterval = k.onUpdate(() => {
+    timer += k.dt()
+    
+    if (phase === 'fade_in') {
+      const progress = Math.min(1, timer / 0.3)
+      messageText.opacity = progress
+      if (progress >= 1) {
+        phase = 'hold'
+        timer = 0
+      }
+    } else if (phase === 'hold') {
+      if (timer >= 1.0) {
+        phase = 'fade_out'
+        timer = 0
+      }
+    } else if (phase === 'fade_out') {
+      const progress = Math.min(1, timer / 0.3)
+      messageText.opacity = 1 - progress
+      if (progress >= 1) {
+        updateInterval.cancel()
+        restartLevel()
+      }
+    }
+  })
+  
+  //
+  // Allow user to skip message with key press or click
+  //
+  k.onKeyPress(["space", "enter"], () => {
+    updateInterval.cancel()
+    restartLevel()
+  })
+  k.onClick(() => {
+    updateInterval.cancel()
+    restartLevel()
+  })
+}
+
 
 export function sceneLevel3(k) {
   k.scene("level-word.3", () => {
@@ -138,7 +246,8 @@ export function sceneLevel3(k) {
       currentLevel: 'level-word.3',
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
-      sfx: sound
+      sfx: sound,
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades)  // Custom death callback
     })
     
     // Create second normal moving platform (timer-based mode)
@@ -152,7 +261,8 @@ export function sceneLevel3(k) {
       jumpToDisableBlades: false,  // Normal mode: timer-based (5 seconds)
       autoOpen: false,  // Triggered by hero proximity
       sfx: sound,
-      raiseTimeout: 6.0  // Close 1 second later than default (4 seconds)
+      raiseTimeout: 6.0,  // Close 1 second later than default (4 seconds)
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades)  // Custom death callback
     })
     //
     // Create static blades after first pit to prevent jumping over
@@ -169,9 +279,10 @@ export function sceneLevel3(k) {
       y: staticBladesY,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(staticBlades, 'level-word.3'),
+      onHit: () => showDeathMessage(k, hero, staticBlades),
       sfx: sound,
-      color: CFG.visual.colors.blades
+      color: CFG.visual.colors.blades,
+      disableAnimation: true  // Disable vibration and glint
     })
     //
     // Make blades visible immediately
@@ -192,9 +303,10 @@ export function sceneLevel3(k) {
       y: staticBlades2Y,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(staticBlades2, 'level-word.3'),
+      onHit: () => showDeathMessage(k, hero, staticBlades2),
       sfx: sound,
-      color: CFG.visual.colors.blades
+      color: CFG.visual.colors.blades,
+      disableAnimation: true  // Disable vibration and glint
     })
     //
     // Make second blades visible immediately
@@ -209,7 +321,9 @@ export function sceneLevel3(k) {
       k,
       y: textY,
       hero,
-      currentLevel: 'level-word.3'
+      currentLevel: 'level-word.3',
+      sfx: sound,
+      onHit: (bladeArm) => showDeathMessage(k, hero, null)  // Custom death callback
     })
     
     // Eerie sound effects removed for cleaner audio experience

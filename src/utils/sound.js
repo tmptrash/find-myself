@@ -499,6 +499,95 @@ export function playStepSound(instance) {
   oscillator.start(now)
   oscillator.stop(now + CFG.audio.sfx.stepDuration)
 }
+
+/**
+ * Play crunch sound (for creature walking) - crispy, crunchy footstep
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playCrunchSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.08
+  
+  //
+  // Create white noise buffer for crunch texture
+  //
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  
+  //
+  // Fill with white noise and apply amplitude envelope in buffer for crisp attack
+  //
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    const envelopeShape = Math.exp(-progress * 8)  // Fast decay for crisp, crunchy attack
+    data[i] = (Math.random() * 2 - 1) * envelopeShape
+  }
+  
+  //
+  // Create buffer source
+  //
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = buffer
+  
+  //
+  // Low oscillator for impact "thud" (footstep weight)
+  //
+  const thud = instance.audioContext.createOscillator()
+  thud.type = 'sine'
+  thud.frequency.setValueAtTime(80, now)
+  thud.frequency.exponentialRampToValueAtTime(40, now + 0.05)
+  
+  const thudGain = instance.audioContext.createGain()
+  thudGain.gain.setValueAtTime(0.3, now)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05)
+  
+  //
+  // Main envelope for noise (very fast attack for crunch)
+  //
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 0.6, now + 0.003)  // Very fast attack, slightly quieter
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  //
+  // High-pass filter for crispness (remove low mud)
+  //
+  const hpFilter = instance.audioContext.createBiquadFilter()
+  hpFilter.type = 'highpass'
+  hpFilter.frequency.value = 1200  // Higher cutoff for crispy sound
+  hpFilter.Q.value = 0.5
+  
+  //
+  // Band-pass filter to shape crunch character
+  //
+  const bpFilter = instance.audioContext.createBiquadFilter()
+  bpFilter.type = 'bandpass'
+  bpFilter.frequency.value = 2500  // High frequencies for crunch
+  bpFilter.Q.value = 1.5  // Focused crunch
+  
+  //
+  // Connect noise path: noise → envelope → highpass → bandpass → stepGain
+  //
+  noise.connect(envelope)
+  envelope.connect(hpFilter)
+  hpFilter.connect(bpFilter)
+  bpFilter.connect(instance.stepGain)  // Use master step gain
+  
+  //
+  // Connect thud path: thud → thudGain → stepGain
+  //
+  thud.connect(thudGain)
+  thudGain.connect(instance.stepGain)  // Use master step gain
+  
+  //
+  // Start both sources
+  //
+  noise.start(now)
+  thud.start(now)
+  thud.stop(now + 0.05)
+}
+
 /**
  * Play hero spawn sweep sound (energy wave)
  * @param {Object} instance - Sound instance

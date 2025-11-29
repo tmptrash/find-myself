@@ -258,6 +258,11 @@ function updateLivingAnimation(inst) {
   const { blade, k, orientation, baseRotation, sfx } = inst
   
   //
+  // Stop animation after death
+  //
+  if (inst.wasShownOnDeath) return
+  
+  //
   // Only animate floor-oriented blades
   //
   if (orientation !== ORIENTATIONS.FLOOR) return
@@ -421,12 +426,12 @@ function getCollisionSize(orientation, width, height) {
  * @param {Object} inst - Blade instance
  */
 function drawGlint(inst) {
-  const { k, isGlinting, glintProgress, blade, baseX, baseY, bladeWidth, bladeHeight, glintDirection, glintLetter } = inst
+  const { k, isGlinting, glintProgress, blade, baseX, baseY, bladeWidth, bladeHeight, glintDirection, glintLetter, wasShownOnDeath } = inst
   
   //
-  // Only draw when glinting
+  // Only draw when glinting and not after death
   //
-  if (!isGlinting || glintProgress === 0) return
+  if (!isGlinting || glintProgress === 0 || wasShownOnDeath) return
   
   //
   // Calculate glint position moving along the diagonal of one letter 'A'

@@ -2,6 +2,11 @@ import { CFG } from '../cfg.js'
 import { getColor } from '../../../utils/helper.js'
 
 //
+// Spawn buffer: distance outside playable area where words can spawn/respawn
+//
+const SPAWN_BUFFER = 100
+
+//
 // Words and fragments related to pain, self-discovery, and introspection
 //
 const WORDS = [
@@ -412,62 +417,17 @@ function updateWord(word, inst) {
     }
 
     //
-    // Loop words: when they exit beyond right or bottom (by word length), respawn at left/top
-    // Respawn at 2-3 word widths behind platforms
+    // Respawn logic: if word exits right or bottom (+ 100px buffer), respawn at left
     //
     const approximateWordWidth = 150
-    const spawnDistanceLeft = approximateWordWidth * 2
-    const spawnDistanceTop = approximateWordWidth * 2
     
-    if (word.textObj.pos.x > playableRight + 150) {
+    if (word.textObj.pos.x > playableRight + SPAWN_BUFFER || word.textObj.pos.y > playableBottom + SPAWN_BUFFER) {
       //
-      // Respawn far left (2-3 words behind left platform)
+      // Respawn at left, 100px before playable area
+      // Y position: random from top-100px to bottom
       //
-      word.textObj.pos.x = playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth
-      word.textObj.pos.y = playableTop + Math.random() * (playableBottom - playableTop)
-      
-      //
-      // Sync outline texts position
-      //
-      if (word.outlineTexts) {
-        const outlineOffsets = [
-          [-1, -1], [0, -1], [1, -1],
-          [-1, 0],           [1, 0],
-          [-1, 1],  [0, 1],  [1, 1]
-        ]
-        word.outlineTexts.forEach((outlineText, i) => {
-          const [dx, dy] = outlineOffsets[i]
-          outlineText.pos.x = word.textObj.pos.x + dx
-          outlineText.pos.y = word.textObj.pos.y + dy
-        })
-      }
-      
-      //
-      // Sync outline position if it exists
-      //
-      if (word.outlineObj) {
-        word.outlineObj.pos.x = word.textObj.pos.x + 0.5
-        word.outlineObj.pos.y = word.textObj.pos.y + 0.5
-      }
-      
-      //
-      // Randomize properties for variety
-      //
-      word.speedX = inst.minSpeed + Math.random() * (inst.maxSpeed - inst.minSpeed)
-      word.speedY = 2 + Math.random() * 8
-      word.rotation = Math.random() * 360
-      word.rotationSpeed = (Math.random() - 0.5) * 120
-      word.rotationZ = Math.random() * 360
-      word.rotationSpeedZ = (Math.random() - 0.5) * inst.rotationSpeedZ
-      word.wavePhase = Math.random() * Math.PI * 2
-    }
-    
-    if (word.textObj.pos.y > playableBottom + 150) {
-      //
-      // Respawn far above (2-3 words above top platform)
-      //
-      word.textObj.pos.y = playableTop - spawnDistanceTop - Math.random() * approximateWordWidth
-      word.textObj.pos.x = playableLeft + Math.random() * (playableRight - playableLeft)
+      word.textObj.pos.x = playableLeft - SPAWN_BUFFER - Math.random() * approximateWordWidth
+      word.textObj.pos.y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
       
       //
       // Sync outline texts position
@@ -577,44 +537,25 @@ function createWord(k, params) {
   const speedY = 2 + Math.random() * 8  // Very slow falling down (2-10 px/s) - minimal vertical drift
 
   //
-  // Random position: start from far behind platforms (left or top)
-  // For initial spawn, distribute evenly across the entire path
-  // 70% chance to start from left, 30% from top
-  //
-  const startFromLeft = Math.random() < 0.7
-  
-  //
-  // Approximate word/letter width for spacing calculation
-  // Average word is ~100-150px, letter is ~40-60px
+  // Spawn position: always start from left side, 100px before playable area
+  // Y position: from top of playable area + 100px above to bottom of playable area
   //
   const approximateWordWidth = 150
-  const spawnDistanceLeft = approximateWordWidth * 2  // 2 words distance behind left platform
-  const spawnDistanceTop = approximateWordWidth * 2   // 2 words distance above top platform
+  const spawnDistanceLeft = SPAWN_BUFFER
   
   let x, y
   if (initialSpawn) {
     //
-    // Distribute words evenly across the entire visible path on initial spawn
+    // Initial spawn: distribute evenly across the path from left spawn point to playable area
     //
-    if (startFromLeft) {
-      // Distribute from far left to far right
-      x = playableLeft - spawnDistanceLeft + Math.random() * (playableRight - playableLeft + spawnDistanceLeft + 150)
-      y = playableTop + Math.random() * (playableBottom - playableTop)
-    } else {
-      // Distribute from far top to far bottom
-      x = playableLeft + Math.random() * (playableRight - playableLeft)
-      y = playableTop - spawnDistanceTop + Math.random() * (playableBottom - playableTop + spawnDistanceTop + 150)
-    }
+    x = playableLeft - spawnDistanceLeft + Math.random() * (spawnDistanceLeft + playableRight - playableLeft)
+    y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
   } else {
     //
-    // Regular spawn: far behind platforms (2 word widths distance)
+    // Regular spawn: always from left, 100px before playable area
     //
-    x = startFromLeft
-      ? playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth  // Start 2-3 words left
-      : playableLeft + Math.random() * (playableRight - playableLeft)
-    y = startFromLeft
-      ? playableTop + Math.random() * (playableBottom - playableTop)
-      : playableTop - spawnDistanceTop - Math.random() * approximateWordWidth  // Start 2-3 words above
+    x = playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth
+    y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
   }
 
   //
@@ -840,29 +781,25 @@ function createKillerLetter(k, params) {
   const speedY = 2 + Math.random() * 8
 
   //
-  // Random position
+  // Spawn position: always start from left side, 100px before playable area
+  // Y position: from top of playable area + 100px above to bottom of playable area
   //
   const approximateWordWidth = 150
-  const spawnDistanceLeft = approximateWordWidth * 2
-  const spawnDistanceTop = approximateWordWidth * 2
-  const startFromLeft = Math.random() < 0.7
+  const spawnDistanceLeft = SPAWN_BUFFER
   
   let x, y
   if (initialSpawn) {
-    if (startFromLeft) {
-      x = playableLeft - spawnDistanceLeft + Math.random() * (playableRight - playableLeft + spawnDistanceLeft + 150)
-      y = playableTop + Math.random() * (playableBottom - playableTop)
-    } else {
-      x = playableLeft + Math.random() * (playableRight - playableLeft)
-      y = playableTop - spawnDistanceTop + Math.random() * (playableBottom - playableTop + spawnDistanceTop + 150)
-    }
+    //
+    // Initial spawn: distribute evenly across the path from left spawn point to playable area
+    //
+    x = playableLeft - spawnDistanceLeft + Math.random() * (spawnDistanceLeft + playableRight - playableLeft)
+    y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
   } else {
-    x = startFromLeft
-      ? playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth
-      : playableLeft + Math.random() * (playableRight - playableLeft)
-    y = startFromLeft
-      ? playableTop + Math.random() * (playableBottom - playableTop)
-      : playableTop - spawnDistanceTop - Math.random() * approximateWordWidth
+    //
+    // Regular spawn: always from left, 100px before playable area
+    //
+    x = playableLeft - spawnDistanceLeft - Math.random() * approximateWordWidth
+    y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
   }
 
   //

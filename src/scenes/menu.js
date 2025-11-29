@@ -14,6 +14,18 @@ import * as Particles from "../utils/particles.js"
 export function sceneMenu(k) {
   k.scene("menu", () => {
     //
+    // Clean up persistent word-pile objects from previous scenes
+    //
+    k.get("word-pile-text").forEach(obj => obj.destroy())
+    k.get("word-pile-outline").forEach(obj => obj.destroy())
+    k.get("flying-word").forEach(obj => obj.destroy())
+    
+    //
+    // Reset flying words instance so it can be recreated in next level
+    //
+    k.flyingWordsInstance = null
+    
+    //
     // Ensure default custom cursor is visible when entering menu
     //
     k.canvas.classList.remove('cursor-pointer')

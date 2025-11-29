@@ -9,7 +9,7 @@ const GRASS_LETTERS = ['|', '/', 'v', 'V', 'y', 'y', 'Y']  // Letters that look 
 const GRASS_ROWS = 1  // Only one row on bottom platform
 const GRASS_HEIGHT = 40  // Height of each grass blade
 const GRASS_SPACING = 80  // Spacing between grass clusters
-const GRASS_VERTICAL_OFFSET = 32  // Move grass up on screen
+const GRASS_VERTICAL_OFFSET = 12  // Move grass up on screen (from bottom platform edge)
 const SWAY_AMPLITUDE = 8  // How much grass sways at the top
 const SWAY_SPEED = 1.2  // Speed of swaying
 const BLADE_SAFE_DISTANCE = 50  // Minimum distance from blade obstacles
@@ -26,6 +26,16 @@ const BLADE_SAFE_DISTANCE = 50  // Minimum distance from blade obstacles
  */
 export function create(config) {
   const { k, customBounds, hero, bladePositions = [], platformGaps = [] } = config
+  
+  //
+  // Always destroy existing grass and recreate it
+  // This ensures grass positions match current platform gaps
+  //
+  const existingGrassBlades = k.get("word-grass-blade")
+  const existingGrassOutlines = k.get("word-grass-outline")
+  
+  existingGrassBlades.forEach(obj => obj.destroy())
+  existingGrassOutlines.forEach(obj => obj.destroy())
   
   const playableLeft = customBounds.left
   const playableRight = customBounds.right
@@ -178,7 +188,8 @@ export function create(config) {
           k.rotate(baseRotation),
           k.anchor('bot'),
           k.z(CFG.visual.zIndex.platforms - 1.1),
-          k.fixed()
+          k.fixed(),
+          "word-grass-outline"
         ])
         outlineObjects.push({ outline: outlineText, dx, dy })
       })
@@ -197,7 +208,8 @@ export function create(config) {
         k.rotate(baseRotation),
         k.anchor('bot'),
         k.z(CFG.visual.zIndex.platforms - 1),
-        k.fixed()
+        k.fixed(),
+        "word-grass-blade"
       ])
       
       grassBlades.push({

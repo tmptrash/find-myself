@@ -238,6 +238,7 @@ export function show(inst) {
   inst.blade.opacity = 1
   inst.isVisible = true
   inst.wasShownOnDeath = true  // Mark that blades were shown on death
+  inst.glintDrawer.hidden = false  // Ensure glint drawer is visible
 }
 
 /**
@@ -255,7 +256,12 @@ export function handleCollision(inst, currentLevel) {
  * @param {Object} inst - Blade instance
  */
 function updateLivingAnimation(inst) {
-  const { blade, k, orientation, baseRotation, sfx } = inst
+  const { blade, k, orientation, baseRotation, sfx, disableAnimation } = inst
+  
+  //
+  // Stop animation if disabled
+  //
+  if (disableAnimation) return
   
   //
   // Stop animation after death
@@ -305,7 +311,14 @@ function updateLivingAnimation(inst) {
   
   //
   // Light glint system (periodic light reflections)
+  // Stop glint if blade is lifted (disappearing)
   //
+  if (inst.isLifted) {
+    inst.isGlinting = false
+    inst.glintProgress = 0
+    return
+  }
+  
   inst.glintTimer -= dt
   
   if (inst.glintTimer <= 0 && !inst.isGlinting) {
@@ -426,12 +439,12 @@ function getCollisionSize(orientation, width, height) {
  * @param {Object} inst - Blade instance
  */
 function drawGlint(inst) {
-  const { k, isGlinting, glintProgress, blade, baseX, baseY, bladeWidth, bladeHeight, glintDirection, glintLetter, wasShownOnDeath } = inst
+  const { k, isGlinting, glintProgress, blade, baseX, baseY, bladeWidth, bladeHeight, glintDirection, glintLetter, wasShownOnDeath, isLifted, disableAnimation } = inst
   
   //
-  // Only draw when glinting and not after death
+  // Only draw when glinting and not after death, not when lifted (disappearing), and animation is enabled
   //
-  if (!isGlinting || glintProgress === 0 || wasShownOnDeath) return
+  if (!isGlinting || glintProgress === 0 || wasShownOnDeath || isLifted || disableAnimation) return
   
   //
   // Calculate glint position moving along the diagonal of one letter 'A'

@@ -254,8 +254,8 @@ export function sceneLevel0(k) {
     const platformBounds = {
       left: PLATFORM_SIDE_WIDTH,
       right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
-      top: PLATFORM_TOP_HEIGHT + 20,
-      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 20
+      top: PLATFORM_TOP_HEIGHT,
+      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     }
     
     //

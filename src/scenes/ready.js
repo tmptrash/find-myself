@@ -40,6 +40,18 @@ const HINT_Y = 1000
 export function sceneReady(k) {
   k.scene('ready', () => {
     //
+    // Clean up persistent word-pile objects from previous scenes
+    //
+    k.get("word-pile-text").forEach(obj => obj.destroy())
+    k.get("word-pile-outline").forEach(obj => obj.destroy())
+    k.get("flying-word").forEach(obj => obj.destroy())
+    
+    //
+    // Reset flying words instance so it can be recreated in next level
+    //
+    k.flyingWordsInstance = null
+    
+    //
     // Reset cursor to invisible state for this scene
     //
     k.canvas.classList.remove('cursor-pointer')

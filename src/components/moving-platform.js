@@ -256,6 +256,7 @@ function onUpdate(inst) {
     // Fade out blades much faster (disappear at 25% of raise animation)
     const fadeProgress = Math.min(1, progress * 4)  // 4x faster fade
     blades.blade.opacity = Math.max(0, 1 - fadeProgress)
+    blades.glintDrawer.hidden = fadeProgress > 0  // Hide glint drawer immediately
     
     inst.currentY = newY
     
@@ -263,6 +264,7 @@ function onUpdate(inst) {
     if (progress >= 1) {
       inst.state = 'disabled'  // Keep disabled, don't reset hasActivated
       blades.blade.opacity = 0  // Ensure fully hidden
+      blades.glintDrawer.hidden = true  // Ensure glint drawer is hidden
     }
   }
 }

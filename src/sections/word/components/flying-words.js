@@ -30,7 +30,7 @@ const LETTERS = [
 // Killer words that hurt the player on collision
 //
 const KILLER_WORDS = [
-  'death', 'end', 'bleed', 'cut', 'kill', 'fall', 'break', 'cease', 'drop'
+  'death', 'end', 'bleed', 'cut', 'kill', 'break', 'cease', 'drop'
 ]
 
 /**

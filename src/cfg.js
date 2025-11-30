@@ -60,10 +60,13 @@ export const CFG = {
       },
       // Ready screen colors
       ready: {
-        background: "#191919",         // Dark background
+        background: "#1B1B1B",         // Dark background (#1B1B1B)
         fireflies: "#FF8C00",          // Hero color for fireflies
-        hint: "#969696",               // Hint color
-        text: "#CCCCCC"                // Instructions text color
+        hint: "#BFBFBF",               // Secondary text (#BFBFBF)
+        text: "#7AAACF",               // Main narrative text (muted blue)
+        title: "#D84C4C",              // Title text (red accent)
+        emphasis: "#F0F0F0",           // Key words emphasis (almost white)
+        ghostWords: "#7AAACF"          // Ghost words in background (blue, very low opacity)
       },
       // Hero colors (for procedural generation)
       hero: {

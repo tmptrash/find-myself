@@ -14,11 +14,29 @@ const QUOTE_PRIMARY_TEXT = 'through death and pain'
 const QUOTE_SECONDARY_TEXT = '(c) someone very wise'
 const ARROW_TEXT = '↓'
 
-const INSTRUCTIONS_TEXT = `"Find Myself" is a game about discovering who you are while life keeps changing your plans. Here, life is the one setting traps. It shifts the ground, twists logic, and pushes you into mistakes — not to harm you, but to teach you. Each level is a tiny reflection of your inner world: words that cut, time that pressures, memory that slips, feelings that deceive. After every level, you understand yourself a little better. After every section, you uncover one of your facets — word, time, memory, and more.
-
-
-
-Your goal is simple and difficult: "find yourself" — the part hiding in every distorted reality. Life will confuse you. You will fall. But each fall brings you closer to who you truly are.`
+const INSTRUCTIONS_TITLE = `Find Myself`
+const INSTRUCTIONS_TEXT_LINES = [
+  { text: 'is a game about discovering who you are while life keeps changing', normal: true },
+  { text: 'your plans. Here, life is the one setting traps. It shifts the ground,', normal: true },
+  { text: 'twists logic, and pushes you into mistakes — not to harm you,', normal: true },
+  { text: 'but to teach you.', normal: true },
+  { text: '', normal: true },
+  { text: 'Each level is a tiny reflection of your inner world: ', normal: true, inline: true },
+  { text: 'words that cut,', important: true, sameLine: true },
+  { text: 'time that pressures, memory that slips, feelings that deceive.', important: true },
+  { text: '', normal: true },
+  { text: 'After every level, you understand yourself a little better.', normal: true },
+  { text: 'After every section, you uncover one of your facets —', normal: true },
+  { text: 'word, time, memory, and more.', normal: true },
+  { text: 'Your goal is simple and difficult: ', normal: true, inline: true },
+  { text: 'find yourself', important: true, sameLine: true, inline: true },
+  { text: ' — the part hiding', important: true, sameLine: true },
+  { text: 'in every distorted reality.', important: true },
+  { text: '', normal: true },
+  { text: 'Life will confuse you. You will fall. ', normal: true, inline: true },
+  { text: 'But each fall brings you', important: true, sameLine: true },
+  { text: 'closer to who you truly are.', important: true }
+]
 
 const DENSITY_MULTIPLIER = 1.2
 
@@ -28,7 +46,8 @@ const QUOTE_FONT_FAMILY = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
 const TITLE_FONT_SIZE = 140
 const QUOTE_PRIMARY_FONT_SIZE = 70
 const QUOTE_SECONDARY_FONT_SIZE = 70
-const INSTRUCTIONS_FONT_SIZE = 36
+const INSTRUCTIONS_FONT_SIZE = 34
+const INSTRUCTIONS_LINE_HEIGHT = 40
 const ARROW_FONT_SIZE = 240
 
 const TITLE_HOLD_DURATION = 2
@@ -44,6 +63,11 @@ const TREMOR_FREE = 8
 const GATHER_SPEED = 0.55
 const SCATTER_DISTANCE_MIN = 95
 const SCATTER_DISTANCE_MAX = 160
+
+const GHOST_WORDS = ['pain', 'lost', 'fear', 'dark', 'void', 'cold', 'fall', 'cut', 'hurt']
+const GHOST_WORD_OPACITY = 0.04  // 4% opacity (3-6% range)
+const GHOST_WORD_SPEED = 5  // Slow movement speed (pixels per second)
+const GHOST_WORD_COUNT = 15  // Number of ghost words
 
 const HINT_Y = 1000
 
@@ -76,6 +100,36 @@ export function sceneReady(k) {
     addBackground(k, CFG.visual.colors.ready.background)
     
     //
+    // Ghost words - barely visible shadows moving slowly in background
+    //
+    const ghostWords = []
+    for (let i = 0; i < GHOST_WORD_COUNT; i++) {
+      const word = GHOST_WORDS[Math.floor(Math.random() * GHOST_WORDS.length)]
+      const x = Math.random() * k.width()
+      const y = Math.random() * k.height()
+      const fontSize = 40 + Math.random() * 60
+      const speedY = GHOST_WORD_SPEED * (0.5 + Math.random())
+      
+      const ghostText = k.add([
+        k.text(word, {
+          size: fontSize,
+          font: QUOTE_FONT_FAMILY
+        }),
+        k.pos(x, y),
+        k.anchor('center'),
+        getColor(k, CFG.visual.colors.ready.ghostWords),
+        k.opacity(GHOST_WORD_OPACITY),
+        k.z(-1)  // Behind everything
+      ])
+      
+      ghostWords.push({
+        obj: ghostText,
+        speedY,
+        initialY: y
+      })
+    }
+    
+    //
     // Hint text (visible immediately)
     //
     const hint = k.add([
@@ -90,13 +144,17 @@ export function sceneReady(k) {
     let hintDirection = -1
     
     //
-    // Instructions text with black outline (shown at start)
+    // Instructions text (shown at start)
     //
     const instructionsTextMargin = 200
     const instructionsMaxWidth = k.width() - instructionsTextMargin * 2
+    const titleSize = 54
+    const lineHeight = INSTRUCTIONS_LINE_HEIGHT
+    const titleX = instructionsTextMargin + 50  // Left aligned with margin
+    const titleY = 140  // Top position
     
     //
-    // Black outline for instructions (8 directions)
+    // Title "Find Myself" in red (top left)
     //
     const outlineOffsets = [
       [-2, -2], [0, -2], [2, -2],
@@ -104,38 +162,109 @@ export function sceneReady(k) {
       [-2, 2],  [0, 2],  [2, 2]
     ]
     
-    const instructionsOutlines = []
+    const titleOutlines = []
     outlineOffsets.forEach(([dx, dy]) => {
       const outline = k.add([
-        k.text(INSTRUCTIONS_TEXT, {
-          size: INSTRUCTIONS_FONT_SIZE,
-          width: instructionsMaxWidth,
-          lineSpacing: 10,
-          font: QUOTE_FONT_FAMILY
+        k.text(INSTRUCTIONS_TITLE, {
+          size: titleSize,
+          font: TITLE_FONT_FAMILY
         }),
-        k.pos(centerX + dx, centerY + dy),
-        k.anchor('center'),
+        k.pos(titleX + dx, titleY + dy),
+        k.anchor('left'),
         k.color(0, 0, 0),
         k.opacity(0)
       ])
-      instructionsOutlines.push(outline)
+      titleOutlines.push(outline)
+    })
+    
+    const titleText = k.add([
+      k.text(INSTRUCTIONS_TITLE, {
+        size: titleSize,
+        font: TITLE_FONT_FAMILY
+      }),
+      k.pos(titleX, titleY),
+      k.anchor('left'),
+      getColor(k, CFG.visual.colors.ready.title),  // Red #D84C4C
+      k.opacity(0)
+    ])
+    
+    //
+    // Body text lines with different colors
+    //
+    const bodyStartY = titleY + 80
+    const bodyX = titleX
+    const instructionsTextObjects = []
+    const instructionsOutlineObjects = []
+    
+    let currentY = bodyStartY
+    let previousLineObj = null
+    
+    INSTRUCTIONS_TEXT_LINES.forEach((line, index) => {
+      //
+      // If this line continues on the same line, calculate X offset
+      //
+      const isSameLine = line.sameLine && previousLineObj
+      const x = isSameLine ? previousLineObj.x + previousLineObj.width + 0 : bodyX
+      const y = isSameLine ? previousLineObj.y : currentY
+      
+      const textColor = line.important
+        ? CFG.visual.colors.ready.emphasis  // Almost white for important lines
+        : CFG.visual.colors.ready.text      // Muted blue for normal lines
+      
+      //
+      // Create outlines for this line
+      //
+      outlineOffsets.forEach(([dx, dy]) => {
+        const outline = k.add([
+          k.text(line.text, {
+            size: INSTRUCTIONS_FONT_SIZE,
+            font: QUOTE_FONT_FAMILY
+          }),
+          k.pos(x + dx, y + dy),
+          k.anchor('left'),
+          k.color(0, 0, 0),
+          k.opacity(0)
+        ])
+        instructionsOutlineObjects.push(outline)
+      })
+      
+      //
+      // Create main text for this line
+      //
+      const textObj = k.add([
+        k.text(line.text, {
+          size: INSTRUCTIONS_FONT_SIZE,
+          font: QUOTE_FONT_FAMILY
+        }),
+        k.pos(x, y),
+        k.anchor('left'),
+        getColor(k, textColor),
+        k.opacity(0)
+      ])
+      instructionsTextObjects.push(textObj)
+      
+      //
+      // Update Y position for next line (only if not inline continuation)
+      //
+      if (!isSameLine) {
+        currentY += lineHeight
+      }
+      
+      //
+      // Store reference for next line if this is inline
+      //
+      if (line.inline) {
+        previousLineObj = { x, y, width: textObj.width }
+      } else {
+        previousLineObj = null
+      }
     })
     
     //
-    // Main instructions text
+    // Store all text objects for fade animations
     //
-    const instructionsText = k.add([
-      k.text(INSTRUCTIONS_TEXT, {
-        size: INSTRUCTIONS_FONT_SIZE,
-        width: instructionsMaxWidth,
-        lineSpacing: 10,
-        font: QUOTE_FONT_FAMILY
-      }),
-      k.pos(centerX, centerY),
-      k.anchor('center'),
-      getColor(k, WORD_CFG.visual.colors.blades),
-      k.opacity(0)
-    ])
+    const instructionsText = instructionsTextObjects[0]  // Reference for compatibility
+    const instructionsOutlines = instructionsOutlineObjects
     
     //
     // Prepare firefly layouts
@@ -233,16 +362,20 @@ export function sceneReady(k) {
     //
     // Show instructions immediately with fade in
     //
-    instructionsText.opacity = 0
-    instructionsOutlines.forEach(outline => outline.opacity = 0)
+    titleText.opacity = 0
+    titleOutlines.forEach(outline => outline.opacity = 0)
+    instructionsTextObjects.forEach(obj => obj.opacity = 0)
+    instructionsOutlineObjects.forEach(outline => outline.opacity = 0)
     
     k.tween(
-      instructionsText.opacity,
+      0,
       1,
       INSTRUCTIONS_FADE_DURATION,
       (val) => {
-        instructionsText.opacity = val
-        instructionsOutlines.forEach(outline => outline.opacity = val)
+        titleText.opacity = val
+        titleOutlines.forEach(outline => outline.opacity = val)
+        instructionsTextObjects.forEach(obj => obj.opacity = val)
+        instructionsOutlineObjects.forEach(outline => outline.opacity = val)
       },
       k.easings.easeOutQuad
     )
@@ -271,12 +404,15 @@ export function sceneReady(k) {
             // Fade out instructions
             //
             k.tween(
-              instructionsText.opacity,
               0,
+              1,
               INSTRUCTIONS_FADE_DURATION,
               (val) => {
-                instructionsText.opacity = val
-                instructionsOutlines.forEach(outline => outline.opacity = val)
+                const opacity = 1 - val
+                titleText.opacity = opacity
+                titleOutlines.forEach(outline => outline.opacity = opacity)
+                instructionsTextObjects.forEach(obj => obj.opacity = opacity)
+                instructionsOutlineObjects.forEach(outline => outline.opacity = opacity)
               },
               k.easings.easeOutQuad
             )
@@ -406,6 +542,20 @@ export function sceneReady(k) {
       }
       const hintProgress = hintFlickerTime / HINT_FLICKER_DURATION
       hint.opacity = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * hintProgress
+      
+      //
+      // Ghost words animation - very slow vertical movement
+      //
+      ghostWords.forEach(ghost => {
+        ghost.obj.pos.y += ghost.speedY * k.dt()
+        //
+        // Wrap around when going off screen
+        //
+        if (ghost.obj.pos.y > k.height() + 100) {
+          ghost.obj.pos.y = -100
+          ghost.obj.pos.x = Math.random() * k.width()
+        }
+      })
     })
     
     k.onDraw(() => {

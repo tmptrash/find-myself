@@ -339,9 +339,16 @@ export function playBladeSound(instance) {
  * Play metal ping sound (for blade glints) - katana-like sound
  * @param {Object} instance - Sound instance from create()
  */
-export function playMetalPingSound(instance) {
+/**
+ * Play metal ping/slash sound (katana swish + ring)
+ * @param {Object} instance - Sound instance from create()
+ * @param {number} [swishVolume=0.15] - Volume of air cutting sound (0-1)
+ * @param {number} [ringVolume=0.08] - Volume of metallic ring sound (0-1)
+ */
+export function playMetalPingSound(instance, swishVolume = 0.15, ringVolume = 0.08) {
   const now = instance.audioContext.currentTime
   const duration = 0.6  // Longer for katana resonance
+  const masterVolume = CFG.audio.ambient.masterVolume
   
   //
   // High pitched "swish" (air cutting sound) - starts high and sweeps down
@@ -363,12 +370,12 @@ export function playMetalPingSound(instance) {
   // Very sharp attack envelope (instant, like katana slash)
   //
   const swishGain = instance.audioContext.createGain()
-  swishGain.gain.setValueAtTime(0.15, now)  // Instant, loud attack
+  swishGain.gain.setValueAtTime(swishVolume * masterVolume, now)  // Apply master volume
   swishGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   const ringGain = instance.audioContext.createGain()
   ringGain.gain.setValueAtTime(0, now)
-  ringGain.gain.linearRampToValueAtTime(0.08, now + 0.05)  // Ring starts after swish
+  ringGain.gain.linearRampToValueAtTime(ringVolume * masterVolume, now + 0.05)  // Ring starts after swish
   ringGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   //

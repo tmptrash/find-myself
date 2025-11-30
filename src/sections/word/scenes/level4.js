@@ -71,7 +71,7 @@ export function sceneLevel4(k) {
         bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
       },
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 7  // Level 4: 7 killer letters
+      killerLetterCount: 5  // Level 4: 7 killer letters
     })
     
     //

@@ -225,7 +225,7 @@ export function sceneLevel1(k) {
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 4  // Level 1: 4 killer letters
+      killerLetterCount: 2  // Level 1: 4 killer letters
     })
     
     //

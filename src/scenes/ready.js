@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { CFG as WORD_CFG } from '../sections/word/cfg.js'
 import { getColor } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
@@ -13,6 +14,12 @@ const QUOTE_PRIMARY_TEXT = 'through death and pain'
 const QUOTE_SECONDARY_TEXT = '(c) someone very wise'
 const ARROW_TEXT = '↓'
 
+const INSTRUCTIONS_TEXT = `"Find Myself" is a game about discovering who you are while life keeps changing your plans. Here, life is the one setting traps. It shifts the ground, twists logic, and pushes you into mistakes — not to harm you, but to teach you. Each level is a tiny reflection of your inner world: words that cut, time that pressures, memory that slips, feelings that deceive. After every level, you understand yourself a little better. After every section, you uncover one of your facets — word, time, memory, and more.
+
+
+
+Your goal is simple and difficult: "find yourself" — the part hiding in every distorted reality. Life will confuse you. You will fall. But each fall brings you closer to who you truly are.`
+
 const DENSITY_MULTIPLIER = 1.2
 
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
@@ -21,11 +28,14 @@ const QUOTE_FONT_FAMILY = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
 const TITLE_FONT_SIZE = 140
 const QUOTE_PRIMARY_FONT_SIZE = 70
 const QUOTE_SECONDARY_FONT_SIZE = 70
+const INSTRUCTIONS_FONT_SIZE = 36
 const ARROW_FONT_SIZE = 240
 
 const TITLE_HOLD_DURATION = 2
 const QUOTE_PRIMARY_HOLD_DURATION = 2.5
 const QUOTE_SECONDARY_HOLD_DURATION = 2.5
+const INSTRUCTIONS_HOLD_DURATION = 50
+const INSTRUCTIONS_FADE_DURATION = 1.5
 
 const LAYOUT_HORIZONTAL_MARGIN = 180
 
@@ -80,6 +90,54 @@ export function sceneReady(k) {
     let hintDirection = -1
     
     //
+    // Instructions text with black outline (shown at start)
+    //
+    const instructionsTextMargin = 200
+    const instructionsMaxWidth = k.width() - instructionsTextMargin * 2
+    
+    //
+    // Black outline for instructions (8 directions)
+    //
+    const outlineOffsets = [
+      [-2, -2], [0, -2], [2, -2],
+      [-2, 0],           [2, 0],
+      [-2, 2],  [0, 2],  [2, 2]
+    ]
+    
+    const instructionsOutlines = []
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outline = k.add([
+        k.text(INSTRUCTIONS_TEXT, {
+          size: INSTRUCTIONS_FONT_SIZE,
+          width: instructionsMaxWidth,
+          lineSpacing: 10,
+          font: QUOTE_FONT_FAMILY
+        }),
+        k.pos(centerX + dx, centerY + dy),
+        k.anchor('center'),
+        k.color(0, 0, 0),
+        k.opacity(0)
+      ])
+      instructionsOutlines.push(outline)
+    })
+    
+    //
+    // Main instructions text
+    //
+    const instructionsText = k.add([
+      k.text(INSTRUCTIONS_TEXT, {
+        size: INSTRUCTIONS_FONT_SIZE,
+        width: instructionsMaxWidth,
+        lineSpacing: 10,
+        font: QUOTE_FONT_FAMILY
+      }),
+      k.pos(centerX, centerY),
+      k.anchor('center'),
+      getColor(k, WORD_CFG.visual.colors.blades),
+      k.opacity(0)
+    ])
+    
+    //
     // Prepare firefly layouts
     //
     const availableWidth = k.width() - LAYOUT_HORIZONTAL_MARGIN * 2
@@ -92,7 +150,12 @@ export function sceneReady(k) {
       fontFamily: TITLE_FONT_FAMILY
     })
     
-    const particleSystem = createParticleSystem(k, titleLayout.positions)
+    const particleSystem = createParticleSystem(k, titleLayout.positions, 0)
+    
+    //
+    // Particles are created hidden (opacity = 0)
+    // They will fade in after instructions disappear
+    //
     
     const quotePrimaryLayout = generateLayout({
       text: QUOTE_PRIMARY_TEXT,
@@ -146,6 +209,9 @@ export function sceneReady(k) {
     // Scene timeline state
     //
     const PHASES = {
+      INSTRUCTIONS_FADE_IN: 'instructionsFadeIn',
+      INSTRUCTIONS_HOLD: 'instructionsHold',
+      INSTRUCTIONS_FADE_OUT: 'instructionsFadeOut',
       TITLE_HOLD: 'titleHold',
       TITLE_SCATTER: 'titleScatter',
       QUOTE_PRIMARY_GATHER: 'quotePrimaryGather',
@@ -159,8 +225,27 @@ export function sceneReady(k) {
       FREE: 'free'
     }
     
-    let currentPhase = PHASES.TITLE_HOLD
+    let currentPhase = PHASES.INSTRUCTIONS_FADE_IN
     let phaseTimer = 0
+    let particlesFadedIn = false
+    let showParticles = false  // Flag to control particle rendering
+    
+    //
+    // Show instructions immediately with fade in
+    //
+    instructionsText.opacity = 0
+    instructionsOutlines.forEach(outline => outline.opacity = 0)
+    
+    k.tween(
+      instructionsText.opacity,
+      1,
+      INSTRUCTIONS_FADE_DURATION,
+      (val) => {
+        instructionsText.opacity = val
+        instructionsOutlines.forEach(outline => outline.opacity = val)
+      },
+      k.easings.easeOutQuad
+    )
     
     const setPhase = phase => {
       currentPhase = phase
@@ -174,6 +259,62 @@ export function sceneReady(k) {
       phaseTimer += k.dt()
       
       switch (currentPhase) {
+        case PHASES.INSTRUCTIONS_FADE_IN: {
+          if (phaseTimer >= INSTRUCTIONS_FADE_DURATION) {
+            setPhase(PHASES.INSTRUCTIONS_HOLD)
+          }
+          break
+        }
+        case PHASES.INSTRUCTIONS_HOLD: {
+          if (phaseTimer >= INSTRUCTIONS_HOLD_DURATION) {
+            //
+            // Fade out instructions
+            //
+            k.tween(
+              instructionsText.opacity,
+              0,
+              INSTRUCTIONS_FADE_DURATION,
+              (val) => {
+                instructionsText.opacity = val
+                instructionsOutlines.forEach(outline => outline.opacity = val)
+              },
+              k.easings.easeOutQuad
+            )
+            setPhase(PHASES.INSTRUCTIONS_FADE_OUT)
+          }
+          break
+        }
+        case PHASES.INSTRUCTIONS_FADE_OUT: {
+          //
+          // Show particles with fade in at the start of fade out
+          //
+          if (!particlesFadedIn) {
+            particlesFadedIn = true
+            showParticles = true  // Enable particle rendering
+            //
+            // Fade in particles
+            //
+            k.tween(
+              0,
+              0.4,
+              INSTRUCTIONS_FADE_DURATION,
+              (val) => {
+                particleSystem.particles.forEach(particle => {
+                  particle.opacity = val
+                })
+              },
+              k.easings.easeInQuad
+            )
+          }
+          
+          if (phaseTimer >= INSTRUCTIONS_FADE_DURATION) {
+            //
+            // Start firefly animation with title
+            //
+            setPhase(PHASES.TITLE_HOLD)
+          }
+          break
+        }
         case PHASES.TITLE_HOLD: {
           if (phaseTimer >= TITLE_HOLD_DURATION) {
             scatterParticles(particleSystem)
@@ -245,7 +386,12 @@ export function sceneReady(k) {
           break
       }
       
-      Particles.onUpdate(particleSystem)
+      //
+      // Only update particles if they should be shown
+      //
+      if (showParticles) {
+        Particles.onUpdate(particleSystem)
+      }
 
       //
       // Hint flicker (always active)
@@ -263,7 +409,12 @@ export function sceneReady(k) {
     })
     
     k.onDraw(() => {
-      Particles.draw(particleSystem)
+      //
+      // Only draw particles if they should be shown
+      //
+      if (showParticles) {
+        Particles.draw(particleSystem)
+      }
     })
     
     //
@@ -282,7 +433,7 @@ export function sceneReady(k) {
   })
 }
 
-function createParticleSystem(k, layoutPositions) {
+function createParticleSystem(k, layoutPositions, initialOpacity = 0.4) {
   const count = Math.max(1, Math.floor(layoutPositions.length * DENSITY_MULTIPLIER))
   const extendedPositions = []
   const particles = []
@@ -300,7 +451,7 @@ function createParticleSystem(k, layoutPositions) {
       tremblePhase: Math.random() * Math.PI * 2,
       trembleSpeed: 0.8 + Math.random() * 0.4,
       fleeSpeed: 0.7 + Math.random() * 0.6,
-      opacity: 0.4,
+      opacity: initialOpacity,
       isFleeing: false,
       isAutoFleeing: false,
       fleeStartX: pos.x,

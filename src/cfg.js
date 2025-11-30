@@ -62,7 +62,8 @@ export const CFG = {
       ready: {
         background: "#191919",         // Dark background
         fireflies: "#FF8C00",          // Hero color for fireflies
-        hint: "#969696"                // Hint color
+        hint: "#969696",               // Hint color
+        text: "#CCCCCC"                // Instructions text color
       },
       // Hero colors (for procedural generation)
       hero: {

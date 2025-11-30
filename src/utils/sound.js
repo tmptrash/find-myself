@@ -348,7 +348,7 @@ export function playBladeSound(instance) {
 export function playMetalPingSound(instance, swishVolume = 0.15, ringVolume = 0.08) {
   const now = instance.audioContext.currentTime
   const duration = 0.6  // Longer for katana resonance
-  const masterVolume = CFG.audio.ambient.masterVolume
+  const masterVolume = CFG.audio.masterVolume
   
   //
   // High pitched "swish" (air cutting sound) - starts high and sweeps down

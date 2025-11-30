@@ -337,11 +337,9 @@ function updateLivingAnimation(inst) {
     // Play katana slash sound at glint start
     //
     if (!inst.glintSoundPlayed && inst.glintProgress > 0.05 && sfx) {
-      Sound.playMetalPingSound(
-        sfx,
-        CFG.audio.bladeGlint.swishVolume,
-        CFG.audio.bladeGlint.ringVolume
-      )
+      const swishVolume = CFG.audio.bladeGlint.swishVolume
+      const ringVolume = CFG.audio.bladeGlint.ringVolume
+      Sound.playMetalPingSound(sfx, swishVolume, ringVolume)
       inst.glintSoundPlayed = true
     }
     

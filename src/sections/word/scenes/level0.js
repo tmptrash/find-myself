@@ -34,13 +34,7 @@ const HERO_SPAWN_X = 230    // 12% of 1920
 const HERO_SPAWN_Y = 691    // 64% of 1080
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
-
-const INTRO_TEXT = "find yourself to know who you are"
-const INTRO_INITIAL_DELAY = 2.0  // Delay before intro starts
-const INTRO_FADE_IN_DURATION = 1.0
-const INTRO_HOLD_DURATION = 3.0
-const INTRO_FADE_OUT_DURATION = 1.0
-const INSTRUCTIONS_INITIAL_DELAY = 1.0  // Delay before instructions (without intro)
+const INSTRUCTIONS_INITIAL_DELAY = 1.0  // Delay before instructions appear
 const INSTRUCTIONS_FADE_IN_DURATION = 0.8
 const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
@@ -434,131 +428,11 @@ export function sceneLevel0(k) {
  * @param {Object} k - Kaplay instance
  */
 function showIntroSequence(k) {
-  const centerX = CFG.visual.screen.width / 2
-  const textY = PLATFORM_TOP_HEIGHT / 2  // Center of top platform area
-  
   //
-  // If intro already complete, show only instructions
+  // Skip intro text, show only instructions immediately
   //
-  if (introAnimationComplete) {
-    showInstructions(k)
-    return
-  }
-  
-  //
-  // Phase 1: Show intro text "find yourself to know who you are"
-  //
-  const introText = k.add([
-    k.text(INTRO_TEXT, {
-      size: 32,
-      align: "center",
-      font: CFG.visual.fonts.regular
-    }),
-    k.pos(centerX, textY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Steel blue (blade color - 6B8E9F)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
-  
-  //
-  // Animation state
-  //
-  const inst = {
-    k,
-    introText,
-    instructionsText: null,
-    timer: 0,
-    phase: 'initial_delay'  // Start with delay phase
-  }
-  
-  //
-  // Update animation
-  //
-  const updateInterval = k.onUpdate(() => {
-    inst.timer += k.dt()
-    
-    if (inst.phase === 'initial_delay') {
-      //
-      // Wait for initial delay
-      //
-      if (inst.timer >= INTRO_INITIAL_DELAY) {
-        inst.phase = 'intro_fade_in'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'intro_fade_in') {
-      //
-      // Fade in intro text
-      //
-      const progress = Math.min(1, inst.timer / INTRO_FADE_IN_DURATION)
-      introText.opacity = progress
-      
-      if (progress >= 1) {
-        inst.phase = 'intro_hold'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'intro_hold') {
-      //
-      // Hold intro text
-      //
-      if (inst.timer >= INTRO_HOLD_DURATION) {
-        inst.phase = 'intro_fade_out'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'intro_fade_out') {
-      //
-      // Fade out intro text
-      //
-      const progress = Math.min(1, inst.timer / INTRO_FADE_OUT_DURATION)
-      introText.opacity = 1 - progress
-      
-      if (progress >= 1) {
-        k.destroy(introText)
-        introAnimationComplete = true  // Mark intro as complete
-        inst.phase = 'instructions_fade_in'
-        inst.timer = 0
-        
-        //
-        // Create instructions text
-        //
-        inst.instructionsText = createInstructionsText(k, centerX, textY)
-      }
-    } else if (inst.phase === 'instructions_fade_in') {
-      //
-      // Fade in instructions text
-      //
-      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
-      inst.instructionsText.opacity = progress
-      
-      if (progress >= 1) {
-        inst.phase = 'instructions_hold'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'instructions_hold') {
-      //
-      // Hold instructions text
-      //
-      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
-        inst.phase = 'instructions_fade_out'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'instructions_fade_out') {
-      //
-      // Fade out instructions text
-      //
-      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
-      inst.instructionsText.opacity = 1 - progress
-      
-      if (progress >= 1) {
-        //
-        // Clean up and finish
-        //
-        instructionsAnimationComplete = true  // Mark instructions as complete
-        updateInterval.cancel()
-        k.destroy(inst.instructionsText)
-      }
-    }
-  })
+  introAnimationComplete = true
+  showInstructions(k)
 }
 
 /**

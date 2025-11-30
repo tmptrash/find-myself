@@ -69,7 +69,7 @@ const GHOST_WORD_OPACITY = 0.04  // 4% opacity (3-6% range)
 const GHOST_WORD_SPEED = 5  // Slow movement speed (pixels per second)
 const GHOST_WORD_COUNT = 15  // Number of ghost words
 
-const HINT_Y = 1000
+const HINT_Y = 1030
 
 export function sceneReady(k) {
   k.scene('ready', () => {
@@ -151,7 +151,7 @@ export function sceneReady(k) {
     const titleSize = 54
     const lineHeight = INSTRUCTIONS_LINE_HEIGHT
     const titleX = instructionsTextMargin + 50  // Left aligned with margin
-    const titleY = 140  // Top position
+    const titleY = 160  // Top position
     
     //
     // Title "Find Myself" in red (top left)

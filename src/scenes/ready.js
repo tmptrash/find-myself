@@ -26,8 +26,8 @@ const INSTRUCTIONS_TEXT_LINES = [
   { text: 'time that pressures, memory that slips, feelings that deceive.', important: true },
   { text: '', normal: true },
   { text: 'After every level, you understand yourself a little better.', normal: true },
-  { text: 'After every section, you uncover one of your facets —', normal: true },
-  { text: 'word, time, memory, and more.', normal: true },
+  { text: 'After every section, you uncover one of your facets — word, time,', normal: true },
+  { text: 'memory, and more.', normal: true },
   { text: 'Your goal is simple and difficult: ', normal: true, inline: true },
   { text: 'find yourself', important: true, sameLine: true, inline: true },
   { text: ' — the part hiding', important: true, sameLine: true },
@@ -64,10 +64,27 @@ const GATHER_SPEED = 0.55
 const SCATTER_DISTANCE_MIN = 95
 const SCATTER_DISTANCE_MAX = 160
 
-const GHOST_WORDS = ['pain', 'lost', 'fear', 'dark', 'void', 'cold', 'fall', 'cut', 'hurt']
+const GHOST_WORDS = ['pain', 'lost', 'fear', 'dark', 'void', 'cold', 'fall', 'cut', 'hurt', 'fade', 'gone', 'break', 'torn', 'scar', 'numb', 'blur']
 const GHOST_WORD_OPACITY = 0.04  // 4% opacity (3-6% range)
-const GHOST_WORD_SPEED = 5  // Slow movement speed (pixels per second)
-const GHOST_WORD_COUNT = 15  // Number of ghost words
+const GHOST_WORD_SPEED = 12  // Movement speed (pixels per second)
+const GHOST_WORD_COUNT = 25  // Number of ghost words per layer
+const GHOST_WORD_DIRECTION_CHANGE_INTERVAL = 3.0  // Seconds between direction changes
+const GHOST_WORD_SCREEN_MARGIN = 50  // Margin from screen edges
+const GHOST_WORD_SMOOTHING = 1.5  // How quickly velocity interpolates to target
+const GHOST_WORD_OUTLINE_OFFSET = 1.5  // Outline offset for ghost words
+//
+// Ghost word layers configuration
+//
+const GHOST_WORD_LAYERS = [
+  { color: '#4A5A6A', opacity: 0.08, speed: 10, zIndex: -2 },  // Darker, slower, deeper
+  { color: '#5A6A7A', opacity: 0.06, speed: 14, zIndex: -1 }   // Lighter, faster, front
+]
+//
+// Title flicker configuration
+//
+const TITLE_FLICKER_SPEED = 1.5
+const TITLE_FLICKER_MIN = 0.7
+const TITLE_FLICKER_MAX = 1.0
 
 const HINT_Y = 1030
 
@@ -100,34 +117,63 @@ export function sceneReady(k) {
     addBackground(k, CFG.visual.colors.ready.background)
     
     //
-    // Ghost words - barely visible shadows moving slowly in background
+    // Ghost words - multiple layers of barely visible shadows moving like fireflies
     //
     const ghostWords = []
-    for (let i = 0; i < GHOST_WORD_COUNT; i++) {
-      const word = GHOST_WORDS[Math.floor(Math.random() * GHOST_WORDS.length)]
-      const x = Math.random() * k.width()
-      const y = Math.random() * k.height()
-      const fontSize = 40 + Math.random() * 60
-      const speedY = GHOST_WORD_SPEED * (0.5 + Math.random())
-      
-      const ghostText = k.add([
-        k.text(word, {
-          size: fontSize,
-          font: QUOTE_FONT_FAMILY
-        }),
-        k.pos(x, y),
-        k.anchor('center'),
-        getColor(k, CFG.visual.colors.ready.ghostWords),
-        k.opacity(GHOST_WORD_OPACITY),
-        k.z(-1)  // Behind everything
-      ])
-      
-      ghostWords.push({
-        obj: ghostText,
-        speedY,
-        initialY: y
-      })
-    }
+    GHOST_WORD_LAYERS.forEach(layer => {
+      for (let i = 0; i < GHOST_WORD_COUNT; i++) {
+        const word = GHOST_WORDS[Math.floor(Math.random() * GHOST_WORDS.length)]
+        const x = GHOST_WORD_SCREEN_MARGIN + Math.random() * (k.width() - GHOST_WORD_SCREEN_MARGIN * 2)
+        const y = GHOST_WORD_SCREEN_MARGIN + Math.random() * (k.height() - GHOST_WORD_SCREEN_MARGIN * 2)
+        const fontSize = 40 + Math.random() * 60
+        const speed = layer.speed * (0.5 + Math.random())
+        //
+        // Random initial direction
+        //
+        const angle = Math.random() * Math.PI * 2
+        const vx = Math.cos(angle) * speed
+        const vy = Math.sin(angle) * speed
+        //
+        // Create outline for ghost word
+        //
+        const ghostOutline = k.add([
+          k.text(word, {
+            size: fontSize,
+            font: QUOTE_FONT_FAMILY
+          }),
+          k.pos(x, y),
+          k.anchor('center'),
+          k.color(0, 0, 0),
+          k.opacity(layer.opacity * 0.5),
+          k.z(layer.zIndex - 0.1)
+        ])
+        //
+        // Create main ghost word text
+        //
+        const ghostText = k.add([
+          k.text(word, {
+            size: fontSize,
+            font: QUOTE_FONT_FAMILY
+          }),
+          k.pos(x, y),
+          k.anchor('center'),
+          getColor(k, layer.color),
+          k.opacity(layer.opacity),
+          k.z(layer.zIndex)
+        ])
+        
+        ghostWords.push({
+          obj: ghostText,
+          outline: ghostOutline,
+          speed,
+          vx,
+          vy,
+          targetVx: vx,
+          targetVy: vy,
+          directionTimer: Math.random() * GHOST_WORD_DIRECTION_CHANGE_INTERVAL
+        })
+      }
+    })
     
     //
     // Hint text (visible immediately)
@@ -142,6 +188,8 @@ export function sceneReady(k) {
     
     let hintFlickerTime = HINT_FLICKER_DURATION
     let hintDirection = -1
+    let titleFlickerPhase = 0  // Phase for title flicker animation
+    let titleBaseOpacity = 0   // Stores the base opacity from tween
     
     //
     // Instructions text (shown at start)
@@ -372,7 +420,7 @@ export function sceneReady(k) {
       1,
       INSTRUCTIONS_FADE_DURATION,
       (val) => {
-        titleText.opacity = val
+        titleBaseOpacity = val
         titleOutlines.forEach(outline => outline.opacity = val)
         instructionsTextObjects.forEach(obj => obj.opacity = val)
         instructionsOutlineObjects.forEach(outline => outline.opacity = val)
@@ -409,7 +457,7 @@ export function sceneReady(k) {
               INSTRUCTIONS_FADE_DURATION,
               (val) => {
                 const opacity = 1 - val
-                titleText.opacity = opacity
+                titleBaseOpacity = opacity
                 titleOutlines.forEach(outline => outline.opacity = opacity)
                 instructionsTextObjects.forEach(obj => obj.opacity = opacity)
                 instructionsOutlineObjects.forEach(outline => outline.opacity = opacity)
@@ -542,18 +590,73 @@ export function sceneReady(k) {
       }
       const hintProgress = hintFlickerTime / HINT_FLICKER_DURATION
       hint.opacity = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * hintProgress
+      //
+      // Title flicker - subtle opacity variation
+      //
+      titleFlickerPhase += k.dt() * TITLE_FLICKER_SPEED
+      const titleFlicker = TITLE_FLICKER_MIN + (TITLE_FLICKER_MAX - TITLE_FLICKER_MIN) * (0.5 + 0.5 * Math.sin(titleFlickerPhase))
+      //
+      // Apply flicker to title opacity (using base opacity from tween)
+      //
+      titleText.opacity = titleBaseOpacity * titleFlicker
       
       //
-      // Ghost words animation - very slow vertical movement
+      // Ghost words animation - firefly-like smooth movement
       //
       ghostWords.forEach(ghost => {
-        ghost.obj.pos.y += ghost.speedY * k.dt()
+        const dt = k.dt()
         //
-        // Wrap around when going off screen
+        // Update direction timer
         //
-        if (ghost.obj.pos.y > k.height() + 100) {
-          ghost.obj.pos.y = -100
-          ghost.obj.pos.x = Math.random() * k.width()
+        ghost.directionTimer -= dt
+        if (ghost.directionTimer <= 0) {
+          //
+          // Set new target direction (will interpolate smoothly)
+          //
+          const newAngle = Math.random() * Math.PI * 2
+          ghost.targetVx = Math.cos(newAngle) * ghost.speed
+          ghost.targetVy = Math.sin(newAngle) * ghost.speed
+          ghost.directionTimer = GHOST_WORD_DIRECTION_CHANGE_INTERVAL * (0.5 + Math.random())
+        }
+        //
+        // Smoothly interpolate velocity towards target
+        //
+        const smoothing = GHOST_WORD_SMOOTHING * dt
+        ghost.vx += (ghost.targetVx - ghost.vx) * smoothing
+        ghost.vy += (ghost.targetVy - ghost.vy) * smoothing
+        //
+        // Move ghost word and its outline
+        //
+        ghost.obj.pos.x += ghost.vx * dt
+        ghost.obj.pos.y += ghost.vy * dt
+        ghost.outline.pos.x = ghost.obj.pos.x + GHOST_WORD_OUTLINE_OFFSET
+        ghost.outline.pos.y = ghost.obj.pos.y + GHOST_WORD_OUTLINE_OFFSET
+        //
+        // Soft bounce off screen edges with margin
+        //
+        const minX = GHOST_WORD_SCREEN_MARGIN
+        const maxX = k.width() - GHOST_WORD_SCREEN_MARGIN
+        const minY = GHOST_WORD_SCREEN_MARGIN
+        const maxY = k.height() - GHOST_WORD_SCREEN_MARGIN
+        
+        if (ghost.obj.pos.x < minX) {
+          ghost.obj.pos.x = minX
+          ghost.targetVx = Math.abs(ghost.targetVx)
+          ghost.vx = Math.abs(ghost.vx) * 0.5
+        } else if (ghost.obj.pos.x > maxX) {
+          ghost.obj.pos.x = maxX
+          ghost.targetVx = -Math.abs(ghost.targetVx)
+          ghost.vx = -Math.abs(ghost.vx) * 0.5
+        }
+        
+        if (ghost.obj.pos.y < minY) {
+          ghost.obj.pos.y = minY
+          ghost.targetVy = Math.abs(ghost.targetVy)
+          ghost.vy = Math.abs(ghost.vy) * 0.5
+        } else if (ghost.obj.pos.y > maxY) {
+          ghost.obj.pos.y = maxY
+          ghost.targetVy = -Math.abs(ghost.targetVy)
+          ghost.vy = -Math.abs(ghost.vy) * 0.5
         }
       })
     })

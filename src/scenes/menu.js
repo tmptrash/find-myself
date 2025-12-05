@@ -61,6 +61,10 @@ export function sceneMenu(k) {
     //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
+    //
+    // Play menu background music
+    //
+    const menuMusic = k.play("menu", { loop: true, volume: 0.3 })
 
     //
     // Create hero in center (using HERO type)
@@ -83,15 +87,23 @@ export function sceneMenu(k) {
     const sectionConfigs = getSectionPositions(centerX, centerY, radius)
     const antiHeroes = []
     const sectionLabels = []
+    //
+    // Floating animation configuration (firefly-like in all directions)
+    //
+    const FLOAT_RADIUS = 6         // Maximum float distance from base position
+    const FLOAT_SPEED_X = 0.8      // Speed of horizontal floating
+    const FLOAT_SPEED_Y = 1.2      // Speed of vertical floating
     
-    sectionConfigs.forEach(config => {
+    sectionConfigs.forEach((config, index) => {
       const isCompleted = progress[config.section]
       //
       // Determine body color: gray if not completed, section color if completed
       // Outline is always black
       //
-      const grayColor = '#A0A0A0'
+      const grayColor = '#656565'
+      const grayOutlineColor = '#454545'
       const bodyColor = isCompleted ? config.color.body : grayColor
+      const outlineColor = isCompleted ? null : grayOutlineColor
       //
       // Create anti-hero for this section
       //
@@ -103,10 +115,35 @@ export function sceneMenu(k) {
         scale: 3,
         controllable: false,
         bodyColor,
+        outlineColor,
         addMouth: config.section === 'word',
         addArms: config.section === 'touch',
         hitboxPadding: 5
       })
+      //
+      // Preload black-outline variant for hover/completed state
+      //
+      Hero.loadHeroSprites({
+        k,
+        type: Hero.HEROES.ANTIHERO,
+        bodyColor,
+        outlineColor: CFG.visual.colors.outline,
+        addMouth: config.section === 'word',
+        addArms: config.section === 'touch'
+      })
+      //
+      // Cache sprite prefixes for outline switching
+      //
+      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${bodyColor}_${outlineColor || CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${bodyColor}_${CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.currentPrefix = antiHeroInst.spritePrefixGray
+      //
+      // Store base position and phase offsets for floating animation
+      //
+      antiHeroInst.baseX = config.x
+      antiHeroInst.baseY = config.y
+      antiHeroInst.floatPhaseX = index * 1.1 + Math.random() * 2
+      antiHeroInst.floatPhaseY = index * 0.7 + Math.random() * 2
       
       antiHeroInst.character.z = 10
       
@@ -190,6 +227,10 @@ export function sceneMenu(k) {
       title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
+      floatTime: 0,
+      floatRadius: FLOAT_RADIUS,
+      floatSpeedX: FLOAT_SPEED_X,
+      floatSpeedY: FLOAT_SPEED_Y,
       hoveredAntiHero: null,  // Track which anti-hero is hovered
       isLeavingScene: false   // Flag to prevent ambient restart when leaving
     }
@@ -231,8 +272,9 @@ export function sceneMenu(k) {
         // Determine target color based on state
         //
         let targetColor
+        const shouldUseBlackOutline = antiHeroInst === hoveredInst || antiHeroInst.isCompleted
         
-        if (antiHeroInst === hoveredInst || antiHeroInst.isCompleted) {
+        if (shouldUseBlackOutline) {
           //
           // Hovered OR completed: show section color
           //
@@ -249,6 +291,16 @@ export function sceneMenu(k) {
         //
         const rgb = getRGB(k, targetColor)
         antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b)
+        
+        //
+        // Switch outline variant by changing sprite prefix
+        //
+        const desiredPrefix = shouldUseBlackOutline ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
+        if (antiHeroInst.currentPrefix !== desiredPrefix) {
+          antiHeroInst.currentPrefix = desiredPrefix
+          antiHeroInst.spritePrefix = desiredPrefix
+          antiHeroInst.character.use(k.sprite(`${desiredPrefix}_0_0`))
+        }
       })
       
       //
@@ -269,9 +321,13 @@ export function sceneMenu(k) {
       inst.hoveredAntiHero = hoveredInst
       
       //
-      // Update title circular movement based on hover
+      // Update title movement or hide when leaving
       //
-      updateTitle(inst.title, k, hoveredInst)
+      if (inst.isLeavingScene) {
+        hideTitle(inst.title)
+      } else {
+        updateTitle(inst.title, k, hoveredInst)
+      }
       
       //
       // Control ambient sound based on hover state
@@ -433,6 +489,10 @@ export function sceneMenu(k) {
     //
     k.onSceneLeave(() => {
       //
+      // Stop menu music
+      //
+      menuMusic.stop()
+      //
       // Destroy all game objects
       //
       heroInst.character.destroy()
@@ -473,30 +533,61 @@ function createTitle(k, centerX, centerY, radius) {
   const titleSize = 32  // Smaller size (was 48)
   const amberColor = k.rgb(228, 155, 36)
   const dimColor = k.rgb(120, 120, 120)  // Gray (was amber-dimmed)
+  const outlineOffsets = [
+    { dx: -2, dy: 0 },
+    { dx: 2, dy: 0 },
+    { dx: 0, dy: -2 },
+    { dx: 0, dy: 2 },
+    { dx: -2, dy: -2 },
+    { dx: 2, dy: -2 },
+    { dx: -2, dy: 2 },
+    { dx: 2, dy: 2 }
+  ]
   
   //
   // Create each letter as separate object
   //
   const letters = []
+  const outlineLetters = []
   const circleRadius = radius + 100  // Slightly smaller (was +120)
   
   for (let i = 0; i < text.length; i++) {
     const char = text[i]
+    
+    //
+    // Outline shadows (four directions)
+    //
+    const shadows = outlineOffsets.map(offset => k.add([
+      k.text(char, { size: titleSize }),
+      k.pos(offset.dx, offset.dy),
+      k.anchor("center"),
+      k.color(0, 0, 0),
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.ui + 49),
+      k.fixed()
+    ]))
     
     const letter = k.add([
       k.text(char, { size: titleSize }),
       k.pos(0, 0),
         k.anchor("center"),
       k.color(dimColor),  // Start dimmed
-      k.z(100),
+      k.outline(0, k.rgb(0, 0, 0)),
+      k.z(CFG.visual.zIndex.ui + 50),
       k.fixed()
     ])
     
     letters.push(letter)
+    outlineLetters.push(shadows.map((shadow, index) => ({
+      node: shadow,
+      dx: outlineOffsets[index].dx,
+      dy: outlineOffsets[index].dy
+    })))
   }
   
   return {
     letters,
+    outlineLetters,
     text,  // Single text
     circleRadius,
     centerX,
@@ -703,6 +794,15 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     if (letter.text !== currentChar) {
       letter.text = currentChar
     }
+    //
+    // Update outline characters to match
+    //
+    const outlines = titleInst.outlineLetters[index]
+    outlines.forEach(outline => {
+      if (outline.node.text !== currentChar) {
+        outline.node.text = currentChar
+      }
+    })
     
     //
     // Determine letter index based on order (reversed or not)
@@ -735,6 +835,35 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     const baseFinalOpacity = hoveredAntiHero ? 1.0 : titleInst.baseOpacity
     const finalOpacity = baseFinalOpacity * titleInst.reverseFadePhase
     letter.opacity = finalOpacity
+    
+    //
+    // Toggle outline: black on hover (drawn with shadow letters), none when idle
+    //
+    const outlineOpacity = hoveredAntiHero ? finalOpacity : 0
+    outlines.forEach(outline => {
+      outline.node.pos.x = x + outline.dx
+      outline.node.pos.y = y + outline.dy
+      outline.node.angle = letter.angle
+      outline.node.opacity = outlineOpacity
+    })
+    //
+    // Disable text outline component to avoid conflicts (kept at 0)
+    //
+    letter.outline.width = 0
+  })
+}
+
+//
+// Hide title instantly (used when leaving scene)
+//
+function hideTitle(titleInst) {
+  titleInst.letters.forEach(letter => {
+    letter.opacity = 0
+  })
+  titleInst.outlineLetters.forEach(outlines => {
+    outlines.forEach(outline => {
+      outline.node.opacity = 0
+    })
   })
 }
 

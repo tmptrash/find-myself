@@ -68,7 +68,8 @@ export function create(config) {
     scale = HERO_SCALE,
     antiHero = null,
     currentLevel = null,
-    bodyColor = null,      // Custom body color (hex string), outline is always black
+    bodyColor = null,      // Custom body color (hex string)
+    outlineColor = null,   // Custom outline color (hex string), defaults to black
     dustColor = null,      // Dust particle color (hex string)
     isStatic = false,      // If true, no physics (for indicators)
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
@@ -78,6 +79,7 @@ export function create(config) {
 
   const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
+  const effectiveOutlineColor = outlineColor ?? CFG.visual.colors.outline
   //
   // Load sprites for this hero configuration
   //
@@ -88,6 +90,7 @@ export function create(config) {
       k,
       type,
       bodyColor: effectiveBodyColor,
+      outlineColor: effectiveOutlineColor,
       addMouth,
       addArms,
       character: null  // Marker to indicate this is an inst-like object
@@ -98,7 +101,7 @@ export function create(config) {
   //
   // Generate sprite prefix based on customization
   //
-  const spritePrefix = `${type}_${effectiveBodyColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -173,14 +176,15 @@ export function create(config) {
  * @param {Object} inst - Hero instance or Kaplay instance
  * @param {string} [type] - Hero type (HERO or ANTIHERO) - required if first param is k
  * @param {string} [bodyColor=null] - Body color in hex format (null = use default from config)
+ * @param {string} [outlineColor=null] - Outline color in hex format (null = use default from config)
  * @param {boolean} [addMouth=false] - Add mouth to idle sprites
  * @param {boolean} [addArms=false] - Add arms to sprites
  */
-export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = false, addArms = false) {
+export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColor = null, addMouth = false, addArms = false) {
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, mouth, arms
+  let k, heroType, color, outline, mouth, arms
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -189,6 +193,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = 
     k = inst.k
     heroType = inst.type
     color = inst.bodyColor
+    outline = inst.outlineColor
     mouth = inst.addMouth || false
     arms = inst.addArms || false
   } else {
@@ -198,17 +203,19 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = 
     k = inst
     heroType = type
     color = bodyColor
+    outline = outlineColor
     mouth = addMouth
     arms = addArms
   }
   //
-  // Use default color from config if not provided
+  // Use default colors from config if not provided
   //
   const effectiveBodyColor = color || (heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
+  const effectiveOutlineColor = outline || CFG.visual.colors.outline
   //
   // Generate unique prefix for this sprite variant
   //
-  const prefix = `${heroType}_${effectiveBodyColor}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}`
+  const prefix = `${heroType}_${effectiveBodyColor}_${effectiveOutlineColor}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}`
   //
   // Check if sprites with this configuration are already loaded
   //
@@ -219,7 +226,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = 
   for (let x = -1; x <= 1; x++) {
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
-      const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, mouth, arms)
+      const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
       k.loadSprite(spriteName, spriteData)
     }
   }
@@ -227,13 +234,13 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, addMouth = 
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, mouth, arms))
+    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms))
   }
   //
   // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-run-${frame}`, createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, mouth, arms))
+    k.loadSprite(`${prefix}-run-${frame}`, createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms))
   }
 }
 /**
@@ -1205,12 +1212,13 @@ function onAnnihilationCollide(inst) {
  * @param {number} frame - Frame number (for animations)
  * @param {number} eyeOffsetX - Pupil X offset
  * @param {number} eyeOffsetY - Pupil Y offset
- * @param {string} [customBodyColor] - Custom body color in hex format (outline is always black)
- * @param {boolean} [addMouth=false] - Add black horizontal mouth line (only for idle animation)
+ * @param {string} [customBodyColor] - Custom body color in hex format
+ * @param {string} [customOutlineColor] - Custom outline color in hex format
+ * @param {boolean} [addMouth=false] - Add horizontal mouth line (only for idle animation)
  * @param {boolean} [addArms=false] - Add simple vertical arms
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, addMouth = false, addArms = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false) {
   //
   // Choose body color - custom or default
   //
@@ -1223,10 +1231,9 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     bodyColor = colors.body
   }
   //
+  // Choose outline color - custom or default (black)
   //
-  // Outline is always black
-  //
-  const outlineColor = CFG.visual.colors.outline.replace('#', '')
+  const outlineColor = (customOutlineColor || CFG.visual.colors.outline).replace('#', '')
   const canvas = document.createElement('canvas')
   canvas.width = SPRITE_SIZE
   canvas.height = SPRITE_SIZE

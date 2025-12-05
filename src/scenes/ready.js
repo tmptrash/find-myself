@@ -64,21 +64,22 @@ const GATHER_SPEED = 0.55
 const SCATTER_DISTANCE_MIN = 95
 const SCATTER_DISTANCE_MAX = 160
 
-const GHOST_WORDS = ['pain', 'lost', 'fear', 'dark', 'void', 'cold', 'fall', 'cut', 'hurt', 'fade', 'gone', 'break', 'torn', 'scar', 'numb', 'blur']
-const GHOST_WORD_OPACITY = 0.04  // 4% opacity (3-6% range)
-const GHOST_WORD_SPEED = 12  // Movement speed (pixels per second)
-const GHOST_WORD_COUNT = 25  // Number of ghost words per layer
-const GHOST_WORD_DIRECTION_CHANGE_INTERVAL = 3.0  // Seconds between direction changes
-const GHOST_WORD_SCREEN_MARGIN = 50  // Margin from screen edges
-const GHOST_WORD_SMOOTHING = 1.5  // How quickly velocity interpolates to target
-const GHOST_WORD_OUTLINE_OFFSET = 1.5  // Outline offset for ghost words
 //
-// Ghost word layers configuration
+// Spider configuration
 //
-const GHOST_WORD_LAYERS = [
-  { color: '#4A5A6A', opacity: 0.08, speed: 10, zIndex: -2 },  // Darker, slower, deeper
-  { color: '#5A6A7A', opacity: 0.06, speed: 14, zIndex: -1 }   // Lighter, faster, front
-]
+const SPIDER_COUNT = 25
+const SPIDER_BODY_SIZE = 14
+const SPIDER_LEG_LENGTH_1 = 28  // First segment length
+const SPIDER_LEG_LENGTH_2 = 35  // Second segment length
+const SPIDER_SPEED = 30
+const SPIDER_DIRECTION_CHANGE_INTERVAL = 2.0
+const SPIDER_SCREEN_MARGIN = 80
+const SPIDER_SMOOTHING = 2.0
+const SPIDER_APPEAR_DELAY = 3.0    // Seconds before spiders start appearing
+const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
+const SPIDER_MAX_OPACITY = 0.15    // Maximum opacity when fully visible
+const SPIDER_COLOR = '#3A4A5A'
+const SPIDER_STEP_DISTANCE = 40    // Distance before leg takes a step
 //
 // Title flicker configuration
 //
@@ -117,63 +118,15 @@ export function sceneReady(k) {
     addBackground(k, CFG.visual.colors.ready.background)
     
     //
-    // Ghost words - multiple layers of barely visible shadows moving like fireflies
+    // Spiders - small creatures crawling in the background
     //
-    const ghostWords = []
-    GHOST_WORD_LAYERS.forEach(layer => {
-      for (let i = 0; i < GHOST_WORD_COUNT; i++) {
-        const word = GHOST_WORDS[Math.floor(Math.random() * GHOST_WORDS.length)]
-        const x = GHOST_WORD_SCREEN_MARGIN + Math.random() * (k.width() - GHOST_WORD_SCREEN_MARGIN * 2)
-        const y = GHOST_WORD_SCREEN_MARGIN + Math.random() * (k.height() - GHOST_WORD_SCREEN_MARGIN * 2)
-        const fontSize = 40 + Math.random() * 60
-        const speed = layer.speed * (0.5 + Math.random())
-        //
-        // Random initial direction
-        //
-        const angle = Math.random() * Math.PI * 2
-        const vx = Math.cos(angle) * speed
-        const vy = Math.sin(angle) * speed
-        //
-        // Create outline for ghost word
-        //
-        const ghostOutline = k.add([
-          k.text(word, {
-            size: fontSize,
-            font: QUOTE_FONT_FAMILY
-          }),
-          k.pos(x, y),
-          k.anchor('center'),
-          k.color(0, 0, 0),
-          k.opacity(layer.opacity * 0.5),
-          k.z(layer.zIndex - 0.1)
-        ])
-        //
-        // Create main ghost word text
-        //
-        const ghostText = k.add([
-          k.text(word, {
-            size: fontSize,
-            font: QUOTE_FONT_FAMILY
-          }),
-          k.pos(x, y),
-          k.anchor('center'),
-          getColor(k, layer.color),
-          k.opacity(layer.opacity),
-          k.z(layer.zIndex)
-        ])
-        
-        ghostWords.push({
-          obj: ghostText,
-          outline: ghostOutline,
-          speed,
-          vx,
-          vy,
-          targetVx: vx,
-          targetVy: vy,
-          directionTimer: Math.random() * GHOST_WORD_DIRECTION_CHANGE_INTERVAL
-        })
-      }
-    })
+    const spiders = []
+    let spiderTimer = 0  // Timer for fade-in delay
+    
+    for (let i = 0; i < SPIDER_COUNT; i++) {
+      const spider = createSpider(k, i)
+      spiders.push(spider)
+    }
     
     //
     // Hint text (visible immediately)
@@ -601,67 +554,38 @@ export function sceneReady(k) {
       titleText.opacity = titleBaseOpacity * titleFlicker
       
       //
-      // Ghost words animation - firefly-like smooth movement
+      // Spider animation
       //
-      ghostWords.forEach(ghost => {
-        const dt = k.dt()
-        //
-        // Update direction timer
-        //
-        ghost.directionTimer -= dt
-        if (ghost.directionTimer <= 0) {
-          //
-          // Set new target direction (will interpolate smoothly)
-          //
-          const newAngle = Math.random() * Math.PI * 2
-          ghost.targetVx = Math.cos(newAngle) * ghost.speed
-          ghost.targetVy = Math.sin(newAngle) * ghost.speed
-          ghost.directionTimer = GHOST_WORD_DIRECTION_CHANGE_INTERVAL * (0.5 + Math.random())
-        }
-        //
-        // Smoothly interpolate velocity towards target
-        //
-        const smoothing = GHOST_WORD_SMOOTHING * dt
-        ghost.vx += (ghost.targetVx - ghost.vx) * smoothing
-        ghost.vy += (ghost.targetVy - ghost.vy) * smoothing
-        //
-        // Move ghost word and its outline
-        //
-        ghost.obj.pos.x += ghost.vx * dt
-        ghost.obj.pos.y += ghost.vy * dt
-        ghost.outline.pos.x = ghost.obj.pos.x + GHOST_WORD_OUTLINE_OFFSET
-        ghost.outline.pos.y = ghost.obj.pos.y + GHOST_WORD_OUTLINE_OFFSET
-        //
-        // Soft bounce off screen edges with margin
-        //
-        const minX = GHOST_WORD_SCREEN_MARGIN
-        const maxX = k.width() - GHOST_WORD_SCREEN_MARGIN
-        const minY = GHOST_WORD_SCREEN_MARGIN
-        const maxY = k.height() - GHOST_WORD_SCREEN_MARGIN
-        
-        if (ghost.obj.pos.x < minX) {
-          ghost.obj.pos.x = minX
-          ghost.targetVx = Math.abs(ghost.targetVx)
-          ghost.vx = Math.abs(ghost.vx) * 0.5
-        } else if (ghost.obj.pos.x > maxX) {
-          ghost.obj.pos.x = maxX
-          ghost.targetVx = -Math.abs(ghost.targetVx)
-          ghost.vx = -Math.abs(ghost.vx) * 0.5
-        }
-        
-        if (ghost.obj.pos.y < minY) {
-          ghost.obj.pos.y = minY
-          ghost.targetVy = Math.abs(ghost.targetVy)
-          ghost.vy = Math.abs(ghost.vy) * 0.5
-        } else if (ghost.obj.pos.y > maxY) {
-          ghost.obj.pos.y = maxY
-          ghost.targetVy = -Math.abs(ghost.targetVy)
-          ghost.vy = -Math.abs(ghost.vy) * 0.5
-        }
+      const dt = k.dt()
+      spiderTimer += dt
+      //
+      // Calculate current opacity based on timer
+      //
+      let currentOpacity = 0
+      if (spiderTimer > SPIDER_APPEAR_DELAY) {
+        const fadeProgress = Math.min(1, (spiderTimer - SPIDER_APPEAR_DELAY) / SPIDER_FADE_DURATION)
+        currentOpacity = fadeProgress * SPIDER_MAX_OPACITY
+      }
+      //
+      // Update each spider
+      //
+      spiders.forEach(spider => {
+        updateSpider(k, spider, dt, currentOpacity)
       })
     })
     
     k.onDraw(() => {
+      //
+      // Draw spiders
+      //
+      let currentOpacity = 0
+      if (spiderTimer > SPIDER_APPEAR_DELAY) {
+        const fadeProgress = Math.min(1, (spiderTimer - SPIDER_APPEAR_DELAY) / SPIDER_FADE_DURATION)
+        currentOpacity = fadeProgress * SPIDER_MAX_OPACITY
+      }
+      spiders.forEach(spider => {
+        drawSpider(k, spider, currentOpacity)
+      })
       //
       // Only draw particles if they should be shown
       //
@@ -1064,4 +988,312 @@ function moveParticlesToLayout(system, layoutPositions) {
 
 function particlesIdle(particles) {
   return particles.every(particle => !particle.isFleeing)
+}
+
+/**
+ * Creates a spider with body and 8 legs using inverse kinematics
+ * @param {Object} k - Kaplay instance
+ * @param {number} index - Spider index for positioning
+ * @returns {Object} Spider instance
+ */
+function createSpider(k, index) {
+  //
+  // Random starting position
+  //
+  const x = SPIDER_SCREEN_MARGIN + Math.random() * (k.width() - SPIDER_SCREEN_MARGIN * 2)
+  const y = SPIDER_SCREEN_MARGIN + Math.random() * (k.height() - SPIDER_SCREEN_MARGIN * 2)
+  //
+  // Random initial direction
+  //
+  const angle = Math.random() * Math.PI * 2
+  const speed = SPIDER_SPEED * (0.5 + Math.random() * 0.5)
+  const vx = Math.cos(angle) * speed
+  const vy = Math.sin(angle) * speed
+  //
+  // Create 8 legs (4 on each side)
+  // Leg angles spread around the body
+  //
+  const legAngles = [
+    -Math.PI * 0.8, -Math.PI * 0.6, -Math.PI * 0.4, -Math.PI * 0.2,  // Left side
+    Math.PI * 0.2, Math.PI * 0.4, Math.PI * 0.6, Math.PI * 0.8       // Right side
+  ]
+  
+  const legs = legAngles.map((baseAngle, i) => {
+    const side = i < 4 ? -1 : 1  // Left or right side
+    const reach = SPIDER_LEG_LENGTH_1 + SPIDER_LEG_LENGTH_2
+    //
+    // Initial foot target position
+    //
+    const footX = x + Math.cos(baseAngle) * reach * 0.8
+    const footY = y + Math.sin(baseAngle) * reach * 0.8
+    
+    return {
+      baseAngle,
+      side,
+      //
+      // Current foot position (where the foot is)
+      //
+      footX,
+      footY,
+      //
+      // Target foot position (where the foot wants to be)
+      //
+      targetFootX: footX,
+      targetFootY: footY,
+      //
+      // Is the leg currently stepping
+      //
+      isStepping: false,
+      stepProgress: 0,
+      stepStartX: footX,
+      stepStartY: footY,
+      //
+      // Leg phase offset for alternating gait
+      //
+      phaseOffset: (i % 2) * Math.PI
+    }
+  })
+  
+  return {
+    x,
+    y,
+    vx,
+    vy,
+    targetVx: vx,
+    targetVy: vy,
+    speed,
+    directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
+    legs,
+    distanceTraveled: 0
+  }
+}
+
+/**
+ * Updates spider position and leg animations
+ * @param {Object} k - Kaplay instance
+ * @param {Object} spider - Spider instance
+ * @param {number} dt - Delta time
+ * @param {number} opacity - Current opacity
+ */
+function updateSpider(k, spider, dt, opacity) {
+  //
+  // Don't move if not visible yet
+  //
+  if (opacity <= 0) return
+  //
+  // Update direction timer
+  //
+  spider.directionTimer -= dt
+  if (spider.directionTimer <= 0) {
+    const newAngle = Math.random() * Math.PI * 2
+    spider.targetVx = Math.cos(newAngle) * spider.speed
+    spider.targetVy = Math.sin(newAngle) * spider.speed
+    spider.directionTimer = SPIDER_DIRECTION_CHANGE_INTERVAL * (0.5 + Math.random())
+  }
+  //
+  // Smoothly interpolate velocity
+  //
+  const smoothing = SPIDER_SMOOTHING * dt
+  spider.vx += (spider.targetVx - spider.vx) * smoothing
+  spider.vy += (spider.targetVy - spider.vy) * smoothing
+  //
+  // Store old position for distance calculation
+  //
+  const oldX = spider.x
+  const oldY = spider.y
+  //
+  // Move spider
+  //
+  spider.x += spider.vx * dt
+  spider.y += spider.vy * dt
+  //
+  // Track distance traveled
+  //
+  const dx = spider.x - oldX
+  const dy = spider.y - oldY
+  spider.distanceTraveled += Math.sqrt(dx * dx + dy * dy)
+  //
+  // Bounce off screen edges
+  //
+  const minX = SPIDER_SCREEN_MARGIN
+  const maxX = k.width() - SPIDER_SCREEN_MARGIN
+  const minY = SPIDER_SCREEN_MARGIN
+  const maxY = k.height() - SPIDER_SCREEN_MARGIN
+  
+  if (spider.x < minX) {
+    spider.x = minX
+    spider.targetVx = Math.abs(spider.targetVx)
+    spider.vx = Math.abs(spider.vx) * 0.5
+  } else if (spider.x > maxX) {
+    spider.x = maxX
+    spider.targetVx = -Math.abs(spider.targetVx)
+    spider.vx = -Math.abs(spider.vx) * 0.5
+  }
+  
+  if (spider.y < minY) {
+    spider.y = minY
+    spider.targetVy = Math.abs(spider.targetVy)
+    spider.vy = Math.abs(spider.vy) * 0.5
+  } else if (spider.y > maxY) {
+    spider.y = maxY
+    spider.targetVy = -Math.abs(spider.targetVy)
+    spider.vy = -Math.abs(spider.vy) * 0.5
+  }
+  //
+  // Update legs with inverse kinematics
+  //
+  const movementAngle = Math.atan2(spider.vy, spider.vx)
+  const reach = SPIDER_LEG_LENGTH_1 + SPIDER_LEG_LENGTH_2
+  
+  spider.legs.forEach((leg, i) => {
+    //
+    // Calculate ideal foot position based on movement direction
+    //
+    const adjustedAngle = leg.baseAngle + movementAngle
+    const idealX = spider.x + Math.cos(adjustedAngle) * reach * 0.7
+    const idealY = spider.y + Math.sin(adjustedAngle) * reach * 0.7
+    //
+    // Distance from current foot to ideal position
+    //
+    const footDx = idealX - leg.footX
+    const footDy = idealY - leg.footY
+    const footDist = Math.sqrt(footDx * footDx + footDy * footDy)
+    //
+    // Check if leg needs to step
+    //
+    if (!leg.isStepping && footDist > SPIDER_STEP_DISTANCE) {
+      //
+      // Start stepping - alternating gait (legs step in pairs)
+      //
+      const shouldStep = (i % 2 === 0) !== (Math.floor(spider.distanceTraveled / SPIDER_STEP_DISTANCE) % 2 === 0)
+      if (shouldStep) {
+        leg.isStepping = true
+        leg.stepProgress = 0
+        leg.stepStartX = leg.footX
+        leg.stepStartY = leg.footY
+        leg.targetFootX = idealX
+        leg.targetFootY = idealY
+      }
+    }
+    //
+    // Animate stepping
+    //
+    if (leg.isStepping) {
+      leg.stepProgress += dt * 8  // Step speed
+      if (leg.stepProgress >= 1) {
+        leg.stepProgress = 1
+        leg.isStepping = false
+        leg.footX = leg.targetFootX
+        leg.footY = leg.targetFootY
+      } else {
+        //
+        // Interpolate foot position with arc
+        //
+        const t = leg.stepProgress
+        const arcHeight = 3  // How high the foot lifts
+        const arc = Math.sin(t * Math.PI) * arcHeight
+        leg.footX = leg.stepStartX + (leg.targetFootX - leg.stepStartX) * t
+        leg.footY = leg.stepStartY + (leg.targetFootY - leg.stepStartY) * t - arc
+      }
+    }
+  })
+}
+
+/**
+ * Draws a spider using inverse kinematics for legs
+ * @param {Object} k - Kaplay instance
+ * @param {Object} spider - Spider instance
+ * @param {number} opacity - Current opacity
+ */
+function drawSpider(k, spider, opacity) {
+  if (opacity <= 0) return
+  
+  const color = k.rgb(58, 74, 90)  // SPIDER_COLOR #3A4A5A
+  //
+  // Draw legs first (behind body)
+  //
+  spider.legs.forEach(leg => {
+    //
+    // Calculate joint position using inverse kinematics
+    //
+    const { jointX, jointY } = solveIK(
+      spider.x, spider.y,
+      leg.footX, leg.footY,
+      SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2,
+      leg.side
+    )
+    //
+    // Draw first segment (body to joint)
+    //
+    k.drawLine({
+      p1: k.vec2(spider.x, spider.y),
+      p2: k.vec2(jointX, jointY),
+      width: 1,
+      color,
+      opacity
+    })
+    //
+    // Draw second segment (joint to foot)
+    //
+    k.drawLine({
+      p1: k.vec2(jointX, jointY),
+      p2: k.vec2(leg.footX, leg.footY),
+      width: 1,
+      color,
+      opacity
+    })
+  })
+  //
+  // Draw body (small circle)
+  //
+  k.drawCircle({
+    pos: k.vec2(spider.x, spider.y),
+    radius: SPIDER_BODY_SIZE,
+    color,
+    opacity
+  })
+}
+
+/**
+ * Solves inverse kinematics for a 2-segment leg
+ * @param {number} baseX - Base X (body position)
+ * @param {number} baseY - Base Y (body position)
+ * @param {number} targetX - Target X (foot position)
+ * @param {number} targetY - Target Y (foot position)
+ * @param {number} len1 - Length of first segment
+ * @param {number} len2 - Length of second segment
+ * @param {number} side - Side of the leg (-1 left, 1 right)
+ * @returns {Object} Joint position { jointX, jointY }
+ */
+function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
+  //
+  // Distance from base to target
+  //
+  const dx = targetX - baseX
+  const dy = targetY - baseY
+  let dist = Math.sqrt(dx * dx + dy * dy)
+  //
+  // Clamp distance to reachable range
+  //
+  const maxReach = len1 + len2 - 0.1
+  const minReach = Math.abs(len1 - len2) + 0.1
+  dist = Math.max(minReach, Math.min(maxReach, dist))
+  //
+  // Use law of cosines to find angles
+  //
+  const angleToTarget = Math.atan2(dy, dx)
+  //
+  // Angle at base joint
+  //
+  const cosAngle1 = (dist * dist + len1 * len1 - len2 * len2) / (2 * dist * len1)
+  const angle1 = Math.acos(Math.max(-1, Math.min(1, cosAngle1)))
+  //
+  // Calculate joint position
+  // Side determines which way the joint bends
+  //
+  const jointAngle = angleToTarget + angle1 * side
+  const jointX = baseX + Math.cos(jointAngle) * len1
+  const jointY = baseY + Math.sin(jointAngle) * len1
+  
+  return { jointX, jointY }
 }

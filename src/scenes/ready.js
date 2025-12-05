@@ -68,7 +68,7 @@ const SCATTER_DISTANCE_MAX = 160
 // Spider configuration
 //
 const SPIDER_COUNT = 25
-const SPIDER_BODY_SIZE = 14
+const SPIDER_BODY_SIZE = 7
 const SPIDER_LEG_LENGTH_1 = 28  // First segment length
 const SPIDER_LEG_LENGTH_2 = 35  // Second segment length
 const SPIDER_SPEED = 30
@@ -384,6 +384,8 @@ export function sceneReady(k) {
     let phaseTimer = 0
     let particlesFadedIn = false
     let showParticles = false  // Flag to control particle rendering
+    let spidersFadingOut = false  // Flag to control spider fade-out
+    let spiderFadeOutProgress = 0  // Progress of spider fade-out (0-1)
     
     //
     // Show instructions immediately with fade in
@@ -453,6 +455,7 @@ export function sceneReady(k) {
           if (!particlesFadedIn) {
             particlesFadedIn = true
             showParticles = true  // Enable particle rendering
+            spidersFadingOut = true  // Start fading out spiders
             //
             // Fade in particles
             //
@@ -584,12 +587,25 @@ export function sceneReady(k) {
       const dt = k.dt()
       spiderTimer += dt
       //
+      // Update spider fade-out progress if fading out
+      //
+      if (spidersFadingOut && spiderFadeOutProgress < 1) {
+        spiderFadeOutProgress += dt / INSTRUCTIONS_FADE_DURATION
+        spiderFadeOutProgress = Math.min(1, spiderFadeOutProgress)
+      }
+      //
       // Calculate current opacity based on timer
       //
       let currentOpacity = 0
       if (spiderTimer > SPIDER_APPEAR_DELAY) {
         const fadeProgress = Math.min(1, (spiderTimer - SPIDER_APPEAR_DELAY) / SPIDER_FADE_DURATION)
         currentOpacity = fadeProgress * SPIDER_MAX_OPACITY
+        //
+        // Apply fade-out multiplier if spiders are fading out
+        //
+        if (spidersFadingOut) {
+          currentOpacity *= (1 - spiderFadeOutProgress)
+        }
       }
       //
       // Update each spider
@@ -601,22 +617,29 @@ export function sceneReady(k) {
     
     k.onDraw(() => {
       //
-      // Draw spiders
-      //
-      let currentOpacity = 0
-      if (spiderTimer > SPIDER_APPEAR_DELAY) {
-        const fadeProgress = Math.min(1, (spiderTimer - SPIDER_APPEAR_DELAY) / SPIDER_FADE_DURATION)
-        currentOpacity = fadeProgress * SPIDER_MAX_OPACITY
-      }
-      spiders.forEach(spider => {
-        drawSpider(k, spider, currentOpacity)
-      })
-      //
       // Only draw particles if they should be shown
       //
       if (showParticles) {
         Particles.draw(particleSystem)
       }
+      //
+      // Draw spiders with individual fade-in (and fade-out) - AFTER particles (on top)
+      //
+      spiders.forEach(spider => {
+        let spiderOpacity = 0
+        const timeToAppear = SPIDER_APPEAR_DELAY + spider.appearDelay
+        if (spiderTimer > timeToAppear) {
+          const fadeProgress = Math.min(1, (spiderTimer - timeToAppear) / SPIDER_FADE_DURATION)
+          spiderOpacity = fadeProgress * SPIDER_MAX_OPACITY
+          //
+          // Apply fade-out multiplier if spiders are fading out
+          //
+          if (spidersFadingOut) {
+            spiderOpacity *= (1 - spiderFadeOutProgress)
+          }
+        }
+        drawSpider(k, spider, spiderOpacity)
+      })
     })
     
     //
@@ -1095,7 +1118,8 @@ function createSpider(k, index) {
     directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
     legs,
     distanceTraveled: 0,
-    color: spiderColor
+    color: spiderColor,
+    appearDelay: index * 0.15
   }
 }
 
@@ -1243,12 +1267,9 @@ function drawSpider(k, spider, opacity) {
   //
   const color = spider.color
   //
-  // Draw legs first (behind body)
+  // Draw colored legs
   //
   spider.legs.forEach(leg => {
-    //
-    // Calculate joint position using inverse kinematics
-    //
     const { jointX, jointY } = solveIK(
       spider.x, spider.y,
       leg.footX, leg.footY,
@@ -1256,28 +1277,37 @@ function drawSpider(k, spider, opacity) {
       leg.side
     )
     //
-    // Draw first segment (body to joint)
+    // First segment (body to joint)
     //
     k.drawLine({
       p1: k.vec2(spider.x, spider.y),
       p2: k.vec2(jointX, jointY),
-      width: 1,
+      width: 2,
       color,
       opacity
     })
     //
-    // Draw second segment (joint to foot)
+    // Second segment (joint to foot)
     //
     k.drawLine({
       p1: k.vec2(jointX, jointY),
       p2: k.vec2(leg.footX, leg.footY),
-      width: 1,
+      width: 2,
+      color,
+      opacity
+    })
+    //
+    // Draw circle at joint to cover gap
+    //
+    k.drawCircle({
+      pos: k.vec2(jointX, jointY),
+      radius: 1,
       color,
       opacity
     })
   })
   //
-  // Draw body (small circle)
+  // Draw colored body (covers leg centers)
   //
   k.drawCircle({
     pos: k.vec2(spider.x, spider.y),

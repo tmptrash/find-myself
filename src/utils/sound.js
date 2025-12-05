@@ -249,8 +249,9 @@ export function playLandSound(instance) {
 /**
  * Play lightning/electric discharge sound effect
  * @param {Object} instance - Sound instance from create()
+ * @param {number} [volume=0.015] - Volume multiplier (default 0.015)
  */
-export function playLightningSound(instance) {
+export function playLightningSound(instance, volume = 0.015) {
   const now = instance.audioContext.currentTime
   const duration = 0.08
   // Create white noise for electric crackle
@@ -271,7 +272,7 @@ export function playLightningSound(instance) {
   filter.Q.value = 1
 
   const gain = instance.audioContext.createGain()
-  gain.gain.setValueAtTime(0.015, now)  // Extremely quiet background sound
+  gain.gain.setValueAtTime(volume, now)
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
 
   noiseSource.connect(filter)
@@ -772,6 +773,97 @@ export function playAnnihilationSound(instance) {
   subBass.start(now)
   subBass.stop(now + 0.6)
 }
+
+/**
+ * Play heartbeat sound effect
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playHeartbeatSound(instance) {
+  const now = instance.audioContext.currentTime
+  //
+  // First beat (same as second beat, without filter artifacts)
+  //
+  const bass1 = instance.audioContext.createOscillator()
+  const bassGain1 = instance.audioContext.createGain()
+  
+  bass1.type = 'sine'
+  bass1.frequency.setValueAtTime(45, now)
+  bass1.frequency.exponentialRampToValueAtTime(28, now + 0.10)
+  //
+  // Smooth attack to avoid click artifacts
+  //
+  bassGain1.gain.setValueAtTime(0, now)
+  bassGain1.gain.linearRampToValueAtTime(1.2, now + 0.01)
+  bassGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
+  
+  bass1.connect(bassGain1)
+  bassGain1.connect(instance.audioContext.destination)
+  bass1.start(now)
+  bass1.stop(now + 0.12)
+  //
+  // Sub-bass for depth (first beat)
+  //
+  const sub1 = instance.audioContext.createOscillator()
+  const subGain1 = instance.audioContext.createGain()
+  
+  sub1.type = 'sine'
+  sub1.frequency.setValueAtTime(30, now)
+  
+  subGain1.gain.setValueAtTime(0, now)
+  subGain1.gain.linearRampToValueAtTime(0.9, now + 0.01)
+  subGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
+  
+  sub1.connect(subGain1)
+  subGain1.connect(instance.audioContext.destination)
+  sub1.start(now)
+  sub1.stop(now + 0.15)
+  //
+  // Second beat (weaker, slightly delayed)
+  //
+  const bass2 = instance.audioContext.createOscillator()
+  const bassGain2 = instance.audioContext.createGain()
+  const filter2 = instance.audioContext.createBiquadFilter()
+  
+  bass2.type = 'sine'
+  bass2.frequency.setValueAtTime(45, now + 0.20)
+  bass2.frequency.exponentialRampToValueAtTime(28, now + 0.30)
+  //
+  // Sharp attack, slower decay
+  //
+  bassGain2.gain.setValueAtTime(0, now + 0.20)
+  bassGain2.gain.linearRampToValueAtTime(1.2, now + 0.205)
+  bassGain2.gain.exponentialRampToValueAtTime(0.001, now + 0.32)
+  //
+  // Low-pass filter for muffled/dull sound
+  //
+  filter2.type = 'lowpass'
+  filter2.frequency.setValueAtTime(200, now + 0.20)
+  filter2.Q.setValueAtTime(1.0, now + 0.20)
+  
+  bass2.connect(filter2)
+  filter2.connect(bassGain2)
+  bassGain2.connect(instance.audioContext.destination)
+  bass2.start(now + 0.20)
+  bass2.stop(now + 0.32)
+  //
+  // Sub-bass for depth (second beat)
+  //
+  const sub2 = instance.audioContext.createOscillator()
+  const subGain2 = instance.audioContext.createGain()
+  
+  sub2.type = 'sine'
+  sub2.frequency.setValueAtTime(30, now + 0.20)
+  
+  subGain2.gain.setValueAtTime(0, now + 0.20)
+  subGain2.gain.linearRampToValueAtTime(0.65, now + 0.208)
+  subGain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
+  
+  sub2.connect(subGain2)
+  subGain2.connect(instance.audioContext.destination)
+  sub2.start(now + 0.20)
+  sub2.stop(now + 0.35)
+}
+
 /**
  * Start background music
  * @param {Object} instance - Sound instance

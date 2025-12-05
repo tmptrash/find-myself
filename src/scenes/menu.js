@@ -67,6 +67,8 @@ export function sceneMenu(k) {
     // Play menu background music
     //
     const menuMusic = k.play("menu", { loop: true, volume: 0.3 })
+    const MENU_MUSIC_NORMAL_VOLUME = 0.3
+    const MENU_MUSIC_HOVER_VOLUME = 0.08
 
     //
     // Create hero in center (using HERO type)
@@ -259,8 +261,10 @@ export function sceneMenu(k) {
       floatRadius: FLOAT_RADIUS,
       floatSpeedX: FLOAT_SPEED_X,
       floatSpeedY: FLOAT_SPEED_Y,
-      hoveredAntiHero: null,  // Track which anti-hero is hovered
-      isLeavingScene: false   // Flag to prevent ambient restart when leaving
+      hoveredAntiHero: null,
+      isLeavingScene: false,
+      heartbeatPhase: 0,
+      lastHeartbeatTime: 0
     }
     
     //
@@ -271,6 +275,12 @@ export function sceneMenu(k) {
       // Update trembling particles
       //
       Particles.onUpdate(particlesBg)
+      //
+      // Update heartbeat phase for lightning pulsation (60 BPM = 1 beat per second)
+      //
+      const HEARTBEAT_BPM = 60
+      const heartbeatSpeed = HEARTBEAT_BPM / 60
+      inst.heartbeatPhase = (inst.heartbeatPhase + k.dt() * heartbeatSpeed) % 1
       
       const mousePos = k.mousePos()
       let foundHover = false
@@ -366,6 +376,32 @@ export function sceneMenu(k) {
       }
       
       inst.hoveredAntiHero = hoveredInst
+      //
+      // Control music volume based on hover state
+      //
+      if (!inst.isLeavingScene) {
+        if (foundHover && hoveredInst && !hoveredInst.isCompleted) {
+          //
+          // Fade music volume down when hovering
+          //
+          const targetVolume = MENU_MUSIC_HOVER_VOLUME
+          menuMusic.volume += (targetVolume - menuMusic.volume) * 5 * k.dt()
+          //
+          // Play heartbeat sound at the right phase (once per cycle)
+          //
+          const HEARTBEAT_INTERVAL = 1.0
+          if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
+            Sound.playHeartbeatSound(sound)
+            inst.lastHeartbeatTime = k.time()
+          }
+        } else {
+          //
+          // Fade music volume back to normal when not hovering
+          //
+          const targetVolume = MENU_MUSIC_NORMAL_VOLUME
+          menuMusic.volume += (targetVolume - menuMusic.volume) * 3 * k.dt()
+        }
+      }
       
       //
       // Update title movement or hide when leaving
@@ -964,7 +1000,8 @@ function drawScene(inst) {
     drawConnectionWave(k, heroPos, antiHeroPos, {
       segmentWidth: 8,
       mainWidth: 3,
-      opacity: 0.6
+      opacity: 0.6,
+      heartbeatPhase: inst.heartbeatPhase
     })
   }
 }

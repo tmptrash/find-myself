@@ -12,14 +12,21 @@ const MAX_LIGHTING_DELAY = 8.0
  * @param {number} [options.mainWidth=4] - Width of main wave line
  * @param {number} [options.opacity=0.7] - Opacity of main wave
  * @param {Array} [options.colors] - Array of possible colors
+ * @param {number} [options.heartbeatPhase=0] - Heartbeat phase (0-1) for pulsation
  */
 export function drawConnectionWave(k, pos1, pos2, options = {}) {
   const {
     segmentWidth = 8,
     mainWidth = 4,
     opacity = 0.7,
-    colors = [k.rgb(255, 165, 0), k.rgb(255, 200, 100), k.rgb(255, 100, 50)]
+    colors = [k.rgb(255, 165, 0), k.rgb(255, 200, 100), k.rgb(255, 100, 50)],
+    heartbeatPhase = 0
   } = options
+  //
+  // Heartbeat pulsation: stronger when heartbeat is at peak
+  //
+  const heartbeatIntensity = Math.sin(heartbeatPhase * Math.PI * 2) * 0.5 + 0.5
+  const pulseFactor = 0.7 + heartbeatIntensity * 0.6
   
   const connectionSegments = []
   const startX = pos1.x
@@ -39,9 +46,23 @@ export function drawConnectionWave(k, pos1, pos2, options = {}) {
     const harmonic2 = Math.sin(k.time() * 12 + i * 1.5) * 3
     const amplitude = 0.8 + Math.sin(k.time() * 2) * 0.3
     const noise = (k.rand(0, 1) - 0.5) * 2
-    const waveY = (mainWave + harmonic1 + harmonic2 + noise) * amplitude
+    const waveY = (mainWave + harmonic1 + harmonic2 + noise) * amplitude * pulseFactor
     
     connectionSegments.push({ x, y: baseY + waveY })
+  }
+  //
+  // Draw sparks along the connection
+  //
+  const sparkCount = Math.floor(numConnectionSegments * 0.15)
+  const sparks = []
+  for (let i = 0; i < sparkCount; i++) {
+    if (k.rand(0, 1) > 0.7) {
+      const sparkIndex = Math.floor(k.rand(0, connectionSegments.length))
+      const segment = connectionSegments[sparkIndex]
+      const sparkSize = k.rand(2, 5) * pulseFactor
+      const sparkLife = k.rand(0.3, 0.8)
+      sparks.push({ x: segment.x, y: segment.y, size: sparkSize, life: sparkLife })
+    }
   }
   
   // Draw multiple waves
@@ -56,31 +77,43 @@ export function drawConnectionWave(k, pos1, pos2, options = {}) {
     k.drawLine({
       p1: k.vec2(current.x, current.y),
       p2: k.vec2(next.x, next.y),
-      width: mainWidth,
+      width: mainWidth * pulseFactor,
       color: lineColor,
-      opacity
+      opacity: opacity * pulseFactor
     })
     
     // First harmonic
-    const offset1 = Math.sin(k.time() * 5 + i * 0.3) * 5
+    const offset1 = Math.sin(k.time() * 5 + i * 0.3) * 5 * pulseFactor
     k.drawLine({
       p1: k.vec2(current.x, current.y + offset1),
       p2: k.vec2(next.x, next.y + offset1),
-      width: 2,
+      width: 2 * pulseFactor,
       color: lineColor,
-      opacity: opacity * 0.57
+      opacity: opacity * 0.57 * pulseFactor
     })
     
     // Second harmonic
-    const offset2 = Math.sin(k.time() * 7 + i * 0.6) * 8
+    const offset2 = Math.sin(k.time() * 7 + i * 0.6) * 8 * pulseFactor
     k.drawLine({
       p1: k.vec2(current.x, current.y + offset2),
       p2: k.vec2(next.x, next.y + offset2),
-      width: 1,
+      width: 1 * pulseFactor,
       color: lineColor,
-      opacity: opacity * 0.43
+      opacity: opacity * 0.43 * pulseFactor
     })
   }
+  //
+  // Draw sparks
+  //
+  sparks.forEach(spark => {
+    const sparkColor = k.choose([k.rgb(255, 255, 200), k.rgb(255, 220, 150), k.rgb(255, 180, 100)])
+    k.drawCircle({
+      pos: k.vec2(spark.x, spark.y),
+      radius: spark.size,
+      color: sparkColor,
+      opacity: spark.life * pulseFactor
+    })
+  })
 }
 
 /**

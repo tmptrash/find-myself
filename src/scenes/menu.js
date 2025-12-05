@@ -459,6 +459,32 @@ export function sceneMenu(k) {
     } else {
       hintText = "Space or Enter - start  |  ESC - back"
     }
+    //
+    // Create outline shadows for hint text
+    //
+    const outlineOffsets = [
+      { dx: -2, dy: 0 },
+      { dx: 2, dy: 0 },
+      { dx: 0, dy: -2 },
+      { dx: 0, dy: 2 },
+      { dx: -1, dy: -1 },
+      { dx: 1, dy: -1 },
+      { dx: -1, dy: 1 },
+      { dx: 1, dy: 1 }
+    ]
+    
+    const startTextOutlines = []
+    outlineOffsets.forEach(({ dx, dy }) => {
+      const outline = k.add([
+        k.text(hintText, { size: 20 }),
+        k.pos(960 + dx, 1030 + dy),
+        k.anchor("center"),
+        k.opacity(1),
+        k.color(0, 0, 0),
+        k.z(99)
+      ])
+      startTextOutlines.push(outline)
+    })
     
     const startText = k.add([
       k.text(hintText, { size: 20 }),
@@ -500,7 +526,14 @@ export function sceneMenu(k) {
       // Interpolate opacity between min and max
       //
       const progress = hintFlickerTime / FLICKER_FADE_DURATION
-      startText.opacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
+      const newOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
+      startText.opacity = newOpacity
+      //
+      // Update outline opacity
+      //
+      startTextOutlines.forEach(outline => {
+        outline.opacity = newOpacity
+      })
     })
     
     //
@@ -593,6 +626,9 @@ export function sceneMenu(k) {
         letter.destroy()
       })
       
+      startTextOutlines.forEach(outline => {
+        outline.destroy()
+      })
       startText.destroy()
       
       //

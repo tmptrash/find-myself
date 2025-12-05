@@ -75,9 +75,9 @@ const SPIDER_SPEED = 30
 const SPIDER_DIRECTION_CHANGE_INTERVAL = 2.0
 const SPIDER_SCREEN_MARGIN = 80
 const SPIDER_SMOOTHING = 2.0
-const SPIDER_APPEAR_DELAY = 3.0    // Seconds before spiders start appearing
+const SPIDER_APPEAR_DELAY = 5.0    // Seconds before spiders start appearing
 const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
-const SPIDER_MAX_OPACITY = 0.15    // Maximum opacity when fully visible
+const SPIDER_MAX_OPACITY = 0.45    // Maximum opacity when fully visible
 const SPIDER_COLOR = '#3A4A5A'
 const SPIDER_STEP_DISTANCE = 40    // Distance before leg takes a step
 //
@@ -131,12 +131,37 @@ export function sceneReady(k) {
     //
     // Hint text (visible immediately)
     //
+    const hintOutlineOffsets = [
+      { dx: -2, dy: 0 },
+      { dx: 2, dy: 0 },
+      { dx: 0, dy: -2 },
+      { dx: 0, dy: 2 },
+      { dx: -1, dy: -1 },
+      { dx: 1, dy: -1 },
+      { dx: -1, dy: 1 },
+      { dx: 1, dy: 1 }
+    ]
+    
+    const hintOutlines = []
+    hintOutlineOffsets.forEach(({ dx, dy }) => {
+      const outline = k.add([
+        k.text('press Space, Enter or click to start', { size: 20 }),
+        k.pos(centerX + dx, HINT_Y + dy),
+        k.anchor('center'),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(99)
+      ])
+      hintOutlines.push(outline)
+    })
+    
     const hint = k.add([
       k.text('press Space, Enter or click to start', { size: 20 }),
       k.pos(centerX, HINT_Y),
       k.anchor('center'),
       getColor(k, CFG.visual.colors.ready.hint),
-      k.opacity(1)
+      k.opacity(1),
+      k.z(100)
     ])
     
     let hintFlickerTime = HINT_FLICKER_DURATION
@@ -1010,6 +1035,11 @@ function createSpider(k, index) {
   const vx = Math.cos(angle) * speed
   const vy = Math.sin(angle) * speed
   //
+  // Random gray shade for each spider (from dark gray to light gray)
+  //
+  const grayValue = 50 + Math.random() * 70  // Range: 50-120
+  const spiderColor = k.rgb(grayValue, grayValue, grayValue)
+  //
   // Create 8 legs (4 on each side)
   // Leg angles spread around the body
   //
@@ -1064,7 +1094,8 @@ function createSpider(k, index) {
     speed,
     directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
     legs,
-    distanceTraveled: 0
+    distanceTraveled: 0,
+    color: spiderColor
   }
 }
 
@@ -1207,8 +1238,10 @@ function updateSpider(k, spider, dt, opacity) {
  */
 function drawSpider(k, spider, opacity) {
   if (opacity <= 0) return
-  
-  const color = k.rgb(58, 74, 90)  // SPIDER_COLOR #3A4A5A
+  //
+  // Use spider's individual color
+  //
+  const color = spider.color
   //
   // Draw legs first (behind body)
   //

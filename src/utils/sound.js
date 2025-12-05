@@ -855,7 +855,7 @@ export function playHeartbeatSound(instance) {
   sub2.frequency.setValueAtTime(30, now + 0.20)
   
   subGain2.gain.setValueAtTime(0, now + 0.20)
-  subGain2.gain.linearRampToValueAtTime(0.65, now + 0.208)
+  subGain2.gain.linearRampToValueAtTime(0.9, now + 0.208)
   subGain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
   
   sub2.connect(subGain2)

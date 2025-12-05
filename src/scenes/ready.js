@@ -474,6 +474,13 @@ export function sceneReady(k) {
           
           if (phaseTimer >= INSTRUCTIONS_FADE_DURATION) {
             //
+            // Destroy instruction text objects
+            //
+            titleText.destroy()
+            titleOutlines.forEach(outline => outline.destroy())
+            instructionsTextObjects.forEach(obj => obj.destroy())
+            instructionsOutlineObjects.forEach(outline => outline.destroy())
+            //
             // Start firefly animation with title
             //
             setPhase(PHASES.TITLE_HOLD)

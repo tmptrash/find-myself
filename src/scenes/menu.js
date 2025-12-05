@@ -69,6 +69,14 @@ export function sceneMenu(k) {
     const menuMusic = k.play("menu", { loop: true, volume: 0.3 })
     const MENU_MUSIC_NORMAL_VOLUME = 0.3
     const MENU_MUSIC_HOVER_VOLUME = 0.08
+    //
+    // Play kids.mp3 music with fade in
+    //
+    const kidsMusic = k.play("kids", { loop: true, volume: 0 })
+    const KIDS_MUSIC_TARGET_VOLUME = 0.4
+    const KIDS_MUSIC_HOVER_VOLUME = 0.1
+    const KIDS_MUSIC_FADE_IN_DURATION = 4.0
+    let kidsMusicFadeTimer = 0
 
     //
     // Create hero in center (using HERO type)
@@ -276,6 +284,14 @@ export function sceneMenu(k) {
       //
       Particles.onUpdate(particlesBg)
       //
+      // Fade in kids music
+      //
+      if (kidsMusicFadeTimer < KIDS_MUSIC_FADE_IN_DURATION) {
+        kidsMusicFadeTimer += k.dt()
+        const progress = Math.min(kidsMusicFadeTimer / KIDS_MUSIC_FADE_IN_DURATION, 1.0)
+        kidsMusic.volume = progress * KIDS_MUSIC_TARGET_VOLUME
+      }
+      //
       // Update heartbeat phase for lightning pulsation (60 BPM = 1 beat per second)
       //
       const HEARTBEAT_BPM = 60
@@ -387,6 +403,13 @@ export function sceneMenu(k) {
           const targetVolume = MENU_MUSIC_HOVER_VOLUME
           menuMusic.volume += (targetVolume - menuMusic.volume) * 5 * k.dt()
           //
+          // Fade kids music volume down when hovering
+          //
+          if (kidsMusicFadeTimer >= KIDS_MUSIC_FADE_IN_DURATION) {
+            const kidsTargetVolume = KIDS_MUSIC_HOVER_VOLUME
+            kidsMusic.volume += (kidsTargetVolume - kidsMusic.volume) * 5 * k.dt()
+          }
+          //
           // Play heartbeat sound at the right phase (once per cycle)
           //
           const HEARTBEAT_INTERVAL = 1.0
@@ -400,6 +423,13 @@ export function sceneMenu(k) {
           //
           const targetVolume = MENU_MUSIC_NORMAL_VOLUME
           menuMusic.volume += (targetVolume - menuMusic.volume) * 3 * k.dt()
+          //
+          // Fade kids music volume back to normal when not hovering
+          //
+          if (kidsMusicFadeTimer >= KIDS_MUSIC_FADE_IN_DURATION) {
+            const kidsTargetVolume = KIDS_MUSIC_TARGET_VOLUME
+            kidsMusic.volume += (kidsTargetVolume - kidsMusic.volume) * 3 * k.dt()
+          }
         }
       }
       
@@ -478,8 +508,8 @@ export function sceneMenu(k) {
       const outline = k.add([
         k.text(hintText, { size: 20 }),
         k.pos(960 + dx, 1030 + dy),
-        k.anchor("center"),
-        k.opacity(1),
+      k.anchor("center"),
+      k.opacity(1),
         k.color(0, 0, 0),
         k.z(99)
       ])
@@ -607,6 +637,7 @@ export function sceneMenu(k) {
       // Stop menu music
       //
       menuMusic.stop()
+      kidsMusic.stop()
       //
       // Destroy all game objects
       //
@@ -689,7 +720,7 @@ function createTitle(k, centerX, centerY, radius) {
     const letter = k.add([
       k.text(char, { size: titleSize }),
       k.pos(0, 0),
-        k.anchor("center"),
+      k.anchor("center"),
       k.color(dimColor),  // Start dimmed
       k.outline(0, k.rgb(0, 0, 0)),
       k.z(CFG.visual.zIndex.ui + 50),

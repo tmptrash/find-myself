@@ -35,6 +35,7 @@ k.loadFont(CFG.visual.fonts.thin, "/fonts/JetBrainsMono-Thin.ttf")
 //
 k.loadSound("word", "/word.mp3")
 k.loadSound("menu", "/menu.mp3")
+k.loadSound("kids", "/kids.mp3")
 //
 // Load default character sprites for both hero types
 //

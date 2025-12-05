@@ -54,6 +54,8 @@ export function sceneMenu(k) {
     })
     
     const progress = getProgress()
+    const lastLevel = getLastLevel()
+    const currentSection = getSectionFromLevel(lastLevel)
     
     //
     // Create sound instance and start audio context
@@ -180,7 +182,6 @@ export function sceneMenu(k) {
           //
           // Get last level for word section or start from beginning
           //
-          const lastLevel = getLastLevel()
           const isWordLevel = lastLevel && lastLevel.startsWith('level-word.')
           
           if (isWordLevel) {
@@ -203,15 +204,41 @@ export function sceneMenu(k) {
       // Add section label below anti-hero
       //
       const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
+      const labelPosX = config.x
+      const labelPosY = config.y + 50
       const label = k.add([
         k.text(config.section, { size: 18 }),
-        k.pos(config.x, config.y + 50),
+        k.pos(labelPosX, labelPosY),
         k.anchor("center"),
         k.color(labelColor.r, labelColor.g, labelColor.b),
         k.z(100)
       ])
+      const outlineOffsets = [
+        { dx: -1, dy: 0 },
+        { dx: 1, dy: 0 },
+        { dx: 0, dy: -1 },
+        { dx: 0, dy: 1 }
+      ]
+      const labelOutlines = outlineOffsets.map(offset => {
+        const outlineNode = k.add([
+          k.text(config.section, { size: 18 }),
+          k.pos(labelPosX + offset.dx, labelPosY + offset.dy),
+          k.anchor("center"),
+          k.color(0, 0, 0),
+          k.opacity(0),
+          k.z(99)
+        ])
+        return { node: outlineNode, dx: offset.dx, dy: offset.dy }
+      })
       
-      sectionLabels.push(label)
+      sectionLabels.push({
+        label,
+        outlines: labelOutlines,
+        section: config.section,
+        sectionColor: config.color.body,
+        grayColor,
+        isCompleted
+      })
     })
     
     //
@@ -227,6 +254,7 @@ export function sceneMenu(k) {
       title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
+      currentSection,
       floatTime: 0,
       floatRadius: FLOAT_RADIUS,
       floatSpeedX: FLOAT_SPEED_X,
@@ -304,6 +332,25 @@ export function sceneMenu(k) {
       })
       
       //
+      // Update section labels: color + outline on hover/completed/current
+      //
+      sectionLabels.forEach(entry => {
+        const { label, outlines, section, sectionColor, grayColor, isCompleted } = entry
+        const isHover = hoveredInst && hoveredInst.section === section
+        const isCurrent = inst.currentSection === section
+        const useHighlight = isHover || isCompleted || isCurrent
+        const targetColor = useHighlight ? sectionColor : grayColor
+        const labelRgb = getRGB(k, targetColor)
+        label.color = k.rgb(labelRgb.r, labelRgb.g, labelRgb.b)
+        const outlineOpacity = useHighlight ? 1 : 0
+        outlines.forEach(outlineObj => {
+          outlineObj.node.opacity = outlineOpacity
+          outlineObj.node.pos.x = label.pos.x + outlineObj.dx
+          outlineObj.node.pos.y = label.pos.y + outlineObj.dy
+        })
+      })
+      
+      //
       // Change cursor to pointer when hovering over word anti-hero
       // Don't change cursor if leaving scene
       //
@@ -360,7 +407,6 @@ export function sceneMenu(k) {
     //
     // Check if there's a saved game
     //
-    const lastLevel = getLastLevel()
     const hasSavedGame = lastLevel !== null
     
     //
@@ -499,8 +545,9 @@ export function sceneMenu(k) {
       antiHeroes.forEach(antiHeroInst => {
         antiHeroInst.character.destroy()
       })
-      sectionLabels.forEach(label => {
-        label.destroy()
+      sectionLabels.forEach(entry => {
+        entry.label.destroy()
+        entry.outlines.forEach(outlineObj => outlineObj.node.destroy())
       })
       
       //
@@ -865,6 +912,16 @@ function hideTitle(titleInst) {
       outline.node.opacity = 0
     })
   })
+}
+
+//
+// Extract section name from level id (e.g., 'level-word.2' -> 'word')
+//
+function getSectionFromLevel(levelName) {
+  if (!levelName || !levelName.startsWith('level-')) return null
+  const withoutPrefix = levelName.slice('level-'.length)
+  const parts = withoutPrefix.split('.')
+  return parts[0] || null
 }
 
 /**

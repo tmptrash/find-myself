@@ -1225,9 +1225,9 @@ function onAnnihilationCollide(inst) {
                   }
                 })
                 //
-                // Play pre-mouth sound (louder glitch)
+                // Play pre-mouth sound (louder glitch) - wait 1.3 seconds after fade completes
                 //
-                k.wait(0.3, () => {
+                k.wait(1.3, () => {
                   sfx && Sound.playMouthSound(sfx)
                   //
                   // Add mouth to hero sprite

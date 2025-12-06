@@ -18,8 +18,14 @@ const INSTRUCTIONS_TITLE = `Find Myself`
 const INSTRUCTIONS_TEXT_LINES = [
   { text: 'is a game about discovering who you are while life keeps changing', normal: true },
   { text: 'your plans. Here, life is the one setting traps. It shifts the ground,', normal: true },
-  { text: 'twists logic, and pushes you into mistakes — not to harm you,', normal: true },
-  { text: 'but to teach you.', normal: true },
+  { text: 'turns words into threats, twists logic, and pushes you into mistakes', normal: true },
+  { text: '— not to harm you, but to teach you.', normal: true },
+  { text: '', normal: true },
+  { text: 'Watch closely — even the title above isn\'t safe. ', normal: true, inline: true },
+  { text: 'Letters will grow legs', important: true, sameLine: true },
+  { text: 'and ', normal: true, inline: true },
+  { text: 'crawl away, ', important: true, sameLine: true, inline: true },
+  { text: 'leaving you uncertain. Nothing here stays still.', normal: true, sameLine: true },
   { text: '', normal: true },
   { text: 'Each level is a tiny reflection of your inner world: ', normal: true, inline: true },
   { text: 'words that cut,', important: true, sameLine: true },
@@ -167,7 +173,7 @@ export function sceneReady(k) {
     const titleSize = 54
     const lineHeight = INSTRUCTIONS_LINE_HEIGHT
     const titleX = instructionsTextMargin + 50  // Left aligned with margin
-    const titleY = 160  // Top position
+    const titleY = 120  // Top position (raised from 160)
     
     //
     // Title "Find Myself" in red (top left)

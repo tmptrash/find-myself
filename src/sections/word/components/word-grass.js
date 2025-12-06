@@ -1,6 +1,9 @@
 import { CFG } from '../cfg.js'
 import { parseHex } from '../../../utils/helper.js'
-
+//
+// Global state to persist grass positions across level restarts
+//
+let savedGrassData = null
 //
 // Grass parameters
 //
@@ -26,16 +29,34 @@ const BLADE_SAFE_DISTANCE = 50  // Minimum distance from blade obstacles
  */
 export function create(config) {
   const { k, customBounds, hero, bladePositions = [], platformGaps = [] } = config
-  
   //
-  // Always destroy existing grass and recreate it
-  // This ensures grass positions match current platform gaps
+  // Always destroy existing grass first
   //
   const existingGrassBlades = k.get("word-grass-blade")
   const existingGrassOutlines = k.get("word-grass-outline")
   
   existingGrassBlades.forEach(obj => obj.destroy())
   existingGrassOutlines.forEach(obj => obj.destroy())
+  //
+  // If we have saved grass data, recreate with exact same parameters
+  //
+  if (savedGrassData) {
+    const grassBlades = []
+    const [grassR, grassG, grassB] = parseHex(GRASS_COLOR)
+    
+    savedGrassData.forEach(savedGrass => {
+      const grass = recreateGrassBlade(k, savedGrass, grassR, grassG, grassB)
+      grassBlades.push(grass)
+    })
+    
+    return {
+      k,
+      grassBlades,
+      playableLeft: customBounds.left,
+      playableRight: customBounds.right,
+      time: 0
+    }
+  }
   
   const playableLeft = customBounds.left
   const playableRight = customBounds.right
@@ -227,6 +248,20 @@ export function create(config) {
       i++
     }
   }
+  //
+  // Save grass data for future recreation
+  //
+  savedGrassData = grassBlades.map(grass => ({
+    letter: grass.blade.text,
+    x: grass.baseX,
+    y: grass.baseY,
+    size: grass.grassSize,
+    rotation: grass.baseRotation,
+    opacity: grass.blade.opacity,
+    swayOffset: grass.swayOffset,
+    swaySpeed: grass.swaySpeed,
+    outlines: grass.outlines.map(o => ({ dx: o.dx, dy: o.dy }))
+  }))
   
   const inst = {
     k,
@@ -238,6 +273,72 @@ export function create(config) {
   }
   
   return inst
+}
+/**
+ * Recreate a grass blade with saved parameters
+ * @param {Object} k - Kaplay instance
+ * @param {Object} savedGrass - Saved grass parameters
+ * @param {number} grassR - Red color component
+ * @param {number} grassG - Green color component
+ * @param {number} grassB - Blue color component
+ * @returns {Object} Grass object
+ */
+function recreateGrassBlade(k, savedGrass, grassR, grassG, grassB) {
+  //
+  // Create outline objects first
+  //
+  const outlineObjects = []
+  savedGrass.outlines.forEach(({ dx, dy }) => {
+    const outline = k.add([
+      k.text(savedGrass.letter, {
+        size: savedGrass.size,
+        font: CFG.visual.fonts.thin
+      }),
+      k.pos(savedGrass.x + dx, savedGrass.y + dy),
+      k.color(0, 0, 0),
+      k.opacity(1),
+      k.rotate(savedGrass.rotation),
+      k.anchor('bot'),
+      k.z(CFG.visual.zIndex.platforms - 1.1),
+      k.fixed(),
+      "word-grass-outline"
+    ])
+    outlineObjects.push({ outline, dx, dy })
+  })
+  //
+  // Create main blade
+  //
+  const grassBlade = k.add([
+    k.text(savedGrass.letter, {
+      size: savedGrass.size,
+      font: CFG.visual.fonts.thin
+    }),
+    k.pos(savedGrass.x, savedGrass.y),
+    k.color(grassR, grassG, grassB),
+    k.opacity(savedGrass.opacity),
+    k.rotate(savedGrass.rotation),
+    k.anchor('bot'),
+    k.z(CFG.visual.zIndex.platforms - 1),
+    k.fixed(),
+    "word-grass-blade"
+  ])
+  
+  return {
+    blade: grassBlade,
+    outlines: outlineObjects,
+    baseRotation: savedGrass.rotation,
+    baseX: savedGrass.x,
+    baseY: savedGrass.y,
+    grassSize: savedGrass.size,
+    swayOffset: savedGrass.swayOffset,
+    swaySpeed: savedGrass.swaySpeed
+  }
+}
+/**
+ * Reset grass state (call when leaving word section completely)
+ */
+export function reset() {
+  savedGrassData = null
 }
 
 /**

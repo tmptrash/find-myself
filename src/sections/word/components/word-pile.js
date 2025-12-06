@@ -1,6 +1,10 @@
 import { CFG } from '../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 //
+// Global state to persist word pile positions across level restarts
+//
+let savedWordPileData = null
+//
 // Words and fragments related to pain, self-discovery, and introspection
 //
 const WORDS = [
@@ -66,19 +70,37 @@ export function create(config) {
   if (!customBounds) {
     throw new Error('WordPile.create() requires customBounds parameter')
   }
+  //
+  // Always clean up existing word pile objects first
+  //
+  const existingTexts = k.get("word-pile-text")
+  existingTexts.forEach(obj => k.destroy(obj))
   
+  const existingOutlines = k.get("word-pile-outline")
+  existingOutlines.forEach(obj => k.destroy(obj))
   //
-  // Check if word-pile objects already exist (from previous level run)
-  // If they exist, don't create new ones - just return empty instance
+  // If we have saved data, recreate words with exact same parameters
   //
-  const existingWords = k.get("word-pile-text")
-  if (existingWords.length > 0) {
-    //
-    // Words already exist, return minimal instance without creating new ones
-    //
+  if (savedWordPileData) {
+    const layers = []
+    
+    savedWordPileData.layers.forEach(savedLayer => {
+      const layerWords = []
+      
+      savedLayer.words.forEach(savedWord => {
+        const word = recreateWord(k, savedWord)
+        layerWords.push(word)
+      })
+      
+      layers.push({
+        config: savedLayer.config,
+        words: layerWords
+      })
+    })
+    
     return {
       k,
-      layers: [],
+      layers,
       playableLeft: customBounds.left,
       playableRight: customBounds.right,
       playableTop: customBounds.top,
@@ -151,6 +173,38 @@ export function create(config) {
       words: layerWords
     })
   })
+  //
+  // Save word pile data for future recreation
+  //
+  savedWordPileData = {
+    layers: layers.map(layer => ({
+      config: layer.config,
+      words: layer.words.map(word => {
+        const savedWord = {
+          text: word.textObj.text,
+          x: word.baseX,
+          y: word.baseY,
+          rotation: word.baseRotation,
+          size: word.size,  // Use stored size
+          color: {
+            r: word.textObj.color.r,
+            g: word.textObj.color.g,
+            b: word.textObj.color.b
+          },
+          opacity: word.textObj.opacity,
+          zIndex: word.textObj.z,
+          outlineColor: word.outlineTexts.length > 0 ? {
+            r: word.outlineTexts[0].color.r,
+            g: word.outlineTexts[0].color.g,
+            b: word.outlineTexts[0].color.b
+          } : null,
+          outlineOpacity: word.outlineTexts.length > 0 ? word.outlineTexts[0].opacity : 0,
+          hasOutline: word.outlineTexts.length > 0
+        }
+        return savedWord
+      })
+    }))
+  }
   
   const inst = {
     k,
@@ -162,6 +216,72 @@ export function create(config) {
   }
   
   return inst
+}
+/**
+ * Recreate a word with saved parameters
+ * @param {Object} k - Kaplay instance
+ * @param {Object} savedWord - Saved word parameters
+ * @returns {Object} Word object
+ */
+function recreateWord(k, savedWord) {
+  const outlineTexts = []
+  
+  if (savedWord.hasOutline) {
+    const outlineOffsets = [
+      [-9, -9], [-5, -9], [0, -9], [5, -9], [9, -9],
+      [-9, -5], [-5, -5], [0, -5], [5, -5], [9, -5],
+      [-9,  0], [-5,  0],          [5,  0], [9,  0],
+      [-9,  5], [-5,  5], [0,  5], [5,  5], [9,  5],
+      [-9,  9], [-5,  9], [0,  9], [5,  9], [9,  9]
+    ]
+    
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineText = k.add([
+        k.text(savedWord.text, {
+          size: savedWord.size,
+          font: CFG.visual.fonts.regular
+        }),
+        k.pos(savedWord.x + dx, savedWord.y + dy),
+        k.anchor('center'),
+        k.color(savedWord.outlineColor.r, savedWord.outlineColor.g, savedWord.outlineColor.b),
+        k.opacity(savedWord.outlineOpacity),
+        k.z(savedWord.zIndex - 0.1),
+        k.rotate(savedWord.rotation),
+        k.fixed(),
+        "word-pile-outline"
+      ])
+      outlineTexts.push(outlineText)
+    })
+  }
+  
+  const textObj = k.add([
+    k.text(savedWord.text, {
+      size: savedWord.size,
+      font: CFG.visual.fonts.regular
+    }),
+    k.pos(savedWord.x, savedWord.y),
+    k.anchor('center'),
+    k.color(savedWord.color.r, savedWord.color.g, savedWord.color.b),
+    k.opacity(savedWord.opacity),
+    k.z(savedWord.zIndex),
+    k.rotate(savedWord.rotation),
+    k.fixed(),
+    "word-pile-text"
+  ])
+  
+  return {
+    textObj,
+    outlineTexts,
+    baseX: savedWord.x,
+    baseY: savedWord.y,
+    baseRotation: savedWord.rotation
+  }
+}
+/**
+ * Reset word pile state (call when leaving word section completely)
+ */
+export function reset() {
+  savedWordPileData = null
 }
 
 /**
@@ -299,7 +419,6 @@ function createWordInLayer(k, params) {
         k.z(finalZIndex - 0.1),
         k.rotate(baseRotation),
         k.fixed(),
-        k.stay(),  // Stay persistent across scene changes
         "word-pile-outline"
       ])
       outlineTexts.push(outlineText)
@@ -327,7 +446,6 @@ function createWordInLayer(k, params) {
     k.z(finalZIndex),
     k.rotate(baseRotation),
     k.fixed(),
-    k.stay(),  // Stay persistent across scene changes
     "word-pile-text"
   ])
   
@@ -336,7 +454,8 @@ function createWordInLayer(k, params) {
     outlineTexts,
     baseX: x,
     baseY: y,
-    baseRotation
+    baseRotation,
+    size  // Store original size
   }
 }
 /**

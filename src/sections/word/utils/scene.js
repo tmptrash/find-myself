@@ -2,6 +2,8 @@ import { CFG } from '../cfg.js'
 import { getColor, getRGB } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
+import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 import { isSectionComplete } from '../../../utils/progress.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -231,10 +233,14 @@ export function initScene(config) {
   //   addLevelTitle(k, "words like blades", levelTitleColor, null, null, topPlatformHeight)
   // }
   
+  //
   // Setup back to menu
+  //
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => {
       Sound.stopBackgroundMusic(sound)
+      WordPile.reset()  // Reset word pile state when leaving section
+      WordGrass.reset()  // Reset grass state when leaving section
       k.go("menu")
     })
   })

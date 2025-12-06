@@ -198,11 +198,15 @@ export function sceneMenu(k) {
             //
             // Continue from last word level with transition
             //
+            menuMusic.stop()
+            kidsMusic.stop()
             showTransitionToLevel(k, lastLevel)
           } else {
             //
             // Start word section from beginning with intro phrase
             //
+            menuMusic.stop()
+            kidsMusic.stop()
             createLevelTransition(k, 'menu')
           }
         })
@@ -593,11 +597,15 @@ export function sceneMenu(k) {
         //
         // Continue from last saved level with transition (show red text)
         //
+        menuMusic.stop()
+        kidsMusic.stop()
         showTransitionToLevel(k, lastLevel)
       } else {
         //
         // No save - start from beginning with intro phrase
         //
+        menuMusic.stop()
+        kidsMusic.stop()
         createLevelTransition(k, 'menu')
       }
     })
@@ -609,6 +617,8 @@ export function sceneMenu(k) {
       inst.isLeavingScene = true
       
       Sound.stopAmbient(sound)
+      menuMusic.stop()
+      kidsMusic.stop()
       //
       // Reset cursor to default (remove pointer class)
       //
@@ -626,6 +636,8 @@ export function sceneMenu(k) {
     //
     k.onKeyPress("escape", () => {
       Sound.stopAmbient(sound)
+      menuMusic.stop()
+      kidsMusic.stop()
       k.go("ready")
     })
     

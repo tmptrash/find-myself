@@ -134,7 +134,7 @@ export function create(config) {
     sfx,
     antiHero,
     currentLevel,
-    bodyColor,        // Store custom body color
+    bodyColor: effectiveBodyColor,        // Store effective body color (not null)
     spritePrefix,
     dustColor,
     speed: CFG.game.moveSpeed,
@@ -1180,23 +1180,163 @@ function onAnnihilationCollide(inst) {
             //
             k.camPos(originalCamPos)
             //
-            // STEP 7: Pause after absorption and shake, then fade and show text
+            // STEP 7: Check if this is the last level of word section
             //
-            k.wait(0.6, () => {
-              if (inst.currentLevel) {
+            const nextLevel = getNextLevel(inst.currentLevel)
+            const isLastWordLevel = inst.currentLevel === 'level-word.4' && nextLevel === 'word-complete'
+            
+            if (isLastWordLevel && !inst.addMouth) {
+              //
+              // Special sequence for completing word section: add mouth before transition
+              //
+              k.wait(1.5, () => {
                 //
-                // Save NEXT level progress to localStorage before transition
+                // Store original volumes
                 //
-                // (so player continues from the next level, not the current one)
+                const originalMusicVolume = Sound.getBackgroundMusicVolume(sfx)
                 //
-                const nextLevel = getNextLevel(inst.currentLevel)
-                if (nextLevel && nextLevel !== 'menu') {
-                  saveLastLevel(nextLevel)
+                // Fade out music and blade sounds to very quiet, increase glitch volume
+                //
+                let fadeTimer = 0
+                const FADE_DURATION = 0.5
+                const TARGET_MUSIC_VOLUME = 0.005  // Even quieter music (was 0.02)
+                const TARGET_BLADE_VOLUME = 0.003  // Even quieter blade sounds (was 0.01)
+                const TARGET_GLITCH_VOLUME = 3.5  // Make glitch sound even louder
+                
+                const fadeInterval = k.onUpdate(() => {
+                  fadeTimer += k.dt()
+                  const progress = Math.min(1, fadeTimer / FADE_DURATION)
+                  //
+                  // Fade music down
+                  //
+                  const newMusicVolume = originalMusicVolume + (TARGET_MUSIC_VOLUME - originalMusicVolume) * progress
+                  Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
+                  //
+                  // Fade blade sounds down
+                  //
+                  Sound.setBladeSoundVolume(sfx, 1.0 - progress * (1.0 - TARGET_BLADE_VOLUME))
+                  //
+                  // Fade glitch sounds up
+                  //
+                  Sound.setGlitchSoundVolume(sfx, 1.0 + progress * (TARGET_GLITCH_VOLUME - 1.0))
+                  
+                  if (progress >= 1) {
+                    fadeInterval.cancel()
+                  }
+                })
+                //
+                // Play pre-mouth sound (louder glitch)
+                //
+                k.wait(0.3, () => {
+                  sfx && Sound.playMouthSound(sfx)
+                  //
+                  // Add mouth to hero sprite
+                  //
+                  k.wait(0.2, () => {
+                    //
+                    // Update inst to include mouth BEFORE loading sprites
+                    //
+                    inst.addMouth = true
+                    inst.spritePrefix = `${inst.type}_${inst.bodyColor}_${CFG.visual.colors.outline}_mouth`
+                    //
+                    // Reload sprites with mouth
+                    //
+                    loadHeroSprites({
+                      k: inst.k,
+                      type: inst.type,
+                      bodyColor: inst.bodyColor,
+                      outlineColor: CFG.visual.colors.outline,
+                      addMouth: true,
+                      addArms: false,
+                      character: null
+                    })
+                    //
+                    // Wait a frame to ensure sprites are loaded, then update character sprite
+                    //
+                    k.wait(0.05, () => {
+                      //
+                      // Use getSpriteName to get the correct sprite with mouth
+                      //
+                      const newSpriteName = getSpriteName(inst, 0, 0)
+                      //
+                      // Update character sprite to show mouth
+                      //
+                      try {
+                        player.use(k.sprite(newSpriteName))
+                      } catch (error) {
+                        console.error(`Failed to load sprite ${newSpriteName}:`, error)
+                      }
+                      //
+                      // Play mouth appearance sound (louder transformation sound)
+                      //
+                      sfx && Sound.playMouthSound(sfx)
+                      //
+                      // Create sparkle particles around mouth
+                      //
+                      createMouthSparkles(inst)
+                      //
+                      // Pause to show the mouth longer
+                      //
+                      k.wait(2.5, () => {
+                        //
+                        // Fade volumes back to normal
+                        //
+                        let restoreTimer = 0
+                        const RESTORE_DURATION = 0.8
+                        
+                        const restoreInterval = k.onUpdate(() => {
+                          restoreTimer += k.dt()
+                          const progress = Math.min(1, restoreTimer / RESTORE_DURATION)
+                          //
+                          // Restore music volume
+                          //
+                          const newMusicVolume = TARGET_MUSIC_VOLUME + (originalMusicVolume - TARGET_MUSIC_VOLUME) * progress
+                          Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
+                          //
+                          // Restore blade sound volume
+                          //
+                          Sound.setBladeSoundVolume(sfx, TARGET_BLADE_VOLUME + (1.0 - TARGET_BLADE_VOLUME) * progress)
+                          //
+                          // Restore glitch sound volume
+                          //
+                          Sound.setGlitchSoundVolume(sfx, TARGET_GLITCH_VOLUME + (1.0 - TARGET_GLITCH_VOLUME) * progress)
+                          
+                          if (progress >= 1) {
+                            restoreInterval.cancel()
+                          }
+                        })
+                        //
+                        // Save progress and show transition
+                        //
+                        if (nextLevel && nextLevel !== 'menu') {
+                          saveLastLevel(nextLevel)
+                        }
+                        inst.character.hidden = true
+                        createLevelTransition(k, inst.currentLevel)
+                      })
+                    })
+                  })
+                })
+              })
+            } else {
+              //
+              // Normal sequence: pause after absorption and shake, then fade and show text
+              //
+              k.wait(0.6, () => {
+                if (inst.currentLevel) {
+                  //
+                  // Save NEXT level progress to localStorage before transition
+                  //
+                  // (so player continues from the next level, not the current one)
+                  //
+                  if (nextLevel && nextLevel !== 'menu') {
+                    saveLastLevel(nextLevel)
+                  }
+                  inst.character.hidden = true
+                  createLevelTransition(k, inst.currentLevel)
                 }
-                inst.character.hidden = true
-                createLevelTransition(k, inst.currentLevel)
-              }
-            })
+              })
+            }
           }
         })
       })
@@ -1539,6 +1679,103 @@ function getParticleColors(inst) {
   return type === HEROES.HERO
     ? [colors.hero.body, colors.outline]
     : [colors.antiHero.body, colors.outline]
+}
+
+/**
+ * Create sparkle particles around hero's mouth
+ * @param {Object} inst - Hero instance
+ */
+function createMouthSparkles(inst) {
+  const { k, character } = inst
+  const centerX = character.pos.x
+  const centerY = character.pos.y
+  //
+  // Create small sparkle particles
+  //
+  const sparkleCount = 12
+  const sparkles = []
+  
+  for (let i = 0; i < sparkleCount; i++) {
+    //
+    // Position sparkles in a small area around the mouth (lower part of face)
+    //
+    const angle = (Math.PI * 2 * i) / sparkleCount
+    const distance = 15 + Math.random() * 10
+    const offsetX = Math.cos(angle) * distance
+    const offsetY = 5 + Math.sin(angle) * distance * 0.5  // Biased downward (mouth area)
+    //
+    // Sparkle colors (bright yellow/white)
+    //
+    const colors = [
+      k.rgb(255, 255, 200),  // Pale yellow
+      k.rgb(255, 255, 255),  // White
+      k.rgb(255, 240, 150),  // Light gold
+      k.rgb(200, 255, 255)   // Light cyan
+    ]
+    const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
+    //
+    // Create sparkle particle (small circle)
+    //
+    const size = 2 + Math.random() * 3
+    const sparkle = k.add([
+      k.circle(size),
+      k.pos(centerX + offsetX, centerY + offsetY),
+      k.color(sparkleColor),
+      k.opacity(0.8),
+      k.z(CFG.visual.zIndex.player + 1)
+    ])
+    //
+    // Store sparkle data
+    //
+    sparkle.vx = (Math.random() - 0.5) * 40
+    sparkle.vy = -20 - Math.random() * 30  // Move up
+    sparkle.lifetime = 0
+    sparkle.maxLifetime = 0.8 + Math.random() * 0.4
+    sparkle.originalSize = size
+    
+    sparkles.push(sparkle)
+  }
+  //
+  // Animate sparkles
+  //
+  const sparkleInterval = k.onUpdate(() => {
+    sparkles.forEach((sparkle, index) => {
+      if (!sparkle.exists()) return
+      
+      sparkle.lifetime += k.dt()
+      //
+      // Move sparkle
+      //
+      sparkle.pos.x += sparkle.vx * k.dt()
+      sparkle.pos.y += sparkle.vy * k.dt()
+      //
+      // Apply upward drift and slow down
+      //
+      sparkle.vy -= 80 * k.dt()  // Upward acceleration
+      sparkle.vx *= 0.95
+      //
+      // Fade out and shrink based on lifetime
+      //
+      const progress = sparkle.lifetime / sparkle.maxLifetime
+      sparkle.opacity = 0.8 * (1 - progress)
+      //
+      // Twinkle effect (size pulsing)
+      //
+      const twinkle = Math.sin(sparkle.lifetime * 20) * 0.3 + 0.7
+      //
+      // Destroy when lifetime expires
+      //
+      if (sparkle.lifetime >= sparkle.maxLifetime) {
+        k.destroy(sparkle)
+      }
+    })
+    //
+    // Clean up when all sparkles are done
+    //
+    if (sparkles.every(s => !s.exists())) {
+      sparkleInterval.cancel()
+    }
+  })
 }
 
 /**

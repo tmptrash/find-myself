@@ -16,7 +16,9 @@ let globalCurrentTrack = null
  */
 export function create() {
   const ctx = getAudioContext()
+  //
   // Create master gains for SFX (reusable)
+  //
   const landGain = ctx.createGain()
   landGain.connect(ctx.destination)
 
@@ -29,6 +31,18 @@ export function create() {
 
   const spawnGain = ctx.createGain()
   spawnGain.connect(ctx.destination)
+  //
+  // Create master gain for blade sounds (for volume control)
+  //
+  const bladeSoundGain = ctx.createGain()
+  bladeSoundGain.gain.value = 1.0
+  bladeSoundGain.connect(ctx.destination)
+  //
+  // Create master gain for glitch sound (for volume control)
+  //
+  const glitchSoundGain = ctx.createGain()
+  glitchSoundGain.gain.value = 1.0
+  glitchSoundGain.connect(ctx.destination)
 
   return {
     // Audio context
@@ -38,6 +52,8 @@ export function create() {
     stepGain,
     jumpGain,
     spawnGain,
+    bladeSoundGain,
+    glitchSoundGain,
     // Ambient music state
     ambientOscillators: [],
     ambientGains: [],
@@ -290,7 +306,9 @@ export function playBladeSound(instance) {
   const now = instance.audioContext.currentTime
   const duration = 0.3
   const fadeOutTime = 0.08  // Longer fade out to avoid click
+  //
   // Create white noise for friction texture
+  //
   const bufferSize = instance.audioContext.sampleRate * duration
   const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
@@ -301,13 +319,17 @@ export function playBladeSound(instance) {
 
   const friction = instance.audioContext.createBufferSource()
   friction.buffer = noiseBuffer
+  //
   // Low-pass filter for soft dragging sound (like carpet/floor)
+  //
   const lpFilter = instance.audioContext.createBiquadFilter()
   lpFilter.type = 'lowpass'
   lpFilter.Q.value = 1
   lpFilter.frequency.setValueAtTime(800, now)
   lpFilter.frequency.linearRampToValueAtTime(600, now + duration)
+  //
   // Low rumble for heavy object weight
+  //
   const rumble = instance.audioContext.createOscillator()
   rumble.type = 'sine'
   rumble.frequency.setValueAtTime(60, now)
@@ -317,20 +339,28 @@ export function playBladeSound(instance) {
   rumbleGain.gain.setValueAtTime(0.12, now)
   rumbleGain.gain.setValueAtTime(0.10, now + duration - fadeOutTime)
   rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  //
   // Main friction gain (softer, more "shhhh")
+  //
   const frictionGain = instance.audioContext.createGain()
   frictionGain.gain.setValueAtTime(0.001, now)
   frictionGain.gain.exponentialRampToValueAtTime(0.40, now + 0.05)  // Increased from 0.20 to 0.40
   frictionGain.gain.setValueAtTime(0.40, now + duration - fadeOutTime)  // Increased from 0.20 to 0.40
   frictionGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  // Connect friction chain
+  //
+  // Connect friction chain through master blade gain
+  //
   friction.connect(lpFilter)
   lpFilter.connect(frictionGain)
-  frictionGain.connect(instance.audioContext.destination)
-  // Connect rumble chain
+  frictionGain.connect(instance.bladeSoundGain)
+  //
+  // Connect rumble chain through master blade gain
+  //
   rumble.connect(rumbleGain)
-  rumbleGain.connect(instance.audioContext.destination)
+  rumbleGain.connect(instance.bladeSoundGain)
+  //
   // Start
+  //
   friction.start(now)
   rumble.start(now)
   rumble.stop(now + duration)
@@ -661,7 +691,9 @@ export function playDeathSound(instance) {
 export function playGlitchSound(inst) {
   const now = inst.audioContext.currentTime
   const duration = 1.5
+  //
   // Deep unsettling bass (40-60 Hz range - creates unease)
+  //
   const bass = inst.audioContext.createOscillator()
   const bassGain = inst.audioContext.createGain()
 
@@ -670,15 +702,19 @@ export function playGlitchSound(inst) {
   bass.frequency.setValueAtTime(baseFreq, now)
   bass.frequency.linearRampToValueAtTime(baseFreq + 5, now + duration * 0.5)
   bass.frequency.linearRampToValueAtTime(baseFreq, now + duration)
+  //
   // Slow crescendo then fade out
+  //
   bassGain.gain.setValueAtTime(0.001, now)
   bassGain.gain.exponentialRampToValueAtTime(0.25, now + 0.4)
   bassGain.gain.setValueAtTime(0.25, now + duration * 0.6)
   bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
 
   bass.connect(bassGain)
-  bassGain.connect(inst.audioContext.destination)
+  bassGain.connect(inst.glitchSoundGain)
+  //
   // Dissonant high overtone (tritone interval - "devil's interval")
+  //
   const dissonant = inst.audioContext.createOscillator()
   const dissonantGain = inst.audioContext.createGain()
 
@@ -692,12 +728,83 @@ export function playGlitchSound(inst) {
   dissonantGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
 
   dissonant.connect(dissonantGain)
-  dissonantGain.connect(inst.audioContext.destination)
+  dissonantGain.connect(inst.glitchSoundGain)
+  //
   // Start all oscillators
+  //
   bass.start(now)
   bass.stop(now + duration)
   dissonant.start(now)
   dissonant.stop(now + duration)
+}
+/**
+ * Play mouth appearance sound (transformation/magic sound)
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playMouthSound(inst) {
+  const now = inst.audioContext.currentTime
+  const duration = 0.8
+  //
+  // Rising magical tone (like something awakening)
+  //
+  const main = inst.audioContext.createOscillator()
+  const mainGain = inst.audioContext.createGain()
+  
+  main.type = 'sine'
+  main.frequency.setValueAtTime(200, now)
+  main.frequency.exponentialRampToValueAtTime(800, now + 0.3)
+  main.frequency.setValueAtTime(800, now + 0.3)
+  main.frequency.exponentialRampToValueAtTime(400, now + duration)
+  
+  mainGain.gain.setValueAtTime(0.001, now)
+  mainGain.gain.exponentialRampToValueAtTime(0.3, now + 0.1)
+  mainGain.gain.setValueAtTime(0.3, now + 0.4)
+  mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  main.connect(mainGain)
+  mainGain.connect(inst.glitchSoundGain)
+  //
+  // Sparkle harmonics (bright overtones)
+  //
+  const sparkle = inst.audioContext.createOscillator()
+  const sparkleGain = inst.audioContext.createGain()
+  
+  sparkle.type = 'triangle'
+  sparkle.frequency.setValueAtTime(1200, now)
+  sparkle.frequency.exponentialRampToValueAtTime(2400, now + 0.2)
+  sparkle.frequency.exponentialRampToValueAtTime(1600, now + duration)
+  
+  sparkleGain.gain.setValueAtTime(0.001, now)
+  sparkleGain.gain.exponentialRampToValueAtTime(0.15, now + 0.15)
+  sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  sparkle.connect(sparkleGain)
+  sparkleGain.connect(inst.glitchSoundGain)
+  //
+  // Deep pulse (mysterious undertone)
+  //
+  const pulse = inst.audioContext.createOscillator()
+  const pulseGain = inst.audioContext.createGain()
+  
+  pulse.type = 'sine'
+  pulse.frequency.setValueAtTime(80, now)
+  pulse.frequency.linearRampToValueAtTime(60, now + duration)
+  
+  pulseGain.gain.setValueAtTime(0.001, now)
+  pulseGain.gain.exponentialRampToValueAtTime(0.2, now + 0.2)
+  pulseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  pulse.connect(pulseGain)
+  pulseGain.connect(inst.glitchSoundGain)
+  //
+  // Start all oscillators
+  //
+  main.start(now)
+  main.stop(now + duration)
+  sparkle.start(now)
+  sparkle.stop(now + duration)
+  pulse.start(now)
+  pulse.stop(now + duration)
 }
 /**
  * Play absorption/merging sound effect
@@ -914,6 +1021,44 @@ export function stopBackgroundMusic(instance) {
  */
 export function isBackgroundMusicPlaying(instance) {
   return globalBackgroundMusic && !globalBackgroundMusic.paused
+}
+/**
+ * Set background music volume
+ * @param {Object} instance - Sound instance
+ * @param {number} volume - Volume level (0-1)
+ */
+export function setBackgroundMusicVolume(instance, volume) {
+  if (globalBackgroundMusic) {
+    globalBackgroundMusic.volume = Math.max(0, Math.min(1, volume))
+  }
+}
+/**
+ * Get current background music volume
+ * @param {Object} instance - Sound instance
+ * @returns {number} Current volume (0-1)
+ */
+export function getBackgroundMusicVolume(instance) {
+  return globalBackgroundMusic ? globalBackgroundMusic.volume : 0
+}
+/**
+ * Set blade sound volume
+ * @param {Object} instance - Sound instance
+ * @param {number} volume - Volume level (0-1)
+ */
+export function setBladeSoundVolume(instance, volume) {
+  if (instance.bladeSoundGain) {
+    instance.bladeSoundGain.gain.value = Math.max(0, Math.min(1, volume))
+  }
+}
+/**
+ * Set glitch sound volume
+ * @param {Object} instance - Sound instance
+ * @param {number} volume - Volume level (0-1)
+ */
+export function setGlitchSoundVolume(instance, volume) {
+  if (instance.glitchSoundGain) {
+    instance.glitchSoundGain.gain.value = Math.max(0, Math.min(1, volume))
+  }
 }
 //
 // Private functions

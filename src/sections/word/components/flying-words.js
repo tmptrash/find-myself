@@ -940,7 +940,10 @@ function createKillerLetter(k, params) {
     //
     const currentInst = k.flyingWordsInstance
     if (!currentInst) return
-    
+    //
+    // Don't kill hero if they're annihilating
+    //
+    if (currentInst.hero.isAnnihilating) return
     //
     // Mark word for respawn by setting flag
     //
@@ -948,7 +951,6 @@ function createKillerLetter(k, params) {
     if (killerWord) {
       killerWord.needsRespawn = true
     }
-    
     //
     // Use custom death handler if provided, otherwise use default
     //

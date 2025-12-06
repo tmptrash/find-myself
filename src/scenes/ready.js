@@ -71,7 +71,7 @@ const SPIDER_COUNT = 25
 const SPIDER_BODY_SIZE = 7
 const SPIDER_LEG_LENGTH_1 = 22  // First segment length
 const SPIDER_LEG_LENGTH_2 = 28  // Second segment length
-const SPIDER_SPEED = 30
+const SPIDER_SPEED = 60
 const SPIDER_DIRECTION_CHANGE_INTERVAL = 5.0
 const SPIDER_SCREEN_MARGIN = 80
 const SPIDER_SMOOTHING = 2.0
@@ -79,6 +79,7 @@ const SPIDER_APPEAR_DELAY = 2.0    // Seconds before spiders start appearing
 const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
 const SPIDER_MAX_OPACITY = 0.45    // Maximum opacity when fully visible
 const SPIDER_COLOR = '#3A4A5A'
+const SPIDER_LEG_FADE_DURATION = 2.0  // Seconds for legs to fully appear
 const SPIDER_STEP_DISTANCE = 40    // Distance before leg takes a step
 //
 // Title flicker configuration
@@ -291,9 +292,42 @@ export function sceneReady(k) {
     const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, titleSize, TITLE_FONT_FAMILY)
     const spiders = []
     let spiderTimer = 0  // Timer for fade-in delay
+    //
+    // Wave-based appearance: letters appear in groups, far apart from each other
+    // "Find Myself" (without space) = 10 letters (indices 0-9)
+    // F(0) i(1) n(2) d(3) M(4) y(5) s(6) e(7) l(8) f(9)
+    // Wave 1: indices 0, 4, 8 (F, M, l) - spread far apart
+    // Wave 2: indices 2, 5, 9 (n, y, f) - spread far apart
+    // Wave 3: indices 1, 6, 7 (i, s, e) - spread far apart
+    // Wave 4: index 3 (d) - last one
+    //
+    const waves = [
+      [0, 4, 8],  // Wave 1: F, M, l
+      [2, 5, 9],  // Wave 2: n, y, f
+      [1, 6, 7],  // Wave 3: i, s, e
+      [3]         // Wave 4: d
+    ]
+    
+    const LEG_APPEAR_DURATION = 2.0  // Legs take 2 seconds to appear
+    const CRAWL_DURATION = 5.0       // Let them crawl for 5 seconds before next wave
+    const WAVE_INTERVAL = LEG_APPEAR_DURATION + CRAWL_DURATION  // 7 seconds between waves
     
     letterInfos.forEach((letterInfo, i) => {
       const spider = createSpider(k, i, letterInfo)
+      //
+      // Find which wave this letter belongs to
+      //
+      let waveIndex = 0
+      for (let w = 0; w < waves.length; w++) {
+        if (waves[w].includes(i)) {
+          waveIndex = w
+          break
+        }
+      }
+      //
+      // Set leg appearance delay based on wave
+      //
+      spider.legAppearDelay = waveIndex * WAVE_INTERVAL + Math.random() * 0.3
       //
       // Store reference to letterInfo and titleOutlines for later use
       //
@@ -1120,6 +1154,8 @@ function createSpider(k, index, sourceInfo) {
     distanceTraveled: 0,
     color,  // Use original text color
     appearDelay: index * 0.15,
+    legAppearDelay: 0,  // Will be set externally
+    legAppearTimer: 0,  // Timer for leg appearance
     letter: char,
     letterSize: fontSize || INSTRUCTIONS_FONT_SIZE,
     letterFont: fontFamily || QUOTE_FONT_FAMILY,
@@ -1143,13 +1179,15 @@ function createSpider(k, index, sourceInfo) {
 function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
   const letterInfos = []
   //
-  // Calculate approximate character widths for positioning
+  // Calculate character width more accurately
+  // For monospace font, width is approximately fontSize * 0.6
   //
-  const charWidth = titleTextObj.width / titleString.length
+  const charWidth = fontSize * 0.6
+  const startX = titleTextObj.pos.x
   //
-  // Use brighter color for spider letters (same as title at maximum brightness)
+  // Use same bright color as title at maximum brightness (matching first image)
   //
-  const brighterColor = k.rgb(255, 120, 120)  // Even brighter red color
+  const brighterColor = k.rgb(245, 110, 110)  // Slightly darker red
   
   titleString.split('').forEach((char, charIndex) => {
     //
@@ -1157,9 +1195,10 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
     //
     if (char.trim().length === 0) return
     //
-    // Calculate approximate position of this character
+    // Calculate center position of this character
+    // Add half char width to get center instead of left edge
     //
-    const charX = titleTextObj.pos.x + charIndex * charWidth
+    const charX = startX + (charIndex * charWidth) + (charWidth / 2)
     const charY = titleTextObj.pos.y
     
     letterInfos.push({
@@ -1244,16 +1283,30 @@ function pickLettersFromText(k, textObjects, count) {
  */
 function updateSpider(k, spider, dt, opacity) {
   //
-  // Update leg opacity separately (for fade-in effect)
+  // Always update leg appearance timer once opacity is greater than 0
   //
   if (opacity > 0) {
-    spider.legOpacity = Math.min(spider.legOpacity + dt * 3.0, opacity)
+    spider.legAppearTimer += dt
   }
   //
-  // Activate spider movement only after legs are fully visible
+  // Update leg opacity if timer is past delay and legs haven't fully appeared
   //
-  if (!spider.isActivated && spider.legOpacity >= SPIDER_MAX_OPACITY) {
+  if (spider.legAppearTimer >= spider.legAppearDelay && spider.legOpacity < opacity) {
+    const legFadeSpeed = SPIDER_MAX_OPACITY / 2.0  // Legs appear over 2 seconds (from 0 to SPIDER_MAX_OPACITY)
+    spider.legOpacity = Math.min(spider.legOpacity + dt * legFadeSpeed, opacity)
+  }
+  //
+  // Activate spider movement after legs have been appearing for 2 seconds
+  //
+  const legAppearTimeElapsed = spider.legAppearTimer - spider.legAppearDelay
+  if (!spider.isActivated && legAppearTimeElapsed >= 2.0) {
     spider.isActivated = true
+    //
+    // Capture the current color from the original text at the moment of activation
+    //
+    if (spider.letterInfo && spider.letterInfo.textObj) {
+      spider.color = spider.letterInfo.textObj.color
+    }
     //
     // Hide the original character from text and outlines when spider activates
     //
@@ -1454,7 +1507,11 @@ function drawSpider(k, spider, textOpacity) {
   //
   // Draw the letter (body) only if it's been hidden from original text
   //
-  if (spider.charHidden && textOpacity > 0) {
+  if (spider.charHidden) {
+    //
+    // Always draw letter at full opacity for maximum brightness
+    //
+    const letterOpacity = 1.0
     //
     // Calculate rotation angle based on movement direction (in degrees)
     //
@@ -1480,7 +1537,7 @@ function drawSpider(k, spider, textOpacity) {
         pos: k.vec2(dx, dy),
         anchor: 'center',
         color: k.rgb(0, 0, 0),
-        opacity: textOpacity,
+        opacity: letterOpacity,
         font: spider.letterFont
       })
     })
@@ -1493,7 +1550,7 @@ function drawSpider(k, spider, textOpacity) {
       pos: k.vec2(0, 0),
       anchor: 'center',
       color: spider.color,
-      opacity: textOpacity,
+      opacity: letterOpacity,
       font: spider.letterFont
     })
     

@@ -69,13 +69,13 @@ const SCATTER_DISTANCE_MAX = 160
 //
 const SPIDER_COUNT = 25
 const SPIDER_BODY_SIZE = 7
-const SPIDER_LEG_LENGTH_1 = 28  // First segment length
-const SPIDER_LEG_LENGTH_2 = 35  // Second segment length
+const SPIDER_LEG_LENGTH_1 = 22  // First segment length
+const SPIDER_LEG_LENGTH_2 = 28  // Second segment length
 const SPIDER_SPEED = 30
-const SPIDER_DIRECTION_CHANGE_INTERVAL = 2.0
+const SPIDER_DIRECTION_CHANGE_INTERVAL = 5.0
 const SPIDER_SCREEN_MARGIN = 80
 const SPIDER_SMOOTHING = 2.0
-const SPIDER_APPEAR_DELAY = 5.0    // Seconds before spiders start appearing
+const SPIDER_APPEAR_DELAY = 2.0    // Seconds before spiders start appearing
 const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
 const SPIDER_MAX_OPACITY = 0.45    // Maximum opacity when fully visible
 const SPIDER_COLOR = '#3A4A5A'
@@ -116,17 +116,6 @@ export function sceneReady(k) {
     Sound.startAudioContext(sound)
     
     addBackground(k, CFG.visual.colors.ready.background)
-    
-    //
-    // Spiders - small creatures crawling in the background
-    //
-    const spiders = []
-    let spiderTimer = 0  // Timer for fade-in delay
-    
-    for (let i = 0; i < SPIDER_COUNT; i++) {
-      const spider = createSpider(k, i)
-      spiders.push(spider)
-    }
     
     //
     // Hint text (visible immediately)
@@ -236,10 +225,10 @@ export function sceneReady(k) {
       const textColor = line.important
         ? CFG.visual.colors.ready.emphasis  // Almost white for important lines
         : CFG.visual.colors.ready.text      // Muted blue for normal lines
-      
       //
       // Create outlines for this line
       //
+      const lineOutlines = []
       outlineOffsets.forEach(([dx, dy]) => {
         const outline = k.add([
           k.text(line.text, {
@@ -252,8 +241,8 @@ export function sceneReady(k) {
           k.opacity(0)
         ])
         instructionsOutlineObjects.push(outline)
+        lineOutlines.push(outline)
       })
-      
       //
       // Create main text for this line
       //
@@ -267,6 +256,10 @@ export function sceneReady(k) {
         getColor(k, textColor),
         k.opacity(0)
       ])
+      //
+      // Store reference to outlines in textObj
+      //
+      textObj.outlines = lineOutlines
       instructionsTextObjects.push(textObj)
       
       //
@@ -291,6 +284,23 @@ export function sceneReady(k) {
     //
     const instructionsText = instructionsTextObjects[0]  // Reference for compatibility
     const instructionsOutlines = instructionsOutlineObjects
+    //
+    // Spiders - creatures made from title letters crawling in the background
+    // Create spiders from all letters in "Find Myself" title
+    //
+    const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, titleSize, TITLE_FONT_FAMILY)
+    const spiders = []
+    let spiderTimer = 0  // Timer for fade-in delay
+    
+    letterInfos.forEach((letterInfo, i) => {
+      const spider = createSpider(k, i, letterInfo)
+      //
+      // Store reference to letterInfo and titleOutlines for later use
+      //
+      spider.letterInfo = letterInfo
+      spider.titleOutlines = titleOutlines
+      spiders.push(spider)
+    })
     
     //
     // Prepare firefly layouts
@@ -1046,33 +1056,24 @@ function particlesIdle(particles) {
 }
 
 /**
- * Creates a spider with body and 8 legs using inverse kinematics
+ * Creates a spider from a specific letter in a text object
  * @param {Object} k - Kaplay instance
- * @param {number} index - Spider index for positioning
+ * @param {number} index - Spider index
+ * @param {Object} sourceInfo - Info about source letter {textObj, charIndex, char, x, y, color, fontSize, fontFamily}
  * @returns {Object} Spider instance
  */
-function createSpider(k, index) {
+function createSpider(k, index, sourceInfo) {
+  const { char, x, y, color, fontSize, fontFamily } = sourceInfo
   //
-  // Random starting position
-  //
-  const x = SPIDER_SCREEN_MARGIN + Math.random() * (k.width() - SPIDER_SCREEN_MARGIN * 2)
-  const y = SPIDER_SCREEN_MARGIN + Math.random() * (k.height() - SPIDER_SCREEN_MARGIN * 2)
-  //
-  // Random initial direction
+  // Spider starts stationary until legs fully appear
   //
   const angle = Math.random() * Math.PI * 2
   const speed = SPIDER_SPEED * (0.5 + Math.random() * 0.5)
-  const vx = Math.cos(angle) * speed
-  const vy = Math.sin(angle) * speed
-  //
-  // Random gray shade for each spider (from dark gray to light gray)
-  //
-  const grayValue = 50 + Math.random() * 70  // Range: 50-120
-  const spiderColor = k.rgb(grayValue, grayValue, grayValue)
   //
   // Create 8 legs (4 on each side)
-  // Leg angles spread around the body
+  // Leg angles spread around the body with random variation
   //
+  const baseAngleOffset = Math.random() * Math.PI * 2  // Random rotation for all legs
   const legAngles = [
     -Math.PI * 0.8, -Math.PI * 0.6, -Math.PI * 0.4, -Math.PI * 0.2,  // Left side
     Math.PI * 0.2, Math.PI * 0.4, Math.PI * 0.6, Math.PI * 0.8       // Right side
@@ -1082,34 +1083,26 @@ function createSpider(k, index) {
     const side = i < 4 ? -1 : 1  // Left or right side
     const reach = SPIDER_LEG_LENGTH_1 + SPIDER_LEG_LENGTH_2
     //
+    // Apply random offset to base angle
+    //
+    const randomizedAngle = baseAngle + baseAngleOffset
+    //
     // Initial foot target position
     //
-    const footX = x + Math.cos(baseAngle) * reach * 0.8
-    const footY = y + Math.sin(baseAngle) * reach * 0.8
+    const footX = x + Math.cos(randomizedAngle) * reach * 0.8
+    const footY = y + Math.sin(randomizedAngle) * reach * 0.8
     
     return {
-      baseAngle,
+      baseAngle: randomizedAngle,
       side,
-      //
-      // Current foot position (where the foot is)
-      //
       footX,
       footY,
-      //
-      // Target foot position (where the foot wants to be)
-      //
       targetFootX: footX,
       targetFootY: footY,
-      //
-      // Is the leg currently stepping
-      //
       isStepping: false,
       stepProgress: 0,
       stepStartX: footX,
       stepStartY: footY,
-      //
-      // Leg phase offset for alternating gait
-      //
       phaseOffset: (i % 2) * Math.PI
     }
   })
@@ -1117,17 +1110,129 @@ function createSpider(k, index) {
   return {
     x,
     y,
-    vx,
-    vy,
-    targetVx: vx,
-    targetVy: vy,
+    vx: 0,  // Start stationary
+    vy: 0,
+    targetVx: Math.cos(angle) * speed,
+    targetVy: Math.sin(angle) * speed,
     speed,
     directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
     legs,
     distanceTraveled: 0,
-    color: spiderColor,
-    appearDelay: index * 0.15
+    color,  // Use original text color
+    appearDelay: index * 0.15,
+    letter: char,
+    letterSize: fontSize || INSTRUCTIONS_FONT_SIZE,
+    letterFont: fontFamily || QUOTE_FONT_FAMILY,
+    isActivated: false,  // Becomes true when legs fully appear
+    legOpacity: 0,  // Separate opacity for legs
+    charHidden: false,  // Track if character was hidden from text
+    letterInfo: null,  // Will be set later
+    titleOutlines: null  // Will be set later for title letters
   }
+}
+
+/**
+ * Picks all letters from title text
+ * @param {Object} k - Kaplay instance
+ * @param {Object} titleTextObj - Title text object
+ * @param {string} titleString - Title text string
+ * @param {number} fontSize - Font size of the title
+ * @param {string} fontFamily - Font family of the title
+ * @returns {Array} Array of letter info objects
+ */
+function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
+  const letterInfos = []
+  //
+  // Calculate approximate character widths for positioning
+  //
+  const charWidth = titleTextObj.width / titleString.length
+  //
+  // Use brighter color for spider letters (same as title at maximum brightness)
+  //
+  const brighterColor = k.rgb(255, 120, 120)  // Even brighter red color
+  
+  titleString.split('').forEach((char, charIndex) => {
+    //
+    // Skip spaces
+    //
+    if (char.trim().length === 0) return
+    //
+    // Calculate approximate position of this character
+    //
+    const charX = titleTextObj.pos.x + charIndex * charWidth
+    const charY = titleTextObj.pos.y
+    
+    letterInfos.push({
+      textObj: titleTextObj,
+      charIndex,
+      char,
+      x: charX,
+      y: charY,
+      color: brighterColor,  // Use brighter color instead of titleTextObj.color
+      fontSize,
+      fontFamily
+    })
+  })
+  
+  return letterInfos
+}
+
+/**
+ * Picks random letters from text objects and returns their info
+ * @param {Object} k - Kaplay instance
+ * @param {Array} textObjects - Array of text objects
+ * @param {number} count - Number of letters to pick
+ * @returns {Array} Array of letter info objects
+ */
+function pickLettersFromText(k, textObjects, count) {
+  const letterInfos = []
+  //
+  // Calculate approximate character widths for positioning
+  //
+  const charWidth = INSTRUCTIONS_FONT_SIZE * 0.5  // Approximate monospace width
+  
+  for (let i = 0; i < count; i++) {
+    if (textObjects.length === 0) break
+    //
+    // Pick random text object
+    //
+    const textObj = k.choose(textObjects)
+    const text = textObj.text
+    const textColor = textObj.color
+    //
+    // Filter non-space characters
+    //
+    const chars = text.split('')
+    const nonSpaceIndices = []
+    chars.forEach((c, idx) => {
+      if (c.trim().length > 0) {
+        nonSpaceIndices.push(idx)
+      }
+    })
+    
+    if (nonSpaceIndices.length === 0) continue
+    //
+    // Pick random character
+    //
+    const charIndex = k.choose(nonSpaceIndices)
+    const char = chars[charIndex]
+    //
+    // Calculate approximate position of this character
+    //
+    const charX = textObj.pos.x + charIndex * charWidth
+    const charY = textObj.pos.y
+    
+    letterInfos.push({
+      textObj,
+      charIndex,
+      char,
+      x: charX,
+      y: charY,
+      color: textColor
+    })
+  }
+  
+  return letterInfos
 }
 
 /**
@@ -1135,13 +1240,44 @@ function createSpider(k, index) {
  * @param {Object} k - Kaplay instance
  * @param {Object} spider - Spider instance
  * @param {number} dt - Delta time
- * @param {number} opacity - Current opacity
+ * @param {number} opacity - Current opacity (for legs)
  */
 function updateSpider(k, spider, dt, opacity) {
   //
-  // Don't move if not visible yet
+  // Update leg opacity separately (for fade-in effect)
   //
-  if (opacity <= 0) return
+  if (opacity > 0) {
+    spider.legOpacity = Math.min(spider.legOpacity + dt * 3.0, opacity)
+  }
+  //
+  // Activate spider movement only after legs are fully visible
+  //
+  if (!spider.isActivated && spider.legOpacity >= SPIDER_MAX_OPACITY) {
+    spider.isActivated = true
+    //
+    // Hide the original character from text and outlines when spider activates
+    //
+    if (spider.letterInfo && !spider.charHidden) {
+      const { textObj, charIndex } = spider.letterInfo
+      const chars = textObj.text.split('')
+      chars[charIndex] = ' '
+      textObj.text = chars.join('')
+      //
+      // Update outlines as well (either from textObj.outlines or spider.titleOutlines)
+      //
+      const outlinesToUpdate = textObj.outlines || spider.titleOutlines
+      if (outlinesToUpdate) {
+        outlinesToUpdate.forEach(outline => {
+          outline.text = textObj.text
+        })
+      }
+      spider.charHidden = true
+    }
+  }
+  //
+  // Don't move if not activated yet
+  //
+  if (!spider.isActivated) return
   //
   // Update direction timer
   //
@@ -1262,66 +1398,107 @@ function updateSpider(k, spider, dt, opacity) {
 }
 
 /**
- * Draws a spider using inverse kinematics for legs
+ * Draws a spider using inverse kinematics for legs and letter as body
  * @param {Object} k - Kaplay instance
  * @param {Object} spider - Spider instance
- * @param {number} opacity - Current opacity
+ * @param {number} textOpacity - Current text opacity
  */
-function drawSpider(k, spider, opacity) {
-  if (opacity <= 0) return
+function drawSpider(k, spider, textOpacity) {
   //
-  // Use spider's individual color
+  // Draw legs with separate opacity (fade in gradually)
   //
-  const color = spider.color
-  //
-  // Draw colored legs
-  //
-  spider.legs.forEach(leg => {
-    const { jointX, jointY } = solveIK(
-      spider.x, spider.y,
-      leg.footX, leg.footY,
-      SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2,
-      leg.side
-    )
+  if (spider.legOpacity > 0) {
     //
-    // First segment (body to joint)
+    // Use same color as letter for legs
     //
-    k.drawLine({
-      p1: k.vec2(spider.x, spider.y),
-      p2: k.vec2(jointX, jointY),
-      width: 2,
-      color,
-      opacity
+    const legColor = spider.color
+    
+    spider.legs.forEach(leg => {
+      const { jointX, jointY } = solveIK(
+        spider.x, spider.y,
+        leg.footX, leg.footY,
+        SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2,
+        leg.side
+      )
+      //
+      // First segment (body to joint)
+      //
+      k.drawLine({
+        p1: k.vec2(spider.x, spider.y),
+        p2: k.vec2(jointX, jointY),
+        width: 2,
+        color: legColor,
+        opacity: spider.legOpacity
+      })
+      //
+      // Second segment (joint to foot)
+      //
+      k.drawLine({
+        p1: k.vec2(jointX, jointY),
+        p2: k.vec2(leg.footX, leg.footY),
+        width: 2,
+        color: legColor,
+        opacity: spider.legOpacity
+      })
+      //
+      // Draw circle at joint to cover gap
+      //
+      k.drawCircle({
+        pos: k.vec2(jointX, jointY),
+        radius: 1,
+        color: legColor,
+        opacity: spider.legOpacity
+      })
+    })
+  }
+  //
+  // Draw the letter (body) only if it's been hidden from original text
+  //
+  if (spider.charHidden && textOpacity > 0) {
+    //
+    // Calculate rotation angle based on movement direction (in degrees)
+    //
+    const angleRad = Math.atan2(spider.vy, spider.vx)
+    const angleDeg = angleRad * (180 / Math.PI)
+    
+    k.pushTransform()
+    k.pushTranslate(spider.x, spider.y)
+    k.pushRotate(angleDeg)
+    //
+    // Draw black outlines for shadow effect (8 directions)
+    //
+    const outlineOffsets = [
+      [-2, -2], [0, -2], [2, -2],
+      [-2, 0],           [2, 0],
+      [-2, 2],  [0, 2],  [2, 2]
+    ]
+    
+    outlineOffsets.forEach(([dx, dy]) => {
+      k.drawText({
+        text: spider.letter,
+        size: spider.letterSize,
+        pos: k.vec2(dx, dy),
+        anchor: 'center',
+        color: k.rgb(0, 0, 0),
+        opacity: textOpacity,
+        font: spider.letterFont
+      })
     })
     //
-    // Second segment (joint to foot)
+    // Draw main letter on top
     //
-    k.drawLine({
-      p1: k.vec2(jointX, jointY),
-      p2: k.vec2(leg.footX, leg.footY),
-      width: 2,
-      color,
-      opacity
+    k.drawText({
+      text: spider.letter,
+      size: spider.letterSize,
+      pos: k.vec2(0, 0),
+      anchor: 'center',
+      color: spider.color,
+      opacity: textOpacity,
+      font: spider.letterFont
     })
-    //
-    // Draw circle at joint to cover gap
-    //
-    k.drawCircle({
-      pos: k.vec2(jointX, jointY),
-      radius: 1,
-      color,
-      opacity
-    })
-  })
-  //
-  // Draw colored body (covers leg centers)
-  //
-  k.drawCircle({
-    pos: k.vec2(spider.x, spider.y),
-    radius: SPIDER_BODY_SIZE,
-    color,
-    opacity
-  })
+    
+    k.popTransform()
+  }
 }
 
 /**

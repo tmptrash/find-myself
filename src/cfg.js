@@ -2,7 +2,6 @@
 // Master audio volume - all other volumes are calculated from this
 //
 const MASTER_VOLUME = 0.7
-
 //
 // Deep merge function to combine nested objects
 // Used for merging section-specific configs with global config

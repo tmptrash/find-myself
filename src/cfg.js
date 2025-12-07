@@ -23,7 +23,7 @@ export function deepMerge(target, source) {
 export const CFG = {
   game: {
     moveSpeed: 300,
-    jumpForce: 620,
+    jumpForce: 740,
     gravity: 2000,
     platformName: "platform"
   },

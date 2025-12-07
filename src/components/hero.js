@@ -656,7 +656,7 @@ function onUpdate(inst) {
       // Step sound on frame 0 (when foot touches ground)
       //
       if (inst.sfx && inst.runFrame === 0) {
-        Sound.playStepSound(inst.sfx)
+        Sound.playStepSound(inst.sfx, inst.currentLevel)
       }
     }
   } else {
@@ -754,7 +754,7 @@ function setupControls(inst) {
         //
         // Play jump sound
         //
-        inst.sfx && Sound.playJumpSound(inst.sfx)
+        inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
       }
     })
   })
@@ -903,7 +903,7 @@ function onCollisionPlatform(inst) {
   // Play landing sound and create dust if was in air
   //
   if (wasInAir && inst.wasJumping) {
-    inst.sfx && Sound.playLandSound(inst.sfx)
+    inst.sfx && Sound.playLandSound(inst.sfx, inst.currentLevel)
     createLandingDust(inst)
   }
 }

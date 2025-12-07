@@ -9,6 +9,7 @@ import { sceneLevel2 } from "./sections/word/scenes/level2.js"
 import { sceneLevel3 } from "./sections/word/scenes/level3.js"
 import { sceneLevel4 } from "./sections/word/scenes/level4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
+import { sceneLevel0 as sceneTouchLevel0 } from "./sections/touch/scenes/level0.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
 //
@@ -17,7 +18,7 @@ import { loadSprites as loadBladeSprites } from "./sections/word/components/blad
 const k = kaplay({
   width: CFG.visual.screen.width,
   height: CFG.visual.screen.height,
-  font: CFG.visual.fonts.regular,
+  font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
   letterbox: true,
   background: parseHex(CFG.visual.colors.background)
 })
@@ -28,8 +29,8 @@ k.canvas.style.removeProperty('cursor')
 //
 // Load resources
 //
-k.loadFont(CFG.visual.fonts.regular, "/fonts/JetBrainsMono-Regular.ttf")
-k.loadFont(CFG.visual.fonts.thin, "/fonts/JetBrainsMono-Thin.ttf")
+k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "/fonts/JetBrainsMono-Regular.ttf")
+k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "/fonts/JetBrainsMono-Thin.ttf")
 //
 // Load audio
 //
@@ -56,6 +57,7 @@ sceneLevel2(k)
 sceneLevel3(k)
 sceneLevel4(k)
 sceneWordComplete(k)
+sceneTouchLevel0(k)
 //
 // Start game after resources loaded
 // Always show ready screen on page load

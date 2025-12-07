@@ -169,7 +169,7 @@ export function sceneMenu(k) {
       antiHeroInst.originalBodyColor = bodyColor
       
       //
-      // Add click handler for word section (only implemented section)
+      // Add click handlers for implemented sections
       // Only if section is not completed
       //
       if (config.section === 'word' && !isCompleted) {
@@ -209,6 +209,36 @@ export function sceneMenu(k) {
             kidsMusic.stop()
             createLevelTransition(k, 'menu')
           }
+        })
+      }
+      
+      if (config.section === 'touch' && !isCompleted) {
+        antiHeroInst.character.onClick(() => {
+          //
+          // Mark that we're leaving the scene
+          //
+          inst.isLeavingScene = true
+          
+          //
+          // Stop ambient sound
+          //
+          Sound.stopAmbient(sound)
+          
+          //
+          // Reset cursor to default (remove pointer class)
+          //
+          k.canvas.classList.remove('cursor-pointer')
+          
+          //
+          // Stop music
+          //
+          menuMusic.stop()
+          kidsMusic.stop()
+          
+          //
+          // Go directly to touch level 0
+          //
+          k.go('level-touch.0')
         })
       }
       
@@ -381,16 +411,21 @@ export function sceneMenu(k) {
       })
       
       //
-      // Change cursor to pointer when hovering over word anti-hero
+      // Change cursor to pointer when hovering over implemented sections
       // Don't change cursor if leaving scene
       //
       if (!inst.isLeavingScene) {
-        if (hoveredInst && hoveredInst.section === 'word' && !hoveredInst.isCompleted) {
-          k.canvas.classList.add('cursor-pointer')
+        if (hoveredInst) {
+          const isImplementedSection = (hoveredInst.section === 'word' || hoveredInst.section === 'touch')
+          if (isImplementedSection && !hoveredInst.isCompleted) {
+            k.canvas.classList.add('cursor-pointer')
+          } else {
+            //
+            // Remove pointer class to use default CSS cursor
+            //
+            k.canvas.classList.remove('cursor-pointer')
+          }
         } else {
-          //
-          // Remove pointer class to use default CSS cursor
-          //
           k.canvas.classList.remove('cursor-pointer')
         }
       }
@@ -483,7 +518,7 @@ export function sceneMenu(k) {
     // Hint text - Space to continue, Enter to start new, ESC to go back
     // If all sections completed, don't show continue option
     //
-    const allCompleted = progress.word  // Only word section is implemented
+    const allCompleted = progress.word && progress.touch  // Both implemented sections
     
     let hintText
     if (allCompleted) {
@@ -576,9 +611,9 @@ export function sceneMenu(k) {
     //
     k.onKeyPress("space", () => {
       //
-      // Don't allow starting if word section is completed (only implemented section)
+      // Don't allow starting if all sections are completed
       //
-      if (progress.word) {
+      if (allCompleted) {
         return
       }
       

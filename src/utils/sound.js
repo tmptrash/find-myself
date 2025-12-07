@@ -240,27 +240,82 @@ export function isAmbientPlaying(instance) {
  * Play landing sound
  * @param {Object} instance - Sound instance
  */
-export function playLandSound(instance) {
+/**
+ * Play landing sound effect
+ * @param {Object} instance - Sound instance from create()
+ * @param {string} [currentLevel] - Current level name to determine sound type
+ */
+export function playLandSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
-  // Oscillators are created each time (they're disposable)
-  const oscillator = instance.audioContext.createOscillator()
-  // Create temporary GainNode for sound envelope
-  const envelope = instance.audioContext.createGain()
-
-  oscillator.type = 'sine'
-  oscillator.frequency.setValueAtTime(CFG.audio.sfx.landFreqStart, now)
-  oscillator.frequency.exponentialRampToValueAtTime(CFG.audio.sfx.landFreqEnd, now + 0.08)
-
-  envelope.gain.setValueAtTime(CFG.audio.sfx.land, now)
-  envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.landFade, now + CFG.audio.sfx.landDuration)
   //
-  // Connect through master gain
+  // Check if we're in touch section (soft landing)
   //
-  oscillator.connect(envelope)
-  envelope.connect(instance.landGain)
-
-  oscillator.start(now)
-  oscillator.stop(now + CFG.audio.sfx.landDuration)
+  const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
+  
+  if (isTouchSection) {
+    //
+    // Soft landing sound similar to blade friction (hissing "shhhh")
+    //
+    const duration = 0.08  // Shorter (was 0.15)
+    const bufferSize = instance.audioContext.sampleRate * duration
+    const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+    const noiseData = noiseBuffer.getChannelData(0)
+    //
+    // Generate white noise
+    //
+    for (let i = 0; i < bufferSize; i++) {
+      noiseData[i] = Math.random() * 2 - 1
+    }
+    
+    const noiseSource = instance.audioContext.createBufferSource()
+    noiseSource.buffer = noiseBuffer
+    //
+    // Low-pass filter for soft hissing (like blade sound, but softer)
+    //
+    const filter = instance.audioContext.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(500, now)  // Even lower frequency for softer sound
+    filter.frequency.linearRampToValueAtTime(300, now + duration)  // Very low
+    filter.Q.value = 0.5  // Lower Q for smoother sound
+    //
+    // Envelope with quick fade out
+    //
+    const envelope = instance.audioContext.createGain()
+    envelope.gain.setValueAtTime(0.001, now)
+    envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.land * 1.2, now + 0.02)  // Much louder (was 0.6)
+    envelope.gain.setValueAtTime(CFG.audio.sfx.land * 1.2, now + duration - 0.03)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    //
+    // Connect: noise -> filter -> envelope -> output
+    //
+    noiseSource.connect(filter)
+    filter.connect(envelope)
+    envelope.connect(instance.landGain)
+    
+    noiseSource.start(now)
+    noiseSource.stop(now + duration)
+  } else {
+    //
+    // Normal landing sound (default for word section)
+    //
+    const oscillator = instance.audioContext.createOscillator()
+    const envelope = instance.audioContext.createGain()
+    
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(CFG.audio.sfx.landFreqStart, now)
+    oscillator.frequency.exponentialRampToValueAtTime(CFG.audio.sfx.landFreqEnd, now + 0.08)
+    
+    envelope.gain.setValueAtTime(CFG.audio.sfx.land, now)
+    envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.landFade, now + CFG.audio.sfx.landDuration)
+    //
+    // Connect through master gain
+    //
+    oscillator.connect(envelope)
+    envelope.connect(instance.landGain)
+    
+    oscillator.start(now)
+    oscillator.stop(now + CFG.audio.sfx.landDuration)
+  }
 }
 /**
  * Play lightning/electric discharge sound effect
@@ -492,50 +547,162 @@ export function playTextSlideSound(instance) {
  * Play jump sound effect (upward bounce)
  * @param {Object} instance - Sound instance from create()
  */
-export function playJumpSound(instance) {
+/**
+ * Play jump sound effect
+ * @param {Object} instance - Sound instance from create()
+ * @param {string} [currentLevel] - Current level name to determine sound type
+ */
+export function playJumpSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
-  const duration = 0.12
-  // Upward pitch sweep
-  const jump = instance.audioContext.createOscillator()
-  const envelope = instance.audioContext.createGain()
+  //
+  // Check if we're in touch section (soft jump)
+  //
+  const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
+  
+  if (isTouchSection) {
+    //
+    // Soft jump sound with filtered noise (quick hiss)
+    //
+    const duration = 0.08
+    const bufferSize = instance.audioContext.sampleRate * duration
+    const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+    const noiseData = noiseBuffer.getChannelData(0)
+    //
+    // Generate white noise
+    //
+    for (let i = 0; i < bufferSize; i++) {
+      noiseData[i] = Math.random() * 2 - 1
+    }
+    
+    const noiseSource = instance.audioContext.createBufferSource()
+    noiseSource.buffer = noiseBuffer
+    //
+    // Low-pass filter with upward sweep
+    //
+    const filter = instance.audioContext.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(400, now)
+    filter.frequency.linearRampToValueAtTime(600, now + duration)  // Upward sweep
+    filter.Q.value = 0.5
+    //
+    // Envelope with quick fade
+    //
+    const envelope = instance.audioContext.createGain()
+    envelope.gain.setValueAtTime(0.001, now)
+    envelope.gain.exponentialRampToValueAtTime(1.0, now + 0.02)  // Much louder (was 0.5)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    //
+    // Connect: noise -> filter -> envelope -> output
+    //
+    noiseSource.connect(filter)
+    filter.connect(envelope)
+    envelope.connect(instance.jumpGain)
+    
+    noiseSource.start(now)
+    noiseSource.stop(now + duration)
+  } else {
+    //
+    // Normal jump sound (default for word section)
+    //
+    const duration = 0.12
+    // Upward pitch sweep
+    const jump = instance.audioContext.createOscillator()
+    const envelope = instance.audioContext.createGain()
 
-  jump.type = 'sine'
-  jump.frequency.setValueAtTime(200, now)
-  jump.frequency.exponentialRampToValueAtTime(400, now + duration)
-  // Use envelope for fade-out (starts at 1, fades to 0.001)
-  envelope.gain.setValueAtTime(1, now)
-  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  // Connect through master jumpGain
-  jump.connect(envelope)
-  envelope.connect(instance.jumpGain)
+    jump.type = 'sine'
+    jump.frequency.setValueAtTime(200, now)
+    jump.frequency.exponentialRampToValueAtTime(400, now + duration)
+    // Use envelope for fade-out (starts at 1, fades to 0.001)
+    envelope.gain.setValueAtTime(1, now)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    // Connect through master jumpGain
+    jump.connect(envelope)
+    envelope.connect(instance.jumpGain)
 
-  jump.start(now)
-  jump.stop(now + duration)
+    jump.start(now)
+    jump.stop(now + duration)
+  }
 }
 /**
  * Play running step sound
  * @param {Object} instance - Sound instance
  */
-export function playStepSound(instance) {
+/**
+ * Play step sound effect
+ * @param {Object} instance - Sound instance from create()
+ * @param {string} [currentLevel] - Current level name to determine sound type
+ */
+export function playStepSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
-
-  const oscillator = instance.audioContext.createOscillator()
-  const envelope = instance.audioContext.createGain()
-
-  oscillator.type = 'sine'
-  oscillator.frequency.setValueAtTime(CFG.audio.sfx.stepFreqStart, now)
-  oscillator.frequency.exponentialRampToValueAtTime(CFG.audio.sfx.stepFreqEnd, now + 0.03)
-
-  envelope.gain.setValueAtTime(CFG.audio.sfx.step, now)
-  envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.stepFade, now + CFG.audio.sfx.stepDuration)
   //
-  // Connect through master gain
+  // Check if we're in touch section (soft steps)
   //
-  oscillator.connect(envelope)
-  envelope.connect(instance.stepGain)
+  const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
+  
+  if (isTouchSection) {
+    //
+    // Soft step sound with filtered noise (quiet hissing)
+    //
+    const duration = 0.06  // Very short
+    const bufferSize = instance.audioContext.sampleRate * duration
+    const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+    const noiseData = noiseBuffer.getChannelData(0)
+    //
+    // Generate white noise
+    //
+    for (let i = 0; i < bufferSize; i++) {
+      noiseData[i] = Math.random() * 2 - 1
+    }
+    
+    const noiseSource = instance.audioContext.createBufferSource()
+    noiseSource.buffer = noiseBuffer
+    //
+    // Low-pass filter for soft hissing
+    //
+    const filter = instance.audioContext.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(400, now)  // Low frequency
+    filter.frequency.linearRampToValueAtTime(250, now + duration)
+    filter.Q.value = 0.5
+    //
+    // Envelope with quick fade
+    //
+    const envelope = instance.audioContext.createGain()
+    envelope.gain.setValueAtTime(0.001, now)
+    envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.step * 1.2, now + 0.015)  // Much louder (was 0.6)
+    envelope.gain.setValueAtTime(CFG.audio.sfx.step * 1.2, now + duration - 0.02)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    //
+    // Connect: noise -> filter -> envelope -> output
+    //
+    noiseSource.connect(filter)
+    filter.connect(envelope)
+    envelope.connect(instance.stepGain)
+    
+    noiseSource.start(now)
+    noiseSource.stop(now + duration)
+  } else {
+    //
+    // Normal step sound (default for word section)
+    //
+    const oscillator = instance.audioContext.createOscillator()
+    const envelope = instance.audioContext.createGain()
 
-  oscillator.start(now)
-  oscillator.stop(now + CFG.audio.sfx.stepDuration)
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(CFG.audio.sfx.stepFreqStart, now)
+    oscillator.frequency.exponentialRampToValueAtTime(CFG.audio.sfx.stepFreqEnd, now + 0.03)
+
+    envelope.gain.setValueAtTime(CFG.audio.sfx.step, now)
+    envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.stepFade, now + CFG.audio.sfx.stepDuration)
+    //
+    // Connect through master gain
+    //
+    oscillator.connect(envelope)
+    envelope.connect(instance.stepGain)
+
+    oscillator.start(now)
+    oscillator.stop(now + CFG.audio.sfx.stepDuration)
+  }
 }
 
 /**

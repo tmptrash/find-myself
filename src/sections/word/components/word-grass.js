@@ -95,12 +95,13 @@ export function create(config) {
       }
       
       //
-      // Check if grass is over a gap in the platform
+      // Check if grass is over a gap in the platform (with extended safety margin)
       //
       let overGap = false
+      const GAP_SAFETY_MARGIN = 80  // Extra margin around gaps to prevent grass near edges
       for (const gap of platformGaps) {
-        const gapLeft = gap.x
-        const gapRight = gap.x + gap.width
+        const gapLeft = gap.x - GAP_SAFETY_MARGIN
+        const gapRight = gap.x + gap.width + GAP_SAFETY_MARGIN
         if (x >= gapLeft && x <= gapRight) {
           overGap = true
           break
@@ -112,7 +113,7 @@ export function create(config) {
         continue
       }
       //
-      // Check if grass is too close to any moving platform
+      // Check if grass is too close to any moving platform (redundant safety check)
       //
       let tooCloseToMovingPlatform = false
       for (const platformX of movingPlatformPositions) {

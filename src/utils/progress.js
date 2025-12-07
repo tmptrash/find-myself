@@ -1,30 +1,19 @@
+import { CFG } from '../cfg.js'
 /**
  * Progress tracking using localStorage
  */
 const STORAGE_KEY = 'find-myself-progress'
-
-/**
- * Section colors configuration (body color only, outline is always black)
- */
-export const SECTION_COLORS = {
-  word: {
-    body: 'E74C3C'      // Soft red - warm, muted, less aggressive
-  },
-  touch: {
-    body: 'FFC0CB'      // Pink - soft, tactile, skin-like
-  },
-  feel: {
-    body: 'FF69B4'      // Hot pink - emotions, passion, feelings
-  },
-  mind: {
-    body: 'D2B48C'      // Tan/Sepia - old, faded, nostalgic
-  },
-  stress: {
-    body: '9370DB'      // Medium purple - anxiety, tension, unease
-  },
-  time: {
-    body: '4169E1'      // Royal blue - eternal, flowing, deep
-  }
+//
+// Section colors configuration (body color only, outline is always black)
+// All colors are imported from global config (CFG.visual.colors.sections)
+//
+const SECTION_COLORS = {
+  word: CFG.visual.colors.sections.word,
+  touch: CFG.visual.colors.sections.touch,
+  feel: CFG.visual.colors.sections.feel,
+  mind: CFG.visual.colors.sections.mind,
+  stress: CFG.visual.colors.sections.stress,
+  time: CFG.visual.colors.sections.time
 }
 
 /**

@@ -79,6 +79,30 @@ export const CFG = {
         body: "#8B5A50",               // Reddish-brown
         eyeWhite: "#FFFFFF",           // Eye white
         eyePupil: "#000000"            // Pupil
+      },
+      //
+      // Section colors (body color for each game section)
+      // word section color is also in its local config (src/sections/word/cfg.js)
+      //
+      sections: {
+        word: {
+          body: '#E74C3C'      // Soft red - warm, muted, less aggressive
+        },
+        touch: {
+          body: '#FFC0CB'      // Pink - soft, tactile, skin-like
+        },
+        feel: {
+          body: '#FF69B4'      // Hot pink - emotions, passion, feelings
+        },
+        mind: {
+          body: '#D2B48C'      // Tan/Sepia - old, faded, nostalgic
+        },
+        stress: {
+          body: '#9370DB'      // Medium purple - anxiety, tension, unease
+        },
+        time: {
+          body: '#4169E1'      // Royal blue - eternal, flowing, deep
+        }
       }
     },
     //

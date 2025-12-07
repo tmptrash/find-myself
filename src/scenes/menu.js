@@ -109,13 +109,13 @@ export function sceneMenu(k) {
     sectionConfigs.forEach((config, index) => {
       const isCompleted = progress[config.section]
       //
-      // Determine body color: gray if not completed, section color if completed
-      // Outline is always black
+      // Always create with gray body (sprite generation)
+      // Color tint will be applied in onUpdate for completed/hovered sections
       //
       const grayColor = '#656565'
       const grayOutlineColor = '#454545'
-      const bodyColor = isCompleted ? config.color.body : grayColor
-      const outlineColor = isCompleted ? null : grayOutlineColor
+      const bodyColor = grayColor  // Always gray for sprite
+      const outlineColor = isCompleted ? CFG.visual.colors.outline : grayOutlineColor
       //
       // Create anti-hero for this section
       //
@@ -133,12 +133,12 @@ export function sceneMenu(k) {
         hitboxPadding: 5
       })
       //
-      // Preload black-outline variant for hover/completed state
+      // Preload section color variant with black outline for hover/completed state
       //
       Hero.loadHeroSprites({
         k,
         type: Hero.HEROES.ANTIHERO,
-        bodyColor,
+        bodyColor: grayColor,
         outlineColor: CFG.visual.colors.outline,
         addMouth: config.section === 'word',
         addArms: config.section === 'touch'
@@ -146,9 +146,9 @@ export function sceneMenu(k) {
       //
       // Cache sprite prefixes for outline switching
       //
-      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${bodyColor}_${outlineColor || CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
-      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${bodyColor}_${CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
-      antiHeroInst.currentPrefix = antiHeroInst.spritePrefixGray
+      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColor}_${grayOutlineColor}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColor}_${CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
       //
       // Store base position and phase offsets for floating animation
       //

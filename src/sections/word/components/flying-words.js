@@ -941,9 +941,9 @@ function createKillerLetter(k, params) {
     const currentInst = k.flyingWordsInstance
     if (!currentInst) return
     //
-    // Don't kill hero if they're annihilating
+    // Don't kill hero if they're annihilating or invulnerable
     //
-    if (currentInst.hero.isAnnihilating) return
+    if (currentInst.hero.isAnnihilating || currentInst.hero.isInvulnerable) return
     //
     // Mark word for respawn by setting flag
     //

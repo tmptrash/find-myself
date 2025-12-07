@@ -25,10 +25,11 @@ const BLADE_SAFE_DISTANCE = 50  // Minimum distance from blade obstacles
  * @param {Object} config.hero - Hero instance for interaction detection
  * @param {Array} config.bladePositions - Array of blade X positions to avoid
  * @param {Array} config.platformGaps - Array of gap objects {x, width} to avoid
+ * @param {Array} config.movingPlatformPositions - Array of moving platform X positions to avoid
  * @returns {Object} Word grass instance
  */
 export function create(config) {
-  const { k, customBounds, hero, bladePositions = [], platformGaps = [] } = config
+  const { k, customBounds, hero, bladePositions = [], platformGaps = [], movingPlatformPositions = [] } = config
   //
   // Always destroy existing grass first
   //
@@ -110,7 +111,21 @@ export function create(config) {
         i++
         continue
       }
+      //
+      // Check if grass is too close to any moving platform
+      //
+      let tooCloseToMovingPlatform = false
+      for (const platformX of movingPlatformPositions) {
+        if (Math.abs(x - platformX) < BLADE_SAFE_DISTANCE) {
+          tooCloseToMovingPlatform = true
+          break
+        }
+      }
       
+      if (tooCloseToMovingPlatform) {
+        i++
+        continue
+      }
       //
       // Randomly skip some grass clusters (40% chance) to create natural gaps
       // This makes gaps in platform less obvious

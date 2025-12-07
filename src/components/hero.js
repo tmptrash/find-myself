@@ -157,7 +157,9 @@ export function create(config) {
     currentEyeSprite: null,
     isAnnihilating: false,
     isDying: false,
-    isSpawned: false   // Flag to prevent controls before spawn completes
+    isSpawned: false,   // Flag to prevent controls before spawn completes
+    invulnerabilityTimer: 0,  // Timer for spawn invulnerability
+    isInvulnerable: false  // Flag for spawn invulnerability
   }
   //
   // Check ground touch through collisions
@@ -416,9 +418,11 @@ export function spawn(inst) {
         //
         character.hidden = false
         //
-        // Mark hero as spawned (allow controls)
+        // Mark hero as spawned (allow controls) and invulnerable
         //
         inst.isSpawned = true
+        inst.isInvulnerable = true
+        inst.invulnerabilityTimer = 3.0  // 3 seconds of invulnerability
         //
         // Cancel update
         //
@@ -437,6 +441,16 @@ function onUpdate(inst) {
   // Skip updates during annihilation (but allow paused for post-absorption idle)
   //
   if (inst.isAnnihilating) return
+  //
+  // Update invulnerability timer
+  //
+  if (inst.isInvulnerable) {
+    inst.invulnerabilityTimer -= inst.k.dt()
+    if (inst.invulnerabilityTimer <= 0) {
+      inst.isInvulnerable = false
+      inst.invulnerabilityTimer = 0
+    }
+  }
   //
   // For non-controllable characters (like in menu), always use idle animation
   //

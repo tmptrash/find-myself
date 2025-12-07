@@ -265,7 +265,8 @@ export function sceneLevel2(k) {
       customBounds: platformBounds,
       hero,
       bladePositions: [blade1X, blade2X],  // Two static blades on this level
-      platformGaps  // Pass the gaps so grass doesn't spawn over them
+      platformGaps,  // Pass the gaps so grass doesn't spawn over them
+      movingPlatformPositions: [movingPlatformX, movingPlatform2X]  // Two moving platforms
     })
     
     //

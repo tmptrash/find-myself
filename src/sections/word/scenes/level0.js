@@ -365,7 +365,8 @@ export function sceneLevel0(k) {
       k,
       customBounds: platformBounds,
       hero,
-      bladePositions
+      bladePositions,
+      movingPlatformPositions: []  // No moving platforms on level 0
     })
     
     //

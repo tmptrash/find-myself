@@ -21,12 +21,6 @@ const INSTRUCTIONS_TEXT_LINES = [
   { text: 'turns words into threats, twists logic, and pushes you into mistakes', normal: true },
   { text: '— not to harm you, but to teach you.', normal: true },
   { text: '', normal: true },
-  { text: 'Watch closely — even the title above isn\'t safe. ', normal: true, inline: true },
-  { text: 'Letters will grow legs', important: true, sameLine: true },
-  { text: 'and ', normal: true, inline: true },
-  { text: 'crawl away, ', important: true, sameLine: true, inline: true },
-  { text: 'leaving you uncertain. Nothing here stays still.', normal: true, sameLine: true },
-  { text: '', normal: true },
   { text: 'Each level is a tiny reflection of your inner world: ', normal: true, inline: true },
   { text: 'words that cut,', important: true, sameLine: true },
   { text: 'time that pressures, memory that slips, feelings that deceive.', important: true },
@@ -59,7 +53,7 @@ const ARROW_FONT_SIZE = 240
 const TITLE_HOLD_DURATION = 2
 const QUOTE_PRIMARY_HOLD_DURATION = 2.5
 const QUOTE_SECONDARY_HOLD_DURATION = 2.5
-const INSTRUCTIONS_HOLD_DURATION = 50
+const INSTRUCTIONS_HOLD_DURATION = 60
 const INSTRUCTIONS_FADE_DURATION = 1.5
 
 const LAYOUT_HORIZONTAL_MARGIN = 180
@@ -173,7 +167,7 @@ export function sceneReady(k) {
     const titleSize = 54
     const lineHeight = INSTRUCTIONS_LINE_HEIGHT
     const titleX = instructionsTextMargin + 50  // Left aligned with margin
-    const titleY = 120  // Top position (raised from 160)
+    const titleY = 180  // Top position
     
     //
     // Title "Find Myself" in red (top left)

@@ -40,12 +40,42 @@ export function create(config) {
   existingGrassOutlines.forEach(obj => obj.destroy())
   //
   // If we have saved grass data, recreate with exact same parameters
+  // But filter out grass that's over gaps or near moving platforms
   //
   if (savedGrassData) {
     const grassBlades = []
     const [grassR, grassG, grassB] = parseHex(GRASS_COLOR)
+    const GAP_SAFETY_MARGIN = 80
     
     savedGrassData.forEach(savedGrass => {
+      const x = savedGrass.x
+      //
+      // Check if grass is over a gap
+      //
+      let overGap = false
+      for (const gap of platformGaps) {
+        const gapLeft = gap.x - GAP_SAFETY_MARGIN
+        const gapRight = gap.x + gap.width + GAP_SAFETY_MARGIN
+        if (x >= gapLeft && x <= gapRight) {
+          overGap = true
+          break
+        }
+      }
+      
+      if (overGap) return
+      //
+      // Check if grass is too close to any moving platform
+      //
+      let tooCloseToMovingPlatform = false
+      for (const platformX of movingPlatformPositions) {
+        if (Math.abs(x - platformX) < BLADE_SAFE_DISTANCE) {
+          tooCloseToMovingPlatform = true
+          break
+        }
+      }
+      
+      if (tooCloseToMovingPlatform) return
+      
       const grass = recreateGrassBlade(k, savedGrass, grassR, grassG, grassB)
       grassBlades.push(grass)
     })

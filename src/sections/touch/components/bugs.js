@@ -170,6 +170,19 @@ export function create(config) {
       startStartY: footY
     }
   })
+  //
+  // Randomize initial state and timer for each bug
+  // Also randomize cycle durations and speed for each bug
+  //
+  const crawlSpeed = CRAWL_SPEED * (0.5 + Math.random() * 1.0)  // 7.5-22.5 speed
+  const crawlDuration = CRAWL_DURATION * (0.5 + Math.random() * 1.5)  // 4-20 seconds
+  const stopDuration = STOP_DURATION * (0.3 + Math.random() * 1.4)  // 0.6-3.4 seconds
+  
+  const startInCrawling = Math.random() > 0.3  // 70% start crawling, 30% start stopped
+  const initialState = startInCrawling ? 'crawling' : 'stopping'
+  const initialTimer = startInCrawling 
+    ? Math.random() * crawlDuration  // Random time into crawl cycle
+    : Math.random() * stopDuration   // Random time into stop cycle
   
   const inst = {
     k,
@@ -180,12 +193,15 @@ export function create(config) {
     normalAngle,
     bounds,
     scale,
-    vx: Math.cos(angle) * CRAWL_SPEED,
-    vy: Math.sin(angle) * CRAWL_SPEED,
+    crawlSpeed,     // Unique speed for this bug
+    crawlDuration,  // Unique duration for this bug
+    stopDuration,   // Unique duration for this bug
+    vx: startInCrawling ? Math.cos(angle) * crawlSpeed : 0,
+    vy: startInCrawling ? Math.sin(angle) * crawlSpeed : 0,
     pattern,
     legs,
-    state: 'crawling',  // States: 'crawling', 'stopping', 'scared', 'recovering'
-    stateTimer: CRAWL_DURATION,  // Time in current state
+    state: initialState,  // States: 'crawling', 'stopping', 'scared', 'recovering'
+    stateTimer: initialTimer,  // Random time in current state
     distanceTraveled: 0,
     movementAngle: angle
   }
@@ -235,7 +251,7 @@ export function onUpdate(inst, dt) {
       // Recovery complete - resume crawling with new direction
       //
       inst.state = 'crawling'
-      inst.stateTimer = CRAWL_DURATION
+      inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
       //
       // Choose random direction
       //
@@ -244,8 +260,8 @@ export function onUpdate(inst, dt) {
       } else if (inst.surface === 'leftWall' || inst.surface === 'rightWall') {
         inst.movementAngle = Math.random() > 0.5 ? -Math.PI / 2 : Math.PI / 2
       }
-      inst.vx = Math.cos(inst.movementAngle) * CRAWL_SPEED
-      inst.vy = Math.sin(inst.movementAngle) * CRAWL_SPEED
+      inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+      inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
     }
   } else {
     //
@@ -259,7 +275,7 @@ export function onUpdate(inst, dt) {
         // Switch to stopping state
         //
         inst.state = 'stopping'
-        inst.stateTimer = STOP_DURATION
+        inst.stateTimer = inst.stopDuration  // Use bug's unique duration
         inst.vx = 0
         inst.vy = 0
       }
@@ -269,7 +285,7 @@ export function onUpdate(inst, dt) {
         // Switch to crawling with new random direction
         //
         inst.state = 'crawling'
-        inst.stateTimer = CRAWL_DURATION
+        inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
         
         if (inst.surface === 'floor') {
           //
@@ -283,8 +299,8 @@ export function onUpdate(inst, dt) {
           inst.movementAngle = Math.random() > 0.5 ? -Math.PI / 2 : Math.PI / 2
         }
         
-        inst.vx = Math.cos(inst.movementAngle) * CRAWL_SPEED
-        inst.vy = Math.sin(inst.movementAngle) * CRAWL_SPEED
+        inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+        inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
       }
     }
     //
@@ -303,8 +319,8 @@ export function onUpdate(inst, dt) {
           //
           if (newX < inst.bounds.minX || newX > inst.bounds.maxX) {
             inst.movementAngle = inst.movementAngle === 0 ? Math.PI : 0
-            inst.vx = Math.cos(inst.movementAngle) * CRAWL_SPEED
-            inst.stateTimer = CRAWL_DURATION
+            inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+            inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
           } else {
             inst.x = newX
           }
@@ -314,8 +330,8 @@ export function onUpdate(inst, dt) {
           //
           if (newY < inst.bounds.minY || newY > inst.bounds.maxY) {
             inst.movementAngle = inst.movementAngle === -Math.PI / 2 ? Math.PI / 2 : -Math.PI / 2
-            inst.vy = Math.sin(inst.movementAngle) * CRAWL_SPEED
-            inst.stateTimer = CRAWL_DURATION
+            inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+            inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
           } else {
             inst.y = newY
           }

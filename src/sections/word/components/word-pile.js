@@ -257,7 +257,7 @@ function recreateWord(k, savedWord) {
   const textObj = k.add([
     k.text(savedWord.text, {
       size: savedWord.size,
-      font: CFG.visual.fonts.regular
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
     }),
     k.pos(savedWord.x, savedWord.y),
     k.anchor('center'),
@@ -437,7 +437,7 @@ function createWordInLayer(k, params) {
   const textObj = k.add([
     k.text(text, {
       size: size,
-      font: CFG.visual.fonts.regular
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
     }),
     k.pos(x, y),
     k.anchor('center'),

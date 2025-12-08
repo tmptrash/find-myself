@@ -217,7 +217,7 @@ export function create(config) {
         const outlineText = k.add([
           k.text(letter, {
             size: clusterGrassSize,
-            font: CFG.visual.fonts.thin
+            font: CFG.visual.fonts.thinFull.replace(/'/g, '')
           }),
           k.pos(finalX + dx, adjustedRowY + dy),
           k.color(0, 0, 0),
@@ -237,7 +237,7 @@ export function create(config) {
       const grassBlade = k.add([
         k.text(letter, {
           size: clusterGrassSize,
-          font: CFG.visual.fonts.thin
+          font: CFG.visual.fonts.thinFull.replace(/'/g, '')
         }),
         k.pos(finalX, adjustedRowY),
         k.color(grassR, grassG, grassB),
@@ -308,7 +308,7 @@ function recreateGrassBlade(k, savedGrass, grassR, grassG, grassB) {
     const outline = k.add([
       k.text(savedGrass.letter, {
         size: savedGrass.size,
-        font: CFG.visual.fonts.thin
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
       }),
       k.pos(savedGrass.x + dx, savedGrass.y + dy),
       k.color(0, 0, 0),
@@ -327,7 +327,7 @@ function recreateGrassBlade(k, savedGrass, grassR, grassG, grassB) {
   const grassBlade = k.add([
     k.text(savedGrass.letter, {
       size: savedGrass.size,
-      font: CFG.visual.fonts.thin
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
     }),
     k.pos(savedGrass.x, savedGrass.y),
     k.color(grassR, grassG, grassB),

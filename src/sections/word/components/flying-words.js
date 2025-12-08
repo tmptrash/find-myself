@@ -636,7 +636,7 @@ function createWord(k, params) {
   //
   // Use JetBrains Mono font for all words
   //
-  const fontFamily = CFG.visual.fonts.regular
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
   
   //
   // Font weight simulation: some words will have outline for bold effect
@@ -880,7 +880,7 @@ function createKillerLetter(k, params) {
   //
   const baseOpacity = 0.85 + Math.random() * 0.15  // 0.85-1.0 (very bright)
 
-  const fontFamily = CFG.visual.fonts.regular
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
   
   //
   // Create black outline

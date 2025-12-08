@@ -57,7 +57,7 @@ export function create(config) {
   const tempText = k.add([
     k.text(TEXT_MESSAGE, {
       size: TEXT_SIZE,
-      font: CFG.visual.fonts.thin
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
     }),
     k.pos(-10000, -10000),  // Off-screen
     k.opacity(0)
@@ -160,7 +160,7 @@ export function create(config) {
     const outlineText = creatureContainer.add([
       k.text(TEXT_MESSAGE, {
         size: TEXT_SIZE,
-        font: CFG.visual.fonts.thin
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
       }),
       k.pos(dx, dy),
       k.color(0, 0, 0),
@@ -175,7 +175,7 @@ export function create(config) {
   const mainText = creatureContainer.add([
     k.text(TEXT_MESSAGE, {
       size: TEXT_SIZE,
-      font: CFG.visual.fonts.thin
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
     }),
     k.pos(0, 0),
     k.color(107, 142, 159),

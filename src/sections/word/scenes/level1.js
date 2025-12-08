@@ -59,7 +59,7 @@ function showDeathMessage(k, hero, bladesInst) {
     k.text(message, {
       size: 28,
       align: "center",
-      font: CFG.visual.fonts.regular
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
     }),
     k.pos(centerX, messageY),
     k.anchor("center"),

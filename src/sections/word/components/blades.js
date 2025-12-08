@@ -572,7 +572,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
   // Font settings
   //
   const fontSize = 40
-  const fontFamily = CFG.visual.fonts.thinFull
+  const fontFamily = CFG.visual.fonts.thinFull.replace(/'/g, '')
   const outlineWidth = 2
   const letterSpacing = 0
   

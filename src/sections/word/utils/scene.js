@@ -117,7 +117,7 @@ export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor
       k.add([
         k.text(letter, {
           size: fontSize,
-          font: CFG.visual.fonts.thin
+          font: CFG.visual.fonts.thinFull.replace(/'/g, '')
         }),
         k.pos(letterX + dx, y + dy),
         k.color(0, 0, 0),
@@ -130,7 +130,7 @@ export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor
     const mainLetter = k.add([
       k.text(letter, {
         size: fontSize,
-        font: CFG.visual.fonts.thin
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
       }),
       k.pos(letterX, y),
       k.color(r, g, b),

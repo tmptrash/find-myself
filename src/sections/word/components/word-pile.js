@@ -239,7 +239,7 @@ function recreateWord(k, savedWord) {
       const outlineText = k.add([
         k.text(savedWord.text, {
           size: savedWord.size,
-          font: CFG.visual.fonts.regular
+          font: CFG.visual.fonts.regularFull.replace(/'/g, '')
         }),
         k.pos(savedWord.x + dx, savedWord.y + dy),
         k.anchor('center'),
@@ -410,7 +410,7 @@ function createWordInLayer(k, params) {
       const outlineText = k.add([
         k.text(text, {
           size: size,
-          font: CFG.visual.fonts.regular
+          font: CFG.visual.fonts.regularFull.replace(/'/g, '')
         }),
         k.pos(x + dx, y + dy),
         k.anchor('center'),

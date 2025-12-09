@@ -138,7 +138,7 @@ export function create(config) {
     spritePrefix,
     dustColor,
     speed: CFG.game.moveSpeed,
-    jumpForce: CFG.game.jumpForce,
+    jumpForce: config.jumpForce ?? CFG.game.jumpForce,
     direction: 1,
     canJump: true,
     runFrame: 0,

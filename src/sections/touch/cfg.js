@@ -4,6 +4,9 @@ import { CFG as GLOBAL_CFG, deepMerge } from '../../cfg.js'
 // This config is merged with global CFG
 //
 export const TOUCH_CFG = {
+  game: {
+    jumpForce: 760  // Higher jump force for touch section (vs 640 in word section)
+  },
   visual: {
     //
     // Colors specific to touch section
@@ -27,4 +30,3 @@ export const TOUCH_CFG = {
 // Export merged configuration
 //
 export const CFG = deepMerge(GLOBAL_CFG, TOUCH_CFG)
-

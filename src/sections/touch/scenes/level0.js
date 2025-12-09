@@ -11,11 +11,6 @@ const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
-// Calculate platform dimensions
-//
-const PLATFORM_WIDTH = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-const PLATFORM_HEIGHT = CFG.visual.screen.height - TOP_MARGIN - BOTTOM_MARGIN
-//
 // Hero spawn positions
 //
 const HERO_SPAWN_X = LEFT_MARGIN + 150
@@ -143,7 +138,8 @@ export function sceneLevel0(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      currentLevel: 'level-touch.0'
+      currentLevel: 'level-touch.0',
+      jumpForce: CFG.game.jumpForce
     })
     //
     // Spawn hero after delay

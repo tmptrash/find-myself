@@ -43,6 +43,16 @@ export function create() {
   const glitchSoundGain = ctx.createGain()
   glitchSoundGain.gain.value = 1.0
   glitchSoundGain.connect(ctx.destination)
+  //
+  // Create master gain for bug sounds
+  //
+  const bugScareGain = ctx.createGain()
+  bugScareGain.gain.value = 0.3
+  bugScareGain.connect(ctx.destination)
+  
+  const bugStepGain = ctx.createGain()
+  bugStepGain.gain.value = 0.04
+  bugStepGain.connect(ctx.destination)
 
   return {
     // Audio context
@@ -54,6 +64,8 @@ export function create() {
     spawnGain,
     bladeSoundGain,
     glitchSoundGain,
+    bugScareGain,
+    bugStepGain,
     // Ambient music state
     ambientOscillators: [],
     ambientGains: [],
@@ -1406,4 +1418,76 @@ function createCrack(instance, time, freq, volume) {
 
   crack.start(time)
   crack.stop(time + duration)
+}
+/**
+ * Play bug scare sound ("Ай!" - short squeak when bug gets scared)
+ * @param {Object} inst - Sound instance
+ */
+export function playBugScareSound(inst) {
+  const { audioContext, bugScareGain } = inst
+  const now = audioContext.currentTime
+  //
+  // Short high-pitched squeak
+  //
+  const oscillator = audioContext.createOscillator()
+  const envelope = audioContext.createGain()
+  
+  oscillator.type = 'sine'
+  oscillator.frequency.setValueAtTime(800, now)  // High pitch
+  oscillator.frequency.exponentialRampToValueAtTime(600, now + 0.08)  // Quick drop
+  //
+  // Very short envelope for "Ай!" effect
+  //
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(1, now + 0.02)  // Fast attack
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + 0.1)  // Quick decay
+  
+  oscillator.connect(envelope)
+  envelope.connect(bugScareGain)
+  
+  oscillator.start(now)
+  oscillator.stop(now + 0.1)
+}
+/**
+ * Play bug step sound (very soft, like a tiny leaf touch)
+ * @param {Object} inst - Sound instance
+ */
+export function playBugStepSound(inst) {
+  const { audioContext, bugStepGain } = inst
+  const now = audioContext.currentTime
+  //
+  // Very short crunch sound
+  //
+  const bufferSize = audioContext.sampleRate * 0.02  // 20ms - shorter
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  //
+  // Generate crunchy noise with higher frequency content
+  //
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * 0.5  // More intensity for crunch
+  }
+  
+  const noise = audioContext.createBufferSource()
+  noise.buffer = buffer
+  
+  const filter = audioContext.createBiquadFilter()
+  filter.type = 'highpass'  // Changed to highpass for crunchier sound
+  filter.frequency.value = 3000  // Higher frequencies for crunch
+  filter.Q.value = 1.0
+  
+  const envelope = audioContext.createGain()
+  //
+  // Very short, crisp envelope for crunch effect
+  //
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(1, now + 0.005)  // Very quick attack
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + 0.02)  // Very quick decay
+  
+  noise.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(bugStepGain)
+  
+  noise.start(now)
+  noise.stop(now + 0.02)
 }

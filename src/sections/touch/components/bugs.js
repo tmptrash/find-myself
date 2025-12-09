@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as Sound from '../../../utils/sound.js'
 //
 // Bug parameters
 //
@@ -8,7 +9,7 @@ const LEG_COUNT = 4  // 4 legs (2 per side)
 const LEG_LENGTH_1 = 8  // First segment length
 const LEG_LENGTH_2 = 7  // Second segment length
 const LEG_THICKNESS = 1.5
-const DETECTION_RADIUS = 30  // Very close proximity (was 100)
+const DETECTION_RADIUS = 60  // Detection distance - bugs hide when hero approaches
 const CRAWL_SPEED = 15  // Slow crawling speed
 const CRAWL_DURATION = 8.0  // Time to crawl before stopping
 const STOP_DURATION = 2.0  // Pause duration before changing direction
@@ -69,7 +70,7 @@ const BUG_PATTERNS = [
  * @returns {Object} Bug instance
  */
 export function create(config) {
-  const { k, x, y, hero, surface = 'floor', bounds, scale = 1 } = config
+  const { k, x, y, hero, surface = 'floor', bounds, scale = 1, sfx } = config
   //
   // Choose random pattern
   //
@@ -187,8 +188,9 @@ export function create(config) {
   const inst = {
     k,
     hero,
+    sfx,
     x,
-    y,
+    y,  // Y is floor line position
     surface,
     normalAngle,
     bounds,
@@ -203,7 +205,8 @@ export function create(config) {
     state: initialState,  // States: 'crawling', 'stopping', 'scared', 'recovering'
     stateTimer: initialTimer,  // Random time in current state
     distanceTraveled: 0,
-    movementAngle: angle
+    movementAngle: angle,
+    dropOffset: 0  // How much body has dropped when scared
   }
   
   return inst
@@ -231,6 +234,23 @@ export function onUpdate(inst, dt) {
       inst.state = 'scared'
       inst.vx = 0
       inst.vy = 0
+      //
+      // Play scare sound ("Ай!")
+      //
+      inst.sfx && Sound.playBugScareSound(inst.sfx)
+    }
+    //
+    // Drop body down when legs are pulled in (for floor bugs)
+    // Increase dropOffset to make body fall
+    //
+    if (inst.surface === 'floor') {
+      const reach = (LEG_LENGTH_1 + LEG_LENGTH_2) * inst.scale
+      const maxDrop = reach * 0.5  // Maximum drop distance
+      
+      if (inst.dropOffset < maxDrop) {
+        inst.dropOffset += dt * 200  // Drop speed
+        if (inst.dropOffset > maxDrop) inst.dropOffset = maxDrop
+      }
     }
   } else if (inst.state === 'scared') {
     //
@@ -243,6 +263,7 @@ export function onUpdate(inst, dt) {
   } else if (inst.state === 'recovering') {
     //
     // Still recovering - count down timer
+    // Body stays down during recovery, lifts only after recovery complete
     //
     inst.stateTimer -= dt
     
@@ -266,7 +287,13 @@ export function onUpdate(inst, dt) {
   } else {
     //
     // State machine for crawling behavior
+    // Also lift body back up when crawling
     //
+    if (inst.surface === 'floor' && inst.dropOffset > 0) {
+      inst.dropOffset -= dt * 150  // Lift speed
+      if (inst.dropOffset < 0) inst.dropOffset = 0
+    }
+    
     inst.stateTimer -= dt
     
     if (inst.state === 'crawling') {
@@ -387,9 +414,9 @@ function updateLegs(inst, dt) {
       if (inst.surface === 'floor') {
         //
         // Floor bugs: all legs land on the same horizontal line (floor level)
-        // Calculate body boundaries based on movement direction
+        // Body position adjusted by dropOffset when scared
         //
-        const floorY = inst.y + reach * 0.7  // All legs touch the same floor line
+        const floorY = inst.y + reach * 0.7 - inst.dropOffset  // Floor line moves up when body drops
         const bodyRadius = inst.scale * BUG_BODY_SIZE * 1.5 * 0.9
         //
         // Determine which legs are front/back based on movement direction
@@ -518,9 +545,13 @@ export function draw(inst) {
   //
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
   const segments = 20  // Number of segments for smooth curve
+  //
+  // Apply dropOffset to body Y position when drawing
+  //
+  const bodyY = inst.y + inst.dropOffset
   
   k.pushTransform()
-  k.pushTranslate(inst.x, inst.y)
+  k.pushTranslate(inst.x, bodyY)
   k.pushRotate(bodyRotation)
   //
   // Create points for semicircle (top half)
@@ -596,15 +627,17 @@ export function draw(inst) {
       // For floor bugs: 
       // Back legs (0, 1) attach to left side
       // Front legs (2, 3) attach to right side
+      // Apply dropOffset to Y position
       //
+      const bodyY = inst.y + inst.dropOffset
       if (i === 0 || i === 1) {
         // Back legs (left side)
         attachX = inst.x - attachmentOffset
-        attachY = inst.y
+        attachY = bodyY
       } else {
         // Front legs (right side)
         attachX = inst.x + attachmentOffset
-        attachY = inst.y
+        attachY = bodyY
       }
     } else if (inst.surface === 'leftWall') {
       //

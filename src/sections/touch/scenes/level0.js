@@ -3,6 +3,7 @@ import * as Hero from '../../../components/hero.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
+import * as Dust from '../components/dust.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -50,17 +51,36 @@ export function sceneLevel0(k) {
       })
     })
     //
-    // Create bottom platform (full width, extends to bottom of screen)
+    // Create bottom platform - split into two parts with a gap in the middle
     //
     const bottomPlatformY = CFG.visual.screen.height - BOTTOM_MARGIN / 2
-    
+    const gapWidth = 300  // Width of the pit
+    const gapCenterX = CFG.visual.screen.width / 2  // Center of screen
+    const leftPlatformWidth = gapCenterX - gapWidth / 2 - LEFT_MARGIN / 2
+    const rightPlatformWidth = gapCenterX - gapWidth / 2 - RIGHT_MARGIN / 2
+    //
+    // Left part of bottom platform
+    //
     k.add([
-      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, bottomPlatformY),
+      k.rect(leftPlatformWidth * 2, BOTTOM_MARGIN),
+      k.pos(LEFT_MARGIN + leftPlatformWidth, bottomPlatformY),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
       k.color(31, 31, 31),  // CFG.visual.colors.platform
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName
+    ])
+    //
+    // Right part of bottom platform
+    //
+    k.add([
+      k.rect(rightPlatformWidth * 2, BOTTOM_MARGIN),
+      k.pos(CFG.visual.screen.width - RIGHT_MARGIN - rightPlatformWidth, bottomPlatformY),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.color(31, 31, 31),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -129,6 +149,30 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
+    // Create movable cube on the raised platform
+    //
+    const cubeSize = 60
+    const cubeX = platformX - platformWidth / 4  // On left part of raised platform
+    const cubeY = platformY - platformHeight / 2 - cubeSize / 2  // On top of platform
+    
+    k.add([
+      k.rect(cubeSize, cubeSize),
+      k.pos(cubeX, cubeY),
+      k.anchor("center"),
+      k.area(),
+      k.body({ 
+        isStatic: true,  // Always static - no physics oscillations
+        mass: 1,
+        gravityScale: 1,
+        friction: 0.9,
+        damping: 0.95
+      }),
+      k.color(31, 31, 31),
+      k.z(CFG.visual.zIndex.platforms + 1),
+      CFG.game.platformName,
+      "movable-cube"
+    ])
+    //
     // Create hero
     //
     const heroInst = Hero.create({
@@ -146,6 +190,91 @@ export function sceneLevel0(k) {
     //
     const HERO_SPAWN_DELAY = 0.5
     k.wait(HERO_SPAWN_DELAY, () => Hero.spawn(heroInst))
+    //
+    // Manual cube movement and gravity (since cube is always static)
+    //
+    let cubeVelocityY = 0  // Track falling velocity
+    
+    k.onUpdate(() => {
+      const cube = k.get("movable-cube")[0]
+      const hero = heroInst.character
+      
+      if (cube && hero) {
+        const cubeLeft = cube.pos.x - cubeSize / 2
+        const cubeRight = cube.pos.x + cubeSize / 2
+        const cubeTop = cube.pos.y - cubeSize / 2
+        const cubeBottom = cube.pos.y + cubeSize / 2
+        //
+        // Check if cube is on a platform (raycast down)
+        //
+        const checkDistance = 5  // Check 5 pixels below
+        const platforms = k.get(CFG.game.platformName)
+        let isOnPlatform = false
+        
+        for (const platform of platforms) {
+          if (platform === cube) continue  // Skip self
+          
+          const platformTop = platform.pos.y - (platform.height || 0) / 2
+          const platformBottom = platform.pos.y + (platform.height || 0) / 2
+          const platformLeft = platform.pos.x - (platform.width || 0) / 2
+          const platformRight = platform.pos.x + (platform.width || 0) / 2
+          //
+          // Check if cube bottom is touching platform top
+          //
+          if (cubeBottom >= platformTop - checkDistance && 
+              cubeBottom <= platformTop + checkDistance &&
+              cubeRight > platformLeft + 5 &&
+              cubeLeft < platformRight - 5) {
+            isOnPlatform = true
+            cubeVelocityY = 0  // Reset velocity
+            cube.pos.y = platformTop - cubeSize / 2  // Snap to platform
+            break
+          }
+        }
+        //
+        // Apply gravity if not on platform
+        //
+        if (!isOnPlatform) {
+          const gravity = CFG.game.gravity * k.dt()
+          cubeVelocityY += gravity
+          cube.pos.y += cubeVelocityY * k.dt()
+        }
+        //
+        // Check if hero is at cube level (not on top)
+        //
+        const heroY = hero.pos.y
+        const isAtCubeLevel = heroY > cubeTop && heroY < cubeBottom + 20
+        //
+        // Check horizontal overlap and push direction
+        //
+        const heroX = hero.pos.x
+        const distanceFromLeft = heroX - cubeLeft
+        const distanceFromRight = cubeRight - heroX
+        //
+        // Simple movement based on hero position
+        //
+        const moveSpeed = 120 * k.dt()  // Faster movement
+        
+        if (isAtCubeLevel) {
+          //
+          // Hero is close to left side and moving right
+          //
+          if (distanceFromLeft > -30 && distanceFromLeft < 5) {
+            if (k.isKeyDown("right") || k.isKeyDown("d")) {
+              cube.pos.x += moveSpeed
+            }
+          }
+          //
+          // Hero is close to right side and moving left
+          //
+          if (distanceFromRight > -30 && distanceFromRight < 5) {
+            if (k.isKeyDown("left") || k.isKeyDown("a")) {
+              cube.pos.x -= moveSpeed
+            }
+          }
+        }
+      }
+    })
     //
     // Create anti-hero
     //
@@ -168,21 +297,15 @@ export function sceneLevel0(k) {
     //
     heroInst.antiHero = antiHeroInst
     //
-    // Debug: Create one large bug on ceiling for testing
+    // Create dust particles in game area only
     //
-    const ceilingY = TOP_MARGIN + 80
-    const debugBug = Bugs.create({
+    const dustInst = Dust.create({ 
       k,
-      x: LEFT_MARGIN + 200,
-      y: ceilingY,
-      hero: heroInst,
-      surface: 'floor',  // Horizontal movement like floor
-      scale: 4,  // 4x larger
       bounds: {
-        minX: LEFT_MARGIN + 20,
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN - 20,
-        minY: ceilingY,
-        maxY: ceilingY
+        left: LEFT_MARGIN,
+        right: CFG.visual.screen.width - RIGHT_MARGIN,
+        top: TOP_MARGIN,
+        bottom: CFG.visual.screen.height - BOTTOM_MARGIN
       }
     })
     //
@@ -190,13 +313,13 @@ export function sceneLevel0(k) {
     // 15 small bugs crawling on bottom platform
     //
     const bugFloorY = CFG.visual.screen.height - BOTTOM_MARGIN - 10
-    const bugs = [debugBug]  // Start with debug bug
+    const bugs = []
     
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 7; i++) {
       //
       // Distribute bugs across the floor
       //
-      const spacing = (CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN - 200) / 14
+      const spacing = (CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN - 200) / 6
       const bugX = LEFT_MARGIN + 100 + i * spacing
       
       bugs.push(Bugs.create({
@@ -206,6 +329,7 @@ export function sceneLevel0(k) {
         hero: heroInst,
         surface: 'floor',
         scale: 1,  // Normal size
+        sfx: sound,
         bounds: {
           minX: LEFT_MARGIN + 20,
           maxX: CFG.visual.screen.width - RIGHT_MARGIN - 20,
@@ -215,17 +339,34 @@ export function sceneLevel0(k) {
       }))
     }
     //
-    // Update bugs
+    // Update bugs and dust
     //
     k.onUpdate(() => {
       bugs.forEach(bug => Bugs.onUpdate(bug, k.dt()))
+      Dust.onUpdate(dustInst, k.dt())
     })
     //
-    // Draw bugs
+    // Draw dust in front of hero but behind platforms
     //
-    k.onDraw(() => {
-      bugs.forEach(bug => Bugs.draw(bug))
-    })
+    k.add([
+      k.z(CFG.visual.zIndex.player + 3),  // Between hero (10) and platforms (15)
+      {
+        draw() {
+          Dust.draw(dustInst)
+        }
+      }
+    ])
+    //
+    // Draw bugs on top of everything
+    //
+    k.add([
+      k.z(CFG.visual.zIndex.ui - 1),  // Just below UI layer
+      {
+        draw() {
+          bugs.forEach(bug => Bugs.draw(bug))
+        }
+      }
+    ])
     //
     // Return to menu on ESC
     //

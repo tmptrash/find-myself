@@ -420,10 +420,11 @@ function updateLegs(inst, dt) {
           idealX = bodyFrontX + (movingRight ? minFrontDistance : -minFrontDistance)
         } else if (isBackLeg) {
           //
-          // Back legs: closer to body back edge (not dragging behind)
+          // Back legs: position near center of body (not back edge!)
+          // This keeps them closer and makes them step more frequently
           //
-          const minBackDistance = reach * 0.2  // Reduced from 0.5 to keep closer
-          idealX = bodyBackX + (movingRight ? -minBackDistance : minBackDistance)
+          const backLegOffset = reach * 0.5  // Distance from body center
+          idealX = inst.x + (movingRight ? -backLegOffset : backLegOffset)
         }
         
         idealY = floorY  // Same Y for all legs on floor
@@ -442,9 +443,12 @@ function updateLegs(inst, dt) {
       const footDist = Math.sqrt(footDx * footDx + footDy * footDy)
       //
       // Check if leg needs to step (diagonal gait sequence)
-      // Each leg steps in specific order with delays
+      // Back legs step much earlier to avoid dragging
       //
-      if (!leg.isStepping && footDist > STEP_DISTANCE * inst.scale) {
+      const isBackLeg = (inst.vx > 0 && (i === 0 || i === 1)) || (inst.vx < 0 && (i === 2 || i === 3))
+      const stepThreshold = isBackLeg ? STEP_DISTANCE * inst.scale * 0.25 : STEP_DISTANCE * inst.scale
+      
+      if (!leg.isStepping && footDist > stepThreshold) {
         //
         // Find position of this leg in step sequence
         //

@@ -168,11 +168,29 @@ export function sceneLevel0(k) {
     //
     heroInst.antiHero = antiHeroInst
     //
+    // Debug: Create one large bug on ceiling for testing
+    //
+    const ceilingY = TOP_MARGIN + 80
+    const debugBug = Bugs.create({
+      k,
+      x: LEFT_MARGIN + 200,
+      y: ceilingY,
+      hero: heroInst,
+      surface: 'floor',  // Horizontal movement like floor
+      scale: 4,  // 4x larger
+      bounds: {
+        minX: LEFT_MARGIN + 20,
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN - 20,
+        minY: ceilingY,
+        maxY: ceilingY
+      }
+    })
+    //
     // Create bugs on the floor
     // 15 small bugs crawling on bottom platform
     //
     const bugFloorY = CFG.visual.screen.height - BOTTOM_MARGIN - 10
-    const bugs = []
+    const bugs = [debugBug]  // Start with debug bug
     
     for (let i = 0; i < 15; i++) {
       //

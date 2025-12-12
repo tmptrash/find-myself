@@ -1,4 +1,3 @@
-import { CFG } from '../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'

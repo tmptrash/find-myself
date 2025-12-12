@@ -1,5 +1,4 @@
 import { CFG } from '../cfg.js'
-import { CFG as WORD_CFG } from '../sections/word/cfg.js'
 import { getColor } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
@@ -59,8 +58,6 @@ const SCATTER_DISTANCE_MAX = 160
 //
 // Spider configuration
 //
-const SPIDER_COUNT = 25
-const SPIDER_BODY_SIZE = 7
 const SPIDER_LEG_LENGTH_1 = 22  // First segment length
 const SPIDER_LEG_LENGTH_2 = 28  // Second segment length
 const SPIDER_SPEED = 60
@@ -70,8 +67,6 @@ const SPIDER_SMOOTHING = 2.0
 const SPIDER_APPEAR_DELAY = 2.0    // Seconds before spiders start appearing
 const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
 const SPIDER_MAX_OPACITY = 0.45    // Maximum opacity when fully visible
-const SPIDER_COLOR = '#3A4A5A'
-const SPIDER_LEG_FADE_DURATION = 2.0  // Seconds for legs to fully appear
 const SPIDER_STEP_DISTANCE = 40    // Distance before leg takes a step
 //
 // Title flicker configuration

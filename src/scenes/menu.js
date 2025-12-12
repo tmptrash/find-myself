@@ -8,6 +8,24 @@ import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
 
 /**
+ * Convert section name to plural for display
+ * @param {string} section - Section name in singular
+ * @returns {string} Section name in plural
+ */
+function getSectionDisplayName(section) {
+  const pluralMap = {
+    'word': 'words',
+    'touch': 'touches',
+    'feel': 'feels',
+    'mind': 'mind',
+    'stress': 'stress',
+    'time': 'time'
+  }
+  
+  return pluralMap[section] || section
+}
+
+/**
  * Menu scene with hero in center
  * @param {Object} k - Kaplay instance
  */
@@ -245,13 +263,14 @@ export function sceneMenu(k) {
       antiHeroes.push(antiHeroInst)
       
       //
-      // Add section label below anti-hero
+      // Add section label below anti-hero (in plural form for display)
       //
+      const displayName = getSectionDisplayName(config.section)
       const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
       const labelPosX = config.x
       const labelPosY = config.y + 50
       const label = k.add([
-        k.text(config.section, { size: 18 }),
+        k.text(displayName, { size: 18 }),
         k.pos(labelPosX, labelPosY),
         k.anchor("center"),
         k.color(labelColor.r, labelColor.g, labelColor.b),
@@ -265,7 +284,7 @@ export function sceneMenu(k) {
       ]
       const labelOutlines = outlineOffsets.map(offset => {
         const outlineNode = k.add([
-          k.text(config.section, { size: 18 }),
+          k.text(displayName, { size: 18 }),
           k.pos(labelPosX + offset.dx, labelPosY + offset.dy),
           k.anchor("center"),
           k.color(0, 0, 0),

@@ -175,9 +175,9 @@ export function onUpdate(inst) {
       flickerValue = Math.pow(Math.sin((phase - Math.PI * 0.3) / 1.7 + Math.PI / 2), 2)
     }
     //
-    // Ensure flickerValue stays in range 0.5 to 1.0 for better visibility
+    // Allow flicker from almost invisible (0.1) to full visibility (1.0)
     //
-    flickerValue = 0.5 + flickerValue * 0.5
+    flickerValue = 0.1 + flickerValue * 0.9
     particle.opacity = inst.baseOpacity * flickerValue
     particle.tremblePhase += (1 + Math.random() * 0.5) * k.dt() * particle.trembleSpeed
     

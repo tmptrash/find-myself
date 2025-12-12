@@ -58,6 +58,10 @@ export function sceneMenu(k) {
     const centerY = 500
     const radius = 302
     //
+    // Create stars for background
+    //
+    const stars = createStars(k, 150)
+    //
     // Create firefly particles background
     //
     const particlesBg = Particles.create({
@@ -314,6 +318,7 @@ export function sceneMenu(k) {
       hero,
       sound,
       particlesBg,
+      stars,  // Add stars to instance
       title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
@@ -1094,11 +1099,34 @@ function getSectionFromLevel(levelName) {
 }
 
 /**
+ * Create stars for background
+ * @param {Object} k - Kaplay instance
+ * @param {number} count - Number of stars
+ * @returns {Array} Array of star objects
+ */
+function createStars(k, count) {
+  const stars = []
+  
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * k.width(),
+      y: Math.random() * k.height(),
+      size: 0.5 + Math.random() * 1.5,  // Star size 0.5-2px
+      opacity: 0.3 + Math.random() * 0.4,  // Opacity 0.3-0.7
+      twinkleSpeed: 0.5 + Math.random() * 1.5,  // Twinkle speed
+      twinklePhase: Math.random() * Math.PI * 2  // Random start phase
+    })
+  }
+  
+  return stars
+}
+
+/**
  * Draw background scene
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg } = inst
+  const { k, hero, hoveredAntiHero, particlesBg, stars } = inst
   
   //
   // Draw gray background (same color as level platforms)
@@ -1109,6 +1137,22 @@ function drawScene(inst) {
     height: k.height(),
     pos: k.vec2(0, 0),
     color: k.rgb(bgRgb.r, bgRgb.g, bgRgb.b)
+  })
+  
+  //
+  // Draw stars with twinkling effect
+  //
+  stars.forEach(star => {
+    star.twinklePhase += star.twinkleSpeed * k.dt()
+    const twinkle = 0.5 + Math.sin(star.twinklePhase) * 0.5  // 0 to 1
+    const currentOpacity = star.opacity * twinkle
+    
+    k.drawCircle({
+      pos: k.vec2(star.x, star.y),
+      radius: star.size,
+      color: k.rgb(255, 255, 255),
+      opacity: currentOpacity
+    })
   })
   
   //

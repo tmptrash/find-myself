@@ -253,7 +253,7 @@ function handleCollision(inst) {
   if (inst.onHit) {
     inst.onHit(inst)
   } else {
-    Hero.death(inst.hero, () => inst.k.go(inst.currentLevel))
+  Hero.death(inst.hero, () => inst.k.go(inst.currentLevel))
   }
 }
 

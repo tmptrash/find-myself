@@ -1,220 +1,55 @@
 import { CFG } from '../cfg.js'
 import { initScene } from '../utils/scene.js'
-import * as Hero from '../../../components/hero.js'
+import { getColor } from '../../../utils/helper.js'
+import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
-import * as MovingPlatform from '../../../components/moving-platform.js'
-import * as BladeArm from '../components/blade-arm.js'
+import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
+// Level 3 has narrower playable area (exactly hero jump height)
 //
-const PLATFORM_TOP_HEIGHT = 360      // Top platform height (33.3% of 1080)
-const PLATFORM_BOTTOM_HEIGHT = 360   // Bottom platform height (33.3% of 1080)
+const PLATFORM_TOP_HEIGHT = 475      // Top platform height (44% of 1080)
+const PLATFORM_BOTTOM_HEIGHT = 475   // Bottom platform height (44% of 1080)
 const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
 
 //
 // Hero spawn positions (in pixels)
 //
-const HERO_SPAWN_X_BASE = 576   // 30% of 1920 (base position before shift)
-const HERO_SPAWN_Y = 691        // 64% of 1080
-const ANTIHERO_SPAWN_X = 1690   // 88% of 1920
-const ANTIHERO_SPAWN_Y = 691    // 64% of 1080
-
-//
-// Death messages for level 3
-//
-const DEATH_MESSAGES = [
-  "Some words strike first.",
-  "Not every word waits to hurt you.",
-  "Sharp words move faster than you think.",
-  "Watch your step — and your words.",
-  "Words hit harder when you're running."
-]
-
-/**
- * Show death message and restart level after delay
- * @param {Object} k - Kaplay instance
- * @param {Object} hero - Hero instance
- * @param {Object} bladesInst - Blades instance (optional)
- * @param {Object} bladeArmInst - Blade arm instance (optional)
- */
-function showDeathMessage(k, hero, bladesInst, bladeArmInst = null) {
-  //
-  // Select random message
-  //
-  const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
-  const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
-  
-  //
-  // Create message text
-  //
-  const messageText = k.add([
-    k.text(message, {
-      size: 32,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, messageY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Steel blue (blade color)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 20)
-  ])
-  
-  let timer = 0
-  let phase = 'fade_in'
-  let restartTriggered = false
-  
-  //
-  // Restart level function
-  //
-  const restartLevel = () => {
-    if (restartTriggered) return
-    restartTriggered = true
-    //
-    // Reset blade arm state if provided
-    //
-    if (bladeArmInst) {
-      bladeArmInst.heroIsDead = false
-    }
-    k.destroy(messageText)
-    k.go("level-word.3")
-  }
-  
-  //
-  // Show blades and trigger death animation with particles
-  //
-  if (bladesInst) {
-    bladesInst.wasShownOnDeath = true  // Stop glint animation on death
-    Blades.show(bladesInst)
-  }
-  Hero.death(hero, () => {
-    // Death animation with particles will play
-  })
-  
-  //
-  // Update animation phases
-  //
-  const updateInterval = k.onUpdate(() => {
-    timer += k.dt()
-    
-    if (phase === 'fade_in') {
-      const progress = Math.min(1, timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = progress
-      if (progress >= 1) {
-        phase = 'hold'
-        timer = 0
-      }
-    } else if (phase === 'hold') {
-      if (timer >= CFG.visual.deathMessage.duration) {
-        phase = 'fade_out'
-        timer = 0
-      }
-    } else if (phase === 'fade_out') {
-      const progress = Math.min(1, timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = 1 - progress
-      if (progress >= 1) {
-        updateInterval.cancel()
-        restartLevel()
-      }
-    }
-  })
-  
-  //
-  // Allow user to skip message with key press or click
-  //
-  k.onKeyPress(["space", "enter"], () => {
-    updateInterval.cancel()
-    restartLevel()
-  })
-  k.onClick(() => {
-    updateInterval.cancel()
-    restartLevel()
-  })
-}
-
+const HERO_SPAWN_X = 230    // 12% of 1920
+const HERO_SPAWN_Y = 562    // 52% of 1080 (higher due to narrower pit)
+const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
+const ANTIHERO_SPAWN_Y = 562   // 52% of 1080
 
 export function sceneLevel3(k) {
   k.scene("level-word.3", () => {
-    // Calculate hero position shifted right by 3 blade widths
-    const singleBladeWidth = Blades.getSingleBladeWidth(k)
-    const customHeroX = HERO_SPAWN_X_BASE + singleBladeWidth * 3  // Shift right by 3 pyramids
-    const leftX = Math.min(customHeroX, ANTIHERO_SPAWN_X)
-    const rightX = Math.max(customHeroX, ANTIHERO_SPAWN_X)
-    const distance = rightX - leftX
-    
-    // Moving platforms at 1/3 and 2/3 distance
-    const bladeWidth = Blades.getBladeWidth(k)
-    const movingPlatform1X = leftX + distance / 3  // First platform at 1/3 distance
-    const movingPlatform2X = leftX + distance * 2 / 3  // Second platform at 2/3 distance
-    
-    //
-    // Define platform gaps
-    //
-    const platformGaps = [
-      // First gap for first moving platform (special jump-to-disable)
-      {
-        x: movingPlatform1X - bladeWidth / 2,
-        width: bladeWidth
-      },
-      // Second gap for second moving platform (normal timer-based)
-      {
-        x: movingPlatform2X - bladeWidth / 2,
-        width: bladeWidth
-      }
-    ]
-    
-    // Initialize level with heroes and TWO gaps in platform
+    // Initialize level with heroes (skip standard platforms)
     const { sound, hero, antiHero } = initScene({
       k,
       levelName: 'level-word.3',
       levelNumber: 4,  // Show 4 red blades in indicator
       nextLevel: 'level-word.4',
+      skipPlatforms: true,
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
-      subTitle: "when feelings grow dull, words become sharper",
+      subTitle: "words are blades that leave invisible wounds",
       subTitleColor: CFG.visual.colors.blades,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
-      heroX: customHeroX,  // Custom hero position (shifted right by 3 pyramids)
+      heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
-      antiHeroY: ANTIHERO_SPAWN_Y,
-      platformGap: platformGaps
+      antiHeroY: ANTIHERO_SPAWN_Y
     })
     
-    //
-    // Calculate platform boundaries for flying words
-    //
-    const platformBounds = {
-      left: PLATFORM_SIDE_WIDTH,
-      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
-      top: PLATFORM_TOP_HEIGHT,
-      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
-    }
+    // Create custom platforms with pit in the middle
+    const pitInfo = createCustomPlatforms(k, CFG.visual.colors.platform)
     
     //
-    // Create blade arm first (needed for death callbacks)
-    //
-    const bottomPlatformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT  // 720
-    const heroHalfHeight = 37  // Half of hero's height
-    const textY = bottomPlatformY - heroHalfHeight - 15    // Text at mid-body height above bottom platform, raised by 30px
-    const bladeArm = BladeArm.create({
-      k,
-      y: textY,
-      hero,
-      currentLevel: 'level-word.3',
-      sfx: sound,
-      onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst)  // Custom death callback
-    })
-    
-    //
-    // Create flying words for atmosphere
+    // Create flying words for atmosphere (constrained to narrow pit area between walls)
     //
     const flyingWords = FlyingWords.create({
       k,
@@ -222,15 +57,21 @@ export function sceneLevel3(k) {
       currentLevel: 'level-word.3',
       onDeath: () => {
         //
-        // Stop blade arm movement
+        // No death messages in level 3 - just direct restart
         //
-        bladeArm.heroIsDead = true
-        showDeathMessage(k, hero, null, bladeArm)
+        import('../../../components/hero.js').then(Hero => {
+          Hero.death(hero, () => k.go('level-word.3'))
+        })
       },
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
-      customBounds: platformBounds,
+      customBounds: {
+        left: PLATFORM_SIDE_WIDTH + 20,
+        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH - 20,
+        top: PLATFORM_TOP_HEIGHT,
+        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+      },
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 4  // Level 3: 6 killer letters
+      killerLetterCount: 5  // Level 3: 5 killer letters
     })
     
     //
@@ -238,7 +79,12 @@ export function sceneLevel3(k) {
     //
     const wordPile = WordPile.create({
       k,
-      customBounds: platformBounds
+      customBounds: {
+        left: PLATFORM_SIDE_WIDTH,
+        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
+        top: PLATFORM_TOP_HEIGHT,
+        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+      }
     })
     
     //
@@ -248,105 +94,279 @@ export function sceneLevel3(k) {
       FlyingWords.onUpdate(flyingWords)
     })
     
-    //
-    // Create word grass on bottom platform (no static blades on this level)
-    //
-    const wordGrass = WordGrass.create({
-      k,
-      customBounds: platformBounds,
-      hero,
-      bladePositions: [],  // No static blades on this level
-      platformGaps,  // Pass the gaps so grass doesn't spawn over them
-      movingPlatformPositions: [movingPlatform1X, movingPlatform2X]  // Two moving platforms
-    })
+    // Create bottom of the pit (platform at pit depth)
+    const heroHeight = CFG.visual.screen.height * 0.08  // Approximate hero height (8% of screen)
+    const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
+    const pitBottomY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + pitDepth
     
-    //
-    // Update word grass animation
-    //
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
-    })
+    // Create pit bottom platform
+    k.add([
+      k.rect(pitInfo.width, k.height() - pitBottomY),
+      k.pos(pitInfo.centerX - pitInfo.width / 2, pitBottomY),
+      k.area(),
+      k.body({ isStatic: true }),
+      getColor(k, CFG.visual.colors.platform),
+      CFG.game.platformName
+    ])
     
-    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+    // Create blades at the bottom of the pit (pointing up)
     const bladeHeight = Blades.getBladeHeight(k)
-    
-    // Create first special moving platform (jump-to-disable mode)
-    MovingPlatform.create({
+    const bladeWidth = Blades.getBladeWidth(k)
+    const pitBlades = Blades.create({
       k,
-      x: movingPlatform1X,
-      y: platformY,
-      hero,
-      color: CFG.visual.colors.platform,
-      currentLevel: 'level-word.3',
-      jumpToDisableBlades: true,  // Special mode: jump down to disable blades
-      autoOpen: true,  // Auto-open on level start
-      sfx: sound,
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm)  // Custom death callback
-    })
-    
-    // Create second normal moving platform (timer-based mode)
-    MovingPlatform.create({
-      k,
-      x: movingPlatform2X,
-      y: platformY,
-      hero,
-      color: CFG.visual.colors.platform,
-      currentLevel: 'level-word.3',
-      jumpToDisableBlades: false,  // Normal mode: timer-based (5 seconds)
-      autoOpen: false,  // Triggered by hero proximity
-      sfx: sound,
-      raiseTimeout: 6.0,  // Close 1 second later than default (4 seconds)
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm)  // Custom death callback
-    })
-    //
-    // Create static blades after first pit to prevent jumping over
-    //
-    const firstPitRightEdge = movingPlatform1X + bladeWidth / 2
-    const staticBladesX = firstPitRightEdge + singleBladeWidth * 2  // Position 2 pyramids after pit
-    const staticBladesY = platformY - bladeHeight * 0.5  // Extend up from platform level
-    //
-    // Create tall static blades (always visible, prevent jumping over pit)
-    //
-    const staticBlades = Blades.create({
-      k,
-      x: staticBladesX,
-      y: staticBladesY,
+      x: pitInfo.centerX,
+      y: pitBottomY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades, bladeArm),
-      sfx: sound,
-      color: CFG.visual.colors.blades,
-      disableAnimation: true  // Disable vibration and glint
+      onHit: () => Blades.handleCollision(pitBlades, "level-word.3"),
+      sfx: sound
     })
-    //
-    // Make blades visible immediately
-    //
-    Blades.show(staticBlades)
-    //
-    // Create static blades after second pit to prevent jumping over
-    //
-    const secondPitRightEdge = movingPlatform2X + bladeWidth / 2
-    const staticBlades2X = secondPitRightEdge + singleBladeWidth * 2  // Position 2 pyramids after pit
-    const staticBlades2Y = platformY - bladeHeight * 0.5  // Extend up from platform level
-    //
-    // Create tall static blades (always visible, prevent jumping over pit)
-    //
-    const staticBlades2 = Blades.create({
+    pitBlades.blade.opacity = 1
+    
+    // Create 3 blades (left floor, center ceiling, right floor)
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+    const floorBladeY = platformY - bladeHeight * 1.2  // Extend up from floor
+    const ceilingBladeY = PLATFORM_TOP_HEIGHT + bladeHeight * 1.2  // Extend down from ceiling
+    
+    // Left blade (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
+    const leftBladeX = pitInfo.centerX - pitInfo.width / 2 - bladeWidth * 2.5
+    const hiddenY1 = platformY + bladeHeight * 2  // Hidden deep below platform
+    const blades1 = Blades.create({
       k,
-      x: staticBlades2X,
-      y: staticBlades2Y,
+      x: leftBladeX,
+      y: hiddenY1,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades2, bladeArm),
+      onHit: () => {
+        blades1.blade.opacity = 1
+        Hero.death(hero, () => k.go("level-word.3"))
+      },
       sfx: sound,
-      color: CFG.visual.colors.blades,
-      disableAnimation: true  // Disable vibration and glint
+      disableAnimation: true,  // Disable vibration and glint for moving blades
+      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
     })
-    //
-    // Make second blades visible immediately
-    //
-    Blades.show(staticBlades2)
+    blades1.blade.opacity = 1
     
-    // Eerie sound effects removed for cleaner audio experience
+    // Center blade (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
+    const hiddenY2 = PLATFORM_TOP_HEIGHT - bladeHeight * 2  // Hidden deep above platform
+    const blades2 = Blades.create({
+      k,
+      x: pitInfo.centerX,
+      y: hiddenY2,
+      hero,
+      orientation: Blades.ORIENTATIONS.CEILING,
+      onHit: () => {
+        blades2.blade.opacity = 1
+        Hero.death(hero, () => k.go("level-word.3"))
+      },
+      sfx: sound,
+      disableAnimation: true,  // Disable vibration and glint for moving blades
+      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
+    })
+    blades2.blade.opacity = 1
+    
+    // Right blade (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
+    const rightBladeX = pitInfo.centerX + pitInfo.width / 2 + bladeWidth * 1.5
+    const hiddenY3 = platformY + bladeHeight * 2  // Hidden deep below platform
+    const blades3 = Blades.create({
+      k,
+      x: rightBladeX,
+      y: hiddenY3,
+      hero,
+      orientation: Blades.ORIENTATIONS.FLOOR,
+      onHit: () => {
+        blades3.blade.opacity = 1
+        Hero.death(hero, () => k.go("level-word.3"))
+      },
+      sfx: sound,
+      disableAnimation: true,  // Disable vibration and glint for moving blades
+      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
+    })
+    blades3.blade.opacity = 1
+    
+    // Scene instance with state
+    const inst = {
+      k,
+      sound,
+      soundTimer: k.rand(3, 6),
+      // Blade animation state
+      blades1,
+      blades2,
+      blades3,
+      targetY1: hiddenY1,      // Hidden position (retracted)
+      visibleY1: floorBladeY,  // Visible position (extended)
+      targetY2: hiddenY2,      // Hidden position (retracted up)
+      visibleY2: ceilingBladeY, // Visible position (extended down)
+      targetY3: hiddenY3,      // Hidden position (retracted)
+      visibleY3: floorBladeY,  // Visible position (extended)
+      blade1State: 'waiting',
+      blade2State: 'waiting',
+      blade3State: 'waiting',
+      animationTimer: 0,
+      cycleTimer: 0,
+      animationSpeed: 0.15,   // Seconds for extend/retract (slower blade movement)
+      bladeDelay: 0.12,      // Seconds between blades (pause between blade1->blade2 and blade2->blade3)
+      cycleDelay: 0.12       // Seconds after last blade before restart
+    }
+    
+    // Start blade animation after 0.5 second
+    k.wait(0.5, () => {
+      inst.blade1State = 'extending'
+      inst.animationTimer = 0
+      sound && Sound.playBladeSound(sound)
+    })
+    
+    // Setup blade animation (eerie sound effects removed)
+    k.onUpdate(() => {
+      updateBladesAnimation(inst)
+    })
   })
 }
+
+/**
+ * Update blades animation (cycle: extend, retract, repeat)
+ * @param {Object} inst - Scene instance
+ */
+function updateBladesAnimation(inst) {
+  const { k, blades1, blades2, blades3, targetY1, visibleY1, targetY2, visibleY2, targetY3, visibleY3, animationSpeed, sound } = inst
+  
+  inst.animationTimer += k.dt()
+  inst.cycleTimer += k.dt()
+  
+  // SPIKE 1 STATE MACHINE (Left blades - first)
+  if (inst.blade1State === 'extending') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    blades1.blade.pos.y = targetY1 + (visibleY1 - targetY1) * progress
+    
+    if (progress >= 1) {
+      blades1.blade.pos.y = visibleY1
+      inst.blade1State = 'retracting'
+      inst.animationTimer = 0
+    }
+  } else if (inst.blade1State === 'retracting') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    blades1.blade.pos.y = visibleY1 + (targetY1 - visibleY1) * progress
+    
+    if (progress >= 1) {
+      blades1.blade.pos.y = targetY1
+      inst.blade1State = 'waiting-for-blade3'
+      inst.animationTimer = 0
+    }
+  } else if (inst.blade1State === 'waiting-for-blade3') {
+    if (inst.animationTimer >= inst.bladeDelay) {
+      inst.blade3State = 'extending'
+      inst.blade1State = 'blade3-active'
+      inst.animationTimer = 0
+      sound && Sound.playBladeSound(sound)
+    }
+  }
+  
+  // SPIKE 2 STATE MACHINE (Center blades - third/last)
+  if (inst.blade2State === 'extending') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    blades2.blade.pos.y = targetY2 + (visibleY2 - targetY2) * progress
+    
+    if (progress >= 1) {
+      blades2.blade.pos.y = visibleY2
+      inst.blade2State = 'retracting'
+      inst.animationTimer = 0
+    }
+  } else if (inst.blade2State === 'retracting') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    blades2.blade.pos.y = visibleY2 + (targetY2 - visibleY2) * progress
+    
+    if (progress >= 1) {
+      blades2.blade.pos.y = targetY2
+      inst.blade2State = 'cycle-complete'
+      inst.blade1State = 'cycle-complete'
+      inst.blade3State = 'cycle-complete'
+      inst.animationTimer = 0
+      inst.cycleTimer = 0
+    }
+  }
+  
+  // SPIKE 3 STATE MACHINE (Right blades - second)
+  if (inst.blade3State === 'extending') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    blades3.blade.pos.y = targetY3 + (visibleY3 - targetY3) * progress
+    
+    if (progress >= 1) {
+      blades3.blade.pos.y = visibleY3
+      inst.blade3State = 'retracting'
+      inst.animationTimer = 0
+    }
+  } else if (inst.blade3State === 'retracting') {
+    const progress = Math.min(1, inst.animationTimer / animationSpeed)
+    blades3.blade.pos.y = visibleY3 + (targetY3 - visibleY3) * progress
+    
+    if (progress >= 1) {
+      blades3.blade.pos.y = targetY3
+      inst.blade3State = 'waiting-for-blade2'
+      inst.animationTimer = 0
+    }
+  } else if (inst.blade3State === 'waiting-for-blade2') {
+    if (inst.animationTimer >= inst.bladeDelay) {
+      inst.blade2State = 'extending'
+      inst.blade3State = 'blade2-active'
+      inst.animationTimer = 0
+      sound && Sound.playBladeSound(sound)
+    }
+  }
+  
+  // RESTART CYCLE after delay
+  if (inst.blade1State === 'cycle-complete' && inst.cycleTimer >= inst.cycleDelay) {
+    inst.cycleTimer = 0
+    inst.animationTimer = 0
+    blades1.blade.pos.y = targetY1
+    blades2.blade.pos.y = targetY2
+    blades3.blade.pos.y = targetY3
+    inst.blade1State = 'extending'
+    inst.blade2State = 'waiting'
+    inst.blade3State = 'waiting'
+    
+    sound && Sound.playBladeSound(sound)
+  }
+}
+
+/**
+ * Create custom platforms with a pit in the middle
+ * @param {Object} k - Kaplay instance
+ * @param {String} color - Platform color
+ * @returns {Object} Pit information (centerX, width)
+ */
+function createCustomPlatforms(k, color) {
+  // Calculate pit dimensions (same width as blades)
+  const pitWidth = Blades.getBladeWidth(k)
+  const centerX = CFG.visual.screen.width / 2
+  const pitLeft = centerX - pitWidth / 2
+  const pitRight = centerX + pitWidth / 2
+  
+  function createPlatform(x, y, width, height) {
+    return k.add([
+      k.rect(width, height),
+      k.pos(x, y),
+      k.area(),
+      k.body({ isStatic: true }),
+      getColor(k, color),
+      CFG.game.platformName
+    ])
+  }
+  
+  // Top platform (full width)
+  createPlatform(0, 0, CFG.visual.screen.width, PLATFORM_TOP_HEIGHT)
+  
+  // Bottom platform - LEFT side (before pit)
+  createPlatform(0, CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT, pitLeft, PLATFORM_BOTTOM_HEIGHT)
+  
+  // Bottom platform - RIGHT side (after pit)
+  createPlatform(pitRight, CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT, CFG.visual.screen.width - pitRight, PLATFORM_BOTTOM_HEIGHT)
+  
+  // Left wall
+  createPlatform(0, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.visual.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
+  
+  // Right wall
+  createPlatform(CFG.visual.screen.width - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT, PLATFORM_SIDE_WIDTH, CFG.visual.screen.height - PLATFORM_TOP_HEIGHT - PLATFORM_BOTTOM_HEIGHT)
+  
+  return { centerX, width: pitWidth }
+}
+

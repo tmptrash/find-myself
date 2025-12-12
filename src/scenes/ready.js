@@ -18,20 +18,12 @@ const INSTRUCTIONS_TITLE = `Find Myself`
 const INSTRUCTIONS_TEXT_LINES = [
   { text: 'is a game about discovering who you are while life keeps changing', normal: true },
   { text: 'your plans. Here, life is the one setting traps. It shifts the ground,', normal: true },
-  { text: 'turns words into threats, twists logic, and pushes you into mistakes', normal: true },
-  { text: '— not to harm you, but to teach you.', normal: true },
+  { text: 'twists logic, and pushes you into mistakes — not to harm you, but to', normal: true },
+  { text: 'teach you.', normal: true },
   { text: '', normal: true },
-  { text: 'Each level is a tiny reflection of your inner world: ', normal: true, inline: true },
-  { text: 'words that cut,', important: true, sameLine: true },
-  { text: 'time that pressures, memory that slips, feelings that deceive.', important: true },
-  { text: '', normal: true },
-  { text: 'After every level, you understand yourself a little better.', normal: true },
-  { text: 'After every section, you uncover one of your facets — word, time,', normal: true },
-  { text: 'memory, and more.', normal: true },
-  { text: 'Your goal is simple and difficult: ', normal: true, inline: true },
-  { text: 'find yourself', important: true, sameLine: true, inline: true },
-  { text: ' — the part hiding', important: true, sameLine: true },
-  { text: 'in every distorted reality.', important: true },
+  { text: 'In each world, you search for another "you" — a reflection shaped by', normal: true },
+  { text: 'the very forces you\'re learning to face. Reaching them means meeting', normal: true },
+  { text: 'yourself honestly.', normal: true },
   { text: '', normal: true },
   { text: 'Life will confuse you. You will fall. ', normal: true, inline: true },
   { text: 'But each fall brings you', important: true, sameLine: true },
@@ -167,7 +159,7 @@ export function sceneReady(k) {
     const titleSize = 54
     const lineHeight = INSTRUCTIONS_LINE_HEIGHT
     const titleX = instructionsTextMargin + 50  // Left aligned with margin
-    const titleY = 180  // Top position
+    const titleY = 280  // Top position (centered)
     
     //
     // Title "Find Myself" in red (top left)

@@ -234,6 +234,8 @@ export function sceneMenu(k) {
         })
       }
       
+      // Temporarily disabled touch section
+      /*
       if (config.section === 'touch' && !isCompleted) {
         antiHeroInst.character.onClick(() => {
           //
@@ -263,6 +265,7 @@ export function sceneMenu(k) {
           k.go('level-touch.0')
         })
       }
+      */
       
       antiHeroes.push(antiHeroInst)
       
@@ -440,7 +443,8 @@ export function sceneMenu(k) {
       //
       if (!inst.isLeavingScene) {
         if (hoveredInst) {
-          const isImplementedSection = (hoveredInst.section === 'word' || hoveredInst.section === 'touch')
+          // Only word section is clickable for now (touch temporarily disabled)
+          const isImplementedSection = (hoveredInst.section === 'word')
           if (isImplementedSection && !hoveredInst.isCompleted) {
             k.canvas.classList.add('cursor-pointer')
           } else {

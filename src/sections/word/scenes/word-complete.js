@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import * as Sound from '../../../utils/sound.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 
@@ -15,6 +16,12 @@ export function sceneWordComplete(k) {
   k.scene("word-complete", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
+    
+    //
+    // Create sound instance and stop background music
+    //
+    const sound = Sound.create()
+    Sound.stopBackgroundMusic(sound)
     
     //
     // Create black background

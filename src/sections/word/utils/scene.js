@@ -196,6 +196,10 @@ export function initScene(config) {
   const bgColor = backgroundColor || CFG.visual.colors.background
   const pfColor = platformColor || CFG.visual.colors.platform
   //
+  // Reset background color to black (in case coming from time section)
+  //
+  k.setBackground(k.Color.fromHex("#000000"))
+  //
   // Set gravity
   //
   k.setGravity(CFG.game.gravity)

@@ -6,6 +6,7 @@ import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import { saveLastLevel } from '../../../utils/progress.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -25,6 +26,10 @@ const ANTIHERO_SPAWN_Y = 562   // 52% of 1080
 
 export function sceneLevel3(k) {
   k.scene("level-word.3", () => {
+    //
+    // Save progress immediately when entering this level
+    //
+    saveLastLevel('level-word.3')
     // Initialize level with heroes (skip standard platforms)
     const { sound, hero, antiHero } = initScene({
       k,

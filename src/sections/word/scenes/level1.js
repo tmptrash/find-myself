@@ -6,6 +6,7 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
+import { saveLastLevel } from '../../../utils/progress.js'
 
 //
 // Death messages (shown randomly on death)
@@ -167,6 +168,10 @@ function showDeathMessage(k, hero, bladesInst) {
 
 export function sceneLevel1(k) {
   k.scene("level-word.1", () => {
+    //
+    // Save progress immediately when entering this level
+    //
+    saveLastLevel('level-word.1')
     //
     // Calculate moving platform position and gap
     //

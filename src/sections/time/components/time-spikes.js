@@ -108,10 +108,10 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     )
   } else {
     //
-    // Fake spikes have no collision and are in front of hero
+    // Fake spikes have no collision and are behind hero
     //
     components.push(
-      k.z(25)  // Above hero (20) and platforms (15)
+      k.z(14)  // Behind hero (20), same as real spikes
     )
   }
   

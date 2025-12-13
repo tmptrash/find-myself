@@ -5,7 +5,7 @@ import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { getProgress } from '../../../utils/progress.js'
+import { getProgress, saveLastLevel } from '../../../utils/progress.js'
 
 //
 // Death messages (shown randomly on death)
@@ -192,6 +192,10 @@ function showDeathMessage(k, hero, bladesInst) {
  */
 export function sceneLevel0(k) {
   k.scene("level-word.0", () => {
+    //
+    // Save progress immediately when entering this level
+    //
+    saveLastLevel('level-word.0')
     //
     // Initialize level with heroes
     //

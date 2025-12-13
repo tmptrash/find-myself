@@ -7,6 +7,7 @@ import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
+import { saveLastLevel } from '../../../utils/progress.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -140,6 +141,10 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null) {
 
 export function sceneLevel4(k) {
   k.scene("level-word.4", () => {
+    //
+    // Save progress immediately when entering this level
+    //
+    saveLastLevel('level-word.4')
     // Calculate hero position shifted right by 3 blade widths
     const singleBladeWidth = Blades.getSingleBladeWidth(k)
     const customHeroX = HERO_SPAWN_X_BASE + singleBladeWidth * 3  // Shift right by 3 pyramids

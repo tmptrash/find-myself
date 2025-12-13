@@ -6,13 +6,14 @@ import { markSectionComplete } from './progress.js'
  * Level transition configuration - maps current level to next level
  */
 const LEVEL_TRANSITIONS = {
-  'menu': 'level-word.0',
+  'menu': 'level-time.0',
   'level-word.0': 'level-word.1',
   'level-word.1': 'level-word.2',
   'level-word.2': 'level-word.3',
   'level-word.3': 'level-word.4',
   'level-word.4': 'word-complete',
-  'word-complete': 'menu'
+  'word-complete': 'menu',
+  'level-time.0': 'menu'
 }
 
 /**
@@ -70,7 +71,8 @@ const LEVEL_SUBTITLES = {
   'level-word.1': "sharp words don't cut - they make you fall",
   'level-word.2': "the words you can't forget hurt the most",
   'level-word.3': 'words that kill',
-  'level-word.4': 'sharp words move fast - so must you'
+  'level-word.4': 'sharp words move fast - so must you',
+  'level-time.0': 'time never waits, and neither should you'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
@@ -198,15 +200,21 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         const subtitle = LEVEL_SUBTITLES[nextLevel] || ''
         
         if (subtitle) {
-          // Get color from next level config (same as title/spikes)
-          let levelColorHex = "#6B8E9F" // Default steel blue
+          //
+          // Get color based on section
+          //
+          let levelColorHex = "#6B8E9F" // Default steel blue (for word section)
           
-          try {
-            if (CFG && CFG.visual.colors && CFG.visual.colors[nextLevel] && CFG.visual.colors[nextLevel].spikes) {
-              levelColorHex = CFG.visual.colors[nextLevel].spikes
-            }
-          } catch (e) {
-            console.warn('Could not get level color, using default:', e)
+          if (nextLevel.startsWith('level-time')) {
+            //
+            // Time section uses medium gray color
+            //
+            levelColorHex = "#808080"
+          } else if (nextLevel.startsWith('level-word')) {
+            //
+            // Word section uses steel blue
+            //
+            levelColorHex = "#6B8E9F"
           }
           
           const rgb = getRGB(k, levelColorHex)

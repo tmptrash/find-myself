@@ -80,6 +80,10 @@ const HINT_Y = 1030
 export function sceneReady(k) {
   k.scene('ready', () => {
     //
+    // Reset background color to black (in case coming from time section)
+    //
+    k.setBackground(k.Color.fromHex("#000000"))
+    //
     // Clean up persistent word-pile objects from previous scenes
     //
     k.get("word-pile-text").forEach(obj => obj.destroy())

@@ -5,6 +5,7 @@ import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as TimeSpikes from '../components/time-spikes.js'
+import { saveLastLevel } from '../../../utils/progress.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -28,6 +29,10 @@ const ANTIHERO_SPAWN_Y = 790
  */
 export function sceneLevel0(k) {
   k.scene("level-time.0", () => {
+    //
+    // Save progress immediately when entering this level
+    //
+    saveLastLevel('level-time.0')
     //
     // Initialize level with heroes and platforms
     //
@@ -77,22 +82,24 @@ export function sceneLevel0(k) {
     Hero.spawn(antiHero)
     //
     // Create time platforms going right and up
-    // Platform 1: left-bottom, above hero
+    // Platform 1: left-bottom, above hero (2 seconds)
     //
     const timePlatform1 = TimePlatform.create({
       k,
       x: 400,
       y: 760,
-      hero
+      hero,
+      duration: 2
     })
     //
-    // Platform 2: middle, higher (closer)
+    // Platform 2: middle, higher (closer, 2 seconds)
     //
     const timePlatform2 = TimePlatform.create({
       k,
       x: 580,
       y: 690,
-      hero
+      hero,
+      duration: 2
     })
     //
     // Platform 3: right, even higher, FAKE (hero passes through)
@@ -113,24 +120,24 @@ export function sceneLevel0(k) {
       y: 720,
     })
     //
-    // Platform 5: 2-second timer, right and up from static platform
+    // Platform 5: 1-second timer, right and up from static platform
     //
     const timePlatform5 = TimePlatform.create({
       k,
       x: 1060,
       y: 650,
       hero,
-      duration: 2
+      duration: 1
     })
     //
-    // Platform 6: 2-second timer, right and up from platform 5
+    // Platform 6: 1-second timer, right and up from platform 5
     //
     const timePlatform6 = TimePlatform.create({
       k,
       x: 1240,
       y: 580,
       hero,
-      duration: 2
+      duration: 1
     })
     //
     // Update all time platforms

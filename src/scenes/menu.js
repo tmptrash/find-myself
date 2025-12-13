@@ -26,11 +26,26 @@ function getSectionDisplayName(section) {
 }
 
 /**
+ * Extract level number from level name
+ * @param {string} levelName - Level name (e.g., 'level-word.2')
+ * @returns {number|null} Level number or null if not found
+ */
+function getLevelNumber(levelName) {
+  if (!levelName) return null
+  const match = levelName.match(/\.(\d+)$/)
+  return match ? parseInt(match[1], 10) : null
+}
+
+/**
  * Menu scene with hero in center
  * @param {Object} k - Kaplay instance
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
+    //
+    // Reset background color to black (in case coming from time section)
+    //
+    k.setBackground(k.Color.fromHex("#000000"))
     //
     // Clean up persistent word-pile objects from previous scenes
     //
@@ -291,9 +306,9 @@ export function sceneMenu(k) {
           kidsMusic.stop()
           
           //
-          // Go directly to time level 0
+          // Show transition to time level 0
           //
-          k.go('level-time.0')
+          showTransitionToLevel(k, 'level-time.0')
         })
       }
       
@@ -303,11 +318,18 @@ export function sceneMenu(k) {
       // Add section label below anti-hero (in plural form for display)
       //
       const displayName = getSectionDisplayName(config.section)
+      //
+      // Add level number if this is the current section (but skip level 0)
+      //
+      const isCurrentSection = currentSection === config.section
+      const levelNumber = isCurrentSection ? getLevelNumber(lastLevel) : null
+      const labelText = (levelNumber !== null && levelNumber > 0) ? `${displayName} ${levelNumber}` : displayName
+      
       const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
       const labelPosX = config.x
       const labelPosY = config.y + 50
       const label = k.add([
-        k.text(displayName, { size: 18 }),
+        k.text(labelText, { size: 18 }),
         k.pos(labelPosX, labelPosY),
         k.anchor("center"),
         k.color(labelColor.r, labelColor.g, labelColor.b),
@@ -321,7 +343,7 @@ export function sceneMenu(k) {
       ]
       const labelOutlines = outlineOffsets.map(offset => {
         const outlineNode = k.add([
-          k.text(displayName, { size: 18 }),
+          k.text(labelText, { size: 18 }),
           k.pos(labelPosX + offset.dx, labelPosY + offset.dy),
           k.anchor("center"),
           k.color(0, 0, 0),
@@ -695,11 +717,11 @@ export function sceneMenu(k) {
         showTransitionToLevel(k, lastLevel)
       } else {
         //
-        // No save - start from beginning with intro phrase
+        // No save - start from time section level 0 with transition
         //
         menuMusic.stop()
         kidsMusic.stop()
-        createLevelTransition(k, 'menu')
+        showTransitionToLevel(k, 'level-time.0')
       }
     })
     
@@ -718,10 +740,10 @@ export function sceneMenu(k) {
       k.canvas.classList.remove('cursor-pointer')
       
       //
-      // Enter always resets progress and starts new game
+      // Enter always starts from time section level 0 with transition
       //
       resetProgress()
-      createLevelTransition(k, 'menu')
+      showTransitionToLevel(k, 'level-time.0')
     })
     
     //

@@ -10,7 +10,7 @@ export const TIME_CFG = {
     // Colors specific to time section (grayscale only)
     //
     colors: {
-      background: "#2A2A2A",         // Dark gray background (almost black)
+      background: "#505050",         // Same as platforms (medium gray)
       platform: "#505050",           // Medium gray platforms
       hero: {
         body: "#C0C0C0",             // Light gray hero (not pure white)

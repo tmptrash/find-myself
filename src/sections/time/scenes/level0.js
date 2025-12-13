@@ -4,6 +4,7 @@ import * as Hero from '../../../components/hero.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
+// Platforms fill entire top and bottom to hide background
 //
 const PLATFORM_TOP_HEIGHT = 360
 const PLATFORM_BOTTOM_HEIGHT = 360

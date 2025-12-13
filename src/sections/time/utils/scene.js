@@ -114,7 +114,6 @@ export function initScene(config) {
  */
 function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null) {
   const platformRgb = getColor(k, color)?.color
-  
   //
   // Top platform
   //

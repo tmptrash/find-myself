@@ -318,12 +318,7 @@ export function sceneMenu(k) {
       // Add section label below anti-hero (in plural form for display)
       //
       const displayName = getSectionDisplayName(config.section)
-      //
-      // Add level number if this is the current section (but skip level 0)
-      //
-      const isCurrentSection = currentSection === config.section
-      const levelNumber = isCurrentSection ? getLevelNumber(lastLevel) : null
-      const labelText = (levelNumber !== null && levelNumber > 0) ? `${displayName} ${levelNumber}` : displayName
+      const labelText = displayName
       
       const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
       const labelPosX = config.x

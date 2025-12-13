@@ -6,7 +6,8 @@ import { markSectionComplete } from './progress.js'
  * Level transition configuration - maps current level to next level
  */
 const LEVEL_TRANSITIONS = {
-  'menu': 'level-time.0',
+  'menu': 'level-word.0',
+  'menu-time': 'level-time.0',
   'level-word.0': 'level-word.1',
   'level-word.1': 'level-word.2',
   'level-word.2': 'level-word.3',
@@ -67,6 +68,7 @@ export function showTransitionToLevel(k, targetLevel) {
 // Subtitles shown BEFORE entering each level (shifted forward by one)
 const LEVEL_SUBTITLES = {
   'menu': '',
+  'menu-time': '',
   'level-word.0': 'words, they cut deeper than blades',
   'level-word.1': "sharp words don't cut - they make you fall",
   'level-word.2': "the words you can't forget hurt the most",

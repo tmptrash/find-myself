@@ -45,7 +45,14 @@ export function sceneLevel0(k) {
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
-      antiHeroY: ANTIHERO_SPAWN_Y
+      antiHeroY: ANTIHERO_SPAWN_Y,
+      onAnnihilation: () => {
+        //
+        // After annihilation, return to menu
+        // TODO: Change to k.go('level-time.1') when level 1 is created
+        //
+        k.go('menu')
+      }
     })
     
     //

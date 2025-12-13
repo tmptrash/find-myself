@@ -52,6 +52,7 @@ export const HEROES = {
  * @param {boolean} [config.controllable=true] - Whether controlled by keyboard
  * @param {Object} [config.sfx] - AudioContext for sound effects
  * @param {Object} [config.antiHero] - Anti-hero instance for annihilation setup
+ * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
  * @param {string} [config.currentLevel] - Current level name for transition
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
  * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
@@ -67,6 +68,7 @@ export function create(config) {
     sfx = null,
     scale = HERO_SCALE,
     antiHero = null,
+    onAnnihilation = null,
     currentLevel = null,
     bodyColor = null,      // Custom body color (hex string)
     outlineColor = null,   // Custom outline color (hex string), defaults to black
@@ -133,6 +135,7 @@ export function create(config) {
     controllable,
     sfx,
     antiHero,
+    onAnnihilation,
     currentLevel,
     bodyColor: effectiveBodyColor,        // Store effective body color (not null)
     spritePrefix,
@@ -1347,7 +1350,14 @@ function onAnnihilationCollide(inst) {
                     saveLastLevel(nextLevel)
                   }
                   inst.character.hidden = true
-                  createLevelTransition(k, inst.currentLevel)
+                  //
+                  // Call onAnnihilation callback if provided, otherwise use default transition
+                  //
+                  if (inst.onAnnihilation) {
+                    inst.onAnnihilation()
+                  } else {
+                    createLevelTransition(k, inst.currentLevel)
+                  }
                 }
               })
             }

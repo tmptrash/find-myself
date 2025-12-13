@@ -34,6 +34,7 @@ function addBackground(k, color) {
  * @param {number} [config.antiHeroX] - Anti-hero X position
  * @param {number} [config.antiHeroY] - Anti-hero Y position
  * @param {Array} [config.platformGap] - Platform gaps configuration
+ * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
  * @returns {Object} Scene instance with sound, hero, and antiHero
  */
 export function initScene(config) {
@@ -48,7 +49,8 @@ export function initScene(config) {
     heroY = null,
     antiHeroX = null,
     antiHeroY = null,
-    platformGap = null
+    platformGap = null,
+    onAnnihilation = null
   } = config
   
   //
@@ -95,7 +97,7 @@ export function initScene(config) {
   // Create heroes if positions provided
   //
   if (heroX !== null && heroY !== null && antiHeroX !== null && antiHeroY !== null) {
-    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY)
+    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
@@ -217,9 +219,10 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
  * @param {number} heroY - Hero Y position
  * @param {number} antiHeroX - Anti-hero X position
  * @param {number} antiHeroY - Anti-hero Y position
+ * @param {Function} onAnnihilation - Callback when hero meets anti-hero
  * @returns {Object} Object with hero and antiHero instances
  */
-function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY) {
+function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation) {
   const antiHeroInst = Hero.create({
     k,
     x: antiHeroX,
@@ -239,7 +242,8 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     controllable: true,
     sfx: sound,
     antiHero: antiHeroInst,
-    onAnnihilation: () => k.go(levelName),
+    onAnnihilation: onAnnihilation || (() => k.go(levelName)),
+    currentLevel: levelName,
     bodyColor: CFG.visual.colors.hero.body,
     outlineColor: CFG.visual.colors.hero.outline
   })

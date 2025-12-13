@@ -308,7 +308,7 @@ export function sceneMenu(k) {
           //
           // Show transition to time level 0
           //
-          showTransitionToLevel(k, 'level-time.0')
+          createLevelTransition(k, 'menu-time')
         })
       }
       
@@ -721,7 +721,7 @@ export function sceneMenu(k) {
         //
         menuMusic.stop()
         kidsMusic.stop()
-        showTransitionToLevel(k, 'level-time.0')
+        createLevelTransition(k, 'menu-time')
       }
     })
     
@@ -743,7 +743,7 @@ export function sceneMenu(k) {
       // Enter always starts from time section level 0 with transition
       //
       resetProgress()
-      showTransitionToLevel(k, 'level-time.0')
+      createLevelTransition(k, 'menu-time')
     })
     
     //

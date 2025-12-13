@@ -10,6 +10,8 @@ import { sceneLevel3 } from "./sections/word/scenes/level3.js"
 import { sceneLevel4 } from "./sections/word/scenes/level4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
 import { sceneLevel0 as sceneTouchLevel0 } from "./sections/touch/scenes/level0.js"
+import { sceneLevel0 as sceneTimeLevel0 } from "./sections/time/scenes/level0.js"
+import { sceneTimeComplete } from "./sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
 //
@@ -20,8 +22,13 @@ const k = kaplay({
   height: CFG.visual.screen.height,
   font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
   letterbox: true,
-  background: parseHex(CFG.visual.colors.background)
+  background: [0, 0, 0]  // Black background as RGB array
 })
+//
+// Force dark background for all elements
+//
+document.documentElement.style.backgroundColor = '#000000'
+document.body.style.backgroundColor = '#000000'
 //
 // Remove default cursor style to allow CSS custom cursor
 //
@@ -58,6 +65,8 @@ sceneLevel3(k)
 sceneLevel4(k)
 sceneWordComplete(k)
 sceneTouchLevel0(k)
+sceneTimeLevel0(k)
+sceneTimeComplete(k)
 //
 // Start game after resources loaded
 // Always show ready screen on page load

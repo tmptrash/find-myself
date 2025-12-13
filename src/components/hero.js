@@ -1557,26 +1557,56 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     rightArmX = 21
   }
   //
-  // Black outline (universal)
+  // Black outline (universal) - pixel-perfect 1px outline
   //
   ctx.fillStyle = getHex(outlineColor)
-  ctx.fillRect(headX - 1, headY - 1, 10, 10)
   //
-  // Body outline - position it right below head
+  // Head outline (8x8 inner, 10x10 outer)
   //
-  ctx.fillRect(bodyX - 1, bodyY - 1, 14, bodyHeight + 2)
+  ctx.fillRect(headX - 1, headY - 1, 10, 1)  // Top
+  ctx.fillRect(headX - 1, headY + 8, 10, 1)  // Bottom
+  ctx.fillRect(headX - 1, headY, 1, 8)  // Left
+  ctx.fillRect(headX + 8, headY, 1, 8)  // Right
+  //
+  // Body outline (12x bodyHeight inner, 14x (bodyHeight+2) outer)
+  //
+  ctx.fillRect(bodyX - 1, bodyY - 1, 14, 1)  // Top
+  ctx.fillRect(bodyX - 1, bodyY + bodyHeight, 14, 1)  // Bottom
+  ctx.fillRect(bodyX - 1, bodyY, 1, bodyHeight)  // Left
+  ctx.fillRect(bodyX + 12, bodyY, 1, bodyHeight)  // Right
   //
   // Arm outlines - don't draw while running and jumping
   //
   if (animation !== 'run' && animation !== 'jump') {
-    ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 9)
-    ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 9)
+    //
+    // Left arm outline (2x7 inner, 4x9 outer)
+    //
+    ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 1)  // Top
+    ctx.fillRect(leftArmX - 1, leftArmY + 7, 4, 1)  // Bottom
+    ctx.fillRect(leftArmX - 1, leftArmY, 1, 7)  // Left
+    ctx.fillRect(leftArmX + 2, leftArmY, 1, 7)  // Right
+    //
+    // Right arm outline (2x7 inner, 4x9 outer)
+    //
+    ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 1)  // Top
+    ctx.fillRect(rightArmX - 1, rightArmY + 7, 4, 1)  // Bottom
+    ctx.fillRect(rightArmX - 1, rightArmY, 1, 7)  // Left
+    ctx.fillRect(rightArmX + 2, rightArmY, 1, 7)  // Right
   }
   //
-  // Leg outlines
+  // Leg outlines (3x legHeight inner, 5x (legHeight+2) outer)
   //
-  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, legHeight + 2)
-  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, legHeight + 2)
+  // Left leg
+  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 1)  // Top
+  ctx.fillRect(leftLegX - 1, leftLegY + legHeight, 5, 1)  // Bottom
+  ctx.fillRect(leftLegX - 1, leftLegY, 1, legHeight)  // Left
+  ctx.fillRect(leftLegX + 3, leftLegY, 1, legHeight)  // Right
+  //
+  // Right leg
+  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 1)  // Top
+  ctx.fillRect(rightLegX - 1, rightLegY + legHeight, 5, 1)  // Bottom
+  ctx.fillRect(rightLegX - 1, rightLegY, 1, legHeight)  // Left
+  ctx.fillRect(rightLegX + 3, rightLegY, 1, legHeight)  // Right
   //
   // Head (universal body color)
   //

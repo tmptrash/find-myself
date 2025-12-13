@@ -267,6 +267,36 @@ export function sceneMenu(k) {
       }
       */
       
+      if (config.section === 'time' && !isCompleted) {
+        antiHeroInst.character.onClick(() => {
+          //
+          // Mark that we're leaving the scene
+          //
+          inst.isLeavingScene = true
+          
+          //
+          // Stop ambient sound
+          //
+          Sound.stopAmbient(sound)
+          
+          //
+          // Reset cursor to default (remove pointer class)
+          //
+          k.canvas.classList.remove('cursor-pointer')
+          
+          //
+          // Stop music
+          //
+          menuMusic.stop()
+          kidsMusic.stop()
+          
+          //
+          // Go directly to time level 0
+          //
+          k.go('level-time.0')
+        })
+      }
+      
       antiHeroes.push(antiHeroInst)
       
       //
@@ -443,8 +473,8 @@ export function sceneMenu(k) {
       //
       if (!inst.isLeavingScene) {
         if (hoveredInst) {
-          // Only word section is clickable for now (touch temporarily disabled)
-          const isImplementedSection = (hoveredInst.section === 'word')
+          // Word and time sections are clickable (touch temporarily disabled)
+          const isImplementedSection = (hoveredInst.section === 'word' || hoveredInst.section === 'time')
           if (isImplementedSection && !hoveredInst.isCompleted) {
             k.canvas.classList.add('cursor-pointer')
           } else {

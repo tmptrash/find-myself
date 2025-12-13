@@ -260,11 +260,37 @@ export function isAmbientPlaying(instance) {
 export function playLandSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
   //
+  // Check if we're in time section (clock tick landing)
+  //
+  const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
+  //
   // Check if we're in touch section (soft landing)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
   
-  if (isTouchSection) {
+  if (isTimeSection) {
+    //
+    // Clock tick sound - soft, muted mechanical click
+    //
+    const duration = 0.05
+    const osc = instance.audioContext.createOscillator()
+    const envelope = instance.audioContext.createGain()
+    
+    osc.type = 'sine'  // Softer than square
+    osc.frequency.setValueAtTime(800, now)
+    osc.frequency.linearRampToValueAtTime(300, now + duration)
+    //
+    // Soft attack and decay (muted impact)
+    //
+    envelope.gain.setValueAtTime(0.8, now)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    
+    osc.connect(envelope)
+    envelope.connect(instance.landGain)
+    
+    osc.start(now)
+    osc.stop(now + duration)
+  } else if (isTouchSection) {
     //
     // Soft landing sound similar to blade friction (hissing "shhhh")
     //
@@ -567,11 +593,37 @@ export function playTextSlideSound(instance) {
 export function playJumpSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
   //
+  // Check if we're in time section (clock tick jump)
+  //
+  const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
+  //
   // Check if we're in touch section (soft jump)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
   
-  if (isTouchSection) {
+  if (isTimeSection) {
+    //
+    // Clock tick sound - soft, muted mechanical click
+    //
+    const duration = 0.06
+    const osc = instance.audioContext.createOscillator()
+    const envelope = instance.audioContext.createGain()
+    
+    osc.type = 'sine'  // Softer than square
+    osc.frequency.setValueAtTime(600, now)
+    osc.frequency.linearRampToValueAtTime(400, now + duration)
+    //
+    // Soft attack and decay
+    //
+    envelope.gain.setValueAtTime(0.6, now)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    
+    osc.connect(envelope)
+    envelope.connect(instance.jumpGain)
+    
+    osc.start(now)
+    osc.stop(now + duration)
+  } else if (isTouchSection) {
     //
     // Soft jump sound with filtered noise (quick hiss)
     //
@@ -647,11 +699,37 @@ export function playJumpSound(instance, currentLevel = null) {
 export function playStepSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
   //
+  // Check if we're in time section (clock tick steps)
+  //
+  const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
+  //
   // Check if we're in touch section (soft steps)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
   
-  if (isTouchSection) {
+  if (isTimeSection) {
+    //
+    // Soft clock tick - quiet, subtle footstep sound
+    //
+    const duration = 0.04
+    const osc = instance.audioContext.createOscillator()
+    const envelope = instance.audioContext.createGain()
+    
+    osc.type = 'sine'  // Softer than square
+    osc.frequency.setValueAtTime(700, now)
+    osc.frequency.linearRampToValueAtTime(500, now + duration)
+    //
+    // Very quiet (footsteps are subtle)
+    //
+    envelope.gain.setValueAtTime(0.3, now)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    
+    osc.connect(envelope)
+    envelope.connect(instance.stepGain)
+    
+    osc.start(now)
+    osc.stop(now + duration)
+  } else if (isTouchSection) {
     //
     // Soft step sound with filtered noise (quiet hissing)
     //

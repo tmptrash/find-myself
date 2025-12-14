@@ -53,6 +53,12 @@ export function create() {
   const bugStepGain = ctx.createGain()
   bugStepGain.gain.value = 0.04
   bugStepGain.connect(ctx.destination)
+  //
+  // Create master gain for clock ticking sound
+  //
+  const clockTickGain = ctx.createGain()
+  clockTickGain.gain.value = 0.4
+  clockTickGain.connect(ctx.destination)
 
   return {
     // Audio context
@@ -66,6 +72,7 @@ export function create() {
     glitchSoundGain,
     bugScareGain,
     bugStepGain,
+    clockTickGain,
     // Ambient music state
     ambientOscillators: [],
     ambientGains: [],
@@ -73,6 +80,9 @@ export function create() {
     ambientIsPlaying: false,
     ambientNoiseNode: null,
     ambientFilterNode: null,
+    // Clock ticking state
+    clockTickInterval: null,
+    clockTickIsPlaying: false,
     // Backward compatibility properties (for hero.js annihilation)
     get currentTime() { return ctx.currentTime },
     createOscillator: () => ctx.createOscillator(),
@@ -1319,6 +1329,147 @@ export function setGlitchSoundVolume(instance, volume) {
   if (instance.glitchSoundGain) {
     instance.glitchSoundGain.gain.value = Math.max(0, Math.min(1, volume))
   }
+}
+/**
+ * Start clock ticking sound for time section
+ * @param {Object} instance - Sound instance
+ */
+export function startClockTicking(instance) {
+  //
+  // If already playing, don't start again
+  //
+  if (instance.clockTickIsPlaying) {
+    return
+  }
+
+  instance.clockTickIsPlaying = true
+  //
+  // Play tick sound every second
+  //
+  const playTick = () => {
+    if (!instance.clockTickIsPlaying) {
+      return
+    }
+
+    playClockTickSound(instance)
+    //
+    // Schedule next tick
+    //
+    instance.clockTickInterval = setTimeout(playTick, 1000)
+  }
+  //
+  // Start ticking
+  //
+  playTick()
+}
+/**
+ * Stop clock ticking sound
+ * @param {Object} instance - Sound instance
+ */
+export function stopClockTicking(instance) {
+  instance.clockTickIsPlaying = false
+  
+  if (instance.clockTickInterval) {
+    clearTimeout(instance.clockTickInterval)
+    instance.clockTickInterval = null
+  }
+}
+/**
+ * Play single clock tick sound
+ * @param {Object} instance - Sound instance
+ */
+function playClockTickSound(instance) {
+  const { audioContext, clockTickGain } = instance
+  const now = audioContext.currentTime
+  const duration = 0.12
+  //
+  // Create deep mechanical clock sound (old mechanism)
+  // 1. Low-frequency thump (heavy escapement)
+  // 2. Gear grinding/friction sound
+  // 3. Mechanical rumble
+  //
+  // Heavy mechanical thump (deep and dull)
+  //
+  const thump = audioContext.createOscillator()
+  const thumpEnvelope = audioContext.createGain()
+  const thumpFilter = audioContext.createBiquadFilter()
+  
+  thump.type = 'sawtooth'
+  thump.frequency.setValueAtTime(120, now)
+  thump.frequency.exponentialRampToValueAtTime(40, now + duration)
+  
+  thumpFilter.type = 'lowpass'
+  thumpFilter.frequency.setValueAtTime(300, now)
+  thumpFilter.Q.value = 0.5
+
+  thumpEnvelope.gain.setValueAtTime(0.001, now)
+  thumpEnvelope.gain.exponentialRampToValueAtTime(0.5, now + 0.005)
+  thumpEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  //
+  // Gear grinding (dull friction sound)
+  //
+  const grind = audioContext.createOscillator()
+  const grindEnvelope = audioContext.createGain()
+  const grindFilter = audioContext.createBiquadFilter()
+  
+  grind.type = 'sawtooth'
+  grind.frequency.setValueAtTime(280, now)
+  grind.frequency.linearRampToValueAtTime(240, now + duration)
+  
+  grindFilter.type = 'lowpass'
+  grindFilter.frequency.setValueAtTime(600, now)
+  grindFilter.Q.value = 1
+
+  grindEnvelope.gain.setValueAtTime(0.001, now + 0.003)
+  grindEnvelope.gain.exponentialRampToValueAtTime(0.2, now + 0.015)
+  grindEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8)
+  //
+  // Mechanical rumble (filtered noise)
+  //
+  const bufferSize = audioContext.sampleRate * duration
+  const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * 0.3
+  }
+
+  const noise = audioContext.createBufferSource()
+  noise.buffer = noiseBuffer
+  
+  const noiseFilter = audioContext.createBiquadFilter()
+  noiseFilter.type = 'lowpass'
+  noiseFilter.frequency.setValueAtTime(400, now)
+  noiseFilter.Q.value = 0.7
+  
+  const noiseEnvelope = audioContext.createGain()
+  noiseEnvelope.gain.setValueAtTime(0.001, now)
+  noiseEnvelope.gain.exponentialRampToValueAtTime(0.18, now + 0.004)
+  noiseEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5)
+  //
+  // Connect everything
+  //
+  thump.connect(thumpFilter)
+  thumpFilter.connect(thumpEnvelope)
+  thumpEnvelope.connect(clockTickGain)
+
+  grind.connect(grindFilter)
+  grindFilter.connect(grindEnvelope)
+  grindEnvelope.connect(clockTickGain)
+
+  noise.connect(noiseFilter)
+  noiseFilter.connect(noiseEnvelope)
+  noiseEnvelope.connect(clockTickGain)
+  //
+  // Play all components
+  //
+  thump.start(now)
+  thump.stop(now + duration)
+
+  grind.start(now + 0.003)
+  grind.stop(now + duration)
+
+  noise.start(now)
 }
 //
 // Private functions

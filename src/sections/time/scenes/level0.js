@@ -5,6 +5,7 @@ import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as TimeSpikes from '../components/time-spikes.js'
+import * as Sound from '../../../utils/sound.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 
 //
@@ -33,6 +34,21 @@ export function sceneLevel0(k) {
     // Save progress immediately when entering this level
     //
     saveLastLevel('level-time.0')
+    //
+    // Create sound instance
+    //
+    const sound = Sound.create()
+    Sound.startAudioContext(sound)
+    //
+    // Start background music (clock.mp3)
+    //
+    Sound.startBackgroundMusic(sound, k, 'clock')
+    //
+    // Stop music when leaving the scene
+    //
+    k.onSceneLeave(() => {
+      Sound.stopBackgroundMusic(sound)
+    })
     //
     // Initialize level with heroes and platforms
     //

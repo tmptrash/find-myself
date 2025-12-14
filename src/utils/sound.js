@@ -1687,28 +1687,32 @@ export function playBugScareSound(inst) {
 export function playPlatformDisappearSound(inst) {
   const { audioContext, clockTickGain } = inst
   const now = audioContext.currentTime
-  const duration = 0.4
+  const duration = 0.5
   //
-  // Create descending tone (like mechanism powering down)
+  // Create single descending tone (like mechanism powering down)
   //
-  const oscillator = audioContext.createOscillator()
+  const tone = audioContext.createOscillator()
   const envelope = audioContext.createGain()
   
-  oscillator.type = 'sine'
-  oscillator.frequency.setValueAtTime(600, now)
-  oscillator.frequency.exponentialRampToValueAtTime(200, now + duration)
+  tone.type = 'triangle'
+  tone.frequency.setValueAtTime(380, now)
+  tone.frequency.exponentialRampToValueAtTime(120, now + duration)
   //
-  // Fade out envelope
+  // Smooth fade out envelope
   //
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.exponentialRampToValueAtTime(0.3, now + 0.02)
+  envelope.gain.exponentialRampToValueAtTime(0.28, now + 0.02)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  
-  oscillator.connect(envelope)
+  //
+  // Connect
+  //
+  tone.connect(envelope)
   envelope.connect(clockTickGain)
-  
-  oscillator.start(now)
-  oscillator.stop(now + duration)
+  //
+  // Play
+  //
+  tone.start(now)
+  tone.stop(now + duration)
 }
 /**
  * Play bug step sound (very soft, like a tiny leaf touch)

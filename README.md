@@ -10,6 +10,16 @@ Your goal is to find another "you" — a reflection shaped by the very forces yo
 
 Life will confuse you. You will fall. But each fall brings you closer to who you truly are.
 
+## 🤖 Created with AI
+
+This game was **entirely created with the help of an AI agent** (Claude by Anthropic). From the initial concept to the final implementation, every line of code, game mechanic, visual effect, and procedural sound was developed through collaborative AI-assisted programming.
+
+**The creative process:**
+- **Human**: Provides vision, ideas, game design decisions, and creative direction
+- **AI**: Implements the ideas, writes code, creates systems, and solves technical challenges
+
+The project demonstrates the potential of AI-augmented game development, where human creativity meets AI capabilities to build a complete, playable experience.
+
 ## 🎨 Visual Style
 
 - **Procedural Graphics**: All visuals are generated programmatically using geometric shapes and text

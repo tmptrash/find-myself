@@ -20,6 +20,16 @@ This game was **entirely created with the help of an AI agent** (Claude by Anthr
 
 The project demonstrates the potential of AI-augmented game development, where human creativity meets AI capabilities to build a complete, playable experience.
 
+## 📝 Design Philosophy
+
+**Find Myself** is designed around several core principles:
+
+1. **Minimalism**: Clean, focused design without unnecessary elements
+2. **Procedural Generation**: Everything is created through code, ensuring consistency and small file size
+3. **Meaningful Challenge**: Each obstacle represents a real-life concept
+4. **Self-Discovery**: The journey is about understanding yourself through overcoming challenges
+5. **Atmosphere Over Graphics**: Mood and feeling take priority over visual complexity
+
 ## 🎨 Visual Style
 
 - **Procedural Graphics**: All visuals are generated programmatically using geometric shapes and text
@@ -91,27 +101,6 @@ npm run zip
 ```
 
 Built files will be in the `dist/` folder.
-
-## 🎮 Controls
-
-| Action | Keys |
-|--------|------|
-| Move Left | Left Arrow, A |
-| Move Right | Right Arrow, D |
-| Jump | Space, W, Up Arrow |
-| Navigate Menu | Arrow Keys |
-| Select | Space, Enter |
-| Skip Intro | Space, Enter |
-
-## 📝 Design Philosophy
-
-**Find Myself** is designed around several core principles:
-
-1. **Minimalism**: Clean, focused design without unnecessary elements
-2. **Procedural Generation**: Everything is created through code, ensuring consistency and small file size
-3. **Meaningful Challenge**: Each obstacle represents a real-life concept
-4. **Self-Discovery**: The journey is about understanding yourself through overcoming challenges
-5. **Atmosphere Over Graphics**: Mood and feeling take priority over visual complexity
 
 ## 📄 License
 

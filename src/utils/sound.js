@@ -272,17 +272,18 @@ export function playLandSound(instance, currentLevel = null) {
     //
     // Clock tick sound - soft, muted mechanical click
     //
-    const duration = 0.05
+    const duration = 0.07
     const osc = instance.audioContext.createOscillator()
     const envelope = instance.audioContext.createGain()
     
     osc.type = 'sine'  // Softer than square
-    osc.frequency.setValueAtTime(800, now)
-    osc.frequency.linearRampToValueAtTime(300, now + duration)
+    osc.frequency.setValueAtTime(700, now)
+    osc.frequency.linearRampToValueAtTime(250, now + duration)
     //
     // Soft attack and decay (muted impact)
     //
-    envelope.gain.setValueAtTime(0.8, now)
+    envelope.gain.setValueAtTime(0.001, now)
+    envelope.gain.exponentialRampToValueAtTime(0.5, now + 0.01)
     envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
     
     osc.connect(envelope)
@@ -605,17 +606,18 @@ export function playJumpSound(instance, currentLevel = null) {
     //
     // Clock tick sound - soft, muted mechanical click
     //
-    const duration = 0.06
+    const duration = 0.08
     const osc = instance.audioContext.createOscillator()
     const envelope = instance.audioContext.createGain()
     
     osc.type = 'sine'  // Softer than square
-    osc.frequency.setValueAtTime(600, now)
-    osc.frequency.linearRampToValueAtTime(400, now + duration)
+    osc.frequency.setValueAtTime(500, now)
+    osc.frequency.linearRampToValueAtTime(300, now + duration)
     //
     // Soft attack and decay
     //
-    envelope.gain.setValueAtTime(0.6, now)
+    envelope.gain.setValueAtTime(0.001, now)
+    envelope.gain.exponentialRampToValueAtTime(0.35, now + 0.01)
     envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
     
     osc.connect(envelope)
@@ -711,17 +713,18 @@ export function playStepSound(instance, currentLevel = null) {
     //
     // Soft clock tick - quiet, subtle footstep sound
     //
-    const duration = 0.04
+    const duration = 0.05
     const osc = instance.audioContext.createOscillator()
     const envelope = instance.audioContext.createGain()
     
     osc.type = 'sine'  // Softer than square
-    osc.frequency.setValueAtTime(700, now)
-    osc.frequency.linearRampToValueAtTime(500, now + duration)
+    osc.frequency.setValueAtTime(600, now)
+    osc.frequency.linearRampToValueAtTime(400, now + duration)
     //
     // Very quiet (footsteps are subtle)
     //
-    envelope.gain.setValueAtTime(0.3, now)
+    envelope.gain.setValueAtTime(0.001, now)
+    envelope.gain.exponentialRampToValueAtTime(0.2, now + 0.008)
     envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
     
     osc.connect(envelope)

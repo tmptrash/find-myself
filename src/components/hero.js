@@ -1729,6 +1729,22 @@ function applySlowMotion(inst) {
  */
 function getParticleColors(inst) {
   const { type } = inst
+  //
+  // Check if we're in time section - use grayscale colors
+  //
+  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('level-time.')
+  
+  if (isTimeSection) {
+    //
+    // Time section: grayscale colors only
+    //
+    return type === HEROES.HERO
+      ? ["#C0C0C0", "#808080", "#A0A0A0", "#000000"]  // Light gray shades + black
+      : ["#606060", "#808080", "#707070", "#000000"]  // Medium gray shades + black
+  }
+  //
+  // Other sections: use colors from config
+  //
   const colors = CFG.visual.colors
   return type === HEROES.HERO
     ? [colors.hero.body, colors.outline]
@@ -1951,28 +1967,35 @@ function createEyeParticles(inst, centerX, centerY) {
   const pupilSize = 1 * HERO_SCALE
   const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
   const particles = []
+  //
+  // Check if we're in time section for grayscale eyes
+  //
+  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('level-time.')
+  const eyeWhiteColor = isTimeSection ? [200, 200, 200] : [255, 255, 255]  // Light gray or white
+  const pupilColor = isTimeSection ? [100, 100, 100] : [0, 0, 0]  // Dark gray or black
+  
   for (let i = 0; i < 2; i++) {
     const angle = eyeAngles[i]
     const speed = k.rand(150, 350)
     //
-    // White eye background
+    // Eye background (white or light gray)
     //
     const eyeWhite = k.add([
       k.rect(eyeWhiteSize, eyeWhiteSize),
       k.pos(centerX, centerY),
-      k.color(255, 255, 255),
+      k.color(eyeWhiteColor[0], eyeWhiteColor[1], eyeWhiteColor[2]),
       k.anchor("center"),
       k.z(CFG.visual.zIndex.playerAbove),
       k.area(),
       k.body()
     ])
     //
-    // Black pupil
+    // Pupil (black or dark gray)
     //
     const pupil = eyeWhite.add([
       k.rect(pupilSize, pupilSize),
       k.pos(0, 0),
-      k.color(0, 0, 0),
+      k.color(pupilColor[0], pupilColor[1], pupilColor[2]),
       k.anchor("center"),
       k.z(CFG.visual.zIndex.eyePupil)
     ])

@@ -42,11 +42,27 @@ export function create(config) {
   const digits = []
   
   //
-  // Create initial digits
+  // Create initial digits with collision detection
   //
   for (let i = 0; i < DIGIT_COUNT; i++) {
-    const digit = createDigit(k, playableLeft, playableRight, playableTop, playableBottom)
-    digits.push(digit)
+    let digit
+    let attempts = 0
+    const maxAttempts = 50
+    
+    //
+    // Try to create digit that doesn't overlap with existing ones
+    //
+    do {
+      digit = createDigit(k, playableLeft, playableRight, playableTop, playableBottom)
+      attempts++
+    } while (attempts < maxAttempts && hasOverlap(digit, digits))
+    
+    //
+    // Only add if we found a valid position or exhausted attempts
+    //
+    if (attempts < maxAttempts || digits.length === 0) {
+      digits.push(digit)
+    }
   }
   
   const inst = {
@@ -89,6 +105,39 @@ function createDigit(k, left, right, top, bottom) {
     timeOffset,
     currentTime: COUNTDOWN_START - timeOffset
   }
+}
+/**
+ * Check if digit overlaps with any existing digits
+ * @param {Object} digit - Digit to check
+ * @param {Array} existingDigits - Array of existing digits
+ * @returns {boolean} True if overlaps
+ */
+function hasOverlap(digit, existingDigits) {
+  //
+  // Approximate width and height of time text (MM:SS format)
+  // Width is roughly size * 3 (5 characters with spacing)
+  // Height is roughly size
+  //
+  const padding = 20  // Extra padding between digits
+  const width = digit.size * 3 + padding
+  const height = digit.size + padding
+  
+  for (const existing of existingDigits) {
+    const existingWidth = existing.size * 3 + padding
+    const existingHeight = existing.size + padding
+    
+    //
+    // Check if rectangles overlap
+    //
+    const overlapX = Math.abs(digit.x - existing.x) < (width + existingWidth) / 2
+    const overlapY = Math.abs(digit.y - existing.y) < (height + existingHeight) / 2
+    
+    if (overlapX && overlapY) {
+      return true
+    }
+  }
+  
+  return false
 }
 
 /**

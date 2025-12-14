@@ -50,6 +50,30 @@ export function create(config) {
   const secs = initialSeconds % 60
   const initialText = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   
+  //
+  // Create timer text with manual outline
+  // Draw black outline by creating 8 text objects with offsets
+  //
+  const outlineOffsets = [
+    [-2, -2], [0, -2], [2, -2],
+    [-2, 0],           [2, 0],
+    [-2, 2],  [0, 2],  [2, 2]
+  ]
+  
+  const outlineTexts = outlineOffsets.map(([ox, oy]) => {
+    return k.add([
+      k.text(initialText, {
+        size: FONT_SIZE,
+        font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+        align: "center"
+      }),
+      k.pos(x + ox, y + oy),
+      k.anchor("center"),
+      k.color(0, 0, 0),  // Black outline
+      k.z(16)  // Above platforms
+    ])
+  })
+  
   const timerText = k.add([
     k.text(initialText, {
       size: FONT_SIZE,
@@ -59,14 +83,14 @@ export function create(config) {
     k.pos(x, y),
     k.anchor("center"),
     k.color(192, 192, 192),  // Light gray (same as hero)
-    k.z(16),  // Above platforms
-    k.outline(2, k.rgb(0, 0, 0))  // Black outline
+    k.z(16)  // Above platforms
   ])
   
   const inst = {
     k,
     platform,
     timerText,
+    outlineTexts,
     hero,
     timeRemaining: duration,
     isActive: false,
@@ -115,7 +139,14 @@ export function onUpdate(inst) {
     const seconds = Math.max(0, Math.ceil(inst.timeRemaining))
     const minutes = Math.floor(seconds / 60)
     const secs = seconds % 60
-    inst.timerText.text = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    const newText = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    inst.timerText.text = newText
+    //
+    // Update outline texts
+    //
+    inst.outlineTexts.forEach(outlineText => {
+      outlineText.text = newText
+    })
     //
     // Destroy when timer reaches zero
     //
@@ -142,5 +173,13 @@ function destroy(inst) {
   if (inst.timerText.exists()) {
     inst.k.destroy(inst.timerText)
   }
+  //
+  // Remove outline texts
+  //
+  inst.outlineTexts.forEach(outlineText => {
+    if (outlineText.exists()) {
+      inst.k.destroy(outlineText)
+    }
+  })
 }
 

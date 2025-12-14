@@ -5,6 +5,15 @@ import { CFG as GLOBAL_CFG, deepMerge } from '../../cfg.js'
 // Time section uses grayscale palette (black, white, shades of gray)
 //
 export const TIME_CFG = {
+  audio: {
+    //
+    // Spike glint sound effect (metal ping/slash)
+    //
+    spikeGlint: {
+      swishVolume: 0.06,   // Volume of air cutting sound (0-1), quieter than blade
+      ringVolume: 0.03     // Volume of metallic ring sound (0-1), quieter than blade
+    }
+  },
   visual: {
     //
     // Colors specific to time section (grayscale only)
@@ -22,6 +31,14 @@ export const TIME_CFG = {
       },
       text: "#FFFFFF",               // White text
       accent: "#808080"              // Medium gray for accents
+    },
+    //
+    // Spike glint effect configuration (similar to blade glint)
+    //
+    spikeGlint: {
+      intervalMin: 24,     // Minimum seconds between glints (3x slower)
+      intervalMax: 75,     // Maximum seconds between glints (3x slower)
+      duration: 0.6        // Duration of light glint effect (seconds)
     }
   }
 }

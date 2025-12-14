@@ -181,7 +181,8 @@ export function sceneLevel0(k) {
       startX: 450,  // Start after the time platform
       endX: 1600,   // End near the anti-hero
       y: 810,       // Below the time platform, on the floor level
-      hero
+      hero,
+      sfx: sound
     })
   })
 }

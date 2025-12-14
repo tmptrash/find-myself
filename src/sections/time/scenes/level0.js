@@ -112,7 +112,8 @@ export function sceneLevel0(k) {
       x: 400,
       y: 760,
       hero,
-      duration: 2
+      duration: 2,
+      sfx: sound
     })
     //
     // Platform 2: middle, higher (closer, 2 seconds)
@@ -122,7 +123,8 @@ export function sceneLevel0(k) {
       x: 580,
       y: 690,
       hero,
-      duration: 2
+      duration: 2,
+      sfx: sound
     })
     //
     // Platform 3: right, even higher, FAKE (hero passes through)
@@ -132,7 +134,8 @@ export function sceneLevel0(k) {
       x: 760,
       y: 620,
       hero,
-      isFake: true
+      isFake: true,
+      sfx: sound
     })
     //
     // Platform 4: static platform with running timer (same Y as platform 2)
@@ -150,7 +153,8 @@ export function sceneLevel0(k) {
       x: 1060,
       y: 650,
       hero,
-      duration: 1
+      duration: 1,
+      sfx: sound
     })
     //
     // Platform 6: 1-second timer, right and up from platform 5
@@ -160,7 +164,8 @@ export function sceneLevel0(k) {
       x: 1240,
       y: 580,
       hero,
-      duration: 1
+      duration: 1,
+      sfx: sound
     })
     //
     // Update all time platforms

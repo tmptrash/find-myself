@@ -36,8 +36,8 @@ export const TIME_CFG = {
     // Spike glint effect configuration (similar to blade glint)
     //
     spikeGlint: {
-      intervalMin: 24,     // Minimum seconds between glints (3x slower)
-      intervalMax: 75,     // Maximum seconds between glints (3x slower)
+      intervalMin: 40,     // Minimum seconds between glints (even slower)
+      intervalMax: 120,    // Maximum seconds between glints (even slower)
       duration: 0.6        // Duration of light glint effect (seconds)
     }
   }

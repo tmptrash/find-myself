@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import * as Sound from '../../../utils/sound.js'
 //
 // Time platform configuration
 //
@@ -16,10 +17,11 @@ const PLATFORM_HEIGHT = 48
  * @param {Object} config.hero - Hero instance to detect collision with
  * @param {boolean} [config.isFake=false] - If true, hero will pass through
  * @param {number} [config.duration=3] - Timer duration in seconds
+ * @param {Object} [config.sfx] - Sound instance for audio effects
  * @returns {Object} Time platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION } = config
+  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, sfx = null } = config
   //
   // Create invisible collision box for the platform
   // Fake platforms have no body, so hero passes through
@@ -96,7 +98,8 @@ export function create(config) {
     isActive: false,
     isDestroyed: false,
     wasGroundedLastFrame: false,
-    isFake
+    isFake,
+    sfx
   }
   
   return inst
@@ -164,6 +167,12 @@ function destroy(inst) {
   if (inst.isDestroyed) return
   
   inst.isDestroyed = true
+  //
+  // Play disappear sound
+  //
+  if (inst.sfx) {
+    Sound.playPlatformDisappearSound(inst.sfx)
+  }
   //
   // Remove platform and text
   //

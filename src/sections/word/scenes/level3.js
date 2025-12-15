@@ -7,6 +7,7 @@ import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import { saveLastLevel } from '../../../utils/progress.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -97,6 +98,16 @@ export function sceneLevel3(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    //
+    // Create FPS counter
+    //
+    const fpsCounter = FpsCounter.create({ k })
+    //
+    // Update FPS counter
+    //
+    k.onUpdate(() => {
+      FpsCounter.onUpdate(fpsCounter)
     })
     
     // Create bottom of the pit (platform at pit depth)

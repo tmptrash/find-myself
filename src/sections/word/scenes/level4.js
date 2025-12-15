@@ -8,6 +8,7 @@ import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import { saveLastLevel } from '../../../utils/progress.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -270,6 +271,16 @@ export function sceneLevel4(k) {
     //
     k.onUpdate(() => {
       WordGrass.onUpdate(wordGrass)
+    })
+    //
+    // Create FPS counter
+    //
+    const fpsCounter = FpsCounter.create({ k })
+    //
+    // Update FPS counter
+    //
+    k.onUpdate(() => {
+      FpsCounter.onUpdate(fpsCounter)
     })
     
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT

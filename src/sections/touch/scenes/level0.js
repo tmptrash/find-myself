@@ -4,6 +4,7 @@ import { saveLastLevel } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as Dust from '../components/dust.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -344,6 +345,16 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       bugs.forEach(bug => Bugs.onUpdate(bug, k.dt()))
       Dust.onUpdate(dustInst, k.dt())
+    })
+    //
+    // Create FPS counter
+    //
+    const fpsCounter = FpsCounter.create({ k })
+    //
+    // Update FPS counter
+    //
+    k.onUpdate(() => {
+      FpsCounter.onUpdate(fpsCounter)
     })
     //
     // Draw dust in front of hero but behind platforms

@@ -6,6 +6,7 @@ import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import { getProgress, saveLastLevel } from '../../../utils/progress.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
 // Death messages (shown randomly on death)
@@ -285,6 +286,16 @@ export function sceneLevel0(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    //
+    // Create FPS counter
+    //
+    const fpsCounter = FpsCounter.create({ k })
+    //
+    // Update FPS counter
+    //
+    k.onUpdate(() => {
+      FpsCounter.onUpdate(fpsCounter)
     })
     
     //

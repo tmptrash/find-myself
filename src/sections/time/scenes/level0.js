@@ -7,6 +7,7 @@ import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
 import { saveLastLevel } from '../../../utils/progress.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -98,6 +99,16 @@ export function sceneLevel0(k) {
       },
       k.z(16)  // Above platforms (15) but below player
     ])
+    //
+    // Create FPS counter
+    //
+    const fpsCounter = FpsCounter.create({ k })
+    //
+    // Update FPS counter
+    //
+    k.onUpdate(() => {
+      FpsCounter.onUpdate(fpsCounter)
+    })
     //
     // Spawn heroes (enables movement)
     //

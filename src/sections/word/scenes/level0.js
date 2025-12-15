@@ -452,15 +452,44 @@ function showIntroSequence(k) {
 }
 
 /**
- * Creates instructions text object
+ * Creates instructions text object with manual black outline
  * @param {Object} k - Kaplay instance
  * @param {number} centerX - Center X position
  * @param {number} textY - Text Y position
- * @returns {Object} Instructions text object
+ * @returns {Object} Instructions text object with outline texts array
  */
 function createInstructionsText(k, centerX, textY) {
-  return k.add([
-    k.text("← → - move,   ↑ Space - jump,   ESC - menu", {
+  const instructionsContent = "← → - move,   ↑ Space - jump,   ESC - menu"
+  const OUTLINE_OFFSET = 2
+  //
+  // Create 8 outline texts (black)
+  //
+  const outlineOffsets = [
+    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
+    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
+  ]
+  
+  const outlineTexts = outlineOffsets.map(([dx, dy]) => {
+    return k.add([
+      k.text(instructionsContent, {
+        size: 24,
+        align: "center",
+        font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+      }),
+      k.pos(centerX + dx, textY + dy),
+      k.anchor("center"),
+      k.color(0, 0, 0),  // Black outline
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.ui + 9)
+    ])
+  })
+  //
+  // Create main text (light gray)
+  //
+  const mainText = k.add([
+    k.text(instructionsContent, {
       size: 24,
       align: "center",
       font: CFG.visual.fonts.regularFull.replace(/'/g, '')
@@ -471,6 +500,8 @@ function createInstructionsText(k, centerX, textY) {
     k.opacity(0),
     k.z(CFG.visual.zIndex.ui + 10)
   ])
+  
+  return { mainText, outlineTexts }
 }
 
 /**
@@ -482,16 +513,17 @@ function showInstructions(k) {
   const textY = PLATFORM_TOP_HEIGHT / 2
   
   //
-  // Create instructions text
+  // Create instructions text with outline
   //
-  const instructionsText = createInstructionsText(k, centerX, textY)
+  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
   
   //
   // Animation state
   //
   const inst = {
     k,
-    instructionsText,
+    mainText,
+    outlineTexts,
     timer: 0,
     phase: 'initial_delay'
   }
@@ -512,10 +544,13 @@ function showInstructions(k) {
       }
     } else if (inst.phase === 'fade_in') {
       //
-      // Fade in instructions text
+      // Fade in instructions text and outline
       //
       const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
-      instructionsText.opacity = progress
+      mainText.opacity = progress
+      outlineTexts.forEach(text => {
+        text.opacity = progress
+      })
       
       if (progress >= 1) {
         inst.phase = 'hold'
@@ -531,18 +566,22 @@ function showInstructions(k) {
       }
     } else if (inst.phase === 'fade_out') {
       //
-      // Fade out instructions text
+      // Fade out instructions text and outline
       //
       const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
-      instructionsText.opacity = 1 - progress
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(text => {
+        text.opacity = 1 - progress
+      })
       
       if (progress >= 1) {
         //
         // Clean up and finish
         //
-        instructionsAnimationComplete = true  // Mark instructions as complete
+        instructionsAnimationComplete = true
         updateInterval.cancel()
-        k.destroy(instructionsText)
+        k.destroy(mainText)
+        outlineTexts.forEach(text => k.destroy(text))
       }
     }
   })

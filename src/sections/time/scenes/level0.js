@@ -24,6 +24,150 @@ const HERO_SPAWN_X = 250
 const HERO_SPAWN_Y = 790
 const ANTIHERO_SPAWN_X = 1670
 const ANTIHERO_SPAWN_Y = 790
+//
+// Instructions animation constants
+//
+const INSTRUCTIONS_INITIAL_DELAY = 1.0
+const INSTRUCTIONS_FADE_IN_DURATION = 0.8
+const INSTRUCTIONS_HOLD_DURATION = 4.0
+const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
+//
+// Flag to track if instructions animation is complete (resets only on page reload)
+//
+let instructionsAnimationComplete = false
+
+/**
+ * Creates instructions text object with manual black outline
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} textY - Text Y position
+ * @returns {Object} Instructions text object with outline texts array
+ */
+function createInstructionsText(k, centerX, textY) {
+  const instructionsContent = "← → - move,   ↑ Space - jump,   ESC - menu"
+  const OUTLINE_OFFSET = 2
+  //
+  // Create 8 outline texts (black)
+  //
+  const outlineOffsets = [
+    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
+    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
+  ]
+  
+  const outlineTexts = outlineOffsets.map(([dx, dy]) => {
+    return k.add([
+      k.text(instructionsContent, {
+        size: 24,
+        align: "center",
+        font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+      }),
+      k.pos(centerX + dx, textY + dy),
+      k.anchor("center"),
+      k.color(0, 0, 0),  // Black outline
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.ui + 9)
+    ])
+  })
+  //
+  // Create main text (white)
+  //
+  const mainText = k.add([
+    k.text(instructionsContent, {
+      size: 24,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),  // White for time section
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  
+  return { mainText, outlineTexts }
+}
+
+/**
+ * Shows instructions
+ * @param {Object} k - Kaplay instance
+ */
+function showInstructions(k) {
+  const centerX = CFG.visual.screen.width / 2
+  const textY = PLATFORM_TOP_HEIGHT / 2
+  //
+  // Create instructions text with outline
+  //
+  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    mainText,
+    outlineTexts,
+    timer: 0,
+    phase: 'initial_delay'
+  }
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    
+    if (inst.phase === 'initial_delay') {
+      //
+      // Wait for initial delay
+      //
+      if (inst.timer >= INSTRUCTIONS_INITIAL_DELAY) {
+        inst.phase = 'fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_in') {
+      //
+      // Fade in instructions text and outline
+      //
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
+      mainText.opacity = progress
+      outlineTexts.forEach(text => {
+        text.opacity = progress
+      })
+      
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      //
+      // Hold instructions text
+      //
+      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      //
+      // Fade out instructions text and outline
+      //
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(text => {
+        text.opacity = 1 - progress
+      })
+      
+      if (progress >= 1) {
+        //
+        // Clean up and finish
+        //
+        instructionsAnimationComplete = true
+        updateInterval.cancel()
+        k.destroy(mainText)
+        outlineTexts.forEach(text => k.destroy(text))
+      }
+    }
+  })
+}
 
 /**
  * Time section level 0 scene
@@ -75,6 +219,7 @@ export function sceneLevel0(k) {
     const { hero, antiHero } = initScene({
       k,
       levelName: 'level-time.0',
+      levelNumber: 1,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -96,7 +241,12 @@ export function sceneLevel0(k) {
     //
     hero.character.z = 20
     antiHero.character.z = 20
-    
+    //
+    // Show instructions on first run
+    //
+    if (!instructionsAnimationComplete) {
+      showInstructions(k)
+    }
     //
     // Create time digits background (full screen)
     //

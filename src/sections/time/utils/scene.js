@@ -3,6 +3,7 @@ import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimeDigits from '../components/time-digits.js'
+import * as LevelIndicator from '../components/level-indicator.js'
 
 /**
  * Adds background to the scene
@@ -24,7 +25,7 @@ function addBackground(k, color) {
  * @param {Object} config - Scene configuration
  * @param {Object} config.k - Kaplay instance
  * @param {string} config.levelName - Level name (e.g., 'level-time.0')
- * @param {number} [config.levelNumber] - Level number for indicator
+ * @param {number} [config.levelNumber] - Level number for indicator (1-4 for T, I, M, E)
  * @param {string} [config.nextLevel] - Next level name
  * @param {boolean} [config.skipPlatforms=false] - Skip platform creation
  * @param {number} [config.bottomPlatformHeight] - Bottom platform height
@@ -42,6 +43,7 @@ export function initScene(config) {
   const { 
     k, 
     levelName,
+    levelNumber = null,
     skipPlatforms = false,
     bottomPlatformHeight = 360,
     topPlatformHeight = 360,
@@ -80,6 +82,19 @@ export function initScene(config) {
   //
   if (!skipPlatforms) {
     addPlatforms(k, CFG.visual.colors.platform, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap)
+  }
+  //
+  // Add level indicator if levelNumber provided
+  //
+  if (levelNumber && topPlatformHeight && sideWallWidth) {
+    LevelIndicator.create({
+      k,
+      levelNumber,
+      activeColor: "#FFFFFF",
+      inactiveColor: "#555555",
+      topPlatformHeight,
+      sideWallWidth
+    })
   }
   
   //

@@ -4,6 +4,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
+import * as LevelIndicator from '../components/level-indicator.js'
 import { isSectionComplete } from '../../../utils/progress.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -67,80 +68,6 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
   }
   
   return antiHeroes
-}
-
-/**
- * Add word-based level indicator (letters "WORDS")
- * @param {Object} k - Kaplay instance
- * @param {number} levelNumber - Current level (1-5)
- * @param {string} activeColor - Color for completed levels (hex)
- * @param {string} inactiveColor - Color for future levels (hex)
- * @param {number} topPlatformHeight - Height of top platform
- * @param {number} sideWallWidth - Width of side wall
- * @returns {Array} Array of letter objects
- */
-export function addWordLevelIndicator(k, levelNumber, activeColor, inactiveColor, topPlatformHeight, sideWallWidth) {
-  const letters = ['W', 'O', 'R', 'D', 'S']
-  const fontSize = 48
-  const letterSpacing = -5  // Negative spacing for closer letters
-  const outlineThickness = 2
-  
-  // Default colors if not provided
-  const defaultActive = "#DC143C"  // Red
-  const defaultInactive = "#555555"  // Gray
-  
-  const startX = sideWallWidth + 20  // Small offset from left wall
-  const y = topPlatformHeight - fontSize - 10  // Position above platform
-  
-  const letterObjects = []
-  
-  letters.forEach((letter, i) => {
-    const isActive = i < levelNumber
-    const colorHex = isActive ? (activeColor || defaultActive) : (inactiveColor || defaultInactive)
-    
-    // Calculate x position for this letter
-    const letterX = startX + i * (fontSize + letterSpacing)
-    
-    // Create outline (8 directions)
-    const offsets = [
-      [-outlineThickness, -outlineThickness],
-      [0, -outlineThickness],
-      [outlineThickness, -outlineThickness],
-      [-outlineThickness, 0],
-      [outlineThickness, 0],
-      [-outlineThickness, outlineThickness],
-      [0, outlineThickness],
-      [outlineThickness, outlineThickness]
-    ]
-    
-    offsets.forEach(([dx, dy]) => {
-      k.add([
-        k.text(letter, {
-          size: fontSize,
-          font: CFG.visual.fonts.thinFull.replace(/'/g, '')
-        }),
-        k.pos(letterX + dx, y + dy),
-        k.color(0, 0, 0),
-        k.z(CFG.visual.zIndex.ui)
-      ])
-    })
-    
-    // Create main letter
-    const {r, g, b} = getRGB(k, colorHex)
-    const mainLetter = k.add([
-      k.text(letter, {
-        size: fontSize,
-        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
-      }),
-      k.pos(letterX, y),
-      k.color(r, g, b),
-      k.z(CFG.visual.zIndex.ui)
-    ])
-    
-    letterObjects.push(mainLetter)
-  })
-  
-  return letterObjects
 }
 
 /**
@@ -229,7 +156,14 @@ export function initScene(config) {
   // Add level indicator if levelNumber provided
   if (levelNumber && topPlatformHeight && sideWallWidth) {
     // Use word indicator for all levels
-    addWordLevelIndicator(k, levelNumber, CFG.visual.colors.levelIndicator.active, CFG.visual.colors.levelIndicator.inactive, topPlatformHeight, sideWallWidth)
+    LevelIndicator.create({
+      k,
+      levelNumber,
+      activeColor: CFG.visual.colors.levelIndicator.active,
+      inactiveColor: CFG.visual.colors.levelIndicator.inactive,
+      topPlatformHeight,
+      sideWallWidth
+    })
   }
   
   // Level titles removed for cleaner visual experience

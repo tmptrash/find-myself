@@ -146,14 +146,14 @@ export function sceneLevel0(k) {
       sfx: sound
     })
     //
-    // Platform 2: middle, higher (closer, 2 seconds)
+    // Platform 2: middle, higher (closer, 1 second)
     //
     const timePlatform2 = TimePlatform.create({
       k,
       x: 580,
       y: 690,
       hero,
-      duration: 2,
+      duration: 1,
       sfx: sound
     })
     //

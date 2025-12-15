@@ -41,14 +41,33 @@ export function sceneLevel0(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start background music (clock.mp3)
+    // Start background music (kids.mp3) - louder
     //
-    Sound.startBackgroundMusic(sound, k, 'clock')
+    const kidsMusic = k.play('kids', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.kids
+    })
+    //
+    // Start clock ticking sound (clock.mp3)
+    //
+    const clockMusic = k.play('clock', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.clock
+    })
+    //
+    // Start time section background music (time.mp3) - quieter
+    //
+    const timeMusic = k.play('time', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.time
+    })
     //
     // Stop music when leaving the scene
     //
     k.onSceneLeave(() => {
-      Sound.stopBackgroundMusic(sound)
+      kidsMusic.stop()
+      clockMusic.stop()
+      timeMusic.stop()
     })
     //
     // Initialize level with heroes and platforms

@@ -6,6 +6,16 @@ import { createLevelTransition, showTransitionToLevel } from "../utils/transitio
 import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
+//
+// Menu audio configuration (relative to CFG.audio.masterVolume)
+//
+const MENU_AUDIO = {
+  menuMusicNormal: CFG.audio.masterVolume * 0.3,      // menu.mp3 normal volume (21% of master)
+  menuMusicHover: CFG.audio.masterVolume * 0.08,      // menu.mp3 hover volume (5.6% of master)
+  kidsMusicTarget: CFG.audio.masterVolume * 0.4,      // kids.mp3 target volume (28% of master)
+  kidsMusicHover: CFG.audio.masterVolume * 0.1,       // kids.mp3 hover volume (7% of master)
+  kidsMusicFadeInDuration: 4.0                         // Fade-in duration in seconds
+}
 
 /**
  * Convert section name to plural for display
@@ -103,16 +113,16 @@ export function sceneMenu(k) {
     //
     // Play menu background music
     //
-    const menuMusic = k.play("menu", { loop: true, volume: 0.3 })
-    const MENU_MUSIC_NORMAL_VOLUME = 0.3
-    const MENU_MUSIC_HOVER_VOLUME = 0.08
+    const menuMusic = k.play("menu", { loop: true, volume: MENU_AUDIO.menuMusicNormal })
+    const MENU_MUSIC_NORMAL_VOLUME = MENU_AUDIO.menuMusicNormal
+    const MENU_MUSIC_HOVER_VOLUME = MENU_AUDIO.menuMusicHover
     //
     // Play kids.mp3 music with fade in
     //
     const kidsMusic = k.play("kids", { loop: true, volume: 0 })
-    const KIDS_MUSIC_TARGET_VOLUME = 0.4
-    const KIDS_MUSIC_HOVER_VOLUME = 0.1
-    const KIDS_MUSIC_FADE_IN_DURATION = 4.0
+    const KIDS_MUSIC_TARGET_VOLUME = MENU_AUDIO.kidsMusicTarget
+    const KIDS_MUSIC_HOVER_VOLUME = MENU_AUDIO.kidsMusicHover
+    const KIDS_MUSIC_FADE_IN_DURATION = MENU_AUDIO.kidsMusicFadeInDuration
     let kidsMusicFadeTimer = 0
 
     //

@@ -1262,10 +1262,14 @@ export function startBackgroundMusic(instance, k, trackName) {
     globalBackgroundMusic.stop()
   }
   //
+  // Get volume for this specific track, fallback to default
+  //
+  const trackVolume = CFG.audio.backgroundMusic[trackName] || CFG.audio.backgroundMusic.volume
+  //
   // Play the track
   //
   const music = k.play(trackName, {
-    volume: CFG.audio.backgroundMusic.volume,
+    volume: trackVolume,
     loop: true
   })
 

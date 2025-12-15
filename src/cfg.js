@@ -135,7 +135,7 @@ export const CFG = {
       fadeInTime: 0.5
     },
     //
-    // Background music for levels
+    // Default background music volume (fallback)
     //
     backgroundMusic: {
       volume: MASTER_VOLUME * 0.143

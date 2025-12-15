@@ -244,16 +244,28 @@ export function draw(inst) {
  */
 function initializeSandLines(inst) {
   const { screenWidth, screenHeight } = inst
+  //
+  // Count vertical and horizontal lines
+  //
+  const verticalCount = Math.ceil(SAND_LINES_COUNT / 2)
+  const horizontalCount = Math.floor(SAND_LINES_COUNT / 2)
+  
+  let verticalIndex = 0
+  let horizontalIndex = 0
   
   for (let i = 0; i < SAND_LINES_COUNT; i++) {
     const isVertical = i % 2 === 0
     
     if (isVertical) {
       //
-      // Vertical line (top to bottom) with random horizontal position
+      // Vertical line - distribute evenly across width
+      // Use segment-based positioning with small random variation
       //
-      const x = Math.random() * screenWidth
-      const startOffset = Math.random() * SAND_LINE_MAX_LENGTH  // Random offset along line
+      const segment = (verticalIndex + 0.5) / (verticalCount + 1)
+      const segmentWidth = screenWidth / (verticalCount + 1)
+      const randomVariation = (Math.random() - 0.5) * segmentWidth * 0.3
+      const x = (segment * screenWidth) + randomVariation
+      const startOffset = Math.random() * SAND_LINE_MAX_LENGTH
       
       inst.sandLines.push({
         startX: x,
@@ -263,14 +275,20 @@ function initializeSandLines(inst) {
         isVertical: true,
         lastParticleSteps: SAND_PARTICLE_SPACING,
         maxDistance: screenHeight,
-        offset: startOffset  // How far along the line this snake starts
+        offset: startOffset
       })
+      
+      verticalIndex++
     } else {
       //
-      // Horizontal line (left to right) with random vertical position
+      // Horizontal line - distribute evenly across height
+      // Use segment-based positioning with small random variation
       //
-      const y = Math.random() * screenHeight
-      const startOffset = Math.random() * SAND_LINE_MAX_LENGTH  // Random offset along line
+      const segment = (horizontalIndex + 0.5) / (horizontalCount + 1)
+      const segmentHeight = screenHeight / (horizontalCount + 1)
+      const randomVariation = (Math.random() - 0.5) * segmentHeight * 0.3
+      const y = (segment * screenHeight) + randomVariation
+      const startOffset = Math.random() * SAND_LINE_MAX_LENGTH
       
       inst.sandLines.push({
         startX: 0,
@@ -280,8 +298,10 @@ function initializeSandLines(inst) {
         isVertical: false,
         lastParticleSteps: SAND_PARTICLE_SPACING,
         maxDistance: screenWidth,
-        offset: startOffset  // How far along the line this snake starts
+        offset: startOffset
       })
+      
+      horizontalIndex++
     }
   }
 }

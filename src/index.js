@@ -45,6 +45,7 @@ k.loadSound("word", "/word.mp3")
 k.loadSound("menu", "/menu.mp3")
 k.loadSound("kids", "/kids.mp3")
 k.loadSound("clock", "/clock.mp3")
+k.loadSound("time", "/time.mp3")
 //
 // Load default character sprites for both hero types
 //

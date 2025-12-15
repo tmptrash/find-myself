@@ -6,6 +6,12 @@ import { CFG as GLOBAL_CFG, deepMerge } from '../../cfg.js'
 export const WORD_CFG = {
   audio: {
     //
+    // Background music volumes (relative to GLOBAL_CFG.audio.masterVolume)
+    //
+    backgroundMusic: {
+      word: GLOBAL_CFG.audio.masterVolume * 0.143  // word.mp3 volume (10% of master)
+    },
+    //
     // Blade glint sound effect (metal ping/slash)
     //
     bladeGlint: {

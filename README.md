@@ -1,6 +1,6 @@
 # Find Myself
 
-A philosophical 2D platformer about self-discovery through life's challenges. Navigate through different aspects of existence while searching for your reflection.
+A philosophical 2D platformer about self-discovery through life's challenges. Navigate through different aspects of existence while searching for yourself.
 
 ## 🎮 About the Game
 

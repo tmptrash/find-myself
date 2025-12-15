@@ -25,6 +25,10 @@ const HERO_SPAWN_Y = 790
 const ANTIHERO_SPAWN_X = 1670
 const ANTIHERO_SPAWN_Y = 790
 //
+// Hero spawn timing
+//
+const ANTIHERO_SPAWN_DELAY = 1.0  // Anti-hero spawns 1 second after hero
+//
 // Instructions animation constants
 //
 const INSTRUCTIONS_INITIAL_DELAY = 1.0
@@ -242,6 +246,10 @@ export function sceneLevel0(k) {
     hero.character.z = 20
     antiHero.character.z = 20
     //
+    // Hide anti-hero initially (will appear after spawn delay)
+    //
+    antiHero.character.hidden = true
+    //
     // Show instructions on first run
     //
     if (!instructionsAnimationComplete) {
@@ -279,10 +287,15 @@ export function sceneLevel0(k) {
       FpsCounter.onUpdate(fpsCounter)
     })
     //
-    // Spawn heroes (enables movement)
+    // Spawn hero immediately
     //
     Hero.spawn(hero)
-    Hero.spawn(antiHero)
+    //
+    // Spawn anti-hero after delay
+    //
+    k.wait(ANTIHERO_SPAWN_DELAY, () => {
+      Hero.spawn(antiHero)
+    })
     //
     // Create time platforms going right and up
     // Platform 1: left-bottom, above hero (2 seconds)

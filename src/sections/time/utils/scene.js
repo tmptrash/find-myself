@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
+import * as TimeDigits from '../components/time-digits.js'
 
 /**
  * Adds background to the scene
@@ -86,6 +87,10 @@ export function initScene(config) {
   //
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => {
+      //
+      // Reset time digits state when leaving section
+      //
+      TimeDigits.reset()
       k.go("menu")
     })
   })

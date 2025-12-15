@@ -1,5 +1,9 @@
 import { CFG } from '../cfg.js'
 //
+// Global state to persist time digits and particles across level restarts
+//
+let savedTimeDigitsData = null
+//
 // Time digits configuration
 //
 const DIGIT_COUNT = 30
@@ -49,6 +53,23 @@ export function create(config) {
   const playableTop = 0
   const playableBottom = k.height()
   
+  //
+  // If we have saved data, restore from it
+  //
+  if (savedTimeDigitsData) {
+    const inst = {
+      k,
+      digits: savedTimeDigitsData.digits,
+      globalTimer: savedTimeDigitsData.globalTimer,
+      updateTimer: savedTimeDigitsData.updateTimer,
+      sandParticles: savedTimeDigitsData.sandParticles,
+      sandLines: savedTimeDigitsData.sandLines,
+      screenWidth: k.width(),
+      screenHeight: k.height()
+    }
+    return inst
+  }
+  
   const digits = []
   
   //
@@ -93,6 +114,10 @@ export function create(config) {
   // Pre-populate lines with particles
   //
   populateInitialParticles(inst)
+  //
+  // Save state for future restarts
+  //
+  saveState(inst)
   
   return inst
 }
@@ -200,6 +225,10 @@ export function onUpdate(inst) {
     // Move all existing sand particles on each second tick
     //
     moveSandParticles(inst)
+    //
+    // Save state after updates
+    //
+    saveState(inst)
   }
 }
 
@@ -473,5 +502,26 @@ function drawSandParticles(inst) {
       anchor: "center"
     })
   })
+}
+
+/**
+ * Save current state for persistence across restarts
+ * @param {Object} inst - Time digits instance
+ */
+function saveState(inst) {
+  savedTimeDigitsData = {
+    digits: inst.digits.map(d => ({ ...d })),
+    globalTimer: inst.globalTimer,
+    updateTimer: inst.updateTimer,
+    sandParticles: inst.sandParticles.map(p => ({ ...p })),
+    sandLines: inst.sandLines.map(l => ({ ...l }))
+  }
+}
+
+/**
+ * Reset saved state (call when leaving time section completely)
+ */
+export function reset() {
+  savedTimeDigitsData = null
 }
 

@@ -1,4 +1,5 @@
 import * as Sound from '../../../utils/sound.js'
+import * as TimeDigits from '../components/time-digits.js'
 
 const FINAL_MESSAGE = "time shapes everything - even you"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -108,6 +109,10 @@ function onUpdate(inst) {
     
     if (progress >= 1) {
       inst.phase = 'complete'
+      //
+      // Reset time digits state when leaving section
+      //
+      TimeDigits.reset()
       inst.k.go('menu')
     }
   }
@@ -119,6 +124,10 @@ function onUpdate(inst) {
 function skipToMenu(inst) {
   if (inst.skipped) return
   inst.skipped = true
+  //
+  // Reset time digits state when leaving section
+  //
+  TimeDigits.reset()
   inst.k.go('menu')
 }
 

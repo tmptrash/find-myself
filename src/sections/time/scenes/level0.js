@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, startTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
@@ -189,33 +189,22 @@ export function sceneLevel0(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start background music (kids.mp3) - louder
+    // Start background music (only if not already playing)
+    // Note: kids.mp3 and time.mp3 persist across level reloads
     //
-    const kidsMusic = k.play('kids', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.kids
-    })
+    startTimeSectionMusic(k)
     //
-    // Start clock ticking sound (clock.mp3)
+    // Start clock.mp3 locally (restarts on each level load for synchronization)
     //
     const clockMusic = k.play('clock', {
       loop: true,
       volume: CFG.audio.backgroundMusic.clock
     })
     //
-    // Start time section background music (time.mp3) - quieter
-    //
-    const timeMusic = k.play('time', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.time
-    })
-    //
-    // Stop music when leaving the scene
+    // Stop clock music when leaving the scene (will restart on reload for sync)
     //
     k.onSceneLeave(() => {
-      kidsMusic.stop()
       clockMusic.stop()
-      timeMusic.stop()
     })
     //
     // Initialize level with heroes and platforms

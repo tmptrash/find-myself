@@ -2,8 +2,49 @@ import { CFG } from '../cfg.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import * as TimeDigits from '../components/time-digits.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+//
+// Global music instances for time section (persist across level reloads)
+// Note: clock.mp3 is NOT stored here - it restarts on each level load for sync
+//
+let timeSectionMusic = {
+  kids: null,
+  time: null
+}
+
+/**
+ * Starts time section background music (only if not already playing)
+ * Note: Does not start clock.mp3 - that is managed per-level for synchronization
+ * @param {Object} k - Kaplay instance
+ */
+export function startTimeSectionMusic(k) {
+  if (!timeSectionMusic.kids) {
+    timeSectionMusic.kids = k.play('kids', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.kids
+    })
+  }
+  if (!timeSectionMusic.time) {
+    timeSectionMusic.time = k.play('time', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.time
+    })
+  }
+}
+
+/**
+ * Stops all time section background music
+ */
+export function stopTimeSectionMusic() {
+  if (timeSectionMusic.kids) {
+    timeSectionMusic.kids.stop()
+    timeSectionMusic.kids = null
+  }
+  if (timeSectionMusic.time) {
+    timeSectionMusic.time.stop()
+    timeSectionMusic.time = null
+  }
+}
 
 /**
  * Adds background to the scene
@@ -103,9 +144,9 @@ export function initScene(config) {
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => {
       //
-      // Reset time digits state when leaving section
+      // Stop time section music when leaving section
       //
-      TimeDigits.reset()
+      stopTimeSectionMusic()
       k.go("menu")
     })
   })

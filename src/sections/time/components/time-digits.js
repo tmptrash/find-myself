@@ -14,7 +14,6 @@ const UPDATE_INTERVAL = 1.0  // Update every second
 //
 const SAND_PARTICLE_SIZE = 4
 const SAND_PARTICLE_STEP = 5  // pixels per step (each second) - small subtle movement
-const SAND_PARTICLE_MAX_STEPS = 200  // maximum steps before removal
 const SAND_PARTICLE_OPACITY = 0.8
 const SAND_LINES_COUNT = 20  // Number of lines/snakes (increased)
 const SAND_PARTICLE_SPACING = 10  // Steps between particles on same line (10 steps = 50 pixels)
@@ -336,7 +335,6 @@ function populateInitialParticles(inst) {
         dirX: line.dirX,
         dirY: line.dirY,
         shade,
-        steps: totalSteps,
         isVertical: line.isVertical,
         lineIndex
       }
@@ -396,39 +394,35 @@ function moveSandParticles(inst) {
   //
   // Move each particle by one step
   //
-  for (let i = inst.sandParticles.length - 1; i >= 0; i--) {
-    const particle = inst.sandParticles[i]
+  inst.sandParticles.forEach(particle => {
     //
     // Move particle by step
     //
     particle.x += particle.dirX * SAND_PARTICLE_STEP
     particle.y += particle.dirY * SAND_PARTICLE_STEP
-    particle.steps++
     //
-    // Check if particle went out of bounds - wrap around instead of removing
+    // Wrap around screen edges using modulo
     //
-    const line = inst.sandLines[particle.lineIndex]
-    
-    if (particle.isVertical && particle.y > inst.screenHeight) {
+    if (particle.isVertical) {
       //
-      // Wrap to top
+      // Vertical particles (moving down or up)
       //
-      particle.y = 0
-      particle.steps = 0
-    } else if (!particle.isVertical && particle.x > inst.screenWidth) {
+      if (particle.y > inst.screenHeight) {
+        particle.y = particle.y % inst.screenHeight
+      } else if (particle.y < 0) {
+        particle.y = inst.screenHeight + (particle.y % inst.screenHeight)
+      }
+    } else {
       //
-      // Wrap to left
+      // Horizontal particles (moving right or left)
       //
-      particle.x = 0
-      particle.steps = 0
+      if (particle.x > inst.screenWidth) {
+        particle.x = particle.x % inst.screenWidth
+      } else if (particle.x < 0) {
+        particle.x = inst.screenWidth + (particle.x % inst.screenWidth)
+      }
     }
-    //
-    // Only remove if max steps reached (safety limit)
-    //
-    if (particle.steps >= SAND_PARTICLE_MAX_STEPS) {
-      inst.sandParticles.splice(i, 1)
-    }
-  }
+  })
 }
 /**
  * Draws all sand particles
@@ -445,31 +439,14 @@ function drawSandParticles(inst) {
     const g = parseInt(particle.shade.slice(3, 5), 16)
     const b = parseInt(particle.shade.slice(5, 7), 16)
     //
-    // Calculate opacity based on steps (fade in and out)
-    //
-    const progress = particle.steps / SAND_PARTICLE_MAX_STEPS
-    let opacity = SAND_PARTICLE_OPACITY
-    
-    if (progress < 0.2) {
-      //
-      // Fade in
-      //
-      opacity = SAND_PARTICLE_OPACITY * (progress / 0.2)
-    } else if (progress > 0.8) {
-      //
-      // Fade out
-      //
-      opacity = SAND_PARTICLE_OPACITY * ((1 - progress) / 0.2)
-    }
-    //
-    // Draw particle as small square
+    // Draw particle as small square with constant opacity
     //
     k.drawRect({
       pos: k.vec2(particle.x, particle.y),
       width: SAND_PARTICLE_SIZE,
       height: SAND_PARTICLE_SIZE,
       color: k.rgb(r, g, b),
-      opacity,
+      opacity: SAND_PARTICLE_OPACITY,
       anchor: "center"
     })
   })

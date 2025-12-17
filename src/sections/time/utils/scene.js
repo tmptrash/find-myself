@@ -66,7 +66,7 @@ function addBackground(k, color) {
  * @param {Object} config - Scene configuration
  * @param {Object} config.k - Kaplay instance
  * @param {string} config.levelName - Level name (e.g., 'level-time.0')
- * @param {number} [config.levelNumber] - Level number for indicator (1-4 for T, I, M, E)
+ * @param {number} [config.levelNumber] - Level number for indicator (1-4 for T, 1, M, E)
  * @param {string} [config.nextLevel] - Next level name
  * @param {boolean} [config.skipPlatforms=false] - Skip platform creation
  * @param {number} [config.bottomPlatformHeight] - Bottom platform height
@@ -291,8 +291,8 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     type: Hero.HEROES.ANTIHERO,
     controllable: false,
     sfx: null,
-    bodyColor: CFG.visual.colors.antiHero.body,
-    outlineColor: CFG.visual.colors.antiHero.outline
+    bodyColor: "#FF8C00",  // Orange/yellow (explicit hex to avoid local config override)
+    outlineColor: CFG.visual.colors.outline
   })
   
   const heroInst = Hero.create({
@@ -305,7 +305,7 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     antiHero: antiHeroInst,
     onAnnihilation: onAnnihilation || (() => k.go(levelName)),
     currentLevel: levelName,
-    bodyColor: CFG.visual.colors.hero.body,
+    bodyColor: CFG.visual.colors.hero.body,  // Gray from local time config
     outlineColor: CFG.visual.colors.hero.outline
   })
   

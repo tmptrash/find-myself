@@ -21,26 +21,29 @@ const SPIKE_TAG = "time-spike"
  * @param {number} config.endX - End X position
  * @param {number} config.y - Y position (base line)
  * @param {Object} config.hero - Hero instance for collision detection
+ * @param {string} config.currentLevel - Current level name for restart
+ * @param {number} [config.digitCount] - Number of digits to create (default: DIGIT_COUNT)
+ * @param {number} [config.fakeDigitCount] - Number of fake digits at the end (default: FAKE_DIGIT_COUNT)
  * @param {Object} [config.sfx] - Sound instance for glint effects
  * @returns {Object} Time spikes instance
  */
 export function create(config) {
-  const { k, startX, endX, y, hero, sfx = null } = config
+  const { k, startX, endX, y, hero, currentLevel, digitCount = DIGIT_COUNT, fakeDigitCount = FAKE_DIGIT_COUNT, sfx = null } = config
   
-  const spacing = (endX - startX) / (DIGIT_COUNT - 1)
+  const spacing = (endX - startX) / (digitCount - 1)
   const spikes = []
   const fakeSpikes = []
   //
   // Create spikes along the line
   //
-  for (let i = 0; i < DIGIT_COUNT; i++) {
+  for (let i = 0; i < digitCount; i++) {
     const x = startX + i * spacing
     const yOffset = MIN_Y_OFFSET + Math.random() * (MAX_Y_OFFSET - MIN_Y_OFFSET)
     const rotation = MIN_ROTATION + Math.random() * (MAX_ROTATION - MIN_ROTATION)
     //
-    // Last 4 digits are fake (no collision, drawn in front)
+    // Last fakeDigitCount digits are fake (no collision, drawn in front)
     //
-    const isFake = i >= DIGIT_COUNT - FAKE_DIGIT_COUNT
+    const isFake = i >= digitCount - fakeDigitCount
     const spike = createSingleSpike(k, x, y + yOffset, rotation, isFake)
     
     if (isFake) {
@@ -54,7 +57,8 @@ export function create(config) {
     k,
     spikes,
     fakeSpikes,
-    hero
+    hero,
+    currentLevel
   }
   //
   // Setup collision detection with hero character (only for real spikes)
@@ -199,7 +203,7 @@ function onSpikeHit(inst) {
   // Trigger hero death
   //
   Hero.death(inst.hero, () => {
-    inst.k.go('level-time.0')  // Restart level
+    inst.k.go(inst.currentLevel)  // Restart current level
   })
 }
 /**

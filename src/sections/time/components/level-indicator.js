@@ -2,7 +2,7 @@ import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 
 /**
- * Creates time section level indicator (letters "TIME")
+ * Creates time section level indicator (letters "T1ME")
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.levelNumber - Current level number (1-4)
@@ -22,7 +22,7 @@ export function create(config) {
     sideWallWidth
   } = config
   
-  const letters = ['T', 'I', 'M', 'E']
+  const letters = ['T', '1', 'M', 'E']
   const fontSize = 48
   const letterSpacing = -5
   const outlineThickness = 2

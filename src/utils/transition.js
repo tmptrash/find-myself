@@ -14,7 +14,8 @@ const LEVEL_TRANSITIONS = {
   'level-word.3': 'level-word.4',
   'level-word.4': 'word-complete',
   'word-complete': 'menu',
-  'level-time.0': 'menu'
+  'level-time.0': 'level-time.1',
+  'level-time.1': 'menu'
 }
 
 /**
@@ -74,7 +75,8 @@ const LEVEL_SUBTITLES = {
   'level-word.2': "the words you can't forget hurt the most",
   'level-word.3': 'words that kill',
   'level-word.4': 'sharp words move fast - so must you',
-  'level-time.0': 'time never waits, and neither should you'
+  'level-time.0': 'time never waits, and neither should you',
+  'level-time.1': 'beware the one, it brings the end near'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
@@ -123,8 +125,13 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   let timer = 0
-  // Start with fade_to_black phase (unless from menu, then skip to black_pause)
-  let phase = currentLevel === 'menu' ? 'black_pause' : 'fade_to_black'
+  //
+  // Check if transitioning from a level (not from menu)
+  // If so, start with black_pause phase since overlay is already opaque
+  //
+  const isFromLevel = currentLevel !== 'menu' && currentLevel.startsWith('level-')
+  // Start with fade_to_black phase (unless from menu or level, then skip to black_pause)
+  let phase = (currentLevel === 'menu' || isFromLevel) ? 'black_pause' : 'fade_to_black'
   const centerX = k.width() / 2
   const centerY = k.height() / 2
   
@@ -136,13 +143,23 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     skipEnableTimer: 0
   }
   
-  // Create black overlay (starts transparent, fades to opaque)
+  //
+  // Set background to black when transitioning from level to hide gray platforms
+  //
+  if (isFromLevel) {
+    k.setBackground(k.Color.fromHex("#000000"))
+  }
+  
+  //
+  // Create black overlay (starts fully opaque if from level, transparent if from menu)
+  // Use very high z-index to ensure it covers all level elements including platforms
+  //
   let overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
     k.color(0, 0, 0),
-    k.opacity(currentLevel === 'menu' ? 1 : 0), // Start opaque if from menu, transparent otherwise
-    k.z(CFG.visual.zIndex.ui + 10),
+    k.opacity(isFromLevel ? 1 : (currentLevel === 'menu' ? 1 : 0)), // Start opaque if from level or menu
+    k.z(CFG.visual.zIndex.ui + 100),  // Very high z-index to cover all elements
     k.fixed()
   ])
   

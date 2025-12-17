@@ -1736,11 +1736,11 @@ function getParticleColors(inst) {
   
   if (isTimeSection) {
     //
-    // Time section: grayscale colors only
+    // Time section: hero uses grayscale, anti-hero uses orange/yellow
     //
     return type === HEROES.HERO
       ? ["#C0C0C0", "#808080", "#A0A0A0", "#000000"]  // Light gray shades + black
-      : ["#606060", "#808080", "#707070", "#000000"]  // Medium gray shades + black
+      : [CFG.visual.colors.hero.body, "#FFA500", "#FF8C00", "#000000"]  // Orange shades + black
   }
   //
   // Other sections: use colors from config

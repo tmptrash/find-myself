@@ -8,6 +8,7 @@ import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -222,10 +223,9 @@ export function sceneLevel0(k) {
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
         //
-        // After annihilation, return to menu
-        // TODO: Change to k.go('level-time.1') when level 1 is created
+        // After annihilation, show transition and move to level 1
         //
-        k.go('menu')
+        createLevelTransition(k, 'level-time.0')
       }
     })
     
@@ -369,6 +369,7 @@ export function sceneLevel0(k) {
       endX: 1600,   // End near the anti-hero
       y: 810,       // Below the time platform, on the floor level
       hero,
+      currentLevel: 'level-time.0',
       sfx: sound
     })
   })

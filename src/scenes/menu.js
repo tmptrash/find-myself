@@ -562,7 +562,7 @@ export function sceneMenu(k) {
       //
       if (inst.isLeavingScene) {
         hideTitle(inst.title)
-      } else {
+        } else {
         updateTitle(inst.title, k, hoveredInst)
       }
       
@@ -842,7 +842,7 @@ function createTitle(k, centerX, centerY, radius) {
     const shadows = outlineOffsets.map(offset => k.add([
       k.text(char, { size: titleSize }),
       k.pos(offset.dx, offset.dy),
-      k.anchor("center"),
+        k.anchor("center"),
       k.color(0, 0, 0),
       k.opacity(0),
       k.z(CFG.visual.zIndex.ui + 49),
@@ -1037,7 +1037,7 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
       letter.color.g += (targetColor.g - letter.color.g) * 5 * dt
       letter.color.b += (targetColor.b - letter.color.b) * 5 * dt
     })
-  } else {
+          } else {
     titleInst.isHovering = false
     
     //

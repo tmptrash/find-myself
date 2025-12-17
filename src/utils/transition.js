@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getRGB } from './helper.js'
+import { parseHex } from './helper.js'
 import { markSectionComplete } from './progress.js'
 
 /**
@@ -126,12 +126,13 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   let timer = 0
   //
-  // Check if transitioning from a level (not from menu)
+  // Check if transitioning from a level or menu-time (not from menu)
   // If so, start with black_pause phase since overlay is already opaque
   //
   const isFromLevel = currentLevel !== 'menu' && currentLevel.startsWith('level-')
-  // Start with fade_to_black phase (unless from menu or level, then skip to black_pause)
-  let phase = (currentLevel === 'menu' || isFromLevel) ? 'black_pause' : 'fade_to_black'
+  const isFromMenuTime = currentLevel === 'menu-time'
+  // Start with fade_to_black phase (unless from menu, menu-time or level, then skip to black_pause)
+  let phase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime) ? 'black_pause' : 'fade_to_black'
   const centerX = k.width() / 2
   const centerY = k.height() / 2
   
@@ -144,21 +145,21 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   //
-  // Set background to black when transitioning from level to hide gray platforms
+  // Set background to black when transitioning from level or menu-time to hide gray platforms
   //
-  if (isFromLevel) {
+  if (isFromLevel || isFromMenuTime) {
     k.setBackground(k.Color.fromHex("#000000"))
   }
   
   //
-  // Create black overlay (starts fully opaque if from level, transparent if from menu)
+  // Create black overlay (starts fully opaque if from level or menu-time, transparent if from menu)
   // Use very high z-index to ensure it covers all level elements including platforms
   //
   let overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
     k.color(0, 0, 0),
-    k.opacity(isFromLevel ? 1 : (currentLevel === 'menu' ? 1 : 0)), // Start opaque if from level or menu
+    k.opacity(isFromLevel || isFromMenuTime ? 1 : (currentLevel === 'menu' ? 1 : 0)), // Start opaque if from level, menu-time or menu
     k.z(CFG.visual.zIndex.ui + 100),  // Very high z-index to cover all elements
     k.fixed()
   ])
@@ -236,7 +237,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             levelColorHex = "#6B8E9F"
           }
           
-          const rgb = getRGB(k, levelColorHex)
+          const [r, g, b] = parseHex(levelColorHex)
           
           const textObj = k.add([
             k.text(subtitle, {
@@ -245,9 +246,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             }),
             k.pos(k.width() / 2, k.height() / 2),
             k.anchor("center"),
-            k.color(rgb.r, rgb.g, rgb.b),
+            k.color(r, g, b),
             k.opacity(0),
-            k.z(CFG.visual.zIndex.ui + 11),
+            k.z(CFG.visual.zIndex.ui + 101),  // Above overlay (which is ui + 100)
             k.fixed()
           ])
           

@@ -314,6 +314,12 @@ export function sceneLevel1(k) {
       let platformY = SECOND_FLOOR_FLOOR_Y + verticalOffset
       let platformX = upperPlatformX
       //
+      // Check if this is one of the last two leftmost platforms
+      // Calculate distance to anti-hero position
+      //
+      const distanceToAntiHero = upperPlatformX - (ANTIHERO_CLOCK_PLATFORM_X + PLATFORM_WIDTH_SECONDS_ONLY)
+      const isLastTwoLeftmost = distanceToAntiHero <= PLATFORM_SPACING * 2.5  // Last two platforms (within 2.5 spacing distances)
+      //
       // Adjust first created platform (second in original sequence, now rightmost upper)
       // Move it right and down to make it jumpable from lower platform
       //
@@ -321,6 +327,11 @@ export function sceneLevel1(k) {
       if (isRightmostPlatform) {
         platformX += 40  // Move right by 40px (reduced from 80 to move left)
         platformY += 60  // Move down by 60px (increased from 15 to lower it more)
+      } else if (isLastTwoLeftmost) {
+        //
+        // Lower the last two leftmost platforms
+        //
+        platformY += 80  // Move down by 80px
       }
       
       const platform = TimePlatform.create({

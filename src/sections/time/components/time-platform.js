@@ -26,10 +26,11 @@ const PLATFORM_HEIGHT = 48
  * @param {string} [config.currentLevel] - Current level name for restart on death
  * @param {Object} [config.sfx] - Sound instance for audio effects
  * @param {boolean} [config.hidden=false] - If true, text is hidden initially
+ * @param {boolean} [config.enableColorChange=false] - If true, platform darkens with each landing
  * @returns {Object} Time platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, staticTime = false, currentLevel = null, sfx = null, hidden = false } = config
+  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false } = config
   //
   // Calculate platform size based on format
   // For seconds-only (XX), use smaller width to fit only two digits
@@ -129,7 +130,6 @@ export function create(config) {
     timeRemaining: duration,
     isActive: persistent,  // If persistent, always active
     isDestroyed: false,
-    wasGroundedLastFrame: false,
     isFake,
     persistent,
     showSecondsOnly,
@@ -140,7 +140,12 @@ export function create(config) {
     staticTime,
     currentLevel,
     sfx,
-    hidden
+    hidden,
+    enableColorChange,  // Enable/disable color change on landing
+    landingCount: 0,  // Track number of landings on this platform
+    initialColor: 192,  // Initial gray color value (light gray)
+    wasOnPlatform: false,  // Track if hero was on platform last frame
+    wasGrounded: false  // Track if hero was grounded last frame
   }
   
   return inst
@@ -248,28 +253,92 @@ export function onUpdate(inst) {
         }
       }
     }
-    return  // Persistent platforms don't disappear
+    //
+    // Landing detection for persistent platforms
+    //
+    if (inst.hero && inst.hero.character && !inst.isDestroyed) {
+      const heroChar = inst.hero.character
+      const isOnPlatform = inst.platform.isColliding(heroChar)
+      const isGrounded = heroChar.isGrounded()
+      //
+      // Detect landing: hero was in air (not on this platform) and now lands on this platform
+      //
+      if (inst.enableColorChange && isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform)) {
+        //
+        // Increment landing count and darken color
+        //
+        inst.landingCount++
+        //
+        // Calculate new color (darker with each landing)
+        // Each landing reduces brightness by 38, down to black (0) after 5 landings
+        //
+        const colorReduction = inst.landingCount * 38
+        const newColor = Math.max(inst.initialColor - colorReduction, 0)  // Minimum brightness of 0 (black)
+        //
+        // Update text color (outline stays black)
+        //
+        inst.timerText.color = inst.k.rgb(newColor, newColor, newColor)
+        //
+        // If color becomes black or landing count reaches 5, destroy the platform
+        //
+        if (newColor === 0 || inst.landingCount >= 5) {
+          destroy(inst)
+          return
+        }
+      }
+      
+      inst.wasOnPlatform = isOnPlatform
+      inst.wasGrounded = isGrounded
+    }
+    
+    return  // Persistent platforms don't disappear (unless color change enabled and black)
   }
   
   //
-  // Check if hero landed on the platform
+  // Check if hero is on the platform (for non-persistent platforms)
   //
-  if (!inst.isActive && inst.hero && inst.hero.character) {
+  if (inst.hero && inst.hero.character && !inst.isDestroyed) {
     const heroChar = inst.hero.character
+    const isOnPlatform = inst.platform.isColliding(heroChar)
     const isGrounded = heroChar.isGrounded()
+    
     //
-    // Activate timer when hero lands (transitions from air to grounded)
+    // Activate timer when hero is on platform (for non-persistent platforms)
     //
-    if (isGrounded && !inst.wasGroundedLastFrame) {
+    if (isOnPlatform && isGrounded && !inst.isActive && !inst.persistent) {
+      inst.isActive = true
+    }
+    
+    //
+    // Detect landing: hero was in air (not on this platform) and now lands on this platform
+    // Used for color change effect (if enabled)
+    //
+    if (isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform) && inst.enableColorChange) {
       //
-      // Check if hero is actually on THIS platform using collision check
+      // Increment landing count and darken color
       //
-      if (inst.platform.isColliding(heroChar)) {
-        inst.isActive = true
+      inst.landingCount++
+      //
+      // Calculate new color (darker with each landing)
+      // Each landing reduces brightness by 38, down to black (0) after 5 landings
+      //
+      const colorReduction = inst.landingCount * 38
+      const newColor = Math.max(inst.initialColor - colorReduction, 0)  // Minimum brightness of 0 (black)
+      //
+      // Update text color (outline stays black)
+      //
+      inst.timerText.color = inst.k.rgb(newColor, newColor, newColor)
+      //
+      // If color becomes black or landing count reaches 5, destroy the platform
+      //
+      if (newColor === 0 || inst.landingCount >= 5) {
+        destroy(inst)
+        return
       }
     }
     
-    inst.wasGroundedLastFrame = isGrounded
+    inst.wasOnPlatform = isOnPlatform
+    inst.wasGrounded = isGrounded
   }
   //
   // Update timer if active

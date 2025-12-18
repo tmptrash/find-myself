@@ -850,7 +850,7 @@ function createDustParticles(inst, footX, footY, type = 'splash', direction = 1)
       k.outline(1.5, k.rgb(outlineColor.r, outlineColor.g, outlineColor.b)),
       k.opacity(0.9),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.playerAbove),
+      k.z(50),
     ])
     //
     // Store particle velocity and lifetime

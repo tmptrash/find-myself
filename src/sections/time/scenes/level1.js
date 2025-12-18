@@ -159,7 +159,8 @@ export function sceneLevel1(k) {
       initialTime: 0,  // Always show 00
       staticTime: true,  // Never update time (always show 00)
       duration: 0,  // Not used for persistent platforms
-      sfx: sound
+      sfx: sound,
+      enableColorChange: true
     })
     //
     // Create clock platform (persistent, shows seconds only) under anti-hero
@@ -172,7 +173,8 @@ export function sceneLevel1(k) {
       persistent: true,
       showSecondsOnly: true,
       duration: 0,  // Not used for persistent platforms
-      sfx: sound
+      sfx: sound,
+      enableColorChange: true
     })
     //
     // Create clock platforms to the right of hero (kill on digit 1)
@@ -251,7 +253,8 @@ export function sceneLevel1(k) {
         killOnOne: true,  // Kill hero when time contains digit 1
         currentLevel: 'level-time.1',
         duration: 0,  // Not used for persistent platforms
-        sfx: sound
+        sfx: sound,
+        enableColorChange: true
       })
       
       clockPlatforms.push(platform)
@@ -351,7 +354,8 @@ export function sceneLevel1(k) {
         currentLevel: 'level-time.1',
         duration: 0,  // Not used for persistent platforms
         sfx: sound,
-        hidden: true  // Hide text initially
+        hidden: true,  // Hide text initially
+        enableColorChange: true
       })
       
       clockPlatforms.push(platform)

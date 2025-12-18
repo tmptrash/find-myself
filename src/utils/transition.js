@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
-import { markSectionComplete } from './progress.js'
+import { markSectionComplete, saveLastLevel } from './progress.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -122,6 +122,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     // No transition defined, go directly
     onComplete?.()
     return
+  }
+  
+  //
+  // Save progress for next level immediately (before showing transition)
+  // This ensures progress is saved even if user interrupts transition with ESC
+  // But DON'T save progress for transitions from menu/menu-time, as these are entry points
+  //
+  const isLevelToLevelTransition = currentLevel.startsWith('level-') && nextLevel.startsWith('level-')
+  if (isLevelToLevelTransition) {
+    saveLastLevel(nextLevel)
   }
   
   let timer = 0

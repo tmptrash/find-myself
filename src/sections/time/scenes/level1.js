@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic } from '../utils/scene.js'
+import { initScene, startTimeSectionMusic, stopTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
@@ -90,6 +90,10 @@ export function sceneLevel1(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
+        //
+        // Stop time section music before going to menu
+        //
+        stopTimeSectionMusic()
         //
         // Move to next level (TODO: create level 2)
         //

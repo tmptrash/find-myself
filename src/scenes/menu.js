@@ -127,6 +127,7 @@ export function sceneMenu(k) {
 
     //
     // Create hero in center (using HERO type)
+    // Use gray color like in time section
     //
     const heroInst = Hero.create({
       k,
@@ -135,7 +136,8 @@ export function sceneMenu(k) {
       type: Hero.HEROES.HERO,
       scale: 5,
       controllable: false,
-      addMouth: Boolean(progress.word)
+      addMouth: Boolean(progress.word),
+      bodyColor: "#C0C0C0"  // Light gray (same as time section)
     })
     
     const hero = heroInst.character
@@ -316,9 +318,21 @@ export function sceneMenu(k) {
           kidsMusic.stop()
           
           //
-          // Show transition to time level 0
+          // Get last level for time section or start from beginning
           //
-          createLevelTransition(k, 'menu-time')
+          const isTimeLevel = lastLevel && lastLevel.startsWith('level-time.')
+          
+          if (isTimeLevel) {
+            //
+            // Continue from last time level with transition
+            //
+            showTransitionToLevel(k, lastLevel)
+          } else {
+            //
+            // Start time section from beginning
+            //
+            createLevelTransition(k, 'menu-time')
+          }
         })
       }
       

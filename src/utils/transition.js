@@ -15,7 +15,8 @@ const LEVEL_TRANSITIONS = {
   'level-word.4': 'word-complete',
   'word-complete': 'menu',
   'level-time.0': 'level-time.1',
-  'level-time.1': 'menu'
+  'level-time.1': 'level-time.2',
+  'level-time.2': 'menu'
 }
 
 /**
@@ -73,10 +74,11 @@ const LEVEL_SUBTITLES = {
   'level-word.0': 'words, they cut deeper than blades',
   'level-word.1': "sharp words don't cut - they make you fall",
   'level-word.2': "the words you can't forget hurt the most",
-  'level-word.3': 'words that kill',
-  'level-word.4': 'sharp words move fast - so must you',
+  'level-word.3': 'sharp words move fast - so must you',
+  'level-word.4': 'words that kill',
   'level-time.0': 'time never waits, and neither should you',
-  'level-time.1': 'beware the one, it brings the end near'
+  'level-time.1': 'beware the one, it brings the end near',
+  'level-time.2': 'TODO: add subtitle for level 2'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

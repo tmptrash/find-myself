@@ -8,6 +8,7 @@ import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -91,13 +92,9 @@ export function sceneLevel1(k) {
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
         //
-        // Stop time section music before going to menu
+        // Move to next level with transition
         //
-        stopTimeSectionMusic()
-        //
-        // Move to next level (TODO: create level 2)
-        //
-        k.go('menu')
+        createLevelTransition(k, 'level-time.1')
       }
     })
     
@@ -415,7 +412,7 @@ export function sceneLevel1(k) {
       y: BOTTOM_PLATFORM_TOP - 20,  // At bottom invisible platform level (910)
       hero,
       currentLevel: 'level-time.1',
-      digitCount: 36,  // Added one more spike at the end
+      digitCount: 50,  // Increased to make spikes closer together
       fakeDigitCount: 0,  // All spikes cut (no fake spikes)
       sfx: sound
     })

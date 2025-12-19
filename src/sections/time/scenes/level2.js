@@ -292,9 +292,40 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     globalTimer: 0  // Timer to track seconds
   }
   //
-  // Create initial next platform
+  // DEBUG: Create all platforms at once for visualization
   //
-  createNextPlatform(inst)
+  const DEBUG_SHOW_ALL_PLATFORMS = false
+  if (DEBUG_SHOW_ALL_PLATFORMS) {
+    for (let i = 1; i < FINAL_PLATFORM_INDEX - 7; i++) {
+      const pos = getPlatformPosition(i, k)
+      const randomOffset = Math.floor(Math.random() * 60)
+      const platform = TimePlatform.create({
+        k,
+        x: pos.x,
+        y: pos.y,
+        hero,
+        persistent: true,
+        showSecondsOnly: true,
+        initialTime: randomOffset,
+        staticTime: false,
+        duration: 0,
+        sfx: sound
+      })
+      platforms.push({
+        inst: platform,
+        index: i,
+        timeOffset: randomOffset,
+        ageInSeconds: 0,
+        maxDarkening: Math.max(12 - Math.floor(i / 6), 1),
+        lastGlobalTime: 0
+      })
+    }
+  } else {
+    //
+    // Create initial next platform
+    //
+    createNextPlatform(inst)
+  }
   //
   // Update function called every frame
   //
@@ -416,9 +447,9 @@ function createPlatformSystem(k, sound, hero, antiHero) {
         inst.currentPlatformIndex = inst.nextPlatform.index
         inst.nextPlatform = null
         //
-        // Create new next platform (stop before the final platform)
+        // Create new next platform (stop 7 platforms before the final one)
         //
-        if (inst.currentPlatformIndex < FINAL_PLATFORM_INDEX - 1) {
+        if (inst.currentPlatformIndex < FINAL_PLATFORM_INDEX - 7) {
           createNextPlatform(inst)
         }
       }
@@ -444,6 +475,13 @@ function createNextPlatform(inst) {
   //
   const randomOffset = Math.floor(Math.random() * 60)
   const nextIndex = inst.currentPlatformIndex + 1
+  //
+  // Don't create platform if it's too close to final platform (leave gap for reaching anti-hero)
+  //
+  if (nextIndex >= FINAL_PLATFORM_INDEX - 7) {
+    return
+  }
+  
   const pos = getPlatformPosition(nextIndex, k)
   //
   // Calculate max darkening: decrease by 1 every 6 platforms (min 1)

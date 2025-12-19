@@ -415,7 +415,7 @@ export function show(inst) {
  * Destroys the time platform
  * @param {Object} inst - Time platform instance
  */
-function destroy(inst) {
+export function destroy(inst) {
   if (inst.isDestroyed) return
   
   inst.isDestroyed = true

@@ -159,6 +159,22 @@ export function sceneLevel2(k) {
     //
     createLevelPlatforms(k, sound)
     //
+    // Create snow particle system
+    //
+    const snowSystem = createSnowParticles(k)
+    //
+    // Update snow particles
+    //
+    k.onUpdate(() => {
+      updateSnowParticles(snowSystem)
+    })
+    //
+    // Draw snow particles
+    //
+    k.onDraw(() => {
+      drawSnowParticles(snowSystem)
+    })
+    //
     // Create time spikes (digit "1") at bottom platform level
     //
     const timeSpikes = TimeSpikes.create({
@@ -572,3 +588,85 @@ function createLevelPlatforms(k, sound) {
   ])
 }
 
+/**
+ * Create snow particle system
+ * @param {Object} k - Kaplay instance
+ * @returns {Object} Snow system instance
+ */
+function createSnowParticles(k) {
+  const particles = []
+  const PARTICLE_COUNT = 150
+  const WIDTH = k.width()
+  const HEIGHT = k.height()
+  //
+  // Create particles with random initial positions
+  //
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push({
+      x: Math.random() * WIDTH,
+      y: Math.random() * HEIGHT,
+      size: 1 + Math.random() * 2,  // Size between 1-3px
+      speedX: 30 + Math.random() * 40,  // Horizontal speed (left to right)
+      speedY: 50 + Math.random() * 50,  // Vertical speed (falling down)
+      opacity: 0.3 + Math.random() * 0.4  // Opacity 0.3-0.7
+    })
+  }
+  
+  return {
+    k,
+    particles,
+    width: WIDTH,
+    height: HEIGHT
+  }
+}
+
+/**
+ * Update snow particles
+ * @param {Object} inst - Snow system instance
+ */
+function updateSnowParticles(inst) {
+  const { k, particles, width, height } = inst
+  const dt = k.dt()
+  //
+  // Update each particle
+  //
+  particles.forEach(p => {
+    //
+    // Move particle left-to-right and down
+    //
+    p.x += p.speedX * dt
+    p.y += p.speedY * dt
+    //
+    // Wrap around when particle goes off screen
+    //
+    if (p.x > width) {
+      p.x = -10
+      p.y = Math.random() * height
+    }
+    if (p.y > height) {
+      p.y = -10
+      p.x = Math.random() * width
+    }
+  })
+}
+
+/**
+ * Draw snow particles
+ * @param {Object} inst - Snow system instance
+ */
+function drawSnowParticles(inst) {
+  const { k, particles } = inst
+  //
+  // Draw each particle as a white pixel/small rect
+  //
+  particles.forEach(p => {
+    k.drawRect({
+      width: p.size,
+      height: p.size,
+      pos: k.vec2(p.x, p.y),
+      color: k.rgb(255, 255, 255),
+      opacity: p.opacity,
+      z: 5  // Above background but below platforms and hero
+    })
+  })
+}

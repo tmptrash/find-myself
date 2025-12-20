@@ -561,7 +561,7 @@ function createMonster(k, heroInst) {
       k.pos(monsterX + eyePos.x, monsterY + eyePos.y),
       k.color(255, 255, 255),
       k.opacity(1.0),
-      k.z(15),
+      k.z(14),
       k.fixed()
     ])
     //
@@ -572,7 +572,7 @@ function createMonster(k, heroInst) {
       k.pos(monsterX + eyePos.x, monsterY + eyePos.y),
       k.color(0, 0, 0),
       k.opacity(1.0),
-      k.z(16),
+      k.z(14),
       k.fixed()
     ])
     

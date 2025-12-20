@@ -81,7 +81,7 @@ const LEVEL_SUBTITLES = {
   'level-time.0': 'time never waits, and neither should you',
   'level-time.1': 'do not touch the one',
   'level-time.2': 'digits sum even safe, sum odd deadly',
-  'level-time.3': 'TODO: add subtitle for level 3'
+  'level-time.3': 'sections switch controls - watch the clocks'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

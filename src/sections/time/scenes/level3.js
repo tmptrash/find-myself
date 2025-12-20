@@ -21,7 +21,7 @@ const PASSAGE_WIDTH = 100  // Width of passage between corridors
 //
 // Hero and monster spawn positions
 //
-const HERO_SPAWN_X = 280  // Hero starts more to the left
+const HERO_SPAWN_X = 350  // Hero starts more to the right
 const HERO_SPAWN_Y = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 const MONSTER_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Monster starts at the left
 const MONSTER_SPAWN_Y = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
@@ -474,7 +474,7 @@ function createTimeSections(k) {
  * @returns {Object} Monster instance
  */
 function createMonster(k, heroInst) {
-  const MONSTER_SPEED = 70  // Slower, more creepy movement
+  const MONSTER_SPEED = 110  // Even faster movement
   const BODY_SIZE = 60
   const LEG_COUNT = 8
   const SEGMENT_COUNT = 6

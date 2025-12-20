@@ -538,6 +538,51 @@ function createMonster(k, heroInst) {
       baseRadius: baseRadius
     })
   }
+  //
+  // Create eyes
+  //
+  const eyes = []
+  const EYE_RADIUS = 6
+  const PUPIL_RADIUS = 3
+  const eyePositions = [
+    { x: -12, y: -12 },  // Top-left
+    { x: 12, y: -12 },   // Top-right
+    { x: -12, y: 12 },   // Bottom-left
+    { x: 12, y: 12 }     // Bottom-right
+  ]
+  
+  for (let i = 0; i < 4; i++) {
+    const eyePos = eyePositions[i]
+    //
+    // White eye background
+    //
+    const eyeWhite = k.add([
+      k.circle(EYE_RADIUS),
+      k.pos(monsterX + eyePos.x, monsterY + eyePos.y),
+      k.color(255, 255, 255),
+      k.opacity(1.0),
+      k.z(15),
+      k.fixed()
+    ])
+    //
+    // Black pupil
+    //
+    const pupil = k.add([
+      k.circle(PUPIL_RADIUS),
+      k.pos(monsterX + eyePos.x, monsterY + eyePos.y),
+      k.color(0, 0, 0),
+      k.opacity(1.0),
+      k.z(16),
+      k.fixed()
+    ])
+    
+    eyes.push({
+      white: eyeWhite,
+      pupil: pupil,
+      offsetX: eyePos.x,
+      offsetY: eyePos.y
+    })
+  }
   
   const inst = {
     k,
@@ -547,6 +592,7 @@ function createMonster(k, heroInst) {
     speed: MONSTER_SPEED,
     legs,
     bodyCircles,
+    eyes,
     bodySize: BODY_SIZE,
     legWidth: LEG_WIDTH,
     segmentLength: SEGMENT_LENGTH,
@@ -594,6 +640,37 @@ function createMonster(k, heroInst) {
       bc.obj.pos.y = inst.y + offsetY + inst.wobbleY
       const scale = 0.9 + Math.sin(phase * 2) * 0.1
       bc.obj.radius = bc.baseRadius * scale
+    })
+    //
+    // Update eyes position and make pupils look at hero
+    //
+    inst.eyes.forEach(eye => {
+      const eyeX = inst.x + eye.offsetX + inst.wobbleX
+      const eyeY = inst.y + eye.offsetY + inst.wobbleY
+      //
+      // Update white part position
+      //
+      eye.white.pos.x = eyeX
+      eye.white.pos.y = eyeY
+      //
+      // Calculate direction to hero for pupil
+      //
+      const toHeroX = heroX - eyeX
+      const toHeroY = heroY - eyeY
+      const distToHero = Math.hypot(toHeroX, toHeroY)
+      //
+      // Move pupil towards hero within eye bounds
+      //
+      const maxPupilOffset = 3  // Maximum distance pupil can move from center
+      if (distToHero > 0) {
+        const pupilOffsetX = (toHeroX / distToHero) * maxPupilOffset
+        const pupilOffsetY = (toHeroY / distToHero) * maxPupilOffset
+        eye.pupil.pos.x = eyeX + pupilOffsetX
+        eye.pupil.pos.y = eyeY + pupilOffsetY
+      } else {
+        eye.pupil.pos.x = eyeX
+        eye.pupil.pos.y = eyeY
+      }
     })
     //
     // Update step timer

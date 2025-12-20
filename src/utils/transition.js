@@ -16,7 +16,9 @@ const LEVEL_TRANSITIONS = {
   'word-complete': 'menu',
   'level-time.0': 'level-time.1',
   'level-time.1': 'level-time.2',
-  'level-time.2': 'menu'
+  'level-time.2': 'level-time.3',
+  'level-time.3': 'time-complete',
+  'time-complete': 'menu'
 }
 
 /**
@@ -77,8 +79,9 @@ const LEVEL_SUBTITLES = {
   'level-word.3': 'sharp words move fast - so must you',
   'level-word.4': 'words that kill',
   'level-time.0': 'time never waits, and neither should you',
-  'level-time.1': 'beware the one, it brings the end near',
-  'level-time.2': 'digits sum even safe, sum odd deadly'
+  'level-time.1': 'do not touch the one',
+  'level-time.2': 'digits sum even safe, sum odd deadly',
+  'level-time.3': 'TODO: add subtitle for level 3'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
@@ -109,7 +112,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   // Check if section is completed (last level of section going to completion screen)
   //
-  if (nextLevel === 'word-complete') {
+  if (nextLevel === 'word-complete' || nextLevel === 'time-complete') {
     //
     // Extract section name from level name (e.g., 'level-word.4' -> 'word')
     //

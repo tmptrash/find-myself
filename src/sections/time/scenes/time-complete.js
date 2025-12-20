@@ -1,5 +1,6 @@
 import * as Sound from '../../../utils/sound.js'
 import { stopTimeSectionMusic } from '../utils/scene.js'
+import { markSectionComplete } from '../../../utils/progress.js'
 
 const FINAL_MESSAGE = "time shapes everything - even you"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -14,13 +15,15 @@ export function sceneTimeComplete(k) {
   k.scene("time-complete", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
-    
+    //
+    // Mark time section as complete
+    //
+    markSectionComplete('time')
     //
     // Create sound instance and stop background music
     //
     const sound = Sound.create()
     Sound.stopBackgroundMusic(sound)
-    
     //
     // Create black background
     //
@@ -30,7 +33,6 @@ export function sceneTimeComplete(k) {
       k.color(0, 0, 0),
       k.z(0)
     ])
-    
     //
     // Create final message text
     //
@@ -45,7 +47,6 @@ export function sceneTimeComplete(k) {
       k.opacity(0),
       k.z(10)
     ])
-    
     //
     // Scene state
     //
@@ -56,14 +57,12 @@ export function sceneTimeComplete(k) {
       phase: 'fade_in',
       skipped: false
     }
-    
     //
     // Update animation
     //
     k.onUpdate(() => {
       onUpdate(inst)
     })
-    
     //
     // Allow skip with Space, Enter or mouse click
     //
@@ -130,5 +129,3 @@ function skipToMenu(inst) {
   stopTimeSectionMusic()
   inst.k.go('menu')
 }
-
-

@@ -129,6 +129,7 @@ export function sceneMenu(k) {
     // Create hero in center (using HERO type)
     // Use gray color like in time section
     //
+    const heroBodyColor = progress.time ? "#FF8C00" : "#C0C0C0"  // Yellow if time complete, gray otherwise
     const heroInst = Hero.create({
       k,
       x: centerX,
@@ -137,7 +138,7 @@ export function sceneMenu(k) {
       scale: 5,
       controllable: false,
       addMouth: Boolean(progress.word),
-      bodyColor: "#C0C0C0"  // Light gray (same as time section)
+      bodyColor: heroBodyColor
     })
     
     const hero = heroInst.character

@@ -44,7 +44,7 @@ export function sceneLevel2(k) {
     //
     saveLastLevel('level-time.2')
     //
-    // Stop previous level music (kids.mp3 and time.mp3 from level 1)
+    // Stop previous level music (kids.mp3, time.mp3 and clock.mp3 from level 1)
     //
     stopTimeSectionMusic()
     //
@@ -53,11 +53,15 @@ export function sceneLevel2(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start time.mp3 and clock.mp3 background music (without kids.mp3)
+    // Start time.mp3, kids.mp3 and clock.mp3 background music
     //
     const timeMusic = k.play('time', {
       loop: true,
       volume: CFG.audio.backgroundMusic.time
+    })
+    const kidsMusic = k.play('kids', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.kids
     })
     //
     // Start clock.mp3 (restarts on each level load for synchronization)
@@ -71,6 +75,7 @@ export function sceneLevel2(k) {
     //
     k.onSceneLeave(() => {
       timeMusic.stop()
+      kidsMusic.stop()
       clockMusic.stop()
     })
     //
@@ -131,11 +136,12 @@ export function sceneLevel2(k) {
         // Stop all music before leaving
         //
         timeMusic.stop()
+        kidsMusic.stop()
         clockMusic.stop()
         //
-        // Move to menu (TODO: create level 3 or time-complete scene)
+        // Move to level 3
         //
-        k.go('menu')
+        k.go('level-time.3')
       }
     })
     

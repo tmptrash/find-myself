@@ -161,7 +161,9 @@ export function create(config) {
     isDying: false,
     isSpawned: false,   // Flag to prevent controls before spawn completes
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
-    isInvulnerable: false  // Flag for spawn invulnerability
+    isInvulnerable: false,  // Flag for spawn invulnerability
+    controlsReversed: false,  // Flag for control inversion (time section level 3)
+    controlsDisabled: false  // Flag to temporarily disable controls during zone transitions
   }
   //
   // Check ground touch through collisions
@@ -464,9 +466,17 @@ function onUpdate(inst) {
   //
   // Handle movement input (check if spawned first)
   //
-  if (inst.isSpawned) {
-    const isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
-    const isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
+  if (inst.isSpawned && !inst.controlsDisabled) {
+    let isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
+    let isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
+    //
+    // Apply control inversion if flag is set (for time section level 3)
+    //
+    if (inst.controlsReversed) {
+      const temp = isMovingLeft
+      isMovingLeft = isMovingRight
+      isMovingRight = temp
+    }
     //
     // Apply movement only once per frame, prioritizing last pressed direction
     //
@@ -1196,10 +1206,11 @@ function onAnnihilationCollide(inst) {
             //
             k.camPos(originalCamPos)
             //
-            // STEP 7: Check if this is the last level of word section
+            // STEP 7: Check if this is the last level of word or time section
             //
             const nextLevel = getNextLevel(inst.currentLevel)
             const isLastWordLevel = inst.currentLevel === 'level-word.4' && nextLevel === 'word-complete'
+            const isLastTimeLevel = inst.currentLevel === 'level-time.3' && nextLevel === 'time-complete'
             
             if (isLastWordLevel && !inst.addMouth) {
               //
@@ -1330,6 +1341,126 @@ function onAnnihilationCollide(inst) {
                         inst.character.hidden = true
                         createLevelTransition(k, inst.currentLevel)
                       })
+                    })
+                  })
+                })
+              })
+            } else if (isLastTimeLevel && inst.bodyColor !== "#FF8C00") {
+              //
+              // Special sequence for completing time section: change hero color to yellow (anti-hero color)
+              //
+              k.wait(1.5, () => {
+                //
+                // Store original volumes
+                //
+                const originalMusicVolume = Sound.getBackgroundMusicVolume(sfx)
+                //
+                // Fade out music to quiet, increase glitch volume
+                //
+                let fadeTimer = 0
+                const FADE_DURATION = 1.0  // 1 second fade
+                const TARGET_MUSIC_VOLUME = 0.005
+                const TARGET_GLITCH_VOLUME = 3.5
+                
+                const fadeInterval = k.onUpdate(() => {
+                  fadeTimer += k.dt()
+                  const progress = Math.min(1, fadeTimer / FADE_DURATION)
+                  //
+                  // Fade music down
+                  //
+                  const newMusicVolume = originalMusicVolume + (TARGET_MUSIC_VOLUME - originalMusicVolume) * progress
+                  Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
+                  //
+                  // Fade glitch sounds up
+                  //
+                  Sound.setGlitchSoundVolume(sfx, 1.0 + progress * (TARGET_GLITCH_VOLUME - 1.0))
+                  
+                  if (progress >= 1) {
+                    fadeInterval.cancel()
+                  }
+                })
+                //
+                // Play color change sound right after fade completes (color change happens in 1 second)
+                //
+                k.wait(1.0, () => {
+                  sfx && Sound.playMouthSound(sfx)
+                  //
+                  // Update inst to use yellow color BEFORE loading sprites
+                  //
+                  const yellowColor = "#FF8C00"  // Anti-hero color (orange/yellow)
+                  inst.bodyColor = yellowColor
+                  inst.spritePrefix = `${inst.type}_${yellowColor}_${CFG.visual.colors.outline}`
+                  //
+                  // Reload sprites with yellow color
+                  //
+                  loadHeroSprites({
+                    k: inst.k,
+                    type: inst.type,
+                    bodyColor: yellowColor,
+                    outlineColor: CFG.visual.colors.outline,
+                    addMouth: false,
+                    addArms: false,
+                    character: null
+                  })
+                  //
+                  // Wait a frame to ensure sprites are loaded, then update character sprite
+                  //
+                  k.wait(0.05, () => {
+                    //
+                    // Use getSpriteName to get the correct sprite with yellow color
+                    //
+                    const newSpriteName = getSpriteName(inst, 0, 0)
+                    //
+                    // Update character sprite to show yellow color
+                    //
+                    try {
+                      player.use(k.sprite(newSpriteName))
+                    } catch (error) {
+                      console.error(`Failed to load sprite ${newSpriteName}:`, error)
+                    }
+                    //
+                    // Play color transformation sound
+                    //
+                    sfx && Sound.playMouthSound(sfx)
+                    //
+                    // Create sparkle particles around hero (yellow/orange particles)
+                    //
+                    createColorChangeSparkles(inst, yellowColor)
+                    //
+                    // Pause to show the yellow hero longer
+                    //
+                    k.wait(2.5, () => {
+                      //
+                      // Fade volumes back to normal
+                      //
+                      let restoreTimer = 0
+                      const RESTORE_DURATION = 0.8
+                      
+                      const restoreInterval = k.onUpdate(() => {
+                        restoreTimer += k.dt()
+                        const progress = Math.min(1, restoreTimer / RESTORE_DURATION)
+                        //
+                        // Restore music volume
+                        //
+                        const newMusicVolume = TARGET_MUSIC_VOLUME + (originalMusicVolume - TARGET_MUSIC_VOLUME) * progress
+                        Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
+                        //
+                        // Restore glitch sound volume
+                        //
+                        Sound.setGlitchSoundVolume(sfx, TARGET_GLITCH_VOLUME + (1.0 - TARGET_GLITCH_VOLUME) * progress)
+                        
+                        if (progress >= 1) {
+                          restoreInterval.cancel()
+                        }
+                      })
+                      //
+                      // Save progress and show transition
+                      //
+                      if (nextLevel && nextLevel !== 'menu') {
+                        saveLastLevel(nextLevel)
+                      }
+                      inst.character.hidden = true
+                      createLevelTransition(k, inst.currentLevel)
                     })
                   })
                 })
@@ -1780,6 +1911,111 @@ function createMouthSparkles(inst) {
       k.rgb(255, 255, 255),  // White
       k.rgb(255, 240, 150),  // Light gold
       k.rgb(200, 255, 255)   // Light cyan
+    ]
+    const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
+    //
+    // Create sparkle particle (small circle)
+    //
+    const size = 2 + Math.random() * 3
+    const sparkle = k.add([
+      k.circle(size),
+      k.pos(centerX + offsetX, centerY + offsetY),
+      k.color(sparkleColor),
+      k.opacity(0.8),
+      k.z(CFG.visual.zIndex.player + 1)
+    ])
+    //
+    // Store sparkle data
+    //
+    sparkle.vx = (Math.random() - 0.5) * 40
+    sparkle.vy = -20 - Math.random() * 30  // Move up
+    sparkle.lifetime = 0
+    sparkle.maxLifetime = 0.8 + Math.random() * 0.4
+    sparkle.originalSize = size
+    
+    sparkles.push(sparkle)
+  }
+  //
+  // Animate sparkles
+  //
+  const sparkleInterval = k.onUpdate(() => {
+    sparkles.forEach((sparkle, index) => {
+      if (!sparkle.exists()) return
+      
+      sparkle.lifetime += k.dt()
+      //
+      // Move sparkle
+      //
+      sparkle.pos.x += sparkle.vx * k.dt()
+      sparkle.pos.y += sparkle.vy * k.dt()
+      //
+      // Apply upward drift and slow down
+      //
+      sparkle.vy -= 80 * k.dt()  // Upward acceleration
+      sparkle.vx *= 0.95
+      //
+      // Fade out and shrink based on lifetime
+      //
+      const progress = sparkle.lifetime / sparkle.maxLifetime
+      sparkle.opacity = 0.8 * (1 - progress)
+      //
+      // Twinkle effect (size pulsing)
+      //
+      const twinkle = Math.sin(sparkle.lifetime * 20) * 0.3 + 0.7
+      //
+      // Destroy when lifetime expires
+      //
+      if (sparkle.lifetime >= sparkle.maxLifetime) {
+        k.destroy(sparkle)
+      }
+    })
+    //
+    // Clean up when all sparkles are done
+    //
+    if (sparkles.every(s => !s.exists())) {
+      sparkleInterval.cancel()
+    }
+  })
+}
+
+/**
+ * Create sparkle particles around hero for color change effect
+ * @param {Object} inst - Hero instance
+ * @param {string} color - New color (hex string)
+ */
+function createColorChangeSparkles(inst, color) {
+  const { k, character } = inst
+  const centerX = character.pos.x
+  const centerY = character.pos.y
+  //
+  // Parse hex color to RGB
+  //
+  const colorValue = parseInt(color.replace('#', ''), 16)
+  const r = (colorValue >> 16) & 0xFF
+  const g = (colorValue >> 8) & 0xFF
+  const b = colorValue & 0xFF
+  //
+  // Create small sparkle particles
+  //
+  const sparkleCount = 12
+  const sparkles = []
+  
+  for (let i = 0; i < sparkleCount; i++) {
+    //
+    // Position sparkles around hero body
+    //
+    const angle = (Math.PI * 2 * i) / sparkleCount
+    const distance = 15 + Math.random() * 10
+    const offsetX = Math.cos(angle) * distance
+    const offsetY = Math.sin(angle) * distance
+    //
+    // Sparkle colors (variations of the new color)
+    //
+    const colors = [
+      k.rgb(Math.min(r + 50, 255), Math.min(g + 50, 255), Math.min(b + 50, 255)),  // Lighter
+      k.rgb(r, g, b),  // Base color
+      k.rgb(Math.max(r - 30, 0), Math.max(g - 30, 0), Math.max(b - 30, 0)),  // Darker
+      k.rgb(255, 255, 255)  // White
     ]
     const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
     //

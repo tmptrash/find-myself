@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import { getLastLevel } from '../../../utils/progress.js'
 
 /**
  * Creates time section level indicator (letters "T1ME")
@@ -8,6 +9,7 @@ import { getRGB } from '../../../utils/helper.js'
  * @param {number} config.levelNumber - Current level number (1-4)
  * @param {string} config.activeColor - Color for completed levels (hex)
  * @param {string} config.inactiveColor - Color for future levels (hex)
+ * @param {string} config.completedColor - Color for already completed levels (hex, default: "#FF8C00" - antiHero color)
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
  * @returns {Array} Array of letter objects
@@ -18,9 +20,15 @@ export function create(config) {
     levelNumber,
     activeColor,
     inactiveColor,
+    completedColor = "#FF8C00",  // Default: antiHero color (orange/yellow)
     topPlatformHeight,
     sideWallWidth
   } = config
+  //
+  // Get last completed level from progress
+  //
+  const lastLevel = getLastLevel()
+  const lastLevelNumber = lastLevel ? parseInt(lastLevel.split('.')[1]) : 0
   
   const letters = ['T', '1', 'M', 'E']
   const fontSize = 48
@@ -33,8 +41,24 @@ export function create(config) {
   const letterObjects = []
   
   letters.forEach((letter, i) => {
-    const isActive = i < levelNumber
-    const colorHex = isActive ? activeColor : inactiveColor
+    const letterLevel = i + 1
+    //
+    // Determine color based on level status:
+    // - Completed and current: use completedColor (yellow/antiHero color)
+    // - Future: use inactiveColor (gray)
+    //
+    let colorHex
+    if (letterLevel <= levelNumber) {
+      //
+      // Completed levels (including current)
+      //
+      colorHex = completedColor
+    } else {
+      //
+      // Future levels
+      //
+      colorHex = inactiveColor
+    }
     //
     // Calculate x position for this letter
     //

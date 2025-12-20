@@ -25,6 +25,131 @@ const HERO_SPAWN_Y = 562    // 52% of 1080 (higher due to narrower pit)
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 562   // 52% of 1080
 
+//
+// Death messages
+//
+const DEATH_MESSAGES = [
+  "Words pierce deeper than blades.",
+  "Some words cut through silence.",
+  "Words hit harder when you're running."
+]
+
+/**
+ * Shows a random death message and then restarts the level
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} bladesInst - Blades instance that was hit
+ */
+function showDeathMessage(k, hero, bladesInst) {
+  //
+  // Select random message
+  //
+  const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
+  //
+  // Calculate position (below bottom platform, centered)
+  //
+  const centerX = CFG.visual.screen.width / 2
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  //
+  // Create message text
+  //
+  const messageText = k.add([
+    k.text(message, {
+      size: 28,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, messageY),
+    k.anchor("center"),
+    k.color(107, 142, 159),  // Blade color (steel blue)
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    messageText,
+    timer: 0,
+    phase: 'fade_in',
+    skipRequested: false
+  }
+  //
+  // Listen for skip inputs (space, enter, mouse click)
+  //
+  const skipHandlers = []
+  
+  const requestSkip = () => {
+    inst.skipRequested = true
+  }
+  
+  skipHandlers.push(k.onKeyPress("space", requestSkip))
+  skipHandlers.push(k.onKeyPress("enter", requestSkip))
+  skipHandlers.push(k.onClick(requestSkip))
+  //
+  // Show blades and trigger death animation
+  //
+  if (bladesInst) {
+    bladesInst.wasShownOnDeath = true  // Stop glint animation on death
+    Blades.show(bladesInst)
+  }
+  Hero.death(hero, () => {
+    // This callback will be called after message sequence completes
+  })
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    //
+    // Phase 1: Fade in (0.5s)
+    //
+    if (inst.phase === 'fade_in') {
+      const fadeInDuration = 0.5
+      const progress = Math.min(inst.timer / fadeInDuration, 1)
+      inst.messageText.opacity = progress
+      
+      if (progress >= 1) {
+        inst.phase = 'display'
+        inst.timer = 0
+      }
+    }
+    //
+    // Phase 2: Display (2.5s)
+    //
+    else if (inst.phase === 'display') {
+      const displayDuration = 2.5
+      
+      if (inst.skipRequested || inst.timer >= displayDuration) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    }
+    //
+    // Phase 3: Fade out (0.5s)
+    //
+    else if (inst.phase === 'fade_out') {
+      const fadeOutDuration = 0.5
+      const progress = Math.min(inst.timer / fadeOutDuration, 1)
+      inst.messageText.opacity = 1 - progress
+      
+      if (progress >= 1) {
+        //
+        // Cleanup
+        //
+        k.destroy(inst.messageText)
+        updateInterval.cancel()
+        skipHandlers.forEach(handler => handler.cancel())
+        //
+        // Restart level
+        //
+        k.go('level-word.3')
+      }
+    }
+  })
+}
+
 export function sceneLevel3(k) {
   k.scene("level-word.3", () => {
     //
@@ -61,14 +186,7 @@ export function sceneLevel3(k) {
       k,
       hero,
       currentLevel: 'level-word.3',
-      onDeath: () => {
-        //
-        // No death messages in level 3 - just direct restart
-        //
-        import('../../../components/hero.js').then(Hero => {
-          Hero.death(hero, () => k.go('level-word.3'))
-        })
-      },
+      onDeath: () => showDeathMessage(k, hero, null),  // Use showDeathMessage for killer letter deaths
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,

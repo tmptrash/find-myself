@@ -83,8 +83,7 @@ export function create(config) {
   const effectiveBodyColor = bodyColor ?? defaultBodyColor
   const effectiveOutlineColor = outlineColor ?? CFG.visual.colors.outline
   //
-  // Load sprites for this hero configuration
-  //
+  // Load sprites for this hero configuration.
   // This will use cached sprites if already loaded
   //
   try {

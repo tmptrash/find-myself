@@ -1761,3 +1761,52 @@ export function playBugStepSound(inst) {
   noise.start(now)
   noise.stop(now + 0.02)
 }
+
+/**
+ * Play monster leg step sound - soft, creepy scuttling sound
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playMonsterStepSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.06
+  //
+  // Create subtle white noise for scuttling texture
+  //
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  //
+  // Fill with soft white noise
+  //
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    const envelopeShape = Math.exp(-progress * 12)
+    data[i] = (Math.random() * 2 - 1) * envelopeShape * 0.3
+  }
+  
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = buffer
+  //
+  // Low-pass filter for muffled, creepy sound
+  //
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(800, now)
+  filter.Q.value = 2
+  //
+  // Maximum volume envelope
+  //
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(2.5, now + 0.005)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  //
+  // Connect chain
+  //
+  noise.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.audioContext.destination)
+  
+  noise.start(now)
+  noise.stop(now + duration)
+}

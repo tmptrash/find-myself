@@ -102,7 +102,7 @@ export function sceneLevel3(k) {
     //
     // Create monster that chases the hero
     //
-    const monster = createMonster(k, hero)
+    const monster = createMonster(k, hero, sound)
     //
     // Setup control inversion based on current section
     //
@@ -124,6 +124,54 @@ export function sceneLevel3(k) {
     //
     k.onUpdate(() => {
       updateSnowParticles(snowSystem)
+    })
+    //
+    // Check if monster collides with clocks and create disintegration effect
+    //
+    k.onUpdate(() => {
+      sections.forEach(section => {
+        if (section.clock && section.clock.exists && section.clock.exists()) {
+          let shouldDestroy = false
+          //
+          // Check collision with monster body
+          //
+          const bodyDistX = Math.abs(monster.x - section.clock.pos.x)
+          const bodyDistY = Math.abs(monster.y - section.clock.pos.y)
+          
+          if (bodyDistX < 40 && bodyDistY < 40) {
+            shouldDestroy = true
+          }
+          //
+          // Check collision with each leg (end point of each leg)
+          //
+          if (!shouldDestroy) {
+            monster.legs.forEach(leg => {
+              //
+              // Get the position of the last segment (foot) of each leg
+              //
+              const lastSegmentIndex = leg.segments.length - 1
+              if (lastSegmentIndex >= 0) {
+                const footX = leg.segments[lastSegmentIndex].x
+                const footY = leg.segments[lastSegmentIndex].y
+                const footDistX = Math.abs(footX - section.clock.pos.x)
+                const footDistY = Math.abs(footY - section.clock.pos.y)
+                
+                if (footDistX < 30 && footDistY < 30) {
+                  shouldDestroy = true
+                }
+              }
+            })
+          }
+          //
+          // If monster or any leg touched the clock, destroy it with particle effect
+          //
+          if (shouldDestroy) {
+            createClockDisintegrationEffect(k, section.clock)
+            k.destroy(section.clock)
+            section.clock = null  // Mark as destroyed
+          }
+        }
+      })
     })
     //
     // Create FPS counter
@@ -416,6 +464,13 @@ function createTimeSections(k) {
   //
   k.onUpdate(() => {
     sections.forEach(section => {
+      //
+      // Skip if clock was destroyed
+      //
+      if (!section.clock || !section.clock.exists || !section.clock.exists()) {
+        return
+      }
+      
       if (section.isReversed) {
         //
         // Decrease time
@@ -456,12 +511,88 @@ function createTimeSections(k) {
 }
 
 /**
+ * Create clock disintegration particle effect
+ * @param {Object} k - Kaplay instance
+ * @param {Object} clock - Clock text object to disintegrate
+ */
+function createClockDisintegrationEffect(k, clock) {
+  const PARTICLE_COUNT = 30
+  const PARTICLE_SIZE = 3
+  const clockPos = clock.pos
+  const clockColor = clock.color || k.rgb(180, 180, 180)
+  //
+  // Create particles at clock position
+  //
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    //
+    // Random starting position around clock
+    //
+    const offsetX = k.rand(-20, 20)
+    const offsetY = k.rand(-15, 15)
+    //
+    // Random velocity (explosion outward)
+    //
+    const angle = k.rand(0, Math.PI * 2)
+    const speed = k.rand(100, 300)
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    //
+    // Create particle
+    //
+    const particle = k.add([
+      k.rect(PARTICLE_SIZE, PARTICLE_SIZE),
+      k.pos(clockPos.x + offsetX, clockPos.y + offsetY),
+      k.color(clockColor.r, clockColor.g, clockColor.b),
+      k.opacity(1.0),
+      k.anchor("center"),
+      k.z(19),  // Above everything except UI
+      k.fixed()
+    ])
+    //
+    // Store velocity and lifetime
+    //
+    particle.vx = vx
+    particle.vy = vy
+    particle.lifetime = 0
+    particle.maxLifetime = 1.0  // Particles last 1 second
+    //
+    // Animate particle
+    //
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      particle.lifetime += dt
+      //
+      // Move particle
+      //
+      particle.pos.x += particle.vx * dt
+      particle.pos.y += particle.vy * dt
+      //
+      // Apply gravity
+      //
+      particle.vy += 500 * dt
+      //
+      // Fade out
+      //
+      const fadeProgress = particle.lifetime / particle.maxLifetime
+      particle.opacity = 1 - fadeProgress
+      //
+      // Destroy when lifetime is over
+      //
+      if (particle.lifetime >= particle.maxLifetime) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+
+/**
  * Create monster that chases the hero
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
+ * @param {Object} sfx - Sound instance for step sounds
  * @returns {Object} Monster instance with returnHome method
  */
-function createMonster(k, heroInst) {
+function createMonster(k, heroInst, sfx) {
   const MONSTER_SPEED = 110  // Even faster movement
   const BODY_SIZE = 60
   const LEG_COUNT = 8
@@ -489,7 +620,8 @@ function createMonster(k, heroInst) {
       baseAngle: angle,
       stepPhase: (i / LEG_COUNT),  // Offset so legs step in sequence
       isLifted: false,
-      liftProgress: 0
+      liftProgress: 0,
+      lastStepSoundTime: 0  // Track when last sound was played
     }
     //
     // Create segments for this leg starting from body edge
@@ -579,6 +711,7 @@ function createMonster(k, heroInst) {
     startX: monsterX,
     startY: monsterY,
     hero: heroInst,
+    sfx,
     speed: MONSTER_SPEED,
     legs,
     bodyCircles,
@@ -601,19 +734,15 @@ function createMonster(k, heroInst) {
   //
   k.onUpdate(() => {
     const dt = k.dt()
-    //
-    // Stop monster if hero is annihilating
-    //
-    if (inst.hero.isAnnihilating) {
-      inst.wobbleX = 0
-      inst.wobbleY = 0
-      return  // Don't move or update anything
-    }
     
     let moveDirectionX = 1
     let moveDirectionY = 1
     const heroX = inst.hero.character.pos.x
     const heroY = inst.hero.character.pos.y
+    //
+    // Check if hero is annihilating - monster stays in place but continues animating
+    //
+    const isAnnihilating = inst.hero.isAnnihilating
     //
     // Check if monster should return home
     //
@@ -628,10 +757,10 @@ function createMonster(k, heroInst) {
       //
       // Move monster towards start position (straight line, no wobble)
       //
-      if (Math.abs(distanceToStartX) > 10) {
+      if (!isAnnihilating && Math.abs(distanceToStartX) > 10) {
         inst.x += moveDirectionX * inst.speed * dt
       }
-      if (Math.abs(distanceToStartY) > 10) {
+      if (!isAnnihilating && Math.abs(distanceToStartY) > 10) {
         inst.y += moveDirectionY * inst.speed * dt
       }
       //
@@ -648,12 +777,12 @@ function createMonster(k, heroInst) {
       moveDirectionX = distanceX > 0 ? 1 : -1
       moveDirectionY = distanceY > 0 ? 1 : -1
       //
-      // Move monster towards hero
+      // Move monster towards hero (stop moving if annihilating)
       //
-      if (Math.abs(distanceX) > 10) {
+      if (!isAnnihilating && Math.abs(distanceX) > 10) {
         inst.x += moveDirectionX * inst.speed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
       }
-      if (Math.abs(distanceY) > 10) {
+      if (!isAnnihilating && Math.abs(distanceY) > 10) {
         inst.y += moveDirectionY * inst.speed * dt
       }
     }
@@ -663,11 +792,23 @@ function createMonster(k, heroInst) {
     inst.currentMoveDirectionX = moveDirectionX
     inst.currentMoveDirectionY = moveDirectionY
     //
-    // Add chaotic wobble to movement (reduced) - only when chasing
+    // Add chaotic wobble to movement (reduced) - only when chasing (not when returning home)
+    // Keep wobble during annihilation for natural look
     //
     if (!inst.isReturningHome) {
       inst.wobbleX = Math.sin(inst.morphTimer * 3) * 10
       inst.wobbleY = Math.cos(inst.morphTimer * 2.3) * 8
+    } else {
+      //
+      // When returning home, keep slight wobble during annihilation
+      //
+      if (isAnnihilating) {
+        inst.wobbleX = Math.sin(inst.morphTimer * 2) * 5
+        inst.wobbleY = Math.cos(inst.morphTimer * 1.5) * 4
+      } else {
+        inst.wobbleX = 0
+        inst.wobbleY = 0
+      }
     }
     //
     // Update body morphing - create organic blob-like shape
@@ -772,6 +913,20 @@ function createMonster(k, heroInst) {
         leg.groundTargetX = leg.groundTargetX + (idealGroundX - leg.groundTargetX) * 0.3
         leg.groundTargetY = leg.groundTargetY + (idealGroundY - leg.groundTargetY) * 0.3
       } else if (stepCycle >= 0.4) {
+        //
+        // Leg lands - play step sound (with cooldown to avoid too many sounds)
+        //
+        if (leg.isLifted && inst.sfx) {
+          const currentTime = inst.k.time()
+          const timeSinceLastSound = currentTime - leg.lastStepSoundTime
+          //
+          // Only play sound if at least 0.15 seconds passed since last sound from this leg
+          //
+          if (timeSinceLastSound > 0.15) {
+            Sound.playMonsterStepSound(inst.sfx)
+            leg.lastStepSoundTime = currentTime
+          }
+        }
         leg.isLifted = false
         leg.liftProgress = 0
       }

@@ -331,7 +331,12 @@ function createTimeSections(k) {
     const isReversed = reversalPattern[i]
     const clockSize = clockSizes[i]
     //
-    // Create clock text in background with varied size
+    // Randomize clock appearance for visual variety
+    //
+    const clockGrayLevel = 140 + Math.floor(Math.random() * 80)  // Random gray from 140 to 220
+    const clockYOffset = -30 + Math.floor(Math.random() * 60)     // Random Y offset from -30 to +30
+    //
+    // Create clock text in background with varied size, color, and position
     //
     const minutes = Math.floor(Math.random() * 60)
     const seconds = Math.floor(Math.random() * 60)
@@ -341,9 +346,9 @@ function createTimeSections(k) {
         size: clockSize,
         align: "center"
       }),
-      k.pos(currentX + sectionWidth / 2, upperCorridorCenterY),
+      k.pos(currentX + sectionWidth / 2, upperCorridorCenterY + clockYOffset),
       k.anchor("center"),
-      k.color(180, 180, 180),
+      k.color(clockGrayLevel, clockGrayLevel, clockGrayLevel),
       k.opacity(0.7),
       k.z(1),
       k.fixed()
@@ -372,7 +377,12 @@ function createTimeSections(k) {
     const clockSize = clockSizes[i]
     currentX -= sectionWidth
     //
-    // Create clock text in background with varied size
+    // Randomize clock appearance for visual variety
+    //
+    const clockGrayLevel = 140 + Math.floor(Math.random() * 80)  // Random gray from 140 to 220
+    const clockYOffset = -30 + Math.floor(Math.random() * 60)     // Random Y offset from -30 to +30
+    //
+    // Create clock text in background with varied size, color, and position
     //
     const minutes = Math.floor(Math.random() * 60)
     const seconds = Math.floor(Math.random() * 60)
@@ -382,9 +392,9 @@ function createTimeSections(k) {
         size: clockSize,
         align: "center"
       }),
-      k.pos(currentX + sectionWidth / 2, lowerCorridorCenterY),
+      k.pos(currentX + sectionWidth / 2, lowerCorridorCenterY + clockYOffset),
       k.anchor("center"),
-      k.color(180, 180, 180),
+      k.color(clockGrayLevel, clockGrayLevel, clockGrayLevel),
       k.opacity(0.7),
       k.z(1),
       k.fixed()
@@ -591,6 +601,14 @@ function createMonster(k, heroInst) {
   //
   k.onUpdate(() => {
     const dt = k.dt()
+    //
+    // Stop monster if hero is annihilating
+    //
+    if (inst.hero.isAnnihilating) {
+      inst.wobbleX = 0
+      inst.wobbleY = 0
+      return  // Don't move or update anything
+    }
     
     let moveDirectionX = 1
     let moveDirectionY = 1

@@ -23,15 +23,15 @@ const PASSAGE_WIDTH = 100  // Width of passage between corridors
 //
 const HERO_SPAWN_X = 350  // Hero starts more to the right
 const HERO_SPAWN_Y = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
-const MONSTER_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Monster starts at the left
+const MONSTER_SPAWN_X = PLATFORM_SIDE_WIDTH + 30  // Monster starts at the left (closer to wall)
 const MONSTER_SPAWN_Y = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 const ANTIHERO_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Anti-hero at the left of lower corridor
 const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 //
 // Section configuration
 //
-const SECTION_WIDTH = 400  // Width of each time section
-const SECTION_COUNT = 10  // Number of sections from left to right
+const SECTION_WIDTH = 350  // Width of each time section (reduced to fit all sections)
+const SECTION_COUNT = 11  // Number of sections from left to right
 
 /**
  * Time section level 3 scene
@@ -89,13 +89,7 @@ export function sceneLevel3(k) {
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
-      antiHeroY: ANTIHERO_SPAWN_Y,
-      onAnnihilation: () => {
-        //
-        // After annihilation, go to time-complete scene
-        //
-        k.go('time-complete')
-      }
+      antiHeroY: ANTIHERO_SPAWN_Y
     })
     //
     // Create custom corridor platforms
@@ -323,105 +317,89 @@ function createTimeSections(k) {
   const upperCorridorCenterY = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
   const lowerCorridorCenterY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
   //
-  // Create sections for UPPER corridor (left to right)
-  // Pattern: normal, normal, reversed, reversed, normal, normal, reversed, reversed...
+  // Define section widths and patterns (varied for unpredictability)
   //
+  const sectionWidths = [300, 400, 350, 280, 420, 360, 320, 380, 340, 400, 330]
+  const reversalPattern = [false, true, false, true, true, false, true, false, false, true, false]
+  const clockSizes = [42, 52, 48, 38, 56, 46, 44, 50, 40, 54, 48]
+  //
+  // Create sections for UPPER corridor (left to right)
+  //
+  let currentX = startX
   for (let i = 0; i < SECTION_COUNT; i++) {
-    const sectionX = startX + i * SECTION_WIDTH
-    const isReversed = Math.floor(i / 2) % 2 === 1  // Groups of 2: NN, RR, NN, RR...
+    const sectionWidth = sectionWidths[i]
+    const isReversed = reversalPattern[i]
+    const clockSize = clockSizes[i]
     //
-    // Create clock text in background (large, semi-transparent)
+    // Create clock text in background with varied size
     //
     const minutes = Math.floor(Math.random() * 60)
     const seconds = Math.floor(Math.random() * 60)
     
     const clock = k.add([
       k.text(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`, {
-        size: 48,
+        size: clockSize,
         align: "center"
       }),
-      k.pos(sectionX + SECTION_WIDTH / 2, upperCorridorCenterY),
+      k.pos(currentX + sectionWidth / 2, upperCorridorCenterY),
       k.anchor("center"),
-      k.color(100, 100, 100),
-      k.opacity(0.3),
-      k.z(1),  // Behind hero but above background
+      k.color(180, 180, 180),
+      k.opacity(0.7),
+      k.z(1),
       k.fixed()
     ])
     
     sections.push({
-      x: sectionX,
+      x: currentX,
       y: CORRIDOR_Y,
-      width: SECTION_WIDTH,
+      width: sectionWidth,
       height: CORRIDOR_HEIGHT,
       isReversed,
       clock,
       clockTime: { minutes, seconds },
       corridor: 'upper'
     })
-    //
-    // Draw vertical line at the end of this section (separator)
-    //
-    if (i < SECTION_COUNT - 1) {
-      const lineX = sectionX + SECTION_WIDTH
-      k.add([
-        k.rect(2, CORRIDOR_HEIGHT),
-        k.pos(lineX, CORRIDOR_Y),
-        k.color(80, 80, 80),
-        k.opacity(0.5),
-        k.z(2),
-        k.fixed()
-      ])
-    }
+    
+    currentX += sectionWidth
   }
   //
   // Create sections for LOWER corridor (right to left)
   //
+  currentX = k.width() - PLATFORM_SIDE_WIDTH
   for (let i = 0; i < SECTION_COUNT; i++) {
-    const sectionX = k.width() - PLATFORM_SIDE_WIDTH - (i + 1) * SECTION_WIDTH
-    const isReversed = Math.floor(i / 2) % 2 === 1  // Same pattern
+    const sectionWidth = sectionWidths[i]
+    const isReversed = reversalPattern[i]
+    const clockSize = clockSizes[i]
+    currentX -= sectionWidth
     //
-    // Create clock text in background
+    // Create clock text in background with varied size
     //
     const minutes = Math.floor(Math.random() * 60)
     const seconds = Math.floor(Math.random() * 60)
     
     const clock = k.add([
       k.text(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`, {
-        size: 48,
+        size: clockSize,
         align: "center"
       }),
-      k.pos(sectionX + SECTION_WIDTH / 2, lowerCorridorCenterY),
+      k.pos(currentX + sectionWidth / 2, lowerCorridorCenterY),
       k.anchor("center"),
-      k.color(100, 100, 100),
-      k.opacity(0.3),
+      k.color(180, 180, 180),
+      k.opacity(0.7),
       k.z(1),
       k.fixed()
     ])
     
     sections.push({
-      x: sectionX,
+      x: currentX,
       y: LOWER_CORRIDOR_Y,
-      width: SECTION_WIDTH,
+      width: sectionWidth,
       height: CORRIDOR_HEIGHT,
       isReversed,
       clock,
       clockTime: { minutes, seconds },
       corridor: 'lower'
     })
-    //
-    // Draw vertical line at the end of this section (separator)
-    //
-    if (i < SECTION_COUNT - 1) {
-      const lineX = sectionX + SECTION_WIDTH
-      k.add([
-        k.rect(2, CORRIDOR_HEIGHT),
-        k.pos(lineX, LOWER_CORRIDOR_Y),
-        k.color(80, 80, 80),
-        k.opacity(0.5),
-        k.z(2),
-        k.fixed()
-      ])
-    }
   }
   //
   // Animate clocks
@@ -471,7 +449,7 @@ function createTimeSections(k) {
  * Create monster that chases the hero
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
- * @returns {Object} Monster instance
+ * @returns {Object} Monster instance with returnHome method
  */
 function createMonster(k, heroInst) {
   const MONSTER_SPEED = 110  // Even faster movement
@@ -588,6 +566,8 @@ function createMonster(k, heroInst) {
     k,
     x: monsterX,
     y: monsterY,
+    startX: monsterX,
+    startY: monsterY,
     hero: heroInst,
     speed: MONSTER_SPEED,
     legs,
@@ -601,32 +581,75 @@ function createMonster(k, heroInst) {
     morphTimer: 0,
     stepTimer: 0,
     wobbleX: 0,
-    wobbleY: 0
+    wobbleY: 0,
+    isReturningHome: false,
+    currentMoveDirectionX: 1,
+    currentMoveDirectionY: 1
   }
   //
   // Update monster
   //
   k.onUpdate(() => {
     const dt = k.dt()
+    
+    let moveDirectionX = 1
+    let moveDirectionY = 1
     const heroX = inst.hero.character.pos.x
     const heroY = inst.hero.character.pos.y
-    const distanceX = heroX - inst.x
-    const distanceY = heroY - inst.y
-    const moveDirectionX = distanceX > 0 ? 1 : -1
-    const moveDirectionY = distanceY > 0 ? 1 : -1
     //
-    // Add chaotic wobble to movement (reduced)
+    // Check if monster should return home
     //
-    inst.wobbleX = Math.sin(inst.morphTimer * 3) * 10
-    inst.wobbleY = Math.cos(inst.morphTimer * 2.3) * 8
-    //
-    // Move towards hero slowly with wobble (both X and Y)
-    //
-    if (Math.abs(distanceX) > 10) {
-      inst.x += moveDirectionX * inst.speed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
+    if (inst.isReturningHome) {
+      //
+      // Move towards start position (no chaotic movement)
+      //
+      const distanceToStartX = inst.startX - inst.x
+      const distanceToStartY = inst.startY - inst.y
+      moveDirectionX = distanceToStartX > 0 ? 1 : -1
+      moveDirectionY = distanceToStartY > 0 ? 1 : -1
+      //
+      // Move monster towards start position (straight line, no wobble)
+      //
+      if (Math.abs(distanceToStartX) > 10) {
+        inst.x += moveDirectionX * inst.speed * dt
+      }
+      if (Math.abs(distanceToStartY) > 10) {
+        inst.y += moveDirectionY * inst.speed * dt
+      }
+      //
+      // No wobble when returning home
+      //
+      inst.wobbleX = 0
+      inst.wobbleY = 0
+    } else {
+      //
+      // Normal chase behavior towards hero
+      //
+      const distanceX = heroX - inst.x
+      const distanceY = heroY - inst.y
+      moveDirectionX = distanceX > 0 ? 1 : -1
+      moveDirectionY = distanceY > 0 ? 1 : -1
+      //
+      // Move monster towards hero
+      //
+      if (Math.abs(distanceX) > 10) {
+        inst.x += moveDirectionX * inst.speed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
+      }
+      if (Math.abs(distanceY) > 10) {
+        inst.y += moveDirectionY * inst.speed * dt
+      }
     }
-    if (Math.abs(distanceY) > 10) {
-      inst.y += moveDirectionY * inst.speed * dt
+    //
+    // Store movement direction for leg calculations
+    //
+    inst.currentMoveDirectionX = moveDirectionX
+    inst.currentMoveDirectionY = moveDirectionY
+    //
+    // Add chaotic wobble to movement (reduced) - only when chasing
+    //
+    if (!inst.isReturningHome) {
+      inst.wobbleX = Math.sin(inst.morphTimer * 3) * 10
+      inst.wobbleY = Math.cos(inst.morphTimer * 2.3) * 8
     }
     //
     // Update body morphing - create organic blob-like shape
@@ -686,7 +709,7 @@ function createMonster(k, heroInst) {
       // Calculate angle relative to movement direction to distribute legs properly
       //
       const legAngleFromCenter = leg.baseAngle
-      const movementAngle = moveDirectionX > 0 ? 0 : Math.PI
+      const movementAngle = inst.currentMoveDirectionX > 0 ? 0 : Math.PI
       const angleDiff = Math.abs(((legAngleFromCenter - movementAngle + Math.PI) % (Math.PI * 2)) - Math.PI)
       //
       // Distribute legs: front 1/3 ahead of body, middle 1/3 beside, back 1/3 behind
@@ -696,17 +719,17 @@ function createMonster(k, heroInst) {
         //
         // Front legs - go ahead of body (reduced distance)
         //
-        forwardBias = moveDirectionX * 80
+        forwardBias = inst.currentMoveDirectionX * 80
       } else if (angleDiff > (2 * Math.PI) / 3) {
         //
         // Back legs - step forward but stay behind front legs
         //
-        forwardBias = moveDirectionX * 40
+        forwardBias = inst.currentMoveDirectionX * 40
       } else {
         //
         // Side legs - stay well ahead
         //
-        forwardBias = moveDirectionX * 60
+        forwardBias = inst.currentMoveDirectionX * 60
       }
       const legDistance = restDistance
       //

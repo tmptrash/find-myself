@@ -372,5 +372,50 @@ export function sceneLevel0(k) {
       currentLevel: 'level-time.0',
       sfx: sound
     })
+    //
+    // Remove last 4 fake spikes when hero approaches them from the right side
+    //
+    let lastSpikesRemoved = false
+    
+    k.onUpdate(() => {
+      //
+      // Check if hero is approaching the right side (last 4 fake spikes area)
+      // Hero should be close to the right edge
+      //
+      if (!lastSpikesRemoved && hero.character.pos.x > 1350 && hero.character.pos.y > 700) {
+        lastSpikesRemoved = true
+        //
+        // Remove all fake spikes (the last 4 ones)
+        //
+        timeSpikes.fakeSpikes.forEach(fakeSpike => {
+          if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
+            //
+            // Destroy outline texts
+            //
+            if (fakeSpike.outlineTexts) {
+              fakeSpike.outlineTexts.forEach(outline => {
+                if (outline && outline.exists && outline.exists()) {
+                  k.destroy(outline)
+                }
+              })
+            }
+            //
+            // Destroy glint drawer
+            //
+            if (fakeSpike.glintDrawer && fakeSpike.glintDrawer.exists && fakeSpike.glintDrawer.exists()) {
+              k.destroy(fakeSpike.glintDrawer)
+            }
+            //
+            // Destroy main spike
+            //
+            k.destroy(fakeSpike)
+          }
+        })
+        //
+        // Clear fake spikes array
+        //
+        timeSpikes.fakeSpikes = []
+      }
+    })
   })
 }

@@ -161,9 +161,11 @@ export function sceneMenu(k) {
       //
       // Always create with gray body (sprite generation)
       // Color tint will be applied in onUpdate for completed/hovered sections
+      // For time section when completed, use yellow color
       //
       const grayColor = '#656565'
       const grayOutlineColor = '#454545'
+      const yellowColor = '#FF8C00'  // Anti-hero orange/yellow color (same as hero color in time-complete)
       const bodyColor = grayColor  // Always gray for sprite
       const outlineColor = isCompleted ? CFG.visual.colors.outline : grayOutlineColor
       //
@@ -194,10 +196,22 @@ export function sceneMenu(k) {
         addArms: config.section === 'touch'
       })
       //
+      // For time section, also preload yellow variant
+      //
+      if (config.section === 'time') {
+        Hero.loadHeroSprites({
+          k,
+          type: Hero.HEROES.ANTIHERO,
+          bodyColor: yellowColor,
+          outlineColor: CFG.visual.colors.outline
+        })
+      }
+      //
       // Cache sprite prefixes for outline switching
       //
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColor}_${grayOutlineColor}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColor}_${CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColor}_${CFG.visual.colors.outline}` : null
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
       //
       // Store base position and phase offsets for floating animation
@@ -208,7 +222,6 @@ export function sceneMenu(k) {
       antiHeroInst.floatPhaseY = index * 0.7 + Math.random() * 2
       
       antiHeroInst.character.z = 10
-      
       //
       // Store section info for hover color change
       //
@@ -216,6 +229,7 @@ export function sceneMenu(k) {
       antiHeroInst.sectionColor = config.color.body
       antiHeroInst.isCompleted = isCompleted
       antiHeroInst.grayColor = grayColor
+      antiHeroInst.yellowColor = yellowColor
       antiHeroInst.originalBodyColor = bodyColor
       
       //
@@ -456,33 +470,52 @@ export function sceneMenu(k) {
       //
       antiHeroes.forEach(antiHeroInst => {
         //
-        // Determine target color based on state
+        // Determine target color and sprite based on state
         //
         let targetColor
-        const shouldUseBlackOutline = antiHeroInst === hoveredInst || antiHeroInst.isCompleted
-        
-        if (shouldUseBlackOutline) {
+        let desiredPrefix
+        const isHovered = antiHeroInst === hoveredInst
+        const shouldUseBlackOutline = isHovered || antiHeroInst.isCompleted
+        //
+        // Special handling for time section: use yellow when completed
+        //
+        if (antiHeroInst.section === 'time' && antiHeroInst.isCompleted) {
+          targetColor = antiHeroInst.yellowColor
+          desiredPrefix = antiHeroInst.spritePrefixYellow
+        } else if (antiHeroInst.section === 'time' && isHovered) {
+          //
+          // Time section hovered but not completed: show yellow
+          //
+          targetColor = antiHeroInst.yellowColor
+          desiredPrefix = antiHeroInst.spritePrefixYellow
+        } else if (shouldUseBlackOutline) {
           //
           // Hovered OR completed: show section color
           //
           targetColor = antiHeroInst.sectionColor
+          desiredPrefix = antiHeroInst.spritePrefixBlack
         } else {
           //
           // Not hovered and not completed: gray
           //
           targetColor = antiHeroInst.grayColor
+          desiredPrefix = antiHeroInst.spritePrefixGray
         }
-        
         //
-        // Apply color tint
+        // Apply color tint (but not for time section with yellow sprite, as sprite already has correct color)
         //
-        const rgb = getRGB(k, targetColor)
-        antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b)
-        
+        if (!(antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isHovered))) {
+          const rgb = getRGB(k, targetColor)
+          antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b)
+        } else {
+          //
+          // For time section with yellow sprite, use white tint (no color modification)
+          //
+          antiHeroInst.character.color = k.rgb(255, 255, 255)
+        }
         //
-        // Switch outline variant by changing sprite prefix
+        // Switch sprite variant if needed
         //
-        const desiredPrefix = shouldUseBlackOutline ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
         if (antiHeroInst.currentPrefix !== desiredPrefix) {
           antiHeroInst.currentPrefix = desiredPrefix
           antiHeroInst.spritePrefix = desiredPrefix
@@ -498,7 +531,16 @@ export function sceneMenu(k) {
         const isHover = hoveredInst && hoveredInst.section === section
         const isCurrent = inst.currentSection === section
         const useHighlight = isHover || isCompleted || isCurrent
-        const targetColor = useHighlight ? sectionColor : grayColor
+        //
+        // Special handling for time section: use yellow when completed, hovered, or current
+        //
+        let targetColor
+        if (section === 'time' && (isCompleted || isHover || isCurrent)) {
+          targetColor = '#FF8C00'  // Anti-hero orange/yellow color (matches hero in time-complete)
+        } else {
+          targetColor = useHighlight ? sectionColor : grayColor
+        }
+        
         const labelRgb = getRGB(k, targetColor)
         label.color = k.rgb(labelRgb.r, labelRgb.g, labelRgb.b)
         const outlineOpacity = useHighlight ? 1 : 0
@@ -1045,8 +1087,18 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     
     //
     // Change to anti-hero's color
+    // Special handling for time section: use yellow color directly
     //
-    const targetColor = hoveredAntiHero.character.color
+    let targetColor
+    if (hoveredAntiHero.section === 'time') {
+      //
+      // For time section, use yellow color directly (not from character.color which is white for sprite)
+      //
+      const yellowRgb = getRGB(k, '#FF8C00')
+      targetColor = k.rgb(yellowRgb.r, yellowRgb.g, yellowRgb.b)
+    } else {
+      targetColor = hoveredAntiHero.character.color
+    }
     titleInst.letters.forEach(letter => {
       letter.color.r += (targetColor.r - letter.color.r) * 5 * dt
       letter.color.g += (targetColor.g - letter.color.g) * 5 * dt

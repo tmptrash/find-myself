@@ -16,9 +16,10 @@ const ARROW_TEXT = '↓'
 const INSTRUCTIONS_TITLE = `Find Myself`
 const INSTRUCTIONS_TEXT_LINES = [
   { text: 'is a game about discovering who you are while life keeps changing', normal: true },
-  { text: 'your plans. Here, life is the one setting traps. It shifts the ground,', normal: true },
-  { text: 'twists logic, and pushes you into mistakes — not to harm you, but to', normal: true },
-  { text: 'teach you.', normal: true },
+  { text: 'your plans. You live a small life here, where everything moves fast,', normal: true },
+  { text: 'exploring yourself through the world that shifts the ground, twists,', normal: true },
+  { text: 'logic and pushes you into mistakes — not to harm you, but to teach', normal: true },
+  { text: 'you.', normal: true },
   { text: '', normal: true },
   { text: 'In each world, you search for another "you" — a reflection shaped by', normal: true },
   { text: 'the very forces you\'re learning to face. Reaching them means meeting', normal: true },

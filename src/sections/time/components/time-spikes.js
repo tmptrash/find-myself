@@ -7,8 +7,8 @@ import * as Sound from '../../../utils/sound.js'
 const DIGIT_COUNT = 40
 const FAKE_DIGIT_COUNT = 4  // Last 4 digits are fake (no collision)
 const FONT_SIZE = 36
-const MIN_Y_OFFSET = -10
-const MAX_Y_OFFSET = 10
+const MIN_Y_OFFSET = -3
+const MAX_Y_OFFSET = 3
 const MIN_ROTATION = -3
 const MAX_ROTATION = 3
 const SPIKE_TAG = "time-spike"
@@ -125,9 +125,9 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     // Add z-index based on fake/real
     //
     if (!isFake) {
-      outlineComponents.push(k.z(14))
+      outlineComponents.push(k.z(10))
     } else {
-      outlineComponents.push(k.z(14))
+      outlineComponents.push(k.z(10))
     }
     
     return k.add(outlineComponents)
@@ -158,7 +158,7 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
           35               // Smaller height (35px) for smaller font
         )
       }),
-      k.z(14),  // Below platforms (15) and hero (20)
+      k.z(10),  // Behind snow drifts (12) and hero (20)
       SPIKE_TAG
     )
   } else {
@@ -166,7 +166,7 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     // Fake spikes have no collision and are behind hero
     //
     components.push(
-      k.z(14)  // Behind hero (20), same as real spikes
+      k.z(10)  // Behind snow drifts (12) and hero (20)
     )
   }
   
@@ -180,7 +180,7 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
   //
   const glintDrawer = k.add([
     k.pos(0, 0),
-    k.z(19),  // Above spike but below hero (20)
+    k.z(11),  // Above spike (10) but below snow drifts (12)
     {
       draw() {
         drawGlint(spike, k)

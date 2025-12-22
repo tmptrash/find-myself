@@ -131,6 +131,10 @@ export function sceneLevel3(k) {
     //
     createObstacleSpikes(k, hero, sound)
     //
+    // Create snow drifts on corridor floors
+    //
+    createSnowDrifts(k)
+    //
     // Check if monster collides with clocks and create disintegration effect
     //
     k.onUpdate(() => {
@@ -1130,13 +1134,13 @@ function setupControlInversion(heroInst, sections) {
 function createObstacleSpikes(k, hero, sound) {
   //
   // Spike cluster configurations (startX, endX, y, digitCount)
-  // Upper corridor clusters - spikes stand on corridor floor
+  // Upper corridor clusters - spikes stand on corridor floor, partially in snow
   //
-  const upperCorridorY = CORRIDOR_Y + CORRIDOR_HEIGHT - 20  // On floor of upper corridor
+  const upperCorridorY = CORRIDOR_Y + CORRIDOR_HEIGHT - 12  // Slightly higher, partially in snow
   //
-  // Lower corridor clusters - spikes stand on corridor floor
+  // Lower corridor clusters - spikes stand on corridor floor, partially in snow
   //
-  const lowerCorridorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 20  // On floor of lower corridor
+  const lowerCorridorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 12  // Slightly higher, partially in snow
   //
   // Define spike clusters (groups of 2-3 spikes, closer together)
   //
@@ -1172,6 +1176,253 @@ function createObstacleSpikes(k, hero, sound) {
       fakeDigitCount: 0,  // No fake spikes - all are deadly
       sfx: sound
     })
+    //
+    // Create snow mounds at the base of each spike cluster
+    //
+    const clusterCenterX = (cluster.startX + cluster.endX) / 2
+    const clusterWidth = (cluster.endX - cluster.startX) + 40  // Extra width around spikes
+    const moundHeight = 12  // Height of snow mound at base
+    
+    k.add([
+      k.pos(clusterCenterX, cluster.y),
+      k.z(9),  // Behind spikes (10) and snow drifts (12)
+      {
+        draw() {
+          //
+          // Draw snow mound at base of spikes
+          //
+          const points = []
+          const steps = 15
+          
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = (t - 0.5) * clusterWidth
+            //
+            // Gentle curve for snow base
+            //
+            const y = -moundHeight * (1 - Math.pow(2 * t - 1, 2))
+            points.push(k.vec2(x, y))
+          }
+          
+          points.push(k.vec2(clusterWidth / 2, 0))
+          points.push(k.vec2(-clusterWidth / 2, 0))
+          //
+          // Draw mound
+          //
+          k.drawPolygon({
+            pts: points,
+            color: k.rgb(245, 245, 255),
+            opacity: 0.9
+          })
+          //
+          // Add subtle highlight (ensure it stays within mound)
+          //
+          const highlightRadius = clusterWidth * 0.1
+          const highlightY = -moundHeight * 0.6
+          //
+          // Only draw if highlight stays above baseline
+          //
+          if (Math.abs(highlightY) - highlightRadius > 0) {
+            k.drawCircle({
+              radius: highlightRadius,
+              color: k.rgb(255, 255, 255),
+              pos: k.vec2(0, highlightY),
+              opacity: 0.7
+            })
+          }
+        }
+      }
+    ])
+  })
+}
+
+/**
+ * Creates snow drifts on corridor floors
+ * @param {Object} k - Kaplay instance
+ */
+function createSnowDrifts(k) {
+  //
+  // Snow drift configurations (x, width, height, corridor)
+  //
+  const upperFloorY = CORRIDOR_Y + CORRIDOR_HEIGHT
+  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT
+  //
+  // Calculate passage area (where snow should not appear)
+  //
+  const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
+  const passageEndX = k.width() - PLATFORM_SIDE_WIDTH
+  //
+  // Generate many snow drifts with random sizes covering entire floor
+  //
+  const drifts = []
+  //
+  // Upper corridor - fill entire length with drifts (but not in passage area)
+  //
+  const upperCorridorStart = PLATFORM_SIDE_WIDTH
+  const upperCorridorEnd = k.width() - PLATFORM_SIDE_WIDTH
+  
+  for (let x = upperCorridorStart; x < upperCorridorEnd; x += 40 + Math.random() * 30) {
+    const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)
+    const height = 8 + Math.random() * 15   // 8-23px height
+    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    //
+    // Skip drifts in passage area (check both center and edges of drift)
+    //
+    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
+    
+    drifts.push({ x, width, height, y: upperFloorY, z: zIndex, shapeType, skew })
+  }
+  //
+  // Lower corridor - fill entire length with drifts (but not in passage area)
+  //
+  const lowerCorridorStart = PLATFORM_SIDE_WIDTH
+  const lowerCorridorEnd = k.width() - PLATFORM_SIDE_WIDTH
+  
+  for (let x = lowerCorridorStart; x < lowerCorridorEnd; x += 40 + Math.random() * 30) {
+    const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)
+    const height = 8 + Math.random() * 15   // 8-23px height
+    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    //
+    // Skip drifts in passage area (check both center and edges of drift)
+    //
+    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
+    
+    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+  }
+  //
+  // Add some extra smaller drifts between main ones for more coverage
+  //
+  for (let x = upperCorridorStart; x < upperCorridorEnd; x += 30 + Math.random() * 25) {
+    const width = 30 + Math.random() * 50  // 30-80px width (medium)
+    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
+    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    //
+    // Skip drifts in passage area
+    //
+    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
+    
+    drifts.push({ x, width, height, y: upperFloorY, z: zIndex, shapeType, skew })
+  }
+  
+  for (let x = lowerCorridorStart; x < lowerCorridorEnd; x += 30 + Math.random() * 25) {
+    const width = 30 + Math.random() * 50  // 30-80px width (medium)
+    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
+    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    //
+    // Skip drifts in passage area
+    //
+    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
+    
+    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+  }
+  //
+  // Create each drift as a mound shape with multiple layers
+  //
+  drifts.forEach(drift => {
+    k.add([
+      k.pos(drift.x, drift.y),
+      k.z(drift.z),  // Either behind hero (12) or in front (25)
+      {
+        draw() {
+          //
+          // Drifts in front of hero (z=25) are slightly more transparent
+          //
+          const baseOpacity = drift.z === 25 ? 0.7 : 0.95
+          const shadowOpacity = drift.z === 25 ? 0.5 : 0.7
+          const highlightOpacity = drift.z === 25 ? 0.6 : 0.85
+          //
+          // Draw snow drift as a polygon (mound shape)
+          //
+          const points = []
+          const steps = 20
+          //
+          // Create curved top using different shape formulas based on shapeType
+          //
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            let y
+            //
+            // Different shape types for variety
+            //
+            if (drift.shapeType === 0) {
+              //
+              // Parabolic curve (classic mound)
+              //
+              y = -drift.height * (1 - Math.pow(2 * t - 1, 2))
+            } else if (drift.shapeType === 1) {
+              //
+              // Steeper peak (more pointed)
+              //
+              y = -drift.height * (1 - Math.pow(Math.abs(2 * t - 1), 1.5))
+            } else {
+              //
+              // Flatter top (more spread out)
+              //
+              y = -drift.height * (1 - Math.pow(2 * t - 1, 4))
+            }
+            points.push(k.vec2(x, y))
+          }
+          //
+          // Add bottom points to close the shape
+          //
+          points.push(k.vec2(drift.width / 2, 0))
+          points.push(k.vec2(-drift.width / 2, 0))
+          //
+          // Draw main snow mound (lightest layer)
+          //
+          k.drawPolygon({
+            pts: points,
+            color: k.rgb(240, 240, 250),
+            opacity: baseOpacity
+          })
+          //
+          // Draw shadow layer (darker at bottom)
+          //
+          const shadowPoints = []
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            const y = -drift.height * 0.3 * (1 - Math.pow(2 * t - 1, 2))
+            shadowPoints.push(k.vec2(x, y))
+          }
+          shadowPoints.push(k.vec2(drift.width / 2, 0))
+          shadowPoints.push(k.vec2(-drift.width / 2, 0))
+          
+          k.drawPolygon({
+            pts: shadowPoints,
+            color: k.rgb(200, 200, 220),
+            opacity: shadowOpacity
+          })
+          //
+          // Draw highlight on top (brightest spot, offset by skew)
+          // Ensure it stays within the mound (not below y=0)
+          //
+          const highlightOffset = drift.skew * drift.width * 0.2
+          const highlightRadius = drift.width * 0.15
+          const highlightY = -drift.height * 0.7
+          //
+          // Only draw highlight if it stays above the baseline
+          //
+          if (Math.abs(highlightY) - highlightRadius > 0) {
+            k.drawCircle({
+              radius: highlightRadius,
+              color: k.rgb(255, 255, 255),
+              pos: k.vec2(highlightOffset, highlightY),
+              opacity: highlightOpacity
+            })
+          }
+        }
+      }
+    ])
   })
 }
 

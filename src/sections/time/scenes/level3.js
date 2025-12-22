@@ -1181,10 +1181,10 @@ function createObstacleSpikes(k, hero, sound) {
     //
     const clusterCenterX = (cluster.startX + cluster.endX) / 2
     const clusterWidth = (cluster.endX - cluster.startX) + 40  // Extra width around spikes
-    const moundHeight = 12  // Height of snow mound at base
+    const moundHeight = 18  // Taller snow mound at base
     
     k.add([
-      k.pos(clusterCenterX, cluster.y),
+      k.pos(clusterCenterX, cluster.y + 10),  // Lower position to cover platform better
       k.z(9),  // Behind spikes (10) and snow drifts (12)
       {
         draw() {
@@ -1192,15 +1192,15 @@ function createObstacleSpikes(k, hero, sound) {
           // Draw snow mound at base of spikes
           //
           const points = []
-          const steps = 15
+          const steps = 20
           
           for (let i = 0; i <= steps; i++) {
             const t = i / steps
             const x = (t - 0.5) * clusterWidth
             //
-            // Gentle curve for snow base
+            // Flatter curve for better ground coverage (changed from pow 2 to pow 4)
             //
-            const y = -moundHeight * (1 - Math.pow(2 * t - 1, 2))
+            const y = -moundHeight * (1 - Math.pow(2 * t - 1, 4))
             points.push(k.vec2(x, y))
           }
           
@@ -1212,13 +1212,13 @@ function createObstacleSpikes(k, hero, sound) {
           k.drawPolygon({
             pts: points,
             color: k.rgb(245, 245, 255),
-            opacity: 0.9
+            opacity: 0.95
           })
           //
           // Add subtle highlight (ensure it stays within mound)
           //
-          const highlightRadius = clusterWidth * 0.1
-          const highlightY = -moundHeight * 0.6
+          const highlightRadius = clusterWidth * 0.08
+          const highlightY = -moundHeight * 0.5
           //
           // Only draw if highlight stays above baseline
           //

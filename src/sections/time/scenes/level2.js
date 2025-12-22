@@ -187,13 +187,17 @@ export function sceneLevel2(k) {
       k,
       startX: PLATFORM_SIDE_WIDTH + 10,  // Start from left wall + 10px
       endX: k.width() - PLATFORM_SIDE_WIDTH - 10,  // End at right wall - 10px
-      y: k.height() - PLATFORM_BOTTOM_HEIGHT - 20,  // At bottom platform level
+      y: k.height() - PLATFORM_BOTTOM_HEIGHT - 10,  // Higher, partially in snow
       hero,
       currentLevel: 'level-time.2',
       digitCount: 50,  // Many spikes close together
       fakeDigitCount: 0,  // All spikes kill (no bunnies)
       sfx: sound
     })
+    //
+    // Create snow drifts on bottom platform floor
+    //
+    createSnowDrifts(k)
     //
     // Create dynamic platform system
     //
@@ -674,5 +678,148 @@ function drawSnowParticles(inst) {
       opacity: p.opacity,
       z: 5  // Above background but below platforms and hero
     })
+  })
+}
+
+/**
+ * Creates snow drifts on bottom platform floor
+ * @param {Object} k - Kaplay instance
+ */
+function createSnowDrifts(k) {
+  //
+  // Snow drift configurations for bottom platform
+  //
+  const floorY = k.height() - PLATFORM_BOTTOM_HEIGHT
+  //
+  // Generate many snow drifts with random sizes covering entire floor
+  //
+  const drifts = []
+  //
+  // Fill entire bottom platform with drifts
+  //
+  const corridorStart = PLATFORM_SIDE_WIDTH
+  const corridorEnd = k.width() - PLATFORM_SIDE_WIDTH
+  
+  for (let x = corridorStart; x < corridorEnd; x += 40 + Math.random() * 30) {
+    const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)
+    const height = 8 + Math.random() * 15   // 8-23px height
+    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    
+    drifts.push({ x, width, height, y: floorY, z: zIndex, shapeType, skew })
+  }
+  //
+  // Add some extra smaller drifts between main ones for more coverage
+  //
+  for (let x = corridorStart; x < corridorEnd; x += 30 + Math.random() * 25) {
+    const width = 30 + Math.random() * 50  // 30-80px width (medium)
+    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
+    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    
+    drifts.push({ x, width, height, y: floorY, z: zIndex, shapeType, skew })
+  }
+  //
+  // Create each drift as a mound shape with multiple layers
+  //
+  drifts.forEach(drift => {
+    k.add([
+      k.pos(drift.x, drift.y),
+      k.z(drift.z),  // Either behind hero (12) or in front (25)
+      {
+        draw() {
+          //
+          // Drifts in front of hero (z=25) are slightly more transparent
+          //
+          const baseOpacity = drift.z === 25 ? 0.7 : 0.95
+          const shadowOpacity = drift.z === 25 ? 0.5 : 0.7
+          const highlightOpacity = drift.z === 25 ? 0.6 : 0.85
+          //
+          // Draw snow drift as a polygon (mound shape)
+          //
+          const points = []
+          const steps = 20
+          //
+          // Create curved top using different shape formulas based on shapeType
+          //
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            let y
+            //
+            // Different shape types for variety
+            //
+            if (drift.shapeType === 0) {
+              //
+              // Parabolic curve (classic mound)
+              //
+              y = -drift.height * (1 - Math.pow(2 * t - 1, 2))
+            } else if (drift.shapeType === 1) {
+              //
+              // Steeper peak (more pointed)
+              //
+              y = -drift.height * (1 - Math.pow(Math.abs(2 * t - 1), 1.5))
+            } else {
+              //
+              // Flatter top (more spread out)
+              //
+              y = -drift.height * (1 - Math.pow(2 * t - 1, 4))
+            }
+            points.push(k.vec2(x, y))
+          }
+          //
+          // Add bottom points to close the shape
+          //
+          points.push(k.vec2(drift.width / 2, 0))
+          points.push(k.vec2(-drift.width / 2, 0))
+          //
+          // Draw main snow mound (lightest layer)
+          //
+          k.drawPolygon({
+            pts: points,
+            color: k.rgb(240, 240, 250),
+            opacity: baseOpacity
+          })
+          //
+          // Draw shadow layer (darker at bottom)
+          //
+          const shadowPoints = []
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps
+            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            const y = -drift.height * 0.3 * (1 - Math.pow(2 * t - 1, 2))
+            shadowPoints.push(k.vec2(x, y))
+          }
+          shadowPoints.push(k.vec2(drift.width / 2, 0))
+          shadowPoints.push(k.vec2(-drift.width / 2, 0))
+          
+          k.drawPolygon({
+            pts: shadowPoints,
+            color: k.rgb(200, 200, 220),
+            opacity: shadowOpacity
+          })
+          //
+          // Draw highlight on top (brightest spot, offset by skew)
+          // Ensure it stays within the mound (not below y=0)
+          //
+          const highlightOffset = drift.skew * drift.width * 0.2
+          const highlightRadius = drift.width * 0.15
+          const highlightY = -drift.height * 0.7
+          //
+          // Only draw highlight if it stays above the baseline
+          //
+          if (Math.abs(highlightY) - highlightRadius > 0) {
+            k.drawCircle({
+              radius: highlightRadius,
+              color: k.rgb(255, 255, 255),
+              pos: k.vec2(highlightOffset, highlightY),
+              opacity: highlightOpacity
+            })
+          }
+        }
+      }
+    ])
   })
 }

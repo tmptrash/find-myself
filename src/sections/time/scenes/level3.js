@@ -5,6 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import { getColor } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as TimeSpikes from '../components/time-spikes.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -125,6 +126,10 @@ export function sceneLevel3(k) {
     k.onUpdate(() => {
       updateSnowParticles(snowSystem)
     })
+    //
+    // Create obstacle spikes (digit "1") in clusters in both corridors
+    //
+    createObstacleSpikes(k, hero, sound)
     //
     // Check if monster collides with clocks and create disintegration effect
     //
@@ -1113,6 +1118,60 @@ function setupControlInversion(heroInst, sections) {
       
       currentSection = newSection
     }
+  })
+}
+
+/**
+ * Creates obstacle spikes (digit "1") in clusters throughout corridors
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance for collision
+ * @param {Object} sound - Sound instance for effects
+ */
+function createObstacleSpikes(k, hero, sound) {
+  //
+  // Spike cluster configurations (startX, endX, y, digitCount)
+  // Upper corridor clusters - spikes stand on corridor floor
+  //
+  const upperCorridorY = CORRIDOR_Y + CORRIDOR_HEIGHT - 20  // On floor of upper corridor
+  //
+  // Lower corridor clusters - spikes stand on corridor floor
+  //
+  const lowerCorridorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 20  // On floor of lower corridor
+  //
+  // Define spike clusters (groups of 2-3 spikes, closer together)
+  //
+  const clusters = [
+    //
+    // Upper corridor clusters (from left to right)
+    //
+    { startX: 600, endX: 630, y: upperCorridorY, count: 2 },    // Cluster 1: 2 spikes (30px apart)
+    { startX: 900, endX: 940, y: upperCorridorY, count: 3 },    // Cluster 2: 3 spikes (40px total) - moved left
+    { startX: 1600, endX: 1630, y: upperCorridorY, count: 2 },  // Cluster 3: 2 spikes (30px apart)
+    { startX: 2400, endX: 2440, y: upperCorridorY, count: 3 },  // Cluster 4: 3 spikes (40px total)
+    { startX: 3000, endX: 3030, y: upperCorridorY, count: 2 },  // Cluster 5: 2 spikes (30px apart)
+    //
+    // Lower corridor clusters (from right to left)
+    //
+    { startX: 1700, endX: 1740, y: lowerCorridorY, count: 3 },  // Cluster 6: 3 spikes (40px total)
+    { startX: 1000, endX: 1030, y: lowerCorridorY, count: 2 },  // Cluster 7: 2 spikes (30px apart) - moved left
+    { startX: 700, endX: 740, y: lowerCorridorY, count: 3 },    // Cluster 8: 3 spikes (40px total)
+    { startX: 300, endX: 330, y: lowerCorridorY, count: 2 }     // Cluster 9: 2 spikes (30px apart)
+  ]
+  //
+  // Create each cluster
+  //
+  clusters.forEach(cluster => {
+    TimeSpikes.create({
+      k,
+      startX: cluster.startX,
+      endX: cluster.endX,
+      y: cluster.y,
+      hero,
+      currentLevel: 'level-time.3',
+      digitCount: cluster.count,
+      fakeDigitCount: 0,  // No fake spikes - all are deadly
+      sfx: sound
+    })
   })
 }
 

@@ -924,7 +924,9 @@ function createMonster(k, heroInst, sfx) {
       } else if (stepCycle >= 0.4) {
         //
         // Leg lands - play step sound (with cooldown to avoid too many sounds)
+        // TEMPORARILY DISABLED - uncomment to restore
         //
+        /*
         if (leg.isLifted && inst.sfx) {
           const currentTime = inst.k.time()
           const timeSinceLastSound = currentTime - leg.lastStepSoundTime
@@ -936,6 +938,7 @@ function createMonster(k, heroInst, sfx) {
             leg.lastStepSoundTime = currentTime
           }
         }
+        */
         leg.isLifted = false
         leg.liftProgress = 0
       }

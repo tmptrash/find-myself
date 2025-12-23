@@ -270,6 +270,10 @@ export function isAmbientPlaying(instance) {
 export function playLandSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
   //
+  // Check if we're in time section level 3 (monster footstep sound)
+  //
+  const isTimeLevel3 = currentLevel === 'level-time.3'
+  //
   // Check if we're in time section (clock tick landing)
   //
   const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
@@ -278,7 +282,52 @@ export function playLandSound(instance, currentLevel = null) {
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
   
-  if (isTimeSection) {
+  if (isTimeLevel3) {
+    //
+    // Monster-like footstep sound - creepy scuttling noise
+    //
+    const duration = 0.06
+    //
+    // Create subtle white noise for scuttling texture
+    //
+    const bufferSize = instance.audioContext.sampleRate * duration
+    const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+    const data = buffer.getChannelData(0)
+    //
+    // Fill with soft white noise
+    //
+    for (let i = 0; i < bufferSize; i++) {
+      const progress = i / bufferSize
+      const envelopeShape = Math.exp(-progress * 12)
+      data[i] = (Math.random() * 2 - 1) * envelopeShape * 0.3
+    }
+    
+    const noise = instance.audioContext.createBufferSource()
+    noise.buffer = buffer
+    //
+    // Low-pass filter for muffled, creepy sound
+    //
+    const filter = instance.audioContext.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(800, now)
+    filter.Q.value = 2
+    //
+    // Envelope for landing (significantly louder than regular step)
+    //
+    const envelope = instance.audioContext.createGain()
+    envelope.gain.setValueAtTime(0, now)
+    envelope.gain.linearRampToValueAtTime(6.0, now + 0.005)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    //
+    // Connect chain
+    //
+    noise.connect(filter)
+    filter.connect(envelope)
+    envelope.connect(instance.landGain)
+    
+    noise.start(now)
+    noise.stop(now + duration)
+  } else if (isTimeSection) {
     //
     // Clock tick sound - soft, muted mechanical click
     //
@@ -711,6 +760,10 @@ export function playJumpSound(instance, currentLevel = null) {
 export function playStepSound(instance, currentLevel = null) {
   const now = instance.audioContext.currentTime
   //
+  // Check if we're in time section level 3 (monster footstep sound)
+  //
+  const isTimeLevel3 = currentLevel === 'level-time.3'
+  //
   // Check if we're in time section (clock tick steps)
   //
   const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
@@ -719,7 +772,52 @@ export function playStepSound(instance, currentLevel = null) {
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
   
-  if (isTimeSection) {
+  if (isTimeLevel3) {
+    //
+    // Monster-like footstep sound - creepy scuttling noise
+    //
+    const duration = 0.06
+    //
+    // Create subtle white noise for scuttling texture
+    //
+    const bufferSize = instance.audioContext.sampleRate * duration
+    const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+    const data = buffer.getChannelData(0)
+    //
+    // Fill with soft white noise
+    //
+    for (let i = 0; i < bufferSize; i++) {
+      const progress = i / bufferSize
+      const envelopeShape = Math.exp(-progress * 12)
+      data[i] = (Math.random() * 2 - 1) * envelopeShape * 0.3
+    }
+    
+    const noise = instance.audioContext.createBufferSource()
+    noise.buffer = buffer
+    //
+    // Low-pass filter for muffled, creepy sound
+    //
+    const filter = instance.audioContext.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(800, now)
+    filter.Q.value = 2
+    //
+    // Envelope for steps (loud, but quieter than landing)
+    //
+    const envelope = instance.audioContext.createGain()
+    envelope.gain.setValueAtTime(0, now)
+    envelope.gain.linearRampToValueAtTime(3.5, now + 0.005)
+    envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    //
+    // Connect chain
+    //
+    noise.connect(filter)
+    filter.connect(envelope)
+    envelope.connect(instance.stepGain)
+    
+    noise.start(now)
+    noise.stop(now + duration)
+  } else if (isTimeSection) {
     //
     // Soft clock tick - quiet, subtle footstep sound
     //

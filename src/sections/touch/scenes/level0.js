@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as Dust from '../components/dust.js'
@@ -174,6 +174,15 @@ export function sceneLevel0(k) {
       "movable-cube"
     ])
     //
+    // Check completed sections for hero appearance
+    //
+    const isWordComplete = isSectionComplete('word')
+    const isTimeComplete = isSectionComplete('time')
+    //
+    // Hero body color: yellow if time section complete, otherwise default
+    //
+    const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+    //
     // Create hero
     //
     const heroInst = Hero.create({
@@ -184,7 +193,9 @@ export function sceneLevel0(k) {
       controllable: true,
       sfx: sound,
       currentLevel: 'level-touch.0',
-      jumpForce: CFG.game.jumpForce
+      jumpForce: CFG.game.jumpForce,
+      addMouth: isWordComplete,
+      bodyColor: heroBodyColor
     })
     //
     // Spawn hero after delay

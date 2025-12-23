@@ -303,6 +303,15 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   // Use platform color for dust particles (black platforms)
   //
   const dustColor = platformColor
+  //
+  // Check completed sections for hero appearance
+  //
+  const isWordComplete = isSectionComplete('word')
+  const isTimeComplete = isSectionComplete('time')
+  //
+  // Hero body color: yellow if time section complete, otherwise default
+  //
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
   
   const antiHero = Hero.create({
     k,
@@ -327,7 +336,8 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     antiHero,
     currentLevel,  // Current level for transition system
     dustColor,
-    addMouth: isSectionComplete('word')
+    addMouth: isWordComplete,  // Add mouth if word section is complete
+    bodyColor: heroBodyColor  // Yellow if time complete, default otherwise
   })
   
   hero.character.use("player")

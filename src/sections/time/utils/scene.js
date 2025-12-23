@@ -3,6 +3,7 @@ import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+import { isSectionComplete } from '../../../utils/progress.js'
 //
 // Global music instances for time section (persist across level reloads)
 // Note: clock.mp3 is NOT stored here - it restarts on each level load for sync
@@ -284,6 +285,16 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
  * @returns {Object} Object with hero and antiHero instances
  */
 function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation) {
+  //
+  // Check completed sections for hero appearance
+  //
+  const isWordComplete = isSectionComplete('word')
+  const isTimeComplete = isSectionComplete('time')
+  //
+  // Hero body color: yellow if time section complete, otherwise gray
+  //
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+  
   const antiHeroInst = Hero.create({
     k,
     x: antiHeroX,
@@ -305,8 +316,9 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     antiHero: antiHeroInst,
     onAnnihilation: onAnnihilation || (() => k.go(levelName)),
     currentLevel: levelName,
-    bodyColor: CFG.visual.colors.hero.body,  // Gray from local time config
-    outlineColor: CFG.visual.colors.hero.outline
+    bodyColor: heroBodyColor,  // Yellow if time complete, gray otherwise
+    outlineColor: CFG.visual.colors.hero.outline,
+    addMouth: isWordComplete  // Add mouth if word section is complete
   })
   
   return {

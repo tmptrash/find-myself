@@ -527,12 +527,15 @@ export function sceneMenu(k) {
         const { label, outlines, section, sectionColor, grayColor, isCompleted } = entry
         const isHover = hoveredInst && hoveredInst.section === section
         const isCurrent = inst.currentSection === section
-        const useHighlight = isHover || isCompleted || isCurrent
         //
-        // Special handling for time section: use yellow when completed, hovered, or current
+        // Label should only highlight when hovered or current, NOT when completed
+        //
+        const useHighlight = isHover || isCurrent
+        //
+        // Special handling for time section: use yellow only when hovered or current
         //
         let targetColor
-        if (section === 'time' && (isCompleted || isHover || isCurrent)) {
+        if (section === 'time' && (isHover || isCurrent)) {
           targetColor = '#FF8C00'  // Anti-hero orange/yellow color (matches hero in time-complete)
         } else {
           targetColor = useHighlight ? sectionColor : grayColor

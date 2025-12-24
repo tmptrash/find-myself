@@ -1015,6 +1015,110 @@ export function sceneLevel0(k) {
       bugs.push(bugInst)
     }
     //
+    // Create pushable creature with eyes
+    //
+    const CREATURE_X = k.width() / 2
+    const CREATURE_Y = FLOOR_Y - 32
+    const CREATURE_SIZE = 55
+    const EYE_SIZE = 7
+    const PUPIL_SIZE = 3.5
+    
+    const creature = k.add([
+      k.rect(CREATURE_SIZE, CREATURE_SIZE, { radius: 8 }),
+      k.pos(CREATURE_X, CREATURE_Y),
+      k.color(80, 60, 50),
+      k.outline(3, k.rgb(0, 0, 0)),
+      k.area(),
+      k.body({ isStatic: false, mass: 10 }),
+      k.anchor("center"),
+      k.z(22),
+      "platform",
+      {
+        leftEyeX: -CREATURE_SIZE * 0.25,
+        rightEyeX: CREATURE_SIZE * 0.25,
+        eyeY: -CREATURE_SIZE * 0.15,
+        leftPupilX: 0,
+        leftPupilY: 0,
+        rightPupilX: 0,
+        rightPupilY: 0
+      }
+    ])
+    //
+    // Update pupil positions to look at hero
+    //
+    creature.onUpdate(() => {
+      const heroX = heroInst.character.pos.x
+      const heroY = heroInst.character.pos.y
+      const MAX_PUPIL_OFFSET = EYE_SIZE * 0.4
+      //
+      // Left eye
+      //
+      const leftEyeWorldX = creature.pos.x + creature.leftEyeX
+      const leftEyeWorldY = creature.pos.y + creature.eyeY
+      const leftDx = heroX - leftEyeWorldX
+      const leftDy = heroY - leftEyeWorldY
+      const leftDist = Math.sqrt(leftDx * leftDx + leftDy * leftDy)
+      
+      if (leftDist > 0) {
+        creature.leftPupilX = (leftDx / leftDist) * MAX_PUPIL_OFFSET
+        creature.leftPupilY = (leftDy / leftDist) * MAX_PUPIL_OFFSET
+      }
+      //
+      // Right eye
+      //
+      const rightEyeWorldX = creature.pos.x + creature.rightEyeX
+      const rightEyeWorldY = creature.pos.y + creature.eyeY
+      const rightDx = heroX - rightEyeWorldX
+      const rightDy = heroY - rightEyeWorldY
+      const rightDist = Math.sqrt(rightDx * rightDx + rightDy * rightDy)
+      
+      if (rightDist > 0) {
+        creature.rightPupilX = (rightDx / rightDist) * MAX_PUPIL_OFFSET
+        creature.rightPupilY = (rightDy / rightDist) * MAX_PUPIL_OFFSET
+      }
+    })
+    //
+    // Draw eyes on creature
+    //
+    creature.onDraw(() => {
+      //
+      // Left eye white
+      //
+      k.drawCircle({
+        pos: k.vec2(creature.leftEyeX, creature.eyeY),
+        radius: EYE_SIZE,
+        color: k.rgb(255, 255, 255),
+        opacity: 1
+      })
+      //
+      // Left pupil
+      //
+      k.drawCircle({
+        pos: k.vec2(creature.leftEyeX + creature.leftPupilX, creature.eyeY + creature.leftPupilY),
+        radius: PUPIL_SIZE,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+      //
+      // Right eye white
+      //
+      k.drawCircle({
+        pos: k.vec2(creature.rightEyeX, creature.eyeY),
+        radius: EYE_SIZE,
+        color: k.rgb(255, 255, 255),
+        opacity: 1
+      })
+      //
+      // Right pupil
+      //
+      k.drawCircle({
+        pos: k.vec2(creature.rightEyeX + creature.rightPupilX, creature.eyeY + creature.rightPupilY),
+        radius: PUPIL_SIZE,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    })
+    //
     // Update bugs and dust
     //
     k.onUpdate(() => {

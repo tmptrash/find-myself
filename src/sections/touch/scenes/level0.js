@@ -279,10 +279,28 @@ export function sceneLevel0(k) {
       if (layerIndex === 2) {
         const totalElements = 14
         const spacing = playableWidth / (totalElements - 1)
+        const TREE_MARGIN = 80
         
         for (let i = 0; i < totalElements; i++) {
           const randomness = 25
-          const posX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
+          //
+          // Limit randomness for first and last elements to prevent overflow
+          //
+          let randomOffset = (Math.random() - 0.5) * randomness
+          //
+          // For first element: add extra margin and only allow positive offset
+          //
+          if (i === 0) {
+            randomOffset = Math.max(0, randomOffset) + TREE_MARGIN
+          }
+          //
+          // For last element: subtract extra margin and only allow negative offset
+          //
+          if (i === totalElements - 1) {
+            randomOffset = Math.min(0, randomOffset) - TREE_MARGIN
+          }
+          
+          const posX = LEFT_MARGIN + spacing * i + randomOffset
           const isBush = Math.random() < 0.35
           
           if (isBush) {
@@ -351,7 +369,7 @@ export function sceneLevel0(k) {
             
             bushes.push(bush)
           } else {
-            const baseTreeHeight = (300 + Math.random() * 280) * scale
+            const baseTreeHeight = (250 + Math.random() * 400) * scale
             const crownCenterY = grassY + yOffset - baseTreeHeight
             const trunkBottom = grassY
             const trunkActualHeight = baseTreeHeight * (0.6 + Math.random() * 0.1)
@@ -613,20 +631,6 @@ export function sceneLevel0(k) {
           ctx.fill()
         }
       }
-      //
-      // Draw grass
-      //
-      for (const blade of layer.grassBlades) {
-        const time = 0
-        const sway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
-        
-        ctx.strokeStyle = `rgba(${blade.color.r}, ${blade.color.g}, ${blade.color.b}, ${blade.opacity})`
-        ctx.lineWidth = blade.width
-        ctx.beginPath()
-        ctx.moveTo(blade.x, blade.y)
-        ctx.lineTo(blade.x + sway, blade.y - blade.height)
-        ctx.stroke()
-      }
     }
     
     const bgCanvas = createBackgroundCanvas()
@@ -641,6 +645,53 @@ export function sceneLevel0(k) {
         anchor: "topleft"
       })
     })
+    //
+    // Create dynamic grass drawer with hero interaction
+    //
+    const allGrassBlades = []
+    for (const layer of layers) {
+      allGrassBlades.push(...layer.grassBlades)
+    }
+    
+    const grassDrawer = k.add([
+      k.z(20),
+      {
+        heroRef: null,
+        draw() {
+          const time = k.time()
+          const heroX = this.heroRef ? this.heroRef.character.pos.x : -1000
+          const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
+          const HERO_RADIUS = 50
+          const PUSH_FORCE = 15
+          
+          for (const blade of allGrassBlades) {
+            const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
+            //
+            // Check distance to hero
+            //
+            const dx = blade.x1 - heroX
+            const dy = blade.y1 - heroY
+            const distance = Math.sqrt(dx * dx + dy * dy)
+            //
+            // Add push effect if hero is close
+            //
+            let pushSway = 0
+            if (distance < HERO_RADIUS) {
+              const pushStrength = (1 - distance / HERO_RADIUS)
+              pushSway = (dx / distance) * pushStrength * PUSH_FORCE
+            }
+            
+            k.drawLine({
+              p1: k.vec2(blade.x1, blade.y1),
+              p2: k.vec2(blade.baseX2 + baseSway + pushSway, blade.y2),
+              width: blade.width,
+              color: blade.color,
+              opacity: blade.opacity
+            })
+          }
+        }
+      }
+    ])
     //
     // Create dynamic foreground trees drawer (40% of front layer)
     //
@@ -748,7 +799,10 @@ export function sceneLevel0(k) {
     // Spawn hero after delay
     //
     const HERO_SPAWN_DELAY = 0.5
-    k.wait(HERO_SPAWN_DELAY, () => Hero.spawn(heroInst))
+    k.wait(HERO_SPAWN_DELAY, () => {
+      Hero.spawn(heroInst)
+      grassDrawer.heroRef = heroInst
+    })
     //
     // Create anti-hero
     //

@@ -231,7 +231,7 @@ export function sceneLevel0(k) {
         const trunkBottom = grassY
         const trunkHeight = trunkBottom - trunkTop
         const trunkWidth = layerIndex === 0 ? (4 + Math.random() * 4) * scale : (6 + Math.random() * 6) * scale
-        const crownSize = (40 + Math.random() * 50) * scale
+        const crownSize = (50 + Math.random() * 60) * scale
         
         const crownCount = layerIndex === 0 ? 5 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3)
         const crowns = []
@@ -419,7 +419,7 @@ export function sceneLevel0(k) {
               const branchX = branch.startX + (branch.endX - branch.startX) * alongBranch
               const branchY = branch.startY + (branch.endY - branch.startY) * alongBranch
               
-              const clusterRadius = (15 + Math.random() * 20) * scale
+              const clusterRadius = (18 + Math.random() * 25) * scale
               const angle = Math.random() * Math.PI * 2
               const distance = Math.random() * clusterRadius
               
@@ -479,144 +479,247 @@ export function sceneLevel0(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Draw grass, bushes, and trees in layers (back to front)
+    // Create background canvas with static layers
     //
-    k.onDraw(() => {
+    const createBackgroundCanvas = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = k.width()
+      canvas.height = k.height()
+      const ctx = canvas.getContext('2d')
       //
-      // 1. Draw darkened ground area (first layer, behind everything)
+      // Calculate dynamic tree indices (will be drawn separately)
+      //
+      const allFrontTrees = layers[2] ? layers[2].trees : []
+      const dynamicTreesSet = new Set()
+      for (let i = 0; i < allFrontTrees.length; i++) {
+        if (i % 5 < 2) {
+          dynamicTreesSet.add(i)
+        }
+      }
+      //
+      // 1. Draw darkened ground area
       //
       if (layers.length > 0 && layers[0].trees.length > 0) {
         const backLayer = layers[0]
         const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
         const floorY = FLOOR_Y
         
-        k.drawRect({
-          pos: k.vec2(k.width() / 2, (avgCrownY + floorY) / 2),
-          width: k.width(),
-          height: floorY - avgCrownY,
-          anchor: "center",
-          color: k.rgb(28, 28, 28),
-          opacity: 1.0
-        })
+        ctx.fillStyle = 'rgb(28, 28, 28)'
+        ctx.fillRect(0, avgCrownY, canvas.width, floorY - avgCrownY)
       }
       //
-      // 2. Draw all layers from back to front (trees and bushes only)
+      // 2. Draw back layer (all trees)
       //
-      for (const layer of layers) {
+      if (layers[0]) {
+        drawLayerToCanvas(ctx, layers[0], 0, null)
+      }
+      //
+      // 3. Draw middle layer (all trees)
+      //
+      if (layers[1]) {
+        drawLayerToCanvas(ctx, layers[1], 0, null)
+      }
+      //
+      // 4. Draw 60% of front layer trees (exclude dynamic trees)
+      //
+      if (layers[2]) {
+        const staticTrees = layers[2].trees.filter((_, i) => !dynamicTreesSet.has(i))
+        const frontLayerStatic = {
+          trees: staticTrees,
+          bushes: layers[2].bushes,
+          grassBlades: layers[2].grassBlades,
+          name: layers[2].name
+        }
+        drawLayerToCanvas(ctx, frontLayerStatic, 0, null)
+      }
+      
+      return canvas
+    }
+    //
+    // Helper function to draw layer to canvas
+    //
+    const drawLayerToCanvas = (ctx, layer, time, skipIndices) => {
+      //
+      // Draw trees
+      //
+      for (const tree of layer.trees) {
+        const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
         //
-        // Draw trees for this layer
+        // Draw trunk
         //
-        for (const tree of layer.trees) {
-          //
-          // Calculate gentle sway
-          //
-          const time = k.time()
-          const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
-          //
-          // Draw trunk (from crown down to ground)
-          //
-          const trunkCenterY = (tree.trunkTop + tree.trunkBottom) / 2
+        ctx.fillStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+        ctx.fillRect(
+          tree.x + sway * 0.2 - tree.trunkWidth / 2,
+          tree.trunkTop,
+          tree.trunkWidth,
+          tree.trunkHeight
+        )
+        //
+        // Draw branches
+        //
+        if (tree.branches) {
+          for (const branch of tree.branches) {
+            ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+            ctx.lineWidth = branch.width
+            ctx.beginPath()
+            ctx.moveTo(tree.x + branch.startX + sway * 0.2, branch.startY)
+            ctx.lineTo(tree.x + branch.endX + sway * 0.3, branch.endY)
+            ctx.stroke()
+          }
+        }
+        //
+        // Draw crowns
+        //
+        for (const crown of tree.crowns) {
+          const colorShift = crown.colorShift || 0
+          const leafR = Math.min(255, tree.leafColor.r + colorShift)
+          const leafG = Math.min(255, tree.leafColor.g + colorShift)
+          const leafB = Math.min(255, tree.leafColor.b + colorShift)
           
-          k.drawRect({
-            pos: k.vec2(tree.x + sway * 0.2, trunkCenterY),
-            width: tree.trunkWidth,
-            height: tree.trunkHeight,
-            anchor: "center",
-            color: tree.trunkColor,
-            opacity: tree.opacity
-          })
-          //
-          // Draw branches
-          //
-          if (tree.branches) {
-            for (const branch of tree.branches) {
-              k.drawLine({
-                p1: k.vec2(tree.x + branch.startX + sway * 0.2, branch.startY),
-                p2: k.vec2(tree.x + branch.endX + sway * 0.3, branch.endY),
-                width: branch.width,
+          ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${tree.opacity * crown.opacityVariation})`
+          ctx.beginPath()
+          ctx.arc(
+            tree.x + crown.offsetX + sway,
+            tree.crownCenterY + crown.offsetY,
+            tree.crownSize * crown.sizeVariation,
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+        }
+      }
+      //
+      // Draw bushes
+      //
+      for (const bush of layer.bushes) {
+        const time = 0
+        const sway = Math.sin(time * bush.swaySpeed + bush.swayOffset) * bush.swayAmount
+        
+        for (const crown of bush.crowns) {
+          const colorShift = crown.colorShift || 0
+          const leafR = Math.min(255, bush.color.r + colorShift)
+          const leafG = Math.min(255, bush.color.g + colorShift)
+          const leafB = Math.min(255, bush.color.b + colorShift)
+          
+          ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${bush.opacity * crown.opacityVariation})`
+          ctx.beginPath()
+          ctx.arc(
+            bush.x + crown.offsetX + sway,
+            bush.y + crown.offsetY,
+            bush.size * crown.sizeVariation * 0.5,
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+        }
+      }
+      //
+      // Draw grass
+      //
+      for (const blade of layer.grassBlades) {
+        const time = 0
+        const sway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
+        
+        ctx.strokeStyle = `rgba(${blade.color.r}, ${blade.color.g}, ${blade.color.b}, ${blade.opacity})`
+        ctx.lineWidth = blade.width
+        ctx.beginPath()
+        ctx.moveTo(blade.x, blade.y)
+        ctx.lineTo(blade.x + sway, blade.y - blade.height)
+        ctx.stroke()
+      }
+    }
+    
+    const bgCanvas = createBackgroundCanvas()
+    const bgTexture = k.loadSprite('bg-touch-0', bgCanvas.toDataURL())
+    //
+    // Draw background
+    //
+    k.onDraw(() => {
+      k.drawSprite({
+        sprite: 'bg-touch-0',
+        pos: k.vec2(0, 0),
+        anchor: "topleft"
+      })
+    })
+    //
+    // Create dynamic foreground trees drawer (40% of front layer)
+    //
+    if (layers[2]) {
+      const allFrontTrees = layers[2].trees
+      const dynamicTreesIndices = []
+      const staticTreesIndices = []
+      //
+      // Distribute trees: every 3rd tree is dynamic, others are static
+      //
+      for (let i = 0; i < allFrontTrees.length; i++) {
+        if (i % 5 < 2) {
+          dynamicTreesIndices.push(i)
+        } else {
+          staticTreesIndices.push(i)
+        }
+      }
+      
+      const dynamicTrees = dynamicTreesIndices.map(i => allFrontTrees[i])
+    
+    k.add([
+        k.z(25),
+        {
+          draw() {
+            const time = k.time()
+            
+            for (const tree of dynamicTrees) {
+              const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
+              //
+              // Draw trunk
+              //
+              const trunkCenterY = (tree.trunkTop + tree.trunkBottom) / 2
+              
+              k.drawRect({
+                pos: k.vec2(tree.x + sway * 0.2, trunkCenterY),
+                width: tree.trunkWidth,
+                height: tree.trunkHeight,
+                anchor: "center",
                 color: tree.trunkColor,
                 opacity: tree.opacity
               })
+              //
+              // Draw branches
+              //
+              if (tree.branches) {
+                for (const branch of tree.branches) {
+                  k.drawLine({
+                    p1: k.vec2(tree.x + branch.startX + sway * 0.2, branch.startY),
+                    p2: k.vec2(tree.x + branch.endX + sway * 0.3, branch.endY),
+                    width: branch.width,
+                    color: tree.trunkColor,
+                    opacity: tree.opacity
+                  })
+                }
+              }
+              //
+              // Draw crowns
+              //
+              for (const crown of tree.crowns) {
+                const colorShift = crown.colorShift || 0
+                const leafR = Math.min(255, tree.leafColor.r + colorShift)
+                const leafG = Math.min(255, tree.leafColor.g + colorShift)
+                const leafB = Math.min(255, tree.leafColor.b + colorShift)
+                
+                k.drawCircle({
+                  pos: k.vec2(
+                    tree.x + crown.offsetX + sway,
+                    tree.crownCenterY + crown.offsetY
+                  ),
+                  radius: tree.crownSize * crown.sizeVariation,
+                  color: k.rgb(leafR, leafG, leafB),
+                  opacity: tree.opacity * crown.opacityVariation
+                })
+              }
             }
           }
-          //
-          // Draw crown (multiple overlapping circles for fuller look)
-          //
-          for (const crown of tree.crowns) {
-            const colorShift = crown.colorShift || 0
-            const leafR = Math.min(255, tree.leafColor.r + colorShift)
-            const leafG = Math.min(255, tree.leafColor.g + colorShift)
-            const leafB = Math.min(255, tree.leafColor.b + colorShift)
-            
-            k.drawCircle({
-              pos: k.vec2(
-                tree.x + crown.offsetX + sway,
-                tree.crownCenterY + crown.offsetY
-              ),
-              radius: tree.crownSize * crown.sizeVariation,
-              color: k.rgb(leafR, leafG, leafB),
-              opacity: tree.opacity * crown.opacityVariation
-            })
-          }
         }
-        //
-        // Draw bushes for this layer
-        //
-        for (const bush of layer.bushes) {
-          if (bush.crowns) {
-            const time = k.time()
-            const sway = Math.sin(time * 0.3 + bush.x * 0.01) * 0.5
-            
-            for (const crown of bush.crowns) {
-              const colorShift = crown.colorShift || 0
-              const leafR = Math.min(255, Math.max(0, bush.color.r + colorShift))
-              const leafG = Math.min(255, Math.max(0, bush.color.g + colorShift))
-              const leafB = Math.min(255, Math.max(0, bush.color.b + colorShift))
-              
-              k.drawCircle({
-                pos: k.vec2(
-                  bush.x + crown.offsetX + sway,
-                  bush.y + crown.offsetY
-                ),
-                radius: bush.size * crown.sizeVariation,
-                color: k.rgb(leafR, leafG, leafB),
-                opacity: bush.opacity * crown.opacityVariation
-              })
-            }
-          } else {
-            k.drawCircle({
-              pos: k.vec2(bush.x, bush.y),
-              radius: bush.size,
-              color: bush.color,
-              opacity: bush.opacity
-            })
-          }
-        }
-      }
-      //
-      // 3. Draw all grass blades on top (from back to front layers)
-      //
-      for (const layer of layers) {
-        //
-        // Draw grass blades for this layer (at ground level, with swaying)
-        //
-        for (const grass of layer.grassBlades) {
-          //
-          // Calculate sway based on time
-          //
-          const time = k.time()
-          const sway = Math.sin(time * grass.swaySpeed + grass.swayOffset) * grass.swayAmount
-          
-          k.drawLine({
-            p1: k.vec2(grass.x1, grass.y1),
-            p2: k.vec2(grass.baseX2 + sway, grass.y2),
-            width: grass.width,
-            color: grass.color,
-            opacity: grass.opacity
-          })
-        }
-      }
-    })
+      ])
+    }
     //
     // Check completed sections for hero appearance
     //

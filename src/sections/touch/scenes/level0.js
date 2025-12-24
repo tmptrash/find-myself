@@ -646,6 +646,142 @@ export function sceneLevel0(k) {
       })
     })
     //
+    // Create birds flying in the background
+    //
+    const birds = []
+    const BIRD_COUNT = 5
+    const SKY_HEIGHT = 400
+    
+    for (let i = 0; i < BIRD_COUNT; i++) {
+      const startX = Math.random() * k.width()
+      const startY = TOP_MARGIN + Math.random() * SKY_HEIGHT
+      const speed = 40 + Math.random() * 30
+      const amplitude = 10 + Math.random() * 20
+      const frequency = 0.5 + Math.random() * 1.0
+      const size = 6 + Math.random() * 5
+      const phaseOffset = Math.random() * Math.PI * 2
+      const timeOffset = Math.random() * 10
+      
+      birds.push({
+        x: startX,
+        y: startY,
+        baseY: startY,
+        speed: speed,
+        amplitude: amplitude,
+        frequency: frequency,
+        size: size,
+        phaseOffset: phaseOffset,
+        timeOffset: timeOffset,
+        wingPhase: 0,
+        isFlapping: Math.random() > 0.5,
+        flapTimer: Math.random() * 3,
+        flapDuration: 0.8 + Math.random() * 0.4,
+        glideDuration: 2.0 + Math.random() * 2.0
+      })
+    }
+    
+    k.add([
+      k.z(5),
+      {
+        draw() {
+          const time = k.time()
+          const dt = k.dt()
+          
+          for (const bird of birds) {
+            //
+            // Update position
+            //
+            bird.x += bird.speed * dt
+            //
+            // Wrap around screen
+            //
+            if (bird.x > k.width() + 50) {
+              bird.x = -50
+              bird.baseY = TOP_MARGIN + Math.random() * SKY_HEIGHT
+            }
+            //
+            // Sine wave flight pattern
+            //
+            bird.y = bird.baseY + Math.sin((time + bird.timeOffset) * bird.frequency + bird.phaseOffset) * bird.amplitude
+            //
+            // Update flapping state timer
+            //
+            bird.flapTimer += dt
+            const currentDuration = bird.isFlapping ? bird.flapDuration : bird.glideDuration
+            
+            if (bird.flapTimer > currentDuration) {
+              bird.isFlapping = !bird.isFlapping
+              bird.flapTimer = 0
+            }
+            //
+            // Wing animation: flap or glide
+            //
+            let wingAngle
+            if (bird.isFlapping) {
+              bird.wingPhase = Math.sin((time + bird.timeOffset) * 8 + bird.phaseOffset)
+              wingAngle = bird.wingPhase * 0.8
+            } else {
+              wingAngle = 0.7
+            }
+            //
+            // Draw bird as simple wing silhouette (like seagull from distance)
+            //
+            const wingSpan = bird.size * 2.5
+            const wingHeight = Math.abs(wingAngle) * wingSpan * 0.3
+            const wingThickness = bird.size * 0.15
+            //
+            // Left wing - curved line
+            //
+            const leftWingTip = k.vec2(bird.x - wingSpan, bird.y - wingHeight)
+            const leftWingMid = k.vec2(
+              bird.x - wingSpan * 0.5,
+              bird.y - wingHeight * 0.5
+            )
+            
+            k.drawLine({
+              p1: k.vec2(bird.x, bird.y),
+              p2: leftWingMid,
+              width: wingThickness * 3,
+              color: k.rgb(14, 16, 14),
+              opacity: 0.85
+            })
+            
+            k.drawLine({
+              p1: leftWingMid,
+              p2: leftWingTip,
+              width: wingThickness * 2,
+              color: k.rgb(14, 16, 14),
+              opacity: 0.85
+            })
+            //
+            // Right wing - curved line
+            //
+            const rightWingTip = k.vec2(bird.x + wingSpan, bird.y - wingHeight)
+            const rightWingMid = k.vec2(
+              bird.x + wingSpan * 0.5,
+              bird.y - wingHeight * 0.5
+            )
+            
+            k.drawLine({
+              p1: k.vec2(bird.x, bird.y),
+              p2: rightWingMid,
+              width: wingThickness * 3,
+              color: k.rgb(14, 16, 14),
+              opacity: 0.85
+            })
+            
+            k.drawLine({
+              p1: rightWingMid,
+              p2: rightWingTip,
+              width: wingThickness * 2,
+              color: k.rgb(14, 16, 14),
+              opacity: 0.85
+            })
+          }
+        }
+      }
+    ])
+    //
     // Create dynamic grass drawer with hero interaction
     //
     const allGrassBlades = []
@@ -711,8 +847,8 @@ export function sceneLevel0(k) {
       }
       
       const dynamicTrees = dynamicTreesIndices.map(i => allFrontTrees[i])
-    
-    k.add([
+      
+      k.add([
         k.z(25),
         {
           draw() {
@@ -849,22 +985,34 @@ export function sceneLevel0(k) {
       //
       const spacing = (floorWidth - 200) / 11
       const bugX = LEFT_MARGIN + 100 + i * spacing + (Math.random() - 0.5) * 30
+      const bugScale = 0.6 + Math.random() * 0.8
+      //
+      // Adjust Y position based on scale to prevent legs from extending below platform
+      // Keep bugs on the edge, just slightly adjust for larger scales
+      //
+      const bugY = bugFloorY - (bugScale - 1.0) * 8
       
-      bugs.push(Bugs.create({
+      const bugInst = Bugs.create({
         k,
         x: bugX,
-        y: bugFloorY,
+        y: bugY,
         hero: heroInst,
         surface: 'floor',
-        scale: 0.8 + Math.random() * 0.4,  // Varied sizes
+        scale: bugScale,
         sfx: sound,
         bounds: {
           minX: LEFT_MARGIN + 30,
           maxX: CFG.visual.screen.width - RIGHT_MARGIN - 30,
-          minY: bugFloorY,
-          maxY: bugFloorY
+          minY: bugY,
+          maxY: bugY
         }
-      }))
+      })
+      //
+      // Store original Y position
+      //
+      bugInst.originalY = bugY
+      
+      bugs.push(bugInst)
     }
     //
     // Update bugs and dust

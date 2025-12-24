@@ -13,12 +13,16 @@ const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
+// Platform dimensions
+//
+const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
+//
 // Hero spawn positions
 //
-const HERO_SPAWN_X = LEFT_MARGIN + 150
-const HERO_SPAWN_Y = CFG.visual.screen.height - BOTTOM_MARGIN - 50
-const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 150
-const ANTIHERO_SPAWN_Y = HERO_SPAWN_Y
+const HERO_SPAWN_X = LEFT_MARGIN + 100
+const HERO_SPAWN_Y = FLOOR_Y - 50
+const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
+const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
 
 /**
  * Level 0 scene for touch section - Introduction level
@@ -52,41 +56,9 @@ export function sceneLevel0(k) {
       })
     })
     //
-    // Create bottom platform - split into two parts with a gap in the middle
+    // Create simple bottom platform
     //
-    const bottomPlatformY = CFG.visual.screen.height - BOTTOM_MARGIN / 2
-    const gapWidth = 300  // Width of the pit
-    const gapCenterX = CFG.visual.screen.width / 2  // Center of screen
-    const leftPlatformWidth = gapCenterX - gapWidth / 2 - LEFT_MARGIN / 2
-    const rightPlatformWidth = gapCenterX - gapWidth / 2 - RIGHT_MARGIN / 2
-    //
-    // Left part of bottom platform
-    //
-    k.add([
-      k.rect(leftPlatformWidth * 2, BOTTOM_MARGIN),
-      k.pos(LEFT_MARGIN + leftPlatformWidth, bottomPlatformY),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),  // CFG.visual.colors.platform
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Right part of bottom platform
-    //
-    k.add([
-      k.rect(rightPlatformWidth * 2, BOTTOM_MARGIN),
-      k.pos(CFG.visual.screen.width - RIGHT_MARGIN - rightPlatformWidth, bottomPlatformY),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Create left wall (full height)
+    // Left wall (full height)
     //
     k.add([
       k.rect(LEFT_MARGIN, CFG.visual.screen.height),
@@ -99,7 +71,7 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
-    // Create right wall (full height)
+    // Right wall (full height)
     //
     k.add([
       k.rect(RIGHT_MARGIN, CFG.visual.screen.height),
@@ -112,7 +84,7 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
-    // Create top wall (full width)
+    // Top wall (full width)
     //
     k.add([
       k.rect(CFG.visual.screen.width, TOP_MARGIN),
@@ -125,23 +97,11 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
-    // Create single long platform on the left
-    // Height allows hero to run under it and jump onto it
+    // Bottom platform (full width)
     //
-    const floorY = CFG.visual.screen.height - BOTTOM_MARGIN
-    const heroHeight = 80  // Approximate hero height
-    const platformHeight = 40  // Platform thickness
-    const clearanceHeight = 100  // Lower height from floor (was 120)
-    //
-    // Platform: Left side, extending right
-    //
-    const platformX = LEFT_MARGIN + 500  // Moved right (was 400) - more space on left
-    const platformY = floorY - clearanceHeight
-    const platformWidth = 800  // Long platform extending right
-    
     k.add([
-      k.rect(platformWidth, platformHeight),
-      k.pos(platformX, platformY),
+      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
+      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
@@ -150,38 +110,522 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
-    // Create movable cube on the raised platform
+    // Create grass/bushes/trees decoration with parallax depth layers
     //
-    const cubeSize = 60
-    const cubeX = platformX - platformWidth / 4  // On left part of raised platform
-    const cubeY = platformY - platformHeight / 2 - cubeSize / 2  // On top of platform
+    const grassY = FLOOR_Y - 2
+    const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const bgColor = { r: 42, g: 42, b: 42 }
+    //
+    // Create parallax layers (all three layers)
+    //
+    const layers = []
+    const layerConfigs = [
+      { name: 'back', colorMix: 0.2, opacity: 1.0, yOffset: 0, scale: 1.5 },      // Tallest, opaque to cover darkened area
+      { name: 'middle', colorMix: 0.55, opacity: 1.0, yOffset: -15, scale: 1.0 }, // Medium height, medium contrast
+      { name: 'front', colorMix: 1.0, opacity: 0.95, yOffset: -30, scale: 0.6 }   // Shortest, bright colors
+    ]
     
-    k.add([
-      k.rect(cubeSize, cubeSize),
-      k.pos(cubeX, cubeY),
-      k.anchor("center"),
-      k.area(),
-      k.body({ 
-        isStatic: true,  // Always static - no physics oscillations
-        mass: 1,
-        gravityScale: 1,
-        friction: 0.9,
-        damping: 0.95
-      }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms + 1),
-      CFG.game.platformName,
-      "movable-cube"
-    ])
+    for (let layerIndex = 0; layerIndex < layerConfigs.length; layerIndex++) {
+      const config = layerConfigs[layerIndex]
+      const colorMix = config.colorMix
+      const baseOpacity = config.opacity
+      const yOffset = config.yOffset
+      const scale = config.scale
+      //
+      // Interpolate color towards background for distant layers
+      // Back layer (layerIndex 0) - monochrome dark
+      // Middle layer (layerIndex 1) - dark colored (dark green leaves, dark brown trunk)
+      // Front layer (layerIndex 2) - bright colored (bright green leaves, brown trunk, bright green grass)
+      //
+      const grassBaseR = layerIndex === 2 ? 40 : 50 * colorMix + bgColor.r * (1 - colorMix)
+      const grassBaseG = layerIndex === 2 ? 85 : 80 * colorMix + bgColor.g * (1 - colorMix)
+      const grassBaseB = layerIndex === 2 ? 40 : 50 * colorMix + bgColor.b * (1 - colorMix)
+      
+      const bushBaseR = layerIndex === 2 ? 35 : 35 * colorMix + bgColor.r * (1 - colorMix)
+      const bushBaseG = layerIndex === 2 ? 70 : 55 * colorMix + bgColor.g * (1 - colorMix)
+      const bushBaseB = layerIndex === 2 ? 35 : 35 * colorMix + bgColor.b * (1 - colorMix)
+      
+      const treeLeafR = layerIndex === 0 ? 12 * colorMix + bgColor.r * (1 - colorMix) : (layerIndex === 1 ? 12 * colorMix + bgColor.r * (1 - colorMix) : 40)
+      const treeLeafG = layerIndex === 0 ? 16 * colorMix + bgColor.g * (1 - colorMix) : (layerIndex === 1 ? 16 * colorMix + bgColor.g * (1 - colorMix) : 75)
+      const treeLeafB = layerIndex === 0 ? 12 * colorMix + bgColor.b * (1 - colorMix) : (layerIndex === 1 ? 12 * colorMix + bgColor.b * (1 - colorMix) : 40)
+      
+      const treeTrunkR = layerIndex === 0 ? 10 * colorMix + bgColor.r * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.r * (1 - colorMix) : 70)
+      const treeTrunkG = layerIndex === 0 ? 10 * colorMix + bgColor.g * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.g * (1 - colorMix) : 50)
+      const treeTrunkB = layerIndex === 0 ? 10 * colorMix + bgColor.b * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.b * (1 - colorMix) : 30)
+      //
+      // Generate grass blade data for this layer
+      // All grass grows from ground level (grassY), not affected by yOffset
+      // Back layer most dense (continuous), front layer least dense
+      //
+      const grassBlades = []
+      const grassDensity = layerIndex === 0 ? 120 : (layerIndex === 1 ? 50 : 25)
+      const bladesCount = Math.floor(grassDensity * scale)
+      
+      for (let i = 0; i < bladesCount; i++) {
+        const baseX = LEFT_MARGIN + Math.random() * playableWidth
+        const height = (10 + Math.random() * 20) * scale
+        const bendX = (Math.random() - 0.5) * 6
+        const swaySpeed = 0.8 + Math.random() * 0.6
+        const swayAmount = (2 + Math.random() * 3) * scale
+        const swayOffset = Math.random() * Math.PI * 2
+        
+        grassBlades.push({
+          x1: baseX,
+          y1: grassY,
+          baseX2: baseX + bendX,
+          y2: grassY - height,
+          height: height,
+          swaySpeed: swaySpeed,
+          swayAmount: swayAmount,
+          swayOffset: swayOffset,
+          color: k.rgb(
+            grassBaseR + Math.random() * 20,
+            grassBaseG + Math.random() * 20,
+            grassBaseB + Math.random() * 15
+          ),
+          opacity: baseOpacity + Math.random() * 0.15,
+          width: (0.8 + Math.random() * 0.4) * scale
+        })
+      }
+      //
+      // Generate bush data for this layer
+      // For front layer: don't create bushes separately, will alternate with trees
+      //
+      const bushes = []
+      const bushCount = layerIndex === 2 ? 0 : 0
+      
+      for (let i = 0; i < bushCount; i++) {
+        const spacing = playableWidth / (bushCount + 1)
+        const randomness = layerIndex === 0 ? 30 : (layerIndex === 1 ? 60 : 40)
+        const bushX = LEFT_MARGIN + spacing * (i + 1) + (Math.random() - 0.5) * randomness
+        const baseBushSize = (40 + Math.random() * 60) * scale
+        
+        const bush = {
+          x: bushX,
+          y: grassY + yOffset - baseBushSize / 2,
+          size: baseBushSize,
+          color: k.rgb(
+            bushBaseR + Math.random() * 15,
+            bushBaseG + Math.random() * 15,
+            bushBaseB + Math.random() * 10
+          ),
+          opacity: baseOpacity + Math.random() * 0.1
+        }
+        
+        bushes.push(bush)
+      }
+      //
+      // Generate tree data for this layer
+      // For front layer: create both trees and bushes in alternating pattern
+      //
+      const trees = []
+      const treeCount = layerIndex === 0 ? 18 : (layerIndex === 1 ? 9 : 0)
+      
+      for (let i = 0; i < treeCount; i++) {
+        const spacing = playableWidth / (treeCount - 1)
+        const randomness = layerIndex === 0 ? 20 : (layerIndex === 1 ? 40 : 25)
+        const treeX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
+        const baseTreeHeight = (120 + Math.random() * 100) * scale
+        const crownCenterY = grassY + yOffset - baseTreeHeight
+        const trunkTop = crownCenterY
+        const trunkBottom = grassY
+        const trunkHeight = trunkBottom - trunkTop
+        const trunkWidth = layerIndex === 0 ? (4 + Math.random() * 4) * scale : (6 + Math.random() * 6) * scale
+        const crownSize = (40 + Math.random() * 50) * scale
+        
+        const crownCount = layerIndex === 0 ? 5 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3)
+        const crowns = []
+        
+        for (let j = 0; j < crownCount; j++) {
+          crowns.push({
+            offsetX: (Math.random() - 0.5) * crownSize * (layerIndex === 0 ? 0.7 : 0.5),
+            offsetY: (Math.random() - 0.5) * crownSize * (layerIndex === 0 ? 0.5 : 0.4),
+            sizeVariation: layerIndex === 0 ? 0.6 + Math.random() * 0.6 : 0.8 + Math.random() * 0.5,
+            opacityVariation: layerIndex === 0 ? 0.7 + Math.random() * 0.2 : 0.85 + Math.random() * 0.15
+          })
+        }
+        
+        const tree = {
+          x: treeX,
+          y: grassY + yOffset,
+          trunkTop: trunkTop,
+          trunkBottom: trunkBottom,
+          trunkHeight: trunkHeight,
+          trunkWidth: trunkWidth,
+          crownSize: crownSize,
+          crownCenterY: crownCenterY,
+          crowns: crowns,
+          trunkColor: k.rgb(
+            treeTrunkR,
+            treeTrunkG,
+            treeTrunkB
+          ),
+          leafColor: k.rgb(
+            treeLeafR,
+            treeLeafG,
+            treeLeafB
+          ),
+          opacity: layerIndex === 0 ? 0.85 + Math.random() * 0.1 : baseOpacity,
+          swaySpeed: 0.2 + Math.random() * 0.15,
+          swayAmount: (1 + Math.random() * 1.5) * scale,
+          swayOffset: Math.random() * Math.PI * 2
+        }
+        
+        trees.push(tree)
+      }
+      //
+      // For front layer: create alternating trees and bushes
+      //
+      if (layerIndex === 2) {
+        const totalElements = 14
+        const spacing = playableWidth / (totalElements - 1)
+        
+        for (let i = 0; i < totalElements; i++) {
+          const randomness = 25
+          const posX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
+          const isBush = Math.random() < 0.35
+          
+          if (isBush) {
+            const bushWidth = (30 + Math.random() * 30) * scale
+            const bushHeight = (25 + Math.random() * 25) * scale
+            const bushCenterY = grassY + yOffset - bushHeight * 0.6
+            
+            const colorType = Math.floor(Math.random() * 4)
+            let baseLeafR, baseLeafG, baseLeafB
+            
+            if (colorType === 0) {
+              baseLeafR = 35
+              baseLeafG = 70
+              baseLeafB = 35
+            } else if (colorType === 1) {
+              baseLeafR = 75
+              baseLeafG = 65
+              baseLeafB = 25
+            } else if (colorType === 2) {
+              baseLeafR = 85
+              baseLeafG = 45
+              baseLeafB = 25
+            } else {
+              baseLeafR = 70
+              baseLeafG = 35
+              baseLeafB = 30
+            }
+            
+            const crownCount = 12 + Math.floor(Math.random() * 8)
+            const crowns = []
+            
+            for (let j = 0; j < crownCount; j++) {
+              const angle = Math.random() * Math.PI * 2
+              const radiusX = Math.random() * 0.9
+              const radiusY = Math.random() * 0.9
+              
+              const x = Math.cos(angle) * radiusX * bushWidth
+              const y = Math.sin(angle) * radiusY * bushHeight
+              
+              const heightRatio = (y + bushHeight) / (bushHeight * 2)
+              const centerDistance = Math.sqrt((x * x) / (bushWidth * bushWidth) + (y * y) / (bushHeight * bushHeight))
+              
+              const isTop = heightRatio > 0.6
+              const brightness = isTop ? 15 + Math.random() * 20 : -10 + Math.random() * 10
+              
+              const size = centerDistance < 0.4 ? 0.3 + Math.random() * 0.2 :
+                          0.2 + Math.random() * 0.2
+              
+              crowns.push({
+                offsetX: x,
+                offsetY: y,
+                sizeVariation: size,
+                opacityVariation: 0.8 + Math.random() * 0.2,
+                colorShift: brightness
+              })
+            }
+            
+            const bush = {
+              x: posX,
+              y: bushCenterY,
+              size: Math.max(bushWidth, bushHeight),
+              crowns: crowns,
+              color: k.rgb(baseLeafR, baseLeafG, baseLeafB),
+              opacity: 0.95
+            }
+            
+            bushes.push(bush)
+          } else {
+            const baseTreeHeight = (300 + Math.random() * 280) * scale
+            const crownCenterY = grassY + yOffset - baseTreeHeight
+            const trunkBottom = grassY
+            const trunkActualHeight = baseTreeHeight * (0.6 + Math.random() * 0.1)
+            const trunkTop = trunkBottom - trunkActualHeight
+            const trunkWidth = (5 + Math.random() * 3) * scale
+            const crownWidth = (45 + Math.random() * 35) * scale
+            const crownHeight = (50 + Math.random() * 40) * scale
+            
+            const colorType = Math.floor(Math.random() * 4)
+            let baseLeafR, baseLeafG, baseLeafB
+            
+            if (colorType === 0) {
+              baseLeafR = 40
+              baseLeafG = 75
+              baseLeafB = 40
+            } else if (colorType === 1) {
+              baseLeafR = 80
+              baseLeafG = 70
+              baseLeafB = 30
+            } else if (colorType === 2) {
+              baseLeafR = 90
+              baseLeafG = 50
+              baseLeafB = 30
+            } else {
+              baseLeafR = 75
+              baseLeafG = 40
+              baseLeafB = 35
+            }
+            
+            const branchCount = 3 + Math.floor(Math.random() * 3)
+            const branches = []
+            let highestBranchY = trunkBottom
+            
+            for (let b = 0; b < branchCount; b++) {
+              const branchAngle = ((b / branchCount) * Math.PI * 1.2 - Math.PI * 0.6) + (Math.random() - 0.5) * 0.4
+              const branchLength = (50 + Math.random() * 40) * scale
+              const branchWidth = trunkWidth * (0.6 + Math.random() * 0.3)
+              const branchStartHeight = trunkTop + trunkActualHeight * (0.3 + Math.random() * 0.4)
+              
+              if (branchStartHeight < highestBranchY) {
+                highestBranchY = branchStartHeight
+              }
+              
+              branches.push({
+                startX: 0,
+                startY: branchStartHeight,
+                endX: Math.sin(branchAngle) * branchLength,
+                endY: branchStartHeight - Math.abs(Math.cos(branchAngle)) * branchLength,
+                width: branchWidth,
+                angle: branchAngle
+              })
+            }
+            
+            const actualTrunkTop = highestBranchY
+            const actualTrunkHeight = trunkBottom - actualTrunkTop
+            
+            const crownCount = 25 + Math.floor(Math.random() * 15)
+            const crowns = []
+            
+            for (let j = 0; j < crownCount; j++) {
+              const branchIndex = Math.floor(Math.random() * branches.length)
+              const branch = branches[branchIndex]
+              const alongBranch = 0.4 + Math.random() * 0.6
+              
+              const branchX = branch.startX + (branch.endX - branch.startX) * alongBranch
+              const branchY = branch.startY + (branch.endY - branch.startY) * alongBranch
+              
+              const clusterRadius = (15 + Math.random() * 20) * scale
+              const angle = Math.random() * Math.PI * 2
+              const distance = Math.random() * clusterRadius
+              
+              const x = branchX + Math.cos(angle) * distance
+              const y = branchY + Math.sin(angle) * distance * 0.8
+              
+              const distFromBranch = distance / clusterRadius
+              const heightFromGround = (y - crownCenterY) / crownHeight
+              
+              const isTop = heightFromGround < -0.3
+              const brightness = isTop ? 15 + Math.random() * 25 : -15 + Math.random() * 15
+              
+              const size = distFromBranch < 0.5 ? 0.25 + Math.random() * 0.25 :
+                          0.15 + Math.random() * 0.2
+              
+              crowns.push({
+                offsetX: x,
+                offsetY: y - crownCenterY,
+                sizeVariation: size,
+                opacityVariation: 0.8 + Math.random() * 0.2,
+                colorShift: brightness
+              })
+            }
+            
+            const tree = {
+              x: posX,
+              y: grassY + yOffset,
+              trunkTop: actualTrunkTop,
+              trunkBottom: trunkBottom,
+              trunkHeight: actualTrunkHeight,
+              trunkWidth: trunkWidth,
+              crownSize: Math.max(crownWidth, crownHeight),
+              crownCenterY: crownCenterY,
+              crowns: crowns,
+              branches: branches,
+              trunkColor: k.rgb(
+                60 + Math.random() * 20,
+                40 + Math.random() * 15,
+                25 + Math.random() * 10
+              ),
+              leafColor: k.rgb(
+                baseLeafR,
+                baseLeafG,
+                baseLeafB
+              ),
+              opacity: 0.95,
+              swaySpeed: 0.15 + Math.random() * 0.1,
+              swayAmount: (0.8 + Math.random() * 1.0) * scale,
+              swayOffset: Math.random() * Math.PI * 2
+            }
+            
+            trees.push(tree)
+          }
+        }
+      }
+      
+      layers.push({ grassBlades, bushes, trees, name: config.name })
+    }
+    //
+    // Draw grass, bushes, and trees in layers (back to front)
+    //
+    k.onDraw(() => {
+      //
+      // 1. Draw darkened ground area (first layer, behind everything)
+      //
+      if (layers.length > 0 && layers[0].trees.length > 0) {
+        const backLayer = layers[0]
+        const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
+        const floorY = FLOOR_Y
+        
+        k.drawRect({
+          pos: k.vec2(k.width() / 2, (avgCrownY + floorY) / 2),
+          width: k.width(),
+          height: floorY - avgCrownY,
+          anchor: "center",
+          color: k.rgb(28, 28, 28),
+          opacity: 1.0
+        })
+      }
+      //
+      // 2. Draw all layers from back to front (trees and bushes only)
+      //
+      for (const layer of layers) {
+        //
+        // Draw trees for this layer
+        //
+        for (const tree of layer.trees) {
+          //
+          // Calculate gentle sway
+          //
+          const time = k.time()
+          const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
+          //
+          // Draw trunk (from crown down to ground)
+          //
+          const trunkCenterY = (tree.trunkTop + tree.trunkBottom) / 2
+          
+          k.drawRect({
+            pos: k.vec2(tree.x + sway * 0.2, trunkCenterY),
+            width: tree.trunkWidth,
+            height: tree.trunkHeight,
+            anchor: "center",
+            color: tree.trunkColor,
+            opacity: tree.opacity
+          })
+          //
+          // Draw branches
+          //
+          if (tree.branches) {
+            for (const branch of tree.branches) {
+              k.drawLine({
+                p1: k.vec2(tree.x + branch.startX + sway * 0.2, branch.startY),
+                p2: k.vec2(tree.x + branch.endX + sway * 0.3, branch.endY),
+                width: branch.width,
+                color: tree.trunkColor,
+                opacity: tree.opacity
+              })
+            }
+          }
+          //
+          // Draw crown (multiple overlapping circles for fuller look)
+          //
+          for (const crown of tree.crowns) {
+            const colorShift = crown.colorShift || 0
+            const leafR = Math.min(255, tree.leafColor.r + colorShift)
+            const leafG = Math.min(255, tree.leafColor.g + colorShift)
+            const leafB = Math.min(255, tree.leafColor.b + colorShift)
+            
+            k.drawCircle({
+              pos: k.vec2(
+                tree.x + crown.offsetX + sway,
+                tree.crownCenterY + crown.offsetY
+              ),
+              radius: tree.crownSize * crown.sizeVariation,
+              color: k.rgb(leafR, leafG, leafB),
+              opacity: tree.opacity * crown.opacityVariation
+            })
+          }
+        }
+        //
+        // Draw bushes for this layer
+        //
+        for (const bush of layer.bushes) {
+          if (bush.crowns) {
+            const time = k.time()
+            const sway = Math.sin(time * 0.3 + bush.x * 0.01) * 0.5
+            
+            for (const crown of bush.crowns) {
+              const colorShift = crown.colorShift || 0
+              const leafR = Math.min(255, Math.max(0, bush.color.r + colorShift))
+              const leafG = Math.min(255, Math.max(0, bush.color.g + colorShift))
+              const leafB = Math.min(255, Math.max(0, bush.color.b + colorShift))
+              
+              k.drawCircle({
+                pos: k.vec2(
+                  bush.x + crown.offsetX + sway,
+                  bush.y + crown.offsetY
+                ),
+                radius: bush.size * crown.sizeVariation,
+                color: k.rgb(leafR, leafG, leafB),
+                opacity: bush.opacity * crown.opacityVariation
+              })
+            }
+          } else {
+            k.drawCircle({
+              pos: k.vec2(bush.x, bush.y),
+              radius: bush.size,
+              color: bush.color,
+              opacity: bush.opacity
+            })
+          }
+        }
+      }
+      //
+      // 3. Draw all grass blades on top (from back to front layers)
+      //
+      for (const layer of layers) {
+        //
+        // Draw grass blades for this layer (at ground level, with swaying)
+        //
+        for (const grass of layer.grassBlades) {
+          //
+          // Calculate sway based on time
+          //
+          const time = k.time()
+          const sway = Math.sin(time * grass.swaySpeed + grass.swayOffset) * grass.swayAmount
+          
+          k.drawLine({
+            p1: k.vec2(grass.x1, grass.y1),
+            p2: k.vec2(grass.baseX2 + sway, grass.y2),
+            width: grass.width,
+            color: grass.color,
+            opacity: grass.opacity
+          })
+        }
+      }
+    })
     //
     // Check completed sections for hero appearance
     //
     const isWordComplete = isSectionComplete('word')
     const isTimeComplete = isSectionComplete('time')
     //
-    // Hero body color: yellow if time section complete, otherwise default
+    // Hero body color: yellow if time section complete, otherwise default gray
     //
-    const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+    const heroBodyColor = isTimeComplete ? "#FF8C00" : "#C0C0C0"
     //
     // Create hero
     //
@@ -202,91 +646,6 @@ export function sceneLevel0(k) {
     //
     const HERO_SPAWN_DELAY = 0.5
     k.wait(HERO_SPAWN_DELAY, () => Hero.spawn(heroInst))
-    //
-    // Manual cube movement and gravity (since cube is always static)
-    //
-    let cubeVelocityY = 0  // Track falling velocity
-    
-    k.onUpdate(() => {
-      const cube = k.get("movable-cube")[0]
-      const hero = heroInst.character
-      
-      if (cube && hero) {
-        const cubeLeft = cube.pos.x - cubeSize / 2
-        const cubeRight = cube.pos.x + cubeSize / 2
-        const cubeTop = cube.pos.y - cubeSize / 2
-        const cubeBottom = cube.pos.y + cubeSize / 2
-        //
-        // Check if cube is on a platform (raycast down)
-        //
-        const checkDistance = 5  // Check 5 pixels below
-        const platforms = k.get(CFG.game.platformName)
-        let isOnPlatform = false
-        
-        for (const platform of platforms) {
-          if (platform === cube) continue  // Skip self
-          
-          const platformTop = platform.pos.y - (platform.height || 0) / 2
-          const platformBottom = platform.pos.y + (platform.height || 0) / 2
-          const platformLeft = platform.pos.x - (platform.width || 0) / 2
-          const platformRight = platform.pos.x + (platform.width || 0) / 2
-          //
-          // Check if cube bottom is touching platform top
-          //
-          if (cubeBottom >= platformTop - checkDistance && 
-              cubeBottom <= platformTop + checkDistance &&
-              cubeRight > platformLeft + 5 &&
-              cubeLeft < platformRight - 5) {
-            isOnPlatform = true
-            cubeVelocityY = 0  // Reset velocity
-            cube.pos.y = platformTop - cubeSize / 2  // Snap to platform
-            break
-          }
-        }
-        //
-        // Apply gravity if not on platform
-        //
-        if (!isOnPlatform) {
-          const gravity = CFG.game.gravity * k.dt()
-          cubeVelocityY += gravity
-          cube.pos.y += cubeVelocityY * k.dt()
-        }
-        //
-        // Check if hero is at cube level (not on top)
-        //
-        const heroY = hero.pos.y
-        const isAtCubeLevel = heroY > cubeTop && heroY < cubeBottom + 20
-        //
-        // Check horizontal overlap and push direction
-        //
-        const heroX = hero.pos.x
-        const distanceFromLeft = heroX - cubeLeft
-        const distanceFromRight = cubeRight - heroX
-        //
-        // Simple movement based on hero position
-        //
-        const moveSpeed = 120 * k.dt()  // Faster movement
-        
-        if (isAtCubeLevel) {
-          //
-          // Hero is close to left side and moving right
-          //
-          if (distanceFromLeft > -30 && distanceFromLeft < 5) {
-            if (k.isKeyDown("right") || k.isKeyDown("d")) {
-              cube.pos.x += moveSpeed
-            }
-          }
-          //
-          // Hero is close to right side and moving left
-          //
-          if (distanceFromRight > -30 && distanceFromRight < 5) {
-            if (k.isKeyDown("left") || k.isKeyDown("a")) {
-              cube.pos.x -= moveSpeed
-            }
-          }
-        }
-      }
-    })
     //
     // Create anti-hero
     //
@@ -322,17 +681,17 @@ export function sceneLevel0(k) {
     })
     //
     // Create bugs on the floor
-    // 15 small bugs crawling on bottom platform
     //
-    const bugFloorY = CFG.visual.screen.height - BOTTOM_MARGIN - 10
+    const bugFloorY = FLOOR_Y - 10
     const bugs = []
+    const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
     
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 12; i++) {
       //
       // Distribute bugs across the floor
       //
-      const spacing = (CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN - 200) / 6
-      const bugX = LEFT_MARGIN + 100 + i * spacing
+      const spacing = (floorWidth - 200) / 11
+      const bugX = LEFT_MARGIN + 100 + i * spacing + (Math.random() - 0.5) * 30
       
       bugs.push(Bugs.create({
         k,
@@ -340,11 +699,11 @@ export function sceneLevel0(k) {
         y: bugFloorY,
         hero: heroInst,
         surface: 'floor',
-        scale: 1,  // Normal size
+        scale: 0.8 + Math.random() * 0.4,  // Varied sizes
         sfx: sound,
         bounds: {
-          minX: LEFT_MARGIN + 20,
-          maxX: CFG.visual.screen.width - RIGHT_MARGIN - 20,
+          minX: LEFT_MARGIN + 30,
+          maxX: CFG.visual.screen.width - RIGHT_MARGIN - 30,
           minY: bugFloorY,
           maxY: bugFloorY
         }

@@ -308,6 +308,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   //
   const isWordComplete = isSectionComplete('word')
   const isTimeComplete = isSectionComplete('time')
+  const isTouchComplete = isSectionComplete('touch')
   //
   // Hero body color: yellow if time section complete, otherwise default
   //
@@ -337,7 +338,8 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     currentLevel,  // Current level for transition system
     dustColor,
     addMouth: isWordComplete,  // Add mouth if word section is complete
-    bodyColor: heroBodyColor  // Yellow if time complete, default otherwise
+    bodyColor: heroBodyColor,  // Yellow if time complete, default otherwise
+    addArms: isTouchComplete  // Add arms if touch section is complete
   })
   
   hero.character.use("player")

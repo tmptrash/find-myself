@@ -290,6 +290,7 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
   //
   const isWordComplete = isSectionComplete('word')
   const isTimeComplete = isSectionComplete('time')
+  const isTouchComplete = isSectionComplete('touch')
   //
   // Hero body color: yellow if time section complete, otherwise gray
   //
@@ -318,7 +319,8 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     currentLevel: levelName,
     bodyColor: heroBodyColor,  // Yellow if time complete, gray otherwise
     outlineColor: CFG.visual.colors.hero.outline,
-    addMouth: isWordComplete  // Add mouth if word section is complete
+    addMouth: isWordComplete,  // Add mouth if word section is complete
+    addArms: isTouchComplete  // Add arms if touch section is complete
   })
   
   return {

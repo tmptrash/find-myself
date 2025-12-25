@@ -77,6 +77,7 @@ const BUG_PATTERNS = [
  * @param {boolean} [config.showOutline=true] - Whether to show black outline
  * @param {number} [config.legThickness] - Custom leg thickness multiplier
  * @param {string} [config.bodyShape='semicircle'] - Body shape: 'semicircle' or 'circle'
+ * @param {number} [config.legCount=4] - Number of legs: 2 or 4
  * @returns {Object} Bug instance
  */
 export function create(config) {
@@ -91,7 +92,8 @@ export function create(config) {
     zIndex = 15,
     showOutline = true,
     legThickness = 1.0,
-    bodyShape = 'semicircle'
+    bodyShape = 'semicircle',
+    legCount = 4
   } = config
   //
   // Choose random pattern or use custom color
@@ -130,29 +132,40 @@ export function create(config) {
   } else {
     angle = Math.random() > 0.5 ? 0 : Math.PI  // Left or right
     normalAngle = Math.PI / 2  // Normal points down (towards floor)
-    //
-    // 4 legs: 2 front (pointing forward-down), 2 back (pointing backward-down)
-    // Indices: 0 = left front, 1 = right front, 2 = left back, 3 = right back
-    // Front legs point more forward (smaller angle), back legs point more backward (larger angle)
-    //
-    legAngles = [
-      Math.PI * 0.25,   // Left front leg (forward-down-left)
-      Math.PI * 0.25,   // Right front leg (forward-down-right)
-      Math.PI * 0.75,   // Left back leg (backward-down-left)
-      Math.PI * 0.75    // Right back leg (backward-down-right)
-    ]
+    
+    if (legCount === 2) {
+      //
+      // 2 legs: one on left side, one on right side (far apart)
+      //
+      legAngles = [
+        Math.PI * 0.5,   // Left leg (straight down-left)
+        Math.PI * 0.5    // Right leg (straight down-right)
+      ]
+    } else {
+      //
+      // 4 legs: 2 front (pointing forward-down), 2 back (pointing backward-down)
+      // Indices: 0 = left front, 1 = right front, 2 = left back, 3 = right back
+      // Front legs point more forward (smaller angle), back legs point more backward (larger angle)
+      //
+      legAngles = [
+        Math.PI * 0.25,   // Left front leg (forward-down-left)
+        Math.PI * 0.25,   // Right front leg (forward-down-right)
+        Math.PI * 0.75,   // Left back leg (backward-down-left)
+        Math.PI * 0.75    // Right back leg (backward-down-right)
+      ]
+    }
   }
   //
-  // Create 4 legs (2 on each side)
+  // Create legs based on legCount
   //
   
   const legs = legAngles.map((baseAngle, i) => {
     //
     // IK bending direction:
-    // Back legs (0, 1): bend backward (side = -1)
-    // Front legs (2, 3): bend forward like human knees (side = 1)
+    // For 4 legs: Back legs (0, 1): bend backward (side = -1), Front legs (2, 3): bend forward (side = 1)
+    // For 2 legs: Both bend outward (side based on index)
     //
-    const side = i < 2 ? -1 : 1
+    const side = legCount === 2 ? (i === 0 ? -1 : 1) : (i < 2 ? -1 : 1)
     const reach = (legLength1 + legLength2) * scale
     
     //
@@ -165,12 +178,28 @@ export function create(config) {
       //
       const floorY = y + reach * legDropFactor
       
-      if (i === 2 || i === 3) {
-        // Front legs (indices 2, 3)
-        footX = x + reach * 0.6 * legSpreadFactor
+      if (legCount === 2) {
+        //
+        // 2 legs: place them far apart on left and right sides
+        //
+        if (i === 0) {
+          // Left leg
+          footX = x - reach * 0.8 * legSpreadFactor
+        } else {
+          // Right leg
+          footX = x + reach * 0.8 * legSpreadFactor
+        }
       } else {
-        // Back legs (indices 0, 1)
-        footX = x - reach * 0.4 * legSpreadFactor
+        //
+        // 4 legs: front and back positioning
+        //
+        if (i === 2 || i === 3) {
+          // Front legs (indices 2, 3)
+          footX = x + reach * 0.6 * legSpreadFactor
+        } else {
+          // Back legs (indices 0, 1)
+          footX = x - reach * 0.4 * legSpreadFactor
+        }
       }
       
       footY = floorY  // Same Y for all legs
@@ -227,6 +256,7 @@ export function create(config) {
     showOutline,     // Store for outline display
     legThickness,    // Store for leg thickness
     bodyShape,       // Store for body shape
+    legCount,        // Store for number of legs
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
@@ -383,12 +413,12 @@ function updateLegs(inst, dt) {
   const movementAngle = Math.atan2(inst.vy, inst.vx)
   const reach = (inst.legLength1 + inst.legLength2) * inst.scale
   //
-  // Leg stepping sequence: diagonal gait
-  // Order: 3 (right front) -> 0 (left back) -> 2 (left front) -> 1 (right back)
-  // Indices: 0,1 = back legs, 2,3 = front legs
+  // Leg stepping sequence
+  // For 2 legs: alternating (0 -> 1 -> 0 -> 1)
+  // For 4 legs: diagonal gait (3 -> 0 -> 2 -> 1)
   //
-  const stepSequence = [3, 0, 2, 1]
-  const currentStep = Math.floor(inst.distanceTraveled / (STEP_DISTANCE * 0.5)) % 4
+  const stepSequence = inst.legCount === 2 ? [0, 1] : [3, 0, 2, 1]
+  const currentStep = Math.floor(inst.distanceTraveled / (STEP_DISTANCE * 0.5)) % stepSequence.length
   
   inst.legs.forEach((leg, i) => {
     if (isScaredOrRecovering) {
@@ -413,40 +443,49 @@ function updateLegs(inst, dt) {
         //
         const floorY = inst.y + reach * inst.legDropFactor - inst.dropOffset  // Floor line moves up when body drops
         const bodyRadius = inst.scale * BUG_BODY_SIZE * 1.5 * 0.9
-        //
-        // Determine which legs are front/back based on movement direction
-        //
-        const movingRight = inst.vx > 0
-        let isFrontLeg, isBackLeg
         
-        if (movingRight) {
-          // Moving right: legs 2,3 are front, 0,1 are back
-          isFrontLeg = (i === 2 || i === 3)
-          isBackLeg = (i === 0 || i === 1)
+        if (inst.legCount === 2) {
+          //
+          // 2 legs: one left, one right (indices 0 = left, 1 = right)
+          //
+          const legSideOffset = reach * 0.8 * inst.legSpreadFactor
+          idealX = i === 0 ? inst.x - legSideOffset : inst.x + legSideOffset
         } else {
-          // Moving left: legs 0,1 are front, 2,3 are back
-          isFrontLeg = (i === 0 || i === 1)
-          isBackLeg = (i === 2 || i === 3)
-        }
-        //
-        // Body front and back edges
-        //
-        const bodyFrontX = movingRight ? inst.x + bodyRadius : inst.x - bodyRadius
-        const bodyBackX = movingRight ? inst.x - bodyRadius : inst.x + bodyRadius
-        
-        if (isFrontLeg) {
           //
-          // Front legs: must stay ahead of body front edge
+          // 4 legs: determine which legs are front/back based on movement direction
           //
-          const minFrontDistance = reach * 0.6 * inst.legSpreadFactor
-          idealX = bodyFrontX + (movingRight ? minFrontDistance : -minFrontDistance)
-        } else if (isBackLeg) {
+          const movingRight = inst.vx > 0
+          let isFrontLeg, isBackLeg
+          
+          if (movingRight) {
+            // Moving right: legs 2,3 are front, 0,1 are back
+            isFrontLeg = (i === 2 || i === 3)
+            isBackLeg = (i === 0 || i === 1)
+          } else {
+            // Moving left: legs 0,1 are front, 2,3 are back
+            isFrontLeg = (i === 0 || i === 1)
+            isBackLeg = (i === 2 || i === 3)
+          }
           //
-          // Back legs: position near center of body (not back edge!)
-          // This keeps them closer and makes them step more frequently
+          // Body front and back edges
           //
-          const backLegOffset = reach * 0.4 * inst.legSpreadFactor
-          idealX = inst.x + (movingRight ? -backLegOffset : backLegOffset)
+          const bodyFrontX = movingRight ? inst.x + bodyRadius : inst.x - bodyRadius
+          const bodyBackX = movingRight ? inst.x - bodyRadius : inst.x + bodyRadius
+          
+          if (isFrontLeg) {
+            //
+            // Front legs: must stay ahead of body front edge
+            //
+            const minFrontDistance = reach * 0.6 * inst.legSpreadFactor
+            idealX = bodyFrontX + (movingRight ? minFrontDistance : -minFrontDistance)
+          } else if (isBackLeg) {
+            //
+            // Back legs: position near center of body (not back edge!)
+            // This keeps them closer and makes them step more frequently
+            //
+            const backLegOffset = reach * 0.4 * inst.legSpreadFactor
+            idealX = inst.x + (movingRight ? -backLegOffset : backLegOffset)
+          }
         }
         
         idealY = floorY  // Same Y for all legs on floor

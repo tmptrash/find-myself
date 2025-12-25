@@ -67,10 +67,22 @@ const BUG_PATTERNS = [
  * @param {string} config.surface - Surface type: 'floor', 'leftWall', 'rightWall'
  * @param {Object} config.bounds - Movement bounds {minX, maxX, minY, maxY}
  * @param {number} [config.scale=1] - Scale multiplier for bug size (for debugging)
+ * @param {number} [config.legLength1] - First leg segment length (overrides default)
+ * @param {number} [config.legLength2] - Second leg segment length (overrides default)
+ * @param {number} [config.crawlSpeed] - Crawling speed (overrides default)
+ * @param {number} [config.legSpreadFactor=1.0] - How wide legs are spread (0.3 = narrow, 1.0 = normal)
+ * @param {number} [config.legDropFactor=0.7] - How far down legs reach (0.2 = straight, 0.7 = bent)
  * @returns {Object} Bug instance
  */
 export function create(config) {
-  const { k, x, y, hero, surface = 'floor', bounds, scale = 1, sfx } = config
+  const { 
+    k, x, y, hero, surface = 'floor', bounds, scale = 1, sfx,
+    legLength1 = LEG_LENGTH_1,
+    legLength2 = LEG_LENGTH_2,
+    crawlSpeed = CRAWL_SPEED,
+    legSpreadFactor = 1.0,
+    legDropFactor = 0.7
+  } = config
   //
   // Choose random pattern
   //
@@ -129,7 +141,7 @@ export function create(config) {
     // Front legs (2, 3): bend forward like human knees (side = 1)
     //
     const side = i < 2 ? -1 : 1
-    const reach = (LEG_LENGTH_1 + LEG_LENGTH_2) * scale
+    const reach = (legLength1 + legLength2) * scale
     
     //
     // Initialize all legs on the same floor line
@@ -139,14 +151,14 @@ export function create(config) {
       //
       // All legs start on same horizontal line (floor)
       //
-      const floorY = y + reach * 0.7
+      const floorY = y + reach * legDropFactor
       
       if (i === 2 || i === 3) {
         // Front legs (indices 2, 3)
-        footX = x + reach * 0.6
+        footX = x + reach * 0.6 * legSpreadFactor
       } else {
         // Back legs (indices 0, 1)
-        footX = x - reach * 0.4
+        footX = x - reach * 0.4 * legSpreadFactor
       }
       
       footY = floorY  // Same Y for all legs
@@ -175,7 +187,7 @@ export function create(config) {
   // Randomize initial state and timer for each bug
   // Also randomize cycle durations and speed for each bug
   //
-  const crawlSpeed = CRAWL_SPEED * (0.5 + Math.random() * 1.0)  // 7.5-22.5 speed
+  const finalCrawlSpeed = crawlSpeed * (0.5 + Math.random() * 1.0)
   const crawlDuration = CRAWL_DURATION * (0.5 + Math.random() * 1.5)  // 4-20 seconds
   const stopDuration = STOP_DURATION * (0.3 + Math.random() * 1.4)  // 0.6-3.4 seconds
   
@@ -195,11 +207,15 @@ export function create(config) {
     normalAngle,
     bounds,
     scale,
-    crawlSpeed,     // Unique speed for this bug
+    legLength1,     // Store for IK calculations
+    legLength2,     // Store for IK calculations
+    legSpreadFactor, // Store for leg positioning
+    legDropFactor,   // Store for leg positioning
+    crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
-    vx: startInCrawling ? Math.cos(angle) * crawlSpeed : 0,
-    vy: startInCrawling ? Math.sin(angle) * crawlSpeed : 0,
+    vx: startInCrawling ? Math.cos(angle) * finalCrawlSpeed : 0,
+    vy: startInCrawling ? Math.sin(angle) * finalCrawlSpeed : 0,
     pattern,
     legs,
     state: initialState,  // States: 'crawling', 'stopping', 'scared', 'recovering'
@@ -220,47 +236,10 @@ export function create(config) {
 export function onUpdate(inst, dt) {
   const { k, hero } = inst
   //
-  // Check distance to hero
+  // Note: Hero proximity detection is handled in the level scene
+  // This function only handles state transitions and movement
   //
-  const dx = hero.character.pos.x - inst.x
-  const dy = hero.character.pos.y - inst.y
-  const distance = Math.sqrt(dx * dx + dy * dy)
-  
-  if (distance < DETECTION_RADIUS) {
-    //
-    // Scared - stop moving and pull legs in
-    //
-    if (inst.state !== 'scared') {
-      inst.state = 'scared'
-      inst.vx = 0
-      inst.vy = 0
-      //
-      // Play scare sound ("Ай!")
-      //
-      inst.sfx && Sound.playBugScareSound(inst.sfx)
-    }
-    //
-    // Drop body down when legs are pulled in (for floor bugs)
-    // Increase dropOffset to make body fall
-    //
-    if (inst.surface === 'floor') {
-      const reach = (LEG_LENGTH_1 + LEG_LENGTH_2) * inst.scale
-      const maxDrop = reach * 0.5  // Maximum drop distance
-      
-      if (inst.dropOffset < maxDrop) {
-        inst.dropOffset += dt * 200  // Drop speed
-        if (inst.dropOffset > maxDrop) inst.dropOffset = maxDrop
-      }
-    }
-  } else if (inst.state === 'scared') {
-    //
-    // Hero left - enter recovery state (stay frozen for 2 seconds)
-    //
-    inst.state = 'recovering'
-    inst.stateTimer = 2.0  // 2 seconds recovery time
-    inst.vx = 0
-    inst.vy = 0
-  } else if (inst.state === 'recovering') {
+  if (inst.state === 'recovering') {
     //
     // Still recovering - count down timer
     // Body stays down during recovery, lifts only after recovery complete
@@ -272,7 +251,7 @@ export function onUpdate(inst, dt) {
       // Recovery complete - resume crawling with new direction
       //
       inst.state = 'crawling'
-      inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
+      inst.stateTimer = inst.crawlDuration
       //
       // Choose random direction
       //
@@ -284,13 +263,13 @@ export function onUpdate(inst, dt) {
       inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
       inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
     }
-  } else {
+  } else if (inst.state === 'crawling' || inst.state === 'stopping') {
     //
     // State machine for crawling behavior
     // Also lift body back up when crawling
     //
     if (inst.surface === 'floor' && inst.dropOffset > 0) {
-      inst.dropOffset -= dt * 150  // Lift speed
+      inst.dropOffset -= dt * 150
       if (inst.dropOffset < 0) inst.dropOffset = 0
     }
     
@@ -386,7 +365,7 @@ export function onUpdate(inst, dt) {
 function updateLegs(inst, dt) {
   const isScaredOrRecovering = inst.state === 'scared' || inst.state === 'recovering'
   const movementAngle = Math.atan2(inst.vy, inst.vx)
-  const reach = (LEG_LENGTH_1 + LEG_LENGTH_2) * inst.scale
+  const reach = (inst.legLength1 + inst.legLength2) * inst.scale
   //
   // Leg stepping sequence: diagonal gait
   // Order: 3 (right front) -> 0 (left back) -> 2 (left front) -> 1 (right back)
@@ -416,7 +395,7 @@ function updateLegs(inst, dt) {
         // Floor bugs: all legs land on the same horizontal line (floor level)
         // Body position adjusted by dropOffset when scared
         //
-        const floorY = inst.y + reach * 0.7 - inst.dropOffset  // Floor line moves up when body drops
+        const floorY = inst.y + reach * inst.legDropFactor - inst.dropOffset  // Floor line moves up when body drops
         const bodyRadius = inst.scale * BUG_BODY_SIZE * 1.5 * 0.9
         //
         // Determine which legs are front/back based on movement direction
@@ -443,14 +422,14 @@ function updateLegs(inst, dt) {
           //
           // Front legs: must stay ahead of body front edge
           //
-          const minFrontDistance = reach * 0.7
+          const minFrontDistance = reach * 0.6 * inst.legSpreadFactor
           idealX = bodyFrontX + (movingRight ? minFrontDistance : -minFrontDistance)
         } else if (isBackLeg) {
           //
           // Back legs: position near center of body (not back edge!)
           // This keeps them closer and makes them step more frequently
           //
-          const backLegOffset = reach * 0.5  // Distance from body center
+          const backLegOffset = reach * 0.4 * inst.legSpreadFactor
           idealX = inst.x + (movingRight ? -backLegOffset : backLegOffset)
         }
         
@@ -588,21 +567,39 @@ export function draw(inst) {
     opacity: 1
   })
   //
-  // Draw spots on body
+  // Draw eye based on movement direction
+  // One eye on the side the bug is moving towards
   //
-  const spotColor = getRGB(k, pattern.spotColor)
-  pattern.spots.forEach(spot => {
-    const spotX = spot.x * radius * 0.8
-    const spotY = spot.y * radius * 0.2 - radius * 0.3  // Higher up on semicircle
-    const spotRadius = BUG_BODY_SIZE * 0.25 * inst.scale
-    
+  const isMovingRight = inst.vx > 0
+  const isMovingLeft = inst.vx < 0
+  
+  if (isMovingRight || isMovingLeft) {
+    const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale
+    const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale
+    //
+    // Position eye on the side of movement
+    //
+    const eyeX = isMovingRight ? radius * 0.6 : -radius * 0.6
+    const eyeY = -radius * 0.4
+    //
+    // Draw white eye
+    //
     k.drawCircle({
-      pos: k.vec2(spotX, spotY),
-      radius: spotRadius,
-      color: k.rgb(spotColor.r, spotColor.g, spotColor.b),
+      pos: k.vec2(eyeX, eyeY),
+      radius: eyeRadius,
+      color: k.rgb(255, 255, 255),
       opacity: 1
     })
-  })
+    //
+    // Draw black pupil
+    //
+    k.drawCircle({
+      pos: k.vec2(eyeX, eyeY),
+      radius: pupilRadius,
+      color: k.rgb(0, 0, 0),
+      opacity: 1
+    })
+  }
   
   k.popTransform()
   //
@@ -670,7 +667,7 @@ export function draw(inst) {
     const { jointX, jointY } = solveIK(
       attachX, attachY,
       leg.footX, leg.footY,
-      LEG_LENGTH_1 * inst.scale, LEG_LENGTH_2 * inst.scale,
+      inst.legLength1 * inst.scale, inst.legLength2 * inst.scale,
       leg.side
     )
     //

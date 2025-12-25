@@ -658,9 +658,13 @@ export function sceneLevel0(k) {
       const speed = 40 + Math.random() * 30
       const amplitude = 10 + Math.random() * 20
       const frequency = 0.5 + Math.random() * 1.0
-      const size = 6 + Math.random() * 5
       const phaseOffset = Math.random() * Math.PI * 2
       const timeOffset = Math.random() * 10
+      const isTreeColor = Math.random() < 0.5
+      //
+      // Black birds are bigger (closer), gray birds are smaller (farther)
+      //
+      const size = isTreeColor ? (4 + Math.random() * 3) : (8 + Math.random() * 6)
       
       birds.push({
         x: startX,
@@ -672,6 +676,7 @@ export function sceneLevel0(k) {
         size: size,
         phaseOffset: phaseOffset,
         timeOffset: timeOffset,
+        color: isTreeColor ? k.rgb(36, 37, 36) : k.rgb(5, 5, 5),
         wingPhase: 0,
         isFlapping: Math.random() > 0.5,
         flapTimer: Math.random() * 3,
@@ -742,7 +747,7 @@ export function sceneLevel0(k) {
               p1: k.vec2(bird.x, bird.y),
               p2: leftWingMid,
               width: wingThickness * 3,
-              color: k.rgb(14, 16, 14),
+              color: bird.color,
               opacity: 0.85
             })
             
@@ -750,7 +755,7 @@ export function sceneLevel0(k) {
               p1: leftWingMid,
               p2: leftWingTip,
               width: wingThickness * 2,
-              color: k.rgb(14, 16, 14),
+              color: bird.color,
               opacity: 0.85
             })
             //
@@ -766,7 +771,7 @@ export function sceneLevel0(k) {
               p1: k.vec2(bird.x, bird.y),
               p2: rightWingMid,
               width: wingThickness * 3,
-              color: k.rgb(14, 16, 14),
+              color: bird.color,
               opacity: 0.85
             })
             
@@ -774,7 +779,7 @@ export function sceneLevel0(k) {
               p1: rightWingMid,
               p2: rightWingTip,
               width: wingThickness * 2,
-              color: k.rgb(14, 16, 14),
+              color: bird.color,
               opacity: 0.85
             })
           }
@@ -855,14 +860,14 @@ export function sceneLevel0(k) {
             const time = k.time()
             
             for (const tree of dynamicTrees) {
-              const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
+              const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount * 8
               //
-              // Draw trunk
+              // Draw trunk (no sway)
               //
               const trunkCenterY = (tree.trunkTop + tree.trunkBottom) / 2
               
               k.drawRect({
-                pos: k.vec2(tree.x + sway * 0.2, trunkCenterY),
+                pos: k.vec2(tree.x, trunkCenterY),
                 width: tree.trunkWidth,
                 height: tree.trunkHeight,
                 anchor: "center",
@@ -870,13 +875,13 @@ export function sceneLevel0(k) {
                 opacity: tree.opacity
               })
               //
-              // Draw branches
+              // Draw branches (no sway)
               //
               if (tree.branches) {
                 for (const branch of tree.branches) {
                   k.drawLine({
-                    p1: k.vec2(tree.x + branch.startX + sway * 0.2, branch.startY),
-                    p2: k.vec2(tree.x + branch.endX + sway * 0.3, branch.endY),
+                    p1: k.vec2(tree.x + branch.startX, branch.startY),
+                    p2: k.vec2(tree.x + branch.endX, branch.endY),
                     width: branch.width,
                     color: tree.trunkColor,
                     opacity: tree.opacity
@@ -884,17 +889,22 @@ export function sceneLevel0(k) {
                 }
               }
               //
-              // Draw crowns
+              // Draw crowns (each crown sways independently)
               //
               for (const crown of tree.crowns) {
                 const colorShift = crown.colorShift || 0
                 const leafR = Math.min(255, tree.leafColor.r + colorShift)
                 const leafG = Math.min(255, tree.leafColor.g + colorShift)
                 const leafB = Math.min(255, tree.leafColor.b + colorShift)
+                //
+                // Each crown circle has its own sway based on its position
+                //
+                const crownPhase = crown.offsetX * 0.1 + crown.offsetY * 0.1
+                const crownSway = Math.sin(time * tree.swaySpeed * 5 + tree.swayOffset + crownPhase) * tree.swayAmount * 6
                 
                 k.drawCircle({
                   pos: k.vec2(
-                    tree.x + crown.offsetX + sway,
+                    tree.x + crown.offsetX + crownSway,
                     tree.crownCenterY + crown.offsetY
                   ),
                   radius: tree.crownSize * crown.sizeVariation,
@@ -978,7 +988,58 @@ export function sceneLevel0(k) {
     const bugFloorY = FLOOR_Y - 10
     const bugs = []
     const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    //
+    // Create mother bug (one big bug with very long legs, tall as trees)
+    //
+    const MOTHER_LEG_LENGTH_1 = 80
+    const MOTHER_LEG_LENGTH_2 = 70
+    const MOTHER_CRAWL_SPEED = 4
+    const MOTHER_SCALE = 3.0
+    const MOTHER_LEG_SPREAD_FACTOR = 0.25
+    const MOTHER_LEG_DROP_FACTOR = 0.95
+    //
+    // Calculate Y position so legs reach the floor
+    // Legs extend down by (legLength1 + legLength2) * scale * legDropFactor
+    //
+    const motherLegReach = (MOTHER_LEG_LENGTH_1 + MOTHER_LEG_LENGTH_2) * MOTHER_SCALE * MOTHER_LEG_DROP_FACTOR
+    const motherBugX = LEFT_MARGIN + floorWidth * 0.5
+    const motherBugY = bugFloorY - motherLegReach
     
+    const motherBugInst = Bugs.create({
+      k,
+      x: motherBugX,
+      y: motherBugY,
+      hero: heroInst,
+      surface: 'floor',
+      scale: MOTHER_SCALE,
+      legLength1: MOTHER_LEG_LENGTH_1,
+      legLength2: MOTHER_LEG_LENGTH_2,
+      crawlSpeed: MOTHER_CRAWL_SPEED,
+      legSpreadFactor: MOTHER_LEG_SPREAD_FACTOR,
+      legDropFactor: MOTHER_LEG_DROP_FACTOR,
+      sfx: sound,
+      bounds: {
+        minX: LEFT_MARGIN + 30,
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN - 30,
+        minY: motherBugY,
+        maxY: motherBugY
+      }
+    })
+    //
+    // Store original Y position and escape state for mother bug
+    //
+    motherBugInst.originalY = motherBugY
+    motherBugInst.isScared = false
+    motherBugInst.scareTimer = 0
+    motherBugInst.scareDuration = 2.0
+    motherBugInst.maxDrop = 0
+    motherBugInst.isMother = true
+    motherBugInst.justRecovered = false
+    
+    bugs.push(motherBugInst)
+    //
+    // Create regular bugs
+    //
     for (let i = 0; i < 12; i++) {
       //
       // Distribute bugs across the floor
@@ -1008,12 +1069,103 @@ export function sceneLevel0(k) {
         }
       })
       //
-      // Store original Y position
+      // Store original Y position and escape state
       //
       bugInst.originalY = bugY
+      bugInst.isScared = false
+      bugInst.scareTimer = 0
+      bugInst.scareDuration = 2.0
+      bugInst.maxDrop = 0
+      bugInst.isMother = false
+      bugInst.justRecovered = false
       
       bugs.push(bugInst)
     }
+    //
+    // Add hero collision check for bugs to trigger scare behavior
+    //
+    k.onUpdate(() => {
+      const heroX = heroInst.character.pos.x
+      const heroY = heroInst.character.pos.y
+      const HERO_RADIUS = 50
+      const dt = k.dt()
+      
+      for (const bugInst of bugs) {
+        const dx = bugInst.x - heroX
+        const dy = bugInst.y - heroY
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        if (distance < HERO_RADIUS) {
+          //
+          // Hero is close
+          //
+          if (!bugInst.isScared && !bugInst.justRecovered) {
+            //
+            // Bug gets scared
+            //
+            bugInst.isScared = true
+            bugInst.scareTimer = 0
+            bugInst.state = 'scared'
+            bugInst.vx = 0
+            bugInst.vy = 0
+            //
+            // Play scare sound
+            //
+            sound && Sound.playBugScareSound(sound)
+            //
+            // Calculate max drop based on actual leg lengths
+            //
+            const reach = (bugInst.legLength1 + bugInst.legLength2) * bugInst.scale
+            bugInst.maxDrop = reach * 0.5
+          }
+        } else {
+          //
+          // Hero is far - allow being scared again
+          //
+          bugInst.justRecovered = false
+        }
+        
+        if (bugInst.isScared) {
+          //
+          // Bug is scared - drop body and wait
+          //
+          if (bugInst.dropOffset < bugInst.maxDrop) {
+            bugInst.dropOffset += dt * 200
+            if (bugInst.dropOffset > bugInst.maxDrop) bugInst.dropOffset = bugInst.maxDrop
+          }
+          //
+          // Count scare time
+          //
+          bugInst.scareTimer += dt
+          
+          if (bugInst.scareTimer >= bugInst.scareDuration) {
+            //
+            // Scare duration is over - determine escape direction and start crawling
+            // Direction is based on hero position at THIS moment
+            //
+            const currentDx = bugInst.x - heroX
+            const escapeDirection = currentDx < 0 ? -1 : 1
+            //
+            // Start crawling away from hero
+            //
+            bugInst.isScared = false
+            bugInst.justRecovered = true
+            bugInst.state = 'crawling'
+            bugInst.movementAngle = escapeDirection < 0 ? Math.PI : 0
+            bugInst.vx = Math.cos(bugInst.movementAngle) * bugInst.crawlSpeed
+            bugInst.vy = 0
+          }
+        }
+        
+        if (!bugInst.isScared && bugInst.dropOffset > 0) {
+          //
+          // Lift body back up when not scared
+          //
+          bugInst.dropOffset -= dt * 150
+          if (bugInst.dropOffset < 0) bugInst.dropOffset = 0
+        }
+      }
+    })
     //
     // Create pushable creature with eyes
     //
@@ -1027,9 +1179,9 @@ export function sceneLevel0(k) {
       k.rect(CREATURE_SIZE, CREATURE_SIZE, { radius: 8 }),
       k.pos(CREATURE_X, CREATURE_Y),
       k.color(80, 60, 50),
-      k.outline(3, k.rgb(0, 0, 0)),
+      k.outline(2, k.rgb(0, 0, 0)),
       k.area(),
-      k.body({ isStatic: false, mass: 10 }),
+      k.body({ isStatic: false, mass: 50 }),
       k.anchor("center"),
       k.z(22),
       "platform",

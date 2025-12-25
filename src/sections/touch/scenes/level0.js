@@ -497,9 +497,35 @@ export function sceneLevel0(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Create background canvas with static layers
+    // Create two background canvases: one for back layer, one for middle+front
     //
-    const createBackgroundCanvas = () => {
+    const createBackLayerCanvas = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = k.width()
+      canvas.height = k.height()
+      const ctx = canvas.getContext('2d')
+      //
+      // 1. Draw darkened ground area
+      //
+      if (layers.length > 0 && layers[0].trees.length > 0) {
+        const backLayer = layers[0]
+        const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
+        const floorY = FLOOR_Y
+        
+        ctx.fillStyle = 'rgb(28, 28, 28)'
+        ctx.fillRect(0, avgCrownY, canvas.width, floorY - avgCrownY)
+      }
+      //
+      // 2. Draw back layer only (layerIndex 0)
+      //
+      if (layers[0]) {
+        drawLayerToCanvas(ctx, layers[0], 0, null)
+      }
+      
+      return canvas
+    }
+    
+    const createMiddleFrontCanvas = () => {
       const canvas = document.createElement('canvas')
       canvas.width = k.width()
       canvas.height = k.height()
@@ -515,30 +541,13 @@ export function sceneLevel0(k) {
         }
       }
       //
-      // 1. Draw darkened ground area
-      //
-      if (layers.length > 0 && layers[0].trees.length > 0) {
-        const backLayer = layers[0]
-        const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
-        const floorY = FLOOR_Y
-        
-        ctx.fillStyle = 'rgb(28, 28, 28)'
-        ctx.fillRect(0, avgCrownY, canvas.width, floorY - avgCrownY)
-      }
-      //
-      // 2. Draw back layer (all trees)
-      //
-      if (layers[0]) {
-        drawLayerToCanvas(ctx, layers[0], 0, null)
-      }
-      //
-      // 3. Draw middle layer (all trees)
+      // 1. Draw middle layer (all trees)
       //
       if (layers[1]) {
         drawLayerToCanvas(ctx, layers[1], 0, null)
       }
       //
-      // 4. Draw 60% of front layer trees (exclude dynamic trees)
+      // 2. Draw 60% of front layer trees (exclude dynamic trees)
       //
       if (layers[2]) {
         const staticTrees = layers[2].trees.filter((_, i) => !dynamicTreesSet.has(i))
@@ -633,18 +642,40 @@ export function sceneLevel0(k) {
       }
     }
     
-    const bgCanvas = createBackgroundCanvas()
-    const bgTexture = k.loadSprite('bg-touch-0', bgCanvas.toDataURL())
+    const backLayerCanvas = createBackLayerCanvas()
+    const middleFrontCanvas = createMiddleFrontCanvas()
+    const backTexture = k.loadSprite('bg-touch-back', backLayerCanvas.toDataURL())
+    const middleFrontTexture = k.loadSprite('bg-touch-middle-front', middleFrontCanvas.toDataURL())
     //
-    // Draw background
+    // Draw back layer canvas (before big bugs, z=2)
     //
-    k.onDraw(() => {
-      k.drawSprite({
-        sprite: 'bg-touch-0',
-        pos: k.vec2(0, 0),
-        anchor: "topleft"
-      })
-    })
+    k.add([
+      k.z(2),
+      {
+        draw() {
+          k.drawSprite({
+            sprite: 'bg-touch-back',
+            pos: k.vec2(0, 0),
+            anchor: "topleft"
+          })
+        }
+      }
+    ])
+    //
+    // Draw middle+front layer canvas (after big bugs, z=7)
+    //
+    k.add([
+      k.z(7),
+      {
+        draw() {
+          k.drawSprite({
+            sprite: 'bg-touch-middle-front',
+            pos: k.vec2(0, 0),
+            anchor: "topleft"
+          })
+        }
+      }
+    ])
     //
     // Create birds flying in the background
     //
@@ -989,54 +1020,142 @@ export function sceneLevel0(k) {
     const bugs = []
     const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
     //
-    // Create mother bug (one big bug with very long legs, tall as trees)
+    // Create three big bugs with different leg heights
+    // Color calculation for middle layer (layerIndex=1, colorMix=0.55):
+    // bgColor = rgb(42, 42, 42)
+    // Result: rgb(26, 28, 26) = #1A1C1A
+    // Z-index 3 places them behind all tree layers
     //
-    const MOTHER_LEG_LENGTH_1 = 80
-    const MOTHER_LEG_LENGTH_2 = 70
-    const MOTHER_CRAWL_SPEED = 4
-    const MOTHER_SCALE = 3.0
-    const MOTHER_LEG_SPREAD_FACTOR = 0.25
-    const MOTHER_LEG_DROP_FACTOR = 0.95
+    const BIG_BUG_COLOR = "#1A1C1A"
+    const BIG_BUG_Z_INDEX = 3
+    const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
+    const BIG_BUG_LEG_THICKNESS = 3.0
+    const BIG_BUG_CRAWL_SPEED = 4
+    const BIG_BUG_SCALE = 3.0
     //
-    // Calculate Y position so legs reach the floor
-    // Legs extend down by (legLength1 + legLength2) * scale * legDropFactor
+    // Bug 1: Tallest (very long legs)
     //
-    const motherLegReach = (MOTHER_LEG_LENGTH_1 + MOTHER_LEG_LENGTH_2) * MOTHER_SCALE * MOTHER_LEG_DROP_FACTOR
-    const motherBugX = LEFT_MARGIN + floorWidth * 0.5
-    const motherBugY = bugFloorY - motherLegReach
+    const bug1LegLength1 = 100
+    const bug1LegLength2 = 90
+    const bug1LegDropFactor = 0.95
+    const bug1LegReach = (bug1LegLength1 + bug1LegLength2) * BIG_BUG_SCALE * bug1LegDropFactor
+    const bug1X = LEFT_MARGIN + floorWidth * 0.3
+    const bug1Y = bugFloorY - bug1LegReach
     
-    const motherBugInst = Bugs.create({
+    const bigBug1Inst = Bugs.create({
       k,
-      x: motherBugX,
-      y: motherBugY,
+      x: bug1X,
+      y: bug1Y,
       hero: heroInst,
       surface: 'floor',
-      scale: MOTHER_SCALE,
-      legLength1: MOTHER_LEG_LENGTH_1,
-      legLength2: MOTHER_LEG_LENGTH_2,
-      crawlSpeed: MOTHER_CRAWL_SPEED,
-      legSpreadFactor: MOTHER_LEG_SPREAD_FACTOR,
-      legDropFactor: MOTHER_LEG_DROP_FACTOR,
+      scale: BIG_BUG_SCALE,
+      legLength1: bug1LegLength1,
+      legLength2: bug1LegLength2,
+      crawlSpeed: BIG_BUG_CRAWL_SPEED,
+      legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
+      legDropFactor: bug1LegDropFactor,
+      customColor: BIG_BUG_COLOR,
+      zIndex: BIG_BUG_Z_INDEX,
+      showOutline: false,
+      legThickness: BIG_BUG_LEG_THICKNESS,
+      bodyShape: 'circle',
       sfx: sound,
       bounds: {
-        minX: LEFT_MARGIN + 30,
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN - 30,
-        minY: motherBugY,
-        maxY: motherBugY
+        minX: LEFT_MARGIN - 100,
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN + 100,
+        minY: bug1Y,
+        maxY: bug1Y
       }
     })
     //
-    // Store original Y position and escape state for mother bug
+    // Bug 2: Medium height
     //
-    motherBugInst.originalY = motherBugY
-    motherBugInst.isScared = false
-    motherBugInst.scareTimer = 0
-    motherBugInst.scareDuration = 2.0
-    motherBugInst.maxDrop = 0
-    motherBugInst.isMother = true
-    motherBugInst.justRecovered = false
+    const bug2LegLength1 = 80
+    const bug2LegLength2 = 70
+    const bug2LegDropFactor = 0.90
+    const bug2LegReach = (bug2LegLength1 + bug2LegLength2) * BIG_BUG_SCALE * bug2LegDropFactor
+    const bug2X = LEFT_MARGIN + floorWidth * 0.6
+    const bug2Y = bugFloorY - bug2LegReach
     
-    bugs.push(motherBugInst)
+    const bigBug2Inst = Bugs.create({
+      k,
+      x: bug2X,
+      y: bug2Y,
+      hero: heroInst,
+      surface: 'floor',
+      scale: BIG_BUG_SCALE,
+      legLength1: bug2LegLength1,
+      legLength2: bug2LegLength2,
+      crawlSpeed: BIG_BUG_CRAWL_SPEED,
+      legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
+      legDropFactor: bug2LegDropFactor,
+      customColor: BIG_BUG_COLOR,
+      zIndex: BIG_BUG_Z_INDEX,
+      showOutline: false,
+      legThickness: BIG_BUG_LEG_THICKNESS,
+      bodyShape: 'circle',
+      sfx: sound,
+      bounds: {
+        minX: LEFT_MARGIN - 100,
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN + 100,
+        minY: bug2Y,
+        maxY: bug2Y
+      }
+    })
+    //
+    // Bug 3: Shortest of the big bugs
+    //
+    const bug3LegLength1 = 65
+    const bug3LegLength2 = 55
+    const bug3LegDropFactor = 0.85
+    const bug3LegReach = (bug3LegLength1 + bug3LegLength2) * BIG_BUG_SCALE * bug3LegDropFactor
+    const bug3X = LEFT_MARGIN + floorWidth * 0.8
+    const bug3Y = bugFloorY - bug3LegReach
+    
+    const bigBug3Inst = Bugs.create({
+      k,
+      x: bug3X,
+      y: bug3Y,
+      hero: heroInst,
+      surface: 'floor',
+      scale: BIG_BUG_SCALE,
+      legLength1: bug3LegLength1,
+      legLength2: bug3LegLength2,
+      crawlSpeed: BIG_BUG_CRAWL_SPEED,
+      legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
+      legDropFactor: bug3LegDropFactor,
+      customColor: BIG_BUG_COLOR,
+      zIndex: BIG_BUG_Z_INDEX,
+      showOutline: false,
+      legThickness: BIG_BUG_LEG_THICKNESS,
+      bodyShape: 'circle',
+      sfx: sound,
+      bounds: {
+        minX: LEFT_MARGIN - 100,
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN + 100,
+        minY: bug3Y,
+        maxY: bug3Y
+      }
+    })
+    //
+    // Store state for all big bugs and add to bugs array
+    //
+    const bigBugs = [
+      { inst: bigBug1Inst, y: bug1Y },
+      { inst: bigBug2Inst, y: bug2Y },
+      { inst: bigBug3Inst, y: bug3Y }
+    ]
+    
+    bigBugs.forEach(({ inst, y }) => {
+      inst.originalY = y
+      inst.isScared = false
+      inst.scareTimer = 0
+      inst.scareDuration = 2.0
+      inst.maxDrop = 0
+      inst.isMother = true
+      inst.justRecovered = false
+      bugs.push(inst)
+    })
     //
     // Create regular bugs
     //
@@ -1181,7 +1300,7 @@ export function sceneLevel0(k) {
       k.color(80, 60, 50),
       k.outline(2, k.rgb(0, 0, 0)),
       k.area(),
-      k.body({ isStatic: false, mass: 50 }),
+      k.body({ isStatic: false, mass: 5 }),
       k.anchor("center"),
       k.z(22),
       "platform",
@@ -1299,16 +1418,18 @@ export function sceneLevel0(k) {
       }
     ])
     //
-    // Draw bugs on top of everything
+    // Draw bugs with individual z-indices
     //
+    bugs.forEach(bugInst => {
     k.add([
-      k.z(CFG.visual.zIndex.ui - 1),  // Just below UI layer
+        k.z(bugInst.zIndex),
       {
         draw() {
-          bugs.forEach(bug => Bugs.draw(bug))
+            Bugs.draw(bugInst)
         }
       }
     ])
+    })
     //
     // Return to menu on ESC
     //

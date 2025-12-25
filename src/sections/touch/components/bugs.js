@@ -72,6 +72,11 @@ const BUG_PATTERNS = [
  * @param {number} [config.crawlSpeed] - Crawling speed (overrides default)
  * @param {number} [config.legSpreadFactor=1.0] - How wide legs are spread (0.3 = narrow, 1.0 = normal)
  * @param {number} [config.legDropFactor=0.7] - How far down legs reach (0.2 = straight, 0.7 = bent)
+ * @param {string} [config.customColor] - Custom color for body (hex string like "#123456")
+ * @param {number} [config.zIndex] - Z-index for rendering order
+ * @param {boolean} [config.showOutline=true] - Whether to show black outline
+ * @param {number} [config.legThickness] - Custom leg thickness multiplier
+ * @param {string} [config.bodyShape='semicircle'] - Body shape: 'semicircle' or 'circle'
  * @returns {Object} Bug instance
  */
 export function create(config) {
@@ -81,12 +86,19 @@ export function create(config) {
     legLength2 = LEG_LENGTH_2,
     crawlSpeed = CRAWL_SPEED,
     legSpreadFactor = 1.0,
-    legDropFactor = 0.7
+    legDropFactor = 0.7,
+    customColor = null,
+    zIndex = 15,
+    showOutline = true,
+    legThickness = 1.0,
+    bodyShape = 'semicircle'
   } = config
   //
-  // Choose random pattern
+  // Choose random pattern or use custom color
   //
-  const pattern = BUG_PATTERNS[Math.floor(Math.random() * BUG_PATTERNS.length)]
+  const pattern = customColor 
+    ? { bodyColor: customColor, spotColor: '#000000', spots: [] }
+    : BUG_PATTERNS[Math.floor(Math.random() * BUG_PATTERNS.length)]
   //
   // Initialize bug state based on surface
   //
@@ -211,6 +223,10 @@ export function create(config) {
     legLength2,     // Store for IK calculations
     legSpreadFactor, // Store for leg positioning
     legDropFactor,   // Store for leg positioning
+    zIndex,          // Store for rendering order
+    showOutline,     // Store for outline display
+    legThickness,    // Store for leg thickness
+    bodyShape,       // Store for body shape
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
@@ -532,60 +548,95 @@ export function draw(inst) {
   k.pushTransform()
   k.pushTranslate(inst.x, bodyY)
   k.pushRotate(bodyRotation)
-  //
-  // Create points for semicircle (top half)
-  // Start from left (-radius, 0), curve up, end at right (radius, 0)
-  //
-  const points = []
-  for (let i = 0; i <= segments; i++) {
-    const angle = Math.PI + (Math.PI * i / segments)  // From PI to 2*PI (top half)
-    const x = Math.cos(angle) * radius
-    const y = Math.sin(angle) * radius
-    points.push(k.vec2(x, y))
-  }
-  //
-  // Draw black outline semicircle (thicker)
-  //
-  const outlinePoints = []
-  for (let i = 0; i <= segments; i++) {
-    const angle = Math.PI + (Math.PI * i / segments)
-    const x = Math.cos(angle) * (radius + 2)
-    const y = Math.sin(angle) * (radius + 2)
-    outlinePoints.push(k.vec2(x, y))
-  }
-  k.drawPolygon({
-    pts: outlinePoints,
-    color: k.rgb(0, 0, 0),
-    opacity: 1
-  })
-  //
-  // Draw main body semicircle
-  //
-  k.drawPolygon({
-    pts: points,
-    color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-    opacity: 1
-  })
-  //
-  // Draw eye based on movement direction
-  // One eye on the side the bug is moving towards
-  //
-  const isMovingRight = inst.vx > 0
-  const isMovingLeft = inst.vx < 0
   
-  if (isMovingRight || isMovingLeft) {
-    const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale
-    const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale
+  if (inst.bodyShape === 'circle') {
     //
-    // Position eye on the side of movement
+    // Draw full circle body
     //
-    const eyeX = isMovingRight ? radius * 0.6 : -radius * 0.6
-    const eyeY = -radius * 0.4
+    if (inst.showOutline) {
+      k.drawCircle({
+        pos: k.vec2(0, 0),
+        radius: radius + 2,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    }
+    k.drawCircle({
+      pos: k.vec2(0, 0),
+      radius: radius,
+      color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
+      opacity: 1
+    })
+  } else {
+    //
+    // Create points for semicircle (top half)
+    // Start from left (-radius, 0), curve up, end at right (radius, 0)
+    //
+    const points = []
+    for (let i = 0; i <= segments; i++) {
+      const angle = Math.PI + (Math.PI * i / segments)  // From PI to 2*PI (top half)
+      const x = Math.cos(angle) * radius
+      const y = Math.sin(angle) * radius
+      points.push(k.vec2(x, y))
+    }
+    //
+    // Draw black outline semicircle (thicker) - only if showOutline is true
+    //
+    if (inst.showOutline) {
+      const outlinePoints = []
+      for (let i = 0; i <= segments; i++) {
+        const angle = Math.PI + (Math.PI * i / segments)
+        const x = Math.cos(angle) * (radius + 2)
+        const y = Math.sin(angle) * (radius + 2)
+        outlinePoints.push(k.vec2(x, y))
+      }
+      k.drawPolygon({
+        pts: outlinePoints,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    }
+    //
+    // Draw main body semicircle
+    //
+    k.drawPolygon({
+      pts: points,
+      color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
+      opacity: 1
+    })
+  }
+  //
+  // Draw eye
+  //
+  if (inst.bodyShape === 'circle') {
+    //
+    // For circle body: draw one large eye in center that follows hero
+    //
+    const eyeRadius = BUG_BODY_SIZE * 0.8 * inst.scale
+    const pupilRadius = BUG_BODY_SIZE * 0.2 * inst.scale
+    const maxPupilOffset = eyeRadius * 0.4
+    //
+    // Calculate direction to hero
+    //
+    const heroX = inst.hero.character.pos.x
+    const heroY = inst.hero.character.pos.y
+    const dx = heroX - inst.x
+    const dy = heroY - (inst.y + inst.dropOffset)
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    //
+    // Calculate pupil position
+    //
+    let pupilOffsetX = 0
+    let pupilOffsetY = 0
+    if (dist > 0) {
+      pupilOffsetX = (dx / dist) * maxPupilOffset
+      pupilOffsetY = (dy / dist) * maxPupilOffset
+    }
     //
     // Draw white eye
     //
     k.drawCircle({
-      pos: k.vec2(eyeX, eyeY),
+      pos: k.vec2(0, 0),
       radius: eyeRadius,
       color: k.rgb(255, 255, 255),
       opacity: 1
@@ -594,11 +645,45 @@ export function draw(inst) {
     // Draw black pupil
     //
     k.drawCircle({
-      pos: k.vec2(eyeX, eyeY),
+      pos: k.vec2(pupilOffsetX, pupilOffsetY),
       radius: pupilRadius,
       color: k.rgb(0, 0, 0),
       opacity: 1
     })
+  } else {
+    //
+    // For semicircle body: draw eye on the side of movement direction
+    //
+    const isMovingRight = inst.vx > 0
+    const isMovingLeft = inst.vx < 0
+    
+    if (isMovingRight || isMovingLeft) {
+      const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale
+      const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale
+      //
+      // Position eye on the side of movement
+      //
+      const eyeX = isMovingRight ? radius * 0.6 : -radius * 0.6
+      const eyeY = -radius * 0.4
+      //
+      // Draw white eye
+      //
+      k.drawCircle({
+        pos: k.vec2(eyeX, eyeY),
+        radius: eyeRadius,
+        color: k.rgb(255, 255, 255),
+        opacity: 1
+      })
+      //
+      // Draw black pupil
+      //
+      k.drawCircle({
+        pos: k.vec2(eyeX, eyeY),
+        radius: pupilRadius,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    }
   }
   
   k.popTransform()
@@ -670,49 +755,55 @@ export function draw(inst) {
       inst.legLength1 * inst.scale, inst.legLength2 * inst.scale,
       leg.side
     )
+    
+    const actualLegThickness = LEG_THICKNESS * inst.legThickness
     //
-    // Draw outline (thicker black line)
+    // Draw outline (thicker black line) - only if showOutline is true
     //
-    k.drawLine({
-      p1: k.vec2(attachX, attachY),
-      p2: k.vec2(jointX, jointY),
-      width: LEG_THICKNESS + 1,
-      color: k.rgb(0, 0, 0),
-      opacity: 1
-    })
-    k.drawLine({
-      p1: k.vec2(jointX, jointY),
-      p2: k.vec2(leg.footX, leg.footY),
-      width: LEG_THICKNESS + 1,
-      color: k.rgb(0, 0, 0),
-      opacity: 1
-    })
+    if (inst.showOutline) {
+      k.drawLine({
+        p1: k.vec2(attachX, attachY),
+        p2: k.vec2(jointX, jointY),
+        width: actualLegThickness + 1,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+      k.drawLine({
+        p1: k.vec2(jointX, jointY),
+        p2: k.vec2(leg.footX, leg.footY),
+        width: actualLegThickness + 1,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    }
     //
     // Draw main leg (using body color)
     //
     k.drawLine({
       p1: k.vec2(attachX, attachY),
       p2: k.vec2(jointX, jointY),
-      width: LEG_THICKNESS,
+      width: actualLegThickness,
       color: k.rgb(legColor.r, legColor.g, legColor.b),
       opacity: 1
     })
     k.drawLine({
       p1: k.vec2(jointX, jointY),
       p2: k.vec2(leg.footX, leg.footY),
-      width: LEG_THICKNESS,
+      width: actualLegThickness,
       color: k.rgb(legColor.r, legColor.g, legColor.b),
       opacity: 1
     })
     //
-    // Draw small circle at joint (knee)
+    // Draw small circle at joint (knee) - only if showOutline is true
     //
-    k.drawCircle({
-      pos: k.vec2(jointX, jointY),
-      radius: 1,
-      color: k.rgb(legColor.r, legColor.g, legColor.b),
-      opacity: 1
-    })
+    if (inst.showOutline) {
+      k.drawCircle({
+        pos: k.vec2(jointX, jointY),
+        radius: 1,
+        color: k.rgb(legColor.r, legColor.g, legColor.b),
+        opacity: 1
+      })
+    }
   })
 }
 

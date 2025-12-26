@@ -10,11 +10,11 @@ const LEG_LENGTH_1 = 8  // First segment length
 const LEG_LENGTH_2 = 7  // Second segment length
 const LEG_THICKNESS = 1.5
 const DETECTION_RADIUS = 60  // Detection distance - bugs hide when hero approaches
-const CRAWL_SPEED = 15  // Slow crawling speed
+const CRAWL_SPEED = 60  // Crawling speed (faster movement)
 const CRAWL_DURATION = 8.0  // Time to crawl before stopping
 const STOP_DURATION = 2.0  // Pause duration before changing direction
-const STEP_DISTANCE = 8  // Distance to trigger leg step (reduced from 12)
-const STEP_SPEED = 6  // How fast legs step
+const STEP_DISTANCE = 20  // Distance to trigger leg step (increased for more visible movement)
+const STEP_SPEED = 8  // How fast legs step (slightly faster)
 //
 // Bug color patterns (ladybug-like)
 //
@@ -89,11 +89,12 @@ export function create(config) {
     legSpreadFactor = 1.0,
     legDropFactor = 0.7,
     customColor = null,
-    zIndex = 15,
+    zIndex = 8,  // Above all trees (trees are z=2 and z=7), below player (z=10)
     showOutline = true,
     legThickness = 1.0,
     bodyShape = 'semicircle',
-    legCount = 4
+    legCount = 4,
+    hasUpwardLegs = false
   } = config
   //
   // Choose random pattern or use custom color
@@ -133,14 +134,31 @@ export function create(config) {
     angle = Math.random() > 0.5 ? 0 : Math.PI  // Left or right
     normalAngle = Math.PI / 2  // Normal points down (towards floor)
     
+    //
+    // Check if this bug has upward legs (legs go up from sides first, then down)
+    //
+    const hasUpwardLegs = config.hasUpwardLegs || false
+    
     if (legCount === 2) {
-      //
-      // 2 legs: one on left side, one on right side (far apart)
-      //
-      legAngles = [
-        Math.PI * 0.5,   // Left leg (straight down-left)
-        Math.PI * 0.5    // Right leg (straight down-right)
-      ]
+      if (hasUpwardLegs) {
+        //
+        // 2 legs with upward bend: start from sides going up, then down
+        // Left leg: goes up-left first, then down
+        // Right leg: goes up-right first, then down
+        //
+        legAngles = [
+          Math.PI * 0.75,   // Left leg (up-left, then curves down)
+          Math.PI * 0.25    // Right leg (up-right, then curves down)
+        ]
+      } else {
+        //
+        // 2 legs: one on left side, one on right side (far apart)
+        //
+        legAngles = [
+          Math.PI * 0.5,   // Left leg (straight down-left)
+          Math.PI * 0.5    // Right leg (straight down-right)
+        ]
+      }
     } else {
       //
       // 4 legs: 2 front (pointing forward-down), 2 back (pointing backward-down)
@@ -285,6 +303,22 @@ export function onUpdate(inst, dt) {
   // Note: Hero proximity detection is handled in the level scene
   // This function only handles state transitions and movement
   //
+  //
+  // Bugs in pyramid don't update movement, but legs need to be updated
+  // to prevent them from being pulled in (scared state)
+  //
+  if (inst.state === 'pyramid') {
+    //
+    // Reset dropOffset for bugs in pyramid (body should be in normal position)
+    //
+    inst.dropOffset = 0
+    //
+    // Update legs for bugs in pyramid (keep legs in normal position)
+    //
+    updateLegs(inst, dt)
+    return
+  }
+  
   if (inst.state === 'recovering') {
     //
     // Still recovering - count down timer
@@ -396,6 +430,16 @@ export function onUpdate(inst, dt) {
       }
     }
     //
+    // Handle scattering state (after pyramid destruction)
+    //
+    if (inst.isScattering) {
+      inst.scatterTimer -= dt
+      if (inst.scatterTimer <= 0) {
+        inst.isScattering = false
+      }
+    }
+    
+    //
     // Update position if crawling
     //
     if (inst.state === 'crawling') {
@@ -497,7 +541,7 @@ function updateLegs(inst, dt) {
           //
           // 2 legs: one left, one right (indices 0 = left, 1 = right)
           //
-          const legSideOffset = reach * 0.8 * inst.legSpreadFactor
+          const legSideOffset = reach * 1.2 * inst.legSpreadFactor  // Increased offset for more visible movement
           idealX = i === 0 ? inst.x - legSideOffset : inst.x + legSideOffset
         } else {
           //
@@ -525,15 +569,20 @@ function updateLegs(inst, dt) {
             //
             // Front legs: must stay ahead of body front edge
             //
-            const minFrontDistance = reach * 0.6 * inst.legSpreadFactor
+            const minFrontDistance = reach * 1.0 * inst.legSpreadFactor  // Increased distance for more visible movement
             idealX = bodyFrontX + (movingRight ? minFrontDistance : -minFrontDistance)
           } else if (isBackLeg) {
             //
-            // Back legs: position near center of body (not back edge!)
-            // This keeps them closer and makes them step more frequently
+            // Back legs: position at body center or ahead of center
+            // Keep them close to body and make them step forward more
             //
-            const backLegOffset = reach * 0.4 * inst.legSpreadFactor
-            idealX = inst.x + (movingRight ? -backLegOffset : backLegOffset)
+            //
+            // Position back legs at body center or slightly ahead (not behind!)
+            // This prevents them from dragging and stretching behind
+            //
+            const bodyRadius = inst.scale * BUG_BODY_SIZE * 1.5 * 0.9
+            const backLegForwardOffset = bodyRadius * 0.3  // Forward offset from body center
+            idealX = inst.x + (movingRight ? backLegForwardOffset : -backLegForwardOffset)  // Ahead of center
           }
         }
         
@@ -556,7 +605,7 @@ function updateLegs(inst, dt) {
       // Back legs step much earlier to avoid dragging
       //
       const isBackLeg = (inst.vx > 0 && (i === 0 || i === 1)) || (inst.vx < 0 && (i === 2 || i === 3))
-      const stepThreshold = isBackLeg ? STEP_DISTANCE * inst.scale * 0.25 : STEP_DISTANCE * inst.scale
+      const stepThreshold = isBackLeg ? STEP_DISTANCE * inst.scale * 0.1 : STEP_DISTANCE * inst.scale  // Back legs step much earlier to prevent dragging
       
       if (!leg.isStepping && footDist > stepThreshold) {
         //
@@ -592,7 +641,7 @@ function updateLegs(inst, dt) {
           // Interpolate with arc
           //
           const t = leg.stepProgress
-          const arcHeight = 2 * inst.scale
+          const arcHeight = 4 * inst.scale  // Increased arc height for more visible step animation
           const arc = Math.sin(t * Math.PI) * arcHeight
           leg.footX = leg.stepStartX + (leg.targetFootX - leg.stepStartX) * t
           leg.footY = leg.stepStartY + (leg.targetFootY - leg.stepStartY) * t - arc
@@ -640,21 +689,50 @@ export function draw(inst) {
   if (inst.bodyShape === 'circle') {
     //
     // Draw full circle body
+    // For bugs with flat head, draw flattened ellipse instead
     //
-    if (inst.showOutline) {
+    if (inst.hasFlatHead) {
+      //
+      // Draw flattened head (ellipse with reduced height)
+      //
+      const flatHeadWidth = radius * 2
+      const flatHeadHeight = radius * 1.8  // Much thicker head
+      
+      if (inst.showOutline) {
+        k.drawEllipse({
+          pos: k.vec2(0, 0),
+          radiusX: flatHeadWidth / 2 + 2,
+          radiusY: flatHeadHeight / 2 + 2,
+          color: k.rgb(0, 0, 0),
+          opacity: 1
+        })
+      }
+      k.drawEllipse({
+        pos: k.vec2(0, 0),
+        radiusX: flatHeadWidth / 2,
+        radiusY: flatHeadHeight / 2,
+        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
+        opacity: 1
+      })
+    } else {
+      //
+      // Draw normal circle body
+      //
+      if (inst.showOutline) {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius + 2,
+          color: k.rgb(0, 0, 0),
+          opacity: 1
+        })
+      }
       k.drawCircle({
         pos: k.vec2(0, 0),
-        radius: radius + 2,
-        color: k.rgb(0, 0, 0),
+        radius: radius,
+        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
         opacity: 1
       })
     }
-    k.drawCircle({
-      pos: k.vec2(0, 0),
-      radius: radius,
-      color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-      opacity: 1
-    })
   } else {
     //
     // Create points for semicircle (top half)
@@ -706,8 +784,8 @@ export function draw(inst) {
     //
     // Calculate direction to hero
     //
-    const heroX = inst.hero.character.pos.x
-    const heroY = inst.hero.character.pos.y
+    const heroX = inst.hero?.character?.pos.x ?? inst.x
+    const heroY = inst.hero?.character?.pos.y ?? inst.y
     const dx = heroX - inst.x
     const dy = heroY - (inst.y + inst.dropOffset)
     const dist = Math.sqrt(dx * dx + dy * dy)
@@ -721,23 +799,53 @@ export function draw(inst) {
       pupilOffsetY = (dy / dist) * maxPupilOffset
     }
     //
-    // Draw white eye
+    // Draw eye - flat head for bug4, round for others
     //
-    k.drawCircle({
-      pos: k.vec2(0, 0),
-      radius: eyeRadius,
-      color: k.rgb(255, 255, 255),
-      opacity: 1
-    })
-    //
-    // Draw black pupil
-    //
-    k.drawCircle({
-      pos: k.vec2(pupilOffsetX, pupilOffsetY),
-      radius: pupilRadius,
-      color: k.rgb(0, 0, 0),
-      opacity: 1
-    })
+    if (inst.hasFlatHead) {
+      //
+      // Draw flat head (rectangular eye)
+      //
+      const eyeWidth = eyeRadius * 2.2
+      const eyeHeight = eyeRadius * 0.8
+      k.drawRect({
+        width: eyeWidth,
+        height: eyeHeight,
+        pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2),
+        color: k.rgb(255, 255, 255),
+        opacity: 1
+      })
+      //
+      // Draw black pupil (smaller rectangle)
+      //
+      const pupilWidth = pupilRadius * 2
+      const pupilHeight = pupilRadius * 1.5
+      k.drawRect({
+        width: pupilWidth,
+        height: pupilHeight,
+        pos: k.vec2(pupilOffsetX - pupilWidth / 2, pupilOffsetY - pupilHeight / 2),
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    } else {
+      //
+      // Draw round eye
+      //
+      k.drawCircle({
+        pos: k.vec2(0, 0),
+        radius: eyeRadius,
+        color: k.rgb(255, 255, 255),
+        opacity: 1
+      })
+      //
+      // Draw black pupil
+      //
+      k.drawCircle({
+        pos: k.vec2(pupilOffsetX, pupilOffsetY),
+        radius: pupilRadius,
+        color: k.rgb(0, 0, 0),
+        opacity: 1
+      })
+    }
   } else {
     //
     // For semicircle body: draw eye on the side of movement direction
@@ -800,18 +908,45 @@ export function draw(inst) {
       // Apply dropOffset to Y position
       //
       const bodyY = inst.y + inst.dropOffset
+      const radius = BUG_BODY_SIZE * 1.5 * inst.scale
+      
       if (inst.legCount === 2) {
         //
         // 2 legs: one on left, one on right
         //
-        if (i === 0) {
-          // Left leg
-          attachX = inst.x - attachmentOffset
-          attachY = bodyY
+        if (inst.hasUpwardLegs) {
+          //
+          // For upward legs with flat head: attach to sides of head
+          // Legs should come out from sides and not go above head top
+          // For flat head: head is ellipse with height = radius * 1.8
+          // Top of head is at bodyY - flatHeadHeight / 2
+          // Attach legs at sides, at or below head center (not above top)
+          //
+          const flatHeadHeight = radius * 1.8
+          const headTop = bodyY - flatHeadHeight / 2
+          // Attach at sides, at head center level (middle of head)
+          if (i === 0) {
+            // Left leg: attach on left side, at head center level
+            attachX = inst.x - attachmentOffset
+            attachY = bodyY  // At body center (which is head center for flat head)
+          } else {
+            // Right leg: attach on right side, at head center level
+            attachX = inst.x + attachmentOffset
+            attachY = bodyY  // At body center (which is head center for flat head)
+          }
         } else {
-          // Right leg
-          attachX = inst.x + attachmentOffset
-          attachY = bodyY
+          //
+          // Normal legs: attach at body center level
+          //
+          if (i === 0) {
+            // Left leg
+            attachX = inst.x - attachmentOffset
+            attachY = bodyY
+          } else {
+            // Right leg
+            attachX = inst.x + attachmentOffset
+            attachY = bodyY
+          }
         }
       } else {
         //

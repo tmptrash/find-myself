@@ -300,9 +300,9 @@ export function sceneMenu(k) {
           kidsMusic.stop()
           
           //
-          // Go directly to touch level 0
+          // Go to touch level 0 with transition
           //
-          k.go('level-touch.0')
+          createLevelTransition(k, 'menu-touch')
         })
       }
       

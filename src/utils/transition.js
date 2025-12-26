@@ -8,6 +8,7 @@ import { markSectionComplete, saveLastLevel } from './progress.js'
 const LEVEL_TRANSITIONS = {
   'menu': 'level-word.0',
   'menu-time': 'level-time.0',
+  'menu-touch': 'level-touch.0',
   'level-word.0': 'level-word.1',
   'level-word.1': 'level-word.2',
   'level-word.2': 'level-word.3',
@@ -18,7 +19,8 @@ const LEVEL_TRANSITIONS = {
   'level-time.1': 'level-time.2',
   'level-time.2': 'level-time.3',
   'level-time.3': 'time-complete',
-  'time-complete': 'menu'
+  'time-complete': 'menu',
+  'level-touch.0': 'menu'
 }
 
 /**
@@ -73,6 +75,7 @@ export function showTransitionToLevel(k, targetLevel) {
 const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
+  'menu-touch': '',
   'level-word.0': 'words, they cut deeper than blades',
   'level-word.1': "sharp words don't cut - they make you fall",
   'level-word.2': "the words you can't forget hurt the most",
@@ -81,7 +84,8 @@ const LEVEL_SUBTITLES = {
   'level-time.0': 'time never waits, and neither should you',
   'level-time.1': 'do not touch the one',
   'level-time.2': 'digits sum even safe, sum odd deadly',
-  'level-time.3': 'sections switch controls - watch the clocks'
+  'level-time.3': 'sections switch controls - watch the clocks',
+  'level-touch.0': 'gather what crawls together to reach what stands above'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
@@ -250,6 +254,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             // Word section uses steel blue
             //
             levelColorHex = "#6B8E9F"
+          } else if (nextLevel.startsWith('level-touch') || nextLevel === 'menu-touch') {
+            //
+            // Touch section uses light beige color
+            //
+            levelColorHex = "#C0B8A8"
           }
           
           const [r, g, b] = parseHex(levelColorHex)

@@ -5,6 +5,8 @@ import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as BugPyramid from '../components/bug-pyramid.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -27,7 +29,7 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
 const ANTIHERO_PLATFORM_WIDTH = 160
 const ANTIHERO_PLATFORM_HEIGHT = 20
-const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 150  // Above hero height
+const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 80  // Above hero height (lowered)
 const ANTIHERO_PLATFORM_X = CFG.visual.screen.width - RIGHT_MARGIN / 2 - 40
 const ANTIHERO_SPAWN_X = ANTIHERO_PLATFORM_X - 20  // Shift anti-hero 20px left from platform center
 const ANTIHERO_SPAWN_Y = ANTIHERO_PLATFORM_Y - ANTIHERO_PLATFORM_HEIGHT / 2 - 50
@@ -118,35 +120,9 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
-    // Anti-hero platform (right side, above hero height)
-    // Calculate platform position using k.width() for accurate screen width
+    // Anti-hero platform position (for reference - will be replaced by bug)
+    // Note: platformCenterX is defined later when creating bug4
     //
-    const platformCenterX = k.width() - RIGHT_MARGIN / 2 - 40
-    const OUTLINE_THICKNESS = 2
-    //
-    // Draw black outline (slightly larger rectangle behind)
-    //
-    k.add([
-      k.rect(ANTIHERO_PLATFORM_WIDTH + OUTLINE_THICKNESS * 2, ANTIHERO_PLATFORM_HEIGHT + OUTLINE_THICKNESS * 2),
-      k.pos(platformCenterX, ANTIHERO_PLATFORM_Y),
-      k.anchor("center"),
-      k.color(0, 0, 0),
-      k.z(CFG.visual.zIndex.platforms - 1),
-      CFG.game.platformName
-    ])
-    //
-    // Main platform
-    //
-    const antiHeroPlatform = k.add([
-      k.rect(ANTIHERO_PLATFORM_WIDTH, ANTIHERO_PLATFORM_HEIGHT),
-      k.pos(platformCenterX, ANTIHERO_PLATFORM_Y),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
     //
     // Create grass/bushes/trees decoration with parallax depth layers
     //
@@ -996,7 +972,146 @@ export function sceneLevel0(k) {
     //
     const heroBodyColor = isTimeComplete ? "#FF8C00" : "#C0C0C0"
     //
-    // Create hero
+    // Big bug constants (needed for bug4 creation)
+    //
+    const BIG_BUG_COLOR = "#1A1C1A"
+    const BIG_BUG_Z_INDEX = 8  // Above all trees (trees are z=2 and z=7), below player (z=10)
+    const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
+    const BIG_BUG_LEG_THICKNESS = 3.0
+    const BIG_BUG_CRAWL_SPEED = 4
+    const BIG_BUG_SCALE = 3.0
+    //
+    // Create bug 4 (platform bug for anti-hero) before creating anti-hero
+    // Note: bug4 is created here but hero reference will be set later
+    //
+    const BUG_BODY_SIZE_FOR_BUG4 = 6  // From bugs.js
+    const bug4LegDropFactor = 0.95
+    const bug4Radius = BUG_BODY_SIZE_FOR_BUG4 * 1.5 * BIG_BUG_SCALE  // Same radius as other big bugs
+    //
+    // Position bug4 on the right side but visible on screen
+    // Place it at about 85% of screen width from left
+    // Note: floorWidth is defined later, calculate it here for bug4 positioning
+    //
+    const bug4FloorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const bug4X = LEFT_MARGIN + bug4FloorWidth * 0.85
+    //
+    // Calculate bug4 position same way as other big bugs
+    // First determine desired leg length (similar to bug1 - tallest)
+    // Then calculate body Y position from floor
+    // Finally adjust so that bug's back (top) is at ANTIHERO_PLATFORM_Y
+    //
+    const bug4LegLength1 = 100  // Same as bug1
+    const bug4LegLength2 = 90   // Same as bug1
+    const bug4LegReach = (bug4LegLength1 + bug4LegLength2) * BIG_BUG_SCALE * bug4LegDropFactor
+    //
+    // Calculate body Y position so that top of flat head is at ANTIHERO_PLATFORM_Y
+    // For flat head bug: head is ellipse with height = radius * 1.8
+    // Top of head is at bug4BodyY - flatHeadHeight / 2
+    // We want top of head at ANTIHERO_PLATFORM_Y
+    // So: bug4BodyY - (radius * 1.8) / 2 = ANTIHERO_PLATFORM_Y
+    // Therefore: bug4BodyY = ANTIHERO_PLATFORM_Y + (radius * 1.8) / 2
+    //
+    const flatHeadHeight = bug4Radius * 1.8
+    const bug4BodyY = ANTIHERO_PLATFORM_Y + flatHeadHeight / 2
+    //
+    // Verify legs can reach floor (they should with bug1's leg lengths)
+    // If not, we'd need longer legs, but bug1's legs should be enough
+    //
+    
+    const bigBug4Inst = Bugs.create({
+      k,
+      x: bug4X,
+      y: bug4BodyY,
+      hero: null,  // Will be set later after hero is created
+      surface: 'floor',
+      scale: BIG_BUG_SCALE,  // Same scale as other big bugs
+      legLength1: bug4LegLength1,  // Same as bug1
+      legLength2: bug4LegLength2,  // Same as bug1
+      crawlSpeed: 0,  // Don't move - it's a platform
+      legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
+      legDropFactor: bug4LegDropFactor,
+      customColor: BIG_BUG_COLOR,  // Same color as other big bugs
+      zIndex: BIG_BUG_Z_INDEX,
+      showOutline: false,
+      legThickness: BIG_BUG_LEG_THICKNESS,
+      bodyShape: 'circle',  // Circle shape like other big bugs
+      legCount: 2,
+      hasUpwardLegs: true,  // Legs go up from sides first, then down
+      sfx: sound,
+      bounds: {
+        minX: bug4X,
+        maxX: bug4X,
+        minY: bug4BodyY,
+        maxY: bug4BodyY
+      }
+    })
+    //
+    // Mark bug4 as having flat head (for special rendering)
+    // and upward legs (legs go up from sides first, then down to floor)
+    // Also mark as platform bug that doesn't react to hero
+    //
+    bigBug4Inst.hasFlatHead = true
+    bigBug4Inst.hasUpwardLegs = true
+    bigBug4Inst.isPlatformBug = true  // Don't react to hero
+    //
+    // Set bug to not move (static platform)
+    //
+    bigBug4Inst.state = 'stopping'
+    bigBug4Inst.vx = 0
+    bigBug4Inst.vy = 0
+    bigBug4Inst.isMother = true
+    bigBug4Inst.originalY = bug4BodyY
+    bigBug4Inst.isScared = false
+    bigBug4Inst.scareTimer = 0
+    bigBug4Inst.maxDrop = 0
+    //
+    // Create invisible platform on bug's back (head) for anti-hero
+    // Top of flat head is at ANTIHERO_PLATFORM_Y
+    // Platform should be on top of the head
+    //
+    const bug4BackPlatformWidth = bug4Radius * 2.5  // Wide platform on bug's back
+    const bug4BackPlatformHeight = 10
+    //
+    // Platform top should be at ANTIHERO_PLATFORM_Y (top of bug's head)
+    // With anchor "top", platform top is at Y
+    // So: bug4BackPlatformY = ANTIHERO_PLATFORM_Y
+    //
+    const bug4BackPlatformY = ANTIHERO_PLATFORM_Y
+    
+    const antiHeroPlatform = k.add([
+      k.rect(bug4BackPlatformWidth, bug4BackPlatformHeight),
+      k.pos(bug4X, bug4BackPlatformY),
+      k.anchor("top"),  // Anchor at top so platform sits on head
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),  // Invisible
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName
+    ])
+    //
+    // Create anti-hero first (needed for hero annihilation setup)
+    // Position anti-hero directly on top of platform (on top of bug's head)
+    //
+    const antiHeroSpawnX = bug4X  // Center on bug's back
+    const antiHeroSpawnY = bug4BackPlatformY - 50  // On top of platform (slightly above to let physics settle)
+    const antiHeroInst = Hero.create({
+      k,
+      x: antiHeroSpawnX,
+      y: antiHeroSpawnY,
+      type: Hero.HEROES.ANTIHERO,
+      controllable: false,
+      sfx: sound,
+      antiHero: null,
+      addArms: true
+    })
+    //
+    // Hide character immediately to prevent double appearance
+    //
+    if (antiHeroInst.character) {
+      antiHeroInst.character.hidden = true
+    }
+    //
+    // Create hero with anti-hero reference for annihilation
     //
     const heroInst = Hero.create({
       k,
@@ -1005,6 +1120,16 @@ export function sceneLevel0(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
+      antiHero: antiHeroInst,
+      onAnnihilation: () => {
+        //
+        // Transition after annihilation
+        // Since this is the only level in touch section, go back to menu
+        //
+        createLevelTransition(k, 'level-touch.0', () => {
+          k.go('menu')
+        })
+      },
       currentLevel: 'level-touch.0',
       jumpForce: CFG.game.jumpForce,
       addMouth: isWordComplete,
@@ -1029,27 +1154,6 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Create anti-hero
-    // Calculate spawn position relative to platform: platform left edge + offset
-    //
-    const antiHeroSpawnX = antiHeroPlatform.pos.x - ANTIHERO_PLATFORM_WIDTH / 2 + 30  // 30px from left edge of platform
-    const antiHeroInst = Hero.create({
-      k,
-      x: antiHeroSpawnX,
-      y: ANTIHERO_SPAWN_Y,
-      type: Hero.HEROES.ANTIHERO,
-      controllable: false,
-      sfx: sound,
-      antiHero: null,
-      addArms: true
-    })
-    //
-    // Hide character immediately to prevent double appearance
-    //
-    if (antiHeroInst.character) {
-      antiHeroInst.character.hidden = true
-    }
-    //
     // Spawn anti-hero after delay
     // Position is already set correctly at creation time
     // Use flag to ensure spawn is called only once
@@ -1061,10 +1165,6 @@ export function sceneLevel0(k) {
         antiHeroSpawned = true
       }
     })
-    //
-    // Link heroes for annihilation
-    //
-    heroInst.antiHero = antiHeroInst
     //
     // Create dust particles in game area only
     //
@@ -1085,17 +1185,7 @@ export function sceneLevel0(k) {
     const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
     //
     // Create three big bugs with different leg heights
-    // Color calculation for middle layer (layerIndex=1, colorMix=0.55):
-    // bgColor = rgb(42, 42, 42)
-    // Result: rgb(26, 28, 26) = #1A1C1A
-    // Z-index 3 places them behind all tree layers
-    //
-    const BIG_BUG_COLOR = "#1A1C1A"
-    const BIG_BUG_Z_INDEX = 3
-    const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
-    const BIG_BUG_LEG_THICKNESS = 3.0
-    const BIG_BUG_CRAWL_SPEED = 4
-    const BIG_BUG_SCALE = 3.0
+    // Note: BIG_BUG_* constants are defined earlier before bug4 creation
     //
     // Bug 1: Tallest (very long legs)
     //
@@ -1205,12 +1295,17 @@ export function sceneLevel0(k) {
       }
     })
     //
+    // Update bug4 hero reference now that hero is created
+    //
+    bigBug4Inst.hero = heroInst
+    //
     // Store state for all big bugs and add to bugs array
     //
     const bigBugs = [
       { inst: bigBug1Inst, y: bug1Y },
       { inst: bigBug2Inst, y: bug2Y },
-      { inst: bigBug3Inst, y: bug3Y }
+      { inst: bigBug3Inst, y: bug3Y },
+      { inst: bigBug4Inst, y: bug4BodyY }
     ]
     
     bigBugs.forEach(({ inst, y }) => {
@@ -1277,6 +1372,14 @@ export function sceneLevel0(k) {
       const dt = k.dt()
       
       for (const bugInst of bugs) {
+        //
+        // Bugs in pyramid don't react to hero (don't get scared)
+        // Platform bug (bug4) also doesn't react to hero
+        //
+        if (bugInst.state === 'pyramid' || bugInst.isPlatformBug) {
+          continue
+        }
+        
         const dx = bugInst.x - heroX
         const dy = bugInst.y - heroY
         const distance = Math.sqrt(dx * dx + dy * dy)
@@ -1353,11 +1456,129 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Update bugs and dust
+    // Bug pyramid system
+    //
+    const activePyramids = []
+    const pyramidCheckInterval = 0.5  // Check for groups every 0.5 seconds
+    let pyramidCheckTimer = 0
+    
+    //
+    // Update bugs, dust, and pyramids
     //
     k.onUpdate(() => {
-      bugs.forEach(bug => Bugs.onUpdate(bug, k.dt()))
-      Dust.onUpdate(dustInst, k.dt())
+      const dt = k.dt()
+      
+      bugs.forEach(bug => Bugs.onUpdate(bug, dt))
+      Dust.onUpdate(dustInst, dt)
+      
+      //
+      // Update active pyramids (iterate backwards to safely remove)
+      //
+      for (let i = activePyramids.length - 1; i >= 0; i--) {
+        const pyramid = activePyramids[i]
+        BugPyramid.onUpdate(pyramid, dt)
+        //
+        // Check for bugs that can join this pyramid
+        //
+        if (pyramid.isActive) {
+          const availableBugs = bugs.filter(bug => 
+            bug.isMother === false && 
+            bug.state !== 'pyramid' && 
+            bug.state !== 'scared' &&
+            bug.state !== 'recovering' &&
+            !bug.isScattering
+          )
+          
+          availableBugs.forEach(bug => {
+            //
+            // Check distance to pyramid center
+            //
+            const dx = bug.x - pyramid.centerX
+            const dy = bug.y - pyramid.centerY
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            
+            if (dist <= 60) {  // JOIN_DETECTION_RADIUS
+              //
+              // Try to add bug to pyramid
+              //
+              const added = BugPyramid.addBug(pyramid, bug)
+              if (added) {
+                //
+                // Bug successfully added, timer will be reset in addBug
+                //
+              }
+            }
+          })
+        }
+        //
+        // Remove destroyed pyramids
+        //
+        if (!pyramid.isActive) {
+          activePyramids.splice(i, 1)
+        }
+      }
+      
+      //
+      // Check for new bug groups to form pyramids
+      //
+      pyramidCheckTimer += dt
+      if (pyramidCheckTimer >= pyramidCheckInterval) {
+        pyramidCheckTimer = 0
+        
+        //
+        // Check if any bugs are still scattering (can't form new pyramid until all scattered)
+        //
+        const anyScattering = bugs.some(bug => bug.isScattering === true)
+        
+        if (anyScattering) {
+          //
+          // Wait for all bugs to finish scattering before allowing new pyramid
+          //
+          return
+        }
+        
+        //
+        // Get only small bugs (not in pyramid, not scared, not scattering)
+        //
+        const smallBugs = bugs.filter(bug => 
+          bug.isMother === false && 
+          bug.state !== 'pyramid' && 
+          bug.state !== 'scared' &&
+          bug.state !== 'recovering' &&
+          !bug.isScattering
+        )
+        
+        //
+        // Find bug groups
+        //
+        const group = BugPyramid.findBugGroup(smallBugs)
+        
+        if (group && group.length >= 5) {
+          //
+          // Check if bugs in this group are already in a pyramid
+          //
+          const alreadyInPyramid = group.some(bug => 
+            activePyramids.some(pyramid => 
+              pyramid.bugs.some(b => b.inst === bug)
+            )
+          )
+          
+          if (!alreadyInPyramid) {
+            //
+            // Create new pyramid
+            //
+            const pyramid = BugPyramid.create({
+              k,
+              bugs: group,
+              hero: heroInst
+            })
+            
+            if (pyramid) {
+              activePyramids.push(pyramid)
+            }
+          }
+        }
+      }
     })
     //
     // Create FPS counter

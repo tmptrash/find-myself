@@ -163,9 +163,9 @@ export function create(config) {
     //
     // IK bending direction:
     // For 4 legs: Back legs (0, 1): bend backward (side = -1), Front legs (2, 3): bend forward (side = 1)
-    // For 2 legs: Both bend outward (side based on index)
+    // For 2 legs: Left leg (i=0) bends right (outward), Right leg (i=1) bends left (outward)
     //
-    const side = legCount === 2 ? (i === 0 ? -1 : 1) : (i < 2 ? -1 : 1)
+    const side = legCount === 2 ? (i === 0 ? 1 : -1) : (i < 2 ? -1 : 1)
     const reach = (legLength1 + legLength2) * scale
     
     //
@@ -294,20 +294,32 @@ export function onUpdate(inst, dt) {
     
     if (inst.stateTimer <= 0) {
       //
-      // Recovery complete - resume crawling with new direction
+      // Recovery complete - resume crawling
       //
       inst.state = 'crawling'
       inst.stateTimer = inst.crawlDuration
       //
-      // Choose random direction
+      // Small bugs keep their escape direction, big bugs choose random direction
       //
-      if (inst.surface === 'floor') {
-        inst.movementAngle = Math.random() > 0.5 ? 0 : Math.PI
-      } else if (inst.surface === 'leftWall' || inst.surface === 'rightWall') {
-        inst.movementAngle = Math.random() > 0.5 ? -Math.PI / 2 : Math.PI / 2
+      const isSmallBug = inst.isMother === false
+      if (isSmallBug) {
+        //
+        // Small bugs: continue in escape direction (already set when escaping)
+        //
+        inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+        inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+      } else {
+        //
+        // Big bugs: choose random direction
+        //
+        if (inst.surface === 'floor') {
+          inst.movementAngle = Math.random() > 0.5 ? 0 : Math.PI
+        } else if (inst.surface === 'leftWall' || inst.surface === 'rightWall') {
+          inst.movementAngle = Math.random() > 0.5 ? -Math.PI / 2 : Math.PI / 2
+        }
+        inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+        inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
       }
-      inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
-      inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
     }
   } else if (inst.state === 'crawling' || inst.state === 'stopping') {
     //
@@ -318,47 +330,84 @@ export function onUpdate(inst, dt) {
       inst.dropOffset -= dt * 150
       if (inst.dropOffset < 0) inst.dropOffset = 0
     }
+    //
+    // Small bugs (isMother === false) don't change direction by timer, only bounce off walls
+    // Big bugs (isMother === true) use timer-based direction changes
+    //
+    const isSmallBug = inst.isMother === false
     
-    inst.stateTimer -= dt
-    
-    if (inst.state === 'crawling') {
-      if (inst.stateTimer <= 0) {
-        //
-        // Switch to stopping state
-        //
-        inst.state = 'stopping'
-        inst.stateTimer = inst.stopDuration  // Use bug's unique duration
-        inst.vx = 0
-        inst.vy = 0
-      }
-    } else if (inst.state === 'stopping') {
-      if (inst.stateTimer <= 0) {
-        //
-        // Switch to crawling with new random direction
-        //
-        inst.state = 'crawling'
-        inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
-        
-        if (inst.surface === 'floor') {
+    if (!isSmallBug) {
+      //
+      // Big bugs: use timer-based state machine
+      //
+      inst.stateTimer -= dt
+      
+      if (inst.state === 'crawling') {
+        if (inst.stateTimer <= 0) {
           //
-          // Floor: randomly choose left or right
+          // Switch to stopping state
           //
-          inst.movementAngle = Math.random() > 0.5 ? 0 : Math.PI
-        } else if (inst.surface === 'leftWall' || inst.surface === 'rightWall') {
-          //
-          // Wall: randomly choose up or down
-          //
-          inst.movementAngle = Math.random() > 0.5 ? -Math.PI / 2 : Math.PI / 2
+          inst.state = 'stopping'
+          inst.stateTimer = inst.stopDuration  // Use bug's unique duration
+          inst.vx = 0
+          inst.vy = 0
         }
-        
-        inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
-        inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+      } else if (inst.state === 'stopping') {
+        if (inst.stateTimer <= 0) {
+          //
+          // Switch to crawling with new random direction
+          //
+          inst.state = 'crawling'
+          inst.stateTimer = inst.crawlDuration  // Use bug's unique duration
+          
+          if (inst.surface === 'floor') {
+            //
+            // Floor: randomly choose left or right
+            //
+            inst.movementAngle = Math.random() > 0.5 ? 0 : Math.PI
+          } else if (inst.surface === 'leftWall' || inst.surface === 'rightWall') {
+            //
+            // Wall: randomly choose up or down
+            //
+            inst.movementAngle = Math.random() > 0.5 ? -Math.PI / 2 : Math.PI / 2
+          }
+          
+          inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+          inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+        }
+      }
+    } else {
+      //
+      // Small bugs: always stay in crawling state, never stop
+      // If they're in stopping state, immediately switch to crawling with movement
+      //
+      if (inst.state === 'stopping') {
+        inst.state = 'crawling'
+        //
+        // Ensure small bugs always have velocity
+        //
+        if (inst.vx === 0 && inst.vy === 0) {
+          //
+          // Restore velocity based on current movement angle
+          //
+          inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+          inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+        }
       }
     }
     //
     // Update position if crawling
     //
     if (inst.state === 'crawling') {
+      //
+      // Ensure small bugs always have velocity
+      //
+      const isSmallBug = inst.isMother === false
+      if (isSmallBug && inst.vx === 0 && inst.vy === 0) {
+        inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+        inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+      }
+      
       const newX = inst.x + inst.vx * dt
       const newY = inst.y + inst.vy * dt
       //
@@ -746,19 +795,37 @@ export function draw(inst) {
     if (inst.surface === 'floor') {
       //
       // For floor bugs: 
-      // Back legs (0, 1) attach to left side
-      // Front legs (2, 3) attach to right side
+      // For 2 legs: leg 0 attaches to left side, leg 1 attaches to right side
+      // For 4 legs: back legs (0, 1) attach to left side, front legs (2, 3) attach to right side
       // Apply dropOffset to Y position
       //
       const bodyY = inst.y + inst.dropOffset
-      if (i === 0 || i === 1) {
-        // Back legs (left side)
-        attachX = inst.x - attachmentOffset
-        attachY = bodyY
+      if (inst.legCount === 2) {
+        //
+        // 2 legs: one on left, one on right
+        //
+        if (i === 0) {
+          // Left leg
+          attachX = inst.x - attachmentOffset
+          attachY = bodyY
+        } else {
+          // Right leg
+          attachX = inst.x + attachmentOffset
+          attachY = bodyY
+        }
       } else {
-        // Front legs (right side)
-        attachX = inst.x + attachmentOffset
-        attachY = bodyY
+        //
+        // 4 legs: back legs (0, 1) on left, front legs (2, 3) on right
+        //
+        if (i === 0 || i === 1) {
+          // Back legs (left side)
+          attachX = inst.x - attachmentOffset
+          attachY = bodyY
+        } else {
+          // Front legs (right side)
+          attachX = inst.x + attachmentOffset
+          attachY = bodyY
+        }
       }
     } else if (inst.surface === 'leftWall') {
       //

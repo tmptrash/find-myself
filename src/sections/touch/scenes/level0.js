@@ -21,8 +21,16 @@ const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
 //
 const HERO_SPAWN_X = LEFT_MARGIN + 100
 const HERO_SPAWN_Y = FLOOR_Y - 50
-const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
-const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
+//
+// Anti-hero platform (right side, above hero height)
+//
+const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
+const ANTIHERO_PLATFORM_WIDTH = 160
+const ANTIHERO_PLATFORM_HEIGHT = 20
+const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 150  // Above hero height
+const ANTIHERO_PLATFORM_X = CFG.visual.screen.width - RIGHT_MARGIN / 2 - 40
+const ANTIHERO_SPAWN_X = ANTIHERO_PLATFORM_X - 20  // Shift anti-hero 20px left from platform center
+const ANTIHERO_SPAWN_Y = ANTIHERO_PLATFORM_Y - ANTIHERO_PLATFORM_HEIGHT / 2 - 50
 
 /**
  * Level 0 scene for touch section - Introduction level
@@ -102,6 +110,36 @@ export function sceneLevel0(k) {
     k.add([
       k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
       k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.color(31, 31, 31),
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName
+    ])
+    //
+    // Anti-hero platform (right side, above hero height)
+    // Calculate platform position using k.width() for accurate screen width
+    //
+    const platformCenterX = k.width() - RIGHT_MARGIN / 2 - 40
+    const OUTLINE_THICKNESS = 2
+    //
+    // Draw black outline (slightly larger rectangle behind)
+    //
+    k.add([
+      k.rect(ANTIHERO_PLATFORM_WIDTH + OUTLINE_THICKNESS * 2, ANTIHERO_PLATFORM_HEIGHT + OUTLINE_THICKNESS * 2),
+      k.pos(platformCenterX, ANTIHERO_PLATFORM_Y),
+      k.anchor("center"),
+      k.color(0, 0, 0),
+      k.z(CFG.visual.zIndex.platforms - 1),
+      CFG.game.platformName
+    ])
+    //
+    // Main platform
+    //
+    const antiHeroPlatform = k.add([
+      k.rect(ANTIHERO_PLATFORM_WIDTH, ANTIHERO_PLATFORM_HEIGHT),
+      k.pos(platformCenterX, ANTIHERO_PLATFORM_Y),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
@@ -973,19 +1011,31 @@ export function sceneLevel0(k) {
       bodyColor: heroBodyColor
     })
     //
+    // Hide character immediately to prevent double appearance
+    //
+    if (heroInst.character) {
+      heroInst.character.hidden = true
+    }
+    //
     // Spawn hero after delay
     //
     const HERO_SPAWN_DELAY = 0.5
+    let heroSpawned = false
     k.wait(HERO_SPAWN_DELAY, () => {
-      Hero.spawn(heroInst)
-      grassDrawer.heroRef = heroInst
+      if (!heroSpawned && heroInst.character) {
+        Hero.spawn(heroInst)
+        grassDrawer.heroRef = heroInst
+        heroSpawned = true
+      }
     })
     //
     // Create anti-hero
+    // Calculate spawn position relative to platform: platform left edge + offset
     //
+    const antiHeroSpawnX = antiHeroPlatform.pos.x - ANTIHERO_PLATFORM_WIDTH / 2 + 30  // 30px from left edge of platform
     const antiHeroInst = Hero.create({
       k,
-      x: ANTIHERO_SPAWN_X,
+      x: antiHeroSpawnX,
       y: ANTIHERO_SPAWN_Y,
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
@@ -994,9 +1044,23 @@ export function sceneLevel0(k) {
       addArms: true
     })
     //
-    // Spawn anti-hero after delay
+    // Hide character immediately to prevent double appearance
     //
-    k.wait(HERO_SPAWN_DELAY, () => Hero.spawn(antiHeroInst))
+    if (antiHeroInst.character) {
+      antiHeroInst.character.hidden = true
+    }
+    //
+    // Spawn anti-hero after delay
+    // Position is already set correctly at creation time
+    // Use flag to ensure spawn is called only once
+    //
+    let antiHeroSpawned = false
+    k.wait(HERO_SPAWN_DELAY, () => {
+      if (!antiHeroSpawned && antiHeroInst.character) {
+        Hero.spawn(antiHeroInst)
+        antiHeroSpawned = true
+      }
+    })
     //
     // Link heroes for annihilation
     //

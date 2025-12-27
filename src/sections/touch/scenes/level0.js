@@ -1005,13 +1005,13 @@ export function sceneLevel0(k) {
     const bug4LegReach = (bug4LegLength1 + bug4LegLength2) * BIG_BUG_SCALE * bug4LegDropFactor
     //
     // Calculate body Y position so that top of flat head is at ANTIHERO_PLATFORM_Y
-    // For flat head bug: head is ellipse with height = radius * 1.8
+    // For flat head bug: head is ellipse with height = radius * 0.8
     // Top of head is at bug4BodyY - flatHeadHeight / 2
     // We want top of head at ANTIHERO_PLATFORM_Y
-    // So: bug4BodyY - (radius * 1.8) / 2 = ANTIHERO_PLATFORM_Y
-    // Therefore: bug4BodyY = ANTIHERO_PLATFORM_Y + (radius * 1.8) / 2
+    // So: bug4BodyY - (radius * 0.8) / 2 = ANTIHERO_PLATFORM_Y
+    // Therefore: bug4BodyY = ANTIHERO_PLATFORM_Y + (radius * 0.8) / 2
     //
-    const flatHeadHeight = bug4Radius * 1.8
+    const flatHeadHeight = bug4Radius * 0.8
     const bug4BodyY = ANTIHERO_PLATFORM_Y + flatHeadHeight / 2
     //
     // Verify legs can reach floor (they should with bug1's leg lengths)

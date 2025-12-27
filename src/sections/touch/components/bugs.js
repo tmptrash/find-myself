@@ -696,7 +696,7 @@ export function draw(inst) {
       // Draw flattened head (ellipse with reduced height)
       //
       const flatHeadWidth = radius * 2
-      const flatHeadHeight = radius * 1.8  // Much thicker head
+      const flatHeadHeight = radius * 0.8  // Flatter head
       
       if (inst.showOutline) {
         k.drawEllipse({
@@ -918,11 +918,11 @@ export function draw(inst) {
           //
           // For upward legs with flat head: attach to sides of head
           // Legs should come out from sides and not go above head top
-          // For flat head: head is ellipse with height = radius * 1.8
+          // For flat head: head is ellipse with height = radius * 0.8
           // Top of head is at bodyY - flatHeadHeight / 2
           // Attach legs at sides, at or below head center (not above top)
           //
-          const flatHeadHeight = radius * 1.8
+          const flatHeadHeight = radius * 0.8
           const headTop = bodyY - flatHeadHeight / 2
           // Attach at sides, at head center level (middle of head)
           if (i === 0) {

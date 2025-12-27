@@ -1027,7 +1027,7 @@ export function sceneLevel0(k) {
       scale: BIG_BUG_SCALE,  // Same scale as other big bugs
       legLength1: bug4LegLength1,  // Same as bug1
       legLength2: bug4LegLength2,  // Same as bug1
-      crawlSpeed: 0,  // Don't move - it's a platform
+      crawlSpeed: BIG_BUG_CRAWL_SPEED * 0.3,  // Slow movement
       legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
       legDropFactor: bug4LegDropFactor,
       customColor: BIG_BUG_COLOR,  // Same color as other big bugs
@@ -1039,8 +1039,8 @@ export function sceneLevel0(k) {
       hasUpwardLegs: true,  // Legs go up from sides first, then down
       sfx: sound,
       bounds: {
-        minX: bug4X,
-        maxX: bug4X,
+        minX: LEFT_MARGIN + 200,  // Allow movement within screen
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN - 200,
         minY: bug4BodyY,
         maxY: bug4BodyY
       }
@@ -1054,10 +1054,10 @@ export function sceneLevel0(k) {
     bigBug4Inst.hasUpwardLegs = true
     bigBug4Inst.isPlatformBug = true  // Don't react to hero
     //
-    // Set bug to not move (static platform)
+    // Set bug to move slowly (crawling state)
     //
-    bigBug4Inst.state = 'stopping'
-    bigBug4Inst.vx = 0
+    bigBug4Inst.state = 'crawling'
+    bigBug4Inst.vx = bigBug4Inst.crawlSpeed  // Start moving right
     bigBug4Inst.vy = 0
     bigBug4Inst.isMother = true
     bigBug4Inst.originalY = bug4BodyY
@@ -1362,6 +1362,33 @@ export function sceneLevel0(k) {
       
       bugs.push(bugInst)
     }
+    //
+    // Update bug4 platform and anti-hero position to follow bug movement
+    //
+    k.onUpdate(() => {
+      //
+      // Sync platform and anti-hero with bug4 movement
+      //
+      if (bigBug4Inst && antiHeroPlatform && antiHeroInst) {
+        //
+        // Update platform position to follow bug's head
+        //
+        const flatHeadHeight = bug4Radius * 0.8
+        const headTopY = bigBug4Inst.y - flatHeadHeight / 2
+        antiHeroPlatform.pos.x = bigBug4Inst.x
+        antiHeroPlatform.pos.y = headTopY
+        
+        //
+        // Update anti-hero position to stay on platform
+        //
+        if (antiHeroInst.character) {
+          antiHeroInst.character.pos.x = bigBug4Inst.x
+          //
+          // Keep anti-hero on platform (let physics handle Y, but sync X)
+          //
+        }
+      }
+    })
     //
     // Add hero collision check for bugs to trigger scare behavior
     //

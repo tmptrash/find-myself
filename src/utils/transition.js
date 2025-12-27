@@ -256,9 +256,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             levelColorHex = "#6B8E9F"
           } else if (nextLevel.startsWith('level-touch') || nextLevel === 'menu-touch') {
             //
-            // Touch section uses light beige color
+            // Touch section uses reddened leaf color from first layer trees
+            // More red version for better visibility
             //
-            levelColorHex = "#C0B8A8"
+            levelColorHex = "#8B4A3A"  // More red color similar to reddened autumn leaves
           }
           
           const [r, g, b] = parseHex(levelColorHex)

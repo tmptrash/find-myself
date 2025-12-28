@@ -1,6 +1,6 @@
 import * as Sound from "../utils/sound.js"
 import { CFG } from "../cfg.js"
-import { getRGB } from "../utils/helper.js"
+import { getRGB, parseHex } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
 import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
@@ -35,16 +35,6 @@ function getSectionDisplayName(section) {
   return pluralMap[section] || section
 }
 
-/**
- * Extract level number from level name
- * @param {string} levelName - Level name (e.g., 'level-word.2')
- * @returns {number|null} Level number or null if not found
- */
-function getLevelNumber(levelName) {
-  if (!levelName) return null
-  const match = levelName.match(/\.(\d+)$/)
-  return match ? parseInt(match[1], 10) : null
-}
 
 /**
  * Menu scene with hero in center
@@ -234,9 +224,16 @@ export function sceneMenu(k) {
       
       //
       // Add click handlers for implemented sections
-      // Only if section is not completed
+      // Only if section is not completed AND previous section is completed (or it's the first section)
       //
-      if (config.section === 'word' && !isCompleted) {
+      const sectionOrder = ['time', 'word', 'touch', 'feel', 'mind', 'stress']
+      const currentIndex = sectionOrder.indexOf(config.section)
+      const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
+      const previousSection = sectionOrder[previousIndex]
+      const isPreviousCompleted = progress[previousSection] || false
+      const canAccess = currentIndex === 0 || isPreviousCompleted  // First section is always accessible
+      
+      if (config.section === 'word' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
           //
           // Mark that we're leaving the scene
@@ -276,7 +273,7 @@ export function sceneMenu(k) {
         })
       }
       
-      if (config.section === 'touch' && !isCompleted) {
+      if (config.section === 'touch' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
           //
           // Mark that we're leaving the scene
@@ -306,7 +303,7 @@ export function sceneMenu(k) {
         })
       }
       
-      if (config.section === 'time' && !isCompleted) {
+      if (config.section === 'time' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
           //
           // Mark that we're leaving the scene
@@ -395,6 +392,49 @@ export function sceneMenu(k) {
     })
     
     //
+    // Create arrows pointing clockwise from one anti-hero to the next
+    //
+    const grayColorHex = '#656565'
+    const grayOutlineColorHex = '#454545'
+    const grayColorRgb = getRGB(k, grayColorHex)
+    const grayOutlineColorRgb = getRGB(k, grayOutlineColorHex)
+    const ARROW_COLOR = k.rgb(grayColorRgb.r, grayColorRgb.g, grayColorRgb.b)  // Same gray color as unselected anti-heroes
+    const ARROW_OUTLINE_COLOR = k.rgb(grayOutlineColorRgb.r, grayOutlineColorRgb.g, grayOutlineColorRgb.b)  // Same gray outline as unselected anti-heroes
+    const ARROW_OPACITY = 1.0
+    const ARROW_WIDTH = 8  // Thick arrows
+    const ARROW_OUTLINE_WIDTH = 3  // Outline width (increased by 1 pixel)
+    const ARROW_OFFSET = 35  // Distance from anti-hero center
+    const ARROWHEAD_SIZE = 22  // Arrowhead size
+    const ARC_RADIUS_OFFSET = 5  // How far the arc curves outward (reduced to bring arrows closer to center)
+    
+    //
+    // Create arrows between anti-heroes in clockwise order
+    // Sort anti-heroes by angle clockwise
+    // Clockwise order: sort by ascending angle (smaller angles first, going clockwise)
+    //
+    const sortedAntiHeroes = [...antiHeroes].sort((a, b) => {
+      //
+      // Calculate angle for each anti-hero relative to center
+      //
+      const angleA = Math.atan2(a.baseY - centerY, a.baseX - centerX)
+      const angleB = Math.atan2(b.baseY - centerY, b.baseX - centerX)
+      //
+      // Normalize angles to 0-2π range
+      //
+      const normalizedA = ((angleA + Math.PI * 2) % (Math.PI * 2))
+      const normalizedB = ((angleB + Math.PI * 2) % (Math.PI * 2))
+      //
+      // Sort ascending for clockwise order (smaller angles first)
+      //
+      return normalizedA - normalizedB
+    })
+    
+    const arrows = sortedAntiHeroes.map((fromAntiHero, i) => {
+      const toAntiHero = sortedAntiHeroes[(i + 1) % sortedAntiHeroes.length]
+      return { fromAntiHero, toAntiHero }
+    })
+    
+    //
     // Scene instance with all state
     //
     const inst = {
@@ -408,6 +448,7 @@ export function sceneMenu(k) {
       title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
+      arrows,  // Store arrows data in instance
       currentSection,
       floatTime: 0,
       floatRadius: FLOAT_RADIUS,
@@ -522,20 +563,46 @@ export function sceneMenu(k) {
       
       //
       // Update section labels: color + outline on hover/completed/current
+      // If section is completed, highlight the NEXT section instead (the one player can play)
       //
+      const sectionOrder = ['time', 'word', 'touch', 'feel', 'mind', 'stress']
+      
       sectionLabels.forEach(entry => {
         const { label, outlines, section, sectionColor, grayColor, isCompleted } = entry
         const isHover = hoveredInst && hoveredInst.section === section
         const isCurrent = inst.currentSection === section
+        
         //
-        // Label should only highlight when hovered or current, NOT when completed
+        // If section is completed, don't highlight it
+        // Instead, check if this is the next section after a completed one
+        // BUT: if currentSection is set (player is playing a section), highlight that section instead
         //
-        const useHighlight = isHover || isCurrent
+        let isNextAfterCompleted = false
+        if (!isCompleted && !inst.currentSection) {
+          //
+          // Only check for "next after completed" if player is not currently playing any section
+          // Check if previous section is completed (this means player can play this section)
+          //
+          const currentIndex = sectionOrder.indexOf(section)
+          const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
+          const previousSection = sectionOrder[previousIndex]
+          const previousEntry = sectionLabels.find(e => e.section === previousSection)
+          if (previousEntry && previousEntry.isCompleted) {
+            isNextAfterCompleted = true
+          }
+        }
+        
+        //
+        // Highlight if: hovered, current, or next after completed (and not completed itself)
+        // Priority: current > hover > next after completed
+        //
+        const useHighlight = !isCompleted && (isCurrent || isHover || isNextAfterCompleted)
+        
         //
         // Special handling for time section: use yellow only when hovered or current
         //
         let targetColor
-        if (section === 'time' && (isHover || isCurrent)) {
+        if (section === 'time' && useHighlight) {
           targetColor = '#FF8C00'  // Anti-hero orange/yellow color (matches hero in time-complete)
         } else {
           targetColor = useHighlight ? sectionColor : grayColor
@@ -553,13 +620,30 @@ export function sceneMenu(k) {
       
       //
       // Change cursor to pointer when hovering over implemented sections
+      // Only if previous section is completed OR if this is the current section being played
       // Don't change cursor if leaving scene
       //
       if (!inst.isLeavingScene) {
         if (hoveredInst) {
+          //
+          // Get previous section in clockwise order
+          //
+          const sectionOrder = ['time', 'word', 'touch', 'feel', 'mind', 'stress']
+          const currentIndex = sectionOrder.indexOf(hoveredInst.section)
+          const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
+          const previousSection = sectionOrder[previousIndex]
+          const previousAntiHero = antiHeroes.find(ah => ah.section === previousSection)
+          const isPreviousCompleted = previousAntiHero ? previousAntiHero.isCompleted : false
+          
+          //
           // Word, touch, and time sections are clickable
+          // Can access if: previous section is completed (or it's the first section) OR if this is the current section being played
+          //
           const isImplementedSection = (hoveredInst.section === 'word' || hoveredInst.section === 'touch' || hoveredInst.section === 'time')
-          if (isImplementedSection && !hoveredInst.isCompleted) {
+          const isCurrentSection = inst.currentSection === hoveredInst.section
+          const canAccess = isCurrentSection || (currentIndex === 0 || isPreviousCompleted)  // Current section is always accessible, or first section, or previous completed
+          
+          if (isImplementedSection && !hoveredInst.isCompleted && canAccess) {
             k.canvas.classList.add('cursor-pointer')
           } else {
             //
@@ -1254,7 +1338,15 @@ function createStars(k, count) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg, stars } = inst
+  const { k, hero, hoveredAntiHero, particlesBg, stars, arrows, centerX, centerY, antiHeroes, sectionLabels } = inst
+  
+  //
+  // Get gray color from first anti-hero (same as inactive anti-heroes use)
+  //
+  const grayColorHex = antiHeroes && antiHeroes.length > 0 ? antiHeroes[0].grayColor : '#656565'  // Body color of inactive anti-heroes
+  const grayOutlineColorHex = '#202020'  // Outline color of inactive anti-heroes
+  const grayColorRgb = getRGB(k, grayColorHex)
+  const grayOutlineColorRgb = getRGB(k, grayOutlineColorHex)
   
   //
   // Draw gray background (same color as level platforms)
@@ -1287,6 +1379,269 @@ function drawScene(inst) {
   // Draw trembling particles
   //
   Particles.draw(particlesBg)
+  
+  //
+  // Draw arrows between anti-heroes in clockwise order (as curved arcs)
+  //
+  if (arrows && arrows.length > 0) {
+    //
+    // IMPORTANT: Anti-hero sprites are drawn with #656565 in canvas (see hero.js:1753, 1788)
+    // But character.color is applied as a TINT on top of the sprite
+    // For inactive anti-heroes, targetColor is grayColor (#656565) and it's applied as:
+    // const rgb = getRGB(k, targetColor) -> k.rgb(101, 101, 101)
+    // antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b) -> k.rgb(101, 101, 101)
+    // 
+    // This tint multiplies with the sprite color, so the final color is NOT #656565!
+    // Let's use a LIGHTER color for the arrow to compensate for the multiplication
+    //
+    const inactiveGrayColorHex = '#454545'  // Lighter gray to compensate for tint multiplication
+    const [r, g, b] = parseHex(inactiveGrayColorHex)
+    //
+    // Create color directly from hex values
+    //
+    const ARROW_COLOR = k.rgb(r, g, b)  // Lighter gray to match final displayed color
+    const ARROW_OUTLINE_COLOR = k.rgb(grayOutlineColorRgb.r, grayOutlineColorRgb.g, grayOutlineColorRgb.b)  // Same gray outline as unselected anti-heroes
+    const ARROW_OPACITY = 1.0
+    const ARROW_WIDTH = 8  // Thick arrows
+    const ARROW_OUTLINE_WIDTH = 3  // Outline width (increased by 1 pixel)
+    const ARROW_START_OFFSET = 120  // Distance from anti-hero where arrow starts (increased for shorter arrows)
+    const ARROW_END_OFFSET = 120  // Distance to anti-hero where arrow ends (increased for shorter arrows)
+    const ARROWHEAD_SIZE = 22  // Arrowhead size
+    const ARC_RADIUS_OFFSET = 5  // How far the arc curves outward (reduced to bring arrows closer to center)
+    const ARC_SEGMENTS = 30  // Number of segments for smooth arc
+    
+    arrows.forEach(({ fromAntiHero, toAntiHero }) => {
+      //
+      // Only draw arrow if the source anti-hero's section is completed
+      //
+      if (!fromAntiHero.isCompleted) {
+        return
+      }
+      
+      //
+      // Use ARROW_COLOR directly (same base color as inactive anti-hero sprites)
+      //
+      const arrowBodyColor = ARROW_COLOR
+      const arrowOutlineColor = ARROW_OUTLINE_COLOR
+      
+      //
+      // Get current positions of anti-heroes
+      //
+      const fromX = fromAntiHero.character.pos.x
+      const fromY = fromAntiHero.character.pos.y
+      const toX = toAntiHero.character.pos.x
+      const toY = toAntiHero.character.pos.y
+      
+      //
+      // Calculate angles from center to each anti-hero
+      //
+      const fromAngle = Math.atan2(fromY - centerY, fromX - centerX)
+      const toAngle = Math.atan2(toY - centerY, toX - centerX)
+      
+      //
+      // Calculate distance from center to anti-heroes
+      //
+      const fromDist = Math.sqrt((fromX - centerX) ** 2 + (fromY - centerY) ** 2)
+      const toDist = Math.sqrt((toX - centerX) ** 2 + (toY - centerY) ** 2)
+      const avgDist = (fromDist + toDist) / 2
+      
+      //
+      // Normalize angles to 0-2π range
+      //
+      const normalizedFrom = ((fromAngle + Math.PI * 2) % (Math.PI * 2))
+      const normalizedTo = ((toAngle + Math.PI * 2) % (Math.PI * 2))
+      
+      //
+      // Calculate angle difference for clockwise direction
+      //
+      let angleDiff = normalizedTo - normalizedFrom
+      if (angleDiff < 0) {
+        angleDiff += Math.PI * 2
+      }
+      //
+      // If angle is more than π, we're going the long way - take the shorter path
+      //
+      if (angleDiff > Math.PI) {
+        angleDiff = angleDiff - Math.PI * 2
+      }
+      //
+      // Ensure angle is positive (clockwise direction)
+      //
+      if (angleDiff < 0) {
+        angleDiff = Math.abs(angleDiff)
+      }
+      
+      //
+      // Calculate start and end angles for the arrow
+      // Arrow starts at some distance from first anti-hero (going clockwise)
+      // Arrow ends at some distance before second anti-hero
+      //
+      // Convert pixel offsets to angular offsets
+      const startAngleOffset = ARROW_START_OFFSET / avgDist
+      const endAngleOffset = ARROW_END_OFFSET / avgDist
+      
+      // Calculate start angle (from first anti-hero + offset)
+      const arrowStartAngle = normalizedFrom + startAngleOffset
+      // Calculate end angle (to second anti-hero - offset)
+      const arrowEndAngle = normalizedTo - endAngleOffset
+      
+      //
+      // Calculate actual angle span of the arrow (clockwise)
+      //
+      let arrowAngleSpan = arrowEndAngle - arrowStartAngle
+      // Normalize to 0-2π range
+      if (arrowAngleSpan < 0) {
+        arrowAngleSpan += Math.PI * 2
+      }
+      // If span is more than π, we're going the wrong way
+      if (arrowAngleSpan > Math.PI) {
+        arrowAngleSpan = arrowAngleSpan - Math.PI * 2
+      }
+      // Ensure positive (clockwise)
+      if (arrowAngleSpan < 0) {
+        arrowAngleSpan = Math.abs(arrowAngleSpan)
+      }
+      //
+      // Ensure arrow doesn't span more than the space between anti-heroes
+      //
+      const maxSpan = Math.PI / 3  // 60 degrees for 6 anti-heroes
+      if (arrowAngleSpan > maxSpan) {
+        arrowAngleSpan = maxSpan
+      }
+      
+      //
+      // Calculate arc radius (closer to center than anti-heroes)
+      //
+      const arcRadius = avgDist - 40 + ARC_RADIUS_OFFSET  // Subtract more offset to bring arrows closer to center
+      
+      //
+      // Draw arc using multiple line segments
+      // Start from arrowStartAngle and go clockwise by arrowAngleSpan
+      //
+      const arcPoints = []
+      const numSegments = Math.max(8, Math.floor(ARC_SEGMENTS * (arrowAngleSpan / (Math.PI / 3))))
+      for (let i = 0; i <= numSegments; i++) {
+        const t = i / numSegments
+        const currentAngle = arrowStartAngle + arrowAngleSpan * t
+        const x = centerX + Math.cos(currentAngle) * arcRadius
+        const y = centerY + Math.sin(currentAngle) * arcRadius
+        arcPoints.push({ x, y })
+      }
+      
+      //
+      // Draw arc segments with outline
+      //
+      for (let i = 0; i < arcPoints.length - 1; i++) {
+        //
+        // Draw outline first (thicker line)
+        //
+        k.drawLine({
+          p1: k.vec2(arcPoints[i].x, arcPoints[i].y),
+          p2: k.vec2(arcPoints[i + 1].x, arcPoints[i + 1].y),
+          width: ARROW_WIDTH + ARROW_OUTLINE_WIDTH * 2,
+          color: arrowOutlineColor,
+          opacity: ARROW_OPACITY
+        })
+        //
+        // Draw main arrow line
+        //
+        k.drawLine({
+          p1: k.vec2(arcPoints[i].x, arcPoints[i].y),
+          p2: k.vec2(arcPoints[i + 1].x, arcPoints[i + 1].y),
+          width: ARROW_WIDTH,
+          color: arrowBodyColor,
+          opacity: ARROW_OPACITY
+        })
+      }
+      
+      //
+      // Draw sharp arrowhead at the end (pointing to next anti-hero)
+      // Position it BEYOND the end of the arc to make it appear at the actual end
+      //
+      const lastPoint = arcPoints[arcPoints.length - 1]
+      const secondLastPoint = arcPoints[arcPoints.length - 2]
+      
+      //
+      // Calculate the direction angle of the arrow at the end
+      //
+      const arrowAngle = Math.atan2(
+        lastPoint.y - secondLastPoint.y,
+        lastPoint.x - secondLastPoint.x
+      )
+      
+      //
+      // Move the tip point forward along the arc direction
+      // This positions the triangle at the actual end of the visible arc
+      //
+      const tipOffset = ARROW_WIDTH + ARROW_OUTLINE_WIDTH  // Move tip forward more to align with arc end
+      const actualTipX = lastPoint.x + Math.cos(arrowAngle) * tipOffset
+      const actualTipY = lastPoint.y + Math.sin(arrowAngle) * tipOffset
+      
+      //
+      // Create triangle pointing forward
+      // Make it blunter by increasing the spread angle to π/6 (30 degrees on each side)
+      //
+      const baseAngle = arrowAngle + Math.PI  // 180 degrees back
+      const spreadAngle = Math.PI / 6  // 30 degrees spread (blunter triangle)
+      
+      //
+      // Calculate base points: go back from tip, then spread left/right
+      //
+      const baseLeftAngle = baseAngle - spreadAngle
+      const baseRightAngle = baseAngle + spreadAngle
+      
+      //
+      // Tip point is pushed forward from the last arc point
+      //
+      const tipPoint = k.vec2(actualTipX, actualTipY)
+      const baseLeft = k.vec2(
+        actualTipX + Math.cos(baseLeftAngle) * ARROWHEAD_SIZE,
+        actualTipY + Math.sin(baseLeftAngle) * ARROWHEAD_SIZE
+      )
+      const baseRight = k.vec2(
+        actualTipX + Math.cos(baseRightAngle) * ARROWHEAD_SIZE,
+        actualTipY + Math.sin(baseRightAngle) * ARROWHEAD_SIZE
+      )
+      
+      //
+      // Outline triangle (larger) - ensure tip is also outlined
+      //
+      const outlineSize = ARROWHEAD_SIZE + ARROW_OUTLINE_WIDTH
+      const outlineLeft = k.vec2(
+        actualTipX + Math.cos(baseLeftAngle) * outlineSize,
+        actualTipY + Math.sin(baseLeftAngle) * outlineSize
+      )
+      const outlineRight = k.vec2(
+        actualTipX + Math.cos(baseRightAngle) * outlineSize,
+        actualTipY + Math.sin(baseRightAngle) * outlineSize
+      )
+      
+      //
+      // Extend tip forward for outline to ensure tip is outlined
+      //
+      const outlineTipX = actualTipX + Math.cos(arrowAngle) * ARROW_OUTLINE_WIDTH
+      const outlineTipY = actualTipY + Math.sin(arrowAngle) * ARROW_OUTLINE_WIDTH
+      const outlineTipPoint = k.vec2(outlineTipX, outlineTipY)
+      
+      //
+      // Draw filled polygon for outline (black) - includes extended tip
+      //
+      k.drawPolygon({
+        pts: [outlineTipPoint, outlineLeft, outlineRight],
+        color: arrowOutlineColor,
+        opacity: ARROW_OPACITY
+      })
+      
+      //
+      // Draw main filled triangle (gray)
+      //
+      k.drawPolygon({
+        pts: [tipPoint, baseLeft, baseRight],
+        color: arrowBodyColor,
+        opacity: ARROW_OPACITY
+      })
+    })
+  }
   
   //
   // Draw lightning between hero and hovered anti-hero

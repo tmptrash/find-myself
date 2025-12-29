@@ -3,15 +3,16 @@ import { CFG } from '../cfg.js'
 /**
  * Creates tree roots that grow from the bottom platform upward
  * Uses organic growth algorithm for realistic root structures
+ * Pre-renders trees to sprites for performance
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.floorY - Y position of the floor/platform
  * @param {number} config.leftMargin - Left margin of playable area
  * @param {number} config.rightMargin - Right margin of playable area
  * @param {number} config.screenWidth - Screen width
- * @returns {Object} Tree roots instance
+ * @returns {Promise<Object>} Tree roots instance
  */
-export function create(config) {
+export async function create(config) {
   const { k, floorY, leftMargin, rightMargin, screenWidth } = config
   
   //
@@ -348,14 +349,89 @@ export function create(config) {
       leafClusters.push(leaves)
     })
     
+    //
+    // Pre-render tree to an offscreen canvas for performance
+    //
+    const treeCanvas = document.createElement('canvas')
+    const treeCtx = treeCanvas.getContext('2d')
+    
+    //
+    // Calculate canvas size based on tree bounds
+    //
+    const minX = Math.min(...allRootSegments.map(s => Math.min(s.startX, s.endX)), ...allBranchSegments.map(s => Math.min(s.startX, s.endX)))
+    const maxX = Math.max(...allRootSegments.map(s => Math.max(s.startX, s.endX)), ...allBranchSegments.map(s => Math.max(s.startX, s.endX)))
+    const minY = Math.min(...allBranchSegments.map(s => Math.min(s.startY, s.endY)))
+    const maxY = Math.max(...allRootSegments.map(s => Math.max(s.startY, s.endY)))
+    
+    //
+    // Add padding for leaves (which extend beyond branches)
+    //
+    const padding = 250
+    const canvasWidth = (maxX - minX) + padding * 2
+    const canvasHeight = (maxY - minY) + padding * 2
+    
+    treeCanvas.width = canvasWidth
+    treeCanvas.height = canvasHeight
+    
+    //
+    // Offset to transform world coordinates to canvas coordinates
+    //
+    const offsetX = -minX + padding
+    const offsetY = -minY + padding
+    
+    //
+    // Draw root segments to canvas
+    //
+    allRootSegments.forEach(segment => {
+      const opacity = 0.75 - segment.depth * 0.08
+      treeCtx.strokeStyle = `rgba(${rootColor.r}, ${rootColor.g}, ${rootColor.b}, ${Math.max(0.3, opacity)})`
+      treeCtx.lineWidth = segment.width
+      treeCtx.lineCap = 'round'
+      
+      treeCtx.beginPath()
+      treeCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
+      treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
+      treeCtx.stroke()
+    })
+    
+    //
+    // Draw leaf clusters to canvas
+    //
+    leafClusters.forEach(cluster => {
+      cluster.forEach(leaf => {
+        drawLeafToCanvas(treeCtx, leaf.x + offsetX, leaf.y + offsetY, leaf.size, leaf.rotation, leaf.color, leaf.opacity)
+      })
+    })
+    
+    //
+    // Draw branch segments to canvas
+    //
+    allBranchSegments.forEach(segment => {
+      const opacity = 0.7 - segment.depth * 0.07
+      treeCtx.strokeStyle = `rgba(${branchColor.r}, ${branchColor.g}, ${branchColor.b}, ${Math.max(0.3, opacity)})`
+      treeCtx.lineWidth = segment.width
+      treeCtx.lineCap = 'round'
+      
+      treeCtx.beginPath()
+      treeCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
+      treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
+      treeCtx.stroke()
+    })
+    
+    //
+    // Convert canvas to data URL
+    //
+    const dataUrl = treeCanvas.toDataURL()
+    const spriteName = `tree-${index}`
+    
     return {
       x: rootX,
-      rootSegments: allRootSegments,
-      branchSegments: allBranchSegments,
-      leafClusters,
+      spriteName,
+      dataUrl,
+      minX,
+      minY,
+      padding,
       centerY,
-      branchColor,
-      rootColor,
       trunkTop: { x: trunkX, y: trunkY },
       trunkBottom: { x: rootX, y: centerY },
       noteFrequency: notes[index],
@@ -365,6 +441,16 @@ export function create(config) {
       swayOffset: Math.random() * Math.PI * 2
     }
   })
+  
+  //
+  // Load all sprites and wait for completion
+  //
+  await Promise.all(roots.map(root => {
+    return new Promise((resolve) => {
+      k.loadSprite(root.spriteName, root.dataUrl)
+      setTimeout(resolve, 50)
+    })
+  }))
   
   return {
     k,
@@ -378,6 +464,45 @@ export function create(config) {
  * Draw tree roots
  * @param {Object} inst - Tree roots instance
  */
+/**
+ * Draw a single leaf to canvas context
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x - Center X position
+ * @param {number} y - Center Y position
+ * @param {number} size - Leaf size
+ * @param {number} angle - Rotation angle
+ * @param {Object} color - Leaf color (r, g, b)
+ * @param {number} opacity - Leaf opacity
+ */
+function drawLeafToCanvas(ctx, x, y, size, angle, color, opacity) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(angle)
+  
+  //
+  // Draw filled leaf shape
+  //
+  ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${opacity})`
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.quadraticCurveTo(-size * 0.6, -size * 0.3, 0, -size)
+  ctx.quadraticCurveTo(size * 0.6, -size * 0.3, 0, 0)
+  ctx.closePath()
+  ctx.fill()
+  
+  //
+  // Draw center vein
+  //
+  ctx.strokeStyle = `rgba(40, 60, 40, ${0.35 * opacity})`
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(0, -size)
+  ctx.stroke()
+  
+  ctx.restore()
+}
+
 /**
  * Draw a single leaf using quadratic curves
  * @param {Object} k - Kaplay instance
@@ -546,9 +671,9 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
     if (isTouchingNow && !root.isTouching) {
       playNote(inst, root.noteFrequency)
       //
-      // Start tree shake animation
+      // Start tree shake animation (reduced amplitude)
       //
-      root.touchShake = 8
+      root.touchShake = 2
     }
     
     //
@@ -583,91 +708,21 @@ export function draw(inst) {
   const time = k.time()
   
   roots.forEach(root => {
-    const sway = Math.sin(time * root.swaySpeed + root.swayOffset) * 2
     //
-    // Add touch shake (oscillating left-right)
+    // Only shake when touched (no natural sway)
     //
     const touchShakeOffset = Math.sin(time * 30) * root.touchShake
-    const totalSway = sway + touchShakeOffset
     
     //
-    // Draw root segments (growing downward)
-    // Roots shake very little (close to base)
+    // Draw pre-rendered tree sprite
+    // Sprite's top-left corner is at (minX - padding, minY - padding)
     //
-    root.rootSegments.forEach(segment => {
-      //
-      // Calculate opacity based on depth (like in original: 0.75 - depth * 0.08)
-      //
-      const opacity = 0.75 - segment.depth * 0.08
-      
-      //
-      // Roots shake minimally (10% of total sway)
-      //
-      k.drawLine({
-        p1: k.vec2(segment.startX + totalSway * 0.1, segment.startY),
-        p2: k.vec2(segment.endX + totalSway * 0.1, segment.endY),
-        width: segment.width,
-        color: root.rootColor,
-        opacity: Math.max(0.3, opacity)
-      })
-    })
-    
-    //
-    // Draw leaf clusters (behind branches)
-    // Leaves shake the most (far from base)
-    //
-    root.leafClusters.forEach(cluster => {
-      cluster.forEach(leaf => {
-        //
-        // Calculate shake based on leaf height (distance from base)
-        // Higher leaves shake more
-        //
-        const leafHeightFromBase = root.centerY - leaf.y
-        const heightFactor = Math.max(0, leafHeightFromBase / 400)  // Normalize by expected max height
-        const leafShake = totalSway * (1.0 + heightFactor * 2.0)  // Leaves shake 1x-3x more
-        
-        drawLeaf(
-          k,
-          leaf.x + leafShake,
-          leaf.y,
-          leaf.size,
-          leaf.rotation,
-          leaf.color,
-          leaf.opacity
-        )
-      })
-    })
-    
-    //
-    // Draw branch segments (growing upward - tree structure)
-    // Shake increases with height from base
-    //
-    root.branchSegments.forEach(segment => {
-      //
-      // Calculate opacity based on depth (0.7 - depth * 0.07 like in example)
-      //
-      const opacity = 0.7 - segment.depth * 0.07
-      
-      //
-      // Apply more sway to higher parts of tree
-      // Height factor: 0 at base (centerY), 1 at ~200px above
-      //
-      const heightFromBase = root.centerY - segment.startY
-      const heightFactor = Math.max(0, heightFromBase / 200)
-      //
-      // Trunk (near base): 0.2x sway
-      // Middle branches: 0.5-1.5x sway
-      // Top branches: 1.5-2.5x sway
-      //
-      const segmentSway = totalSway * (0.2 + heightFactor * 1.5)
-      
-      k.drawLine({
-        p1: k.vec2(segment.startX + segmentSway, segment.startY),
-        p2: k.vec2(segment.endX + segmentSway, segment.endY),
-        width: segment.width,
-        color: root.branchColor,
-        opacity: Math.max(0.3, opacity)
-      })
+    k.drawSprite({
+      sprite: root.spriteName,
+      pos: k.vec2(
+        root.minX - root.padding + touchShakeOffset,
+        root.minY - root.padding
+      )
     })
   })
 }

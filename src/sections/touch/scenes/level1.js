@@ -27,7 +27,6 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 // Anti-hero spawn position
 //
-const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
 const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
 const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
 
@@ -37,7 +36,7 @@ const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
  * @param {Object} k - Kaplay instance
  */
 export function sceneLevel1(k) {
-  k.scene("level-touch.1", () => {
+  k.scene("level-touch.1", async () => {
     //
     // Save progress
     //
@@ -166,9 +165,9 @@ export function sceneLevel1(k) {
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     //
-    // Create tree roots
+    // Create tree roots (async - wait for sprites to load)
     //
-    const treeRootsInst = TreeRoots.create({
+    const treeRootsInst = await TreeRoots.create({
       k,
       floorY: FLOOR_Y,
       leftMargin: LEFT_MARGIN,

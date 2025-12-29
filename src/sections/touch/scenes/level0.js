@@ -988,7 +988,7 @@ export function sceneLevel0(k) {
     // Big bug constants (needed for bug4 creation)
     //
     const BIG_BUG_COLOR = "#1A1C1A"
-    const BIG_BUG_Z_INDEX = 8  // Above all trees (trees are z=2 and z=7), below player (z=10)
+    const BIG_BUG_Z_INDEX = 20  // In front of static trees (z=7), behind dynamic trees (z=25), below player (z=10)
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
     const BIG_BUG_CRAWL_SPEED = 4

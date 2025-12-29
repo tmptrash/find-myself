@@ -6,6 +6,7 @@ import * as Bugs from '../components/bugs.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 //
 // Platform dimensions (minimal margins for large play area)
@@ -17,7 +18,7 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 // Platform dimensions
 //
-const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
+const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN - 250
 //
 // Hero spawn positions
 //
@@ -116,60 +117,15 @@ export function sceneLevel1(k) {
       sideWallWidth: LEFT_MARGIN
     })
     //
-    // Bottom platform (full width)
+    // Bottom platform (full width) - raised by 250px, but extends to bottom
     //
     k.add([
-      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
+      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN + 250),
+      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - (BOTTOM_MARGIN + 250) / 2),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
       k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Create middle platforms for platforming challenge
-    //
-    const platformColor = k.rgb(31, 31, 31)
-    const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-    const playableHeight = CFG.visual.screen.height - TOP_MARGIN - BOTTOM_MARGIN
-    //
-    // Platform 1: Low left platform
-    //
-    k.add([
-      k.rect(180, 20),
-      k.pos(LEFT_MARGIN + 200, FLOOR_Y - 120),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(platformColor),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Platform 2: Middle center platform
-    //
-    k.add([
-      k.rect(200, 20),
-      k.pos(CFG.visual.screen.width / 2, FLOOR_Y - 240),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(platformColor),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Platform 3: High right platform (near anti-hero)
-    //
-    k.add([
-      k.rect(180, 20),
-      k.pos(CFG.visual.screen.width - RIGHT_MARGIN - 200, FLOOR_Y - 360),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(platformColor),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -210,40 +166,40 @@ export function sceneLevel1(k) {
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     //
+    // Create tree roots
+    //
+    const treeRootsInst = TreeRoots.create({
+      k,
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN,
+      screenWidth: CFG.visual.screen.width
+    })
+    //
+    // Add custom drawing for tree roots (above platform z=15, but behind player z=10)
+    // Set z=16 so roots draw on top of platform
+    //
+    k.add([
+      k.z(16),
+      {
+        draw() {
+          TreeRoots.draw(treeRootsInst)
+        }
+      }
+    ])
+    //
     // Create bugs (obstacles)
     //
     //
-    // Bug 1: Patrol on floor (left area)
+    // Bug 1: Patrol on floor
     //
     Bugs.create({
       k,
       x: LEFT_MARGIN + 350,
       y: FLOOR_Y - 40,
       patrolStart: LEFT_MARGIN + 250,
-      patrolEnd: LEFT_MARGIN + 450,
+      patrolEnd: CFG.visual.screen.width - RIGHT_MARGIN - 250,
       speed: 80
-    })
-    //
-    // Bug 2: Patrol on first platform
-    //
-    Bugs.create({
-      k,
-      x: LEFT_MARGIN + 200,
-      y: FLOOR_Y - 160,
-      patrolStart: LEFT_MARGIN + 120,
-      patrolEnd: LEFT_MARGIN + 280,
-      speed: 60
-    })
-    //
-    // Bug 3: Patrol on middle platform
-    //
-    Bugs.create({
-      k,
-      x: CFG.visual.screen.width / 2,
-      y: FLOOR_Y - 280,
-      patrolStart: CFG.visual.screen.width / 2 - 80,
-      patrolEnd: CFG.visual.screen.width / 2 + 80,
-      speed: 70
     })
     //
     // Create dust particles
@@ -279,10 +235,18 @@ export function sceneLevel1(k) {
     //
     const fpsCounter = FpsCounter.create({ k })
     //
-    // Update FPS counter
+    // Update FPS counter and check tree collisions
     //
     k.onUpdate(() => {
       FpsCounter.onUpdate(fpsCounter)
+      //
+      // Update tree shake animations
+      //
+      TreeRoots.onUpdate(treeRootsInst)
+      //
+      // Check if hero is touching tree trunks
+      //
+      TreeRoots.checkHeroTreeCollision(treeRootsInst, heroInst.character)
     })
     //
     // Create level transition for next level

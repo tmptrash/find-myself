@@ -20,20 +20,23 @@ export function create(config) {
   const rand = (min, max) => min + Math.random() * (max - min)
   
   //
-  // Create 4 tree roots closer together
-  // Distribute within 30%-70% of playable area (instead of full width)
+  // Create 7 tree roots with equal spacing between them
+  // Distribute within 25%-75% of playable area (50% span)
   //
   const playableWidth = screenWidth - leftMargin - rightMargin
   const startOffset = 0.25  // Start at 25% from left
   const endOffset = 0.75    // End at 75% from left
-  const treeSpan = endOffset - startOffset
+  const numTrees = 7
   
-  const rootPositions = [
-    leftMargin + playableWidth * (startOffset + treeSpan * 0.125),  // ~27.5%
-    leftMargin + playableWidth * (startOffset + treeSpan * 0.375),  // ~43.75%
-    leftMargin + playableWidth * (startOffset + treeSpan * 0.625),  // ~56.25%
-    leftMargin + playableWidth * (startOffset + treeSpan * 0.875)   // ~72.5%
-  ]
+  //
+  // Generate evenly spaced positions
+  //
+  const rootPositions = []
+  for (let i = 0; i < numTrees; i++) {
+    const t = i / (numTrees - 1)  // 0 to 1
+    const position = leftMargin + playableWidth * (startOffset + (endOffset - startOffset) * t)
+    rootPositions.push(position)
+  }
   
   //
   // Center Y position is exactly at floorY (top of bottom platform)
@@ -41,9 +44,17 @@ export function create(config) {
   const centerY = floorY
   
   //
-  // Musical notes (C, D, E, F) - assign one note per tree
+  // Musical notes (C, D, E, F, G, A, B) - assign one note per tree
   //
-  const notes = [261.63, 293.66, 329.63, 349.23]  // C4, D4, E4, F4 frequencies
+  const notes = [
+    261.63,  // C4 (до)
+    293.66,  // D4 (ре)
+    329.63,  // E4 (ми)
+    349.23,  // F4 (фа)
+    392.00,  // G4 (соль)
+    440.00,  // A4 (ля)
+    493.88   // B4 (си)
+  ]
   
   const roots = rootPositions.map((rootX, index) => {
     //
@@ -507,8 +518,8 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
   
   const heroX = heroCharacter.pos.x
   const heroY = heroCharacter.pos.y
-  const heroWidth = 30  // Approximate hero width
-  const trunkWidth = 15  // Trunk collision width
+  const heroWidth = 60  // Increased width for better detection during flight
+  const trunkWidth = 25  // Increased trunk collision width
   
   roots.forEach(root => {
     //
@@ -518,8 +529,11 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
     
     //
     // Check if hero is vertically within trunk range
+    // Extend the range slightly to catch fast-moving heroes
     //
-    const isInTrunkHeight = heroY >= root.trunkTop.y && heroY <= root.trunkBottom.y
+    const verticalMargin = 50  // Extra margin to catch heroes in flight
+    const isInTrunkHeight = heroY >= (root.trunkTop.y - verticalMargin) && 
+                            heroY <= (root.trunkBottom.y + verticalMargin)
     
     //
     // Currently touching trunk

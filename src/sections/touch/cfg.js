@@ -13,7 +13,13 @@ export const TOUCH_CFG = {
     //
     colors: {
       background: "#2A2A2A",         // Darker gray background
-      platform: "#1F1F1F"            // Dark platforms
+      platform: "#1F1F1F",           // Dark platforms
+      sections: {
+        touch: {
+          body: "#FFC0CB",           // Pink - soft, tactile, skin-like (from global CFG)
+          antiHero: "#D8A0AB"        // Darker pink for anti-hero (darker shade of body color)
+        }
+      }
     },
     //
     // Game area configuration (larger than word section)

@@ -20,7 +20,8 @@ const LEVEL_TRANSITIONS = {
   'level-time.2': 'level-time.3',
   'level-time.3': 'time-complete',
   'time-complete': 'menu',
-  'level-touch.0': 'menu'
+  'level-touch.0': 'level-touch.1',
+  'level-touch.1': 'menu'
 }
 
 /**
@@ -85,7 +86,8 @@ const LEVEL_SUBTITLES = {
   'level-time.1': 'do not touch the one',
   'level-time.2': 'digits sum even safe, sum odd deadly',
   'level-time.3': 'sections switch controls - watch the clocks',
-  'level-touch.0': 'gather what crawls together to reach what stands above'
+  'level-touch.0': 'gather what crawls together to reach what stands above',
+  'level-touch.1': 'the path is yours to climb'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

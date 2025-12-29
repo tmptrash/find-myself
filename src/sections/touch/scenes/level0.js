@@ -6,6 +6,7 @@ import * as Bugs from '../components/bugs.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
+import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 //
 // Platform dimensions (minimal margins for large play area)
@@ -106,6 +107,18 @@ export function sceneLevel0(k) {
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
+    //
+    // Create level indicator (TOUCH letters)
+    //
+    LevelIndicator.create({
+      k,
+      levelNumber: 0,
+      activeColor: '#8B5A50',
+      inactiveColor: '#808080',
+      completedColor: '#8B5A50',
+      topPlatformHeight: TOP_MARGIN,
+      sideWallWidth: LEFT_MARGIN
+    })
     //
     // Bottom platform (full width)
     //

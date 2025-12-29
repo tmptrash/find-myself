@@ -297,9 +297,21 @@ export function sceneMenu(k) {
           kidsMusic.stop()
           
           //
-          // Go to touch level 0 with transition
+          // Determine which level to go to
           //
-          createLevelTransition(k, 'menu-touch')
+          const lastLevel = getLastLevel()
+          
+          if (lastLevel && lastLevel.startsWith('level-touch.')) {
+            //
+            // Go to the last played touch level directly (no transition)
+            //
+            k.go(lastLevel)
+          } else {
+            //
+            // Go to touch level 0 with transition
+            //
+            createLevelTransition(k, 'menu-touch')
+          }
         })
       }
       

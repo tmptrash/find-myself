@@ -10,6 +10,7 @@ import { sceneLevel3 } from "./sections/word/scenes/level3.js"
 import { sceneLevel4 } from "./sections/word/scenes/level4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
 import { sceneLevel0 as sceneTouchLevel0 } from "./sections/touch/scenes/level0.js"
+import { sceneLevel1 as sceneTouchLevel1 } from "./sections/touch/scenes/level1.js"
 import { sceneLevel0 as sceneTimeLevel0 } from "./sections/time/scenes/level0.js"
 import { sceneLevel1 as sceneTimeLevel1 } from "./sections/time/scenes/level1.js"
 import { sceneLevel2 as sceneTimeLevel2 } from "./sections/time/scenes/level2.js"
@@ -70,6 +71,7 @@ sceneLevel3(k)
 sceneLevel4(k)
 sceneWordComplete(k)
 sceneTouchLevel0(k)
+sceneTouchLevel1(k)
 sceneTimeLevel0(k)
 sceneTimeLevel1(k)
 sceneTimeLevel2(k)

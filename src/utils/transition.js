@@ -84,7 +84,7 @@ const LEVEL_SUBTITLES = {
   'level-word.4': 'words that kill',
   'level-time.0': 'time never waits, and neither should you',
   'level-time.1': 'do not touch the one',
-  'level-time.2': 'digits sum even safe, sum odd deadly',
+  'level-time.2': 'digits sum even safe, sum odd deadly. you have 3 attempts',
   'level-time.3': 'sections switch controls - watch the clocks',
   'level-touch.0': 'gather what crawls together to reach what stands above',
   'level-touch.1': 'the path is yours to climb'

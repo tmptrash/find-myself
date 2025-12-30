@@ -270,6 +270,81 @@ function getPlatformPosition(index, k) {
 }
 
 /**
+ * Show attempts text above hero
+ * @param {Object} inst - Platform system instance
+ */
+function showAttemptsText(inst) {
+  const { k, hero, attemptsRemaining } = inst
+  
+  //
+  // Create text content in English (short version)
+  // Ensure non-negative display and correct grammar (0 uses plural "lives")
+  //
+  const displayLives = Math.max(0, attemptsRemaining)
+  const textContent = `${displayLives} ${displayLives === 1 ? 'life' : 'lives'} left`
+  
+  //
+  // Remove existing text if it exists
+  //
+  if (inst.attemptsText && inst.attemptsText.exists()) {
+    if (inst.attemptsText.outlineTexts) {
+      inst.attemptsText.outlineTexts.forEach(outlineText => {
+        if (outlineText.exists()) {
+          k.destroy(outlineText)
+        }
+      })
+    }
+    k.destroy(inst.attemptsText)
+  }
+  
+  //
+  // Create text above hero
+  //
+  const textY = hero.character.pos.y - 80
+  const textX = hero.character.pos.x
+  
+  //
+  // Create text with outline
+  //
+  const outlineOffsets = [
+    [-1, -1], [0, -1], [1, -1],
+    [-1, 0],           [1, 0],
+    [-1, 1],  [0, 1],  [1, 1]
+  ]
+  
+  const outlineTexts = outlineOffsets.map(([ox, oy]) => {
+    return k.add([
+      k.text(textContent, {
+        size: 24,
+        font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+        align: "center"
+      }),
+      k.pos(textX + ox, textY + oy),
+      k.anchor("center"),
+      k.color(0, 0, 0),  // Black outline
+      k.z(CFG.visual.zIndex.ui)
+    ])
+  })
+  
+  inst.attemptsText = k.add([
+    k.text(textContent, {
+      size: 24,
+      font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+      align: "center"
+    }),
+    k.pos(textX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),  // White text
+    k.z(CFG.visual.zIndex.ui),
+    {
+      outlineTexts: outlineTexts,
+      lifetime: 0,
+      maxLifetime: 2.0  // Show for 2 seconds
+    }
+  ])
+}
+
+/**
  * Creates dynamic platform system
  * @param {Object} k - Kaplay instance
  * @param {Object} sound - Sound instance
@@ -315,7 +390,17 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     currentPlatformIndex,
     nextPlatform,
     globalTime: 0,  // Global time in seconds that all platforms sync to
-    globalTimer: 0  // Timer to track seconds
+    globalTimer: 0,  // Timer to track seconds
+    attemptsRemaining: 3,  // Number of wrong platform attempts remaining (starts at 3)
+    attemptsText: null,  // Text object showing remaining attempts
+    lastErrorTime: 0  // Track when last error occurred to prevent multiple triggers
+  }
+  
+  //
+  // Ensure attempts counter is properly initialized
+  //
+  if (inst.attemptsRemaining <= 0 || inst.attemptsRemaining > 3) {
+    inst.attemptsRemaining = 3
   }
   //
   // DEBUG: Create all platforms at once for visualization
@@ -356,6 +441,72 @@ function createPlatformSystem(k, sound, hero, antiHero) {
   // Update function called every frame
   //
   k.onUpdate(() => {
+    //
+    // Update attempts text position and lifetime
+    //
+    if (inst.attemptsText && inst.attemptsText.exists()) {
+      //
+      // Follow hero position
+      //
+      const textY = hero.character.pos.y - 80
+      const textX = hero.character.pos.x
+      inst.attemptsText.pos.x = textX
+      inst.attemptsText.pos.y = textY
+      
+      //
+      // Update outline texts position
+      //
+      if (inst.attemptsText.outlineTexts) {
+        const outlineOffsets = [
+          [-1, -1], [0, -1], [1, -1],
+          [-1, 0],           [1, 0],
+          [-1, 1],  [0, 1],  [1, 1]
+        ]
+        inst.attemptsText.outlineTexts.forEach((outlineText, i) => {
+          if (outlineText.exists()) {
+            const [ox, oy] = outlineOffsets[i]
+            outlineText.pos.x = textX + ox
+            outlineText.pos.y = textY + oy
+          }
+        })
+      }
+      
+      //
+      // Update lifetime and fade out
+      //
+      inst.attemptsText.lifetime += k.dt()
+      const progress = inst.attemptsText.lifetime / inst.attemptsText.maxLifetime
+      
+      if (progress >= 1.0) {
+        //
+        // Remove text after max lifetime
+        //
+        if (inst.attemptsText.outlineTexts) {
+          inst.attemptsText.outlineTexts.forEach(outlineText => {
+            if (outlineText.exists()) {
+              k.destroy(outlineText)
+            }
+          })
+        }
+        k.destroy(inst.attemptsText)
+        inst.attemptsText = null
+      } else if (progress > 0.7) {
+        //
+        // Fade out in last 30% of lifetime
+        //
+        const fadeProgress = (progress - 0.7) / 0.3
+        const opacity = 1 - fadeProgress
+        inst.attemptsText.opacity = opacity
+        if (inst.attemptsText.outlineTexts) {
+          inst.attemptsText.outlineTexts.forEach(outlineText => {
+            if (outlineText.exists()) {
+              outlineText.opacity = opacity
+            }
+          })
+        }
+      }
+    }
+    
     //
     // Update global timer
     //
@@ -439,12 +590,70 @@ function createPlatformSystem(k, sound, hero, antiHero) {
         const landingTime = inst.nextPlatform.inst.currentTime || inst.nextPlatform.inst.initialTime
         const isSafe = isSumEven(landingTime)
         //
-        // If landing platform has odd sum, kill hero
+        // If landing platform has odd sum, decrease attempts
         //
         if (!isSafe) {
-          Hero.death(hero, () => {
-            k.go('level-time.2')
+          //
+          // Mark as landed immediately to prevent repeated checks
+          //
+          inst.nextPlatform.heroLanded = true
+          
+          //
+          // Only count error once per platform (check errorCounted flag)
+          //
+          if (!inst.nextPlatform.errorCounted) {
+            inst.nextPlatform.errorCounted = true
+            
+            //
+            // Decrease attempts only if we have attempts remaining
+            // Platform won't kill hero, but we still track attempts
+            //
+            if (inst.attemptsRemaining > 0) {
+              inst.attemptsRemaining--
+              
+              //
+              // Show attempts text above hero only if we have attempts left
+              //
+              if (inst.attemptsRemaining > 0) {
+                showAttemptsText(inst)
+              }
+              
+              //
+              // If no attempts left, hero dies
+              //
+              if (inst.attemptsRemaining <= 0) {
+                Sound.playDeathSound(inst.sound)
+                Hero.death(inst.hero, () => k.go('level-time.2'))
+                return
+              }
+            }
+          }
+          
+          //
+          // Add platform to platforms array so it can age and disappear
+          // But don't destroy previous platform - hero can return to it
+          //
+          inst.platforms.push({
+            inst: inst.nextPlatform.inst,
+            index: inst.nextPlatform.index,
+            timeOffset: inst.nextPlatform.timeOffset,
+            ageInSeconds: inst.nextPlatform.ageInSeconds,
+            maxDarkening: inst.nextPlatform.maxDarkening,
+            lastGlobalTime: inst.nextPlatform.lastGlobalTime
           })
+          
+          inst.currentPlatformIndex = inst.nextPlatform.index
+          inst.nextPlatform = null
+          //
+          // Create new next platform (stop 7 platforms before the final one)
+          //
+          if (inst.currentPlatformIndex < FINAL_PLATFORM_INDEX - 7) {
+            createNextPlatform(inst)
+          }
+          //
+          // Don't destroy previous platform - hero can return to it
+          // Platform is unsafe but hero can stay on it
+          //
           return
         }
         //
@@ -534,6 +743,7 @@ function createNextPlatform(inst) {
     inst: platform,
     index: nextIndex,
     heroLanded: false,
+    errorCounted: false,  // Track if error was already counted for this platform
     timeOffset: randomOffset,  // Store offset for syncing
     ageInSeconds: 0,
     maxDarkening: maxDarkening,

@@ -52,13 +52,26 @@ k.loadSound("clock", "/clock.mp3")
 k.loadSound("time", "/time.mp3")
 //
 // Load default character sprites for both hero types
+// Must be loaded before scenes are registered, as scenes may create heroes immediately
 //
-loadHeroSprites(k, HEROES.HERO)
-loadHeroSprites(k, HEROES.ANTIHERO)
+try {
+  loadHeroSprites(k, HEROES.HERO)
+  loadHeroSprites(k, HEROES.ANTIHERO)
+} catch (error) {
+  //
+  // If sprite loading fails, continue anyway - sprites will be loaded on-demand in Hero.create()
+  //
+}
 //
 // Load blade sprites
 //
-loadBladeSprites(k)
+try {
+  loadBladeSprites(k)
+} catch (error) {
+  //
+  // If blade sprite loading fails, continue anyway
+  //
+}
 //
 // Register all scenes
 //

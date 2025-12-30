@@ -198,10 +198,15 @@ export function sceneMenu(k) {
       }
       //
       // Cache sprite prefixes for outline switching
+      // Remove # from colors to match loadHeroSprites prefix format
       //
-      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColor}_${grayOutlineColor}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
-      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColor}_${CFG.visual.colors.outline}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
-      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColor}_${CFG.visual.colors.outline}` : null
+      const grayColorNoHash = grayColor.replace('#', '')
+      const grayOutlineColorNoHash = grayOutlineColor.replace('#', '')
+      const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
+      const yellowColorNoHash = yellowColor.replace('#', '')
+      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}` : null
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
       //
       // Store base position and phase offsets for floating animation

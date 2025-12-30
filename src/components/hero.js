@@ -102,7 +102,7 @@ export function create(config) {
   //
   // Generate sprite prefix based on customization
   //
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
+  const spritePrefix = `${type}_${effectiveBodyColor.replace('#', '')}_${effectiveOutlineColor.replace('#', '')}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -110,8 +110,53 @@ export function create(config) {
   const collisionWidth = COLLISION_WIDTH + hitboxPadding * 2
   const collisionHeight = COLLISION_HEIGHT + hitboxPadding * 2
 
+  //
+  // Ensure sprite is loaded before using it
+  //
+  let spriteComponent
+  try {
+    const existingSprite = k.getSprite(spriteName)
+    if (existingSprite) {
+      spriteComponent = k.sprite(spriteName)
+    } else {
+      //
+      // Sprite not found, try to load it now
+      //
+      loadHeroSprites({
+        k,
+        type,
+        bodyColor: effectiveBodyColor,
+        outlineColor: effectiveOutlineColor,
+        addMouth,
+        addArms
+      })
+      //
+      // Try to use the sprite (it should be loaded now)
+      //
+      spriteComponent = k.sprite(spriteName)
+    }
+  } catch (error) {
+    //
+      // Fallback: use default sprite name or rectangle placeholder
+      //
+    const defaultSpriteName = `${type}_0_0`
+    try {
+      const defaultSprite = k.getSprite(defaultSpriteName)
+      if (defaultSprite) {
+        spriteComponent = k.sprite(defaultSpriteName)
+      } else {
+        spriteComponent = k.rect(SPRITE_SIZE, SPRITE_SIZE)
+      }
+    } catch (fallbackError) {
+      //
+      // If everything fails, use rectangle placeholder
+      //
+      spriteComponent = k.rect(SPRITE_SIZE, SPRITE_SIZE)
+    }
+  }
+
   const character = k.add([
-    k.sprite(spriteName),
+    spriteComponent,
     k.pos(x, y),
     k.area({
       shape: new k.Rect(
@@ -216,12 +261,27 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Use default colors from config if not provided
   //
-  const effectiveBodyColor = color || (heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
-  const effectiveOutlineColor = outline || CFG.visual.colors.outline
+  let effectiveBodyColor = color || (heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body)
+  let effectiveOutlineColor = outline || CFG.visual.colors.outline
+  //
+  // Ensure colors are valid strings
+  //
+  if (!effectiveBodyColor || typeof effectiveBodyColor !== 'string') {
+    effectiveBodyColor = heroType === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
+  }
+  if (!effectiveOutlineColor || typeof effectiveOutlineColor !== 'string') {
+    effectiveOutlineColor = CFG.visual.colors.outline
+  }
+  //
+  // Remove # from colors for prefix (colors are normalized in createFrame via getHex)
+  // Ensure colors are strings before calling replace
+  //
+  const bodyColorForPrefix = String(effectiveBodyColor).replace('#', '')
+  const outlineColorForPrefix = String(effectiveOutlineColor).replace('#', '')
   //
   // Generate unique prefix for this sprite variant
   //
-  const prefix = `${heroType}_${effectiveBodyColor}_${effectiveOutlineColor}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}`
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}`
   //
   // Check if sprites with this configuration are already loaded
   //
@@ -232,21 +292,68 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   for (let x = -1; x <= 1; x++) {
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
-      const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
-      k.loadSprite(spriteName, spriteData)
+      try {
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
+        //
+        // Ensure sprite data is valid before loading
+        //
+        if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
+          try {
+            k.loadSprite(spriteName, spriteData)
+          } catch (loadError) {
+            //
+            // Skip this sprite if loading fails
+            //
+          }
+        }
+      } catch (error) {
+        //
+        // Skip this sprite if there's an error creating it
+        //
+      }
     }
   }
   //
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-jump-${frame}`, createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms))
+    try {
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
+      if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
+        try {
+          k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
+        } catch (loadError) {
+          //
+          // Skip this sprite if loading fails
+          //
+        }
+      }
+    } catch (error) {
+      //
+      // Skip this sprite if there's an error creating it
+      //
+    }
   }
   //
   // Load run frames (3 frames)
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
-    k.loadSprite(`${prefix}-run-${frame}`, createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms))
+    try {
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
+      if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
+        try {
+          k.loadSprite(`${prefix}-run-${frame}`, spriteData)
+        } catch (loadError) {
+          //
+          // Skip this sprite if loading fails
+          //
+        }
+      }
+    } catch (error) {
+      //
+      // Skip this sprite if there's an error creating it
+      //
+    }
   }
 }
 /**
@@ -925,7 +1032,7 @@ function onCollisionPlatform(inst) {
  * Both characters dissolve into particles and merge
  * @param {Object} inst - Hero instance
  */
-function onAnnihilationCollide(inst) {
+export function onAnnihilationCollide(inst) {
   if (inst.isAnnihilating) return
 
   inst.isAnnihilating = true
@@ -1525,9 +1632,17 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     bodyColor = colors.body
   }
   //
+  // Ensure bodyColor is a valid string
+  //
+  if (!bodyColor || typeof bodyColor !== 'string') {
+    const colors = type === HEROES.HERO ? CFG.visual.colors.hero : CFG.visual.colors.antiHero
+    bodyColor = colors.body || '#FF8C00'
+  }
+  //
   // Choose outline color - custom or default (black)
   //
-  const outlineColor = (customOutlineColor || CFG.visual.colors.outline).replace('#', '')
+  const outlineColorRaw = customOutlineColor || CFG.visual.colors.outline
+  const outlineColor = String(outlineColorRaw || '#000000').replace('#', '')
   const canvas = document.createElement('canvas')
   canvas.width = SPRITE_SIZE
   canvas.height = SPRITE_SIZE
@@ -1815,7 +1930,28 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
   }
 
-  return canvas.toDataURL()
+  //
+  // Ensure canvas is valid before converting to data URL
+  //
+  if (!canvas || !ctx) {
+    //
+    // Fallback: return a minimal valid data URL (1x1 transparent pixel)
+    //
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  }
+  
+  const dataURL = canvas.toDataURL()
+  //
+  // Ensure data URL is valid
+  //
+  if (!dataURL || typeof dataURL !== 'string' || !dataURL.startsWith('data:')) {
+    //
+    // Fallback: return a minimal valid data URL (1x1 transparent pixel)
+    //
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  }
+  
+  return dataURL
 }
 /**
  * Get sprite name for character (supports custom colors)

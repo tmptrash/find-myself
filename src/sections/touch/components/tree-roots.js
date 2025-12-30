@@ -632,21 +632,33 @@ function playNote(inst, frequency) {
 }
 
 /**
+ * Play a musical note using Web Audio API (external call)
+ * @param {Object} inst - Tree roots instance
+ * @param {number} frequency - Note frequency in Hz
+ */
+export function playNoteExternal(inst, frequency) {
+  playNote(inst, frequency)
+}
+
+/**
  * Check if hero is touching any tree trunk and play note
  * @param {Object} inst - Tree roots instance
  * @param {Object} heroCharacter - Hero's Kaplay character object
+ * @returns {number} Index of touched tree (-1 if none)
  */
 export function checkHeroTreeCollision(inst, heroCharacter) {
   const { k, roots } = inst
   
-  if (!heroCharacter || !heroCharacter.pos) return
+  if (!heroCharacter || !heroCharacter.pos) return -1
   
   const heroX = heroCharacter.pos.x
   const heroY = heroCharacter.pos.y
   const heroWidth = 60  // Increased width for better detection during flight
   const trunkWidth = 25  // Increased trunk collision width
   
-  roots.forEach(root => {
+  let touchedTreeIndex = -1
+  
+  roots.forEach((root, index) => {
     //
     // Check if hero is horizontally aligned with trunk
     //
@@ -674,6 +686,7 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
       // Start tree shake animation (reduced amplitude)
       //
       root.touchShake = 2
+      touchedTreeIndex = index
     }
     
     //
@@ -681,6 +694,8 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
     //
     root.isTouching = isTouchingNow
   })
+  
+  return touchedTreeIndex
 }
 
 /**

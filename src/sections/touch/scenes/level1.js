@@ -129,15 +129,301 @@ export function sceneLevel1(k) {
       CFG.game.platformName
     ])
     //
-    // Create anti-hero first
+    // Create anti-hero first (starts gray/inactive)
     //
     const antiHeroInst = Hero.create({
       k,
       x: ANTIHERO_SPAWN_X,
       y: ANTIHERO_SPAWN_Y,
       type: Hero.HEROES.ANTIHERO,
-      controllable: false
+      controllable: false,
+      bodyColor: '#B0B0B0'  // Gray color for inactive state
     })
+    
+    //
+    // Game state for melody puzzle
+    //
+    const gameState = {
+      antiHeroActive: false,
+      playerSequence: [],
+      targetSequence: [0, 1, 2, 1, 2],  // C, D, E, D, E (tree indices)
+      melodyNotes: [261.63, 293.66, 329.63, 293.66, 329.63],  // Frequencies
+      isNearAntiHero: false,
+      isPlayingMelody: false,
+      melodyTimer: 0
+    }
+    
+    //
+    // Note names for display
+    //
+    const noteNames = ['C', 'D', 'E', 'D', 'E']
+    
+    //
+    // Function to play melody sequence
+    //
+    function playMelody() {
+      if (gameState.isPlayingMelody) return
+      
+      gameState.isPlayingMelody = true
+      gameState.currentNoteIndex = -1
+      let noteIndex = 0
+      
+      const playNextNote = () => {
+        if (noteIndex < gameState.melodyNotes.length) {
+          //
+          // Set current note index before playing
+          //
+          gameState.currentNoteIndex = noteIndex
+          TreeRoots.playNoteExternal(treeRootsInst, gameState.melodyNotes[noteIndex])
+          noteIndex++
+          
+          if (noteIndex < gameState.melodyNotes.length) {
+            k.wait(0.6, playNextNote)
+          } else {
+            k.wait(0.6, () => {
+              gameState.isPlayingMelody = false
+              gameState.currentNoteIndex = -1
+            })
+          }
+        }
+      }
+      
+      playNextNote()
+    }
+    
+    //
+    // Function to create sparkle particles around anti-hero for color change
+    //
+    function createAntiHeroSparkles(colorHex) {
+      const centerX = antiHeroInst.character.pos.x
+      const centerY = antiHeroInst.character.pos.y
+      //
+      // Parse hex color to RGB
+      //
+      const colorValue = parseInt(colorHex.replace('#', ''), 16)
+      const r = (colorValue >> 16) & 0xFF
+      const g = (colorValue >> 8) & 0xFF
+      const b = colorValue & 0xFF
+      //
+      // Create small sparkle particles
+      //
+      const sparkleCount = 12
+      const sparkles = []
+      
+      for (let i = 0; i < sparkleCount; i++) {
+        //
+        // Position sparkles around anti-hero body
+        //
+        const angle = (Math.PI * 2 * i) / sparkleCount
+        const distance = 15 + Math.random() * 10
+        const offsetX = Math.cos(angle) * distance
+        const offsetY = Math.sin(angle) * distance
+        //
+        // Sparkle colors (variations of brown)
+        //
+        const colors = [
+          k.rgb(r, g, b),  // Base brown
+          k.rgb(Math.min(255, r + 30), Math.min(255, g + 20), Math.min(255, b + 15)),  // Lighter brown
+          k.rgb(Math.max(0, r - 20), Math.max(0, g - 15), Math.max(0, b - 10)),  // Darker brown
+          k.rgb(200, 150, 120)  // Light brown
+        ]
+        const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
+        //
+        // Create sparkle particle (small circle)
+        //
+        const size = 2 + Math.random() * 3
+        const sparkle = k.add([
+          k.circle(size),
+          k.pos(centerX + offsetX, centerY + offsetY),
+          k.color(sparkleColor),
+          k.opacity(0.8),
+          k.z(CFG.visual.zIndex.player + 1)
+        ])
+        //
+        // Store sparkle data
+        //
+        sparkle.vx = (Math.random() - 0.5) * 40
+        sparkle.vy = -20 - Math.random() * 30  // Move up
+        sparkle.lifetime = 0
+        sparkle.maxLifetime = 0.8 + Math.random() * 0.4
+        sparkle.originalSize = size
+        
+        sparkles.push(sparkle)
+      }
+      //
+      // Animate sparkles
+      //
+      const sparkleInterval = k.onUpdate(() => {
+        sparkles.forEach((sparkle) => {
+          if (!sparkle.exists()) return
+          
+          sparkle.lifetime += k.dt()
+          //
+          // Move sparkle
+          //
+          sparkle.pos.x += sparkle.vx * k.dt()
+          sparkle.pos.y += sparkle.vy * k.dt()
+          //
+          // Apply gravity
+          //
+          sparkle.vy -= 80 * k.dt()  // Upward acceleration
+          sparkle.vx *= 0.95
+          //
+          // Fade out
+          //
+          const progress = sparkle.lifetime / sparkle.maxLifetime
+          sparkle.opacity = 0.8 * (1 - progress)
+          //
+          // Twinkle effect
+          //
+          const twinkle = Math.sin(sparkle.lifetime * 20) * 0.3 + 0.7
+          sparkle.scale = twinkle
+          
+          if (sparkle.lifetime >= sparkle.maxLifetime) {
+            k.destroy(sparkle)
+          }
+        })
+        //
+        // Clean up when all sparkles are done
+        //
+        if (sparkles.every(s => !s.exists())) {
+          sparkleInterval.cancel()
+        }
+      })
+    }
+    
+    //
+    // Function to activate anti-hero
+    //
+    function activateAntiHero() {
+      if (gameState.antiHeroActive) return  // Already activated
+      
+      //
+      // Large pause before activation to let player realize they succeeded
+      //
+      k.wait(1.5, () => {
+        gameState.antiHeroActive = true
+        //
+        // Change anti-hero color to brown (active) by reloading sprites
+        // This preserves white eyes with black pupils, as eyes are drawn separately
+        //
+        const activeColor = CFG.visual.colors.antiHero.body  // #8B5A50
+        Hero.loadHeroSprites({
+          k,
+          type: Hero.HEROES.ANTIHERO,
+          bodyColor: activeColor,
+          outlineColor: CFG.visual.colors.outline
+        })
+        
+        //
+        // Update sprite prefix and change character sprite
+        //
+        const spritePrefix = `antiHero_${activeColor.replace('#', '')}_${CFG.visual.colors.outline.replace('#', '')}`
+        const newSpriteName = `${spritePrefix}_0_0`
+        
+        //
+        // Function to apply sprite change
+        //
+        const applySpriteChange = () => {
+          try {
+            //
+            // Check if sprite exists before using it
+            //
+            const sprite = k.getSprite(newSpriteName)
+            if (sprite) {
+              antiHeroInst.character.use(k.sprite(newSpriteName))
+              antiHeroInst.spritePrefix = spritePrefix
+              antiHeroInst.bodyColor = activeColor
+              //
+              // Reset color tint to white (no tint) since sprite is already brown
+              //
+              antiHeroInst.character.color = k.rgb(255, 255, 255)
+              
+              //
+              // Create sparkle particles around anti-hero
+              //
+              createAntiHeroSparkles(activeColor)
+              
+              //
+              // Play success sound after color change (same as mouth sound)
+              //
+              k.wait(0.2, () => {
+                Sound.playMouthSound(sound)
+              })
+              
+              //
+              // Enable annihilation by setting antiHero reference and setting up collision
+              //
+              heroInst.antiHero = antiHeroInst
+              //
+              // Set up collision handler for annihilation using Hero's full logic
+              //
+              heroInst.character.onCollide('annihilation', () => {
+                Hero.onAnnihilationCollide(heroInst)
+              })
+              return true
+            }
+          } catch (error) {
+            //
+            // Sprite not found, will retry
+            //
+          }
+          return false
+        }
+        
+        //
+        // Wait for sprites to load, then update
+        // Try multiple times with increasing delays
+        //
+        k.wait(0.1, () => {
+          if (!applySpriteChange()) {
+            //
+            // Retry after longer delay
+            //
+            k.wait(0.2, () => {
+              if (!applySpriteChange()) {
+                //
+                // Fallback: use tint method if sprite loading fails
+                //
+                const brownR = 139  // #8B5A50
+                const brownG = 90
+                const brownB = 80
+                const grayR = 176  // #B0B0B0
+                const grayG = 176
+                const grayB = 176
+                const tintR = Math.round((brownR / grayR) * 255)
+                const tintG = Math.round((brownG / grayG) * 255)
+                const tintB = Math.round((brownB / grayB) * 255)
+                antiHeroInst.character.color = k.rgb(
+                  Math.min(255, Math.max(0, tintR)),
+                  Math.min(255, Math.max(0, tintG)),
+                  Math.min(255, Math.max(0, tintB))
+                )
+                createAntiHeroSparkles(activeColor)
+                k.wait(0.2, () => {
+                  Sound.playMouthSound(sound)
+                })
+                //
+                // Enable annihilation by setting antiHero reference and setting up collision
+                //
+                heroInst.antiHero = antiHeroInst
+                //
+                // Set up collision handler for annihilation using Hero's full logic
+                //
+                heroInst.character.onCollide('annihilation', () => {
+                  Hero.onAnnihilationCollide(heroInst)
+                })
+              }
+            })
+          }
+        })
+      })
+    }
+    
+    //
+    // No need to set gray color - it's already set via bodyColor parameter
+    //
+    
     //
     // Create hero with anti-hero reference
     //
@@ -148,7 +434,7 @@ export function sceneLevel1(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: antiHeroInst,
+      antiHero: gameState.antiHeroActive ? antiHeroInst : null,  // Only set antiHero if active
       onAnnihilation: () => {
         //
         // Go back to menu after annihilation
@@ -245,8 +531,216 @@ export function sceneLevel1(k) {
       //
       // Check if hero is touching tree trunks
       //
-      TreeRoots.checkHeroTreeCollision(treeRootsInst, heroInst.character)
+      const touchedTreeIndex = TreeRoots.checkHeroTreeCollision(treeRootsInst, heroInst.character)
+      
+      //
+      // If a tree was touched, add to player sequence
+      // Check sequence regardless of proximity to anti-hero
+      //
+      if (touchedTreeIndex !== -1 && !gameState.antiHeroActive) {
+        //
+        // Don't add the same note twice in a row (prevent duplicates)
+        //
+        const lastNote = gameState.playerSequence.length > 0 ? gameState.playerSequence[gameState.playerSequence.length - 1] : -1
+        if (touchedTreeIndex !== lastNote) {
+          gameState.playerSequence.push(touchedTreeIndex)
+          
+          //
+          // Check if sequence is correct so far
+          //
+          const currentLength = gameState.playerSequence.length
+          const targetLength = gameState.targetSequence.length
+          
+          //
+          // Check if current sequence matches target sequence up to current length
+          //
+          let isCorrect = true
+          for (let i = 0; i < currentLength; i++) {
+            if (gameState.playerSequence[i] !== gameState.targetSequence[i]) {
+              isCorrect = false
+              break
+            }
+          }
+          
+          if (!isCorrect) {
+            //
+            // Wrong note, reset sequence
+            //
+            gameState.playerSequence = []
+          } else if (currentLength === targetLength && isCorrect) {
+            //
+            // Complete sequence matched! Activate anti-hero
+            //
+            try {
+              activateAntiHero()
+              gameState.playerSequence = []  // Reset for safety
+            } catch (error) {
+              //
+              // If activation fails, reset sequence and try again
+              //
+              gameState.playerSequence = []
+            }
+          }
+        }
+      }
+      
+      //
+      // Check collision with anti-hero to trigger melody (actual touch)
+      //
+      if (heroInst.character && antiHeroInst.character) {
+        //
+        // Check if characters are actually touching (collision distance)
+        //
+        const dx = heroInst.character.pos.x - antiHeroInst.character.pos.x
+        const dy = heroInst.character.pos.y - antiHeroInst.character.pos.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        const touchDistance = 50  // Characters must be within 50 pixels to trigger
+        
+        const wasNear = gameState.isNearAntiHero
+        gameState.isNearAntiHero = distance < touchDistance
+        
+        //
+        // If just got near (wasn't near before, now near), play melody
+        //
+        if (gameState.isNearAntiHero && !wasNear && !gameState.antiHeroActive) {
+          playMelody()
+        }
+      }
     })
+    
+    //
+    // Draw speech bubble with notes
+    //
+    k.add([
+      k.z(CFG.visual.zIndex.ui),
+      {
+        draw() {
+          //
+          // Only show bubble when near anti-hero or playing melody
+          //
+          if (!gameState.isNearAntiHero && !gameState.isPlayingMelody) return
+          if (gameState.antiHeroActive) return  // Hide after activation
+          
+          let bubbleX = antiHeroInst.character.pos.x
+          const bubbleY = antiHeroInst.character.pos.y - 100
+          
+          //
+          // Draw speech bubble background (larger for better readability)
+          //
+          const bubbleWidth = 280
+          const bubbleHeight = 120  // Increased height for text
+          const cornerRadius = 10
+          const outlineWidth = 3
+          
+          //
+          // Adjust bubble position to stay within screen bounds
+          //
+          const screenWidth = k.width()
+          const screenHeight = k.height()
+          const margin = 20  // Additional margin from screen edges
+          const screenRight = screenWidth - margin
+          const screenLeft = margin
+          const bubbleRight = bubbleX + bubbleWidth / 2 + outlineWidth
+          const bubbleLeft = bubbleX - bubbleWidth / 2 - outlineWidth
+          
+          //
+          // Shift left if bubble goes off right edge
+          //
+          if (bubbleRight > screenRight) {
+            bubbleX = screenRight - bubbleWidth / 2 - outlineWidth
+          }
+          //
+          // Shift right if bubble goes off left edge
+          //
+          if (bubbleLeft < screenLeft) {
+            bubbleX = screenLeft + bubbleWidth / 2 + outlineWidth
+          }
+          //
+          // Also check top boundary (don't let bubble go above screen)
+          //
+          const bubbleTop = bubbleY - bubbleHeight / 2 - outlineWidth
+          if (bubbleTop < margin) {
+            // If bubble would go above screen, move it down
+            // (but this shouldn't happen normally)
+          }
+          
+          //
+          // Draw outline (slightly larger rectangle)
+          //
+          k.drawRect({
+            pos: k.vec2(bubbleX - bubbleWidth / 2 - outlineWidth, bubbleY - bubbleHeight / 2 - outlineWidth),
+            width: bubbleWidth + outlineWidth * 2,
+            height: bubbleHeight + outlineWidth * 2,
+            radius: cornerRadius + outlineWidth,
+            color: k.rgb(0, 0, 0),
+            opacity: 0.4
+          })
+          
+          //
+          // Draw white background
+          //
+          k.drawRect({
+            pos: k.vec2(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2),
+            width: bubbleWidth,
+            height: bubbleHeight,
+            radius: cornerRadius,
+            color: k.rgb(255, 255, 255),
+            opacity: 0.98
+          })
+          
+          //
+          // Draw request text above notes
+          //
+          k.drawText({
+            text: 'Play this:',
+            pos: k.vec2(bubbleX, bubbleY - 35),
+            size: 18,
+            font: CFG.visual.fonts.regularFull,
+            color: k.rgb(40, 40, 40),
+            anchor: 'center'
+          })
+          
+          //
+          // Draw notes (larger and more visible)
+          //
+          const noteSpacing = 50
+          const startX = bubbleX - (gameState.targetSequence.length - 1) * noteSpacing / 2
+          
+          gameState.targetSequence.forEach((noteIndex, i) => {
+            const noteX = startX + i * noteSpacing
+            const noteY = bubbleY + 10  // Moved down a bit to make room for text
+            
+            //
+            // Highlight current note if melody is playing
+            //
+            const isCurrentNote = gameState.isPlayingMelody && i === gameState.currentNoteIndex
+            
+            //
+            // Draw note circle (larger)
+            //
+            const circleRadius = isCurrentNote ? 20 : 18
+            k.drawCircle({
+              pos: k.vec2(noteX, noteY),
+              radius: circleRadius,
+              color: isCurrentNote ? k.rgb(100, 200, 100) : k.rgb(60, 60, 60),
+              opacity: 1.0
+            })
+            
+            //
+            // Draw note name (larger and bolder)
+            //
+            k.drawText({
+              text: noteNames[i],
+              pos: k.vec2(noteX, noteY),
+              size: isCurrentNote ? 24 : 20,
+              font: CFG.visual.fonts.regularFull,
+              color: k.rgb(255, 255, 255),
+              anchor: 'center'
+            })
+          })
+        }
+      }
+    ])
     //
     // Create level transition for next level
     //

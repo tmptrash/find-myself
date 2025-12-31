@@ -51,19 +51,6 @@ export function sceneLevel1(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start touch.mp3 background music
-    //
-    const touchMusic = k.play('touch', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.touch
-    })
-    //
-    // Stop music when leaving the scene
-    //
-    k.onSceneLeave(() => {
-      touchMusic.stop()
-    })
-    //
     // Draw background
     //
     k.onDraw(() => {
@@ -164,8 +151,15 @@ export function sceneLevel1(k) {
       isNearAntiHero: false,
       isPlayingMelody: false,
       melodyTimer: 0,
-      lastTouchedTreeIndex: -1  // Track last touched tree to prevent duplicate detection
+      lastTouchedTreeIndex: -1,  // Track last touched tree to prevent duplicate detection
+      sequenceCompleteTime: null,  // Time when sequence was completed (for pause check)
+      pauseTimer: 0  // Timer for tracking pause after sequence completion
     }
+    
+    //
+    // Minimum pause after completing sequence before it's considered valid
+    //
+    const SEQUENCE_PAUSE_MINIMUM = 1.0  // 1 second
     
     //
     // Note names for display
@@ -542,6 +536,34 @@ export function sceneLevel1(k) {
       // Update tree shake animations
       //
       TreeRoots.onUpdate(treeRootsInst)
+      
+      //
+      // Update pause timer if sequence was completed
+      //
+      if (gameState.sequenceCompleteTime !== null) {
+        gameState.pauseTimer += k.dt()
+        
+        //
+        // Check if pause is sufficient and activate anti-hero
+        //
+        if (gameState.pauseTimer >= SEQUENCE_PAUSE_MINIMUM) {
+          //
+          // Pause was sufficient - activate anti-hero
+          //
+          try {
+            activateAntiHero()
+            gameState.sequenceCompleteTime = null
+            gameState.pauseTimer = 0
+          } catch (error) {
+            //
+            // If activation fails, reset
+            //
+            gameState.sequenceCompleteTime = null
+            gameState.pauseTimer = 0
+          }
+        }
+      }
+      
       //
       // Check if hero is touching tree trunks
       //
@@ -564,74 +586,187 @@ export function sceneLevel1(k) {
       if (touchedTreeIndex !== -1 && !gameState.antiHeroActive) {
         //
         // Prevent processing the same touch event multiple times
-        // Only process if this is a new touch (different from last processed touch)
+        // If same tree is touched twice in a row, reset sequence
         //
         if (touchedTreeIndex === gameState.lastTouchedTreeIndex) {
+          //
+          // Same tree touched twice - reset sequence
+          //
+          gameState.playerSequence = []
+          gameState.lastTouchedTreeIndex = -1
+          gameState.sequenceCompleteTime = null
+          gameState.pauseTimer = 0
+          console.log('Sequence reset: same tree touched twice. Current sequence:', gameState.playerSequence)
           return
         }
         
-        const currentLength = gameState.playerSequence.length
-        const targetLength = gameState.targetSequence.length
-        const firstNoteIndex = gameState.targetSequence[0]  // First note must be this index (0)
+        //
+        // Check if sequence was recently completed - if pause is too short, reset
+        //
+        if (gameState.sequenceCompleteTime !== null) {
+          if (gameState.pauseTimer < SEQUENCE_PAUSE_MINIMUM) {
+            //
+            // Pause is too short - reset sequence
+            //
+            gameState.playerSequence = []
+            gameState.sequenceCompleteTime = null
+            gameState.pauseTimer = 0
+            gameState.lastTouchedTreeIndex = -1
+            console.log('Sequence reset: pause too short. Current sequence:', gameState.playerSequence)
+            return
+          }
+          //
+          // Pause is sufficient - clear the completion time
+          //
+          gameState.sequenceCompleteTime = null
+          gameState.pauseTimer = 0
+        }
         
         //
-        // If sequence is empty, only accept first note (index 0) to start
+        // Debug: log when note processing starts
         //
-        if (currentLength === 0) {
+        console.log('Processing note:', touchedTreeIndex, 'Current sequence before:', [...gameState.playerSequence])
+        
+        const currentSequence = gameState.playerSequence
+        const targetSequence = gameState.targetSequence
+        const firstNoteIndex = targetSequence[0]  // First note must be this index (0)
+        
+        //
+        // Algorithm:
+        // 1. If sequence is empty, only accept first note (0) to start
+        // 2. Current sequence must match a subarray of target sequence starting from the same note
+        // 3. Check if next note matches expected note from target sequence
+        // 4. If wrong note - reset and wait for note 0
+        // 5. If sequences match completely and 2 seconds passed - activate
+        //
+        
+        //
+        // Step 1: If sequence is empty, only accept first note (0)
+        //
+        if (currentSequence.length === 0) {
           if (touchedTreeIndex !== firstNoteIndex) {
             //
             // Wrong first note - ignore it, wait for correct first note
             //
-            gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+            gameState.lastTouchedTreeIndex = -1
             return
           }
         }
         
         //
-        // If sequence is already complete, reset it
+        // Step 2: Find where current sequence matches in target sequence
+        // Current sequence must match a subarray starting from position where first note matches
         //
-        if (currentLength >= targetLength) {
-          gameState.playerSequence = []
+        let matchingStartPosition = -1
+        
+        if (currentSequence.length > 0) {
           //
-          // After reset, wait for first note again
+          // Find position in target sequence where current sequence starts
+          // It must start from a position where first note matches
+          //
+          const firstNote = currentSequence[0]
+          for (let i = 0; i <= targetSequence.length - currentSequence.length; i++) {
+            if (targetSequence[i] === firstNote) {
+              //
+              // Check if current sequence matches from this position
+              //
+              let matches = true
+              for (let j = 0; j < currentSequence.length; j++) {
+                if (targetSequence[i + j] !== currentSequence[j]) {
+                  matches = false
+                  break
+                }
+              }
+              if (matches) {
+                matchingStartPosition = i
+                break
+              }
+            }
+          }
+        } else {
+          //
+          // Sequence is empty, will start from position 0
+          //
+          matchingStartPosition = 0
+        }
+        
+        //
+        // Step 3: Check if next note matches expected note from target sequence
+        //
+        if (matchingStartPosition === -1) {
+          //
+          // Current sequence doesn't match any part of target sequence
+          // Reset and wait for first note (0)
+          //
+          gameState.playerSequence = []
+          gameState.lastTouchedTreeIndex = -1
+          gameState.sequenceCompleteTime = null
+          gameState.pauseTimer = 0
+          console.log('Sequence reset: no matching position found. Current sequence:', gameState.playerSequence)
+          //
+          // If touched note is first note (0), we can start new sequence
           //
           if (touchedTreeIndex !== firstNoteIndex) {
-            gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
             return
           }
+          //
+          // If it's first note, set matching position to 0 and continue
+          //
+          matchingStartPosition = 0
         }
         
         //
-        // Check: adding this note must not exceed target length
+        // Check if next note matches expected note
         //
-        if (currentLength >= targetLength) {
+        const nextPosition = matchingStartPosition + currentSequence.length
+        
+        //
+        // Only check expected note if we haven't reached the end of target sequence
+        //
+        if (nextPosition >= targetSequence.length) {
           //
-          // Sequence is already at target length - reset and start over
+          // Sequence is already complete - reset
           //
           gameState.playerSequence = []
-          gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+          gameState.lastTouchedTreeIndex = -1
+          gameState.sequenceCompleteTime = null
+          gameState.pauseTimer = 0
+          console.log('Sequence reset: already complete. Current sequence:', gameState.playerSequence)
           //
-          // After reset, only accept first note
+          // If touched note is first note (0), we can start new sequence
           //
           if (touchedTreeIndex !== firstNoteIndex) {
             return
           }
-        }
-        
-        //
-        // Check: this note must match target sequence at the next position
-        // Verify BEFORE adding to prevent invalid sequences
-        //
-        const nextPosition = currentLength
-        const expectedNote = gameState.targetSequence[nextPosition]
-        
-        if (touchedTreeIndex !== expectedNote) {
           //
-          // Wrong note at this position - reset sequence immediately
+          // If it's first note, continue to add it
           //
-          gameState.playerSequence = []
-          gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
-          return
+        } else {
+          const expectedNote = targetSequence[nextPosition]
+          
+          //
+          // Step 4: If wrong note - reset and wait for note 0
+          //
+          if (touchedTreeIndex !== expectedNote) {
+            //
+            // Wrong note - reset sequence and wait for first note (0)
+            //
+            gameState.playerSequence = []
+            gameState.lastTouchedTreeIndex = -1
+            gameState.sequenceCompleteTime = null
+            gameState.pauseTimer = 0
+            console.log('Sequence reset: wrong note. Expected:', expectedNote, 'Got:', touchedTreeIndex, 'Current sequence:', gameState.playerSequence)
+            //
+            // If wrong note was first note (0), we can start new sequence
+            // Otherwise, ignore and wait for first note
+            //
+            if (touchedTreeIndex !== firstNoteIndex) {
+              return
+            }
+            //
+            // If it's first note, continue to add it below
+            //
+          }
         }
         
         //
@@ -641,20 +776,23 @@ export function sceneLevel1(k) {
         gameState.lastTouchedTreeIndex = touchedTreeIndex
         
         //
-        // Get new length after adding note
+        // Debug: log current sequence
         //
-        const newLength = gameState.playerSequence.length
+        console.log('Current sequence:', gameState.playerSequence)
         
         //
-        // If sequence length equals target length, verify exact match and activate
+        // Step 5: Check if sequences match completely
         //
-        if (newLength === targetLength) {
-          //
-          // Final verification: sequence must match target exactly (all 5 notes)
-          //
+        const newSequence = gameState.playerSequence
+        const newLength = newSequence.length
+        
+        //
+        // Check if current sequence matches target sequence exactly
+        //
+        if (newLength === targetSequence.length) {
           let exactMatch = true
-          for (let i = 0; i < targetLength; i++) {
-            if (gameState.playerSequence[i] !== gameState.targetSequence[i]) {
+          for (let i = 0; i < targetSequence.length; i++) {
+            if (newSequence[i] !== targetSequence[i]) {
               exactMatch = false
               break
             }
@@ -662,25 +800,19 @@ export function sceneLevel1(k) {
           
           if (exactMatch) {
             //
-            // Complete sequence matched exactly! Activate anti-hero
+            // Sequences match completely! Record completion time
+            // Don't clear sequence yet - wait for 2 second pause
             //
-            try {
-              activateAntiHero()
-              gameState.playerSequence = []  // Reset for safety
-              gameState.lastTouchedTreeIndex = -1  // Reset to allow new sequence
-            } catch (error) {
-              //
-              // If activation fails, reset sequence and try again
-              //
-              gameState.playerSequence = []
-              gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
-            }
+            gameState.sequenceCompleteTime = k.time()
+            gameState.pauseTimer = 0  // Start pause timer
           } else {
             //
             // Sequence length matches but content doesn't - reset
             //
             gameState.playerSequence = []
-            gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+            gameState.lastTouchedTreeIndex = -1
+            gameState.sequenceCompleteTime = null
+            gameState.pauseTimer = 0
           }
         }
       } else {

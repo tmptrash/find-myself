@@ -567,13 +567,25 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     //
     inst.platforms.forEach((p, index) => {
       if (!p.inst.isDestroyed) {
-        const platformTime = (inst.globalTime + p.timeOffset) % 60
-        p.inst.currentTime = platformTime
-        const timeText = platformTime.toString().padStart(2, '0')
-        p.inst.timerText.text = timeText
-        p.inst.outlineTexts.forEach(outline => {
-          outline.text = timeText
-        })
+        //
+        // Safe platforms (3rd, 5th, 7th, 9th, etc.) always show "00"
+        //
+        if (p.isSafePlatform) {
+          p.inst.currentTime = 0
+          const timeText = "00"
+          p.inst.timerText.text = timeText
+          p.inst.outlineTexts.forEach(outline => {
+            outline.text = timeText
+          })
+        } else {
+          const platformTime = (inst.globalTime + p.timeOffset) % 60
+          p.inst.currentTime = platformTime
+          const timeText = platformTime.toString().padStart(2, '0')
+          p.inst.timerText.text = timeText
+          p.inst.outlineTexts.forEach(outline => {
+            outline.text = timeText
+          })
+        }
         //
         // Only age and darken the current platform (last one)
         //
@@ -609,15 +621,31 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     })
     //
     // Sync next platform with its offset (but don't age or darken it)
+    // Safe platforms always show "00"
     //
     if (inst.nextPlatform && !inst.nextPlatform.inst.isDestroyed) {
-      const platformTime = (inst.globalTime + inst.nextPlatform.timeOffset) % 60
-      inst.nextPlatform.inst.currentTime = platformTime
-      const timeText = platformTime.toString().padStart(2, '0')
-      inst.nextPlatform.inst.timerText.text = timeText
-      inst.nextPlatform.inst.outlineTexts.forEach(outline => {
-        outline.text = timeText
-      })
+      if (inst.nextPlatform.isSafePlatform) {
+        //
+        // Safe platforms always show "00"
+        //
+        inst.nextPlatform.inst.currentTime = 0
+        const timeText = "00"
+        inst.nextPlatform.inst.timerText.text = timeText
+        inst.nextPlatform.inst.outlineTexts.forEach(outline => {
+          outline.text = timeText
+        })
+      } else {
+        //
+        // Regular platforms tick with global time
+        //
+        const platformTime = (inst.globalTime + inst.nextPlatform.timeOffset) % 60
+        inst.nextPlatform.inst.currentTime = platformTime
+        const timeText = platformTime.toString().padStart(2, '0')
+        inst.nextPlatform.inst.timerText.text = timeText
+        inst.nextPlatform.inst.outlineTexts.forEach(outline => {
+          outline.text = timeText
+        })
+      }
     }
     //
     // Check if hero jumped to next platform
@@ -629,9 +657,11 @@ function createPlatformSystem(k, sound, hero, antiHero) {
       if (isOnNext && isGrounded && !inst.nextPlatform.heroLanded) {
         //
         // Get time on the platform hero is landing on
+        // Safe platforms (3rd, 5th, 7th, 9th, etc.) are always safe
         //
+        const isSafePlatform = inst.nextPlatform.isSafePlatform || false
         const landingTime = inst.nextPlatform.inst.currentTime || inst.nextPlatform.inst.initialTime
-        const isSafe = isSumEven(landingTime)
+        const isSafe = isSafePlatform || isSumEven(landingTime)
         //
         // If landing platform has odd sum, decrease attempts
         //
@@ -681,6 +711,7 @@ function createPlatformSystem(k, sound, hero, antiHero) {
             inst: inst.nextPlatform.inst,
             index: inst.nextPlatform.index,
             timeOffset: inst.nextPlatform.timeOffset,
+            isSafePlatform: inst.nextPlatform.isSafePlatform || false,
             ageInSeconds: inst.nextPlatform.ageInSeconds,
             maxDarkening: inst.nextPlatform.maxDarkening,
             lastGlobalTime: inst.nextPlatform.lastGlobalTime
@@ -718,6 +749,7 @@ function createPlatformSystem(k, sound, hero, antiHero) {
           inst: inst.nextPlatform.inst,
           index: inst.nextPlatform.index,
           timeOffset: inst.nextPlatform.timeOffset,  // Keep the offset
+          isSafePlatform: inst.nextPlatform.isSafePlatform || false,
           ageInSeconds: inst.nextPlatform.ageInSeconds,
           maxDarkening: inst.nextPlatform.maxDarkening,
           lastGlobalTime: inst.nextPlatform.lastGlobalTime
@@ -771,6 +803,26 @@ function createNextPlatform(inst) {
     return
   }
   
+  //
+  // Check if this is a safe platform (through intervals of 3, 5, 7, 9 platforms)
+  // Safe platforms: 3rd (index 2), then +5=8th (index 7), then +7=15th (index 14), then +9=24th (index 23)
+  // Then cycle repeats: +3=27th (index 26), +5=32nd (index 31), +7=39th (index 38), +9=48th (index 47)...
+  //
+  const intervals = [3, 5, 7, 9]
+  const platformNumber = nextIndex + 1  // Convert 0-based index to 1-based platform number
+  let currentPosition = 0
+  let intervalIndex = 0
+  let isSafePlatform = false
+  
+  while (currentPosition < platformNumber) {
+    currentPosition += intervals[intervalIndex]
+    if (currentPosition === platformNumber) {
+      isSafePlatform = true
+      break
+    }
+    intervalIndex = (intervalIndex + 1) % intervals.length
+  }
+  
   const pos = getPlatformPosition(nextIndex, k)
   //
   // Calculate max darkening: decrease by 1 every 6 platforms (min 1)
@@ -779,6 +831,7 @@ function createNextPlatform(inst) {
   const maxDarkening = Math.max(12 - Math.floor(nextIndex / 6), 1)
   //
   // Create platform with offset that will tick with global time
+  // Safe platforms always show "00" and don't tick
   //
   const platform = TimePlatform.create({
     k,
@@ -787,8 +840,8 @@ function createNextPlatform(inst) {
     hero,
     persistent: true,
     showSecondsOnly: true,
-    initialTime: randomOffset,  // Initial display
-    staticTime: false,
+    initialTime: isSafePlatform ? 0 : randomOffset,  // Safe platforms always show 00
+    staticTime: isSafePlatform,  // Safe platforms don't tick
     duration: 0,
     sfx: sound
   })
@@ -798,7 +851,8 @@ function createNextPlatform(inst) {
     index: nextIndex,
     heroLanded: false,
     errorCounted: false,  // Track if error was already counted for this platform
-    timeOffset: randomOffset,  // Store offset for syncing
+    timeOffset: isSafePlatform ? 0 : randomOffset,  // Store offset for syncing (0 for safe platforms)
+    isSafePlatform: isSafePlatform,  // Flag to mark safe platforms
     ageInSeconds: 0,
     maxDarkening: maxDarkening,
     lastGlobalTime: inst.globalTime

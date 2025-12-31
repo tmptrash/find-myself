@@ -270,78 +270,177 @@ function getPlatformPosition(index, k) {
 }
 
 /**
- * Show attempts text above hero
+ * Create hearts display above hero
  * @param {Object} inst - Platform system instance
  */
-function showAttemptsText(inst) {
-  const { k, hero, attemptsRemaining } = inst
+function createHearts(inst) {
+  const { k } = inst
   
   //
-  // Create text content in English (short version)
-  // Ensure non-negative display and correct grammar (0 uses plural "lives")
+  // Initialize hearts array
   //
-  const displayLives = Math.max(0, attemptsRemaining)
-  const textContent = `${displayLives} ${displayLives === 1 ? 'life' : 'lives'} left`
+  inst.hearts = []
   
   //
-  // Remove existing text if it exists
-  //
-  if (inst.attemptsText && inst.attemptsText.exists()) {
-    if (inst.attemptsText.outlineTexts) {
-      inst.attemptsText.outlineTexts.forEach(outlineText => {
-        if (outlineText.exists()) {
-          k.destroy(outlineText)
-        }
-      })
-    }
-    k.destroy(inst.attemptsText)
-  }
-  
-  //
-  // Create text above hero
-  //
-  const textY = hero.character.pos.y - 80
-  const textX = hero.character.pos.x
-  
-  //
-  // Create text with outline
+  // Create outline offsets for black outline (thicker outline with larger size)
   //
   const outlineOffsets = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0],           [1, 0],
-    [-1, 1],  [0, 1],  [1, 1]
+    [-4, -4], [-3, -4], [-2, -4], [-1, -4], [0, -4], [1, -4], [2, -4], [3, -4], [4, -4],
+    [-4, -3], [-3, -3], [-2, -3], [-1, -3], [0, -3], [1, -3], [2, -3], [3, -3], [4, -3],
+    [-4, -2], [-3, -2], [-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [3, -2], [4, -2],
+    [-4, -1], [-3, -1], [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1], [3, -1], [4, -1],
+    [-4, 0],  [-3, 0],  [-2, 0],  [-1, 0],           [1, 0],  [2, 0],  [3, 0],  [4, 0],
+    [-4, 1],  [-3, 1],  [-2, 1],  [-1, 1],  [0, 1],  [1, 1],  [2, 1],  [3, 1],  [4, 1],
+    [-4, 2],  [-3, 2],  [-2, 2],  [-1, 2],  [0, 2],  [1, 2],  [2, 2],  [3, 2],  [4, 2],
+    [-4, 3],  [-3, 3],  [-2, 3],  [-1, 3],  [0, 3],  [1, 3],  [2, 3],  [3, 3],  [4, 3],
+    [-4, 4],  [-3, 4],  [-2, 4],  [-1, 4],  [0, 4],  [1, 4],  [2, 4],  [3, 4],  [4, 4]
   ]
   
-  const outlineTexts = outlineOffsets.map(([ox, oy]) => {
-    return k.add([
-      k.text(textContent, {
-        size: 24,
+  //
+  // Create 3 hearts with black outline
+  //
+  for (let i = 0; i < 3; i++) {
+    //
+    // Create outline hearts (black, slightly larger for better visibility)
+    //
+    const outlineHearts = outlineOffsets.map(([ox, oy]) => {
+      return k.add([
+        k.text('♥', {
+          size: 22,  // Slightly larger than main heart for better outline visibility
+          font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+          align: "center"
+        }),
+        k.pos(ox, oy),
+        k.anchor("center"),
+        k.color(0, 0, 0),  // Black outline
+        k.z(CFG.visual.zIndex.ui - 1),  // Behind main heart
+        k.opacity(1)
+      ])
+    })
+    
+    //
+    // Create main heart (red)
+    //
+    const heart = k.add([
+      k.text('♥', {
+        size: 20,
         font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
         align: "center"
       }),
-      k.pos(textX + ox, textY + oy),
+      k.pos(0, 0),
       k.anchor("center"),
-      k.color(0, 0, 0),  // Black outline
-      k.z(CFG.visual.zIndex.ui)
+      k.color(255, 0, 0),  // Red heart
+      k.z(CFG.visual.zIndex.ui),
+      k.opacity(1),
+      {
+        outlineHearts: outlineHearts
+      }
     ])
+    inst.hearts.push(heart)
+  }
+  
+  //
+  // Update hearts position
+  //
+  updateHeartsPosition(inst)
+}
+
+/**
+ * Update hearts position above hero
+ * @param {Object} inst - Platform system instance
+ */
+function updateHeartsPosition(inst) {
+  const { k, hero } = inst
+  
+  if (!inst.hearts || !hero || !hero.character) return
+  
+  //
+  // Position hearts above hero
+  //
+  const heartsY = hero.character.pos.y - 60
+  const heartsX = hero.character.pos.x
+  const heartSpacing = 25  // Space between hearts
+  
+  //
+  // Count visible hearts (hearts that should be shown)
+  //
+  const visibleHeartsCount = inst.attemptsRemaining
+  
+  //
+  // Center only visible hearts horizontally relative to hero position
+  // Calculate start position so visible hearts are centered
+  //
+  const totalWidth = visibleHeartsCount > 0 ? (visibleHeartsCount - 1) * heartSpacing : 0
+  const startX = heartsX - totalWidth / 2
+  
+  //
+  // Position visible hearts centered, ignoring hidden ones
+  //
+  let visibleIndex = 0
+  inst.hearts.forEach((heart, index) => {
+    if (heart && heart.exists()) {
+      //
+      // Only position visible hearts (those that should be shown)
+      //
+      if (index < visibleHeartsCount) {
+        const heartX = startX + visibleIndex * heartSpacing
+        heart.pos.x = heartX
+        heart.pos.y = heartsY
+        
+        //
+        // Update outline hearts position
+        //
+        if (heart.outlineHearts) {
+          heart.outlineHearts.forEach((outlineHeart) => {
+            if (outlineHeart && outlineHeart.exists()) {
+              outlineHeart.pos.x = heartX
+              outlineHeart.pos.y = heartsY
+            }
+          })
+        }
+        visibleIndex++
+      }
+    }
+  })
+}
+
+/**
+ * Update hearts display based on remaining attempts
+ * @param {Object} inst - Platform system instance
+ */
+function updateHearts(inst) {
+  const { k } = inst
+  
+  if (!inst.hearts) {
+    createHearts(inst)
+    return
+  }
+  
+  //
+  // Hide hearts that exceed attempts remaining
+  //
+  inst.hearts.forEach((heart, index) => {
+    if (heart && heart.exists()) {
+      const opacity = index < inst.attemptsRemaining ? 1 : 0
+      heart.opacity = opacity
+      
+      //
+      // Update outline hearts opacity
+      //
+      if (heart.outlineHearts) {
+        heart.outlineHearts.forEach((outlineHeart) => {
+          if (outlineHeart && outlineHeart.exists()) {
+            outlineHeart.opacity = opacity
+          }
+        })
+      }
+    }
   })
   
-  inst.attemptsText = k.add([
-    k.text(textContent, {
-      size: 24,
-      font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
-      align: "center"
-    }),
-    k.pos(textX, textY),
-    k.anchor("center"),
-    k.color(255, 255, 255),  // White text
-    k.z(CFG.visual.zIndex.ui),
-    {
-      outlineTexts: outlineTexts,
-      lifetime: 0,
-      maxLifetime: 2.0  // Show for 2 seconds
-    }
-  ])
+  //
+  // Update position
+  //
+  updateHeartsPosition(inst)
 }
 
 /**
@@ -392,7 +491,7 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     globalTime: 0,  // Global time in seconds that all platforms sync to
     globalTimer: 0,  // Timer to track seconds
     attemptsRemaining: 3,  // Number of wrong platform attempts remaining (starts at 3)
-    attemptsText: null,  // Text object showing remaining attempts
+    hearts: null,  // Array of heart objects showing remaining attempts
     lastErrorTime: 0  // Track when last error occurred to prevent multiple triggers
   }
   
@@ -402,6 +501,11 @@ function createPlatformSystem(k, sound, hero, antiHero) {
   if (inst.attemptsRemaining <= 0 || inst.attemptsRemaining > 3) {
     inst.attemptsRemaining = 3
   }
+  //
+  // Create hearts display
+  //
+  createHearts(inst)
+  updateHearts(inst)
   //
   // DEBUG: Create all platforms at once for visualization
   //
@@ -442,70 +546,9 @@ function createPlatformSystem(k, sound, hero, antiHero) {
   //
   k.onUpdate(() => {
     //
-    // Update attempts text position and lifetime
+    // Update hearts position above hero
     //
-    if (inst.attemptsText && inst.attemptsText.exists()) {
-      //
-      // Follow hero position
-      //
-      const textY = hero.character.pos.y - 80
-      const textX = hero.character.pos.x
-      inst.attemptsText.pos.x = textX
-      inst.attemptsText.pos.y = textY
-      
-      //
-      // Update outline texts position
-      //
-      if (inst.attemptsText.outlineTexts) {
-        const outlineOffsets = [
-          [-1, -1], [0, -1], [1, -1],
-          [-1, 0],           [1, 0],
-          [-1, 1],  [0, 1],  [1, 1]
-        ]
-        inst.attemptsText.outlineTexts.forEach((outlineText, i) => {
-          if (outlineText.exists()) {
-            const [ox, oy] = outlineOffsets[i]
-            outlineText.pos.x = textX + ox
-            outlineText.pos.y = textY + oy
-          }
-        })
-      }
-      
-      //
-      // Update lifetime and fade out
-      //
-      inst.attemptsText.lifetime += k.dt()
-      const progress = inst.attemptsText.lifetime / inst.attemptsText.maxLifetime
-      
-      if (progress >= 1.0) {
-        //
-        // Remove text after max lifetime
-        //
-        if (inst.attemptsText.outlineTexts) {
-          inst.attemptsText.outlineTexts.forEach(outlineText => {
-            if (outlineText.exists()) {
-              k.destroy(outlineText)
-            }
-          })
-        }
-        k.destroy(inst.attemptsText)
-        inst.attemptsText = null
-      } else if (progress > 0.7) {
-        //
-        // Fade out in last 30% of lifetime
-        //
-        const fadeProgress = (progress - 0.7) / 0.3
-        const opacity = 1 - fadeProgress
-        inst.attemptsText.opacity = opacity
-        if (inst.attemptsText.outlineTexts) {
-          inst.attemptsText.outlineTexts.forEach(outlineText => {
-            if (outlineText.exists()) {
-              outlineText.opacity = opacity
-            }
-          })
-        }
-      }
-    }
+    updateHeartsPosition(inst)
     
     //
     // Update global timer
@@ -612,17 +655,19 @@ function createPlatformSystem(k, sound, hero, antiHero) {
               inst.attemptsRemaining--
               
               //
-              // Show attempts text above hero only if we have attempts left
+              // Play death sound when losing a heart
               //
-              if (inst.attemptsRemaining > 0) {
-                showAttemptsText(inst)
-              }
+              Sound.playDeathSound(inst.sound)
+              
+              //
+              // Update hearts display
+              //
+              updateHearts(inst)
               
               //
               // If no attempts left, hero dies
               //
               if (inst.attemptsRemaining <= 0) {
-                Sound.playDeathSound(inst.sound)
                 Hero.death(inst.hero, () => k.go('level-time.2'))
                 return
               }
@@ -631,7 +676,6 @@ function createPlatformSystem(k, sound, hero, antiHero) {
           
           //
           // Add platform to platforms array so it can age and disappear
-          // But don't destroy previous platform - hero can return to it
           //
           inst.platforms.push({
             inst: inst.nextPlatform.inst,
@@ -642,6 +686,17 @@ function createPlatformSystem(k, sound, hero, antiHero) {
             lastGlobalTime: inst.nextPlatform.lastGlobalTime
           })
           
+          //
+          // Destroy previous platform (including the first one)
+          //
+          const prevPlatformIndex = inst.platforms.length - 2
+          if (prevPlatformIndex >= 0) {
+            const prevPlatform = inst.platforms[prevPlatformIndex]
+            if (prevPlatform && !prevPlatform.inst.isDestroyed) {
+              TimePlatform.destroy(prevPlatform.inst)
+            }
+          }
+          
           inst.currentPlatformIndex = inst.nextPlatform.index
           inst.nextPlatform = null
           //
@@ -651,7 +706,6 @@ function createPlatformSystem(k, sound, hero, antiHero) {
             createNextPlatform(inst)
           }
           //
-          // Don't destroy previous platform - hero can return to it
           // Platform is unsafe but hero can stay on it
           //
           return

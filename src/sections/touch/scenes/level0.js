@@ -56,6 +56,19 @@ export function sceneLevel0(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
+    // Start touch.mp3 background music
+    //
+    const touchMusic = k.play('touch', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.touch
+    })
+    //
+    // Stop music when leaving the scene
+    //
+    k.onSceneLeave(() => {
+      touchMusic.stop()
+    })
+    //
     // Draw background
     //
     k.onDraw(() => {
@@ -988,7 +1001,7 @@ export function sceneLevel0(k) {
     // Big bug constants (needed for bug4 creation)
     //
     const BIG_BUG_COLOR = "#1A1C1A"
-    const BIG_BUG_Z_INDEX = 20  // In front of static trees (z=7), behind dynamic trees (z=25), below player (z=10)
+    const BIG_BUG_Z_INDEX = 8  // In front of layer 1 trees (z=7), behind dynamic trees (z=25), below player (z=10)
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
     const BIG_BUG_CRAWL_SPEED = 4
@@ -1017,19 +1030,42 @@ export function sceneLevel0(k) {
     const bug4LegLength2 = 90   // Same as bug1
     const bug4LegReach = (bug4LegLength1 + bug4LegLength2) * BIG_BUG_SCALE * bug4LegDropFactor
     //
-    // Calculate body Y position so that top of flat head is at ANTIHERO_PLATFORM_Y
-    // For flat head bug: head is ellipse with height = radius * 0.8
-    // Top of head is at bug4BodyY - flatHeadHeight / 2
+    // Calculate body Y position so that top of head is at ANTIHERO_PLATFORM_Y
+    // and legs touch FLOOR_Y
+    // Top of flat head is at bug4BodyY - flatHeadHeight / 2
     // We want top of head at ANTIHERO_PLATFORM_Y
-    // So: bug4BodyY - (radius * 0.8) / 2 = ANTIHERO_PLATFORM_Y
-    // Therefore: bug4BodyY = ANTIHERO_PLATFORM_Y + (radius * 0.8) / 2
+    // So: bug4BodyY = ANTIHERO_PLATFORM_Y + flatHeadHeight / 2
+    //
+    // For bugs with upward legs, legs go up from sides first, then down to floor
+    // Legs are positioned at floorY = bug4BodyY + reach * legDropFactor
+    // We want floorY = FLOOR_Y
+    // So: FLOOR_Y = bug4BodyY + reach * legDropFactor
+    // Therefore: reach * legDropFactor = FLOOR_Y - bug4BodyY
+    // reach = (FLOOR_Y - bug4BodyY) / legDropFactor
     //
     const flatHeadHeight = bug4Radius * 0.8
     const bug4BodyY = ANTIHERO_PLATFORM_Y + flatHeadHeight / 2
+    const requiredLegReach = (FLOOR_Y - bug4BodyY) / bug4LegDropFactor
+    
     //
-    // Verify legs can reach floor (they should with bug1's leg lengths)
-    // If not, we'd need longer legs, but bug1's legs should be enough
+    // Calculate leg lengths to ensure legs touch FLOOR_Y
     //
+    let bug4LegLength1Final, bug4LegLength2Final
+    
+    if (bug4LegReach < requiredLegReach) {
+      //
+      // Need longer legs - adjust leg lengths proportionally
+      //
+      const scaleFactor = requiredLegReach / bug4LegReach
+      bug4LegLength1Final = bug4LegLength1 * scaleFactor
+      bug4LegLength2Final = bug4LegLength2 * scaleFactor
+    } else {
+      //
+      // Current leg lengths are sufficient
+      //
+      bug4LegLength1Final = bug4LegLength1
+      bug4LegLength2Final = bug4LegLength2
+    }
     
     const bigBug4Inst = Bugs.create({
       k,
@@ -1038,14 +1074,16 @@ export function sceneLevel0(k) {
       hero: null,  // Will be set later after hero is created
       surface: 'floor',
       scale: BIG_BUG_SCALE,  // Same scale as other big bugs
-      legLength1: bug4LegLength1,  // Same as bug1
-      legLength2: bug4LegLength2,  // Same as bug1
+      legLength1: bug4LegLength1Final,  // Adjusted to ensure legs touch FLOOR_Y
+      legLength2: bug4LegLength2Final,  // Adjusted to ensure legs touch FLOOR_Y
       crawlSpeed: BIG_BUG_CRAWL_SPEED * 0.3,  // Slow movement
       legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
       legDropFactor: bug4LegDropFactor,
       customColor: BIG_BUG_COLOR,  // Same color as other big bugs
       zIndex: BIG_BUG_Z_INDEX,
       showOutline: false,
+      hasUpwardLegs: true,
+      targetFloorY: FLOOR_Y,  // Use fixed FLOOR_Y for legs
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',  // Circle shape like other big bugs
       legCount: 2,
@@ -1384,7 +1422,8 @@ export function sceneLevel0(k) {
       //
       if (bigBug4Inst && antiHeroPlatform && antiHeroInst) {
         //
-        // Update platform position to follow bug's head
+        // Update platform position to follow bug's head top
+        // Top of flat head is at bug4BodyY - flatHeadHeight / 2
         //
         const flatHeadHeight = bug4Radius * 0.8
         const headTopY = bigBug4Inst.y - flatHeadHeight / 2

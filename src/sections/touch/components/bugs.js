@@ -94,7 +94,8 @@ export function create(config) {
     legThickness = 1.0,
     bodyShape = 'semicircle',
     legCount = 4,
-    hasUpwardLegs = false
+    hasUpwardLegs = false,
+    targetFloorY = null
   } = config
   //
   // Choose random pattern or use custom color
@@ -193,21 +194,33 @@ export function create(config) {
     if (surface === 'floor') {
       //
       // All legs start on same horizontal line (floor)
+      // For bugs with upward legs and targetFloorY, use targetFloorY directly
+      // Otherwise calculate floorY relative to body position
       //
-      const floorY = y + reach * legDropFactor
+      const hasUpwardLegs = config.hasUpwardLegs || false
+      const targetFloorY = config.targetFloorY || null
+      const floorY = hasUpwardLegs && targetFloorY !== null
+        ? targetFloorY
+        : y + reach * legDropFactor
       
-      if (legCount === 2) {
-        //
-        // 2 legs: place them far apart on left and right sides
-        //
-        if (i === 0) {
-          // Left leg
-          footX = x - reach * 0.8 * legSpreadFactor
+        if (legCount === 2) {
+          //
+          // 2 legs: place them far apart on left and right sides
+          //
+          if (i === 0) {
+            // Left leg
+            footX = x - reach * 0.8 * legSpreadFactor
+          } else {
+            // Right leg
+            footX = x + reach * 0.8 * legSpreadFactor
+          }
+          
+          //
+          // For bugs with upward legs, legs still touch the floor
+          // They go up from sides first, then curve down to the floor
+          //
+          footY = floorY  // Same Y for all legs (touch floor)
         } else {
-          // Right leg
-          footX = x + reach * 0.8 * legSpreadFactor
-        }
-      } else {
         //
         // 4 legs: front and back positioning
         //
@@ -218,9 +231,9 @@ export function create(config) {
           // Back legs (indices 0, 1)
           footX = x - reach * 0.4 * legSpreadFactor
         }
+        
+        footY = floorY  // Same Y for all legs
       }
-      
-      footY = floorY  // Same Y for all legs
     } else {
       //
       // Wall bugs use angles
@@ -275,6 +288,8 @@ export function create(config) {
     legThickness,    // Store for leg thickness
     bodyShape,       // Store for body shape
     legCount,        // Store for number of legs
+    hasUpwardLegs,   // Store for upward legs flag
+    targetFloorY,    // Store for target floor Y position
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
@@ -534,7 +549,12 @@ function updateLegs(inst, dt) {
         // Floor bugs: all legs land on the same horizontal line (floor level)
         // Body position adjusted by dropOffset when scared
         //
-        const floorY = inst.y + reach * inst.legDropFactor - inst.dropOffset  // Floor line moves up when body drops
+        // For bugs with upward legs and targetFloorY, use targetFloorY directly
+        // Otherwise calculate floorY relative to body position
+        //
+        const floorY = inst.hasUpwardLegs && inst.targetFloorY !== null
+          ? inst.targetFloorY - inst.dropOffset
+          : inst.y + reach * inst.legDropFactor - inst.dropOffset
         const bodyRadius = inst.scale * BUG_BODY_SIZE * 1.5 * 0.9
         
         if (inst.legCount === 2) {
@@ -543,6 +563,12 @@ function updateLegs(inst, dt) {
           //
           const legSideOffset = reach * 1.2 * inst.legSpreadFactor  // Increased offset for more visible movement
           idealX = i === 0 ? inst.x - legSideOffset : inst.x + legSideOffset
+          
+          //
+          // For bugs with upward legs, legs still touch the floor
+          // They go up from sides first, then curve down to the floor
+          //
+          idealY = floorY  // Same Y for all legs on floor
         } else {
           //
           // 4 legs: determine which legs are front/back based on movement direction
@@ -586,6 +612,10 @@ function updateLegs(inst, dt) {
           }
         }
         
+        //
+        // For bugs with upward legs, legs still touch the floor
+        // They go up from sides first, then curve down to the floor
+        //
         idealY = floorY  // Same Y for all legs on floor
         
       } else {

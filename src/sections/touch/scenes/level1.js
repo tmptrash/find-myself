@@ -51,6 +51,19 @@ export function sceneLevel1(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
+    // Start touch.mp3 background music
+    //
+    const touchMusic = k.play('touch', {
+      loop: true,
+      volume: CFG.audio.backgroundMusic.touch
+    })
+    //
+    // Stop music when leaving the scene
+    //
+    k.onSceneLeave(() => {
+      touchMusic.stop()
+    })
+    //
     // Draw background
     //
     k.onDraw(() => {
@@ -146,11 +159,12 @@ export function sceneLevel1(k) {
     const gameState = {
       antiHeroActive: false,
       playerSequence: [],
-      targetSequence: [0, 1, 2, 1, 2],  // C, D, E, D, E (tree indices)
+      targetSequence: [0, 1, 2, 1, 2],  // C, D, E, D, E (tree indices) - exactly 5 notes
       melodyNotes: [261.63, 293.66, 329.63, 293.66, 329.63],  // Frequencies
       isNearAntiHero: false,
       isPlayingMelody: false,
-      melodyTimer: 0
+      melodyTimer: 0,
+      lastTouchedTreeIndex: -1  // Track last touched tree to prevent duplicate detection
     }
     
     //
@@ -534,54 +548,146 @@ export function sceneLevel1(k) {
       const touchedTreeIndex = TreeRoots.checkHeroTreeCollision(treeRootsInst, heroInst.character)
       
       //
+      // Track when player stops touching a tree to allow re-touching the same tree
+      //
+      if (touchedTreeIndex === -1 && gameState.lastTouchedTreeIndex !== -1) {
+        //
+        // Player stopped touching a tree - reset to allow touching the same tree again
+        //
+        gameState.lastTouchedTreeIndex = -1
+      }
+      
+      //
       // If a tree was touched, add to player sequence
       // Check sequence regardless of proximity to anti-hero
       //
       if (touchedTreeIndex !== -1 && !gameState.antiHeroActive) {
         //
-        // Don't add the same note twice in a row (prevent duplicates)
+        // Prevent processing the same touch event multiple times
+        // Only process if this is a new touch (different from last processed touch)
         //
-        const lastNote = gameState.playerSequence.length > 0 ? gameState.playerSequence[gameState.playerSequence.length - 1] : -1
-        if (touchedTreeIndex !== lastNote) {
-          gameState.playerSequence.push(touchedTreeIndex)
-          
+        if (touchedTreeIndex === gameState.lastTouchedTreeIndex) {
+          return
+        }
+        
+        const currentLength = gameState.playerSequence.length
+        const targetLength = gameState.targetSequence.length
+        const firstNoteIndex = gameState.targetSequence[0]  // First note must be this index (0)
+        
+        //
+        // If sequence is empty, only accept first note (index 0) to start
+        //
+        if (currentLength === 0) {
+          if (touchedTreeIndex !== firstNoteIndex) {
+            //
+            // Wrong first note - ignore it, wait for correct first note
+            //
+            gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+            return
+          }
+        }
+        
+        //
+        // If sequence is already complete, reset it
+        //
+        if (currentLength >= targetLength) {
+          gameState.playerSequence = []
           //
-          // Check if sequence is correct so far
+          // After reset, wait for first note again
           //
-          const currentLength = gameState.playerSequence.length
-          const targetLength = gameState.targetSequence.length
-          
+          if (touchedTreeIndex !== firstNoteIndex) {
+            gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+            return
+          }
+        }
+        
+        //
+        // Check: adding this note must not exceed target length
+        //
+        if (currentLength >= targetLength) {
           //
-          // Check if current sequence matches target sequence up to current length
+          // Sequence is already at target length - reset and start over
           //
-          let isCorrect = true
-          for (let i = 0; i < currentLength; i++) {
+          gameState.playerSequence = []
+          gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+          //
+          // After reset, only accept first note
+          //
+          if (touchedTreeIndex !== firstNoteIndex) {
+            return
+          }
+        }
+        
+        //
+        // Check: this note must match target sequence at the next position
+        // Verify BEFORE adding to prevent invalid sequences
+        //
+        const nextPosition = currentLength
+        const expectedNote = gameState.targetSequence[nextPosition]
+        
+        if (touchedTreeIndex !== expectedNote) {
+          //
+          // Wrong note at this position - reset sequence immediately
+          //
+          gameState.playerSequence = []
+          gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
+          return
+        }
+        
+        //
+        // All checks passed - add note to sequence
+        //
+        gameState.playerSequence.push(touchedTreeIndex)
+        gameState.lastTouchedTreeIndex = touchedTreeIndex
+        
+        //
+        // Get new length after adding note
+        //
+        const newLength = gameState.playerSequence.length
+        
+        //
+        // If sequence length equals target length, verify exact match and activate
+        //
+        if (newLength === targetLength) {
+          //
+          // Final verification: sequence must match target exactly (all 5 notes)
+          //
+          let exactMatch = true
+          for (let i = 0; i < targetLength; i++) {
             if (gameState.playerSequence[i] !== gameState.targetSequence[i]) {
-              isCorrect = false
+              exactMatch = false
               break
             }
           }
           
-          if (!isCorrect) {
+          if (exactMatch) {
             //
-            // Wrong note, reset sequence
-            //
-            gameState.playerSequence = []
-          } else if (currentLength === targetLength && isCorrect) {
-            //
-            // Complete sequence matched! Activate anti-hero
+            // Complete sequence matched exactly! Activate anti-hero
             //
             try {
               activateAntiHero()
               gameState.playerSequence = []  // Reset for safety
+              gameState.lastTouchedTreeIndex = -1  // Reset to allow new sequence
             } catch (error) {
               //
               // If activation fails, reset sequence and try again
               //
               gameState.playerSequence = []
+              gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
             }
+          } else {
+            //
+            // Sequence length matches but content doesn't - reset
+            //
+            gameState.playerSequence = []
+            gameState.lastTouchedTreeIndex = -1  // Reset to allow retry
           }
         }
+      } else {
+        //
+        // No tree touched or anti-hero already active - reset touch tracking
+        //
+        gameState.lastTouchedTreeIndex = -1
       }
       
       //
@@ -692,7 +798,7 @@ export function sceneLevel1(k) {
           // Draw request text above notes
           //
           k.drawText({
-            text: 'Play this:',
+            text: 'play this:',
             pos: k.vec2(bubbleX, bubbleY - 35),
             size: 18,
             font: CFG.visual.fonts.regularFull,
@@ -716,22 +822,37 @@ export function sceneLevel1(k) {
             const isCurrentNote = gameState.isPlayingMelody && i === gameState.currentNoteIndex
             
             //
-            // Draw note circle (larger)
+            // Draw note circle with black outline
             //
             const circleRadius = isCurrentNote ? 20 : 18
+            const outlineWidth = 2
+            
+            //
+            // Draw black outline circle
+            //
             k.drawCircle({
               pos: k.vec2(noteX, noteY),
-              radius: circleRadius,
-              color: isCurrentNote ? k.rgb(100, 200, 100) : k.rgb(60, 60, 60),
+              radius: circleRadius + outlineWidth,
+              color: k.rgb(0, 0, 0),
               opacity: 1.0
             })
             
             //
-            // Draw note name (larger and bolder)
+            // Draw circle - dark green when current note is playing, gray otherwise
+            //
+            k.drawCircle({
+              pos: k.vec2(noteX, noteY),
+              radius: circleRadius,
+              color: isCurrentNote ? k.rgb(80, 130, 80) : k.rgb(120, 120, 120),
+              opacity: 1.0
+            })
+            
+            //
+            // Draw note name (moved down by 1 pixel)
             //
             k.drawText({
               text: noteNames[i],
-              pos: k.vec2(noteX, noteY),
+              pos: k.vec2(noteX, noteY + 1),
               size: isCurrentNote ? 24 : 20,
               font: CFG.visual.fonts.regularFull,
               color: k.rgb(255, 255, 255),

@@ -50,6 +50,7 @@ k.loadSound("menu", "/menu.mp3")
 k.loadSound("kids", "/kids.mp3")
 k.loadSound("clock", "/clock.mp3")
 k.loadSound("time", "/time.mp3")
+k.loadSound("touch", "/touch.mp3")
 //
 // Load default character sprites for both hero types
 // Must be loaded before scenes are registered, as scenes may create heroes immediately

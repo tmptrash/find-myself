@@ -444,6 +444,37 @@ function updateHearts(inst) {
 }
 
 /**
+ * Hide/destroy hearts when hero dies
+ * @param {Object} inst - Platform system instance
+ */
+function destroyHearts(inst) {
+  const { k } = inst
+  
+  if (!inst.hearts) return
+  
+  inst.hearts.forEach((heart) => {
+    if (heart && heart.exists()) {
+      //
+      // Destroy outline hearts
+      //
+      if (heart.outlineHearts) {
+        heart.outlineHearts.forEach((outlineHeart) => {
+          if (outlineHeart && outlineHeart.exists()) {
+            k.destroy(outlineHeart)
+          }
+        })
+      }
+      //
+      // Destroy main heart
+      //
+      k.destroy(heart)
+    }
+  })
+  
+  inst.hearts = null
+}
+
+/**
  * Creates dynamic platform system
  * @param {Object} k - Kaplay instance
  * @param {Object} sound - Sound instance
@@ -545,6 +576,16 @@ function createPlatformSystem(k, sound, hero, antiHero) {
   // Update function called every frame
   //
   k.onUpdate(() => {
+    //
+    // Check if hero is dead or doesn't exist - hide hearts
+    //
+    if (!hero || !hero.character || !hero.character.exists()) {
+      if (inst.hearts) {
+        destroyHearts(inst)
+      }
+      return
+    }
+    
     //
     // Update hearts position above hero
     //

@@ -327,6 +327,112 @@ export function create(config) {
 export function onUpdate(inst, dt) {
   const { k, hero } = inst
   //
+  // Initialize cooldown tracking if not exists
+  //
+  if (inst.scaredCooldown === undefined) {
+    inst.scaredCooldown = 0
+  }
+  if (inst.minDistanceToReset === undefined) {
+    inst.minDistanceToReset = 100  // Distance bug needs to move away to reset fear
+  }
+  
+  //
+  // Update cooldown timer
+  //
+  if (inst.scaredCooldown > 0) {
+    inst.scaredCooldown -= dt
+  }
+  
+  //
+  // Check for hero collision and react with fear
+  // Don't check during scared, recovering, or pyramid states
+  //
+  if (hero && hero.character && hero.character.pos && inst.state !== 'scared' && inst.state !== 'recovering' && inst.state !== 'pyramid') {
+    const heroPos = hero.character.pos
+    const dx = heroPos.x - inst.x
+    const dy = heroPos.y - inst.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const touchRadius = 30  // Close distance (about 20-30 pixels)
+    
+    //
+    // If bug moved far enough from hero, reset cooldown
+    //
+    if (dist > inst.minDistanceToReset && inst.scaredCooldown > 0) {
+      inst.scaredCooldown = 0  // Reset cooldown, bug can be scared again
+    }
+    
+    //
+    // Simple check: if hero is close and no cooldown, get scared
+    //
+    if (dist < touchRadius && inst.scaredCooldown <= 0) {
+      //
+      // Bug gets scared!
+      //
+      inst.state = 'scared'
+      inst.stateTimer = 2.0
+      inst.vx = 0
+      inst.vy = 0
+      // Don't set cooldown here - set it after recovery completes
+      //
+      // Determine escape direction
+      //
+      if (heroPos.x < inst.x) {
+        inst.movementAngle = 0  // Escape right
+      } else {
+        inst.movementAngle = Math.PI  // Escape left
+      }
+    }
+  }
+  //
+  // Handle scared state
+  //
+  if (inst.state === 'scared') {
+    //
+    // Squat down - increase dropOffset to lower body to the ground
+    //
+    const targetDropOffset = 20  // Lower body significantly (was 8)
+    if (inst.dropOffset < targetDropOffset) {
+      inst.dropOffset += dt * 150  // Fast squat
+      if (inst.dropOffset > targetDropOffset) inst.dropOffset = targetDropOffset
+    }
+    //
+    // Count down timer
+    //
+    inst.stateTimer -= dt
+    
+    if (inst.stateTimer <= 0) {
+      //
+      // Fear period over - start escaping
+      // Re-check hero position to determine correct escape direction
+      //
+      if (hero && hero.character && hero.character.pos) {
+        const heroPos = hero.character.pos
+        //
+        // Set escape direction based on current hero position
+        //
+        if (heroPos.x < inst.x) {
+          inst.movementAngle = 0  // Hero to the left, escape right
+        } else {
+          inst.movementAngle = Math.PI  // Hero to the right, escape left
+        }
+      }
+      
+      inst.state = 'recovering'
+      inst.stateTimer = 0.5  // Short recovery period
+      //
+      // Start moving away from hero
+      //
+      inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+      inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+    }
+    
+    //
+    // Update legs even when scared (they pull in)
+    //
+    updateLegs(inst, dt)
+    return
+  }
+  //
   // Bugs in pyramid don't update movement, but legs need to be updated
   // to prevent them from being pulled in (scared state)
   //
@@ -345,18 +451,33 @@ export function onUpdate(inst, dt) {
   if (inst.state === 'recovering') {
     //
     // Still recovering - count down timer
-    // Body stays down during recovery, lifts only after recovery complete
+    // Body lifts back up during recovery
     //
+    if (inst.dropOffset > 0) {
+      inst.dropOffset -= dt * 150
+      if (inst.dropOffset < 0) inst.dropOffset = 0
+    }
+    
+    //
+    // Keep moving in escape direction during recovery
+    //
+    inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
+    inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
+    
     inst.stateTimer -= dt
     
     if (inst.stateTimer <= 0) {
       //
-      // Recovery complete - resume crawling
+      // Recovery complete - continue crawling in escape direction
       //
       inst.state = 'crawling'
       inst.stateTimer = inst.crawlDuration
       //
-      // Small bugs keep their escape direction
+      // Set cooldown NOW so bug can't be scared again immediately
+      //
+      inst.scaredCooldown = 3.0  // 3 seconds until can be scared again
+      //
+      // Maintain escape direction and speed
       //
       inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
       inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed

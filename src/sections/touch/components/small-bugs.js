@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as Sound from '../../../utils/sound.js'
 //
 // Small bug parameters
 //
@@ -372,7 +373,10 @@ export function onUpdate(inst, dt) {
       inst.stateTimer = 2.0
       inst.vx = 0
       inst.vy = 0
-      // Don't set cooldown here - set it after recovery completes
+      //
+      // Play scare sound
+      //
+      inst.sfx && Sound.playBugScareSound(inst.sfx)
       //
       // Determine escape direction
       //

@@ -1573,9 +1573,11 @@ export function sceneLevel0(k) {
         BugPyramid.onUpdate(pyramid, dt)
         //
         // Check for bugs that can join this pyramid
+        // Check both big bugs and small bugs
         //
         if (pyramid.isActive) {
-          const availableBugs = bugs.filter(bug => 
+          const allBugs = [...bugs, ...smallBugs]
+          const availableBugs = allBugs.filter(bug => 
             bug.isMother === false && 
             bug.state !== 'pyramid' && 
             bug.state !== 'scared' &&
@@ -1593,12 +1595,12 @@ export function sceneLevel0(k) {
             
             if (dist <= 60) {  // JOIN_DETECTION_RADIUS
               //
-              // Try to add bug to pyramid
+              // Try to add bug to pyramid (timer will be reset to 0 in addBug)
               //
               const added = BugPyramid.addBug(pyramid, bug)
               if (added) {
                 //
-                // Bug successfully added, timer will be reset in addBug
+                // Bug successfully added, timer reset to 0 for another 5 seconds
                 //
               }
             }

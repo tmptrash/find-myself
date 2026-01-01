@@ -596,7 +596,6 @@ export function sceneLevel1(k) {
           gameState.lastTouchedTreeIndex = -1
           gameState.sequenceCompleteTime = null
           gameState.pauseTimer = 0
-          console.log('Sequence reset: same tree touched twice. Current sequence:', gameState.playerSequence)
           return
         }
         
@@ -612,7 +611,6 @@ export function sceneLevel1(k) {
             gameState.sequenceCompleteTime = null
             gameState.pauseTimer = 0
             gameState.lastTouchedTreeIndex = -1
-            console.log('Sequence reset: pause too short. Current sequence:', gameState.playerSequence)
             return
           }
           //
@@ -621,11 +619,6 @@ export function sceneLevel1(k) {
           gameState.sequenceCompleteTime = null
           gameState.pauseTimer = 0
         }
-        
-        //
-        // Debug: log when note processing starts
-        //
-        console.log('Processing note:', touchedTreeIndex, 'Current sequence before:', [...gameState.playerSequence])
         
         const currentSequence = gameState.playerSequence
         const targetSequence = gameState.targetSequence
@@ -702,7 +695,6 @@ export function sceneLevel1(k) {
           gameState.lastTouchedTreeIndex = -1
           gameState.sequenceCompleteTime = null
           gameState.pauseTimer = 0
-          console.log('Sequence reset: no matching position found. Current sequence:', gameState.playerSequence)
           //
           // If touched note is first note (0), we can start new sequence
           //
@@ -731,7 +723,6 @@ export function sceneLevel1(k) {
           gameState.lastTouchedTreeIndex = -1
           gameState.sequenceCompleteTime = null
           gameState.pauseTimer = 0
-          console.log('Sequence reset: already complete. Current sequence:', gameState.playerSequence)
           //
           // If touched note is first note (0), we can start new sequence
           //
@@ -755,7 +746,6 @@ export function sceneLevel1(k) {
             gameState.lastTouchedTreeIndex = -1
             gameState.sequenceCompleteTime = null
             gameState.pauseTimer = 0
-            console.log('Sequence reset: wrong note. Expected:', expectedNote, 'Got:', touchedTreeIndex, 'Current sequence:', gameState.playerSequence)
             //
             // If wrong note was first note (0), we can start new sequence
             // Otherwise, ignore and wait for first note
@@ -774,11 +764,6 @@ export function sceneLevel1(k) {
         //
         gameState.playerSequence.push(touchedTreeIndex)
         gameState.lastTouchedTreeIndex = touchedTreeIndex
-        
-        //
-        // Debug: log current sequence
-        //
-        console.log('Current sequence:', gameState.playerSequence)
         
         //
         // Step 5: Check if sequences match completely

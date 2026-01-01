@@ -3,11 +3,16 @@ import * as Hero from '../../../components/hero.js'
 import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
+import * as SmallBugs from '../components/small-bugs.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+//
+// Bug constants (from bugs.js)
+//
+const BUG_BODY_SIZE = 6
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -132,6 +137,7 @@ export function sceneLevel0(k) {
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
+    //
     //
     // Bottom platform (full width)
     //
@@ -1000,11 +1006,18 @@ export function sceneLevel0(k) {
     //
     // Big bug constants (needed for bug4 creation)
     //
-    const BIG_BUG_COLOR = "#1A1C1A"
+    const BIG_BUG_COLOR = "#1A1C1A"  // Black color for bug4 (anti-hero platform)
+    //
+    // Calculate back layer tree color for bugs 1, 2, 3
+    // Back layer (layerIndex 0) tree color: 12 * 0.2 + 42 * 0.8 = 36 (R), 16 * 0.2 + 42 * 0.8 = 37 (G), 12 * 0.2 + 42 * 0.8 = 36 (B)
+    // Mix between black (#1A1C1A = rgb(26, 28, 26)) and tree color (#242524 = rgb(36, 37, 36))
+    // Average: rgb(31, 32.5, 31) ≈ rgb(31, 33, 31) = #1F211F
+    //
+    const BACK_LAYER_TREE_COLOR = "#1F211F"  // Color between black and back layer trees for better visibility
     const BIG_BUG_Z_INDEX = 8  // In front of layer 1 trees (z=7), behind dynamic trees (z=25), below player (z=10)
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
-    const BIG_BUG_CRAWL_SPEED = 4
+    const BIG_BUG_CRAWL_SPEED = 12  // Increased speed for tall bugs
     const BIG_BUG_SCALE = 3.0
     //
     // Create bug 4 (platform bug for anti-hero) before creating anti-hero
@@ -1026,8 +1039,10 @@ export function sceneLevel0(k) {
     // Then calculate body Y position from floor
     // Finally adjust so that bug's back (top) is at ANTIHERO_PLATFORM_Y
     //
-    const bug4LegLength1 = 100  // Same as bug1
-    const bug4LegLength2 = 90   // Same as bug1
+    // Legs length = 2 body lengths (same as bug1 and bug2)
+    // 2 body lengths = BUG_BODY_SIZE * 1.5 * BIG_BUG_SCALE * 2 = 6 * 1.5 * 3.0 * 2 = 54
+    const bug4LegLength1 = 28  // First segment
+    const bug4LegLength2 = 26  // Second segment (total = 54, equals 2 body lengths)
     const bug4LegReach = (bug4LegLength1 + bug4LegLength2) * BIG_BUG_SCALE * bug4LegDropFactor
     //
     // Calculate body Y position so that top of head is at ANTIHERO_PLATFORM_Y
@@ -1090,8 +1105,8 @@ export function sceneLevel0(k) {
       hasUpwardLegs: true,  // Legs go up from sides first, then down
       sfx: sound,
       bounds: {
-        minX: LEFT_MARGIN + 200,  // Allow movement within screen
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN - 200,
+        minX: LEFT_MARGIN + bug4Radius,  // Don't go beyond left platform (account for body radius)
+        maxX: CFG.visual.screen.width - RIGHT_MARGIN - bug4Radius,  // Don't go beyond right platform (account for body radius)
         minY: bug4BodyY,
         maxY: bug4BodyY
       }
@@ -1231,8 +1246,9 @@ export function sceneLevel0(k) {
     //
     // Create bugs on the floor
     //
-    const bugFloorY = FLOOR_Y - 10
-    const bugs = []
+    const bugFloorY = FLOOR_Y - 4  // Lower by 6 pixels total (was -10)
+    const bugs = []  // Big bugs only
+    const smallBugs = []  // Small bugs and debug bug
     const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
     //
     // Create three big bugs with different leg heights
@@ -1246,6 +1262,13 @@ export function sceneLevel0(k) {
     const bug1LegReach = (bug1LegLength1 + bug1LegLength2) * BIG_BUG_SCALE * bug1LegDropFactor
     const bug1X = LEFT_MARGIN + floorWidth * 0.3
     const bug1Y = bugFloorY - bug1LegReach
+    //
+    // Set boundary for bug1: stop before bug4 and don't go beyond platforms
+    //
+    const bug1BodyRadius = BUG_BODY_SIZE * 1.5 * BIG_BUG_SCALE * 0.9
+    const bug1MaxX = bug4X - 150  // Stop 150px before bug4
+    const bug1MinX = LEFT_MARGIN + bug1BodyRadius  // Don't go beyond left platform
+    const bug1MaxXWithPlatform = Math.min(bug1MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug1BodyRadius)  // Don't go beyond right platform
     
     const bigBug1Inst = Bugs.create({
       k,
@@ -1259,7 +1282,7 @@ export function sceneLevel0(k) {
       crawlSpeed: BIG_BUG_CRAWL_SPEED,
       legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
       legDropFactor: bug1LegDropFactor,
-      customColor: BIG_BUG_COLOR,
+      customColor: BACK_LAYER_TREE_COLOR,
       zIndex: BIG_BUG_Z_INDEX,
       showOutline: false,
       legThickness: BIG_BUG_LEG_THICKNESS,
@@ -1267,8 +1290,8 @@ export function sceneLevel0(k) {
       legCount: 2,
       sfx: sound,
       bounds: {
-        minX: LEFT_MARGIN - 100,
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN + 100,
+        minX: bug1MinX,
+        maxX: bug1MaxXWithPlatform,
         minY: bug1Y,
         maxY: bug1Y
       }
@@ -1282,6 +1305,13 @@ export function sceneLevel0(k) {
     const bug2LegReach = (bug2LegLength1 + bug2LegLength2) * BIG_BUG_SCALE * bug2LegDropFactor
     const bug2X = LEFT_MARGIN + floorWidth * 0.6
     const bug2Y = bugFloorY - bug2LegReach
+    //
+    // Set boundary for bug2: stop before bug4 and don't go beyond platforms
+    //
+    const bug2BodyRadius = BUG_BODY_SIZE * 1.5 * BIG_BUG_SCALE * 0.9
+    const bug2MaxX = bug4X - 150  // Stop 150px before bug4
+    const bug2MinX = LEFT_MARGIN + bug2BodyRadius  // Don't go beyond left platform
+    const bug2MaxXWithPlatform = Math.min(bug2MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug2BodyRadius)  // Don't go beyond right platform
     
     const bigBug2Inst = Bugs.create({
       k,
@@ -1295,7 +1325,7 @@ export function sceneLevel0(k) {
       crawlSpeed: BIG_BUG_CRAWL_SPEED,
       legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
       legDropFactor: bug2LegDropFactor,
-      customColor: BIG_BUG_COLOR,
+      customColor: BACK_LAYER_TREE_COLOR,
       zIndex: BIG_BUG_Z_INDEX,
       showOutline: false,
       legThickness: BIG_BUG_LEG_THICKNESS,
@@ -1303,46 +1333,10 @@ export function sceneLevel0(k) {
       legCount: 2,
       sfx: sound,
       bounds: {
-        minX: LEFT_MARGIN - 100,
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN + 100,
+        minX: bug2MinX,
+        maxX: bug2MaxXWithPlatform,
         minY: bug2Y,
         maxY: bug2Y
-      }
-    })
-    //
-    // Bug 3: Shortest of the big bugs
-    //
-    const bug3LegLength1 = 65
-    const bug3LegLength2 = 55
-    const bug3LegDropFactor = 0.85
-    const bug3LegReach = (bug3LegLength1 + bug3LegLength2) * BIG_BUG_SCALE * bug3LegDropFactor
-    const bug3X = LEFT_MARGIN + floorWidth * 0.8
-    const bug3Y = bugFloorY - bug3LegReach
-    
-    const bigBug3Inst = Bugs.create({
-      k,
-      x: bug3X,
-      y: bug3Y,
-      hero: heroInst,
-      surface: 'floor',
-      scale: BIG_BUG_SCALE,
-      legLength1: bug3LegLength1,
-      legLength2: bug3LegLength2,
-      crawlSpeed: BIG_BUG_CRAWL_SPEED,
-      legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
-      legDropFactor: bug3LegDropFactor,
-      customColor: BIG_BUG_COLOR,
-      zIndex: BIG_BUG_Z_INDEX,
-      showOutline: false,
-      legThickness: BIG_BUG_LEG_THICKNESS,
-      bodyShape: 'circle',
-      legCount: 2,
-      sfx: sound,
-      bounds: {
-        minX: LEFT_MARGIN - 100,
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN + 100,
-        minY: bug3Y,
-        maxY: bug3Y
       }
     })
     //
@@ -1355,7 +1349,6 @@ export function sceneLevel0(k) {
     const bigBugs = [
       { inst: bigBug1Inst, y: bug1Y },
       { inst: bigBug2Inst, y: bug2Y },
-      { inst: bigBug3Inst, y: bug3Y },
       { inst: bigBug4Inst, y: bug4BodyY }
     ]
     
@@ -1378,20 +1371,41 @@ export function sceneLevel0(k) {
       //
       const spacing = (floorWidth - 200) / 11
       const bugX = LEFT_MARGIN + 100 + i * spacing + (Math.random() - 0.5) * 30
-      const bugScale = 0.6 + Math.random() * 0.8
+      // Larger bugs with smaller size variation - closer to big bugs
+      const bugScale = 1.0 + Math.random() * 0.3  // Range: 1.0 to 1.3 (was 0.6 to 1.4)
       //
-      // Adjust Y position based on scale to prevent legs from extending below platform
-      // Keep bugs on the edge, just slightly adjust for larger scales
+      // Use longer legs for small bugs to ensure they reach the floor and extend fully
+      // Longer legs help prevent knees from touching ground - legs should stand on foot tips
       //
-      const bugY = bugFloorY - (bugScale - 1.0) * 8
+      const smallBugLegLength1 = 12  // Longer first segment
+      const smallBugLegLength2 = 11  // Longer second segment
+      const smallBugLegReach = (smallBugLegLength1 + smallBugLegLength2) * bugScale
+      const smallBugLegDropFactor = 1.0  // Full drop factor to ensure legs reach floor
+      //
+      // Calculate body Y position so legs touch the floor
+      // Need to account for body radius - body center is at bugY, but bottom of body is at bugY + bodyRadius
+      // Legs attach to bottom of body, so: floorY = bugY + bodyRadius + reach * legDropFactor
+      // We want floorY = bugFloorY
+      // So: bugY = bugFloorY - bodyRadius - reach * legDropFactor
+      // Add extra offset to lower body position
+      //
+      const bodyRadius = BUG_BODY_SIZE * 1.5 * bugScale * 0.9
+      const bodyLowerOffset = 10  // Additional offset to lower body (reduced to straighten legs)
+      const bugY = bugFloorY - bodyRadius - smallBugLegReach * smallBugLegDropFactor + bodyLowerOffset
       
-      const bugInst = Bugs.create({
+      const bugInst = SmallBugs.create({
         k,
         x: bugX,
         y: bugY,
         hero: heroInst,
         surface: 'floor',
         scale: bugScale,
+        legLength1: smallBugLegLength1,
+        legLength2: smallBugLegLength2,
+        legDropFactor: smallBugLegDropFactor,
+        targetFloorY: bugFloorY,  // Explicitly set floor Y so legs touch platform
+        legSpreadFactor: 0.3,  // Keep legs close to body
+        legCount: 4,  // Will be converted to 6 legs by component logic
         sfx: sound,
         bounds: {
           minX: LEFT_MARGIN + 30,
@@ -1411,7 +1425,7 @@ export function sceneLevel0(k) {
       bugInst.isMother = false
       bugInst.justRecovered = false
       
-      bugs.push(bugInst)
+      smallBugs.push(bugInst)
     }
     //
     // Update bug4 platform and anti-hero position to follow bug movement
@@ -1548,6 +1562,7 @@ export function sceneLevel0(k) {
       const dt = k.dt()
       
       bugs.forEach(bug => Bugs.onUpdate(bug, dt))
+      smallBugs.forEach(bug => SmallBugs.onUpdate(bug, dt))
       Dust.onUpdate(dustInst, dt)
       
       //
@@ -1618,8 +1633,10 @@ export function sceneLevel0(k) {
         
         //
         // Get only small bugs (not in pyramid, not scared, not scattering)
+        // Use all bugs (big + small) and filter for small bugs
         //
-        const smallBugs = bugs.filter(bug => 
+        const allBugs = [...bugs, ...smallBugs]
+        const availableSmallBugs = allBugs.filter(bug => 
           bug.isMother === false && 
           bug.state !== 'pyramid' && 
           bug.state !== 'scared' &&
@@ -1630,7 +1647,7 @@ export function sceneLevel0(k) {
         //
         // Find bug groups
         //
-        const group = BugPyramid.findBugGroup(smallBugs)
+        const group = BugPyramid.findBugGroup(availableSmallBugs)
         
         if (group && group.length >= 5) {
           //
@@ -1692,6 +1709,19 @@ export function sceneLevel0(k) {
         }
       }
     ])
+    })
+    //
+    // Draw small bugs (including debug bug)
+    //
+    smallBugs.forEach(bugInst => {
+      k.add([
+        k.z(bugInst.zIndex),
+        {
+          draw() {
+            SmallBugs.draw(bugInst)
+          }
+        }
+      ])
     })
     //
     // Return to menu on ESC

@@ -319,7 +319,7 @@ function createHearts(inst) {
     })
     
     //
-    // Create main heart (red)
+    // Create main heart (yellow, same as anti-hero)
     //
     const heart = k.add([
       k.text('♥', {
@@ -329,7 +329,7 @@ function createHearts(inst) {
       }),
       k.pos(0, 0),
       k.anchor("center"),
-      k.color(255, 0, 0),  // Red heart
+      k.color(255, 140, 0),  // Orange/yellow heart (same as anti-hero #FF8C00)
       k.z(CFG.visual.zIndex.ui),
       k.opacity(1),
       {

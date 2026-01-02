@@ -144,7 +144,7 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     k.pos(x, y),
     k.anchor("center"),
     k.rotate(rotation),
-    k.color(192, 192, 192)  // Light gray
+    k.color(135, 169, 189)  // Steel blue color
   ]
   //
   // Real spikes have collision and are behind hero

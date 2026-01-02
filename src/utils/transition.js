@@ -87,7 +87,7 @@ const LEVEL_SUBTITLES = {
   'level-time.2': 'digits sum even safe, sum odd deadly. you have 3 tries',
   'level-time.3': 'sections switch controls - watch the clocks',
   'level-touch.0': 'gather what crawls together to reach what stands above',
-  'level-touch.1': 'the path is yours to climb'
+  'level-touch.1': 'touch the roots in sequence - find the melody that awakens'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

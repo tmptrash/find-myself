@@ -4,6 +4,7 @@ import * as Hero from '../../../components/hero.js'
 import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
+import * as AnalogClock from '../components/analog-clock.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
 import { saveLastLevel } from '../../../utils/progress.js'
@@ -36,10 +37,6 @@ const INSTRUCTIONS_INITIAL_DELAY = 1.0
 const INSTRUCTIONS_FADE_IN_DURATION = 0.8
 const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
-//
-// Flag to track if instructions animation is complete (resets only on page reload)
-//
-let instructionsAnimationComplete = false
 
 /**
  * Creates instructions text object with manual black outline
@@ -165,7 +162,6 @@ function showInstructions(k) {
         //
         // Clean up and finish
         //
-        instructionsAnimationComplete = true
         updateInterval.cancel()
         k.destroy(mainText)
         outlineTexts.forEach(text => k.destroy(text))
@@ -239,11 +235,9 @@ export function sceneLevel0(k) {
     //
     antiHero.character.hidden = true
     //
-    // Show instructions on first run
+    // Show instructions every time
     //
-    if (!instructionsAnimationComplete) {
-      showInstructions(k)
-    }
+    showInstructions(k)
     //
     // Create time digits background (full screen)
     //
@@ -264,6 +258,17 @@ export function sceneLevel0(k) {
         }
       },
       k.z(16)  // Above platforms (15) but below player
+    ])
+    //
+    // Create a game object for drawing analog clock
+    //
+    k.add([
+      {
+        draw() {
+          AnalogClock.draw(analogClock)
+        }
+      },
+      k.z(17)  // Above time digits
     ])
     //
     // Create FPS counter
@@ -328,6 +333,15 @@ export function sceneLevel0(k) {
       y: 720,
     })
     //
+    // Create analog clock centered horizontally at the top
+    //
+    const analogClock = AnalogClock.create({
+      k,
+      x: CFG.visual.screen.width / 2,  // Center horizontally
+      y: 450,  // Higher up
+      staticPlatform
+    })
+    //
     // Platform 5: 1-second timer, right and up from static platform
     //
     const timePlatform5 = TimePlatform.create({
@@ -350,7 +364,7 @@ export function sceneLevel0(k) {
       sfx: sound
     })
     //
-    // Update all time platforms
+    // Update all time platforms and analog clock
     //
     k.onUpdate(() => {
       TimePlatform.onUpdate(timePlatform1)
@@ -359,6 +373,7 @@ export function sceneLevel0(k) {
       TimePlatform.onUpdate(timePlatform5)
       TimePlatform.onUpdate(timePlatform6)
       StaticTimePlatform.onUpdate(staticPlatform)
+      AnalogClock.onUpdate(analogClock)
     })
     //
     // Create time spikes (digit "1") under the time platform to anti-hero
@@ -373,48 +388,219 @@ export function sceneLevel0(k) {
       sfx: sound
     })
     //
-    // Remove last 4 fake spikes when hero approaches them from the right side
+    // Make last 4 fake spikes glitch like broken TV/computer screen
+    // and disappear when hero jumps on them
     //
-    let lastSpikesRemoved = false
+    let glitchTimer = 0
+    let isGlitching = false
+    let glitchFlickerTimer = 0
+    let spikesDisappeared = false
+    let glitchSoundPlayed = false
+    const STABLE_DURATION = 5  // 5 seconds stable
+    const GLITCH_DURATION = 0.8  // 0.8 seconds of glitching
+    //
+    // Store original positions for each fake spike
+    //
+    const originalPositions = []
+    const originalRotations = []
+    
+    timeSpikes.fakeSpikes.forEach(fakeSpike => {
+      if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
+        originalPositions.push({ x: fakeSpike.pos.x, y: fakeSpike.pos.y })
+        originalRotations.push(fakeSpike.angle)
+      }
+    })
     
     k.onUpdate(() => {
       //
-      // Check if hero is approaching the right side (last 4 fake spikes area)
-      // Hero should be close to the right edge
+      // Check if hero jumped on fake spikes (passed through them from above)
       //
-      if (!lastSpikesRemoved && hero.character.pos.x > 1350 && hero.character.pos.y > 700) {
-        lastSpikesRemoved = true
+      if (!spikesDisappeared && hero.character.pos.x > 1350 && hero.character.pos.y > 700) {
         //
-        // Remove all fake spikes (the last 4 ones)
+        // Hero reached the fake spikes area - make them disappear permanently
         //
+        spikesDisappeared = true
+        
         timeSpikes.fakeSpikes.forEach(fakeSpike => {
           if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
-            //
-            // Destroy outline texts
-            //
+            fakeSpike.opacity = 0
+            
             if (fakeSpike.outlineTexts) {
               fakeSpike.outlineTexts.forEach(outline => {
                 if (outline && outline.exists && outline.exists()) {
-                  k.destroy(outline)
+                  outline.opacity = 0
                 }
               })
             }
-            //
-            // Destroy glint drawer
-            //
-            if (fakeSpike.glintDrawer && fakeSpike.glintDrawer.exists && fakeSpike.glintDrawer.exists()) {
-              k.destroy(fakeSpike.glintDrawer)
-            }
-            //
-            // Destroy main spike
-            //
-            k.destroy(fakeSpike)
           }
         })
-        //
-        // Clear fake spikes array
-        //
-        timeSpikes.fakeSpikes = []
+      }
+      //
+      // Glitch effect: 5 seconds stable, then chaotic TV-like glitching
+      //
+      if (!spikesDisappeared && timeSpikes && timeSpikes.fakeSpikes) {
+        glitchTimer += k.dt()
+        
+        if (!isGlitching) {
+          //
+          // Stable phase: spikes are at original positions
+          //
+          if (glitchTimer >= STABLE_DURATION) {
+            //
+            // Start glitching
+            //
+            isGlitching = true
+            glitchTimer = 0
+            glitchFlickerTimer = 0
+            glitchSoundPlayed = false
+          }
+        } else {
+          //
+          // Glitching phase: TV screen distortion effects
+          //
+          glitchFlickerTimer += k.dt()
+          //
+          // Random flicker intervals (between 0.03 and 0.12 seconds)
+          //
+          const randomInterval = 0.03 + Math.random() * 0.09
+          
+          if (glitchFlickerTimer >= randomInterval) {
+            glitchFlickerTimer = 0
+            //
+            // Apply random TV glitch effects to each spike
+            //
+            timeSpikes.fakeSpikes.forEach((fakeSpike, index) => {
+              if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
+                const original = originalPositions[index]
+                const originalRotation = originalRotations[index]
+                //
+                // Random glitch type for variety
+                //
+                const glitchType = Math.random()
+                
+                if (glitchType < 0.2) {
+                  //
+                  // Type 1: Complete signal loss (20%)
+                  //
+                  fakeSpike.opacity = 0
+                  if (fakeSpike.outlineTexts) {
+                    fakeSpike.outlineTexts.forEach(outline => {
+                      if (outline && outline.exists && outline.exists()) {
+                        outline.opacity = 0
+                      }
+                    })
+                  }
+                } else if (glitchType < 0.5) {
+                  //
+                  // Type 2: Horizontal displacement (30%)
+                  //
+                  const offsetX = (Math.random() - 0.5) * 20  // ±10px horizontal
+                  fakeSpike.pos.x = original.x + offsetX
+                  fakeSpike.opacity = 0.7 + Math.random() * 0.3
+                  
+                  if (fakeSpike.outlineTexts) {
+                    fakeSpike.outlineTexts.forEach((outline, i) => {
+                      if (outline && outline.exists && outline.exists()) {
+                        const outlineOffset = i < 4 ? [-2, 0, 2, -2][i] : [2, -2, 0, 2][i - 4]
+                        outline.pos.x = original.x + offsetX + outlineOffset
+                        outline.opacity = 0.7 + Math.random() * 0.3
+                      }
+                    })
+                  }
+                } else if (glitchType < 0.7) {
+                  //
+                  // Type 3: Vertical jitter (20%)
+                  //
+                  const offsetY = (Math.random() - 0.5) * 10  // ±5px vertical
+                  fakeSpike.pos.y = original.y + offsetY
+                  fakeSpike.opacity = 1
+                  
+                  if (fakeSpike.outlineTexts) {
+                    fakeSpike.outlineTexts.forEach((outline, i) => {
+                      if (outline && outline.exists && outline.exists()) {
+                        const outlineOffsetY = i < 3 ? -2 : (i < 5 ? 0 : 2)
+                        outline.pos.y = original.y + offsetY + outlineOffsetY
+                        outline.opacity = 1
+                      }
+                    })
+                  }
+                } else if (glitchType < 0.85) {
+                  //
+                  // Type 4: Double vision / ghosting (15%)
+                  //
+                  const offsetX = (Math.random() - 0.5) * 15
+                  const offsetY = (Math.random() - 0.5) * 8
+                  fakeSpike.pos.x = original.x + offsetX
+                  fakeSpike.pos.y = original.y + offsetY
+                  fakeSpike.opacity = 0.5 + Math.random() * 0.3
+                  
+                  if (fakeSpike.outlineTexts) {
+                    fakeSpike.outlineTexts.forEach((outline, i) => {
+                      if (outline && outline.exists && outline.exists()) {
+                        const ox = i < 4 ? [-2, 0, 2, -2][i] : [2, -2, 0, 2][i - 4]
+                        const oy = i < 3 ? -2 : (i < 5 ? 0 : 2)
+                        outline.pos.x = original.x + offsetX + ox
+                        outline.pos.y = original.y + offsetY + oy
+                        outline.opacity = 0.5 + Math.random() * 0.3
+                      }
+                    })
+                  }
+                } else {
+                  //
+                  // Type 5: Normal display (15%)
+                  //
+                  fakeSpike.pos.x = original.x
+                  fakeSpike.pos.y = original.y
+                  fakeSpike.opacity = 1
+                  
+                  if (fakeSpike.outlineTexts) {
+                    fakeSpike.outlineTexts.forEach((outline, i) => {
+                      if (outline && outline.exists && outline.exists()) {
+                        const ox = i < 4 ? [-2, 0, 2, -2][i] : [2, -2, 0, 2][i - 4]
+                        const oy = i < 3 ? -2 : (i < 5 ? 0 : 2)
+                        outline.pos.x = original.x + ox
+                        outline.pos.y = original.y + oy
+                        outline.opacity = 1
+                      }
+                    })
+                  }
+                }
+              }
+            })
+          }
+          
+          if (glitchTimer >= GLITCH_DURATION) {
+            //
+            // End glitching, restore to original positions
+            //
+            isGlitching = false
+            glitchTimer = 0
+            glitchSoundPlayed = false
+            //
+            // Restore spikes to original positions and full opacity
+            //
+            timeSpikes.fakeSpikes.forEach((fakeSpike, index) => {
+              if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
+                const original = originalPositions[index]
+                fakeSpike.pos.x = original.x
+                fakeSpike.pos.y = original.y
+                fakeSpike.opacity = 1
+                
+                if (fakeSpike.outlineTexts) {
+                  fakeSpike.outlineTexts.forEach((outline, i) => {
+                    if (outline && outline.exists && outline.exists()) {
+                      const ox = i < 4 ? [-2, 0, 2, -2][i] : [2, -2, 0, 2][i - 4]
+                      const oy = i < 3 ? -2 : (i < 5 ? 0 : 2)
+                      outline.pos.x = original.x + ox
+                      outline.pos.y = original.y + oy
+                      outline.opacity = 1
+                    }
+                  })
+                }
+              }
+            })
+          }
+        }
       }
     })
   })

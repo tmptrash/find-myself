@@ -38,10 +38,10 @@ export function create() {
   bladeSoundGain.gain.value = 1.0
   bladeSoundGain.connect(ctx.destination)
   //
-  // Create master gain for glitch sound (for volume control)
+  // Create master gain for glitch sound (TV static)
   //
   const glitchSoundGain = ctx.createGain()
-  glitchSoundGain.gain.value = 1.0
+  glitchSoundGain.gain.value = 0.6
   glitchSoundGain.connect(ctx.destination)
   //
   // Create master gain for bug sounds
@@ -1781,6 +1781,69 @@ export function playBugScareSound(inst) {
   
   oscillator.start(now)
   oscillator.stop(now + 0.1)
+}
+/**
+ * Play electrical glitch sound (TV static noise)
+ * @param {Object} inst - Sound instance
+ */
+export function playElectricalGlitchSound(inst) {
+  if (!inst || !inst.audioContext || !inst.glitchSoundGain) return
+  
+  const { audioContext, glitchSoundGain } = inst
+  const now = audioContext.currentTime
+  const duration = 0.4
+  //
+  // Create white noise buffer (TV static)
+  //
+  const bufferSize = audioContext.sampleRate * duration
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  
+  for (let i = 0; i < bufferSize; i++) {
+    //
+    // Pure white noise (full spectrum)
+    //
+    data[i] = Math.random() * 2 - 1
+  }
+  //
+  // Create noise source
+  //
+  const noise = audioContext.createBufferSource()
+  noise.buffer = buffer
+  //
+  // Light highpass filter to remove very low rumble (like real TV static)
+  //
+  const filter = audioContext.createBiquadFilter()
+  filter.type = 'highpass'
+  filter.frequency.setValueAtTime(200, now)
+  filter.Q.setValueAtTime(0.5, now)
+  //
+  // Add slight lowpass to soften harsh highs
+  //
+  const lowpass = audioContext.createBiquadFilter()
+  lowpass.type = 'lowpass'
+  lowpass.frequency.setValueAtTime(8000, now)
+  lowpass.Q.setValueAtTime(0.5, now)
+  //
+  // Envelope with quick attack and decay (like burst of static)
+  //
+  const envelope = audioContext.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(0.8, now + 0.02)
+  envelope.gain.linearRampToValueAtTime(0.6, now + 0.15)
+  envelope.gain.linearRampToValueAtTime(0, now + duration)
+  //
+  // Connect: noise -> highpass -> lowpass -> envelope -> output
+  //
+  noise.connect(filter)
+  filter.connect(lowpass)
+  lowpass.connect(envelope)
+  envelope.connect(glitchSoundGain)
+  //
+  // Play
+  //
+  noise.start(now)
+  noise.stop(now + duration)
 }
 /**
  * Play time platform disappear sound (mechanical fade out)

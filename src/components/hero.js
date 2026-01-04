@@ -954,15 +954,39 @@ function createDustParticles(inst, footX, footY, type = 'splash', direction = 1)
     const offsetX = side * k.rand(5, 15)
 
     //
-    // Create particle with gray fill and black outline
+    // Create particle with custom or default color
     //
     const outlineColor = getRGB(k, CFG.visual.colors.outline)
-    const grayColor = k.color(150, 150, 150)
+    let particleR, particleG, particleB
+    if (inst.dustColor) {
+      //
+      // Use custom dust color (hex string) - parse directly to get RGB values
+      // Keep blue tint by varying channels differently
+      //
+      const [baseR, baseG, baseB] = parseHex(inst.dustColor)
+      //
+      // Vary channels to keep blue tint: less variation for red (keep it darker),
+      // more variation for green and blue (but keep blue dominant)
+      //
+      const variationR = k.rand(-5, 5)  // Less variation for red
+      const variationG = k.rand(-8, 8)  // Medium variation for green
+      const variationB = k.rand(-10, 5)  // More variation for blue, but don't go too bright
+      particleR = Math.max(0, Math.min(255, baseR + variationR))
+      particleG = Math.max(0, Math.min(255, baseG + variationG))
+      particleB = Math.max(0, Math.min(255, baseB + variationB))
+    } else {
+      //
+      // Default gray color
+      //
+      particleR = 150
+      particleG = 150
+      particleB = 150
+    }
     
     const particle = k.add([
       k.rect(DUST_PARTICLE_SIZE, DUST_PARTICLE_SIZE),
       k.pos(footX + offsetX, footY - 2),  // Slightly above ground
-      grayColor,
+      k.color(particleR, particleG, particleB),
       k.outline(1.5, k.rgb(outlineColor.r, outlineColor.g, outlineColor.b)),
       k.opacity(0.9),
       k.anchor("center"),

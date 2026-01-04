@@ -77,6 +77,7 @@ const BUG_PATTERNS = [
  * @param {number} [config.legCount=4] - Number of legs: 2 or 4
  * @param {number} [config.targetFloorY] - Target floor Y position
  * @param {boolean} [config.isDebugBug=false] - Whether this is a debug bug
+ * @param {number} [config.touchRadius=30] - Distance at which bug crouches when touching hero
  * @returns {Object} Bug instance
  */
 export function create(config) {
@@ -94,7 +95,8 @@ export function create(config) {
     bodyShape = 'semicircle',
     legCount = 4,
     targetFloorY = null,
-    isDebugBug = false
+    isDebugBug = false,
+    touchRadius = 30
   } = config
   //
   // All bugs now use 4 legs with horse-like gait
@@ -301,6 +303,7 @@ export function create(config) {
     legCount: finalLegCount,  // Store for number of legs (ensure 4 for debug bugs)
     targetFloorY,    // Store for target floor Y position
     isDebugBug,      // Store for debug bug flag
+    touchRadius,     // Store for touch detection radius
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
@@ -334,7 +337,7 @@ export function onUpdate(inst, dt) {
     inst.scaredCooldown = 0
   }
   if (inst.minDistanceToReset === undefined) {
-    inst.minDistanceToReset = 100  // Distance bug needs to move away to reset fear
+    inst.minDistanceToReset = 50  // Distance bug needs to move away to reset fear
   }
   
   //
@@ -353,7 +356,6 @@ export function onUpdate(inst, dt) {
     const dx = heroPos.x - inst.x
     const dy = heroPos.y - inst.y
     const dist = Math.sqrt(dx * dx + dy * dy)
-    const touchRadius = 30  // Close distance (about 20-30 pixels)
     
     //
     // If bug moved far enough from hero, reset cooldown
@@ -365,7 +367,7 @@ export function onUpdate(inst, dt) {
     //
     // Simple check: if hero is close and no cooldown, get scared
     //
-    if (dist < touchRadius && inst.scaredCooldown <= 0) {
+    if (dist < inst.touchRadius && inst.scaredCooldown <= 0) {
       //
       // Bug gets scared!
       //
@@ -479,7 +481,7 @@ export function onUpdate(inst, dt) {
       //
       // Set cooldown NOW so bug can't be scared again immediately
       //
-      inst.scaredCooldown = 3.0  // 3 seconds until can be scared again
+      inst.scaredCooldown = 0.5  // 0.5 seconds until can be scared again
       //
       // Maintain escape direction and speed
       //

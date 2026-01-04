@@ -445,10 +445,10 @@ export function sceneLevel1(k) {
       antiHero: gameState.antiHeroActive ? antiHeroInst : null,  // Only set antiHero if active
       onAnnihilation: () => {
         //
-        // Go back to menu after annihilation
+        // Transition after annihilation to next level
         //
         createLevelTransition(k, 'level-touch.1', () => {
-          k.go('menu')
+          k.go('level-touch.2')
         })
       },
       currentLevel: 'level-touch.1'

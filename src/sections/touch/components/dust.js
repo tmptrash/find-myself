@@ -15,23 +15,25 @@ const DUST_OPACITY_MAX = 0.4  // Maximum opacity
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {Object} config.bounds - Game area bounds {left, right, top, bottom}
+ * @param {Object} [config.color] - Custom color {r, g, b} for particles (default: blue)
  * @returns {Object} Dust instance
  */
 export function create(config) {
-  const { k, bounds } = config
+  const { k, bounds, color = null } = config
   
   const particles = []
   //
   // Create initial dust particles distributed across entire screen
   //
   for (let i = 0; i < DUST_COUNT; i++) {
-    particles.push(createParticle(k, bounds, true))  // initialSpawn = true
+    particles.push(createParticle(k, bounds, true, color))  // initialSpawn = true
   }
   
   return {
     k,
     particles,
-    bounds
+    bounds,
+    customColor: color  // Store custom color if provided
   }
 }
 
@@ -40,9 +42,10 @@ export function create(config) {
  * @param {Object} k - Kaplay instance
  * @param {Object} bounds - Game area bounds {left, right, top, bottom}
  * @param {boolean} initialSpawn - If true, spawn across entire screen for initial distribution
+ * @param {Object} [customColor] - Custom color {r, g, b} for particles
  * @returns {Object} Dust particle object
  */
-function createParticle(k, bounds, initialSpawn = false) {
+function createParticle(k, bounds, initialSpawn = false, customColor = null) {
   const x = bounds.left + Math.random() * (bounds.right - bounds.left)
   const y = initialSpawn 
     ? bounds.top + Math.random() * (bounds.bottom - bounds.top)  // Distribute in game area at start
@@ -52,12 +55,25 @@ function createParticle(k, bounds, initialSpawn = false) {
   const driftSpeed = (Math.random() - 0.5) * DUST_DRIFT_SPEED * 2  // Can drift left or right
   const opacity = DUST_OPACITY_MIN + Math.random() * (DUST_OPACITY_MAX - DUST_OPACITY_MIN)
   //
-  // Bright blue color like blue bugs (#3498DB) with slight variations
+  // Use custom color if provided, otherwise use default bright blue color
   //
-  const baseR = 52
-  const baseG = 152
-  const baseB = 219
-  const variation = Math.random() * 30 - 15  // ±15 variation
+  let baseR, baseG, baseB
+  if (customColor) {
+    baseR = customColor.r
+    baseG = customColor.g
+    baseB = customColor.b
+  } else {
+    //
+    // Bright blue color like blue bugs (#3498DB) with slight variations
+    //
+    baseR = 52
+    baseG = 152
+    baseB = 219
+  }
+  //
+  // Use smaller variation for custom colors (snow), larger for default blue
+  //
+  const variation = customColor ? (Math.random() * 20 - 10) : (Math.random() * 30 - 15)  // ±10 for snow, ±15 for default
   
   return {
     x,
@@ -94,13 +110,13 @@ export function onUpdate(inst, dt) {
     // If particle goes below game area, reset it at top
     //
     if (particle.y > bounds.bottom + 10) {
-      particles[index] = createParticle(k, bounds, false)
+      particles[index] = createParticle(k, bounds, false, inst.customColor)
     }
     //
     // If particle goes outside game area horizontally, reset it
     //
     if (particle.x < bounds.left - 10 || particle.x > bounds.right + 10) {
-      particles[index] = createParticle(k, bounds, false)
+      particles[index] = createParticle(k, bounds, false, inst.customColor)
     }
   })
 }
@@ -110,20 +126,38 @@ export function onUpdate(inst, dt) {
  * @param {Object} inst - Dust instance
  */
 export function draw(inst) {
-  const { k, particles } = inst
+  const { k, particles, customColor } = inst
   
   particles.forEach(particle => {
     //
-    // Draw dark outline first (1 pixel larger)
+    // Draw outline - use darker version of particle color if custom color is set
     //
-    k.drawCircle({
-      pos: k.vec2(particle.x, particle.y),
-      radius: particle.size + 1,
-      color: k.rgb(30, 30, 30),
-      opacity: particle.opacity * 0.8
-    })
+    if (customColor) {
+      //
+      // For snow particles, use darker blue outline
+      //
+      const outlineR = Math.max(0, particle.color.r - 30)
+      const outlineG = Math.max(0, particle.color.g - 30)
+      const outlineB = Math.max(0, particle.color.b - 30)
+      k.drawCircle({
+        pos: k.vec2(particle.x, particle.y),
+        radius: particle.size + 1,
+        color: k.rgb(outlineR, outlineG, outlineB),
+        opacity: particle.opacity * 0.8
+      })
+    } else {
+      //
+      // Default dark outline for blue particles
+      //
+      k.drawCircle({
+        pos: k.vec2(particle.x, particle.y),
+        radius: particle.size + 1,
+        color: k.rgb(30, 30, 30),
+        opacity: particle.opacity * 0.8
+      })
+    }
     //
-    // Draw main particle on top with blue color
+    // Draw main particle with its color
     //
     k.drawCircle({
       pos: k.vec2(particle.x, particle.y),

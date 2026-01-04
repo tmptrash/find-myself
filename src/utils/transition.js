@@ -21,7 +21,8 @@ const LEVEL_TRANSITIONS = {
   'level-time.3': 'time-complete',
   'time-complete': 'menu',
   'level-touch.0': 'level-touch.1',
-  'level-touch.1': 'menu'
+  'level-touch.1': 'level-touch.2',
+  'level-touch.2': 'menu'
 }
 
 /**
@@ -87,7 +88,8 @@ const LEVEL_SUBTITLES = {
   'level-time.2': 'digits sum even safe, sum odd deadly. you have 3 tries',
   'level-time.3': 'sections switch controls - watch the clocks',
   'level-touch.0': 'gather what crawls together to reach what stands above',
-  'level-touch.1': 'touch the roots in sequence - find the melody that awakens'
+  'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
+  'level-touch.2': 'jump to reveal the path - find what stands nearby'
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

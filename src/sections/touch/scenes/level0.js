@@ -1189,11 +1189,10 @@ export function sceneLevel0(k) {
       antiHero: antiHeroInst,
       onAnnihilation: () => {
         //
-        // Transition after annihilation
-        // Since this is the only level in touch section, go back to menu
+        // Transition after annihilation to next level
         //
         createLevelTransition(k, 'level-touch.0', () => {
-          k.go('menu')
+          k.go('level-touch.1')
         })
       },
       currentLevel: 'level-touch.0',
@@ -1407,6 +1406,7 @@ export function sceneLevel0(k) {
         legSpreadFactor: 0.3,  // Keep legs close to body
         legCount: 4,  // Will be converted to 6 legs by component logic
         sfx: sound,
+        touchRadius: 50,  // Increased distance for level 0
         bounds: {
           minX: LEFT_MARGIN + 30,
           maxX: CFG.visual.screen.width - RIGHT_MARGIN - 30,
@@ -1461,7 +1461,7 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       const heroX = heroInst.character.pos.x
       const heroY = heroInst.character.pos.y
-      const HERO_RADIUS = 50
+      const HERO_RADIUS = 50  // Increased distance for level 0
       const dt = k.dt()
       
       for (const bugInst of bugs) {
@@ -1476,6 +1476,20 @@ export function sceneLevel0(k) {
         const dx = bugInst.x - heroX
         const dy = bugInst.y - heroY
         const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        //
+        // Update justRecovered timer - reset after short time regardless of distance
+        //
+        if (bugInst.justRecovered) {
+          if (bugInst.justRecoveredTimer === undefined) {
+            bugInst.justRecoveredTimer = 0.5  // Short cooldown period
+          }
+          bugInst.justRecoveredTimer -= dt
+          if (bugInst.justRecoveredTimer <= 0) {
+            bugInst.justRecovered = false
+            bugInst.justRecoveredTimer = undefined
+          }
+        }
         
         if (distance < HERO_RADIUS) {
           //
@@ -1500,11 +1514,6 @@ export function sceneLevel0(k) {
             const reach = (bugInst.legLength1 + bugInst.legLength2) * bugInst.scale
             bugInst.maxDrop = reach * 0.5
           }
-        } else {
-          //
-          // Hero is far - allow being scared again
-          //
-          bugInst.justRecovered = false
         }
         
         if (bugInst.isScared) {
@@ -1532,6 +1541,7 @@ export function sceneLevel0(k) {
             //
             bugInst.isScared = false
             bugInst.justRecovered = true
+            bugInst.justRecoveredTimer = 0.5  // Short cooldown period
             bugInst.state = 'crawling'
             bugInst.movementAngle = escapeDirection < 0 ? Math.PI : 0
             bugInst.vx = Math.cos(bugInst.movementAngle) * bugInst.crawlSpeed

@@ -248,6 +248,241 @@ export function sceneLevel2(k) {
     //
     createSnowDrifts(k)
     //
+    // Create arrow in snow pointing right (to guide hero direction)
+    // Uses same style as arrows between anti-heroes in menu
+    //
+    const arrowY = FLOOR_Y - 40  // Slightly above bottom platform (moved down more)
+    const arrowX = k.width() / 2 + 50  // Center arrow horizontally, shifted right by 50px
+    const ARROWHEAD_SIZE = 24  // Larger arrowhead (increased from 18)
+    const ARROW_OUTLINE_WIDTH = 2  // Outline width for body (reduced by 1px)
+    const ARROWHEAD_OUTLINE_WIDTH = 4  // Outline width for triangle (unchanged)
+    const ARROW_OPACITY = 1.0  // Same as menu arrows
+    const ARROW_BODY_WIDTH = 16  // Width of arrow body rectangle (increased from 12)
+    const ARROW_BODY_LENGTH = 45  // Shorter arrow body (reduced from 65)
+    const arrowAngle = 0  // Pointing right (0 radians)
+    const spreadAngle = Math.PI / 3  // 60 degrees spread (blunter triangle)
+    const arrowColor = k.rgb(150, 180, 220)  // Snow color (light blue)
+    const arrowOutlineColor = k.rgb(0, 0, 0)  // Black outline
+    
+    k.add([
+      k.pos(arrowX, arrowY),
+      k.z(CFG.visual.zIndex.platforms - 2),  // Behind platforms but visible
+      {
+        update() {
+          //
+          // Sway arrow up and down by a couple pixels
+          //
+          const swayAmount = 2  // 2 pixels up and down
+          const swaySpeed = 2.5  // Speed of swaying
+          const offsetY = Math.sin(k.time() * swaySpeed) * swayAmount
+          this.pos.y = arrowY + offsetY
+        },
+        draw() {
+          //
+          // Draw arrow body (long rectangle on the left)
+          //
+          const bodyStartX = -ARROW_BODY_LENGTH
+          const bodyEndX = -ARROWHEAD_SIZE / 2
+          const bodyHalfWidth = ARROW_BODY_WIDTH / 2
+          
+          //
+          // Draw body outline (darker, larger) with rounded corners
+          //
+          const bodyOutlineWidth = ARROW_BODY_WIDTH + ARROW_OUTLINE_WIDTH * 2
+          const bodyOutlineHalfWidth = bodyOutlineWidth / 2
+          const cornerRadius = 3  // Rounded corner radius
+          k.drawRect({
+            width: ARROW_BODY_LENGTH + ARROWHEAD_SIZE / 2 + ARROW_OUTLINE_WIDTH,
+            height: bodyOutlineWidth,
+            pos: k.vec2(bodyStartX - ARROW_OUTLINE_WIDTH / 2, 0),
+            anchor: "center",
+            radius: cornerRadius,
+            color: arrowOutlineColor,
+            opacity: ARROW_OPACITY
+          })
+          
+          //
+          // Draw main body rectangle with rounded corners
+          //
+          k.drawRect({
+            width: ARROW_BODY_LENGTH + ARROWHEAD_SIZE / 2,
+            height: ARROW_BODY_WIDTH,
+            pos: k.vec2(bodyStartX, 0),
+            anchor: "center",
+            radius: cornerRadius,
+            color: arrowColor,
+            opacity: ARROW_OPACITY
+          })
+          
+          //
+          // Calculate arrow head points with rounded corners
+          //
+          const baseAngle = arrowAngle + Math.PI  // 180 degrees back
+          const baseLeftAngle = baseAngle - spreadAngle
+          const baseRightAngle = baseAngle + spreadAngle
+          const triangleOffsetX = -12  // Shift triangle left (increased)
+          const triangleCornerRadius = 3  // Rounded corner radius for triangle
+          
+          //
+          // Helper function to create rounded corner points
+          //
+          const createRoundedCorner = (p1, corner, p2, radius, steps) => {
+            const points = []
+            //
+            // Calculate vectors from corner to adjacent points
+            //
+            const v1x = p1.x - corner.x
+            const v1y = p1.y - corner.y
+            const v2x = p2.x - corner.x
+            const v2y = p2.y - corner.y
+            const len1 = Math.sqrt(v1x * v1x + v1y * v1y)
+            const len2 = Math.sqrt(v2x * v2x + v2y * v2y)
+            
+            //
+            // Normalize and calculate cut distance
+            //
+            const n1x = v1x / len1
+            const n1y = v1y / len1
+            const n2x = v2x / len2
+            const n2y = v2y / len2
+            
+            //
+            // Calculate angle between vectors
+            //
+            const dot = n1x * n2x + n1y * n2y
+            const angle = Math.acos(Math.max(-1, Math.min(1, dot)))
+            const cutDist = radius / Math.tan(angle / 2)
+            
+            //
+            // Start and end points of rounded corner
+            //
+            const startX = corner.x + n1x * cutDist
+            const startY = corner.y + n1y * cutDist
+            const endX = corner.x + n2x * cutDist
+            const endY = corner.y + n2y * cutDist
+            
+            //
+            // Calculate center of arc
+            //
+            const bisectorX = n1x + n2x
+            const bisectorY = n1y + n2y
+            const bisectorLen = Math.sqrt(bisectorX * bisectorX + bisectorY * bisectorY)
+            const centerDist = radius / Math.sin(angle / 2)
+            const centerX = corner.x + (bisectorX / bisectorLen) * centerDist
+            const centerY = corner.y + (bisectorY / bisectorLen) * centerDist
+            
+            //
+            // Generate arc points
+            //
+            const startAngle = Math.atan2(startY - centerY, startX - centerX)
+            const endAngle = Math.atan2(endY - centerY, endX - centerX)
+            
+            for (let i = 0; i <= steps; i++) {
+              const t = i / steps
+              let angle = startAngle + (endAngle - startAngle) * t
+              //
+              // Handle angle wrap
+              //
+              if (endAngle < startAngle) {
+                angle = startAngle + (endAngle + Math.PI * 2 - startAngle) * t
+                if (angle > Math.PI) angle -= Math.PI * 2
+              }
+              points.push(k.vec2(centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius))
+            }
+            
+            return { points, start: k.vec2(startX, startY), end: k.vec2(endX, endY) }
+          }
+          
+          //
+          // Tip point (pointing right, shifted left)
+          //
+          const tipPoint = k.vec2(ARROWHEAD_SIZE / 2 + triangleOffsetX, 0)
+          const baseLeft = k.vec2(
+            Math.cos(baseLeftAngle) * ARROWHEAD_SIZE + triangleOffsetX,
+            Math.sin(baseLeftAngle) * ARROWHEAD_SIZE
+          )
+          const baseRight = k.vec2(
+            Math.cos(baseRightAngle) * ARROWHEAD_SIZE + triangleOffsetX,
+            Math.sin(baseRightAngle) * ARROWHEAD_SIZE
+          )
+          
+          //
+          // Create rounded corners for main triangle
+          //
+          const tipCorner = createRoundedCorner(baseRight, tipPoint, baseLeft, triangleCornerRadius, 8)
+          const leftCorner = createRoundedCorner(tipPoint, baseLeft, baseRight, triangleCornerRadius, 8)
+          const rightCorner = createRoundedCorner(baseLeft, baseRight, tipPoint, triangleCornerRadius, 8)
+          
+          //
+          // Build triangle points with rounded corners
+          //
+          const trianglePoints = []
+          trianglePoints.push(tipCorner.start)
+          trianglePoints.push(...tipCorner.points.slice(1, -1))
+          trianglePoints.push(leftCorner.start)
+          trianglePoints.push(...leftCorner.points.slice(1, -1))
+          trianglePoints.push(rightCorner.start)
+          trianglePoints.push(...rightCorner.points.slice(1, -1))
+          
+          //
+          // Outline triangle (larger) - bigger black outline (shifted left)
+          //
+          const outlineSize = ARROWHEAD_SIZE + ARROWHEAD_OUTLINE_WIDTH
+          const outlineLeft = k.vec2(
+            Math.cos(baseLeftAngle) * outlineSize + triangleOffsetX,
+            Math.sin(baseLeftAngle) * outlineSize
+          )
+          const outlineRight = k.vec2(
+            Math.cos(baseRightAngle) * outlineSize + triangleOffsetX,
+            Math.sin(baseRightAngle) * outlineSize
+          )
+          
+          //
+          // Extend tip forward for outline (shifted left)
+          //
+          const outlineTipX = ARROWHEAD_SIZE / 2 + triangleOffsetX + Math.cos(arrowAngle) * ARROWHEAD_OUTLINE_WIDTH
+          const outlineTipY = Math.sin(arrowAngle) * ARROWHEAD_OUTLINE_WIDTH
+          const outlineTipPoint = k.vec2(outlineTipX, outlineTipY)
+          
+          //
+          // Create rounded corners for outline triangle
+          //
+          const outlineTipCorner = createRoundedCorner(outlineRight, outlineTipPoint, outlineLeft, triangleCornerRadius + 1, 8)
+          const outlineLeftCorner = createRoundedCorner(outlineTipPoint, outlineLeft, outlineRight, triangleCornerRadius + 1, 8)
+          const outlineRightCorner = createRoundedCorner(outlineLeft, outlineRight, outlineTipPoint, triangleCornerRadius + 1, 8)
+          
+          //
+          // Build outline triangle points with rounded corners
+          //
+          const outlinePoints = []
+          outlinePoints.push(outlineTipCorner.start)
+          outlinePoints.push(...outlineTipCorner.points.slice(1, -1))
+          outlinePoints.push(outlineLeftCorner.start)
+          outlinePoints.push(...outlineLeftCorner.points.slice(1, -1))
+          outlinePoints.push(outlineRightCorner.start)
+          outlinePoints.push(...outlineRightCorner.points.slice(1, -1))
+          
+          //
+          // Draw filled polygon for outline (darker) with rounded corners
+          //
+          k.drawPolygon({
+            pts: outlinePoints,
+            color: arrowOutlineColor,
+            opacity: ARROW_OPACITY
+          })
+          
+          //
+          // Draw main filled triangle (lighter) with rounded corners
+          //
+          k.drawPolygon({
+            pts: trianglePoints,
+            color: arrowColor,
+            opacity: ARROW_OPACITY
+          })
+        }
+      }
+    ])
+    //
     // Platform visibility system
     //
     const VISIBILITY_RADIUS = 120  // Reduced radius for tighter detection

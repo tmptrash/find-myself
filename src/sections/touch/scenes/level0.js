@@ -4,7 +4,6 @@ import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as SmallBugs from '../components/small-bugs.js'
-import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
@@ -1231,18 +1230,6 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Create dust particles in game area only
-    //
-    const dustInst = Dust.create({ 
-      k,
-      bounds: {
-        left: LEFT_MARGIN,
-        right: CFG.visual.screen.width - RIGHT_MARGIN,
-        top: TOP_MARGIN,
-        bottom: CFG.visual.screen.height - BOTTOM_MARGIN
-      }
-    })
-    //
     // Create bugs on the floor
     //
     const bugFloorY = FLOOR_Y - 4  // Lower by 6 pixels total (was -10)
@@ -1565,15 +1552,14 @@ export function sceneLevel0(k) {
     const pyramidCheckInterval = 0.5  // Check for groups every 0.5 seconds
     let pyramidCheckTimer = 0
     
-    //
-    // Update bugs, dust, and pyramids
-    //
+      //
+      // Update bugs and pyramids
+      //
     k.onUpdate(() => {
       const dt = k.dt()
       
       bugs.forEach(bug => Bugs.onUpdate(bug, dt))
       smallBugs.forEach(bug => SmallBugs.onUpdate(bug, dt))
-      Dust.onUpdate(dustInst, dt)
       
       //
       // Update active pyramids (iterate backwards to safely remove)
@@ -1698,17 +1684,6 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       FpsCounter.onUpdate(fpsCounter)
     })
-    //
-    // Draw dust in front of hero but behind platforms
-    //
-    k.add([
-      k.z(CFG.visual.zIndex.player + 3),  // Between hero (10) and platforms (15)
-      {
-        draw() {
-          Dust.draw(dustInst)
-        }
-      }
-    ])
     //
     // Draw bugs with individual z-indices
     //

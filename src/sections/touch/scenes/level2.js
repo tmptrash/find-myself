@@ -148,6 +148,10 @@ export function sceneLevel2(k) {
     //
     const heroBodyColor = isTimeComplete ? "#FF8C00" : "#C0C0C0"
     //
+    // Create clouds under top platform (top wall)
+    //
+    createCloudsUnderTopPlatform(k)
+    //
     // Create platforms first to get first platform position and states
     //
     const platformsData = createDiagonalPlatforms(k)
@@ -683,6 +687,243 @@ export function sceneLevel2(k) {
       Sound.stopAmbient(sound)
       k.go("menu")
     })
+  })
+}
+
+/**
+ * Creates clouds under the top platform (top wall)
+ * @param {Object} k - Kaplay instance
+ */
+function createCloudsUnderTopPlatform(k) {
+  //
+  // Cloud parameters
+  //
+  const cloudTopY = TOP_MARGIN + 40  // Top Y position (dense layer here)
+  const cloudBottomY = TOP_MARGIN + 100  // Bottom Y position (sparse clouds here)
+  const cloudDenseLayerY = TOP_MARGIN + 50  // Dense layer Y position
+  const cloudSparseLayerStartY = TOP_MARGIN + 60  // Start of sparse layer
+  const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
+  const baseCloudColor = k.rgb(100, 100, 120)  // Gray-blue color for clouds
+  
+  //
+  // Create multiple clouds spread horizontally across the screen
+  // Cover almost entire width like snow
+  //
+  const screenWidth = k.width()
+  const playableWidth = screenWidth - LEFT_MARGIN - RIGHT_MARGIN
+  const cloudStartX = LEFT_MARGIN + 50  // Start a bit inside left margin
+  const cloudEndX = screenWidth - RIGHT_MARGIN - 50  // End a bit before right margin
+  const cloudCoverageWidth = cloudEndX - cloudStartX
+  
+  //
+  // Create dense layer at top (more clouds, closer together)
+  //
+  const denseCloudCount = 24  // Even more clouds for solid coverage without gaps
+  const denseCloudSpacing = cloudCoverageWidth / (denseCloudCount - 1)
+  
+  //
+  // Create sparse layer below (fewer clouds, more spread out)
+  //
+  const sparseCloudCount = 8  // Fewer clouds for sparse coverage
+  const sparseCloudSpacing = cloudCoverageWidth / (sparseCloudCount - 1)
+  
+  //
+  // Generate clouds programmatically to cover almost entire width
+  // Create overlapping clouds like snow covering the top
+  //
+  const cloudTypes = [
+    //
+    // Type 1: Large wide cloud (6 puffs)
+    //
+    {
+      mainSize: 50,
+      puffs: [
+        { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
+        { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
+        { radius: 0.65, offsetX: 0.4, offsetY: -0.1 },
+        { radius: 0.7, offsetX: 0.8, offsetY: -0.05 },
+        { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
+        { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
+      ],
+      color: baseCloudColor,
+      opacity: 0.6
+    },
+    //
+    // Type 2: Medium wide cloud (5 puffs)
+    //
+    {
+      mainSize: 42,
+      puffs: [
+        { radius: 0.8, offsetX: -0.7, offsetY: 0 },
+        { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
+        { radius: 0.75, offsetX: 0.3, offsetY: -0.08 },
+        { radius: 0.8, offsetX: 0.7, offsetY: 0 },
+        { radius: 0.7, offsetX: 0, offsetY: 0.12 }
+      ],
+      color: k.rgb(95, 95, 115),
+      opacity: 0.55
+    },
+    //
+    // Type 3: Small wide cloud (4 puffs)
+    //
+    {
+      mainSize: 35,
+      puffs: [
+        { radius: 0.75, offsetX: -0.6, offsetY: 0 },
+        { radius: 0.8, offsetX: -0.2, offsetY: -0.08 },
+        { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
+        { radius: 0.75, offsetX: 0.6, offsetY: 0 }
+      ],
+      color: k.rgb(105, 105, 125),
+      opacity: 0.5
+    },
+    //
+    // Type 4: Very wide cloud (7 puffs)
+    //
+    {
+      mainSize: 55,
+      puffs: [
+        { radius: 0.65, offsetX: -1.0, offsetY: 0 },
+        { radius: 0.7, offsetX: -0.6, offsetY: -0.1 },
+        { radius: 0.75, offsetX: -0.2, offsetY: -0.12 },
+        { radius: 0.75, offsetX: 0.2, offsetY: -0.12 },
+        { radius: 0.7, offsetX: 0.6, offsetY: -0.1 },
+        { radius: 0.65, offsetX: 1.0, offsetY: 0 },
+        { radius: 0.6, offsetX: 0, offsetY: 0.15 }
+      ],
+      color: baseCloudColor,
+      opacity: 0.65
+    }
+  ]
+  
+  //
+  // Generate clouds with dense layer at top, sparse layer below
+  //
+  const cloudConfigs = []
+  
+  //
+  // Create dense layer at top (solid coverage, no gaps)
+  //
+  for (let i = 0; i < denseCloudCount; i++) {
+    const baseX = cloudStartX + denseCloudSpacing * i
+    
+    //
+    // Add small randomness for natural look (less variation for dense layer)
+    // Overlap clouds to ensure no gaps
+    //
+    const randomOffset = (Math.random() - 0.5) * (denseCloudSpacing * 0.6)  // Overlap with neighbors
+    const x = baseX + randomOffset
+    
+    //
+    // Select cloud type with some variation
+    //
+    const typeIndex = i % cloudTypes.length
+    const cloudType = cloudTypes[typeIndex]
+    
+    //
+    // Vary size slightly for more natural look
+    // Make dense layer clouds slightly larger for better overlap
+    //
+    const sizeVariation = 1.0 + Math.random() * 0.3  // 1.0 to 1.3 (larger for dense layer)
+    const mainSize = cloudType.mainSize * sizeVariation
+    
+    //
+    // Create multiple rows for dense layer to ensure no gaps
+    // Divide clouds into 2-3 rows for complete coverage
+    //
+    const rowsPerLayer = 2
+    const rowIndex = Math.floor((i % denseCloudCount) / (denseCloudCount / rowsPerLayer))
+    const rowYOffset = rowIndex * 8  // 8px between rows
+    const yVariation = (Math.random() - 0.5) * 3  // ±1.5px variation within row
+    const cloudY = cloudDenseLayerY + rowYOffset + yVariation
+    
+    cloudConfigs.push({
+      x: x,
+      y: cloudY,
+      mainSize: mainSize,
+      puffs: cloudType.puffs,
+      color: cloudType.color,
+      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+    })
+  }
+  
+  //
+  // Create sparse layer below (fewer clouds, more spread out)
+  //
+  for (let i = 0; i < sparseCloudCount; i++) {
+    const baseX = cloudStartX + sparseCloudSpacing * i
+    
+    //
+    // Add more randomness for sparse layer
+    //
+    const randomOffset = (Math.random() - 0.5) * 40  // ±20px random offset
+    const x = baseX + randomOffset
+    
+    //
+    // Select cloud type with some variation
+    //
+    const typeIndex = (i + denseCloudCount) % cloudTypes.length
+    const cloudType = cloudTypes[typeIndex]
+    
+    //
+    // Vary size slightly for more natural look
+    //
+    const sizeVariation = 0.9 + Math.random() * 0.2  // 0.9 to 1.1
+    const mainSize = cloudType.mainSize * sizeVariation
+    
+    //
+    // Distribute Y positions in sparse layer (more variation)
+    // Use quadratic function to bias towards top of sparse layer
+    //
+    const sparseYRange = cloudSparseLayerEndY - cloudSparseLayerStartY
+    const yDistribution = Math.random() * Math.random()  // 0 to 1, biased towards 0 (top)
+    const cloudY = cloudSparseLayerStartY + yDistribution * sparseYRange
+    
+    cloudConfigs.push({
+      x: x,
+      y: cloudY,
+      mainSize: mainSize,
+      puffs: cloudType.puffs,
+      color: cloudType.color,
+      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+    })
+  }
+  
+  cloudConfigs.forEach((cloudConfig) => {
+    k.add([
+      k.pos(cloudConfig.x, cloudConfig.y),
+      k.z(CFG.visual.zIndex.platforms - 1),  // Behind platforms
+      {
+        draw() {
+          //
+          // Draw cloud as overlapping circles (puffy cloud shape)
+          //
+          const mainSize = cloudConfig.mainSize
+          
+          //
+          // Main cloud body (largest circle in center)
+          //
+          k.drawCircle({
+            radius: mainSize,
+            pos: k.vec2(0, 0),
+            color: cloudConfig.color,
+            opacity: cloudConfig.opacity
+          })
+          
+          //
+          // Draw all puffs for this cloud
+          //
+          cloudConfig.puffs.forEach((puff) => {
+            k.drawCircle({
+              radius: mainSize * puff.radius,
+              pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
+              color: cloudConfig.color,
+              opacity: cloudConfig.opacity
+            })
+          })
+        }
+      }
+    ])
   })
 }
 

@@ -3,7 +3,6 @@ import * as Hero from '../../../components/hero.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
-import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as TreeRoots from '../components/tree-roots.js'
@@ -494,35 +493,6 @@ export function sceneLevel1(k) {
       patrolEnd: CFG.visual.screen.width - RIGHT_MARGIN - 250,
       speed: 80
     })
-    //
-    // Create dust particles
-    //
-    const dustInst = Dust.create({ 
-      k,
-      bounds: {
-        left: LEFT_MARGIN,
-        right: CFG.visual.screen.width - RIGHT_MARGIN,
-        top: TOP_MARGIN,
-        bottom: CFG.visual.screen.height - BOTTOM_MARGIN
-      }
-    })
-    //
-    // Update and draw dust
-    //
-    k.onUpdate(() => {
-      const dt = k.dt()
-      Dust.onUpdate(dustInst, dt)
-    })
-    //
-    // Add custom drawing for dust particles
-    //
-    k.add([
-      {
-        draw() {
-          Dust.draw(dustInst)
-        }
-      }
-    ])
     //
     // Create FPS counter
     //

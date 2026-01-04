@@ -308,9 +308,9 @@ export function sceneMenu(k) {
           
           if (lastLevel && lastLevel.startsWith('level-touch.')) {
             //
-            // Go to the last played touch level directly (no transition)
+            // Go to the last played touch level with transition (show subtitle)
             //
-            k.go(lastLevel)
+            showTransitionToLevel(k, lastLevel)
           } else {
             //
             // Go to touch level 0 with transition

@@ -106,6 +106,7 @@ export function sceneMenu(k) {
     const kidsMusic = k.play("kids", { loop: true, volume: 0 })
     const KIDS_MUSIC_TARGET_VOLUME = MENU_AUDIO.kidsMusicTarget
     const KIDS_MUSIC_HOVER_VOLUME = MENU_AUDIO.kidsMusicHover
+    const KIDS_MUSIC_CURRENT_SECTION_VOLUME = MENU_AUDIO.kidsMusicHover * 0.5  // Even quieter when hovering current section
     const KIDS_MUSIC_FADE_IN_DURATION = MENU_AUDIO.kidsMusicFadeInDuration
     let kidsMusicFadeTimer = 0
 
@@ -672,6 +673,11 @@ export function sceneMenu(k) {
       // Control music volume based on hover state
       //
       if (!inst.isLeavingScene) {
+        //
+        // Check if hovering over anti-hero of current section
+        //
+        const isCurrentSectionHover = foundHover && hoveredInst && !hoveredInst.isCompleted && inst.currentSection && hoveredInst.section === inst.currentSection
+        
         if (foundHover && hoveredInst && !hoveredInst.isCompleted) {
           //
           // Fade music volume down when hovering
@@ -680,18 +686,11 @@ export function sceneMenu(k) {
           menuMusic.volume += (targetVolume - menuMusic.volume) * 5 * k.dt()
           //
           // Fade kids music volume down when hovering
+          // Even quieter when hovering current section (with lightning and heartbeat)
           //
           if (kidsMusicFadeTimer >= KIDS_MUSIC_FADE_IN_DURATION) {
-            const kidsTargetVolume = KIDS_MUSIC_HOVER_VOLUME
+            const kidsTargetVolume = isCurrentSectionHover ? KIDS_MUSIC_CURRENT_SECTION_VOLUME : KIDS_MUSIC_HOVER_VOLUME
             kidsMusic.volume += (kidsTargetVolume - kidsMusic.volume) * 5 * k.dt()
-          }
-          //
-          // Play heartbeat sound at the right phase (once per cycle)
-          //
-          const HEARTBEAT_INTERVAL = 1.0
-          if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
-            Sound.playHeartbeatSound(sound)
-            inst.lastHeartbeatTime = k.time()
           }
         } else {
           //
@@ -707,6 +706,17 @@ export function sceneMenu(k) {
             kidsMusic.volume += (kidsTargetVolume - kidsMusic.volume) * 3 * k.dt()
           }
         }
+        
+        //
+        // Play heartbeat sound only for current section anti-hero
+        //
+        if (isCurrentSectionHover) {
+          const HEARTBEAT_INTERVAL = 1.0
+          if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
+            Sound.playHeartbeatSound(sound)
+            inst.lastHeartbeatTime = k.time()
+          }
+        }
       }
       
       //
@@ -720,19 +730,24 @@ export function sceneMenu(k) {
       
       //
       // Control ambient sound based on hover state
-      // Don't start ambient if leaving scene or if section is completed
+      // Only start ambient for current section being played (not completed sections)
       //
       if (!inst.isLeavingScene) {
-        if (foundHover && hoveredInst && !hoveredInst.isCompleted) {
+        //
+        // Check if hovering over anti-hero of current section
+        //
+        const isCurrentSectionHover = foundHover && hoveredInst && !hoveredInst.isCompleted && inst.currentSection && hoveredInst.section === inst.currentSection
+        
+        if (isCurrentSectionHover) {
           //
-          // Start ambient if hovering over incomplete section and not already playing
+          // Start ambient if hovering over current section and not already playing
           //
           if (!Sound.isAmbientPlaying(sound)) {
             Sound.startAmbient(sound)
           }
         } else {
           //
-          // Stop ambient if not hovering or section is completed
+          // Stop ambient if not hovering over current section or section is completed
           //
           if (Sound.isAmbientPlaying(sound)) {
             Sound.stopAmbient(sound)
@@ -1656,9 +1671,9 @@ function drawScene(inst) {
   
   //
   // Draw lightning between hero and hovered anti-hero
-  // Only for incomplete sections
+  // Only for incomplete sections that match the current section being played
   //
-  if (hoveredAntiHero && !hoveredAntiHero.isCompleted) {
+  if (hoveredAntiHero && !hoveredAntiHero.isCompleted && inst.currentSection && hoveredAntiHero.section === inst.currentSection) {
     const heroPos = { x: hero.pos.x, y: hero.pos.y }
     const antiHeroPos = { 
       x: hoveredAntiHero.character.pos.x, 

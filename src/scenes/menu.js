@@ -18,21 +18,15 @@ const MENU_AUDIO = {
 }
 
 /**
- * Convert section name to plural for display
- * @param {string} section - Section name in singular
- * @returns {string} Section name in plural
+ * Get section name for display (singular form)
+ * @param {string} section - Section name
+ * @returns {string} Section name in singular form
  */
 function getSectionDisplayName(section) {
-  const pluralMap = {
-    'word': 'words',
-    'touch': 'touches',
-    'feel': 'feels',
-    'mind': 'mind',
-    'stress': 'stress',
-    'time': 'time'
-  }
-  
-  return pluralMap[section] || section
+  //
+  // Return section name as-is (singular form)
+  //
+  return section
 }
 
 
@@ -365,7 +359,7 @@ export function sceneMenu(k) {
       antiHeroes.push(antiHeroInst)
       
       //
-      // Add section label below anti-hero (in plural form for display)
+      // Add section label below anti-hero (in singular form)
       //
       const displayName = getSectionDisplayName(config.section)
       const labelText = displayName

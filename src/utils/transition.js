@@ -22,7 +22,8 @@ const LEVEL_TRANSITIONS = {
   'time-complete': 'menu',
   'level-touch.0': 'level-touch.1',
   'level-touch.1': 'level-touch.2',
-  'level-touch.2': 'menu'
+  'level-touch.2': 'level-touch.3',
+  'level-touch.3': 'menu'
 }
 
 /**

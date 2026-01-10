@@ -306,9 +306,9 @@ export function sceneLevel1(k) {
       if (gameState.antiHeroActive) return  // Already activated
       
       //
-      // Large pause before activation to let player realize they succeeded
+      // Pause before activation to let player realize they succeeded
       //
-      k.wait(1.5, () => {
+      k.wait(0.5, () => {
         gameState.antiHeroActive = true
         //
         // Change anti-hero color to brown (active) by reloading sprites

@@ -195,10 +195,10 @@ export function sceneLevel2(k) {
       dustColor: snowColor,
       onAnnihilation: () => {
         //
-        // Transition after annihilation - go back to menu (last level)
+        // Transition after annihilation - go to level 3
         //
         createLevelTransition(k, 'level-touch.2', () => {
-          k.go('menu')
+          k.go('level-touch.3')
         })
       },
       currentLevel: 'level-touch.2',
@@ -253,20 +253,140 @@ export function sceneLevel2(k) {
     createSnowDrifts(k)
     //
     // Create arrow in snow pointing right (to guide hero direction)
-    // Using Unicode symbol U+21E8 (⇨)
+    // Created as sprite from canvas for perfect synchronization
     //
     const arrowY = FLOOR_Y - 100  // Higher above bottom platform
-    const arrowX = k.width() / 2 + 50  // Center arrow horizontally, shifted right by 50px
-    const arrowColor = k.rgb(150, 180, 220)  // Snow color (light blue) - fill color
-    const arrowOutlineColor = k.rgb(100, 130, 180)  // Darker blue for outline
+    const arrowX = k.width() / 2 + 500  // Center arrow horizontally, shifted right by 500px
+    const arrowFillColor = k.rgb(100, 130, 180)  // Darker blue for fill
     const ARROW_OPACITY = 1.0
-    const ARROW_SIZE = 72  // Larger arrow size
-    const ARROW_OUTLINE_WIDTH = 2  // Outline width for better visibility
+    const ARROW_BODY_LENGTH = 75  // Length of arrow body (rectangle) - increased
+    const ARROW_BODY_WIDTH = 18  // Width of arrow body - increased
+    const ARROWHEAD_SIZE = 30  // Size of arrowhead triangle - increased
     
+    //
+    // Create arrow sprite from canvas
+    //
+    const createArrowSprite = () => {
+      //
+      // Calculate canvas size (with padding for "ears" and tip)
+      //
+      const baseWidth = ARROW_BODY_WIDTH * 2.2  // Base width for "ears"
+      const canvasWidth = ARROW_BODY_LENGTH + ARROWHEAD_SIZE + 30  // Total width + extra padding for tip
+      const canvasHeight = baseWidth + 20  // Height for "ears" + padding
+      const canvasCenterX = ARROW_BODY_LENGTH / 2 + 10  // Center X accounting for left padding
+      const canvasCenterY = canvasHeight / 2
+      
+      //
+      // Create canvas
+      //
+      const canvas = document.createElement('canvas')
+      canvas.width = canvasWidth
+      canvas.height = canvasHeight
+      const ctx = canvas.getContext('2d')
+      
+      //
+      // Set fill color (convert Kaplay color to hex)
+      //
+      const fillR = Math.round(arrowFillColor.r)
+      const fillG = Math.round(arrowFillColor.g)
+      const fillB = Math.round(arrowFillColor.b)
+      ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
+      
+      //
+      // Arrow body (rectangle) - left side
+      //
+      const bodyLeftX = canvasCenterX - ARROW_BODY_LENGTH / 2
+      const bodyRightX = canvasCenterX + ARROW_BODY_LENGTH / 2
+      const bodyTopY = canvasCenterY - ARROW_BODY_WIDTH / 2
+      const bodyBottomY = canvasCenterY + ARROW_BODY_WIDTH / 2
+      
+      //
+      // Arrowhead (triangle) - right side with "ears" (wider base)
+      //
+      const tipX = bodyRightX + ARROWHEAD_SIZE
+      const tipY = canvasCenterY  // Same Y as body center
+      const baseLeftX = bodyRightX
+      const baseLeftY = canvasCenterY - baseWidth / 2  // Top "ear"
+      const baseRightX = bodyRightX
+      const baseRightY = canvasCenterY + baseWidth / 2  // Bottom "ear"
+      
+      //
+      // Draw soft outline (multiple layers for softness)
+      //
+      const outlineWidth = 3
+      const outlineLayers = 3
+      const outlineColor = `rgba(0, 0, 0, 0.3)`  // Dark outline with transparency
+      
+      for (let layer = outlineLayers; layer > 0; layer--) {
+        const layerWidth = outlineWidth * (layer / outlineLayers)
+        const layerOpacity = 0.3 * (layer / outlineLayers)
+        
+        ctx.strokeStyle = `rgba(0, 0, 0, ${layerOpacity})`
+        ctx.lineWidth = layerWidth
+        ctx.lineJoin = 'round'
+        ctx.lineCap = 'round'
+        
+        //
+        // Draw arrow body outline (rectangle)
+        //
+        ctx.strokeRect(
+          bodyLeftX - layerWidth / 2,
+          bodyTopY - layerWidth / 2,
+          ARROW_BODY_LENGTH + layerWidth,
+          ARROW_BODY_WIDTH + layerWidth
+        )
+        
+        //
+        // Draw arrowhead outline (triangle)
+        //
+        ctx.beginPath()
+        ctx.moveTo(tipX + layerWidth / 2, tipY)
+        ctx.lineTo(baseLeftX - layerWidth / 2, baseLeftY - layerWidth / 2)
+        ctx.lineTo(baseRightX - layerWidth / 2, baseRightY + layerWidth / 2)
+        ctx.closePath()
+        ctx.stroke()
+      }
+      
+      //
+      // Draw arrow body fill (rectangle)
+      //
+      ctx.fillRect(bodyLeftX, bodyTopY, ARROW_BODY_LENGTH, ARROW_BODY_WIDTH)
+      
+      //
+      // Draw arrowhead fill (triangle)
+      //
+      ctx.beginPath()
+      ctx.moveTo(tipX, tipY)
+      ctx.lineTo(baseLeftX, baseLeftY)
+      ctx.lineTo(baseRightX, baseRightY)
+      ctx.closePath()
+      ctx.fill()
+      
+      //
+      // Convert canvas to data URL and load as sprite
+      //
+      const dataURL = canvas.toDataURL()
+      const spriteId = `arrow-touch-level2-${Date.now()}`
+      k.loadSprite(spriteId, dataURL)
+      
+      return spriteId
+    }
+    
+    const arrowSpriteId = createArrowSprite()
+    
+    //
+    // Store base Y position for consistent movement
+    //
+    const arrowBaseY = arrowY
+    
+    //
+    // Create arrow sprite object
+    //
     k.add([
-      k.pos(arrowX, arrowY),
+      k.sprite(arrowSpriteId),
+      k.pos(arrowX, arrowBaseY),
+      k.anchor("center"),
       k.z(CFG.visual.zIndex.platforms - 2),  // Behind platforms but visible
-      k.scale(1.5, .9),  // Stretch arrow horizontally (wider)
       {
         update() {
           //
@@ -275,21 +395,7 @@ export function sceneLevel2(k) {
           const swayAmount = 2  // 2 pixels up and down
           const swaySpeed = 2.5  // Speed of swaying
           const offsetY = Math.sin(k.time() * swaySpeed) * swayAmount
-          this.pos.y = arrowY + offsetY
-        },
-        draw() {
-          //
-          // Draw Unicode arrow symbol U+2192 (→) with outline only (no fill)
-          //
-          k.drawText({
-            text: '\u21E8',  // RIGHTWARDS ARROW
-            size: ARROW_SIZE,
-            pos: k.vec2(0, 0),
-            anchor: 'center',
-            font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
-            color: arrowOutlineColor,
-            opacity: ARROW_OPACITY
-          })
+          this.pos.y = arrowBaseY + offsetY
         }
       }
     ])

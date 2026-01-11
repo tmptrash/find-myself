@@ -146,6 +146,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const isLevelToLevelTransition = currentLevel.startsWith('level-') && nextLevel.startsWith('level-')
   if (isLevelToLevelTransition) {
     saveLastLevel(nextLevel)
+  } else if (nextLevel === 'time-complete') {
+    //
+    // When completing time section, save first level of next section (word) instead of completion screen
+    //
+    saveLastLevel('level-word.0')
+  } else if (nextLevel === 'word-complete') {
+    //
+    // When completing word section, save first level of next section (time) instead of completion screen
+    //
+    saveLastLevel('level-time.0')
   }
   
   let timer = 0

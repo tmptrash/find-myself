@@ -408,6 +408,34 @@ export function sceneLevel2(k) {
     const PLATFORM_HEIGHT = 30  // Platform height constant
     let wasGrounded = false
     //
+    // Create hero influence radius halo (visible circle around hero)
+    // Draw halo in onDraw callback to ensure it's always visible
+    //
+    k.onDraw(() => {
+      //
+      // Draw influence radius halo around hero
+      // Only draw when hero exists and character is available
+      // Single outer circle at maximum radius, barely visible
+      //
+      if (!heroInst || !heroInst.character || !heroInst.character.pos) return
+      
+      const heroX = heroInst.character.pos.x
+      const heroY = heroInst.character.pos.y
+      
+      //
+      // Draw single outer circle at maximum radius
+      //
+      const glowColor = k.rgb(150, 180, 220)  // Light blue matching snow theme
+      const haloOpacity = 0.08  // Barely visible opacity
+      
+      k.drawCircle({
+        radius: VISIBILITY_RADIUS,
+        pos: k.vec2(heroX, heroY),
+        color: glowColor,
+        opacity: haloOpacity
+      })
+    })
+    //
     // Update dust and platform visibility
     //
     k.onUpdate(() => {

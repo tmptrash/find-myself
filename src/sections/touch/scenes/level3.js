@@ -131,29 +131,13 @@ export function sceneLevel3(k) {
     const GRID_RIGHT = CFG.visual.screen.width - RIGHT_MARGIN - GRID_RIGHT_MARGIN  // Grid ends 50px before right platform
     const GRID_LEFT = GRID_RIGHT - GRID_WIDTH  // Grid starts from right platform minus margin minus width
     //
-    // Cloud platform lowered significantly - hero will be fixed at this level
+    // Cloud platform positioned to touch top line of grid
     // Platform width matches grid width, positioned to align with grid
+    // Note: Position calculation moved after BOTTOM_PLATFORM_TOP_Y is defined
     //
-    const CLOUD_PLATFORM_Y = TOP_MARGIN + 40 + TOUCH_FONT_SIZE + 150  // Lowered significantly
     const CLOUD_PLATFORM_WIDTH = GRID_WIDTH  // Platform width matches grid width
     const CLOUD_PLATFORM_HEIGHT = 30
     const CLOUD_PLATFORM_X = GRID_LEFT + CLOUD_PLATFORM_WIDTH / 2  // Platform centered on grid
-    //
-    // Create cloud platform with collision (hero can stand and jump on it)
-    //
-    const cloudPlatform = k.add([
-      k.rect(CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),  // Invisible collision - visual is drawn separately
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "cloud-platform"  // Tag for identification
-    ])
-    createStaticCloudPlatform(k, CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y, CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT)
-    const CLOUD_PLATFORM_TOP_Y = CLOUD_PLATFORM_Y - CLOUD_PLATFORM_HEIGHT / 2
     //
     // Bottom platform (full width)
     // Cloud blocks will stop here
@@ -171,6 +155,35 @@ export function sceneLevel3(k) {
     ])
     const BOTTOM_PLATFORM_Y = CFG.visual.screen.height - BOTTOM_MARGIN / 2
     const BOTTOM_PLATFORM_TOP_Y = BOTTOM_PLATFORM_Y - BOTTOM_MARGIN / 2
+    //
+    // Calculate grid start position
+    // Now BOTTOM_PLATFORM_TOP_Y is defined, so we can use it
+    //
+    const GRID_ROWS = 8  // Fixed number of grid rows (needed for platform positioning)
+    const gridEndYForPlatform = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
+    const gridStartYForPlatform = gridEndYForPlatform - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
+    //
+    // Position platform above grid - blocks spawn at gridStartY - GRID_CELL_SIZE/2, so platform should be above that
+    // Raise platform by 2 cells above grid top to ensure blocks don't collide with it
+    // Lowered by 100px total (50px + 50px)
+    //
+    const CLOUD_PLATFORM_Y = gridStartYForPlatform - GRID_CELL_SIZE * 2 + CLOUD_PLATFORM_HEIGHT / 2 + 100  // Platform positioned 2 cells above grid top, lowered by 100px total
+    //
+    // Create cloud platform with collision (hero can stand and jump on it)
+    //
+    const cloudPlatform = k.add([
+      k.rect(CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT),
+      k.pos(CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),  // Invisible collision - visual is drawn separately
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName,
+      "cloud-platform"  // Tag for identification
+    ])
+    createStaticCloudPlatform(k, CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y, CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT)
+    const CLOUD_PLATFORM_TOP_Y = CLOUD_PLATFORM_Y - CLOUD_PLATFORM_HEIGHT / 2
     //
     // Hero spawn position on bottom platform (between left platform and grid)
     // Position hero between left margin and grid start
@@ -266,8 +279,8 @@ export function sceneLevel3(k) {
     // Calculate spawn positions on grid (below cloud platform)
     // Blocks should spawn one cell above first grid cell
     // Use same grid calculation as visualization: gridEndY = BOTTOM_PLATFORM_TOP_Y, gridStartY = gridEndY - (8 * GRID_CELL_SIZE)
+    // Note: GRID_ROWS is already defined above
     //
-    const GRID_ROWS = 8  // Fixed number of grid rows
     const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
     const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
     const SPAWN_Y = gridStartY - GRID_CELL_SIZE / 2  // Center of cell one row above first grid cell
@@ -352,6 +365,83 @@ export function sceneLevel3(k) {
       // Update arrow glow when hero is above them
       //
       arrowsInst.update(heroInst.character)
+      //
+      // Prevent hero from using side collisions of wall blocks for jumping
+      // Check if hero is colliding with a block that is part of a wall from the side
+      //
+      if (heroInst.character && cloudBlocks.length > 0) {
+        const heroX = heroInst.character.pos.x
+        const heroY = heroInst.character.pos.y
+        const heroCollisionHeight = 75  // HERO_COLLISION_HEIGHT_SCALED
+        const heroCollisionWidth = 30   // HERO_COLLISION_WIDTH_SCALED
+        const heroTop = heroY - heroCollisionHeight / 2
+        const heroBottom = heroY + heroCollisionHeight / 2
+        const heroLeft = heroX - heroCollisionWidth / 2
+        const heroRight = heroX + heroCollisionWidth / 2
+        
+        cloudBlocks.forEach(block => {
+          if (block._isPartOfWall && block.isStopped) {
+            //
+            // Block is part of a wall - check if hero is colliding from the side
+            //
+            const blockX = block.pos.x
+            const blockY = block.pos.y
+            const blockSize = CLOUD_BLOCK_SIZE
+            const blockLeft = blockX - blockSize / 2
+            const blockRight = blockX + blockSize / 2
+            const blockTop = blockY - blockSize / 2
+            const blockBottom = blockY + blockSize / 2
+            
+            //
+            // Check if hero is horizontally overlapping with block
+            //
+            const horizontalOverlap = heroLeft < blockRight && heroRight > blockLeft
+            
+            //
+            // Check if hero is vertically overlapping with block
+            //
+            const verticalOverlap = heroTop < blockBottom && heroBottom > blockTop
+            
+            //
+            // Check if hero is colliding from the side (not from top)
+            // Hero is colliding from side if:
+            // - Horizontal overlap exists
+            // - Hero is not clearly above the block (hero bottom is not significantly above block top)
+            // - Hero is to the left or right of block center
+            //
+            const isCollidingFromSide = horizontalOverlap && verticalOverlap && 
+                                       (heroBottom > blockTop + 10) &&  // Hero is not clearly above
+                                       (Math.abs(heroX - blockX) > blockSize * 0.3)  // Hero is significantly to the side
+            
+            if (isCollidingFromSide) {
+              //
+              // Temporarily disable platform collision for this block
+              // Remove platformName tag temporarily to prevent hero from using it as platform
+              //
+              if (!block._wallCollisionDisabled) {
+                block.unuse(CFG.game.platformName)
+                block._wallCollisionDisabled = true
+              }
+            } else {
+              //
+              // Hero is not colliding from side - restore platform collision
+              //
+              if (block._wallCollisionDisabled) {
+                block.use(CFG.game.platformName)
+                block._wallCollisionDisabled = false
+              }
+            }
+          } else {
+            //
+            // Block is not part of wall - ensure platform collision is enabled
+            //
+            if (block._wallCollisionDisabled) {
+              block.use(CFG.game.platformName)
+              block._wallCollisionDisabled = false
+            }
+          }
+        })
+      }
       //
       // Update cloud blocks spawn timer
       // Only spawn if we haven't reached the maximum number of blocks
@@ -519,18 +609,29 @@ export function sceneLevel3(k) {
               //
               // Apply horizontal grid movement (one cell left or right)
               // Blocks move based on hero position above arrows
+              // Only move if target column has space at current or lower row
               //
               let newGridColumn = currentGridColumn
               if (isHeroAboveLeftArrow && currentGridColumn > 0) {
                 //
-                // Move left one grid cell
+                // Check if left column has space at current row or below
                 //
-                newGridColumn = currentGridColumn - 1
+                const leftColumn = currentGridColumn - 1
+                const hasSpaceLeft = !isCellOccupied(leftColumn, finalGridRow, block) && 
+                                     !isCellOccupied(leftColumn, finalGridRow + 1, block)
+                if (hasSpaceLeft) {
+                  newGridColumn = leftColumn
+                }
               } else if (isHeroAboveRightArrow && currentGridColumn < GRID_COLUMNS - 1) {
                 //
-                // Move right one grid cell
+                // Check if right column has space at current row or below
                 //
-                newGridColumn = currentGridColumn + 1
+                const rightColumn = currentGridColumn + 1
+                const hasSpaceRight = !isCellOccupied(rightColumn, finalGridRow, block) && 
+                                      !isCellOccupied(rightColumn, finalGridRow + 1, block)
+                if (hasSpaceRight) {
+                  newGridColumn = rightColumn
+                }
               }
               //
               // Update positions to grid cell centers (snap to grid)
@@ -582,6 +683,14 @@ export function sceneLevel3(k) {
                 block._isStatic = true
               }
           }
+          //
+          // Check if this block is part of a wall (has block above it)
+          // If so, mark it to prevent hero from using side collisions for jumping
+          //
+          const blockRow = getGridRow(block.pos.y)
+          const blockColumn = block.gridColumn !== undefined ? block.gridColumn : getGridColumn(block.pos.x)
+          const hasBlockAbove = blockRow > 0 && isCellOccupied(blockColumn, blockRow - 1, block)
+          block._isPartOfWall = hasBlockAbove
           //
           // Always enforce grid position (prevent any physics drift)
           // Snap Y position to grid to ensure blocks are always in cells, not between them

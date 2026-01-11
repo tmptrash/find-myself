@@ -181,7 +181,7 @@ export function sceneLevel3(k) {
     // Create arrows (left and right) on bottom platform with hero, moved right
     // Position arrows slightly above platform
     //
-    const ARROWS_Y_OFFSET = -25  // Move arrows up by 25 pixels (lowered by 5px)
+    const ARROWS_Y_OFFSET = -23  // Move arrows up by 23 pixels (lowered by 2px from -25)
     const arrowsInst = createCloudPlatformArrows(k, HERO_SPAWN_X_ON_PLATFORM, BOTTOM_PLATFORM_Y + ARROWS_Y_OFFSET)
     //
     // Store bottomPlatformTopY for use in createCloudBlock

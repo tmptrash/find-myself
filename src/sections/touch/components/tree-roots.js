@@ -322,6 +322,7 @@ export async function create(config) {
     
     //
     // Generate leaf clusters at branch endpoints
+    // Use autumn colors: reds, yellows, and oranges with variations
     //
     const leafClusters = []
     branchEndPoints.forEach(endPoint => {
@@ -332,16 +333,46 @@ export async function create(config) {
         const angle = rand(-Math.PI, Math.PI)
         const dist = rand(0, 70)
         
+        //
+        // Choose random autumn color type (red, yellow, or orange)
+        //
+        const colorType = Math.random()
+        let leafColor
+        if (colorType < 0.4) {
+          //
+          // Red leaves (40% chance)
+          //
+          leafColor = k.rgb(
+            rand(180, 255),  // Red component
+            rand(50, 100),   // Green component
+            rand(50, 100)    // Blue component
+          )
+        } else if (colorType < 0.7) {
+          //
+          // Yellow leaves (30% chance)
+          //
+          leafColor = k.rgb(
+            rand(220, 255),  // Red component
+            rand(180, 220),  // Green component
+            rand(50, 100)    // Blue component
+          )
+        } else {
+          //
+          // Orange leaves (30% chance)
+          //
+          leafColor = k.rgb(
+            rand(220, 255),  // Red component
+            rand(120, 180),  // Green component
+            rand(50, 100)    // Blue component
+          )
+        }
+        
         leaves.push({
           x: endPoint.x + Math.cos(angle) * dist,
           y: endPoint.y + Math.sin(angle) * dist * 0.6,
           size: rand(12, 22),
           rotation: rand(-1, 1),
-          color: k.rgb(
-            rand(70, 110),
-            rand(110, 150),
-            rand(70, 110)
-          ),
+          color: leafColor,
           opacity: rand(0.85, 1.0)
         })
       }

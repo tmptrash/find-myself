@@ -2,7 +2,7 @@ import { CFG } from '../cfg.js'
 /**
  * Progress tracking using localStorage
  */
-const STORAGE_KEY = 'find-myself-progress'
+const STORAGE_KEY = 'find-yourself-progress'
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)

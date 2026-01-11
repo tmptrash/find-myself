@@ -1,10 +1,10 @@
-# Find Myself
+# Find Yourself
 
 A philosophical 2D platformer about self-discovery through life's challenges. Navigate through different aspects of existence while searching for yourself.
 
 ## 🎮 About the Game
 
-**Find Myself** is a minimalist platformer where you journey through abstract worlds representing different forces that shape who you are. Each world presents unique challenges and obstacles that mirror real struggles in life — from cutting words to the relentless passage of time.
+**Find Yourself** is a minimalist platformer where you journey through abstract worlds representing different forces that shape who you are. Each world presents unique challenges and obstacles that mirror real struggles in life — from cutting words to the relentless passage of time.
 
 Your goal is to find another "you" — a reflection shaped by the very forces you're learning to face. Reaching them means meeting yourself honestly and understanding yourself a little more.
 
@@ -22,7 +22,7 @@ The project demonstrates the potential of AI-augmented game development, where h
 
 ## 📝 Design Philosophy
 
-**Find Myself** is designed around several core principles:
+**Find Yourself** is designed around several core principles:
 
 1. **Minimalism**: Clean, focused design without unnecessary elements
 2. **Procedural Generation**: Everything is created through code, ensuring consistency and small file size

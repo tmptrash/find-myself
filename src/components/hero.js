@@ -80,18 +80,24 @@ export function create(config) {
   } = config
 
   const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
-  const effectiveBodyColor = bodyColor ?? defaultBodyColor
-  const effectiveOutlineColor = outlineColor ?? CFG.visual.colors.outline
+  //
+  // Ensure colors are strings and remove # symbols
+  //
+  const effectiveBodyColor = String(bodyColor ?? defaultBodyColor).replace('#', '')
+  const effectiveOutlineColor = String(outlineColor ?? CFG.visual.colors.outline).replace('#', '')
   //
   // Load sprites for this hero configuration.
   // This will use cached sprites if already loaded
+  // Pass colors with # for loadHeroSprites (it will handle removal internally)
   //
   try {
+    const bodyColorWithHash = bodyColor ?? defaultBodyColor
+    const outlineColorWithHash = outlineColor ?? CFG.visual.colors.outline
     loadHeroSprites({
       k,
       type,
-      bodyColor: effectiveBodyColor,
-      outlineColor: effectiveOutlineColor,
+      bodyColor: bodyColorWithHash,
+      outlineColor: outlineColorWithHash,
       addMouth,
       addArms,
       character: null  // Marker to indicate this is an inst-like object
@@ -100,9 +106,9 @@ export function create(config) {
     console.error('Failed to load hero sprites:', error)
   }
   //
-  // Generate sprite prefix based on customization
+  // Generate sprite prefix based on customization (colors already have # removed)
   //
-  const spritePrefix = `${type}_${effectiveBodyColor.replace('#', '')}_${effectiveOutlineColor.replace('#', '')}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -1395,7 +1401,9 @@ export function onAnnihilationCollide(inst) {
                     // Update inst to include mouth BEFORE loading sprites
                     //
                     inst.addMouth = true
-                    inst.spritePrefix = `${inst.type}_${inst.bodyColor}_${CFG.visual.colors.outline}_mouth`
+                    const bodyColorClean = String(inst.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
+                    const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
+                    inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth`
                     //
                     // Reload sprites with mouth
                     //
@@ -1520,7 +1528,9 @@ export function onAnnihilationCollide(inst) {
                   //
                   const yellowColor = "#FF8C00"  // Anti-hero color (orange/yellow)
                   inst.bodyColor = yellowColor
-                  inst.spritePrefix = `${inst.type}_${yellowColor}_${CFG.visual.colors.outline}`
+                  const yellowColorClean = String(yellowColor).replace('#', '')
+                  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
+                  inst.spritePrefix = `${inst.type}_${yellowColorClean}_${outlineColorClean}`
                   //
                   // Reload sprites with yellow color
                   //

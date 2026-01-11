@@ -8,12 +8,12 @@ const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
 
-const TITLE_TEXT = 'find myself'
+const TITLE_TEXT = 'find yourself'
 const QUOTE_PRIMARY_TEXT = 'through death and pain'
 const QUOTE_SECONDARY_TEXT = '(c) someone very wise'
 const ARROW_TEXT = '↓'
 
-const INSTRUCTIONS_TITLE = `Find Myself`
+const INSTRUCTIONS_TITLE = `find yourself`
 const INSTRUCTIONS_TEXT_LINES = [
   { text: 'is a game about discovering who you are while life keeps changing', normal: true },
   { text: 'your plans. You live a small life here, where everything moves fast,', normal: true },
@@ -162,7 +162,7 @@ export function sceneReady(k) {
     const titleY = 280  // Top position (centered)
     
     //
-    // Title "Find Myself" in red (top left)
+    // Title "Find Yourself" in red (top left)
     //
     const outlineOffsets = [
       [-2, -2], [0, -2], [2, -2],
@@ -279,14 +279,14 @@ export function sceneReady(k) {
     const instructionsOutlines = instructionsOutlineObjects
     //
     // Spiders - creatures made from title letters crawling in the background
-    // Create spiders from all letters in "Find Myself" title
+    // Create spiders from all letters in "Find Yourself" title
     //
     const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, titleSize, TITLE_FONT_FAMILY)
     const spiders = []
     let spiderTimer = 0  // Timer for fade-in delay
     //
     // Wave-based appearance: letters appear in groups, far apart from each other
-    // "Find Myself" (without space) = 10 letters (indices 0-9)
+    // "Find Yourself" (without space) = 10 letters (indices 0-9)
     // F(0) i(1) n(2) d(3) M(4) y(5) s(6) e(7) l(8) f(9)
     // Wave 1: indices 0, 4, 8 (F, M, l) - spread far apart
     // Wave 2: indices 2, 5, 9 (n, y, f) - spread far apart
@@ -422,6 +422,8 @@ export function sceneReady(k) {
     let showParticles = false  // Flag to control particle rendering
     let spidersFadingOut = false  // Flag to control spider fade-out
     let spiderFadeOutProgress = 0  // Progress of spider fade-out (0-1)
+    let spidersReturningToTitle = false  // Flag to control spider return to title
+    let spiderReturnProgress = 0  // Progress of spider return (0-1)
     
     //
     // Show instructions immediately with fade in
@@ -578,6 +580,84 @@ export function sceneReady(k) {
           break
         }
         case PHASES.ARROW_GATHER: {
+          //
+          // Start spiders returning to title when arrow starts gathering
+          //
+          if (!spidersReturningToTitle) {
+            spidersReturningToTitle = true
+            spiderReturnProgress = 0
+            //
+            // Calculate target positions for "Find Yourself" above arrow
+            // Position title above arrow with spacing
+            // Use original letter positions but recalculate for vertical layout above arrow
+            //
+            const titleAboveArrowY = arrowCenterY - 200  // Position title 200px above arrow
+            const charWidth = titleSize * 0.6  // Character width (same as in pickLettersFromTitle)
+            const spaceWidth = charWidth * 0.5  // Space width (half of character width)
+            //
+            // Keep spaces in title for proper spacing: "find yourself"
+            //
+            const titleText = INSTRUCTIONS_TITLE  // "find yourself" with space
+            //
+            // Calculate total width including spaces
+            //
+            let totalWidth = 0
+            for (let i = 0; i < titleText.length; i++) {
+              if (titleText[i] === ' ') {
+                totalWidth += spaceWidth
+              } else {
+                totalWidth += charWidth
+              }
+            }
+            const startX = centerX - totalWidth / 2 + charWidth / 2  // Start from left edge, centered
+            
+            //
+            // Create mapping from original charIndex to X position
+            // Account for spaces in the title
+            //
+            const titleWithSpaces = INSTRUCTIONS_TITLE
+            let currentX = startX
+            const charIndexToX = {}
+            for (let i = 0; i < titleWithSpaces.length; i++) {
+              if (titleWithSpaces[i] === ' ') {
+                //
+                // Space - advance X position but don't assign to any spider
+                //
+                currentX += spaceWidth
+              } else {
+                //
+                // Letter - assign X position
+                //
+                charIndexToX[i] = currentX
+                currentX += charWidth
+              }
+            }
+            
+            //
+            // Assign target positions to spiders based on their original letter order
+            // Sort spiders by their original charIndex to maintain letter order
+            //
+            const sortedSpiders = [...spiders].sort((a, b) => {
+              const aIndex = a.letterInfo ? a.letterInfo.charIndex : 999
+              const bIndex = b.letterInfo ? b.letterInfo.charIndex : 999
+              return aIndex - bIndex
+            })
+            
+            sortedSpiders.forEach((spider) => {
+              if (spider.letterInfo) {
+                //
+                // Calculate horizontal position based on original charIndex
+                // Use charIndexToX mapping which accounts for spaces
+                //
+                const originalCharIndex = spider.letterInfo.charIndex
+                spider.targetReturnX = charIndexToX[originalCharIndex] ?? startX
+                spider.targetReturnY = titleAboveArrowY
+                spider.startReturnX = spider.x  // Save current position
+                spider.startReturnY = spider.y
+                spider.targetRotation = 0  // Normal horizontal text (no rotation)
+              }
+            })
+          }
           if (particlesIdle(particleSystem.particles)) {
             setPhase(PHASES.ARROW_HOLD)
           }
@@ -586,6 +666,7 @@ export function sceneReady(k) {
         case PHASES.ARROW_HOLD: {
           //
           // Arrow stays until user presses key
+          // Spiders continue returning to title
           //
           break
         }
@@ -654,7 +735,10 @@ export function sceneReady(k) {
       // Update each spider
       //
       spiders.forEach(spider => {
-        updateSpider(k, spider, dt, currentOpacity)
+        //
+        // Allow full screen movement only after fireflies appear
+        //
+        updateSpider(k, spider, dt, currentOpacity, showParticles)
       })
     })
     
@@ -1155,7 +1239,14 @@ function createSpider(k, index, sourceInfo) {
     legOpacity: 0,  // Separate opacity for legs
     charHidden: false,  // Track if character was hidden from text
     letterInfo: null,  // Will be set later
-    titleOutlines: null  // Will be set later for title letters
+    titleOutlines: null,  // Will be set later for title letters
+    targetReturnX: undefined,  // Target X position when returning to title
+    targetReturnY: undefined,  // Target Y position when returning to title
+    startReturnX: undefined,  // Starting X position when return begins
+    startReturnY: undefined,  // Starting Y position when return begins
+    targetRotation: 0,  // Target rotation angle when returning to title (degrees)
+    currentRotation: 0,  // Current rotation angle (degrees)
+    legsHidden: false  // Flag to hide legs when spider reaches target position
   }
 }
 
@@ -1272,8 +1363,9 @@ function pickLettersFromText(k, textObjects, count) {
  * @param {Object} spider - Spider instance
  * @param {number} dt - Delta time
  * @param {number} opacity - Current opacity (for legs)
+ * @param {boolean} allowFullScreenMovement - If true, spiders can move across full screen
  */
-function updateSpider(k, spider, dt, opacity) {
+function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
   //
   // Always update leg appearance timer once opacity is greater than 0
   //
@@ -1324,14 +1416,73 @@ function updateSpider(k, spider, dt, opacity) {
   //
   if (!spider.isActivated) return
   //
-  // Update direction timer
+  // Check if spider should return to title position
   //
-  spider.directionTimer -= dt
-  if (spider.directionTimer <= 0) {
-    const newAngle = Math.random() * Math.PI * 2
-    spider.targetVx = Math.cos(newAngle) * spider.speed
-    spider.targetVy = Math.sin(newAngle) * spider.speed
-    spider.directionTimer = SPIDER_DIRECTION_CHANGE_INTERVAL * (0.5 + Math.random())
+  if (spider.targetReturnX !== undefined && spider.targetReturnY !== undefined) {
+    //
+    // Spider is returning to title - move towards target position
+    //
+    const returnSpeed = 80  // Speed for returning to title
+    const dx = spider.targetReturnX - spider.x
+    const dy = spider.targetReturnY - spider.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    
+    //
+    // Smoothly rotate towards target rotation
+    //
+    if (spider.targetRotation !== undefined) {
+      const rotationSpeed = 180 * dt  // Rotate 180 degrees per second
+      const rotationDiff = spider.targetRotation - spider.currentRotation
+      //
+      // Normalize rotation difference to -180 to 180 range
+      //
+      let normalizedDiff = rotationDiff
+      while (normalizedDiff > 180) normalizedDiff -= 360
+      while (normalizedDiff < -180) normalizedDiff += 360
+      
+      if (Math.abs(normalizedDiff) > rotationSpeed * dt) {
+        spider.currentRotation += Math.sign(normalizedDiff) * rotationSpeed * dt
+      } else {
+        spider.currentRotation = spider.targetRotation
+      }
+    }
+    
+    if (distance > 5) {
+      //
+      // Move towards target
+      //
+      const angle = Math.atan2(dy, dx)
+      spider.targetVx = Math.cos(angle) * returnSpeed
+      spider.targetVy = Math.sin(angle) * returnSpeed
+    } else {
+      //
+      // Reached target - stop moving and ensure correct rotation
+      //
+      spider.targetVx = 0
+      spider.targetVy = 0
+      spider.x = spider.targetReturnX
+      spider.y = spider.targetReturnY
+      if (spider.targetRotation !== undefined) {
+        spider.currentRotation = spider.targetRotation
+      }
+      //
+      // Hide legs when spider reaches target position
+      //
+      spider.legsHidden = true
+    }
+  } else {
+    //
+    // Normal random movement
+    //
+    // Update direction timer
+    //
+    spider.directionTimer -= dt
+    if (spider.directionTimer <= 0) {
+      const newAngle = Math.random() * Math.PI * 2
+      spider.targetVx = Math.cos(newAngle) * spider.speed
+      spider.targetVy = Math.sin(newAngle) * spider.speed
+      spider.directionTimer = SPIDER_DIRECTION_CHANGE_INTERVAL * (0.5 + Math.random())
+    }
   }
   //
   // Smoothly interpolate velocity
@@ -1357,11 +1508,25 @@ function updateSpider(k, spider, dt, opacity) {
   spider.distanceTraveled += Math.sqrt(dx * dx + dy * dy)
   //
   // Bounce off screen edges
+  // Before fireflies appear, restrict spiders to area above main text
+  // After fireflies appear, allow full screen movement
   //
   const minX = SPIDER_SCREEN_MARGIN
   const maxX = k.width() - SPIDER_SCREEN_MARGIN
-  const minY = SPIDER_SCREEN_MARGIN
-  const maxY = k.height() - SPIDER_SCREEN_MARGIN
+  let minY = SPIDER_SCREEN_MARGIN
+  let maxY = k.height() - SPIDER_SCREEN_MARGIN
+  
+  if (!allowFullScreenMovement) {
+    //
+    // Restrict spiders to area above main text (above bodyStartY)
+    // bodyStartY = titleY + 80 = 280 + 80 = 360
+    // Allow some margin above title (titleY = 280)
+    //
+    const TITLE_Y = 280
+    const BODY_START_Y = TITLE_Y + 80  // 360
+    minY = SPIDER_SCREEN_MARGIN
+    maxY = BODY_START_Y - 20  // 20px above main text
+  }
   
   if (spider.x < minX) {
     spider.x = minX
@@ -1451,8 +1616,9 @@ function updateSpider(k, spider, dt, opacity) {
 function drawSpider(k, spider, textOpacity) {
   //
   // Draw legs with separate opacity (fade in gradually)
+  // Don't draw legs if spider has reached target position
   //
-  if (spider.legOpacity > 0) {
+  if (spider.legOpacity > 0 && !spider.legsHidden) {
     //
     // Use same color as letter for legs
     //
@@ -1505,10 +1671,18 @@ function drawSpider(k, spider, textOpacity) {
     //
     const letterOpacity = 1.0
     //
-    // Calculate rotation angle based on movement direction (in degrees)
+    // Calculate rotation angle
+    // If spider is returning to title, use target rotation, otherwise use movement direction
     //
-    const angleRad = Math.atan2(spider.vy, spider.vx)
-    const angleDeg = angleRad * (180 / Math.PI)
+    let angleDeg = spider.currentRotation
+    if (spider.targetReturnX === undefined || spider.targetReturnY === undefined) {
+      //
+      // Normal movement - rotate based on movement direction
+      //
+      const angleRad = Math.atan2(spider.vy, spider.vx)
+      angleDeg = angleRad * (180 / Math.PI)
+      spider.currentRotation = angleDeg
+    }
     
     k.pushTransform()
     k.pushTranslate(spider.x, spider.y)

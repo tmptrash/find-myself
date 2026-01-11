@@ -119,12 +119,25 @@ export function sceneLevel3(k) {
     //
     const TOUCH_FONT_SIZE = 48
     //
+    // Calculate grid dimensions first (needed for cloud platform positioning)
+    // Grid should be positioned to leave space for hero and arrows on the left
+    // Grid ends 50px before right platform (right platform starts at screen.width - RIGHT_MARGIN)
+    //
+    const CLOUD_BLOCK_SIZE = 75
+    const GRID_COLUMNS = 12  // Fixed number of grid columns
+    const GRID_CELL_SIZE = CLOUD_BLOCK_SIZE  // Grid cell size equals block size
+    const GRID_WIDTH = GRID_COLUMNS * GRID_CELL_SIZE  // Total grid width
+    const GRID_RIGHT_MARGIN = 50  // Margin from right platform (50 pixels)
+    const GRID_RIGHT = CFG.visual.screen.width - RIGHT_MARGIN - GRID_RIGHT_MARGIN  // Grid ends 50px before right platform
+    const GRID_LEFT = GRID_RIGHT - GRID_WIDTH  // Grid starts from right platform minus margin minus width
+    //
     // Cloud platform lowered significantly - hero will be fixed at this level
+    // Platform width matches grid width, positioned to align with grid
     //
     const CLOUD_PLATFORM_Y = TOP_MARGIN + 40 + TOUCH_FONT_SIZE + 150  // Lowered significantly
-    const CLOUD_PLATFORM_WIDTH = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const CLOUD_PLATFORM_WIDTH = GRID_WIDTH  // Platform width matches grid width
     const CLOUD_PLATFORM_HEIGHT = 30
-    const CLOUD_PLATFORM_X = LEFT_MARGIN + CLOUD_PLATFORM_WIDTH / 2
+    const CLOUD_PLATFORM_X = GRID_LEFT + CLOUD_PLATFORM_WIDTH / 2  // Platform centered on grid
     //
     // Create cloud platform with collision (hero can stand and jump on it)
     //
@@ -141,10 +154,6 @@ export function sceneLevel3(k) {
     ])
     createStaticCloudPlatform(k, CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y, CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT)
     const CLOUD_PLATFORM_TOP_Y = CLOUD_PLATFORM_Y - CLOUD_PLATFORM_HEIGHT / 2
-    //
-    // Create arrows (left and right) in center of cloud platform, above clouds
-    //
-    const arrowsInst = createCloudPlatformArrows(k, CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y)
     //
     // Bottom platform (full width)
     // Cloud blocks will stop here
@@ -163,21 +172,34 @@ export function sceneLevel3(k) {
     const BOTTOM_PLATFORM_Y = CFG.visual.screen.height - BOTTOM_MARGIN / 2
     const BOTTOM_PLATFORM_TOP_Y = BOTTOM_PLATFORM_Y - BOTTOM_MARGIN / 2
     //
+    // Hero spawn position on bottom platform (between left platform and grid)
+    // Position hero between left margin and grid start
+    //
+    const HERO_AREA_CENTER_X = LEFT_MARGIN + (GRID_LEFT - LEFT_MARGIN) / 2  // Center between left margin and grid
+    const HERO_SPAWN_X_ON_PLATFORM = HERO_AREA_CENTER_X  // Position hero in center of available space
+    //
+    // Create arrows (left and right) on bottom platform with hero, moved right
+    // Position arrows slightly above platform
+    //
+    const ARROWS_Y_OFFSET = -25  // Move arrows up by 25 pixels (lowered by 5px)
+    const arrowsInst = createCloudPlatformArrows(k, HERO_SPAWN_X_ON_PLATFORM, BOTTOM_PLATFORM_Y + ARROWS_Y_OFFSET)
+    //
     // Store bottomPlatformTopY for use in createCloudBlock
     //
     const bottomPlatformTopY = BOTTOM_PLATFORM_TOP_Y
     //
-    // Create anti-hero on bottom platform
+    // Create anti-hero on cloud platform (where hero was)
     //
     const ANTIHERO_COLLISION_HEIGHT = 25
     const ANTIHERO_SCALE = 3
     const ANTIHERO_COLLISION_HEIGHT_SCALED = ANTIHERO_COLLISION_HEIGHT * ANTIHERO_SCALE  // 75
-    const ANTIHERO_Y_ON_BOTTOM_PLATFORM = BOTTOM_PLATFORM_TOP_Y - ANTIHERO_COLLISION_HEIGHT_SCALED / 2  // Anti-hero center positioned so bottom touches bottom platform top
+    const ANTIHERO_Y_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_TOP_Y - ANTIHERO_COLLISION_HEIGHT_SCALED / 2  // Anti-hero center positioned so bottom touches cloud platform top
+    const ANTIHERO_X_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_X  // Center of cloud platform
     
     const antiHeroInst = Hero.create({
       k,
-      x: ANTIHERO_SPAWN_X,
-      y: ANTIHERO_Y_ON_BOTTOM_PLATFORM,
+      x: ANTIHERO_X_ON_CLOUD_PLATFORM,
+      y: ANTIHERO_Y_ON_CLOUD_PLATFORM,
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
       sfx: sound,
@@ -186,13 +208,12 @@ export function sceneLevel3(k) {
     })
     //
     // Create hero with anti-hero reference for annihilation
-    // Position hero on cloud platform level (fixed Y position)
+    // Position hero on bottom platform in left corner
     //
     const HERO_COLLISION_HEIGHT = 25
     const HERO_SCALE = 3
     const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE  // 75
-    const HERO_SPAWN_X_ON_PLATFORM = k.width() / 2
-    const HERO_FIXED_Y = CLOUD_PLATFORM_TOP_Y - HERO_COLLISION_HEIGHT_SCALED / 2  // Hero center positioned so bottom touches cloud platform top
+    const HERO_FIXED_Y = BOTTOM_PLATFORM_TOP_Y - HERO_COLLISION_HEIGHT_SCALED / 2  // Hero center positioned so bottom touches bottom platform top
     
     const heroInst = Hero.create({
       k,
@@ -224,27 +245,32 @@ export function sceneLevel3(k) {
     // Create falling cloud blocks system with grid movement
     //
     const cloudBlocks = []
-    const CLOUD_BLOCK_SIZE = 75
-    const GRID_CELL_SIZE = CLOUD_BLOCK_SIZE  // Grid cell size equals block size
     const CLOUD_BLOCK_MOVE_DISTANCE = GRID_CELL_SIZE  // Move one grid cell at a time
     const CLOUD_BLOCK_SPAWN_INTERVAL = 2.0  // Spawn new block every 2 seconds
     const CLOUD_BLOCK_UPDATE_INTERVAL = 2.0  // Update position every 2 seconds (tetris-like jerky movement)
     const CLOUD_BLOCK_TAG = "cloud-block"  // Tag for cloud blocks
+    const MAX_CLOUD_BLOCKS = 20  // Maximum number of blocks to spawn
     //
-    // Calculate grid bounds (centered grid with 12 cells width)
-    // Grid starts from cloud platform and extends downward
+    // Fixed spawn positions for blocks (same order every time)
+    // Each number represents grid column (0-11)
     //
-    const GRID_COLUMNS = 12  // Fixed number of grid columns
-    const GRID_WIDTH = GRID_COLUMNS * GRID_CELL_SIZE  // Total grid width
-    const GRID_LEFT = (CFG.visual.screen.width - GRID_WIDTH) / 2  // Center grid horizontally
-    const GRID_RIGHT = GRID_LEFT + GRID_WIDTH  // Right edge of grid
+    const FIXED_SPAWN_COLUMNS = [
+      5, 6, 4, 7, 3, 8, 2, 9, 1, 10,
+      0, 11, 5, 6, 4, 7, 3, 8, 2, 9
+    ]
+    let totalBlocksSpawned = 0  // Counter for total blocks spawned
+    //
+    // Grid bounds already calculated above (GRID_LEFT, GRID_WIDTH, GRID_RIGHT, etc.)
+    //
     //
     // Calculate spawn positions on grid (below cloud platform)
-    // Snap spawn Y to grid
+    // Blocks should spawn one cell above first grid cell
+    // Use same grid calculation as visualization: gridEndY = BOTTOM_PLATFORM_TOP_Y, gridStartY = gridEndY - (8 * GRID_CELL_SIZE)
     //
-    const spawnYRaw = CLOUD_PLATFORM_TOP_Y + CLOUD_PLATFORM_HEIGHT / 2 + CLOUD_BLOCK_SIZE / 2 + 5
-    const spawnGridRow = Math.floor(spawnYRaw / GRID_CELL_SIZE)
-    const SPAWN_Y = spawnGridRow * GRID_CELL_SIZE + CLOUD_BLOCK_SIZE / 2  // Center of grid cell
+    const GRID_ROWS = 8  // Fixed number of grid rows
+    const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
+    const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
+    const SPAWN_Y = gridStartY - GRID_CELL_SIZE / 2  // Center of cell one row above first grid cell
     let cloudBlockSpawnTimer = 0
     let cloudBlockUpdateTimer = 0
     //
@@ -263,34 +289,27 @@ export function sceneLevel3(k) {
         //
         // Calculate grid - should have exactly 8 cells vertically, ending at bottom platform
         // Last cell bottom edge should align with platform top
-        // If gridEndRow is the last row, then: gridEndRow * GRID_CELL_SIZE + GRID_CELL_SIZE = BOTTOM_PLATFORM_TOP_Y
+        // Calculate gridEndRow so that: gridEndRow * GRID_CELL_SIZE + GRID_CELL_SIZE = BOTTOM_PLATFORM_TOP_Y
         // So: gridEndRow = (BOTTOM_PLATFORM_TOP_Y - GRID_CELL_SIZE) / GRID_CELL_SIZE
         //
         const GRID_ROWS = 8  // Fixed number of grid rows
         //
-        // Calculate grid end row so that last cell bottom edge aligns with platform top
-        // gridEndRow * GRID_CELL_SIZE + GRID_CELL_SIZE = BOTTOM_PLATFORM_TOP_Y
-        // gridEndRow = (BOTTOM_PLATFORM_TOP_Y - GRID_CELL_SIZE) / GRID_CELL_SIZE
+        // Calculate grid - 8 cells vertically, starting from bottom platform top
+        // Bottom edge of last cell should exactly align with platform top
+        // Count 8 cells upward from bottom platform
         //
-        const gridEndRow = Math.floor((BOTTOM_PLATFORM_TOP_Y - GRID_CELL_SIZE) / GRID_CELL_SIZE)
-        const gridEndY = gridEndRow * GRID_CELL_SIZE + GRID_CELL_SIZE  // Bottom edge of last cell (platform top)
-        //
-        // Calculate grid start row - 8 cells total, ending at platform
-        // Start from end row and go up 7 rows (8 cells total: rows gridEndRow-7 to gridEndRow)
-        // gridStartRow = gridEndRow - 7 (for 8 cells: 0,1,2,3,4,5,6,7 relative to gridEndRow-7)
-        //
-        const gridStartRow = gridEndRow - GRID_ROWS + 1  // First row (8 cells: gridEndRow-7 to gridEndRow)
-        const gridStartY = gridStartRow * GRID_CELL_SIZE  // Top edge of first cell
+        const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
+        const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
         //
         // Draw vertical grid lines at cell boundaries
         // Lines at: GRID_LEFT, GRID_LEFT + GRID_CELL_SIZE, GRID_LEFT + 2*GRID_CELL_SIZE, ...
-        // Draw one extra line to show last cell boundary
-        // Use fixed GRID_LEFT and GRID_RIGHT values (computed once at scene init)
+        // Draw 13 lines total (12 cells + 1 right edge): from col 0 to GRID_COLUMNS (inclusive)
+        // Lines go from top of first cell (gridStartY) to bottom of last cell (gridEndY)
         //
         for (let col = 0; col <= GRID_COLUMNS; col++) {
           const x = GRID_LEFT + col * GRID_CELL_SIZE
           //
-          // Draw line even if it's outside current viewport to ensure it's always visible
+          // Draw line from top of first cell to bottom of last cell
           //
           k.drawLine({
             p1: k.vec2(x, gridStartY),
@@ -302,13 +321,13 @@ export function sceneLevel3(k) {
         }
         //
         // Draw horizontal grid lines at cell boundaries
-        // Lines at: gridRow * GRID_CELL_SIZE (top edge of each cell)
-        // Use fixed GRID_LEFT and GRID_RIGHT values (computed once at scene init)
+        // For 8 cells, we need 9 lines: top of first cell + 8 boundaries between cells
+        // Lines at: gridStartY, gridStartY + GRID_CELL_SIZE, ..., gridEndY
         //
-        for (let row = gridStartRow; row <= gridEndRow; row++) {
-          const y = row * GRID_CELL_SIZE
+        for (let row = 0; row <= GRID_ROWS; row++) {
+          const y = gridStartY + row * GRID_CELL_SIZE
           //
-          // Draw line even if it's outside current viewport to ensure it's always visible
+          // Draw line from left to right edge of grid
           //
           k.drawLine({
             p1: k.vec2(GRID_LEFT, y),
@@ -335,22 +354,26 @@ export function sceneLevel3(k) {
       arrowsInst.update(heroInst.character)
       //
       // Update cloud blocks spawn timer
+      // Only spawn if we haven't reached the maximum number of blocks
       //
-      cloudBlockSpawnTimer += k.dt()
-      if (cloudBlockSpawnTimer >= CLOUD_BLOCK_SPAWN_INTERVAL) {
-        cloudBlockSpawnTimer = 0
-        //
-        // Spawn new cloud block on grid (below cloud platform)
-        // Choose random grid column
-        //
-        const gridColumn = Math.floor(Math.random() * GRID_COLUMNS)
-        const spawnX = GRID_LEFT + gridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2  // Center of grid cell
-        const cloudBlock = createCloudBlock(k, spawnX, SPAWN_Y, CLOUD_BLOCK_SIZE, CLOUD_BLOCK_TAG)
-        //
-        // Store grid position for block
-        //
-        cloudBlock.gridColumn = gridColumn
-        cloudBlocks.push(cloudBlock)
+      if (totalBlocksSpawned < MAX_CLOUD_BLOCKS) {
+        cloudBlockSpawnTimer += k.dt()
+        if (cloudBlockSpawnTimer >= CLOUD_BLOCK_SPAWN_INTERVAL) {
+          cloudBlockSpawnTimer = 0
+          //
+          // Spawn new cloud block on grid (below cloud platform)
+          // Use fixed spawn column from predefined array
+          //
+          const gridColumn = FIXED_SPAWN_COLUMNS[totalBlocksSpawned]  // Get column from fixed array
+          const spawnX = GRID_LEFT + gridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2  // Center of grid cell
+          const cloudBlock = createCloudBlock(k, spawnX, SPAWN_Y, CLOUD_BLOCK_SIZE, CLOUD_BLOCK_TAG)
+          //
+          // Store grid position for block
+          //
+          cloudBlock.gridColumn = gridColumn
+          cloudBlocks.push(cloudBlock)
+          totalBlocksSpawned++  // Increment counter
+        }
       }
       //
       // Update cloud blocks position (jerky movement every second)
@@ -382,55 +405,96 @@ export function sceneLevel3(k) {
         const rightArrowRight = arrowsInst.rightArrowX + arrowHalfWidth
         const isHeroAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
         //
-        // Update each cloud block (grid-based tetris-like movement)
+        // Calculate grid constants once (used by all blocks)
         //
-        cloudBlocks.forEach((block) => {
-          if (block.exists()) {
+        const GRID_ROWS = 8  // Fixed number of grid rows
+        const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
+        const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
+        const targetY = gridEndY - GRID_CELL_SIZE / 2  // Center of last cell (8th cell)
+        const targetGridRow = GRID_ROWS - 1  // Last row index (0-based: 0 to 7)
+        //
+        // Helper function to get grid row from Y position
+        //
+        const getGridRow = (y) => {
+          return Math.floor((y - gridStartY - GRID_CELL_SIZE / 2) / GRID_CELL_SIZE)
+        }
+        //
+        // Helper function to get grid column from X position
+        //
+        const getGridColumn = (x) => {
+          return Math.floor((x - GRID_LEFT - GRID_CELL_SIZE / 2) / GRID_CELL_SIZE)
+        }
+        //
+        // Helper function to check if a cell is occupied by any block
+        //
+        const isCellOccupied = (column, row, excludeBlock) => {
+          return cloudBlocks.some((otherBlock) => {
+            if (!otherBlock.exists() || otherBlock === excludeBlock) return false
+            const otherColumn = otherBlock.gridColumn !== undefined ? otherBlock.gridColumn : getGridColumn(otherBlock.pos.x)
+            const otherRow = getGridRow(otherBlock.pos.y)
+            return otherColumn === column && otherRow === row
+          })
+        }
+        //
+        // Sort blocks by Y position (bottom to top) so lower blocks are processed first
+        // This ensures that when a block checks for blocks below, lower blocks are already positioned
+        //
+        const sortedBlocks = [...cloudBlocks].filter(b => b.exists()).sort((a, b) => b.pos.y - a.pos.y)
+        //
+        // Update each cloud block (grid-based tetris-like movement)
+        // Process from bottom to top so lower blocks are positioned first
+        //
+        sortedBlocks.forEach((block) => {
+          //
+          // Always snap block to grid first (prevent drift from physics)
+          //
+          const currentGridColumn = block.gridColumn !== undefined ? block.gridColumn : getGridColumn(block.pos.x)
+          const snappedX = GRID_LEFT + currentGridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
+          block.pos.x = snappedX
+          block.gridColumn = currentGridColumn
+          //
+          // Get current grid position (snap to grid)
+          // Calculate which row (0-7) the block is in based on gridStartY
+          //
+          const currentGridRow = getGridRow(block.pos.y)
+          //
+          // Check if block has reached bottom platform
+          //
+          const hasReachedBottom = currentGridRow >= targetGridRow
+          //
+          // Check if block is stopped (already on platform)
+          //
+          const isStopped = block.isStopped || false
+          //
+          // Check if block is on another block (using grid-based logic, not physics)
+          // Block is on another block if there's any block in the same column one row below
+          //
+          let isOnAnotherBlock = false
+          if (currentGridRow < targetGridRow && !isStopped) {
             //
-            // Always snap block to grid first (prevent drift from physics)
+            // Check if there's any block in the same column one row below
             //
-            const currentGridColumn = block.gridColumn !== undefined ? block.gridColumn : Math.floor((block.pos.x - GRID_LEFT - GRID_CELL_SIZE / 2) / GRID_CELL_SIZE)
-            const snappedX = GRID_LEFT + currentGridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-            block.pos.x = snappedX
-            block.gridColumn = currentGridColumn
-            //
-            // Calculate target Y position for bottom platform (snap to grid)
-            // Last cell bottom edge aligns with platform top: gridEndRow * GRID_CELL_SIZE + GRID_CELL_SIZE = BOTTOM_PLATFORM_TOP_Y
-            // Block center at last row: gridEndRow * GRID_CELL_SIZE + CLOUD_BLOCK_SIZE / 2
-            //
-            const GRID_ROWS = 8  // Fixed number of grid rows
-            const gridEndRow = Math.floor((BOTTOM_PLATFORM_TOP_Y - GRID_CELL_SIZE) / GRID_CELL_SIZE)
-            const targetGridRow = gridEndRow  // Last row (8th cell)
-            const targetY = targetGridRow * GRID_CELL_SIZE + CLOUD_BLOCK_SIZE / 2
-            //
-            // Get current grid position (snap to grid)
-            //
-            const currentGridRow = Math.floor((block.pos.y - CLOUD_BLOCK_SIZE / 2) / GRID_CELL_SIZE)
-            //
-            // Check if block has reached bottom platform
-            //
-            const hasReachedBottom = currentGridRow >= targetGridRow
-            //
-            // Check if block is stopped (already on platform)
-            //
-            const isStopped = block.isStopped || false
-            //
-            // Check if block is on another block (using collision detection)
-            // Block is on another block if it's grounded and not at target row
-            //
-            const isOnAnotherBlock = block.isGrounded() && currentGridRow < targetGridRow
-            const isOnPlatform = hasReachedBottom || isOnAnotherBlock || isStopped
-            //
-            // Apply grid-based tetris-like movement
-            //
-            if (!isOnPlatform) {
+            const rowBelow = currentGridRow + 1
+            isOnAnotherBlock = isCellOccupied(currentGridColumn, rowBelow, block)
+          }
+          const isOnPlatform = hasReachedBottom || isOnAnotherBlock || isStopped
+          //
+          // Apply grid-based tetris-like movement
+          //
+          if (!isOnPlatform) {
               //
               // Move block down by one grid cell (one cell lower)
               //
-              const newGridRow = currentGridRow + 2  // Move down by 2 cells (one cell lower)
+              const newGridRow = currentGridRow + 1  // Move down by 1 cell
+              //
+              // Check if there's any block in the same column at newGridRow
+              // Blocks cannot occupy the same cell - each cell can only have one block
+              //
+              const cellBelowOccupied = isCellOccupied(currentGridColumn, newGridRow, block)
               //
               // Don't move past platform - clamp to platform grid row
               // Blocks cannot go below targetGridRow (last cell)
+              // Also don't move if there's any block at the new position (prevents stacking in same cell)
               //
               let finalY
               let finalGridRow
@@ -441,12 +505,20 @@ export function sceneLevel3(k) {
                 finalGridRow = targetGridRow
                 finalY = targetY
                 block.isStopped = true  // Mark as stopped
+              } else if (cellBelowOccupied) {
+                //
+                // There's a block at new position - stop at current row (one cell above)
+                //
+                finalGridRow = currentGridRow
+                finalY = gridStartY + finalGridRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
+                block.isStopped = true  // Mark as stopped
               } else {
                 finalGridRow = newGridRow
-                finalY = finalGridRow * GRID_CELL_SIZE + CLOUD_BLOCK_SIZE / 2
+                finalY = gridStartY + finalGridRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
               }
               //
               // Apply horizontal grid movement (one cell left or right)
+              // Blocks move based on hero position above arrows
               //
               let newGridColumn = currentGridColumn
               if (isHeroAboveLeftArrow && currentGridColumn > 0) {
@@ -480,7 +552,7 @@ export function sceneLevel3(k) {
                 // Block is on another block - snap to grid row above current
                 //
                 const snappedRow = currentGridRow
-                block.pos.y = snappedRow * GRID_CELL_SIZE + CLOUD_BLOCK_SIZE / 2
+                block.pos.y = gridStartY + snappedRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
                 block.isStopped = true  // Mark as stopped when on another block
               } else {
                 //
@@ -496,28 +568,69 @@ export function sceneLevel3(k) {
               block.pos.x = GRID_LEFT + snappedColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
               block.gridColumn = snappedColumn
               //
-              // Stop all movement
+              // Stop all movement and make block static to prevent physics interactions
               //
               block.vel.y = 0
               block.vel.x = 0
-            }
-            //
-            // Always enforce grid position (prevent any physics drift)
-            // Snap Y position to grid to ensure blocks are always in cells, not between them
-            // Blocks cannot go below targetGridRow (last cell)
-            //
-            const enforcedColumn = block.gridColumn !== undefined ? block.gridColumn : Math.floor((block.pos.x - GRID_LEFT) / GRID_CELL_SIZE)
-            let enforcedRow = Math.floor((block.pos.y - CLOUD_BLOCK_SIZE / 2) / GRID_CELL_SIZE)
-            //
-            // Clamp enforced row to targetGridRow (cannot go below last cell)
-            //
-            if (enforcedRow > targetGridRow) {
-              enforcedRow = targetGridRow
-            }
-            block.pos.x = GRID_LEFT + enforcedColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-            block.pos.y = enforcedRow * GRID_CELL_SIZE + CLOUD_BLOCK_SIZE / 2
-            block.gridColumn = enforcedColumn
+              //
+              // Make block static to prevent any physics interactions with other blocks
+              // Use unuse/use to replace dynamic body with static body
+              //
+              if (!block._isStatic) {
+                block.unuse("body")
+                block.use(k.body({ isStatic: true }))
+                block._isStatic = true
+              }
           }
+          //
+          // Always enforce grid position (prevent any physics drift)
+          // Snap Y position to grid to ensure blocks are always in cells, not between them
+          // Blocks cannot go below targetGridRow (last cell)
+          // For stopped blocks, force static body and exact position
+          // Also ensure blocks don't occupy the same cell (move up if cell is occupied)
+          //
+          const enforcedColumn = block.gridColumn !== undefined ? block.gridColumn : getGridColumn(block.pos.x)
+          let enforcedRow = getGridRow(block.pos.y)
+          //
+          // Clamp enforced row to targetGridRow (cannot go below last cell)
+          //
+          if (enforcedRow > targetGridRow) {
+            enforcedRow = targetGridRow
+          }
+          //
+          // Check if there's another block in the same cell and move up if needed
+          // Blocks cannot occupy the same cell - each cell can only have one block
+          // Keep moving up until we find an empty cell
+          //
+          while (isCellOccupied(enforcedColumn, enforcedRow, block) && enforcedRow > 0) {
+            enforcedRow = enforcedRow - 1
+            if (!block.isStopped) {
+              block.isStopped = true  // Mark as stopped if we had to move up
+            }
+          }
+          const enforcedX = GRID_LEFT + enforcedColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
+          const enforcedY = gridStartY + enforcedRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
+          //
+          // For stopped blocks, force exact position and make static
+          //
+          if (block.isStopped) {
+            block.pos.x = enforcedX
+            block.pos.y = enforcedY
+            block.vel.y = 0
+            block.vel.x = 0
+            //
+            // Make block static to prevent any physics interactions
+            //
+            if (!block._isStatic) {
+              block.unuse("body")
+              block.use(k.body({ isStatic: true }))
+              block._isStatic = true
+            }
+          } else {
+            block.pos.x = enforcedX
+            block.pos.y = enforcedY
+          }
+          block.gridColumn = enforcedColumn
         })
         //
         // Remove blocks that are below screen
@@ -799,6 +912,13 @@ function createCloudPlatformArrows(k, x, y) {
   ])
   leftArrow.opacity = NORMAL_OPACITY
   //
+  // Store constants for use in update function
+  //
+  const arrowWidthScaled = ARROW_WIDTH_SCALED
+  const glowOpacity = GLOW_OPACITY
+  const normalOpacity = NORMAL_OPACITY
+  const heroCollisionWidthScaled = HERO_COLLISION_WIDTH_SCALED
+  //
   // Return arrow objects and update function
   //
   return {
@@ -816,8 +936,8 @@ function createCloudPlatformArrows(k, x, y) {
         //
         // Hero not available - set normal opacity
         //
-        rightArrow.opacity = NORMAL_OPACITY
-        leftArrow.opacity = NORMAL_OPACITY
+        rightArrow.opacity = normalOpacity
+        leftArrow.opacity = normalOpacity
         return
       }
       //
@@ -828,13 +948,13 @@ function createCloudPlatformArrows(k, x, y) {
       // Calculate collision box bounds
       // Hero collision box: centered at heroX, width = HERO_COLLISION_WIDTH_SCALED
       //
-      const heroLeft = heroX - HERO_COLLISION_WIDTH_SCALED / 2
-      const heroRight = heroX + HERO_COLLISION_WIDTH_SCALED / 2
+      const heroLeft = heroX - heroCollisionWidthScaled / 2
+      const heroRight = heroX + heroCollisionWidthScaled / 2
       //
       // Get arrow width - use stored scaled width (calculated from sprite dimensions)
       // Increase detection width by 2x + 40px on each side for easier detection
       //
-      const arrowHalfWidth = (ARROW_WIDTH_SCALED * 2) / 2 + 40  // Double the width + 40px on each side
+      const arrowHalfWidth = (arrowWidthScaled * 2) / 2 + 40  // Double the width + 40px on each side
       //
       // Arrow collision box bounds (scaled, doubled + 50px padding for detection)
       // Right arrow: centered at rightArrowX, width = ARROW_WIDTH_SCALED * 2 + 100px
@@ -850,7 +970,7 @@ function createCloudPlatformArrows(k, x, y) {
       //
       // Update right arrow glow instantly
       //
-      rightArrow.opacity = isAboveRightArrow ? GLOW_OPACITY : NORMAL_OPACITY
+      rightArrow.opacity = isAboveRightArrow ? glowOpacity : normalOpacity
       //
       // Left arrow: centered at leftArrowX, width = ARROW_WIDTH_SCALED * 2 (absolute value)
       //
@@ -864,7 +984,7 @@ function createCloudPlatformArrows(k, x, y) {
       //
       // Update left arrow glow instantly
       //
-      leftArrow.opacity = isAboveLeftArrow ? GLOW_OPACITY : NORMAL_OPACITY
+      leftArrow.opacity = isAboveLeftArrow ? glowOpacity : normalOpacity
     }
   }
 }
@@ -987,7 +1107,7 @@ function createCloudBlock(k, x, y, size, tag) {
         collisionBoxSize,  // Exact grid cell width
         collisionBoxSize   // Exact grid cell height
       ),
-      ignore: ["cloud-platform"]  // Ignore collision with cloud platform
+      ignore: ["cloud-platform", tag]  // Ignore collision with cloud platform and other cloud blocks (use grid logic instead)
     }),
     k.body({
       mass: 1.0,

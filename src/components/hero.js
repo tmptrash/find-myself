@@ -1153,14 +1153,43 @@ export function onAnnihilationCollide(inst) {
     particles.push(particle)
   }
   //
+  // Play scatter sound immediately after particles are created, before they start moving
+  //
+  sfx && Sound.playScatterSound(sfx)
+  //
   // PHASE 1: Particles scatter outward (0.4 sec)
   //
   const scatterDuration = 0.4
   let scatterTime = 0
+  let absorptionSoundStarted = false
+  // let shakeStarted = false  // Temporarily disabled
+  // const originalCamPos = k.camPos()  // Temporarily disabled
+  // const shakeIntensity = 20  // Temporarily disabled
 
   const scatterInterval = k.onUpdate(() => {
     scatterTime += k.dt()
     const progress = Math.min(scatterTime / scatterDuration, 1)
+    
+    //
+    // Start absorption sound near the end of scatter phase (at 95% progress)
+    //
+    if (!absorptionSoundStarted && progress >= 0.95) {
+      sfx && Sound.playAbsorptionSound(sfx)
+      absorptionSoundStarted = true
+    }
+    
+    // if (!shakeStarted && scatterTime > 0) {
+    //   shakeStarted = true
+    // }
+    
+    //
+    // Screen shake during scatter phase (temporarily disabled)
+    //
+    // if (shakeStarted) {
+    //   const shakeX = k.rand(-shakeIntensity, shakeIntensity)
+    //   const shakeY = k.rand(-shakeIntensity, shakeIntensity)
+    //   k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
+    // }
     //
     // Animate particles - scatter outward
     //
@@ -1191,17 +1220,14 @@ export function onAnnihilationCollide(inst) {
       scatterInterval.cancel()
       //
       // STEP 5: Small pause before absorption (0.2 sec)
+      // Sound already started earlier during scatter phase
       //
       k.wait(0.2, () => {
-        //
-        // Play explosion sound (short pop/snap sound)
-        //
-        sfx && Sound.playGlitchSound(sfx)
         //
         // PHASE 2: Particles absorbed into hero with screen shake
         //
         let absorbTime = 0
-        const maxAbsorbDuration = 2.0
+        const maxAbsorbDuration = 5.0  // Longer duration for particles to converge into hero
         let heroFlickerTimer = 0
         const heroFlickerInterval = 0.08
         //
@@ -1248,13 +1274,11 @@ export function onAnnihilationCollide(inst) {
             heroFlickerTimer = 0
           }
           //
-          // STEP 6: Screen shake starts after particles begin flying (delay 0.15 sec)
+          // Continue screen shake during absorption (temporarily disabled)
           //
-          if (absorbTime > 0.15) {
-            const shakeX = k.rand(-shakeIntensity, shakeIntensity)
-            const shakeY = k.rand(-shakeIntensity, shakeIntensity)
-            k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
-          }
+          // const shakeX = k.rand(-shakeIntensity, shakeIntensity)
+          // const shakeY = k.rand(-shakeIntensity, shakeIntensity)
+          // k.camPos(originalCamPos.x + shakeX, originalCamPos.y + shakeY)
           //
           // Count remaining particles
           //
@@ -1601,7 +1625,12 @@ export function onAnnihilationCollide(inst) {
                         saveLastLevel(nextLevel)
                       }
                       inst.character.hidden = true
-                      createLevelTransition(k, inst.currentLevel)
+                      //
+                      // Small pause after annihilation before transitioning to next level
+                      //
+                      k.wait(0.5, () => {
+                        createLevelTransition(k, inst.currentLevel)
+                      })
                     })
                   })
                 })
@@ -1622,13 +1651,18 @@ export function onAnnihilationCollide(inst) {
                   }
                   inst.character.hidden = true
                   //
-                  // Call onAnnihilation callback if provided, otherwise use default transition
+                  // Small pause after annihilation before transitioning to next level
                   //
-                  if (inst.onAnnihilation) {
-                    inst.onAnnihilation()
-                  } else {
-                    createLevelTransition(k, inst.currentLevel)
-                  }
+                  k.wait(0.5, () => {
+                    //
+                    // Call onAnnihilation callback if provided, otherwise use default transition
+                    //
+                    if (inst.onAnnihilation) {
+                      inst.onAnnihilation()
+                    } else {
+                      createLevelTransition(k, inst.currentLevel)
+                    }
+                  })
                 }
               })
             }

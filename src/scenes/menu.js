@@ -462,6 +462,7 @@ export function sceneMenu(k) {
       sectionLabels,
       arrows,  // Store arrows data in instance
       currentSection,
+      progress,  // Store progress for checking section completion
       floatTime: 0,
       floatRadius: FLOAT_RADIUS,
       floatSpeedX: FLOAT_SPEED_X,
@@ -1364,7 +1365,7 @@ function createStars(k, count) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg, stars, arrows, centerX, centerY, antiHeroes, sectionLabels } = inst
+  const { k, hero, hoveredAntiHero, particlesBg, stars, arrows, centerX, centerY, antiHeroes, sectionLabels, progress } = inst
   
   //
   // Get gray color from first anti-hero (same as inactive anti-heroes use)

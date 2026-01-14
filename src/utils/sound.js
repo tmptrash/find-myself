@@ -1058,7 +1058,7 @@ export function playDeathSound(instance) {
  */
 export function playGlitchSound(inst) {
   const now = inst.audioContext.currentTime
-  const duration = 1.5
+  const duration = 2.5  // Longer duration to cover scatter and absorption phases
   //
   // Deep unsettling bass (40-60 Hz range - creates unease)
   //
@@ -1105,6 +1105,145 @@ export function playGlitchSound(inst) {
   dissonant.start(now)
   dissonant.stop(now + duration)
 }
+
+/**
+ * Play particle scatter sound (explosion/breakup sound)
+ * Sharp, explosive sound for when particles scatter outward
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playScatterSound(inst) {
+  const now = inst.audioContext.currentTime
+  const duration = 0.5  // Short, sharp explosion
+  
+  //
+  // Sharp attack - white noise burst
+  //
+  const bufferSize = inst.audioContext.sampleRate * duration
+  const noiseBuffer = inst.audioContext.createBuffer(1, bufferSize, inst.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    const envelope = Math.exp(-progress * 15)  // Fast decay
+    noiseData[i] = (Math.random() * 2 - 1) * envelope
+  }
+  
+  const noise = inst.audioContext.createBufferSource()
+  noise.buffer = noiseBuffer
+  
+  const noiseGain = inst.audioContext.createGain()
+  noiseGain.gain.setValueAtTime(0, now)
+  noiseGain.gain.linearRampToValueAtTime(0.4, now + 0.01)  // Sharp attack
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  //
+  // Low-pass filter for muffled explosion
+  //
+  const filter = inst.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(2000, now)
+  filter.frequency.exponentialRampToValueAtTime(500, now + duration)
+  
+  noise.connect(filter)
+  filter.connect(noiseGain)
+  noiseGain.connect(inst.glitchSoundGain)
+  
+  //
+  // Deep bass thump (explosion impact)
+  //
+  const bass = inst.audioContext.createOscillator()
+  const bassGain = inst.audioContext.createGain()
+  
+  bass.type = 'sine'
+  bass.frequency.setValueAtTime(60, now)
+  bass.frequency.exponentialRampToValueAtTime(30, now + duration)
+  
+  bassGain.gain.setValueAtTime(0, now)
+  bassGain.gain.linearRampToValueAtTime(0.3, now + 0.02)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  bass.connect(bassGain)
+  bassGain.connect(inst.glitchSoundGain)
+  
+  noise.start(now)
+  noise.stop(now + duration)
+  bass.start(now)
+  bass.stop(now + duration)
+}
+
+/**
+ * Play particle absorption sound (particles converging)
+ * Rising, pulling sound for when particles converge into hero
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playAbsorptionSound(inst) {
+  const now = inst.audioContext.currentTime
+  const duration = 0.9  // Shorter sound duration
+  
+  //
+  // Rising tone - particles being pulled in
+  //
+  const tone1 = inst.audioContext.createOscillator()
+  const tone1Gain = inst.audioContext.createGain()
+  
+  tone1.type = 'sine'
+  tone1.frequency.setValueAtTime(150, now)  // Start low
+  tone1.frequency.exponentialRampToValueAtTime(400, now + duration * 0.7)  // Rise up
+  tone1.frequency.linearRampToValueAtTime(300, now + duration)  // Slight fall at end
+  
+  tone1Gain.gain.setValueAtTime(0, now)
+  tone1Gain.gain.linearRampToValueAtTime(0.25, now + 0.2)
+  tone1Gain.gain.setValueAtTime(0.25, now + duration * 0.7)
+  tone1Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  tone1.connect(tone1Gain)
+  tone1Gain.connect(inst.glitchSoundGain)
+  
+  //
+  // Harmonic overtone (fifth above) for richness
+  //
+  const tone2 = inst.audioContext.createOscillator()
+  const tone2Gain = inst.audioContext.createGain()
+  
+  tone2.type = 'triangle'
+  tone2.frequency.setValueAtTime(225, now)  // Fifth above (1.5x)
+  tone2.frequency.exponentialRampToValueAtTime(600, now + duration * 0.7)
+  tone2.frequency.linearRampToValueAtTime(450, now + duration)
+  
+  tone2Gain.gain.setValueAtTime(0, now)
+  tone2Gain.gain.linearRampToValueAtTime(0.15, now + 0.3)
+  tone2Gain.gain.setValueAtTime(0.15, now + duration * 0.7)
+  tone2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  tone2.connect(tone2Gain)
+  tone2Gain.connect(inst.glitchSoundGain)
+  
+  //
+  // Low rumble - particles converging
+  //
+  const rumble = inst.audioContext.createOscillator()
+  const rumbleGain = inst.audioContext.createGain()
+  
+  rumble.type = 'sawtooth'
+  rumble.frequency.setValueAtTime(40, now)
+  rumble.frequency.linearRampToValueAtTime(60, now + duration)
+  
+  rumbleGain.gain.setValueAtTime(0, now)
+  rumbleGain.gain.linearRampToValueAtTime(0.1, now + 0.4)
+  rumbleGain.gain.setValueAtTime(0.1, now + duration * 0.8)
+  rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  rumble.connect(rumbleGain)
+  rumbleGain.connect(inst.glitchSoundGain)
+  
+  tone1.start(now)
+  tone1.stop(now + duration)
+  tone2.start(now)
+  tone2.stop(now + duration)
+  rumble.start(now)
+  rumble.stop(now + duration)
+}
+
 /**
  * Play mouth appearance sound (transformation/magic sound)
  * @param {Object} inst - Sound instance from create()
@@ -1173,53 +1312,6 @@ export function playMouthSound(inst) {
   sparkle.stop(now + duration)
   pulse.start(now)
   pulse.stop(now + duration)
-}
-/**
- * Play absorption/merging sound effect
- * @param {Object} instance - Sound instance
- */
-export function playAbsorptionSound(instance) {
-  const now = instance.audioContext.currentTime
-  const duration = 1.0
-  // Soft harmonic tone that rises and falls
-  const tone1 = instance.audioContext.createOscillator()
-  const tone1Gain = instance.audioContext.createGain()
-
-  tone1.type = 'sine'
-  tone1.frequency.setValueAtTime(220, now)  // A3
-  tone1.frequency.linearRampToValueAtTime(440, now + duration * 0.5)  // A4
-  tone1.frequency.linearRampToValueAtTime(220, now + duration)  // Back to A3
-
-  tone1Gain.gain.setValueAtTime(0, now)
-  tone1Gain.gain.linearRampToValueAtTime(0.3, now + 0.1)
-  tone1Gain.gain.linearRampToValueAtTime(0.2, now + duration * 0.5)
-  tone1Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-
-  tone1.connect(tone1Gain)
-  tone1Gain.connect(instance.audioContext.destination)
-
-  tone1.start(now)
-  tone1.stop(now + duration)
-  // Second harmonic (fifth above)
-  const tone2 = instance.audioContext.createOscillator()
-  const tone2Gain = instance.audioContext.createGain()
-
-  tone2.type = 'sine'
-  tone2.frequency.setValueAtTime(330, now)  // E4
-  tone2.frequency.linearRampToValueAtTime(660, now + duration * 0.5)  // E5
-  tone2.frequency.linearRampToValueAtTime(330, now + duration)
-
-  tone2Gain.gain.setValueAtTime(0, now)
-  tone2Gain.gain.linearRampToValueAtTime(0.2, now + 0.15)
-  tone2Gain.gain.linearRampToValueAtTime(0.15, now + duration * 0.5)
-  tone2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-
-  tone2.connect(tone2Gain)
-  tone2Gain.connect(instance.audioContext.destination)
-
-  tone2.start(now + 0.05)
-  tone2.stop(now + duration)
-  // Shimmer effect removed (bell-like sound)
 }
 
 export function playAnnihilationSound(instance) {

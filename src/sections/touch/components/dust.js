@@ -63,9 +63,9 @@ function createParticle(k, bounds, initialSpawn = false, customColor = null) {
     baseG = customColor.g
     baseB = customColor.b
   } else {
-    //
-    // Bright blue color like blue bugs (#3498DB) with slight variations
-    //
+  //
+  // Bright blue color like blue bugs (#3498DB) with slight variations
+  //
     baseR = 52
     baseG = 152
     baseB = 219
@@ -148,13 +148,13 @@ export function draw(inst) {
     } else {
       //
       // Default dark outline for blue particles
-      //
-      k.drawCircle({
-        pos: k.vec2(particle.x, particle.y),
-        radius: particle.size + 1,
-        color: k.rgb(30, 30, 30),
-        opacity: particle.opacity * 0.8
-      })
+    //
+    k.drawCircle({
+      pos: k.vec2(particle.x, particle.y),
+      radius: particle.size + 1,
+      color: k.rgb(30, 30, 30),
+      opacity: particle.opacity * 0.8
+    })
     }
     //
     // Draw main particle with its color

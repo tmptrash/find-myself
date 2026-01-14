@@ -450,7 +450,8 @@ export function sceneLevel1(k) {
           k.go('level-touch.2')
         })
       },
-      currentLevel: 'level-touch.1'
+      currentLevel: 'level-touch.1',
+      addMouth: true
     })
     //
     // Spawn hero and anti-hero

@@ -203,7 +203,7 @@ export function sceneLevel2(k) {
       },
       currentLevel: 'level-touch.2',
       jumpForce: CFG.game.jumpForce,
-      addMouth: isWordComplete,
+      addMouth: true,
       bodyColor: heroBodyColor
     })
     //

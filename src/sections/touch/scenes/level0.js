@@ -1196,7 +1196,7 @@ export function sceneLevel0(k) {
       },
       currentLevel: 'level-touch.0',
       jumpForce: CFG.game.jumpForce,
-      addMouth: isWordComplete,
+      addMouth: true,
       bodyColor: heroBodyColor
     })
     //
@@ -1552,9 +1552,9 @@ export function sceneLevel0(k) {
     const pyramidCheckInterval = 0.5  // Check for groups every 0.5 seconds
     let pyramidCheckTimer = 0
     
-      //
+    //
       // Update bugs and pyramids
-      //
+    //
     k.onUpdate(() => {
       const dt = k.dt()
       

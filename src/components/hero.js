@@ -1629,7 +1629,7 @@ export function onAnnihilationCollide(inst) {
                       // Small pause after annihilation before transitioning to next level
                       //
                       k.wait(0.5, () => {
-                        createLevelTransition(k, inst.currentLevel)
+                      createLevelTransition(k, inst.currentLevel)
                       })
                     })
                   })
@@ -1654,14 +1654,14 @@ export function onAnnihilationCollide(inst) {
                   // Small pause after annihilation before transitioning to next level
                   //
                   k.wait(0.5, () => {
-                    //
-                    // Call onAnnihilation callback if provided, otherwise use default transition
-                    //
-                    if (inst.onAnnihilation) {
-                      inst.onAnnihilation()
-                    } else {
-                      createLevelTransition(k, inst.currentLevel)
-                    }
+                  //
+                  // Call onAnnihilation callback if provided, otherwise use default transition
+                  //
+                  if (inst.onAnnihilation) {
+                    inst.onAnnihilation()
+                  } else {
+                    createLevelTransition(k, inst.currentLevel)
+                  }
                   })
                 }
               })

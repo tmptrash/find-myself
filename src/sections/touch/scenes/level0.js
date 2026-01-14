@@ -1090,7 +1090,7 @@ export function sceneLevel0(k) {
       scale: BIG_BUG_SCALE,  // Same scale as other big bugs
       legLength1: bug4LegLength1Final,  // Adjusted to ensure legs touch FLOOR_Y
       legLength2: bug4LegLength2Final,  // Adjusted to ensure legs touch FLOOR_Y
-      crawlSpeed: BIG_BUG_CRAWL_SPEED * 0.3,  // Slow movement
+      crawlSpeed: 0,  // No movement
       legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
       legDropFactor: bug4LegDropFactor,
       customColor: BIG_BUG_COLOR,  // Same color as other big bugs
@@ -1119,10 +1119,10 @@ export function sceneLevel0(k) {
     bigBug4Inst.hasUpwardLegs = true
     bigBug4Inst.isPlatformBug = true  // Don't react to hero
     //
-    // Set bug to move slowly (crawling state)
+    // Set bug to stationary (no movement)
     //
-    bigBug4Inst.state = 'crawling'
-    bigBug4Inst.vx = bigBug4Inst.crawlSpeed  // Start moving right
+    bigBug4Inst.state = 'stopping'
+    bigBug4Inst.vx = 0  // No horizontal movement
     bigBug4Inst.vy = 0
     bigBug4Inst.isMother = true
     bigBug4Inst.originalY = bug4BodyY
@@ -1686,22 +1686,27 @@ export function sceneLevel0(k) {
     })
     //
     // Draw bugs with individual z-indices
+    // Create drawing objects that check state dynamically
     //
+    const bugDrawObjects = []
     bugs.forEach(bugInst => {
-    k.add([
+      const drawObj = k.add([
         k.z(bugInst.zIndex),
-      {
-        draw() {
+        {
+          draw() {
             Bugs.draw(bugInst)
+          }
         }
-      }
-    ])
+      ])
+      bugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
     //
     // Draw small bugs (including debug bug)
+    // Bugs in pyramid state should be in front of trees (z=25) and platforms (z=15)
     //
+    const smallBugDrawObjects = []
     smallBugs.forEach(bugInst => {
-      k.add([
+      const drawObj = k.add([
         k.z(bugInst.zIndex),
         {
           draw() {
@@ -1709,6 +1714,18 @@ export function sceneLevel0(k) {
           }
         }
       ])
+      smallBugDrawObjects.push({ bug: bugInst, obj: drawObj })
+    })
+    //
+    // Update z-index for bugs in pyramid state each frame
+    //
+    k.onUpdate(() => {
+      smallBugDrawObjects.forEach(({ bug, obj }) => {
+        const pyramidZIndex = bug.state === 'pyramid' ? 30 : bug.zIndex
+        if (obj.exists()) {
+          obj.z = pyramidZIndex
+        }
+      })
     })
     //
     // Return to menu on ESC

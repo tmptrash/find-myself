@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
@@ -49,11 +50,19 @@ export function sceneLevel2(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start touch.mp3 background music
+    // Start touch.mp3 background music with same volume as level 0
+    // Use global CFG to ensure same volume as level 0
     //
     const touchMusic = k.play('touch', {
       loop: true,
-      volume: CFG.audio.backgroundMusic.touch
+      volume: GLOBAL_CFG.audio.backgroundMusic.touch
+    })
+    //
+    // Ensure music volume is set correctly (same as level 0)
+    // Set volume explicitly to match level 0 using global CFG
+    //
+    k.wait(0.1, () => {
+      touchMusic.volume = GLOBAL_CFG.audio.backgroundMusic.touch
     })
     //
     // Stop music when leaving the scene

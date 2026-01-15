@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
@@ -30,7 +31,8 @@ export function sceneLevel3(k) {
     //
     // Set gravity
     //
-    k.setGravity(CFG.game.gravity)
+    const originalGravity = CFG.game.gravity
+    k.setGravity(originalGravity)
     //
     // Create sound instance
     //
@@ -127,9 +129,8 @@ export function sceneLevel3(k) {
     const GRID_COLUMNS = 12  // Fixed number of grid columns
     const GRID_CELL_SIZE = CLOUD_BLOCK_SIZE  // Grid cell size equals block size
     const GRID_WIDTH = GRID_COLUMNS * GRID_CELL_SIZE  // Total grid width
-    const GRID_RIGHT_MARGIN = 50  // Margin from right platform (50 pixels)
-    const GRID_RIGHT = CFG.visual.screen.width - RIGHT_MARGIN - GRID_RIGHT_MARGIN  // Grid ends 50px before right platform
-    const GRID_LEFT = GRID_RIGHT - GRID_WIDTH  // Grid starts from right platform minus margin minus width
+    const GRID_RIGHT = CFG.visual.screen.width - RIGHT_MARGIN  // Grid ends at right platform (no margin)
+    const GRID_LEFT = GRID_RIGHT - GRID_WIDTH  // Grid starts from right platform minus width
     //
     // Cloud platform positioned to touch top line of grid
     // Platform width matches grid width, positioned to align with grid
@@ -169,11 +170,19 @@ export function sceneLevel3(k) {
     //
     const CLOUD_PLATFORM_Y = gridStartYForPlatform - GRID_CELL_SIZE * 2 + CLOUD_PLATFORM_HEIGHT / 2 + 100  // Platform positioned 2 cells above grid top, lowered by 100px total
     //
-    // Create cloud platform with collision (hero can stand and jump on it)
+    // Create small platform segments: 2 on each side of anti-hero platform
     //
-    const cloudPlatform = k.add([
-      k.rect(CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y),
+    const SMALL_SEGMENT_WIDTH = 60  // Width of small platform segments
+    const SMALL_SEGMENT_SPACING = 150  // Distance between small segments (center to center) - increased to stretch platforms apart
+    
+    const cloudPlatformSegments = []
+    //
+    // Create 1 small platform to the left of anti-hero
+    //
+    const leftSegmentX = CLOUD_PLATFORM_X - SMALL_SEGMENT_SPACING
+    const leftSegment = k.add([
+      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
+      k.pos(leftSegmentX, CLOUD_PLATFORM_Y),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
@@ -182,7 +191,148 @@ export function sceneLevel3(k) {
       CFG.game.platformName,
       "cloud-platform"  // Tag for identification
     ])
-    createStaticCloudPlatform(k, CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y, CLOUD_PLATFORM_WIDTH, CLOUD_PLATFORM_HEIGHT)
+    cloudPlatformSegments.push(leftSegment)
+    //
+    // Create 1 more small platform further to the left
+    //
+    const leftSegmentX2 = CLOUD_PLATFORM_X - SMALL_SEGMENT_SPACING * 2
+    const leftSegment2 = k.add([
+      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
+      k.pos(leftSegmentX2, CLOUD_PLATFORM_Y),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),  // Invisible collision - visual is drawn separately
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName,
+      "cloud-platform"  // Tag for identification
+    ])
+    cloudPlatformSegments.push(leftSegment2)
+    //
+    // Create 1 small platform to the right of anti-hero
+    //
+    const rightSegmentX = CLOUD_PLATFORM_X + SMALL_SEGMENT_SPACING
+    const rightSegment = k.add([
+      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
+      k.pos(rightSegmentX, CLOUD_PLATFORM_Y),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),  // Invisible collision - visual is drawn separately
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName,
+      "cloud-platform"  // Tag for identification
+    ])
+    cloudPlatformSegments.push(rightSegment)
+    //
+    // Create 1 more small platform further to the right
+    //
+    const rightSegmentX2 = CLOUD_PLATFORM_X + SMALL_SEGMENT_SPACING * 2
+    const rightSegment2 = k.add([
+      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
+      k.pos(rightSegmentX2, CLOUD_PLATFORM_Y),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),  // Invisible collision - visual is drawn separately
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName,
+      "cloud-platform"  // Tag for identification
+    ])
+    cloudPlatformSegments.push(rightSegment2)
+    //
+    // Create platform segment under anti-hero (center of platform)
+    // This ensures anti-hero always has a platform to stand on
+    //
+    const ANTI_HERO_SEGMENT_WIDTH = 60  // Segment width for anti-hero (reduced to match small platforms)
+    const antiHeroSegment = k.add([
+      k.rect(ANTI_HERO_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
+      k.pos(CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y),  // Center of platform (where anti-hero stands)
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),  // Invisible collision - visual is drawn separately
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName,
+      "cloud-platform"  // Tag for identification
+    ])
+    cloudPlatformSegments.push(antiHeroSegment)
+    //
+    // Create visual clouds for all platform segments
+    //
+    const baseCloudColor = k.rgb(100, 100, 120)
+    const cloudTypes = [
+      {
+        mainSize: 50,
+        puffs: [
+          { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
+          { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
+          { radius: 0.65, offsetX: 0.4, offsetY: -0.1 },
+          { radius: 0.7, offsetX: 0.8, offsetY: -0.05 },
+          { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
+          { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
+        ],
+        color: baseCloudColor,
+        opacity: 0.6
+      },
+      {
+        mainSize: 42,
+        puffs: [
+          { radius: 0.8, offsetX: -0.7, offsetY: 0 },
+          { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
+          { radius: 0.75, offsetX: 0.3, offsetY: -0.08 },
+          { radius: 0.8, offsetX: 0.7, offsetY: 0 },
+          { radius: 0.7, offsetX: 0, offsetY: 0.12 }
+        ],
+        color: k.rgb(95, 95, 115),
+        opacity: 0.55
+      }
+    ]
+    //
+    // Helper function to create clouds for a platform segment
+    //
+    const createCloudsForSegment = (segmentX, segmentWidth) => {
+      const cloudStartX = segmentX - segmentWidth / 2 + 10
+      const cloudEndX = segmentX + segmentWidth / 2 - 10
+      const cloudWidth = cloudEndX - cloudStartX
+      const cloudCount = Math.max(2, Math.floor(cloudWidth / 40))
+      const cloudSpacing = cloudCount > 1 ? cloudWidth / (cloudCount - 1) : 0
+      for (let i = 0; i < cloudCount; i++) {
+        const baseX = cloudStartX + cloudSpacing * i
+        const randomOffset = (Math.random() - 0.5) * (cloudSpacing * 0.6)
+        const cloudX = baseX + randomOffset
+        const randomYOffset = (Math.random() - 0.5) * (CLOUD_PLATFORM_HEIGHT * 0.4)
+        const cloudY = CLOUD_PLATFORM_Y + randomYOffset
+        const cloudType = cloudTypes[Math.floor(Math.random() * cloudTypes.length)]
+        k.add([
+          k.pos(cloudX, cloudY),
+          k.z(CFG.visual.zIndex.platforms - 1),
+          {
+            draw() {
+              const mainSize = cloudType.mainSize
+              k.drawCircle({
+                radius: mainSize,
+                pos: k.vec2(0, 0),
+                color: cloudType.color,
+                opacity: cloudType.opacity
+              })
+              cloudType.puffs.forEach((puff) => {
+                k.drawCircle({
+                  radius: mainSize * puff.radius,
+                  pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
+                  color: cloudType.color,
+                  opacity: cloudType.opacity
+                })
+              })
+            }
+          }
+        ])
+      }
+    }
+    //
+    // Create visual clouds across entire tetris zone width (from GRID_LEFT to GRID_RIGHT)
+    //
+    createCloudsForSegment(GRID_LEFT + GRID_WIDTH / 2, GRID_WIDTH)
     const CLOUD_PLATFORM_TOP_Y = CLOUD_PLATFORM_Y - CLOUD_PLATFORM_HEIGHT / 2
     //
     // Hero spawn position on bottom platform (between left platform and grid)
@@ -195,7 +345,7 @@ export function sceneLevel3(k) {
     // Position arrows slightly above platform
     //
     const ARROWS_Y_OFFSET = -23  // Move arrows up by 23 pixels (lowered by 2px from -25)
-    const arrowsInst = createCloudPlatformArrows(k, HERO_SPAWN_X_ON_PLATFORM, BOTTOM_PLATFORM_Y + ARROWS_Y_OFFSET)
+    const arrowsInst = createCloudPlatformArrows(k, HERO_SPAWN_X_ON_PLATFORM, BOTTOM_PLATFORM_Y + ARROWS_Y_OFFSET, sound)
     //
     // Store bottomPlatformTopY for use in createCloudBlock
     //
@@ -248,6 +398,14 @@ export function sceneLevel3(k) {
       addMouth: true
     })
     //
+    // Store original jump force for hero (use hero's actual jumpForce)
+    //
+    const originalJumpForce = heroInst.jumpForce
+    //
+    // Track if hero is currently in tetris zone to avoid setting gravity every frame
+    //
+    let wasInTetrisZone = false
+    //
     // Spawn hero and anti-hero
     //
     Hero.spawn(heroInst)
@@ -290,7 +448,7 @@ export function sceneLevel3(k) {
     //
     // Grid visualization (for debugging)
     //
-    const showGrid = true  // Set to false to hide grid
+    const showGrid = false  // Set to false to hide grid
     //
     // Draw grid visualization (for debugging)
     //
@@ -360,12 +518,62 @@ export function sceneLevel3(k) {
     //
     // Update FPS counter, arrow glow effect, and cloud blocks
     //
+    // Track previous arrow state to play sound only when hero first steps on arrow
+    //
+    let wasHeroAboveLeftArrow = false
+    let wasHeroAboveRightArrow = false
     k.onUpdate(() => {
       FpsCounter.onUpdate(fpsCounter)
       //
       // Update arrow glow when hero is above them
       //
       arrowsInst.update(heroInst.character)
+      //
+      // Check if hero is above arrows and play sound immediately when hero steps on arrow
+      //
+      if (heroInst.character && heroInst.isSpawned && sound) {
+        const heroX = heroInst.character.pos.x
+        const HERO_COLLISION_WIDTH_SCALED = 30
+        const heroLeft = heroX - HERO_COLLISION_WIDTH_SCALED / 2
+        const heroRight = heroX + HERO_COLLISION_WIDTH_SCALED / 2
+        const ARROW_WIDTH_SCALED = 300 * 0.16
+        const arrowHalfWidth = (ARROW_WIDTH_SCALED * 2) / 2 + 40
+        const leftArrowLeft = arrowsInst.leftArrowX - arrowHalfWidth
+        const leftArrowRight = arrowsInst.leftArrowX + arrowHalfWidth
+        const rightArrowLeft = arrowsInst.rightArrowX - arrowHalfWidth
+        const rightArrowRight = arrowsInst.rightArrowX + arrowHalfWidth
+        const isHeroAboveLeftArrow = heroLeft < leftArrowRight && heroRight > leftArrowLeft
+        const isHeroAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
+        //
+        // Play sound when hero first steps on arrow (same moment color changes)
+        //
+        if (isHeroAboveLeftArrow && !wasHeroAboveLeftArrow) {
+          Sound.playSpawnClick(sound)
+        }
+        if (isHeroAboveRightArrow && !wasHeroAboveRightArrow) {
+          Sound.playSpawnClick(sound)
+        }
+        wasHeroAboveLeftArrow = isHeroAboveLeftArrow
+        wasHeroAboveRightArrow = isHeroAboveRightArrow
+      }
+      //
+      // Increase jump force by 2x and reduce gravity when hero is in tetris zone (between GRID_LEFT and GRID_RIGHT)
+      // Use gravityScale to reduce gravity only in tetris zone, keep normal gravity outside
+      //
+      if (heroInst.character && heroInst.isSpawned) {
+        const heroX = heroInst.character.pos.x
+        const isInTetrisZone = heroX >= GRID_LEFT && heroX <= GRID_RIGHT
+        
+        // Update jump force and gravity scale only when zone state changes
+        if (isInTetrisZone !== wasInTetrisZone) {
+          if (isInTetrisZone) {
+            heroInst.jumpForce = originalJumpForce * 1.25
+          } else {
+            heroInst.jumpForce = originalJumpForce
+          }
+          wasInTetrisZone = isInTetrisZone
+        }
+      }
       //
       // Prevent hero from using side collisions of wall blocks for jumping
       // Check if hero is colliding with a block that is part of a wall from the side
@@ -769,15 +977,34 @@ export function sceneLevel3(k) {
  * @param {number} y - Y position (center)
  * @param {number} width - Platform width
  * @param {number} height - Platform height
+ * @param {boolean} [dotted=false] - If true, create dotted platform with gaps
+ * @param {number} [segmentCount=10] - Number of segments for dotted platform
+ * @param {number} [segmentWidth] - Width of each segment
+ * @param {number} [gapWidth] - Width of gap between segments
  */
-function createStaticCloudPlatform(k, x, y, width, height) {
+function createStaticCloudPlatform(k, x, y, width, height, dotted = false, segmentCount = 10, segmentWidth = null, gapWidth = null) {
   //
   // Cloud parameters (same style as level 2)
   //
   const baseCloudColor = k.rgb(100, 100, 120)  // Gray-blue color for clouds
-  const cloudStartX = x - width / 2 + 50  // Start a bit inside left edge
-  const cloudEndX = x + width / 2 - 50  // End a bit before right edge
-  const cloudCoverageWidth = cloudEndX - cloudStartX
+  
+  let cloudStartX, cloudEndX, cloudCoverageWidth
+  
+  if (dotted) {
+    //
+    // For dotted platform, only draw clouds on segments (skip first and last)
+    //
+    const SEGMENT_WIDTH = segmentWidth || (width / segmentCount)
+    const GAP_WIDTH = gapWidth || (SEGMENT_WIDTH * 0.3)
+    cloudStartX = x - width / 2 + SEGMENT_WIDTH + (SEGMENT_WIDTH - GAP_WIDTH) / 2  // Start after first gap
+    cloudEndX = x + width / 2 - SEGMENT_WIDTH - (SEGMENT_WIDTH - GAP_WIDTH) / 2  // End before last gap
+    cloudCoverageWidth = cloudEndX - cloudStartX
+  } else {
+    cloudStartX = x - width / 2 + 50  // Start a bit inside left edge
+    cloudEndX = x + width / 2 - 50  // End a bit before right edge
+    cloudCoverageWidth = cloudEndX - cloudStartX
+  }
+  
   const cloudCenterY = y
   //
   // Create dense layer of clouds (like level 2)
@@ -932,9 +1159,10 @@ function createStaticCloudPlatform(k, x, y, width, height) {
  * @param {Object} k - Kaplay instance
  * @param {number} x - X position (center)
  * @param {number} y - Y position (center)
+ * @param {Object} sound - Sound instance for click sounds
  * @returns {Object} Object with leftArrow, rightArrow, and update function
  */
-function createCloudPlatformArrows(k, x, y) {
+function createCloudPlatformArrows(k, x, y, sound) {
   //
   // Arrow spacing
   //
@@ -1007,9 +1235,17 @@ function createCloudPlatformArrows(k, x, y) {
     k.pos(rightArrowX, y),
     k.anchor("center"),
     k.scale(arrowScale),
+    k.area({
+      shape: new k.Rect(
+        k.vec2(-ARROW_WIDTH_SCALED / 2, -ARROW_HEIGHT_SCALED / 2),
+        ARROW_WIDTH_SCALED,
+        ARROW_HEIGHT_SCALED
+      )
+    }),
     k.z(CFG.visual.zIndex.platforms),  // Above clouds
   ])
   rightArrow.opacity = NORMAL_OPACITY
+  const rightArrowBaseX = rightArrowX  // Store base X position for press animation
   //
   // Create left arrow (pointing left) - horizontally flipped using negative X scale
   //
@@ -1018,9 +1254,17 @@ function createCloudPlatformArrows(k, x, y) {
     k.pos(leftArrowX, y),
     k.anchor("center"),
     k.scale(-arrowScale, arrowScale),  // Negative X scale flips horizontally
+    k.area({
+      shape: new k.Rect(
+        k.vec2(-ARROW_WIDTH_SCALED / 2, -ARROW_HEIGHT_SCALED / 2),
+        ARROW_WIDTH_SCALED,
+        ARROW_HEIGHT_SCALED
+      )
+    }),
     k.z(CFG.visual.zIndex.platforms),  // Above clouds
   ])
   leftArrow.opacity = NORMAL_OPACITY
+  const leftArrowBaseX = leftArrowX  // Store base X position for press animation
   //
   // Store constants for use in update function
   //
@@ -1078,9 +1322,18 @@ function createCloudPlatformArrows(k, x, y) {
       //
       const isAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
       //
-      // Update right arrow glow instantly
+      // Update right arrow glow and position (animated forward/backward movement)
       //
       rightArrow.opacity = isAboveRightArrow ? glowOpacity : normalOpacity
+      const ARROW_ANIMATION_AMPLITUDE = 4  // Maximum movement distance
+      const ARROW_ANIMATION_SPEED = 8  // Animation speed
+      if (isAboveRightArrow) {
+        const animationTime = k.time()  // Use global time for animation
+        const offset = Math.sin(animationTime * ARROW_ANIMATION_SPEED) * ARROW_ANIMATION_AMPLITUDE
+        rightArrow.pos.x = rightArrowBaseX + offset
+      } else {
+        rightArrow.pos.x = rightArrowBaseX
+      }
       //
       // Left arrow: centered at leftArrowX, width = ARROW_WIDTH_SCALED * 2 (absolute value)
       //
@@ -1092,9 +1345,16 @@ function createCloudPlatformArrows(k, x, y) {
       //
       const isAboveLeftArrow = heroLeft < leftArrowRight && heroRight > leftArrowLeft
       //
-      // Update left arrow glow instantly
+      // Update left arrow glow and position (animated forward/backward movement)
       //
       leftArrow.opacity = isAboveLeftArrow ? glowOpacity : normalOpacity
+      if (isAboveLeftArrow) {
+        const animationTime = k.time()  // Use global time for animation
+        const offset = Math.sin(animationTime * ARROW_ANIMATION_SPEED) * ARROW_ANIMATION_AMPLITUDE
+        leftArrow.pos.x = leftArrowBaseX - offset  // Move in opposite direction (backward)
+      } else {
+        leftArrow.pos.x = leftArrowBaseX
+      }
     }
   }
 }
@@ -1200,11 +1460,41 @@ function createCloudBlock(k, x, y, size, tag) {
   //   }
   // })
   //
-  // Generate base color for square background
+  // Generate cloud configuration for cloud-like appearance
+  // Create puffy cloud shape using overlapping circles
   //
   const baseColorIndex = Math.floor(Math.random() * shades.length)
   const baseColor = shades[baseColorIndex]
   const baseOpacity = 0.6 + Math.random() * 0.2
+  //
+  // Create cloud puffs configuration to fill square area (size x size)
+  // Use multiple overlapping circles to create cloud-like appearance
+  //
+  const halfSize = size / 2
+  const mainPuffRadius = size * 0.3  // Main center puff
+  const sidePuffRadius = size * 0.25  // Side puffs
+  const cornerPuffRadius = size * 0.2  // Corner puffs
+  //
+  // Define cloud puff positions (fixed at creation time for stable appearance)
+  //
+  const cloudPuffs = [
+    // Center puff (largest)
+    { x: 0, y: 0, radius: mainPuffRadius, color: baseColor, opacity: baseOpacity },
+    // Top row
+    { x: -halfSize * 0.4, y: -halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 1) % shades.length], opacity: baseOpacity * 0.9 },
+    { x: halfSize * 0.4, y: -halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 2) % shades.length], opacity: baseOpacity * 0.9 },
+    // Middle row
+    { x: -halfSize * 0.5, y: 0, radius: sidePuffRadius, color: shades[(baseColorIndex + 1) % shades.length], opacity: baseOpacity * 0.9 },
+    { x: halfSize * 0.5, y: 0, radius: sidePuffRadius, color: shades[(baseColorIndex + 2) % shades.length], opacity: baseOpacity * 0.9 },
+    // Bottom row
+    { x: -halfSize * 0.4, y: halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 1) % shades.length], opacity: baseOpacity * 0.9 },
+    { x: halfSize * 0.4, y: halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 2) % shades.length], opacity: baseOpacity * 0.9 },
+    // Corners (smaller puffs)
+    { x: -halfSize * 0.6, y: -halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 },
+    { x: halfSize * 0.6, y: -halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 },
+    { x: -halfSize * 0.6, y: halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 },
+    { x: halfSize * 0.6, y: halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 }
+  ]
   //
   // Create cloud block visual with physics
   //
@@ -1236,28 +1526,16 @@ function createCloudBlock(k, x, y, size, tag) {
     {
       draw() {
         //
-        // Draw square background (simple square block)
+        // Draw cloud-like appearance using overlapping circles (puffs)
         //
-        k.drawRect({
-          width: size,
-          height: size,
-          pos: k.vec2(0, 0),
-          anchor: "center",
-          color: baseColor,
-          opacity: baseOpacity
+        cloudPuffs.forEach((puff) => {
+          k.drawCircle({
+            radius: puff.radius,
+            pos: k.vec2(puff.x, puff.y),
+            color: puff.color,
+            opacity: puff.opacity
+          })
         })
-        //
-        // Draw all puffs with fixed configuration (stable shape)
-        // COMMENTED OUT: Cloud puffs disabled - using simple squares instead
-        //
-        // puffs.forEach((puff) => {
-        //   k.drawCircle({
-        //     radius: puff.radius,
-        //     pos: k.vec2(puff.x, puff.y),
-        //     color: puff.color,
-        //     opacity: puff.opacity
-        //   })
-        // })
       }
     }
   ])

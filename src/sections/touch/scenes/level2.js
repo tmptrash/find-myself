@@ -82,6 +82,14 @@ export function sceneLevel2(k) {
       })
     })
     //
+    // Create dark trees without leaves
+    //
+    createDarkTrees(k)
+    //
+    // Create background dark trees (1.5x larger)
+    //
+    createBackgroundDarkTrees(k)
+    //
     // Create walls
     //
     // Left wall (full height)
@@ -395,9 +403,9 @@ export function sceneLevel2(k) {
       k.sprite(arrowSpriteId),
       k.pos(arrowX, arrowBaseY),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.platforms - 2),  // Behind platforms but visible
-      {
-        update() {
+      k.z(5),  // Above background but below platforms
+    {
+      draw() {
           //
           // Sway arrow up and down by a couple pixels
           //
@@ -686,7 +694,7 @@ function createCloudsUnderTopPlatform(k) {
     // Type 1: Large wide cloud (6 puffs)
     //
     {
-      mainSize: 50,
+      mainSize: 80,
       puffs: [
         { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
         { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
@@ -702,7 +710,7 @@ function createCloudsUnderTopPlatform(k) {
     // Type 2: Medium wide cloud (5 puffs)
     //
     {
-      mainSize: 42,
+      mainSize: 70,
       puffs: [
         { radius: 0.8, offsetX: -0.7, offsetY: 0 },
         { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
@@ -717,7 +725,7 @@ function createCloudsUnderTopPlatform(k) {
     // Type 3: Small wide cloud (4 puffs)
     //
     {
-      mainSize: 35,
+      mainSize: 60,
       puffs: [
         { radius: 0.75, offsetX: -0.6, offsetY: 0 },
         { radius: 0.8, offsetX: -0.2, offsetY: -0.08 },
@@ -731,7 +739,7 @@ function createCloudsUnderTopPlatform(k) {
     // Type 4: Very wide cloud (7 puffs)
     //
     {
-      mainSize: 55,
+      mainSize: 90,
       puffs: [
         { radius: 0.65, offsetX: -1.0, offsetY: 0 },
         { radius: 0.7, offsetX: -0.6, offsetY: -0.1 },
@@ -774,7 +782,7 @@ function createCloudsUnderTopPlatform(k) {
     // Vary size slightly for more natural look
     // Make dense layer clouds slightly larger for better overlap
     //
-    const sizeVariation = 1.0 + Math.random() * 0.3  // 1.0 to 1.3 (larger for dense layer)
+    const sizeVariation = 1.0 + Math.random() * 0.4  // 1.0 to 1.4 (larger for dense layer)
     const mainSize = cloudType.mainSize * sizeVariation
     
     //
@@ -818,7 +826,7 @@ function createCloudsUnderTopPlatform(k) {
     //
     // Vary size slightly for more natural look
     //
-    const sizeVariation = 0.9 + Math.random() * 0.2  // 0.9 to 1.1
+    const sizeVariation = 1.0 + Math.random() * 0.3  // 1.0 to 1.3
     const mainSize = cloudType.mainSize * sizeVariation
     
     //
@@ -1504,3 +1512,502 @@ function createDiagonalPlatforms(k) {
   }
 }
 
+/**
+ * Creates dark trees without leaves (trunks and branches only)
+ * Based on trees from level 1, but without crowns/leaves
+ * @param {Object} k - Kaplay instance
+ */
+function createDarkTrees(k) {
+  //
+  // Tree parameters (based on TreeRoots component, but without roots and leaves, dark)
+  //
+  const grassY = FLOOR_Y - 2
+  const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const yOffset = -30
+  
+  //
+  // Random helper
+  //
+  const rand = (min, max) => min + Math.random() * (max - min)
+  
+  //
+  // Branch growth algorithm (from TreeRoots component)
+  //
+  const growBranch = (x, y, angle, length, thickness, depth = 0) => {
+    const branchSegments = []
+    
+    if (length <= 6 || thickness <= 0.5 || depth > 7) {
+      return branchSegments
+    }
+    
+    const step = rand(5, 8)
+    let cx = x
+    let cy = y
+    
+    //
+    // Build branch path with softer curvature
+    //
+    for (let i = 0; i < length; i++) {
+      const prevX = cx
+      const prevY = cy
+      
+      //
+      // Softer organic curvature (less than roots)
+      //
+      angle += rand(-0.12, 0.12)
+      cx += Math.cos(angle) * step
+      cy += Math.sin(angle) * step
+      
+      //
+      // Add segment
+      //
+      branchSegments.push({
+        startX: prevX,
+        startY: prevY,
+        endX: cx,
+        endY: cy,
+        width: thickness,
+        depth
+      })
+      
+      //
+      // Small offshoots
+      //
+      if (Math.random() < 0.07 && depth < 6) {
+        const microBranches = growBranch(
+          cx,
+          cy,
+          angle + rand(-1.2, 1.2),
+          length * 0.35,
+          thickness * 0.5,
+          depth + 2
+        )
+        branchSegments.push(...microBranches)
+      }
+    }
+    
+    //
+    // Main branching (45% chance)
+    //
+    if (Math.random() < 0.45) {
+      const sideBranches = growBranch(
+        cx,
+        cy,
+        angle + rand(-0.8, 0.8),
+        length * 0.6,
+        thickness * 0.65,
+        depth + 1
+      )
+      branchSegments.push(...sideBranches)
+    }
+    
+    //
+    // Continue upward
+    //
+    const continueBranches = growBranch(
+      cx,
+      cy,
+      angle + rand(-0.25, 0.25),
+      length * 0.75,
+      thickness * 0.75,
+      depth + 1
+    )
+    branchSegments.push(...continueBranches)
+    
+    return branchSegments
+  }
+  
+  //
+  // Create trees similar to TreeRoots but without roots and leaves
+  //
+  const totalElements = 14
+  const spacing = playableWidth / (totalElements - 1)
+  const TREE_MARGIN = 80
+  const trees = []
+  
+  for (let i = 0; i < totalElements; i++) {
+    const randomness = 25
+    //
+    // Limit randomness for first and last elements to prevent overflow
+    //
+    let randomOffset = (Math.random() - 0.5) * randomness
+    //
+    // For first element: add extra margin and only allow positive offset
+    //
+    if (i === 0) {
+      randomOffset = Math.max(0, randomOffset) + TREE_MARGIN
+    }
+    //
+    // For last element: subtract extra margin and only allow negative offset
+    //
+    if (i === totalElements - 1) {
+      randomOffset = Math.min(0, randomOffset) - TREE_MARGIN
+    }
+    
+    const posX = LEFT_MARGIN + spacing * i + randomOffset
+    //
+    // Skip bushes, only create trees
+    //
+    const isBush = Math.random() < 0.35
+    if (isBush) continue
+    
+    const centerY = grassY
+    
+    //
+    // Generate branches from center point (growing upward - like a tree)
+    //
+    const allBranchSegments = []
+    
+    //
+    // First, create a straight trunk section (no branches)
+    //
+    const trunkHeight = 20  // Straight trunk segments before branching starts
+    const trunkStep = rand(5, 8)
+    let trunkX = posX
+    let trunkY = centerY
+    
+    for (let i = 0; i < trunkHeight; i++) {
+      const prevX = trunkX
+      const prevY = trunkY
+      
+      //
+      // Move straight up with minimal variation
+      //
+      trunkY -= trunkStep
+      trunkX += rand(-1, 1)  // Slight horizontal variation
+      
+      allBranchSegments.push({
+        startX: prevX,
+        startY: prevY,
+        endX: trunkX,
+        endY: trunkY,
+        width: 14,  // Trunk thickness (wider)
+        depth: 0
+      })
+    }
+    
+    //
+    // Now start branching from the top of the trunk
+    //
+    const mainBranches = growBranch(
+      trunkX,
+      trunkY,
+      -Math.PI / 2,  // Upward direction
+      16,  // Length segments for branches
+      12,  // Starting thickness (wider)
+      0  // Initial depth
+    )
+    allBranchSegments.push(...mainBranches)
+    
+    //
+    // Trunk color (same as TreeRoots component in level 1)
+    //
+    const darkTrunkColor = k.rgb(120, 120, 120)  // Gray branches like in TreeRoots
+    
+    trees.push({
+      x: posX,
+      branchSegments: allBranchSegments,
+      trunkColor: darkTrunkColor
+    })
+  }
+  
+  //
+  // Create canvas and draw trees on it
+  //
+  const createTreesCanvas = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = k.width()
+    canvas.height = k.height()
+    const ctx = canvas.getContext('2d')
+    
+    //
+    // Draw trees on canvas (trunks and branches only, no leaves, no roots)
+    //
+    trees.forEach(tree => {
+      //
+      // Draw branch segments (includes trunk)
+      //
+      tree.branchSegments.forEach(segment => {
+        const opacity = 0.7 - segment.depth * 0.07
+        ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${Math.max(0.3, opacity)})`
+        ctx.lineWidth = segment.width
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        
+        ctx.beginPath()
+        ctx.moveTo(segment.startX, segment.startY)
+        ctx.lineTo(segment.endX, segment.endY)
+        ctx.stroke()
+      })
+    })
+    
+    return canvas
+  }
+  
+  const treesCanvas = createTreesCanvas()
+  const treesTexture = k.loadSprite('bg-touch-level2-trees', treesCanvas.toDataURL())
+  
+  //
+  // Draw trees canvas
+  //
+  k.add([
+    k.z(5),  // Above background but below platforms
+    {
+      draw() {
+        k.drawSprite({
+          sprite: 'bg-touch-level2-trees',
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}
+
+function createBackgroundDarkTrees(k) {
+  //
+  // Tree parameters (based on TreeRoots component, but without roots and leaves, 1.5x larger and dark)
+  //
+  const grassY = FLOOR_Y - 2
+  const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const scale = 1.5  // 1.5x larger
+  const yOffset = -30
+  
+  //
+  // Random helper
+  //
+  const rand = (min, max) => min + Math.random() * (max - min)
+  
+  //
+  // Branch growth algorithm (from TreeRoots component)
+  //
+  const growBranch = (x, y, angle, length, thickness, depth = 0) => {
+    const branchSegments = []
+    
+    if (length <= 6 || thickness <= 0.5 || depth > 7) {
+      return branchSegments
+    }
+    
+    const step = rand(5, 8) * scale
+    let cx = x
+    let cy = y
+    
+    //
+    // Build branch path with softer curvature
+    //
+    for (let i = 0; i < length; i++) {
+      const prevX = cx
+      const prevY = cy
+      
+      //
+      // Softer organic curvature (less than roots)
+      //
+      angle += rand(-0.12, 0.12)
+      cx += Math.cos(angle) * step
+      cy += Math.sin(angle) * step
+      
+      //
+      // Add segment
+      //
+      branchSegments.push({
+        startX: prevX,
+        startY: prevY,
+        endX: cx,
+        endY: cy,
+        width: thickness,
+        depth
+      })
+      
+      //
+      // Small offshoots
+      //
+      if (Math.random() < 0.07 && depth < 6) {
+        const microBranches = growBranch(
+          cx,
+          cy,
+          angle + rand(-1.2, 1.2),
+          length * 0.35,
+          thickness * 0.5,
+          depth + 2
+        )
+        branchSegments.push(...microBranches)
+      }
+    }
+    
+    //
+    // Main branching (45% chance)
+    //
+    if (Math.random() < 0.45) {
+      const sideBranches = growBranch(
+        cx,
+        cy,
+        angle + rand(-0.8, 0.8),
+        length * 0.6,
+        thickness * 0.65,
+        depth + 1
+      )
+      branchSegments.push(...sideBranches)
+    }
+    
+    //
+    // Continue upward
+    //
+    const continueBranches = growBranch(
+      cx,
+      cy,
+      angle + rand(-0.25, 0.25),
+      length * 0.75,
+      thickness * 0.75,
+      depth + 1
+    )
+    branchSegments.push(...continueBranches)
+    
+    return branchSegments
+  }
+  
+  //
+  // Create trees similar to TreeRoots but without roots and leaves
+  //
+  const totalElements = 14
+  const spacing = playableWidth / (totalElements - 1)
+  const TREE_MARGIN = 80
+  const trees = []
+  
+  for (let i = 0; i < totalElements; i++) {
+    const randomness = 25
+    //
+    // Limit randomness for first and last elements to prevent overflow
+    //
+    let randomOffset = (Math.random() - 0.5) * randomness
+    //
+    // For first element: add extra margin and only allow positive offset
+    //
+    if (i === 0) {
+      randomOffset = Math.max(0, randomOffset) + TREE_MARGIN
+    }
+    //
+    // For last element: subtract extra margin and only allow negative offset
+    //
+    if (i === totalElements - 1) {
+      randomOffset = Math.min(0, randomOffset) - TREE_MARGIN
+    }
+    
+    const posX = LEFT_MARGIN + spacing * i + randomOffset
+    //
+    // Skip bushes, only create trees
+    //
+    const isBush = Math.random() < 0.35
+    if (isBush) continue
+    
+    const centerY = grassY
+    
+    //
+    // Generate branches from center point (growing upward - like a tree)
+    //
+    const allBranchSegments = []
+    
+    //
+    // First, create a straight trunk section (no branches)
+    //
+    const trunkHeight = 20 * scale  // Straight trunk segments before branching starts (1.5x taller)
+    const trunkStep = rand(5, 8) * scale
+    let trunkX = posX
+    let trunkY = centerY
+    
+    for (let i = 0; i < trunkHeight; i++) {
+      const prevX = trunkX
+      const prevY = trunkY
+      
+      //
+      // Move straight up with minimal variation
+      //
+      trunkY -= trunkStep
+      trunkX += rand(-1, 1) * scale  // Slight horizontal variation
+      
+      allBranchSegments.push({
+        startX: prevX,
+        startY: prevY,
+        endX: trunkX,
+        endY: trunkY,
+        width: 14 * scale,  // Trunk thickness (1.5x wider)
+        depth: 0
+      })
+    }
+    
+    //
+    // Now start branching from the top of the trunk
+    //
+    const mainBranches = growBranch(
+      trunkX,
+      trunkY,
+      -Math.PI / 2,  // Upward direction
+      16,  // Length segments for branches
+      12 * scale,  // Starting thickness (1.5x thicker)
+      0  // Initial depth
+    )
+    allBranchSegments.push(...mainBranches)
+    
+    //
+    // Dark trunk color (same as back layer trees in level 0)
+    //
+    const darkTrunkColor = k.rgb(36, 37, 36)  // Dark color for background trees
+    
+    trees.push({
+      x: posX,
+      branchSegments: allBranchSegments,
+      trunkColor: darkTrunkColor
+    })
+  }
+  
+  //
+  // Create canvas and draw trees on it
+  //
+  const createTreesCanvas = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = k.width()
+    canvas.height = k.height()
+    const ctx = canvas.getContext('2d')
+    
+    //
+    // Draw trees on canvas (trunks and branches only, no leaves, no roots)
+    //
+    trees.forEach(tree => {
+      //
+      // Draw branch segments (includes trunk)
+      //
+      tree.branchSegments.forEach(segment => {
+        const opacity = 0.7 - segment.depth * 0.07
+        ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${Math.max(0.3, opacity)})`
+        ctx.lineWidth = segment.width
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        
+        ctx.beginPath()
+        ctx.moveTo(segment.startX, segment.startY)
+        ctx.lineTo(segment.endX, segment.endY)
+        ctx.stroke()
+      })
+    })
+    
+    return canvas
+  }
+  
+  const treesCanvas = createTreesCanvas()
+  const treesTexture = k.loadSprite('bg-touch-level2-background-trees', treesCanvas.toDataURL())
+  
+  //
+  // Draw trees canvas (behind other trees)
+  //
+  k.add([
+    k.z(4),  // Behind foreground trees (z=5) but above background
+    {
+      draw() {
+        k.drawSprite({
+          sprite: 'bg-touch-level2-background-trees',
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}

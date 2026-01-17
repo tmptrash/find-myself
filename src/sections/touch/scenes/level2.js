@@ -653,7 +653,7 @@ function createCloudsUnderTopPlatform(k) {
   const cloudDenseLayerY = TOP_MARGIN + 50  // Dense layer Y position
   const cloudSparseLayerStartY = TOP_MARGIN + 60  // Start of sparse layer
   const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
-  const baseCloudColor = k.rgb(100, 100, 120)  // Gray-blue color for clouds
+  const baseCloudColor = k.rgb(36, 37, 36)  // Dark color like in previous level
   
   //
   // Create multiple clouds spread horizontally across the screen
@@ -710,7 +710,7 @@ function createCloudsUnderTopPlatform(k) {
         { radius: 0.8, offsetX: 0.7, offsetY: 0 },
         { radius: 0.7, offsetX: 0, offsetY: 0.12 }
       ],
-      color: k.rgb(95, 95, 115),
+      color: k.rgb(36, 37, 36),
       opacity: 0.55
     },
     //
@@ -724,7 +724,7 @@ function createCloudsUnderTopPlatform(k) {
         { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
         { radius: 0.75, offsetX: 0.6, offsetY: 0 }
       ],
-      color: k.rgb(105, 105, 125),
+      color: k.rgb(36, 37, 36),
       opacity: 0.5
     },
     //

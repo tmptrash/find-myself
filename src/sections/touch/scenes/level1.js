@@ -17,7 +17,7 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 // Platform dimensions
 //
-const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN - 250
+const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN - 200
 //
 // Hero spawn positions
 //
@@ -460,16 +460,8 @@ export function sceneLevel1(k) {
       canvas.height = k.height()
       const ctx = canvas.getContext('2d')
       //
-      // 1. Draw darkened ground area
+      // 1. Draw darkened ground area (removed to avoid dark line)
       //
-      if (layers.length > 0 && layers[0].trees.length > 0) {
-        const backLayer = layers[0]
-        const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
-        const floorY = FLOOR_Y
-        
-        ctx.fillStyle = 'rgb(28, 28, 28)'
-        ctx.fillRect(0, avgCrownY, canvas.width, floorY - avgCrownY)
-      }
       //
       // 2. Draw back layer only (layerIndex 0)
       //
@@ -961,11 +953,11 @@ export function sceneLevel1(k) {
       sideWallWidth: LEFT_MARGIN
     })
     //
-    // Bottom platform (full width) - raised by 250px, but extends to bottom
+    // Bottom platform (full width) - raised by 200px, but extends to bottom
     //
     k.add([
-      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN + 250),
-      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - (BOTTOM_MARGIN + 250) / 2),
+      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN + 200),
+      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - (BOTTOM_MARGIN + 200) / 2),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),

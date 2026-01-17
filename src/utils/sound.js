@@ -1040,6 +1040,40 @@ export function playSpawnClick(instance) {
   click.stop(now + 0.05)
 }
 /**
+ * Play one-time calm monotone sound when arrow is pressed
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playArrowSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.2  // Short duration for one-time sound
+  
+  //
+  // Create simple monotone oscillator (calm, steady tone)
+  //
+  const oscillator = instance.audioContext.createOscillator()
+  const envelope = instance.audioContext.createGain()
+  
+  oscillator.type = 'sine'  // Pure sine wave for smooth, calm tone
+  oscillator.frequency.setValueAtTime(300, now)  // Lower frequency for calmness
+  
+  //
+  // Smooth envelope - gentle attack and decay (louder volume)
+  //
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(0.15, now + 0.05)  // Gentle attack, louder volume
+  envelope.gain.linearRampToValueAtTime(0.12, now + duration * 0.6)  // Slight sustain
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)  // Smooth decay
+  
+  //
+  // Connect and play
+  //
+  oscillator.connect(envelope)
+  envelope.connect(instance.spawnGain)
+  
+  oscillator.start(now)
+  oscillator.stop(now + duration)
+}
+/**
  * Play death sound effect (bone cracking/breaking)
  * @param {Object} instance - Sound instance from create()
  */

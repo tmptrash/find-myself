@@ -84,6 +84,10 @@ export function sceneLevel0(k) {
       })
     })
     //
+    // Create dark background clouds in the distance at the top
+    //
+    createBackgroundClouds(k)
+    //
     // Create simple bottom platform
     //
     // Left wall (full height)
@@ -1737,3 +1741,111 @@ export function sceneLevel0(k) {
   })
 }
 
+/**
+ * Creates dark background clouds in the distance at the top
+ * @param {Object} k - Kaplay instance
+ */
+function createBackgroundClouds(k) {
+  //
+  // Dark cloud parameters (similar to back layer trees)
+  //
+  const cloudTopY = TOP_MARGIN + 20  // Top Y position for clouds
+  const cloudBottomY = TOP_MARGIN + 100  // Bottom Y position
+  const baseCloudColor = k.rgb(36, 37, 36)  // Same color as back layer trees
+  
+  //
+  // Create clouds spread horizontally across the screen (similar to tree distribution)
+  //
+  const screenWidth = k.width()
+  const cloudStartX = LEFT_MARGIN + 50
+  const cloudEndX = screenWidth - RIGHT_MARGIN - 50
+  const cloudCoverageWidth = cloudEndX - cloudStartX
+  
+  //
+  // Create clouds similar to back layer trees (18 trees, so 18 clouds)
+  //
+  const cloudCount = 18  // Same count as back layer trees
+  const cloudSpacing = cloudCoverageWidth / (cloudCount - 1)
+  
+  //
+  // Generate cloud configurations (similar to tree crown structure)
+  //
+  const cloudConfigs = []
+  
+  for (let i = 0; i < cloudCount; i++) {
+    const baseX = cloudStartX + cloudSpacing * i
+    //
+    // Add randomness similar to trees (randomness = 20 for back layer)
+    //
+    const randomness = 20
+    const randomOffset = (Math.random() - 0.5) * randomness
+    const cloudX = baseX + randomOffset
+    //
+    // Random vertical position within cloud area
+    //
+    const randomY = cloudTopY + Math.random() * (cloudBottomY - cloudTopY)
+    //
+    // Crown size similar to trees: (50 + Math.random() * 60) * scale
+    // For clouds, use similar range but slightly smaller scale
+    //
+    const crownSize = (50 + Math.random() * 60) * 1.2  // Similar to trees but slightly smaller
+    //
+    // Number of circles (crowns) similar to trees: 5 + Math.floor(Math.random() * 4) = 5-8
+    //
+    const crownCount = 5 + Math.floor(Math.random() * 4)  // 5-8 circles, same as trees
+    const crowns = []
+    
+    //
+    // Generate crown circles similar to tree crowns
+    //
+    for (let j = 0; j < crownCount; j++) {
+      //
+      // Offset similar to trees: (Math.random() - 0.5) * crownSize * 0.7 for X, * 0.5 for Y
+      //
+      crowns.push({
+        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+        sizeVariation: 0.6 + Math.random() * 0.6,  // Same as trees: 0.6-1.2
+        opacityVariation: 0.7 + Math.random() * 0.2  // Same as trees: 0.7-0.9
+      })
+    }
+    //
+    // Opacity similar to trees: 0.85 + Math.random() * 0.1
+    //
+    const baseOpacity = 0.85 + Math.random() * 0.1
+    
+    cloudConfigs.push({
+      x: cloudX,
+      y: randomY,
+      crownSize: crownSize,
+      crowns: crowns,
+      color: baseCloudColor,
+      opacity: baseOpacity
+    })
+  }
+  
+  //
+  // Create visual cloud layer (background, behind everything)
+  //
+  cloudConfigs.forEach((cloudConfig) => {
+    k.add([
+      k.pos(cloudConfig.x, cloudConfig.y),
+      k.z(1),  // Between background (-100) and back trees (z=2), so clouds are visible
+      {
+        draw() {
+          //
+          // Draw cloud as multiple circles (similar to tree crowns)
+          //
+          cloudConfig.crowns.forEach((crown) => {
+            k.drawCircle({
+              radius: cloudConfig.crownSize * crown.sizeVariation,
+              pos: k.vec2(crown.offsetX, crown.offsetY),
+              color: cloudConfig.color,
+              opacity: cloudConfig.opacity * crown.opacityVariation
+            })
+          })
+        }
+      }
+    ])
+  })
+}

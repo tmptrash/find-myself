@@ -1,5 +1,4 @@
 import { CFG } from '../cfg.js'
-import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { saveLastLevel } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
@@ -13,11 +12,6 @@ const TOP_MARGIN = CFG.visual.gameArea.topMargin
 const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
-//
-// Hero spawn positions
-//
-const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
-
 /**
  * Level 3 scene for touch section
  * @param {Object} k - Kaplay instance
@@ -417,7 +411,7 @@ export function sceneLevel3(k) {
     // Create falling cloud blocks system with grid movement
     //
     const cloudBlocks = []
-    const CLOUD_BLOCK_MOVE_DISTANCE = GRID_CELL_SIZE  // Move one grid cell at a time
+
     const CLOUD_BLOCK_SPAWN_INTERVAL = 2.0  // Spawn new block every 2 seconds
     const CLOUD_BLOCK_UPDATE_INTERVAL = 2.0  // Update position every 2 seconds (tetris-like jerky movement)
     const CLOUD_BLOCK_TAG = "cloud-block"  // Tag for cloud blocks
@@ -545,13 +539,13 @@ export function sceneLevel3(k) {
         const isHeroAboveLeftArrow = heroLeft < leftArrowRight && heroRight > leftArrowLeft
         const isHeroAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
         //
-        // Play sound when hero first steps on arrow (same moment color changes)
+        // Play sound once when hero first steps on arrow
         //
         if (isHeroAboveLeftArrow && !wasHeroAboveLeftArrow) {
-          Sound.playSpawnClick(sound)
+          Sound.playArrowSound(sound)
         }
         if (isHeroAboveRightArrow && !wasHeroAboveRightArrow) {
-          Sound.playSpawnClick(sound)
+          Sound.playArrowSound(sound)
         }
         wasHeroAboveLeftArrow = isHeroAboveLeftArrow
         wasHeroAboveRightArrow = isHeroAboveRightArrow
@@ -1166,7 +1160,7 @@ function createCloudPlatformArrows(k, x, y, sound) {
   //
   // Arrow spacing
   //
-  const arrowSpacing = 250  // Space between arrows (reduced to bring arrows closer)
+  const arrowSpacing = 320  // Space between arrows (increased to spread arrows further apart)
   const arrowScale = 0.16  // Scale for arrows (same as center arrow)
   const GLOW_OPACITY = 1.0  // Opacity when glowing
   const NORMAL_OPACITY = 0.5  // Normal opacity

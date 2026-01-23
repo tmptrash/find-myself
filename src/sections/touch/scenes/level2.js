@@ -3,10 +3,13 @@ import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
+import { toPng } from '../../../utils/helper.js'
+import { drawFirTree } from '../components/fir-tree.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { arcY } from '../utils/trees.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -71,24 +74,32 @@ export function sceneLevel2(k) {
       touchMusic.stop()
     })
     //
-    // Draw background
+    // Set background to black
     //
-    k.onDraw(() => {
-      k.drawRect({
-        width: k.width(),
-        height: k.height(),
-        pos: k.vec2(0, 0),
-        color: k.rgb(42, 42, 42)
-      })
-    })
+    k.setBackground(k.Color.fromHex("#000000"))
     //
-    // Create dark trees without leaves
+    // Draw background (black)
     //
-    createDarkTrees(k)
     //
-    // Create background dark trees (1.5x larger)
+    // Create dark mountains in the background
+    //
+    createMountains(k)
+    //
+    // Create dark bushes on background
+    //
+    createBackgroundBushesNear(k)  // Near layer - grayer, shorter
+    //
+    // Create darkest background trees (third layer - darkest and tallest)
+    //
+    createBackgroundDarkestTrees(k)
+    //
+    // Create background dark trees (larger, darker, more of them)
     //
     createBackgroundDarkTrees(k)
+    //
+    // Create foreground trees with gray color (from previous level) in front of hero
+    //
+    createForegroundTrees(k)
     //
     // Create walls
     //
@@ -199,7 +210,7 @@ export function sceneLevel2(k) {
     //
     // Snow color for dust particles (matching snowdrifts)
     //
-    const snowColor = '#96B4DC' // rgb(150, 180, 220) in hex
+    const snowColor = '#FFFFFF' // Pure white in hex
     
     const heroInst = Hero.create({
       k,
@@ -262,7 +273,7 @@ export function sceneLevel2(k) {
         top: TOP_MARGIN,
         bottom: CFG.visual.screen.height - BOTTOM_MARGIN
       },
-      color: { r: 150, g: 180, b: 220 }  // Snow color (light blue)
+      color: { r: 255, g: 255, b: 255 }  // Snow color (pure white)
     })
     //
     // Create blue snow drifts on bottom platform floor
@@ -275,7 +286,6 @@ export function sceneLevel2(k) {
     const arrowY = FLOOR_Y - 100  // Higher above bottom platform
     const arrowX = k.width() / 2 + 500  // Center arrow horizontally, shifted right by 500px
     const arrowFillColor = k.rgb(100, 130, 180)  // Darker blue for fill
-    const ARROW_OPACITY = 1.0
     const ARROW_BODY_LENGTH = 75  // Length of arrow body (rectangle) - increased
     const ARROW_BODY_WIDTH = 18  // Width of arrow body - increased
     const ARROWHEAD_SIZE = 30  // Size of arrowhead triangle - increased
@@ -315,7 +325,6 @@ export function sceneLevel2(k) {
       const bodyLeftX = canvasCenterX - ARROW_BODY_LENGTH / 2
       const bodyRightX = canvasCenterX + ARROW_BODY_LENGTH / 2
       const bodyTopY = canvasCenterY - ARROW_BODY_WIDTH / 2
-      const bodyBottomY = canvasCenterY + ARROW_BODY_WIDTH / 2
       
       //
       // Arrowhead (triangle) - right side with "ears" (wider base)
@@ -332,11 +341,10 @@ export function sceneLevel2(k) {
       //
       const outlineWidth = 3
       const outlineLayers = 3
-      const outlineColor = `rgba(0, 0, 0, 0.3)`  // Dark outline with transparency
       
       for (let layer = outlineLayers; layer > 0; layer--) {
         const layerWidth = outlineWidth * (layer / outlineLayers)
-        const layerOpacity = 0.3 * (layer / outlineLayers)
+        const layerOpacity = .8
         
         ctx.strokeStyle = `rgba(0, 0, 0, ${layerOpacity})`
         ctx.lineWidth = layerWidth
@@ -403,7 +411,7 @@ export function sceneLevel2(k) {
       k.sprite(arrowSpriteId),
       k.pos(arrowX, arrowBaseY),
       k.anchor("center"),
-      k.z(5),  // Above background but below platforms
+      k.z(CFG.visual.zIndex.player + 1),  // Above background but below platforms
     {
       draw() {
           //
@@ -442,7 +450,7 @@ export function sceneLevel2(k) {
       //
       // Draw single outer circle at maximum radius
       //
-      const glowColor = k.rgb(150, 180, 220)  // Light blue matching snow theme
+      const glowColor = k.rgb(255, 255, 255)  // White matching snow theme
       const haloOpacity = 0.08  // Barely visible opacity
       
       k.drawCircle({
@@ -983,7 +991,7 @@ function createSnowDrifts(k) {
           //
           k.drawPolygon({
             pts: points,
-            color: k.rgb(150, 180, 220),  // Light blue
+            color: k.rgb(255, 255, 255),  // Pure white
             opacity: baseOpacity
           })
           //
@@ -1029,138 +1037,6 @@ function createSnowDrifts(k) {
 }
 
 /**
- * Creates a snow platform
- * Concept: A minimal rectangular platform made of blue snow
- * Simple, clean snow platform without internal elements
- * Blue color represents the coldness of touch, frozen connections
- * 
- * Visual design:
- * - Minimal rectangular platform (just enough to walk on)
- * - Blue snow material with subtle texture
- * - Clean, simple appearance
- * 
- * @param {Object} k - Kaplay instance
- */
-function createRootBridgePlatform(k) {
-  //
-  // Platform position - connects left and right sides
-  //
-  const platformCenterX = CFG.visual.screen.width / 2
-  const platformY = FLOOR_Y - 100  // Lower platform - jumpable height
-  const platformWidth = 200  // Minimal width - just enough to walk on
-  const platformHeight = 30  // Minimal height
-  //
-  // Colors for snow platform
-  //
-  const snowColor = k.rgb(150, 180, 220)  // Light blue for snow
-  const darkSnowColor = k.rgb(120, 150, 190)  // Darker blue for depth
-  const lightSnowColor = k.rgb(180, 210, 240)  // Lighter blue for highlights
-  //
-  // Create main platform (collision area)
-  //
-  k.add([
-    k.rect(platformWidth, platformHeight),
-    k.pos(platformCenterX, platformY),
-    k.anchor("center"),
-    k.area(),
-    k.body({ isStatic: true }),
-    k.opacity(0),  // Invisible - we'll draw custom graphics
-    k.z(CFG.visual.zIndex.platforms),
-    CFG.game.platformName
-  ])
-  //
-  // Create artistic platform visualization
-  //
-  k.add([
-    k.pos(platformCenterX, platformY),
-    k.z(CFG.visual.zIndex.platforms - 1),
-    {
-      draw() {
-        //
-        // Draw snow platform with wavy top surface (like snow drifts)
-        //
-        const steps = 20
-        const points = []
-        //
-        // Create wavy top surface using similar formula as snow drifts
-        //
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps
-          const x = (t - 0.5) * platformWidth
-          //
-          // Create wavy snow surface - use parabolic curve like snow drifts
-          //
-          const waveHeight = 6  // Height of waves
-          const y = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2))
-          points.push(k.vec2(x, y))
-        }
-        //
-        // Add bottom points to close the shape (flat bottom)
-        //
-        points.push(k.vec2(platformWidth / 2, platformHeight / 2))
-        points.push(k.vec2(-platformWidth / 2, platformHeight / 2))
-        //
-        // Draw main snow platform (wavy shape)
-        //
-        k.drawPolygon({
-          pts: points,
-          color: darkSnowColor,
-          opacity: 0.9
-        })
-        //
-        // Draw shadow layer (darker blue at bottom, like snow drifts)
-        //
-        const shadowPoints = []
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps
-          const x = (t - 0.5) * platformWidth
-          const waveHeight = 6
-          const shadowHeight = waveHeight * 0.3
-          const y = -platformHeight / 2 - shadowHeight * (1 - Math.pow(2 * t - 1, 2))
-          shadowPoints.push(k.vec2(x, y))
-        }
-        shadowPoints.push(k.vec2(platformWidth / 2, platformHeight / 2))
-        shadowPoints.push(k.vec2(-platformWidth / 2, platformHeight / 2))
-        
-        k.drawPolygon({
-          pts: shadowPoints,
-          color: k.rgb(100, 130, 180),  // Darker blue shadow
-          opacity: 0.7
-        })
-        //
-        // Draw lighter snow layer on top (wavy surface)
-        //
-        const topPoints = []
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps
-          const x = (t - 0.5) * platformWidth
-          const waveHeight = 6
-          const y = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2))
-          topPoints.push(k.vec2(x, y))
-        }
-        //
-        // Add bottom points for top layer (shallower, following wave)
-        //
-        for (let i = steps; i >= 0; i--) {
-          const t = i / steps
-          const x = (t - 0.5) * platformWidth
-          const waveHeight = 6
-          const topLayerHeight = platformHeight * 0.7
-          const y = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + topLayerHeight
-          topPoints.push(k.vec2(x, y))
-        }
-        
-        k.drawPolygon({
-          pts: topPoints,
-          color: snowColor,
-          opacity: 0.8
-        })
-      }
-    }
-  ])
-}
-
-/**
  * Creates platforms forming a path from top-left to bottom-right
  * All platforms are arranged so hero can jump from one to another
  * Leading to the final platform near anti-hero position
@@ -1184,8 +1060,8 @@ function createDiagonalPlatforms(k) {
   //
   // Colors for snow platforms
   //
-  const snowColor = k.rgb(150, 180, 220)
-  const darkSnowColor = k.rgb(120, 150, 190)
+  const snowColor = k.rgb(255, 255, 255)  // Pure white
+  const darkSnowColor = k.rgb(200, 200, 200)  // Light gray for dark snow
   //
   // Platform visibility system
   // Each platform has: opacity (0-1), jumpCount (0-3), visibilityTimer (0-2 seconds)
@@ -1512,18 +1388,13 @@ function createDiagonalPlatforms(k) {
   }
 }
 
-/**
- * Creates dark trees without leaves (trunks and branches only)
- * Based on trees from level 1, but without crowns/leaves
- * @param {Object} k - Kaplay instance
- */
-function createDarkTrees(k) {
+function createBackgroundBushesNear(k) {
   //
-  // Tree parameters (based on TreeRoots component, but without roots and leaves, dark)
+  // Create near layer bushes - grayer, shorter, in front of far layer
   //
   const grassY = FLOOR_Y - 2
   const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-  const yOffset = -30
+  const yOffset = -80  // Raised bushes higher
   
   //
   // Random helper
@@ -1531,231 +1402,116 @@ function createDarkTrees(k) {
   const rand = (min, max) => min + Math.random() * (max - min)
   
   //
-  // Branch growth algorithm (from TreeRoots component)
+  // Create many bushes for continuous strip
   //
-  const growBranch = (x, y, angle, length, thickness, depth = 0) => {
-    const branchSegments = []
-    
-    if (length <= 6 || thickness <= 0.5 || depth > 7) {
-      return branchSegments
-    }
-    
-    const step = rand(5, 8)
-    let cx = x
-    let cy = y
-    
-    //
-    // Build branch path with softer curvature
-    //
-    for (let i = 0; i < length; i++) {
-      const prevX = cx
-      const prevY = cy
-      
-      //
-      // Softer organic curvature (less than roots)
-      //
-      angle += rand(-0.12, 0.12)
-      cx += Math.cos(angle) * step
-      cy += Math.sin(angle) * step
-      
-      //
-      // Add segment
-      //
-      branchSegments.push({
-        startX: prevX,
-        startY: prevY,
-        endX: cx,
-        endY: cy,
-        width: thickness,
-        depth
-      })
-      
-      //
-      // Small offshoots
-      //
-      if (Math.random() < 0.07 && depth < 6) {
-        const microBranches = growBranch(
-          cx,
-          cy,
-          angle + rand(-1.2, 1.2),
-          length * 0.35,
-          thickness * 0.5,
-          depth + 2
-        )
-        branchSegments.push(...microBranches)
-      }
-    }
-    
-    //
-    // Main branching (45% chance)
-    //
-    if (Math.random() < 0.45) {
-      const sideBranches = growBranch(
-        cx,
-        cy,
-        angle + rand(-0.8, 0.8),
-        length * 0.6,
-        thickness * 0.65,
-        depth + 1
-      )
-      branchSegments.push(...sideBranches)
-    }
-    
-    //
-    // Continue upward
-    //
-    const continueBranches = growBranch(
-      cx,
-      cy,
-      angle + rand(-0.25, 0.25),
-      length * 0.75,
-      thickness * 0.75,
-      depth + 1
-    )
-    branchSegments.push(...continueBranches)
-    
-    return branchSegments
-  }
-  
-  //
-  // Create trees similar to TreeRoots but without roots and leaves
-  //
-  const totalElements = 14
+  const totalElements = 80  // More bushes for continuous horizontal strip
   const spacing = playableWidth / (totalElements - 1)
-  const TREE_MARGIN = 80
-  const trees = []
+  const bushes = []
   
   for (let i = 0; i < totalElements; i++) {
-    const randomness = 25
-    //
-    // Limit randomness for first and last elements to prevent overflow
-    //
-    let randomOffset = (Math.random() - 0.5) * randomness
-    //
-    // For first element: add extra margin and only allow positive offset
-    //
-    if (i === 0) {
-      randomOffset = Math.max(0, randomOffset) + TREE_MARGIN
-    }
-    //
-    // For last element: subtract extra margin and only allow negative offset
-    //
-    if (i === totalElements - 1) {
-      randomOffset = Math.min(0, randomOffset) - TREE_MARGIN
-    }
-    
-    const posX = LEFT_MARGIN + spacing * i + randomOffset
-    //
-    // Skip bushes, only create trees
-    //
-    const isBush = Math.random() < 0.35
-    if (isBush) continue
-    
-    const centerY = grassY
+    const posX = LEFT_MARGIN + spacing * i
     
     //
-    // Generate branches from center point (growing upward - like a tree)
+    // Create bushes with 100% density for continuous strip
     //
-    const allBranchSegments = []
+    // Always create bush (no random skip)
     
     //
-    // First, create a straight trunk section (no branches)
+    // Near layer bushes - base size (shorter than far layer)
     //
-    const trunkHeight = 20  // Straight trunk segments before branching starts
-    const trunkStep = rand(5, 8)
-    let trunkX = posX
-    let trunkY = centerY
+    const bushSize = (20 + Math.random() * 30) * 0.7 * 6.4  // Base size (shorter than far layer)
+    const crownCount = 8 + Math.floor(Math.random() * 10)  // More crowns for continuous density
+    const crowns = []
     
-    for (let i = 0; i < trunkHeight; i++) {
-      const prevX = trunkX
-      const prevY = trunkY
+    for (let j = 0; j < crownCount; j++) {
+      const angle = Math.random() * Math.PI * 2
+      const distance = Math.random() * bushSize * 0.8
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance * 0.6
       
-      //
-      // Move straight up with minimal variation
-      //
-      trunkY -= trunkStep
-      trunkX += rand(-1, 1)  // Slight horizontal variation
-      
-      allBranchSegments.push({
-        startX: prevX,
-        startY: prevY,
-        endX: trunkX,
-        endY: trunkY,
-        width: 14,  // Trunk thickness (wider)
-        depth: 0
+      crowns.push({
+        offsetX: x,
+        offsetY: y,
+        sizeVariation: 0.5 + Math.random() * 0.5,
+        opacityVariation: 0.6 + Math.random() * 0.4
       })
     }
     
     //
-    // Now start branching from the top of the trunk
+    // Dark gray bush color for near layer (much darker)
     //
-    const mainBranches = growBranch(
-      trunkX,
-      trunkY,
-      -Math.PI / 2,  // Upward direction
-      16,  // Length segments for branches
-      12,  // Starting thickness (wider)
-      0  // Initial depth
-    )
-    allBranchSegments.push(...mainBranches)
+    const grayBushColor = k.rgb(18, 20, 22)  // Much darker gray color
     
-    //
-    // Trunk color (same as TreeRoots component in level 1)
-    //
-    const darkTrunkColor = k.rgb(120, 120, 120)  // Gray branches like in TreeRoots
-    
-    trees.push({
+    bushes.push({
       x: posX,
-      branchSegments: allBranchSegments,
-      trunkColor: darkTrunkColor
+      y: grassY + yOffset,
+      size: bushSize,
+      crowns: crowns,
+      color: grayBushColor,
+      opacity: 0.85,  // Slightly more opaque for continuous appearance
+      swaySpeed: 0.1 + Math.random() * 0.05,
+      swayAmount: (0.5 + Math.random() * 0.5) * 0.7,
+      swayOffset: Math.random() * Math.PI * 2
     })
   }
   
   //
-  // Create canvas and draw trees on it
+  // Create canvas and draw bushes on it
   //
-  const createTreesCanvas = () => {
+  const createBushesCanvas = () => {
     const canvas = document.createElement('canvas')
     canvas.width = k.width()
     canvas.height = k.height()
     const ctx = canvas.getContext('2d')
     
     //
-    // Draw trees on canvas (trunks and branches only, no leaves, no roots)
+    // Calculate arc multiplier for bushes (higher at edges, lower in center)
     //
-    trees.forEach(tree => {
+    const screenCenter = k.width() / 2
+    const maxDistance = Math.max(screenCenter - LEFT_MARGIN, k.width() - RIGHT_MARGIN - screenCenter)
+    
+    //
+    // Draw bushes on canvas with arc variation
+    //
+    bushes.forEach(bush => {
+      const sway = 0  // No sway for static canvas
+      
       //
-      // Draw branch segments (includes trunk)
+      // Calculate distance from center and apply arc formula
       //
-      tree.branchSegments.forEach(segment => {
-        const opacity = 0.7 - segment.depth * 0.07
-        ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${Math.max(0.3, opacity)})`
-        ctx.lineWidth = segment.width
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        
+      const distanceFromCenter = Math.abs(bush.x - screenCenter)
+      const normalizedDistance = distanceFromCenter / maxDistance  // 0 at center, 1 at edges
+      const arcMultiplier = 0.7 + normalizedDistance * 0.6  // 0.7 at center, 1.3 at edges (creates arc)
+      
+      bush.crowns.forEach(crown => {
+        ctx.fillStyle = `rgba(${bush.color.r}, ${bush.color.g}, ${bush.color.b}, ${bush.opacity * crown.opacityVariation})`
         ctx.beginPath()
-        ctx.moveTo(segment.startX, segment.startY)
-        ctx.lineTo(segment.endX, segment.endY)
-        ctx.stroke()
+        ctx.arc(
+          bush.x + crown.offsetX + sway,
+          bush.y + crown.offsetY,
+          bush.size * crown.sizeVariation * 0.5 * arcMultiplier,  // Apply arc multiplier to size
+          0,
+          Math.PI * 2
+        )
+        ctx.fill()
       })
     })
     
     return canvas
   }
   
-  const treesCanvas = createTreesCanvas()
-  const treesTexture = k.loadSprite('bg-touch-level2-trees', treesCanvas.toDataURL())
+  const bushesCanvas = createBushesCanvas()
+  const bushesTexture = k.loadSprite('bg-touch-level2-background-bushes-near', bushesCanvas.toDataURL())
   
   //
-  // Draw trees canvas
+  // Draw bushes canvas (in front of far bushes, but behind trees)
   //
   k.add([
-    k.z(5),  // Above background but below platforms
+    k.z(2),  // In front of far bushes (z=1.5) but behind trees
     {
       draw() {
         k.drawSprite({
-          sprite: 'bg-touch-level2-trees',
+          sprite: 'bg-touch-level2-background-bushes-near',
           pos: k.vec2(0, 0),
           anchor: "topleft"
         })
@@ -1764,237 +1520,310 @@ function createDarkTrees(k) {
   ])
 }
 
-function createBackgroundDarkTrees(k) {
+function createMountains(k) {
   //
-  // Tree parameters (based on TreeRoots component, but without roots and leaves, 1.5x larger and dark)
+  // Create mountains using segment-based random point generation
   //
-  const grassY = FLOOR_Y - 2
-  const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-  const scale = 1.5  // 1.5x larger
-  const yOffset = -30
+  const screenWidth = k.width()
+  const screenHeight = k.height()
+  const horizonY = FLOOR_Y  // Mountains start from bottom platform
+  //
+  // Color palette
+  //
+  const colors = {
+    sky: '#000000',            // Black background
+    snow: 'rgb(255, 255, 255)', // Pure white snow
+    rockLeft: 'rgb(73, 121, 141)',  // Left side rock color
+    rockRight: 'rgb(62, 105, 121)', // Right side rock color
+    rockRightLight: 'rgb(130, 176, 209)' // Right side light rock color
+  }
   
-  //
-  // Random helper
-  //
-  const rand = (min, max) => min + Math.random() * (max - min)
-  
-  //
-  // Branch growth algorithm (from TreeRoots component)
-  //
-  const growBranch = (x, y, angle, length, thickness, depth = 0) => {
-    const branchSegments = []
-    
-    if (length <= 6 || thickness <= 0.5 || depth > 7) {
-      return branchSegments
-    }
-    
-    const step = rand(5, 8) * scale
-    let cx = x
-    let cy = y
-    
+  const fixedPointOnSegment = (x1, y1, x2, y2, percent) => {
     //
-    // Build branch path with softer curvature
+    // Fixed point on segment (no randomness) - always same position
     //
-    for (let i = 0; i < length; i++) {
-      const prevX = cx
-      const prevY = cy
-      
-      //
-      // Softer organic curvature (less than roots)
-      //
-      angle += rand(-0.12, 0.12)
-      cx += Math.cos(angle) * step
-      cy += Math.sin(angle) * step
-      
-      //
-      // Add segment
-      //
-      branchSegments.push({
-        startX: prevX,
-        startY: prevY,
-        endX: cx,
-        endY: cy,
-        width: thickness,
-        depth
-      })
-      
-      //
-      // Small offshoots
-      //
-      if (Math.random() < 0.07 && depth < 6) {
-        const microBranches = growBranch(
-          cx,
-          cy,
-          angle + rand(-1.2, 1.2),
-          length * 0.35,
-          thickness * 0.5,
-          depth + 2
-        )
-        branchSegments.push(...microBranches)
-      }
-    }
-    
-    //
-    // Main branching (45% chance)
-    //
-    if (Math.random() < 0.45) {
-      const sideBranches = growBranch(
-        cx,
-        cy,
-        angle + rand(-0.8, 0.8),
-        length * 0.6,
-        thickness * 0.65,
-        depth + 1
-      )
-      branchSegments.push(...sideBranches)
-    }
-    
-    //
-    // Continue upward
-    //
-    const continueBranches = growBranch(
-      cx,
-      cy,
-      angle + rand(-0.25, 0.25),
-      length * 0.75,
-      thickness * 0.75,
-      depth + 1
-    )
-    branchSegments.push(...continueBranches)
-    
-    return branchSegments
+    const n = percent / 100
+    const a = (y2 - y1) / (x2 - x1)
+    const x = x1 + (x2 - x1) * n
+    const y = a * (x - x1) + y1
+    return { x, y }
   }
   
   //
-  // Create trees similar to TreeRoots but without roots and leaves
+  // Draw single mountain (fixed positions, no randomness)
   //
-  const totalElements = 14
-  const spacing = playableWidth / (totalElements - 1)
-  const TREE_MARGIN = 80
-  const trees = []
-  
-  for (let i = 0; i < totalElements; i++) {
-    const randomness = 25
+  const drawMountain = (ctx, x, y, width, height, mountainData, alpha = 1, customColors = null) => {
+    ctx.save()
+    ctx.globalAlpha = alpha
+    
     //
-    // Limit randomness for first and last elements to prevent overflow
+    // Use custom colors if provided, otherwise use default colors
     //
-    let randomOffset = (Math.random() - 0.5) * randomness
+    const mountainColors = customColors || colors
+    
     //
-    // For first element: add extra margin and only allow positive offset
+    // Fixed positions (no randomness) - always same place
     //
-    if (i === 0) {
-      randomOffset = Math.max(0, randomOffset) + TREE_MARGIN
+    const leftMountainBaseX = x + mountainData.widthVariation / 2
+    const rightMountainBaseX = x + width - mountainData.widthVariation / 2
+    const mountainTopY = y - mountainData.heightVariation / 2
+    const mountainTopX = x + (width - mountainData.centerVariation) / 2 + mountainData.centerVariation / 2
+    
+    const leftSnow = fixedPointOnSegment(leftMountainBaseX, y, mountainTopX, mountainTopY, 85)  // Higher snow line for sharper peaks (was 70%)
+    const rightSnow = fixedPointOnSegment(rightMountainBaseX, y, mountainTopX, mountainTopY, 85)  // Higher snow line for sharper peaks (was 70%)
+    const midSnow = {
+      x: mountainTopX,
+      y: (leftSnow.y + rightSnow.y) / 2
     }
-    //
-    // For last element: subtract extra margin and only allow negative offset
-    //
-    if (i === totalElements - 1) {
-      randomOffset = Math.min(0, randomOffset) - TREE_MARGIN
-    }
     
-    const posX = LEFT_MARGIN + spacing * i + randomOffset
-    //
-    // Skip bushes, only create trees
-    //
-    const isBush = Math.random() < 0.35
-    if (isBush) continue
-    
-    const centerY = grassY
-    
-    //
-    // Generate branches from center point (growing upward - like a tree)
-    //
-    const allBranchSegments = []
-    
-    //
-    // First, create a straight trunk section (no branches)
-    //
-    const trunkHeight = 20 * scale  // Straight trunk segments before branching starts (1.5x taller)
-    const trunkStep = rand(5, 8) * scale
-    let trunkX = posX
-    let trunkY = centerY
-    
-    for (let i = 0; i < trunkHeight; i++) {
-      const prevX = trunkX
-      const prevY = trunkY
+    const leftSnowPoints = []
+    const rightSnowPoints = []
+    for (let i = 1; i <= 2; i++) {
+      const leftPoint = fixedPointOnSegment(leftSnow.x, leftSnow.y, midSnow.x, midSnow.y, 100 / 3 * i)  // Fixed position
+      leftPoint.y += 15 * (1 - 2 * (i % 2))  // Fixed offset
+      leftSnowPoints.push(leftPoint)
       
-      //
-      // Move straight up with minimal variation
-      //
-      trunkY -= trunkStep
-      trunkX += rand(-1, 1) * scale  // Slight horizontal variation
-      
-      allBranchSegments.push({
-        startX: prevX,
-        startY: prevY,
-        endX: trunkX,
-        endY: trunkY,
-        width: 14 * scale,  // Trunk thickness (1.5x wider)
-        depth: 0
-      })
+      const rightPoint = fixedPointOnSegment(midSnow.x, midSnow.y, rightSnow.x, rightSnow.y, 100 / 3 * i)  // Fixed position
+      rightPoint.y += 15 * (-1 + 2 * (i % 2))  // Fixed offset
+      rightSnowPoints.push(rightPoint)
     }
     
     //
-    // Now start branching from the top of the trunk
+    // Draw snow cap (left side)
     //
-    const mainBranches = growBranch(
-      trunkX,
-      trunkY,
-      -Math.PI / 2,  // Upward direction
-      16,  // Length segments for branches
-      12 * scale,  // Starting thickness (1.5x thicker)
-      0  // Initial depth
-    )
-    allBranchSegments.push(...mainBranches)
+    ctx.fillStyle = mountainColors.snow
+    ctx.beginPath()
+    ctx.moveTo(leftSnow.x, leftSnow.y)
+    leftSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
+    ctx.lineTo(midSnow.x, midSnow.y)
+    ctx.lineTo(mountainTopX, mountainTopY)
+    ctx.fill()
     
     //
-    // Dark trunk color (same as back layer trees in level 0)
+    // Draw snow cap (right side - light)
     //
-    const darkTrunkColor = k.rgb(36, 37, 36)  // Dark color for background trees
+    ctx.fillStyle = mountainColors.rockRightLight
+    ctx.beginPath()
+    ctx.moveTo(midSnow.x, midSnow.y)
+    rightSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
+    ctx.lineTo(rightSnow.x, rightSnow.y)
+    ctx.lineTo(mountainTopX, mountainTopY)
+    ctx.fill()
     
-    trees.push({
-      x: posX,
-      branchSegments: allBranchSegments,
-      trunkColor: darkTrunkColor
-    })
+    //
+    // Draw left rock face
+    //
+    ctx.fillStyle = mountainColors.rockLeft
+    ctx.beginPath()
+    ctx.moveTo(leftMountainBaseX, y)
+    ctx.lineTo(leftSnow.x, leftSnow.y)
+    leftSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
+    ctx.lineTo(midSnow.x, midSnow.y)
+    ctx.lineTo(midSnow.x, y)
+    ctx.fill()
+    
+    //
+    // Draw right rock face
+    //
+    ctx.fillStyle = mountainColors.rockRight
+    ctx.beginPath()
+    ctx.moveTo(midSnow.x, midSnow.y)
+    rightSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
+    ctx.lineTo(rightSnow.x, rightSnow.y)
+    ctx.lineTo(rightMountainBaseX, y)
+    ctx.lineTo(mountainTopX, y)
+    ctx.fill()
+    
+    ctx.restore()
   }
   
   //
-  // Create canvas and draw trees on it
+  // Create canvas for mountains
   //
-  const createTreesCanvas = () => {
+  const createMountainsCanvas = () => {
     const canvas = document.createElement('canvas')
-    canvas.width = k.width()
-    canvas.height = k.height()
+    canvas.width = screenWidth
+    canvas.height = screenHeight
     const ctx = canvas.getContext('2d')
     
     //
-    // Draw trees on canvas (trunks and branches only, no leaves, no roots)
+    // Disable anti-aliasing for pixel art effect
     //
-    trees.forEach(tree => {
-      //
-      // Draw branch segments (includes trunk)
-      //
-      tree.branchSegments.forEach(segment => {
-        const opacity = 0.7 - segment.depth * 0.07
-        ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${Math.max(0.3, opacity)})`
-        ctx.lineWidth = segment.width
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-        
-        ctx.beginPath()
-        ctx.moveTo(segment.startX, segment.startY)
-        ctx.lineTo(segment.endX, segment.endY)
-        ctx.stroke()
-      })
+    ctx.imageSmoothingEnabled = false
+    
+    //
+    // Draw dark night sky (fill entire canvas to avoid horizontal line)
+    //
+    ctx.fillStyle = colors.sky
+    ctx.fillRect(0, 0, screenWidth, screenHeight)
+    
+    //
+    // Draw three mountains: left (shadowed, lower), center (higher, sharper), right (light)
+    // Made higher and stretched horizontally
+    //
+    const screenThird = screenWidth / 3
+    
+    //
+    // Left mountain: shadowed, lower (but higher than before)
+    //
+    const leftMountainParams = {
+      widthVariation: 40,  // Narrower for sharper peak
+      heightVariation: 1200,  // 2x higher
+      centerVariation: 250  // Narrower variation for sharper peak
+    }
+    const leftMountainHeight = 2500  // 2x higher
+    const leftMountainX = -100  // Start further left
+    const leftMountainWidth = screenThird + 200  // Wider
+    
+    //
+    // Center mountain: higher, sharper (made even higher)
+    //
+    const centerMountainParams = {
+      widthVariation: 30,  // Narrower for sharpest peak
+      heightVariation: 1500,  // 2x higher
+      centerVariation: 200  // Narrower variation for sharpest peak
+    }
+    const centerMountainHeight = 2800  // 2x higher
+    const centerMountainX = screenThird - 400  // Start further left to accommodate much wider base
+    const centerMountainWidth = screenThird + 900  // Much wider base
+    
+    //
+    // Right mountain: light (made higher)
+    //
+    const rightMountainParams = {
+      widthVariation: 45,  // Narrower for sharper peak
+      heightVariation: 1300,  // 2x higher
+      centerVariation: 280  // Narrower variation for sharper peak
+    }
+    const rightMountainHeight = 2200  // 2x higher
+    const rightMountainX = screenThird * 2 - 150  // Start further left
+    const rightMountainWidth = screenThird + 250  // Wider, extends to edge
+    
+    //
+    // Draw left mountain (shadowed, darker colors)
+    //
+    drawMountain(ctx, leftMountainX, horizonY, leftMountainWidth, leftMountainHeight, leftMountainParams, 1.0, {
+      snow: 'rgb(200, 210, 220)',  // Darker snow
+      rockLeft: 'rgb(50, 80, 100)',  // Darker left rock
+      rockRight: 'rgb(40, 70, 90)',  // Darker right rock
+      rockRightLight: 'rgb(90, 130, 150)'  // Darker light rock
+    })
+    
+    //
+    // Draw center mountain (higher, sharper, normal colors)
+    //
+    drawMountain(ctx, centerMountainX, horizonY, centerMountainWidth, centerMountainHeight, centerMountainParams, 1.0, {
+      snow: colors.snow,
+      rockLeft: colors.rockLeft,
+      rockRight: colors.rockRight,
+      rockRightLight: colors.rockRightLight
+    })
+    
+    //
+    // Draw right mountain (light, brighter colors)
+    //
+    drawMountain(ctx, rightMountainX, horizonY, rightMountainWidth, rightMountainHeight, rightMountainParams, 1.0, {
+      snow: 'rgb(245, 248, 250)',  // Brighter snow
+      rockLeft: 'rgb(90, 140, 160)',  // Brighter left rock
+      rockRight: 'rgb(80, 130, 150)',  // Brighter right rock
+      rockRightLight: 'rgb(150, 190, 220)'  // Brighter light rock
     })
     
     return canvas
   }
   
-  const treesCanvas = createTreesCanvas()
-  const treesTexture = k.loadSprite('bg-touch-level2-background-trees', treesCanvas.toDataURL())
+  const mountainsCanvas = createMountainsCanvas()
+  k.loadSprite('bg-touch-level2-mountains', mountainsCanvas.toDataURL())
   
+  //
+  // Draw mountains canvas (behind everything)
+  //
+  k.add([
+    k.z(1),  // Very far back, behind trees
+    {
+      draw() {
+        k.drawSprite({
+          sprite: 'bg-touch-level2-mountains',
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}
+/**
+ * First level background dark fir trees. They are distributed evenly across the screen.
+ * @param {*} ctx Canvas context
+ */
+function drawBackgroundDarkestTrees(ctx) {
+  const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const treesAmount = 50
+  const treePeriod = w / treesAmount
+  const treesLayers = 1
+
+  for ( let i = 0; i < treesAmount; i++ ) {
+    const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
+    drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, w, 400, 480), {
+      layers: treesLayers,
+      trunkWidthPercent: .03,
+      trunkHeightPercent: Math.random() * .2 + .1,
+      trunkColor: '#050505',
+      leftColor: [7, 7, 7],
+      rightColor: [10, 10, 10],
+      layer0WidthPercent: .5,
+      layersDecWidthPercent: .15,
+      layersSharpness: Math.floor(Math.random() * 10 + 10)
+    })
+  }
+}
+function createBackgroundDarkestTrees(k) {
+  const png = toPng({ width: k.width(), height: k.height() }, drawBackgroundDarkestTrees)
+  k.loadSprite('bg-touch-level2-darkest-trees', png)  
+  //
+  // Draw trees canvas (behind all other trees - lowest z-index)
+  //
+  k.add([
+    k.z(3),  // Behind background trees (z=4) but above mountains (z=1)
+    {
+      draw() {
+        k.drawSprite({
+          sprite: 'bg-touch-level2-darkest-trees',
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}
+/**
+ * First level background dark fir trees. They are distributed evenly across the screen.
+ * @param {*} ctx Canvas context
+ */
+function drawBackgroundDarkTrees(ctx) {
+  const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const treesAmount = 30
+  const treePeriod = w / treesAmount
+  const treesLayers = 4
+
+  for ( let i = 0; i < treesAmount; i++ ) {
+    const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
+    drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, w, 300, 380), {
+      layers: Math.random() * treesLayers + 4,
+      trunkWidthPercent: .03,
+      trunkHeightPercent: Math.random() * .2 + .1,
+      trunkColor: '#101010',
+      leftColor: [15, 15, 15],
+      rightColor: [25, 20, 25],
+      layer0WidthPercent: .3,
+      layersDecWidthPercent: .15,
+      layersSharpness: Math.floor(Math.random() * 10 + 10)
+    })
+  }
+}
+
+function createBackgroundDarkTrees(k) {
+  const png = toPng({ width: k.width(), height: k.height() }, drawBackgroundDarkTrees)
+  k.loadSprite('bg-touch-level2-background-dark-trees', png)
   //
   // Draw trees canvas (behind other trees)
   //
@@ -2003,7 +1832,52 @@ function createBackgroundDarkTrees(k) {
     {
       draw() {
         k.drawSprite({
-          sprite: 'bg-touch-level2-background-trees',
+          sprite: 'bg-touch-level2-background-dark-trees',
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}
+/**
+ * First level foreground fir trees. They are distributed evenly across the screen.
+ * @param {*} ctx Canvas context
+ */
+function drawForegroundTrees(ctx) {
+  const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const treesAmount = 15
+  const treePeriod = w / treesAmount
+  const treesLayers = 4
+
+  for ( let i = 0; i < treesAmount; i++ ) {
+    const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
+    drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, w, 200, 280), {
+      layers: Math.random() * treesLayers + 4,
+      trunkWidthPercent: .03,
+      trunkHeightPercent: Math.random() * .2 + .1,
+      leftColor: [30, 100, 40],
+      rightColor: [30, 150, 40],
+      layer0WidthPercent: .3,
+      layersDecWidthPercent: .15,
+      layersSharpness: Math.floor(Math.random() * 10 + 10)
+    })
+  }
+}
+
+function createForegroundTrees(k) {
+  const png = toPng({ width: k.width(), height: k.height() }, drawForegroundTrees)
+  k.loadSprite('bg-touch-level2-foreground-trees', png)
+  
+  //
+  // Draw trees canvas (in front of hero)
+  //
+  k.add([
+    k.z(CFG.visual.zIndex.player - 1),  // In front of hero (z=11)
+    {
+      draw() {
+        k.drawSprite({
+          sprite: 'bg-touch-level2-foreground-trees',
           pos: k.vec2(0, 0),
           anchor: "topleft"
         })

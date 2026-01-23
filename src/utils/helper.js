@@ -57,3 +57,17 @@ export function parseHex(colorHex) {
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => k.isKeyDown(key))
 }
+
+export function toPng({ width, height, pixelRatio = 1 }, drawFn) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width * pixelRatio
+  canvas.height = height * pixelRatio
+  canvas.style.width = width + 'px'
+  canvas.style.height = height + 'px'
+
+  const ctx = canvas.getContext("2d")
+  ctx.scale(pixelRatio, pixelRatio)
+
+  drawFn(ctx, canvas)
+  return canvas.toDataURL('image/png')
+}

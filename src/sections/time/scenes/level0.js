@@ -7,10 +7,9 @@ import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as AnalogClock from '../components/analog-clock.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set, setSoundStatus, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
@@ -18,7 +17,6 @@ import { createLevelTransition } from '../../../utils/transition.js'
 const PLATFORM_TOP_HEIGHT = 250
 const PLATFORM_BOTTOM_HEIGHT = 250
 const PLATFORM_SIDE_WIDTH = 192
-
 //
 // Hero spawn positions (in pixels)
 //
@@ -30,6 +28,7 @@ const ANTIHERO_SPAWN_Y = 790
 // Hero spawn timing
 //
 const ANTIHERO_SPAWN_DELAY = 1.0  // Anti-hero spawns 1 second after hero
+const HERO_FIRST_THOUGHTS_DELAY = 2.0
 //
 // Instructions animation constants
 //
@@ -37,7 +36,6 @@ const INSTRUCTIONS_INITIAL_DELAY = 1.0
 const INSTRUCTIONS_FADE_IN_DURATION = 0.8
 const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
-
 /**
  * Creates instructions text object with manual black outline
  * @param {Object} k - Kaplay instance
@@ -90,7 +88,6 @@ function createInstructionsText(k, centerX, textY) {
   
   return { mainText, outlineTexts }
 }
-
 /**
  * Shows instructions
  * @param {Object} k - Kaplay instance
@@ -169,7 +166,6 @@ function showInstructions(k) {
     }
   })
 }
-
 /**
  * Time section level 0 scene
  * @param {Object} k - Kaplay instance
@@ -179,7 +175,7 @@ export function sceneLevel0(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-time.0')
+    set('lastLevel', 'level-time.0')
     //
     // Create sound instance
     //
@@ -193,16 +189,11 @@ export function sceneLevel0(k) {
     //
     // Start clock.mp3 locally (restarts on each level load for synchronization)
     //
-    const clockMusic = k.play('clock', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.clock
-    })
+    Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
     //
-    // Stop clock music when leaving the scene (will restart on reload for sync)
+    // Start beginning phrase about time
     //
-    k.onSceneLeave(() => {
-      clockMusic.stop()
-    })
+    Sound.playOnce(k, HERO_FIRST_THOUGHTS_DELAY, 'time0', CFG.audio.backgroundMusic.words)
     //
     // Initialize level with heroes and platforms
     //
@@ -247,7 +238,6 @@ export function sceneLevel0(k) {
     // Update time digits
     //
     k.onUpdate(() => TimeDigits.onUpdate(timeDigitsInst))
-    
     //
     // Create a game object for drawing time digits with proper z-index
     //

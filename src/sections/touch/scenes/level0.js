@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as SmallBugs from '../components/small-bugs.js'
@@ -32,13 +32,7 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 // Anti-hero platform (right side, above hero height)
 //
 const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
-const ANTIHERO_PLATFORM_WIDTH = 160
-const ANTIHERO_PLATFORM_HEIGHT = 20
 const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 80  // Above hero height (lowered)
-const ANTIHERO_PLATFORM_X = CFG.visual.screen.width - RIGHT_MARGIN / 2 - 40
-const ANTIHERO_SPAWN_X = ANTIHERO_PLATFORM_X - 20  // Shift anti-hero 20px left from platform center
-const ANTIHERO_SPAWN_Y = ANTIHERO_PLATFORM_Y - ANTIHERO_PLATFORM_HEIGHT / 2 - 50
-
 /**
  * Level 0 scene for touch section - Introduction level
  * Large game area with minimal obstacles
@@ -49,7 +43,7 @@ export function sceneLevel0(k) {
     //
     // Save progress
     //
-    saveLastLevel('level-touch.0')
+    set('lastLevel', 'level-touch.0')
     //
     // Set gravity
     //
@@ -1000,8 +994,7 @@ export function sceneLevel0(k) {
     //
     // Check completed sections for hero appearance
     //
-    const isWordComplete = isSectionComplete('word')
-    const isTimeComplete = isSectionComplete('time')
+    const isTimeComplete = get('time', false)
     //
     // Hero body color: yellow if time section complete, otherwise default gray
     //

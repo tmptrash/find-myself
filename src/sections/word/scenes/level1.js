@@ -6,7 +6,7 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
@@ -172,7 +172,7 @@ export function sceneLevel1(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-word.1')
+    set('lastLevel', 'level-word.1')
     //
     // Calculate moving platform position and gap
     //

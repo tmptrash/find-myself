@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
@@ -21,7 +21,7 @@ export function sceneLevel3(k) {
     //
     // Save progress
     //
-    saveLastLevel('level-touch.3')
+    set('lastLevel', 'level-touch.3')
     //
     // Set gravity
     //

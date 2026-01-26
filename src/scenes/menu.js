@@ -3,9 +3,21 @@ import { CFG } from "../cfg.js"
 import { getRGB, parseHex } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
-import { getProgress, getSectionPositions, getLastLevel, resetProgress } from "../utils/progress.js"
+import { getProgress, get, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
+//
+// Section colors configuration (body color only, outline is always black)
+// All colors are imported from global config (CFG.visual.colors.sections)
+//
+const SECTION_COLORS = {
+  word: CFG.visual.colors.sections.word,
+  touch: CFG.visual.colors.sections.touch,
+  feel: CFG.visual.colors.sections.feel,
+  mind: CFG.visual.colors.sections.mind,
+  stress: CFG.visual.colors.sections.stress,
+  time: CFG.visual.colors.sections.time
+}
 //
 // Menu audio configuration (relative to CFG.audio.masterVolume)
 //
@@ -29,6 +41,35 @@ function getSectionDisplayName(section) {
   return section
 }
 
+/**
+ * Get section label positions (arranged in circle)
+ * @param {number} centerX - Center X position
+ * @param {number} centerY - Center Y position
+ * @param {number} radius - Circle radius
+ * @returns {Array} Array of section configs with positions
+ */
+function getSectionPositions(centerX, centerY, radius) {
+  const sections = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
+  const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
+  //
+  // Start angle shifted to have 2 anti-heroes at top
+  // -120° puts first anti-hero at top-left, second at top-right
+  //
+  const startAngle = -Math.PI * 2 / 3  // -120 degrees
+  
+  return sections.map((section, index) => {
+    const angle = startAngle + angleStep * index
+    const x = centerX + Math.cos(angle) * radius
+    const y = centerY + Math.sin(angle) * radius
+    
+    return {
+      section,
+      x,
+      y,
+      color: SECTION_COLORS[section]
+    }
+  })
+}
 
 /**
  * Menu scene with hero in center
@@ -85,7 +126,7 @@ export function sceneMenu(k) {
     })
     
     const progress = getProgress()
-    const lastLevel = getLastLevel()
+    const lastLevel = get('lastLevel', null)
     const currentSection = getSectionFromLevel(lastLevel)
     
     //
@@ -299,7 +340,7 @@ export function sceneMenu(k) {
           //
           // Determine which level to go to
           //
-          const lastLevel = getLastLevel()
+          const lastLevel = get('lastLevel', null)
           
           if (lastLevel && lastLevel.startsWith('level-touch.')) {
             //

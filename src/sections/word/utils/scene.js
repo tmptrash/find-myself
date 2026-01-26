@@ -5,7 +5,7 @@ import * as Hero from '../../../components/hero.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import * as LevelIndicator from '../components/level-indicator.js'
-import { isSectionComplete } from '../../../utils/progress.js'
+import { get } from '../../../utils/progress.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 /**
@@ -306,9 +306,9 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   //
   // Check completed sections for hero appearance
   //
-  const isWordComplete = isSectionComplete('word')
-  const isTimeComplete = isSectionComplete('time')
-  const isTouchComplete = isSectionComplete('touch')
+  const isWordComplete = get('word', false)
+  const isTimeComplete = get('time', false)
+  const isTouchComplete = get('touch', false)
   //
   // Hero body color: yellow if time section complete, otherwise default
   //

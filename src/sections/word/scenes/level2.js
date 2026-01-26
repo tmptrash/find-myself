@@ -6,7 +6,7 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
@@ -171,7 +171,7 @@ export function sceneLevel2(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-word.2')
+    set('lastLevel', 'level-word.2')
     // Calculate moving platform position first (110px from hero start position)
     const bladeWidth = Blades.getBladeWidth(k)
     const movingPlatformX = HERO_SPAWN_X + 110  // 110px from hero

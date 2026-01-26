@@ -1,6 +1,6 @@
 import * as Sound from '../../../utils/sound.js'
 import { stopTimeSectionMusic } from '../utils/scene.js'
-import { markSectionComplete, saveLastLevel } from '../../../utils/progress.js'
+import { setSectionCompleted, set } from '../../../utils/progress.js'
 
 const FINAL_MESSAGE = "time shapes everything - even you"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -18,12 +18,12 @@ export function sceneTimeComplete(k) {
     //
     // Mark time section as complete
     //
-    markSectionComplete('time')
+    setSectionCompleted('time')
     //
     // Save first level of next section (word) as lastLevel
     // This ensures that after completing time section, progress points to next section
     //
-    saveLastLevel('level-word.0')
+    set('lastLevel', 'level-word.0')
     //
     // Create sound instance and stop background music
     //

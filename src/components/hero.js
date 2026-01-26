@@ -2,7 +2,7 @@ import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, getColor, parseHex, getRGB } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
-import { saveLastLevel } from '../utils/progress.js'
+import { set } from '../utils/progress.js'
 //
 // Collision box parameters
 //
@@ -1499,7 +1499,7 @@ export function onAnnihilationCollide(inst) {
                         // Save progress and show transition
                         //
                         if (nextLevel && nextLevel !== 'menu') {
-                          saveLastLevel(nextLevel)
+                          set('lastLevel', nextLevel)
                         }
                         inst.character.hidden = true
                         createLevelTransition(k, inst.currentLevel)
@@ -1622,7 +1622,7 @@ export function onAnnihilationCollide(inst) {
                       // Save progress and show transition
                       //
                       if (nextLevel && nextLevel !== 'menu') {
-                        saveLastLevel(nextLevel)
+                        set('lastLevel', nextLevel)
                       }
                       inst.character.hidden = true
                       //
@@ -1647,7 +1647,7 @@ export function onAnnihilationCollide(inst) {
                   // (so player continues from the next level, not the current one)
                   //
                   if (nextLevel && nextLevel !== 'menu') {
-                    saveLastLevel(nextLevel)
+                    set('lastLevel', nextLevel)
                   }
                   inst.character.hidden = true
                   //

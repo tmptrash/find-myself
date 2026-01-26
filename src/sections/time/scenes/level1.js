@@ -3,12 +3,11 @@ import { initScene, startTimeSectionMusic, stopTimeSectionMusic } from '../utils
 import * as Hero from '../../../components/hero.js'
 import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
-import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
-import { saveLastLevel } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { set, setSoundStatus, get } from '../../../utils/progress.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -19,7 +18,6 @@ const PLATFORM_SIDE_WIDTH = 192
 //
 // Hero size (approximately)
 //
-const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
 const HERO_WIDTH = 96   // SPRITE_SIZE (32) * HERO_SCALE (3)
 //
 // Level geometry - two platforms connected by stairs
@@ -32,7 +30,6 @@ const SECOND_FLOOR_FLOOR_Y = 400  // Raised second floor (was 554)
 //
 const LOWER_PLATFORM_START_X = PLATFORM_SIDE_WIDTH  // Left wall (192)
 const LOWER_PLATFORM_WIDTH = HERO_WIDTH - 8  // Narrower than hero (88px, was 104px)
-const LOWER_PLATFORM_END_X = LOWER_PLATFORM_START_X + LOWER_PLATFORM_WIDTH  // 280
 //
 // Hero spawn positions
 //
@@ -42,6 +39,7 @@ const ANTIHERO_CLOCK_PLATFORM_X = PLATFORM_SIDE_WIDTH + 15  // Clock platform po
 const ANTIHERO_SPAWN_X = ANTIHERO_CLOCK_PLATFORM_X  // Standing on clock platform
 const ANTIHERO_SPAWN_Y = SECOND_FLOOR_FLOOR_Y - 50  // Standing on clock platform
 
+const HERO_FIRST_THOUGHTS_DELAY = 2.0
 /**
  * Time section level 1 scene
  * @param {Object} k - Kaplay instance
@@ -51,7 +49,7 @@ export function sceneLevel1(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-time.1')
+    set('lastLevel', 'level-time.1')
     //
     // Create sound instance
     //
@@ -65,16 +63,11 @@ export function sceneLevel1(k) {
     //
     // Start clock.mp3 locally (restarts on each level load for synchronization)
     //
-    const clockMusic = k.play('clock', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.clock
-    })
+    Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
     //
-    // Stop clock music when leaving the scene (will restart on reload for sync)
+    // Start beginning phrase about time
     //
-    k.onSceneLeave(() => {
-      clockMusic.stop()
-    })
+    Sound.playOnce(k, HERO_FIRST_THOUGHTS_DELAY, 'time1', CFG.audio.backgroundMusic.words)
     //
     // Initialize level with heroes and platforms (skip default platforms)
     //

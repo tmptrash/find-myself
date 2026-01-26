@@ -71,3 +71,14 @@ export function toPng({ width, height, pixelRatio = 1 }, drawFn) {
   drawFn(ctx, canvas)
   return canvas.toDataURL('image/png')
 }
+
+export const prop = (path, root = {}) => path.split(".").reduce(
+  (o, key) => (o == null ? undefined : o[key]),
+  root
+)
+
+export function setProp(path, val, obj = {}) {
+  const keys = path.split(".")
+  keys.slice(0, -1).forEach(k => obj = obj[k] ??= {})
+  obj[keys.pop()] = val
+}

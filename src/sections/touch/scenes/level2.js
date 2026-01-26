@@ -1,7 +1,7 @@
 import { CFG } from '../cfg.js'
 import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { saveLastLevel, isSectionComplete } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toPng } from '../../../utils/helper.js'
 import { drawFirTree } from '../components/fir-tree.js'
@@ -26,13 +26,6 @@ const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
 //
 const HERO_SPAWN_X = LEFT_MARGIN + 100
 const HERO_SPAWN_Y = FLOOR_Y - 50
-//
-// Anti-hero spawn position (on top-left platform)
-// Will be set after platforms are created
-//
-const ANTIHERO_SPAWN_X = LEFT_MARGIN + 200  // Same as first platform X
-const ANTIHERO_SPAWN_Y = TOP_MARGIN + 250   // Same as first platform Y
-
 /**
  * Level 2 scene for touch section - Simple level without obstacles
  * @param {Object} k - Kaplay instance
@@ -42,7 +35,7 @@ export function sceneLevel2(k) {
     //
     // Save progress
     //
-    saveLastLevel('level-touch.2')
+    set('lastLevel', 'level-touch.2')
     //
     // Set gravity
     //
@@ -169,8 +162,7 @@ export function sceneLevel2(k) {
     //
     // Check completed sections for hero appearance
     //
-    const isWordComplete = isSectionComplete('word')
-    const isTimeComplete = isSectionComplete('time')
+    const isTimeComplete = get('time', false)
     //
     // Hero body color: yellow if time section complete, otherwise default gray
     //

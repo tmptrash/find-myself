@@ -1,10 +1,12 @@
 import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
-import { markSectionComplete, saveLastLevel } from './progress.js'
+import { setSectionCompleted, set } from './progress.js'
+import * as Sound from './sound.js'
 
 /**
  * Level transition configuration - maps current level to next level
  */
+// TODO: complete this by two items arrays
 const LEVEL_TRANSITIONS = {
   'menu': 'level-word.0',
   'menu-time': 'level-time.0',
@@ -25,6 +27,32 @@ const LEVEL_TRANSITIONS = {
   'level-touch.2': 'level-touch.3',
   'level-touch.3': 'menu'
 }
+
+// Subtitles shown BEFORE entering each level (shifted forward by one)
+const LEVEL_SUBTITLES = {
+  'menu': '',
+  'menu-time': '',
+  'menu-touch': '',
+  'level-word.0': 'words, they cut deeper than blades',
+  'level-word.1': "sharp words don't cut - they make you fall",
+  'level-word.2': "the words you can't forget hurt the most",
+  'level-word.3': 'sharp words move fast - so must you',
+  'level-word.4': 'words that kill',
+  'level-time.0': ['time never waits, and neither should you', 'time0-pre'],
+  'level-time.1': ['do not touch the one', 'time1-pre'],
+  'level-time.2': ['digits sum even safe, sum odd deadly. you have 3 tries', 'time2-pre'],
+  'level-time.3': ['sections switch controls - watch the clocks', 'time3-pre'],
+  'level-touch.0': 'gather what crawls together to reach what stands above',
+  'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
+  'level-touch.2': 'jump to reveal the path - find what stands nearby'
+}
+
+const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
+const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
+const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
+const TEXT_HOLD_DURATION = 2.0       // Duration text stays visible
+const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
+const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 
 /**
  * Get next level name
@@ -73,33 +101,6 @@ export function showTransitionToLevel(k, targetLevel) {
     k.go(targetLevel)
   }
 }
-
-// Subtitles shown BEFORE entering each level (shifted forward by one)
-const LEVEL_SUBTITLES = {
-  'menu': '',
-  'menu-time': '',
-  'menu-touch': '',
-  'level-word.0': 'words, they cut deeper than blades',
-  'level-word.1': "sharp words don't cut - they make you fall",
-  'level-word.2': "the words you can't forget hurt the most",
-  'level-word.3': 'sharp words move fast - so must you',
-  'level-word.4': 'words that kill',
-  'level-time.0': 'time never waits, and neither should you',
-  'level-time.1': 'do not touch the one',
-  'level-time.2': 'digits sum even safe, sum odd deadly. you have 3 tries',
-  'level-time.3': 'sections switch controls - watch the clocks',
-  'level-touch.0': 'gather what crawls together to reach what stands above',
-  'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
-  'level-touch.2': 'jump to reveal the path - find what stands nearby'
-}
-
-const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
-const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
-const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
-const TEXT_HOLD_DURATION = 2.0       // Duration text stays visible
-const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
-const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
-
 /**
  * Creates a fade to black transition effect between levels
  * Shows subtitle BEFORE entering the next level
@@ -116,8 +117,7 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
  * @param {Function} onComplete - Callback when transition completes
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
-  const nextLevel = LEVEL_TRANSITIONS[currentLevel]
-  
+  const nextLevel = LEVEL_TRANSITIONS[currentLevel] || null
   //
   // Check if section is completed (last level of section going to completion screen)
   //
@@ -128,7 +128,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     const sectionMatch = currentLevel.match(/level-(\w+)\.\d+/)
     if (sectionMatch) {
       const sectionName = sectionMatch[1]
-      markSectionComplete(sectionName)
+      setSectionCompleted(sectionName)
     }
   }
   
@@ -145,17 +145,17 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   const isLevelToLevelTransition = currentLevel.startsWith('level-') && nextLevel.startsWith('level-')
   if (isLevelToLevelTransition) {
-    saveLastLevel(nextLevel)
+    set('lastLevel', nextLevel)
   } else if (nextLevel === 'time-complete') {
     //
     // When completing time section, save first level of next section (word) instead of completion screen
     //
-    saveLastLevel('level-word.0')
+    set('lastLevel', 'level-word.0')
   } else if (nextLevel === 'word-complete') {
     //
     // When completing word section, save first level of next section (time) instead of completion screen
     //
-    saveLastLevel('level-time.0')
+    set('lastLevel', 'level-time.0')
   }
   
   let timer = 0
@@ -167,8 +167,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const isFromMenuTime = currentLevel === 'menu-time'
   // Start with fade_to_black phase (unless from menu, menu-time or level, then skip to black_pause)
   let phase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime) ? 'black_pause' : 'fade_to_black'
-  const centerX = k.width() / 2
-  const centerY = k.height() / 2
   
   // Instance object to store text reference
   const inst = {
@@ -251,8 +249,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         timer = 0
         
         // Create subtitle text for NEXT level (the one we're transitioning TO)
-        const subtitle = LEVEL_SUBTITLES[nextLevel] || ''
-        
+        const subtitle = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[0] : LEVEL_SUBTITLES[nextLevel]
+        const soundName = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[1] : null
+
         if (subtitle) {
           //
           // Get color based on section
@@ -294,6 +293,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           
           // Store text object in inst-like structure
           inst.textObj = textObj
+          inst.soundName = soundName
         } else {
           // No subtitle, go to next level immediately
           transitionInterval.cancel()
@@ -302,6 +302,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         }
       }
     } else if (phase === 'text_fade_in') {
+      //
+      // Start level related description sound before it starts
+      //
+      if (!inst.textSound && inst.soundName) inst.textSound = Sound.playInScene(k, inst.soundName, CFG.audio.backgroundMusic.words)
       // Fade in text
       const progress = Math.min(timer / TEXT_FADE_IN_DURATION, 1)
       if (inst.textObj) {
@@ -355,6 +359,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionInterval.cancel()
     overlay && overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
+    inst?.textSound?.stop()
   }
 }
 

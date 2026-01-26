@@ -1,35 +1,15 @@
-import { CFG } from '../cfg.js'
+import { prop, setProp } from './helper.js'
 /**
  * Progress tracking using localStorage
  */
-const STORAGE_KEY = 'find-yourself-progress'
-//
-// Section colors configuration (body color only, outline is always black)
-// All colors are imported from global config (CFG.visual.colors.sections)
-//
-const SECTION_COLORS = {
-  word: CFG.visual.colors.sections.word,
-  touch: CFG.visual.colors.sections.touch,
-  feel: CFG.visual.colors.sections.feel,
-  mind: CFG.visual.colors.sections.mind,
-  stress: CFG.visual.colors.sections.stress,
-  time: CFG.visual.colors.sections.time
-}
-
+const STORAGE_KEY = 'find-yourself'
 /**
  * Get all sections progress from localStorage
  * @returns {Object} Progress object with section completion status and last level
  */
 export function getProgress() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch (error) {
-    // Ignore errors
-  }
-  
+  try { return JSON.parse(localStorage[STORAGE_KEY])}
+  catch (error) {}
   //
   // Default progress - all sections incomplete, no last level
   //
@@ -40,15 +20,35 @@ export function getProgress() {
     mind: false,
     stress: false,
     time: false,
-    lastLevel: null  // Last played level (e.g., 'level-word.2')
+    lastLevel: null,  // Last played level (e.g., 'level-word.2')
+    sounds: {}
   }
 }
-
+/**
+ * Universal function, which returns a prop's value by it's path
+ * @param {*} path Path to the property separated by '.'
+ * @param {*} defValue Default value if the property is not found
+ * @returns {*} Value of the property or default value if the property is not found
+ */
+export function get(path, defValue = null) {
+  return prop(path, getProgress()) || defValue
+}
+/**
+ * Universal function, which sets a prop's value by it's path
+ * @param {*} path Path to the property separated by '.'
+ * @param {*} val Value to set
+ */
+export function set(path, val) {
+  const progress = getProgress()
+  setProp(path, val, progress)
+  try {localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))}
+  catch (_) {}
+}
 /**
  * Mark section as completed
  * @param {string} section - Section name
  */
-export function markSectionComplete(section) {
+export function setSectionCompleted(section) {
   const progress = getProgress()
   progress[section] = true
   
@@ -58,24 +58,13 @@ export function markSectionComplete(section) {
     // Ignore errors
   }
 }
-
 /**
- * Check if section is completed
- * @param {string} section - Section name
- * @returns {boolean} True if section is completed
+ * Save sound status
+ * @param {string} soundName - Name of the sound (not a filename)
  */
-export function isSectionComplete(section) {
+export function setSoundStatus(soundName, status) {
   const progress = getProgress()
-  return progress[section] || false
-}
-
-/**
- * Save last played level
- * @param {string} levelName - Level name (e.g., 'level-word.2')
- */
-export function saveLastLevel(levelName) {
-  const progress = getProgress()
-  progress.lastLevel = levelName
+  progress.sounds[soundName] = status
   
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
@@ -85,52 +74,9 @@ export function saveLastLevel(levelName) {
 }
 
 /**
- * Get last played level
- * @returns {string|null} Last level name or null if no progress
- */
-export function getLastLevel() {
-  const progress = getProgress()
-  return progress.lastLevel || null
-}
-
-/**
  * Reset all progress (for testing)
  */
 export function resetProgress() {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch (error) {
-    // Ignore errors
-  }
-}
-
-/**
- * Get section label positions (arranged in circle)
- * @param {number} centerX - Center X position
- * @param {number} centerY - Center Y position
- * @param {number} radius - Circle radius
- * @returns {Array} Array of section configs with positions
- */
-export function getSectionPositions(centerX, centerY, radius) {
-  const sections = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
-  const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
-  //
-  // Start angle shifted to have 2 anti-heroes at top
-  // -120° puts first anti-hero at top-left, second at top-right
-  //
-  const startAngle = -Math.PI * 2 / 3  // -120 degrees
-  
-  return sections.map((section, index) => {
-    const angle = startAngle + angleStep * index
-    const x = centerX + Math.cos(angle) * radius
-    const y = centerY + Math.sin(angle) * radius
-    
-    return {
-      section,
-      x,
-      y,
-      color: SECTION_COLORS[section]
-    }
-  })
+  delete localStorage[STORAGE_KEY]
 }
 

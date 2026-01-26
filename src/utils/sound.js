@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { get, set } from './progress.js'
 /**
  * Audio context singleton
  * @returns {AudioContext} The single AudioContext instance
@@ -89,6 +90,34 @@ export function create() {
     createGain: () => ctx.createGain(),
     destination: ctx.destination
   }
+}
+/**
+ * Plays a sound without looping and stop it if we quit a scene. Uses localStorage
+ * to not play this song on current level again after it restart
+ * @param {Object} k - Kaplay instance
+ * @param {number} delay - Delay in seconds
+ * @param {string} name - Name of the registered sound
+ * @param {number} volume - Volume of the sound
+ */
+export function playOnce(k, delay, name, volume) {
+  k.wait(delay, () => {
+    const alreadyPlayed = get('sounds.' + name)
+    if (!alreadyPlayed) {
+      playInScene(k, name, volume)
+      set('sounds.' + name, true)
+    }
+  })
+}
+/**
+ * Plays a sound with looping and stop it if we quit a scene
+ * @param {Object} k - Kaplay instance
+ * @param {string} name - Name of the registered sound
+ * @param {number} volume - Volume of the sound
+ */
+export function playInScene(k, name, volume, loop = false) {
+  const sound = k.play(name, { loop, volume })
+  k.onSceneLeave(() => sound?.stop())
+  return sound
 }
 /**
  * Start audio context - initializes and resumes the audio context

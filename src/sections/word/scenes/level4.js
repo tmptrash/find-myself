@@ -7,7 +7,7 @@ import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
@@ -145,7 +145,7 @@ export function sceneLevel4(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-word.4')
+    set('lastLevel', 'level-word.4')
     // Calculate hero position shifted right by 3 blade widths
     const singleBladeWidth = Blades.getSingleBladeWidth(k)
     const customHeroX = HERO_SPAWN_X_BASE + singleBladeWidth * 3  // Shift right by 3 pyramids

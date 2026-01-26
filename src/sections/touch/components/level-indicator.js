@@ -1,6 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
-import { getLastLevel } from '../../../utils/progress.js'
+import { get } from '../../../utils/progress.js'
 
 /**
  * Creates touch section level indicator (letters "TOUCH")
@@ -27,7 +27,7 @@ export function create(config) {
   //
   // Get last completed level from progress
   //
-  const lastLevel = getLastLevel()
+  const lastLevel = get('lastLevel', null)
   const lastLevelNumber = lastLevel ? parseInt(lastLevel.split('.')[1]) : 0
   
   const letters = ['T', 'O', 'U', 'C', 'H']

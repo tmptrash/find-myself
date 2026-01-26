@@ -3,7 +3,9 @@ import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/level-indicator.js'
-import { isSectionComplete } from '../../../utils/progress.js'
+import { get } from '../../../utils/progress.js'
+
+const MUSIC_START_DELAY = 6.0
 //
 // Global music instances for time section (persist across level reloads)
 // Note: clock.mp3 is NOT stored here - it restarts on each level load for sync
@@ -19,18 +21,20 @@ let timeSectionMusic = {
  * @param {Object} k - Kaplay instance
  */
 export function startTimeSectionMusic(k) {
-  if (!timeSectionMusic.kids) {
-    timeSectionMusic.kids = k.play('kids', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.kids
-    })
-  }
-  if (!timeSectionMusic.time) {
-    timeSectionMusic.time = k.play('time', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.time
-    })
-  }
+  k.wait(MUSIC_START_DELAY, () => {
+    if (!timeSectionMusic.kids) {
+      timeSectionMusic.kids = k.play('kids', {
+        loop: true,
+        volume: CFG.audio.backgroundMusic.kids
+      })
+    }
+    if (!timeSectionMusic.time) {
+      timeSectionMusic.time = k.play('time', {
+        loop: true,
+        volume: CFG.audio.backgroundMusic.time
+      })
+    }
+  })
 }
 
 /**
@@ -288,9 +292,9 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
   //
   // Check completed sections for hero appearance
   //
-  const isWordComplete = isSectionComplete('word')
-  const isTimeComplete = isSectionComplete('time')
-  const isTouchComplete = isSectionComplete('touch')
+  const isWordComplete = get('word', false)
+  const isTimeComplete = get('time', false)
+  const isTouchComplete = get('touch', false)
   //
   // Hero body color: yellow if time section complete, otherwise gray
   //

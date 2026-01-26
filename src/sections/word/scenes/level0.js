@@ -5,7 +5,7 @@ import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { getProgress, saveLastLevel } from '../../../utils/progress.js'
+import { getProgress, set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
@@ -56,137 +56,6 @@ let introAnimationComplete = false
 let instructionsAnimationComplete = false
 
 /**
- * Shows a random death message and then restarts the level
- * @param {Object} k - Kaplay instance
- * @param {Object} hero - Hero instance
- * @param {Object} bladesInst - Blades instance that was hit
- */
-function showDeathMessage(k, hero, bladesInst) {
-  //
-  // Select random message
-  //
-  const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
-  
-  //
-  // Calculate position (below bottom platform, centered)
-  //
-  const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
-  
-  //
-  // Create message text
-  //
-  const messageText = k.add([
-    k.text(message, {
-      size: 28,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, messageY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Blade color (steel blue)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
-  
-  //
-  // Animation state
-  //
-  const inst = {
-    k,
-    messageText,
-    timer: 0,
-    phase: 'fade_in',
-    skipRequested: false
-  }
-  
-  //
-  // Listen for skip inputs (space, enter, mouse click)
-  //
-  const skipHandlers = []
-  
-  const requestSkip = () => {
-    inst.skipRequested = true
-  }
-  
-  skipHandlers.push(k.onKeyPress("space", requestSkip))
-  skipHandlers.push(k.onKeyPress("enter", requestSkip))
-  skipHandlers.push(k.onClick(requestSkip))
-  
-  //
-  // Show blades and trigger death animation
-  //
-  if (bladesInst) {
-    bladesInst.wasShownOnDeath = true  // Stop glint animation on death
-    Blades.show(bladesInst)
-  }
-  Hero.death(hero, () => {
-    // This callback will be called after message sequence completes
-  })
-  
-  //
-  // Update animation
-  //
-  const updateInterval = k.onUpdate(() => {
-    inst.timer += k.dt()
-    
-    //
-    // Handle skip request
-    //
-    if (inst.skipRequested) {
-      //
-      // Clean up immediately
-      //
-      updateInterval.cancel()
-      skipHandlers.forEach(h => h.cancel())
-      k.destroy(messageText)
-      //
-      // Restart level
-      //
-      k.go("level-word.0")
-      return
-    }
-    
-    if (inst.phase === 'fade_in') {
-      //
-      // Fade in message
-      //
-      const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = progress
-      
-      if (progress >= 1) {
-        inst.phase = 'hold'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'hold') {
-      //
-      // Hold message
-      //
-      if (inst.timer >= CFG.visual.deathMessage.duration) {
-        inst.phase = 'fade_out'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'fade_out') {
-      //
-      // Fade out message
-      //
-      const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = 1 - progress
-      
-      if (progress >= 1) {
-        //
-        // Clean up and restart level
-        //
-        updateInterval.cancel()
-        skipHandlers.forEach(h => h.cancel())
-        k.destroy(messageText)
-        k.go("level-word.0")
-      }
-    }
-  })
-}
-
-/**
  * Level 0 scene - Introduction level with blade obstacles
  * Three blade blocks: two static, one trap with appearing blades
  * @param {Object} k - Kaplay instance
@@ -196,7 +65,7 @@ export function sceneLevel0(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-word.0')
+    set('lastLevel', 'level-word.0')
     //
     // Initialize level with heroes
     //
@@ -436,6 +305,137 @@ export function sceneLevel0(k) {
         Blades.startAnimation(trapBlades)
       }
     })
+  })
+}
+
+/**
+ * Shows a random death message and then restarts the level
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} bladesInst - Blades instance that was hit
+ */
+function showDeathMessage(k, hero, bladesInst) {
+  //
+  // Select random message
+  //
+  const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
+  
+  //
+  // Calculate position (below bottom platform, centered)
+  //
+  const centerX = CFG.visual.screen.width / 2
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  
+  //
+  // Create message text
+  //
+  const messageText = k.add([
+    k.text(message, {
+      size: 28,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, messageY),
+    k.anchor("center"),
+    k.color(107, 142, 159),  // Blade color (steel blue)
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    messageText,
+    timer: 0,
+    phase: 'fade_in',
+    skipRequested: false
+  }
+  
+  //
+  // Listen for skip inputs (space, enter, mouse click)
+  //
+  const skipHandlers = []
+  
+  const requestSkip = () => {
+    inst.skipRequested = true
+  }
+  
+  skipHandlers.push(k.onKeyPress("space", requestSkip))
+  skipHandlers.push(k.onKeyPress("enter", requestSkip))
+  skipHandlers.push(k.onClick(requestSkip))
+  
+  //
+  // Show blades and trigger death animation
+  //
+  if (bladesInst) {
+    bladesInst.wasShownOnDeath = true  // Stop glint animation on death
+    Blades.show(bladesInst)
+  }
+  Hero.death(hero, () => {
+    // This callback will be called after message sequence completes
+  })
+  
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    
+    //
+    // Handle skip request
+    //
+    if (inst.skipRequested) {
+      //
+      // Clean up immediately
+      //
+      updateInterval.cancel()
+      skipHandlers.forEach(h => h.cancel())
+      k.destroy(messageText)
+      //
+      // Restart level
+      //
+      k.go("level-word.0")
+      return
+    }
+    
+    if (inst.phase === 'fade_in') {
+      //
+      // Fade in message
+      //
+      const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
+      messageText.opacity = progress
+      
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      //
+      // Hold message
+      //
+      if (inst.timer >= CFG.visual.deathMessage.duration) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      //
+      // Fade out message
+      //
+      const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
+      messageText.opacity = 1 - progress
+      
+      if (progress >= 1) {
+        //
+        // Clean up and restart level
+        //
+        updateInterval.cancel()
+        skipHandlers.forEach(h => h.cancel())
+        k.destroy(messageText)
+        k.go("level-word.0")
+      }
+    }
   })
 }
 

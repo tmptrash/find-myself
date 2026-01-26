@@ -4,7 +4,7 @@ import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -42,7 +42,7 @@ export function sceneLevel2(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-time.2')
+    set('lastLevel', 'level-time.2')
     //
     // Stop previous level music (kids.mp3, time.mp3 and clock.mp3 from level 1)
     //
@@ -55,29 +55,9 @@ export function sceneLevel2(k) {
     //
     // Start time.mp3, kids.mp3 and clock.mp3 background music
     //
-    const timeMusic = k.play('time', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.time
-    })
-    const kidsMusic = k.play('kids', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.kids
-    })
-    //
-    // Start clock.mp3 (restarts on each level load for synchronization)
-    //
-    const clockMusic = k.play('clock', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.clock
-    })
-    //
-    // Stop all music when leaving the scene
-    //
-    k.onSceneLeave(() => {
-      timeMusic.stop()
-      kidsMusic.stop()
-      clockMusic.stop()
-    })
+    const timeMusic = Sound.playInScene(k, 'time', CFG.audio.backgroundMusic.time, true)
+    const kidsMusic = Sound.playInScene(k, 'kids', CFG.audio.backgroundMusic.kids, true)
+    const clockMusic = Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
     //
     // Calculate anti-hero position (on final platform)
     // Create the platform FIRST, then position hero above it

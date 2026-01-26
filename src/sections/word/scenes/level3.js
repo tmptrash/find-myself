@@ -6,7 +6,7 @@ import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 
 //
@@ -155,7 +155,7 @@ export function sceneLevel3(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-word.3')
+    set('lastLevel', 'level-word.3')
     // Initialize level with heroes (skip standard platforms)
     const { sound, hero, antiHero } = initScene({
       k,

@@ -2,7 +2,7 @@ import { CFG } from '../cfg.js'
 import { initScene, stopTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
-import { saveLastLevel } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import { getColor } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as TimeSpikes from '../components/time-spikes.js'
@@ -43,7 +43,7 @@ export function sceneLevel3(k) {
     //
     // Save progress immediately when entering this level
     //
-    saveLastLevel('level-time.3')
+    set('lastLevel', 'level-time.3')
     //
     // Stop previous level music
     //

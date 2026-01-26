@@ -1,6 +1,5 @@
 import kaplay from "kaplay"
 import { CFG } from "./cfg.js"
-import { parseHex } from "./utils/helper.js"
 import { sceneReady } from "./scenes/ready.js"
 import { sceneMenu } from "./scenes/menu.js"
 import { sceneLevel0 } from "./sections/word/scenes/level0.js"
@@ -66,19 +65,10 @@ k.loadSound("touch", "/sounds/touch.mp3")
 try {
   loadHeroSprites(k, HEROES.HERO)
   loadHeroSprites(k, HEROES.ANTIHERO)
-} catch (error) {
-  //
-  // If sprite loading fails, continue anyway - sprites will be loaded on-demand in Hero.create()
-  //
-}
-//
-// Load blade sprites
-//
-try {
   loadBladeSprites(k)
 } catch (error) {
   //
-  // If blade sprite loading fails, continue anyway
+  // If sprite loading fails, continue anyway - sprites will be loaded on-demand in Hero.create()
   //
 }
 //

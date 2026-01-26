@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, stopTimeSectionMusic } from '../utils/scene.js'
+import { initScene, startTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
@@ -64,10 +64,6 @@ export function sceneLevel1(k) {
     // Start clock.mp3 locally (restarts on each level load for synchronization)
     //
     Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
-    //
-    // Start beginning phrase about time
-    //
-    Sound.playOnce(k, HERO_FIRST_THOUGHTS_DELAY, 'time1', CFG.audio.backgroundMusic.words)
     //
     // Initialize level with heroes and platforms (skip default platforms)
     //

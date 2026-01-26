@@ -46,10 +46,6 @@ k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "/fonts/JetBrainsMono-Th
 //
 // Load audio
 //
-k.loadSound("word", "/sounds/word.mp3")
-k.loadSound("menu", "/sounds/menu.mp3")
-k.loadSound("kids", "/sounds/kids.mp3")
-k.loadSound("clock", "/sounds/clock.mp3")
 k.loadSound("time", "/sounds/time.mp3")
 k.loadSound("time0", "/sounds/time0.mp3")
 k.loadSound("time0-pre", "/sounds/time0-pre.mp3")
@@ -57,6 +53,17 @@ k.loadSound("time1", "/sounds/time1.mp3")
 k.loadSound("time1-pre", "/sounds/time1-pre.mp3")
 k.loadSound("time2-pre", "/sounds/time2-pre.mp3")
 k.loadSound("time3-pre", "/sounds/time3-pre.mp3")
+
+k.loadSound("word", "/sounds/word.mp3")
+k.loadSound("word0-pre", "/sounds/word0-pre.mp3")
+k.loadSound("word1-pre", "/sounds/word1-pre.mp3")
+k.loadSound("word2-pre", "/sounds/word2-pre.mp3")
+k.loadSound("word3-pre", "/sounds/word3-pre.mp3")
+k.loadSound("word4-pre", "/sounds/word4-pre.mp3")
+
+k.loadSound("menu", "/sounds/menu.mp3")
+k.loadSound("kids", "/sounds/kids.mp3")
+k.loadSound("clock", "/sounds/clock.mp3")
 k.loadSound("touch", "/sounds/touch.mp3")
 //
 // Load default character sprites for both hero types

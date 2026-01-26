@@ -7,9 +7,10 @@ import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as AnalogClock from '../components/analog-clock.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
-import { set, setSoundStatus, get } from '../../../utils/progress.js'
+import { set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { stopTimeSectionMusic } from '../utils/scene.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
@@ -209,6 +210,7 @@ export function sceneLevel0(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
+        stopTimeSectionMusic()
         //
         // After annihilation, show transition and move to level 1
         //

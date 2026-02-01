@@ -102,6 +102,10 @@ export function initScene(config) {
     platformGap = null,
     onAnnihilation = null
   } = config
+  //
+  // For level-time.0, ensure platforms reach screen edges
+  //
+  const isLevel0 = levelName === 'level-time.0'
   
   //
   // Set gravity
@@ -128,7 +132,7 @@ export function initScene(config) {
   // Add platforms (unless skipped)
   //
   if (!skipPlatforms) {
-    addPlatforms(k, CFG.visual.colors.platform, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap)
+    addPlatforms(k, CFG.visual.colors.platform, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap, isLevel0)
   }
   //
   // Add level indicator if levelNumber provided
@@ -180,15 +184,16 @@ export function initScene(config) {
  * @param {number} topHeight - Top platform height
  * @param {number} sideWidth - Side wall width
  * @param {Array} [gaps] - Platform gaps configuration
+ * @param {boolean} [isLevel0=false] - If true, bottom platform extends to screen bottom
  */
-function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null) {
+function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null, isLevel0 = false) {
   const platformRgb = getColor(k, color)?.color
   //
-  // Top platform
+  // Top platform (starts from y=0, extends down by topHeight)
   //
   k.add([
     k.rect(k.width(), topHeight),
-    k.pos(0, 0),
+    k.pos(0, 0),  // Start from top of screen (y = 0)
     k.area(),
     k.body({ isStatic: true }),
     k.color(platformRgb.r, platformRgb.g, platformRgb.b),
@@ -237,11 +242,13 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
     }
   } else {
     //
-    // Solid bottom platform
+    // Solid bottom platform (extends up from bottom of screen)
+    // For level-time.0, make it reach to the very bottom
     //
+    const bottomY = k.height() - bottomHeight  // Position so platform extends to k.height()
     k.add([
       k.rect(k.width(), bottomHeight),
-      k.pos(0, k.height() - bottomHeight),
+      k.pos(0, bottomY),  // Start from calculated Y, extends down to k.height()
       k.area(),
       k.body({ isStatic: true }),
       k.color(platformRgb.r, platformRgb.g, platformRgb.b),

@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { toPng } from '../../../utils/helper.js'
 //
 // Words and fragments related to pain, self-discovery, and introspection
 //
@@ -67,17 +68,6 @@ export function create(config) {
   const width = customBounds.right - customBounds.left
   const height = customBounds.bottom - customBounds.top
   //
-  // Create off-screen canvas for pre-rendering
-  //
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  //
-  // Clear canvas with transparent background
-  //
-  ctx.clearRect(0, 0, width, height)
-  //
   // Generate word data for all layers
   //
   const wordDataLayers = []
@@ -121,15 +111,21 @@ export function create(config) {
   })
   allWords.sort((a, b) => a.zIndex - b.zIndex)
   //
-  // Render all words to canvas
+  // Render all words to canvas using toPng
   //
-  allWords.forEach(word => {
-    renderWordToCanvas(ctx, word)
+  const dataURL = toPng({ width, height, pixelRatio: 1 }, (ctx) => {
+    //
+    // Clear canvas with transparent background
+    //
+    ctx.clearRect(0, 0, width, height)
+    
+    allWords.forEach(word => {
+      renderWordToCanvas(ctx, word)
+    })
   })
   //
   // Load canvas as sprite
   //
-  const dataURL = canvas.toDataURL()
   const spriteId = `word-pile-bg-${Date.now()}-${Math.random()}`
   k.loadSprite(spriteId, dataURL)
   //

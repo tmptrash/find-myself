@@ -10,7 +10,7 @@ const TICK_LENGTH = 12  // Length of tick marks (increased from 8)
 const TICK_WIDTH = 3  // Width of tick marks (increased from 2)
 const FACE_COLOR = { r: 80, g: 80, b: 80 }  // Dark gray for clock face
 const HAND_COLOR = { r: 144, g: 144, b: 144 }  // Same color as sand particles (#909090)
-const CLOCK_OPACITY = 1.0  // Fully opaque
+const CLOCK_OPACITY = 0.0  // Transparent (clock face is invisible)
 //
 // Gray shades for pulsation (from dark to light and back)
 // Moves away from face color and back each second
@@ -96,32 +96,34 @@ export function draw(inst) {
   const glowG = shade.g
   const glowB = shade.b
   //
-  // Draw thin pulsating ring
+  // Draw thin pulsating ring (transparent when clock is transparent)
   //
   const outerRadius = CLOCK_RADIUS + 12
   const innerRadius = CLOCK_RADIUS + 9  // Thin ring (3px width)
   //
-  // Draw outer circle
+  // Draw outer circle (only if clock is visible)
   //
-  k.drawCircle({
-    pos: k.vec2(x, y),
-    radius: outerRadius,
-    color: k.rgb(glowR, glowG, glowB),
-    opacity: 0.8,
-    fill: true
-  })
+  if (CLOCK_OPACITY > 0) {
+    k.drawCircle({
+      pos: k.vec2(x, y),
+      radius: outerRadius,
+      color: k.rgb(glowR, glowG, glowB),
+      opacity: 0.8 * CLOCK_OPACITY,
+      fill: true
+    })
+    //
+    // Draw inner circle (to create ring effect) - use background color
+    //
+    k.drawCircle({
+      pos: k.vec2(x, y),
+      radius: innerRadius,
+      color: k.rgb(80, 80, 80),  // Same as background
+      opacity: 1.0,
+      fill: true
+    })
+  }
   //
-  // Draw inner circle (to create ring effect) - use background color
-  //
-  k.drawCircle({
-    pos: k.vec2(x, y),
-    radius: innerRadius,
-    color: k.rgb(80, 80, 80),  // Same as background
-    opacity: 1.0,
-    fill: true
-  })
-  //
-  // Draw clock face circle (gray background)
+  // Draw clock face circle (transparent)
   //
   k.drawCircle({
     pos: k.vec2(x, y),

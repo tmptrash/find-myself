@@ -750,9 +750,14 @@ export function sceneMenu(k) {
         }
         
         //
-        // Play heartbeat sound only for current section anti-hero
+        // Play heartbeat sound for current section anti-hero OR time anti-hero when localStorage is empty
         //
-        if (isCurrentSectionHover) {
+        const lastLevel = get('lastLevel', null)
+        const isEmptyLocalStorage = lastLevel === null
+        const timeAntiHero = antiHeroes.find(ah => ah.section === 'time')
+        const isTimeAntiHeroHover = isEmptyLocalStorage && timeAntiHero && !timeAntiHero.isCompleted && hoveredInst === timeAntiHero
+        
+        if (isCurrentSectionHover || isTimeAntiHeroHover) {
           const HEARTBEAT_INTERVAL = 1.0
           if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
             Sound.playHeartbeatSound(sound)

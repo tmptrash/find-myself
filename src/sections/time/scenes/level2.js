@@ -4,8 +4,10 @@ import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/time-spikes.js'
 import * as Sound from '../../../utils/sound.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as CityBackground from '../components/city-background.js'
+import * as LevelIndicator from '../components/level-indicator.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -139,9 +141,74 @@ export function sceneLevel2(k) {
       FpsCounter.onUpdate(fpsCounter)
     })
     //
+    // Add city background (preloaded sprite)
+    //
+    k.add([
+      k.sprite('city-background-level2'),
+      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height / 2),
+      k.anchor('center'),
+      k.z(14)  // Behind platforms (15) and snow (14.5)
+    ])
+    //
     // Create custom platforms for this level
     //
     createLevelPlatforms(k, sound)
+    //
+    // Create small hero icon and life.png image below level indicator letters
+    // Hero centered on letter T, dropped down by half of small hero height
+    //
+    const levelIndicatorY = PLATFORM_TOP_HEIGHT - 48 - 10  // Same Y as level indicator letters
+    const levelIndicatorStartX = PLATFORM_SIDE_WIDTH + 20  // Same X as level indicator start
+    const fontSize = 48  // Font size of level indicator letters
+    const letterSpacing = -5  // Letter spacing
+    const letterT_X = levelIndicatorStartX  // X position of letter T (first letter)
+    const letterT_CenterX = letterT_X + fontSize / 2  // Center X of letter T
+    const smallHeroSize = 66  // Increased by 10% (60 * 1.1)
+    const smallHeroDropDown = smallHeroSize / 2  // Drop down by half of hero height
+    const lifeImageHeight = 60  // Increased by 2x (30 * 2), center stays at same Y
+    const heroOffsetLeft = -15  // Move hero left
+    const spacingBetween = 70  // Increased spacing to move life further right
+    const lifeImageOriginalHeight = 1197  // Original height of life.png
+    
+    //
+    // Create small hero (2x smaller, static, time section colors)
+    // Check completed sections for hero parts (mouth, arms)
+    //
+    const isWordComplete = get('word', false)
+    const isTouchComplete = get('touch', false)
+    
+    const smallHeroY = levelIndicatorY + fontSize + smallHeroDropDown  // Below letters, dropped by half hero height
+    const smallHero = Hero.create({
+      k,
+      x: letterT_CenterX + heroOffsetLeft,  // Moved left from center of letter T
+      y: smallHeroY,
+      type: Hero.HEROES.HERO,
+      controllable: false,
+      isStatic: true,
+      scale: 2.0625,  // Increased by 10% (1.875 * 1.1)
+      bodyColor: CFG.visual.colors.hero.body,
+      outlineColor: CFG.visual.colors.outline,
+      addMouth: isWordComplete,  // Add mouth if word section is complete
+      addArms: isTouchComplete  // Add arms if touch section is complete
+    })
+    smallHero.character.fixed = true  // Fixed position
+    smallHero.character.z = CFG.visual.zIndex.ui
+    
+    //
+    // Load and add life.png image (scaled to 2x size, increased by 10%, center stays at same Y)
+    // Positioned to the right of small hero at the same vertical level
+    //
+    k.loadSprite('life', '/life.png')
+    const lifeImageX = letterT_CenterX + smallHeroSize / 2 + spacingBetween + heroOffsetLeft
+    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.1  // Scale to 60px height * 1.1 (increased by 10%)
+    k.add([
+      k.sprite('life'),
+      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (center stays at same vertical position)
+      k.scale(lifeImageScale),
+      k.anchor('center'),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
     //
     // Create clouds under top platform (where snow falls from)
     //
@@ -157,11 +224,16 @@ export function sceneLevel2(k) {
       updateSnowParticles(snowSystem)
     })
     //
-    // Draw snow particles
+    // Draw snow particles (using k.add with draw method for proper z-index)
     //
-    k.onDraw(() => {
-      drawSnowParticles(snowSystem)
-    })
+    k.add([
+      {
+        draw() {
+          drawSnowParticles(snowSystem)
+        }
+      },
+      k.z(16)  // Above platforms (15) and city background (14) but below hero (20)
+    ])
     //
     // Create time spikes (digit "1") at bottom platform level
     //
@@ -1140,7 +1212,7 @@ function createCloudsUnderTopPlatform(k) {
   cloudConfigs.forEach((cloudConfig) => {
     k.add([
       k.pos(cloudConfig.x, cloudConfig.y),
-      k.z(CFG.visual.zIndex.platforms - 1),  // Behind platforms
+      k.z(14.5),  // Above city background (14) but below platforms (15) and other elements
       {
         draw() {
           //
@@ -1177,21 +1249,31 @@ function createCloudsUnderTopPlatform(k) {
 
 /**
  * Create snow particle system
+ * Snow particles stay within game area (between side platforms, from clouds to bottom platform)
  * @param {Object} k - Kaplay instance
  * @returns {Object} Snow system instance
  */
 function createSnowParticles(k) {
   const particles = []
   const PARTICLE_COUNT = 150
-  const WIDTH = k.width()
-  const HEIGHT = k.height()
   //
-  // Create particles with random initial positions
+  // Game area boundaries
+  // Add small margin to ensure particles don't overlap with platform edges
+  //
+  const MARGIN = 2  // Small margin from platform edges
+  const gameAreaLeft = PLATFORM_SIDE_WIDTH + MARGIN  // Inside left platform
+  const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH - MARGIN  // Inside right platform
+  const gameAreaTop = PLATFORM_TOP_HEIGHT + 100  // Start from clouds area
+  const gameAreaBottom = k.height() - PLATFORM_BOTTOM_HEIGHT  // End at bottom platform
+  const gameAreaWidth = gameAreaRight - gameAreaLeft
+  const gameAreaHeight = gameAreaBottom - gameAreaTop
+  //
+  // Create particles with random initial positions within game area
   //
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     particles.push({
-      x: Math.random() * WIDTH,
-      y: Math.random() * HEIGHT,
+      x: gameAreaLeft + Math.random() * gameAreaWidth,
+      y: gameAreaTop + Math.random() * gameAreaHeight,
       size: 1 + Math.random() * 2,  // Size between 1-3px
       speedX: 30 + Math.random() * 40,  // Horizontal speed (left to right)
       speedY: 50 + Math.random() * 50,  // Vertical speed (falling down)
@@ -1202,17 +1284,22 @@ function createSnowParticles(k) {
   return {
     k,
     particles,
-    width: WIDTH,
-    height: HEIGHT
+    gameAreaLeft,
+    gameAreaRight,
+    gameAreaTop,
+    gameAreaBottom,
+    gameAreaWidth,
+    gameAreaHeight
   }
 }
 
 /**
  * Update snow particles
+ * Keep particles within game area boundaries
  * @param {Object} inst - Snow system instance
  */
 function updateSnowParticles(inst) {
-  const { k, particles, width, height } = inst
+  const { k, particles, gameAreaLeft, gameAreaRight, gameAreaTop, gameAreaBottom, gameAreaWidth, gameAreaHeight } = inst
   const dt = k.dt()
   //
   // Update each particle
@@ -1224,15 +1311,44 @@ function updateSnowParticles(inst) {
     p.x += p.speedX * dt
     p.y += p.speedY * dt
     //
-    // Wrap around when particle goes off screen
+    // Keep particles within game area boundaries
+    // Account for particle size to ensure no overlap with platforms
     //
-    if (p.x > width) {
-      p.x = -10
-      p.y = Math.random() * height
+    const halfSize = p.size / 2
+    //
+    // Horizontal boundaries (left and right platforms)
+    // Wrap particles but ensure they don't overlap platform edges
+    //
+    if (p.x + halfSize >= gameAreaRight) {
+      //
+      // Particle (including its size) reached or passed right platform boundary, wrap to left side
+      //
+      p.x = gameAreaLeft + halfSize + Math.random() * 10  // Start from left boundary with margin
+      p.y = gameAreaTop + Math.random() * gameAreaHeight
     }
-    if (p.y > height) {
-      p.y = -10
-      p.x = Math.random() * width
+    if (p.x - halfSize <= gameAreaLeft) {
+      //
+      // Particle (including its size) reached or passed left platform boundary, wrap to right side
+      //
+      p.x = gameAreaRight - halfSize - Math.random() * 10  // Start from right boundary with margin
+      p.y = gameAreaTop + Math.random() * gameAreaHeight
+    }
+    //
+    // Vertical boundaries (clouds top and bottom platform)
+    //
+    if (p.y > gameAreaBottom) {
+      //
+      // Particle went past bottom platform, reset to top (clouds area)
+      //
+      p.y = gameAreaTop + Math.random() * 20  // Random position near top
+      p.x = gameAreaLeft + Math.random() * gameAreaWidth
+    }
+    if (p.y < gameAreaTop) {
+      //
+      // Particle went above clouds, reset to bottom
+      //
+      p.y = gameAreaBottom - Math.random() * 20  // Random position near bottom
+      p.x = gameAreaLeft + Math.random() * gameAreaWidth
     }
   })
 }
@@ -1252,8 +1368,7 @@ function drawSnowParticles(inst) {
       height: p.size,
       pos: k.vec2(p.x, p.y),
       color: k.rgb(255, 255, 255),
-      opacity: p.opacity,
-      z: 5  // Above background but below platforms and hero
+      opacity: p.opacity
     })
   })
 }

@@ -19,6 +19,7 @@ import { sceneLevel3 as sceneTimeLevel3 } from "./sections/time/scenes/level3.js
 import { sceneTimeComplete } from "./sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
+import * as CityBackground from "./sections/time/components/city-background.js"
 //
 // Game initialization
 //
@@ -74,6 +75,15 @@ try {
   loadHeroSprites(k, HEROES.HERO)
   loadHeroSprites(k, HEROES.ANTIHERO)
   loadBladeSprites(k)
+  //
+  // Preload city backgrounds for time section levels
+  //
+  const PLATFORM_BOTTOM_HEIGHT_LEVEL0 = 250  // Same as in level0.js
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL0, 'city-background')
+  const PLATFORM_BOTTOM_HEIGHT_LEVEL1 = 150  // Same as in level1.js
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1')
+  const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150  // Same as in level2.js
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2')
 } catch (error) {
   //
   // If sprite loading fails, continue anyway - sprites will be loaded on-demand in Hero.create()

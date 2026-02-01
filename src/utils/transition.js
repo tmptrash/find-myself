@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
 import { setSectionCompleted, set } from './progress.js'
 import * as Sound from './sound.js'
+import { stopTimeSectionMusic } from '../sections/time/utils/scene.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -253,6 +254,30 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         const soundName = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[1] : null
 
         if (subtitle) {
+          //
+          // Stop all music and sound effects, keep only voice-over (xxx-pre files)
+          //
+          stopTimeSectionMusic()
+          //
+          // Stop all Kaplay sounds except voice-over (xxx-pre files)
+          // Stop clock.mp3, time.mp3, kids.mp3, word.mp3, touch.mp3, menu.mp3
+          //
+          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
+          soundsToStop.forEach(soundName => {
+            try {
+              const sound = k.getSound(soundName)
+              if (sound && sound.isPlaying && sound.isPlaying()) {
+                sound.stop()
+              }
+            } catch (e) {
+              // Sound not found or already stopped
+            }
+          })
+          //
+          // Stop global background music if playing
+          //
+          const soundInst = Sound.create()
+          Sound.stopBackgroundMusic(soundInst)
           //
           // Get color based on section
           //

@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor } from '../utils/helper.js'
+import { getColor, toPng } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Particles from '../utils/particles.js'
@@ -79,7 +79,7 @@ const TITLE_FLICKER_MAX = 1.0
 const HINT_Y = 1030
 
 export function sceneReady(k) {
-  k.scene('ready', () => {
+  k.scene('ready', async () => {
     //
     // Reset background color to black (in case coming from time section)
     //
@@ -333,13 +333,24 @@ export function sceneReady(k) {
     //
     const availableWidth = k.width() - LAYOUT_HORIZONTAL_MARGIN * 2
     
-    const titleLayout = generateLayout({
-      text: TITLE_TEXT,
-      fontSize: TITLE_FONT_SIZE,
-      centerX,
-      centerY,
-      fontFamily: TITLE_FONT_FAMILY
-    })
+    let titleLayout
+    try {
+      titleLayout = await generateLayout({
+        text: TITLE_TEXT,
+        fontSize: TITLE_FONT_SIZE,
+        centerX,
+        centerY,
+        fontFamily: TITLE_FONT_FAMILY
+      })
+    } catch (error) {
+      console.error('Failed to generate title layout:', error)
+      return
+    }
+    
+    if (!titleLayout || !titleLayout.positions) {
+      console.error('Title layout is invalid:', titleLayout)
+      return
+    }
     
     const particleSystem = createParticleSystem(k, titleLayout.positions, 0)
     
@@ -348,7 +359,7 @@ export function sceneReady(k) {
     // They will fade in after instructions disappear
     //
     
-    const quotePrimaryLayout = generateLayout({
+    const quotePrimaryLayout = await generateLayout({
       text: QUOTE_PRIMARY_TEXT,
       fontSize: QUOTE_PRIMARY_FONT_SIZE,
       centerX,
@@ -363,7 +374,7 @@ export function sceneReady(k) {
     })
     
     const quoteSecondaryCenterY = centerY
-    const quoteSecondaryLayout = generateLayout({
+    const quoteSecondaryLayout = await generateLayout({
       text: QUOTE_SECONDARY_TEXT,
       fontSize: QUOTE_SECONDARY_FONT_SIZE,
       centerX,
@@ -381,7 +392,7 @@ export function sceneReady(k) {
     // Arrow layout - positioned above hint text
     //
     const arrowCenterY = HINT_Y - 180  // Position arrow higher above hint
-    const arrowLayout = generateLayout({
+    const arrowLayout = await generateLayout({
       text: ARROW_TEXT,
       fontSize: ARROW_FONT_SIZE,
       centerX,
@@ -836,11 +847,11 @@ function createParticleSystem(k, layoutPositions, initialOpacity = 0.4) {
   }
 }
 
-function generateLayout({
+async function generateLayout({
   text,
   fontSize,
   centerX,
-  centerY,
+  centerY,  
   desiredCount,
   samplingProbability = 0.8,
   minDistance = 4,
@@ -853,88 +864,130 @@ function generateLayout({
   const padding = 24
   const lineHeight = fontSize * 1.2
   
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  ctx.font = `${fontSize}px ${fontFamily}`
+  //
+  // Measure text first (need temporary canvas for measurement)
+  //
+  const tempCanvas = document.createElement('canvas')
+  const tempCtx = tempCanvas.getContext('2d')
+  tempCtx.font = `${fontSize}px ${fontFamily}`
   
-  const maxLineWidth = Math.max(...lines.map(line => ctx.measureText(line).width))
+  const maxLineWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width))
   const rawCanvasWidth = Math.ceil(maxLineWidth + padding * 2)
   const canvasHeight = Math.ceil(lineHeight * lines.length + padding * 2)
-  
-  canvas.width = rawCanvasWidth
-  canvas.height = canvasHeight
-  
-  ctx.fillStyle = 'white'
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
   
   const scaleX = maxWidth ? Math.min(1, maxWidth / rawCanvasWidth) : 1
   const effectiveWidth = rawCanvasWidth * scaleX
   
-  ctx.save()
-  ctx.translate(rawCanvasWidth / 2, 0)
-  ctx.scale(scaleX, 1)
-  
-  const strokeWidth = singlePixelStroke ? Math.max(0.75, 1 / scaleX) : 1
-  ctx.lineWidth = strokeWidth
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = 'white'
-  
-  lines.forEach((line, index) => {
-    const lineY = padding + lineHeight * index + lineHeight / 2
-    if (singlePixelStroke) {
-      ctx.strokeText(line, 0, lineY)
-    } else {
-      ctx.fillText(line, 0, lineY)
-    }
+  //
+  // Render text using toPng, then extract ImageData for pixel processing
+  //
+  const dataURL = toPng({ width: rawCanvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.fillStyle = 'white'
+    ctx.font = `${fontSize}px ${fontFamily}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    ctx.save()
+    ctx.translate(rawCanvasWidth / 2, 0)
+    ctx.scale(scaleX, 1)
+    
+    const strokeWidth = singlePixelStroke ? Math.max(0.75, 1 / scaleX) : 1
+    ctx.lineWidth = strokeWidth
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    ctx.strokeStyle = 'white'
+    
+    lines.forEach((line, index) => {
+      const lineY = padding + lineHeight * index + lineHeight / 2
+      if (singlePixelStroke) {
+        ctx.strokeText(line, 0, lineY)
+      } else {
+        ctx.fillText(line, 0, lineY)
+      }
+    })
+    
+    ctx.restore()
   })
   
-  ctx.restore()
-  
-  const imageData = ctx.getImageData(0, 0, rawCanvasWidth, canvasHeight)
-  const pixels = imageData.data
-  
-  const edgePixels = collectEdgePixels(rawCanvasWidth, canvasHeight, pixels)
-  shuffle(edgePixels)
-  
-  const positions = []
-  const temp = []
-  
-  for (let i = 0; i < edgePixels.length; i++) {
-    const pixel = edgePixels[i]
-    if (Math.random() > samplingProbability) continue
-    if (!isFarEnough(pixel.x, pixel.y, temp, minDistance)) continue
-    temp.push(pixel)
+  //
+  // Convert data URL to ImageData for pixel extraction
+  // Need to load image and extract pixels
+  //
+  const img = new Image()
+  return await new Promise((resolve, reject) => {
+    img.onload = () => {
+      try {
+        const renderCanvas = document.createElement('canvas')
+        renderCanvas.width = rawCanvasWidth
+        renderCanvas.height = canvasHeight
+        const renderCtx = renderCanvas.getContext('2d')
+        renderCtx.drawImage(img, 0, 0)
+        const imageData = renderCtx.getImageData(0, 0, rawCanvasWidth, canvasHeight)
+        const pixels = imageData.data
+        
+        const edgePixels = collectEdgePixels(rawCanvasWidth, canvasHeight, pixels)
+        shuffle(edgePixels)
+        
+        const positions = []
+        const temp = []
+        
+        for (let i = 0; i < edgePixels.length; i++) {
+          const pixel = edgePixels[i]
+          if (Math.random() > samplingProbability) continue
+          if (!isFarEnough(pixel.x, pixel.y, temp, minDistance)) continue
+          temp.push(pixel)
+          
+          const worldX = centerX - effectiveWidth / 2 + pixel.x * scaleX
+          const worldY = centerY - canvasHeight / 2 + pixel.y
+          positions.push({ x: worldX, y: worldY })
+        }
+        
+        let finalPositions = positions
+        if (desiredCount) {
+          finalPositions = normalizeLayoutCount(
+            positions,
+            desiredCount,
+            centerX,
+            centerY,
+            morphTargets
+          )
+        }
+        
+        const metrics = {
+          width: effectiveWidth,
+          height: canvasHeight,
+          lineHeight,
+          lines: lines.length
+        }
+        
+        resolve({
+          positions: finalPositions,
+          metrics
+        })
+      } catch (error) {
+        reject(error)
+      }
+    }
+    img.onerror = () => {
+      reject(new Error('Failed to load image from data URL'))
+    }
     
-    const worldX = centerX - effectiveWidth / 2 + pixel.x * scaleX
-    const worldY = centerY - canvasHeight / 2 + pixel.y
-    positions.push({ x: worldX, y: worldY })
-  }
-  
-  let finalPositions = positions
-  if (desiredCount) {
-    finalPositions = normalizeLayoutCount(
-      positions,
-      desiredCount,
-      centerX,
-      centerY,
-      morphTargets
-    )
-  }
-  
-  const metrics = {
-    width: effectiveWidth,
-    height: canvasHeight,
-    lineHeight,
-    lines: lines.length
-  }
-  
-  return {
-    positions: finalPositions,
-    metrics
-  }
+    //
+    // Set src after handlers are attached
+    //
+    img.src = dataURL
+    
+    //
+    // Check if image is already loaded (for cached images)
+    // This must be checked AFTER setting src
+    //
+    if (img.complete && img.naturalHeight !== 0) {
+      //
+      // Image already loaded, trigger onload manually
+      //
+      setTimeout(() => img.onload(), 0)
+    }
+  })
 }
 
 function normalizeLayoutCount(positions, desiredCount, centerX, centerY, morphTargets) {

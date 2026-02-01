@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex } from '../../../utils/helper.js'
+import { getHex, toPng } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 
@@ -565,9 +565,6 @@ function drawGlint(inst) {
  * @returns {string} Base64 encoded sprite data
  */
 function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  
   //
   // Font settings
   //
@@ -577,11 +574,13 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
   const letterSpacing = 0
   
   //
-  // Measure text to get dimensions
+  // Measure text to get dimensions (need temporary canvas for measurement)
   //
-  ctx.font = `${fontSize}px ${fontFamily}`
+  const tempCanvas = document.createElement('canvas')
+  const tempCtx = tempCanvas.getContext('2d')
+  tempCtx.font = `${fontSize}px ${fontFamily}`
   const letterText = 'A'.repeat(bladeCount)
-  const metrics = ctx.measureText(letterText)
+  const metrics = tempCtx.measureText(letterText)
   const textWidth = metrics.width + (bladeCount - 1) * letterSpacing
   const textHeight = fontSize * 1.4
   
@@ -589,18 +588,11 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
   // Set canvas size with padding for outline
   //
   const padding = outlineWidth * 4
-  canvas.width = textWidth + padding * 2
-  canvas.height = textHeight + padding * 2
-  
-  //
-  // Set text rendering properties
-  //
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textBaseline = 'bottom'
-  ctx.textAlign = 'left'
+  const canvasWidth = textWidth + padding * 2
+  const canvasHeight = textHeight + padding * 2
   
   const baseX = padding
-  const baseY = canvas.height - padding - 12
+  const baseY = canvasHeight - padding - 12
   
   //
   // Draw black outline by rendering text multiple times with offset
@@ -616,23 +608,30 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
     [outlineWidth, outlineWidth]
   ]
   
-  ctx.fillStyle = '#000000'
-  for (let i = 0; i < bladeCount; i++) {
-    const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
-    offsets.forEach(([offsetX, offsetY]) => {
-      ctx.fillText('A', letterX + offsetX, baseY + offsetY)
-    })
-  }
-  
-  //
-  // Draw main text (colored)
-  //
-  ctx.fillStyle = getHex(color)
-  for (let i = 0; i < bladeCount; i++) {
-    const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
-    ctx.fillText('A', letterX, baseY)
-  }
-
-  return canvas.toDataURL()
+  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+    //
+    // Set text rendering properties
+    //
+    ctx.font = `${fontSize}px ${fontFamily}`
+    ctx.textBaseline = 'bottom'
+    ctx.textAlign = 'left'
+    
+    ctx.fillStyle = '#000000'
+    for (let i = 0; i < bladeCount; i++) {
+      const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
+      offsets.forEach(([offsetX, offsetY]) => {
+        ctx.fillText('A', letterX + offsetX, baseY + offsetY)
+      })
+    }
+    
+    //
+    // Draw main text (colored)
+    //
+    ctx.fillStyle = getHex(color)
+    for (let i = 0; i < bladeCount; i++) {
+      const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
+      ctx.fillText('A', letterX, baseY)
+    }
+  })
 }
 

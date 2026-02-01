@@ -296,20 +296,11 @@ export function sceneLevel2(k) {
       const canvasCenterY = canvasHeight / 2
       
       //
-      // Create canvas
-      //
-      const canvas = document.createElement('canvas')
-      canvas.width = canvasWidth
-      canvas.height = canvasHeight
-      const ctx = canvas.getContext('2d')
-      
-      //
-      // Set fill color (convert Kaplay color to hex)
+      // Create arrow sprite using toPng
       //
       const fillR = Math.round(arrowFillColor.r)
       const fillG = Math.round(arrowFillColor.g)
       const fillB = Math.round(arrowFillColor.b)
-      ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
       
       //
       // Arrow body (rectangle) - left side
@@ -334,17 +325,20 @@ export function sceneLevel2(k) {
       const outlineWidth = 3
       const outlineLayers = 3
       
-      for (let layer = outlineLayers; layer > 0; layer--) {
-        const layerWidth = outlineWidth * (layer / outlineLayers)
-        const layerOpacity = .8
+      const dataURL = toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+        ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
         
-        ctx.strokeStyle = `rgba(0, 0, 0, ${layerOpacity})`
-        ctx.lineWidth = layerWidth
-        ctx.lineJoin = 'round'
-        ctx.lineCap = 'round'
-        
-        //
-        // Draw arrow body outline (rectangle)
+        for (let layer = outlineLayers; layer > 0; layer--) {
+          const layerWidth = outlineWidth * (layer / outlineLayers)
+          const layerOpacity = .8
+          
+          ctx.strokeStyle = `rgba(0, 0, 0, ${layerOpacity})`
+          ctx.lineWidth = layerWidth
+          ctx.lineJoin = 'round'
+          ctx.lineCap = 'round'
+          
+          //
+          // Draw arrow body outline (rectangle)
         //
         ctx.strokeRect(
           bodyLeftX - layerWidth / 2,
@@ -360,29 +354,26 @@ export function sceneLevel2(k) {
         ctx.moveTo(tipX + layerWidth / 2, tipY)
         ctx.lineTo(baseLeftX - layerWidth / 2, baseLeftY - layerWidth / 2)
         ctx.lineTo(baseRightX - layerWidth / 2, baseRightY + layerWidth / 2)
+          ctx.closePath()
+          ctx.stroke()
+        }
+        
+        //
+        // Draw arrow body fill (rectangle)
+        //
+        ctx.fillRect(bodyLeftX, bodyTopY, ARROW_BODY_LENGTH, ARROW_BODY_WIDTH)
+        
+        //
+        // Draw arrowhead fill (triangle)
+        //
+        ctx.beginPath()
+        ctx.moveTo(tipX, tipY)
+        ctx.lineTo(baseLeftX, baseLeftY)
+        ctx.lineTo(baseRightX, baseRightY)
         ctx.closePath()
-        ctx.stroke()
-      }
+        ctx.fill()
+      })
       
-      //
-      // Draw arrow body fill (rectangle)
-      //
-      ctx.fillRect(bodyLeftX, bodyTopY, ARROW_BODY_LENGTH, ARROW_BODY_WIDTH)
-      
-      //
-      // Draw arrowhead fill (triangle)
-      //
-      ctx.beginPath()
-      ctx.moveTo(tipX, tipY)
-      ctx.lineTo(baseLeftX, baseLeftY)
-      ctx.lineTo(baseRightX, baseRightY)
-      ctx.closePath()
-      ctx.fill()
-      
-      //
-      // Convert canvas to data URL and load as sprite
-      //
-      const dataURL = canvas.toDataURL()
       const spriteId = `arrow-touch-level2-${Date.now()}`
       k.loadSprite(spriteId, dataURL)
       
@@ -1448,52 +1439,47 @@ function createBackgroundBushesNear(k) {
   }
   
   //
-  // Create canvas and draw bushes on it
+  // Create canvas and draw bushes on it using toPng
   //
   const createBushesCanvas = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = k.width()
-    canvas.height = k.height()
-    const ctx = canvas.getContext('2d')
-    
     //
     // Calculate arc multiplier for bushes (higher at edges, lower in center)
     //
     const screenCenter = k.width() / 2
     const maxDistance = Math.max(screenCenter - LEFT_MARGIN, k.width() - RIGHT_MARGIN - screenCenter)
     
-    //
-    // Draw bushes on canvas with arc variation
-    //
-    bushes.forEach(bush => {
-      const sway = 0  // No sway for static canvas
-      
+    return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
       //
-      // Calculate distance from center and apply arc formula
+      // Draw bushes on canvas with arc variation
       //
-      const distanceFromCenter = Math.abs(bush.x - screenCenter)
-      const normalizedDistance = distanceFromCenter / maxDistance  // 0 at center, 1 at edges
-      const arcMultiplier = 0.7 + normalizedDistance * 0.6  // 0.7 at center, 1.3 at edges (creates arc)
-      
-      bush.crowns.forEach(crown => {
-        ctx.fillStyle = `rgba(${bush.color.r}, ${bush.color.g}, ${bush.color.b}, ${bush.opacity * crown.opacityVariation})`
-        ctx.beginPath()
-        ctx.arc(
-          bush.x + crown.offsetX + sway,
-          bush.y + crown.offsetY,
-          bush.size * crown.sizeVariation * 0.5 * arcMultiplier,  // Apply arc multiplier to size
-          0,
-          Math.PI * 2
-        )
-        ctx.fill()
+      bushes.forEach(bush => {
+        const sway = 0  // No sway for static canvas
+        
+        //
+        // Calculate distance from center and apply arc formula
+        //
+        const distanceFromCenter = Math.abs(bush.x - screenCenter)
+        const normalizedDistance = distanceFromCenter / maxDistance  // 0 at center, 1 at edges
+        const arcMultiplier = 0.7 + normalizedDistance * 0.6  // 0.7 at center, 1.3 at edges (creates arc)
+        
+        bush.crowns.forEach(crown => {
+          ctx.fillStyle = `rgba(${bush.color.r}, ${bush.color.g}, ${bush.color.b}, ${bush.opacity * crown.opacityVariation})`
+          ctx.beginPath()
+          ctx.arc(
+            bush.x + crown.offsetX + sway,
+            bush.y + crown.offsetY,
+            bush.size * crown.sizeVariation * 0.5 * arcMultiplier,  // Apply arc multiplier to size
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+        })
       })
     })
-    
-    return canvas
   }
   
-  const bushesCanvas = createBushesCanvas()
-  const bushesTexture = k.loadSprite('bg-touch-level2-background-bushes-near', bushesCanvas.toDataURL())
+  const bushesDataURL = createBushesCanvas()
+  const bushesTexture = k.loadSprite('bg-touch-level2-background-bushes-near', bushesDataURL)
   
   //
   // Draw bushes canvas (in front of far bushes, but behind trees)
@@ -1630,25 +1616,9 @@ function createMountains(k) {
   }
   
   //
-  // Create canvas for mountains
+  // Create canvas for mountains using toPng
   //
   const createMountainsCanvas = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = screenWidth
-    canvas.height = screenHeight
-    const ctx = canvas.getContext('2d')
-    
-    //
-    // Disable anti-aliasing for pixel art effect
-    //
-    ctx.imageSmoothingEnabled = false
-    
-    //
-    // Draw dark night sky (fill entire canvas to avoid horizontal line)
-    //
-    ctx.fillStyle = colors.sky
-    ctx.fillRect(0, 0, screenWidth, screenHeight)
-    
     //
     // Draw three mountains: left (shadowed, lower), center (higher, sharper), right (light)
     // Made higher and stretched horizontally
@@ -1691,41 +1661,52 @@ function createMountains(k) {
     const rightMountainX = screenThird * 2 - 150  // Start further left
     const rightMountainWidth = screenThird + 250  // Wider, extends to edge
     
-    //
-    // Draw left mountain (shadowed, darker colors)
-    //
-    drawMountain(ctx, leftMountainX, horizonY, leftMountainWidth, leftMountainHeight, leftMountainParams, 1.0, {
-      snow: 'rgb(200, 210, 220)',  // Darker snow
-      rockLeft: 'rgb(50, 80, 100)',  // Darker left rock
-      rockRight: 'rgb(40, 70, 90)',  // Darker right rock
-      rockRightLight: 'rgb(90, 130, 150)'  // Darker light rock
+    return toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+      //
+      // Disable anti-aliasing for pixel art effect
+      //
+      ctx.imageSmoothingEnabled = false
+      
+      //
+      // Draw dark night sky (fill entire canvas to avoid horizontal line)
+      //
+      ctx.fillStyle = colors.sky
+      ctx.fillRect(0, 0, screenWidth, screenHeight)
+      
+      //
+      // Draw left mountain (shadowed, darker colors)
+      //
+      drawMountain(ctx, leftMountainX, horizonY, leftMountainWidth, leftMountainHeight, leftMountainParams, 1.0, {
+        snow: 'rgb(200, 210, 220)',  // Darker snow
+        rockLeft: 'rgb(50, 80, 100)',  // Darker left rock
+        rockRight: 'rgb(40, 70, 90)',  // Darker right rock
+        rockRightLight: 'rgb(90, 130, 150)'  // Darker light rock
+      })
+      
+      //
+      // Draw center mountain (higher, sharper, normal colors)
+      //
+      drawMountain(ctx, centerMountainX, horizonY, centerMountainWidth, centerMountainHeight, centerMountainParams, 1.0, {
+        snow: colors.snow,
+        rockLeft: colors.rockLeft,
+        rockRight: colors.rockRight,
+        rockRightLight: colors.rockRightLight
+      })
+      
+      //
+      // Draw right mountain (light, brighter colors)
+      //
+      drawMountain(ctx, rightMountainX, horizonY, rightMountainWidth, rightMountainHeight, rightMountainParams, 1.0, {
+        snow: 'rgb(245, 248, 250)',  // Brighter snow
+        rockLeft: 'rgb(90, 140, 160)',  // Brighter left rock
+        rockRight: 'rgb(80, 130, 150)',  // Brighter right rock
+        rockRightLight: 'rgb(150, 190, 220)'  // Brighter light rock
+      })
     })
-    
-    //
-    // Draw center mountain (higher, sharper, normal colors)
-    //
-    drawMountain(ctx, centerMountainX, horizonY, centerMountainWidth, centerMountainHeight, centerMountainParams, 1.0, {
-      snow: colors.snow,
-      rockLeft: colors.rockLeft,
-      rockRight: colors.rockRight,
-      rockRightLight: colors.rockRightLight
-    })
-    
-    //
-    // Draw right mountain (light, brighter colors)
-    //
-    drawMountain(ctx, rightMountainX, horizonY, rightMountainWidth, rightMountainHeight, rightMountainParams, 1.0, {
-      snow: 'rgb(245, 248, 250)',  // Brighter snow
-      rockLeft: 'rgb(90, 140, 160)',  // Brighter left rock
-      rockRight: 'rgb(80, 130, 150)',  // Brighter right rock
-      rockRightLight: 'rgb(150, 190, 220)'  // Brighter light rock
-    })
-    
-    return canvas
   }
   
-  const mountainsCanvas = createMountainsCanvas()
-  k.loadSprite('bg-touch-level2-mountains', mountainsCanvas.toDataURL())
+  const mountainsDataURL = createMountainsCanvas()
+  k.loadSprite('bg-touch-level2-mountains', mountainsDataURL)
   
   //
   // Draw mountains canvas (behind everything)

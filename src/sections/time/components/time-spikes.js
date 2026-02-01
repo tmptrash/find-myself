@@ -125,9 +125,9 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     // Add z-index based on fake/real
     //
     if (!isFake) {
-      outlineComponents.push(k.z(10))
+      outlineComponents.push(k.z(16))
     } else {
-      outlineComponents.push(k.z(10))
+      outlineComponents.push(k.z(16))
     }
     
     return k.add(outlineComponents)
@@ -147,7 +147,7 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     k.color(135, 169, 189)  // Steel blue color
   ]
   //
-  // Real spikes have collision and are behind hero
+  // Real spikes have collision and are in front of city background
   //
   if (!isFake) {
     components.push(
@@ -158,15 +158,15 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
           35               // Smaller height (35px) for smaller font
         )
       }),
-      k.z(10),  // Behind snow drifts (12) and hero (20)
+      k.z(16),  // In front of city background (15.5) but behind hero (20)
       SPIKE_TAG
     )
   } else {
     //
-    // Fake spikes have no collision and are behind hero
+    // Fake spikes have no collision and are in front of city background
     //
     components.push(
-      k.z(10)  // Behind snow drifts (12) and hero (20)
+      k.z(16)  // In front of city background (15.5) but behind hero (20)
     )
   }
   
@@ -180,7 +180,7 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
   //
   const glintDrawer = k.add([
     k.pos(0, 0),
-    k.z(11),  // Above spike (10) but below snow drifts (12)
+    k.z(17),  // Above spike (16) but below hero (20)
     {
       draw() {
         drawGlint(spike, k)

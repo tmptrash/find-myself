@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, getColor, parseHex, getRGB } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, getColor, parseHex, getRGB, toPng } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
@@ -1711,11 +1711,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   //
   const outlineColorRaw = customOutlineColor || CFG.visual.colors.outline
   const outlineColor = String(outlineColorRaw || '#000000').replace('#', '')
-  const canvas = document.createElement('canvas')
-  canvas.width = SPRITE_SIZE
-  canvas.height = SPRITE_SIZE
-  const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
   //
   // Base parameters for different animations
   //
@@ -1880,146 +1875,137 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     rightArmX = 21
   }
   //
-  // Black outline (universal) - pixel-perfect 1px outline
+  // Create sprite using toPng
   //
-  ctx.fillStyle = getHex(outlineColor)
-  //
-  // Head outline (8x8 inner, 10x10 outer)
-  //
-  ctx.fillRect(headX - 1, headY - 1, 10, 1)  // Top
-  ctx.fillRect(headX - 1, headY + 8, 10, 1)  // Bottom
-  ctx.fillRect(headX - 1, headY, 1, 8)  // Left
-  ctx.fillRect(headX + 8, headY, 1, 8)  // Right
-  //
-  // Body outline (12x bodyHeight inner, 14x (bodyHeight+2) outer)
-  //
-  ctx.fillRect(bodyX - 1, bodyY - 1, 14, 1)  // Top
-  ctx.fillRect(bodyX - 1, bodyY + bodyHeight, 14, 1)  // Bottom
-  ctx.fillRect(bodyX - 1, bodyY, 1, bodyHeight)  // Left
-  ctx.fillRect(bodyX + 12, bodyY, 1, bodyHeight)  // Right
-  //
-  // Arm outlines - don't draw while running and jumping
-  //
-  if (animation !== 'run' && animation !== 'jump') {
-    //
-    // Left arm outline (2x7 inner, 4x9 outer)
-    //
-    ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 1)  // Top
-    ctx.fillRect(leftArmX - 1, leftArmY + 7, 4, 1)  // Bottom
-    ctx.fillRect(leftArmX - 1, leftArmY, 1, 7)  // Left
-    ctx.fillRect(leftArmX + 2, leftArmY, 1, 7)  // Right
-    //
-    // Right arm outline (2x7 inner, 4x9 outer)
-    //
-    ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 1)  // Top
-    ctx.fillRect(rightArmX - 1, rightArmY + 7, 4, 1)  // Bottom
-    ctx.fillRect(rightArmX - 1, rightArmY, 1, 7)  // Left
-    ctx.fillRect(rightArmX + 2, rightArmY, 1, 7)  // Right
-  }
-  //
-  // Leg outlines (3x legHeight inner, 5x (legHeight+2) outer)
-  //
-  // Left leg
-  ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 1)  // Top
-  ctx.fillRect(leftLegX - 1, leftLegY + legHeight, 5, 1)  // Bottom
-  ctx.fillRect(leftLegX - 1, leftLegY, 1, legHeight)  // Left
-  ctx.fillRect(leftLegX + 3, leftLegY, 1, legHeight)  // Right
-  //
-  // Right leg
-  ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 1)  // Top
-  ctx.fillRect(rightLegX - 1, rightLegY + legHeight, 5, 1)  // Bottom
-  ctx.fillRect(rightLegX - 1, rightLegY, 1, legHeight)  // Left
-  ctx.fillRect(rightLegX + 3, rightLegY, 1, legHeight)  // Right
-  //
-  // Head (universal body color)
-  //
-  ctx.fillStyle = getHex(bodyColor)
-  ctx.fillRect(headX, headY, 8, 8)
-  //
-  // Eyes - for run and jump draw only ONE eye (side view)
-  //
-  ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
-  if (animation === 'run' || animation === 'jump') {
-    ctx.fillRect(headX + 6, headY + 2, 3, 3)
-  } else {
-    ctx.fillRect(headX + 1, headY + 2, 3, 3)
-    ctx.fillRect(headX + 6, headY + 2, 3, 3)
-  }
-  //
-  // Pupils (universal color)
-  //
-  ctx.fillStyle = getHex(outlineColor)
-  if (animation === 'run' || animation === 'jump') {
-    ctx.fillRect(headX + 7, headY + 3, 1, 1)
-  } else {
-    ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
-    ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
-  }
-  //
-  // Mouth (optional, only for idle animation)
-  //
-  if (addMouth && animation === 'idle') {
-    ctx.fillStyle = getHex(outlineColor)  // Black
-    //
-    // Horizontal line below eyes (centered, 4 pixels wide, lower position)
-    //
-    ctx.fillRect(headX + 2, headY + 7, 4, 1)
-  }
-  //
-  // Body (universal color)
-  //
-  ctx.fillStyle = getHex(bodyColor)
-  ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
-  //
-  // Arms - don't draw while running and jumping
-  //
-  if (animation !== 'run' && animation !== 'jump') {
-    ctx.fillRect(leftArmX, leftArmY, 2, 7)
-    ctx.fillRect(rightArmX, rightArmY, 2, 7)
-  }
-  //
-  // Legs
-  //
-  ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
-  ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
-  //
-  // Custom arms (optional, simple vertical lines drawn on top)
-  //
-  if (addArms) {
-    ctx.fillStyle = getHex(outlineColor)  // Black
-    //
-    // Arms positioned at the same X as legs, shifted outward by arm width
-    //
-    const armStartY = bodyY + 4  // Start lower (was +2, now +4)
-    const armLength = 6  // Length of arms
-    const armWidth = 1  // Arm width
+  try {
+    return toPng({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: 1 }, (ctx) => {
+      ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+      
+      //
+      // Black outline (universal) - pixel-perfect 1px outline
+      //
+      ctx.fillStyle = getHex(outlineColor)
+      //
+      // Head outline (8x8 inner, 10x10 outer)
+      //
+      ctx.fillRect(headX - 1, headY - 1, 10, 1)  // Top
+      ctx.fillRect(headX - 1, headY + 8, 10, 1)  // Bottom
+      ctx.fillRect(headX - 1, headY, 1, 8)  // Left
+      ctx.fillRect(headX + 8, headY, 1, 8)  // Right
+      //
+      // Body outline (12x bodyHeight inner, 14x (bodyHeight+2) outer)
+      //
+      ctx.fillRect(bodyX - 1, bodyY - 1, 14, 1)  // Top
+      ctx.fillRect(bodyX - 1, bodyY + bodyHeight, 14, 1)  // Bottom
+      ctx.fillRect(bodyX - 1, bodyY, 1, bodyHeight)  // Left
+      ctx.fillRect(bodyX + 12, bodyY, 1, bodyHeight)  // Right
+      //
+      // Arm outlines - don't draw while running and jumping
+      //
+      if (animation !== 'run' && animation !== 'jump') {
+        //
+        // Left arm outline (2x7 inner, 4x9 outer)
+        //
+        ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 1)  // Top
+        ctx.fillRect(leftArmX - 1, leftArmY + 7, 4, 1)  // Bottom
+        ctx.fillRect(leftArmX - 1, leftArmY, 1, 7)  // Left
+        ctx.fillRect(leftArmX + 2, leftArmY, 1, 7)  // Right
+        //
+        // Right arm outline (2x7 inner, 4x9 outer)
+        //
+        ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 1)  // Top
+        ctx.fillRect(rightArmX - 1, rightArmY + 7, 4, 1)  // Bottom
+        ctx.fillRect(rightArmX - 1, rightArmY, 1, 7)  // Left
+        ctx.fillRect(rightArmX + 2, rightArmY, 1, 7)  // Right
+      }
+      //
+      // Leg outlines (3x legHeight inner, 5x (legHeight+2) outer)
+      //
+      // Left leg
+      ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 1)  // Top
+      ctx.fillRect(leftLegX - 1, leftLegY + legHeight, 5, 1)  // Bottom
+      ctx.fillRect(leftLegX - 1, leftLegY, 1, legHeight)  // Left
+      ctx.fillRect(leftLegX + 3, leftLegY, 1, legHeight)  // Right
+      //
+      // Right leg
+      ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 1)  // Top
+      ctx.fillRect(rightLegX - 1, rightLegY + legHeight, 5, 1)  // Bottom
+      ctx.fillRect(rightLegX - 1, rightLegY, 1, legHeight)  // Left
+      ctx.fillRect(rightLegX + 3, rightLegY, 1, legHeight)  // Right
+      //
+      // Head (universal body color)
+      //
+      ctx.fillStyle = getHex(bodyColor)
+      ctx.fillRect(headX, headY, 8, 8)
+      //
+      // Eyes - for run and jump draw only ONE eye (side view)
+      //
+      ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
+      if (animation === 'run' || animation === 'jump') {
+        ctx.fillRect(headX + 6, headY + 2, 3, 3)
+      } else {
+        ctx.fillRect(headX + 1, headY + 2, 3, 3)
+        ctx.fillRect(headX + 6, headY + 2, 3, 3)
+      }
+      //
+      // Pupils (universal color)
+      //
+      ctx.fillStyle = getHex(outlineColor)
+      if (animation === 'run' || animation === 'jump') {
+        ctx.fillRect(headX + 7, headY + 3, 1, 1)
+      } else {
+        ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
+        ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
+      }
+      //
+      // Mouth (optional, only for idle animation)
+      //
+      if (addMouth && animation === 'idle') {
+        ctx.fillStyle = getHex(outlineColor)  // Black
+        //
+        // Horizontal line below eyes (centered, 4 pixels wide, lower position)
+        //
+        ctx.fillRect(headX + 2, headY + 7, 4, 1)
+      }
+      //
+      // Body (universal color)
+      //
+      ctx.fillStyle = getHex(bodyColor)
+      ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
+      //
+      // Arms - don't draw while running and jumping
+      //
+      if (animation !== 'run' && animation !== 'jump') {
+        ctx.fillRect(leftArmX, leftArmY, 2, 7)
+        ctx.fillRect(rightArmX, rightArmY, 2, 7)
+      }
+      //
+      // Legs
+      //
+      ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
+      ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
+      //
+      // Custom arms (optional, simple vertical lines drawn on top)
+      //
+      if (addArms) {
+        ctx.fillStyle = getHex(outlineColor)  // Black
+        //
+        // Arms positioned at the same X as legs, shifted outward by arm width
+        //
+        const armStartY = bodyY + 4  // Start lower (was +2, now +4)
+        const armLength = 6  // Length of arms
+        const armWidth = 1  // Arm width
 
-    ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
-    ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
-  }
-
-  //
-  // Ensure canvas is valid before converting to data URL
-  //
-  if (!canvas || !ctx) {
+        ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
+        ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
+      }
+    })
+  } catch (error) {
     //
     // Fallback: return a minimal valid data URL (1x1 transparent pixel)
     //
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
   }
-  
-  const dataURL = canvas.toDataURL()
-  //
-  // Ensure data URL is valid
-  //
-  if (!dataURL || typeof dataURL !== 'string' || !dataURL.startsWith('data:')) {
-    //
-    // Fallback: return a minimal valid data URL (1x1 transparent pixel)
-    //
-    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-  }
-  
-  return dataURL
 }
 /**
  * Get sprite name for character (supports custom colors)
@@ -2327,7 +2313,7 @@ function createBodyParticles(inst, centerX, centerY) {
       k.pos(centerX, centerY),
       k.anchor("center"),
       k.rotate(rotation),
-      k.z(CFG.visual.zIndex.player),
+      k.z(20),  // Above city background (15.5) and platforms (15)
       k.opacity(1),
       {
         draw() {
@@ -2424,7 +2410,7 @@ function createEyeParticles(inst, centerX, centerY) {
       k.pos(centerX, centerY),
       k.color(eyeWhiteColor[0], eyeWhiteColor[1], eyeWhiteColor[2]),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.playerAbove),
+      k.z(20),  // Above city background (15.5) and platforms (15)
       k.area(),
       k.body()
     ])

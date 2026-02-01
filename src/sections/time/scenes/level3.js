@@ -2,7 +2,7 @@ import { CFG } from '../cfg.js'
 import { initScene, stopTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import { getColor } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as TimeSpikes from '../components/time-spikes.js'
@@ -96,6 +96,66 @@ export function sceneLevel3(k) {
     // Create custom corridor platforms
     //
     createCorridorPlatforms(k)
+    //
+    // Create clouds under top platform (same as level 2)
+    //
+    createCloudsUnderTopPlatform(k)
+    //
+    // Create small hero icon and life.png image below level indicator letters
+    // Hero centered on letter T, dropped down by half of small hero height
+    //
+    const levelIndicatorY = PLATFORM_TOP_HEIGHT - 48 - 10  // Same Y as level indicator letters
+    const levelIndicatorStartX = PLATFORM_SIDE_WIDTH + 20  // Same X as level indicator start
+    const fontSize = 48  // Font size of level indicator letters
+    const letterSpacing = -5  // Letter spacing
+    const letterT_X = levelIndicatorStartX  // X position of letter T (first letter)
+    const letterT_CenterX = letterT_X + fontSize / 2  // Center X of letter T
+    const smallHeroSize = 66  // Increased by 10% (60 * 1.1)
+    const smallHeroDropDown = smallHeroSize / 2  // Drop down by half of hero height
+    const lifeImageHeight = 60  // Increased by 2x (30 * 2), center stays at same Y
+    const heroOffsetLeft = -15  // Move hero left
+    const spacingBetween = 70  // Increased spacing to move life further right
+    const lifeImageOriginalHeight = 1197  // Original height of life.png
+    
+    //
+    // Create small hero (2x smaller, static, time section colors)
+    // Check completed sections for hero parts (mouth, arms)
+    //
+    const isWordComplete = get('word', false)
+    const isTouchComplete = get('touch', false)
+    
+    const smallHeroY = levelIndicatorY + fontSize + smallHeroDropDown  // Below letters, dropped by half hero height
+    const smallHero = Hero.create({
+      k,
+      x: letterT_CenterX + heroOffsetLeft,  // Moved left from center of letter T
+      y: smallHeroY,
+      type: Hero.HEROES.HERO,
+      controllable: false,
+      isStatic: true,
+      scale: 2.0625,  // Increased by 10% (1.875 * 1.1)
+      bodyColor: CFG.visual.colors.hero.body,
+      outlineColor: CFG.visual.colors.outline,
+      addMouth: isWordComplete,  // Add mouth if word section is complete
+      addArms: isTouchComplete  // Add arms if touch section is complete
+    })
+    smallHero.character.fixed = true  // Fixed position
+    smallHero.character.z = CFG.visual.zIndex.ui
+    
+    //
+    // Load and add life.png image (scaled to 2x size, increased by 10%, center stays at same Y)
+    // Positioned to the right of small hero at the same vertical level
+    //
+    k.loadSprite('life', '/life.png')
+    const lifeImageX = letterT_CenterX + smallHeroSize / 2 + spacingBetween + heroOffsetLeft
+    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.1  // Scale to 60px height * 1.1 (increased by 10%)
+    k.add([
+      k.sprite('life'),
+      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (center stays at same vertical position)
+      k.scale(lifeImageScale),
+      k.anchor('center'),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
     //
     // Create time sections with clocks
     //
@@ -1233,6 +1293,243 @@ function createObstacleSpikes(k, hero, sound) {
               opacity: 0.7
             })
           }
+        }
+      }
+    ])
+  })
+}
+
+/**
+ * Creates clouds under the top platform (top wall)
+ * Same as in level 2
+ * @param {Object} k - Kaplay instance
+ */
+function createCloudsUnderTopPlatform(k) {
+  //
+  // Cloud parameters
+  //
+  const cloudTopY = 0  // Top Y position (dense layer here) - moved to very top
+  const cloudBottomY = 60  // Bottom Y position (sparse clouds here) - moved to very top
+  const cloudDenseLayerY = 10  // Dense layer Y position - moved to very top
+  const cloudSparseLayerStartY = 20  // Start of sparse layer - moved to very top
+  const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
+  const baseCloudColor = k.rgb(250, 250, 255)  // White with slight blue tint for clouds
+  
+  //
+  // Create multiple clouds spread horizontally across the screen
+  // Cover almost entire width like snow
+  //
+  const screenWidth = k.width()
+  const cloudStartX = PLATFORM_SIDE_WIDTH + 50  // Start a bit inside left margin
+  const cloudEndX = screenWidth - PLATFORM_SIDE_WIDTH - 50  // End a bit before right margin
+  const cloudCoverageWidth = cloudEndX - cloudStartX
+  
+  //
+  // Create dense layer at top (more clouds, closer together)
+  //
+  const denseCloudCount = 24  // Even more clouds for solid coverage without gaps
+  const denseCloudSpacing = cloudCoverageWidth / (denseCloudCount - 1)
+  
+  //
+  // Create sparse layer below (fewer clouds, more spread out)
+  //
+  const sparseCloudCount = 8  // Fewer clouds for sparse coverage
+  const sparseCloudSpacing = cloudCoverageWidth / (sparseCloudCount - 1)
+  
+  //
+  // Generate clouds programmatically to cover almost entire width
+  // Create overlapping clouds like snow covering the top
+  //
+  const cloudTypes = [
+    //
+    // Type 1: Large wide cloud (6 puffs)
+    //
+    {
+      mainSize: 50,
+      puffs: [
+        { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
+        { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
+        { radius: 0.65, offsetX: 0.4, offsetY: -0.1 },
+        { radius: 0.7, offsetX: 0.8, offsetY: -0.05 },
+        { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
+        { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
+      ],
+      color: baseCloudColor,
+      opacity: 0.6
+    },
+    //
+    // Type 2: Medium wide cloud (5 puffs)
+    //
+    {
+      mainSize: 42,
+      puffs: [
+        { radius: 0.8, offsetX: -0.7, offsetY: 0 },
+        { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
+        { radius: 0.75, offsetX: 0.3, offsetY: -0.08 },
+        { radius: 0.8, offsetX: 0.7, offsetY: 0 },
+        { radius: 0.7, offsetX: 0, offsetY: 0.12 }
+      ],
+      color: k.rgb(245, 245, 250),
+      opacity: 0.55
+    },
+    //
+    // Type 3: Small wide cloud (4 puffs)
+    //
+    {
+      mainSize: 35,
+      puffs: [
+        { radius: 0.75, offsetX: -0.6, offsetY: 0 },
+        { radius: 0.8, offsetX: -0.2, offsetY: -0.08 },
+        { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
+        { radius: 0.75, offsetX: 0.6, offsetY: 0 }
+      ],
+      color: k.rgb(255, 255, 255),
+      opacity: 0.5
+    },
+    //
+    // Type 4: Very wide cloud (7 puffs)
+    //
+    {
+      mainSize: 55,
+      puffs: [
+        { radius: 0.65, offsetX: -1.0, offsetY: 0 },
+        { radius: 0.7, offsetX: -0.6, offsetY: -0.1 },
+        { radius: 0.75, offsetX: -0.2, offsetY: -0.12 },
+        { radius: 0.75, offsetX: 0.2, offsetY: -0.12 },
+        { radius: 0.7, offsetX: 0.6, offsetY: -0.1 },
+        { radius: 0.65, offsetX: 1.0, offsetY: 0 },
+        { radius: 0.6, offsetX: 0, offsetY: 0.15 }
+      ],
+      color: baseCloudColor,
+      opacity: 0.65
+    }
+  ]
+  
+  //
+  // Generate clouds with dense layer at top, sparse layer below
+  //
+  const cloudConfigs = []
+  
+  //
+  // Create dense layer at top (solid coverage, no gaps)
+  //
+  for (let i = 0; i < denseCloudCount; i++) {
+    const baseX = cloudStartX + denseCloudSpacing * i
+    
+    //
+    // Add small randomness for natural look (less variation for dense layer)
+    // Overlap clouds to ensure no gaps
+    //
+    const randomOffset = (Math.random() - 0.5) * (denseCloudSpacing * 0.6)  // Overlap with neighbors
+    const x = baseX + randomOffset
+    
+    //
+    // Select cloud type with some variation
+    //
+    const typeIndex = i % cloudTypes.length
+    const cloudType = cloudTypes[typeIndex]
+    
+    //
+    // Vary size slightly for more natural look
+    // Make dense layer clouds slightly larger for better overlap
+    //
+    const sizeVariation = 1.0 + Math.random() * 0.3  // 1.0 to 1.3 (larger for dense layer)
+    const mainSize = cloudType.mainSize * sizeVariation
+    
+    //
+    // Create multiple rows for dense layer to ensure no gaps
+    // Divide clouds into 2-3 rows for complete coverage
+    //
+    const rowsPerLayer = 2
+    const rowIndex = Math.floor((i % denseCloudCount) / (denseCloudCount / rowsPerLayer))
+    const rowYOffset = rowIndex * 8  // 8px between rows
+    const yVariation = (Math.random() - 0.5) * 3  // ±1.5px variation within row
+    const cloudY = cloudDenseLayerY + rowYOffset + yVariation
+    
+    cloudConfigs.push({
+      x: x,
+      y: cloudY,
+      mainSize: mainSize,
+      puffs: cloudType.puffs,
+      color: cloudType.color,
+      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+    })
+  }
+  
+  //
+  // Create sparse layer below (fewer clouds, more spread out)
+  //
+  for (let i = 0; i < sparseCloudCount; i++) {
+    const baseX = cloudStartX + sparseCloudSpacing * i
+    
+    //
+    // Add more randomness for sparse layer
+    //
+    const randomOffset = (Math.random() - 0.5) * 40  // ±20px random offset
+    const x = baseX + randomOffset
+    
+    //
+    // Select cloud type with some variation
+    //
+    const typeIndex = (i + denseCloudCount) % cloudTypes.length
+    const cloudType = cloudTypes[typeIndex]
+    
+    //
+    // Vary size slightly for more natural look
+    //
+    const sizeVariation = 0.9 + Math.random() * 0.2  // 0.9 to 1.1
+    const mainSize = cloudType.mainSize * sizeVariation
+    
+    //
+    // Distribute Y positions in sparse layer (more variation)
+    // Use quadratic function to bias towards top of sparse layer
+    //
+    const sparseYRange = cloudSparseLayerEndY - cloudSparseLayerStartY
+    const yDistribution = Math.random() * Math.random()  // 0 to 1, biased towards 0 (top)
+    const cloudY = cloudSparseLayerStartY + yDistribution * sparseYRange
+    
+    cloudConfigs.push({
+      x: x,
+      y: cloudY,
+      mainSize: mainSize,
+      puffs: cloudType.puffs,
+      color: cloudType.color,
+      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+    })
+  }
+  
+  cloudConfigs.forEach((cloudConfig) => {
+    k.add([
+      k.pos(cloudConfig.x, cloudConfig.y),
+      k.z(16),  // Above city background (15.5) but below time digits and other elements
+      {
+        draw() {
+          //
+          // Draw cloud as overlapping circles (puffy cloud shape)
+          //
+          const mainSize = cloudConfig.mainSize
+          
+          //
+          // Main cloud body (largest circle in center)
+          //
+          k.drawCircle({
+            radius: mainSize,
+            pos: k.vec2(0, 0),
+            color: cloudConfig.color,
+            opacity: cloudConfig.opacity
+          })
+          
+          //
+          // Draw all puffs for this cloud
+          //
+          cloudConfig.puffs.forEach((puff) => {
+            k.drawCircle({
+              radius: mainSize * puff.radius,
+              pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
+              color: cloudConfig.color,
+              opacity: cloudConfig.opacity
+            })
+          })
         }
       }
     ])

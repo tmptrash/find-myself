@@ -8,6 +8,8 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { set, setSoundStatus, get } from '../../../utils/progress.js'
+import * as CityBackground from '../components/city-background.js'
+import * as LevelIndicator from '../components/level-indicator.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -97,6 +99,15 @@ export function sceneLevel1(k) {
     //
     antiHero.character.hidden = true
     //
+    // Add city background (preloaded sprite)
+    //
+    k.add([
+      k.sprite('city-background-level1'),
+      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height / 2),
+      k.anchor('center'),
+      k.z(15.5)  // In front of platforms (15) but behind time digits (16)
+    ])
+    //
     // Create time digits background (full screen)
     //
     const timeDigitsInst = TimeDigits.create({ k })
@@ -127,6 +138,62 @@ export function sceneLevel1(k) {
     k.onUpdate(() => {
       FpsCounter.onUpdate(fpsCounter)
     })
+    //
+    // Create small hero icon and life.png image below level indicator letters
+    // Hero centered on letter T, dropped down by half of small hero height
+    //
+    const levelIndicatorY = PLATFORM_TOP_HEIGHT - 48 - 10  // Same Y as level indicator letters
+    const levelIndicatorStartX = PLATFORM_SIDE_WIDTH + 20  // Same X as level indicator start
+    const fontSize = 48  // Font size of level indicator letters
+    const letterSpacing = -5  // Letter spacing
+    const letterT_X = levelIndicatorStartX  // X position of letter T (first letter)
+    const letterT_CenterX = letterT_X + fontSize / 2  // Center X of letter T
+    const smallHeroSize = 66  // Increased by 10% (60 * 1.1)
+    const smallHeroDropDown = smallHeroSize / 2  // Drop down by half of hero height
+    const lifeImageHeight = 60  // Increased by 2x (30 * 2), center stays at same Y
+    const heroOffsetLeft = -15  // Move hero left
+    const spacingBetween = 70  // Increased spacing to move life further right
+    const lifeImageOriginalHeight = 1197  // Original height of life.png
+    
+    //
+    // Create small hero (2x smaller, static, time section colors)
+    // Check completed sections for hero parts (mouth, arms)
+    //
+    const isWordComplete = get('word', false)
+    const isTouchComplete = get('touch', false)
+    
+    const smallHeroY = levelIndicatorY + fontSize + smallHeroDropDown  // Below letters, dropped by half hero height
+    const smallHero = Hero.create({
+      k,
+      x: letterT_CenterX + heroOffsetLeft,  // Moved left from center of letter T
+      y: smallHeroY,
+      type: Hero.HEROES.HERO,
+      controllable: false,
+      isStatic: true,
+      scale: 2.0625,  // Increased by 10% (1.875 * 1.1)
+      bodyColor: CFG.visual.colors.hero.body,
+      outlineColor: CFG.visual.colors.outline,
+      addMouth: isWordComplete,  // Add mouth if word section is complete
+      addArms: isTouchComplete  // Add arms if touch section is complete
+    })
+    smallHero.character.fixed = true  // Fixed position
+    smallHero.character.z = CFG.visual.zIndex.ui
+    
+    //
+    // Load and add life.png image (scaled to 2x size, increased by 10%, center stays at same Y)
+    // Positioned to the right of small hero at the same vertical level
+    //
+    k.loadSprite('life', '/life.png')
+    const lifeImageX = letterT_CenterX + smallHeroSize / 2 + spacingBetween + heroOffsetLeft
+    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.1  // Scale to 60px height * 1.1 (increased by 10%)
+    k.add([
+      k.sprite('life'),
+      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (center stays at same vertical position)
+      k.scale(lifeImageScale),
+      k.anchor('center'),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
     //
     // Create custom platforms for two-floor level
     //

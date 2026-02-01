@@ -8,6 +8,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { toPng } from '../../../utils/helper.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -543,36 +544,28 @@ export function sceneLevel0(k) {
     // Create two background canvases: one for back layer, one for middle+front
     //
     const createBackLayerCanvas = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = k.width()
-      canvas.height = k.height()
-      const ctx = canvas.getContext('2d')
-      //
-      // 1. Draw darkened ground area
-      //
-      if (layers.length > 0 && layers[0].trees.length > 0) {
-        const backLayer = layers[0]
-        const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
-        const floorY = FLOOR_Y
-        
-        ctx.fillStyle = 'rgb(28, 28, 28)'
-        ctx.fillRect(0, avgCrownY, canvas.width, floorY - avgCrownY)
-      }
-      //
-      // 2. Draw back layer only (layerIndex 0)
-      //
-      if (layers[0]) {
-        drawLayerToCanvas(ctx, layers[0], 0, null)
-      }
-      
-      return canvas
+      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+        //
+        // 1. Draw darkened ground area
+        //
+        if (layers.length > 0 && layers[0].trees.length > 0) {
+          const backLayer = layers[0]
+          const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
+          const floorY = FLOOR_Y
+          
+          ctx.fillStyle = 'rgb(28, 28, 28)'
+          ctx.fillRect(0, avgCrownY, k.width(), floorY - avgCrownY)
+        }
+        //
+        // 2. Draw back layer only (layerIndex 0)
+        //
+        if (layers[0]) {
+          drawLayerToCanvas(ctx, layers[0], 0, null)
+        }
+      })
     }
     
     const createMiddleFrontCanvas = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = k.width()
-      canvas.height = k.height()
-      const ctx = canvas.getContext('2d')
       //
       // Calculate dynamic tree indices (will be drawn separately)
       //
@@ -583,27 +576,28 @@ export function sceneLevel0(k) {
           dynamicTreesSet.add(i)
         }
       }
-      //
-      // 1. Draw middle layer (all trees)
-      //
-      if (layers[1]) {
-        drawLayerToCanvas(ctx, layers[1], 0, null)
-      }
-      //
-      // 2. Draw 60% of front layer trees (exclude dynamic trees)
-      //
-      if (layers[2]) {
-        const staticTrees = layers[2].trees.filter((_, i) => !dynamicTreesSet.has(i))
-        const frontLayerStatic = {
-          trees: staticTrees,
-          bushes: layers[2].bushes,
-          grassBlades: layers[2].grassBlades,
-          name: layers[2].name
-        }
-        drawLayerToCanvas(ctx, frontLayerStatic, 0, null)
-      }
       
-      return canvas
+      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+        //
+        // 1. Draw middle layer (all trees)
+        //
+        if (layers[1]) {
+          drawLayerToCanvas(ctx, layers[1], 0, null)
+        }
+        //
+        // 2. Draw 60% of front layer trees (exclude dynamic trees)
+        //
+        if (layers[2]) {
+          const staticTrees = layers[2].trees.filter((_, i) => !dynamicTreesSet.has(i))
+          const frontLayerStatic = {
+            trees: staticTrees,
+            bushes: layers[2].bushes,
+            grassBlades: layers[2].grassBlades,
+            name: layers[2].name
+          }
+          drawLayerToCanvas(ctx, frontLayerStatic, 0, null)
+        }
+      })
     }
     //
     // Helper function to draw layer to canvas
@@ -685,10 +679,10 @@ export function sceneLevel0(k) {
       }
     }
     
-    const backLayerCanvas = createBackLayerCanvas()
-    const middleFrontCanvas = createMiddleFrontCanvas()
-    const backTexture = k.loadSprite('bg-touch-back', backLayerCanvas.toDataURL())
-    const middleFrontTexture = k.loadSprite('bg-touch-middle-front', middleFrontCanvas.toDataURL())
+    const backLayerDataURL = createBackLayerCanvas()
+    const middleFrontDataURL = createMiddleFrontCanvas()
+    const backTexture = k.loadSprite('bg-touch-back', backLayerDataURL)
+    const middleFrontTexture = k.loadSprite('bg-touch-middle-front', middleFrontDataURL)
     //
     // Draw back layer canvas (before big bugs, z=2)
     //

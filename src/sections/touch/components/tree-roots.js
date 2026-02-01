@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { toPng } from '../../../utils/helper.js'
 
 /**
  * Creates tree roots that grow from the bottom platform upward
@@ -381,11 +382,8 @@ export async function create(config) {
     })
     
     //
-    // Pre-render tree to an offscreen canvas for performance
+    // Pre-render tree to an offscreen canvas for performance using toPng
     //
-    const treeCanvas = document.createElement('canvas')
-    const treeCtx = treeCanvas.getContext('2d')
-    
     //
     // Calculate canvas size based on tree bounds
     //
@@ -401,9 +399,6 @@ export async function create(config) {
     const canvasWidth = (maxX - minX) + padding * 2
     const canvasHeight = (maxY - minY) + padding * 2
     
-    treeCanvas.width = canvasWidth
-    treeCanvas.height = canvasHeight
-    
     //
     // Offset to transform world coordinates to canvas coordinates
     //
@@ -411,48 +406,48 @@ export async function create(config) {
     const offsetY = -minY + padding
     
     //
-    // Draw root segments to canvas
+    // Convert canvas to data URL using toPng
     //
-    allRootSegments.forEach(segment => {
-      const opacity = 0.75 - segment.depth * 0.08
-      treeCtx.strokeStyle = `rgba(${rootColor.r}, ${rootColor.g}, ${rootColor.b}, ${Math.max(0.3, opacity)})`
-      treeCtx.lineWidth = segment.width
-      treeCtx.lineCap = 'round'
+    const dataUrl = toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (treeCtx) => {
+      //
+      // Draw root segments to canvas
+      //
+      allRootSegments.forEach(segment => {
+        const opacity = 0.75 - segment.depth * 0.08
+        treeCtx.strokeStyle = `rgba(${rootColor.r}, ${rootColor.g}, ${rootColor.b}, ${Math.max(0.3, opacity)})`
+        treeCtx.lineWidth = segment.width
+        treeCtx.lineCap = 'round'
+        
+        treeCtx.beginPath()
+        treeCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
+        treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
+        treeCtx.stroke()
+      })
       
-      treeCtx.beginPath()
-      treeCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
-      treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
-      treeCtx.stroke()
-    })
-    
-    //
-    // Draw leaf clusters to canvas
-    //
-    leafClusters.forEach(cluster => {
-      cluster.forEach(leaf => {
-        drawLeafToCanvas(treeCtx, leaf.x + offsetX, leaf.y + offsetY, leaf.size, leaf.rotation, leaf.color, leaf.opacity)
+      //
+      // Draw leaf clusters to canvas
+      //
+      leafClusters.forEach(cluster => {
+        cluster.forEach(leaf => {
+          drawLeafToCanvas(treeCtx, leaf.x + offsetX, leaf.y + offsetY, leaf.size, leaf.rotation, leaf.color, leaf.opacity)
+        })
+      })
+      
+      //
+      // Draw branch segments to canvas
+      //
+      allBranchSegments.forEach(segment => {
+        const opacity = 0.7 - segment.depth * 0.07
+        treeCtx.strokeStyle = `rgba(${branchColor.r}, ${branchColor.g}, ${branchColor.b}, ${Math.max(0.3, opacity)})`
+        treeCtx.lineWidth = segment.width
+        treeCtx.lineCap = 'round'
+        
+        treeCtx.beginPath()
+        treeCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
+        treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
+        treeCtx.stroke()
       })
     })
-    
-    //
-    // Draw branch segments to canvas
-    //
-    allBranchSegments.forEach(segment => {
-      const opacity = 0.7 - segment.depth * 0.07
-      treeCtx.strokeStyle = `rgba(${branchColor.r}, ${branchColor.g}, ${branchColor.b}, ${Math.max(0.3, opacity)})`
-      treeCtx.lineWidth = segment.width
-      treeCtx.lineCap = 'round'
-      
-      treeCtx.beginPath()
-      treeCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
-      treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
-      treeCtx.stroke()
-    })
-    
-    //
-    // Convert canvas to data URL
-    //
-    const dataUrl = treeCanvas.toDataURL()
     const spriteName = `tree-${index}`
     
     return {

@@ -144,7 +144,7 @@ export function sceneMenu(k) {
     //
     // Play kids.mp3 music with fade in
     //
-    const kidsMusic = k.play("time0-kids", { loop: true, volume: 0 })
+    const kidsMusic = k.play("kids", { loop: true, volume: 0 })
     const KIDS_MUSIC_TARGET_VOLUME = MENU_AUDIO.kidsMusicTarget
     const KIDS_MUSIC_HOVER_VOLUME = MENU_AUDIO.kidsMusicHover
     const KIDS_MUSIC_CURRENT_SECTION_VOLUME = MENU_AUDIO.kidsMusicHover * 0.5  // Even quieter when hovering current section

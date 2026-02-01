@@ -50,7 +50,7 @@ const LEVEL_SUBTITLES = {
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
 const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
-const TEXT_HOLD_DURATION = 2.0       // Duration text stays visible
+const TEXT_HOLD_DURATION = 3.0       // Duration text stays visible
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 

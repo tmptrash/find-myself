@@ -60,7 +60,7 @@ export function sceneLevel3(k) {
       loop: true,
       volume: CFG.audio.backgroundMusic.time
     })
-    const kidsMusic = k.play('kids', {
+    const kidsMusic = k.play('time0-kids', {
       loop: true,
       volume: CFG.audio.backgroundMusic.kids
     })

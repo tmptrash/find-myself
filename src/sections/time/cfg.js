@@ -10,7 +10,7 @@ export const TIME_CFG = {
     // Background music volumes (relative to GLOBAL_CFG.audio.masterVolume)
     //
     backgroundMusic: {
-      kids: GLOBAL_CFG.audio.masterVolume * 0.8,   // kids.mp3 volume (56% of master)
+      kids: GLOBAL_CFG.audio.masterVolume * 1.5,   // kids.mp3 volume (56% of master)
       clock: GLOBAL_CFG.audio.masterVolume * 0.6,  // clock.mp3 volume (42% of master)
       time: GLOBAL_CFG.audio.masterVolume * 0.4,   // time.mp3 volume (28% of master)
       words: GLOBAL_CFG.audio.masterVolume * 4     // time0.mp3 volume (100% of master)

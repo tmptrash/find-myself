@@ -20,15 +20,16 @@ let timeSectionMusic = {
  * Note: Does not start clock.mp3 - that is managed per-level for synchronization
  * @param {Object} k - Kaplay instance
  */
-export function startTimeSectionMusic(k) {
-  k.wait(MUSIC_START_DELAY, () => {
+export function startTimeSectionMusic(k, music = false) {
+  const delay = get('sounds.time0') ? 0 : MUSIC_START_DELAY
+  k.wait(delay, () => {
     if (!timeSectionMusic.kids) {
-      timeSectionMusic.kids = k.play('kids', {
+      timeSectionMusic.kids = k.play('time0-kids', {
         loop: true,
         volume: CFG.audio.backgroundMusic.kids
       })
     }
-    if (!timeSectionMusic.time) {
+    if (music && !timeSectionMusic.time) {
       timeSectionMusic.time = k.play('time', {
         loop: true,
         volume: CFG.audio.backgroundMusic.time

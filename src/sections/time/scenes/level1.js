@@ -59,7 +59,7 @@ export function sceneLevel1(k) {
     // Start background music (only if not already playing)
     // Note: kids.mp3 and time.mp3 persist across level reloads
     //
-    startTimeSectionMusic(k)
+    startTimeSectionMusic(k, true)
     //
     // Start clock.mp3 locally (restarts on each level load for synchronization)
     //

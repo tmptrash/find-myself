@@ -16,11 +16,9 @@ const PLATFORM_SIDE_WIDTH = 50  // Reduced from 192 to 50 for more space
 // Hero size (approximately)
 //
 const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
-const HERO_WIDTH = 96   // SPRITE_SIZE (32) * HERO_SCALE (3)
 //
 // Level geometry
 //
-const BOTTOM_PLATFORM_TOP = 1080 - PLATFORM_BOTTOM_HEIGHT  // 930
 const FLOOR_Y = 700
 //
 // Hero spawn positions
@@ -56,7 +54,7 @@ export function sceneLevel2(k) {
     // Start time.mp3, kids.mp3 and clock.mp3 background music
     //
     const timeMusic = Sound.playInScene(k, 'time', CFG.audio.backgroundMusic.time, true)
-    const kidsMusic = Sound.playInScene(k, 'kids', CFG.audio.backgroundMusic.kids, true)
+    const kidsMusic = Sound.playInScene(k, 'time0-kids', CFG.audio.backgroundMusic.kids, true)
     const clockMusic = Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
     //
     // Calculate anti-hero position (on final platform)

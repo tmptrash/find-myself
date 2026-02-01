@@ -317,6 +317,10 @@ export function sceneLevel0(k) {
       sfx: sound
     })
     //
+    // Make platform 3 grayer (darker than other platforms)
+    //
+    timePlatform3.timerText.color = k.rgb(140, 140, 140)  // Darker gray instead of 192, 192, 192
+    //
     // Platform 4: static platform with running timer (same Y as platform 2)
     //
     const staticPlatform = StaticTimePlatform.create({
@@ -341,7 +345,7 @@ export function sceneLevel0(k) {
       x: 1060,
       y: 650,
       hero,
-      duration: 1,
+      duration: 3,
       sfx: sound
     })
     //
@@ -354,6 +358,117 @@ export function sceneLevel0(k) {
       hero,
       duration: 1,
       sfx: sound
+    })
+    //
+    // Platform 6 trap: smoothly moves right when hero moves right past platform 5 edge, returns after 1 second, only once
+    //
+    const PLATFORM6_ORIGINAL_X = 1240
+    const PLATFORM6_MOVE_DISTANCE = 200  // Move 200px to the right
+    const PLATFORM6_MOVE_SPEED = 400  // Speed of platform movement (px/s)
+    const PLATFORM6_RETURN_DELAY = 1.0  // 1 second delay before return
+    const PLATFORM5_X = 1060
+    const PLATFORM5_WIDTH = 140
+    const PLATFORM5_RIGHT_EDGE = PLATFORM5_X + PLATFORM5_WIDTH / 2  // Right edge of platform 5 (1130)
+    
+    let platform6State = 'idle'  // 'idle', 'moving_right', 'waiting', 'returning'
+    let platform6CurrentX = PLATFORM6_ORIGINAL_X
+    let platform6TargetX = PLATFORM6_ORIGINAL_X
+    let platform6WaitTimer = 0
+    let platform6HasActivated = false  // Track if trap has been activated once
+    
+    k.onUpdate(() => {
+      //
+      // Check if hero moves right past platform 5 edge (only if trap hasn't activated yet)
+      //
+      if (!platform6HasActivated && hero && hero.character && platform6State === 'idle') {
+        const heroX = hero.character.pos.x
+        
+        //
+        // If hero is to the right of platform 5's right edge, start moving platform 6
+        //
+        if (heroX > PLATFORM5_RIGHT_EDGE) {
+          //
+          // Start moving platform 6 to the right smoothly
+          //
+          platform6HasActivated = true
+          platform6State = 'moving_right'
+          platform6TargetX = PLATFORM6_ORIGINAL_X + PLATFORM6_MOVE_DISTANCE
+          //
+          // Temporarily remove collision so hero can't land on moving platform
+          //
+          if (timePlatform6.platform.body) {
+            timePlatform6.platform.unuse("body")
+          }
+          timePlatform6.platform.unuse(CFG.game.platformName)
+        }
+      }
+      
+      //
+      // Handle platform 6 movement states
+      //
+      if (platform6State === 'moving_right' && !timePlatform6.isDestroyed) {
+        //
+        // Smoothly move platform 6 to the right
+        //
+        const moveDelta = PLATFORM6_MOVE_SPEED * k.dt()
+        platform6CurrentX = Math.min(platform6CurrentX + moveDelta, platform6TargetX)
+        
+        //
+        // Update platform position
+        //
+        timePlatform6.platform.pos.x = platform6CurrentX
+        timePlatform6.timerText.pos.x = platform6CurrentX
+        timePlatform6.outlineTexts.forEach(outlineText => {
+          outlineText.pos.x = platform6CurrentX
+        })
+        
+        //
+        // Check if reached target position
+        //
+        if (platform6CurrentX >= platform6TargetX) {
+          platform6State = 'waiting'
+          platform6WaitTimer = 0
+        }
+      } else if (platform6State === 'waiting' && !timePlatform6.isDestroyed) {
+        //
+        // Wait before returning
+        //
+        platform6WaitTimer += k.dt()
+        if (platform6WaitTimer >= PLATFORM6_RETURN_DELAY) {
+          platform6State = 'returning'
+          platform6TargetX = PLATFORM6_ORIGINAL_X
+        }
+      } else if (platform6State === 'returning' && !timePlatform6.isDestroyed) {
+        //
+        // Smoothly return platform 6 to original position
+        //
+        const moveDelta = PLATFORM6_MOVE_SPEED * k.dt()
+        platform6CurrentX = Math.max(platform6CurrentX - moveDelta, platform6TargetX)
+        
+        //
+        // Update platform position
+        //
+        timePlatform6.platform.pos.x = platform6CurrentX
+        timePlatform6.timerText.pos.x = platform6CurrentX
+        timePlatform6.outlineTexts.forEach(outlineText => {
+          outlineText.pos.x = platform6CurrentX
+        })
+        
+        //
+        // Check if returned to original position
+        //
+        if (platform6CurrentX <= platform6TargetX) {
+          platform6State = 'idle'
+          platform6CurrentX = PLATFORM6_ORIGINAL_X
+          //
+          // Re-enable collision when platform returns (hero can jump on it now)
+          //
+          if (!timePlatform6.platform.body) {
+            timePlatform6.platform.use(k.body({ isStatic: true }))
+          }
+          timePlatform6.platform.use(CFG.game.platformName)
+        }
+      }
     })
     //
     // Update all time platforms and analog clock

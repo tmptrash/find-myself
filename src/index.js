@@ -49,6 +49,7 @@ k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "/fonts/JetBrainsMono-Th
 k.loadSound("time", "/sounds/time.mp3")
 k.loadSound("time0", "/sounds/time0.mp3")
 k.loadSound("time0-pre", "/sounds/time0-pre.mp3")
+k.loadSound("time0-kids", "/sounds/time0-kids.mp3")
 k.loadSound("time1", "/sounds/time1.mp3")
 k.loadSound("time1-pre", "/sounds/time1-pre.mp3")
 k.loadSound("time2-pre", "/sounds/time2-pre.mp3")

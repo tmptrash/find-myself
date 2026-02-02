@@ -193,7 +193,7 @@ function createMovingCars(k) {
   // Car parameters
   //
   const carCount = 5  // Number of cars
-  const platformTopY = k.height() - PLATFORM_BOTTOM_HEIGHT  // Top of bottom platform
+  const platformTopY = k.height() - PLATFORM_BOTTOM_HEIGHT + 17  // Top of bottom platform
   const carSpeedMin = 20  // Minimum speed (px/s) - slower
   const carSpeedMax = 50  // Maximum speed (px/s) - slower
   const gameAreaLeft = PLATFORM_SIDE_WIDTH
@@ -388,16 +388,16 @@ export function sceneLevel1(k) {
       FpsCounter.onUpdate(fpsCounter)
     })
     //
-    // Create small hero icon and life.png image on the right side, aligned with T1ME indicator
+    // Create small hero icon and life.png image in top right corner
     //
-    const levelIndicatorY = PLATFORM_TOP_HEIGHT - 48 - 10  // Same Y as level indicator letters
     const fontSize = 48  // Font size of level indicator letters
-    const smallHeroSize = 66  // Increased by 10% (60 * 1.1)
-    const lifeImageHeight = 60  // Increased by 2x (30 * 2), center stays at same Y
+    const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
+    const lifeImageHeight = 78  // Increased by 30% (30 * 2 * 1.3)
     const spacingBetween = 70  // Spacing between hero and life
     const lifeImageOriginalHeight = 1197  // Original height of life.png
-    const rightMargin = 50  // Margin from right edge
-    const smallHeroY = levelIndicatorY + fontSize / 2  // Aligned with center of T1ME letters vertically
+    const rightMargin = 80  // Margin from right edge (80px)
+    const topMargin = 10  // Top margin (same as T1ME)
+    const smallHeroY = topMargin + fontSize / 2  // Aligned with center of T1ME letters vertically
     
     //
     // Create small hero (2x smaller, static, time section colors)
@@ -407,9 +407,9 @@ export function sceneLevel1(k) {
     const isTouchComplete = get('touch', false)
     
     //
-    // Position hero and life on the right side, moved left by 3 hero widths
+    // Position hero and life in top right corner
     //
-    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2 - (smallHeroSize * 3)  // Life on the right, moved left
+    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2  // Life on the right, 80px from edge
     const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
     
     const smallHero = Hero.create({
@@ -419,7 +419,7 @@ export function sceneLevel1(k) {
       type: Hero.HEROES.HERO,
       controllable: false,
       isStatic: true,
-      scale: 2.0625,  // Increased by 10% (1.875 * 1.1)
+      scale: 2.4375,  // Increased by 30% (1.875 * 1.3)
       bodyColor: CFG.visual.colors.hero.body,
       outlineColor: CFG.visual.colors.outline,
       addMouth: isWordComplete,  // Add mouth if word section is complete
@@ -429,11 +429,11 @@ export function sceneLevel1(k) {
     smallHero.character.z = CFG.visual.zIndex.ui
     
     //
-    // Load and add life.png image (scaled to 2x size, increased by 10%, center stays at same Y)
-    // Positioned to the right of small hero at the same vertical level
+    // Load and add life.png image (scaled to 2x size, increased by 30%)
+    // Positioned in top right corner
     //
     k.loadSprite('life', '/life.png')
-    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.1  // Scale to 60px height * 1.1 (increased by 10%)
+    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3  // Scale increased by 30%
     k.add([
       k.sprite('life'),
       k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (aligned with T1ME)
@@ -717,7 +717,7 @@ export function sceneLevel1(k) {
       k,
       startX: PLATFORM_SIDE_WIDTH + 10,  // Start from left wall + 10px (moved right)
       endX: k.width() - PLATFORM_SIDE_WIDTH - 20,  // End closer to right wall (added one more spike)
-      y: BOTTOM_PLATFORM_TOP - 20,  // At bottom invisible platform level (910)
+      y: BOTTOM_PLATFORM_TOP - 10,  // At bottom invisible platform level (910)
       hero,
       currentLevel: 'level-time.1',
       digitCount: 50,  // Increased to make spikes closer together

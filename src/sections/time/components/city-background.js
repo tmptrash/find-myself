@@ -31,7 +31,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     // Draw sun (larger, brighter, more to the right) - only if showSun is true
     //
     if (showSun) {
-      const sunX = screenWidth * 0.85  // Moved more to the right (was 0.75)
+      const sunX = screenWidth * 0.85 - 100  // Moved left by 100px
       const sunY = screenHeight * 0.2
       const sunRadius = 90  // Increased size (was 60)
       const pulse = 1.0  // Static pulse for static image

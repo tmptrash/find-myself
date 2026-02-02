@@ -101,21 +101,16 @@ export function sceneLevel3(k) {
     //
     createCloudsUnderTopPlatform(k)
     //
-    // Create small hero icon and life.png image below level indicator letters
-    // Hero centered on letter T, dropped down by half of small hero height
+    // Create small hero icon and life.png image in top right corner
     //
-    const levelIndicatorY = PLATFORM_TOP_HEIGHT - 48 - 10  // Same Y as level indicator letters
-    const levelIndicatorStartX = PLATFORM_SIDE_WIDTH + 20  // Same X as level indicator start
     const fontSize = 48  // Font size of level indicator letters
-    const letterSpacing = -5  // Letter spacing
-    const letterT_X = levelIndicatorStartX  // X position of letter T (first letter)
-    const letterT_CenterX = letterT_X + fontSize / 2  // Center X of letter T
-    const smallHeroSize = 66  // Increased by 10% (60 * 1.1)
-    const smallHeroDropDown = smallHeroSize / 2  // Drop down by half of hero height
-    const lifeImageHeight = 60  // Increased by 2x (30 * 2), center stays at same Y
-    const heroOffsetLeft = -15  // Move hero left
-    const spacingBetween = 70  // Increased spacing to move life further right
+    const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
+    const lifeImageHeight = 78  // Increased by 30% (30 * 2 * 1.3)
+    const spacingBetween = 70  // Spacing between hero and life
     const lifeImageOriginalHeight = 1197  // Original height of life.png
+    const rightMargin = 80  // Margin from right edge (80px)
+    const topMargin = 10  // Top margin (same as T1ME)
+    const smallHeroY = topMargin + fontSize / 2  // Aligned with center of T1ME letters vertically
     
     //
     // Create small hero (2x smaller, static, time section colors)
@@ -124,15 +119,20 @@ export function sceneLevel3(k) {
     const isWordComplete = get('word', false)
     const isTouchComplete = get('touch', false)
     
-    const smallHeroY = levelIndicatorY + fontSize + smallHeroDropDown  // Below letters, dropped by half hero height
+    //
+    // Position hero and life in top right corner
+    //
+    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2  // Life on the right, 80px from edge
+    const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
+    
     const smallHero = Hero.create({
       k,
-      x: letterT_CenterX + heroOffsetLeft,  // Moved left from center of letter T
+      x: smallHeroX,
       y: smallHeroY,
       type: Hero.HEROES.HERO,
       controllable: false,
       isStatic: true,
-      scale: 2.0625,  // Increased by 10% (1.875 * 1.1)
+      scale: 2.4375,  // Increased by 30% (1.875 * 1.3)
       bodyColor: CFG.visual.colors.hero.body,
       outlineColor: CFG.visual.colors.outline,
       addMouth: isWordComplete,  // Add mouth if word section is complete
@@ -142,12 +142,11 @@ export function sceneLevel3(k) {
     smallHero.character.z = CFG.visual.zIndex.ui
     
     //
-    // Load and add life.png image (scaled to 2x size, increased by 10%, center stays at same Y)
-    // Positioned to the right of small hero at the same vertical level
+    // Load and add life.png image (scaled to 2x size, increased by 30%)
+    // Positioned in top right corner
     //
     k.loadSprite('life', '/life.png')
-    const lifeImageX = letterT_CenterX + smallHeroSize / 2 + spacingBetween + heroOffsetLeft
-    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.1  // Scale to 60px height * 1.1 (increased by 10%)
+    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3  // Scale increased by 30%
     k.add([
       k.sprite('life'),
       k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (center stays at same vertical position)

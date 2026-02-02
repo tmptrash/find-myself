@@ -35,8 +35,8 @@ export function create(config) {
   const letterSpacing = -5
   const outlineThickness = 2
   
-  const startX = sideWallWidth + 20
-  const y = topPlatformHeight - fontSize - 10
+  const startX = 30  // Top left corner
+  const y = 35  // Top left corner
   
   const letterObjects = []
   

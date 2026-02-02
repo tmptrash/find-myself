@@ -2,13 +2,13 @@ import { CFG } from '../cfg.js'
 import { toPng } from '../../../utils/helper.js'
 
 /**
- * Creates city background sprite for time section level 0
- * @param {Object} config - Configuration
- * @param {Object} config.k - Kaplay instance
- * @param {number} config.bottomPlatformHeight - Bottom platform height
+ * Creates city background sprite for time section levels
+ * @param {Object} k - Kaplay instance
+ * @param {number} bottomPlatformHeight - Bottom platform height
+ * @param {boolean} [showSun=true] - Whether to show the sun
  * @returns {string} Data URL of the background sprite
  */
-export function createCityBackgroundSprite(k, bottomPlatformHeight) {
+export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   
@@ -28,43 +28,45 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight) {
     ctx.fillRect(0, 0, screenWidth, screenHeight)
     
     //
-    // Draw sun (larger, brighter, more to the right)
+    // Draw sun (larger, brighter, more to the right) - only if showSun is true
     //
-    const sunX = screenWidth * 0.85  // Moved more to the right (was 0.75)
-    const sunY = screenHeight * 0.2
-    const sunRadius = 90  // Increased size (was 60)
-    const pulse = 1.0  // Static pulse for static image
-    
-    // Blurred glow (multiple circles, brighter)
-    for (let i = 5; i > 0; i--) {
+    if (showSun) {
+      const sunX = screenWidth * 0.85  // Moved more to the right (was 0.75)
+      const sunY = screenHeight * 0.2
+      const sunRadius = 90  // Increased size (was 60)
+      const pulse = 1.0  // Static pulse for static image
+      
+      // Blurred glow (multiple circles, brighter)
+      for (let i = 5; i > 0; i--) {
+        const sunGradient = ctx.createRadialGradient(
+          sunX, sunY, 0,
+          sunX, sunY, sunRadius * i * 0.5 * pulse
+        )
+        
+        const opacity = 0.06 / i  // Increased brightness (was 0.03 / i)
+        sunGradient.addColorStop(0, `rgba(255, 255, 255, ${opacity * 2})`)
+        sunGradient.addColorStop(1, `rgba(255, 255, 255, 0)`)
+        
+        ctx.fillStyle = sunGradient
+        ctx.beginPath()
+        ctx.arc(sunX, sunY, sunRadius * i * 0.5 * pulse, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      
+      // Sun itself (brighter)
       const sunGradient = ctx.createRadialGradient(
         sunX, sunY, 0,
-        sunX, sunY, sunRadius * i * 0.5 * pulse
+        sunX, sunY, sunRadius * pulse
       )
-      
-      const opacity = 0.06 / i  // Increased brightness (was 0.03 / i)
-      sunGradient.addColorStop(0, `rgba(255, 255, 255, ${opacity * 2})`)
-      sunGradient.addColorStop(1, `rgba(255, 255, 255, 0)`)
+      sunGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)')  // Increased brightness (was 0.4)
+      sunGradient.addColorStop(0.7, 'rgba(250, 250, 250, 0.4)')  // Increased brightness (was 0.2)
+      sunGradient.addColorStop(1, 'rgba(240, 240, 240, 0)')
       
       ctx.fillStyle = sunGradient
       ctx.beginPath()
-      ctx.arc(sunX, sunY, sunRadius * i * 0.5 * pulse, 0, Math.PI * 2)
+      ctx.arc(sunX, sunY, sunRadius * pulse, 0, Math.PI * 2)
       ctx.fill()
     }
-    
-    // Sun itself (brighter)
-    const sunGradient = ctx.createRadialGradient(
-      sunX, sunY, 0,
-      sunX, sunY, sunRadius * pulse
-    )
-    sunGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)')  // Increased brightness (was 0.4)
-    sunGradient.addColorStop(0.7, 'rgba(250, 250, 250, 0.4)')  // Increased brightness (was 0.2)
-    sunGradient.addColorStop(1, 'rgba(240, 240, 240, 0)')
-    
-    ctx.fillStyle = sunGradient
-    ctx.beginPath()
-    ctx.arc(sunX, sunY, sunRadius * pulse, 0, Math.PI * 2)
-    ctx.fill()
     
     //
     // Draw blurred buildings (even stronger blur)
@@ -373,8 +375,9 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight) {
  * @param {Object} k - Kaplay instance
  * @param {number} bottomPlatformHeight - Bottom platform height
  * @param {string} [spriteName='city-background'] - Sprite name to use
+ * @param {boolean} [showSun=true] - Whether to show the sun
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background') {
-  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight)
+export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true) {
+  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun)
   k.loadSprite(spriteName, spriteData)
 }

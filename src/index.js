@@ -83,7 +83,7 @@ try {
   const PLATFORM_BOTTOM_HEIGHT_LEVEL1 = 150  // Same as in level1.js
   CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1')
   const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150  // Same as in level2.js
-  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2')
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false)  // No sun for level 2
 } catch (error) {
   //
   // If sprite loading fails, continue anyway - sprites will be loaded on-demand in Hero.create()

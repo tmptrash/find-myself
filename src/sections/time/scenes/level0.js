@@ -1,7 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene, startTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
-import * as TimeDigits from '../components/time-digits.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
 import * as AnalogClock from '../components/analog-clock.js'
@@ -12,6 +11,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { stopTimeSectionMusic } from '../utils/scene.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+import { toPng } from '../../../utils/helper.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
@@ -169,6 +169,275 @@ function showInstructions(k) {
   })
 }
 /**
+ * Creates a blurred car sprite using canvas with blur filter
+ * @param {Object} params - Car parameters
+ * @param {number} params.bodyWidth - Car body width
+ * @param {number} params.bodyHeight - Car body height
+ * @param {number} params.roofWidth - Car roof width
+ * @param {number} params.roofHeight - Car roof height
+ * @param {number} params.wheelRadius - Wheel radius
+ * @param {number} params.bodyColor - Body color (gray value 0-255)
+ * @param {number} params.roofColor - Roof color (gray value 0-255)
+ * @param {number} params.wheelColor - Wheel color (gray value 0-255)
+ * @param {number} params.windowColor - Window color (gray value 0-255)
+ * @param {number} params.speed - Car speed (for window direction)
+ * @returns {string} Data URL of the car sprite
+ */
+function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, wheelRadius, bodyColor, roofColor, wheelColor, windowColor, speed }) {
+  //
+  // Calculate canvas size (add padding for blur)
+  //
+  const padding = 20
+  const canvasWidth = bodyWidth + padding * 2
+  const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
+  const centerX = canvasWidth / 2
+  const centerY = canvasHeight - padding - wheelRadius
+  
+  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+    //
+    // Clear canvas with transparent background
+    //
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+    
+    //
+    // Apply blur filter (same as buildings - blur(6px))
+    //
+    ctx.filter = 'blur(6px)'
+    
+    //
+    // Helper function to draw rounded rectangle
+    //
+    const drawRoundedRect = (x, y, width, height, radius, color) => {
+      ctx.fillStyle = `rgb(${color}, ${color}, ${color})`
+      ctx.beginPath()
+      ctx.moveTo(x + radius, y)
+      ctx.lineTo(x + width - radius, y)
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
+      ctx.lineTo(x + width, y + height - radius)
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+      ctx.lineTo(x + radius, y + height)
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
+      ctx.lineTo(x, y + radius)
+      ctx.quadraticCurveTo(x, y, x + radius, y)
+      ctx.closePath()
+      ctx.fill()
+    }
+    
+    //
+    // Car body outline (darker stroke) - draw first (behind)
+    //
+    const outlineWidth = 1.5
+    const outlineColor = bodyColor - 20
+    
+    //
+    // Body outline
+    //
+    drawRoundedRect(
+      centerX - bodyWidth / 2 - outlineWidth,
+      centerY - bodyHeight,
+      bodyWidth + outlineWidth * 2,
+      bodyHeight + outlineWidth * 2,
+      4 + outlineWidth,
+      outlineColor
+    )
+    
+    //
+    // Roof outline
+    //
+    drawRoundedRect(
+      centerX - roofWidth / 2 - outlineWidth,
+      centerY - bodyHeight - roofHeight - outlineWidth,
+      roofWidth + outlineWidth * 2,
+      roofHeight + outlineWidth * 2,
+      4 + outlineWidth,
+      outlineColor
+    )
+    
+    //
+    // Main car body (rounded rectangle)
+    //
+    drawRoundedRect(
+      centerX - bodyWidth / 2,
+      centerY - bodyHeight,
+      bodyWidth,
+      bodyHeight,
+      4,
+      bodyColor
+    )
+    
+    //
+    // Car roof (rounded rectangle)
+    //
+    drawRoundedRect(
+      centerX - roofWidth / 2,
+      centerY - bodyHeight - roofHeight,
+      roofWidth,
+      roofHeight,
+      4,
+      roofColor
+    )
+    
+    //
+    // Car windows
+    //
+    const windowWidth = roofWidth / 2 - 8
+    const windowHeight = roofHeight - 8
+    const windowY = centerY - bodyHeight - roofHeight + 4
+    
+    //
+    // Front window (right side when moving right)
+    //
+    const frontWindowX = speed > 0 ? centerX + roofWidth / 4 : centerX - roofWidth / 4
+    ctx.fillStyle = `rgb(${windowColor}, ${windowColor}, ${windowColor})`
+    ctx.fillRect(frontWindowX - windowWidth / 2, windowY, windowWidth, windowHeight)
+    
+    //
+    // Rear window
+    //
+    const rearWindowX = speed > 0 ? centerX - roofWidth / 4 : centerX + roofWidth / 4
+    ctx.fillRect(rearWindowX - windowWidth / 2, windowY, windowWidth, windowHeight)
+    
+    //
+    // Draw wheels (4 wheels)
+    //
+    const wheelY = centerY - wheelRadius
+    const frontWheelX = centerX + bodyWidth / 3 - bodyWidth / 2
+    const rearWheelX = centerX - bodyWidth / 3 + bodyWidth / 2
+    
+    //
+    // Front wheels
+    //
+    ctx.fillStyle = `rgb(${wheelColor}, ${wheelColor}, ${wheelColor})`
+    ctx.beginPath()
+    ctx.arc(frontWheelX, wheelY, wheelRadius, 0, Math.PI * 2)
+    ctx.fill()
+    
+    //
+    // Rear wheels
+    //
+    ctx.beginPath()
+    ctx.arc(rearWheelX, wheelY, wheelRadius, 0, Math.PI * 2)
+    ctx.fill()
+    
+    //
+    // Wheel rims (lighter circles inside)
+    //
+    const rimRadius = wheelRadius - 3
+    ctx.fillStyle = `rgb(${wheelColor + 25}, ${wheelColor + 25}, ${wheelColor + 25})`
+    ctx.beginPath()
+    ctx.arc(frontWheelX, wheelY, rimRadius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(rearWheelX, wheelY, rimRadius, 0, Math.PI * 2)
+    ctx.fill()
+  })
+}
+
+/**
+ * Creates moving blurred cars on background (sedans/SUVs with wheels, driving on bottom platform)
+ * Cars are rendered as blurred sprites using canvas with blur filter
+ * @param {Object} k - Kaplay instance
+ */
+function createMovingCars(k) {
+  //
+  // Car parameters
+  //
+  const carCount = 5  // Number of cars
+  const platformTopY = k.height() - PLATFORM_BOTTOM_HEIGHT + 17  // Top of bottom platform
+  const carSpeedMin = 10  // Minimum speed (px/s) - slower
+  const carSpeedMax = 30  // Maximum speed (px/s) - slower
+  const gameAreaLeft = PLATFORM_SIDE_WIDTH
+  const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH
+  const gameAreaWidth = gameAreaRight - gameAreaLeft
+  
+  //
+  // Create cars moving in different directions
+  // Distribute cars horizontally across the platform at start
+  //
+  for (let i = 0; i < carCount; i++) {
+    const direction = Math.random() > 0.5 ? 1 : -1  // Left (-1) or right (1)
+    const carSpeed = (carSpeedMin + Math.random() * (carSpeedMax - carSpeedMin)) * direction
+    const isSUV = Math.random() > 0.5  // 50% chance of SUV (taller) vs sedan
+    const bodyWidth = isSUV ? 80 + Math.random() * 30 : 70 + Math.random() * 30  // 80-110px (SUV) or 70-100px (sedan)
+    const bodyHeight = isSUV ? 35 + Math.random() * 10 : 30 + Math.random() * 8  // 35-45px (SUV) or 30-38px (sedan)
+    const roofWidth = bodyWidth * 0.6  // Roof is 60% of body width
+    const roofHeight = isSUV ? bodyHeight * 0.4 : bodyHeight * 0.5  // Roof height
+    const wheelRadius = 10 + Math.random() * 4  // 10-14px radius
+    const bodyColor = 50 + Math.random() * 20  // Gray color 50-70
+    const roofColor = bodyColor - 15  // Darker roof
+    const wheelColor = 30 + Math.random() * 15  // Dark wheels 30-45
+    const windowColor = 80 + Math.random() * 20  // Lighter windows 80-100
+    
+    //
+    // Create blurred car sprite
+    //
+    const carSpriteDataURL = createBlurredCarSprite({
+      bodyWidth,
+      bodyHeight,
+      roofWidth,
+      roofHeight,
+      wheelRadius,
+      bodyColor,
+      roofColor,
+      wheelColor,
+      windowColor,
+      speed: carSpeed
+    })
+    
+    //
+    // Load sprite
+    //
+    const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
+    k.loadSprite(spriteId, carSpriteDataURL)
+    
+    //
+    // Position car on bottom platform
+    // Sprite uses anchor('center'), so we need to position center of sprite correctly
+    // Canvas height = roofHeight + bodyHeight + wheelRadius + padding * 2
+    // Center Y of canvas = canvasHeight / 2
+    // Bottom of wheels in canvas = centerY + wheelRadius (from center of sprite)
+    // We want bottom of wheels to be at platformTopY
+    //
+    const padding = 20
+    const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
+    const centerY = canvasHeight - padding - wheelRadius  // Center Y of wheels in canvas
+    const carY = platformTopY - (centerY + wheelRadius - canvasHeight / 2)  // Position sprite center so wheels touch platform
+    
+    //
+    // Distribute cars horizontally across the platform at start (not all from edges)
+    //
+    const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
+    
+    k.add([
+      k.sprite(spriteId),
+      k.pos(startX, carY),
+      k.anchor('center'),
+      k.z(15.6),  // Above city background (15.5) but below analog clock (17) and heroes (20)
+      {
+        speed: carSpeed,
+        bodyWidth: bodyWidth,
+        gameAreaLeft: gameAreaLeft,
+        gameAreaRight: gameAreaRight,
+        update() {
+          //
+          // Move car horizontally
+          //
+          this.pos.x += this.speed * k.dt()
+          
+          //
+          // Reset car position when it goes off-screen (wrap around)
+          //
+          if (this.speed > 0 && this.pos.x > this.gameAreaRight + 100) {
+            this.pos.x = this.gameAreaLeft - this.bodyWidth - 100
+          } else if (this.speed < 0 && this.pos.x < this.gameAreaLeft - this.bodyWidth - 100) {
+            this.pos.x = this.gameAreaRight + 100
+          }
+        }
+      }
+    ])
+  }
+}
+/**
  * Time section level 0 scene
  * @param {Object} k - Kaplay instance
  */
@@ -220,7 +489,7 @@ export function sceneLevel0(k) {
     })
     
     //
-    // Override z-index for heroes to be above time digits
+    // Override z-index for heroes
     //
     hero.character.z = 20
     antiHero.character.z = 20
@@ -239,27 +508,7 @@ export function sceneLevel0(k) {
       k.sprite('city-background'),
       k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height / 2),
       k.anchor('center'),
-      k.z(15.5)  // In front of platforms (15) but behind time digits (16)
-    ])
-    //
-    // Create time digits background (full screen)
-    //
-    const timeDigitsInst = TimeDigits.create({ k })
-    
-    //
-    // Update time digits
-    //
-    k.onUpdate(() => TimeDigits.onUpdate(timeDigitsInst))
-    //
-    // Create a game object for drawing time digits with proper z-index
-    //
-    k.add([
-      {
-        draw() {
-          TimeDigits.draw(timeDigitsInst)
-        }
-      },
-      k.z(16)  // Above platforms (15) but below player
+      k.z(15.5)  // In front of platforms (15)
     ])
     //
     // Create a game object for drawing analog clock
@@ -270,7 +519,7 @@ export function sceneLevel0(k) {
           AnalogClock.draw(analogClock)
         }
       },
-      k.z(17)  // Above time digits
+      k.z(17)  // Above other elements
     ])
     //
     // Create FPS counter
@@ -286,21 +535,16 @@ export function sceneLevel0(k) {
     // Create small hero icon and life.png image below level indicator letters
     //
     //
-    // Create small hero icon and life.png image below level indicator letters
-    // Hero centered on letter T, dropped down by half of small hero height
+    // Create small hero icon and life.png image on the right side, aligned with T1ME indicator
     //
     const levelIndicatorY = PLATFORM_TOP_HEIGHT - 48 - 10  // Same Y as level indicator letters
-    const levelIndicatorStartX = PLATFORM_SIDE_WIDTH + 20  // Same X as level indicator start
     const fontSize = 48  // Font size of level indicator letters
-    const letterSpacing = -5  // Letter spacing
-    const letterT_X = levelIndicatorStartX  // X position of letter T (first letter)
-    const letterT_CenterX = letterT_X + fontSize / 2  // Center X of letter T
     const smallHeroSize = 66  // Increased by 10% (60 * 1.1)
-    const smallHeroDropDown = smallHeroSize / 2  // Drop down by half of hero height
     const lifeImageHeight = 60  // Increased by 2x (30 * 2), center stays at same Y
-    const heroOffsetLeft = -15  // Move hero left
-    const spacingBetween = 70  // Increased spacing to move life further right
+    const spacingBetween = 70  // Spacing between hero and life
     const lifeImageOriginalHeight = 1197  // Original height of life.png
+    const rightMargin = 50  // Margin from right edge
+    const smallHeroY = levelIndicatorY + fontSize / 2  // Aligned with center of T1ME letters vertically
     
     //
     // Create small hero (2x smaller, static, time section colors)
@@ -309,10 +553,15 @@ export function sceneLevel0(k) {
     const isWordComplete = get('word', false)
     const isTouchComplete = get('touch', false)
     
-    const smallHeroY = levelIndicatorY + fontSize + smallHeroDropDown  // Below letters, dropped by half hero height
+    //
+    // Position hero and life on the right side, moved left by 3 hero widths
+    //
+    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2 - (smallHeroSize * 3)  // Life on the right, moved left
+    const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
+    
     const smallHero = Hero.create({
       k,
-      x: letterT_CenterX + heroOffsetLeft,  // Moved left from center of letter T
+      x: smallHeroX,
       y: smallHeroY,
       type: Hero.HEROES.HERO,
       controllable: false,
@@ -331,16 +580,19 @@ export function sceneLevel0(k) {
     // Positioned to the right of small hero at the same vertical level
     //
     k.loadSprite('life', '/life.png')
-    const lifeImageX = letterT_CenterX + smallHeroSize / 2 + spacingBetween + heroOffsetLeft
     const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.1  // Scale to 60px height * 1.1 (increased by 10%)
     k.add([
       k.sprite('life'),
-      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (center stays at same vertical position)
+      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (aligned with T1ME)
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
       k.z(CFG.visual.zIndex.ui)
     ])
+    //
+    // Create moving blurred cars on background
+    //
+    createMovingCars(k)
     //
     // Spawn hero immediately
     //

@@ -10,12 +10,12 @@ export function create(config) {
   const { k } = config
   
   const centerX = k.width() / 2
-  const topY = 30
+  const topY = 55
   //
   // Create FPS text
   //
   const fpsText = k.add([
-    k.text('FPS: 60', {
+    k.text('FPS: 30', {
       size: 16,
       font: CFG.visual.fonts.regularFull.replace(/'/g, '')
     }),

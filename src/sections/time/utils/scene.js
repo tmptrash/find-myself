@@ -94,19 +94,14 @@ export function initScene(config) {
     skipPlatforms = false,
     bottomPlatformHeight = 360,
     topPlatformHeight = 360,
-    sideWallWidth = 192,
+    sideWallWidth = 162,
     heroX = null,
     heroY = null,
     antiHeroX = null,
     antiHeroY = null,
     platformGap = null,
     onAnnihilation = null
-  } = config
-  //
-  // For level-time.0, ensure platforms reach screen edges
-  //
-  const isLevel0 = levelName === 'level-time.0'
-  
+  } = config  
   //
   // Set gravity
   //
@@ -132,7 +127,7 @@ export function initScene(config) {
   // Add platforms (unless skipped)
   //
   if (!skipPlatforms) {
-    addPlatforms(k, CFG.visual.colors.platform, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap, isLevel0)
+    addPlatforms(k, CFG.visual.colors.background, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap)
   }
   //
   // Add level indicator if levelNumber provided
@@ -184,9 +179,8 @@ export function initScene(config) {
  * @param {number} topHeight - Top platform height
  * @param {number} sideWidth - Side wall width
  * @param {Array} [gaps] - Platform gaps configuration
- * @param {boolean} [isLevel0=false] - If true, bottom platform extends to screen bottom
  */
-function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null, isLevel0 = false) {
+function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null) {
   const platformRgb = getColor(k, color)?.color
   //
   // Top platform (starts from y=0, extends down by topHeight)

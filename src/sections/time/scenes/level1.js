@@ -2,13 +2,11 @@ import { CFG } from '../cfg.js'
 import { initScene, startTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
-import * as TimeSpikes from '../components/time-spikes.js'
+import * as TimeSpikes from '../components/one-spikes.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { set, setSoundStatus, get } from '../../../utils/progress.js'
-import * as CityBackground from '../components/city-background.js'
-import * as LevelIndicator from '../components/level-indicator.js'
+import { set, get } from '../../../utils/progress.js'
 import { toPng } from '../../../utils/helper.js'
 
 //
@@ -17,6 +15,96 @@ import { toPng } from '../../../utils/helper.js'
 const PLATFORM_TOP_HEIGHT = 150  // Raised top platform (was 250)
 const PLATFORM_BOTTOM_HEIGHT = 150  // Raised bottom platform (was 250)
 const PLATFORM_SIDE_WIDTH = 192
+const CORNER_RADIUS = 20  // Radius for rounded corners of game area
+
+/**
+ * Creates rounded corners for game area to soften sharp edges where platforms meet
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const platformColor = k.rgb(27, 27, 27)  // Same as platform color
+  const radius = CORNER_RADIUS
+  
+  //
+  // Top-left corner arc
+  //
+  k.add([
+    k.pos(PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
+    k.z(15.8),  // Above background and cars, below UI
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 180,
+          end: 270,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+  
+  //
+  // Top-right corner arc
+  //
+  k.add([
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
+    k.z(15.8),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 270,
+          end: 360,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+  
+  //
+  // Bottom-left corner arc
+  //
+  k.add([
+    k.pos(PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
+    k.z(15.8),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 90,
+          end: 180,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+  
+  //
+  // Bottom-right corner arc
+  //
+  k.add([
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
+    k.z(15.8),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 0,
+          end: 90,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+}
 
 /**
  * Creates a blurred car sprite using canvas with blur filter
@@ -288,10 +376,6 @@ function createMovingCars(k) {
   }
 }
 //
-// Hero size (approximately)
-//
-const HERO_WIDTH = 96   // SPRITE_SIZE (32) * HERO_SCALE (3)
-//
 // Level geometry - two platforms connected by stairs
 //
 const BOTTOM_PLATFORM_TOP = 1080 - PLATFORM_BOTTOM_HEIGHT  // 930
@@ -301,17 +385,14 @@ const SECOND_FLOOR_FLOOR_Y = 400  // Raised second floor (was 554)
 // Lower platform: narrow platform in left part of screen
 //
 const LOWER_PLATFORM_START_X = PLATFORM_SIDE_WIDTH  // Left wall (192)
-const LOWER_PLATFORM_WIDTH = HERO_WIDTH - 8  // Narrower than hero (88px, was 104px)
 //
 // Hero spawn positions
 //
-const HERO_SPAWN_X = LOWER_PLATFORM_START_X + 10  // Left side of lower platform (202)
+const HERO_SPAWN_X = LOWER_PLATFORM_START_X + 60  // Left side of lower platform, moved right 50px (was +10)
 const HERO_SPAWN_Y = FIRST_FLOOR_FLOOR_Y - 50
-const ANTIHERO_CLOCK_PLATFORM_X = PLATFORM_SIDE_WIDTH + 15  // Clock platform position (same offset as hero's)
+const ANTIHERO_CLOCK_PLATFORM_X = PLATFORM_SIDE_WIDTH + 65  // Clock platform position, moved right 50px (was +15)
 const ANTIHERO_SPAWN_X = ANTIHERO_CLOCK_PLATFORM_X  // Standing on clock platform
 const ANTIHERO_SPAWN_Y = SECOND_FLOOR_FLOOR_Y - 50  // Standing on clock platform
-
-const HERO_FIRST_THOUGHTS_DELAY = 2.0
 /**
  * Time section level 1 scene
  * @param {Object} k - Kaplay instance
@@ -388,60 +469,9 @@ export function sceneLevel1(k) {
       FpsCounter.onUpdate(fpsCounter)
     })
     //
-    // Create small hero icon and life.png image in top right corner
+    // Create rounded corners for game area
     //
-    const fontSize = 48  // Font size of level indicator letters
-    const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
-    const lifeImageHeight = 78  // Increased by 30% (30 * 2 * 1.3)
-    const spacingBetween = 70  // Spacing between hero and life
-    const lifeImageOriginalHeight = 1197  // Original height of life.png
-    const rightMargin = 80  // Margin from right edge (80px)
-    const topMargin = 10  // Top margin (same as T1ME)
-    const smallHeroY = topMargin + fontSize / 2  // Aligned with center of T1ME letters vertically
-    
-    //
-    // Create small hero (2x smaller, static, time section colors)
-    // Check completed sections for hero parts (mouth, arms)
-    //
-    const isWordComplete = get('word', false)
-    const isTouchComplete = get('touch', false)
-    
-    //
-    // Position hero and life in top right corner
-    //
-    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2  // Life on the right, 80px from edge
-    const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
-    
-    const smallHero = Hero.create({
-      k,
-      x: smallHeroX,
-      y: smallHeroY,
-      type: Hero.HEROES.HERO,
-      controllable: false,
-      isStatic: true,
-      scale: 2.4375,  // Increased by 30% (1.875 * 1.3)
-      bodyColor: CFG.visual.colors.hero.body,
-      outlineColor: CFG.visual.colors.outline,
-      addMouth: isWordComplete,  // Add mouth if word section is complete
-      addArms: isTouchComplete  // Add arms if touch section is complete
-    })
-    smallHero.character.fixed = true  // Fixed position
-    smallHero.character.z = CFG.visual.zIndex.ui
-    
-    //
-    // Load and add life.png image (scaled to 2x size, increased by 30%)
-    // Positioned in top right corner
-    //
-    k.loadSprite('life', '/life.png')
-    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3  // Scale increased by 30%
-    k.add([
-      k.sprite('life'),
-      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (aligned with T1ME)
-      k.scale(lifeImageScale),
-      k.anchor('center'),
-      k.fixed(),
-      k.z(CFG.visual.zIndex.ui)
-    ])
+    createRoundedCorners(k)
     //
     // Create moving blurred cars on background
     //
@@ -453,7 +483,7 @@ export function sceneLevel1(k) {
     //
     // Create clock platform (persistent, shows seconds only) under hero
     //
-    const clockPlatformX = LOWER_PLATFORM_START_X + 15  // Moved right by 5px (was 10)
+    const clockPlatformX = LOWER_PLATFORM_START_X + 65  // Moved right by 50px (was +15)
     const clockPlatform = TimePlatform.create({
       k,
       x: clockPlatformX,

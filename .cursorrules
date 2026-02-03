@@ -8,6 +8,7 @@ This is a Kaplay.js-based 2D platformer game with procedural graphics and audio.
 ## 1. Module Organization
 
 ### Structure
+- **All constants at the top of the file (before any functions)**
 - **Every module should export create() function & it should be on the top**
 - **All exported functions at the top**
 - **All private functions at the bottom**
@@ -432,10 +433,11 @@ export function playLandSound(inst) {
 
 ### Comments and empty lines
 - **NO empty line** should be placed directly before a comment block that describes code below it
+- **NO empty line** should be placed between a comment and the code it describes
 - Every multi-line comment block should start and end with an empty comment line (`//`)
 - For JSDoc comments (`/** ... */`), no empty line is needed between the comment and the code
 - Inline comments (on the same line as code) are allowed for brief clarifications
-- Every code block should be described by comment.
+- Every code block should be described by comment
 
 ```javascript
 // Bad: empty line before comment, and missing // wrapper lines

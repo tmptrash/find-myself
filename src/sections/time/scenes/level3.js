@@ -5,7 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
 import { getColor } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import * as TimeSpikes from '../components/time-spikes.js'
+import * as OneSpikes from '../components/one-spikes.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -31,7 +31,6 @@ const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 //
 // Section configuration
 //
-const SECTION_WIDTH = 350  // Width of each time section (reduced to fit all sections)
 const SECTION_COUNT = 11  // Number of sections from left to right
 
 /**
@@ -108,9 +107,8 @@ export function sceneLevel3(k) {
     const lifeImageHeight = 78  // Increased by 30% (30 * 2 * 1.3)
     const spacingBetween = 70  // Spacing between hero and life
     const lifeImageOriginalHeight = 1197  // Original height of life.png
-    const rightMargin = 80  // Margin from right edge (80px)
-    const topMargin = 10  // Top margin (same as T1ME)
-    const smallHeroY = topMargin + fontSize / 2  // Aligned with center of T1ME letters vertically
+    const rightMargin = 80  // Margin from right edge of game area (80px)
+    const smallHeroY = PLATFORM_TOP_HEIGHT + fontSize / 2  // Aligned with T1ME (game area top)
     
     //
     // Create small hero (2x smaller, static, time section colors)
@@ -120,9 +118,9 @@ export function sceneLevel3(k) {
     const isTouchComplete = get('touch', false)
     
     //
-    // Position hero and life in top right corner
+    // Position hero and life in top right corner, aligned with right edge of game area
     //
-    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2  // Life on the right, 80px from edge
+    const lifeImageX = k.width() - PLATFORM_SIDE_WIDTH - rightMargin - lifeImageHeight / 2  // Life aligned with right game area edge, 80px inset
     const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
     
     const smallHero = Hero.create({
@@ -1227,7 +1225,7 @@ function createObstacleSpikes(k, hero, sound) {
   // Create each cluster
   //
   clusters.forEach(cluster => {
-    TimeSpikes.create({
+    OneSpikes.create({
       k,
       startX: cluster.startX,
       endX: cluster.endX,

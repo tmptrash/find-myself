@@ -110,7 +110,7 @@ export const CFG = {
     zIndex: {
       background: -100,
       flyingWords: -25,  // Between near_front (-1) and mid_depth (-50)
-      platforms: 15,  // High z-index so platforms are always on top
+      platforms: 16,  // High z-index so platforms are always on top
       player: 10,
       playerShadow: 9,
       playerAbove: 11,

@@ -3,34 +3,34 @@ import { initScene, startTimeSectionMusic } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
-import * as AnalogClock from '../components/analog-clock.js'
-import * as TimeSpikes from '../components/time-spikes.js'
+import * as OneSpikes from '../components/one-spikes.js'
 import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { stopTimeSectionMusic } from '../utils/scene.js'
-import * as LevelIndicator from '../components/level-indicator.js'
 import { toPng } from '../../../utils/helper.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
 //
 const PLATFORM_TOP_HEIGHT = 250
-const PLATFORM_BOTTOM_HEIGHT = 250
+const PLATFORM_BOTTOM_HEIGHT = 255  // Lowered by 5px to create ground stripe
 const PLATFORM_SIDE_WIDTH = 192
+const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
 // Hero spawn positions (in pixels)
 //
 const HERO_SPAWN_X = 250
-const HERO_SPAWN_Y = 790
+const HERO_SPAWN_Y = 795  // Raised by 5px due to ground stripe
 const ANTIHERO_SPAWN_X = 1670
-const ANTIHERO_SPAWN_Y = 790
+const ANTIHERO_SPAWN_Y = 795  // Raised by 5px due to ground stripe
 //
 // Hero spawn timing
 //
 const ANTIHERO_SPAWN_DELAY = 1.0  // Anti-hero spawns 1 second after hero
 const HERO_FIRST_THOUGHTS_DELAY = 2.0
+const CORNER_RADIUS = 20  // Radius for rounded corners of game area
 //
 // Instructions animation constants
 //
@@ -168,6 +168,111 @@ function showInstructions(k) {
     }
   })
 }
+/**
+ * Creates ground stripe above bottom platform
+ * @param {Object} k - Kaplay instance
+ */
+function createGroundStripe(k) {
+  const groundColor = k.rgb(20, 20, 20)  // Dark gray ground
+  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT
+  k.add([
+    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
+    k.pos(PLATFORM_SIDE_WIDTH, groundY),
+    k.color(groundColor),
+    k.z(16)  // Above platforms (15), background (15.5), cars (15.6), rounded corners (15.8)
+  ])
+}
+
+/**
+ * Creates rounded corners for game area to soften sharp edges where platforms meet
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const platformColor = k.rgb(27, 27, 27)  // Same as platform color
+  const radius = CORNER_RADIUS
+  
+  //
+  // Top-left corner arc
+  //
+  k.add([
+    k.pos(PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
+    k.z(15.8),  // Above background and cars, below UI
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 180,
+          end: 270,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+  
+  //
+  // Top-right corner arc
+  //
+  k.add([
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
+    k.z(15.8),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 270,
+          end: 360,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+  
+  //
+  // Bottom-left corner arc
+  //
+  k.add([
+    k.pos(PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
+    k.z(15.8),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 90,
+          end: 180,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+  
+  //
+  // Bottom-right corner arc
+  //
+  k.add([
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
+    k.z(15.8),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: radius,
+          start: 0,
+          end: 90,
+          fill: true,
+          color: platformColor
+        })
+      }
+    }
+  ])
+}
+
 /**
  * Creates a blurred car sprite using canvas with blur filter
  * @param {Object} params - Car parameters
@@ -511,17 +616,6 @@ export function sceneLevel0(k) {
       k.z(15.5)  // In front of platforms (15)
     ])
     //
-    // Create a game object for drawing analog clock
-    //
-    k.add([
-      {
-        draw() {
-          AnalogClock.draw(analogClock)
-        }
-      },
-      k.z(17)  // Above other elements
-    ])
-    //
     // Create FPS counter
     //
     const fpsCounter = FpsCounter.create({ k })
@@ -532,63 +626,13 @@ export function sceneLevel0(k) {
       FpsCounter.onUpdate(fpsCounter)
     })
     //
-    // Create small hero icon and life.png image below level indicator letters
+    // Create rounded corners for game area
     //
+    createRoundedCorners(k)
     //
-    // Create small hero icon and life.png image in top right corner
+    // Create ground stripe above bottom platform
     //
-    const fontSize = 48  // Font size of level indicator letters
-    const smallHeroSize = 90  // Increased by 30% (60 * 1.3)
-    const lifeImageHeight = 60  // Increased by 30% (30 * 2 * 1.3)
-    const spacingBetween = 90  // Spacing between hero and life
-    const lifeImageOriginalHeight = 1197  // Original height of life.png
-    const rightMargin = 80  // Margin from right edge (80px)
-    const topMargin = 30  // Top margin (same as T1ME)
-    const smallHeroY = topMargin + fontSize / 2  // Aligned with center of T1ME letters vertically
-    
-    //
-    // Create small hero (2x smaller, static, time section colors)
-    // Check completed sections for hero parts (mouth, arms)
-    //
-    const isWordComplete = get('word', false)
-    const isTouchComplete = get('touch', false)
-    
-    //
-    // Position hero and life in top right corner
-    //
-    const lifeImageX = k.width() - rightMargin - lifeImageHeight / 2  // Life on the right, 80px from edge
-    const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
-    
-    const smallHero = Hero.create({
-      k,
-      x: smallHeroX,
-      y: smallHeroY,
-      type: Hero.HEROES.HERO,
-      controllable: false,
-      isStatic: true,
-      scale: 2.4375,  // Increased by 30% (1.875 * 1.3)
-      bodyColor: CFG.visual.colors.hero.body,
-      outlineColor: CFG.visual.colors.outline,
-      addMouth: isWordComplete,  // Add mouth if word section is complete
-      addArms: isTouchComplete  // Add arms if touch section is complete
-    })
-    smallHero.character.fixed = true  // Fixed position
-    smallHero.character.z = CFG.visual.zIndex.ui
-    
-    //
-    // Load and add life.png image (scaled to 2x size, increased by 30%)
-    // Positioned in top right corner
-    //
-    k.loadSprite('life', '/life.png')
-    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3  // Scale increased by 30%
-    k.add([
-      k.sprite('life'),
-      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (aligned with T1ME)
-      k.scale(lifeImageScale),
-      k.anchor('center'),
-      k.fixed(),
-      k.z(CFG.visual.zIndex.ui)
-    ])
+    createGroundStripe(k)
     //
     // Create moving blurred cars on background
     //
@@ -648,15 +692,6 @@ export function sceneLevel0(k) {
       k,
       x: 880,
       y: 720,
-    })
-    //
-    // Create analog clock centered horizontally at the top
-    //
-    const analogClock = AnalogClock.create({
-      k,
-      x: CFG.visual.screen.width / 2,  // Center horizontally
-      y: 450,  // Higher up
-      staticPlatform
     })
     //
     // Platform 5: 1-second timer, right and up from static platform
@@ -801,16 +836,15 @@ export function sceneLevel0(k) {
       TimePlatform.onUpdate(timePlatform5)
       TimePlatform.onUpdate(timePlatform6)
       StaticTimePlatform.onUpdate(staticPlatform)
-      AnalogClock.onUpdate(analogClock)
     })
     //
     // Create time spikes (digit "1") under the time platform to anti-hero
     //
-    const timeSpikes = TimeSpikes.create({
+    const oneSpikes = OneSpikes.create({
       k,
       startX: 450,  // Start after the time platform
       endX: 1600,   // End near the anti-hero
-      y: 823,       // Below the time platform, on the floor level
+      y: 818,       // Below the time platform, on the floor level
       hero,
       currentLevel: 'level-time.0',
       sfx: sound
@@ -832,7 +866,7 @@ export function sceneLevel0(k) {
     const originalPositions = []
     const originalRotations = []
     
-    timeSpikes.fakeSpikes.forEach(fakeSpike => {
+    oneSpikes.fakeSpikes.forEach(fakeSpike => {
       if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
         originalPositions.push({ x: fakeSpike.pos.x, y: fakeSpike.pos.y })
         originalRotations.push(fakeSpike.angle)
@@ -849,7 +883,7 @@ export function sceneLevel0(k) {
         //
         spikesDisappeared = true
         
-        timeSpikes.fakeSpikes.forEach(fakeSpike => {
+        oneSpikes.fakeSpikes.forEach(fakeSpike => {
           if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
             fakeSpike.opacity = 0
             
@@ -866,7 +900,7 @@ export function sceneLevel0(k) {
       //
       // Glitch effect: 5 seconds stable, then chaotic TV-like glitching
       //
-      if (!spikesDisappeared && timeSpikes && timeSpikes.fakeSpikes) {
+      if (!spikesDisappeared && oneSpikes && oneSpikes.fakeSpikes) {
         glitchTimer += k.dt()
         
         if (!isGlitching) {
@@ -897,7 +931,7 @@ export function sceneLevel0(k) {
             //
             // Apply random TV glitch effects to each spike
             //
-            timeSpikes.fakeSpikes.forEach((fakeSpike, index) => {
+            oneSpikes.fakeSpikes.forEach((fakeSpike, index) => {
               if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
                 const original = originalPositions[index]
                 const originalRotation = originalRotations[index]
@@ -1007,7 +1041,7 @@ export function sceneLevel0(k) {
             //
             // Restore spikes to original positions and full opacity
             //
-            timeSpikes.fakeSpikes.forEach((fakeSpike, index) => {
+            oneSpikes.fakeSpikes.forEach((fakeSpike, index) => {
               if (fakeSpike && fakeSpike.exists && fakeSpike.exists()) {
                 const original = originalPositions[index]
                 fakeSpike.pos.x = original.x

@@ -7,7 +7,7 @@ import { set } from '../utils/progress.js'
 // Collision box parameters
 //
 const COLLISION_WIDTH = 10
-const COLLISION_HEIGHT = 25
+const COLLISION_HEIGHT = 27
 const COLLISION_OFFSET_X = 0
 const COLLISION_OFFSET_Y = 0
 //
@@ -35,7 +35,7 @@ const DUST_PARTICLE_LIFETIME = 0.4
 //
 // Death animation timing
 //
-const DEATH_ANIMATION_DURATION = 2.3
+const DEATH_ANIMATION_DURATION = 0.4
 const DEATH_PARTICLE_POINTS = 20
 
 export const HEROES = {

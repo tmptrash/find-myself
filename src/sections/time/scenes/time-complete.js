@@ -1,5 +1,5 @@
 import * as Sound from '../../../utils/sound.js'
-import { stopTimeSectionMusic } from '../utils/scene.js'
+import { stopTimeSectionMusic } from '../components/scene-helper.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
 
 const FINAL_MESSAGE = "time shapes everything - even you"

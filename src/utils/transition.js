@@ -2,7 +2,7 @@ import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
 import { setSectionCompleted, set } from './progress.js'
 import * as Sound from './sound.js'
-import { stopTimeSectionMusic } from '../sections/time/utils/scene.js'
+import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
 
 /**
  * Level transition configuration - maps current level to next level

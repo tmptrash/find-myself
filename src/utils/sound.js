@@ -11,6 +11,10 @@ let audioContext = null
 //
 let globalBackgroundMusic = null
 let globalCurrentTrack = null
+//
+// Global subtitle sound reference (for stopping on death)
+//
+let globalSubtitleSound = null
 /**
  * Create sound instance with AudioContext and all audio resources
  * @returns {Object} Sound instance with context, gains, and ambient state
@@ -116,8 +120,40 @@ export function playOnce(k, delay, name, volume) {
  */
 export function playInScene(k, name, volume, loop = false) {
   const sound = k.play(name, { loop, volume })
+  //
+  // If this is a subtitle sound (xxx-pre), store it globally
+  //
+  if (name && name.includes('-pre')) {
+    globalSubtitleSound = sound
+  }
   k.onSceneLeave(() => sound?.stop())
   return sound
+}
+/**
+ * Stop subtitle sound immediately (called on hero death)
+ */
+export function stopSubtitleSound() {
+  if (globalSubtitleSound) {
+    try {
+      globalSubtitleSound.stop()
+      globalSubtitleSound = null
+    } catch (e) {
+      // Already stopped
+    }
+  }
+}
+/**
+ * Fade out all background music tracks quickly
+ */
+export function fadeOutAllMusic() {
+  if (globalBackgroundMusic) {
+    try {
+      globalBackgroundMusic.volume = 0
+      globalBackgroundMusic.stop()
+    } catch (e) {
+      // Already stopped
+    }
+  }
 }
 /**
  * Start audio context - initializes and resumes the audio context
@@ -1114,6 +1150,130 @@ export function playDeathSound(instance) {
   createCrack(instance, now + 0.08, 150, 0.24)
   // Third crack (final)
   createCrack(instance, now + 0.15, 120, 0.20)
+}
+/**
+ * Play evil laugh sound effect (sinister laugh for life counter)
+ * @param {Object} instance - Sound instance
+ */
+export function playEvilLaughSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 1.2
+  //
+  // Create evil laugh with descending tone and distortion
+  //
+  const laugh = instance.audioContext.createOscillator()
+  const laughGain = instance.audioContext.createGain()
+  const filter = instance.audioContext.createBiquadFilter()
+  
+  laugh.type = 'sawtooth'
+  //
+  // Start high and descend (evil cackle)
+  //
+  laugh.frequency.setValueAtTime(400, now)
+  laugh.frequency.exponentialRampToValueAtTime(150, now + 0.3)
+  laugh.frequency.exponentialRampToValueAtTime(200, now + 0.5)
+  laugh.frequency.exponentialRampToValueAtTime(100, now + duration)
+  //
+  // Filter for darker tone
+  //
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(800, now)
+  filter.Q.value = 2
+  //
+  // Volume envelope - crescendo then fade
+  //
+  laughGain.gain.setValueAtTime(0.001, now)
+  laughGain.gain.exponentialRampToValueAtTime(0.3, now + 0.1)
+  laughGain.gain.setValueAtTime(0.3, now + 0.8)
+  laughGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  laugh.connect(filter)
+  filter.connect(laughGain)
+  laughGain.connect(instance.audioContext.destination)
+  
+  laugh.start(now)
+  laugh.stop(now + duration)
+  //
+  // Add secondary oscillator for richness (deeper tone)
+  //
+  const deepLaugh = instance.audioContext.createOscillator()
+  const deepGain = instance.audioContext.createGain()
+  
+  deepLaugh.type = 'sine'
+  deepLaugh.frequency.setValueAtTime(200, now)
+  deepLaugh.frequency.exponentialRampToValueAtTime(75, now + 0.3)
+  deepLaugh.frequency.exponentialRampToValueAtTime(100, now + 0.5)
+  deepLaugh.frequency.exponentialRampToValueAtTime(50, now + duration)
+  
+  deepGain.gain.setValueAtTime(0.001, now)
+  deepGain.gain.exponentialRampToValueAtTime(0.2, now + 0.15)
+  deepGain.gain.setValueAtTime(0.2, now + 0.7)
+  deepGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  deepLaugh.connect(deepGain)
+  deepGain.connect(instance.audioContext.destination)
+  
+  deepLaugh.start(now)
+  deepLaugh.stop(now + duration)
+}
+/**
+ * Play victory sound (ascending bright tones)
+ * @param {Object} instance - Sound instance
+ */
+export function playVictorySound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 1.0
+  //
+  // Create bright ascending victory tone
+  //
+  const victory = instance.audioContext.createOscillator()
+  const victoryGain = instance.audioContext.createGain()
+  const filter = instance.audioContext.createBiquadFilter()
+  
+  victory.type = 'sine'
+  // Start mid and ascend (bright victory)
+  victory.frequency.setValueAtTime(440, now)  // A4
+  victory.frequency.exponentialRampToValueAtTime(554, now + 0.15)  // C#5
+  victory.frequency.exponentialRampToValueAtTime(659, now + 0.3)  // E5
+  victory.frequency.setValueAtTime(880, now + 0.5)  // A5
+  // Filter for brighter tone
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(3000, now)
+  filter.Q.value = 1
+  // Volume envelope - quick attack then sustain
+  victoryGain.gain.setValueAtTime(0.001, now)
+  victoryGain.gain.exponentialRampToValueAtTime(0.25, now + 0.05)
+  victoryGain.gain.setValueAtTime(0.25, now + 0.6)
+  victoryGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  victory.connect(filter)
+  filter.connect(victoryGain)
+  victoryGain.connect(instance.audioContext.destination)
+  
+  victory.start(now)
+  victory.stop(now + duration)
+  //
+  // Add harmony (perfect fifth above)
+  //
+  const harmony = instance.audioContext.createOscillator()
+  const harmonyGain = instance.audioContext.createGain()
+  
+  harmony.type = 'sine'
+  harmony.frequency.setValueAtTime(660, now)  // E5
+  harmony.frequency.exponentialRampToValueAtTime(831, now + 0.15)  // G#5
+  harmony.frequency.exponentialRampToValueAtTime(988, now + 0.3)  // B5
+  harmony.frequency.setValueAtTime(1320, now + 0.5)  // E6
+  
+  harmonyGain.gain.setValueAtTime(0.001, now)
+  harmonyGain.gain.exponentialRampToValueAtTime(0.15, now + 0.05)
+  harmonyGain.gain.setValueAtTime(0.15, now + 0.6)
+  harmonyGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  harmony.connect(harmonyGain)
+  harmonyGain.connect(instance.audioContext.destination)
+  
+  harmony.start(now)
+  harmony.stop(now + duration)
 }
 /**
  * Play eerie/creepy sound effect (disturbing low frequency drone)

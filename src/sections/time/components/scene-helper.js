@@ -132,8 +132,9 @@ export function initScene(config) {
   //
   // Add level indicator if levelNumber provided
   //
+  let levelIndicator = null
   if (levelNumber && topPlatformHeight && sideWallWidth) {
-    LevelIndicator.create({
+    levelIndicator = LevelIndicator.create({
       k,
       levelNumber,
       activeColor: "#FFFFFF",
@@ -168,7 +169,7 @@ export function initScene(config) {
     antiHero = heroesResult.antiHero
   }
   
-  return { sound, hero, antiHero }
+  return { sound, hero, antiHero, levelIndicator }
 }
 
 /**

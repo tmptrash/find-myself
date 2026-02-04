@@ -28,13 +28,17 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     ctx.fillRect(0, 0, screenWidth, screenHeight)
     
     //
+    // Calculate sun position (needed for building height calculation)
+    //
+    const sunX = screenWidth * 0.85 - 100  // Moved left by 100px
+    const sunY = screenHeight * 0.2 + 150  // Moved down by 150px
+    const sunRadius = 90  // Increased size (was 60)
+    const pulse = 1.0  // Static pulse for static image
+    
+    //
     // Draw sun (larger, brighter, more to the right) - only if showSun is true
     //
     if (showSun) {
-      const sunX = screenWidth * 0.85 - 100  // Moved left by 100px
-      const sunY = screenHeight * 0.2 + 150  // Moved down by 150px
-      const sunRadius = 90  // Increased size (was 60)
-      const pulse = 1.0  // Static pulse for static image
       
       // Blurred glow (multiple circles, brighter)
       for (let i = 5; i > 0; i--) {
@@ -81,6 +85,11 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     // Calculate bottom platform Y position (houses start from here)
     //
     const bottomPlatformY = screenHeight - bottomPlatformHeight
+    //
+    // Calculate maximum building height to not cover the sun
+    // Sun is at sunY, leave some space (100px) below it
+    //
+    const maxBuildingHeight = bottomPlatformY - sunY - 100
     
     //
     // First pass: Draw deepest background buildings (darkest, fill all gaps)
@@ -92,8 +101,10 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       // Deepest buildings are smallest, darkest, and fill all gaps
       //
       const deepWidth = randomRange(40, 120)
-      const availableHeight = bottomPlatformY
-      const deepHeight = randomRange(availableHeight * 0.1, availableHeight * 0.3)  // Lowest buildings (10-30% of height)
+      const deepHeight = Math.min(
+        randomRange(maxBuildingHeight * 0.1, maxBuildingHeight * 0.3),
+        maxBuildingHeight
+      )  // Lowest buildings (10-30% of max height, but not above max)
       const deepBuildingY = bottomPlatformY - deepHeight
       const deepColor = randomInt(20, 35)  // Darkest color (20-35)
       
@@ -153,8 +164,10 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       // Background buildings are smaller and darker
       //
       const bgWidth = randomRange(60, 180)
-      const availableHeight = bottomPlatformY
-      const bgHeight = randomRange(availableHeight * 0.15, availableHeight * 0.4)  // Lower buildings (15-40% of height)
+      const bgHeight = Math.min(
+        randomRange(maxBuildingHeight * 0.15, maxBuildingHeight * 0.4),
+        maxBuildingHeight
+      )  // Lower buildings (15-40% of max height, but not above max)
       const bgBuildingY = bottomPlatformY - bgHeight
       const bgColor = randomInt(35, 50)  // Darker color (35-50 instead of 60-80)
       

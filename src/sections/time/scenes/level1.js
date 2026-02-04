@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic } from '../utils/scene.js'
+import { initScene, startTimeSectionMusic } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -7,7 +7,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { set, get } from '../../../utils/progress.js'
-import { toPng } from '../../../utils/helper.js'
+import { toPng, parseHex } from '../../../utils/helper.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -16,93 +16,176 @@ const PLATFORM_TOP_HEIGHT = 150  // Raised top platform (was 250)
 const PLATFORM_BOTTOM_HEIGHT = 150  // Raised bottom platform (was 250)
 const PLATFORM_SIDE_WIDTH = 192
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
+const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
+
+/**
+ * Flash small hero with color animation
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ * @param {Object} originalColor - Original color of small hero
+ * @param {number} count - Current flash count
+ */
+function flashSmallHeroLevel1(k, levelIndicator, originalColor, count) {
+  if (count >= 20) {
+    levelIndicator.smallHero.character.color = originalColor
+    return
+  }
+  //
+  // Flash between green and white for visibility
+  //
+  levelIndicator.smallHero.character.color = count % 2 === 0 ? k.rgb(0, 255, 100) : k.rgb(255, 255, 255)
+  k.wait(0.05, () => flashSmallHeroLevel1(k, levelIndicator, originalColor, count + 1))
+}
+/**
+ * Create heart particles around small hero when level is completed
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function createHeroScoreParticles(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
+    return
+  }
+  
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  const particleCount = 15
+  //
+  // Create heart particles flying outward
+  //
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.8 + Math.random() * 0.4
+    
+    const particle = k.add([
+      k.text('♥', { size: 20 + Math.random() * 10 }),
+      k.pos(heroX, heroY),
+      k.color(255, 100 + Math.random() * 100, 100 + Math.random() * 100),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.fixed()
+    ])
+    //
+    // Animate particle outward with fade
+    //
+    const startTime = k.time()
+    particle.onUpdate(() => {
+      const elapsed = k.time() - startTime
+      if (elapsed > lifetime) {
+        particle.destroy()
+        return
+      }
+      //
+      // Move outward
+      //
+      particle.pos.x += Math.cos(angle) * speed * k.dt()
+      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      //
+      // Fade out
+      //
+      particle.opacity = 1 - (elapsed / lifetime)
+    })
+  }
+}
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius
+ * @param {string} backgroundColor - Background color hex
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, backgroundColor) {
+  const size = radius * 2
+  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+    const [r, g, b] = parseHex(backgroundColor)
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+    //
+    // Draw L-shaped corner with rounded inner angle
+    // Start with full square
+    //
+    ctx.fillRect(0, 0, size, size)
+    //
+    // Cut out top-right quarter circle to create rounded inner corner
+    //
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
+    ctx.lineTo(size, size)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Reset composite operation
+    //
+    ctx.globalCompositeOperation = 'source-over'
+  })
+  return dataURL
+}
+
+/**
+ * Creates ground stripe above bottom platform
+ * @param {Object} k - Kaplay instance
+ */
+function createGroundStripe(k) {
+  const groundColor = k.rgb(20, 20, 20)  // Dark gray ground
+  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
+  k.add([
+    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
+    k.pos(PLATFORM_SIDE_WIDTH, groundY),
+    k.color(groundColor),
+    k.z(16)  // Above platforms (15), background (15.5), cars (15.6), rounded corners (15.8)
+  ])
+}
 
 /**
  * Creates rounded corners for game area to soften sharp edges where platforms meet
  * @param {Object} k - Kaplay instance
  */
 function createRoundedCorners(k) {
-  const platformColor = k.rgb(27, 27, 27)  // Same as platform color
   const radius = CORNER_RADIUS
-  
+  const backgroundColor = CFG.visual.colors.background
   //
-  // Top-left corner arc
+  // Create corner sprite
+  //
+  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  k.loadSprite('corner-sprite-level1', cornerDataURL)
+  //
+  // Top-left corner (rotate 0°)
   //
   k.add([
-    k.pos(PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
-    k.z(15.8),  // Above background and cars, below UI
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 180,
-          end: 270,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level1'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
-  
   //
-  // Top-right corner arc
+  // Top-right corner (rotate 90°)
   //
   k.add([
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
-    k.z(15.8),
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 270,
-          end: 360,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level1'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
-  
   //
-  // Bottom-left corner arc
+  // Bottom-left corner (rotate 270°)
   //
   k.add([
-    k.pos(PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
-    k.z(15.8),
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 90,
-          end: 180,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level1'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
-  
   //
-  // Bottom-right corner arc
+  // Bottom-right corner (rotate 180°)
   //
   k.add([
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
-    k.z(15.8),
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 0,
-          end: 90,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level1'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
 }
 
@@ -420,7 +503,7 @@ export function sceneLevel1(k) {
     //
     // Initialize level with heroes and platforms (skip default platforms)
     //
-    const { hero, antiHero } = initScene({
+    const { hero, antiHero, levelIndicator } = initScene({
       k,
       levelName: 'level-time.1',
       levelNumber: 2,
@@ -434,9 +517,55 @@ export function sceneLevel1(k) {
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
         //
-        // Move to next level with transition
+        // Fade out all sounds immediately
         //
-        createLevelTransition(k, 'level-time.1')
+        if (sound && sound.audioContext) {
+          const ctx = sound.audioContext
+          if (sound.ambientGain) {
+            sound.ambientGain.gain.setValueAtTime(sound.ambientGain.gain.value, ctx.currentTime)
+            sound.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+          }
+        }
+        Sound.fadeOutAllMusic()
+        //
+        // Increment hero score (level completed)
+        //
+        const currentScore = get('heroScore', 0)
+        const newScore = currentScore + 1
+        set('heroScore', newScore)
+        //
+        // Show visual effects with hero score before transition
+        //
+        if (levelIndicator && levelIndicator.smallHero) {
+          //
+          // Update score text immediately
+          //
+          if (levelIndicator.updateHeroScore) {
+            levelIndicator.updateHeroScore(newScore)
+          }
+          //
+          // Play victory sound
+          //
+          Sound.playVictorySound(sound)
+          //
+          // Flash small hero aggressively (green to white, 20 flashes = 1 second)
+          //
+          const originalColor = levelIndicator.smallHero.character.color
+          flashSmallHeroLevel1(k, levelIndicator, originalColor, 0)
+          //
+          // Create heart particles around small hero
+          //
+          createHeroScoreParticles(k, levelIndicator)
+        }
+        //
+        // Wait 1.3 seconds before transition (1s for effects + 0.3s pause)
+        //
+        k.wait(1.3, () => {
+          //
+          // Move to next level with transition
+          //
+          createLevelTransition(k, 'level-time.1')
+        })
       }
     })
     
@@ -473,6 +602,10 @@ export function sceneLevel1(k) {
     //
     createRoundedCorners(k)
     //
+    // Create ground stripe above bottom platform
+    //
+    createGroundStripe(k)
+    //
     // Create moving blurred cars on background
     //
     createMovingCars(k)
@@ -495,7 +628,8 @@ export function sceneLevel1(k) {
       staticTime: true,  // Never update time (always show 00)
       duration: 0,  // Not used for persistent platforms
       sfx: sound,
-      enableColorChange: true
+      enableColorChange: true,
+      levelIndicator
     })
     //
     // Create clock platform (persistent, shows seconds only) under anti-hero
@@ -509,7 +643,8 @@ export function sceneLevel1(k) {
       showSecondsOnly: true,
       duration: 0,  // Not used for persistent platforms
       sfx: sound,
-      enableColorChange: true
+      enableColorChange: true,
+      levelIndicator
     })
     //
     // Create clock platforms to the right of hero (kill on digit 1)
@@ -589,7 +724,8 @@ export function sceneLevel1(k) {
         currentLevel: 'level-time.1',
         duration: 0,  // Not used for persistent platforms
         sfx: sound,
-        enableColorChange: true
+        enableColorChange: true,
+        levelIndicator
       })
       
       clockPlatforms.push(platform)
@@ -690,7 +826,8 @@ export function sceneLevel1(k) {
         duration: 0,  // Not used for persistent platforms
         sfx: sound,
         hidden: true,  // Hide text initially
-        enableColorChange: true
+        enableColorChange: true,
+        levelIndicator
       })
       
       clockPlatforms.push(platform)
@@ -752,7 +889,8 @@ export function sceneLevel1(k) {
       currentLevel: 'level-time.1',
       digitCount: 50,  // Increased to make spikes closer together
       fakeDigitCount: 0,  // All spikes cut (no fake spikes)
-      sfx: sound
+      sfx: sound,
+      levelIndicator
     })
     //
     // Spawn hero immediately
@@ -827,7 +965,5 @@ function createLevelPlatforms(k, sound) {
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
-  
-  
 }
 

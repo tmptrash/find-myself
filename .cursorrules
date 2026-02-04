@@ -656,6 +656,7 @@ public/
 - ✅ Comment all code you write
 - ✅ Put all private functions at the bottom
 - ✅ Use hex color strings like "#xxxxxx"
+- ✅ In scene files, all helper functions must come after the main scene function sceneLevelX()
 
 ---
 

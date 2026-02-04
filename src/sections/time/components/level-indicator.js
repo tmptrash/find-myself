@@ -99,7 +99,7 @@ export function create(config) {
   //
   const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
   const lifeImageHeight = 70  // Increased by 30% (30 * 2 * 1.3)
-  const spacingBetween = 80  // Spacing between hero and life
+  const spacingBetween = 110  // Spacing between hero and life (increased from 80)
   const lifeImageOriginalHeight = 1197  // Original height of life.png
   const rightMargin = 90  // Margin from right edge of game area
   const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 7  // Above game area, aligned with T1ME
@@ -133,22 +133,142 @@ export function create(config) {
   // Load and add life.png image (scaled to 2x size, increased by 30%)
   // Positioned in top right corner
   //
-  if (!k.getSprite('life')) {
-    k.loadSprite('life', '/life.png')
-  }
   const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3  // Scale increased by 30%
-  const lifeImage = k.add([
-    k.sprite('life'),
-    k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (aligned with T1ME)
-    k.scale(lifeImageScale),
-    k.anchor('center'),
+  //
+  // Create placeholder lifeImage object immediately (will be populated when sprite loads)
+  //
+  const lifeImageData = {
+    sprite: null,
+    pos: { x: lifeImageX, y: smallHeroY }
+  }
+  //
+  // Load sprite asynchronously and add when ready
+  //
+  k.loadSprite('life', '/life.png').then(() => {
+    lifeImageData.sprite = k.add([
+      k.sprite('life'),
+      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (aligned with T1ME)
+      k.scale(lifeImageScale),
+      k.anchor('center'),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+  })
+  //
+  // Get score values from localStorage
+  //
+  const heroScore = get('heroScore', 0)
+  const lifeScore = get('lifeScore', 0)
+  //
+  // Add hero score text (to the right of small hero, closer, with black outline)
+  //
+  const scoreOffsetX = 5  // Offset from hero/life image (reduced from 15)
+  const scoreOffsetY = 10  // Vertical offset down from hero/life center
+  const scoreOutlineThickness = 2  // Outline thickness for score text
+  //
+  // Create outline for hero score (8 directions) - store references to update later
+  //
+  const scoreOffsets = [
+    [-scoreOutlineThickness, -scoreOutlineThickness],
+    [0, -scoreOutlineThickness],
+    [scoreOutlineThickness, -scoreOutlineThickness],
+    [-scoreOutlineThickness, 0],
+    [scoreOutlineThickness, 0],
+    [-scoreOutlineThickness, scoreOutlineThickness],
+    [0, scoreOutlineThickness],
+    [scoreOutlineThickness, scoreOutlineThickness]
+  ]
+  const heroScoreOutlines = []
+  scoreOffsets.forEach(([dx, dy]) => {
+    const outline = k.add([
+      k.text(heroScore.toString(), {
+        size: fontSize,
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+      }),
+      k.pos(smallHeroX + smallHeroSize / 2 + scoreOffsetX + dx, smallHeroY + scoreOffsetY + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+    heroScoreOutlines.push(outline)
+  })
+  //
+  // Add main hero score text
+  //
+  const heroScoreText = k.add([
+    k.text(heroScore.toString(), {
+      size: fontSize,
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+    }),
+    k.pos(smallHeroX + smallHeroSize / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
+    k.anchor('left'),
+    k.color(255, 255, 255),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui)
+  ])
+  //
+  // Create outline for life score (8 directions) - store references to update later
+  //
+  const lifeScoreOutlines = []
+  scoreOffsets.forEach(([dx, dy]) => {
+    const outline = k.add([
+      k.text(lifeScore.toString(), {
+        size: fontSize,
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+      }),
+      k.pos(lifeImageX + lifeImageHeight / 2 + scoreOffsetX + dx, smallHeroY + scoreOffsetY + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+    lifeScoreOutlines.push(outline)
+  })
+  //
+  // Add main life score text
+  //
+  const lifeScoreText = k.add([
+    k.text(lifeScore.toString(), {
+      size: fontSize,
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+    }),
+    k.pos(lifeImageX + lifeImageHeight / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
+    k.anchor('left'),
+    k.color(255, 255, 255),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
   return {
     letterObjects,
     smallHero,
-    lifeImage
+    lifeImage: lifeImageData,
+    heroScoreText,
+    lifeScoreText,
+    lifeScoreOutlines,
+    heroScoreOutlines,
+    updateHeroScore: (newScore) => {
+      heroScoreText.text = newScore.toString()
+      //
+      // Update all outline texts too
+      //
+      heroScoreOutlines.forEach(outline => {
+        if (outline.exists && outline.exists()) {
+          outline.text = newScore.toString()
+        }
+      })
+    },
+    updateLifeScore: (newScore) => {
+      lifeScoreText.text = newScore.toString()
+      //
+      // Update all outline texts too
+      //
+      lifeScoreOutlines.forEach(outline => {
+        if (outline.exists && outline.exists()) {
+          outline.text = newScore.toString()
+        }
+      })
+    }
   }
 }
 

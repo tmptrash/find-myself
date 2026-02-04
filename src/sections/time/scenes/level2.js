@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, stopTimeSectionMusic } from '../utils/scene.js'
+import { initScene, stopTimeSectionMusic } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -7,7 +7,7 @@ import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CityBackground from '../components/city-background.js'
-import { toPng } from '../../../utils/helper.js'
+import { toPng, parseHex } from '../../../utils/helper.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -15,6 +15,7 @@ const PLATFORM_TOP_HEIGHT = 150
 const PLATFORM_BOTTOM_HEIGHT = 150
 const PLATFORM_SIDE_WIDTH = 50  // Reduced from 192 to 50 for more space
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
+const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
 // Hero size (approximately)
 //
@@ -34,6 +35,75 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 const FINAL_PLATFORM_INDEX = 28
 
+/**
+ * Flash small hero with color animation
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ * @param {Object} originalColor - Original color of small hero
+ * @param {number} count - Current flash count
+ */
+function flashSmallHeroLevel2(k, levelIndicator, originalColor, count) {
+  if (count >= 20) {
+    levelIndicator.smallHero.character.color = originalColor
+    return
+  }
+  //
+  // Flash between green and white for visibility
+  //
+  levelIndicator.smallHero.character.color = count % 2 === 0 ? k.rgb(0, 255, 100) : k.rgb(255, 255, 255)
+  k.wait(0.05, () => flashSmallHeroLevel2(k, levelIndicator, originalColor, count + 1))
+}
+/**
+ * Create heart particles around small hero when level is completed
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function createHeroScoreParticles(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
+    return
+  }
+  
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  const particleCount = 15
+  //
+  // Create heart particles flying outward
+  //
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.8 + Math.random() * 0.4
+    
+    const particle = k.add([
+      k.text('♥', { size: 20 + Math.random() * 10 }),
+      k.pos(heroX, heroY),
+      k.color(255, 100 + Math.random() * 100, 100 + Math.random() * 100),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.fixed()
+    ])
+    //
+    // Animate particle outward with fade
+    //
+    const startTime = k.time()
+    particle.onUpdate(() => {
+      const elapsed = k.time() - startTime
+      if (elapsed > lifetime) {
+        particle.destroy()
+        return
+      }
+      //
+      // Move outward
+      //
+      particle.pos.x += Math.cos(angle) * speed * k.dt()
+      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      //
+      // Fade out
+      //
+      particle.opacity = 1 - (elapsed / lifetime)
+    })
+  }
+}
 /**
  * Time section level 2 scene
  * @param {Object} k - Kaplay instance
@@ -100,7 +170,7 @@ export function sceneLevel2(k) {
     //
     // Initialize level with heroes and platforms
     //
-    const { hero, antiHero } = initScene({
+    const { hero, antiHero, levelIndicator } = initScene({
       k,
       levelName: 'level-time.2',
       levelNumber: 3,
@@ -114,15 +184,61 @@ export function sceneLevel2(k) {
       antiHeroY: antiHeroSpawnY,
       onAnnihilation: () => {
         //
-        // Stop all music before leaving
+        // Fade out all sounds immediately
         //
-        timeMusic.stop()
-        kidsMusic.stop()
-        clockMusic.stop()
+        if (sound && sound.audioContext) {
+          const ctx = sound.audioContext
+          if (sound.ambientGain) {
+            sound.ambientGain.gain.setValueAtTime(sound.ambientGain.gain.value, ctx.currentTime)
+            sound.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+          }
+        }
+        Sound.fadeOutAllMusic()
         //
-        // Move to level 3
+        // Increment hero score (level completed)
         //
-        k.go('level-time.3')
+        const currentScore = get('heroScore', 0)
+        const newScore = currentScore + 1
+        set('heroScore', newScore)
+        //
+        // Show visual effects with hero score before transition
+        //
+        if (levelIndicator && levelIndicator.smallHero) {
+          //
+          // Update score text immediately
+          //
+          if (levelIndicator.updateHeroScore) {
+            levelIndicator.updateHeroScore(newScore)
+          }
+          //
+          // Play victory sound
+          //
+          Sound.playVictorySound(sound)
+          //
+          // Flash small hero aggressively (green to white, 20 flashes = 1 second)
+          //
+          const originalColor = levelIndicator.smallHero.character.color
+          flashSmallHeroLevel2(k, levelIndicator, originalColor, 0)
+          //
+          // Create heart particles around small hero
+          //
+          createHeroScoreParticles(k, levelIndicator)
+        }
+        //
+        // Wait 1.3 seconds before transition (1s for effects + 0.3s pause)
+        //
+        k.wait(1.3, () => {
+          //
+          // Stop all music before leaving
+          //
+          timeMusic.stop()
+          kidsMusic.stop()
+          clockMusic.stop()
+          //
+          // Move to level 3
+          //
+          k.go('level-time.3')
+        })
       }
     })
     
@@ -163,6 +279,10 @@ export function sceneLevel2(k) {
     //
     createRoundedCorners(k)
     //
+    // Create ground stripe above bottom platform
+    //
+    createGroundStripe(k)
+    //
     // Create moving blurred cars on background
     //
     createMovingCars(k)
@@ -199,7 +319,8 @@ export function sceneLevel2(k) {
       currentLevel: 'level-time.2',
       digitCount: 50,  // Many spikes close together
       fakeDigitCount: 0,  // All spikes kill (no bunnies)
-      sfx: sound
+      sfx: sound,
+      levelIndicator
     })
     //
     // Create snow drifts on bottom platform floor
@@ -746,6 +867,11 @@ function createPlatformSystem(k, sound, hero, antiHero) {
               // If no attempts left, hero dies
               //
               if (inst.attemptsRemaining <= 0) {
+                //
+                // Increment life score (hero died)
+                //
+                const currentScore = get('lifeScore', 0)
+                set('lifeScore', currentScore + 1)
                 Hero.death(inst.hero, () => k.go('level-time.2'))
                 return
               }
@@ -965,91 +1091,104 @@ function createLevelPlatforms(k, sound) {
 }
 
 /**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius
+ * @param {string} backgroundColor - Background color hex
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, backgroundColor) {
+  const size = radius * 2
+  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+    const [r, g, b] = parseHex(backgroundColor)
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+    //
+    // Draw L-shaped corner with rounded inner angle
+    // Start with full square
+    //
+    ctx.fillRect(0, 0, size, size)
+    //
+    // Cut out top-right quarter circle to create rounded inner corner
+    //
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
+    ctx.lineTo(size, size)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Reset composite operation
+    //
+    ctx.globalCompositeOperation = 'source-over'
+  })
+  return dataURL
+}
+
+/**
+ * Creates ground stripe above bottom platform
+ * @param {Object} k - Kaplay instance
+ */
+function createGroundStripe(k) {
+  const groundColor = k.rgb(20, 20, 20)  // Dark gray ground
+  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
+  k.add([
+    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
+    k.pos(PLATFORM_SIDE_WIDTH, groundY),
+    k.color(groundColor),
+    k.z(16)  // Above platforms (15), background (15.5), cars (15.6), rounded corners (15.8)
+  ])
+}
+
+/**
  * Creates rounded corners for game area to soften sharp edges where platforms meet
  * @param {Object} k - Kaplay instance
  */
 function createRoundedCorners(k) {
-  const platformColor = k.rgb(27, 27, 27)  // Same as platform color
   const radius = CORNER_RADIUS
-  
+  const backgroundColor = CFG.visual.colors.background
   //
-  // Top-left corner arc
+  // Create corner sprite
+  //
+  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  k.loadSprite('corner-sprite-level2', cornerDataURL)
+  //
+  // Top-left corner (rotate 0°)
   //
   k.add([
-    k.pos(PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
-    k.z(15.8),  // Above background and cars, below UI
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 180,
-          end: 270,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level2'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
-  
   //
-  // Top-right corner arc
+  // Top-right corner (rotate 90°)
   //
   k.add([
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH, PLATFORM_TOP_HEIGHT),
-    k.z(15.8),
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 270,
-          end: 360,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level2'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
-  
   //
-  // Bottom-left corner arc
+  // Bottom-left corner (rotate 270°)
   //
   k.add([
-    k.pos(PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
-    k.z(15.8),
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 90,
-          end: 180,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level2'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
-  
   //
-  // Bottom-right corner arc
+  // Bottom-right corner (rotate 180°)
   //
   k.add([
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH, k.height() - PLATFORM_BOTTOM_HEIGHT),
-    k.z(15.8),
-    {
-      draw() {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius,
-          start: 0,
-          end: 90,
-          fill: true,
-          color: platformColor
-        })
-      }
-    }
+    k.sprite('corner-sprite-level2'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
   ])
 }
 

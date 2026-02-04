@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, stopTimeSectionMusic } from '../utils/scene.js'
+import { initScene, stopTimeSectionMusic } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
@@ -78,7 +78,7 @@ export function sceneLevel3(k) {
     //
     // Initialize level with heroes (skip default platforms)
     //
-    const { hero, antiHero } = initScene({
+    const { hero, antiHero, levelIndicator } = initScene({
       k,
       levelName: 'level-time.3',
       levelNumber: 4,
@@ -1092,7 +1092,82 @@ function createMonster(k, heroInst, sfx) {
         monsterBox.y + monsterBox.height > heroBox.y) {
       if (!inst.hero.isDying && !inst.hero.isAnnihilating) {
         import('../../../components/hero.js').then(Hero => {
-          Hero.death(inst.hero, () => k.go('level-time.3'))
+          //
+          // Save references before death animation
+          //
+          const savedSfx = inst.hero.sfx
+          const savedLevelIndicator = levelIndicator
+          //
+          // 1. Stop subtitle sound immediately if playing
+          //
+          import('../../../utils/sound.js').then(Sound => {
+            Sound.stopSubtitleSound()
+          })
+          //
+          // 2. Trigger death animation
+          //
+          Hero.death(inst.hero, () => {
+            //
+            // 3. After death particles dispersed, minimal pause before life effects
+            //
+            k.wait(0.1, () => {
+              import('../../../utils/sound.js').then(Sound => {
+                //
+                // 4. Lower all level sounds (ambient, background music)
+                //
+                if (savedSfx && savedSfx.audioContext) {
+                  const ctx = savedSfx.audioContext
+                  //
+                  // Fade out ambient and other sounds quickly
+                  //
+                  if (savedSfx.ambientGain) {
+                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                  }
+                }
+                //
+                // Stop or fade all background music tracks
+                //
+                Sound.fadeOutAllMusic()
+                //
+                // 5. Increment life score and show all effects
+                //
+                const currentScore = get('lifeScore', 0)
+                const newScore = currentScore + 1
+                set('lifeScore', newScore)
+                
+                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                  //
+                  // Update score text and remove old outline
+                  //
+                  if (savedLevelIndicator.updateLifeScore) {
+                    savedLevelIndicator.updateLifeScore(newScore)
+                  }
+                  //
+                  // Play evil laugh sound
+                  //
+                  if (savedSfx) {
+                    Sound.playEvilLaughSound(savedSfx)
+                  }
+                  //
+                  // Flash life image red aggressively (20 flashes = 1 second, faster)
+                  //
+                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                  flashLifeImageLevel3(k, savedLevelIndicator, originalColor, 0)
+                  //
+                  // Create particles around life score
+                  //
+                  createLifeScoreParticlesLevel3(k, savedLevelIndicator)
+                }
+                //
+                // 6. Wait 0.8 seconds for effects to be visible, then reload
+                //
+                k.wait(0.8, () => {
+                  k.go('level-time.3')
+                })
+              })
+            })
+          })
         })
       }
     }
@@ -1721,5 +1796,62 @@ function createSnowDrifts(k) {
       }
     ])
   })
+}
+function flashLifeImageLevel3(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  if (count >= 20) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    return
+  }
+  //
+  // Aggressive flashing - bright red to white
+  //
+  levelIndicator.lifeImage.sprite.color = count % 2 === 0 ? k.rgb(255, 0, 0) : k.rgb(255, 255, 255)
+  k.wait(0.05, () => flashLifeImageLevel3(k, levelIndicator, originalColor, count + 1))
+}
+function createLifeScoreParticlesLevel3(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  
+  const lifeImageX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeImageY = levelIndicator.lifeImage.sprite.pos.y
+  const particleCount = 15
+  
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.8 + Math.random() * 0.4
+    const size = 4 + Math.random() * 4
+    
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeImageX, lifeImageY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      age += dt
+      
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      
+      if (age >= lifetime && particle.exists && particle.exists()) {
+        k.destroy(particle)
+      }
+    })
+  }
 }
 

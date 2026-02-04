@@ -23,6 +23,7 @@ const PLATFORM_HEIGHT = 48
  * @param {boolean} [config.showSecondsOnly=false] - If true, show only seconds (XX format)
  * @param {number} [config.initialTime=0] - Initial time in seconds (for persistent platforms)
  * @param {boolean} [config.killOnOne=false] - If true, kill hero when time contains digit 1
+ * @param {boolean} [config.killOnOddSum=false] - If true, kill hero when digit sum is odd
  * @param {boolean} [config.staticTime=false] - If true, time never updates (always shows initialTime)
  * @param {string} [config.currentLevel] - Current level name for restart on death
  * @param {Object} [config.sfx] - Sound instance for audio effects
@@ -31,7 +32,7 @@ const PLATFORM_HEIGHT = 48
  * @returns {Object} Time platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false, levelIndicator = null } = config
+  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, killOnOddSum = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false, levelIndicator = null } = config
   //
   // Calculate platform size based on format
   // For seconds-only (XX), use smaller width to fit only two digits
@@ -138,6 +139,7 @@ export function create(config) {
     initialTime: persistent ? initialTime : 0,  // Store initial time for staticTime platforms
     updateTimer: 0,  // Timer for updating persistent time
     killOnOne,
+    killOnOddSum,
     staticTime,
     currentLevel,
     sfx,
@@ -228,111 +230,15 @@ export function onUpdate(inst) {
       }
     }
     //
-    // Check for killOnOne logic: kill hero if time contains digit 1 and hero is on platform
-    // Only kill if platform is visible (not hidden)
+    // Landing detection and kill checks for persistent platforms
     //
-    if (inst.killOnOne && !inst.hidden && inst.hero && inst.hero.character && !inst.hero.isDying && !inst.hero.isAnnihilating) {
-      //
-      // Get current displayed text
-      //
-      const currentText = inst.timerText.text
-      //
-      // Check if text contains digit 1
-      //
-      if (currentText.includes('1')) {
-        //
-        // Check if hero is on this platform
-        //
-        if (inst.platform.isColliding(inst.hero.character)) {
-          //
-          // Kill hero
-          //
-          //
-          // Save references before death animation
-          //
-          const savedSfx = inst.sfx
-          const savedLevelIndicator = inst.levelIndicator
-          const savedK = inst.k
-          const savedCurrentLevel = inst.currentLevel
-          //
-          // 1. Stop subtitle sound immediately if playing
-          //
-          Sound.stopSubtitleSound()
-          //
-          // 2. Trigger death animation
-          //
-          Hero.death(inst.hero, () => {
-            //
-            // 3. After death particles dispersed, minimal pause before life effects
-            //
-            savedK.wait(0.1, () => {
-              //
-              // 4. Lower all level sounds (ambient, background music)
-              //
-              if (savedSfx && savedSfx.audioContext) {
-                const ctx = savedSfx.audioContext
-                //
-                // Fade out ambient and other sounds quickly
-                //
-                if (savedSfx.ambientGain) {
-                  savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                  savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                }
-              }
-              //
-              // Stop or fade all background music tracks
-              //
-              Sound.fadeOutAllMusic()
-              //
-              // 5. Increment life score and show all effects
-              //
-              const currentScore = get('lifeScore', 0)
-              const newScore = currentScore + 1
-              set('lifeScore', newScore)
-              
-              if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                //
-                // Update score text and remove old outline
-                //
-                if (savedLevelIndicator.updateLifeScore) {
-                  savedLevelIndicator.updateLifeScore(newScore)
-                }
-                //
-                // Play evil laugh sound
-                //
-                if (savedSfx) {
-                  Sound.playEvilLaughSound(savedSfx)
-                }
-                //
-                // Flash life image red aggressively (20 flashes = 1 second, faster)
-                //
-                const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
-                //
-                // Create particles around life score
-                //
-                createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
-              }
-              //
-              // 6. Wait 0.8 seconds for effects to be visible, then reload
-              //
-              savedK.wait(0.8, () => {
-                if (savedCurrentLevel) {
-                  savedK.go(savedCurrentLevel)
-                }
-              })
-            })
-          })
-        }
-      }
-    }
-    //
-    // Landing detection for persistent platforms
-    //
+    let isOnPlatform = false
+    let isGrounded = false
+    
     if (inst.hero && inst.hero.character && !inst.isDestroyed) {
       const heroChar = inst.hero.character
-      const isOnPlatform = inst.platform.isColliding(heroChar)
-      const isGrounded = heroChar.isGrounded()
+      isOnPlatform = inst.platform.isColliding(heroChar)
+      isGrounded = heroChar.isGrounded()
       //
       // Detect landing: hero was in air (not on this platform) and now lands on this platform
       //
@@ -356,7 +262,110 @@ export function onUpdate(inst) {
         //
         if (newColor === 0 || inst.landingCount >= 5) {
           destroy(inst)
-          return
+        }
+      }
+      //
+      // Check killOnOne/killOnOddSum when hero is standing on platform
+      //
+      if (isOnPlatform && isGrounded && !inst.hero.isDying && !inst.hero.isAnnihilating) {
+        //
+        // Check killOnOne when hero is standing on platform
+        //
+        if (inst.killOnOne && !inst.hidden) {
+          const currentText = inst.timerText.text
+          if (currentText.includes('1')) {
+            const savedSfx = inst.sfx
+            const savedLevelIndicator = inst.levelIndicator
+            const savedK = inst.k
+            const savedCurrentLevel = inst.currentLevel
+            
+            Sound.stopSubtitleSound()
+            Hero.death(inst.hero, () => {
+              savedK.wait(0.1, () => {
+                if (savedSfx && savedSfx.audioContext) {
+                  const ctx = savedSfx.audioContext
+                  if (savedSfx.ambientGain) {
+                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                  }
+                }
+                Sound.fadeOutAllMusic()
+                
+                const currentScore = get('lifeScore', 0)
+                const newScore = currentScore + 1
+                set('lifeScore', newScore)
+                
+                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                  if (savedLevelIndicator.updateLifeScore) {
+                    savedLevelIndicator.updateLifeScore(newScore)
+                  }
+                  if (savedSfx) {
+                    Sound.playEvilLaughSound(savedSfx)
+                  }
+                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                  flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                  createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+                }
+                
+                savedK.wait(0.8, () => {
+                  if (savedCurrentLevel) {
+                    savedK.go(savedCurrentLevel)
+                  }
+                })
+              })
+            })
+          }
+        }
+        //
+        // Check killOnOddSum when hero is standing on platform
+        //
+        if (inst.killOnOddSum && !inst.hidden) {
+          const currentText = inst.timerText.text
+          const digits = currentText.split('').filter(c => c >= '0' && c <= '9')
+          const sum = digits.reduce((acc, d) => acc + parseInt(d), 0)
+          
+          if (sum % 2 === 1) {
+            const savedSfx = inst.sfx
+            const savedLevelIndicator = inst.levelIndicator
+            const savedK = inst.k
+            const savedCurrentLevel = inst.currentLevel
+            
+            Sound.stopSubtitleSound()
+            Hero.death(inst.hero, () => {
+              savedK.wait(0.1, () => {
+                if (savedSfx && savedSfx.audioContext) {
+                  const ctx = savedSfx.audioContext
+                  if (savedSfx.ambientGain) {
+                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                  }
+                }
+                Sound.fadeOutAllMusic()
+                
+                const currentScore = get('lifeScore', 0)
+                const newScore = currentScore + 1
+                set('lifeScore', newScore)
+                
+                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                  if (savedLevelIndicator.updateLifeScore) {
+                    savedLevelIndicator.updateLifeScore(newScore)
+                  }
+                  if (savedSfx) {
+                    Sound.playEvilLaughSound(savedSfx)
+                  }
+                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                  flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                  createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+                }
+                
+                savedK.wait(0.8, () => {
+                  if (savedCurrentLevel) {
+                    savedK.go(savedCurrentLevel)
+                  }
+                })
+              })
+            })
+          }
         }
       }
       

@@ -6,9 +6,10 @@ import { toPng } from '../../../utils/helper.js'
  * @param {Object} k - Kaplay instance
  * @param {number} bottomPlatformHeight - Bottom platform height
  * @param {boolean} [showSun=true] - Whether to show the sun
+ * @param {boolean} [autumnLeaves=false] - Whether to use autumn colors for tree leaves
  * @returns {string} Data URL of the background sprite
  */
-export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true) {
+export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   
@@ -339,17 +340,31 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       ctx.fillRect(trunkX, trunkY, trunkWidth, trunkHeight)
       
       //
-      // Tree foliage (darker green-gray, rounded shape)
+      // Tree foliage (darker green-gray or autumn colors, rounded shape)
       //
-      const foliageColor = randomInt(30, 45)  // Dark green-gray
       const foliageRadius = treeWidth * randomRange(0.4, 0.6)
       const foliageX = treeX + treeWidth / 2
       const foliageY = treeY + foliageRadius * 0.3
       
       //
       // Draw foliage as overlapping circles for natural tree shape
+      // Use autumn colors (yellow/red/orange) if autumnLeaves is true
       //
-      ctx.fillStyle = `rgb(${foliageColor}, ${foliageColor + 5}, ${foliageColor})`
+      let foliageColorStyle
+      if (autumnLeaves) {
+        //
+        // Gray autumn leaves (various shades of gray)
+        //
+        const grayValue = randomInt(50, 80)
+        foliageColorStyle = `rgb(${grayValue}, ${grayValue}, ${grayValue})`
+      } else {
+        //
+        // Green-gray leaves (default)
+        //
+        const foliageColor = randomInt(30, 45)
+        foliageColorStyle = `rgb(${foliageColor}, ${foliageColor + 5}, ${foliageColor})`
+      }
+      ctx.fillStyle = foliageColorStyle
       
       //
       // Main foliage circle
@@ -390,7 +405,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
  * @param {string} [spriteName='city-background'] - Sprite name to use
  * @param {boolean} [showSun=true] - Whether to show the sun
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true) {
-  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun)
+export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false) {
+  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves)
   k.loadSprite(spriteName, spriteData)
 }

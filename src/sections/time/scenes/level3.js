@@ -6,6 +6,7 @@ import { set, get } from '../../../utils/progress.js'
 import { getColor } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
+import * as MovingCars from '../components/moving-cars.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -16,8 +17,8 @@ const PLATFORM_SIDE_WIDTH = 50
 // Corridor dimensions
 //
 const CORRIDOR_HEIGHT = 200  // Height of the corridor
-const CORRIDOR_Y = 200  // Position corridor at 200px from top (under T1ME indicator)
-const LOWER_CORRIDOR_Y = 650  // Position of lower corridor
+const CORRIDOR_Y = 400  // Position corridor at 400px from top (under clouds, above T1ME)
+const LOWER_CORRIDOR_Y = 850  // Position of lower corridor (lowered)
 const PASSAGE_WIDTH = 100  // Width of passage between corridors
 //
 // Hero and monster spawn positions
@@ -100,59 +101,23 @@ export function sceneLevel3(k) {
     //
     createCloudsUnderTopPlatform(k)
     //
-    // Create small hero icon and life.png image in top right corner
+    // Add city background (preloaded sprite with autumn leaves)
     //
-    const fontSize = 48  // Font size of level indicator letters
-    const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
-    const lifeImageHeight = 78  // Increased by 30% (30 * 2 * 1.3)
-    const spacingBetween = 70  // Spacing between hero and life
-    const lifeImageOriginalHeight = 1197  // Original height of life.png
-    const rightMargin = 80  // Margin from right edge of game area (80px)
-    const smallHeroY = PLATFORM_TOP_HEIGHT + fontSize / 2  // Aligned with T1ME (game area top)
-    
-    //
-    // Create small hero (2x smaller, static, time section colors)
-    // Check completed sections for hero parts (mouth, arms)
-    //
-    const isWordComplete = get('word', false)
-    const isTouchComplete = get('touch', false)
-    
-    //
-    // Position hero and life in top right corner, aligned with right edge of game area
-    //
-    const lifeImageX = k.width() - PLATFORM_SIDE_WIDTH - rightMargin - lifeImageHeight / 2  // Life aligned with right game area edge, 80px inset
-    const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2  // Hero to the left of life
-    
-    const smallHero = Hero.create({
-      k,
-      x: smallHeroX,
-      y: smallHeroY,
-      type: Hero.HEROES.HERO,
-      controllable: false,
-      isStatic: true,
-      scale: 2.4375,  // Increased by 30% (1.875 * 1.3)
-      bodyColor: CFG.visual.colors.hero.body,
-      outlineColor: CFG.visual.colors.outline,
-      addMouth: isWordComplete,  // Add mouth if word section is complete
-      addArms: isTouchComplete  // Add arms if touch section is complete
-    })
-    smallHero.character.fixed = true  // Fixed position
-    smallHero.character.z = CFG.visual.zIndex.ui
-    
-    //
-    // Load and add life.png image (scaled to 2x size, increased by 30%)
-    // Positioned in top right corner
-    //
-    k.loadSprite('life', '/life.png')
-    const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3  // Scale increased by 30%
     k.add([
-      k.sprite('life'),
-      k.pos(lifeImageX, smallHeroY),  // Same Y as small hero (center stays at same vertical position)
-      k.scale(lifeImageScale),
+      k.sprite('city-background-level3'),
+      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height / 2),
       k.anchor('center'),
-      k.fixed(),
-      k.z(CFG.visual.zIndex.ui)
+      k.z(13)  // Behind everything except gradient
     ])
+    //
+    // Add moving cars on bottom platform
+    //
+    MovingCars.create({
+      k,
+      platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
+      platformSideWidth: PLATFORM_SIDE_WIDTH,
+      carCount: 5
+    })
     //
     // Create time sections with clocks
     //
@@ -160,7 +125,7 @@ export function sceneLevel3(k) {
     //
     // Create monster that chases the hero
     //
-    const monster = createMonster(k, hero, sound)
+    const monster = createMonster(k, hero, sound, levelIndicator)
     //
     // Setup control inversion based on current section
     //
@@ -186,15 +151,98 @@ export function sceneLevel3(k) {
     //
     // Create obstacle spikes (digit "1") in clusters in both corridors
     //
-    createObstacleSpikes(k, hero, sound)
+    createObstacleSpikes(k, hero, sound, levelIndicator)
     //
     // Create snow drifts on corridor floors
     //
     createSnowDrifts(k)
     //
-    // Check if monster collides with clocks and create disintegration effect
+    // Check if monster collides with hero or clocks
     //
     k.onUpdate(() => {
+      //
+      // Check collision with hero
+      //
+      if (hero && !hero.isDying && !hero.isAnnihilating) {
+        const bodyDistX = Math.abs(monster.x - hero.character.pos.x)
+        const bodyDistY = Math.abs(monster.y - hero.character.pos.y)
+        
+        if (bodyDistX < 50 && bodyDistY < 50) {
+          //
+          // Monster touched hero - trigger death sequence with life score effects
+          //
+          const savedSfx = hero.sfx
+          const savedLevelIndicator = levelIndicator
+          //
+          // 1. Stop subtitle sound immediately if playing
+          //
+          Sound.stopSubtitleSound()
+          //
+          // 2. Trigger death animation
+          //
+          Hero.death(hero, () => {
+            //
+            // 3. After death particles dispersed, minimal pause before life effects
+            //
+            k.wait(0.1, () => {
+              //
+              // 4. Lower all level sounds (ambient, background music)
+              //
+              if (savedSfx && savedSfx.audioContext) {
+                const ctx = savedSfx.audioContext
+                //
+                // Fade out ambient and other sounds quickly
+                //
+                if (savedSfx.ambientGain) {
+                  savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                  savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                }
+              }
+              //
+              // Stop or fade all background music tracks
+              //
+              Sound.fadeOutAllMusic()
+              //
+              // 5. Increment life score and show all effects
+              //
+              const currentScore = get('lifeScore', 0)
+              const newScore = currentScore + 1
+              set('lifeScore', newScore)
+              
+              if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                //
+                // Update score text and remove old outline
+                //
+                if (savedLevelIndicator.updateLifeScore) {
+                  savedLevelIndicator.updateLifeScore(newScore)
+                }
+                //
+                // Play evil laugh sound
+                //
+                if (savedSfx) {
+                  Sound.playEvilLaughSound(savedSfx)
+                }
+                //
+                // Flash life image red aggressively (20 flashes = 1 second, faster)
+                //
+                const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                flashLifeImageLevel3(k, savedLevelIndicator, originalColor, 0)
+                //
+                // Create particles around life score
+                //
+                createLifeScoreParticlesLevel3(k, savedLevelIndicator)
+              }
+              //
+              // 6. Wait 0.8 seconds for effects to be visible, then reload
+              //
+              k.wait(0.8, () => {
+                k.go('level-time.3')
+              })
+            })
+          })
+        }
+      }
+      
       sections.forEach(section => {
         if (section.clock && section.clock.exists && section.clock.exists()) {
           let shouldDestroy = false
@@ -658,7 +706,7 @@ function createClockDisintegrationEffect(k, clock) {
  * @param {Object} sfx - Sound instance for step sounds
  * @returns {Object} Monster instance with returnHome method
  */
-function createMonster(k, heroInst, sfx) {
+function createMonster(k, heroInst, sfx, levelIndicator) {
   const MONSTER_SPEED = 110  // Even faster movement
   const BODY_SIZE = 60
   const LEG_COUNT = 8
@@ -1266,7 +1314,7 @@ function setupControlInversion(heroInst, sections) {
  * @param {Object} hero - Hero instance for collision
  * @param {Object} sound - Sound instance for effects
  */
-function createObstacleSpikes(k, hero, sound) {
+function createObstacleSpikes(k, hero, sound, levelIndicator) {
   //
   // Spike cluster configurations (startX, endX, y, digitCount)
   // Upper corridor clusters - spikes stand on corridor floor, partially in snow
@@ -1309,7 +1357,8 @@ function createObstacleSpikes(k, hero, sound) {
       currentLevel: 'level-time.3',
       digitCount: cluster.count,
       fakeDigitCount: 0,  // No fake spikes - all are deadly
-      sfx: sound
+      sfx: sound,
+      levelIndicator
     })
     //
     // Create snow mounds at the base of each spike cluster

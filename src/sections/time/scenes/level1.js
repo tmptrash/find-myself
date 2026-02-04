@@ -50,19 +50,61 @@ function createHeroScoreParticles(k, levelIndicator) {
   const heroY = levelIndicator.smallHero.character.pos.y
   const particleCount = 15
   //
-  // Create heart particles flying outward
+  // Create heart particles flying outward (yellow with black outline like hero particles)
   //
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 80 + Math.random() * 40
+    const speed = 100 + Math.random() * 50
     const lifetime = 0.8 + Math.random() * 0.4
+    const heartSize = 18 + Math.random() * 8
+    //
+    // Create black outline hearts (8 directions)
+    //
+    const outlineOffset = 1.5
+    const outlineOffsets = [
+      [-outlineOffset, -outlineOffset],
+      [0, -outlineOffset],
+      [outlineOffset, -outlineOffset],
+      [-outlineOffset, 0],
+      [outlineOffset, 0],
+      [-outlineOffset, outlineOffset],
+      [0, outlineOffset],
+      [outlineOffset, outlineOffset]
+    ]
     
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineParticle = k.add([
+        k.text('♥', { size: heartSize }),
+        k.pos(heroX + dx, heroY + dy),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(CFG.visual.zIndex.ui + 10),
+        k.fixed()
+      ])
+      //
+      // Animate outline particle
+      //
+      const startTime = k.time()
+      outlineParticle.onUpdate(() => {
+        const elapsed = k.time() - startTime
+        if (elapsed > lifetime) {
+          outlineParticle.destroy()
+          return
+        }
+        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
+        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.opacity = 1 - (elapsed / lifetime)
+      })
+    })
+    //
+    // Create main yellow heart
+    //
     const particle = k.add([
-      k.text('♥', { size: 20 + Math.random() * 10 }),
+      k.text('♥', { size: heartSize }),
       k.pos(heroX, heroY),
-      k.color(255, 100 + Math.random() * 100, 100 + Math.random() * 100),
+      k.color(255, 200, 0),
       k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 10),
+      k.z(CFG.visual.zIndex.ui + 11),
       k.fixed()
     ])
     //
@@ -75,14 +117,8 @@ function createHeroScoreParticles(k, levelIndicator) {
         particle.destroy()
         return
       }
-      //
-      // Move outward
-      //
       particle.pos.x += Math.cos(angle) * speed * k.dt()
       particle.pos.y += Math.sin(angle) * speed * k.dt()
-      //
-      // Fade out
-      //
       particle.opacity = 1 - (elapsed / lifetime)
     })
   }

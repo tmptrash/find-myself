@@ -34,6 +34,73 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 // Increased platform count to push anti-hero platform to the far left
 //
 const FINAL_PLATFORM_INDEX = 28
+/**
+ * Flash life image when hero dies
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ * @param {Object} originalColor - Original color of life image
+ * @param {number} count - Current flash count
+ */
+function flashLifeImageLevel2(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  if (count >= 20) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    return
+  }
+  //
+  // Aggressive flashing - bright red to white
+  //
+  levelIndicator.lifeImage.sprite.color = count % 2 === 0 ? k.rgb(255, 0, 0) : k.rgb(255, 255, 255)
+  k.wait(0.05, () => flashLifeImageLevel2(k, levelIndicator, originalColor, count + 1))
+}
+/**
+ * Create particles around life score
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function createLifeScoreParticlesLevel2(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  
+  const lifeImageX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeImageY = levelIndicator.lifeImage.sprite.pos.y
+  const particleCount = 15
+  
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.8 + Math.random() * 0.4
+    const size = 4 + Math.random() * 4
+    
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeImageX, lifeImageY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    
+    particle.onUpdate(() => {
+      age += k.dt()
+      if (age > lifetime) {
+        particle.destroy()
+        return
+      }
+      particle.pos.x += velocityX * k.dt()
+      particle.pos.y += velocityY * k.dt()
+      particle.opacity = 1 - (age / lifetime)
+    })
+  }
+}
 
 /**
  * Flash small hero with color animation
@@ -67,19 +134,61 @@ function createHeroScoreParticles(k, levelIndicator) {
   const heroY = levelIndicator.smallHero.character.pos.y
   const particleCount = 15
   //
-  // Create heart particles flying outward
+  // Create heart particles flying outward (yellow with black outline like hero particles)
   //
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 80 + Math.random() * 40
+    const speed = 100 + Math.random() * 50
     const lifetime = 0.8 + Math.random() * 0.4
+    const heartSize = 18 + Math.random() * 8
+    //
+    // Create black outline hearts (8 directions)
+    //
+    const outlineOffset = 1.5
+    const outlineOffsets = [
+      [-outlineOffset, -outlineOffset],
+      [0, -outlineOffset],
+      [outlineOffset, -outlineOffset],
+      [-outlineOffset, 0],
+      [outlineOffset, 0],
+      [-outlineOffset, outlineOffset],
+      [0, outlineOffset],
+      [outlineOffset, outlineOffset]
+    ]
     
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineParticle = k.add([
+        k.text('♥', { size: heartSize }),
+        k.pos(heroX + dx, heroY + dy),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(CFG.visual.zIndex.ui + 10),
+        k.fixed()
+      ])
+      //
+      // Animate outline particle
+      //
+      const startTime = k.time()
+      outlineParticle.onUpdate(() => {
+        const elapsed = k.time() - startTime
+        if (elapsed > lifetime) {
+          outlineParticle.destroy()
+          return
+        }
+        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
+        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.opacity = 1 - (elapsed / lifetime)
+      })
+    })
+    //
+    // Create main yellow heart
+    //
     const particle = k.add([
-      k.text('♥', { size: 20 + Math.random() * 10 }),
+      k.text('♥', { size: heartSize }),
       k.pos(heroX, heroY),
-      k.color(255, 100 + Math.random() * 100, 100 + Math.random() * 100),
+      k.color(255, 200, 0),
       k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 10),
+      k.z(CFG.visual.zIndex.ui + 11),
       k.fixed()
     ])
     //
@@ -92,14 +201,8 @@ function createHeroScoreParticles(k, levelIndicator) {
         particle.destroy()
         return
       }
-      //
-      // Move outward
-      //
       particle.pos.x += Math.cos(angle) * speed * k.dt()
       particle.pos.y += Math.sin(angle) * speed * k.dt()
-      //
-      // Fade out
-      //
       particle.opacity = 1 - (elapsed / lifetime)
     })
   }
@@ -329,7 +432,7 @@ export function sceneLevel2(k) {
     //
     // Create dynamic platform system
     //
-    const platformSystem = createPlatformSystem(k, sound, hero, antiHero)
+    const platformSystem = createPlatformSystem(k, sound, hero, antiHero, levelIndicator)
     //
     // Update hero reference in final platform
     //
@@ -608,9 +711,10 @@ function destroyHearts(inst) {
  * @param {Object} sound - Sound instance
  * @param {Object} hero - Hero instance
  * @param {Object} antiHero - Anti-hero instance
+ * @param {Object} levelIndicator - Level indicator instance for score effects
  * @returns {Object} Platform system instance
  */
-function createPlatformSystem(k, sound, hero, antiHero) {
+function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
   const platforms = []
   let currentPlatformIndex = 0
   let nextPlatform = null
@@ -628,7 +732,9 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     initialTime: 0,
     staticTime: false,  // Let time tick on the platform
     duration: 0,
-    sfx: sound
+    sfx: sound,
+    levelIndicator,
+    currentLevel: 'level-time.2'
   })
   platforms.push({
     inst: startPlatform,
@@ -644,6 +750,7 @@ function createPlatformSystem(k, sound, hero, antiHero) {
     sound,
     hero,
     antiHero,
+    levelIndicator,
     platforms,
     currentPlatformIndex,
     nextPlatform,
@@ -683,7 +790,9 @@ function createPlatformSystem(k, sound, hero, antiHero) {
         initialTime: randomOffset,
         staticTime: false,
         duration: 0,
-        sfx: sound
+        sfx: sound,
+        levelIndicator,
+        currentLevel: 'level-time.2'
       })
       platforms.push({
         inst: platform,
@@ -868,11 +977,63 @@ function createPlatformSystem(k, sound, hero, antiHero) {
               //
               if (inst.attemptsRemaining <= 0) {
                 //
-                // Increment life score (hero died)
+                // Save references
                 //
-                const currentScore = get('lifeScore', 0)
-                set('lifeScore', currentScore + 1)
-                Hero.death(inst.hero, () => k.go('level-time.2'))
+                const savedLevelIndicator = inst.levelIndicator
+                const savedSound = inst.sound
+                //
+                // Destroy hearts
+                //
+                destroyHearts(inst)
+                //
+                // Stop subtitle sound
+                //
+                Sound.stopSubtitleSound()
+                //
+                // Trigger death animation
+                //
+                Hero.death(inst.hero, () => {
+                  //
+                  // After death particles dispersed, minimal pause before life effects
+                  //
+                  k.wait(0.1, () => {
+                    //
+                    // Lower all level sounds
+                    //
+                    if (savedSound && savedSound.audioContext) {
+                      const ctx = savedSound.audioContext
+                      if (savedSound.ambientGain) {
+                        savedSound.ambientGain.gain.setValueAtTime(savedSound.ambientGain.gain.value, ctx.currentTime)
+                        savedSound.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                      }
+                    }
+                    Sound.fadeOutAllMusic()
+                    //
+                    // Increment life score and show all effects
+                    //
+                    const currentScore = get('lifeScore', 0)
+                    const newScore = currentScore + 1
+                    set('lifeScore', newScore)
+                    
+                    if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                      if (savedLevelIndicator.updateLifeScore) {
+                        savedLevelIndicator.updateLifeScore(newScore)
+                      }
+                      if (savedSound) {
+                        Sound.playEvilLaughSound(savedSound)
+                      }
+                      const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                      flashLifeImageLevel2(k, savedLevelIndicator, originalColor, 0)
+                      createLifeScoreParticlesLevel2(k, savedLevelIndicator)
+                    }
+                    //
+                    // Wait 0.8 seconds for effects to be visible, then reload
+                    //
+                    k.wait(0.8, () => {
+                      k.go('level-time.2')
+                    })
+                  })
+                })
                 return
               }
             }
@@ -959,7 +1120,7 @@ function createPlatformSystem(k, sound, hero, antiHero) {
  * @param {Object} inst - Platform system instance
  */
 function createNextPlatform(inst) {
-  const { k, sound, hero } = inst
+  const { k, sound, hero, levelIndicator } = inst
   //
   // Get current platform
   //
@@ -1017,7 +1178,9 @@ function createNextPlatform(inst) {
     initialTime: isSafePlatform ? 0 : randomOffset,  // Safe platforms always show 00
     staticTime: isSafePlatform,  // Safe platforms don't tick
     duration: 0,
-    sfx: sound
+    sfx: sound,
+    levelIndicator,
+    currentLevel: 'level-time.2'
   })
   
   inst.nextPlatform = {

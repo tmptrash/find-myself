@@ -1155,66 +1155,15 @@ export function playDeathSound(instance) {
  * Play evil laugh sound effect (sinister laugh for life counter)
  * @param {Object} instance - Sound instance
  */
-export function playEvilLaughSound(instance) {
-  const now = instance.audioContext.currentTime
-  const duration = 1.2
-  //
-  // Create evil laugh with descending tone and distortion
-  //
-  const laugh = instance.audioContext.createOscillator()
-  const laughGain = instance.audioContext.createGain()
-  const filter = instance.audioContext.createBiquadFilter()
-  
-  laugh.type = 'sawtooth'
-  //
-  // Start high and descend (evil cackle)
-  //
-  laugh.frequency.setValueAtTime(400, now)
-  laugh.frequency.exponentialRampToValueAtTime(150, now + 0.3)
-  laugh.frequency.exponentialRampToValueAtTime(200, now + 0.5)
-  laugh.frequency.exponentialRampToValueAtTime(100, now + duration)
-  //
-  // Filter for darker tone
-  //
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(800, now)
-  filter.Q.value = 2
-  //
-  // Volume envelope - crescendo then fade
-  //
-  laughGain.gain.setValueAtTime(0.001, now)
-  laughGain.gain.exponentialRampToValueAtTime(0.3, now + 0.1)
-  laughGain.gain.setValueAtTime(0.3, now + 0.8)
-  laughGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  
-  laugh.connect(filter)
-  filter.connect(laughGain)
-  laughGain.connect(instance.audioContext.destination)
-  
-  laugh.start(now)
-  laugh.stop(now + duration)
-  //
-  // Add secondary oscillator for richness (deeper tone)
-  //
-  const deepLaugh = instance.audioContext.createOscillator()
-  const deepGain = instance.audioContext.createGain()
-  
-  deepLaugh.type = 'sine'
-  deepLaugh.frequency.setValueAtTime(200, now)
-  deepLaugh.frequency.exponentialRampToValueAtTime(75, now + 0.3)
-  deepLaugh.frequency.exponentialRampToValueAtTime(100, now + 0.5)
-  deepLaugh.frequency.exponentialRampToValueAtTime(50, now + duration)
-  
-  deepGain.gain.setValueAtTime(0.001, now)
-  deepGain.gain.exponentialRampToValueAtTime(0.2, now + 0.15)
-  deepGain.gain.setValueAtTime(0.2, now + 0.7)
-  deepGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  
-  deepLaugh.connect(deepGain)
-  deepGain.connect(instance.audioContext.destination)
-  
-  deepLaugh.start(now)
-  deepLaugh.stop(now + duration)
+/**
+ * Play life sound (death sound effect)
+ * @param {Object} k - Kaplay instance
+ */
+export function playLifeSound(k) {
+  const lifeSound = k.play("life", {
+    volume: 0.7
+  })
+  return lifeSound
 }
 /**
  * Play victory sound (ascending bright tones)

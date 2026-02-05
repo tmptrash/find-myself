@@ -252,11 +252,9 @@ function onSpikeHit(inst) {
           savedLevelIndicator.updateLifeScore(newScore)
         }
         //
-        // Play evil laugh sound
+        // Play life sound
         //
-        if (savedSfx) {
-          Sound.playEvilLaughSound(savedSfx)
-        }
+        Sound.playLifeSound(savedK)
         //
         // Flash life image red aggressively (20 flashes = 1 second, faster)
         //

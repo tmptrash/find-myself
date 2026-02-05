@@ -299,9 +299,7 @@ export function onUpdate(inst) {
                   if (savedLevelIndicator.updateLifeScore) {
                     savedLevelIndicator.updateLifeScore(newScore)
                   }
-                  if (savedSfx) {
-                    Sound.playEvilLaughSound(savedSfx)
-                  }
+                  Sound.playLifeSound(savedK)
                   const originalColor = savedLevelIndicator.lifeImage.sprite.color
                   flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
                   createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
@@ -350,9 +348,7 @@ export function onUpdate(inst) {
                   if (savedLevelIndicator.updateLifeScore) {
                     savedLevelIndicator.updateLifeScore(newScore)
                   }
-                  if (savedSfx) {
-                    Sound.playEvilLaughSound(savedSfx)
-                  }
+                  Sound.playLifeSound(savedK)
                   const originalColor = savedLevelIndicator.lifeImage.sprite.color
                   flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
                   createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)

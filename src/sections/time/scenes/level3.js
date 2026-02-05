@@ -217,11 +217,9 @@ export function sceneLevel3(k) {
                   savedLevelIndicator.updateLifeScore(newScore)
                 }
                 //
-                // Play evil laugh sound
+                // Play life sound
                 //
-                if (savedSfx) {
-                  Sound.playEvilLaughSound(savedSfx)
-                }
+                Sound.playLifeSound(k)
                 //
                 // Flash life image red aggressively (20 flashes = 1 second, faster)
                 //
@@ -1192,11 +1190,9 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
                     savedLevelIndicator.updateLifeScore(newScore)
                   }
                   //
-                  // Play evil laugh sound
+                  // Play life sound
                   //
-                  if (savedSfx) {
-                    Sound.playEvilLaughSound(savedSfx)
-                  }
+                  Sound.playLifeSound(k)
                   //
                   // Flash life image red aggressively (20 flashes = 1 second, faster)
                   //

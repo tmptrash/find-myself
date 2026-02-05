@@ -1019,9 +1019,7 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
                       if (savedLevelIndicator.updateLifeScore) {
                         savedLevelIndicator.updateLifeScore(newScore)
                       }
-                      if (savedSound) {
-                        Sound.playEvilLaughSound(savedSound)
-                      }
+                      Sound.playLifeSound(k)
                       const originalColor = savedLevelIndicator.lifeImage.sprite.color
                       flashLifeImageLevel2(k, savedLevelIndicator, originalColor, 0)
                       createLifeScoreParticlesLevel2(k, savedLevelIndicator)

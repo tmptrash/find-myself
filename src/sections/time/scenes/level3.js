@@ -10,7 +10,6 @@ import * as MovingCars from '../components/moving-cars.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
-const PLATFORM_TOP_HEIGHT = 100
 const PLATFORM_BOTTOM_HEIGHT = 100
 const PLATFORM_SIDE_WIDTH = 50
 const CORNER_RADIUS = 20  // Radius for rounded corners
@@ -31,11 +30,6 @@ const MONSTER_SPAWN_X = PLATFORM_SIDE_WIDTH + 30  // Monster starts at the left 
 const MONSTER_SPAWN_Y = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT / 2
 const ANTIHERO_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Anti-hero at the left of lower corridor
 const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
-//
-// Section configuration
-//
-const SECTION_COUNT = 11  // Number of sections from left to right
-
 /**
  * Time section level 3 scene
  * @param {Object} k - Kaplay instance
@@ -129,9 +123,10 @@ export function sceneLevel3(k) {
     //
     const monster = createMonster(k, hero, sound, levelIndicator)
     //
-    // Setup control inversion based on current section
+    // Setup control inversion based on current section for BOTH hero and anti-hero
     //
     setupControlInversion(hero, sections)
+    setupControlInversion(antiHero, sections)
     //
     // Spawn hero
     //
@@ -248,6 +243,7 @@ export function sceneLevel3(k) {
               // 6. Wait 0.8 seconds for effects to be visible, then reload
               //
               k.wait(0.8, () => {
+                Sound.stopSubtitleSound()
                 k.go('level-time.3')
               })
             })
@@ -400,28 +396,41 @@ function createCorridorPlatforms(k) {
  */
 function createSnowParticles(k) {
   const particles = []
-  const PARTICLE_COUNT = 800
-  const MARGIN = 10  // Margin from platform edges
+  const PARTICLE_COUNT = 300
+  const MARGIN = 10
   const gameAreaLeft = PLATFORM_SIDE_WIDTH + MARGIN
   const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH - MARGIN
   const gameAreaWidth = gameAreaRight - gameAreaLeft
-  const HEIGHT = k.height()
   //
-  // Create particles as game objects with random initial positions within game area
+  // Define visible areas (exclude clouds, middle platform, and bottom platform)
+  //
+  const upperCorridorTop = CORRIDOR_Y
+  const upperCorridorBottom = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT
+  const lowerCorridorTop = LOWER_CORRIDOR_Y
+  const lowerCorridorBottom = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT
+  //
+  // Create particles in two corridors only (not in clouds, middle platform, or bottom platform)
   //
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const size = 1 + Math.random() * 2
     const opacity = 0.3 + Math.random() * 0.4
     //
-    // Create particle as a game object (constrained to game area horizontally)
+    // Distribute particles between upper and lower corridors (60% upper, 40% lower)
+    //
+    const inUpperCorridor = Math.random() < 0.6
+    const yPos = inUpperCorridor
+      ? upperCorridorTop + Math.random() * (upperCorridorBottom - upperCorridorTop)
+      : lowerCorridorTop + Math.random() * (lowerCorridorBottom - lowerCorridorTop)
+    //
+    // Create particle as a game object
     //
     const particle = k.add([
       k.rect(size, size),
-      k.pos(gameAreaLeft + Math.random() * gameAreaWidth, Math.random() * HEIGHT),
+      k.pos(gameAreaLeft + Math.random() * gameAreaWidth, yPos),
       k.color(255, 255, 255),
       k.opacity(opacity),
-      k.z(100),  // Very high z-index to be above everything
-      k.fixed()  // Fixed to screen, not world
+      k.z(15),
+      k.fixed()
     ])
     
     particles.push({
@@ -431,7 +440,10 @@ function createSnowParticles(k) {
       gameAreaLeft,
       gameAreaRight,
       gameAreaWidth,
-      height: HEIGHT
+      upperCorridorTop,
+      upperCorridorBottom,
+      lowerCorridorTop,
+      lowerCorridorBottom
     })
   }
   
@@ -440,7 +452,11 @@ function createSnowParticles(k) {
     particles,
     gameAreaLeft,
     gameAreaRight,
-    gameAreaWidth
+    gameAreaWidth,
+    upperCorridorTop,
+    upperCorridorBottom,
+    lowerCorridorTop,
+    lowerCorridorBottom
   }
 }
 
@@ -449,12 +465,8 @@ function createSnowParticles(k) {
  * @param {Object} inst - Snow system instance
  */
 function updateSnowParticles(inst) {
-  const { k, particles, gameAreaLeft, gameAreaRight, gameAreaWidth } = inst
+  const { k, particles, gameAreaLeft, gameAreaRight, gameAreaWidth, upperCorridorTop, upperCorridorBottom, lowerCorridorTop, lowerCorridorBottom } = inst
   const dt = k.dt()
-  //
-  // Get screen bounds
-  //
-  const screenHeight = k.height()
   //
   // Update each particle
   //
@@ -465,23 +477,57 @@ function updateSnowParticles(inst) {
     p.obj.pos.x += p.speedX * dt
     p.obj.pos.y += p.speedY * dt
     //
-    // Wrap around when particle goes off game area (constrained horizontally)
+    // Determine which corridor particle is in
+    //
+    const inUpperCorridor = p.obj.pos.y >= upperCorridorTop && p.obj.pos.y <= upperCorridorBottom
+    const inLowerCorridor = p.obj.pos.y >= lowerCorridorTop && p.obj.pos.y <= lowerCorridorBottom
+    //
+    // Wrap horizontally
     //
     if (p.obj.pos.x > gameAreaRight + 10) {
       p.obj.pos.x = gameAreaLeft - 10
-      p.obj.pos.y = Math.random() * screenHeight
+      //
+      // Respawn in same corridor
+      //
+      if (inUpperCorridor) {
+        p.obj.pos.y = upperCorridorTop + Math.random() * (upperCorridorBottom - upperCorridorTop)
+      } else if (inLowerCorridor) {
+        p.obj.pos.y = lowerCorridorTop + Math.random() * (lowerCorridorBottom - lowerCorridorTop)
+      }
       p.speedY = -30 + Math.random() * 60
     }
     if (p.obj.pos.x < gameAreaLeft - 10) {
       p.obj.pos.x = gameAreaRight + 10
-      p.obj.pos.y = Math.random() * screenHeight
     }
-    if (p.obj.pos.y < -10) {
-      p.obj.pos.y = screenHeight + 10
-      p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
-    }
-    if (p.obj.pos.y > screenHeight + 10) {
-      p.obj.pos.y = -10
+    //
+    // Wrap vertically within corridor bounds
+    //
+    if (inUpperCorridor) {
+      if (p.obj.pos.y < upperCorridorTop - 10) {
+        p.obj.pos.y = upperCorridorBottom + 10
+        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
+      }
+      if (p.obj.pos.y > upperCorridorBottom + 10) {
+        p.obj.pos.y = upperCorridorTop - 10
+        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
+      }
+    } else if (inLowerCorridor) {
+      if (p.obj.pos.y < lowerCorridorTop - 10) {
+        p.obj.pos.y = lowerCorridorBottom + 10
+        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
+      }
+      if (p.obj.pos.y > lowerCorridorBottom + 10) {
+        p.obj.pos.y = lowerCorridorTop - 10
+        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
+      }
+    } else {
+      //
+      // Particle escaped corridor bounds (shouldn't happen), respawn in random corridor
+      //
+      const respawnInUpper = Math.random() < 0.6
+      p.obj.pos.y = respawnInUpper
+        ? upperCorridorTop + Math.random() * (upperCorridorBottom - upperCorridorTop)
+        : lowerCorridorTop + Math.random() * (lowerCorridorBottom - lowerCorridorTop)
       p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
     }
   })
@@ -1203,12 +1249,13 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
                   //
                   createLifeScoreParticlesLevel3(k, savedLevelIndicator)
                 }
-                //
-                // 6. Wait 0.8 seconds for effects to be visible, then reload
-                //
-                k.wait(0.8, () => {
-                  k.go('level-time.3')
-                })
+                  //
+                  // 6. Wait 0.8 seconds for effects to be visible, then reload
+                  //
+                  k.wait(0.8, () => {
+                    Sound.stopSubtitleSound()
+                    k.go('level-time.3')
+                  })
               })
             })
           })
@@ -1265,10 +1312,12 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
 function setupControlInversion(heroInst, sections) {
   const k = heroInst.k
   //
-  // Track the furthest section reached (rightmost in upper, leftmost in lower)
+  // Track progress separately for each corridor to prevent control jitter
+  // Upper corridor: sections 0-3, Lower corridor: sections 4-8
   //
   let currentSection = null
-  let maxSectionIndex = -1
+  let maxUpperIndex = -1  // Furthest reached in upper corridor (0-3)
+  let maxLowerIndex = 3  // Start at 3 since lower corridor begins at index 4
   
   k.onUpdate(() => {
     const heroX = heroInst.character.pos.x
@@ -1286,23 +1335,39 @@ function setupControlInversion(heroInst, sections) {
     if (!newSection) return
     
     const newIndex = sections.indexOf(newSection)
+    const isUpperCorridor = newSection.corridor === 'upper'
+    const isLowerCorridor = newSection.corridor === 'lower'
+    
     //
     // Check if hero moved into a new section
     //
     if (newSection !== currentSection) {
-      //
-      // Only switch controls if entering a NEW zone further than before
-      //
-      if (newIndex > maxSectionIndex) {
+      let shouldUpdateControls = false
+      
+      if (isUpperCorridor) {
         //
-        // Hero reached a new zone - switch controls
+        // Upper corridor: progress is left to right (indices 0-3)
         //
-        heroInst.controlsReversed = newSection.isReversed
-        maxSectionIndex = newIndex
+        if (newIndex > maxUpperIndex) {
+          maxUpperIndex = newIndex
+          shouldUpdateControls = true
+        }
+      } else if (isLowerCorridor) {
+        //
+        // Lower corridor: progress is right to left (indices 4-8)
+        //
+        if (newIndex > maxLowerIndex) {
+          maxLowerIndex = newIndex
+          shouldUpdateControls = true
+        }
       }
+      
       //
-      // If going back (newIndex <= maxSectionIndex), don't switch controls
+      // Only update controls if progressing forward in current corridor
       //
+      if (shouldUpdateControls) {
+        heroInst.controlsReversed = newSection.isReversed
+      }
       
       currentSection = newSection
     }
@@ -1387,109 +1452,99 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
       levelIndicator
     })
     //
-    // Create snow mounds at the base of each spike cluster
+    // Create snow mound sprite at the base of each spike cluster using toPng()
     //
     const clusterCenterX = (cluster.startX + cluster.endX) / 2
     const clusterWidth = (cluster.endX - cluster.startX) + 40  // Extra width around spikes
     const moundHeight = 18  // Taller snow mound at base
     
-    k.add([
-      k.pos(clusterCenterX, cluster.y + 10),  // Lower position to cover platform better
-      k.z(9),  // Behind spikes (10) and snow drifts (12)
-      {
-        draw() {
-          //
-          // Draw snow mound at base of spikes
-          //
-          const points = []
-          const steps = 20
-          
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const x = (t - 0.5) * clusterWidth
-            //
-            // Flatter curve for better ground coverage (changed from pow 2 to pow 4)
-            //
-            const y = -moundHeight * (1 - Math.pow(2 * t - 1, 4))
-            points.push(k.vec2(x, y))
-          }
-          
-          points.push(k.vec2(clusterWidth / 2, 0))
-          points.push(k.vec2(-clusterWidth / 2, 0))
-          //
-          // Draw mound
-          //
-          k.drawPolygon({
-            pts: points,
-            color: k.rgb(245, 245, 255),
-            opacity: 0.95
-          })
-          //
-          // Add subtle highlight (ensure it stays within mound)
-          //
-          const highlightRadius = clusterWidth * 0.08
-          const highlightY = -moundHeight * 0.5
-          //
-          // Only draw if highlight stays above baseline
-          //
-          if (Math.abs(highlightY) - highlightRadius > 0) {
-            k.drawCircle({
-              radius: highlightRadius,
-              color: k.rgb(255, 255, 255),
-              pos: k.vec2(0, highlightY),
-              opacity: 0.7
-            })
-          }
-        }
+    const moundDataURL = toPng({ width: clusterWidth + 20, height: moundHeight + 10, pixelRatio: 1 }, (ctx) => {
+      ctx.translate((clusterWidth + 20) / 2, moundHeight + 10)
+      
+      const points = []
+      const steps = 20
+      
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps
+        const x = (t - 0.5) * clusterWidth
+        const y = -moundHeight * (1 - Math.pow(2 * t - 1, 4))
+        points.push({ x, y })
       }
+      
+      //
+      // Draw mound
+      //
+      ctx.fillStyle = 'rgb(245, 245, 255)'
+      ctx.globalAlpha = 0.95
+      ctx.beginPath()
+      points.forEach((p, i) => {
+        if (i === 0) {
+          ctx.moveTo(p.x, p.y)
+        } else {
+          ctx.lineTo(p.x, p.y)
+        }
+      })
+      ctx.lineTo(clusterWidth / 2, 0)
+      ctx.lineTo(-clusterWidth / 2, 0)
+      ctx.closePath()
+      ctx.fill()
+      
+      //
+      // Add highlight
+      //
+      const highlightRadius = clusterWidth * 0.08
+      const highlightY = -moundHeight * 0.5
+      
+      if (Math.abs(highlightY) - highlightRadius > 0) {
+        ctx.fillStyle = 'rgb(255, 255, 255)'
+        ctx.globalAlpha = 0.7
+        ctx.beginPath()
+        ctx.arc(0, highlightY, highlightRadius, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    })
+    
+    k.loadSprite(`spike-mound-${cluster.startX}-${cluster.y}`, moundDataURL)
+    k.add([
+      k.sprite(`spike-mound-${cluster.startX}-${cluster.y}`),
+      k.pos(clusterCenterX, cluster.y + 10),
+      k.anchor('center'),
+      k.z(9)  // Behind spikes (10) and snow drifts (12)
     ])
   })
 }
 
 /**
- * Creates clouds at the very top of upper corridor
+ * Creates clouds at the very top of upper corridor using toPng() for performance
  * @param {Object} k - Kaplay instance
  */
 function createCloudsAtTop(k) {
   //
   // Cloud parameters (positioned above upper corridor)
   //
-  const cloudTopY = CORRIDOR_Y + 20  // Just inside corridor top
-  const cloudBottomY = CORRIDOR_Y + 80  // Hanging down into corridor
+  const cloudTopY = CORRIDOR_Y  // Just inside corridor top
   const cloudDenseLayerY = CORRIDOR_Y + 30  // Dense layer inside corridor
   const cloudSparseLayerStartY = CORRIDOR_Y + 50  // Start of sparse layer
   const cloudSparseLayerEndY = CORRIDOR_Y + 80  // End of sparse layer
-  const baseCloudColor = k.rgb(250, 250, 255)  // White with slight blue tint for clouds
+  const baseCloudColor = { r: 250, g: 250, b: 255 }  // White with slight blue tint for clouds
   
   //
   // Create multiple clouds spread horizontally across the screen
-  // Cover almost entire width like snow
   //
   const screenWidth = k.width()
-  const cloudStartX = PLATFORM_SIDE_WIDTH + 50  // Start a bit inside left margin
-  const cloudEndX = screenWidth - PLATFORM_SIDE_WIDTH - 50  // End a bit before right margin
+  const cloudStartX = PLATFORM_SIDE_WIDTH + 60
+  const cloudEndX = screenWidth - PLATFORM_SIDE_WIDTH - 70
   const cloudCoverageWidth = cloudEndX - cloudStartX
   
-  //
-  // Create dense layer at top (more clouds, closer together)
-  //
-  const denseCloudCount = 24  // Even more clouds for solid coverage without gaps
+  const denseCloudCount = 24
   const denseCloudSpacing = cloudCoverageWidth / (denseCloudCount - 1)
-  
-  //
-  // Create sparse layer below (fewer clouds, more spread out)
-  //
-  const sparseCloudCount = 8  // Fewer clouds for sparse coverage
+  const sparseCloudCount = 8
   const sparseCloudSpacing = cloudCoverageWidth / (sparseCloudCount - 1)
   
   //
-  // Generate clouds programmatically to cover almost entire width
-  // Create overlapping clouds like snow covering the top
+  // Cloud types configuration
   //
   const cloudTypes = [
-    //
-    // Type 1: Large wide cloud (6 puffs)
-    //
     {
       mainSize: 50,
       puffs: [
@@ -1500,12 +1555,8 @@ function createCloudsAtTop(k) {
         { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
         { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
       ],
-      color: baseCloudColor,
       opacity: 0.6
     },
-    //
-    // Type 2: Medium wide cloud (5 puffs)
-    //
     {
       mainSize: 42,
       puffs: [
@@ -1515,12 +1566,8 @@ function createCloudsAtTop(k) {
         { radius: 0.8, offsetX: 0.7, offsetY: 0 },
         { radius: 0.7, offsetX: 0, offsetY: 0.12 }
       ],
-      color: k.rgb(245, 245, 250),
       opacity: 0.55
     },
-    //
-    // Type 3: Small wide cloud (4 puffs)
-    //
     {
       mainSize: 35,
       puffs: [
@@ -1529,12 +1576,8 @@ function createCloudsAtTop(k) {
         { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
         { radius: 0.75, offsetX: 0.6, offsetY: 0 }
       ],
-      color: k.rgb(255, 255, 255),
       opacity: 0.5
     },
-    //
-    // Type 4: Very wide cloud (7 puffs)
-    //
     {
       mainSize: 55,
       puffs: [
@@ -1546,50 +1589,27 @@ function createCloudsAtTop(k) {
         { radius: 0.65, offsetX: 1.0, offsetY: 0 },
         { radius: 0.6, offsetX: 0, offsetY: 0.15 }
       ],
-      color: baseCloudColor,
       opacity: 0.65
     }
   ]
   
   //
-  // Generate clouds with dense layer at top, sparse layer below
+  // Generate cloud configurations
   //
   const cloudConfigs = []
   
-  //
-  // Create dense layer at top (solid coverage, no gaps)
-  //
   for (let i = 0; i < denseCloudCount; i++) {
     const baseX = cloudStartX + denseCloudSpacing * i
-    
-    //
-    // Add small randomness for natural look (less variation for dense layer)
-    // Overlap clouds to ensure no gaps
-    //
-    const randomOffset = (Math.random() - 0.5) * (denseCloudSpacing * 0.6)  // Overlap with neighbors
+    const randomOffset = (Math.random() - 0.5) * (denseCloudSpacing * 0.6)
     const x = baseX + randomOffset
-    
-    //
-    // Select cloud type with some variation
-    //
     const typeIndex = i % cloudTypes.length
     const cloudType = cloudTypes[typeIndex]
-    
-    //
-    // Vary size slightly for more natural look
-    // Make dense layer clouds slightly larger for better overlap
-    //
-    const sizeVariation = 1.0 + Math.random() * 0.3  // 1.0 to 1.3 (larger for dense layer)
+    const sizeVariation = 1.0 + Math.random() * 0.3
     const mainSize = cloudType.mainSize * sizeVariation
-    
-    //
-    // Create multiple rows for dense layer to ensure no gaps
-    // Divide clouds into 2-3 rows for complete coverage
-    //
     const rowsPerLayer = 2
     const rowIndex = Math.floor((i % denseCloudCount) / (denseCloudCount / rowsPerLayer))
-    const rowYOffset = rowIndex * 8  // 8px between rows
-    const yVariation = (Math.random() - 0.5) * 3  // ±1.5px variation within row
+    const rowYOffset = rowIndex * 8
+    const yVariation = (Math.random() - 0.5) * 3
     const cloudY = cloudDenseLayerY + rowYOffset + yVariation
     
     cloudConfigs.push({
@@ -1597,41 +1617,20 @@ function createCloudsAtTop(k) {
       y: cloudY,
       mainSize: mainSize,
       puffs: cloudType.puffs,
-      color: cloudType.color,
-      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)
     })
   }
   
-  //
-  // Create sparse layer below (fewer clouds, more spread out)
-  //
   for (let i = 0; i < sparseCloudCount; i++) {
     const baseX = cloudStartX + sparseCloudSpacing * i
-    
-    //
-    // Add more randomness for sparse layer
-    //
-    const randomOffset = (Math.random() - 0.5) * 40  // ±20px random offset
+    const randomOffset = (Math.random() - 0.5) * 40
     const x = baseX + randomOffset
-    
-    //
-    // Select cloud type with some variation
-    //
     const typeIndex = (i + denseCloudCount) % cloudTypes.length
     const cloudType = cloudTypes[typeIndex]
-    
-    //
-    // Vary size slightly for more natural look
-    //
-    const sizeVariation = 0.9 + Math.random() * 0.2  // 0.9 to 1.1
+    const sizeVariation = 0.9 + Math.random() * 0.2
     const mainSize = cloudType.mainSize * sizeVariation
-    
-    //
-    // Distribute Y positions in sparse layer (more variation)
-    // Use quadratic function to bias towards top of sparse layer
-    //
     const sparseYRange = cloudSparseLayerEndY - cloudSparseLayerStartY
-    const yDistribution = Math.random() * Math.random()  // 0 to 1, biased towards 0 (top)
+    const yDistribution = Math.random() * Math.random()
     const cloudY = cloudSparseLayerStartY + yDistribution * sparseYRange
     
     cloudConfigs.push({
@@ -1639,248 +1638,308 @@ function createCloudsAtTop(k) {
       y: cloudY,
       mainSize: mainSize,
       puffs: cloudType.puffs,
-      color: cloudType.color,
-      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)
     })
   }
   
-  cloudConfigs.forEach((cloudConfig) => {
-    k.add([
-      k.pos(cloudConfig.x, cloudConfig.y),
-      k.z(16),  // Above city background (15.5) but below time digits and other elements
-      {
-        draw() {
-          //
-          // Draw cloud as overlapping circles (puffy cloud shape)
-          //
-          const mainSize = cloudConfig.mainSize
-          
-          //
-          // Main cloud body (largest circle in center)
-          //
-          k.drawCircle({
-            radius: mainSize,
-            pos: k.vec2(0, 0),
-            color: cloudConfig.color,
-            opacity: cloudConfig.opacity
-          })
-          
-          //
-          // Draw all puffs for this cloud
-          //
-          cloudConfig.puffs.forEach((puff) => {
-            k.drawCircle({
-              radius: mainSize * puff.radius,
-              pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
-              color: cloudConfig.color,
-              opacity: cloudConfig.opacity
-            })
-          })
-        }
-      }
-    ])
+  //
+  // Render all clouds to a single sprite using toPng()
+  // Canvas height increased to prevent clipping
+  //
+  const cloudsDataURL = toPng({ width: screenWidth, height: 150, pixelRatio: 1 }, (ctx) => {
+    cloudConfigs.forEach((cloudConfig) => {
+      const canvasX = cloudConfig.x
+      const canvasY = cloudConfig.y - cloudTopY  // Relative to top of canvas
+      const mainSize = cloudConfig.mainSize
+      
+      ctx.globalAlpha = cloudConfig.opacity
+      ctx.fillStyle = `rgb(${baseCloudColor.r}, ${baseCloudColor.g}, ${baseCloudColor.b})`
+      
+      //
+      // Draw main cloud circle
+      //
+      ctx.beginPath()
+      ctx.arc(canvasX, canvasY, mainSize, 0, Math.PI * 2)
+      ctx.fill()
+      
+      //
+      // Draw all puffs
+      //
+      cloudConfig.puffs.forEach((puff) => {
+        ctx.beginPath()
+        ctx.arc(
+          canvasX + puff.offsetX * mainSize,
+          canvasY + puff.offsetY * mainSize,
+          mainSize * puff.radius,
+          0,
+          Math.PI * 2
+        )
+        ctx.fill()
+      })
+    })
   })
+  
+  //
+  // Load sprite and add to scene
+  //
+  k.loadSprite('clouds-level3', cloudsDataURL)
+  k.add([
+    k.sprite('clouds-level3'),
+    k.pos(0, cloudTopY),
+    k.z(16),
+    k.anchor('topleft')
+  ])
 }
 
 /**
- * Creates snow drifts on corridor floors
+ * Creates snow drifts on corridor floors using toPng() for performance
  * @param {Object} k - Kaplay instance
  */
 function createSnowDrifts(k) {
   //
   // Snow drift configurations (x, width, height, corridor)
   //
-  const upperFloorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 70  // Raised to sit on floor
-  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT  // Lowered to sit on floor
-  //
-  // Calculate passage area (where snow should not appear)
-  //
+  const upperFloorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 70
+  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
   const passageEndX = k.width() - PLATFORM_SIDE_WIDTH
+  
   //
-  // Generate continuous snow drifts covering entire floor without gaps
-  // Snow starts AFTER left platform and ends BEFORE right platform
+  // Generate continuous snow drifts data
   //
-  const drifts = []
-  //
-  // Upper corridor - continuous coverage from left platform edge to passage start
-  //
-  const upperCorridorStart = PLATFORM_SIDE_WIDTH + 50
-  const upperCorridorEnd = passageStartX - 50
+  const driftsBack = []  // z=12, behind hero
+  const driftsFront = []  // z=25, in front of hero
+  
+  const upperCorridorStart = PLATFORM_SIDE_WIDTH + 100
+  const upperCorridorEnd = passageStartX - 60
   
   for (let x = upperCorridorStart; x < upperCorridorEnd; x += 20 + Math.random() * 15) {
-    const width = 60 + Math.random() * 120  // 60-180px width (large and overlapping for continuous coverage)
-    const height = 8 + Math.random() * 15   // 8-23px height
-    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    const width = 60 + Math.random() * 120
+    const height = 8 + Math.random() * 15
+    const zIndex = Math.random() > 0.5 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     
-    drifts.push({ x, width, height, y: upperFloorY, z: zIndex, shapeType, skew })
+    const drift = { x, width, height, y: upperFloorY, shapeType, skew }
+    if (zIndex === 12) {
+      driftsBack.push(drift)
+    } else {
+      driftsFront.push(drift)
+    }
   }
-  //
-  // Lower corridor - continuous coverage from left platform edge to passage start, and from passage end to right platform edge
-  //
+  
   const lowerCorridorStart1 = PLATFORM_SIDE_WIDTH + 70
   const lowerCorridorEnd1 = passageStartX
   
   for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 20 + Math.random() * 15) {
-    const width = 60 + Math.random() * 120  // 60-180px width (large and overlapping for continuous coverage)
-    const height = 8 + Math.random() * 15   // 8-23px height
-    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    const width = 60 + Math.random() * 120
+    const height = 8 + Math.random() * 15
+    const zIndex = Math.random() > 0.5 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     
-    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+    const drift = { x, width, height, y: lowerFloorY, shapeType, skew }
+    if (zIndex === 12) {
+      driftsBack.push(drift)
+    } else {
+      driftsFront.push(drift)
+    }
   }
-  //
-  // Lower corridor right section (from passage end to right edge)
-  //
+  
   const lowerCorridorStart2 = passageEndX
   const lowerCorridorEnd2 = k.width() - PLATFORM_SIDE_WIDTH
   
   for (let x = lowerCorridorStart2; x < lowerCorridorEnd2; x += 20 + Math.random() * 15) {
-    const width = 60 + Math.random() * 120  // 60-180px width (large and overlapping for continuous coverage)
-    const height = 8 + Math.random() * 15   // 8-23px height
-    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    const width = 60 + Math.random() * 120
+    const height = 8 + Math.random() * 15
+    const zIndex = Math.random() > 0.5 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     
-    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+    const drift = { x, width, height, y: lowerFloorY, shapeType, skew }
+    if (zIndex === 12) {
+      driftsBack.push(drift)
+    } else {
+      driftsFront.push(drift)
+    }
   }
+  
   //
-  // Add extra smaller drifts between main ones for even more coverage
+  // Add extra smaller drifts
   //
   for (let x = upperCorridorStart; x < upperCorridorEnd; x += 15 + Math.random() * 12) {
-    const width = 40 + Math.random() * 70  // 40-110px width (medium)
-    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
-    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    const width = 40 + Math.random() * 70
+    const height = 5 + Math.random() * 8
+    const zIndex = Math.random() > 0.3 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     
-    drifts.push({ x, width, height, y: upperFloorY, z: zIndex, shapeType, skew })
+    const drift = { x, width, height, y: upperFloorY, shapeType, skew }
+    if (zIndex === 12) {
+      driftsBack.push(drift)
+    } else {
+      driftsFront.push(drift)
+    }
   }
   
   for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 15 + Math.random() * 12) {
-    const width = 40 + Math.random() * 70  // 40-110px width (medium)
-    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
-    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    const width = 40 + Math.random() * 70
+    const height = 5 + Math.random() * 8
+    const zIndex = Math.random() > 0.3 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     
-    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+    const drift = { x, width, height, y: lowerFloorY, shapeType, skew }
+    if (zIndex === 12) {
+      driftsBack.push(drift)
+    } else {
+      driftsFront.push(drift)
+    }
   }
   
   for (let x = lowerCorridorStart2; x < lowerCorridorEnd2; x += 15 + Math.random() * 12) {
-    const width = 40 + Math.random() * 70  // 40-110px width (medium)
-    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
-    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    const width = 40 + Math.random() * 70
+    const height = 5 + Math.random() * 8
+    const zIndex = Math.random() > 0.3 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     
-    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+    const drift = { x, width, height, y: lowerFloorY, shapeType, skew }
+    if (zIndex === 12) {
+      driftsBack.push(drift)
+    } else {
+      driftsFront.push(drift)
+    }
   }
+  
   //
-  // Create each drift as a mound shape with multiple layers
+  // Helper function to draw drift to canvas
   //
-  drifts.forEach(drift => {
-    k.add([
-      k.pos(drift.x, drift.y),
-      k.z(drift.z),  // Either behind hero (12) or in front (25)
-      {
-        draw() {
-          //
-          // Drifts in front of hero (z=25) are slightly more transparent
-          //
-          const baseOpacity = drift.z === 25 ? 0.7 : 0.95
-          const shadowOpacity = drift.z === 25 ? 0.5 : 0.7
-          const highlightOpacity = drift.z === 25 ? 0.6 : 0.85
-          //
-          // Draw snow drift as a polygon (mound shape)
-          //
-          const points = []
-          const steps = 20
-          //
-          // Create curved top using different shape formulas based on shapeType
-          //
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
-            let y
-            //
-            // Different shape types for variety
-            //
-            if (drift.shapeType === 0) {
-              //
-              // Parabolic curve (classic mound)
-              //
-              y = -drift.height * (1 - Math.pow(2 * t - 1, 2))
-            } else if (drift.shapeType === 1) {
-              //
-              // Steeper peak (more pointed)
-              //
-              y = -drift.height * (1 - Math.pow(Math.abs(2 * t - 1), 1.5))
-            } else {
-              //
-              // Flatter top (more spread out)
-              //
-              y = -drift.height * (1 - Math.pow(2 * t - 1, 4))
-            }
-            points.push(k.vec2(x, y))
-          }
-          //
-          // Add bottom points to close the shape
-          //
-          points.push(k.vec2(drift.width / 2, 0))
-          points.push(k.vec2(-drift.width / 2, 0))
-          //
-          // Draw main snow mound (lightest layer)
-          //
-          k.drawPolygon({
-            pts: points,
-            color: k.rgb(240, 240, 250),
-            opacity: baseOpacity
-          })
-          //
-          // Draw shadow layer (darker at bottom)
-          //
-          const shadowPoints = []
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
-            const y = -drift.height * 0.3 * (1 - Math.pow(2 * t - 1, 2))
-            shadowPoints.push(k.vec2(x, y))
-          }
-          shadowPoints.push(k.vec2(drift.width / 2, 0))
-          shadowPoints.push(k.vec2(-drift.width / 2, 0))
-          
-          k.drawPolygon({
-            pts: shadowPoints,
-            color: k.rgb(200, 200, 220),
-            opacity: shadowOpacity
-          })
-          //
-          // Draw highlight on top (brightest spot, offset by skew)
-          // Ensure it stays within the mound (not below y=0)
-          //
-          const highlightOffset = drift.skew * drift.width * 0.2
-          const highlightRadius = drift.width * 0.15
-          const highlightY = -drift.height * 0.7
-          //
-          // Only draw highlight if it stays above the baseline
-          //
-          if (Math.abs(highlightY) - highlightRadius > 0) {
-            k.drawCircle({
-              radius: highlightRadius,
-              color: k.rgb(255, 255, 255),
-              pos: k.vec2(highlightOffset, highlightY),
-              opacity: highlightOpacity
-            })
-          }
-        }
+  const drawDriftToCanvas = (ctx, drift, isFront) => {
+    const baseOpacity = isFront ? 0.7 : 0.95
+    const shadowOpacity = isFront ? 0.5 : 0.7
+    const highlightOpacity = isFront ? 0.6 : 0.85
+    
+    ctx.save()
+    ctx.translate(drift.x, drift.y)
+    
+    //
+    // Draw main snow mound
+    //
+    ctx.globalAlpha = baseOpacity
+    ctx.fillStyle = 'rgb(240, 240, 250)'
+    ctx.beginPath()
+    
+    const steps = 20
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+      let y
+      
+      if (drift.shapeType === 0) {
+        y = -drift.height * (1 - Math.pow(2 * t - 1, 2))
+      } else if (drift.shapeType === 1) {
+        y = -drift.height * (1 - Math.pow(Math.abs(2 * t - 1), 1.5))
+      } else {
+        y = -drift.height * (1 - Math.pow(2 * t - 1, 4))
       }
-    ])
+      
+      if (i === 0) {
+        ctx.moveTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    }
+    
+    ctx.lineTo(drift.width / 2, 0)
+    ctx.lineTo(-drift.width / 2, 0)
+    ctx.closePath()
+    ctx.fill()
+    
+    //
+    // Draw shadow layer
+    //
+    ctx.globalAlpha = shadowOpacity
+    ctx.fillStyle = 'rgb(200, 200, 220)'
+    ctx.beginPath()
+    
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+      const y = -drift.height * 0.3 * (1 - Math.pow(2 * t - 1, 2))
+      
+      if (i === 0) {
+        ctx.moveTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    }
+    
+    ctx.lineTo(drift.width / 2, 0)
+    ctx.lineTo(-drift.width / 2, 0)
+    ctx.closePath()
+    ctx.fill()
+    
+    //
+    // Draw highlight
+    //
+    const highlightOffset = drift.skew * drift.width * 0.2
+    const highlightRadius = drift.width * 0.15
+    const highlightY = -drift.height * 0.7
+    
+    if (Math.abs(highlightY) - highlightRadius > 0) {
+      ctx.globalAlpha = highlightOpacity
+      ctx.fillStyle = 'rgb(255, 255, 255)'
+      ctx.beginPath()
+      ctx.arc(highlightOffset, highlightY, highlightRadius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    
+    ctx.restore()
+  }
+  
+  //
+  // Render back snow layer to sprite
+  //
+  const snowBackDataURL = toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+    driftsBack.forEach(drift => drawDriftToCanvas(ctx, drift, false))
   })
+  
+  //
+  // Render front snow layer to sprite
+  //
+  const snowFrontDataURL = toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+    driftsFront.forEach(drift => drawDriftToCanvas(ctx, drift, true))
+  })
+  
+  //
+  // Load and add sprites
+  //
+  k.loadSprite('snow-back-level3', snowBackDataURL)
+  k.loadSprite('snow-front-level3', snowFrontDataURL)
+  
+  k.add([
+    k.sprite('snow-back-level3'),
+    k.pos(0, 0),
+    k.z(12),
+    k.anchor('topleft')
+  ])
+  
+  k.add([
+    k.sprite('snow-front-level3'),
+    k.pos(0, 0),
+    k.z(25),
+    k.anchor('topleft')
+  ])
 }
+
+/**
+ * Flashes the life image to indicate life count increase
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ * @param {Object} originalColor - Original color
+ * @param {number} count - Flash count
+ */
 function flashLifeImageLevel3(k, levelIndicator, originalColor, count) {
   if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
     return
@@ -1986,24 +2045,34 @@ function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
   k.loadSprite('corner-sprite-level3', cornerDataURL)
   //
-  // Upper corridor corners (only left side, no corners on passage side)
-  // Bottom-left corner
+  // Upper corridor corners (left side only)
+  // Top-left corner (where monster starts, upper part)
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 50),
+    k.rotate(270),  // No rotation (default orientation, same as lower corridor top-left)
+    k.z(30),  // High z-index to be visible above snow
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-left corner (where monster starts, lower part)
   //
   k.add([
     k.sprite('corner-sprite-level3'),
     k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT + CORNER_RADIUS),
     k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1),
+    k.z(30),  // High z-index to be visible above snow
     k.anchor('topleft')
   ])
   //
-  // Lower corridor corners (only left side, no corners on passage side)
+  // Lower corridor corners (only left side)
   // Top-left corner
   //
   k.add([
     k.sprite('corner-sprite-level3'),
     k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, LOWER_CORRIDOR_Y - CORNER_RADIUS),
-    k.z(CFG.visual.zIndex.platforms + 1),
+    k.z(30),  // High z-index to be visible above snow
     k.anchor('topleft')
   ])
   //
@@ -2013,7 +2082,7 @@ function createRoundedCorners(k) {
     k.sprite('corner-sprite-level3'),
     k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT + CORNER_RADIUS),
     k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1),
+    k.z(30),  // High z-index to be visible above snow
     k.anchor('topleft')
   ])
   //
@@ -2023,7 +2092,7 @@ function createRoundedCorners(k) {
     k.sprite('corner-sprite-level3'),
     k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT + CORNER_RADIUS),
     k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1),
+    k.z(30),  // High z-index to be visible above snow
     k.anchor('topleft')
   ])
 }

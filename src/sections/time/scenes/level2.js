@@ -8,6 +8,7 @@ import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CityBackground from '../components/city-background.js'
 import { toPng, parseHex } from '../../../utils/helper.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -132,13 +133,13 @@ function createHeroScoreParticles(k, levelIndicator) {
   
   const heroX = levelIndicator.smallHero.character.pos.x
   const heroY = levelIndicator.smallHero.character.pos.y
-  const particleCount = 15
+  const particleCount = 8
   //
   // Create heart particles flying outward (yellow with black outline like hero particles)
   //
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 100 + Math.random() * 50
+    const speed = 30 + Math.random() * 20
     const lifetime = 0.8 + Math.random() * 0.4
     const heartSize = 18 + Math.random() * 8
     //
@@ -338,9 +339,9 @@ export function sceneLevel2(k) {
           kidsMusic.stop()
           clockMusic.stop()
           //
-          // Move to level 3
+          // Move to level 3 with transition
           //
-          k.go('level-time.3')
+          createLevelTransition(k, 'level-time.2')
         })
       }
     })
@@ -1564,7 +1565,7 @@ function createMovingCars(k) {
     const padding = 20
     const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
     const centerY = canvasHeight - padding - wheelRadius  // Center Y of wheels in canvas
-    const carY = platformTopY - (centerY + wheelRadius - canvasHeight / 2)  // Position sprite center so wheels touch platform
+    const carY = platformTopY - (centerY + wheelRadius - canvasHeight / 2) + 12  // Position sprite center so wheels touch platform
     
     //
     // Create blurred car sprite
@@ -1870,9 +1871,9 @@ function createSnowParticles(k) {
   const PARTICLE_COUNT = 150
   //
   // Game area boundaries
-  // Add small margin to ensure particles don't overlap with platform edges
+  // Add margin to ensure particles don't overlap with platform edges
   //
-  const MARGIN = 2  // Small margin from platform edges
+  const MARGIN = 15  // Margin from platform edges
   const gameAreaLeft = PLATFORM_SIDE_WIDTH + MARGIN  // Inside left platform
   const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH - MARGIN  // Inside right platform
   const gameAreaTop = PLATFORM_TOP_HEIGHT + 100  // Start from clouds area
@@ -1996,13 +1997,15 @@ function createSnowDrifts(k) {
   const floorY = k.height() - PLATFORM_BOTTOM_HEIGHT
   //
   // Generate many snow drifts with random sizes covering entire floor
+  // Add margin to keep snow away from side platforms
   //
   const drifts = []
   //
-  // Fill entire bottom platform with drifts
+  // Fill entire bottom platform with drifts (with margin from sides)
   //
-  const corridorStart = PLATFORM_SIDE_WIDTH
-  const corridorEnd = k.width() - PLATFORM_SIDE_WIDTH
+  const MARGIN = 20  // Increased margin from side platforms
+  const corridorStart = PLATFORM_SIDE_WIDTH + MARGIN
+  const corridorEnd = k.width() - PLATFORM_SIDE_WIDTH - MARGIN
   
   for (let x = corridorStart; x < corridorEnd; x += 40 + Math.random() * 30) {
     const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)

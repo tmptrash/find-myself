@@ -3,7 +3,7 @@ import { initScene, stopTimeSectionMusic } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
-import { getColor } from '../../../utils/helper.js'
+import { getColor, toPng, parseHex } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
@@ -13,20 +13,22 @@ import * as MovingCars from '../components/moving-cars.js'
 const PLATFORM_TOP_HEIGHT = 100
 const PLATFORM_BOTTOM_HEIGHT = 100
 const PLATFORM_SIDE_WIDTH = 50
+const CORNER_RADIUS = 20  // Radius for rounded corners
 //
 // Corridor dimensions
 //
 const CORRIDOR_HEIGHT = 200  // Height of the corridor
-const CORRIDOR_Y = 400  // Position corridor at 400px from top (under clouds, above T1ME)
-const LOWER_CORRIDOR_Y = 850  // Position of lower corridor (lowered)
+const UPPER_CORRIDOR_HEIGHT = 350  // Upper corridor is taller to fit clouds
+const CORRIDOR_Y = 200  // Position upper corridor at top (room for clouds above)
+const LOWER_CORRIDOR_Y = 680  // Position lower corridor
 const PASSAGE_WIDTH = 100  // Width of passage between corridors
 //
 // Hero and monster spawn positions
 //
 const HERO_SPAWN_X = 350  // Hero starts more to the right
-const HERO_SPAWN_Y = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
+const HERO_SPAWN_Y = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT / 2
 const MONSTER_SPAWN_X = PLATFORM_SIDE_WIDTH + 30  // Monster starts at the left (closer to wall)
-const MONSTER_SPAWN_Y = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
+const MONSTER_SPAWN_Y = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT / 2
 const ANTIHERO_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Anti-hero at the left of lower corridor
 const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 //
@@ -85,7 +87,7 @@ export function sceneLevel3(k) {
       levelNumber: 4,
       skipPlatforms: true,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      topPlatformHeight: CORRIDOR_Y - 50,  // UI positioned above upper corridor with more space
       sideWallWidth: PLATFORM_SIDE_WIDTH,
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
@@ -97,10 +99,6 @@ export function sceneLevel3(k) {
     //
     createCorridorPlatforms(k)
     //
-    // Create clouds under top platform (same as level 2)
-    //
-    createCloudsUnderTopPlatform(k)
-    //
     // Add city background (preloaded sprite with autumn leaves)
     //
     k.add([
@@ -109,6 +107,10 @@ export function sceneLevel3(k) {
       k.anchor('center'),
       k.z(13)  // Behind everything except gradient
     ])
+    //
+    // Add clouds at the top of upper corridor
+    //
+    createCloudsAtTop(k)
     //
     // Add moving cars on bottom platform
     //
@@ -135,9 +137,17 @@ export function sceneLevel3(k) {
     //
     Hero.spawn(hero)
     //
+    // Set hero z-index between snow layers (behind snow at z=25, in front of snow at z=12)
+    //
+    hero.character.z = 20
+    //
     // Spawn anti-hero
     //
     Hero.spawn(antiHero)
+    //
+    // Set anti-hero z-index between snow layers (behind snow at z=25, in front of snow at z=12)
+    //
+    antiHero.character.z = 20
     //
     // Create snow particle system
     //
@@ -151,11 +161,15 @@ export function sceneLevel3(k) {
     //
     // Create obstacle spikes (digit "1") in clusters in both corridors
     //
-    createObstacleSpikes(k, hero, sound, levelIndicator)
+    createObstacleSpikes(k, hero, sound, levelIndicator, sections)
     //
     // Create snow drifts on corridor floors
     //
     createSnowDrifts(k)
+    //
+    // Create rounded corners for corridors
+    //
+    createRoundedCorners(k)
     //
     // Check if monster collides with hero or clocks
     //
@@ -321,8 +335,8 @@ function createCorridorPlatforms(k) {
   //
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
   k.add([
-    k.rect(passageStartX, LOWER_CORRIDOR_Y - (CORRIDOR_Y + CORRIDOR_HEIGHT)),
-    k.pos(0, CORRIDOR_Y + CORRIDOR_HEIGHT),
+    k.rect(passageStartX, LOWER_CORRIDOR_Y - (CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT)),
+    k.pos(0, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
     platformColor,
@@ -387,20 +401,23 @@ function createCorridorPlatforms(k) {
 function createSnowParticles(k) {
   const particles = []
   const PARTICLE_COUNT = 800
-  const WIDTH = k.width()
+  const MARGIN = 10  // Margin from platform edges
+  const gameAreaLeft = PLATFORM_SIDE_WIDTH + MARGIN
+  const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH - MARGIN
+  const gameAreaWidth = gameAreaRight - gameAreaLeft
   const HEIGHT = k.height()
   //
-  // Create particles as game objects with random initial positions across entire game world
+  // Create particles as game objects with random initial positions within game area
   //
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const size = 1 + Math.random() * 2
     const opacity = 0.3 + Math.random() * 0.4
     //
-    // Create particle as a game object
+    // Create particle as a game object (constrained to game area horizontally)
     //
     const particle = k.add([
       k.rect(size, size),
-      k.pos(Math.random() * WIDTH, Math.random() * HEIGHT),
+      k.pos(gameAreaLeft + Math.random() * gameAreaWidth, Math.random() * HEIGHT),
       k.color(255, 255, 255),
       k.opacity(opacity),
       k.z(100),  // Very high z-index to be above everything
@@ -411,14 +428,19 @@ function createSnowParticles(k) {
       obj: particle,
       speedX: 150 + Math.random() * 100,
       speedY: -30 + Math.random() * 60,
-      width: WIDTH,
+      gameAreaLeft,
+      gameAreaRight,
+      gameAreaWidth,
       height: HEIGHT
     })
   }
   
   return {
     k,
-    particles
+    particles,
+    gameAreaLeft,
+    gameAreaRight,
+    gameAreaWidth
   }
 }
 
@@ -427,12 +449,11 @@ function createSnowParticles(k) {
  * @param {Object} inst - Snow system instance
  */
 function updateSnowParticles(inst) {
-  const { k, particles } = inst
+  const { k, particles, gameAreaLeft, gameAreaRight, gameAreaWidth } = inst
   const dt = k.dt()
   //
   // Get screen bounds
   //
-  const screenWidth = k.width()
   const screenHeight = k.height()
   //
   // Update each particle
@@ -444,24 +465,24 @@ function updateSnowParticles(inst) {
     p.obj.pos.x += p.speedX * dt
     p.obj.pos.y += p.speedY * dt
     //
-    // Wrap around when particle goes off screen
+    // Wrap around when particle goes off game area (constrained horizontally)
     //
-    if (p.obj.pos.x > screenWidth + 10) {
-      p.obj.pos.x = -10
+    if (p.obj.pos.x > gameAreaRight + 10) {
+      p.obj.pos.x = gameAreaLeft - 10
       p.obj.pos.y = Math.random() * screenHeight
       p.speedY = -30 + Math.random() * 60
     }
-    if (p.obj.pos.x < -10) {
-      p.obj.pos.x = screenWidth + 10
+    if (p.obj.pos.x < gameAreaLeft - 10) {
+      p.obj.pos.x = gameAreaRight + 10
       p.obj.pos.y = Math.random() * screenHeight
     }
     if (p.obj.pos.y < -10) {
       p.obj.pos.y = screenHeight + 10
-      p.obj.pos.x = Math.random() * screenWidth
+      p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
     }
     if (p.obj.pos.y > screenHeight + 10) {
       p.obj.pos.y = -10
-      p.obj.pos.x = Math.random() * screenWidth
+      p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
     }
   })
 }
@@ -473,98 +494,94 @@ function updateSnowParticles(inst) {
  */
 function createTimeSections(k) {
   const sections = []
-  const startX = PLATFORM_SIDE_WIDTH
-  const upperCorridorCenterY = CORRIDOR_Y + CORRIDOR_HEIGHT / 2
+  const upperCorridorCenterY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT / 2
   const lowerCorridorCenterY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
   //
-  // Define section widths and patterns (varied for unpredictability)
+  // Fixed section configuration for upper corridor (4 sections with fixed inversion pattern)
   //
-  const sectionWidths = [300, 400, 350, 280, 420, 360, 320, 380, 340, 400, 330]
-  const reversalPattern = [false, true, false, true, true, false, true, false, false, true, false]
-  const clockSizes = [42, 52, 48, 38, 56, 46, 44, 50, 40, 54, 48]
+  const UPPER_SECTION_COUNT = 4
+  const upperCorridorWidth = k.width() - PLATFORM_SIDE_WIDTH * 2 - PASSAGE_WIDTH
+  const upperSectionWidth = upperCorridorWidth / UPPER_SECTION_COUNT
   //
-  // Create sections for UPPER corridor (left to right)
+  // Fixed inversion pattern: false, true, false, true (alternating)
   //
-  let currentX = startX
-  for (let i = 0; i < SECTION_COUNT; i++) {
-    const sectionWidth = sectionWidths[i]
-    const isReversed = reversalPattern[i]
-    const clockSize = clockSizes[i]
-    //
-    // Randomize clock appearance for visual variety
-    //
-    const clockGrayLevel = 140 + Math.floor(Math.random() * 80)  // Random gray from 140 to 220
-    const clockYOffset = -30 + Math.floor(Math.random() * 60)     // Random Y offset from -30 to +30
-    //
-    // Create clock text in background with varied size, color, and position
-    //
-    const minutes = Math.floor(Math.random() * 60)
-    const seconds = Math.floor(Math.random() * 60)
+  const upperInversionPattern = [false, true, false, true]
+  
+  for (let i = 0; i < UPPER_SECTION_COUNT; i++) {
+    const sectionStartX = PLATFORM_SIDE_WIDTH + upperSectionWidth * i
+    const sectionCenterX = sectionStartX + upperSectionWidth / 2
+    const isReversed = upperInversionPattern[i]
+    const clockSize = 42 + (i * 3)  // Fixed progression: 42, 45, 48, 51
+    const clockGrayLevel = 160 + (i * 15)  // Fixed progression: 160, 175, 190, 205
+    const clockYOffset = -20 + (i * 10)  // Fixed progression: -20, -10, 0, 10
+    const minutes = 10 + (i * 15)  // Fixed times: 10, 25, 40, 55
+    const seconds = i * 15  // Fixed seconds: 0, 15, 30, 45
     
     const clock = k.add([
       k.text(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`, {
         size: clockSize,
         align: "center"
       }),
-      k.pos(currentX + sectionWidth / 2, upperCorridorCenterY + clockYOffset),
+      k.pos(sectionCenterX, upperCorridorCenterY + clockYOffset),
       k.anchor("center"),
       k.color(clockGrayLevel, clockGrayLevel, clockGrayLevel),
       k.opacity(0.7),
-      k.z(1),
+      k.z(19),  // High z-index to be visible above background
       k.fixed()
     ])
     
     sections.push({
-      x: currentX,
+      x: sectionStartX,
       y: CORRIDOR_Y,
-      width: sectionWidth,
-      height: CORRIDOR_HEIGHT,
+      width: upperSectionWidth,
+      height: UPPER_CORRIDOR_HEIGHT,
+      centerX: sectionCenterX,
       isReversed,
       clock,
       clockTime: { minutes, seconds },
       corridor: 'upper'
     })
-    
-    currentX += sectionWidth
   }
   //
-  // Create sections for LOWER corridor (right to left)
+  // Fixed section configuration for lower corridor (5 sections with fixed inversion pattern)
   //
-  currentX = k.width() - PLATFORM_SIDE_WIDTH
-  for (let i = 0; i < SECTION_COUNT; i++) {
-    const sectionWidth = sectionWidths[i]
-    const isReversed = reversalPattern[i]
-    const clockSize = clockSizes[i]
-    currentX -= sectionWidth
-    //
-    // Randomize clock appearance for visual variety
-    //
-    const clockGrayLevel = 140 + Math.floor(Math.random() * 80)  // Random gray from 140 to 220
-    const clockYOffset = -30 + Math.floor(Math.random() * 60)     // Random Y offset from -30 to +30
-    //
-    // Create clock text in background with varied size, color, and position
-    //
-    const minutes = Math.floor(Math.random() * 60)
-    const seconds = Math.floor(Math.random() * 60)
+  const LOWER_SECTION_COUNT = 5
+  const lowerCorridorWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  const lowerSectionWidth = lowerCorridorWidth / LOWER_SECTION_COUNT
+  //
+  // Fixed inversion pattern: true, false, true, false, true (alternating, starting with true)
+  //
+  const lowerInversionPattern = [true, false, true, false, true]
+  
+  for (let i = 0; i < LOWER_SECTION_COUNT; i++) {
+    const sectionStartX = PLATFORM_SIDE_WIDTH + lowerSectionWidth * i
+    const sectionCenterX = sectionStartX + lowerSectionWidth / 2
+    const isReversed = lowerInversionPattern[i]
+    const clockSize = 44 + (i * 2)  // Fixed progression: 44, 46, 48, 50, 52
+    const clockGrayLevel = 150 + (i * 12)  // Fixed progression: 150, 162, 174, 186, 198
+    const clockYOffset = -25 + (i * 12)  // Fixed progression: -25, -13, -1, 11, 23
+    const minutes = 5 + (i * 12)  // Fixed times: 5, 17, 29, 41, 53
+    const seconds = i * 12  // Fixed seconds: 0, 12, 24, 36, 48
     
     const clock = k.add([
       k.text(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`, {
         size: clockSize,
         align: "center"
       }),
-      k.pos(currentX + sectionWidth / 2, lowerCorridorCenterY + clockYOffset),
+      k.pos(sectionCenterX, lowerCorridorCenterY + clockYOffset),
       k.anchor("center"),
       k.color(clockGrayLevel, clockGrayLevel, clockGrayLevel),
       k.opacity(0.7),
-      k.z(1),
+      k.z(19),  // High z-index to be visible above background
       k.fixed()
     ])
     
     sections.push({
-      x: currentX,
+      x: sectionStartX,
       y: LOWER_CORRIDOR_Y,
-      width: sectionWidth,
+      width: lowerSectionWidth,
       height: CORRIDOR_HEIGHT,
+      centerX: sectionCenterX,
       isReversed,
       clock,
       clockTime: { minutes, seconds },
@@ -1025,23 +1042,6 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
         leg.groundTargetX = leg.groundTargetX + (idealGroundX - leg.groundTargetX) * 0.3
         leg.groundTargetY = leg.groundTargetY + (idealGroundY - leg.groundTargetY) * 0.3
       } else if (stepCycle >= 0.4) {
-        //
-        // Leg lands - play step sound (with cooldown to avoid too many sounds)
-        // TEMPORARILY DISABLED - uncomment to restore
-        //
-        /*
-        if (leg.isLifted && inst.sfx) {
-          const currentTime = inst.k.time()
-          const timeSinceLastSound = currentTime - leg.lastStepSoundTime
-          //
-          // Only play sound if at least 0.15 seconds passed since last sound from this leg
-          //
-          if (timeSinceLastSound > 0.15) {
-            Sound.playMonsterStepSound(inst.sfx)
-            leg.lastStepSoundTime = currentTime
-          }
-        }
-        */
         leg.isLifted = false
         leg.liftProgress = 0
       }
@@ -1217,10 +1217,12 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
     }
   })
   //
-  // Draw legs with pads at the end
+  // Draw legs with pads at the end (using game object with z-index)
   //
-  k.onDraw(() => {
-    inst.legs.forEach(leg => {
+  k.add([
+    {
+      draw() {
+        inst.legs.forEach(leg => {
       leg.segments.forEach((segment, i) => {
         if (i < leg.segments.length - 1) {
           const nextSegment = leg.segments[i + 1]
@@ -1246,8 +1248,11 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
         color: k.rgb(40, 40, 45),
         opacity: 1.0
       })
-    })
-  })
+        })
+      }
+    },
+    k.z(13)  // Below body circles (14) so legs appear behind body
+  ])
   
   return inst
 }
@@ -1306,40 +1311,65 @@ function setupControlInversion(heroInst, sections) {
 
 /**
  * Creates obstacle spikes (digit "1") in clusters throughout corridors
+ * Spikes are placed in the CENTER of each section, not at boundaries
  * @param {Object} k - Kaplay instance
  * @param {Object} hero - Hero instance for collision
  * @param {Object} sound - Sound instance for effects
+ * @param {Array} sections - Time sections to place spikes in their centers
  */
-function createObstacleSpikes(k, hero, sound, levelIndicator) {
+function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
   //
-  // Spike cluster configurations (startX, endX, y, digitCount)
-  // Upper corridor clusters - spikes stand on corridor floor, partially in snow
+  // Spike Y positions
   //
-  const upperCorridorY = CORRIDOR_Y + CORRIDOR_HEIGHT - 12  // Slightly higher, partially in snow
+  const upperCorridorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 85  // Raised to sit on floor
+  const lowerCorridorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 15  // Lowered to sit on floor
   //
-  // Lower corridor clusters - spikes stand on corridor floor, partially in snow
+  // Place spikes in CENTER of alternating sections (avoid section boundaries)
+  // Upper corridor: sections 0 and 2 (indices 0, 2)
+  // Lower corridor: sections 0, 2, 4 (indices 4, 6, 8 in combined array)
   //
-  const lowerCorridorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 12  // Slightly higher, partially in snow
-  //
-  // Define spike clusters (groups of 2-3 spikes, closer together)
-  //
-  const clusters = [
+  const spikePositions = [
     //
-    // Upper corridor clusters (from left to right)
+    // Upper corridor - section 0 (first section, center)
     //
-    { startX: 600, endX: 630, y: upperCorridorY, count: 2 },    // Cluster 1: 2 spikes (30px apart)
-    { startX: 900, endX: 940, y: upperCorridorY, count: 3 },    // Cluster 2: 3 spikes (40px total) - moved left
-    { startX: 1600, endX: 1630, y: upperCorridorY, count: 2 },  // Cluster 3: 2 spikes (30px apart)
-    { startX: 2400, endX: 2440, y: upperCorridorY, count: 3 },  // Cluster 4: 3 spikes (40px total)
-    { startX: 3000, endX: 3030, y: upperCorridorY, count: 2 },  // Cluster 5: 2 spikes (30px apart)
+    { sectionIndex: 0, count: 2 },
     //
-    // Lower corridor clusters (from right to left)
+    // Upper corridor - section 2 (third section, center)
     //
-    { startX: 1700, endX: 1740, y: lowerCorridorY, count: 3 },  // Cluster 6: 3 spikes (40px total)
-    { startX: 1000, endX: 1030, y: lowerCorridorY, count: 2 },  // Cluster 7: 2 spikes (30px apart) - moved left
-    { startX: 700, endX: 740, y: lowerCorridorY, count: 3 },    // Cluster 8: 3 spikes (40px total)
-    { startX: 300, endX: 330, y: lowerCorridorY, count: 2 }     // Cluster 9: 2 spikes (30px apart)
+    { sectionIndex: 2, count: 3 },
+    //
+    // Lower corridor - section 0 (first section, center) - index 4 in sections array
+    //
+    { sectionIndex: 4, count: 3 },
+    //
+    // Lower corridor - section 2 (third section, center) - index 6 in sections array
+    //
+    { sectionIndex: 6, count: 2 },
+    //
+    // Lower corridor - section 4 (fifth section, center) - index 8 in sections array
+    //
+    { sectionIndex: 8, count: 3 }
   ]
+  
+  const clusters = []
+  
+  spikePositions.forEach(pos => {
+    const section = sections[pos.sectionIndex]
+    if (!section) return
+    
+    const clusterWidth = 30 * (pos.count - 1)  // Width based on spike count
+    const clusterCenterX = section.centerX
+    const clusterStartX = clusterCenterX - clusterWidth / 2
+    const clusterEndX = clusterCenterX + clusterWidth / 2
+    const clusterY = section.corridor === 'upper' ? upperCorridorY : lowerCorridorY
+    
+    clusters.push({
+      startX: clusterStartX,
+      endX: clusterEndX,
+      y: clusterY,
+      count: pos.count
+    })
+  })
   //
   // Create each cluster
   //
@@ -1417,19 +1447,18 @@ function createObstacleSpikes(k, hero, sound, levelIndicator) {
 }
 
 /**
- * Creates clouds under the top platform (top wall)
- * Same as in level 2
+ * Creates clouds at the very top of upper corridor
  * @param {Object} k - Kaplay instance
  */
-function createCloudsUnderTopPlatform(k) {
+function createCloudsAtTop(k) {
   //
-  // Cloud parameters
+  // Cloud parameters (positioned above upper corridor)
   //
-  const cloudTopY = 0  // Top Y position (dense layer here) - moved to very top
-  const cloudBottomY = 60  // Bottom Y position (sparse clouds here) - moved to very top
-  const cloudDenseLayerY = 10  // Dense layer Y position - moved to very top
-  const cloudSparseLayerStartY = 20  // Start of sparse layer - moved to very top
-  const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
+  const cloudTopY = CORRIDOR_Y + 20  // Just inside corridor top
+  const cloudBottomY = CORRIDOR_Y + 80  // Hanging down into corridor
+  const cloudDenseLayerY = CORRIDOR_Y + 30  // Dense layer inside corridor
+  const cloudSparseLayerStartY = CORRIDOR_Y + 50  // Start of sparse layer
+  const cloudSparseLayerEndY = CORRIDOR_Y + 80  // End of sparse layer
   const baseCloudColor = k.rgb(250, 250, 255)  // White with slight blue tint for clouds
   
   //
@@ -1661,82 +1690,92 @@ function createSnowDrifts(k) {
   //
   // Snow drift configurations (x, width, height, corridor)
   //
-  const upperFloorY = CORRIDOR_Y + CORRIDOR_HEIGHT
-  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT
+  const upperFloorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 70  // Raised to sit on floor
+  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT  // Lowered to sit on floor
   //
   // Calculate passage area (where snow should not appear)
   //
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
   const passageEndX = k.width() - PLATFORM_SIDE_WIDTH
   //
-  // Generate many snow drifts with random sizes covering entire floor
+  // Generate continuous snow drifts covering entire floor without gaps
+  // Snow starts AFTER left platform and ends BEFORE right platform
   //
   const drifts = []
   //
-  // Upper corridor - fill entire length with drifts (but not in passage area)
+  // Upper corridor - continuous coverage from left platform edge to passage start
   //
-  const upperCorridorStart = PLATFORM_SIDE_WIDTH
-  const upperCorridorEnd = k.width() - PLATFORM_SIDE_WIDTH
+  const upperCorridorStart = PLATFORM_SIDE_WIDTH + 50
+  const upperCorridorEnd = passageStartX - 50
   
-  for (let x = upperCorridorStart; x < upperCorridorEnd; x += 40 + Math.random() * 30) {
-    const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)
+  for (let x = upperCorridorStart; x < upperCorridorEnd; x += 20 + Math.random() * 15) {
+    const width = 60 + Math.random() * 120  // 60-180px width (large and overlapping for continuous coverage)
     const height = 8 + Math.random() * 15   // 8-23px height
     const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
     const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
     const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
-    //
-    // Skip drifts in passage area (check both center and edges of drift)
-    //
-    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
     
     drifts.push({ x, width, height, y: upperFloorY, z: zIndex, shapeType, skew })
   }
   //
-  // Lower corridor - fill entire length with drifts (but not in passage area)
+  // Lower corridor - continuous coverage from left platform edge to passage start, and from passage end to right platform edge
   //
-  const lowerCorridorStart = PLATFORM_SIDE_WIDTH
-  const lowerCorridorEnd = k.width() - PLATFORM_SIDE_WIDTH
+  const lowerCorridorStart1 = PLATFORM_SIDE_WIDTH + 70
+  const lowerCorridorEnd1 = passageStartX
   
-  for (let x = lowerCorridorStart; x < lowerCorridorEnd; x += 40 + Math.random() * 30) {
-    const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)
+  for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 20 + Math.random() * 15) {
+    const width = 60 + Math.random() * 120  // 60-180px width (large and overlapping for continuous coverage)
     const height = 8 + Math.random() * 15   // 8-23px height
     const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
     const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
     const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
-    //
-    // Skip drifts in passage area (check both center and edges of drift)
-    //
-    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
     
     drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
   }
   //
-  // Add some extra smaller drifts between main ones for more coverage
+  // Lower corridor right section (from passage end to right edge)
   //
-  for (let x = upperCorridorStart; x < upperCorridorEnd; x += 30 + Math.random() * 25) {
-    const width = 30 + Math.random() * 50  // 30-80px width (medium)
+  const lowerCorridorStart2 = passageEndX
+  const lowerCorridorEnd2 = k.width() - PLATFORM_SIDE_WIDTH
+  
+  for (let x = lowerCorridorStart2; x < lowerCorridorEnd2; x += 20 + Math.random() * 15) {
+    const width = 60 + Math.random() * 120  // 60-180px width (large and overlapping for continuous coverage)
+    const height = 8 + Math.random() * 15   // 8-23px height
+    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
+    
+    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+  }
+  //
+  // Add extra smaller drifts between main ones for even more coverage
+  //
+  for (let x = upperCorridorStart; x < upperCorridorEnd; x += 15 + Math.random() * 12) {
+    const width = 40 + Math.random() * 70  // 40-110px width (medium)
     const height = 5 + Math.random() * 8    // 5-13px height (smaller)
     const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
     const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
     const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
-    //
-    // Skip drifts in passage area
-    //
-    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
     
     drifts.push({ x, width, height, y: upperFloorY, z: zIndex, shapeType, skew })
   }
   
-  for (let x = lowerCorridorStart; x < lowerCorridorEnd; x += 30 + Math.random() * 25) {
-    const width = 30 + Math.random() * 50  // 30-80px width (medium)
+  for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 15 + Math.random() * 12) {
+    const width = 40 + Math.random() * 70  // 40-110px width (medium)
     const height = 5 + Math.random() * 8    // 5-13px height (smaller)
     const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
     const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
     const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
-    //
-    // Skip drifts in passage area
-    //
-    if ((x >= passageStartX - width && x <= passageEndX + width)) continue
+    
+    drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
+  }
+  
+  for (let x = lowerCorridorStart2; x < lowerCorridorEnd2; x += 15 + Math.random() * 12) {
+    const width = 40 + Math.random() * 70  // 40-110px width (medium)
+    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
+    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
+    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
+    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
     
     drifts.push({ x, width, height, y: lowerFloorY, z: zIndex, shapeType, skew })
   }
@@ -1900,3 +1939,91 @@ function createLifeScoreParticlesLevel3(k, levelIndicator) {
   }
 }
 
+
+/**
+ * Creates a rounded corner sprite using canvas
+ * @param {number} radius - Corner radius
+ * @param {string} backgroundColor - Background color as hex string
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, backgroundColor) {
+  const size = radius * 2
+  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+    const [r, g, b] = parseHex(backgroundColor)
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+    //
+    // Draw L-shaped corner with rounded inner angle
+    // Start with full square
+    //
+    ctx.fillRect(0, 0, size, size)
+    //
+    // Cut out top-right quarter circle to create rounded inner corner
+    //
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
+    ctx.lineTo(size, size)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Reset composite operation
+    //
+    ctx.globalCompositeOperation = 'source-over'
+  })
+  return dataURL
+}
+
+/**
+ * Creates rounded corners for corridors
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const radius = CORNER_RADIUS
+  const backgroundColor = CFG.visual.colors.background
+  //
+  // Create corner sprite
+  //
+  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  k.loadSprite('corner-sprite-level3', cornerDataURL)
+  //
+  // Upper corridor corners (only left side, no corners on passage side)
+  // Bottom-left corner
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT + CORNER_RADIUS),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Lower corridor corners (only left side, no corners on passage side)
+  // Top-left corner
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, LOWER_CORRIDOR_Y - CORNER_RADIUS),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-left corner
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT + CORNER_RADIUS),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-right corner (only full right wall)
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT + CORNER_RADIUS),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+}

@@ -48,13 +48,13 @@ function createHeroScoreParticles(k, levelIndicator) {
   
   const heroX = levelIndicator.smallHero.character.pos.x
   const heroY = levelIndicator.smallHero.character.pos.y
-  const particleCount = 15
+  const particleCount = 8
   //
   // Create heart particles flying outward (yellow with black outline like hero particles)
   //
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 100 + Math.random() * 50
+    const speed = 30 + Math.random() * 20
     const lifetime = 0.8 + Math.random() * 0.4
     const heartSize = 18 + Math.random() * 8
     //

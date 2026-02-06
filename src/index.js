@@ -85,8 +85,13 @@ try {
   CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1')
   const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150  // Same as in level2.js
   CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false, true)  // No sun, autumn leaves for level 2
-  const PLATFORM_BOTTOM_HEIGHT_LEVEL3 = 100  // Same as in level3.js
-  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL3, 'city-background-level3', false, true)  // No sun, autumn leaves for level 3
+  //
+  // For level 3: ground line matches lower corridor floor
+  //
+  const LOWER_CORRIDOR_Y_LEVEL3 = 680
+  const CORRIDOR_HEIGHT_LEVEL3 = 180
+  const groundLineLevel3 = k.height() - (LOWER_CORRIDOR_Y_LEVEL3 + CORRIDOR_HEIGHT_LEVEL3)
+  CityBackground.preloadCityBackground(k, groundLineLevel3, 'city-background-level3', false, true, false)  // No sun, autumn leaves, no cars for level 3
 } catch (error) {
   //
   // If sprite loading fails, continue anyway - sprites will be loaded on-demand in Hero.create()

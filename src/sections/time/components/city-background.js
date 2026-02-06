@@ -7,9 +7,10 @@ import { toPng } from '../../../utils/helper.js'
  * @param {number} bottomPlatformHeight - Bottom platform height
  * @param {boolean} [showSun=true] - Whether to show the sun
  * @param {boolean} [autumnLeaves=false] - Whether to use autumn colors for tree leaves
+ * @param {boolean} [showCars=true] - Whether to show moving cars
  * @returns {string} Data URL of the background sprite
  */
-export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false) {
+export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   
@@ -88,9 +89,9 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     const bottomPlatformY = screenHeight - bottomPlatformHeight
     //
     // Calculate maximum building height to not cover the sun
-    // Sun is at sunY, leave some space (100px) below it
+    // Sun is at sunY, leave more space (sunRadius + 200px) below it
     //
-    const maxBuildingHeight = bottomPlatformY - sunY - 100
+    const maxBuildingHeight = showSun ? (bottomPlatformY - sunY - sunRadius - 200) : bottomPlatformY
     
     //
     // First pass: Draw deepest background buildings (darkest, fill all gaps)
@@ -245,28 +246,50 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       //
       // Foreground buildings go from bottom platform upward (not below it)
       // Height varies from 40% to 70% of available space (higher than background)
+      // But check if building would overlap with sun
       //
       const availableHeight = bottomPlatformY
-      const height = randomRange(availableHeight * 0.4, availableHeight * 0.7)
+      let height = randomRange(availableHeight * 0.4, availableHeight * 0.7)
       const buildingY = bottomPlatformY - height  // Start from platform, go upward
+      //
+      // Check if this building overlaps with sun horizontally and would be too tall
+      //
+      if (showSun) {
+        const buildingRight = currentX + width
+        const sunLeft = sunX - sunRadius - 50
+        const sunRight = sunX + sunRadius + 50
+        //
+        // If building overlaps with sun area horizontally
+        //
+        if (currentX < sunRight && buildingRight > sunLeft) {
+          //
+          // Limit building height to not reach sun
+          //
+          const maxHeightForSun = bottomPlatformY - sunY - sunRadius - 100
+          if (height > maxHeightForSun) {
+            height = Math.max(maxHeightForSun, availableHeight * 0.2)  // At least 20% height
+          }
+        }
+      }
+      const finalBuildingY = bottomPlatformY - height
       const windowRows = Math.floor(height / 25)
       const windowCols = Math.floor(width / 20)
       const color = randomInt(60, 80)  // Brighter than background buildings
       
       // Building
       ctx.fillStyle = `rgb(${color}, ${color}, ${color})`
-      ctx.fillRect(currentX, buildingY, width, height)
+      ctx.fillRect(currentX, finalBuildingY, width, height)
       
       ctx.strokeStyle = `rgb(${color - 10}, ${color - 10}, ${color - 10})`
       ctx.lineWidth = 2
-      ctx.strokeRect(currentX, buildingY, width, height)
+      ctx.strokeRect(currentX, finalBuildingY, width, height)
       
       // Windows
       for (let row = 0; row < windowRows; row++) {
         for (let col = 0; col < windowCols; col++) {
           if (Math.random() > 0.3) {
             const windowX = currentX + (col + 0.5) * (width / windowCols)
-            const windowY = buildingY + (row + 0.5) * (height / windowRows)
+            const windowY = finalBuildingY + (row + 0.5) * (height / windowRows)
             const windowSize = 6
             const brightness = 150 + Math.random() * 20
             
@@ -404,8 +427,10 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
  * @param {number} bottomPlatformHeight - Bottom platform height
  * @param {string} [spriteName='city-background'] - Sprite name to use
  * @param {boolean} [showSun=true] - Whether to show the sun
+ * @param {boolean} [autumnLeaves=false] - Whether to use autumn colors for tree leaves
+ * @param {boolean} [showCars=true] - Whether to show moving cars
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false) {
-  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves)
+export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true) {
+  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars)
   k.loadSprite(spriteName, spriteData)
 }

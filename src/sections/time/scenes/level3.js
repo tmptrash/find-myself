@@ -1313,11 +1313,12 @@ function setupControlInversion(heroInst, sections) {
   const k = heroInst.k
   //
   // Track progress separately for each corridor to prevent control jitter
-  // Upper corridor: sections 0-3, Lower corridor: sections 4-8
+  // Upper corridor: sections 0-3 (left to right)
+  // Lower corridor: sections 4-8 (right to left)
   //
   let currentSection = null
-  let maxUpperIndex = -1  // Furthest reached in upper corridor (0-3)
-  let maxLowerIndex = 3  // Start at 3 since lower corridor begins at index 4
+  let maxUpperIndex = -1
+  let minLowerIndex = 9
   
   k.onUpdate(() => {
     const heroX = heroInst.character.pos.x
@@ -1346,7 +1347,7 @@ function setupControlInversion(heroInst, sections) {
       
       if (isUpperCorridor) {
         //
-        // Upper corridor: progress is left to right (indices 0-3)
+        // Upper corridor: progress is left to right (indices increase 0→3)
         //
         if (newIndex > maxUpperIndex) {
           maxUpperIndex = newIndex
@@ -1354,10 +1355,10 @@ function setupControlInversion(heroInst, sections) {
         }
       } else if (isLowerCorridor) {
         //
-        // Lower corridor: progress is right to left (indices 4-8)
+        // Lower corridor: progress is right to left (indices decrease 8→4)
         //
-        if (newIndex > maxLowerIndex) {
-          maxLowerIndex = newIndex
+        if (newIndex < minLowerIndex) {
+          minLowerIndex = newIndex
           shouldUpdateControls = true
         }
       }

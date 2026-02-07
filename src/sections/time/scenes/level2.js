@@ -414,7 +414,7 @@ export function sceneLevel2(k) {
     //
     // Create time spikes (digit "1") at bottom platform level
     //
-    const timeSpikes = TimeSpikes.create({
+    TimeSpikes.create({
       k,
       startX: PLATFORM_SIDE_WIDTH + 10,  // Start from left wall + 10px
       endX: k.width() - PLATFORM_SIDE_WIDTH - 10,  // End at right wall - 10px
@@ -433,7 +433,7 @@ export function sceneLevel2(k) {
     //
     // Create dynamic platform system
     //
-    const platformSystem = createPlatformSystem(k, sound, hero, antiHero, levelIndicator)
+    createPlatformSystem(k, sound, hero, antiHero, levelIndicator)
     //
     // Update hero reference in final platform
     //
@@ -2003,7 +2003,7 @@ function createSnowDrifts(k) {
   //
   // Fill entire bottom platform with drifts (with margin from sides)
   //
-  const MARGIN = 20  // Increased margin from side platforms
+  const MARGIN = 80  // Increased margin from side platforms
   const corridorStart = PLATFORM_SIDE_WIDTH + MARGIN
   const corridorEnd = k.width() - PLATFORM_SIDE_WIDTH - MARGIN
   

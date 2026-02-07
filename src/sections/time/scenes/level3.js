@@ -1729,7 +1729,7 @@ function createSnowDrifts(k) {
     }
   }
   
-  const lowerCorridorStart1 = PLATFORM_SIDE_WIDTH + 70
+  const lowerCorridorStart1 = PLATFORM_SIDE_WIDTH + 100
   const lowerCorridorEnd1 = passageStartX
   
   for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 20 + Math.random() * 15) {

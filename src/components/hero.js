@@ -550,6 +550,94 @@ export function spawn(inst) {
 }
 
 /**
+ * Create particles around hero when a new body part is added
+ * @param {Object} inst - Hero instance
+ */
+function createBodyPartParticles(inst) {
+  const k = inst.k
+  const heroX = inst.character.pos.x
+  const heroY = inst.character.pos.y
+  const particleCount = 12
+  const bodyColor = inst.bodyColor || CFG.visual.colors.hero.body
+  //
+  // Create heart particles flying outward (hero body color with black outline)
+  //
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.6 + Math.random() * 0.4
+    const heartSize = 20 + Math.random() * 10
+    //
+    // Create black outline hearts (8 directions)
+    //
+    const outlineOffset = 1.5
+    const outlineOffsets = [
+      [-outlineOffset, -outlineOffset],
+      [0, -outlineOffset],
+      [outlineOffset, -outlineOffset],
+      [-outlineOffset, 0],
+      [outlineOffset, 0],
+      [-outlineOffset, outlineOffset],
+      [0, outlineOffset],
+      [outlineOffset, outlineOffset]
+    ]
+    
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineParticle = k.add([
+        k.text('♥', { size: heartSize }),
+        k.pos(heroX + dx, heroY + dy),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(50)
+      ])
+      //
+      // Animate outline particle
+      //
+      const startTime = k.time()
+      outlineParticle.onUpdate(() => {
+        const elapsed = k.time() - startTime
+        if (elapsed > lifetime) {
+          k.destroy(outlineParticle)
+          return
+        }
+        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
+        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.opacity = 1 - (elapsed / lifetime)
+      })
+    })
+    //
+    // Create main colored heart
+    //
+    const colorClean = String(bodyColor).replace('#', '')
+    const r = parseInt(colorClean.substring(0, 2), 16)
+    const g = parseInt(colorClean.substring(2, 4), 16)
+    const b = parseInt(colorClean.substring(4, 6), 16)
+    
+    const particle = k.add([
+      k.text('♥', { size: heartSize }),
+      k.pos(heroX, heroY),
+      k.color(r, g, b),
+      k.opacity(1),
+      k.z(51)
+    ])
+    //
+    // Animate particle outward with fade
+    //
+    const startTime = k.time()
+    particle.onUpdate(() => {
+      const elapsed = k.time() - startTime
+      if (elapsed > lifetime) {
+        k.destroy(particle)
+        return
+      }
+      particle.pos.x += Math.cos(angle) * speed * k.dt()
+      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      particle.opacity = 1 - (elapsed / lifetime)
+    })
+  }
+}
+
+/**
  * Update character animation and state
  * @param {Object} inst - Hero instance
  */
@@ -1429,6 +1517,10 @@ export function onAnnihilationCollide(inst) {
                     const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
                     inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth`
                     //
+                    // Create visual effect (particles around hero)
+                    //
+                    createBodyPartParticles(inst)
+                    //
                     // Reload sprites with mouth
                     //
                     loadHeroSprites({
@@ -2173,6 +2265,12 @@ function createMouthSparkles(inst) {
  * @param {Object} inst - Hero instance
  * @param {string} color - New color (hex string)
  */
+/**
+ * Create color change sparkle particles around hero
+ * Similar to particles when small hero completes a level
+ * @param {Object} inst - Hero instance
+ * @param {string} color - New body color (hex)
+ */
 function createColorChangeSparkles(inst, color) {
   const { k, character } = inst
   const centerX = character.pos.x
@@ -2185,92 +2283,78 @@ function createColorChangeSparkles(inst, color) {
   const g = (colorValue >> 8) & 0xFF
   const b = colorValue & 0xFF
   //
-  // Create small sparkle particles
+  // Create circle particles flying outward (similar to heart particles for small hero)
   //
-  const sparkleCount = 12
-  const sparkles = []
+  const particleCount = 12
   
-  for (let i = 0; i < sparkleCount; i++) {
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.6 + Math.random() * 0.4
+    const circleSize = 8 + Math.random() * 6
     //
-    // Position sparkles around hero body
+    // Create black outline circles (8 directions)
     //
-    const angle = (Math.PI * 2 * i) / sparkleCount
-    const distance = 15 + Math.random() * 10
-    const offsetX = Math.cos(angle) * distance
-    const offsetY = Math.sin(angle) * distance
-    //
-    // Sparkle colors (variations of the new color)
-    //
-    const colors = [
-      k.rgb(Math.min(r + 50, 255), Math.min(g + 50, 255), Math.min(b + 50, 255)),  // Lighter
-      k.rgb(r, g, b),  // Base color
-      k.rgb(Math.max(r - 30, 0), Math.max(g - 30, 0), Math.max(b - 30, 0)),  // Darker
-      k.rgb(255, 255, 255)  // White
+    const outlineOffset = 1.5
+    const outlineOffsets = [
+      [-outlineOffset, -outlineOffset],
+      [0, -outlineOffset],
+      [outlineOffset, -outlineOffset],
+      [-outlineOffset, 0],
+      [outlineOffset, 0],
+      [-outlineOffset, outlineOffset],
+      [0, outlineOffset],
+      [outlineOffset, outlineOffset]
     ]
-    const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
-    //
-    // Create sparkle particle (small circle)
-    //
-    const size = 2 + Math.random() * 3
-    const sparkle = k.add([
-      k.circle(size),
-      k.pos(centerX + offsetX, centerY + offsetY),
-      k.color(sparkleColor),
-      k.opacity(0.8),
-      k.z(CFG.visual.zIndex.player + 1)
-    ])
-    //
-    // Store sparkle data
-    //
-    sparkle.vx = (Math.random() - 0.5) * 40
-    sparkle.vy = -20 - Math.random() * 30  // Move up
-    sparkle.lifetime = 0
-    sparkle.maxLifetime = 0.8 + Math.random() * 0.4
-    sparkle.originalSize = size
     
-    sparkles.push(sparkle)
-  }
-  //
-  // Animate sparkles
-  //
-  const sparkleInterval = k.onUpdate(() => {
-    sparkles.forEach((sparkle, index) => {
-      if (!sparkle.exists()) return
-      
-      sparkle.lifetime += k.dt()
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineParticle = k.add([
+        k.circle(circleSize),
+        k.pos(centerX + dx, centerY + dy),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(50)
+      ])
       //
-      // Move sparkle
+      // Animate outline particle
       //
-      sparkle.pos.x += sparkle.vx * k.dt()
-      sparkle.pos.y += sparkle.vy * k.dt()
-      //
-      // Apply upward drift and slow down
-      //
-      sparkle.vy -= 80 * k.dt()  // Upward acceleration
-      sparkle.vx *= 0.95
-      //
-      // Fade out and shrink based on lifetime
-      //
-      const progress = sparkle.lifetime / sparkle.maxLifetime
-      sparkle.opacity = 0.8 * (1 - progress)
-      //
-      // Twinkle effect (size pulsing)
-      //
-      const twinkle = Math.sin(sparkle.lifetime * 20) * 0.3 + 0.7
-      //
-      // Destroy when lifetime expires
-      //
-      if (sparkle.lifetime >= sparkle.maxLifetime) {
-        k.destroy(sparkle)
-      }
+      const startTime = k.time()
+      outlineParticle.onUpdate(() => {
+        const elapsed = k.time() - startTime
+        if (elapsed > lifetime) {
+          k.destroy(outlineParticle)
+          return
+        }
+        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
+        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.opacity = 1 - (elapsed / lifetime)
+      })
     })
     //
-    // Clean up when all sparkles are done
+    // Create main colored circle
     //
-    if (sparkles.every(s => !s.exists())) {
-      sparkleInterval.cancel()
-    }
-  })
+    const particle = k.add([
+      k.circle(circleSize),
+      k.pos(centerX, centerY),
+      k.color(r, g, b),
+      k.opacity(1),
+      k.z(51)
+    ])
+    //
+    // Animate particle outward with fade
+    //
+    const startTime = k.time()
+    particle.onUpdate(() => {
+      const elapsed = k.time() - startTime
+      if (elapsed > lifetime) {
+        k.destroy(particle)
+        return
+      }
+      particle.pos.x += Math.cos(angle) * speed * k.dt()
+      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      particle.opacity = 1 - (elapsed / lifetime)
+    })
+  }
 }
 
 /**

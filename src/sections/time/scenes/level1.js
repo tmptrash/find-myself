@@ -17,483 +17,6 @@ const PLATFORM_BOTTOM_HEIGHT = 150  // Raised bottom platform (was 250)
 const PLATFORM_SIDE_WIDTH = 192
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
 const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
-
-/**
- * Flash small hero with color animation
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator instance
- * @param {Object} originalColor - Original color of small hero
- * @param {number} count - Current flash count
- */
-function flashSmallHeroLevel1(k, levelIndicator, originalColor, count) {
-  if (count >= 20) {
-    levelIndicator.smallHero.character.color = originalColor
-    return
-  }
-  //
-  // Flash between green and white for visibility
-  //
-  levelIndicator.smallHero.character.color = count % 2 === 0 ? k.rgb(0, 255, 100) : k.rgb(255, 255, 255)
-  k.wait(0.05, () => flashSmallHeroLevel1(k, levelIndicator, originalColor, count + 1))
-}
-/**
- * Create heart particles around small hero when level is completed
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator instance
- */
-function createHeroScoreParticles(k, levelIndicator) {
-  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
-    return
-  }
-  
-  const heroX = levelIndicator.smallHero.character.pos.x
-  const heroY = levelIndicator.smallHero.character.pos.y
-  const particleCount = 8
-  //
-  // Create heart particles flying outward (yellow with black outline like hero particles)
-  //
-  for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 30 + Math.random() * 20
-    const lifetime = 0.8 + Math.random() * 0.4
-    const heartSize = 18 + Math.random() * 8
-    //
-    // Create black outline hearts (8 directions)
-    //
-    const outlineOffset = 1.5
-    const outlineOffsets = [
-      [-outlineOffset, -outlineOffset],
-      [0, -outlineOffset],
-      [outlineOffset, -outlineOffset],
-      [-outlineOffset, 0],
-      [outlineOffset, 0],
-      [-outlineOffset, outlineOffset],
-      [0, outlineOffset],
-      [outlineOffset, outlineOffset]
-    ]
-    
-    outlineOffsets.forEach(([dx, dy]) => {
-      const outlineParticle = k.add([
-        k.text('♥', { size: heartSize }),
-        k.pos(heroX + dx, heroY + dy),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(CFG.visual.zIndex.ui + 10),
-        k.fixed()
-      ])
-      //
-      // Animate outline particle
-      //
-      const startTime = k.time()
-      outlineParticle.onUpdate(() => {
-        const elapsed = k.time() - startTime
-        if (elapsed > lifetime) {
-          outlineParticle.destroy()
-          return
-        }
-        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
-        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
-        outlineParticle.opacity = 1 - (elapsed / lifetime)
-      })
-    })
-    //
-    // Create main yellow heart
-    //
-    const particle = k.add([
-      k.text('♥', { size: heartSize }),
-      k.pos(heroX, heroY),
-      k.color(255, 200, 0),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 11),
-      k.fixed()
-    ])
-    //
-    // Animate particle outward with fade
-    //
-    const startTime = k.time()
-    particle.onUpdate(() => {
-      const elapsed = k.time() - startTime
-      if (elapsed > lifetime) {
-        particle.destroy()
-        return
-      }
-      particle.pos.x += Math.cos(angle) * speed * k.dt()
-      particle.pos.y += Math.sin(angle) * speed * k.dt()
-      particle.opacity = 1 - (elapsed / lifetime)
-    })
-  }
-}
-/**
- * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
- * @param {number} radius - Corner radius
- * @param {string} backgroundColor - Background color hex
- * @returns {string} Data URL of the corner sprite
- */
-function createRoundedCornerSprite(radius, backgroundColor) {
-  const size = radius * 2
-  const dataURL = toPng({ width: size, height: size }, (ctx) => {
-    const [r, g, b] = parseHex(backgroundColor)
-    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
-    //
-    // Draw L-shaped corner with rounded inner angle
-    // Start with full square
-    //
-    ctx.fillRect(0, 0, size, size)
-    //
-    // Cut out top-right quarter circle to create rounded inner corner
-    //
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.beginPath()
-    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
-    ctx.lineTo(size, size)
-    ctx.closePath()
-    ctx.fill()
-    //
-    // Reset composite operation
-    //
-    ctx.globalCompositeOperation = 'source-over'
-  })
-  return dataURL
-}
-
-/**
- * Creates ground stripe above bottom platform
- * @param {Object} k - Kaplay instance
- */
-function createGroundStripe(k) {
-  const groundColor = k.rgb(20, 20, 20)  // Dark gray ground
-  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
-  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
-  k.add([
-    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
-    k.pos(PLATFORM_SIDE_WIDTH, groundY),
-    k.color(groundColor),
-    k.z(16)  // Above platforms (15), background (15.5), cars (15.6), rounded corners (15.8)
-  ])
-}
-
-/**
- * Creates rounded corners for game area to soften sharp edges where platforms meet
- * @param {Object} k - Kaplay instance
- */
-function createRoundedCorners(k) {
-  const radius = CORNER_RADIUS
-  const backgroundColor = CFG.visual.colors.background
-  //
-  // Create corner sprite
-  //
-  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
-  k.loadSprite('corner-sprite-level1', cornerDataURL)
-  //
-  // Top-left corner (rotate 0°)
-  //
-  k.add([
-    k.sprite('corner-sprite-level1'),
-    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-  //
-  // Top-right corner (rotate 90°)
-  //
-  k.add([
-    k.sprite('corner-sprite-level1'),
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
-    k.rotate(90),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-  //
-  // Bottom-left corner (rotate 270°)
-  //
-  k.add([
-    k.sprite('corner-sprite-level1'),
-    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
-    k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-  //
-  // Bottom-right corner (rotate 180°)
-  //
-  k.add([
-    k.sprite('corner-sprite-level1'),
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
-    k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-}
-
-/**
- * Creates a blurred car sprite using canvas with blur filter
- * @param {Object} params - Car parameters
- * @param {number} params.bodyWidth - Car body width
- * @param {number} params.bodyHeight - Car body height
- * @param {number} params.roofWidth - Car roof width
- * @param {number} params.roofHeight - Car roof height
- * @param {number} params.wheelRadius - Wheel radius
- * @param {number} params.bodyColor - Body color (gray value 0-255)
- * @param {number} params.roofColor - Roof color (gray value 0-255)
- * @param {number} params.wheelColor - Wheel color (gray value 0-255)
- * @param {number} params.windowColor - Window color (gray value 0-255)
- * @param {number} params.speed - Car speed (for window direction)
- * @returns {string} Data URL of the car sprite
- */
-function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, wheelRadius, bodyColor, roofColor, wheelColor, windowColor, speed }) {
-  //
-  // Calculate canvas size (add padding for blur)
-  //
-  const padding = 20
-  const canvasWidth = bodyWidth + padding * 2
-  const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
-  const centerX = canvasWidth / 2
-  const centerY = canvasHeight - padding - wheelRadius
-  
-  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
-    //
-    // Clear canvas with transparent background
-    //
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-    
-    //
-    // Apply blur filter (same as buildings - blur(6px))
-    //
-    ctx.filter = 'blur(6px)'
-    
-    //
-    // Helper function to draw rounded rectangle
-    //
-    const drawRoundedRect = (x, y, width, height, radius, color) => {
-      ctx.fillStyle = `rgb(${color}, ${color}, ${color})`
-      ctx.beginPath()
-      ctx.moveTo(x + radius, y)
-      ctx.lineTo(x + width - radius, y)
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
-      ctx.lineTo(x + width, y + height - radius)
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
-      ctx.lineTo(x + radius, y + height)
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
-      ctx.lineTo(x, y + radius)
-      ctx.quadraticCurveTo(x, y, x + radius, y)
-      ctx.closePath()
-      ctx.fill()
-    }
-    
-    //
-    // Car body outline (darker stroke) - draw first (behind)
-    //
-    const outlineWidth = 1.5
-    const outlineColor = bodyColor - 20
-    
-    //
-    // Body outline
-    //
-    drawRoundedRect(
-      centerX - bodyWidth / 2 - outlineWidth,
-      centerY - bodyHeight,
-      bodyWidth + outlineWidth * 2,
-      bodyHeight + outlineWidth * 2,
-      4 + outlineWidth,
-      outlineColor
-    )
-    
-    //
-    // Roof outline
-    //
-    drawRoundedRect(
-      centerX - roofWidth / 2 - outlineWidth,
-      centerY - bodyHeight - roofHeight - outlineWidth,
-      roofWidth + outlineWidth * 2,
-      roofHeight + outlineWidth * 2,
-      4 + outlineWidth,
-      outlineColor
-    )
-    
-    //
-    // Main car body (rounded rectangle)
-    //
-    drawRoundedRect(
-      centerX - bodyWidth / 2,
-      centerY - bodyHeight,
-      bodyWidth,
-      bodyHeight,
-      4,
-      bodyColor
-    )
-    
-    //
-    // Car roof (rounded rectangle)
-    //
-    drawRoundedRect(
-      centerX - roofWidth / 2,
-      centerY - bodyHeight - roofHeight,
-      roofWidth,
-      roofHeight,
-      4,
-      roofColor
-    )
-    
-    //
-    // Car windows
-    //
-    const windowWidth = roofWidth / 2 - 8
-    const windowHeight = roofHeight - 8
-    const windowY = centerY - bodyHeight - roofHeight + 4
-    
-    //
-    // Front window (right side when moving right)
-    //
-    const frontWindowX = speed > 0 ? centerX + roofWidth / 4 : centerX - roofWidth / 4
-    ctx.fillStyle = `rgb(${windowColor}, ${windowColor}, ${windowColor})`
-    ctx.fillRect(frontWindowX - windowWidth / 2, windowY, windowWidth, windowHeight)
-    
-    //
-    // Rear window
-    //
-    const rearWindowX = speed > 0 ? centerX - roofWidth / 4 : centerX + roofWidth / 4
-    ctx.fillRect(rearWindowX - windowWidth / 2, windowY, windowWidth, windowHeight)
-    
-    //
-    // Draw wheels (4 wheels)
-    //
-    const wheelY = centerY - wheelRadius
-    const frontWheelX = centerX + bodyWidth / 3 - bodyWidth / 2
-    const rearWheelX = centerX - bodyWidth / 3 + bodyWidth / 2
-    
-    //
-    // Front wheels
-    //
-    ctx.fillStyle = `rgb(${wheelColor}, ${wheelColor}, ${wheelColor})`
-    ctx.beginPath()
-    ctx.arc(frontWheelX, wheelY, wheelRadius, 0, Math.PI * 2)
-    ctx.fill()
-    
-    //
-    // Rear wheels
-    //
-    ctx.beginPath()
-    ctx.arc(rearWheelX, wheelY, wheelRadius, 0, Math.PI * 2)
-    ctx.fill()
-    
-    //
-    // Wheel rims (lighter circles inside)
-    //
-    const rimRadius = wheelRadius - 3
-    ctx.fillStyle = `rgb(${wheelColor + 25}, ${wheelColor + 25}, ${wheelColor + 25})`
-    ctx.beginPath()
-    ctx.arc(frontWheelX, wheelY, rimRadius, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(rearWheelX, wheelY, rimRadius, 0, Math.PI * 2)
-    ctx.fill()
-  })
-}
-
-/**
- * Creates moving blurred cars on background (sedans/SUVs with wheels, driving on bottom platform)
- * Cars are rendered as blurred sprites using canvas with blur filter
- * @param {Object} k - Kaplay instance
- */
-function createMovingCars(k) {
-  //
-  // Car parameters
-  //
-  const carCount = 5  // Number of cars
-  const platformTopY = k.height() - PLATFORM_BOTTOM_HEIGHT + 17  // Top of bottom platform
-  const carSpeedMin = 20  // Minimum speed (px/s) - slower
-  const carSpeedMax = 50  // Maximum speed (px/s) - slower
-  const gameAreaLeft = PLATFORM_SIDE_WIDTH
-  const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH
-  const gameAreaWidth = gameAreaRight - gameAreaLeft
-  
-  //
-  // Create cars moving in different directions
-  // Distribute cars horizontally across the platform at start
-  //
-  for (let i = 0; i < carCount; i++) {
-    const direction = Math.random() > 0.5 ? 1 : -1  // Left (-1) or right (1)
-    const carSpeed = (carSpeedMin + Math.random() * (carSpeedMax - carSpeedMin)) * direction
-    const isSUV = Math.random() > 0.5  // 50% chance of SUV (taller) vs sedan
-    const bodyWidth = isSUV ? 80 + Math.random() * 30 : 70 + Math.random() * 30  // 80-110px (SUV) or 70-100px (sedan)
-    const bodyHeight = isSUV ? 35 + Math.random() * 10 : 30 + Math.random() * 8  // 35-45px (SUV) or 30-38px (sedan)
-    const roofWidth = bodyWidth * 0.6  // Roof is 60% of body width
-    const roofHeight = isSUV ? bodyHeight * 0.4 : bodyHeight * 0.5  // Roof height
-    const wheelRadius = 10 + Math.random() * 4  // 10-14px radius
-    const bodyColor = 50 + Math.random() * 20  // Gray color 50-70
-    const roofColor = bodyColor - 15  // Darker roof
-    const wheelColor = 30 + Math.random() * 15  // Dark wheels 30-45
-    const windowColor = 80 + Math.random() * 20  // Lighter windows 80-100
-    
-    //
-    // Position car on bottom platform
-    // Sprite uses anchor('center'), so we need to position center of sprite correctly
-    // Canvas height = roofHeight + bodyHeight + wheelRadius + padding * 2
-    // Center Y of canvas = canvasHeight / 2
-    // Bottom of wheels in canvas = centerY + wheelRadius (from center of sprite)
-    // We want bottom of wheels to be at platformTopY
-    //
-    const padding = 20
-    const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
-    const centerY = canvasHeight - padding - wheelRadius  // Center Y of wheels in canvas
-    const carY = platformTopY - (centerY + wheelRadius - canvasHeight / 2)  // Position sprite center so wheels touch platform
-    
-    //
-    // Create blurred car sprite
-    //
-    const carSpriteDataURL = createBlurredCarSprite({
-      bodyWidth,
-      bodyHeight,
-      roofWidth,
-      roofHeight,
-      wheelRadius,
-      bodyColor,
-      roofColor,
-      wheelColor,
-      windowColor,
-      speed: carSpeed
-    })
-    
-    //
-    // Load sprite
-    //
-    const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
-    k.loadSprite(spriteId, carSpriteDataURL)
-    
-    //
-    // Distribute cars horizontally across the platform at start (not all from edges)
-    //
-    const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
-    
-    k.add([
-      k.sprite(spriteId),
-      k.pos(startX, carY),
-      k.anchor('center'),
-      k.z(15.6),  // Above city background (15.5) but below heroes (20)
-      {
-        speed: carSpeed,
-        bodyWidth: bodyWidth,
-        gameAreaLeft: gameAreaLeft,
-        gameAreaRight: gameAreaRight,
-        update() {
-          //
-          // Move car horizontally
-          //
-          this.pos.x += this.speed * k.dt()
-          
-          //
-          // Reset car position when it goes off-screen (wrap around)
-          //
-          if (this.speed > 0 && this.pos.x > this.gameAreaRight + 100) {
-            this.pos.x = this.gameAreaLeft - this.bodyWidth - 100
-          } else if (this.speed < 0 && this.pos.x < this.gameAreaLeft - this.bodyWidth - 100) {
-            this.pos.x = this.gameAreaRight + 100
-          }
-        }
-      }
-    ])
-  }
-}
 //
 // Level geometry - two platforms connected by stairs
 //
@@ -512,6 +35,7 @@ const HERO_SPAWN_Y = FIRST_FLOOR_FLOOR_Y - 50
 const ANTIHERO_CLOCK_PLATFORM_X = PLATFORM_SIDE_WIDTH + 65  // Clock platform position, moved right 50px (was +15)
 const ANTIHERO_SPAWN_X = ANTIHERO_CLOCK_PLATFORM_X  // Standing on clock platform
 const ANTIHERO_SPAWN_Y = SECOND_FLOOR_FLOOR_Y - 50  // Standing on clock platform
+
 /**
  * Time section level 1 scene
  * @param {Object} k - Kaplay instance
@@ -1001,5 +525,394 @@ function createLevelPlatforms(k, sound) {
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
+}
+
+/**
+ * Flash small hero with color animation
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ * @param {Object} originalColor - Original color of small hero
+ * @param {number} count - Current flash count
+ */
+function flashSmallHeroLevel1(k, levelIndicator, originalColor, count) {
+  if (count >= 20) {
+    levelIndicator.smallHero.character.color = originalColor
+    return
+  }
+  //
+  // Flash between green and white for visibility
+  //
+  levelIndicator.smallHero.character.color = count % 2 === 0 ? k.rgb(0, 255, 100) : k.rgb(255, 255, 255)
+  k.wait(0.05, () => flashSmallHeroLevel1(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Create heart particles around small hero when level is completed
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function createHeroScoreParticles(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
+    return
+  }
+  
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  const particleCount = 8
+  //
+  // Create heart particles flying outward (yellow with black outline like hero particles)
+  //
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 30 + Math.random() * 20
+    const lifetime = 0.8 + Math.random() * 0.4
+    const heartSize = 18 + Math.random() * 8
+    //
+    // Create black outline hearts (8 directions)
+    //
+    const outlineOffset = 1.5
+    const outlineOffsets = [
+      [-outlineOffset, -outlineOffset],
+      [0, -outlineOffset],
+      [outlineOffset, -outlineOffset],
+      [-outlineOffset, 0],
+      [outlineOffset, 0],
+      [-outlineOffset, outlineOffset],
+      [0, outlineOffset],
+      [outlineOffset, outlineOffset]
+    ]
+    
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineParticle = k.add([
+        k.text('♥', { size: heartSize }),
+        k.pos(heroX + dx, heroY + dy),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(CFG.visual.zIndex.ui + 10),
+        k.fixed()
+      ])
+      //
+      // Animate outline particle
+      //
+      const startTime = k.time()
+      outlineParticle.onUpdate(() => {
+        const elapsed = k.time() - startTime
+        if (elapsed > lifetime) {
+          outlineParticle.destroy()
+          return
+        }
+        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
+        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.opacity = 1 - (elapsed / lifetime)
+      })
+    })
+    //
+    // Create main yellow heart
+    //
+    const particle = k.add([
+      k.text('♥', { size: heartSize }),
+      k.pos(heroX, heroY),
+      k.color(255, 200, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.fixed()
+    ])
+    //
+    // Animate particle outward with fade
+    //
+    const startTime = k.time()
+    particle.onUpdate(() => {
+      const elapsed = k.time() - startTime
+      if (elapsed > lifetime) {
+        particle.destroy()
+        return
+      }
+      particle.pos.x += Math.cos(angle) * speed * k.dt()
+      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      particle.opacity = 1 - (elapsed / lifetime)
+    })
+  }
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius
+ * @param {string} backgroundColor - Background color hex
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, backgroundColor) {
+  const size = radius * 2
+  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+    const [r, g, b] = parseHex(backgroundColor)
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+    //
+    // Draw L-shaped corner with rounded inner angle
+    // Start with full square
+    //
+    ctx.fillRect(0, 0, size, size)
+    //
+    // Cut out top-right quarter circle to create rounded inner corner
+    //
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
+    ctx.lineTo(size, size)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Reset composite operation
+    //
+    ctx.globalCompositeOperation = 'source-over'
+  })
+  return dataURL
+}
+
+/**
+ * Creates ground stripe above bottom platform
+ * @param {Object} k - Kaplay instance
+ */
+function createGroundStripe(k) {
+  const groundColor = k.rgb(20, 20, 20)
+  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
+  k.add([
+    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
+    k.pos(PLATFORM_SIDE_WIDTH, groundY),
+    k.color(groundColor),
+    k.z(16)
+  ])
+}
+
+/**
+ * Creates rounded corners for game area to soften sharp edges where platforms meet
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const radius = CORNER_RADIUS
+  const backgroundColor = CFG.visual.colors.background
+  //
+  // Create corner sprite
+  //
+  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  k.loadSprite('corner-sprite-level1', cornerDataURL)
+  //
+  // Top-left corner (rotate 0°)
+  //
+  k.add([
+    k.sprite('corner-sprite-level1'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite('corner-sprite-level1'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-left corner (rotate 270°)
+  //
+  k.add([
+    k.sprite('corner-sprite-level1'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-right corner (rotate 180°)
+  //
+  k.add([
+    k.sprite('corner-sprite-level1'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+}
+
+/**
+ * Creates moving blurred cars on background
+ * @param {Object} k - Kaplay instance
+ */
+function createMovingCars(k) {
+  const carCount = 5
+  const platformTopY = k.height() - PLATFORM_BOTTOM_HEIGHT + 17
+  const carSpeedMin = 20
+  const carSpeedMax = 50
+  const gameAreaLeft = PLATFORM_SIDE_WIDTH
+  const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH
+  const gameAreaWidth = gameAreaRight - gameAreaLeft
+  
+  for (let i = 0; i < carCount; i++) {
+    const direction = Math.random() > 0.5 ? 1 : -1
+    const carSpeed = (carSpeedMin + Math.random() * (carSpeedMax - carSpeedMin)) * direction
+    const isSUV = Math.random() > 0.5
+    const bodyWidth = isSUV ? 80 + Math.random() * 30 : 70 + Math.random() * 30
+    const bodyHeight = isSUV ? 35 + Math.random() * 10 : 30 + Math.random() * 8
+    const roofWidth = bodyWidth * 0.6
+    const roofHeight = isSUV ? bodyHeight * 0.4 : bodyHeight * 0.5
+    const wheelRadius = 10 + Math.random() * 4
+    const bodyColor = 50 + Math.random() * 20
+    const roofColor = bodyColor - 15
+    const wheelColor = 30 + Math.random() * 15
+    const windowColor = 80 + Math.random() * 20
+    
+    const padding = 20
+    const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
+    const centerY = canvasHeight - padding - wheelRadius
+    const carY = platformTopY - (centerY + wheelRadius - canvasHeight / 2)
+    
+    const carSpriteDataURL = createBlurredCarSprite({
+      bodyWidth,
+      bodyHeight,
+      roofWidth,
+      roofHeight,
+      wheelRadius,
+      bodyColor,
+      roofColor,
+      wheelColor,
+      windowColor,
+      speed: carSpeed
+    })
+    
+    const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
+    k.loadSprite(spriteId, carSpriteDataURL)
+    
+    const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
+    
+    k.add([
+      k.sprite(spriteId),
+      k.pos(startX, carY),
+      k.anchor('center'),
+      k.z(15.6),
+      {
+        speed: carSpeed,
+        bodyWidth: bodyWidth,
+        gameAreaLeft: gameAreaLeft,
+        gameAreaRight: gameAreaRight,
+        update() {
+          this.pos.x += this.speed * k.dt()
+          
+          if (this.speed > 0 && this.pos.x > this.gameAreaRight + 100) {
+            this.pos.x = this.gameAreaLeft - this.bodyWidth - 100
+          } else if (this.speed < 0 && this.pos.x < this.gameAreaLeft - this.bodyWidth - 100) {
+            this.pos.x = this.gameAreaRight + 100
+          }
+        }
+      }
+    ])
+  }
+}
+
+/**
+ * Creates a blurred car sprite using canvas with blur filter
+ * @param {Object} params - Car parameters
+ * @returns {string} Data URL of the car sprite
+ */
+function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, wheelRadius, bodyColor, roofColor, wheelColor, windowColor, speed }) {
+  const padding = 20
+  const canvasWidth = bodyWidth + padding * 2
+  const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
+  const centerX = canvasWidth / 2
+  const centerY = canvasHeight - padding - wheelRadius
+  
+  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+    ctx.filter = 'blur(6px)'
+    
+    const drawRoundedRect = (x, y, width, height, radius, color) => {
+      ctx.fillStyle = `rgb(${color}, ${color}, ${color})`
+      ctx.beginPath()
+      ctx.moveTo(x + radius, y)
+      ctx.lineTo(x + width - radius, y)
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
+      ctx.lineTo(x + width, y + height - radius)
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+      ctx.lineTo(x + radius, y + height)
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
+      ctx.lineTo(x, y + radius)
+      ctx.quadraticCurveTo(x, y, x + radius, y)
+      ctx.closePath()
+      ctx.fill()
+    }
+    
+    const outlineWidth = 1.5
+    const outlineColor = bodyColor - 20
+    
+    drawRoundedRect(
+      centerX - bodyWidth / 2 - outlineWidth,
+      centerY - bodyHeight,
+      bodyWidth + outlineWidth * 2,
+      bodyHeight + outlineWidth * 2,
+      4 + outlineWidth,
+      outlineColor
+    )
+    
+    drawRoundedRect(
+      centerX - roofWidth / 2 - outlineWidth,
+      centerY - bodyHeight - roofHeight - outlineWidth,
+      roofWidth + outlineWidth * 2,
+      roofHeight + outlineWidth * 2,
+      4 + outlineWidth,
+      outlineColor
+    )
+    
+    drawRoundedRect(
+      centerX - bodyWidth / 2,
+      centerY - bodyHeight,
+      bodyWidth,
+      bodyHeight,
+      4,
+      bodyColor
+    )
+    
+    drawRoundedRect(
+      centerX - roofWidth / 2,
+      centerY - bodyHeight - roofHeight,
+      roofWidth,
+      roofHeight,
+      4,
+      roofColor
+    )
+    
+    const windowWidth = roofWidth / 2 - 8
+    const windowHeight = roofHeight - 8
+    const windowY = centerY - bodyHeight - roofHeight + 4
+    
+    const frontWindowX = speed > 0 ? centerX + roofWidth / 4 : centerX - roofWidth / 4
+    ctx.fillStyle = `rgb(${windowColor}, ${windowColor}, ${windowColor})`
+    ctx.fillRect(frontWindowX - windowWidth / 2, windowY, windowWidth, windowHeight)
+    
+    const rearWindowX = speed > 0 ? centerX - roofWidth / 4 : centerX + roofWidth / 4
+    ctx.fillRect(rearWindowX - windowWidth / 2, windowY, windowWidth, windowHeight)
+    
+    const wheelY = centerY - wheelRadius
+    const frontWheelX = centerX + bodyWidth / 3 - bodyWidth / 2
+    const rearWheelX = centerX - bodyWidth / 3 + bodyWidth / 2
+    
+    ctx.fillStyle = `rgb(${wheelColor}, ${wheelColor}, ${wheelColor})`
+    ctx.beginPath()
+    ctx.arc(frontWheelX, wheelY, wheelRadius, 0, Math.PI * 2)
+    ctx.fill()
+    
+    ctx.beginPath()
+    ctx.arc(rearWheelX, wheelY, wheelRadius, 0, Math.PI * 2)
+    ctx.fill()
+    
+    const rimRadius = wheelRadius - 3
+    ctx.fillStyle = `rgb(${wheelColor + 25}, ${wheelColor + 25}, ${wheelColor + 25})`
+    ctx.beginPath()
+    ctx.arc(frontWheelX, wheelY, rimRadius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(rearWheelX, wheelY, rimRadius, 0, Math.PI * 2)
+    ctx.fill()
+  })
 }
 

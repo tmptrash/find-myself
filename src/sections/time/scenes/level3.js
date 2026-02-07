@@ -17,7 +17,7 @@ const CORNER_RADIUS = 20  // Radius for rounded corners
 // Corridor dimensions
 //
 const CORRIDOR_HEIGHT = 200  // Height of the corridor
-const UPPER_CORRIDOR_HEIGHT = 350  // Upper corridor is taller to fit clouds
+const UPPER_CORRIDOR_HEIGHT = 270  // Upper corridor height (reduced to raise middle platform)
 const CORRIDOR_Y = 200  // Position upper corridor at top (room for clouds above)
 const LOWER_CORRIDOR_Y = 680  // Position lower corridor
 const PASSAGE_WIDTH = 100  // Width of passage between corridors
@@ -81,7 +81,7 @@ export function sceneLevel3(k) {
       levelNumber: 4,
       skipPlatforms: true,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      topPlatformHeight: CORRIDOR_Y - 50,  // UI positioned above upper corridor with more space
+      topPlatformHeight: CORRIDOR_Y - 20,  // UI positioned lower, closer to upper corridor
       sideWallWidth: PLATFORM_SIDE_WIDTH,
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
@@ -161,6 +161,10 @@ export function sceneLevel3(k) {
     // Create snow drifts on corridor floors
     //
     createSnowDrifts(k)
+    //
+    // Create ground stripe on down corridor floor
+    //
+    createGroundStripe(k)
     //
     // Create rounded corners for corridors
     //
@@ -327,11 +331,12 @@ function createCorridorPlatforms(k) {
     CFG.game.platformName
   ])
   //
-  // Middle wall between corridors (with passage on the right)
+  // Middle wall between corridors (unified, with passage on the right)
   //
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
+  const middleWallHeight = LOWER_CORRIDOR_Y - (CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT)
   k.add([
-    k.rect(passageStartX, LOWER_CORRIDOR_Y - (CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT)),
+    k.rect(passageStartX, middleWallHeight),
     k.pos(0, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
@@ -345,18 +350,6 @@ function createCorridorPlatforms(k) {
   k.add([
     k.rect(k.width(), k.height() - (LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT)),
     k.pos(0, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT),
-    k.area(),
-    k.body({ isStatic: true }),
-    platformColor,
-    k.z(CFG.visual.zIndex.platforms),
-    CFG.game.platformName
-  ])
-  //
-  // Lower corridor ceiling (from left to passage)
-  //
-  k.add([
-    k.rect(passageStartX, CORRIDOR_HEIGHT),
-    k.pos(0, LOWER_CORRIDOR_Y - CORRIDOR_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
     platformColor,
@@ -1387,7 +1380,7 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
   //
   // Spike Y positions
   //
-  const upperCorridorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 85  // Raised to sit on floor
+  const upperCorridorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 14  // On middle platform
   const lowerCorridorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 15  // Lowered to sit on floor
   //
   // Place spikes in CENTER of alternating sections (avoid section boundaries)
@@ -1700,8 +1693,8 @@ function createSnowDrifts(k) {
   //
   // Snow drift configurations (x, width, height, corridor)
   //
-  const upperFloorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 70
-  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT
+  const upperFloorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT + 2
+  const lowerFloorY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT + 2
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
   const passageEndX = k.width() - PLATFORM_SIDE_WIDTH
   
@@ -1712,7 +1705,7 @@ function createSnowDrifts(k) {
   const driftsFront = []  // z=25, in front of hero
   
   const upperCorridorStart = PLATFORM_SIDE_WIDTH + 100
-  const upperCorridorEnd = passageStartX - 60
+  const upperCorridorEnd = passageStartX - 80
   
   for (let x = upperCorridorStart; x < upperCorridorEnd; x += 20 + Math.random() * 15) {
     const width = 60 + Math.random() * 120
@@ -2034,6 +2027,26 @@ function createRoundedCornerSprite(radius, backgroundColor) {
 }
 
 /**
+ * Creates ground stripes on corridor floors
+ * @param {Object} k - Kaplay instance
+ */
+function createGroundStripe(k) {
+  const groundColor = k.rgb(20, 20, 20)
+  const GROUND_STRIPE_HEIGHT = 5
+  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  //
+  // Lower corridor ground stripe
+  //
+  const lowerGroundY = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT - 4
+  k.add([
+    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
+    k.pos(PLATFORM_SIDE_WIDTH, lowerGroundY),
+    k.color(groundColor),
+    k.z(16)
+  ])
+}
+
+/**
  * Creates rounded corners for corridors
  * @param {Object} k - Kaplay instance
  */
@@ -2045,17 +2058,6 @@ function createRoundedCorners(k) {
   //
   const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
   k.loadSprite('corner-sprite-level3', cornerDataURL)
-  //
-  // Upper corridor corners (left side only)
-  // Top-left corner (where monster starts, upper part)
-  //
-  k.add([
-    k.sprite('corner-sprite-level3'),
-    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - 50),
-    k.rotate(270),  // No rotation (default orientation, same as lower corridor top-left)
-    k.z(30),  // High z-index to be visible above snow
-    k.anchor('topleft')
-  ])
   //
   // Bottom-left corner (where monster starts, lower part)
   //

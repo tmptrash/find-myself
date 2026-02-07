@@ -87,6 +87,10 @@ export function sceneMenu(k) {
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
+    //
+    // Clean up life.png sprite from level indicators
+    //
+    k.get("life").forEach(obj => obj.destroy())
     
     //
     // Reset flying words instance so it can be recreated in next level

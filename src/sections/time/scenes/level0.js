@@ -38,344 +38,7 @@ const INSTRUCTIONS_INITIAL_DELAY = 1.0
 const INSTRUCTIONS_FADE_IN_DURATION = 0.8
 const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
-/**
- * Flash small hero with color animation
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator instance
- * @param {Object} originalColor - Original color of small hero
- * @param {number} count - Current flash count
- */
-function flashSmallHeroLevel0(k, levelIndicator, originalColor, count) {
-  if (count >= 20) {
-    levelIndicator.smallHero.character.color = originalColor
-    return
-  }
-  //
-  // Flash between green and white for visibility
-  //
-  levelIndicator.smallHero.character.color = count % 2 === 0 ? k.rgb(0, 255, 100) : k.rgb(255, 255, 255)
-  k.wait(0.05, () => flashSmallHeroLevel0(k, levelIndicator, originalColor, count + 1))
-}
-/**
- * Create heart particles around small hero when level is completed
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator instance
- */
-function createHeroScoreParticles(k, levelIndicator) {
-  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
-    return
-  }
-  
-  const heroX = levelIndicator.smallHero.character.pos.x
-  const heroY = levelIndicator.smallHero.character.pos.y
-  const particleCount = 8
-  //
-  // Create heart particles flying outward (yellow with black outline like hero particles)
-  //
-  for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount
-    const speed = 30 + Math.random() * 20
-    const lifetime = 0.8 + Math.random() * 0.4
-    const heartSize = 18 + Math.random() * 8
-    //
-    // Create black outline hearts (8 directions)
-    //
-    const outlineOffset = 1.5
-    const outlineOffsets = [
-      [-outlineOffset, -outlineOffset],
-      [0, -outlineOffset],
-      [outlineOffset, -outlineOffset],
-      [-outlineOffset, 0],
-      [outlineOffset, 0],
-      [-outlineOffset, outlineOffset],
-      [0, outlineOffset],
-      [outlineOffset, outlineOffset]
-    ]
-    
-    outlineOffsets.forEach(([dx, dy]) => {
-      const outlineParticle = k.add([
-        k.text('♥', { size: heartSize }),
-        k.pos(heroX + dx, heroY + dy),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(CFG.visual.zIndex.ui + 10),
-        k.fixed()
-      ])
-      //
-      // Animate outline particle
-      //
-      const startTime = k.time()
-      outlineParticle.onUpdate(() => {
-        const elapsed = k.time() - startTime
-        if (elapsed > lifetime) {
-          outlineParticle.destroy()
-          return
-        }
-        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
-        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
-        outlineParticle.opacity = 1 - (elapsed / lifetime)
-      })
-    })
-    //
-    // Create main yellow heart
-    //
-    const particle = k.add([
-      k.text('♥', { size: heartSize }),
-      k.pos(heroX, heroY),
-      k.color(255, 200, 0),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 11),
-      k.fixed()
-    ])
-    //
-    // Animate particle outward with fade
-    //
-    const startTime = k.time()
-    particle.onUpdate(() => {
-      const elapsed = k.time() - startTime
-      if (elapsed > lifetime) {
-        particle.destroy()
-        return
-      }
-      particle.pos.x += Math.cos(angle) * speed * k.dt()
-      particle.pos.y += Math.sin(angle) * speed * k.dt()
-      particle.opacity = 1 - (elapsed / lifetime)
-    })
-  }
-}
-/**
- * Creates instructions text object with manual black outline
- * @param {Object} k - Kaplay instance
- * @param {number} centerX - Center X position
- * @param {number} textY - Text Y position
- * @returns {Object} Instructions text object with outline texts array
- */
-function createInstructionsText(k, centerX, textY) {
-  const instructionsContent = "← → - move,   ↑ Space - jump,   ESC - menu"
-  const OUTLINE_OFFSET = 2
-  //
-  // Create 8 outline texts (black)
-  //
-  const outlineOffsets = [
-    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
-    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
-    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
-    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
-  ]
-  
-  const outlineTexts = outlineOffsets.map(([dx, dy]) => {
-    return k.add([
-      k.text(instructionsContent, {
-        size: 24,
-        align: "center",
-        font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-      }),
-      k.pos(centerX + dx, textY + dy),
-      k.anchor("center"),
-      k.color(0, 0, 0),  // Black outline
-      k.opacity(0),
-      k.z(CFG.visual.zIndex.ui + 9)
-    ])
-  })
-  //
-  // Create main text (white)
-  //
-  const mainText = k.add([
-    k.text(instructionsContent, {
-      size: 24,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, textY),
-    k.anchor("center"),
-    k.color(255, 255, 255),  // White for time section
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
-  
-  return { mainText, outlineTexts }
-}
-/**
- * Shows instructions
- * @param {Object} k - Kaplay instance
- */
-function showInstructions(k) {
-  const centerX = CFG.visual.screen.width / 2
-  const textY = PLATFORM_TOP_HEIGHT / 2
-  //
-  // Create instructions text with outline
-  //
-  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
-  //
-  // Animation state
-  //
-  const inst = {
-    k,
-    mainText,
-    outlineTexts,
-    timer: 0,
-    phase: 'initial_delay'
-  }
-  //
-  // Update animation
-  //
-  const updateInterval = k.onUpdate(() => {
-    inst.timer += k.dt()
-    
-    if (inst.phase === 'initial_delay') {
-      //
-      // Wait for initial delay
-      //
-      if (inst.timer >= INSTRUCTIONS_INITIAL_DELAY) {
-        inst.phase = 'fade_in'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'fade_in') {
-      //
-      // Fade in instructions text and outline
-      //
-      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
-      mainText.opacity = progress
-      outlineTexts.forEach(text => {
-        text.opacity = progress
-      })
-      
-      if (progress >= 1) {
-        inst.phase = 'hold'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'hold') {
-      //
-      // Hold instructions text
-      //
-      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
-        inst.phase = 'fade_out'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'fade_out') {
-      //
-      // Fade out instructions text and outline
-      //
-      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
-      mainText.opacity = 1 - progress
-      outlineTexts.forEach(text => {
-        text.opacity = 1 - progress
-      })
-      
-      if (progress >= 1) {
-        //
-        // Clean up and finish
-        //
-        updateInterval.cancel()
-        k.destroy(mainText)
-        outlineTexts.forEach(text => k.destroy(text))
-      }
-    }
-  })
-}
-/**
- * Creates ground stripe above bottom platform
- * @param {Object} k - Kaplay instance
- */
-function createGroundStripe(k) {
-  const groundColor = k.rgb(20, 20, 20)  // Dark gray ground
-  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
-  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
-  k.add([
-    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
-    k.pos(PLATFORM_SIDE_WIDTH, groundY),
-    k.color(groundColor),
-    k.z(16)  // Above platforms (15), background (15.5), cars (15.6), rounded corners (15.8)
-  ])
-}
 
-/**
- * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
- * @param {number} radius - Corner radius
- * @param {string} backgroundColor - Background color hex
- * @returns {string} Data URL of the corner sprite
- */
-function createRoundedCornerSprite(radius, backgroundColor) {
-  const size = radius * 2
-  const dataURL = toPng({ width: size, height: size }, (ctx) => {
-    const [r, g, b] = parseHex(backgroundColor)
-    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
-    //
-    // Draw L-shaped corner with rounded inner angle
-    // Start with full square
-    //
-    ctx.fillRect(0, 0, size, size)
-    //
-    // Cut out top-right quarter circle to create rounded inner corner
-    //
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.beginPath()
-    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
-    ctx.lineTo(size, size)
-    ctx.closePath()
-    ctx.fill()
-    //
-    // Reset composite operation
-    //
-    ctx.globalCompositeOperation = 'source-over'
-  })
-  return dataURL
-}
-
-/**
- * Creates rounded corners for game area to soften sharp edges where platforms meet
- * @param {Object} k - Kaplay instance
- */
-function createRoundedCorners(k) {
-  const radius = CORNER_RADIUS
-  const backgroundColor = CFG.visual.colors.background
-  //
-  // Create corner sprite
-  //
-  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
-  k.loadSprite('corner-sprite', cornerDataURL)
-  //
-  // Top-left corner (rotate 0°)
-  //
-  k.add([
-    k.sprite('corner-sprite'),
-    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-  //
-  // Top-right corner (rotate 90°)
-  //
-  k.add([
-    k.sprite('corner-sprite'),
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
-    k.rotate(90),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-  //
-  // Bottom-left corner (rotate 270°)
-  //
-  k.add([
-    k.sprite('corner-sprite'),
-    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
-    k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-  //
-  // Bottom-right corner (rotate 180°)
-  //
-  k.add([
-    k.sprite('corner-sprite'),
-    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
-    k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1),
-    k.anchor('topleft')
-  ])
-}
-
-/**
 /**
  * Time section level 0 scene
  * @param {Object} k - Kaplay instance
@@ -957,4 +620,345 @@ export function sceneLevel0(k) {
       }
     })
   })
+}
+
+/**
+ * Flash small hero with color animation
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ * @param {Object} originalColor - Original color of small hero
+ * @param {number} count - Current flash count
+ */
+function flashSmallHeroLevel0(k, levelIndicator, originalColor, count) {
+  if (count >= 20) {
+    levelIndicator.smallHero.character.color = originalColor
+    return
+  }
+  //
+  // Flash between green and white for visibility
+  //
+  levelIndicator.smallHero.character.color = count % 2 === 0 ? k.rgb(0, 255, 100) : k.rgb(255, 255, 255)
+  k.wait(0.05, () => flashSmallHeroLevel0(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Create heart particles around small hero when level is completed
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function createHeroScoreParticles(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
+    return
+  }
+  
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  const particleCount = 8
+  //
+  // Create heart particles flying outward (yellow with black outline like hero particles)
+  //
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 30 + Math.random() * 20
+    const lifetime = 0.8 + Math.random() * 0.4
+    const heartSize = 18 + Math.random() * 8
+    //
+    // Create black outline hearts (8 directions)
+    //
+    const outlineOffset = 1.5
+    const outlineOffsets = [
+      [-outlineOffset, -outlineOffset],
+      [0, -outlineOffset],
+      [outlineOffset, -outlineOffset],
+      [-outlineOffset, 0],
+      [outlineOffset, 0],
+      [-outlineOffset, outlineOffset],
+      [0, outlineOffset],
+      [outlineOffset, outlineOffset]
+    ]
+    
+    outlineOffsets.forEach(([dx, dy]) => {
+      const outlineParticle = k.add([
+        k.text('♥', { size: heartSize }),
+        k.pos(heroX + dx, heroY + dy),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(CFG.visual.zIndex.ui + 10),
+        k.fixed()
+      ])
+      //
+      // Animate outline particle
+      //
+      const startTime = k.time()
+      outlineParticle.onUpdate(() => {
+        const elapsed = k.time() - startTime
+        if (elapsed > lifetime) {
+          outlineParticle.destroy()
+          return
+        }
+        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
+        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.opacity = 1 - (elapsed / lifetime)
+      })
+    })
+    //
+    // Create main yellow heart
+    //
+    const particle = k.add([
+      k.text('♥', { size: heartSize }),
+      k.pos(heroX, heroY),
+      k.color(255, 200, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.fixed()
+    ])
+    //
+    // Animate particle outward with fade
+    //
+    const startTime = k.time()
+    particle.onUpdate(() => {
+      const elapsed = k.time() - startTime
+      if (elapsed > lifetime) {
+        particle.destroy()
+        return
+      }
+      particle.pos.x += Math.cos(angle) * speed * k.dt()
+      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      particle.opacity = 1 - (elapsed / lifetime)
+    })
+  }
+}
+
+/**
+ * Creates instructions text object with manual black outline
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} textY - Text Y position
+ * @returns {Object} Instructions text object with outline texts array
+ */
+function createInstructionsText(k, centerX, textY) {
+  const instructionsContent = "← → - move,   ↑ Space - jump,   ESC - menu"
+  const OUTLINE_OFFSET = 2
+  //
+  // Create 8 outline texts (black)
+  //
+  const outlineOffsets = [
+    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
+    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
+  ]
+  
+  const outlineTexts = outlineOffsets.map(([dx, dy]) => {
+    return k.add([
+      k.text(instructionsContent, {
+        size: 24,
+        align: "center",
+        font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+      }),
+      k.pos(centerX + dx, textY + dy),
+      k.anchor("center"),
+      k.color(0, 0, 0),
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.ui + 9)
+    ])
+  })
+  //
+  // Create main text (white)
+  //
+  const mainText = k.add([
+    k.text(instructionsContent, {
+      size: 24,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  
+  return { mainText, outlineTexts }
+}
+
+/**
+ * Shows instructions
+ * @param {Object} k - Kaplay instance
+ */
+function showInstructions(k) {
+  const centerX = CFG.visual.screen.width / 2
+  const textY = PLATFORM_TOP_HEIGHT / 2
+  //
+  // Create instructions text with outline
+  //
+  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    mainText,
+    outlineTexts,
+    timer: 0,
+    phase: 'initial_delay'
+  }
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    
+    if (inst.phase === 'initial_delay') {
+      //
+      // Wait for initial delay
+      //
+      if (inst.timer >= INSTRUCTIONS_INITIAL_DELAY) {
+        inst.phase = 'fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_in') {
+      //
+      // Fade in instructions text and outline
+      //
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
+      mainText.opacity = progress
+      outlineTexts.forEach(text => {
+        text.opacity = progress
+      })
+      
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      //
+      // Hold instructions text
+      //
+      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      //
+      // Fade out instructions text and outline
+      //
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(text => {
+        text.opacity = 1 - progress
+      })
+      
+      if (progress >= 1) {
+        //
+        // Clean up and finish
+        //
+        updateInterval.cancel()
+        k.destroy(mainText)
+        outlineTexts.forEach(text => k.destroy(text))
+      }
+    }
+  })
+}
+
+/**
+ * Creates ground stripe above bottom platform
+ * @param {Object} k - Kaplay instance
+ */
+function createGroundStripe(k) {
+  const groundColor = k.rgb(20, 20, 20)
+  const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
+  const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
+  k.add([
+    k.rect(gameAreaWidth, GROUND_STRIPE_HEIGHT),
+    k.pos(PLATFORM_SIDE_WIDTH, groundY),
+    k.color(groundColor),
+    k.z(16)
+  ])
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius
+ * @param {string} backgroundColor - Background color hex
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, backgroundColor) {
+  const size = radius * 2
+  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+    const [r, g, b] = parseHex(backgroundColor)
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+    //
+    // Draw L-shaped corner with rounded inner angle
+    // Start with full square
+    //
+    ctx.fillRect(0, 0, size, size)
+    //
+    // Cut out top-right quarter circle to create rounded inner corner
+    //
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.beginPath()
+    ctx.arc(size, size, radius, Math.PI, Math.PI * 1.5, false)
+    ctx.lineTo(size, size)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Reset composite operation
+    //
+    ctx.globalCompositeOperation = 'source-over'
+  })
+  return dataURL
+}
+
+/**
+ * Creates rounded corners for game area to soften sharp edges where platforms meet
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const radius = CORNER_RADIUS
+  const backgroundColor = CFG.visual.colors.background
+  //
+  // Create corner sprite
+  //
+  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  k.loadSprite('corner-sprite', cornerDataURL)
+  //
+  // Top-left corner (rotate 0°)
+  //
+  k.add([
+    k.sprite('corner-sprite'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite('corner-sprite'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, PLATFORM_TOP_HEIGHT - CORNER_RADIUS),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-left corner (rotate 270°)
+  //
+  k.add([
+    k.sprite('corner-sprite'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
+  //
+  // Bottom-right corner (rotate 180°)
+  //
+  k.add([
+    k.sprite('corner-sprite'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, k.height() - PLATFORM_BOTTOM_HEIGHT + CORNER_RADIUS),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.anchor('topleft')
+  ])
 }

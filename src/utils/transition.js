@@ -39,10 +39,10 @@ const LEVEL_SUBTITLES = {
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre'],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre'],
   'level-word.4': ['words that kill', 'word4-pre'],
-  'level-time.0': ['time never waits, and neither should you', 'time0-pre'],
-  'level-time.1': ['do not touch the one', 'time1-pre'],
-  'level-time.2': ['digits sum even safe, sum odd deadly. you have 3 tries', 'time2-pre'],
-  'level-time.3': ['sections switch controls - watch the clocks', 'time3-pre'],
+  'level-time.0': ['time moves forward even when you stand still.\n\nthis is the first thing you learn.', 'time0-pre'],
+  'level-time.1': ['growing up means learning what you can touch —\n\nand what you should leave alone. do not touch the one', 'time1-pre'],
+  'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum even safe, sum odd deadly.', 'time2-pre'],
+  'level-time.3': ['life consumes time while you hesitate.\n\nact too slow — and it will catch you.', 'time3-pre'],
   'level-touch.0': 'gather what crawls together to reach what stands above',
   'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
   'level-touch.2': 'jump to reveal the path - find what stands nearby'
@@ -51,7 +51,7 @@ const LEVEL_SUBTITLES = {
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
 const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
-const TEXT_HOLD_DURATION = 3.0       // Duration text stays visible
+const TEXT_HOLD_DURATION = 7.5       // Duration text stays visible (increased for time section)
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 

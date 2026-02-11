@@ -30,19 +30,20 @@ const LEVEL_TRANSITIONS = {
 }
 
 // Subtitles shown BEFORE entering each level (shifted forward by one)
+// Format: [text, sound_id, hold_duration] or just text (for touch section)
 const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'level-word.0': ['words, they cut deeper than blades', 'word0-pre'],
-  'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre'],
-  'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre'],
-  'level-word.3': ['sharp words move fast - so must you', 'word3-pre'],
-  'level-word.4': ['words that kill', 'word4-pre'],
-  'level-time.0': ['time moves forward even when you stand still.\n\nthis is the first thing you learn.', 'time0-pre'],
-  'level-time.1': ['growing up means learning what you can touch —\n\nand what you should leave alone. do not touch the one', 'time1-pre'],
-  'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum even safe, sum odd deadly.', 'time2-pre'],
-  'level-time.3': ['life consumes time while you hesitate.\n\nact too slow — and it will catch you.', 'time3-pre'],
+  'level-word.0': ['words, they cut deeper than blades', 'word0-pre', 3.0],
+  'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre', 3.5],
+  'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
+  'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],
+  'level-word.4': ['words that kill', 'word4-pre', 2.5],
+  'level-time.0': ['time moves forward even when you stand still.\n\nthis is the first thing you learn.', 'time0-pre', 5.5],
+  'level-time.1': ['growing up means learning what you can touch —\n\nand what you should leave alone. do not touch the one', 'time1-pre', 8],
+  'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
+  'level-time.3': ['life consumes time while you hesitate.\n\nact too slow — and it will catch you.', 'time3-pre', 6],
   'level-touch.0': 'gather what crawls together to reach what stands above',
   'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
   'level-touch.2': 'jump to reveal the path - find what stands nearby'
@@ -51,7 +52,7 @@ const LEVEL_SUBTITLES = {
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
 const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
-const TEXT_HOLD_DURATION = 7.5       // Duration text stays visible (increased for time section)
+const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 
@@ -173,8 +174,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const inst = {
     textObj: null,
     skipped: false,
-    skipEnabled: false,  // Skip is disabled initially to prevent accidental skip
-    skipEnableTimer: 0
+    skipEnabled: false,
+    skipEnableTimer: 0,
+    textHoldDuration: DEFAULT_TEXT_HOLD_DURATION,
+    soundName: null,
+    textSound: null
   }
   
   //
@@ -252,6 +256,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         // Create subtitle text for NEXT level (the one we're transitioning TO)
         const subtitle = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[0] : LEVEL_SUBTITLES[nextLevel]
         const soundName = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[1] : null
+        const textHoldDuration = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[2] : DEFAULT_TEXT_HOLD_DURATION
+        
+        inst.soundName = soundName
+        inst.textHoldDuration = textHoldDuration || DEFAULT_TEXT_HOLD_DURATION
 
         if (subtitle) {
           //
@@ -316,9 +324,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             k.fixed()
           ])
           
-          // Store text object in inst-like structure
+          // Store text object in inst
           inst.textObj = textObj
-          inst.soundName = soundName
         } else {
           // No subtitle, go to next level immediately
           transitionInterval.cancel()
@@ -343,7 +350,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       }
     } else if (phase === 'text_hold') {
       // Hold text visible
-      if (timer >= TEXT_HOLD_DURATION) {
+      if (timer >= inst.textHoldDuration) {
         phase = 'text_fade_out'
         timer = 0
       }

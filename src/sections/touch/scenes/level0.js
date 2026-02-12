@@ -46,6 +46,11 @@ export function sceneLevel0(k) {
     //
     set('lastLevel', 'level-touch.0')
     //
+    // Reset scores at the beginning of touch section
+    //
+    set('heroScore', 0)
+    set('lifeScore', 0)
+    //
     // Set gravity
     //
     k.setGravity(CFG.game.gravity)

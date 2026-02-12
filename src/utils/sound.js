@@ -64,6 +64,12 @@ export function create() {
   const clockTickGain = ctx.createGain()
   clockTickGain.gain.value = 0.4
   clockTickGain.connect(ctx.destination)
+  //
+  // Create master gain for clock destruction sound
+  //
+  const clockDestroyGain = ctx.createGain()
+  clockDestroyGain.gain.value = 0.5
+  clockDestroyGain.connect(ctx.destination)
 
   return {
     // Audio context
@@ -78,6 +84,7 @@ export function create() {
     bugScareGain,
     bugStepGain,
     clockTickGain,
+    clockDestroyGain,
     // Ambient music state
     ambientOscillators: [],
     ambientGains: [],
@@ -2234,4 +2241,76 @@ export function playMonsterStepSound(instance) {
   
   noise.start(now)
   noise.stop(now + duration)
+}
+/**
+ * Play clock disintegration sound (victory-like tone with scatter effect)
+ * @param {Object} instance - Sound instance
+ */
+export function playClockDestroySound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.7
+  //
+  // Create bright ascending tone (similar to victory)
+  //
+  const mainTone = instance.audioContext.createOscillator()
+  const mainGain = instance.audioContext.createGain()
+  const filter = instance.audioContext.createBiquadFilter()
+  
+  mainTone.type = 'sine'
+  mainTone.frequency.setValueAtTime(440, now)
+  mainTone.frequency.exponentialRampToValueAtTime(554, now + 0.12)
+  mainTone.frequency.exponentialRampToValueAtTime(659, now + 0.25)
+  
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(3000, now)
+  filter.Q.value = 1
+  
+  mainGain.gain.setValueAtTime(0.001, now)
+  mainGain.gain.exponentialRampToValueAtTime(0.2, now + 0.03)
+  mainGain.gain.setValueAtTime(0.2, now + 0.4)
+  mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  //
+  // Add scatter effect with white noise burst
+  //
+  const bufferSize = instance.audioContext.sampleRate * 0.3
+  const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  //
+  // Create burst of noise for scatter effect
+  //
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    const envelope = Math.exp(-progress * 12)
+    data[i] = (Math.random() * 2 - 1) * envelope * 0.3
+  }
+  
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = buffer
+  
+  const noiseFilter = instance.audioContext.createBiquadFilter()
+  noiseFilter.type = 'highpass'
+  noiseFilter.frequency.setValueAtTime(1200, now)
+  noiseFilter.Q.value = 1
+  
+  const noiseGain = instance.audioContext.createGain()
+  noiseGain.gain.setValueAtTime(0.15, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3)
+  //
+  // Connect chains
+  //
+  mainTone.connect(filter)
+  filter.connect(mainGain)
+  mainGain.connect(instance.clockDestroyGain)
+  
+  noise.connect(noiseFilter)
+  noiseFilter.connect(noiseGain)
+  noiseGain.connect(instance.clockDestroyGain)
+  //
+  // Start sounds
+  //
+  mainTone.start(now)
+  mainTone.stop(now + duration)
+  
+  noise.start(now)
+  noise.stop(now + 0.3)
 }

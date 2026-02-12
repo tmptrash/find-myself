@@ -3,7 +3,7 @@ import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/level-indicator.js'
-import { get } from '../../../utils/progress.js'
+import { get, set } from '../../../utils/progress.js'
 
 const MUSIC_START_DELAY = 6.0
 //
@@ -334,5 +334,22 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     hero: heroInst,
     antiHero: antiHeroInst
   }
+}
+/**
+ * Check if player earned speed bonus and display message
+ * @param {Object} k - Kaplay instance
+ * @param {string} levelName - Current level name (e.g. 'level-time.0')
+ * @param {number} levelTime - Time taken to complete level (seconds)
+ * @param {Object} levelIndicator - Level indicator instance
+ * @returns {boolean} True if speed bonus earned
+ */
+export function checkSpeedBonus(k, levelName, levelTime, levelIndicator) {
+  const targetTime = CFG.gameplay.speedBonusTime[levelName]
+  
+  if (!targetTime) return false
+  
+  const earnedBonus = levelTime < targetTime
+  
+  return earnedBonus
 }
 

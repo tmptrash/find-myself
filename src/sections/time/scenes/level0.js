@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, stopTimeSectionMusic } from '../components/scene-helper.js'
+import { initScene, startTimeSectionMusic, stopTimeSectionMusic, checkSpeedBonus } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
@@ -50,6 +50,11 @@ export function sceneLevel0(k) {
     //
     set('lastLevel', 'level-time.0')
     //
+    // Reset scores at the beginning of time section
+    //
+    set('heroScore', 0)
+    set('lifeScore', 0)
+    //
     // Create sound instance
     //
     const sound = Sound.create()
@@ -95,10 +100,16 @@ export function sceneLevel0(k) {
         }
         Sound.fadeOutAllMusic()
         //
-        // Increment hero score (level completed)
+        // Check for speed bonus before incrementing normal score
+        //
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(k, 'level-time.0', levelTime, levelIndicator)
+        //
+        // Increment hero score (level completed + speed bonus if earned)
         //
         const currentScore = get('heroScore', 0)
-        const newScore = currentScore + 1
+        const pointsToAdd = speedBonusEarned ? 2 : 1
+        const newScore = currentScore + pointsToAdd
         set('heroScore', newScore)
         //
         // Show visual effects with hero score before transition
@@ -161,7 +172,7 @@ export function sceneLevel0(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k })
+    const fpsCounter = FpsCounter.create({ k, showTimer: true })
     //
     // Update FPS counter
     //

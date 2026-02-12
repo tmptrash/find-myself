@@ -67,6 +67,11 @@ export function sceneLevel0(k) {
     //
     set('lastLevel', 'level-word.0')
     //
+    // Reset scores at the beginning of word section
+    //
+    set('heroScore', 0)
+    set('lifeScore', 0)
+    //
     // Initialize level with heroes
     //
     const progress = getProgress()

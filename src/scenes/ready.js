@@ -24,6 +24,8 @@ const INSTRUCTIONS_TEXT_LINES = [
   { text: 'In each world, you search for another "you" — a reflection shaped by', normal: true },
   { text: 'the very forces you\'re learning to face. Reaching them means meeting', normal: true },
   { text: 'yourself honestly.', normal: true },
+  { text: 'Complete levels quickly to earn bonus points — use them when you', normal: true },
+  { text: 'need them most. Speed rewards courage.', normal: true },
   { text: '', normal: true },
   { text: 'Life will confuse you. You will fall. ', normal: true, inline: true },
   { text: 'But each fall brings you', important: true, sameLine: true },

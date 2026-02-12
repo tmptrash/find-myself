@@ -23,6 +23,17 @@ export const TIME_CFG = {
       ringVolume: 0.03     // Volume of metallic ring sound (0-1), quieter than blade
     }
   },
+  gameplay: {
+    //
+    // Target time for speed bonus (in seconds) for each level
+    //
+    speedBonusTime: {
+      'level-time.0': 15,   // Level 0: 15 seconds
+      'level-time.1': 55,   // Level 1: 55 seconds
+      'level-time.2': 80,   // Level 2: 80 seconds
+      'level-time.3': 180   // Level 3: 180 seconds
+    }
+  },
   visual: {
     //
     // Colors specific to time section (grayscale only)

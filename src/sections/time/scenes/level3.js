@@ -146,7 +146,7 @@ export function sceneLevel3(k) {
     //
     // Create snow particle system
     //
-    const snowSystem = createSnowParticles(k)
+    const snowSystem = createSnowParticles(k, sections)
     //
     // Update snow particles
     //
@@ -292,7 +292,7 @@ export function sceneLevel3(k) {
           // If monster or any leg touched the clock, destroy it with particle effect
           //
           if (shouldDestroy) {
-            createClockDisintegrationEffect(k, section.clock)
+            createClockDisintegrationEffect(k, section.clock, sound)
             k.destroy(section.clock)
             section.clock = null  // Mark as destroyed
           }
@@ -302,7 +302,7 @@ export function sceneLevel3(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k })
+    const fpsCounter = FpsCounter.create({ k, showTimer: true })
     //
     // Update FPS counter
     //
@@ -387,7 +387,13 @@ function createCorridorPlatforms(k) {
  * @param {Object} k - Kaplay instance
  * @returns {Object} Snow system instance
  */
-function createSnowParticles(k) {
+/**
+ * Create snow particles for both corridors
+ * @param {Object} k - Kaplay instance
+ * @param {Array} sections - Time sections with isReversed property
+ * @returns {Object} Snow system instance
+ */
+function createSnowParticles(k, sections) {
   const particles = []
   const PARTICLE_COUNT = 300
   const MARGIN = 10
@@ -428,7 +434,7 @@ function createSnowParticles(k) {
     
     particles.push({
       obj: particle,
-      speedX: 150 + Math.random() * 100,
+      baseSpeedX: 150 + Math.random() * 100,
       speedY: -30 + Math.random() * 60,
       gameAreaLeft,
       gameAreaRight,
@@ -443,6 +449,7 @@ function createSnowParticles(k) {
   return {
     k,
     particles,
+    sections,
     gameAreaLeft,
     gameAreaRight,
     gameAreaWidth,
@@ -458,16 +465,31 @@ function createSnowParticles(k) {
  * @param {Object} inst - Snow system instance
  */
 function updateSnowParticles(inst) {
-  const { k, particles, gameAreaLeft, gameAreaRight, gameAreaWidth, upperCorridorTop, upperCorridorBottom, lowerCorridorTop, lowerCorridorBottom } = inst
+  const { k, particles, sections, gameAreaLeft, gameAreaRight, gameAreaWidth, upperCorridorTop, upperCorridorBottom, lowerCorridorTop, lowerCorridorBottom } = inst
   const dt = k.dt()
   //
   // Update each particle
   //
   particles.forEach(p => {
     //
-    // Move particle right with vertical variation (blizzard)
+    // Find which section particle is currently in
     //
-    p.obj.pos.x += p.speedX * dt
+    const particleX = p.obj.pos.x
+    const particleY = p.obj.pos.y
+    const currentSection = sections.find(s => 
+      particleX >= s.x && 
+      particleX < s.x + s.width &&
+      particleY >= s.y &&
+      particleY < s.y + s.height
+    )
+    //
+    // Determine snow direction based on section's isReversed property
+    //
+    const speedX = currentSection && currentSection.isReversed ? -p.baseSpeedX : p.baseSpeedX
+    //
+    // Move particle with direction based on current section
+    //
+    p.obj.pos.x += speedX * dt
     p.obj.pos.y += p.speedY * dt
     //
     // Determine which corridor particle is in
@@ -475,22 +497,25 @@ function updateSnowParticles(inst) {
     const inUpperCorridor = p.obj.pos.y >= upperCorridorTop && p.obj.pos.y <= upperCorridorBottom
     const inLowerCorridor = p.obj.pos.y >= lowerCorridorTop && p.obj.pos.y <= lowerCorridorBottom
     //
-    // Wrap horizontally
+    // Wrap particle within its current section boundaries
     //
-    if (p.obj.pos.x > gameAreaRight + 10) {
-      p.obj.pos.x = gameAreaLeft - 10
+    if (currentSection) {
+      const sectionLeft = currentSection.x
+      const sectionRight = currentSection.x + currentSection.width
       //
-      // Respawn in same corridor
+      // If particle exits section on right, respawn at left of same section
       //
-      if (inUpperCorridor) {
-        p.obj.pos.y = upperCorridorTop + Math.random() * (upperCorridorBottom - upperCorridorTop)
-      } else if (inLowerCorridor) {
-        p.obj.pos.y = lowerCorridorTop + Math.random() * (lowerCorridorBottom - lowerCorridorTop)
+      if (p.obj.pos.x > sectionRight) {
+        p.obj.pos.x = sectionLeft + (p.obj.pos.x - sectionRight)
+        p.speedY = -30 + Math.random() * 60
       }
-      p.speedY = -30 + Math.random() * 60
-    }
-    if (p.obj.pos.x < gameAreaLeft - 10) {
-      p.obj.pos.x = gameAreaRight + 10
+      //
+      // If particle exits section on left, respawn at right of same section
+      //
+      if (p.obj.pos.x < sectionLeft) {
+        p.obj.pos.x = sectionRight - (sectionLeft - p.obj.pos.x)
+        p.speedY = -30 + Math.random() * 60
+      }
     }
     //
     // Wrap vertically within corridor bounds
@@ -498,20 +523,16 @@ function updateSnowParticles(inst) {
     if (inUpperCorridor) {
       if (p.obj.pos.y < upperCorridorTop - 10) {
         p.obj.pos.y = upperCorridorBottom + 10
-        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
       }
       if (p.obj.pos.y > upperCorridorBottom + 10) {
         p.obj.pos.y = upperCorridorTop - 10
-        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
       }
     } else if (inLowerCorridor) {
       if (p.obj.pos.y < lowerCorridorTop - 10) {
         p.obj.pos.y = lowerCorridorBottom + 10
-        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
       }
       if (p.obj.pos.y > lowerCorridorBottom + 10) {
         p.obj.pos.y = lowerCorridorTop - 10
-        p.obj.pos.x = gameAreaLeft + Math.random() * gameAreaWidth
       }
     } else {
       //
@@ -682,12 +703,17 @@ function createTimeSections(k) {
  * Create clock disintegration particle effect
  * @param {Object} k - Kaplay instance
  * @param {Object} clock - Clock text object to disintegrate
+ * @param {Object} sound - Sound instance
  */
-function createClockDisintegrationEffect(k, clock) {
+function createClockDisintegrationEffect(k, clock, sound) {
   const PARTICLE_COUNT = 30
   const PARTICLE_SIZE = 3
   const clockPos = clock.pos
   const clockColor = clock.color || k.rgb(180, 180, 180)
+  //
+  // Play clock destruction sound
+  //
+  Sound.playClockDestroySound(sound)
   //
   // Create particles at clock position
   //

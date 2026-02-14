@@ -46,14 +46,19 @@ const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
 export function sceneLevel0(k) {
   k.scene("level-time.0", () => {
     //
+    // Reset scores only if coming from a different section (not a reload after death)
+    //
+    const lastLevel = get('lastLevel', '')
+    const isComingFromDifferentSection = !lastLevel.startsWith('level-time.')
+    
+    if (isComingFromDifferentSection) {
+      set('heroScore', 0)
+      set('lifeScore', 0)
+    }
+    //
     // Save progress immediately when entering this level
     //
     set('lastLevel', 'level-time.0')
-    //
-    // Reset scores at the beginning of time section
-    //
-    set('heroScore', 0)
-    set('lifeScore', 0)
     //
     // Create sound instance
     //
@@ -172,7 +177,11 @@ export function sceneLevel0(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true })
+    const fpsCounter = FpsCounter.create({ 
+      k, 
+      showTimer: true, 
+      targetTime: CFG.gameplay.speedBonusTime['level-time.0'] 
+    })
     //
     // Update FPS counter
     //

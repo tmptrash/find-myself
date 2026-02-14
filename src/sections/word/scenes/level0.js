@@ -63,14 +63,19 @@ let instructionsAnimationComplete = false
 export function sceneLevel0(k) {
   k.scene("level-word.0", () => {
     //
+    // Reset scores only if coming from a different section (not a reload after death)
+    //
+    const lastLevel = get('lastLevel', '')
+    const isComingFromDifferentSection = !lastLevel.startsWith('level-word.')
+    
+    if (isComingFromDifferentSection) {
+      set('heroScore', 0)
+      set('lifeScore', 0)
+    }
+    //
     // Save progress immediately when entering this level
     //
     set('lastLevel', 'level-word.0')
-    //
-    // Reset scores at the beginning of word section
-    //
-    set('heroScore', 0)
-    set('lifeScore', 0)
     //
     // Initialize level with heroes
     //

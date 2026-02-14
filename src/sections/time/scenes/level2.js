@@ -360,7 +360,11 @@ export function sceneLevel2(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true })
+    const fpsCounter = FpsCounter.create({ 
+      k, 
+      showTimer: true, 
+      targetTime: CFG.gameplay.speedBonusTime['level-time.2'] 
+    })
     //
     // Update FPS counter
     //

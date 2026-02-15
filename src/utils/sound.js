@@ -2314,3 +2314,107 @@ export function playClockDestroySound(instance) {
   noise.start(now)
   noise.stop(now + 0.3)
 }
+/**
+ * Play snowball shoot sound (soft whoosh)
+ * @param {Object} instance - Sound instance
+ */
+export function playBulletShootSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.15
+  //
+  // Create soft whoosh with white noise
+  //
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  //
+  // Generate soft whoosh sound
+  //
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    const envelope = Math.sin(progress * Math.PI) * 0.3
+    data[i] = (Math.random() * 2 - 1) * envelope
+  }
+  
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = buffer
+  //
+  // Low-pass filter for soft sound
+  //
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(1200, now)
+  filter.Q.value = 1
+  
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.3, now)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  noise.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.audioContext.destination)
+  
+  noise.start(now)
+  noise.stop(now + duration)
+}
+/**
+ * Play snowball hit sound (soft impact)
+ * @param {Object} instance - Sound instance
+ */
+export function playBulletHitSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.2
+  //
+  // Create impact sound with short burst
+  //
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const data = buffer.getChannelData(0)
+  //
+  // Generate impact burst
+  //
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    const envelope = Math.exp(-progress * 10) * 0.4
+    data[i] = (Math.random() * 2 - 1) * envelope
+  }
+  
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = buffer
+  //
+  // Band-pass filter for snow-like texture
+  //
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(800, now)
+  filter.Q.value = 1.5
+  //
+  // Add low tone for impact
+  //
+  const tone = instance.audioContext.createOscillator()
+  const toneGain = instance.audioContext.createGain()
+  
+  tone.type = 'sine'
+  tone.frequency.setValueAtTime(150, now)
+  tone.frequency.exponentialRampToValueAtTime(80, now + 0.1)
+  
+  toneGain.gain.setValueAtTime(0.2, now)
+  toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1)
+  
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.5, now)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  noise.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.audioContext.destination)
+  
+  tone.connect(toneGain)
+  toneGain.connect(instance.audioContext.destination)
+  
+  noise.start(now)
+  noise.stop(now + duration)
+  
+  tone.start(now)
+  tone.stop(now + 0.1)
+}

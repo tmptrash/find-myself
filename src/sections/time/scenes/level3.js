@@ -30,6 +30,13 @@ const MONSTER_SPAWN_X = PLATFORM_SIDE_WIDTH + 30  // Monster starts at the left 
 const MONSTER_SPAWN_Y = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT / 2
 const ANTIHERO_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Anti-hero at the left of lower corridor
 const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
+//
+// Bullet configuration
+//
+const BULLET_RADIUS = 6
+const BULLET_SPEED = 600
+const BULLET_OUTLINE_WIDTH = 2
+const MONSTER_FREEZE_DURATION = 1.0
 /**
  * Time section level 3 scene
  * @param {Object} k - Kaplay instance
@@ -127,6 +134,10 @@ export function sceneLevel3(k) {
     //
     setupControlInversion(hero, sections)
     setupControlInversion(antiHero, sections)
+    //
+    // Setup shooting system for hero
+    //
+    setupHeroShooting(k, hero, monster, levelIndicator)
     //
     // Spawn hero
     //
@@ -924,6 +935,7 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
     wobbleX: 0,
     wobbleY: 0,
     isReturningHome: false,
+    isFrozen: false,
     currentMoveDirectionX: 1,
     currentMoveDirectionY: 1
   }
@@ -942,6 +954,10 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
     //
     const isAnnihilating = inst.hero.isAnnihilating
     //
+    // Check if monster is frozen (hit by bullet)
+    //
+    const isFrozen = inst.isFrozen
+    //
     // Check if monster should return home
     //
     if (inst.isReturningHome) {
@@ -955,10 +971,10 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
       //
       // Move monster towards start position (straight line, no wobble)
       //
-      if (!isAnnihilating && Math.abs(distanceToStartX) > 10) {
+      if (!isAnnihilating && !isFrozen && Math.abs(distanceToStartX) > 10) {
         inst.x += moveDirectionX * inst.speed * dt
       }
-      if (!isAnnihilating && Math.abs(distanceToStartY) > 10) {
+      if (!isAnnihilating && !isFrozen && Math.abs(distanceToStartY) > 10) {
         inst.y += moveDirectionY * inst.speed * dt
       }
       //
@@ -975,12 +991,12 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
       moveDirectionX = distanceX > 0 ? 1 : -1
       moveDirectionY = distanceY > 0 ? 1 : -1
       //
-      // Move monster towards hero (stop moving if annihilating)
+      // Move monster towards hero (stop moving if annihilating or frozen)
       //
-      if (!isAnnihilating && Math.abs(distanceX) > 10) {
+      if (!isAnnihilating && !isFrozen && Math.abs(distanceX) > 10) {
         inst.x += moveDirectionX * inst.speed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
       }
-      if (!isAnnihilating && Math.abs(distanceY) > 10) {
+      if (!isAnnihilating && !isFrozen && Math.abs(distanceY) > 10) {
         inst.y += moveDirectionY * inst.speed * dt
       }
     }
@@ -2128,4 +2144,220 @@ function createRoundedCorners(k) {
     k.z(30),  // High z-index to be visible above snow
     k.anchor('topleft')
   ])
+}
+/**
+ * Setup hero shooting system
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} monster - Monster instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function setupHeroShooting(k, hero, monster, levelIndicator) {
+  //
+  // Handle shooting with both Shift keys
+  //
+  const shootKeys = ['shift', 'ShiftLeft', 'ShiftRight']
+  
+  shootKeys.forEach(key => {
+    k.onKeyPress(key, () => {
+      //
+      // Check if hero has bullets (heroScore > 0)
+      //
+      const currentScore = get('heroScore', 0)
+      
+      if (currentScore > 0 && hero.character && hero.character.exists()) {
+        //
+        // Get hero facing direction from flipX
+        //
+        const heroFacingRight = !hero.character.flipX
+        //
+        // Reduce hero score by 1
+        //
+        const newScore = currentScore - 1
+        set('heroScore', newScore)
+        //
+        // Update score display
+        //
+        if (levelIndicator && levelIndicator.updateHeroScore) {
+          levelIndicator.updateHeroScore(newScore)
+        }
+        //
+        // Create bullet
+        //
+        createBullet(k, hero, heroFacingRight, monster)
+      }
+    })
+  })
+}
+/**
+ * Create a bullet
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {boolean} facingRight - Direction hero is facing
+ * @param {Object} monster - Monster instance
+ */
+function createBullet(k, hero, facingRight, monster) {
+  const heroPos = hero.character.pos
+  const direction = facingRight ? 1 : -1
+  //
+  // Get hero color
+  //
+  const heroColor = getColor(k, CFG.visual.colors.hero.body)
+  //
+  // Play shoot sound
+  //
+  Sound.playBulletShootSound(hero.sfx)
+  //
+  // Create bullet as drawable object (snowball-like)
+  //
+  const bullet = k.add([
+    k.pos(heroPos.x, heroPos.y),
+    k.z(21),
+    k.anchor('center'),
+    'bullet',
+    {
+      draw() {
+        //
+        // Draw outline (black circle)
+        //
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: BULLET_RADIUS + BULLET_OUTLINE_WIDTH,
+          color: k.rgb(0, 0, 0)
+        })
+        //
+        // Draw main bullet (hero color)
+        //
+        k.drawCircle({
+          pos: k.vec2(0, 0),
+          radius: BULLET_RADIUS,
+          color: heroColor
+        })
+      }
+    }
+  ])
+  //
+  // Move bullet
+  //
+  bullet.onUpdate(() => {
+    bullet.pos.x += BULLET_SPEED * direction * k.dt()
+    //
+    // Destroy if out of bounds
+    //
+    if (bullet.pos.x < 0 || bullet.pos.x > k.width()) {
+      k.destroy(bullet)
+    }
+  })
+  //
+  // Check collision with monster
+  //
+  bullet.onUpdate(() => {
+    if (!monster || monster.isFrozen) return
+    
+    const distX = Math.abs(bullet.pos.x - monster.x)
+    const distY = Math.abs(bullet.pos.y - monster.y)
+    
+    if (distX < 40 && distY < 40) {
+      //
+      // Hit monster
+      //
+      onMonsterHit(k, monster, hero.sfx)
+      k.destroy(bullet)
+    }
+  })
+}
+/**
+ * Handle monster being hit by bullet
+ * @param {Object} k - Kaplay instance
+ * @param {Object} monster - Monster instance
+ * @param {Object} sfx - Sound instance
+ */
+function onMonsterHit(k, monster, sfx) {
+  //
+  // Freeze monster
+  //
+  monster.isFrozen = true
+  //
+  // Play hit sound
+  //
+  sfx && Sound.playBulletHitSound(sfx)
+  //
+  // Create hit particles
+  //
+  createMonsterHitParticles(k, monster)
+  //
+  // Flash monster
+  //
+  flashMonster(k, monster, 0)
+  //
+  // Unfreeze after duration
+  //
+  k.wait(MONSTER_FREEZE_DURATION, () => {
+    if (monster) {
+      monster.isFrozen = false
+    }
+  })
+}
+/**
+ * Create particles when monster is hit
+ * @param {Object} k - Kaplay instance
+ * @param {Object} monster - Monster instance
+ */
+function createMonsterHitParticles(k, monster) {
+  const PARTICLE_COUNT = 15
+  const PARTICLE_SIZE = 4
+  
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = 100 + Math.random() * 200
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    
+    const particle = k.add([
+      k.rect(PARTICLE_SIZE, PARTICLE_SIZE),
+      k.pos(monster.x, monster.y),
+      k.color(0, 0, 0),
+      k.opacity(1.0),
+      k.anchor('center'),
+      k.z(22)
+    ])
+    
+    particle.onUpdate(() => {
+      particle.pos.x += vx * k.dt()
+      particle.pos.y += vy * k.dt()
+      particle.opacity -= k.dt() * 2
+      
+      if (particle.opacity <= 0) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+/**
+ * Flash monster white when hit
+ * @param {Object} k - Kaplay instance
+ * @param {Object} monster - Monster instance
+ * @param {number} count - Flash count
+ */
+function flashMonster(k, monster, count) {
+  if (count >= 10) return
+  
+  const isWhite = count % 2 === 0
+  const newColor = isWhite ? k.rgb(255, 255, 255) : k.rgb(80, 80, 80)
+  //
+  // Flash all body circles
+  //
+  if (monster.bodyCircles) {
+    monster.bodyCircles.forEach(circle => {
+      try {
+        if (circle && typeof circle.color !== 'undefined') {
+          circle.color = newColor
+        }
+      } catch (e) {
+        // Skip if circle is destroyed
+      }
+    })
+  }
+  
+  k.wait(0.1, () => flashMonster(k, monster, count + 1))
 }

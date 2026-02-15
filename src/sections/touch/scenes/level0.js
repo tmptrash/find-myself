@@ -45,7 +45,7 @@ export function sceneLevel0(k) {
     // Reset scores only if coming from a different section (not a reload after death)
     //
     const lastLevel = get('lastLevel', '')
-    const isComingFromDifferentSection = !lastLevel.startsWith('level-touch.')
+    const isComingFromDifferentSection = !lastLevel || typeof lastLevel !== 'string' || !lastLevel.startsWith('level-touch.')
     
     if (isComingFromDifferentSection) {
       set('heroScore', 0)

@@ -231,7 +231,6 @@ export function sceneLevel1(k) {
     let initialTime = 2  // Start with 02
     let platformIndex = 0  // Index for vertical variation pattern
     let lastPlatformX = platformX  // Store last platform X position
-    
     //
     // Create lower platforms (first floor) until we reach near the right wall
     //

@@ -2418,3 +2418,32 @@ export function playBulletHitSound(instance) {
   tone.start(now)
   tone.stop(now + 0.1)
 }
+/**
+ * Play empty click sound when hero has no bullets
+ * @param {Object} instance - Sound instance
+ */
+export function playEmptyClickSound(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.08
+  //
+  // Create short click sound
+  //
+  const osc = instance.audioContext.createOscillator()
+  const gain = instance.audioContext.createGain()
+  
+  osc.type = 'square'
+  osc.frequency.setValueAtTime(800, now)
+  osc.frequency.exponentialRampToValueAtTime(400, now + duration)
+  //
+  // Very short attack and decay for click effect
+  //
+  gain.gain.setValueAtTime(0, now)
+  gain.gain.linearRampToValueAtTime(0.15, now + 0.005)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  
+  osc.connect(gain)
+  gain.connect(instance.audioContext.destination)
+  
+  osc.start(now)
+  osc.stop(now + duration)
+}

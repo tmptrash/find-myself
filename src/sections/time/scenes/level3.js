@@ -2185,6 +2185,11 @@ function setupHeroShooting(k, hero, monster, levelIndicator) {
         // Create bullet
         //
         createBullet(k, hero, heroFacingRight, monster)
+      } else if (currentScore === 0) {
+        //
+        // Play empty click sound if no bullets
+        //
+        hero.sfx && Sound.playEmptyClickSound(hero.sfx)
       }
     })
   })
@@ -2252,7 +2257,7 @@ function createBullet(k, hero, facingRight, monster) {
   // Check collision with monster
   //
   bullet.onUpdate(() => {
-    if (!monster || monster.isFrozen) return
+    if (!monster) return
     
     const distX = Math.abs(bullet.pos.x - monster.x)
     const distY = Math.abs(bullet.pos.y - monster.y)
@@ -2274,9 +2279,22 @@ function createBullet(k, hero, facingRight, monster) {
  */
 function onMonsterHit(k, monster, sfx) {
   //
-  // Freeze monster
+  // Add freeze duration (accumulate)
   //
-  monster.isFrozen = true
+  if (!monster.freezeTimeRemaining) {
+    monster.freezeTimeRemaining = 0
+  }
+  monster.freezeTimeRemaining += MONSTER_FREEZE_DURATION
+  //
+  // Mark as frozen if not already
+  //
+  if (!monster.isFrozen) {
+    monster.isFrozen = true
+    //
+    // Start countdown timer
+    //
+    startFreezeCountdown(k, monster)
+  }
   //
   // Play hit sound
   //
@@ -2289,12 +2307,30 @@ function onMonsterHit(k, monster, sfx) {
   // Flash monster
   //
   flashMonster(k, monster, 0)
+}
+/**
+ * Start freeze countdown for monster
+ * @param {Object} k - Kaplay instance
+ * @param {Object} monster - Monster instance
+ */
+function startFreezeCountdown(k, monster) {
   //
-  // Unfreeze after duration
+  // Decrease freeze time each frame
   //
-  k.wait(MONSTER_FREEZE_DURATION, () => {
-    if (monster) {
+  const unfreezeLoop = k.onUpdate(() => {
+    if (!monster || !monster.freezeTimeRemaining) {
+      unfreezeLoop.cancel()
+      return
+    }
+    
+    monster.freezeTimeRemaining -= k.dt()
+    //
+    // Unfreeze when time runs out
+    //
+    if (monster.freezeTimeRemaining <= 0) {
       monster.isFrozen = false
+      monster.freezeTimeRemaining = 0
+      unfreezeLoop.cancel()
     }
   })
 }

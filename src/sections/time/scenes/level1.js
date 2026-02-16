@@ -35,7 +35,6 @@ const HERO_SPAWN_Y = FIRST_FLOOR_FLOOR_Y - 50
 const ANTIHERO_CLOCK_PLATFORM_X = PLATFORM_SIDE_WIDTH + 65  // Clock platform position, moved right 50px (was +15)
 const ANTIHERO_SPAWN_X = ANTIHERO_CLOCK_PLATFORM_X  // Standing on clock platform
 const ANTIHERO_SPAWN_Y = SECOND_FLOOR_FLOOR_Y - 50  // Standing on clock platform
-
 /**
  * Time section level 1 scene
  * @param {Object} k - Kaplay instance
@@ -182,7 +181,7 @@ export function sceneLevel1(k) {
     //
     // Create custom platforms for two-floor level
     //
-    createLevelPlatforms(k, sound)
+    createLevelPlatforms(k)
     //
     // Create clock platform (persistent, shows seconds only) under hero
     //
@@ -477,11 +476,9 @@ export function sceneLevel1(k) {
 /**
  * Creates all platforms for level 1 (two-floor corridor)
  * @param {Object} k - Kaplay instance
- * @param {Object} sound - Sound instance
  */
-function createLevelPlatforms(k, sound) {
+function createLevelPlatforms(k) {
   const backgroundPlatformColor = k.Color.fromHex(CFG.visual.colors.platform)
-  const visiblePlatformColor = k.Color.fromHex("#707070")  // Lighter gray for visible platforms
   
   //
   // Top platform (ceiling for entire level)

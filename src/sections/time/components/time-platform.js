@@ -521,6 +521,7 @@ export function destroy(inst) {
     }
   })
 }
+
 function flashLifeImagePlatformSaved(k, levelIndicator, originalColor, count) {
   if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
     return
@@ -535,6 +536,7 @@ function flashLifeImagePlatformSaved(k, levelIndicator, originalColor, count) {
   levelIndicator.lifeImage.sprite.color = count % 2 === 0 ? k.rgb(255, 0, 0) : k.rgb(255, 255, 255)
   k.wait(0.05, () => flashLifeImagePlatformSaved(k, levelIndicator, originalColor, count + 1))
 }
+
 function createLifeScoreParticlesPlatform(k, levelIndicator) {
   if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
     return

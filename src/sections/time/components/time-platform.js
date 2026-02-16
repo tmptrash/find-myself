@@ -32,7 +32,7 @@ const PLATFORM_HEIGHT = 48
  * @returns {Object} Time platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, killOnOddSum = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false, levelIndicator = null } = config
+  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, killOnOddSum = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false, levelIndicator = null, falling = false, fallTarget = 0 } = config
   //
   // Calculate platform size based on format
   // For seconds-only (XX), use smaller width to fit only two digits
@@ -149,7 +149,13 @@ export function create(config) {
     initialColor: 192,  // Initial gray color value (light gray)
     wasOnPlatform: false,  // Track if hero was on platform last frame
     wasGrounded: false,  // Track if hero was grounded last frame
-    levelIndicator
+    levelIndicator,
+    falling,  // Whether platform falls when hero lands
+    fallTarget,  // Target Y position to fall to
+    isFalling: false,  // Current falling state
+    isRising: false,  // Current rising state
+    hasFallen: false,  // Whether platform has already fallen once
+    startY: y  // Store initial Y position
   }
   
   return inst
@@ -161,7 +167,13 @@ export function create(config) {
  */
 export function onUpdate(inst) {
   if (inst.isDestroyed) return
-  
+  //
+  // Handle falling platform logic
+  //
+  if (inst.falling && !inst.hasFallen) {
+    handleFallingPlatform(inst)
+    console.log('falling')
+  }
   //
   // Handle persistent platforms (show current time, never disappear)
   //
@@ -241,8 +253,9 @@ export function onUpdate(inst) {
       isGrounded = heroChar.isGrounded()
       //
       // Detect landing: hero was in air (not on this platform) and now lands on this platform
+      // Skip color change logic for falling platforms
       //
-      if (inst.enableColorChange && isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform)) {
+      if (inst.enableColorChange && !inst.falling && isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform)) {
         //
         // Increment landing count and darken color
         //
@@ -578,6 +591,108 @@ function createLifeScoreParticlesPlatform(k, levelIndicator) {
         k.destroy(particle)
       }
     })
+  }
+}
+//
+// Handle falling platform movement
+// @param {Object} inst - Platform instance
+//
+function handleFallingPlatform(inst) {
+  const FALL_SPEED = 600
+  const RISE_SPEED = 500
+  const PAUSE_AT_BOTTOM = 0.3
+  //
+  // Check if hero is on platform and trigger falling
+  //
+  if (!inst.isFalling && !inst.isRising && inst.hero && inst.hero.character) {
+    const isColliding = inst.platform.isColliding(inst.hero.character)
+    const heroAbove = inst.hero.character.pos.y < inst.platform.pos.y
+    const heroOnPlatform = isColliding && heroAbove && inst.hero.character.isGrounded()
+    
+    if (heroOnPlatform) {
+      inst.isFalling = true
+    }
+  }
+  //
+  // Move platform down
+  //
+  if (inst.isFalling) {
+    const deltaY = FALL_SPEED * inst.k.dt()
+    inst.platform.pos.y += deltaY
+    //
+    // Update text position
+    //
+    inst.timerText.pos.y = inst.platform.pos.y
+    inst.outlineTexts.forEach(text => {
+      text.pos.y = inst.platform.pos.y
+    })
+    //
+    // Move hero with platform if on it
+    //
+    if (inst.hero && inst.hero.character) {
+      const isColliding = inst.platform.isColliding(inst.hero.character)
+      const heroAbove = inst.hero.character.pos.y < inst.platform.pos.y
+      const heroOnPlatform = isColliding && heroAbove && inst.hero.character.isGrounded()
+      
+      if (heroOnPlatform && !inst.hero.character.isJumping()) {
+        inst.hero.character.pos.y += deltaY
+      }
+    }
+    //
+    // Check if reached bottom
+    //
+    if (inst.platform.pos.y >= inst.fallTarget) {
+      inst.platform.pos.y = inst.fallTarget
+      inst.timerText.pos.y = inst.platform.pos.y
+      inst.outlineTexts.forEach(text => {
+        text.pos.y = inst.platform.pos.y
+      })
+      inst.isFalling = false
+      //
+      // Wait at bottom then move up
+      //
+      inst.k.wait(PAUSE_AT_BOTTOM, () => {
+        inst.isRising = true
+      })
+    }
+  }
+  //
+  // Move platform up
+  //
+  if (inst.isRising) {
+    const deltaY = -RISE_SPEED * inst.k.dt()
+    inst.platform.pos.y += deltaY
+    //
+    // Update text position
+    //
+    inst.timerText.pos.y = inst.platform.pos.y
+    inst.outlineTexts.forEach(text => {
+      text.pos.y = inst.platform.pos.y
+    })
+    //
+    // Move hero with platform if on it
+    //
+    if (inst.hero && inst.hero.character) {
+      const isColliding = inst.platform.isColliding(inst.hero.character)
+      const heroAbove = inst.hero.character.pos.y < inst.platform.pos.y
+      const heroOnPlatform = isColliding && heroAbove && inst.hero.character.isGrounded()
+      
+      if (heroOnPlatform && !inst.hero.character.isJumping()) {
+        inst.hero.character.pos.y += deltaY
+      }
+    }
+    //
+    // Check if reached original position
+    //
+    if (inst.platform.pos.y <= inst.startY) {
+      inst.platform.pos.y = inst.startY
+      inst.timerText.pos.y = inst.platform.pos.y
+      inst.outlineTexts.forEach(text => {
+        text.pos.y = inst.platform.pos.y
+      })
+      inst.isRising = false
+      inst.hasFallen = true
+    }
   }
 }
 

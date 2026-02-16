@@ -634,6 +634,7 @@ public/
 - ❌ Use console.log() function
 - ❌ Put magic (hard-coded) numbers and strings.
 - ❌ Write functions inside other functions
+- ❌ Use inline arrow functions in onUpdate/onDraw/onCollide callbacks (extract them to separate private functions)
 
 
 ### Do
@@ -657,6 +658,7 @@ public/
 - ✅ Put all private functions at the bottom
 - ✅ Use hex color strings like "#xxxxxx"
 - ✅ In scene files, all helper functions must come after the main scene function sceneLevelX()
+- ✅ Always extract inline functions from onUpdate/onDraw/onCollide callbacks into separate private functions
 
 ---
 
@@ -708,7 +710,36 @@ export function create(cfg) {
 export function loadSprites(inst) {
   inst.k.loadSprite('sprite', 'path/to/sprite.png')
 }
+//
+// Private update function
+//
+function onUpdate(inst) {
+  inst.timer += inst.k.dt()
+  
+  if (inst.timer > ANIMATION_SPEED) {
+    inst.frame = (inst.frame + 1) % FRAME_COUNT
+    inst.timer = 0
+  }
+}
+```
 
+**BAD Example (inline arrow function):**
+```javascript
+gameObject.onUpdate(() => {
+  inst.timer += inst.k.dt()
+  
+  if (inst.timer > ANIMATION_SPEED) {
+    inst.frame = (inst.frame + 1) % FRAME_COUNT
+    inst.timer = 0
+  }
+})
+```
+
+**GOOD Example (extracted private function):**
+```javascript
+gameObject.onUpdate(() => onUpdate(inst))
+
+// ... at bottom of file
 function onUpdate(inst) {
   inst.timer += inst.k.dt()
   

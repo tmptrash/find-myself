@@ -230,6 +230,7 @@ export function sceneLevel1(k) {
     let initialTime = 2  // Start with 02
     let platformIndex = 0  // Index for vertical variation pattern
     let lastPlatformX = platformX  // Store last platform X position
+    let lowerPlatformCount = 1  // Count platforms (clockPlatform is #1)
     //
     // Create lower platforms (first floor) until we reach near the right wall
     //
@@ -272,6 +273,11 @@ export function sceneLevel1(k) {
       const platformInitialTime = isThirdPlatform ? 22 : initialTime
       const isStaticTime = isThirdPlatform
       //
+      // Count platforms for falling platform detection
+      //
+      lowerPlatformCount++
+      const isFifthPlatform = lowerPlatformCount === 5
+      //
       // Adjust X position for last lower platform (move left)
       //
       let adjustedPlatformX = platformX
@@ -293,7 +299,9 @@ export function sceneLevel1(k) {
         duration: 0,  // Not used for persistent platforms
         sfx: sound,
         enableColorChange: true,
-        levelIndicator
+        levelIndicator,
+        falling: isFifthPlatform,  // 5th platform falls when hero lands on it
+        fallTarget: isFifthPlatform ? BOTTOM_PLATFORM_TOP + 20 : 0  // Fall to just above bottom spikes
       })
       
       clockPlatforms.push(platform)

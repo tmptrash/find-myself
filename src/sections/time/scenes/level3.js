@@ -37,6 +37,16 @@ const BULLET_RADIUS = 6
 const BULLET_SPEED = 600
 const BULLET_OUTLINE_WIDTH = 2
 const MONSTER_FREEZE_DURATION = 1.0
+//
+// Level decay constants (when monster eats clocks)
+//
+const DECAY_HOLE_WIDTH = 80
+const DECAY_HOLE_HEIGHT = 60
+const DECAY_PARTICLE_COUNT = 20
+const DECAY_PARTICLE_MIN_SIZE = 2
+const DECAY_PARTICLE_MAX_SIZE = 6
+const DECAY_HOLES_PER_CLOCK = 1  // Number of holes per clock eaten
+const DECAY_SAFE_DISTANCE = 150  // Minimum distance from hero/monster
 /**
  * Time section level 3 scene
  * @param {Object} k - Kaplay instance
@@ -95,6 +105,17 @@ export function sceneLevel3(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y
     })
+    //
+    // Array to store decay holes in platforms
+    //
+    const decayHoles = []
+    //
+    // Grid system for decay holes (to prevent overlaps)
+    //
+    const decayGrid = {
+      upper: new Set(),  // Occupied cells in upper corridor
+      lower: new Set()   // Occupied cells in lower corridor
+    }
     //
     // Create custom corridor platforms
     //
@@ -303,7 +324,7 @@ export function sceneLevel3(k) {
           // If monster or any leg touched the clock, destroy it with particle effect
           //
           if (shouldDestroy) {
-            createClockDisintegrationEffect(k, section.clock, sound)
+            createClockDisintegrationEffect(k, section.clock, sound, decayHoles, hero, monster, decayGrid)
             k.destroy(section.clock)
             section.clock = null  // Mark as destroyed
           }
@@ -328,11 +349,53 @@ export function sceneLevel3(k) {
 }
 
 /**
+ * Create sprite for middle wall with rounded right corners
+ * @param {number} width - Wall width
+ * @param {number} height - Wall height
+ * @param {string} colorHex - Hex color string
+ * @returns {string} Data URL for sprite
+ */
+function createMiddleWallSprite(width, height, colorHex) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  const radius = CORNER_RADIUS
+  //
+  // Parse hex color (returns array [r, g, b])
+  //
+  const [r, g, b] = parseHex(colorHex)
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
+  //
+  // Draw rectangle with rounded top-right and bottom-right corners
+  //
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(width - radius, 0)
+  ctx.arcTo(width, 0, width, radius, radius)
+  ctx.lineTo(width, height - radius)
+  ctx.arcTo(width, height, width - radius, height, radius)
+  ctx.lineTo(0, height)
+  ctx.closePath()
+  ctx.fill()
+  
+  return canvas.toDataURL()
+}
+
+/**
  * Create corridor platforms for level 3
  * @param {Object} k - Kaplay instance
  */
 function createCorridorPlatforms(k) {
   const platformColor = getColor(k, CFG.visual.colors.platform)
+  const platformHex = CFG.visual.colors.platform
+  //
+  // Create sprite for middle wall with rounded right corners
+  //
+  const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
+  const middleWallHeight = LOWER_CORRIDOR_Y - (CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT)
+  const middleWallSprite = createMiddleWallSprite(passageStartX, middleWallHeight, platformHex)
+  k.loadSprite('middle-wall-level3', middleWallSprite)
   //
   // Top corridor wall (upper corridor ceiling)
   //
@@ -346,16 +409,14 @@ function createCorridorPlatforms(k) {
     CFG.game.platformName
   ])
   //
-  // Middle wall between corridors (unified, with passage on the right)
+  // Middle wall between corridors (sprite with rounded right corners)
   //
-  const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
-  const middleWallHeight = LOWER_CORRIDOR_Y - (CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT)
   k.add([
-    k.rect(passageStartX, middleWallHeight),
+    k.sprite('middle-wall-level3'),
     k.pos(0, CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT),
+    k.anchor('topleft'),
     k.area(),
     k.body({ isStatic: true }),
-    platformColor,
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
@@ -719,8 +780,9 @@ function createTimeSections(k) {
  * @param {Object} k - Kaplay instance
  * @param {Object} clock - Clock text object to disintegrate
  * @param {Object} sound - Sound instance
+ * @param {Array} decayHoles - Array to store decay holes
  */
-function createClockDisintegrationEffect(k, clock, sound) {
+function createClockDisintegrationEffect(k, clock, sound, decayHoles, hero, monster, decayGrid) {
   const PARTICLE_COUNT = 30
   const PARTICLE_SIZE = 3
   const clockPos = clock.pos
@@ -729,6 +791,12 @@ function createClockDisintegrationEffect(k, clock, sound) {
   // Play clock destruction sound
   //
   Sound.playClockDestroySound(sound)
+  //
+  // Create decay holes in random positions behind hero (avoiding hero and monster)
+  //
+  for (let i = 0; i < DECAY_HOLES_PER_CLOCK; i++) {
+    createRandomDecayHole(k, decayHoles, hero, monster, decayGrid)
+  }
   //
   // Create particles at clock position
   //
@@ -2396,4 +2464,212 @@ function flashMonster(k, monster, count) {
   }
   
   k.wait(0.1, () => flashMonster(k, monster, count + 1))
+}
+/**
+ * Create random decay hole behind hero using grid system
+ * @param {Object} k - Kaplay instance
+ * @param {Array} decayHoles - Array to store holes
+ * @param {Object} hero - Hero instance
+ * @param {Object} monster - Monster instance
+ * @param {Object} decayGrid - Grid tracking system
+ */
+function createRandomDecayHole(k, decayHoles, hero, monster, decayGrid) {
+  //
+  // Get hero position
+  //
+  const heroX = hero.character.pos.x
+  const heroY = hero.character.pos.y
+  //
+  // Get monster position
+  //
+  const monsterX = monster.x
+  const monsterY = monster.y
+  //
+  // Determine which corridor hero is in
+  //
+  const isInUpperCorridor = heroY < LOWER_CORRIDOR_Y
+  const corridor = isInUpperCorridor ? 'upper' : 'lower'
+  //
+  // Calculate grid dimensions and boundaries
+  //
+  let floorY, floorHeight, startX, endX
+  
+  if (isInUpperCorridor) {
+    //
+    // Upper corridor: hero moves right, holes appear LEFT of hero
+    //
+    floorY = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT - PLATFORM_BOTTOM_HEIGHT
+    floorHeight = PLATFORM_BOTTOM_HEIGHT
+    startX = PLATFORM_SIDE_WIDTH
+    endX = Math.max(startX, heroX - DECAY_SAFE_DISTANCE)
+  } else {
+    //
+    // Lower corridor: hero moves left, holes appear RIGHT of hero
+    //
+    floorY = LOWER_CORRIDOR_Y
+    floorHeight = CORRIDOR_HEIGHT
+    startX = Math.max(PLATFORM_SIDE_WIDTH, heroX + DECAY_SAFE_DISTANCE)
+    endX = k.width() - PLATFORM_SIDE_WIDTH
+  }
+  //
+  // Calculate grid cells
+  //
+  const gridWidth = endX - startX
+  if (gridWidth < DECAY_HOLE_WIDTH) return
+  
+  const colsCount = Math.floor(gridWidth / DECAY_HOLE_WIDTH)
+  const rowsCount = Math.floor(floorHeight / DECAY_HOLE_HEIGHT)
+  
+  if (colsCount === 0 || rowsCount === 0) return
+  //
+  // Find available grid cells (not occupied, far from hero and monster)
+  //
+  const availableCells = []
+  
+  for (let row = 0; row < rowsCount; row++) {
+    for (let col = 0; col < colsCount; col++) {
+      const cellKey = `${row},${col}`
+      //
+      // Skip if cell is occupied
+      //
+      if (decayGrid[corridor].has(cellKey)) continue
+      //
+      // Calculate cell position
+      //
+      const x = startX + col * DECAY_HOLE_WIDTH
+      const y = floorY + row * DECAY_HOLE_HEIGHT
+      //
+      // Check distance from hero and monster
+      //
+      const distToHero = Math.sqrt(Math.pow(x - heroX, 2) + Math.pow(y - heroY, 2))
+      const distToMonster = Math.sqrt(Math.pow(x - monsterX, 2) + Math.pow(y - monsterY, 2))
+      
+      if (distToHero > DECAY_SAFE_DISTANCE && distToMonster > DECAY_SAFE_DISTANCE) {
+        availableCells.push({ row, col, x, y, cellKey })
+      }
+    }
+  }
+  
+  if (availableCells.length === 0) return
+  //
+  // Pick random available cell
+  //
+  const cell = availableCells[Math.floor(Math.random() * availableCells.length)]
+  //
+  // Mark cell as occupied
+  //
+  decayGrid[corridor].add(cell.cellKey)
+  //
+  // Create hole with particles
+  //
+  createDecayHole(k, cell.x, cell.y, decayHoles)
+}
+
+/**
+ * Create decay hole at specific position
+ * @param {Object} k - Kaplay instance
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {Array} decayHoles - Array to store holes
+ */
+function createDecayHole(k, x, y, decayHoles) {
+  //
+  // Create hole with particles flying out
+  //
+  const hole = {
+    x,
+    y,
+    width: 0,
+    height: 0,
+    maxWidth: DECAY_HOLE_WIDTH,
+    maxHeight: DECAY_HOLE_HEIGHT,
+    age: 0,
+    maxAge: 0.3,
+    gameObject: null
+  }
+  decayHoles.push(hole)
+  //
+  // Create visual hole object (black rectangle)
+  //
+  hole.gameObject = k.add([
+    k.rect(hole.width, hole.height),
+    k.pos(x, y),
+    k.color(0, 0, 0),
+    k.anchor('topleft'),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.fixed()
+  ])
+  //
+  // Animate hole expansion
+  //
+  const expandLoop = k.onUpdate(() => {
+    hole.age += k.dt()
+    const progress = hole.age / hole.maxAge
+    hole.width = progress * hole.maxWidth
+    hole.height = progress * hole.maxHeight
+    //
+    // Update visual size
+    //
+    if (hole.gameObject && !hole.gameObject.isDestroyed) {
+      k.destroy(hole.gameObject)
+      hole.gameObject = k.add([
+        k.rect(hole.width, hole.height),
+        k.pos(x, y),
+        k.color(0, 0, 0),
+        k.anchor('topleft'),
+        k.z(CFG.visual.zIndex.platforms + 1),
+        k.fixed()
+      ])
+    }
+    
+    if (hole.age >= hole.maxAge) {
+      hole.width = hole.maxWidth
+      hole.height = hole.maxHeight
+      expandLoop.cancel()
+    }
+  })
+  //
+  // Create platform particles flying out (use platform hex color)
+  //
+  const platformHex = CFG.visual.colors.platform
+  const [r, g, b] = parseHex(platformHex)
+  //
+  // Create particles from hole center
+  //
+  const centerX = x + DECAY_HOLE_WIDTH / 2
+  const centerY = y + DECAY_HOLE_HEIGHT / 2
+  
+  for (let i = 0; i < DECAY_PARTICLE_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = 50 + Math.random() * 150
+    const size = DECAY_PARTICLE_MIN_SIZE + Math.random() * (DECAY_PARTICLE_MAX_SIZE - DECAY_PARTICLE_MIN_SIZE)
+    
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(centerX, centerY),
+      k.color(r, g, b),
+      k.opacity(1.0),
+      k.anchor('center'),
+      k.z(25),
+      k.fixed()
+    ])
+    
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    let particleAge = 0
+    const particleLifetime = 1.0
+    
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      particleAge += dt
+      
+      particle.pos.x += vx * dt
+      particle.pos.y += vy * dt
+      particle.opacity = 1 - (particleAge / particleLifetime)
+      
+      if (particleAge >= particleLifetime) {
+        k.destroy(particle)
+      }
+    })
+  }
 }

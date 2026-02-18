@@ -126,6 +126,13 @@ export function playOnce(k, delay, name, volume) {
  * @param {number} volume - Volume of the sound
  */
 export function playInScene(k, name, volume, loop = false) {
+  //
+  // If this is a subtitle sound (xxx-pre), stop any existing one first
+  //
+  if (name && name.includes('-pre')) {
+    stopSubtitleSound()
+  }
+  
   const sound = k.play(name, { loop, volume })
   //
   // If this is a subtitle sound (xxx-pre), store it globally

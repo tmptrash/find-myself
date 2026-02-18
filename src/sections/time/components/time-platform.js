@@ -28,7 +28,7 @@ const PLATFORM_HEIGHT = 48
  * @param {string} [config.currentLevel] - Current level name for restart on death
  * @param {Object} [config.sfx] - Sound instance for audio effects
  * @param {boolean} [config.hidden=false] - If true, text is hidden initially
- * @param {boolean} [config.enableColorChange=false] - If true, platform darkens with each landing
+ * @param {boolean} [config.enableColorChange=false] - If true, platform changes color with each landing
  * @returns {Object} Time platform instance
  */
 export function create(config) {
@@ -129,6 +129,7 @@ export function create(config) {
     timerText,
     outlineTexts,
     hero,
+    duration,  // Store duration for transparency calculation
     timeRemaining: duration,
     isActive: persistent,  // If persistent, always active
     isDestroyed: false,
@@ -149,13 +150,30 @@ export function create(config) {
     initialColor: 192,  // Initial gray color value (light gray)
     wasOnPlatform: false,  // Track if hero was on platform last frame
     wasGrounded: false,  // Track if hero was grounded last frame
+    currentPlatformColor: null,  // Store current platform color (for enableColorChange)
     levelIndicator,
     falling,  // Whether platform falls when hero lands
     fallTarget,  // Target Y position to fall to
     isFalling: false,  // Current falling state
     isRising: false,  // Current rising state
     hasFallen: false,  // Whether platform has already fallen once
-    startY: y  // Store initial Y position
+    startY: y,  // Store initial Y position
+    //
+    // Living platform animation (for level0)
+    //
+    floatOffset: 0,  // Current float animation offset
+    floatSpeed: 1.5 + Math.random() * 1.0,  // Faster float speed
+    floatAmplitude: 3,  // How much to float (pixels)
+    fadeTimer: 0,  // Timer for fade animation
+    fadeDuration: 4.0 + Math.random() * 2.0,  // Longer duration for smoother fade
+    fadeDirection: 1,  // 1 for brighter, -1 for darker
+    lastSecondsValue: null  // Track last seconds value for snap opacity change
+  }
+  //
+  // Set initial color based on hostility (for enableColorChange platforms)
+  //
+  if (enableColorChange && persistent) {
+    updatePlatformColorByHostility(inst, initialText)
   }
   
   return inst
@@ -172,7 +190,6 @@ export function onUpdate(inst) {
   //
   if (inst.falling && !inst.hasFallen) {
     handleFallingPlatform(inst)
-    console.log('falling')
   }
   //
   // Handle persistent platforms (show current time, never disappear)
@@ -206,6 +223,12 @@ export function onUpdate(inst) {
           outlineText.text = staticText
         }
       })
+      //
+      // Update color for static platforms too (enableColorChange platforms only)
+      //
+      if (inst.enableColorChange) {
+        updatePlatformColorByHostility(inst, staticText)
+      }
     } else {
       inst.updateTimer += inst.k.dt()
       //
@@ -239,6 +262,12 @@ export function onUpdate(inst) {
             outlineText.text = newText
           }
         })
+        //
+        // Update color based on hostility when time changes (for enableColorChange platforms)
+        //
+        if (inst.enableColorChange) {
+          updatePlatformColorByHostility(inst, newText)
+        }
       }
     }
     //
@@ -257,23 +286,71 @@ export function onUpdate(inst) {
       //
       if (inst.enableColorChange && !inst.falling && isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform)) {
         //
-        // Increment landing count and darken color
+        // Increment landing count and make platform more transparent
         //
         inst.landingCount++
         //
-        // Calculate new color (darker with each landing)
-        // Each landing reduces brightness by 38, down to black (0) after 5 landings
+        // Calculate new opacity (more transparent with each landing)
+        // Each landing reduces opacity by 0.2, down to 0 after 5 landings
         //
-        const colorReduction = inst.landingCount * 38
-        const newColor = Math.max(inst.initialColor - colorReduction, 0)  // Minimum brightness of 0 (black)
+        const opacityReduction = inst.landingCount * 0.2
+        const newOpacity = Math.max(1.0 - opacityReduction, 0)  // Minimum opacity of 0 (transparent)
         //
-        // Update text color (outline stays black)
+        // Determine if platform is hostile based on current text
+        // Check the actual text value to determine hostility
         //
-        inst.timerText.color = inst.k.rgb(newColor, newColor, newColor)
+        const currentText = inst.timerText.text
+        let isHostile = false
+        
+        if (inst.killOnOne) {
+          //
+          // Check if text contains "1"
+          //
+          isHostile = currentText.includes('1')
+        } else if (inst.killOnOddSum) {
+          //
+          // Check if digit sum is odd
+          //
+          const digits = currentText.replace(/:/g, '').split('').map(d => parseInt(d))
+          const sum = digits.reduce((a, b) => a + b, 0)
+          isHostile = sum % 2 === 1
+        }
         //
-        // If color becomes black or landing count reaches 5, destroy the platform
+        // Determine platform color based on hostility
         //
-        if (newColor === 0 || inst.landingCount >= 5) {
+        let targetColor
+        if (isHostile) {
+          //
+          // Hostile platforms become blue (killOnOne) or dark blue (killOnOddSum)
+          //
+          if (inst.killOnOne) {
+            targetColor = inst.k.rgb(70, 130, 180)  // Steel blue for "1"
+          } else {
+            targetColor = inst.k.rgb(30, 60, 150)  // Dark blue for odd sum
+          }
+        } else {
+          //
+          // Non-hostile platforms keep gray color
+          //
+          const colorValue = inst.initialColor
+          targetColor = inst.k.rgb(colorValue, colorValue, colorValue)
+        }
+        //
+        // Update text color and opacity (outline stays black but also fades)
+        //
+        inst.timerText.color = targetColor
+        inst.timerText.opacity = newOpacity
+        inst.outlineTexts.forEach(outlineText => {
+          outlineText.opacity = newOpacity
+        })
+        //
+        // Store current color to prevent fade from overwriting it
+        //
+        inst.currentPlatformColor = targetColor
+        //
+        // If opacity becomes 0 or landing count reaches 5, destroy the platform
+        //
+        if (newOpacity === 0 || inst.landingCount >= 5) {
           destroy(inst)
         }
       }
@@ -381,8 +458,48 @@ export function onUpdate(inst) {
       inst.wasOnPlatform = isOnPlatform
       inst.wasGrounded = isGrounded
     }
-    
-    return  // Persistent platforms don't disappear (unless color change enabled and black)
+  }
+  //
+  // Living platform animation (floating and color fade)
+  // Apply to non-falling platforms (including persistent ones for level1, level2)
+  // MUST be called before early returns
+  //
+  if (!inst.falling && !inst.isDestroyed) {
+    //
+    // Float animation (faster)
+    //
+    inst.floatOffset += inst.k.dt() * inst.floatSpeed
+    const floatY = Math.sin(inst.floatOffset) * inst.floatAmplitude
+    inst.platform.pos.y = inst.startY + floatY
+    inst.timerText.pos.y = inst.startY + floatY
+    inst.outlineTexts.forEach((text, i) => {
+      const [ox, oy] = [
+        [-2, -2], [0, -2], [2, -2],
+        [-2, 0],           [2, 0],
+        [-2, 2],  [0, 2],  [2, 2]
+      ][i]
+      text.pos.y = inst.startY + floatY + oy
+    })
+    //
+    // Color fade animation (smoother with sine wave)
+    // Only if not using enableColorChange OR if no custom color is set
+    //
+    if (!inst.enableColorChange || !inst.currentPlatformColor) {
+      inst.fadeTimer += inst.k.dt()
+      const fadeWave = Math.sin(inst.fadeTimer / inst.fadeDuration * Math.PI * 2)
+      const colorValue = 192 + fadeWave * 20  // Smoother transition
+      const finalColor = Math.max(172, Math.min(212, colorValue))
+      inst.timerText.color = inst.k.rgb(finalColor, finalColor, finalColor)
+    } else if (inst.currentPlatformColor) {
+      //
+      // Keep the color that was set by enableColorChange
+      //
+      inst.timerText.color = inst.currentPlatformColor
+    }
+  }
+  
+  if (inst.persistent) {
+    return  // Persistent platforms don't disappear (unless color change enabled and transparent)
   }
   
   //
@@ -406,23 +523,71 @@ export function onUpdate(inst) {
     //
     if (isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform) && inst.enableColorChange) {
       //
-      // Increment landing count and darken color
+      // Increment landing count and make platform more transparent
       //
       inst.landingCount++
       //
-      // Calculate new color (darker with each landing)
-      // Each landing reduces brightness by 38, down to black (0) after 5 landings
+      // Calculate new opacity (more transparent with each landing)
+      // Each landing reduces opacity by 0.2, down to 0 after 5 landings
       //
-      const colorReduction = inst.landingCount * 38
-      const newColor = Math.max(inst.initialColor - colorReduction, 0)  // Minimum brightness of 0 (black)
+      const opacityReduction = inst.landingCount * 0.2
+      const newOpacity = Math.max(1.0 - opacityReduction, 0)  // Minimum opacity of 0 (transparent)
       //
-      // Update text color (outline stays black)
+      // Determine if platform is hostile based on current text
+      // Check the actual text value to determine hostility
       //
-      inst.timerText.color = inst.k.rgb(newColor, newColor, newColor)
+      const currentText = inst.timerText.text
+      let isHostile = false
+      
+      if (inst.killOnOne) {
+        //
+        // Check if text contains "1"
+        //
+        isHostile = currentText.includes('1')
+      } else if (inst.killOnOddSum) {
+        //
+        // Check if digit sum is odd
+        //
+        const digits = currentText.replace(/:/g, '').split('').map(d => parseInt(d))
+        const sum = digits.reduce((a, b) => a + b, 0)
+        isHostile = sum % 2 === 1
+      }
       //
-      // If color becomes black or landing count reaches 5, destroy the platform
+      // Determine platform color based on hostility
       //
-      if (newColor === 0 || inst.landingCount >= 5) {
+      let targetColor
+      if (isHostile) {
+        //
+        // Hostile platforms become blue (killOnOne) or dark blue (killOnOddSum)
+        //
+        if (inst.killOnOne) {
+          targetColor = inst.k.rgb(70, 130, 180)  // Steel blue for "1"
+        } else {
+          targetColor = inst.k.rgb(30, 60, 150)  // Dark blue for odd sum
+        }
+      } else {
+        //
+        // Non-hostile platforms keep gray color
+        //
+        const colorValue = inst.initialColor
+        targetColor = inst.k.rgb(colorValue, colorValue, colorValue)
+      }
+      //
+      // Update text color and opacity (outline stays black but also fades)
+      //
+      inst.timerText.color = targetColor
+      inst.timerText.opacity = newOpacity
+      inst.outlineTexts.forEach(outlineText => {
+        outlineText.opacity = newOpacity
+      })
+      //
+      // Store current color to prevent fade from overwriting it
+      //
+      inst.currentPlatformColor = targetColor
+      //
+      // If opacity becomes 0 or landing count reaches 5, destroy the platform
+      //
+      if (newOpacity === 0 || inst.landingCount >= 5) {
         destroy(inst)
         return
       }
@@ -450,6 +615,18 @@ export function onUpdate(inst) {
     inst.outlineTexts.forEach(outlineText => {
       outlineText.text = newText
     })
+    //
+    // Snap opacity change when seconds value changes
+    //
+    if (inst.lastSecondsValue !== seconds) {
+      const timeProgress = inst.timeRemaining / inst.duration
+      const targetOpacity = Math.max(0, timeProgress)
+      inst.timerText.opacity = targetOpacity
+      inst.outlineTexts.forEach(outlineText => {
+        outlineText.opacity = targetOpacity
+      })
+      inst.lastSecondsValue = seconds
+    }
     //
     // Destroy when timer reaches zero
     //
@@ -694,5 +871,74 @@ function handleFallingPlatform(inst) {
       inst.hasFallen = true
     }
   }
+}
+
+/**
+ * Update platform color based on hostility (exported for level2)
+ * @param {Object} inst - Time platform instance
+ * @param {string} text - Current platform text
+ */
+export function updatePlatformColorByHostility(inst, text) {
+  //
+  // Check if hero is currently on this platform
+  //
+  let isHeroOnPlatform = false
+  if (inst.hero && inst.hero.character && !inst.isDestroyed) {
+    const heroChar = inst.hero.character
+    isHeroOnPlatform = inst.platform.isColliding(heroChar) && heroChar.isGrounded()
+  }
+  //
+  // If hero is on platform, force gray color (non-hostile appearance)
+  //
+  if (isHeroOnPlatform) {
+    const colorValue = inst.initialColor
+    const grayColor = inst.k.rgb(colorValue, colorValue, colorValue)
+    inst.timerText.color = grayColor
+    inst.currentPlatformColor = grayColor
+    return
+  }
+  //
+  // Hero is not on platform - determine color by hostility
+  //
+  let isHostile = false
+  
+  if (inst.killOnOne) {
+    //
+    // Check if text contains "1"
+    //
+    isHostile = text.includes('1')
+  } else if (inst.killOnOddSum) {
+    //
+    // Check if digit sum is odd
+    //
+    const digits = text.replace(/:/g, '').split('').map(d => parseInt(d))
+    const sum = digits.reduce((a, b) => a + b, 0)
+    isHostile = sum % 2 === 1
+  }
+  //
+  // Determine platform color based on hostility
+  //
+  let targetColor
+  if (isHostile) {
+    //
+    // Hostile platforms become blue (killOnOne) or dark blue (killOnOddSum)
+    //
+    if (inst.killOnOne) {
+      targetColor = inst.k.rgb(70, 130, 180)  // Steel blue for "1"
+    } else {
+      targetColor = inst.k.rgb(30, 60, 150)  // Dark blue for odd sum
+    }
+  } else {
+    //
+    // Non-hostile platforms keep gray color
+    //
+    const colorValue = inst.initialColor
+    targetColor = inst.k.rgb(colorValue, colorValue, colorValue)
+  }
+  //
+  // Update color
+  //
+  inst.timerText.color = targetColor
+  inst.currentPlatformColor = targetColor
 }
 

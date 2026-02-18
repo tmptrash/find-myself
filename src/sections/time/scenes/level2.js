@@ -9,6 +9,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CityBackground from '../components/city-background.js'
 import { toPng, parseHex } from '../../../utils/helper.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import * as BackgroundBirds from '../components/background-birds.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -253,8 +254,10 @@ export function sceneLevel2(k) {
       showSecondsOnly: true,
       initialTime: 0,
       staticTime: true,
+      killOnOddSum: true,  // Kill hero when digit sum is odd
       duration: 0,
       sfx: sound,
+      enableColorChange: true,  // Enable color change on landing
       killOnOne: false
     })
     //
@@ -380,6 +383,10 @@ export function sceneLevel2(k) {
       k.anchor('center'),
       k.z(14)  // Behind platforms (15) and snow (14.5)
     ])
+    //
+    // Create background birds
+    //
+    const birds = BackgroundBirds.create(k)
     //
     // Create custom platforms for this level
     //
@@ -742,8 +749,10 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
     showSecondsOnly: true,
     initialTime: 0,
     staticTime: false,  // Let time tick on the platform
+    killOnOddSum: true,  // Kill hero when digit sum is odd
     duration: 0,
     sfx: sound,
+    enableColorChange: true,  // Enable color change on landing
     levelIndicator,
     currentLevel: 'level-time.2'
   })
@@ -800,8 +809,10 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
         showSecondsOnly: true,
         initialTime: randomOffset,
         staticTime: false,
+        killOnOddSum: true,  // Kill hero when digit sum is odd
         duration: 0,
         sfx: sound,
+        enableColorChange: true,  // Enable color change on landing
         levelIndicator,
         currentLevel: 'level-time.2'
       })
@@ -874,6 +885,12 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
           p.inst.outlineTexts.forEach(outline => {
             outline.text = timeText
           })
+          //
+          // Update color based on hostility (for enableColorChange platforms)
+          //
+          if (p.inst.enableColorChange) {
+            TimePlatform.updatePlatformColorByHostility(p.inst, timeText)
+          }
         }
         //
         // Only age and darken the current platform (last one)
@@ -934,6 +951,12 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
         inst.nextPlatform.inst.outlineTexts.forEach(outline => {
           outline.text = timeText
         })
+        //
+        // Update color based on hostility (for enableColorChange platforms)
+        //
+        if (inst.nextPlatform.inst.enableColorChange) {
+          TimePlatform.updatePlatformColorByHostility(inst.nextPlatform.inst, timeText)
+        }
       }
     }
     //
@@ -1186,8 +1209,10 @@ function createNextPlatform(inst) {
     showSecondsOnly: true,
     initialTime: isSafePlatform ? 0 : randomOffset,  // Safe platforms always show 00
     staticTime: isSafePlatform,  // Safe platforms don't tick
+    killOnOddSum: true,  // Kill hero when digit sum is odd
     duration: 0,
     sfx: sound,
+    enableColorChange: true,  // Enable color change on landing
     levelIndicator,
     currentLevel: 'level-time.2'
   })

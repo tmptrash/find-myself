@@ -10,6 +10,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, parseHex } from '../../../utils/helper.js'
 import * as MovingCars from '../components/moving-cars.js'
+import * as BackgroundBirds from '../components/background-birds.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
@@ -175,6 +176,10 @@ export function sceneLevel0(k) {
       k.z(15.5)  // In front of platforms (15)
     ])
     //
+    // Create background birds
+    //
+    const birds = BackgroundBirds.create(k)
+    //
     // Create FPS counter
     //
     const fpsCounter = FpsCounter.create({ 
@@ -217,26 +222,26 @@ export function sceneLevel0(k) {
     })
     //
     // Create time platforms going right and up
-    // Platform 1: left-bottom, above hero (2 seconds)
+    // Platform 1: left-bottom, above hero (3 seconds)
     //
     const timePlatform1 = TimePlatform.create({
       k,
       x: 400,
       y: 760,
       hero,
-      duration: 2,
+      duration: 3,
       sfx: sound,
       levelIndicator
     })
     //
-    // Platform 2: middle, higher (closer, 1 second)
+    // Platform 2: middle, higher (closer, 2 seconds)
     //
     const timePlatform2 = TimePlatform.create({
       k,
       x: 580,
       y: 690,
       hero,
-      duration: 1,
+      duration: 2,
       sfx: sound,
       levelIndicator
     })
@@ -265,26 +270,26 @@ export function sceneLevel0(k) {
       y: 720,
     })
     //
-    // Platform 5: 1-second timer, right and up from static platform
+    // Platform 5: 4-second timer, right and up from static platform
     //
     const timePlatform5 = TimePlatform.create({
       k,
       x: 1060,
       y: 650,
       hero,
-      duration: 3,
+      duration: 4,
       sfx: sound,
       levelIndicator
     })
     //
-    // Platform 6: 1-second timer, right and up from platform 5
+    // Platform 6: 2-second timer, right and up from platform 5
     //
     const timePlatform6 = TimePlatform.create({
       k,
       x: 1240,
       y: 580,
       hero,
-      duration: 1,
+      duration: 2,
       sfx: sound,
       levelIndicator
     })

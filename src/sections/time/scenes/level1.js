@@ -8,6 +8,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { set, get } from '../../../utils/progress.js'
 import { toPng, parseHex } from '../../../utils/helper.js'
+import * as BackgroundBirds from '../components/background-birds.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -152,6 +153,10 @@ export function sceneLevel1(k) {
       k.anchor('center'),
       k.z(15.5)  // In front of platforms (15)
     ])
+    //
+    // Create background birds
+    //
+    const birds = BackgroundBirds.create(k)
     //
     // Create FPS counter
     //

@@ -80,11 +80,11 @@ try {
   // Preload city backgrounds for time section levels
   //
   const PLATFORM_BOTTOM_HEIGHT_LEVEL0 = 250  // Same as in level0.js
-  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL0, 'city-background')
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL0, 'city-background', true, false, true, 2.0)  // Much taller deep buildings for level 0 (50% height)
   const PLATFORM_BOTTOM_HEIGHT_LEVEL1 = 150  // Same as in level1.js
-  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1')
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1', true, false, true, 2.0)  // Much taller deep buildings for level 1 (50% height)
   const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150  // Same as in level2.js
-  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false, true)  // No sun, autumn leaves for level 2
+  CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false, true, true, 0.4)  // No sun, autumn leaves, normal deep buildings for level 2
   //
   // For level 3: ground line matches lower corridor floor
   //

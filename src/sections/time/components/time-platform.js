@@ -163,7 +163,7 @@ export function create(config) {
     //
     floatOffset: 0,  // Current float animation offset
     floatSpeed: 1.5 + Math.random() * 1.0,  // Faster float speed
-    floatAmplitude: 3,  // How much to float (pixels)
+    floatAmplitude: 6,  // How much to float (pixels) - increased for visibility
     fadeTimer: 0,  // Timer for fade animation
     fadeDuration: 4.0 + Math.random() * 2.0,  // Longer duration for smoother fade
     fadeDirection: 1,  // 1 for brighter, -1 for darker
@@ -718,12 +718,25 @@ function flashLifeImagePlatformSaved(k, levelIndicator, originalColor, count) {
   }
   if (count >= 20) {
     levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
     return
   }
   //
-  // Aggressive flashing - bright red to white
+  // Flash entire image with color tint and opacity change
   //
-  levelIndicator.lifeImage.sprite.color = count % 2 === 0 ? k.rgb(255, 0, 0) : k.rgb(255, 255, 255)
+  if (count % 2 === 0) {
+    //
+    // Red tint with full opacity
+    //
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    //
+    // White tint with reduced opacity
+    //
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
   k.wait(0.05, () => flashLifeImagePlatformSaved(k, levelIndicator, originalColor, count + 1))
 }
 

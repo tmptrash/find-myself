@@ -8,9 +8,10 @@ import { toPng } from '../../../utils/helper.js'
  * @param {boolean} [showSun=true] - Whether to show the sun
  * @param {boolean} [autumnLeaves=false] - Whether to use autumn colors for tree leaves
  * @param {boolean} [showCars=true] - Whether to show moving cars
+ * @param {number} [deepBuildingHeightMultiplier=0.25] - Height multiplier for deepest buildings (0.15-0.35 by default means 15-35%)
  * @returns {string} Data URL of the background sprite
  */
-export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true) {
+export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   
@@ -103,12 +104,9 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       // Deepest buildings are smallest, darkest, and fill all gaps
       //
       const deepWidth = randomRange(40, 120)
-      const deepHeight = Math.min(
-        randomRange(maxBuildingHeight * 0.1, maxBuildingHeight * 0.3),
-        maxBuildingHeight
-      )  // Lowest buildings (10-30% of max height, but not above max)
+      const deepHeight = randomRange(maxBuildingHeight * 0.1, maxBuildingHeight * deepBuildingHeightMultiplier)
       const deepBuildingY = bottomPlatformY - deepHeight
-      const deepColor = randomInt(20, 35)  // Darkest color (20-35)
+      const deepColor = randomInt(30, 55)  // Darkest color (20-35)
       
       deepestBuildings.push({
         x: currentX,
@@ -137,7 +135,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       ctx.strokeRect(deep.x, deep.y, deep.width, deep.height)
       
       //
-      // Very few windows for deepest buildings
+      // Very few windows for deepest buildings with blur glow
       //
       const windowRows = Math.floor(deep.height / 35)
       const windowCols = Math.floor(deep.width / 30)
@@ -148,9 +146,14 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
             const windowY = deep.y + (row + 0.5) * (deep.height / windowRows)
             const windowSize = 3  // Smallest windows
             const brightness = 50 + Math.random() * 10  // Darkest windows
-            
+            //
+            // Add blur glow for deepest buildings
+            //
+            ctx.shadowBlur = 8
+            ctx.shadowColor = `rgba(${brightness}, ${brightness}, ${brightness}, 0.6)`
             ctx.fillStyle = `rgb(${brightness}, ${brightness}, ${brightness})`
             ctx.fillRect(windowX - windowSize / 2, windowY - windowSize / 2, windowSize, windowSize)
+            ctx.shadowBlur = 0
           }
         }
       }
@@ -171,7 +174,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
         maxBuildingHeight
       )  // Lower buildings (15-40% of max height, but not above max)
       const bgBuildingY = bottomPlatformY - bgHeight
-      const bgColor = randomInt(35, 50)  // Darker color (35-50 instead of 60-80)
+      const bgColor = randomInt(50, 70)  // Darker color (35-50 instead of 60-80)
       
       backgroundBuildings.push({
         x: currentX,
@@ -197,7 +200,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       ctx.strokeRect(bg.x, bg.y, bg.width, bg.height)
       
       //
-      // Fewer windows for background buildings
+      // Fewer windows for background buildings with blur glow
       //
       const windowRows = Math.floor(bg.height / 30)
       const windowCols = Math.floor(bg.width / 25)
@@ -208,9 +211,14 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
             const windowY = bg.y + (row + 0.5) * (bg.height / windowRows)
             const windowSize = 4  // Smaller windows
             const brightness = 80 + Math.random() * 15  // Darker windows
-            
+            //
+            // Add blur glow for background buildings
+            //
+            ctx.shadowBlur = 6
+            ctx.shadowColor = `rgba(${brightness}, ${brightness}, ${brightness}, 0.5)`
             ctx.fillStyle = `rgb(${brightness}, ${brightness}, ${brightness})`
             ctx.fillRect(windowX - windowSize / 2, windowY - windowSize / 2, windowSize, windowSize)
+            ctx.shadowBlur = 0
           }
         }
       }
@@ -274,7 +282,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       const finalBuildingY = bottomPlatformY - height
       const windowRows = Math.floor(height / 25)
       const windowCols = Math.floor(width / 20)
-      const color = randomInt(60, 80)  // Brighter than background buildings
+      const color = randomInt(65, 80)  // Brighter than background buildings
       
       // Building
       ctx.fillStyle = `rgb(${color}, ${color}, ${color})`
@@ -429,8 +437,9 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
  * @param {boolean} [showSun=true] - Whether to show the sun
  * @param {boolean} [autumnLeaves=false] - Whether to use autumn colors for tree leaves
  * @param {boolean} [showCars=true] - Whether to show moving cars
+ * @param {number} [deepBuildingHeightMultiplier=0.25] - Height multiplier for deepest buildings
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true) {
-  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars)
+export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25) {
+  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars, deepBuildingHeightMultiplier)
   k.loadSprite(spriteName, spriteData)
 }

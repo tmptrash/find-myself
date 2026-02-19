@@ -78,6 +78,10 @@ function getSectionPositions(centerX, centerY, radius) {
 export function sceneMenu(k) {
   k.scene("menu", () => {
     //
+    // Restore volume to 1 (in case it was muted by transition)
+    //
+    k.volume(1)
+    //
     // Reset background color to black (in case coming from time section)
     //
     k.setBackground(k.Color.fromHex("#000000"))

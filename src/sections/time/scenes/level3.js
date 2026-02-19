@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, stopTimeSectionMusic } from '../components/scene-helper.js'
+import { initScene, stopTimeSectionMusic, timeSectionMusic } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
@@ -42,6 +42,92 @@ const MONSTER_FREEZE_DURATION = 1.0
 // Level decay constants (when monster eats clocks)
 //
 /**
+ * Draw varied cloud on canvas with multiple layers and colors
+ * Uses three color schemes: white, gray, and blue
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} size - Cloud size
+ * @param {number} layers - Number of cloud puffs
+ */
+function drawCloudOnCanvas(ctx, x, y, size, layers) {
+  //
+  // Choose cloud color scheme randomly
+  //
+  const cloudType = Math.floor(Math.random() * 3)  // 0=white, 1=gray, 2=blue
+  
+  let baseColor, shadowColor, highlightColor
+  if (cloudType === 0) {
+    // White cloud
+    baseColor = { r: 220, g: 220, b: 230 }
+    shadowColor = { r: 160, g: 160, b: 184 }  // #a0a0b8 (darker)
+    highlightColor = { r: 245, g: 245, b: 255 }
+  } else if (cloudType === 1) {
+    // Gray cloud
+    baseColor = { r: 130, g: 130, b: 140 }
+    shadowColor = { r: 32, g: 32, b: 48 }  // #202030
+    highlightColor = { r: 144, g: 144, b: 144 }  // #909090
+  } else {
+    // Blue cloud
+    baseColor = { r: 100, g: 110, b: 130 }
+    shadowColor = { r: 21, g: 24, b: 40 }  // #151828 (almost black)
+    highlightColor = { r: 112, g: 128, b: 144 }  // #708090
+  }
+  
+  //
+  // Draw all puffs with lighting
+  //
+  for (let i = 0; i < layers; i++) {
+    const angle = (i / layers) * Math.PI * 2 + (Math.random() - 0.5) * 0.5
+    const distance = size * (0.5 + Math.random() * 0.3)
+    const offsetX = Math.cos(angle) * distance
+    const offsetY = Math.sin(angle) * distance * 0.6
+    const puffSize = size * (0.5 + Math.random() * 0.4)
+    
+    //
+    // Calculate light factor based on position (light comes from left-top)
+    //
+    const normalizedX = offsetX / size
+    const normalizedY = offsetY / size
+    let lightFactor = (normalizedX * -0.5 + normalizedY * -0.3 + 0.7)  // Light from left-top
+    lightFactor = Math.max(0, Math.min(1, lightFactor))  // Clamp to 0-1
+    
+    let r, g, b
+    if (lightFactor > 0.65) {  // Highlight zone starts earlier (was 0.7)
+      const t = (lightFactor - 0.65) / 0.35
+      r = baseColor.r + (highlightColor.r - baseColor.r) * t
+      g = baseColor.g + (highlightColor.g - baseColor.g) * t
+      b = baseColor.b + (highlightColor.b - baseColor.b) * t
+    } else if (lightFactor < 0.3) {  // Shadow zone enhanced (was 0.35)
+      const t = lightFactor / 0.3
+      r = shadowColor.r + (baseColor.r - shadowColor.r) * t
+      g = shadowColor.g + (baseColor.g - shadowColor.g) * t
+      b = shadowColor.b + (baseColor.b - shadowColor.b) * t
+    } else {
+      r = baseColor.r
+      g = baseColor.g
+      b = baseColor.b
+    }
+    
+    const opacity = 0.75 + Math.random() * 0.2
+    ctx.fillStyle = `rgba(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)}, ${opacity})`
+    
+    ctx.beginPath()
+    ctx.arc(x + offsetX, y + offsetY, puffSize, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  
+  //
+  // Draw main central puff last (on top)
+  //
+  const opacity = 0.85
+  ctx.fillStyle = `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${opacity})`
+  ctx.beginPath()
+  ctx.arc(x, y, size, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/**
  * Time section level 3 scene
  * @param {Object} k - Kaplay instance
  */
@@ -75,6 +161,10 @@ export function sceneLevel3(k) {
       loop: true,
       volume: CFG.audio.backgroundMusic.clock
     })
+    //
+    // Store clock music reference for stopping during transitions
+    //
+    timeSectionMusic.clock = clockMusic
     //
     // Stop all music when leaving the scene
     //
@@ -120,9 +210,42 @@ export function sceneLevel3(k) {
     //
     const birds = BackgroundBirds.create(k)
     //
-    // Add clouds at the top of upper corridor
+    // Create small clouds at the top
     //
-    createCloudsAtTop(k)
+    const cloudY = CORRIDOR_Y - 30
+    const screenWidth = k.width()
+    const cloudCount = 14  // More smaller clouds
+    const cloudSpacing = screenWidth / cloudCount
+    //
+    // Create single large canvas for all clouds
+    //
+    const cloudsCanvas = document.createElement('canvas')
+    cloudsCanvas.width = screenWidth
+    cloudsCanvas.height = 250
+    const cloudsCtx = cloudsCanvas.getContext('2d')
+    //
+    // Draw all clouds on one canvas
+    //
+    for (let i = 0; i < cloudCount; i++) {
+      const x = cloudSpacing * i + (Math.random() - 0.5) * cloudSpacing * 0.5
+      const yOffset = (Math.random() - 0.5) * 60
+      const cloudSize = 25 + Math.random() * 35  // Smaller clouds (25-60)
+      const layers = 6 + Math.floor(Math.random() * 12)  // Layers (6-17)
+      
+      // Draw cloud directly on shared canvas
+      drawCloudOnCanvas(cloudsCtx, x, 125 + yOffset, cloudSize, layers)
+    }
+    //
+    // Convert to sprite and add to scene
+    //
+    const cloudsSprite = cloudsCanvas.toDataURL()
+    k.loadSprite('level3-clouds', cloudsSprite)
+    k.add([
+      k.sprite('level3-clouds'),
+      k.pos(0, cloudY - 125),
+      k.z(13),  // Above blurred background
+      k.fixed()
+    ])
     //
     // Add moving cars on bottom platform
     //
@@ -327,7 +450,7 @@ export function sceneLevel3(k) {
     const fpsCounter = FpsCounter.create({ 
       k, 
       showTimer: true, 
-      targetTime: CFG.gameplay.speedBonusTime['level-time.3'] 
+      targetTime: null  // No target time display for level 3 
     })
     //
     // Update FPS counter
@@ -2038,12 +2161,25 @@ function flashLifeImageLevel3(k, levelIndicator, originalColor, count) {
   }
   if (count >= 20) {
     levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
     return
   }
   //
-  // Aggressive flashing - bright red to white
+  // Flash entire image with color tint and opacity change
   //
-  levelIndicator.lifeImage.sprite.color = count % 2 === 0 ? k.rgb(255, 0, 0) : k.rgb(255, 255, 255)
+  if (count % 2 === 0) {
+    //
+    // Red tint with full opacity
+    //
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    //
+    // White tint with reduced opacity
+    //
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
   k.wait(0.05, () => flashLifeImageLevel3(k, levelIndicator, originalColor, count + 1))
 }
 function createLifeScoreParticlesLevel3(k, levelIndicator) {

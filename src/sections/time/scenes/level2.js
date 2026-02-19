@@ -8,6 +8,7 @@ import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CityBackground from '../components/city-background.js'
 import { toPng, parseHex } from '../../../utils/helper.js'
+import * as PixelClouds from '../../../components/pixel-clouds.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 //
@@ -37,6 +38,92 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 const FINAL_PLATFORM_INDEX = 28
 /**
+ * Draw varied cloud on canvas with multiple layers and colors
+ * Uses three color schemes: white, gray, and blue
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} size - Cloud size
+ * @param {number} layers - Number of cloud puffs
+ */
+function drawCloudOnCanvas(ctx, x, y, size, layers) {
+  //
+  // Choose cloud color scheme randomly
+  //
+  const cloudType = Math.floor(Math.random() * 3)  // 0=white, 1=gray, 2=blue
+  
+  let baseColor, shadowColor, highlightColor
+  if (cloudType === 0) {
+    // White cloud
+    baseColor = { r: 220, g: 220, b: 230 }
+    shadowColor = { r: 160, g: 160, b: 184 }  // #a0a0b8 (darker)
+    highlightColor = { r: 245, g: 245, b: 255 }
+  } else if (cloudType === 1) {
+    // Gray cloud
+    baseColor = { r: 130, g: 130, b: 140 }
+    shadowColor = { r: 32, g: 32, b: 48 }  // #202030
+    highlightColor = { r: 144, g: 144, b: 144 }  // #909090
+  } else {
+    // Blue cloud
+    baseColor = { r: 100, g: 110, b: 130 }
+    shadowColor = { r: 21, g: 24, b: 40 }  // #151828 (almost black)
+    highlightColor = { r: 112, g: 128, b: 144 }  // #708090
+  }
+  
+  //
+  // Draw all puffs with lighting
+  //
+  for (let i = 0; i < layers; i++) {
+    const angle = (i / layers) * Math.PI * 2 + (Math.random() - 0.5) * 0.5
+    const distance = size * (0.5 + Math.random() * 0.3)
+    const offsetX = Math.cos(angle) * distance
+    const offsetY = Math.sin(angle) * distance * 0.6
+    const puffSize = size * (0.5 + Math.random() * 0.4)
+    
+    //
+    // Calculate light factor based on position (light comes from left-top)
+    //
+    const normalizedX = offsetX / size
+    const normalizedY = offsetY / size
+    let lightFactor = (normalizedX * -0.5 + normalizedY * -0.3 + 0.7)  // Light from left-top
+    lightFactor = Math.max(0, Math.min(1, lightFactor))  // Clamp to 0-1
+    
+    let r, g, b
+    if (lightFactor > 0.65) {  // Highlight zone starts earlier (was 0.7)
+      const t = (lightFactor - 0.65) / 0.35
+      r = baseColor.r + (highlightColor.r - baseColor.r) * t
+      g = baseColor.g + (highlightColor.g - baseColor.g) * t
+      b = baseColor.b + (highlightColor.b - baseColor.b) * t
+    } else if (lightFactor < 0.3) {  // Shadow zone enhanced (was 0.35)
+      const t = lightFactor / 0.3
+      r = shadowColor.r + (baseColor.r - shadowColor.r) * t
+      g = shadowColor.g + (baseColor.g - shadowColor.g) * t
+      b = shadowColor.b + (baseColor.b - shadowColor.b) * t
+    } else {
+      r = baseColor.r
+      g = baseColor.g
+      b = baseColor.b
+    }
+    
+    const opacity = 0.75 + Math.random() * 0.2
+    ctx.fillStyle = `rgba(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)}, ${opacity})`
+    
+    ctx.beginPath()
+    ctx.arc(x + offsetX, y + offsetY, puffSize, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  
+  //
+  // Draw main central puff last (on top)
+  //
+  const opacity = 0.85
+  ctx.fillStyle = `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${opacity})`
+  ctx.beginPath()
+  ctx.arc(x, y, size, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/**
  * Flash life image when hero dies
  * @param {Object} k - Kaplay instance
  * @param {Object} levelIndicator - Level indicator instance
@@ -49,12 +136,25 @@ function flashLifeImageLevel2(k, levelIndicator, originalColor, count) {
   }
   if (count >= 20) {
     levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
     return
   }
   //
-  // Aggressive flashing - bright red to white
+  // Flash entire image with color tint and opacity change
   //
-  levelIndicator.lifeImage.sprite.color = count % 2 === 0 ? k.rgb(255, 0, 0) : k.rgb(255, 255, 255)
+  if (count % 2 === 0) {
+    //
+    // Red tint with full opacity
+    //
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    //
+    // White tint with reduced opacity
+    //
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
   k.wait(0.05, () => flashLifeImageLevel2(k, levelIndicator, originalColor, count + 1))
 }
 /**
@@ -392,9 +492,43 @@ export function sceneLevel2(k) {
     //
     createLevelPlatforms(k, sound)
     //
-    // Create clouds under top platform (where snow falls from)
+    // Create realistic pixel art clouds under top platform
+    // Use single canvas for all clouds for better performance
     //
-    createCloudsUnderTopPlatform(k)
+    const cloudY = PLATFORM_TOP_HEIGHT + 70
+    const screenWidth = k.width()
+    const cloudCount = 9  // Increased cloud count (was 6)
+    const cloudSpacing = (screenWidth - PLATFORM_SIDE_WIDTH * 2) / cloudCount
+    //
+    // Create single large canvas for all clouds (increased size to fit larger clouds)
+    //
+    const cloudsCanvas = document.createElement('canvas')
+    cloudsCanvas.width = screenWidth
+    cloudsCanvas.height = 350  // Increased from 200 to fit larger clouds
+    const cloudsCtx = cloudsCanvas.getContext('2d')
+    //
+    // Draw all clouds on one canvas with varied configurations
+    //
+    for (let i = 0; i < cloudCount; i++) {
+      const x = PLATFORM_SIDE_WIDTH + cloudSpacing * i + (Math.random() - 0.5) * cloudSpacing * 0.5
+      const yOffset = (Math.random() - 0.5) * 80  // Increased vertical variation
+      const cloudSize = 35 + Math.random() * 45  // Smaller clouds (35-80 instead of 50-120)
+      const layers = 8 + Math.floor(Math.random() * 15)  // Much more varied layers (8-22)
+      
+      // Draw cloud directly on shared canvas
+      drawCloudOnCanvas(cloudsCtx, x - PLATFORM_SIDE_WIDTH, 175 + yOffset, cloudSize, layers)
+    }
+    //
+    // Convert to sprite and add to scene
+    //
+    const cloudsSprite = cloudsCanvas.toDataURL()
+    k.loadSprite('level2-clouds', cloudsSprite)
+    k.add([
+      k.sprite('level2-clouds'),
+      k.pos(PLATFORM_SIDE_WIDTH, cloudY - 175),  // Adjusted position for larger canvas
+      k.z(14.5),
+      k.fixed()
+    ])
     //
     // Create rounded corners for game area
     //

@@ -8,11 +8,11 @@ import { get, set } from '../../../utils/progress.js'
 const MUSIC_START_DELAY = 6.0
 //
 // Global music instances for time section (persist across level reloads)
-// Note: clock.mp3 is NOT stored here - it restarts on each level load for sync
 //
-let timeSectionMusic = {
+export let timeSectionMusic = {
   kids: null,
-  time: null
+  time: null,
+  clock: null
 }
 
 /**
@@ -40,8 +40,9 @@ export function startTimeSectionMusic(k, music = false) {
 
 /**
  * Stops all time section background music
+ * @param {Object} k - Optional Kaplay instance for direct sound stopping
  */
-export function stopTimeSectionMusic() {
+export function stopTimeSectionMusic(k) {
   if (timeSectionMusic.kids) {
     timeSectionMusic.kids.stop()
     timeSectionMusic.kids = null
@@ -49,6 +50,26 @@ export function stopTimeSectionMusic() {
   if (timeSectionMusic.time) {
     timeSectionMusic.time.stop()
     timeSectionMusic.time = null
+  }
+  if (timeSectionMusic.clock) {
+    timeSectionMusic.clock.stop()
+    timeSectionMusic.clock = null
+  }
+  //
+  // Also try to stop sounds directly via Kaplay (fallback)
+  //
+  if (k) {
+    const soundsToStop = ['clock', 'time', 'time0-kids']
+    soundsToStop.forEach(soundName => {
+      try {
+        const sound = k.getSound(soundName)
+        if (sound) {
+          sound.stop()
+        }
+      } catch (e) {
+        // Sound not found or already stopped
+      }
+    })
   }
 }
 
@@ -153,6 +174,11 @@ export function initScene(config) {
       // Stop time section music when leaving section
       //
       stopTimeSectionMusic()
+      //
+      // Restore volume to 1 and unmute procedural sounds when going to menu
+      //
+      k.volume(1)
+      Sound.unmuteProceduralSounds()
       k.go("menu")
     })
   })

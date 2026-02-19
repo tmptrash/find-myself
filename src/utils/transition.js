@@ -40,8 +40,8 @@ const LEVEL_SUBTITLES = {
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],
   'level-word.4': ['words that kill', 'word4-pre', 2.5],
-  'level-time.0': ['you are young and everything is new. time moves\n\nforward even when you stand still. this is the first\n\nthing you learn. you start to notice it slipping — and\n\nyou start to run.', 'time0-pre', 14],
-  'level-time.1': ['growing up means learning what you can touch —\n\nand what you should leave alone. do not touch the one', 'time1-pre', 8],
+  'level-time.0': ['you are young and everything is new. time moves\n\nforward even when you stand still. this is the\n\nfirst thing you learn. you start to notice it\n\nslipping — and you start to run.', 'time0-pre', 14],
+  'level-time.1': ['you are growing. you are learning. numbers begin\n\nto surround you. growing up means learning what you\n\ncan touch — and what you should leave alone. do not\n\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
   'level-time.3': ['life consumes time while you hesitate.\n\nact too slow — and it will catch you.', 'time3-pre', 6],
   'level-touch.0': 'gather what crawls together to reach what stands above',
@@ -139,7 +139,32 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     onComplete?.()
     return
   }
-  
+  //
+  // IMMEDIATELY stop all background sounds when transition starts
+  // This prevents sounds from playing during transition text
+  //
+  stopTimeSectionMusic(k)
+  //
+  // Mute procedural sounds (like spike glints)
+  //
+  Sound.muteProceduralSounds()
+  //
+  // Store original volume and mute all sounds
+  //
+  const originalVolume = k.volume()
+  k.volume(0)
+  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
+  soundsToStop.forEach(soundName => {
+    try {
+      const sound = k.getSound(soundName)
+      if (sound) {
+        sound.stop()
+        sound.paused = true
+      }
+    } catch (e) {
+      // Sound not found or already stopped
+    }
+  })
   //
   // Save progress for next level immediately (before showing transition)
   // This ensures progress is saved even if user interrupts transition with ESC
@@ -178,7 +203,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     skipEnableTimer: 0,
     textHoldDuration: DEFAULT_TEXT_HOLD_DURATION,
     soundName: null,
-    textSound: null
+    textSound: null,
+    soundsStopped: false,
+    originalVolume: originalVolume  // Store original volume to restore later
   }
   
   //
@@ -210,7 +237,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionInterval.cancel()
     overlay && overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
-    
+    //
+    // Restore volume and unmute procedural sounds before going to next level
+    //
+    k.volume(inst.originalVolume)
+    Sound.unmuteProceduralSounds()
     // Go to next level
     k.go(nextLevel)
   }
@@ -239,6 +270,24 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     timer += k.dt()
     
     if (phase === 'fade_to_black') {
+      //
+      // Stop all background sounds immediately when transition starts
+      //
+      if (timer === 0 || !inst.soundsStopped) {
+        inst.soundsStopped = true
+        stopTimeSectionMusic(k)
+        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
+        soundsToStop.forEach(soundName => {
+          try {
+            const sound = k.getSound(soundName)
+            if (sound) {
+              sound.stop()
+            }
+          } catch (e) {
+            // Sound not found or already stopped
+          }
+        })
+      }
       // Fade overlay from transparent to opaque
       const progress = Math.min(timer / FADE_TO_BLACK_DURATION, 1)
       overlay.opacity = progress
@@ -265,16 +314,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           //
           // Stop all music and sound effects, keep only voice-over (xxx-pre files)
           //
-          stopTimeSectionMusic()
+          stopTimeSectionMusic(k)
           //
           // Stop all Kaplay sounds except voice-over (xxx-pre files)
-          // Stop clock.mp3, time.mp3, kids.mp3, word.mp3, touch.mp3, menu.mp3
+          // Stop clock.mp3, time.mp3, time0-kids.mp3, word.mp3, touch.mp3, menu.mp3
           //
           const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
           soundsToStop.forEach(soundName => {
             try {
               const sound = k.getSound(soundName)
-              if (sound && sound.isPlaying && sound.isPlaying()) {
+              if (sound) {
                 sound.stop()
               }
             } catch (e) {
@@ -330,6 +379,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // No subtitle, go to next level immediately
           transitionInterval.cancel()
           overlay.exists() && k.destroy(overlay)
+          //
+          // Restore volume and unmute procedural sounds before going to next level
+          //
+          k.volume(inst.originalVolume)
+          Sound.unmuteProceduralSounds()
           k.go(nextLevel)
         }
       }
@@ -337,7 +391,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       //
       // Start level related description sound before it starts
       //
-      if (!inst.textSound && inst.soundName) inst.textSound = Sound.playInScene(k, inst.soundName, CFG.audio.backgroundMusic.words)
+      if (!inst.textSound && inst.soundName) {
+        // Restore volume to play transition sound (xxx-pre.mp3)
+        k.volume(inst.originalVolume)
+        inst.textSound = Sound.playInScene(k, inst.soundName, CFG.audio.backgroundMusic.words)
+        // Don't mute again - let the transition sound play
+      }
       // Fade in text
       const progress = Math.min(timer / TEXT_FADE_IN_DURATION, 1)
       if (inst.textObj) {
@@ -377,7 +436,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         // Clean up and go to next level
         transitionInterval.cancel()
         overlay.exists() && k.destroy(overlay)
-        
+        //
+        // Restore volume and unmute procedural sounds before going to next level
+        //
+        k.volume(inst.originalVolume)
+        Sound.unmuteProceduralSounds()
         // Go to next level
         k.go(nextLevel)
       }

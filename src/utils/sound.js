@@ -15,6 +15,10 @@ let globalCurrentTrack = null
 // Global subtitle sound reference (for stopping on death)
 //
 let globalSubtitleSound = null
+//
+// Global mute flag for procedural sounds (used during transitions)
+//
+let globalMuteProceduralSounds = false
 /**
  * Create sound instance with AudioContext and all audio resources
  * @returns {Object} Sound instance with context, gains, and ambient state
@@ -609,6 +613,11 @@ export function playBladeSound(instance) {
  * @param {number} [ringVolume=0.08] - Volume of metallic ring sound (0-1)
  */
 export function playMetalPingSound(instance, swishVolume = 0.15, ringVolume = 0.08) {
+  //
+  // Don't play if procedural sounds are muted (during transitions)
+  //
+  if (globalMuteProceduralSounds) return
+  
   const now = instance.audioContext.currentTime
   const duration = 0.6  // Longer for katana resonance
   const masterVolume = CFG.audio.masterVolume
@@ -2454,3 +2463,18 @@ export function playEmptyClickSound(instance) {
   osc.start(now)
   osc.stop(now + duration)
 }
+
+/**
+ * Mute all procedural sounds (used during transitions)
+ */
+export function muteProceduralSounds() {
+  globalMuteProceduralSounds = true
+}
+
+/**
+ * Unmute all procedural sounds
+ */
+export function unmuteProceduralSounds() {
+  globalMuteProceduralSounds = false
+}
+

@@ -82,3 +82,28 @@ export function setProp(path, val, obj = {}) {
   keys.slice(0, -1).forEach(k => obj = obj[k] ??= {})
   obj[keys.pop()] = val
 }
+/**
+ * Convert hex color to RGB object
+ * @param {string} hex - Hex color string (e.g. "#ff0000" or "ff0000")
+ * @returns {Object} RGB object with r, g, b properties
+ */
+export function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null
+}
+
+/**
+ * Convert RGB values to hex color string
+ * @param {number} r - Red value (0-255)
+ * @param {number} g - Green value (0-255)
+ * @param {number} b - Blue value (0-255)
+ * @returns {string} Hex color string with # prefix
+ */
+export function rgbToHex(r, g, b) {
+  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
+}
+

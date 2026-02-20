@@ -3,7 +3,7 @@ import { initScene, stopTimeSectionMusic, timeSectionMusic } from '../components
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
-import { getColor, toPng, parseHex } from '../../../utils/helper.js'
+import { getColor, toPng, parseHex, hexToRgb, rgbToHex } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
@@ -41,90 +41,131 @@ const MONSTER_FREEZE_DURATION = 1.0
 //
 // Level decay constants (when monster eats clocks)
 //
+const randomRange = (min, max) => Math.random() * (max - min) + min
+
 /**
- * Draw varied cloud on canvas with multiple layers and colors
- * Uses three color schemes: white, gray, and blue
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {number} x - X position
- * @param {number} y - Y position
- * @param {number} size - Cloud size
- * @param {number} layers - Number of cloud puffs
+ * Draw realistic pixel art cloud on canvas
+ * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {Object} config - Cloud configuration
  */
-function drawCloudOnCanvas(ctx, x, y, size, layers) {
-  //
-  // Choose cloud color scheme randomly
-  //
-  const cloudType = Math.floor(Math.random() * 3)  // 0=white, 1=gray, 2=blue
+function drawCloud(context, config) {
+  const {
+    x,
+    y,
+    size = 200,
+    layers = 15,
+    lightSide = 'right',
+    baseColor = '#f5d5b8',
+    shadowColor = '#9ba4d6',
+    highlightColor = '#ffeedd',
+    pixelSize = 2
+  } = config
   
-  let baseColor, shadowColor, highlightColor
-  if (cloudType === 0) {
-    // White cloud
-    baseColor = { r: 220, g: 220, b: 230 }
-    shadowColor = { r: 160, g: 160, b: 184 }  // #a0a0b8 (darker)
-    highlightColor = { r: 245, g: 245, b: 255 }
-  } else if (cloudType === 1) {
-    // Gray cloud
-    baseColor = { r: 130, g: 130, b: 140 }
-    shadowColor = { r: 32, g: 32, b: 48 }  // #202030
-    highlightColor = { r: 144, g: 144, b: 144 }  // #909090
-  } else {
-    // Blue cloud
-    baseColor = { r: 100, g: 110, b: 130 }
-    shadowColor = { r: 21, g: 24, b: 40 }  // #151828 (almost black)
-    highlightColor = { r: 112, g: 128, b: 144 }  // #708090
-  }
+  const base = hexToRgb(baseColor)
+  const shadow = hexToRgb(shadowColor)
+  const highlight = hexToRgb(highlightColor)
   
-  //
-  // Draw all puffs with lighting
-  //
-  for (let i = 0; i < layers; i++) {
-    const angle = (i / layers) * Math.PI * 2 + (Math.random() - 0.5) * 0.5
-    const distance = size * (0.5 + Math.random() * 0.3)
-    const offsetX = Math.cos(angle) * distance
-    const offsetY = Math.sin(angle) * distance * 0.6
-    const puffSize = size * (0.5 + Math.random() * 0.4)
+  const cloudLayers = []
+  
+  for (let layerIndex = 0; layerIndex < layers; layerIndex++) {
+    const layerDepth = layerIndex / layers
+    const bubblesInLayer = Math.floor(randomRange(3, 8))
+    const bubbles = []
     
-    //
-    // Calculate light factor based on position (light comes from left-top)
-    //
-    const normalizedX = offsetX / size
-    const normalizedY = offsetY / size
-    let lightFactor = (normalizedX * -0.5 + normalizedY * -0.3 + 0.7)  // Light from left-top
-    lightFactor = Math.max(0, Math.min(1, lightFactor))  // Clamp to 0-1
+    const layerLightBoost = layerDepth * 0.6
+    const layerDarkness = (1 - layerDepth) * 0.3
     
-    let r, g, b
-    if (lightFactor > 0.65) {  // Highlight zone starts earlier (was 0.7)
-      const t = (lightFactor - 0.65) / 0.35
-      r = baseColor.r + (highlightColor.r - baseColor.r) * t
-      g = baseColor.g + (highlightColor.g - baseColor.g) * t
-      b = baseColor.b + (highlightColor.b - baseColor.b) * t
-    } else if (lightFactor < 0.3) {  // Shadow zone enhanced (was 0.35)
-      const t = lightFactor / 0.3
-      r = shadowColor.r + (baseColor.r - shadowColor.r) * t
-      g = shadowColor.g + (baseColor.g - shadowColor.g) * t
-      b = shadowColor.b + (baseColor.b - shadowColor.b) * t
-    } else {
-      r = baseColor.r
-      g = baseColor.g
-      b = baseColor.b
+    for (let i = 0; i < bubblesInLayer; i++) {
+      const angle = randomRange(0, Math.PI * 2)
+      const distance = randomRange(0, size * 0.5)
+      const radius = randomRange(size * 0.15, size * 0.4)
+      
+      const bx = Math.cos(angle) * distance
+      const by = Math.sin(angle) * distance * 0.6 - (layerDepth - 0.5) * size * 0.3
+      
+      bubbles.push({
+        x: bx,
+        y: by,
+        radius: radius,
+        density: randomRange(0.5, 0.9)
+      })
     }
     
-    const opacity = 0.75 + Math.random() * 0.2
-    ctx.fillStyle = `rgba(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)}, ${opacity})`
-    
-    ctx.beginPath()
-    ctx.arc(x + offsetX, y + offsetY, puffSize, 0, Math.PI * 2)
-    ctx.fill()
+    cloudLayers.push({
+      bubbles: bubbles,
+      depth: layerDepth,
+      lightBoost: layerLightBoost,
+      darkness: layerDarkness
+    })
   }
   
-  //
-  // Draw main central puff last (on top)
-  //
-  const opacity = 0.85
-  ctx.fillStyle = `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${opacity})`
-  ctx.beginPath()
-  ctx.arc(x, y, size, 0, Math.PI * 2)
-  ctx.fill()
+  for (const layer of cloudLayers) {
+    const halfSize = size
+    
+    for (let py = -halfSize; py <= halfSize; py += pixelSize) {
+      for (let px = -halfSize; px <= halfSize; px += pixelSize) {
+        let totalDensity = 0
+        
+        for (const bubble of layer.bubbles) {
+          const dx = px - bubble.x
+          const dy = py - bubble.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          
+          if (dist < bubble.radius) {
+            const falloff = 1 - (dist / bubble.radius)
+            totalDensity += falloff * falloff * bubble.density
+          }
+        }
+        
+        const threshold = 0.25 - layer.depth * 0.1
+        
+        if (totalDensity > threshold) {
+          const density = Math.min(totalDensity, 1)
+          
+          let lightFactor = 0
+          
+          switch (lightSide) {
+            case 'right':
+              lightFactor = (px / halfSize) * 0.5 + 0.5
+              break
+            case 'left':
+              lightFactor = (-px / halfSize) * 0.5 + 0.5
+              break
+            case 'top':
+              lightFactor = (-py / halfSize) * 0.5 + 0.5
+              break
+            case 'bottom':
+              lightFactor = (py / halfSize) * 0.5 + 0.5
+              break
+          }
+          
+          lightFactor = lightFactor * 0.5 + density * 0.2 + layer.lightBoost - layer.darkness
+          lightFactor = Math.max(0, Math.min(1, lightFactor))
+          
+          let r, g, b
+          
+          if (lightFactor > 0.65) {
+            const t = (lightFactor - 0.65) / 0.35
+            r = Math.floor(base.r + (highlight.r - base.r) * t)
+            g = Math.floor(base.g + (highlight.g - base.g) * t)
+            b = Math.floor(base.b + (highlight.b - base.b) * t)
+          } else if (lightFactor > 0.3) {
+            r = Math.floor(base.r)
+            g = Math.floor(base.g)
+            b = Math.floor(base.b)
+          } else {
+            const t = lightFactor / 0.3
+            r = Math.floor(shadow.r + (base.r - shadow.r) * t)
+            g = Math.floor(shadow.g + (base.g - shadow.g) * t)
+            b = Math.floor(shadow.b + (base.b - shadow.b) * t)
+          }
+          
+          context.fillStyle = rgbToHex(r, g, b)
+          context.fillRect(x + px, y + py, pixelSize, pixelSize)
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -214,7 +255,7 @@ export function sceneLevel3(k) {
     //
     const cloudY = CORRIDOR_Y - 30
     const screenWidth = k.width()
-    const cloudCount = 14  // More smaller clouds
+    const cloudCount = 16
     const cloudSpacing = screenWidth / cloudCount
     //
     // Create single large canvas for all clouds
@@ -224,16 +265,35 @@ export function sceneLevel3(k) {
     cloudsCanvas.height = 250
     const cloudsCtx = cloudsCanvas.getContext('2d')
     //
+    // Define cloud color schemes (same as level2)
+    //
+    const cloudSchemes = [
+      { baseColor: '#f0f0f0', shadowColor: '#a0a0b8', highlightColor: '#ffffff' },  // White
+      { baseColor: '#606060', shadowColor: '#202030', highlightColor: '#909090' },  // Gray
+      { baseColor: '#405070', shadowColor: '#151828', highlightColor: '#708090' }   // Blue
+    ]
+    //
     // Draw all clouds on one canvas
     //
     for (let i = 0; i < cloudCount; i++) {
       const x = cloudSpacing * i + (Math.random() - 0.5) * cloudSpacing * 0.5
       const yOffset = (Math.random() - 0.5) * 60
-      const cloudSize = 25 + Math.random() * 35  // Smaller clouds (25-60)
-      const layers = 6 + Math.floor(Math.random() * 12)  // Layers (6-17)
+      const cloudSize = 25 + Math.random() * 150  // Smaller clouds (25-60)
+      const layers = 6 + Math.floor(Math.random() * 12)
+      const scheme = cloudSchemes[Math.floor(Math.random() * cloudSchemes.length)]
+      const lightSide = Math.random() > 0.5 ? 'left' : 'right'
       
-      // Draw cloud directly on shared canvas
-      drawCloudOnCanvas(cloudsCtx, x, 125 + yOffset, cloudSize, layers)
+      drawCloud(cloudsCtx, {
+        x: x,
+        y: 125 + yOffset,
+        size: cloudSize,
+        layers: layers,
+        lightSide: lightSide,
+        baseColor: scheme.baseColor,
+        shadowColor: scheme.shadowColor,
+        highlightColor: scheme.highlightColor,
+        pixelSize: 2
+      })
     }
     //
     // Convert to sprite and add to scene
@@ -242,8 +302,8 @@ export function sceneLevel3(k) {
     k.loadSprite('level3-clouds', cloudsSprite)
     k.add([
       k.sprite('level3-clouds'),
-      k.pos(0, cloudY - 125),
-      k.z(13),  // Above blurred background
+      k.pos(0, cloudY - 70),
+      k.z(13),
       k.fixed()
     ])
     //
@@ -1819,7 +1879,7 @@ function createCloudsAtTop(k) {
     const x = baseX + randomOffset
     const typeIndex = i % cloudTypes.length
     const cloudType = cloudTypes[typeIndex]
-    const sizeVariation = 1.0 + Math.random() * 0.3
+    const sizeVariation = 1.0 + Math.random() * 1.3
     const mainSize = cloudType.mainSize * sizeVariation
     const rowsPerLayer = 2
     const rowIndex = Math.floor((i % denseCloudCount) / (denseCloudCount / rowsPerLayer))

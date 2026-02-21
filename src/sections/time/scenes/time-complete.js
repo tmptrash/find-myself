@@ -30,7 +30,11 @@ export function sceneTimeComplete(k) {
     const sound = Sound.create()
     Sound.stopBackgroundMusic(sound)
     //
-    // Create black background
+    // Set canvas background to black
+    //
+    k.setBackground(k.Color.fromHex("#000000"))
+    //
+    // Create black background rectangle
     //
     k.add([
       k.rect(k.width(), k.height()),

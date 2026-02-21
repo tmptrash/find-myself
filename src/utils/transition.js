@@ -132,6 +132,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       const sectionName = sectionMatch[1]
       setSectionCompleted(sectionName)
     }
+    //
+    // Go directly to completion screen without transition overlay
+    //
+    k.go(nextLevel)
+    return
   }
   
   if (!nextLevel) {

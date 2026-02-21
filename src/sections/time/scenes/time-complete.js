@@ -2,7 +2,7 @@ import * as Sound from '../../../utils/sound.js'
 import { stopTimeSectionMusic } from '../components/scene-helper.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
 
-const FINAL_MESSAGE = "time shapes everything - even you"
+const FINAL_MESSAGE = "time shapes everything — even you.\n\nnow you know how to move with it."
 const MESSAGE_HOLD_DURATION = 5.0
 const FADE_IN_DURATION = 1.0
 const FADE_OUT_DURATION = 1.5

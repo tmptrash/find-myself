@@ -518,6 +518,154 @@ export function sceneLevel3(k) {
     k.onUpdate(() => {
       FpsCounter.onUpdate(fpsCounter)
     })
+    //
+    // Show snowball throwing instructions
+    //
+    showSnowballInstructions(k)
+  })
+}
+
+/**
+ * Create instructions text with outline
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} textY - Text Y position
+ * @param {string} content - Text content
+ * @returns {Object} Text objects
+ */
+function createInstructionsText(k, centerX, textY, content) {
+  const OUTLINE_OFFSET = 2
+  //
+  // Create 8 outline texts (black)
+  //
+  const outlineOffsets = [
+    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
+    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
+  ]
+  
+  const outlineTexts = outlineOffsets.map(([dx, dy]) => {
+    return k.add([
+      k.text(content, {
+        size: 24,
+        align: "center",
+        font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+      }),
+      k.pos(centerX + dx, textY + dy),
+      k.anchor("center"),
+      k.color(0, 0, 0),
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.ui + 9),
+      k.fixed()
+    ])
+  })
+  //
+  // Create main text (white)
+  //
+  const mainText = k.add([
+    k.text(content, {
+      size: 24,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10),
+    k.fixed()
+  ])
+  
+  return { mainText, outlineTexts }
+}
+
+/**
+ * Shows snowball throwing instructions
+ * @param {Object} k - Kaplay instance
+ */
+function showSnowballInstructions(k) {
+  //
+  // Check progress storage for how many times instructions were shown
+  //
+  let showCount = get('level3SnowballInstructionsCount', 0)
+  //
+  // Only show instructions first 2 times
+  //
+  if (showCount >= 2) {
+    return
+  }
+  //
+  // Increment show count
+  //
+  set('level3SnowballInstructionsCount', showCount + 1)
+  
+  const centerX = CFG.visual.screen.width / 2 - 20
+  const textY = 140  // Position below FPS counter
+  const instructionsContent = "use Shift to throw snowballs at monster"
+  //
+  // Create instructions text with outline
+  //
+  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY, instructionsContent)
+  //
+  // Animation constants
+  //
+  const INITIAL_DELAY = 1.0
+  const FADE_IN_DURATION = 0.5
+  const HOLD_DURATION = 4.0
+  const FADE_OUT_DURATION = 0.5
+  //
+  // Animation state
+  //
+  const inst = {
+    k,
+    mainText,
+    outlineTexts,
+    timer: 0,
+    phase: 'initial_delay'
+  }
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    
+    if (inst.phase === 'initial_delay') {
+      if (inst.timer >= INITIAL_DELAY) {
+        inst.phase = 'fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_in') {
+      const progress = Math.min(1, inst.timer / FADE_IN_DURATION)
+      mainText.opacity = progress
+      outlineTexts.forEach(text => {
+        text.opacity = progress
+      })
+      
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      if (inst.timer >= HOLD_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      const progress = Math.min(1, inst.timer / FADE_OUT_DURATION)
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(text => {
+        text.opacity = 1 - progress
+      })
+      
+      if (progress >= 1) {
+        updateInterval.cancel()
+        mainText.exists() && k.destroy(mainText)
+        outlineTexts.forEach(text => {
+          text.exists() && k.destroy(text)
+        })
+      }
+    }
   })
 }
 

@@ -661,18 +661,6 @@ export function sceneLevel2(k) {
 }
 
 /**
- * Check if sum of digits is even
- * @param {number} seconds - Current seconds (0-59)
- * @returns {boolean} True if sum is even
- */
-function isSumEven(seconds) {
-  const digit1 = Math.floor(seconds / 10)
-  const digit2 = seconds % 10
-  const sum = digit1 + digit2
-  return sum % 2 === 0
-}
-
-/**
  * Calculate platform position based on index
  * @param {number} index - Platform index
  * @param {Object} k - Kaplay instance
@@ -987,6 +975,11 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
   createHearts(inst)
   updateHearts(inst)
   //
+  // Add methods for heartSystem to be called from time-platform.js
+  //
+  inst.updateHearts = (heartSystem) => updateHearts(heartSystem)
+  inst.destroyHearts = (heartSystem) => destroyHearts(heartSystem)
+  //
   // DEBUG: Create all platforms at once for visualization
   //
   const DEBUG_SHOW_ALL_PLATFORMS = false
@@ -1008,7 +1001,8 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
         sfx: sound,
         enableColorChange: true,  // Enable color change on landing
         levelIndicator,
-        currentLevel: 'level-time.2'
+        currentLevel: 'level-time.2',
+        heartSystem: inst  // Pass inst that contains attemptsRemaining, updateHearts, destroyHearts
       })
       platforms.push({
         inst: platform,
@@ -1061,6 +1055,10 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
     //
     inst.platforms.forEach((p, index) => {
       if (!p.inst.isDestroyed) {
+        //
+        // Update platform animation (floating, color fade)
+        //
+        TimePlatform.onUpdate(p.inst)
         //
         // Safe platforms (3rd, 5th, 7th, 9th, etc.) always show "00"
         //
@@ -1162,154 +1160,16 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
       
       if (isOnNext && isGrounded && !inst.nextPlatform.heroLanded) {
         //
-        // Get time on the platform hero is landing on
-        // Safe platforms (3rd, 5th, 7th, 9th, etc.) are always safe
-        //
-        const isSafePlatform = inst.nextPlatform.isSafePlatform || false
-        const landingTime = inst.nextPlatform.inst.currentTime || inst.nextPlatform.inst.initialTime
-        const isSafe = isSafePlatform || isSumEven(landingTime)
-        //
-        // If landing platform has odd sum, decrease attempts
-        //
-        if (!isSafe) {
-          //
-          // Mark as landed immediately to prevent repeated checks
-          //
-          inst.nextPlatform.heroLanded = true
-          
-          //
-          // Only count error once per platform (check errorCounted flag)
-          //
-          if (!inst.nextPlatform.errorCounted) {
-            inst.nextPlatform.errorCounted = true
-            
-            //
-            // Decrease attempts only if we have attempts remaining
-            // Platform won't kill hero, but we still track attempts
-            //
-            if (inst.attemptsRemaining > 0) {
-              inst.attemptsRemaining--
-              
-              //
-              // Play death sound when losing a heart
-              //
-              Sound.playDeathSound(inst.sound)
-              
-              //
-              // Update hearts display
-              //
-              updateHearts(inst)
-              
-              //
-              // If no attempts left, hero dies
-              //
-              if (inst.attemptsRemaining <= 0) {
-                //
-                // Save references
-                //
-                const savedLevelIndicator = inst.levelIndicator
-                const savedSound = inst.sound
-                //
-                // Destroy hearts
-                //
-                destroyHearts(inst)
-                //
-                // Stop subtitle sound
-                //
-                Sound.stopSubtitleSound()
-                //
-                // Trigger death animation
-                //
-                Hero.death(inst.hero, () => {
-                  //
-                  // After death particles dispersed, minimal pause before life effects
-                  //
-                  k.wait(0.1, () => {
-                    //
-                    // Lower all level sounds
-                    //
-                    if (savedSound && savedSound.audioContext) {
-                      const ctx = savedSound.audioContext
-                      if (savedSound.ambientGain) {
-                        savedSound.ambientGain.gain.setValueAtTime(savedSound.ambientGain.gain.value, ctx.currentTime)
-                        savedSound.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                      }
-                    }
-                    Sound.fadeOutAllMusic()
-                    //
-                    // Increment life score and show all effects
-                    //
-                    const currentScore = get('lifeScore', 0)
-                    const newScore = currentScore + 1
-                    set('lifeScore', newScore)
-                    
-                    if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                      if (savedLevelIndicator.updateLifeScore) {
-                        savedLevelIndicator.updateLifeScore(newScore)
-                      }
-                      Sound.playLifeSound(k)
-                      const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                      flashLifeImageLevel2(k, savedLevelIndicator, originalColor, 0)
-                      createLifeScoreParticlesLevel2(k, savedLevelIndicator)
-                    }
-                    //
-                    // Wait 0.8 seconds for effects to be visible, then reload
-                    //
-                    k.wait(0.8, () => {
-                      k.go('level-time.2')
-                    })
-                  })
-                })
-                return
-              }
-            }
-          }
-          
-          //
-          // Add platform to platforms array so it can age and disappear
-          //
-          inst.platforms.push({
-            inst: inst.nextPlatform.inst,
-            index: inst.nextPlatform.index,
-            timeOffset: inst.nextPlatform.timeOffset,
-            isSafePlatform: inst.nextPlatform.isSafePlatform || false,
-            ageInSeconds: inst.nextPlatform.ageInSeconds,
-            maxDarkening: inst.nextPlatform.maxDarkening,
-            lastGlobalTime: inst.nextPlatform.lastGlobalTime
-          })
-          
-          //
-          // Destroy previous platform (including the first one)
-          //
-          const prevPlatformIndex = inst.platforms.length - 2
-          if (prevPlatformIndex >= 0) {
-            const prevPlatform = inst.platforms[prevPlatformIndex]
-            if (prevPlatform && !prevPlatform.inst.isDestroyed) {
-              TimePlatform.destroy(prevPlatform.inst)
-            }
-          }
-          
-          inst.currentPlatformIndex = inst.nextPlatform.index
-          inst.nextPlatform = null
-          //
-          // Create new next platform (stop 7 platforms before the final one)
-          //
-          if (inst.currentPlatformIndex < FINAL_PLATFORM_INDEX - 7) {
-            createNextPlatform(inst)
-          }
-          //
-          // Platform is unsafe but hero can stay on it
-          //
-          return
-        }
-        //
-        // Safe landing - make it current platform
+        // Mark as landed to prevent repeated checks
         //
         inst.nextPlatform.heroLanded = true
+        //
+        // Add platform to platforms array
+        //
         inst.platforms.push({
           inst: inst.nextPlatform.inst,
           index: inst.nextPlatform.index,
-          timeOffset: inst.nextPlatform.timeOffset,  // Keep the offset
+          timeOffset: inst.nextPlatform.timeOffset,
           isSafePlatform: inst.nextPlatform.isSafePlatform || false,
           ageInSeconds: inst.nextPlatform.ageInSeconds,
           maxDarkening: inst.nextPlatform.maxDarkening,
@@ -1408,7 +1268,8 @@ function createNextPlatform(inst) {
     sfx: sound,
     enableColorChange: true,  // Enable color change on landing
     levelIndicator,
-    currentLevel: 'level-time.2'
+    currentLevel: 'level-time.2',
+    heartSystem: inst  // Pass inst that contains attemptsRemaining, updateHearts, destroyHearts
   })
   
   inst.nextPlatform = {

@@ -43,7 +43,7 @@ const LEVEL_SUBTITLES = {
   'level-time.0': ['you are young and everything is new. time moves\n\nforward even when you stand still. this is the\n\nfirst thing you learn. you start to notice it\n\nslipping — and you start to run.', 'time0-pre', 14],
   'level-time.1': ['you are growing. you are learning. numbers begin\n\nto surround you. growing up means learning what you\n\ncan touch — and what you should leave alone. do not\n\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
-  'level-time.3': ['life consumes time while you hesitate.\n\nact too slow — and it will catch you.', 'time3-pre', 6],
+  'level-time.3': ['life consumes time while you hesitate. act too\n\nslow — and it will catch you. throw snow. move\n\nfast. everything happens at once.', 'time3-pre', 16],
   'level-touch.0': 'gather what crawls together to reach what stands above',
   'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
   'level-touch.2': 'jump to reveal the path - find what stands nearby'

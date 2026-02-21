@@ -9,6 +9,10 @@ const FONT_SIZE = 48
 const TIMER_DURATION = 3  // 3 seconds
 const PLATFORM_WIDTH = 140
 const PLATFORM_HEIGHT = 48
+//
+// Global variable to prevent multiple heart losses in same frame
+//
+let lastHeartLossTime = -1
 
 /**
  * Creates a time platform that disappears when timer reaches zero
@@ -29,10 +33,11 @@ const PLATFORM_HEIGHT = 48
  * @param {Object} [config.sfx] - Sound instance for audio effects
  * @param {boolean} [config.hidden=false] - If true, text is hidden initially
  * @param {boolean} [config.enableColorChange=false] - If true, platform changes color with each landing
+ * @param {Object} [config.heartSystem=null] - Heart system for level2 (contains attemptsRemaining, updateHearts, destroyHearts)
  * @returns {Object} Time platform instance
  */
 export function create(config) {
-  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, killOnOddSum = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false, levelIndicator = null, falling = false, fallTarget = 0 } = config
+  const { k, x, y, hero, isFake = false, duration = TIMER_DURATION, persistent = false, showSecondsOnly = false, initialTime = 0, killOnOne = false, killOnOddSum = false, staticTime = false, currentLevel = null, sfx = null, hidden = false, enableColorChange = false, levelIndicator = null, falling = false, fallTarget = 0, heartSystem = null } = config
   //
   // Calculate platform size based on format
   // For seconds-only (XX), use smaller width to fit only two digits
@@ -152,6 +157,8 @@ export function create(config) {
     wasGrounded: false,  // Track if hero was grounded last frame
     currentPlatformColor: null,  // Store current platform color (for enableColorChange)
     levelIndicator,
+    heartSystem,  // Heart system for level2 (contains attemptsRemaining, updateHearts, destroyHearts)
+    hasLostHeartThisLanding: false,  // Prevent multiple heart loss on same landing
     falling,  // Whether platform falls when hero lands
     fallTarget,  // Target Y position to fall to
     isFalling: false,  // Current falling state
@@ -281,10 +288,13 @@ export function onUpdate(inst) {
       isOnPlatform = inst.platform.isColliding(heroChar)
       isGrounded = heroChar.isGrounded()
       //
-      // Detect landing: hero was in air (not on this platform) and now lands on this platform
-      // Skip color change logic for falling platforms
+      // Check if this is a new landing (hero was not on platform last frame)
       //
-      if (inst.enableColorChange && !inst.falling && isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform)) {
+      const isNewLanding = isOnPlatform && isGrounded && !inst.wasOnPlatform
+      //
+      // Detect landing: hero was in air (not on this platform) and now lands on this platform
+      //
+      if (inst.enableColorChange && !inst.falling && isNewLanding) {
         //
         // Increment landing count and make platform more transparent
         //
@@ -294,34 +304,27 @@ export function onUpdate(inst) {
         // Each landing reduces opacity by 0.2, down to 0 after 5 landings
         //
         const opacityReduction = inst.landingCount * 0.2
-        const newOpacity = Math.max(1.0 - opacityReduction, 0)  // Minimum opacity of 0 (transparent)
+        const newOpacity = Math.max(1.0 - opacityReduction, 0)
         //
-        // Determine if platform is hostile based on current text
-        // Check the actual text value to determine hostility
+        // Determine if platform is hostile based on current text AT THE MOMENT OF LANDING
         //
         const currentText = inst.timerText.text
         let isHostile = false
         
-        if (inst.killOnOne) {
-          //
-          // Check if text contains "1"
-          //
+        if (inst.killOnOne && !inst.hidden) {
           isHostile = currentText.includes('1')
-        } else if (inst.killOnOddSum) {
-          //
-          // Check if digit sum is odd
-          //
+        } else if (inst.killOnOddSum && !inst.hidden) {
           const digits = currentText.replace(/:/g, '').split('').map(d => parseInt(d))
           const sum = digits.reduce((a, b) => a + b, 0)
           isHostile = sum % 2 === 1
         }
         //
-        // Determine platform color based on hostility
+        // Determine platform color based on hostility at landing moment
         //
         let targetColor
         if (isHostile) {
           //
-          // Hostile platforms become blue (killOnOne) or dark blue (killOnOddSum)
+          // Hostile platforms become blue
           //
           if (inst.killOnOne) {
             targetColor = inst.k.rgb(70, 130, 180)  // Steel blue for "1"
@@ -336,7 +339,7 @@ export function onUpdate(inst) {
           targetColor = inst.k.rgb(colorValue, colorValue, colorValue)
         }
         //
-        // Update text color and opacity (outline stays black but also fades)
+        // Update text color and opacity
         //
         inst.timerText.color = targetColor
         inst.timerText.opacity = newOpacity
@@ -348,115 +351,183 @@ export function onUpdate(inst) {
         //
         inst.currentPlatformColor = targetColor
         //
+        // If platform was hostile at landing, remove a heart (only for level2 with heartSystem)
+        //
+        if (isHostile && inst.killOnOddSum) {
+          //
+          // Get current time to prevent multiple heart losses
+          //
+          const currentTime = inst.k.time()
+          //
+          // Check if heart was already lost very recently (within 0.05 seconds)
+          //
+          if (currentTime - lastHeartLossTime >= 0.05) {
+            //
+            // Mark that heart was lost
+            //
+            inst.hasLostHeartThisLanding = true
+            lastHeartLossTime = currentTime
+            //
+            // If heartSystem is available (level2), remove a heart instead of death
+            //
+            if (inst.heartSystem && inst.heartSystem.attemptsRemaining > 0) {
+              inst.heartSystem.attemptsRemaining--
+              inst.heartSystem.updateHearts(inst.heartSystem)
+              //
+              // Play hit sound
+              //
+              if (inst.sfx) {
+                Sound.playLifeSound(inst.k)
+              }
+              //
+              // If no hearts left, then death
+              //
+              if (inst.heartSystem.attemptsRemaining <= 0) {
+                const savedSfx = inst.sfx
+                const savedLevelIndicator = inst.levelIndicator
+                const savedK = inst.k
+                const savedCurrentLevel = inst.currentLevel
+                
+                Sound.stopSubtitleSound()
+                Hero.death(inst.hero, () => {
+                  savedK.wait(0.1, () => {
+                    if (savedSfx && savedSfx.audioContext) {
+                      const ctx = savedSfx.audioContext
+                      if (savedSfx.ambientGain) {
+                        savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                        savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                      }
+                    }
+                    Sound.fadeOutAllMusic()
+                    
+                    const currentScore = get('lifeScore', 0)
+                    const newScore = currentScore + 1
+                    set('lifeScore', newScore)
+                    
+                    if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                      if (savedLevelIndicator.updateLifeScore) {
+                        savedLevelIndicator.updateLifeScore(newScore)
+                      }
+                      Sound.playLifeSound(savedK)
+                      const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                      flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                      createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+                    }
+                    
+                    inst.heartSystem.destroyHearts(inst.heartSystem)
+                    
+                    savedK.wait(0.8, () => {
+                      if (savedCurrentLevel) {
+                        savedK.go(savedCurrentLevel)
+                      }
+                    })
+                  })
+                })
+              }
+            } else if (!inst.heartSystem) {
+              //
+              // No heartSystem - original death behavior (for level1 with killOnOne)
+              //
+              const savedSfx = inst.sfx
+              const savedLevelIndicator = inst.levelIndicator
+              const savedK = inst.k
+              const savedCurrentLevel = inst.currentLevel
+              
+              Sound.stopSubtitleSound()
+              Hero.death(inst.hero, () => {
+                savedK.wait(0.1, () => {
+                  if (savedSfx && savedSfx.audioContext) {
+                    const ctx = savedSfx.audioContext
+                    if (savedSfx.ambientGain) {
+                      savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                      savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                    }
+                  }
+                  Sound.fadeOutAllMusic()
+                  
+                  const currentScore = get('lifeScore', 0)
+                  const newScore = currentScore + 1
+                  set('lifeScore', newScore)
+                  
+                  if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                    if (savedLevelIndicator.updateLifeScore) {
+                      savedLevelIndicator.updateLifeScore(newScore)
+                    }
+                    Sound.playLifeSound(savedK)
+                    const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                    flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                    createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+                  }
+                  
+                  savedK.wait(0.8, () => {
+                    if (savedCurrentLevel) {
+                      savedK.go(savedCurrentLevel)
+                    }
+                  })
+                })
+              })
+            }
+          }
+        }
+        //
+        // Handle killOnOne separately (for level1)
+        //
+        if (isHostile && inst.killOnOne && !inst.heartSystem) {
+          const savedSfx = inst.sfx
+          const savedLevelIndicator = inst.levelIndicator
+          const savedK = inst.k
+          const savedCurrentLevel = inst.currentLevel
+          
+          Sound.stopSubtitleSound()
+          Hero.death(inst.hero, () => {
+            savedK.wait(0.1, () => {
+              if (savedSfx && savedSfx.audioContext) {
+                const ctx = savedSfx.audioContext
+                if (savedSfx.ambientGain) {
+                  savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                  savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                }
+              }
+              Sound.fadeOutAllMusic()
+              
+              const currentScore = get('lifeScore', 0)
+              const newScore = currentScore + 1
+              set('lifeScore', newScore)
+              
+              if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                if (savedLevelIndicator.updateLifeScore) {
+                  savedLevelIndicator.updateLifeScore(newScore)
+                }
+                Sound.playLifeSound(savedK)
+                const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+              }
+              
+              savedK.wait(0.8, () => {
+                if (savedCurrentLevel) {
+                  savedK.go(savedCurrentLevel)
+                }
+              })
+            })
+          })
+        }
+        //
         // If opacity becomes 0 or landing count reaches 5, destroy the platform
         //
         if (newOpacity === 0 || inst.landingCount >= 5) {
           destroy(inst)
         }
       }
-      //
-      // Check killOnOne/killOnOddSum when hero is standing on platform
-      //
-      if (isOnPlatform && isGrounded && !inst.hero.isDying && !inst.hero.isAnnihilating) {
-        //
-        // Check killOnOne when hero is standing on platform
-        //
-        if (inst.killOnOne && !inst.hidden) {
-          const currentText = inst.timerText.text
-          if (currentText.includes('1')) {
-            const savedSfx = inst.sfx
-            const savedLevelIndicator = inst.levelIndicator
-            const savedK = inst.k
-            const savedCurrentLevel = inst.currentLevel
-            
-            Sound.stopSubtitleSound()
-            Hero.death(inst.hero, () => {
-              savedK.wait(0.1, () => {
-                if (savedSfx && savedSfx.audioContext) {
-                  const ctx = savedSfx.audioContext
-                  if (savedSfx.ambientGain) {
-                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                  }
-                }
-                Sound.fadeOutAllMusic()
-                
-                const currentScore = get('lifeScore', 0)
-                const newScore = currentScore + 1
-                set('lifeScore', newScore)
-                
-                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                  if (savedLevelIndicator.updateLifeScore) {
-                    savedLevelIndicator.updateLifeScore(newScore)
-                  }
-                  Sound.playLifeSound(savedK)
-                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                  flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
-                  createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
-                }
-                
-                savedK.wait(0.8, () => {
-                  if (savedCurrentLevel) {
-                    savedK.go(savedCurrentLevel)
-                  }
-                })
-              })
-            })
-          }
-        }
-        //
-        // Check killOnOddSum when hero is standing on platform
-        //
-        if (inst.killOnOddSum && !inst.hidden) {
-          const currentText = inst.timerText.text
-          const digits = currentText.split('').filter(c => c >= '0' && c <= '9')
-          const sum = digits.reduce((acc, d) => acc + parseInt(d), 0)
-          
-          if (sum % 2 === 1) {
-            const savedSfx = inst.sfx
-            const savedLevelIndicator = inst.levelIndicator
-            const savedK = inst.k
-            const savedCurrentLevel = inst.currentLevel
-            
-            Sound.stopSubtitleSound()
-            Hero.death(inst.hero, () => {
-              savedK.wait(0.1, () => {
-                if (savedSfx && savedSfx.audioContext) {
-                  const ctx = savedSfx.audioContext
-                  if (savedSfx.ambientGain) {
-                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                  }
-                }
-                Sound.fadeOutAllMusic()
-                
-                const currentScore = get('lifeScore', 0)
-                const newScore = currentScore + 1
-                set('lifeScore', newScore)
-                
-                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                  if (savedLevelIndicator.updateLifeScore) {
-                    savedLevelIndicator.updateLifeScore(newScore)
-                  }
-                  Sound.playLifeSound(savedK)
-                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                  flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
-                  createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
-                }
-                
-                savedK.wait(0.8, () => {
-                  if (savedCurrentLevel) {
-                    savedK.go(savedCurrentLevel)
-                  }
-                })
-              })
-            })
-          }
-        }
-      }
       
       inst.wasOnPlatform = isOnPlatform
       inst.wasGrounded = isGrounded
+      //
+      // Reset heart loss flag when hero leaves platform
+      //
+      if (!isOnPlatform) {
+        inst.hasLostHeartThisLanding = false
+      }
     }
   }
   //
@@ -509,7 +580,10 @@ export function onUpdate(inst) {
     const heroChar = inst.hero.character
     const isOnPlatform = inst.platform.isColliding(heroChar)
     const isGrounded = heroChar.isGrounded()
-    
+    //
+    // Check if this is a new landing
+    //
+    const isNewLanding = isOnPlatform && isGrounded && !inst.wasOnPlatform
     //
     // Activate timer when hero is on platform (for non-persistent platforms)
     //
@@ -521,7 +595,7 @@ export function onUpdate(inst) {
     // Detect landing: hero was in air (not on this platform) and now lands on this platform
     // Used for color change effect (if enabled)
     //
-    if (isOnPlatform && isGrounded && (!inst.wasGrounded || !inst.wasOnPlatform) && inst.enableColorChange) {
+    if (isNewLanding && (!inst.wasGrounded || !inst.wasOnPlatform) && inst.enableColorChange) {
       //
       // Increment landing count and make platform more transparent
       //
@@ -595,6 +669,12 @@ export function onUpdate(inst) {
     
     inst.wasOnPlatform = isOnPlatform
     inst.wasGrounded = isGrounded
+    //
+    // Reset heart loss flag when hero leaves platform
+    //
+    if (!isOnPlatform) {
+      inst.hasLostHeartThisLanding = false
+    }
   }
   //
   // Update timer if active
@@ -893,25 +973,7 @@ function handleFallingPlatform(inst) {
  */
 export function updatePlatformColorByHostility(inst, text) {
   //
-  // Check if hero is currently on this platform
-  //
-  let isHeroOnPlatform = false
-  if (inst.hero && inst.hero.character && !inst.isDestroyed) {
-    const heroChar = inst.hero.character
-    isHeroOnPlatform = inst.platform.isColliding(heroChar) && heroChar.isGrounded()
-  }
-  //
-  // If hero is on platform, force gray color (non-hostile appearance)
-  //
-  if (isHeroOnPlatform) {
-    const colorValue = inst.initialColor
-    const grayColor = inst.k.rgb(colorValue, colorValue, colorValue)
-    inst.timerText.color = grayColor
-    inst.currentPlatformColor = grayColor
-    return
-  }
-  //
-  // Hero is not on platform - determine color by hostility
+  // Determine hostility first
   //
   let isHostile = false
   
@@ -927,6 +989,23 @@ export function updatePlatformColorByHostility(inst, text) {
     const digits = text.replace(/:/g, '').split('').map(d => parseInt(d))
     const sum = digits.reduce((a, b) => a + b, 0)
     isHostile = sum % 2 === 1
+  }
+  //
+  // For both modes, check if hero is on platform
+  // If hero is on platform, force gray color (non-hostile appearance)
+  //
+  let isHeroOnPlatform = false
+  if (inst.hero && inst.hero.character && !inst.isDestroyed) {
+    const heroChar = inst.hero.character
+    isHeroOnPlatform = inst.platform.isColliding(heroChar) && heroChar.isGrounded()
+  }
+  
+  if (isHeroOnPlatform) {
+    const colorValue = inst.initialColor
+    const grayColor = inst.k.rgb(colorValue, colorValue, colorValue)
+    inst.timerText.color = grayColor
+    inst.currentPlatformColor = grayColor
+    return
   }
   //
   // Determine platform color based on hostility

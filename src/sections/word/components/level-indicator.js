@@ -1,8 +1,10 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import { get } from '../../../utils/progress.js'
+import * as Hero from '../../../components/hero.js'
 
 /**
- * Creates word section level indicator (letters "WORDS")
+ * Creates word section level indicator (letters "WORDS") with hero and life icons
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.levelNumber - Current level number (1-5)
@@ -10,7 +12,7 @@ import { getRGB } from '../../../utils/helper.js'
  * @param {string} config.inactiveColor - Color for future levels (hex)
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
- * @returns {Array} Array of letter objects
+ * @returns {Object} Object with letterObjects, smallHero, lifeImage, and score update methods
  */
 export function create(config) {
   const {
@@ -26,9 +28,10 @@ export function create(config) {
   const fontSize = 48
   const letterSpacing = -5
   const outlineThickness = 2
+  const topMargin = 40
   
   const startX = sideWallWidth + 20
-  const y = topPlatformHeight - fontSize - 10
+  const y = topPlatformHeight - fontSize / 2 - topMargin
   
   const letterObjects = []
   
@@ -80,7 +83,151 @@ export function create(config) {
     
     letterObjects.push(mainLetter)
   })
-  
-  return letterObjects
+  //
+  // Create small hero icon and life.png image in top right corner
+  //
+  const smallHeroSize = 78
+  const lifeImageHeight = 70
+  const spacingBetween = 110
+  const lifeImageOriginalHeight = 1197
+  const rightMargin = 90
+  const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 7
+  //
+  // Check completed sections for hero parts (mouth, arms)
+  //
+  const isTouchComplete = get('touch', false)
+  //
+  // Position hero and life in top right corner
+  //
+  const lifeImageX = k.width() - sideWallWidth - rightMargin - lifeImageHeight / 2
+  const smallHeroX = lifeImageX - spacingBetween - smallHeroSize / 2
+  const smallHero = Hero.create({
+    k,
+    x: smallHeroX,
+    y: smallHeroY,
+    type: Hero.HEROES.HERO,
+    controllable: false,
+    isStatic: true,
+    scale: 2.6,
+    bodyColor: activeColor,
+    outlineColor: CFG.visual.colors.outline,
+    addMouth: true,
+    addArms: isTouchComplete
+  })
+  smallHero.character.fixed = true
+  smallHero.character.z = CFG.visual.zIndex.ui
+  //
+  // Load and add life.png image
+  //
+  const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3
+  const lifeImageData = {
+    sprite: null,
+    pos: { x: lifeImageX, y: smallHeroY }
+  }
+  k.loadSprite('life', '/life.png').then(() => {
+    lifeImageData.sprite = k.add([
+      k.sprite('life'),
+      k.pos(lifeImageX, smallHeroY),
+      k.scale(lifeImageScale),
+      k.anchor('center'),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+  })
+  //
+  // Get score values from localStorage
+  //
+  const heroScore = get('heroScore', 0)
+  const lifeScore = get('lifeScore', 0)
+  const scoreOffsetX = 5
+  const scoreOffsetY = 10
+  const scoreOutlineThickness = 2
+  const scoreOffsets = [
+    [-scoreOutlineThickness, -scoreOutlineThickness],
+    [0, -scoreOutlineThickness],
+    [scoreOutlineThickness, -scoreOutlineThickness],
+    [-scoreOutlineThickness, 0],
+    [scoreOutlineThickness, 0],
+    [-scoreOutlineThickness, scoreOutlineThickness],
+    [0, scoreOutlineThickness],
+    [scoreOutlineThickness, scoreOutlineThickness]
+  ]
+  const heroScoreOutlines = []
+  scoreOffsets.forEach(([dx, dy]) => {
+    const outline = k.add([
+      k.text(heroScore.toString(), {
+        size: fontSize,
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+      }),
+      k.pos(smallHeroX + smallHeroSize / 2 + scoreOffsetX + dx, smallHeroY + scoreOffsetY + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+    heroScoreOutlines.push(outline)
+  })
+  const heroScoreText = k.add([
+    k.text(heroScore.toString(), {
+      size: fontSize,
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+    }),
+    k.pos(smallHeroX + smallHeroSize / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
+    k.anchor('left'),
+    k.color(255, 255, 255),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui)
+  ])
+  const lifeScoreOutlines = []
+  scoreOffsets.forEach(([dx, dy]) => {
+    const outline = k.add([
+      k.text(lifeScore.toString(), {
+        size: fontSize,
+        font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+      }),
+      k.pos(lifeImageX + lifeImageHeight / 2 + scoreOffsetX + dx, smallHeroY + scoreOffsetY + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+    lifeScoreOutlines.push(outline)
+  })
+  const lifeScoreText = k.add([
+    k.text(lifeScore.toString(), {
+      size: fontSize,
+      font: CFG.visual.fonts.thinFull.replace(/'/g, '')
+    }),
+    k.pos(lifeImageX + lifeImageHeight / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
+    k.anchor('left'),
+    k.color(255, 255, 255),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui)
+  ])
+  return {
+    letterObjects,
+    smallHero,
+    lifeImage: lifeImageData,
+    heroScoreText,
+    lifeScoreText,
+    lifeScoreOutlines,
+    heroScoreOutlines,
+    updateHeroScore: (newScore) => {
+      heroScoreText.text = newScore.toString()
+      heroScoreOutlines.forEach(outline => {
+        if (outline.exists && outline.exists()) {
+          outline.text = newScore.toString()
+        }
+      })
+    },
+    updateLifeScore: (newScore) => {
+      lifeScoreText.text = newScore.toString()
+      lifeScoreOutlines.forEach(outline => {
+        if (outline.exists && outline.exists()) {
+          outline.text = newScore.toString()
+        }
+      })
+    }
+  }
 }
 

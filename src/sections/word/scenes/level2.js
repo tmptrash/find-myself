@@ -1,13 +1,15 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as Sound from '../../../utils/sound.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 //
 // Death messages (shown randomly on death)
@@ -31,9 +33,9 @@ const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
 // Hero spawn positions (in pixels)
 //
 const HERO_SPAWN_X = 230    // 12% of 1920
-const HERO_SPAWN_Y = 691    // 64% of 1080
+const HERO_SPAWN_Y = 705    // Adjusted to stand on platform
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
-const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
+const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 
 /**
  * Shows a random death message and then restarts the level
@@ -41,7 +43,12 @@ const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
  * @param {Object} hero - Hero instance
  * @param {Object} bladesInst - Blades instance that was hit
  */
-function showDeathMessage(k, hero, bladesInst) {
+function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
+  const currentLifeScore = get('lifeScore', 0)
+  const newLifeScore = currentLifeScore + 1
+  set('lifeScore', newLifeScore)
+  levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
+  playLifeDeathEffects(k, levelIndicator)
   //
   // Select random message
   //
@@ -205,10 +212,10 @@ export function sceneLevel2(k) {
     ]
     
     // Initialize level with heroes and gaps in platform
-    const { sound, hero, antiHero } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
       k,
       levelName: 'level-word.2',
-      levelNumber: 3,  // Show 3 red blades in indicator
+      levelNumber: 3,
       nextLevel: 'level-word.3',
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
@@ -221,7 +228,20 @@ export function sceneLevel2(k) {
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
-      platformGap: platformGaps
+      platformGap: platformGaps,
+      onAnnihilation: () => {
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(k, 'level-word.2', levelTime, levelIndicator)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 2 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
+        sound && Sound.playVictorySound(sound)
+        k.wait(1.3, () => {
+          createLevelTransition(k, 'level-word.2')
+        })
+      }
     })
     
     //
@@ -241,7 +261,7 @@ export function sceneLevel2(k) {
       k,
       hero,
       currentLevel: 'level-word.2',
-      onDeath: () => showDeathMessage(k, hero, null),  // Use showDeathMessage for killer letter deaths
+      onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
@@ -281,17 +301,6 @@ export function sceneLevel2(k) {
     k.onUpdate(() => {
       WordGrass.onUpdate(wordGrass)
     })
-    //
-    // Create FPS counter
-    //
-    const fpsCounter = FpsCounter.create({ k })
-    //
-    // Update FPS counter
-    //
-    k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
-    })
-    
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
     
@@ -304,7 +313,7 @@ export function sceneLevel2(k) {
       color: CFG.visual.colors.platform,
       currentLevel: 'level-word.2',
       sfx: sound,
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades)
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
     })
     
     // Create second moving platform (before second blade)
@@ -316,7 +325,7 @@ export function sceneLevel2(k) {
       color: CFG.visual.colors.platform,
       currentLevel: 'level-word.2',
       sfx: sound,
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades)
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
     })
     
     // Create first blade
@@ -326,7 +335,7 @@ export function sceneLevel2(k) {
       y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, blades1),
+      onHit: () => showDeathMessage(k, hero, blades1, levelIndicator, sound),
       sfx: sound
     })
     
@@ -337,7 +346,7 @@ export function sceneLevel2(k) {
       y: platformY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, blades2),
+      onHit: () => showDeathMessage(k, hero, blades2, levelIndicator, sound),
       sfx: sound
     })
     

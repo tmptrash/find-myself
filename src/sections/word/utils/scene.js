@@ -5,9 +5,12 @@ import * as Hero from '../../../components/hero.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import * as LevelIndicator from '../components/level-indicator.js'
-import { get } from '../../../utils/progress.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
+import { get, set } from '../../../utils/progress.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
+const CORNER_RADIUS = 20  // Radius for rounded corners
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -93,7 +96,8 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
  * @param {Number} [config.heroY] - Hero Y position in pixels
  * @param {Number} [config.antiHeroX] - Anti-hero X position in pixels
  * @param {Number} [config.antiHeroY] - Anti-hero Y position in pixels
- * @returns {Object} Object with sound, hero, antiHero instances
+ * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
+ * @returns {Object} Object with sound, hero, antiHero, levelIndicator, fpsCounter
  */
 export function initScene(config) {
   const { 
@@ -116,7 +120,8 @@ export function initScene(config) {
     heroX = null,
     heroY = null,
     antiHeroX = null,
-    antiHeroY = null
+    antiHeroY = null,
+    onAnnihilation = null
   } = config
   
   // Use word section colors if not explicitly provided
@@ -148,15 +153,21 @@ export function initScene(config) {
   // Add platforms (unless skipped)
   if (!skipPlatforms) {
     addPlatforms(k, pfColor, bottomPlatformHeight, topPlatformHeight, platformGap)
+    //
+    // Create rounded corners
+    //
+    createRoundedCorners(k, pfColor)
   }
   
   // Setup camera
   setupCamera(k)
   
+  //
   // Add level indicator if levelNumber provided
+  //
+  let levelIndicator = null
   if (levelNumber && topPlatformHeight && sideWallWidth) {
-    // Use word indicator for all levels
-    LevelIndicator.create({
+    levelIndicator = LevelIndicator.create({
       k,
       levelNumber,
       activeColor: CFG.visual.colors.levelIndicator.active,
@@ -165,6 +176,22 @@ export function initScene(config) {
       sideWallWidth
     })
   }
+  //
+  // Create FPS counter, timer and target time (aligned with WORDS and small hero)
+  //
+  const uiTopY = topPlatformHeight ? topPlatformHeight - 50 : 55
+  const fpsCounter = FpsCounter.create({ 
+    k,
+    showTimer: true,
+    targetTime: levelName && CFG.gameplay.speedBonusTime ? CFG.gameplay.speedBonusTime[levelName] : null,
+    topY: uiTopY
+  })
+  //
+  // Update FPS counter
+  //
+  k.onUpdate(() => {
+    FpsCounter.onUpdate(fpsCounter)
+  })
   
   // Level titles removed for cleaner visual experience
   // if (levelTitleColor) {
@@ -186,14 +213,107 @@ export function initScene(config) {
   let hero = null
   let antiHero = null
   
+  //
   // Create heroes if requested
+  //
   if (createHeroes && levelName && heroX !== null && heroY !== null && antiHeroX !== null && antiHeroY !== null) {
-    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor)
+    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor, onAnnihilation)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
   
-  return { sound, hero, antiHero }
+  return { sound, hero, antiHero, levelIndicator, fpsCounter }
+}
+
+/**
+ * Check if player earned speed bonus for completing level faster than target
+ * @param {Object} k - Kaplay instance
+ * @param {string} levelName - Current level name (e.g. 'level-word.0')
+ * @param {number} levelTime - Time taken to complete level (seconds)
+ * @param {Object} levelIndicator - Level indicator instance
+ * @returns {boolean} True if speed bonus earned
+ */
+export function checkSpeedBonus(k, levelName, levelTime, levelIndicator) {
+  const targetTime = CFG.gameplay.speedBonusTime && CFG.gameplay.speedBonusTime[levelName]
+  if (!targetTime) return false
+  return levelTime < targetTime
+}
+
+/**
+ * Play life sound, flash life image and create particles when hero dies
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage
+ */
+export function playLifeDeathEffects(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  Sound.playLifeSound(k)
+  const originalColor = levelIndicator.lifeImage.sprite.color
+  flashLifeImageWord(k, levelIndicator, originalColor, 0)
+  createLifeScoreParticlesWord(k, levelIndicator)
+}
+
+/**
+ * Flash life image red/white when hero dies
+ */
+function flashLifeImageWord(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  if (count >= 20) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+    return
+  }
+  if (count % 2 === 0) {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
+  k.wait(0.05, () => flashLifeImageWord(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Create red particles around life image when hero dies
+ */
+function createLifeScoreParticlesWord(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.lifeImage || !levelIndicator.lifeImage.sprite || !levelIndicator.lifeImage.sprite.exists()) {
+    return
+  }
+  const lifeImageX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeImageY = levelIndicator.lifeImage.sprite.pos.y
+  const particleCount = 15
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount
+    const speed = 80 + Math.random() * 40
+    const lifetime = 0.8 + Math.random() * 0.4
+    const size = 4 + Math.random() * 4
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeImageX, lifeImageY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      age += dt
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      if (age >= lifetime && particle.exists && particle.exists()) {
+        k.destroy(particle)
+      }
+    })
+  }
 }
 
 /**
@@ -290,15 +410,17 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
 /**
  * Create hero and anti-hero for a level
  * @param {Object} k - Kaplay instance
- * @param {string} levelName - Level name (e.g., 'level-word.1')
  * @param {Object} sound - Sound instance
- * @param {string} nextLevel - Next level name for annihilation (deprecated, kept for compatibility)
- * @param {Number} [customHeroX] - Custom hero X position (overrides config)
- * @param {Number} [customHeroY] - Custom hero Y position (overrides config)
+ * @param {string} currentLevel - Level name (e.g., 'level-word.1')
+ * @param {number} heroX - Hero X position
+ * @param {number} heroY - Hero Y position
+ * @param {number} antiHeroX - Anti-hero X position
+ * @param {number} antiHeroY - Anti-hero Y position
  * @param {string} [platformColor] - Platform color for dust particles
+ * @param {Function} [onAnnihilation] - Callback when hero meets anti-hero
  * @returns {Object} {hero, antiHero}
  */
-function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY, platformColor = null) {
+function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY, platformColor = null, onAnnihilation = null) {
   //
   // Use platform color for dust particles (black platforms)
   //
@@ -335,11 +457,12 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     type: Hero.HEROES.HERO,
     sfx: sound,
     antiHero,
-    currentLevel,  // Current level for transition system
+    currentLevel,
+    onAnnihilation: onAnnihilation || null,
     dustColor,
-    addMouth: isWordComplete,  // Add mouth if word section is complete
-    bodyColor: heroBodyColor,  // Yellow if time complete, default otherwise
-    addArms: isTouchComplete  // Add arms if touch section is complete
+    addMouth: isWordComplete,
+    bodyColor: heroBodyColor,
+    addArms: isTouchComplete
   })
   
   hero.character.use("player")
@@ -396,4 +519,83 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
   }
   
   return title
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius
+ * @param {string} color - Platform color in hex format
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = radius
+  canvas.height = radius
+  const ctx = canvas.getContext('2d')
+  //
+  // Draw L-shaped corner with rounded inner angle
+  //
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, radius, radius)
+  //
+  // Cut out top-right quarter circle to create rounded inner corner
+  //
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(radius, radius, radius, 0, Math.PI * 2)
+  ctx.fill()
+  
+  return canvas.toDataURL()
+}
+
+/**
+ * Creates rounded corners for game area to soften sharp edges where platforms meet
+ * @param {Object} k - Kaplay instance
+ * @param {string} platformColor - Platform color in hex format
+ */
+export function createRoundedCorners(k, platformColor) {
+  const radius = CORNER_RADIUS
+  const sideWallWidth = 192
+  const topPlatformHeight = 360
+  const bottomPlatformHeight = 360
+  //
+  // Create corner sprite
+  //
+  const cornerDataURL = createRoundedCornerSprite(radius, platformColor)
+  k.loadSprite('word-corner-sprite', cornerDataURL)
+  //
+  // Top-left corner (rotate 0°)
+  //
+  k.add([
+    k.sprite('word-corner-sprite'),
+    k.pos(sideWallWidth, topPlatformHeight),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite('word-corner-sprite'),
+    k.pos(k.width() - sideWallWidth, topPlatformHeight),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-left corner (rotate 270°)
+  //
+  k.add([
+    k.sprite('word-corner-sprite'),
+    k.pos(sideWallWidth, k.height() - bottomPlatformHeight),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-right corner (rotate 180°)
+  //
+  k.add([
+    k.sprite('word-corner-sprite'),
+    k.pos(k.width() - sideWallWidth, k.height() - bottomPlatformHeight),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
 }

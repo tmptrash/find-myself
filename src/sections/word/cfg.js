@@ -56,6 +56,19 @@ export const WORD_CFG = {
       intervalMax: 35,    // Maximum seconds between glints
       duration: 0.8       // Duration of light glint effect (seconds)
     }
+  },
+  gameplay: {
+    //
+    // Speed bonus time targets for each level (seconds)
+    // Player gets bonus point if completing level faster than this
+    //
+    speedBonusTime: {
+      'level-word.0': 10,   // Level 0
+      'level-word.1': 25,   // Level 1
+      'level-word.2': 30,   // Level 2
+      'level-word.3': 35,   // Level 3
+      'level-word.4': 40    // Level 4
+    }
   }
 }
 //

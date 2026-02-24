@@ -1,12 +1,14 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { getProgress, set } from '../../../utils/progress.js'
+import { getProgress, get, set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as Sound from '../../../utils/sound.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 //
 // Death messages (shown randomly on death)
@@ -32,9 +34,9 @@ const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
 // Hero spawn positions (in pixels)
 //
 const HERO_SPAWN_X = 230    // 12% of 1920
-const HERO_SPAWN_Y = 691    // 64% of 1080
+const HERO_SPAWN_Y = 705    // Adjusted to stand on platform (1080 - 360 - 15 for character height)
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
-const ANTIHERO_SPAWN_Y = 691   // 64% of 1080
+const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 const INSTRUCTIONS_INITIAL_DELAY = 1.0  // Delay before instructions appear
 const INSTRUCTIONS_FADE_IN_DURATION = 0.8
 const INSTRUCTIONS_HOLD_DURATION = 4.0
@@ -89,10 +91,10 @@ export function sceneLevel0(k) {
     //
     const shouldShowIntro = isFirstRun && !introShownInSession
     
-    const { sound, hero } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
       k,
       levelName: 'level-word.0',
-      levelNumber: 1,  // Show 1 red blade in indicator
+      levelNumber: 1,
       nextLevel: 'level-word.1',
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
@@ -104,7 +106,20 @@ export function sceneLevel0(k) {
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
-      antiHeroY: ANTIHERO_SPAWN_Y
+      antiHeroY: ANTIHERO_SPAWN_Y,
+      onAnnihilation: () => {
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(k, 'level-word.0', levelTime, levelIndicator)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 2 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
+        sound && Sound.playVictorySound(sound)
+        k.wait(1.3, () => {
+          createLevelTransition(k, 'level-word.0')
+        })
+      }
     })
     
     //
@@ -153,7 +168,7 @@ export function sceneLevel0(k) {
       k,
       hero,
       currentLevel: 'level-word.0',
-      onDeath: () => showDeathMessage(k, hero, null),  // Use showDeathMessage for killer letter deaths
+      onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
@@ -166,17 +181,6 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    //
-    // Create FPS counter
-    //
-    const fpsCounter = FpsCounter.create({ k })
-    //
-    // Update FPS counter
-    //
-    k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
-    })
-    
     //
     // Calculate positions
     //
@@ -206,7 +210,7 @@ export function sceneLevel0(k) {
       y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, blades1),
+      onHit: () => showDeathMessage(k, hero, blades1, levelIndicator, sound),
       sfx: sound,
       bladeCount: 2,
       zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
@@ -222,7 +226,7 @@ export function sceneLevel0(k) {
       y: platformY - 8,  // Lower by 2px
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, blades2),
+      onHit: () => showDeathMessage(k, hero, blades2, levelIndicator, sound),
       sfx: sound,
       bladeCount: 2,
       zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
@@ -303,7 +307,7 @@ export function sceneLevel0(k) {
           y: platformY - 8,  // Lower by 2px
           hero,
           orientation: Blades.ORIENTATIONS.FLOOR,
-          onHit: () => showDeathMessage(k, hero, trapBlades),
+          onHit: () => showDeathMessage(k, hero, trapBlades, levelIndicator, sound),
           sfx: sound,
           bladeCount: 2,
           zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
@@ -323,8 +327,18 @@ export function sceneLevel0(k) {
  * @param {Object} k - Kaplay instance
  * @param {Object} hero - Hero instance
  * @param {Object} bladesInst - Blades instance that was hit
+ * @param {Object} [levelIndicator] - Level indicator for life score update
+ * @param {Object} [sound] - Sound instance for effects
  */
-function showDeathMessage(k, hero, bladesInst) {
+function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
+  //
+  // Increment life score and update display
+  //
+  const currentLifeScore = get('lifeScore', 0)
+  const newLifeScore = currentLifeScore + 1
+  set('lifeScore', newLifeScore)
+  levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
+  playLifeDeathEffects(k, levelIndicator)
   //
   // Select random message
   //

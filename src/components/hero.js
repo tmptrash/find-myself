@@ -4,12 +4,15 @@ import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
 //
-// Collision box parameters
+// Collision box parameters (extends to visual feet to eliminate ground gap)
 //
 const COLLISION_WIDTH = 10
 const COLLISION_HEIGHT = 27
 const COLLISION_OFFSET_X = 0
-const COLLISION_OFFSET_Y = 0
+//
+// Shift collision down so bottom aligns with sprite feet (scale 3: 16px * 3 = 48)
+//
+const COLLISION_OFFSET_Y = -1
 //
 // Hero parameters
 //

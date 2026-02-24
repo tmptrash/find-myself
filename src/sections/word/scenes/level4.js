@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
 import * as Hero from '../../../components/hero.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -7,8 +7,10 @@ import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as Sound from '../../../utils/sound.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -21,9 +23,9 @@ const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
 // Hero spawn positions (in pixels)
 //
 const HERO_SPAWN_X_BASE = 576   // 30% of 1920 (base position before shift)
-const HERO_SPAWN_Y = 691        // 64% of 1080
+const HERO_SPAWN_Y = 705        // Adjusted to stand on platform
 const ANTIHERO_SPAWN_X = 1690   // 88% of 1920
-const ANTIHERO_SPAWN_Y = 691    // 64% of 1080
+const ANTIHERO_SPAWN_Y = 705    // Adjusted to stand on platform
 
 //
 // Death messages for level 4
@@ -42,8 +44,18 @@ const DEATH_MESSAGES = [
  * @param {Object} hero - Hero instance
  * @param {Object} bladesInst - Blades instance (optional)
  * @param {Object} bladeArmInst - Blade arm instance (optional)
+ * @param {Object} [levelIndicator] - Level indicator for life score update
+ * @param {Object} [sound] - Sound instance for effects
  */
-function showDeathMessage(k, hero, bladesInst, bladeArmInst = null) {
+function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicator = null, sound = null) {
+  //
+  // Increment life score and update display
+  //
+  const currentLifeScore = get('lifeScore', 0)
+  const newLifeScore = currentLifeScore + 1
+  set('lifeScore', newLifeScore)
+  levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
+  playLifeDeathEffects(k, levelIndicator)
   //
   // Select random message
   //
@@ -175,10 +187,10 @@ export function sceneLevel4(k) {
     ]
     
     // Initialize level with heroes and TWO gaps in platform
-    const { sound, hero, antiHero } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
       k,
       levelName: 'level-word.4',
-      levelNumber: 5,  // Show 5 red blades in indicator (all red)
+      levelNumber: 5,
       nextLevel: 'word-complete',
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
@@ -191,7 +203,20 @@ export function sceneLevel4(k) {
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
-      platformGap: platformGaps
+      platformGap: platformGaps,
+      onAnnihilation: () => {
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(k, 'level-word.4', levelTime, levelIndicator)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 2 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
+        sound && Sound.playVictorySound(sound)
+        k.wait(1.3, () => {
+          createLevelTransition(k, 'level-word.4')
+        })
+      }
     })
     
     //
@@ -216,7 +241,7 @@ export function sceneLevel4(k) {
       hero,
       currentLevel: 'level-word.4',
       sfx: sound,
-      onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst)  // Custom death callback
+      onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst, levelIndicator, sound)
     })
     
     //
@@ -231,7 +256,7 @@ export function sceneLevel4(k) {
         // Stop blade arm movement
         //
         bladeArm.heroIsDead = true
-        showDeathMessage(k, hero, null, bladeArm)
+        showDeathMessage(k, hero, null, bladeArm, levelIndicator, sound)
       },
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
@@ -272,17 +297,6 @@ export function sceneLevel4(k) {
     k.onUpdate(() => {
       WordGrass.onUpdate(wordGrass)
     })
-    //
-    // Create FPS counter
-    //
-    const fpsCounter = FpsCounter.create({ k })
-    //
-    // Update FPS counter
-    //
-    k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
-    })
-    
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
     
@@ -297,7 +311,7 @@ export function sceneLevel4(k) {
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
       sfx: sound,
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm)  // Custom death callback
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound)
     })
     
     // Create second normal moving platform (timer-based mode)
@@ -312,7 +326,7 @@ export function sceneLevel4(k) {
       autoOpen: false,  // Triggered by hero proximity
       sfx: sound,
       raiseTimeout: 6.0,  // Close 1 second later than default (4 seconds)
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm)  // Custom death callback
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound)
     })
     //
     // Create static blades after first pit to prevent jumping over
@@ -329,7 +343,7 @@ export function sceneLevel4(k) {
       y: staticBladesY,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades, bladeArm),
+      onHit: () => showDeathMessage(k, hero, staticBlades, bladeArm, levelIndicator, sound),
       sfx: sound,
       color: CFG.visual.colors.blades,
       disableAnimation: true  // Disable vibration and glint
@@ -353,7 +367,7 @@ export function sceneLevel4(k) {
       y: staticBlades2Y,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades2, bladeArm),
+      onHit: () => showDeathMessage(k, hero, staticBlades2, bladeArm, levelIndicator, sound),
       sfx: sound,
       color: CFG.visual.colors.blades,
       disableAnimation: true  // Disable vibration and glint

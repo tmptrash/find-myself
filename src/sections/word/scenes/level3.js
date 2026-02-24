@@ -1,13 +1,14 @@
 import { CFG } from '../cfg.js'
-import { initScene } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -40,7 +41,12 @@ const DEATH_MESSAGES = [
  * @param {Object} hero - Hero instance
  * @param {Object} bladesInst - Blades instance that was hit
  */
-function showDeathMessage(k, hero, bladesInst) {
+function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
+  const currentLifeScore = get('lifeScore', 0)
+  const newLifeScore = currentLifeScore + 1
+  set('lifeScore', newLifeScore)
+  levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
+  playLifeDeathEffects(k, levelIndicator)
   //
   // Select random message
   //
@@ -157,10 +163,10 @@ export function sceneLevel3(k) {
     //
     set('lastLevel', 'level-word.3')
     // Initialize level with heroes (skip standard platforms)
-    const { sound, hero, antiHero } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
       k,
       levelName: 'level-word.3',
-      levelNumber: 4,  // Show 4 red blades in indicator
+      levelNumber: 4,
       nextLevel: 'level-word.4',
       skipPlatforms: true,
       levelTitle: "words like blades",
@@ -173,7 +179,20 @@ export function sceneLevel3(k) {
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
-      antiHeroY: ANTIHERO_SPAWN_Y
+      antiHeroY: ANTIHERO_SPAWN_Y,
+      onAnnihilation: () => {
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(k, 'level-word.3', levelTime, levelIndicator)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 2 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
+        sound && Sound.playVictorySound(sound)
+        k.wait(1.3, () => {
+          createLevelTransition(k, 'level-word.3')
+        })
+      }
     })
     
     // Create custom platforms with pit in the middle
@@ -186,7 +205,7 @@ export function sceneLevel3(k) {
       k,
       hero,
       currentLevel: 'level-word.3',
-      onDeath: () => showDeathMessage(k, hero, null),  // Use showDeathMessage for killer letter deaths
+      onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,
@@ -217,17 +236,6 @@ export function sceneLevel3(k) {
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    //
-    // Create FPS counter
-    //
-    const fpsCounter = FpsCounter.create({ k })
-    //
-    // Update FPS counter
-    //
-    k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
-    })
-    
     // Create bottom of the pit (platform at pit depth)
     const heroHeight = CFG.visual.screen.height * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
@@ -273,7 +281,7 @@ export function sceneLevel3(k) {
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => {
         blades1.blade.opacity = 1
-        Hero.death(hero, () => k.go("level-word.3"))
+        showDeathMessage(k, hero, blades1, levelIndicator, sound)
       },
       sfx: sound,
       disableAnimation: true,  // Disable vibration and glint for moving blades
@@ -291,7 +299,7 @@ export function sceneLevel3(k) {
       orientation: Blades.ORIENTATIONS.CEILING,
       onHit: () => {
         blades2.blade.opacity = 1
-        Hero.death(hero, () => k.go("level-word.3"))
+        showDeathMessage(k, hero, blades2, levelIndicator, sound)
       },
       sfx: sound,
       disableAnimation: true,  // Disable vibration and glint for moving blades
@@ -310,7 +318,7 @@ export function sceneLevel3(k) {
       orientation: Blades.ORIENTATIONS.FLOOR,
       onHit: () => {
         blades3.blade.opacity = 1
-        Hero.death(hero, () => k.go("level-word.3"))
+        showDeathMessage(k, hero, blades3, levelIndicator, sound)
       },
       sfx: sound,
       disableAnimation: true,  // Disable vibration and glint for moving blades

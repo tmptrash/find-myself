@@ -6,13 +6,13 @@ import { CFG } from '../cfg.js'
  * @param {Object} config.k - Kaplay instance
  * @param {boolean} [config.showTimer=false] - Whether to show level timer
  * @param {number} [config.targetTime=null] - Target time for speed bonus (in seconds)
+ * @param {number} [config.topY=55] - Vertical position (pixels from top)
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, targetTime = null } = config
+  const { k, showTimer = false, targetTime = null, topY = 55 } = config
   
   const centerX = k.width() / 2 - 100
-  const topY = 55
   //
   // Create FPS text
   //

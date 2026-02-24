@@ -64,10 +64,10 @@ export const WORD_CFG = {
     //
     speedBonusTime: {
       'level-word.0': 10,   // Level 0
-      'level-word.1': 25,   // Level 1
-      'level-word.2': 30,   // Level 2
-      'level-word.3': 35,   // Level 3
-      'level-word.4': 40    // Level 4
+      'level-word.1': 10,   // Level 1
+      'level-word.2': 15,   // Level 2
+      'level-word.3': 15,   // Level 3
+      'level-word.4': 10    // Level 4
     }
   }
 }

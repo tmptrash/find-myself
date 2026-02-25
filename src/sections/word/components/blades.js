@@ -171,7 +171,8 @@ export function create(config) {
     glintSoundPlayed: false,
     glintDirection: 0,  // Will be set when glint starts (left or right stroke)
     glintLetter: 0,  // Will be set when glint starts (left or right 'A')
-    disableAnimation  // Store animation flag
+    disableAnimation,  // Store animation flag
+    isLifted: false  // True when blade is retracting/disappearing (stops glint)
   }
 
   // Setup collision detection with hero (works even when invisible)
@@ -379,6 +380,7 @@ function updateAnimation(inst) {
   }
   // Phase 3: Fade out
   else if (elapsed < fadeInDuration + visibleDuration + fadeOutDuration) {
+    inst.isLifted = true  // Stop glint when blade starts disappearing
     const fadeOutElapsed = elapsed - fadeInDuration - visibleDuration
     const progress = fadeOutElapsed / fadeOutDuration
     blade.opacity = 1 - progress
@@ -386,6 +388,7 @@ function updateAnimation(inst) {
   }
   // Phase 4: Stay invisible forever
   else {
+    inst.isLifted = true
     blade.opacity = 0
     inst.isVisible = false
     inst.animationComplete = true

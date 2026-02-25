@@ -17,7 +17,7 @@ const LEVEL_TRANSITIONS = {
   'level-word.2': 'level-word.3',
   'level-word.3': 'level-word.4',
   'level-word.4': 'word-complete',
-  'word-complete': 'menu',
+  'word-complete': 'level-touch.0',
   'level-time.0': 'level-time.1',
   'level-time.1': 'level-time.2',
   'level-time.2': 'level-time.3',
@@ -44,6 +44,7 @@ const LEVEL_SUBTITLES = {
   'level-time.1': ['you are growing. you are learning. numbers begin\n\nto surround you. growing up means learning what you\n\ncan touch — and what you should leave alone. do not\n\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
   'level-time.3': ['life consumes time while you hesitate. act too\n\nslow — and it will catch you. throw snow. move\n\nfast. everything happens at once.', 'time3-pre', 16],
+  'word-complete': 'gather what crawls together to reach what stands above',
   'level-touch.0': 'gather what crawls together to reach what stands above',
   'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
   'level-touch.2': 'jump to reveal the path - find what stands nearby'
@@ -133,6 +134,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       setSectionCompleted(sectionName)
     }
     //
+    // Save next section first level so continue goes there
+    //
+    if (nextLevel === 'word-complete') set('lastLevel', 'level-touch.0')
+    if (nextLevel === 'time-complete') set('lastLevel', 'level-word.0')
+    //
     // Go directly to completion screen without transition overlay
     //
     k.go(nextLevel)
@@ -185,9 +191,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     set('lastLevel', 'level-word.0')
   } else if (nextLevel === 'word-complete') {
     //
-    // When completing word section, save first level of next section (time) instead of completion screen
+    // When completing word section, save first level of next section (touch) instead of completion screen
     //
-    set('lastLevel', 'level-time.0')
+    set('lastLevel', 'level-touch.0')
   }
   
   let timer = 0

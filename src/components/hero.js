@@ -1464,9 +1464,9 @@ export function onAnnihilationCollide(inst) {
             const isLastWordLevel = inst.currentLevel === 'level-word.4' && nextLevel === 'word-complete'
             const isLastTimeLevel = inst.currentLevel === 'level-time.3' && nextLevel === 'time-complete'
             
-            if (isLastWordLevel && !inst.addMouth) {
+            if (isLastWordLevel && (!inst.addMouth || inst.bodyColor !== '#DC143C')) {
               //
-              // Special sequence for completing word section: add mouth before transition
+              // Special sequence for completing word section: add mouth and red color before transition
               //
               k.wait(1.5, () => {
                 //
@@ -1512,13 +1512,15 @@ export function onAnnihilationCollide(inst) {
                   // Add mouth to hero sprite
                   //
                   k.wait(0.2, () => {
-                    //
-                    // Update inst to include mouth BEFORE loading sprites
-                    //
-                    inst.addMouth = true
-                    const bodyColorClean = String(inst.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
-                    const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-                    inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth`
+                  //
+                  // Update inst: add mouth and red color (DC143C) before loading sprites
+                  //
+                  inst.addMouth = true
+                  const redColor = '#DC143C'
+                  inst.bodyColor = redColor
+                  const bodyColorClean = String(redColor).replace('#', '')
+                  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
+                  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth`
                     //
                     // Create visual effect (particles around hero)
                     //
@@ -1529,7 +1531,7 @@ export function onAnnihilationCollide(inst) {
                     loadHeroSprites({
                       k: inst.k,
                       type: inst.type,
-                      bodyColor: inst.bodyColor,
+                      bodyColor: redColor,
                       outlineColor: CFG.visual.colors.outline,
                       addMouth: true,
                       addArms: false,

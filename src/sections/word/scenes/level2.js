@@ -212,7 +212,7 @@ export function sceneLevel2(k) {
     ]
     
     // Initialize level with heroes and gaps in platform
-    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
       k,
       levelName: 'level-word.2',
       levelNumber: 3,
@@ -230,6 +230,7 @@ export function sceneLevel2(k) {
       antiHeroY: ANTIHERO_SPAWN_Y,
       platformGap: platformGaps,
       onAnnihilation: () => {
+        breathMusic && breathMusic.stop && breathMusic.stop()
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
         const speedBonusEarned = checkSpeedBonus(k, 'level-word.2', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)

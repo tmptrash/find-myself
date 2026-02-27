@@ -143,8 +143,8 @@ export const CFG = {
       time: MASTER_VOLUME * 0.143,
       clock: MASTER_VOLUME * 0.143,
       touch: MASTER_VOLUME * 0.4,
-      word: MASTER_VOLUME * 0.5,
-      breath: MASTER_VOLUME * 0.2  // breath.mp3 (parallel with word in word section)
+      word: MASTER_VOLUME * 0.3,
+      breath: MASTER_VOLUME * 0.15  // breath.mp3 (parallel with word in word section)
     },
     //
     // Level sound effects

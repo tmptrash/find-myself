@@ -163,7 +163,7 @@ export function sceneLevel3(k) {
     //
     set('lastLevel', 'level-word.3')
     // Initialize level with heroes (skip standard platforms)
-    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
       k,
       levelName: 'level-word.3',
       levelNumber: 4,
@@ -181,6 +181,7 @@ export function sceneLevel3(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
+        breathMusic && breathMusic.stop && breathMusic.stop()
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
         const speedBonusEarned = checkSpeedBonus(k, 'level-word.3', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)

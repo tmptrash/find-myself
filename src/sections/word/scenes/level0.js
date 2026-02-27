@@ -91,7 +91,7 @@ export function sceneLevel0(k) {
     //
     const shouldShowIntro = isFirstRun && !introShownInSession
     
-    const { sound, hero, antiHero, levelIndicator, fpsCounter } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
       k,
       levelName: 'level-word.0',
       levelNumber: 1,
@@ -108,6 +108,7 @@ export function sceneLevel0(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
+        breathMusic && breathMusic.stop && breathMusic.stop()
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
         const speedBonusEarned = checkSpeedBonus(k, 'level-word.0', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)

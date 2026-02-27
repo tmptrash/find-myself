@@ -97,7 +97,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
  * @param {Number} [config.antiHeroX] - Anti-hero X position in pixels
  * @param {Number} [config.antiHeroY] - Anti-hero Y position in pixels
  * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
- * @returns {Object} Object with sound, hero, antiHero, levelIndicator, fpsCounter
+ * @returns {Object} Object with sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic
  */
 export function initScene(config) {
   const { 
@@ -231,7 +231,7 @@ export function initScene(config) {
     antiHero = heroesResult.antiHero
   }
   
-  return { sound, hero, antiHero, levelIndicator, fpsCounter }
+  return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic }
 }
 
 /**

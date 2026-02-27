@@ -17,7 +17,7 @@ const LEVEL_TRANSITIONS = {
   'level-word.2': 'level-word.3',
   'level-word.3': 'level-word.4',
   'level-word.4': 'word-complete',
-  'word-complete': 'level-touch.0',
+  'word-complete': 'menu',
   'level-time.0': 'level-time.1',
   'level-time.1': 'level-time.2',
   'level-time.2': 'level-time.3',
@@ -35,7 +35,7 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'level-word.0': ['words, they cut deeper than blades', 'word0-pre', 3.0],
+  'level-word.0': ['you are walking through your own thoughts now.\n\nevery word here is a voice inside you.\n\nsometimes words cut deeper than blades.', 'word0-pre', 10],
   'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre', 3.5],
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],
@@ -44,7 +44,6 @@ const LEVEL_SUBTITLES = {
   'level-time.1': ['you are growing. you are learning. numbers begin\n\nto surround you. growing up means learning what you\n\ncan touch — and what you should leave alone. do not\n\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
   'level-time.3': ['life consumes time while you hesitate. act too\n\nslow — and it will catch you. throw snow. move\n\nfast. everything happens at once.', 'time3-pre', 16],
-  'word-complete': 'gather what crawls together to reach what stands above',
   'level-touch.0': 'gather what crawls together to reach what stands above',
   'level-touch.1': 'touch the roots in sequence - find the melody that awakens',
   'level-touch.2': 'jump to reveal the path - find what stands nearby'
@@ -134,9 +133,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       setSectionCompleted(sectionName)
     }
     //
-    // Save next section first level so continue goes there
+    // Save completion screen as lastLevel so continue returns to menu
     //
-    if (nextLevel === 'word-complete') set('lastLevel', 'level-touch.0')
+    if (nextLevel === 'word-complete') set('lastLevel', 'word-complete')
     if (nextLevel === 'time-complete') set('lastLevel', 'level-word.0')
     //
     // Go directly to completion screen without transition overlay
@@ -164,7 +163,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   const originalVolume = k.volume()
   k.volume(0)
-  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
+  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu']
   soundsToStop.forEach(soundName => {
     try {
       const sound = k.getSound(soundName)
@@ -189,11 +188,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     // When completing time section, save first level of next section (word) instead of completion screen
     //
     set('lastLevel', 'level-word.0')
-  } else if (nextLevel === 'word-complete') {
-    //
-    // When completing word section, save first level of next section (touch) instead of completion screen
-    //
-    set('lastLevel', 'level-touch.0')
   }
   
   let timer = 0
@@ -287,7 +281,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       if (timer === 0 || !inst.soundsStopped) {
         inst.soundsStopped = true
         stopTimeSectionMusic(k)
-        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
+        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu']
         soundsToStop.forEach(soundName => {
           try {
             const sound = k.getSound(soundName)
@@ -330,7 +324,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // Stop all Kaplay sounds except voice-over (xxx-pre files)
           // Stop clock.mp3, time.mp3, time0-kids.mp3, word.mp3, touch.mp3, menu.mp3
           //
-          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'touch', 'menu']
+          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu']
           soundsToStop.forEach(soundName => {
             try {
               const sound = k.getSound(soundName)

@@ -1,7 +1,6 @@
 import * as Sound from '../../../utils/sound.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import { createLevelTransition } from '../../../utils/transition.js'
 
 const FINAL_MESSAGE = "remember - not every word in your head is telling the truth"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -113,7 +112,7 @@ function onUpdate(inst) {
       inst.phase = 'complete'
       WordPile.reset()  // Reset word pile state when leaving section
       WordGrass.reset()  // Reset grass state when leaving section
-      createLevelTransition(inst.k, 'word-complete')
+      inst.k.go('menu')
     }
   }
 }
@@ -126,6 +125,6 @@ function skipToMenu(inst) {
   inst.skipped = true
   WordPile.reset()  // Reset word pile state when leaving section
   WordGrass.reset()  // Reset grass state when leaving section
-  createLevelTransition(inst.k, 'word-complete')
+  inst.k.go('menu')
 }
 

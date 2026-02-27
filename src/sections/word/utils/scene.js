@@ -143,10 +143,18 @@ export function initScene(config) {
   Sound.stopAmbient(sound)
   
   //
-  // Start background music for word levels
+  // Start background music for word levels (word.mp3 + breath.mp3)
   //
   Sound.startBackgroundMusic(sound, k, 'word')
-  
+  const breathVolume = CFG.audio.backgroundMusic?.breath ?? CFG.audio.backgroundMusic?.word * 0.5
+  const breathMusic = k.play('breath', {
+    volume: breathVolume,
+    loop: true
+  })
+  k.onSceneLeave(() => {
+    if (breathMusic && breathMusic.stop) breathMusic.stop()
+  })
+  //
   // Add background
   addBackground(k, bgColor)
   
@@ -204,6 +212,7 @@ export function initScene(config) {
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => {
       Sound.stopBackgroundMusic(sound)
+      if (breathMusic && breathMusic.stop) breathMusic.stop()
       WordPile.reset()  // Reset word pile state when leaving section
       WordGrass.reset()  // Reset grass state when leaving section
       k.go("menu")

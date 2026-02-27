@@ -938,12 +938,15 @@ export function sceneMenu(k) {
       if (hasSavedGame) {
         //
         // Continue from last saved level with transition (show red text)
-        // When lastLevel is word-complete, go to first touch level
+        // When lastLevel is word-complete, go directly to menu
         //
         menuMusic.stop()
         kidsMusic.stop()
-        const targetLevel = lastLevel === 'word-complete' ? 'level-touch.0' : lastLevel
-        showTransitionToLevel(k, targetLevel)
+        if (lastLevel === 'word-complete') {
+          k.go('menu')
+        } else {
+          showTransitionToLevel(k, lastLevel)
+        }
       } else {
         //
         // No save - start from time section level 0 with transition

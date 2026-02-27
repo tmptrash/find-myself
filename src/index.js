@@ -28,7 +28,14 @@ const k = kaplay({
   height: CFG.visual.screen.height,
   font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
   letterbox: true,
-  background: [0, 0, 0]  // Black background as RGB array
+  background: [0, 0, 0]
+})
+//
+// Show loader during asset loading (runs every frame while loading)
+//
+k.onLoading((progress) => {
+  const bar = document.getElementById('loader-bar')
+  if (bar) bar.style.width = `${Math.round(progress * 100)}%`
 })
 //
 // Force dark background for all elements
@@ -118,7 +125,10 @@ sceneTimeLevel2(k)
 sceneTimeLevel3(k)
 sceneTimeComplete(k)
 //
-// Start game after resources loaded
-// Always show ready screen on page load
+// Start game after resources loaded - hide loader, show ready screen
 //
-k.onLoad(() => k.go("ready"))
+k.onLoad(() => {
+  const loader = document.getElementById('loader')
+  if (loader) loader.remove()
+  k.go("ready")
+})

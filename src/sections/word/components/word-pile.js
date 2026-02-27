@@ -13,6 +13,17 @@ const WORDS = [
   'self', 'soul', 'mind', 'heart', 'life', 'death', 'time'
 ]
 //
+// Floating animation parameters (firefly-like random trajectory per background)
+//
+const FLOAT_AMP_MIN = 3
+const FLOAT_AMP_MAX = 8
+const FLOAT_SPEED_MIN = 0.4
+const FLOAT_SPEED_MAX = 1.1
+const FREQ_MIN = 0.4
+const FREQ_MAX = 1.5
+const MIX_MIN = 0.3
+const MIX_MAX = 0.7
+//
 // Depth layers configuration - 2 levels of depth
 //
 const DEPTH_LAYERS = [
@@ -101,52 +112,60 @@ export function create(config) {
     })
   })
   //
-  // Sort all words by z-index (deepest first) for correct drawing order
+  // Create separate sprite per layer for independent floating animation
   //
-  const allWords = []
-  wordDataLayers.forEach(layer => {
-    layer.words.forEach(word => {
-      allWords.push({ ...word, layerConfig: layer.config })
-    })
-  })
-  allWords.sort((a, b) => a.zIndex - b.zIndex)
-  //
-  // Render all words to canvas using toPng
-  //
-  const dataURL = toPng({ width, height, pixelRatio: 1 }, (ctx) => {
-    //
-    // Clear canvas with transparent background
-    //
-    ctx.clearRect(0, 0, width, height)
-    
-    allWords.forEach(word => {
-      renderWordToCanvas(ctx, word)
-    })
-  })
-  //
-  // Load canvas as sprite
-  //
-  const spriteId = `word-pile-bg-${Date.now()}-${Math.random()}`
-  k.loadSprite(spriteId, dataURL)
-  //
-  // Create sprite object
-  //
-  const sprite = k.add([
-    k.sprite(spriteId),
-    k.pos(playableLeft, playableTop),
-    k.z(-100),
-    k.fixed()
-  ])
+  const layerSprites = []
+  const baseSpriteId = `word-pile-bg-${Date.now()}`
   
-  return {
+  wordDataLayers.forEach((layer, layerIndex) => {
+    const layerWords = layer.words.map(word => ({ ...word, layerConfig: layer.config }))
+    const dataURL = toPng({ width, height, pixelRatio: 1 }, (ctx) => {
+      ctx.clearRect(0, 0, width, height)
+      layerWords.forEach(word => renderWordToCanvas(ctx, word))
+    })
+    const spriteId = `${baseSpriteId}-${layerIndex}`
+    k.loadSprite(spriteId, dataURL)
+    const sprite = k.add([
+      k.sprite(spriteId),
+      k.pos(playableLeft, playableTop),
+      k.z(layer.config.zIndex),
+      k.fixed()
+    ])
+    //
+    // Random trajectory coefficients (firefly-like, unique per background)
+    //
+    const freq1 = FREQ_MIN + Math.random() * (FREQ_MAX - FREQ_MIN)
+    const freq2 = FREQ_MIN + Math.random() * (FREQ_MAX - FREQ_MIN)
+    const freq3 = FREQ_MIN + Math.random() * (FREQ_MAX - FREQ_MIN)
+    const mix1 = MIX_MIN + Math.random() * (MIX_MAX - MIX_MIN)
+    const mix2 = MIX_MIN + Math.random() * (MIX_MAX - MIX_MIN)
+    layerSprites.push({
+      dt: performance.now() + Math.random() * 100,
+      sprite,
+      baseX: playableLeft,
+      baseY: playableTop,
+      freq1,
+      freq2,
+      freq3,
+      mix1,
+      mix2
+    })
+  })
+  //
+  // Register floating animation update, cancel on scene leave
+  //
+  const inst = {
     k,
-    sprite,
-    spriteId,
+    layerSprites,
     playableLeft,
     playableRight,
     playableTop,
     playableBottom
   }
+  const updateController = k.onUpdate(() => onUpdate(inst))
+  k.onSceneLeave(() => updateController.cancel())
+  
+  return inst
 }
 
 /**
@@ -276,12 +295,25 @@ function hexToRGBA(hex, opacity) {
 }
 
 /**
+ * Per-frame floating animation for background word layers
+ * Each of 2 backgrounds follows its own random firefly-like trajectory (Lissajous curve)
+ * @param {Object} inst - Word pile instance
+ */
+function onUpdate(inst) {
+  inst.layerSprites.forEach((layer, i) => {
+    layer.dt = performance.now() / (700 * (i + .7))
+    layer.sprite.pos.x = layer.baseX + Math.cos(layer.dt) * 10
+    layer.sprite.pos.y = layer.baseY + Math.sin(layer.dt) * 15
+  })
+}
+
+/**
  * Destroys word pile
  * @param {Object} inst - Word pile instance
  */
 export function destroy(inst) {
-  const { k, sprite } = inst
-  k.destroy(sprite)
+  const { k, layerSprites } = inst
+  layerSprites.forEach((layer) => k.destroy(layer.sprite))
 }
 
 /**

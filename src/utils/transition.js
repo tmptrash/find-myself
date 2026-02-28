@@ -35,7 +35,7 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'level-word.0': ['you are walking through your own thoughts now.\n\nevery word here is a voice inside you.\n\nsometimes words cut deeper than blades.', 'word0-pre', 10],
+  'level-word.0': ['you are walking through your own thoughts now.\n\nevery word here is a voice inside you.\n\nand some of them cut deeper than blades.', 'word0-pre', 14],
   'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre', 3.5],
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],

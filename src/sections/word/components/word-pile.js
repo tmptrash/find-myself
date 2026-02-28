@@ -301,7 +301,7 @@ function hexToRGBA(hex, opacity) {
  */
 function onUpdate(inst) {
   inst.layerSprites.forEach((layer, i) => {
-    layer.dt = performance.now() / (700 * (i + .7))
+    layer.dt = performance.now() / (600 * (i + .7))
     layer.sprite.pos.x = layer.baseX + Math.cos(layer.dt) * 10
     layer.sprite.pos.y = layer.baseY + Math.sin(layer.dt) * 15
   })

@@ -558,8 +558,9 @@ export function onUpdate(inst) {
     if (!inst.enableColorChange || !inst.currentPlatformColor) {
       inst.fadeTimer += inst.k.dt()
       const fadeWave = Math.sin(inst.fadeTimer / inst.fadeDuration * Math.PI * 2)
-      const colorValue = 192 + fadeWave * 20  // Smoother transition
-      const finalColor = Math.max(172, Math.min(212, colorValue))
+      const base = inst.initialColor
+      const colorValue = base + fadeWave * 20
+      const finalColor = Math.max(base - 20, Math.min(base + 20, colorValue))
       inst.timerText.color = inst.k.rgb(finalColor, finalColor, finalColor)
     } else if (inst.currentPlatformColor) {
       //

@@ -117,23 +117,20 @@ export function create(config) {
   smallHero.character.fixed = true
   smallHero.character.z = CFG.visual.zIndex.ui
   //
-  // Load and add life.png image
+  // Create life image (sprite pre-loaded in index.js)
   //
   const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3
   const lifeImageData = {
-    sprite: null,
-    pos: { x: lifeImageX, y: smallHeroY }
-  }
-  k.loadSprite('life', '/life.png').then(() => {
-    lifeImageData.sprite = k.add([
+    sprite: k.add([
       k.sprite('life'),
       k.pos(lifeImageX, smallHeroY),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
       k.z(CFG.visual.zIndex.ui)
-    ])
-  })
+    ]),
+    pos: { x: lifeImageX, y: smallHeroY }
+  }
   //
   // Get score values from localStorage
   //

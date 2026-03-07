@@ -162,6 +162,10 @@ export function sceneLevel3(k) {
     // Save progress immediately when entering this level
     //
     set('lastLevel', 'level-word.3')
+    //
+    // Track level completion to stop blade animation and sounds
+    //
+    let levelCompleted = false
     // Initialize level with heroes (skip standard platforms)
     const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
       k,
@@ -181,7 +185,9 @@ export function sceneLevel3(k) {
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
       onAnnihilation: () => {
+        levelCompleted = true
         breathMusic && breathMusic.stop && breathMusic.stop()
+        Sound.fadeOutAllMusic()
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
         const speedBonusEarned = checkSpeedBonus(k, 'level-word.3', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
@@ -359,9 +365,9 @@ export function sceneLevel3(k) {
       sound && Sound.playBladeSound(sound)
     })
     
-    // Setup blade animation (eerie sound effects removed)
+    // Setup blade animation (stops when level is completed)
     k.onUpdate(() => {
-      updateBladesAnimation(inst)
+      if (!levelCompleted) updateBladesAnimation(inst)
     })
   })
 }

@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
+import { getColor } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -27,6 +28,30 @@ const HERO_SPAWN_Y = 705        // Adjusted to stand on platform
 const ANTIHERO_SPAWN_X = 1690   // 88% of 1920
 const ANTIHERO_SPAWN_Y = 705    // Adjusted to stand on platform
 
+//
+// Letter bullet configuration
+//
+const BULLET_SPEED = 600
+const BULLET_SIZE = 22
+const BULLET_OUTLINE_WIDTH = 2
+const CREATURE_FREEZE_DURATION = 1.0
+const CREATURE_HIT_PARTICLE_COUNT = 15
+const CREATURE_HIT_PARTICLE_SIZE = 4
+const CREATURE_FLASH_COUNT = 10
+const CREATURE_HIT_DISTANCE = 50
+const SHOOT_KEYS = ['shift', 'ShiftLeft', 'ShiftRight']
+const INSTRUCTIONS_SHOW_MAX = 2
+const INSTRUCTIONS_INITIAL_DELAY = 1.0
+const INSTRUCTIONS_FADE_IN_DURATION = 0.5
+const INSTRUCTIONS_HOLD_DURATION = 4.0
+const INSTRUCTIONS_FADE_OUT_DURATION = 0.5
+//
+// Random letters for projectiles
+//
+const BULLET_LETTERS = [
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+  'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
+]
 //
 // Death messages for level 4
 //
@@ -377,8 +402,302 @@ export function sceneLevel4(k) {
     // Make second blades visible immediately
     //
     Blades.show(staticBlades2)
-    
-    // Eerie sound effects removed for cleaner audio experience
+    //
+    // Setup letter throwing mechanic (hero throws letters at creature)
+    //
+    setupHeroShooting(k, hero, bladeArm, levelIndicator)
+    showLetterInstructions(k)
+  })
+}
+
+/**
+ * Setup hero shooting system (throw letters at blade-arm creature)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ * @param {Object} levelIndicator - Level indicator instance
+ */
+function setupHeroShooting(k, hero, bladeArm, levelIndicator) {
+  SHOOT_KEYS.forEach(key => {
+    k.onKeyPress(key, () => {
+      const currentScore = get('heroScore', 0)
+      if (currentScore > 0 && hero.character && hero.character.exists()) {
+        const heroFacingRight = !hero.character.flipX
+        //
+        // Reduce hero score by 1
+        //
+        const newScore = currentScore - 1
+        set('heroScore', newScore)
+        levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
+        createLetterBullet(k, hero, heroFacingRight, bladeArm)
+      } else if (currentScore === 0) {
+        hero.sfx && Sound.playEmptyClickSound(hero.sfx)
+      }
+    })
+  })
+}
+
+/**
+ * Create a letter projectile that flies horizontally
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ * @param {boolean} facingRight - Direction hero is facing
+ * @param {Object} bladeArm - Blade arm creature instance
+ */
+function createLetterBullet(k, hero, facingRight, bladeArm) {
+  const heroPos = hero.character.pos
+  const direction = facingRight ? 1 : -1
+  const heroColor = getColor(k, CFG.visual.colors.hero.body)
+  const letter = BULLET_LETTERS[Math.floor(Math.random() * BULLET_LETTERS.length)]
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  //
+  // Play shoot sound
+  //
+  Sound.playBulletShootSound(hero.sfx)
+  //
+  // Create letter bullet with outline
+  //
+  const bullet = k.add([
+    k.pos(heroPos.x, heroPos.y),
+    k.z(21),
+    k.anchor('center'),
+    'letter-bullet',
+    {
+      draw() {
+        //
+        // Draw black outline offsets
+        //
+        const outlineOffsets = [
+          [-BULLET_OUTLINE_WIDTH, -BULLET_OUTLINE_WIDTH],
+          [0, -BULLET_OUTLINE_WIDTH],
+          [BULLET_OUTLINE_WIDTH, -BULLET_OUTLINE_WIDTH],
+          [-BULLET_OUTLINE_WIDTH, 0],
+          [BULLET_OUTLINE_WIDTH, 0],
+          [-BULLET_OUTLINE_WIDTH, BULLET_OUTLINE_WIDTH],
+          [0, BULLET_OUTLINE_WIDTH],
+          [BULLET_OUTLINE_WIDTH, BULLET_OUTLINE_WIDTH]
+        ]
+        outlineOffsets.forEach(([dx, dy]) => {
+          k.drawText({
+            text: letter,
+            size: BULLET_SIZE,
+            font: fontFamily,
+            pos: k.vec2(dx, dy),
+            anchor: 'center',
+            color: k.rgb(0, 0, 0)
+          })
+        })
+        //
+        // Draw main letter in hero color
+        //
+        k.drawText({
+          text: letter,
+          size: BULLET_SIZE,
+          font: fontFamily,
+          pos: k.vec2(0, 0),
+          anchor: 'center',
+          color: heroColor
+        })
+      }
+    }
+  ])
+  //
+  // Move bullet horizontally
+  //
+  bullet.onUpdate(() => {
+    bullet.pos.x += BULLET_SPEED * direction * k.dt()
+    if (bullet.pos.x < 0 || bullet.pos.x > k.width()) {
+      k.destroy(bullet)
+    }
+  })
+  //
+  // Check collision with blade-arm creature
+  //
+  bullet.onUpdate(() => {
+    if (!bladeArm || !bladeArm.collisionArea) return
+    const creatureX = bladeArm.collisionArea.pos.x
+    const creatureY = bladeArm.collisionArea.pos.y
+    const distX = Math.abs(bullet.pos.x - creatureX)
+    const distY = Math.abs(bullet.pos.y - creatureY)
+    if (distX < CREATURE_HIT_DISTANCE && distY < CREATURE_HIT_DISTANCE) {
+      onCreatureHit(k, bladeArm, hero.sfx)
+      k.destroy(bullet)
+    }
+  })
+}
+
+/**
+ * Handle blade-arm creature being hit by letter
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ * @param {Object} sfx - Sound instance
+ */
+function onCreatureHit(k, bladeArm, sfx) {
+  //
+  // Add freeze duration (accumulate if already frozen)
+  //
+  if (!bladeArm.freezeTimeRemaining) {
+    bladeArm.freezeTimeRemaining = 0
+  }
+  bladeArm.freezeTimeRemaining += CREATURE_FREEZE_DURATION
+  //
+  // Mark as frozen if not already
+  //
+  if (!bladeArm.isFrozen) {
+    bladeArm.isFrozen = true
+    startFreezeCountdown(k, bladeArm)
+  }
+  sfx && Sound.playBulletHitSound(sfx)
+  createCreatureHitParticles(k, bladeArm)
+  flashCreature(k, bladeArm, 0)
+}
+
+/**
+ * Start freeze countdown for blade-arm creature
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ */
+function startFreezeCountdown(k, bladeArm) {
+  const unfreezeLoop = k.onUpdate(() => {
+    if (!bladeArm || !bladeArm.freezeTimeRemaining) {
+      unfreezeLoop.cancel()
+      return
+    }
+    bladeArm.freezeTimeRemaining -= k.dt()
+    if (bladeArm.freezeTimeRemaining <= 0) {
+      bladeArm.isFrozen = false
+      bladeArm.freezeTimeRemaining = 0
+      unfreezeLoop.cancel()
+    }
+  })
+}
+
+/**
+ * Create particles when creature is hit
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ */
+function createCreatureHitParticles(k, bladeArm) {
+  const hitX = bladeArm.collisionArea.pos.x
+  const hitY = bladeArm.collisionArea.pos.y
+  for (let i = 0; i < CREATURE_HIT_PARTICLE_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = 100 + Math.random() * 200
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    const particle = k.add([
+      k.rect(CREATURE_HIT_PARTICLE_SIZE, CREATURE_HIT_PARTICLE_SIZE),
+      k.pos(hitX, hitY),
+      k.color(107, 142, 159),
+      k.opacity(1.0),
+      k.anchor('center'),
+      k.z(22)
+    ])
+    particle.onUpdate(() => {
+      particle.pos.x += vx * k.dt()
+      particle.pos.y += vy * k.dt()
+      particle.opacity -= k.dt() * 2
+      if (particle.opacity <= 0) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+
+/**
+ * Flash creature text when hit (alternates between white and original)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ * @param {number} count - Current flash count
+ */
+function flashCreature(k, bladeArm, count) {
+  if (count >= CREATURE_FLASH_COUNT) return
+  const isWhite = count % 2 === 0
+  const newColor = isWhite ? k.rgb(255, 255, 255) : k.rgb(107, 142, 159)
+  //
+  // Flash all text objects (last one is main text)
+  //
+  const mainText = bladeArm.textObjects[bladeArm.textObjects.length - 1]
+  if (mainText) {
+    mainText.color = newColor
+  }
+  k.wait(0.05, () => flashCreature(k, bladeArm, count + 1))
+}
+
+/**
+ * Show letter throwing instructions (shown only first 2 times)
+ * @param {Object} k - Kaplay instance
+ */
+function showLetterInstructions(k) {
+  let showCount = get('level4LetterInstructionsCount', 0)
+  if (showCount >= INSTRUCTIONS_SHOW_MAX) return
+  set('level4LetterInstructionsCount', showCount + 1)
+  const centerX = CFG.visual.screen.width / 2 - 20
+  const textY = 140
+  const content = "use Shift to throw letters at the creature"
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  //
+  // Create outline texts
+  //
+  const outlineOffsets = [
+    [-2, -2], [0, -2], [2, -2],
+    [-2, 0], [2, 0],
+    [-2, 2], [0, 2], [2, 2]
+  ]
+  const outlineTexts = outlineOffsets.map(([dx, dy]) =>
+    k.add([
+      k.text(content, { size: 20, font: fontFamily }),
+      k.pos(centerX + dx, textY + dy),
+      k.anchor("center"),
+      k.color(0, 0, 0),
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.fixed()
+    ])
+  )
+  const mainText = k.add([
+    k.text(content, { size: 20, font: fontFamily }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10),
+    k.fixed()
+  ])
+  //
+  // Animate instructions (delay -> fade in -> hold -> fade out)
+  //
+  const inst = { timer: 0, phase: 'initial_delay' }
+  const updateLoop = k.onUpdate(() => {
+    inst.timer += k.dt()
+    if (inst.phase === 'initial_delay') {
+      if (inst.timer >= INSTRUCTIONS_INITIAL_DELAY) {
+        inst.phase = 'fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_in') {
+      const progress = Math.min(inst.timer / INSTRUCTIONS_FADE_IN_DURATION, 1)
+      mainText.opacity = progress
+      outlineTexts.forEach(t => { t.opacity = progress })
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      const progress = Math.min(inst.timer / INSTRUCTIONS_FADE_OUT_DURATION, 1)
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(t => { t.opacity = 1 - progress })
+      if (progress >= 1) {
+        k.destroy(mainText)
+        outlineTexts.forEach(t => k.destroy(t))
+        updateLoop.cancel()
+      }
+    }
   })
 }
 

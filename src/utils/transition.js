@@ -87,6 +87,16 @@ function getPreviousLevel(targetLevel) {
  */
 export function showTransitionToLevel(k, targetLevel) {
   //
+  // Validate target level exists in known transitions
+  //
+  if (!targetLevel || !LEVEL_TRANSITIONS[targetLevel]) {
+    const isValidTarget = Object.values(LEVEL_TRANSITIONS).includes(targetLevel)
+    if (!isValidTarget) {
+      k.go('menu')
+      return
+    }
+  }
+  //
   // Find previous level to show correct subtitle
   //
   const previousLevel = getPreviousLevel(targetLevel)
@@ -97,9 +107,6 @@ export function showTransitionToLevel(k, targetLevel) {
     //
     createLevelTransition(k, previousLevel)
   } else {
-    //
-    // No previous level found, go directly (shouldn't happen normally)
-    //
     k.go(targetLevel)
   }
 }
@@ -135,7 +142,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     // Save completion screen as lastLevel so continue returns to menu
     //
-    if (nextLevel === 'word-complete') set('lastLevel', 'word-complete')
+    //
+    // Set lastLevel to the first level of the NEXT section
+    //
+    if (nextLevel === 'word-complete') set('lastLevel', 'level-touch.0')
     if (nextLevel === 'time-complete') set('lastLevel', 'level-word.0')
     //
     // Go directly to completion screen without transition overlay

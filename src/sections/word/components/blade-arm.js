@@ -216,7 +216,9 @@ export function create(config) {
     bodyBounceOffset: 0,
     bodyTilt: 0,  // Body tilt angle (horizontal sway)
     currentSpeed: WALK_SPEED,  // Current walking speed
-    heroIsDead: false  // Flag to stop movement after killing hero
+    heroIsDead: false,  // Flag to stop movement after killing hero
+    isFrozen: false,
+    freezeTimeRemaining: 0
   }
   
   //
@@ -427,6 +429,12 @@ function updateWalkingCreature(inst) {
   // Stop animation if hero is annihilating or dead
   //
   if (inst.hero.isAnnihilating || inst.heroIsDead) {
+    return
+  }
+  //
+  // Skip movement while frozen (hit by letter projectile)
+  //
+  if (inst.isFrozen) {
     return
   }
   

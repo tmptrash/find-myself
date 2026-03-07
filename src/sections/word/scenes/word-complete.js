@@ -1,6 +1,7 @@
 import * as Sound from '../../../utils/sound.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
+import { setSectionCompleted, set } from '../../../utils/progress.js'
 
 const FINAL_MESSAGE = "remember - not every word in your head is telling the truth"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -15,7 +16,11 @@ export function sceneWordComplete(k) {
   k.scene("word-complete", () => {
     const centerX = k.width() / 2
     const centerY = k.height() / 2
-    
+    //
+    // Mark word section complete and point to next section
+    //
+    setSectionCompleted('word')
+    set('lastLevel', 'level-touch.0')
     //
     // Create sound instance and stop background music
     //

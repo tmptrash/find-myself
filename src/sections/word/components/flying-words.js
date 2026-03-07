@@ -161,6 +161,7 @@ export function create(cfg) {
     killerLetters,
     hero,
     currentLevel,
+    onDeath,
     color,
     minSpeed,
     maxSpeed,

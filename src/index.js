@@ -77,6 +77,10 @@ k.loadSound("touch", "/sounds/touch.mp3")
 k.loadSound("touch0-pre", "/sounds/touch0-pre.mp3")
 k.loadSound("life", "/sounds/life.mp3")
 //
+// Load life indicator sprite (used by level-indicator in all sections)
+//
+k.loadSprite("life", "/life.png")
+//
 // Load default character sprites for both hero types
 // Must be loaded before scenes are registered, as scenes may create heroes immediately
 //

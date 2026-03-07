@@ -3,7 +3,7 @@ import { CFG } from "../cfg.js"
 import { getRGB, parseHex } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
-import { getProgress, get, resetProgress } from "../utils/progress.js"
+import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
 //
@@ -134,7 +134,17 @@ export function sceneMenu(k) {
     })
     
     const progress = getProgress()
-    const lastLevel = get('lastLevel', null)
+    //
+    // Sanitize lastLevel: section-complete markers should point to the next section
+    //
+    let lastLevel = get('lastLevel', null)
+    if (lastLevel === 'word-complete') {
+      lastLevel = 'level-touch.0'
+      set('lastLevel', lastLevel)
+    } else if (lastLevel === 'time-complete') {
+      lastLevel = 'level-word.0'
+      set('lastLevel', lastLevel)
+    }
     const currentSection = getSectionFromLevel(lastLevel)
     
     //
@@ -937,16 +947,11 @@ export function sceneMenu(k) {
       
       if (hasSavedGame) {
         //
-        // Continue from last saved level with transition (show red text)
-        // When lastLevel is word-complete, go directly to menu
+        // Continue from last saved level with transition
         //
         menuMusic.stop()
         kidsMusic.stop()
-        if (lastLevel === 'word-complete') {
-          k.go('menu')
-        } else {
-          showTransitionToLevel(k, lastLevel)
-        }
+        showTransitionToLevel(k, lastLevel)
       } else {
         //
         // No save - start from time section level 0 with transition

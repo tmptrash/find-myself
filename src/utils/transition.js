@@ -35,11 +35,11 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'level-word.0': ['you are walking through your own thoughts now.\n\nevery word here is a voice inside you.\n\nand some of them cut deeper than blades.', 'word0-pre', 14],
+  'level-word.0': ['you are inside your own head now. these words\n\nare your thoughts — the voices within you.\n\nsome of them cut deeper than blades.', 'word0-pre', 13],
   'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre', 3.5],
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],
-  'level-word.4': ['words that kill', 'word4-pre', 2.5],
+  'level-word.4': ['words that kill...', 'word4-pre', 2.5],
   'level-time.0': ['you are young and everything is new. time moves\n\nforward even when you stand still. this is the\n\nfirst thing you learn. you start to notice it\n\nslipping — and you start to run.', 'time0-pre', 14],
   'level-time.1': ['you are growing. you are learning. numbers begin\n\nto surround you. growing up means learning what you\n\ncan touch — and what you should leave alone. do not\n\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
@@ -55,6 +55,20 @@ const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
+const TEXT_OUTLINE_OFFSET = 2        // Pixel offset for text outline shadows
+//
+// Subtitle colors per section (matches anti-hero hover color in menu scene)
+//
+const TIME_SUBTITLE_COLOR = '#FF8C00'
+const SECTION_SUBTITLE_COLORS = {
+  time: TIME_SUBTITLE_COLOR,
+  word: CFG.visual.colors.sections.word.body,
+  touch: CFG.visual.colors.sections.touch.body,
+  feel: CFG.visual.colors.sections.feel.body,
+  mind: CFG.visual.colors.sections.mind.body,
+  stress: CFG.visual.colors.sections.stress.body
+}
+const DEFAULT_SUBTITLE_COLOR = '#6B8E9F'
 
 /**
  * Get next level name
@@ -213,6 +227,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // Instance object to store text reference
   const inst = {
     textObj: null,
+    outlineTexts: null,
     skipped: false,
     skipEnabled: false,
     skipEnableTimer: 0,
@@ -220,26 +235,27 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     soundName: null,
     textSound: null,
     soundsStopped: false,
-    originalVolume: originalVolume  // Store original volume to restore later
+    originalVolume: originalVolume
   }
   
   //
-  // Set background to black when transitioning from level or menu-time to hide gray platforms
+  // Set background to menu color when transitioning from level or menu-time
   //
+  const transitionBgHex = CFG.visual.colors.menu.platformColor
+  const [bgR, bgG, bgB] = parseHex(transitionBgHex)
   if (isFromLevel || isFromMenuTime) {
-    k.setBackground(k.Color.fromHex("#000000"))
+    k.setBackground(k.Color.fromHex(transitionBgHex))
   }
-  
   //
-  // Create black overlay (starts fully opaque if from level or menu-time, transparent if from menu)
-  // Use very high z-index to ensure it covers all level elements including platforms
+  // Create overlay matching menu background color
+  // Starts fully opaque if from level or menu-time, transparent if from menu
   //
   let overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
-    k.color(0, 0, 0),
-    k.opacity(isFromLevel || isFromMenuTime ? 1 : (currentLevel === 'menu' ? 1 : 0)), // Start opaque if from level, menu-time or menu
-    k.z(CFG.visual.zIndex.ui + 100),  // Very high z-index to cover all elements
+    k.color(bgR, bgG, bgB),
+    k.opacity(isFromLevel || isFromMenuTime ? 1 : (currentLevel === 'menu' ? 1 : 0)),
+    k.z(CFG.visual.zIndex.ui + 100),
     k.fixed()
   ])
   
@@ -252,6 +268,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionInterval.cancel()
     overlay && overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
+    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
     //
     // Restore volume and unmute procedural sounds before going to next level
     //
@@ -351,45 +368,46 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           const soundInst = Sound.create()
           Sound.stopBackgroundMusic(soundInst)
           //
-          // Get color based on section
+          // Get color based on section (matches anti-hero hover color in menu)
           //
-          let levelColorHex = "#6B8E9F" // Default steel blue (for word section)
-          
-          if (nextLevel.startsWith('level-time')) {
-            //
-            // Time section uses medium gray color
-            //
-            levelColorHex = "#808080"
-          } else if (nextLevel.startsWith('level-word')) {
-            //
-            // Word section uses steel blue
-            //
-            levelColorHex = "#6B8E9F"
-          } else if (nextLevel.startsWith('level-touch') || nextLevel === 'menu-touch') {
-            //
-            // Touch section uses reddened leaf color from first layer trees
-            // More red version for better visibility
-            //
-            levelColorHex = "#8B4A3A"  // More red color similar to reddened autumn leaves
-          }
+          const levelColorHex = getSectionSubtitleColor(nextLevel)
           
           const [r, g, b] = parseHex(levelColorHex)
-          
+          const textSize = k.height() * 0.04
+          const textX = k.width() / 2
+          const textY = k.height() / 2
+          //
+          // Create 8-direction outline shadows (black)
+          //
+          const outlineOffsets = [
+            [-TEXT_OUTLINE_OFFSET, 0], [TEXT_OUTLINE_OFFSET, 0],
+            [0, -TEXT_OUTLINE_OFFSET], [0, TEXT_OUTLINE_OFFSET],
+            [-TEXT_OUTLINE_OFFSET, -TEXT_OUTLINE_OFFSET], [TEXT_OUTLINE_OFFSET, -TEXT_OUTLINE_OFFSET],
+            [-TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET], [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
+          ]
+          const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
+            k.text(subtitle, { size: textSize, align: "center" }),
+            k.pos(textX + dx, textY + dy),
+            k.anchor("center"),
+            k.color(0, 0, 0),
+            k.opacity(0),
+            k.z(CFG.visual.zIndex.ui + 101),
+            k.fixed()
+          ]))
+          //
+          // Create main colored text above outlines
+          //
           const textObj = k.add([
-            k.text(subtitle, {
-              size: k.height() * 0.04,
-              align: "center"
-            }),
-            k.pos(k.width() / 2, k.height() / 2),
+            k.text(subtitle, { size: textSize, align: "center" }),
+            k.pos(textX, textY),
             k.anchor("center"),
             k.color(r, g, b),
             k.opacity(0),
-            k.z(CFG.visual.zIndex.ui + 101),  // Above overlay (which is ui + 100)
+            k.z(CFG.visual.zIndex.ui + 102),
             k.fixed()
           ])
-          
-          // Store text object in inst
           inst.textObj = textObj
+          inst.outlineTexts = outlineTexts
         } else {
           // No subtitle, go to next level immediately
           transitionInterval.cancel()
@@ -416,6 +434,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       const progress = Math.min(timer / TEXT_FADE_IN_DURATION, 1)
       if (inst.textObj) {
         inst.textObj.opacity = progress
+        inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = progress })
       }
       
       if (progress >= 1) {
@@ -433,13 +452,18 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       const progress = Math.min(timer / TEXT_FADE_OUT_DURATION, 1)
       if (inst.textObj) {
         inst.textObj.opacity = 1 - progress
+        inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = 1 - progress })
       }
       
       if (progress >= 1) {
-        // Clean up text
+        // Clean up text and outlines
         if (inst.textObj) {
           inst.textObj.exists() && k.destroy(inst.textObj)
           inst.textObj = null
+        }
+        if (inst.outlineTexts) {
+          inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+          inst.outlineTexts = null
         }
         
         phase = 'final_pause'
@@ -469,6 +493,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     transitionInterval.cancel()
     overlay && overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
+    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
     inst?.textSound?.stop()
   }
 }
@@ -526,4 +551,19 @@ function playCRTShutdownSound(k) {
     // Silently fail if audio context is not available
     //
   }
+}
+
+/**
+ * Extracts section name from level identifier and returns matching subtitle color
+ * @param {string} level - Level name (e.g., 'level-word.2', 'menu-touch')
+ * @returns {string} Hex color string for that section's subtitle
+ */
+function getSectionSubtitleColor(level) {
+  if (!level) return DEFAULT_SUBTITLE_COLOR
+  //
+  // Extract section from level name (handles 'level-word.2' and 'menu-touch' formats)
+  //
+  const match = level.match(/^(?:level-|menu-)(\w+)/)
+  const section = match ? match[1] : null
+  return SECTION_SUBTITLE_COLORS[section] || DEFAULT_SUBTITLE_COLOR
 }

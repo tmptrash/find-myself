@@ -83,9 +83,9 @@ const HINT_Y = 1030
 export function sceneReady(k) {
   k.scene('ready', async () => {
     //
-    // Reset background color to black (in case coming from time section)
+    // Set canvas background to match ready scene background color
     //
-    k.setBackground(k.Color.fromHex("#000000"))
+    k.setBackground(k.Color.fromHex(CFG.visual.colors.ready.background))
     //
     // Clean up persistent word-pile objects from previous scenes
     //

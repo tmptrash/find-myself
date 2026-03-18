@@ -1,11 +1,12 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createRoundedCorners } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
+import * as WordGrass from '../components/word-grass.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
@@ -55,7 +56,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   // Calculate position (below bottom platform, centered)
   //
   const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 200
   //
   // Create message text
   //
@@ -196,7 +197,9 @@ export function sceneLevel3(k) {
         set('heroScore', newScore)
         levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
         sound && Sound.playVictorySound(sound)
-        k.wait(1.3, () => {
+        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-word.3')
         })
       }
@@ -204,6 +207,14 @@ export function sceneLevel3(k) {
     
     // Create custom platforms with pit in the middle
     const pitInfo = createCustomPlatforms(k, CFG.visual.colors.platform)
+    //
+    // Add rounded corners matching level 3's platform dimensions
+    //
+    createRoundedCorners(k, CFG.visual.colors.platform, {
+      sideWallWidth: PLATFORM_SIDE_WIDTH,
+      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT
+    })
     
     //
     // Create flying words for atmosphere (constrained to narrow pit area between walls)
@@ -242,6 +253,32 @@ export function sceneLevel3(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    //
+    // Create word grass on bottom platform (exclude pit area)
+    // Raise bottom bound so grass appears to grow from the floor surface
+    //
+    const GRASS_RAISE_OFFSET = 4
+    const grassBounds = {
+      left: PLATFORM_SIDE_WIDTH,
+      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
+      top: PLATFORM_TOP_HEIGHT,
+      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - GRASS_RAISE_OFFSET
+    }
+    const pitGap = {
+      x: pitInfo.centerX - pitInfo.width / 2,
+      width: pitInfo.width
+    }
+    const wordGrass = WordGrass.create({
+      k,
+      customBounds: grassBounds,
+      hero,
+      bladePositions: [],
+      platformGaps: [pitGap],
+      movingPlatformPositions: []
+    })
+    k.onUpdate(() => {
+      WordGrass.onUpdate(wordGrass)
     })
     // Create bottom of the pit (platform at pit depth)
     const heroHeight = CFG.visual.screen.height * 0.08  // Approximate hero height (8% of screen)
@@ -497,7 +534,8 @@ function createCustomPlatforms(k, color) {
       k.area(),
       k.body({ isStatic: true }),
       getColor(k, color),
-      CFG.game.platformName
+      CFG.game.platformName,
+      k.z(CFG.visual.zIndex.platforms)
     ])
   }
   

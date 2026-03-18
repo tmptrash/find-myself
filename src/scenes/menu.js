@@ -19,6 +19,17 @@ const SECTION_COLORS = {
   time: CFG.visual.colors.sections.time
 }
 //
+// Section hover descriptions (shown on floating title when hovering over anti-hero)
+//
+const SECTION_DESCRIPTIONS = {
+  time: 'time sense',
+  word: 'inner voices',
+  touch: 'contact',
+  feel: 'emotions',
+  mind: 'thoughts',
+  stress: 'pressure'
+}
+//
 // Menu audio configuration (relative to CFG.audio.masterVolume)
 //
 const MENU_AUDIO = {
@@ -82,9 +93,9 @@ export function sceneMenu(k) {
     //
     k.volume(1)
     //
-    // Reset background color to black (in case coming from time section)
+    // Set canvas background to match menu background color
     //
-    k.setBackground(k.Color.fromHex("#000000"))
+    k.setBackground(k.Color.fromHex(CFG.visual.colors.menu.platformColor))
     //
     // Clean up persistent word-pile objects from previous scenes
     //
@@ -1043,10 +1054,10 @@ export function sceneMenu(k) {
  * @returns {Object} Title instance with state
  */
 function createTitle(k, centerX, centerY, radius) {
-  const text = "find"  // Only "find" word
-  const titleSize = 32  // Smaller size (was 48)
+  const defaultText = "find"
+  const titleSize = 32
   const amberColor = k.rgb(228, 155, 36)
-  const dimColor = k.rgb(120, 120, 120)  // Gray (was amber-dimmed)
+  const dimColor = k.rgb(120, 120, 120)
   const outlineOffsets = [
     { dx: -2, dy: 0 },
     { dx: 2, dy: 0 },
@@ -1057,24 +1068,27 @@ function createTitle(k, centerX, centerY, radius) {
     { dx: -2, dy: 2 },
     { dx: 2, dy: 2 }
   ]
-  
   //
-  // Create each letter as separate object
+  // Pre-allocate letter objects for the longest possible text (section descriptions)
   //
+  const maxTextLength = Math.max(
+    defaultText.length,
+    ...Object.values(SECTION_DESCRIPTIONS).map(d => d.length)
+  )
   const letters = []
   const outlineLetters = []
-  const circleRadius = radius + 100  // Slightly smaller (was +120)
+  const circleRadius = radius + 100
   
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i]
-    
+  for (let i = 0; i < maxTextLength; i++) {
+    const char = i < defaultText.length ? defaultText[i] : ' '
+    const isVisible = i < defaultText.length
     //
-    // Outline shadows (four directions)
+    // Outline shadows (eight directions)
     //
     const shadows = outlineOffsets.map(offset => k.add([
       k.text(char, { size: titleSize }),
       k.pos(offset.dx, offset.dy),
-        k.anchor("center"),
+      k.anchor("center"),
       k.color(0, 0, 0),
       k.opacity(0),
       k.z(CFG.visual.zIndex.ui + 49),
@@ -1085,10 +1099,11 @@ function createTitle(k, centerX, centerY, radius) {
       k.text(char, { size: titleSize }),
       k.pos(0, 0),
       k.anchor("center"),
-      k.color(dimColor),  // Start dimmed
+      k.color(dimColor),
       k.outline(0, k.rgb(0, 0, 0)),
       k.z(CFG.visual.zIndex.ui + 50),
-      k.fixed()
+      k.fixed(),
+      k.opacity(isVisible ? 1 : 0)
     ])
     
     letters.push(letter)
@@ -1102,25 +1117,29 @@ function createTitle(k, centerX, centerY, radius) {
   return {
     letters,
     outlineLetters,
-    text,  // Single text
+    text: defaultText,
+    defaultText,
+    targetText: defaultText,
     circleRadius,
     centerX,
     centerY,
-    angle: 0,  // Current angle on circle
-    targetAngle: 0,  // Target angle when hovering
+    angle: 0,
+    targetAngle: 0,
     isHovering: false,
-    hoverAngle: 0,  // Angle of hovered anti-hero
-    hoverRange: 0.3,  // Range of movement when hovering (radians)
-    hoverPhase: 0,  // Phase for back-and-forth movement
-    moveSpeed: 0.15,  // Normal rotation speed
-    snapSpeed: 3.0,  // Fast snap to hover position
+    hoverAngle: 0,
+    hoverRange: 0.3,
+    hoverPhase: 0,
+    moveSpeed: 0.15,
+    snapSpeed: 3.0,
     amberColor,
     dimColor,
-    isReversed: false,  // Current letter order
-    targetReversed: false,  // Target letter order
-    reverseFadePhase: 1.0,  // 1.0 = fully visible, 0.0 = invisible (for reversal)
-    isReverseChanging: false,  // Is reversal fade animation active
-    baseOpacity: 0.3  // Base opacity when not hovering (dimmed)
+    isReversed: false,
+    targetReversed: false,
+    reverseFadePhase: 1.0,
+    isReverseChanging: false,
+    baseOpacity: 0.3,
+    textFadePhase: 1.0,
+    isTextChanging: false
   }
 }
 
@@ -1132,91 +1151,69 @@ function createTitle(k, centerX, centerY, radius) {
  */
 function updateTitle(titleInst, k, hoveredAntiHero) {
   const dt = k.dt()
-  
+  //
+  // Determine target text based on hover state
+  //
+  const newTargetText = hoveredAntiHero
+    ? (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText)
+    : titleInst.defaultText
+  //
+  // Start text change fade if target text changed
+  //
+  if (newTargetText !== titleInst.targetText) {
+    titleInst.targetText = newTargetText
+    titleInst.isTextChanging = true
+    titleInst.textFadePhase = 1.0
+  }
+  //
+  // Handle text change fade animation (fade out → swap text → fade in)
+  //
+  if (titleInst.isTextChanging) {
+    if (titleInst.textFadePhase > 0 && titleInst.text !== titleInst.targetText) {
+      titleInst.textFadePhase -= dt * 5.0
+      if (titleInst.textFadePhase <= 0) {
+        titleInst.textFadePhase = 0
+        titleInst.text = titleInst.targetText
+      }
+    } else if (titleInst.textFadePhase < 1) {
+      titleInst.textFadePhase += dt * 4.0
+      if (titleInst.textFadePhase >= 1) {
+        titleInst.textFadePhase = 1
+        titleInst.isTextChanging = false
+      }
+    }
+  }
   //
   // Determine if letters should be reversed based on angle
   // Text direction depends on position on circle (clockwise motion)
-  // 
-  // Angles (starting from -120° = top-left):
-  // - Top-left (240°): 23 hours → normal (inverted)
-  // - Top-right (300°): 13 hours → normal (inverted)
-  // - Right (0°/360°): 15 hours → normal (inverted)
-  // - Bottom-right (60°): 17 hours → reverse (inverted)
-  // - Bottom-left (120°): 19 hours → reverse (inverted)
-  // - Left (180°): 21 hours → reverse (inverted)
   //
   const normalizedAngle = ((titleInst.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
-  
-  //
-  // Convert to degrees for easier understanding (0° = right, increases counter-clockwise)
-  //
   const degrees = (normalizedAngle * 180 / Math.PI)
-  
-  let shouldReverse = false
-  
   //
-  // Top-right quadrant (270° to 30°): normal (inverted from reverse)
-  // This covers 13 hours (top-right) and 15 hours (right)
+  // Bottom half (30°-210°) → reversed, top half → normal
   //
-  if (degrees >= 270 || degrees < 30) {
-    shouldReverse = false
-  }
-  //
-  // Right to bottom (30° to 150°): reverse (inverted from normal)
-  // This covers 17 hours (bottom-right) and 19 hours (bottom-left)
-  //
-  else if (degrees >= 30 && degrees < 150) {
-    shouldReverse = true
-  }
-  //
-  // Left side (150° to 210°): reverse (inverted from normal)
-  // This covers 21 hours (left)
-  //
-  else if (degrees >= 150 && degrees < 210) {
-    shouldReverse = true
-  }
-  //
-  // Top-left (210° to 270°): normal (inverted from reverse)
-  // This covers 23 hours (top-left)
-  //
-  else if (degrees >= 210 && degrees < 270) {
-    shouldReverse = false
-  }
-  
+  const shouldReverse = degrees >= 30 && degrees < 210
   //
   // Check if reversal state needs to change
   //
   if (shouldReverse !== titleInst.targetReversed) {
     titleInst.targetReversed = shouldReverse
-    //
-    // Start fade animation for reversal
-    //
     if (!titleInst.isReverseChanging) {
       titleInst.isReverseChanging = true
       titleInst.reverseFadePhase = 1.0
     }
   }
-  
   //
   // Handle fade animation for reversal change
   //
   if (titleInst.isReverseChanging) {
     if (titleInst.reverseFadePhase > 0 && titleInst.isReversed !== titleInst.targetReversed) {
-      //
-      // Fade out (300ms = 0.3s, so speed = 1/0.3 = 3.33)
-      //
       titleInst.reverseFadePhase -= dt * 3.33
       if (titleInst.reverseFadePhase <= 0) {
         titleInst.reverseFadePhase = 0
-        //
-        // Switch reversal at complete fade
-        //
         titleInst.isReversed = titleInst.targetReversed
       }
     } else if (titleInst.reverseFadePhase < 1) {
-      //
-      // Fade in (400ms = 0.4s, so speed = 1/0.4 = 2.5) - slower than fade out
-      //
       titleInst.reverseFadePhase += dt * 2.5
       if (titleInst.reverseFadePhase >= 1) {
         titleInst.reverseFadePhase = 1
@@ -1224,51 +1221,36 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
       }
     }
   }
-  
   //
   // Update hover state
   //
   if (hoveredAntiHero) {
     if (!titleInst.isHovering) {
-      //
-      // Just started hovering - calculate angle to anti-hero
-      //
       const dx = hoveredAntiHero.character.pos.x - titleInst.centerX
       const dy = hoveredAntiHero.character.pos.y - titleInst.centerY
       titleInst.hoverAngle = Math.atan2(dy, dx)
       titleInst.isHovering = true
       titleInst.hoverPhase = 0
     }
-    
     //
     // Move to hovered position quickly
     //
     let angleDiff = titleInst.hoverAngle - titleInst.angle
-    
-    //
-    // Normalize angle difference to [-PI, PI]
-    //
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-    
     titleInst.angle += angleDiff * titleInst.snapSpeed * dt
-    
     //
     // Update hover phase for back-and-forth movement
     //
     titleInst.hoverPhase += dt * 2
     const hoverOffset = Math.sin(titleInst.hoverPhase) * titleInst.hoverRange
     titleInst.targetAngle = titleInst.hoverAngle + hoverOffset
-    
     //
     // Change to anti-hero's color
     // Special handling for time section: use yellow color directly
     //
     let targetColor
     if (hoveredAntiHero.section === 'time') {
-      //
-      // For time section, use yellow color directly (not from character.color which is white for sprite)
-      //
       const yellowRgb = getRGB(k, '#FF8C00')
       targetColor = k.rgb(yellowRgb.r, yellowRgb.g, yellowRgb.b)
     } else {
@@ -1279,38 +1261,43 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
       letter.color.g += (targetColor.g - letter.color.g) * 5 * dt
       letter.color.b += (targetColor.b - letter.color.b) * 5 * dt
     })
-          } else {
+  } else {
     titleInst.isHovering = false
-    
     //
     // Rotate slowly around circle
     //
     titleInst.angle += titleInst.moveSpeed * dt
     titleInst.targetAngle = titleInst.angle
-    
     //
-    // Dim letters
+    // Dim letters back to gray
     //
     titleInst.letters.forEach(letter => {
-      const currentR = letter.color.r
-      const targetR = titleInst.dimColor.r
-      letter.color.r += (targetR - currentR) * 3 * dt
+      letter.color.r += (titleInst.dimColor.r - letter.color.r) * 3 * dt
       letter.color.g += (titleInst.dimColor.g - letter.color.g) * 3 * dt
       letter.color.b += (titleInst.dimColor.b - letter.color.b) * 3 * dt
     })
   }
-  
   //
   // Position each letter along the arc
+  // Scale arc length based on current text length with constant per-character spacing
   //
   const textLength = titleInst.text.length
-  //
-  // Arc length for "find" word
-  //
-  const arcLength = 0.3
+  const arcCharSpacing = 0.075
+  const arcLength = arcCharSpacing * (textLength - 1)
   const angleStep = textLength > 1 ? arcLength / (textLength - 1) : 0
   
   titleInst.letters.forEach((letter, index) => {
+    const outlines = titleInst.outlineLetters[index]
+    //
+    // Hide letters beyond current text length
+    //
+    if (index >= textLength) {
+      letter.opacity = 0
+      outlines.forEach(outline => {
+        outline.node.opacity = 0
+      })
+      return
+    }
     //
     // Update letter character if needed
     //
@@ -1318,50 +1305,35 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     if (letter.text !== currentChar) {
       letter.text = currentChar
     }
-    //
-    // Update outline characters to match
-    //
-    const outlines = titleInst.outlineLetters[index]
     outlines.forEach(outline => {
       if (outline.node.text !== currentChar) {
         outline.node.text = currentChar
       }
     })
-    
     //
     // Determine letter index based on order (reversed or not)
     //
     const displayIndex = titleInst.isReversed ? (textLength - 1 - index) : index
-    
-    //
-    // Calculate angle for this letter
-    //
     const letterAngle = titleInst.angle + (displayIndex - textLength / 2) * angleStep
-    
     //
     // Position on circle
     //
     const x = titleInst.centerX + Math.cos(letterAngle) * titleInst.circleRadius
     const y = titleInst.centerY + Math.sin(letterAngle) * titleInst.circleRadius
-    
     letter.pos.x = x
     letter.pos.y = y
-    
     //
     // Rotate letter to follow arc (tangent to circle)
     //
     letter.angle = letterAngle + Math.PI / 2
-    
     //
-    // Apply base opacity for dimming based on hover
-    // Also apply reversal fade phase
+    // Apply opacity combining hover, reversal fade, and text change fade
     //
     const baseFinalOpacity = hoveredAntiHero ? 1.0 : titleInst.baseOpacity
-    const finalOpacity = baseFinalOpacity * titleInst.reverseFadePhase
+    const finalOpacity = baseFinalOpacity * titleInst.reverseFadePhase * titleInst.textFadePhase
     letter.opacity = finalOpacity
-    
     //
-    // Toggle outline: black on hover (drawn with shadow letters), none when idle
+    // Toggle outline: black on hover, hidden when idle
     //
     const outlineOpacity = hoveredAntiHero ? finalOpacity : 0
     outlines.forEach(outline => {
@@ -1370,9 +1342,6 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
       outline.node.angle = letter.angle
       outline.node.opacity = outlineOpacity
     })
-    //
-    // Disable text outline component to avoid conflicts (kept at 0)
-    //
     letter.outline.width = 0
   })
 }

@@ -142,12 +142,10 @@ export function sceneLevel0(k) {
           createHeroScoreParticles(k, levelIndicator)
         }
         //
-        // Wait 1.3 seconds before transition (1s for effects + 0.3s pause)
+        // Wait before transition (extra 1s if speed bonus earned for particle effect)
         //
-        k.wait(1.3, () => {
-          //
-          // After annihilation, show transition and move to level 1
-          //
+        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.0')
         })
       }

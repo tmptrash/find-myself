@@ -86,7 +86,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
   //
   const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
   const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 200
   
   //
   // Create message text

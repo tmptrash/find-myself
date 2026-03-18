@@ -128,9 +128,9 @@ export function initScene(config) {
   const bgColor = backgroundColor || CFG.visual.colors.background
   const pfColor = platformColor || CFG.visual.colors.platform
   //
-  // Reset background color to black (in case coming from time section)
+  // Set canvas background to match platform color at edges (avoids visible strips in letterbox)
   //
-  k.setBackground(k.Color.fromHex("#000000"))
+  k.setBackground(k.Color.fromHex(pfColor))
   //
   // Set gravity
   //
@@ -249,6 +249,19 @@ export function checkSpeedBonus(k, levelName, levelTime, levelIndicator) {
 }
 
 /**
+ * Play speed bonus visual effects on the small hero indicator
+ * Flashes green/white and creates circle particles flying outward
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ */
+export function playSpeedBonusEffects(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) return
+  const originalColor = levelIndicator.smallHero.character.color
+  flashSmallHeroBonus(k, levelIndicator, originalColor, 0)
+  createSpeedBonusParticles(k, levelIndicator)
+}
+
+/**
  * Play life sound, flash life image and create particles when hero dies
  * @param {Object} k - Kaplay instance
  * @param {Object} levelIndicator - Level indicator with lifeImage
@@ -306,6 +319,71 @@ function createLifeScoreParticlesWord(k, levelIndicator) {
       k.color(255, 0, 0),
       k.opacity(1),
       k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      age += dt
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      if (age >= lifetime && particle.exists && particle.exists()) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+
+const SPEED_BONUS_FLASH_COUNT = 20
+const SPEED_BONUS_FLASH_INTERVAL = 0.05
+const SPEED_BONUS_PARTICLE_COUNT = 8
+const SPEED_BONUS_PARTICLE_SPEED_MIN = 30
+const SPEED_BONUS_PARTICLE_SPEED_RANGE = 20
+const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
+const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
+const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
+const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
+
+/**
+ * Flash small hero green/white for speed bonus
+ */
+function flashSmallHeroBonus(k, levelIndicator, originalColor, count) {
+  if (count >= SPEED_BONUS_FLASH_COUNT) {
+    levelIndicator.smallHero.character.color = originalColor
+    return
+  }
+  levelIndicator.smallHero.character.color = count % 2 === 0
+    ? k.rgb(0, 255, 100)
+    : k.rgb(255, 255, 255)
+  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Create circle particles flying outward from small hero on speed bonus
+ */
+function createSpeedBonusParticles(k, levelIndicator) {
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) return
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  
+  for (let i = 0; i < SPEED_BONUS_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / SPEED_BONUS_PARTICLE_COUNT
+    const speed = SPEED_BONUS_PARTICLE_SPEED_MIN + Math.random() * SPEED_BONUS_PARTICLE_SPEED_RANGE
+    const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
+    const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
+    //
+    // Create small circle particle (green to match flash color)
+    //
+    const particle = k.add([
+      k.circle(size),
+      k.pos(heroX, heroY),
+      k.color(0, 255, 100),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
       k.anchor('center'),
       k.fixed()
     ])
@@ -561,12 +639,16 @@ function createRoundedCornerSprite(radius, color) {
  * Creates rounded corners for game area to soften sharp edges where platforms meet
  * @param {Object} k - Kaplay instance
  * @param {string} platformColor - Platform color in hex format
+ * @param {Object} [dims] - Custom platform dimensions
+ * @param {number} [dims.sideWallWidth=192] - Side wall width
+ * @param {number} [dims.topPlatformHeight=360] - Top platform height
+ * @param {number} [dims.bottomPlatformHeight=360] - Bottom platform height
  */
-export function createRoundedCorners(k, platformColor) {
+export function createRoundedCorners(k, platformColor, dims = {}) {
   const radius = CORNER_RADIUS
-  const sideWallWidth = 192
-  const topPlatformHeight = 360
-  const bottomPlatformHeight = 360
+  const sideWallWidth = dims.sideWallWidth || 192
+  const topPlatformHeight = dims.topPlatformHeight || 360
+  const bottomPlatformHeight = dims.bottomPlatformHeight || 360
   //
   // Create corner sprite
   //

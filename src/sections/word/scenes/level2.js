@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -58,7 +58,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   // Calculate position (below bottom platform, centered)
   //
   const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 150
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 200
   
   //
   // Create message text
@@ -239,7 +239,9 @@ export function sceneLevel2(k) {
         set('heroScore', newScore)
         levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
         sound && Sound.playVictorySound(sound)
-        k.wait(1.3, () => {
+        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-word.2')
         })
       }

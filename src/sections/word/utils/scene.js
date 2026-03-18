@@ -250,15 +250,16 @@ export function checkSpeedBonus(k, levelName, levelTime, levelIndicator) {
 
 /**
  * Play speed bonus visual effects on the small hero indicator
- * Flashes green/white and creates circle particles flying outward
+ * Flashes hero color/white and creates circle particles flying outward
  * @param {Object} k - Kaplay instance
  * @param {Object} levelIndicator - Level indicator with smallHero
  */
 export function playSpeedBonusEffects(k, levelIndicator) {
   if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) return
-  const originalColor = levelIndicator.smallHero.character.color
-  flashSmallHeroBonus(k, levelIndicator, originalColor, 0)
-  createSpeedBonusParticles(k, levelIndicator)
+  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.hero.body
+  const heroColor = getRGB(k, bodyColorHex)
+  flashSmallHeroBonus(k, levelIndicator, heroColor, 0)
+  createSpeedBonusParticles(k, levelIndicator, heroColor)
 }
 
 /**
@@ -349,23 +350,26 @@ const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 
 /**
- * Flash small hero green/white for speed bonus
+ * Flash small hero between hero color and white for speed bonus
  */
-function flashSmallHeroBonus(k, levelIndicator, originalColor, count) {
+function flashSmallHeroBonus(k, levelIndicator, heroColor, count) {
   if (count >= SPEED_BONUS_FLASH_COUNT) {
-    levelIndicator.smallHero.character.color = originalColor
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
     return
   }
   levelIndicator.smallHero.character.color = count % 2 === 0
-    ? k.rgb(0, 255, 100)
+    ? heroColor
     : k.rgb(255, 255, 255)
-  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, originalColor, count + 1))
+  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, heroColor, count + 1))
 }
 
 /**
  * Create circle particles flying outward from small hero on speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero's body
  */
-function createSpeedBonusParticles(k, levelIndicator) {
+function createSpeedBonusParticles(k, levelIndicator, heroColor) {
   if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) return
   const heroX = levelIndicator.smallHero.character.pos.x
   const heroY = levelIndicator.smallHero.character.pos.y
@@ -376,12 +380,12 @@ function createSpeedBonusParticles(k, levelIndicator) {
     const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
     const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
     //
-    // Create small circle particle (green to match flash color)
+    // Create small circle particle matching hero body color
     //
     const particle = k.add([
       k.circle(size),
       k.pos(heroX, heroY),
-      k.color(0, 255, 100),
+      k.color(heroColor.r, heroColor.g, heroColor.b),
       k.opacity(1),
       k.z(CFG.visual.zIndex.ui + 11),
       k.anchor('center'),

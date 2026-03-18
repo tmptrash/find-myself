@@ -7,7 +7,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { set, get } from '../../../utils/progress.js'
-import { toPng, parseHex } from '../../../utils/helper.js'
+import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 
 //
@@ -569,86 +569,61 @@ function flashSmallHeroLevel1(k, levelIndicator, originalColor, count) {
  * @param {Object} levelIndicator - Level indicator instance
  */
 function createHeroScoreParticles(k, levelIndicator) {
-  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) {
-    return
-  }
-  
+  if (!levelIndicator || !levelIndicator.smallHero || !levelIndicator.smallHero.character) return
+  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.hero.body
+  const heroColor = getRGB(k, bodyColorHex)
   const heroX = levelIndicator.smallHero.character.pos.x
   const heroY = levelIndicator.smallHero.character.pos.y
   const particleCount = 8
   //
-  // Create heart particles flying outward (yellow with black outline like hero particles)
+  // Flash the small hero between hero color and white
+  //
+  flashSmallHeroForBonus(k, levelIndicator, heroColor, 0)
+  //
+  // Create circle particles flying outward matching hero body color
   //
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount
     const speed = 30 + Math.random() * 20
     const lifetime = 0.8 + Math.random() * 0.4
-    const heartSize = 18 + Math.random() * 8
-    //
-    // Create black outline hearts (8 directions)
-    //
-    const outlineOffset = 1.5
-    const outlineOffsets = [
-      [-outlineOffset, -outlineOffset],
-      [0, -outlineOffset],
-      [outlineOffset, -outlineOffset],
-      [-outlineOffset, 0],
-      [outlineOffset, 0],
-      [-outlineOffset, outlineOffset],
-      [0, outlineOffset],
-      [outlineOffset, outlineOffset]
-    ]
-    
-    outlineOffsets.forEach(([dx, dy]) => {
-      const outlineParticle = k.add([
-        k.text('♥', { size: heartSize }),
-        k.pos(heroX + dx, heroY + dy),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(CFG.visual.zIndex.ui + 10),
-        k.fixed()
-      ])
-      //
-      // Animate outline particle
-      //
-      const startTime = k.time()
-      outlineParticle.onUpdate(() => {
-        const elapsed = k.time() - startTime
-        if (elapsed > lifetime) {
-          outlineParticle.destroy()
-          return
-        }
-        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
-        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
-        outlineParticle.opacity = 1 - (elapsed / lifetime)
-      })
-    })
-    //
-    // Create main yellow heart
-    //
+    const size = 4 + Math.random() * 4
     const particle = k.add([
-      k.text('♥', { size: heartSize }),
+      k.circle(size),
       k.pos(heroX, heroY),
-      k.color(255, 200, 0),
+      k.color(heroColor.r, heroColor.g, heroColor.b),
       k.opacity(1),
       k.z(CFG.visual.zIndex.ui + 11),
+      k.anchor('center'),
       k.fixed()
     ])
-    //
-    // Animate particle outward with fade
-    //
-    const startTime = k.time()
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
     particle.onUpdate(() => {
-      const elapsed = k.time() - startTime
-      if (elapsed > lifetime) {
-        particle.destroy()
-        return
+      const dt = k.dt()
+      age += dt
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      if (age >= lifetime && particle.exists && particle.exists()) {
+        k.destroy(particle)
       }
-      particle.pos.x += Math.cos(angle) * speed * k.dt()
-      particle.pos.y += Math.sin(angle) * speed * k.dt()
-      particle.opacity = 1 - (elapsed / lifetime)
     })
   }
+}
+
+/**
+ * Flash small hero between hero color and white for speed bonus
+ */
+function flashSmallHeroForBonus(k, levelIndicator, heroColor, count) {
+  const FLASH_COUNT = 20
+  const FLASH_INTERVAL = 0.05
+  if (count >= FLASH_COUNT) {
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
+    return
+  }
+  levelIndicator.smallHero.character.color = count % 2 === 0 ? heroColor : k.rgb(255, 255, 255)
+  k.wait(FLASH_INTERVAL, () => flashSmallHeroForBonus(k, levelIndicator, heroColor, count + 1))
 }
 
 /**

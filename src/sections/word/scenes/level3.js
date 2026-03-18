@@ -258,7 +258,7 @@ export function sceneLevel3(k) {
     // Create word grass on bottom platform (exclude pit area)
     // Raise bottom bound so grass appears to grow from the floor surface
     //
-    const GRASS_RAISE_OFFSET = 4
+    const GRASS_RAISE_OFFSET = 0
     const grassBounds = {
       left: PLATFORM_SIDE_WIDTH,
       right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,

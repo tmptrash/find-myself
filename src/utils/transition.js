@@ -26,7 +26,8 @@ const LEVEL_TRANSITIONS = {
   'level-touch.0': 'level-touch.1',
   'level-touch.1': 'level-touch.2',
   'level-touch.2': 'level-touch.3',
-  'level-touch.3': 'menu'
+  'level-touch.3': 'level-touch.4',
+  'level-touch.4': 'menu'
 }
 
 // Subtitles shown BEFORE entering each level (shifted forward by one)

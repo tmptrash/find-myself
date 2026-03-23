@@ -5,15 +5,291 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import * as GlowBug from '../components/glow-bug.js'
+import * as ShadowCreature from '../components/shadow-creature.js'
+import * as Fog from '../components/fog.js'
+import * as JungleDecor from '../components/jungle-decor.js'
+import { toPng } from '../../../utils/helper.js'
+import { drawFirTree } from '../components/fir-tree.js'
+import { arcY } from '../utils/trees.js'
 //
-// Platform dimensions (minimal margins for large play area)
+// Game area margins
 //
 const TOP_MARGIN = CFG.visual.gameArea.topMargin
 const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
+//
+// Hero spawn configuration
+//
+const HERO_COLLISION_HEIGHT = 25
+const HERO_SCALE = 3
+const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE
+//
+// Background color (gray, brighter for debug)
+//
+const BG_COLOR_R = 50
+const BG_COLOR_G = 50
+const BG_COLOR_B = 60
+const BG_HEX = '#32323C'
+//
+// Wall color (dark gray)
+//
+const WALL_COLOR_R = 40
+const WALL_COLOR_G = 40
+const WALL_COLOR_B = 48
+const WALL_COLOR_HEX = '#282830'
+//
+// Platform color (visible gray)
+//
+const PLATFORM_COLOR_R = 80
+const PLATFORM_COLOR_G = 75
+const PLATFORM_COLOR_B = 90
+//
+// Platform root color (matches vine green tone)
+//
+const PLATFORM_ROOT_COLOR_R = 15
+const PLATFORM_ROOT_COLOR_G = 30
+const PLATFORM_ROOT_COLOR_B = 12
+//
+// Platform dimensions
+//
+const PLATFORM_HEIGHT = 40
+const PLATFORM_CORNER_RADIUS = 8
+//
+// Black outline around platforms on all sides (follows rounded corners)
+//
+const PLATFORM_OUTLINE_WIDTH = 3
+const PLATFORM_OUTLINE_COLOR_R = 10
+const PLATFORM_OUTLINE_COLOR_G = 10
+const PLATFORM_OUTLINE_COLOR_B = 10
+//
+// Bug shield radius for thorn collision (hero near bug is protected from thorns)
+//
+const BUG_SHIELD_RADIUS_X = 25
+const BUG_SHIELD_RADIUS_Y = 30
+//
+// Rounded corner configuration for game area
+//
+const CORNER_RADIUS = 20
+const CORNER_SPRITE_NAME = 'touch3-corner-sprite'
+//
+// Corridor platform definitions (4 platforms)
+// Path: P0 (left-top) → P2 (left-middle, thorns) → P1 (right-middle, trap) → P3 (right-top, anti-hero)
+// Each entry: { x: centerX, y: topSurfaceY, width }
+// P0: small starting platform at max left (higher than P2)
+// P1: trap platform that splits when hero approaches (no vines)
+// P2: thorn-covered hazard platform (moved left)
+// P3: anti-hero platform at max right/top (no bugs)
+//
+const CORRIDOR_PLATFORMS = [
+  { x: 180, y: 550, width: 150 },
+  { x: 1150, y: 500, width: 340 },
+  { x: 680, y: 600, width: 280 },
+  { x: 1650, y: 300, width: 250 }
+]
+//
+// Trap platform configuration (P1 splits into two halves when hero approaches)
+//
+const TRAP_PLATFORM_INDEX = 1
+const TRAP_ACTIVATION_DELAY = 0.05
+const TRAP_SLIDE_SPEED = 600
+//
+// Each half slides out by the full platform width (2x width total gap)
+//
+const TRAP_MAX_SPLIT_DISTANCE = CORRIDOR_PLATFORMS[1].width
+//
+// Speed at which halves return to original position after splitting
+//
+const TRAP_RETURN_SPEED = 200
+//
+// Trap proximity detection range (triggers while hero is still in the air)
+//
+const TRAP_PROXIMITY_X = 300
+const TRAP_PROXIMITY_Y = 400
+//
+// Platform thorn zones (thorns only on P2 hazard platform, none on trap platform)
+//
+const PLATFORM_THORN_ZONES = [
+  {
+    startX: CORRIDOR_PLATFORMS[2].x - CORRIDOR_PLATFORMS[2].width / 2 + 10,
+    endX: CORRIDOR_PLATFORMS[2].x + CORRIDOR_PLATFORMS[2].width / 2 - 10,
+    y: CORRIDOR_PLATFORMS[2].y
+  }
+]
+//
+// Y tolerance for platform thorn collision detection (pixels)
+//
+const PLATFORM_THORN_TOLERANCE = 5
+//
+// Monster spawn position (dark corner, far from hero)
+//
+const MONSTER_SPAWN_X = 1600
+const MONSTER_SPAWN_Y = 500
+//
+// Bottom wall kill zone Y threshold (top surface of bottom wall)
+//
+const BOTTOM_KILL_Y = CFG.visual.screen.height - CFG.visual.gameArea.bottomMargin
+//
+// Floor Y for mountain and tree base (top of bottom wall)
+//
+const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
+//
+// Play area width (for tree distribution)
+//
+const PLAY_AREA_WIDTH = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+//
+// Pre-rendered background sprite names
+//
+const BACK_CANVAS_SPRITE = 'bg-touch-level3-back'
+const FRONT_TREES_SPRITE = 'bg-touch-level3-front-trees'
+//
+// Mountain snow line position (percentage from base to peak)
+//
+const MOUNTAIN_SNOW_PERCENT = 85
+//
+// Mountain snow cap wobble offset (pixels)
+//
+const MOUNTAIN_SNOW_WOBBLE = 15
+//
+// Left mountain geometry and colors (adapted from touch level 2)
+//
+const LEFT_MOUNTAIN = {
+  xOffset: -100,
+  widthExtra: 200,
+  widthVariation: 40,
+  heightVariation: 1200,
+  centerVariation: 250,
+  colors: {
+    snow: 'rgb(200, 210, 220)',
+    rockLeft: 'rgb(50, 80, 100)',
+    rockRight: 'rgb(40, 70, 90)',
+    rockRightLight: 'rgb(90, 130, 150)'
+  }
+}
+//
+// Center mountain geometry and colors (tallest, sharpest)
+//
+const CENTER_MOUNTAIN = {
+  xOffset: -400,
+  widthExtra: 900,
+  widthVariation: 30,
+  heightVariation: 1500,
+  centerVariation: 200,
+  colors: {
+    snow: 'rgb(255, 255, 255)',
+    rockLeft: 'rgb(73, 121, 141)',
+    rockRight: 'rgb(62, 105, 121)',
+    rockRightLight: 'rgb(130, 176, 209)'
+  }
+}
+//
+// Right mountain geometry and colors (brightest)
+//
+const RIGHT_MOUNTAIN = {
+  xOffset: -150,
+  widthExtra: 250,
+  widthVariation: 45,
+  heightVariation: 1300,
+  centerVariation: 280,
+  colors: {
+    snow: 'rgb(245, 248, 250)',
+    rockLeft: 'rgb(90, 140, 160)',
+    rockRight: 'rgb(80, 130, 150)',
+    rockRightLight: 'rgb(150, 190, 220)'
+  }
+}
+//
+// Shared tree trunk configuration
+//
+const TREE_TRUNK_HEIGHT_BASE = 0.1
+const TREE_TRUNK_HEIGHT_RANGE = 0.2
+const TREE_LAYERS_DEC_WIDTH = 0.15
+//
+// Dark tree layer configuration (furthest back, thin silhouettes)
+//
+const DARK_TREES_COUNT = 20
+const DARK_TREES_LAYERS = 1
+const DARK_TREES_TRUNK_WIDTH = 0.03
+const DARK_TREES_TRUNK_COLOR = '#1A1A1A'
+const DARK_TREES_LEFT_COLOR = [40, 50, 40]
+const DARK_TREES_RIGHT_COLOR = [50, 60, 50]
+const DARK_TREES_LAYER_WIDTH = 0.5
+const DARK_TREES_HEIGHT_MIN = 400
+const DARK_TREES_HEIGHT_MAX = 480
+const DARK_TREES_SHARPNESS_MIN = 10
+const DARK_TREES_SHARPNESS_MAX = 20
+//
+// Medium tree layer configuration (multi-layered, slightly brighter)
+//
+const BG_TREES_COUNT = 12
+const BG_TREES_LAYERS = 4
+const BG_TREES_TRUNK_WIDTH = 0.03
+const BG_TREES_TRUNK_COLOR = '#1A1A1A'
+const BG_TREES_LEFT_COLOR = [50, 70, 45]
+const BG_TREES_RIGHT_COLOR = [60, 80, 55]
+const BG_TREES_LAYER_WIDTH = 0.3
+const BG_TREES_HEIGHT_MIN = 300
+const BG_TREES_HEIGHT_MAX = 380
+const BG_TREES_SHARPNESS_MIN = 10
+const BG_TREES_SHARPNESS_MAX = 20
+//
+// Foreground tree layer configuration (small, bright, in front of creature)
+//
+const FRONT_TREES_COUNT = 15
+const FRONT_TREES_LAYERS = 3
+const FRONT_TREES_TRUNK_WIDTH = 0.03
+const FRONT_TREES_TRUNK_COLOR = '#1A1A1A'
+const FRONT_TREES_LEFT_COLOR = [35, 80, 30]
+const FRONT_TREES_RIGHT_COLOR = [45, 100, 40]
+const FRONT_TREES_LAYER_WIDTH = 0.35
+const FRONT_TREES_HEIGHT_MIN = 80
+const FRONT_TREES_HEIGHT_MAX = 200
+const FRONT_TREES_SHARPNESS_MIN = 8
+const FRONT_TREES_SHARPNESS_MAX = 18
+//
+// Cloud configuration (dark clouds under top wall, adapted from touch level 2)
+//
+const CLOUD_DENSE_COUNT = 16
+const CLOUD_SPARSE_COUNT = 5
+const CLOUD_DENSE_Y = TOP_MARGIN + 30
+const CLOUD_SPARSE_Y_MIN = TOP_MARGIN + 50
+const CLOUD_SPARSE_Y_MAX = TOP_MARGIN + 80
+const CLOUD_BASE_COLOR_R = 45
+const CLOUD_BASE_COLOR_G = 46
+const CLOUD_BASE_COLOR_B = 50
+//
+// Platform root decoration count per 100px of platform width
+//
+const ROOTS_PER_100PX = 3
+const ROOT_LENGTH_MIN = 25
+const ROOT_LENGTH_MAX = 55
+const ROOT_WIDTH_MIN = 2.5
+const ROOT_WIDTH_MAX = 4.5
+const ROOT_X_WOBBLE = 12
+//
+// Platform bark line count range
+//
+const BARK_LINES_MIN = 2
+const BARK_LINES_MAX = 4
+const BARK_LINE_OPACITY_MIN = 0.1
+const BARK_LINE_OPACITY_MAX = 0.2
+//
+// Z-index layers for this level
+// Back canvas (mountains + dark/medium trees) → clouds → fog → vines →
+// platforms → platform visuals → foreground → creature → front trees → bugs
+//
+const Z_BACK_CANVAS = -95
+const Z_CLOUDS = -80
+const Z_FOG = -10
+const Z_VINES = 0
+const Z_PLATFORM_VISUALS = 2
+const Z_FOREGROUND = 3
+const Z_CREATURE = 5
+const Z_FRONT_TREES = 6
+const Z_BUGS = 8
 /**
- * Level 3 scene for touch section
+ * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
  */
 export function sceneLevel3(k) {
@@ -25,8 +301,11 @@ export function sceneLevel3(k) {
     //
     // Set gravity
     //
-    const originalGravity = CFG.game.gravity
-    k.setGravity(originalGravity)
+    k.setGravity(CFG.game.gravity)
+    //
+    // Set canvas background to wall color to prevent edge strips
+    //
+    k.setBackground(k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B))
     //
     // Create sound instance
     //
@@ -46,57 +325,37 @@ export function sceneLevel3(k) {
       touchMusic.stop()
     })
     //
-    // Draw background
+    // Create boundary walls
     //
-    k.onDraw(() => {
-      k.drawRect({
-        width: k.width(),
-        height: k.height(),
-        pos: k.vec2(0, 0),
-        color: k.rgb(42, 42, 42)
-      })
-    })
+    createWalls(k)
     //
-    // Create walls
+    // Create rounded corners for the game area
     //
-    // Left wall (full height)
+    createRoundedCorners(k)
     //
-    k.add([
-      k.rect(LEFT_MARGIN, CFG.visual.screen.height),
-      k.pos(LEFT_MARGIN / 2, CFG.visual.screen.height / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
+    // Create corridor platforms (invisible collision rects, skips trap platform)
     //
-    // Right wall (full height)
+    createCorridorPlatforms(k)
     //
-    k.add([
-      k.rect(RIGHT_MARGIN, CFG.visual.screen.height),
-      k.pos(CFG.visual.screen.width - RIGHT_MARGIN / 2, CFG.visual.screen.height / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
+    // Create trap platform as two splittable halves
     //
-    // Top wall (full width)
+    const trapState = createTrapPlatform(k)
     //
-    k.add([
-      k.rect(CFG.visual.screen.width, TOP_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, TOP_MARGIN / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
+    // Pre-generate platform decoration data (roots and bark lines)
+    //
+    const platformDecor = generatePlatformDecor(CORRIDOR_PLATFORMS)
+    //
+    // Create pre-rendered background canvas (mountains + dark/medium trees, one sprite)
+    //
+    createBackCanvas(k)
+    //
+    // Create pre-rendered foreground trees (transparent, in front of creature)
+    //
+    createFrontTrees(k)
+    //
+    // Create dark clouds under top wall
+    //
+    createClouds(k)
     //
     // Create level indicator (TOUCH letters)
     //
@@ -110,253 +369,15 @@ export function sceneLevel3(k) {
       sideWallWidth: LEFT_MARGIN
     })
     //
-    // Create static cloud platform where hero platform was
-    // Position: below letters (TOP_MARGIN + 40 + fontSize + spacing), lowered by 5px
+    // Create anti-hero on the last (upper-right) platform
     //
-    const TOUCH_FONT_SIZE = 48
-    //
-    // Calculate grid dimensions first (needed for cloud platform positioning)
-    // Grid should be positioned to leave space for hero and arrows on the left
-    // Grid ends 50px before right platform (right platform starts at screen.width - RIGHT_MARGIN)
-    //
-    const CLOUD_BLOCK_SIZE = 75
-    const GRID_COLUMNS = 12  // Fixed number of grid columns
-    const GRID_CELL_SIZE = CLOUD_BLOCK_SIZE  // Grid cell size equals block size
-    const GRID_WIDTH = GRID_COLUMNS * GRID_CELL_SIZE  // Total grid width
-    const GRID_RIGHT = CFG.visual.screen.width - RIGHT_MARGIN  // Grid ends at right platform (no margin)
-    const GRID_LEFT = GRID_RIGHT - GRID_WIDTH  // Grid starts from right platform minus width
-    //
-    // Cloud platform positioned to touch top line of grid
-    // Platform width matches grid width, positioned to align with grid
-    // Note: Position calculation moved after BOTTOM_PLATFORM_TOP_Y is defined
-    //
-    const CLOUD_PLATFORM_WIDTH = GRID_WIDTH  // Platform width matches grid width
-    const CLOUD_PLATFORM_HEIGHT = 30
-    const CLOUD_PLATFORM_X = GRID_LEFT + CLOUD_PLATFORM_WIDTH / 2  // Platform centered on grid
-    //
-    // Bottom platform (full width)
-    // Cloud blocks will stop here
-    //
-    const bottomPlatform = k.add([
-      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(31, 31, 31),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "bottom-platform"  // Tag for cloud block collision detection
-    ])
-    const BOTTOM_PLATFORM_Y = CFG.visual.screen.height - BOTTOM_MARGIN / 2
-    const BOTTOM_PLATFORM_TOP_Y = BOTTOM_PLATFORM_Y - BOTTOM_MARGIN / 2
-    //
-    // Calculate grid start position
-    // Now BOTTOM_PLATFORM_TOP_Y is defined, so we can use it
-    //
-    const GRID_ROWS = 8  // Fixed number of grid rows (needed for platform positioning)
-    const gridEndYForPlatform = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
-    const gridStartYForPlatform = gridEndYForPlatform - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
-    //
-    // Position platform above grid - blocks spawn at gridStartY - GRID_CELL_SIZE/2, so platform should be above that
-    // Raise platform by 2 cells above grid top to ensure blocks don't collide with it
-    // Lowered by 100px total (50px + 50px)
-    //
-    const CLOUD_PLATFORM_Y = gridStartYForPlatform - GRID_CELL_SIZE * 2 + CLOUD_PLATFORM_HEIGHT / 2 + 100  // Platform positioned 2 cells above grid top, lowered by 100px total
-    //
-    // Create small platform segments: 2 on each side of anti-hero platform
-    //
-    const SMALL_SEGMENT_WIDTH = 60  // Width of small platform segments
-    const SMALL_SEGMENT_SPACING = 150  // Distance between small segments (center to center) - increased to stretch platforms apart
-    
-    const cloudPlatformSegments = []
-    //
-    // Create 1 small platform to the left of anti-hero
-    //
-    const leftSegmentX = CLOUD_PLATFORM_X - SMALL_SEGMENT_SPACING
-    const leftSegment = k.add([
-      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(leftSegmentX, CLOUD_PLATFORM_Y),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),  // Invisible collision - visual is drawn separately
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "cloud-platform"  // Tag for identification
-    ])
-    cloudPlatformSegments.push(leftSegment)
-    //
-    // Create 1 more small platform further to the left
-    //
-    const leftSegmentX2 = CLOUD_PLATFORM_X - SMALL_SEGMENT_SPACING * 2
-    const leftSegment2 = k.add([
-      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(leftSegmentX2, CLOUD_PLATFORM_Y),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),  // Invisible collision - visual is drawn separately
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "cloud-platform"  // Tag for identification
-    ])
-    cloudPlatformSegments.push(leftSegment2)
-    //
-    // Create 1 small platform to the right of anti-hero
-    //
-    const rightSegmentX = CLOUD_PLATFORM_X + SMALL_SEGMENT_SPACING
-    const rightSegment = k.add([
-      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(rightSegmentX, CLOUD_PLATFORM_Y),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),  // Invisible collision - visual is drawn separately
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "cloud-platform"  // Tag for identification
-    ])
-    cloudPlatformSegments.push(rightSegment)
-    //
-    // Create 1 more small platform further to the right
-    //
-    const rightSegmentX2 = CLOUD_PLATFORM_X + SMALL_SEGMENT_SPACING * 2
-    const rightSegment2 = k.add([
-      k.rect(SMALL_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(rightSegmentX2, CLOUD_PLATFORM_Y),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),  // Invisible collision - visual is drawn separately
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "cloud-platform"  // Tag for identification
-    ])
-    cloudPlatformSegments.push(rightSegment2)
-    //
-    // Create platform segment under anti-hero (center of platform)
-    // This ensures anti-hero always has a platform to stand on
-    //
-    const ANTI_HERO_SEGMENT_WIDTH = 60  // Segment width for anti-hero (reduced to match small platforms)
-    const antiHeroSegment = k.add([
-      k.rect(ANTI_HERO_SEGMENT_WIDTH, CLOUD_PLATFORM_HEIGHT),
-      k.pos(CLOUD_PLATFORM_X, CLOUD_PLATFORM_Y),  // Center of platform (where anti-hero stands)
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.opacity(0),  // Invisible collision - visual is drawn separately
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName,
-      "cloud-platform"  // Tag for identification
-    ])
-    cloudPlatformSegments.push(antiHeroSegment)
-    //
-    // Create visual clouds for all platform segments
-    //
-    const baseCloudColor = k.rgb(100, 100, 120)
-    const cloudTypes = [
-      {
-        mainSize: 50,
-        puffs: [
-          { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
-          { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
-          { radius: 0.65, offsetX: 0.4, offsetY: -0.1 },
-          { radius: 0.7, offsetX: 0.8, offsetY: -0.05 },
-          { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
-          { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
-        ],
-        color: baseCloudColor,
-        opacity: 0.6
-      },
-      {
-        mainSize: 42,
-        puffs: [
-          { radius: 0.8, offsetX: -0.7, offsetY: 0 },
-          { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
-          { radius: 0.75, offsetX: 0.3, offsetY: -0.08 },
-          { radius: 0.8, offsetX: 0.7, offsetY: 0 },
-          { radius: 0.7, offsetX: 0, offsetY: 0.12 }
-        ],
-        color: k.rgb(95, 95, 115),
-        opacity: 0.55
-      }
-    ]
-    //
-    // Helper function to create clouds for a platform segment
-    //
-    const createCloudsForSegment = (segmentX, segmentWidth) => {
-      const cloudStartX = segmentX - segmentWidth / 2 + 10
-      const cloudEndX = segmentX + segmentWidth / 2 - 10
-      const cloudWidth = cloudEndX - cloudStartX
-      const cloudCount = Math.max(2, Math.floor(cloudWidth / 40))
-      const cloudSpacing = cloudCount > 1 ? cloudWidth / (cloudCount - 1) : 0
-      for (let i = 0; i < cloudCount; i++) {
-        const baseX = cloudStartX + cloudSpacing * i
-        const randomOffset = (Math.random() - 0.5) * (cloudSpacing * 0.6)
-        const cloudX = baseX + randomOffset
-        const randomYOffset = (Math.random() - 0.5) * (CLOUD_PLATFORM_HEIGHT * 0.4)
-        const cloudY = CLOUD_PLATFORM_Y + randomYOffset
-        const cloudType = cloudTypes[Math.floor(Math.random() * cloudTypes.length)]
-        k.add([
-          k.pos(cloudX, cloudY),
-          k.z(CFG.visual.zIndex.platforms - 1),
-          {
-            draw() {
-              const mainSize = cloudType.mainSize
-              k.drawCircle({
-                radius: mainSize,
-                pos: k.vec2(0, 0),
-                color: cloudType.color,
-                opacity: cloudType.opacity
-              })
-              cloudType.puffs.forEach((puff) => {
-                k.drawCircle({
-                  radius: mainSize * puff.radius,
-                  pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
-                  color: cloudType.color,
-                  opacity: cloudType.opacity
-                })
-              })
-            }
-          }
-        ])
-      }
-    }
-    //
-    // Create visual clouds across entire tetris zone width (from GRID_LEFT to GRID_RIGHT)
-    //
-    createCloudsForSegment(GRID_LEFT + GRID_WIDTH / 2, GRID_WIDTH)
-    const CLOUD_PLATFORM_TOP_Y = CLOUD_PLATFORM_Y - CLOUD_PLATFORM_HEIGHT / 2
-    //
-    // Hero spawn position on bottom platform (between left platform and grid)
-    // Position hero between left margin and grid start
-    //
-    const HERO_AREA_CENTER_X = LEFT_MARGIN + (GRID_LEFT - LEFT_MARGIN) / 2  // Center between left margin and grid
-    const HERO_SPAWN_X_ON_PLATFORM = HERO_AREA_CENTER_X  // Position hero in center of available space
-    //
-    // Create arrows (left and right) on bottom platform with hero, moved right
-    // Position arrows slightly above platform
-    //
-    const ARROWS_Y_OFFSET = -23  // Move arrows up by 23 pixels (lowered by 2px from -25)
-    const arrowsInst = createCloudPlatformArrows(k, HERO_SPAWN_X_ON_PLATFORM, BOTTOM_PLATFORM_Y + ARROWS_Y_OFFSET, sound)
-    //
-    // Store bottomPlatformTopY for use in createCloudBlock
-    //
-    const bottomPlatformTopY = BOTTOM_PLATFORM_TOP_Y
-    //
-    // Create anti-hero on cloud platform (where hero was)
-    //
-    const ANTIHERO_COLLISION_HEIGHT = 25
-    const ANTIHERO_SCALE = 3
-    const ANTIHERO_COLLISION_HEIGHT_SCALED = ANTIHERO_COLLISION_HEIGHT * ANTIHERO_SCALE  // 75
-    const ANTIHERO_Y_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_TOP_Y - ANTIHERO_COLLISION_HEIGHT_SCALED / 2  // Anti-hero center positioned so bottom touches cloud platform top
-    const ANTIHERO_X_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_X  // Center of cloud platform
-    
+    const lastPlatform = CORRIDOR_PLATFORMS[CORRIDOR_PLATFORMS.length - 1]
+    const antiHeroX = lastPlatform.x + lastPlatform.width / 2 - 80
+    const antiHeroY = lastPlatform.y - HERO_COLLISION_HEIGHT_SCALED / 2 - 5
     const antiHeroInst = Hero.create({
       k,
-      x: ANTIHERO_X_ON_CLOUD_PLATFORM,
-      y: ANTIHERO_Y_ON_CLOUD_PLATFORM,
+      x: antiHeroX,
+      y: antiHeroY,
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
       sfx: sound,
@@ -364,595 +385,168 @@ export function sceneLevel3(k) {
       addArms: true
     })
     //
-    // Create hero with anti-hero reference for annihilation
-    // Position hero on bottom platform in left corner
+    // Create hero on the first (bottom-left) platform
     //
-    const HERO_COLLISION_HEIGHT = 25
-    const HERO_SCALE = 3
-    const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE  // 75
-    const HERO_FIXED_Y = BOTTOM_PLATFORM_TOP_Y - HERO_COLLISION_HEIGHT_SCALED / 2  // Hero center positioned so bottom touches bottom platform top
-    
+    const firstPlatform = CORRIDOR_PLATFORMS[0]
+    const heroX = firstPlatform.x - firstPlatform.width / 2 + 80
+    const heroY = firstPlatform.y - HERO_COLLISION_HEIGHT_SCALED / 2 - 5
     const heroInst = Hero.create({
       k,
-      x: HERO_SPAWN_X_ON_PLATFORM,
-      y: HERO_FIXED_Y,
+      x: heroX,
+      y: heroY,
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
       antiHero: antiHeroInst,
       onAnnihilation: () => {
         //
-        // Transition after annihilation to menu
+        // Transition after annihilation to level 4
         //
         createLevelTransition(k, 'level-touch.3', () => {
-          k.go('menu')
+          k.go('level-touch.4')
         })
       },
       currentLevel: 'level-touch.3',
       addMouth: true
     })
     //
-    // Store original jump force for hero (use hero's actual jumpForce)
-    //
-    const originalJumpForce = heroInst.jumpForce
-    //
-    // Track if hero is currently in tetris zone to avoid setting gravity every frame
-    //
-    let wasInTetrisZone = false
-    //
     // Spawn hero and anti-hero
     //
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     //
-    // Hero can run and jump on cloud platform (gravity enabled, collision with platform)
+    // Create fog system
     //
+    const fogInst = Fog.create({ k })
     //
-    // Create falling cloud blocks system with grid movement
+    // Create glow bugs on platforms 0-2 (no bugs on anti-hero platform)
     //
-    const cloudBlocks = []
-
-    const CLOUD_BLOCK_SPAWN_INTERVAL = 2.0  // Spawn new block every 2 seconds
-    const CLOUD_BLOCK_UPDATE_INTERVAL = 2.0  // Update position every 2 seconds (tetris-like jerky movement)
-    const CLOUD_BLOCK_TAG = "cloud-block"  // Tag for cloud blocks
-    const MAX_CLOUD_BLOCKS = 20  // Maximum number of blocks to spawn
+    const glowBugInst = GlowBug.create({
+      k,
+      hero: heroInst,
+      sfx: sound,
+      platforms: [CORRIDOR_PLATFORMS[0], CORRIDOR_PLATFORMS[2]],
+      bugsPerPlatform: 1,
+      minBugsPerPlatform: 1
+    })
     //
-    // Fixed spawn positions for blocks (same order every time)
-    // Each number represents grid column (0-11)
+    // Create a bug on the right half of the trap platform
     //
-    const FIXED_SPAWN_COLUMNS = [
-      5, 6, 4, 7, 3, 8, 2, 9, 1, 10,
-      0, 11, 5, 6, 4, 7, 3, 8, 2, 9
-    ]
-    let totalBlocksSpawned = 0  // Counter for total blocks spawned
-    //
-    // Grid bounds already calculated above (GRID_LEFT, GRID_WIDTH, GRID_RIGHT, etc.)
-    //
-    //
-    // Calculate spawn positions on grid (below cloud platform)
-    // Blocks should spawn one cell above first grid cell
-    // Use same grid calculation as visualization: gridEndY = BOTTOM_PLATFORM_TOP_Y, gridStartY = gridEndY - (8 * GRID_CELL_SIZE)
-    // Note: GRID_ROWS is already defined above
-    //
-    const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
-    const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
-    const SPAWN_Y = gridStartY - GRID_CELL_SIZE / 2  // Center of cell one row above first grid cell
-    let cloudBlockSpawnTimer = 0
-    let cloudBlockUpdateTimer = 0
-    //
-    // Grid visualization (for debugging)
-    //
-    const showGrid = false  // Set to false to hide grid
-    //
-    // Draw grid visualization (for debugging)
-    //
-    if (showGrid) {
-      k.onDraw(() => {
-        //
-        // Calculate grid bounds to match block positions exactly
-        // Grid starts from cloud platform top and extends downward
-        // Use fixed screen width to ensure consistent grid positioning
-        //
-        // Calculate grid - should have exactly 8 cells vertically, ending at bottom platform
-        // Last cell bottom edge should align with platform top
-        // Calculate gridEndRow so that: gridEndRow * GRID_CELL_SIZE + GRID_CELL_SIZE = BOTTOM_PLATFORM_TOP_Y
-        // So: gridEndRow = (BOTTOM_PLATFORM_TOP_Y - GRID_CELL_SIZE) / GRID_CELL_SIZE
-        //
-        const GRID_ROWS = 8  // Fixed number of grid rows
-        //
-        // Calculate grid - 8 cells vertically, starting from bottom platform top
-        // Bottom edge of last cell should exactly align with platform top
-        // Count 8 cells upward from bottom platform
-        //
-        const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
-        const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
-        //
-        // Draw vertical grid lines at cell boundaries
-        // Lines at: GRID_LEFT, GRID_LEFT + GRID_CELL_SIZE, GRID_LEFT + 2*GRID_CELL_SIZE, ...
-        // Draw 13 lines total (12 cells + 1 right edge): from col 0 to GRID_COLUMNS (inclusive)
-        // Lines go from top of first cell (gridStartY) to bottom of last cell (gridEndY)
-        //
-        for (let col = 0; col <= GRID_COLUMNS; col++) {
-          const x = GRID_LEFT + col * GRID_CELL_SIZE
-          //
-          // Draw line from top of first cell to bottom of last cell
-          //
-          k.drawLine({
-            p1: k.vec2(x, gridStartY),
-            p2: k.vec2(x, gridEndY),
-            width: 1,
-            color: k.rgb(255, 255, 255),
-            opacity: 0.2
-          })
-        }
-        //
-        // Draw horizontal grid lines at cell boundaries
-        // For 8 cells, we need 9 lines: top of first cell + 8 boundaries between cells
-        // Lines at: gridStartY, gridStartY + GRID_CELL_SIZE, ..., gridEndY
-        //
-        for (let row = 0; row <= GRID_ROWS; row++) {
-          const y = gridStartY + row * GRID_CELL_SIZE
-          //
-          // Draw line from left to right edge of grid
-          //
-          k.drawLine({
-            p1: k.vec2(GRID_LEFT, y),
-            p2: k.vec2(GRID_RIGHT, y),
-            width: 1,
-            color: k.rgb(255, 255, 255),
-            opacity: 0.2
-          })
-        }
-      })
+    const trapPlatform = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
+    const trapRightHalfPlatform = {
+      x: trapPlatform.x + trapPlatform.width / 4,
+      y: trapPlatform.y,
+      width: trapPlatform.width / 2
     }
+    const trapBugInst = GlowBug.create({
+      k,
+      hero: heroInst,
+      sfx: sound,
+      platforms: [trapRightHalfPlatform],
+      bugsPerPlatform: 1,
+      minBugsPerPlatform: 1
+    })
+    //
+    // Create shadow creature with hero death animation on touch
+    //
+    const creatureInst = ShadowCreature.create({
+      k,
+      x: MONSTER_SPAWN_X,
+      y: MONSTER_SPAWN_Y,
+      hero: heroInst,
+      onHeroTouch: () => {
+        if (heroInst.isDying) return
+        Hero.death(heroInst, () => k.go('level-touch.3'))
+      }
+    })
+    //
+    // Create jungle decorations (grass, vines, thorns on bottom wall and platforms)
+    //
+    const decorInst = JungleDecor.create({
+      k,
+      platforms: CORRIDOR_PLATFORMS,
+      platformHeight: PLATFORM_HEIGHT,
+      hero: heroInst,
+      platformThorns: PLATFORM_THORN_ZONES,
+      skipVineIndices: [TRAP_PLATFORM_INDEX]
+    })
+    //
+    // Draw fog layer
+    //
+    k.add([
+      k.z(Z_FOG),
+      {
+        draw() {
+          Fog.onDraw(fogInst)
+        }
+      }
+    ])
+    //
+    // Draw hanging vines (behind platforms)
+    //
+    k.add([
+      k.z(Z_VINES),
+      {
+        draw() {
+          JungleDecor.onDrawVines(decorInst)
+        }
+      }
+    ])
+    //
+    // Draw platform visuals with rounded edges, black stripe, and root decorations
+    //
+    k.add([
+      k.z(Z_PLATFORM_VISUALS),
+      {
+        draw() {
+          drawPlatformVisuals(k, platformDecor)
+          drawTrapPlatformVisuals(k, trapState)
+        }
+      }
+    ])
+    //
+    // Draw grass and thorns (above platforms)
+    //
+    k.add([
+      k.z(Z_FOREGROUND),
+      {
+        draw() {
+          JungleDecor.onDrawForeground(decorInst)
+        }
+      }
+    ])
+    //
+    // Draw shadow creature (between back canvas and front trees)
+    //
+    k.add([
+      k.z(Z_CREATURE),
+      {
+        draw() {
+          ShadowCreature.onDraw(creatureInst)
+        }
+      }
+    ])
+    //
+    // Draw glow bug auras and bugs (in front of front trees)
+    //
+    k.add([
+      k.z(Z_BUGS),
+      {
+        draw() {
+          GlowBug.onDraw(glowBugInst)
+          GlowBug.onDraw(trapBugInst)
+        }
+      }
+    ])
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k })
+    const fpsCounter = FpsCounter.create({ k, showTimer: true })
     //
-    // Update FPS counter, arrow glow effect, and cloud blocks
+    // Main update loop
     //
-    // Track previous arrow state to play sound only when hero first steps on arrow
-    //
-    let wasHeroAboveLeftArrow = false
-    let wasHeroAboveRightArrow = false
     k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
-      //
-      // Update arrow glow when hero is above them
-      //
-      arrowsInst.update(heroInst.character)
-      //
-      // Check if hero is above arrows and play sound immediately when hero steps on arrow
-      //
-      if (heroInst.character && heroInst.isSpawned && sound) {
-        const heroX = heroInst.character.pos.x
-        const HERO_COLLISION_WIDTH_SCALED = 30
-        const heroLeft = heroX - HERO_COLLISION_WIDTH_SCALED / 2
-        const heroRight = heroX + HERO_COLLISION_WIDTH_SCALED / 2
-        const ARROW_WIDTH_SCALED = 300 * 0.16
-        const arrowHalfWidth = (ARROW_WIDTH_SCALED * 2) / 2 + 40
-        const leftArrowLeft = arrowsInst.leftArrowX - arrowHalfWidth
-        const leftArrowRight = arrowsInst.leftArrowX + arrowHalfWidth
-        const rightArrowLeft = arrowsInst.rightArrowX - arrowHalfWidth
-        const rightArrowRight = arrowsInst.rightArrowX + arrowHalfWidth
-        const isHeroAboveLeftArrow = heroLeft < leftArrowRight && heroRight > leftArrowLeft
-        const isHeroAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
-        //
-        // Play sound once when hero first steps on arrow
-        //
-        if (isHeroAboveLeftArrow && !wasHeroAboveLeftArrow) {
-          Sound.playArrowSound(sound)
-        }
-        if (isHeroAboveRightArrow && !wasHeroAboveRightArrow) {
-          Sound.playArrowSound(sound)
-        }
-        wasHeroAboveLeftArrow = isHeroAboveLeftArrow
-        wasHeroAboveRightArrow = isHeroAboveRightArrow
-      }
-      //
-      // Increase jump force by 2x and reduce gravity when hero is in tetris zone (between GRID_LEFT and GRID_RIGHT)
-      // Use gravityScale to reduce gravity only in tetris zone, keep normal gravity outside
-      //
-      if (heroInst.character && heroInst.isSpawned) {
-        const heroX = heroInst.character.pos.x
-        const isInTetrisZone = heroX >= GRID_LEFT && heroX <= GRID_RIGHT
-        
-        // Update jump force and gravity scale only when zone state changes
-        if (isInTetrisZone !== wasInTetrisZone) {
-          if (isInTetrisZone) {
-            heroInst.jumpForce = originalJumpForce * 1.25
-          } else {
-            heroInst.jumpForce = originalJumpForce
-          }
-          wasInTetrisZone = isInTetrisZone
-        }
-      }
-      //
-      // Prevent hero from using side collisions of wall blocks for jumping
-      // Check if hero is colliding with a block that is part of a wall from the side
-      //
-      if (heroInst.character && cloudBlocks.length > 0) {
-        const heroX = heroInst.character.pos.x
-        const heroY = heroInst.character.pos.y
-        const heroCollisionHeight = 75  // HERO_COLLISION_HEIGHT_SCALED
-        const heroCollisionWidth = 30   // HERO_COLLISION_WIDTH_SCALED
-        const heroTop = heroY - heroCollisionHeight / 2
-        const heroBottom = heroY + heroCollisionHeight / 2
-        const heroLeft = heroX - heroCollisionWidth / 2
-        const heroRight = heroX + heroCollisionWidth / 2
-        
-        cloudBlocks.forEach(block => {
-          if (block._isPartOfWall && block.isStopped) {
-            //
-            // Block is part of a wall - check if hero is colliding from the side
-            //
-            const blockX = block.pos.x
-            const blockY = block.pos.y
-            const blockSize = CLOUD_BLOCK_SIZE
-            const blockLeft = blockX - blockSize / 2
-            const blockRight = blockX + blockSize / 2
-            const blockTop = blockY - blockSize / 2
-            const blockBottom = blockY + blockSize / 2
-            
-            //
-            // Check if hero is horizontally overlapping with block
-            //
-            const horizontalOverlap = heroLeft < blockRight && heroRight > blockLeft
-            
-            //
-            // Check if hero is vertically overlapping with block
-            //
-            const verticalOverlap = heroTop < blockBottom && heroBottom > blockTop
-            
-            //
-            // Check if hero is colliding from the side (not from top)
-            // Hero is colliding from side if:
-            // - Horizontal overlap exists
-            // - Hero is not clearly above the block (hero bottom is not significantly above block top)
-            // - Hero is to the left or right of block center
-            //
-            const isCollidingFromSide = horizontalOverlap && verticalOverlap && 
-                                       (heroBottom > blockTop + 10) &&  // Hero is not clearly above
-                                       (Math.abs(heroX - blockX) > blockSize * 0.3)  // Hero is significantly to the side
-            
-            if (isCollidingFromSide) {
-              //
-              // Temporarily disable platform collision for this block
-              // Remove platformName tag temporarily to prevent hero from using it as platform
-              //
-              if (!block._wallCollisionDisabled) {
-                block.unuse(CFG.game.platformName)
-                block._wallCollisionDisabled = true
-              }
-            } else {
-              //
-              // Hero is not colliding from side - restore platform collision
-              //
-              if (block._wallCollisionDisabled) {
-                block.use(CFG.game.platformName)
-                block._wallCollisionDisabled = false
-              }
-            }
-          } else {
-            //
-            // Block is not part of wall - ensure platform collision is enabled
-            //
-            if (block._wallCollisionDisabled) {
-              block.use(CFG.game.platformName)
-              block._wallCollisionDisabled = false
-            }
-          }
-        })
-      }
-      //
-      // Update cloud blocks spawn timer
-      // Only spawn if we haven't reached the maximum number of blocks
-      //
-      if (totalBlocksSpawned < MAX_CLOUD_BLOCKS) {
-        cloudBlockSpawnTimer += k.dt()
-        if (cloudBlockSpawnTimer >= CLOUD_BLOCK_SPAWN_INTERVAL) {
-          cloudBlockSpawnTimer = 0
-          //
-          // Spawn new cloud block on grid (below cloud platform)
-          // Use fixed spawn column from predefined array
-          //
-          const gridColumn = FIXED_SPAWN_COLUMNS[totalBlocksSpawned]  // Get column from fixed array
-          const spawnX = GRID_LEFT + gridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2  // Center of grid cell
-          const cloudBlock = createCloudBlock(k, spawnX, SPAWN_Y, CLOUD_BLOCK_SIZE, CLOUD_BLOCK_TAG)
-          //
-          // Store grid position for block
-          //
-          cloudBlock.gridColumn = gridColumn
-          cloudBlocks.push(cloudBlock)
-          totalBlocksSpawned++  // Increment counter
-        }
-      }
-      //
-      // Update cloud blocks position (jerky movement every second)
-      //
-      cloudBlockUpdateTimer += k.dt()
-      if (cloudBlockUpdateTimer >= CLOUD_BLOCK_UPDATE_INTERVAL) {
-        cloudBlockUpdateTimer = 0
-        //
-        // Check if hero is above left or right arrow (use same logic as arrow glow)
-        //
-        const heroX = heroInst.character.pos.x
-        const heroLeft = heroX - 15  // Half of hero collision width (HERO_COLLISION_WIDTH_SCALED / 2)
-        const heroRight = heroX + 15
-        //
-        // Calculate arrow detection bounds (same as in createCloudPlatformArrows)
-        //
-        const ARROW_WIDTH_SCALED = 300 * 0.16  // arrowSpriteWidth * arrowScale
-        const arrowHalfWidth = (ARROW_WIDTH_SCALED * 2) / 2 + 40  // Double width + 40px padding
-        //
-        // Check left arrow
-        //
-        const leftArrowLeft = arrowsInst.leftArrowX - arrowHalfWidth
-        const leftArrowRight = arrowsInst.leftArrowX + arrowHalfWidth
-        const isHeroAboveLeftArrow = heroLeft < leftArrowRight && heroRight > leftArrowLeft
-        //
-        // Check right arrow
-        //
-        const rightArrowLeft = arrowsInst.rightArrowX - arrowHalfWidth
-        const rightArrowRight = arrowsInst.rightArrowX + arrowHalfWidth
-        const isHeroAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
-        //
-        // Calculate grid constants once (used by all blocks)
-        //
-        const GRID_ROWS = 8  // Fixed number of grid rows
-        const gridEndY = BOTTOM_PLATFORM_TOP_Y  // Bottom edge of last cell = platform top
-        const gridStartY = gridEndY - (GRID_ROWS * GRID_CELL_SIZE)  // Top edge of first cell (8 cells up)
-        const targetY = gridEndY - GRID_CELL_SIZE / 2  // Center of last cell (8th cell)
-        const targetGridRow = GRID_ROWS - 1  // Last row index (0-based: 0 to 7)
-        //
-        // Helper function to get grid row from Y position
-        //
-        const getGridRow = (y) => {
-          return Math.floor((y - gridStartY - GRID_CELL_SIZE / 2) / GRID_CELL_SIZE)
-        }
-        //
-        // Helper function to get grid column from X position
-        //
-        const getGridColumn = (x) => {
-          return Math.floor((x - GRID_LEFT - GRID_CELL_SIZE / 2) / GRID_CELL_SIZE)
-        }
-        //
-        // Helper function to check if a cell is occupied by any block
-        //
-        const isCellOccupied = (column, row, excludeBlock) => {
-          return cloudBlocks.some((otherBlock) => {
-            if (!otherBlock.exists() || otherBlock === excludeBlock) return false
-            const otherColumn = otherBlock.gridColumn !== undefined ? otherBlock.gridColumn : getGridColumn(otherBlock.pos.x)
-            const otherRow = getGridRow(otherBlock.pos.y)
-            return otherColumn === column && otherRow === row
-          })
-        }
-        //
-        // Sort blocks by Y position (bottom to top) so lower blocks are processed first
-        // This ensures that when a block checks for blocks below, lower blocks are already positioned
-        //
-        const sortedBlocks = [...cloudBlocks].filter(b => b.exists()).sort((a, b) => b.pos.y - a.pos.y)
-        //
-        // Update each cloud block (grid-based tetris-like movement)
-        // Process from bottom to top so lower blocks are positioned first
-        //
-        sortedBlocks.forEach((block) => {
-          //
-          // Always snap block to grid first (prevent drift from physics)
-          //
-          const currentGridColumn = block.gridColumn !== undefined ? block.gridColumn : getGridColumn(block.pos.x)
-          const snappedX = GRID_LEFT + currentGridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-          block.pos.x = snappedX
-          block.gridColumn = currentGridColumn
-          //
-          // Get current grid position (snap to grid)
-          // Calculate which row (0-7) the block is in based on gridStartY
-          //
-          const currentGridRow = getGridRow(block.pos.y)
-          //
-          // Check if block has reached bottom platform
-          //
-          const hasReachedBottom = currentGridRow >= targetGridRow
-          //
-          // Check if block is stopped (already on platform)
-          //
-          const isStopped = block.isStopped || false
-          //
-          // Check if block is on another block (using grid-based logic, not physics)
-          // Block is on another block if there's any block in the same column one row below
-          //
-          let isOnAnotherBlock = false
-          if (currentGridRow < targetGridRow && !isStopped) {
-            //
-            // Check if there's any block in the same column one row below
-            //
-            const rowBelow = currentGridRow + 1
-            isOnAnotherBlock = isCellOccupied(currentGridColumn, rowBelow, block)
-          }
-          const isOnPlatform = hasReachedBottom || isOnAnotherBlock || isStopped
-          //
-          // Apply grid-based tetris-like movement
-          //
-          if (!isOnPlatform) {
-              //
-              // Move block down by one grid cell (one cell lower)
-              //
-              const newGridRow = currentGridRow + 1  // Move down by 1 cell
-              //
-              // Check if there's any block in the same column at newGridRow
-              // Blocks cannot occupy the same cell - each cell can only have one block
-              //
-              const cellBelowOccupied = isCellOccupied(currentGridColumn, newGridRow, block)
-              //
-              // Don't move past platform - clamp to platform grid row
-              // Blocks cannot go below targetGridRow (last cell)
-              // Also don't move if there's any block at the new position (prevents stacking in same cell)
-              //
-              let finalY
-              let finalGridRow
-              if (newGridRow >= targetGridRow) {
-                //
-                // Block would go past or reach platform - stop at target position
-                //
-                finalGridRow = targetGridRow
-                finalY = targetY
-                block.isStopped = true  // Mark as stopped
-              } else if (cellBelowOccupied) {
-                //
-                // There's a block at new position - stop at current row (one cell above)
-                //
-                finalGridRow = currentGridRow
-                finalY = gridStartY + finalGridRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-                block.isStopped = true  // Mark as stopped
-              } else {
-                finalGridRow = newGridRow
-                finalY = gridStartY + finalGridRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-              }
-              //
-              // Apply horizontal grid movement (one cell left or right)
-              // Blocks move based on hero position above arrows
-              // Only move if target column has space at current or lower row
-              //
-              let newGridColumn = currentGridColumn
-              if (isHeroAboveLeftArrow && currentGridColumn > 0) {
-                //
-                // Check if left column has space at current row or below
-                //
-                const leftColumn = currentGridColumn - 1
-                const hasSpaceLeft = !isCellOccupied(leftColumn, finalGridRow, block) && 
-                                     !isCellOccupied(leftColumn, finalGridRow + 1, block)
-                if (hasSpaceLeft) {
-                  newGridColumn = leftColumn
-                }
-              } else if (isHeroAboveRightArrow && currentGridColumn < GRID_COLUMNS - 1) {
-                //
-                // Check if right column has space at current row or below
-                //
-                const rightColumn = currentGridColumn + 1
-                const hasSpaceRight = !isCellOccupied(rightColumn, finalGridRow, block) && 
-                                      !isCellOccupied(rightColumn, finalGridRow + 1, block)
-                if (hasSpaceRight) {
-                  newGridColumn = rightColumn
-                }
-              }
-              //
-              // Update positions to grid cell centers (snap to grid)
-              //
-              block.pos.x = GRID_LEFT + newGridColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-              block.pos.y = finalY
-              block.gridColumn = newGridColumn
-              //
-              // Reset velocity to prevent physics from interfering
-              //
-              block.vel.y = 0
-              block.vel.x = 0
-            } else {
-              //
-              // Block is on platform or another block - ensure it stays exactly on grid
-              //
-              if (isOnAnotherBlock) {
-                //
-                // Block is on another block - snap to grid row above current
-                //
-                const snappedRow = currentGridRow
-                block.pos.y = gridStartY + snappedRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-                block.isStopped = true  // Mark as stopped when on another block
-              } else {
-                //
-                // Block is on bottom platform - use target position
-                //
-                block.pos.y = targetY
-                block.isStopped = true
-              }
-              //
-              // Snap X position to grid (force exact position)
-              //
-              const snappedColumn = block.gridColumn !== undefined ? block.gridColumn : Math.floor((block.pos.x - GRID_LEFT) / GRID_CELL_SIZE)
-              block.pos.x = GRID_LEFT + snappedColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-              block.gridColumn = snappedColumn
-              //
-              // Stop all movement and make block static to prevent physics interactions
-              //
-              block.vel.y = 0
-              block.vel.x = 0
-              //
-              // Make block static to prevent any physics interactions with other blocks
-              // Use unuse/use to replace dynamic body with static body
-              //
-              if (!block._isStatic) {
-                block.unuse("body")
-                block.use(k.body({ isStatic: true }))
-                block._isStatic = true
-              }
-          }
-          //
-          // Check if this block is part of a wall (has block above it)
-          // If so, mark it to prevent hero from using side collisions for jumping
-          //
-          const blockRow = getGridRow(block.pos.y)
-          const blockColumn = block.gridColumn !== undefined ? block.gridColumn : getGridColumn(block.pos.x)
-          const hasBlockAbove = blockRow > 0 && isCellOccupied(blockColumn, blockRow - 1, block)
-          block._isPartOfWall = hasBlockAbove
-          //
-          // Always enforce grid position (prevent any physics drift)
-          // Snap Y position to grid to ensure blocks are always in cells, not between them
-          // Blocks cannot go below targetGridRow (last cell)
-          // For stopped blocks, force static body and exact position
-          // Also ensure blocks don't occupy the same cell (move up if cell is occupied)
-          //
-          const enforcedColumn = block.gridColumn !== undefined ? block.gridColumn : getGridColumn(block.pos.x)
-          let enforcedRow = getGridRow(block.pos.y)
-          //
-          // Clamp enforced row to targetGridRow (cannot go below last cell)
-          //
-          if (enforcedRow > targetGridRow) {
-            enforcedRow = targetGridRow
-          }
-          //
-          // Check if there's another block in the same cell and move up if needed
-          // Blocks cannot occupy the same cell - each cell can only have one block
-          // Keep moving up until we find an empty cell
-          //
-          while (isCellOccupied(enforcedColumn, enforcedRow, block) && enforcedRow > 0) {
-            enforcedRow = enforcedRow - 1
-            if (!block.isStopped) {
-              block.isStopped = true  // Mark as stopped if we had to move up
-            }
-          }
-          const enforcedX = GRID_LEFT + enforcedColumn * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-          const enforcedY = gridStartY + enforcedRow * GRID_CELL_SIZE + GRID_CELL_SIZE / 2
-          //
-          // For stopped blocks, force exact position and make static
-          //
-          if (block.isStopped) {
-            block.pos.x = enforcedX
-            block.pos.y = enforcedY
-            block.vel.y = 0
-            block.vel.x = 0
-            //
-            // Make block static to prevent any physics interactions
-            //
-            if (!block._isStatic) {
-              block.unuse("body")
-              block.use(k.body({ isStatic: true }))
-              block._isStatic = true
-            }
-          } else {
-            block.pos.x = enforcedX
-            block.pos.y = enforcedY
-          }
-          block.gridColumn = enforcedColumn
-        })
-        //
-        // Remove blocks that are below screen
-        //
-        for (let i = cloudBlocks.length - 1; i >= 0; i--) {
-          if (!cloudBlocks[i].exists() || cloudBlocks[i].pos.y > k.height() + 100) {
-            cloudBlocks.splice(i, 1)
-          }
-        }
-      }
+      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState)
     })
     //
     // ESC key to return to menu
@@ -964,56 +558,752 @@ export function sceneLevel3(k) {
 }
 
 /**
- * Creates a static cloud platform (hero can stand on it)
- * Uses same cloud layer style as level 2 (dense layer of clouds)
+ * Main update function for all level3 systems
  * @param {Object} k - Kaplay instance
- * @param {number} x - X position (center)
- * @param {number} y - Y position (center)
- * @param {number} width - Platform width
- * @param {number} height - Platform height
- * @param {boolean} [dotted=false] - If true, create dotted platform with gaps
- * @param {number} [segmentCount=10] - Number of segments for dotted platform
- * @param {number} [segmentWidth] - Width of each segment
- * @param {number} [gapWidth] - Width of gap between segments
+ * @param {Object} fpsCounter - FPS counter instance
+ * @param {Object} fogInst - Fog instance
+ * @param {Object} glowBugInst - GlowBug manager instance
+ * @param {Object} trapBugInst - GlowBug instance for the trap platform right half
+ * @param {Object} creatureInst - Shadow creature instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} trapState - Trap platform state
  */
-function createStaticCloudPlatform(k, x, y, width, height, dotted = false, segmentCount = 10, segmentWidth = null, gapWidth = null) {
+function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState) {
+  const dt = k.dt()
+  FpsCounter.onUpdate(fpsCounter)
+  Fog.onUpdate(fogInst, dt)
+  GlowBug.onUpdate(glowBugInst, dt)
   //
-  // Cloud parameters (same style as level 2)
+  // Update trap platform split animation and sync hero position
   //
-  const baseCloudColor = k.rgb(100, 100, 120)  // Gray-blue color for clouds
-  
-  let cloudStartX, cloudEndX, cloudCoverageWidth
-  
-  if (dotted) {
-    //
-    // For dotted platform, only draw clouds on segments (skip first and last)
-    //
-    const SEGMENT_WIDTH = segmentWidth || (width / segmentCount)
-    const GAP_WIDTH = gapWidth || (SEGMENT_WIDTH * 0.3)
-    cloudStartX = x - width / 2 + SEGMENT_WIDTH + (SEGMENT_WIDTH - GAP_WIDTH) / 2  // Start after first gap
-    cloudEndX = x + width / 2 - SEGMENT_WIDTH - (SEGMENT_WIDTH - GAP_WIDTH) / 2  // End before last gap
-    cloudCoverageWidth = cloudEndX - cloudStartX
-  } else {
-    cloudStartX = x - width / 2 + 50  // Start a bit inside left edge
-    cloudEndX = x + width / 2 - 50  // End a bit before right edge
-    cloudCoverageWidth = cloudEndX - cloudStartX
+  const prevRightX = trapState.rightCenterX
+  updateTrapPlatform(trapState, heroInst, dt)
+  //
+  // Sync trap bug position and bounds with the right half movement delta
+  //
+  const rightDeltaX = trapState.rightCenterX - prevRightX
+  if (rightDeltaX !== 0 && trapBugInst.entries) {
+    trapBugInst.entries.forEach(entry => {
+      entry.bug.x += rightDeltaX
+      entry.bug.bounds.minX += rightDeltaX
+      entry.bug.bounds.maxX += rightDeltaX
+    })
   }
-  
-  const cloudCenterY = y
+  GlowBug.onUpdate(trapBugInst, dt)
   //
-  // Create dense layer of clouds (like level 2)
+  // Check bottom wall and platform thorns (only when hero is alive)
   //
-  const denseCloudCount = Math.max(12, Math.floor(cloudCoverageWidth / 40))  // Adjust count based on width
-  const denseCloudSpacing = cloudCoverageWidth / (denseCloudCount - 1)
+  if (!heroInst.isDying) {
+    checkBottomThorns(k, heroInst)
+    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries])
+  }
   //
-  // Cloud types (same as level 2)
+  // Get glow positions from both bug instances for creature AI
+  //
+  const glowPositions = [
+    ...GlowBug.getGlowingPositions(glowBugInst),
+    ...GlowBug.getGlowingPositions(trapBugInst)
+  ]
+  ShadowCreature.onUpdate(creatureInst, dt, glowPositions)
+}
+
+/**
+ * Checks if hero has fallen onto the bottom wall thorns and triggers death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ */
+function checkBottomThorns(k, heroInst) {
+  if (!heroInst.character?.pos) return
+  const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
+  if (heroFeetY >= BOTTOM_KILL_Y) {
+    Hero.death(heroInst, () => k.go('level-touch.3'))
+  }
+}
+
+/**
+ * Checks if hero is standing on a platform thorn zone and triggers death
+ * Skips kill when hero is near a bug (bug body shields hero from thorns below)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Array} bugEntries - GlowBug entries for shielding check
+ */
+function checkPlatformThorns(k, heroInst, bugEntries) {
+  if (!heroInst.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
+  //
+  // Check if hero is near any bug (bug body shields from thorns underneath)
+  //
+  const shielded = bugEntries.some(entry => {
+    const dx = Math.abs(heroX - entry.bug.x)
+    const dy = Math.abs(heroFeetY - entry.bug.y)
+    return dx < BUG_SHIELD_RADIUS_X && dy < BUG_SHIELD_RADIUS_Y
+  })
+  if (shielded) return
+  for (const zone of PLATFORM_THORN_ZONES) {
+    //
+    // Hero feet must be approximately at platform surface AND within thorn X range
+    //
+    if (heroFeetY >= zone.y - PLATFORM_THORN_TOLERANCE &&
+        heroFeetY <= zone.y + PLATFORM_THORN_TOLERANCE &&
+        heroX >= zone.startX && heroX <= zone.endX) {
+      Hero.death(heroInst, () => k.go('level-touch.3'))
+      return
+    }
+  }
+}
+
+/**
+ * Creates boundary walls for the level
+ * @param {Object} k - Kaplay instance
+ */
+function createWalls(k) {
+  //
+  // Left wall (full height)
+  //
+  k.add([
+    k.rect(LEFT_MARGIN, CFG.visual.screen.height),
+    k.pos(LEFT_MARGIN / 2, CFG.visual.screen.height / 2),
+    k.anchor("center"),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Right wall (full height)
+  //
+  k.add([
+    k.rect(RIGHT_MARGIN, CFG.visual.screen.height),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN / 2, CFG.visual.screen.height / 2),
+    k.anchor("center"),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Top wall (full width)
+  //
+  k.add([
+    k.rect(CFG.visual.screen.width, TOP_MARGIN),
+    k.pos(CFG.visual.screen.width / 2, TOP_MARGIN / 2),
+    k.anchor("center"),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Bottom wall (full width)
+  //
+  k.add([
+    k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
+    k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
+    k.anchor("center"),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+}
+
+/**
+ * Creates corridor platforms as invisible collision rectangles
+ * Skips the trap platform (created separately as two halves)
+ * @param {Object} k - Kaplay instance
+ */
+function createCorridorPlatforms(k) {
+  CORRIDOR_PLATFORMS.forEach((platform, index) => {
+    if (index === TRAP_PLATFORM_INDEX) return
+    k.add([
+      k.rect(platform.width, PLATFORM_HEIGHT),
+      k.pos(platform.x, platform.y + PLATFORM_HEIGHT / 2),
+      k.anchor("center"),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName
+    ])
+  })
+}
+
+/**
+ * Creates the trap platform as two halves that can split apart
+ * Returns state object for animation tracking
+ * @param {Object} k - Kaplay instance
+ * @returns {Object} Trap platform state
+ */
+function createTrapPlatform(k) {
+  const platform = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
+  const halfWidth = platform.width / 2
+  const leftCenterX = platform.x - halfWidth / 2
+  const rightCenterX = platform.x + halfWidth / 2
+  const centerY = platform.y + PLATFORM_HEIGHT / 2
+  //
+  // Create left half collision body
+  //
+  const leftHalf = k.add([
+    k.rect(halfWidth, PLATFORM_HEIGHT),
+    k.pos(leftCenterX, centerY),
+    k.anchor("center"),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Create right half collision body
+  //
+  const rightHalf = k.add([
+    k.rect(halfWidth, PLATFORM_HEIGHT),
+    k.pos(rightCenterX, centerY),
+    k.anchor("center"),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  return {
+    leftHalf,
+    rightHalf,
+    triggered: false,
+    splitting: false,
+    returning: false,
+    done: false,
+    activationTimer: 0,
+    leftCenterX,
+    rightCenterX,
+    initialLeftCenterX: leftCenterX,
+    initialRightCenterX: rightCenterX,
+    splitDistance: 0,
+    y: platform.y,
+    halfWidth,
+    heroRidingHalf: null,
+    heroOffsetX: 0
+  }
+}
+
+/**
+ * Updates trap platform split animation (one-time only)
+ * Splits fast to 2x width gap and stays open permanently
+ * Hero riding a half gets carried along with it
+ * @param {Object} trapState - Trap platform state
+ * @param {Object} heroInst - Hero instance
+ * @param {number} dt - Delta time
+ */
+function updateTrapPlatform(trapState, heroInst, dt) {
+  if (!heroInst.character?.pos) return
+  //
+  // Already returned to original position, permanently idle
+  //
+  if (trapState.done) return
+  //
+  // Returning phase: halves slide back to original position, then lock permanently
+  //
+  if (trapState.returning) {
+    const step = TRAP_RETURN_SPEED * dt
+    trapState.splitDistance = Math.max(0, trapState.splitDistance - step)
+    trapState.leftCenterX = trapState.initialLeftCenterX - trapState.splitDistance
+    trapState.rightCenterX = trapState.initialRightCenterX + trapState.splitDistance
+    trapState.leftHalf.pos.x = trapState.leftCenterX
+    trapState.rightHalf.pos.x = trapState.rightCenterX
+    syncHeroWithTrapPlatform(heroInst, trapState)
+    //
+    // Fully returned — lock permanently
+    //
+    if (trapState.splitDistance <= 0) {
+      trapState.done = true
+      trapState.heroRidingHalf = null
+    }
+    return
+  }
+  //
+  // Splitting phase: halves slide apart fast until max distance, then start returning
+  //
+  if (trapState.splitting) {
+    const step = TRAP_SLIDE_SPEED * dt
+    trapState.splitDistance += step
+    //
+    // Reached max split distance — switch to returning
+    //
+    if (trapState.splitDistance >= TRAP_MAX_SPLIT_DISTANCE) {
+      trapState.splitDistance = TRAP_MAX_SPLIT_DISTANCE
+      trapState.returning = true
+      trapState.splitting = false
+    }
+    trapState.leftCenterX = trapState.initialLeftCenterX - trapState.splitDistance
+    trapState.rightCenterX = trapState.initialRightCenterX + trapState.splitDistance
+    trapState.leftHalf.pos.x = trapState.leftCenterX
+    trapState.rightHalf.pos.x = trapState.rightCenterX
+    syncHeroWithTrapPlatform(heroInst, trapState)
+    return
+  }
+  //
+  // Count down activation delay after trigger
+  //
+  if (trapState.triggered) {
+    trapState.activationTimer -= dt
+    if (trapState.activationTimer <= 0) {
+      trapState.splitting = true
+    }
+    return
+  }
+  //
+  // Check if hero is approaching the platform (proximity-based, triggers while in the air)
+  //
+  const platform = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  const dx = Math.abs(heroX - platform.x)
+  const dy = Math.abs(heroY - platform.y)
+  if (dx < TRAP_PROXIMITY_X && dy < TRAP_PROXIMITY_Y) {
+    trapState.triggered = true
+    trapState.activationTimer = TRAP_ACTIVATION_DELAY
+  }
+}
+
+/**
+ * Detects when hero lands on a trap platform half and starts tracking.
+ * While tracked, hero's X is locked relative to the half's center each frame.
+ * Tracking stops when hero jumps off or platform finishes moving.
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} trapState - Trap platform state
+ */
+function syncHeroWithTrapPlatform(heroInst, trapState) {
+  if (!heroInst.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
+  const platSurfaceY = trapState.y
+  const halfW = trapState.halfWidth / 2
+  const isNearSurface = Math.abs(heroFeetY - platSurfaceY) < 20
+  const isGrounded = heroInst.character.isGrounded?.() ?? false
+  const onPlatform = isNearSurface && isGrounded
+  //
+  // If hero is not on the platform, stop tracking
+  //
+  if (!onPlatform) {
+    trapState.heroRidingHalf = null
+    return
+  }
+  //
+  // If not yet tracking, detect which half the hero is on and start tracking
+  //
+  if (!trapState.heroRidingHalf) {
+    if (heroX >= trapState.leftCenterX - halfW && heroX <= trapState.leftCenterX + halfW) {
+      trapState.heroRidingHalf = 'left'
+      trapState.heroOffsetX = heroX - trapState.leftCenterX
+    } else if (heroX >= trapState.rightCenterX - halfW && heroX <= trapState.rightCenterX + halfW) {
+      trapState.heroRidingHalf = 'right'
+      trapState.heroOffsetX = heroX - trapState.rightCenterX
+    }
+  }
+  //
+  // Hero is being tracked — snap X to maintain relative offset from the half
+  //
+  if (trapState.heroRidingHalf === 'left') {
+    heroInst.character.pos.x = trapState.leftCenterX + trapState.heroOffsetX
+  } else if (trapState.heroRidingHalf === 'right') {
+    heroInst.character.pos.x = trapState.rightCenterX + trapState.heroOffsetX
+  }
+}
+
+/**
+ * Pre-generates decorative root tendrils and bark line data for each platform
+ * Called once during scene setup for consistent per-frame rendering
+ * @param {Array} platforms - Corridor platform definitions
+ * @returns {Array} Array of { roots, barkLines } per platform
+ */
+function generatePlatformDecor(platforms) {
+  return platforms.map(platform => {
+    //
+    // Generate root tendrils hanging from platform bottom
+    //
+    const rootCount = Math.max(2, Math.round(platform.width / 100 * ROOTS_PER_100PX))
+    const roots = []
+    for (let i = 0; i < rootCount; i++) {
+      const frac = (i + 0.5) / rootCount
+      roots.push({
+        startX: platform.x - platform.width / 2 + frac * platform.width,
+        endXOffset: (Math.random() - 0.5) * ROOT_X_WOBBLE,
+        length: ROOT_LENGTH_MIN + Math.random() * (ROOT_LENGTH_MAX - ROOT_LENGTH_MIN),
+        width: ROOT_WIDTH_MIN + Math.random() * (ROOT_WIDTH_MAX - ROOT_WIDTH_MIN)
+      })
+    }
+    //
+    // Generate horizontal bark grain lines on platform surface
+    //
+    const lineCount = BARK_LINES_MIN + Math.floor(Math.random() * (BARK_LINES_MAX - BARK_LINES_MIN + 1))
+    const barkLines = []
+    for (let i = 0; i < lineCount; i++) {
+      const startFrac = Math.random() * 0.3
+      const endFrac = startFrac + 0.2 + Math.random() * 0.5
+      barkLines.push({
+        startX: platform.x - platform.width / 2 + PLATFORM_CORNER_RADIUS + startFrac * (platform.width - PLATFORM_CORNER_RADIUS * 2),
+        endX: platform.x - platform.width / 2 + PLATFORM_CORNER_RADIUS + Math.min(endFrac, 1) * (platform.width - PLATFORM_CORNER_RADIUS * 2),
+        yOffset: 10 + Math.random() * (PLATFORM_HEIGHT - 18),
+        opacity: BARK_LINE_OPACITY_MIN + Math.random() * (BARK_LINE_OPACITY_MAX - BARK_LINE_OPACITY_MIN)
+      })
+    }
+    return { roots, barkLines }
+  })
+}
+
+/**
+ * Draws platform visuals with black outline, rounded edges, bark texture, and hanging roots
+ * Skips the trap platform (drawn separately via drawTrapPlatformVisuals)
+ * @param {Object} k - Kaplay instance
+ * @param {Array} platformDecor - Pre-generated decoration data per platform
+ */
+function drawPlatformVisuals(k, platformDecor) {
+  const platformColor = k.rgb(PLATFORM_COLOR_R, PLATFORM_COLOR_G, PLATFORM_COLOR_B)
+  const outlineColor = k.rgb(PLATFORM_OUTLINE_COLOR_R, PLATFORM_OUTLINE_COLOR_G, PLATFORM_OUTLINE_COLOR_B)
+  const rootColor = k.rgb(PLATFORM_ROOT_COLOR_R, PLATFORM_ROOT_COLOR_G, PLATFORM_ROOT_COLOR_B)
+  const barkColor = k.rgb(PLATFORM_COLOR_R - 15, PLATFORM_COLOR_G - 15, PLATFORM_COLOR_B - 10)
+  CORRIDOR_PLATFORMS.forEach((platform, idx) => {
+    if (idx === TRAP_PLATFORM_INDEX) return
+    drawSinglePlatform(k, platform.x, platform.y, platform.width, platformColor, outlineColor, rootColor, barkColor, platformDecor[idx])
+  })
+}
+
+/**
+ * Draws a single platform with black outline on all sides, rounded edges, bark lines, and roots
+ * Outline is drawn first as a larger rounded rect, then fill on top
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Platform center X
+ * @param {number} topY - Platform top surface Y
+ * @param {number} width - Platform width
+ * @param {Object} platformColor - Main platform color
+ * @param {Object} outlineColor - Black outline color
+ * @param {Object} rootColor - Root tendril color
+ * @param {Object} barkColor - Bark line color
+ * @param {Object} decor - Pre-generated decoration data (roots, barkLines)
+ */
+function drawSinglePlatform(k, centerX, topY, width, platformColor, outlineColor, rootColor, barkColor, decor) {
+  const left = centerX - width / 2
+  const r = PLATFORM_CORNER_RADIUS
+  const ow = PLATFORM_OUTLINE_WIDTH
+  //
+  // Draw black outline (slightly larger rounded rect behind the fill)
+  //
+  drawRoundedRect(k, left - ow, topY - ow, width + ow * 2, PLATFORM_HEIGHT + ow * 2, r + ow, outlineColor)
+  //
+  // Draw platform fill on top
+  //
+  drawRoundedRect(k, left, topY, width, PLATFORM_HEIGHT, r, platformColor)
+  //
+  // Draw bark grain lines for wood texture
+  //
+  decor?.barkLines?.forEach(line => {
+    k.drawLine({
+      p1: k.vec2(line.startX, topY + line.yOffset),
+      p2: k.vec2(line.endX, topY + line.yOffset),
+      width: 1,
+      color: barkColor,
+      opacity: line.opacity
+    })
+  })
+  //
+  // Draw root tendrils hanging from platform bottom with gentle sway
+  //
+  const time = k.time()
+  decor?.roots?.forEach((root, i) => {
+    const sway = Math.sin(time * 1.2 + root.startX * 0.1 + i) * 4
+    k.drawLine({
+      p1: k.vec2(root.startX, topY + PLATFORM_HEIGHT),
+      p2: k.vec2(root.startX + root.endXOffset + sway, topY + PLATFORM_HEIGHT + root.length),
+      width: root.width,
+      color: rootColor,
+      opacity: 0.8
+    })
+  })
+}
+
+/**
+ * Draws the trap platform halves at their current positions
+ * Each half has black outline on all sides following rounded corners
+ * @param {Object} k - Kaplay instance
+ * @param {Object} trapState - Trap platform state with current positions
+ */
+function drawTrapPlatformVisuals(k, trapState) {
+  const platformColor = k.rgb(PLATFORM_COLOR_R, PLATFORM_COLOR_G, PLATFORM_COLOR_B)
+  const outlineColor = k.rgb(PLATFORM_OUTLINE_COLOR_R, PLATFORM_OUTLINE_COLOR_G, PLATFORM_OUTLINE_COLOR_B)
+  const { leftCenterX, rightCenterX, y, halfWidth } = trapState
+  const r = PLATFORM_CORNER_RADIUS
+  const ow = PLATFORM_OUTLINE_WIDTH
+  //
+  // Draw left half with outline
+  //
+  const leftEdge = leftCenterX - halfWidth / 2
+  drawRoundedRect(k, leftEdge - ow, y - ow, halfWidth + ow * 2, PLATFORM_HEIGHT + ow * 2, r + ow, outlineColor)
+  drawRoundedRect(k, leftEdge, y, halfWidth, PLATFORM_HEIGHT, r, platformColor)
+  //
+  // Draw right half with outline
+  //
+  const rightEdge = rightCenterX - halfWidth / 2
+  drawRoundedRect(k, rightEdge - ow, y - ow, halfWidth + ow * 2, PLATFORM_HEIGHT + ow * 2, r + ow, outlineColor)
+  drawRoundedRect(k, rightEdge, y, halfWidth, PLATFORM_HEIGHT, r, platformColor)
+}
+
+/**
+ * Draws a rounded rectangle using 2 overlapping rects and 4 corner circles
+ * Works without engine-level radius support
+ * @param {Object} k - Kaplay instance
+ * @param {number} x - Left edge X
+ * @param {number} y - Top edge Y
+ * @param {number} w - Width
+ * @param {number} h - Height
+ * @param {number} r - Corner radius
+ * @param {Object} color - Kaplay color object
+ */
+function drawRoundedRect(k, x, y, w, h, r, color) {
+  //
+  // Horizontal strip (full width, excluding top/bottom corner strips)
+  //
+  k.drawRect({
+    pos: k.vec2(x, y + r),
+    width: w,
+    height: h - 2 * r,
+    color
+  })
+  //
+  // Vertical strip (excluding left/right corner strips)
+  //
+  k.drawRect({
+    pos: k.vec2(x + r, y),
+    width: w - 2 * r,
+    height: h,
+    color
+  })
+  //
+  // Four corner circles
+  //
+  k.drawCircle({ pos: k.vec2(x + r, y + r), radius: r, color })
+  k.drawCircle({ pos: k.vec2(x + w - r, y + r), radius: r, color })
+  k.drawCircle({ pos: k.vec2(x + r, y + h - r), radius: r, color })
+  k.drawCircle({ pos: k.vec2(x + w - r, y + h - r), radius: r, color })
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius in pixels
+ * @param {string} color - Fill color in hex format
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = radius
+  canvas.height = radius
+  const ctx = canvas.getContext('2d')
+  //
+  // Draw L-shaped corner with rounded inner angle
+  //
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, radius, radius)
+  //
+  // Cut out quarter circle to create rounded inner corner
+  //
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(radius, radius, radius, 0, Math.PI * 2)
+  ctx.fill()
+  return canvas.toDataURL()
+}
+
+/**
+ * Creates rounded corners at all four corners of the game area
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
+  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  //
+  // Top-left corner
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, TOP_MARGIN),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, TOP_MARGIN),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-left corner (rotate 270°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-right corner (rotate 180°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+}
+
+/**
+ * Creates a single pre-rendered background canvas containing mountains, dark trees,
+ * and medium trees. Rendered once via toPng for performance.
+ * @param {Object} k - Kaplay instance
+ */
+function createBackCanvas(k) {
+  const screenWidth = CFG.visual.screen.width
+  const screenHeight = CFG.visual.screen.height
+  const screenThird = screenWidth / 3
+  //
+  // Render mountains + all back trees into one canvas
+  //
+  const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.imageSmoothingEnabled = false
+    //
+    // Fill sky with background color for seamless blending
+    //
+    ctx.fillStyle = BG_HEX
+    ctx.fillRect(0, 0, screenWidth, screenHeight)
+    //
+    // Draw three mountains (left, center, right)
+    //
+    drawMountainShape(ctx, LEFT_MOUNTAIN.xOffset, FLOOR_Y, screenThird + LEFT_MOUNTAIN.widthExtra, LEFT_MOUNTAIN, LEFT_MOUNTAIN.colors)
+    drawMountainShape(ctx, screenThird + CENTER_MOUNTAIN.xOffset, FLOOR_Y, screenThird + CENTER_MOUNTAIN.widthExtra, CENTER_MOUNTAIN, CENTER_MOUNTAIN.colors)
+    drawMountainShape(ctx, screenThird * 2 + RIGHT_MOUNTAIN.xOffset, FLOOR_Y, screenThird + RIGHT_MOUNTAIN.widthExtra, RIGHT_MOUNTAIN, RIGHT_MOUNTAIN.colors)
+    //
+    // Draw dark tree silhouettes (furthest back, single layer)
+    //
+    const darkPeriod = PLAY_AREA_WIDTH / DARK_TREES_COUNT
+    for (let i = 0; i < DARK_TREES_COUNT; i++) {
+      const x = i * darkPeriod + Math.random() * darkPeriod + LEFT_MARGIN
+      drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, PLAY_AREA_WIDTH, DARK_TREES_HEIGHT_MIN, DARK_TREES_HEIGHT_MAX), {
+        layers: DARK_TREES_LAYERS,
+        trunkWidthPercent: DARK_TREES_TRUNK_WIDTH,
+        trunkHeightPercent: TREE_TRUNK_HEIGHT_BASE + Math.random() * TREE_TRUNK_HEIGHT_RANGE,
+        trunkColor: DARK_TREES_TRUNK_COLOR,
+        leftColor: DARK_TREES_LEFT_COLOR,
+        rightColor: DARK_TREES_RIGHT_COLOR,
+        layer0WidthPercent: DARK_TREES_LAYER_WIDTH,
+        layersDecWidthPercent: TREE_LAYERS_DEC_WIDTH,
+        layersSharpness: Math.floor(Math.random() * (DARK_TREES_SHARPNESS_MAX - DARK_TREES_SHARPNESS_MIN) + DARK_TREES_SHARPNESS_MIN)
+      })
+    }
+    //
+    // Draw medium trees (multi-layered, slightly brighter)
+    //
+    const bgPeriod = PLAY_AREA_WIDTH / BG_TREES_COUNT
+    for (let i = 0; i < BG_TREES_COUNT; i++) {
+      const x = i * bgPeriod + Math.random() * bgPeriod + LEFT_MARGIN
+      drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, PLAY_AREA_WIDTH, BG_TREES_HEIGHT_MIN, BG_TREES_HEIGHT_MAX), {
+        layers: Math.random() * BG_TREES_LAYERS + 4,
+        trunkWidthPercent: BG_TREES_TRUNK_WIDTH,
+        trunkHeightPercent: TREE_TRUNK_HEIGHT_BASE + Math.random() * TREE_TRUNK_HEIGHT_RANGE,
+        trunkColor: BG_TREES_TRUNK_COLOR,
+        leftColor: BG_TREES_LEFT_COLOR,
+        rightColor: BG_TREES_RIGHT_COLOR,
+        layer0WidthPercent: BG_TREES_LAYER_WIDTH,
+        layersDecWidthPercent: TREE_LAYERS_DEC_WIDTH,
+        layersSharpness: Math.floor(Math.random() * (BG_TREES_SHARPNESS_MAX - BG_TREES_SHARPNESS_MIN) + BG_TREES_SHARPNESS_MIN)
+      })
+    }
+  })
+  k.loadSprite(BACK_CANVAS_SPRITE, png)
+  //
+  // Display back canvas behind creature
+  //
+  k.add([
+    k.z(Z_BACK_CANVAS),
+    {
+      draw() {
+        k.drawSprite({
+          sprite: BACK_CANVAS_SPRITE,
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}
+
+/**
+ * Creates a pre-rendered foreground tree layer with transparent background
+ * Small, bright trees drawn in front of the creature for depth parallax
+ * @param {Object} k - Kaplay instance
+ */
+function createFrontTrees(k) {
+  const screenWidth = CFG.visual.screen.width
+  const screenHeight = CFG.visual.screen.height
+  //
+  // Render small foreground trees onto transparent canvas
+  //
+  const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    const treePeriod = PLAY_AREA_WIDTH / FRONT_TREES_COUNT
+    for (let i = 0; i < FRONT_TREES_COUNT; i++) {
+      const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
+      drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, PLAY_AREA_WIDTH, FRONT_TREES_HEIGHT_MIN, FRONT_TREES_HEIGHT_MAX), {
+        layers: Math.random() * FRONT_TREES_LAYERS + 3,
+        trunkWidthPercent: FRONT_TREES_TRUNK_WIDTH,
+        trunkHeightPercent: TREE_TRUNK_HEIGHT_BASE + Math.random() * TREE_TRUNK_HEIGHT_RANGE,
+        trunkColor: FRONT_TREES_TRUNK_COLOR,
+        leftColor: FRONT_TREES_LEFT_COLOR,
+        rightColor: FRONT_TREES_RIGHT_COLOR,
+        layer0WidthPercent: FRONT_TREES_LAYER_WIDTH,
+        layersDecWidthPercent: TREE_LAYERS_DEC_WIDTH,
+        layersSharpness: Math.floor(Math.random() * (FRONT_TREES_SHARPNESS_MAX - FRONT_TREES_SHARPNESS_MIN) + FRONT_TREES_SHARPNESS_MIN)
+      })
+    }
+  })
+  k.loadSprite(FRONT_TREES_SPRITE, png)
+  //
+  // Display front trees in front of creature for depth
+  //
+  k.add([
+    k.z(Z_FRONT_TREES),
+    {
+      draw() {
+        k.drawSprite({
+          sprite: FRONT_TREES_SPRITE,
+          pos: k.vec2(0, 0),
+          anchor: "topleft"
+        })
+      }
+    }
+  ])
+}
+
+/**
+ * Creates dark clouds under the top wall, adapted from touch level 2
+ * Dense layer at top for solid coverage, sparse layer below for wispy effect
+ * @param {Object} k - Kaplay instance
+ */
+function createClouds(k) {
+  const baseColor = k.rgb(CLOUD_BASE_COLOR_R, CLOUD_BASE_COLOR_G, CLOUD_BASE_COLOR_B)
+  const screenWidth = CFG.visual.screen.width
+  const cloudStartX = LEFT_MARGIN + 50
+  const cloudEndX = screenWidth - RIGHT_MARGIN - 50
+  const cloudWidth = cloudEndX - cloudStartX
+  //
+  // Cloud shape templates (puffs relative to mainSize)
   //
   const cloudTypes = [
-    //
-    // Type 1: Large wide cloud (6 puffs)
-    //
     {
-      mainSize: 50,
+      mainSize: 70,
       puffs: [
         { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
         { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
@@ -1022,14 +1312,10 @@ function createStaticCloudPlatform(k, x, y, width, height, dotted = false, segme
         { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
         { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
       ],
-      color: baseCloudColor,
-      opacity: 0.6
+      opacity: 0.5
     },
-    //
-    // Type 2: Medium wide cloud (5 puffs)
-    //
     {
-      mainSize: 42,
+      mainSize: 55,
       puffs: [
         { radius: 0.8, offsetX: -0.7, offsetY: 0 },
         { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
@@ -1037,502 +1323,199 @@ function createStaticCloudPlatform(k, x, y, width, height, dotted = false, segme
         { radius: 0.8, offsetX: 0.7, offsetY: 0 },
         { radius: 0.7, offsetX: 0, offsetY: 0.12 }
       ],
-      color: k.rgb(95, 95, 115),
-      opacity: 0.55
+      opacity: 0.45
     },
-    //
-    // Type 3: Small wide cloud (4 puffs)
-    //
     {
-      mainSize: 35,
+      mainSize: 45,
       puffs: [
         { radius: 0.75, offsetX: -0.6, offsetY: 0 },
         { radius: 0.8, offsetX: -0.2, offsetY: -0.08 },
         { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
         { radius: 0.75, offsetX: 0.6, offsetY: 0 }
       ],
-      color: k.rgb(105, 105, 125),
-      opacity: 0.5
-    },
-    //
-    // Type 4: Very wide cloud (7 puffs)
-    //
-    {
-      mainSize: 55,
-      puffs: [
-        { radius: 0.65, offsetX: -1.0, offsetY: 0 },
-        { radius: 0.7, offsetX: -0.6, offsetY: -0.1 },
-        { radius: 0.75, offsetX: -0.2, offsetY: -0.12 },
-        { radius: 0.75, offsetX: 0.2, offsetY: -0.12 },
-        { radius: 0.7, offsetX: 0.6, offsetY: -0.1 },
-        { radius: 0.65, offsetX: 1.0, offsetY: 0 },
-        { radius: 0.6, offsetX: 0, offsetY: 0.15 }
-      ],
-      color: baseCloudColor,
-      opacity: 0.65
+      opacity: 0.4
     }
   ]
   //
-  // Generate cloud configurations
+  // Generate dense layer clouds at top (solid coverage, no gaps)
   //
-  const cloudConfigs = []
-  //
-  // Create dense layer of clouds
-  //
-  for (let i = 0; i < denseCloudCount; i++) {
-    const baseX = cloudStartX + denseCloudSpacing * i
-    //
-    // Overlap clouds to ensure no gaps
-    //
-    const randomOffset = (Math.random() - 0.5) * (denseCloudSpacing * 0.6)
+  const denseSpacing = cloudWidth / (CLOUD_DENSE_COUNT - 1)
+  for (let i = 0; i < CLOUD_DENSE_COUNT; i++) {
+    const baseX = cloudStartX + denseSpacing * i
+    const randomOffset = (Math.random() - 0.5) * (denseSpacing * 0.6)
     const cloudX = baseX + randomOffset
     //
-    // Random vertical offset within platform height
+    // Distribute into 2 rows for solid coverage
     //
-    const randomYOffset = (Math.random() - 0.5) * (height * 0.4)
-    const cloudY = cloudCenterY + randomYOffset
-    //
-    // Randomly select cloud type
-    //
-    const cloudType = cloudTypes[Math.floor(Math.random() * cloudTypes.length)]
-    //
-    // Add cloud configuration
-    //
-    cloudConfigs.push({
-      x: cloudX,
-      y: cloudY,
-      mainSize: cloudType.mainSize,
-      puffs: cloudType.puffs,
-      color: cloudType.color,
-      opacity: cloudType.opacity
-    })
+    const rowIndex = i % 2
+    const cloudY = CLOUD_DENSE_Y + rowIndex * 8 + (Math.random() - 0.5) * 3
+    const cloudType = cloudTypes[i % cloudTypes.length]
+    const sizeVariation = 1.0 + Math.random() * 0.4
+    const mainSize = cloudType.mainSize * sizeVariation
+    addCloudObject(k, cloudX, cloudY, mainSize, cloudType, baseColor)
   }
   //
-  // Create visual cloud layer
+  // Generate sparse layer clouds below (fewer, more spread out)
   //
-  cloudConfigs.forEach((cloudConfig) => {
-    k.add([
-      k.pos(cloudConfig.x, cloudConfig.y),
-      k.z(CFG.visual.zIndex.platforms - 1),
-      {
-        draw() {
-          //
-          // Draw cloud as overlapping circles (puffy cloud shape)
-          //
-          const mainSize = cloudConfig.mainSize
-          //
-          // Main cloud body (largest circle in center)
-          //
-          k.drawCircle({
-            radius: mainSize,
-            pos: k.vec2(0, 0),
-            color: cloudConfig.color,
-            opacity: cloudConfig.opacity
-          })
-          //
-          // Draw all puffs for this cloud
-          //
-          cloudConfig.puffs.forEach((puff) => {
-            k.drawCircle({
-              radius: mainSize * puff.radius,
-              pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
-              color: cloudConfig.color,
-              opacity: cloudConfig.opacity
-            })
-          })
-        }
-      }
-    ])
-  })
-}
-
-/**
- * Creates left and right arrows in center of cloud platform
- * Uses arrow.png image (right arrow, left arrow is horizontally flipped)
- * Returns arrow objects for glow effect when hero is above them
- * @param {Object} k - Kaplay instance
- * @param {number} x - X position (center)
- * @param {number} y - Y position (center)
- * @param {Object} sound - Sound instance for click sounds
- * @returns {Object} Object with leftArrow, rightArrow, and update function
- */
-function createCloudPlatformArrows(k, x, y, sound) {
-  //
-  // Arrow spacing
-  //
-  const arrowSpacing = 320  // Space between arrows (increased to spread arrows further apart)
-  const arrowScale = 0.16  // Scale for arrows (same as center arrow)
-  const GLOW_OPACITY = 1.0  // Opacity when glowing
-  const NORMAL_OPACITY = 0.5  // Normal opacity
-  //
-  // Hero collision box dimensions (from hero.js constants)
-  //
-  const HERO_COLLISION_WIDTH = 10  // Base collision width
-  const HERO_COLLISION_HEIGHT = 25  // Base collision height
-  const HERO_SCALE = 3  // Hero scale multiplier
-  const HERO_COLLISION_WIDTH_SCALED = HERO_COLLISION_WIDTH * HERO_SCALE  // 30 pixels
-  const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE  // 75 pixels
-  //
-  // Arrow sprite dimensions (approximate, will get actual size from sprite)
-  //
-  const arrowSpriteId = 'center-arrow-level3'
-  //
-  // Load sprite from file (will be cached if already loaded)
-  //
-  k.loadSprite(arrowSpriteId, '/arrow.png')
-  //
-  // Get arrow sprite dimensions
-  // Use larger default to ensure detection works - arrow.png is likely around 200-400px wide
-  //
-  let arrowSpriteWidth = 300  // Default fallback (larger to ensure detection)
-  let arrowSpriteHeight = 300  // Default fallback
-  try {
-    const arrowSprite = k.getSprite(arrowSpriteId)
-    if (arrowSprite) {
-      //
-      // Try different ways to get sprite dimensions
-      //
-      if (arrowSprite.width && arrowSprite.height) {
-        arrowSpriteWidth = arrowSprite.width
-        arrowSpriteHeight = arrowSprite.height
-      } else if (arrowSprite.tex && arrowSprite.tex.width && arrowSprite.tex.height) {
-        arrowSpriteWidth = arrowSprite.tex.width
-        arrowSpriteHeight = arrowSprite.tex.height
-      } else if (arrowSprite.frame && arrowSprite.frame.width && arrowSprite.frame.height) {
-        arrowSpriteWidth = arrowSprite.frame.width
-        arrowSpriteHeight = arrowSprite.frame.height
-      }
-    }
-  } catch (e) {
-    // Use default dimensions if sprite not available
-  }
-  //
-  // Scaled arrow dimensions (scale reduces size, so multiply by scale)
-  // Use absolute value for width since left arrow has negative X scale
-  // arrowScale = 0.16, so if sprite is 300px, scaled width = 48px
-  //
-  const ARROW_WIDTH_SCALED = Math.abs(arrowSpriteWidth * arrowScale)
-  const ARROW_HEIGHT_SCALED = arrowSpriteHeight * arrowScale
-  //
-  // Left arrow position
-  //
-  const leftArrowX = x - arrowSpacing / 2
-  //
-  // Right arrow position
-  //
-  const rightArrowX = x + arrowSpacing / 2
-  //
-  // Create right arrow (pointing right) - original image
-  //
-  const rightArrow = k.add([
-    k.sprite(arrowSpriteId),
-    k.pos(rightArrowX, y),
-    k.anchor("center"),
-    k.scale(arrowScale),
-    k.area({
-      shape: new k.Rect(
-        k.vec2(-ARROW_WIDTH_SCALED / 2, -ARROW_HEIGHT_SCALED / 2),
-        ARROW_WIDTH_SCALED,
-        ARROW_HEIGHT_SCALED
-      )
-    }),
-    k.z(CFG.visual.zIndex.platforms),  // Above clouds
-  ])
-  rightArrow.opacity = NORMAL_OPACITY
-  const rightArrowBaseX = rightArrowX  // Store base X position for press animation
-  //
-  // Create left arrow (pointing left) - horizontally flipped using negative X scale
-  //
-  const leftArrow = k.add([
-    k.sprite(arrowSpriteId),
-    k.pos(leftArrowX, y),
-    k.anchor("center"),
-    k.scale(-arrowScale, arrowScale),  // Negative X scale flips horizontally
-    k.area({
-      shape: new k.Rect(
-        k.vec2(-ARROW_WIDTH_SCALED / 2, -ARROW_HEIGHT_SCALED / 2),
-        ARROW_WIDTH_SCALED,
-        ARROW_HEIGHT_SCALED
-      )
-    }),
-    k.z(CFG.visual.zIndex.platforms),  // Above clouds
-  ])
-  leftArrow.opacity = NORMAL_OPACITY
-  const leftArrowBaseX = leftArrowX  // Store base X position for press animation
-  //
-  // Store constants for use in update function
-  //
-  const arrowWidthScaled = ARROW_WIDTH_SCALED
-  const glowOpacity = GLOW_OPACITY
-  const normalOpacity = NORMAL_OPACITY
-  const heroCollisionWidthScaled = HERO_COLLISION_WIDTH_SCALED
-  //
-  // Return arrow objects and update function
-  //
-  return {
-    leftArrow,
-    rightArrow,
-    leftArrowX,
-    rightArrowX,
-    y,
-    arrowScale,
-    update(heroCharacter) {
-      //
-      // Check if hero collision box intersects with arrow collision boxes
-      //
-      if (!heroCharacter || !heroCharacter.pos) {
-        //
-        // Hero not available - set normal opacity
-        //
-        rightArrow.opacity = normalOpacity
-        leftArrow.opacity = normalOpacity
-        return
-      }
-      //
-      // Get hero X position
-      //
-      const heroX = heroCharacter.pos.x
-      //
-      // Calculate collision box bounds
-      // Hero collision box: centered at heroX, width = HERO_COLLISION_WIDTH_SCALED
-      //
-      const heroLeft = heroX - heroCollisionWidthScaled / 2
-      const heroRight = heroX + heroCollisionWidthScaled / 2
-      //
-      // Get arrow width - use stored scaled width (calculated from sprite dimensions)
-      // Increase detection width by 2x + 40px on each side for easier detection
-      //
-      const arrowHalfWidth = (arrowWidthScaled * 2) / 2 + 40  // Double the width + 40px on each side
-      //
-      // Arrow collision box bounds (scaled, doubled + 50px padding for detection)
-      // Right arrow: centered at rightArrowX, width = ARROW_WIDTH_SCALED * 2 + 100px
-      //
-      const rightArrowLeft = rightArrowX - arrowHalfWidth
-      const rightArrowRight = rightArrowX + arrowHalfWidth
-      //
-      // Check if hero collision box overlaps arrow collision box horizontally
-      // Overlap occurs when: heroLeft < arrowRight AND heroRight > arrowLeft
-      // This checks if the two boxes intersect horizontally
-      //
-      const isAboveRightArrow = heroLeft < rightArrowRight && heroRight > rightArrowLeft
-      //
-      // Update right arrow glow and position (animated forward/backward movement)
-      //
-      rightArrow.opacity = isAboveRightArrow ? glowOpacity : normalOpacity
-      const ARROW_ANIMATION_AMPLITUDE = 4  // Maximum movement distance
-      const ARROW_ANIMATION_SPEED = 8  // Animation speed
-      if (isAboveRightArrow) {
-        const animationTime = k.time()  // Use global time for animation
-        const offset = Math.sin(animationTime * ARROW_ANIMATION_SPEED) * ARROW_ANIMATION_AMPLITUDE
-        rightArrow.pos.x = rightArrowBaseX + offset
-      } else {
-        rightArrow.pos.x = rightArrowBaseX
-      }
-      //
-      // Left arrow: centered at leftArrowX, width = ARROW_WIDTH_SCALED * 2 (absolute value)
-      //
-      const leftArrowLeft = leftArrowX - arrowHalfWidth
-      const leftArrowRight = leftArrowX + arrowHalfWidth
-      //
-      // Check if hero collision box overlaps arrow collision box horizontally
-      // Same logic as right arrow
-      //
-      const isAboveLeftArrow = heroLeft < leftArrowRight && heroRight > leftArrowLeft
-      //
-      // Update left arrow glow and position (animated forward/backward movement)
-      //
-      leftArrow.opacity = isAboveLeftArrow ? glowOpacity : normalOpacity
-      if (isAboveLeftArrow) {
-        const animationTime = k.time()  // Use global time for animation
-        const offset = Math.sin(animationTime * ARROW_ANIMATION_SPEED) * ARROW_ANIMATION_AMPLITUDE
-        leftArrow.pos.x = leftArrowBaseX - offset  // Move in opposite direction (backward)
-      } else {
-        leftArrow.pos.x = leftArrowBaseX
-      }
-    }
+  const sparseSpacing = cloudWidth / (CLOUD_SPARSE_COUNT - 1)
+  for (let i = 0; i < CLOUD_SPARSE_COUNT; i++) {
+    const baseX = cloudStartX + sparseSpacing * i
+    const randomOffset = (Math.random() - 0.5) * 40
+    const cloudX = baseX + randomOffset
+    const sparseRange = CLOUD_SPARSE_Y_MAX - CLOUD_SPARSE_Y_MIN
+    const cloudY = CLOUD_SPARSE_Y_MIN + Math.random() * Math.random() * sparseRange
+    const cloudType = cloudTypes[(i + CLOUD_DENSE_COUNT) % cloudTypes.length]
+    const sizeVariation = 1.0 + Math.random() * 0.3
+    const mainSize = cloudType.mainSize * sizeVariation
+    addCloudObject(k, cloudX, cloudY, mainSize, cloudType, baseColor)
   }
 }
 
 /**
- * Creates arrow sprite from arrow.png image in center of screen
+ * Adds a single cloud game object with puff circles at the given position
  * @param {Object} k - Kaplay instance
+ * @param {number} x - Cloud center X
+ * @param {number} y - Cloud center Y
+ * @param {number} mainSize - Main circle radius
+ * @param {Object} cloudType - Cloud template with puffs and opacity
+ * @param {Object} color - Kaplay color object
  */
-function createCenterArrow(k) {
-  const centerX = k.width() / 2
-  const centerY = k.height() / 2
+function addCloudObject(k, x, y, mainSize, cloudType, color) {
+  const opacityVariation = 0.9 + Math.random() * 0.2
+  const opacity = cloudType.opacity * opacityVariation
   //
-  // Load arrow sprite from image file
+  // Capture puff data for draw closure
   //
-  const arrowSpriteId = 'center-arrow-level3'
-  //
-  // Load sprite from file (will be cached if already loaded)
-  //
-  k.loadSprite(arrowSpriteId, '/arrow.png')
-  //
-  // Create arrow sprite object in center of screen
-  //
+  const puffs = cloudType.puffs
   k.add([
-    k.sprite(arrowSpriteId),
-    k.pos(centerX, centerY),
-    k.anchor("center"),
-    k.scale(0.16),  // Scale down to 16% of original size (reduced by 20%)
-    k.z(CFG.visual.zIndex.player + 1),  // Above hero
-  ])
-}
-
-/**
- * Creates a falling cloud block with physics (can stack and be jumped on)
- * @param {Object} k - Kaplay instance
- * @param {number} x - X position
- * @param {number} y - Y position
- * @param {number} size - Block size
- * @param {string} tag - Tag for cloud blocks
- * @returns {Object} Cloud block game object
- */
-function createCloudBlock(k, x, y, size, tag) {
-  //
-  // Cloud block visual style - square block with cloud puffs inside
-  // Similar to original cloud blocks with better edge alignment
-  //
-  const shades = [
-    k.rgb(90, 90, 110),
-    k.rgb(92, 92, 112),
-    k.rgb(95, 95, 115),
-    k.rgb(98, 98, 118),
-    k.rgb(100, 100, 120),
-    k.rgb(102, 102, 122),
-    k.rgb(105, 105, 125),
-    k.rgb(108, 108, 128),
-    k.rgb(110, 110, 130),
-    k.rgb(112, 112, 132),
-    k.rgb(115, 115, 135),
-    k.rgb(118, 118, 138)
-  ]
-  //
-  // Pre-generate stable puff configuration (fixed at creation time)
-  // COMMENTED OUT: Cloud puffs disabled - using simple squares instead
-  //
-  // const halfSize = size / 2
-  // const puffRadiusMin = size * 0.25
-  // const puffRadiusMax = size * 0.35
-  //
-  // Calculate collision box size to match grid cell size exactly
-  // Collision box must be exactly equal to size (GRID_CELL_SIZE) to match grid cells
-  // Position offset remains the same (size * 0.6) to match visual cloud
-  //
-  const collisionBoxSize = size  // Exact grid cell size
-  //
-  // Define base puff positions to fill square area better (more square-like)
-  // COMMENTED OUT: Cloud puffs disabled
-  //
-  // const basePuffs = [
-  //   { x: -halfSize * 0.5, y: -halfSize * 0.5, radius: 0.85 },
-  //   { x: 0, y: -halfSize * 0.5, radius: 0.9 },
-  //   { x: halfSize * 0.5, y: -halfSize * 0.5, radius: 0.85 },
-  //   { x: -halfSize * 0.5, y: 0, radius: 0.9 },
-  //   { x: 0, y: 0, radius: 1.0 },
-  //   { x: halfSize * 0.5, y: 0, radius: 0.9 },
-  //   { x: -halfSize * 0.5, y: halfSize * 0.5, radius: 0.85 },
-  //   { x: 0, y: halfSize * 0.5, radius: 0.9 },
-  //   { x: halfSize * 0.5, y: halfSize * 0.5, radius: 0.85 }
-  // ]
-  //
-  // Generate fixed puff configuration (stable, doesn't change each frame)
-  // COMMENTED OUT: Cloud puffs disabled
-  //
-  // const puffs = basePuffs.map((puff) => {
-  //   const radius = puffRadiusMin + (puffRadiusMax - puffRadiusMin) * puff.radius
-  //   const shadeIndex = Math.floor(Math.random() * shades.length)
-  //   const opacity = 0.7 + Math.random() * 0.2
-  //   
-  //   return {
-  //     x: puff.x,
-  //     y: puff.y,
-  //     radius: radius,
-  //     color: shades[shadeIndex],
-  //     opacity: opacity
-  //   }
-  // })
-  //
-  // Generate cloud configuration for cloud-like appearance
-  // Create puffy cloud shape using overlapping circles
-  //
-  const baseColorIndex = Math.floor(Math.random() * shades.length)
-  const baseColor = shades[baseColorIndex]
-  const baseOpacity = 0.6 + Math.random() * 0.2
-  //
-  // Create cloud puffs configuration to fill square area (size x size)
-  // Use multiple overlapping circles to create cloud-like appearance
-  //
-  const halfSize = size / 2
-  const mainPuffRadius = size * 0.3  // Main center puff
-  const sidePuffRadius = size * 0.25  // Side puffs
-  const cornerPuffRadius = size * 0.2  // Corner puffs
-  //
-  // Define cloud puff positions (fixed at creation time for stable appearance)
-  //
-  const cloudPuffs = [
-    // Center puff (largest)
-    { x: 0, y: 0, radius: mainPuffRadius, color: baseColor, opacity: baseOpacity },
-    // Top row
-    { x: -halfSize * 0.4, y: -halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 1) % shades.length], opacity: baseOpacity * 0.9 },
-    { x: halfSize * 0.4, y: -halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 2) % shades.length], opacity: baseOpacity * 0.9 },
-    // Middle row
-    { x: -halfSize * 0.5, y: 0, radius: sidePuffRadius, color: shades[(baseColorIndex + 1) % shades.length], opacity: baseOpacity * 0.9 },
-    { x: halfSize * 0.5, y: 0, radius: sidePuffRadius, color: shades[(baseColorIndex + 2) % shades.length], opacity: baseOpacity * 0.9 },
-    // Bottom row
-    { x: -halfSize * 0.4, y: halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 1) % shades.length], opacity: baseOpacity * 0.9 },
-    { x: halfSize * 0.4, y: halfSize * 0.4, radius: sidePuffRadius, color: shades[(baseColorIndex + 2) % shades.length], opacity: baseOpacity * 0.9 },
-    // Corners (smaller puffs)
-    { x: -halfSize * 0.6, y: -halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 },
-    { x: halfSize * 0.6, y: -halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 },
-    { x: -halfSize * 0.6, y: halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 },
-    { x: halfSize * 0.6, y: halfSize * 0.6, radius: cornerPuffRadius, color: shades[(baseColorIndex + 3) % shades.length], opacity: baseOpacity * 0.8 }
-  ]
-  //
-  // Create cloud block visual with physics
-  //
-  const cloudBlock = k.add([
     k.pos(x, y),
-    k.anchor("center"),
-    k.area({
-      shape: new k.Rect(
-        k.vec2(-collisionBoxSize / 2 + size / 2, -collisionBoxSize / 2 + size / 2),  // Shift right and down by half square side
-        collisionBoxSize,  // Exact grid cell width
-        collisionBoxSize   // Exact grid cell height
-      ),
-      ignore: ["cloud-platform", tag]  // Ignore collision with cloud platform and other cloud blocks (use grid logic instead)
-    }),
-    k.body({
-      mass: 1.0,
-      isStatic: false,
-      gravityScale: 0  // Disable gravity - blocks fall in discrete steps like tetris
-    }),
-    k.z(CFG.visual.zIndex.platforms - 1),  // Below platforms
-    CFG.game.platformName,  // Allow hero to stand on blocks
-    tag,  // Tag for cloud blocks
-    //
-    // Store initial state
-    //
-    {
-      isStopped: false  // Flag to track if block has stopped on platform
-    },
+    k.z(Z_CLOUDS),
     {
       draw() {
         //
-        // Draw cloud-like appearance using overlapping circles (puffs)
+        // Main cloud body
         //
-        cloudPuffs.forEach((puff) => {
+        k.drawCircle({
+          radius: mainSize,
+          pos: k.vec2(0, 0),
+          color,
+          opacity
+        })
+        //
+        // Draw puff circles around main body
+        //
+        puffs.forEach(puff => {
           k.drawCircle({
-            radius: puff.radius,
-            pos: k.vec2(puff.x, puff.y),
-            color: puff.color,
-            opacity: puff.opacity
+            radius: mainSize * puff.radius,
+            pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
+            color,
+            opacity
           })
         })
       }
     }
   ])
-  
-  return cloudBlock
+}
+
+/**
+ * Draws a single mountain with snow cap and colored rock faces onto canvas context
+ * Adapted from touch section level 2 mountain rendering
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
+ * @param {number} x - Left edge X position
+ * @param {number} baseY - Mountain base Y (horizon line)
+ * @param {number} width - Horizontal span of the mountain
+ * @param {Object} data - Mountain geometry data {widthVariation, heightVariation, centerVariation}
+ * @param {Object} colors - Color palette {snow, rockLeft, rockRight, rockRightLight}
+ */
+function drawMountainShape(ctx, x, baseY, width, data, colors) {
+  ctx.save()
+  //
+  // Calculate mountain geometry from data parameters
+  //
+  const leftBaseX = x + data.widthVariation / 2
+  const rightBaseX = x + width - data.widthVariation / 2
+  const peakY = baseY - data.heightVariation / 2
+  const peakX = x + (width - data.centerVariation) / 2 + data.centerVariation / 2
+  //
+  // Calculate snow line positions on left and right slopes
+  //
+  const leftSnow = fixedPointOnSegment(leftBaseX, baseY, peakX, peakY, MOUNTAIN_SNOW_PERCENT)
+  const rightSnow = fixedPointOnSegment(rightBaseX, baseY, peakX, peakY, MOUNTAIN_SNOW_PERCENT)
+  const midSnow = {
+    x: peakX,
+    y: (leftSnow.y + rightSnow.y) / 2
+  }
+  //
+  // Generate snow cap edge points with wobble
+  //
+  const leftSnowPoints = []
+  const rightSnowPoints = []
+  for (let i = 1; i <= 2; i++) {
+    const leftPt = fixedPointOnSegment(leftSnow.x, leftSnow.y, midSnow.x, midSnow.y, 100 / 3 * i)
+    leftPt.y += MOUNTAIN_SNOW_WOBBLE * (1 - 2 * (i % 2))
+    leftSnowPoints.push(leftPt)
+    const rightPt = fixedPointOnSegment(midSnow.x, midSnow.y, rightSnow.x, rightSnow.y, 100 / 3 * i)
+    rightPt.y += MOUNTAIN_SNOW_WOBBLE * (-1 + 2 * (i % 2))
+    rightSnowPoints.push(rightPt)
+  }
+  //
+  // Draw left snow cap
+  //
+  ctx.fillStyle = colors.snow
+  ctx.beginPath()
+  ctx.moveTo(leftSnow.x, leftSnow.y)
+  leftSnowPoints.forEach(p => ctx.lineTo(p.x, p.y))
+  ctx.lineTo(midSnow.x, midSnow.y)
+  ctx.lineTo(peakX, peakY)
+  ctx.fill()
+  //
+  // Draw right snow cap (lighter color)
+  //
+  ctx.fillStyle = colors.rockRightLight
+  ctx.beginPath()
+  ctx.moveTo(midSnow.x, midSnow.y)
+  rightSnowPoints.forEach(p => ctx.lineTo(p.x, p.y))
+  ctx.lineTo(rightSnow.x, rightSnow.y)
+  ctx.lineTo(peakX, peakY)
+  ctx.fill()
+  //
+  // Draw left rock face
+  //
+  ctx.fillStyle = colors.rockLeft
+  ctx.beginPath()
+  ctx.moveTo(leftBaseX, baseY)
+  ctx.lineTo(leftSnow.x, leftSnow.y)
+  leftSnowPoints.forEach(p => ctx.lineTo(p.x, p.y))
+  ctx.lineTo(midSnow.x, midSnow.y)
+  ctx.lineTo(midSnow.x, baseY)
+  ctx.fill()
+  //
+  // Draw right rock face
+  //
+  ctx.fillStyle = colors.rockRight
+  ctx.beginPath()
+  ctx.moveTo(midSnow.x, midSnow.y)
+  rightSnowPoints.forEach(p => ctx.lineTo(p.x, p.y))
+  ctx.lineTo(rightSnow.x, rightSnow.y)
+  ctx.lineTo(rightBaseX, baseY)
+  ctx.lineTo(peakX, baseY)
+  ctx.fill()
+  ctx.restore()
+}
+
+/**
+ * Calculates a fixed point on a line segment at a given percentage
+ * @param {number} x1 - Start X
+ * @param {number} y1 - Start Y
+ * @param {number} x2 - End X
+ * @param {number} y2 - End Y
+ * @param {number} percent - Position along segment (0-100)
+ * @returns {Object} Point {x, y}
+ */
+function fixedPointOnSegment(x1, y1, x2, y2, percent) {
+  const n = percent / 100
+  const a = (y2 - y1) / (x2 - x1)
+  const px = x1 + (x2 - x1) * n
+  const py = a * (px - x1) + y1
+  return { x: px, y: py }
 }

@@ -12,6 +12,7 @@ import { sceneLevel0 as sceneTouchLevel0 } from "./sections/touch/scenes/level0.
 import { sceneLevel1 as sceneTouchLevel1 } from "./sections/touch/scenes/level1.js"
 import { sceneLevel2 as sceneTouchLevel2 } from "./sections/touch/scenes/level2.js"
 import { sceneLevel3 as sceneTouchLevel3 } from "./sections/touch/scenes/level3.js"
+import { sceneLevel4 as sceneTouchLevel4 } from "./sections/touch/scenes/level4.js"
 import { sceneLevel0 as sceneTimeLevel0 } from "./sections/time/scenes/level0.js"
 import { sceneLevel1 as sceneTimeLevel1 } from "./sections/time/scenes/level1.js"
 import { sceneLevel2 as sceneTimeLevel2 } from "./sections/time/scenes/level2.js"
@@ -124,6 +125,7 @@ sceneTouchLevel0(k)
 sceneTouchLevel1(k)
 sceneTouchLevel2(k)
 sceneTouchLevel3(k)
+sceneTouchLevel4(k)
 sceneTimeLevel0(k)
 sceneTimeLevel1(k)
 sceneTimeLevel2(k)

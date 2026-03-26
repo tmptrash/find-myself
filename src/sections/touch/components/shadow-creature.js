@@ -1,13 +1,13 @@
 import { CFG } from '../cfg.js'
 //
-// Creature body configuration (larger size)
+// Creature body configuration (solid black)
 //
 const BODY_RADIUS = 30
 const BODY_SEGMENTS = 4
 const BODY_SEGMENT_SPACING = 20
-const BODY_COLOR_R = 60
-const BODY_COLOR_G = 50
-const BODY_COLOR_B = 70
+const BODY_COLOR_R = 5
+const BODY_COLOR_G = 5
+const BODY_COLOR_B = 8
 //
 // Tentacle (IK arm) configuration
 //
@@ -23,10 +23,7 @@ const STEP_ARC_HEIGHT = 14
 const STALK_SPEED = 55
 const FLEE_SPEED = 100
 const LIGHT_FEAR_RADIUS = 450
-const LIGHT_REVEAL_RADIUS = 300
 const HERO_KILL_RADIUS = 85
-const MIN_OPACITY = 0.9
-const MAX_OPACITY = 1.0
 //
 // Smooth turning speed (radians per second)
 //
@@ -61,7 +58,7 @@ const TENTACLE_SIDES = [1, -1, 1, -1, 1, -1]
 const TIP_DOT_RADIUS = 3
 /**
  * Creates a shadow creature with IK tentacle arms
- * Barely visible in darkness, revealed by light, fears glowing bugs, stalks hero
+ * Solid black body, fears glowing bugs, stalks hero
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.x - Initial X position
@@ -101,7 +98,6 @@ export function create(cfg) {
     tentacles,
     facingAngle: 0,
     targetFacingAngle: 0,
-    opacity: MIN_OPACITY,
     isFleeing: false,
     lastStepIndex: -1
   }
@@ -118,7 +114,7 @@ export function create(cfg) {
 export function onUpdate(inst, dt, glowPositions) {
   const { hero } = inst
   //
-  // Find nearest light source
+  // Find nearest light source for AI flee behavior
   //
   let nearestLightDist = Infinity
   let nearestLightX = 0
@@ -133,15 +129,6 @@ export function onUpdate(inst, dt, glowPositions) {
       nearestLightY = glow.y
     }
   })
-  //
-  // Calculate opacity based on distance to nearest light
-  //
-  if (nearestLightDist < LIGHT_REVEAL_RADIUS) {
-    const t = 1 - nearestLightDist / LIGHT_REVEAL_RADIUS
-    inst.opacity = MIN_OPACITY + (MAX_OPACITY - MIN_OPACITY) * t
-  } else {
-    inst.opacity = MIN_OPACITY
-  }
   //
   // AI: determine desired facing direction
   //
@@ -191,15 +178,13 @@ export function onUpdate(inst, dt, glowPositions) {
   //
   updateTentacles(inst, dt)
   //
-  // Check hero collision (kill on touch, regardless of flee state)
+  // Check hero collision (kill on touch)
   //
   if (hero?.character?.pos) {
     const dx = hero.character.pos.x - inst.x
     const dy = hero.character.pos.y - inst.y
     const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist < HERO_KILL_RADIUS) {
-      inst.onHeroTouch?.()
-    }
+    dist < HERO_KILL_RADIUS && inst.onHeroTouch?.()
   }
 }
 
@@ -208,12 +193,12 @@ export function onUpdate(inst, dt, glowPositions) {
  * @param {Object} inst - Shadow creature instance
  */
 export function onDraw(inst) {
-  const { k, opacity } = inst
+  const { k } = inst
   const bodyColor = k.rgb(BODY_COLOR_R, BODY_COLOR_G, BODY_COLOR_B)
+  const tentacleColor = k.rgb(BODY_COLOR_R + 8, BODY_COLOR_G + 5, BODY_COLOR_B + 10)
   //
   // Draw tentacles first (behind body)
   //
-  const tentacleColor = k.rgb(BODY_COLOR_R + 8, BODY_COLOR_G + 5, BODY_COLOR_B + 10)
   inst.tentacles.forEach(tentacle => {
     //
     // Calculate attachment point on body edge
@@ -229,38 +214,26 @@ export function onDraw(inst) {
       SEGMENT_1_LENGTH, SEGMENT_2_LENGTH,
       tentacle.side
     )
-    //
-    // Draw first tentacle segment (thicker, closer to body)
-    //
     k.drawLine({
       p1: k.vec2(attachX, attachY),
       p2: k.vec2(jointX, jointY),
       width: TENTACLE_THICKNESS,
-      color: tentacleColor,
-      opacity: opacity
+      color: tentacleColor
     })
-    //
-    // Draw second tentacle segment (thinner, toward tip)
-    //
     k.drawLine({
       p1: k.vec2(jointX, jointY),
       p2: k.vec2(tentacle.footX, tentacle.footY),
       width: TENTACLE_THICKNESS * 0.7,
-      color: tentacleColor,
-      opacity: opacity
+      color: tentacleColor
     })
-    //
-    // Draw small dot at tip
-    //
     k.drawCircle({
       pos: k.vec2(tentacle.footX, tentacle.footY),
       radius: TIP_DOT_RADIUS,
-      color: tentacleColor,
-      opacity: opacity * 0.8
+      color: tentacleColor
     })
   })
   //
-  // Draw body segments (overlapping circles for amorphous shape)
+  // Draw body segments (overlapping circles for solid shape)
   //
   for (let i = 0; i < BODY_SEGMENTS; i++) {
     const offset = (i - 1) * BODY_SEGMENT_SPACING
@@ -270,12 +243,11 @@ export function onDraw(inst) {
     k.drawCircle({
       pos: k.vec2(segX, segY),
       radius: segRadius,
-      color: bodyColor,
-      opacity: opacity
+      color: bodyColor
     })
   }
   //
-  // Draw two dim eyes that look toward facing direction
+  // Draw two eyes that look toward facing direction
   //
   const eyeOffset = BODY_RADIUS * EYE_OFFSET_RATIO
   const eyeAngle1 = inst.facingAngle + EYE_ANGLE_SPREAD
@@ -285,36 +257,32 @@ export function onDraw(inst) {
   const eyeX2 = inst.x + Math.cos(eyeAngle2) * eyeOffset
   const eyeY2 = inst.y + Math.sin(eyeAngle2) * eyeOffset
   //
-  // Eye whites
+  // Eye whites (dark, barely distinguishable from body)
   //
   k.drawCircle({
     pos: k.vec2(eyeX1, eyeY1),
     radius: EYE_RADIUS,
-    color: k.rgb(60, 50, 70),
-    opacity: opacity * 1.2
+    color: k.rgb(15, 12, 18)
   })
   k.drawCircle({
     pos: k.vec2(eyeX2, eyeY2),
     radius: EYE_RADIUS,
-    color: k.rgb(60, 50, 70),
-    opacity: opacity * 1.2
+    color: k.rgb(15, 12, 18)
   })
   //
-  // Pupils (pointing toward facing direction)
+  // Pupils (dim red, pointing toward facing direction)
   //
   const pupilDirX = Math.cos(inst.facingAngle) * PUPIL_OFFSET
   const pupilDirY = Math.sin(inst.facingAngle) * PUPIL_OFFSET
   k.drawCircle({
     pos: k.vec2(eyeX1 + pupilDirX, eyeY1 + pupilDirY),
     radius: PUPIL_RADIUS,
-    color: k.rgb(180, 40, 40),
-    opacity: opacity * 1.5
+    color: k.rgb(140, 30, 30)
   })
   k.drawCircle({
     pos: k.vec2(eyeX2 + pupilDirX, eyeY2 + pupilDirY),
     radius: PUPIL_RADIUS,
-    color: k.rgb(180, 40, 40),
-    opacity: opacity * 1.5
+    color: k.rgb(140, 30, 30)
   })
 }
 
@@ -332,9 +300,6 @@ function updateTentacles(inst, dt) {
     //
     const idealX = inst.x + Math.cos(tentacle.angle + inst.facingAngle) * reach * 0.55
     const idealY = inst.y + Math.sin(tentacle.angle + inst.facingAngle) * reach * 0.55
-    //
-    // Distance from current foot to ideal position
-    //
     const dx = idealX - tentacle.footX
     const dy = idealY - tentacle.footY
     const dist = Math.sqrt(dx * dx + dy * dy)
@@ -342,10 +307,6 @@ function updateTentacles(inst, dt) {
     // Start stepping when foot is too far from ideal
     //
     if (!tentacle.isStepping && dist > STEP_THRESHOLD) {
-      //
-      // Alternating tripod gait: even tentacles step together, odd together
-      // Only start step if same-group tentacles are not mid-step
-      //
       const groupParity = i % 2
       const sameGroupStepping = inst.tentacles.some(
         (t, idx) => idx % 2 === groupParity && t.isStepping

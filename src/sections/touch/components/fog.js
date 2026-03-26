@@ -29,9 +29,9 @@ const ROTATE_SPEED_MAX = 0.08
 //
 // Fog color (darker than background to create shadow patches, not light streaks)
 //
-const FOG_COLOR_R = 40
-const FOG_COLOR_G = 40
-const FOG_COLOR_B = 50
+const FOG_COLOR_R = 16
+const FOG_COLOR_G = 16
+const FOG_COLOR_B = 22
 //
 // Screen edge wrapping margin
 //

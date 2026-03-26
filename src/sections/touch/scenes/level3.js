@@ -26,43 +26,43 @@ const HERO_COLLISION_HEIGHT = 25
 const HERO_SCALE = 3
 const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE
 //
-// Background color (gray, brighter for debug)
+// Background color (near-black night sky)
 //
-const BG_COLOR_R = 50
-const BG_COLOR_G = 50
-const BG_COLOR_B = 60
-const BG_HEX = '#32323C'
+const BG_COLOR_R = 12
+const BG_COLOR_G = 12
+const BG_COLOR_B = 16
+const BG_HEX = '#0C0C10'
 //
-// Wall color (dark gray)
+// Wall color (deep black)
 //
-const WALL_COLOR_R = 40
-const WALL_COLOR_G = 40
-const WALL_COLOR_B = 48
-const WALL_COLOR_HEX = '#282830'
+const WALL_COLOR_R = 8
+const WALL_COLOR_G = 8
+const WALL_COLOR_B = 10
+const WALL_COLOR_HEX = '#08080A'
 //
-// Platform color (visible gray)
+// Platform color (dark stone)
 //
-const PLATFORM_COLOR_R = 80
-const PLATFORM_COLOR_G = 75
-const PLATFORM_COLOR_B = 90
+const PLATFORM_COLOR_R = 28
+const PLATFORM_COLOR_G = 26
+const PLATFORM_COLOR_B = 32
 //
-// Platform root color (matches vine green tone)
+// Platform root color (very dark green)
 //
-const PLATFORM_ROOT_COLOR_R = 15
-const PLATFORM_ROOT_COLOR_G = 30
-const PLATFORM_ROOT_COLOR_B = 12
+const PLATFORM_ROOT_COLOR_R = 8
+const PLATFORM_ROOT_COLOR_G = 16
+const PLATFORM_ROOT_COLOR_B = 6
 //
 // Platform dimensions
 //
 const PLATFORM_HEIGHT = 40
 const PLATFORM_CORNER_RADIUS = 8
 //
-// Black outline around platforms on all sides (follows rounded corners)
+// Dark outline around platforms on all sides (follows rounded corners)
 //
 const PLATFORM_OUTLINE_WIDTH = 3
-const PLATFORM_OUTLINE_COLOR_R = 10
-const PLATFORM_OUTLINE_COLOR_G = 10
-const PLATFORM_OUTLINE_COLOR_B = 10
+const PLATFORM_OUTLINE_COLOR_R = 5
+const PLATFORM_OUTLINE_COLOR_G = 5
+const PLATFORM_OUTLINE_COLOR_B = 5
 //
 // Bug shield radius for thorn collision (hero near bug is protected from thorns)
 //
@@ -93,15 +93,16 @@ const CORRIDOR_PLATFORMS = [
 //
 const TRAP_PLATFORM_INDEX = 1
 const TRAP_ACTIVATION_DELAY = 0.05
-const TRAP_SLIDE_SPEED = 600
+const TRAP_INITIAL_GAP = 3
 //
 // Each half slides out by the full platform width (2x width total gap)
 //
 const TRAP_MAX_SPLIT_DISTANCE = CORRIDOR_PLATFORMS[1].width
 //
-// Speed at which halves return to original position after splitting
+// Duration in seconds for splitting apart and returning back
 //
-const TRAP_RETURN_SPEED = 200
+const TRAP_SPLIT_DURATION = 0.55
+const TRAP_RETURN_DURATION = 1.2
 //
 // Trap proximity detection range (triggers while hero is still in the air)
 //
@@ -161,10 +162,10 @@ const LEFT_MOUNTAIN = {
   heightVariation: 1200,
   centerVariation: 250,
   colors: {
-    snow: 'rgb(200, 210, 220)',
-    rockLeft: 'rgb(50, 80, 100)',
-    rockRight: 'rgb(40, 70, 90)',
-    rockRightLight: 'rgb(90, 130, 150)'
+    snow: 'rgb(30, 32, 36)',
+    rockLeft: 'rgb(14, 18, 22)',
+    rockRight: 'rgb(12, 16, 20)',
+    rockRightLight: 'rgb(20, 26, 30)'
   }
 }
 //
@@ -177,14 +178,14 @@ const CENTER_MOUNTAIN = {
   heightVariation: 1500,
   centerVariation: 200,
   colors: {
-    snow: 'rgb(255, 255, 255)',
-    rockLeft: 'rgb(73, 121, 141)',
-    rockRight: 'rgb(62, 105, 121)',
-    rockRightLight: 'rgb(130, 176, 209)'
+    snow: 'rgb(35, 38, 42)',
+    rockLeft: 'rgb(16, 22, 28)',
+    rockRight: 'rgb(14, 20, 26)',
+    rockRightLight: 'rgb(24, 30, 36)'
   }
 }
 //
-// Right mountain geometry and colors (brightest)
+// Right mountain geometry and colors (darkest silhouettes)
 //
 const RIGHT_MOUNTAIN = {
   xOffset: -150,
@@ -193,10 +194,10 @@ const RIGHT_MOUNTAIN = {
   heightVariation: 1300,
   centerVariation: 280,
   colors: {
-    snow: 'rgb(245, 248, 250)',
-    rockLeft: 'rgb(90, 140, 160)',
-    rockRight: 'rgb(80, 130, 150)',
-    rockRightLight: 'rgb(150, 190, 220)'
+    snow: 'rgb(32, 35, 40)',
+    rockLeft: 'rgb(18, 24, 28)',
+    rockRight: 'rgb(16, 22, 26)',
+    rockRightLight: 'rgb(26, 32, 38)'
   }
 }
 //
@@ -211,37 +212,37 @@ const TREE_LAYERS_DEC_WIDTH = 0.15
 const DARK_TREES_COUNT = 20
 const DARK_TREES_LAYERS = 1
 const DARK_TREES_TRUNK_WIDTH = 0.03
-const DARK_TREES_TRUNK_COLOR = '#1A1A1A'
-const DARK_TREES_LEFT_COLOR = [40, 50, 40]
-const DARK_TREES_RIGHT_COLOR = [50, 60, 50]
+const DARK_TREES_TRUNK_COLOR = '#080808'
+const DARK_TREES_LEFT_COLOR = [10, 14, 10]
+const DARK_TREES_RIGHT_COLOR = [14, 18, 14]
 const DARK_TREES_LAYER_WIDTH = 0.5
 const DARK_TREES_HEIGHT_MIN = 400
 const DARK_TREES_HEIGHT_MAX = 480
 const DARK_TREES_SHARPNESS_MIN = 10
 const DARK_TREES_SHARPNESS_MAX = 20
 //
-// Medium tree layer configuration (multi-layered, slightly brighter)
+// Medium tree layer configuration (dark silhouettes)
 //
 const BG_TREES_COUNT = 12
 const BG_TREES_LAYERS = 4
 const BG_TREES_TRUNK_WIDTH = 0.03
-const BG_TREES_TRUNK_COLOR = '#1A1A1A'
-const BG_TREES_LEFT_COLOR = [50, 70, 45]
-const BG_TREES_RIGHT_COLOR = [60, 80, 55]
+const BG_TREES_TRUNK_COLOR = '#080808'
+const BG_TREES_LEFT_COLOR = [12, 18, 10]
+const BG_TREES_RIGHT_COLOR = [16, 22, 14]
 const BG_TREES_LAYER_WIDTH = 0.3
 const BG_TREES_HEIGHT_MIN = 300
 const BG_TREES_HEIGHT_MAX = 380
 const BG_TREES_SHARPNESS_MIN = 10
 const BG_TREES_SHARPNESS_MAX = 20
 //
-// Foreground tree layer configuration (small, bright, in front of creature)
+// Foreground tree layer configuration (small, very dark, in front of creature)
 //
 const FRONT_TREES_COUNT = 15
 const FRONT_TREES_LAYERS = 3
 const FRONT_TREES_TRUNK_WIDTH = 0.03
-const FRONT_TREES_TRUNK_COLOR = '#1A1A1A'
-const FRONT_TREES_LEFT_COLOR = [35, 80, 30]
-const FRONT_TREES_RIGHT_COLOR = [45, 100, 40]
+const FRONT_TREES_TRUNK_COLOR = '#060606'
+const FRONT_TREES_LEFT_COLOR = [10, 20, 8]
+const FRONT_TREES_RIGHT_COLOR = [14, 28, 12]
 const FRONT_TREES_LAYER_WIDTH = 0.35
 const FRONT_TREES_HEIGHT_MIN = 80
 const FRONT_TREES_HEIGHT_MAX = 200
@@ -255,9 +256,9 @@ const CLOUD_SPARSE_COUNT = 5
 const CLOUD_DENSE_Y = TOP_MARGIN + 30
 const CLOUD_SPARSE_Y_MIN = TOP_MARGIN + 50
 const CLOUD_SPARSE_Y_MAX = TOP_MARGIN + 80
-const CLOUD_BASE_COLOR_R = 45
-const CLOUD_BASE_COLOR_G = 46
-const CLOUD_BASE_COLOR_B = 50
+const CLOUD_BASE_COLOR_R = 14
+const CLOUD_BASE_COLOR_G = 14
+const CLOUD_BASE_COLOR_B = 18
 //
 // Platform root decoration count per 100px of platform width
 //
@@ -272,8 +273,8 @@ const ROOT_X_WOBBLE = 12
 //
 const BARK_LINES_MIN = 2
 const BARK_LINES_MAX = 4
-const BARK_LINE_OPACITY_MIN = 0.1
-const BARK_LINE_OPACITY_MAX = 0.2
+const BARK_LINE_OPACITY_MIN = 0.05
+const BARK_LINE_OPACITY_MAX = 0.1
 //
 // Z-index layers for this level
 // Back canvas (mountains + dark/medium trees) → clouds → fog → vines →
@@ -471,6 +472,20 @@ export function sceneLevel3(k) {
       skipVineIndices: [TRAP_PLATFORM_INDEX]
     })
     //
+    // Split trap platform grass blades into left/right half groups
+    // so they move with their respective halves during split animation
+    //
+    const trapPlat = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
+    const trapLeftBlades = []
+    const trapRightBlades = []
+    decorInst.grassBlades.forEach(blade => {
+      if (blade.baseY !== trapPlat.y) return
+      const platLeft = trapPlat.x - trapPlat.width / 2
+      const platRight = trapPlat.x + trapPlat.width / 2
+      if (blade.x < platLeft || blade.x > platRight) return
+      blade.x < trapPlat.x ? trapLeftBlades.push(blade) : trapRightBlades.push(blade)
+    })
+    //
     // Draw fog layer
     //
     k.add([
@@ -546,7 +561,7 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState)
+      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades)
     })
     //
     // ESC key to return to menu
@@ -567,8 +582,10 @@ export function sceneLevel3(k) {
  * @param {Object} creatureInst - Shadow creature instance
  * @param {Object} heroInst - Hero instance
  * @param {Object} trapState - Trap platform state
+ * @param {Array} trapLeftBlades - Grass blades on the left trap half
+ * @param {Array} trapRightBlades - Grass blades on the right trap half
  */
-function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState) {
+function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   Fog.onUpdate(fogInst, dt)
@@ -576,12 +593,23 @@ function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst
   //
   // Update trap platform split animation and sync hero position
   //
+  const prevLeftX = trapState.leftCenterX
   const prevRightX = trapState.rightCenterX
   updateTrapPlatform(trapState, heroInst, dt)
   //
+  // Sync trap grass blades with platform half movement
+  //
+  const leftDeltaX = trapState.leftCenterX - prevLeftX
+  const rightDeltaX = trapState.rightCenterX - prevRightX
+  if (leftDeltaX !== 0) {
+    trapLeftBlades.forEach(blade => { blade.x += leftDeltaX })
+  }
+  if (rightDeltaX !== 0) {
+    trapRightBlades.forEach(blade => { blade.x += rightDeltaX })
+  }
+  //
   // Sync trap bug position and bounds with the right half movement delta
   //
-  const rightDeltaX = trapState.rightCenterX - prevRightX
   if (rightDeltaX !== 0 && trapBugInst.entries) {
     trapBugInst.entries.forEach(entry => {
       entry.bug.x += rightDeltaX
@@ -742,8 +770,8 @@ function createCorridorPlatforms(k) {
 function createTrapPlatform(k) {
   const platform = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
   const halfWidth = platform.width / 2
-  const leftCenterX = platform.x - halfWidth / 2
-  const rightCenterX = platform.x + halfWidth / 2
+  const leftCenterX = platform.x - halfWidth / 2 - TRAP_INITIAL_GAP
+  const rightCenterX = platform.x + halfWidth / 2 + TRAP_INITIAL_GAP
   const centerY = platform.y + PLATFORM_HEIGHT / 2
   //
   // Create left half collision body
@@ -784,6 +812,7 @@ function createTrapPlatform(k) {
     initialLeftCenterX: leftCenterX,
     initialRightCenterX: rightCenterX,
     splitDistance: 0,
+    splitProgress: 0,
     y: platform.y,
     halfWidth,
     heroRidingHalf: null,
@@ -809,36 +838,45 @@ function updateTrapPlatform(trapState, heroInst, dt) {
   // Returning phase: halves slide back to original position, then lock permanently
   //
   if (trapState.returning) {
-    const step = TRAP_RETURN_SPEED * dt
-    trapState.splitDistance = Math.max(0, trapState.splitDistance - step)
+    trapState.splitProgress += dt / TRAP_RETURN_DURATION
+    //
+    // Fully returned — lock permanently
+    //
+    if (trapState.splitProgress >= 1) {
+      trapState.splitProgress = 1
+      trapState.done = true
+      trapState.heroRidingHalf = null
+    }
+    //
+    // Ease-in-out: accelerate at start, decelerate at end (reverse direction)
+    //
+    const eased = smoothstep(trapState.splitProgress)
+    trapState.splitDistance = TRAP_MAX_SPLIT_DISTANCE * (1 - eased)
     trapState.leftCenterX = trapState.initialLeftCenterX - trapState.splitDistance
     trapState.rightCenterX = trapState.initialRightCenterX + trapState.splitDistance
     trapState.leftHalf.pos.x = trapState.leftCenterX
     trapState.rightHalf.pos.x = trapState.rightCenterX
     syncHeroWithTrapPlatform(heroInst, trapState)
-    //
-    // Fully returned — lock permanently
-    //
-    if (trapState.splitDistance <= 0) {
-      trapState.done = true
-      trapState.heroRidingHalf = null
-    }
     return
   }
   //
-  // Splitting phase: halves slide apart fast until max distance, then start returning
+  // Splitting phase: halves slide apart with ease-in-out, then start returning
   //
   if (trapState.splitting) {
-    const step = TRAP_SLIDE_SPEED * dt
-    trapState.splitDistance += step
+    trapState.splitProgress += dt / TRAP_SPLIT_DURATION
     //
-    // Reached max split distance — switch to returning
+    // Reached max split — switch to returning
     //
-    if (trapState.splitDistance >= TRAP_MAX_SPLIT_DISTANCE) {
-      trapState.splitDistance = TRAP_MAX_SPLIT_DISTANCE
+    if (trapState.splitProgress >= 1) {
+      trapState.splitProgress = 0
       trapState.returning = true
       trapState.splitting = false
     }
+    //
+    // Ease-in-out: accelerate at start, decelerate at end
+    //
+    const eased = smoothstep(Math.min(trapState.splitProgress, 1))
+    trapState.splitDistance = TRAP_MAX_SPLIT_DISTANCE * eased
     trapState.leftCenterX = trapState.initialLeftCenterX - trapState.splitDistance
     trapState.rightCenterX = trapState.initialRightCenterX + trapState.splitDistance
     trapState.leftHalf.pos.x = trapState.leftCenterX
@@ -1518,4 +1556,14 @@ function fixedPointOnSegment(x1, y1, x2, y2, percent) {
   const px = x1 + (x2 - x1) * n
   const py = a * (px - x1) + y1
   return { x: px, y: py }
+}
+
+/**
+ * Smooth ease-in-out curve (Hermite interpolation)
+ * Accelerates from 0, decelerates toward 1
+ * @param {number} t - Normalized progress (0 to 1)
+ * @returns {number} Eased value (0 to 1)
+ */
+function smoothstep(t) {
+  return t * t * (3 - 2 * t)
 }

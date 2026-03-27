@@ -18,14 +18,34 @@ const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
+// Rounded corner configuration for game area
+//
+const CORNER_RADIUS = 20
+const CORNER_SPRITE_NAME = 'touch2-corner-sprite'
+const WALL_COLOR_HEX = '#1F1F1F'
+//
 // Platform dimensions
 //
 const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
 //
 // Hero spawn positions
 //
-const HERO_SPAWN_X = LEFT_MARGIN + 100
+const HERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 250
 const HERO_SPAWN_Y = FLOOR_Y - 50
+//
+// Icicle spike configuration (deadly floor barrier)
+//
+const ICICLE_HEIGHT_MIN = 50
+const ICICLE_HEIGHT_MAX = 90
+const ICICLE_WIDTH_MIN = 16
+const ICICLE_WIDTH_MAX = 30
+const ICICLE_SPACING = 22
+const ICICLE_SAFE_ZONE_X = CFG.visual.screen.width - RIGHT_MARGIN - 400
+const ICICLE_COLOR_R = 255
+const ICICLE_COLOR_G = 255
+const ICICLE_COLOR_B = 255
+const ICICLE_OUTLINE_WIDTH = 2
+const ICICLE_KILL_TOLERANCE = 10
 /**
  * Level 2 scene for touch section - Simple level without obstacles
  * @param {Object} k - Kaplay instance
@@ -67,9 +87,9 @@ export function sceneLevel2(k) {
       touchMusic.stop()
     })
     //
-    // Set background to black
+    // Set background to match wall color (prevents visible bars at top/bottom)
     //
-    k.setBackground(k.Color.fromHex("#000000"))
+    k.setBackground(k.rgb(31, 31, 31))
     //
     // Draw background (black)
     //
@@ -135,9 +155,13 @@ export function sceneLevel2(k) {
       CFG.game.platformName
     ])
     //
+    // Create rounded corners at all four game area corners
+    //
+    createRoundedCorners(k)
+    //
     // Create level indicator (TOUCH letters)
     //
-    LevelIndicator.create({
+    const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 2,
       activeColor: '#8B5A50',
@@ -272,138 +296,17 @@ export function sceneLevel2(k) {
     //
     createSnowDrifts(k)
     //
-    // Create arrow in snow pointing right (to guide hero direction)
-    // Created as sprite from canvas for perfect synchronization
+    // Generate icicle spikes on the floor (left portion, safe zone on right)
     //
-    const arrowY = FLOOR_Y - 100  // Higher above bottom platform
-    const arrowX = k.width() / 2 + 500  // Center arrow horizontally, shifted right by 500px
-    const arrowFillColor = k.rgb(100, 130, 180)  // Darker blue for fill
-    const ARROW_BODY_LENGTH = 75  // Length of arrow body (rectangle) - increased
-    const ARROW_BODY_WIDTH = 18  // Width of arrow body - increased
-    const ARROWHEAD_SIZE = 30  // Size of arrowhead triangle - increased
-    
+    const icicleData = generateIcicles()
     //
-    // Create arrow sprite from canvas
-    //
-    const createArrowSprite = () => {
-      //
-      // Calculate canvas size (with padding for "ears" and tip)
-      //
-      const baseWidth = ARROW_BODY_WIDTH * 2.2  // Base width for "ears"
-      const canvasWidth = ARROW_BODY_LENGTH + ARROWHEAD_SIZE + 30  // Total width + extra padding for tip
-      const canvasHeight = baseWidth + 20  // Height for "ears" + padding
-      const canvasCenterX = ARROW_BODY_LENGTH / 2 + 10  // Center X accounting for left padding
-      const canvasCenterY = canvasHeight / 2
-      
-      //
-      // Create arrow sprite using toPng
-      //
-      const fillR = Math.round(arrowFillColor.r)
-      const fillG = Math.round(arrowFillColor.g)
-      const fillB = Math.round(arrowFillColor.b)
-      
-      //
-      // Arrow body (rectangle) - left side
-      //
-      const bodyLeftX = canvasCenterX - ARROW_BODY_LENGTH / 2
-      const bodyRightX = canvasCenterX + ARROW_BODY_LENGTH / 2
-      const bodyTopY = canvasCenterY - ARROW_BODY_WIDTH / 2
-      
-      //
-      // Arrowhead (triangle) - right side with "ears" (wider base)
-      //
-      const tipX = bodyRightX + ARROWHEAD_SIZE
-      const tipY = canvasCenterY  // Same Y as body center
-      const baseLeftX = bodyRightX
-      const baseLeftY = canvasCenterY - baseWidth / 2  // Top "ear"
-      const baseRightX = bodyRightX
-      const baseRightY = canvasCenterY + baseWidth / 2  // Bottom "ear"
-      
-      //
-      // Draw soft outline (multiple layers for softness)
-      //
-      const outlineWidth = 3
-      const outlineLayers = 3
-      
-      const dataURL = toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
-        ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
-        
-        for (let layer = outlineLayers; layer > 0; layer--) {
-          const layerWidth = outlineWidth * (layer / outlineLayers)
-          const layerOpacity = .8
-          
-          ctx.strokeStyle = `rgba(0, 0, 0, ${layerOpacity})`
-          ctx.lineWidth = layerWidth
-          ctx.lineJoin = 'round'
-          ctx.lineCap = 'round'
-          
-          //
-          // Draw arrow body outline (rectangle)
-        //
-        ctx.strokeRect(
-          bodyLeftX - layerWidth / 2,
-          bodyTopY - layerWidth / 2,
-          ARROW_BODY_LENGTH + layerWidth,
-          ARROW_BODY_WIDTH + layerWidth
-        )
-        
-        //
-        // Draw arrowhead outline (triangle)
-        //
-        ctx.beginPath()
-        ctx.moveTo(tipX + layerWidth / 2, tipY)
-        ctx.lineTo(baseLeftX - layerWidth / 2, baseLeftY - layerWidth / 2)
-        ctx.lineTo(baseRightX - layerWidth / 2, baseRightY + layerWidth / 2)
-          ctx.closePath()
-          ctx.stroke()
-        }
-        
-        //
-        // Draw arrow body fill (rectangle)
-        //
-        ctx.fillRect(bodyLeftX, bodyTopY, ARROW_BODY_LENGTH, ARROW_BODY_WIDTH)
-        
-        //
-        // Draw arrowhead fill (triangle)
-        //
-        ctx.beginPath()
-        ctx.moveTo(tipX, tipY)
-        ctx.lineTo(baseLeftX, baseLeftY)
-        ctx.lineTo(baseRightX, baseRightY)
-        ctx.closePath()
-        ctx.fill()
-      })
-      
-      const spriteId = `arrow-touch-level2-${Date.now()}`
-      k.loadSprite(spriteId, dataURL)
-      
-      return spriteId
-    }
-    
-    const arrowSpriteId = createArrowSprite()
-    
-    //
-    // Store base Y position for consistent movement
-    //
-    const arrowBaseY = arrowY
-    
-    //
-    // Create arrow sprite object
+    // Draw icicle spikes layer
     //
     k.add([
-      k.sprite(arrowSpriteId),
-      k.pos(arrowX, arrowBaseY),
-      k.anchor("center"),
-      k.z(CFG.visual.zIndex.player + 1),  // Above background but below platforms
-    {
-      draw() {
-          //
-          // Sway arrow up and down by a couple pixels
-          //
-          const swayAmount = 2  // 2 pixels up and down
-          const swaySpeed = 2.5  // Speed of swaying
-          const offsetY = Math.sin(k.time() * swaySpeed) * swayAmount
-          this.pos.y = arrowBaseY + offsetY
+      k.z(CFG.visual.zIndex.platforms + 1),
+      {
+        draw() {
+          drawIcicles(k, icicleData)
         }
       }
     ])
@@ -449,6 +352,12 @@ export function sceneLevel2(k) {
     k.onUpdate(() => {
       const dt = k.dt()
       Dust.onUpdate(dustInst, dt)
+      //
+      // Check if hero touches icicle spikes (deadly floor barrier)
+      //
+      if (!heroInst.isDying && heroInst.character?.pos) {
+        checkIcicleCollision(k, heroInst, icicleData, levelIndicator)
+      }
       //
       // Check if hero just landed
       //
@@ -1856,5 +1765,263 @@ function createForegroundTrees(k) {
         })
       }
     }
+  ])
+}
+
+/**
+ * Generates icicle spike data for the bottom floor barrier
+ * Icicles cover the floor from left wall to the safe zone on the right
+ * @returns {Array} Array of icicle objects with position, size, and tip offset
+ */
+function generateIcicles() {
+  const icicles = []
+  const startX = LEFT_MARGIN + 5
+  const endX = ICICLE_SAFE_ZONE_X
+  for (let x = startX; x < endX; x += ICICLE_SPACING) {
+    icicles.push({
+      x: x + (Math.random() - 0.5) * 8,
+      baseY: FLOOR_Y,
+      width: ICICLE_WIDTH_MIN + Math.random() * (ICICLE_WIDTH_MAX - ICICLE_WIDTH_MIN),
+      height: ICICLE_HEIGHT_MIN + Math.random() * (ICICLE_HEIGHT_MAX - ICICLE_HEIGHT_MIN),
+      tipOffset: (Math.random() - 0.5) * 4
+    })
+  }
+  return icicles
+}
+
+/**
+ * Draws icicle spikes pointing upward from the floor
+ * Each icicle has a dark outline and semi-transparent blue-white fill
+ * @param {Object} k - Kaplay instance
+ * @param {Array} icicleData - Array of icicle objects
+ */
+function drawIcicles(k, icicleData) {
+  const outlineColor = k.rgb(0, 0, 0)
+  const icicleColor = k.rgb(ICICLE_COLOR_R, ICICLE_COLOR_G, ICICLE_COLOR_B)
+  const ow = ICICLE_OUTLINE_WIDTH
+  icicleData.forEach(icicle => {
+    //
+    // Draw black outline (slightly larger triangle behind the icicle)
+    //
+    k.drawPolygon({
+      pts: [
+        k.vec2(icicle.x - icicle.width / 2 - ow, icicle.baseY + ow),
+        k.vec2(icicle.x + icicle.width / 2 + ow, icicle.baseY + ow),
+        k.vec2(icicle.x + icicle.tipOffset, icicle.baseY - icicle.height - ow)
+      ],
+      color: outlineColor
+    })
+    //
+    // Draw icicle fill (semi-transparent blue-white)
+    //
+    k.drawPolygon({
+      pts: [
+        k.vec2(icicle.x - icicle.width / 2, icicle.baseY),
+        k.vec2(icicle.x + icicle.width / 2, icicle.baseY),
+        k.vec2(icicle.x + icicle.tipOffset, icicle.baseY - icicle.height)
+      ],
+      color: icicleColor
+    })
+  })
+}
+
+/**
+ * Checks if hero is touching any icicle spike and triggers death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Array} icicleData - Array of icicle objects
+ */
+function checkIcicleCollision(k, heroInst, icicleData, levelIndicator) {
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  //
+  // Hero is only at risk if within the icicle zone (left of safe zone)
+  //
+  if (heroX > ICICLE_SAFE_ZONE_X) return
+  //
+  // Check if hero feet are near floor level and within icicle X range
+  //
+  for (const icicle of icicleData) {
+    const dx = Math.abs(heroX - icicle.x)
+    if (dx > icicle.width) continue
+    //
+    // Hero dies if their center is below the icicle tip
+    //
+    if (heroY > icicle.baseY - icicle.height + ICICLE_KILL_TOLERANCE) {
+      onHeroDeath(k, heroInst, levelIndicator)
+      return
+    }
+  }
+}
+//
+// Life death effect constants
+//
+const LIFE_FLASH_COUNT = 20
+const LIFE_FLASH_INTERVAL = 0.05
+const LIFE_PARTICLE_COUNT = 15
+const LIFE_PARTICLE_SPEED_MIN = 80
+const LIFE_PARTICLE_SPEED_EXTRA = 40
+const LIFE_PARTICLE_LIFETIME_MIN = 0.8
+const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
+const LIFE_PARTICLE_SIZE_MIN = 4
+const LIFE_PARTICLE_SIZE_EXTRA = 4
+const DEATH_RELOAD_DELAY = 0.8
+
+/**
+ * Handles hero death: increments life score, plays laugh sound,
+ * flashes life image, creates particles, then reloads the level
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage and updateLifeScore
+ */
+function onHeroDeath(k, heroInst, levelIndicator) {
+  if (heroInst.isDying) return
+  Hero.death(heroInst, () => {
+    const currentScore = get('lifeScore', 0)
+    const newScore = currentScore + 1
+    set('lifeScore', newScore)
+    levelIndicator?.updateLifeScore?.(newScore)
+    //
+    // Play laugh sound and trigger life image visual effects
+    //
+    if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
+      Sound.playLifeSound(k)
+      const originalColor = levelIndicator.lifeImage.sprite.color
+      flashLifeImage(k, levelIndicator, originalColor, 0)
+      createLifeParticles(k, levelIndicator)
+    }
+    k.wait(DEATH_RELOAD_DELAY, () => k.go('level-touch.2'))
+  })
+}
+
+/**
+ * Flashes life image red/white alternating to indicate death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage
+ * @param {Object} originalColor - Original color to restore after flash
+ * @param {number} count - Current flash iteration
+ */
+function flashLifeImage(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  if (count >= LIFE_FLASH_COUNT) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+    return
+  }
+  if (count % 2 === 0) {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImage(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Creates red particles radiating outward from the life image on death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage position
+ */
+function createLifeParticles(k, levelIndicator) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  const lifeX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeY = levelIndicator.lifeImage.sprite.pos.y
+  for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
+    const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
+    const lifetime = LIFE_PARTICLE_LIFETIME_MIN + Math.random() * LIFE_PARTICLE_LIFETIME_EXTRA
+    const size = LIFE_PARTICLE_SIZE_MIN + Math.random() * LIFE_PARTICLE_SIZE_EXTRA
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeX, lifeY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    let elapsed = 0
+    particle.onUpdate(() => {
+      elapsed += k.dt()
+      particle.pos.x += vx * k.dt()
+      particle.pos.y += vy * k.dt()
+      particle.opacity = 1 - elapsed / lifetime
+      if (elapsed >= lifetime) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius in pixels
+ * @param {string} color - Fill color in hex format
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = radius
+  canvas.height = radius
+  const ctx = canvas.getContext('2d')
+  //
+  // Draw L-shaped corner with rounded inner angle
+  //
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, radius, radius)
+  //
+  // Cut out quarter circle to create rounded inner corner
+  //
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(radius, radius, radius, 0, Math.PI * 2)
+  ctx.fill()
+  return canvas.toDataURL()
+}
+
+/**
+ * Creates rounded corners at all four corners of the game area
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
+  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  //
+  // Top-left corner
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, TOP_MARGIN),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, TOP_MARGIN),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-left corner (rotate 270°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-right corner (rotate 180°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1)
   ])
 }

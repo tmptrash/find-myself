@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
@@ -64,9 +64,10 @@ const PLATFORM_OUTLINE_COLOR_R = 5
 const PLATFORM_OUTLINE_COLOR_G = 5
 const PLATFORM_OUTLINE_COLOR_B = 5
 //
-// Bug shield radius for thorn collision (hero near bug is protected from thorns)
+// Bug shield radius for thorn collision (hero directly above bug is protected)
+// X range is tight: only shields when hero stands on top of the bug, not beside it
 //
-const BUG_SHIELD_RADIUS_X = 25
+const BUG_SHIELD_RADIUS_X = 15
 const BUG_SHIELD_RADIUS_Y = 30
 //
 // Rounded corner configuration for game area
@@ -113,8 +114,8 @@ const TRAP_PROXIMITY_Y = 400
 //
 const PLATFORM_THORN_ZONES = [
   {
-    startX: CORRIDOR_PLATFORMS[2].x - CORRIDOR_PLATFORMS[2].width / 2 + 10,
-    endX: CORRIDOR_PLATFORMS[2].x + CORRIDOR_PLATFORMS[2].width / 2 - 10,
+    startX: CORRIDOR_PLATFORMS[2].x - CORRIDOR_PLATFORMS[2].width / 2 + 20,
+    endX: CORRIDOR_PLATFORMS[2].x + CORRIDOR_PLATFORMS[2].width / 2 - 20,
     y: CORRIDOR_PLATFORMS[2].y
   }
 ]
@@ -260,6 +261,29 @@ const CLOUD_BASE_COLOR_R = 14
 const CLOUD_BASE_COLOR_G = 14
 const CLOUD_BASE_COLOR_B = 18
 //
+// Moon configuration (drawn on background canvas)
+//
+const MOON_X = 1400
+const MOON_Y = 230
+const MOON_RADIUS = 56
+const MOON_COLOR_R = 200
+const MOON_COLOR_G = 195
+const MOON_COLOR_B = 180
+const MOON_GLOW_RADIUS = 30
+//
+// Pre-defined crater positions relative to moon center (fraction of radius)
+// Each crater has a slightly darker shade defined by brightness offset
+//
+const MOON_CRATERS = [
+  { x: -0.3, y: -0.2, r: 0.25, dark: 25 },
+  { x: 0.25, y: 0.15, r: 0.2, dark: 20 },
+  { x: -0.1, y: 0.35, r: 0.16, dark: 30 },
+  { x: 0.4, y: -0.25, r: 0.13, dark: 22 },
+  { x: -0.45, y: 0.1, r: 0.11, dark: 18 },
+  { x: 0.1, y: -0.45, r: 0.1, dark: 28 },
+  { x: 0.3, y: 0.4, r: 0.09, dark: 15 }
+]
+//
 // Platform root decoration count per 100px of platform width
 //
 const ROOTS_PER_100PX = 3
@@ -360,7 +384,7 @@ export function sceneLevel3(k) {
     //
     // Create level indicator (TOUCH letters)
     //
-    LevelIndicator.create({
+    const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 3,
       activeColor: '#8B5A50',
@@ -401,8 +425,9 @@ export function sceneLevel3(k) {
       antiHero: antiHeroInst,
       onAnnihilation: () => {
         //
-        // Transition after annihilation to level 4
+        // Stop creature and transition after annihilation to level 4
         //
+        creatureInst.stopped = true
         createLevelTransition(k, 'level-touch.3', () => {
           k.go('level-touch.4')
         })
@@ -457,7 +482,7 @@ export function sceneLevel3(k) {
       hero: heroInst,
       onHeroTouch: () => {
         if (heroInst.isDying) return
-        Hero.death(heroInst, () => k.go('level-touch.3'))
+        onHeroDeath(k, heroInst, levelIndicator)
       }
     })
     //
@@ -479,7 +504,7 @@ export function sceneLevel3(k) {
     const trapLeftBlades = []
     const trapRightBlades = []
     decorInst.grassBlades.forEach(blade => {
-      if (blade.baseY !== trapPlat.y) return
+      if (Math.abs(blade.baseY - trapPlat.y) > 5) return
       const platLeft = trapPlat.x - trapPlat.width / 2
       const platRight = trapPlat.x + trapPlat.width / 2
       if (blade.x < platLeft || blade.x > platRight) return
@@ -561,7 +586,7 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades)
+      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator)
     })
     //
     // ESC key to return to menu
@@ -584,8 +609,9 @@ export function sceneLevel3(k) {
  * @param {Object} trapState - Trap platform state
  * @param {Array} trapLeftBlades - Grass blades on the left trap half
  * @param {Array} trapRightBlades - Grass blades on the right trap half
+ * @param {Object} levelIndicator - Level indicator for life score effects on death
  */
-function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades) {
+function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   Fog.onUpdate(fogInst, dt)
@@ -622,8 +648,8 @@ function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst
   // Check bottom wall and platform thorns (only when hero is alive)
   //
   if (!heroInst.isDying) {
-    checkBottomThorns(k, heroInst)
-    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries])
+    checkBottomThorns(k, heroInst, levelIndicator)
+    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries], levelIndicator)
   }
   //
   // Get glow positions from both bug instances for creature AI
@@ -639,12 +665,13 @@ function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst
  * Checks if hero has fallen onto the bottom wall thorns and triggers death
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
+ * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkBottomThorns(k, heroInst) {
+function checkBottomThorns(k, heroInst, levelIndicator) {
   if (!heroInst.character?.pos) return
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
   if (heroFeetY >= BOTTOM_KILL_Y) {
-    Hero.death(heroInst, () => k.go('level-touch.3'))
+    onHeroDeath(k, heroInst, levelIndicator)
   }
 }
 
@@ -654,18 +681,20 @@ function checkBottomThorns(k, heroInst) {
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
  * @param {Array} bugEntries - GlowBug entries for shielding check
+ * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkPlatformThorns(k, heroInst, bugEntries) {
+function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator) {
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
   //
-  // Check if hero is near any bug (bug body shields from thorns underneath)
+  // Check if hero is directly above any bug (standing on it shields from thorns)
+  // Hero feet must be above the bug center and within tight horizontal range
   //
   const shielded = bugEntries.some(entry => {
     const dx = Math.abs(heroX - entry.bug.x)
-    const dy = Math.abs(heroFeetY - entry.bug.y)
-    return dx < BUG_SHIELD_RADIUS_X && dy < BUG_SHIELD_RADIUS_Y
+    const dy = entry.bug.y - heroFeetY
+    return dx < BUG_SHIELD_RADIUS_X && dy > 0 && dy < BUG_SHIELD_RADIUS_Y
   })
   if (shielded) return
   for (const zone of PLATFORM_THORN_ZONES) {
@@ -675,9 +704,111 @@ function checkPlatformThorns(k, heroInst, bugEntries) {
     if (heroFeetY >= zone.y - PLATFORM_THORN_TOLERANCE &&
         heroFeetY <= zone.y + PLATFORM_THORN_TOLERANCE &&
         heroX >= zone.startX && heroX <= zone.endX) {
-      Hero.death(heroInst, () => k.go('level-touch.3'))
+      onHeroDeath(k, heroInst, levelIndicator)
       return
     }
+  }
+}
+//
+// Life death effect constants
+//
+const LIFE_FLASH_COUNT = 20
+const LIFE_FLASH_INTERVAL = 0.05
+const LIFE_PARTICLE_COUNT = 15
+const LIFE_PARTICLE_SPEED_MIN = 80
+const LIFE_PARTICLE_SPEED_EXTRA = 40
+const LIFE_PARTICLE_LIFETIME_MIN = 0.8
+const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
+const LIFE_PARTICLE_SIZE_MIN = 4
+const LIFE_PARTICLE_SIZE_EXTRA = 4
+const DEATH_RELOAD_DELAY = 0.8
+
+/**
+ * Handles hero death: increments life score, plays laugh sound,
+ * flashes life image, creates particles, then reloads the level
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage and updateLifeScore
+ */
+function onHeroDeath(k, heroInst, levelIndicator) {
+  if (heroInst.isDying) return
+  Hero.death(heroInst, () => {
+    const currentScore = get('lifeScore', 0)
+    const newScore = currentScore + 1
+    set('lifeScore', newScore)
+    levelIndicator?.updateLifeScore?.(newScore)
+    //
+    // Play laugh sound and trigger life image visual effects
+    //
+    if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
+      Sound.playLifeSound(k)
+      const originalColor = levelIndicator.lifeImage.sprite.color
+      flashLifeImage(k, levelIndicator, originalColor, 0)
+      createLifeParticles(k, levelIndicator)
+    }
+    k.wait(DEATH_RELOAD_DELAY, () => k.go('level-touch.3'))
+  })
+}
+
+/**
+ * Flashes life image red/white alternating to indicate death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage
+ * @param {Object} originalColor - Original color to restore after flash
+ * @param {number} count - Current flash iteration
+ */
+function flashLifeImage(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  if (count >= LIFE_FLASH_COUNT) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+    return
+  }
+  if (count % 2 === 0) {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImage(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Creates red particles radiating outward from the life image on death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage position
+ */
+function createLifeParticles(k, levelIndicator) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  const lifeX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeY = levelIndicator.lifeImage.sprite.pos.y
+  for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
+    const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
+    const lifetime = LIFE_PARTICLE_LIFETIME_MIN + Math.random() * LIFE_PARTICLE_LIFETIME_EXTRA
+    const size = LIFE_PARTICLE_SIZE_MIN + Math.random() * LIFE_PARTICLE_SIZE_EXTRA
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeX, lifeY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    let elapsed = 0
+    particle.onUpdate(() => {
+      elapsed += k.dt()
+      particle.pos.x += vx * k.dt()
+      particle.pos.y += vy * k.dt()
+      particle.opacity = 1 - elapsed / lifetime
+      if (elapsed >= lifetime) {
+        k.destroy(particle)
+      }
+    })
   }
 }
 
@@ -1219,6 +1350,10 @@ function createBackCanvas(k) {
     ctx.fillStyle = BG_HEX
     ctx.fillRect(0, 0, screenWidth, screenHeight)
     //
+    // Draw crescent moon with soft glow
+    //
+    drawMoon(ctx)
+    //
     // Draw three mountains (left, center, right)
     //
     drawMountainShape(ctx, LEFT_MOUNTAIN.xOffset, FLOOR_Y, screenThird + LEFT_MOUNTAIN.widthExtra, LEFT_MOUNTAIN, LEFT_MOUNTAIN.colors)
@@ -1453,6 +1588,58 @@ function addCloudObject(k, x, y, mainSize, cloudType, color) {
       }
     }
   ])
+}
+
+/**
+ * Draws a full moon with smooth radial glow and craters on the background canvas
+ * Uses canvas radial gradient for seamless glow falloff (no visible rings)
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
+ */
+function drawMoon(ctx) {
+  ctx.save()
+  //
+  // Draw smooth radial glow using canvas gradient (no discrete rings)
+  //
+  const outerR = MOON_RADIUS + MOON_GLOW_RADIUS
+  const gradient = ctx.createRadialGradient(MOON_X, MOON_Y, MOON_RADIUS * 0.8, MOON_X, MOON_Y, outerR)
+  gradient.addColorStop(0, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.15)`)
+  gradient.addColorStop(0.4, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.06)`)
+  gradient.addColorStop(1, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0)`)
+  ctx.beginPath()
+  ctx.arc(MOON_X, MOON_Y, outerR, 0, Math.PI * 2)
+  ctx.fillStyle = gradient
+  ctx.fill()
+  //
+  // Draw solid moon disc
+  //
+  ctx.beginPath()
+  ctx.arc(MOON_X, MOON_Y, MOON_RADIUS, 0, Math.PI * 2)
+  ctx.fillStyle = `rgb(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B})`
+  ctx.fill()
+  //
+  // Draw craters as darker circles clipped to moon disc
+  // Each crater has its own darkness level for surface variation
+  //
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(MOON_X, MOON_Y, MOON_RADIUS, 0, Math.PI * 2)
+  ctx.clip()
+  MOON_CRATERS.forEach(crater => {
+    const cr = MOON_COLOR_R - crater.dark
+    const cg = MOON_COLOR_G - crater.dark
+    const cb = MOON_COLOR_B - crater.dark
+    ctx.beginPath()
+    ctx.arc(
+      MOON_X + crater.x * MOON_RADIUS,
+      MOON_Y + crater.y * MOON_RADIUS,
+      crater.r * MOON_RADIUS,
+      0, Math.PI * 2
+    )
+    ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`
+    ctx.fill()
+  })
+  ctx.restore()
+  ctx.restore()
 }
 
 /**

@@ -42,6 +42,10 @@ export function sceneLevel1(k) {
     //
     set('lastLevel', 'level-touch.1')
     //
+    // Set background to match wall color (prevents visible bars at top/bottom)
+    //
+    k.setBackground(k.rgb(31, 31, 31))
+    //
     // Set gravity
     //
     k.setGravity(CFG.game.gravity)

@@ -25,7 +25,7 @@ export const TOUCH_CFG = {
     // Game area configuration (larger than word section)
     //
     gameArea: {
-      topMargin: 80,      // Small margin from top
+      topMargin: 110,     // Margin from top (room for small hero and life icons)
       bottomMargin: 50,   // Small margin from bottom
       leftMargin: 100,    // Small margin from left
       rightMargin: 100    // Small margin from right

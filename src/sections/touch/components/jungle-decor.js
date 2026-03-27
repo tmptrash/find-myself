@@ -12,6 +12,7 @@ const GRASS_SWAY_AMOUNT = 2.5
 const GRASS_PUSH_RADIUS = 50
 const GRASS_PUSH_FORCE = 15
 const GRASS_OPACITY = 0.85
+const GRASS_RAISE_OFFSET = 2
 //
 // Pre-defined dark green color palette for grass blades [r, g, b]
 //
@@ -46,6 +47,11 @@ const THORN_WIDTH_MAX = 14
 const THORN_HEIGHT_MIN = 11
 const THORN_HEIGHT_MAX = 20
 const THORN_TIP_OFFSET = 3
+const THORN_OUTLINE_WIDTH = 2
+//
+// Vertical offset to raise thorns above platform surface (pixels)
+//
+const THORN_RAISE_OFFSET = 3
 /**
  * Creates jungle decoration system with grass, vines, thorns, and platform spikes
  * @param {Object} cfg - Configuration
@@ -206,8 +212,8 @@ function generateGrass(platforms, colorPalette) {
       const widthVariation = 0.7 + Math.random() * 0.6
       blades.push({
         x: x + (Math.random() - 0.5) * 4,
-        baseY: platform.y,
-        tipY: platform.y - height,
+        baseY: platform.y - GRASS_RAISE_OFFSET,
+        tipY: platform.y - GRASS_RAISE_OFFSET - height,
         halfWidth: GRASS_BLADE_WIDTH * widthVariation / 2,
         swaySpeed: GRASS_SWAY_SPEED_MIN + Math.random() * (GRASS_SWAY_SPEED_MAX - GRASS_SWAY_SPEED_MIN),
         swayOffset: Math.random() * Math.PI * 2,
@@ -252,7 +258,7 @@ function generateBottomWallThorns() {
   const thorns = []
   const startX = CFG.visual.gameArea.leftMargin + 5
   const endX = CFG.visual.screen.width - CFG.visual.gameArea.rightMargin - 5
-  const baseY = CFG.visual.screen.height - CFG.visual.gameArea.bottomMargin
+  const baseY = CFG.visual.screen.height - CFG.visual.gameArea.bottomMargin - THORN_RAISE_OFFSET
   for (let x = startX; x < endX; x += THORN_SPACING) {
     thorns.push({
       x: x + (Math.random() - 0.5) * 6,
@@ -277,7 +283,7 @@ function generatePlatformThorns(zones) {
     for (let x = zone.startX; x < zone.endX; x += THORN_SPACING) {
       thorns.push({
         x: x + (Math.random() - 0.5) * 6,
-        baseY: zone.y,
+        baseY: zone.y - THORN_RAISE_OFFSET,
         width: THORN_WIDTH_MIN + Math.random() * (THORN_WIDTH_MAX - THORN_WIDTH_MIN),
         height: THORN_HEIGHT_MIN + Math.random() * (THORN_HEIGHT_MAX - THORN_HEIGHT_MIN),
         tipOffset: (Math.random() - 0.5) * THORN_TIP_OFFSET
@@ -294,7 +300,23 @@ function generatePlatformThorns(zones) {
  */
 function drawThorns(k, thornData) {
   const thornColor = k.rgb(45, 40, 50)
+  const outlineColor = k.rgb(0, 0, 0)
+  const ow = THORN_OUTLINE_WIDTH
   thornData.forEach(thorn => {
+    //
+    // Draw black outline (slightly larger triangle behind the thorn)
+    //
+    k.drawPolygon({
+      pts: [
+        k.vec2(thorn.x - thorn.width / 2 - ow, thorn.baseY + ow),
+        k.vec2(thorn.x + thorn.width / 2 + ow, thorn.baseY + ow),
+        k.vec2(thorn.x + thorn.tipOffset, thorn.baseY - thorn.height - ow)
+      ],
+      color: outlineColor
+    })
+    //
+    // Draw thorn fill on top
+    //
     k.drawPolygon({
       pts: [
         k.vec2(thorn.x - thorn.width / 2, thorn.baseY),

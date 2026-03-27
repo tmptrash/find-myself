@@ -13,7 +13,7 @@ const BODY_COLOR_B = 8
 //
 const SEGMENT_1_LENGTH = 45
 const SEGMENT_2_LENGTH = 38
-const TENTACLE_THICKNESS = 4
+const TENTACLE_THICKNESS = 7
 const STEP_THRESHOLD = 28
 const STEP_SPEED = 5.0
 const STEP_ARC_HEIGHT = 14
@@ -32,10 +32,8 @@ const TURN_SPEED = 2.5
 // Eye configuration
 //
 const EYE_OFFSET_RATIO = 0.45
-const EYE_RADIUS = 5
-const PUPIL_RADIUS = 2.5
-const PUPIL_OFFSET = 2
-const EYE_ANGLE_SPREAD = 0.4
+const EYE_RADIUS = 6
+const EYE_ANGLE_SPREAD = 0.7
 //
 // Tentacle rest angle offsets (radians from body center)
 // 3 per side: front, middle, back
@@ -55,7 +53,7 @@ const TENTACLE_SIDES = [1, -1, 1, -1, 1, -1]
 //
 // Tip dot radius at end of each tentacle
 //
-const TIP_DOT_RADIUS = 3
+const TIP_DOT_RADIUS = 4
 /**
  * Creates a shadow creature with IK tentacle arms
  * Solid black body, fears glowing bugs, stalks hero
@@ -99,7 +97,8 @@ export function create(cfg) {
     facingAngle: 0,
     targetFacingAngle: 0,
     isFleeing: false,
-    lastStepIndex: -1
+    lastStepIndex: -1,
+    stopped: false
   }
   return inst
 }
@@ -112,6 +111,10 @@ export function create(cfg) {
  * @param {Array} glowPositions - Array of {x, y, radius} from glowing bugs
  */
 export function onUpdate(inst, dt, glowPositions) {
+  //
+  // Skip all movement when stopped (hero reached anti-hero)
+  //
+  if (inst.stopped) return
   const { hero } = inst
   //
   // Find nearest light source for AI flee behavior
@@ -195,7 +198,6 @@ export function onUpdate(inst, dt, glowPositions) {
 export function onDraw(inst) {
   const { k } = inst
   const bodyColor = k.rgb(BODY_COLOR_R, BODY_COLOR_G, BODY_COLOR_B)
-  const tentacleColor = k.rgb(BODY_COLOR_R + 8, BODY_COLOR_G + 5, BODY_COLOR_B + 10)
   //
   // Draw tentacles first (behind body)
   //
@@ -218,18 +220,18 @@ export function onDraw(inst) {
       p1: k.vec2(attachX, attachY),
       p2: k.vec2(jointX, jointY),
       width: TENTACLE_THICKNESS,
-      color: tentacleColor
+      color: bodyColor
     })
     k.drawLine({
       p1: k.vec2(jointX, jointY),
       p2: k.vec2(tentacle.footX, tentacle.footY),
       width: TENTACLE_THICKNESS * 0.7,
-      color: tentacleColor
+      color: bodyColor
     })
     k.drawCircle({
       pos: k.vec2(tentacle.footX, tentacle.footY),
       radius: TIP_DOT_RADIUS,
-      color: tentacleColor
+      color: bodyColor
     })
   })
   //
@@ -257,31 +259,16 @@ export function onDraw(inst) {
   const eyeX2 = inst.x + Math.cos(eyeAngle2) * eyeOffset
   const eyeY2 = inst.y + Math.sin(eyeAngle2) * eyeOffset
   //
-  // Eye whites (dark, barely distinguishable from body)
+  // Eyes (solid red, no surrounding eyeball)
   //
   k.drawCircle({
     pos: k.vec2(eyeX1, eyeY1),
     radius: EYE_RADIUS,
-    color: k.rgb(15, 12, 18)
+    color: k.rgb(140, 30, 30)
   })
   k.drawCircle({
     pos: k.vec2(eyeX2, eyeY2),
     radius: EYE_RADIUS,
-    color: k.rgb(15, 12, 18)
-  })
-  //
-  // Pupils (dim red, pointing toward facing direction)
-  //
-  const pupilDirX = Math.cos(inst.facingAngle) * PUPIL_OFFSET
-  const pupilDirY = Math.sin(inst.facingAngle) * PUPIL_OFFSET
-  k.drawCircle({
-    pos: k.vec2(eyeX1 + pupilDirX, eyeY1 + pupilDirY),
-    radius: PUPIL_RADIUS,
-    color: k.rgb(140, 30, 30)
-  })
-  k.drawCircle({
-    pos: k.vec2(eyeX2 + pupilDirX, eyeY2 + pupilDirY),
-    radius: PUPIL_RADIUS,
     color: k.rgb(140, 30, 30)
   })
 }

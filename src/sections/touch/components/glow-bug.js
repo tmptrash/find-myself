@@ -32,8 +32,8 @@ const BUG_SURFACE_OFFSET = 20
 // Smooth gradient glow ring configuration
 // Each ring adds opacity, creating natural falloff from center to edge
 //
-const GLOW_RING_COUNT = 10
-const GLOW_RING_OPACITY = 0.025
+const GLOW_RING_COUNT = 30
+const GLOW_MAX_OPACITY = 0.12
 /**
  * Creates a glow bug manager that wraps SmallBugs with glow, trampoline,
  * and chain reaction mechanics
@@ -123,9 +123,9 @@ export function onUpdate(inst, dt) {
       entry.trampolineCooldown -= dt
     }
     //
-    // Check hero touch to activate glow
+    // Check hero touch to activate or re-activate glow (resets timer on every contact)
     //
-    if (!entry.isGlowing && hero?.character?.pos) {
+    if (hero?.character?.pos) {
       const dx = hero.character.pos.x - entry.bug.x
       const dy = hero.character.pos.y - entry.bug.y
       const dist = Math.sqrt(dx * dx + dy * dy)
@@ -207,16 +207,23 @@ export function onDraw(inst) {
       const radius = GLOW_AURA_RADIUS * pulse
       const c = entry.glowColor
       //
-      // Draw smooth gradient glow using concentric rings
-      // Outer rings drawn first, each adds opacity for natural falloff
+      // Glow center follows bug body (shifts down when squatting via dropOffset)
+      //
+      const glowY = entry.bug.y + (entry.bug.dropOffset || 0)
+      //
+      // Draw smooth radial gradient glow: each ring drawn from outer to inner
+      // with opacity following inverse-square falloff for natural light decay
       //
       for (let i = 0; i < GLOW_RING_COUNT; i++) {
-        const ringRadius = radius * ((GLOW_RING_COUNT - i) / GLOW_RING_COUNT)
+        const t = i / GLOW_RING_COUNT
+        const ringRadius = radius * (1 - t)
+        const falloff = t * t
+        const ringOpacity = GLOW_MAX_OPACITY * falloff
         k.drawCircle({
-          pos: k.vec2(entry.bug.x, entry.bug.y),
+          pos: k.vec2(entry.bug.x, glowY),
           radius: ringRadius,
           color: k.rgb(c.r, c.g, c.b),
-          opacity: GLOW_RING_OPACITY
+          opacity: ringOpacity
         })
       }
     }

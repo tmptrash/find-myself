@@ -87,7 +87,7 @@ const CORRIDOR_PLATFORMS = [
   { x: 180, y: 550, width: 150 },
   { x: 1150, y: 500, width: 340 },
   { x: 680, y: 600, width: 280 },
-  { x: 1650, y: 300, width: 250 }
+  { x: 1650, y: 350, width: 250 }
 ]
 //
 // Trap platform configuration (P1 splits into two halves when hero approaches)
@@ -96,9 +96,9 @@ const TRAP_PLATFORM_INDEX = 1
 const TRAP_ACTIVATION_DELAY = 0.05
 const TRAP_INITIAL_GAP = 3
 //
-// Each half slides out by the full platform width (2x width total gap)
+// Each half slides out by a small amount (just enough to create a gap)
 //
-const TRAP_MAX_SPLIT_DISTANCE = CORRIDOR_PLATFORMS[1].width
+const TRAP_MAX_SPLIT_DISTANCE = 180
 //
 // Duration in seconds for splitting apart and returning back
 //

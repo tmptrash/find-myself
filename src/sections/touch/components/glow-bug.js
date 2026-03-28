@@ -6,8 +6,8 @@ import { getRGB } from '../../../utils/helper.js'
 // Glow mechanics configuration
 //
 const GLOW_DURATION = 3.0
-const GLOW_AURA_RADIUS = 90
-const HERO_TOUCH_RADIUS = 35
+const GLOW_AURA_RADIUS = 150
+const HERO_TOUCH_RADIUS = 50
 const BUG_CHAIN_RADIUS = 50
 const TRAMPOLINE_FORCE = 1100
 const GLOW_PULSE_SPEED = 4.0

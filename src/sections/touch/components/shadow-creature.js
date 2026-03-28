@@ -29,6 +29,32 @@ const HERO_KILL_RADIUS = 85
 //
 const TURN_SPEED = 2.5
 //
+// Padding around platform rectangles for body avoidance (pixels)
+//
+const PLATFORM_AVOIDANCE_PADDING = 5
+//
+// Steering angle offset when creature is blocked by a platform (radians)
+//
+const STEER_ANGLE_STEP = Math.PI / 6
+//
+// Creature glow when near light (reflected light on body)
+//
+const GLOW_MAX_OPACITY = 0.18
+const GLOW_RING_COUNT = 8
+const GLOW_RADIUS_MULTIPLIER = 1.8
+//
+// Burning effect when creature is very close to a light source
+//
+const BURN_RADIUS = 180
+const BURN_FLEE_SPEED = 180
+const BURN_PARTICLE_COUNT = 6
+const BURN_PARTICLE_SPEED_MIN = 40
+const BURN_PARTICLE_SPEED_EXTRA = 60
+const BURN_PARTICLE_LIFETIME = 0.5
+const BURN_PARTICLE_SIZE = 5
+const BURN_GLOW_MAX_OPACITY = 0.35
+const BURN_GLOW_RADIUS_MULTIPLIER = 2.5
+//
 // Eye configuration
 //
 const EYE_OFFSET_RATIO = 0.45
@@ -63,10 +89,12 @@ const TIP_DOT_RADIUS = 4
  * @param {number} cfg.y - Initial Y position
  * @param {Object} cfg.hero - Hero instance
  * @param {Function} cfg.onHeroTouch - Callback when creature touches hero
+ * @param {Array} [cfg.platforms=[]] - Platform rectangles {x, y, width} for collision avoidance
+ * @param {number} [cfg.platformHeight=40] - Platform thickness in pixels
  * @returns {Object} Shadow creature instance
  */
 export function create(cfg) {
-  const { k, x, y, hero, onHeroTouch } = cfg
+  const { k, x, y, hero, onHeroTouch, platforms = [], platformHeight = 40 } = cfg
   //
   // Initialize tentacles with rest positions around body
   //
@@ -94,11 +122,16 @@ export function create(cfg) {
     hero,
     onHeroTouch,
     tentacles,
+    platforms,
+    platformHeight,
     facingAngle: 0,
     targetFacingAngle: 0,
     isFleeing: false,
     lastStepIndex: -1,
-    stopped: false
+    stopped: false,
+    nearestLightDist: Infinity,
+    isBurning: false,
+    burnParticles: []
   }
   return inst
 }
@@ -133,6 +166,10 @@ export function onUpdate(inst, dt, glowPositions) {
     }
   })
   //
+  // Store nearest light distance for glow rendering
+  //
+  inst.nearestLightDist = nearestLightDist
+  //
   // AI: determine desired facing direction
   //
   let desiredAngle = inst.facingAngle
@@ -140,9 +177,13 @@ export function onUpdate(inst, dt, glowPositions) {
   //
   // If light is within fear radius, smoothly turn away from it
   //
+  //
+  // Detect burning state: creature is very close to a light source
+  //
+  inst.isBurning = nearestLightDist < BURN_RADIUS
   if (nearestLightDist < LIGHT_FEAR_RADIUS) {
     desiredAngle = Math.atan2(inst.y - nearestLightY, inst.x - nearestLightX)
-    speed = FLEE_SPEED
+    speed = inst.isBurning ? BURN_FLEE_SPEED : FLEE_SPEED
     inst.isFleeing = true
   } else if (hero?.character?.pos) {
     //
@@ -161,11 +202,21 @@ export function onUpdate(inst, dt, glowPositions) {
   inst.targetFacingAngle = desiredAngle
   inst.facingAngle = lerpAngle(inst.facingAngle, inst.targetFacingAngle, TURN_SPEED * dt)
   //
-  // Move body in current facing direction (smooth organic movement)
+  // Move body with platform avoidance: try direct path first,
+  // then probe rotated angles (±30°, ±60°, ±90°) to steer around obstacles
   //
   if (speed > 0) {
-    inst.x += Math.cos(inst.facingAngle) * speed * dt
-    inst.y += Math.sin(inst.facingAngle) * speed * dt
+    const step = speed * dt
+    const moved = tryMoveWithSteering(inst, inst.facingAngle, step)
+    //
+    // If all angles are blocked, try axis-aligned sliding as fallback
+    //
+    if (!moved) {
+      const moveDx = Math.cos(inst.facingAngle) * step
+      const moveDy = Math.sin(inst.facingAngle) * step
+      !wouldOverlapPlatform(inst, inst.x + moveDx, inst.y) && (inst.x += moveDx)
+      !wouldOverlapPlatform(inst, inst.x, inst.y + moveDy) && (inst.y += moveDy)
+    }
   }
   //
   // Clamp creature to play area
@@ -180,6 +231,10 @@ export function onUpdate(inst, dt, glowPositions) {
   // Update tentacle IK stepping
   //
   updateTentacles(inst, dt)
+  //
+  // Update burn particles and spawn new ones while burning
+  //
+  updateBurnParticles(inst, dt)
   //
   // Check hero collision (kill on touch)
   //
@@ -198,6 +253,57 @@ export function onUpdate(inst, dt, glowPositions) {
 export function onDraw(inst) {
   const { k } = inst
   const bodyColor = k.rgb(BODY_COLOR_R, BODY_COLOR_G, BODY_COLOR_B)
+  //
+  // Draw glow or burning effect around body depending on light proximity
+  //
+  if (inst.isBurning) {
+    //
+    // Intense burning glow (orange-red, flickering)
+    //
+    const burnIntensity = 1 - inst.nearestLightDist / BURN_RADIUS
+    const flicker = 0.8 + Math.sin(k.time() * 12) * 0.2
+    const glowR = BODY_RADIUS * BURN_GLOW_RADIUS_MULTIPLIER * flicker
+    for (let i = 0; i < GLOW_RING_COUNT; i++) {
+      const t = i / GLOW_RING_COUNT
+      const ringRadius = glowR * (1 - t)
+      const ringOpacity = BURN_GLOW_MAX_OPACITY * burnIntensity * t * t
+      k.drawCircle({
+        pos: k.vec2(inst.x, inst.y),
+        radius: ringRadius,
+        color: k.rgb(200, 100, 20),
+        opacity: ringOpacity
+      })
+    }
+    //
+    // Draw burn particles (rising flame wisps)
+    //
+    inst.burnParticles.forEach(p => {
+      const alpha = 1 - p.age / p.lifetime
+      k.drawCircle({
+        pos: k.vec2(p.x, p.y),
+        radius: BURN_PARTICLE_SIZE * alpha,
+        color: k.rgb(p.r, p.g, p.b),
+        opacity: alpha * 0.7
+      })
+    })
+  } else if (inst.nearestLightDist < LIGHT_FEAR_RADIUS) {
+    //
+    // Subtle reflected glow when near but not burning
+    //
+    const intensity = 1 - inst.nearestLightDist / LIGHT_FEAR_RADIUS
+    const glowR = BODY_RADIUS * GLOW_RADIUS_MULTIPLIER
+    for (let i = 0; i < GLOW_RING_COUNT; i++) {
+      const t = i / GLOW_RING_COUNT
+      const ringRadius = glowR * (1 - t)
+      const ringOpacity = GLOW_MAX_OPACITY * intensity * t * t
+      k.drawCircle({
+        pos: k.vec2(inst.x, inst.y),
+        radius: ringRadius,
+        color: k.rgb(80, 60, 40),
+        opacity: ringOpacity
+      })
+    }
+  }
   //
   // Draw tentacles first (behind body)
   //
@@ -324,6 +430,116 @@ function updateTentacles(inst, dt) {
         tentacle.footY = tentacle.stepStartY + (tentacle.targetY - tentacle.stepStartY) * t - arc
       }
     }
+  })
+}
+
+/**
+ * Spawns flame particles when burning and updates existing particle positions/lifetimes
+ * Particles rise upward with random spread, fading from orange to red
+ * @param {Object} inst - Shadow creature instance
+ * @param {number} dt - Delta time
+ */
+function updateBurnParticles(inst, dt) {
+  //
+  // Update existing particles (move upward, age)
+  //
+  for (let i = inst.burnParticles.length - 1; i >= 0; i--) {
+    const p = inst.burnParticles[i]
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    p.age += dt
+    p.age >= p.lifetime && inst.burnParticles.splice(i, 1)
+  }
+  //
+  // Spawn new particles while burning
+  //
+  if (!inst.isBurning) return
+  for (let i = 0; i < BURN_PARTICLE_COUNT; i++) {
+    if (Math.random() > 0.3) continue
+    const angle = Math.random() * Math.PI * 2
+    const speed = BURN_PARTICLE_SPEED_MIN + Math.random() * BURN_PARTICLE_SPEED_EXTRA
+    const rVal = Math.random()
+    inst.burnParticles.push({
+      x: inst.x + (Math.random() - 0.5) * BODY_RADIUS,
+      y: inst.y + (Math.random() - 0.5) * BODY_RADIUS,
+      vx: Math.cos(angle) * speed * 0.3,
+      vy: -Math.abs(Math.sin(angle)) * speed - 30,
+      age: 0,
+      lifetime: BURN_PARTICLE_LIFETIME + Math.random() * 0.3,
+      r: rVal > 0.5 ? 255 : 220,
+      g: rVal > 0.5 ? 140 : 80,
+      b: 20
+    })
+  }
+}
+
+/**
+ * Tries to move the creature at the given angle; if blocked, probes
+ * progressively wider angles (±30°, ±60°, ±90°) to find a clear path.
+ * Prefers the side closer to the original desired direction.
+ * @param {Object} inst - Shadow creature instance
+ * @param {number} angle - Desired movement angle (radians)
+ * @param {number} step - Movement distance this frame (pixels)
+ * @returns {boolean} True if creature successfully moved
+ */
+function tryMoveWithSteering(inst, angle, step) {
+  //
+  // Try direct path first
+  //
+  const dx = Math.cos(angle) * step
+  const dy = Math.sin(angle) * step
+  if (!wouldOverlapPlatform(inst, inst.x + dx, inst.y + dy)) {
+    inst.x += dx
+    inst.y += dy
+    return true
+  }
+  //
+  // Probe rotated angles on both sides to find a clear path around the platform
+  //
+  for (let i = 1; i <= 3; i++) {
+    const offset = STEER_ANGLE_STEP * i
+    const angleLeft = angle + offset
+    const angleRight = angle - offset
+    const ldx = Math.cos(angleLeft) * step
+    const ldy = Math.sin(angleLeft) * step
+    if (!wouldOverlapPlatform(inst, inst.x + ldx, inst.y + ldy)) {
+      inst.x += ldx
+      inst.y += ldy
+      return true
+    }
+    const rdx = Math.cos(angleRight) * step
+    const rdy = Math.sin(angleRight) * step
+    if (!wouldOverlapPlatform(inst, inst.x + rdx, inst.y + rdy)) {
+      inst.x += rdx
+      inst.y += rdy
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Checks if placing the creature body at (x, y) would overlap any platform
+ * Uses circle-vs-AABB: finds closest point on each platform rect and
+ * checks if distance is less than body radius + padding
+ * @param {Object} inst - Shadow creature instance
+ * @param {number} x - Candidate X position
+ * @param {number} y - Candidate Y position
+ * @returns {boolean} True if position would overlap a platform
+ */
+function wouldOverlapPlatform(inst, x, y) {
+  const padding = BODY_RADIUS + PLATFORM_AVOIDANCE_PADDING
+  const paddingSq = padding * padding
+  return inst.platforms.some(platform => {
+    const left = platform.x - platform.width / 2
+    const right = platform.x + platform.width / 2
+    const top = platform.y
+    const bottom = platform.y + inst.platformHeight
+    const closestX = Math.max(left, Math.min(right, x))
+    const closestY = Math.max(top, Math.min(bottom, y))
+    const dx = x - closestX
+    const dy = y - closestY
+    return (dx * dx + dy * dy) < paddingSq
   })
 }
 

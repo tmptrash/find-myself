@@ -299,7 +299,7 @@ function generatePlatformThorns(zones) {
  * @param {Array} thornData - Array of thorn definitions
  */
 function drawThorns(k, thornData) {
-  const thornColor = k.rgb(45, 40, 50)
+  const thornColor = k.rgb(70, 65, 80)
   const outlineColor = k.rgb(0, 0, 0)
   const ow = THORN_OUTLINE_WIDTH
   thornData.forEach(thorn => {

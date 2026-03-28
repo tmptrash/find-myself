@@ -42,15 +42,15 @@ const WALL_COLOR_HEX = '#08080A'
 //
 // Platform color (dark stone)
 //
-const PLATFORM_COLOR_R = 28
-const PLATFORM_COLOR_G = 26
-const PLATFORM_COLOR_B = 32
+const PLATFORM_COLOR_R = 50
+const PLATFORM_COLOR_G = 48
+const PLATFORM_COLOR_B = 55
 //
 // Platform root color (very dark green)
 //
-const PLATFORM_ROOT_COLOR_R = 8
-const PLATFORM_ROOT_COLOR_G = 16
-const PLATFORM_ROOT_COLOR_B = 6
+const PLATFORM_ROOT_COLOR_R = 30
+const PLATFORM_ROOT_COLOR_G = 38
+const PLATFORM_ROOT_COLOR_B = 28
 //
 // Platform dimensions
 //
@@ -480,6 +480,8 @@ export function sceneLevel3(k) {
       x: MONSTER_SPAWN_X,
       y: MONSTER_SPAWN_Y,
       hero: heroInst,
+      platforms: CORRIDOR_PLATFORMS,
+      platformHeight: PLATFORM_HEIGHT,
       onHeroTouch: () => {
         if (heroInst.isDying) return
         onHeroDeath(k, heroInst, levelIndicator)

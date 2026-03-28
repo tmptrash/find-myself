@@ -46,6 +46,28 @@ const ICICLE_COLOR_G = 255
 const ICICLE_COLOR_B = 255
 const ICICLE_OUTLINE_WIDTH = 2
 const ICICLE_KILL_TOLERANCE = 10
+//
+// Moon configuration (drawn on mountains canvas)
+//
+const MOON_X = 1400
+const MOON_Y = 320
+const MOON_RADIUS = 56
+const MOON_COLOR_R = 200
+const MOON_COLOR_G = 195
+const MOON_COLOR_B = 180
+const MOON_GLOW_RADIUS = 30
+//
+// Pre-defined crater positions relative to moon center (fraction of radius)
+//
+const MOON_CRATERS = [
+  { x: -0.3, y: -0.2, r: 0.25, dark: 25 },
+  { x: 0.25, y: 0.15, r: 0.2, dark: 20 },
+  { x: -0.1, y: 0.35, r: 0.16, dark: 30 },
+  { x: 0.4, y: -0.25, r: 0.13, dark: 22 },
+  { x: -0.45, y: 0.1, r: 0.11, dark: 18 },
+  { x: 0.1, y: -0.45, r: 0.1, dark: 28 },
+  { x: 0.3, y: 0.4, r: 0.09, dark: 15 }
+]
 /**
  * Level 2 scene for touch section - Simple level without obstacles
  * @param {Object} k - Kaplay instance
@@ -303,7 +325,8 @@ export function sceneLevel2(k) {
     // Draw icicle spikes layer
     //
     k.add([
-      k.z(CFG.visual.zIndex.platforms + 1),
+      k.pos(0, 0),
+      k.z(11),
       {
         draw() {
           drawIcicles(k, icicleData)
@@ -1581,7 +1604,6 @@ function createMountains(k) {
       //
       ctx.fillStyle = colors.sky
       ctx.fillRect(0, 0, screenWidth, screenHeight)
-      
       //
       // Draw left mountain (shadowed, darker colors)
       //
@@ -1611,6 +1633,10 @@ function createMountains(k) {
         rockRight: 'rgb(80, 130, 150)',  // Brighter right rock
         rockRightLight: 'rgb(150, 190, 220)'  // Brighter light rock
       })
+      //
+      // Draw moon in front of mountains
+      //
+      drawLevel2Moon(ctx)
     })
   }
   
@@ -2024,4 +2050,55 @@ function createRoundedCorners(k) {
     k.rotate(180),
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
+}
+
+/**
+ * Draws a full moon with smooth radial glow and craters on the background canvas
+ * Uses canvas radial gradient for seamless glow falloff
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
+ */
+function drawLevel2Moon(ctx) {
+  ctx.save()
+  //
+  // Draw smooth radial glow using canvas gradient
+  //
+  const outerR = MOON_RADIUS + MOON_GLOW_RADIUS
+  const gradient = ctx.createRadialGradient(MOON_X, MOON_Y, MOON_RADIUS * 0.8, MOON_X, MOON_Y, outerR)
+  gradient.addColorStop(0, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.15)`)
+  gradient.addColorStop(0.4, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.06)`)
+  gradient.addColorStop(1, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0)`)
+  ctx.beginPath()
+  ctx.arc(MOON_X, MOON_Y, outerR, 0, Math.PI * 2)
+  ctx.fillStyle = gradient
+  ctx.fill()
+  //
+  // Draw solid moon disc
+  //
+  ctx.beginPath()
+  ctx.arc(MOON_X, MOON_Y, MOON_RADIUS, 0, Math.PI * 2)
+  ctx.fillStyle = `rgb(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B})`
+  ctx.fill()
+  //
+  // Draw craters as darker circles clipped to moon disc
+  //
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(MOON_X, MOON_Y, MOON_RADIUS, 0, Math.PI * 2)
+  ctx.clip()
+  MOON_CRATERS.forEach(crater => {
+    const cr = MOON_COLOR_R - crater.dark
+    const cg = MOON_COLOR_G - crater.dark
+    const cb = MOON_COLOR_B - crater.dark
+    ctx.beginPath()
+    ctx.arc(
+      MOON_X + crater.x * MOON_RADIUS,
+      MOON_Y + crater.y * MOON_RADIUS,
+      crater.r * MOON_RADIUS,
+      0, Math.PI * 2
+    )
+    ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`
+    ctx.fill()
+  })
+  ctx.restore()
+  ctx.restore()
 }

@@ -120,6 +120,11 @@ const PLATFORM_THORN_ZONES = [
   }
 ]
 //
+// Trap platform left-half thorn coverage (fraction of left half width from left edge)
+//
+const TRAP_LEFT_THORN_COVERAGE = 0.6
+const TRAP_THORN_INSET = 15
+//
 // Y tolerance for platform thorn collision detection (pixels)
 //
 const PLATFORM_THORN_TOLERANCE = 5
@@ -503,6 +508,17 @@ export function sceneLevel3(k) {
     // so they move with their respective halves during split animation
     //
     const trapPlat = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
+    //
+    // Generate thorns on the left portion of the left trap half
+    //
+    const trapHalfWidth = trapPlat.width / 2
+    const trapLeftEdge = trapPlat.x - trapHalfWidth / 2 - TRAP_INITIAL_GAP - trapHalfWidth / 2
+    const trapThornStartX = trapLeftEdge + TRAP_THORN_INSET
+    const trapThornEndX = trapLeftEdge + trapHalfWidth * TRAP_LEFT_THORN_COVERAGE - TRAP_THORN_INSET
+    const trapLeftThorns = generateTrapThorns(trapThornStartX, trapThornEndX, trapPlat.y)
+    //
+    // Split trap platform grass blades into left/right half groups
+    //
     const trapLeftBlades = []
     const trapRightBlades = []
     decorInst.grassBlades.forEach(blade => {
@@ -554,6 +570,7 @@ export function sceneLevel3(k) {
       {
         draw() {
           JungleDecor.onDrawForeground(decorInst)
+          drawTrapLeftThorns(k, trapLeftThorns, trapState)
         }
       }
     ])
@@ -588,7 +605,7 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator)
+      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
     })
     //
     // ESC key to return to menu
@@ -612,8 +629,9 @@ export function sceneLevel3(k) {
  * @param {Array} trapLeftBlades - Grass blades on the left trap half
  * @param {Array} trapRightBlades - Grass blades on the right trap half
  * @param {Object} levelIndicator - Level indicator for life score effects on death
+ * @param {Array} trapLeftThorns - Thorn data on the left trap half (moves with platform)
  */
-function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator) {
+function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   Fog.onUpdate(fogInst, dt)
@@ -631,6 +649,7 @@ function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst
   const rightDeltaX = trapState.rightCenterX - prevRightX
   if (leftDeltaX !== 0) {
     trapLeftBlades.forEach(blade => { blade.x += leftDeltaX })
+    trapLeftThorns.forEach(thorn => { thorn.x += leftDeltaX })
   }
   if (rightDeltaX !== 0) {
     trapRightBlades.forEach(blade => { blade.x += rightDeltaX })
@@ -652,6 +671,7 @@ function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst
   if (!heroInst.isDying) {
     checkBottomThorns(k, heroInst, levelIndicator)
     checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries], levelIndicator)
+    checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator)
   }
   //
   // Get glow positions from both bug instances for creature AI
@@ -706,6 +726,93 @@ function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator) {
     if (heroFeetY >= zone.y - PLATFORM_THORN_TOLERANCE &&
         heroFeetY <= zone.y + PLATFORM_THORN_TOLERANCE &&
         heroX >= zone.startX && heroX <= zone.endX) {
+      onHeroDeath(k, heroInst, levelIndicator)
+      return
+    }
+  }
+}
+
+/**
+ * Generates thorn data for the left trap platform half
+ * Thorns use the same sizing as jungle-decor thorns
+ * @param {number} startX - Left edge X of thorn zone
+ * @param {number} endX - Right edge X of thorn zone
+ * @param {number} y - Platform surface Y
+ * @returns {Array} Array of thorn objects {x, baseY, width, height, tipOffset}
+ */
+function generateTrapThorns(startX, endX, y) {
+  const SPACING = 22
+  const WIDTH_MIN = 7
+  const WIDTH_MAX = 14
+  const HEIGHT_MIN = 11
+  const HEIGHT_MAX = 20
+  const TIP_OFFSET = 3
+  const RAISE = 3
+  const thorns = []
+  for (let x = startX; x < endX; x += SPACING) {
+    thorns.push({
+      x: x + (Math.random() - 0.5) * 6,
+      baseY: y - RAISE,
+      width: WIDTH_MIN + Math.random() * (WIDTH_MAX - WIDTH_MIN),
+      height: HEIGHT_MIN + Math.random() * (HEIGHT_MAX - HEIGHT_MIN),
+      tipOffset: (Math.random() - 0.5) * TIP_OFFSET
+    })
+  }
+  return thorns
+}
+
+/**
+ * Draws trap left-half thorns with outline, offset by current platform position
+ * @param {Object} k - Kaplay instance
+ * @param {Array} thorns - Thorn data array
+ * @param {Object} trapState - Trap platform state (for current position)
+ */
+function drawTrapLeftThorns(k, thorns, trapState) {
+  const thornColor = k.rgb(70, 65, 80)
+  const outlineColor = k.rgb(0, 0, 0)
+  const ow = 2
+  thorns.forEach(thorn => {
+    k.drawPolygon({
+      pts: [
+        k.vec2(thorn.x - thorn.width / 2 - ow, thorn.baseY + ow),
+        k.vec2(thorn.x + thorn.width / 2 + ow, thorn.baseY + ow),
+        k.vec2(thorn.x + thorn.tipOffset, thorn.baseY - thorn.height - ow)
+      ],
+      color: outlineColor
+    })
+    k.drawPolygon({
+      pts: [
+        k.vec2(thorn.x - thorn.width / 2, thorn.baseY),
+        k.vec2(thorn.x + thorn.width / 2, thorn.baseY),
+        k.vec2(thorn.x + thorn.tipOffset, thorn.baseY - thorn.height)
+      ],
+      color: thornColor
+    })
+  })
+}
+
+/**
+ * Checks if hero is touching trap left-half thorns and triggers death
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Array} thorns - Thorn data array (positions updated each frame)
+ * @param {Object} trapState - Trap platform state
+ * @param {Object} levelIndicator - Level indicator for life score effects
+ */
+function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator) {
+  if (!heroInst.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
+  if (heroFeetY < trapState.y - PLATFORM_THORN_TOLERANCE ||
+      heroFeetY > trapState.y + PLATFORM_THORN_TOLERANCE) return
+  const leftHalfLeft = trapState.leftCenterX - trapState.halfWidth / 2
+  const leftHalfRight = trapState.leftCenterX + trapState.halfWidth / 2
+  if (heroX < leftHalfLeft || heroX > leftHalfRight) return
+  //
+  // Check if hero is within any thorn's X range
+  //
+  for (const thorn of thorns) {
+    if (Math.abs(heroX - thorn.x) < thorn.width) {
       onHeroDeath(k, heroInst, levelIndicator)
       return
     }

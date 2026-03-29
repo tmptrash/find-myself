@@ -79,6 +79,7 @@ export function create(config) {
     isStatic = false,      // If true, no physics (for indicators)
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
     addArms = false,       // If true, add simple vertical arms
+    outlineOnly = false,   // If true, draw only outline (no body fill)
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
 
@@ -103,6 +104,7 @@ export function create(config) {
       outlineColor: outlineColorWithHash,
       addMouth,
       addArms,
+      outlineOnly,
       character: null  // Marker to indicate this is an inst-like object
     })
   } catch (error) {
@@ -111,7 +113,7 @@ export function create(config) {
   //
   // Generate sprite prefix based on customization (colors already have # removed)
   //
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}`
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${outlineOnly ? '_outline' : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -137,7 +139,8 @@ export function create(config) {
         bodyColor: effectiveBodyColor,
         outlineColor: effectiveOutlineColor,
         addMouth,
-        addArms
+        addArms,
+        outlineOnly
       })
       //
       // Try to use the sprite (it should be loaded now)
@@ -244,7 +247,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms
+  let k, heroType, color, outline, mouth, arms, hollow
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -256,6 +259,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     outline = inst.outlineColor
     mouth = inst.addMouth || false
     arms = inst.addArms || false
+    hollow = inst.outlineOnly || false
   } else {
     //
     // Called with individual parameters (for preloading)
@@ -266,6 +270,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     outline = outlineColor
     mouth = addMouth
     arms = addArms
+    hollow = false
   }
   //
   // Use default colors from config if not provided
@@ -290,7 +295,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Generate unique prefix for this sprite variant
   //
-  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}`
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${hollow ? '_outline' : ''}`
   //
   // Check if sprites with this configuration are already loaded
   //
@@ -302,7 +307,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow)
         //
         // Ensure sprite data is valid before loading
         //
@@ -327,7 +332,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow)
       if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
         try {
           k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
@@ -348,7 +353,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow)
       if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
         try {
           k.loadSprite(`${prefix}-run-${frame}`, spriteData)
@@ -1784,7 +1789,7 @@ export function onAnnihilationCollide(inst) {
  * @param {boolean} [addArms=false] - Add simple vertical arms
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false) {
   //
   // Choose body color - custom or default
   //
@@ -2030,10 +2035,12 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       ctx.fillRect(rightLegX - 1, rightLegY, 1, legHeight)  // Left
       ctx.fillRect(rightLegX + 3, rightLegY, 1, legHeight)  // Right
       //
-      // Head (universal body color)
+      // Head (universal body color) — skip fill for outline-only mode
       //
-      ctx.fillStyle = getHex(bodyColor)
-      ctx.fillRect(headX, headY, 8, 8)
+      if (!outlineOnly) {
+        ctx.fillStyle = getHex(bodyColor)
+        ctx.fillRect(headX, headY, 8, 8)
+      }
       //
       // Eyes - for run and jump draw only ONE eye (side view)
       //
@@ -2065,22 +2072,24 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.fillRect(headX + 2, headY + 7, 4, 1)
       }
       //
-      // Body (universal color)
+      // Body, arms, legs (universal color) — skip fill for outline-only mode
       //
-      ctx.fillStyle = getHex(bodyColor)
-      ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
-      //
-      // Arms - don't draw while running and jumping
-      //
-      if (animation !== 'run' && animation !== 'jump') {
-        ctx.fillRect(leftArmX, leftArmY, 2, 7)
-        ctx.fillRect(rightArmX, rightArmY, 2, 7)
+      if (!outlineOnly) {
+        ctx.fillStyle = getHex(bodyColor)
+        ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
+        //
+        // Arms - don't draw while running and jumping
+        //
+        if (animation !== 'run' && animation !== 'jump') {
+          ctx.fillRect(leftArmX, leftArmY, 2, 7)
+          ctx.fillRect(rightArmX, rightArmY, 2, 7)
+        }
+        //
+        // Legs
+        //
+        ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
+        ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
       }
-      //
-      // Legs
-      //
-      ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
-      ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
       //
       // Custom arms (optional, simple vertical lines drawn on top)
       //

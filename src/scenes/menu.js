@@ -182,9 +182,10 @@ export function sceneMenu(k) {
 
     //
     // Create hero in center (using HERO type)
-    // Red if word complete, orange if time complete, gray otherwise
+    // Background color if no sections complete, orange if time complete, red if word complete
     //
-    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : "#C0C0C0"
+    const noSectionsComplete = !progress.time && !progress.word
+    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : CFG.visual.colors.menu.platformColor
     const heroInst = Hero.create({
       k,
       x: centerX,
@@ -193,7 +194,8 @@ export function sceneMenu(k) {
       scale: 5,
       controllable: false,
       addMouth: Boolean(progress.word),
-      bodyColor: heroBodyColor
+      bodyColor: heroBodyColor,
+      outlineColor: noSectionsComplete ? "#282828" : null
     })
     
     const hero = heroInst.character

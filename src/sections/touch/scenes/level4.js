@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
@@ -100,12 +100,19 @@ export function sceneLevel4(k) {
     //
     // Create level indicator (TOUCH letters)
     //
+    //
+    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    //
+    const isWordComplete = get('word', false)
+    const isTimeComplete = get('time', false)
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
     LevelIndicator.create({
       k,
       levelNumber: 4,
       activeColor: '#8B5A50',
       inactiveColor: '#808080',
       completedColor: '#8B5A50',
+      heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
@@ -389,7 +396,8 @@ export function sceneLevel4(k) {
         })
       },
       currentLevel: 'level-touch.4',
-      addMouth: true
+      addMouth: true,
+      bodyColor: heroBodyColor
     })
     //
     // Store original jump force for hero (use hero's actual jumpForce)

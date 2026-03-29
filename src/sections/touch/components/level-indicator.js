@@ -24,6 +24,7 @@ const SCORE_OUTLINE_THICKNESS = 2
  * @param {string} config.activeColor - Color for completed levels (hex)
  * @param {string} config.inactiveColor - Color for future levels (hex)
  * @param {string} config.completedColor - Color for already completed levels (hex, default: touch antiHero color)
+ * @param {string} [config.heroBodyColor] - Body color for small hero icon (hex), defaults to activeColor
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
  * @returns {Object} Object with letterObjects, smallHero, lifeImage, and score update methods
@@ -35,6 +36,7 @@ export function create(config) {
     activeColor,
     inactiveColor,
     completedColor = CFG.visual.colors.sections.touch.antiHero,
+    heroBodyColor = activeColor,
     topPlatformHeight,
     sideWallWidth
   } = config
@@ -119,7 +121,7 @@ export function create(config) {
     controllable: false,
     isStatic: true,
     scale: 2.6,
-    bodyColor: activeColor,
+    bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
     addMouth: true,
     addArms: isTouchComplete

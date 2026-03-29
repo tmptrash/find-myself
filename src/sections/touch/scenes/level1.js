@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
-import { set } from '../../../utils/progress.js'
+import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -941,12 +941,19 @@ export function sceneLevel1(k) {
     //
     // Create level indicator (TOUCH letters)
     //
+    //
+    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    //
+    const isWordComplete = get('word', false)
+    const isTimeComplete = get('time', false)
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
     LevelIndicator.create({
       k,
       levelNumber: 1,
       activeColor: '#8B5A50',
       inactiveColor: '#808080',
       completedColor: '#8B5A50',
+      heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
@@ -1277,7 +1284,7 @@ export function sceneLevel1(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: gameState.antiHeroActive ? antiHeroInst : null,  // Only set antiHero if active
+      antiHero: gameState.antiHeroActive ? antiHeroInst : null,
       onAnnihilation: () => {
         //
         // Transition after annihilation to next level
@@ -1287,7 +1294,8 @@ export function sceneLevel1(k) {
         })
       },
       currentLevel: 'level-touch.1',
-      addMouth: true
+      addMouth: true,
+      bodyColor: heroBodyColor
     })
     //
     // Spawn hero and anti-hero

@@ -387,6 +387,12 @@ export function sceneLevel3(k) {
     //
     createClouds(k)
     //
+    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    //
+    const isWordComplete = get('word', false)
+    const isTimeComplete = get('time', false)
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
@@ -395,6 +401,7 @@ export function sceneLevel3(k) {
       activeColor: '#8B5A50',
       inactiveColor: '#808080',
       completedColor: '#8B5A50',
+      heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
@@ -438,7 +445,8 @@ export function sceneLevel3(k) {
         })
       },
       currentLevel: 'level-touch.3',
-      addMouth: true
+      addMouth: true,
+      bodyColor: heroBodyColor
     })
     //
     // Spawn hero and anti-hero

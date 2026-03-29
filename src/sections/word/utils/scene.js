@@ -171,6 +171,11 @@ export function initScene(config) {
   setupCamera(k)
   
   //
+  // Hero body color based on section progress (used for level indicator small hero)
+  //
+  const isTimeComplete = get('time', false)
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+  //
   // Add level indicator if levelNumber provided
   //
   let levelIndicator = null
@@ -180,6 +185,7 @@ export function initScene(config) {
       levelNumber,
       activeColor: CFG.visual.colors.levelIndicator.active,
       inactiveColor: CFG.visual.colors.levelIndicator.inactive,
+      heroBodyColor,
       topPlatformHeight,
       sideWallWidth
     })
@@ -523,7 +529,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   const isTimeComplete = get('time', false)
   const isTouchComplete = get('touch', false)
   //
-  // Hero body color: yellow if time section complete, otherwise default
+  // Hero body color: orange if time section complete, otherwise default
   //
   const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
   

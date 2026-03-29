@@ -181,6 +181,15 @@ export function sceneLevel2(k) {
     //
     createRoundedCorners(k)
     //
+    // Check completed sections for hero appearance
+    //
+    const isTimeComplete = get('time', false)
+    const isWordComplete = get('word', false)
+    //
+    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    //
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
@@ -189,6 +198,7 @@ export function sceneLevel2(k) {
       activeColor: '#8B5A50',
       inactiveColor: '#808080',
       completedColor: '#8B5A50',
+      heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
@@ -205,14 +215,6 @@ export function sceneLevel2(k) {
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
-    //
-    // Check completed sections for hero appearance
-    //
-    const isTimeComplete = get('time', false)
-    //
-    // Hero body color: yellow if time section complete, otherwise default gray
-    //
-    const heroBodyColor = isTimeComplete ? "#FF8C00" : "#C0C0C0"
     //
     // Create clouds under top platform (top wall)
     //

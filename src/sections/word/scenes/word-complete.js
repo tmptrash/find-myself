@@ -28,6 +28,10 @@ export function sceneWordComplete(k) {
     Sound.stopBackgroundMusic(sound)
     
     //
+    // Set canvas background to black (prevents visible bars at top/bottom)
+    //
+    k.setBackground(k.rgb(0, 0, 0))
+    //
     // Create black background
     //
     k.add([

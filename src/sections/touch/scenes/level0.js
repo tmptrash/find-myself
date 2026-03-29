@@ -21,6 +21,12 @@ const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
+// Rounded corner configuration
+//
+const CORNER_RADIUS = 20
+const CORNER_SPRITE_NAME = 'touch0-corner-sprite'
+const WALL_COLOR_HEX = '#1F1F1F'
+//
 // Platform dimensions
 //
 const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
@@ -137,6 +143,10 @@ export function sceneLevel0(k) {
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
+    //
+    // Create rounded corners at all four game area corners
+    //
+    createRoundedCorners(k)
     //
     // Check completed sections for hero appearance
     //
@@ -1742,6 +1752,76 @@ export function sceneLevel0(k) {
       k.go("menu")
     })
   })
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius in pixels
+ * @param {string} color - Fill color in hex format
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = radius
+  canvas.height = radius
+  const ctx = canvas.getContext('2d')
+  //
+  // Draw L-shaped corner with rounded inner angle
+  //
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, radius, radius)
+  //
+  // Cut out quarter circle to create rounded inner corner
+  //
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(radius, radius, radius, 0, Math.PI * 2)
+  ctx.fill()
+  return canvas.toDataURL()
+}
+
+/**
+ * Creates rounded corners at all four corners of the game area
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
+  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  //
+  // Top-left corner
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, TOP_MARGIN),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, TOP_MARGIN),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-left corner (rotate 270°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-right corner (rotate 180°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
 }
 
 /**

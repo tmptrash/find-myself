@@ -188,9 +188,9 @@ export function sceneLevel3(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start time.mp3, kids.mp3 and clock.mp3 background music
+    // Start boss.mp3, kids.mp3 and clock.mp3 background music
     //
-    const timeMusic = k.play('time', {
+    const timeMusic = k.play('boss', {
       loop: true,
       volume: CFG.audio.backgroundMusic.time
     })

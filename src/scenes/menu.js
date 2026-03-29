@@ -182,10 +182,10 @@ export function sceneMenu(k) {
 
     //
     // Create hero in center (using HERO type)
-    // Background color if no sections complete, orange if time complete, red if word complete
+    // Same gray as inactive anti-heroes if no sections complete, orange if time complete, red if word complete
     //
     const noSectionsComplete = !progress.time && !progress.word
-    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : CFG.visual.colors.menu.platformColor
+    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : "#656565"
     const heroInst = Hero.create({
       k,
       x: centerX,
@@ -195,11 +195,18 @@ export function sceneMenu(k) {
       controllable: false,
       addMouth: Boolean(progress.word),
       bodyColor: heroBodyColor,
-      outlineColor: noSectionsComplete ? "#282828" : null
+      outlineColor: noSectionsComplete ? "#454545" : null
     })
     
     const hero = heroInst.character
     hero.z = 10
+    //
+    // Apply same color tint as inactive anti-heroes when no sections complete
+    //
+    if (noSectionsComplete) {
+      const grayRgb = getRGB(k, "#656565")
+      hero.color = k.rgb(grayRgb.r, grayRgb.g, grayRgb.b)
+    }
     //
     // Create 6 anti-heroes around the main hero (sections)
     //

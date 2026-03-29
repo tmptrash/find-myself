@@ -28,17 +28,17 @@ const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE
 //
 // Background color (near-black night sky)
 //
-const BG_COLOR_R = 12
-const BG_COLOR_G = 12
-const BG_COLOR_B = 16
-const BG_HEX = '#0C0C10'
+const BG_COLOR_R = 31
+const BG_COLOR_G = 31
+const BG_COLOR_B = 31
+const BG_HEX = '#1F1F1F'
 //
-// Wall color (deep black)
+// Wall color (matches background for seamless edges)
 //
-const WALL_COLOR_R = 8
-const WALL_COLOR_G = 8
-const WALL_COLOR_B = 10
-const WALL_COLOR_HEX = '#08080A'
+const WALL_COLOR_R = 31
+const WALL_COLOR_G = 31
+const WALL_COLOR_B = 31
+const WALL_COLOR_HEX = '#1F1F1F'
 //
 // Platform color (dark stone)
 //

@@ -46,6 +46,10 @@ export function sceneLevel4(k) {
       touchMusic.stop()
     })
     //
+    // Set background to match wall color (prevents visible bars at top/bottom)
+    //
+    k.setBackground(k.rgb(31, 31, 31))
+    //
     // Draw background
     //
     k.onDraw(() => {
@@ -53,7 +57,7 @@ export function sceneLevel4(k) {
         width: k.width(),
         height: k.height(),
         pos: k.vec2(0, 0),
-        color: k.rgb(42, 42, 42)
+        color: k.rgb(31, 31, 31)
       })
     })
     //

@@ -39,13 +39,10 @@ const STEER_ANGLE_STEP = Math.PI / 6
 //
 // Creature glow when near light (reflected light on body)
 //
-const GLOW_MAX_OPACITY = 0.18
 const GLOW_RING_COUNT = 8
-const GLOW_RADIUS_MULTIPLIER = 1.8
 //
 // Burning effect when creature is very close to a light source
 //
-const BURN_RADIUS = 180
 const BURN_FLEE_SPEED = 180
 const BURN_PARTICLE_COUNT = 6
 const BURN_PARTICLE_SPEED_MIN = 40
@@ -178,12 +175,16 @@ export function onUpdate(inst, dt, glowPositions) {
   // If light is within fear radius, smoothly turn away from it
   //
   //
-  // Detect burning state: creature is very close to a light source
+  // Burning state: creature burns while fleeing from any light source
   //
-  inst.isBurning = nearestLightDist < BURN_RADIUS
+  inst.isBurning = nearestLightDist < LIGHT_FEAR_RADIUS
   if (nearestLightDist < LIGHT_FEAR_RADIUS) {
     desiredAngle = Math.atan2(inst.y - nearestLightY, inst.x - nearestLightX)
-    speed = inst.isBurning ? BURN_FLEE_SPEED : FLEE_SPEED
+    //
+    // Speed scales up as creature gets closer to light (lerp between FLEE and BURN_FLEE)
+    //
+    const closeness = 1 - nearestLightDist / LIGHT_FEAR_RADIUS
+    speed = FLEE_SPEED + (BURN_FLEE_SPEED - FLEE_SPEED) * closeness
     inst.isFleeing = true
   } else if (hero?.character?.pos) {
     //
@@ -260,7 +261,7 @@ export function onDraw(inst) {
     //
     // Intense burning glow (orange-red, flickering)
     //
-    const burnIntensity = 1 - inst.nearestLightDist / BURN_RADIUS
+    const burnIntensity = 1 - inst.nearestLightDist / LIGHT_FEAR_RADIUS
     const flicker = 0.8 + Math.sin(k.time() * 12) * 0.2
     const glowR = BODY_RADIUS * BURN_GLOW_RADIUS_MULTIPLIER * flicker
     for (let i = 0; i < GLOW_RING_COUNT; i++) {
@@ -286,23 +287,6 @@ export function onDraw(inst) {
         opacity: alpha * 0.7
       })
     })
-  } else if (inst.nearestLightDist < LIGHT_FEAR_RADIUS) {
-    //
-    // Subtle reflected glow when near but not burning
-    //
-    const intensity = 1 - inst.nearestLightDist / LIGHT_FEAR_RADIUS
-    const glowR = BODY_RADIUS * GLOW_RADIUS_MULTIPLIER
-    for (let i = 0; i < GLOW_RING_COUNT; i++) {
-      const t = i / GLOW_RING_COUNT
-      const ringRadius = glowR * (1 - t)
-      const ringOpacity = GLOW_MAX_OPACITY * intensity * t * t
-      k.drawCircle({
-        pos: k.vec2(inst.x, inst.y),
-        radius: ringRadius,
-        color: k.rgb(80, 60, 40),
-        opacity: ringOpacity
-      })
-    }
   }
   //
   // Draw tentacles first (behind body)

@@ -7,7 +7,6 @@ import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as GlowBug from '../components/glow-bug.js'
 import * as ShadowCreature from '../components/shadow-creature.js'
-import * as Fog from '../components/fog.js'
 import * as JungleDecor from '../components/jungle-decor.js'
 import { toPng } from '../../../utils/helper.js'
 import { drawFirTree } from '../components/fir-tree.js'
@@ -306,12 +305,11 @@ const BARK_LINE_OPACITY_MIN = 0.05
 const BARK_LINE_OPACITY_MAX = 0.1
 //
 // Z-index layers for this level
-// Back canvas (mountains + dark/medium trees) → clouds → fog → vines →
+// Back canvas (mountains + dark/medium trees) → clouds → vines →
 // platforms → platform visuals → foreground → creature → front trees → bugs
 //
 const Z_BACK_CANVAS = -95
 const Z_CLOUDS = -80
-const Z_FOG = -10
 const Z_VINES = 0
 const Z_PLATFORM_VISUALS = 2
 const Z_FOREGROUND = 3
@@ -454,10 +452,6 @@ export function sceneLevel3(k) {
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     //
-    // Create fog system
-    //
-    const fogInst = Fog.create({ k })
-    //
     // Create glow bugs on platforms 0-2 (no bugs on anti-hero platform)
     //
     const glowBugInst = GlowBug.create({
@@ -537,17 +531,6 @@ export function sceneLevel3(k) {
       blade.x < trapPlat.x ? trapLeftBlades.push(blade) : trapRightBlades.push(blade)
     })
     //
-    // Draw fog layer
-    //
-    k.add([
-      k.z(Z_FOG),
-      {
-        draw() {
-          Fog.onDraw(fogInst)
-        }
-      }
-    ])
-    //
     // Draw hanging vines (behind platforms)
     //
     k.add([
@@ -613,7 +596,7 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
+      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
     })
     //
     // ESC key to return to menu
@@ -628,7 +611,6 @@ export function sceneLevel3(k) {
  * Main update function for all level3 systems
  * @param {Object} k - Kaplay instance
  * @param {Object} fpsCounter - FPS counter instance
- * @param {Object} fogInst - Fog instance
  * @param {Object} glowBugInst - GlowBug manager instance
  * @param {Object} trapBugInst - GlowBug instance for the trap platform right half
  * @param {Object} creatureInst - Shadow creature instance
@@ -639,10 +621,9 @@ export function sceneLevel3(k) {
  * @param {Object} levelIndicator - Level indicator for life score effects on death
  * @param {Array} trapLeftThorns - Thorn data on the left trap half (moves with platform)
  */
-function onUpdate(k, fpsCounter, fogInst, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns) {
+function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
-  Fog.onUpdate(fogInst, dt)
   GlowBug.onUpdate(glowBugInst, dt)
   //
   // Update trap platform split animation and sync hero position

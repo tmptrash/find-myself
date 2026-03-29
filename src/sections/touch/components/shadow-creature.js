@@ -259,21 +259,27 @@ export function onDraw(inst) {
   //
   if (inst.isBurning) {
     //
-    // Intense burning glow (orange-red, flickering)
+    // Intense burning glow around every body segment (orange-red, flickering)
     //
     const burnIntensity = 1 - inst.nearestLightDist / LIGHT_FEAR_RADIUS
     const flicker = 0.8 + Math.sin(k.time() * 12) * 0.2
-    const glowR = BODY_RADIUS * BURN_GLOW_RADIUS_MULTIPLIER * flicker
-    for (let i = 0; i < GLOW_RING_COUNT; i++) {
-      const t = i / GLOW_RING_COUNT
-      const ringRadius = glowR * (1 - t)
-      const ringOpacity = BURN_GLOW_MAX_OPACITY * burnIntensity * t * t
-      k.drawCircle({
-        pos: k.vec2(inst.x, inst.y),
-        radius: ringRadius,
-        color: k.rgb(200, 100, 20),
-        opacity: ringOpacity
-      })
+    for (let s = 0; s < BODY_SEGMENTS; s++) {
+      const offset = (s - 1) * BODY_SEGMENT_SPACING
+      const segX = inst.x - Math.cos(inst.facingAngle) * offset
+      const segY = inst.y - Math.sin(inst.facingAngle) * offset
+      const segScale = 1 - Math.abs(s - 1) * 0.15
+      const glowR = BODY_RADIUS * segScale * BURN_GLOW_RADIUS_MULTIPLIER * flicker
+      for (let i = 0; i < GLOW_RING_COUNT; i++) {
+        const t = i / GLOW_RING_COUNT
+        const ringRadius = glowR * (1 - t)
+        const ringOpacity = BURN_GLOW_MAX_OPACITY * burnIntensity * t * t
+        k.drawCircle({
+          pos: k.vec2(segX, segY),
+          radius: ringRadius,
+          color: k.rgb(200, 100, 20),
+          opacity: ringOpacity
+        })
+      }
     }
     //
     // Draw burn particles (rising flame wisps)
@@ -438,14 +444,21 @@ function updateBurnParticles(inst, dt) {
   // Spawn new particles while burning
   //
   if (!inst.isBurning) return
+  //
+  // Spawn particles from random body segments so flames cover the whole creature
+  //
   for (let i = 0; i < BURN_PARTICLE_COUNT; i++) {
     if (Math.random() > 0.3) continue
+    const seg = Math.floor(Math.random() * BODY_SEGMENTS)
+    const segOffset = (seg - 1) * BODY_SEGMENT_SPACING
+    const segX = inst.x - Math.cos(inst.facingAngle) * segOffset
+    const segY = inst.y - Math.sin(inst.facingAngle) * segOffset
     const angle = Math.random() * Math.PI * 2
     const speed = BURN_PARTICLE_SPEED_MIN + Math.random() * BURN_PARTICLE_SPEED_EXTRA
     const rVal = Math.random()
     inst.burnParticles.push({
-      x: inst.x + (Math.random() - 0.5) * BODY_RADIUS,
-      y: inst.y + (Math.random() - 0.5) * BODY_RADIUS,
+      x: segX + (Math.random() - 0.5) * BODY_RADIUS,
+      y: segY + (Math.random() - 0.5) * BODY_RADIUS,
       vx: Math.cos(angle) * speed * 0.3,
       vy: -Math.abs(Math.sin(angle)) * speed - 30,
       age: 0,

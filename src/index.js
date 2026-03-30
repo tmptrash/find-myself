@@ -22,6 +22,10 @@ import { loadHeroSprites, HEROES } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
 import * as CityBackground from "./sections/time/components/city-background.js"
 //
+// URL pattern for network-loaded assets (audio and images)
+//
+const NETWORK_ASSET_PATTERN = /\.(mp3|png)(\?|$)/i
+//
 // Game initialization
 //
 const k = kaplay({
@@ -32,12 +36,37 @@ const k = kaplay({
   background: [0, 0, 0]
 })
 //
-// Show loader during asset loading (runs every frame while loading)
+// Track asset loading progress per file using PerformanceObserver
+// Fires as each individual mp3/png finishes downloading, giving smooth
+// incremental progress instead of Kaplay's batched frame-based updates
 //
-k.onLoading((progress) => {
-  const bar = document.getElementById('loader-bar')
-  if (bar) bar.style.width = `${Math.round(progress * 100)}%`
+const loaderBar = document.getElementById('loader-bar')
+let loadedNetworkAssets = 0
+let totalNetworkAssets = 0
+const loadObserver = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (NETWORK_ASSET_PATTERN.test(entry.name)) {
+      loadedNetworkAssets++
+      if (loaderBar && totalNetworkAssets > 0) {
+        loaderBar.style.width = `${Math.min(100, Math.round((loadedNetworkAssets / totalNetworkAssets) * 100))}%`
+      }
+    }
+  }
 })
+loadObserver.observe({ type: 'resource', buffered: true })
+//
+// Wrap Kaplay load functions to auto-count expected network assets
+//
+const _origLoadSound = k.loadSound.bind(k)
+const _origLoadSprite = k.loadSprite.bind(k)
+k.loadSound = (name, src, ...rest) => {
+  totalNetworkAssets++
+  return _origLoadSound(name, src, ...rest)
+}
+k.loadSprite = (name, src, ...rest) => {
+  if (typeof src === 'string' && !src.startsWith('data:')) totalNetworkAssets++
+  return _origLoadSprite(name, src, ...rest)
+}
 //
 // Force dark background for all elements
 //
@@ -136,6 +165,7 @@ sceneTimeComplete(k)
 // Start game after resources loaded - hide loader, show ready screen
 //
 k.onLoad(() => {
+  loadObserver.disconnect()
   const loader = document.getElementById('loader')
   if (loader) loader.remove()
   k.go("ready")

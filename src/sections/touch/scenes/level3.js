@@ -340,17 +340,17 @@ export function sceneLevel3(k) {
     const sound = Sound.create()
     Sound.startAudioContext(sound)
     //
-    // Start touch.mp3 background music
+    // Start boss.mp3 background music
     //
-    const touchMusic = k.play('touch', {
+    const bossMusic = k.play('boss', {
       loop: true,
-      volume: CFG.audio.backgroundMusic.touch
+      volume: CFG.audio.backgroundMusic.time
     })
     //
     // Stop music when leaving the scene
     //
     k.onSceneLeave(() => {
-      touchMusic.stop()
+      bossMusic.stop()
     })
     //
     // Create boundary walls

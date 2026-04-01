@@ -324,14 +324,10 @@ const Z_DARKNESS = 50
 const MAX_DARKNESS_LIGHTS = 12
 const DARKNESS_OPACITY = 1.0
 const DARKNESS_AMBIENT = 0.0
-const DARKNESS_BUG_RADIUS = 50
-const DARKNESS_BUG_INTENSITY = 0.8
 const DARKNESS_GLOW_RADIUS = 350
 const DARKNESS_GLOW_INTENSITY = 1.0
 const DARKNESS_CREATURE_BURN_RADIUS = 120
 const DARKNESS_CREATURE_BURN_INTENSITY = 1.0
-const DARKNESS_MOON_RADIUS = 130
-const DARKNESS_MOON_INTENSITY = 1.0
 /**
  * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
@@ -468,6 +464,7 @@ export function sceneLevel3(k) {
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     heroInst.character.z = Z_DARKNESS + 1
+    heroInst.deathParticleZ = Z_DARKNESS + 1
     antiHeroInst.character.z = Z_DARKNESS + 1
     //
     // Create glow bugs on platforms 0-2 (no bugs on anti-hero platform)
@@ -572,14 +569,13 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw grass and thorns (above platforms)
+    // Draw grass (above platforms, thorns rendered separately above darkness)
     //
     k.add([
       k.z(Z_FOREGROUND),
       {
         draw() {
           JungleDecor.onDrawForeground(decorInst)
-          drawTrapLeftThorns(k, trapLeftThorns, trapState)
         }
       }
     ])
@@ -606,14 +602,38 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw glow bug auras and bugs (in front of front trees)
+    // Draw glow bug auras and bugs above darkness (always visible, dim when not glowing)
     //
     k.add([
-      k.z(Z_BUGS),
+      k.z(Z_DARKNESS + 1),
       {
         draw() {
           GlowBug.onDraw(glowBugInst)
           GlowBug.onDraw(trapBugInst)
+        }
+      }
+    ])
+    //
+    // Draw moon above darkness (bright and visible)
+    //
+    k.add([
+      k.z(Z_DARKNESS + 1),
+      {
+        draw() {
+          drawMoonOverlay(k)
+        }
+      }
+    ])
+    //
+    // Draw all thorns above darkness (always visible through dark areas)
+    //
+    k.add([
+      k.z(Z_DARKNESS + 1),
+      {
+        draw() {
+          JungleDecor.onDrawBottomThorns(decorInst)
+          JungleDecor.onDrawPlatformThorns(decorInst)
+          drawTrapLeftThorns(k, trapLeftThorns, trapState)
         }
       }
     ])
@@ -1961,17 +1981,16 @@ vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
 function collectLightUniforms(k, glowBugInst, trapBugInst, creatureInst, gaWidth, gaHeight) {
   const lights = []
   //
-  // Moon (always visible)
-  //
-  lights.push({ x: MOON_X, y: MOON_Y, r: DARKNESS_MOON_RADIUS, i: DARKNESS_MOON_INTENSITY })
-  //
-  // All bugs: small permanent light, large radius when glowing
+  // Only glowing bugs emit light (non-glowing bugs are visible above darkness without glow)
   //
   const allEntries = [...glowBugInst.entries, ...trapBugInst.entries]
   allEntries.forEach(entry => {
-    const radius = entry.isGlowing ? DARKNESS_GLOW_RADIUS : DARKNESS_BUG_RADIUS
-    const intensity = entry.isGlowing ? DARKNESS_GLOW_INTENSITY : DARKNESS_BUG_INTENSITY
-    lights.push({ x: entry.bug.x, y: entry.bug.y, r: radius, i: intensity })
+    entry.isGlowing && lights.push({
+      x: entry.bug.x,
+      y: entry.bug.y,
+      r: DARKNESS_GLOW_RADIUS,
+      i: DARKNESS_GLOW_INTENSITY
+    })
   })
   //
   // Creature emits light when burning (makes body and fire visible through darkness)
@@ -2001,4 +2020,55 @@ function collectLightUniforms(k, glowBugInst, trapBugInst, creatureInst, gaWidth
     uniforms[`u_i${idx}`] = light ? light.i : 0
   }
   return uniforms
+}
+
+/**
+ * Draws a bright moon with soft glow above the darkness overlay
+ * Simplified version of the background moon for visibility through darkness
+ * @param {Object} k - Kaplay instance
+ */
+function drawMoonOverlay(k) {
+  const GLOW_RINGS = 8
+  const GLOW_OUTER = MOON_RADIUS + MOON_GLOW_RADIUS
+  //
+  // Draw soft radial glow rings from outer to inner
+  //
+  for (let i = 0; i < GLOW_RINGS; i++) {
+    const t = i / GLOW_RINGS
+    const ringRadius = GLOW_OUTER * (1 - t)
+    const ringOpacity = t * t * 0.15
+    k.drawCircle({
+      pos: k.vec2(MOON_X, MOON_Y),
+      radius: ringRadius,
+      color: k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B),
+      opacity: ringOpacity
+    })
+  }
+  //
+  // Draw moon body
+  //
+  k.drawCircle({
+    pos: k.vec2(MOON_X, MOON_Y),
+    radius: MOON_RADIUS,
+    color: k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B),
+    opacity: 1
+  })
+  //
+  // Draw craters as darker circles
+  //
+  MOON_CRATERS.forEach(crater => {
+    k.drawCircle({
+      pos: k.vec2(
+        MOON_X + crater.x * MOON_RADIUS,
+        MOON_Y + crater.y * MOON_RADIUS
+      ),
+      radius: crater.r * MOON_RADIUS,
+      color: k.rgb(
+        MOON_COLOR_R - crater.dark,
+        MOON_COLOR_G - crater.dark,
+        MOON_COLOR_B - crater.dark
+      ),
+      opacity: 1
+    })
+  })
 }

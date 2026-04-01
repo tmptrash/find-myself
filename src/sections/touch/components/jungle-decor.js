@@ -139,13 +139,29 @@ export function onDrawVines(inst) {
 }
 
 /**
- * Draws grass blades (triangular, hero-reactive) on platforms,
- * bottom wall thorns, and platform thorns
+ * Draws bottom wall thorns only (for rendering above darkness overlay)
+ * @param {Object} inst - Jungle decoration instance
+ */
+export function onDrawBottomThorns(inst) {
+  drawThorns(inst.k, inst.thornData)
+}
+
+/**
+ * Draws platform thorns only (for rendering above darkness overlay)
+ * @param {Object} inst - Jungle decoration instance
+ */
+export function onDrawPlatformThorns(inst) {
+  drawThorns(inst.k, inst.platformThornData)
+}
+
+/**
+ * Draws grass blades (triangular, hero-reactive) on platforms
+ * and platform thorns (bottom wall thorns drawn separately via onDrawBottomThorns)
  * Called at Z_FOREGROUND layer above platforms
  * @param {Object} inst - Jungle decoration instance
  */
 export function onDrawForeground(inst) {
-  const { k, hero, grassBlades, thornData, platformThornData } = inst
+  const { k, hero, grassBlades, platformThornData } = inst
   const time = k.time()
   //
   // Get hero position for grass push effect
@@ -183,11 +199,7 @@ export function onDrawForeground(inst) {
     })
   })
   //
-  // Draw thorns on bottom wall
-  //
-  drawThorns(k, thornData)
-  //
-  // Draw thorns on platforms
+  // Draw thorns on platforms (bottom wall thorns rendered separately above darkness)
   //
   drawThorns(k, platformThornData)
 }

@@ -2394,6 +2394,7 @@ function createBodyParticles(inst, centerX, centerY) {
     //
     // Create invisible body for physics
     //
+    const particleZ = inst.deathParticleZ ?? 20
     const body = k.add([
       k.rect(pSize, pSize),
       k.pos(centerX, centerY),
@@ -2411,7 +2412,7 @@ function createBodyParticles(inst, centerX, centerY) {
       k.pos(centerX, centerY),
       k.anchor("center"),
       k.rotate(rotation),
-      k.z(20),  // Above city background (15.5) and platforms (15)
+      k.z(particleZ),
       k.opacity(1),
       {
         draw() {
@@ -2503,12 +2504,13 @@ function createEyeParticles(inst, centerX, centerY) {
     //
     // Eye background (white or light gray)
     //
+    const eyeZ = inst.deathParticleZ ?? 20
     const eyeWhite = k.add([
       k.rect(eyeWhiteSize, eyeWhiteSize),
       k.pos(centerX, centerY),
       k.color(eyeWhiteColor[0], eyeWhiteColor[1], eyeWhiteColor[2]),
       k.anchor("center"),
-      k.z(20),  // Above city background (15.5) and platforms (15)
+      k.z(eyeZ),
       k.area(),
       k.body()
     ])

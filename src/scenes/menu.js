@@ -243,7 +243,7 @@ export function sceneMenu(k) {
         controllable: false,
         bodyColor,
         outlineColor,
-        addMouth: config.section === 'word',
+        addMouth: config.section === 'word' || config.section === 'touch',
         addArms: config.section === 'touch',
         hitboxPadding: 5
       })
@@ -255,7 +255,7 @@ export function sceneMenu(k) {
         type: Hero.HEROES.ANTIHERO,
         bodyColor: grayColor,
         outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word',
+        addMouth: config.section === 'word' || config.section === 'touch',
         addArms: config.section === 'touch'
       })
       //
@@ -277,8 +277,11 @@ export function sceneMenu(k) {
       const grayOutlineColorNoHash = grayOutlineColor.replace('#', '')
       const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
       const yellowColorNoHash = yellowColor.replace('#', '')
-      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
-      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${config.section === 'word' ? '_mouth' : ''}${config.section === 'touch' ? '_arms' : ''}`
+      const hasMouth = config.section === 'word' || config.section === 'touch'
+      const hasArms = config.section === 'touch'
+      const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}`
+      antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
+      antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}` : null
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
       //
@@ -480,22 +483,6 @@ export function sceneMenu(k) {
         isCompleted
       })
     })
-    
-    //
-    // Create arrows pointing clockwise from one anti-hero to the next
-    //
-    const grayColorHex = '#656565'
-    const grayOutlineColorHex = '#1A1A1A'
-    const grayColorRgb = getRGB(k, grayColorHex)
-    const grayOutlineColorRgb = getRGB(k, grayOutlineColorHex)
-    const ARROW_COLOR = k.rgb(grayColorRgb.r, grayColorRgb.g, grayColorRgb.b)  // Same gray color as unselected anti-heroes
-    const ARROW_OUTLINE_COLOR = k.rgb(grayOutlineColorRgb.r, grayOutlineColorRgb.g, grayOutlineColorRgb.b)  // Same gray outline as unselected anti-heroes
-    const ARROW_OPACITY = 1.0
-    const ARROW_WIDTH = 8  // Thick arrows
-    const ARROW_OUTLINE_WIDTH = 3  // Outline width (increased by 1 pixel)
-    const ARROW_OFFSET = 35  // Distance from anti-hero center
-    const ARROWHEAD_SIZE = 22  // Arrowhead size
-    const ARC_RADIUS_OFFSET = 5  // How far the arc curves outward (reduced to bring arrows closer to center)
     
     //
     // Create arrows between anti-heroes in clockwise order
@@ -1468,7 +1455,8 @@ function drawScene(inst) {
     // Create color directly from hex values
     //
     const ARROW_COLOR = k.rgb(r, g, b)  // Lighter gray to match final displayed color
-    const ARROW_OUTLINE_COLOR = k.rgb(grayOutlineColorRgb.r, grayOutlineColorRgb.g, grayOutlineColorRgb.b)  // Same gray outline as unselected anti-heroes
+    const arrowOutlineRgb = getRGB(k, CFG.visual.colors.outline)
+    const ARROW_OUTLINE_COLOR = k.rgb(arrowOutlineRgb.r, arrowOutlineRgb.g, arrowOutlineRgb.b)  // Same outline as completed anti-heroes
     const ARROW_OPACITY = 1.0
     const ARROW_WIDTH = 8  // Thick arrows
     const ARROW_OUTLINE_WIDTH = 3  // Outline width (increased by 1 pixel)
@@ -1597,22 +1585,30 @@ function drawScene(inst) {
       }
       
       //
-      // Draw arc segments with outline
+      // Draw arc outline pass: first segment extended backward for uniform back edge
       //
       for (let i = 0; i < arcPoints.length - 1; i++) {
-        //
-        // Draw outline first (thicker line)
-        //
+        let p1x = arcPoints[i].x
+        let p1y = arcPoints[i].y
+        if (i === 0) {
+          const dx = arcPoints[1].x - arcPoints[0].x
+          const dy = arcPoints[1].y - arcPoints[0].y
+          const len = Math.sqrt(dx * dx + dy * dy)
+          p1x -= (dx / len) * ARROW_OUTLINE_WIDTH
+          p1y -= (dy / len) * ARROW_OUTLINE_WIDTH
+        }
         k.drawLine({
-          p1: k.vec2(arcPoints[i].x, arcPoints[i].y),
+          p1: k.vec2(p1x, p1y),
           p2: k.vec2(arcPoints[i + 1].x, arcPoints[i + 1].y),
           width: ARROW_WIDTH + ARROW_OUTLINE_WIDTH * 2,
           color: arrowOutlineColor,
           opacity: ARROW_OPACITY
         })
-        //
-        // Draw main arrow line
-        //
+      }
+      //
+      // Draw arc body pass on top of outline
+      //
+      for (let i = 0; i < arcPoints.length - 1; i++) {
         k.drawLine({
           p1: k.vec2(arcPoints[i].x, arcPoints[i].y),
           p2: k.vec2(arcPoints[i + 1].x, arcPoints[i + 1].y),

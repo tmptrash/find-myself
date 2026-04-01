@@ -111,6 +111,7 @@ k.loadSound("boss", "/sounds/boss.mp3")
 // Load life indicator sprite (used by level-indicator in all sections)
 //
 k.loadSprite("life", "/life.png")
+k.loadSprite("menu-bg", "/menu.png")
 //
 // Load default character sprites for both hero types
 // Must be loaded before scenes are registered, as scenes may create heroes immediately

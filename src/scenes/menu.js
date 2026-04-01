@@ -195,7 +195,7 @@ export function sceneMenu(k) {
       controllable: false,
       addMouth: Boolean(progress.word),
       bodyColor: heroBodyColor,
-      outlineColor: noSectionsComplete ? "#454545" : null
+      outlineColor: noSectionsComplete ? "#1A1A1A" : null
     })
     
     const hero = heroInst.character
@@ -204,8 +204,7 @@ export function sceneMenu(k) {
     // Apply same color tint as inactive anti-heroes when no sections complete
     //
     if (noSectionsComplete) {
-      const grayRgb = getRGB(k, "#656565")
-      hero.color = k.rgb(grayRgb.r, grayRgb.g, grayRgb.b)
+      hero.color = k.rgb(255, 255, 255)
     }
     //
     // Create 6 anti-heroes around the main hero (sections)
@@ -228,7 +227,7 @@ export function sceneMenu(k) {
       // For time section when completed, use yellow color
       //
       const grayColor = '#656565'
-      const grayOutlineColor = '#454545'
+      const grayOutlineColor = '#1A1A1A'
       const yellowColor = '#FF8C00'  // Anti-hero orange/yellow color (same as hero color in time-complete)
       const bodyColor = grayColor  // Always gray for sprite
       const outlineColor = isCompleted ? CFG.visual.colors.outline : grayOutlineColor
@@ -486,7 +485,7 @@ export function sceneMenu(k) {
     // Create arrows pointing clockwise from one anti-hero to the next
     //
     const grayColorHex = '#656565'
-    const grayOutlineColorHex = '#454545'
+    const grayOutlineColorHex = '#1A1A1A'
     const grayColorRgb = getRGB(k, grayColorHex)
     const grayOutlineColorRgb = getRGB(k, grayOutlineColorHex)
     const ARROW_COLOR = k.rgb(grayColorRgb.r, grayColorRgb.g, grayColorRgb.b)  // Same gray color as unselected anti-heroes
@@ -632,16 +631,16 @@ export function sceneMenu(k) {
           desiredPrefix = antiHeroInst.spritePrefixGray
         }
         //
-        // Apply color tint (but not for time section with yellow sprite, as sprite already has correct color)
+        // Apply color tint: white for states with baked-in body color (gray idle, yellow time),
+        // section color for hover/completed states that need colorizing
         //
-        if (!(antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isHovered))) {
+        const useWhiteTint = desiredPrefix === antiHeroInst.spritePrefixGray ||
+          (antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isHovered))
+        if (useWhiteTint) {
+          antiHeroInst.character.color = k.rgb(255, 255, 255)
+        } else {
           const rgb = getRGB(k, targetColor)
           antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b)
-        } else {
-          //
-          // For time section with yellow sprite, use white tint (no color modification)
-          //
-          antiHeroInst.character.color = k.rgb(255, 255, 255)
         }
         //
         // Switch sprite variant if needed
@@ -1413,19 +1412,19 @@ function drawScene(inst) {
   // Get gray color from first anti-hero (same as inactive anti-heroes use)
   //
   const grayColorHex = antiHeroes && antiHeroes.length > 0 ? antiHeroes[0].grayColor : '#656565'  // Body color of inactive anti-heroes
-  const grayOutlineColorHex = '#202020'  // Outline color of inactive anti-heroes
+  const grayOutlineColorHex = '#1A1A1A'  // Outline color of inactive anti-heroes
   const grayColorRgb = getRGB(k, grayColorHex)
   const grayOutlineColorRgb = getRGB(k, grayOutlineColorHex)
   
   //
-  // Draw gray background (same color as level platforms)
+  // Draw menu background image (darkened)
   //
-  const bgRgb = getRGB(k, CFG.visual.colors.menu.platformColor)
-  k.drawRect({
+  k.drawSprite({
+    sprite: "menu-bg",
+    pos: k.vec2(0, 0),
     width: k.width(),
     height: k.height(),
-    pos: k.vec2(0, 0),
-    color: k.rgb(bgRgb.r, bgRgb.g, bgRgb.b)
+    opacity: 0.3
   })
   
   //

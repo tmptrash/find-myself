@@ -316,6 +316,22 @@ const Z_FOREGROUND = 3
 const Z_CREATURE = 5
 const Z_FRONT_TREES = 6
 const Z_BUGS = 8
+const Z_DARKNESS = 50
+//
+// Darkness overlay (shader-based with smooth gradient falloff per light source)
+// Covers only the game area with rounded corners; walls/margins stay normal
+//
+const MAX_DARKNESS_LIGHTS = 12
+const DARKNESS_OPACITY = 1.0
+const DARKNESS_AMBIENT = 0.0
+const DARKNESS_BUG_RADIUS = 50
+const DARKNESS_BUG_INTENSITY = 0.8
+const DARKNESS_GLOW_RADIUS = 350
+const DARKNESS_GLOW_INTENSITY = 1.0
+const DARKNESS_CREATURE_BURN_RADIUS = 120
+const DARKNESS_CREATURE_BURN_INTENSITY = 1.0
+const DARKNESS_MOON_RADIUS = 130
+const DARKNESS_MOON_INTENSITY = 1.0
 /**
  * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
@@ -447,10 +463,12 @@ export function sceneLevel3(k) {
       bodyColor: heroBodyColor
     })
     //
-    // Spawn hero and anti-hero
+    // Spawn hero and anti-hero, render above darkness overlay
     //
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
+    heroInst.character.z = Z_DARKNESS + 1
+    antiHeroInst.character.z = Z_DARKNESS + 1
     //
     // Create glow bugs on platforms 0-2 (no bugs on anti-hero platform)
     //
@@ -566,13 +584,24 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw shadow creature (between back canvas and front trees)
+    // Draw shadow creature body and tentacles (below darkness, hidden in dark areas)
     //
     k.add([
       k.z(Z_CREATURE),
       {
         draw() {
           ShadowCreature.onDraw(creatureInst)
+        }
+      }
+    ])
+    //
+    // Draw creature eyes and fire above darkness (eyes always visible, fire bright)
+    //
+    k.add([
+      k.z(Z_DARKNESS + 1),
+      {
+        draw() {
+          ShadowCreature.onDrawOverlay(creatureInst)
         }
       }
     ])
@@ -585,6 +614,32 @@ export function sceneLevel3(k) {
         draw() {
           GlowBug.onDraw(glowBugInst)
           GlowBug.onDraw(trapBugInst)
+        }
+      }
+    ])
+    //
+    // Load darkness shader (smooth gradient falloff per light source, rounded corners)
+    //
+    k.loadShader("level3-darkness", null, generateDarknessShader(MAX_DARKNESS_LIGHTS))
+    //
+    // Darkness overlay covers only the game area (not walls/margins)
+    // Uses drawUVQuad which provides proper UV coords for the shader
+    //
+    const gameAreaWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const gameAreaHeight = CFG.visual.screen.height - TOP_MARGIN - BOTTOM_MARGIN
+    k.add([
+      k.pos(LEFT_MARGIN, TOP_MARGIN),
+      k.z(Z_DARKNESS),
+      {
+        draw() {
+          k.drawUVQuad({
+            width: gameAreaWidth,
+            height: gameAreaHeight,
+            anchor: "topleft",
+            shader: "level3-darkness",
+            uniform: collectLightUniforms(k, glowBugInst, trapBugInst, creatureInst, gameAreaWidth, gameAreaHeight),
+            fixed: true
+          })
         }
       }
     ])
@@ -663,12 +718,12 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroIns
     checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator)
   }
   //
-  // Get glow positions from both bug instances for creature AI
+  // Get glow positions with darkness glow radius (creature burns within visible light)
   //
   const glowPositions = [
     ...GlowBug.getGlowingPositions(glowBugInst),
     ...GlowBug.getGlowingPositions(trapBugInst)
-  ]
+  ].map(glow => ({ ...glow, radius: DARKNESS_GLOW_RADIUS }))
   ShadowCreature.onUpdate(creatureInst, dt, glowPositions)
 }
 
@@ -1851,4 +1906,99 @@ function fixedPointOnSegment(x1, y1, x2, y2, percent) {
  */
 function smoothstep(t) {
   return t * t * (3 - 2 * t)
+}
+
+/**
+ * Generates a GLSL fragment shader for the darkness overlay
+ * Each light source creates a smooth gradient falloff using smoothstep
+ * @param {number} maxLights - Maximum number of simultaneous light sources
+ * @returns {string} GLSL fragment shader source
+ */
+function generateDarknessShader(maxLights) {
+  let uniforms = ''
+  uniforms += 'uniform float u_ambient;\n'
+  uniforms += 'uniform float u_darkness;\n'
+  uniforms += 'uniform float u_gw;\n'
+  uniforms += 'uniform float u_gh;\n'
+  uniforms += 'uniform float u_ox;\n'
+  uniforms += 'uniform float u_oy;\n'
+  uniforms += 'uniform float u_cr;\n'
+  let lightCalc = ''
+  for (let i = 0; i < maxLights; i++) {
+    uniforms += `uniform vec2 u_p${i}; uniform float u_r${i}; uniform float u_i${i};\n`
+    lightCalc += `d = length(wp - u_p${i}); f = smoothstep(u_r${i}, 0.0, d); light = max(light, u_i${i} * f * f);\n`
+  }
+  return `${uniforms}
+vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
+  vec2 lp = uv * vec2(u_gw, u_gh);
+  vec2 wp = lp + vec2(u_ox, u_oy);
+  float cr = u_cr;
+  float ax = min(lp.x, u_gw - lp.x);
+  float ay = min(lp.y, u_gh - lp.y);
+  if (ax < cr && ay < cr) {
+    float cd = length(vec2(cr - ax, cr - ay));
+    if (cd > cr) { return vec4(0.0, 0.0, 0.0, 0.0); }
+  }
+  float light = u_ambient;
+  float d;
+  float f;
+  ${lightCalc}
+  return vec4(0.0, 0.0, 0.0, u_darkness * (1.0 - light));
+}`
+}
+
+/**
+ * Collects all light sources and builds the shader uniform object
+ * Bugs and moon always emit light; creature emits light only when burning
+ * @param {Object} k - Kaplay instance
+ * @param {Object} glowBugInst - Main glow bug manager
+ * @param {Object} trapBugInst - Trap platform glow bug manager
+ * @param {Object} creatureInst - Shadow creature instance
+ * @param {number} gaWidth - Game area width
+ * @param {number} gaHeight - Game area height
+ * @returns {Object} Shader uniforms object
+ */
+function collectLightUniforms(k, glowBugInst, trapBugInst, creatureInst, gaWidth, gaHeight) {
+  const lights = []
+  //
+  // Moon (always visible)
+  //
+  lights.push({ x: MOON_X, y: MOON_Y, r: DARKNESS_MOON_RADIUS, i: DARKNESS_MOON_INTENSITY })
+  //
+  // All bugs: small permanent light, large radius when glowing
+  //
+  const allEntries = [...glowBugInst.entries, ...trapBugInst.entries]
+  allEntries.forEach(entry => {
+    const radius = entry.isGlowing ? DARKNESS_GLOW_RADIUS : DARKNESS_BUG_RADIUS
+    const intensity = entry.isGlowing ? DARKNESS_GLOW_INTENSITY : DARKNESS_BUG_INTENSITY
+    lights.push({ x: entry.bug.x, y: entry.bug.y, r: radius, i: intensity })
+  })
+  //
+  // Creature emits light when burning (makes body and fire visible through darkness)
+  //
+  creatureInst.isBurning && lights.push({
+    x: creatureInst.x,
+    y: creatureInst.y,
+    r: DARKNESS_CREATURE_BURN_RADIUS,
+    i: DARKNESS_CREATURE_BURN_INTENSITY
+  })
+  //
+  // Build uniform object with game area dimensions and all light slots
+  //
+  const uniforms = {
+    u_ambient: DARKNESS_AMBIENT,
+    u_darkness: DARKNESS_OPACITY,
+    u_gw: gaWidth,
+    u_gh: gaHeight,
+    u_ox: LEFT_MARGIN,
+    u_oy: TOP_MARGIN,
+    u_cr: CORNER_RADIUS
+  }
+  for (let idx = 0; idx < MAX_DARKNESS_LIGHTS; idx++) {
+    const light = lights[idx]
+    uniforms[`u_p${idx}`] = light ? k.vec2(light.x, light.y) : k.vec2(-9999, -9999)
+    uniforms[`u_r${idx}`] = light ? light.r : 0
+    uniforms[`u_i${idx}`] = light ? light.i : 0
+  }
+  return uniforms
 }

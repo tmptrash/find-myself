@@ -47,6 +47,7 @@ const BURN_FLEE_SPEED = 180
 const BURN_PARTICLE_COUNT = 6
 const BURN_PARTICLE_SPEED_MIN = 40
 const BURN_PARTICLE_SPEED_EXTRA = 60
+const BURN_PARTICLE_UPWARD_BIAS = 15
 const BURN_PARTICLE_LIFETIME = 0.5
 const BURN_PARTICLE_SIZE = 5
 const BURN_GLOW_MAX_OPACITY = 0.35
@@ -152,6 +153,7 @@ export function onUpdate(inst, dt, glowPositions) {
   let nearestLightDist = Infinity
   let nearestLightX = 0
   let nearestLightY = 0
+  let nearestLightRadius = 0
   glowPositions.forEach(glow => {
     const dx = glow.x - inst.x
     const dy = glow.y - inst.y
@@ -160,6 +162,7 @@ export function onUpdate(inst, dt, glowPositions) {
       nearestLightDist = dist
       nearestLightX = glow.x
       nearestLightY = glow.y
+      nearestLightRadius = glow.radius
     }
   })
   //
@@ -172,12 +175,9 @@ export function onUpdate(inst, dt, glowPositions) {
   let desiredAngle = inst.facingAngle
   let speed = 0
   //
-  // If light is within fear radius, smoothly turn away from it
+  // Burning state: creature burns only when inside the glow radius of a bug
   //
-  //
-  // Burning state: creature burns while fleeing from any light source
-  //
-  inst.isBurning = nearestLightDist < LIGHT_FEAR_RADIUS
+  inst.isBurning = nearestLightDist < nearestLightRadius
   if (nearestLightDist < LIGHT_FEAR_RADIUS) {
     desiredAngle = Math.atan2(inst.y - nearestLightY, inst.x - nearestLightX)
     //
@@ -259,7 +259,7 @@ export function onDraw(inst) {
   //
   if (inst.isBurning) {
     //
-    // Intense burning glow around every body segment (orange-red, flickering)
+    // Ambient burning glow around body segments (drawn below darkness)
     //
     const burnIntensity = 1 - inst.nearestLightDist / LIGHT_FEAR_RADIUS
     const flicker = 0.8 + Math.sin(k.time() * 12) * 0.2
@@ -281,18 +281,6 @@ export function onDraw(inst) {
         })
       }
     }
-    //
-    // Draw burn particles (rising flame wisps)
-    //
-    inst.burnParticles.forEach(p => {
-      const alpha = 1 - p.age / p.lifetime
-      k.drawCircle({
-        pos: k.vec2(p.x, p.y),
-        radius: BURN_PARTICLE_SIZE * alpha,
-        color: k.rgb(p.r, p.g, p.b),
-        opacity: alpha * 0.7
-      })
-    })
   }
   //
   // Draw tentacles first (behind body)
@@ -344,8 +332,31 @@ export function onDraw(inst) {
       color: bodyColor
     })
   }
+}
+
+/**
+ * Draws creature overlay elements that should render above the darkness layer:
+ * eyes (always visible) and burn particles (bright fire when burning)
+ * @param {Object} inst - Shadow creature instance
+ */
+export function onDrawOverlay(inst) {
+  const { k } = inst
   //
-  // Draw two eyes that look toward facing direction
+  // Draw burn particles above darkness (bright fire wisps)
+  //
+  if (inst.isBurning) {
+    inst.burnParticles.forEach(p => {
+      const alpha = 1 - p.age / p.lifetime
+      k.drawCircle({
+        pos: k.vec2(p.x, p.y),
+        radius: BURN_PARTICLE_SIZE * alpha,
+        color: k.rgb(p.r, p.g, p.b),
+        opacity: alpha * 0.7
+      })
+    })
+  }
+  //
+  // Draw two eyes that look toward facing direction (always visible through darkness)
   //
   const eyeOffset = BODY_RADIUS * EYE_OFFSET_RATIO
   const eyeAngle1 = inst.facingAngle + EYE_ANGLE_SPREAD
@@ -354,9 +365,6 @@ export function onDraw(inst) {
   const eyeY1 = inst.y + Math.sin(eyeAngle1) * eyeOffset
   const eyeX2 = inst.x + Math.cos(eyeAngle2) * eyeOffset
   const eyeY2 = inst.y + Math.sin(eyeAngle2) * eyeOffset
-  //
-  // Eyes (solid red, no surrounding eyeball)
-  //
   k.drawCircle({
     pos: k.vec2(eyeX1, eyeY1),
     radius: EYE_RADIUS,
@@ -459,8 +467,8 @@ function updateBurnParticles(inst, dt) {
     inst.burnParticles.push({
       x: segX + (Math.random() - 0.5) * BODY_RADIUS,
       y: segY + (Math.random() - 0.5) * BODY_RADIUS,
-      vx: Math.cos(angle) * speed * 0.3,
-      vy: -Math.abs(Math.sin(angle)) * speed - 30,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - BURN_PARTICLE_UPWARD_BIAS,
       age: 0,
       lifetime: BURN_PARTICLE_LIFETIME + Math.random() * 0.3,
       r: rVal > 0.5 ? 255 : 220,

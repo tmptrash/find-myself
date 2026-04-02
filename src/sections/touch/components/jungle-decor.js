@@ -156,12 +156,11 @@ export function onDrawPlatformThorns(inst) {
 
 /**
  * Draws grass blades (triangular, hero-reactive) on platforms
- * and platform thorns (bottom wall thorns drawn separately via onDrawBottomThorns)
- * Called at Z_FOREGROUND layer above platforms
+ * Wind sway and hero proximity push create natural-looking movement
  * @param {Object} inst - Jungle decoration instance
  */
-export function onDrawForeground(inst) {
-  const { k, hero, grassBlades, platformThornData } = inst
+export function onDrawGrass(inst) {
+  const { k, hero, grassBlades } = inst
   const time = k.time()
   //
   // Get hero position for grass push effect
@@ -198,10 +197,6 @@ export function onDrawForeground(inst) {
       opacity: GRASS_OPACITY
     })
   })
-  //
-  // Draw thorns on platforms (bottom wall thorns rendered separately above darkness)
-  //
-  drawThorns(k, platformThornData)
 }
 
 /**

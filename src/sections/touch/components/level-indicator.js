@@ -45,7 +45,7 @@ export function create(config) {
   const letterSpacing = -5
   const outlineThickness = 2
   const startX = sideWallWidth + 40
-  const y = topPlatformHeight + TOP_OFFSET
+  const y = (topPlatformHeight - fontSize) / 2
   const letterObjects = []
   letters.forEach((letter, i) => {
     const letterLevel = i

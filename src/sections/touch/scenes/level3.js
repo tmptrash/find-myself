@@ -81,17 +81,23 @@ const CORNER_SPRITE_NAME = 'touch3-corner-sprite'
 // P1: trap platform that splits when hero approaches (no vines)
 // P2: thorn-covered hazard platform (moved left)
 // P3: anti-hero platform at max right/top (no bugs)
+// P4: small recovery platform below P0, between P0 and bottom wall (1 bug)
 //
 const CORRIDOR_PLATFORMS = [
   { x: 180, y: 550, width: 150 },
   { x: 1150, y: 500, width: 340 },
   { x: 680, y: 600, width: 280 },
-  { x: 1650, y: 350, width: 250 }
+  { x: 1650, y: 350, width: 250 },
+  { x: 350, y: 780, width: 130 }
 ]
 //
 // Trap platform configuration (P1 splits into two halves when hero approaches)
 //
 const TRAP_PLATFORM_INDEX = 1
+//
+// Anti-hero platform index (fixed, not affected by adding new platforms)
+//
+const ANTIHERO_PLATFORM_INDEX = 3
 const TRAP_ACTIVATION_DELAY = 0.05
 const TRAP_INITIAL_GAP = 3
 //
@@ -128,10 +134,14 @@ const TRAP_THORN_INSET = 15
 //
 const PLATFORM_THORN_TOLERANCE = 5
 //
-// Monster spawn position (dark corner, far from hero)
+// Number of glow bugs on the bottom wall (with blades across full width)
 //
-const MONSTER_SPAWN_X = 1600
-const MONSTER_SPAWN_Y = 500
+const BOTTOM_WALL_BUG_COUNT = 10
+//
+// Monster spawn position (just below upper-right anti-hero platform)
+//
+const MONSTER_SPAWN_X = 1650
+const MONSTER_SPAWN_Y = 430
 //
 // Bottom wall kill zone Y threshold (top surface of bottom wall)
 //
@@ -147,8 +157,20 @@ const PLAY_AREA_WIDTH = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
 //
 // Pre-rendered background sprite names
 //
-const BACK_CANVAS_SPRITE = 'bg-touch-level3-back'
+const BG_SKY_SPRITE = 'bg-touch-level3-sky'
+const MOUNTAINS_SPRITE = 'bg-touch-level3-mountains'
+const DARK_TREES_SPRITE = 'bg-touch-level3-dark-trees'
+const MEDIUM_TREES_SPRITE = 'bg-touch-level3-medium-trees'
 const FRONT_TREES_SPRITE = 'bg-touch-level3-front-trees'
+const CLOUDS_SPRITE = 'bg-touch-level3-clouds'
+//
+// Depth-based opacity below darkness (farther layers dimmer, revealed by bug light)
+// Shader DARKNESS_AMBIENT provides faint base visibility through these opacities
+//
+const MOUNTAINS_DEPTH_OPACITY = 0.15
+const DARK_TREES_DEPTH_OPACITY = 0.70
+const MEDIUM_TREES_DEPTH_OPACITY = 0.82
+const FRONT_TREES_DEPTH_OPACITY = 0.95
 //
 // Mountain snow line position (percentage from base to peak)
 //
@@ -217,12 +239,12 @@ const TREE_LAYERS_DEC_WIDTH = 0.15
 const DARK_TREES_COUNT = 20
 const DARK_TREES_LAYERS = 1
 const DARK_TREES_TRUNK_WIDTH = 0.03
-const DARK_TREES_TRUNK_COLOR = '#080808'
-const DARK_TREES_LEFT_COLOR = [10, 14, 10]
-const DARK_TREES_RIGHT_COLOR = [14, 18, 14]
+const DARK_TREES_TRUNK_COLOR = '#1A1A1A'
+const DARK_TREES_LEFT_COLOR = [40, 55, 38]
+const DARK_TREES_RIGHT_COLOR = [50, 65, 48]
 const DARK_TREES_LAYER_WIDTH = 0.5
-const DARK_TREES_HEIGHT_MIN = 400
-const DARK_TREES_HEIGHT_MAX = 480
+const DARK_TREES_HEIGHT_MIN = 320
+const DARK_TREES_HEIGHT_MAX = 400
 const DARK_TREES_SHARPNESS_MIN = 10
 const DARK_TREES_SHARPNESS_MAX = 20
 //
@@ -231,12 +253,12 @@ const DARK_TREES_SHARPNESS_MAX = 20
 const BG_TREES_COUNT = 12
 const BG_TREES_LAYERS = 4
 const BG_TREES_TRUNK_WIDTH = 0.03
-const BG_TREES_TRUNK_COLOR = '#080808'
-const BG_TREES_LEFT_COLOR = [12, 18, 10]
-const BG_TREES_RIGHT_COLOR = [16, 22, 14]
+const BG_TREES_TRUNK_COLOR = '#1A1A1A'
+const BG_TREES_LEFT_COLOR = [45, 65, 40]
+const BG_TREES_RIGHT_COLOR = [55, 78, 50]
 const BG_TREES_LAYER_WIDTH = 0.3
-const BG_TREES_HEIGHT_MIN = 300
-const BG_TREES_HEIGHT_MAX = 380
+const BG_TREES_HEIGHT_MIN = 290
+const BG_TREES_HEIGHT_MAX = 370
 const BG_TREES_SHARPNESS_MIN = 10
 const BG_TREES_SHARPNESS_MAX = 20
 //
@@ -245,12 +267,12 @@ const BG_TREES_SHARPNESS_MAX = 20
 const FRONT_TREES_COUNT = 15
 const FRONT_TREES_LAYERS = 3
 const FRONT_TREES_TRUNK_WIDTH = 0.03
-const FRONT_TREES_TRUNK_COLOR = '#060606'
-const FRONT_TREES_LEFT_COLOR = [10, 20, 8]
-const FRONT_TREES_RIGHT_COLOR = [14, 28, 12]
+const FRONT_TREES_TRUNK_COLOR = '#161616'
+const FRONT_TREES_LEFT_COLOR = [50, 75, 42]
+const FRONT_TREES_RIGHT_COLOR = [62, 90, 52]
 const FRONT_TREES_LAYER_WIDTH = 0.35
-const FRONT_TREES_HEIGHT_MIN = 80
-const FRONT_TREES_HEIGHT_MAX = 200
+const FRONT_TREES_HEIGHT_MIN = 120
+const FRONT_TREES_HEIGHT_MAX = 250
 const FRONT_TREES_SHARPNESS_MIN = 8
 const FRONT_TREES_SHARPNESS_MAX = 18
 //
@@ -262,8 +284,8 @@ const CLOUD_DENSE_Y = TOP_MARGIN + 30
 const CLOUD_SPARSE_Y_MIN = TOP_MARGIN + 50
 const CLOUD_SPARSE_Y_MAX = TOP_MARGIN + 80
 const CLOUD_BASE_COLOR_R = 14
-const CLOUD_BASE_COLOR_G = 14
-const CLOUD_BASE_COLOR_B = 18
+const CLOUD_BASE_COLOR_G = 16
+const CLOUD_BASE_COLOR_B = 30
 //
 // Moon configuration (drawn on background canvas)
 //
@@ -305,16 +327,19 @@ const BARK_LINE_OPACITY_MIN = 0.05
 const BARK_LINE_OPACITY_MAX = 0.1
 //
 // Z-index layers for this level
-// Back canvas (mountains + dark/medium trees) → clouds → vines →
-// platforms → platform visuals → foreground → creature → front trees → bugs
+// Sky → mountains → dark trees → medium trees → front trees → vines →
+// platform visuals → foreground → creature → bugs
 //
-const Z_BACK_CANVAS = -95
-const Z_CLOUDS = -80
+const Z_SKY = -95
+const Z_MOUNTAINS = -90
+const Z_DARK_TREES = -85
+const Z_MEDIUM_TREES = -80
+const Z_FRONT_TREES = -75
+const Z_CLOUDS = 52
 const Z_VINES = 0
 const Z_PLATFORM_VISUALS = 2
 const Z_FOREGROUND = 3
 const Z_CREATURE = 5
-const Z_FRONT_TREES = 6
 const Z_BUGS = 8
 const Z_DARKNESS = 50
 //
@@ -323,7 +348,7 @@ const Z_DARKNESS = 50
 //
 const MAX_DARKNESS_LIGHTS = 12
 const DARKNESS_OPACITY = 1.0
-const DARKNESS_AMBIENT = 0.0
+const DARKNESS_AMBIENT = 0.14
 const DARKNESS_GLOW_RADIUS = 350
 const DARKNESS_GLOW_INTENSITY = 1.0
 const DARKNESS_CREATURE_BURN_RADIUS = 120
@@ -385,9 +410,9 @@ export function sceneLevel3(k) {
     //
     const platformDecor = generatePlatformDecor(CORRIDOR_PLATFORMS)
     //
-    // Create pre-rendered background canvas (mountains + dark/medium trees, one sprite)
+    // Create depth-layered background (sky, mountains, dark trees, medium trees)
     //
-    createBackCanvas(k)
+    createDepthLayers(k)
     //
     // Create pre-rendered foreground trees (transparent, in front of creature)
     //
@@ -418,9 +443,9 @@ export function sceneLevel3(k) {
     //
     // Create anti-hero on the last (upper-right) platform
     //
-    const lastPlatform = CORRIDOR_PLATFORMS[CORRIDOR_PLATFORMS.length - 1]
-    const antiHeroX = lastPlatform.x + lastPlatform.width / 2 - 80
-    const antiHeroY = lastPlatform.y - HERO_COLLISION_HEIGHT_SCALED / 2 - 5
+    const antiHeroPlatform = CORRIDOR_PLATFORMS[ANTIHERO_PLATFORM_INDEX]
+    const antiHeroX = antiHeroPlatform.x + antiHeroPlatform.width / 2 - 80
+    const antiHeroY = antiHeroPlatform.y - HERO_COLLISION_HEIGHT_SCALED / 2 - 5
     const antiHeroInst = Hero.create({
       k,
       x: antiHeroX,
@@ -473,7 +498,7 @@ export function sceneLevel3(k) {
       k,
       hero: heroInst,
       sfx: sound,
-      platforms: [CORRIDOR_PLATFORMS[0], CORRIDOR_PLATFORMS[2]],
+      platforms: [CORRIDOR_PLATFORMS[0], CORRIDOR_PLATFORMS[2], CORRIDOR_PLATFORMS[4]],
       bugsPerPlatform: 1,
       minBugsPerPlatform: 1
     })
@@ -493,6 +518,22 @@ export function sceneLevel3(k) {
       platforms: [trapRightHalfPlatform],
       bugsPerPlatform: 1,
       minBugsPerPlatform: 1
+    })
+    //
+    // Create glow bugs on the bottom wall (blade-covered floor)
+    //
+    const bottomWallPlatform = {
+      x: LEFT_MARGIN + PLAY_AREA_WIDTH / 2,
+      y: BOTTOM_KILL_Y,
+      width: PLAY_AREA_WIDTH - 40
+    }
+    const bottomBugInst = GlowBug.create({
+      k,
+      hero: heroInst,
+      sfx: sound,
+      platforms: [bottomWallPlatform],
+      bugsPerPlatform: 1,
+      minBugsPerPlatform: BOTTOM_WALL_BUG_COUNT
     })
     //
     // Create shadow creature with hero death animation on touch
@@ -569,13 +610,13 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw grass (above platforms, thorns rendered separately above darkness)
+    // Draw grass above platforms (rendered below darkness, visible via overlay)
     //
     k.add([
       k.z(Z_FOREGROUND),
       {
         draw() {
-          JungleDecor.onDrawForeground(decorInst)
+          JungleDecor.onDrawGrass(decorInst)
         }
       }
     ])
@@ -610,6 +651,7 @@ export function sceneLevel3(k) {
         draw() {
           GlowBug.onDraw(glowBugInst)
           GlowBug.onDraw(trapBugInst)
+          GlowBug.onDraw(bottomBugInst)
         }
       }
     ])
@@ -625,12 +667,13 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw all thorns above darkness (always visible through dark areas)
+    // Draw grass, thorns, and P3 platform hint above darkness (always visible)
     //
     k.add([
       k.z(Z_DARKNESS + 1),
       {
         draw() {
+          JungleDecor.onDrawGrass(decorInst)
           JungleDecor.onDrawBottomThorns(decorInst)
           JungleDecor.onDrawPlatformThorns(decorInst)
           drawTrapLeftThorns(k, trapLeftThorns, trapState)
@@ -657,7 +700,7 @@ export function sceneLevel3(k) {
             height: gameAreaHeight,
             anchor: "topleft",
             shader: "level3-darkness",
-            uniform: collectLightUniforms(k, glowBugInst, trapBugInst, creatureInst, gameAreaWidth, gameAreaHeight),
+            uniform: collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, gameAreaWidth, gameAreaHeight),
             fixed: true
           })
         }
@@ -671,7 +714,7 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
+      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
     })
     //
     // ESC key to return to menu
@@ -688,6 +731,7 @@ export function sceneLevel3(k) {
  * @param {Object} fpsCounter - FPS counter instance
  * @param {Object} glowBugInst - GlowBug manager instance
  * @param {Object} trapBugInst - GlowBug instance for the trap platform right half
+ * @param {Object} bottomBugInst - GlowBug instance for the bottom wall
  * @param {Object} creatureInst - Shadow creature instance
  * @param {Object} heroInst - Hero instance
  * @param {Object} trapState - Trap platform state
@@ -696,7 +740,7 @@ export function sceneLevel3(k) {
  * @param {Object} levelIndicator - Level indicator for life score effects on death
  * @param {Array} trapLeftThorns - Thorn data on the left trap half (moves with platform)
  */
-function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns) {
+function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   GlowBug.onUpdate(glowBugInst, dt)
@@ -726,15 +770,24 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroIns
       entry.bug.x += rightDeltaX
       entry.bug.bounds.minX += rightDeltaX
       entry.bug.bounds.maxX += rightDeltaX
+      //
+      // Shift leg foot positions with platform to prevent stretching during split
+      //
+      entry.bug.legs.forEach(leg => {
+        leg.footX += rightDeltaX
+        leg.targetFootX += rightDeltaX
+        leg.stepStartX += rightDeltaX
+      })
     })
   }
   GlowBug.onUpdate(trapBugInst, dt)
+  GlowBug.onUpdate(bottomBugInst, dt)
   //
   // Check bottom wall and platform thorns (only when hero is alive)
   //
   if (!heroInst.isDying) {
     checkBottomThorns(k, heroInst, levelIndicator)
-    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries], levelIndicator)
+    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries], levelIndicator)
     checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator)
   }
   //
@@ -742,7 +795,8 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, creatureInst, heroIns
   //
   const glowPositions = [
     ...GlowBug.getGlowingPositions(glowBugInst),
-    ...GlowBug.getGlowingPositions(trapBugInst)
+    ...GlowBug.getGlowingPositions(trapBugInst),
+    ...GlowBug.getGlowingPositions(bottomBugInst)
   ].map(glow => ({ ...glow, radius: DARKNESS_GLOW_RADIUS }))
   ShadowCreature.onUpdate(creatureInst, dt, glowPositions)
 }
@@ -1404,8 +1458,9 @@ function drawTrapPlatformVisuals(k, trapState) {
  * @param {number} h - Height
  * @param {number} r - Corner radius
  * @param {Object} color - Kaplay color object
+ * @param {number} [opacity=1] - Optional opacity (0-1)
  */
-function drawRoundedRect(k, x, y, w, h, r, color) {
+function drawRoundedRect(k, x, y, w, h, r, color, opacity = 1) {
   //
   // Horizontal strip (full width, excluding top/bottom corner strips)
   //
@@ -1413,7 +1468,8 @@ function drawRoundedRect(k, x, y, w, h, r, color) {
     pos: k.vec2(x, y + r),
     width: w,
     height: h - 2 * r,
-    color
+    color,
+    opacity
   })
   //
   // Vertical strip (excluding left/right corner strips)
@@ -1422,15 +1478,16 @@ function drawRoundedRect(k, x, y, w, h, r, color) {
     pos: k.vec2(x + r, y),
     width: w - 2 * r,
     height: h,
-    color
+    color,
+    opacity
   })
   //
   // Four corner circles
   //
-  k.drawCircle({ pos: k.vec2(x + r, y + r), radius: r, color })
-  k.drawCircle({ pos: k.vec2(x + w - r, y + r), radius: r, color })
-  k.drawCircle({ pos: k.vec2(x + r, y + h - r), radius: r, color })
-  k.drawCircle({ pos: k.vec2(x + w - r, y + h - r), radius: r, color })
+  k.drawCircle({ pos: k.vec2(x + r, y + r), radius: r, color, opacity })
+  k.drawCircle({ pos: k.vec2(x + w - r, y + r), radius: r, color, opacity })
+  k.drawCircle({ pos: k.vec2(x + r, y + h - r), radius: r, color, opacity })
+  k.drawCircle({ pos: k.vec2(x + w - r, y + h - r), radius: r, color, opacity })
 }
 
 /**
@@ -1504,37 +1561,57 @@ function createRoundedCorners(k) {
 }
 
 /**
- * Creates a single pre-rendered background canvas containing mountains, dark trees,
- * and medium trees. Rendered once via toPng for performance.
+ * Creates depth-layered background: sky+moon, mountains, dark trees, medium trees
+ * Each layer is a separate sprite rendered at its own z-level with depth-based opacity
+ * Farther layers appear dimmer both in ambient darkness and when illuminated by bugs
  * @param {Object} k - Kaplay instance
  */
-function createBackCanvas(k) {
+function createDepthLayers(k) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   const screenThird = screenWidth / 3
   //
-  // Render mountains + all back trees into one canvas
+  // Sky layer: background color fill + moon (opaque base, always behind everything)
   //
-  const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const skyPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     ctx.imageSmoothingEnabled = false
-    //
-    // Fill sky with background color for seamless blending
-    //
     ctx.fillStyle = BG_HEX
     ctx.fillRect(0, 0, screenWidth, screenHeight)
-    //
-    // Draw crescent moon with soft glow
-    //
     drawMoon(ctx)
+  })
+  k.loadSprite(BG_SKY_SPRITE, skyPng)
+  k.add([
+    k.z(Z_SKY),
+    {
+      draw() {
+        k.drawSprite({ sprite: BG_SKY_SPRITE, pos: k.vec2(0, 0), anchor: "topleft" })
+      }
+    }
+  ])
+  //
+  // Mountains layer (farthest depth, dimmest)
+  //
+  const mountainsPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.imageSmoothingEnabled = false
     //
-    // Draw three mountains (left, center, right)
+    // Clip mountains to game area boundaries (no overflow into margins)
     //
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(LEFT_MARGIN, 0, PLAY_AREA_WIDTH, screenHeight)
+    ctx.clip()
     drawMountainShape(ctx, LEFT_MOUNTAIN.xOffset, FLOOR_Y, screenThird + LEFT_MOUNTAIN.widthExtra, LEFT_MOUNTAIN, LEFT_MOUNTAIN.colors)
     drawMountainShape(ctx, screenThird + CENTER_MOUNTAIN.xOffset, FLOOR_Y, screenThird + CENTER_MOUNTAIN.widthExtra, CENTER_MOUNTAIN, CENTER_MOUNTAIN.colors)
     drawMountainShape(ctx, screenThird * 2 + RIGHT_MOUNTAIN.xOffset, FLOOR_Y, screenThird + RIGHT_MOUNTAIN.widthExtra, RIGHT_MOUNTAIN, RIGHT_MOUNTAIN.colors)
-    //
-    // Draw dark tree silhouettes (furthest back, single layer)
-    //
+    ctx.restore()
+  })
+  k.loadSprite(MOUNTAINS_SPRITE, mountainsPng)
+  addDepthLayer(k, MOUNTAINS_SPRITE, Z_MOUNTAINS, MOUNTAINS_DEPTH_OPACITY)
+  //
+  // Dark trees layer (far depth)
+  //
+  const darkTreesPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.imageSmoothingEnabled = false
     const darkPeriod = PLAY_AREA_WIDTH / DARK_TREES_COUNT
     for (let i = 0; i < DARK_TREES_COUNT; i++) {
       const x = i * darkPeriod + Math.random() * darkPeriod + LEFT_MARGIN
@@ -1550,9 +1627,14 @@ function createBackCanvas(k) {
         layersSharpness: Math.floor(Math.random() * (DARK_TREES_SHARPNESS_MAX - DARK_TREES_SHARPNESS_MIN) + DARK_TREES_SHARPNESS_MIN)
       })
     }
-    //
-    // Draw medium trees (multi-layered, slightly brighter)
-    //
+  })
+  k.loadSprite(DARK_TREES_SPRITE, darkTreesPng)
+  addDepthLayer(k, DARK_TREES_SPRITE, Z_DARK_TREES, DARK_TREES_DEPTH_OPACITY)
+  //
+  // Medium trees layer (medium depth)
+  //
+  const mediumTreesPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.imageSmoothingEnabled = false
     const bgPeriod = PLAY_AREA_WIDTH / BG_TREES_COUNT
     for (let i = 0; i < BG_TREES_COUNT; i++) {
       const x = i * bgPeriod + Math.random() * bgPeriod + LEFT_MARGIN
@@ -1569,19 +1651,25 @@ function createBackCanvas(k) {
       })
     }
   })
-  k.loadSprite(BACK_CANVAS_SPRITE, png)
-  //
-  // Display back canvas behind creature
-  //
+  k.loadSprite(MEDIUM_TREES_SPRITE, mediumTreesPng)
+  addDepthLayer(k, MEDIUM_TREES_SPRITE, Z_MEDIUM_TREES, MEDIUM_TREES_DEPTH_OPACITY)
+}
+
+/**
+ * Adds a depth layer below darkness with depth-scaled opacity
+ * Shader ambient lets it bleed through faintly; bug light reveals it fully
+ * @param {Object} k - Kaplay instance
+ * @param {string} sprite - Sprite name
+ * @param {number} z - Z-index below darkness
+ * @param {number} depthOpacity - Opacity scaling (farther layers are dimmer)
+ */
+function addDepthLayer(k, sprite, z, depthOpacity) {
   k.add([
-    k.z(Z_BACK_CANVAS),
+    k.z(z),
+    k.opacity(depthOpacity),
     {
       draw() {
-        k.drawSprite({
-          sprite: BACK_CANVAS_SPRITE,
-          pos: k.vec2(0, 0),
-          anchor: "topleft"
-        })
+        k.drawSprite({ sprite, pos: k.vec2(0, 0), anchor: "topleft" })
       }
     }
   ])
@@ -1617,30 +1705,19 @@ function createFrontTrees(k) {
   })
   k.loadSprite(FRONT_TREES_SPRITE, png)
   //
-  // Display front trees in front of creature for depth
+  // Front trees use the same depth layer pattern (closest, brightest)
   //
-  k.add([
-    k.z(Z_FRONT_TREES),
-    {
-      draw() {
-        k.drawSprite({
-          sprite: FRONT_TREES_SPRITE,
-          pos: k.vec2(0, 0),
-          anchor: "topleft"
-        })
-      }
-    }
-  ])
+  addDepthLayer(k, FRONT_TREES_SPRITE, Z_FRONT_TREES, FRONT_TREES_DEPTH_OPACITY)
 }
 
 /**
- * Creates dark clouds under the top wall, adapted from touch level 2
+ * Creates dark clouds as a pre-rendered sprite clipped to game area boundaries
  * Dense layer at top for solid coverage, sparse layer below for wispy effect
  * @param {Object} k - Kaplay instance
  */
 function createClouds(k) {
-  const baseColor = k.rgb(CLOUD_BASE_COLOR_R, CLOUD_BASE_COLOR_G, CLOUD_BASE_COLOR_B)
   const screenWidth = CFG.visual.screen.width
+  const screenHeight = CFG.visual.screen.height
   const cloudStartX = LEFT_MARGIN + 50
   const cloudEndX = screenWidth - RIGHT_MARGIN - 50
   const cloudWidth = cloudEndX - cloudStartX
@@ -1683,84 +1760,87 @@ function createClouds(k) {
     }
   ]
   //
-  // Generate dense layer clouds at top (solid coverage, no gaps)
+  // Pre-render all clouds onto a canvas clipped to game area
   //
-  const denseSpacing = cloudWidth / (CLOUD_DENSE_COUNT - 1)
-  for (let i = 0; i < CLOUD_DENSE_COUNT; i++) {
-    const baseX = cloudStartX + denseSpacing * i
-    const randomOffset = (Math.random() - 0.5) * (denseSpacing * 0.6)
-    const cloudX = baseX + randomOffset
+  const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    ctx.imageSmoothingEnabled = true
     //
-    // Distribute into 2 rows for solid coverage
+    // Clip drawing to game area so clouds never overflow into margins
     //
-    const rowIndex = i % 2
-    const cloudY = CLOUD_DENSE_Y + rowIndex * 8 + (Math.random() - 0.5) * 3
-    const cloudType = cloudTypes[i % cloudTypes.length]
-    const sizeVariation = 1.0 + Math.random() * 0.4
-    const mainSize = cloudType.mainSize * sizeVariation
-    addCloudObject(k, cloudX, cloudY, mainSize, cloudType, baseColor)
-  }
-  //
-  // Generate sparse layer clouds below (fewer, more spread out)
-  //
-  const sparseSpacing = cloudWidth / (CLOUD_SPARSE_COUNT - 1)
-  for (let i = 0; i < CLOUD_SPARSE_COUNT; i++) {
-    const baseX = cloudStartX + sparseSpacing * i
-    const randomOffset = (Math.random() - 0.5) * 40
-    const cloudX = baseX + randomOffset
-    const sparseRange = CLOUD_SPARSE_Y_MAX - CLOUD_SPARSE_Y_MIN
-    const cloudY = CLOUD_SPARSE_Y_MIN + Math.random() * Math.random() * sparseRange
-    const cloudType = cloudTypes[(i + CLOUD_DENSE_COUNT) % cloudTypes.length]
-    const sizeVariation = 1.0 + Math.random() * 0.3
-    const mainSize = cloudType.mainSize * sizeVariation
-    addCloudObject(k, cloudX, cloudY, mainSize, cloudType, baseColor)
-  }
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(LEFT_MARGIN, TOP_MARGIN, PLAY_AREA_WIDTH, screenHeight - TOP_MARGIN - BOTTOM_MARGIN)
+    ctx.clip()
+    //
+    // Draw dense layer clouds at top (solid coverage, no gaps)
+    //
+    const denseSpacing = cloudWidth / (CLOUD_DENSE_COUNT - 1)
+    for (let i = 0; i < CLOUD_DENSE_COUNT; i++) {
+      const baseX = cloudStartX + denseSpacing * i
+      const randomOffset = (Math.random() - 0.5) * (denseSpacing * 0.6)
+      const cloudX = baseX + randomOffset
+      const rowIndex = i % 2
+      const cloudY = CLOUD_DENSE_Y + rowIndex * 8 + (Math.random() - 0.5) * 3
+      const cloudType = cloudTypes[i % cloudTypes.length]
+      const sizeVariation = 1.0 + Math.random() * 0.4
+      const mainSize = cloudType.mainSize * sizeVariation
+      drawCloudOnCanvas(ctx, cloudX, cloudY, mainSize, cloudType)
+    }
+    //
+    // Draw sparse layer clouds below (fewer, more spread out)
+    //
+    const sparseSpacing = cloudWidth / (CLOUD_SPARSE_COUNT - 1)
+    for (let i = 0; i < CLOUD_SPARSE_COUNT; i++) {
+      const baseX = cloudStartX + sparseSpacing * i
+      const randomOffset = (Math.random() - 0.5) * 40
+      const cloudX = baseX + randomOffset
+      const sparseRange = CLOUD_SPARSE_Y_MAX - CLOUD_SPARSE_Y_MIN
+      const cloudY = CLOUD_SPARSE_Y_MIN + Math.random() * Math.random() * sparseRange
+      const cloudType = cloudTypes[(i + CLOUD_DENSE_COUNT) % cloudTypes.length]
+      const sizeVariation = 1.0 + Math.random() * 0.3
+      const mainSize = cloudType.mainSize * sizeVariation
+      drawCloudOnCanvas(ctx, cloudX, cloudY, mainSize, cloudType)
+    }
+    ctx.restore()
+  })
+  k.loadSprite(CLOUDS_SPRITE, png)
+  k.add([
+    k.z(Z_CLOUDS),
+    {
+      draw() {
+        k.drawSprite({ sprite: CLOUDS_SPRITE, pos: k.vec2(0, 0), anchor: "topleft" })
+      }
+    }
+  ])
 }
 
 /**
- * Adds a single cloud game object with puff circles at the given position
- * @param {Object} k - Kaplay instance
+ * Draws a single cloud with puff circles onto a canvas context
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
  * @param {number} x - Cloud center X
  * @param {number} y - Cloud center Y
  * @param {number} mainSize - Main circle radius
  * @param {Object} cloudType - Cloud template with puffs and opacity
- * @param {Object} color - Kaplay color object
  */
-function addCloudObject(k, x, y, mainSize, cloudType, color) {
+function drawCloudOnCanvas(ctx, x, y, mainSize, cloudType) {
   const opacityVariation = 0.9 + Math.random() * 0.2
   const opacity = cloudType.opacity * opacityVariation
+  const colorStr = `rgba(${CLOUD_BASE_COLOR_R}, ${CLOUD_BASE_COLOR_G}, ${CLOUD_BASE_COLOR_B}, ${opacity})`
+  ctx.fillStyle = colorStr
   //
-  // Capture puff data for draw closure
+  // Main cloud body
   //
-  const puffs = cloudType.puffs
-  k.add([
-    k.pos(x, y),
-    k.z(Z_CLOUDS),
-    {
-      draw() {
-        //
-        // Main cloud body
-        //
-        k.drawCircle({
-          radius: mainSize,
-          pos: k.vec2(0, 0),
-          color,
-          opacity
-        })
-        //
-        // Draw puff circles around main body
-        //
-        puffs.forEach(puff => {
-          k.drawCircle({
-            radius: mainSize * puff.radius,
-            pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
-            color,
-            opacity
-          })
-        })
-      }
-    }
-  ])
+  ctx.beginPath()
+  ctx.arc(x, y, mainSize, 0, Math.PI * 2)
+  ctx.fill()
+  //
+  // Draw puff circles around main body
+  //
+  cloudType.puffs.forEach(puff => {
+    ctx.beginPath()
+    ctx.arc(x + puff.offsetX * mainSize, y + puff.offsetY * mainSize, mainSize * puff.radius, 0, Math.PI * 2)
+    ctx.fill()
+  })
 }
 
 /**
@@ -1973,17 +2053,18 @@ vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
  * @param {Object} k - Kaplay instance
  * @param {Object} glowBugInst - Main glow bug manager
  * @param {Object} trapBugInst - Trap platform glow bug manager
+ * @param {Object} bottomBugInst - Bottom wall glow bug manager
  * @param {Object} creatureInst - Shadow creature instance
  * @param {number} gaWidth - Game area width
  * @param {number} gaHeight - Game area height
  * @returns {Object} Shader uniforms object
  */
-function collectLightUniforms(k, glowBugInst, trapBugInst, creatureInst, gaWidth, gaHeight) {
+function collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, gaWidth, gaHeight) {
   const lights = []
   //
   // Only glowing bugs emit light (non-glowing bugs are visible above darkness without glow)
   //
-  const allEntries = [...glowBugInst.entries, ...trapBugInst.entries]
+  const allEntries = [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries]
   allEntries.forEach(entry => {
     entry.isGlowing && lights.push({
       x: entry.bug.x,
@@ -2072,3 +2153,4 @@ function drawMoonOverlay(k) {
     })
   })
 }
+

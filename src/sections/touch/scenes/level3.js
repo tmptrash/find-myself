@@ -575,6 +575,10 @@ export function sceneLevel3(k) {
     const trapThornEndX = trapLeftEdge + trapHalfWidth * TRAP_LEFT_THORN_COVERAGE - TRAP_THORN_INSET
     const trapLeftThorns = generateTrapThorns(trapThornStartX, trapThornEndX, trapPlat.y)
     //
+    // Store initial thorn X positions for absolute offset calculation
+    //
+    trapLeftThorns.forEach(thorn => { thorn.initialX = thorn.x })
+    //
     // Split trap platform grass blades into left/right half groups
     //
     const trapLeftBlades = []
@@ -586,6 +590,11 @@ export function sceneLevel3(k) {
       if (blade.x < platLeft || blade.x > platRight) return
       blade.x < trapPlat.x ? trapLeftBlades.push(blade) : trapRightBlades.push(blade)
     })
+    //
+    // Store initial blade X positions for absolute offset calculation
+    //
+    trapLeftBlades.forEach(blade => { blade.initialX = blade.x })
+    trapRightBlades.forEach(blade => { blade.initialX = blade.x })
     //
     // Draw hanging vines (behind platforms)
     //
@@ -747,24 +756,20 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
   //
   // Update trap platform split animation and sync hero position
   //
-  const prevLeftX = trapState.leftCenterX
   const prevRightX = trapState.rightCenterX
   updateTrapPlatform(trapState, heroInst, dt)
   //
-  // Sync trap grass blades with platform half movement
+  // Sync trap blades and thorns using absolute offsets (prevents drift and flickering)
   //
-  const leftDeltaX = trapState.leftCenterX - prevLeftX
-  const rightDeltaX = trapState.rightCenterX - prevRightX
-  if (leftDeltaX !== 0) {
-    trapLeftBlades.forEach(blade => { blade.x += leftDeltaX })
-    trapLeftThorns.forEach(thorn => { thorn.x += leftDeltaX })
-  }
-  if (rightDeltaX !== 0) {
-    trapRightBlades.forEach(blade => { blade.x += rightDeltaX })
-  }
+  const leftOffset = trapState.leftCenterX - trapState.initialLeftCenterX
+  const rightOffset = trapState.rightCenterX - trapState.initialRightCenterX
+  trapLeftBlades.forEach(blade => { blade.x = blade.initialX + leftOffset })
+  trapLeftThorns.forEach(thorn => { thorn.x = thorn.initialX + leftOffset })
+  trapRightBlades.forEach(blade => { blade.x = blade.initialX + rightOffset })
   //
   // Sync trap bug position and bounds with the right half movement delta
   //
+  const rightDeltaX = trapState.rightCenterX - prevRightX
   if (rightDeltaX !== 0 && trapBugInst.entries) {
     trapBugInst.entries.forEach(entry => {
       entry.bug.x += rightDeltaX

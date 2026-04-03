@@ -171,6 +171,7 @@ const MOUNTAINS_DEPTH_OPACITY = 0.15
 const DARK_TREES_DEPTH_OPACITY = 0.70
 const MEDIUM_TREES_DEPTH_OPACITY = 0.82
 const FRONT_TREES_DEPTH_OPACITY = 0.95
+const PLATFORM_DEPTH_OPACITY = 0.15
 //
 // Mountain snow line position (percentage from base to peak)
 //
@@ -611,6 +612,7 @@ export function sceneLevel3(k) {
     //
     k.add([
       k.z(Z_PLATFORM_VISUALS),
+      k.opacity(PLATFORM_DEPTH_OPACITY),
       {
         draw() {
           drawPlatformVisuals(k, platformDecor)

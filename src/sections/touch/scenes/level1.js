@@ -8,6 +8,7 @@ import * as LevelIndicator from '../components/level-indicator.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, getRGB } from '../../../utils/helper.js'
+import * as FallingLeaf from '../components/falling-leaf.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -84,9 +85,9 @@ export function sceneLevel1(k) {
       })
     })
     //
-    // Create dark background clouds in the distance at the top
+    // Generate dark background cloud data (baked into back canvas below)
     //
-    createBackgroundClouds(k)
+    const cloudConfigs = createCloudConfigs(k)
     //
     // Create grass/bushes/trees decoration with parallax depth layers
     //
@@ -475,23 +476,32 @@ export function sceneLevel1(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Create two background canvases: one for back layer, one for middle+front
+    // Create two background canvases:
+    // 1. Back canvas (z=2): clouds + back trees + middle trees
+    // 2. Front static canvas (z=7): 60% of front trees (static ones)
     //
-    const createBackLayerCanvas = () => {
+    const createBackCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         //
-        // 1. Draw darkened ground area (removed to avoid dark line)
+        // Draw clouds first (furthest back)
         //
+        drawCloudsToCanvas(ctx, cloudConfigs)
         //
-        // 2. Draw back layer only (layerIndex 0)
+        // Draw back layer trees
         //
         if (layers[0]) {
           drawLayerToCanvas(ctx, layers[0], 0, null)
         }
+        //
+        // Draw middle layer trees
+        //
+        if (layers[1]) {
+          drawLayerToCanvas(ctx, layers[1], 0, null)
+        }
       })
     }
     
-    const createMiddleFrontCanvas = () => {
+    const createFrontStaticCanvas = () => {
       //
       // Calculate dynamic tree indices (will be drawn separately)
       //
@@ -504,15 +514,6 @@ export function sceneLevel1(k) {
       }
       
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        //
-        // 1. Draw middle layer (all trees)
-        //
-        if (layers[1]) {
-          drawLayerToCanvas(ctx, layers[1], 0, null)
-        }
-        //
-        // 2. Draw 60% of front layer trees (exclude dynamic trees)
-        //
         if (layers[2]) {
           const staticTrees = layers[2].trees.filter((_, i) => !dynamicTreesSet.has(i))
           const frontLayerStatic = {
@@ -605,12 +606,12 @@ export function sceneLevel1(k) {
       }
     }
     
-    const backLayerDataURL = createBackLayerCanvas()
-    const middleFrontDataURL = createMiddleFrontCanvas()
-    const backTexture = k.loadSprite('bg-touch-back', backLayerDataURL)
-    const middleFrontTexture = k.loadSprite('bg-touch-middle-front', middleFrontDataURL)
+    const backDataURL = createBackCanvas()
+    const frontStaticDataURL = createFrontStaticCanvas()
+    k.loadSprite('bg-touch-back', backDataURL)
+    k.loadSprite('bg-touch-front-static', frontStaticDataURL)
     //
-    // Draw back layer canvas (before big bugs, z=2)
+    // Draw back canvas: clouds + back trees + middle trees (z=2)
     //
     k.add([
       k.z(2),
@@ -625,14 +626,14 @@ export function sceneLevel1(k) {
       }
     ])
     //
-    // Draw middle+front layer canvas (after big bugs, z=7)
+    // Draw front static trees canvas (z=7, in front of birds at z=5)
     //
     k.add([
       k.z(7),
       {
         draw() {
           k.drawSprite({
-            sprite: 'bg-touch-middle-front',
+            sprite: 'bg-touch-front-static',
             pos: k.vec2(0, 0),
             anchor: "topleft"
           })
@@ -1370,6 +1371,17 @@ export function sceneLevel1(k) {
       }
     ])
     //
+    // Create falling leaves system (leaves detach from TreeRoots trees)
+    //
+    const fallingLeafInst = FallingLeaf.create({
+      k,
+      treeRoots: treeRootsInst,
+      floorY: FLOOR_Y,
+      hero: heroInst,
+      leftBound: LEFT_MARGIN,
+      rightBound: CFG.visual.screen.width - RIGHT_MARGIN
+    })
+    //
     // Create bugs (obstacles)
     //
     //
@@ -1402,6 +1414,10 @@ export function sceneLevel1(k) {
       // Update tree shake animations
       //
       TreeRoots.onUpdate(treeRootsInst)
+      //
+      // Update falling leaves (spawn, fall, ground interaction)
+      //
+      FallingLeaf.onUpdate(fallingLeafInst)
       
       //
       // Update pause timer if sequence was completed
@@ -1852,109 +1868,72 @@ export function sceneLevel1(k) {
     //
     // ESC key to return to menu
     //
-    function createBackgroundClouds(k) {
-      //
-      // Dark cloud parameters (similar to back layer trees)
-      //
-      const cloudTopY = TOP_MARGIN + 20  // Top Y position for clouds
-      const cloudBottomY = TOP_MARGIN + 100  // Bottom Y position
-      const baseCloudColor = k.rgb(36, 37, 36)  // Same color as back layer trees
-      
-      //
-      // Create clouds spread horizontally across the screen (similar to tree distribution)
-      //
+    /**
+     * Generate cloud configuration data (no game objects created).
+     * Cloud data is baked into the back canvas via drawCloudsToCanvas.
+     */
+    function createCloudConfigs(k) {
+      const cloudTopY = TOP_MARGIN + 20
+      const cloudBottomY = TOP_MARGIN + 100
       const screenWidth = k.width()
       const cloudStartX = LEFT_MARGIN + 50
       const cloudEndX = screenWidth - RIGHT_MARGIN - 50
       const cloudCoverageWidth = cloudEndX - cloudStartX
-      
-      //
-      // Create clouds similar to back layer trees (18 trees, so 18 clouds)
-      //
-      const cloudCount = 18  // Same count as back layer trees
+      const cloudCount = 18
       const cloudSpacing = cloudCoverageWidth / (cloudCount - 1)
-      
-      //
-      // Generate cloud configurations (similar to tree crown structure)
-      //
-      const cloudConfigs = []
-      
+      const configs = []
+
       for (let i = 0; i < cloudCount; i++) {
         const baseX = cloudStartX + cloudSpacing * i
-        //
-        // Add randomness similar to trees (randomness = 20 for back layer)
-        //
         const randomness = 20
-        const randomOffset = (Math.random() - 0.5) * randomness
-        const cloudX = baseX + randomOffset
-        //
-        // Random vertical position within cloud area
-        //
+        const cloudX = baseX + (Math.random() - 0.5) * randomness
         const randomY = cloudTopY + Math.random() * (cloudBottomY - cloudTopY)
-        //
-        // Crown size similar to trees: (50 + Math.random() * 60) * scale
-        // For clouds, use similar range but slightly smaller scale
-        //
-        const crownSize = (50 + Math.random() * 60) * 1.2  // Similar to trees but slightly smaller
-        //
-        // Number of circles (crowns) similar to trees: 5 + Math.floor(Math.random() * 4) = 5-8
-        //
-        const crownCount = 5 + Math.floor(Math.random() * 4)  // 5-8 circles, same as trees
+        const crownSize = (50 + Math.random() * 60) * 1.2
+        const crownCount = 5 + Math.floor(Math.random() * 4)
         const crowns = []
-        
-        //
-        // Generate crown circles similar to tree crowns
-        //
+
         for (let j = 0; j < crownCount; j++) {
-          //
-          // Offset similar to trees: (Math.random() - 0.5) * crownSize * 0.7 for X, * 0.5 for Y
-          //
           crowns.push({
             offsetX: (Math.random() - 0.5) * crownSize * 0.7,
             offsetY: (Math.random() - 0.5) * crownSize * 0.5,
-            sizeVariation: 0.6 + Math.random() * 0.6,  // Same as trees: 0.6-1.2
-            opacityVariation: 0.7 + Math.random() * 0.2  // Same as trees: 0.7-0.9
+            sizeVariation: 0.6 + Math.random() * 0.6,
+            opacityVariation: 0.7 + Math.random() * 0.2
           })
         }
-        //
-        // Opacity similar to trees: 0.85 + Math.random() * 0.1
-        //
-        const baseOpacity = 0.85 + Math.random() * 0.1
-        
-        cloudConfigs.push({
+
+        configs.push({
           x: cloudX,
           y: randomY,
-          crownSize: crownSize,
-          crowns: crowns,
-          color: baseCloudColor,
-          opacity: baseOpacity
+          crownSize,
+          crowns,
+          colorR: 36,
+          colorG: 37,
+          colorB: 36,
+          opacity: 0.85 + Math.random() * 0.1
         })
       }
-      
-      //
-      // Create visual cloud layer (background, behind everything)
-      //
-      cloudConfigs.forEach((cloudConfig) => {
-        k.add([
-          k.pos(cloudConfig.x, cloudConfig.y),
-          k.z(1),  // Between background (-100) and back trees (z=2), so clouds are visible
-          {
-            draw() {
-              //
-              // Draw cloud as multiple circles (similar to tree crowns)
-              //
-              cloudConfig.crowns.forEach((crown) => {
-                k.drawCircle({
-                  radius: cloudConfig.crownSize * crown.sizeVariation,
-                  pos: k.vec2(crown.offsetX, crown.offsetY),
-                  color: cloudConfig.color,
-                  opacity: cloudConfig.opacity * crown.opacityVariation
-                })
-              })
-            }
-          }
-        ])
-      })
+      return configs
+    }
+    /**
+     * Render cloud configs onto a 2D canvas context
+     */
+    function drawCloudsToCanvas(ctx, configs) {
+      for (const cloud of configs) {
+        for (const crown of cloud.crowns) {
+          const r = cloud.crownSize * crown.sizeVariation
+          const opacity = cloud.opacity * crown.opacityVariation
+          ctx.fillStyle = `rgba(${cloud.colorR}, ${cloud.colorG}, ${cloud.colorB}, ${opacity})`
+          ctx.beginPath()
+          ctx.arc(
+            cloud.x + crown.offsetX,
+            cloud.y + crown.offsetY,
+            r,
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+        }
+      }
     }
     
     k.onKeyPress("escape", () => {

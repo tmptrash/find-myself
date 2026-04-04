@@ -425,16 +425,7 @@ export async function create(config) {
       })
       
       //
-      // Draw leaf clusters to canvas
-      //
-      leafClusters.forEach(cluster => {
-        cluster.forEach(leaf => {
-          drawLeafToCanvas(treeCtx, leaf.x + offsetX, leaf.y + offsetY, leaf.size, leaf.rotation, leaf.color, leaf.opacity)
-        })
-      })
-      
-      //
-      // Draw branch segments to canvas
+      // Draw branch segments to canvas (leaves are drawn dynamically now)
       //
       allBranchSegments.forEach(segment => {
         const opacity = 0.7 - segment.depth * 0.07
@@ -458,6 +449,7 @@ export async function create(config) {
       minY,
       padding,
       centerY,
+      leafClusters,
       trunkTop: { x: trunkX, y: trunkY },
       trunkBottom: { x: rootX, y: centerY },
       noteFrequency: notes[index],
@@ -747,15 +739,22 @@ export function onUpdate(inst) {
 export function draw(inst) {
   const { k, roots } = inst
   const time = k.time()
-  
+
   roots.forEach(root => {
     //
     // Only shake when touched (no natural sway)
     //
     const touchShakeOffset = Math.sin(time * 30) * root.touchShake
-    
     //
-    // Draw pre-rendered tree sprite
+    // Draw leaves dynamically BEFORE the sprite so branches cover them
+    //
+    for (const cluster of root.leafClusters) {
+      for (const leaf of cluster) {
+        drawLeaf(k, leaf.x + touchShakeOffset, leaf.y, leaf.size, leaf.rotation, leaf.color, leaf.opacity)
+      }
+    }
+    //
+    // Draw pre-rendered tree sprite (roots + branches only)
     // Sprite's top-left corner is at (minX - padding, minY - padding)
     //
     k.drawSprite({

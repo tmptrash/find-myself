@@ -273,6 +273,18 @@ export function sceneMenu(k) {
         })
       }
       //
+      // Preload section-colored variant for accurate hover/completed color
+      // (avoids dark tinting that occurs when multiplying gray × section color)
+      //
+      Hero.loadHeroSprites({
+        k,
+        type: Hero.HEROES.ANTIHERO,
+        bodyColor: config.color.body,
+        outlineColor: CFG.visual.colors.outline,
+        addMouth: config.section === 'word' || config.section === 'touch',
+        addArms: config.section === 'touch'
+      })
+      //
       // Cache sprite prefixes for outline switching
       // Remove # from colors to match loadHeroSprites prefix format
       //
@@ -280,13 +292,15 @@ export function sceneMenu(k) {
       const grayOutlineColorNoHash = grayOutlineColor.replace('#', '')
       const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
       const yellowColorNoHash = yellowColor.replace('#', '')
+      const sectionColorNoHash = config.color.body.replace('#', '')
       const hasMouth = config.section === 'word' || config.section === 'touch'
       const hasArms = config.section === 'touch'
       const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}`
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}` : null
-      antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixBlack : antiHeroInst.spritePrefixGray
+      antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
+      antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
       //
       // Store base position and phase offsets for floating animation
       //
@@ -609,10 +623,11 @@ export function sceneMenu(k) {
           desiredPrefix = antiHeroInst.spritePrefixYellow
         } else if (shouldUseBlackOutline) {
           //
-          // Hovered OR completed: show section color
+          // Hovered OR completed: use section-colored sprite with white tint
+          // (colored sprite avoids the dark tinting from gray × color multiplication)
           //
           targetColor = antiHeroInst.sectionColor
-          desiredPrefix = antiHeroInst.spritePrefixBlack
+          desiredPrefix = antiHeroInst.spritePrefixColored
         } else {
           //
           // Not hovered and not completed: gray
@@ -621,17 +636,9 @@ export function sceneMenu(k) {
           desiredPrefix = antiHeroInst.spritePrefixGray
         }
         //
-        // Apply color tint: white for states with baked-in body color (gray idle, yellow time),
-        // section color for hover/completed states that need colorizing
+        // White tint for all states since sprites now have correct colors baked in
         //
-        const useWhiteTint = desiredPrefix === antiHeroInst.spritePrefixGray ||
-          (antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isHovered))
-        if (useWhiteTint) {
-          antiHeroInst.character.color = k.rgb(255, 255, 255)
-        } else {
-          const rgb = getRGB(k, targetColor)
-          antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b)
-        }
+        antiHeroInst.character.color = k.rgb(255, 255, 255)
         //
         // Switch sprite variant if needed
         //
@@ -1244,16 +1251,13 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     const hoverOffset = Math.sin(titleInst.hoverPhase) * titleInst.hoverRange
     titleInst.targetAngle = titleInst.hoverAngle + hoverOffset
     //
-    // Change to anti-hero's color
-    // Special handling for time section: use yellow color directly
+    // Change to anti-hero's section color
     //
-    let targetColor
-    if (hoveredAntiHero.section === 'time') {
-      const yellowRgb = getRGB(k, '#FF8C00')
-      targetColor = k.rgb(yellowRgb.r, yellowRgb.g, yellowRgb.b)
-    } else {
-      targetColor = hoveredAntiHero.character.color
-    }
+    const sectionHex = hoveredAntiHero.section === 'time'
+      ? '#FF8C00'
+      : hoveredAntiHero.sectionColor
+    const sectionRgb = getRGB(k, sectionHex)
+    const targetColor = k.rgb(sectionRgb.r, sectionRgb.g, sectionRgb.b)
     titleInst.letters.forEach(letter => {
       letter.color.r += (targetColor.r - letter.color.r) * 5 * dt
       letter.color.g += (targetColor.g - letter.color.g) * 5 * dt

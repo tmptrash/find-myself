@@ -545,7 +545,7 @@ export function sceneLevel2(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k })
+    const fpsCounter = FpsCounter.create({ k, showTimer: true })
     //
     // Update FPS counter
     //

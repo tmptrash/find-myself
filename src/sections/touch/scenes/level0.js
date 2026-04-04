@@ -8,7 +8,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { toPng } from '../../../utils/helper.js'
+import { toPng, getRGB } from '../../../utils/helper.js'
 import { drawThorns } from '../components/jungle-decor.js'
 //
 // Bug constants (from bugs.js)
@@ -88,6 +88,18 @@ const LIFE_PARTICLE_LIFETIME_MIN = 0.8
 const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
 const LIFE_PARTICLE_SIZE_MIN = 4
 const LIFE_PARTICLE_SIZE_EXTRA = 4
+//
+// Speed bonus effects (flash small hero + particles on quick completion)
+//
+const SPEED_BONUS_FLASH_COUNT = 20
+const SPEED_BONUS_FLASH_INTERVAL = 0.05
+const SPEED_BONUS_PARTICLE_COUNT = 8
+const SPEED_BONUS_PARTICLE_SPEED_MIN = 30
+const SPEED_BONUS_PARTICLE_SPEED_RANGE = 20
+const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
+const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
+const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
+const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 //
 // Anti-hero platform (right side, above hero height)
 //
@@ -1295,10 +1307,22 @@ export function sceneLevel0(k) {
       antiHero: antiHeroInst,
       onAnnihilation: () => {
         //
-        // Transition after annihilation to next level
+        // Check for speed bonus before scoring
         //
-        createLevelTransition(k, 'level-touch.0', () => {
-          k.go('level-touch.1')
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(levelTime)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 3 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator?.updateHeroScore?.(newScore)
+        sound && Sound.playVictorySound(sound)
+        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        k.wait(transitionDelay, () => {
+          createLevelTransition(k, 'level-touch.0', () => {
+            k.go('level-touch.1')
+          })
         })
       },
       currentLevel: 'level-touch.0',
@@ -1833,7 +1857,13 @@ export function sceneLevel0(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k })
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      targetTime: CFG.gameplay.speedBonusTime
+        ? CFG.gameplay.speedBonusTime['level-touch.0']
+        : null
+    })
     //
     // Update FPS counter
     //
@@ -2228,4 +2258,91 @@ function createBackgroundClouds(k) {
       }
     ])
   })
+}
+
+/**
+ * Check if player earned speed bonus for completing level faster than target
+ * @param {number} levelTime - Time taken to complete level (seconds)
+ * @returns {boolean} True if speed bonus earned
+ */
+function checkSpeedBonus(levelTime) {
+  const targetTime = CFG.gameplay.speedBonusTime
+    && CFG.gameplay.speedBonusTime['level-touch.0']
+  if (!targetTime) return false
+  return levelTime < targetTime
+}
+
+/**
+ * Play speed bonus visual effects on the small hero indicator
+ * Flashes hero color/white and creates circle particles flying outward
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ */
+function playSpeedBonusEffects(k, levelIndicator) {
+  if (!levelIndicator?.smallHero?.character) return
+  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.sections.touch.body
+  const heroColor = getRGB(k, bodyColorHex)
+  flashSmallHeroBonus(k, levelIndicator, heroColor, 0)
+  createSpeedBonusParticles(k, levelIndicator, heroColor)
+}
+
+/**
+ * Flash small hero between hero color and white for speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero body
+ * @param {number} count - Current flash iteration
+ */
+function flashSmallHeroBonus(k, levelIndicator, heroColor, count) {
+  if (count >= SPEED_BONUS_FLASH_COUNT) {
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
+    return
+  }
+  levelIndicator.smallHero.character.color = count % 2 === 0
+    ? heroColor
+    : k.rgb(255, 255, 255)
+  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, heroColor, count + 1))
+}
+
+/**
+ * Create circle particles flying outward from small hero on speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero body
+ */
+function createSpeedBonusParticles(k, levelIndicator, heroColor) {
+  if (!levelIndicator?.smallHero?.character) return
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  for (let i = 0; i < SPEED_BONUS_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / SPEED_BONUS_PARTICLE_COUNT
+    const speed = SPEED_BONUS_PARTICLE_SPEED_MIN + Math.random() * SPEED_BONUS_PARTICLE_SPEED_RANGE
+    const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
+    const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
+    //
+    // Create small circle particle matching hero body color
+    //
+    const particle = k.add([
+      k.circle(size),
+      k.pos(heroX, heroY),
+      k.color(heroColor.r, heroColor.g, heroColor.b),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      age += dt
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      if (age >= lifetime && particle.exists?.()) {
+        k.destroy(particle)
+      }
+    })
+  }
 }

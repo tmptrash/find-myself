@@ -493,7 +493,10 @@ export function destroy(inst) {
   if (!inst.isActive) return
   
   inst.isActive = false
-  
+  //
+  // Play break / scatter sound
+  //
+  inst.sfx && Sound.playPyramidBreakSound(inst.sfx)
   //
   // Restore bugs to normal behavior and scatter them
   //

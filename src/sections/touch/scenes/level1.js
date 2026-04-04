@@ -7,7 +7,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { toPng } from '../../../utils/helper.js'
+import { toPng, getRGB } from '../../../utils/helper.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -15,6 +15,12 @@ const TOP_MARGIN = CFG.visual.gameArea.topMargin
 const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
+//
+// Rounded corner configuration
+//
+const CORNER_RADIUS = 20
+const CORNER_SPRITE_NAME = 'touch1-corner-sprite'
+const WALL_COLOR_HEX = '#1F1F1F'
 //
 // Platform dimensions
 //
@@ -29,6 +35,18 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
 const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
+//
+// Speed bonus effects (flash small hero + particles on quick completion)
+//
+const SPEED_BONUS_FLASH_COUNT = 20
+const SPEED_BONUS_FLASH_INTERVAL = 0.05
+const SPEED_BONUS_PARTICLE_COUNT = 8
+const SPEED_BONUS_PARTICLE_SPEED_MIN = 30
+const SPEED_BONUS_PARTICLE_SPEED_RANGE = 20
+const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
+const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
+const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
+const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 
 /**
  * Level 1 scene for touch section
@@ -939,6 +957,10 @@ export function sceneLevel1(k) {
       CFG.game.platformName
     ])
     //
+    // Create rounded corners at all four game area corners
+    //
+    createRoundedCorners(k)
+    //
     // Create level indicator (TOUCH letters)
     //
     //
@@ -947,7 +969,7 @@ export function sceneLevel1(k) {
     const isWordComplete = get('word', false)
     const isTimeComplete = get('time', false)
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
-    LevelIndicator.create({
+    const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 1,
       activeColor: '#8B5A50',
@@ -979,7 +1001,8 @@ export function sceneLevel1(k) {
       y: ANTIHERO_SPAWN_Y,
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
-      bodyColor: '#B0B0B0'  // Gray color for inactive state
+      bodyColor: '#B0B0B0',  // Gray color for inactive state
+      addArms: true
     })
     
     //
@@ -1002,6 +1025,10 @@ export function sceneLevel1(k) {
     // Minimum pause after completing sequence before it's considered valid
     //
     const SEQUENCE_PAUSE_MINIMUM = 1.0  // 1 second
+    //
+    // Pause before anti-hero starts playing the melody
+    //
+    const MELODY_PRE_PLAY_DELAY = 1.0  // 1 second
     
     //
     // Note names for display
@@ -1037,8 +1064,10 @@ export function sceneLevel1(k) {
           }
         }
       }
-      
-      playNextNote()
+      //
+      // Wait before playing the first note so player can see the bubble
+      //
+      k.wait(MELODY_PRE_PLAY_DELAY, playNextNote)
     }
     
     //
@@ -1287,10 +1316,22 @@ export function sceneLevel1(k) {
       antiHero: gameState.antiHeroActive ? antiHeroInst : null,
       onAnnihilation: () => {
         //
-        // Transition after annihilation to next level
+        // Check for speed bonus before scoring
         //
-        createLevelTransition(k, 'level-touch.1', () => {
-          k.go('level-touch.2')
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(levelTime)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 3 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator?.updateHeroScore?.(newScore)
+        sound && Sound.playVictorySound(sound)
+        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        k.wait(transitionDelay, () => {
+          createLevelTransition(k, 'level-touch.1', () => {
+            k.go('level-touch.2')
+          })
         })
       },
       currentLevel: 'level-touch.1',
@@ -1345,7 +1386,13 @@ export function sceneLevel1(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k })
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      targetTime: CFG.gameplay.speedBonusTime
+        ? CFG.gameplay.speedBonusTime['level-touch.1']
+        : null
+    })
     //
     // Update FPS counter and check tree collisions
     //
@@ -1914,4 +1961,161 @@ export function sceneLevel1(k) {
       k.go("menu")
     })
   })
+}
+
+/**
+ * Check if player earned speed bonus for completing level faster than target
+ * @param {number} levelTime - Time taken to complete level (seconds)
+ * @returns {boolean} True if speed bonus earned
+ */
+function checkSpeedBonus(levelTime) {
+  const targetTime = CFG.gameplay.speedBonusTime
+    && CFG.gameplay.speedBonusTime['level-touch.1']
+  if (!targetTime) return false
+  return levelTime < targetTime
+}
+
+/**
+ * Play speed bonus visual effects on the small hero indicator
+ * Flashes hero color/white and creates circle particles flying outward
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ */
+function playSpeedBonusEffects(k, levelIndicator) {
+  if (!levelIndicator?.smallHero?.character) return
+  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.sections.touch.body
+  const heroColor = getRGB(k, bodyColorHex)
+  flashSmallHeroBonus(k, levelIndicator, heroColor, 0)
+  createSpeedBonusParticles(k, levelIndicator, heroColor)
+}
+
+/**
+ * Flash small hero between hero color and white for speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero body
+ * @param {number} count - Current flash iteration
+ */
+function flashSmallHeroBonus(k, levelIndicator, heroColor, count) {
+  if (count >= SPEED_BONUS_FLASH_COUNT) {
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
+    return
+  }
+  levelIndicator.smallHero.character.color = count % 2 === 0
+    ? heroColor
+    : k.rgb(255, 255, 255)
+  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, heroColor, count + 1))
+}
+
+/**
+ * Create circle particles flying outward from small hero on speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero body
+ */
+function createSpeedBonusParticles(k, levelIndicator, heroColor) {
+  if (!levelIndicator?.smallHero?.character) return
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  for (let i = 0; i < SPEED_BONUS_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / SPEED_BONUS_PARTICLE_COUNT
+    const speed = SPEED_BONUS_PARTICLE_SPEED_MIN + Math.random() * SPEED_BONUS_PARTICLE_SPEED_RANGE
+    const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
+    const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
+    //
+    // Create small circle particle matching hero body color
+    //
+    const particle = k.add([
+      k.circle(size),
+      k.pos(heroX, heroY),
+      k.color(heroColor.r, heroColor.g, heroColor.b),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      age += dt
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      if (age >= lifetime && particle.exists?.()) {
+        k.destroy(particle)
+      }
+    })
+  }
+}
+
+/**
+ * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
+ * @param {number} radius - Corner radius in pixels
+ * @param {string} color - Fill color in hex format
+ * @returns {string} Data URL of the corner sprite
+ */
+function createRoundedCornerSprite(radius, color) {
+  const canvas = document.createElement('canvas')
+  canvas.width = radius
+  canvas.height = radius
+  const ctx = canvas.getContext('2d')
+  //
+  // Draw L-shaped corner with rounded inner angle
+  //
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, radius, radius)
+  //
+  // Cut out quarter circle to create rounded inner corner
+  //
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(radius, radius, radius, 0, Math.PI * 2)
+  ctx.fill()
+  return canvas.toDataURL()
+}
+
+/**
+ * Creates rounded corners at all four corners of the game area
+ * @param {Object} k - Kaplay instance
+ */
+function createRoundedCorners(k) {
+  const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
+  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  //
+  // Top-left corner
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, TOP_MARGIN),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Top-right corner (rotate 90°)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, TOP_MARGIN),
+    k.rotate(90),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-left corner (rotate 270°) — at FLOOR_Y (raised platform)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(LEFT_MARGIN, FLOOR_Y),
+    k.rotate(270),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
+  //
+  // Bottom-right corner (rotate 180°) — at FLOOR_Y (raised platform)
+  //
+  k.add([
+    k.sprite(CORNER_SPRITE_NAME),
+    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, FLOOR_Y),
+    k.rotate(180),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ])
 }

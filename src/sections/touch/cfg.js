@@ -7,6 +7,16 @@ export const TOUCH_CFG = {
   game: {
     jumpForce: 760  // Higher jump force for touch section (vs 640 in word section)
   },
+  gameplay: {
+    //
+    // Target time for speed bonus (in seconds) for each level
+    // Player gets 3 bonus points if completing level faster than this
+    //
+    speedBonusTime: {
+      'level-touch.0': 240,  // Level 0: 4 minutes
+      'level-touch.1': 40    // Level 1: 40 seconds
+    }
+  },
   visual: {
     //
     // Colors specific to touch section

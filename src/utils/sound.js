@@ -2091,7 +2091,7 @@ export function playPyramidStackSound(inst) {
   // Master volume (direct to speakers)
   //
   const master = ctx.createGain()
-  master.gain.setValueAtTime(0.6, now)
+  master.gain.setValueAtTime(1.0, now)
   master.connect(ctx.destination)
   //
   // Layer 1: filtered noise burst (wood crack / snap texture)
@@ -2112,7 +2112,7 @@ export function playPyramidStackSound(inst) {
   noiseFilter.Q.value = 2
   const noiseEnv = ctx.createGain()
   noiseEnv.gain.setValueAtTime(0, now)
-  noiseEnv.gain.linearRampToValueAtTime(0.9, now + 0.004)
+  noiseEnv.gain.linearRampToValueAtTime(1.0, now + 0.004)
   noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + noiseDur)
   noise.connect(noiseFilter)
   noiseFilter.connect(noiseEnv)
@@ -2128,13 +2128,98 @@ export function playPyramidStackSound(inst) {
   thump.frequency.setValueAtTime(120, now)
   thump.frequency.exponentialRampToValueAtTime(40, now + 0.18)
   thumpEnv.gain.setValueAtTime(0, now)
-  thumpEnv.gain.linearRampToValueAtTime(0.7, now + 0.008)
+  thumpEnv.gain.linearRampToValueAtTime(1.0, now + 0.008)
   thumpEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.18)
   thump.connect(thumpEnv)
   thumpEnv.connect(master)
   thump.start(now)
   thump.stop(now + 0.18)
 }
+
+/**
+ * Play pyramid break sound — soft descending chime when the bug tower dissolves.
+ * Two gentle sine tones glide down in pitch with a warm low-pass filter,
+ * creating a pleasant "scatter and settle" feeling rather than a harsh crash.
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playPyramidBreakSound(inst) {
+  if (!inst?.audioContext) return
+  const ctx = inst.audioContext
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  const now = ctx.currentTime
+  //
+  // Master volume (direct to speakers)
+  //
+  const master = ctx.createGain()
+  master.gain.setValueAtTime(0.7, now)
+  master.connect(ctx.destination)
+  //
+  // Layer 1: descending sine chime (520 → 180 Hz, 400ms) — gentle falling tone
+  //
+  const chimeDur = 0.4
+  const chime = ctx.createOscillator()
+  const chimeEnv = ctx.createGain()
+  chime.type = 'sine'
+  chime.frequency.setValueAtTime(520, now)
+  chime.frequency.exponentialRampToValueAtTime(180, now + chimeDur)
+  chimeEnv.gain.setValueAtTime(0, now)
+  chimeEnv.gain.linearRampToValueAtTime(0.6, now + 0.01)
+  chimeEnv.gain.exponentialRampToValueAtTime(0.001, now + chimeDur)
+  const chimeFilter = ctx.createBiquadFilter()
+  chimeFilter.type = 'lowpass'
+  chimeFilter.frequency.setValueAtTime(1200, now)
+  chimeFilter.frequency.exponentialRampToValueAtTime(400, now + chimeDur)
+  chime.connect(chimeFilter)
+  chimeFilter.connect(chimeEnv)
+  chimeEnv.connect(master)
+  chime.start(now)
+  chime.stop(now + chimeDur)
+  //
+  // Layer 2: soft triangle undertone (260 → 90 Hz, 350ms) — warm body
+  //
+  const bodyDur = 0.35
+  const body = ctx.createOscillator()
+  const bodyEnv = ctx.createGain()
+  body.type = 'triangle'
+  body.frequency.setValueAtTime(260, now)
+  body.frequency.exponentialRampToValueAtTime(90, now + bodyDur)
+  bodyEnv.gain.setValueAtTime(0, now)
+  bodyEnv.gain.linearRampToValueAtTime(0.4, now + 0.01)
+  bodyEnv.gain.exponentialRampToValueAtTime(0.001, now + bodyDur)
+  body.connect(bodyEnv)
+  bodyEnv.connect(master)
+  body.start(now)
+  body.stop(now + bodyDur)
+  //
+  // Layer 3: quiet filtered noise puff (200ms) — soft air / dust texture
+  //
+  const puffDur = 0.2
+  const bufSize = Math.ceil(ctx.sampleRate * puffDur)
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+  const data = noiseBuf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = noiseBuf
+  const noiseFilter = ctx.createBiquadFilter()
+  noiseFilter.type = 'lowpass'
+  noiseFilter.frequency.setValueAtTime(600, now)
+  noiseFilter.frequency.exponentialRampToValueAtTime(200, now + puffDur)
+  noiseFilter.Q.value = 0.5
+  const noiseEnv = ctx.createGain()
+  noiseEnv.gain.setValueAtTime(0, now)
+  noiseEnv.gain.linearRampToValueAtTime(0.15, now + 0.01)
+  noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + puffDur)
+  noise.connect(noiseFilter)
+  noiseFilter.connect(noiseEnv)
+  noiseEnv.connect(master)
+  noise.start(now)
+  noise.stop(now + puffDur)
+}
+
 /**
  * Play electrical glitch sound (TV static noise)
  * @param {Object} inst - Sound instance

@@ -47,7 +47,7 @@ const LEVEL_SUBTITLES = {
   'level-time.3': ['life consumes time while you hesitate. act too\n\nslow — and it will catch you. throw snow. move\n\nfast. everything happens at once.', 'time3-pre', 16],
   'level-touch.0': ['gather what crawls together to reach what stands above.\n\npay attention to how they behave when you are near.', 'touch0-pre', 8],
   'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 5],
-  'level-touch.2': 'jump to reveal the path - find what stands nearby'
+  'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 4],
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
@@ -56,6 +56,7 @@ const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
+const SCENE_FADE_IN_DURATION = 0.5   // Duration of fade-in overlay when entering new scene
 const TEXT_OUTLINE_OFFSET = 2        // Pixel offset for text outline shadows
 //
 // Subtitle colors per section (matches anti-hero hover color in menu scene)
@@ -269,7 +270,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     
     // Clean up
     transitionInterval.cancel()
-    overlay && overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
     //
@@ -277,8 +277,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     k.volume(inst.originalVolume)
     Sound.unmuteProceduralSounds()
-    // Go to next level
+    //
+    // Go to next level and add fade-in overlay so new scene doesn't flash
+    //
     k.go(nextLevel)
+    createSceneFadeIn(k, bgR, bgG, bgB)
   }
   
   const updateTransition = () => {
@@ -475,16 +478,17 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     } else if (phase === 'final_pause') {
       // Short pause after text fades out before loading new level
       if (timer >= FINAL_PAUSE_DURATION) {
-        // Clean up and go to next level
         transitionInterval.cancel()
-        overlay.exists() && k.destroy(overlay)
         //
         // Restore volume and unmute procedural sounds before going to next level
         //
         k.volume(inst.originalVolume)
         Sound.unmuteProceduralSounds()
-        // Go to next level
+        //
+        // Go to next level and add fade-in overlay so new scene doesn't flash
+        //
         k.go(nextLevel)
+        createSceneFadeIn(k, bgR, bgG, bgB)
       }
     }
   }
@@ -569,4 +573,33 @@ function getSectionSubtitleColor(level) {
   const match = level.match(/^(?:level-|menu-)(\w+)/)
   const section = match ? match[1] : null
   return SECTION_SUBTITLE_COLORS[section] || DEFAULT_SUBTITLE_COLOR
+}
+
+/**
+ * Creates an opaque overlay in the NEW scene that fades out, preventing
+ * a visual flash when k.go() destroys the old scene's transition overlay.
+ * Must be called immediately after k.go() while still in the same call stack.
+ * @param {Object} k - Kaplay instance
+ * @param {number} r - Red component of overlay color
+ * @param {number} g - Green component of overlay color
+ * @param {number} b - Blue component of overlay color
+ */
+function createSceneFadeIn(k, r, g, b) {
+  const fadeOverlay = k.add([
+    k.rect(k.width(), k.height()),
+    k.pos(0, 0),
+    k.color(r, g, b),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.ui + 100),
+    k.fixed()
+  ])
+  let fadeTimer = 0
+  fadeOverlay.onUpdate(() => {
+    fadeTimer += k.dt()
+    const progress = Math.min(fadeTimer / SCENE_FADE_IN_DURATION, 1)
+    fadeOverlay.opacity = 1 - progress
+    if (progress >= 1 && fadeOverlay.exists()) {
+      k.destroy(fadeOverlay)
+    }
+  })
 }

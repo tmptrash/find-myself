@@ -155,6 +155,9 @@ export function sceneMenu(k) {
     } else if (lastLevel === 'time-complete') {
       lastLevel = 'level-word.0'
       set('lastLevel', lastLevel)
+    } else if (lastLevel === 'touch-complete') {
+      lastLevel = null
+      set('lastLevel', lastLevel)
     }
     const currentSection = getSectionFromLevel(lastLevel)
     

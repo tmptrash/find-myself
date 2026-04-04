@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as Sound from '../../../utils/sound.js'
 //
 // Pyramid parameters
 //
@@ -66,10 +67,11 @@ function calculateTowerLayout(bugCount) {
  * @param {Object} config.k - Kaplay instance
  * @param {Array} config.bugs - Array of bug instances
  * @param {Object} config.hero - Hero instance
+ * @param {Object} [config.sound] - Sound instance from Sound.create() for stack SFX
  * @returns {Object} Pyramid instance
  */
 export function create(config) {
-  const { k, bugs, hero } = config
+  const { k, bugs, hero, sound } = config
   
   if (bugs.length < 5) return null
   
@@ -253,8 +255,13 @@ export function create(config) {
     layout,
     timer: 0,
     lastBounceTime: 0,
-    isActive: true
+    isActive: true,
+    sfx: sound
   }
+  //
+  // Audio feedback when the tower first forms
+  //
+  sound && Sound.playPyramidStackSound(sound)
   
   return inst
 }
@@ -470,6 +477,10 @@ export function addBug(inst, bug) {
   // Reset timer to extend pyramid duration by 5 seconds
   //
   inst.timer = 0
+  //
+  // Same stack sound when a bug joins the tower
+  //
+  inst.sfx && Sound.playPyramidStackSound(inst.sfx)
   
   return true
 }

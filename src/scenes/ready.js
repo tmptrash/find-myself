@@ -111,7 +111,21 @@ export function sceneReady(k) {
     Sound.startAudioContext(sound)
     
     addBackground(k, CFG.visual.colors.ready.background)
-    
+    //
+    // Draw menu background image (darkened) behind all content
+    //
+    const bgOverlay = k.add([
+      k.pos(0, 0),
+      k.z(CFG.visual.zIndex.background + 1)
+    ])
+    bgOverlay.onDraw(() => {
+      k.drawSprite({
+        sprite: "menu-bg",
+        width: k.width(),
+        height: k.height(),
+        opacity: 0.3
+      })
+    })
     //
     // Hint text (visible immediately)
     //

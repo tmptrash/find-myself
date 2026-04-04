@@ -181,11 +181,17 @@ export function fadeOutAllMusic() {
  */
 export async function startAudioContext(inst) {
   const ctx = inst.audioContext
+  //
   // Try to start context immediately
+  //
   ctx.resume().catch(() => {
+    //
     // If failed, will try on first user interaction
+    //
   })
+  //
   // Try to resume on page load
+  //
   window.addEventListener('load', () => {
     ctx.resume()
   })
@@ -2070,6 +2076,66 @@ export function playBugScareSound(inst) {
   oscillator.stop(now + 0.1)
 }
 /**
+ * Play pyramid stack sound — muffled wood-crack when bugs form a tower or a new bug joins.
+ * Low-pass filtered noise burst + deep thump: sounds like a twig snapping.
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playPyramidStackSound(inst) {
+  if (!inst?.audioContext) return
+  const ctx = inst.audioContext
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  const now = ctx.currentTime
+  //
+  // Master volume (direct to speakers)
+  //
+  const master = ctx.createGain()
+  master.gain.setValueAtTime(0.6, now)
+  master.connect(ctx.destination)
+  //
+  // Layer 1: filtered noise burst (wood crack / snap texture)
+  //
+  const noiseDur = 0.12
+  const bufSize = Math.ceil(ctx.sampleRate * noiseDur)
+  const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+  const data = noiseBuf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = noiseBuf
+  const noiseFilter = ctx.createBiquadFilter()
+  noiseFilter.type = 'lowpass'
+  noiseFilter.frequency.setValueAtTime(800, now)
+  noiseFilter.frequency.exponentialRampToValueAtTime(200, now + noiseDur)
+  noiseFilter.Q.value = 2
+  const noiseEnv = ctx.createGain()
+  noiseEnv.gain.setValueAtTime(0, now)
+  noiseEnv.gain.linearRampToValueAtTime(0.9, now + 0.004)
+  noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + noiseDur)
+  noise.connect(noiseFilter)
+  noiseFilter.connect(noiseEnv)
+  noiseEnv.connect(master)
+  noise.start(now)
+  noise.stop(now + noiseDur)
+  //
+  // Layer 2: deep muffled thump (triangle 120 → 40 Hz, 180ms)
+  //
+  const thump = ctx.createOscillator()
+  const thumpEnv = ctx.createGain()
+  thump.type = 'triangle'
+  thump.frequency.setValueAtTime(120, now)
+  thump.frequency.exponentialRampToValueAtTime(40, now + 0.18)
+  thumpEnv.gain.setValueAtTime(0, now)
+  thumpEnv.gain.linearRampToValueAtTime(0.7, now + 0.008)
+  thumpEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.18)
+  thump.connect(thumpEnv)
+  thumpEnv.connect(master)
+  thump.start(now)
+  thump.stop(now + 0.18)
+}
+/**
  * Play electrical glitch sound (TV static noise)
  * @param {Object} inst - Sound instance
  */
@@ -2477,4 +2543,5 @@ export function muteProceduralSounds() {
 export function unmuteProceduralSounds() {
   globalMuteProceduralSounds = false
 }
+
 

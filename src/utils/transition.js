@@ -26,8 +26,8 @@ const LEVEL_TRANSITIONS = {
   'level-touch.0': 'level-touch.1',
   'level-touch.1': 'level-touch.2',
   'level-touch.2': 'level-touch.3',
-  'level-touch.3': 'level-touch.4',
-  'level-touch.4': 'menu'
+  'level-touch.3': 'touch-complete',
+  'touch-complete': 'menu'
 }
 
 // Subtitles shown BEFORE entering each level (shifted forward by one)
@@ -145,7 +145,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   // Check if section is completed (last level of section going to completion screen)
   //
-  if (nextLevel === 'word-complete' || nextLevel === 'time-complete') {
+  if (nextLevel === 'word-complete' || nextLevel === 'time-complete' || nextLevel === 'touch-complete') {
     //
     // Extract section name from level name (e.g., 'level-word.4' -> 'word')
     //
@@ -162,6 +162,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     if (nextLevel === 'word-complete') set('lastLevel', 'level-touch.0')
     if (nextLevel === 'time-complete') set('lastLevel', 'level-word.0')
+    if (nextLevel === 'touch-complete') set('lastLevel', 'menu')
     //
     // Go directly to completion screen without transition overlay
     //
@@ -188,7 +189,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   const originalVolume = k.volume()
   k.volume(0)
-  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu']
+  const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu', 'boss']
   soundsToStop.forEach(soundName => {
     try {
       const sound = k.getSound(soundName)
@@ -203,7 +204,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   // Save progress for next level immediately (before showing transition)
   // This ensures progress is saved even if user interrupts transition with ESC
-  // But DON'T save progress for transitions from menu/menu-time, as these are entry points
+  // But DON'T save progress for transitions from menu/menu-time/menu-touch, as these are entry points
   //
   const isLevelToLevelTransition = currentLevel.startsWith('level-') && nextLevel.startsWith('level-')
   if (isLevelToLevelTransition) {
@@ -217,13 +218,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   let timer = 0
   //
-  // Check if transitioning from a level or menu-time (not from menu)
-  // If so, start with black_pause phase since overlay is already opaque
+  // Check if transitioning from a level, menu-time, or menu-touch (not from menu)
+  // If so, start with black_pause phase since overlay is already opaque (no slow fade)
   //
   const isFromLevel = currentLevel !== 'menu' && currentLevel.startsWith('level-')
   const isFromMenuTime = currentLevel === 'menu-time'
-  // Start with fade_to_black phase (unless from menu, menu-time or level, then skip to black_pause)
-  let phase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime) ? 'black_pause' : 'fade_to_black'
+  const isFromMenuTouch = currentLevel === 'menu-touch'
+  // Start with fade_to_black phase (unless from menu, menu-time, menu-touch or level, then skip to black_pause)
+  let phase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime || isFromMenuTouch) ? 'black_pause' : 'fade_to_black'
   
   // Instance object to store text reference
   const inst = {
@@ -240,22 +242,22 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   //
-  // Set background to menu color when transitioning from level or menu-time
+  // Set background to menu color when transitioning from level, menu-time, or menu-touch
   //
   const transitionBgHex = CFG.visual.colors.menu.platformColor
   const [bgR, bgG, bgB] = parseHex(transitionBgHex)
-  if (isFromLevel || isFromMenuTime) {
+  if (isFromLevel || isFromMenuTime || isFromMenuTouch) {
     k.setBackground(k.Color.fromHex(transitionBgHex))
   }
   //
   // Create overlay matching menu background color
-  // Starts fully opaque if from level or menu-time, transparent if from menu
+  // Starts fully opaque if from level, menu-time, or menu-touch, transparent if from menu
   //
   let overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
     k.color(bgR, bgG, bgB),
-    k.opacity(isFromLevel || isFromMenuTime ? 1 : (currentLevel === 'menu' ? 1 : 0)),
+    k.opacity(isFromLevel || isFromMenuTime || isFromMenuTouch ? 1 : (currentLevel === 'menu' ? 1 : 0)),
     k.z(CFG.visual.zIndex.ui + 100),
     k.fixed()
   ])
@@ -309,7 +311,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       if (timer === 0 || !inst.soundsStopped) {
         inst.soundsStopped = true
         stopTimeSectionMusic(k)
-        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu']
+        const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu', 'boss']
         soundsToStop.forEach(soundName => {
           try {
             const sound = k.getSound(soundName)
@@ -352,7 +354,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // Stop all Kaplay sounds except voice-over (xxx-pre files)
           // Stop clock.mp3, time.mp3, time0-kids.mp3, word.mp3, touch.mp3, menu.mp3
           //
-          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu']
+          const soundsToStop = ['clock', 'time', 'time0-kids', 'word', 'breath', 'touch', 'menu', 'boss']
           soundsToStop.forEach(soundName => {
             try {
               const sound = k.getSound(soundName)

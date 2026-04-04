@@ -16,6 +16,22 @@ const LIFE_SCALE_FACTOR = 1.3
 const SCORE_OFFSET_X = 5
 const SCORE_OFFSET_Y = 10
 const SCORE_OUTLINE_THICKNESS = 2
+//
+// Falling "H" letter configuration (last letter tilts as if falling)
+//
+const FALLING_LETTER_INDEX = 4
+const FALLING_LETTER_TILT = 22
+const FALLING_LETTER_COLOR = '#666666'
+const FALLING_LETTER_OFFSET_X = 10
+//
+// Vertical offset so the top of "H" sits on the same line as the bottom of "C" (H lowered vs T,O,U,C)
+//
+const FALLING_LETTER_UNDER_C_RATIO = 0.72
+//
+// Wobble animation for the falling "H" letter (continuous gentle sway)
+//
+const WOBBLE_SPEED = 2.5
+const WOBBLE_AMPLITUDE = 4
 /**
  * Creates touch section level indicator (letters "TOUCH") with small hero and life icons
  * @param {Object} config - Configuration
@@ -46,7 +62,9 @@ export function create(config) {
   const outlineThickness = 2
   const startX = sideWallWidth + 40
   const y = (topPlatformHeight - fontSize) / 2
+  const fallingLetterExtraY = Math.round(fontSize * FALLING_LETTER_UNDER_C_RATIO)
   const letterObjects = []
+  const fallingLetterObjects = []
   letters.forEach((letter, i) => {
     const letterLevel = i
     //
@@ -55,8 +73,14 @@ export function create(config) {
     // - Current level: use activeColor (hero color - yellow)
     // - Future levels: use inactiveColor (gray)
     //
+    //
+    // Last letter "H" is always gray and tilted (falling effect)
+    //
+    const isFallingLetter = i === FALLING_LETTER_INDEX
     let colorHex
-    if (letterLevel < levelNumber) {
+    if (isFallingLetter) {
+      colorHex = FALLING_LETTER_COLOR
+    } else if (letterLevel < levelNumber) {
       colorHex = completedColor
     } else if (letterLevel === levelNumber) {
       colorHex = activeColor
@@ -81,30 +105,47 @@ export function create(config) {
       [outlineThickness, outlineThickness]
     ]
     offsets.forEach(([dx, dy]) => {
-      k.add([
+      const outlineComponents = [
         k.text(letter, {
           size: fontSize,
           font: CFG.visual.fonts.thinFull.replace(/'/g, '')
         }),
-        k.pos(letterX + dx, y + dy),
+        k.pos(letterX + dx + (isFallingLetter ? FALLING_LETTER_OFFSET_X : 0), y + dy + (isFallingLetter ? fallingLetterExtraY : 0)),
         k.color(0, 0, 0),
         k.z(CFG.visual.zIndex.ui)
-      ])
+      ]
+      isFallingLetter && outlineComponents.push(k.rotate(FALLING_LETTER_TILT))
+      const outlineObj = k.add(outlineComponents)
+      isFallingLetter && fallingLetterObjects.push(outlineObj)
     })
     //
     // Create main letter
     //
     const {r, g, b} = getRGB(k, colorHex)
-    const mainLetter = k.add([
+    const fallingOffX = isFallingLetter ? FALLING_LETTER_OFFSET_X : 0
+    const fallingOffY = isFallingLetter ? fallingLetterExtraY : 0
+    const mainComponents = [
       k.text(letter, {
         size: fontSize,
         font: CFG.visual.fonts.thinFull.replace(/'/g, '')
       }),
-      k.pos(letterX, y),
+      k.pos(letterX + fallingOffX, y + fallingOffY),
       k.color(r, g, b),
       k.z(CFG.visual.zIndex.ui)
-    ])
+    ]
+    isFallingLetter && mainComponents.push(k.rotate(FALLING_LETTER_TILT))
+    const mainLetter = k.add(mainComponents)
+    isFallingLetter && fallingLetterObjects.push(mainLetter)
     letterObjects.push(mainLetter)
+  })
+  //
+  // Wobble animation: continuously sway the falling "H" letter back and forth
+  //
+  k.onUpdate(() => {
+    const wobbleAngle = FALLING_LETTER_TILT + Math.sin(k.time() * WOBBLE_SPEED) * WOBBLE_AMPLITUDE
+    fallingLetterObjects.forEach(obj => {
+      obj.exists?.() && (obj.angle = wobbleAngle)
+    })
   })
   //
   // Create small hero icon and life.png image in top right corner

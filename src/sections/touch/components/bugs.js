@@ -95,7 +95,8 @@ export function create(config) {
     legCount = 4,
     hasUpwardLegs = false,
     targetFloorY = null,
-    isDebugBug = false
+    isDebugBug = false,
+    eyeScaleMultiplier = 1
   } = config
   //
   // Ensure debug bugs always have 4 legs
@@ -336,6 +337,7 @@ export function create(config) {
     hasUpwardLegs,   // Store for upward legs flag
     targetFloorY,    // Store for target floor Y position
     isDebugBug,      // Store for debug bug flag
+    eyeScaleMultiplier,
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
@@ -1212,11 +1214,14 @@ export function draw(inst) {
   //
   if (inst.bodyShape === 'circle') {
     //
-    // For circle body: draw one large eye in center that follows hero
+    // For circle body: large white sclera, thin outer ring in body/leg color (same as legs), black pupil
     //
-    const eyeRadius = BUG_BODY_SIZE * 0.8 * inst.scale
-    const pupilRadius = BUG_BODY_SIZE * 0.2 * inst.scale
-    const maxPupilOffset = eyeRadius * 0.4
+    const em = inst.eyeScaleMultiplier ?? 1
+    const outlineW = LEG_THICKNESS * inst.legThickness
+    const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em
+    const outerR = scleraR + outlineW
+    const pupilRadius = scleraR * 0.34
+    const maxPupilOffset = scleraR * 0.32
     //
     // Calculate direction to hero
     //
@@ -1239,20 +1244,26 @@ export function draw(inst) {
     //
     if (inst.hasFlatHead) {
       //
-      // Draw flat head (rectangular eye)
+      // Flat head: body-colored outer frame, large white sclera, black pupil
       //
-      const eyeWidth = eyeRadius * 2.2
-      const eyeHeight = eyeRadius * 0.8
+      const eyeWidth = scleraR * 2.2
+      const eyeHeight = scleraR * 0.85
+      const outerW = eyeWidth + outlineW * 2
+      const outerH = eyeHeight + outlineW * 2
+      k.drawRect({
+        width: outerW,
+        height: outerH,
+        pos: k.vec2(-outerW / 2, -outerH / 2),
+        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
+        opacity: 1
+      })
       k.drawRect({
         width: eyeWidth,
         height: eyeHeight,
         pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2),
-        color: k.rgb(180, 180, 180),
+        color: k.rgb(255, 255, 255),
         opacity: 1
       })
-      //
-      // Draw black pupil (smaller rectangle)
-      //
       const pupilWidth = pupilRadius * 2
       const pupilHeight = pupilRadius * 1.5
       k.drawRect({
@@ -1264,17 +1275,20 @@ export function draw(inst) {
       })
     } else {
       //
-      // Draw round eye
+      // Outer disk: body/leg color; inner: large white sclera; pupil on top
       //
       k.drawCircle({
         pos: k.vec2(0, 0),
-        radius: eyeRadius,
-        color: k.rgb(180, 180, 180),
+        radius: outerR,
+        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
         opacity: 1
       })
-      //
-      // Draw black pupil
-      //
+      k.drawCircle({
+        pos: k.vec2(0, 0),
+        radius: scleraR,
+        color: k.rgb(255, 255, 255),
+        opacity: 1
+      })
       k.drawCircle({
         pos: k.vec2(pupilOffsetX, pupilOffsetY),
         radius: pupilRadius,
@@ -1290,8 +1304,9 @@ export function draw(inst) {
     const isMovingLeft = inst.vx < 0
     
     if (isMovingRight || isMovingLeft) {
-      const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale
-      const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale
+      const em = inst.eyeScaleMultiplier ?? 1
+      const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale * em
+      const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale * em
       //
       // Position eye on the side of movement
       //

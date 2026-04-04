@@ -301,12 +301,13 @@ function generatePlatformThorns(zones) {
 }
 
 /**
- * Draws thorn spikes as sharp upward triangles
+ * Draws thorn spikes as sharp upward triangles (same style as level 3 bottom wall)
  * @param {Object} k - Kaplay instance
  * @param {Array} thornData - Array of thorn definitions
+ * @param {*} [fillColor] - Optional inner fill (Kaplay Color); default gray-purple
  */
-function drawThorns(k, thornData) {
-  const thornColor = k.rgb(70, 65, 80)
+export function drawThorns(k, thornData, fillColor) {
+  const thornColor = fillColor ?? k.rgb(70, 65, 80)
   const outlineColor = k.rgb(0, 0, 0)
   const ow = THORN_OUTLINE_WIDTH
   thornData.forEach(thorn => {

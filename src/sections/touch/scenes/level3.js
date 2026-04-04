@@ -427,7 +427,8 @@ export function sceneLevel3(k) {
     //
     const isWordComplete = get('word', false)
     const isTimeComplete = get('time', false)
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    const isTouchComplete = get('touch', false)
+    const heroBodyColor = isTouchComplete ? "#FFC0CB" : isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
@@ -473,15 +474,14 @@ export function sceneLevel3(k) {
       antiHero: antiHeroInst,
       onAnnihilation: () => {
         //
-        // Stop creature and transition after annihilation to level 4
+        // Stop creature and transition after completing touch section
         //
         creatureInst.stopped = true
-        createLevelTransition(k, 'level-touch.3', () => {
-          k.go('level-touch.4')
-        })
+        createLevelTransition(k, 'level-touch.3')
       },
       currentLevel: 'level-touch.3',
       addMouth: true,
+      addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
     //
@@ -1531,12 +1531,16 @@ function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
   k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
   //
+  // Render corners above darkness overlay so they're always visible
+  //
+  const cornerZ = Z_DARKNESS + 3
+  //
   // Top-left corner
   //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(LEFT_MARGIN, TOP_MARGIN),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(cornerZ)
   ])
   //
   // Top-right corner (rotate 90°)
@@ -1545,7 +1549,7 @@ function createRoundedCorners(k) {
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(CFG.visual.screen.width - RIGHT_MARGIN, TOP_MARGIN),
     k.rotate(90),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(cornerZ)
   ])
   //
   // Bottom-left corner (rotate 270°)
@@ -1554,7 +1558,7 @@ function createRoundedCorners(k) {
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(cornerZ)
   ])
   //
   // Bottom-right corner (rotate 180°)
@@ -1563,7 +1567,7 @@ function createRoundedCorners(k) {
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(cornerZ)
   ])
 }
 

@@ -9,6 +9,7 @@ import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng } from '../../../utils/helper.js'
+import { drawThorns } from '../components/jungle-decor.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -31,10 +32,62 @@ const WALL_COLOR_HEX = '#1F1F1F'
 //
 const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
 //
+// Floor thorns on bottom platform: clusters with gaps (same spike style as touch level 3)
+//
+const FLOOR_THORN_SPACING = 22
+const FLOOR_THORN_WIDTH_MIN = 7
+const FLOOR_THORN_WIDTH_MAX = 14
+//
+// Random spike count per cluster (inclusive range) so strips stay jumpable; gaps between clusters
+//
+const FLOOR_THORN_MIN_PER_CLUSTER = 2
+const FLOOR_THORN_MAX_PER_CLUSTER = 6
+const FLOOR_THORN_HEIGHT_MIN = 11
+const FLOOR_THORN_HEIGHT_MAX = 20
+const FLOOR_THORN_TIP_OFFSET = 3
+const FLOOR_THORN_RAISE_OFFSET = 3
+const FLOOR_THORN_CLUSTER_MIN = 70
+const FLOOR_THORN_CLUSTER_EXTRA = 140
+const FLOOR_THORN_GAP_MIN = 80
+const FLOOR_THORN_GAP_EXTRA = 140
+const FLOOR_THORN_EDGE_INSET = 40
+const HERO_COLLISION_HEIGHT_THORNS = 25
+const HERO_SCALE_THORNS = 3
+const HERO_COLLISION_HEIGHT_SCALED_THORNS = HERO_COLLISION_HEIGHT_THORNS * HERO_SCALE_THORNS
+const FLOOR_THORN_FEET_TOLERANCE_LOW = 35
+const FLOOR_THORN_FEET_TOLERANCE_HIGH = 12
+const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
+//
+// Z: floor thorns above platform (16), below grass blades (20) so spikes sit on floor but under grass
+//
+const FLOOR_THORN_DRAW_Z = CFG.visual.zIndex.platforms + 2
+//
 // Hero spawn positions
 //
 const HERO_SPAWN_X = LEFT_MARGIN + 100
 const HERO_SPAWN_Y = FLOOR_Y - 50
+//
+// No grass blades or floor thorns centered on hero start (horizontal band)
+//
+const HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH = 140
+//
+// Floor thorn spikes (touch level 0): blue blades, black outline via drawThorns
+//
+const FLOOR_THORN_BLADE_FILL_R = 100
+const FLOOR_THORN_BLADE_FILL_G = 195
+const FLOOR_THORN_BLADE_FILL_B = 235
+//
+// Life image flash + red particles on thorn death (same as touch level 3)
+//
+const LIFE_FLASH_COUNT = 20
+const LIFE_FLASH_INTERVAL = 0.05
+const LIFE_PARTICLE_COUNT = 15
+const LIFE_PARTICLE_SPEED_MIN = 80
+const LIFE_PARTICLE_SPEED_EXTRA = 40
+const LIFE_PARTICLE_LIFETIME_MIN = 0.8
+const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
+const LIFE_PARTICLE_SIZE_MIN = 4
+const LIFE_PARTICLE_SIZE_EXTRA = 4
 //
 // Anti-hero platform (right side, above hero height)
 //
@@ -159,7 +212,7 @@ export function sceneLevel0(k) {
     //
     // Create level indicator (TOUCH letters)
     //
-    LevelIndicator.create({
+    const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 0,
       activeColor: '#8B5A50',
@@ -182,6 +235,34 @@ export function sceneLevel0(k) {
       k.color(31, 31, 31),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
+    ])
+    //
+    // Thorn spikes along the bottom floor in random clusters with gaps (jump-through holes)
+    //
+    const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
+    const floorThornStartX = LEFT_MARGIN + FLOOR_THORN_EDGE_INSET
+    const floorThornEndX = CFG.visual.screen.width - RIGHT_MARGIN - FLOOR_THORN_EDGE_INSET
+    const floorThornData = generateFloorThornsWithGaps(
+      floorThornStartX,
+      floorThornEndX,
+      floorThornBaseY,
+      HERO_SPAWN_X,
+      HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH
+    )
+    //
+    // Draw thorns after background sprites (z=7), under grass (z=20); k.onDraw would paint under the full-screen tree canvas
+    //
+    k.add([
+      k.z(FLOOR_THORN_DRAW_Z),
+      {
+        draw() {
+          drawThorns(
+            k,
+            floorThornData,
+            k.rgb(FLOOR_THORN_BLADE_FILL_R, FLOOR_THORN_BLADE_FILL_G, FLOOR_THORN_BLADE_FILL_B)
+          )
+        }
+      }
     ])
     //
     // Anti-hero platform position (for reference - will be replaced by bug)
@@ -240,7 +321,15 @@ export function sceneLevel0(k) {
       const bladesCount = Math.floor(grassDensity * scale)
       
       for (let i = 0; i < bladesCount; i++) {
-        const baseX = LEFT_MARGIN + Math.random() * playableWidth
+        let baseX = LEFT_MARGIN + Math.random() * playableWidth
+        let rejectGuard = 0
+        while (
+          Math.abs(baseX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH &&
+          rejectGuard < 60
+        ) {
+          baseX = LEFT_MARGIN + Math.random() * playableWidth
+          rejectGuard++
+        }
         const height = (10 + Math.random() * 20) * scale
         const bendX = (Math.random() - 0.5) * 6
         const swaySpeed = 0.8 + Math.random() * 0.6
@@ -1035,6 +1124,7 @@ export function sceneLevel0(k) {
     const BIG_BUG_LEG_THICKNESS = 3.0
     const BIG_BUG_CRAWL_SPEED = 12  // Increased speed for tall bugs
     const BIG_BUG_SCALE = 3.0
+    const BIG_BUG_EYE_SCALE = 1.18  // Slightly larger eyes on long-legged floor bugs
     //
     // Create bug 4 (platform bug for anti-hero) before creating anti-hero
     // Note: bug4 is created here but hero reference will be set later
@@ -1117,8 +1207,8 @@ export function sceneLevel0(k) {
       targetFloorY: FLOOR_Y,  // Use fixed FLOOR_Y for legs
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',  // Circle shape like other big bugs
+      eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
       legCount: 2,
-      hasUpwardLegs: true,  // Legs go up from sides first, then down
       sfx: sound,
       bounds: {
         minX: LEFT_MARGIN + bug4Radius,  // Don't go beyond left platform (account for body radius)
@@ -1247,6 +1337,12 @@ export function sceneLevel0(k) {
       }
     })
     //
+    // Hero vs floor thorns (death + reload level)
+    //
+    k.onUpdate(() => {
+      checkFloorThorns(k, heroInst, floorThornData, levelIndicator)
+    })
+    //
     // Create bugs on the floor
     //
     const bugFloorY = FLOOR_Y - 4  // Lower by 6 pixels total (was -10)
@@ -1254,8 +1350,18 @@ export function sceneLevel0(k) {
     const smallBugs = []  // Small bugs and debug bug
     const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
     //
-    // Create three big bugs with different leg heights
+    // Create four big bugs: three crawlers (far left + two) and bug4 (platform)
     // Note: BIG_BUG_* constants are defined earlier before bug4 creation
+    //
+    // Bug 0: Far left, medium-long legs
+    //
+    const bug0LegLength1 = 85
+    const bug0LegLength2 = 75
+    const bug0LegDropFactor = 0.9
+    const bug0LegReach = (bug0LegLength1 + bug0LegLength2) * BIG_BUG_SCALE * bug0LegDropFactor
+    const bug0X = LEFT_MARGIN + floorWidth * 0.1
+    const bug0Y = bugFloorY - bug0LegReach
+    const bug0BodyRadius = BUG_BODY_SIZE * 1.5 * BIG_BUG_SCALE * 0.9
     //
     // Bug 1: Tallest (very long legs)
     //
@@ -1263,15 +1369,44 @@ export function sceneLevel0(k) {
     const bug1LegLength2 = 90
     const bug1LegDropFactor = 0.95
     const bug1LegReach = (bug1LegLength1 + bug1LegLength2) * BIG_BUG_SCALE * bug1LegDropFactor
-    const bug1X = LEFT_MARGIN + floorWidth * 0.3
+    const bug1X = LEFT_MARGIN + floorWidth * 0.38
     const bug1Y = bugFloorY - bug1LegReach
     //
     // Set boundary for bug1: stop before bug4 and don't go beyond platforms
     //
     const bug1BodyRadius = BUG_BODY_SIZE * 1.5 * BIG_BUG_SCALE * 0.9
     const bug1MaxX = bug4X - 150  // Stop 150px before bug4
-    const bug1MinX = LEFT_MARGIN + bug1BodyRadius  // Don't go beyond left platform
+    const bug0MaxX = bug1X - 130
+    const bug1MinX = Math.max(LEFT_MARGIN + bug1BodyRadius, bug0X + 100)
     const bug1MaxXWithPlatform = Math.min(bug1MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug1BodyRadius)  // Don't go beyond right platform
+    
+    const bigBug0Inst = Bugs.create({
+      k,
+      x: bug0X,
+      y: bug0Y,
+      hero: heroInst,
+      surface: 'floor',
+      scale: BIG_BUG_SCALE,
+      legLength1: bug0LegLength1,
+      legLength2: bug0LegLength2,
+      crawlSpeed: BIG_BUG_CRAWL_SPEED,
+      legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
+      legDropFactor: bug0LegDropFactor,
+      customColor: BACK_LAYER_TREE_COLOR,
+      zIndex: BIG_BUG_Z_INDEX,
+      showOutline: false,
+      legThickness: BIG_BUG_LEG_THICKNESS,
+      bodyShape: 'circle',
+      eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      legCount: 2,
+      sfx: sound,
+      bounds: {
+        minX: LEFT_MARGIN + bug0BodyRadius,
+        maxX: Math.min(bug0MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug0BodyRadius),
+        minY: bug0Y,
+        maxY: bug0Y
+      }
+    })
     
     const bigBug1Inst = Bugs.create({
       k,
@@ -1290,6 +1425,7 @@ export function sceneLevel0(k) {
       showOutline: false,
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
+      eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
       legCount: 2,
       sfx: sound,
       bounds: {
@@ -1300,7 +1436,7 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Bug 2: Medium height
+    // Bug 2: Medium height (between bug1 and bug4)
     //
     const bug2LegLength1 = 80
     const bug2LegLength2 = 70
@@ -1333,6 +1469,7 @@ export function sceneLevel0(k) {
       showOutline: false,
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
+      eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
       legCount: 2,
       sfx: sound,
       bounds: {
@@ -1350,6 +1487,7 @@ export function sceneLevel0(k) {
     // Store state for all big bugs and add to bugs array
     //
     const bigBugs = [
+      { inst: bigBug0Inst, y: bug0Y },
       { inst: bigBug1Inst, y: bug1Y },
       { inst: bigBug2Inst, y: bug2Y },
       { inst: bigBug4Inst, y: bug4BodyY }
@@ -1681,7 +1819,8 @@ export function sceneLevel0(k) {
             const pyramid = BugPyramid.create({
               k,
               bugs: group,
-              hero: heroInst
+              hero: heroInst,
+              sound
             })
             
             if (pyramid) {
@@ -1752,6 +1891,164 @@ export function sceneLevel0(k) {
       k.go("menu")
     })
   })
+}
+
+/**
+ * Builds thorn spike data along the floor: clusters of FLOOR_THORN_MIN_PER_CLUSTER..FLOOR_THORN_MAX_PER_CLUSTER spikes (random per cluster), then gap regions
+ * @param {number} startX - Left edge of playable thorn range
+ * @param {number} endX - Right edge of playable thorn range
+ * @param {number} baseY - Thorn base Y (same as jungle-decor bottom wall)
+ * @param {number} [excludeCenterX] - Hero spawn X: skip thorns in this horizontal band
+ * @param {number} [excludeHalfWidth] - Half width of excluded band around excludeCenterX
+ * @returns {Array<{x: number, baseY: number, width: number, height: number, tipOffset: number}>}
+ */
+function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, excludeHalfWidth) {
+  const thorns = []
+  let x = startX
+  while (x < endX) {
+    const clusterEnd = Math.min(
+      x + FLOOR_THORN_CLUSTER_MIN + Math.random() * FLOOR_THORN_CLUSTER_EXTRA,
+      endX
+    )
+    let cx = x
+    let placedInCluster = 0
+    const targetInCluster =
+      FLOOR_THORN_MIN_PER_CLUSTER +
+      Math.floor(
+        Math.random() *
+          (FLOOR_THORN_MAX_PER_CLUSTER - FLOOR_THORN_MIN_PER_CLUSTER + 1)
+      )
+    while (placedInCluster < targetInCluster && cx < clusterEnd) {
+      const tx = cx + (Math.random() - 0.5) * 6
+      cx += FLOOR_THORN_SPACING
+      if (
+        excludeHalfWidth != null &&
+        excludeCenterX != null &&
+        Math.abs(tx - excludeCenterX) < excludeHalfWidth
+      ) {
+        continue
+      }
+      thorns.push({
+        x: tx,
+        baseY,
+        width: FLOOR_THORN_WIDTH_MIN + Math.random() * (FLOOR_THORN_WIDTH_MAX - FLOOR_THORN_WIDTH_MIN),
+        height: FLOOR_THORN_HEIGHT_MIN + Math.random() * (FLOOR_THORN_HEIGHT_MAX - FLOOR_THORN_HEIGHT_MIN),
+        tipOffset: (Math.random() - 0.5) * FLOOR_THORN_TIP_OFFSET
+      })
+      placedInCluster++
+    }
+    const gap = FLOOR_THORN_GAP_MIN + Math.random() * FLOOR_THORN_GAP_EXTRA
+    x = clusterEnd + gap
+  }
+  return thorns
+}
+
+/**
+ * Kills the hero when feet overlap a floor thorn (same horizontal test as touch level 3 trap thorns)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Array} floorThornData - Thorn definitions from generateFloorThornsWithGaps
+ * @param {Object} levelIndicator - Level indicator inst (life score UI)
+ */
+function checkFloorThorns(k, heroInst, floorThornData, levelIndicator) {
+  if (!heroInst.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED_THORNS / 2
+  if (heroFeetY < FLOOR_Y - FLOOR_THORN_FEET_TOLERANCE_LOW ||
+      heroFeetY > FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH) {
+    return
+  }
+  for (const thorn of floorThornData) {
+    if (Math.abs(heroX - thorn.x) < thorn.width) {
+      onHeroFloorThornDeath(k, heroInst, levelIndicator)
+      return
+    }
+  }
+}
+
+/**
+ * Hero death on floor thorns: life score, laugh, reload touch level 0
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} levelIndicator - Level indicator inst
+ */
+function onHeroFloorThornDeath(k, heroInst, levelIndicator) {
+  if (heroInst.isDying) return
+  Hero.death(heroInst, () => {
+    const currentScore = get('lifeScore', 0)
+    const newScore = currentScore + 1
+    set('lifeScore', newScore)
+    levelIndicator?.updateLifeScore?.(newScore)
+    if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
+      Sound.playLifeSound(k)
+      const originalColor = levelIndicator.lifeImage.sprite.color
+      flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
+      createLifeParticlesOnThornDeath(k, levelIndicator)
+    }
+    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => k.go('level-touch.0'))
+  })
+}
+
+/**
+ * Flashes life image red/white on thorn death (same pattern as touch level 3)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage
+ * @param {Object} originalColor - Original color to restore after flash
+ * @param {number} count - Current flash iteration
+ */
+function flashLifeImageOnThornDeath(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  if (count >= LIFE_FLASH_COUNT) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+    return
+  }
+  if (count % 2 === 0) {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnThornDeath(k, levelIndicator, originalColor, count + 1))
+}
+
+/**
+ * Red square particles radiating from life icon (same as touch level 3)
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage position
+ */
+function createLifeParticlesOnThornDeath(k, levelIndicator) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  const lifeX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeY = levelIndicator.lifeImage.sprite.pos.y
+  for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
+    const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
+    const lifetime = LIFE_PARTICLE_LIFETIME_MIN + Math.random() * LIFE_PARTICLE_LIFETIME_EXTRA
+    const size = LIFE_PARTICLE_SIZE_MIN + Math.random() * LIFE_PARTICLE_SIZE_EXTRA
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeX, lifeY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    let elapsed = 0
+    particle.onUpdate(() => {
+      elapsed += k.dt()
+      particle.pos.x += vx * k.dt()
+      particle.pos.y += vy * k.dt()
+      particle.opacity = 1 - elapsed / lifetime
+      if (elapsed >= lifetime) {
+        k.destroy(particle)
+      }
+    })
+  }
 }
 
 /**

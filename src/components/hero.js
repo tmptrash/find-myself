@@ -1463,7 +1463,7 @@ export function onAnnihilationCollide(inst) {
             //
             k.camPos(originalCamPos)
             //
-            // STEP 7: Check if this is the last level of word or time section
+            // STEP 7: Check if this is the last level of word, touch or time section
             //
             const nextLevel = getNextLevel(inst.currentLevel)
             const isLastWordLevel = inst.currentLevel === 'level-word.4' && nextLevel === 'word-complete'
@@ -1604,6 +1604,139 @@ export function onAnnihilationCollide(inst) {
                           set('lastLevel', nextLevel)
                         }
                         inst.character.hidden = true
+                        createLevelTransition(k, inst.currentLevel)
+                      })
+                    })
+                  })
+                })
+              })
+            } else if (inst.currentLevel === 'level-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== '#FFC0CB')) {
+              //
+              // Special sequence for completing touch section: change hero color to pink and add arms
+              //
+              k.wait(1.5, () => {
+                //
+                // Store original volumes
+                //
+                const originalMusicVolume = Sound.getBackgroundMusicVolume(sfx)
+                //
+                // Fade out music to quiet, increase glitch volume
+                //
+                let fadeTimer = 0
+                const FADE_DURATION = 1.0
+                const TARGET_MUSIC_VOLUME = 0.005
+                const TARGET_GLITCH_VOLUME = 3.5
+
+                const fadeInterval = k.onUpdate(() => {
+                  fadeTimer += k.dt()
+                  const progress = Math.min(1, fadeTimer / FADE_DURATION)
+                  //
+                  // Fade music down
+                  //
+                  const newMusicVolume = originalMusicVolume + (TARGET_MUSIC_VOLUME - originalMusicVolume) * progress
+                  Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
+                  //
+                  // Fade glitch sounds up
+                  //
+                  Sound.setGlitchSoundVolume(sfx, 1.0 + progress * (TARGET_GLITCH_VOLUME - 1.0))
+
+                  if (progress >= 1) {
+                    fadeInterval.cancel()
+                  }
+                })
+                //
+                // Play transformation sound after fade completes
+                //
+                k.wait(1.0, () => {
+                  sfx && Sound.playMouthSound(sfx)
+                  //
+                  // Update inst: change to pink color and add arms
+                  //
+                  const pinkColor = '#FFC0CB'
+                  inst.bodyColor = pinkColor
+                  inst.addArms = true
+                  const pinkColorClean = String(pinkColor).replace('#', '')
+                  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
+                  const hasMouth = inst.addMouth
+                  inst.spritePrefix = `${inst.type}_${pinkColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms`
+                  //
+                  // Create visual effect (particles around hero)
+                  //
+                  createBodyPartParticles(inst)
+                  //
+                  // Reload sprites with pink color and arms
+                  //
+                  loadHeroSprites({
+                    k: inst.k,
+                    type: inst.type,
+                    bodyColor: pinkColor,
+                    outlineColor: CFG.visual.colors.outline,
+                    addMouth: hasMouth,
+                    addArms: true,
+                    character: null
+                  })
+                  //
+                  // Wait a frame to ensure sprites are loaded, then update character sprite
+                  //
+                  k.wait(0.05, () => {
+                    //
+                    // Use getSpriteName to get the correct sprite with pink color and arms
+                    //
+                    const newSpriteName = getSpriteName(inst, 0, 0)
+                    //
+                    // Update character sprite to show pink color with arms
+                    //
+                    try {
+                      player.use(k.sprite(newSpriteName))
+                    } catch (error) {
+                      // Sprite load failed, continue with transition
+                    }
+                    //
+                    // Play transformation sound
+                    //
+                    sfx && Sound.playMouthSound(sfx)
+                    //
+                    // Create sparkle particles around hero (pink particles)
+                    //
+                    createColorChangeSparkles(inst, pinkColor)
+                    //
+                    // Pause to show the transformed hero
+                    //
+                    k.wait(2.5, () => {
+                      //
+                      // Fade volumes back to normal
+                      //
+                      let restoreTimer = 0
+                      const RESTORE_DURATION = 0.8
+
+                      const restoreInterval = k.onUpdate(() => {
+                        restoreTimer += k.dt()
+                        const progress = Math.min(1, restoreTimer / RESTORE_DURATION)
+                        //
+                        // Restore music volume
+                        //
+                        const newMusicVolume = TARGET_MUSIC_VOLUME + (originalMusicVolume - TARGET_MUSIC_VOLUME) * progress
+                        Sound.setBackgroundMusicVolume(sfx, newMusicVolume)
+                        //
+                        // Restore glitch sound volume
+                        //
+                        Sound.setGlitchSoundVolume(sfx, TARGET_GLITCH_VOLUME + (1.0 - TARGET_GLITCH_VOLUME) * progress)
+
+                        if (progress >= 1) {
+                          restoreInterval.cancel()
+                        }
+                      })
+                      //
+                      // Save progress and show transition
+                      //
+                      if (nextLevel && nextLevel !== 'menu') {
+                        set('lastLevel', nextLevel)
+                      }
+                      inst.character.hidden = true
+                      //
+                      // Small pause before transitioning to touch-complete
+                      //
+                      k.wait(0.5, () => {
                         createLevelTransition(k, inst.currentLevel)
                       })
                     })

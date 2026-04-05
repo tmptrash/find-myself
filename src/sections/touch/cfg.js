@@ -26,8 +26,8 @@ export const TOUCH_CFG = {
       platform: "#1F1F1F",           // Dark platforms
       sections: {
         touch: {
-          body: "#FFC0CB",           // Pink - soft, tactile, skin-like (from global CFG)
-          antiHero: "#D8A0AB"        // Darker pink for anti-hero (darker shade of body color)
+          body: "#8B5A50",           // Reddish-brown - warm, earthy, tactile (matches global CFG)
+          antiHero: "#8B5A50"        // Reddish-brown anti-hero (same as section body)
         }
       }
     },

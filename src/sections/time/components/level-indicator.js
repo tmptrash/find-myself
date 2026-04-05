@@ -11,6 +11,7 @@ import * as Hero from '../../../components/hero.js'
  * @param {string} config.activeColor - Color for completed levels (hex)
  * @param {string} config.inactiveColor - Color for future levels (hex)
  * @param {string} config.completedColor - Color for already completed levels (hex, default: "#FF8C00" - antiHero color)
+ * @param {string} [config.heroBodyColor] - Body color for small hero icon (hex), defaults to global hero body
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
  * @returns {Object} Object with letterObjects, smallHero, and lifeImage
@@ -21,6 +22,7 @@ export function create(config) {
     levelNumber,
     inactiveColor,
     completedColor = "#FF8C00",  // Default: antiHero color (orange/yellow)
+    heroBodyColor = CFG.visual.colors.hero.body,
     topPlatformHeight,
     sideWallWidth
   } = config
@@ -122,7 +124,7 @@ export function create(config) {
     controllable: false,
     isStatic: true,
     scale: 2.6,
-    bodyColor: CFG.visual.colors.hero.body,
+    bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
     addMouth: isWordComplete,  // Add mouth if word section is complete
     addArms: isTouchComplete  // Add arms if touch section is complete

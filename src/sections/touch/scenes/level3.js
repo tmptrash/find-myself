@@ -428,7 +428,7 @@ export function sceneLevel3(k) {
     const isWordComplete = get('word', false)
     const isTimeComplete = get('time', false)
     const isTouchComplete = get('touch', false)
-    const heroBodyColor = isTouchComplete ? "#FFC0CB" : isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    const heroBodyColor = isTouchComplete ? "#8B5A50" : isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //

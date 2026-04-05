@@ -152,7 +152,10 @@ export function initScene(config) {
   }
   //
   // Add level indicator if levelNumber provided
+  // Hero body color matches the actual hero: gray when time not complete, orange when complete
   //
+  const isTimeCompleteForIndicator = get('time', false)
+  const indicatorHeroColor = isTimeCompleteForIndicator ? "#FF8C00" : CFG.visual.colors.hero.body
   let levelIndicator = null
   if (levelNumber && topPlatformHeight && sideWallWidth) {
     levelIndicator = LevelIndicator.create({
@@ -160,6 +163,7 @@ export function initScene(config) {
       levelNumber,
       activeColor: "#FFFFFF",
       inactiveColor: "#555555",
+      heroBodyColor: indicatorHeroColor,
       topPlatformHeight,
       sideWallWidth
     })

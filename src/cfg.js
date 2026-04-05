@@ -88,7 +88,7 @@ export const CFG = {
           body: '#E74C3C'      // Soft red - warm, muted, less aggressive
         },
         touch: {
-          body: '#FFC0CB'      // Pink - soft, tactile, skin-like
+          body: '#8B5A50'      // Reddish-brown - warm, earthy, tactile
         },
         feel: {
           body: '#FF69B4'      // Hot pink - emotions, passion, feelings

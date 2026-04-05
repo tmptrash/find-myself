@@ -1610,7 +1610,7 @@ export function onAnnihilationCollide(inst) {
                   })
                 })
               })
-            } else if (inst.currentLevel === 'level-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== '#FFC0CB')) {
+            } else if (inst.currentLevel === 'level-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== '#8B5A50')) {
               //
               // Special sequence for completing touch section: change hero color to pink and add arms
               //
@@ -1650,26 +1650,26 @@ export function onAnnihilationCollide(inst) {
                 k.wait(1.0, () => {
                   sfx && Sound.playMouthSound(sfx)
                   //
-                  // Update inst: change to pink color and add arms
+                  // Update inst: change to touch section color and add arms
                   //
-                  const pinkColor = '#FFC0CB'
-                  inst.bodyColor = pinkColor
+                  const touchColor = '#8B5A50'
+                  inst.bodyColor = touchColor
                   inst.addArms = true
-                  const pinkColorClean = String(pinkColor).replace('#', '')
+                  const touchColorClean = String(touchColor).replace('#', '')
                   const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
                   const hasMouth = inst.addMouth
-                  inst.spritePrefix = `${inst.type}_${pinkColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms`
+                  inst.spritePrefix = `${inst.type}_${touchColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms`
                   //
                   // Create visual effect (particles around hero)
                   //
                   createBodyPartParticles(inst)
                   //
-                  // Reload sprites with pink color and arms
+                  // Reload sprites with touch section color and arms
                   //
                   loadHeroSprites({
                     k: inst.k,
                     type: inst.type,
-                    bodyColor: pinkColor,
+                    bodyColor: touchColor,
                     outlineColor: CFG.visual.colors.outline,
                     addMouth: hasMouth,
                     addArms: true,

@@ -302,6 +302,15 @@ export function sceneMenu(k) {
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
       //
+      // Switch to colored sprite immediately if section is completed
+      // (Hero.create uses gray body, so the actual sprite needs replacing)
+      //
+      if (isCompleted) {
+        antiHeroInst.spritePrefix = antiHeroInst.spritePrefixColored
+        antiHeroInst.character.use(k.sprite(`${antiHeroInst.spritePrefixColored}_0_0`))
+        antiHeroInst.character.color = k.rgb(255, 255, 255)
+      }
+      //
       // Store base position and phase offsets for floating animation
       //
       antiHeroInst.baseX = config.x

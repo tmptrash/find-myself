@@ -9,6 +9,7 @@ const SPAWN_INTERVAL_RANGE = 3
 // Minimum remaining leaves ratio (stop spawning at 30% of original)
 //
 const MIN_LEAVES_RATIO = 0.3
+const MAX_FALLEN_LEAVES = 70
 //
 // Falling physics
 //
@@ -53,10 +54,16 @@ const SLIDE_IMPULSE_RANGE = 2.0
 const SPIN_IMPULSE_MIN = 1.0
 const SPIN_IMPULSE_RANGE = 5.0
 //
-// Friction dampens both slide and spin each frame
+// Z-axis tumble impulse per contact (degrees of angular velocity, affects scaleX)
+//
+const TUMBLE_IMPULSE_MIN = 15
+const TUMBLE_IMPULSE_RANGE = 40
+//
+// Friction dampens slide, spin, and tumble each frame
 //
 const GROUND_FRICTION = 0.88
 const GROUND_SPIN_FRICTION = 0.85
+const GROUND_TUMBLE_FRICTION = 0.88
 //
 // Per-leaf random slide range multiplier (assigned on landing)
 //
@@ -108,6 +115,7 @@ export function create(config) {
     fallingLeaves: [],
     groundLeaves: [],
     totalInitialLeaves,
+    spawnedCount: 0,
     spawnTimer: 0,
     nextSpawnTime: INITIAL_SPAWN_DELAY
   }
@@ -152,7 +160,7 @@ export function onUpdate(inst) {
   // Spawn new leaves on a timer (stop when too few remain on trees)
   //
   inst.spawnTimer += dt
-  if (inst.spawnTimer >= inst.nextSpawnTime && remaining > minLeaves) {
+  if (inst.spawnTimer >= inst.nextSpawnTime && remaining > minLeaves && inst.spawnedCount < MAX_FALLEN_LEAVES) {
     spawnLeaf(inst)
     inst.spawnTimer = 0
     inst.nextSpawnTime = SPAWN_INTERVAL_MIN + Math.random() * SPAWN_INTERVAL_RANGE
@@ -281,6 +289,7 @@ function spawnLeaf(inst) {
   // Remove leaf from tree cluster (disappears from tree drawing)
   //
   pick.cluster.splice(leafIdx, 1)
+  inst.spawnedCount++
   //
   // Initial angle in degrees (source rotation is in radians)
   //
@@ -435,6 +444,11 @@ function updateGroundLeaf(inst, leaf) {
     // Random spin impulse for orientation change
     //
     leaf.groundSpin = dir * (SPIN_IMPULSE_MIN + Math.random() * SPIN_IMPULSE_RANGE) * mult
+    //
+    // Random Z-axis tumble impulse (leaf flips toward/away from viewer)
+    //
+    const tumbleDir = Math.random() < 0.5 ? 1 : -1
+    leaf.groundTumble = tumbleDir * (TUMBLE_IMPULSE_MIN + Math.random() * TUMBLE_IMPULSE_RANGE) * mult
   }
   leaf.heroTouching = isTouching
   //
@@ -449,6 +463,16 @@ function updateGroundLeaf(inst, leaf) {
   if (Math.abs(spin) > 0.01) {
     leaf.angle += spin
     leaf.groundSpin = spin * GROUND_SPIN_FRICTION
+  }
+  //
+  // Apply Z-axis tumble (pseudo-3D flip via scaleX)
+  //
+  const tumble = leaf.groundTumble ?? 0
+  if (Math.abs(tumble) > 0.1) {
+    leaf.rotZ = (leaf.rotZ ?? 0) + tumble
+    leaf.groundTumble = tumble * GROUND_TUMBLE_FRICTION
+    const zRad = leaf.rotZ * Math.PI / 180
+    leaf.scaleX = Math.max(ROTATION_Z_MIN_SCALE, Math.abs(Math.cos(zRad)))
   }
   //
   // Keep within bounds

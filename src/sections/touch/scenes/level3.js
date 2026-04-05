@@ -81,14 +81,12 @@ const CORNER_SPRITE_NAME = 'touch3-corner-sprite'
 // P1: trap platform that splits when hero approaches (no vines)
 // P2: thorn-covered hazard platform (moved left)
 // P3: anti-hero platform at max right/top (no bugs)
-// P4: small recovery platform below P0, between P0 and bottom wall (1 bug)
 //
 const CORRIDOR_PLATFORMS = [
   { x: 180, y: 550, width: 150 },
   { x: 1150, y: 500, width: 340 },
   { x: 680, y: 600, width: 280 },
-  { x: 1650, y: 350, width: 250 },
-  { x: 350, y: 780, width: 130 }
+  { x: 1650, y: 350, width: 250 }
 ]
 //
 // Trap platform configuration (P1 splits into two halves when hero approaches)
@@ -423,12 +421,12 @@ export function sceneLevel3(k) {
     //
     createClouds(k)
     //
-    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
+    const isTouchComplete = get('touch', false)
     const isWordComplete = get('word', false)
     const isTimeComplete = get('time', false)
-    const isTouchComplete = get('touch', false)
-    const heroBodyColor = isTouchComplete ? "#8B5A50" : isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
@@ -480,7 +478,7 @@ export function sceneLevel3(k) {
         createLevelTransition(k, 'level-touch.3')
       },
       currentLevel: 'level-touch.3',
-      addMouth: true,
+      addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
@@ -493,13 +491,13 @@ export function sceneLevel3(k) {
     heroInst.deathParticleZ = Z_DARKNESS + 1
     antiHeroInst.character.z = Z_DARKNESS + 1
     //
-    // Create glow bugs on platforms 0-2 (no bugs on anti-hero platform)
+    // Create glow bugs on platforms P0 and P2 (no bugs on trap or anti-hero platforms)
     //
     const glowBugInst = GlowBug.create({
       k,
       hero: heroInst,
       sfx: sound,
-      platforms: [CORRIDOR_PLATFORMS[0], CORRIDOR_PLATFORMS[2], CORRIDOR_PLATFORMS[4]],
+      platforms: [CORRIDOR_PLATFORMS[0], CORRIDOR_PLATFORMS[2]],
       bugsPerPlatform: 1,
       minBugsPerPlatform: 1
     })

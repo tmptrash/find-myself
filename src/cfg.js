@@ -85,7 +85,7 @@ export const CFG = {
       //
       sections: {
         word: {
-          body: '#E74C3C'      // Soft red - warm, muted, less aggressive
+          body: '#DC143C'      // Crimson red - matches anti-hero and WORDS indicator
         },
         touch: {
           body: '#8B5A50'      // Reddish-brown - warm, earthy, tactile

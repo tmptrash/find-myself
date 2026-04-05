@@ -105,11 +105,12 @@ export function sceneLevel4(k) {
     // Create level indicator (TOUCH letters)
     //
     //
-    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
+    const isTouchComplete = get('touch', false)
     const isWordComplete = get('word', false)
     const isTimeComplete = get('time', false)
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
     LevelIndicator.create({
       k,
       levelNumber: 4,
@@ -400,7 +401,8 @@ export function sceneLevel4(k) {
         })
       },
       currentLevel: 'level-touch.4',
-      addMouth: true,
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
     //

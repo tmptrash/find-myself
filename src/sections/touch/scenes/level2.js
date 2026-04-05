@@ -183,12 +183,13 @@ export function sceneLevel2(k) {
     //
     // Check completed sections for hero appearance
     //
+    const isTouchComplete = get('touch', false)
     const isTimeComplete = get('time', false)
     const isWordComplete = get('word', false)
     //
-    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
@@ -271,7 +272,8 @@ export function sceneLevel2(k) {
       },
       currentLevel: 'level-touch.2',
       jumpForce: CFG.game.jumpForce,
-      addMouth: true,
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
     //

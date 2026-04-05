@@ -174,7 +174,8 @@ export function initScene(config) {
   // Hero body color based on section progress (used for level indicator small hero)
   //
   const isTimeComplete = get('time', false)
-  const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+  const isTouchCompleteForColor = get('touch', false)
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : isTouchCompleteForColor ? "#8B5A50" : CFG.visual.colors.hero.body
   //
   // Add level indicator if levelNumber provided
   //
@@ -529,9 +530,9 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   const isTimeComplete = get('time', false)
   const isTouchComplete = get('touch', false)
   //
-  // Hero body color: orange if time section complete, otherwise default
+  // Hero body color: orange if time complete, brown if touch complete, otherwise default
   //
-  const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : CFG.visual.colors.hero.body
   
   const antiHero = Hero.create({
     k,

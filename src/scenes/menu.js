@@ -60,7 +60,7 @@ function getSectionDisplayName(section) {
  * @returns {Array} Array of section configs with positions
  */
 function getSectionPositions(centerX, centerY, radius) {
-  const sections = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
+  const sections = ['time', 'word', 'feel', 'mind', 'stress', 'touch']
   const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
   //
   // Start angle shifted to have 2 anti-heroes at top
@@ -185,10 +185,10 @@ export function sceneMenu(k) {
 
     //
     // Create hero in center (using HERO type)
-    // Same gray as inactive anti-heroes if no sections complete, orange if time complete, red if word complete
+    // Color progression: gray → brown (touch) → orange (time) → red (word)
     //
-    const noSectionsComplete = !progress.time && !progress.word
-    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : "#656565"
+    const noSectionsComplete = !progress.touch && !progress.time && !progress.word
+    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : progress.touch ? "#8B5A50" : "#656565"
     const heroInst = Hero.create({
       k,
       x: centerX,
@@ -197,6 +197,7 @@ export function sceneMenu(k) {
       scale: 5,
       controllable: false,
       addMouth: Boolean(progress.word),
+      addArms: Boolean(progress.touch),
       bodyColor: heroBodyColor,
       outlineColor: noSectionsComplete ? "#1A1A1A" : null
     })
@@ -333,7 +334,7 @@ export function sceneMenu(k) {
       // Add click handlers for implemented sections
       // Only if section is not completed AND previous section is completed (or it's the first section)
       //
-      const sectionOrder = ['time', 'word', 'touch', 'feel', 'mind', 'stress']
+      const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
       const currentIndex = sectionOrder.indexOf(config.section)
       const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
       const previousSection = sectionOrder[previousIndex]
@@ -662,7 +663,7 @@ export function sceneMenu(k) {
       // Update section labels: color + outline on hover/completed/current
       // If section is completed, highlight the NEXT section instead (the one player can play)
       //
-      const sectionOrder = ['time', 'word', 'touch', 'feel', 'mind', 'stress']
+      const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
       
       sectionLabels.forEach(entry => {
         const { label, outlines, section, sectionColor, grayColor, isCompleted } = entry
@@ -725,7 +726,7 @@ export function sceneMenu(k) {
           //
           // Get previous section in clockwise order
           //
-          const sectionOrder = ['time', 'word', 'touch', 'feel', 'mind', 'stress']
+          const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
           const currentIndex = sectionOrder.indexOf(hoveredInst.section)
           const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
           const previousSection = sectionOrder[previousIndex]
@@ -979,11 +980,11 @@ export function sceneMenu(k) {
         showTransitionToLevel(k, lastLevel)
       } else {
         //
-        // No save - start from time section level 0 with transition
+        // No save - start from touch section level 0 with transition
         //
         menuMusic.stop()
         kidsMusic.stop()
-        createLevelTransition(k, 'menu-time')
+        createLevelTransition(k, 'menu-touch')
       }
     })
     
@@ -1002,10 +1003,10 @@ export function sceneMenu(k) {
       k.canvas.classList.remove('cursor-pointer')
       
       //
-      // Enter always starts from time section level 0 with transition
+      // Enter always starts from touch section level 0 with transition
       //
       resetProgress()
-      createLevelTransition(k, 'menu-time')
+      createLevelTransition(k, 'menu-touch')
     })
     
     //

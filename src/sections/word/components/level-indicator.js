@@ -97,6 +97,7 @@ export function create(config) {
   //
   // Check completed sections for hero parts (mouth, arms)
   //
+  const isWordComplete = get('word', false)
   const isTouchComplete = get('touch', false)
   //
   // Position hero and life in top right corner
@@ -113,7 +114,7 @@ export function create(config) {
     scale: 2.6,
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
-    addMouth: true,
+    addMouth: isWordComplete,
     addArms: isTouchComplete
   })
   smallHero.character.fixed = true

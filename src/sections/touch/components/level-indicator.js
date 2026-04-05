@@ -152,6 +152,7 @@ export function create(config) {
   //
   const smallHeroY = topPlatformHeight - fontSize / 2 - TOP_OFFSET + SMALL_HERO_Y_ADJUST
   const isTouchComplete = get('touch', false)
+  const isWordComplete = get('word', false)
   const lifeImageX = k.width() - sideWallWidth - UI_RIGHT_MARGIN - LIFE_IMAGE_HEIGHT / 2
   const smallHeroX = lifeImageX - SPACING_BETWEEN - SMALL_HERO_SIZE / 2
   const smallHero = Hero.create({
@@ -164,7 +165,7 @@ export function create(config) {
     scale: 2.6,
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
-    addMouth: true,
+    addMouth: isWordComplete,
     addArms: isTouchComplete
   })
   smallHero.character.fixed = true

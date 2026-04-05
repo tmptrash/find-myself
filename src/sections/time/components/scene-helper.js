@@ -152,10 +152,11 @@ export function initScene(config) {
   }
   //
   // Add level indicator if levelNumber provided
-  // Hero body color matches the actual hero: gray when time not complete, orange when complete
+  // Hero body color matches the actual hero: orange when time complete, brown when touch complete, gray otherwise
   //
   const isTimeCompleteForIndicator = get('time', false)
-  const indicatorHeroColor = isTimeCompleteForIndicator ? "#FF8C00" : CFG.visual.colors.hero.body
+  const isTouchCompleteForIndicator = get('touch', false)
+  const indicatorHeroColor = isTimeCompleteForIndicator ? "#FF8C00" : isTouchCompleteForIndicator ? "#8B5A50" : CFG.visual.colors.hero.body
   let levelIndicator = null
   if (levelNumber && topPlatformHeight && sideWallWidth) {
     levelIndicator = LevelIndicator.create({
@@ -329,9 +330,9 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
   const isTimeComplete = get('time', false)
   const isTouchComplete = get('touch', false)
   //
-  // Hero body color: yellow if time section complete, otherwise gray
+  // Hero body color: yellow if time complete, brown if touch complete, otherwise gray
   //
-  const heroBodyColor = isTimeComplete ? "#FF8C00" : CFG.visual.colors.hero.body
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : CFG.visual.colors.hero.body
   
   const antiHeroInst = Hero.create({
     k,

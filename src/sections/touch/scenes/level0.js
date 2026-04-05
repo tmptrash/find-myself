@@ -10,6 +10,7 @@ import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, getRGB } from '../../../utils/helper.js'
 import { drawThorns } from '../components/jungle-decor.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -100,6 +101,22 @@ const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
 const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
 const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
+//
+// Instructions animation constants
+//
+const INSTRUCTIONS_INITIAL_DELAY = 1.0
+const INSTRUCTIONS_FADE_IN_DURATION = 0.8
+const INSTRUCTIONS_HOLD_DURATION = 4.0
+const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
+const INSTRUCTIONS_FONT_SIZE = 24
+const INSTRUCTIONS_OUTLINE_OFFSET = 2
+const INSTRUCTIONS_TEXT = "← → - move,   ↑ Space - jump,   ESC - menu"
+//
+// Monster tooltip text (shown on hover over big bug heads)
+//
+const MONSTER_TOOLTIP_TEXT = `the world is full of monsters. this\nis one of them. it is quiet and\nalways watching you.`
+const MONSTER_TOOLTIP_HOVER_SIZE = 80
+const MONSTER_TOOLTIP_Y_OFFSET = -80
 //
 // Anti-hero platform (right side, above hero height)
 //
@@ -215,12 +232,13 @@ export function sceneLevel0(k) {
     //
     // Check completed sections for hero appearance
     //
+    const isTouchComplete = get('touch', false)
     const isTimeComplete = get('time', false)
     const isWordComplete = get('word', false)
     //
-    // Hero body color: red if word complete, orange if time complete, otherwise gray
+    // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : "#C0C0C0"
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
@@ -235,6 +253,9 @@ export function sceneLevel0(k) {
       sideWallWidth: LEFT_MARGIN
     })
     //
+    // Show keyboard controls instructions
+    //
+    showInstructions(k)
     //
     // Bottom platform (full width)
     //
@@ -254,12 +275,14 @@ export function sceneLevel0(k) {
     const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
     const floorThornStartX = LEFT_MARGIN + FLOOR_THORN_EDGE_INSET
     const floorThornEndX = CFG.visual.screen.width - RIGHT_MARGIN - FLOOR_THORN_EDGE_INSET
+    const FLOOR_THORN_MAX_CLUSTERS = 2
     const floorThornData = generateFloorThornsWithGaps(
       floorThornStartX,
       floorThornEndX,
       floorThornBaseY,
       HERO_SPAWN_X,
-      HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH
+      HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH,
+      FLOOR_THORN_MAX_CLUSTERS
     )
     //
     // Draw thorns after background sprites (z=7), under grass (z=20); k.onDraw would paint under the full-screen tree canvas
@@ -1327,7 +1350,8 @@ export function sceneLevel0(k) {
       },
       currentLevel: 'level-touch.0',
       jumpForce: CFG.game.jumpForce,
-      addMouth: true,
+      addMouth: isWordComplete,
+      addArms: isTouchComplete,
       bodyColor: heroBodyColor
     })
     //
@@ -1887,6 +1911,20 @@ export function sceneLevel0(k) {
       bugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
     //
+    // Tooltip hints for big bug heads (monsters on long legs)
+    //
+    Tooltip.create({
+      k,
+      targets: [bigBug0Inst, bigBug1Inst, bigBug2Inst, bigBug4Inst].map(bug => ({
+        x: () => bug.x,
+        y: () => bug.y,
+        width: MONSTER_TOOLTIP_HOVER_SIZE,
+        height: MONSTER_TOOLTIP_HOVER_SIZE,
+        text: MONSTER_TOOLTIP_TEXT,
+        offsetY: MONSTER_TOOLTIP_Y_OFFSET
+      }))
+    })
+    //
     // Draw small bugs (including debug bug)
     // Bugs in pyramid state should be in front of trees (z=25) and platforms (z=15)
     //
@@ -1930,12 +1968,15 @@ export function sceneLevel0(k) {
  * @param {number} baseY - Thorn base Y (same as jungle-decor bottom wall)
  * @param {number} [excludeCenterX] - Hero spawn X: skip thorns in this horizontal band
  * @param {number} [excludeHalfWidth] - Half width of excluded band around excludeCenterX
+ * @param {number} [maxClusters] - Maximum number of thorn clusters to generate (null = unlimited)
  * @returns {Array<{x: number, baseY: number, width: number, height: number, tipOffset: number}>}
  */
-function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, excludeHalfWidth) {
+function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, excludeHalfWidth, maxClusters) {
   const thorns = []
   let x = startX
+  let clusterCount = 0
   while (x < endX) {
+    if (maxClusters != null && clusterCount >= maxClusters) break
     const clusterEnd = Math.min(
       x + FLOOR_THORN_CLUSTER_MIN + Math.random() * FLOOR_THORN_CLUSTER_EXTRA,
       endX
@@ -1967,6 +2008,7 @@ function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, exclud
       })
       placedInCluster++
     }
+    clusterCount++
     const gap = FLOOR_THORN_GAP_MIN + Math.random() * FLOOR_THORN_GAP_EXTRA
     x = clusterEnd + gap
   }
@@ -2345,4 +2387,105 @@ function createSpeedBonusParticles(k, levelIndicator, heroColor) {
       }
     })
   }
+}
+
+/**
+ * Creates instructions text with manual black outline
+ * @param {Object} k - Kaplay instance
+ * @param {number} centerX - Center X position
+ * @param {number} textY - Text Y position
+ * @returns {Object} Object with mainText and outlineTexts array
+ */
+function createInstructionsText(k, centerX, textY) {
+  //
+  // Create 8 outline texts (black)
+  //
+  const outlineOffsets = [
+    [-INSTRUCTIONS_OUTLINE_OFFSET, 0], [INSTRUCTIONS_OUTLINE_OFFSET, 0],
+    [0, -INSTRUCTIONS_OUTLINE_OFFSET], [0, INSTRUCTIONS_OUTLINE_OFFSET],
+    [-INSTRUCTIONS_OUTLINE_OFFSET, -INSTRUCTIONS_OUTLINE_OFFSET], [INSTRUCTIONS_OUTLINE_OFFSET, -INSTRUCTIONS_OUTLINE_OFFSET],
+    [-INSTRUCTIONS_OUTLINE_OFFSET, INSTRUCTIONS_OUTLINE_OFFSET], [INSTRUCTIONS_OUTLINE_OFFSET, INSTRUCTIONS_OUTLINE_OFFSET]
+  ]
+  const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
+    k.text(INSTRUCTIONS_TEXT, {
+      size: INSTRUCTIONS_FONT_SIZE,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX + dx, textY + dy),
+    k.anchor("center"),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 9)
+  ]))
+  //
+  // Create main text (white)
+  //
+  const mainText = k.add([
+    k.text(INSTRUCTIONS_TEXT, {
+      size: INSTRUCTIONS_FONT_SIZE,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10)
+  ])
+  return { mainText, outlineTexts }
+}
+
+/**
+ * Shows keyboard instructions with fade in/hold/fade out animation
+ * @param {Object} k - Kaplay instance
+ */
+function showInstructions(k) {
+  const centerX = CFG.visual.screen.width / 2
+  const textY = TOP_MARGIN + 55
+  //
+  // Create instructions text with outline
+  //
+  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
+  //
+  // Animation state
+  //
+  const inst = {
+    timer: 0,
+    phase: 'initial_delay'
+  }
+  //
+  // Update animation
+  //
+  const updateInterval = k.onUpdate(() => {
+    inst.timer += k.dt()
+    if (inst.phase === 'initial_delay') {
+      if (inst.timer >= INSTRUCTIONS_INITIAL_DELAY) {
+        inst.phase = 'fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_in') {
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
+      mainText.opacity = progress
+      outlineTexts.forEach(t => { t.opacity = progress })
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(t => { t.opacity = 1 - progress })
+      if (progress >= 1) {
+        updateInterval.cancel()
+        k.destroy(mainText)
+        outlineTexts.forEach(t => k.destroy(t))
+      }
+    }
+  })
 }

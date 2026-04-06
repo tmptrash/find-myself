@@ -10,6 +10,7 @@ const TRAMPOLINE_BOUNCE_FORCE = 1200  // Bounce force for hero
 const BUG_SPACING = 20  // Spacing between bugs in pyramid
 const PYRAMID_BASE_HEIGHT = 8  // Height of pyramid base (for collision) - reduced to make hero land lower
 const JOIN_DETECTION_RADIUS = 60  // Distance for bugs to join existing tower
+const STACK_SOUND_STAGGER = 0.08  // Delay between stacked sounds (seconds)
 //
 // Calculate tower layout based on bug count
 // Bugs stack vertically on top of each other
@@ -256,12 +257,17 @@ export function create(config) {
     timer: 0,
     lastBounceTime: 0,
     isActive: true,
-    sfx: sound
+    sfx: sound,
+    soundStaggerIndex: 0
   }
   //
-  // Audio feedback when the tower first forms
+  // Audio feedback for each bug stacking into the tower (staggered)
   //
-  sound && Sound.playPyramidStackSound(sound)
+  if (sound) {
+    for (let i = 0; i < bugs.length; i++) {
+      Sound.playPyramidStackSound(sound, i * STACK_SOUND_STAGGER)
+    }
+  }
   
   return inst
 }
@@ -273,7 +279,10 @@ export function create(config) {
  */
 export function onUpdate(inst, dt) {
   if (!inst.isActive) return
-  
+  //
+  // Reset sound stagger counter each frame
+  //
+  inst.soundStaggerIndex = 0
   inst.timer += dt
   
   //
@@ -478,9 +487,12 @@ export function addBug(inst, bug) {
   //
   inst.timer = 0
   //
-  // Same stack sound when a bug joins the tower
+  // Stack sound staggered so overlapping additions are audible individually
   //
-  inst.sfx && Sound.playPyramidStackSound(inst.sfx)
+  if (inst.sfx) {
+    Sound.playPyramidStackSound(inst.sfx, inst.soundStaggerIndex * STACK_SOUND_STAGGER)
+    inst.soundStaggerIndex++
+  }
   
   return true
 }

@@ -2079,14 +2079,15 @@ export function playBugScareSound(inst) {
  * Play pyramid stack sound — muffled wood-crack when bugs form a tower or a new bug joins.
  * Low-pass filtered noise burst + deep thump: sounds like a twig snapping.
  * @param {Object} inst - Sound instance from create()
+ * @param {number} [delay=0] - Delay in seconds before playing (for staggering multiple hits)
  */
-export function playPyramidStackSound(inst) {
+export function playPyramidStackSound(inst, delay = 0) {
   if (!inst?.audioContext) return
   const ctx = inst.audioContext
   if (ctx.state === 'suspended') {
     ctx.resume()
   }
-  const now = ctx.currentTime
+  const now = ctx.currentTime + delay
   //
   // Master volume (direct to speakers)
   //

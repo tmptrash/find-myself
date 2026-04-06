@@ -73,9 +73,14 @@ k.loadSprite = (name, src, ...rest) => {
 document.documentElement.style.backgroundColor = '#000000'
 document.body.style.backgroundColor = '#000000'
 //
-// Remove default cursor style to allow CSS custom cursor
+// Remove default cursor style to allow CSS custom cursor.
+// Kaplay re-applies inline cursor each frame; clear it continuously
+// so the CSS custom cursor always takes effect.
 //
 k.canvas.style.removeProperty('cursor')
+k.onUpdate(() => {
+  k.canvas.style.removeProperty('cursor')
+})
 //
 // Load resources
 //

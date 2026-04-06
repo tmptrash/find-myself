@@ -110,13 +110,83 @@ const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
 const INSTRUCTIONS_FONT_SIZE = 24
 const INSTRUCTIONS_OUTLINE_OFFSET = 2
-const INSTRUCTIONS_TEXT = "← → - move,   ↑ Space - jump,   ESC - menu"
+const INSTRUCTIONS_TEXT = "← → - move,   ↑ Space - jump,   ESC - menu\nuse the mouse to understand this world"
 //
-// Monster tooltip text (shown on hover over big bug heads)
+// Monster tooltip text (shown on hover over big bug heads - bugs 0, 1, 2)
 //
-const MONSTER_TOOLTIP_TEXT = `the world is full of monsters. this\nis one of them. it is quiet and\nalways watching you.`
+const MONSTER_TOOLTIP_TEXT = `watching you...`
 const MONSTER_TOOLTIP_HOVER_SIZE = 80
 const MONSTER_TOOLTIP_Y_OFFSET = -80
+//
+// Bug4 (anti-hero platform monster) tooltip - head-only hover zone, appears below
+//
+const BUG4_TOOLTIP_TEXT = "gather nearby bugs to reach higher"
+const BUG4_TOOLTIP_HOVER_WIDTH = 60
+const BUG4_TOOLTIP_HOVER_HEIGHT = 40
+const BUG4_TOOLTIP_Y_OFFSET = 50
+//
+// TOUCH indicator tooltip
+//
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
+const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
+const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
+//
+// Small bug tooltip (default and after green time expires)
+//
+const SMALL_BUG_TOOLTIP_TEXT_DEFAULT = "hi, my name is "
+const SMALL_BUG_TOOLTIP_TEXT_HINT = "gather us in one place\nand we will help you"
+const SMALL_BUG_TOOLTIP_HOVER_SIZE = 50
+const SMALL_BUG_TOOLTIP_Y_OFFSET = -50
+//
+// Unique names for small bugs
+//
+const SMALL_BUG_NAMES = [
+  "Archie", "Biscuit", "Clover", "Dotty",
+  "Echo", "Fern", "Gizmo", "Hazel",
+  "Iggy", "Juniper", "Kiwi", "Lemon"
+]
+//
+// Anti-hero tooltip (reduced height to avoid overlap with bug4 below)
+//
+const ANTIHERO_TOOLTIP_TEXT = "this is the you that\nyou are looking for"
+const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
+const ANTIHERO_TOOLTIP_HOVER_HEIGHT = 60
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+//
+// Hero tooltip
+//
+const HERO_TOOLTIP_TEXT = "you are here.\ntry to find yourself"
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -60
+//
+// Green timer tooltip
+//
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_WIDTH = 80
+const GREEN_TIMER_TOOLTIP_HEIGHT = 30
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = -30
+//
+// Small hero and life icon tooltips
+//
+const SMALL_HERO_TOOLTIP_TEXT = "your score"
+const SMALL_HERO_TOOLTIP_SIZE = 60
+const SMALL_HERO_TOOLTIP_Y_OFFSET = -40
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 60
+const LIFE_TOOLTIP_Y_OFFSET = -40
+//
+// Floor thorns tooltip
+//
+const FLOOR_THORNS_TOOLTIP_TEXT = "you will die here"
+const FLOOR_THORNS_TOOLTIP_HEIGHT = 40
+const FLOOR_THORNS_TOOLTIP_Y_OFFSET = -30
+//
+// Bird tooltip
+//
+const BIRD_TOOLTIP_TEXT = "I believe I can fly"
+const BIRD_TOOLTIP_HOVER_SIZE = 40
+const BIRD_TOOLTIP_Y_OFFSET = -30
 //
 // Anti-hero platform (right side, above hero height)
 //
@@ -1911,17 +1981,155 @@ export function sceneLevel0(k) {
       bugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
     //
-    // Tooltip hints for big bug heads (monsters on long legs)
+    // Tooltip hints for big bug heads (monsters on long legs - bugs 0, 1, 2)
     //
     Tooltip.create({
       k,
-      targets: [bigBug0Inst, bigBug1Inst, bigBug2Inst, bigBug4Inst].map(bug => ({
+      targets: [bigBug0Inst, bigBug1Inst, bigBug2Inst].map(bug => ({
         x: () => bug.x,
         y: () => bug.y,
         width: MONSTER_TOOLTIP_HOVER_SIZE,
         height: MONSTER_TOOLTIP_HOVER_SIZE,
         text: MONSTER_TOOLTIP_TEXT,
         offsetY: MONSTER_TOOLTIP_Y_OFFSET
+      }))
+    })
+    //
+    // Tooltip for bug4 (anti-hero platform monster) - head-only hover, appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => bigBug4Inst.x,
+        y: () => bigBug4Inst.y,
+        width: BUG4_TOOLTIP_HOVER_WIDTH,
+        height: BUG4_TOOLTIP_HOVER_HEIGHT,
+        text: BUG4_TOOLTIP_TEXT,
+        offsetY: BUG4_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for TOUCH level indicator letters
+    //
+    const touchLettersCenterX = LEFT_MARGIN + 40 + TOUCH_INDICATOR_TOOLTIP_WIDTH / 2
+    const touchLettersCenterY = TOP_MARGIN / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: touchLettersCenterX,
+        y: touchLettersCenterY,
+        width: TOUCH_INDICATOR_TOOLTIP_WIDTH,
+        height: TOUCH_INDICATOR_TOOLTIP_HEIGHT,
+        text: TOUCH_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for small bugs with unique names per bug.
+    // Text switches to hint after green time expires.
+    //
+    const smallBugTooltipTargets = smallBugs.map((bug, i) => ({
+      x: () => bug.x,
+      y: () => bug.y,
+      width: SMALL_BUG_TOOLTIP_HOVER_SIZE,
+      height: SMALL_BUG_TOOLTIP_HOVER_SIZE,
+      text: SMALL_BUG_TOOLTIP_TEXT_DEFAULT + (SMALL_BUG_NAMES[i] || SMALL_BUG_NAMES[i % SMALL_BUG_NAMES.length]),
+      offsetY: SMALL_BUG_TOOLTIP_Y_OFFSET
+    }))
+    Tooltip.create({
+      k,
+      targets: smallBugTooltipTargets
+    })
+    //
+    // Tooltip for anti-hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHeroInst.character.pos.x,
+        y: () => antiHeroInst.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_WIDTH,
+        height: ANTIHERO_TOOLTIP_HOVER_HEIGHT,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => heroInst.character.pos.x,
+        y: () => heroInst.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for green timer (target time)
+    //
+    fpsCounter.targetText && Tooltip.create({
+      k,
+      targets: [{
+        x: fpsCounter.targetText.pos.x,
+        y: fpsCounter.targetText.pos.y,
+        width: GREEN_TIMER_TOOLTIP_WIDTH,
+        height: GREEN_TIMER_TOOLTIP_HEIGHT,
+        text: GREEN_TIMER_TOOLTIP_TEXT,
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for small hero icon (score)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for life icon
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.pos.x,
+        y: levelIndicator.lifeImage.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for floor thorns (clusters)
+    //
+    Tooltip.create({
+      k,
+      targets: computeThornClusterTargets(floorThornData)
+    })
+    //
+    // Tooltip for birds
+    //
+    Tooltip.create({
+      k,
+      targets: birds.map(bird => ({
+        x: () => bird.x,
+        y: () => bird.y,
+        width: BIRD_TOOLTIP_HOVER_SIZE,
+        height: BIRD_TOOLTIP_HOVER_SIZE,
+        text: BIRD_TOOLTIP_TEXT,
+        offsetY: BIRD_TOOLTIP_Y_OFFSET
       }))
     })
     //
@@ -1950,6 +2158,23 @@ export function sceneLevel0(k) {
           obj.z = pyramidZIndex
         }
       })
+    })
+    //
+    // Switch small bug tooltip text to hint after green time expires
+    //
+    let bugTooltipsSwapped = false
+    k.onUpdate(() => {
+      if (bugTooltipsSwapped) return
+      const levelTime = FpsCounter.getLevelTime(fpsCounter)
+      const targetTime = CFG.gameplay.speedBonusTime
+        && CFG.gameplay.speedBonusTime['level-touch.0']
+      if (!targetTime) return
+      if (levelTime >= targetTime) {
+        bugTooltipsSwapped = true
+        smallBugTooltipTargets.forEach(t => {
+          t.text = SMALL_BUG_TOOLTIP_TEXT_HINT
+        })
+      }
     })
     //
     // Return to menu on ESC
@@ -2013,6 +2238,47 @@ function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, exclud
     x = clusterEnd + gap
   }
   return thorns
+}
+/**
+ * Groups thorn data into cluster bounding boxes for tooltip hover zones
+ * @param {Array} thornData - Thorn definitions from generateFloorThornsWithGaps
+ * @returns {Array<Object>} Array of tooltip target objects for each cluster
+ */
+function computeThornClusterTargets(thornData) {
+  if (!thornData || thornData.length === 0) return []
+  //
+  // Separate thorns into clusters by detecting gaps > cluster gap threshold
+  //
+  const CLUSTER_GAP_THRESHOLD = 80
+  const sorted = [...thornData].sort((a, b) => a.x - b.x)
+  const clusters = []
+  let currentCluster = [sorted[0]]
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].x - sorted[i - 1].x > CLUSTER_GAP_THRESHOLD) {
+      clusters.push(currentCluster)
+      currentCluster = [sorted[i]]
+    } else {
+      currentCluster.push(sorted[i])
+    }
+  }
+  clusters.push(currentCluster)
+  //
+  // Convert each cluster into a tooltip target with bounding rect
+  //
+  return clusters.map(cluster => {
+    const minX = Math.min(...cluster.map(t => t.x - t.width))
+    const maxX = Math.max(...cluster.map(t => t.x + t.width))
+    const centerX = (minX + maxX) / 2
+    const centerY = cluster[0].baseY
+    return {
+      x: centerX,
+      y: centerY,
+      width: maxX - minX,
+      height: FLOOR_THORNS_TOOLTIP_HEIGHT,
+      text: FLOOR_THORNS_TOOLTIP_TEXT,
+      offsetY: FLOOR_THORNS_TOOLTIP_Y_OFFSET
+    }
+  })
 }
 
 /**
@@ -2442,7 +2708,7 @@ function createInstructionsText(k, centerX, textY) {
  */
 function showInstructions(k) {
   const centerX = CFG.visual.screen.width / 2
-  const textY = TOP_MARGIN + 55
+  const textY = TOP_MARGIN + 90
   //
   // Create instructions text with outline
   //

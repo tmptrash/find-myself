@@ -36,16 +36,16 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'level-word.0': ['you are inside your own head now. these words\n\nare your thoughts — the voices within you.\n\nsome of them cut deeper than blades.', 'word0-pre', 13],
+  'level-word.0': ['you are inside your own head now. these words\nare your thoughts — the voices within you.\nsome of them cut deeper than blades.', 'word0-pre', 13],
   'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre', 3.5],
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],
   'level-word.4': ['words that kill...', 'word4-pre', 2.5],
-  'level-time.0': ['you are young and everything is new. time moves\n\nforward even when you stand still. this is the\n\nfirst thing you learn. you start to notice it\n\nslipping — and you start to run.', 'time0-pre', 14],
-  'level-time.1': ['you are growing. you are learning. numbers begin\n\nto surround you. growing up means learning what you\n\ncan touch — and what you should leave alone. do not\n\ntouch the one.', 'time1-pre', 17],
-  'level-time.2': ['rules appear. some protect you, some punish you.\n\nmistakes are allowed — but not forever. digits sum\n\neven safe, sum odd deadly.', 'time2-pre', 18],
-  'level-time.3': ['life consumes time while you hesitate. act too\n\nslow — and it will catch you. throw snow. move\n\nfast. everything happens at once.', 'time3-pre', 16],
-  'level-touch.0': ['before words, before understanding you learn the world\n\nthrough touch. gather what crawls together to reach\n\nwhat stands above. pay attention to how they\n\nbehave when you are near.', 'touch0-pre', 14],
+  'level-time.0': ['you are young and everything is new. time moves\nforward even when you stand still. this is the\nfirst thing you learn. you start to notice it\nslipping — and you start to run.', 'time0-pre', 14],
+  'level-time.1': ['you are growing. you are learning. numbers begin\nto surround you. growing up means learning what you\ncan touch — and what you should leave alone. do not\ntouch the one.', 'time1-pre', 17],
+  'level-time.2': ['rules appear. some protect you, some punish you.\nmistakes are allowed — but not forever. digits sum\neven safe, sum odd deadly.', 'time2-pre', 18],
+  'level-time.3': ['life consumes time while you hesitate. act too\nslow — and it will catch you. throw snow. move\nfast. everything happens at once.', 'time3-pre', 16],
+  'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7],
   'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 5],
   'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 4],
 }
@@ -58,6 +58,7 @@ const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 const SCENE_FADE_IN_DURATION = 0.5   // Duration of fade-in overlay when entering new scene
 const TEXT_OUTLINE_OFFSET = 2        // Pixel offset for text outline shadows
+const SUBTITLE_LINE_SPACING = 12     // Extra vertical pixels between subtitle lines
 //
 // Subtitle colors per section (matches anti-hero hover color in menu scene)
 //
@@ -392,7 +393,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             [-TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET], [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
           ]
           const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-            k.text(subtitle, { size: textSize, align: "center" }),
+            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING }),
             k.pos(textX + dx, textY + dy),
             k.anchor("center"),
             k.color(0, 0, 0),
@@ -404,7 +405,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // Create main colored text above outlines
           //
           const textObj = k.add([
-            k.text(subtitle, { size: textSize, align: "center" }),
+            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING }),
             k.pos(textX, textY),
             k.anchor("center"),
             k.color(r, g, b),

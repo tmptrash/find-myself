@@ -132,6 +132,12 @@ const TRAP_THORN_INSET = 15
 //
 const PLATFORM_THORN_TOLERANCE = 5
 //
+// Blue thorn color for level 3 (icy/cold theme)
+//
+const THORN_COLOR_R = 80
+const THORN_COLOR_G = 120
+const THORN_COLOR_B = 180
+//
 // Number of glow bugs on the bottom wall (with blades across full width)
 //
 const BOTTOM_WALL_BUG_COUNT = 10
@@ -560,6 +566,7 @@ export function sceneLevel3(k) {
       platformThorns: PLATFORM_THORN_ZONES,
       skipVineIndices: [TRAP_PLATFORM_INDEX]
     })
+    decorInst.thornColor = k.rgb(THORN_COLOR_R, THORN_COLOR_G, THORN_COLOR_B)
     //
     // Split trap platform grass blades into left/right half groups
     // so they move with their respective halves during split animation
@@ -891,7 +898,7 @@ function generateTrapThorns(startX, endX, y) {
  * @param {Object} trapState - Trap platform state (for current position)
  */
 function drawTrapLeftThorns(k, thorns, trapState) {
-  const thornColor = k.rgb(70, 65, 80)
+  const thornColor = k.rgb(THORN_COLOR_R, THORN_COLOR_G, THORN_COLOR_B)
   const outlineColor = k.rgb(0, 0, 0)
   const ow = 2
   thorns.forEach(thorn => {

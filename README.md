@@ -2,7 +2,15 @@
 
 A philosophical 2D platformer about self-discovery through life's challenges. Navigate through different aspects of existence while searching for yourself.
 
-## 🎮 About the Game
+**[Play online](https://find-myself.netlify.app/)**
+
+![Menu](public/screenshots/menu.png)
+
+![Touch](public/screenshots/touch.png)
+
+![Word](public/screenshots/word.png)
+
+## About the Game
 
 **Find Yourself** is a minimalist platformer where you journey through abstract worlds representing different forces that shape who you are. Each world presents unique challenges and obstacles that mirror real struggles in life — from cutting words to the relentless passage of time.
 
@@ -10,7 +18,7 @@ Your goal is to find another "you" — a reflection shaped by the very forces yo
 
 Life will confuse you. You will fall. But each fall brings you closer to who you truly are.
 
-## 🤖 Created with AI
+## Created with AI
 
 This game was **entirely created with the help of an AI agent** (Claude by Anthropic). From the initial concept to the final implementation, every line of code, game mechanic, visual effect, and procedural sound was developed through collaborative AI-assisted programming.
 
@@ -20,61 +28,71 @@ This game was **entirely created with the help of an AI agent** (Claude by Anthr
 
 The project demonstrates the potential of AI-augmented game development, where human creativity meets AI capabilities to build a complete, playable experience.
 
-## 📝 Design Philosophy
+## Sections
+
+The game is divided into 6 sections, each with its own theme, atmosphere, and mechanics. Three sections are currently playable. The player must complete them in order to progress.
+
+- **Touch** — "before words… touch"
+- **Time** — "time doesn't wait"
+- **Word** — "words like blades"
+- **Feel** — coming soon
+- **Mind** — coming soon
+- **Stress** — coming soon
+
+## Design Philosophy
 
 **Find Yourself** is designed around several core principles:
 
 1. **Minimalism**: Clean, focused design without unnecessary elements
-2. **Procedural Generation**: Everything is created through code, ensuring consistency and small file size
+2. **Procedural Generation**: Everything is created through code — no external sprite sheets or image assets
 3. **Meaningful Challenge**: Each obstacle represents a real-life concept
 4. **Self-Discovery**: The journey is about understanding yourself through overcoming challenges
 5. **Atmosphere Over Graphics**: Mood and feeling take priority over visual complexity
 
-## 🎨 Visual Style
-
-- **Procedural Graphics**: All visuals are generated programmatically using geometric shapes and text
-- **Minimalist Aesthetic**: Clean lines, limited color palettes per world
-- **Pixel-Perfect Animation**: Custom sprite generation with frame-by-frame animation
-- **Dynamic Effects**: Light glints, particle systems, connection effects
-
-## 🔊 Audio Design
-
-- **Procedural Sound**: All sound effects generated using Web Audio API
-- **No Audio Files** (except background music): Footsteps, jumps, landings, and special effects are synthesized in real-time
-- **Adaptive Soundscapes**: Each world has unique audio characteristics that match its theme and atmosphere
-
-## 🎯 Core Mechanics
+## Core Mechanics
 
 ### Movement
 - **Arrow Keys / WASD**: Move left and right
 - **Space / W / Up Arrow**: Jump
-- **Precise Controls**: Responsive movement with subtle running animation
+- **ESC**: Return to menu
+- **Mouse**: Hover over objects for tooltip hints
 
 ### Dual Character System
-- Control the **Hero** (light-colored character)
+- Control the **Hero** (colored character)
 - Seek the **Anti-Hero** (dark reflection)
 - Upon meeting, both characters annihilate in a particle explosion
 - Meeting your reflection advances to the next challenge
 
+### Tooltip System
+- Hover over any game object to discover hints and lore
+- Monsters, bugs, heroes, and UI elements all have unique messages
+- Some tooltips are timed — appearing only after the player struggles
+
 ### Death & Respawn
 - Contact with hazards causes the hero to disintegrate into particles
 - Instant respawn at the start of the level
-- Learn from mistakes and try again
+- Life score tracks how many times you've fallen
+
+### Speed Bonus
+- Each level has a target completion time (shown as green timer)
+- Complete a level within the target to earn bonus points
+- Flash and particle effects celebrate fast completions
 
 ### Progress Tracking
-- Game automatically saves your progress in browser localStorage
+- Game automatically saves progress in browser localStorage
 - Continue from where you left off
-- Section completion is tracked
+- Section completion unlocks the next section in the menu
 
-## 🛠 Technical Details
+## Technical Details
 
 ### Built With
-- [Kaplay.js](https://kaplayjs.com/) - Game engine
-- Vanilla JavaScript (ES6+)
-- Web Audio API for procedural sound
-- HTML5 Canvas for rendering
+- [Kaplay.js](https://kaplayjs.com/) — Game engine (canvas rendering, physics, scene management)
+- Vanilla JavaScript (ES6+ modules)
+- Web Audio API for procedural sound synthesis
+- HTML5 Canvas for sprite generation and background baking
+- Vite for development and building
 
-## 🚀 Development
+## Development
 
 ### Prerequisites
 - Node.js (v14 or higher)
@@ -102,7 +120,7 @@ npm run zip
 
 Built files will be in the `dist/` folder.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 

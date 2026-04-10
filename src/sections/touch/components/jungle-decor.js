@@ -143,7 +143,7 @@ export function onDrawVines(inst) {
  * @param {Object} inst - Jungle decoration instance
  */
 export function onDrawBottomThorns(inst) {
-  drawThorns(inst.k, inst.thornData)
+  drawThorns(inst.k, inst.thornData, inst.thornColor)
 }
 
 /**
@@ -151,7 +151,7 @@ export function onDrawBottomThorns(inst) {
  * @param {Object} inst - Jungle decoration instance
  */
 export function onDrawPlatformThorns(inst) {
-  drawThorns(inst.k, inst.platformThornData)
+  drawThorns(inst.k, inst.platformThornData, inst.thornColor)
 }
 
 /**

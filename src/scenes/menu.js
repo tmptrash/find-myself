@@ -39,6 +39,13 @@ const MENU_AUDIO = {
   kidsMusicHover: CFG.audio.masterVolume * 0.1,       // kids.mp3 hover volume (7% of master)
   kidsMusicFadeInDuration: 4.0                         // Fade-in duration in seconds
 }
+//
+// Static dot on the right hand of time and word antiheros
+//
+const HAND_DOT_OFFSET_X = 19
+const HAND_DOT_OFFSET_Y = 13
+const HAND_DOT_RADIUS = 2
+const HAND_DOT_SECTIONS = ['time', 'word']
 
 /**
  * Get section name for display (singular form)
@@ -116,6 +123,7 @@ export function sceneMenu(k) {
     // Ensure default custom cursor is visible when entering menu
     //
     k.canvas.classList.remove('cursor-pointer')
+    k.canvas.classList.add('cursor')
     k.canvas.style.removeProperty('cursor')
     
     //
@@ -247,8 +255,8 @@ export function sceneMenu(k) {
         controllable: false,
         bodyColor,
         outlineColor,
-        addMouth: config.section === 'word' || config.section === 'touch',
-        addArms: config.section === 'touch',
+        addMouth: config.section === 'word',
+        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
         hitboxPadding: 5
       })
       //
@@ -259,8 +267,8 @@ export function sceneMenu(k) {
         type: Hero.HEROES.ANTIHERO,
         bodyColor: grayColor,
         outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word' || config.section === 'touch',
-        addArms: config.section === 'touch'
+        addMouth: config.section === 'word',
+        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time'
       })
       //
       // For time section, also preload yellow variant
@@ -270,7 +278,8 @@ export function sceneMenu(k) {
           k,
           type: Hero.HEROES.ANTIHERO,
           bodyColor: yellowColor,
-          outlineColor: CFG.visual.colors.outline
+          outlineColor: CFG.visual.colors.outline,
+          addArms: true
         })
       }
       //
@@ -282,8 +291,8 @@ export function sceneMenu(k) {
         type: Hero.HEROES.ANTIHERO,
         bodyColor: config.color.body,
         outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word' || config.section === 'touch',
-        addArms: config.section === 'touch'
+        addMouth: config.section === 'word',
+        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time'
       })
       //
       // Cache sprite prefixes for outline switching
@@ -294,12 +303,12 @@ export function sceneMenu(k) {
       const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
       const yellowColorNoHash = yellowColor.replace('#', '')
       const sectionColorNoHash = config.color.body.replace('#', '')
-      const hasMouth = config.section === 'word' || config.section === 'touch'
-      const hasArms = config.section === 'touch'
+      const hasMouth = config.section === 'word'
+      const hasArms = config.section === 'touch' || config.section === 'word' || config.section === 'time'
       const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}`
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
-      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}` : null
+      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_arms` : null
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
       //
@@ -320,6 +329,7 @@ export function sceneMenu(k) {
       antiHeroInst.floatPhaseY = index * 0.7 + Math.random() * 2
       
       antiHeroInst.character.z = 10
+      antiHeroInst.hasArms = hasArms
       //
       // Store section info for hover color change
       //
@@ -354,10 +364,10 @@ export function sceneMenu(k) {
           Sound.stopAmbient(sound)
           
           //
-          // Reset cursor to default (remove pointer class)
+          // Swap back to default cursor class
           //
           k.canvas.classList.remove('cursor-pointer')
-          
+          k.canvas.classList.add('cursor')
           //
           // Get last level for word section or start from beginning
           //
@@ -394,10 +404,10 @@ export function sceneMenu(k) {
           Sound.stopAmbient(sound)
           
           //
-          // Reset cursor to default (remove pointer class)
+          // Swap back to default cursor class
           //
           k.canvas.classList.remove('cursor-pointer')
-          
+          k.canvas.classList.add('cursor')
           //
           // Stop music
           //
@@ -436,10 +446,10 @@ export function sceneMenu(k) {
           Sound.stopAmbient(sound)
           
           //
-          // Reset cursor to default (remove pointer class)
+          // Swap back to default cursor class
           //
           k.canvas.classList.remove('cursor-pointer')
-          
+          k.canvas.classList.add('cursor')
           //
           // Stop music
           //
@@ -475,9 +485,9 @@ export function sceneMenu(k) {
       
       const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
       const labelPosX = config.x
-      const labelPosY = config.y + 50
+      const labelPosY = config.y + 55
       const label = k.add([
-        k.text(labelText, { size: 18 }),
+        k.text(labelText, { size: 22 }),
         k.pos(labelPosX, labelPosY),
         k.anchor("center"),
         k.color(labelColor.r, labelColor.g, labelColor.b),
@@ -491,7 +501,7 @@ export function sceneMenu(k) {
       ]
       const labelOutlines = outlineOffsets.map(offset => {
         const outlineNode = k.add([
-          k.text(labelText, { size: 18 }),
+          k.text(labelText, { size: 22 }),
           k.pos(labelPosX + offset.dx, labelPosY + offset.dy),
           k.anchor("center"),
           k.color(0, 0, 0),
@@ -742,15 +752,18 @@ export function sceneMenu(k) {
           const canAccess = isCurrentSection || (currentIndex === 0 || isPreviousCompleted)  // Current section is always accessible, or first section, or previous completed
           
           if (isImplementedSection && !hoveredInst.isCompleted && canAccess) {
+            k.canvas.classList.remove('cursor')
             k.canvas.classList.add('cursor-pointer')
           } else {
             //
-            // Remove pointer class to use default CSS cursor
+            // Swap back to default cursor class
             //
             k.canvas.classList.remove('cursor-pointer')
+            k.canvas.classList.add('cursor')
           }
         } else {
           k.canvas.classList.remove('cursor-pointer')
+          k.canvas.classList.add('cursor')
         }
       }
       
@@ -851,7 +864,19 @@ export function sceneMenu(k) {
     // Background layer with animation
     //
     k.onDraw(() => drawScene(inst))
-  
+    //
+    // Hand dots drawn above antihero sprites (z=11 > antihero z=10)
+    //
+    k.add([
+      k.z(11),
+      {
+        draw() {
+          antiHeroes.forEach(ah => {
+            ah.hasArms && HAND_DOT_SECTIONS.includes(ah.section) && drawHandDot(k, ah)
+          })
+        }
+      }
+    ])
     //
     // Check if there's a saved game
     //
@@ -967,10 +992,10 @@ export function sceneMenu(k) {
       
       Sound.stopAmbient(sound)
       //
-      // Reset cursor to default (remove pointer class)
+      // Swap back to default cursor class
       //
       k.canvas.classList.remove('cursor-pointer')
-      
+      k.canvas.classList.add('cursor')
       if (hasSavedGame) {
         //
         // Continue from last saved level with transition
@@ -998,10 +1023,10 @@ export function sceneMenu(k) {
       menuMusic.stop()
       kidsMusic.stop()
       //
-      // Reset cursor to default (remove pointer class)
+      // Swap back to default cursor class
       //
       k.canvas.classList.remove('cursor-pointer')
-      
+      k.canvas.classList.add('cursor')
       //
       // Enter always starts from touch section level 0 with transition
       //
@@ -1451,7 +1476,6 @@ function drawScene(inst) {
   // Draw trembling particles
   //
   Particles.draw(particlesBg)
-  
   //
   // Draw arrows between anti-heroes in clockwise order (as curved arcs)
   //
@@ -1772,4 +1796,33 @@ function drawScene(inst) {
       heartbeatPhase: inst.heartbeatPhase
     })
   }
+}
+
+/**
+ * Draws a static dot on the right hand of an anti-hero.
+ * White fill with black outline, always visible.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} antiHero - Anti-hero instance with character.pos
+ */
+function drawHandDot(k, antiHero) {
+  const dotX = antiHero.character.pos.x + HAND_DOT_OFFSET_X
+  const dotY = antiHero.character.pos.y + HAND_DOT_OFFSET_Y
+  //
+  // Black outline ring
+  //
+  k.drawCircle({
+    pos: k.vec2(dotX, dotY),
+    radius: HAND_DOT_RADIUS + 1.5,
+    color: k.rgb(0, 0, 0),
+    opacity: 0.9
+  })
+  //
+  // White fill
+  //
+  k.drawCircle({
+    pos: k.vec2(dotX, dotY),
+    radius: HAND_DOT_RADIUS,
+    color: k.rgb(255, 255, 255),
+    opacity: 0.9
+  })
 }

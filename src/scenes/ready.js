@@ -99,9 +99,11 @@ export function sceneReady(k) {
     k.flyingWordsInstance = null
     
     //
-    // Reset cursor to invisible state for this scene
+    // Hide cursor for this scene by removing cursor class
+    // and setting inline cursor: none (no class rule to override it)
     //
     k.canvas.classList.remove('cursor-pointer')
+    k.canvas.classList.remove('cursor')
     k.canvas.style.cursor = 'none'
     
     const centerX = k.width() / 2

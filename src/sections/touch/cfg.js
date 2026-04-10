@@ -14,7 +14,8 @@ export const TOUCH_CFG = {
     //
     speedBonusTime: {
       'level-touch.0': 240,  // Level 0: 4 minutes
-      'level-touch.1': 40    // Level 1: 40 seconds
+      'level-touch.1': 40,   // Level 1: 40 seconds
+      'level-touch.2': 30    // Level 2: 30 seconds
     }
   },
   visual: {

@@ -2617,6 +2617,48 @@ export function playEmptyClickSound(instance) {
 }
 
 /**
+ * Play wave pulse sound (short resonant burst like a physics wave experiment).
+ * Uses a sine oscillator swept through a low-pass filter for a "ping" feel.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playWavePulseSound(instance) {
+  if (!instance?.audioContext) return
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  const now = ctx.currentTime
+  const duration = 0.35
+  //
+  // Sine oscillator swept downward for a resonant "ping"
+  //
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(900, now)
+  osc.frequency.exponentialRampToValueAtTime(200, now + duration)
+  //
+  // Band-pass filter gives a watery, resonant quality
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(600, now)
+  filter.Q.setValueAtTime(4, now)
+  //
+  // Short envelope: quick attack, slow release
+  //
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0, now)
+  gain.gain.linearRampToValueAtTime(0.12, now + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + duration)
+}
+
+/**
  * Mute all procedural sounds (used during transitions)
  */
 export function muteProceduralSounds() {

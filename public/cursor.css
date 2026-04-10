@@ -1,26 +1,17 @@
 /**
- * Custom pixel cursor (chubby triangle with convex sides and thick black outline)
- * Applied to html and body to cover all areas including edges
- * !important prevents Kaplay from overriding with inline cursor styles
+ * Custom pixel cursor applied via CSS class on the canvas.
+ * Uses !important to override Kaplay's inline cursor: default.
+ * Two mutually exclusive classes: cursor (default) and cursor-pointer (hover).
+ * The canvas always has exactly one of these classes.
  */
-html,
-body {
-  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="-4 -4 32 36"><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="white"/></svg>') 0 0, auto !important;
-}
-
-/**
- * Custom pixel cursor for canvas
- * !important prevents Kaplay from overriding with inline cursor styles
- */
-canvas {
+canvas.cursor {
   cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="-4 -4 32 36"><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 3,2 Q 1,8 1,14 Q 1,20 3,24 Q 7,22 12,19 Q 16,17 20,13 Q 20,11 16,8 Q 12,5 9,4 Q 6,2 3,2 Z" fill="white"/></svg>') 0 0, auto !important;
 }
 
 /**
  * Custom pointer cursor (chubby hand/finger in same style)
- * !important prevents Kaplay from overriding with inline cursor styles
+ * Finger separation lines drawn lower for better visibility
  */
 canvas.cursor-pointer {
-  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="40" viewBox="-4 -4 36 40"><path d="M 8,20 L 8,12 Q 8,8 11,8 Q 14,8 14,11 L 14,6 Q 14,3 17,3 Q 20,3 20,6 L 20,8 Q 20,5 23,5 Q 26,5 26,8 L 26,16 Q 26,20 24,24 Q 22,28 18,28 L 12,28 Q 8,28 6,24 L 4,20 Q 4,18 6,18 Q 8,18 8,20 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 8,20 L 8,12 Q 8,8 11,8 Q 14,8 14,11 L 14,6 Q 14,3 17,3 Q 20,3 20,6 L 20,8 Q 20,5 23,5 Q 26,5 26,8 L 26,16 Q 26,20 24,24 Q 22,28 18,28 L 12,28 Q 8,28 6,24 L 4,20 Q 4,18 6,18 Q 8,18 8,20 Z" fill="white"/></svg>') 8 0, pointer !important;
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="40" viewBox="-4 -4 36 40"><path d="M 8,20 L 8,12 Q 8,8 11,8 Q 14,8 14,11 L 14,6 Q 14,3 17,3 Q 20,3 20,6 L 20,8 Q 20,5 23,5 Q 26,5 26,8 L 26,16 Q 26,20 24,24 Q 22,28 18,28 L 12,28 Q 8,28 6,24 L 4,20 Q 4,18 6,18 Q 8,18 8,20 Z" fill="none" stroke="black" stroke-width="8" stroke-linejoin="round"/><path d="M 8,20 L 8,12 Q 8,8 11,8 Q 14,8 14,11 L 14,6 Q 14,3 17,3 Q 20,3 20,6 L 20,8 Q 20,5 23,5 Q 26,5 26,8 L 26,16 Q 26,20 24,24 Q 22,28 18,28 L 12,28 Q 8,28 6,24 L 4,20 Q 4,18 6,18 Q 8,18 8,20 Z" fill="white"/><line x1="14" y1="8" x2="14" y2="16" stroke="black" stroke-width="1.5" stroke-linecap="round"/><line x1="20" y1="6" x2="20" y2="16" stroke="black" stroke-width="1.5" stroke-linecap="round"/></svg>') 8 0, pointer !important;
 }
-

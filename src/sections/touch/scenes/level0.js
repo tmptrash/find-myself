@@ -11,6 +11,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, getRGB } from '../../../utils/helper.js'
 import { drawThorns } from '../components/jungle-decor.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as Rain from '../components/rain.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -110,13 +111,26 @@ const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
 const INSTRUCTIONS_FONT_SIZE = 24
 const INSTRUCTIONS_OUTLINE_OFFSET = 2
-const INSTRUCTIONS_TEXT = "← → - move,   ↑ Space - jump,   ESC - menu\nuse the mouse to understand this world"
+const INSTRUCTIONS_TEXT = "← → - move,  ↑ Space - jump,  ESC - menu,  use mouse"
 //
-// Monster tooltip text (shown on hover over big bug heads - bugs 0, 1, 2)
+// Monster conversation system (timed dialogue between 3 monsters)
 //
-const MONSTER_TOOLTIP_TEXT = `watching you...`
-const MONSTER_TOOLTIP_HOVER_SIZE = 80
-const MONSTER_TOOLTIP_Y_OFFSET = -80
+const MONSTER_CONVERSATION_DELAY = 20
+const MONSTER_CHARS_PER_SECOND = 12
+const MONSTER_MIN_DISPLAY_TIME = 2.5
+const MONSTER_PAUSE_BETWEEN = 1.0
+const MONSTER_CONVERSATION_LINES = [
+  { speaker: 0, text: "look. the grey one is\ntouching the bugs again" },
+  { speaker: 1, text: "why do they always\ntouch the bugs?" },
+  { speaker: 2, text: "because small things\ngather into bigger things.\nthat is philosophy" },
+  { speaker: 1, text: "I touched the bugs once" },
+  { speaker: 0, text: "yes. you became taller" },
+  { speaker: 1, text: "so... touching the world\nchanges you?" },
+  { speaker: 2, text: "usually" },
+  { speaker: 1, text: "should we tell him?" },
+  { speaker: 0, text: "no. understanding must\ngrow on its own" }
+]
+const MONSTER_CONVERSATION_STORAGE_KEY = 'conversations.monsterSeen'
 //
 // Bug4 (anti-hero platform monster) tooltip - head-only hover zone, appears below
 //
@@ -149,36 +163,36 @@ const SMALL_BUG_NAMES = [
 //
 // Anti-hero tooltip (reduced height to avoid overlap with bug4 below)
 //
-const ANTIHERO_TOOLTIP_TEXT = "this is the you that\nyou are looking for"
+const ANTIHERO_TOOLTIP_TEXT = "try to reach me"
 const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
 const ANTIHERO_TOOLTIP_HOVER_HEIGHT = 60
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
-// Hero tooltip
+// Hero tooltip (raised higher so it sits above bug tooltips)
 //
 const HERO_TOOLTIP_TEXT = "you are here.\ntry to find yourself"
 const HERO_TOOLTIP_HOVER_SIZE = 80
-const HERO_TOOLTIP_Y_OFFSET = -60
+const HERO_TOOLTIP_Y_OFFSET = -100
 //
-// Green timer tooltip
+// Green timer tooltip (appears below the timer text)
 //
 const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = -30
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
-// Small hero and life icon tooltips
+// Small hero and life icon tooltips (appear below)
 //
 const SMALL_HERO_TOOLTIP_TEXT = "your score"
 const SMALL_HERO_TOOLTIP_SIZE = 60
-const SMALL_HERO_TOOLTIP_Y_OFFSET = -40
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"
 const LIFE_TOOLTIP_SIZE = 60
-const LIFE_TOOLTIP_Y_OFFSET = -40
+const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Floor thorns tooltip
 //
-const FLOOR_THORNS_TOOLTIP_TEXT = "you will die here"
+const FLOOR_THORNS_TOOLTIP_TEXT = "try to touch me"
 const FLOOR_THORNS_TOOLTIP_HEIGHT = 40
 const FLOOR_THORNS_TOOLTIP_Y_OFFSET = -30
 //
@@ -187,6 +201,55 @@ const FLOOR_THORNS_TOOLTIP_Y_OFFSET = -30
 const BIRD_TOOLTIP_TEXT = "I believe I can fly"
 const BIRD_TOOLTIP_HOVER_SIZE = 40
 const BIRD_TOOLTIP_Y_OFFSET = -30
+//
+// Small bug random phrases (shown as speech bubbles with long pauses)
+//
+const BUG_PHRASE_MIN_PAUSE = 25
+const BUG_PHRASE_EXTRA_PAUSE = 20
+const BUG_PHRASE_CHARS_PER_SECOND = 12
+const BUG_PHRASE_MIN_DISPLAY_TIME = 2.5
+const BUG_PHRASE_Y_OFFSET = -40
+const SMALL_BUG_PHRASES = [
+  "what a great day\nfor a run",
+  "gotta go fast",
+  "left, right, left, right...",
+  "I love running",
+  "need to get everything\ndone today",
+  "where did everyone go?",
+  "are we there yet?",
+  "my legs never get tired",
+  "the floor is warm today",
+  "I wonder what's\nover there",
+  "running is my therapy",
+  "one more lap...\nmaybe two",
+  "has anyone seen\nmy shadow?",
+  "this ground smells\nlike adventure",
+  "I think I saw\na crumb somewhere",
+  "life is short.\nrun faster",
+  "do bugs dream\nof electric crumbs?",
+  "my left legs are\nfaster than my right"
+]
+//
+// Trap spikes: hidden spikes that emerge from the floor when hero approaches
+//
+const TRAP_TRIGGER_X = 700
+const TRAP_TRIGGER_RADIUS = 90
+const TRAP_SPIKE_COUNT = 5
+const TRAP_SPIKE_SPACING = 24
+const TRAP_SPIKE_WIDTH_MIN = 9
+const TRAP_SPIKE_WIDTH_MAX = 15
+const TRAP_SPIKE_HEIGHT_MIN = 18
+const TRAP_SPIKE_HEIGHT_MAX = 30
+const TRAP_SPIKE_TIP_OFFSET = 3
+const TRAP_RISE_DURATION = 0.12
+const TRAP_HOLD_DURATION = 1.5
+const TRAP_RETRACT_DURATION = 0.6
+const TRAP_EXCLUSION_HALF_WIDTH = 200
+const TRAP_SPIKE_FILL_R = 180
+const TRAP_SPIKE_FILL_G = 60
+const TRAP_SPIKE_FILL_B = 60
+const TRAP_TOOLTIP_TEXT = "surprise"
+const TRAP_TOOLTIP_Y_OFFSET = -30
 //
 // Anti-hero platform (right side, above hero height)
 //
@@ -345,13 +408,16 @@ export function sceneLevel0(k) {
     const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
     const floorThornStartX = LEFT_MARGIN + FLOOR_THORN_EDGE_INSET
     const floorThornEndX = CFG.visual.screen.width - RIGHT_MARGIN - FLOOR_THORN_EDGE_INSET
-    const FLOOR_THORN_MAX_CLUSTERS = 2
+    const FLOOR_THORN_MAX_CLUSTERS = 3
+    const floorThornExcludeZones = [
+      { center: HERO_SPAWN_X, halfWidth: HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH },
+      { center: TRAP_TRIGGER_X, halfWidth: TRAP_EXCLUSION_HALF_WIDTH }
+    ]
     const floorThornData = generateFloorThornsWithGaps(
       floorThornStartX,
       floorThornEndX,
       floorThornBaseY,
-      HERO_SPAWN_X,
-      HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH,
+      floorThornExcludeZones,
       FLOOR_THORN_MAX_CLUSTERS
     )
     //
@@ -1413,6 +1479,11 @@ export function sceneLevel0(k) {
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.3 : 1.3
         k.wait(transitionDelay, () => {
+          //
+          // Stop all audio before transition so nothing bleeds into the subtitle screen
+          //
+          Sound.stopAmbient(sound)
+          touchMusic.stop()
           createLevelTransition(k, 'level-touch.0', () => {
             k.go('level-touch.1')
           })
@@ -1460,6 +1531,10 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       checkFloorThorns(k, heroInst, floorThornData, levelIndicator)
     })
+    //
+    // Trap spikes: hidden spikes that emerge from the floor when hero approaches
+    //
+    createTrapSpikes(k, heroInst, levelIndicator, sound)
     //
     // Create bugs on the floor
     //
@@ -1981,19 +2056,15 @@ export function sceneLevel0(k) {
       bugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
     //
-    // Tooltip hints for big bug heads (monsters on long legs - bugs 0, 1, 2)
+    // Monster conversation system: timed dialogue between 3 monsters.
+    // Starts after MONSTER_CONVERSATION_DELAY seconds and plays once.
     //
-    Tooltip.create({
-      k,
-      targets: [bigBug0Inst, bigBug1Inst, bigBug2Inst].map(bug => ({
-        x: () => bug.x,
-        y: () => bug.y,
-        width: MONSTER_TOOLTIP_HOVER_SIZE,
-        height: MONSTER_TOOLTIP_HOVER_SIZE,
-        text: MONSTER_TOOLTIP_TEXT,
-        offsetY: MONSTER_TOOLTIP_Y_OFFSET
-      }))
-    })
+    const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
+    startMonsterConversation(k, monsterBugs)
+    //
+    // Small bug random phrases: occasional speech bubbles from crawling bugs
+    //
+    startSmallBugPhrases(k, smallBugs)
     //
     // Tooltip for bug4 (anti-hero platform monster) - head-only hover, appears below
     //
@@ -2080,11 +2151,12 @@ export function sceneLevel0(k) {
         width: GREEN_TIMER_TOOLTIP_WIDTH,
         height: GREEN_TIMER_TOOLTIP_HEIGHT,
         text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
+        forceBelow: true
       }]
     })
     //
-    // Tooltip for small hero icon (score)
+    // Tooltip for small hero icon (score) - appears below
     //
     Tooltip.create({
       k,
@@ -2094,11 +2166,12 @@ export function sceneLevel0(k) {
         width: SMALL_HERO_TOOLTIP_SIZE,
         height: SMALL_HERO_TOOLTIP_SIZE,
         text: SMALL_HERO_TOOLTIP_TEXT,
-        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
       }]
     })
     //
-    // Tooltip for life icon
+    // Tooltip for life icon - appears below
     //
     Tooltip.create({
       k,
@@ -2108,7 +2181,8 @@ export function sceneLevel0(k) {
         width: LIFE_TOOLTIP_SIZE,
         height: LIFE_TOOLTIP_SIZE,
         text: LIFE_TOOLTIP_TEXT,
-        offsetY: LIFE_TOOLTIP_Y_OFFSET
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
       }]
     })
     //
@@ -2177,6 +2251,22 @@ export function sceneLevel0(k) {
       }
     })
     //
+    // Rain system: depth-layered drops with splashes on objects
+    //
+    const frontTrees = layers[2] ? layers[2].trees : []
+    Rain.create({
+      k,
+      topY: TOP_MARGIN,
+      floorY: FLOOR_Y,
+      leftX: LEFT_MARGIN,
+      rightX: CFG.visual.screen.width - RIGHT_MARGIN,
+      heroInst,
+      antiHeroInst,
+      monsterBugs: [bigBug0Inst, bigBug1Inst, bigBug2Inst],
+      smallBugs,
+      trees: frontTrees
+    })
+    //
     // Return to menu on ESC
     //
     k.onKeyPress("escape", () => {
@@ -2191,12 +2281,11 @@ export function sceneLevel0(k) {
  * @param {number} startX - Left edge of playable thorn range
  * @param {number} endX - Right edge of playable thorn range
  * @param {number} baseY - Thorn base Y (same as jungle-decor bottom wall)
- * @param {number} [excludeCenterX] - Hero spawn X: skip thorns in this horizontal band
- * @param {number} [excludeHalfWidth] - Half width of excluded band around excludeCenterX
+ * @param {Array<{center: number, halfWidth: number}>} excludeZones - Horizontal bands to skip
  * @param {number} [maxClusters] - Maximum number of thorn clusters to generate (null = unlimited)
  * @returns {Array<{x: number, baseY: number, width: number, height: number, tipOffset: number}>}
  */
-function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, excludeHalfWidth, maxClusters) {
+function generateFloorThornsWithGaps(startX, endX, baseY, excludeZones, maxClusters) {
   const thorns = []
   let x = startX
   let clusterCount = 0
@@ -2217,13 +2306,11 @@ function generateFloorThornsWithGaps(startX, endX, baseY, excludeCenterX, exclud
     while (placedInCluster < targetInCluster && cx < clusterEnd) {
       const tx = cx + (Math.random() - 0.5) * 6
       cx += FLOOR_THORN_SPACING
-      if (
-        excludeHalfWidth != null &&
-        excludeCenterX != null &&
-        Math.abs(tx - excludeCenterX) < excludeHalfWidth
-      ) {
-        continue
-      }
+      //
+      // Skip thorns inside any exclusion zone
+      //
+      const inExcluded = excludeZones.some(z => Math.abs(tx - z.center) < z.halfWidth)
+      if (inExcluded) continue
       thorns.push({
         x: tx,
         baseY,
@@ -2390,6 +2477,165 @@ function createLifeParticlesOnThornDeath(k, levelIndicator) {
 }
 
 /**
+ * Creates trap spikes that hide below the floor and emerge when the hero walks close.
+ * The spikes rise, hold briefly, then retract. Kills the hero on contact while risen.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} levelIndicator - Level indicator for life score
+ * @param {Object} sound - Sound instance
+ * @returns {Object} Trap instance with state
+ */
+function createTrapSpikes(k, heroInst, levelIndicator, sound) {
+  //
+  // Generate spike data centered on TRAP_TRIGGER_X
+  //
+  const spikes = []
+  const totalWidth = (TRAP_SPIKE_COUNT - 1) * TRAP_SPIKE_SPACING
+  const startX = TRAP_TRIGGER_X - totalWidth / 2
+  for (let i = 0; i < TRAP_SPIKE_COUNT; i++) {
+    spikes.push({
+      x: startX + i * TRAP_SPIKE_SPACING + (Math.random() - 0.5) * 6,
+      baseY: FLOOR_Y,
+      width: TRAP_SPIKE_WIDTH_MIN + Math.random() * (TRAP_SPIKE_WIDTH_MAX - TRAP_SPIKE_WIDTH_MIN),
+      height: TRAP_SPIKE_HEIGHT_MIN + Math.random() * (TRAP_SPIKE_HEIGHT_MAX - TRAP_SPIKE_HEIGHT_MIN),
+      tipOffset: (Math.random() - 0.5) * TRAP_SPIKE_TIP_OFFSET
+    })
+  }
+  const inst = {
+    spikes,
+    phase: 'hidden',
+    timer: 0,
+    progress: 0,
+    triggered: false
+  }
+  const fillColor = k.rgb(TRAP_SPIKE_FILL_R, TRAP_SPIKE_FILL_G, TRAP_SPIKE_FILL_B)
+  const outlineColor = k.rgb(0, 0, 0)
+  //
+  // Draw trap spikes with vertical offset based on rise progress (0 = hidden, 1 = fully risen)
+  //
+  k.add([
+    k.z(FLOOR_THORN_DRAW_Z),
+    {
+      draw() {
+        if (inst.progress <= 0) return
+        drawTrapSpikes(k, inst, fillColor, outlineColor)
+      }
+    }
+  ])
+  //
+  // Update: detect hero proximity, animate rise/hold/retract, check collision
+  //
+  k.onUpdate(() => onUpdateTrap(k, inst, heroInst, levelIndicator, sound))
+  //
+  // Tooltip appears only while spikes are visible
+  //
+  const trapClusterMinX = Math.min(...spikes.map(s => s.x - s.width))
+  const trapClusterMaxX = Math.max(...spikes.map(s => s.x + s.width))
+  const trapClusterCenterX = (trapClusterMinX + trapClusterMaxX) / 2
+  const trapClusterWidth = trapClusterMaxX - trapClusterMinX
+  Tooltip.create({
+    k,
+    targets: [{
+      x: trapClusterCenterX,
+      y: FLOOR_Y,
+      width: trapClusterWidth,
+      height: FLOOR_THORNS_TOOLTIP_HEIGHT,
+      text: TRAP_TOOLTIP_TEXT,
+      offsetY: TRAP_TOOLTIP_Y_OFFSET
+    }]
+  })
+  return inst
+}
+//
+// Animates trap spike phases: hidden -> rising -> holding -> retracting -> hidden
+//
+function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
+  if (!heroInst.character?.pos) return
+  const dt = k.dt()
+  const heroX = heroInst.character.pos.x
+  const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED_THORNS / 2
+  if (inst.phase === 'hidden') {
+    //
+    // Trigger when hero walks within the activation radius
+    //
+    if (!inst.triggered && Math.abs(heroX - TRAP_TRIGGER_X) < TRAP_TRIGGER_RADIUS) {
+      inst.phase = 'rising'
+      inst.timer = 0
+      inst.triggered = true
+      sound && Sound.playBladeSound(sound)
+    }
+    return
+  }
+  inst.timer += dt
+  if (inst.phase === 'rising') {
+    inst.progress = Math.min(1, inst.timer / TRAP_RISE_DURATION)
+    if (inst.progress >= 1) {
+      inst.phase = 'holding'
+      inst.timer = 0
+    }
+  } else if (inst.phase === 'holding') {
+    inst.progress = 1
+    if (inst.timer >= TRAP_HOLD_DURATION) {
+      inst.phase = 'retracting'
+      inst.timer = 0
+    }
+  } else if (inst.phase === 'retracting') {
+    inst.progress = Math.max(0, 1 - inst.timer / TRAP_RETRACT_DURATION)
+    if (inst.progress <= 0) {
+      inst.phase = 'hidden'
+      inst.timer = 0
+    }
+  }
+  //
+  // Kill hero if feet overlap any risen spike
+  //
+  if (inst.progress > 0.3) {
+    const onFloor = heroFeetY >= FLOOR_Y - FLOOR_THORN_FEET_TOLERANCE_LOW &&
+                    heroFeetY <= FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH
+    if (onFloor) {
+      for (const spike of inst.spikes) {
+        if (Math.abs(heroX - spike.x) < spike.width) {
+          onHeroFloorThornDeath(k, heroInst, levelIndicator)
+          return
+        }
+      }
+    }
+  }
+}
+//
+// Draws trap spikes partially risen from the floor (clipped below baseY)
+//
+function drawTrapSpikes(k, inst, fillColor, outlineColor) {
+  const ow = 2
+  for (const spike of inst.spikes) {
+    const visibleHeight = spike.height * inst.progress
+    if (visibleHeight <= 0) continue
+    //
+    // Outline (slightly larger)
+    //
+    k.drawPolygon({
+      pts: [
+        k.vec2(spike.x - spike.width / 2 - ow, spike.baseY + ow),
+        k.vec2(spike.x + spike.width / 2 + ow, spike.baseY + ow),
+        k.vec2(spike.x + spike.tipOffset, spike.baseY - visibleHeight - ow)
+      ],
+      color: outlineColor
+    })
+    //
+    // Fill
+    //
+    k.drawPolygon({
+      pts: [
+        k.vec2(spike.x - spike.width / 2, spike.baseY),
+        k.vec2(spike.x + spike.width / 2, spike.baseY),
+        k.vec2(spike.x + spike.tipOffset, spike.baseY - visibleHeight)
+      ],
+      color: fillColor
+    })
+  }
+}
+
+/**
  * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
  * @param {number} radius - Corner radius in pixels
  * @param {string} color - Fill color in hex format
@@ -2440,13 +2686,17 @@ function createRoundedCorners(k) {
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
   //
+  // Bottom corners need higher z-index to render above grass (z=20) and trees (z=25)
+  //
+  const BOTTOM_CORNER_Z = 26
+  //
   // Bottom-left corner (rotate 270°)
   //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(BOTTOM_CORNER_Z)
   ])
   //
   // Bottom-right corner (rotate 180°)
@@ -2455,117 +2705,92 @@ function createRoundedCorners(k) {
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(BOTTOM_CORNER_Z)
   ])
 }
 
 /**
- * Creates dark background clouds in the distance at the top
+ * Creates dark background clouds that scroll slowly to the right in a seamless loop.
+ * Clouds are generated within a band width equal to the screen, then drawn twice
+ * side-by-side so one copy always fills the visible area during scrolling.
  * @param {Object} k - Kaplay instance
  */
 function createBackgroundClouds(k) {
+  const CLOUD_SCROLL_SPEED = 8
+  const CLOUD_TOP_Y = TOP_MARGIN + 20
+  const CLOUD_BOTTOM_Y = TOP_MARGIN + 100
+  const CLOUD_COUNT = 18
+  const CLOUD_RANDOMNESS = 20
+  const baseCloudColor = k.rgb(36, 37, 36)
   //
-  // Dark cloud parameters (similar to back layer trees)
+  // Band covers the playable width; two copies tile seamlessly
   //
-  const cloudTopY = TOP_MARGIN + 20  // Top Y position for clouds
-  const cloudBottomY = TOP_MARGIN + 100  // Bottom Y position
-  const baseCloudColor = k.rgb(36, 37, 36)  // Same color as back layer trees
-  
+  const areaLeft = LEFT_MARGIN
+  const areaRight = CFG.visual.screen.width - RIGHT_MARGIN
+  const bandWidth = areaRight - areaLeft
+  const cloudSpacing = bandWidth / CLOUD_COUNT
   //
-  // Create clouds spread horizontally across the screen (similar to tree distribution)
-  //
-  const screenWidth = k.width()
-  const cloudStartX = LEFT_MARGIN + 50
-  const cloudEndX = screenWidth - RIGHT_MARGIN - 50
-  const cloudCoverageWidth = cloudEndX - cloudStartX
-  
-  //
-  // Create clouds similar to back layer trees (18 trees, so 18 clouds)
-  //
-  const cloudCount = 18  // Same count as back layer trees
-  const cloudSpacing = cloudCoverageWidth / (cloudCount - 1)
-  
-  //
-  // Generate cloud configurations (similar to tree crown structure)
+  // Cloud X positions are relative to the band (0 to bandWidth)
   //
   const cloudConfigs = []
-  
-  for (let i = 0; i < cloudCount; i++) {
-    const baseX = cloudStartX + cloudSpacing * i
-    //
-    // Add randomness similar to trees (randomness = 20 for back layer)
-    //
-    const randomness = 20
-    const randomOffset = (Math.random() - 0.5) * randomness
-    const cloudX = baseX + randomOffset
-    //
-    // Random vertical position within cloud area
-    //
-    const randomY = cloudTopY + Math.random() * (cloudBottomY - cloudTopY)
-    //
-    // Crown size similar to trees: (50 + Math.random() * 60) * scale
-    // For clouds, use similar range but slightly smaller scale
-    //
-    const crownSize = (50 + Math.random() * 60) * 1.2  // Similar to trees but slightly smaller
-    //
-    // Number of circles (crowns) similar to trees: 5 + Math.floor(Math.random() * 4) = 5-8
-    //
-    const crownCount = 5 + Math.floor(Math.random() * 4)  // 5-8 circles, same as trees
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const baseX = cloudSpacing * i + cloudSpacing * 0.5
+    const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
+    const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+    const crownSize = (50 + Math.random() * 60) * 1.2
+    const crownCount = 5 + Math.floor(Math.random() * 4)
     const crowns = []
-    
-    //
-    // Generate crown circles similar to tree crowns
-    //
     for (let j = 0; j < crownCount; j++) {
-      //
-      // Offset similar to trees: (Math.random() - 0.5) * crownSize * 0.7 for X, * 0.5 for Y
-      //
       crowns.push({
         offsetX: (Math.random() - 0.5) * crownSize * 0.7,
         offsetY: (Math.random() - 0.5) * crownSize * 0.5,
-        sizeVariation: 0.6 + Math.random() * 0.6,  // Same as trees: 0.6-1.2
-        opacityVariation: 0.7 + Math.random() * 0.2  // Same as trees: 0.7-0.9
+        sizeVariation: 0.6 + Math.random() * 0.6,
+        opacityVariation: 0.7 + Math.random() * 0.2
       })
     }
-    //
-    // Opacity similar to trees: 0.85 + Math.random() * 0.1
-    //
-    const baseOpacity = 0.85 + Math.random() * 0.1
-    
     cloudConfigs.push({
       x: cloudX,
-      y: randomY,
-      crownSize: crownSize,
-      crowns: crowns,
+      y: cloudY,
+      crownSize,
+      crowns,
       color: baseCloudColor,
-      opacity: baseOpacity
+      opacity: 0.85 + Math.random() * 0.1
     })
   }
-  
   //
-  // Create visual cloud layer (background, behind everything)
+  // Scroll offset wraps within bandWidth
   //
-  cloudConfigs.forEach((cloudConfig) => {
-    k.add([
-      k.pos(cloudConfig.x, cloudConfig.y),
-      k.z(1),  // Between background (-100) and back trees (z=2), so clouds are visible
-      {
-        draw() {
+  const inst = { scrollX: 0 }
+  //
+  // Draw two copies of the band so one always fills the visible area.
+  // The second copy is placed one bandWidth BEHIND (to the left of) the first.
+  //
+  k.add([
+    k.z(1),
+    {
+      draw() {
+        inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
+        for (let copy = 0; copy < 2; copy++) {
           //
-          // Draw cloud as multiple circles (similar to tree crowns)
+          // copy 0: current position, copy 1: one band-width behind
           //
-          cloudConfig.crowns.forEach((crown) => {
-            k.drawCircle({
-              radius: cloudConfig.crownSize * crown.sizeVariation,
-              pos: k.vec2(crown.offsetX, crown.offsetY),
-              color: cloudConfig.color,
-              opacity: cloudConfig.opacity * crown.opacityVariation
-            })
-          })
+          const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
+          for (const cloud of cloudConfigs) {
+            const cx = cloud.x + baseOffset
+            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
+            for (const crown of cloud.crowns) {
+              k.drawCircle({
+                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
+                radius: cloud.crownSize * crown.sizeVariation,
+                color: cloud.color,
+                opacity: cloud.opacity * crown.opacityVariation
+              })
+            }
+          }
         }
       }
-    ])
-  })
+    }
+  ])
 }
 
 /**
@@ -2700,6 +2925,186 @@ function createInstructionsText(k, centerX, textY) {
     k.z(CFG.visual.zIndex.ui + 10)
   ])
   return { mainText, outlineTexts }
+}
+
+/**
+ * Starts a timed conversation between three monsters (big bugs 0, 1, 2).
+ * Each line appears as a speech bubble above the speaking monster.
+ * Display duration is based on text length. Plays once after initial delay.
+ * @param {Object} k - Kaplay instance
+ * @param {Array<Object>} monsterBugs - Array of [bug0, bug1, bug2] instances
+ */
+function startMonsterConversation(k, monsterBugs) {
+  //
+  // Only show conversation once per player (persisted in localStorage)
+  //
+  if (get(MONSTER_CONVERSATION_STORAGE_KEY)) return
+  //
+  // Conversation state: tracks current line and timing
+  //
+  const inst = {
+    lineIndex: 0,
+    timer: 0,
+    phase: 'delay',
+    currentTooltip: null,
+    currentDisplayTime: 0
+  }
+  //
+  // Show a conversation line as a forced-visible tooltip above the speaking monster
+  //
+  const showLine = (lineData) => {
+    const bug = monsterBugs[lineData.speaker]
+    if (!bug) return
+    inst.currentTooltip && Tooltip.destroy(inst.currentTooltip)
+    const target = {
+      x: () => bug.x,
+      y: () => bug.y,
+      width: 0,
+      height: 0,
+      text: lineData.text,
+      offsetY: -80
+    }
+    inst.currentTooltip = Tooltip.create({
+      k,
+      targets: [target],
+      forceVisible: true
+    })
+    inst.currentTooltip.activeTarget = target
+    inst.currentTooltip.frozenX = Math.round(bug.x)
+    inst.currentTooltip.frozenY = Math.round(bug.y)
+    inst.currentTooltip.opacity = 1
+    const chars = lineData.text.replace(/\n/g, '').length
+    inst.currentDisplayTime = Math.max(MONSTER_MIN_DISPLAY_TIME, chars / MONSTER_CHARS_PER_SECOND)
+  }
+  //
+  // Update handler drives the conversation timeline
+  //
+  k.onUpdate(() => {
+    inst.timer += k.dt()
+    if (inst.phase === 'delay') {
+      if (inst.timer >= MONSTER_CONVERSATION_DELAY) {
+        inst.phase = 'showing'
+        inst.timer = 0
+        showLine(MONSTER_CONVERSATION_LINES[0])
+      }
+    } else if (inst.phase === 'showing') {
+      //
+      // Keep frozen position updated so bubble tracks the swaying monster
+      //
+      if (inst.currentTooltip) {
+        const bug = monsterBugs[MONSTER_CONVERSATION_LINES[inst.lineIndex].speaker]
+        inst.currentTooltip.frozenX = Math.round(bug.x)
+        inst.currentTooltip.frozenY = Math.round(bug.y)
+      }
+      if (inst.timer >= inst.currentDisplayTime) {
+        inst.currentTooltip && Tooltip.destroy(inst.currentTooltip)
+        inst.currentTooltip = null
+        inst.lineIndex++
+        if (inst.lineIndex >= MONSTER_CONVERSATION_LINES.length) {
+          inst.phase = 'done'
+          //
+          // Persist only after the full conversation has played
+          //
+          set(MONSTER_CONVERSATION_STORAGE_KEY, true)
+          return
+        }
+        inst.phase = 'pause'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'pause') {
+      if (inst.timer >= MONSTER_PAUSE_BETWEEN) {
+        inst.phase = 'showing'
+        inst.timer = 0
+        showLine(MONSTER_CONVERSATION_LINES[inst.lineIndex])
+      }
+    }
+  })
+}
+
+/**
+ * Shows random speech bubbles from crawling small bugs with long pauses.
+ * Picks a random crawling bug and a random phrase, displays it, then waits.
+ * Loops indefinitely to add ambient life to the level.
+ * @param {Object} k - Kaplay instance
+ * @param {Array<Object>} smallBugs - Array of small bug instances
+ */
+function startSmallBugPhrases(k, smallBugs) {
+  const inst = {
+    timer: 0,
+    phase: 'pause',
+    currentTooltip: null,
+    currentDisplayTime: 0,
+    lastPhraseIndex: -1,
+    pauseDuration: BUG_PHRASE_MIN_PAUSE * 0.5 + Math.random() * BUG_PHRASE_EXTRA_PAUSE * 0.5
+  }
+  //
+  // Pick a random phrase, avoiding the last one used
+  //
+  const pickPhrase = () => {
+    let idx = Math.floor(Math.random() * SMALL_BUG_PHRASES.length)
+    if (idx === inst.lastPhraseIndex && SMALL_BUG_PHRASES.length > 1) {
+      idx = (idx + 1) % SMALL_BUG_PHRASES.length
+    }
+    inst.lastPhraseIndex = idx
+    return SMALL_BUG_PHRASES[idx]
+  }
+  //
+  // Find a random bug that is currently crawling (not in pyramid or scared)
+  //
+  const pickBug = () => {
+    const crawling = smallBugs.filter(b => b.state === 'crawling')
+    if (crawling.length === 0) return null
+    return crawling[Math.floor(Math.random() * crawling.length)]
+  }
+  //
+  // Show a phrase bubble above the chosen bug
+  //
+  const showPhrase = (bug, text) => {
+    inst.currentTooltip && Tooltip.destroy(inst.currentTooltip)
+    const target = {
+      x: () => bug.x,
+      y: () => bug.y,
+      width: 0,
+      height: 0,
+      text,
+      offsetY: BUG_PHRASE_Y_OFFSET
+    }
+    inst.currentTooltip = Tooltip.create({
+      k,
+      targets: [target],
+      forceVisible: true
+    })
+    inst.currentTooltip.activeTarget = target
+    inst.currentTooltip.frozenX = Math.round(bug.x)
+    inst.currentTooltip.frozenY = Math.round(bug.y)
+    inst.currentTooltip.opacity = 1
+    const chars = text.replace(/\n/g, '').length
+    inst.currentDisplayTime = Math.max(BUG_PHRASE_MIN_DISPLAY_TIME, chars / BUG_PHRASE_CHARS_PER_SECOND)
+  }
+  k.onUpdate(() => {
+    inst.timer += k.dt()
+    if (inst.phase === 'pause') {
+      if (inst.timer >= inst.pauseDuration) {
+        const bug = pickBug()
+        if (!bug) {
+          inst.timer = 0
+          return
+        }
+        const text = pickPhrase()
+        showPhrase(bug, text)
+        inst.phase = 'showing'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'showing') {
+      if (inst.timer >= inst.currentDisplayTime) {
+        inst.currentTooltip && Tooltip.destroy(inst.currentTooltip)
+        inst.currentTooltip = null
+        inst.phase = 'pause'
+        inst.timer = 0
+        inst.pauseDuration = BUG_PHRASE_MIN_PAUSE + Math.random() * BUG_PHRASE_EXTRA_PAUSE
+      }
+    }
+  })
 }
 
 /**

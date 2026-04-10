@@ -76,6 +76,13 @@ const AIR_PUSH_DISTANCE_X = 40
 const AIR_PUSH_DISTANCE_Y = 60
 const AIR_PUSH_FACTOR = 0.6
 //
+// Poison collision combines leaf radius with hero half-dimensions.
+// Hero visual box is SPRITE_SIZE(32) * HERO_SCALE(3) = 96px; half = 48px.
+// We use slightly tighter values so it feels fair.
+//
+const POISON_HERO_HALF_W = 20
+const POISON_HERO_HALF_H = 40
+//
 // Leaf shape bezier resolution
 //
 const BEZIER_STEPS = 8
@@ -94,7 +101,7 @@ const BEZIER_STEPS = 8
  * @returns {Object} Falling leaves instance
  */
 export function create(config) {
-  const { k, treeRoots, floorY, hero, leftBound, rightBound } = config
+  const { k, treeRoots, floorY, hero, leftBound, rightBound, poisonChance = 0, poisonColor = null, onPoisonHit = null } = config
   //
   // Count total initial leaves across all trees
   //
@@ -117,7 +124,10 @@ export function create(config) {
     totalInitialLeaves,
     spawnedCount: 0,
     spawnTimer: 0,
-    nextSpawnTime: INITIAL_SPAWN_DELAY
+    nextSpawnTime: INITIAL_SPAWN_DELAY,
+    poisonChance,
+    poisonColor,
+    onPoisonHit
   }
   //
   // Drawer for grounded leaves (on floor surface, above platforms)
@@ -295,17 +305,24 @@ function spawnLeaf(inst) {
   //
   const angleDeg = srcLeaf.rotation * 180 / Math.PI
   //
+  // Determine if this leaf is poisonous (random chance from config)
+  //
+  const isPoisonous = inst.poisonChance > 0 && Math.random() < inst.poisonChance
+  const leafColor = isPoisonous && inst.poisonColor ? inst.poisonColor : srcLeaf.color
+  //
   // Create falling leaf data
   //
   inst.fallingLeaves.push({
     x: srcLeaf.x,
     y: srcLeaf.y,
     size: srcLeaf.size,
-    color: srcLeaf.color,
+    color: leafColor,
     opacity: srcLeaf.opacity,
     baseOpacity: srcLeaf.opacity,
     angle: angleDeg,
     scaleX: 1,
+    poisonous: isPoisonous,
+    poisonTriggered: false,
     //
     // Movement
     //
@@ -399,6 +416,15 @@ function updateFallingLeaf(inst, leaf) {
     if (Math.abs(dxHero) < AIR_PUSH_DISTANCE_X && Math.abs(dyHero) < AIR_PUSH_DISTANCE_Y) {
       const heroVx = hero.pos.x - (inst.lastHeroX ?? hero.pos.x)
       leaf.speedX += heroVx * AIR_PUSH_FACTOR
+      //
+      // Poison leaf kills hero when bounding boxes overlap (leaf size + hero half-size)
+      //
+      if (leaf.poisonous && !leaf.poisonTriggered && inst.onPoisonHit &&
+          Math.abs(dxHero) < leaf.size + POISON_HERO_HALF_W &&
+          Math.abs(dyHero) < leaf.size + POISON_HERO_HALF_H) {
+        leaf.poisonTriggered = true
+        inst.onPoisonHit(leaf)
+      }
     }
   }
   //
@@ -433,6 +459,14 @@ function updateGroundLeaf(inst, leaf) {
   // One-shot impulse on first contact (not repeated while hero stays on leaf)
   //
   if (isTouching && !leaf.heroTouching) {
+    //
+    // Poison leaf on ground kills hero when feet horizontally overlap the leaf
+    //
+    if (leaf.poisonous && !leaf.poisonTriggered && inst.onPoisonHit && distX < leaf.size + POISON_HERO_HALF_W) {
+      leaf.poisonTriggered = true
+      inst.onPoisonHit(leaf)
+      return
+    }
     const heroVx = hero.pos.x - (inst.lastHeroX ?? hero.pos.x)
     const dir = heroVx >= 0 ? 1 : -1
     const mult = leaf.slideMult ?? 1

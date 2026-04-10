@@ -9,6 +9,8 @@ import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, getRGB } from '../../../utils/helper.js'
 import * as FallingLeaf from '../components/falling-leaf.js'
+import * as Rain from '../components/rain.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -48,6 +50,118 @@ const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
 const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
 const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
+//
+// Rain intensity (fraction of default drop count)
+//
+const RAIN_INTENSITY = 0.1
+//
+// Scrolling cloud constants
+//
+const CLOUD_SCROLL_SPEED = 8
+const CLOUD_TOP_Y = TOP_MARGIN + 20
+const CLOUD_BOTTOM_Y = TOP_MARGIN + 100
+const CLOUD_COUNT = 18
+const CLOUD_RANDOMNESS = 20
+//
+// Tooltip texts
+//
+const HERO_TOOLTIP_TEXT = "find yourself"
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -100
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
+const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
+const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_WIDTH = 80
+const GREEN_TIMER_TOOLTIP_HEIGHT = 20
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
+const FPS_COUNTER_TOP_Y = 55
+const SMALL_HERO_TOOLTIP_TEXT = "your score"
+const SMALL_HERO_TOOLTIP_SIZE = 60
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 60
+const LIFE_TOOLTIP_Y_OFFSET = 50
+//
+// Falling leaf tooltip phrases (shown when hovering a leaf in the air)
+//
+const LEAF_FALLING_PHRASES = [
+  "aaaaaa!!!!",
+  "I'm freeee!",
+  "Wheee!!",
+  "not again...",
+  "fly, fly, fly!"
+]
+//
+// Grounded leaf tooltip phrases (shown when hovering a leaf on the floor)
+//
+const LEAF_GROUND_PHRASES = [
+  "I used to be somebody",
+  "don't step on me!",
+  "I'm fine. this is fine",
+  "tell my branch\nI said hi",
+  "floor life is\nnot so bad",
+  "I'm on a break",
+  "five more minutes...",
+  "was that a foot?!",
+  "I regret nothing",
+  "at least it's warm\ndown here"
+]
+//
+// Poison leaf tooltip phrases (shown on hover over blue leaves)
+//
+const LEAF_POISON_PHRASES = [
+  "don't touch me",
+  "I dare you",
+  "feeling brave?",
+  "you won't like this",
+  "blue means danger"
+]
+const LEAF_TOOLTIP_HOVER_SIZE = 30
+const LEAF_TOOLTIP_Y_OFFSET = -30
+//
+// Poison leaf settings (blue leaves that kill the hero on contact)
+//
+const POISON_LEAF_CHANCE = 0.4
+const POISON_LEAF_COLOR_HEX = '#4488CC'
+const POISON_DEATH_RELOAD_DELAY = 0.8
+//
+// Life icon flash/particle effects on death
+//
+const LIFE_FLASH_COUNT = 20
+const LIFE_FLASH_INTERVAL = 0.05
+const LIFE_PARTICLE_COUNT = 15
+const LIFE_PARTICLE_SPEED_MIN = 80
+const LIFE_PARTICLE_SPEED_EXTRA = 40
+const LIFE_PARTICLE_LIFETIME_MIN = 0.8
+const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
+const LIFE_PARTICLE_SIZE_MIN = 4
+const LIFE_PARTICLE_SIZE_EXTRA = 4
+//
+// First tree trunk tooltip (note name hint)
+//
+const FIRST_TREE_TOOLTIP_TEXT = "C"
+const FIRST_TREE_TOOLTIP_HOVER_WIDTH = 40
+const FIRST_TREE_TOOLTIP_EXTRA_HEIGHT = 80
+const FIRST_TREE_TOOLTIP_Y_OFFSET = -60
+//
+// Anti-hero tooltip (shown while gray/inactive)
+//
+const ANTIHERO_TOOLTIP_TEXT = "wait... do I know you?\nyou look familiar"
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -70
+//
+// Antihero timed hints (shown if player hasn't solved the melody puzzle)
+//
+const ANTIHERO_HINT_WAIT_DELAY = 30
+const ANTIHERO_HINT_WAIT_TEXT = "I'm waiting for you here"
+const ANTIHERO_HINT_NOTES_DELAY = 60
+const ANTIHERO_HINT_NOTES_TEXT = "C - Do, D - Re, E - Mi\nplay the trees"
+const ANTIHERO_HINT_DISPLAY_TIME = 5
+const ANTIHERO_HINT_NOTES_DISPLAY_TIME = 10
+const ANTIHERO_HINT_NOTES_REPEAT_INTERVAL = 30
+const ANTIHERO_HINT_Y_OFFSET = -140
 
 /**
  * Level 1 scene for touch section
@@ -85,9 +199,10 @@ export function sceneLevel1(k) {
       })
     })
     //
-    // Generate dark background cloud data (baked into back canvas below)
+    // Scrolling clouds: generate configs and add live draw object
     //
-    const cloudConfigs = createCloudConfigs(k)
+    const cloudConfigs = createScrollingCloudConfigs()
+    createScrollingClouds(k, cloudConfigs)
     //
     // Create grass/bushes/trees decoration with parallax depth layers
     //
@@ -482,10 +597,6 @@ export function sceneLevel1(k) {
     //
     const createBackCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        //
-        // Draw clouds first (furthest back)
-        //
-        drawCloudsToCanvas(ctx, cloudConfigs)
         //
         // Draw back layer trees
         //
@@ -1020,7 +1131,12 @@ export function sceneLevel1(k) {
       melodyTimer: 0,
       lastTouchedTreeIndex: -1,  // Track last touched tree to prevent duplicate detection
       sequenceCompleteTime: null,  // Time when sequence was completed (for pause check)
-      pauseTimer: 0  // Timer for tracking pause after sequence completion
+      pauseTimer: 0,  // Timer for tracking pause after sequence completion
+      hintTimer: 0,
+      hintWaitShown: false,
+      hintNotesFirstShown: false,
+      hintNotesLastShownAt: 0,
+      currentHint: null
     }
     
     //
@@ -1373,15 +1489,37 @@ export function sceneLevel1(k) {
       }
     ])
     //
-    // Create falling leaves system (leaves detach from TreeRoots trees)
+    // Tooltip on first tree trunk (note "C")
     //
+    const firstRoot = treeRootsInst.roots[0]
+    const firstTrunkVisualHeight = firstRoot.trunkBottom.y - firstRoot.trunkTop.y + FIRST_TREE_TOOLTIP_EXTRA_HEIGHT
+    const firstTrunkCenterY = firstRoot.trunkBottom.y - firstTrunkVisualHeight / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: firstRoot.x,
+        y: firstTrunkCenterY,
+        width: FIRST_TREE_TOOLTIP_HOVER_WIDTH,
+        height: firstTrunkVisualHeight,
+        text: FIRST_TREE_TOOLTIP_TEXT,
+        offsetY: FIRST_TREE_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Create falling leaves system (leaves detach from TreeRoots trees).
+    // 40% of leaves are poisonous (blue) and kill the hero on contact.
+    //
+    const poisonColor = getRGB(k, POISON_LEAF_COLOR_HEX)
     const fallingLeafInst = FallingLeaf.create({
       k,
       treeRoots: treeRootsInst,
       floorY: FLOOR_Y,
       hero: heroInst,
       leftBound: LEFT_MARGIN,
-      rightBound: CFG.visual.screen.width - RIGHT_MARGIN
+      rightBound: CFG.visual.screen.width - RIGHT_MARGIN,
+      poisonChance: POISON_LEAF_CHANCE,
+      poisonColor,
+      onPoisonHit: () => onPoisonLeafDeath(k, heroInst, levelIndicator)
     })
     //
     // Create bugs (obstacles)
@@ -1713,6 +1851,10 @@ export function sceneLevel1(k) {
           playMelody()
         }
       }
+      //
+      // Timed hints from anti-hero while melody puzzle is unsolved
+      //
+      onUpdateAntiHeroHints(k, gameState, antiHeroInst)
     })
     
     //
@@ -1868,76 +2010,116 @@ export function sceneLevel1(k) {
     //
     const transition = createLevelTransition(k)
     //
+    // Rain: very light rain (25% of default intensity)
+    //
+    const frontTrees = layers[2] ? layers[2].trees : []
+    Rain.create({
+      k,
+      topY: TOP_MARGIN,
+      floorY: FLOOR_Y,
+      leftX: LEFT_MARGIN,
+      rightX: CFG.visual.screen.width - RIGHT_MARGIN,
+      heroInst,
+      antiHeroInst,
+      trees: frontTrees,
+      intensity: RAIN_INTENSITY
+    })
+    //
+    // Tooltip: hero (tracks hero position dynamically)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => heroInst.character.pos.x,
+        y: () => heroInst.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: TOUCH indicator letters (top-left corner)
+    //
+    const touchLettersCenterX = LEFT_MARGIN + 40 + TOUCH_INDICATOR_TOOLTIP_WIDTH / 2
+    const touchLettersCenterY = TOP_MARGIN / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: touchLettersCenterX,
+        y: touchLettersCenterY,
+        width: TOUCH_INDICATOR_TOOLTIP_WIDTH,
+        height: TOUCH_INDICATOR_TOOLTIP_HEIGHT,
+        text: TOUCH_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: green timer (appears below, positioned at FPS counter row)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: k.width() / 2 + 140,
+        y: FPS_COUNTER_TOP_Y,
+        width: GREEN_TIMER_TOOLTIP_WIDTH,
+        height: GREEN_TIMER_TOOLTIP_HEIGHT,
+        text: GREEN_TIMER_TOOLTIP_TEXT,
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: small hero icon (score) - appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: life icon - appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.pos.x,
+        y: levelIndicator.lifeImage.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: anti-hero (shown only while gray/inactive, hidden once activated)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => gameState.antiHeroActive ? -9999 : antiHeroInst.character.pos.x,
+        y: () => antiHeroInst.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: falling and grounded leaves (separate phrases per state)
+    //
+    createLeafTooltips(k, fallingLeafInst)
+    //
     // ESC key to return to menu
     //
-    /**
-     * Generate cloud configuration data (no game objects created).
-     * Cloud data is baked into the back canvas via drawCloudsToCanvas.
-     */
-    function createCloudConfigs(k) {
-      const cloudTopY = TOP_MARGIN + 20
-      const cloudBottomY = TOP_MARGIN + 100
-      const screenWidth = k.width()
-      const cloudStartX = LEFT_MARGIN + 50
-      const cloudEndX = screenWidth - RIGHT_MARGIN - 50
-      const cloudCoverageWidth = cloudEndX - cloudStartX
-      const cloudCount = 18
-      const cloudSpacing = cloudCoverageWidth / (cloudCount - 1)
-      const configs = []
-
-      for (let i = 0; i < cloudCount; i++) {
-        const baseX = cloudStartX + cloudSpacing * i
-        const randomness = 20
-        const cloudX = baseX + (Math.random() - 0.5) * randomness
-        const randomY = cloudTopY + Math.random() * (cloudBottomY - cloudTopY)
-        const crownSize = (50 + Math.random() * 60) * 1.2
-        const crownCount = 5 + Math.floor(Math.random() * 4)
-        const crowns = []
-
-        for (let j = 0; j < crownCount; j++) {
-          crowns.push({
-            offsetX: (Math.random() - 0.5) * crownSize * 0.7,
-            offsetY: (Math.random() - 0.5) * crownSize * 0.5,
-            sizeVariation: 0.6 + Math.random() * 0.6,
-            opacityVariation: 0.7 + Math.random() * 0.2
-          })
-        }
-
-        configs.push({
-          x: cloudX,
-          y: randomY,
-          crownSize,
-          crowns,
-          colorR: 36,
-          colorG: 37,
-          colorB: 36,
-          opacity: 0.85 + Math.random() * 0.1
-        })
-      }
-      return configs
-    }
-    /**
-     * Render cloud configs onto a 2D canvas context
-     */
-    function drawCloudsToCanvas(ctx, configs) {
-      for (const cloud of configs) {
-        for (const crown of cloud.crowns) {
-          const r = cloud.crownSize * crown.sizeVariation
-          const opacity = cloud.opacity * crown.opacityVariation
-          ctx.fillStyle = `rgba(${cloud.colorR}, ${cloud.colorG}, ${cloud.colorB}, ${opacity})`
-          ctx.beginPath()
-          ctx.arc(
-            cloud.x + crown.offsetX,
-            cloud.y + crown.offsetY,
-            r,
-            0,
-            Math.PI * 2
-          )
-          ctx.fill()
-        }
-      }
-    }
-    
     k.onKeyPress("escape", () => {
       k.go("menu")
     })
@@ -2058,6 +2240,91 @@ function createRoundedCornerSprite(radius, color) {
 }
 
 /**
+ * Handles hero death from touching a poison (blue) leaf.
+ * Increments life score, flashes life icon, then reloads the level.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} levelIndicator - Level indicator with lifeImage
+ */
+function onPoisonLeafDeath(k, heroInst, levelIndicator) {
+  if (heroInst.isDying) return
+  Hero.death(heroInst, () => {
+    const currentScore = get('lifeScore', 0)
+    const newScore = currentScore + 1
+    set('lifeScore', newScore)
+    levelIndicator?.updateLifeScore?.(newScore)
+    if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
+      Sound.playLifeSound(k)
+      const originalColor = levelIndicator.lifeImage.sprite.color
+      flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
+      createLifeParticlesOnDeath(k, levelIndicator)
+    }
+    k.wait(POISON_DEATH_RELOAD_DELAY, () => k.go('level-touch.1'))
+  })
+}
+//
+// Flashes life image red/white on poison death
+//
+function flashLifeImageOnDeath(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  if (count >= LIFE_FLASH_COUNT) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+    return
+  }
+  if (count % 2 === 0) {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDeath(k, levelIndicator, originalColor, count + 1))
+}
+//
+// Red square particles radiating from life icon on death
+//
+function createLifeParticlesOnDeath(k, levelIndicator) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  const lifeX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeY = levelIndicator.lifeImage.sprite.pos.y
+  for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
+    const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
+    const lifetime = LIFE_PARTICLE_LIFETIME_MIN + Math.random() * LIFE_PARTICLE_LIFETIME_EXTRA
+    const size = LIFE_PARTICLE_SIZE_MIN + Math.random() * LIFE_PARTICLE_SIZE_EXTRA
+    const pData = {
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      lifetime,
+      elapsed: 0
+    }
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeX, lifeY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    particle.onUpdate(() => onUpdateDeathParticle(k, particle, pData))
+  }
+}
+//
+// Updates a death particle (movement + fade + destroy)
+//
+function onUpdateDeathParticle(k, particle, pData) {
+  pData.elapsed += k.dt()
+  particle.pos.x += pData.vx * k.dt()
+  particle.pos.y += pData.vy * k.dt()
+  particle.opacity = 1 - pData.elapsed / pData.lifetime
+  if (pData.elapsed >= pData.lifetime) {
+    k.destroy(particle)
+  }
+}
+
+/**
  * Creates rounded corners at all four corners of the game area
  * @param {Object} k - Kaplay instance
  */
@@ -2099,4 +2366,218 @@ function createRoundedCorners(k) {
     k.rotate(180),
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
+}
+
+/**
+ * Generates cloud configuration data for the scrolling cloud system.
+ * Cloud X positions are relative to a band (0 to bandWidth) so two copies
+ * can tile seamlessly during scrolling.
+ * @returns {Object} Cloud config with bandWidth and cloud array
+ */
+function createScrollingCloudConfigs() {
+  const areaLeft = LEFT_MARGIN
+  const areaRight = CFG.visual.screen.width - RIGHT_MARGIN
+  const bandWidth = areaRight - areaLeft
+  const cloudSpacing = bandWidth / CLOUD_COUNT
+  const baseCloudColor = { r: 36, g: 37, b: 36 }
+  const configs = []
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const baseX = cloudSpacing * i + cloudSpacing * 0.5
+    const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
+    const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+    const crownSize = (50 + Math.random() * 60) * 1.2
+    const crownCount = 5 + Math.floor(Math.random() * 4)
+    const crowns = []
+    for (let j = 0; j < crownCount; j++) {
+      crowns.push({
+        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+        sizeVariation: 0.6 + Math.random() * 0.6,
+        opacityVariation: 0.7 + Math.random() * 0.2
+      })
+    }
+    configs.push({
+      x: cloudX,
+      y: cloudY,
+      crownSize,
+      crowns,
+      color: baseCloudColor,
+      opacity: 0.85 + Math.random() * 0.1
+    })
+  }
+  return { bandWidth, areaLeft, areaRight, configs }
+}
+
+/**
+ * Creates the scrolling cloud draw object that moves clouds to the right
+ * in a seamless loop (two copies of the band tiled side-by-side).
+ * @param {Object} k - Kaplay instance
+ * @param {Object} cloudData - Output of createScrollingCloudConfigs
+ */
+function createScrollingClouds(k, cloudData) {
+  const { bandWidth, areaLeft, areaRight, configs } = cloudData
+  const inst = { scrollX: 0 }
+  k.add([
+    k.z(1),
+    {
+      draw() {
+        inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
+        for (let copy = 0; copy < 2; copy++) {
+          const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
+          for (const cloud of configs) {
+            const cx = cloud.x + baseOffset
+            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
+            for (const crown of cloud.crowns) {
+              k.drawCircle({
+                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
+                radius: cloud.crownSize * crown.sizeVariation,
+                color: k.rgb(cloud.color.r, cloud.color.g, cloud.color.b),
+                opacity: cloud.opacity * crown.opacityVariation
+              })
+            }
+          }
+        }
+      }
+    }
+  ])
+}
+
+/**
+ * Creates dynamic tooltips for leaves. Falling leaves get "scream" phrases,
+ * grounded leaves get funny "resting" phrases. Phrases are assigned via
+ * WeakMaps so each leaf keeps its phrase stable across frames.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} fallingLeafInst - FallingLeaf instance with fallingLeaves/groundLeaves
+ */
+function createLeafTooltips(k, fallingLeafInst) {
+  //
+  // Separate phrase maps: falling vs grounded (so phrase changes on landing).
+  // Poison leaves always use the poison pool regardless of state.
+  //
+  const fallingPhraseMap = new WeakMap()
+  const groundPhraseMap = new WeakMap()
+  const getPhrase = (leaf, isFalling) => {
+    if (leaf.poisonous) {
+      if (!fallingPhraseMap.has(leaf)) {
+        fallingPhraseMap.set(leaf, LEAF_POISON_PHRASES[Math.floor(Math.random() * LEAF_POISON_PHRASES.length)])
+      }
+      return fallingPhraseMap.get(leaf)
+    }
+    const map = isFalling ? fallingPhraseMap : groundPhraseMap
+    const pool = isFalling ? LEAF_FALLING_PHRASES : LEAF_GROUND_PHRASES
+    if (!map.has(leaf)) {
+      map.set(leaf, pool[Math.floor(Math.random() * pool.length)])
+    }
+    return map.get(leaf)
+  }
+  //
+  // Pre-allocate tooltip target slots refreshed each frame via onUpdate
+  //
+  const tooltipTargets = []
+  const MAX_TRACKED_LEAVES = 200
+  for (let i = 0; i < MAX_TRACKED_LEAVES; i++) {
+    tooltipTargets.push({
+      x: -9999,
+      y: -9999,
+      width: LEAF_TOOLTIP_HOVER_SIZE,
+      height: LEAF_TOOLTIP_HOVER_SIZE,
+      text: "",
+      offsetY: LEAF_TOOLTIP_Y_OFFSET
+    })
+  }
+  Tooltip.create({ k, targets: tooltipTargets })
+  //
+  // Sync tooltip target positions/texts with actual leaf positions each frame
+  //
+  k.onUpdate(() => onUpdateLeafTooltips(fallingLeafInst, tooltipTargets, getPhrase))
+}
+//
+// Updates leaf tooltip target positions. Poison leaves get warning phrases,
+// falling leaves get scream phrases, grounded leaves get resting phrases.
+//
+function onUpdateLeafTooltips(fallingLeafInst, targets, getPhrase) {
+  const falling = fallingLeafInst.fallingLeaves
+  const ground = fallingLeafInst.groundLeaves
+  let idx = 0
+  //
+  // Falling leaves first
+  //
+  for (let i = 0; i < falling.length && idx < targets.length; i++, idx++) {
+    targets[idx].x = falling[i].x
+    targets[idx].y = falling[i].y
+    targets[idx].text = getPhrase(falling[i], true)
+  }
+  //
+  // Grounded leaves next
+  //
+  for (let i = 0; i < ground.length && idx < targets.length; i++, idx++) {
+    targets[idx].x = ground[i].x
+    targets[idx].y = ground[i].y
+    targets[idx].text = getPhrase(ground[i], false)
+  }
+  //
+  // Hide remaining unused slots
+  //
+  for (; idx < targets.length; idx++) {
+    targets[idx].x = -9999
+    targets[idx].y = -9999
+  }
+}
+//
+// Shows timed speech bubbles from the anti-hero if the melody puzzle
+// is unsolved for too long. First hint at 30s, notes hint at 60s,
+// then notes hint repeats every 30s.
+//
+function onUpdateAntiHeroHints(k, gameState, antiHeroInst) {
+  if (gameState.antiHeroActive) return
+  gameState.hintTimer += k.dt()
+  //
+  // First hint: "I'm waiting for you here" after 30 seconds (once)
+  //
+  if (!gameState.hintWaitShown && gameState.hintTimer >= ANTIHERO_HINT_WAIT_DELAY) {
+    gameState.hintWaitShown = true
+    showAntiHeroHint(k, gameState, antiHeroInst, ANTIHERO_HINT_WAIT_TEXT, ANTIHERO_HINT_DISPLAY_TIME)
+  }
+  //
+  // Notes hint: first at 60s, then repeats every 30s
+  //
+  if (!gameState.hintNotesFirstShown && gameState.hintTimer >= ANTIHERO_HINT_NOTES_DELAY) {
+    gameState.hintNotesFirstShown = true
+    gameState.hintNotesLastShownAt = gameState.hintTimer
+    showAntiHeroHint(k, gameState, antiHeroInst, ANTIHERO_HINT_NOTES_TEXT, ANTIHERO_HINT_NOTES_DISPLAY_TIME)
+  } else if (gameState.hintNotesFirstShown && !gameState.currentHint) {
+    const elapsed = gameState.hintTimer - gameState.hintNotesLastShownAt
+    if (elapsed >= ANTIHERO_HINT_NOTES_REPEAT_INTERVAL) {
+      gameState.hintNotesLastShownAt = gameState.hintTimer
+      showAntiHeroHint(k, gameState, antiHeroInst, ANTIHERO_HINT_NOTES_TEXT, ANTIHERO_HINT_NOTES_DISPLAY_TIME)
+    }
+  }
+}
+//
+// Displays a forced-visible tooltip above the anti-hero for a fixed duration.
+// Uses a higher Y offset when the hover tooltip is also visible to avoid overlap.
+//
+function showAntiHeroHint(k, gameState, antiHeroInst, text, duration) {
+  gameState.currentHint && Tooltip.destroy(gameState.currentHint)
+  const target = {
+    x: () => antiHeroInst.character.pos.x,
+    y: () => antiHeroInst.character.pos.y,
+    width: 0,
+    height: 0,
+    text,
+    offsetY: ANTIHERO_HINT_Y_OFFSET
+  }
+  gameState.currentHint = Tooltip.create({
+    k,
+    targets: [target],
+    forceVisible: true
+  })
+  gameState.currentHint.activeTarget = target
+  gameState.currentHint.frozenX = Math.round(antiHeroInst.character.pos.x)
+  gameState.currentHint.frozenY = Math.round(antiHeroInst.character.pos.y)
+  gameState.currentHint.opacity = 1
+  k.wait(duration, () => {
+    gameState.currentHint && Tooltip.destroy(gameState.currentHint)
+    gameState.currentHint = null
+  })
 }

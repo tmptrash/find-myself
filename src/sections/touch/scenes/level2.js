@@ -3,13 +3,14 @@ import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
-import { toPng } from '../../../utils/helper.js'
+import { toPng, getRGB } from '../../../utils/helper.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { arcY } from '../utils/trees.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -46,6 +47,116 @@ const ICICLE_COLOR_G = 255
 const ICICLE_COLOR_B = 255
 const ICICLE_OUTLINE_WIDTH = 2
 const ICICLE_KILL_TOLERANCE = 10
+//
+// Snowflake hero push (snowflakes fly when hero runs past)
+//
+const SNOW_PUSH_DISTANCE = 60
+const SNOW_PUSH_STRENGTH = 80
+//
+// Tooltip texts and layout
+//
+const ICICLE_TOOLTIP_TEXT = "I'm an icicle.\ncome closer and lick me"
+const ICICLE_TOOLTIP_Y_OFFSET = -30
+const ANTIHERO_TOOLTIP_TEXT = "I'm here :)"
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
+const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
+const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_WIDTH = 80
+const GREEN_TIMER_TOOLTIP_HEIGHT = 20
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
+const FPS_COUNTER_TOP_Y = 55
+const SMALL_HERO_TOOLTIP_TEXT = "your score"
+const SMALL_HERO_TOOLTIP_SIZE = 60
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 60
+const LIFE_TOOLTIP_Y_OFFSET = 50
+//
+// Hero tooltip
+//
+const HERO_TOOLTIP_TEXT = "maybe here I'm not\nfinding myself...\nbut the platforms"
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -100
+//
+// Moon tooltip
+//
+const MOON_TOOLTIP_TEXT = "you can howl at me"
+const MOON_TOOLTIP_Y_OFFSET = -30
+//
+// Antihero platform tooltip (log where antihero stands)
+//
+const ANTIHERO_PLATFORM_TOOLTIP_TEXT = "there are other\nplatforms below..."
+const ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET = 40
+//
+// Antihero timed hint (shown if player hasn't completed level in time)
+//
+const ANTIHERO_HINT_DELAY = 60
+const ANTIHERO_HINT_TEXT = "use the edges\nof the platforms..."
+const ANTIHERO_HINT_DISPLAY_TIME = 8
+const ANTIHERO_HINT_Y_OFFSET = -140
+//
+// Jump ring: expanding circle of particles radiating from hero's feet
+//
+const JUMP_RING_PARTICLE_COUNT = 28
+const JUMP_RING_EXPAND_SPEED = 300
+const JUMP_RING_LIFETIME = 0.6
+const JUMP_RING_PARTICLE_SIZE = 2.5
+const JUMP_RING_JITTER = 6
+const JUMP_RING_COLOR_R = 200
+const JUMP_RING_COLOR_G = 220
+const JUMP_RING_COLOR_B = 255
+const JUMP_RING_FOOT_OFFSET_Y = 40
+//
+// Speed bonus constants
+//
+const SPEED_BONUS_FLASH_COUNT = 20
+const SPEED_BONUS_FLASH_INTERVAL = 0.05
+const SPEED_BONUS_PARTICLE_COUNT = 8
+const SPEED_BONUS_PARTICLE_SPEED_MIN = 30
+const SPEED_BONUS_PARTICLE_SPEED_RANGE = 20
+const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
+const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
+const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
+const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
+//
+// Log platform visual constants (rounded wooden look)
+//
+const LOG_BARK_COLOR_HEX = '#5C3A1E'
+const LOG_BARK_LIGHT_HEX = '#7A5030'
+const LOG_BARK_DARK_HEX = '#3E2510'
+const LOG_RING_COLOR_HEX = '#A07050'
+const LOG_RING_DARK_HEX = '#6B4930'
+const LOG_CORE_COLOR_HEX = '#C4956A'
+const LOG_END_STEPS = 16
+const LOG_BARK_LINE_COUNT = 5
+const LOG_END_SQUASH = 0.55
+const LOG_CRACK_COUNT_MIN = 3
+const LOG_CRACK_COUNT_MAX = 6
+const LOG_CRACK_LENGTH_MIN = 8
+const LOG_CRACK_LENGTH_MAX = 20
+const LOG_KNOT_COUNT_MIN = 1
+const LOG_KNOT_COUNT_MAX = 3
+const LOG_KNOT_RADIUS_MIN = 2
+const LOG_KNOT_RADIUS_MAX = 4
+//
+// Trap platform: the second-to-last platform slides away on first approach
+//
+const TRAP_PLATFORM_SLIDE_SPEED = 1200
+const TRAP_PLATFORM_RETURN_SPEED = 600
+const TRAP_PLATFORM_SLIDE_DISTANCE = 400
+const TRAP_PLATFORM_TRIGGER_RADIUS = 80
+const TRAP_PLATFORM_PAUSE_DURATION = 0.3
+//
+// Snow clump constants (small extra snow pieces scattered on the mound)
+//
+const SNOW_CLUMP_COUNT_MIN = 3
+const SNOW_CLUMP_COUNT_MAX = 6
+const SNOW_CLUMP_RADIUS_MIN = 3
+const SNOW_CLUMP_RADIUS_MAX = 8
 //
 // Moon configuration (drawn on mountains canvas)
 //
@@ -264,10 +375,24 @@ export function sceneLevel2(k) {
       dustColor: snowColor,
       onAnnihilation: () => {
         //
-        // Transition after annihilation - go to level 3
+        // Check for speed bonus before scoring
         //
-        createLevelTransition(k, 'level-touch.2', () => {
-          k.go('level-touch.3')
+        const levelTime = FpsCounter.getLevelTime(fpsCounter)
+        const speedBonusEarned = checkSpeedBonus(levelTime)
+        const currentScore = get('heroScore', 0)
+        const pointsToAdd = speedBonusEarned ? 3 : 1
+        const newScore = currentScore + pointsToAdd
+        set('heroScore', newScore)
+        levelIndicator?.updateHeroScore?.(newScore)
+        sound && Sound.playVictorySound(sound)
+        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        k.wait(transitionDelay, () => {
+          Sound.stopAmbient(sound)
+          touchMusic.stop()
+          createLevelTransition(k, 'level-touch.2', () => {
+            k.go('level-touch.3')
+          })
         })
       },
       currentLevel: 'level-touch.2',
@@ -376,9 +501,31 @@ export function sceneLevel2(k) {
     //
     // Update dust and platform visibility
     //
+    //
+    // Track hero's previous X position for snowflake push direction
+    //
+    let lastHeroX = heroInst.character?.pos?.x ?? HERO_SPAWN_X
     k.onUpdate(() => {
       const dt = k.dt()
       Dust.onUpdate(dustInst, dt)
+      //
+      // Push snowflakes in hero's movement direction (like leaves in level 1)
+      //
+      if (heroInst.character?.pos) {
+        const heroX = heroInst.character.pos.x
+        const heroY = heroInst.character.pos.y
+        const heroVx = heroX - lastHeroX
+        lastHeroX = heroX
+        if (Math.abs(heroVx) > 0.5) {
+          for (const p of dustInst.particles) {
+            const dx = Math.abs(p.x - heroX)
+            const dy = Math.abs(p.y - heroY)
+            if (dx < SNOW_PUSH_DISTANCE && dy < SNOW_PUSH_DISTANCE) {
+              p.driftSpeed += heroVx * SNOW_PUSH_STRENGTH * dt
+            }
+          }
+        }
+      }
       //
       // Check if hero touches icicle spikes (deadly floor barrier)
       //
@@ -455,6 +602,59 @@ export function sceneLevel2(k) {
           }
         })
       }
+      //
+      // Trap platform: slides left, pauses, returns, then vanishes until next jump
+      //
+      platformStates.forEach(state => {
+        if (!state.isTrap) return
+        if (!state.trapTriggered) {
+          const dx = Math.abs(heroX - state.x)
+          const dy = Math.abs(heroY - state.y)
+          if (state.opacity > 0 && dx < state.width / 2 + TRAP_PLATFORM_TRIGGER_RADIUS && dy < TRAP_PLATFORM_TRIGGER_RADIUS) {
+            state.trapTriggered = true
+            state.trapPhase = 'sliding-out'
+            state.trapSlideProgress = 0
+            state.trapPauseTimer = 0
+          }
+        }
+        if (state.trapPhase === 'sliding-out') {
+          state.trapSlideProgress += TRAP_PLATFORM_SLIDE_SPEED * dt
+          if (state.trapSlideProgress >= TRAP_PLATFORM_SLIDE_DISTANCE) {
+            state.trapSlideProgress = TRAP_PLATFORM_SLIDE_DISTANCE
+            state.trapPhase = 'pausing'
+            state.trapPauseTimer = 0
+          }
+          const newX = state.trapOriginalX - state.trapSlideProgress
+          state.x = newX
+          state.visualObject && (state.visualObject.pos.x = newX)
+          state.collisionObject && (state.collisionObject.pos.x = newX)
+        } else if (state.trapPhase === 'pausing') {
+          state.trapPauseTimer += dt
+          if (state.trapPauseTimer >= TRAP_PLATFORM_PAUSE_DURATION) {
+            state.trapPhase = 'sliding-back'
+          }
+        } else if (state.trapPhase === 'sliding-back') {
+          state.trapSlideProgress -= TRAP_PLATFORM_RETURN_SPEED * dt
+          if (state.trapSlideProgress <= 0) {
+            state.trapSlideProgress = 0
+            state.trapPhase = 'done'
+            //
+            // Reset visibility so the platform vanishes until the next jump reveals it
+            //
+            state.opacity = 0
+            state.jumpCount = 0
+            state.visibilityTimer = 0
+            if (state.hasCollision && state.collisionObject) {
+              state.collisionObject.unuse("area")
+              state.hasCollision = false
+            }
+          }
+          const newX = state.trapOriginalX - state.trapSlideProgress
+          state.x = newX
+          state.visualObject && (state.visualObject.pos.x = newX)
+          state.collisionObject && (state.collisionObject.pos.x = newX)
+        }
+      })
       //
       // Update platform visibility timers and opacity
       //
@@ -547,7 +747,13 @@ export function sceneLevel2(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true })
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      targetTime: CFG.gameplay.speedBonusTime
+        ? CFG.gameplay.speedBonusTime['level-touch.2']
+        : null
+    })
     //
     // Update FPS counter
     //
@@ -565,6 +771,166 @@ export function sceneLevel2(k) {
         }
       }
     ])
+    //
+    // Tooltip: icicle spikes (each icicle has its own hover zone)
+    //
+    Tooltip.create({
+      k,
+      targets: icicleData.map(ic => ({
+        x: ic.x,
+        y: FLOOR_Y - ic.height / 2,
+        width: ic.width + 10,
+        height: ic.height,
+        text: ICICLE_TOOLTIP_TEXT,
+        offsetY: ICICLE_TOOLTIP_Y_OFFSET
+      }))
+    })
+    //
+    // Tooltip: hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => heroInst.character.pos.x,
+        y: () => heroInst.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: anti-hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHeroInst.character.pos.x,
+        y: () => antiHeroInst.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: TOUCH indicator letters (top-left corner)
+    //
+    const touchLettersCenterX = LEFT_MARGIN + 40 + TOUCH_INDICATOR_TOOLTIP_WIDTH / 2
+    const touchLettersCenterY = TOP_MARGIN / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: touchLettersCenterX,
+        y: touchLettersCenterY,
+        width: TOUCH_INDICATOR_TOOLTIP_WIDTH,
+        height: TOUCH_INDICATOR_TOOLTIP_HEIGHT,
+        text: TOUCH_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: green timer (appears below, positioned at FPS counter row)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: k.width() / 2 + 140,
+        y: FPS_COUNTER_TOP_Y,
+        width: GREEN_TIMER_TOOLTIP_WIDTH,
+        height: GREEN_TIMER_TOOLTIP_HEIGHT,
+        text: GREEN_TIMER_TOOLTIP_TEXT,
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: small hero icon (score) - appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: life icon - appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.pos.x,
+        y: levelIndicator.lifeImage.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: moon (howl prompt)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: MOON_X,
+        y: MOON_Y,
+        width: MOON_RADIUS * 2,
+        height: MOON_RADIUS * 2,
+        text: MOON_TOOLTIP_TEXT,
+        offsetY: MOON_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: antihero platform (first platform where antihero stands)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: firstPlatform.x,
+        y: firstPlatform.y,
+        width: firstPlatform.width,
+        height: 30,
+        text: ANTIHERO_PLATFORM_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Landing ring system: expanding circle of particles on hero landing
+    //
+    const jumpRings = []
+    let prevGroundedForRing = true
+    const jumpRingColor = k.rgb(JUMP_RING_COLOR_R, JUMP_RING_COLOR_G, JUMP_RING_COLOR_B)
+    k.add([
+      k.z(CFG.visual.zIndex.player + 2),
+      {
+        draw() {
+          drawJumpRings(k, jumpRings, jumpRingColor)
+        }
+      }
+    ])
+    k.onUpdate(() => {
+      const grounded = heroInst.character?.isGrounded?.() ?? true
+      onUpdateLandingRings(k, jumpRings, heroInst, grounded, prevGroundedForRing)
+      prevGroundedForRing = grounded
+    })
+    //
+    // Antihero hint: after ANTIHERO_HINT_DELAY seconds, show a hint if level not completed
+    //
+    const hintState = {
+      timer: 0,
+      shown: false,
+      currentHint: null
+    }
+    k.onUpdate(() => onUpdateAntiHeroHint(k, hintState, antiHeroInst))
     //
     // Return to menu on ESC
     //
@@ -588,7 +954,7 @@ function createCloudsUnderTopPlatform(k) {
   const cloudDenseLayerY = TOP_MARGIN + 50  // Dense layer Y position
   const cloudSparseLayerStartY = TOP_MARGIN + 60  // Start of sparse layer
   const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
-  const baseCloudColor = k.rgb(36, 37, 36)  // Dark color like in previous level
+  const baseCloudColor = k.rgb(30, 35, 50)  // Dark blue-tinted cloud color
   
   //
   // Create multiple clouds spread horizontally across the screen
@@ -645,7 +1011,7 @@ function createCloudsUnderTopPlatform(k) {
         { radius: 0.8, offsetX: 0.7, offsetY: 0 },
         { radius: 0.7, offsetX: 0, offsetY: 0.12 }
       ],
-      color: k.rgb(36, 37, 36),
+      color: baseCloudColor,
       opacity: 0.55
     },
     //
@@ -659,7 +1025,7 @@ function createCloudsUnderTopPlatform(k) {
         { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
         { radius: 0.75, offsetX: 0.6, offsetY: 0 }
       ],
-      color: k.rgb(36, 37, 36),
+      color: baseCloudColor,
       opacity: 0.5
     },
     //
@@ -855,6 +1221,11 @@ function createSnowDrifts(k) {
   //
   // Create each drift as a mound shape with multiple layers
   //
+  //
+  // Clipping bounds: drift points must stay inside the game area
+  //
+  const clipLeft = LEFT_MARGIN - corridorStart
+  const clipRight = corridorEnd - corridorStart
   drifts.forEach(drift => {
     k.add([
       k.pos(drift.x, drift.y),
@@ -868,6 +1239,11 @@ function createSnowDrifts(k) {
           const shadowOpacity = drift.z === 25 ? 0.5 : 0.7
           const highlightOpacity = drift.z === 25 ? 0.6 : 0.85
           //
+          // Clamp horizontal extent to game area bounds
+          //
+          const leftBound = LEFT_MARGIN - drift.x
+          const rightBound = (k.width() - RIGHT_MARGIN) - drift.x
+          //
           // Draw snow drift as a polygon (mound shape)
           //
           const points = []
@@ -877,7 +1253,8 @@ function createSnowDrifts(k) {
           //
           for (let i = 0; i <= steps; i++) {
             const t = i / steps
-            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            let x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            x = Math.max(leftBound, Math.min(rightBound, x))
             let y
             //
             // Different shape types for variety
@@ -901,10 +1278,10 @@ function createSnowDrifts(k) {
             points.push(k.vec2(x, y))
           }
           //
-          // Add bottom points to close the shape
+          // Add bottom points to close the shape (clamped to game area)
           //
-          points.push(k.vec2(drift.width / 2, 0))
-          points.push(k.vec2(-drift.width / 2, 0))
+          points.push(k.vec2(Math.max(leftBound, Math.min(rightBound, drift.width / 2)), 0))
+          points.push(k.vec2(Math.max(leftBound, Math.min(rightBound, -drift.width / 2)), 0))
           //
           // Draw main snow mound (light blue layer)
           //
@@ -919,12 +1296,13 @@ function createSnowDrifts(k) {
           const shadowPoints = []
           for (let i = 0; i <= steps; i++) {
             const t = i / steps
-            const x = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
-            const y = -drift.height * 0.3 * (1 - Math.pow(2 * t - 1, 2))
-            shadowPoints.push(k.vec2(x, y))
+            let sx = (t - 0.5 + drift.skew * (t - 0.5)) * drift.width
+            sx = Math.max(leftBound, Math.min(rightBound, sx))
+            const sy = -drift.height * 0.3 * (1 - Math.pow(2 * t - 1, 2))
+            shadowPoints.push(k.vec2(sx, sy))
           }
-          shadowPoints.push(k.vec2(drift.width / 2, 0))
-          shadowPoints.push(k.vec2(-drift.width / 2, 0))
+          shadowPoints.push(k.vec2(Math.max(leftBound, Math.min(rightBound, drift.width / 2)), 0))
+          shadowPoints.push(k.vec2(Math.max(leftBound, Math.min(rightBound, -drift.width / 2)), 0))
           
           k.drawPolygon({
             pts: shadowPoints,
@@ -976,11 +1354,6 @@ function createDiagonalPlatforms(k) {
   // Use 160px spacing for comfortable jumps
   //
   const maxJumpDistance = 160
-  //
-  // Colors for snow platforms
-  //
-  const snowColor = k.rgb(255, 255, 255)  // Pure white
-  const darkSnowColor = k.rgb(200, 200, 200)  // Light gray for dark snow
   //
   // Platform visibility system
   // Each platform has: opacity (0-1), jumpCount (0-3), visibilityTimer (0-2 seconds)
@@ -1039,88 +1412,22 @@ function createDiagonalPlatforms(k) {
     const collisionObj = k.add(collisionComponents)
     platformState.collisionObject = collisionObj
     //
-    // Create visual platform (snow style) with dynamic opacity
+    // Pre-generate log surface detail (cracks, knots, snow for first platform)
+    //
+    const logDetail = generateLogDetail(width, platformHeight, isFirstPlatform)
+    //
+    // Create visual platform (log style) with dynamic opacity
     //
     const visualObj = k.add([
       k.pos(x, y),
       k.z(CFG.visual.zIndex.platforms - 1),
       {
         draw() {
-          //
-          // Use opacity from platform state
-          //
           const currentOpacity = platformState.opacity
-          if (currentOpacity <= 0) return  // Don't draw if invisible
-          //
-          // Apply shake offset to drawing position
-          //
+          if (currentOpacity <= 0) return
           const drawX = platformState.shakeOffsetX
           const drawY = platformState.shakeOffsetY
-          
-          const steps = 20
-          const points = []
-          const waveHeight = 6
-          //
-          // Create wavy top surface (with shake offset)
-          //
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const px = (t - 0.5) * width + drawX
-            const py = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + drawY
-            points.push(k.vec2(px, py))
-          }
-          points.push(k.vec2(width / 2 + drawX, platformHeight / 2 + drawY))
-          points.push(k.vec2(-width / 2 + drawX, platformHeight / 2 + drawY))
-          //
-          // Draw shadow layer (with shake offset)
-          //
-          const shadowPoints = []
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const px = (t - 0.5) * width + drawX
-            const shadowHeight = waveHeight * 0.3
-            const py = -platformHeight / 2 - shadowHeight * (1 - Math.pow(2 * t - 1, 2)) + drawY
-            shadowPoints.push(k.vec2(px, py))
-          }
-          shadowPoints.push(k.vec2(width / 2 + drawX, platformHeight / 2 + drawY))
-          shadowPoints.push(k.vec2(-width / 2 + drawX, platformHeight / 2 + drawY))
-          
-          k.drawPolygon({
-            pts: shadowPoints,
-            color: k.rgb(100, 130, 180),
-            opacity: 0.7 * currentOpacity
-          })
-          //
-          // Draw main platform
-          //
-          k.drawPolygon({
-            pts: points,
-            color: darkSnowColor,
-            opacity: 0.9 * currentOpacity
-          })
-          //
-          // Draw top layer (with shake offset)
-          //
-          const topPoints = []
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const px = (t - 0.5) * width + drawX
-            const py = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + drawY
-            topPoints.push(k.vec2(px, py))
-          }
-          for (let i = steps; i >= 0; i--) {
-            const t = i / steps
-            const px = (t - 0.5) * width + drawX
-            const topLayerHeight = platformHeight * 0.7
-            const py = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + topLayerHeight + drawY
-            topPoints.push(k.vec2(px, py))
-          }
-          
-          k.drawPolygon({
-            pts: topPoints,
-            color: snowColor,
-            opacity: 0.8 * currentOpacity
-          })
+          drawLogPlatform(k, width, platformHeight, drawX, drawY, currentOpacity, logDetail)
         }
       }
     ])
@@ -1223,7 +1530,11 @@ function createDiagonalPlatforms(k) {
     fakePlatformState.collisionObject = fakeCollisionObj
     
     //
-    // Create visual platform (same as regular platforms)
+    // Pre-generate log surface detail (no snow on fake platforms)
+    //
+    const fakeLogDetail = generateLogDetail(fakeWidth, platformHeight, false)
+    //
+    // Create visual platform (log style, no snow on fake platforms)
     //
     const fakeVisualObj = k.add([
       k.pos(fakeX, fakeY),
@@ -1232,72 +1543,25 @@ function createDiagonalPlatforms(k) {
         draw() {
           const currentOpacity = fakePlatformState.opacity
           if (currentOpacity <= 0) return
-          
           const drawX = fakePlatformState.shakeOffsetX
           const drawY = fakePlatformState.shakeOffsetY
-          
-          const steps = 20
-          const points = []
-          const waveHeight = 6
-          
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const px = (t - 0.5) * fakeWidth + drawX
-            const py = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + drawY
-            points.push(k.vec2(px, py))
-          }
-          points.push(k.vec2(fakeWidth / 2 + drawX, platformHeight / 2 + drawY))
-          points.push(k.vec2(-fakeWidth / 2 + drawX, platformHeight / 2 + drawY))
-          
-          const shadowPoints = []
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const px = (t - 0.5) * fakeWidth + drawX
-            const shadowHeight = waveHeight * 0.3
-            const py = -platformHeight / 2 - shadowHeight * (1 - Math.pow(2 * t - 1, 2)) + drawY
-            shadowPoints.push(k.vec2(px, py))
-          }
-          shadowPoints.push(k.vec2(fakeWidth / 2 + drawX, platformHeight / 2 + drawY))
-          shadowPoints.push(k.vec2(-fakeWidth / 2 + drawX, platformHeight / 2 + drawY))
-          
-          k.drawPolygon({
-            pts: shadowPoints,
-            color: k.rgb(100, 130, 180),
-            opacity: 0.7 * currentOpacity
-          })
-          
-          k.drawPolygon({
-            pts: points,
-            color: darkSnowColor,
-            opacity: 0.9 * currentOpacity
-          })
-          
-          const topPoints = []
-          for (let i = 0; i <= steps; i++) {
-            const t = i / steps
-            const px = (t - 0.5) * fakeWidth + drawX
-            const py = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + drawY
-            topPoints.push(k.vec2(px, py))
-          }
-          for (let i = steps; i >= 0; i--) {
-            const t = i / steps
-            const px = (t - 0.5) * fakeWidth + drawX
-            const topLayerHeight = platformHeight * 0.7
-            const py = -platformHeight / 2 - waveHeight * (1 - Math.pow(2 * t - 1, 2)) + topLayerHeight + drawY
-            topPoints.push(k.vec2(px, py))
-          }
-          
-          k.drawPolygon({
-            pts: topPoints,
-            color: snowColor,
-            opacity: 0.8 * currentOpacity
-          })
+          drawLogPlatform(k, fakeWidth, platformHeight, drawX, drawY, currentOpacity, fakeLogDetail)
         }
       }
     ])
     fakePlatformState.visualObject = fakeVisualObj
   })
   
+  //
+  // Mark the second-to-last platform (index 1) as a trap that slides away once
+  //
+  const TRAP_INDEX = 1
+  platformStates[TRAP_INDEX].isTrap = true
+  platformStates[TRAP_INDEX].trapTriggered = false
+  platformStates[TRAP_INDEX].trapPhase = 'idle'
+  platformStates[TRAP_INDEX].trapSlideProgress = 0
+  platformStates[TRAP_INDEX].trapPauseTimer = 0
+  platformStates[TRAP_INDEX].trapOriginalX = platforms[TRAP_INDEX].x
   //
   // Return first platform position and platform states for visibility system
   //
@@ -1503,20 +1767,19 @@ function createMountains(k) {
     }
     
     //
-    // Draw snow cap (left side)
+    // Draw snow cap (left side - shaded)
     //
-    ctx.fillStyle = mountainColors.snow
+    ctx.fillStyle = mountainColors.rockRightLight
     ctx.beginPath()
     ctx.moveTo(leftSnow.x, leftSnow.y)
     leftSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
     ctx.lineTo(midSnow.x, midSnow.y)
     ctx.lineTo(mountainTopX, mountainTopY)
     ctx.fill()
-    
     //
-    // Draw snow cap (right side - light)
+    // Draw snow cap (right side - illuminated)
     //
-    ctx.fillStyle = mountainColors.rockRightLight
+    ctx.fillStyle = mountainColors.snow
     ctx.beginPath()
     ctx.moveTo(midSnow.x, midSnow.y)
     rightSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
@@ -1525,9 +1788,9 @@ function createMountains(k) {
     ctx.fill()
     
     //
-    // Draw left rock face
+    // Draw left rock face (shaded side)
     //
-    ctx.fillStyle = mountainColors.rockLeft
+    ctx.fillStyle = mountainColors.rockRight
     ctx.beginPath()
     ctx.moveTo(leftMountainBaseX, y)
     ctx.lineTo(leftSnow.x, leftSnow.y)
@@ -1535,11 +1798,10 @@ function createMountains(k) {
     ctx.lineTo(midSnow.x, midSnow.y)
     ctx.lineTo(midSnow.x, y)
     ctx.fill()
-    
     //
-    // Draw right rock face
+    // Draw right rock face (illuminated side)
     //
-    ctx.fillStyle = mountainColors.rockRight
+    ctx.fillStyle = mountainColors.rockLeft
     ctx.beginPath()
     ctx.moveTo(midSnow.x, midSnow.y)
     rightSnowPoints.forEach(point => ctx.lineTo(point.x, point.y))
@@ -1987,6 +2249,276 @@ function createLifeParticles(k, levelIndicator) {
 }
 
 /**
+ * Pre-generates random crack, knot and snow detail for a single log platform.
+ * Called once per platform at creation time so the visuals stay stable across frames.
+ * @param {number} w - Platform width
+ * @param {number} h - Platform height
+ * @param {boolean} withSnow - Whether to generate asymmetric snow profile
+ * @returns {Object} Detail data (cracks, knots, snowProfile)
+ */
+function generateLogDetail(w, h, withSnow) {
+  const halfW = w / 2
+  const halfH = h / 2
+  const sq = LOG_END_SQUASH
+  const innerLeft = -halfW + halfH * sq
+  const innerRight = halfW - halfH * sq
+  const innerW = innerRight - innerLeft
+  //
+  // Cracks: short dark diagonal lines on the bark surface
+  //
+  const crackCount = LOG_CRACK_COUNT_MIN + Math.floor(Math.random() * (LOG_CRACK_COUNT_MAX - LOG_CRACK_COUNT_MIN + 1))
+  const cracks = []
+  for (let i = 0; i < crackCount; i++) {
+    const cx = innerLeft + Math.random() * innerW
+    const cy = -halfH * 0.7 + Math.random() * h * 0.7
+    const len = LOG_CRACK_LENGTH_MIN + Math.random() * (LOG_CRACK_LENGTH_MAX - LOG_CRACK_LENGTH_MIN)
+    const angle = -0.4 + Math.random() * 0.8
+    cracks.push({ x: cx, y: cy, len, angle })
+  }
+  //
+  // Knots: small dark ovals on the bark
+  //
+  const knotCount = LOG_KNOT_COUNT_MIN + Math.floor(Math.random() * (LOG_KNOT_COUNT_MAX - LOG_KNOT_COUNT_MIN + 1))
+  const knots = []
+  for (let i = 0; i < knotCount; i++) {
+    knots.push({
+      x: innerLeft + Math.random() * innerW,
+      y: -halfH * 0.5 + Math.random() * h * 0.5,
+      r: LOG_KNOT_RADIUS_MIN + Math.random() * (LOG_KNOT_RADIUS_MAX - LOG_KNOT_RADIUS_MIN)
+    })
+  }
+  //
+  // Asymmetric snow profile with multiple random peaks and bumps.
+  // Uses 2-3 overlapping mounds of different sizes to break symmetry.
+  //
+  let snowProfile = null
+  let snowClumps = null
+  if (withSnow) {
+    const steps = 24
+    snowProfile = new Array(steps + 1).fill(0)
+    //
+    // Layer 2-3 mounds at random positions with random heights
+    //
+    const moundCount = 2 + Math.floor(Math.random() * 2)
+    for (let m = 0; m < moundCount; m++) {
+      const center = 0.15 + Math.random() * 0.7
+      const spread = 0.2 + Math.random() * 0.3
+      const height = 0.5 + Math.random() * 0.5
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps
+        const dist = (t - center) / spread
+        snowProfile[i] += height * Math.max(0, 1 - dist * dist)
+      }
+    }
+    //
+    // Normalize so the peak is 1.0, then add small random bumps
+    //
+    const maxVal = Math.max(...snowProfile)
+    for (let i = 0; i <= steps; i++) {
+      snowProfile[i] = snowProfile[i] / maxVal + (Math.random() - 0.5) * 0.08
+      snowProfile[i] = Math.max(0, snowProfile[i])
+    }
+    //
+    // Ensure edges taper to zero
+    //
+    snowProfile[0] = Math.min(snowProfile[0], 0.05)
+    snowProfile[steps] = Math.min(snowProfile[steps], 0.05)
+    //
+    // Snow clumps: small extra circles scattered along the mound surface
+    //
+    const clumpCount = SNOW_CLUMP_COUNT_MIN + Math.floor(Math.random() * (SNOW_CLUMP_COUNT_MAX - SNOW_CLUMP_COUNT_MIN + 1))
+    snowClumps = []
+    for (let i = 0; i < clumpCount; i++) {
+      const t = 0.1 + Math.random() * 0.8
+      const idx = Math.round(t * steps)
+      const profileH = snowProfile[Math.min(idx, steps)]
+      snowClumps.push({
+        t,
+        yOffset: -profileH * 0.3 + Math.random() * profileH * 0.4,
+        r: SNOW_CLUMP_RADIUS_MIN + Math.random() * (SNOW_CLUMP_RADIUS_MAX - SNOW_CLUMP_RADIUS_MIN)
+      })
+    }
+  }
+  return { cracks, knots, snowProfile, snowClumps }
+}
+
+/**
+ * Draws a log-shaped platform: rounded barrel body with bark texture,
+ * cracks/knots for detail, oval end-grain on the right, and optional snowdrift.
+ * All coordinates are relative to the platform center (0,0).
+ * @param {Object} k - Kaplay instance
+ * @param {number} w - Platform width
+ * @param {number} h - Platform height
+ * @param {number} ox - Shake offset X
+ * @param {number} oy - Shake offset Y
+ * @param {number} opacity - Current opacity (0-1)
+ * @param {Object} detail - Pre-generated log detail (cracks, knots, snowProfile)
+ */
+function drawLogPlatform(k, w, h, ox, oy, opacity, detail) {
+  const halfW = w / 2
+  const halfH = h / 2
+  const endR = halfH
+  const sq = LOG_END_SQUASH
+  const barkColor = getRGB(k, LOG_BARK_COLOR_HEX)
+  const barkLight = getRGB(k, LOG_BARK_LIGHT_HEX)
+  const barkDark = getRGB(k, LOG_BARK_DARK_HEX)
+  const ringColor = getRGB(k, LOG_RING_COLOR_HEX)
+  const ringDark = getRGB(k, LOG_RING_DARK_HEX)
+  const coreColor = getRGB(k, LOG_CORE_COLOR_HEX)
+  //
+  // Main barrel body (rounded rectangle with oval ends)
+  //
+  const bodyPts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    bodyPts.push(k.vec2(-halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
+  }
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
+  }
+  //
+  // Dark outline
+  //
+  k.drawPolygon({ pts: bodyPts.map(p => k.vec2(p.x, p.y + 2)), color: k.rgb(0, 0, 0), opacity: 0.4 * opacity })
+  //
+  // Bark body
+  //
+  k.drawPolygon({ pts: bodyPts, color: barkColor, opacity: opacity })
+  //
+  // Light streak on top half for volume
+  //
+  const topPts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    const r = endR * 0.85
+    topPts.push(k.vec2(-halfW + r * Math.cos(a) * sq + ox, r * Math.sin(a) * 0.45 - halfH * 0.2 + oy))
+  }
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    const r = endR * 0.85
+    topPts.push(k.vec2(halfW + r * Math.cos(a) * sq + ox, r * Math.sin(a) * 0.45 - halfH * 0.2 + oy))
+  }
+  k.drawPolygon({ pts: topPts, color: barkLight, opacity: 0.5 * opacity })
+  //
+  // Horizontal bark lines for texture
+  //
+  for (let i = 0; i < LOG_BARK_LINE_COUNT; i++) {
+    const ly = -halfH + (h / (LOG_BARK_LINE_COUNT + 1)) * (i + 1) + oy
+    k.drawRect({
+      pos: k.vec2(-halfW + endR * sq + ox, ly),
+      width: w - endR * sq * 2,
+      height: 1,
+      color: barkDark,
+      opacity: 0.3 * opacity
+    })
+  }
+  //
+  // Cracks: short dark diagonal lines across the bark
+  //
+  for (const crack of detail.cracks) {
+    const dx = Math.cos(crack.angle) * crack.len * 0.5
+    const dy = Math.sin(crack.angle) * crack.len * 0.5
+    k.drawLines({
+      pts: [k.vec2(crack.x - dx + ox, crack.y - dy + oy), k.vec2(crack.x + dx + ox, crack.y + dy + oy)],
+      width: 1,
+      color: barkDark,
+      opacity: 0.5 * opacity
+    })
+  }
+  //
+  // Knots: small dark ovals on the bark surface
+  //
+  for (const knot of detail.knots) {
+    drawOvalRing(k, knot.x + ox, knot.y + oy, knot.r, 0.7, barkDark, 0.45 * opacity)
+    drawOvalRing(k, knot.x + ox, knot.y + oy, knot.r * 0.5, 0.7, barkLight, 0.25 * opacity)
+  }
+  //
+  // Right end-grain oval (cross-section squashed horizontally)
+  //
+  const endCX = halfW + ox
+  const endCY = oy
+  drawOvalRing(k, endCX, endCY, endR, sq, ringColor, opacity)
+  drawOvalRing(k, endCX, endCY, endR * 0.75, sq, coreColor, opacity)
+  drawOvalRing(k, endCX, endCY, endR * 0.5, sq, ringDark, 0.3 * opacity)
+  drawOvalRing(k, endCX, endCY, endR * 0.2, sq, barkDark, 0.5 * opacity)
+  //
+  // Snowdrift on top (only when detail includes a snow profile)
+  //
+  if (!detail.snowProfile) return
+  const sp = detail.snowProfile
+  const snowSteps = sp.length - 1
+  const snowHeight = h * 0.5
+  const snowPts = []
+  for (let i = 0; i <= snowSteps; i++) {
+    const t = i / snowSteps
+    const px = (t - 0.5) * w + ox
+    snowPts.push(k.vec2(px, -halfH - snowHeight * sp[i] + oy))
+  }
+  snowPts.push(k.vec2(halfW + ox, -halfH + oy))
+  snowPts.push(k.vec2(-halfW + ox, -halfH + oy))
+  //
+  // Main snow mound (white)
+  //
+  k.drawPolygon({ pts: snowPts, color: k.rgb(255, 255, 255), opacity: 0.9 * opacity })
+  //
+  // Shadow layer at the bottom of the snow
+  //
+  const shadowPts = []
+  for (let i = 0; i <= snowSteps; i++) {
+    const t = i / snowSteps
+    const px = (t - 0.5) * w + ox
+    shadowPts.push(k.vec2(px, -halfH - snowHeight * 0.3 * sp[i] + oy))
+  }
+  shadowPts.push(k.vec2(halfW + ox, -halfH + oy))
+  shadowPts.push(k.vec2(-halfW + ox, -halfH + oy))
+  k.drawPolygon({ pts: shadowPts, color: k.rgb(100, 130, 180), opacity: 0.5 * opacity })
+  //
+  // Snow clumps: small extra circles on the mound surface for variation
+  //
+  if (detail.snowClumps) {
+    for (const clump of detail.snowClumps) {
+      const cx = (clump.t - 0.5) * w + ox
+      const idx = Math.round(clump.t * snowSteps)
+      const baseH = sp[Math.min(idx, snowSteps)]
+      const cy = -halfH - snowHeight * baseH + clump.yOffset * snowHeight + oy
+      k.drawCircle({
+        pos: k.vec2(cx, cy),
+        radius: clump.r,
+        color: k.rgb(230, 240, 255),
+        opacity: 0.8 * opacity
+      })
+    }
+  }
+  //
+  // Bright highlight offset toward the peak of the asymmetric mound
+  //
+  let peakIdx = 0
+  for (let i = 1; i <= snowSteps; i++) {
+    if (sp[i] > sp[peakIdx]) peakIdx = i
+  }
+  const peakT = peakIdx / snowSteps
+  const highlightX = (peakT - 0.5) * w + ox
+  k.drawCircle({
+    pos: k.vec2(highlightX, -halfH - snowHeight * sp[peakIdx] * 0.7 + oy),
+    radius: w * 0.08,
+    color: k.rgb(200, 220, 255),
+    opacity: 0.6 * opacity
+  })
+}
+//
+// Draws a filled oval (ellipse) using a polygon approximation
+//
+function drawOvalRing(k, cx, cy, r, squash, color, opacity) {
+  const pts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI * 2 * i / LOG_END_STEPS
+    pts.push(k.vec2(cx + Math.cos(a) * r * squash, cy + Math.sin(a) * r))
+  }
+  k.drawPolygon({ pts, color, opacity })
+}
+
+/**
  * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
  * @param {number} radius - Corner radius in pixels
  * @param {string} color - Fill color in hex format
@@ -2037,13 +2569,17 @@ function createRoundedCorners(k) {
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
   //
+  // Bottom corners need higher z-index to render above snowdrifts and other floor elements
+  //
+  const BOTTOM_CORNER_Z = 26
+  //
   // Bottom-left corner (rotate 270°)
   //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(BOTTOM_CORNER_Z)
   ])
   //
   // Bottom-right corner (rotate 180°)
@@ -2052,8 +2588,92 @@ function createRoundedCorners(k) {
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(BOTTOM_CORNER_Z)
   ])
+}
+
+/**
+ * Checks if the player completed the level faster than the target time
+ * @param {number} levelTime - Time in seconds
+ * @returns {boolean} True if speed bonus earned
+ */
+function checkSpeedBonus(levelTime) {
+  const targetTime = CFG.gameplay.speedBonusTime
+    && CFG.gameplay.speedBonusTime['level-touch.2']
+  if (!targetTime) return false
+  return levelTime < targetTime
+}
+
+/**
+ * Play speed bonus visual effects on the small hero indicator
+ * Flashes hero color/white and creates circle particles flying outward
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ */
+function playSpeedBonusEffects(k, levelIndicator) {
+  if (!levelIndicator?.smallHero?.character) return
+  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.sections.touch.body
+  const heroColor = getRGB(k, bodyColorHex)
+  flashSmallHeroBonus(k, levelIndicator, heroColor, 0)
+  createSpeedBonusParticles(k, levelIndicator, heroColor)
+}
+
+/**
+ * Flash small hero between hero color and white for speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero body
+ * @param {number} count - Current flash iteration
+ */
+function flashSmallHeroBonus(k, levelIndicator, heroColor, count) {
+  if (count >= SPEED_BONUS_FLASH_COUNT) {
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
+    return
+  }
+  levelIndicator.smallHero.character.color = count % 2 === 0
+    ? heroColor
+    : k.rgb(255, 255, 255)
+  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, heroColor, count + 1))
+}
+
+/**
+ * Create circle particles flying outward from small hero on speed bonus
+ * @param {Object} k - Kaplay instance
+ * @param {Object} levelIndicator - Level indicator with smallHero
+ * @param {Object} heroColor - RGB color matching the hero body
+ */
+function createSpeedBonusParticles(k, levelIndicator, heroColor) {
+  if (!levelIndicator?.smallHero?.character) return
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  for (let i = 0; i < SPEED_BONUS_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / SPEED_BONUS_PARTICLE_COUNT
+    const speed = SPEED_BONUS_PARTICLE_SPEED_MIN + Math.random() * SPEED_BONUS_PARTICLE_SPEED_RANGE
+    const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
+    const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
+    const particle = k.add([
+      k.circle(size),
+      k.pos(heroX, heroY),
+      k.color(heroColor.r, heroColor.g, heroColor.b),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const velocityX = Math.cos(angle) * speed
+    const velocityY = Math.sin(angle) * speed
+    let age = 0
+    particle.onUpdate(() => {
+      const dt = k.dt()
+      age += dt
+      particle.pos.x += velocityX * dt
+      particle.pos.y += velocityY * dt
+      particle.opacity = 1 - (age / lifetime)
+      if (age >= lifetime && particle.exists?.()) {
+        k.destroy(particle)
+      }
+    })
+  }
 }
 
 /**
@@ -2105,4 +2725,121 @@ function drawLevel2Moon(ctx) {
   })
   ctx.restore()
   ctx.restore()
+}
+
+/**
+ * Detects hero landing and spawns an expanding ring of particles
+ * from under the hero's feet. Uses the existing landing sound from hero.js.
+ * @param {Object} k - Kaplay instance
+ * @param {Array} rings - Ring array (mutated in place)
+ * @param {Object} heroInst - Hero instance
+ * @param {boolean} grounded - Whether hero is currently grounded
+ * @param {boolean} prevGrounded - Whether hero was grounded on previous frame
+ */
+function onUpdateLandingRings(k, rings, heroInst, grounded, prevGrounded) {
+  const dt = k.dt()
+  //
+  // Detect landing: hero transitions from airborne to grounded
+  //
+  if (!prevGrounded && grounded && heroInst.character?.pos) {
+    const hx = heroInst.character.pos.x
+    const hy = heroInst.character.pos.y + JUMP_RING_FOOT_OFFSET_Y
+    //
+    // Create one ring with particles distributed along a circle.
+    // Each particle has a fixed angle and per-particle jitter seed.
+    //
+    const particles = []
+    for (let i = 0; i < JUMP_RING_PARTICLE_COUNT; i++) {
+      const angle = (Math.PI * 2 * i) / JUMP_RING_PARTICLE_COUNT
+      particles.push({
+        angle,
+        jitterX: (Math.random() - 0.5) * JUMP_RING_JITTER,
+        jitterY: (Math.random() - 0.5) * JUMP_RING_JITTER
+      })
+    }
+    rings.push({
+      cx: hx,
+      cy: hy,
+      particles,
+      radius: 0,
+      life: JUMP_RING_LIFETIME,
+      maxLife: JUMP_RING_LIFETIME
+    })
+  }
+  //
+  // Update existing rings: expand radius, decrease lifetime
+  //
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const ring = rings[i]
+    ring.life -= dt
+    if (ring.life <= 0) {
+      rings.splice(i, 1)
+      continue
+    }
+    ring.radius += JUMP_RING_EXPAND_SPEED * dt
+    //
+    // Animate jitter so particles tremble along the ring
+    //
+    for (const p of ring.particles) {
+      p.jitterX += (Math.random() - 0.5) * JUMP_RING_JITTER * dt * 10
+      p.jitterY += (Math.random() - 0.5) * JUMP_RING_JITTER * dt * 10
+    }
+  }
+}
+//
+// Draws expanding ring particles: each dot sits on the ring circumference with jitter
+//
+function drawJumpRings(k, rings, color) {
+  for (const ring of rings) {
+    const alpha = ring.life / ring.maxLife
+    const dotSize = JUMP_RING_PARTICLE_SIZE * (0.5 + alpha * 0.5)
+    for (const p of ring.particles) {
+      const px = ring.cx + Math.cos(p.angle) * ring.radius + p.jitterX
+      const py = ring.cy + Math.sin(p.angle) * ring.radius + p.jitterY
+      k.drawCircle({
+        pos: k.vec2(px, py),
+        radius: dotSize,
+        color,
+        opacity: alpha * 0.6
+      })
+    }
+  }
+}
+
+/**
+ * Shows a timed hint from the anti-hero after ANTIHERO_HINT_DELAY seconds.
+ * Only triggers once per level load.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hintState - Hint state object
+ * @param {Object} antiHeroInst - Anti-hero instance
+ */
+function onUpdateAntiHeroHint(k, hintState, antiHeroInst) {
+  if (hintState.shown) return
+  hintState.timer += k.dt()
+  if (hintState.timer < ANTIHERO_HINT_DELAY) return
+  hintState.shown = true
+  //
+  // Create a forced-visible tooltip above the anti-hero
+  //
+  const target = {
+    x: () => antiHeroInst.character.pos.x,
+    y: () => antiHeroInst.character.pos.y,
+    width: 0,
+    height: 0,
+    text: ANTIHERO_HINT_TEXT,
+    offsetY: ANTIHERO_HINT_Y_OFFSET
+  }
+  hintState.currentHint = Tooltip.create({
+    k,
+    targets: [target],
+    forceVisible: true
+  })
+  hintState.currentHint.activeTarget = target
+  hintState.currentHint.frozenX = Math.round(antiHeroInst.character.pos.x)
+  hintState.currentHint.frozenY = Math.round(antiHeroInst.character.pos.y)
+  hintState.currentHint.opacity = 1
+  k.wait(ANTIHERO_HINT_DISPLAY_TIME, () => {
+    hintState.currentHint && Tooltip.destroy(hintState.currentHint)
+    hintState.currentHint = null
+  })
 }

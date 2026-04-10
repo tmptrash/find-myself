@@ -50,10 +50,11 @@ const TEXT_COLOR_B = 30
  * @param {string} cfg.targets[].text - Tooltip text (supports \n for multiline)
  * @param {number} [cfg.targets[].offsetY] - Custom Y offset for tooltip (default: TOOLTIP_Y_OFFSET)
  * @param {boolean} [cfg.targets[].forceBelow] - Force tooltip to appear below the target
+ * @param {boolean} [cfg.forceVisible] - Skip hover detection, keep tooltip always visible
  * @returns {Object} Tooltip instance with destroy() method
  */
 export function create(cfg) {
-  const { k, targets } = cfg
+  const { k, targets, forceVisible = false } = cfg
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // Tooltip rendering state
@@ -65,7 +66,8 @@ export function create(cfg) {
     opacity: 0,
     font,
     frozenX: 0,
-    frozenY: 0
+    frozenY: 0,
+    forceVisible
   }
   //
   // Game object with high z-index so tooltip renders in front of everything
@@ -277,6 +279,11 @@ function drawPointer(k, tipX, baseEdgeY, tipY, borderColor, bgColor, opacity, po
 //
 function onUpdate(inst) {
   const { k, targets } = inst
+  //
+  // In forceVisible mode, skip hover detection entirely.
+  // The caller manages activeTarget, frozenX/Y, and opacity directly.
+  //
+  if (inst.forceVisible) return
   const mousePos = k.mousePos()
   const dt = k.dt()
   //

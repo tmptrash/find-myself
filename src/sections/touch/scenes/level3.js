@@ -8,7 +8,8 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import * as GlowBug from '../components/glow-bug.js'
 import * as ShadowCreature from '../components/shadow-creature.js'
 import * as JungleDecor from '../components/jungle-decor.js'
-import { toPng } from '../../../utils/helper.js'
+import { toPng, getRGB } from '../../../utils/helper.js'
+import * as Dust from '../components/dust.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import { arcY } from '../utils/trees.js'
 //
@@ -39,29 +40,29 @@ const WALL_COLOR_G = 31
 const WALL_COLOR_B = 31
 const WALL_COLOR_HEX = '#1F1F1F'
 //
-// Platform color (dark stone)
-//
-const PLATFORM_COLOR_R = 50
-const PLATFORM_COLOR_G = 48
-const PLATFORM_COLOR_B = 55
-//
-// Platform root color (very dark green)
-//
-const PLATFORM_ROOT_COLOR_R = 30
-const PLATFORM_ROOT_COLOR_G = 38
-const PLATFORM_ROOT_COLOR_B = 28
-//
 // Platform dimensions
 //
 const PLATFORM_HEIGHT = 40
-const PLATFORM_CORNER_RADIUS = 8
 //
-// Dark outline around platforms on all sides (follows rounded corners)
+// Log platform visual constants (rounded wooden look matching level 2)
 //
-const PLATFORM_OUTLINE_WIDTH = 3
-const PLATFORM_OUTLINE_COLOR_R = 5
-const PLATFORM_OUTLINE_COLOR_G = 5
-const PLATFORM_OUTLINE_COLOR_B = 5
+const LOG_BARK_COLOR_HEX = '#4A3018'
+const LOG_BARK_LIGHT_HEX = '#6A4228'
+const LOG_BARK_DARK_HEX = '#321A0A'
+const LOG_RING_COLOR_HEX = '#8A5A40'
+const LOG_RING_DARK_HEX = '#5B3920'
+const LOG_CORE_COLOR_HEX = '#A4755A'
+const LOG_END_STEPS = 16
+const LOG_BARK_LINE_COUNT = 5
+const LOG_END_SQUASH = 0.55
+const LOG_CRACK_COUNT_MIN = 3
+const LOG_CRACK_COUNT_MAX = 6
+const LOG_CRACK_LENGTH_MIN = 8
+const LOG_CRACK_LENGTH_MAX = 20
+const LOG_KNOT_COUNT_MIN = 1
+const LOG_KNOT_COUNT_MAX = 3
+const LOG_KNOT_RADIUS_MIN = 2
+const LOG_KNOT_RADIUS_MAX = 4
 //
 // Bug shield radius for thorn collision (hero directly above bug is protected)
 // X range is tight: only shields when hero stands on top of the bug, not beside it
@@ -137,6 +138,12 @@ const PLATFORM_THORN_TOLERANCE = 5
 const THORN_COLOR_R = 80
 const THORN_COLOR_G = 120
 const THORN_COLOR_B = 180
+//
+// Snow particle color (cold blue-white matching dark theme)
+//
+const SNOW_COLOR_R = 180
+const SNOW_COLOR_G = 195
+const SNOW_COLOR_B = 220
 //
 // Number of glow bugs on the bottom wall (with blades across full width)
 //
@@ -315,21 +322,12 @@ const MOON_CRATERS = [
   { x: 0.3, y: 0.4, r: 0.09, dark: 15 }
 ]
 //
-// Platform root decoration count per 100px of platform width
+// Snow clump detail counts for log snow caps
 //
-const ROOTS_PER_100PX = 3
-const ROOT_LENGTH_MIN = 25
-const ROOT_LENGTH_MAX = 55
-const ROOT_WIDTH_MIN = 2.5
-const ROOT_WIDTH_MAX = 4.5
-const ROOT_X_WOBBLE = 12
-//
-// Platform bark line count range
-//
-const BARK_LINES_MIN = 2
-const BARK_LINES_MAX = 4
-const BARK_LINE_OPACITY_MIN = 0.05
-const BARK_LINE_OPACITY_MAX = 0.1
+const SNOW_CLUMP_COUNT_MIN = 3
+const SNOW_CLUMP_COUNT_MAX = 6
+const SNOW_CLUMP_RADIUS_MIN = 3
+const SNOW_CLUMP_RADIUS_MAX = 8
 //
 // Z-index layers for this level
 // Sky → mountains → dark trees → medium trees → front trees → vines →
@@ -411,9 +409,17 @@ export function sceneLevel3(k) {
     //
     const trapState = createTrapPlatform(k)
     //
-    // Pre-generate platform decoration data (roots and bark lines)
+    // Pre-generate log detail data (cracks, knots) for each platform
     //
-    const platformDecor = generatePlatformDecor(CORRIDOR_PLATFORMS)
+    const logDetails = CORRIDOR_PLATFORMS.map(platform =>
+      generateLogDetail(platform.width, PLATFORM_HEIGHT, false)
+    )
+    //
+    // Generate separate log details for each trap half
+    //
+    const trapLogHalfW = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX].width / 2
+    const trapLeftLogDetail = generateLogDetail(trapLogHalfW, PLATFORM_HEIGHT, false)
+    const trapRightLogDetail = generateLogDetail(trapLogHalfW, PLATFORM_HEIGHT, false)
     //
     // Create depth-layered background (sky, mountains, dark trees, medium trees)
     //
@@ -426,6 +432,20 @@ export function sceneLevel3(k) {
     // Create dark clouds under top wall
     //
     createClouds(k)
+    //
+    // Create snow particles in game area
+    //
+    const snowColor = { r: SNOW_COLOR_R, g: SNOW_COLOR_G, b: SNOW_COLOR_B }
+    const dustInst = Dust.create({
+      k,
+      bounds: {
+        left: LEFT_MARGIN,
+        right: CFG.visual.screen.width - RIGHT_MARGIN,
+        top: TOP_MARGIN,
+        bottom: CFG.visual.screen.height - BOTTOM_MARGIN
+      },
+      color: snowColor
+    })
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
@@ -613,15 +633,14 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw platform visuals with rounded edges, black stripe, and root decorations
+    // Draw log platform visuals (rounded wooden logs with bark texture)
     //
     k.add([
       k.z(Z_PLATFORM_VISUALS),
       k.opacity(PLATFORM_DEPTH_OPACITY),
       {
         draw() {
-          drawPlatformVisuals(k, platformDecor)
-          drawTrapPlatformVisuals(k, trapState)
+          drawAllLogPlatforms(k, logDetails, trapState, trapLeftLogDetail, trapRightLogDetail)
         }
       }
     ])
@@ -697,6 +716,17 @@ export function sceneLevel3(k) {
       }
     ])
     //
+    // Draw snow particles above darkness (always visible, gentle snowfall)
+    //
+    k.add([
+      k.z(Z_DARKNESS + 2),
+      {
+        draw() {
+          Dust.draw(dustInst)
+        }
+      }
+    ])
+    //
     // Load darkness shader (smooth gradient falloff per light source, rounded corners)
     //
     k.loadShader("level3-darkness", null, generateDarknessShader(MAX_DARKNESS_LIGHTS))
@@ -731,6 +761,7 @@ export function sceneLevel3(k) {
     //
     k.onUpdate(() => {
       onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
+      Dust.onUpdate(dustInst, k.dt())
     })
     //
     // ESC key to return to menu
@@ -1241,6 +1272,7 @@ function updateTrapPlatform(trapState, heroInst, dt) {
       trapState.splitProgress = 0
       trapState.returning = true
       trapState.splitting = false
+      return
     }
     //
     // Ease-in-out: accelerate at start, decelerate at end
@@ -1324,182 +1356,281 @@ function syncHeroWithTrapPlatform(heroInst, trapState) {
 }
 
 /**
- * Pre-generates decorative root tendrils and bark line data for each platform
- * Called once during scene setup for consistent per-frame rendering
- * @param {Array} platforms - Corridor platform definitions
- * @returns {Array} Array of { roots, barkLines } per platform
+ * Generates log detail data (cracks, knots) for a platform of given dimensions
+ * @param {number} w - Platform width
+ * @param {number} h - Platform height
+ * @param {boolean} withSnow - Whether to generate snow profile on top
+ * @returns {Object} Detail data { cracks, knots, snowProfile, snowClumps }
  */
-function generatePlatformDecor(platforms) {
-  return platforms.map(platform => {
-    //
-    // Generate root tendrils hanging from platform bottom
-    //
-    const rootCount = Math.max(2, Math.round(platform.width / 100 * ROOTS_PER_100PX))
-    const roots = []
-    for (let i = 0; i < rootCount; i++) {
-      const frac = (i + 0.5) / rootCount
-      roots.push({
-        startX: platform.x - platform.width / 2 + frac * platform.width,
-        endXOffset: (Math.random() - 0.5) * ROOT_X_WOBBLE,
-        length: ROOT_LENGTH_MIN + Math.random() * (ROOT_LENGTH_MAX - ROOT_LENGTH_MIN),
-        width: ROOT_WIDTH_MIN + Math.random() * (ROOT_WIDTH_MAX - ROOT_WIDTH_MIN)
+function generateLogDetail(w, h, withSnow) {
+  const halfW = w / 2
+  const halfH = h / 2
+  const sq = LOG_END_SQUASH
+  const innerLeft = -halfW + halfH * sq
+  const innerRight = halfW - halfH * sq
+  const innerW = innerRight - innerLeft
+  //
+  // Cracks: short dark diagonal lines on the bark surface
+  //
+  const crackCount = LOG_CRACK_COUNT_MIN + Math.floor(Math.random() * (LOG_CRACK_COUNT_MAX - LOG_CRACK_COUNT_MIN + 1))
+  const cracks = []
+  for (let i = 0; i < crackCount; i++) {
+    const cx = innerLeft + Math.random() * innerW
+    const cy = -halfH * 0.7 + Math.random() * h * 0.7
+    const len = LOG_CRACK_LENGTH_MIN + Math.random() * (LOG_CRACK_LENGTH_MAX - LOG_CRACK_LENGTH_MIN)
+    const angle = -0.4 + Math.random() * 0.8
+    cracks.push({ x: cx, y: cy, len, angle })
+  }
+  //
+  // Knots: small dark ovals on the bark
+  //
+  const knotCount = LOG_KNOT_COUNT_MIN + Math.floor(Math.random() * (LOG_KNOT_COUNT_MAX - LOG_KNOT_COUNT_MIN + 1))
+  const knots = []
+  for (let i = 0; i < knotCount; i++) {
+    knots.push({
+      x: innerLeft + Math.random() * innerW,
+      y: -halfH * 0.5 + Math.random() * h * 0.5,
+      r: LOG_KNOT_RADIUS_MIN + Math.random() * (LOG_KNOT_RADIUS_MAX - LOG_KNOT_RADIUS_MIN)
+    })
+  }
+  //
+  // Asymmetric snow profile (only when requested)
+  //
+  let snowProfile = null
+  let snowClumps = null
+  if (withSnow) {
+    const steps = 24
+    snowProfile = new Array(steps + 1).fill(0)
+    const moundCount = 2 + Math.floor(Math.random() * 2)
+    for (let m = 0; m < moundCount; m++) {
+      const center = 0.15 + Math.random() * 0.7
+      const spread = 0.2 + Math.random() * 0.3
+      const height = 0.5 + Math.random() * 0.5
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps
+        const dist = (t - center) / spread
+        snowProfile[i] += height * Math.max(0, 1 - dist * dist)
+      }
+    }
+    const maxVal = Math.max(...snowProfile)
+    for (let i = 0; i <= steps; i++) {
+      snowProfile[i] = snowProfile[i] / maxVal + (Math.random() - 0.5) * 0.08
+      snowProfile[i] = Math.max(0, snowProfile[i])
+    }
+    snowProfile[0] = Math.min(snowProfile[0], 0.05)
+    snowProfile[steps] = Math.min(snowProfile[steps], 0.05)
+    const clumpCount = SNOW_CLUMP_COUNT_MIN + Math.floor(Math.random() * (SNOW_CLUMP_COUNT_MAX - SNOW_CLUMP_COUNT_MIN + 1))
+    snowClumps = []
+    for (let i = 0; i < clumpCount; i++) {
+      const t = 0.1 + Math.random() * 0.8
+      const idx = Math.round(t * steps)
+      const profileH = snowProfile[Math.min(idx, steps)]
+      snowClumps.push({
+        t,
+        yOffset: -profileH * 0.3 + Math.random() * profileH * 0.4,
+        r: SNOW_CLUMP_RADIUS_MIN + Math.random() * (SNOW_CLUMP_RADIUS_MAX - SNOW_CLUMP_RADIUS_MIN)
       })
     }
-    //
-    // Generate horizontal bark grain lines on platform surface
-    //
-    const lineCount = BARK_LINES_MIN + Math.floor(Math.random() * (BARK_LINES_MAX - BARK_LINES_MIN + 1))
-    const barkLines = []
-    for (let i = 0; i < lineCount; i++) {
-      const startFrac = Math.random() * 0.3
-      const endFrac = startFrac + 0.2 + Math.random() * 0.5
-      barkLines.push({
-        startX: platform.x - platform.width / 2 + PLATFORM_CORNER_RADIUS + startFrac * (platform.width - PLATFORM_CORNER_RADIUS * 2),
-        endX: platform.x - platform.width / 2 + PLATFORM_CORNER_RADIUS + Math.min(endFrac, 1) * (platform.width - PLATFORM_CORNER_RADIUS * 2),
-        yOffset: 10 + Math.random() * (PLATFORM_HEIGHT - 18),
-        opacity: BARK_LINE_OPACITY_MIN + Math.random() * (BARK_LINE_OPACITY_MAX - BARK_LINE_OPACITY_MIN)
-      })
-    }
-    return { roots, barkLines }
-  })
+  }
+  return { cracks, knots, snowProfile, snowClumps }
 }
 
 /**
- * Draws platform visuals with black outline, rounded edges, bark texture, and hanging roots
- * Skips the trap platform (drawn separately via drawTrapPlatformVisuals)
+ * Draws all log platforms (regular and trap halves) at their current positions
+ * Uses pushTransform/popTransform to center each log at the platform origin
  * @param {Object} k - Kaplay instance
- * @param {Array} platformDecor - Pre-generated decoration data per platform
+ * @param {Array} logDetails - Pre-generated log details per platform
+ * @param {Object} trapState - Trap platform state with current positions
+ * @param {Object} trapLeftLogDetail - Log detail for left trap half
+ * @param {Object} trapRightLogDetail - Log detail for right trap half
  */
-function drawPlatformVisuals(k, platformDecor) {
-  const platformColor = k.rgb(PLATFORM_COLOR_R, PLATFORM_COLOR_G, PLATFORM_COLOR_B)
-  const outlineColor = k.rgb(PLATFORM_OUTLINE_COLOR_R, PLATFORM_OUTLINE_COLOR_G, PLATFORM_OUTLINE_COLOR_B)
-  const rootColor = k.rgb(PLATFORM_ROOT_COLOR_R, PLATFORM_ROOT_COLOR_G, PLATFORM_ROOT_COLOR_B)
-  const barkColor = k.rgb(PLATFORM_COLOR_R - 15, PLATFORM_COLOR_G - 15, PLATFORM_COLOR_B - 10)
+function drawAllLogPlatforms(k, logDetails, trapState, trapLeftLogDetail, trapRightLogDetail) {
+  //
+  // Draw regular platforms (skip trap platform index)
+  //
   CORRIDOR_PLATFORMS.forEach((platform, idx) => {
     if (idx === TRAP_PLATFORM_INDEX) return
-    drawSinglePlatform(k, platform.x, platform.y, platform.width, platformColor, outlineColor, rootColor, barkColor, platformDecor[idx])
+    const centerY = platform.y + PLATFORM_HEIGHT / 2
+    k.pushTransform()
+    k.pushTranslate(platform.x, centerY)
+    drawLogPlatform(k, platform.width, PLATFORM_HEIGHT, 0, 0, 1, logDetails[idx])
+    k.popTransform()
   })
+  //
+  // Draw trap platform left half
+  //
+  const trapCenterY = trapState.y + PLATFORM_HEIGHT / 2
+  k.pushTransform()
+  k.pushTranslate(trapState.leftCenterX, trapCenterY)
+  drawLogPlatform(k, trapState.halfWidth, PLATFORM_HEIGHT, 0, 0, 1, trapLeftLogDetail)
+  k.popTransform()
+  //
+  // Draw trap platform right half
+  //
+  k.pushTransform()
+  k.pushTranslate(trapState.rightCenterX, trapCenterY)
+  drawLogPlatform(k, trapState.halfWidth, PLATFORM_HEIGHT, 0, 0, 1, trapRightLogDetail)
+  k.popTransform()
 }
 
 /**
- * Draws a single platform with black outline on all sides, rounded edges, bark lines, and roots
- * Outline is drawn first as a larger rounded rect, then fill on top
+ * Draws a log-shaped platform: rounded barrel body with bark texture,
+ * cracks/knots for detail, oval end-grain on the right, and optional snowdrift.
+ * All coordinates are relative to the platform center (0,0).
  * @param {Object} k - Kaplay instance
- * @param {number} centerX - Platform center X
- * @param {number} topY - Platform top surface Y
- * @param {number} width - Platform width
- * @param {Object} platformColor - Main platform color
- * @param {Object} outlineColor - Black outline color
- * @param {Object} rootColor - Root tendril color
- * @param {Object} barkColor - Bark line color
- * @param {Object} decor - Pre-generated decoration data (roots, barkLines)
+ * @param {number} w - Platform width
+ * @param {number} h - Platform height
+ * @param {number} ox - Offset X
+ * @param {number} oy - Offset Y
+ * @param {number} opacity - Current opacity (0-1)
+ * @param {Object} detail - Pre-generated log detail (cracks, knots, snowProfile)
  */
-function drawSinglePlatform(k, centerX, topY, width, platformColor, outlineColor, rootColor, barkColor, decor) {
-  const left = centerX - width / 2
-  const r = PLATFORM_CORNER_RADIUS
-  const ow = PLATFORM_OUTLINE_WIDTH
+function drawLogPlatform(k, w, h, ox, oy, opacity, detail) {
+  const halfW = w / 2
+  const halfH = h / 2
+  const endR = halfH
+  const sq = LOG_END_SQUASH
+  const barkColor = getRGB(k, LOG_BARK_COLOR_HEX)
+  const barkLight = getRGB(k, LOG_BARK_LIGHT_HEX)
+  const barkDark = getRGB(k, LOG_BARK_DARK_HEX)
+  const ringColor = getRGB(k, LOG_RING_COLOR_HEX)
+  const ringDark = getRGB(k, LOG_RING_DARK_HEX)
+  const coreColor = getRGB(k, LOG_CORE_COLOR_HEX)
   //
-  // Draw black outline (slightly larger rounded rect behind the fill)
+  // Main barrel body (rounded rectangle with oval ends)
   //
-  drawRoundedRect(k, left - ow, topY - ow, width + ow * 2, PLATFORM_HEIGHT + ow * 2, r + ow, outlineColor)
+  const bodyPts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    bodyPts.push(k.vec2(-halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
+  }
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
+  }
   //
-  // Draw platform fill on top
+  // Dark outline
   //
-  drawRoundedRect(k, left, topY, width, PLATFORM_HEIGHT, r, platformColor)
+  k.drawPolygon({ pts: bodyPts.map(p => k.vec2(p.x, p.y + 2)), color: k.rgb(0, 0, 0), opacity: 0.4 * opacity })
   //
-  // Draw bark grain lines for wood texture
+  // Bark body
   //
-  decor?.barkLines?.forEach(line => {
-    k.drawLine({
-      p1: k.vec2(line.startX, topY + line.yOffset),
-      p2: k.vec2(line.endX, topY + line.yOffset),
+  k.drawPolygon({ pts: bodyPts, color: barkColor, opacity })
+  //
+  // Light streak on top half for volume
+  //
+  const topPts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    const r = endR * 0.85
+    topPts.push(k.vec2(-halfW + r * Math.cos(a) * sq + ox, r * Math.sin(a) * 0.45 - halfH * 0.2 + oy))
+  }
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    const r = endR * 0.85
+    topPts.push(k.vec2(halfW + r * Math.cos(a) * sq + ox, r * Math.sin(a) * 0.45 - halfH * 0.2 + oy))
+  }
+  k.drawPolygon({ pts: topPts, color: barkLight, opacity: 0.5 * opacity })
+  //
+  // Horizontal bark lines for texture
+  //
+  for (let i = 0; i < LOG_BARK_LINE_COUNT; i++) {
+    const ly = -halfH + (h / (LOG_BARK_LINE_COUNT + 1)) * (i + 1) + oy
+    k.drawRect({
+      pos: k.vec2(-halfW + endR * sq + ox, ly),
+      width: w - endR * sq * 2,
+      height: 1,
+      color: barkDark,
+      opacity: 0.3 * opacity
+    })
+  }
+  //
+  // Cracks: short dark diagonal lines across the bark
+  //
+  for (const crack of detail.cracks) {
+    const dx = Math.cos(crack.angle) * crack.len * 0.5
+    const dy = Math.sin(crack.angle) * crack.len * 0.5
+    k.drawLines({
+      pts: [k.vec2(crack.x - dx + ox, crack.y - dy + oy), k.vec2(crack.x + dx + ox, crack.y + dy + oy)],
       width: 1,
-      color: barkColor,
-      opacity: line.opacity
+      color: barkDark,
+      opacity: 0.5 * opacity
     })
-  })
+  }
   //
-  // Draw root tendrils hanging from platform bottom with gentle sway
+  // Knots: small dark ovals on the bark surface
   //
-  const time = k.time()
-  decor?.roots?.forEach((root, i) => {
-    const sway = Math.sin(time * 1.2 + root.startX * 0.1 + i) * 4
-    k.drawLine({
-      p1: k.vec2(root.startX, topY + PLATFORM_HEIGHT),
-      p2: k.vec2(root.startX + root.endXOffset + sway, topY + PLATFORM_HEIGHT + root.length),
-      width: root.width,
-      color: rootColor,
-      opacity: 0.8
-    })
-  })
+  for (const knot of detail.knots) {
+    drawOvalRing(k, knot.x + ox, knot.y + oy, knot.r, 0.7, barkDark, 0.45 * opacity)
+    drawOvalRing(k, knot.x + ox, knot.y + oy, knot.r * 0.5, 0.7, barkLight, 0.25 * opacity)
+  }
+  //
+  // Right end-grain oval (cross-section squashed horizontally)
+  //
+  const endCX = halfW + ox
+  const endCY = oy
+  drawOvalRing(k, endCX, endCY, endR, sq, ringColor, opacity)
+  drawOvalRing(k, endCX, endCY, endR * 0.75, sq, coreColor, opacity)
+  drawOvalRing(k, endCX, endCY, endR * 0.5, sq, ringDark, 0.3 * opacity)
+  drawOvalRing(k, endCX, endCY, endR * 0.2, sq, barkDark, 0.5 * opacity)
+  //
+  // Snowdrift on top (only when detail includes a snow profile)
+  //
+  if (!detail.snowProfile) return
+  const sp = detail.snowProfile
+  const snowSteps = sp.length - 1
+  const snowHeight = h * 0.5
+  const snowPts = []
+  for (let i = 0; i <= snowSteps; i++) {
+    const t = i / snowSteps
+    const px = (t - 0.5) * w + ox
+    snowPts.push(k.vec2(px, -halfH - snowHeight * sp[i] + oy))
+  }
+  snowPts.push(k.vec2(halfW + ox, -halfH + oy))
+  snowPts.push(k.vec2(-halfW + ox, -halfH + oy))
+  k.drawPolygon({ pts: snowPts, color: k.rgb(255, 255, 255), opacity: 0.9 * opacity })
+  const shadowPts = []
+  for (let i = 0; i <= snowSteps; i++) {
+    const t = i / snowSteps
+    const px = (t - 0.5) * w + ox
+    shadowPts.push(k.vec2(px, -halfH - snowHeight * 0.3 * sp[i] + oy))
+  }
+  shadowPts.push(k.vec2(halfW + ox, -halfH + oy))
+  shadowPts.push(k.vec2(-halfW + ox, -halfH + oy))
+  k.drawPolygon({ pts: shadowPts, color: k.rgb(100, 130, 180), opacity: 0.5 * opacity })
+  if (detail.snowClumps) {
+    for (const clump of detail.snowClumps) {
+      const cx = (clump.t - 0.5) * w + ox
+      const idx = Math.round(clump.t * snowSteps)
+      const baseH = sp[Math.min(idx, snowSteps)]
+      const cy = -halfH - snowHeight * baseH + clump.yOffset * snowHeight + oy
+      k.drawCircle({
+        pos: k.vec2(cx, cy),
+        radius: clump.r,
+        color: k.rgb(230, 240, 255),
+        opacity: 0.8 * opacity
+      })
+    }
+  }
 }
 
 /**
- * Draws the trap platform halves at their current positions
- * Each half has black outline on all sides following rounded corners
+ * Draws a filled oval (ellipse) using a polygon approximation
  * @param {Object} k - Kaplay instance
- * @param {Object} trapState - Trap platform state with current positions
- */
-function drawTrapPlatformVisuals(k, trapState) {
-  const platformColor = k.rgb(PLATFORM_COLOR_R, PLATFORM_COLOR_G, PLATFORM_COLOR_B)
-  const outlineColor = k.rgb(PLATFORM_OUTLINE_COLOR_R, PLATFORM_OUTLINE_COLOR_G, PLATFORM_OUTLINE_COLOR_B)
-  const { leftCenterX, rightCenterX, y, halfWidth } = trapState
-  const r = PLATFORM_CORNER_RADIUS
-  const ow = PLATFORM_OUTLINE_WIDTH
-  //
-  // Draw left half with outline
-  //
-  const leftEdge = leftCenterX - halfWidth / 2
-  drawRoundedRect(k, leftEdge - ow, y - ow, halfWidth + ow * 2, PLATFORM_HEIGHT + ow * 2, r + ow, outlineColor)
-  drawRoundedRect(k, leftEdge, y, halfWidth, PLATFORM_HEIGHT, r, platformColor)
-  //
-  // Draw right half with outline
-  //
-  const rightEdge = rightCenterX - halfWidth / 2
-  drawRoundedRect(k, rightEdge - ow, y - ow, halfWidth + ow * 2, PLATFORM_HEIGHT + ow * 2, r + ow, outlineColor)
-  drawRoundedRect(k, rightEdge, y, halfWidth, PLATFORM_HEIGHT, r, platformColor)
-}
-
-/**
- * Draws a rounded rectangle using 2 overlapping rects and 4 corner circles
- * Works without engine-level radius support
- * @param {Object} k - Kaplay instance
- * @param {number} x - Left edge X
- * @param {number} y - Top edge Y
- * @param {number} w - Width
- * @param {number} h - Height
- * @param {number} r - Corner radius
+ * @param {number} cx - Center X
+ * @param {number} cy - Center Y
+ * @param {number} r - Radius
+ * @param {number} squash - Horizontal squash factor (0-1)
  * @param {Object} color - Kaplay color object
- * @param {number} [opacity=1] - Optional opacity (0-1)
+ * @param {number} opacity - Opacity (0-1)
  */
-function drawRoundedRect(k, x, y, w, h, r, color, opacity = 1) {
-  //
-  // Horizontal strip (full width, excluding top/bottom corner strips)
-  //
-  k.drawRect({
-    pos: k.vec2(x, y + r),
-    width: w,
-    height: h - 2 * r,
-    color,
-    opacity
-  })
-  //
-  // Vertical strip (excluding left/right corner strips)
-  //
-  k.drawRect({
-    pos: k.vec2(x + r, y),
-    width: w - 2 * r,
-    height: h,
-    color,
-    opacity
-  })
-  //
-  // Four corner circles
-  //
-  k.drawCircle({ pos: k.vec2(x + r, y + r), radius: r, color, opacity })
-  k.drawCircle({ pos: k.vec2(x + w - r, y + r), radius: r, color, opacity })
-  k.drawCircle({ pos: k.vec2(x + r, y + h - r), radius: r, color, opacity })
-  k.drawCircle({ pos: k.vec2(x + w - r, y + h - r), radius: r, color, opacity })
+function drawOvalRing(k, cx, cy, r, squash, color, opacity) {
+  const pts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI * 2 * i / LOG_END_STEPS
+    pts.push(k.vec2(cx + Math.cos(a) * r * squash, cy + Math.sin(a) * r))
+  }
+  k.drawPolygon({ pts, color, opacity })
 }
 
 /**

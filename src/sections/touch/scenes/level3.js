@@ -10,6 +10,7 @@ import * as ShadowCreature from '../components/shadow-creature.js'
 import * as JungleDecor from '../components/jungle-decor.js'
 import { toPng, getRGB } from '../../../utils/helper.js'
 import * as Dust from '../components/dust.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import { arcY } from '../utils/trees.js'
 //
@@ -55,14 +56,14 @@ const LOG_CORE_COLOR_HEX = '#A4755A'
 const LOG_END_STEPS = 16
 const LOG_BARK_LINE_COUNT = 5
 const LOG_END_SQUASH = 0.55
-const LOG_CRACK_COUNT_MIN = 3
-const LOG_CRACK_COUNT_MAX = 6
-const LOG_CRACK_LENGTH_MIN = 8
-const LOG_CRACK_LENGTH_MAX = 20
-const LOG_KNOT_COUNT_MIN = 1
-const LOG_KNOT_COUNT_MAX = 3
+const LOG_CRACK_COUNT_MIN = 6
+const LOG_CRACK_COUNT_MAX = 12
+const LOG_CRACK_LENGTH_MIN = 6
+const LOG_CRACK_LENGTH_MAX = 24
+const LOG_KNOT_COUNT_MIN = 2
+const LOG_KNOT_COUNT_MAX = 5
 const LOG_KNOT_RADIUS_MIN = 2
-const LOG_KNOT_RADIUS_MAX = 4
+const LOG_KNOT_RADIUS_MAX = 5
 //
 // Bug shield radius for thorn collision (hero directly above bug is protected)
 // X range is tight: only shields when hero stands on top of the bug, not beside it
@@ -133,11 +134,11 @@ const TRAP_THORN_INSET = 15
 //
 const PLATFORM_THORN_TOLERANCE = 5
 //
-// Blue thorn color for level 3 (icy/cold theme)
+// Blue thorn color for level 3 (icy/cold theme, slightly darker)
 //
-const THORN_COLOR_R = 80
-const THORN_COLOR_G = 120
-const THORN_COLOR_B = 180
+const THORN_COLOR_R = 55
+const THORN_COLOR_G = 90
+const THORN_COLOR_B = 145
 //
 // Snow particle color (cold blue-white matching dark theme)
 //
@@ -288,13 +289,14 @@ const FRONT_TREES_HEIGHT_MAX = 250
 const FRONT_TREES_SHARPNESS_MIN = 8
 const FRONT_TREES_SHARPNESS_MAX = 18
 //
-// Cloud configuration (dark clouds under top wall, adapted from touch level 2)
+// Cloud configuration (scrolling dark clouds under top wall)
 //
-const CLOUD_DENSE_COUNT = 16
-const CLOUD_SPARSE_COUNT = 5
+const CLOUD_SCROLL_SPEED = 4
+const CLOUD_TOP_Y = TOP_MARGIN + 15
+const CLOUD_BOTTOM_Y = TOP_MARGIN + 55
+const CLOUD_COUNT = 18
+const CLOUD_RANDOMNESS = 15
 const CLOUD_DENSE_Y = TOP_MARGIN + 30
-const CLOUD_SPARSE_Y_MIN = TOP_MARGIN + 50
-const CLOUD_SPARSE_Y_MAX = TOP_MARGIN + 80
 const CLOUD_BASE_COLOR_R = 14
 const CLOUD_BASE_COLOR_G = 16
 const CLOUD_BASE_COLOR_B = 30
@@ -308,6 +310,11 @@ const MOON_COLOR_R = 200
 const MOON_COLOR_G = 195
 const MOON_COLOR_B = 180
 const MOON_GLOW_RADIUS = 30
+//
+// Moon hover glow configuration
+//
+const MOON_HOVER_GLOW_EXTRA = 40
+const MOON_HOVER_GLOW_SPEED = 3
 //
 // Pre-defined crater positions relative to moon center (fraction of radius)
 // Each crater has a slightly darker shade defined by brightness offset
@@ -328,6 +335,42 @@ const SNOW_CLUMP_COUNT_MIN = 3
 const SNOW_CLUMP_COUNT_MAX = 6
 const SNOW_CLUMP_RADIUS_MIN = 3
 const SNOW_CLUMP_RADIUS_MAX = 8
+//
+// Tooltip texts and layout
+//
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
+const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
+const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const SMALL_HERO_TOOLTIP_TEXT = "your score"
+const SMALL_HERO_TOOLTIP_SIZE = 60
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 60
+const LIFE_TOOLTIP_Y_OFFSET = 50
+const MONSTER_TOOLTIP_TEXT = "come here little one"
+const MONSTER_TOOLTIP_HOVER_SIZE = 100
+const MONSTER_TOOLTIP_Y_OFFSET = -80
+const ANTIHERO_TOOLTIP_TEXT = "come on, you can do it"
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+//
+// Decorative log piles (stacked on the bottom floor in multiple spots)
+//
+const DECOR_LOG_WIDTH = 160
+const DECOR_LOG_HEIGHT = 28
+const DECOR_LOG_PILE_POSITIONS = [
+  LEFT_MARGIN + 200,
+  LEFT_MARGIN + 550,
+  CFG.visual.screen.width - RIGHT_MARGIN - 550,
+  CFG.visual.screen.width - RIGHT_MARGIN - 200
+]
+const DECOR_LOG_Z = 1
+//
+// Bottom platform snow profile constants
+//
+const BOTTOM_SNOW_HEIGHT = 12
+const BOTTOM_SNOW_STEPS = 40
 //
 // Z-index layers for this level
 // Sky → mountains → dark trees → medium trees → front trees → vines →
@@ -409,10 +452,10 @@ export function sceneLevel3(k) {
     //
     const trapState = createTrapPlatform(k)
     //
-    // Pre-generate log detail data (cracks, knots) for each platform
+    // Pre-generate log detail data (cracks, knots, snow on top) for each platform
     //
     const logDetails = CORRIDOR_PLATFORMS.map(platform =>
-      generateLogDetail(platform.width, PLATFORM_HEIGHT, false)
+      generateLogDetail(platform.width, PLATFORM_HEIGHT, true)
     )
     //
     // Generate separate log details for each trap half
@@ -429,9 +472,9 @@ export function sceneLevel3(k) {
     //
     createFrontTrees(k)
     //
-    // Create dark clouds under top wall
+    // Create scrolling dark clouds under top wall
     //
-    createClouds(k)
+    createScrollingClouds(k)
     //
     // Create snow particles in game area
     //
@@ -441,7 +484,7 @@ export function sceneLevel3(k) {
       bounds: {
         left: LEFT_MARGIN,
         right: CFG.visual.screen.width - RIGHT_MARGIN,
-        top: TOP_MARGIN,
+        top: CLOUD_BOTTOM_Y,
         bottom: CFG.visual.screen.height - BOTTOM_MARGIN
       },
       color: snowColor
@@ -645,13 +688,26 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw grass above platforms (rendered below darkness, visible via overlay)
+    // Generate decorative log piles at multiple spots on the bottom floor
     //
+    const allDecorLogs = DECOR_LOG_PILE_POSITIONS.map(x => generateDecorLogs(x))
+    k.add([
+      k.z(DECOR_LOG_Z),
+      {
+        draw() {
+          allDecorLogs.forEach(logs => drawDecorLogs(k, logs))
+        }
+      }
+    ])
+    //
+    // Generate bottom platform snow profile (covers the full-width floor)
+    //
+    const bottomSnowProfile = generateBottomSnowProfile()
     k.add([
       k.z(Z_FOREGROUND),
       {
         draw() {
-          JungleDecor.onDrawGrass(decorInst)
+          drawBottomPlatformSnow(k, bottomSnowProfile)
         }
       }
     ])
@@ -702,13 +758,27 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw grass, thorns, and P3 platform hint above darkness (always visible)
+    // Moon hover glow system (glows when mouse hovers over it)
+    //
+    const moonGlowState = { intensity: 0 }
+    k.add([
+      k.z(Z_DARKNESS + 2),
+      {
+        draw() {
+          drawMoonHoverGlow(k, moonGlowState)
+        }
+      }
+    ])
+    k.onUpdate(() => {
+      updateMoonHoverGlow(k, moonGlowState)
+    })
+    //
+    // Draw thorns above darkness (always visible)
     //
     k.add([
       k.z(Z_DARKNESS + 1),
       {
         draw() {
-          JungleDecor.onDrawGrass(decorInst)
           JungleDecor.onDrawBottomThorns(decorInst)
           JungleDecor.onDrawPlatformThorns(decorInst)
           drawTrapLeftThorns(k, trapLeftThorns, trapState)
@@ -756,6 +826,80 @@ export function sceneLevel3(k) {
     // Create FPS counter
     //
     const fpsCounter = FpsCounter.create({ k, showTimer: true })
+    //
+    // Tooltip: TOUCH indicator letters (top-left corner)
+    //
+    const touchLettersCenterX = LEFT_MARGIN + 40 + TOUCH_INDICATOR_TOOLTIP_WIDTH / 2
+    const touchLettersCenterY = TOP_MARGIN / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: touchLettersCenterX,
+        y: touchLettersCenterY,
+        width: TOUCH_INDICATOR_TOOLTIP_WIDTH,
+        height: TOUCH_INDICATOR_TOOLTIP_HEIGHT,
+        text: TOUCH_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: small hero icon (score) - appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: life icon - appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.pos.x,
+        y: levelIndicator.lifeImage.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip: monster (shadow creature)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => creatureInst.x,
+        y: () => creatureInst.y,
+        width: MONSTER_TOOLTIP_HOVER_SIZE,
+        height: MONSTER_TOOLTIP_HOVER_SIZE,
+        text: MONSTER_TOOLTIP_TEXT,
+        offsetY: MONSTER_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip: anti-hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHeroInst.character.pos.x,
+        y: () => antiHeroInst.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
     //
     // Main update loop
     //
@@ -1858,136 +2002,80 @@ function createFrontTrees(k) {
 }
 
 /**
- * Creates dark clouds as a pre-rendered sprite clipped to game area boundaries
- * Dense layer at top for solid coverage, sparse layer below for wispy effect
+ * Creates scrolling dark clouds under the top platform (seamless loop)
  * @param {Object} k - Kaplay instance
  */
-function createClouds(k) {
+function createScrollingClouds(k) {
+  const baseCloudColor = k.rgb(CLOUD_BASE_COLOR_R, CLOUD_BASE_COLOR_G, CLOUD_BASE_COLOR_B)
+  const areaLeft = LEFT_MARGIN
+  const areaRight = CFG.visual.screen.width - RIGHT_MARGIN
+  const bandWidth = areaRight - areaLeft
+  const cloudSpacing = bandWidth / CLOUD_COUNT
+  //
+  // Pre-generate cloud positions and crown shapes relative to the band
+  //
+  const cloudConfigs = []
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const baseX = cloudSpacing * i + cloudSpacing * 0.5
+    const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
+    const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+    const crownSize = (30 + Math.random() * 35) * 1.2
+    const crownCount = 5 + Math.floor(Math.random() * 4)
+    const crowns = []
+    for (let j = 0; j < crownCount; j++) {
+      crowns.push({
+        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+        sizeVariation: 0.6 + Math.random() * 0.6,
+        opacityVariation: 0.7 + Math.random() * 0.2
+      })
+    }
+    cloudConfigs.push({
+      x: cloudX,
+      y: cloudY,
+      crownSize,
+      crowns,
+      color: baseCloudColor,
+      opacity: 0.85 + Math.random() * 0.1
+    })
+  }
+  //
+  // Scroll offset wraps within bandWidth
+  //
+  const scrollState = { scrollX: 0 }
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
-  const cloudStartX = LEFT_MARGIN + 50
-  const cloudEndX = screenWidth - RIGHT_MARGIN - 50
-  const cloudWidth = cloudEndX - cloudStartX
-  //
-  // Cloud shape templates (puffs relative to mainSize)
-  //
-  const cloudTypes = [
-    {
-      mainSize: 70,
-      puffs: [
-        { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
-        { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
-        { radius: 0.65, offsetX: 0.4, offsetY: -0.1 },
-        { radius: 0.7, offsetX: 0.8, offsetY: -0.05 },
-        { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
-        { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
-      ],
-      opacity: 0.5
-    },
-    {
-      mainSize: 55,
-      puffs: [
-        { radius: 0.8, offsetX: -0.7, offsetY: 0 },
-        { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
-        { radius: 0.75, offsetX: 0.3, offsetY: -0.08 },
-        { radius: 0.8, offsetX: 0.7, offsetY: 0 },
-        { radius: 0.7, offsetX: 0, offsetY: 0.12 }
-      ],
-      opacity: 0.45
-    },
-    {
-      mainSize: 45,
-      puffs: [
-        { radius: 0.75, offsetX: -0.6, offsetY: 0 },
-        { radius: 0.8, offsetX: -0.2, offsetY: -0.08 },
-        { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
-        { radius: 0.75, offsetX: 0.6, offsetY: 0 }
-      ],
-      opacity: 0.4
-    }
-  ]
-  //
-  // Pre-render all clouds onto a canvas clipped to game area
-  //
-  const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
-    ctx.imageSmoothingEnabled = true
-    //
-    // Clip drawing to game area so clouds never overflow into margins
-    //
-    ctx.save()
-    ctx.beginPath()
-    ctx.rect(LEFT_MARGIN, TOP_MARGIN, PLAY_AREA_WIDTH, screenHeight - TOP_MARGIN - BOTTOM_MARGIN)
-    ctx.clip()
-    //
-    // Draw dense layer clouds at top (solid coverage, no gaps)
-    //
-    const denseSpacing = cloudWidth / (CLOUD_DENSE_COUNT - 1)
-    for (let i = 0; i < CLOUD_DENSE_COUNT; i++) {
-      const baseX = cloudStartX + denseSpacing * i
-      const randomOffset = (Math.random() - 0.5) * (denseSpacing * 0.6)
-      const cloudX = baseX + randomOffset
-      const rowIndex = i % 2
-      const cloudY = CLOUD_DENSE_Y + rowIndex * 8 + (Math.random() - 0.5) * 3
-      const cloudType = cloudTypes[i % cloudTypes.length]
-      const sizeVariation = 1.0 + Math.random() * 0.4
-      const mainSize = cloudType.mainSize * sizeVariation
-      drawCloudOnCanvas(ctx, cloudX, cloudY, mainSize, cloudType)
-    }
-    //
-    // Draw sparse layer clouds below (fewer, more spread out)
-    //
-    const sparseSpacing = cloudWidth / (CLOUD_SPARSE_COUNT - 1)
-    for (let i = 0; i < CLOUD_SPARSE_COUNT; i++) {
-      const baseX = cloudStartX + sparseSpacing * i
-      const randomOffset = (Math.random() - 0.5) * 40
-      const cloudX = baseX + randomOffset
-      const sparseRange = CLOUD_SPARSE_Y_MAX - CLOUD_SPARSE_Y_MIN
-      const cloudY = CLOUD_SPARSE_Y_MIN + Math.random() * Math.random() * sparseRange
-      const cloudType = cloudTypes[(i + CLOUD_DENSE_COUNT) % cloudTypes.length]
-      const sizeVariation = 1.0 + Math.random() * 0.3
-      const mainSize = cloudType.mainSize * sizeVariation
-      drawCloudOnCanvas(ctx, cloudX, cloudY, mainSize, cloudType)
-    }
-    ctx.restore()
-  })
-  k.loadSprite(CLOUDS_SPRITE, png)
+  const wallColor = k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B)
   k.add([
     k.z(Z_CLOUDS),
     {
       draw() {
-        k.drawSprite({ sprite: CLOUDS_SPRITE, pos: k.vec2(0, 0), anchor: "topleft" })
+        scrollState.scrollX = (scrollState.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
+        for (let copy = 0; copy < 2; copy++) {
+          const baseOffset = areaLeft + scrollState.scrollX - copy * bandWidth
+          for (const cloud of cloudConfigs) {
+            const cx = cloud.x + baseOffset
+            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
+            for (const crown of cloud.crowns) {
+              k.drawCircle({
+                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
+                radius: cloud.crownSize * crown.sizeVariation,
+                color: cloud.color,
+                opacity: cloud.opacity * crown.opacityVariation
+              })
+            }
+          }
+        }
+        //
+        // Mask overflow with wall-colored rectangles on all four sides
+        //
+        k.drawRect({ pos: k.vec2(0, 0), width: areaLeft, height: screenHeight, color: wallColor })
+        k.drawRect({ pos: k.vec2(areaRight, 0), width: screenWidth - areaRight, height: screenHeight, color: wallColor })
+        k.drawRect({ pos: k.vec2(0, 0), width: screenWidth, height: TOP_MARGIN, color: wallColor })
+        k.drawRect({ pos: k.vec2(0, screenHeight - BOTTOM_MARGIN), width: screenWidth, height: BOTTOM_MARGIN, color: wallColor })
       }
     }
   ])
-}
-
-/**
- * Draws a single cloud with puff circles onto a canvas context
- * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
- * @param {number} x - Cloud center X
- * @param {number} y - Cloud center Y
- * @param {number} mainSize - Main circle radius
- * @param {Object} cloudType - Cloud template with puffs and opacity
- */
-function drawCloudOnCanvas(ctx, x, y, mainSize, cloudType) {
-  const opacityVariation = 0.9 + Math.random() * 0.2
-  const opacity = cloudType.opacity * opacityVariation
-  const colorStr = `rgba(${CLOUD_BASE_COLOR_R}, ${CLOUD_BASE_COLOR_G}, ${CLOUD_BASE_COLOR_B}, ${opacity})`
-  ctx.fillStyle = colorStr
-  //
-  // Main cloud body
-  //
-  ctx.beginPath()
-  ctx.arc(x, y, mainSize, 0, Math.PI * 2)
-  ctx.fill()
-  //
-  // Draw puff circles around main body
-  //
-  cloudType.puffs.forEach(puff => {
-    ctx.beginPath()
-    ctx.arc(x + puff.offsetX * mainSize, y + puff.offsetY * mainSize, mainSize * puff.radius, 0, Math.PI * 2)
-    ctx.fill()
-  })
 }
 
 /**
@@ -2299,5 +2387,169 @@ function drawMoonOverlay(k) {
       opacity: 1
     })
   })
+}
+
+/**
+ * Updates moon hover glow intensity based on mouse proximity
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Moon glow state { intensity: 0-1 }
+ */
+function updateMoonHoverGlow(k, state) {
+  const mousePos = k.mousePos()
+  const dx = mousePos.x - MOON_X
+  const dy = mousePos.y - MOON_Y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const isHovering = dist < MOON_RADIUS + 20
+  const dt = k.dt()
+  const target = isHovering ? 1 : 0
+  state.intensity += (target - state.intensity) * MOON_HOVER_GLOW_SPEED * dt
+  state.intensity = Math.max(0, Math.min(1, state.intensity))
+}
+
+/**
+ * Draws additional radial glow around the moon when hovered
+ * Renders concentric circles with fading opacity for a soft glow effect
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Moon glow state { intensity: 0-1 }
+ */
+function drawMoonHoverGlow(k, state) {
+  if (state.intensity < 0.01) return
+  const glowColor = k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
+  const rings = 8
+  for (let i = rings; i > 0; i--) {
+    const t = i / rings
+    const radius = MOON_RADIUS + MOON_HOVER_GLOW_EXTRA * t
+    k.drawCircle({
+      pos: k.vec2(MOON_X, MOON_Y),
+      radius,
+      color: glowColor,
+      opacity: state.intensity * 0.12 * (1 - t)
+    })
+  }
+}
+
+/**
+ * Generates decorative stacked log pile at the given X position on the floor
+ * Bottom row has 3 logs, then 2 on top, then 1 on top (pyramid shape)
+ * @param {number} pileX - Center X of the pile
+ * @returns {Array} Array of log objects with position, size, detail
+ */
+function generateDecorLogs(pileX) {
+  const logs = []
+  const w = DECOR_LOG_WIDTH
+  const h = DECOR_LOG_HEIGHT
+  const halfH = h / 2
+  //
+  // Bottom row: 3 logs side by side on the floor
+  //
+  for (let i = 0; i < 3; i++) {
+    const spacing = h + 2
+    logs.push({
+      x: pileX + (i - 1) * spacing + (Math.random() - 0.5) * 4,
+      y: FLOOR_Y - halfH,
+      w,
+      h,
+      detail: generateLogDetail(w, h, false)
+    })
+  }
+  //
+  // Middle row: 2 logs resting in the gaps of the bottom row
+  //
+  const midY = FLOOR_Y - h - halfH - 2
+  for (let i = 0; i < 2; i++) {
+    const spacing = h + 2
+    logs.push({
+      x: pileX + (i - 0.5) * spacing + (Math.random() - 0.5) * 4,
+      y: midY,
+      w,
+      h,
+      detail: generateLogDetail(w, h, false)
+    })
+  }
+  //
+  // Top: 1 log balanced on the middle row
+  //
+  logs.push({
+    x: pileX + (Math.random() - 0.5) * 6,
+    y: midY - h - 2,
+    w,
+    h,
+    detail: generateLogDetail(w, h, false)
+  })
+  return logs
+}
+
+/**
+ * Draws decorative stacked log pile using the same drawLogPlatform as playable logs
+ * @param {Object} k - Kaplay instance
+ * @param {Array} logs - Array of log objects with position, size, detail
+ */
+function drawDecorLogs(k, logs) {
+  for (const log of logs) {
+    k.pushTransform()
+    k.pushTranslate(log.x, log.y)
+    drawLogPlatform(k, log.w, log.h, 0, 0, 1, log.detail)
+    k.popTransform()
+  }
+}
+
+/**
+ * Generates an asymmetric snow height profile for the bottom platform
+ * Uses multiple overlapping mounds for natural coverage
+ * @returns {Array} Snow profile heights (normalized 0-1)
+ */
+function generateBottomSnowProfile() {
+  const profile = new Array(BOTTOM_SNOW_STEPS + 1).fill(0)
+  const moundCount = 6 + Math.floor(Math.random() * 4)
+  for (let m = 0; m < moundCount; m++) {
+    const center = Math.random()
+    const spread = 0.08 + Math.random() * 0.15
+    const height = 0.3 + Math.random() * 0.7
+    for (let i = 0; i <= BOTTOM_SNOW_STEPS; i++) {
+      const t = i / BOTTOM_SNOW_STEPS
+      const dist = (t - center) / spread
+      profile[i] += height * Math.max(0, 1 - dist * dist)
+    }
+  }
+  const maxVal = Math.max(...profile)
+  for (let i = 0; i <= BOTTOM_SNOW_STEPS; i++) {
+    profile[i] = profile[i] / maxVal + (Math.random() - 0.5) * 0.06
+    profile[i] = Math.max(0.05, Math.min(1, profile[i]))
+  }
+  profile[0] = Math.min(profile[0], 0.1)
+  profile[BOTTOM_SNOW_STEPS] = Math.min(profile[BOTTOM_SNOW_STEPS], 0.1)
+  return profile
+}
+
+/**
+ * Draws snow covering on the bottom platform across the full playable width
+ * @param {Object} k - Kaplay instance
+ * @param {Array} profile - Snow profile heights (normalized 0-1)
+ */
+function drawBottomPlatformSnow(k, profile) {
+  const leftX = LEFT_MARGIN
+  const rightX = CFG.visual.screen.width - RIGHT_MARGIN
+  const snowWidth = rightX - leftX
+  const pts = []
+  for (let i = 0; i <= BOTTOM_SNOW_STEPS; i++) {
+    const t = i / BOTTOM_SNOW_STEPS
+    const px = leftX + t * snowWidth
+    pts.push(k.vec2(px, FLOOR_Y - BOTTOM_SNOW_HEIGHT * profile[i]))
+  }
+  pts.push(k.vec2(rightX, FLOOR_Y))
+  pts.push(k.vec2(leftX, FLOOR_Y))
+  k.drawPolygon({ pts, color: k.rgb(255, 255, 255), opacity: 0.9 })
+  //
+  // Subtle shadow layer for depth
+  //
+  const shadowPts = []
+  for (let i = 0; i <= BOTTOM_SNOW_STEPS; i++) {
+    const t = i / BOTTOM_SNOW_STEPS
+    const px = leftX + t * snowWidth
+    shadowPts.push(k.vec2(px, FLOOR_Y - BOTTOM_SNOW_HEIGHT * 0.3 * profile[i]))
+  }
+  shadowPts.push(k.vec2(rightX, FLOOR_Y))
+  shadowPts.push(k.vec2(leftX, FLOOR_Y))
+  k.drawPolygon({ pts: shadowPts, color: k.rgb(100, 130, 180), opacity: 0.4 })
 }
 

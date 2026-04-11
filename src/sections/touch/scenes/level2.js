@@ -41,12 +41,26 @@ const ICICLE_HEIGHT_MAX = 90
 const ICICLE_WIDTH_MIN = 16
 const ICICLE_WIDTH_MAX = 30
 const ICICLE_SPACING = 22
-const ICICLE_SAFE_ZONE_X = CFG.visual.screen.width - RIGHT_MARGIN - 400
+const ICICLE_SAFE_ZONE_X = CFG.visual.screen.width - RIGHT_MARGIN - 550
 const ICICLE_COLOR_R = 255
 const ICICLE_COLOR_G = 255
 const ICICLE_COLOR_B = 255
 const ICICLE_OUTLINE_WIDTH = 2
 const ICICLE_KILL_TOLERANCE = 10
+//
+// Icicle wobble (random icicles wobble left/right one at a time with creak)
+//
+const ICICLE_WOBBLE_INTERVAL_MIN = 2
+const ICICLE_WOBBLE_INTERVAL_MAX = 5
+const ICICLE_WOBBLE_DURATION = 1.2
+const ICICLE_WOBBLE_AMPLITUDE = 3
+//
+// Decorative floor logs (stacked pile in the area between icicles and hero)
+//
+const DECOR_LOG_PILE_X = ICICLE_SAFE_ZONE_X + 130
+const DECOR_LOG_Z = 5
+const DECOR_LOG_WIDTH = 120
+const DECOR_LOG_HEIGHT = 30
 //
 // Snowflake hero push (snowflakes fly when hero runs past)
 //
@@ -82,10 +96,10 @@ const HERO_TOOLTIP_TEXT = "maybe here I'm not\nfinding myself...\nbut the platfo
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
-// Moon tooltip
+// Moon hover glow configuration
 //
-const MOON_TOOLTIP_TEXT = "you can howl at me"
-const MOON_TOOLTIP_Y_OFFSET = -30
+const MOON_HOVER_GLOW_EXTRA = 40
+const MOON_HOVER_GLOW_SPEED = 3
 //
 // Antihero platform tooltip (log where antihero stands)
 //
@@ -134,14 +148,14 @@ const LOG_CORE_COLOR_HEX = '#C4956A'
 const LOG_END_STEPS = 16
 const LOG_BARK_LINE_COUNT = 5
 const LOG_END_SQUASH = 0.55
-const LOG_CRACK_COUNT_MIN = 3
-const LOG_CRACK_COUNT_MAX = 6
-const LOG_CRACK_LENGTH_MIN = 8
-const LOG_CRACK_LENGTH_MAX = 20
-const LOG_KNOT_COUNT_MIN = 1
-const LOG_KNOT_COUNT_MAX = 3
+const LOG_CRACK_COUNT_MIN = 6
+const LOG_CRACK_COUNT_MAX = 12
+const LOG_CRACK_LENGTH_MIN = 6
+const LOG_CRACK_LENGTH_MAX = 24
+const LOG_KNOT_COUNT_MIN = 2
+const LOG_KNOT_COUNT_MAX = 5
 const LOG_KNOT_RADIUS_MIN = 2
-const LOG_KNOT_RADIUS_MAX = 4
+const LOG_KNOT_RADIUS_MAX = 5
 //
 // Trap platform: the second-to-last platform slides away on first approach
 //
@@ -150,6 +164,11 @@ const TRAP_PLATFORM_RETURN_SPEED = 600
 const TRAP_PLATFORM_SLIDE_DISTANCE = 400
 const TRAP_PLATFORM_TRIGGER_RADIUS = 80
 const TRAP_PLATFORM_PAUSE_DURATION = 0.3
+//
+// Tree wind sway configuration (front-row trees oscillate gently)
+//
+const TREE_SWAY_AMPLITUDE = 3
+const TREE_SWAY_SPEED = 1.2
 //
 // Snow clump constants (small extra snow pieces scattered on the mound)
 //
@@ -463,6 +482,30 @@ export function sceneLevel2(k) {
       }
     ])
     //
+    // Icicle wobble system (random icicles wobble one at a time with creak)
+    //
+    const icicleWobbleState = {
+      timer: 2 + Math.random() * 2,
+      activeIndex: -1,
+      elapsed: 0,
+      prevWobbleDir: 0
+    }
+    k.onUpdate(() => {
+      updateIcicleWobble(k, icicleData, icicleWobbleState, sound)
+    })
+    //
+    // Generate decorative background logs in the right safe zone
+    //
+    const decorLogs = generateDecorLogs()
+    k.add([
+      k.z(DECOR_LOG_Z),
+      {
+        draw() {
+          drawDecorLogs(k, decorLogs)
+        }
+      }
+    ])
+    //
     // Platform visibility system
     //
     const VISIBILITY_RADIUS = 120  // Reduced radius for tighter detection
@@ -638,16 +681,6 @@ export function sceneLevel2(k) {
           if (state.trapSlideProgress <= 0) {
             state.trapSlideProgress = 0
             state.trapPhase = 'done'
-            //
-            // Reset visibility so the platform vanishes until the next jump reveals it
-            //
-            state.opacity = 0
-            state.jumpCount = 0
-            state.visibilityTimer = 0
-            if (state.hasCollision && state.collisionObject) {
-              state.collisionObject.unuse("area")
-              state.hasCollision = false
-            }
           }
           const newX = state.trapOriginalX - state.trapSlideProgress
           state.x = newX
@@ -875,18 +908,19 @@ export function sceneLevel2(k) {
       }]
     })
     //
-    // Tooltip: moon (howl prompt)
+    // Moon hover glow system (glows when mouse hovers over it)
     //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: MOON_X,
-        y: MOON_Y,
-        width: MOON_RADIUS * 2,
-        height: MOON_RADIUS * 2,
-        text: MOON_TOOLTIP_TEXT,
-        offsetY: MOON_TOOLTIP_Y_OFFSET
-      }]
+    const moonGlowState = { intensity: 0 }
+    k.add([
+      k.z(2),
+      {
+        draw() {
+          drawMoonHoverGlow(k, moonGlowState)
+        }
+      }
+    ])
+    k.onUpdate(() => {
+      updateMoonHoverGlow(k, moonGlowState)
     })
     //
     // Tooltip: antihero platform (first platform where antihero stands)
@@ -942,240 +976,81 @@ export function sceneLevel2(k) {
 }
 
 /**
- * Creates clouds under the top platform (top wall)
+ * Creates scrolling clouds under the top platform (seamless loop, same as level 0/1)
  * @param {Object} k - Kaplay instance
  */
 function createCloudsUnderTopPlatform(k) {
+  const CLOUD_SCROLL_SPEED = 6
+  const CLOUD_TOP_Y = TOP_MARGIN + 15
+  const CLOUD_BOTTOM_Y = TOP_MARGIN + 55
+  const CLOUD_COUNT = 22
+  const CLOUD_RANDOMNESS = 15
+  const baseCloudColor = k.rgb(30, 35, 50)
   //
-  // Cloud parameters
+  // Band covers the playable width; two copies tile seamlessly
   //
-  const cloudTopY = TOP_MARGIN + 40  // Top Y position (dense layer here)
-  const cloudBottomY = TOP_MARGIN + 100  // Bottom Y position (sparse clouds here)
-  const cloudDenseLayerY = TOP_MARGIN + 50  // Dense layer Y position
-  const cloudSparseLayerStartY = TOP_MARGIN + 60  // Start of sparse layer
-  const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
-  const baseCloudColor = k.rgb(30, 35, 50)  // Dark blue-tinted cloud color
-  
+  const areaLeft = LEFT_MARGIN
+  const areaRight = CFG.visual.screen.width - RIGHT_MARGIN
+  const bandWidth = areaRight - areaLeft
+  const cloudSpacing = bandWidth / CLOUD_COUNT
   //
-  // Create multiple clouds spread horizontally across the screen
-  // Cover almost entire width like snow
-  //
-  const screenWidth = k.width()
-  const playableWidth = screenWidth - LEFT_MARGIN - RIGHT_MARGIN
-  const cloudStartX = LEFT_MARGIN + 50  // Start a bit inside left margin
-  const cloudEndX = screenWidth - RIGHT_MARGIN - 50  // End a bit before right margin
-  const cloudCoverageWidth = cloudEndX - cloudStartX
-  
-  //
-  // Create dense layer at top (more clouds, closer together)
-  //
-  const denseCloudCount = 24  // Even more clouds for solid coverage without gaps
-  const denseCloudSpacing = cloudCoverageWidth / (denseCloudCount - 1)
-  
-  //
-  // Create sparse layer below (fewer clouds, more spread out)
-  //
-  const sparseCloudCount = 8  // Fewer clouds for sparse coverage
-  const sparseCloudSpacing = cloudCoverageWidth / (sparseCloudCount - 1)
-  
-  //
-  // Generate clouds programmatically to cover almost entire width
-  // Create overlapping clouds like snow covering the top
-  //
-  const cloudTypes = [
-    //
-    // Type 1: Large wide cloud (6 puffs)
-    //
-    {
-      mainSize: 80,
-      puffs: [
-        { radius: 0.7, offsetX: -0.8, offsetY: -0.05 },
-        { radius: 0.75, offsetX: -0.4, offsetY: -0.1 },
-        { radius: 0.65, offsetX: 0.4, offsetY: -0.1 },
-        { radius: 0.7, offsetX: 0.8, offsetY: -0.05 },
-        { radius: 0.6, offsetX: -0.2, offsetY: 0.15 },
-        { radius: 0.6, offsetX: 0.2, offsetY: 0.15 }
-      ],
-      color: baseCloudColor,
-      opacity: 0.6
-    },
-    //
-    // Type 2: Medium wide cloud (5 puffs)
-    //
-    {
-      mainSize: 70,
-      puffs: [
-        { radius: 0.8, offsetX: -0.7, offsetY: 0 },
-        { radius: 0.85, offsetX: -0.3, offsetY: -0.08 },
-        { radius: 0.75, offsetX: 0.3, offsetY: -0.08 },
-        { radius: 0.8, offsetX: 0.7, offsetY: 0 },
-        { radius: 0.7, offsetX: 0, offsetY: 0.12 }
-      ],
-      color: baseCloudColor,
-      opacity: 0.55
-    },
-    //
-    // Type 3: Small wide cloud (4 puffs)
-    //
-    {
-      mainSize: 60,
-      puffs: [
-        { radius: 0.75, offsetX: -0.6, offsetY: 0 },
-        { radius: 0.8, offsetX: -0.2, offsetY: -0.08 },
-        { radius: 0.8, offsetX: 0.2, offsetY: -0.08 },
-        { radius: 0.75, offsetX: 0.6, offsetY: 0 }
-      ],
-      color: baseCloudColor,
-      opacity: 0.5
-    },
-    //
-    // Type 4: Very wide cloud (7 puffs)
-    //
-    {
-      mainSize: 90,
-      puffs: [
-        { radius: 0.65, offsetX: -1.0, offsetY: 0 },
-        { radius: 0.7, offsetX: -0.6, offsetY: -0.1 },
-        { radius: 0.75, offsetX: -0.2, offsetY: -0.12 },
-        { radius: 0.75, offsetX: 0.2, offsetY: -0.12 },
-        { radius: 0.7, offsetX: 0.6, offsetY: -0.1 },
-        { radius: 0.65, offsetX: 1.0, offsetY: 0 },
-        { radius: 0.6, offsetX: 0, offsetY: 0.15 }
-      ],
-      color: baseCloudColor,
-      opacity: 0.65
-    }
-  ]
-  
-  //
-  // Generate clouds with dense layer at top, sparse layer below
+  // Cloud X positions are relative to the band (0 to bandWidth)
   //
   const cloudConfigs = []
-  
-  //
-  // Create dense layer at top (solid coverage, no gaps)
-  //
-  for (let i = 0; i < denseCloudCount; i++) {
-    const baseX = cloudStartX + denseCloudSpacing * i
-    
-    //
-    // Add small randomness for natural look (less variation for dense layer)
-    // Overlap clouds to ensure no gaps
-    //
-    const randomOffset = (Math.random() - 0.5) * (denseCloudSpacing * 0.6)  // Overlap with neighbors
-    const x = baseX + randomOffset
-    
-    //
-    // Select cloud type with some variation
-    //
-    const typeIndex = i % cloudTypes.length
-    const cloudType = cloudTypes[typeIndex]
-    
-    //
-    // Vary size slightly for more natural look
-    // Make dense layer clouds slightly larger for better overlap
-    //
-    const sizeVariation = 1.0 + Math.random() * 0.4  // 1.0 to 1.4 (larger for dense layer)
-    const mainSize = cloudType.mainSize * sizeVariation
-    
-    //
-    // Create multiple rows for dense layer to ensure no gaps
-    // Divide clouds into 2-3 rows for complete coverage
-    //
-    const rowsPerLayer = 2
-    const rowIndex = Math.floor((i % denseCloudCount) / (denseCloudCount / rowsPerLayer))
-    const rowYOffset = rowIndex * 8  // 8px between rows
-    const yVariation = (Math.random() - 0.5) * 3  // ±1.5px variation within row
-    const cloudY = cloudDenseLayerY + rowYOffset + yVariation
-    
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const baseX = cloudSpacing * i + cloudSpacing * 0.5
+    const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
+    const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+    const crownSize = (35 + Math.random() * 40) * 1.2
+    const crownCount = 5 + Math.floor(Math.random() * 4)
+    const crowns = []
+    for (let j = 0; j < crownCount; j++) {
+      crowns.push({
+        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+        sizeVariation: 0.6 + Math.random() * 0.6,
+        opacityVariation: 0.7 + Math.random() * 0.2
+      })
+    }
     cloudConfigs.push({
-      x: x,
+      x: cloudX,
       y: cloudY,
-      mainSize: mainSize,
-      puffs: cloudType.puffs,
-      color: cloudType.color,
-      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
+      crownSize,
+      crowns,
+      color: baseCloudColor,
+      opacity: 0.85 + Math.random() * 0.1
     })
   }
-  
   //
-  // Create sparse layer below (fewer clouds, more spread out)
+  // Scroll offset wraps within bandWidth
   //
-  for (let i = 0; i < sparseCloudCount; i++) {
-    const baseX = cloudStartX + sparseCloudSpacing * i
-    
-    //
-    // Add more randomness for sparse layer
-    //
-    const randomOffset = (Math.random() - 0.5) * 40  // ±20px random offset
-    const x = baseX + randomOffset
-    
-    //
-    // Select cloud type with some variation
-    //
-    const typeIndex = (i + denseCloudCount) % cloudTypes.length
-    const cloudType = cloudTypes[typeIndex]
-    
-    //
-    // Vary size slightly for more natural look
-    //
-    const sizeVariation = 1.0 + Math.random() * 0.3  // 1.0 to 1.3
-    const mainSize = cloudType.mainSize * sizeVariation
-    
-    //
-    // Distribute Y positions in sparse layer (more variation)
-    // Use quadratic function to bias towards top of sparse layer
-    //
-    const sparseYRange = cloudSparseLayerEndY - cloudSparseLayerStartY
-    const yDistribution = Math.random() * Math.random()  // 0 to 1, biased towards 0 (top)
-    const cloudY = cloudSparseLayerStartY + yDistribution * sparseYRange
-    
-    cloudConfigs.push({
-      x: x,
-      y: cloudY,
-      mainSize: mainSize,
-      puffs: cloudType.puffs,
-      color: cloudType.color,
-      opacity: cloudType.opacity * (0.9 + Math.random() * 0.2)  // Slight opacity variation
-    })
-  }
-  
-  cloudConfigs.forEach((cloudConfig) => {
-    k.add([
-      k.pos(cloudConfig.x, cloudConfig.y),
-      k.z(CFG.visual.zIndex.platforms - 1),  // Behind platforms
-      {
-        draw() {
-          //
-          // Draw cloud as overlapping circles (puffy cloud shape)
-          //
-          const mainSize = cloudConfig.mainSize
-          
-          //
-          // Main cloud body (largest circle in center)
-          //
-          k.drawCircle({
-            radius: mainSize,
-            pos: k.vec2(0, 0),
-            color: cloudConfig.color,
-            opacity: cloudConfig.opacity
-          })
-          
-          //
-          // Draw all puffs for this cloud
-          //
-          cloudConfig.puffs.forEach((puff) => {
-            k.drawCircle({
-              radius: mainSize * puff.radius,
-              pos: k.vec2(puff.offsetX * mainSize, puff.offsetY * mainSize),
-              color: cloudConfig.color,
-              opacity: cloudConfig.opacity
-            })
-          })
+  const inst = { scrollX: 0 }
+  //
+  // Draw two copies of the band so one always fills the visible area
+  //
+  k.add([
+    k.z(CFG.visual.zIndex.platforms - 1),
+    {
+      draw() {
+        inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
+        for (let copy = 0; copy < 2; copy++) {
+          const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
+          for (const cloud of cloudConfigs) {
+            const cx = cloud.x + baseOffset
+            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
+            for (const crown of cloud.crowns) {
+              k.drawCircle({
+                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
+                radius: cloud.crownSize * crown.sizeVariation,
+                color: cloud.color,
+                opacity: cloud.opacity * crown.opacityVariation
+              })
+            }
+          }
         }
       }
-    ])
-  })
+    }
+  ])
 }
 
 /**
@@ -2015,49 +1890,191 @@ function createBackgroundDarkTrees(k) {
   ])
 }
 /**
- * First level foreground fir trees. They are distributed evenly across the screen.
- * @param {*} ctx Canvas context
+ * Creates all foreground trees as dynamic swaying objects
+ * Both the behind-hero row and the in-front-of-hero overlay trees sway
+ * @param {Object} k - Kaplay instance
  */
-function drawForegroundTrees(ctx) {
-  const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-  const treesAmount = 15
-  const treePeriod = w / treesAmount
-  const treesLayers = 4
-
-  for ( let i = 0; i < treesAmount; i++ ) {
-    const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
-    drawFirTree(ctx, x, FLOOR_Y, arcY(x, LEFT_MARGIN, w, 200, 280), {
-      layers: Math.random() * treesLayers + 4,
-      trunkWidthPercent: .03,
-      trunkHeightPercent: Math.random() * .2 + .1,
-      leftColor: [30, 100, 40],
-      rightColor: [30, 150, 40],
-      layer0WidthPercent: .3,
-      layersDecWidthPercent: .15,
-      layersSharpness: Math.floor(Math.random() * 10 + 10)
-    })
-  }
-}
-
 function createForegroundTrees(k) {
-  const png = toPng({ width: k.width(), height: k.height() }, drawForegroundTrees)
-  k.loadSprite('bg-touch-level2-foreground-trees', png)
-  
+  const screenWidth = CFG.visual.screen.width
   //
-  // Draw trees canvas (in front of hero)
+  // Pre-generate layer data for 15 foreground trees (behind hero)
   //
+  const foregroundTrees = generateForegroundTreeData()
   k.add([
-    k.z(CFG.visual.zIndex.player - 1),  // In front of hero (z=11)
+    k.z(CFG.visual.zIndex.player - 1),
     {
       draw() {
-        k.drawSprite({
-          sprite: 'bg-touch-level2-foreground-trees',
-          pos: k.vec2(0, 0),
-          anchor: "topleft"
-        })
+        drawOverlayTreesSway(k, foregroundTrees)
       }
     }
   ])
+  //
+  // Pre-generate layer data for 2 overlay trees that sway in front of hero
+  //
+  const overlayTrees = generateOverlayTreeData(screenWidth)
+  k.add([
+    k.z(CFG.visual.zIndex.player + 1),
+    {
+      draw() {
+        drawOverlayTreesSway(k, overlayTrees)
+      }
+    }
+  ])
+}
+
+/**
+ * Pre-generates layer geometry for 15 foreground trees (behind hero)
+ * Same data format as overlay trees so drawOverlayTreesSway can render both
+ * @returns {Array} Array of tree data objects
+ */
+function generateForegroundTreeData() {
+  const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const treesAmount = 15
+  const treePeriod = w / treesAmount
+  const treeDefs = []
+  for (let i = 0; i < treesAmount; i++) {
+    const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
+    const height = arcY(x, LEFT_MARGIN, w, 200, 280)
+    const layerCount = Math.floor(Math.random() * 4 + 4)
+    treeDefs.push({
+      x,
+      height,
+      layers: layerCount,
+      trunkWidthPercent: 0.03,
+      trunkHeightPercent: Math.random() * 0.2 + 0.1,
+      leftColor: [30, 100, 40],
+      rightColor: [30, 150, 40],
+      layer0WidthPercent: 0.3,
+      layersDecWidthPercent: 0.15,
+      layersSharpness: Math.floor(Math.random() * 10 + 10),
+      phase: Math.random() * Math.PI * 2
+    })
+  }
+  return treeDefs.map(def => buildTreeLayerData(def))
+}
+
+/**
+ * Converts a tree definition into pre-computed layer data for per-frame rendering
+ * @param {Object} def - Tree definition with position, size, colors, and phase
+ * @returns {Object} Tree data with trunk rect and layer geometry
+ */
+function buildTreeLayerData(def) {
+  const trunkWidth = def.height * def.trunkWidthPercent
+  const trunkHeight = def.height * def.trunkHeightPercent
+  const layerHeight = (def.height - trunkHeight) / def.layers
+  const layerData = []
+  let baseY = FLOOR_Y - trunkHeight
+  for (let i = 0; i < def.layers; i++) {
+    const layerWidth = def.height * def.layer0WidthPercent - def.height * def.layer0WidthPercent * i * def.layersDecWidthPercent
+    const topY = baseY - layerHeight
+    const offsetX = (Math.random() - 0.5) * layerWidth / 3
+    layerData.push({ baseY, topY, layerWidth, offsetX, index: i })
+    baseY = topY
+  }
+  return {
+    x: def.x,
+    height: def.height,
+    trunkX: def.x - trunkWidth / 2,
+    trunkY: FLOOR_Y - trunkHeight,
+    trunkWidth,
+    trunkHeight,
+    leftColor: def.leftColor,
+    rightColor: def.rightColor,
+    layersSharpness: def.layersSharpness,
+    layers: def.layers,
+    layerData,
+    phase: def.phase
+  }
+}
+
+/**
+ * Pre-generates static layer geometry for overlay trees (computed once)
+ * Each tree stores its trunk rect and layer triangles for per-frame drawing
+ * @param {number} screenWidth - Screen width for positioning
+ * @returns {Array} Array of tree data objects
+ */
+function generateOverlayTreeData(screenWidth) {
+  const treeDefs = [
+    {
+      x: screenWidth - RIGHT_MARGIN - 180,
+      height: 220,
+      layers: 5,
+      trunkWidthPercent: 0.03,
+      trunkHeightPercent: 0.15,
+      leftColor: [25, 85, 35],
+      rightColor: [25, 130, 35],
+      layer0WidthPercent: 0.3,
+      layersDecWidthPercent: 0.15,
+      layersSharpness: 14,
+      phase: Math.random() * Math.PI * 2
+    },
+    {
+      x: screenWidth - RIGHT_MARGIN - 80,
+      height: 180,
+      layers: 4,
+      trunkWidthPercent: 0.03,
+      trunkHeightPercent: 0.12,
+      leftColor: [28, 90, 38],
+      rightColor: [28, 140, 38],
+      layer0WidthPercent: 0.3,
+      layersDecWidthPercent: 0.15,
+      layersSharpness: 12,
+      phase: Math.random() * Math.PI * 2
+    }
+  ]
+  return treeDefs.map(def => buildTreeLayerData(def))
+}
+
+/**
+ * Draws overlay trees each frame with wind sway applied to each layer
+ * Higher layers sway more than lower ones for realistic branch movement
+ * @param {Object} k - Kaplay instance
+ * @param {Array} trees - Pre-generated tree data
+ */
+function drawOverlayTreesSway(k, trees) {
+  const time = k.time()
+  for (const tree of trees) {
+    const swayBase = Math.sin(time * TREE_SWAY_SPEED + tree.phase) * TREE_SWAY_AMPLITUDE * (tree.height / 200)
+    //
+    // Draw trunk (no sway)
+    //
+    k.drawRect({
+      pos: k.vec2(tree.trunkX, tree.trunkY),
+      width: tree.trunkWidth,
+      height: tree.trunkHeight,
+      color: k.rgb(74, 46, 31)
+    })
+    //
+    // Draw each layer with increasing sway
+    //
+    const lc = tree.leftColor
+    const rc = tree.rightColor
+    for (const layer of tree.layerData) {
+      const sway = swayBase * (layer.index + 1) / tree.layers
+      //
+      // Left half (darker)
+      //
+      k.drawPolygon({
+        pts: [
+          k.vec2(tree.x + layer.offsetX + sway, layer.baseY),
+          k.vec2(tree.x - layer.layerWidth / 2 + sway, layer.baseY),
+          k.vec2(tree.x + sway, layer.topY - tree.layersSharpness)
+        ],
+        color: k.rgb(lc[0], lc[1], lc[2])
+      })
+      //
+      // Right half (lighter)
+      //
+      k.drawPolygon({
+        pts: [
+          k.vec2(tree.x + layer.offsetX + sway, layer.baseY),
+          k.vec2(tree.x + layer.layerWidth / 2 + sway, layer.baseY),
+          k.vec2(tree.x + sway, layer.topY - tree.layersSharpness)
+        ],
+        color: k.rgb(rc[0], rc[1], rc[2])
+      })
+    }
+  }
 }
 
 /**
@@ -2143,6 +2160,180 @@ function checkIcicleCollision(k, heroInst, icicleData, levelIndicator) {
       onHeroDeath(k, heroInst, levelIndicator)
       return
     }
+  }
+}
+
+/**
+ * Updates icicle wobble state: one random icicle wobbles at a time
+ * Wobble applies a horizontal offset to the icicle's tipOffset, then resets
+ * @param {Object} k - Kaplay instance
+ * @param {Array} icicleData - Icicle position data (mutated: tipOffset changes)
+ * @param {Object} state - Wobble state { timer, activeIndex, elapsed }
+ * @param {Object} sfx - Sound instance
+ */
+function updateIcicleWobble(k, icicleData, state, sfx) {
+  if (icicleData.length === 0) return
+  const dt = k.dt()
+  //
+  // If an icicle is currently wobbling, animate it
+  //
+  if (state.activeIndex >= 0) {
+    state.elapsed += dt
+    const progress = state.elapsed / ICICLE_WOBBLE_DURATION
+    if (progress >= 1) {
+      //
+      // Wobble finished, restore original tipOffset
+      //
+      icicleData[state.activeIndex].tipOffset = icicleData[state.activeIndex].originalTip
+      state.activeIndex = -1
+      state.timer = ICICLE_WOBBLE_INTERVAL_MIN + Math.random() * (ICICLE_WOBBLE_INTERVAL_MAX - ICICLE_WOBBLE_INTERVAL_MIN)
+    } else {
+      //
+      // Damped oscillation: sin wave with decaying amplitude
+      //
+      const decay = 1 - progress
+      const phase = progress * Math.PI * 6
+      const wobble = Math.sin(phase) * ICICLE_WOBBLE_AMPLITUDE * decay
+      icicleData[state.activeIndex].tipOffset = icicleData[state.activeIndex].originalTip + wobble
+      //
+      // Detect direction change (velocity sign flip) and play crunch at each peak
+      //
+      const velocity = Math.cos(phase)
+      const dir = velocity > 0 ? 1 : -1
+      if (state.prevWobbleDir !== 0 && dir !== state.prevWobbleDir) {
+        sfx && playIceCreakSound(sfx, decay)
+      }
+      state.prevWobbleDir = dir
+    }
+    return
+  }
+  //
+  // Count down to next wobble
+  //
+  state.timer -= dt
+  if (state.timer <= 0) {
+    const idx = Math.floor(Math.random() * icicleData.length)
+    //
+    // Store original tipOffset so we can restore it after wobble
+    //
+    if (icicleData[idx].originalTip === undefined) {
+      icicleData[idx].originalTip = icicleData[idx].tipOffset
+    }
+    state.activeIndex = idx
+    state.elapsed = 0
+    state.prevWobbleDir = 0
+    sfx && playIceCreakSound(sfx, 1)
+  }
+}
+
+/**
+ * Plays a short ice crunch sound for a single wobble peak
+ * Volume scales with the wobble decay so later peaks are quieter
+ * @param {Object} instance - Sound instance from create()
+ * @param {number} [volume=1] - Volume multiplier (0-1), tied to wobble decay
+ */
+function playIceCreakSound(instance, volume = 1) {
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.08
+  const peak = 0.5 * volume
+  //
+  // Short white noise burst for a single crunch
+  //
+  const bufferSize = ctx.sampleRate * duration
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  //
+  // Low-pass filter for icy crunch character
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(700, now)
+  filter.frequency.linearRampToValueAtTime(350, now + duration)
+  filter.Q.value = 1.5
+  //
+  // Sharp attack, fast decay envelope
+  //
+  const envelope = ctx.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(peak, now + 0.003)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(ctx.destination)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+/**
+ * Generates decorative stacked log pile in the area between icicles and hero spawn
+ * Bottom row has 3 logs, then 2 on top, then 1 on top (pyramid shape)
+ * Uses the same drawLogPlatform rendering as playable platforms
+ * @returns {Array} Array of log objects with position, size, detail
+ */
+function generateDecorLogs() {
+  const logs = []
+  const baseX = DECOR_LOG_PILE_X
+  const w = DECOR_LOG_WIDTH
+  const h = DECOR_LOG_HEIGHT
+  const halfH = h / 2
+  //
+  // Bottom row: 3 logs side by side on the floor
+  //
+  for (let i = 0; i < 3; i++) {
+    const spacing = h + 2
+    logs.push({
+      x: baseX + (i - 1) * spacing + (Math.random() - 0.5) * 4,
+      y: FLOOR_Y - halfH,
+      w,
+      h,
+      detail: generateLogDetail(w, h, false)
+    })
+  }
+  //
+  // Middle row: 2 logs resting in the gaps of the bottom row
+  //
+  const midY = FLOOR_Y - h - halfH - 2
+  for (let i = 0; i < 2; i++) {
+    const spacing = h + 2
+    logs.push({
+      x: baseX + (i - 0.5) * spacing + (Math.random() - 0.5) * 4,
+      y: midY,
+      w,
+      h,
+      detail: generateLogDetail(w, h, false)
+    })
+  }
+  //
+  // Top: 1 log balanced on the middle row
+  //
+  logs.push({
+    x: baseX + (Math.random() - 0.5) * 6,
+    y: midY - h - 2,
+    w,
+    h,
+    detail: generateLogDetail(w, h, false)
+  })
+  return logs
+}
+
+/**
+ * Draws decorative stacked log pile using the same drawLogPlatform as playable logs
+ * @param {Object} k - Kaplay instance
+ * @param {Array} logs - Array of log objects with position, size, detail
+ */
+function drawDecorLogs(k, logs) {
+  for (const log of logs) {
+    k.pushTransform()
+    k.pushTranslate(log.x, log.y)
+    drawLogPlatform(k, log.w, log.h, 0, 0, 1, log.detail)
+    k.popTransform()
   }
 }
 //
@@ -2725,6 +2916,48 @@ function drawLevel2Moon(ctx) {
   })
   ctx.restore()
   ctx.restore()
+}
+
+/**
+ * Updates moon hover glow intensity based on mouse proximity
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Moon glow state { intensity: 0-1 }
+ */
+function updateMoonHoverGlow(k, state) {
+  const mousePos = k.mousePos()
+  const dx = mousePos.x - MOON_X
+  const dy = mousePos.y - MOON_Y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const isHovering = dist < MOON_RADIUS + 20
+  const dt = k.dt()
+  //
+  // Smooth transition toward target intensity
+  //
+  const target = isHovering ? 1 : 0
+  state.intensity += (target - state.intensity) * MOON_HOVER_GLOW_SPEED * dt
+  state.intensity = Math.max(0, Math.min(1, state.intensity))
+}
+
+/**
+ * Draws additional radial glow around the moon when hovered
+ * Renders concentric circles with fading opacity for a soft glow effect
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Moon glow state { intensity: 0-1 }
+ */
+function drawMoonHoverGlow(k, state) {
+  if (state.intensity < 0.01) return
+  const glowColor = k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
+  const rings = 8
+  for (let i = rings; i > 0; i--) {
+    const t = i / rings
+    const radius = MOON_RADIUS + MOON_HOVER_GLOW_EXTRA * t
+    k.drawCircle({
+      pos: k.vec2(MOON_X, MOON_Y),
+      radius,
+      color: glowColor,
+      opacity: state.intensity * 0.12 * (1 - t)
+    })
+  }
 }
 
 /**

@@ -1698,7 +1698,7 @@ export function onAnnihilationCollide(inst) {
                     //
                     // Create sparkle particles around hero (pink particles)
                     //
-                    createColorChangeSparkles(inst, pinkColor)
+                    createColorChangeSparkles(inst, touchColor)
                     //
                     // Pause to show the transformed hero
                     //

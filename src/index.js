@@ -109,6 +109,7 @@ k.loadSound("touch", "/sounds/touch.mp3")
 k.loadSound("touch0-pre", "/sounds/touch0-pre.mp3")
 k.loadSound("touch1-pre", "/sounds/touch1-pre.mp3")
 k.loadSound("touch2-pre", "/sounds/touch2-pre.mp3")
+k.loadSound("touch3-pre", "/sounds/touch3-pre.mp3")
 k.loadSound("life", "/sounds/life.mp3")
 k.loadSound("boss", "/sounds/boss.mp3")
 //

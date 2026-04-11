@@ -48,6 +48,7 @@ const LEVEL_SUBTITLES = {
   'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7],
   'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 5],
   'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 4],
+  'level-touch.3': ['when you cannot see… touch to survive', 'touch3-pre', 5]
 }
 
 const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black

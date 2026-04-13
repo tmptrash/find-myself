@@ -134,11 +134,11 @@ const TRAP_THORN_INSET = 15
 //
 const PLATFORM_THORN_TOLERANCE = 5
 //
-// Blue thorn color for level 3 (icy/cold theme, slightly darker)
+// White thorn/icicle color for level 3 (icy white matching snow theme)
 //
-const THORN_COLOR_R = 55
-const THORN_COLOR_G = 90
-const THORN_COLOR_B = 145
+const THORN_COLOR_R = 210
+const THORN_COLOR_G = 225
+const THORN_COLOR_B = 240
 //
 // Snow particle color (cold blue-white matching dark theme)
 //
@@ -294,7 +294,7 @@ const FRONT_TREES_SHARPNESS_MAX = 18
 const CLOUD_SCROLL_SPEED = 4
 const CLOUD_TOP_Y = TOP_MARGIN + 15
 const CLOUD_BOTTOM_Y = TOP_MARGIN + 55
-const CLOUD_COUNT = 18
+const CLOUD_COUNT = 22
 const CLOUD_RANDOMNESS = 15
 const CLOUD_DENSE_Y = TOP_MARGIN + 30
 const CLOUD_BASE_COLOR_R = 14
@@ -331,10 +331,10 @@ const MOON_CRATERS = [
 //
 // Snow clump detail counts for log snow caps
 //
-const SNOW_CLUMP_COUNT_MIN = 3
-const SNOW_CLUMP_COUNT_MAX = 6
+const SNOW_CLUMP_COUNT_MIN = 5
+const SNOW_CLUMP_COUNT_MAX = 10
 const SNOW_CLUMP_RADIUS_MIN = 3
-const SNOW_CLUMP_RADIUS_MAX = 8
+const SNOW_CLUMP_RADIUS_MAX = 9
 //
 // Tooltip texts and layout
 //
@@ -354,6 +354,41 @@ const MONSTER_TOOLTIP_Y_OFFSET = -80
 const ANTIHERO_TOOLTIP_TEXT = "come on, you can do it"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+const HERO_TOOLTIP_TEXT = "it's dark and scary"
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -60
+//
+// Icicles hanging under stationary log platforms (white, longer)
+//
+const PLATFORM_ICICLE_COUNT_MIN = 3
+const PLATFORM_ICICLE_COUNT_MAX = 6
+const PLATFORM_ICICLE_HEIGHT_MIN = 18
+const PLATFORM_ICICLE_HEIGHT_MAX = 40
+const PLATFORM_ICICLE_WIDTH_MIN = 4
+const PLATFORM_ICICLE_WIDTH_MAX = 9
+const PLATFORM_ICICLE_COLOR_R = 210
+const PLATFORM_ICICLE_COLOR_G = 225
+const PLATFORM_ICICLE_COLOR_B = 240
+//
+// Icicle wobble (random platform icicles wobble one at a time with creak)
+//
+const ICICLE_WOBBLE_INTERVAL_MIN = 3
+const ICICLE_WOBBLE_INTERVAL_MAX = 6
+const ICICLE_WOBBLE_DURATION = 1.2
+const ICICLE_WOBBLE_AMPLITUDE = 3
+//
+// Log platform click wobble (wooden creak on mouse click)
+//
+const LOG_WOBBLE_DURATION = 0.6
+const LOG_WOBBLE_AMPLITUDE = 2
+const LOG_WOBBLE_FREQUENCY = 12
+//
+// Thorn wobble (random blue thorns wobble with icy creak sound)
+//
+const THORN_WOBBLE_INTERVAL_MIN = 3
+const THORN_WOBBLE_INTERVAL_MAX = 7
+const THORN_WOBBLE_DURATION = 1.0
+const THORN_WOBBLE_AMPLITUDE = 2
 //
 // Decorative log piles (stacked on the bottom floor in multiple spots)
 //
@@ -367,9 +402,14 @@ const DECOR_LOG_PILE_POSITIONS = [
 ]
 const DECOR_LOG_Z = 1
 //
+// Snowflake hero push (snowflakes fly when hero runs past)
+//
+const SNOW_PUSH_DISTANCE = 60
+const SNOW_PUSH_STRENGTH = 80
+//
 // Bottom platform snow profile constants
 //
-const BOTTOM_SNOW_HEIGHT = 12
+const BOTTOM_SNOW_HEIGHT = 22
 const BOTTOM_SNOW_STEPS = 40
 //
 // Z-index layers for this level
@@ -631,6 +671,12 @@ export function sceneLevel3(k) {
     })
     decorInst.thornColor = k.rgb(THORN_COLOR_R, THORN_COLOR_G, THORN_COLOR_B)
     //
+    // Scale up thorn heights for icy level (longer spikes)
+    //
+    const THORN_HEIGHT_SCALE = 1.8
+    decorInst.thornData.forEach(t => { t.height *= THORN_HEIGHT_SCALE })
+    decorInst.platformThornData.forEach(t => { t.height *= THORN_HEIGHT_SCALE })
+    //
     // Split trap platform grass blades into left/right half groups
     // so they move with their respective halves during split animation
     //
@@ -643,6 +689,10 @@ export function sceneLevel3(k) {
     const trapThornStartX = trapLeftEdge + TRAP_THORN_INSET
     const trapThornEndX = trapLeftEdge + trapHalfWidth * TRAP_LEFT_THORN_COVERAGE - TRAP_THORN_INSET
     const trapLeftThorns = generateTrapThorns(trapThornStartX, trapThornEndX, trapPlat.y)
+    //
+    // Scale trap thorns to match the icy level's longer spikes
+    //
+    trapLeftThorns.forEach(t => { t.height *= THORN_HEIGHT_SCALE })
     //
     // Store initial thorn X positions for absolute offset calculation
     //
@@ -676,6 +726,17 @@ export function sceneLevel3(k) {
       }
     ])
     //
+    // Generate icicles hanging under stationary log platforms (skip trap platform)
+    //
+    const platformIcicles = generatePlatformIcicles()
+    //
+    // Log platform wobble state (one platform wobbles at a time on mouse click)
+    //
+    const logWobbleState = {
+      activeIndex: -1,
+      elapsed: 0
+    }
+    //
     // Draw log platform visuals (rounded wooden logs with bark texture)
     //
     k.add([
@@ -683,10 +744,36 @@ export function sceneLevel3(k) {
       k.opacity(PLATFORM_DEPTH_OPACITY),
       {
         draw() {
-          drawAllLogPlatforms(k, logDetails, trapState, trapLeftLogDetail, trapRightLogDetail)
+          drawAllLogPlatforms(k, logDetails, trapState, trapLeftLogDetail, trapRightLogDetail, logWobbleState)
+          drawPlatformIcicles(k, platformIcicles, logWobbleState)
         }
       }
     ])
+    //
+    // Mouse click on log platform triggers wobble + creak sound
+    //
+    k.onClick(() => {
+      onLogPlatformClick(k, logWobbleState, sound)
+    })
+    //
+    // Thorn wobble system (random blue thorns wobble one at a time)
+    //
+    const thornWobbleState = {
+      timer: THORN_WOBBLE_INTERVAL_MIN + Math.random() * (THORN_WOBBLE_INTERVAL_MAX - THORN_WOBBLE_INTERVAL_MIN),
+      activeIndex: -1,
+      elapsed: 0,
+      prevWobbleDir: 0
+    }
+    //
+    // Icicle wobble system (random platform icicles wobble one at a time)
+    //
+    const icicleWobbleState = {
+      timer: ICICLE_WOBBLE_INTERVAL_MIN + Math.random() * (ICICLE_WOBBLE_INTERVAL_MAX - ICICLE_WOBBLE_INTERVAL_MIN),
+      activePlatformIdx: -1,
+      activeIcicleIdx: -1,
+      elapsed: 0,
+      prevWobbleDir: 0
+    }
     //
     // Generate decorative log piles at multiple spots on the bottom floor
     //
@@ -773,15 +860,28 @@ export function sceneLevel3(k) {
       updateMoonHoverGlow(k, moonGlowState)
     })
     //
-    // Draw thorns above darkness (always visible)
+    // Draw thorns below darkness so they are only visible in bug light
     //
     k.add([
-      k.z(Z_DARKNESS + 1),
+      k.z(Z_DARKNESS - 2),
       {
         draw() {
           JungleDecor.onDrawBottomThorns(decorInst)
-          JungleDecor.onDrawPlatformThorns(decorInst)
+          drawPlatformThornsWithWobble(k, decorInst, logWobbleState)
           drawTrapLeftThorns(k, trapLeftThorns, trapState)
+        }
+      }
+    ])
+    //
+    // Draw snow caps on log platforms and bottom snow below darkness
+    // so they are only bright in areas illuminated by glow bugs
+    //
+    k.add([
+      k.z(Z_DARKNESS - 1),
+      {
+        draw() {
+          drawAllLogSnowOverlay(k, logDetails, trapState, logWobbleState)
+          drawBottomPlatformSnow(k, bottomSnowProfile)
         }
       }
     ])
@@ -901,11 +1001,70 @@ export function sceneLevel3(k) {
       }]
     })
     //
+    // Tooltip: hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => heroInst.character.pos.x,
+        y: () => heroInst.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Track hero X for snowflake push direction
+    //
+    let lastHeroX = heroInst.character?.pos?.x ?? heroX
+    //
+    // Track creature burning state for burn sound
+    //
+    let wasBurning = false
+    let burnSoundNode = null
+    //
     // Main update loop
     //
     k.onUpdate(() => {
       onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
-      Dust.onUpdate(dustInst, k.dt())
+      const dt = k.dt()
+      Dust.onUpdate(dustInst, dt)
+      updateLogWobble(logWobbleState, dt)
+      updateThornWobble(k, decorInst.thornData, thornWobbleState, sound)
+      updateIcicleWobble(k, platformIcicles, icicleWobbleState, sound)
+      //
+      // Push snowflakes in hero movement direction
+      //
+      if (heroInst.character?.pos) {
+        const hx = heroInst.character.pos.x
+        const hy = heroInst.character.pos.y
+        const heroVx = hx - lastHeroX
+        lastHeroX = hx
+        if (Math.abs(heroVx) > 0.5) {
+          for (const p of dustInst.particles) {
+            const dx = Math.abs(p.x - hx)
+            const dy = Math.abs(p.y - hy)
+            if (dx < SNOW_PUSH_DISTANCE && dy < SNOW_PUSH_DISTANCE) {
+              p.driftSpeed += heroVx * SNOW_PUSH_STRENGTH * dt
+            }
+          }
+        }
+      }
+      //
+      // Creature burn sound (start/stop looping noise when burning state changes)
+      //
+      burnSoundNode = updateBurnSound(sound, creatureInst.isBurning, wasBurning, burnSoundNode)
+      wasBurning = creatureInst.isBurning
+    })
+    //
+    // Stop burn sound when leaving scene
+    //
+    k.onSceneLeave(() => {
+      if (burnSoundNode) {
+        burnSoundNode.source.stop()
+        burnSoundNode = null
+      }
     })
     //
     // ESC key to return to menu
@@ -1064,6 +1223,34 @@ function generateTrapThorns(startX, endX, y) {
     })
   }
   return thorns
+}
+
+/**
+ * Draws platform thorns with wobble offset matching the log platform click animation
+ * Platform thorns are on P2 (CORRIDOR_PLATFORMS[2]) — when that log wobbles, thorns follow
+ * @param {Object} k - Kaplay instance
+ * @param {Object} decorInst - Jungle decoration instance
+ * @param {Object} wobbleState - Log wobble state
+ */
+function drawPlatformThornsWithWobble(k, decorInst, wobbleState) {
+  //
+  // Platform thorns are on P2 (index 2). Apply wobble Y offset if that platform is wobbling
+  //
+  const thornPlatformIdx = 2
+  let wobbleOffsetY = 0
+  if (wobbleState && wobbleState.activeIndex === thornPlatformIdx && wobbleState.elapsed < LOG_WOBBLE_DURATION) {
+    const progress = wobbleState.elapsed / LOG_WOBBLE_DURATION
+    const decay = 1 - progress
+    wobbleOffsetY = Math.sin(progress * Math.PI * LOG_WOBBLE_FREQUENCY) * LOG_WOBBLE_AMPLITUDE * decay
+  }
+  if (wobbleOffsetY !== 0) {
+    k.pushTransform()
+    k.pushTranslate(0, wobbleOffsetY)
+    JungleDecor.onDrawPlatformThorns(decorInst)
+    k.popTransform()
+  } else {
+    JungleDecor.onDrawPlatformThorns(decorInst)
+  }
 }
 
 /**
@@ -1543,36 +1730,53 @@ function generateLogDetail(w, h, withSnow) {
   let snowProfile = null
   let snowClumps = null
   if (withSnow) {
-    const steps = 24
+    //
+    // Higher step count for smoother, more detailed snow contour
+    //
+    const steps = 36
     snowProfile = new Array(steps + 1).fill(0)
-    const moundCount = 2 + Math.floor(Math.random() * 2)
+    //
+    // More mounds for varied terrain (3-5 overlapping bumps)
+    //
+    const moundCount = 3 + Math.floor(Math.random() * 3)
     for (let m = 0; m < moundCount; m++) {
-      const center = 0.15 + Math.random() * 0.7
-      const spread = 0.2 + Math.random() * 0.3
-      const height = 0.5 + Math.random() * 0.5
+      const center = 0.1 + Math.random() * 0.8
+      const spread = 0.12 + Math.random() * 0.25
+      const height = 0.3 + Math.random() * 0.7
       for (let i = 0; i <= steps; i++) {
         const t = i / steps
         const dist = (t - center) / spread
         snowProfile[i] += height * Math.max(0, 1 - dist * dist)
       }
     }
+    //
+    // Add fine-grained noise for natural irregularity
+    //
     const maxVal = Math.max(...snowProfile)
     for (let i = 0; i <= steps; i++) {
-      snowProfile[i] = snowProfile[i] / maxVal + (Math.random() - 0.5) * 0.08
+      snowProfile[i] = snowProfile[i] / maxVal + (Math.random() - 0.5) * 0.12
       snowProfile[i] = Math.max(0, snowProfile[i])
     }
     snowProfile[0] = Math.min(snowProfile[0], 0.05)
     snowProfile[steps] = Math.min(snowProfile[steps], 0.05)
+    //
+    // Generate oval-shaped snow clumps with varied tints and squash ratios
+    //
     const clumpCount = SNOW_CLUMP_COUNT_MIN + Math.floor(Math.random() * (SNOW_CLUMP_COUNT_MAX - SNOW_CLUMP_COUNT_MIN + 1))
     snowClumps = []
     for (let i = 0; i < clumpCount; i++) {
-      const t = 0.1 + Math.random() * 0.8
+      const t = 0.08 + Math.random() * 0.84
       const idx = Math.round(t * steps)
       const profileH = snowProfile[Math.min(idx, steps)]
+      const r = SNOW_CLUMP_RADIUS_MIN + Math.random() * (SNOW_CLUMP_RADIUS_MAX - SNOW_CLUMP_RADIUS_MIN)
       snowClumps.push({
         t,
-        yOffset: -profileH * 0.3 + Math.random() * profileH * 0.4,
-        r: SNOW_CLUMP_RADIUS_MIN + Math.random() * (SNOW_CLUMP_RADIUS_MAX - SNOW_CLUMP_RADIUS_MIN)
+        yOffset: -profileH * 0.3 + Math.random() * profileH * 0.5,
+        r,
+        squashX: 1.2 + Math.random() * 1.0,
+        squashY: 0.4 + Math.random() * 0.4,
+        tint: Math.floor(Math.random() * 3),
+        angle: (Math.random() - 0.5) * 0.3
       })
     }
   }
@@ -1587,16 +1791,26 @@ function generateLogDetail(w, h, withSnow) {
  * @param {Object} trapState - Trap platform state with current positions
  * @param {Object} trapLeftLogDetail - Log detail for left trap half
  * @param {Object} trapRightLogDetail - Log detail for right trap half
+ * @param {Object} wobbleState - Log wobble state for click animation
  */
-function drawAllLogPlatforms(k, logDetails, trapState, trapLeftLogDetail, trapRightLogDetail) {
+function drawAllLogPlatforms(k, logDetails, trapState, trapLeftLogDetail, trapRightLogDetail, wobbleState) {
   //
   // Draw regular platforms (skip trap platform index)
   //
   CORRIDOR_PLATFORMS.forEach((platform, idx) => {
     if (idx === TRAP_PLATFORM_INDEX) return
     const centerY = platform.y + PLATFORM_HEIGHT / 2
+    //
+    // Apply vertical wobble offset if this platform is actively wobbling
+    //
+    let wobbleOffsetY = 0
+    if (wobbleState && wobbleState.activeIndex === idx && wobbleState.elapsed < LOG_WOBBLE_DURATION) {
+      const progress = wobbleState.elapsed / LOG_WOBBLE_DURATION
+      const decay = 1 - progress
+      wobbleOffsetY = Math.sin(progress * Math.PI * LOG_WOBBLE_FREQUENCY) * LOG_WOBBLE_AMPLITUDE * decay
+    }
     k.pushTransform()
-    k.pushTranslate(platform.x, centerY)
+    k.pushTranslate(platform.x, centerY + wobbleOffsetY)
     drawLogPlatform(k, platform.width, PLATFORM_HEIGHT, 0, 0, 1, logDetails[idx])
     k.popTransform()
   })
@@ -1732,7 +1946,10 @@ function drawLogPlatform(k, w, h, ox, oy, opacity, detail) {
   }
   snowPts.push(k.vec2(halfW + ox, -halfH + oy))
   snowPts.push(k.vec2(-halfW + ox, -halfH + oy))
-  k.drawPolygon({ pts: snowPts, color: k.rgb(255, 255, 255), opacity: 0.9 * opacity })
+  k.drawPolygon({ pts: snowPts, color: k.rgb(230, 235, 245), opacity: 0.9 * opacity })
+  //
+  // Mid-layer shadow for depth and layered snow appearance
+  //
   const shadowPts = []
   for (let i = 0; i <= snowSteps; i++) {
     const t = i / snowSteps
@@ -1741,19 +1958,13 @@ function drawLogPlatform(k, w, h, ox, oy, opacity, detail) {
   }
   shadowPts.push(k.vec2(halfW + ox, -halfH + oy))
   shadowPts.push(k.vec2(-halfW + ox, -halfH + oy))
-  k.drawPolygon({ pts: shadowPts, color: k.rgb(100, 130, 180), opacity: 0.5 * opacity })
+  k.drawPolygon({ pts: shadowPts, color: k.rgb(160, 180, 210), opacity: 0.45 * opacity })
+  //
+  // Snow clumps as squashed ovals with varied tints
+  //
   if (detail.snowClumps) {
     for (const clump of detail.snowClumps) {
-      const cx = (clump.t - 0.5) * w + ox
-      const idx = Math.round(clump.t * snowSteps)
-      const baseH = sp[Math.min(idx, snowSteps)]
-      const cy = -halfH - snowHeight * baseH + clump.yOffset * snowHeight + oy
-      k.drawCircle({
-        pos: k.vec2(cx, cy),
-        radius: clump.r,
-        color: k.rgb(230, 240, 255),
-        opacity: 0.8 * opacity
-      })
+      drawSnowClumpOval(k, clump, w, sp, snowSteps, snowHeight, halfH, ox, oy, opacity)
     }
   }
 }
@@ -1811,9 +2022,9 @@ function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
   k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
   //
-  // Render corners above darkness overlay so they're always visible
+  // Render corners above darkness overlay and snow overlay
   //
-  const cornerZ = Z_DARKNESS + 3
+  const cornerZ = Z_DARKNESS + 5
   //
   // Top-left corner
   //
@@ -2019,7 +2230,7 @@ function createScrollingClouds(k) {
     const baseX = cloudSpacing * i + cloudSpacing * 0.5
     const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
     const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
-    const crownSize = (30 + Math.random() * 35) * 1.2
+    const crownSize = (35 + Math.random() * 40) * 1.2
     const crownCount = 5 + Math.floor(Math.random() * 4)
     const crowns = []
     for (let j = 0; j < crownCount; j++) {
@@ -2538,7 +2749,7 @@ function drawBottomPlatformSnow(k, profile) {
   }
   pts.push(k.vec2(rightX, FLOOR_Y))
   pts.push(k.vec2(leftX, FLOOR_Y))
-  k.drawPolygon({ pts, color: k.rgb(255, 255, 255), opacity: 0.9 })
+  k.drawPolygon({ pts, color: k.rgb(230, 235, 245), opacity: 0.9 })
   //
   // Subtle shadow layer for depth
   //
@@ -2550,6 +2761,477 @@ function drawBottomPlatformSnow(k, profile) {
   }
   shadowPts.push(k.vec2(rightX, FLOOR_Y))
   shadowPts.push(k.vec2(leftX, FLOOR_Y))
-  k.drawPolygon({ pts: shadowPts, color: k.rgb(100, 130, 180), opacity: 0.4 })
+  k.drawPolygon({ pts: shadowPts, color: k.rgb(160, 180, 210), opacity: 0.45 })
 }
 
+/**
+ * Generates icicle data for all stationary (non-trap) log platforms
+ * Icicles hang downward from the bottom edge of each platform
+ * @returns {Array} Array of arrays of icicle objects per platform
+ */
+function generatePlatformIcicles() {
+  const allIcicles = []
+  CORRIDOR_PLATFORMS.forEach((platform, idx) => {
+    if (idx === TRAP_PLATFORM_INDEX) {
+      allIcicles.push([])
+      return
+    }
+    const count = PLATFORM_ICICLE_COUNT_MIN + Math.floor(Math.random() * (PLATFORM_ICICLE_COUNT_MAX - PLATFORM_ICICLE_COUNT_MIN + 1))
+    const icicles = []
+    for (let i = 0; i < count; i++) {
+      const t = (i + 0.5) / count
+      icicles.push({
+        offsetX: (t - 0.5) * (platform.width - 20) + (Math.random() - 0.5) * 8,
+        height: PLATFORM_ICICLE_HEIGHT_MIN + Math.random() * (PLATFORM_ICICLE_HEIGHT_MAX - PLATFORM_ICICLE_HEIGHT_MIN),
+        width: PLATFORM_ICICLE_WIDTH_MIN + Math.random() * (PLATFORM_ICICLE_WIDTH_MAX - PLATFORM_ICICLE_WIDTH_MIN),
+        tipOffset: (Math.random() - 0.5) * 2
+      })
+    }
+    allIcicles.push(icicles)
+  })
+  return allIcicles
+}
+
+/**
+ * Draws icicles hanging under stationary log platforms
+ * Each icicle is a small triangle pointing downward from the bottom edge
+ * @param {Object} k - Kaplay instance
+ * @param {Array} allIcicles - Array of icicle arrays per platform
+ * @param {Object} wobbleState - Log wobble state for syncing icicle motion
+ */
+function drawPlatformIcicles(k, allIcicles, wobbleState) {
+  const icicleColor = k.rgb(PLATFORM_ICICLE_COLOR_R, PLATFORM_ICICLE_COLOR_G, PLATFORM_ICICLE_COLOR_B)
+  const outlineColor = k.rgb(0, 0, 0)
+  CORRIDOR_PLATFORMS.forEach((platform, idx) => {
+    if (idx === TRAP_PLATFORM_INDEX) return
+    const icicles = allIcicles[idx]
+    if (!icicles || icicles.length === 0) return
+    const baseY = platform.y + PLATFORM_HEIGHT
+    //
+    // Apply wobble offset if this platform is actively wobbling
+    //
+    let wobbleOffsetY = 0
+    if (wobbleState.activeIndex === idx && wobbleState.elapsed < LOG_WOBBLE_DURATION) {
+      const progress = wobbleState.elapsed / LOG_WOBBLE_DURATION
+      const decay = 1 - progress
+      wobbleOffsetY = Math.sin(progress * Math.PI * LOG_WOBBLE_FREQUENCY) * LOG_WOBBLE_AMPLITUDE * decay
+    }
+    for (const icicle of icicles) {
+      const cx = platform.x + icicle.offsetX
+      const topY = baseY + wobbleOffsetY
+      k.drawPolygon({
+        pts: [
+          k.vec2(cx - icicle.width / 2 - 1, topY - 1),
+          k.vec2(cx + icicle.width / 2 + 1, topY - 1),
+          k.vec2(cx + icicle.tipOffset, topY + icicle.height + 1)
+        ],
+        color: outlineColor
+      })
+      k.drawPolygon({
+        pts: [
+          k.vec2(cx - icicle.width / 2, topY),
+          k.vec2(cx + icicle.width / 2, topY),
+          k.vec2(cx + icicle.tipOffset, topY + icicle.height)
+        ],
+        color: icicleColor,
+        opacity: 0.85
+      })
+    }
+  })
+}
+
+/**
+ * Handles mouse click on a log platform: starts wobble animation + wooden creak
+ * Only stationary platforms (not trap) respond to clicks
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Log wobble state { activeIndex, elapsed }
+ * @param {Object} sfx - Sound instance
+ */
+function onLogPlatformClick(k, state, sfx) {
+  if (state.activeIndex >= 0 && state.elapsed < LOG_WOBBLE_DURATION) return
+  const mousePos = k.mousePos()
+  for (let idx = 0; idx < CORRIDOR_PLATFORMS.length; idx++) {
+    if (idx === TRAP_PLATFORM_INDEX) continue
+    const p = CORRIDOR_PLATFORMS[idx]
+    const halfW = p.width / 2
+    if (mousePos.x >= p.x - halfW && mousePos.x <= p.x + halfW &&
+        mousePos.y >= p.y && mousePos.y <= p.y + PLATFORM_HEIGHT) {
+      state.activeIndex = idx
+      state.elapsed = 0
+      playWoodCreakSound(sfx)
+      return
+    }
+  }
+}
+
+/**
+ * Updates log platform wobble animation timer
+ * @param {Object} state - Log wobble state { activeIndex, elapsed }
+ * @param {number} dt - Delta time
+ */
+function updateLogWobble(state, dt) {
+  if (state.activeIndex < 0) return
+  state.elapsed += dt
+  if (state.elapsed >= LOG_WOBBLE_DURATION) {
+    state.activeIndex = -1
+  }
+}
+
+/**
+ * Plays a short wooden creak sound using noise burst with low-pass filter
+ * @param {Object} instance - Sound instance from create()
+ */
+function playWoodCreakSound(instance) {
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.25
+  const peak = 0.35
+  //
+  // Short noise burst filtered to sound like wood creaking
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  //
+  // Band-pass filter centered around 400Hz for wooden character
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(400, now)
+  filter.frequency.linearRampToValueAtTime(250, now + duration)
+  filter.Q.value = 3
+  //
+  // Attack-decay envelope
+  //
+  const envelope = ctx.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(peak, now + 0.01)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(ctx.destination)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+/**
+ * Updates thorn wobble state: one random bottom thorn wobbles at a time
+ * Similar to icicle wobble in level 2 but for blue thorns
+ * @param {Object} k - Kaplay instance
+ * @param {Array} thornData - Bottom thorn data (mutated: tipOffset changes)
+ * @param {Object} state - Wobble state { timer, activeIndex, elapsed, prevWobbleDir }
+ * @param {Object} sfx - Sound instance
+ */
+function updateThornWobble(k, thornData, state, sfx) {
+  if (!thornData || thornData.length === 0) return
+  const dt = k.dt()
+  if (state.activeIndex >= 0) {
+    state.elapsed += dt
+    const progress = state.elapsed / THORN_WOBBLE_DURATION
+    if (progress >= 1) {
+      thornData[state.activeIndex].tipOffset = thornData[state.activeIndex].originalTip
+      state.activeIndex = -1
+      state.timer = THORN_WOBBLE_INTERVAL_MIN + Math.random() * (THORN_WOBBLE_INTERVAL_MAX - THORN_WOBBLE_INTERVAL_MIN)
+    } else {
+      const decay = 1 - progress
+      const phase = progress * Math.PI * 6
+      const wobble = Math.sin(phase) * THORN_WOBBLE_AMPLITUDE * decay
+      thornData[state.activeIndex].tipOffset = thornData[state.activeIndex].originalTip + wobble
+      //
+      // Play creak at each direction change for pulsing sound waves
+      //
+      const velocity = Math.cos(phase)
+      const dir = velocity > 0 ? 1 : -1
+      if (state.prevWobbleDir !== 0 && dir !== state.prevWobbleDir) {
+        playIceCreakSound(sfx, decay)
+      }
+      state.prevWobbleDir = dir
+    }
+    return
+  }
+  state.timer -= dt
+  if (state.timer <= 0) {
+    const idx = Math.floor(Math.random() * thornData.length)
+    if (thornData[idx].originalTip === undefined) {
+      thornData[idx].originalTip = thornData[idx].tipOffset
+    }
+    state.activeIndex = idx
+    state.elapsed = 0
+    state.prevWobbleDir = 0
+    playIceCreakSound(sfx, 1)
+  }
+}
+
+/**
+ * Plays a short ice crunch sound for a single wobble peak
+ * Volume scales with the wobble decay so later peaks are quieter
+ * @param {Object} instance - Sound instance from create()
+ * @param {number} [volume=1] - Volume multiplier (0-1), tied to wobble decay
+ */
+function playIceCreakSound(instance, volume = 1) {
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.08
+  const peak = 0.5 * volume
+  //
+  // Short white noise burst for a single crunch
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  //
+  // Low-pass filter for icy crunch character
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(700, now)
+  filter.frequency.linearRampToValueAtTime(350, now + duration)
+  filter.Q.value = 1.5
+  //
+  // Sharp attack, fast decay envelope
+  //
+  const envelope = ctx.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(peak, now + 0.003)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(ctx.destination)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+/**
+ * Draws snow caps from all stationary log platforms above the darkness/hero layer
+ * Re-renders only the snow portion so it appears in front of the hero and bugs
+ * @param {Object} k - Kaplay instance
+ * @param {Array} logDetails - Pre-generated log details per platform
+ * @param {Object} trapState - Trap platform state
+ * @param {Object} wobbleState - Log wobble state
+ */
+function drawAllLogSnowOverlay(k, logDetails, trapState, wobbleState) {
+  CORRIDOR_PLATFORMS.forEach((platform, idx) => {
+    if (idx === TRAP_PLATFORM_INDEX) return
+    const detail = logDetails[idx]
+    if (!detail.snowProfile) return
+    const centerY = platform.y + PLATFORM_HEIGHT / 2
+    let wobbleOffsetY = 0
+    if (wobbleState && wobbleState.activeIndex === idx && wobbleState.elapsed < LOG_WOBBLE_DURATION) {
+      const progress = wobbleState.elapsed / LOG_WOBBLE_DURATION
+      const decay = 1 - progress
+      wobbleOffsetY = Math.sin(progress * Math.PI * LOG_WOBBLE_FREQUENCY) * LOG_WOBBLE_AMPLITUDE * decay
+    }
+    k.pushTransform()
+    k.pushTranslate(platform.x, centerY + wobbleOffsetY)
+    drawLogSnowOnly(k, platform.width, PLATFORM_HEIGHT, 0, 0, 1, detail)
+    k.popTransform()
+  })
+}
+
+/**
+ * Draws a single snow clump as a squashed oval with a tinted color
+ * Replaces simple circles with more realistic layered oval shapes
+ * @param {Object} k - Kaplay instance
+ * @param {Object} clump - Clump data { t, yOffset, r, squashX, squashY, tint, angle }
+ * @param {number} w - Platform width
+ * @param {Array} sp - Snow profile array
+ * @param {number} snowSteps - Number of profile steps
+ * @param {number} snowHeight - Snow height multiplier
+ * @param {number} halfH - Half platform height
+ * @param {number} ox - Offset X
+ * @param {number} oy - Offset Y
+ * @param {number} opacity - Opacity (0-1)
+ */
+function drawSnowClumpOval(k, clump, w, sp, snowSteps, snowHeight, halfH, ox, oy, opacity) {
+  const cx = (clump.t - 0.5) * w + ox
+  const idx = Math.round(clump.t * snowSteps)
+  const baseH = sp[Math.min(idx, snowSteps)]
+  const cy = -halfH - snowHeight * baseH + clump.yOffset * snowHeight + oy
+  const sqX = clump.squashX ?? 1.5
+  const sqY = clump.squashY ?? 0.5
+  //
+  // Three tint variants for visual variety
+  //
+  const TINT_COLORS = [
+    [210, 220, 235],
+    [220, 230, 245],
+    [200, 215, 230]
+  ]
+  const tintIdx = clump.tint ?? 0
+  const col = TINT_COLORS[tintIdx]
+  //
+  // Draw oval as polygon approximation (rotated ellipse)
+  //
+  const segments = 10
+  const pts = []
+  const cosA = Math.cos(clump.angle ?? 0)
+  const sinA = Math.sin(clump.angle ?? 0)
+  for (let i = 0; i < segments; i++) {
+    const a = (i / segments) * Math.PI * 2
+    const px = Math.cos(a) * clump.r * sqX
+    const py = Math.sin(a) * clump.r * sqY
+    pts.push(k.vec2(cx + px * cosA - py * sinA, cy + px * sinA + py * cosA))
+  }
+  k.drawPolygon({ pts, color: k.rgb(col[0], col[1], col[2]), opacity: 0.7 * opacity })
+}
+
+/**
+ * Draws only the snow cap portion of a log platform (no bark body)
+ * Used for the overlay layer that renders in front of hero/bugs
+ * @param {Object} k - Kaplay instance
+ * @param {number} w - Platform width
+ * @param {number} h - Platform height
+ * @param {number} ox - Offset X
+ * @param {number} oy - Offset Y
+ * @param {number} opacity - Opacity (0-1)
+ * @param {Object} detail - Log detail with snowProfile and snowClumps
+ */
+function drawLogSnowOnly(k, w, h, ox, oy, opacity, detail) {
+  if (!detail.snowProfile) return
+  const halfW = w / 2
+  const halfH = h / 2
+  const sp = detail.snowProfile
+  const snowSteps = sp.length - 1
+  const snowHeight = h * 0.5
+  const snowPts = []
+  for (let i = 0; i <= snowSteps; i++) {
+    const t = i / snowSteps
+    const px = (t - 0.5) * w + ox
+    snowPts.push(k.vec2(px, -halfH - snowHeight * sp[i] + oy))
+  }
+  snowPts.push(k.vec2(halfW + ox, -halfH + oy))
+  snowPts.push(k.vec2(-halfW + ox, -halfH + oy))
+  k.drawPolygon({ pts: snowPts, color: k.rgb(230, 235, 245), opacity: 0.9 * opacity })
+  const shadowPts = []
+  for (let i = 0; i <= snowSteps; i++) {
+    const t = i / snowSteps
+    const px = (t - 0.5) * w + ox
+    shadowPts.push(k.vec2(px, -halfH - snowHeight * 0.3 * sp[i] + oy))
+  }
+  shadowPts.push(k.vec2(halfW + ox, -halfH + oy))
+  shadowPts.push(k.vec2(-halfW + ox, -halfH + oy))
+  k.drawPolygon({ pts: shadowPts, color: k.rgb(160, 180, 210), opacity: 0.45 * opacity })
+  if (detail.snowClumps) {
+    for (const clump of detail.snowClumps) {
+      drawSnowClumpOval(k, clump, w, sp, snowSteps, snowHeight, halfH, ox, oy, opacity)
+    }
+  }
+}
+
+/**
+ * Updates icicle wobble state: one random icicle across all platforms wobbles at a time
+ * @param {Object} k - Kaplay instance
+ * @param {Array} allIcicles - Array of icicle arrays per platform
+ * @param {Object} state - Wobble state { timer, activePlatformIdx, activeIcicleIdx, elapsed, prevWobbleDir }
+ * @param {Object} sfx - Sound instance
+ */
+function updateIcicleWobble(k, allIcicles, state, sfx) {
+  const dt = k.dt()
+  if (state.activePlatformIdx >= 0) {
+    state.elapsed += dt
+    const progress = state.elapsed / ICICLE_WOBBLE_DURATION
+    if (progress >= 1) {
+      const icicle = allIcicles[state.activePlatformIdx][state.activeIcicleIdx]
+      icicle.tipOffset = icicle.originalTip
+      state.activePlatformIdx = -1
+      state.timer = ICICLE_WOBBLE_INTERVAL_MIN + Math.random() * (ICICLE_WOBBLE_INTERVAL_MAX - ICICLE_WOBBLE_INTERVAL_MIN)
+    } else {
+      const decay = 1 - progress
+      const phase = progress * Math.PI * 6
+      const wobble = Math.sin(phase) * ICICLE_WOBBLE_AMPLITUDE * decay
+      const icicle = allIcicles[state.activePlatformIdx][state.activeIcicleIdx]
+      icicle.tipOffset = icicle.originalTip + wobble
+      const velocity = Math.cos(phase)
+      const dir = velocity > 0 ? 1 : -1
+      if (state.prevWobbleDir !== 0 && dir !== state.prevWobbleDir) {
+        playIceCreakSound(sfx, decay)
+      }
+      state.prevWobbleDir = dir
+    }
+    return
+  }
+  state.timer -= dt
+  if (state.timer <= 0) {
+    //
+    // Pick a random icicle from any non-trap platform
+    //
+    const validPlatforms = []
+    allIcicles.forEach((icicles, idx) => {
+      if (icicles.length > 0) validPlatforms.push(idx)
+    })
+    if (validPlatforms.length === 0) return
+    const platIdx = validPlatforms[Math.floor(Math.random() * validPlatforms.length)]
+    const icicleIdx = Math.floor(Math.random() * allIcicles[platIdx].length)
+    const icicle = allIcicles[platIdx][icicleIdx]
+    if (icicle.originalTip === undefined) {
+      icicle.originalTip = icicle.tipOffset
+    }
+    state.activePlatformIdx = platIdx
+    state.activeIcicleIdx = icicleIdx
+    state.elapsed = 0
+    state.prevWobbleDir = 0
+    playIceCreakSound(sfx, 1)
+  }
+}
+
+/**
+ * Manages the creature burn sound loop: starts crackling noise when creature
+ * enters burning state, stops when it exits
+ * @param {Object} sfx - Sound instance
+ * @param {boolean} isBurning - Current burning state
+ * @param {boolean} wasBurning - Previous frame's burning state
+ * @param {Object|null} currentNode - Currently playing burn sound node
+ * @returns {Object|null} Updated burn sound node
+ */
+function updateBurnSound(sfx, isBurning, wasBurning, currentNode) {
+  if (!sfx?.audioContext) return null
+  const ctx = sfx.audioContext
+  if (isBurning && !wasBurning) {
+    //
+    // Start burn sound: looping filtered noise with crackling character
+    //
+    const bufferSize = Math.floor(ctx.sampleRate * 0.5)
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+    const noiseData = noiseBuffer.getChannelData(0)
+    for (let i = 0; i < bufferSize; i++) {
+      noiseData[i] = Math.random() * 2 - 1
+    }
+    const noiseSource = ctx.createBufferSource()
+    noiseSource.buffer = noiseBuffer
+    noiseSource.loop = true
+    const filter = ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.value = 600
+    filter.Q.value = 2
+    const gain = ctx.createGain()
+    gain.gain.value = 0.15
+    noiseSource.connect(filter)
+    filter.connect(gain)
+    gain.connect(ctx.destination)
+    noiseSource.start()
+    return { source: noiseSource, gain }
+  }
+  if (!isBurning && wasBurning && currentNode) {
+    //
+    // Stop burn sound with short fade-out
+    //
+    const now = ctx.currentTime
+    currentNode.gain.gain.setValueAtTime(currentNode.gain.gain.value, now)
+    currentNode.gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1)
+    currentNode.source.stop(now + 0.15)
+    return null
+  }
+  return currentNode
+}

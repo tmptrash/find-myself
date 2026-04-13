@@ -6,11 +6,11 @@ const MESSAGE_HOLD_DURATION = 5.0
 const FADE_IN_DURATION = 1.0
 const FADE_OUT_DURATION = 1.5
 //
-// Touch section completion message color (pink, matches section body color)
+// Touch section completion message color (brown, matches pre-level subtitle color)
 //
-const MESSAGE_COLOR_R = 255
-const MESSAGE_COLOR_G = 192
-const MESSAGE_COLOR_B = 203
+const MESSAGE_COLOR_R = 139
+const MESSAGE_COLOR_G = 90
+const MESSAGE_COLOR_B = 80
 
 /**
  * Final scene after completing all touch section levels
@@ -43,7 +43,7 @@ export function sceneTouchComplete(k) {
       k.z(0)
     ])
     //
-    // Create final message text (pink, matching touch section color)
+    // Create final message text (brown, matching touch section color)
     //
     const messageText = k.add([
       k.text(FINAL_MESSAGE, {

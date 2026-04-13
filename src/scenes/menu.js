@@ -807,14 +807,14 @@ export function sceneMenu(k) {
         }
         
         //
-        // Play heartbeat sound for current section anti-hero OR time anti-hero when localStorage is empty
+        // Play heartbeat sound for current section anti-hero OR touch anti-hero when localStorage is empty
         //
         const lastLevel = get('lastLevel', null)
         const isEmptyLocalStorage = lastLevel === null
-        const timeAntiHero = antiHeroes.find(ah => ah.section === 'time')
-        const isTimeAntiHeroHover = isEmptyLocalStorage && timeAntiHero && !timeAntiHero.isCompleted && hoveredInst === timeAntiHero
+        const touchAntiHero = antiHeroes.find(ah => ah.section === 'touch')
+        const isTouchAntiHeroHover = isEmptyLocalStorage && touchAntiHero && !touchAntiHero.isCompleted && hoveredInst === touchAntiHero
         
-        if (isCurrentSectionHover || isTimeAntiHeroHover) {
+        if (isCurrentSectionHover || isTouchAntiHeroHover) {
           const HEARTBEAT_INTERVAL = 1.0
           if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
             Sound.playHeartbeatSound(sound)
@@ -1751,22 +1751,22 @@ function drawScene(inst) {
   //
   // Draw lightning between hero and hovered anti-hero
   // Only for incomplete sections that match the current section being played
-  // OR if localStorage is empty, show electricity on time anti-hero when hovered
+  // OR if localStorage is empty, show electricity on touch anti-hero when hovered
   //
   const lastLevel = get('lastLevel', null)
   const isEmptyLocalStorage = lastLevel === null
   
   if (isEmptyLocalStorage) {
     //
-    // Find time anti-hero when localStorage is empty
+    // Find touch anti-hero when localStorage is empty (touch is the first section)
     // Show electricity only when hovering over it
     //
-    const timeAntiHero = antiHeroes.find(ah => ah.section === 'time')
-    if (timeAntiHero && !timeAntiHero.isCompleted && hoveredAntiHero === timeAntiHero) {
+    const touchAntiHero = antiHeroes.find(ah => ah.section === 'touch')
+    if (touchAntiHero && !touchAntiHero.isCompleted && hoveredAntiHero === touchAntiHero) {
       const heroPos = { x: hero.pos.x, y: hero.pos.y }
       const antiHeroPos = { 
-        x: timeAntiHero.character.pos.x, 
-        y: timeAntiHero.character.pos.y 
+        x: touchAntiHero.character.pos.x, 
+        y: touchAntiHero.character.pos.y 
       }
       
       //

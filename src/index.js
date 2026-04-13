@@ -36,36 +36,59 @@ const k = kaplay({
   background: [0, 0, 0]
 })
 //
-// Track asset loading progress per file using PerformanceObserver
-// Fires as each individual mp3/png finishes downloading, giving smooth
-// incremental progress instead of Kaplay's batched frame-based updates
+// Track asset loading progress with two-phase updates:
+// Phase 1 (request): bar advances as each load call is made (immediate visual feedback)
+// Phase 2 (complete): bar advances as each file finishes downloading
+// Each phase contributes 50% so the bar moves steadily throughout loading
 //
 const loaderBar = document.getElementById('loader-bar')
-let loadedNetworkAssets = 0
-let totalNetworkAssets = 0
+let requestedAssets = 0
+let completedAssets = 0
+let totalAssets = 0
+//
+// Update progress bar using combined request + completion progress
+//
+function updateLoaderBar() {
+  if (!loaderBar || totalAssets === 0) return
+  const requestProgress = requestedAssets / totalAssets
+  const completeProgress = completedAssets / totalAssets
+  const combined = (requestProgress * 0.4 + completeProgress * 0.6) * 100
+  loaderBar.style.width = `${Math.min(100, Math.round(combined))}%`
+}
 const loadObserver = new PerformanceObserver((list) => {
   for (const entry of list.getEntries()) {
     if (NETWORK_ASSET_PATTERN.test(entry.name)) {
-      loadedNetworkAssets++
-      if (loaderBar && totalNetworkAssets > 0) {
-        loaderBar.style.width = `${Math.min(100, Math.round((loadedNetworkAssets / totalNetworkAssets) * 100))}%`
-      }
+      completedAssets++
+      updateLoaderBar()
     }
   }
 })
 loadObserver.observe({ type: 'resource', buffered: true })
 //
-// Wrap Kaplay load functions to auto-count expected network assets
+// Wrap Kaplay load functions to count assets and update bar on each request
 //
 const _origLoadSound = k.loadSound.bind(k)
 const _origLoadSprite = k.loadSprite.bind(k)
+const _origLoadFont = k.loadFont.bind(k)
 k.loadSound = (name, src, ...rest) => {
-  totalNetworkAssets++
+  totalAssets++
+  requestedAssets++
+  updateLoaderBar()
   return _origLoadSound(name, src, ...rest)
 }
 k.loadSprite = (name, src, ...rest) => {
-  if (typeof src === 'string' && !src.startsWith('data:')) totalNetworkAssets++
+  if (typeof src === 'string' && !src.startsWith('data:')) {
+    totalAssets++
+    requestedAssets++
+    updateLoaderBar()
+  }
   return _origLoadSprite(name, src, ...rest)
+}
+k.loadFont = (name, src, ...rest) => {
+  totalAssets++
+  requestedAssets++
+  updateLoaderBar()
+  return _origLoadFont(name, src, ...rest)
 }
 //
 // Force dark background for all elements

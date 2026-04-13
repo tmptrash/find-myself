@@ -216,7 +216,7 @@ function onDraw(inst) {
       liveY + Math.abs(liveOffsetY) - POINTER_HEIGHT,
       SCREEN_EDGE_MARGIN
     )
-    const pointerBaseEdge = bubbleY + 1
+    const pointerBaseEdge = bubbleY + BUBBLE_BORDER_WIDTH + 1
     drawPointer(k, clampedPointerX, pointerBaseEdge, pointerTipY, borderColor, bgColor, inst.opacity, true)
   } else {
     //
@@ -226,7 +226,7 @@ function onDraw(inst) {
       liveY + liveOffsetY + POINTER_HEIGHT,
       screenH - SCREEN_EDGE_MARGIN
     )
-    const pointerBaseEdge = bubbleY + bubbleH - 1
+    const pointerBaseEdge = bubbleY + bubbleH - BUBBLE_BORDER_WIDTH - 1
     drawPointer(k, clampedPointerX, pointerBaseEdge, pointerTipY, borderColor, bgColor, inst.opacity, false)
   }
   //

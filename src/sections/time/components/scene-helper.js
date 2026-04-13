@@ -39,6 +39,16 @@ export function startTimeSectionMusic(k, music = false) {
 }
 
 /**
+ * Starts clock.mp3 background music and stores handle for proper stopping
+ * @param {Object} k - Kaplay instance
+ */
+export function startClockMusic(k) {
+  if (timeSectionMusic.clock) {
+    timeSectionMusic.clock.stop()
+  }
+  timeSectionMusic.clock = Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
+}
+/**
  * Stops all time section background music
  * @param {Object} k - Optional Kaplay instance for direct sound stopping
  */
@@ -341,8 +351,10 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     type: Hero.HEROES.ANTIHERO,
     controllable: false,
     sfx: null,
-    bodyColor: "#FF8C00",  // Orange/yellow (explicit hex to avoid local config override)
-    outlineColor: CFG.visual.colors.outline
+    bodyColor: "#FF8C00",
+    outlineColor: CFG.visual.colors.outline,
+    addArms: true,
+    addWatch: true
   })
   
   const heroInst = Hero.create({

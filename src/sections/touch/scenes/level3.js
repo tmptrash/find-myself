@@ -358,6 +358,16 @@ const HERO_TOOLTIP_TEXT = "it's dark and scary"
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -60
 //
+// Bug tooltip configuration (joke phrases for platform bugs)
+//
+const BUG_TOOLTIP_HOVER_SIZE = 50
+const BUG_TOOLTIP_Y_OFFSET = -50
+const BUG_JOKES = [
+  "i'm not a trampoline!",
+  "stop bouncing on me!",
+  "watch your step, big guy"
+]
+//
 // Icicles hanging under stationary log platforms (white, longer)
 //
 const PLATFORM_ICICLE_COUNT_MIN = 3
@@ -790,14 +800,6 @@ export function sceneLevel3(k) {
     // Generate bottom platform snow profile (covers the full-width floor)
     //
     const bottomSnowProfile = generateBottomSnowProfile()
-    k.add([
-      k.z(Z_FOREGROUND),
-      {
-        draw() {
-          drawBottomPlatformSnow(k, bottomSnowProfile)
-        }
-      }
-    ])
     //
     // Draw shadow creature body and tentacles (below darkness, hidden in dark areas)
     //
@@ -873,11 +875,11 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Draw snow caps on log platforms and bottom snow below darkness
-    // so they are only bright in areas illuminated by glow bugs
+    // Draw snow caps on log platforms and bottom snow above hero and bugs
+    // so snow visually covers characters walking on platforms
     //
     k.add([
-      k.z(Z_DARKNESS - 1),
+      k.z(Z_DARKNESS + 3),
       {
         draw() {
           drawAllLogSnowOverlay(k, logDetails, trapState, logWobbleState)
@@ -1013,6 +1015,27 @@ export function sceneLevel3(k) {
         text: HERO_TOOLTIP_TEXT,
         offsetY: HERO_TOOLTIP_Y_OFFSET
       }]
+    })
+    //
+    // Tooltip: platform glow bugs (one joke per bug)
+    //
+    const platformBugEntries = [
+      ...glowBugInst.entries,
+      ...trapBugInst.entries
+    ]
+    platformBugEntries.forEach((entry, i) => {
+      const jokeText = BUG_JOKES[i % BUG_JOKES.length]
+      Tooltip.create({
+        k,
+        targets: [{
+          x: () => entry.bug.x,
+          y: () => entry.bug.y,
+          width: BUG_TOOLTIP_HOVER_SIZE,
+          height: BUG_TOOLTIP_HOVER_SIZE,
+          text: jokeText,
+          offsetY: BUG_TOOLTIP_Y_OFFSET
+        }]
+      })
     })
     //
     // Track hero X for snowflake push direction

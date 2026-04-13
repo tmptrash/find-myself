@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, stopTimeSectionMusic, checkSpeedBonus } from '../components/scene-helper.js'
+import { initScene, startTimeSectionMusic, stopTimeSectionMusic, startClockMusic, checkSpeedBonus } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
@@ -64,9 +64,9 @@ export function sceneLevel0(k) {
     //
     startTimeSectionMusic(k)
     //
-    // Start clock.mp3 locally (restarts on each level load for synchronization)
+    // Start clock.mp3 (stored in timeSectionMusic for proper transition stopping)
     //
-    Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
+    startClockMusic(k)
     //
     // Start beginning phrase about time
     //
@@ -173,7 +173,8 @@ export function sceneLevel0(k) {
     const fpsCounter = FpsCounter.create({ 
       k, 
       showTimer: true, 
-      targetTime: CFG.gameplay.speedBonusTime['level-time.0'] 
+      targetTime: CFG.gameplay.speedBonusTime['level-time.0'],
+      topY: PLATFORM_TOP_HEIGHT - 57
     })
     //
     // Update FPS counter

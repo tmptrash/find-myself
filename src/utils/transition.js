@@ -41,7 +41,7 @@ const LEVEL_SUBTITLES = {
   'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 3.0],
   'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 3.0],
   'level-word.4': ['words that kill...', 'word4-pre', 2.5],
-  'level-time.0': ['you are young and everything is new. time moves\nforward even when you stand still. this is the\nfirst thing you learn. you start to notice it\nslipping — and you start to run.', 'time0-pre', 14],
+  'level-time.0': ['time moves forward even when you stand still. you\nstart to notice it slipping — and you start to run.', 'time0-pre', 8],
   'level-time.1': ['you are growing. you are learning. numbers begin\nto surround you. growing up means learning what you\ncan touch — and what you should leave alone. do not\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\nmistakes are allowed — but not forever. digits sum\neven safe, sum odd deadly.', 'time2-pre', 18],
   'level-time.3': ['life consumes time while you hesitate. act too\nslow — and it will catch you. throw snow. move\nfast. everything happens at once.', 'time3-pre', 16],

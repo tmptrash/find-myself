@@ -79,6 +79,7 @@ export function create(config) {
     isStatic = false,      // If true, no physics (for indicators)
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
     addArms = false,       // If true, add simple vertical arms
+    addWatch = false,      // If true, draw small watch on left arm (requires addArms)
     outlineOnly = false,   // If true, draw only outline (no body fill)
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
@@ -104,6 +105,7 @@ export function create(config) {
       outlineColor: outlineColorWithHash,
       addMouth,
       addArms,
+      addWatch,
       outlineOnly,
       character: null  // Marker to indicate this is an inst-like object
     })
@@ -113,7 +115,7 @@ export function create(config) {
   //
   // Generate sprite prefix based on customization (colors already have # removed)
   //
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${outlineOnly ? '_outline' : ''}`
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -140,6 +142,7 @@ export function create(config) {
         outlineColor: effectiveOutlineColor,
         addMouth,
         addArms,
+        addWatch,
         outlineOnly
       })
       //
@@ -242,12 +245,13 @@ export function create(config) {
  * @param {string} [outlineColor=null] - Outline color in hex format (null = use default from config)
  * @param {boolean} [addMouth=false] - Add mouth to idle sprites
  * @param {boolean} [addArms=false] - Add arms to sprites
+ * @param {boolean} [addWatch=false] - Add watch on left arm
  */
-export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColor = null, addMouth = false, addArms = false) {
+export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColor = null, addMouth = false, addArms = false, addWatch = false) {
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, hollow
+  let k, heroType, color, outline, mouth, arms, watch, hollow
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -259,6 +263,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     outline = inst.outlineColor
     mouth = inst.addMouth || false
     arms = inst.addArms || false
+    watch = inst.addWatch || false
     hollow = inst.outlineOnly || false
   } else {
     //
@@ -270,6 +275,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     outline = outlineColor
     mouth = addMouth
     arms = addArms
+    watch = addWatch
     hollow = false
   }
   //
@@ -295,7 +301,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Generate unique prefix for this sprite variant
   //
-  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${hollow ? '_outline' : ''}`
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}`
   //
   // Check if sprites with this configuration are already loaded
   //
@@ -307,7 +313,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
         //
         // Ensure sprite data is valid before loading
         //
@@ -332,7 +338,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
       if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
         try {
           k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
@@ -353,7 +359,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
       if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
         try {
           k.loadSprite(`${prefix}-run-${frame}`, spriteData)
@@ -1920,9 +1926,11 @@ export function onAnnihilationCollide(inst) {
  * @param {string} [customOutlineColor] - Custom outline color in hex format
  * @param {boolean} [addMouth=false] - Add horizontal mouth line (only for idle animation)
  * @param {boolean} [addArms=false] - Add simple vertical arms
+ * @param {boolean} [outlineOnly=false] - Draw only outline (no body fill)
+ * @param {boolean} [addWatch=false] - Draw small watch on left arm
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false) {
   //
   // Choose body color - custom or default
   //
@@ -2237,6 +2245,14 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
 
         ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
         ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
+        //
+        // Small watch on left wrist (colored rectangle at arm end)
+        //
+        if (addWatch) {
+          const watchY = armStartY + armLength - 2
+          ctx.fillStyle = '#A0A0A0'
+          ctx.fillRect(leftLegX - armWidth - 1, watchY, 3, 2)
+        }
       }
     })
   } catch (error) {

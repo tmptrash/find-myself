@@ -510,7 +510,8 @@ export function sceneLevel3(k) {
     const fpsCounter = FpsCounter.create({ 
       k, 
       showTimer: true, 
-      targetTime: null  // No target time display for level 3 
+      targetTime: null,
+      topY: CORRIDOR_Y - 20 - 57
     })
     //
     // Update FPS counter

@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, stopTimeSectionMusic, checkSpeedBonus } from '../components/scene-helper.js'
+import { initScene, stopTimeSectionMusic, startClockMusic, checkSpeedBonus } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -349,7 +349,7 @@ export function sceneLevel2(k) {
     //
     const timeMusic = Sound.playInScene(k, 'time', CFG.audio.backgroundMusic.time, true)
     const kidsMusic = Sound.playInScene(k, 'time0-kids', CFG.audio.backgroundMusic.kids, true)
-    const clockMusic = Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
+    startClockMusic(k)
     //
     // Calculate anti-hero position (on final platform)
     // Create the platform FIRST, then position hero above it
@@ -463,7 +463,7 @@ export function sceneLevel2(k) {
           //
           timeMusic.stop()
           kidsMusic.stop()
-          clockMusic.stop()
+          stopTimeSectionMusic()
           //
           // Move to level 3 with transition
           //
@@ -483,7 +483,8 @@ export function sceneLevel2(k) {
     const fpsCounter = FpsCounter.create({ 
       k, 
       showTimer: true, 
-      targetTime: CFG.gameplay.speedBonusTime['level-time.2'] 
+      targetTime: CFG.gameplay.speedBonusTime['level-time.2'],
+      topY: PLATFORM_TOP_HEIGHT - 57
     })
     //
     // Update FPS counter

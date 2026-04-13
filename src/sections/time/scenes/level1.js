@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, checkSpeedBonus } from '../components/scene-helper.js'
+import { initScene, startTimeSectionMusic, startClockMusic, checkSpeedBonus } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -57,9 +57,9 @@ export function sceneLevel1(k) {
     //
     startTimeSectionMusic(k, true)
     //
-    // Start clock.mp3 locally (restarts on each level load for synchronization)
+    // Start clock.mp3 (stored in timeSectionMusic for proper transition stopping)
     //
-    Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
+    startClockMusic(k)
     //
     // Initialize level with heroes and platforms (skip default platforms)
     //
@@ -161,7 +161,8 @@ export function sceneLevel1(k) {
     const fpsCounter = FpsCounter.create({ 
       k, 
       showTimer: true, 
-      targetTime: CFG.gameplay.speedBonusTime['level-time.1'] 
+      targetTime: CFG.gameplay.speedBonusTime['level-time.1'],
+      topY: PLATFORM_TOP_HEIGHT - 57
     })
     //
     // Update FPS counter

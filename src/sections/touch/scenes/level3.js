@@ -368,6 +368,23 @@ const BUG_JOKES = [
   "watch your step, big guy"
 ]
 //
+// Hero glow (Shift ability): hero emits light for 3 seconds, costs 1 heroScore
+//
+const HERO_GLOW_DURATION = 3.0
+const HERO_GLOW_AURA_RADIUS = 150
+const HERO_GLOW_RING_COUNT = 30
+const HERO_GLOW_MAX_OPACITY = 0.12
+const HERO_GLOW_PULSE_SPEED = 4.0
+const HERO_GLOW_COLOR_R = 255
+const HERO_GLOW_COLOR_G = 200
+const HERO_GLOW_COLOR_B = 100
+//
+// Hero glow hint text
+//
+const HERO_GLOW_HINT_TEXT = "press Shift to light up (costs 1 point)"
+const HERO_GLOW_HINT_STORAGE_KEY = 'level3GlowInstructionsCount'
+const HERO_GLOW_HINT_MAX_SHOWS = 2
+//
 // Icicles hanging under stationary log platforms (white, longer)
 //
 const PLATFORM_ICICLE_COUNT_MIN = 3
@@ -431,13 +448,13 @@ const Z_MOUNTAINS = -90
 const Z_DARK_TREES = -85
 const Z_MEDIUM_TREES = -80
 const Z_FRONT_TREES = -75
-const Z_CLOUDS = 52
 const Z_VINES = 0
 const Z_PLATFORM_VISUALS = 2
 const Z_FOREGROUND = 3
 const Z_CREATURE = 5
 const Z_BUGS = 8
 const Z_DARKNESS = 50
+const Z_CLOUDS = 52
 //
 // Darkness overlay (shader-based with smooth gradient falloff per light source)
 // Covers only the game area with rounded corners; walls/margins stay normal
@@ -449,6 +466,10 @@ const DARKNESS_GLOW_RADIUS = 350
 const DARKNESS_GLOW_INTENSITY = 1.0
 const DARKNESS_CREATURE_BURN_RADIUS = 120
 const DARKNESS_CREATURE_BURN_INTENSITY = 1.0
+//
+// Snow darkness: ambient brightness when no lights are near
+//
+const SNOW_AMBIENT_BRIGHTNESS = 0.08
 /**
  * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
@@ -459,6 +480,10 @@ export function sceneLevel3(k) {
     // Save progress
     //
     set('lastLevel', 'level-touch.3')
+    //
+    // Save heroScore at level start for restoration on death
+    //
+    const heroScoreAtStart = get('heroScore', 0)
     //
     // Set gravity
     //
@@ -610,6 +635,25 @@ export function sceneLevel3(k) {
     heroInst.deathParticleZ = Z_DARKNESS + 1
     antiHeroInst.character.z = Z_DARKNESS + 1
     //
+    // Hero glow state (Shift ability)
+    //
+    const heroGlowState = {
+      active: false,
+      timer: 0,
+      intensity: 0
+    }
+    //
+    // Handle Shift key for hero glow activation
+    //
+    const shiftKeys = ['shift', 'ShiftLeft', 'ShiftRight']
+    shiftKeys.forEach(key => {
+      k.onKeyPress(key, () => onHeroGlowPress(heroInst, heroGlowState, levelIndicator, sound))
+    })
+    //
+    // Show glow instructions hint text
+    //
+    showGlowInstructions(k)
+    //
     // Create glow bugs on platforms P0 and P2 (no bugs on trap or anti-hero platforms)
     //
     const glowBugInst = GlowBug.create({
@@ -665,7 +709,7 @@ export function sceneLevel3(k) {
       platformHeight: PLATFORM_HEIGHT,
       onHeroTouch: () => {
         if (heroInst.isDying) return
-        onHeroDeath(k, heroInst, levelIndicator)
+        onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
       }
     })
     //
@@ -851,7 +895,7 @@ export function sceneLevel3(k) {
     //
     const moonGlowState = { intensity: 0 }
     k.add([
-      k.z(Z_DARKNESS + 2),
+      k.z(Z_DARKNESS + 4),
       {
         draw() {
           drawMoonHoverGlow(k, moonGlowState)
@@ -861,6 +905,17 @@ export function sceneLevel3(k) {
     k.onUpdate(() => {
       updateMoonHoverGlow(k, moonGlowState)
     })
+    //
+    // Draw hero glow effect (Shift ability visual rings)
+    //
+    k.add([
+      k.z(Z_DARKNESS + 4),
+      {
+        draw() {
+          drawHeroGlow(k, heroGlowState, heroInst)
+        }
+      }
+    ])
     //
     // Draw thorns below darkness so they are only visible in bug light
     //
@@ -876,14 +931,15 @@ export function sceneLevel3(k) {
     ])
     //
     // Draw snow caps on log platforms and bottom snow above hero and bugs
-    // so snow visually covers characters walking on platforms
+    // Snow calculates its own darkness based on proximity to glowing bugs
     //
     k.add([
       k.z(Z_DARKNESS + 3),
       {
         draw() {
-          drawAllLogSnowOverlay(k, logDetails, trapState, logWobbleState)
-          drawBottomPlatformSnow(k, bottomSnowProfile)
+          const lights = collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst)
+          drawAllLogSnowOverlay(k, logDetails, trapState, logWobbleState, lights)
+          drawBottomPlatformSnow(k, bottomSnowProfile, lights)
         }
       }
     ])
@@ -918,7 +974,7 @@ export function sceneLevel3(k) {
             height: gameAreaHeight,
             anchor: "topleft",
             shader: "level3-darkness",
-            uniform: collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, gameAreaWidth, gameAreaHeight),
+            uniform: collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst, gameAreaWidth, gameAreaHeight),
             fixed: true
           })
         }
@@ -1050,8 +1106,9 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns)
+      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState)
       const dt = k.dt()
+      updateHeroGlow(heroGlowState, dt)
       Dust.onUpdate(dustInst, dt)
       updateLogWobble(logWobbleState, dt)
       updateThornWobble(k, decorInst.thornData, thornWobbleState, sound)
@@ -1113,7 +1170,7 @@ export function sceneLevel3(k) {
  * @param {Object} levelIndicator - Level indicator for life score effects on death
  * @param {Array} trapLeftThorns - Thorn data on the left trap half (moves with platform)
  */
-function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns) {
+function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   GlowBug.onUpdate(glowBugInst, dt)
@@ -1155,9 +1212,9 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
   // Check bottom wall and platform thorns (only when hero is alive)
   //
   if (!heroInst.isDying) {
-    checkBottomThorns(k, heroInst, levelIndicator)
-    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries], levelIndicator)
-    checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator)
+    checkBottomThorns(k, heroInst, levelIndicator, heroScoreAtStart)
+    checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries], levelIndicator, heroScoreAtStart)
+    checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator, heroScoreAtStart)
   }
   //
   // Get glow positions with darkness glow radius (creature burns within visible light)
@@ -1167,6 +1224,14 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
     ...GlowBug.getGlowingPositions(trapBugInst),
     ...GlowBug.getGlowingPositions(bottomBugInst)
   ].map(glow => ({ ...glow, radius: DARKNESS_GLOW_RADIUS }))
+  //
+  // Hero glow acts as a light source that repels the creature
+  //
+  heroGlowState.active && heroInst.character?.pos && glowPositions.push({
+    x: heroInst.character.pos.x,
+    y: heroInst.character.pos.y,
+    radius: DARKNESS_GLOW_RADIUS * heroGlowState.intensity
+  })
   ShadowCreature.onUpdate(creatureInst, dt, glowPositions)
 }
 
@@ -1176,11 +1241,11 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkBottomThorns(k, heroInst, levelIndicator) {
+function checkBottomThorns(k, heroInst, levelIndicator, heroScoreAtStart) {
   if (!heroInst.character?.pos) return
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
   if (heroFeetY >= BOTTOM_KILL_Y) {
-    onHeroDeath(k, heroInst, levelIndicator)
+    onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
   }
 }
 
@@ -1192,7 +1257,7 @@ function checkBottomThorns(k, heroInst, levelIndicator) {
  * @param {Array} bugEntries - GlowBug entries for shielding check
  * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator) {
+function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator, heroScoreAtStart) {
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
@@ -1213,7 +1278,7 @@ function checkPlatformThorns(k, heroInst, bugEntries, levelIndicator) {
     if (heroFeetY >= zone.y - PLATFORM_THORN_TOLERANCE &&
         heroFeetY <= zone.y + PLATFORM_THORN_TOLERANCE &&
         heroX >= zone.startX && heroX <= zone.endX) {
-      onHeroDeath(k, heroInst, levelIndicator)
+      onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
       return
     }
   }
@@ -1314,7 +1379,7 @@ function drawTrapLeftThorns(k, thorns, trapState) {
  * @param {Object} trapState - Trap platform state
  * @param {Object} levelIndicator - Level indicator for life score effects
  */
-function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator) {
+function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator, heroScoreAtStart) {
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY = heroInst.character.pos.y + HERO_COLLISION_HEIGHT_SCALED / 2
@@ -1328,10 +1393,176 @@ function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator) {
   //
   for (const thorn of thorns) {
     if (Math.abs(heroX - thorn.x) < thorn.width) {
-      onHeroDeath(k, heroInst, levelIndicator)
+      onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
       return
     }
   }
+}
+/**
+ * Handles Shift key press to activate hero glow ability
+ * Deducts 1 heroScore and starts the glow timer
+ * @param {Object} heroInst - Hero instance
+ * @param {Object} state - Hero glow state { active, timer, intensity }
+ * @param {Object} levelIndicator - Level indicator for score display
+ * @param {Object} sound - Sound instance for SFX
+ */
+function onHeroGlowPress(heroInst, state, levelIndicator, sound) {
+  if (state.active || heroInst.isDying) return
+  const currentScore = get('heroScore', 0)
+  if (currentScore <= 0) {
+    sound && Sound.playEmptyClickSound(sound)
+    return
+  }
+  //
+  // Deduct 1 point and activate glow
+  //
+  const newScore = currentScore - 1
+  set('heroScore', newScore)
+  levelIndicator?.updateHeroScore?.(newScore)
+  state.active = true
+  state.timer = HERO_GLOW_DURATION
+  state.intensity = 1
+}
+/**
+ * Updates hero glow timer and intensity each frame
+ * Fades out smoothly during the last second
+ * @param {Object} state - Hero glow state { active, timer, intensity }
+ * @param {number} dt - Delta time
+ */
+function updateHeroGlow(state, dt) {
+  if (!state.active) return
+  state.timer -= dt
+  if (state.timer <= 0) {
+    state.active = false
+    state.timer = 0
+    state.intensity = 0
+    return
+  }
+  //
+  // Fade out during the last second for smooth transition
+  //
+  state.intensity = state.timer < 1.0 ? state.timer : 1.0
+}
+/**
+ * Draws concentric glow rings around the hero matching the bug glow style
+ * Uses same radial gradient pattern: outer-to-inner with inverse-square falloff
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Hero glow state { active, timer, intensity }
+ * @param {Object} heroInst - Hero instance for position
+ */
+function drawHeroGlow(k, state, heroInst) {
+  if (!state.active || state.intensity < 0.01) return
+  if (!heroInst.character?.pos) return
+  const pos = heroInst.character.pos
+  const pulse = 0.7 + Math.sin(k.time() * HERO_GLOW_PULSE_SPEED) * 0.3
+  const radius = HERO_GLOW_AURA_RADIUS * pulse
+  const glowColor = k.rgb(HERO_GLOW_COLOR_R, HERO_GLOW_COLOR_G, HERO_GLOW_COLOR_B)
+  //
+  // Draw smooth radial gradient glow from outer to inner (same as bug glow)
+  //
+  for (let i = 0; i < HERO_GLOW_RING_COUNT; i++) {
+    const t = i / HERO_GLOW_RING_COUNT
+    const ringRadius = radius * (1 - t)
+    const falloff = t * t
+    const ringOpacity = HERO_GLOW_MAX_OPACITY * falloff * state.intensity
+    k.drawCircle({
+      pos: k.vec2(pos.x, pos.y),
+      radius: ringRadius,
+      color: glowColor,
+      opacity: ringOpacity
+    })
+  }
+}
+/**
+ * Shows glow ability instructions (white text with black outline at top)
+ * Only shown the first 2 times the level is loaded
+ * @param {Object} k - Kaplay instance
+ */
+function showGlowInstructions(k) {
+  let showCount = get(HERO_GLOW_HINT_STORAGE_KEY, 0)
+  if (showCount >= HERO_GLOW_HINT_MAX_SHOWS) return
+  set(HERO_GLOW_HINT_STORAGE_KEY, showCount + 1)
+  const centerX = CFG.visual.screen.width / 2
+  const textY = TOP_MARGIN + 80
+  const OUTLINE_OFFSET = 2
+  const TEXT_SIZE = 24
+  const INITIAL_DELAY = 1.0
+  const FADE_IN_DURATION = 0.5
+  const HOLD_DURATION = 4.0
+  const FADE_OUT_DURATION = 0.5
+  //
+  // Create 8-direction outline texts (black)
+  //
+  const outlineOffsets = [
+    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
+    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
+    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
+  ]
+  const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
+    k.text(HERO_GLOW_HINT_TEXT, {
+      size: TEXT_SIZE,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX + dx, textY + dy),
+    k.anchor("center"),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 9),
+    k.fixed()
+  ]))
+  //
+  // Create main text (white)
+  //
+  const mainText = k.add([
+    k.text(HERO_GLOW_HINT_TEXT, {
+      size: TEXT_SIZE,
+      align: "center",
+      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
+    }),
+    k.pos(centerX, textY),
+    k.anchor("center"),
+    k.color(255, 255, 255),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 10),
+    k.fixed()
+  ])
+  //
+  // Animate: delay → fade in → hold → fade out → destroy
+  //
+  const inst = { timer: 0, phase: 'initial_delay' }
+  const updateHandler = k.onUpdate(() => {
+    inst.timer += k.dt()
+    if (inst.phase === 'initial_delay') {
+      if (inst.timer >= INITIAL_DELAY) {
+        inst.phase = 'fade_in'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_in') {
+      const progress = Math.min(1, inst.timer / FADE_IN_DURATION)
+      mainText.opacity = progress
+      outlineTexts.forEach(text => { text.opacity = progress })
+      if (progress >= 1) {
+        inst.phase = 'hold'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'hold') {
+      if (inst.timer >= HOLD_DURATION) {
+        inst.phase = 'fade_out'
+        inst.timer = 0
+      }
+    } else if (inst.phase === 'fade_out') {
+      const progress = Math.min(1, inst.timer / FADE_OUT_DURATION)
+      mainText.opacity = 1 - progress
+      outlineTexts.forEach(text => { text.opacity = 1 - progress })
+      if (progress >= 1) {
+        updateHandler.cancel()
+        mainText.exists() && k.destroy(mainText)
+        outlineTexts.forEach(text => { text.exists() && k.destroy(text) })
+      }
+    }
+  })
 }
 //
 // Life death effect constants
@@ -1348,19 +1579,24 @@ const LIFE_PARTICLE_SIZE_EXTRA = 4
 const DEATH_RELOAD_DELAY = 0.8
 
 /**
- * Handles hero death: increments life score, plays laugh sound,
- * flashes life image, creates particles, then reloads the level
+ * Handles hero death: increments life score, restores heroScore to pre-death value,
+ * plays laugh sound, flashes life image, creates particles, then reloads the level
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator with lifeImage and updateLifeScore
+ * @param {number} heroScoreAtStart - heroScore value saved at level start for restoration
  */
-function onHeroDeath(k, heroInst, levelIndicator) {
+function onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart) {
   if (heroInst.isDying) return
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
     set('lifeScore', newScore)
     levelIndicator?.updateLifeScore?.(newScore)
+    //
+    // Restore heroScore to value at level start so spent points are refunded
+    //
+    set('heroScore', heroScoreAtStart)
     //
     // Play laugh sound and trigger life image visual effects
     //
@@ -2517,6 +2753,63 @@ vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
 }
 
 /**
+ * Collects active light sources (glowing bugs and burning creature)
+ * Used by snow drawing functions to calculate per-element brightness
+ * @param {Object} glowBugInst - Glow bug manager instance
+ * @param {Object} trapBugInst - Trap bug manager instance
+ * @param {Object} bottomBugInst - Bottom bug manager instance
+ * @param {Object} creatureInst - Shadow creature instance
+ * @returns {Array} Array of { x, y, r } for each active light
+ */
+function collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst) {
+  const activeLights = []
+  const allEntries = [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries]
+  allEntries.forEach(entry => {
+    entry.isGlowing && activeLights.push({
+      x: entry.bug.x,
+      y: entry.bug.y,
+      r: DARKNESS_GLOW_RADIUS
+    })
+  })
+  creatureInst.isBurning && activeLights.push({
+    x: creatureInst.x,
+    y: creatureInst.y,
+    r: DARKNESS_CREATURE_BURN_RADIUS
+  })
+  //
+  // Hero glow as a light source when active
+  //
+  heroGlowState.active && heroInst.character?.pos && activeLights.push({
+    x: heroInst.character.pos.x,
+    y: heroInst.character.pos.y,
+    r: DARKNESS_GLOW_RADIUS * heroGlowState.intensity
+  })
+  return activeLights
+}
+/**
+ * Calculates snow brightness at a given world position based on nearby light sources
+ * Returns a value from SNOW_AMBIENT_BRIGHTNESS (dark) to 1.0 (fully lit)
+ * Uses smooth quadratic falloff matching the darkness shader
+ * @param {number} x - World X coordinate
+ * @param {number} y - World Y coordinate
+ * @param {Array} lights - Array of { x, y, r } light sources
+ * @returns {number} Brightness factor (0.08 to 1.0)
+ */
+function getSnowBrightness(x, y, lights) {
+  let maxBright = 0
+  for (const light of lights) {
+    const dx = x - light.x
+    const dy = y - light.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist < light.r) {
+      const t = 1 - dist / light.r
+      const bright = t * t
+      maxBright = Math.max(maxBright, bright)
+    }
+  }
+  return SNOW_AMBIENT_BRIGHTNESS + maxBright * (1 - SNOW_AMBIENT_BRIGHTNESS)
+}
+/**
  * Collects all light sources and builds the shader uniform object
  * Bugs and moon always emit light; creature emits light only when burning
  * @param {Object} k - Kaplay instance
@@ -2528,7 +2821,7 @@ vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
  * @param {number} gaHeight - Game area height
  * @returns {Object} Shader uniforms object
  */
-function collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, gaWidth, gaHeight) {
+function collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst, gaWidth, gaHeight) {
   const lights = []
   //
   // Only glowing bugs emit light (non-glowing bugs are visible above darkness without glow)
@@ -2550,6 +2843,15 @@ function collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatu
     y: creatureInst.y,
     r: DARKNESS_CREATURE_BURN_RADIUS,
     i: DARKNESS_CREATURE_BURN_INTENSITY
+  })
+  //
+  // Hero glow adds a dynamic light centered on the hero
+  //
+  heroGlowState.active && heroInst.character?.pos && lights.push({
+    x: heroInst.character.pos.x,
+    y: heroInst.character.pos.y,
+    r: DARKNESS_GLOW_RADIUS * heroGlowState.intensity,
+    i: heroGlowState.intensity
   })
   //
   // Build uniform object with game area dimensions and all light slots
@@ -2760,31 +3062,44 @@ function generateBottomSnowProfile() {
  * @param {Object} k - Kaplay instance
  * @param {Array} profile - Snow profile heights (normalized 0-1)
  */
-function drawBottomPlatformSnow(k, profile) {
+function drawBottomPlatformSnow(k, profile, lights) {
   const leftX = LEFT_MARGIN
   const rightX = CFG.visual.screen.width - RIGHT_MARGIN
   const snowWidth = rightX - leftX
-  const pts = []
-  for (let i = 0; i <= BOTTOM_SNOW_STEPS; i++) {
-    const t = i / BOTTOM_SNOW_STEPS
-    const px = leftX + t * snowWidth
-    pts.push(k.vec2(px, FLOOR_Y - BOTTOM_SNOW_HEIGHT * profile[i]))
-  }
-  pts.push(k.vec2(rightX, FLOOR_Y))
-  pts.push(k.vec2(leftX, FLOOR_Y))
-  k.drawPolygon({ pts, color: k.rgb(230, 235, 245), opacity: 0.9 })
   //
-  // Subtle shadow layer for depth
+  // Draw bottom snow in segments so each segment gets its own brightness
   //
-  const shadowPts = []
-  for (let i = 0; i <= BOTTOM_SNOW_STEPS; i++) {
-    const t = i / BOTTOM_SNOW_STEPS
-    const px = leftX + t * snowWidth
-    shadowPts.push(k.vec2(px, FLOOR_Y - BOTTOM_SNOW_HEIGHT * 0.3 * profile[i]))
+  const SEGMENT_COUNT = 8
+  const stepsPerSegment = Math.ceil(BOTTOM_SNOW_STEPS / SEGMENT_COUNT)
+  for (let seg = 0; seg < SEGMENT_COUNT; seg++) {
+    const startStep = seg * stepsPerSegment
+    const endStep = Math.min((seg + 1) * stepsPerSegment, BOTTOM_SNOW_STEPS)
+    const segCenterX = leftX + ((startStep + endStep) / 2 / BOTTOM_SNOW_STEPS) * snowWidth
+    const brightness = lights ? getSnowBrightness(segCenterX, FLOOR_Y, lights) : 1
+    const pts = []
+    for (let i = startStep; i <= endStep; i++) {
+      const t = i / BOTTOM_SNOW_STEPS
+      const px = leftX + t * snowWidth
+      pts.push(k.vec2(px, FLOOR_Y - BOTTOM_SNOW_HEIGHT * profile[i]))
+    }
+    const segRightX = leftX + (endStep / BOTTOM_SNOW_STEPS) * snowWidth
+    const segLeftX = leftX + (startStep / BOTTOM_SNOW_STEPS) * snowWidth
+    pts.push(k.vec2(segRightX, FLOOR_Y))
+    pts.push(k.vec2(segLeftX, FLOOR_Y))
+    k.drawPolygon({ pts, color: k.rgb(230, 235, 245), opacity: 0.9 * brightness })
+    //
+    // Shadow layer for this segment
+    //
+    const shadowPts = []
+    for (let i = startStep; i <= endStep; i++) {
+      const t = i / BOTTOM_SNOW_STEPS
+      const px = leftX + t * snowWidth
+      shadowPts.push(k.vec2(px, FLOOR_Y - BOTTOM_SNOW_HEIGHT * 0.3 * profile[i]))
+    }
+    shadowPts.push(k.vec2(segRightX, FLOOR_Y))
+    shadowPts.push(k.vec2(segLeftX, FLOOR_Y))
+    k.drawPolygon({ pts: shadowPts, color: k.rgb(160, 180, 210), opacity: 0.45 * brightness })
   }
-  shadowPts.push(k.vec2(rightX, FLOOR_Y))
-  shadowPts.push(k.vec2(leftX, FLOOR_Y))
-  k.drawPolygon({ pts: shadowPts, color: k.rgb(160, 180, 210), opacity: 0.45 })
 }
 
 /**
@@ -3044,7 +3359,7 @@ function playIceCreakSound(instance, volume = 1) {
  * @param {Object} trapState - Trap platform state
  * @param {Object} wobbleState - Log wobble state
  */
-function drawAllLogSnowOverlay(k, logDetails, trapState, wobbleState) {
+function drawAllLogSnowOverlay(k, logDetails, trapState, wobbleState, lights) {
   CORRIDOR_PLATFORMS.forEach((platform, idx) => {
     if (idx === TRAP_PLATFORM_INDEX) return
     const detail = logDetails[idx]
@@ -3056,9 +3371,13 @@ function drawAllLogSnowOverlay(k, logDetails, trapState, wobbleState) {
       const decay = 1 - progress
       wobbleOffsetY = Math.sin(progress * Math.PI * LOG_WOBBLE_FREQUENCY) * LOG_WOBBLE_AMPLITUDE * decay
     }
+    //
+    // Calculate brightness at platform center based on nearby lights
+    //
+    const brightness = lights ? getSnowBrightness(platform.x, centerY, lights) : 1
     k.pushTransform()
     k.pushTranslate(platform.x, centerY + wobbleOffsetY)
-    drawLogSnowOnly(k, platform.width, PLATFORM_HEIGHT, 0, 0, 1, detail)
+    drawLogSnowOnly(k, platform.width, PLATFORM_HEIGHT, 0, 0, brightness, detail)
     k.popTransform()
   })
 }

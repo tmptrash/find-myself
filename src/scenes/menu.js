@@ -257,6 +257,7 @@ export function sceneMenu(k) {
         outlineColor,
         addMouth: config.section === 'word',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
+        addWatch: config.section === 'time',
         hitboxPadding: 5
       })
       //
@@ -268,7 +269,8 @@ export function sceneMenu(k) {
         bodyColor: grayColor,
         outlineColor: CFG.visual.colors.outline,
         addMouth: config.section === 'word',
-        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time'
+        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
+        addWatch: config.section === 'time'
       })
       //
       // For time section, also preload yellow variant
@@ -279,7 +281,8 @@ export function sceneMenu(k) {
           type: Hero.HEROES.ANTIHERO,
           bodyColor: yellowColor,
           outlineColor: CFG.visual.colors.outline,
-          addArms: true
+          addArms: true,
+          addWatch: true
         })
       }
       //
@@ -292,7 +295,8 @@ export function sceneMenu(k) {
         bodyColor: config.color.body,
         outlineColor: CFG.visual.colors.outline,
         addMouth: config.section === 'word',
-        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time'
+        addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
+        addWatch: config.section === 'time'
       })
       //
       // Cache sprite prefixes for outline switching
@@ -305,10 +309,11 @@ export function sceneMenu(k) {
       const sectionColorNoHash = config.color.body.replace('#', '')
       const hasMouth = config.section === 'word'
       const hasArms = config.section === 'touch' || config.section === 'word' || config.section === 'time'
-      const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}`
+      const hasWatch = config.section === 'time'
+      const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}${hasWatch ? '_watch' : ''}`
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
-      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_arms` : null
+      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_arms_watch` : null
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
       //

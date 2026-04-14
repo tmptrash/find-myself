@@ -2246,12 +2246,14 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
         ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
         //
-        // Small watch on left wrist (colored rectangle at arm end)
+        // Small watch on right wrist (black band with white face)
         //
         if (addWatch) {
           const watchY = armStartY + armLength - 2
-          ctx.fillStyle = '#A0A0A0'
-          ctx.fillRect(leftLegX - armWidth - 1, watchY, 3, 2)
+          ctx.fillStyle = getHex(outlineColor)
+          ctx.fillRect(rightLegX + 2, watchY, 3, 2)
+          ctx.fillStyle = '#FFFFFF'
+          ctx.fillRect(rightLegX + 3, watchY, 1, 1)
         }
       }
     })

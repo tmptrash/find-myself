@@ -179,6 +179,10 @@ export function sceneLevel3(k) {
     //
     set('lastLevel', 'level-time.3')
     //
+    // Save heroScore at level start for restoration on death
+    //
+    const heroScoreAtStart = get('heroScore', 0)
+    //
     // Stop previous level music
     //
     stopTimeSectionMusic()
@@ -426,6 +430,10 @@ export function sceneLevel3(k) {
               const currentScore = get('lifeScore', 0)
               const newScore = currentScore + 1
               set('lifeScore', newScore)
+              //
+              // Restore heroScore to value at level start so spent snowballs are refunded
+              //
+              set('heroScore', heroScoreAtStart)
               
               if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
                 //
@@ -1650,6 +1658,10 @@ function createMonster(k, heroInst, sfx, levelIndicator) {
                 const currentScore = get('lifeScore', 0)
                 const newScore = currentScore + 1
                 set('lifeScore', newScore)
+                //
+                // Restore heroScore to value at level start so spent snowballs are refunded
+                //
+                set('heroScore', heroScoreAtStart)
                 
                 if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
                   //

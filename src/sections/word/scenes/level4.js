@@ -72,7 +72,7 @@ const DEATH_MESSAGES = [
  * @param {Object} [levelIndicator] - Level indicator for life score update
  * @param {Object} [sound] - Sound instance for effects
  */
-function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicator = null, sound = null) {
+function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicator = null, sound = null, heroScoreAtStart = 0) {
   //
   // Increment life score and update display
   //
@@ -80,6 +80,10 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
   const newLifeScore = currentLifeScore + 1
   set('lifeScore', newLifeScore)
   levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
+  //
+  // Restore heroScore to value at level start so spent bullets are refunded
+  //
+  set('heroScore', heroScoreAtStart)
   playLifeDeathEffects(k, levelIndicator)
   //
   // Select random message
@@ -183,6 +187,10 @@ export function sceneLevel4(k) {
     // Save progress immediately when entering this level
     //
     set('lastLevel', 'level-word.4')
+    //
+    // Save heroScore at level start for restoration on death
+    //
+    const heroScoreAtStart = get('heroScore', 0)
     // Calculate hero position shifted right by 3 blade widths
     const singleBladeWidth = Blades.getSingleBladeWidth(k)
     const customHeroX = HERO_SPAWN_X_BASE + singleBladeWidth * 3  // Shift right by 3 pyramids
@@ -267,7 +275,7 @@ export function sceneLevel4(k) {
       hero,
       currentLevel: 'level-word.4',
       sfx: sound,
-      onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst, levelIndicator, sound)
+      onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst, levelIndicator, sound, heroScoreAtStart)
     })
     
     //
@@ -282,7 +290,7 @@ export function sceneLevel4(k) {
         // Stop blade arm movement
         //
         bladeArm.heroIsDead = true
-        showDeathMessage(k, hero, null, bladeArm, levelIndicator, sound)
+        showDeathMessage(k, hero, null, bladeArm, levelIndicator, sound, heroScoreAtStart)
       },
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
@@ -337,7 +345,7 @@ export function sceneLevel4(k) {
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
       sfx: sound,
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound)
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound, heroScoreAtStart)
     })
     
     // Create second normal moving platform (timer-based mode)
@@ -352,7 +360,7 @@ export function sceneLevel4(k) {
       autoOpen: false,  // Triggered by hero proximity
       sfx: sound,
       raiseTimeout: 6.0,  // Close 1 second later than default (4 seconds)
-      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound)
+      onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound, heroScoreAtStart)
     })
     //
     // Create static blades after first pit to prevent jumping over
@@ -369,7 +377,7 @@ export function sceneLevel4(k) {
       y: staticBladesY,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades, bladeArm, levelIndicator, sound),
+      onHit: () => showDeathMessage(k, hero, staticBlades, bladeArm, levelIndicator, sound, heroScoreAtStart),
       sfx: sound,
       color: CFG.visual.colors.blades,
       disableAnimation: true  // Disable vibration and glint
@@ -393,7 +401,7 @@ export function sceneLevel4(k) {
       y: staticBlades2Y,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => showDeathMessage(k, hero, staticBlades2, bladeArm, levelIndicator, sound),
+      onHit: () => showDeathMessage(k, hero, staticBlades2, bladeArm, levelIndicator, sound, heroScoreAtStart),
       sfx: sound,
       color: CFG.visual.colors.blades,
       disableAnimation: true  // Disable vibration and glint

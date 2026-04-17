@@ -61,10 +61,11 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
       y: y,
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
-      bodyColor,      // Custom body color (section color or gray)
+      bodyColor,
       scale: antiHeroScale,
-      isStatic: true, // No physics for indicators
-      addMouth: true
+      isStatic: true,
+      addMouth: true,
+      addWatch: true
     })
     antiHero.character.z = CFG.visual.zIndex.ui  // Show above platforms
     antiHeroes.push(antiHero)
@@ -542,7 +543,8 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     sfx: sound,
     dustColor,
     addMouth: true,
-    bodyColor: 'DC143C'  // Crimson red for anti-hero
+    addWatch: true,
+    bodyColor: 'DC143C'
   })
   
   // Hide anti-hero initially (will be shown when spawned)
@@ -560,7 +562,8 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     dustColor,
     addMouth: isWordComplete,
     bodyColor: heroBodyColor,
-    addArms: isTouchComplete
+    addArms: isTouchComplete,
+    addWatch: true
   })
   
   hero.character.use("player")

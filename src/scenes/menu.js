@@ -30,6 +30,10 @@ const SECTION_DESCRIPTIONS = {
   stress: 'pressure'
 }
 //
+// Background fade transition speed (higher = faster)
+//
+const BG_FADE_SPEED = 3.0
+//
 // Menu audio configuration (relative to CFG.audio.masterVolume)
 //
 const MENU_AUDIO = {
@@ -569,7 +573,8 @@ export function sceneMenu(k) {
       hoveredAntiHero: null,
       isLeavingScene: false,
       heartbeatPhase: 0,
-      lastHeartbeatTime: 0
+      lastHeartbeatTime: 0,
+      bgDefaultOpacity: 1.0
     }
     
     //
@@ -765,6 +770,11 @@ export function sceneMenu(k) {
       }
       
       inst.hoveredAntiHero = hoveredInst
+      //
+      // Fade default background out when hovering any anti-hero, back in when not
+      //
+      const bgDefaultTarget = hoveredInst ? 0.0 : 1.0
+      inst.bgDefaultOpacity += (bgDefaultTarget - inst.bgDefaultOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
       //
       // Control music volume based on hover state
       //
@@ -1433,13 +1443,7 @@ function drawScene(inst) {
   //
   // Draw menu background image (darkened)
   //
-  k.drawSprite({
-    sprite: "menu-bg",
-    pos: k.vec2(0, 0),
-    width: k.width(),
-    height: k.height(),
-    opacity: 0.3
-  })
+  drawMenuBackground(inst)
   
   //
   // Draw stars with twinkling effect
@@ -1781,5 +1785,22 @@ function drawScene(inst) {
       heartbeatPhase: inst.heartbeatPhase
     })
   }
+}
+//
+// Draw menu background with section-specific fade transitions
+//
+function drawMenuBackground(inst) {
+  const { k, bgDefaultOpacity } = inst
+  const BG_OPACITY = 0.3
+  //
+  // Draw default background with fade (hidden when hovering anti-hero)
+  //
+  bgDefaultOpacity > 0.01 && k.drawSprite({
+    sprite: 'menu-bg',
+    pos: k.vec2(0, 0),
+    width: k.width(),
+    height: k.height(),
+    opacity: BG_OPACITY * bgDefaultOpacity
+  })
 }
 

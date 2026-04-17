@@ -115,7 +115,8 @@ export function create(config) {
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
     addMouth: isWordComplete,
-    addArms: isTouchComplete
+    addArms: isTouchComplete,
+    addWatch: true
   })
   smallHero.character.fixed = true
   smallHero.character.z = CFG.visual.zIndex.ui

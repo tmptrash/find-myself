@@ -1,5 +1,5 @@
 import * as Sound from '../../../utils/sound.js'
-import { setSectionCompleted } from '../../../utils/progress.js'
+import { setSectionCompleted, set } from '../../../utils/progress.js'
 
 const FINAL_MESSAGE = "you learned to reach out — to touch and be touched.\n\nnow you feel the difference between contact\n\nand connection."
 const MESSAGE_HOLD_DURATION = 5.0
@@ -24,6 +24,7 @@ export function sceneTouchComplete(k) {
     // Mark touch section as complete
     //
     setSectionCompleted('touch')
+    set('lastLevel', 'level-time.0')
     //
     // Create sound instance and stop background music
     //

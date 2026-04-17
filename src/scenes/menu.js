@@ -39,13 +39,6 @@ const MENU_AUDIO = {
   kidsMusicHover: CFG.audio.masterVolume * 0.1,       // kids.mp3 hover volume (7% of master)
   kidsMusicFadeInDuration: 4.0                         // Fade-in duration in seconds
 }
-//
-// Static dot on the right hand of time and word antiheros
-//
-const HAND_DOT_OFFSET_X = 19
-const HAND_DOT_OFFSET_Y = 13
-const HAND_DOT_RADIUS = 2
-const HAND_DOT_SECTIONS = ['time', 'word']
 
 /**
  * Get section name for display (singular form)
@@ -257,7 +250,7 @@ export function sceneMenu(k) {
         outlineColor,
         addMouth: config.section === 'word',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time',
+        addWatch: config.section === 'time' || config.section === 'word',
         hitboxPadding: 5
       })
       //
@@ -270,7 +263,7 @@ export function sceneMenu(k) {
         outlineColor: CFG.visual.colors.outline,
         addMouth: config.section === 'word',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time'
+        addWatch: config.section === 'time' || config.section === 'word'
       })
       //
       // For time section, also preload yellow variant
@@ -296,7 +289,7 @@ export function sceneMenu(k) {
         outlineColor: CFG.visual.colors.outline,
         addMouth: config.section === 'word',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time'
+        addWatch: config.section === 'time' || config.section === 'word'
       })
       //
       // Cache sprite prefixes for outline switching
@@ -309,7 +302,7 @@ export function sceneMenu(k) {
       const sectionColorNoHash = config.color.body.replace('#', '')
       const hasMouth = config.section === 'word'
       const hasArms = config.section === 'touch' || config.section === 'word' || config.section === 'time'
-      const hasWatch = config.section === 'time'
+      const hasWatch = config.section === 'time' || config.section === 'word'
       const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}${hasWatch ? '_watch' : ''}`
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
@@ -334,7 +327,6 @@ export function sceneMenu(k) {
       antiHeroInst.floatPhaseY = index * 0.7 + Math.random() * 2
       
       antiHeroInst.character.z = 10
-      antiHeroInst.hasArms = hasArms
       //
       // Store section info for hover color change
       //
@@ -869,19 +861,7 @@ export function sceneMenu(k) {
     // Background layer with animation
     //
     k.onDraw(() => drawScene(inst))
-    //
-    // Hand dots drawn above antihero sprites (z=11 > antihero z=10)
-    //
-    k.add([
-      k.z(11),
-      {
-        draw() {
-          antiHeroes.forEach(ah => {
-            ah.hasArms && HAND_DOT_SECTIONS.includes(ah.section) && drawHandDot(k, ah)
-          })
-        }
-      }
-    ])
+    
     //
     // Check if there's a saved game
     //
@@ -1803,31 +1783,3 @@ function drawScene(inst) {
   }
 }
 
-/**
- * Draws a static dot on the right hand of an anti-hero.
- * White fill with black outline, always visible.
- * @param {Object} k - Kaplay instance
- * @param {Object} antiHero - Anti-hero instance with character.pos
- */
-function drawHandDot(k, antiHero) {
-  const dotX = antiHero.character.pos.x + HAND_DOT_OFFSET_X
-  const dotY = antiHero.character.pos.y + HAND_DOT_OFFSET_Y
-  //
-  // Black outline ring
-  //
-  k.drawCircle({
-    pos: k.vec2(dotX, dotY),
-    radius: HAND_DOT_RADIUS + 1.5,
-    color: k.rgb(0, 0, 0),
-    opacity: 0.9
-  })
-  //
-  // White fill
-  //
-  k.drawCircle({
-    pos: k.vec2(dotX, dotY),
-    radius: HAND_DOT_RADIUS,
-    color: k.rgb(255, 255, 255),
-    opacity: 0.9
-  })
-}

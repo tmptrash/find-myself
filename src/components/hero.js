@@ -79,7 +79,7 @@ export function create(config) {
     isStatic = false,      // If true, no physics (for indicators)
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
     addArms = false,       // If true, add simple vertical arms
-    addWatch = false,      // If true, draw small watch on left arm (requires addArms)
+    addWatch = false,      // If true, draw small watch on right wrist (requires addArms)
     outlineOnly = false,   // If true, draw only outline (no body fill)
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
@@ -245,7 +245,7 @@ export function create(config) {
  * @param {string} [outlineColor=null] - Outline color in hex format (null = use default from config)
  * @param {boolean} [addMouth=false] - Add mouth to idle sprites
  * @param {boolean} [addArms=false] - Add arms to sprites
- * @param {boolean} [addWatch=false] - Add watch on left arm
+ * @param {boolean} [addWatch=false] - Add watch on right wrist
  */
 export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColor = null, addMouth = false, addArms = false, addWatch = false) {
   //
@@ -1927,7 +1927,7 @@ export function onAnnihilationCollide(inst) {
  * @param {boolean} [addMouth=false] - Add horizontal mouth line (only for idle animation)
  * @param {boolean} [addArms=false] - Add simple vertical arms
  * @param {boolean} [outlineOnly=false] - Draw only outline (no body fill)
- * @param {boolean} [addWatch=false] - Draw small watch on left arm
+ * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
 function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false) {
@@ -2232,29 +2232,27 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
       }
       //
-      // Custom arms (optional, simple vertical lines drawn on top)
+      // Custom arms (optional, only in idle — hidden during run/jump like body arms)
       //
-      if (addArms) {
-        ctx.fillStyle = getHex(outlineColor)  // Black
+      if (addArms && animation === 'idle') {
+        ctx.fillStyle = getHex(outlineColor)
         //
         // Arms positioned at the same X as legs, shifted outward by arm width
         //
-        const armStartY = bodyY + 4  // Start lower (was +2, now +4)
-        const armLength = 6  // Length of arms
-        const armWidth = 1  // Arm width
+        const armStartY = bodyY + 4
+        const armLength = 6
+        const armWidth = 1
 
-        ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)  // Left arm (shifted left)
-        ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)  // Right arm (shifted right by leg width)
-        //
-        // Small watch on right wrist (black band with white face)
-        //
-        if (addWatch) {
-          const watchY = armStartY + armLength - 2
-          ctx.fillStyle = getHex(outlineColor)
-          ctx.fillRect(rightLegX + 2, watchY, 3, 2)
-          ctx.fillStyle = '#FFFFFF'
-          ctx.fillRect(rightLegX + 3, watchY, 1, 1)
-        }
+        ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)
+        ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)
+      }
+      //
+      // Watch on right wrist — drawn at body arm position, not custom arm
+      //
+      if (addWatch && animation === 'idle') {
+        const watchY = rightArmY + 5
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(rightArmX + 1, watchY, 1, 1)
       }
     })
   } catch (error) {

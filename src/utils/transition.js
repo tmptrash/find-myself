@@ -165,7 +165,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     if (nextLevel === 'word-complete') set('lastLevel', 'level-touch.0')
     if (nextLevel === 'time-complete') set('lastLevel', 'level-word.0')
-    if (nextLevel === 'touch-complete') set('lastLevel', 'menu')
+    if (nextLevel === 'touch-complete') set('lastLevel', 'level-time.0')
     //
     // Go directly to completion screen without transition overlay
     //

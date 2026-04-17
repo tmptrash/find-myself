@@ -326,7 +326,7 @@ export function sceneLevel3(k) {
     //
     // Create monster that chases the hero
     //
-    const monster = createMonster(k, hero, sound, levelIndicator)
+    const monster = createMonster(k, hero, sound, levelIndicator, heroScoreAtStart)
     //
     // Setup control inversion based on current section for BOTH hero and anti-hero
     //
@@ -610,7 +610,7 @@ function showSnowballInstructions(k) {
   set('level3SnowballInstructionsCount', showCount + 1)
   
   const centerX = CFG.visual.screen.width / 2 - 20
-  const textY = 140  // Position below FPS counter
+  const textY = CORRIDOR_Y + 100
   const instructionsContent = "use Shift to throw snowballs at monster"
   //
   // Create instructions text with outline
@@ -1193,7 +1193,7 @@ function createClockDisintegrationEffect(k, clock, sound) {
  * @param {Object} sfx - Sound instance for step sounds
  * @returns {Object} Monster instance with returnHome method
  */
-function createMonster(k, heroInst, sfx, levelIndicator) {
+function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
   const MONSTER_SPEED = 110  // Even faster movement
   const BODY_SIZE = 60
   const LEG_COUNT = 8

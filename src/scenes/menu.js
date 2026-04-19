@@ -34,6 +34,10 @@ const SECTION_DESCRIPTIONS = {
 //
 const BG_FADE_SPEED = 3.0
 //
+// Firefly particles target opacity when hovering an anti-hero
+//
+const PARTICLES_HOVER_OPACITY = 0.8
+//
 // Menu audio configuration (relative to CFG.audio.masterVolume)
 //
 const MENU_AUDIO = {
@@ -142,7 +146,7 @@ export function sceneMenu(k) {
       k,
       particleCount: 180,
       color: '#FF8C00',
-      baseOpacity: 0.8,
+      baseOpacity: 0,
       flickerSpeed: 1.5,
       trembleRadius: 12,
       gaussianFactor: 0.35,
@@ -775,6 +779,11 @@ export function sceneMenu(k) {
       //
       const bgDefaultTarget = hoveredInst ? 0.0 : 1.0
       inst.bgDefaultOpacity += (bgDefaultTarget - inst.bgDefaultOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
+      //
+      // Fade firefly particles in when hovering, out when not
+      //
+      const particlesTarget = hoveredInst ? PARTICLES_HOVER_OPACITY : 0.0
+      particlesBg.baseOpacity += (particlesTarget - particlesBg.baseOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
       //
       // Control music volume based on hover state
       //

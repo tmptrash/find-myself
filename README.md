@@ -20,13 +20,7 @@ Life will confuse you. You will fall. But each fall brings you closer to who you
 
 ## Created with AI
 
-This game was **entirely created with the help of an AI agent** (Claude by Anthropic). From the initial concept to the final implementation, every line of code, game mechanic, visual effect, and procedural sound was developed through collaborative AI-assisted programming.
-
-**The creative process:**
-- **Human**: Provides vision, ideas, game design decisions, and creative direction
-- **AI**: Implements the ideas, writes code, creates systems, and solves technical challenges
-
-The project demonstrates the potential of AI-augmented game development, where human creativity meets AI capabilities to build a complete, playable experience.
+This game was **entirely created with the help of an AI agent** (Claude by Anthropic). From the initial concept to the final implementation, every line of code, game mechanic, visual effect, and procedural sound was developed through collaborative AI-assisted programming. The project demonstrates the potential of AI-augmented game development, where human creativity meets AI capabilities to build a complete, playable experience.
 
 ## Sections
 
@@ -34,7 +28,7 @@ The game is divided into 6 sections, each with its own theme, atmosphere, and me
 
 - **Touch** — "before words… touch"
 - **Time** — "time doesn't wait"
-- **Word** — "words like blades"
+- **Word** — "voices in your head"
 - **Feel** — coming soon
 - **Mind** — coming soon
 - **Stress** — coming soon
@@ -56,17 +50,6 @@ The game is divided into 6 sections, each with its own theme, atmosphere, and me
 - **Space / W / Up Arrow**: Jump
 - **ESC**: Return to menu
 - **Mouse**: Hover over objects for tooltip hints
-
-### Dual Character System
-- Control the **Hero** (colored character)
-- Seek the **Anti-Hero** (dark reflection)
-- Upon meeting, both characters annihilate in a particle explosion
-- Meeting your reflection advances to the next challenge
-
-### Tooltip System
-- Hover over any game object to discover hints and lore
-- Monsters, bugs, heroes, and UI elements all have unique messages
-- Some tooltips are timed — appearing only after the player struggles
 
 ### Death & Respawn
 - Contact with hazards causes the hero to disintegrate into particles

@@ -356,7 +356,7 @@ const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const HERO_TOOLTIP_TEXT = "it's dark and scary"
 const HERO_TOOLTIP_HOVER_SIZE = 80
-const HERO_TOOLTIP_Y_OFFSET = -60
+const HERO_TOOLTIP_Y_OFFSET = -80
 //
 // Bug tooltip configuration (joke phrases for platform bugs)
 //
@@ -366,6 +366,23 @@ const BUG_JOKES = [
   "i'm not a trampoline!",
   "stop bouncing on me!",
   "watch your step, big guy"
+]
+//
+// Bottom bug tooltip configuration (warning phrases)
+//
+const BOTTOM_BUG_TOOLTIP_HOVER_SIZE = 50
+const BOTTOM_BUG_TOOLTIP_Y_OFFSET = -50
+const BOTTOM_BUG_WARNINGS = [
+  "you'd better not fall here",
+  "this place is ours",
+  "no visitors allowed",
+  "down here we bite",
+  "turn back while you can",
+  "we don't like guests",
+  "stay up there, big one",
+  "not a safe landing spot",
+  "only bugs down here",
+  "you won't like it here"
 ]
 //
 // Hero glow (Shift ability): hero emits light for 3 seconds, costs 1 heroScore
@@ -1090,6 +1107,23 @@ export function sceneLevel3(k) {
           height: BUG_TOOLTIP_HOVER_SIZE,
           text: jokeText,
           offsetY: BUG_TOOLTIP_Y_OFFSET
+        }]
+      })
+    })
+    //
+    // Tooltip: bottom wall glow bugs (warning phrases)
+    //
+    bottomBugInst.entries.forEach((entry, i) => {
+      const warningText = BOTTOM_BUG_WARNINGS[i % BOTTOM_BUG_WARNINGS.length]
+      Tooltip.create({
+        k,
+        targets: [{
+          x: () => entry.bug.x,
+          y: () => entry.bug.y,
+          width: BOTTOM_BUG_TOOLTIP_HOVER_SIZE,
+          height: BOTTOM_BUG_TOOLTIP_HOVER_SIZE,
+          text: warningText,
+          offsetY: BOTTOM_BUG_TOOLTIP_Y_OFFSET
         }]
       })
     })

@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, startClockMusic, checkSpeedBonus } from '../components/scene-helper.js'
+import { initScene, startTimeSectionMusic, startClockMusic, checkSpeedBonus, createSunHoverFace } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -149,8 +149,12 @@ export function sceneLevel1(k) {
       k.sprite('city-background-level1'),
       k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height / 2),
       k.anchor('center'),
-      k.z(15.5)  // In front of platforms (15)
+      k.z(15.5)
     ])
+    //
+    // Sun hover face (smiley appears when mouse hovers the sun)
+    //
+    createSunHoverFace(k, 15.6)
     //
     // Create background birds
     //

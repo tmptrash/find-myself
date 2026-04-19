@@ -34,6 +34,15 @@ const POINTER_HEIGHT = 10
 const TEXT_COLOR_R = 30
 const TEXT_COLOR_G = 30
 const TEXT_COLOR_B = 30
+//
+// Vertical gap between stacked tooltips
+//
+const STACK_GAP = 8
+//
+// Frame-level registry for active tooltip positions to prevent overlap
+//
+const activeTooltipRects = []
+let lastRegistryFrame = -1
 
 /**
  * Creates a tooltip system that shows a speech-bubble hint when the mouse
@@ -130,6 +139,14 @@ function onDraw(inst) {
   const { k } = inst
   const target = inst.activeTarget
   //
+  // Clear registry at the start of each frame
+  //
+  const currentFrame = k.time()
+  if (currentFrame !== lastRegistryFrame) {
+    activeTooltipRects.length = 0
+    lastRegistryFrame = currentFrame
+  }
+  //
   // Bubble uses frozen position for stable text rendering (no glyph shimmer).
   // Pointer tracks the live target position so it follows the moving object.
   //
@@ -173,6 +190,10 @@ function onDraw(inst) {
   const minY = SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const maxY = screenH - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleH
   bubbleY = Math.max(minY, Math.min(maxY, bubbleY))
+  //
+  // Shift bubble up if it overlaps with an already-drawn tooltip
+  //
+  bubbleY = avoidOverlap(bubbleX, bubbleY, totalW, totalH, minY)
   const borderColor = k.rgb(BUBBLE_BORDER_R, BUBBLE_BORDER_G, BUBBLE_BORDER_B)
   const bgColor = k.rgb(BUBBLE_BG_R, BUBBLE_BG_G, BUBBLE_BG_B)
   //
@@ -244,6 +265,32 @@ function onDraw(inst) {
     opacity: inst.opacity,
     fixed: false
   })
+  //
+  // Register this tooltip's bounding box for overlap avoidance
+  //
+  activeTooltipRects.push({
+    x: bubbleX - BUBBLE_BORDER_WIDTH,
+    y: bubbleY - BUBBLE_BORDER_WIDTH,
+    w: totalW,
+    h: totalH
+  })
+}
+//
+// Shift bubbleY upward until it no longer overlaps with any registered tooltip
+//
+function avoidOverlap(bubbleX, bubbleY, totalW, totalH, minY) {
+  const bx = bubbleX - BUBBLE_BORDER_WIDTH
+  const bw = totalW
+  for (let i = 0; i < activeTooltipRects.length; i++) {
+    const r = activeTooltipRects[i]
+    const overlapX = bx < r.x + r.w && bx + bw > r.x
+    const overlapY = bubbleY - BUBBLE_BORDER_WIDTH < r.y + r.h && bubbleY - BUBBLE_BORDER_WIDTH + totalH > r.y
+    if (overlapX && overlapY) {
+      bubbleY = r.y - totalH - STACK_GAP + BUBBLE_BORDER_WIDTH
+      bubbleY = Math.max(minY, bubbleY)
+    }
+  }
+  return bubbleY
 }
 //
 // Draw the triangle pointer (border + fill) either pointing down or up

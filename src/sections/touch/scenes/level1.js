@@ -1309,13 +1309,13 @@ export function sceneLevel1(k) {
           k,
           type: Hero.HEROES.ANTIHERO,
           bodyColor: activeColor,
-          outlineColor: CFG.visual.colors.outline
+          outlineColor: CFG.visual.colors.outline,
+          addArms: true
         })
-        
         //
         // Update sprite prefix and change character sprite
         //
-        const spritePrefix = `antiHero_${activeColor.replace('#', '')}_${CFG.visual.colors.outline.replace('#', '')}`
+        const spritePrefix = `antiHero_${activeColor.replace('#', '')}_${CFG.visual.colors.outline.replace('#', '')}_arms`
         const newSpriteName = `${spritePrefix}_0_0`
         
         //

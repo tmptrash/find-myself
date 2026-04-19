@@ -34,6 +34,10 @@ const HERO_HIT_HALF_W = 16
 const HERO_HIT_HALF_H = 20
 const BUG_HIT_HALF_W = 30
 const BUG_HIT_HALF_H = 20
+//
+// Bug body radius constant (BUG_BODY_SIZE * 1.5 from bugs.js) for edge splash positioning
+//
+const BUG_BODY_RADIUS_FACTOR = 9
 const SMALL_BUG_HIT_HALF = 8
 //
 // Fraction of drops that originate from tree canopies instead of screen top
@@ -203,13 +207,20 @@ function onUpdate(inst) {
         continue
       }
       //
-      // Check monster (big bug) collisions
+      // Check monster (big bug) collisions — splash on circle edge, not center
       //
       let hitMonster = false
       for (let m = 0; m < monsterBugs.length; m++) {
         const bug = monsterBugs[m]
-        if (hitTest(drop, bug.x, bug.y, BUG_HIT_HALF_W, BUG_HIT_HALF_H)) {
-          addSplash(splashes, drop.x, drop.y, layer.cfg)
+        const bugRadius = BUG_BODY_RADIUS_FACTOR * (bug.scale || 1)
+        const bugCenterY = bug.y + (bug.dropOffset || 0)
+        if (hitTest(drop, bug.x, bugCenterY, BUG_HIT_HALF_W, BUG_HIT_HALF_H)) {
+          const dx = drop.x - bug.x
+          const dy = drop.y - bugCenterY
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1
+          const splashX = bug.x + (dx / dist) * bugRadius
+          const splashY = bugCenterY + (dy / dist) * bugRadius
+          addSplash(splashes, splashX, splashY, layer.cfg)
           resetDrop(drop, leftX, playableW, topY, canopyPoints)
           hitMonster = true
           break

@@ -7,6 +7,29 @@ import { get, set } from '../../../utils/progress.js'
 
 const MUSIC_START_DELAY = 6.0
 //
+// Sun position and radius (matches city-background.js calculations)
+//
+const SUN_X = CFG.visual.screen.width * 0.85 - 100
+const SUN_Y = CFG.visual.screen.height * 0.2 + 150
+const SUN_RADIUS = 90
+//
+// Sun hover detection and face fade speed
+//
+const SUN_HOVER_SPEED = 3
+const SUN_HOVER_MARGIN = 20
+//
+// Sun smiley face dimensions (relative to SUN_RADIUS)
+//
+const SUN_EYE_OFFSET_X = 0.28
+const SUN_EYE_OFFSET_Y = -0.15
+const SUN_EYE_RADIUS = 0.14
+const SUN_PUPIL_RADIUS = 0.07
+const SUN_MOUTH_Y = 0.25
+const SUN_MOUTH_WIDTH = 0.5
+const SUN_MOUTH_HEIGHT = 0.22
+const SUN_TOOTH_WIDTH = 0.1
+const SUN_TOOTH_HEIGHT = 0.08
+//
 // Global music instances for time section (persist across level reloads)
 //
 export let timeSectionMusic = {
@@ -377,6 +400,87 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     hero: heroInst,
     antiHero: antiHeroInst
   }
+}
+/**
+ * Creates a sun hover face system that shows a smiley when the mouse hovers the sun
+ * @param {Object} k - Kaplay instance
+ * @param {number} zIndex - Z-index for the face overlay
+ */
+export function createSunHoverFace(k, zIndex = 16) {
+  const state = { intensity: 0 }
+  k.add([
+    k.z(zIndex),
+    { draw() { drawSunFace(k, state.intensity) } }
+  ])
+  k.onUpdate(() => updateSunHover(k, state))
+}
+//
+// Update sun hover intensity based on mouse proximity
+//
+function updateSunHover(k, state) {
+  const mousePos = k.mousePos()
+  const dx = mousePos.x - SUN_X
+  const dy = mousePos.y - SUN_Y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const isHovering = dist < SUN_RADIUS + SUN_HOVER_MARGIN
+  const target = isHovering ? 1 : 0
+  state.intensity += (target - state.intensity) * SUN_HOVER_SPEED * k.dt()
+  state.intensity = Math.max(0, Math.min(1, state.intensity))
+}
+//
+// Draw smiley face on the sun with eyes, pupils, mouth and teeth
+//
+function drawSunFace(k, intensity) {
+  if (intensity < 0.01) return
+  const r = SUN_RADIUS
+  const darkColor = k.rgb(180, 180, 160)
+  const white = k.rgb(255, 255, 255)
+  const black = k.rgb(40, 40, 40)
+  //
+  // Eyes — white sclera with dark pupils
+  //
+  const eyeR = SUN_EYE_RADIUS * r
+  const pupilR = SUN_PUPIL_RADIUS * r
+  const eyeY = SUN_Y + SUN_EYE_OFFSET_Y * r
+  const leftEyeX = SUN_X - SUN_EYE_OFFSET_X * r
+  const rightEyeX = SUN_X + SUN_EYE_OFFSET_X * r
+  k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
+  k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
+  k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
+  k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
+  //
+  // Mouth — darker ellipse with white teeth
+  //
+  const mouthY = SUN_Y + SUN_MOUTH_Y * r
+  const mouthW = SUN_MOUTH_WIDTH * r
+  const mouthH = SUN_MOUTH_HEIGHT * r
+  k.drawEllipse({
+    pos: k.vec2(SUN_X, mouthY),
+    radiusX: mouthW / 2,
+    radiusY: mouthH / 2,
+    color: darkColor,
+    opacity: intensity
+  })
+  //
+  // Teeth — two small white rectangles at top of mouth
+  //
+  const toothW = SUN_TOOTH_WIDTH * r
+  const toothH = SUN_TOOTH_HEIGHT * r
+  const toothY = mouthY - mouthH / 2
+  k.drawRect({
+    pos: k.vec2(SUN_X - toothW - 1, toothY),
+    width: toothW,
+    height: toothH,
+    color: white,
+    opacity: intensity
+  })
+  k.drawRect({
+    pos: k.vec2(SUN_X + 1, toothY),
+    width: toothW,
+    height: toothH,
+    color: white,
+    opacity: intensity
+  })
 }
 /**
  * Check if player earned speed bonus and display message

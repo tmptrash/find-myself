@@ -100,17 +100,17 @@ export function create(config) {
   // Create small hero icon and life.png image in top right corner
   //
   const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
-  const lifeImageHeight = 70  // Increased by 30% (30 * 2 * 1.3)
-  const spacingBetween = 110  // Spacing between hero and life (increased from 80)
-  const lifeImageOriginalHeight = 1197  // Original height of life.png
-  const rightMargin = 90  // Margin from right edge of game area
-  const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 7  // Above game area, aligned with T1ME
+  const lifeImageHeight = 120
+  const spacingBetween = 110
+  const lifeImageOriginalHeight = 1197
+  const rightMargin = 70
+  const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 10
   //
   // Create small hero (2x smaller, static, time section colors)
   // Check completed sections for hero parts (mouth, arms)
   //
-  const isWordComplete = get('word', false)
-  const isTouchComplete = get('touch', false)
+  const isWordComplete = get('word.completed', false)
+  const isTouchComplete = get('touch.completed', false)
   //
   // Position hero and life in top right corner, aligned with right edge of game area
   //
@@ -139,7 +139,7 @@ export function create(config) {
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX, smallHeroY),
+      k.pos(lifeImageX + 12, smallHeroY + 5),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),

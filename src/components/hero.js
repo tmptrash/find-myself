@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, getColor, parseHex, getRGB, toPng } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, onPhysicalKeyPress, getColor, parseHex, getRGB, toPng } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
@@ -704,10 +704,10 @@ function onUpdate(inst) {
     }
   }
   //
-  // Determine movement state (only for controllable characters)
+  // Determine movement state (only for controllable characters, respects controlsDisabled)
   //
-  const isMoving = isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
-    isAnyKeyDown(inst.k, CFG.controls.moveRight)
+  const isMoving = !inst.controlsDisabled && (isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
+    isAnyKeyDown(inst.k, CFG.controls.moveRight))
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   //
@@ -961,29 +961,28 @@ function updateIdleAnimation(inst) {
  */
 function setupControls(inst) {
   //
-  // Jump
+  // Jump action handler
+  //
+  const jumpAction = () => {
+    if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled) return
+    if (inst.canJump && !inst.isSquashing) {
+      inst.isSquashing = true
+      inst.squashTimer = 0
+      inst.jumpFrame = 0
+      const prefix = inst.spritePrefix || inst.type
+      inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+      inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
+    }
+  }
+  //
+  // Register jump keys (Kaplay key names + physical key codes for non-English layouts)
   //
   CFG.controls.jump.forEach(key => {
-    inst.k.onKeyPress(key, () => {
-      if (!inst.isSpawned || inst.isAnnihilating) return  // Prevent jump before spawn or during annihilation
-      if (inst.canJump && !inst.isSquashing) {
-        //
-        // Start pre-jump squash animation instead of jumping immediately
-        //
-        inst.isSquashing = true
-        inst.squashTimer = 0
-        inst.jumpFrame = 0
-        //
-        // Immediately set squash sprite (frame 0)
-        //
-        const prefix = inst.spritePrefix || inst.type
-        inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
-        //
-        // Play jump sound
-        //
-        inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
-      }
-    })
+    if (key.length > 1 && key.startsWith('Key')) {
+      onPhysicalKeyPress(key, jumpAction)
+    } else {
+      inst.k.onKeyPress(key, jumpAction)
+    }
   })
 }
 

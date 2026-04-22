@@ -7,10 +7,11 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { toPng, getRGB } from '../../../utils/helper.js'
+import { toPng, getRGB, parseHex } from '../../../utils/helper.js'
 import * as FallingLeaf from '../components/falling-leaf.js'
 import * as Rain from '../components/rain.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as LifeDeduction from '../utils/life-deduction.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -127,6 +128,38 @@ const POISON_LEAF_CHANCE = 0.4
 const POISON_LEAF_COLOR_HEX = '#4488CC'
 const POISON_DEATH_RELOAD_DELAY = 0.8
 //
+// Worm crawling on root level — peristaltic wave locomotion.
+// Worms move mostly straight with large-radius arcs.
+// Body contracts ~30% during wave, never bunching into a cluster.
+//
+const WORM_BASE_Y = FLOOR_Y + 30
+const WORM_DRAW_Z = 17
+const WORM_SEGMENT_COUNT = 7
+const WORM_SEGMENT_RADIUS = 3.2
+const WORM_REST_SPACING = 5
+const WORM_WAVE_SPEED = 0.3
+const WORM_HEAD_SPEED = 3.5
+const WORM_FOLLOW_SPEED = 6
+const WORM_STEER_SPEED = 0.4
+const WORM_STEER_AMPLITUDE = 0.15
+const WORM_DIRECTION_CHANGE_MIN = 10
+const WORM_DIRECTION_CHANGE_RANGE = 20
+const WORM_WAVE_DELAY = 0.4
+const WORM_CONTRACT_MIN = 0.7
+const WORM_CONTRACT_MAX = 1.0
+const WORM_MAX_STRETCH = 1.2
+const WORM_BULGE_AMOUNT = 1.2
+const WORM_TRAIL_FADE_SPEED = 0.0003
+const WORM_TRAIL_MAX_POINTS = 4000
+const WORM_TRAIL_COLOR = '#0A0A0A'
+const WORM_BODY_COLOR = '#5C3A1E'
+const WORM_HEAD_COLOR = '#7A4E2A'
+const WORM_EYE_RADIUS = 1.4
+const WORM_PUPIL_RADIUS = 0.7
+const WORM_EYE_SPACING = 2.0
+const WORM_COUNT = 3
+const WORM_Y_ZONE_HEIGHT = 15
+//
 // Life icon flash/particle effects on death
 //
 const LIFE_FLASH_COUNT = 20
@@ -162,6 +195,13 @@ const ANTIHERO_HINT_DISPLAY_TIME = 5
 const ANTIHERO_HINT_NOTES_DISPLAY_TIME = 10
 const ANTIHERO_HINT_NOTES_REPEAT_INTERVAL = 30
 const ANTIHERO_HINT_Y_OFFSET = -140
+//
+// Life deduction (level-specific flags and threshold)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'touch.level1DeductDone'
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.level1Visited'
+const LIFE_DEDUCT_LEAVES_FLAG = 'touch.level1LeavesActive'
 
 /**
  * Level 1 scene for touch section
@@ -1078,9 +1118,9 @@ export function sceneLevel1(k) {
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
-    const isTouchComplete = get('touch', false)
-    const isWordComplete = get('word', false)
-    const isTimeComplete = get('time', false)
+    const isTouchComplete = get('touch.completed', false)
+    const isWordComplete = get('word.completed', false)
+    const isTimeComplete = get('time.completed', false)
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
     const levelIndicator = LevelIndicator.create({
       k,
@@ -1092,6 +1132,31 @@ export function sceneLevel1(k) {
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
+    //
+    // Life deduction logic: leaves are paused until deduction animation plays.
+    // First visit with eligible score: mark as visited, no deduction yet.
+    // Second visit (after death/reload): show deduction and activate leaves.
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const alreadyDeducted = get(LIFE_DEDUCT_FLAG, false)
+    const leavesAlreadyActive = get(LIFE_DEDUCT_LEAVES_FLAG, false)
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = !alreadyDeducted && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    //
+    // Determine whether to show deduction and whether leaves should fall
+    //
+    let showDeduction = false
+    let leavesActive = leavesAlreadyActive
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showDeduction = true
+      leavesActive = true
+    }
+    //
+    // Scene-level lock: hero controls disabled during life deduction animation
+    //
+    const sceneLock = { locked: showDeduction }
     //
     // Bottom platform (full width) - raised by 200px, but extends to bottom
     //
@@ -1458,6 +1523,30 @@ export function sceneLevel1(k) {
       bodyColor: heroBodyColor
     })
     //
+    // Lock hero controls while life deduction animation plays
+    //
+    if (sceneLock.locked) {
+      heroInst.controlsDisabled = true
+      sceneLock.heroInst = heroInst
+    }
+    //
+    // Show life deduction animation if eligible on second visit
+    //
+    if (showDeduction) {
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        extraFlags: [LIFE_DEDUCT_LEAVES_FLAG],
+        sceneLock,
+        onComplete: () => {
+          fallingLeafInst.paused = false
+        }
+      })
+    }
+    //
     // Spawn hero and anti-hero
     //
     Hero.spawn(heroInst)
@@ -1489,6 +1578,12 @@ export function sceneLevel1(k) {
       }
     ])
     //
+    // Worms crawling along the root level leaving dark trails
+    //
+    for (let i = 0; i < WORM_COUNT; i++) {
+      createWorm(k, i)
+    }
+    //
     // Tooltip on first tree trunk (note "C")
     //
     const firstRoot = treeRootsInst.roots[0]
@@ -1508,6 +1603,7 @@ export function sceneLevel1(k) {
     //
     // Create falling leaves system (leaves detach from TreeRoots trees).
     // 40% of leaves are poisonous (blue) and kill the hero on contact.
+    // Leaves are paused until life deduction animation completes.
     //
     const poisonColor = getRGB(k, POISON_LEAF_COLOR_HEX)
     const fallingLeafInst = FallingLeaf.create({
@@ -1521,6 +1617,10 @@ export function sceneLevel1(k) {
       poisonColor,
       onPoisonHit: () => onPoisonLeafDeath(k, heroInst, levelIndicator)
     })
+    //
+    // Pause leaf spawning until deduction has been shown or leaves were already active
+    //
+    fallingLeafInst.paused = !leavesActive
     //
     // Create bugs (obstacles)
     //
@@ -2580,4 +2680,231 @@ function showAntiHeroHint(k, gameState, antiHeroInst, text, duration) {
     gameState.currentHint && Tooltip.destroy(gameState.currentHint)
     gameState.currentHint = null
   })
+}
+/**
+ * Creates a small worm that crawls along the root level with peristaltic locomotion.
+ * A contraction wave travels head-to-tail through connected segments.
+ * The head leads movement; body follows with distance constraints.
+ * @param {Object} k - Kaplay instance
+ * @param {number} index - Worm index for varied starting position and direction
+ * @returns {Object} Worm instance
+ */
+function createWorm(k, index) {
+  const leftBound = LEFT_MARGIN + 40
+  const rightBound = CFG.visual.screen.width - RIGHT_MARGIN - 40
+  const range = rightBound - leftBound
+  //
+  // Spread worms across the playable area
+  //
+  const zoneWidth = range / WORM_COUNT
+  const startX = leftBound + zoneWidth * index + Math.random() * zoneWidth
+  const yZoneCenter = WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT
+  const startAngle = (index % 2 === 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.5
+  //
+  // Initialize segments in a line behind the head
+  //
+  const segments = []
+  for (let i = 0; i < WORM_SEGMENT_COUNT; i++) {
+    segments.push({
+      x: startX - i * WORM_REST_SPACING * Math.cos(startAngle),
+      y: yZoneCenter - i * WORM_REST_SPACING * Math.sin(startAngle)
+    })
+  }
+  const inst = {
+    segments,
+    heading: startAngle,
+    wavePhase: Math.random() * Math.PI * 2,
+    steerPhase: Math.random() * Math.PI * 2,
+    directionTimer: WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE,
+    trail: [],
+    leftBound,
+    rightBound,
+    yMin: WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT - 3,
+    yMax: WORM_BASE_Y + (index + 1) * WORM_Y_ZONE_HEIGHT
+  }
+  k.add([
+    k.z(WORM_DRAW_Z),
+    { draw() { onDrawWorm(k, inst) } }
+  ])
+  k.onUpdate(() => onUpdateWorm(k, inst))
+  return inst
+}
+//
+// Peristaltic wave locomotion: head leads, contraction wave travels head-to-tail.
+// Segments smoothly follow their predecessor with soft lerp and hard distance clamp.
+//
+function onUpdateWorm(k, inst) {
+  const dt = k.dt()
+  const head = inst.segments[0]
+  inst.wavePhase += dt * WORM_WAVE_SPEED
+  inst.steerPhase += dt * WORM_STEER_SPEED
+  //
+  // Periodic direction reversal
+  //
+  inst.directionTimer -= dt
+  if (inst.directionTimer <= 0) {
+    inst.heading += Math.PI
+    inst.directionTimer = WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE
+  }
+  //
+  // Head pulses forward: speed modulated by the contraction wave
+  //
+  const headWave = (Math.sin(inst.wavePhase * Math.PI * 2) + 1) / 2
+  const speed = WORM_HEAD_SPEED * (0.2 + headWave * 0.8)
+  //
+  // Sinusoidal steering for gentle curves
+  //
+  inst.heading += Math.sin(inst.steerPhase) * WORM_STEER_AMPLITUDE * dt
+  //
+  // Boundary steering: gentle turn away from edges (large-radius arc)
+  //
+  const edgeMargin = 50
+  if (head.x < inst.leftBound + edgeMargin && Math.cos(inst.heading) < 0) {
+    inst.heading += 0.02
+  } else if (head.x > inst.rightBound - edgeMargin && Math.cos(inst.heading) > 0) {
+    inst.heading -= 0.02
+  }
+  if (head.y < inst.yMin && Math.sin(inst.heading) < 0) {
+    inst.heading += 0.03
+  } else if (head.y > inst.yMax && Math.sin(inst.heading) > 0) {
+    inst.heading -= 0.03
+  }
+  //
+  // Keep heading mostly horizontal with gentle correction
+  //
+  inst.heading -= Math.sin(inst.heading) * 0.005
+  //
+  // Advance head along curved heading
+  //
+  head.x += Math.cos(inst.heading) * speed * dt
+  head.y += Math.sin(inst.heading) * speed * dt
+  head.y = Math.max(inst.yMin, Math.min(inst.yMax, head.y))
+  //
+  // Body segments: each follows its predecessor with a soft lerp.
+  // The contraction wave modulates target distance (short = contracted, long = extended).
+  // Hard clamp enforces max stretch so segments never disconnect.
+  //
+  for (let i = 1; i < inst.segments.length; i++) {
+    const prev = inst.segments[i - 1]
+    const seg = inst.segments[i]
+    const dx = prev.x - seg.x
+    const dy = prev.y - seg.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist < 0.01) continue
+    //
+    // Contraction wave: phase-shifted per segment so wave travels along body
+    //
+    const segWave = (Math.sin((inst.wavePhase - i * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
+    const targetDist = WORM_REST_SPACING * (WORM_CONTRACT_MIN + segWave * (WORM_CONTRACT_MAX - WORM_CONTRACT_MIN))
+    //
+    // Soft follow: smoothly move toward target position behind predecessor
+    //
+    const targetX = prev.x - (dx / dist) * targetDist
+    const targetY = prev.y - (dy / dist) * targetDist
+    const lerp = Math.min(1, WORM_FOLLOW_SPEED * dt)
+    seg.x += (targetX - seg.x) * lerp
+    seg.y += (targetY - seg.y) * lerp
+    //
+    // Hard distance constraint: never stretch beyond max
+    //
+    const cdx = prev.x - seg.x
+    const cdy = prev.y - seg.y
+    const cDist = Math.sqrt(cdx * cdx + cdy * cdy)
+    const maxDist = WORM_REST_SPACING * WORM_MAX_STRETCH
+    if (cDist > maxDist) {
+      seg.x = prev.x - (cdx / cDist) * maxDist
+      seg.y = prev.y - (cdy / cDist) * maxDist
+    }
+    seg.y = Math.max(inst.yMin, Math.min(inst.yMax, seg.y))
+  }
+  //
+  // Trail: record tail position, slowly fade old points
+  //
+  const tail = inst.segments[inst.segments.length - 1]
+  inst.trail.push({ x: tail.x, y: tail.y, opacity: 1 })
+  if (inst.trail.length > WORM_TRAIL_MAX_POINTS) {
+    inst.trail.shift()
+  }
+  for (let i = inst.trail.length - 1; i >= 0; i--) {
+    inst.trail[i].opacity -= WORM_TRAIL_FADE_SPEED
+    if (inst.trail[i].opacity <= 0) {
+      inst.trail.splice(i, 1)
+    }
+  }
+}
+//
+// Draws the worm: dark trail, circle segments with peristaltic bulge, tiny eyes
+//
+function onDrawWorm(k, inst) {
+  const trailRgb = parseHex(WORM_TRAIL_COLOR)
+  const bodyRgb = parseHex(WORM_BODY_COLOR)
+  const headRgb = parseHex(WORM_HEAD_COLOR)
+  //
+  // Dark trail behind the worm
+  //
+  for (const pt of inst.trail) {
+    k.drawRect({
+      pos: k.vec2(pt.x - 2.5, pt.y - 1),
+      width: 5,
+      height: 2,
+      color: k.rgb(trailRgb[0], trailRgb[1], trailRgb[2]),
+      opacity: pt.opacity * 0.8
+    })
+  }
+  //
+  // Body segments: radius pulses with the contraction wave (thick when contracted)
+  //
+  for (let i = inst.segments.length - 1; i >= 0; i--) {
+    const seg = inst.segments[i]
+    const isHead = i === 0
+    const isTail = i === inst.segments.length - 1
+    const segWave = (Math.sin((inst.wavePhase - i * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
+    //
+    // Bulge inverted: thick when contracted (wave low), thin when extended (wave high)
+    //
+    const bulge = 1 - segWave
+    let r = WORM_SEGMENT_RADIUS + bulge * WORM_BULGE_AMOUNT
+    if (isHead) r += 0.6
+    if (isTail) r -= 0.4
+    const rgb = isHead ? headRgb : bodyRgb
+    k.drawCircle({
+      pos: k.vec2(seg.x, seg.y),
+      radius: r + 1,
+      color: k.rgb(0, 0, 0)
+    })
+    k.drawCircle({
+      pos: k.vec2(seg.x, seg.y),
+      radius: r,
+      color: k.rgb(rgb[0], rgb[1], rgb[2])
+    })
+    isHead && drawWormEyes(k, inst, seg)
+  }
+}
+//
+// Draws two tiny eyes on the worm's head, facing the movement direction
+//
+function drawWormEyes(k, inst, head) {
+  const next = inst.segments[1]
+  const dx = head.x - next.x
+  const dy = head.y - next.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const nx = dist > 0 ? dx / dist : Math.cos(inst.heading)
+  const ny = dist > 0 ? dy / dist : 0
+  const px = -ny
+  const py = nx
+  const eyeForward = 1.5
+  for (let side = -1; side <= 1; side += 2) {
+    const ex = head.x + nx * eyeForward + px * WORM_EYE_SPACING * side
+    const ey = head.y + ny * eyeForward + py * WORM_EYE_SPACING * side
+    k.drawCircle({
+      pos: k.vec2(ex, ey),
+      radius: WORM_EYE_RADIUS,
+      color: k.rgb(220, 220, 210)
+    })
+    k.drawCircle({
+      pos: k.vec2(ex + nx * 0.3, ey + ny * 0.3),
+      radius: WORM_PUPIL_RADIUS,
+      color: k.rgb(20, 20, 20)
+    })
+  }
 }

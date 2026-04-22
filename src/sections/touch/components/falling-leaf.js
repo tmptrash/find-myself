@@ -77,11 +77,10 @@ const AIR_PUSH_DISTANCE_Y = 60
 const AIR_PUSH_FACTOR = 0.6
 //
 // Poison collision combines leaf radius with hero half-dimensions.
-// Hero visual box is SPRITE_SIZE(32) * HERO_SCALE(3) = 96px; half = 48px.
-// We use slightly tighter values so it feels fair.
+// Tight values so the leaf must visually overlap the hero sprite to kill.
 //
-const POISON_HERO_HALF_W = 20
-const POISON_HERO_HALF_H = 40
+const POISON_HERO_HALF_W = 8
+const POISON_HERO_HALF_H = 12
 //
 // Leaf shape bezier resolution
 //
@@ -170,7 +169,7 @@ export function onUpdate(inst) {
   // Spawn new leaves on a timer (stop when too few remain on trees)
   //
   inst.spawnTimer += dt
-  if (inst.spawnTimer >= inst.nextSpawnTime && remaining > minLeaves && inst.spawnedCount < MAX_FALLEN_LEAVES) {
+  if (!inst.paused && inst.spawnTimer >= inst.nextSpawnTime && remaining > minLeaves && inst.spawnedCount < MAX_FALLEN_LEAVES) {
     spawnLeaf(inst)
     inst.spawnTimer = 0
     inst.nextSpawnTime = SPAWN_INTERVAL_MIN + Math.random() * SPAWN_INTERVAL_RANGE

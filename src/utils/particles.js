@@ -91,8 +91,12 @@ export function create(config = {}) {
       fleeTargetY: clampedY,
       fleeProgress: 0,       // Progress of flee animation (0-1)
       justLanded: false,     // Just finished fleeing (pause floating)
-      landedTimer: 0,        // Timer for landing pause
-      floatFadeIn: 0         // Fade-in progress for floating after landing (0-1)
+      floatFadeIn: 0,        // Fade-in progress for floating after landing (0-1)
+      attractSpeed: 0.05 + Math.random() * 0.15,
+      attractWanderPhase: Math.random() * Math.PI * 2,
+      attractWanderSpeed: 0.5 + Math.random() * 1.5,
+      attractWanderRadius: 30 + Math.random() * 60,
+      attractOrbitDist: 60 + Math.random() * 80
     })
   }
   
@@ -107,7 +111,9 @@ export function create(config = {}) {
     bounds: effectiveBounds,
     boundsMargin,
     disableMouseInteraction: config.disableMouseInteraction,
-    time: 0
+    time: 0,
+    attractTarget: null,
+    wasAttracting: false
   }
   
   return inst
@@ -159,6 +165,14 @@ export function onUpdate(inst) {
       }
     }
   }
+  
+  //
+  // Attraction target: particles fly toward this position when active
+  //
+  const attract = inst.attractTarget
+  const isAttracting = attract && attract.active
+  const attractX = isAttracting ? attract.x : 0
+  const attractY = isAttracting ? attract.y : 0
   
   const trembleRadiusAfterFlee = inst.trembleRadiusAfterFlee || trembleRadius
   
@@ -238,8 +252,26 @@ export function onUpdate(inst) {
       }
     }
     
+    //
+    // Cancel auto-flee immediately when attraction starts so particles respond at once
+    //
+    if (isAttracting && particle.isFleeing && particle.isAutoFleeing) {
+      particle.isFleeing = false
+      particle.isAutoFleeing = false
+      particle.fleeProgress = 0
+      //
+      // Place particle near the attraction target so it appears immediately
+      //
+      const angle = Math.random() * Math.PI * 2
+      const dist = particle.attractOrbitDist * (0.5 + Math.random() * 0.5)
+      particle.baseX = attractX + Math.cos(angle) * dist
+      particle.baseY = attractY + Math.sin(angle) * dist
+      particle.x = particle.baseX
+      particle.y = particle.baseY
+      particle.floatFadeIn = 1
+    }
     if (particle.isFleeing) {
-      const baseSpeed = particle.isAutoFleeing ? 0.55 : 0.46
+      const baseSpeed = particle.isAutoFleeing ? 0.2 : 0.46
       particle.fleeProgress += k.dt() * baseSpeed * particle.fleeSpeed
       
       if (particle.fleeProgress >= 1) {
@@ -286,7 +318,7 @@ export function onUpdate(inst) {
       // Slowly drift base position for natural movement
       // Add slow random drift to baseX/baseY instead of hard clamping
       //
-      if (bounds) {
+      if (bounds && !isAttracting) {
         const driftSpeed = 5
         const centerX = bounds.x + bounds.width / 2
         const centerY = bounds.y + bounds.height / 2
@@ -317,8 +349,56 @@ export function onUpdate(inst) {
           particle.baseY += (Math.random() - 0.5) * driftSpeed * k.dt()
         }
       }
+      //
+      // Attract: each particle wanders chaotically on its own curved path
+      // while gradually drifting toward the attraction target over time
+      //
+      if (isAttracting && !particle.isFleeing) {
+        particle.attractWanderPhase += k.dt() * particle.attractWanderSpeed
+        //
+        // Wander in a personal circular pattern, creating curved flight paths
+        //
+        const wanderX = Math.cos(particle.attractWanderPhase) * particle.attractWanderRadius
+        const wanderY = Math.sin(particle.attractWanderPhase * 0.7) * particle.attractWanderRadius
+        particle.baseX += wanderX * k.dt()
+        particle.baseY += wanderY * k.dt()
+        //
+        // Gentle pull toward the orbit zone around the target
+        //
+        const orbitAngle = particle.tremblePhase * particle.trembleSpeed * 0.3
+        const targetX = attractX + Math.cos(orbitAngle) * particle.attractOrbitDist
+        const targetY = attractY + Math.sin(orbitAngle) * particle.attractOrbitDist
+        particle.baseX += (targetX - particle.baseX) * particle.attractSpeed * k.dt()
+        particle.baseY += (targetY - particle.baseY) * particle.attractSpeed * k.dt()
+      }
     }
   })
+  //
+  // Teleport all particles near the target when attraction first starts
+  //
+  if (isAttracting && !inst.wasAttracting) {
+    particles.forEach(particle => {
+      if (particle.isFleeing) return
+      const angle = Math.random() * Math.PI * 2
+      const dist = particle.attractOrbitDist * (0.3 + Math.random() * 0.7)
+      particle.baseX = attractX + Math.cos(angle) * dist
+      particle.baseY = attractY + Math.sin(angle) * dist
+      particle.x = particle.baseX
+      particle.y = particle.baseY
+      particle.floatFadeIn = 1
+    })
+  }
+  //
+  // Scatter: when attraction just ended, trigger all particles to flee from the attract center
+  //
+  if (inst.wasAttracting && !isAttracting) {
+    scatterFromPoint(inst, inst.lastAttractX, inst.lastAttractY)
+  }
+  inst.wasAttracting = isAttracting
+  if (isAttracting) {
+    inst.lastAttractX = attractX
+    inst.lastAttractY = attractY
+  }
 }
 
 /**
@@ -363,5 +443,35 @@ export function draw(inst) {
       fixed: true
     })
   }
+}
+//
+// Scatter all particles outward from a point (used when attraction ends)
+//
+function scatterFromPoint(inst, fromX, fromY) {
+  const { particles, bounds } = inst
+  const SCATTER_DISTANCE_MIN = 80
+  const SCATTER_DISTANCE_MAX = 200
+  particles.forEach(particle => {
+    if (particle.isFleeing) return
+    particle.isFleeing = true
+    particle.isAutoFleeing = true
+    particle.fleeProgress = 0
+    particle.fleeStartX = particle.x
+    particle.fleeStartY = particle.y
+    particle.hasEverFled = true
+    const baseAngle = Math.atan2(particle.y - fromY, particle.x - fromX)
+    const randomDeviation = (Math.random() - 0.5) * Math.PI
+    const finalAngle = baseAngle + randomDeviation
+    const dist = SCATTER_DISTANCE_MIN + Math.random() * (SCATTER_DISTANCE_MAX - SCATTER_DISTANCE_MIN)
+    let targetX = particle.x + Math.cos(finalAngle) * dist
+    let targetY = particle.y + Math.sin(finalAngle) * dist
+    if (bounds) {
+      const margin = typeof inst.boundsMargin === 'number' ? inst.boundsMargin : 50
+      targetX = Math.max(bounds.x + margin, Math.min(bounds.x + bounds.width - margin, targetX))
+      targetY = Math.max(bounds.y + margin, Math.min(bounds.y + bounds.height - margin, targetY))
+    }
+    particle.fleeTargetX = targetX
+    particle.fleeTargetY = targetY
+  })
 }
 

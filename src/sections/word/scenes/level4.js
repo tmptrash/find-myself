@@ -637,9 +637,9 @@ function flashCreature(k, bladeArm, count) {
  * @param {Object} k - Kaplay instance
  */
 function showLetterInstructions(k) {
-  let showCount = get('level4LetterInstructionsCount', 0)
+  let showCount = get('word.level4LetterInstructionsCount', 0)
   if (showCount >= INSTRUCTIONS_SHOW_MAX) return
-  set('level4LetterInstructionsCount', showCount + 1)
+  set('word.level4LetterInstructionsCount', showCount + 1)
   const centerX = CFG.visual.screen.width / 2 - 20
   const textY = 140
   const content = "use Shift to throw letters at the creature"

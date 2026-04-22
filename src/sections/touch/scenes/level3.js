@@ -584,9 +584,9 @@ export function sceneLevel3(k) {
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
-    const isTouchComplete = get('touch', false)
-    const isWordComplete = get('word', false)
-    const isTimeComplete = get('time', false)
+    const isTouchComplete = get('touch.completed', false)
+    const isWordComplete = get('word.completed', false)
+    const isTimeComplete = get('time.completed', false)
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)

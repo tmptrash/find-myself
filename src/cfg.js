@@ -28,11 +28,11 @@ export const CFG = {
     platformName: "platform"
   },
   controls: {
-    moveLeft: ['left', 'a'],       // Move left
-    moveRight: ['right', 'd'],     // Move right
-    jump: ['up', 'w', 'space'],    // Jump
-    backToMenu: ['escape'],        // Return to menu
-    startGame: ['space', 'enter']  // Start game (from menu/start)
+    moveLeft: ['left', 'a', 'KeyA'],       // Move left (KeyA = physical key for any layout)
+    moveRight: ['right', 'd', 'KeyD'],     // Move right (KeyD = physical key for any layout)
+    jump: ['up', 'w', 'space', 'KeyW'],    // Jump (KeyW = physical key for any layout)
+    backToMenu: ['escape'],
+    startGame: ['space', 'enter']
   },
   visual: {
     screen: {

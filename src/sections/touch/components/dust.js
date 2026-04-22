@@ -9,6 +9,7 @@ const DUST_SIZE_MIN = 1.5  // Minimum size (increased from 1)
 const DUST_SIZE_MAX = 4  // Maximum size (increased from 3)
 const DUST_OPACITY_MIN = 0.1  // Minimum opacity
 const DUST_OPACITY_MAX = 0.4  // Maximum opacity
+const DUST_DRIFT_DAMPING = 3.0  // How fast disturbed drift returns to natural speed
 
 /**
  * Creates dust system
@@ -81,6 +82,7 @@ function createParticle(k, bounds, initialSpawn = false, customColor = null) {
     size,
     fallSpeed,
     driftSpeed,
+    baseDriftSpeed: driftSpeed,
     opacity,
     color: {
       r: Math.max(0, Math.min(255, baseR + variation)),
@@ -102,8 +104,9 @@ export function onUpdate(inst, dt) {
   //
   particles.forEach((particle, index) => {
     //
-    // Move down and drift
+    // Move down and drift, damping disturbed drift back to natural speed
     //
+    particle.driftSpeed += (particle.baseDriftSpeed - particle.driftSpeed) * DUST_DRIFT_DAMPING * dt
     particle.y += particle.fallSpeed * dt
     particle.x += particle.driftSpeed * dt
     //

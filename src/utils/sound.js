@@ -2671,5 +2671,24 @@ export function muteProceduralSounds() {
 export function unmuteProceduralSounds() {
   globalMuteProceduralSounds = false
 }
-
-
+/**
+ * Play a descending tick sound for score deduction countdown
+ * @param {Object} instance - Sound instance
+ * @param {number} progress - Countdown progress 0..1 (pitch descends as progress increases)
+ */
+export function playScoreTickSound(instance, progress) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const freq = 600 - progress * 300
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(freq, now)
+  gain.gain.setValueAtTime(0.12, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + 0.08)
+}

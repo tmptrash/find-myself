@@ -597,7 +597,7 @@ function showSnowballInstructions(k) {
   //
   // Check progress storage for how many times instructions were shown
   //
-  let showCount = get('level3SnowballInstructionsCount', 0)
+  let showCount = get('time.level3SnowballInstructionsCount', 0)
   //
   // Only show instructions first 2 times
   //
@@ -607,7 +607,7 @@ function showSnowballInstructions(k) {
   //
   // Increment show count
   //
-  set('level3SnowballInstructionsCount', showCount + 1)
+  set('time.level3SnowballInstructionsCount', showCount + 1)
   
   const centerX = CFG.visual.screen.width / 2 - 20
   const textY = CORRIDOR_Y + 100

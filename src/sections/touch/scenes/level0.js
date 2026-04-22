@@ -9,6 +9,7 @@ import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, getRGB } from '../../../utils/helper.js'
+import * as LifeDeduction from '../utils/life-deduction.js'
 import { drawThorns } from '../components/jungle-decor.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as Rain from '../components/rain.js'
@@ -56,7 +57,7 @@ const FLOOR_THORN_EDGE_INSET = 40
 const HERO_COLLISION_HEIGHT_THORNS = 25
 const HERO_SCALE_THORNS = 3
 const HERO_COLLISION_HEIGHT_SCALED_THORNS = HERO_COLLISION_HEIGHT_THORNS * HERO_SCALE_THORNS
-const FLOOR_THORN_FEET_TOLERANCE_LOW = 35
+const FLOOR_THORN_FEET_TOLERANCE_LOW = 22
 const FLOOR_THORN_FEET_TOLERANCE_HIGH = 12
 const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
 //
@@ -103,6 +104,12 @@ const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
 const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 //
+//
+// Life deduction (level-specific flags and threshold)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'touch.lifeDeducted'
+//
 // Instructions animation constants
 //
 const INSTRUCTIONS_INITIAL_DELAY = 1.0
@@ -139,6 +146,12 @@ const BUG4_TOOLTIP_HOVER_WIDTH = 60
 const BUG4_TOOLTIP_HOVER_HEIGHT = 40
 const BUG4_TOOLTIP_Y_OFFSET = 50
 //
+// Floor monster (bug0-2) hover tooltip
+//
+const FLOOR_MONSTER_TOOLTIP_TEXT = "What?!"
+const FLOOR_MONSTER_TOOLTIP_HOVER_SIZE = 60
+const FLOOR_MONSTER_TOOLTIP_Y_OFFSET = -80
+//
 // TOUCH indicator tooltip
 //
 const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
@@ -146,19 +159,39 @@ const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
-// Small bug tooltip (default and after green time expires)
+// Small bug tooltip (jokes and after green time expires)
 //
-const SMALL_BUG_TOOLTIP_TEXT_DEFAULT = "hi, my name is "
 const SMALL_BUG_TOOLTIP_TEXT_HINT = "gather us in one place\nand we will help you"
 const SMALL_BUG_TOOLTIP_HOVER_SIZE = 50
 const SMALL_BUG_TOOLTIP_Y_OFFSET = -50
 //
-// Unique names for small bugs
+// Bug jokes (2x the number of bugs, shown randomly on hover)
 //
-const SMALL_BUG_NAMES = [
-  "Archie", "Biscuit", "Clover", "Dotty",
-  "Echo", "Fern", "Gizmo", "Hazel",
-  "Iggy", "Juniper", "Kiwi", "Lemon"
+const SMALL_BUG_JOKES = [
+  "I'm not a bug,\nI'm a feature",
+  "do these legs\nmake me look fast?",
+  "I once outran\na pixel",
+  "my therapist says\nI have too many legs",
+  "I tried yoga.\ndownward bug is hard",
+  "is it just me\nor is the floor moving?",
+  "don't step on me.\nI have feelings",
+  "I'm on a seafood diet.\nI see food, I run",
+  "my left legs never\nagree with my right",
+  "I was employee\nof the month once",
+  "I don't need a gym.\nI carry my own weight",
+  "running is cheaper\nthan therapy",
+  "I dream of being\na butterfly sometimes",
+  "my ancestors were\ndinosaurs. probably",
+  "fun fact: I have more\nlegs than friends",
+  "the floor is lava.\njust kidding. or is it?",
+  "I'm not lost.\nI'm exploring",
+  "two bugs walk into\na bar. ouch",
+  "why did I cross\nthe screen? no idea",
+  "I'm basically\na tiny horse",
+  "excuse me, is this\nthe way to the exit?",
+  "my horoscope said\nstay home today",
+  "I could've been\na spider but no",
+  "plot twist:\nI'm the main character"
 ]
 //
 // Anti-hero tooltip (reduced height to avoid overlap with bug4 below)
@@ -233,17 +266,28 @@ const SMALL_BUG_PHRASES = [
 // Trap spikes: hidden spikes that emerge from the floor when hero approaches
 //
 const TRAP_TRIGGER_X = 700
-const TRAP_TRIGGER_RADIUS = 90
-const TRAP_SPIKE_COUNT = 5
-const TRAP_SPIKE_SPACING = 24
-const TRAP_SPIKE_WIDTH_MIN = 9
-const TRAP_SPIKE_WIDTH_MAX = 15
-const TRAP_SPIKE_HEIGHT_MIN = 18
-const TRAP_SPIKE_HEIGHT_MAX = 30
-const TRAP_SPIKE_TIP_OFFSET = 3
-const TRAP_RISE_DURATION = 0.12
-const TRAP_HOLD_DURATION = 1.5
-const TRAP_RETRACT_DURATION = 0.6
+const TRAP_TRIGGER_RADIUS = 140
+const TRAP_SPIKE_COUNT = 4
+const TRAP_SPIKE_SPACING = 28
+const TRAP_SPIKE_WIDTH_BASE = 10
+const TRAP_SPIKE_HEIGHT_MIN = 50
+const TRAP_SPIKE_HEIGHT_MAX = 80
+const TRAP_RISE_DURATION = 0.3
+const TRAP_HOLD_DURATION = 2.0
+const TRAP_RETRACT_DURATION = 0.8
+//
+// Tentacle wiggle parameters
+//
+const TRAP_WIGGLE_SPEED = 3.0
+const TRAP_WIGGLE_AMPLITUDE = 8
+const TRAP_SEGMENTS = 10
+//
+// Tentacle eye parameters (eye at the tip that follows the hero)
+//
+const TRAP_EYE_RADIUS = 4
+const TRAP_PUPIL_RADIUS = 2
+const TRAP_PUPIL_MAX_OFFSET = 1.5
+const TRAP_EYE_SEGMENT = 0.15
 const TRAP_EXCLUSION_HALF_WIDTH = 200
 const TRAP_SPIKE_FILL_R = 180
 const TRAP_SPIKE_FILL_G = 60
@@ -365,9 +409,9 @@ export function sceneLevel0(k) {
     //
     // Check completed sections for hero appearance
     //
-    const isTouchComplete = get('touch', false)
-    const isTimeComplete = get('time', false)
-    const isWordComplete = get('word', false)
+    const isTouchComplete = get('touch.completed', false)
+    const isTimeComplete = get('time.completed', false)
+    const isWordComplete = get('word.completed', false)
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
@@ -386,9 +430,31 @@ export function sceneLevel0(k) {
       sideWallWidth: LEFT_MARGIN
     })
     //
-    // Show keyboard controls instructions
+    // Life deduction intro: show once when lifeScore reaches threshold for the first time
     //
-    showInstructions(k)
+    const currentLifeScore = get('lifeScore', 0)
+    const alreadyDeducted = get(LIFE_DEDUCT_FLAG, false)
+    const trapAlreadyActive = get('touch.trapActive', false)
+    const lifeDeducted = !alreadyDeducted && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    //
+    // Scene-level lock: hero controls are disabled during the life deduction animation
+    //
+    const sceneLock = { locked: lifeDeducted }
+    //
+    // Show keyboard controls instructions (delayed if life deduction animation plays)
+    //
+    showInstructions(k, lifeDeducted ? LifeDeduction.TOTAL_DURATION : 0)
+    if (lifeDeducted) {
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        extraFlags: ['touch.trapActive'],
+        sceneLock
+      })
+    }
     //
     // Bottom platform (full width)
     //
@@ -1496,6 +1562,13 @@ export function sceneLevel0(k) {
       bodyColor: heroBodyColor
     })
     //
+    // Lock hero controls while life deduction animation plays
+    //
+    if (sceneLock.locked) {
+      heroInst.controlsDisabled = true
+      sceneLock.heroInst = heroInst
+    }
+    //
     // Hide character immediately to prevent double appearance
     //
     if (heroInst.character) {
@@ -1532,9 +1605,10 @@ export function sceneLevel0(k) {
       checkFloorThorns(k, heroInst, floorThornData, levelIndicator)
     })
     //
-    // Trap spikes: hidden spikes that emerge from the floor when hero approaches
+    // Trap tentacles: appear if life was just deducted or if trap was already active from a previous attempt
     //
-    createTrapSpikes(k, heroInst, levelIndicator, sound)
+    const showTraps = lifeDeducted || trapAlreadyActive
+    showTraps && createTrapSpikes(k, heroInst, levelIndicator, sound)
     //
     // Create bugs on the floor
     //
@@ -2062,6 +2136,22 @@ export function sceneLevel0(k) {
     const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
     startMonsterConversation(k, monsterBugs)
     //
+    // Tooltip for floor monsters (bug0-2) - "What?!" on hover
+    //
+    monsterBugs.forEach(bug => {
+      Tooltip.create({
+        k,
+        targets: [{
+          x: () => bug.x,
+          y: () => bug.y,
+          width: FLOOR_MONSTER_TOOLTIP_HOVER_SIZE,
+          height: FLOOR_MONSTER_TOOLTIP_HOVER_SIZE,
+          text: FLOOR_MONSTER_TOOLTIP_TEXT,
+          offsetY: FLOOR_MONSTER_TOOLTIP_Y_OFFSET
+        }]
+      })
+    })
+    //
     // Small bug random phrases: occasional speech bubbles from crawling bugs
     //
     startSmallBugPhrases(k, smallBugs)
@@ -2097,20 +2187,25 @@ export function sceneLevel0(k) {
       }]
     })
     //
-    // Tooltip for small bugs with unique names per bug.
+    // Tooltip for small bugs with random jokes.
+    // Each bug picks a random joke on each hover.
     // Text switches to hint after green time expires.
     //
-    const smallBugTooltipTargets = smallBugs.map((bug, i) => ({
-      x: () => bug.x,
-      y: () => bug.y,
-      width: SMALL_BUG_TOOLTIP_HOVER_SIZE,
-      height: SMALL_BUG_TOOLTIP_HOVER_SIZE,
-      text: SMALL_BUG_TOOLTIP_TEXT_DEFAULT + (SMALL_BUG_NAMES[i] || SMALL_BUG_NAMES[i % SMALL_BUG_NAMES.length]),
-      offsetY: SMALL_BUG_TOOLTIP_Y_OFFSET
-    }))
-    Tooltip.create({
-      k,
-      targets: smallBugTooltipTargets
+    const smallBugTooltipTargets = smallBugs.map((bug) => {
+      const target = {
+        x: () => bug.x,
+        y: () => bug.y,
+        width: SMALL_BUG_TOOLTIP_HOVER_SIZE,
+        height: SMALL_BUG_TOOLTIP_HOVER_SIZE,
+        text: SMALL_BUG_JOKES[Math.floor(Math.random() * SMALL_BUG_JOKES.length)],
+        offsetY: SMALL_BUG_TOOLTIP_Y_OFFSET
+      }
+      return target
+    })
+    const smallBugTooltips = smallBugTooltipTargets.map(target => {
+      const inst = Tooltip.create({ k, targets: [target] })
+      inst._wasActive = false
+      return inst
     })
     //
     // Tooltip for anti-hero
@@ -2238,6 +2333,21 @@ export function sceneLevel0(k) {
     //
     let bugTooltipsSwapped = false
     k.onUpdate(() => {
+      //
+      // Rotate bug jokes: pick a new random joke each time hover ends
+      //
+      if (!bugTooltipsSwapped) {
+        smallBugTooltips.forEach((tooltipInst, i) => {
+          const isActive = tooltipInst.activeTarget !== null
+          if (tooltipInst._wasActive && !isActive) {
+            smallBugTooltipTargets[i].text = SMALL_BUG_JOKES[Math.floor(Math.random() * SMALL_BUG_JOKES.length)]
+          }
+          tooltipInst._wasActive = isActive
+        })
+      }
+      //
+      // Switch small bug tooltip text to hint after green time expires
+      //
       if (bugTooltipsSwapped) return
       const levelTime = FpsCounter.getLevelTime(fpsCounter)
       const targetTime = CFG.gameplay.speedBonusTime
@@ -2384,7 +2494,7 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator) {
     return
   }
   for (const thorn of floorThornData) {
-    if (Math.abs(heroX - thorn.x) < thorn.width) {
+    if (Math.abs(heroX - thorn.x) < thorn.width / 2) {
       onHeroFloorThornDeath(k, heroInst, levelIndicator)
       return
     }
@@ -2496,9 +2606,8 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
     spikes.push({
       x: startX + i * TRAP_SPIKE_SPACING + (Math.random() - 0.5) * 6,
       baseY: FLOOR_Y,
-      width: TRAP_SPIKE_WIDTH_MIN + Math.random() * (TRAP_SPIKE_WIDTH_MAX - TRAP_SPIKE_WIDTH_MIN),
       height: TRAP_SPIKE_HEIGHT_MIN + Math.random() * (TRAP_SPIKE_HEIGHT_MAX - TRAP_SPIKE_HEIGHT_MIN),
-      tipOffset: (Math.random() - 0.5) * TRAP_SPIKE_TIP_OFFSET
+      phaseOffset: Math.random() * Math.PI * 2
     })
   }
   const inst = {
@@ -2518,7 +2627,7 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
     {
       draw() {
         if (inst.progress <= 0) return
-        drawTrapSpikes(k, inst, fillColor, outlineColor)
+        drawTrapSpikes(k, inst, fillColor, outlineColor, heroInst)
       }
     }
   ])
@@ -2594,7 +2703,7 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
                     heroFeetY <= FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH
     if (onFloor) {
       for (const spike of inst.spikes) {
-        if (Math.abs(heroX - spike.x) < spike.width) {
+        if (Math.abs(heroX - spike.x) < TRAP_SPIKE_WIDTH_BASE) {
           onHeroFloorThornDeath(k, heroInst, levelIndicator)
           return
         }
@@ -2603,36 +2712,101 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
   }
 }
 //
-// Draws trap spikes partially risen from the floor (clipped below baseY)
+// Draws trap tentacles wiggling upward from the floor
 //
-function drawTrapSpikes(k, inst, fillColor, outlineColor) {
-  const ow = 2
+function drawTrapSpikes(k, inst, fillColor, outlineColor, heroInst) {
+  const time = k.time()
+  const heroX = heroInst?.character?.pos?.x ?? 0
+  const heroY = heroInst?.character?.pos?.y ?? 0
   for (const spike of inst.spikes) {
     const visibleHeight = spike.height * inst.progress
     if (visibleHeight <= 0) continue
+    drawTentacle(k, spike, visibleHeight, time, fillColor, outlineColor, heroX, heroY)
+  }
+}
+//
+// Draw a single tentacle as segments with sinusoidal wiggle and an eye at the tip
+//
+function drawTentacle(k, spike, visibleHeight, time, fillColor, outlineColor, heroX, heroY) {
+  const segments = TRAP_SEGMENTS
+  let eyeX = 0
+  let eyeY = 0
+  for (let i = 0; i < segments; i++) {
+    const t0 = i / segments
+    const t1 = (i + 1) / segments
+    const y0 = spike.baseY - visibleHeight * t0
+    const y1 = spike.baseY - visibleHeight * t1
     //
-    // Outline (slightly larger)
+    // Wiggle increases toward the tip, phase offset per tentacle for variety
     //
+    const wiggle0 = Math.sin(time * TRAP_WIGGLE_SPEED + t0 * 4 + spike.phaseOffset) * TRAP_WIGGLE_AMPLITUDE * t0
+    const wiggle1 = Math.sin(time * TRAP_WIGGLE_SPEED + t1 * 4 + spike.phaseOffset) * TRAP_WIGGLE_AMPLITUDE * t1
+    const x0 = spike.x + wiggle0
+    const x1 = spike.x + wiggle1
+    const w0 = TRAP_SPIKE_WIDTH_BASE * (1 - t0 * 0.7)
+    const w1 = TRAP_SPIKE_WIDTH_BASE * (1 - t1 * 0.7)
+    const ow = 2
     k.drawPolygon({
       pts: [
-        k.vec2(spike.x - spike.width / 2 - ow, spike.baseY + ow),
-        k.vec2(spike.x + spike.width / 2 + ow, spike.baseY + ow),
-        k.vec2(spike.x + spike.tipOffset, spike.baseY - visibleHeight - ow)
+        k.vec2(x0 - w0 / 2 - ow, y0),
+        k.vec2(x0 + w0 / 2 + ow, y0),
+        k.vec2(x1 + w1 / 2 + ow, y1),
+        k.vec2(x1 - w1 / 2 - ow, y1)
       ],
       color: outlineColor
     })
-    //
-    // Fill
-    //
     k.drawPolygon({
       pts: [
-        k.vec2(spike.x - spike.width / 2, spike.baseY),
-        k.vec2(spike.x + spike.width / 2, spike.baseY),
-        k.vec2(spike.x + spike.tipOffset, spike.baseY - visibleHeight)
+        k.vec2(x0 - w0 / 2, y0),
+        k.vec2(x0 + w0 / 2, y0),
+        k.vec2(x1 + w1 / 2, y1),
+        k.vec2(x1 - w1 / 2, y1)
       ],
       color: fillColor
     })
+    //
+    // Track eye position at the segment closest to the tip
+    //
+    if (t1 >= TRAP_EYE_SEGMENT && eyeX === 0) {
+      eyeX = (x0 + x1) / 2
+      eyeY = (y0 + y1) / 2
+    }
   }
+  //
+  // Draw eye that follows the hero
+  //
+  drawTentacleEye(k, eyeX, eyeY, heroX, heroY)
+}
+//
+// Draws an eye on the tentacle tip that tracks the hero position
+//
+function drawTentacleEye(k, eyeX, eyeY, heroX, heroY) {
+  //
+  // White sclera
+  //
+  k.drawCircle({
+    pos: k.vec2(eyeX, eyeY),
+    radius: TRAP_EYE_RADIUS + 1,
+    color: k.rgb(0, 0, 0)
+  })
+  k.drawCircle({
+    pos: k.vec2(eyeX, eyeY),
+    radius: TRAP_EYE_RADIUS,
+    color: k.rgb(240, 240, 230)
+  })
+  //
+  // Pupil that looks toward the hero
+  //
+  const dx = heroX - eyeX
+  const dy = heroY - eyeY
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const nx = dist > 0 ? dx / dist : 0
+  const ny = dist > 0 ? dy / dist : 0
+  k.drawCircle({
+    pos: k.vec2(eyeX + nx * TRAP_PUPIL_MAX_OFFSET, eyeY + ny * TRAP_PUPIL_MAX_OFFSET),
+    radius: TRAP_PUPIL_RADIUS,
+    color: k.rgb(20, 20, 20)
+  })
 }
 
 /**
@@ -3110,8 +3284,9 @@ function startSmallBugPhrases(k, smallBugs) {
 /**
  * Shows keyboard instructions with fade in/hold/fade out animation
  * @param {Object} k - Kaplay instance
+ * @param {number} extraDelay - Additional delay before showing (e.g. waiting for deduction animation)
  */
-function showInstructions(k) {
+function showInstructions(k, extraDelay = 0) {
   const centerX = CFG.visual.screen.width / 2
   const textY = TOP_MARGIN + 90
   //
@@ -3119,8 +3294,9 @@ function showInstructions(k) {
   //
   const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
   //
-  // Animation state
+  // Animation state (extra delay added to initial delay)
   //
+  const totalInitialDelay = INSTRUCTIONS_INITIAL_DELAY + extraDelay
   const inst = {
     timer: 0,
     phase: 'initial_delay'
@@ -3131,7 +3307,7 @@ function showInstructions(k) {
   const updateInterval = k.onUpdate(() => {
     inst.timer += k.dt()
     if (inst.phase === 'initial_delay') {
-      if (inst.timer >= INSTRUCTIONS_INITIAL_DELAY) {
+      if (inst.timer >= totalInitialDelay) {
         inst.phase = 'fade_in'
         inst.timer = 0
       }

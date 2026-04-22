@@ -37,6 +37,8 @@ const BG_FADE_SPEED = 3.0
 // Firefly particles target opacity when hovering an anti-hero
 //
 const PARTICLES_HOVER_OPACITY = 0.8
+const PARTICLES_FADE_IN_SPEED = 4.0
+const PARTICLES_FADE_OUT_SPEED = 0.5
 //
 // Menu audio configuration (relative to CFG.audio.masterVolume)
 //
@@ -196,8 +198,8 @@ export function sceneMenu(k) {
     // Create hero in center (using HERO type)
     // Color progression: gray → brown (touch) → orange (time) → red (word)
     //
-    const noSectionsComplete = !progress.touch && !progress.time && !progress.word
-    const heroBodyColor = progress.word ? "#E74C3C" : progress.time ? "#FF8C00" : progress.touch ? "#8B5A50" : "#656565"
+    const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed
+    const heroBodyColor = progress.word?.completed ? "#E74C3C" : progress.time?.completed ? "#FF8C00" : progress.touch?.completed ? "#8B5A50" : "#656565"
     const heroInst = Hero.create({
       k,
       x: centerX,
@@ -205,8 +207,8 @@ export function sceneMenu(k) {
       type: Hero.HEROES.HERO,
       scale: 5,
       controllable: false,
-      addMouth: Boolean(progress.word),
-      addArms: Boolean(progress.touch),
+      addMouth: Boolean(progress.word?.completed),
+      addArms: Boolean(progress.touch?.completed),
       bodyColor: heroBodyColor,
       outlineColor: noSectionsComplete ? "#1A1A1A" : null
     })
@@ -233,7 +235,7 @@ export function sceneMenu(k) {
     const FLOAT_SPEED_Y = 1.2      // Speed of vertical floating
     
     sectionConfigs.forEach((config, index) => {
-      const isCompleted = progress[config.section]
+      const isCompleted = progress[config.section]?.completed || false
       //
       // Always create with gray body (sprite generation)
       // Color tint will be applied in onUpdate for completed/hovered sections
@@ -353,7 +355,7 @@ export function sceneMenu(k) {
       const currentIndex = sectionOrder.indexOf(config.section)
       const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
       const previousSection = sectionOrder[previousIndex]
-      const isPreviousCompleted = progress[previousSection] || false
+      const isPreviousCompleted = progress[previousSection]?.completed || false
       const canAccess = currentIndex === 0 || isPreviousCompleted  // First section is always accessible
       
       if (config.section === 'word' && !isCompleted && canAccess) {
@@ -713,18 +715,20 @@ export function sceneMenu(k) {
         const useHighlight = !isCompleted && (isCurrent || isHover || isNextAfterCompleted)
         
         //
-        // Special handling for time section: use yellow only when hovered or current
+        // Completed sections use their section color, highlighted sections use section color,
+        // time section uses orange when highlighted, otherwise gray
         //
         let targetColor
-        if (section === 'time' && useHighlight) {
-          targetColor = '#FF8C00'  // Anti-hero orange/yellow color (matches hero in time-complete)
+        if (isCompleted) {
+          targetColor = section === 'time' ? '#FF8C00' : sectionColor
+        } else if (section === 'time' && useHighlight) {
+          targetColor = '#FF8C00'
         } else {
           targetColor = useHighlight ? sectionColor : grayColor
         }
-        
         const labelRgb = getRGB(k, targetColor)
         label.color = k.rgb(labelRgb.r, labelRgb.g, labelRgb.b)
-        const outlineOpacity = useHighlight ? 1 : 0
+        const outlineOpacity = (useHighlight || isCompleted) ? 1 : 0
         outlines.forEach(outlineObj => {
           outlineObj.node.opacity = outlineOpacity
           outlineObj.node.pos.x = label.pos.x + outlineObj.dx
@@ -782,8 +786,23 @@ export function sceneMenu(k) {
       //
       // Fade firefly particles in when hovering, out when not
       //
-      const particlesTarget = hoveredInst ? PARTICLES_HOVER_OPACITY : 0.0
-      particlesBg.baseOpacity += (particlesTarget - particlesBg.baseOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
+      if (hoveredInst) {
+        particlesBg.baseOpacity = Math.min(PARTICLES_HOVER_OPACITY, particlesBg.baseOpacity + k.dt() * PARTICLES_FADE_IN_SPEED)
+      } else {
+        particlesBg.baseOpacity += (0 - particlesBg.baseOpacity) * Math.min(k.dt() * PARTICLES_FADE_OUT_SPEED, 1.0)
+      }
+      //
+      // Attract fireflies toward hovered anti-hero, scatter when unhovered
+      //
+      if (hoveredInst) {
+        particlesBg.attractTarget = {
+          x: hoveredInst.character.pos.x,
+          y: hoveredInst.character.pos.y,
+          active: true
+        }
+      } else if (particlesBg.attractTarget) {
+        particlesBg.attractTarget.active = false
+      }
       //
       // Control music volume based on hover state
       //
@@ -890,7 +909,7 @@ export function sceneMenu(k) {
     // Hint text - Space to continue, Enter to start new, ESC to go back
     // If all sections completed, don't show continue option
     //
-    const allCompleted = progress.word && progress.touch  // Both implemented sections
+    const allCompleted = progress.word?.completed && progress.touch?.completed
     
     let hintText
     if (allCompleted) {
@@ -898,7 +917,7 @@ export function sceneMenu(k) {
     } else if (hasSavedGame) {
       hintText = "Space - continue  |  Enter - new game  |  ESC - back"
     } else {
-      hintText = "Space or Enter - start  |  ESC - back"
+      hintText = "Space / Enter - start  |  ESC - back"
     }
     //
     // Create outline shadows for hint text
@@ -981,62 +1000,28 @@ export function sceneMenu(k) {
     // Start game controls
     // Space or Enter - Continue from last saved level or start from beginning
     //
-    k.onKeyPress("space", () => {
-      //
-      // Don't allow starting if all sections are completed
-      //
-      if (allCompleted) {
-        return
-      }
-      
-      //
-      // Mark that we're leaving the scene
-      //
+    //
+    // Start game action: Space continues saved game or starts new; Enter always starts new
+    //
+    const startGame = (forceNew) => {
+      if (allCompleted && !forceNew) return
       inst.isLeavingScene = true
-      
-      Sound.stopAmbient(sound)
-      //
-      // Swap back to default cursor class
-      //
-      k.canvas.classList.remove('cursor-pointer')
-      k.canvas.classList.add('cursor')
-      if (hasSavedGame) {
-        //
-        // Continue from last saved level with transition
-        //
-        menuMusic.stop()
-        kidsMusic.stop()
-        showTransitionToLevel(k, lastLevel)
-      } else {
-        //
-        // No save - start from touch section level 0 with transition
-        //
-        menuMusic.stop()
-        kidsMusic.stop()
-        createLevelTransition(k, 'menu-touch')
-      }
-    })
-    
-    k.onKeyPress("enter", () => {
-      //
-      // Mark that we're leaving the scene
-      //
-      inst.isLeavingScene = true
-      
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()
-      //
-      // Swap back to default cursor class
-      //
       k.canvas.classList.remove('cursor-pointer')
       k.canvas.classList.add('cursor')
-      //
-      // Enter always starts from touch section level 0 with transition
-      //
-      resetProgress()
-      createLevelTransition(k, 'menu-touch')
-    })
+      if (forceNew) {
+        resetProgress()
+        createLevelTransition(k, 'menu-touch')
+      } else if (hasSavedGame) {
+        showTransitionToLevel(k, lastLevel)
+      } else {
+        createLevelTransition(k, 'menu-touch')
+      }
+    }
+    k.onKeyPress("space", () => startGame(false))
+    k.onKeyPress("enter", () => startGame(true))
     
     //
     // Back to ready scene (ESC)
@@ -1800,7 +1785,7 @@ function drawScene(inst) {
 //
 function drawMenuBackground(inst) {
   const { k, bgDefaultOpacity } = inst
-  const BG_OPACITY = 0.3
+  const BG_OPACITY = 0.55
   //
   // Draw default background with fade (hidden when hovering anti-hero)
   //

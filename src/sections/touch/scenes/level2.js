@@ -11,6 +11,7 @@ import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { arcY } from '../utils/trees.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as LifeDeduction from '../utils/life-deduction.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -77,7 +78,8 @@ const PLATFORM_ICICLE_WIDTH_MAX = 10
 // Snowflake hero push (snowflakes fly when hero runs past)
 //
 const SNOW_PUSH_DISTANCE = 60
-const SNOW_PUSH_STRENGTH = 80
+const SNOW_PUSH_STRENGTH = 25
+const SNOW_PUSH_DOWN_BOOST = 10
 //
 // Tooltip texts and layout
 //
@@ -168,6 +170,15 @@ const LOG_KNOT_COUNT_MIN = 2
 const LOG_KNOT_COUNT_MAX = 5
 const LOG_KNOT_RADIUS_MIN = 2
 const LOG_KNOT_RADIUS_MAX = 5
+//
+// Life deduction (level-specific flags and thresholds, up to 2 deductions)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'touch.level2DeductCount'
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.level2Visited'
+const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
+const LIFE_DEDUCT_TRAP_FLAG = 'touch.level2TrapActive'
+const LIFE_DEDUCT_MAX_COUNT = 2
 //
 // Trap platform: the second-to-last platform slides away on first approach
 //
@@ -325,9 +336,9 @@ export function sceneLevel2(k) {
     //
     // Check completed sections for hero appearance
     //
-    const isTouchComplete = get('touch', false)
-    const isTimeComplete = get('time', false)
-    const isWordComplete = get('word', false)
+    const isTouchComplete = get('touch.completed', false)
+    const isTimeComplete = get('time.completed', false)
+    const isWordComplete = get('word.completed', false)
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
@@ -345,6 +356,40 @@ export function sceneLevel2(k) {
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
+    //
+    // Life deduction logic: icicles hidden until 1st deduction, trap platform until 2nd.
+    // Same "first visit → second visit" pattern per deduction.
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const deductCount = get(LIFE_DEDUCT_FLAG, 0)
+    const iciclesAlreadyActive = get(LIFE_DEDUCT_ICICLES_FLAG, false)
+    const trapAlreadyActive = get(LIFE_DEDUCT_TRAP_FLAG, false)
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = deductCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    //
+    // Determine whether to show deduction on this load
+    //
+    let showDeduction = false
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showDeduction = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
+    //
+    // Resolve active states: icicles after 1st deduction, trap after 2nd
+    //
+    let iciclesActive = iciclesAlreadyActive
+    let trapPlatformActive = trapAlreadyActive
+    if (showDeduction) {
+      const nextCount = deductCount + 1
+      if (nextCount >= 1) iciclesActive = true
+      if (nextCount >= 2) trapPlatformActive = true
+    }
+    //
+    // Scene-level lock: hero controls disabled during life deduction animation
+    //
+    const sceneLock = { locked: showDeduction }
     //
     // Bottom platform (full width)
     //
@@ -365,7 +410,7 @@ export function sceneLevel2(k) {
     //
     // Create platforms first to get first platform position and states
     //
-    const platformsData = createDiagonalPlatforms(k)
+    const platformsData = createDiagonalPlatforms(k, trapPlatformActive)
     const firstPlatform = platformsData.firstPlatform
     const platformStates = platformsData.platformStates
     //
@@ -433,6 +478,54 @@ export function sceneLevel2(k) {
       bodyColor: heroBodyColor
     })
     //
+    // Lock hero controls while life deduction animation plays
+    //
+    if (sceneLock.locked) {
+      heroInst.controlsDisabled = true
+      sceneLock.heroInst = heroInst
+    }
+    //
+    // Show life deduction animation if eligible on second visit.
+    // Updates deduct count and activates icicles/trap depending on which deduction this is.
+    //
+    if (showDeduction) {
+      const nextCount = deductCount + 1
+      const extraFlags = []
+      if (nextCount >= 1) extraFlags.push(LIFE_DEDUCT_ICICLES_FLAG)
+      if (nextCount >= 2) extraFlags.push(LIFE_DEDUCT_TRAP_FLAG)
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        deductFlagValue: deductCount + 1,
+        extraFlags,
+        sceneLock,
+        onComplete: () => {
+          //
+          // If icicles were just activated, generate and display them now
+          //
+          if (!iciclesAlreadyActive && iciclesActive) {
+            const newIcicles = generateIcicles()
+            newIcicles.forEach(ic => icicleData.push(ic))
+            k.add([
+              k.pos(0, 0),
+              k.z(11),
+              {
+                draw() {
+                  drawIcicles(k, icicleData)
+                }
+              }
+            ])
+            k.onUpdate(() => {
+              updateIcicleWobble(k, icicleData, icicleWobbleState, sound)
+            })
+          }
+        }
+      })
+    }
+    //
     // Hide character immediately to prevent double appearance
     //
     if (heroInst.character) {
@@ -478,13 +571,13 @@ export function sceneLevel2(k) {
     //
     createSnowDrifts(k)
     //
-    // Generate icicle spikes on the floor (left portion, safe zone on right)
+    // Generate icicle spikes on the floor (conditional: only after 1st life deduction)
     //
-    const icicleData = generateIcicles()
+    const icicleData = iciclesActive ? generateIcicles() : []
     //
     // Draw icicle spikes layer
     //
-    k.add([
+    iciclesActive && k.add([
       k.pos(0, 0),
       k.z(11),
       {
@@ -502,7 +595,7 @@ export function sceneLevel2(k) {
       elapsed: 0,
       prevWobbleDir: 0
     }
-    k.onUpdate(() => {
+    iciclesActive && k.onUpdate(() => {
       updateIcicleWobble(k, icicleData, icicleWobbleState, sound)
     })
     //
@@ -577,6 +670,7 @@ export function sceneLevel2(k) {
             const dy = Math.abs(p.y - heroY)
             if (dx < SNOW_PUSH_DISTANCE && dy < SNOW_PUSH_DISTANCE) {
               p.driftSpeed += heroVx * SNOW_PUSH_STRENGTH * dt
+              p.fallSpeed += SNOW_PUSH_DOWN_BOOST * dt
             }
           }
         }
@@ -1229,7 +1323,7 @@ function createSnowDrifts(k) {
  * @param {Object} k - Kaplay instance
  * @returns {Object} Object with first platform position and platform states array
  */
-function createDiagonalPlatforms(k) {
+function createDiagonalPlatforms(k, enableTrap = true) {
   //
   // Platform parameters
   //
@@ -1460,9 +1554,10 @@ function createDiagonalPlatforms(k) {
   
   //
   // Mark the second-to-last platform (index 1) as a trap that slides away once
+  // Only activated after the 2nd life deduction in this level
   //
   const TRAP_INDEX = 1
-  platformStates[TRAP_INDEX].isTrap = true
+  platformStates[TRAP_INDEX].isTrap = enableTrap
   platformStates[TRAP_INDEX].trapTriggered = false
   platformStates[TRAP_INDEX].trapPhase = 'idle'
   platformStates[TRAP_INDEX].trapSlideProgress = 0

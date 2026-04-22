@@ -6,12 +6,12 @@ import * as Hero from '../../../components/hero.js'
 // Small hero and life icon layout constants
 //
 const SMALL_HERO_SIZE = 78
-const LIFE_IMAGE_HEIGHT = 70
+const LIFE_IMAGE_HEIGHT = 120
 const SPACING_BETWEEN = 110
 const LIFE_IMAGE_ORIGINAL_HEIGHT = 1197
-const UI_RIGHT_MARGIN = 90
+const UI_RIGHT_MARGIN = 70
 const TOP_OFFSET = 40
-const SMALL_HERO_Y_ADJUST = 7
+const SMALL_HERO_Y_ADJUST = 10
 const LIFE_SCALE_FACTOR = 1.3
 const SCORE_OFFSET_X = 5
 const SCORE_OFFSET_Y = 10
@@ -151,8 +151,8 @@ export function create(config) {
   // Create small hero icon and life.png image in top right corner
   //
   const smallHeroY = topPlatformHeight - fontSize / 2 - TOP_OFFSET + SMALL_HERO_Y_ADJUST
-  const isTouchComplete = get('touch', false)
-  const isWordComplete = get('word', false)
+  const isTouchComplete = get('touch.completed', false)
+  const isWordComplete = get('word.completed', false)
   const lifeImageX = k.width() - sideWallWidth - UI_RIGHT_MARGIN - LIFE_IMAGE_HEIGHT / 2
   const smallHeroX = lifeImageX - SPACING_BETWEEN - SMALL_HERO_SIZE / 2
   const smallHero = Hero.create({
@@ -177,7 +177,7 @@ export function create(config) {
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX, smallHeroY),
+      k.pos(lifeImageX + 12, smallHeroY + 5),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),

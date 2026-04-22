@@ -52,10 +52,38 @@ export function parseHex(colorHex) {
   return [r, g, b]
 }
 //
-// Check if any of the keys is pressed (down)
+// Physical key state tracking (uses KeyboardEvent.code for layout-independent input)
+//
+const physicalKeysDown = new Set()
+const physicalKeyPressCallbacks = []
+window.addEventListener('keydown', (e) => {
+  if (!physicalKeysDown.has(e.code)) {
+    physicalKeysDown.add(e.code)
+    physicalKeyPressCallbacks.forEach(cb => cb.code === e.code && cb.fn())
+  }
+})
+window.addEventListener('keyup', (e) => {
+  physicalKeysDown.delete(e.code)
+})
+//
+// Check if any of the keys is pressed (down), supports both Kaplay key names and physical codes
 //
 export function isAnyKeyDown(k, keys) {
-  return keys.some(key => k.isKeyDown(key))
+  return keys.some(key => key.length > 1 && key.startsWith('Key')
+    ? physicalKeysDown.has(key)
+    : k.isKeyDown(key)
+  )
+}
+//
+// Register a callback for physical key press (fires once on keydown, not repeat)
+//
+export function onPhysicalKeyPress(code, fn) {
+  const entry = { code, fn }
+  physicalKeyPressCallbacks.push(entry)
+  return { cancel: () => {
+    const idx = physicalKeyPressCallbacks.indexOf(entry)
+    idx >= 0 && physicalKeyPressCallbacks.splice(idx, 1)
+  }}
 }
 
 export function toPng({ width, height, pixelRatio = 1 }, drawFn) {

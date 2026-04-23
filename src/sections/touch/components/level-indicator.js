@@ -177,7 +177,7 @@ export function create(config) {
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX + 12, smallHeroY + 5),
+      k.pos(lifeImageX + 12, smallHeroY),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),

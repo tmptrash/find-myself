@@ -2671,6 +2671,21 @@ export function muteProceduralSounds() {
 export function unmuteProceduralSounds() {
   globalMuteProceduralSounds = false
 }
+
+/**
+ * Suspends the global AudioContext to silence all procedural sounds immediately.
+ * Existing oscillators and noise buffers stop producing output.
+ */
+export function suspendGlobalAudio() {
+  audioContext?.state === 'running' && audioContext.suspend()
+}
+
+/**
+ * Resumes the global AudioContext after suspension
+ */
+export function resumeGlobalAudio() {
+  audioContext?.state === 'suspended' && audioContext.resume()
+}
 /**
  * Play a descending tick sound for score deduction countdown
  * @param {Object} instance - Sound instance

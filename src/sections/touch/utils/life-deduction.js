@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import * as Sound from '../../../utils/sound.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 import { set } from '../../../utils/progress.js'
 import { parseHex } from '../../../utils/helper.js'
 
@@ -32,9 +33,8 @@ const INTRO_Y_OFFSET = -120
 const RESULT_Y_OFFSET = 120
 const LIFE_X_OFFSET = -50
 const SCORE_X_OFFSET = 55
-const SCORE_Y_OFFSET = 12
+const SCORE_Y_OFFSET = 0
 const OUTLINE_OFFSET = 1.5
-const TICK_INTERVAL = 0.06
 const BORDER_WIDTH = 3
 //
 // Total animation duration (all phases combined)
@@ -68,6 +68,7 @@ export function show(config) {
   set('lifeScore', newScore)
   set(deductFlag, deductFlagValue)
   extraFlags?.forEach(flag => set(flag, true))
+  Tooltip.suppressAll()
   const boxX = centerX - BOX_WIDTH / 2
   const boxY = centerY - BOX_HEIGHT / 2
   //
@@ -131,7 +132,7 @@ export function show(config) {
   //
   const lifeIcon = k.add([
     k.sprite('life'),
-    k.pos(centerX + LIFE_X_OFFSET + 12, centerY + SCORE_Y_OFFSET + 5),
+    k.pos(centerX + LIFE_X_OFFSET, centerY + SCORE_Y_OFFSET),
     k.anchor('center'),
     k.scale(LIFE_SCALE),
     k.opacity(0),
@@ -141,7 +142,7 @@ export function show(config) {
   // Score outlines (black)
   //
   const scoreX = centerX + SCORE_X_OFFSET
-  const scoreY = centerY + SCORE_Y_OFFSET
+  const scoreY = centerY + SCORE_Y_OFFSET + 15
   const oo = OUTLINE_OFFSET
   const outlineOffsets = [[-oo, 0], [oo, 0], [0, -oo], [0, oo]]
   const scoreOutlines = outlineOffsets.map(([dx, dy]) => k.add([
@@ -285,6 +286,7 @@ function onUpdateDeduction(k, state, el, fromScore, toScore, updateHandler, leve
       scoreOutlines.forEach(o => k.destroy(o))
       k.destroy(scoreText)
       k.destroy(resultText)
+      Tooltip.unsuppressAll()
       sceneLock && (sceneLock.locked = false)
       sceneLock?.heroInst && (sceneLock.heroInst.controlsDisabled = false)
       onComplete?.()

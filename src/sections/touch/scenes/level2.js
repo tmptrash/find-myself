@@ -48,6 +48,25 @@ const ICICLE_COLOR_G = 255
 const ICICLE_COLOR_B = 255
 const ICICLE_OUTLINE_WIDTH = 2
 const ICICLE_KILL_TOLERANCE = 10
+const HERO_FEET_OFFSET = 35
+//
+// Right-side floor icicles: single row left of the rightmost platform
+//
+const RIGHT_ICICLE_START_X = ICICLE_SAFE_ZONE_X + 80
+const RIGHTMOST_PLATFORM_LEFT_EDGE = CFG.visual.screen.width - RIGHT_MARGIN - 200 - 70
+const RIGHT_ICICLE_END_X = RIGHTMOST_PLATFORM_LEFT_EDGE - 30
+const RIGHT_ICICLE_HERO_CLEAR_X = HERO_SPAWN_X
+const RIGHT_ICICLE_HERO_CLEAR_RADIUS = 80
+const RIGHT_ICICLE_SPACING = 30
+//
+// Hanging icicles under log platforms (appear after life deduction)
+//
+const HANGING_ICICLE_COUNT_PER_PLATFORM = 6
+const HANGING_ICICLE_HEIGHT_MIN = 20
+const HANGING_ICICLE_HEIGHT_MAX = 42
+const HANGING_ICICLE_WIDTH_MIN = 5
+const HANGING_ICICLE_WIDTH_MAX = 10
+const HANGING_ICICLE_SKIP_INDICES = [1]
 //
 // Icicle wobble (random icicles wobble left/right one at a time with creak)
 //
@@ -65,15 +84,6 @@ const DECOR_LOG_PILE_POSITIONS = [
 const DECOR_LOG_Z = 5
 const DECOR_LOG_WIDTH = 120
 const DECOR_LOG_HEIGHT = 30
-//
-// Icicles hanging under stationary log platforms (visible only when platform is visible)
-//
-const PLATFORM_ICICLE_COUNT_MIN = 6
-const PLATFORM_ICICLE_COUNT_MAX = 10
-const PLATFORM_ICICLE_HEIGHT_MIN = 22
-const PLATFORM_ICICLE_HEIGHT_MAX = 45
-const PLATFORM_ICICLE_WIDTH_MIN = 5
-const PLATFORM_ICICLE_WIDTH_MAX = 10
 //
 // Snowflake hero push (snowflakes fly when hero runs past)
 //
@@ -503,24 +513,12 @@ export function sceneLevel2(k) {
         extraFlags,
         sceneLock,
         onComplete: () => {
-          //
-          // If icicles were just activated, generate and display them now
-          //
-          if (!iciclesAlreadyActive && iciclesActive) {
-            const newIcicles = generateIcicles()
-            newIcicles.forEach(ic => icicleData.push(ic))
-            k.add([
-              k.pos(0, 0),
-              k.z(11),
-              {
-                draw() {
-                  drawIcicles(k, icicleData)
-                }
-              }
-            ])
-            k.onUpdate(() => {
-              updateIcicleWobble(k, icicleData, icicleWobbleState, sound)
-            })
+          if (!iciclesAlreadyActive) {
+            //
+            // First deduction: populate left-side floor icicles and hanging platform icicles
+            //
+            generateIcicles().forEach(ic => icicleData.push(ic))
+            generateHangingIcicles(platformStates).forEach(ic => hangingIcicleData.push(ic))
           }
         }
       })
@@ -571,32 +569,33 @@ export function sceneLevel2(k) {
     //
     createSnowDrifts(k)
     //
-    // Generate icicle spikes on the floor (conditional: only after 1st life deduction)
+    // Right-side floor icicles always present from the start.
+    // Left-side floor icicles appear only after the first life deduction.
     //
-    const icicleData = iciclesActive ? generateIcicles() : []
+    const leftIcicles = iciclesActive ? generateIcicles() : []
+    const icicleData = [...generateRightIcicles(), ...leftIcicles]
     //
-    // Draw icicle spikes layer
+    // Hanging icicles under log platforms (only after life deduction)
     //
-    iciclesActive && k.add([
+    const hangingIcicleData = iciclesActive ? generateHangingIcicles(platformStates) : []
+    k.add([
       k.pos(0, 0),
       k.z(11),
       {
         draw() {
-          drawIcicles(k, icicleData)
+          if (icicleData.length > 0) drawIcicles(k, icicleData)
+          if (hangingIcicleData.length > 0) drawHangingIcicles(k, hangingIcicleData, platformStates)
         }
       }
     ])
-    //
-    // Icicle wobble system (random icicles wobble one at a time with creak)
-    //
     const icicleWobbleState = {
       timer: 2 + Math.random() * 2,
       activeIndex: -1,
       elapsed: 0,
       prevWobbleDir: 0
     }
-    iciclesActive && k.onUpdate(() => {
-      updateIcicleWobble(k, icicleData, icicleWobbleState, sound)
+    k.onUpdate(() => {
+      if (icicleData.length > 0) updateIcicleWobble(k, icicleData, icicleWobbleState, sound)
     })
     //
     // Generate decorative background logs at multiple spots
@@ -680,7 +679,7 @@ export function sceneLevel2(k) {
       //
       if (!heroInst.isDying && heroInst.character?.pos) {
         checkIcicleCollision(k, heroInst, icicleData, levelIndicator)
-        checkPlatformIcicleCollision(k, heroInst, platformStates, levelIndicator)
+        checkHangingIcicleCollision(k, heroInst, hangingIcicleData, levelIndicator, platformStates)
       }
       //
       // Check if hero just landed
@@ -1398,12 +1397,7 @@ function createDiagonalPlatforms(k, enableTrap = true) {
     //
     const logDetail = generateLogDetail(width, platformHeight, isFirstPlatform)
     //
-    // Pre-generate icicles hanging under each non-trap platform
-    // Trap platform (index 1) gets no icicles since it slides away
-    //
-    const isTrapPlatform = index === 1
-    const icicles = isTrapPlatform ? [] : generatePlatformIcicles(width)
-    platformState.icicles = icicles
+    platformState.icicles = []
     //
     // Create visual platform (log style) with dynamic opacity
     //
@@ -1417,7 +1411,6 @@ function createDiagonalPlatforms(k, enableTrap = true) {
           const drawX = platformState.shakeOffsetX
           const drawY = platformState.shakeOffsetY
           drawLogPlatform(k, width, platformHeight, drawX, drawY, currentOpacity, logDetail)
-          icicles.length > 0 && drawPlatformIciclesLocal(k, icicles, platformHeight, drawX, drawY, currentOpacity)
         }
       }
     ])
@@ -1529,10 +1522,6 @@ function createDiagonalPlatforms(k, enableTrap = true) {
     //
     const fakeLogDetail = generateLogDetail(fakeWidth, platformHeight, false)
     //
-    // Pre-generate icicles for fake platforms
-    //
-    const fakeIcicles = generatePlatformIcicles(fakeWidth)
-    //
     // Create visual platform (log style, no snow on fake platforms)
     //
     const fakeVisualObj = k.add([
@@ -1545,7 +1534,6 @@ function createDiagonalPlatforms(k, enableTrap = true) {
           const drawX = fakePlatformState.shakeOffsetX
           const drawY = fakePlatformState.shakeOffsetY
           drawLogPlatform(k, fakeWidth, platformHeight, drawX, drawY, currentOpacity, fakeLogDetail)
-          drawPlatformIciclesLocal(k, fakeIcicles, platformHeight, drawX, drawY, currentOpacity)
         }
       }
     ])
@@ -2277,21 +2265,18 @@ function drawIcicles(k, icicleData) {
  */
 function checkIcicleCollision(k, heroInst, icicleData, levelIndicator) {
   const heroX = heroInst.character.pos.x
-  const heroY = heroInst.character.pos.y
-  //
-  // Hero is only at risk if within the icicle zone (left of safe zone)
-  //
-  if (heroX > ICICLE_SAFE_ZONE_X) return
-  //
-  // Check if hero feet are near floor level and within icicle X range
-  //
+  const heroFeetY = heroInst.character.pos.y + HERO_FEET_OFFSET
   for (const icicle of icicleData) {
     const dx = Math.abs(heroX - icicle.x)
-    if (dx > icicle.width) continue
     //
-    // Hero dies if their center is below the icicle tip
+    // Horizontal overlap: hero center within half icicle width + tolerance
     //
-    if (heroY > icicle.baseY - icicle.height + ICICLE_KILL_TOLERANCE) {
+    if (dx > icicle.width / 2 + 8) continue
+    //
+    // Vertical overlap: hero feet below the icicle tip
+    //
+    const icicleTipY = icicle.baseY - icicle.height + ICICLE_KILL_TOLERANCE
+    if (heroFeetY > icicleTipY) {
       onHeroDeath(k, heroInst, levelIndicator)
       return
     }
@@ -3214,91 +3199,106 @@ function onUpdateAntiHeroHint(k, hintState, antiHeroInst) {
 }
 
 /**
- * Generates icicle data hanging under a log platform of given width
- * @param {number} platformWidth - Width of the platform
- * @returns {Array} Array of icicle objects with offsetX, height, width, tipOffset
+ * Generates right-side floor icicles (bottom platform right portion).
+ * Always present from the start of the level.
+ * @returns {Array} Array of icicle objects
  */
-function generatePlatformIcicles(platformWidth) {
-  const count = PLATFORM_ICICLE_COUNT_MIN + Math.floor(Math.random() * (PLATFORM_ICICLE_COUNT_MAX - PLATFORM_ICICLE_COUNT_MIN + 1))
+function generateRightIcicles() {
   const icicles = []
-  for (let i = 0; i < count; i++) {
-    const t = (i + 0.5) / count
+  for (let x = RIGHT_ICICLE_START_X; x < RIGHT_ICICLE_END_X; x += RIGHT_ICICLE_SPACING) {
+    //
+    // Skip icicles near hero spawn point (clearance zone)
+    //
+    if (Math.abs(x - RIGHT_ICICLE_HERO_CLEAR_X) < RIGHT_ICICLE_HERO_CLEAR_RADIUS) continue
     icicles.push({
-      offsetX: (t - 0.5) * (platformWidth - 16) + (Math.random() - 0.5) * 6,
-      height: PLATFORM_ICICLE_HEIGHT_MIN + Math.random() * (PLATFORM_ICICLE_HEIGHT_MAX - PLATFORM_ICICLE_HEIGHT_MIN),
-      width: PLATFORM_ICICLE_WIDTH_MIN + Math.random() * (PLATFORM_ICICLE_WIDTH_MAX - PLATFORM_ICICLE_WIDTH_MIN),
-      tipOffset: (Math.random() - 0.5) * 2
+      x: x + (Math.random() - 0.5) * 8,
+      baseY: FLOOR_Y,
+      width: ICICLE_WIDTH_MIN + Math.random() * (ICICLE_WIDTH_MAX - ICICLE_WIDTH_MIN),
+      height: ICICLE_HEIGHT_MIN + Math.random() * (ICICLE_HEIGHT_MAX - ICICLE_HEIGHT_MIN),
+      tipOffset: (Math.random() - 0.5) * 4
     })
   }
   return icicles
 }
 
 /**
- * Draws icicles hanging below a log platform (drawn in platform-local coordinates)
- * @param {Object} k - Kaplay instance
- * @param {Array} icicles - Icicle data for this platform
- * @param {number} platformHeight - Height of the log platform
- * @param {number} ox - Shake offset X
- * @param {number} oy - Shake offset Y
- * @param {number} opacity - Current platform opacity (0-1)
+ * Generates icicles hanging under visible log platforms (point downward).
+ * Skips trap platform and platforms in HANGING_ICICLE_SKIP_INDICES.
+ * @param {Array} platformStates - Platform state objects from createDiagonalPlatforms
+ * @returns {Array} Array of hanging icicle objects { x, topY, width, height, tipOffset }
  */
-function drawPlatformIciclesLocal(k, icicles, platformHeight, ox, oy, opacity) {
-  if (opacity <= 0) return
-  const icicleColor = k.rgb(ICICLE_COLOR_R, ICICLE_COLOR_G, ICICLE_COLOR_B)
+function generateHangingIcicles(platformStates) {
+  const icicles = []
+  const platformHeight = 30
+  platformStates.forEach((state, idx) => {
+    if (state.isTrap || state.isFake) return
+    if (HANGING_ICICLE_SKIP_INDICES.includes(idx)) return
+    const halfW = state.width / 2
+    for (let i = 0; i < HANGING_ICICLE_COUNT_PER_PLATFORM; i++) {
+      const t = (i + 0.5) / HANGING_ICICLE_COUNT_PER_PLATFORM
+      const ox = (t - 0.5) * (state.width - 16) + (Math.random() - 0.5) * 6
+      icicles.push({
+        x: state.x + ox,
+        topY: state.y + platformHeight / 2,
+        width: HANGING_ICICLE_WIDTH_MIN + Math.random() * (HANGING_ICICLE_WIDTH_MAX - HANGING_ICICLE_WIDTH_MIN),
+        height: HANGING_ICICLE_HEIGHT_MIN + Math.random() * (HANGING_ICICLE_HEIGHT_MAX - HANGING_ICICLE_HEIGHT_MIN),
+        tipOffset: (Math.random() - 0.5) * 2,
+        platformIdx: idx
+      })
+    }
+  })
+  return icicles
+}
+//
+// Draws icicles hanging downward from platform bottoms.
+// Only draws icicles whose parent platform is visible (opacity > 0).
+// Applies the parent platform's shake offset so icicles move with the platform.
+//
+function drawHangingIcicles(k, data, platformStates) {
   const outlineColor = k.rgb(0, 0, 0)
-  const halfH = platformHeight / 2
-  for (const icicle of icicles) {
-    const cx = icicle.offsetX + ox
-    const topY = halfH + oy
+  const icicleColor = k.rgb(ICICLE_COLOR_R, ICICLE_COLOR_G, ICICLE_COLOR_B)
+  const ow = ICICLE_OUTLINE_WIDTH
+  for (const ic of data) {
+    const pState = platformStates[ic.platformIdx]
+    if (!pState || pState.opacity <= 0) continue
+    const sx = pState.shakeOffsetX || 0
+    const sy = pState.shakeOffsetY || 0
+    const cx = ic.x + sx
+    const cy = ic.topY + sy
     k.drawPolygon({
       pts: [
-        k.vec2(cx - icicle.width / 2 - 1, topY - 1),
-        k.vec2(cx + icicle.width / 2 + 1, topY - 1),
-        k.vec2(cx + icicle.tipOffset, topY + icicle.height + 1)
+        k.vec2(cx - ic.width / 2 - ow, cy - ow),
+        k.vec2(cx + ic.width / 2 + ow, cy - ow),
+        k.vec2(cx + ic.tipOffset, cy + ic.height + ow)
       ],
       color: outlineColor,
-      opacity: opacity * 0.8
+      opacity: pState.opacity * 0.8
     })
     k.drawPolygon({
       pts: [
-        k.vec2(cx - icicle.width / 2, topY),
-        k.vec2(cx + icicle.width / 2, topY),
-        k.vec2(cx + icicle.tipOffset, topY + icicle.height)
+        k.vec2(cx - ic.width / 2, cy),
+        k.vec2(cx + ic.width / 2, cy),
+        k.vec2(cx + ic.tipOffset, cy + ic.height)
       ],
       color: icicleColor,
-      opacity: opacity * 0.85
+      opacity: pState.opacity * 0.85
     })
   }
 }
-
-/**
- * Checks if hero's head collides with platform icicles hanging below visible platforms
- * Only checks platforms that are currently visible (opacity > 0) and have icicles
- * @param {Object} k - Kaplay instance
- * @param {Object} heroInst - Hero instance
- * @param {Array} platformStates - Array of platform state objects
- * @param {Object} levelIndicator - Level indicator for life score effects
- */
-function checkPlatformIcicleCollision(k, heroInst, platformStates, levelIndicator) {
+//
+// Checks if hero's head collides with hanging icicles.
+// Only checks icicles whose parent platform is visible.
+//
+function checkHangingIcicleCollision(k, heroInst, data, levelIndicator, platformStates) {
+  if (data.length === 0) return
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
-  const PLAT_HEIGHT = 30
-  const HERO_HEAD_TOLERANCE = 10
-  for (const state of platformStates) {
-    if (!state.icicles || state.icicles.length === 0) continue
-    if (state.opacity <= 0) continue
-    const halfW = state.width / 2
-    //
-    // Skip if hero is not horizontally within the platform bounds
-    //
-    if (heroX < state.x - halfW || heroX > state.x + halfW) continue
-    //
-    // Kill zone: hero head touches platform bottom or icicle region below it
-    //
-    const platBottomY = state.y + PLAT_HEIGHT / 2
-    const maxIcicleHeight = state.icicles.reduce((max, ic) => Math.max(max, ic.height), 0)
-    const killZoneBottom = platBottomY + maxIcicleHeight
-    if (heroY - HERO_HEAD_TOLERANCE < killZoneBottom && heroY > platBottomY - HERO_HEAD_TOLERANCE) {
+  for (const ic of data) {
+    const pState = platformStates[ic.platformIdx]
+    if (!pState || pState.opacity <= 0) continue
+    const dx = Math.abs(heroX - ic.x)
+    if (dx > ic.width / 2 + 8) continue
+    if (heroY > ic.topY - 10 && heroY < ic.topY + ic.height) {
       onHeroDeath(k, heroInst, levelIndicator)
       return
     }

@@ -13,6 +13,7 @@ import * as Dust from '../components/dust.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import { arcY } from '../utils/trees.js'
+import * as LifeDeduction from '../utils/life-deduction.js'
 //
 // Game area margins
 //
@@ -399,7 +400,7 @@ const HERO_GLOW_COLOR_B = 100
 // Hero glow hint text
 //
 const HERO_GLOW_HINT_TEXT = "press Shift to light up (costs 1 point)"
-const HERO_GLOW_HINT_STORAGE_KEY = 'level3GlowInstructionsCount'
+const HERO_GLOW_HINT_STORAGE_KEY = 'touch.level3GlowInstructionsCount'
 const HERO_GLOW_HINT_MAX_SHOWS = 2
 //
 // Icicles hanging under stationary log platforms (white, longer)
@@ -487,6 +488,14 @@ const DARKNESS_CREATURE_BURN_INTENSITY = 1.0
 // Snow darkness: ambient brightness when no lights are near
 //
 const SNOW_AMBIENT_BRIGHTNESS = 0.08
+//
+// Life deduction (level-specific flags and threshold, max 1 deduction)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'touch.level3DeductCount'
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.level3Visited'
+const LIFE_DEDUCT_MAX_COUNT = 1
+const LIFE_DEDUCT_SCATTER_FLAG = 'touch.level3ScatterActive'
 /**
  * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
@@ -501,6 +510,24 @@ export function sceneLevel3(k) {
     // Save heroScore at level start for restoration on death
     //
     const heroScoreAtStart = get('heroScore', 0)
+    //
+    // Life deduction: check if we should show the hint on this load
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const deductCount = get(LIFE_DEDUCT_FLAG, 0)
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = deductCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    let showDeduction = false
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showDeduction = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
+    //
+    // Scene-level lock: hero controls disabled during life deduction animation
+    //
+    const sceneLock = { locked: showDeduction }
     //
     // Set gravity
     //
@@ -540,9 +567,15 @@ export function sceneLevel3(k) {
     //
     createCorridorPlatforms(k)
     //
-    // Create trap platform as two splittable halves
+    // Create trap platform as two splittable halves.
+    // Platforms only scatter after the life deduction hint has played (this or previous visit).
     //
     const trapState = createTrapPlatform(k)
+    const scatterAlreadyDone = get(LIFE_DEDUCT_SCATTER_FLAG, false) && !showDeduction
+    if (scatterAlreadyDone) {
+      trapState.triggered = true
+      trapState.activationTimer = 0
+    }
     //
     // Pre-generate log detail data (cracks, knots, snow on top) for each platform
     //
@@ -652,6 +685,13 @@ export function sceneLevel3(k) {
     heroInst.deathParticleZ = Z_DARKNESS + 1
     antiHeroInst.character.z = Z_DARKNESS + 1
     //
+    // Lock hero controls while life deduction animation plays
+    //
+    if (sceneLock.locked) {
+      heroInst.controlsDisabled = true
+      sceneLock.heroInst = heroInst
+    }
+    //
     // Hero glow state (Shift ability)
     //
     const heroGlowState = {
@@ -667,9 +707,36 @@ export function sceneLevel3(k) {
       k.onKeyPress(key, () => onHeroGlowPress(heroInst, heroGlowState, levelIndicator, sound))
     })
     //
-    // Show glow instructions hint text
+    // Show glow instructions hint text (delayed if deduction hint is playing)
     //
-    showGlowInstructions(k)
+    if (showDeduction) {
+      k.wait(LifeDeduction.TOTAL_DURATION + 0.3, () => showGlowInstructions(k))
+    } else {
+      showGlowInstructions(k)
+    }
+    //
+    // Show life deduction animation if eligible on second visit.
+    // On complete: trigger trap platform scatter.
+    //
+    if (showDeduction) {
+      //
+      // Pre-trigger scatter: platforms begin splitting after the animation ends.
+      // Using a timer avoids reliance on onComplete (which is lost if scene restarts).
+      //
+      trapState.triggered = true
+      trapState.activationTimer = LifeDeduction.TOTAL_DURATION + 0.3
+      const nextCount = deductCount + 1
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        deductFlagValue: nextCount,
+        extraFlags: [LIFE_DEDUCT_SCATTER_FLAG],
+        sceneLock
+      })
+    }
     //
     // Create glow bugs on platforms P0 and P2 (no bugs on trap or anti-hero platforms)
     //
@@ -1919,18 +1986,6 @@ function updateTrapPlatform(trapState, heroInst, dt) {
       trapState.splitting = true
     }
     return
-  }
-  //
-  // Check if hero is approaching the platform (proximity-based, triggers while in the air)
-  //
-  const platform = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
-  const heroX = heroInst.character.pos.x
-  const heroY = heroInst.character.pos.y
-  const dx = Math.abs(heroX - platform.x)
-  const dy = Math.abs(heroY - platform.y)
-  if (dx < TRAP_PROXIMITY_X && dy < TRAP_PROXIMITY_Y) {
-    trapState.triggered = true
-    trapState.activationTimer = TRAP_ACTIVATION_DELAY
   }
 }
 

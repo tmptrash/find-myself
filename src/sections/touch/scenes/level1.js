@@ -12,6 +12,7 @@ import * as FallingLeaf from '../components/falling-leaf.js'
 import * as Rain from '../components/rain.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
+import * as GiantWorm from '../components/giant-worm.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -195,6 +196,12 @@ const ANTIHERO_HINT_DISPLAY_TIME = 5
 const ANTIHERO_HINT_NOTES_DISPLAY_TIME = 10
 const ANTIHERO_HINT_NOTES_REPEAT_INTERVAL = 30
 const ANTIHERO_HINT_Y_OFFSET = -140
+//
+// Giant worm obstacle (emerges from ground left of antihero)
+//
+const GIANT_WORM_X_OFFSET = 200
+const GIANT_WORM_COLLISION_HALF_W = 32
+const GIANT_WORM_COLLISION_TOP_MARGIN = 5
 //
 // Life deduction (level-specific flags and threshold)
 //
@@ -1542,7 +1549,7 @@ export function sceneLevel1(k) {
         extraFlags: [LIFE_DEDUCT_LEAVES_FLAG],
         sceneLock,
         onComplete: () => {
-          fallingLeafInst.paused = false
+          fallingLeafInst.poisonChance = POISON_LEAF_CHANCE
         }
       })
     }
@@ -1584,6 +1591,16 @@ export function sceneLevel1(k) {
       createWorm(k, i)
     }
     //
+    // Giant worm obstacle: emerges from the ground left of the antihero
+    //
+    const giantWormInst = GiantWorm.create({
+      k,
+      x: ANTIHERO_SPAWN_X - GIANT_WORM_X_OFFSET,
+      floorY: FLOOR_Y,
+      hero: heroInst,
+      sfx: sound
+    })
+    //
     // Tooltip on first tree trunk (note "C")
     //
     const firstRoot = treeRootsInst.roots[0]
@@ -1613,14 +1630,14 @@ export function sceneLevel1(k) {
       hero: heroInst,
       leftBound: LEFT_MARGIN,
       rightBound: CFG.visual.screen.width - RIGHT_MARGIN,
-      poisonChance: POISON_LEAF_CHANCE,
+      poisonChance: leavesActive ? POISON_LEAF_CHANCE : 0,
       poisonColor,
       onPoisonHit: () => onPoisonLeafDeath(k, heroInst, levelIndicator)
     })
     //
-    // Pause leaf spawning until deduction has been shown or leaves were already active
+    // Normal leaves always fall; poison (blue) leaves only after deduction
     //
-    fallingLeafInst.paused = !leavesActive
+    fallingLeafInst.paused = false
     //
     // Create bugs (obstacles)
     //
@@ -1658,6 +1675,12 @@ export function sceneLevel1(k) {
       // Update falling leaves (spawn, fall, ground interaction)
       //
       FallingLeaf.onUpdate(fallingLeafInst)
+      //
+      // Giant worm collision: hero dies if overlapping any visible part of the body
+      //
+      if (!heroInst.isDying && heroInst.character?.pos && giantWormInst.riseAmount > 0) {
+        checkGiantWormCollision(k, heroInst, giantWormInst, levelIndicator)
+      }
       
       //
       // Update pause timer if sequence was completed
@@ -2906,5 +2929,24 @@ function drawWormEyes(k, inst, head) {
       radius: WORM_PUPIL_RADIUS,
       color: k.rgb(20, 20, 20)
     })
+  }
+}
+//
+// Checks hero collision against the giant worm's risen body
+//
+function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  const wormTop = wormInst.floorY - wormInst.riseAmount + GIANT_WORM_COLLISION_TOP_MARGIN
+  const wormBottom = wormInst.floorY
+  //
+  // Check horizontal overlap (hero center vs worm half-width)
+  //
+  if (Math.abs(heroX - wormInst.x) > GIANT_WORM_COLLISION_HALF_W) return
+  //
+  // Check vertical overlap (hero center within worm body range)
+  //
+  if (heroY > wormTop && heroY < wormBottom) {
+    onPoisonLeafDeath(k, heroInst, levelIndicator)
   }
 }

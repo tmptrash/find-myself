@@ -55,8 +55,10 @@ const FLOOR_THORN_GAP_MIN = 80
 const FLOOR_THORN_GAP_EXTRA = 140
 const FLOOR_THORN_EDGE_INSET = 40
 const HERO_COLLISION_HEIGHT_THORNS = 25
+const HERO_COLLISION_WIDTH_THORNS = 10
 const HERO_SCALE_THORNS = 3
 const HERO_COLLISION_HEIGHT_SCALED_THORNS = HERO_COLLISION_HEIGHT_THORNS * HERO_SCALE_THORNS
+const HERO_HALF_WIDTH_THORNS = (HERO_COLLISION_WIDTH_THORNS * HERO_SCALE_THORNS) / 2
 const FLOOR_THORN_FEET_TOLERANCE_LOW = 22
 const FLOOR_THORN_FEET_TOLERANCE_HIGH = 12
 const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
@@ -137,7 +139,7 @@ const MONSTER_CONVERSATION_LINES = [
   { speaker: 1, text: "should we tell him?" },
   { speaker: 0, text: "no. understanding must\ngrow on its own" }
 ]
-const MONSTER_CONVERSATION_STORAGE_KEY = 'conversations.monsterSeen'
+const MONSTER_CONVERSATION_STORAGE_KEY = 'touch.monsterSeen'
 //
 // Bug4 (anti-hero platform monster) tooltip - head-only hover zone, appears below
 //
@@ -148,7 +150,17 @@ const BUG4_TOOLTIP_Y_OFFSET = 50
 //
 // Floor monster (bug0-2) hover tooltip
 //
-const FLOOR_MONSTER_TOOLTIP_TEXT = "What?!"
+const FLOOR_MONSTER_TOOLTIP_PHRASES = [
+  "what do you want?",
+  "who are you\nlooking at?",
+  "stop staring at me",
+  "go away already",
+  "do I know you?",
+  "leave me alone",
+  "you again?",
+  "what now?",
+  "mind your\nown business"
+]
 const FLOOR_MONSTER_TOOLTIP_HOVER_SIZE = 60
 const FLOOR_MONSTER_TOOLTIP_Y_OFFSET = -80
 //
@@ -168,30 +180,30 @@ const SMALL_BUG_TOOLTIP_Y_OFFSET = -50
 // Bug jokes (2x the number of bugs, shown randomly on hover)
 //
 const SMALL_BUG_JOKES = [
-  "I'm not a bug,\nI'm a feature",
-  "do these legs\nmake me look fast?",
-  "I once outran\na pixel",
-  "my therapist says\nI have too many legs",
-  "I tried yoga.\ndownward bug is hard",
-  "is it just me\nor is the floor moving?",
-  "don't step on me.\nI have feelings",
-  "I'm on a seafood diet.\nI see food, I run",
-  "my left legs never\nagree with my right",
-  "I was employee\nof the month once",
-  "I don't need a gym.\nI carry my own weight",
-  "running is cheaper\nthan therapy",
-  "I dream of being\na butterfly sometimes",
-  "my ancestors were\ndinosaurs. probably",
-  "fun fact: I have more\nlegs than friends",
-  "the floor is lava.\njust kidding. or is it?",
-  "I'm not lost.\nI'm exploring",
-  "two bugs walk into\na bar. ouch",
-  "why did I cross\nthe screen? no idea",
-  "I'm basically\na tiny horse",
-  "excuse me, is this\nthe way to the exit?",
-  "my horoscope said\nstay home today",
-  "I could've been\na spider but no",
-  "plot twist:\nI'm the main character"
+  "I'm a tiny problem.\nyou'll forget me soon",
+  "I used to be\na big deal. once",
+  "just a small worry.\nnothing serious",
+  "you think I'm bad?\nwait till you meet\nmy bigger brother",
+  "ignore me.\nI'll go away.\nprobably not",
+  "I'm that thing you\nforgot to do last week",
+  "small problem today.\nbig regret tomorrow",
+  "I'm the reason you\ncan't sleep at 3 AM",
+  "don't mind me.\njust ruining your day\na tiny bit",
+  "every big disaster\nstarted as someone\nlike me",
+  "I'm not important.\nbut I'll remind you\nevery five minutes",
+  "I multiply when\nyou're not looking",
+  "step on me.\nI'll come back\nwith friends",
+  "you can't solve me.\nbut you'll try anyway",
+  "I'm that unopened\nemail you're avoiding",
+  "life gave you me.\nyou're welcome",
+  "I'm small now.\nbut I'm growing",
+  "pretend I don't exist.\nthat always works",
+  "I'm the pebble\nin your shoe of life",
+  "today's tiny annoyance.\ntomorrow's funny story",
+  "I feed on\nyour procrastination",
+  "you'll deal with me\nlater. you always\nsay that",
+  "I'm a minor\ninconvenience.\nwith ambition",
+  "at least I'm not\na tax return"
 ]
 //
 // Anti-hero tooltip (reduced height to avoid overlap with bug4 below)
@@ -486,6 +498,19 @@ export function sceneLevel0(k) {
       floorThornExcludeZones,
       FLOOR_THORN_MAX_CLUSTERS
     )
+    //
+    // Guarantee at least one thorn is always present
+    //
+    if (floorThornData.length === 0) {
+      const safeX = (floorThornStartX + floorThornEndX) / 2
+      floorThornData.push({
+        x: safeX,
+        baseY: floorThornBaseY,
+        width: (FLOOR_THORN_WIDTH_MIN + FLOOR_THORN_WIDTH_MAX) / 2,
+        height: (FLOOR_THORN_HEIGHT_MIN + FLOOR_THORN_HEIGHT_MAX) / 2,
+        tipOffset: 0
+      })
+    }
     //
     // Draw thorns after background sprites (z=7), under grass (z=20); k.onDraw would paint under the full-screen tree canvas
     //
@@ -1478,8 +1503,8 @@ export function sceneLevel0(k) {
     // Top of flat head is at ANTIHERO_PLATFORM_Y
     // Platform should be on top of the head
     //
-    const bug4BackPlatformWidth = bug4Radius * 2.5  // Wide platform on bug's back
-    const bug4BackPlatformHeight = 10
+    const bug4BackPlatformWidth = bug4Radius * 1.8
+    const bug4BackPlatformHeight = 16
     //
     // Platform top should be at ANTIHERO_PLATFORM_Y (top of bug's head)
     // With anchor "top", platform top is at Y
@@ -2138,7 +2163,8 @@ export function sceneLevel0(k) {
     //
     // Tooltip for floor monsters (bug0-2) - "What?!" on hover
     //
-    monsterBugs.forEach(bug => {
+    monsterBugs.forEach((bug, idx) => {
+      const phrase = FLOOR_MONSTER_TOOLTIP_PHRASES[idx % FLOOR_MONSTER_TOOLTIP_PHRASES.length]
       Tooltip.create({
         k,
         targets: [{
@@ -2146,7 +2172,7 @@ export function sceneLevel0(k) {
           y: () => bug.y,
           width: FLOOR_MONSTER_TOOLTIP_HOVER_SIZE,
           height: FLOOR_MONSTER_TOOLTIP_HOVER_SIZE,
-          text: FLOOR_MONSTER_TOOLTIP_TEXT,
+          text: phrase,
           offsetY: FLOOR_MONSTER_TOOLTIP_Y_OFFSET
         }]
       })
@@ -2494,7 +2520,10 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator) {
     return
   }
   for (const thorn of floorThornData) {
-    if (Math.abs(heroX - thorn.x) < thorn.width / 2) {
+    //
+    // Hero half-width + thorn half-width for proper AABB overlap
+    //
+    if (Math.abs(heroX - thorn.x) < thorn.width / 2 + HERO_HALF_WIDTH_THORNS) {
       onHeroFloorThornDeath(k, heroInst, levelIndicator)
       return
     }
@@ -2703,7 +2732,7 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
                     heroFeetY <= FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH
     if (onFloor) {
       for (const spike of inst.spikes) {
-        if (Math.abs(heroX - spike.x) < TRAP_SPIKE_WIDTH_BASE) {
+        if (Math.abs(heroX - spike.x) < TRAP_SPIKE_WIDTH_BASE + HERO_HALF_WIDTH_THORNS) {
           onHeroFloorThornDeath(k, heroInst, levelIndicator)
           return
         }

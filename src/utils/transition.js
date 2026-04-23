@@ -184,9 +184,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   stopTimeSectionMusic(k)
   //
-  // Mute procedural sounds (like spike glints)
+  // Mute procedural sounds and suspend AudioContext to silence all active oscillators
   //
   Sound.muteProceduralSounds()
+  Sound.suspendGlobalAudio()
   //
   // Store original volume and mute all sounds
   //
@@ -275,10 +276,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
     //
-    // Restore volume and unmute procedural sounds before going to next level
+    // Restore volume, unmute procedural sounds, and resume AudioContext
     //
     k.volume(inst.originalVolume)
     Sound.unmuteProceduralSounds()
+    Sound.resumeGlobalAudio()
     //
     // Go to next level and add fade-in overlay so new scene doesn't flash
     //
@@ -425,6 +427,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           //
           k.volume(inst.originalVolume)
           Sound.unmuteProceduralSounds()
+          Sound.resumeGlobalAudio()
           k.go(nextLevel)
         }
       }
@@ -486,6 +489,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         //
         k.volume(inst.originalVolume)
         Sound.unmuteProceduralSounds()
+        Sound.resumeGlobalAudio()
         //
         // Go to next level and add fade-in overlay so new scene doesn't flash
         //

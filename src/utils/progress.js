@@ -52,6 +52,19 @@ function migrate(data) {
     delete data.level3SnowballInstructionsCount
     changed = true
   }
+  if (data.level3GlowInstructionsCount !== undefined) {
+    data.touch.level3GlowInstructionsCount = data.level3GlowInstructionsCount
+    delete data.level3GlowInstructionsCount
+    changed = true
+  }
+  //
+  // Migrate old conversations.monsterSeen to touch.monsterSeen
+  //
+  if (data.conversations?.monsterSeen !== undefined) {
+    data.touch.monsterSeen = data.conversations.monsterSeen
+    delete data.conversations
+    changed = true
+  }
   if (changed) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }
     catch (_) {}

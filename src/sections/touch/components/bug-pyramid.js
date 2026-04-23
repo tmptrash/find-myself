@@ -195,8 +195,11 @@ export function create(config) {
   // Create collision platform for trampoline
   // Platform is positioned on top of top-level bugs' backs
   //
-  const maxLevelSize = Math.max(...layout)
-  const towerWidth = maxLevelSize * BUG_SPACING
+  //
+  // Platform width: combined width of top-row bugs (spacing + body diameter padding)
+  //
+  const topLevelSize = layout[layout.length - 1]
+  const towerWidth = topLevelSize * BUG_SPACING + BUG_BODY_SIZE * 1.5 * 2 * 2
   //
   // Find actual top level bugs and calculate platform position from their real positions
   //

@@ -43,6 +43,10 @@ const STACK_GAP = 8
 //
 const activeTooltipRects = []
 let lastRegistryFrame = -1
+//
+// Global suppression flag: when true, all tooltips are hidden
+//
+let globalSuppressed = false
 
 /**
  * Creates a tooltip system that shows a speech-bubble hint when the mouse
@@ -102,6 +106,20 @@ export function create(cfg) {
 export function destroy(inst) {
   inst.drawer?.exists?.() && inst.k.destroy(inst.drawer)
   inst.updateHandler?.cancel()
+}
+
+/**
+ * Suppresses all tooltips globally (e.g. during life deduction animation)
+ */
+export function suppressAll() {
+  globalSuppressed = true
+}
+
+/**
+ * Restores normal tooltip behavior after suppression
+ */
+export function unsuppressAll() {
+  globalSuppressed = false
 }
 //
 // Resolve target position (supports static values and dynamic functions)
@@ -331,6 +349,14 @@ function onUpdate(inst) {
   // The caller manages activeTarget, frozenX/Y, and opacity directly.
   //
   if (inst.forceVisible) return
+  //
+  // When globally suppressed, force all tooltips to fade out
+  //
+  if (globalSuppressed) {
+    inst.opacity = Math.max(0, inst.opacity - k.dt() * FADE_SPEED)
+    if (inst.opacity <= 0) inst.activeTarget = null
+    return
+  }
   const mousePos = k.mousePos()
   const dt = k.dt()
   //

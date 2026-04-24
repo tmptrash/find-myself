@@ -67,7 +67,15 @@ const SPIDER_SMOOTHING = 2.0
 const SPIDER_APPEAR_DELAY = 5.0    // Seconds before spiders start appearing (was 2.0)
 const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
 const SPIDER_MAX_OPACITY = 0.45    // Maximum opacity when fully visible
-const SPIDER_STEP_DISTANCE = 40    // Distance before leg takes a step
+const SPIDER_STEP_DISTANCE = 20     // Distance before leg takes a step
+const SPIDER_TURN_SPEED = 90        // Degrees per second for gradual rotation
+//
+// Spider eyes (small, positioned on the letter surface)
+//
+const SPIDER_EYE_RADIUS = 3
+const SPIDER_PUPIL_RADIUS = 1.2
+const SPIDER_EYE_SPACING = 10
+const SPIDER_EYE_Y_OFFSET = -8
 //
 // Title flicker configuration
 //
@@ -1304,7 +1312,8 @@ function createSpider(k, index, sourceInfo) {
     letterSize: fontSize || INSTRUCTIONS_FONT_SIZE,
     letterFont: fontFamily || QUOTE_FONT_FAMILY,
     isActivated: false,  // Becomes true when legs fully appear
-    legOpacity: 0,  // Separate opacity for legs
+    legExtendT: 0,  // 0=legs hidden inside body, 1=fully extended
+    displayAngle: 0,  // Smoothed rotation angle (degrees)
     charHidden: false,  // Track if character was hidden from text
     letterInfo: null,  // Will be set later
     titleOutlines: null,  // Will be set later for title letters
@@ -1441,17 +1450,17 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
     spider.legAppearTimer += dt
   }
   //
-  // Update leg opacity if timer is past delay and legs haven't fully appeared
-  //
-  if (spider.legAppearTimer >= spider.legAppearDelay && spider.legOpacity < opacity) {
-    const legFadeSpeed = SPIDER_MAX_OPACITY / 2.0  // Legs appear over 2 seconds (from 0 to SPIDER_MAX_OPACITY)
-    spider.legOpacity = Math.min(spider.legOpacity + dt * legFadeSpeed, opacity)
-  }
-  //
-  // Activate spider movement after legs have been appearing for 2 seconds
+  // Gradually extend legs from body (0 to 1 over LEG_APPEAR_DURATION)
   //
   const legAppearTimeElapsed = spider.legAppearTimer - spider.legAppearDelay
-  if (!spider.isActivated && legAppearTimeElapsed >= 2.0) {
+  if (legAppearTimeElapsed > 0 && spider.legExtendT < 1) {
+    const LEG_GROW_DURATION = 2.0
+    spider.legExtendT = Math.min(1, legAppearTimeElapsed / LEG_GROW_DURATION)
+  }
+  //
+  // Activate spider movement after legs have fully extended
+  //
+  if (!spider.isActivated && spider.legExtendT >= 1) {
     spider.isActivated = true
     //
     // Capture the current color from the original text at the moment of activation
@@ -1559,6 +1568,18 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
   spider.vx += (spider.targetVx - spider.vx) * smoothing
   spider.vy += (spider.targetVy - spider.vy) * smoothing
   //
+  // Smoothly interpolate display rotation toward movement direction
+  //
+  const speed = Math.sqrt(spider.vx * spider.vx + spider.vy * spider.vy)
+  if (speed > 1) {
+    const targetAngleDeg = Math.atan2(spider.vy, spider.vx) * (180 / Math.PI)
+    let diff = targetAngleDeg - spider.displayAngle
+    while (diff > 180) diff -= 360
+    while (diff < -180) diff += 360
+    const maxTurn = SPIDER_TURN_SPEED * dt
+    spider.displayAngle += Math.max(-maxTurn, Math.min(maxTurn, diff))
+  }
+  //
   // Store old position for distance calculation
   //
   const oldX = spider.x
@@ -1616,18 +1637,18 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
     spider.vy = -Math.abs(spider.vy) * 0.5
   }
   //
-  // Update legs with inverse kinematics
+  // Update legs: alternating gait with proper stepping
   //
   const movementAngle = Math.atan2(spider.vy, spider.vx)
   const reach = SPIDER_LEG_LENGTH_1 + SPIDER_LEG_LENGTH_2
-  
+  const maxReach = reach * 0.85
   spider.legs.forEach((leg, i) => {
     //
-    // Calculate ideal foot position based on movement direction
+    // Ideal foot position relative to body based on movement direction
     //
     const adjustedAngle = leg.baseAngle + movementAngle
-    const idealX = spider.x + Math.cos(adjustedAngle) * reach * 0.7
-    const idealY = spider.y + Math.sin(adjustedAngle) * reach * 0.7
+    const idealX = spider.x + Math.cos(adjustedAngle) * reach * 0.6
+    const idealY = spider.y + Math.sin(adjustedAngle) * reach * 0.6
     //
     // Distance from current foot to ideal position
     //
@@ -1635,13 +1656,21 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
     const footDy = idealY - leg.footY
     const footDist = Math.sqrt(footDx * footDx + footDy * footDy)
     //
-    // Check if leg needs to step
+    // Distance from body center to current foot (prevent over-stretching)
     //
-    if (!leg.isStepping && footDist > SPIDER_STEP_DISTANCE) {
+    const bodyDx = leg.footX - spider.x
+    const bodyDy = leg.footY - spider.y
+    const bodyDist = Math.sqrt(bodyDx * bodyDx + bodyDy * bodyDy)
+    //
+    // Force step if foot is too far from body or too far from ideal position
+    //
+    const needsStep = footDist > SPIDER_STEP_DISTANCE || bodyDist > maxReach
+    if (!leg.isStepping && needsStep) {
       //
-      // Start stepping - alternating gait (legs step in pairs)
+      // Alternating gait: even/odd legs step on opposite halves of the walk cycle
       //
-      const shouldStep = (i % 2 === 0) !== (Math.floor(spider.distanceTraveled / SPIDER_STEP_DISTANCE) % 2 === 0)
+      const phase = Math.floor(spider.distanceTraveled / SPIDER_STEP_DISTANCE) % 2
+      const shouldStep = (i % 2 === 0) !== (phase === 0) || bodyDist > maxReach
       if (shouldStep) {
         leg.isStepping = true
         leg.stepProgress = 0
@@ -1652,21 +1681,18 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
       }
     }
     //
-    // Animate stepping
+    // Animate step: foot lifts in arc from old to new position
     //
     if (leg.isStepping) {
-      leg.stepProgress += dt * 8  // Step speed
+      leg.stepProgress += dt * 10
       if (leg.stepProgress >= 1) {
         leg.stepProgress = 1
         leg.isStepping = false
         leg.footX = leg.targetFootX
         leg.footY = leg.targetFootY
       } else {
-        //
-        // Interpolate foot position with arc
-        //
         const t = leg.stepProgress
-        const arcHeight = 3  // How high the foot lifts
+        const arcHeight = 4
         const arc = Math.sin(t * Math.PI) * arcHeight
         leg.footX = leg.stepStartX + (leg.targetFootX - leg.stepStartX) * t
         leg.footY = leg.stepStartY + (leg.targetFootY - leg.stepStartY) * t - arc
@@ -1683,75 +1709,66 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
  */
 function drawSpider(k, spider, textOpacity) {
   //
-  // Draw legs with separate opacity (fade in gradually)
-  // Don't draw legs if spider has reached target position
+  // Draw legs that physically extend from the body.
+  // Effective foot position interpolated by legExtendT (0=at body, 1=full reach).
   //
-  if (spider.legOpacity > 0 && !spider.legsHidden) {
-    //
-    // Use same color as letter for legs
-    //
+  if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = spider.color
-    
-    spider.legs.forEach(leg => {
-      const { jointX, jointY } = solveIK(
-        spider.x, spider.y,
-        leg.footX, leg.footY,
-        SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2,
-        leg.side
-      )
-      //
-      // First segment (body to joint)
-      //
-      k.drawLine({
-        p1: k.vec2(spider.x, spider.y),
-        p2: k.vec2(jointX, jointY),
-        width: 2,
-        color: legColor,
-        opacity: spider.legOpacity
+    //
+    // Once activated, legs stay at full opacity regardless of spider fade-out
+    //
+    const legOpacity = spider.charHidden ? SPIDER_MAX_OPACITY : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
+    if (legOpacity > 0) {
+      spider.legs.forEach(leg => {
+        //
+        // Scale effective foot position: lerp from body center to actual foot
+        //
+        const effFootX = spider.x + (leg.footX - spider.x) * spider.legExtendT
+        const effFootY = spider.y + (leg.footY - spider.y) * spider.legExtendT
+        const { jointX, jointY } = solveIK(
+          spider.x, spider.y,
+          effFootX, effFootY,
+          SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2,
+          leg.side
+        )
+        k.drawLine({
+          p1: k.vec2(spider.x, spider.y),
+          p2: k.vec2(jointX, jointY),
+          width: 2,
+          color: legColor,
+          opacity: legOpacity
+        })
+        k.drawLine({
+          p1: k.vec2(jointX, jointY),
+          p2: k.vec2(effFootX, effFootY),
+          width: 2,
+          color: legColor,
+          opacity: legOpacity
+        })
+        k.drawCircle({
+          pos: k.vec2(jointX, jointY),
+          radius: 1,
+          color: legColor,
+          opacity: legOpacity
+        })
       })
-      //
-      // Second segment (joint to foot)
-      //
-      k.drawLine({
-        p1: k.vec2(jointX, jointY),
-        p2: k.vec2(leg.footX, leg.footY),
-        width: 2,
-        color: legColor,
-        opacity: spider.legOpacity
-      })
-      //
-      // Draw circle at joint to cover gap
-      //
-      k.drawCircle({
-        pos: k.vec2(jointX, jointY),
-        radius: 1,
-        color: legColor,
-        opacity: spider.legOpacity
-      })
-    })
+    }
   }
   //
   // Draw the letter (body) only if it's been hidden from original text
   //
   if (spider.charHidden) {
-    //
-    // Always draw letter at full opacity for maximum brightness
-    //
     const letterOpacity = 1.0
     //
-    // Calculate rotation angle
-    // If spider is returning to title, use target rotation, otherwise use movement direction
+    // Use smoothed display angle for gradual turning.
+    // When returning to title, use the return rotation.
     //
-    let angleDeg = spider.currentRotation
-    if (spider.targetReturnX === undefined || spider.targetReturnY === undefined) {
-      //
-      // Normal movement - rotate based on movement direction
-      //
-      const angleRad = Math.atan2(spider.vy, spider.vx)
-      angleDeg = angleRad * (180 / Math.PI)
+    let angleDeg = spider.displayAngle
+    if (spider.targetReturnX !== undefined && spider.targetReturnY !== undefined) {
+      angleDeg = spider.currentRotation
+    } else {
       spider.currentRotation = angleDeg
     }
-    
     k.pushTransform()
     k.pushTranslate(spider.x, spider.y)
     k.pushRotate(angleDeg)
@@ -1763,7 +1780,6 @@ function drawSpider(k, spider, textOpacity) {
       [-2, 0],           [2, 0],
       [-2, 2],  [0, 2],  [2, 2]
     ]
-    
     outlineOffsets.forEach(([dx, dy]) => {
       k.drawText({
         text: spider.letter,
@@ -1775,9 +1791,6 @@ function drawSpider(k, spider, textOpacity) {
         font: spider.letterFont
       })
     })
-    //
-    // Draw main letter on top
-    //
     k.drawText({
       text: spider.letter,
       size: spider.letterSize,
@@ -1787,9 +1800,46 @@ function drawSpider(k, spider, textOpacity) {
       opacity: letterOpacity,
       font: spider.letterFont
     })
-    
+    //
+    // Eyes on the letter surface: pupils track movement direction in local frame
+    //
+    drawSpiderEyes(k, spider, angleDeg)
     k.popTransform()
   }
+}
+//
+// Draws two small eyes on the letter body with pupils tracking movement direction.
+// Drawn in the letter's local (rotated) coordinate system.
+//
+function drawSpiderEyes(k, spider, angleDeg) {
+  if (spider.legExtendT < 0.3) return
+  const eyeOpacity = Math.min(1, (spider.legExtendT - 0.3) / 0.4)
+  const scleraColor = k.rgb(220, 220, 210)
+  const pupilColor = k.rgb(15, 8, 8)
+  //
+  // Eye positions on the letter surface (local coordinates, relative to center)
+  //
+  const lx = -SPIDER_EYE_SPACING / 2
+  const rx = SPIDER_EYE_SPACING / 2
+  const ey = SPIDER_EYE_Y_OFFSET
+  //
+  // Pupil direction: convert world velocity to local frame
+  //
+  const velAngle = Math.atan2(spider.vy, spider.vx)
+  const localAngle = velAngle - angleDeg * (Math.PI / 180)
+  const maxPupilOffset = SPIDER_EYE_RADIUS - SPIDER_PUPIL_RADIUS - 0.5
+  const px = Math.cos(localAngle) * maxPupilOffset
+  const py = Math.sin(localAngle) * maxPupilOffset
+  //
+  // Left eye
+  //
+  k.drawCircle({ pos: k.vec2(lx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity })
+  k.drawCircle({ pos: k.vec2(lx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity })
+  //
+  // Right eye
+  //
+  k.drawCircle({ pos: k.vec2(rx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity })
+  k.drawCircle({ pos: k.vec2(rx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity })
 }
 
 /**

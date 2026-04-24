@@ -3286,19 +3286,25 @@ function drawHangingIcicles(k, data, platformStates) {
   }
 }
 //
-// Checks if hero's head collides with hanging icicles.
+// Checks if hero collides with hanging icicles.
+// Uses hero's head position (center minus offset) for accurate vertical overlap.
 // Only checks icicles whose parent platform is visible.
 //
 function checkHangingIcicleCollision(k, heroInst, data, levelIndicator, platformStates) {
   if (data.length === 0) return
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
+  const heroTopY = heroY - HERO_FEET_OFFSET
+  const heroBottomY = heroY + HERO_FEET_OFFSET
   for (const ic of data) {
     const pState = platformStates[ic.platformIdx]
     if (!pState || pState.opacity <= 0) continue
     const dx = Math.abs(heroX - ic.x)
-    if (dx > ic.width / 2 + 8) continue
-    if (heroY > ic.topY - 10 && heroY < ic.topY + ic.height) {
+    if (dx > ic.width / 2 + 10) continue
+    //
+    // Vertical overlap: hero range [heroTopY, heroBottomY] vs icicle range [topY, topY+height]
+    //
+    if (heroTopY < ic.topY + ic.height && heroBottomY > ic.topY) {
       onHeroDeath(k, heroInst, levelIndicator)
       return
     }

@@ -92,15 +92,13 @@ const PUPIL_B = 8
 //
 // Mouth (below eyes, closes fully when hero is at RETRACT_DISTANCE)
 //
-const MOUTH_BASE_WIDTH = 18
-const MOUTH_BASE_HEIGHT = 10
 const MOUTH_MAX_WIDTH = 26
 const MOUTH_MAX_HEIGHT = 16
-const MOUTH_FROM_TIP_T = 0.65
-const MOUTH_OPEN_DISTANCE = RETRACT_DISTANCE
+const MOUTH_FROM_TIP_T = 0.55
+const MOUTH_OPEN_DISTANCE = 200
 const TOOTH_COUNT = 6
-const TOOTH_HEIGHT = 5
-const TOOTH_WIDTH = 3
+const TOOTH_HEIGHT = 8
+const TOOTH_WIDTH = 4
 const MOUTH_COLOR_R = 30
 const MOUTH_COLOR_G = 10
 const MOUTH_COLOR_B = 10
@@ -188,6 +186,28 @@ export function create(config) {
   ])
   k.onUpdate(() => onUpdate(inst))
   return inst
+}
+
+/**
+ * Checks if a point (hero) collides with the worm's risen body.
+ * Accounts for spine offsets (IK lean) and tapered body width.
+ * @param {Object} inst - Worm instance
+ * @param {number} heroX - Hero X position
+ * @param {number} heroY - Hero Y position
+ * @returns {boolean} True if collision detected
+ */
+export function checkCollision(inst, heroX, heroY) {
+  if (inst.riseAmount <= 0) return false
+  const wormTop = inst.floorY - inst.riseAmount
+  if (heroY < wormTop || heroY > inst.floorY) return false
+  //
+  // Determine body parameter t at hero's vertical position
+  //
+  const t = Math.max(0, Math.min(1, (inst.floorY - heroY) / BODY_HEIGHT))
+  const nodePos = getNodePos(inst, t)
+  const bodyW = getWidth(t)
+  const halfW = bodyW / 2 + 5
+  return Math.abs(heroX - nodePos.x) < halfW
 }
 //
 // Per-frame update: trigger, rise, hold, retract
@@ -467,12 +487,13 @@ function drawMouth(inst) {
   const heroY = hero?.character?.pos?.y ?? pos.y
   const heroDist = Math.sqrt((heroX - pos.x) ** 2 + (heroY - pos.y) ** 2)
   const openT = Math.max(0, Math.min(1, 1 - heroDist / MOUTH_OPEN_DISTANCE))
-  const mouthW = MOUTH_BASE_WIDTH * openT + MOUTH_MAX_WIDTH * openT
-  const mouthH = MOUTH_BASE_HEIGHT * openT + MOUTH_MAX_HEIGHT * openT
+  if (openT <= 0) return
   //
-  // Fully closed: don't draw anything
+  // Mouth scales smoothly from 0 to max, clamped to body width
   //
-  if (openT < 0.01) return
+  const bodyW = getWidth(MOUTH_FROM_TIP_T)
+  const mouthW = Math.min(MOUTH_MAX_WIDTH * openT, bodyW * 0.9)
+  const mouthH = MOUTH_MAX_HEIGHT * openT
   k.drawEllipse({
     pos: k.vec2(pos.x, pos.y),
     radiusX: mouthW / 2,

@@ -200,8 +200,6 @@ const ANTIHERO_HINT_Y_OFFSET = -140
 // Giant worm obstacle (emerges from ground left of antihero)
 //
 const GIANT_WORM_X_OFFSET = 200
-const GIANT_WORM_COLLISION_HALF_W = 32
-const GIANT_WORM_COLLISION_TOP_MARGIN = 5
 //
 // Life deduction (level-specific flags and threshold)
 //
@@ -2932,21 +2930,13 @@ function drawWormEyes(k, inst, head) {
   }
 }
 //
-// Checks hero collision against the giant worm's risen body
+// Checks hero collision against the giant worm's risen body.
+// Delegates to GiantWorm.checkCollision which accounts for spine offsets and tapered width.
 //
 function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
-  const wormTop = wormInst.floorY - wormInst.riseAmount + GIANT_WORM_COLLISION_TOP_MARGIN
-  const wormBottom = wormInst.floorY
-  //
-  // Check horizontal overlap (hero center vs worm half-width)
-  //
-  if (Math.abs(heroX - wormInst.x) > GIANT_WORM_COLLISION_HALF_W) return
-  //
-  // Check vertical overlap (hero center within worm body range)
-  //
-  if (heroY > wormTop && heroY < wormBottom) {
+  if (GiantWorm.checkCollision(wormInst, heroX, heroY)) {
     onPoisonLeafDeath(k, heroInst, levelIndicator)
   }
 }

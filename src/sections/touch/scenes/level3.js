@@ -571,11 +571,6 @@ export function sceneLevel3(k) {
     // Platforms only scatter after the life deduction hint has played (this or previous visit).
     //
     const trapState = createTrapPlatform(k)
-    const scatterAlreadyDone = get(LIFE_DEDUCT_SCATTER_FLAG, false) && !showDeduction
-    if (scatterAlreadyDone) {
-      trapState.triggered = true
-      trapState.activationTimer = 0
-    }
     //
     // Pre-generate log detail data (cracks, knots, snow on top) for each platform
     //

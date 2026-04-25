@@ -7,12 +7,13 @@ import { set } from '../utils/progress.js'
 // Collision box parameters (extends to visual feet to eliminate ground gap)
 //
 const COLLISION_WIDTH = 10
-const COLLISION_HEIGHT = 27
+const COLLISION_HEIGHT = 23
 const COLLISION_OFFSET_X = 0
 //
-// Shift collision down so bottom aligns with sprite feet (scale 3: 16px * 3 = 48)
+// Shift collision down so bottom aligns with sprite feet.
+// Top edge lowered to avoid collision above hero's head.
 //
-const COLLISION_OFFSET_Y = -1
+const COLLISION_OFFSET_Y = 1
 //
 // Hero parameters
 //
@@ -545,8 +546,10 @@ export function spawn(inst) {
           if (p.exists()) k.destroy(p)
         })
         //
-        // Show hero
+        // Restore original position (body may have fallen during assembly)
         //
+        character.pos.x = x
+        character.pos.y = y
         character.hidden = false
         //
         // Mark hero as spawned (allow controls) and invulnerable

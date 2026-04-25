@@ -572,6 +572,13 @@ export function sceneLevel3(k) {
     //
     const trapState = createTrapPlatform(k)
     //
+    // If scatter already happened in a previous visit, enable proximity-based scatter
+    //
+    const scatterAlreadyDone = get(LIFE_DEDUCT_SCATTER_FLAG, false) && !showDeduction
+    if (scatterAlreadyDone) {
+      trapState.scatterOnProximity = true
+    }
+    //
     // Pre-generate log detail data (cracks, knots, snow on top) for each platform
     //
     const logDetails = CORRIDOR_PLATFORMS.map(platform =>
@@ -649,7 +656,7 @@ export function sceneLevel3(k) {
     // Create hero on the first (bottom-left) platform
     //
     const firstPlatform = CORRIDOR_PLATFORMS[0]
-    const heroX = firstPlatform.x - firstPlatform.width / 2 + 80
+    const heroX = firstPlatform.x + firstPlatform.width / 2 - 40
     const heroY = firstPlatform.y - HERO_COLLISION_HEIGHT_SCALED / 2 - 5
     const heroInst = Hero.create({
       k,
@@ -715,11 +722,12 @@ export function sceneLevel3(k) {
     //
     if (showDeduction) {
       //
-      // Pre-trigger scatter: platforms begin splitting after the animation ends.
-      // Using a timer avoids reliance on onComplete (which is lost if scene restarts).
+      // Enable proximity-based scatter after the deduction animation finishes.
+      // Platforms stay still until hero approaches them.
       //
-      trapState.triggered = true
-      trapState.activationTimer = LifeDeduction.TOTAL_DURATION + 0.3
+      k.wait(LifeDeduction.TOTAL_DURATION + 0.3, () => {
+        trapState.scatterOnProximity = true
+      })
       const nextCount = deductCount + 1
       LifeDeduction.show({
         k,
@@ -1981,6 +1989,19 @@ function updateTrapPlatform(trapState, heroInst, dt) {
       trapState.splitting = true
     }
     return
+  }
+  //
+  // Proximity-based scatter: trigger when hero gets close (subsequent visits after deduction)
+  //
+  if (trapState.scatterOnProximity) {
+    const platform = CORRIDOR_PLATFORMS[TRAP_PLATFORM_INDEX]
+    const dx = Math.abs(heroInst.character.pos.x - platform.x)
+    const dy = Math.abs(heroInst.character.pos.y - platform.y)
+    if (dx < TRAP_PROXIMITY_X && dy < TRAP_PROXIMITY_Y) {
+      trapState.scatterOnProximity = false
+      trapState.triggered = true
+      trapState.activationTimer = 0.3
+    }
   }
 }
 

@@ -13,6 +13,7 @@ import * as Rain from '../components/rain.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import * as GiantWorm from '../components/giant-worm.js'
+import * as BonusHero from '../components/bonus-hero.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -1557,6 +1558,27 @@ export function sceneLevel1(k) {
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     //
+    // Allow hero to jump when standing on the antihero's head
+    //
+    antiHeroInst.character.use(CFG.game.platformName)
+    //
+    // Hidden bonus hero to the left and above antihero
+    // Reachable by jumping from the antihero's platform area
+    //
+    const BONUS_X = ANTIHERO_SPAWN_X - 100
+    const BONUS_Y = ANTIHERO_SPAWN_Y - 100
+    BonusHero.create({
+      k,
+      x: BONUS_X,
+      y: BONUS_Y,
+      width: 80,
+      heroInst,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      heroBodyColor
+    })
+    //
     // Set hero reference for grass drawer
     //
     grassDrawer.heroRef = heroInst
@@ -1597,6 +1619,26 @@ export function sceneLevel1(k) {
       floorY: FLOOR_Y,
       hero: heroInst,
       sfx: sound
+    })
+    //
+    // Tooltip on the giant worm (dynamic position tracks the worm body)
+    //
+    const WORM_TOOLTIP_TEXT = 'you are my soulmate'
+    const WORM_TOOLTIP_WIDTH = 60
+    const WORM_TOOLTIP_HEIGHT = 80
+    const wormTooltipTarget = {
+      x: giantWormInst.x,
+      y: FLOOR_Y - 40,
+      width: WORM_TOOLTIP_WIDTH,
+      height: WORM_TOOLTIP_HEIGHT,
+      text: WORM_TOOLTIP_TEXT,
+      offsetY: -90
+    }
+    Tooltip.create({ k, targets: [wormTooltipTarget] })
+    k.onUpdate(() => {
+      wormTooltipTarget.y = FLOOR_Y - giantWormInst.riseAmount / 2
+      wormTooltipTarget.x = giantWormInst.x + (giantWormInst.leanOffset || 0)
+      wormTooltipTarget.height = Math.max(10, giantWormInst.riseAmount)
     })
     //
     // Tooltip on first tree trunk (note "C")

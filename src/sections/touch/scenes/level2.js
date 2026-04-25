@@ -12,6 +12,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { arcY } from '../utils/trees.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
+import * as BonusHero from '../components/bonus-hero.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -62,8 +63,8 @@ const RIGHT_ICICLE_SPACING = 30
 // Hanging icicles under log platforms (appear after life deduction)
 //
 const HANGING_ICICLE_COUNT_PER_PLATFORM = 6
-const HANGING_ICICLE_HEIGHT_MIN = 20
-const HANGING_ICICLE_HEIGHT_MAX = 42
+const HANGING_ICICLE_HEIGHT_MIN = 14
+const HANGING_ICICLE_HEIGHT_MAX = 26
 const HANGING_ICICLE_WIDTH_MIN = 5
 const HANGING_ICICLE_WIDTH_MAX = 10
 const HANGING_ICICLE_SKIP_INDICES = [1]
@@ -568,6 +569,24 @@ export function sceneLevel2(k) {
     // Create blue snow drifts on bottom platform floor
     //
     createSnowDrifts(k)
+    //
+    // Hidden bonus hero on left wall, above the icicles.
+    // Only reachable by jumping from an upper platform and flying left.
+    //
+    const BONUS_PLATFORM_X = LEFT_MARGIN + 50
+    const BONUS_PLATFORM_Y = FLOOR_Y - 200
+    BonusHero.create({
+      k,
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: 70,
+      heroInst,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      revealDistance: 120,
+      heroBodyColor
+    })
     //
     // Right-side floor icicles always present from the start.
     // Left-side floor icicles appear only after the first life deduction.
@@ -1459,7 +1478,7 @@ function createDiagonalPlatforms(k, enableTrap = true) {
   //
   // Raise the rightmost platform slightly higher for better icicle kill zone
   //
-  const RIGHTMOST_PLATFORM_RAISE = 12
+  const RIGHTMOST_PLATFORM_RAISE = 20
   platforms[platformCount - 1].y -= RIGHTMOST_PLATFORM_RAISE
   //
   // Create all platforms
@@ -1472,8 +1491,8 @@ function createDiagonalPlatforms(k, enableTrap = true) {
   // Positioned to the right and up from platforms 2 and 5
   //
   const fakePlatformOffsets = [
-    { sourceIndex: 1, offsetX: 220 + (totalHorizontalDistance / (platformCount - 1)) + 100, offsetY: 40 + (totalVerticalDistance / (platformCount - 1)) - 40 },  // Fake platform from platform 2 (moved further right)
-    { sourceIndex: 4, offsetX: 120, offsetY: -120 }   // Fake platform from platform 5 (moved left)
+    { sourceIndex: 4, offsetX: 120, offsetY: -120 },  // Right and above platform 4 (visible from its right part)
+    { sourceIndex: 4, offsetX: 0, offsetY: -250 }     // Left of first fake and higher (dead-end path)
   ]
   
   fakePlatformOffsets.forEach((fake, fakeIndex) => {

@@ -1141,6 +1141,7 @@ function scatterParticles(system) {
     particle.isFleeing = true
     particle.isAutoFleeing = true
     particle.fleeProgress = 0
+    particle.fleeSpeed = 2.5 + Math.random() * 1.5
     particle.fleeStartX = particle.x
     particle.fleeStartY = particle.y
     particle.fleeTargetX = targetX
@@ -1508,17 +1509,16 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
     // Smoothly rotate towards target rotation
     //
     if (spider.targetRotation !== undefined) {
-      const rotationSpeed = 180 * dt  // Rotate 180 degrees per second
       const rotationDiff = spider.targetRotation - spider.currentRotation
-      //
-      // Normalize rotation difference to -180 to 180 range
-      //
       let normalizedDiff = rotationDiff
       while (normalizedDiff > 180) normalizedDiff -= 360
       while (normalizedDiff < -180) normalizedDiff += 360
-      
-      if (Math.abs(normalizedDiff) > rotationSpeed * dt) {
-        spider.currentRotation += Math.sign(normalizedDiff) * rotationSpeed * dt
+      //
+      // Smooth rotation: 120 degrees per second
+      //
+      const maxTurnPerFrame = 120 * dt
+      if (Math.abs(normalizedDiff) > maxTurnPerFrame) {
+        spider.currentRotation += Math.sign(normalizedDiff) * maxTurnPerFrame
       } else {
         spider.currentRotation = spider.targetRotation
       }
@@ -1543,8 +1543,9 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
         spider.currentRotation = spider.targetRotation
       }
       //
-      // Hide legs when spider reaches target position
+      // Mark as settled and hide legs when spider reaches target position
       //
+      spider.settled = true
       spider.legsHidden = true
     }
   } else {
@@ -1812,6 +1813,10 @@ function drawSpider(k, spider, textOpacity) {
 // Drawn in the letter's local (rotated) coordinate system.
 //
 function drawSpiderEyes(k, spider, angleDeg) {
+  //
+  // Hide eyes after spider has settled into its title position
+  //
+  if (spider.settled) return
   if (spider.legExtendT < 0.3) return
   const eyeOpacity = Math.min(1, (spider.legExtendT - 0.3) / 0.4)
   const scleraColor = k.rgb(220, 220, 210)

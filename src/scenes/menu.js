@@ -784,9 +784,20 @@ export function sceneMenu(k) {
       const bgDefaultTarget = hoveredInst ? 0.0 : 1.0
       inst.bgDefaultOpacity += (bgDefaultTarget - inst.bgDefaultOpacity) * Math.min(k.dt() * BG_FADE_SPEED, 1.0)
       //
-      // Fade firefly particles in when hovering, out when not
+      // Fireflies only appear for antiheroes whose section is completed or currently being played
       //
-      if (hoveredInst) {
+      const lastLevel = get('lastLevel', null)
+      const isEmptyLS = lastLevel === null
+      const touchAH = antiHeroes.find(ah => ah.section === 'touch')
+      const fireflyAllowed = hoveredInst && (
+        hoveredInst.isCompleted ||
+        (inst.currentSection && hoveredInst.section === inst.currentSection) ||
+        (isEmptyLS && touchAH && hoveredInst === touchAH)
+      )
+      //
+      // Fade firefly particles in when hovering allowed anti-hero, out otherwise
+      //
+      if (fireflyAllowed) {
         particlesBg.baseOpacity = Math.min(PARTICLES_HOVER_OPACITY, particlesBg.baseOpacity + k.dt() * PARTICLES_FADE_IN_SPEED)
       } else {
         particlesBg.baseOpacity += (0 - particlesBg.baseOpacity) * Math.min(k.dt() * PARTICLES_FADE_OUT_SPEED, 1.0)
@@ -794,7 +805,7 @@ export function sceneMenu(k) {
       //
       // Attract fireflies toward hovered anti-hero, scatter when unhovered
       //
-      if (hoveredInst) {
+      if (fireflyAllowed) {
         particlesBg.attractTarget = {
           x: hoveredInst.character.pos.x,
           y: hoveredInst.character.pos.y,
@@ -844,10 +855,7 @@ export function sceneMenu(k) {
         //
         // Play heartbeat sound for current section anti-hero OR touch anti-hero when localStorage is empty
         //
-        const lastLevel = get('lastLevel', null)
-        const isEmptyLocalStorage = lastLevel === null
-        const touchAntiHero = antiHeroes.find(ah => ah.section === 'touch')
-        const isTouchAntiHeroHover = isEmptyLocalStorage && touchAntiHero && !touchAntiHero.isCompleted && hoveredInst === touchAntiHero
+        const isTouchAntiHeroHover = isEmptyLS && touchAH && !touchAH.isCompleted && hoveredInst === touchAH
         
         if (isCurrentSectionHover || isTouchAntiHeroHover) {
           const HEARTBEAT_INTERVAL = 1.0

@@ -13,6 +13,7 @@ import * as LifeDeduction from '../utils/life-deduction.js'
 import { drawThorns } from '../components/jungle-decor.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as Rain from '../components/rain.js'
+import * as BonusHero from '../components/bonus-hero.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -1634,6 +1635,24 @@ export function sceneLevel0(k) {
     //
     const showTraps = lifeDeducted || trapAlreadyActive
     showTraps && createTrapSpikes(k, heroInst, levelIndicator, sound)
+    //
+    // Hidden bonus hero on the left side at antihero height
+    // Only visible when hero approaches from above (jumping from a bug)
+    //
+    const BONUS_PLATFORM_X = LEFT_MARGIN + 140
+    const BONUS_PLATFORM_Y = ANTIHERO_PLATFORM_Y + 10
+    const BONUS_PLATFORM_WIDTH = 80
+    BonusHero.create({
+      k,
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: BONUS_PLATFORM_WIDTH,
+      heroInst,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      heroBodyColor
+    })
     //
     // Create bugs on the floor
     //

@@ -5,7 +5,7 @@ import { CFG } from '../../../cfg.js'
 //
 const BASE_WIDTH = 48
 const TIP_WIDTH = 14
-const BODY_HEIGHT = 80
+const BODY_HEIGHT = 90
 const NODE_COUNT = 24
 //
 // Rise/retract animation
@@ -47,58 +47,54 @@ const RETRACT_DISTANCE = 400
 // Sideways lean toward hero
 //
 const LEAN_SPEED = 3.5
-const LEAN_MAX = 35
+const LEAN_MAX = 50
 const IK_FOLLOW_SPEED = 5.0
 //
-// Visual colors (dark, organic)
+// Visual colors (warm reddish-brown, cartoon worm style)
 //
-const BODY_COLOR_R = 60
-const BODY_COLOR_G = 40
-const BODY_COLOR_B = 35
-const BODY_HIGHLIGHT_R = 85
-const BODY_HIGHLIGHT_G = 60
-const BODY_HIGHLIGHT_B = 50
-const OUTLINE_COLOR_R = 20
-const OUTLINE_COLOR_G = 15
-const OUTLINE_COLOR_B = 12
+const BODY_COLOR_R = 140
+const BODY_COLOR_G = 65
+const BODY_COLOR_B = 50
+const BODY_HIGHLIGHT_R = 180
+const BODY_HIGHLIGHT_G = 95
+const BODY_HIGHLIGHT_B = 70
+const OUTLINE_COLOR_R = 25
+const OUTLINE_COLOR_G = 18
+const OUTLINE_COLOR_B = 15
 //
 // Body bulges: fat rolls with dark outline for organic roundness
 //
-const BULGE_COUNT = 4
-const BULGE_EXTRA_WIDTH = 6
-const BULGE_ASPECT = 0.45
+const BULGE_COUNT = 5
+const BULGE_EXTRA_WIDTH = 7
+const BULGE_ASPECT = 0.4
 //
-// Suckers along body
+// Segment divider lines: dark horizontal stripes between segments
 //
-const SUCKER_COUNT = 4
-const SUCKER_RADIUS_MIN = 2
-const SUCKER_RADIUS_MAX = 5
-const SUCKER_COLOR_R = 45
-const SUCKER_COLOR_G = 30
-const SUCKER_COLOR_B = 28
+const SEGMENT_LINE_COUNT = 6
+const SEGMENT_LINE_WIDTH = 2.5
 //
 // Eyes (near the tip)
 //
-const EYE_RADIUS = 7
-const PUPIL_RADIUS = 2.5
-const EYE_SPACING = 14
+const EYE_RADIUS = 9
+const PUPIL_RADIUS = 3
+const EYE_SPACING = 16
 const EYE_FROM_TIP_T = 0.82
-const SCLERA_R = 200
-const SCLERA_G = 190
-const SCLERA_B = 160
+const SCLERA_R = 240
+const SCLERA_G = 240
+const SCLERA_B = 235
 const PUPIL_R = 15
 const PUPIL_G = 8
 const PUPIL_B = 8
 //
 // Mouth (below eyes, closes fully when hero is at RETRACT_DISTANCE)
 //
-const MOUTH_MAX_WIDTH = 26
-const MOUTH_MAX_HEIGHT = 16
+const MOUTH_MAX_WIDTH = 32
+const MOUTH_MAX_HEIGHT = 22
 const MOUTH_FROM_TIP_T = 0.55
-const MOUTH_OPEN_DISTANCE = 200
+const MOUTH_OPEN_DISTANCE = RETRACT_DISTANCE
 const TOOTH_COUNT = 6
-const TOOTH_HEIGHT = 8
-const TOOTH_WIDTH = 4
+const TOOTH_HEIGHT = 10
+const TOOTH_WIDTH = 5
 const MOUTH_COLOR_R = 30
 const MOUTH_COLOR_G = 10
 const MOUTH_COLOR_B = 10
@@ -198,16 +194,31 @@ export function create(config) {
  */
 export function checkCollision(inst, heroX, heroY) {
   if (inst.riseAmount <= 0) return false
+  //
+  // Ground-level collision: hero dies when running through the emergence hole
+  // Height is limited so jumping over the base is still possible
+  //
+  const GROUND_COLLISION_HALF_W = BASE_WIDTH / 2 + 30
+  const GROUND_COLLISION_HEIGHT = 50
+  if (heroY > inst.floorY - GROUND_COLLISION_HEIGHT && Math.abs(heroX - inst.x) < GROUND_COLLISION_HALF_W) {
+    return true
+  }
   const wormTop = inst.floorY - inst.riseAmount
-  if (heroY < wormTop || heroY > inst.floorY) return false
   //
-  // Determine body parameter t at hero's vertical position
+  // Check multiple vertical sample points on the hero for reliable collision
   //
-  const t = Math.max(0, Math.min(1, (inst.floorY - heroY) / BODY_HEIGHT))
-  const nodePos = getNodePos(inst, t)
-  const bodyW = getWidth(t)
-  const halfW = bodyW / 2 + 5
-  return Math.abs(heroX - nodePos.x) < halfW
+  const HERO_HEIGHT_SAMPLES = [0, -20, -40, -60]
+  const COLLISION_PADDING = 18
+  for (const offset of HERO_HEIGHT_SAMPLES) {
+    const sampleY = heroY + offset
+    if (sampleY < wormTop || sampleY > inst.floorY) continue
+    const t = Math.max(0, Math.min(1, (inst.floorY - sampleY) / BODY_HEIGHT))
+    const nodePos = getNodePos(inst, t)
+    const bodyW = getWidth(t)
+    const halfW = bodyW / 2 + COLLISION_PADDING
+    if (Math.abs(heroX - nodePos.x) < halfW) return true
+  }
+  return false
 }
 //
 // Per-frame update: trigger, rise, hold, retract
@@ -353,42 +364,22 @@ function onDraw(inst) {
   //
   drawBulges(inst, outlineColor)
   //
-  // Highlight strip for volume
+  // Highlight sheen along left side for 3D roundness
   //
-  for (let i = 0; i < NODE_COUNT; i += 3) {
+  for (let i = 1; i < NODE_COUNT - 2; i += 2) {
     const t = i / (NODE_COUNT - 1)
     const ny = floorY - t * BODY_HEIGHT
     if (ny < topY || ny > floorY - 4) continue
     const w = getWidth(t)
     const nx = x + (inst.spineOffsets[i] || 0)
-    k.drawCircle({
-      pos: k.vec2(nx - w / 4, ny),
-      radius: w * 0.08,
-      color: k.rgb(BODY_HIGHLIGHT_R, BODY_HIGHLIGHT_G, BODY_HIGHLIGHT_B),
-      opacity: 0.3
+    k.drawEllipse({
+      pos: k.vec2(nx - w * 0.2, ny),
+      radiusX: w * 0.12,
+      radiusY: BODY_HEIGHT / NODE_COUNT * 0.5,
+      color: k.rgb(BODY_HIGHLIGHT_R + 30, BODY_HIGHLIGHT_G + 20, BODY_HIGHLIGHT_B + 15),
+      opacity: 0.25
     })
   }
-  //
-  // Rounded tip cap
-  //
-  const tipY = floorY - BODY_HEIGHT
-  if (tipY >= topY) {
-    const tipW = getWidth(1)
-    const tipX = x + (inst.spineOffsets[NODE_COUNT - 1] || 0)
-    k.drawEllipse({
-      pos: k.vec2(tipX, tipY),
-      radiusX: tipW / 2 + 2,
-      radiusY: tipW / 2 * 0.7,
-      color: outlineColor
-    })
-    k.drawEllipse({
-      pos: k.vec2(tipX, tipY),
-      radiusX: tipW / 2,
-      radiusY: tipW / 2 * 0.6,
-      color: k.rgb(BODY_COLOR_R + 8, BODY_COLOR_G + 5, BODY_COLOR_B + 4)
-    })
-  }
-  drawSuckers(inst)
   if (riseAmount > BODY_HEIGHT * 0.4) drawEyes(inst)
   if (riseAmount > BODY_HEIGHT * 0.35) drawMouth(inst)
   //
@@ -453,24 +444,28 @@ function drawEarthMounds(inst) {
   }
 }
 //
-// Draw circular suckers along the body (above ground only)
+// Draw dark horizontal lines across the body to define worm segments
 //
-function drawSuckers(inst) {
+function drawSegmentLines(inst, outlineColor) {
   const { k, x, floorY, riseAmount } = inst
   const topY = floorY - riseAmount
-  const suckerColor = k.rgb(SUCKER_COLOR_R, SUCKER_COLOR_G, SUCKER_COLOR_B)
-  for (let i = 0; i < SUCKER_COUNT; i++) {
-    const t = (i + 1) / (SUCKER_COUNT + 1)
+  for (let s = 1; s < SEGMENT_LINE_COUNT; s++) {
+    const t = s / SEGMENT_LINE_COUNT
+    const ny = floorY - t * BODY_HEIGHT
+    if (ny < topY || ny > floorY - 4) continue
     const idx = Math.round(t * (NODE_COUNT - 1))
-    const sy = floorY - t * BODY_HEIGHT
-    if (sy < topY || sy > floorY - 4) continue
-    const offsetX = inst.spineOffsets[idx] || 0
-    const r = SUCKER_RADIUS_MIN + (SUCKER_RADIUS_MAX - SUCKER_RADIUS_MIN) * (1 - t)
-    k.drawCircle({
-      pos: k.vec2(x + offsetX, sy),
-      radius: r,
-      color: suckerColor,
-      opacity: 0.6
+    const nx = x + (inst.spineOffsets[idx] || 0)
+    const w = getWidth(t)
+    const halfW = w / 2 - 3
+    //
+    // Slight curve on segment lines using a thin ellipse
+    //
+    k.drawEllipse({
+      pos: k.vec2(nx, ny),
+      radiusX: halfW,
+      radiusY: SEGMENT_LINE_WIDTH,
+      color: outlineColor,
+      opacity: 0.65
     })
   }
 }

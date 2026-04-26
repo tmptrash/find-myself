@@ -108,10 +108,10 @@ const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 //
 //
-// Life deduction (level-specific flags and threshold)
+// Life trap (level-specific flags and threshold)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
-const LIFE_DEDUCT_FLAG = 'touch.lifeDeducted'
+const LIFE_DEDUCT_FLAG = 'touch.trapAdded'
 //
 // Instructions animation constants
 //
@@ -140,7 +140,7 @@ const MONSTER_CONVERSATION_LINES = [
   { speaker: 1, text: "should we tell him?" },
   { speaker: 0, text: "no. understanding must\ngrow on its own" }
 ]
-const MONSTER_CONVERSATION_STORAGE_KEY = 'touch.monsterSeen'
+const MONSTERS_TALKED_KEY = 'touch.monstersTalked'
 //
 // Bug4 (anti-hero platform monster) tooltip - head-only hover zone, appears below
 //
@@ -446,25 +446,23 @@ export function sceneLevel0(k) {
     // Life deduction intro: show once when lifeScore reaches threshold for the first time
     //
     const currentLifeScore = get('lifeScore', 0)
-    const alreadyDeducted = get(LIFE_DEDUCT_FLAG, false)
-    const trapAlreadyActive = get('touch.trapActive', false)
-    const lifeDeducted = !alreadyDeducted && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
+    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     //
     // Scene-level lock: hero controls are disabled during the life deduction animation
     //
-    const sceneLock = { locked: lifeDeducted }
+    const sceneLock = { locked: showTrap }
     //
     // Show keyboard controls instructions (delayed if life deduction animation plays)
     //
-    showInstructions(k, lifeDeducted ? LifeDeduction.TOTAL_DURATION : 0)
-    if (lifeDeducted) {
+    showInstructions(k, showTrap ? LifeDeduction.TOTAL_DURATION : 0)
+    if (showTrap) {
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
-        extraFlags: ['touch.trapActive'],
         sceneLock
       })
     }
@@ -1633,8 +1631,8 @@ export function sceneLevel0(k) {
     //
     // Trap tentacles: appear if life was just deducted or if trap was already active from a previous attempt
     //
-    const showTraps = lifeDeducted || trapAlreadyActive
-    showTraps && createTrapSpikes(k, heroInst, levelIndicator, sound)
+    const trapsEnabled = showTrap || trapAlreadyAdded
+    trapsEnabled && createTrapSpikes(k, heroInst, levelIndicator, sound)
     //
     // Hidden bonus hero on the left side at antihero height
     // Only visible when hero approaches from above (jumping from a bug)
@@ -1651,7 +1649,8 @@ export function sceneLevel0(k) {
       levelIndicator,
       sfx: sound,
       approachFromAbove: true,
-      heroBodyColor
+      heroBodyColor,
+      storageKey: 'touch.level0BonusCollected'
     })
     //
     // Create bugs on the floor
@@ -2741,6 +2740,7 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
     if (inst.progress <= 0) {
       inst.phase = 'hidden'
       inst.timer = 0
+      inst.triggered = false
     }
   }
   //
@@ -3160,7 +3160,7 @@ function startMonsterConversation(k, monsterBugs) {
   //
   // Only show conversation once per player (persisted in localStorage)
   //
-  if (get(MONSTER_CONVERSATION_STORAGE_KEY)) return
+  if (get(MONSTERS_TALKED_KEY)) return
   //
   // Conversation state: tracks current line and timing
   //
@@ -3227,7 +3227,7 @@ function startMonsterConversation(k, monsterBugs) {
           //
           // Persist only after the full conversation has played
           //
-          set(MONSTER_CONVERSATION_STORAGE_KEY, true)
+          set(MONSTERS_TALKED_KEY, true)
           return
         }
         inst.phase = 'pause'

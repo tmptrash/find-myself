@@ -185,7 +185,7 @@ const LOG_KNOT_RADIUS_MAX = 5
 // Life deduction (level-specific flags and thresholds, up to 2 deductions)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
-const LIFE_DEDUCT_FLAG = 'touch.level2DeductCount'
+const LIFE_DEDUCT_FLAG = 'touch.level2TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level2Visited'
 const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
 const LIFE_DEDUCT_TRAP_FLAG = 'touch.level2TrapActive'
@@ -372,19 +372,19 @@ export function sceneLevel2(k) {
     // Same "first visit → second visit" pattern per deduction.
     //
     const currentLifeScore = get('lifeScore', 0)
-    const deductCount = get(LIFE_DEDUCT_FLAG, 0)
+    const trapCount = get(LIFE_DEDUCT_FLAG, 0)
     const iciclesAlreadyActive = get(LIFE_DEDUCT_ICICLES_FLAG, false)
     const trapAlreadyActive = get(LIFE_DEDUCT_TRAP_FLAG, false)
     const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
-    const eligible = deductCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const eligible = trapCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     //
     // Determine whether to show deduction on this load
     //
-    let showDeduction = false
+    let showTrap = false
     if (eligible && !alreadyVisited) {
       set(LIFE_DEDUCT_VISITED_FLAG, true)
     } else if (eligible && alreadyVisited) {
-      showDeduction = true
+      showTrap = true
       set(LIFE_DEDUCT_VISITED_FLAG, false)
     }
     //
@@ -392,15 +392,15 @@ export function sceneLevel2(k) {
     //
     let iciclesActive = iciclesAlreadyActive
     let trapPlatformActive = trapAlreadyActive
-    if (showDeduction) {
-      const nextCount = deductCount + 1
+    if (showTrap) {
+      const nextCount = trapCount + 1
       if (nextCount >= 1) iciclesActive = true
       if (nextCount >= 2) trapPlatformActive = true
     }
     //
     // Scene-level lock: hero controls disabled during life deduction animation
     //
-    const sceneLock = { locked: showDeduction }
+    const sceneLock = { locked: showTrap }
     //
     // Bottom platform (full width)
     //
@@ -499,8 +499,8 @@ export function sceneLevel2(k) {
     // Show life deduction animation if eligible on second visit.
     // Updates deduct count and activates icicles/trap depending on which deduction this is.
     //
-    if (showDeduction) {
-      const nextCount = deductCount + 1
+    if (showTrap) {
+      const nextCount = trapCount + 1
       const extraFlags = []
       if (nextCount >= 1) extraFlags.push(LIFE_DEDUCT_ICICLES_FLAG)
       if (nextCount >= 2) extraFlags.push(LIFE_DEDUCT_TRAP_FLAG)
@@ -510,7 +510,7 @@ export function sceneLevel2(k) {
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
-        deductFlagValue: deductCount + 1,
+        deductFlagValue: trapCount + 1,
         extraFlags,
         sceneLock,
         onComplete: () => {
@@ -585,7 +585,8 @@ export function sceneLevel2(k) {
       sfx: sound,
       approachFromAbove: true,
       revealDistance: 120,
-      heroBodyColor
+      heroBodyColor,
+      storageKey: 'touch.level2BonusCollected'
     })
     //
     // Right-side floor icicles always present from the start.

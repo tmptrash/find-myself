@@ -9,7 +9,7 @@ import { getRGB } from '../../../utils/helper.js'
 const PLATFORM_HEIGHT = 20
 const REVEAL_DISTANCE = 150
 const BONUS_POINTS = 3
-const HERO_SCALE = 2
+const HERO_SCALE = 1.5
 const SPARKLE_INTERVAL_MIN = 2.5
 const SPARKLE_INTERVAL_MAX = 5.0
 const SPARKLE_DURATION = 0.4
@@ -20,7 +20,6 @@ const SPARKLE_COLOR_B = 100
 const COLLECT_PARTICLE_COUNT = 12
 const COLLECT_PARTICLE_SPEED = 120
 const COLLECT_PARTICLE_LIFETIME = 0.8
-const PLATFORM_FADE_SPEED = 3.0
 //
 // Log platform visual constants (simplified log barrel style)
 //
@@ -59,6 +58,7 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {boolean} [config.approachFromAbove] - Only reveal when hero falls from above
  * @param {number} [config.revealDistance] - Custom reveal distance
  * @param {string} [config.heroBodyColor] - Body color for the mini-hero (defaults to main hero color)
+ * @param {string} [config.storageKey] - localStorage key to persist collection state
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -67,8 +67,13 @@ export function create(config) {
     heroInst, levelIndicator, sfx,
     approachFromAbove = false,
     revealDistance = REVEAL_DISTANCE,
-    heroBodyColor = null
+    heroBodyColor = null,
+    storageKey = null
   } = config
+  //
+  // Skip creation if bonus was already collected in a previous visit
+  //
+  if (storageKey && get(storageKey, false)) return null
   //
   // Off-screen Y so the collision body is unreachable until hero approaches from above
   //
@@ -126,7 +131,8 @@ export function create(config) {
     bonusFlashParticles: [],
     miniColor,
     offScreenY: OFF_SCREEN_Y,
-    logDetail: generateLogDetail(width, PLATFORM_HEIGHT)
+    logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
+    storageKey
   }
   //
   // Reveal visual when hero physically lands on the platform
@@ -139,7 +145,7 @@ export function create(config) {
   //
   k.add([
     k.pos(0, 0),
-    k.z(CFG.visual.zIndex.platforms + 2),
+    k.z(CFG.visual.zIndex.player + 5),
     {
       draw() {
         onDraw(inst)
@@ -183,10 +189,11 @@ function onUpdate(inst) {
     if (inRange) inst.revealed = true
   }
   //
-  // Fade platform in once revealed
+  // Snap platform and mini-hero to full visibility once revealed
   //
   if (inst.revealed && inst.platformOpacity < 1) {
-    inst.platformOpacity = Math.min(1, inst.platformOpacity + dt * PLATFORM_FADE_SPEED)
+    inst.platformOpacity = 1
+    inst.miniHero.character.opacity = 1
   }
   //
   // Sparkle hint (visible even before platform reveal)
@@ -403,6 +410,7 @@ function collectBonus(inst) {
   inst.collected = true
   inst.miniHero.character.opacity = 0
   inst.miniHero.character.paused = true
+  inst.storageKey && set(inst.storageKey, true)
   //
   // Add bonus score
   //

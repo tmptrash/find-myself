@@ -205,7 +205,7 @@ const GIANT_WORM_X_OFFSET = 200
 // Life deduction (level-specific flags and threshold)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
-const LIFE_DEDUCT_FLAG = 'touch.level1DeductDone'
+const LIFE_DEDUCT_FLAG = 'touch.level1TrapAdded'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level1Visited'
 const LIFE_DEDUCT_LEAVES_FLAG = 'touch.level1LeavesActive'
 
@@ -1144,25 +1144,25 @@ export function sceneLevel1(k) {
     // Second visit (after death/reload): show deduction and activate leaves.
     //
     const currentLifeScore = get('lifeScore', 0)
-    const alreadyDeducted = get(LIFE_DEDUCT_FLAG, false)
+    const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
     const leavesAlreadyActive = get(LIFE_DEDUCT_LEAVES_FLAG, false)
     const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
-    const eligible = !alreadyDeducted && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const eligible = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     //
     // Determine whether to show deduction and whether leaves should fall
     //
-    let showDeduction = false
+    let showTrap = false
     let leavesActive = leavesAlreadyActive
     if (eligible && !alreadyVisited) {
       set(LIFE_DEDUCT_VISITED_FLAG, true)
     } else if (eligible && alreadyVisited) {
-      showDeduction = true
+      showTrap = true
       leavesActive = true
     }
     //
     // Scene-level lock: hero controls disabled during life deduction animation
     //
-    const sceneLock = { locked: showDeduction }
+    const sceneLock = { locked: showTrap }
     //
     // Bottom platform (full width) - raised by 200px, but extends to bottom
     //
@@ -1538,7 +1538,7 @@ export function sceneLevel1(k) {
     //
     // Show life deduction animation if eligible on second visit
     //
-    if (showDeduction) {
+    if (showTrap) {
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
@@ -1576,7 +1576,8 @@ export function sceneLevel1(k) {
       levelIndicator,
       sfx: sound,
       approachFromAbove: true,
-      heroBodyColor
+      heroBodyColor,
+      storageKey: 'touch.level1BonusCollected'
     })
     //
     // Set hero reference for grass drawer

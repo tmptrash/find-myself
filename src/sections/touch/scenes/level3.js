@@ -492,7 +492,7 @@ const SNOW_AMBIENT_BRIGHTNESS = 0.08
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
-const LIFE_DEDUCT_FLAG = 'touch.level3DeductCount'
+const LIFE_DEDUCT_FLAG = 'touch.level3TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level3Visited'
 const LIFE_DEDUCT_MAX_COUNT = 1
 const LIFE_DEDUCT_SCATTER_FLAG = 'touch.level3ScatterActive'
@@ -514,20 +514,20 @@ export function sceneLevel3(k) {
     // Life deduction: check if we should show the hint on this load
     //
     const currentLifeScore = get('lifeScore', 0)
-    const deductCount = get(LIFE_DEDUCT_FLAG, 0)
+    const trapCount = get(LIFE_DEDUCT_FLAG, 0)
     const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
-    const eligible = deductCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
-    let showDeduction = false
+    const eligible = trapCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    let showTrap = false
     if (eligible && !alreadyVisited) {
       set(LIFE_DEDUCT_VISITED_FLAG, true)
     } else if (eligible && alreadyVisited) {
-      showDeduction = true
+      showTrap = true
       set(LIFE_DEDUCT_VISITED_FLAG, false)
     }
     //
     // Scene-level lock: hero controls disabled during life deduction animation
     //
-    const sceneLock = { locked: showDeduction }
+    const sceneLock = { locked: showTrap }
     //
     // Set gravity
     //
@@ -574,7 +574,7 @@ export function sceneLevel3(k) {
     //
     // If scatter already happened in a previous visit, enable proximity-based scatter
     //
-    const scatterAlreadyDone = get(LIFE_DEDUCT_SCATTER_FLAG, false) && !showDeduction
+    const scatterAlreadyDone = get(LIFE_DEDUCT_SCATTER_FLAG, false) && !showTrap
     if (scatterAlreadyDone) {
       trapState.scatterOnProximity = true
     }
@@ -711,7 +711,7 @@ export function sceneLevel3(k) {
     //
     // Show glow instructions hint text (delayed if deduction hint is playing)
     //
-    if (showDeduction) {
+    if (showTrap) {
       k.wait(LifeDeduction.TOTAL_DURATION + 0.3, () => showGlowInstructions(k))
     } else {
       showGlowInstructions(k)
@@ -720,7 +720,7 @@ export function sceneLevel3(k) {
     // Show life deduction animation if eligible on second visit.
     // On complete: trigger trap platform scatter.
     //
-    if (showDeduction) {
+    if (showTrap) {
       //
       // Enable proximity-based scatter after the deduction animation finishes.
       // Platforms stay still until hero approaches them.
@@ -728,7 +728,7 @@ export function sceneLevel3(k) {
       k.wait(LifeDeduction.TOTAL_DURATION + 0.3, () => {
         trapState.scatterOnProximity = true
       })
-      const nextCount = deductCount + 1
+      const nextCount = trapCount + 1
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,

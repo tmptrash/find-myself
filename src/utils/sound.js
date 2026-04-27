@@ -2774,7 +2774,7 @@ export function playTentacleAmbientSound(instance) {
   osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, now + 0.5)
   osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.3, now + 1.0)
   gain.gain.setValueAtTime(0.001, now)
-  gain.gain.linearRampToValueAtTime(0.08, now + 0.1)
+  gain.gain.linearRampToValueAtTime(0.22, now + 0.1)
   gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0)
   //
   // FM modulation for alien warble

@@ -8,12 +8,20 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as BackgroundBirds from '../components/background-birds.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
 const PLATFORM_BOTTOM_HEIGHT = 100
 const PLATFORM_SIDE_WIDTH = 50
 const CORNER_RADIUS = 20  // Radius for rounded corners
+//
+// TIME indicator tooltip
+//
+const TIME_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning time"
+const TIME_INDICATOR_TOOLTIP_WIDTH = 200
+const TIME_INDICATOR_TOOLTIP_HEIGHT = 40
+const TIME_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
 // Corridor dimensions
 //
@@ -531,6 +539,22 @@ export function sceneLevel3(k) {
     // Show snowball throwing instructions
     //
     showSnowballInstructions(k)
+    //
+    // Tooltip for TIME level indicator letters
+    //
+    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + TIME_INDICATOR_TOOLTIP_WIDTH / 2
+    const timeLettersCenterY = (CORRIDOR_Y - 20) / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: timeLettersCenterX,
+        y: timeLettersCenterY,
+        width: TIME_INDICATOR_TOOLTIP_WIDTH,
+        height: TIME_INDICATOR_TOOLTIP_HEIGHT,
+        text: TIME_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
   })
 }
 

@@ -30,6 +30,13 @@ const SUN_MOUTH_HEIGHT = 0.22
 const SUN_TOOTH_WIDTH = 0.1
 const SUN_TOOTH_HEIGHT = 0.08
 //
+// Eyebrow dimensions and raise distance (relative to SUN_RADIUS)
+//
+const SUN_BROW_OFFSET_Y = -0.08
+const SUN_BROW_RAISE = 0.14
+const SUN_BROW_WIDTH = 0.16
+const SUN_BROW_THICKNESS = 2.5
+//
 // Global music instances for time section (persist across level reloads)
 //
 export let timeSectionMusic = {
@@ -428,7 +435,8 @@ function updateSunHover(k, state) {
   state.intensity = Math.max(0, Math.min(1, state.intensity))
 }
 //
-// Draw smiley face on the sun with eyes, pupils, mouth and teeth
+// Draw smiley face on the sun with eyes, eyebrows, pupils, and a curved smile.
+// Eyebrows raise and smile widens gradually as intensity goes from 0 to 1.
 //
 function drawSunFace(k, intensity) {
   if (intensity < 0.01) return
@@ -437,50 +445,96 @@ function drawSunFace(k, intensity) {
   const white = k.rgb(255, 255, 255)
   const black = k.rgb(40, 40, 40)
   //
-  // Eyes — white sclera with dark pupils
+  // Eye positions
   //
   const eyeR = SUN_EYE_RADIUS * r
   const pupilR = SUN_PUPIL_RADIUS * r
   const eyeY = SUN_Y + SUN_EYE_OFFSET_Y * r
   const leftEyeX = SUN_X - SUN_EYE_OFFSET_X * r
   const rightEyeX = SUN_X + SUN_EYE_OFFSET_X * r
+  //
+  // Eyebrows — raise upward as intensity increases
+  //
+  const browY = eyeY + SUN_BROW_OFFSET_Y * r - intensity * SUN_BROW_RAISE * r
+  const browHalfW = SUN_BROW_WIDTH * r
+  drawSunBrow(k, leftEyeX, browY, browHalfW, intensity)
+  drawSunBrow(k, rightEyeX, browY, browHalfW, intensity)
+  //
+  // Eyes — white sclera with dark pupils
+  //
   k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
   k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
   k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
   k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
   //
-  // Mouth — darker ellipse with white teeth
+  // Smile — curved arc that widens and rises with intensity
   //
+  drawSunSmile(k, intensity, r, darkColor, white)
+}
+//
+// Draws a single eyebrow as a short curved arc above an eye
+//
+function drawSunBrow(k, cx, y, halfW, intensity) {
+  const segments = 6
+  const black = k.rgb(60, 50, 30)
+  for (let i = 0; i < segments; i++) {
+    const t0 = i / segments
+    const t1 = (i + 1) / segments
+    const x0 = cx - halfW + t0 * halfW * 2
+    const x1 = cx - halfW + t1 * halfW * 2
+    const archHeight = -intensity * 3
+    const y0 = y + Math.sin(t0 * Math.PI) * archHeight
+    const y1 = y + Math.sin(t1 * Math.PI) * archHeight
+    k.drawLine({
+      p1: k.vec2(x0, y0),
+      p2: k.vec2(x1, y1),
+      width: SUN_BROW_THICKNESS,
+      color: black,
+      opacity: intensity
+    })
+  }
+}
+//
+// Draws a curved smile on the sun. At low intensity it is a flat line;
+// at full intensity it becomes a wide grin with teeth.
+//
+function drawSunSmile(k, intensity, r, darkColor, white) {
   const mouthY = SUN_Y + SUN_MOUTH_Y * r
-  const mouthW = SUN_MOUTH_WIDTH * r
-  const mouthH = SUN_MOUTH_HEIGHT * r
-  k.drawEllipse({
-    pos: k.vec2(SUN_X, mouthY),
-    radiusX: mouthW / 2,
-    radiusY: mouthH / 2,
-    color: darkColor,
-    opacity: intensity
-  })
+  const mouthW = SUN_MOUTH_WIDTH * r * (0.4 + intensity * 0.6)
+  const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 0.8
+  const segments = 10
   //
-  // Teeth — two small white rectangles at top of mouth
+  // Draw filled mouth area using overlapping circles along the curve
   //
-  const toothW = SUN_TOOTH_WIDTH * r
-  const toothH = SUN_TOOTH_HEIGHT * r
-  const toothY = mouthY - mouthH / 2
-  k.drawRect({
-    pos: k.vec2(SUN_X - toothW - 1, toothY),
-    width: toothW,
-    height: toothH,
-    color: white,
-    opacity: intensity
-  })
-  k.drawRect({
-    pos: k.vec2(SUN_X + 1, toothY),
-    width: toothW,
-    height: toothH,
-    color: white,
-    opacity: intensity
-  })
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments
+    const x = SUN_X - mouthW / 2 + t * mouthW
+    const curveY = mouthY + Math.sin(t * Math.PI) * curveDepth
+    const dotR = 2 + intensity * 3.5
+    k.drawCircle({ pos: k.vec2(x, curveY), radius: dotR, color: darkColor, opacity: intensity })
+  }
+  //
+  // Teeth — only visible when smile is wide enough
+  //
+  if (intensity > 0.3) {
+    const toothOpacity = (intensity - 0.3) / 0.7
+    const toothW = SUN_TOOTH_WIDTH * r
+    const toothH = SUN_TOOTH_HEIGHT * r * intensity
+    k.drawRect({
+      pos: k.vec2(SUN_X - toothW - 1, mouthY - toothH * 0.3),
+      width: toothW,
+      height: toothH,
+      color: white,
+      opacity: toothOpacity
+    })
+    k.drawRect({
+      pos: k.vec2(SUN_X + 1, mouthY - toothH * 0.3),
+      width: toothW,
+      height: toothH,
+      color: white,
+      opacity: toothOpacity
+    })
+  }
 }
 /**
  * Check if player earned speed bonus and display message

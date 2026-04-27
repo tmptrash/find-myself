@@ -11,6 +11,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as BackgroundBirds from '../components/background-birds.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
@@ -32,6 +33,42 @@ const ANTIHERO_SPAWN_Y = 795  // Raised by 5px due to ground stripe
 const ANTIHERO_SPAWN_DELAY = 1.0  // Anti-hero spawns 1 second after hero
 const HERO_FIRST_THOUGHTS_DELAY = 2.0
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
+//
+// TIME indicator tooltip
+//
+const TIME_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning time"
+const TIME_INDICATOR_TOOLTIP_WIDTH = 200
+const TIME_INDICATOR_TOOLTIP_HEIGHT = 40
+const TIME_INDICATOR_TOOLTIP_Y_OFFSET = -30
+//
+// Green timer tooltip
+//
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_WIDTH = 100
+const GREEN_TIMER_TOOLTIP_HEIGHT = 30
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
+//
+// Small hero and life icon tooltips (appear below)
+//
+const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_SIZE = 80
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 80
+const LIFE_TOOLTIP_Y_OFFSET = 50
+//
+// Anti-hero tooltip
+//
+const ANTIHERO_TOOLTIP_TEXT = "time waits for no one"
+const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
+const ANTIHERO_TOOLTIP_HOVER_HEIGHT = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+//
+// Hero tooltip
+//
+const HERO_TOOLTIP_TEXT = "time flies..."
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -60
 
 /**
  * Time section level 0 scene
@@ -423,6 +460,95 @@ export function sceneLevel0(k) {
       fakeDigitCount: 0,
       sfx: sound,
       levelIndicator
+    })
+    //
+    // Tooltip for TIME level indicator letters
+    //
+    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + TIME_INDICATOR_TOOLTIP_WIDTH / 2
+    const timeLettersCenterY = PLATFORM_TOP_HEIGHT / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: timeLettersCenterX,
+        y: timeLettersCenterY,
+        width: TIME_INDICATOR_TOOLTIP_WIDTH,
+        height: TIME_INDICATOR_TOOLTIP_HEIGHT,
+        text: TIME_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for green timer (target time countdown)
+    //
+    fpsCounter.targetText && Tooltip.create({
+      k,
+      targets: [{
+        x: fpsCounter.targetText.pos.x,
+        y: fpsCounter.targetText.pos.y,
+        width: GREEN_TIMER_TOOLTIP_WIDTH,
+        height: GREEN_TIMER_TOOLTIP_HEIGHT,
+        text: GREEN_TIMER_TOOLTIP_TEXT,
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for small hero icon (score) — appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for life icon — appears below
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.pos.x,
+        y: levelIndicator.lifeImage.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for anti-hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHero.character.pos.x,
+        y: () => antiHero.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_WIDTH,
+        height: ANTIHERO_TOOLTIP_HOVER_HEIGHT,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => hero.character.pos.x,
+        y: () => hero.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
     })
   })
 }

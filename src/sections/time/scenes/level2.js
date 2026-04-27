@@ -11,6 +11,7 @@ import { toPng, parseHex, hexToRgb, rgbToHex, getRGB } from '../../../utils/help
 import * as PixelClouds from '../../../components/pixel-clouds.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as BackgroundBirds from '../components/background-birds.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -19,6 +20,13 @@ const PLATFORM_BOTTOM_HEIGHT = 150
 const PLATFORM_SIDE_WIDTH = 50  // Reduced from 192 to 50 for more space
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
 const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
+//
+// TIME indicator tooltip
+//
+const TIME_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning time"
+const TIME_INDICATOR_TOOLTIP_WIDTH = 200
+const TIME_INDICATOR_TOOLTIP_HEIGHT = 40
+const TIME_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
 // Hero size (approximately)
 //
@@ -634,6 +642,22 @@ export function sceneLevel2(k) {
     // Spawn anti-hero immediately (no delay)
     //
     Hero.spawn(antiHero)
+    //
+    // Tooltip for TIME level indicator letters
+    //
+    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + TIME_INDICATOR_TOOLTIP_WIDTH / 2
+    const timeLettersCenterY = PLATFORM_TOP_HEIGHT / 2
+    Tooltip.create({
+      k,
+      targets: [{
+        x: timeLettersCenterX,
+        y: timeLettersCenterY,
+        width: TIME_INDICATOR_TOOLTIP_WIDTH,
+        height: TIME_INDICATOR_TOOLTIP_HEIGHT,
+        text: TIME_INDICATOR_TOOLTIP_TEXT,
+        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET
+      }]
+    })
   })
 }
 

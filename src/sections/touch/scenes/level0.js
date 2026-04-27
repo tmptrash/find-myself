@@ -229,7 +229,7 @@ const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your score"
+const SMALL_HERO_TOOLTIP_TEXT = "your points"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"

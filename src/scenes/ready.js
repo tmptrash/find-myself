@@ -18,7 +18,7 @@ const INSTRUCTIONS_TEXT_LINES = [
   { text: 'is a game about discovering who you are. You play against life', normal: true },
   { text: 'itself — the only opponent you will ever face.', normal: true },
   { text: '', normal: true },
-  { text: 'In each world, you search for yourself — collecting fragments', normal: true },
+  { text: 'In each world, you search for meaning — collecting fragments', normal: true },
   { text: 'of yourself and learning to understand this world. Reaching', normal: true },
   { text: 'the other "you" means meeting yourself honestly.', normal: true },
   { text: 'Complete levels quickly to earn fragments — use them when you', normal: true },

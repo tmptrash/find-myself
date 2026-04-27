@@ -577,6 +577,7 @@ export function sceneMenu(k) {
       floatSpeedX: FLOAT_SPEED_X,
       floatSpeedY: FLOAT_SPEED_Y,
       hoveredAntiHero: null,
+      heroInst,
       isLeavingScene: false,
       heartbeatPhase: 0,
       lastHeartbeatTime: 0,
@@ -636,11 +637,12 @@ export function sceneMenu(k) {
         let targetColor
         let desiredPrefix
         const isHovered = antiHeroInst === hoveredInst
-        const shouldUseBlackOutline = isHovered || antiHeroInst.isCompleted
+        const isCurrentSection = inst.currentSection === antiHeroInst.section
+        const shouldUseBlackOutline = isHovered || antiHeroInst.isCompleted || isCurrentSection
         //
-        // Special handling for time section: use yellow when completed
+        // Special handling for time section: use yellow when completed or current
         //
-        if (antiHeroInst.section === 'time' && antiHeroInst.isCompleted) {
+        if (antiHeroInst.section === 'time' && (antiHeroInst.isCompleted || isCurrentSection)) {
           targetColor = antiHeroInst.yellowColor
           desiredPrefix = antiHeroInst.spritePrefixYellow
         } else if (antiHeroInst.section === 'time' && isHovered) {
@@ -651,14 +653,13 @@ export function sceneMenu(k) {
           desiredPrefix = antiHeroInst.spritePrefixYellow
         } else if (shouldUseBlackOutline) {
           //
-          // Hovered OR completed: use section-colored sprite with white tint
-          // (colored sprite avoids the dark tinting from gray × color multiplication)
+          // Hovered, completed, or current section: use section-colored sprite
           //
           targetColor = antiHeroInst.sectionColor
           desiredPrefix = antiHeroInst.spritePrefixColored
         } else {
           //
-          // Not hovered and not completed: gray
+          // Not hovered, not completed, not current: gray
           //
           targetColor = antiHeroInst.grayColor
           desiredPrefix = antiHeroInst.spritePrefixGray
@@ -778,6 +779,16 @@ export function sceneMenu(k) {
       }
       
       inst.hoveredAntiHero = hoveredInst
+      //
+      // Make hero and antihero eyes look at each other when hovering
+      //
+      if (hoveredInst && hoveredInst.character?.pos) {
+        Hero.setLookAtPos(inst.heroInst, { x: hoveredInst.character.pos.x, y: hoveredInst.character.pos.y })
+        Hero.setLookAtPos(hoveredInst, { x: hero.pos.x, y: hero.pos.y })
+      } else {
+        Hero.setLookAtPos(inst.heroInst, null)
+        antiHeroes.forEach(ah => Hero.setLookAtPos(ah, null))
+      }
       //
       // Fade default background out when hovering any anti-hero, back in when not
       //

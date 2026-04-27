@@ -218,6 +218,7 @@ export function create(config) {
     targetEyeY: 0,
     eyeTimer: 0,
     currentEyeSprite: null,
+    lookAtPos: null,
     isAnnihilating: false,
     isDying: false,
     isSpawned: false,   // Flag to prevent controls before spawn completes
@@ -418,6 +419,16 @@ export function death(inst, onComplete) {
   k.wait(DEATH_ANIMATION_DURATION, () => onComplete?.())
 }
 
+/**
+ * Sets a world position for the hero to look at. When set, eyes
+ * track this position instead of wandering randomly.
+ * Pass null to resume random eye movement.
+ * @param {Object} inst - Hero instance
+ * @param {Object|null} pos - { x, y } world position or null
+ */
+export function setLookAtPos(inst, pos) {
+  inst.lookAtPos = pos
+}
 /**
  * Spawn hero with assembly effect from particles
  * @param {Object} inst - Hero instance
@@ -924,16 +935,23 @@ function updateIdleAnimation(inst) {
     inst.currentEyeSprite = spriteName
   }
   //
-  // Eye animation - smooth movement
+  // Eye animation: track lookAtPos if set, otherwise random wander
   //
-  inst.eyeTimer += inst.k.dt()
-  //
-  // Choose new target position
-  //
-  if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
-    inst.targetEyeX = inst.k.choose([-1, 0, 1])
-    inst.targetEyeY = inst.k.choose([-1, 0, 1])
-    inst.eyeTimer = 0
+  if (inst.lookAtPos) {
+    const heroPos = inst.character?.pos
+    if (heroPos) {
+      const dx = inst.lookAtPos.x - heroPos.x
+      const dy = inst.lookAtPos.y - heroPos.y
+      inst.targetEyeX = dx > 20 ? 1 : dx < -20 ? -1 : 0
+      inst.targetEyeY = dy > 20 ? 1 : dy < -20 ? -1 : 0
+    }
+  } else {
+    inst.eyeTimer += inst.k.dt()
+    if (inst.eyeTimer > inst.k.rand(EYE_ANIM_MIN_DELAY, EYE_ANIM_MAX_DELAY)) {
+      inst.targetEyeX = inst.k.choose([-1, 0, 1])
+      inst.targetEyeY = inst.k.choose([-1, 0, 1])
+      inst.eyeTimer = 0
+    }
   }
   //
   // Smoothly interpolate to target position

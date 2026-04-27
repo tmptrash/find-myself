@@ -288,6 +288,8 @@ const TRAP_SPIKE_HEIGHT_MAX = 80
 const TRAP_RISE_DURATION = 0.3
 const TRAP_HOLD_DURATION = 2.0
 const TRAP_RETRACT_DURATION = 0.8
+const TRAP_PROXIMITY_RADIUS = 180
+const TRAP_AMBIENT_SOUND_INTERVAL = 2.0
 //
 // Tentacle wiggle parameters
 //
@@ -1650,7 +1652,8 @@ export function sceneLevel0(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level0BonusCollected'
+      storageKey: 'touch.level0BonusCollected',
+      hintText: "no matter how many problems\nthere are, a solution always exists"
     })
     //
     // Create bugs on the floor
@@ -2021,6 +2024,7 @@ export function sceneLevel0(k) {
       // Update bugs and pyramids
     //
     k.onUpdate(() => {
+      if (heroInst.isAnnihilating) return
       const dt = k.dt()
       
       bugs.forEach(bug => Bugs.onUpdate(bug, dt))
@@ -2662,7 +2666,8 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
     phase: 'hidden',
     timer: 0,
     progress: 0,
-    triggered: false
+    triggered: false,
+    ambientSoundTimer: 0
   }
   const fillColor = k.rgb(TRAP_SPIKE_FILL_R, TRAP_SPIKE_FILL_G, TRAP_SPIKE_FILL_B)
   const outlineColor = k.rgb(0, 0, 0)
@@ -2718,7 +2723,7 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
       inst.phase = 'rising'
       inst.timer = 0
       inst.triggered = true
-      sound && Sound.playBladeSound(sound)
+      sound && Sound.playTentacleSound(sound)
     }
     return
   }
@@ -2731,9 +2736,22 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
     }
   } else if (inst.phase === 'holding') {
     inst.progress = 1
-    if (inst.timer >= TRAP_HOLD_DURATION) {
+    //
+    // Play ambient alien sound periodically while tentacles are out
+    //
+    inst.ambientSoundTimer += dt
+    if (inst.ambientSoundTimer >= TRAP_AMBIENT_SOUND_INTERVAL) {
+      inst.ambientSoundTimer -= TRAP_AMBIENT_SOUND_INTERVAL
+      sound && Sound.playTentacleAmbientSound(sound)
+    }
+    //
+    // Stay out while hero is nearby; only start retracting when hero walks away
+    //
+    const heroNearby = Math.abs(heroX - TRAP_TRIGGER_X) < TRAP_PROXIMITY_RADIUS
+    if (!heroNearby && inst.timer >= TRAP_HOLD_DURATION) {
       inst.phase = 'retracting'
       inst.timer = 0
+      inst.ambientSoundTimer = 0
     }
   } else if (inst.phase === 'retracting') {
     inst.progress = Math.max(0, 1 - inst.timer / TRAP_RETRACT_DURATION)

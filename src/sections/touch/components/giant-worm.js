@@ -113,6 +113,10 @@ const ALIEN_SOUND_INTERVAL = 2.0
 const FRICTION_VOLUME = 0.16
 const EMERGENCE_VOLUME = 0.18
 const ALIEN_VOLUME = 0.1
+//
+// Smile after eating the hero
+//
+const SMILE_FADE_SPEED = 3.0
 
 /**
  * Creates a worm obstacle that emerges smoothly from the ground.
@@ -169,10 +173,12 @@ export function create(config) {
     dirtTimer: 0,
     frictionNode: null,
     frictionGain: null,
-    alienTimer: 0
+    alienTimer: 0,
+    smiling: false,
+    smileT: 0
   }
   k.add([
-    k.z(CFG.visual.zIndex.platforms + 3),
+    k.z(CFG.visual.zIndex.platforms + 15),
     {
       draw() {
         if (inst.riseAmount <= 0 && inst.dirtParticles.length === 0) return
@@ -184,6 +190,14 @@ export function create(config) {
   return inst
 }
 
+/**
+ * Makes the worm smile after eating the hero (satisfied grin).
+ * @param {Object} inst - Worm instance
+ */
+export function startSmiling(inst) {
+  inst.smiling = true
+  inst.smileT = 0
+}
 /**
  * Checks if a point (hero) collides with the worm's risen body.
  * Accounts for spine offsets (IK lean) and tapered body width.
@@ -283,6 +297,12 @@ function onUpdate(inst) {
     updateIK(inst, dt, heroX)
   }
   updateDirtParticles(inst, dt)
+  //
+  // Smile animation: smoothly transition to grin after eating hero
+  //
+  if (inst.smiling && inst.smileT < 1) {
+    inst.smileT = Math.min(1, inst.smileT + dt * SMILE_FADE_SPEED)
+  }
 }
 //
 // IK: tip leans toward hero, lower nodes follow with lag
@@ -478,6 +498,13 @@ function drawMouth(inst) {
   const topY = floorY - riseAmount
   const pos = getNodePos(inst, MOUTH_FROM_TIP_T)
   if (pos.y < topY) return
+  //
+  // When smiling, draw a curved grin instead of the normal mouth
+  //
+  if (inst.smiling && inst.smileT > 0) {
+    drawSmile(inst, pos)
+    return
+  }
   const heroX = hero?.character?.pos?.x ?? x + 999
   const heroY = hero?.character?.pos?.y ?? pos.y
   const heroDist = Math.sqrt((heroX - pos.x) ** 2 + (heroY - pos.y) ** 2)
@@ -761,4 +788,59 @@ function playAlienChirp(inst) {
   gain.connect(ctx.destination)
   osc.start(now)
   osc.stop(now + 0.9)
+}
+//
+// Draw a satisfied smile (curved upward arc with teeth peeking out)
+//
+function drawSmile(inst, mouthPos) {
+  const { k } = inst
+  const t = inst.smileT
+  const bodyW = getWidth(MOUTH_FROM_TIP_T)
+  const smileW = Math.min(MOUTH_MAX_WIDTH * 0.8, bodyW * 0.85) * t
+  const smileH = MOUTH_MAX_HEIGHT * 0.35 * t
+  if (smileW < 1) return
+  //
+  // Dark mouth interior (narrow ellipse for closed-mouth grin)
+  //
+  k.drawEllipse({
+    pos: k.vec2(mouthPos.x, mouthPos.y),
+    radiusX: smileW / 2,
+    radiusY: smileH / 2,
+    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B)
+  })
+  //
+  // Curved smile line (arc of small segments)
+  //
+  const arcSegments = 8
+  const smileColor = k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B)
+  for (let i = 0; i < arcSegments; i++) {
+    const a1 = (i / arcSegments) * Math.PI
+    const a2 = ((i + 1) / arcSegments) * Math.PI
+    const x1 = mouthPos.x - smileW / 2 + (smileW * i / arcSegments)
+    const x2 = mouthPos.x - smileW / 2 + (smileW * (i + 1) / arcSegments)
+    const curveDepth = smileH * 0.6
+    const y1 = mouthPos.y + Math.sin(a1) * curveDepth
+    const y2 = mouthPos.y + Math.sin(a2) * curveDepth
+    k.drawLine({
+      p1: k.vec2(x1, y1),
+      p2: k.vec2(x2, y2),
+      width: 2 * t,
+      color: smileColor
+    })
+  }
+  //
+  // Small teeth peeking from the top of the smile
+  //
+  const toothColor = k.rgb(TOOTH_COLOR_R, TOOTH_COLOR_G, TOOTH_COLOR_B)
+  const toothCount = 3
+  for (let i = 0; i < toothCount; i++) {
+    const tx = mouthPos.x - smileW * 0.3 + (i * smileW * 0.3)
+    const th = 3 * t
+    k.drawTriangle({
+      p1: k.vec2(tx - 2, mouthPos.y - smileH * 0.3),
+      p2: k.vec2(tx + 2, mouthPos.y - smileH * 0.3),
+      p3: k.vec2(tx, mouthPos.y - smileH * 0.3 + th),
+      color: toothColor
+    })
+  }
 }

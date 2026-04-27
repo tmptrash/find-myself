@@ -186,6 +186,10 @@ export function show(config) {
     lastTickScore: currentScore
   }
   const el = { overlay, bubble, introText, lifeIcon, scoreText, scoreOutlines, resultText }
+  //
+  // Play scary sound at the start of the deduction animation
+  //
+  sound && Sound.playScarySound(sound)
   const updateHandler = k.onUpdate(() => {
     state.timer += k.dt()
     onUpdateDeduction(k, state, el, currentScore, newScore, updateHandler, levelIndicator, sound, sceneLock, onComplete)

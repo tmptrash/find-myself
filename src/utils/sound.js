@@ -2659,6 +2659,193 @@ export function playWavePulseSound(instance) {
 }
 
 /**
+ * Play scary sound effect for life deduction hint appearance.
+ * Deep dissonant drone with sudden sharp attack and eerie overtone.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playScarySound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const duration = 2.5
+  //
+  // Ultra-deep sub-bass drone (oppressive, slow pulsing)
+  //
+  const bass = ctx.createOscillator()
+  const bassGain = ctx.createGain()
+  bass.type = 'sine'
+  bass.frequency.setValueAtTime(25, now)
+  bass.frequency.linearRampToValueAtTime(18, now + duration)
+  bassGain.gain.setValueAtTime(0.001, now)
+  bassGain.gain.linearRampToValueAtTime(0.6, now + 0.03)
+  bassGain.gain.setValueAtTime(0.6, now + 0.5)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  bass.connect(bassGain)
+  bassGain.connect(ctx.destination)
+  bass.start(now)
+  bass.stop(now + duration)
+  //
+  // Dissonant tritone with FM wobble (creeping dread)
+  //
+  const tritone = ctx.createOscillator()
+  const tritoneGain = ctx.createGain()
+  const tritoneLfo = ctx.createOscillator()
+  const tritoneLfoGain = ctx.createGain()
+  tritone.type = 'sawtooth'
+  tritone.frequency.setValueAtTime(130, now)
+  tritone.frequency.linearRampToValueAtTime(92, now + duration)
+  tritoneLfo.frequency.value = 4
+  tritoneLfoGain.gain.value = 15
+  tritoneLfo.connect(tritoneLfoGain)
+  tritoneLfoGain.connect(tritone.frequency)
+  tritoneLfo.start(now)
+  tritoneLfo.stop(now + duration)
+  const tritoneFilter = ctx.createBiquadFilter()
+  tritoneFilter.type = 'lowpass'
+  tritoneFilter.frequency.value = 400
+  tritoneFilter.Q.value = 4
+  tritoneGain.gain.setValueAtTime(0.001, now)
+  tritoneGain.gain.exponentialRampToValueAtTime(0.18, now + 0.08)
+  tritoneGain.gain.setValueAtTime(0.18, now + 0.8)
+  tritoneGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  tritone.connect(tritoneFilter)
+  tritoneFilter.connect(tritoneGain)
+  tritoneGain.connect(ctx.destination)
+  tritone.start(now)
+  tritone.stop(now + duration)
+  //
+  // Sharp noise burst at the start (violent scare)
+  //
+  const noiseDur = 0.4
+  const bufSize = Math.ceil(ctx.sampleRate * noiseDur)
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufSize) * 8)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = buf
+  const nf = ctx.createBiquadFilter()
+  nf.type = 'lowpass'
+  nf.frequency.setValueAtTime(1200, now)
+  nf.frequency.exponentialRampToValueAtTime(150, now + noiseDur)
+  nf.Q.value = 3
+  const ng = ctx.createGain()
+  ng.gain.setValueAtTime(0.001, now)
+  ng.gain.linearRampToValueAtTime(0.4, now + 0.015)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + noiseDur)
+  noise.connect(nf)
+  nf.connect(ng)
+  ng.connect(ctx.destination)
+  noise.start(now)
+  noise.stop(now + noiseDur)
+  //
+  // High dissonant whine (eerie, unsettling overtone)
+  //
+  const whine = ctx.createOscillator()
+  const whineGain = ctx.createGain()
+  whine.type = 'sine'
+  whine.frequency.setValueAtTime(950, now + 0.1)
+  whine.frequency.exponentialRampToValueAtTime(600, now + duration)
+  whineGain.gain.setValueAtTime(0.001, now + 0.1)
+  whineGain.gain.exponentialRampToValueAtTime(0.06, now + 0.3)
+  whineGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  whine.connect(whineGain)
+  whineGain.connect(ctx.destination)
+  whine.start(now + 0.1)
+  whine.stop(now + duration)
+}
+/**
+ * Play tentacle ambient chirp sound while tentacles are wiggling.
+ * Sinister low dissonant growl with FM modulation, similar to alien worm.
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playTentacleAmbientSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const baseFreq = 60 + Math.random() * 40
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(baseFreq, now)
+  osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, now + 0.5)
+  osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.3, now + 1.0)
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(0.08, now + 0.1)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0)
+  //
+  // FM modulation for alien warble
+  //
+  const mod = ctx.createOscillator()
+  const modGain = ctx.createGain()
+  mod.frequency.value = 2 + Math.random() * 4
+  modGain.gain.value = 30 + Math.random() * 20
+  mod.connect(modGain)
+  modGain.connect(osc.frequency)
+  mod.start(now)
+  mod.stop(now + 1.0)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 250
+  filter.Q.value = 6
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + 1.0)
+}
+/**
+ * Play ominous tentacle emergence sound (low growl + eerie rising whistle)
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playTentacleSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const duration = 0.6
+  //
+  // Deep rumbling growl (sawtooth at very low frequency)
+  //
+  const growl = ctx.createOscillator()
+  const growlGain = ctx.createGain()
+  const growlFilter = ctx.createBiquadFilter()
+  growl.type = 'sawtooth'
+  growl.frequency.setValueAtTime(35, now)
+  growl.frequency.linearRampToValueAtTime(55, now + duration)
+  growlFilter.type = 'lowpass'
+  growlFilter.frequency.setValueAtTime(200, now)
+  growlFilter.Q.value = 2
+  growlGain.gain.setValueAtTime(0.001, now)
+  growlGain.gain.exponentialRampToValueAtTime(0.35, now + 0.1)
+  growlGain.gain.setValueAtTime(0.35, now + duration * 0.6)
+  growlGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  growl.connect(growlFilter)
+  growlFilter.connect(growlGain)
+  growlGain.connect(ctx.destination)
+  growl.start(now)
+  growl.stop(now + duration)
+  //
+  // Eerie rising whistle (sine at mid-high range)
+  //
+  const whistle = ctx.createOscillator()
+  const whistleGain = ctx.createGain()
+  whistle.type = 'sine'
+  whistle.frequency.setValueAtTime(300, now)
+  whistle.frequency.exponentialRampToValueAtTime(800, now + duration * 0.7)
+  whistle.frequency.exponentialRampToValueAtTime(500, now + duration)
+  whistleGain.gain.setValueAtTime(0.001, now)
+  whistleGain.gain.exponentialRampToValueAtTime(0.08, now + 0.15)
+  whistleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  whistle.connect(whistleGain)
+  whistleGain.connect(ctx.destination)
+  whistle.start(now)
+  whistle.stop(now + duration)
+}
+/**
  * Mute all procedural sounds (used during transitions)
  */
 export function muteProceduralSounds() {

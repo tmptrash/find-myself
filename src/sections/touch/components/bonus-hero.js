@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { get, set } from '../../../utils/progress.js'
 import { getRGB } from '../../../utils/helper.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 
 //
 // Hidden platform and collectible hero configuration
@@ -20,6 +21,13 @@ const SPARKLE_COLOR_B = 100
 const COLLECT_PARTICLE_COUNT = 12
 const COLLECT_PARTICLE_SPEED = 120
 const COLLECT_PARTICLE_LIFETIME = 0.8
+//
+// Inner glow pulsation (matches sparkle color, visible when platform revealed)
+//
+const GLOW_PULSE_SPEED = 2.5
+const GLOW_MIN_OPACITY = 0.15
+const GLOW_MAX_OPACITY = 0.5
+const GLOW_RADIUS_MULTIPLIER = 2.5
 //
 // Log platform visual constants (simplified log barrel style)
 //
@@ -59,6 +67,7 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {number} [config.revealDistance] - Custom reveal distance
  * @param {string} [config.heroBodyColor] - Body color for the mini-hero (defaults to main hero color)
  * @param {string} [config.storageKey] - localStorage key to persist collection state
+ * @param {string} [config.hintText] - Tooltip text shown above hero on collection
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -68,7 +77,8 @@ export function create(config) {
     approachFromAbove = false,
     revealDistance = REVEAL_DISTANCE,
     heroBodyColor = null,
-    storageKey = null
+    storageKey = null,
+    hintText = null
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -132,7 +142,9 @@ export function create(config) {
     miniColor,
     offScreenY: OFF_SCREEN_Y,
     logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
-    storageKey
+    storageKey,
+    glowTimer: 0,
+    hintText
   }
   //
   // Reveal visual when hero physically lands on the platform
@@ -196,6 +208,10 @@ function onUpdate(inst) {
     inst.miniHero.character.opacity = 1
   }
   //
+  // Pulsating glow timer (runs while revealed and not collected)
+  //
+  if (inst.revealed) inst.glowTimer += dt
+  //
   // Sparkle hint (visible even before platform reveal)
   //
   updateSparkle(inst, dt)
@@ -243,6 +259,12 @@ function onDraw(inst) {
     drawLogPlatform(inst)
   }
   //
+  // Pulsating inner glow around the mini-hero (visible when revealed, before collection)
+  //
+  if (inst.revealed && !inst.collected) {
+    drawGlow(inst)
+  }
+  //
   // Sparkle hint: small flash near the mini-hero position
   //
   if (inst.sparkleActive && !inst.collected) {
@@ -281,6 +303,25 @@ function onDraw(inst) {
   //
   drawCollectParticles(inst)
   drawBonusFlashParticles(inst)
+}
+//
+// Pulsating glow emanating from within the mini-hero
+//
+function drawGlow(inst) {
+  const { k, x, y, glowTimer } = inst
+  const glowY = y - PLATFORM_HEIGHT / 2 - 10
+  const pulse = (Math.sin(glowTimer * GLOW_PULSE_SPEED) + 1) / 2
+  const opacity = GLOW_MIN_OPACITY + pulse * (GLOW_MAX_OPACITY - GLOW_MIN_OPACITY)
+  const radius = SPARKLE_RADIUS * GLOW_RADIUS_MULTIPLIER * (0.8 + pulse * 0.4)
+  const glowColor = k.rgb(SPARKLE_COLOR_R, SPARKLE_COLOR_G, SPARKLE_COLOR_B)
+  //
+  // Outer soft glow
+  //
+  k.drawCircle({ pos: k.vec2(x, glowY), radius, color: glowColor, opacity: opacity * 0.3 })
+  //
+  // Inner bright core
+  //
+  k.drawCircle({ pos: k.vec2(x, glowY), radius: radius * 0.5, color: glowColor, opacity: opacity * 0.6 })
 }
 //
 // Draw a simplified log-style platform
@@ -440,6 +481,12 @@ function collectBonus(inst) {
     })
   }
   //
+  // Show hint tooltip above the main hero
+  //
+  if (inst.hintText) {
+    showCollectHint(inst)
+  }
+  //
   // Trigger speed bonus flash on the HUD small hero
   //
   playBonusFlash(inst, 0)
@@ -528,6 +575,35 @@ function drawBonusFlashParticles(inst) {
     const alpha = Math.max(0, p.life / p.maxLife)
     k.drawCircle({ pos: k.vec2(p.x, p.y), radius: p.size * alpha, color: p.color, opacity: alpha, fixed: true })
   }
+}
+//
+// Display tooltip hint above the main hero on bonus collection
+//
+const HINT_DISPLAY_DURATION = 5
+function showCollectHint(inst) {
+  const heroPos = inst.heroInst.character?.pos
+  if (!heroPos) return
+  const target = {
+    x: () => inst.heroInst.character?.pos?.x ?? heroPos.x,
+    y: () => inst.heroInst.character?.pos?.y ?? heroPos.y,
+    width: 1,
+    height: 1,
+    text: inst.hintText,
+    offsetY: -60
+  }
+  const tooltip = Tooltip.create({
+    k: inst.k,
+    targets: [target],
+    forceVisible: true
+  })
+  //
+  // forceVisible skips onUpdate, so we must populate the rendering state manually
+  //
+  tooltip.activeTarget = target
+  tooltip.frozenX = heroPos.x
+  tooltip.frozenY = heroPos.y
+  tooltip.opacity = 1
+  inst.k.wait(HINT_DISPLAY_DURATION, () => tooltip && Tooltip.destroy(tooltip))
 }
 //
 // Plays a short bright chime sound on collection

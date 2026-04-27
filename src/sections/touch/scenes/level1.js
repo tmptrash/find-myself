@@ -1577,7 +1577,8 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level1BonusCollected'
+      storageKey: 'touch.level1BonusCollected',
+      hintText: "don't touch what\nyou don't like"
     })
     //
     // Set hero reference for grass drawer
@@ -2980,6 +2981,7 @@ function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
   if (GiantWorm.checkCollision(wormInst, heroX, heroY)) {
+    GiantWorm.startSmiling(wormInst)
     onPoisonLeafDeath(k, heroInst, levelIndicator)
   }
 }

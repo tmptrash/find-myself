@@ -586,7 +586,8 @@ export function sceneLevel2(k) {
       approachFromAbove: true,
       revealDistance: 120,
       heroBodyColor,
-      storageKey: 'touch.level2BonusCollected'
+      storageKey: 'touch.level2BonusCollected',
+      hintText: "delayed gratification is\noften better than instant"
     })
     //
     // Right-side floor icicles always present from the start.

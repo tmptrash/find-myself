@@ -18,10 +18,10 @@ const CORNER_RADIUS = 20  // Radius for rounded corners
 //
 // TIME indicator tooltip
 //
-const TIME_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning time"
+const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
-const TIME_INDICATOR_TOOLTIP_HEIGHT = 40
-const TIME_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
+const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Corridor dimensions
 //
@@ -542,8 +542,8 @@ export function sceneLevel3(k) {
     //
     // Tooltip for TIME level indicator letters
     //
-    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + TIME_INDICATOR_TOOLTIP_WIDTH / 2
-    const timeLettersCenterY = (CORRIDOR_Y - 20) / 2
+    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + 90
+    const timeLettersCenterY = CORRIDOR_Y - 60
     Tooltip.create({
       k,
       targets: [{
@@ -552,7 +552,8 @@ export function sceneLevel3(k) {
         width: TIME_INDICATOR_TOOLTIP_WIDTH,
         height: TIME_INDICATOR_TOOLTIP_HEIGHT,
         text: TIME_INDICATOR_TOOLTIP_TEXT,
-        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET
+        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
+        forceBelow: true
       }]
     })
   })

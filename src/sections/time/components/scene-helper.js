@@ -443,7 +443,7 @@ function drawSunFace(k, intensity) {
   const r = SUN_RADIUS
   const darkColor = k.rgb(180, 180, 160)
   const white = k.rgb(255, 255, 255)
-  const black = k.rgb(40, 40, 40)
+  const black = k.rgb(100, 95, 85)
   //
   // Eye positions
   //
@@ -475,36 +475,58 @@ function drawSunFace(k, intensity) {
 // Draws a single eyebrow as a short curved arc above an eye
 //
 function drawSunBrow(k, cx, y, halfW, intensity) {
-  const segments = 6
-  const black = k.rgb(60, 50, 30)
+  const segments = 8
+  const browColor = k.rgb(100, 95, 85)
   for (let i = 0; i < segments; i++) {
     const t0 = i / segments
     const t1 = (i + 1) / segments
     const x0 = cx - halfW + t0 * halfW * 2
     const x1 = cx - halfW + t1 * halfW * 2
-    const archHeight = -intensity * 3
+    const archHeight = -intensity * 4
     const y0 = y + Math.sin(t0 * Math.PI) * archHeight
     const y1 = y + Math.sin(t1 * Math.PI) * archHeight
     k.drawLine({
       p1: k.vec2(x0, y0),
       p2: k.vec2(x1, y1),
-      width: SUN_BROW_THICKNESS,
-      color: black,
+      width: SUN_BROW_THICKNESS + 1.5,
+      color: browColor,
       opacity: intensity
     })
   }
 }
 //
-// Draws a curved smile on the sun. At low intensity it is a flat line;
-// at full intensity it becomes a wide grin with teeth.
+// Draws an unhinged grin on the sun with upper lip, teeth, and lower lip.
+// At low intensity it is a subtle line; at full intensity a wide deranged smile.
 //
 function drawSunSmile(k, intensity, r, darkColor, white) {
   const mouthY = SUN_Y + SUN_MOUTH_Y * r
-  const mouthW = SUN_MOUTH_WIDTH * r * (0.4 + intensity * 0.6)
-  const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 0.8
-  const segments = 10
+  const mouthW = SUN_MOUTH_WIDTH * r * (0.5 + intensity * 0.5)
+  const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 0.9
+  const segments = 12
+  const lipColor = k.rgb(100, 90, 75)
+  const lipWidth = 2 + intensity * 1.5
   //
-  // Draw filled mouth area using overlapping circles along the curve
+  // Upper lip — curved arc above the mouth opening
+  //
+  const upperLipY = mouthY - 1
+  for (let i = 0; i < segments; i++) {
+    const t0 = i / segments
+    const t1 = (i + 1) / segments
+    const x0 = SUN_X - mouthW / 2 + t0 * mouthW
+    const x1 = SUN_X - mouthW / 2 + t1 * mouthW
+    const lipCurve = -intensity * 2
+    const y0 = upperLipY + Math.sin(t0 * Math.PI) * lipCurve
+    const y1 = upperLipY + Math.sin(t1 * Math.PI) * lipCurve
+    k.drawLine({
+      p1: k.vec2(x0, y0),
+      p2: k.vec2(x1, y1),
+      width: lipWidth,
+      color: lipColor,
+      opacity: intensity
+    })
+  }
+  //
+  // Dark mouth interior — filled with overlapping circles along the curve
   //
   for (let i = 0; i <= segments; i++) {
     const t = i / segments
@@ -514,21 +536,46 @@ function drawSunSmile(k, intensity, r, darkColor, white) {
     k.drawCircle({ pos: k.vec2(x, curveY), radius: dotR, color: darkColor, opacity: intensity })
   }
   //
-  // Teeth — only visible when smile is wide enough
+  // Lower lip — same texture and color as upper lip
+  //
+  for (let i = 0; i < segments; i++) {
+    const t0 = i / segments
+    const t1 = (i + 1) / segments
+    const x0 = SUN_X - mouthW / 2 + t0 * mouthW
+    const x1 = SUN_X - mouthW / 2 + t1 * mouthW
+    const lowerY0 = mouthY + Math.sin(t0 * Math.PI) * curveDepth + 1
+    const lowerY1 = mouthY + Math.sin(t1 * Math.PI) * curveDepth + 1
+    k.drawLine({
+      p1: k.vec2(x0, lowerY0),
+      p2: k.vec2(x1, lowerY1),
+      width: lipWidth,
+      color: lipColor,
+      opacity: intensity
+    })
+  }
+  //
+  // Teeth — visible when smile opens wide enough, slightly uneven
   //
   if (intensity > 0.3) {
     const toothOpacity = (intensity - 0.3) / 0.7
     const toothW = SUN_TOOTH_WIDTH * r
     const toothH = SUN_TOOTH_HEIGHT * r * intensity
+    const toothTopY = mouthY - 1
+    //
+    // Left tooth (slightly taller)
+    //
     k.drawRect({
-      pos: k.vec2(SUN_X - toothW - 1, mouthY - toothH * 0.3),
+      pos: k.vec2(SUN_X - toothW - 2, toothTopY),
       width: toothW,
-      height: toothH,
+      height: toothH * 1.15,
       color: white,
       opacity: toothOpacity
     })
+    //
+    // Right tooth
+    //
     k.drawRect({
-      pos: k.vec2(SUN_X + 1, mouthY - toothH * 0.3),
+      pos: k.vec2(SUN_X + 2, toothTopY),
       width: toothW,
       height: toothH,
       color: white,

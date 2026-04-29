@@ -602,7 +602,7 @@ src/
     ├── progress.js                   # Game progress tracking (localStorage)
     └── transition.js                 # Level transition & subtitle system
 
-public/
+assets/
 ├── fonts/                            # Custom fonts
 │   ├── JetBrainsMono-Regular.ttf
 │   ├── JetBrainsMono-Thin.ttf

@@ -10,6 +10,7 @@ import { set, get } from '../../../utils/progress.js'
 import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as BonusHero from '../../touch/components/bonus-hero.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -22,10 +23,18 @@ const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
 // TIME indicator tooltip
 //
-const TIME_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning time"
+const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
-const TIME_INDICATOR_TOOLTIP_HEIGHT = 40
-const TIME_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
+const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
+//
+// Bonus hero — hidden platform right-below the "22" platform
+//
+const BONUS_PLATFORM_X = 720
+const BONUS_PLATFORM_Y = 800
+const BONUS_PLATFORM_WIDTH = 80
+const BONUS_STORAGE_KEY = 'time.level1BonusCollected'
+const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Level geometry - two platforms connected by stairs
 //
@@ -497,8 +506,8 @@ export function sceneLevel1(k) {
     //
     // Tooltip for TIME level indicator letters
     //
-    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + TIME_INDICATOR_TOOLTIP_WIDTH / 2
-    const timeLettersCenterY = PLATFORM_TOP_HEIGHT / 2
+    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + 90
+    const timeLettersCenterY = PLATFORM_TOP_HEIGHT - 40
     Tooltip.create({
       k,
       targets: [{
@@ -507,8 +516,24 @@ export function sceneLevel1(k) {
         width: TIME_INDICATOR_TOOLTIP_WIDTH,
         height: TIME_INDICATOR_TOOLTIP_HEIGHT,
         text: TIME_INDICATOR_TOOLTIP_TEXT,
-        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET
+        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
+        forceBelow: true
       }]
+    })
+    //
+    // Hidden bonus hero — right-below the "22" platform
+    //
+    BonusHero.create({
+      k,
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: BONUS_PLATFORM_WIDTH,
+      heroInst: hero,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      heroBodyColor: BONUS_HERO_COLOR,
+      storageKey: BONUS_STORAGE_KEY
     })
   })
 }

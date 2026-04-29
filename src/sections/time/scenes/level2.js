@@ -23,10 +23,10 @@ const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
 // TIME indicator tooltip
 //
-const TIME_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning time"
+const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
-const TIME_INDICATOR_TOOLTIP_HEIGHT = 40
-const TIME_INDICATOR_TOOLTIP_Y_OFFSET = -30
+const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
+const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Hero size (approximately)
 //
@@ -645,8 +645,8 @@ export function sceneLevel2(k) {
     //
     // Tooltip for TIME level indicator letters
     //
-    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + TIME_INDICATOR_TOOLTIP_WIDTH / 2
-    const timeLettersCenterY = PLATFORM_TOP_HEIGHT / 2
+    const timeLettersCenterX = PLATFORM_SIDE_WIDTH + 90
+    const timeLettersCenterY = PLATFORM_TOP_HEIGHT - 40
     Tooltip.create({
       k,
       targets: [{
@@ -655,7 +655,8 @@ export function sceneLevel2(k) {
         width: TIME_INDICATOR_TOOLTIP_WIDTH,
         height: TIME_INDICATOR_TOOLTIP_HEIGHT,
         text: TIME_INDICATOR_TOOLTIP_TEXT,
-        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET
+        offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
+        forceBelow: true
       }]
     })
   })

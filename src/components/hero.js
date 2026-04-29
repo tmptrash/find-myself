@@ -41,6 +41,13 @@ const DUST_PARTICLE_LIFETIME = 0.4
 //
 const DEATH_ANIMATION_DURATION = 0.4
 const DEATH_PARTICLE_POINTS = 20
+//
+// Corner radii for rounded body parts (in sprite pixels)
+//
+const HEAD_CORNER_RADIUS = 3
+const BODY_CORNER_RADIUS = 3
+const ARM_CORNER_RADIUS = 1
+const LEG_CORNER_RADIUS = 1
 
 export const HEROES = {
   HERO: 'hero',
@@ -2143,67 +2150,39 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   try {
     return toPng({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: 1 }, (ctx) => {
       ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
-      
       //
-      // Black outline (universal) - pixel-perfect 1px outline
+      // Black outline (1px) — filled rounded rect, then body on top
       //
       ctx.fillStyle = getHex(outlineColor)
       //
-      // Head outline (8x8 inner, 10x10 outer)
+      // Head outline (rounded, 1px border around 8x8 inner)
       //
-      ctx.fillRect(headX - 1, headY - 1, 10, 1)  // Top
-      ctx.fillRect(headX - 1, headY + 8, 10, 1)  // Bottom
-      ctx.fillRect(headX - 1, headY, 1, 8)  // Left
-      ctx.fillRect(headX + 8, headY, 1, 8)  // Right
+      fillRoundedRect(ctx, headX - 1, headY - 1, 10, 10, HEAD_CORNER_RADIUS)
       //
-      // Body outline (12x bodyHeight inner, 14x (bodyHeight+2) outer)
+      // Body outline (rounded, 1px border around 12xbodyHeight inner)
       //
-      ctx.fillRect(bodyX - 1, bodyY - 1, 14, 1)  // Top
-      ctx.fillRect(bodyX - 1, bodyY + bodyHeight, 14, 1)  // Bottom
-      ctx.fillRect(bodyX - 1, bodyY, 1, bodyHeight)  // Left
-      ctx.fillRect(bodyX + 12, bodyY, 1, bodyHeight)  // Right
+      fillRoundedRect(ctx, bodyX - 1, bodyY - 1, 14, bodyHeight + 2, BODY_CORNER_RADIUS)
       //
-      // Arm outlines - don't draw while running and jumping
+      // Arm outlines (rounded) — don't draw while running and jumping
       //
       if (animation !== 'run' && animation !== 'jump') {
-        //
-        // Left arm outline (2x7 inner, 4x9 outer)
-        //
-        ctx.fillRect(leftArmX - 1, leftArmY - 1, 4, 1)  // Top
-        ctx.fillRect(leftArmX - 1, leftArmY + 7, 4, 1)  // Bottom
-        ctx.fillRect(leftArmX - 1, leftArmY, 1, 7)  // Left
-        ctx.fillRect(leftArmX + 2, leftArmY, 1, 7)  // Right
-        //
-        // Right arm outline (2x7 inner, 4x9 outer)
-        //
-        ctx.fillRect(rightArmX - 1, rightArmY - 1, 4, 1)  // Top
-        ctx.fillRect(rightArmX - 1, rightArmY + 7, 4, 1)  // Bottom
-        ctx.fillRect(rightArmX - 1, rightArmY, 1, 7)  // Left
-        ctx.fillRect(rightArmX + 2, rightArmY, 1, 7)  // Right
+        fillRoundedRect(ctx, leftArmX - 1, leftArmY - 1, 4, 9, ARM_CORNER_RADIUS)
+        fillRoundedRect(ctx, rightArmX - 1, rightArmY - 1, 4, 9, ARM_CORNER_RADIUS)
       }
       //
-      // Leg outlines (3x legHeight inner, 5x (legHeight+2) outer)
+      // Leg outlines (rounded)
       //
-      // Left leg
-      ctx.fillRect(leftLegX - 1, leftLegY - 1, 5, 1)  // Top
-      ctx.fillRect(leftLegX - 1, leftLegY + legHeight, 5, 1)  // Bottom
-      ctx.fillRect(leftLegX - 1, leftLegY, 1, legHeight)  // Left
-      ctx.fillRect(leftLegX + 3, leftLegY, 1, legHeight)  // Right
+      fillRoundedRect(ctx, leftLegX - 1, leftLegY - 1, 5, legHeight + 2, LEG_CORNER_RADIUS)
+      fillRoundedRect(ctx, rightLegX - 1, rightLegY - 1, 5, legHeight + 2, LEG_CORNER_RADIUS)
       //
-      // Right leg
-      ctx.fillRect(rightLegX - 1, rightLegY - 1, 5, 1)  // Top
-      ctx.fillRect(rightLegX - 1, rightLegY + legHeight, 5, 1)  // Bottom
-      ctx.fillRect(rightLegX - 1, rightLegY, 1, legHeight)  // Left
-      ctx.fillRect(rightLegX + 3, rightLegY, 1, legHeight)  // Right
-      //
-      // Head (universal body color) — skip fill for outline-only mode
+      // Head fill (rounded) — skip for outline-only mode
       //
       if (!outlineOnly) {
         ctx.fillStyle = getHex(bodyColor)
-        ctx.fillRect(headX, headY, 8, 8)
+        fillRoundedRect(ctx, headX, headY, 8, 8, HEAD_CORNER_RADIUS - 1)
       }
       //
-      // Eyes - for run and jump draw only ONE eye (side view)
+      // Eyes — for run and jump draw only ONE eye (side view)
       //
       ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
       if (animation === 'run' || animation === 'jump') {
@@ -2213,7 +2192,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.fillRect(headX + 6, headY + 2, 3, 3)
       }
       //
-      // Pupils (universal color)
+      // Pupils
       //
       ctx.fillStyle = getHex(outlineColor)
       if (animation === 'run' || animation === 'jump') {
@@ -2226,43 +2205,36 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       // Mouth (optional, only for idle animation)
       //
       if (addMouth && animation === 'idle') {
-        ctx.fillStyle = getHex(outlineColor)  // Black
-        //
-        // Horizontal line below eyes (centered, 4 pixels wide, lower position)
-        //
+        ctx.fillStyle = getHex(outlineColor)
         ctx.fillRect(headX + 2, headY + 7, 4, 1)
       }
       //
-      // Body, arms, legs (universal color) — skip fill for outline-only mode
+      // Body, arms, legs fill — skip for outline-only mode
       //
       if (!outlineOnly) {
         ctx.fillStyle = getHex(bodyColor)
-        ctx.fillRect(bodyX, bodyY, 12, bodyHeight)
+        fillRoundedRect(ctx, bodyX, bodyY, 12, bodyHeight, BODY_CORNER_RADIUS - 1)
         //
-        // Arms - don't draw while running and jumping
+        // Arms (rounded) — don't draw while running and jumping
         //
         if (animation !== 'run' && animation !== 'jump') {
-          ctx.fillRect(leftArmX, leftArmY, 2, 7)
-          ctx.fillRect(rightArmX, rightArmY, 2, 7)
+          fillRoundedRect(ctx, leftArmX, leftArmY, 2, 7, ARM_CORNER_RADIUS)
+          fillRoundedRect(ctx, rightArmX, rightArmY, 2, 7, ARM_CORNER_RADIUS)
         }
         //
-        // Legs
+        // Legs (rounded)
         //
-        ctx.fillRect(leftLegX, leftLegY, 3, legHeight)
-        ctx.fillRect(rightLegX, rightLegY, 3, legHeight)
+        fillRoundedRect(ctx, leftLegX, leftLegY, 3, legHeight, LEG_CORNER_RADIUS)
+        fillRoundedRect(ctx, rightLegX, rightLegY, 3, legHeight, LEG_CORNER_RADIUS)
       }
       //
       // Custom arms (optional, only in idle — hidden during run/jump like body arms)
       //
       if (addArms && animation === 'idle') {
         ctx.fillStyle = getHex(outlineColor)
-        //
-        // Arms positioned at the same X as legs, shifted outward by arm width
-        //
         const armStartY = bodyY + 4
         const armLength = 6
         const armWidth = 1
-
         ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)
         ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)
       }
@@ -2790,4 +2762,18 @@ function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, parti
       }
     }
   ])
+}
+//
+// Draws a filled rectangle with rounded corners using Canvas arc API
+//
+function fillRoundedRect(ctx, x, y, w, h, r) {
+  const clampedR = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + clampedR, y)
+  ctx.arcTo(x + w, y, x + w, y + h, clampedR)
+  ctx.arcTo(x + w, y + h, x, y + h, clampedR)
+  ctx.arcTo(x, y + h, x, y, clampedR)
+  ctx.arcTo(x, y, x + w, y, clampedR)
+  ctx.closePath()
+  ctx.fill()
 }

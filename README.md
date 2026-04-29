@@ -4,11 +4,11 @@ A philosophical 2D platformer about self-discovery through life's challenges. Na
 
 **[Play online](https://find-myself.netlify.app/)**
 
-![Menu](public/screenshots/menu.png)
+![Menu](assets/screenshots/menu.png)
 
-![Touch](public/screenshots/touch.png)
+![Touch](assets/screenshots/touch.png)
 
-![Word](public/screenshots/word.png)
+![Word](assets/screenshots/word.png)
 
 ## About the Game
 
@@ -99,6 +99,9 @@ npm run build
 
 # Build and create zip package
 npm run zip
+
+# Build binary for the current OS
+npm run bin
 ```
 
 Built files will be in the `dist/` folder.

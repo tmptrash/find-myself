@@ -1193,7 +1193,7 @@ function createCloudPlatformArrows(k, x, y, sound) {
   //
   // Load sprite from file (will be cached if already loaded)
   //
-  k.loadSprite(arrowSpriteId, '/arrow.png')
+  k.loadSprite(arrowSpriteId, './arrow.png')
   //
   // Get arrow sprite dimensions
   // Use larger default to ensure detection works - arrow.png is likely around 200-400px wide
@@ -1381,7 +1381,7 @@ function createCenterArrow(k) {
   //
   // Load sprite from file (will be cached if already loaded)
   //
-  k.loadSprite(arrowSpriteId, '/arrow.png')
+  k.loadSprite(arrowSpriteId, './arrow.png')
   //
   // Create arrow sprite object in center of screen
   //

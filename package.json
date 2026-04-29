@@ -1,17 +1,45 @@
 {
 	"name": "find-yourself",
+	"version": "1.0.0",
 	"type": "module",
+	"main": "electron/main.cjs",
 	"scripts": {
 		"build": "vite build",
+		"bin": "npm run build && electron-builder",
 		"dev": "vite",
+		"electron": "electron .",
 		"preview": "vite preview",
 		"zip": "npm run build && mkdir -p dist && zip -r dist/game.zip dist -x \"**/.DS_Store\""
 	},
+	"build": {
+    "appId": "com.findyourself.game",
+    "productName": "Find Yourself",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": "dmg",
+			"icon": "public/life.png"
+    },
+    "win": {
+      "target": "nsis",
+			"icon": "public/life.png"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
 	"dependencies": {
 		"kaplay": "^3001.0.19"
 	},
 	"devDependencies": {
 		"@types/node": "^24.7.2",
+		"electron": "^41.3.0",
+		"electron-builder": "^26.8.1",
 		"vite": "^7.1.10"
 	}
 }

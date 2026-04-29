@@ -75,46 +75,46 @@ const assetTasks = [
   //
   // Fonts
   //
-  () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "/fonts/JetBrainsMono-Regular.ttf"),
-  () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "/fonts/JetBrainsMono-Thin.ttf"),
+  () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Regular.ttf"),
+  () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Thin.ttf"),
   //
   // Audio: time section
   //
-  () => k.loadSound("time", "/sounds/time.mp3"),
-  () => k.loadSound("time0", "/sounds/time0.mp3"),
-  () => k.loadSound("time0-pre", "/sounds/time0-pre.mp3"),
-  () => k.loadSound("time0-kids", "/sounds/time0-kids.mp3"),
-  () => k.loadSound("time1-pre", "/sounds/time1-pre.mp3"),
-  () => k.loadSound("time2-pre", "/sounds/time2-pre.mp3"),
-  () => k.loadSound("time3-pre", "/sounds/time3-pre.mp3"),
+  () => k.loadSound("time", "./sounds/time.mp3"),
+  () => k.loadSound("time0", "./sounds/time0.mp3"),
+  () => k.loadSound("time0-pre", "./sounds/time0-pre.mp3"),
+  () => k.loadSound("time0-kids", "./sounds/time0-kids.mp3"),
+  () => k.loadSound("time1-pre", "./sounds/time1-pre.mp3"),
+  () => k.loadSound("time2-pre", "./sounds/time2-pre.mp3"),
+  () => k.loadSound("time3-pre", "./sounds/time3-pre.mp3"),
   //
   // Audio: word section
   //
-  () => k.loadSound("word", "/sounds/word.mp3"),
-  () => k.loadSound("breath", "/sounds/breath.mp3"),
-  () => k.loadSound("word0-pre", "/sounds/word0-pre.mp3"),
-  () => k.loadSound("word1-pre", "/sounds/word1-pre.mp3"),
-  () => k.loadSound("word2-pre", "/sounds/word2-pre.mp3"),
-  () => k.loadSound("word3-pre", "/sounds/word3-pre.mp3"),
-  () => k.loadSound("word4-pre", "/sounds/word4-pre.mp3"),
+  () => k.loadSound("word", "./sounds/word.mp3"),
+  () => k.loadSound("breath", "./sounds/breath.mp3"),
+  () => k.loadSound("word0-pre", "./sounds/word0-pre.mp3"),
+  () => k.loadSound("word1-pre", "./sounds/word1-pre.mp3"),
+  () => k.loadSound("word2-pre", "./sounds/word2-pre.mp3"),
+  () => k.loadSound("word3-pre", "./sounds/word3-pre.mp3"),
+  () => k.loadSound("word4-pre", "./sounds/word4-pre.mp3"),
   //
   // Audio: menu and touch section
   //
-  () => k.loadSound("menu", "/sounds/menu.mp3"),
-  () => k.loadSound("kids", "/sounds/kids.mp3"),
-  () => k.loadSound("clock", "/sounds/clock.mp3"),
-  () => k.loadSound("touch", "/sounds/touch.mp3"),
-  () => k.loadSound("touch0-pre", "/sounds/touch0-pre.mp3"),
-  () => k.loadSound("touch1-pre", "/sounds/touch1-pre.mp3"),
-  () => k.loadSound("touch2-pre", "/sounds/touch2-pre.mp3"),
-  () => k.loadSound("touch3-pre", "/sounds/touch3-pre.mp3"),
-  () => k.loadSound("life", "/sounds/life.mp3"),
-  () => k.loadSound("boss", "/sounds/boss.mp3"),
+  () => k.loadSound("menu", "./sounds/menu.mp3"),
+  () => k.loadSound("kids", "./sounds/kids.mp3"),
+  () => k.loadSound("clock", "./sounds/clock.mp3"),
+  () => k.loadSound("touch", "./sounds/touch.mp3"),
+  () => k.loadSound("touch0-pre", "./sounds/touch0-pre.mp3"),
+  () => k.loadSound("touch1-pre", "./sounds/touch1-pre.mp3"),
+  () => k.loadSound("touch2-pre", "./sounds/touch2-pre.mp3"),
+  () => k.loadSound("touch3-pre", "./sounds/touch3-pre.mp3"),
+  () => k.loadSound("life", "./sounds/life.mp3"),
+  () => k.loadSound("boss", "./sounds/boss.mp3"),
   //
   // Sprites
   //
-  () => k.loadSprite("life", "/life.png"),
-  () => k.loadSprite("menu-bg", "/menu.png"),
+  () => k.loadSprite("life", "./life.png"),
+  () => k.loadSprite("menu-bg", "./menu.png"),
   //
   // Hero and blade sprites
   //

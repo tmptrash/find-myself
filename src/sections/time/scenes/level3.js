@@ -23,6 +23,15 @@ const TIME_INDICATOR_TOOLTIP_WIDTH = 200
 const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
 const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
+// Monster and hero tooltips
+//
+const MONSTER_TOOLTIP_TEXT = "why are you running?"
+const MONSTER_TOOLTIP_SIZE = 120
+const MONSTER_TOOLTIP_Y_OFFSET = -80
+const HERO_TOOLTIP_TEXT = "I can't keep uuuuup!!!"
+const HERO_TOOLTIP_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -60
+//
 // Corridor dimensions
 //
 const CORRIDOR_HEIGHT = 200  // Height of the corridor
@@ -554,6 +563,34 @@ export function sceneLevel3(k) {
         text: TIME_INDICATOR_TOOLTIP_TEXT,
         offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
         forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for monster
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => monster.body?.pos?.x ?? 0,
+        y: () => monster.body?.pos?.y ?? 0,
+        width: MONSTER_TOOLTIP_SIZE,
+        height: MONSTER_TOOLTIP_SIZE,
+        text: MONSTER_TOOLTIP_TEXT,
+        offsetY: MONSTER_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => hero.character.pos.x,
+        y: () => hero.character.pos.y,
+        width: HERO_TOOLTIP_SIZE,
+        height: HERO_TOOLTIP_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
       }]
     })
   })
@@ -1729,19 +1766,24 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
   k.add([
     {
       draw() {
+        const legColor = k.rgb(40, 40, 45)
         inst.legs.forEach(leg => {
       leg.segments.forEach((segment, i) => {
+        //
+        // Draw circle at each joint to fill gaps between line segments
+        //
+        k.drawCircle({
+          pos: k.vec2(segment.x, segment.y),
+          radius: inst.legWidth / 2,
+          color: legColor
+        })
         if (i < leg.segments.length - 1) {
           const nextSegment = leg.segments[i + 1]
-          //
-          // Draw gray leg (same color as body)
-          //
           k.drawLine({
             p1: k.vec2(segment.x, segment.y),
             p2: k.vec2(nextSegment.x, nextSegment.y),
             width: inst.legWidth,
-            color: k.rgb(40, 40, 45),
-            opacity: 1.0
+            color: legColor
           })
         }
       })
@@ -1752,8 +1794,7 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       k.drawCircle({
         pos: k.vec2(lastSegment.x, lastSegment.y),
         radius: inst.legWidth * 1.5,
-        color: k.rgb(40, 40, 45),
-        opacity: 1.0
+        color: legColor
       })
         })
       }
@@ -2639,6 +2680,13 @@ function createBullet(k, hero, facingRight, monster) {
   const heroPos = hero.character.pos
   const direction = facingRight ? 1 : -1
   //
+  // Spawn at hero's hand: offset from center to left/right arm
+  //
+  const HAND_OFFSET_X = 24
+  const HAND_OFFSET_Y = -3
+  const bulletX = heroPos.x + direction * HAND_OFFSET_X
+  const bulletY = heroPos.y + HAND_OFFSET_Y
+  //
   // Get hero color
   //
   const heroColor = getColor(k, CFG.visual.colors.hero.body)
@@ -2650,7 +2698,7 @@ function createBullet(k, hero, facingRight, monster) {
   // Create bullet as drawable object (snowball-like)
   //
   const bullet = k.add([
-    k.pos(heroPos.x, heroPos.y),
+    k.pos(bulletX, bulletY),
     k.z(21),
     k.anchor('center'),
     'bullet',

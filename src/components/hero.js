@@ -4,21 +4,25 @@ import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
 //
-// Collision box parameters (extends to visual feet to eliminate ground gap)
+// Sprite rendering: native 96x96 via pixelRatio 3 on a 32x32 logical canvas
 //
-const COLLISION_WIDTH = 10
-const COLLISION_HEIGHT = 23
+const SPRITE_SIZE = 32
+const RENDER_SCALE = 3
+//
+// Collision box parameters (in 96x96 local sprite space)
+//
+const COLLISION_WIDTH = 30
+const COLLISION_HEIGHT = 69
 const COLLISION_OFFSET_X = 0
 //
 // Shift collision down so bottom aligns with sprite feet.
 // Top edge lowered to avoid collision above hero's head.
 //
-const COLLISION_OFFSET_Y = 1
+const COLLISION_OFFSET_Y = 3
 //
-// Hero parameters
+// Hero parameters — scale 1 since sprites are already at display resolution
 //
-const HERO_SCALE = 3
-const SPRITE_SIZE = 32
+const HERO_SCALE = 1
 const RUN_ANIM_SPEED = 0.03333
 const PARTICLE_SHAPES = ['square', 'rect_h', 'rect_v', 'small_square']
 const RUN_FRAME_COUNT = 3
@@ -45,7 +49,7 @@ const DEATH_PARTICLE_POINTS = 20
 // Corner radii for rounded body parts (in sprite pixels)
 //
 const HEAD_CORNER_RADIUS = 3
-const BODY_CORNER_RADIUS = 3
+const BODY_CORNER_RADIUS = 2
 const ARM_CORNER_RADIUS = 1
 const LEG_CORNER_RADIUS = 1
 
@@ -168,13 +172,13 @@ export function create(config) {
       if (defaultSprite) {
         spriteComponent = k.sprite(defaultSpriteName)
       } else {
-        spriteComponent = k.rect(SPRITE_SIZE, SPRITE_SIZE)
+        spriteComponent = k.rect(SPRITE_SIZE * RENDER_SCALE, SPRITE_SIZE * RENDER_SCALE)
       }
     } catch (fallbackError) {
       //
       // If everything fails, use rectangle placeholder
       //
-      spriteComponent = k.rect(SPRITE_SIZE, SPRITE_SIZE)
+      spriteComponent = k.rect(SPRITE_SIZE * RENDER_SCALE, SPRITE_SIZE * RENDER_SCALE)
     }
   }
 
@@ -458,9 +462,9 @@ export function spawn(inst) {
   //
   // Generate target points along character outline
   //
-  // Character is approximately SPRITE_SIZE x SPRITE_SIZE pixels scaled by HERO_SCALE
+  // Character is approximately SPRITE_SIZE x RENDER_SCALE pixels
   //
-  const charSize = SPRITE_SIZE * HERO_SCALE
+  const charSize = SPRITE_SIZE * RENDER_SCALE
   const targetPoints = []
   //
   // Generate points around the perimeter of the character
@@ -1999,23 +2003,35 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let leftLegX = 12
   let rightLegX = 17
   let legHeight = 6    // Leg height (for stretching/squashing)
+  let leftLegHeight = legHeight
+  let rightLegHeight = legHeight
   //
-  // Run animation (3 frames)
+  // Run animation: 3 frames with horizontal spread and vertical leg lift.
+  // The ground-contact foot always reaches y=28 (same as idle).
+  // The lifted foot is shorter to show a realistic stride.
+  // Step sound plays on frame 0 when left foot makes contact.
   //
   if (animation === 'run') {
     if (frame === 0) {
-      leftLegY = 20
-      rightLegY = 22
+      //
+      // Contact: left foot forward on ground, right foot back and lifted
+      //
       leftLegX = 10
       rightLegX = 18
+      rightLegY = 21
+      rightLegHeight = 4
     } else if (frame === 1) {
-      leftLegY = 18
-      rightLegY = 22
-      leftLegX = 12
+      //
+      // Drive: right foot lands, left foot lifts
+      //
+      leftLegX = 11
       rightLegX = 17
+      leftLegY = 21
+      leftLegHeight = 4
     } else if (frame === 2) {
-      leftLegY = 20
-      rightLegY = 20
+      //
+      // Pass: both legs close together at ground level
+      //
       leftLegX = 14
       rightLegX = 14
     }
@@ -2143,12 +2159,17 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     }
     leftArmX = 9
     rightArmX = 21
+    //
+    // Sync per-leg heights with the shared legHeight for jump frames
+    //
+    leftLegHeight = legHeight
+    rightLegHeight = legHeight
   }
   //
   // Create sprite using toPng
   //
   try {
-    return toPng({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: 1 }, (ctx) => {
+    return toPng({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: RENDER_SCALE }, (ctx) => {
       ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
       //
       // Black outline (1px) — filled rounded rect, then body on top
@@ -2159,9 +2180,13 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       fillRoundedRect(ctx, headX - 1, headY - 1, 10, 10, HEAD_CORNER_RADIUS)
       //
-      // Body outline (rounded, 1px border around 12xbodyHeight inner)
+      // Body outline with shoulder arcs: smooth curve from head edge down to body side
       //
-      fillRoundedRect(ctx, bodyX - 1, bodyY - 1, 14, bodyHeight + 2, BODY_CORNER_RADIUS)
+      drawBodyOutline(ctx, headX, bodyX, bodyY, bodyHeight, BODY_CORNER_RADIUS)
+      //
+      // Flatten head bottom corners to connect with body
+      //
+      ctx.fillRect(headX - 1, bodyY - 1, 10, 2)
       //
       // Arm outlines (rounded) — don't draw while running and jumping
       //
@@ -2172,14 +2197,24 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       // Leg outlines (rounded)
       //
-      fillRoundedRect(ctx, leftLegX - 1, leftLegY - 1, 5, legHeight + 2, LEG_CORNER_RADIUS)
-      fillRoundedRect(ctx, rightLegX - 1, rightLegY - 1, 5, legHeight + 2, LEG_CORNER_RADIUS)
+      fillRoundedRect(ctx, leftLegX - 1, leftLegY - 1, 5, leftLegHeight + 2, LEG_CORNER_RADIUS)
+      fillRoundedRect(ctx, rightLegX - 1, rightLegY - 1, 5, rightLegHeight + 2, LEG_CORNER_RADIUS)
+      //
+      // Run/jump: extend body outline bottom to merge seamlessly with legs
+      //
+      if (animation === 'run' || animation === 'jump') {
+        ctx.fillRect(bodyX - 1, bodyY + bodyHeight - 1, 14, 2)
+      }
       //
       // Head fill (rounded) — skip for outline-only mode
       //
       if (!outlineOnly) {
         ctx.fillStyle = getHex(bodyColor)
         fillRoundedRect(ctx, headX, headY, 8, 8, HEAD_CORNER_RADIUS - 1)
+        //
+        // Fill head bottom corner gaps to prevent stray outline dots under eyes
+        //
+        ctx.fillRect(headX, headY + 6, 8, 2)
       }
       //
       // Eyes — for run and jump draw only ONE eye (side view)
@@ -2213,7 +2248,11 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       if (!outlineOnly) {
         ctx.fillStyle = getHex(bodyColor)
-        fillRoundedRect(ctx, bodyX, bodyY, 12, bodyHeight, BODY_CORNER_RADIUS - 1)
+        drawBodyFill(ctx, headX, bodyX, bodyY, bodyHeight)
+        //
+        // Fill head-body junction
+        //
+        ctx.fillRect(headX, bodyY - 1, 8, 2)
         //
         // Arms (rounded) — don't draw while running and jumping
         //
@@ -2222,10 +2261,16 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           fillRoundedRect(ctx, rightArmX, rightArmY, 2, 7, ARM_CORNER_RADIUS)
         }
         //
+        // Run/jump: extend body fill bottom to merge seamlessly with legs
+        //
+        if (animation === 'run' || animation === 'jump') {
+          ctx.fillRect(bodyX, bodyY + bodyHeight - 1, 12, 1)
+        }
+        //
         // Legs (rounded)
         //
-        fillRoundedRect(ctx, leftLegX, leftLegY, 3, legHeight, LEG_CORNER_RADIUS)
-        fillRoundedRect(ctx, rightLegX, rightLegY, 3, legHeight, LEG_CORNER_RADIUS)
+        fillRoundedRect(ctx, leftLegX, leftLegY, 3, leftLegHeight, LEG_CORNER_RADIUS)
+        fillRoundedRect(ctx, rightLegX, rightLegY, 3, rightLegHeight, LEG_CORNER_RADIUS)
       }
       //
       // Custom arms (optional, only in idle — hidden during run/jump like body arms)
@@ -2306,7 +2351,7 @@ function getParticleColors(inst) {
     // Time section: hero uses grayscale, anti-hero uses orange/yellow
     //
     return type === HEROES.HERO
-      ? ["#C0C0C0", "#808080", "#A0A0A0", "#000000"]  // Light gray shades + black
+      ? ["#8B5A50", "#6B4A40", "#A07060", "#3E2E28"]  // Brown shades matching hero body
       : [CFG.visual.colors.hero.body, "#FFA500", "#FF8C00", "#000000"]  // Orange shades + black
   }
   //
@@ -2628,8 +2673,8 @@ function createBodyParticles(inst, centerX, centerY) {
  */
 function createEyeParticles(inst, centerX, centerY) {
   const { k } = inst
-  const eyeWhiteSize = 3 * HERO_SCALE
-  const pupilSize = 1 * HERO_SCALE
+  const eyeWhiteSize = 3 * RENDER_SCALE
+  const pupilSize = 1 * RENDER_SCALE
   const eyeAngles = [k.rand(0, Math.PI * 2), k.rand(0, Math.PI * 2)]
   const particles = []
   //
@@ -2774,6 +2819,58 @@ function fillRoundedRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x + w, y + h, x, y + h, clampedR)
   ctx.arcTo(x, y + h, x, y, clampedR)
   ctx.arcTo(x, y, x + w, y, clampedR)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Body outline with smooth shoulder arcs.
+// The path starts at the head left edge, curves down to the body left side,
+// continues down, across the bottom, up the right side, and arcs back to
+// the head right edge. The shoulder depth equals the head-to-body width gap.
+//
+function drawBodyOutline(ctx, headX, bodyX, bodyY, bodyHeight, cornerR) {
+  const leftHeadEdge = headX - 1
+  const rightHeadEdge = headX + 9
+  const leftBodyEdge = bodyX - 1
+  const rightBodyEdge = bodyX + 13
+  const top = bodyY - 1
+  const bottom = bodyY + bodyHeight + 1
+  const shoulderR = leftHeadEdge - leftBodyEdge
+  ctx.beginPath()
+  ctx.moveTo(leftHeadEdge, top)
+  //
+  // Left shoulder: circular arc tangent to horizontal head edge
+  // and vertical body side, radius matches the shoulder width
+  //
+  ctx.arcTo(leftBodyEdge, top, leftBodyEdge, bottom, shoulderR)
+  ctx.lineTo(leftBodyEdge, bottom)
+  ctx.lineTo(rightBodyEdge, bottom)
+  //
+  // Right shoulder: mirror arc
+  //
+  ctx.lineTo(rightBodyEdge, top + shoulderR)
+  ctx.arcTo(rightBodyEdge, top, rightHeadEdge, top, shoulderR)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Body fill (inset 1px from outline) with matching circular shoulder arcs.
+//
+function drawBodyFill(ctx, headX, bodyX, bodyY, bodyHeight) {
+  const leftHeadEdge = headX
+  const rightHeadEdge = headX + 8
+  const leftBodyEdge = bodyX
+  const rightBodyEdge = bodyX + 12
+  const top = bodyY
+  const bottom = bodyY + bodyHeight
+  const shoulderR = leftHeadEdge - leftBodyEdge
+  ctx.beginPath()
+  ctx.moveTo(leftHeadEdge, top)
+  ctx.arcTo(leftBodyEdge, top, leftBodyEdge, bottom, shoulderR)
+  ctx.lineTo(leftBodyEdge, bottom)
+  ctx.lineTo(rightBodyEdge, bottom)
+  ctx.lineTo(rightBodyEdge, top + shoulderR)
+  ctx.arcTo(rightBodyEdge, top, rightHeadEdge, top, shoulderR)
   ctx.closePath()
   ctx.fill()
 }

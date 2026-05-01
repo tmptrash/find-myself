@@ -84,45 +84,24 @@ export function getNextLevel(currentLevel) {
 }
 
 /**
- * Get previous level name (reverse lookup in LEVEL_TRANSITIONS)
- * @param {string} targetLevel - Target level name
- * @returns {string|null} Previous level name or null if not found
- */
-function getPreviousLevel(targetLevel) {
-  for (const [current, next] of Object.entries(LEVEL_TRANSITIONS)) {
-    if (next === targetLevel) {
-      return current
-    }
-  }
-  return null
-}
-
-/**
- * Show transition screen and go to the specified target level
- * Finds the appropriate previous level to show the correct subtitle
+ * Show the pre-level subtitle transition, then navigate to the saved level.
+ * Called when the player resumes from the menu with a saved game.
+ * Looks up which "menu-to-section" key produces targetLevel and replays
+ * the transition from there so the subtitle is shown again.
  * @param {Object} k - Kaplay instance
- * @param {string} targetLevel - Target level to go to (e.g., 'level-word.2')
+ * @param {string} targetLevel - Target level to go to (e.g., 'level-time.0')
  */
 export function showTransitionToLevel(k, targetLevel) {
-  //
-  // Validate target level exists in known transitions
-  //
-  if (!targetLevel || !LEVEL_TRANSITIONS[targetLevel]) {
-    const isValidTarget = Object.values(LEVEL_TRANSITIONS).includes(targetLevel)
-    if (!isValidTarget) {
-      k.go('menu')
-      return
-    }
+  if (!targetLevel) {
+    k.go('menu')
+    return
   }
   //
-  // Find previous level to show correct subtitle
+  // Find the key whose transition chain starts at targetLevel.
+  // E.g. if targetLevel is 'level-time.0', previousLevel is 'menu-time'.
   //
   const previousLevel = getPreviousLevel(targetLevel)
-  
   if (previousLevel) {
-    //
-    // Use normal transition from previous level
-    //
     createLevelTransition(k, previousLevel)
   } else {
     k.go(targetLevel)
@@ -211,7 +190,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // But DON'T save progress for transitions from menu/menu-time/menu-touch, as these are entry points
   //
   const isLevelToLevelTransition = currentLevel.startsWith('level-') && nextLevel.startsWith('level-')
-  if (isLevelToLevelTransition) {
+  const isMenuToLevelTransition = currentLevel.startsWith('menu') && nextLevel.startsWith('level-')
+  if (isLevelToLevelTransition || isMenuToLevelTransition) {
     set('lastLevel', nextLevel)
   } else if (nextLevel === 'time-complete') {
     //
@@ -297,13 +277,32 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       }
     }
     
+    //
+    // Esc during transition goes directly to menu
+    //
+    if (inst.skipEnabled && k.isKeyPressed("escape")) {
+      if (inst.skipped) return
+      inst.skipped = true
+      transitionInterval.cancel()
+      inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
+      inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+      k.volume(inst.originalVolume)
+      Sound.unmuteProceduralSounds()
+      Sound.resumeGlobalAudio()
+      stopTimeSectionMusic()
+      k.go("menu")
+      return
+    }
+    //
     // Check for skip keys (space or enter) in update loop for better reliability
+    //
     if (inst.skipEnabled && (k.isKeyPressed("space") || k.isKeyPressed("enter"))) {
       skipTransition()
       return
     }
-    
+    //
     // Check for mouse click to skip (same as space/enter)
+    //
     if (inst.skipEnabled && k.isMousePressed()) {
       skipTransition()
       return
@@ -608,4 +607,14 @@ function createSceneFadeIn(k, r, g, b) {
       k.destroy(fadeOverlay)
     }
   })
+}
+//
+// Reverse lookup: find the key that maps to targetLevel in LEVEL_TRANSITIONS.
+// Returns the previous level name or null if not found.
+//
+function getPreviousLevel(targetLevel) {
+  for (const [key, value] of Object.entries(LEVEL_TRANSITIONS)) {
+    if (value === targetLevel) return key
+  }
+  return null
 }

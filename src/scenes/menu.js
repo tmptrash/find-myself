@@ -6,6 +6,7 @@ import { createLevelTransition, showTransitionToLevel } from "../utils/transitio
 import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
+import * as Cursor from "../utils/cursor.js"
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -123,11 +124,9 @@ export function sceneMenu(k) {
     k.flyingWordsInstance = null
     
     //
-    // Ensure default custom cursor is visible when entering menu
+    // Ensure default cursor type when entering menu
     //
-    k.canvas.classList.remove('cursor-pointer')
-    k.canvas.classList.add('cursor')
-    k.canvas.style.removeProperty('cursor')
+    Cursor.setCursor('arrow')
     
     //
     // Disable gravity in menu
@@ -205,7 +204,7 @@ export function sceneMenu(k) {
       x: centerX,
       y: centerY,
       type: Hero.HEROES.HERO,
-      scale: 5,
+      scale: 5 / 3,
       controllable: false,
       addMouth: Boolean(progress.word?.completed),
       addArms: Boolean(progress.touch?.completed),
@@ -254,7 +253,7 @@ export function sceneMenu(k) {
         x: config.x,
         y: config.y,
         type: Hero.HEROES.ANTIHERO,
-        scale: 3,
+        scale: 1,
         controllable: false,
         bodyColor,
         outlineColor,
@@ -370,11 +369,7 @@ export function sceneMenu(k) {
           //
           Sound.stopAmbient(sound)
           
-          //
-          // Swap back to default cursor class
-          //
-          k.canvas.classList.remove('cursor-pointer')
-          k.canvas.classList.add('cursor')
+          Cursor.setCursor('arrow')
           //
           // Get last level for word section or start from beginning
           //
@@ -409,18 +404,12 @@ export function sceneMenu(k) {
           // Stop ambient sound
           //
           Sound.stopAmbient(sound)
-          
-          //
-          // Swap back to default cursor class
-          //
-          k.canvas.classList.remove('cursor-pointer')
-          k.canvas.classList.add('cursor')
+          Cursor.setCursor('arrow')
           //
           // Stop music
           //
           menuMusic.stop()
           kidsMusic.stop()
-          
           //
           // Determine which level to go to
           //
@@ -453,16 +442,12 @@ export function sceneMenu(k) {
           Sound.stopAmbient(sound)
           
           //
-          // Swap back to default cursor class
-          //
-          k.canvas.classList.remove('cursor-pointer')
-          k.canvas.classList.add('cursor')
+          Cursor.setCursor('arrow')
           //
           // Stop music
           //
           menuMusic.stop()
           kidsMusic.stop()
-          
           //
           // Get last level for time section or start from beginning
           //
@@ -763,18 +748,12 @@ export function sceneMenu(k) {
           const canAccess = isCurrentSection || (currentIndex === 0 || isPreviousCompleted)  // Current section is always accessible, or first section, or previous completed
           
           if (isImplementedSection && !hoveredInst.isCompleted && canAccess) {
-            k.canvas.classList.remove('cursor')
-            k.canvas.classList.add('cursor-pointer')
+            Cursor.setCursor('pointer')
           } else {
-            //
-            // Swap back to default cursor class
-            //
-            k.canvas.classList.remove('cursor-pointer')
-            k.canvas.classList.add('cursor')
+            Cursor.setCursor('arrow')
           }
         } else {
-          k.canvas.classList.remove('cursor-pointer')
-          k.canvas.classList.add('cursor')
+          Cursor.setCursor('arrow')
         }
       }
       
@@ -1028,8 +1007,7 @@ export function sceneMenu(k) {
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()
-      k.canvas.classList.remove('cursor-pointer')
-      k.canvas.classList.add('cursor')
+      Cursor.setCursor('arrow')
       if (forceNew) {
         resetProgress()
         createLevelTransition(k, 'menu-touch')
@@ -1043,9 +1021,13 @@ export function sceneMenu(k) {
     k.onKeyPress("enter", () => startGame(true))
     
     //
-    // Back to ready scene (ESC)
+    // Back to ready scene (ESC) — guarded to prevent firing from a scene transition
     //
+    const SCENE_GUARD_DELAY = 0.2
+    let sceneReady = false
+    k.wait(SCENE_GUARD_DELAY, () => { sceneReady = true })
     k.onKeyPress("escape", () => {
+      if (!sceneReady) return
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()

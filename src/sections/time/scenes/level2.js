@@ -12,6 +12,8 @@ import * as PixelClouds from '../../../components/pixel-clouds.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as BonusHero from '../../touch/components/bonus-hero.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -27,6 +29,62 @@ const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
 const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
 const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
+//
+// Green timer tooltip
+//
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_WIDTH = 100
+const GREEN_TIMER_TOOLTIP_HEIGHT = 30
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
+//
+// Small hero and life icon tooltips
+//
+const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_SIZE = 80
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 80
+const LIFE_TOOLTIP_Y_OFFSET = 50
+//
+// Hero tooltip
+//
+const HERO_TOOLTIP_TEXT = "I hate math..."
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -60
+//
+// Anti-hero tooltip
+//
+const ANTIHERO_TOOLTIP_TEXT = "tough, isn't it?"
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+//
+// Cloud jokes (shown on 2 random clouds)
+//
+const CLOUD_JOKES = [
+  "I'm feeling under the weather",
+  "I'm on cloud nine!",
+  "I mist you already",
+  "every cloud has a silver lining",
+  "I'm just passing through",
+  "don't rain on my parade"
+]
+const CLOUD_TOOLTIP_SIZE = 120
+const CLOUD_TOOLTIP_Y_OFFSET = -50
+//
+// Bonus hero — hidden platform top-right of rightmost reachable platform
+//
+const BONUS_PLATFORM_X = 1700
+const BONUS_PLATFORM_Y = 400
+const BONUS_PLATFORM_WIDTH = 80
+const BONUS_STORAGE_KEY = 'time.level2BonusCollected'
+const BONUS_HERO_COLOR = "#8B5A50"
+//
+// Life deduction (show hint + control 2 falling platform traps)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'time.level2TrapAdded'
+const TRAP_PLATFORM_INDEX_1 = 2
+const TRAP_PLATFORM_INDEX_2 = 6
 //
 // Hero size (approximately)
 //
@@ -575,6 +633,28 @@ export function sceneLevel2(k) {
       k.fixed()
     ])
     //
+    // Add joke tooltips to 2 random clouds
+    //
+    const jokeIndices = []
+    while (jokeIndices.length < 2) {
+      const idx = Math.floor(Math.random() * cloudCount)
+      if (!jokeIndices.includes(idx)) jokeIndices.push(idx)
+    }
+    const cloudJokeTargets = jokeIndices.map(idx => {
+      const joke = CLOUD_JOKES[Math.floor(Math.random() * CLOUD_JOKES.length)]
+      const cx = PLATFORM_SIDE_WIDTH + cloudSpacing * idx + cloudSpacing / 2
+      return {
+        x: cx,
+        y: cloudY,
+        width: CLOUD_TOOLTIP_SIZE,
+        height: CLOUD_TOOLTIP_SIZE,
+        text: joke,
+        offsetY: CLOUD_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }
+    })
+    Tooltip.create({ k, targets: cloudJokeTargets })
+    //
     // Create rounded corners for game area
     //
     createRoundedCorners(k)
@@ -629,7 +709,25 @@ export function sceneLevel2(k) {
     //
     // Create dynamic platform system
     //
-    createPlatformSystem(k, sound, hero, antiHero, levelIndicator)
+    //
+    // Life deduction: show hint at level start if lifeScore >= threshold
+    // Trap platforms only fall if the hint was shown (current or previous visit)
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
+    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trapEnabled = showTrap || trapAlreadyAdded
+    if (showTrap) {
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG
+      })
+    }
+    const trapIndices = trapEnabled ? [TRAP_PLATFORM_INDEX_1, TRAP_PLATFORM_INDEX_2] : []
+    createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndices)
     //
     // Update hero reference in final platform
     //
@@ -658,6 +756,96 @@ export function sceneLevel2(k) {
         offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
         forceBelow: true
       }]
+    })
+    //
+    // Tooltip for green timer (target time countdown)
+    //
+    fpsCounter.targetText && Tooltip.create({
+      k,
+      targets: [{
+        x: fpsCounter.targetText.pos.x,
+        y: fpsCounter.targetText.pos.y,
+        width: GREEN_TIMER_TOOLTIP_WIDTH,
+        height: GREEN_TIMER_TOOLTIP_HEIGHT,
+        text: GREEN_TIMER_TOOLTIP_TEXT,
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for small hero (score indicator)
+    //
+    levelIndicator && levelIndicator.smallHero && Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for life icon (top-right)
+    //
+    levelIndicator && levelIndicator.lifeImage && Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.sprite.pos.x,
+        y: levelIndicator.lifeImage.sprite.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => hero.character.pos.x,
+        y: () => hero.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for anti-hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHero.character.pos.x,
+        y: () => antiHero.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Hidden bonus hero — top-right of rightmost reachable platform
+    //
+    BonusHero.create({
+      k,
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: BONUS_PLATFORM_WIDTH,
+      heroInst: hero,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      heroBodyColor: BONUS_HERO_COLOR,
+      storageKey: BONUS_STORAGE_KEY,
+      hintText: "patience is a virtue",
+      platformText: "00"
     })
   })
 }
@@ -916,7 +1104,7 @@ function destroyHearts(inst) {
  * @param {Object} levelIndicator - Level indicator instance for score effects
  * @returns {Object} Platform system instance
  */
-function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
+function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndices = []) {
   const platforms = []
   let currentPlatformIndex = 0
   let nextPlatform = null
@@ -962,7 +1150,8 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
     globalTimer: 0,  // Timer to track seconds
     attemptsRemaining: 3,  // Number of wrong platform attempts remaining (starts at 3)
     hearts: null,  // Array of heart objects showing remaining attempts
-    lastErrorTime: 0  // Track when last error occurred to prevent multiple triggers
+    lastErrorTime: 0,  // Track when last error occurred to prevent multiple triggers
+    trapIndices
   }
   
   //
@@ -1102,12 +1291,16 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator) {
             // 192 / 10 ≈ 19 per second
             //
             const brightness = Math.max(192 - (p.ageInSeconds * 19), 0)
-            p.inst.timerText.color = k.rgb(brightness, brightness, brightness)
+            const ageColor = k.rgb(brightness, brightness, brightness)
+            p.inst.timerText.color = ageColor
+            p.inst.currentPlatformColor = ageColor
             //
-            // Keep outline black
+            // Fade outline opacity to match brightness
             //
+            const opacityFade = brightness / 192
             p.inst.outlineTexts.forEach(outline => {
               outline.color = k.rgb(0, 0, 0)
+              outline.opacity = opacityFade
             })
             //
             // Destroy platform if it has aged too much
@@ -1256,6 +1449,11 @@ function createNextPlatform(inst) {
   // Create platform with offset that will tick with global time
   // Safe platforms always show "00" and don't tick
   //
+  //
+  // Check if this platform is a trap (falls when hero lands on it)
+  //
+  const isTrap = inst.trapIndices.includes(nextIndex)
+  const fallTarget = isTrap ? k.height() - PLATFORM_BOTTOM_HEIGHT + 20 : 0
   const platform = TimePlatform.create({
     k,
     x: pos.x,
@@ -1263,15 +1461,17 @@ function createNextPlatform(inst) {
     hero,
     persistent: true,
     showSecondsOnly: true,
-    initialTime: isSafePlatform ? 0 : randomOffset,  // Safe platforms always show 00
-    staticTime: isSafePlatform,  // Safe platforms don't tick
-    killOnOddSum: true,  // Kill hero when digit sum is odd
+    initialTime: isSafePlatform ? 0 : randomOffset,
+    staticTime: isSafePlatform,
+    killOnOddSum: true,
     duration: 0,
     sfx: sound,
-    enableColorChange: true,  // Enable color change on landing
+    enableColorChange: true,
     levelIndicator,
     currentLevel: 'level-time.2',
-    heartSystem: inst  // Pass inst that contains attemptsRemaining, updateHearts, destroyHearts
+    heartSystem: inst,
+    falling: isTrap,
+    fallTarget
   })
   
   inst.nextPlatform = {

@@ -153,7 +153,7 @@ function measureText(k, text, font) {
 // Automatically flips below the target if the bubble would go off the top edge.
 //
 function onDraw(inst) {
-  if (inst.opacity <= 0.01 || !inst.activeTarget) return
+  if (inst.opacity <= 0.01 || !inst.activeTarget || (!inst.frozenX && !inst.frozenY)) return
   const { k } = inst
   const target = inst.activeTarget
   //
@@ -387,16 +387,15 @@ function onUpdate(inst) {
       inst.activeTarget = hoveredTarget
       inst.frozenX = Math.round(getTargetX(hoveredTarget))
       inst.frozenY = Math.round(getTargetY(hoveredTarget))
+      inst.opacity = 0
     }
     inst.opacity = Math.min(1, inst.opacity + dt * FADE_SPEED)
   } else {
-    inst.opacity = Math.max(0, inst.opacity - dt * FADE_SPEED)
     //
-    // Clear active target once fully faded so re-hovering the same moving
-    // object at a new position captures fresh frozen coordinates.
+    // Hide instantly when mouse leaves so a fading-out tooltip from one
+    // target never visually overlaps with a newly appearing tooltip nearby.
     //
-    if (inst.opacity <= 0) {
-      inst.activeTarget = null
-    }
+    inst.opacity = 0
+    inst.activeTarget = null
   }
 }

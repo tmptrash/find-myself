@@ -42,8 +42,8 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
   //
   // Calculate spacing for 5 anti-heroes
   //
-  const antiHeroScale = 2  // Small size for indicators
-  const antiHeroSize = 32 * antiHeroScale  // Approximate size
+  const antiHeroScale = 2 / 3
+  const antiHeroSize = 96 * antiHeroScale
   const spacing = -20  // Strong overlap - very close together
   
   const startX = sideWallWidth + antiHeroSize / 2  // Align left side with platform below

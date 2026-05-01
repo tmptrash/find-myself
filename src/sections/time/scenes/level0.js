@@ -13,6 +13,7 @@ import * as MovingCars from '../components/moving-cars.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
@@ -74,10 +75,15 @@ const HERO_TOOLTIP_Y_OFFSET = -60
 // Bonus hero — hidden platform shaped as 00:00, top-left of rightmost platform
 //
 const BONUS_PLATFORM_X = 1100
-const BONUS_PLATFORM_Y = 530
+const BONUS_PLATFORM_Y = 460
 const BONUS_PLATFORM_WIDTH = 100
 const BONUS_STORAGE_KEY = 'time.level0BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
+//
+// Life deduction (show hint + control platform 6 trap)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
 
 /**
  * Time section level 0 scene
@@ -347,11 +353,28 @@ export function sceneLevel0(k) {
     let platform6CurrentX = PLATFORM6_ORIGINAL_X
     let platform6TargetX = PLATFORM6_ORIGINAL_X
     let platform6WaitTimer = 0
-    let platform6HasActivated = false  // Track if trap has been activated once
+    //
+    // Life deduction: show hint at level start if lifeScore >= threshold
+    // Platform 6 trap only activates if the hint was shown (current or previous visit)
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
+    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trapEnabled = showTrap || trapAlreadyAdded
+    if (showTrap) {
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG
+      })
+    }
+    let platform6HasActivated = !trapEnabled
     
     k.onUpdate(() => {
       //
-      // Check if hero moves right past platform 5 edge (only if trap hasn't activated yet)
+      // Check if hero moves right past platform 5 edge (only if trap is enabled and hasn't activated yet)
       //
       if (!platform6HasActivated && hero && hero.character && platform6State === 'idle') {
         const heroX = hero.character.pos.x
@@ -573,7 +596,9 @@ export function sceneLevel0(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
-      storageKey: BONUS_STORAGE_KEY
+      storageKey: BONUS_STORAGE_KEY,
+      hintText: "your curiosity matters",
+      platformText: "00:00"
     })
   })
 }

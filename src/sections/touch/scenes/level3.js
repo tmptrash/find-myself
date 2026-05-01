@@ -24,9 +24,7 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 // Hero spawn configuration
 //
-const HERO_COLLISION_HEIGHT = 25
-const HERO_SCALE = 3
-const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE
+const HERO_COLLISION_HEIGHT_SCALED = 75
 //
 // Background color (near-black night sky)
 //

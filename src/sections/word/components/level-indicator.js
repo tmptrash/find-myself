@@ -111,7 +111,7 @@ export function create(config) {
     type: Hero.HEROES.HERO,
     controllable: false,
     isStatic: true,
-    scale: 2.6,
+    scale: 2.6 / 3,
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
     addMouth: isWordComplete,

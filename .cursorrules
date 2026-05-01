@@ -613,7 +613,33 @@ assets/
 
 ---
 
-## 12. Anti-Patterns to Avoid
+## 12. localStorage Keys
+
+### Naming Convention
+All localStorage keys must be prefixed by section name, separated by dots:
+- `touch.` — Touch section data (e.g. `touch.level0BonusCollected`, `touch.lifeHintShown`)
+- `time.` — Time section data (e.g. `time.level0BonusCollected`, `time.lifeHintShown`)
+- `word.` — Word section data (e.g. `word.completed`)
+- Top-level keys without prefix — Global game state (e.g. `heroScore`, `lifeScore`, `lastLevel`)
+
+### Example
+```javascript
+// Good: section-prefixed keys
+set('touch.level0BonusCollected', true)
+set('time.lifeHintShown', true)
+get('word.completed', false)
+
+// Good: global keys (no prefix needed)
+set('heroScore', 5)
+set('lastLevel', 'level-time.1')
+
+// Bad: unprefixed section-specific key
+set('level0BonusCollected', true)  // ❌ Missing section prefix
+```
+
+---
+
+## 13. Anti-Patterns to Avoid
 
 ### Don't
 - ❌ Put a ; symbol at the end of the line

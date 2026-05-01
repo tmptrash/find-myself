@@ -155,9 +155,9 @@ function createSingleSpike(k, x, y, rotation, isFake = false) {
     components.push(
       k.area({
         shape: new k.Rect(
-          k.vec2(-3, -5),  // Narrow collision box for thin digit, lowered down
+          k.vec2(-3, 5),   // Collision starts below digit top so hero must visually touch
           6,               // Very narrow width (6px)
-          35               // Smaller height (35px) for smaller font
+          25               // Height covers lower part of digit
         )
       }),
       k.z(16),  // In front of city background (15.5) but behind hero (20)

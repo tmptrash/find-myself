@@ -21,6 +21,7 @@ import { sceneTimeComplete } from "./sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
 import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
 import * as CityBackground from "./sections/time/components/city-background.js"
+import * as Cursor from "./utils/cursor.js"
 //
 // URL pattern for network-loaded assets (all resource types)
 //
@@ -61,11 +62,9 @@ function yieldToRenderer() {
 document.documentElement.style.backgroundColor = '#000000'
 document.body.style.backgroundColor = '#000000'
 //
-// Apply custom cursor class to the canvas.
-// The class rule uses !important to override Kaplay's inline cursor: default.
-// Scenes swap between 'cursor' and 'cursor-pointer' as needed.
+// Initialize drawn cursor (replaces CSS cursor to avoid system cursor at screen edges)
 //
-k.canvas.classList.add('cursor')
+Cursor.init(k)
 //
 // Define all asset loading tasks as an ordered list.
 // Each task is executed one at a time with browser yields between them

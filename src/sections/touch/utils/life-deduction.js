@@ -18,6 +18,7 @@ const RESULT_HOLD = 1.5
 const FADE_OUT = 0.8
 const OVERLAY_OPACITY = 0.7
 const LIFE_SCALE = 0.3
+const SHOW_DELAY = 0.5
 const INTRO_TEXT = "life strikes back"
 const RESULT_TEXT = "one problem added"
 const FONT_SIZE = 32
@@ -39,7 +40,7 @@ const BORDER_WIDTH = 3
 //
 // Total animation duration (all phases combined)
 //
-export const TOTAL_DURATION = FADE_IN + SCORE_HOLD + COUNT_DURATION
+export const TOTAL_DURATION = SHOW_DELAY + FADE_IN + SCORE_HOLD + COUNT_DURATION
   + BLINK_DURATION + RESULT_FADE_IN + RESULT_HOLD + FADE_OUT
 
 /**
@@ -59,18 +60,31 @@ export const TOTAL_DURATION = FADE_IN + SCORE_HOLD + COUNT_DURATION
 export function show(config) {
   const { k, currentScore, levelIndicator, sound, deductFlag, extraFlags, sceneLock, onComplete } = config
   const deductFlagValue = config.deductFlagValue ?? true
-  const centerX = CFG.visual.screen.width / 2
-  const centerY = CFG.visual.screen.height / 2
+  //
+  // Persist the deducted score and mark as used immediately
+  //
   const newScore = currentScore - DEDUCT_AMOUNT
-  //
-  // Persist the deducted score and mark as used
-  //
   set('lifeScore', newScore)
   set(deductFlag, deductFlagValue)
   extraFlags?.forEach(flag => set(flag, true))
+  //
+  // Delay the visual hint by SHOW_DELAY seconds
+  //
+  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete))
+}
+//
+// Runs the actual life deduction animation after the delay
+//
+function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete) {
+  const centerX = CFG.visual.screen.width / 2
+  const centerY = CFG.visual.screen.height / 2
   Tooltip.suppressAll()
   const boxX = centerX - BOX_WIDTH / 2
   const boxY = centerY - BOX_HEIGHT / 2
+  //
+  // Play ominous sound at animation start
+  //
+  sound && Sound.playScarySound(sound)
   //
   // Dark overlay
   //
@@ -110,7 +124,7 @@ export function show(config) {
           width: BOX_WIDTH,
           height: BOX_HEIGHT,
           radius: BOX_RADIUS,
-          color: k.rgb(245, 242, 235),
+          color: k.rgb(50, 45, 55),
           opacity: bubble.opacity * 0.92
         })
       }
@@ -123,7 +137,7 @@ export function show(config) {
     k.text(INTRO_TEXT, { size: FONT_SIZE, align: 'center' }),
     k.pos(centerX, centerY + INTRO_Y_OFFSET),
     k.anchor('center'),
-    k.color(30, 30, 30),
+    k.color(255, 255, 255),
     k.opacity(0),
     k.z(CFG.visual.zIndex.ui + 52)
   ])
@@ -160,7 +174,7 @@ export function show(config) {
     k.text(currentScore.toString(), { size: SCORE_FONT_SIZE }),
     k.pos(scoreX, scoreY),
     k.anchor('left'),
-    k.color(30, 30, 30),
+    k.color(255, 255, 255),
     k.opacity(0),
     k.z(CFG.visual.zIndex.ui + 52.1)
   ])
@@ -186,10 +200,6 @@ export function show(config) {
     lastTickScore: currentScore
   }
   const el = { overlay, bubble, introText, lifeIcon, scoreText, scoreOutlines, resultText }
-  //
-  // Play scary sound at the start of the deduction animation
-  //
-  sound && Sound.playScarySound(sound)
   const updateHandler = k.onUpdate(() => {
     state.timer += k.dt()
     onUpdateDeduction(k, state, el, currentScore, newScore, updateHandler, levelIndicator, sound, sceneLock, onComplete)

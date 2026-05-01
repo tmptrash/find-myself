@@ -3,6 +3,7 @@ import { getColor, toPng } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Particles from '../utils/particles.js'
+import * as Cursor from '../utils/cursor.js'
 
 const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
@@ -103,13 +104,7 @@ export function sceneReady(k) {
     //
     k.flyingWordsInstance = null
     
-    //
-    // Hide cursor for this scene by removing cursor class
-    // and setting inline cursor: none (no class rule to override it)
-    //
-    k.canvas.classList.remove('cursor-pointer')
-    k.canvas.classList.remove('cursor')
-    k.canvas.style.cursor = 'none'
+    Cursor.setCursor('arrow')
     
     const centerX = k.width() / 2
     const centerY = k.height() / 2
@@ -812,6 +807,9 @@ export function sceneReady(k) {
     }
     
     CFG.controls.startGame.forEach(key => {
+      k.onKeyPress(key, exitToMenu)
+    })
+    CFG.controls.backToMenu.forEach(key => {
       k.onKeyPress(key, exitToMenu)
     })
     

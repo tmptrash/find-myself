@@ -11,6 +11,7 @@ import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -28,6 +29,35 @@ const TIME_INDICATOR_TOOLTIP_WIDTH = 200
 const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
 const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
+// Green timer tooltip
+//
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_WIDTH = 100
+const GREEN_TIMER_TOOLTIP_HEIGHT = 30
+const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
+//
+// Small hero and life icon tooltips
+//
+const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_SIZE = 80
+const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
+const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_SIZE = 80
+const LIFE_TOOLTIP_Y_OFFSET = 50
+//
+// Anti-hero tooltip
+//
+const ANTIHERO_TOOLTIP_TEXT = "learning to handle numbers"
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+//
+// Platform tooltip
+//
+const PLATFORM_TOOLTIP_TEXT = "do not touch the one"
+const PLATFORM_TOOLTIP_WIDTH = 80
+const PLATFORM_TOOLTIP_HEIGHT = 40
+const PLATFORM_TOOLTIP_Y_OFFSET = -50
+//
 // Bonus hero — hidden platform right-below the "22" platform
 //
 const BONUS_PLATFORM_X = 720
@@ -35,6 +65,11 @@ const BONUS_PLATFORM_Y = 800
 const BONUS_PLATFORM_WIDTH = 80
 const BONUS_STORAGE_KEY = 'time.level1BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
+//
+// Life deduction (show hint + control 5th platform falling)
+//
+const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_FLAG = 'time.level1TrapAdded'
 //
 // Level geometry - two platforms connected by stairs
 //
@@ -241,6 +276,23 @@ export function sceneLevel1(k) {
       levelIndicator
     })
     //
+    // Life deduction: show hint at level start if lifeScore >= threshold
+    // 5th platform only falls if the hint was shown (current or previous visit)
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
+    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trapEnabled = showTrap || trapAlreadyAdded
+    if (showTrap) {
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG
+      })
+    }
+    //
     // Create clock platforms to the right of hero (kill on digit 1)
     // Initial times: 02, 05, 10, 15, 20, 25, 30, ...
     //
@@ -325,8 +377,8 @@ export function sceneLevel1(k) {
         sfx: sound,
         enableColorChange: true,
         levelIndicator,
-        falling: isFifthPlatform,  // 5th platform falls when hero lands on it
-        fallTarget: isFifthPlatform ? BOTTOM_PLATFORM_TOP + 20 : 0  // Fall to just above bottom spikes
+        falling: isFifthPlatform && trapEnabled,
+        fallTarget: isFifthPlatform && trapEnabled ? BOTTOM_PLATFORM_TOP + 20 : 0
       })
       
       clockPlatforms.push(platform)
@@ -521,6 +573,77 @@ export function sceneLevel1(k) {
       }]
     })
     //
+    // Tooltip for green timer (target time countdown)
+    //
+    fpsCounter.targetText && Tooltip.create({
+      k,
+      targets: [{
+        x: fpsCounter.targetText.pos.x,
+        y: fpsCounter.targetText.pos.y,
+        width: GREEN_TIMER_TOOLTIP_WIDTH,
+        height: GREEN_TIMER_TOOLTIP_HEIGHT,
+        text: GREEN_TIMER_TOOLTIP_TEXT,
+        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for small hero (score indicator)
+    //
+    levelIndicator && levelIndicator.smallHero && Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.smallHero.character.pos.x,
+        y: levelIndicator.smallHero.character.pos.y,
+        width: SMALL_HERO_TOOLTIP_SIZE,
+        height: SMALL_HERO_TOOLTIP_SIZE,
+        text: SMALL_HERO_TOOLTIP_TEXT,
+        offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for life icon (top-right)
+    //
+    levelIndicator && levelIndicator.lifeImage && Tooltip.create({
+      k,
+      targets: [{
+        x: levelIndicator.lifeImage.sprite.pos.x,
+        y: levelIndicator.lifeImage.sprite.pos.y,
+        width: LIFE_TOOLTIP_SIZE,
+        height: LIFE_TOOLTIP_SIZE,
+        text: LIFE_TOOLTIP_TEXT,
+        offsetY: LIFE_TOOLTIP_Y_OFFSET,
+        forceBelow: true
+      }]
+    })
+    //
+    // Tooltip for anti-hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHero.character.pos.x,
+        y: () => antiHero.character.pos.y,
+        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
+    // Tooltip for clock platforms
+    //
+    const platformTargets = clockPlatforms.map(p => ({
+      x: p.platform.pos.x,
+      y: p.platform.pos.y,
+      width: PLATFORM_TOOLTIP_WIDTH,
+      height: PLATFORM_TOOLTIP_HEIGHT,
+      text: PLATFORM_TOOLTIP_TEXT,
+      offsetY: PLATFORM_TOOLTIP_Y_OFFSET
+    }))
+    Tooltip.create({ k, targets: platformTargets })
+    //
     // Hidden bonus hero — right-below the "22" platform
     //
     BonusHero.create({
@@ -533,7 +656,9 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
-      storageKey: BONUS_STORAGE_KEY
+      storageKey: BONUS_STORAGE_KEY,
+      hintText: "math is everywhere",
+      platformText: "00"
     })
   })
 }

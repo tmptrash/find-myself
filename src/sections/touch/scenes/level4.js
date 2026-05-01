@@ -359,10 +359,8 @@ export function sceneLevel4(k) {
     //
     // Create anti-hero on cloud platform (where hero was)
     //
-    const ANTIHERO_COLLISION_HEIGHT = 25
-    const ANTIHERO_SCALE = 3
-    const ANTIHERO_COLLISION_HEIGHT_SCALED = ANTIHERO_COLLISION_HEIGHT * ANTIHERO_SCALE  // 75
-    const ANTIHERO_Y_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_TOP_Y - ANTIHERO_COLLISION_HEIGHT_SCALED / 2  // Anti-hero center positioned so bottom touches cloud platform top
+    const ANTIHERO_COLLISION_HEIGHT_SCALED = 75
+    const ANTIHERO_Y_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_TOP_Y - ANTIHERO_COLLISION_HEIGHT_SCALED / 2
     const ANTIHERO_X_ON_CLOUD_PLATFORM = CLOUD_PLATFORM_X  // Center of cloud platform
     
     const antiHeroInst = Hero.create({
@@ -379,10 +377,8 @@ export function sceneLevel4(k) {
     // Create hero with anti-hero reference for annihilation
     // Position hero on bottom platform in left corner
     //
-    const HERO_COLLISION_HEIGHT = 25
-    const HERO_SCALE = 3
-    const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE  // 75
-    const HERO_FIXED_Y = BOTTOM_PLATFORM_TOP_Y - HERO_COLLISION_HEIGHT_SCALED / 2  // Hero center positioned so bottom touches bottom platform top
+    const HERO_COLLISION_HEIGHT_SCALED = 75
+    const HERO_FIXED_Y = BOTTOM_PLATFORM_TOP_Y - HERO_COLLISION_HEIGHT_SCALED / 2
     
     const heroInst = Hero.create({
       k,
@@ -1181,11 +1177,8 @@ function createCloudPlatformArrows(k, x, y, sound) {
   //
   // Hero collision box dimensions (from hero.js constants)
   //
-  const HERO_COLLISION_WIDTH = 10  // Base collision width
-  const HERO_COLLISION_HEIGHT = 25  // Base collision height
-  const HERO_SCALE = 3  // Hero scale multiplier
-  const HERO_COLLISION_WIDTH_SCALED = HERO_COLLISION_WIDTH * HERO_SCALE  // 30 pixels
-  const HERO_COLLISION_HEIGHT_SCALED = HERO_COLLISION_HEIGHT * HERO_SCALE  // 75 pixels
+  const HERO_COLLISION_WIDTH_SCALED = 30
+  const HERO_COLLISION_HEIGHT_SCALED = 75
   //
   // Arrow sprite dimensions (approximate, will get actual size from sprite)
   //

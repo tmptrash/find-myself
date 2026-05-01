@@ -8,26 +8,44 @@ import * as Tooltip from '../../../utils/tooltip.js'
 // Hidden platform and collectible hero configuration
 //
 const PLATFORM_HEIGHT = 20
+const TIME_PLATFORM_COLLISION_HEIGHT = 48
 const REVEAL_DISTANCE = 150
+//
+// Approximate distance from hero center to hero feet (half collision height + offset)
+//
+const HERO_FEET_OFFSET = 38
+//
+// How far above the platform surface the hero's feet can be to trigger collision
+//
+const APPROACH_DISTANCE = 25
+//
+// How far below the platform surface the hero's feet can be to still count as landing
+//
+const LAND_TOLERANCE = 5
 const BONUS_POINTS = 3
-const HERO_SCALE = 1.5
-const SPARKLE_INTERVAL_MIN = 2.5
-const SPARKLE_INTERVAL_MAX = 5.0
-const SPARKLE_DURATION = 0.4
-const SPARKLE_RADIUS = 8
+const HERO_SCALE = 0.5
+const SPARKLE_INTERVAL_MIN = 1.5
+const SPARKLE_INTERVAL_MAX = 3.5
+const SPARKLE_DURATION = 0.5
+const SPARKLE_RADIUS = 6
 const SPARKLE_COLOR_R = 255
-const SPARKLE_COLOR_G = 220
-const SPARKLE_COLOR_B = 100
+const SPARKLE_COLOR_G = 255
+const SPARKLE_COLOR_B = 255
 const COLLECT_PARTICLE_COUNT = 12
 const COLLECT_PARTICLE_SPEED = 120
 const COLLECT_PARTICLE_LIFETIME = 0.8
 //
-// Inner glow pulsation (matches sparkle color, visible when platform revealed)
+// Float animation and time-style platform text
 //
-const GLOW_PULSE_SPEED = 2.5
-const GLOW_MIN_OPACITY = 0.15
-const GLOW_MAX_OPACITY = 0.5
-const GLOW_RADIUS_MULTIPLIER = 2.5
+const FLOAT_SPEED = 1.5
+const FLOAT_AMPLITUDE = 6
+const TIME_PLATFORM_FONT_SIZE = 48
+//
+// Post-reveal mini-hero opacity pulsation
+//
+const PULSE_SPEED = 2.5
+const PULSE_MIN_OPACITY = 0.5
+const PULSE_MAX_OPACITY = 1.0
 //
 // Log platform visual constants (simplified log barrel style)
 //
@@ -68,6 +86,7 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {string} [config.heroBodyColor] - Body color for the mini-hero (defaults to main hero color)
  * @param {string} [config.storageKey] - localStorage key to persist collection state
  * @param {string} [config.hintText] - Tooltip text shown above hero on collection
+ * @param {string} [config.platformText] - Time-style text for platform (e.g. "00:00"); uses log if null
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -78,7 +97,8 @@ export function create(config) {
     revealDistance = REVEAL_DISTANCE,
     heroBodyColor = null,
     storageKey = null,
-    hintText = null
+    hintText = null,
+    platformText = null
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -90,10 +110,14 @@ export function create(config) {
   const OFF_SCREEN_Y = -5000
   const startY = approachFromAbove ? OFF_SCREEN_Y : y
   //
+  // Collision box height matches platform visual: taller for time-style platforms
+  //
+  const collisionHeight = platformText ? TIME_PLATFORM_COLLISION_HEIGHT : PLATFORM_HEIGHT
+  //
   // Invisible collision platform
   //
   const platform = k.add([
-    k.rect(width, PLATFORM_HEIGHT),
+    k.rect(width, collisionHeight),
     k.pos(x, startY),
     k.anchor('center'),
     k.area(),
@@ -117,7 +141,7 @@ export function create(config) {
     bodyColor: miniColor
   })
   miniHero.character.opacity = 0
-  miniHero.character.z = CFG.visual.zIndex.platforms + 1
+  miniHero.character.z = CFG.visual.zIndex.platforms + 3
 
   const inst = {
     k,
@@ -129,6 +153,7 @@ export function create(config) {
     x,
     y,
     width,
+    collisionHeight,
     revealed: false,
     collected: false,
     platformOpacity: 0,
@@ -143,21 +168,17 @@ export function create(config) {
     offScreenY: OFF_SCREEN_Y,
     logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
     storageKey,
-    glowTimer: 0,
-    hintText
+    pulseTimer: 0,
+    hintText,
+    platformText,
+    floatOffset: Math.random() * Math.PI * 2
   }
-  //
-  // Reveal visual when hero physically lands on the platform
-  //
-  platform.onCollide(() => {
-    if (!inst.revealed) inst.revealed = true
-  })
   //
   // Draw log platform, sparkle hints, and collection particles
   //
   k.add([
     k.pos(0, 0),
-    k.z(CFG.visual.zIndex.player + 5),
+    k.z(CFG.visual.zIndex.platforms + 2),
     {
       draw() {
         onDraw(inst)
@@ -165,6 +186,12 @@ export function create(config) {
     }
   ])
   k.onUpdate(() => onUpdate(inst))
+  //
+  // Log platforms in touch section can be destroyed by clicking on them
+  //
+  if (!platformText) {
+    k.onClick(() => onClickPlatform(inst))
+  }
   return inst
 }
 //
@@ -177,40 +204,77 @@ function onUpdate(inst) {
     updateBonusFlashParticles(inst, dt)
     return
   }
+  //
+  // Float animation for time-style platforms
+  //
+  if (inst.platformText) {
+    inst.floatOffset += dt * FLOAT_SPEED
+  }
   const heroPos = inst.heroInst.character?.pos
   if (!heroPos) return
+  //
+  // Current Y with optional float
+  //
+  const floatY = inst.platformText
+    ? inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
+    : inst.y
   const dx = Math.abs(heroPos.x - inst.x)
-  const dy = heroPos.y - inst.y
+  const dy = heroPos.y - floatY
+  const heroChar = inst.heroInst.character
   //
-  // One-way platform: only collidable when hero falls onto it from directly above.
-  // Requires hero to be above AND horizontally close. Stays in place once revealed.
+  // One-way platform: only collidable when hero is actively falling with feet
+  // very close to the surface. The platform must stay off-screen unless the hero
+  // is about to land, so it never interferes with upward jumps or side movement.
   //
-  if (inst.approachFromAbove) {
-    if (inst.revealed) {
-      inst.platform.pos.y = inst.y
+  if (inst.revealed) {
+    inst.platform.pos.y = floatY
+  } else {
+    const horizontallyAligned = dx < inst.width / 2
+    //
+    // Check grounded BEFORE moving the platform, so the hero stays supported.
+    // If the platform was collidable last frame and hero landed, isGrounded()
+    // is true while the collision body is still in place.
+    //
+    const heroOnPlatform = heroChar.isGrounded?.() && horizontallyAligned
+      && inst.platform.pos.y !== inst.offScreenY
+    if (heroOnPlatform) {
+      inst.revealed = true
+      inst.platform.pos.y = floatY
     } else {
-      const heroAbove = dy < -10 && dx < inst.width / 2 + 30
-      inst.platform.pos.y = heroAbove ? inst.y : inst.offScreenY
+      //
+      // Use hero feet position (not center) to determine if the hero
+      // is about to land. Only make collidable when feet are directly
+      // above the platform surface and hero is falling downward.
+      //
+      const platformSurface = floatY - inst.collisionHeight / 2
+      const heroFeetY = heroPos.y + HERO_FEET_OFFSET
+      const isFalling = heroChar.vel && heroChar.vel.y > 0
+      const feetAboveSurface = heroFeetY < platformSurface + LAND_TOLERANCE
+      const feetNearSurface = heroFeetY > platformSurface - APPROACH_DISTANCE
+      const shouldBeCollidable = isFalling && feetAboveSurface && feetNearSurface && horizontallyAligned
+      inst.platform.pos.y = shouldBeCollidable ? floatY : inst.offScreenY
     }
   }
   //
-  // Non-approachFromAbove: distance-based reveal
-  //
-  if (!inst.revealed && !inst.approachFromAbove) {
-    const inRange = dx < inst.revealDistance && Math.abs(dy) < inst.revealDistance
-    if (inRange) inst.revealed = true
-  }
-  //
-  // Snap platform and mini-hero to full visibility once revealed
+  // Once revealed: show platform and start mini-hero opacity pulse
   //
   if (inst.revealed && inst.platformOpacity < 1) {
     inst.platformOpacity = 1
-    inst.miniHero.character.opacity = 1
   }
   //
-  // Pulsating glow timer (runs while revealed and not collected)
+  // Float mini-hero position together with platform
   //
-  if (inst.revealed) inst.glowTimer += dt
+  if (inst.platformText && inst.miniHero.character.exists()) {
+    inst.miniHero.character.pos.y = floatY - PLATFORM_HEIGHT / 2 - 10
+  }
+  //
+  // Post-reveal: pulse mini-hero opacity (visible only when platform is revealed)
+  //
+  if (inst.revealed && !inst.collected) {
+    inst.pulseTimer += dt
+    const pulse = (Math.sin(inst.pulseTimer * PULSE_SPEED) + 1) / 2
+    inst.miniHero.character.opacity = PULSE_MIN_OPACITY + pulse * (PULSE_MAX_OPACITY - PULSE_MIN_OPACITY)
+  }
   //
   // Sparkle hint (visible even before platform reveal)
   //
@@ -253,49 +317,22 @@ function updateSparkle(inst, dt) {
 function onDraw(inst) {
   const { k } = inst
   //
-  // Draw log-style platform when revealed
+  // Draw platform when revealed
   //
   if (inst.revealed && inst.platformOpacity > 0) {
-    drawLogPlatform(inst)
+    if (inst.platformText) {
+      drawTimePlatform(inst)
+    } else {
+      drawLogPlatform(inst)
+    }
   }
   //
-  // Pulsating inner glow around the mini-hero (visible when revealed, before collection)
+  // Pre-reveal sparkle: small glint dot visible even before platform is revealed
   //
-  if (inst.revealed && !inst.collected) {
-    drawGlow(inst)
-  }
-  //
-  // Sparkle hint: small flash near the mini-hero position
-  //
-  if (inst.sparkleActive && !inst.collected) {
-    const t = inst.sparkleT / SPARKLE_DURATION
-    const sparkleOpacity = Math.sin(t * Math.PI)
-    const sparkleSize = SPARKLE_RADIUS * (0.5 + sparkleOpacity * 0.5)
-    const sparkleColor = k.rgb(SPARKLE_COLOR_R, SPARKLE_COLOR_G, SPARKLE_COLOR_B)
-    const sparkleY = inst.y - PLATFORM_HEIGHT / 2 - 10
-    k.drawCircle({
-      pos: k.vec2(inst.x, sparkleY),
-      radius: sparkleSize,
-      color: sparkleColor,
-      opacity: sparkleOpacity * 0.7
-    })
-    const rayCount = 4
-    for (let i = 0; i < rayCount; i++) {
-      const angle = (i / rayCount) * Math.PI * 2 + t * Math.PI
-      const rayLen = sparkleSize * 1.5
-      k.drawLine({
-        p1: k.vec2(
-          inst.x + Math.cos(angle) * sparkleSize * 0.5,
-          sparkleY + Math.sin(angle) * sparkleSize * 0.5
-        ),
-        p2: k.vec2(
-          inst.x + Math.cos(angle) * rayLen,
-          sparkleY + Math.sin(angle) * rayLen
-        ),
-        width: 1.5,
-        color: sparkleColor,
-        opacity: sparkleOpacity * 0.5
-      })
+  if (!inst.collected && !inst.revealed) {
+    inst.miniHero.character.opacity = 0
+    if (inst.sparkleActive) {
+      drawSparkleGlint(inst)
     }
   }
   //
@@ -305,23 +342,60 @@ function onDraw(inst) {
   drawBonusFlashParticles(inst)
 }
 //
-// Pulsating glow emanating from within the mini-hero
+// Small sparkle glint drawn at the bonus hero position (pre-reveal hint)
 //
-function drawGlow(inst) {
-  const { k, x, y, glowTimer } = inst
-  const glowY = y - PLATFORM_HEIGHT / 2 - 10
-  const pulse = (Math.sin(glowTimer * GLOW_PULSE_SPEED) + 1) / 2
-  const opacity = GLOW_MIN_OPACITY + pulse * (GLOW_MAX_OPACITY - GLOW_MIN_OPACITY)
-  const radius = SPARKLE_RADIUS * GLOW_RADIUS_MULTIPLIER * (0.8 + pulse * 0.4)
-  const glowColor = k.rgb(SPARKLE_COLOR_R, SPARKLE_COLOR_G, SPARKLE_COLOR_B)
+function drawSparkleGlint(inst) {
+  const { k, x, sparkleT } = inst
+  const baseY = inst.platformText
+    ? inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
+    : inst.y
+  const glintY = baseY - PLATFORM_HEIGHT / 2 - 10
+  const t = sparkleT / SPARKLE_DURATION
+  const opacity = t < 0.3 ? t / 0.3 : (1 - t) / 0.7
+  const glintColor = k.rgb(SPARKLE_COLOR_R, SPARKLE_COLOR_G, SPARKLE_COLOR_B)
+  const r = SPARKLE_RADIUS * (0.6 + opacity * 0.4)
   //
-  // Outer soft glow
+  // Soft outer glow
   //
-  k.drawCircle({ pos: k.vec2(x, glowY), radius, color: glowColor, opacity: opacity * 0.3 })
+  k.drawCircle({ pos: k.vec2(x, glintY), radius: r * 2, color: glintColor, opacity: opacity * 0.15 })
   //
-  // Inner bright core
+  // Bright core
   //
-  k.drawCircle({ pos: k.vec2(x, glowY), radius: radius * 0.5, color: glowColor, opacity: opacity * 0.6 })
+  k.drawCircle({ pos: k.vec2(x, glintY), radius: r, color: glintColor, opacity: opacity * 0.7 })
+}
+//
+// Draw time-style text platform (e.g. "00:00" or "00")
+//
+function drawTimePlatform(inst) {
+  const { k, x, platformOpacity, platformText, floatOffset } = inst
+  const floatY = inst.y + Math.sin(floatOffset) * FLOAT_AMPLITUDE
+  const outlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
+  //
+  // Black outline text (8 directions)
+  //
+  outlineOffsets.forEach(([ox, oy]) => {
+    k.drawText({
+      text: platformText,
+      size: TIME_PLATFORM_FONT_SIZE,
+      font: CFG.visual.fonts.thinFull.replace(/'/g, ''),
+      pos: k.vec2(x + ox, floatY + oy),
+      anchor: 'center',
+      color: k.rgb(0, 0, 0),
+      opacity: platformOpacity
+    })
+  })
+  //
+  // Main gray text
+  //
+  k.drawText({
+    text: platformText,
+    size: TIME_PLATFORM_FONT_SIZE,
+    font: CFG.visual.fonts.thinFull.replace(/'/g, ''),
+    pos: k.vec2(x, floatY),
+    anchor: 'center',
+    color: k.rgb(192, 192, 192),
+    opacity: platformOpacity
+  })
 }
 //
 // Draw a simplified log-style platform
@@ -638,4 +712,24 @@ function playCollectSound(inst) {
   gain2.connect(ctx.destination)
   osc2.start(now + 0.05)
   osc2.stop(now + 0.4)
+}
+//
+// Handle click on revealed log platform — destroy it so hero falls through
+//
+function onClickPlatform(inst) {
+  if (!inst.revealed || inst.collected) return
+  const { k } = inst
+  const mousePos = k.mousePos()
+  const halfW = inst.width / 2
+  const halfH = PLATFORM_HEIGHT / 2
+  const withinX = mousePos.x >= inst.x - halfW && mousePos.x <= inst.x + halfW
+  const withinY = mousePos.y >= inst.y - halfH && mousePos.y <= inst.y + halfH
+  if (!withinX || !withinY) return
+  //
+  // Move platform off-screen so hero loses footing
+  //
+  inst.platform.pos.y = inst.offScreenY
+  inst.revealed = false
+  inst.platformOpacity = 0
+  inst.miniHero.character.opacity = 0
 }

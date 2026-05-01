@@ -441,9 +441,9 @@ function updateSunHover(k, state) {
 function drawSunFace(k, intensity) {
   if (intensity < 0.01) return
   const r = SUN_RADIUS
-  const darkColor = k.rgb(180, 180, 160)
+  const darkColor = k.rgb(160, 160, 160)
   const white = k.rgb(255, 255, 255)
-  const black = k.rgb(100, 95, 85)
+  const black = k.rgb(90, 90, 90)
   //
   // Eye positions
   //
@@ -476,7 +476,7 @@ function drawSunFace(k, intensity) {
 //
 function drawSunBrow(k, cx, y, halfW, intensity) {
   const segments = 8
-  const browColor = k.rgb(100, 95, 85)
+  const browColor = k.rgb(90, 90, 90)
   for (let i = 0; i < segments; i++) {
     const t0 = i / segments
     const t1 = (i + 1) / segments
@@ -500,10 +500,10 @@ function drawSunBrow(k, cx, y, halfW, intensity) {
 //
 function drawSunSmile(k, intensity, r, darkColor, white) {
   const mouthY = SUN_Y + SUN_MOUTH_Y * r
-  const mouthW = SUN_MOUTH_WIDTH * r * (0.5 + intensity * 0.5)
-  const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 0.9
+  const mouthW = SUN_MOUTH_WIDTH * r * (0.5 + intensity * 0.7)
+  const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 1.2
   const segments = 12
-  const lipColor = k.rgb(100, 90, 75)
+  const lipColor = k.rgb(100, 100, 100)
   const lipWidth = 2 + intensity * 1.5
   //
   // Upper lip — curved arc above the mouth opening
@@ -514,7 +514,7 @@ function drawSunSmile(k, intensity, r, darkColor, white) {
     const t1 = (i + 1) / segments
     const x0 = SUN_X - mouthW / 2 + t0 * mouthW
     const x1 = SUN_X - mouthW / 2 + t1 * mouthW
-    const lipCurve = -intensity * 2
+    const lipCurve = -intensity * 3
     const y0 = upperLipY + Math.sin(t0 * Math.PI) * lipCurve
     const y1 = upperLipY + Math.sin(t1 * Math.PI) * lipCurve
     k.drawLine({
@@ -536,7 +536,7 @@ function drawSunSmile(k, intensity, r, darkColor, white) {
     k.drawCircle({ pos: k.vec2(x, curveY), radius: dotR, color: darkColor, opacity: intensity })
   }
   //
-  // Lower lip — same texture and color as upper lip
+  // Lower lip — same gray color and width as upper lip
   //
   for (let i = 0; i < segments; i++) {
     const t0 = i / segments
@@ -562,22 +562,22 @@ function drawSunSmile(k, intensity, r, darkColor, white) {
     const toothH = SUN_TOOTH_HEIGHT * r * intensity
     const toothTopY = mouthY - 1
     //
-    // Left tooth (slightly taller)
+    // Left tooth (noticeably taller, slightly tilted look)
     //
     k.drawRect({
-      pos: k.vec2(SUN_X - toothW - 2, toothTopY),
-      width: toothW,
-      height: toothH * 1.15,
+      pos: k.vec2(SUN_X - toothW - 3, toothTopY),
+      width: toothW * 0.9,
+      height: toothH * 1.3,
       color: white,
       opacity: toothOpacity
     })
     //
-    // Right tooth
+    // Right tooth (shorter, wider)
     //
     k.drawRect({
       pos: k.vec2(SUN_X + 2, toothTopY),
-      width: toothW,
-      height: toothH,
+      width: toothW * 1.1,
+      height: toothH * 0.85,
       color: white,
       opacity: toothOpacity
     })

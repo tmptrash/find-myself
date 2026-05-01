@@ -52,6 +52,11 @@ const HEAD_CORNER_RADIUS = 3
 const BODY_CORNER_RADIUS = 2
 const ARM_CORNER_RADIUS = 1
 const LEG_CORNER_RADIUS = 1
+//
+// Shoulder arc starts this many pixels above head bottom
+// for a smoother, earlier curve
+//
+const SHOULDER_RISE = 2
 
 export const HEROES = {
   HERO: 'hero',
@@ -2182,11 +2187,13 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       // Body outline with shoulder arcs: smooth curve from head edge down to body side
       //
-      drawBodyOutline(ctx, headX, bodyX, bodyY, bodyHeight, BODY_CORNER_RADIUS)
+      drawBodyOutline(ctx, headX, headY, bodyX, bodyY, bodyHeight)
       //
-      // Flatten head bottom corners to connect with body
+      // Fill the neck area between body top and shoulder start at head width
       //
-      ctx.fillRect(headX - 1, bodyY - 1, 10, 2)
+      const shoulderStart = headY + 9 - SHOULDER_RISE
+      const neckHeight = shoulderStart - (bodyY - 1)
+      if (neckHeight > 0) ctx.fillRect(headX - 1, bodyY - 1, 10, neckHeight)
       //
       // Arm outlines (rounded) — don't draw while running and jumping
       //
@@ -2248,11 +2255,13 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       if (!outlineOnly) {
         ctx.fillStyle = getHex(bodyColor)
-        drawBodyFill(ctx, headX, bodyX, bodyY, bodyHeight)
+        drawBodyFill(ctx, headX, headY, bodyX, bodyY, bodyHeight)
         //
-        // Fill head-body junction
+        // Fill the neck area between body top and shoulder start at head fill width
         //
-        ctx.fillRect(headX, bodyY - 1, 8, 2)
+        const shoulderStartFill = headY + 9 - SHOULDER_RISE
+        const neckFillH = shoulderStartFill - bodyY
+        if (neckFillH > 0) ctx.fillRect(headX, bodyY, 8, neckFillH)
         //
         // Arms (rounded) — don't draw while running and jumping
         //
@@ -2828,49 +2837,51 @@ function fillRoundedRect(ctx, x, y, w, h, r) {
 // continues down, across the bottom, up the right side, and arcs back to
 // the head right edge. The shoulder depth equals the head-to-body width gap.
 //
-function drawBodyOutline(ctx, headX, bodyX, bodyY, bodyHeight, cornerR) {
+function drawBodyOutline(ctx, headX, headY, bodyX, bodyY, bodyHeight) {
   const leftHeadEdge = headX - 1
   const rightHeadEdge = headX + 9
   const leftBodyEdge = bodyX - 1
   const rightBodyEdge = bodyX + 13
-  const top = bodyY - 1
-  const bottom = bodyY + bodyHeight + 1
   const shoulderR = leftHeadEdge - leftBodyEdge
+  //
+  // Shoulder starts SHOULDER_RISE pixels above the head bottom, curving
+  // down along the head edge then outward to the body side. Uses cubic
+  // bezier so the curve begins going downward (not immediately outward).
+  //
+  const shoulderTop = headY + 9 - SHOULDER_RISE
+  const shoulderBottom = shoulderTop + shoulderR * 2
+  const shoulderMid = shoulderTop + shoulderR
+  const bottom = bodyY + bodyHeight + 1
   ctx.beginPath()
-  ctx.moveTo(leftHeadEdge, top)
-  //
-  // Left shoulder: circular arc tangent to horizontal head edge
-  // and vertical body side, radius matches the shoulder width
-  //
-  ctx.arcTo(leftBodyEdge, top, leftBodyEdge, bottom, shoulderR)
+  ctx.moveTo(leftHeadEdge, shoulderTop)
+  ctx.bezierCurveTo(leftHeadEdge, shoulderMid, leftBodyEdge, shoulderMid, leftBodyEdge, shoulderBottom)
   ctx.lineTo(leftBodyEdge, bottom)
   ctx.lineTo(rightBodyEdge, bottom)
-  //
-  // Right shoulder: mirror arc
-  //
-  ctx.lineTo(rightBodyEdge, top + shoulderR)
-  ctx.arcTo(rightBodyEdge, top, rightHeadEdge, top, shoulderR)
+  ctx.lineTo(rightBodyEdge, shoulderBottom)
+  ctx.bezierCurveTo(rightBodyEdge, shoulderMid, rightHeadEdge, shoulderMid, rightHeadEdge, shoulderTop)
   ctx.closePath()
   ctx.fill()
 }
 //
-// Body fill (inset 1px from outline) with matching circular shoulder arcs.
+// Body fill (inset 1px from outline) with matching cubic bezier shoulder curves.
 //
-function drawBodyFill(ctx, headX, bodyX, bodyY, bodyHeight) {
+function drawBodyFill(ctx, headX, headY, bodyX, bodyY, bodyHeight) {
   const leftHeadEdge = headX
   const rightHeadEdge = headX + 8
   const leftBodyEdge = bodyX
   const rightBodyEdge = bodyX + 12
-  const top = bodyY
-  const bottom = bodyY + bodyHeight
   const shoulderR = leftHeadEdge - leftBodyEdge
+  const shoulderTop = headY + 9 - SHOULDER_RISE
+  const shoulderBottom = shoulderTop + shoulderR * 2
+  const shoulderMid = shoulderTop + shoulderR
+  const bottom = bodyY + bodyHeight
   ctx.beginPath()
-  ctx.moveTo(leftHeadEdge, top)
-  ctx.arcTo(leftBodyEdge, top, leftBodyEdge, bottom, shoulderR)
+  ctx.moveTo(leftHeadEdge, shoulderTop)
+  ctx.bezierCurveTo(leftHeadEdge, shoulderMid, leftBodyEdge, shoulderMid, leftBodyEdge, shoulderBottom)
   ctx.lineTo(leftBodyEdge, bottom)
   ctx.lineTo(rightBodyEdge, bottom)
-  ctx.lineTo(rightBodyEdge, top + shoulderR)
-  ctx.arcTo(rightBodyEdge, top, rightHeadEdge, top, shoulderR)
+  ctx.lineTo(rightBodyEdge, shoulderBottom)
+  ctx.bezierCurveTo(rightBodyEdge, shoulderMid, rightHeadEdge, shoulderMid, rightHeadEdge, shoulderTop)
   ctx.closePath()
   ctx.fill()
 }

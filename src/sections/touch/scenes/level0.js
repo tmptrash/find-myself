@@ -1502,7 +1502,7 @@ export function sceneLevel0(k) {
     // Platform should be on top of the head
     //
     const bug4BackPlatformWidth = bug4Radius * 1.8
-    const bug4BackPlatformHeight = 16
+    const bug4BackPlatformHeight = 30
     //
     // Platform top should be at ANTIHERO_PLATFORM_Y (top of bug's head)
     // With anchor "top", platform top is at Y

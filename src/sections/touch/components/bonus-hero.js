@@ -47,6 +47,12 @@ const PULSE_SPEED = 2.5
 const PULSE_MIN_OPACITY = 0.5
 const PULSE_MAX_OPACITY = 1.0
 //
+// Click-to-destroy shake animation
+//
+const SHAKE_DURATION = 0.4
+const SHAKE_INTENSITY = 4
+const SHAKE_FREQUENCY = 30
+//
 // Log platform visual constants (simplified log barrel style)
 //
 const LOG_BARK_COLOR = '#5C3A1E'
@@ -171,7 +177,9 @@ export function create(config) {
     pulseTimer: 0,
     hintText,
     platformText,
-    floatOffset: Math.random() * Math.PI * 2
+    floatOffset: Math.random() * Math.PI * 2,
+    shakeTimer: 0,
+    shakeOffsetX: 0
   }
   //
   // Draw log platform, sparkle hints, and collection particles
@@ -187,11 +195,9 @@ export function create(config) {
   ])
   k.onUpdate(() => onUpdate(inst))
   //
-  // Log platforms in touch section can be destroyed by clicking on them
+  // Revealed platforms can be destroyed by clicking on them
   //
-  if (!platformText) {
-    k.onClick(() => onClickPlatform(inst))
-  }
+  k.onClick(() => onClickPlatform(inst))
   return inst
 }
 //
@@ -218,6 +224,23 @@ function onUpdate(inst) {
   const floatY = inst.platformText
     ? inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
     : inst.y
+  //
+  // Shake animation: platform vibrates before being destroyed
+  //
+  if (inst.shakeTimer > 0) {
+    inst.shakeTimer -= dt
+    if (inst.shakeTimer <= 0) {
+      inst.shakeTimer = 0
+      inst.shakeOffsetX = 0
+      inst.platform.pos.y = inst.offScreenY
+      inst.revealed = false
+      inst.platformOpacity = 0
+      inst.miniHero.character.opacity = 0
+    } else {
+      inst.shakeOffsetX = Math.sin(inst.shakeTimer * SHAKE_FREQUENCY * Math.PI * 2) * SHAKE_INTENSITY
+        * (inst.shakeTimer / SHAKE_DURATION)
+    }
+  }
   const dx = Math.abs(heroPos.x - inst.x)
   const dy = heroPos.y - floatY
   const heroChar = inst.heroInst.character
@@ -317,6 +340,16 @@ function updateSparkle(inst, dt) {
 function onDraw(inst) {
   const { k } = inst
   //
+  // Apply shake offset to platform and mini-hero during destruction animation
+  //
+  if (inst.shakeTimer > 0) {
+    inst.platform.pos.x = inst.x + inst.shakeOffsetX
+    inst.miniHero.character.pos.x = inst.x + inst.shakeOffsetX
+  } else if (inst.revealed) {
+    inst.platform.pos.x = inst.x
+    inst.miniHero.character.pos.x = inst.x
+  }
+  //
   // Draw platform when revealed
   //
   if (inst.revealed && inst.platformOpacity > 0) {
@@ -367,7 +400,8 @@ function drawSparkleGlint(inst) {
 // Draw time-style text platform (e.g. "00:00" or "00")
 //
 function drawTimePlatform(inst) {
-  const { k, x, platformOpacity, platformText, floatOffset } = inst
+  const { k, platformOpacity, platformText, floatOffset } = inst
+  const x = inst.x + inst.shakeOffsetX
   const floatY = inst.y + Math.sin(floatOffset) * FLOAT_AMPLITUDE
   const outlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
   //
@@ -401,7 +435,8 @@ function drawTimePlatform(inst) {
 // Draw a simplified log-style platform
 //
 function drawLogPlatform(inst) {
-  const { k, x, y, width, platformOpacity } = inst
+  const { k, y, width, platformOpacity } = inst
+  const x = inst.x + inst.shakeOffsetX
   const w = width
   const h = PLATFORM_HEIGHT
   const halfW = w / 2
@@ -717,19 +752,47 @@ function playCollectSound(inst) {
 // Handle click on revealed log platform — destroy it so hero falls through
 //
 function onClickPlatform(inst) {
-  if (!inst.revealed || inst.collected) return
+  if (!inst.revealed || inst.collected || inst.shakeTimer > 0) return
   const { k } = inst
   const mousePos = k.mousePos()
   const halfW = inst.width / 2
-  const halfH = PLATFORM_HEIGHT / 2
+  const floatY = inst.y + Math.sin(k.time() * FLOAT_SPEED + inst.floatOffset) * FLOAT_AMPLITUDE
+  const halfH = inst.collisionHeight / 2
   const withinX = mousePos.x >= inst.x - halfW && mousePos.x <= inst.x + halfW
-  const withinY = mousePos.y >= inst.y - halfH && mousePos.y <= inst.y + halfH
+  const withinY = mousePos.y >= floatY - halfH && mousePos.y <= floatY + halfH
   if (!withinX || !withinY) return
   //
-  // Move platform off-screen so hero loses footing
+  // Start shake animation, then destroy
   //
-  inst.platform.pos.y = inst.offScreenY
-  inst.revealed = false
-  inst.platformOpacity = 0
-  inst.miniHero.character.opacity = 0
+  inst.shakeTimer = SHAKE_DURATION
+  playCrackleSound(inst)
+}
+//
+// Crackle sound for platform destruction
+//
+function playCrackleSound(inst) {
+  if (!inst.sfx) return
+  const ctx = inst.sfx.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const noise = ctx.createBufferSource()
+  const bufferSize = ctx.sampleRate * 0.3
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * 0.5
+  }
+  noise.buffer = buffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(800, now)
+  filter.Q.value = 1.5
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.25, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3)
+  noise.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  noise.start(now)
+  noise.stop(now + 0.3)
 }

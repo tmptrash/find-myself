@@ -23,10 +23,10 @@ const INTRO_TEXT = "life strikes back"
 const RESULT_TEXT = "one problem added"
 const FONT_SIZE = 32
 const SCORE_FONT_SIZE = 74
-const BLINK_COLOR = '#CC2222'
-const RESULT_COLOR_R = 180
-const RESULT_COLOR_G = 40
-const RESULT_COLOR_B = 40
+const BLINK_COLOR = '#E07060'
+const RESULT_COLOR_R = 230
+const RESULT_COLOR_G = 110
+const RESULT_COLOR_B = 100
 const BOX_WIDTH = 560
 const BOX_HEIGHT = 340
 const BOX_RADIUS = 16
@@ -124,7 +124,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
           width: BOX_WIDTH,
           height: BOX_HEIGHT,
           radius: BOX_RADIUS,
-          color: k.rgb(50, 45, 55),
+          color: k.rgb(75, 75, 80),
           opacity: bubble.opacity * 0.92
         })
       }

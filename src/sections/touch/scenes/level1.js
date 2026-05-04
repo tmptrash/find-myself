@@ -58,6 +58,70 @@ const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 //
 const RAIN_INTENSITY = 0.1
 //
+// Firefly configuration: small glowing dots that drift between tree layers
+//
+const FIREFLY_COUNT = 18
+const FIREFLY_MIN_SPEED = 8
+const FIREFLY_MAX_SPEED = 25
+const FIREFLY_DRIFT_RANGE = 40
+const FIREFLY_RADIUS_MIN = 1.5
+const FIREFLY_RADIUS_MAX = 3
+const FIREFLY_GLOW_SPEED_MIN = 0.8
+const FIREFLY_GLOW_SPEED_MAX = 2.5
+const FIREFLY_COLOR_R = 220
+const FIREFLY_COLOR_G = 255
+const FIREFLY_COLOR_B = 180
+//
+// Hero push distance for fireflies (same mechanic as snowflakes)
+//
+const FIREFLY_PUSH_DISTANCE = 60
+const FIREFLY_PUSH_STRENGTH = 8
+//
+// Z-indices for firefly layers (behind/between/in front of trees)
+//
+const FIREFLY_LAYERS_Z = [1, 4, 8, 24]
+//
+// Thunder and lightning configuration
+//
+const THUNDER_INTERVAL_MIN = 8
+const THUNDER_INTERVAL_MAX = 15
+const LIGHTNING_FLASH_DURATION = 0.3
+const LIGHTNING_FLASH_OPACITY = 0.25
+const LIGHTNING_FLASH_HEIGHT_RATIO = 0.4
+const THUNDER_MULTI_CHANCE = 0.5
+const THUNDER_MULTI_MAX = 3
+const THUNDER_MULTI_DELAY_MIN = 0.4
+const THUNDER_MULTI_DELAY_MAX = 1.2
+//
+// Forest ambient sound intervals (level 1)
+//
+const L1_BIRD_INTERVAL_MIN = 4
+const L1_BIRD_INTERVAL_MAX = 9
+const L1_CRICKET_INTERVAL_MIN = 3
+const L1_CRICKET_INTERVAL_MAX = 7
+const L1_FROG_INTERVAL_MIN = 6
+const L1_FROG_INTERVAL_MAX = 14
+//
+// Cobweb decoration constants
+//
+const COBWEB_COUNT = 5
+const COBWEB_SIZE_MIN = 50
+const COBWEB_SIZE_MAX = 90
+const COBWEB_RADIAL_SPOKES = 8
+const COBWEB_RING_COUNT = 4
+const COBWEB_COLOR_R = 220
+const COBWEB_COLOR_G = 220
+const COBWEB_COLOR_B = 230
+const COBWEB_OPACITY = 0.32
+//
+// Mushroom decoration constants for level 1
+//
+const L1_MUSHROOM_COUNT = 6
+const L1_MUSHROOM_CAP_WIDTH_MIN = 14
+const L1_MUSHROOM_CAP_WIDTH_MAX = 26
+const L1_MUSHROOM_STEM_HEIGHT_MIN = 10
+const L1_MUSHROOM_STEM_HEIGHT_MAX = 20
+//
 // Scrolling cloud constants
 //
 const CLOUD_SCROLL_SPEED = 8
@@ -161,6 +225,17 @@ const WORM_PUPIL_RADIUS = 0.7
 const WORM_EYE_SPACING = 2.0
 const WORM_COUNT = 3
 const WORM_Y_ZONE_HEIGHT = 15
+//
+// Small worm hover tooltips
+//
+const WORM_HOVER_WIDTH = 50
+const WORM_HOVER_HEIGHT = 30
+const WORM_TOOLTIP_OFFSET_Y = -28
+const SMALL_WORM_PHRASES = [
+  "you should see\nmy dad",
+  "I'm just a\nbaby noodle",
+  "do worms have\nfeelings? yes."
+]
 //
 // Life icon flash/particle effects on death
 //
@@ -1159,6 +1234,8 @@ export function sceneLevel1(k) {
       showTrap = true
       leavesActive = true
     }
+    const trapCountValue = (showTrap || trapAlreadyAdded) ? 1 : 0
+    levelIndicator.updateTrapCount(trapCountValue)
     //
     // Scene-level lock: hero controls disabled during life deduction animation
     //
@@ -1607,11 +1684,36 @@ export function sceneLevel1(k) {
       }
     ])
     //
+    // White root glow overlay: blinking sprite on top of roots during note play
+    //
+    k.add([
+      k.z(17),
+      {
+        draw() {
+          TreeRoots.drawGlow(treeRootsInst)
+        }
+      }
+    ])
+    //
     // Worms crawling along the root level leaving dark trails
     //
+    const wormInsts = []
     for (let i = 0; i < WORM_COUNT; i++) {
-      createWorm(k, i)
+      wormInsts.push(createWorm(k, i))
     }
+    //
+    // Tooltips on small worms: each has a unique funny English phrase.
+    // Position tracked dynamically via getter functions.
+    //
+    const wormTooltipTargets = wormInsts.map((wormInst, i) => ({
+      x: () => wormInst.segments[0].x,
+      y: () => wormInst.segments[0].y,
+      width: WORM_HOVER_WIDTH,
+      height: WORM_HOVER_HEIGHT,
+      text: SMALL_WORM_PHRASES[i % SMALL_WORM_PHRASES.length],
+      offsetY: WORM_TOOLTIP_OFFSET_Y
+    }))
+    Tooltip.create({ k, targets: wormTooltipTargets })
     //
     // Giant worm obstacle: emerges from the ground left of the antihero
     //
@@ -2190,6 +2292,10 @@ export function sceneLevel1(k) {
       intensity: RAIN_INTENSITY
     })
     //
+    // Fireflies: small glowing dots drifting between tree layers
+    //
+    createFireflies(k, heroInst)
+    //
     // Tooltip: hero (tracks hero position dynamically)
     //
     Tooltip.create({
@@ -2282,6 +2388,39 @@ export function sceneLevel1(k) {
     // Tooltip: falling and grounded leaves (separate phrases per state)
     //
     createLeafTooltips(k, fallingLeafInst)
+    //
+    // Thunder + lightning flash at random intervals
+    //
+    const lightningState = {
+      timer: THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN),
+      flashTimer: 0
+    }
+    k.add([
+      k.z(0),
+      {
+        draw() {
+          drawLightningFlash(k, lightningState)
+        }
+      }
+    ])
+    k.onUpdate(() => onUpdateLightning(k, lightningState, sound))
+    //
+    // Forest ambience: birds, cicadas/crickets and frogs at random intervals
+    //
+    const birdState = { timer: L1_BIRD_INTERVAL_MIN + Math.random() * (L1_BIRD_INTERVAL_MAX - L1_BIRD_INTERVAL_MIN) }
+    k.onUpdate(() => onUpdateBirdAmbient(k, birdState, sound))
+    const cricketState = { timer: L1_CRICKET_INTERVAL_MIN + Math.random() * (L1_CRICKET_INTERVAL_MAX - L1_CRICKET_INTERVAL_MIN) }
+    k.onUpdate(() => onUpdateCricketAmbient(k, cricketState, sound))
+    const frogState = { timer: L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN) }
+    k.onUpdate(() => onUpdateFrogAmbient(k, frogState, sound))
+    //
+    // Cobwebs hanging on tree-note trunks (not floating in air)
+    //
+    createCobwebs(k, treeRootsInst)
+    //
+    // Small mushrooms scattered along the ground
+    //
+    createL1Mushrooms(k)
     //
     // ESC key to return to menu
     //
@@ -2983,5 +3122,392 @@ function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
   if (GiantWorm.checkCollision(wormInst, heroX, heroY)) {
     GiantWorm.startSmiling(wormInst)
     onPoisonLeafDeath(k, heroInst, levelIndicator)
+  }
+}
+//
+// Fireflies that drift between tree layers at different z-depths
+//
+function createFireflies(k, heroInst) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const fireflies = []
+  for (let i = 0; i < FIREFLY_COUNT; i++) {
+    fireflies.push({
+      x: LEFT_MARGIN + Math.random() * playableW,
+      y: TOP_MARGIN + 50 + Math.random() * (FLOOR_Y - TOP_MARGIN - 100),
+      baseX: 0,
+      baseY: 0,
+      vx: (Math.random() - 0.5) * 2,
+      vy: (Math.random() - 0.5) * 2,
+      pushVx: 0,
+      pushVy: 0,
+      radius: FIREFLY_RADIUS_MIN + Math.random() * (FIREFLY_RADIUS_MAX - FIREFLY_RADIUS_MIN),
+      glowSpeed: FIREFLY_GLOW_SPEED_MIN + Math.random() * (FIREFLY_GLOW_SPEED_MAX - FIREFLY_GLOW_SPEED_MIN),
+      phase: Math.random() * Math.PI * 2,
+      speed: FIREFLY_MIN_SPEED + Math.random() * (FIREFLY_MAX_SPEED - FIREFLY_MIN_SPEED),
+      layerIndex: i % FIREFLY_LAYERS_Z.length
+    })
+  }
+  fireflies.forEach(f => { f.baseX = f.x; f.baseY = f.y })
+  //
+  // One draw object per z-layer so fireflies interleave with tree sprites
+  //
+  FIREFLY_LAYERS_Z.forEach((zVal, li) => {
+    k.add([
+      k.z(zVal),
+      {
+        draw() {
+          drawFireflyLayer(k, fireflies, li)
+        }
+      }
+    ])
+  })
+  let lastHeroX = heroInst.character?.pos?.x ?? 0
+  let lastHeroY = heroInst.character?.pos?.y ?? 0
+  k.onUpdate(() => {
+    onUpdateFireflies(k, fireflies)
+    //
+    // Push fireflies away when hero runs or jumps nearby
+    //
+    if (!heroInst.character?.pos) return
+    const heroX = heroInst.character.pos.x
+    const heroY = heroInst.character.pos.y
+    const heroVx = heroX - lastHeroX
+    const heroVy = heroY - lastHeroY
+    lastHeroX = heroX
+    lastHeroY = heroY
+    const heroSpeed = Math.abs(heroVx) + Math.abs(heroVy)
+    if (heroSpeed < 0.5) return
+    const dt = k.dt()
+    for (const f of fireflies) {
+      const dx = f.x - heroX
+      const dy = f.y - heroY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist >= FIREFLY_PUSH_DISTANCE || dist < 1) continue
+      const force = (1 - dist / FIREFLY_PUSH_DISTANCE) * FIREFLY_PUSH_STRENGTH * dt
+      f.pushVx += (dx / dist) * force + heroVx * force * 0.3
+      f.pushVy += (dy / dist) * force + heroVy * force * 0.3
+    }
+  })
+}
+//
+// Per-frame drift: gentle sine-wave wander within bounds
+//
+function onUpdateFireflies(k, fireflies) {
+  const dt = k.dt()
+  const t = k.time()
+  const minX = LEFT_MARGIN + 10
+  const maxX = CFG.visual.screen.width - RIGHT_MARGIN - 10
+  const minY = TOP_MARGIN + 30
+  const maxY = FLOOR_Y - 20
+  for (const f of fireflies) {
+    f.x += Math.sin(t * f.glowSpeed + f.phase) * f.speed * dt + f.pushVx
+    f.y += Math.cos(t * f.glowSpeed * 0.7 + f.phase) * f.speed * 0.6 * dt + f.pushVy
+    //
+    // Decay push velocity over time
+    //
+    f.pushVx *= 0.96
+    f.pushVy *= 0.96
+    if (f.x < minX) f.x = minX
+    if (f.x > maxX) f.x = maxX
+    if (f.y < minY) f.y = minY
+    if (f.y > maxY) f.y = maxY
+  }
+}
+//
+// Draw fireflies belonging to a specific z-layer
+//
+function drawFireflyLayer(k, fireflies, layerIndex) {
+  const t = k.time()
+  for (const f of fireflies) {
+    if (f.layerIndex !== layerIndex) continue
+    const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
+    const alpha = 0.15 + glow * 0.7
+    //
+    // Soft glow halo
+    //
+    k.drawCircle({
+      pos: k.vec2(f.x, f.y),
+      radius: f.radius * 3,
+      color: k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B),
+      opacity: alpha * 0.15
+    })
+    //
+    // Bright core
+    //
+    k.drawCircle({
+      pos: k.vec2(f.x, f.y),
+      radius: f.radius,
+      color: k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B),
+      opacity: alpha
+    })
+  }
+}
+//
+// Update lightning timer: trigger thunder sound and flash
+//
+function onUpdateLightning(k, state, sound) {
+  const dt = k.dt()
+  if (state.flashTimer > 0) {
+    state.flashTimer = Math.max(0, state.flashTimer - dt)
+  }
+  state.timer -= dt
+  if (state.timer <= 0) {
+    playVariedThunder(sound)
+    state.flashTimer = LIGHTNING_FLASH_DURATION
+    state.timer = THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN)
+  }
+}
+//
+// Play 1-3 thunder rumbles with random durations and delays
+//
+function playVariedThunder(sound) {
+  const durations = [1.5, 2.5, 3.5, 4.5, 5.0]
+  const mainDuration = durations[Math.floor(Math.random() * durations.length)]
+  Sound.playThunderSound(sound, { duration: mainDuration })
+  //
+  // Chance to add follow-up rumbles
+  //
+  if (Math.random() < THUNDER_MULTI_CHANCE) {
+    const extraCount = 1 + Math.floor(Math.random() * (THUNDER_MULTI_MAX - 1))
+    let cumulativeDelay = 0
+    for (let i = 0; i < extraCount; i++) {
+      cumulativeDelay += THUNDER_MULTI_DELAY_MIN + Math.random() * (THUNDER_MULTI_DELAY_MAX - THUNDER_MULTI_DELAY_MIN)
+      const extraDuration = 1.0 + Math.random() * 2.5
+      const extraVolume = 0.4 + Math.random() * 0.4
+      Sound.playThunderSound(sound, { duration: extraDuration, volume: extraVolume, delay: cumulativeDelay })
+    }
+  }
+}
+//
+// Draw lightning flash: bright rectangle across upper portion of screen
+//
+function drawLightningFlash(k, state) {
+  if (state.flashTimer <= 0) return
+  const progress = state.flashTimer / LIGHTNING_FLASH_DURATION
+  const alpha = progress * LIGHTNING_FLASH_OPACITY
+  const screenW = CFG.visual.screen.width
+  const flashH = CFG.visual.screen.height * LIGHTNING_FLASH_HEIGHT_RATIO
+  k.drawRect({
+    pos: k.vec2(0, 0),
+    width: screenW,
+    height: flashH,
+    color: k.rgb(220, 225, 240),
+    opacity: alpha
+  })
+}
+//
+// Periodically play a small bird chirp or owl hoot
+//
+function onUpdateBirdAmbient(k, state, sound) {
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    Math.random() < 0.7 ? Sound.playBirdChirpSound(sound) : Sound.playOwlSound(sound)
+    state.timer = L1_BIRD_INTERVAL_MIN + Math.random() * (L1_BIRD_INTERVAL_MAX - L1_BIRD_INTERVAL_MIN)
+  }
+}
+//
+// Periodically play cricket/cicada chirps
+//
+function onUpdateCricketAmbient(k, state, sound) {
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    Sound.playCricketSound(sound)
+    state.timer = L1_CRICKET_INTERVAL_MIN + Math.random() * (L1_CRICKET_INTERVAL_MAX - L1_CRICKET_INTERVAL_MIN)
+  }
+}
+//
+// Periodically play a frog croak
+//
+function onUpdateFrogAmbient(k, state, sound) {
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    Sound.playFrogSound(sound)
+    state.timer = L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN)
+  }
+}
+//
+// Creates cobwebs attached to musical tree trunks (alternating sides).
+// Each cobweb anchors at the upper-left or upper-right corner so it reads
+// as a web hanging in the gap between trunk and a branch.
+//
+function createCobwebs(k, treeRootsInst) {
+  if (!treeRootsInst || !treeRootsInst.roots || treeRootsInst.roots.length === 0) return
+  const cobwebs = []
+  //
+  // Pick a subset of trees to host cobwebs (every other tree, up to COBWEB_COUNT)
+  //
+  const trees = treeRootsInst.roots
+  const candidates = trees.filter((_, i) => i % 2 === 0).slice(0, COBWEB_COUNT)
+  for (let i = 0; i < candidates.length; i++) {
+    const tree = candidates[i]
+    const size = COBWEB_SIZE_MIN + Math.random() * (COBWEB_SIZE_MAX - COBWEB_SIZE_MIN)
+    const total = Math.ceil(size + 4)
+    const spriteName = `cobweb-l1-${i}`
+    //
+    // Alternate cobwebs to left/right of trunk so they read as hanging
+    // from the trunk into the branch gap on either side.
+    //
+    const cornerSide = i % 2 === 0 ? -1 : 1
+    const dataUrl = toPng({ width: total, height: total, pixelRatio: 1 }, (ctx) => {
+      drawCobwebShape(ctx, total, cornerSide)
+    })
+    //
+    // Anchor X: just inside the trunk on the chosen side.
+    // Anchor Y: in the upper third of the trunk so the web sits among branches.
+    //
+    const trunkX = tree.x
+    const trunkY = tree.trunkTop.y
+    const trunkLen = tree.trunkBottom.y - tree.trunkTop.y
+    //
+    // Web hangs from upper trunk: 10-30% down the trunk
+    //
+    const yOffset = trunkLen * (0.1 + Math.random() * 0.2)
+    const x = cornerSide < 0 ? trunkX - total + 4 : trunkX - 4
+    const y = trunkY + yOffset
+    cobwebs.push({ spriteName, dataUrl, x, y, total })
+  }
+  cobwebs.forEach(c => k.loadSprite(c.spriteName, c.dataUrl))
+  k.add([
+    k.z(18),
+    {
+      draw() {
+        for (const c of cobwebs) {
+          k.drawSprite({ sprite: c.spriteName, pos: k.vec2(c.x, c.y) })
+        }
+      }
+    }
+  ])
+}
+//
+// Draw a corner cobweb on a 2D canvas: radial spokes + concentric arcs
+//
+function drawCobwebShape(ctx, size, cornerSide) {
+  //
+  // Anchor at one corner: spokes radiate from the corner, arcs hang off it.
+  // cornerSide -1 = upper-left anchor, +1 = upper-right anchor.
+  //
+  const anchorX = cornerSide < 0 ? 2 : size - 2
+  const anchorY = 2
+  const radius = size - 4
+  const color = `rgba(${COBWEB_COLOR_R}, ${COBWEB_COLOR_G}, ${COBWEB_COLOR_B}, ${COBWEB_OPACITY})`
+  ctx.strokeStyle = color
+  ctx.lineWidth = 0.8
+  //
+  // Spokes radiating into the quadrant facing inward
+  //
+  const startAngle = cornerSide < 0 ? 0 : Math.PI / 2
+  const endAngle = cornerSide < 0 ? Math.PI / 2 : Math.PI
+  for (let i = 0; i <= COBWEB_RADIAL_SPOKES; i++) {
+    const t = i / COBWEB_RADIAL_SPOKES
+    const angle = startAngle + (endAngle - startAngle) * t
+    ctx.beginPath()
+    ctx.moveTo(anchorX, anchorY)
+    ctx.lineTo(anchorX + Math.cos(angle) * radius, anchorY + Math.sin(angle) * radius)
+    ctx.stroke()
+  }
+  //
+  // Concentric arc rings connecting the spokes (with a slight catenary droop)
+  //
+  for (let r = 1; r <= COBWEB_RING_COUNT; r++) {
+    const ringRadius = (r / COBWEB_RING_COUNT) * radius
+    ctx.beginPath()
+    for (let i = 0; i <= COBWEB_RADIAL_SPOKES; i++) {
+      const t = i / COBWEB_RADIAL_SPOKES
+      const angle = startAngle + (endAngle - startAngle) * t
+      //
+      // Apply slight droop in the middle by lowering ring radius mid-arc
+      //
+      const droop = Math.sin(t * Math.PI) * 2
+      const x = anchorX + Math.cos(angle) * ringRadius
+      const y = anchorY + Math.sin(angle) * ringRadius + droop
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+}
+//
+// Creates small mushrooms scattered along the level 1 ground
+//
+function createL1Mushrooms(k) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const mushrooms = []
+  //
+  // Earthy/forest mushroom palette (browns, reds, yellows)
+  //
+  const capColors = [
+    [120, 70, 35], [160, 80, 40], [180, 50, 50],
+    [140, 110, 50], [90, 60, 35], [170, 60, 70]
+  ]
+  for (let i = 0; i < L1_MUSHROOM_COUNT; i++) {
+    const capW = L1_MUSHROOM_CAP_WIDTH_MIN + Math.random() * (L1_MUSHROOM_CAP_WIDTH_MAX - L1_MUSHROOM_CAP_WIDTH_MIN)
+    const capH = capW * (0.4 + Math.random() * 0.3)
+    const stemH = L1_MUSHROOM_STEM_HEIGHT_MIN + Math.random() * (L1_MUSHROOM_STEM_HEIGHT_MAX - L1_MUSHROOM_STEM_HEIGHT_MIN)
+    const stemW = capW * (0.25 + Math.random() * 0.15)
+    const totalW = Math.ceil(capW + 4)
+    const totalH = Math.ceil(capH + stemH + 4)
+    const color = capColors[Math.floor(Math.random() * capColors.length)]
+    const spriteName = `mushroom-l1-${i}`
+    const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+      drawMushroomShape(ctx, totalW, totalH, capW, capH, stemH, stemW, color)
+    })
+    const posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
+    mushrooms.push({ spriteName, dataUrl, x: posX, y: FLOOR_Y - totalH + 2 })
+  }
+  mushrooms.forEach(m => k.loadSprite(m.spriteName, m.dataUrl))
+  k.add([
+    k.z(6),
+    {
+      draw() {
+        for (const m of mushrooms) {
+          k.drawSprite({ sprite: m.spriteName, pos: k.vec2(m.x, m.y) })
+        }
+      }
+    }
+  ])
+}
+//
+// Draw a mushroom on a 2D canvas (cap + stem + texture dots)
+//
+function drawMushroomShape(ctx, totalW, totalH, capW, capH, stemH, stemW, color) {
+  const cx = totalW / 2
+  const stemTop = totalH - stemH - 2
+  //
+  // Stem: tapered rectangle
+  //
+  ctx.fillStyle = `rgb(${Math.min(255, color[0] + 40)}, ${Math.min(255, color[1] + 50)}, ${Math.min(255, color[2] + 30)})`
+  ctx.beginPath()
+  ctx.moveTo(cx - stemW / 2, totalH - 2)
+  ctx.lineTo(cx - stemW * 0.4, stemTop)
+  ctx.lineTo(cx + stemW * 0.4, stemTop)
+  ctx.lineTo(cx + stemW / 2, totalH - 2)
+  ctx.closePath()
+  ctx.fill()
+  //
+  // Cap: half-ellipse
+  //
+  ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+  ctx.beginPath()
+  ctx.ellipse(cx, stemTop, capW / 2, capH, 0, Math.PI, 0)
+  ctx.closePath()
+  ctx.fill()
+  //
+  // Cap highlight
+  //
+  ctx.fillStyle = `rgba(255, 255, 255, 0.15)`
+  ctx.beginPath()
+  ctx.ellipse(cx - capW * 0.1, stemTop - capH * 0.3, capW * 0.25, capH * 0.3, 0, Math.PI, 0)
+  ctx.closePath()
+  ctx.fill()
+  //
+  // White spots on cap for texture
+  //
+  const dotCount = Math.floor(Math.random() * 3) + 1
+  ctx.fillStyle = `rgba(255, 255, 240, 0.3)`
+  for (let d = 0; d < dotCount; d++) {
+    const dotX = cx + (Math.random() - 0.5) * capW * 0.6
+    const dotY = stemTop - capH * (0.2 + Math.random() * 0.5)
+    ctx.beginPath()
+    ctx.arc(dotX, dotY, 1 + Math.random(), 0, Math.PI * 2)
+    ctx.fill()
   }
 }

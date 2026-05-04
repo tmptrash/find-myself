@@ -361,6 +361,7 @@ export function sceneLevel0(k) {
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     const trapEnabled = showTrap || trapAlreadyAdded
+    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
     if (showTrap) {
       LifeDeduction.show({
         k,

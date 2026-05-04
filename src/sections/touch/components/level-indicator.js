@@ -17,6 +17,20 @@ const SCORE_OFFSET_X = 5
 const SCORE_OFFSET_Y = 10
 const SCORE_OUTLINE_THICKNESS = 2
 //
+// Vertical offset for the life icon so it sits a bit below the small hero
+//
+const LIFE_IMAGE_Y_OFFSET = 18
+//
+// Trap count badge: small red number below-right of life icon
+//
+const TRAP_BADGE_OFFSET_X = 45
+const TRAP_BADGE_OFFSET_Y = 40
+const TRAP_BADGE_FONT_SIZE = 20
+const TRAP_BADGE_COLOR_R = 200
+const TRAP_BADGE_COLOR_G = 60
+const TRAP_BADGE_COLOR_B = 60
+const TRAP_BADGE_OUTLINE_THICKNESS = 2
+//
 // Falling "H" letter configuration (last letter tilts as if falling)
 //
 const FALLING_LETTER_INDEX = 4
@@ -177,13 +191,13 @@ export function create(config) {
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX + 12, smallHeroY),
+      k.pos(lifeImageX + 12, smallHeroY + LIFE_IMAGE_Y_OFFSET),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
       k.z(CFG.visual.zIndex.ui)
     ]),
-    pos: { x: lifeImageX, y: smallHeroY }
+    pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
   }
   //
   // Get score values from localStorage
@@ -210,6 +224,40 @@ export function create(config) {
   //
   const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, smallHeroY + SCORE_OFFSET_Y, fontSize, scoreOffsets)
   const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, smallHeroY + SCORE_OFFSET_Y, fontSize)
+  //
+  // Trap count badge with outline (bold red number right of life icon)
+  //
+  const trapBadgeX = lifeImageX + TRAP_BADGE_OFFSET_X
+  const trapBadgeY = smallHeroY + TRAP_BADGE_OFFSET_Y
+  const trapBadgeFont = CFG.visual.fonts.regularFull
+    ? CFG.visual.fonts.regularFull.replace(/'/g, '')
+    : CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const trapBadgeOutlineOffsets = [
+    [-TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
+    [0, -TRAP_BADGE_OUTLINE_THICKNESS],
+    [TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
+    [-TRAP_BADGE_OUTLINE_THICKNESS, 0],
+    [TRAP_BADGE_OUTLINE_THICKNESS, 0],
+    [-TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS],
+    [0, TRAP_BADGE_OUTLINE_THICKNESS],
+    [TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS]
+  ]
+  const trapBadgeOutlines = trapBadgeOutlineOffsets.map(([dx, dy]) => k.add([
+    k.text('', { size: TRAP_BADGE_FONT_SIZE, font: trapBadgeFont }),
+    k.pos(trapBadgeX + dx, trapBadgeY + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ]))
+  const trapBadgeText = k.add([
+    k.text('', { size: TRAP_BADGE_FONT_SIZE, font: trapBadgeFont }),
+    k.pos(trapBadgeX, trapBadgeY),
+    k.anchor('center'),
+    k.color(TRAP_BADGE_COLOR_R, TRAP_BADGE_COLOR_G, TRAP_BADGE_COLOR_B),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ])
   return {
     letterObjects,
     smallHero,
@@ -229,6 +277,11 @@ export function create(config) {
       lifeScoreOutlines.forEach(outline => {
         outline.exists?.() && (outline.text = newScore.toString())
       })
+    },
+    updateTrapCount: (count) => {
+      const val = count > 0 ? count.toString() : ''
+      trapBadgeText.text = val
+      trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
 }

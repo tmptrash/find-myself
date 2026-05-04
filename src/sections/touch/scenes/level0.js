@@ -301,6 +301,19 @@ const TRAP_PUPIL_RADIUS = 2
 const TRAP_PUPIL_MAX_OFFSET = 1.5
 const TRAP_EYE_SEGMENT = 0.15
 const TRAP_EXCLUSION_HALF_WIDTH = 200
+//
+// Dirt particles that burst from ground when tentacles emerge.
+// Visually match the hero's landing dust (rect + black outline, gravity).
+//
+const DIRT_PARTICLE_COUNT_PER_SPIKE = 6
+const DIRT_PARTICLE_SPEED_MIN = 80
+const DIRT_PARTICLE_SPEED_MAX = 160
+const DIRT_PARTICLE_LIFETIME = 0.5
+const DIRT_PARTICLE_SIZE = 6
+const DIRT_PARTICLE_GRAVITY = 600
+const DIRT_PARTICLE_COLOR_R = 95
+const DIRT_PARTICLE_COLOR_G = 65
+const DIRT_PARTICLE_COLOR_B = 40
 const TRAP_SPIKE_FILL_R = 180
 const TRAP_SPIKE_FILL_G = 60
 const TRAP_SPIKE_FILL_B = 60
@@ -353,10 +366,15 @@ export function sceneLevel0(k) {
       volume: CFG.audio.backgroundMusic.touch
     })
     //
-    // Stop music when leaving the scene
+    // Audio references for cleanup on scene leave
+    //
+    const rainRef = { stop: null }
+    //
+    // Stop music and ambient sounds when leaving the scene (death, ESC, transition)
     //
     k.onSceneLeave(() => {
       touchMusic.stop()
+      rainRef.stop?.()
     })
     //
     // Draw background
@@ -447,6 +465,8 @@ export function sceneLevel0(k) {
     const currentLifeScore = get('lifeScore', 0)
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trapCount = (showTrap || trapAlreadyAdded) ? 1 : 0
+    levelIndicator.updateTrapCount(trapCount)
     //
     // Scene-level lock: hero controls are disabled during the life deduction animation
     //
@@ -572,47 +592,58 @@ export function sceneLevel0(k) {
       const treeTrunkG = layerIndex === 0 ? 10 * colorMix + bgColor.g * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.g * (1 - colorMix) : 50)
       const treeTrunkB = layerIndex === 0 ? 10 * colorMix + bgColor.b * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.b * (1 - colorMix) : 30)
       //
-      // Generate grass blade data for this layer
-      // All grass grows from ground level (grassY), not affected by yOffset
-      // Back layer most dense (continuous), front layer least dense
+      // Generate grass blade data for this layer.
+      // Back/middle layers stay uniform-but-sparse for atmospheric haze.
+      // The FRONT layer uses cluster-based growth so grass doesn't carpet
+      // the whole platform — instead it clumps in patches with bare soil
+      // between (more roots, rocks, moss can show through).
       //
       const grassBlades = []
-      const grassDensity = layerIndex === 0 ? 120 : (layerIndex === 1 ? 50 : 25)
-      const bladesCount = Math.floor(grassDensity * scale)
-      
-      for (let i = 0; i < bladesCount; i++) {
-        let baseX = LEFT_MARGIN + Math.random() * playableWidth
-        let rejectGuard = 0
-        while (
-          Math.abs(baseX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH &&
-          rejectGuard < 60
-        ) {
-          baseX = LEFT_MARGIN + Math.random() * playableWidth
-          rejectGuard++
+      if (layerIndex === 2) {
+        //
+        // Front layer: 6-9 organic patches scattered along the platform.
+        //
+        const clusterCount = 6 + Math.floor(Math.random() * 4)
+        for (let c = 0; c < clusterCount; c++) {
+          let centerX = LEFT_MARGIN + 80 + Math.random() * (playableWidth - 160)
+          let safety = 0
+          while (
+            Math.abs(centerX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH &&
+            safety < 30
+          ) {
+            centerX = LEFT_MARGIN + 80 + Math.random() * (playableWidth - 160)
+            safety++
+          }
+          const clusterRadius = 30 + Math.random() * 60
+          const bladesInCluster = 4 + Math.floor(Math.random() * 8)
+          for (let b = 0; b < bladesInCluster; b++) {
+            //
+            // Place blades with falloff distribution near the cluster center
+            //
+            const dist = Math.pow(Math.random(), 1.6) * clusterRadius
+            const sign = Math.random() < 0.5 ? -1 : 1
+            const baseX = centerX + sign * dist
+            grassBlades.push(buildGrassBlade(k, baseX, grassY, scale, baseOpacity, grassBaseR, grassBaseG, grassBaseB))
+          }
         }
-        const height = (10 + Math.random() * 20) * scale
-        const bendX = (Math.random() - 0.5) * 6
-        const swaySpeed = 0.8 + Math.random() * 0.6
-        const swayAmount = (2 + Math.random() * 3) * scale
-        const swayOffset = Math.random() * Math.PI * 2
-        
-        grassBlades.push({
-          x1: baseX,
-          y1: grassY,
-          baseX2: baseX + bendX,
-          y2: grassY - height,
-          height: height,
-          swaySpeed: swaySpeed,
-          swayAmount: swayAmount,
-          swayOffset: swayOffset,
-          color: k.rgb(
-            grassBaseR + Math.random() * 20,
-            grassBaseG + Math.random() * 20,
-            grassBaseB + Math.random() * 15
-          ),
-          opacity: baseOpacity + Math.random() * 0.15,
-          width: (0.8 + Math.random() * 0.4) * scale
-        })
+      } else {
+        //
+        // Back/middle layers: keep uniform random distribution
+        //
+        const grassDensity = layerIndex === 0 ? 120 : 50
+        const bladesCount = Math.floor(grassDensity * scale)
+        for (let i = 0; i < bladesCount; i++) {
+          let baseX = LEFT_MARGIN + Math.random() * playableWidth
+          let rejectGuard = 0
+          while (
+            Math.abs(baseX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH &&
+            rejectGuard < 60
+          ) {
+            baseX = LEFT_MARGIN + Math.random() * playableWidth
+            rejectGuard++
+          }
+          grassBlades.push(buildGrassBlade(k, baseX, grassY, scale, baseOpacity, grassBaseR, grassBaseG, grassBaseB))
+        }
       }
       //
       // Generate bush data for this layer
@@ -672,6 +703,11 @@ export function sceneLevel0(k) {
           })
         }
         
+        //
+        // Build short root segments so back/middle layer trees aren't floating;
+        // roots clamp at TREE_ROOT_ABSOLUTE_MAX_Y so they never escape the screen.
+        //
+        const backRootSegments = buildBackLayerRoots(trunkBottom, trunkWidth)
         const tree = {
           x: treeX,
           y: grassY + yOffset,
@@ -682,6 +718,7 @@ export function sceneLevel0(k) {
           crownSize: crownSize,
           crownCenterY: crownCenterY,
           crowns: crowns,
+          rootSegments: backRootSegments,
           trunkColor: k.rgb(
             treeTrunkR,
             treeTrunkG,
@@ -704,7 +741,11 @@ export function sceneLevel0(k) {
       // For front layer: create alternating trees and bushes
       //
       if (layerIndex === 2) {
-        const totalElements = 14
+        //
+        // Increased from 14 to 17 (3 more trees), with lower bush probability
+        // so we get more trees rather than bushes
+        //
+        const totalElements = 17
         const spacing = playableWidth / (totalElements - 1)
         const TREE_MARGIN = 80
         
@@ -728,7 +769,10 @@ export function sceneLevel0(k) {
           }
           
           const posX = LEFT_MARGIN + spacing * i + randomOffset
-          const isBush = Math.random() < 0.35
+          //
+          // Reduced bush probability from 35% to 22% so more trees appear
+          //
+          const isBush = Math.random() < 0.22
           
           if (isBush) {
             const bushWidth = (30 + Math.random() * 30) * scale
@@ -737,23 +781,25 @@ export function sceneLevel0(k) {
             
             const colorType = Math.floor(Math.random() * 4)
             let baseLeafR, baseLeafG, baseLeafB
-            
+            //
+            // Autumn bush palette: green, deep yellow, orange-red, dark red
+            //
             if (colorType === 0) {
               baseLeafR = 35
-              baseLeafG = 70
-              baseLeafB = 35
-            } else if (colorType === 1) {
-              baseLeafR = 75
               baseLeafG = 65
+              baseLeafB = 30
+            } else if (colorType === 1) {
+              baseLeafR = 130
+              baseLeafG = 95
               baseLeafB = 25
             } else if (colorType === 2) {
-              baseLeafR = 85
-              baseLeafG = 45
+              baseLeafR = 140
+              baseLeafG = 60
               baseLeafB = 25
             } else {
-              baseLeafR = 70
+              baseLeafR = 110
               baseLeafG = 35
-              baseLeafB = 30
+              baseLeafB = 25
             }
             
             const crownCount = 12 + Math.floor(Math.random() * 8)
@@ -796,126 +842,62 @@ export function sceneLevel0(k) {
             
             bushes.push(bush)
           } else {
-            const baseTreeHeight = (250 + Math.random() * 400) * scale
+            //
+            // Even lower trees per user request: was (170 + 0..230), now (130 + 0..160)
+            //
+            const baseTreeHeight = (130 + Math.random() * 160) * scale
             const crownCenterY = grassY + yOffset - baseTreeHeight
             const trunkBottom = grassY
-            const trunkActualHeight = baseTreeHeight * (0.6 + Math.random() * 0.1)
+            const trunkActualHeight = baseTreeHeight * (0.55 + Math.random() * 0.1)
             const trunkTop = trunkBottom - trunkActualHeight
             const trunkWidth = (5 + Math.random() * 3) * scale
-            const crownWidth = (45 + Math.random() * 35) * scale
-            const crownHeight = (50 + Math.random() * 40) * scale
-            
-            const colorType = Math.floor(Math.random() * 4)
-            let baseLeafR, baseLeafG, baseLeafB
-            
-            if (colorType === 0) {
-              baseLeafR = 40
-              baseLeafG = 75
-              baseLeafB = 40
-            } else if (colorType === 1) {
-              baseLeafR = 80
-              baseLeafG = 70
-              baseLeafB = 30
-            } else if (colorType === 2) {
-              baseLeafR = 90
-              baseLeafG = 50
-              baseLeafB = 30
-            } else {
-              baseLeafR = 75
-              baseLeafG = 40
-              baseLeafB = 35
-            }
-            
-            const branchCount = 3 + Math.floor(Math.random() * 3)
-            const branches = []
-            let highestBranchY = trunkBottom
-            
-            for (let b = 0; b < branchCount; b++) {
-              const branchAngle = ((b / branchCount) * Math.PI * 1.2 - Math.PI * 0.6) + (Math.random() - 0.5) * 0.4
-              const branchLength = (50 + Math.random() * 40) * scale
-              const branchWidth = trunkWidth * (0.6 + Math.random() * 0.3)
-              const branchStartHeight = trunkTop + trunkActualHeight * (0.3 + Math.random() * 0.4)
-              
-              if (branchStartHeight < highestBranchY) {
-                highestBranchY = branchStartHeight
+            //
+            // Build organic tree structure: trunk + roots + per-cluster branches/leaves
+            //
+            const organic = buildOrganicTreeData(posX, trunkBottom, trunkTop)
+            //
+            // Sample leaves from all clusters as crown points so rain can drip
+            // from the canopy. Crown offsets are relative to (tree.x, crownCenterY).
+            //
+            const rainCrowns = []
+            for (const cluster of organic.branchClusters) {
+              for (let l = 0; l < cluster.leaves.length; l += 3) {
+                const leaf = cluster.leaves[l]
+                //
+                // Convert cluster-local leaf coords to world-relative crown offsets
+                //
+                const worldLeafX = cluster.pivotX + leaf.x
+                const worldLeafY = cluster.pivotY + leaf.y
+                rainCrowns.push({ offsetX: worldLeafX, offsetY: worldLeafY - crownCenterY })
               }
-              
-              branches.push({
-                startX: 0,
-                startY: branchStartHeight,
-                endX: Math.sin(branchAngle) * branchLength,
-                endY: branchStartHeight - Math.abs(Math.cos(branchAngle)) * branchLength,
-                width: branchWidth,
-                angle: branchAngle
-              })
             }
-            
-            const actualTrunkTop = highestBranchY
-            const actualTrunkHeight = trunkBottom - actualTrunkTop
-            
-            const crownCount = 25 + Math.floor(Math.random() * 15)
-            const crowns = []
-            
-            for (let j = 0; j < crownCount; j++) {
-              const branchIndex = Math.floor(Math.random() * branches.length)
-              const branch = branches[branchIndex]
-              const alongBranch = 0.4 + Math.random() * 0.6
-              
-              const branchX = branch.startX + (branch.endX - branch.startX) * alongBranch
-              const branchY = branch.startY + (branch.endY - branch.startY) * alongBranch
-              
-              const clusterRadius = (18 + Math.random() * 25) * scale
-              const angle = Math.random() * Math.PI * 2
-              const distance = Math.random() * clusterRadius
-              
-              const x = branchX + Math.cos(angle) * distance
-              const y = branchY + Math.sin(angle) * distance * 0.8
-              
-              const distFromBranch = distance / clusterRadius
-              const heightFromGround = (y - crownCenterY) / crownHeight
-              
-              const isTop = heightFromGround < -0.3
-              const brightness = isTop ? 15 + Math.random() * 25 : -15 + Math.random() * 15
-              
-              const size = distFromBranch < 0.5 ? 0.25 + Math.random() * 0.25 :
-                          0.15 + Math.random() * 0.2
-              
-              crowns.push({
-                offsetX: x,
-                offsetY: y - crownCenterY,
-                sizeVariation: size,
-                opacityVariation: 0.8 + Math.random() * 0.2,
-                colorShift: brightness
-              })
-            }
-            
+            //
+            // Per-tree trunk/root color palette (varied but realistic)
+            //
+            const palette = buildTreePalette()
             const tree = {
               x: posX,
               y: grassY + yOffset,
-              trunkTop: actualTrunkTop,
-              trunkBottom: trunkBottom,
-              trunkHeight: actualTrunkHeight,
-              trunkWidth: trunkWidth,
-              crownSize: Math.max(crownWidth, crownHeight),
-              crownCenterY: crownCenterY,
-              crowns: crowns,
-              branches: branches,
-              trunkColor: k.rgb(
-                60 + Math.random() * 20,
-                40 + Math.random() * 15,
-                25 + Math.random() * 10
-              ),
-              leafColor: k.rgb(
-                baseLeafR,
-                baseLeafG,
-                baseLeafB
-              ),
+              trunkTop,
+              trunkBottom,
+              trunkHeight: trunkActualHeight,
+              trunkWidth,
+              crownCenterY,
+              crowns: rainCrowns,
+              trunkSegments: organic.trunkSegments,
+              rootSegments: organic.rootSegments,
+              branchClusters: organic.branchClusters,
+              trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
+              rootColor: k.rgb(palette.root.r, palette.root.g, palette.root.b),
+              leafColor: k.rgb(120, 90, 40),
               opacity: 0.95,
-              swaySpeed: 0.15 + Math.random() * 0.1,
-              swayAmount: (0.8 + Math.random() * 1.0) * scale,
-              swayOffset: Math.random() * Math.PI * 2
+              //
+              // Whole-tree sway is no longer used; clusters sway independently
+              //
+              swaySpeed: 0,
+              swayAmount: 0,
+              swayOffset: 0
             }
-            
             trees.push(tree)
           }
         }
@@ -950,12 +932,13 @@ export function sceneLevel0(k) {
     
     const createMiddleFrontCanvas = () => {
       //
-      // Calculate dynamic tree indices (will be drawn separately)
+      // Calculate dynamic tree indices (will be drawn separately, never baked)
+      // Must match the dynamic tree drawer below (every 5th tree is dynamic)
       //
       const allFrontTrees = layers[2] ? layers[2].trees : []
       const dynamicTreesSet = new Set()
       for (let i = 0; i < allFrontTrees.length; i++) {
-        if (i % 5 < 2) {
+        if (i % 5 === 0) {
           dynamicTreesSet.add(i)
         }
       }
@@ -992,8 +975,27 @@ export function sceneLevel0(k) {
       for (const tree of layer.trees) {
         const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
         //
-        // Draw trunk
+        // Organic trees (front layer): trunk + branches + roots + individual leaves
         //
+        if (tree.branchClusters) {
+          drawOrganicTreeToCanvas(ctx, tree, sway)
+          continue
+        }
+        //
+        // Legacy back/middle layer trees: roots + rectangle trunk + circle crowns
+        // Roots are drawn first so the trunk paints over their tops.
+        //
+        if (tree.rootSegments) {
+          ctx.lineCap = 'round'
+          for (const seg of tree.rootSegments) {
+            ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+            ctx.lineWidth = seg.width
+            ctx.beginPath()
+            ctx.moveTo(tree.x + seg.startX, seg.startY)
+            ctx.lineTo(tree.x + seg.endX, seg.endY)
+            ctx.stroke()
+          }
+        }
         ctx.fillStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
         ctx.fillRect(
           tree.x + sway * 0.2 - tree.trunkWidth / 2,
@@ -1001,9 +1003,6 @@ export function sceneLevel0(k) {
           tree.trunkWidth,
           tree.trunkHeight
         )
-        //
-        // Draw branches
-        //
         if (tree.branches) {
           for (const branch of tree.branches) {
             ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
@@ -1014,15 +1013,11 @@ export function sceneLevel0(k) {
             ctx.stroke()
           }
         }
-        //
-        // Draw crowns
-        //
         for (const crown of tree.crowns) {
           const colorShift = crown.colorShift || 0
           const leafR = Math.min(255, tree.leafColor.r + colorShift)
           const leafG = Math.min(255, tree.leafColor.g + colorShift)
           const leafB = Math.min(255, tree.leafColor.b + colorShift)
-          
           ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${tree.opacity * crown.opacityVariation})`
           ctx.beginPath()
           ctx.arc(
@@ -1142,97 +1137,39 @@ export function sceneLevel0(k) {
         draw() {
           const time = k.time()
           const dt = k.dt()
-          
           for (const bird of birds) {
             //
-            // Update position
+            // Position update + screen wrap
             //
             bird.x += bird.speed * dt
-            //
-            // Wrap around screen
-            //
             if (bird.x > k.width() + 50) {
               bird.x = -50
               bird.baseY = TOP_MARGIN + Math.random() * SKY_HEIGHT
             }
             //
-            // Sine wave flight pattern
+            // Sine wave flight path
             //
             bird.y = bird.baseY + Math.sin((time + bird.timeOffset) * bird.frequency + bird.phaseOffset) * bird.amplitude
             //
-            // Update flapping state timer
+            // Flap/glide state machine
             //
             bird.flapTimer += dt
             const currentDuration = bird.isFlapping ? bird.flapDuration : bird.glideDuration
-            
             if (bird.flapTimer > currentDuration) {
               bird.isFlapping = !bird.isFlapping
               bird.flapTimer = 0
             }
             //
-            // Wing animation: flap or glide
+            // Wing flap angle: positive = wings down, negative = wings up
             //
-            let wingAngle
+            let wingFlap
             if (bird.isFlapping) {
               bird.wingPhase = Math.sin((time + bird.timeOffset) * 8 + bird.phaseOffset)
-              wingAngle = bird.wingPhase * 0.8
+              wingFlap = bird.wingPhase
             } else {
-              wingAngle = 0.7
+              wingFlap = 0.45
             }
-            //
-            // Draw bird as simple wing silhouette (like seagull from distance)
-            //
-            const wingSpan = bird.size * 2.5
-            const wingHeight = Math.abs(wingAngle) * wingSpan * 0.3
-            const wingThickness = bird.size * 0.15
-            //
-            // Left wing - curved line
-            //
-            const leftWingTip = k.vec2(bird.x - wingSpan, bird.y - wingHeight)
-            const leftWingMid = k.vec2(
-              bird.x - wingSpan * 0.5,
-              bird.y - wingHeight * 0.5
-            )
-            
-            k.drawLine({
-              p1: k.vec2(bird.x, bird.y),
-              p2: leftWingMid,
-              width: wingThickness * 3,
-              color: bird.color,
-              opacity: 0.85
-            })
-            
-            k.drawLine({
-              p1: leftWingMid,
-              p2: leftWingTip,
-              width: wingThickness * 2,
-              color: bird.color,
-              opacity: 0.85
-            })
-            //
-            // Right wing - curved line
-            //
-            const rightWingTip = k.vec2(bird.x + wingSpan, bird.y - wingHeight)
-            const rightWingMid = k.vec2(
-              bird.x + wingSpan * 0.5,
-              bird.y - wingHeight * 0.5
-            )
-            
-            k.drawLine({
-              p1: k.vec2(bird.x, bird.y),
-              p2: rightWingMid,
-              width: wingThickness * 3,
-              color: bird.color,
-              opacity: 0.85
-            })
-            
-            k.drawLine({
-              p1: rightWingMid,
-              p2: rightWingTip,
-              width: wingThickness * 2,
-              color: bird.color,
-              opacity: 0.85
-            })
+            drawRealisticBird(k, bird, wingFlap)
           }
         }
       }
@@ -1292,75 +1229,55 @@ export function sceneLevel0(k) {
       const dynamicTreesIndices = []
       const staticTreesIndices = []
       //
-      // Distribute trees: every 3rd tree is dynamic, others are static
+      // Distribute trees: ~20% dynamic to keep FPS high (was 40%)
       //
       for (let i = 0; i < allFrontTrees.length; i++) {
-        if (i % 5 < 2) {
+        if (i % 5 === 0) {
           dynamicTreesIndices.push(i)
         } else {
           staticTreesIndices.push(i)
         }
       }
-      
       const dynamicTrees = dynamicTreesIndices.map(i => allFrontTrees[i])
-      
+      //
+      // FPS optimization: pre-render each dynamic tree to a PNG sprite once,
+      // then draw the cached sprite each frame with a tiny horizontal sway.
+      // This replaces hundreds of per-frame drawLine/drawEllipse calls per tree.
+      //
+      dynamicTrees.forEach((tree, idx) => {
+        if (!tree.branchClusters) return
+        prerenderOrganicTreeSprites(k, tree, `l0-dyn-tree-${idx}`)
+      })
       k.add([
         k.z(25),
         {
           draw() {
             const time = k.time()
-            
             for (const tree of dynamicTrees) {
-              const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount * 8
+              if (!tree.branchClusters) continue
               //
-              // Draw trunk (no sway)
+              // Trunk + roots: drawn first, no sway
               //
-              const trunkCenterY = (tree.trunkTop + tree.trunkBottom) / 2
-              
-              k.drawRect({
-                pos: k.vec2(tree.x, trunkCenterY),
-                width: tree.trunkWidth,
-                height: tree.trunkHeight,
-                anchor: "center",
-                color: tree.trunkColor,
-                opacity: tree.opacity
-              })
-              //
-              // Draw branches (no sway)
-              //
-              if (tree.branches) {
-                for (const branch of tree.branches) {
-                  k.drawLine({
-                    p1: k.vec2(tree.x + branch.startX, branch.startY),
-                    p2: k.vec2(tree.x + branch.endX, branch.endY),
-                    width: branch.width,
-                    color: tree.trunkColor,
-                    opacity: tree.opacity
-                  })
-                }
+              if (tree.trunkSpriteName) {
+                k.drawSprite({
+                  sprite: tree.trunkSpriteName,
+                  pos: k.vec2(tree.trunkSpriteX, tree.trunkSpriteY)
+                })
               }
               //
-              // Draw crowns (each crown sways independently)
+              // Each branch cluster rotates around its pivot like a hinge:
+              // the cluster's attachment point stays fixed on the trunk and
+              // the branch + leaves swing together around that point.
+              // angleDeg is small (a few degrees) for a subtle wind effect.
               //
-              for (const crown of tree.crowns) {
-                const colorShift = crown.colorShift || 0
-                const leafR = Math.min(255, tree.leafColor.r + colorShift)
-                const leafG = Math.min(255, tree.leafColor.g + colorShift)
-                const leafB = Math.min(255, tree.leafColor.b + colorShift)
-                //
-                // Each crown circle has its own sway based on its position
-                //
-                const crownPhase = crown.offsetX * 0.1 + crown.offsetY * 0.1
-                const crownSway = Math.sin(time * tree.swaySpeed * 5 + tree.swayOffset + crownPhase) * tree.swayAmount * 6
-                
-                k.drawCircle({
-                  pos: k.vec2(
-                    tree.x + crown.offsetX + crownSway,
-                    tree.crownCenterY + crown.offsetY
-                  ),
-                  radius: tree.crownSize * crown.sizeVariation,
-                  color: k.rgb(leafR, leafG, leafB),
-                  opacity: tree.opacity * crown.opacityVariation
+              for (const cluster of tree.branchClusters) {
+                if (!cluster.spriteName) continue
+                const angleDeg = Math.sin(time * cluster.swaySpeed + cluster.swayPhase) * cluster.swayAmount
+                k.drawSprite({
+                  sprite: cluster.spriteName,
+                  pos: k.vec2(cluster.worldPivotX, cluster.worldPivotY),
+                  anchor: k.vec2(cluster.anchorX, cluster.anchorY),
+                  angle: angleDeg
                 })
               }
             }
@@ -1379,7 +1296,13 @@ export function sceneLevel0(k) {
     // Average: rgb(31, 32.5, 31) ≈ rgb(31, 33, 31) = #1F211F
     //
     const BACK_LAYER_TREE_COLOR = "#1F211F"  // Color between black and back layer trees for better visibility
-    const BIG_BUG_Z_INDEX = 8  // In front of layer 1 trees (z=7), behind dynamic trees (z=25), below player (z=10)
+    //
+    // Bug4 (anti-hero monster platform) z is in FRONT of dynamic trees (z=25) so the
+    // monster + the anti-hero on its head are clearly in front of all foliage.
+    // Other big bugs (1, 2, 3) keep the original z=8 so they hide behind front trees.
+    //
+    const BIG_BUG_Z_INDEX = 8
+    const ANTIHERO_PLATFORM_Z_INDEX = 27
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
     const BIG_BUG_CRAWL_SPEED = 12  // Increased speed for tall bugs
@@ -1461,7 +1384,7 @@ export function sceneLevel0(k) {
       legSpreadFactor: BIG_BUG_LEG_SPREAD_FACTOR,
       legDropFactor: bug4LegDropFactor,
       customColor: BIG_BUG_COLOR,  // Same color as other big bugs
-      zIndex: BIG_BUG_Z_INDEX,
+      zIndex: ANTIHERO_PLATFORM_Z_INDEX,
       showOutline: false,
       hasUpwardLegs: true,
       targetFloorY: FLOOR_Y,  // Use fixed FLOOR_Y for legs
@@ -1541,6 +1464,10 @@ export function sceneLevel0(k) {
     //
     if (antiHeroInst.character) {
       antiHeroInst.character.hidden = true
+      //
+      // Bump anti-hero z so it's drawn in front of dynamic trees (z=25)
+      //
+      antiHeroInst.character.z = ANTIHERO_PLATFORM_Z_INDEX
     }
     //
     // Create hero with anti-hero reference for annihilation
@@ -1639,7 +1566,7 @@ export function sceneLevel0(k) {
     const BONUS_PLATFORM_X = LEFT_MARGIN + 140
     const BONUS_PLATFORM_Y = ANTIHERO_PLATFORM_Y + 10
     const BONUS_PLATFORM_WIDTH = 80
-    BonusHero.create({
+    const bonusHeroInst = BonusHero.create({
       k,
       x: BONUS_PLATFORM_X,
       y: BONUS_PLATFORM_Y,
@@ -1652,6 +1579,13 @@ export function sceneLevel0(k) {
       storageKey: 'touch.level0BonusCollected',
       hintText: "no matter how many problems\nthere are, a solution always exists"
     })
+    //
+    // Push the bonus mini hero in front of front-line trees (dynamic trees z=25)
+    // so the sparkly hint and revealed mini hero are not occluded by foliage.
+    //
+    if (bonusHeroInst?.miniHero?.character) {
+      bonusHeroInst.miniHero.character.z = ANTIHERO_PLATFORM_Z_INDEX
+    }
     //
     // Create bugs on the floor
     //
@@ -2422,6 +2356,103 @@ export function sceneLevel0(k) {
       trees: frontTrees
     })
     //
+    // Rain drip sounds: retry until AudioContext is running
+    //
+    Sound.startAudioContext(sound)
+    const startRainWhenReady = () => {
+      if (rainRef.stop) return
+      const ctx = sound.audioContext
+      if (ctx && ctx.state === 'running') {
+        rainRef.stop = Sound.startRainSound(sound, 0.003)
+      }
+    }
+    startRainWhenReady()
+    k.onUpdate(() => startRainWhenReady())
+    //
+    // Puddles on the floor: small ellipses with occasional ripple
+    //
+    createPuddles(k, heroInst, sound)
+    //
+    // Distant thunder rumble with lightning flash at random intervals
+    //
+    const thunderState = {
+      timer: THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN),
+      flashTimer: 0
+    }
+    k.add([
+      k.z(0),
+      {
+        draw() {
+          drawLightningFlash(k, thunderState)
+        }
+      }
+    ])
+    k.onUpdate(() => onUpdateThunder(k, thunderState, sound))
+    //
+    // Cricket/cicada ambient chirps at random intervals
+    //
+    const cricketState = { timer: CRICKET_INTERVAL_MIN + Math.random() * (CRICKET_INTERVAL_MAX - CRICKET_INTERVAL_MIN) }
+    k.onUpdate(() => {
+      cricketState.timer -= k.dt()
+      if (cricketState.timer <= 0) {
+        Sound.playCricketSound(sound)
+        cricketState.timer = CRICKET_INTERVAL_MIN + Math.random() * (CRICKET_INTERVAL_MAX - CRICKET_INTERVAL_MIN)
+      }
+    })
+    //
+    // Frog croaks at random intervals
+    //
+    const frogState = { timer: FROG_INTERVAL_MIN + Math.random() * (FROG_INTERVAL_MAX - FROG_INTERVAL_MIN) }
+    k.onUpdate(() => {
+      frogState.timer -= k.dt()
+      if (frogState.timer <= 0) {
+        Sound.playFrogSound(sound)
+        frogState.timer = FROG_INTERVAL_MIN + Math.random() * (FROG_INTERVAL_MAX - FROG_INTERVAL_MIN)
+      }
+    })
+    //
+    // Owl/bird ambient hoots at random intervals (5-10s)
+    //
+    const owlState = { timer: OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN) }
+    k.onUpdate(() => {
+      owlState.timer -= k.dt()
+      if (owlState.timer <= 0) {
+        //
+        // Mix between owl hoots and lighter bird chirps for variety
+        //
+        Math.random() < 0.6 ? Sound.playOwlSound(sound) : Sound.playBirdChirpSound(sound)
+        owlState.timer = OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN)
+      }
+    })
+    //
+    // Fireflies: small glowing dots drifting over the swamp
+    //
+    createL0Fireflies(k)
+    //
+    // Floor roots: tentacle-like roots growing into the ground
+    //
+    createFloorRoots(k)
+    //
+    // Small mushrooms on the ground
+    //
+    createMushrooms(k)
+    //
+    // Rocks scattered across the bottom platform (returned for moss/grass clustering)
+    //
+    const rocks = createRocks(k)
+    //
+    // Extra grass blades growing at the base of each rock (added to shared array)
+    //
+    addGrassAroundRocks(k, rocks, allGrassBlades, FLOOR_Y - 2)
+    //
+    // Moss patches: clustered near rocks plus standalone clumps for realism
+    //
+    createMoss(k, rocks)
+    //
+    // Hanging spider on a thread tied to a tree branch (eyes follow the hero)
+    //
+    createHangingSpider(k, heroInst, frontTrees)
+    //
     // Return to menu on ESC
     //
     k.onKeyPress("escape", () => {
@@ -2664,19 +2695,21 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
     timer: 0,
     progress: 0,
     triggered: false,
-    ambientSoundTimer: 0
+    ambientSoundTimer: 0,
+    dirtParticles: []
   }
   const fillColor = k.rgb(TRAP_SPIKE_FILL_R, TRAP_SPIKE_FILL_G, TRAP_SPIKE_FILL_B)
   const outlineColor = k.rgb(0, 0, 0)
   //
-  // Draw trap spikes with vertical offset based on rise progress (0 = hidden, 1 = fully risen)
+  // Draw trap spikes and dirt particles
   //
   k.add([
     k.z(FLOOR_THORN_DRAW_Z),
     {
       draw() {
-        if (inst.progress <= 0) return
+        if (inst.progress <= 0 && inst.dirtParticles.length === 0) return
         drawTrapSpikes(k, inst, fillColor, outlineColor, heroInst)
+        drawDirtParticles(k, inst.dirtParticles)
       }
     }
   ])
@@ -2721,6 +2754,11 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
       inst.timer = 0
       inst.triggered = true
       sound && Sound.playTentacleSound(sound)
+      k.shake(4)
+      //
+      // Spawn dirt particles from each spike base
+      //
+      spawnTentacleDirt(inst)
     }
     return
   }
@@ -2758,6 +2796,10 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
       inst.triggered = false
     }
   }
+  //
+  // Update dirt particles (gravity + fade)
+  //
+  onUpdateDirtParticles(inst.dirtParticles, dt)
   //
   // Kill hero if feet overlap any risen spike
   //
@@ -2871,7 +2913,73 @@ function drawTentacleEye(k, eyeX, eyeY, heroX, heroY) {
     color: k.rgb(20, 20, 20)
   })
 }
-
+//
+// Spawn dirt particles from each spike base when tentacles rise.
+// Mirrors the hero's "splash" landing dust: particles spread to both sides,
+// fly mostly horizontal with slight upward angle, then fall under gravity.
+//
+function spawnTentacleDirt(inst) {
+  for (const spike of inst.spikes) {
+    for (let i = 0; i < DIRT_PARTICLE_COUNT_PER_SPIKE; i++) {
+      const side = i < DIRT_PARTICLE_COUNT_PER_SPIKE / 2 ? -1 : 1
+      //
+      // Flat splash angle (5-30 degrees from horizontal) like hero dust
+      //
+      const angleDeg = 5 + Math.random() * 25
+      const angleRad = angleDeg * Math.PI / 180
+      const speed = DIRT_PARTICLE_SPEED_MIN + Math.random() * (DIRT_PARTICLE_SPEED_MAX - DIRT_PARTICLE_SPEED_MIN)
+      const offsetX = side * (5 + Math.random() * 10)
+      //
+      // Slight color variation per particle for natural dirt look
+      //
+      const dr = Math.floor((Math.random() - 0.5) * 20)
+      const dg = Math.floor((Math.random() - 0.5) * 16)
+      const db = Math.floor((Math.random() - 0.5) * 12)
+      inst.dirtParticles.push({
+        x: spike.x + offsetX,
+        y: spike.baseY - 2,
+        vx: Math.cos(angleRad) * speed * side,
+        vy: -Math.sin(angleRad) * speed,
+        life: DIRT_PARTICLE_LIFETIME,
+        maxLife: DIRT_PARTICLE_LIFETIME,
+        r: Math.max(0, Math.min(255, DIRT_PARTICLE_COLOR_R + dr)),
+        g: Math.max(0, Math.min(255, DIRT_PARTICLE_COLOR_G + dg)),
+        b: Math.max(0, Math.min(255, DIRT_PARTICLE_COLOR_B + db))
+      })
+    }
+  }
+}
+//
+// Age dirt particles: gravity, horizontal friction, lifetime decay
+//
+function onUpdateDirtParticles(particles, dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    p.vy += DIRT_PARTICLE_GRAVITY * dt
+    p.vx *= 0.97
+    p.life -= dt
+    if (p.life <= 0) particles.splice(i, 1)
+  }
+}
+//
+// Draw dirt particles as outlined brown squares (matching hero dust style)
+//
+function drawDirtParticles(k, particles) {
+  for (const p of particles) {
+    const alpha = Math.max(0, p.life / p.maxLife) * 0.9
+    k.drawRect({
+      pos: k.vec2(p.x, p.y),
+      width: DIRT_PARTICLE_SIZE,
+      height: DIRT_PARTICLE_SIZE,
+      anchor: 'center',
+      color: k.rgb(p.r, p.g, p.b),
+      opacity: alpha,
+      outline: { width: 1.5, color: k.rgb(0, 0, 0) }
+    })
+  }
+}
 /**
  * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
  * @param {number} radius - Corner radius in pixels
@@ -3398,4 +3506,1659 @@ function showInstructions(k, extraDelay = 0) {
       }
     }
   })
+}
+//
+// Thunder rumble interval (distant thunder every 7-10 seconds)
+//
+const THUNDER_INTERVAL_MIN = 7
+const THUNDER_INTERVAL_MAX = 10
+//
+// Lightning flash during thunder
+//
+const LIGHTNING_FLASH_DURATION = 0.3
+const LIGHTNING_FLASH_OPACITY = 0.25
+//
+// Flash Y band: from cloud bottom to back-tree canopy area
+//
+const LIGHTNING_FLASH_TOP_Y = TOP_MARGIN + 100
+const LIGHTNING_FLASH_BOTTOM_Y = FLOOR_Y - 100
+//
+// Cricket/cicada ambient interval
+//
+const CRICKET_INTERVAL_MIN = 3
+const CRICKET_INTERVAL_MAX = 8
+//
+// Frog croak interval
+//
+const FROG_INTERVAL_MIN = 5
+const FROG_INTERVAL_MAX = 15
+//
+// Owl/bird hoot interval (5-10 seconds between calls)
+//
+const OWL_INTERVAL_MIN = 5
+const OWL_INTERVAL_MAX = 10
+//
+// Firefly configuration for level 0
+//
+const L0_FIREFLY_COUNT = 12
+const L0_FIREFLY_MIN_SPEED = 6
+const L0_FIREFLY_MAX_SPEED = 18
+const L0_FIREFLY_RADIUS_MIN = 1.5
+const L0_FIREFLY_RADIUS_MAX = 2.5
+const L0_FIREFLY_GLOW_SPEED_MIN = 0.6
+const L0_FIREFLY_GLOW_SPEED_MAX = 2.0
+const L0_FIREFLY_COLOR_R = 180
+const L0_FIREFLY_COLOR_G = 230
+const L0_FIREFLY_COLOR_B = 120
+//
+// Floor roots: grow downward from ground surface into the platform (like level 1)
+//
+const FLOOR_ROOT_COUNT = 8
+const FLOOR_ROOT_BRANCH_DEPTH = 3
+const FLOOR_ROOT_LENGTH_MIN = 8
+const FLOOR_ROOT_LENGTH_MAX = 18
+const FLOOR_ROOT_WIDTH_START = 3.5
+const FLOOR_ROOT_SPREAD_ANGLE = 0.6
+const FLOOR_ROOT_COLOR_R = 90
+const FLOOR_ROOT_COLOR_G = 60
+const FLOOR_ROOT_COLOR_B = 35
+//
+// Maximum root depth so they stay within the bottom platform
+//
+const FLOOR_ROOT_MAX_DEPTH = BOTTOM_MARGIN - 8
+//
+// Small mushrooms on the ground
+//
+const MUSHROOM_COUNT = 7
+const MUSHROOM_CAP_WIDTH_MIN = 16
+const MUSHROOM_CAP_WIDTH_MAX = 32
+const MUSHROOM_STEM_HEIGHT_MIN = 12
+const MUSHROOM_STEM_HEIGHT_MAX = 24
+//
+// Rocks scattered on the bottom platform: dark grey blobs with shading and outline.
+// Rocks are larger now and frequently appear in clusters of 2-3 next to each other.
+//
+const ROCK_COUNT = 9
+const ROCK_RADIUS_MIN = 22
+const ROCK_RADIUS_MAX = 52
+const ROCK_BASE_R = 60
+const ROCK_BASE_G = 60
+const ROCK_BASE_B = 60
+//
+// Each main rock has a chance of spawning 1-2 smaller satellite rocks beside it
+//
+const ROCK_CLUSTER_CHANCE = 0.65
+const ROCK_CLUSTER_SATELLITES_MIN = 1
+const ROCK_CLUSTER_SATELLITES_MAX = 2
+const ROCK_SATELLITE_RADIUS_RATIO_MIN = 0.45
+const ROCK_SATELLITE_RADIUS_RATIO_MAX = 0.85
+//
+// Moss patches on the bottom platform: small green clumps
+//
+const MOSS_PATCH_COUNT = 28
+const MOSS_PATCH_RADIUS_MIN = 8
+const MOSS_PATCH_RADIUS_MAX = 22
+const MOSS_DOT_COUNT_MIN = 6
+const MOSS_DOT_COUNT_MAX = 14
+const MOSS_BASE_R = 50
+const MOSS_BASE_G = 90
+const MOSS_BASE_B = 35
+//
+// Puddle constants
+//
+const PUDDLE_COUNT = 8
+const PUDDLE_WIDTH_MIN = 50
+const PUDDLE_WIDTH_MAX = 100
+const PUDDLE_HEIGHT_RATIO = 0.12
+const PUDDLE_OPACITY = 0.22
+const PUDDLE_RIPPLE_INTERVAL_MIN = 1.5
+const PUDDLE_RIPPLE_INTERVAL_MAX = 4.0
+const PUDDLE_RIPPLE_DURATION = 0.8
+const PUDDLE_COLOR_R = 50
+const PUDDLE_COLOR_G = 120
+const PUDDLE_COLOR_B = 200
+//
+// Puddle splash when hero steps on a puddle
+//
+const PUDDLE_SPLASH_PARTICLE_COUNT = 6
+const PUDDLE_SPLASH_SPEED_MIN = 30
+const PUDDLE_SPLASH_SPEED_MAX = 80
+const PUDDLE_SPLASH_LIFETIME = 0.5
+const PUDDLE_SPLASH_SIZE = 3
+const PUDDLE_HERO_DETECT_Y = 35
+//
+// Creates small floor puddles with rain ripple effect
+//
+function createPuddles(k, heroInst, sound) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const puddles = []
+  //
+  // Minimum gap between puddle edges so they don't overlap
+  //
+  const MIN_GAP = 30
+  for (let i = 0; i < PUDDLE_COUNT; i++) {
+    const w = PUDDLE_WIDTH_MIN + Math.random() * (PUDDLE_WIDTH_MAX - PUDDLE_WIDTH_MIN)
+    let x = 0
+    let placed = false
+    //
+    // Retry placement until no overlap with existing puddles
+    //
+    for (let attempt = 0; attempt < 50; attempt++) {
+      x = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+      const overlaps = puddles.some(p => {
+        const edgeDist = Math.abs(x - p.x) - (w / 2 + p.width / 2)
+        return edgeDist < MIN_GAP
+      })
+      if (!overlaps) { placed = true; break }
+    }
+    if (!placed) continue
+    puddles.push({
+      x,
+      y: FLOOR_Y - 2,
+      width: w,
+      height: w * PUDDLE_HEIGHT_RATIO,
+      rippleTimer: Math.random() * PUDDLE_RIPPLE_INTERVAL_MAX,
+      rippleT: 0,
+      rippling: false,
+      heroInside: false,
+      dripX: 0,
+      dripY: 0,
+      dripSplashT: 0
+    })
+  }
+  const splashParticles = []
+  //
+  // Track previous grounded state for landing detection
+  //
+  const groundState = { wasGrounded: true }
+  k.add([
+    k.z(17),
+    {
+      draw() {
+        drawPuddles(k, puddles)
+        drawPuddleSplashes(k, splashParticles)
+      }
+    }
+  ])
+  k.onUpdate(() => {
+    onUpdatePuddles(k, puddles)
+    onUpdatePuddleSplashes(k, splashParticles)
+    checkHeroPuddleCollision(k, heroInst, puddles, splashParticles, sound, groundState)
+  })
+}
+//
+// Per-frame puddle ripple timer
+//
+function onUpdatePuddles(k, puddles) {
+  const dt = k.dt()
+  for (const p of puddles) {
+    if (p.rippling) {
+      p.rippleT += dt
+      p.dripSplashT += dt
+      if (p.rippleT >= PUDDLE_RIPPLE_DURATION) {
+        p.rippling = false
+        p.rippleTimer = PUDDLE_RIPPLE_INTERVAL_MIN + Math.random() * (PUDDLE_RIPPLE_INTERVAL_MAX - PUDDLE_RIPPLE_INTERVAL_MIN)
+      }
+    } else {
+      p.rippleTimer -= dt
+      if (p.rippleTimer <= 0) {
+        p.rippling = true
+        p.rippleT = 0
+        p.dripSplashT = 0
+        //
+        // Set drip impact position inside the puddle
+        //
+        p.dripX = p.x + (Math.random() - 0.5) * p.width * 0.5
+        p.dripY = p.y + (Math.random() - 0.5) * p.height * 0.3
+      }
+    }
+  }
+}
+//
+// Draw elliptical puddles with expanding ripple rings
+//
+function drawPuddles(k, puddles) {
+  for (const p of puddles) {
+    k.drawEllipse({
+      pos: k.vec2(p.x, p.y),
+      radiusX: p.width / 2,
+      radiusY: p.height / 2,
+      color: k.rgb(PUDDLE_COLOR_R, PUDDLE_COLOR_G, PUDDLE_COLOR_B),
+      opacity: PUDDLE_OPACITY
+    })
+    if (p.rippling) {
+      const progress = p.rippleT / PUDDLE_RIPPLE_DURATION
+      //
+      // Ripple ring expands from the drip impact point
+      //
+      const rippleScale = 0.1 + progress * 0.9
+      const rippleOpacity = (1 - progress) * 0.25
+      const rippleRadiusX = p.width * 0.3 * rippleScale
+      const rippleRadiusY = p.height * 0.6 * rippleScale
+      k.drawEllipse({
+        pos: k.vec2(p.dripX, p.dripY),
+        radiusX: rippleRadiusX,
+        radiusY: rippleRadiusY,
+        color: k.rgb(PUDDLE_COLOR_R + 40, PUDDLE_COLOR_G + 40, PUDDLE_COLOR_B + 40),
+        opacity: rippleOpacity,
+        fill: false,
+        outline: { width: 1, color: k.rgb(PUDDLE_COLOR_R + 60, PUDDLE_COLOR_G + 60, PUDDLE_COLOR_B + 60) }
+      })
+      //
+      // Small splash dot at impact point (visible briefly at start)
+      //
+      if (p.dripSplashT < 0.15) {
+        const dotAlpha = (1 - p.dripSplashT / 0.15) * 0.5
+        k.drawCircle({
+          pos: k.vec2(p.dripX, p.dripY),
+          radius: 2,
+          color: k.rgb(PUDDLE_COLOR_R + 80, PUDDLE_COLOR_G + 80, PUDDLE_COLOR_B + 55),
+          opacity: dotAlpha
+        })
+      }
+    }
+  }
+}
+//
+// Detect hero stepping into a puddle and spawn splash particles
+//
+function checkHeroPuddleCollision(k, heroInst, puddles, splashParticles, sound, groundState) {
+  if (!heroInst?.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y + PUDDLE_HERO_DETECT_Y
+  const grounded = heroInst.character.isGrounded?.() ?? false
+  //
+  // Detect landing: hero was airborne last frame and now grounded
+  //
+  const justLanded = grounded && !groundState.wasGrounded
+  groundState.wasGrounded = grounded
+  let inAnyPuddle = false
+  for (const p of puddles) {
+    const insideX = Math.abs(heroX - p.x) < p.width / 2
+    const insideY = Math.abs(heroY - p.y) < 15
+    const isInside = insideX && insideY && grounded
+    if (isInside) inAnyPuddle = true
+    if (isInside && !p.heroInside) {
+      //
+      // Hero just entered puddle: spawn splash particles
+      //
+      for (let i = 0; i < PUDDLE_SPLASH_PARTICLE_COUNT; i++) {
+        const angle = -Math.PI * (0.15 + Math.random() * 0.7)
+        const speed = PUDDLE_SPLASH_SPEED_MIN + Math.random() * (PUDDLE_SPLASH_SPEED_MAX - PUDDLE_SPLASH_SPEED_MIN)
+        splashParticles.push({
+          x: heroX + (Math.random() - 0.5) * 10,
+          y: p.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: PUDDLE_SPLASH_LIFETIME,
+          maxLife: PUDDLE_SPLASH_LIFETIME
+        })
+      }
+      p.rippling = true
+      p.rippleT = 0
+      //
+      // Landing from a jump produces a louder splash than walking in
+      //
+      const splashVolume = justLanded ? 1.0 : 0.5
+      Sound.playSplashSound?.(sound, splashVolume)
+    }
+    p.heroInside = isInside
+  }
+  //
+  // Override dust color to puddle blue while in water
+  //
+  heroInst.dustColor = inAnyPuddle ? '#3278C8' : null
+  //
+  // Suppress landing dust when above a puddle (set preemptively so
+  // the physics collision callback sees it). Running dust is allowed.
+  //
+  const aboveAnyPuddle = puddles.some(p => Math.abs(heroInst.character.pos.x - p.x) < p.width / 2)
+  heroInst.suppressDust = aboveAnyPuddle && !grounded
+}
+//
+// Update splash particles: apply gravity and age
+//
+function onUpdatePuddleSplashes(k, particles) {
+  const dt = k.dt()
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]
+    p.x += p.vx * dt
+    p.vy += 200 * dt
+    p.y += p.vy * dt
+    p.life -= dt
+    if (p.life <= 0) particles.splice(i, 1)
+  }
+}
+//
+// Draw puddle splash droplets
+//
+function drawPuddleSplashes(k, particles) {
+  for (const p of particles) {
+    const alpha = Math.max(0, p.life / p.maxLife)
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: PUDDLE_SPLASH_SIZE,
+      color: k.rgb(PUDDLE_COLOR_R + 30, PUDDLE_COLOR_G + 30, PUDDLE_COLOR_B + 30),
+      opacity: alpha * 0.7
+    })
+  }
+}
+//
+// Update thunder timer and trigger lightning flash
+//
+function onUpdateThunder(k, state, sound) {
+  const dt = k.dt()
+  if (state.flashTimer > 0) {
+    state.flashTimer = Math.max(0, state.flashTimer - dt)
+  }
+  state.timer -= dt
+  if (state.timer <= 0) {
+    Sound.playThunderSound(sound)
+    state.flashTimer = LIGHTNING_FLASH_DURATION
+    state.timer = THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN)
+  }
+}
+//
+// Draw lightning flash between cloud bottom and dark back-tree canopy
+//
+function drawLightningFlash(k, state) {
+  if (state.flashTimer <= 0) return
+  const progress = state.flashTimer / LIGHTNING_FLASH_DURATION
+  const alpha = progress * LIGHTNING_FLASH_OPACITY
+  const screenW = CFG.visual.screen.width
+  k.drawRect({
+    pos: k.vec2(0, LIGHTNING_FLASH_TOP_Y),
+    width: screenW,
+    height: LIGHTNING_FLASH_BOTTOM_Y - LIGHTNING_FLASH_TOP_Y,
+    color: k.rgb(220, 225, 240),
+    opacity: alpha
+  })
+}
+//
+// Creates small fireflies drifting over the swamp in level 0
+//
+function createL0Fireflies(k) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const fireflies = []
+  //
+  // Fireflies stay in the lower third of the play area near the ground
+  //
+  const fireflyMinY = FLOOR_Y - 150
+  const fireflyMaxY = FLOOR_Y - 20
+  for (let i = 0; i < L0_FIREFLY_COUNT; i++) {
+    //
+    // Distribute starting positions evenly across the width
+    //
+    fireflies.push({
+      x: LEFT_MARGIN + (i / L0_FIREFLY_COUNT) * playableW + Math.random() * (playableW / L0_FIREFLY_COUNT),
+      y: fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY),
+      radius: L0_FIREFLY_RADIUS_MIN + Math.random() * (L0_FIREFLY_RADIUS_MAX - L0_FIREFLY_RADIUS_MIN),
+      glowSpeed: L0_FIREFLY_GLOW_SPEED_MIN + Math.random() * (L0_FIREFLY_GLOW_SPEED_MAX - L0_FIREFLY_GLOW_SPEED_MIN),
+      phase: Math.random() * Math.PI * 2,
+      speed: L0_FIREFLY_MIN_SPEED + Math.random() * (L0_FIREFLY_MAX_SPEED - L0_FIREFLY_MIN_SPEED),
+      driftVx: (Math.random() - 0.5) * 12
+    })
+  }
+  k.add([
+    k.z(24),
+    {
+      draw() {
+        drawL0Fireflies(k, fireflies)
+      }
+    }
+  ])
+  k.onUpdate(() => onUpdateL0Fireflies(k, fireflies))
+}
+//
+// Per-frame firefly drift: gentle sine-wave wander
+//
+function onUpdateL0Fireflies(k, fireflies) {
+  const dt = k.dt()
+  const t = k.time()
+  const minX = LEFT_MARGIN + 10
+  const maxX = CFG.visual.screen.width - RIGHT_MARGIN - 10
+  const minY = FLOOR_Y - 150
+  const maxY = FLOOR_Y - 20
+  for (const f of fireflies) {
+    //
+    // Horizontal drift + sine wobble for natural wandering across the screen
+    //
+    f.x += f.driftVx * dt + Math.sin(t * f.glowSpeed + f.phase) * f.speed * 0.3 * dt
+    f.y += Math.cos(t * f.glowSpeed * 0.7 + f.phase) * f.speed * 0.6 * dt
+    //
+    // Wrap around when reaching screen edges
+    //
+    if (f.x < minX) f.x = maxX
+    if (f.x > maxX) f.x = minX
+    if (f.y < minY) f.y = minY
+    if (f.y > maxY) f.y = maxY
+  }
+}
+//
+// Draw firefly glow dots
+//
+function drawL0Fireflies(k, fireflies) {
+  const t = k.time()
+  for (const f of fireflies) {
+    const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
+    const alpha = 0.15 + glow * 0.7
+    k.drawCircle({
+      pos: k.vec2(f.x, f.y),
+      radius: f.radius * 3,
+      color: k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B),
+      opacity: alpha * 0.15
+    })
+    k.drawCircle({
+      pos: k.vec2(f.x, f.y),
+      radius: f.radius,
+      color: k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B),
+      opacity: alpha
+    })
+  }
+}
+//
+// Creates roots growing downward from ground surface (branching like level 1)
+//
+function createFloorRoots(k) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const allSegments = { behind: [], front: [] }
+  for (let i = 0; i < FLOOR_ROOT_COUNT; i++) {
+    const baseX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
+    const baseY = FLOOR_Y
+    const segments = []
+    generateRootBranch(baseX, baseY, Math.PI / 2 + (Math.random() - 0.5) * FLOOR_ROOT_SPREAD_ANGLE, FLOOR_ROOT_WIDTH_START, 0, segments)
+    const target = i % 2 === 0 ? allSegments.behind : allSegments.front
+    target.push(...segments)
+  }
+  //
+  // Draw behind hero (z=5) and in front (z=15)
+  //
+  allSegments.behind.length > 0 && k.add([k.z(5), { draw() { drawFloorRoots(k, allSegments.behind) } }])
+  allSegments.front.length > 0 && k.add([k.z(15), { draw() { drawFloorRoots(k, allSegments.front) } }])
+}
+//
+// Recursively generate branching root segments going downward
+//
+function generateRootBranch(x, y, angle, width, depth, segments) {
+  if (depth >= FLOOR_ROOT_BRANCH_DEPTH || width < 0.5) return
+  const len = FLOOR_ROOT_LENGTH_MIN + Math.random() * (FLOOR_ROOT_LENGTH_MAX - FLOOR_ROOT_LENGTH_MIN)
+  const endX = x + Math.cos(angle) * len
+  const endY = y + Math.sin(angle) * len
+  //
+  // Clamp to max depth within the platform
+  //
+  const clampedEndY = Math.min(FLOOR_Y + FLOOR_ROOT_MAX_DEPTH, endY)
+  segments.push({ startX: x, startY: y, endX, endY: clampedEndY, width })
+  if (clampedEndY >= FLOOR_Y + FLOOR_ROOT_MAX_DEPTH) return
+  //
+  // Branch into 1-2 child roots with spread
+  //
+  const branchCount = depth === 0 ? 2 : (Math.random() < 0.6 ? 2 : 1)
+  for (let b = 0; b < branchCount; b++) {
+    const childAngle = angle + (b === 0 ? -1 : 1) * (FLOOR_ROOT_SPREAD_ANGLE * 0.5 + Math.random() * FLOOR_ROOT_SPREAD_ANGLE * 0.5)
+    generateRootBranch(endX, clampedEndY, childAngle, width * 0.65, depth + 1, segments)
+  }
+}
+//
+// Draw root segments as tapered lines
+//
+function drawFloorRoots(k, segments) {
+  for (const seg of segments) {
+    k.drawLine({
+      p1: k.vec2(seg.startX, seg.startY),
+      p2: k.vec2(seg.endX, seg.endY),
+      width: seg.width,
+      color: k.rgb(FLOOR_ROOT_COLOR_R, FLOOR_ROOT_COLOR_G, FLOOR_ROOT_COLOR_B),
+      opacity: 0.7
+    })
+  }
+}
+//
+// Creates small mushrooms on the ground using toPng()
+//
+function createMushrooms(k) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const mushrooms = []
+  //
+  // Possible mushroom cap hues (earth tones, reds, browns, yellows)
+  //
+  const capColors = [
+    [140, 60, 30], [180, 80, 40], [200, 50, 50],
+    [160, 130, 60], [100, 80, 50], [180, 40, 60]
+  ]
+  for (let i = 0; i < MUSHROOM_COUNT; i++) {
+    const capW = MUSHROOM_CAP_WIDTH_MIN + Math.random() * (MUSHROOM_CAP_WIDTH_MAX - MUSHROOM_CAP_WIDTH_MIN)
+    const capH = capW * (0.4 + Math.random() * 0.3)
+    const stemH = MUSHROOM_STEM_HEIGHT_MIN + Math.random() * (MUSHROOM_STEM_HEIGHT_MAX - MUSHROOM_STEM_HEIGHT_MIN)
+    const stemW = capW * (0.25 + Math.random() * 0.15)
+    const totalW = Math.ceil(capW + 4)
+    const totalH = Math.ceil(capH + stemH + 4)
+    const color = capColors[Math.floor(Math.random() * capColors.length)]
+    //
+    // Draw mushroom to off-screen canvas
+    //
+    const spriteName = `mushroom-l0-${i}`
+    const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+      const cx = totalW / 2
+      const stemTop = totalH - stemH - 2
+      //
+      // Stem: slightly tapered rectangle
+      //
+      ctx.fillStyle = `rgb(${Math.min(255, color[0] + 40)}, ${Math.min(255, color[1] + 50)}, ${Math.min(255, color[2] + 30)})`
+      ctx.beginPath()
+      ctx.moveTo(cx - stemW / 2, totalH - 2)
+      ctx.lineTo(cx - stemW * 0.4, stemTop)
+      ctx.lineTo(cx + stemW * 0.4, stemTop)
+      ctx.lineTo(cx + stemW / 2, totalH - 2)
+      ctx.closePath()
+      ctx.fill()
+      //
+      // Cap: half-ellipse with slight color variation
+      //
+      ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+      ctx.beginPath()
+      ctx.ellipse(cx, stemTop, capW / 2, capH, 0, Math.PI, 0)
+      ctx.closePath()
+      ctx.fill()
+      //
+      // Cap highlight: lighter arc near the top
+      //
+      ctx.fillStyle = `rgba(255, 255, 255, 0.15)`
+      ctx.beginPath()
+      ctx.ellipse(cx - capW * 0.1, stemTop - capH * 0.3, capW * 0.25, capH * 0.3, 0, Math.PI, 0)
+      ctx.closePath()
+      ctx.fill()
+      //
+      // Small dots on cap for texture
+      //
+      const dotCount = Math.floor(Math.random() * 3) + 1
+      ctx.fillStyle = `rgba(255, 255, 240, 0.3)`
+      for (let d = 0; d < dotCount; d++) {
+        const dotX = cx + (Math.random() - 0.5) * capW * 0.6
+        const dotY = stemTop - capH * (0.2 + Math.random() * 0.5)
+        ctx.beginPath()
+        ctx.arc(dotX, dotY, 1 + Math.random(), 0, Math.PI * 2)
+        ctx.fill()
+      }
+    })
+    const posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
+    mushrooms.push({ spriteName, dataUrl, x: posX, y: FLOOR_Y - totalH + 2, width: totalW, height: totalH })
+  }
+  //
+  // Load sprites and draw mushrooms
+  //
+  mushrooms.forEach(m => {
+    k.loadSprite(m.spriteName, m.dataUrl)
+  })
+  k.add([
+    k.z(6),
+    {
+      draw() {
+        drawMushrooms(k, mushrooms)
+      }
+    }
+  ])
+}
+//
+// Draw mushroom sprites on the floor
+//
+function drawMushrooms(k, mushrooms) {
+  for (const m of mushrooms) {
+    k.drawSprite({
+      sprite: m.spriteName,
+      pos: k.vec2(m.x, m.y)
+    })
+  }
+}
+/**
+ * Draws a realistic bird silhouette: small body ellipse + head + curved wings.
+ * Wings use a 4-point bezier-like polyline (shoulder -> elbow -> wrist -> tip)
+ * so they look like a gull's "M" shape rather than a simple V. Wing flap moves
+ * the elbow and tip up/down based on `wingFlap` in [-1..1].
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bird - Bird descriptor with x, y, size, color
+ * @param {number} wingFlap - Flap value in [-1..1], 1 = wings fully down
+ */
+function drawRealisticBird(k, bird, wingFlap) {
+  const wingSpan = bird.size * 2.6
+  const thickness = Math.max(1, bird.size * 0.35)
+  const opacity = 0.88
+  //
+  // Body: small horizontal ellipse so the bird has a visible torso
+  //
+  k.drawEllipse({
+    pos: k.vec2(bird.x, bird.y),
+    radiusX: bird.size * 0.55,
+    radiusY: bird.size * 0.32,
+    color: bird.color,
+    opacity
+  })
+  //
+  // Tiny head bump in front (forward = right since birds drift right)
+  //
+  k.drawCircle({
+    pos: k.vec2(bird.x + bird.size * 0.5, bird.y - bird.size * 0.05),
+    radius: Math.max(1, bird.size * 0.22),
+    color: bird.color,
+    opacity
+  })
+  //
+  // Wing joints. Up-flap raises the wrist & tip; down-flap drops them.
+  //
+  const elbowDrop = wingFlap * bird.size * 0.55
+  const wristDrop = wingFlap * bird.size * 1.1
+  const tipDrop = wingFlap * bird.size * 1.4
+  //
+  // For each side draw 3 connected segments approximating a curve
+  //
+  for (const side of [-1, 1]) {
+    const shoulder = k.vec2(bird.x + side * bird.size * 0.3, bird.y - bird.size * 0.05)
+    const elbow = k.vec2(bird.x + side * wingSpan * 0.35, bird.y - bird.size * 0.2 + elbowDrop)
+    const wrist = k.vec2(bird.x + side * wingSpan * 0.7, bird.y - bird.size * 0.05 + wristDrop)
+    const tip = k.vec2(bird.x + side * wingSpan, bird.y + tipDrop)
+    k.drawLine({ p1: shoulder, p2: elbow, width: thickness, color: bird.color, opacity })
+    k.drawLine({ p1: elbow, p2: wrist, width: thickness * 0.85, color: bird.color, opacity })
+    k.drawLine({ p1: wrist, p2: tip, width: thickness * 0.65, color: bird.color, opacity })
+  }
+}
+/**
+ * Builds a single grass blade entry suitable for the dynamic grass drawer.
+ * Centralises blade visual parameters so both layered and per-rock grass
+ * generation produce blades with consistent style.
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {number} baseX - World X for the blade base
+ * @param {number} grassY - Ground Y for the blade base
+ * @param {number} scale - Layer scale factor
+ * @param {number} baseOpacity - Layer base opacity
+ * @param {number} baseR - Base R color channel
+ * @param {number} baseG - Base G color channel
+ * @param {number} baseB - Base B color channel
+ * @returns {Object} Blade descriptor consumed by the grass drawer
+ */
+function buildGrassBlade(k, baseX, grassY, scale, baseOpacity, baseR, baseG, baseB) {
+  const height = (10 + Math.random() * 20) * scale
+  const bendX = (Math.random() - 0.5) * 6
+  return {
+    x1: baseX,
+    y1: grassY,
+    baseX2: baseX + bendX,
+    y2: grassY - height,
+    height,
+    swaySpeed: 0.8 + Math.random() * 0.6,
+    swayAmount: (2 + Math.random() * 3) * scale,
+    swayOffset: Math.random() * Math.PI * 2,
+    color: k.rgb(
+      baseR + Math.random() * 20,
+      baseG + Math.random() * 20,
+      baseB + Math.random() * 15
+    ),
+    opacity: baseOpacity + Math.random() * 0.15,
+    width: (0.8 + Math.random() * 0.4) * scale
+  }
+}
+/**
+ * Adds extra grass blades around each rock so vegetation looks like it's
+ * actually growing out of the soil at the rock base. Blades are pushed into
+ * the shared `allBlades` array so the existing grass drawer renders them.
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {Array} rocks - Rocks returned by createRocks
+ * @param {Array} allBlades - Shared grass blade array (mutated)
+ * @param {number} grassY - Ground Y for blade bases
+ */
+function addGrassAroundRocks(k, rocks, allBlades, grassY) {
+  //
+  // Front-layer color palette to match the rest of the front grass
+  //
+  const grassBaseR = 60
+  const grassBaseG = 85
+  const grassBaseB = 40
+  for (const rock of rocks) {
+    const blades = 3 + Math.floor(Math.random() * 5)
+    for (let i = 0; i < blades; i++) {
+      //
+      // Place blades on either side of the rock base, never directly under
+      //
+      const sign = Math.random() < 0.5 ? -1 : 1
+      const offset = rock.radius * (0.7 + Math.random() * 0.6)
+      const baseX = rock.worldX + sign * offset
+      allBlades.push(buildGrassBlade(k, baseX, grassY, 1.0, 0.85, grassBaseR, grassBaseG, grassBaseB))
+    }
+  }
+}
+/**
+ * Generates realistic-looking rocks scattered along the bottom platform.
+ * Each rock is rendered once into a PNG sprite (irregular polygon body with a
+ * darker bottom shadow + lighter top highlight + thin black outline).
+ * Returns an array of rock world positions/sizes so other systems (moss, grass)
+ * can cluster around them.
+ *
+ * @param {Object} k - Kaplay instance
+ * @returns {Array} Array of {x, y, radius} for placed rocks
+ */
+function createRocks(k) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const rocks = []
+  let spriteIdx = 0
+  for (let i = 0; i < ROCK_COUNT; i++) {
+    const radius = ROCK_RADIUS_MIN + Math.random() * (ROCK_RADIUS_MAX - ROCK_RADIUS_MIN)
+    //
+    // Find a base X for the main rock, avoiding hero spawn corridor
+    //
+    let posX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+    let safety = 0
+    while (Math.abs(posX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH && safety < 30) {
+      posX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+      safety++
+    }
+    const mainRock = buildSingleRock(k, posX, radius, `rock-l0-${spriteIdx++}`)
+    rocks.push(mainRock)
+    //
+    // Cluster: spawn 1-2 smaller satellite rocks beside the main one
+    //
+    if (Math.random() < ROCK_CLUSTER_CHANCE) {
+      const satCount = ROCK_CLUSTER_SATELLITES_MIN + Math.floor(Math.random() * (ROCK_CLUSTER_SATELLITES_MAX - ROCK_CLUSTER_SATELLITES_MIN + 1))
+      for (let s = 0; s < satCount; s++) {
+        const ratio = ROCK_SATELLITE_RADIUS_RATIO_MIN + Math.random() * (ROCK_SATELLITE_RADIUS_RATIO_MAX - ROCK_SATELLITE_RADIUS_RATIO_MIN)
+        const satRadius = radius * ratio
+        //
+        // Place satellite tucked next to the main rock with slight overlap
+        //
+        const sign = Math.random() < 0.5 ? -1 : 1
+        const horizontalGap = radius * 0.55 + satRadius * 0.4 + Math.random() * 8
+        const satX = posX + sign * horizontalGap
+        if (Math.abs(satX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH) continue
+        rocks.push(buildSingleRock(k, satX, satRadius, `rock-l0-${spriteIdx++}`))
+      }
+    }
+  }
+  rocks.forEach(r => k.loadSprite(r.spriteName, r.dataUrl))
+  k.add([
+    k.z(7),
+    {
+      draw() {
+        for (const rock of rocks) {
+          k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
+        }
+      }
+    }
+  ])
+  return rocks
+}
+/**
+ * Builds a single rock sprite + world descriptor. Extracted from createRocks
+ * so it can be reused for satellite cluster rocks.
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {number} posX - World X for the rock base center
+ * @param {number} radius - Base radius driving the rock outline
+ * @param {string} spriteName - Unique sprite name for Kaplay asset cache
+ * @returns {Object} Rock descriptor used by drawing + clustering systems
+ */
+function buildSingleRock(k, posX, radius, spriteName) {
+  //
+  // Build irregular rock outline (8-12 vertices around base radius)
+  //
+  const vertCount = 8 + Math.floor(Math.random() * 5)
+  const verts = []
+  for (let v = 0; v < vertCount; v++) {
+    const a = (v / vertCount) * Math.PI * 2
+    const r = radius * (0.78 + Math.random() * 0.4)
+    verts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r * 0.6 })
+  }
+  const tint = -10 + Math.floor(Math.random() * 30)
+  const fillR = Math.max(0, Math.min(255, ROCK_BASE_R + tint))
+  const fillG = Math.max(0, Math.min(255, ROCK_BASE_G + tint))
+  const fillB = Math.max(0, Math.min(255, ROCK_BASE_B + tint + 5))
+  const totalW = Math.ceil(radius * 2.4)
+  const totalH = Math.ceil(radius * 1.7)
+  const cx = totalW / 2
+  const cy = totalH * 0.55
+  const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+    ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
+    ctx.beginPath()
+    ctx.moveTo(cx + verts[0].x, cy + verts[0].y)
+    for (let v = 1; v < verts.length; v++) {
+      ctx.lineTo(cx + verts[v].x, cy + verts[v].y)
+    }
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Darker bottom shadow
+    //
+    ctx.fillStyle = `rgba(0, 0, 0, 0.28)`
+    ctx.beginPath()
+    ctx.ellipse(cx, cy + radius * 0.25, radius * 0.85, radius * 0.25, 0, 0, Math.PI)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Top-left highlight
+    //
+    ctx.fillStyle = `rgba(255, 255, 255, 0.13)`
+    ctx.beginPath()
+    ctx.ellipse(cx - radius * 0.25, cy - radius * 0.2, radius * 0.55, radius * 0.18, -0.4, Math.PI, 0)
+    ctx.closePath()
+    ctx.fill()
+    //
+    // Black outline for definition
+    //
+    ctx.strokeStyle = `rgba(0, 0, 0, 0.7)`
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(cx + verts[0].x, cy + verts[0].y)
+    for (let v = 1; v < verts.length; v++) {
+      ctx.lineTo(cx + verts[v].x, cy + verts[v].y)
+    }
+    ctx.closePath()
+    ctx.stroke()
+  })
+  //
+  // Place rock so its base sits roughly on FLOOR_Y
+  //
+  const posY = FLOOR_Y - totalH * 0.45 + Math.random() * 6
+  return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
+}
+/**
+ * Generates moss patches on the bottom platform. Some patches are placed near
+ * rocks (clinging to the rock base) and others are scattered standalone for
+ * realism. Each patch is several small green dots clustered together.
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {Array} rocks - Rocks returned from createRocks (used as anchors)
+ */
+function createMoss(k, rocks) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const patches = []
+  for (let i = 0; i < MOSS_PATCH_COUNT; i++) {
+    const patchRadius = MOSS_PATCH_RADIUS_MIN + Math.random() * (MOSS_PATCH_RADIUS_MAX - MOSS_PATCH_RADIUS_MIN)
+    //
+    // 60% of patches are anchored next to a rock, 40% are standalone
+    //
+    let cx, cy
+    if (rocks.length > 0 && Math.random() < 0.6) {
+      const rock = rocks[Math.floor(Math.random() * rocks.length)]
+      const offsetAngle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.9
+      const dist = rock.radius * (0.7 + Math.random() * 0.4)
+      cx = rock.worldX + Math.cos(offsetAngle) * dist
+      cy = rock.worldY + Math.abs(Math.sin(offsetAngle)) * dist * 0.4
+    } else {
+      let candidateX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+      let safety = 0
+      while (Math.abs(candidateX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH && safety < 20) {
+        candidateX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+        safety++
+      }
+      cx = candidateX
+      cy = FLOOR_Y + Math.random() * 12
+    }
+    //
+    // Build a cluster of small moss dots
+    //
+    const dotCount = MOSS_DOT_COUNT_MIN + Math.floor(Math.random() * (MOSS_DOT_COUNT_MAX - MOSS_DOT_COUNT_MIN))
+    const dots = []
+    for (let d = 0; d < dotCount; d++) {
+      const angle = Math.random() * Math.PI * 2
+      const dist = Math.random() * patchRadius
+      const dr = Math.max(0, Math.min(255, MOSS_BASE_R + Math.floor((Math.random() - 0.5) * 30)))
+      const dg = Math.max(0, Math.min(255, MOSS_BASE_G + Math.floor((Math.random() - 0.5) * 35)))
+      const db = Math.max(0, Math.min(255, MOSS_BASE_B + Math.floor((Math.random() - 0.5) * 25)))
+      dots.push({
+        offsetX: Math.cos(angle) * dist,
+        offsetY: Math.sin(angle) * dist * 0.5,
+        radius: 1.6 + Math.random() * 2.2,
+        color: k.rgb(dr, dg, db),
+        opacity: 0.6 + Math.random() * 0.35
+      })
+    }
+    patches.push({ x: cx, y: cy, dots })
+  }
+  k.add([
+    k.z(7.5),
+    {
+      draw() {
+        for (const p of patches) {
+          for (const dot of p.dots) {
+            k.drawCircle({
+              pos: k.vec2(p.x + dot.offsetX, p.y + dot.offsetY),
+              radius: dot.radius,
+              color: dot.color,
+              opacity: dot.opacity
+            })
+          }
+        }
+      }
+    }
+  ])
+}
+//
+// Absolute bottom Y for any root in the scene. Computed once from screen height
+// and BOTTOM_MARGIN so roots never extend past the visible platform edge.
+//
+const TREE_ROOT_ABSOLUTE_MAX_Y = CFG.visual.screen.height - 6
+/**
+ * Builds simple short root segments for back/middle layer (stylized) trees.
+ * Each tree gets 3-4 short roots fanning down. Hard-clamped so root tips
+ * stay above the absolute screen-bottom limit.
+ *
+ * @param {number} trunkBottomY - World Y where the trunk meets the ground
+ * @param {number} trunkWidth - Trunk width (used to size root thickness)
+ * @returns {Array} Root segment descriptors {startX, startY, endX, endY, width}
+ */
+function buildBackLayerRoots(trunkBottomY, trunkWidth) {
+  const segs = []
+  const rootCount = 3 + Math.floor(Math.random() * 2)
+  for (let i = 0; i < rootCount; i++) {
+    const baseAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.9
+    let cx = 0
+    let cy = trunkBottomY
+    let angle = baseAngle
+    const segCount = 3 + Math.floor(Math.random() * 3)
+    const baseWidth = Math.max(1.2, trunkWidth * 0.5)
+    for (let s = 0; s < segCount; s++) {
+      const prevX = cx
+      const prevY = cy
+      angle += (Math.random() - 0.5) * 0.4
+      const step = 3 + Math.random() * 3
+      cx += Math.cos(angle) * step
+      cy += Math.sin(angle) * step
+      //
+      // Hard absolute clamp: never pass screen bottom
+      //
+      if (cy > TREE_ROOT_ABSOLUTE_MAX_Y) {
+        cy = TREE_ROOT_ABSOLUTE_MAX_Y
+        segs.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: Math.max(0.8, baseWidth - s * 0.3) })
+        break
+      }
+      segs.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: Math.max(0.8, baseWidth - s * 0.3) })
+    }
+  }
+  return segs
+}
+//
+// Organic root growth (downward): clamps against an ABSOLUTE maxY (not relative
+// per-recursion), so deep recursive forks cannot escape past the screen bottom.
+//
+function growTreeRoots(x, y, angle, segments, thickness, depth, maxY) {
+  const out = []
+  if (segments <= 0 || thickness <= 0.35 || depth > 6) return out
+  const step = 4 + Math.random() * 3
+  let cx = x
+  let cy = y
+  for (let i = 0; i < segments; i++) {
+    const prevX = cx
+    const prevY = cy
+    //
+    // Bias the angle slightly toward horizontal so roots spread sideways
+    // rather than plunging straight down (wider, not deeper)
+    //
+    const horizontalBias = (cy > y + 4 ? Math.sign(Math.cos(angle)) * 0.18 : 0)
+    angle += (Math.random() - 0.5) * 0.36 + horizontalBias
+    cx += Math.cos(angle) * step
+    cy += Math.sin(angle) * step
+    //
+    // Hard absolute clamp: never pass screen bottom regardless of recursion depth
+    //
+    if (cy > maxY) {
+      cy = maxY
+      out.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: thickness, depth })
+      return out
+    }
+    out.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: thickness, depth })
+    //
+    // Side branch chance: more frequent branching for richer root system
+    //
+    if (Math.random() < 0.55 && depth < 5) {
+      out.push(...growTreeRoots(cx, cy, angle + (Math.random() - 0.5) * 1.2, Math.floor(segments * 0.7), thickness * 0.7, depth + 1, maxY))
+    }
+  }
+  return out
+}
+//
+// Organic branch growth (upward): more branching and every endpoint
+// (including mid-level ones) becomes a leaf attachment point.
+//
+function growTreeBranches(x, y, angle, length, thickness, depth = 0, endpoints = []) {
+  const out = []
+  if (length <= 3 || thickness <= 0.45 || depth > 7) {
+    //
+    // Terminal endpoint: always becomes a leaf cluster anchor
+    //
+    endpoints.push({ x, y, depth })
+    return out
+  }
+  const step = 4 + Math.random() * 4
+  let cx = x
+  let cy = y
+  for (let i = 0; i < length; i++) {
+    const prevX = cx
+    const prevY = cy
+    angle += (Math.random() - 0.5) * 0.24
+    cx += Math.cos(angle) * step
+    cy += Math.sin(angle) * step
+    out.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: thickness, depth })
+    //
+    // Mid-branch leaf clusters: at depth >= 2 every couple of segments
+    // gets a small leaf anchor so leaves grow along branches, not only at tips
+    //
+    if (depth >= 2 && i > 0 && i % 2 === 0 && Math.random() < 0.45) {
+      endpoints.push({ x: cx, y: cy, depth, mid: true })
+    }
+  }
+  //
+  // First side branch (was 50% chance, now 80% for denser canopy)
+  //
+  if (Math.random() < 0.8) {
+    out.push(...growTreeBranches(cx, cy, angle + (Math.random() - 0.5) * 1.6, Math.floor(length * 0.65), thickness * 0.65, depth + 1, endpoints))
+  }
+  //
+  // Second side branch: extra fork for fuller crown
+  //
+  if (Math.random() < 0.55 && depth < 5) {
+    out.push(...growTreeBranches(cx, cy, angle + (Math.random() - 0.5) * 1.2, Math.floor(length * 0.55), thickness * 0.55, depth + 1, endpoints))
+  }
+  //
+  // Continuation upward
+  //
+  out.push(...growTreeBranches(cx, cy, angle + (Math.random() - 0.5) * 0.5, Math.floor(length * 0.78), thickness * 0.78, depth + 1, endpoints))
+  return out
+}
+//
+// Generate a leaf cluster around an endpoint with mixed autumn/green colors.
+// Mid-branch clusters are slightly smaller than terminal clusters.
+// Leaves are realistic teardrop shapes (level 1 style) with rotation + central vein.
+//
+function makeLeafCluster(endpoint, palette) {
+  const leaves = []
+  //
+  // Mid-branch clusters smaller (8-14), terminal clusters larger (14-22)
+  //
+  const isMid = !!endpoint.mid
+  const count = isMid ? 8 + Math.floor(Math.random() * 7) : 14 + Math.floor(Math.random() * 9)
+  const spread = isMid ? 14 : 22
+  for (let j = 0; j < count; j++) {
+    const a = Math.random() * Math.PI * 2
+    const dist = Math.random() * spread
+    const colorBase = palette[Math.floor(Math.random() * palette.length)]
+    const r = Math.max(0, Math.min(255, colorBase[0] + Math.floor((Math.random() - 0.5) * 30)))
+    const g = Math.max(0, Math.min(255, colorBase[1] + Math.floor((Math.random() - 0.5) * 30)))
+    const b = Math.max(0, Math.min(255, colorBase[2] + Math.floor((Math.random() - 0.5) * 20)))
+    leaves.push({
+      x: endpoint.x + Math.cos(a) * dist,
+      y: endpoint.y + Math.sin(a) * dist * 0.7,
+      //
+      // Bigger leaves so the teardrop shape reads clearly (was 3..7, now 5..11)
+      //
+      size: 5 + Math.random() * 6,
+      //
+      // Rotation in [-π, π] so leaves can point in any direction
+      //
+      rotation: (Math.random() - 0.5) * Math.PI * 2,
+      r, g, b,
+      opacity: 0.85 + Math.random() * 0.15
+    })
+  }
+  return leaves
+}
+//
+// Draw a single realistic leaf (teardrop shape with vein) to a canvas context.
+// Adapted from level 1 musical trees.
+//
+function drawRealisticLeafToCanvas(ctx, x, y, size, angle, r, g, b, opacity) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(angle)
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.quadraticCurveTo(-size * 0.6, -size * 0.3, 0, -size)
+  ctx.quadraticCurveTo(size * 0.6, -size * 0.3, 0, 0)
+  ctx.closePath()
+  ctx.fill()
+  //
+  // Center vein
+  //
+  ctx.strokeStyle = `rgba(40, 60, 40, ${0.35 * opacity})`
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(0, -size)
+  ctx.stroke()
+  ctx.restore()
+}
+//
+// Mixed autumn palette per tree (greens + golds + oranges + reds)
+//
+function buildAutumnPalette() {
+  return [
+    [40, 75, 35],
+    [60, 95, 40],
+    [150, 110, 30],
+    [200, 160, 50],
+    [180, 100, 40],
+    [220, 130, 60],
+    [160, 50, 35],
+    [200, 70, 50]
+  ]
+}
+/**
+ * Returns a randomly chosen pair of trunk + root colors. Both stay within a
+ * realistic forest palette: trunks vary from dark chocolate to weathered gray-
+ * brown, roots are always a darker / earthier shade of the same family so they
+ * read as parts of the same tree (similar to the L1 musical trees).
+ *
+ * @returns {Object} { trunk: {r,g,b}, root: {r,g,b} }
+ */
+function buildTreePalette() {
+  //
+  // 5 base palettes: dark brown, medium brown, gray-brown, reddish, mossy
+  //
+  const palettes = [
+    { trunk: [55, 40, 28], root: [40, 28, 18] },
+    { trunk: [80, 55, 35], root: [55, 38, 22] },
+    { trunk: [95, 85, 70], root: [60, 50, 35] },
+    { trunk: [105, 60, 40], root: [70, 38, 22] },
+    { trunk: [70, 65, 50], root: [50, 42, 28] }
+  ]
+  const base = palettes[Math.floor(Math.random() * palettes.length)]
+  //
+  // Tiny per-tree color jitter so even same-palette trees aren't identical
+  //
+  const jitter = (v) => Math.max(0, Math.min(255, v + Math.floor((Math.random() - 0.5) * 14)))
+  return {
+    trunk: { r: jitter(base.trunk[0]), g: jitter(base.trunk[1]), b: jitter(base.trunk[2]) },
+    root: { r: jitter(base.root[0]), g: jitter(base.root[1]), b: jitter(base.root[2]) }
+  }
+}
+//
+// Build organic foliage data for a front tree.
+// Returns:
+//   - trunkSegments: vertical wiggly trunk (no sway, includes roots area)
+//   - rootSegments:  underground roots
+//   - branchClusters: array of { branchSegments, leaves, pivotX, pivotY,
+//                                swayPhase, swayAmount }
+//     Each cluster sways independently around its pivot (the point where it
+//     joins the trunk) so individual groups of branches move differently
+//     instead of the whole tree sliding sideways.
+//
+function buildOrganicTreeData(treeX, trunkBottomY, trunkTopY) {
+  //
+  // Trunk: wiggly segments going up. These never sway.
+  //
+  const trunkSegments = []
+  const trunkSteps = 14
+  const trunkStep = (trunkBottomY - trunkTopY) / trunkSteps
+  let cx = 0
+  let cy = trunkBottomY
+  for (let i = 0; i < trunkSteps; i++) {
+    const prevX = cx
+    const prevY = cy
+    cx += (Math.random() - 0.5) * 1.5
+    cy -= trunkStep
+    trunkSegments.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: 5 + Math.random() * 1.5, depth: 0 })
+  }
+  //
+  // Branches: build 3 separate clusters (center, left side, right side) so
+  // each cluster can sway independently instead of as one rigid sprite.
+  //
+  const trunkTopX = cx
+  const trunkTopY2 = cy
+  const palette = buildAutumnPalette()
+  const branchClusters = [
+    buildBranchCluster(trunkTopX, trunkTopY2, -Math.PI / 2, 10, 4, palette),
+    buildBranchCluster(trunkTopX, trunkTopY2, -Math.PI / 2 - 0.45, 8, 3.4, palette),
+    buildBranchCluster(trunkTopX, trunkTopY2, -Math.PI / 2 + 0.45, 8, 3.4, palette)
+  ]
+  //
+  // Roots: many main roots fanning out wider but shorter so they stay on the
+  // visible bottom platform. Angles spread ±0.7 rad from straight-down for a
+  // wide, shallow root system instead of going straight down off screen.
+  //
+  const rootSegments = []
+  const rootCount = 6 + Math.floor(Math.random() * 3)
+  //
+  // Cap depth to ~half the playable platform so roots stay above bottom edge
+  //
+  const rootMaxY = Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottomY + Math.max(18, BOTTOM_MARGIN * 0.55))
+  for (let r = 0; r < rootCount; r++) {
+    //
+    // Wider angle spread (±0.7) means more horizontal-biased roots
+    //
+    const rootAngle = Math.PI / 2 + (Math.random() - 0.5) * 1.4
+    const rootSegmentsCount = 5 + Math.floor(Math.random() * 4)
+    const rootThickness = 3 + Math.random() * 1.5
+    rootSegments.push(...growTreeRoots(0, trunkBottomY, rootAngle, rootSegmentsCount, rootThickness, 0, rootMaxY))
+  }
+  return { trunkSegments, rootSegments, branchClusters }
+}
+/**
+ * Builds a single branch cluster + its leaves with all coordinates relative
+ * to the cluster's pivot (the point on the trunk where it attaches).
+ * The pivot lets the dynamic drawer translate the whole cluster sprite by
+ * a sway offset so each cluster moves independently.
+ *
+ * @param {number} pivotX - World X for the cluster pivot (trunk top X)
+ * @param {number} pivotY - World Y for the cluster pivot (trunk top Y)
+ * @param {number} angle - Initial branch angle (radians)
+ * @param {number} length - Initial branch length parameter
+ * @param {number} thickness - Initial branch thickness
+ * @param {Array} palette - Autumn color palette for leaves
+ * @returns {Object} { branchSegments, leaves, pivotX, pivotY, swayPhase, swayAmount }
+ */
+function buildBranchCluster(pivotX, pivotY, angle, length, thickness, palette) {
+  const endpoints = []
+  //
+  // growTreeBranches starts at (0, 0) so all segment coords are relative to pivot
+  //
+  const branchSegments = growTreeBranches(0, 0, angle, length, thickness, 0, endpoints)
+  const leaves = []
+  endpoints.forEach(ep => leaves.push(...makeLeafCluster(ep, palette)))
+  return {
+    branchSegments,
+    leaves,
+    pivotX,
+    pivotY,
+    //
+    // Per-cluster sway parameters: each cluster has its own phase + amplitude
+    // so they bob independently. Amplitudes are kept small for realism.
+    //
+    swayPhase: Math.random() * Math.PI * 2,
+    swaySpeed: 0.7 + Math.random() * 0.6,
+    //
+    // Sway amount is now in degrees (rotation around pivot), not pixels.
+    // Keep it small (2-5 degrees) for a subtle, realistic breeze.
+    //
+    swayAmount: 2 + Math.random() * 3
+  }
+}
+//
+// Draw organic tree (trunk + roots + per-cluster branches/leaves) to a canvas
+// context. Used by static front-tree baking. Sway is applied uniformly to all
+// clusters here since baked trees never move.
+//
+function drawOrganicTreeToCanvas(ctx, tree, sway) {
+  if (!tree.branchClusters) return
+  const trunkColor = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+  const rc = tree.rootColor || { r: 60, g: 40, b: 25 }
+  const rootColor = `rgba(${rc.r}, ${rc.g}, ${rc.b}, 0.9)`
+  ctx.lineCap = 'round'
+  //
+  // Roots first (behind), then trunk, then branch clusters (with leaves)
+  //
+  for (const seg of tree.rootSegments) {
+    ctx.strokeStyle = rootColor
+    ctx.lineWidth = seg.width
+    ctx.beginPath()
+    ctx.moveTo(tree.x + seg.startX, seg.startY)
+    ctx.lineTo(tree.x + seg.endX, seg.endY)
+    ctx.stroke()
+  }
+  for (const seg of tree.trunkSegments) {
+    ctx.strokeStyle = trunkColor
+    ctx.lineWidth = seg.width
+    ctx.beginPath()
+    ctx.moveTo(tree.x + seg.startX, seg.startY)
+    ctx.lineTo(tree.x + seg.endX, seg.endY)
+    ctx.stroke()
+  }
+  for (const cluster of tree.branchClusters) {
+    drawClusterToCanvas(ctx, tree, cluster, sway, trunkColor)
+  }
+}
+/**
+ * Draws one branch cluster (segments + leaves) into a canvas context with an
+ * optional horizontal sway offset. All cluster coords are relative to its
+ * pivot, so we add (cluster.pivotX, cluster.pivotY) on top of tree.x and the
+ * world Y baseline.
+ */
+function drawClusterToCanvas(ctx, tree, cluster, sway, trunkColor) {
+  for (const seg of cluster.branchSegments) {
+    ctx.strokeStyle = trunkColor
+    ctx.lineWidth = seg.width
+    ctx.beginPath()
+    ctx.moveTo(tree.x + cluster.pivotX + seg.startX + sway * 0.4, cluster.pivotY + seg.startY)
+    ctx.lineTo(tree.x + cluster.pivotX + seg.endX + sway, cluster.pivotY + seg.endY)
+    ctx.stroke()
+  }
+  for (const leaf of cluster.leaves) {
+    drawRealisticLeafToCanvas(
+      ctx,
+      tree.x + cluster.pivotX + leaf.x + sway,
+      cluster.pivotY + leaf.y,
+      leaf.size,
+      leaf.rotation,
+      leaf.r, leaf.g, leaf.b,
+      leaf.opacity
+    )
+  }
+}
+/**
+ * Pre-renders an organic tree as multiple PNG sprites:
+ *   - one trunk+roots sprite (static, never sways)
+ *   - one sprite per branch cluster (each sways independently around its pivot)
+ *
+ * Mutates the tree to store sprite metadata used by the dynamic drawer.
+ */
+function prerenderOrganicTreeSprites(k, tree, baseSpriteName) {
+  if (!tree.branchClusters) return
+  //
+  // 1. Trunk + roots sprite
+  //
+  prerenderTrunkSprite(k, tree, `${baseSpriteName}-trunk`)
+  //
+  // 2. One sprite per branch cluster
+  //
+  tree.branchClusters.forEach((cluster, i) => {
+    prerenderClusterSprite(k, tree, cluster, `${baseSpriteName}-cluster-${i}`)
+  })
+}
+/**
+ * Pre-renders just the trunk + roots into a PNG sprite. Stores sprite name
+ * and world-position metadata on the tree object.
+ */
+function prerenderTrunkSprite(k, tree, spriteName) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  const accum = (seg) => {
+    if (seg.startX < minX) minX = seg.startX
+    if (seg.endX < minX) minX = seg.endX
+    if (seg.startX > maxX) maxX = seg.startX
+    if (seg.endX > maxX) maxX = seg.endX
+    if (seg.startY < minY) minY = seg.startY
+    if (seg.endY < minY) minY = seg.endY
+    if (seg.startY > maxY) maxY = seg.startY
+    if (seg.endY > maxY) maxY = seg.endY
+  }
+  for (const seg of tree.trunkSegments) accum(seg)
+  for (const seg of tree.rootSegments) accum(seg)
+  if (!isFinite(minX)) return
+  const pad = 8
+  const w = Math.ceil(maxX - minX + pad * 2)
+  const h = Math.ceil(maxY - minY + pad * 2)
+  const trunkColor = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+  const rc = tree.rootColor || { r: 60, g: 40, b: 25 }
+  const rootColor = `rgba(${rc.r}, ${rc.g}, ${rc.b}, 0.9)`
+  const dataUrl = toPng({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
+    ctx.translate(-minX + pad, -minY + pad)
+    ctx.lineCap = 'round'
+    for (const seg of tree.rootSegments) {
+      ctx.strokeStyle = rootColor
+      ctx.lineWidth = seg.width
+      ctx.beginPath()
+      ctx.moveTo(seg.startX, seg.startY)
+      ctx.lineTo(seg.endX, seg.endY)
+      ctx.stroke()
+    }
+    for (const seg of tree.trunkSegments) {
+      ctx.strokeStyle = trunkColor
+      ctx.lineWidth = seg.width
+      ctx.beginPath()
+      ctx.moveTo(seg.startX, seg.startY)
+      ctx.lineTo(seg.endX, seg.endY)
+      ctx.stroke()
+    }
+  })
+  k.loadSprite(spriteName, dataUrl)
+  tree.trunkSpriteName = spriteName
+  //
+  // World-space top-left position for drawSprite
+  //
+  tree.trunkSpriteX = tree.x + minX - pad
+  tree.trunkSpriteY = minY - pad
+}
+/**
+ * Pre-renders a single branch cluster (segments + leaves) into a PNG sprite.
+ * The sprite is drawn rotated around its pivot point so the cluster appears
+ * hinged at the trunk attachment and the branch + leaves swing together.
+ */
+function prerenderClusterSprite(k, tree, cluster, spriteName) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const seg of cluster.branchSegments) {
+    if (seg.startX < minX) minX = seg.startX
+    if (seg.endX < minX) minX = seg.endX
+    if (seg.startX > maxX) maxX = seg.startX
+    if (seg.endX > maxX) maxX = seg.endX
+    if (seg.startY < minY) minY = seg.startY
+    if (seg.endY < minY) minY = seg.endY
+    if (seg.startY > maxY) maxY = seg.startY
+    if (seg.endY > maxY) maxY = seg.endY
+  }
+  for (const leaf of cluster.leaves) {
+    if (leaf.x - leaf.size < minX) minX = leaf.x - leaf.size
+    if (leaf.x + leaf.size > maxX) maxX = leaf.x + leaf.size
+    if (leaf.y - leaf.size < minY) minY = leaf.y - leaf.size
+    if (leaf.y + leaf.size > maxY) maxY = leaf.y + leaf.size
+  }
+  //
+  // Make sure the pivot point itself (cluster-local 0,0) is inside the bounds
+  // so when we anchor at the pivot the sprite renders correctly around it.
+  //
+  if (0 < minX) minX = 0
+  if (0 > maxX) maxX = 0
+  if (0 < minY) minY = 0
+  if (0 > maxY) maxY = 0
+  if (!isFinite(minX)) return
+  const pad = 12
+  const w = Math.ceil(maxX - minX + pad * 2)
+  const h = Math.ceil(maxY - minY + pad * 2)
+  const trunkColor = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+  const dataUrl = toPng({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
+    ctx.translate(-minX + pad, -minY + pad)
+    ctx.lineCap = 'round'
+    for (const seg of cluster.branchSegments) {
+      ctx.strokeStyle = trunkColor
+      ctx.lineWidth = seg.width
+      ctx.beginPath()
+      ctx.moveTo(seg.startX, seg.startY)
+      ctx.lineTo(seg.endX, seg.endY)
+      ctx.stroke()
+    }
+    for (const leaf of cluster.leaves) {
+      drawRealisticLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.rotation, leaf.r, leaf.g, leaf.b, leaf.opacity)
+    }
+  })
+  k.loadSprite(spriteName, dataUrl)
+  cluster.spriteName = spriteName
+  //
+  // Pivot location inside the sprite (canvas pixel coords). The pivot is the
+  // attachment point at cluster-local (0, 0); after the canvas translate
+  // above, that point sits at (-minX + pad, -minY + pad).
+  //
+  const pivotPxX = -minX + pad
+  const pivotPxY = -minY + pad
+  //
+  // Kaplay anchor is normalized in [-1, 1], where (-1,-1) = top-left and
+  // (1,1) = bottom-right. Convert pixel pivot to normalized coords so the
+  // pivot is exactly at the sprite's anchor (and thus at draw position).
+  //
+  cluster.anchorX = (pivotPxX / w) * 2 - 1
+  cluster.anchorY = (pivotPxY / h) * 2 - 1
+  //
+  // World-space pivot position (drawSprite will be called with this pos)
+  //
+  cluster.worldPivotX = tree.x + cluster.pivotX
+  cluster.worldPivotY = cluster.pivotY
+}
+//
+// Hanging spider configuration
+//
+const SPIDER_THREAD_X_RATIO = 0.78
+const SPIDER_THREAD_TOP_Y = TOP_MARGIN + 80
+const SPIDER_THREAD_LENGTH = 220
+const SPIDER_BODY_RADIUS = 9
+const SPIDER_HEAD_RADIUS = 6
+const SPIDER_LEG_LENGTH = 12
+const SPIDER_LEG_COUNT = 4
+const SPIDER_EYE_RADIUS = 1.4
+const SPIDER_EYE_OFFSET_X = 2.8
+const SPIDER_EYE_OFFSET_Y = -1.2
+const SPIDER_PUPIL_RADIUS = 0.7
+const SPIDER_PUPIL_MAX_OFFSET = 0.7
+const SPIDER_SWAY_SPEED = 0.9
+const SPIDER_SWAY_AMOUNT = 7
+const SPIDER_COLOR_R = 25
+const SPIDER_COLOR_G = 25
+const SPIDER_COLOR_B = 30
+const SPIDER_THREAD_COLOR_R = 200
+const SPIDER_THREAD_COLOR_G = 200
+const SPIDER_THREAD_COLOR_B = 210
+const SPIDER_THREAD_OPACITY = 0.4
+//
+// Creates a spider hanging from a thread on a tree branch. Eyes track the hero.
+// Picks a tree from the front layer and uses one of its upper branch endpoints
+// as the silk thread anchor instead of an empty spot in the sky.
+//
+function createHangingSpider(k, heroInst, frontTrees) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  let anchorX = LEFT_MARGIN + playableW * SPIDER_THREAD_X_RATIO
+  let anchorY = SPIDER_THREAD_TOP_Y
+  let threadLength = SPIDER_THREAD_LENGTH
+  //
+  // Try to anchor on an upper branch endpoint of a front-layer tree. We pick a
+  // tree near the right side of the playable area, then choose its highest tip.
+  //
+  if (frontTrees && frontTrees.length > 0) {
+    const candidates = frontTrees.filter(t => t.branchClusters)
+    if (candidates.length > 0) {
+      const targetX = LEFT_MARGIN + playableW * SPIDER_THREAD_X_RATIO
+      let best = candidates[0]
+      let bestDist = Infinity
+      for (const tree of candidates) {
+        const d = Math.abs(tree.x - targetX)
+        if (d < bestDist) {
+          bestDist = d
+          best = tree
+        }
+      }
+      //
+      // Pick the highest (smallest Y) endpoint across all clusters of that tree.
+      // Cluster segment coords are relative to (cluster.pivotX, cluster.pivotY).
+      //
+      let topWorldX = 0
+      let topWorldY = best.trunkTop
+      for (const cluster of best.branchClusters) {
+        for (const seg of cluster.branchSegments) {
+          const wY = cluster.pivotY + seg.endY
+          if (wY < topWorldY) {
+            topWorldY = wY
+            topWorldX = best.x + cluster.pivotX + seg.endX
+          }
+        }
+      }
+      //
+      // Anchor a few px below the very tip so the thread looks tied to a branch
+      //
+      anchorX = topWorldX
+      anchorY = topWorldY + 4
+      //
+      // Shorter thread so the spider hangs in foliage shadow rather than mid-sky
+      //
+      threadLength = 90 + Math.random() * 70
+    }
+  }
+  const inst = {
+    threadAnchorX: anchorX,
+    threadAnchorY: anchorY,
+    threadLength,
+    swayPhase: Math.random() * Math.PI * 2,
+    heroInst
+  }
+  k.add([
+    k.z(28),
+    {
+      draw() {
+        drawHangingSpider(k, inst)
+      }
+    }
+  ])
+}
+//
+// Draws spider body, legs, eyes (looking at hero), and the silk thread.
+//
+function drawHangingSpider(k, inst) {
+  const t = k.time()
+  //
+  // Sway: small horizontal swing on the thread
+  //
+  const sway = Math.sin(t * SPIDER_SWAY_SPEED + inst.swayPhase) * SPIDER_SWAY_AMOUNT
+  const bodyX = inst.threadAnchorX + sway
+  const bodyY = inst.threadAnchorY + inst.threadLength
+  //
+  // Silk thread from anchor down to spider (with slight bend at spider)
+  //
+  k.drawLine({
+    p1: k.vec2(inst.threadAnchorX, inst.threadAnchorY),
+    p2: k.vec2(bodyX, bodyY - SPIDER_BODY_RADIUS),
+    width: 1,
+    color: k.rgb(SPIDER_THREAD_COLOR_R, SPIDER_THREAD_COLOR_G, SPIDER_THREAD_COLOR_B),
+    opacity: SPIDER_THREAD_OPACITY
+  })
+  //
+  // Legs: 4 per side, arching outward and down
+  //
+  const spiderColor = k.rgb(SPIDER_COLOR_R, SPIDER_COLOR_G, SPIDER_COLOR_B)
+  for (let s = -1; s <= 1; s += 2) {
+    for (let i = 0; i < SPIDER_LEG_COUNT; i++) {
+      const tParam = i / (SPIDER_LEG_COUNT - 1)
+      //
+      // Leg angle: spread between -50 and +30 degrees from horizontal
+      //
+      const angleDeg = -50 + tParam * 80
+      const angleRad = angleDeg * Math.PI / 180
+      const legSpread = SPIDER_LEG_LENGTH
+      const midX = bodyX + s * Math.cos(angleRad) * legSpread * 0.6
+      const midY = bodyY + Math.sin(angleRad) * legSpread * 0.6 - 2
+      const tipX = bodyX + s * Math.cos(angleRad) * legSpread * 1.4
+      const tipY = bodyY + Math.sin(angleRad) * legSpread * 1.4 + 4
+      //
+      // Two-segment leg (body -> mid joint -> tip)
+      //
+      k.drawLine({ p1: k.vec2(bodyX, bodyY), p2: k.vec2(midX, midY), width: 1.4, color: spiderColor })
+      k.drawLine({ p1: k.vec2(midX, midY), p2: k.vec2(tipX, tipY), width: 1.4, color: spiderColor })
+    }
+  }
+  //
+  // Body (abdomen): larger ellipse
+  //
+  k.drawEllipse({
+    pos: k.vec2(bodyX, bodyY),
+    radiusX: SPIDER_BODY_RADIUS,
+    radiusY: SPIDER_BODY_RADIUS * 1.1,
+    color: spiderColor
+  })
+  //
+  // Head: smaller circle in front (below body since spider hangs upside-down)
+  //
+  const headY = bodyY + SPIDER_BODY_RADIUS * 0.8
+  k.drawCircle({
+    pos: k.vec2(bodyX, headY),
+    radius: SPIDER_HEAD_RADIUS,
+    color: spiderColor
+  })
+  //
+  // Eyes: white background + pupils that track the hero
+  //
+  let pupilDx = 0
+  let pupilDy = 0
+  if (inst.heroInst?.character?.pos) {
+    const dx = inst.heroInst.character.pos.x - bodyX
+    const dy = inst.heroInst.character.pos.y - headY
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1
+    pupilDx = (dx / dist) * SPIDER_PUPIL_MAX_OFFSET
+    pupilDy = (dy / dist) * SPIDER_PUPIL_MAX_OFFSET
+  }
+  for (const s of [-1, 1]) {
+    const eyeX = bodyX + s * SPIDER_EYE_OFFSET_X
+    const eyeY = headY + SPIDER_EYE_OFFSET_Y
+    k.drawCircle({
+      pos: k.vec2(eyeX, eyeY),
+      radius: SPIDER_EYE_RADIUS,
+      color: k.rgb(240, 240, 240)
+    })
+    k.drawCircle({
+      pos: k.vec2(eyeX + pupilDx, eyeY + pupilDy),
+      radius: SPIDER_PUPIL_RADIUS,
+      color: k.rgb(20, 20, 20)
+    })
+  }
 }

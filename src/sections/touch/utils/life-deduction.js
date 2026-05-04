@@ -131,7 +131,20 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     }
   ])
   //
-  // Intro text
+  // Intro text outlines (black, drawn slightly behind)
+  //
+  const oo = OUTLINE_OFFSET
+  const introOutlineOffsets = [[-oo, -oo], [0, -oo], [oo, -oo], [-oo, 0], [oo, 0], [-oo, oo], [0, oo], [oo, oo]]
+  const introOutlines = introOutlineOffsets.map(([dx, dy]) => k.add([
+    k.text(INTRO_TEXT, { size: FONT_SIZE, align: 'center' }),
+    k.pos(centerX + dx, centerY + INTRO_Y_OFFSET + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 52)
+  ]))
+  //
+  // Intro text (white, drawn on top of outlines)
   //
   const introText = k.add([
     k.text(INTRO_TEXT, { size: FONT_SIZE, align: 'center' }),
@@ -139,7 +152,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.anchor('center'),
     k.color(255, 255, 255),
     k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 52)
+    k.z(CFG.visual.zIndex.ui + 52.1)
   ])
   //
   // Life icon
@@ -157,7 +170,6 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   //
   const scoreX = centerX + SCORE_X_OFFSET
   const scoreY = centerY + SCORE_Y_OFFSET + 15
-  const oo = OUTLINE_OFFSET
   const outlineOffsets = [[-oo, 0], [oo, 0], [0, -oo], [0, oo]]
   const scoreOutlines = outlineOffsets.map(([dx, dy]) => k.add([
     k.text(currentScore.toString(), { size: SCORE_FONT_SIZE }),
@@ -179,7 +191,18 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.z(CFG.visual.zIndex.ui + 52.1)
   ])
   //
-  // Result text (red)
+  // Result text outlines (black, drawn slightly behind)
+  //
+  const resultOutlines = introOutlineOffsets.map(([dx, dy]) => k.add([
+    k.text(RESULT_TEXT, { size: FONT_SIZE }),
+    k.pos(centerX + dx, centerY + RESULT_Y_OFFSET + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 52)
+  ]))
+  //
+  // Result text (red, drawn on top of outlines)
   //
   const resultText = k.add([
     k.text(RESULT_TEXT, { size: FONT_SIZE }),
@@ -187,7 +210,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.anchor('center'),
     k.color(RESULT_COLOR_R, RESULT_COLOR_G, RESULT_COLOR_B),
     k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 52)
+    k.z(CFG.visual.zIndex.ui + 52.1)
   ])
   //
   // Animation state machine
@@ -199,7 +222,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     blinkTimer: 0,
     lastTickScore: currentScore
   }
-  const el = { overlay, bubble, introText, lifeIcon, scoreText, scoreOutlines, resultText }
+  const el = { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines }
   const updateHandler = k.onUpdate(() => {
     state.timer += k.dt()
     onUpdateDeduction(k, state, el, currentScore, newScore, updateHandler, levelIndicator, sound, sceneLock, onComplete)
@@ -221,12 +244,13 @@ function setOutlinesText(outlines, text) {
 // Drives the animation phases
 //
 function onUpdateDeduction(k, state, el, fromScore, toScore, updateHandler, levelIndicator, sound, sceneLock, onComplete) {
-  const { overlay, bubble, introText, lifeIcon, scoreText, scoreOutlines, resultText } = el
+  const { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines } = el
   if (state.phase === 'fadeIn') {
     const p = Math.min(1, state.timer / FADE_IN)
     overlay.opacity = p
     bubble.opacity = p
     introText.opacity = p
+    setOutlinesOpacity(introOutlines, p)
     lifeIcon.opacity = p
     scoreText.opacity = p
     setOutlinesOpacity(scoreOutlines, p)
@@ -272,6 +296,7 @@ function onUpdateDeduction(k, state, el, fromScore, toScore, updateHandler, leve
   } else if (state.phase === 'resultFadeIn') {
     const p = Math.min(1, state.timer / RESULT_FADE_IN)
     resultText.opacity = p
+    setOutlinesOpacity(resultOutlines, p)
     if (p >= 1) {
       state.phase = 'resultHold'
       state.timer = 0
@@ -287,19 +312,23 @@ function onUpdateDeduction(k, state, el, fromScore, toScore, updateHandler, leve
     overlay.opacity = opacity
     bubble.opacity = opacity
     introText.opacity = opacity
+    setOutlinesOpacity(introOutlines, opacity)
     lifeIcon.opacity = opacity
     scoreText.opacity = opacity
     setOutlinesOpacity(scoreOutlines, opacity)
     resultText.opacity = opacity
+    setOutlinesOpacity(resultOutlines, opacity)
     if (p >= 1) {
       updateHandler.cancel()
       k.destroy(overlay)
       k.destroy(bubble)
       k.destroy(introText)
+      introOutlines.forEach(o => k.destroy(o))
       k.destroy(lifeIcon)
       scoreOutlines.forEach(o => k.destroy(o))
       k.destroy(scoreText)
       k.destroy(resultText)
+      resultOutlines.forEach(o => k.destroy(o))
       Tooltip.unsuppressAll()
       sceneLock && (sceneLock.locked = false)
       sceneLock?.heroInst && (sceneLock.heroInst.controlsDisabled = false)

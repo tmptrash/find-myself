@@ -124,16 +124,20 @@ export function create(config) {
   // Create life image (sprite pre-loaded in index.js)
   //
   const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3
+  //
+  // Lower the life icon a bit further below the small hero (UI polish)
+  //
+  const LIFE_IMAGE_Y_OFFSET = 18
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX + 12, smallHeroY + 5),
+      k.pos(lifeImageX + 12, smallHeroY + LIFE_IMAGE_Y_OFFSET),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
       k.z(CFG.visual.zIndex.ui)
     ]),
-    pos: { x: lifeImageX, y: smallHeroY }
+    pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
   }
   //
   // Get score values from localStorage

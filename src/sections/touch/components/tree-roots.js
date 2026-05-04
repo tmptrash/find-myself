@@ -440,11 +440,29 @@ export async function create(config) {
       })
     })
     const spriteName = `tree-${index}`
-    
+    //
+    // White root-only sprite for glow overlay on note touch
+    //
+    const glowDataUrl = toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (glowCtx) => {
+      allRootSegments.forEach(segment => {
+        const opacity = 0.9 - segment.depth * 0.06
+        glowCtx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.3, opacity)})`
+        glowCtx.lineWidth = segment.width + 2
+        glowCtx.lineCap = 'round'
+        glowCtx.beginPath()
+        glowCtx.moveTo(segment.startX + offsetX, segment.startY + offsetY)
+        glowCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
+        glowCtx.stroke()
+      })
+    })
+    const glowSpriteName = `tree-glow-${index}`
+
     return {
       x: rootX,
       spriteName,
+      glowSpriteName,
       dataUrl,
+      glowDataUrl,
       minX,
       minY,
       padding,
@@ -455,8 +473,10 @@ export async function create(config) {
       noteFrequency: notes[index],
       isTouching: false,
       touchShake: 0,
+      glowTimer: 0,
       swaySpeed: 0.1 + Math.random() * 0.05,
-      swayOffset: Math.random() * Math.PI * 2
+      swayOffset: Math.random() * Math.PI * 2,
+      rootSegments: allRootSegments
     }
   })
   
@@ -466,6 +486,7 @@ export async function create(config) {
   await Promise.all(roots.map(root => {
     return new Promise((resolve) => {
       k.loadSprite(root.spriteName, root.dataUrl)
+      k.loadSprite(root.glowSpriteName, root.glowDataUrl)
       setTimeout(resolve, 50)
     })
   }))
@@ -617,34 +638,64 @@ function drawLeaf(k, x, y, size, angle, color, opacity) {
  */
 function playNote(inst, frequency) {
   const { k } = inst
-  
+
   if (!inst.audioContext) {
     inst.audioContext = new (window.AudioContext || window.webkitAudioContext)()
   }
-  
+
   const ctx = inst.audioContext
+  //
+  // Lazily build a shared echo bus: feedback delay with a lowpass filter
+  // so each note naturally trails off into echoes. Output is mixed into
+  // a single bus shared across all notes for a unified ambience.
+  //
+  if (!inst.echoBus) {
+    const echoInput = ctx.createGain()
+    const delay = ctx.createDelay(2.0)
+    delay.delayTime.value = 0.32
+    const feedback = ctx.createGain()
+    feedback.gain.value = 0.42
+    const echoFilter = ctx.createBiquadFilter()
+    echoFilter.type = 'lowpass'
+    echoFilter.frequency.value = 1800
+    const echoOutput = ctx.createGain()
+    echoOutput.gain.value = 0.6
+    //
+    // Routing: input -> delay -> filter -> [feedback loop] -> output
+    //
+    echoInput.connect(delay)
+    delay.connect(echoFilter)
+    echoFilter.connect(feedback)
+    feedback.connect(delay)
+    echoFilter.connect(echoOutput)
+    echoOutput.connect(ctx.destination)
+    inst.echoBus = echoInput
+  }
+
   const now = ctx.currentTime
-  
   //
   // Create oscillator for the note
   //
   const oscillator = ctx.createOscillator()
   const gainNode = ctx.createGain()
-  
+
   oscillator.type = 'sine'
   oscillator.frequency.setValueAtTime(frequency, now)
-  
   //
   // Envelope (fade in and out)
   //
   gainNode.gain.setValueAtTime(0, now)
-  gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01)  // Quick fade in
-  gainNode.gain.linearRampToValueAtTime(0.3, now + 0.2)   // Sustain
-  gainNode.gain.linearRampToValueAtTime(0, now + 0.5)     // Fade out
-  
+  gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01)
+  gainNode.gain.linearRampToValueAtTime(0.3, now + 0.2)
+  gainNode.gain.linearRampToValueAtTime(0, now + 0.5)
+
   oscillator.connect(gainNode)
+  //
+  // Dry signal goes to destination, send a copy to the echo bus
+  //
   gainNode.connect(ctx.destination)
-  
+  gainNode.connect(inst.echoBus)
+
   oscillator.start(now)
   oscillator.stop(now + 0.5)
 }
@@ -701,9 +752,10 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
     if (isTouchingNow && !root.isTouching) {
       playNote(inst, root.noteFrequency)
       //
-      // Start tree shake animation (reduced amplitude)
+      // Start tree shake animation and root glow blink
       //
       root.touchShake = 2
+      root.glowTimer = 0.5
       touchedTreeIndex = index
     }
     
@@ -723,15 +775,22 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
 export function onUpdate(inst) {
   const { roots } = inst
   
+  const dt = inst.k.dt()
   roots.forEach(root => {
     //
     // Decay touch shake over time
     //
     if (root.touchShake > 0) {
-      root.touchShake *= 0.9  // Exponential decay
+      root.touchShake *= 0.9
       if (root.touchShake < 0.1) {
         root.touchShake = 0
       }
+    }
+    //
+    // Decay root glow timer
+    //
+    if (root.glowTimer > 0) {
+      root.glowTimer = Math.max(0, root.glowTimer - dt)
     }
   })
 }
@@ -763,6 +822,32 @@ export function draw(inst) {
         root.minX - root.padding + touchShakeOffset,
         root.minY - root.padding
       )
+    })
+  })
+}
+/**
+ * Draws blinking white root overlay for trees whose glowTimer is active
+ * @param {Object} inst - Tree roots instance
+ */
+export function drawGlow(inst) {
+  const { k, roots } = inst
+  const time = k.time()
+  roots.forEach(root => {
+    if (root.glowTimer <= 0) return
+    const touchShakeOffset = Math.sin(time * 30) * root.touchShake
+    //
+    // Blink at ~10Hz, fade out during last 0.5s of the timer
+    //
+    const blink = (Math.sin(time * 10) + 1) / 2
+    const fadeOut = Math.min(1, root.glowTimer / 0.15)
+    const alpha = (0.4 + blink * 0.6) * fadeOut
+    k.drawSprite({
+      sprite: root.glowSpriteName,
+      pos: k.vec2(
+        root.minX - root.padding + touchShakeOffset,
+        root.minY - root.padding
+      ),
+      opacity: alpha
     })
   })
 }

@@ -487,6 +487,17 @@ const DARKNESS_CREATURE_BURN_INTENSITY = 1.0
 //
 const SNOW_AMBIENT_BRIGHTNESS = 0.08
 //
+// Breath vapor: small white puffs from hero's mouth in cold air
+//
+const BREATH_INTERVAL = 2.0
+const BREATH_PARTICLE_COUNT = 5
+const BREATH_PARTICLE_SPEED = 15
+const BREATH_PARTICLE_LIFETIME = 0.8
+const BREATH_PARTICLE_SIZE_MIN = 2
+const BREATH_PARTICLE_SIZE_MAX = 5
+const BREATH_OFFSET_X = 12
+const BREATH_OFFSET_Y = -20
+//
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
@@ -522,6 +533,7 @@ export function sceneLevel3(k) {
       showTrap = true
       set(LIFE_DEDUCT_VISITED_FLAG, false)
     }
+    const displayTrapCount = showTrap ? trapCount + 1 : trapCount
     //
     // Scene-level lock: hero controls disabled during life deduction animation
     //
@@ -634,6 +646,7 @@ export function sceneLevel3(k) {
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
+    levelIndicator.updateTrapCount(displayTrapCount)
     //
     // Create anti-hero on the last (upper-right) platform
     //
@@ -1248,6 +1261,19 @@ export function sceneLevel3(k) {
         burnSoundNode = null
       }
     })
+    //
+    // Breath vapor: periodic white puffs from hero's mouth
+    //
+    const breathState = { timer: BREATH_INTERVAL, particles: [] }
+    k.add([
+      k.z(CFG.visual.zIndex.player + 2),
+      {
+        draw() {
+          drawBreathVapor(k, breathState.particles)
+        }
+      }
+    ])
+    k.onUpdate(() => onUpdateBreathVapor(k, heroInst, breathState))
     //
     // ESC key to return to menu
     //
@@ -3679,4 +3705,64 @@ function updateBurnSound(sfx, isBurning, wasBurning, currentNode) {
     return null
   }
   return currentNode
+}
+//
+// Update breath vapor: spawn puffs periodically, age existing particles
+//
+function onUpdateBreathVapor(k, heroInst, state) {
+  const dt = k.dt()
+  //
+  // Age and remove expired particles
+  //
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i]
+    p.life -= dt
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    p.size += 2 * dt
+    if (p.life <= 0) state.particles.splice(i, 1)
+  }
+  if (!heroInst?.character?.pos) return
+  state.timer -= dt
+  if (state.timer > 0) return
+  state.timer = BREATH_INTERVAL
+  //
+  // Spawn breath puff from hero's mouth area
+  //
+  const dir = heroInst.direction ?? 1
+  const baseX = heroInst.character.pos.x + BREATH_OFFSET_X * dir
+  const baseY = heroInst.character.pos.y + BREATH_OFFSET_Y
+  for (let i = 0; i < BREATH_PARTICLE_COUNT; i++) {
+    const angle = (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.8
+    const speed = BREATH_PARTICLE_SPEED * (0.5 + Math.random())
+    state.particles.push({
+      x: baseX + (Math.random() - 0.5) * 4,
+      y: baseY + (Math.random() - 0.5) * 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 8,
+      size: BREATH_PARTICLE_SIZE_MIN + Math.random() * (BREATH_PARTICLE_SIZE_MAX - BREATH_PARTICLE_SIZE_MIN),
+      life: BREATH_PARTICLE_LIFETIME * (0.6 + Math.random() * 0.4),
+      maxLife: BREATH_PARTICLE_LIFETIME
+    })
+  }
+}
+//
+// Draw breath vapor puffs
+//
+function drawBreathVapor(k, particles) {
+  for (const p of particles) {
+    const alpha = Math.max(0, p.life / p.maxLife) * 0.4
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: p.size,
+      color: k.rgb(220, 230, 240),
+      opacity: alpha
+    })
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: p.size * 1.8,
+      color: k.rgb(200, 210, 220),
+      opacity: alpha * 0.3
+    })
+  }
 }

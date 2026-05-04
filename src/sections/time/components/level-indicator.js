@@ -136,16 +136,20 @@ export function create(config) {
   // Create life image (sprite pre-loaded in index.js)
   //
   const lifeImageScale = (lifeImageHeight / lifeImageOriginalHeight) * 1.3
+  //
+  // Lower the life icon a bit further below the small hero (UI polish)
+  //
+  const LIFE_IMAGE_Y_OFFSET = 18
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX + 12, smallHeroY + 5),
+      k.pos(lifeImageX + 12, smallHeroY + LIFE_IMAGE_Y_OFFSET),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
       k.z(CFG.visual.zIndex.ui)
     ]),
-    pos: { x: lifeImageX, y: smallHeroY }
+    pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
   }
   //
   // Get score values from localStorage
@@ -232,6 +236,32 @@ export function create(config) {
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
+  //
+  // Trap count badge with outline (bold red number right of life icon)
+  //
+  const trapBadgeX = lifeImageX + 45
+  const trapBadgeY = smallHeroY + 40
+  const trapBadgeSize = 20
+  const trapBadgeFont = CFG.visual.fonts.regularFull
+    ? CFG.visual.fonts.regularFull.replace(/'/g, '')
+    : CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const trapOutlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
+  const trapBadgeOutlines = trapOutlineOffsets.map(([dx, dy]) => k.add([
+    k.text('', { size: trapBadgeSize, font: trapBadgeFont }),
+    k.pos(trapBadgeX + dx, trapBadgeY + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ]))
+  const trapBadgeText = k.add([
+    k.text('', { size: trapBadgeSize, font: trapBadgeFont }),
+    k.pos(trapBadgeX, trapBadgeY),
+    k.anchor('center'),
+    k.color(200, 60, 60),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ])
   return {
     letterObjects,
     smallHero,
@@ -261,6 +291,11 @@ export function create(config) {
           outline.text = newScore.toString()
         }
       })
+    },
+    updateTrapCount: (count) => {
+      const val = count > 0 ? count.toString() : ''
+      trapBadgeText.text = val
+      trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
 }

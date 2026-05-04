@@ -252,6 +252,10 @@ function onUpdate(inst) {
       inst.arcAmount = 0
       playEmergenceSound(inst)
       startFrictionSound(inst)
+      //
+      // Slight screen shake as the giant worm bursts from the ground
+      //
+      inst.k.shake(4)
     }
   } else if (inst.phase === 'rising') {
     inst.riseAmount += RISE_SPEED * dt

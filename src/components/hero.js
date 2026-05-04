@@ -41,6 +41,19 @@ const DUST_PARTICLE_SIZE = 6
 const DUST_PARTICLE_SPEED = 80
 const DUST_PARTICLE_LIFETIME = 0.4
 //
+// Footprint trail: small fading marks left where the hero steps
+//
+const FOOTPRINT_LIFETIME = 2.0
+const FOOTPRINT_RADIUS_X = 5
+const FOOTPRINT_RADIUS_Y = 2
+const FOOTPRINT_OFFSET_X = 4
+const FOOTPRINT_OFFSET_Y = -1
+const FOOTPRINT_COLOR_R = 35
+const FOOTPRINT_COLOR_G = 25
+const FOOTPRINT_COLOR_B = 18
+const FOOTPRINT_OPACITY_START = 0.55
+const FOOTPRINT_Z = 9
+//
 // Death animation timing
 //
 const DEATH_ANIMATION_DURATION = 0.4
@@ -56,7 +69,7 @@ const LEG_CORNER_RADIUS = 1
 // Shoulder arc starts this many pixels above head bottom
 // for a smoother, earlier curve
 //
-const SHOULDER_RISE = 2
+const SHOULDER_RISE = 3
 
 export const HEROES = {
   HERO: 'hero',
@@ -241,7 +254,9 @@ export function create(config) {
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
     isInvulnerable: false,  // Flag for spawn invulnerability
     controlsReversed: false,  // Flag for control inversion (time section level 3)
-    controlsDisabled: false  // Flag to temporarily disable controls during zone transitions
+    controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
+    footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
+    lastFootprintFoot: 1     // Alternates between -1 (left foot) and +1 (right foot)
   }
   //
   // Check ground touch through collisions
@@ -250,6 +265,21 @@ export function create(config) {
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
   antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
+  //
+  // Footprint renderer: a single fixed entity that draws and ages footprints
+  // for this hero. Drawn behind the player so prints sit on the ground.
+  //
+  k.add([
+    k.z(FOOTPRINT_Z),
+    {
+      update() {
+        onUpdateFootprints(inst)
+      },
+      draw() {
+        drawFootprints(k, inst)
+      }
+    }
+  ])
 
   return inst
 }
@@ -892,9 +922,9 @@ function onUpdate(inst) {
       inst.runTimer = 0
       inst.character.use(inst.k.sprite(`${prefix}-run-0`))
       //
-      // Create dust particles when starting to run
+      // Create dust particles when starting to run (skip in water)
       //
-      createRunStartDust(inst, inst.direction)
+      !inst.suppressDust && createRunStartDust(inst, inst.direction)
     } else if (inst.wasJumping) {
       //
       // Just landed - continue with current frame, just update sprite
@@ -910,10 +940,11 @@ function onUpdate(inst) {
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
       //
-      // Step sound on frame 0 (when foot touches ground)
+      // Step sound + footprint on frame 0 (when foot touches ground)
       //
-      if (inst.sfx && inst.runFrame === 0) {
-        Sound.playStepSound(inst.sfx, inst.currentLevel)
+      if (inst.runFrame === 0) {
+        inst.sfx && Sound.playStepSound(inst.sfx, inst.currentLevel)
+        spawnFootprint(inst)
       }
     }
   } else {
@@ -1177,6 +1208,54 @@ function createDustParticles(inst, footX, footY, type = 'splash', direction = 1)
 }
 
 /**
+ * Spawns a small footprint at the hero's current foot position.
+ * Footprints alternate left/right and fade out over FOOTPRINT_LIFETIME.
+ * @param {Object} inst - Hero instance
+ */
+function spawnFootprint(inst) {
+  if (!inst.character?.pos) return
+  const footY = inst.character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y + FOOTPRINT_OFFSET_Y
+  //
+  // Alternate left/right foot offset so footprints zigzag slightly
+  //
+  inst.lastFootprintFoot = -inst.lastFootprintFoot
+  const footX = inst.character.pos.x + inst.lastFootprintFoot * FOOTPRINT_OFFSET_X
+  inst.footprints.push({
+    x: footX,
+    y: footY,
+    life: FOOTPRINT_LIFETIME
+  })
+}
+/**
+ * Ages footprints over time and removes expired entries.
+ * @param {Object} inst - Hero instance
+ */
+function onUpdateFootprints(inst) {
+  const dt = inst.k.dt()
+  const arr = inst.footprints
+  for (let i = arr.length - 1; i >= 0; i--) {
+    arr[i].life -= dt
+    if (arr[i].life <= 0) arr.splice(i, 1)
+  }
+}
+/**
+ * Draws all live footprints for this hero as small fading dark ovals.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} inst - Hero instance
+ */
+function drawFootprints(k, inst) {
+  for (const fp of inst.footprints) {
+    const alpha = (fp.life / FOOTPRINT_LIFETIME) * FOOTPRINT_OPACITY_START
+    k.drawEllipse({
+      pos: k.vec2(fp.x, fp.y),
+      radiusX: FOOTPRINT_RADIUS_X,
+      radiusY: FOOTPRINT_RADIUS_Y,
+      color: k.rgb(FOOTPRINT_COLOR_R, FOOTPRINT_COLOR_G, FOOTPRINT_COLOR_B),
+      opacity: alpha
+    })
+  }
+}
+/**
  * Handle collision with platform
  * @param {Object} inst - Hero instance
  */
@@ -1191,7 +1270,10 @@ function onCollisionPlatform(inst) {
   //
   if (wasInAir && inst.wasJumping) {
     inst.sfx && Sound.playLandSound(inst.sfx, inst.currentLevel)
-    createLandingDust(inst)
+    //
+    // Skip dust particles when suppressDust is set (e.g. landing in water)
+    //
+    !inst.suppressDust && createLandingDust(inst)
   }
 }
 
@@ -2844,21 +2926,21 @@ function drawBodyOutline(ctx, headX, headY, bodyX, bodyY, bodyHeight) {
   const rightBodyEdge = bodyX + 13
   const shoulderR = leftHeadEdge - leftBodyEdge
   //
-  // Shoulder starts SHOULDER_RISE pixels above the head bottom, curving
-  // down along the head edge then outward to the body side. Uses cubic
-  // bezier so the curve begins going downward (not immediately outward).
+  // Shoulder starts SHOULDER_RISE pixels above the head bottom. The first
+  // control point stays near the head edge but lower, pulling the curve
+  // down-and-outward (not perpendicular). The second control point sits
+  // below the midpoint to create a gradual S-curve into the body side.
   //
   const shoulderTop = headY + 9 - SHOULDER_RISE
-  const shoulderBottom = shoulderTop + shoulderR * 2
-  const shoulderMid = shoulderTop + shoulderR
+  const shoulderBottom = shoulderTop + shoulderR * 2.2
   const bottom = bodyY + bodyHeight + 1
   ctx.beginPath()
   ctx.moveTo(leftHeadEdge, shoulderTop)
-  ctx.bezierCurveTo(leftHeadEdge, shoulderMid, leftBodyEdge, shoulderMid, leftBodyEdge, shoulderBottom)
+  ctx.bezierCurveTo(leftHeadEdge - 1, shoulderTop + shoulderR * 1.2, leftBodyEdge, shoulderTop + shoulderR * 0.8, leftBodyEdge, shoulderBottom)
   ctx.lineTo(leftBodyEdge, bottom)
   ctx.lineTo(rightBodyEdge, bottom)
   ctx.lineTo(rightBodyEdge, shoulderBottom)
-  ctx.bezierCurveTo(rightBodyEdge, shoulderMid, rightHeadEdge, shoulderMid, rightHeadEdge, shoulderTop)
+  ctx.bezierCurveTo(rightBodyEdge, shoulderTop + shoulderR * 0.8, rightHeadEdge + 1, shoulderTop + shoulderR * 1.2, rightHeadEdge, shoulderTop)
   ctx.closePath()
   ctx.fill()
 }
@@ -2872,16 +2954,15 @@ function drawBodyFill(ctx, headX, headY, bodyX, bodyY, bodyHeight) {
   const rightBodyEdge = bodyX + 12
   const shoulderR = leftHeadEdge - leftBodyEdge
   const shoulderTop = headY + 9 - SHOULDER_RISE
-  const shoulderBottom = shoulderTop + shoulderR * 2
-  const shoulderMid = shoulderTop + shoulderR
+  const shoulderBottom = shoulderTop + shoulderR * 2.2
   const bottom = bodyY + bodyHeight
   ctx.beginPath()
   ctx.moveTo(leftHeadEdge, shoulderTop)
-  ctx.bezierCurveTo(leftHeadEdge, shoulderMid, leftBodyEdge, shoulderMid, leftBodyEdge, shoulderBottom)
+  ctx.bezierCurveTo(leftHeadEdge - 1, shoulderTop + shoulderR * 1.2, leftBodyEdge, shoulderTop + shoulderR * 0.8, leftBodyEdge, shoulderBottom)
   ctx.lineTo(leftBodyEdge, bottom)
   ctx.lineTo(rightBodyEdge, bottom)
   ctx.lineTo(rightBodyEdge, shoulderBottom)
-  ctx.bezierCurveTo(rightBodyEdge, shoulderMid, rightHeadEdge, shoulderMid, rightHeadEdge, shoulderTop)
+  ctx.bezierCurveTo(rightBodyEdge, shoulderTop + shoulderR * 0.8, rightHeadEdge + 1, shoulderTop + shoulderR * 1.2, rightHeadEdge, shoulderTop)
   ctx.closePath()
   ctx.fill()
 }

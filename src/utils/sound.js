@@ -441,44 +441,35 @@ export function playLandSound(instance, currentLevel = null) {
     osc.stop(now + duration)
   } else if (isTouchSection) {
     //
-    // Soft landing sound similar to blade friction (hissing "shhhh")
+    // Damp, muffled landing on wet ground: very low-passed noise thud
     //
-    const duration = 0.08  // Shorter (was 0.15)
+    const duration = 0.12
     const bufferSize = instance.audioContext.sampleRate * duration
     const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
     const noiseData = noiseBuffer.getChannelData(0)
-    //
-    // Generate white noise
-    //
     for (let i = 0; i < bufferSize; i++) {
       noiseData[i] = Math.random() * 2 - 1
     }
-    
     const noiseSource = instance.audioContext.createBufferSource()
     noiseSource.buffer = noiseBuffer
     //
-    // Low-pass filter for soft hissing (like blade sound, but softer)
+    // Very low cutoff for a dull, wet thud
     //
     const filter = instance.audioContext.createBiquadFilter()
     filter.type = 'lowpass'
-    filter.frequency.setValueAtTime(500, now)  // Even lower frequency for softer sound
-    filter.frequency.linearRampToValueAtTime(300, now + duration)  // Very low
-    filter.Q.value = 0.5  // Lower Q for smoother sound
+    filter.frequency.setValueAtTime(250, now)
+    filter.frequency.linearRampToValueAtTime(120, now + duration)
+    filter.Q.value = 0.3
     //
-    // Envelope with quick fade out
+    // Quick attack, soft tail
     //
     const envelope = instance.audioContext.createGain()
     envelope.gain.setValueAtTime(0.001, now)
-    envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.land * 1.2, now + 0.02)  // Much louder (was 0.6)
-    envelope.gain.setValueAtTime(CFG.audio.sfx.land * 1.2, now + duration - 0.03)
+    envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.land * 1.5, now + 0.01)
     envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-    //
-    // Connect: noise -> filter -> envelope -> output
-    //
     noiseSource.connect(filter)
     filter.connect(envelope)
     envelope.connect(instance.landGain)
-    
     noiseSource.start(now)
     noiseSource.stop(now + duration)
   } else {
@@ -936,44 +927,32 @@ export function playStepSound(instance, currentLevel = null) {
     osc.stop(now + duration)
   } else if (isTouchSection) {
     //
-    // Soft step sound with filtered noise (quiet hissing)
+    // Damp, muffled step on wet ground: very low-passed noise
     //
-    const duration = 0.06  // Very short
+    const duration = 0.07
     const bufferSize = instance.audioContext.sampleRate * duration
     const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
     const noiseData = noiseBuffer.getChannelData(0)
-    //
-    // Generate white noise
-    //
     for (let i = 0; i < bufferSize; i++) {
       noiseData[i] = Math.random() * 2 - 1
     }
-    
     const noiseSource = instance.audioContext.createBufferSource()
     noiseSource.buffer = noiseBuffer
     //
-    // Low-pass filter for soft hissing
+    // Very low cutoff for a dull, wet step
     //
     const filter = instance.audioContext.createBiquadFilter()
     filter.type = 'lowpass'
-    filter.frequency.setValueAtTime(400, now)  // Low frequency
-    filter.frequency.linearRampToValueAtTime(250, now + duration)
-    filter.Q.value = 0.5
-    //
-    // Envelope with quick fade
-    //
+    filter.frequency.setValueAtTime(200, now)
+    filter.frequency.linearRampToValueAtTime(100, now + duration)
+    filter.Q.value = 0.3
     const envelope = instance.audioContext.createGain()
     envelope.gain.setValueAtTime(0.001, now)
-    envelope.gain.exponentialRampToValueAtTime(CFG.audio.sfx.step * 1.2, now + 0.015)  // Much louder (was 0.6)
-    envelope.gain.setValueAtTime(CFG.audio.sfx.step * 1.2, now + duration - 0.02)
+    envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 1.5, now + 0.01)
     envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-    //
-    // Connect: noise -> filter -> envelope -> output
-    //
     noiseSource.connect(filter)
     filter.connect(envelope)
     envelope.connect(instance.stepGain)
-    
     noiseSource.start(now)
     noiseSource.stop(now + duration)
   } else {
@@ -2893,4 +2872,325 @@ export function playScoreTickSound(instance, progress) {
   gain.connect(ctx.destination)
   osc.start(now)
   osc.stop(now + 0.08)
+}
+/**
+ * Plays a short water splash sound (hero stepping into puddle)
+ * @param {Object} instance - Sound instance
+ */
+export function playSplashSound(instance, volume = 0.3) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const duration = 0.3
+  //
+  // Soft watery splash: very low-passed noise + pitched sine drop for "plop"
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * 0.3
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = buffer
+  //
+  // Very low cutoff for a soft, muffled water sound (no scraping)
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(350, now)
+  filter.frequency.linearRampToValueAtTime(180, now + duration)
+  filter.Q.value = 0.2
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(volume * 0.5, now + 0.015)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noise.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  noise.start(now)
+  noise.stop(now + duration)
+}
+/**
+ * Starts a rain drip loop: individual drip sounds at random intervals.
+ * Returns a stop function to end the loop.
+ * @param {Object} instance - Sound instance
+ * @param {number} [volume=0.1] - Drip volume
+ * @returns {Function} Call to stop the drip loop
+ */
+export function startRainSound(instance, volume = 0.1) {
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return () => {}
+  //
+  // Continuous filtered white noise shaped to sound like quiet rain
+  //
+  const bufferSize = ctx.sampleRate * 2
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = buffer
+  noise.loop = true
+  const hiPass = ctx.createBiquadFilter()
+  hiPass.type = 'highpass'
+  hiPass.frequency.value = 600
+  const loPass = ctx.createBiquadFilter()
+  loPass.type = 'lowpass'
+  loPass.frequency.value = 4000
+  loPass.Q.value = 0.2
+  const gain = ctx.createGain()
+  gain.gain.value = volume
+  noise.connect(hiPass)
+  hiPass.connect(loPass)
+  loPass.connect(gain)
+  gain.connect(ctx.destination)
+  noise.start()
+  return () => {
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+    setTimeout(() => { try { noise.stop() } catch (_) {} }, 400)
+  }
+}
+/**
+ * Plays a distant thunder rumble (low-frequency noise burst with reverb tail)
+ * @param {Object} instance - Sound instance
+ * @param {Object} [opts] - Optional overrides
+ * @param {number} [opts.duration] - Custom duration in seconds
+ * @param {number} [opts.volume] - Custom peak volume multiplier (0-1)
+ * @param {number} [opts.delay] - Delay before sound starts (seconds)
+ */
+export function playThunderSound(instance, opts = {}) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime + (opts.delay || 0)
+  const duration = opts.duration || (3.0 + Math.random() * 2.0)
+  const volumeScale = opts.volume ?? 1
+  //
+  // White noise shaped into deep, rolling thunder rumble
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = buffer
+  const loPass = ctx.createBiquadFilter()
+  loPass.type = 'lowpass'
+  loPass.frequency.setValueAtTime(250 + Math.random() * 120, now)
+  loPass.Q.value = 0.4
+  const gain = ctx.createGain()
+  const peakVolume = (0.4 + Math.random() * 0.2) * volumeScale
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.exponentialRampToValueAtTime(peakVolume, now + 0.1)
+  gain.gain.setValueAtTime(peakVolume, now + 0.25)
+  gain.gain.exponentialRampToValueAtTime(peakVolume * 0.5, now + 0.8)
+  gain.gain.exponentialRampToValueAtTime(peakVolume * 0.2, now + duration * 0.5)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noise.connect(loPass)
+  loPass.connect(gain)
+  gain.connect(ctx.destination)
+  noise.start(now)
+  noise.stop(now + duration)
+}
+/**
+ * Plays a single tree creak sound (for winter/wind atmosphere)
+ * @param {Object} instance - Sound instance
+ */
+export function playTreeCreakSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const duration = 0.8 + Math.random() * 0.8
+  const freq = 50 + Math.random() * 35
+  const osc = ctx.createOscillator()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(freq, now)
+  osc.frequency.linearRampToValueAtTime(freq + 20, now + duration * 0.4)
+  osc.frequency.linearRampToValueAtTime(freq - 5, now + duration * 0.7)
+  osc.frequency.linearRampToValueAtTime(freq + 8, now + duration)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.value = 180
+  filter.Q.value = 4
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.2, now)
+  gain.gain.linearRampToValueAtTime(0.35, now + duration * 0.25)
+  gain.gain.linearRampToValueAtTime(0.25, now + duration * 0.6)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + duration)
+}
+/**
+ * Plays a single water drip sound (short pitched sine with fast decay)
+ * @param {Object} instance - Sound instance
+ * @param {number} [volume=0.15] - Volume
+ */
+export function playDripSound(instance, volume = 0.15) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const freq = 800 + Math.random() * 1200
+  const duration = 0.06 + Math.random() * 0.06
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(freq, now)
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.4, now + duration)
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(volume, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 2500
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + duration)
+}
+/**
+ * Plays a cricket/cicada chirp (fast oscillating tone burst)
+ * @param {Object} instance - Sound instance
+ */
+export function playCricketSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Rapid chirp: short high-frequency burst with tremolo
+  //
+  const chirpCount = 2 + Math.floor(Math.random() * 4)
+  const chirpDuration = 0.03 + Math.random() * 0.02
+  const chirpGap = 0.04 + Math.random() * 0.03
+  const freq = 4000 + Math.random() * 2000
+  const vol = 0.04 + Math.random() * 0.03
+  for (let i = 0; i < chirpCount; i++) {
+    const t = now + i * (chirpDuration + chirpGap)
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(freq + Math.random() * 200, t)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.001, t)
+    gain.gain.linearRampToValueAtTime(vol, t + chirpDuration * 0.2)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + chirpDuration)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + chirpDuration)
+  }
+}
+/**
+ * Plays an owl hoot sound: two soft low-frequency tones
+ * @param {Object} instance - Sound instance
+ */
+export function playOwlSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Two soft hoots ("hoo... hoo") with short pause between them
+  //
+  const baseFreq = 280 + Math.random() * 60
+  const vol = 0.08 + Math.random() * 0.04
+  const hootDuration = 0.32
+  const gap = 0.18
+  for (let i = 0; i < 2; i++) {
+    const t = now + i * (hootDuration + gap)
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(baseFreq * 1.05, t)
+    osc.frequency.linearRampToValueAtTime(baseFreq, t + hootDuration * 0.7)
+    //
+    // Lowpass filter for soft, breathy quality
+    //
+    const filter = ctx.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.value = 700
+    filter.Q.value = 0.6
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.001, t)
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.06)
+    gain.gain.setValueAtTime(vol, t + hootDuration * 0.6)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + hootDuration)
+    osc.connect(filter)
+    filter.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + hootDuration + 0.05)
+  }
+}
+/**
+ * Plays a chirpy small-bird tweet (1-3 short rising chirps)
+ * @param {Object} instance - Sound instance
+ */
+export function playBirdChirpSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const chirps = 1 + Math.floor(Math.random() * 3)
+  const baseFreq = 1800 + Math.random() * 1200
+  const vol = 0.04 + Math.random() * 0.03
+  for (let i = 0; i < chirps; i++) {
+    const t = now + i * (0.07 + Math.random() * 0.05)
+    const dur = 0.06 + Math.random() * 0.05
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(baseFreq, t)
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.6, t + dur)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.001, t)
+    gain.gain.exponentialRampToValueAtTime(vol, t + dur * 0.2)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + dur + 0.02)
+  }
+}
+/**
+ * Plays a frog croak sound (low frequency warble)
+ * @param {Object} instance - Sound instance
+ */
+export function playFrogSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const duration = 0.15 + Math.random() * 0.2
+  const freq = 150 + Math.random() * 100
+  const vol = 0.06 + Math.random() * 0.04
+  //
+  // Low warbling tone shaped by bandpass filter
+  //
+  const osc = ctx.createOscillator()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(freq, now)
+  osc.frequency.linearRampToValueAtTime(freq * 1.3, now + duration * 0.3)
+  osc.frequency.linearRampToValueAtTime(freq * 0.8, now + duration)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.value = freq * 2
+  filter.Q.value = 3
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(vol, now + 0.02)
+  gain.gain.setValueAtTime(vol, now + duration * 0.5)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + duration)
 }

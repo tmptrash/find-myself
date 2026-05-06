@@ -139,7 +139,7 @@ export function create(config) {
   //
   // Lower the life icon a bit further below the small hero (UI polish)
   //
-  const LIFE_IMAGE_Y_OFFSET = 18
+  const LIFE_IMAGE_Y_OFFSET = 8
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
@@ -240,7 +240,7 @@ export function create(config) {
   // Trap count badge with outline (bold red number right of life icon)
   //
   const trapBadgeX = lifeImageX + 45
-  const trapBadgeY = smallHeroY + 40
+  const trapBadgeY = smallHeroY + 30
   const trapBadgeSize = 20
   const trapBadgeFont = CFG.visual.fonts.regularFull
     ? CFG.visual.fonts.regularFull.replace(/'/g, '')

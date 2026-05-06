@@ -109,6 +109,7 @@ const assetTasks = [
   () => k.loadSound("touch3-pre", "./sounds/touch3-pre.mp3"),
   () => k.loadSound("life", "./sounds/life.mp3"),
   () => k.loadSound("boss", "./sounds/boss.mp3"),
+  () => k.loadSound("water", "./sounds/water.mp3"),
   //
   // Sprites
   //

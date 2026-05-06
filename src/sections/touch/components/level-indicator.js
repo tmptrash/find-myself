@@ -19,12 +19,12 @@ const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
 //
-const LIFE_IMAGE_Y_OFFSET = 18
+const LIFE_IMAGE_Y_OFFSET = 8
 //
 // Trap count badge: small red number below-right of life icon
 //
 const TRAP_BADGE_OFFSET_X = 45
-const TRAP_BADGE_OFFSET_Y = 40
+const TRAP_BADGE_OFFSET_Y = 30
 const TRAP_BADGE_FONT_SIZE = 20
 const TRAP_BADGE_COLOR_R = 200
 const TRAP_BADGE_COLOR_G = 60

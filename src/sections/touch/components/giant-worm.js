@@ -13,6 +13,10 @@ const NODE_COUNT = 24
 const RISE_SPEED = 90
 const RETRACT_SPEED = 70
 //
+// Last fraction of visible height during retract: worm + soil mounds fade instead of popping off.
+//
+const WORM_BURROW_SURFACE_FADE_FRAC = 0.34
+//
 // Arc emergence: worm curves sideways while rising, then straightens
 //
 const ARC_MAX = 30
@@ -101,12 +105,6 @@ const MOUTH_COLOR_B = 10
 const TOOTH_COLOR_R = 220
 const TOOTH_COLOR_G = 210
 const TOOTH_COLOR_B = 190
-//
-// Ground cover to mask anything below the floor line
-//
-const GROUND_COVER_EXTRA = 40
-const GROUND_COVER_HEIGHT = 40
-//
 // Sound timing and volumes
 //
 const ALIEN_SOUND_INTERVAL = 2.0
@@ -343,11 +341,22 @@ function getNodePos(inst, t) {
   return { x: inst.x + offsetX, y }
 }
 //
-// Draw the worm as a smooth continuous tube with fat bulges.
-// Everything below floorY is masked by a ground cover rectangle.
+// Surface fade while retracting into soil so the mesh does not pop off at riseAmount === 0.
+//
+function wormBurrowSurfaceOpacity(inst) {
+  if (inst.phase !== 'retracting') return 1
+  const thresh = BODY_HEIGHT * WORM_BURROW_SURFACE_FADE_FRAC
+  const r = inst.riseAmount
+  if (r >= thresh) return 1
+  return Math.max(0, r / thresh)
+}
+//
+// Draw the worm as a smooth continuous tube with fat bulges; circles clamp at floorY.
 //
 function onDraw(inst) {
   const { k, x, floorY, riseAmount } = inst
+  inst.surfaceDrawOpacity = wormBurrowSurfaceOpacity(inst)
+  const surfaceOp = inst.surfaceDrawOpacity
   const topY = floorY - riseAmount
   if (riseAmount > 0) drawEarthMounds(inst)
   drawDirtParticles(inst)
@@ -364,7 +373,12 @@ function onDraw(inst) {
     const r = w / 2 + 2
     if (ny - r > floorY) continue
     const nx = x + (inst.spineOffsets[i] || 0)
-    k.drawCircle({ pos: k.vec2(nx, Math.min(ny, floorY - r * 0.3)), radius: r, color: outlineColor })
+    k.drawCircle({
+      pos: k.vec2(nx, Math.min(ny, floorY - r * 0.3)),
+      radius: r,
+      color: outlineColor,
+      opacity: surfaceOp
+    })
   }
   //
   // Body fill pass: overlapping circles with subtle gradient (only above ground)
@@ -381,7 +395,12 @@ function onDraw(inst) {
     const cr = BODY_COLOR_R + (BODY_HIGHLIGHT_R - BODY_COLOR_R) * colorShift
     const cg = BODY_COLOR_G + (BODY_HIGHLIGHT_G - BODY_COLOR_G) * colorShift
     const cb = BODY_COLOR_B + (BODY_HIGHLIGHT_B - BODY_COLOR_B) * colorShift
-    k.drawCircle({ pos: k.vec2(nx, Math.min(ny, floorY - r * 0.3)), radius: r, color: k.rgb(cr, cg, cb) })
+    k.drawCircle({
+      pos: k.vec2(nx, Math.min(ny, floorY - r * 0.3)),
+      radius: r,
+      color: k.rgb(cr, cg, cb),
+      opacity: surfaceOp
+    })
   }
   //
   // Fat body bulges: rounded bumps with dark outline for organic roundness
@@ -401,20 +420,11 @@ function onDraw(inst) {
       radiusX: w * 0.12,
       radiusY: BODY_HEIGHT / NODE_COUNT * 0.5,
       color: k.rgb(BODY_HIGHLIGHT_R + 30, BODY_HIGHLIGHT_G + 20, BODY_HIGHLIGHT_B + 15),
-      opacity: 0.25
+      opacity: 0.25 * surfaceOp
     })
   }
   if (riseAmount > BODY_HEIGHT * 0.4) drawEyes(inst)
   if (riseAmount > BODY_HEIGHT * 0.35) drawMouth(inst)
-  //
-  // Ground cover: masks any geometry that bleeds below floorY
-  //
-  k.drawRect({
-    pos: k.vec2(x - BASE_WIDTH - GROUND_COVER_EXTRA, floorY),
-    width: (BASE_WIDTH + GROUND_COVER_EXTRA) * 2,
-    height: GROUND_COVER_HEIGHT,
-    color: k.rgb(31, 31, 31)
-  })
 }
 //
 // Draw fat body bulges: horizontal ellipses protruding from the body
@@ -423,6 +433,7 @@ function onDraw(inst) {
 function drawBulges(inst, outlineColor) {
   const { k, x, floorY, riseAmount } = inst
   const topY = floorY - riseAmount
+  const surfaceOp = inst.surfaceDrawOpacity ?? 1
   for (const bulge of inst.bulges) {
     const ny = floorY - bulge.t * BODY_HEIGHT
     if (ny < topY || ny > floorY - 4) continue
@@ -440,14 +451,14 @@ function drawBulges(inst, outlineColor) {
       radiusX: (bulgeRX + 2) * breathe,
       radiusY: (bulgeRY + 1.5) * breathe,
       color: outlineColor,
-      opacity: 0.85
+      opacity: 0.85 * surfaceOp
     })
     k.drawEllipse({
       pos: k.vec2(nx, ny),
       radiusX: bulgeRX * breathe,
       radiusY: bulgeRY * breathe,
       color: k.rgb(BODY_COLOR_R + 5, BODY_COLOR_G + 3, BODY_COLOR_B + 2),
-      opacity: 0.9
+      opacity: 0.9 * surfaceOp
     })
   }
 }
@@ -457,13 +468,14 @@ function drawBulges(inst, outlineColor) {
 function drawEarthMounds(inst) {
   const { k, x, floorY } = inst
   const moundColor = k.rgb(DIRT_COLOR_R, DIRT_COLOR_G, DIRT_COLOR_B)
+  const surfaceOp = inst.surfaceDrawOpacity ?? 1
   for (const m of inst.earthMounds) {
     k.drawEllipse({
       pos: k.vec2(x + m.dx, floorY + m.dy),
       radiusX: m.size,
       radiusY: m.size * m.aspect,
       color: moundColor,
-      opacity: 0.8
+      opacity: 0.8 * surfaceOp
     })
   }
 }
@@ -498,7 +510,8 @@ function drawSegmentLines(inst, outlineColor) {
 // At RETRACT_DISTANCE the mouth is fully closed.
 //
 function drawMouth(inst) {
-  const { k, x, floorY, riseAmount, hero } = inst
+  const { k, floorY, riseAmount } = inst
+  const surfaceOp = inst.surfaceDrawOpacity ?? 1
   const topY = floorY - riseAmount
   const pos = getNodePos(inst, MOUTH_FROM_TIP_T)
   if (pos.y < topY) return
@@ -506,25 +519,18 @@ function drawMouth(inst) {
   // When smiling, draw a curved grin instead of the normal mouth
   //
   if (inst.smiling && inst.smileT > 0) {
-    drawSmile(inst, pos)
+    drawSmile(inst, pos, surfaceOp)
     return
   }
-  const heroX = hero?.character?.pos?.x ?? x + 999
-  const heroY = hero?.character?.pos?.y ?? pos.y
-  const heroDist = Math.sqrt((heroX - pos.x) ** 2 + (heroY - pos.y) ** 2)
-  const openT = Math.max(0, Math.min(1, 1 - heroDist / MOUTH_OPEN_DISTANCE))
-  if (openT <= 0) return
-  //
-  // Mouth scales smoothly from 0 to max, clamped to body width
-  //
-  const bodyW = getWidth(MOUTH_FROM_TIP_T)
-  const mouthW = Math.min(MOUTH_MAX_WIDTH * openT, bodyW * 0.9)
-  const mouthH = MOUTH_MAX_HEIGHT * openT
+  const geo = resolveMouthOpening(inst, pos)
+  if (!geo) return
+  const { mouthW, mouthH, openT } = geo
   k.drawEllipse({
     pos: k.vec2(pos.x, pos.y),
     radiusX: mouthW / 2,
     radiusY: mouthH / 2,
-    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B)
+    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B),
+    opacity: surfaceOp
   })
   const toothColor = k.rgb(TOOTH_COLOR_R, TOOTH_COLOR_G, TOOTH_COLOR_B)
   for (let i = 0; i < TOOTH_COUNT; i++) {
@@ -535,15 +541,31 @@ function drawMouth(inst) {
       p1: k.vec2(tx - TOOTH_WIDTH / 2, pos.y - mouthH / 2),
       p2: k.vec2(tx + TOOTH_WIDTH / 2, pos.y - mouthH / 2),
       p3: k.vec2(tx, pos.y - mouthH / 2 + th),
-      color: toothColor
+      color: toothColor,
+      opacity: surfaceOp
     })
     k.drawTriangle({
       p1: k.vec2(tx - TOOTH_WIDTH / 2, pos.y + mouthH / 2),
       p2: k.vec2(tx + TOOTH_WIDTH / 2, pos.y + mouthH / 2),
       p3: k.vec2(tx, pos.y + mouthH / 2 - th),
-      color: toothColor
+      color: toothColor,
+      opacity: surfaceOp
     })
   }
+}
+//
+// Mouth aperture geometry shared by drawing only (hero proximity scaling).
+//
+function resolveMouthOpening(inst, pos) {
+  const heroX = inst.hero?.character?.pos?.x ?? inst.x + 999
+  const heroY = inst.hero?.character?.pos?.y ?? pos.y
+  const heroDist = Math.sqrt((heroX - pos.x) ** 2 + (heroY - pos.y) ** 2)
+  const openT = Math.max(0, Math.min(1, 1 - heroDist / MOUTH_OPEN_DISTANCE))
+  if (openT <= 0) return null
+  const bodyW = getWidth(MOUTH_FROM_TIP_T)
+  const mouthW = Math.min(MOUTH_MAX_WIDTH * openT, bodyW * 0.9)
+  const mouthH = MOUTH_MAX_HEIGHT * openT
+  return { pos, mouthW, mouthH, openT }
 }
 //
 // Draw eyes near the tip that track the hero
@@ -555,22 +577,25 @@ function drawEyes(inst) {
   if (pos.y < topY) return
   const heroX = inst.hero?.character?.pos?.x ?? x
   const heroY = inst.hero?.character?.pos?.y ?? pos.y
-  drawEye(k, pos.x - EYE_SPACING / 2, pos.y, heroX, heroY)
-  drawEye(k, pos.x + EYE_SPACING / 2, pos.y, heroX, heroY)
+  const surfaceOp = inst.surfaceDrawOpacity ?? 1
+  drawEye(k, pos.x - EYE_SPACING / 2, pos.y, heroX, heroY, surfaceOp)
+  drawEye(k, pos.x + EYE_SPACING / 2, pos.y, heroX, heroY, surfaceOp)
 }
 //
 // Draw a single eye with pupil tracking the hero
 //
-function drawEye(k, eyeX, eyeY, heroX, heroY) {
+function drawEye(k, eyeX, eyeY, heroX, heroY, surfaceOp = 1) {
   k.drawCircle({
     pos: k.vec2(eyeX, eyeY),
     radius: EYE_RADIUS + 2,
-    color: k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B)
+    color: k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B),
+    opacity: surfaceOp
   })
   k.drawCircle({
     pos: k.vec2(eyeX, eyeY),
     radius: EYE_RADIUS,
-    color: k.rgb(SCLERA_R, SCLERA_G, SCLERA_B)
+    color: k.rgb(SCLERA_R, SCLERA_G, SCLERA_B),
+    opacity: surfaceOp
   })
   const dx = heroX - eyeX
   const dy = heroY - eyeY
@@ -581,13 +606,15 @@ function drawEye(k, eyeX, eyeY, heroX, heroY) {
   k.drawCircle({
     pos: k.vec2(eyeX + nx * maxOffset, eyeY + ny * maxOffset),
     radius: PUPIL_RADIUS,
-    color: k.rgb(PUPIL_R, PUPIL_G, PUPIL_B)
+    color: k.rgb(PUPIL_R, PUPIL_G, PUPIL_B),
+    opacity: surfaceOp
   })
 }
 //
 // Spawns dirt chunks at the ground line while rising or retracting
 //
 function spawnDirtParticles(inst, dt) {
+  if (inst.phase === 'retracting' && inst.riseAmount < BODY_HEIGHT * 0.14) return
   inst.dirtTimer += dt
   if (inst.dirtTimer < DIRT_SPAWN_INTERVAL) return
   inst.dirtTimer -= DIRT_SPAWN_INTERVAL
@@ -627,6 +654,7 @@ function drawDirtParticles(inst) {
   const { k } = inst
   const dirtColor = k.rgb(DIRT_COLOR_R, DIRT_COLOR_G, DIRT_COLOR_B)
   const darkColor = k.rgb(DIRT_COLOR_R - 15, DIRT_COLOR_G - 12, DIRT_COLOR_B - 10)
+  const surfaceOp = inst.surfaceDrawOpacity ?? 1
   for (const p of inst.dirtParticles) {
     const alpha = Math.max(0, p.life / DIRT_LIFETIME)
     k.drawRect({
@@ -634,14 +662,14 @@ function drawDirtParticles(inst) {
       width: p.size,
       height: p.size * 0.6,
       color: dirtColor,
-      opacity: alpha * 0.9
+      opacity: alpha * 0.9 * surfaceOp
     })
     k.drawRect({
       pos: k.vec2(p.x - p.size * 0.3, p.y - p.size * 0.3),
       width: p.size * 0.5,
       height: p.size * 0.4,
       color: darkColor,
-      opacity: alpha * 0.5
+      opacity: alpha * 0.5 * surfaceOp
     })
   }
 }
@@ -796,7 +824,7 @@ function playAlienChirp(inst) {
 //
 // Draw a satisfied smile (curved upward arc with teeth peeking out)
 //
-function drawSmile(inst, mouthPos) {
+function drawSmile(inst, mouthPos, surfaceOp = 1) {
   const { k } = inst
   const t = inst.smileT
   const bodyW = getWidth(MOUTH_FROM_TIP_T)
@@ -810,7 +838,8 @@ function drawSmile(inst, mouthPos) {
     pos: k.vec2(mouthPos.x, mouthPos.y),
     radiusX: smileW / 2,
     radiusY: smileH / 2,
-    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B)
+    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B),
+    opacity: surfaceOp
   })
   //
   // Curved smile line (arc of small segments)
@@ -829,7 +858,8 @@ function drawSmile(inst, mouthPos) {
       p1: k.vec2(x1, y1),
       p2: k.vec2(x2, y2),
       width: 2 * t,
-      color: smileColor
+      color: smileColor,
+      opacity: surfaceOp
     })
   }
   //
@@ -844,7 +874,8 @@ function drawSmile(inst, mouthPos) {
       p1: k.vec2(tx - 2, mouthPos.y - smileH * 0.3),
       p2: k.vec2(tx + 2, mouthPos.y - smileH * 0.3),
       p3: k.vec2(tx, mouthPos.y - smileH * 0.3 + th),
-      color: toothColor
+      color: toothColor,
+      opacity: surfaceOp
     })
   }
 }

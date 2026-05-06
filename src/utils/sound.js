@@ -2874,43 +2874,104 @@ export function playScoreTickSound(instance, progress) {
   osc.stop(now + 0.08)
 }
 /**
- * Plays a short water splash sound (hero stepping into puddle)
+ * Plays a wet "splat/splash" sound (hero stepping/landing in puddle)
+ * Layered: low-pass noise body + bandpass high-end "splash" burst + a quick
+ * pitched "plop" tone, so it reads clearly as a wet splash and can be heard
+ * over rain ambience.
  * @param {Object} instance - Sound instance
+ * @param {number} [volume=0.3] - Peak volume multiplier (0..1+)
  */
 export function playSplashSound(instance, volume = 0.3) {
   if (globalMuteProceduralSounds) return
   const ctx = instance.audioContext
   if (!ctx || ctx.state !== 'running') return
   const now = ctx.currentTime
-  const duration = 0.3
+  const duration = 0.22
   //
-  // Soft watery splash: very low-passed noise + pitched sine drop for "plop"
+  // Softer water motion: airy filtered noise + brief hiss — avoids drum-like sine body.
   //
   const bufferSize = Math.floor(ctx.sampleRate * duration)
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
   const data = buffer.getChannelData(0)
   for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * 0.3
+    data[i] = Math.random() * 2 - 1
   }
-  const noise = ctx.createBufferSource()
-  noise.buffer = buffer
-  //
-  // Very low cutoff for a soft, muffled water sound (no scraping)
-  //
-  const filter = ctx.createBiquadFilter()
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(350, now)
-  filter.frequency.linearRampToValueAtTime(180, now + duration)
-  filter.Q.value = 0.2
-  const gain = ctx.createGain()
-  gain.gain.setValueAtTime(0.001, now)
-  gain.gain.linearRampToValueAtTime(volume * 0.5, now + 0.015)
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  noise.connect(filter)
-  filter.connect(gain)
-  gain.connect(ctx.destination)
-  noise.start(now)
-  noise.stop(now + duration)
+  const bodyNoise = ctx.createBufferSource()
+  bodyNoise.buffer = buffer
+  const bodyFilter = ctx.createBiquadFilter()
+  bodyFilter.type = 'lowpass'
+  bodyFilter.frequency.setValueAtTime(520, now)
+  bodyFilter.frequency.exponentialRampToValueAtTime(140, now + duration)
+  bodyFilter.Q.value = 0.45
+  const bodyGain = ctx.createGain()
+  bodyGain.gain.setValueAtTime(0.001, now)
+  bodyGain.gain.linearRampToValueAtTime(volume * 0.38, now + 0.022)
+  bodyGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  bodyNoise.connect(bodyFilter)
+  bodyFilter.connect(bodyGain)
+  bodyGain.connect(ctx.destination)
+  bodyNoise.start(now)
+  bodyNoise.stop(now + duration)
+  const hissNoise = ctx.createBufferSource()
+  hissNoise.buffer = buffer
+  const hissFilter = ctx.createBiquadFilter()
+  hissFilter.type = 'bandpass'
+  hissFilter.frequency.setValueAtTime(4200, now)
+  hissFilter.Q.value = 0.9
+  const hissGain = ctx.createGain()
+  const hissPeak = volume * 0.22
+  hissGain.gain.setValueAtTime(0.001, now)
+  hissGain.gain.linearRampToValueAtTime(hissPeak, now + 0.004)
+  hissGain.gain.exponentialRampToValueAtTime(0.001, now + 0.11)
+  hissNoise.connect(hissFilter)
+  hissFilter.connect(hissGain)
+  hissGain.connect(ctx.destination)
+  hissNoise.start(now)
+  hissNoise.stop(now + 0.14)
+}
+/**
+ * Footsteps / wading: prefers Kaplay-loaded water.mp3 (assets/sounds/water.mp3).
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {number} [volume=0.4] - Playback volume 0..1
+ */
+export function playWaterFootstepKaplay(k, volume = 0.4) {
+  if (globalMuteProceduralSounds) return
+  k?.play?.('water', { volume: Math.min(1, Math.max(0.05, volume)) })
+}
+/**
+ * Tiny dry leaf settling crunch (touch L1 floor landing).
+ *
+ * @param {Object} instance - Sound instance from create()
+ * @param {number} [volume=0.22] - Peak gain scale
+ */
+export function playLeafGroundRustle(instance, volume = 0.22) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance?.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const dur = 0.045
+  const bufferSize = Math.floor(ctx.sampleRate * dur)
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize)
+  }
+  const src = ctx.createBufferSource()
+  src.buffer = buffer
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(2800, now)
+  bp.Q.value = 2.2
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(0.001, now)
+  g.gain.linearRampToValueAtTime(volume * 0.55, now + 0.004)
+  g.gain.exponentialRampToValueAtTime(0.001, now + dur)
+  src.connect(bp)
+  bp.connect(g)
+  g.connect(ctx.destination)
+  src.start(now)
+  src.stop(now + dur + 0.01)
 }
 /**
  * Starts a rain drip loop: individual drip sounds at random intervals.

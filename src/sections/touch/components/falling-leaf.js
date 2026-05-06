@@ -97,10 +97,22 @@ const BEZIER_STEPS = 8
  * @param {Object} config.hero - Hero instance
  * @param {number} config.leftBound - Left boundary for leaves
  * @param {number} config.rightBound - Right boundary for leaves
+ * @param {Function} [config.onLeafGroundLand] - Called once when an airborne leaf first settles on the floor
  * @returns {Object} Falling leaves instance
  */
 export function create(config) {
-  const { k, treeRoots, floorY, hero, leftBound, rightBound, poisonChance = 0, poisonColor = null, onPoisonHit = null } = config
+  const {
+    k,
+    treeRoots,
+    floorY,
+    hero,
+    leftBound,
+    rightBound,
+    poisonChance = 0,
+    poisonColor = null,
+    onPoisonHit = null,
+    onLeafGroundLand = null
+  } = config
   //
   // Count total initial leaves across all trees
   //
@@ -126,7 +138,8 @@ export function create(config) {
     nextSpawnTime: INITIAL_SPAWN_DELAY,
     poisonChance,
     poisonColor,
-    onPoisonHit
+    onPoisonHit,
+    onLeafGroundLand
   }
   //
   // Drawer for grounded leaves (on floor surface, above platforms)
@@ -431,7 +444,9 @@ function updateFallingLeaf(inst, leaf) {
   //
   if (leaf.y >= inst.floorY) {
     leaf.y = inst.floorY
+    const firstGroundTouch = !leaf.grounded
     leaf.grounded = true
+    firstGroundTouch && inst.onLeafGroundLand?.(leaf)
     leaf.scaleX = 1
     leaf.opacity = leaf.baseOpacity * 0.8
     leaf.groundVx = 0

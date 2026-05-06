@@ -2,7 +2,6 @@ import { CFG } from '../cfg.js'
 //
 // Grass blade configuration (triangular blades for realism)
 //
-const GRASS_SPACING = 8
 const GRASS_HEIGHT_MIN = 8
 const GRASS_HEIGHT_MAX = 24
 const GRASS_BLADE_WIDTH = 3
@@ -209,23 +208,33 @@ export function onDrawGrass(inst) {
 function generateGrass(platforms, colorPalette) {
   const blades = []
   platforms.forEach(platform => {
-    const startX = platform.x - platform.width / 2 + 5
-    const endX = platform.x + platform.width / 2 - 5
-    for (let x = startX; x < endX; x += GRASS_SPACING) {
-      const height = GRASS_HEIGHT_MIN + Math.random() * (GRASS_HEIGHT_MAX - GRASS_HEIGHT_MIN)
-      //
-      // Vary blade width slightly for natural look
-      //
-      const widthVariation = 0.7 + Math.random() * 0.6
-      blades.push({
-        x: x + (Math.random() - 0.5) * 4,
-        baseY: platform.y - GRASS_RAISE_OFFSET,
-        tipY: platform.y - GRASS_RAISE_OFFSET - height,
-        halfWidth: GRASS_BLADE_WIDTH * widthVariation / 2,
-        swaySpeed: GRASS_SWAY_SPEED_MIN + Math.random() * (GRASS_SWAY_SPEED_MAX - GRASS_SWAY_SPEED_MIN),
-        swayOffset: Math.random() * Math.PI * 2,
-        color: colorPalette[Math.floor(Math.random() * colorPalette.length)]
-      })
+    const pad = 8
+    const startX = platform.x - platform.width / 2 + pad
+    const endX = platform.x + platform.width / 2 - pad
+    const span = Math.max(0, endX - startX)
+    const clusterCount = Math.max(2, Math.floor(span / 46 + Math.random() * 4))
+    for (let c = 0; c < clusterCount; c++) {
+      if (Math.random() < 0.07) continue
+      const centerX = startX + Math.random() * span
+      const clusterRadius = 9 + Math.random() * 34
+      const bladeCount = 2 + Math.floor(Math.random() * 13)
+      for (let b = 0; b < bladeCount; b++) {
+        const dist = Math.pow(Math.random(), 1.48) * clusterRadius
+        const ang = Math.random() * Math.PI * 2
+        const x = centerX + Math.cos(ang) * dist * 0.92 + (Math.random() - 0.5) * 3
+        if (x < startX || x > endX) continue
+        const height = GRASS_HEIGHT_MIN + Math.random() * (GRASS_HEIGHT_MAX - GRASS_HEIGHT_MIN)
+        const widthVariation = 0.7 + Math.random() * 0.6
+        blades.push({
+          x,
+          baseY: platform.y - GRASS_RAISE_OFFSET,
+          tipY: platform.y - GRASS_RAISE_OFFSET - height,
+          halfWidth: GRASS_BLADE_WIDTH * widthVariation / 2,
+          swaySpeed: GRASS_SWAY_SPEED_MIN + Math.random() * (GRASS_SWAY_SPEED_MAX - GRASS_SWAY_SPEED_MIN),
+          swayOffset: Math.random() * Math.PI * 2,
+          color: colorPalette[Math.floor(Math.random() * colorPalette.length)]
+        })
+      }
     }
   })
   return blades
@@ -307,31 +316,47 @@ function generatePlatformThorns(zones) {
  * @param {*} [fillColor] - Optional inner fill (Kaplay Color); default gray-purple
  */
 export function drawThorns(k, thornData, fillColor) {
-  const thornColor = fillColor ?? k.rgb(70, 65, 80)
-  const outlineColor = k.rgb(0, 0, 0)
-  const ow = THORN_OUTLINE_WIDTH
+  //
+  // Splintered stakes / snapped branches — irregular quads read as forest debris,
+  // not abstract neon triangles (outline stays near-black for damp silhouettes).
+  //
+  const thornColor = fillColor ?? k.rgb(72, 56, 42)
+  const outlineColor = k.rgb(10, 9, 8)
+  const ow = 1.15
+  const hi = k.rgb(118, 98, 78)
   thornData.forEach(thorn => {
-    //
-    // Draw black outline (slightly larger triangle behind the thorn)
-    //
+    const hw = thorn.width / 2
+    const h = thorn.height
+    const skew = Math.sin(thorn.x * 0.09 + thorn.baseY * 0.02) * (hw * 0.35)
+    const tipX = thorn.x + (thorn.tipOffset || 0) + Math.cos(thorn.x * 0.06) * (hw * 0.25)
+    const tipY = thorn.baseY - h
+    const midRX = thorn.x + hw * 0.25 + skew
+    const midLX = thorn.x - hw * 0.35 + skew * 0.4
+    const upperMidY = thorn.baseY - h * 0.38
     k.drawPolygon({
       pts: [
-        k.vec2(thorn.x - thorn.width / 2 - ow, thorn.baseY + ow),
-        k.vec2(thorn.x + thorn.width / 2 + ow, thorn.baseY + ow),
-        k.vec2(thorn.x + thorn.tipOffset, thorn.baseY - thorn.height - ow)
+        k.vec2(thorn.x - hw - ow, thorn.baseY + ow * 0.6),
+        k.vec2(thorn.x + hw + ow, thorn.baseY + ow * 0.6),
+        k.vec2(midRX + ow * 0.8, upperMidY),
+        k.vec2(tipX, tipY - ow)
       ],
       color: outlineColor
     })
-    //
-    // Draw thorn fill on top
-    //
     k.drawPolygon({
       pts: [
-        k.vec2(thorn.x - thorn.width / 2, thorn.baseY),
-        k.vec2(thorn.x + thorn.width / 2, thorn.baseY),
-        k.vec2(thorn.x + thorn.tipOffset, thorn.baseY - thorn.height)
+        k.vec2(thorn.x - hw, thorn.baseY),
+        k.vec2(thorn.x + hw, thorn.baseY),
+        k.vec2(midRX, upperMidY - 1),
+        k.vec2(tipX, tipY)
       ],
       color: thornColor
+    })
+    k.drawLine({
+      p1: k.vec2(midLX, thorn.baseY - 3),
+      p2: k.vec2(tipX - skew * 0.2, tipY + h * 0.08),
+      width: 1.1,
+      color: hi,
+      opacity: 0.35
     })
   })
 }

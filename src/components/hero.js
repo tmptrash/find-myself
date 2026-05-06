@@ -2431,27 +2431,38 @@ function applySlowMotion(inst) {
  * @returns {Array<string>} Array of color hex strings
  */
 function getParticleColors(inst) {
-  const { type } = inst
   //
-  // Check if we're in time section - use grayscale colors
+  // Death shards stay filled with body hues plus thin outline only — never solid outline blobs.
   //
   const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('level-time.')
-  
   if (isTimeSection) {
-    //
-    // Time section: hero uses grayscale, anti-hero uses orange/yellow
-    //
+    const { type } = inst
     return type === HEROES.HERO
-      ? ["#8B5A50", "#6B4A40", "#A07060", "#3E2E28"]  // Brown shades matching hero body
-      : [CFG.visual.colors.hero.body, "#FFA500", "#FF8C00", "#000000"]  // Orange shades + black
+      ? deathParticlePaletteFromHex('#8B5A50')
+      : deathParticlePaletteFromHex('#FF8C00')
   }
-  //
-  // Other sections: use colors from config
-  //
   const colors = CFG.visual.colors
-  return type === HEROES.HERO
-    ? [colors.hero.body, colors.outline]
-    : [colors.antiHero.body, colors.outline]
+  return inst.type === HEROES.HERO
+    ? deathParticlePaletteFromHex(inst.bodyColor || colors.hero.body)
+    : deathParticlePaletteFromHex(colors.antiHero.body)
+}
+
+/**
+ * Builds four body-tone hex shades from one hero colour (no outline-only shards).
+ *
+ * @param {string} hex - Hero fill hex
+ * @returns {string[]} Four palette strings for particle bodies
+ */
+function deathParticlePaletteFromHex(hex) {
+  const [r, g, b] = parseHex(hex)
+  const clamp = (v) => Math.max(18, Math.min(248, Math.round(v)))
+  const toHex = (rr, gg, bb) => `#${clamp(rr).toString(16).padStart(2, '0')}${clamp(gg).toString(16).padStart(2, '0')}${clamp(bb).toString(16).padStart(2, '0')}`
+  return [
+    toHex(r, g, b),
+    toHex(r * 0.88, g * 0.88, b * 0.88),
+    toHex(r * 0.72, g * 0.72, b * 0.72),
+    toHex(Math.min(255, r * 1.08), Math.min(255, g * 1.06), Math.min(255, b * 1.04))
+  ]
 }
 
 /**
@@ -2664,7 +2675,7 @@ function createBodyParticles(inst, centerX, centerY) {
     const angle = (Math.PI * 2 * i) / particleCount + k.rand(-0.4, 0.4)
     const speed = k.rand(150, 350)
     const pSize = k.rand(4, 8)
-    const oSize = pSize + 4
+    const oSize = pSize + 2
     const colorHex = k.choose(particleColors)
     const [r, g, b] = parseHex(colorHex)
     const rotation = k.rand(0, 360)

@@ -161,7 +161,8 @@ export function drawOrganicTreeToCanvas(ctx, tree, sway) {
   if (!tree.branchClusters) return
   const trunkColor = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
   const rc = tree.rootColor || { r: 60, g: 40, b: 25 }
-  const rootColor = `rgba(${rc.r}, ${rc.g}, ${rc.b}, 0.9)`
+  const rootAlpha = Math.min(1, tree.opacity) * 0.92
+  const rootColor = `rgba(${rc.r}, ${rc.g}, ${rc.b}, ${rootAlpha})`
   ctx.lineCap = 'round'
   for (const seg of tree.rootSegments) {
     ctx.strokeStyle = rootColor
@@ -336,7 +337,7 @@ function drawClusterToCanvas(ctx, tree, cluster, sway, trunkColor) {
       leaf.size,
       leaf.rotation,
       leaf.r, leaf.g, leaf.b,
-      leaf.opacity
+      leaf.opacity * tree.opacity
     )
   }
 }
@@ -354,6 +355,35 @@ export function prerenderOrganicTreeSprites(k, tree, baseSpriteName) {
   tree.branchClusters.forEach((cluster, i) => {
     prerenderClusterSprite(k, tree, cluster, `${baseSpriteName}-cluster-${i}`)
   })
+}
+
+/**
+ * Bake one dimmed full-organic-tree PNG (sway=0) for depth pass behind hinged sprites.
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {Object} tree - Organic tree (mutated with darkBackdropSpriteName, darkBackdropX, darkBackdropY)
+ * @param {string} baseSpriteName - Prefix shared with prerenderOrganicTreeSprites
+ * @param {number} [dimRgbFactor=0.38] - RGB multiplier for farther read
+ * @param {number} [opacityScale=0.88] - Whole-tree alpha scale after dimming
+ */
+export function prerenderOrganicDarkBackdropSprite(k, tree, baseSpriteName, dimRgbFactor = 0.38, opacityScale = 0.88) {
+  if (!tree.branchClusters) return
+  const bb = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+  extendOrganicTreeCanvasBounds(tree, bb, 0)
+  if (!isFinite(bb.minX)) return
+  const pad = 20
+  const w = Math.ceil(bb.maxX - bb.minX + pad * 2)
+  const h = Math.ceil(bb.maxY - bb.minY + pad * 2)
+  const snap = dimOrganicTreeSnapshot(tree, dimRgbFactor, opacityScale)
+  const name = `${baseSpriteName}-dark-backdrop`
+  const dataUrl = toPng({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
+    ctx.translate(-bb.minX + pad, -bb.minY + pad)
+    drawOrganicTreeToCanvas(ctx, snap, 0)
+  })
+  k.loadSprite(name, dataUrl)
+  tree.darkBackdropSpriteName = name
+  tree.darkBackdropX = bb.minX - pad
+  tree.darkBackdropY = bb.minY - pad
 }
 
 function prerenderTrunkSprite(k, tree, spriteName) {
@@ -442,7 +472,7 @@ function prerenderClusterSprite(k, tree, cluster, spriteName) {
       ctx.stroke()
     }
     for (const leaf of cluster.leaves) {
-      drawRealisticLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.rotation, leaf.r, leaf.g, leaf.b, leaf.opacity)
+      drawRealisticLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.rotation, leaf.r, leaf.g, leaf.b, leaf.opacity * tree.opacity)
     }
   })
   k.loadSprite(spriteName, dataUrl)
@@ -453,4 +483,83 @@ function prerenderClusterSprite(k, tree, cluster, spriteName) {
   cluster.anchorY = (pivotPxY / h) * 2 - 1
   cluster.worldPivotX = tree.x + cluster.pivotX
   cluster.worldPivotY = cluster.pivotY
+}
+
+//
+// World-space bounds for baking a full-tree overlay (matches drawOrganicTreeToCanvas coordinates).
+//
+function extendOrganicTreeCanvasBounds(tree, bb, sway) {
+  if (!tree.branchClusters) return
+  const mergePt = (x, y) => {
+    if (x < bb.minX) bb.minX = x
+    if (x > bb.maxX) bb.maxX = x
+    if (y < bb.minY) bb.minY = y
+    if (y > bb.maxY) bb.maxY = y
+  }
+  const sx = sway
+  for (const seg of tree.rootSegments) {
+    mergePt(tree.x + seg.startX, seg.startY)
+    mergePt(tree.x + seg.endX, seg.endY)
+  }
+  for (const seg of tree.trunkSegments) {
+    mergePt(tree.x + seg.startX, seg.startY)
+    mergePt(tree.x + seg.endX, seg.endY)
+  }
+  for (const cluster of tree.branchClusters) {
+    const bx = tree.x + cluster.pivotX
+    const py = cluster.pivotY
+    for (const seg of cluster.branchSegments) {
+      mergePt(bx + seg.startX + sx * 0.4, py + seg.startY)
+      mergePt(bx + seg.endX + sx, py + seg.endY)
+    }
+    for (const leaf of cluster.leaves) {
+      const lx = bx + leaf.x + sx
+      const ly = py + leaf.y
+      const r = leaf.size + 10
+      mergePt(lx - r, ly - r)
+      mergePt(lx + r, ly + r)
+    }
+  }
+}
+
+//
+// Non-mutating dimmed copy for one-shot canvas bake (live tree keeps palette for hinged sprites).
+//
+function dimOrganicTreeSnapshot(tree, rgbFactor, opacityScale) {
+  const clampChan = (v) => Math.max(0, Math.min(255, Math.floor(v * rgbFactor)))
+  const cloneColor = (c) => ({
+    r: clampChan(c.r),
+    g: clampChan(c.g),
+    b: clampChan(c.b)
+  })
+  const clusters = tree.branchClusters.map((cluster) => ({
+    pivotX: cluster.pivotX,
+    pivotY: cluster.pivotY,
+    branchSegments: cluster.branchSegments,
+    leaves: cluster.leaves.map((leaf) => ({
+      ...leaf,
+      r: clampChan(leaf.r),
+      g: clampChan(leaf.g),
+      b: clampChan(leaf.b)
+    }))
+  }))
+  const rcBase = tree.rootColor || { r: 60, g: 40, b: 25 }
+  const lcBase = tree.leafColor || { r: 120, g: 90, b: 40 }
+  return {
+    x: tree.x,
+    y: tree.y,
+    trunkTop: tree.trunkTop,
+    trunkBottom: tree.trunkBottom,
+    trunkHeight: tree.trunkHeight,
+    trunkWidth: tree.trunkWidth,
+    crownCenterY: tree.crownCenterY,
+    trunkSegments: tree.trunkSegments,
+    rootSegments: tree.rootSegments,
+    branchClusters: clusters,
+    crowns: tree.crowns,
+    trunkColor: cloneColor(tree.trunkColor),
+    rootColor: cloneColor(rcBase),
+    leafColor: cloneColor(lcBase),
+    opacity: Math.min(1, tree.opacity * opacityScale)
+  }
 }

@@ -8,6 +8,18 @@ const TOP_MARGIN = CFG.visual.gameArea.topMargin
 const SPIDER_THREAD_X_RATIO = 0.78
 const SPIDER_THREAD_TOP_Y = TOP_MARGIN + 80
 const SPIDER_THREAD_LENGTH = 220
+//
+// Shortest silk length allowed after floor clamping so the spider does not park into terrain or bark.
+//
+const SPIDER_THREAD_LENGTH_MIN = 42
+//
+// Lowest pixel (feet / abdomen / hanging sway buffer) must stay above scene floor by at least this clear gap.
+//
+const SPIDER_CLEARANCE_ABOVE_FLOOR = 54
+//
+// Approx vertical span from body center down through legs + head bulge for clearance checks only.
+//
+const SPIDER_BODY_HEAD_LEG_REACH_BELOW_CENTER = 28
 const SPIDER_BODY_RADIUS = 9
 const SPIDER_HEAD_RADIUS = 6
 const SPIDER_LEG_LENGTH = 12
@@ -61,11 +73,12 @@ export function spiderHoverTooltipTarget(inst, text) {
  * @param {Array<Object>} [cfg.frontTrees] - Parallax trees with branchClusters (touch L0)
  * @param {Object} [cfg.treeRootsInst] - Touch L1 musical tree roots inst (preferred when noteTreeIndices set)
  * @param {number[]} [cfg.noteTreeIndices] - Root indices that play puzzle notes (spider hangs only on these)
+ * @param {number} [cfg.floorY] - World floor line Y; thread length is clamped so the spider never reaches it
  * @param {number} [cfg.drawZ=28] - Draw order
  * @returns {Object} Spider instance ({ threadAnchorX, threadAnchorY, threadLength, k, heroInst })
  */
 export function createHangingSpider(cfg) {
-  const { k, heroInst, frontTrees, treeRootsInst, noteTreeIndices, drawZ = 28 } = cfg
+  const { k, heroInst, frontTrees, treeRootsInst, noteTreeIndices, drawZ = 28, floorY } = cfg
   const playableW = CFG.visual.screen.width - CFG.visual.gameArea.leftMargin - CFG.visual.gameArea.rightMargin
   const leftMargin = CFG.visual.gameArea.leftMargin
   let anchorX = leftMargin + playableW * SPIDER_THREAD_X_RATIO
@@ -118,6 +131,7 @@ export function createHangingSpider(cfg) {
       threadLength = 90 + Math.random() * 70
     }
   }
+  threadLength = clampSpiderThreadToFloor(anchorY, threadLength, floorY)
   const inst = {
     threadAnchorX: anchorX,
     threadAnchorY: anchorY,
@@ -223,4 +237,14 @@ function drawHangingSpider(k, inst) {
       color: k.rgb(20, 20, 20)
     })
   }
+}
+//
+// Shortens silk when body center + legs would dip below the playable floor line.
+//
+function clampSpiderThreadToFloor(anchorY, threadLength, floorY) {
+  if (floorY == null) return threadLength
+  const maxBodyCenterY = floorY - SPIDER_CLEARANCE_ABOVE_FLOOR - SPIDER_BODY_HEAD_LEG_REACH_BELOW_CENTER
+  const bodyCenterY = anchorY + threadLength
+  if (bodyCenterY <= maxBodyCenterY) return threadLength
+  return Math.max(SPIDER_THREAD_LENGTH_MIN, maxBodyCenterY - anchorY)
 }

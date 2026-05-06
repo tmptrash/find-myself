@@ -2223,7 +2223,8 @@ export function sceneLevel1(k) {
       k,
       heroInst,
       treeRootsInst,
-      noteTreeIndices: [...new Set(gameState.targetSequence)]
+      noteTreeIndices: [...new Set(gameState.targetSequence)],
+      floorY: FLOOR_Y
     })
     Tooltip.create({
       k,

@@ -84,6 +84,21 @@ const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
 //
 const FLOOR_THORN_DRAW_Z = CFG.visual.zIndex.platforms + 2
 //
+// Parallax ladder (Kaplay z, larger draws above): grey circle crowns farthest, black crowns + strip,
+// back-row organic silhouettes, birds z=5, baked front bushes/static circles z=7, grass z=20,
+// dim duplicate organics z=23 under hinged sway z=25.
+//
+const L0_PARALLAX_GREY_MIDDLE_Z = 2
+const L0_PARALLAX_BLACK_BACK_Z = 3
+const L0_PARALLAX_BACK_ORGANIC_Z = 4
+const L0_PARALLAX_FRONT_STATIC_Z = 7
+//
+const L0_FRONT_ORGANIC_DARK_BACKDROP_Z = 23
+const L0_FRONT_ORGANIC_DYNAMIC_Z = 25
+//
+const L0_FRONT_ORGANIC_DARK_DIM_RGB = 0.38
+const L0_FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE = 0.88
+//
 // Dark static organic silhouettes on back parallax — tinted like Touch L1 back row (far/near fog).
 //
 const L0_BACK_ORGANIC_TREE_COUNT = 6
@@ -845,7 +860,7 @@ export function sceneLevel0(k) {
             trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
             rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
             leafColor: k.rgb(120, 90, 40),
-            opacity: 0.82 + Math.random() * 0.08,
+            opacity: 1,
             swaySpeed: 0,
             swayAmount: 0,
             swayOffset: 0
@@ -1035,9 +1050,10 @@ export function sceneLevel0(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Create two background canvases: one for back layer, one for middle+front
+    // Bake backgrounds: farthest grey circles-only sheet, black back row strip + circle trees,
+    // transparent back organics, front bushes/static circles (hinged organics at runtime).
     //
-    const createBackLayerCanvas = () => {
+    const createBlackBackBaseCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         //
         // 1. Draw darkened ground area
@@ -1051,149 +1067,176 @@ export function sceneLevel0(k) {
           ctx.fillRect(0, avgCrownY, k.width(), floorY - avgCrownY)
         }
         //
-        // 2. Draw back layer only (layerIndex 0)
+        // 2. Back layer base only (grey fill above + circle-crown trees; organic goes on a separate PNG sheet).
         //
-        if (layers[0]) {
-          drawLayerToCanvas(ctx, layers[0], 0, null)
-        }
+        layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { skipOrganic: true })
       })
     }
     
-    const createMiddleFrontCanvas = () => {
-      //
-      // ALL organic front-layer trees are now dynamic (sway around hinges).
-      // The baked canvas only carries non-organic stuff: middle layer + bushes
-      // + grass. Trunks/branches of front trees are drawn from PNG sprites.
-      //
+    const createBackOrganicOverlayCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        //
-        // 1. Draw middle layer (all trees)
-        //
-        if (layers[1]) {
-          drawLayerToCanvas(ctx, layers[1], 0, null)
+        ctx.clearRect(0, 0, k.width(), k.height())
+        layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { organicOnly: true })
+      })
+    }
+    
+    const createGreyMiddleCanvas = () => {
+      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+        layers[1] && drawLayerToCanvas(ctx, layers[1], 0, {})
+      })
+    }
+    
+    const createFrontStaticCanvas = () => {
+      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+        if (!layers[2]) return
+        const staticTrees = layers[2].trees.filter(t => !t.branchClusters)
+        const frontLayerStatic = {
+          trees: staticTrees,
+          bushes: layers[2].bushes,
+          grassBlades: layers[2].grassBlades,
+          name: layers[2].name
         }
-        //
-        // 2. Draw front layer WITHOUT organic trees (those are sprites + sway)
-        //
-        if (layers[2]) {
-          const staticTrees = layers[2].trees.filter(t => !t.branchClusters)
-          const frontLayerStatic = {
-            trees: staticTrees,
-            bushes: layers[2].bushes,
-            grassBlades: layers[2].grassBlades,
-            name: layers[2].name
-          }
-          drawLayerToCanvas(ctx, frontLayerStatic, 0, null)
-        }
+        drawLayerToCanvas(ctx, frontLayerStatic, 0, {})
       })
     }
     //
     // Helper function to draw layer to canvas
     //
-    const drawLayerToCanvas = (ctx, layer, time, skipIndices) => {
+    const drawLayerToCanvas = (ctx, layer, time, drawOpts) => {
+      const { skipOrganic = false, organicOnly = false } = drawOpts || {}
       //
-      // Draw trees: rectangle + circle crowns first, then organic meshes so silhouettes paint over dark backs but stay behind upper parallax layers when baked together.
+      // Legacy rectangle + circle crowns (and bushes); skipped when baking transparent organic-only sheet.
       //
-      for (const tree of layer.trees) {
-        if (tree.branchClusters) continue
-        const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
-        //
-        // Legacy back/middle layer trees: roots + rectangle trunk + circle crowns
-        // Roots are drawn first so the trunk paints over their tops.
-        //
-        if (tree.rootSegments) {
-          ctx.lineCap = 'round'
-          const rr = tree.rootColor ? tree.rootColor.r : tree.trunkColor.r
-          const rg = tree.rootColor ? tree.rootColor.g : tree.trunkColor.g
-          const rb = tree.rootColor ? tree.rootColor.b : tree.trunkColor.b
-          for (const seg of tree.rootSegments) {
-            ctx.strokeStyle = `rgba(${rr}, ${rg}, ${rb}, ${tree.opacity})`
-            ctx.lineWidth = seg.width
+      if (!organicOnly) {
+        for (const tree of layer.trees) {
+          if (tree.branchClusters) continue
+          const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
+          //
+          // Legacy back/middle layer trees: roots + rectangle trunk + circle crowns
+          // Roots are drawn first so the trunk paints over their tops.
+          //
+          if (tree.rootSegments) {
+            ctx.lineCap = 'round'
+            const rr = tree.rootColor ? tree.rootColor.r : tree.trunkColor.r
+            const rg = tree.rootColor ? tree.rootColor.g : tree.trunkColor.g
+            const rb = tree.rootColor ? tree.rootColor.b : tree.trunkColor.b
+            for (const seg of tree.rootSegments) {
+              ctx.strokeStyle = `rgba(${rr}, ${rg}, ${rb}, ${tree.opacity})`
+              ctx.lineWidth = seg.width
+              ctx.beginPath()
+              ctx.moveTo(tree.x + seg.startX, seg.startY)
+              ctx.lineTo(tree.x + seg.endX, seg.endY)
+              ctx.stroke()
+            }
+          }
+          ctx.fillStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+          ctx.fillRect(
+            tree.x + sway * 0.2 - tree.trunkWidth / 2,
+            tree.trunkTop,
+            tree.trunkWidth,
+            tree.trunkHeight
+          )
+          if (tree.branches) {
+            for (const branch of tree.branches) {
+              ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
+              ctx.lineWidth = branch.width
+              ctx.beginPath()
+              ctx.moveTo(tree.x + branch.startX + sway * 0.2, branch.startY)
+              ctx.lineTo(tree.x + branch.endX + sway * 0.3, branch.endY)
+              ctx.stroke()
+            }
+          }
+          for (const crown of tree.crowns) {
+            const colorShift = crown.colorShift || 0
+            const leafR = Math.min(255, tree.leafColor.r + colorShift)
+            const leafG = Math.min(255, tree.leafColor.g + colorShift)
+            const leafB = Math.min(255, tree.leafColor.b + colorShift)
+            ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${tree.opacity * crown.opacityVariation})`
             ctx.beginPath()
-            ctx.moveTo(tree.x + seg.startX, seg.startY)
-            ctx.lineTo(tree.x + seg.endX, seg.endY)
-            ctx.stroke()
+            ctx.arc(
+              tree.x + crown.offsetX + sway,
+              tree.crownCenterY + crown.offsetY,
+              tree.crownSize * crown.sizeVariation,
+              0,
+              Math.PI * 2
+            )
+            ctx.fill()
           }
         }
-        ctx.fillStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
-        ctx.fillRect(
-          tree.x + sway * 0.2 - tree.trunkWidth / 2,
-          tree.trunkTop,
-          tree.trunkWidth,
-          tree.trunkHeight
-        )
-        if (tree.branches) {
-          for (const branch of tree.branches) {
-            ctx.strokeStyle = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
-            ctx.lineWidth = branch.width
+        //
+        // Draw bushes
+        //
+        for (const bush of layer.bushes) {
+          const bushTime = 0
+          const sway = Math.sin(bushTime * bush.swaySpeed + bush.swayOffset) * bush.swayAmount
+          for (const crown of bush.crowns) {
+            const colorShift = crown.colorShift || 0
+            const leafR = Math.min(255, bush.color.r + colorShift)
+            const leafG = Math.min(255, bush.color.g + colorShift)
+            const leafB = Math.min(255, bush.color.b + colorShift)
+            ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${bush.opacity * crown.opacityVariation})`
             ctx.beginPath()
-            ctx.moveTo(tree.x + branch.startX + sway * 0.2, branch.startY)
-            ctx.lineTo(tree.x + branch.endX + sway * 0.3, branch.endY)
-            ctx.stroke()
+            ctx.arc(
+              bush.x + crown.offsetX + sway,
+              bush.y + crown.offsetY,
+              bush.size * crown.sizeVariation * 0.5,
+              0,
+              Math.PI * 2
+            )
+            ctx.fill()
           }
         }
-        for (const crown of tree.crowns) {
-          const colorShift = crown.colorShift || 0
-          const leafR = Math.min(255, tree.leafColor.r + colorShift)
-          const leafG = Math.min(255, tree.leafColor.g + colorShift)
-          const leafB = Math.min(255, tree.leafColor.b + colorShift)
-          ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${tree.opacity * crown.opacityVariation})`
-          ctx.beginPath()
-          ctx.arc(
-            tree.x + crown.offsetX + sway,
-            tree.crownCenterY + crown.offsetY,
-            tree.crownSize * crown.sizeVariation,
-            0,
-            Math.PI * 2
-          )
-          ctx.fill()
-        }
       }
-      for (const tree of layer.trees) {
-        if (!tree.branchClusters) continue
-        const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
-        OrganicParallax.drawOrganicTreeToCanvas(ctx, tree, sway)
-      }
-      //
-      // Draw bushes
-      //
-      for (const bush of layer.bushes) {
-        const time = 0
-        const sway = Math.sin(time * bush.swaySpeed + bush.swayOffset) * bush.swayAmount
-        
-        for (const crown of bush.crowns) {
-          const colorShift = crown.colorShift || 0
-          const leafR = Math.min(255, bush.color.r + colorShift)
-          const leafG = Math.min(255, bush.color.g + colorShift)
-          const leafB = Math.min(255, bush.color.b + colorShift)
-          
-          ctx.fillStyle = `rgba(${leafR}, ${leafG}, ${leafB}, ${bush.opacity * crown.opacityVariation})`
-          ctx.beginPath()
-          ctx.arc(
-            bush.x + crown.offsetX + sway,
-            bush.y + crown.offsetY,
-            bush.size * crown.sizeVariation * 0.5,
-            0,
-            Math.PI * 2
-          )
-          ctx.fill()
+      if (!skipOrganic) {
+        for (const tree of layer.trees) {
+          if (!tree.branchClusters) continue
+          const sway = Math.sin(time * tree.swaySpeed + tree.swayOffset) * tree.swayAmount
+          OrganicParallax.drawOrganicTreeToCanvas(ctx, tree, sway)
         }
       }
     }
     
-    const backLayerDataURL = createBackLayerCanvas()
-    const middleFrontDataURL = createMiddleFrontCanvas()
-    const backTexture = k.loadSprite('bg-touch-back', backLayerDataURL)
-    const middleFrontTexture = k.loadSprite('bg-touch-middle-front', middleFrontDataURL)
+    const greyMiddleDataURL = createGreyMiddleCanvas()
+    const blackBackBaseDataURL = createBlackBackBaseCanvas()
+    const backOrganicOverlayDataURL = createBackOrganicOverlayCanvas()
+    const frontStaticDataURL = createFrontStaticCanvas()
+    k.loadSprite('bg-touch-l0-grey-middle', greyMiddleDataURL)
+    k.loadSprite('bg-touch-l0-black-back', blackBackBaseDataURL)
+    k.loadSprite('bg-touch-l0-back-organic', backOrganicOverlayDataURL)
+    k.loadSprite('bg-touch-l0-front-static', frontStaticDataURL)
     //
-    // Draw back layer canvas (before big bugs, z=2)
+    // Grey circle crowns (furthest), then black circle row + strip, then back organic silhouettes (below birds z=5).
     //
     k.add([
-      k.z(2),
+      k.z(L0_PARALLAX_GREY_MIDDLE_Z),
       {
         draw() {
           k.drawSprite({
-            sprite: 'bg-touch-back',
+            sprite: 'bg-touch-l0-grey-middle',
+            pos: k.vec2(0, 0),
+            anchor: "topleft"
+          })
+        }
+      }
+    ])
+    k.add([
+      k.z(L0_PARALLAX_BLACK_BACK_Z),
+      {
+        draw() {
+          k.drawSprite({
+            sprite: 'bg-touch-l0-black-back',
+            pos: k.vec2(0, 0),
+            anchor: "topleft"
+          })
+        }
+      }
+    ])
+    k.add([
+      k.z(L0_PARALLAX_BACK_ORGANIC_Z),
+      {
+        draw() {
+          k.drawSprite({
+            sprite: 'bg-touch-l0-back-organic',
             pos: k.vec2(0, 0),
             anchor: "topleft"
           })
@@ -1201,14 +1244,14 @@ export function sceneLevel0(k) {
       }
     ])
     //
-    // Draw middle+front layer canvas (after big bugs, z=7)
+    // Front bushes / static circles (organic hinge trees drawn later).
     //
     k.add([
-      k.z(7),
+      k.z(L0_PARALLAX_FRONT_STATIC_Z),
       {
         draw() {
           k.drawSprite({
-            sprite: 'bg-touch-middle-front',
+            sprite: 'bg-touch-l0-front-static',
             pos: k.vec2(0, 0),
             anchor: "topleft"
           })
@@ -1384,10 +1427,32 @@ export function sceneLevel0(k) {
       //
       const dynamicTrees = allFrontTrees.filter(t => t.branchClusters)
       dynamicTrees.forEach((tree, idx) => {
-        OrganicParallax.prerenderOrganicTreeSprites(k, tree, `l0-dyn-tree-${idx}`)
+        const baseName = `l0-dyn-tree-${idx}`
+        OrganicParallax.prerenderOrganicDarkBackdropSprite(
+          k,
+          tree,
+          baseName,
+          L0_FRONT_ORGANIC_DARK_DIM_RGB,
+          L0_FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE
+        )
+        OrganicParallax.prerenderOrganicTreeSprites(k, tree, baseName)
       })
       k.add([
-        k.z(25),
+        k.z(L0_FRONT_ORGANIC_DARK_BACKDROP_Z),
+        {
+          draw() {
+            for (const tree of dynamicTrees) {
+              tree.darkBackdropSpriteName && k.drawSprite({
+                sprite: tree.darkBackdropSpriteName,
+                pos: k.vec2(tree.darkBackdropX, tree.darkBackdropY),
+                anchor: "topleft"
+              })
+            }
+          }
+        }
+      ])
+      k.add([
+        k.z(L0_FRONT_ORGANIC_DYNAMIC_Z),
         {
           draw() {
             const time = k.time()
@@ -1440,7 +1505,7 @@ export function sceneLevel0(k) {
     //
     const BACK_LAYER_TREE_COLOR = "#1F211F"  // Color between black and back layer trees for better visibility
     //
-    // Bug4 (anti-hero monster platform) z is in FRONT of dynamic trees (z=25) so the
+    // Bug4 (anti-hero monster platform) z is in FRONT of hinged foliage (L0_FRONT_ORGANIC_DYNAMIC_Z)
     // monster + the anti-hero on its head are clearly in front of all foliage.
     // Other big bugs (1, 2, 3) keep the original z=8 so they hide behind front trees.
     //
@@ -2608,7 +2673,8 @@ export function sceneLevel0(k) {
     const spiderL0Inst = createHangingSpider({
       k,
       heroInst,
-      frontTrees
+      frontTrees,
+      floorY: FLOOR_Y
     })
     Tooltip.create({
       k,

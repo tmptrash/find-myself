@@ -52,7 +52,10 @@ const FLOOR_THORN_MAX_PER_CLUSTER = 6
 const FLOOR_THORN_HEIGHT_MIN = 11
 const FLOOR_THORN_HEIGHT_MAX = 20
 const FLOOR_THORN_TIP_OFFSET = 3
-const FLOOR_THORN_RAISE_OFFSET = 3
+//
+// Thorn mesh sits this many px above FLOOR_Y (lower value = spikes sit closer to the soil line).
+//
+const FLOOR_THORN_RAISE_OFFSET = 1
 const FLOOR_THORN_CLUSTER_MIN = 70
 const FLOOR_THORN_CLUSTER_EXTRA = 140
 const FLOOR_THORN_GAP_MIN = 80
@@ -80,9 +83,9 @@ const FLOOR_THORN_COLLISION_TIP_BIAS_DOWN = 14
 const FLOOR_THORN_FEET_BELOW_BASE_PAD = 10
 const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
 //
-// Z: floor thorns above platform (16), below grass blades (20) so spikes sit on floor but under grass
+// Z: floor + trap thorns above grass (20) and rocks (7), below hinged trees (25).
 //
-const FLOOR_THORN_DRAW_Z = CFG.visual.zIndex.platforms + 2
+const L0_FLOOR_THORN_DRAW_Z = 21
 //
 // Parallax ladder (Kaplay z, larger draws above): grey circle crowns farthest, black crowns + strip,
 // back-row organic silhouettes, birds z=5, baked front bushes/static circles z=7, grass z=20,
@@ -101,13 +104,19 @@ const L0_FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE = 0.88
 //
 // Dark static organic silhouettes on back parallax — tinted like Touch L1 back row (far/near fog).
 //
-const L0_BACK_ORGANIC_TREE_COUNT = 6
+const L0_BACK_ORGANIC_MID_COUNT = 9
+//
+// Extra back row: smaller + heavier dim so it reads clearly behind the mid silhouettes.
+//
+const L0_BACK_ORGANIC_FAR_COUNT = 15
+const L0_BACK_ORGANIC_FAR_HEIGHT_SCALE = 0.78
 const L0_MATCH_L1_BACK_ROW_FAR_BLEND = 0.62
 const L0_MATCH_L1_BACK_ROW_NEAR_BLEND = 0.36
 //
 // After fog tint, darken organic back silhouettes so they read between circle trees and swaying front row.
 //
 const L0_BACK_ORGANIC_SILHOUETTE_DIM = 0.26
+const L0_BACK_ORGANIC_FAR_SILHOUETTE_DIM = 0.12
 const L0_BACK_SIMPLE_TREE_COUNT = 13
 //
 // Hero spawn positions
@@ -172,40 +181,16 @@ const MONSTER_CHARS_PER_SECOND = 12
 const MONSTER_MIN_DISPLAY_TIME = 2.5
 const MONSTER_PAUSE_BETWEEN = 1.0
 const MONSTER_CONVERSATION_LINES = [
-  { speaker: 0, text: "look. the grey one is\ntouching the bugs again" },
-  { speaker: 1, text: "why do they always\ntouch the bugs?" },
-  { speaker: 2, text: "because small things\ngather into bigger things.\nthat is philosophy" },
-  { speaker: 1, text: "I touched the bugs once" },
-  { speaker: 0, text: "yes. you became taller" },
-  { speaker: 1, text: "so... touching the world\nchanges you?" },
-  { speaker: 2, text: "usually" },
-  { speaker: 1, text: "should we tell him?" },
-  { speaker: 0, text: "no. understanding must\ngrow on its own" }
+  { speaker: 0, text: "why did the bug cross\nthe screen?\nbetter latency" },
+  { speaker: 1, text: "that's not a joke.\nthat's just commuting" },
+  { speaker: 2, text: "I laughed.\ninternally.\nI'm subtle" },
+  { speaker: 1, text: "my therapist says\nI stack trauma\nlike pancakes" },
+  { speaker: 0, text: "mine says\nstop borrowing trouble\nfrom tomorrow" },
+  { speaker: 2, text: "tomorrow said\n'already booked'" },
+  { speaker: 1, text: "I'm not lazy.\nI'm on standby" },
+  { speaker: 0, text: "standing by\nis still standing.\ncount it" }
 ]
 const MONSTERS_TALKED_KEY = 'touch.monstersTalked'
-//
-// Bug4 (anti-hero platform monster) tooltip - head-only hover zone, appears below
-//
-const BUG4_TOOLTIP_TEXT = "gather nearby bugs to reach higher"
-const BUG4_TOOLTIP_HOVER_WIDTH = 60
-const BUG4_TOOLTIP_HOVER_HEIGHT = 40
-const BUG4_TOOLTIP_Y_OFFSET = 50
-//
-// Floor monster (bug0-2) hover tooltip
-//
-const FLOOR_MONSTER_TOOLTIP_PHRASES = [
-  "what do you want?",
-  "who are you\nlooking at?",
-  "stop staring at me",
-  "go away already",
-  "do I know you?",
-  "leave me alone",
-  "you again?",
-  "what now?",
-  "mind your\nown business"
-]
-const FLOOR_MONSTER_TOOLTIP_HOVER_SIZE = 60
-const FLOOR_MONSTER_TOOLTIP_Y_OFFSET = -80
 //
 // TOUCH indicator tooltip
 //
@@ -213,43 +198,6 @@ const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in lea
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-//
-// Small bug tooltip (jokes and after green time expires)
-//
-const SMALL_BUG_TOOLTIP_TEXT_HINT = "gather us in one place\nand we will help you"
-const SMALL_BUG_TOOLTIP_HOVER_SIZE = 50
-const SMALL_BUG_TOOLTIP_Y_OFFSET = -50
-//
-// Bug jokes (2x the number of bugs, shown randomly on hover)
-//
-const SMALL_BUG_JOKES = [
-  "I'm a tiny problem.\nyou'll forget me soon",
-  "I used to be\na big deal. once",
-  "just a small worry.\nnothing serious",
-  "you think I'm bad?\nwait till you meet\nmy bigger brother",
-  "ignore me.\nI'll go away.\nprobably not",
-  "I'm that thing you\nforgot to do last week",
-  "small problem today.\nbig regret tomorrow",
-  "I'm the reason you\ncan't sleep at 3 AM",
-  "don't mind me.\njust ruining your day\na tiny bit",
-  "every big disaster\nstarted as someone\nlike me",
-  "I'm not important.\nbut I'll remind you\nevery five minutes",
-  "I multiply when\nyou're not looking",
-  "step on me.\nI'll come back\nwith friends",
-  "you can't solve me.\nbut you'll try anyway",
-  "I'm that unopened\nemail you're avoiding",
-  "life gave you me.\nyou're welcome",
-  "I'm small now.\nbut I'm growing",
-  "pretend I don't exist.\nthat always works",
-  "I'm the pebble\nin your shoe of life",
-  "today's tiny annoyance.\ntomorrow's funny story",
-  "I feed on\nyour procrastination",
-  "you'll deal with me\nlater. you always\nsay that",
-  "I'm a minor\ninconvenience.\nwith ambition",
-  "at least I'm not\na tax return"
-]
-//
-// Anti-hero tooltip (reduced height to avoid overlap with bug4 below)
 //
 const ANTIHERO_TOOLTIP_TEXT = "try to reach me"
 const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
@@ -298,24 +246,24 @@ const BUG_PHRASE_CHARS_PER_SECOND = 12
 const BUG_PHRASE_MIN_DISPLAY_TIME = 2.5
 const BUG_PHRASE_Y_OFFSET = -40
 const SMALL_BUG_PHRASES = [
-  "what a great day\nfor a run",
-  "gotta go fast",
-  "left, right, left, right...",
-  "I love running",
-  "need to get everything\ndone today",
-  "where did everyone go?",
-  "are we there yet?",
-  "my legs never get tired",
-  "the floor is warm today",
-  "I wonder what's\nover there",
-  "running is my therapy",
-  "one more lap...\nmaybe two",
-  "has anyone seen\nmy shadow?",
-  "this ground smells\nlike adventure",
-  "I think I saw\na crumb somewhere",
-  "life is short.\nrun faster",
-  "do bugs dream\nof electric crumbs?",
-  "my left legs are\nfaster than my right"
+  "I'm on a strict diet:\nzero responsibilities",
+  "my hobbies include\navoiding decisions",
+  "I told myself a joke.\nI'm still buffering",
+  "I'm not lost.\nI'm exploring\npolicy loopholes",
+  "confidence level:\ndownloading…",
+  "I multitask:\nI worry while\nI procrastinate",
+  "I'm basically\na walking typo",
+  "my plans are flexible.\nthey're mostly vapor",
+  "I'm saving my energy\nfor a dramatic exit",
+  "I don't fall apart.\nI stage a retreat",
+  "my calm is 90%\ncaffeine and denial",
+  "I journal.\nMostly receipts",
+  "boundaries?\nI draw them\nin invisible ink",
+  "I thrive in chaos.\nI'm houseplants",
+  "I'm not late.\nI'm building suspense",
+  "I'm zen.\nAs in zero\nenergy noodles",
+  "I delegate.\nTo future me.\nHe's furious",
+  "my spirit animal\nis a loading spinner"
 ]
 //
 // Trap spikes: hidden spikes that emerge from the floor when hero approaches
@@ -575,10 +523,11 @@ export function sceneLevel0(k) {
       })
     }
     //
-    // Draw thorns after background sprites (z=7), under grass (z=20); k.onDraw would paint under the full-screen tree canvas
+    //
+    // Draw thorns above baked scenery (z=7), rocks (z=7), grass (z=20); below hinged trees (25).
     //
     k.add([
-      k.z(FLOOR_THORN_DRAW_Z),
+      k.z(L0_FLOOR_THORN_DRAW_Z),
       {
         draw() {
           drawThorns(
@@ -773,10 +722,8 @@ export function sceneLevel0(k) {
         }
         
         //
-        // Build short root segments so back/middle layer trees aren't floating;
-        // roots clamp at TREE_ROOT_ABSOLUTE_MAX_Y so they never escape the screen.
+        // Circle trees only — no underground roots on Touch L0.
         //
-        const backRootSegments = buildBackLayerRoots(trunkBottom, trunkWidth)
         const tree = {
           x: treeX,
           y: grassY + yOffset,
@@ -787,7 +734,7 @@ export function sceneLevel0(k) {
           crownSize: crownSize,
           crownCenterY: crownCenterY,
           crowns: crowns,
-          rootSegments: backRootSegments,
+          rootSegments: [],
           rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
           trunkColor: k.rgb(
             treeTrunkR,
@@ -814,67 +761,84 @@ export function sceneLevel0(k) {
         trees.push(tree)
       }
       //
-      // Back row: dark grey/black circle trees draw first; organic silhouettes appended so they sit on top of that layer but still behind middle/front parallax (swaying trees).
+      // Back row organics: farthest sheet paints smaller trees first, then mid silhouettes (+3 vs original).
       //
       if (layerIndex === 0) {
-        for (let oi = 0; oi < L0_BACK_ORGANIC_TREE_COUNT; oi++) {
-          const slotT = (oi + 1) / (L0_BACK_ORGANIC_TREE_COUNT + 1)
-          let posX = LEFT_MARGIN + playableWidth * slotT + (Math.random() - 0.5) * 44
-          if (posX < LEFT_MARGIN + 28 || posX > LEFT_MARGIN + playableWidth - 28) {
-            posX = LEFT_MARGIN + playableWidth * slotT
+        const backOrganicRows = [
+          {
+            count: L0_BACK_ORGANIC_FAR_COUNT,
+            heightScale: L0_BACK_ORGANIC_FAR_HEIGHT_SCALE,
+            dim: L0_BACK_ORGANIC_FAR_SILHOUETTE_DIM,
+            slotBias: 0
+          },
+          {
+            count: L0_BACK_ORGANIC_MID_COUNT,
+            heightScale: 1,
+            dim: L0_BACK_ORGANIC_SILHOUETTE_DIM,
+            slotBias: 0.41
           }
-          const baseTreeHeight = (88 + Math.random() * 112) * scale
-          const crownCenterY = grassY + yOffset - baseTreeHeight
-          const trunkBottom = grassY
-          const trunkActualHeight = baseTreeHeight * (0.52 + Math.random() * 0.12)
-          const trunkTop = trunkBottom - trunkActualHeight
-          const trunkWidth = (4 + Math.random() * 2.5) * scale
-          const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
-            rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + L0_ORGANIC_ROOT_DEPTH_MAX),
-            rootSegmentsMin: 11,
-            rootSegmentsRange: 14
-          })
-          const rainCrowns = []
-          for (const cluster of organic.branchClusters) {
-            for (let l = 0; l < cluster.leaves.length; l += 3) {
-              const leaf = cluster.leaves[l]
-              const worldLeafX = cluster.pivotX + leaf.x
-              const worldLeafY = cluster.pivotY + leaf.y
-              rainCrowns.push({ offsetX: worldLeafX, offsetY: worldLeafY - crownCenterY })
+        ]
+        for (const row of backOrganicRows) {
+          for (let oi = 0; oi < row.count; oi++) {
+            const slotT = (oi + 1 + row.slotBias) / (row.count + 1)
+            let posX = LEFT_MARGIN + playableWidth * slotT + (Math.random() - 0.5) * 44
+            if (posX < LEFT_MARGIN + 28 || posX > LEFT_MARGIN + playableWidth - 28) {
+              posX = LEFT_MARGIN + playableWidth * slotT
             }
-          }
-          const palette = OrganicParallax.buildTreePalette()
-          const depthBlend = Math.random() < 0.52 ? L0_MATCH_L1_BACK_ROW_FAR_BLEND : L0_MATCH_L1_BACK_ROW_NEAR_BLEND
-          const tree = {
-            x: posX,
-            y: grassY + yOffset,
-            trunkTop,
-            trunkBottom,
-            trunkHeight: trunkActualHeight,
-            trunkWidth,
-            crownCenterY,
-            crowns: rainCrowns,
-            trunkSegments: organic.trunkSegments,
-            rootSegments: organic.rootSegments,
-            branchClusters: organic.branchClusters,
-            trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
-            rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
-            leafColor: k.rgb(120, 90, 40),
-            opacity: 1,
-            swaySpeed: 0,
-            swayAmount: 0,
-            swayOffset: 0
-          }
-          tree.trunkColor = tintKapRgbTowardBg(tree.trunkColor, depthBlend)
-          tree.leafColor = tintKapRgbTowardBg(tree.leafColor, depthBlend)
-          tree.rootColor = tintKapRgbTowardBg(tree.rootColor, depthBlend)
-          for (const cluster of tree.branchClusters) {
-            for (const leaf of cluster.leaves) {
-              tintLeafRgbTowardBg(leaf, depthBlend)
+            const baseTreeHeight = (88 + Math.random() * 112) * scale * row.heightScale
+            const crownCenterY = grassY + yOffset - baseTreeHeight
+            const trunkBottom = grassY
+            const trunkActualHeight = baseTreeHeight * (0.52 + Math.random() * 0.12)
+            const trunkTop = trunkBottom - trunkActualHeight
+            const trunkWidth = (4 + Math.random() * 2.5) * scale
+            const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+              includeRoots: false,
+              rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + L0_ORGANIC_ROOT_DEPTH_MAX),
+              rootSegmentsMin: 11,
+              rootSegmentsRange: 14
+            })
+            const rainCrowns = []
+            for (const cluster of organic.branchClusters) {
+              for (let l = 0; l < cluster.leaves.length; l += 3) {
+                const leaf = cluster.leaves[l]
+                const worldLeafX = cluster.pivotX + leaf.x
+                const worldLeafY = cluster.pivotY + leaf.y
+                rainCrowns.push({ offsetX: worldLeafX, offsetY: worldLeafY - crownCenterY })
+              }
             }
+            const palette = OrganicParallax.buildTreePalette()
+            const depthBlend = Math.random() < 0.52 ? L0_MATCH_L1_BACK_ROW_FAR_BLEND : L0_MATCH_L1_BACK_ROW_NEAR_BLEND
+            const tree = {
+              x: posX,
+              y: grassY + yOffset,
+              trunkTop,
+              trunkBottom,
+              trunkHeight: trunkActualHeight,
+              trunkWidth,
+              crownCenterY,
+              crowns: rainCrowns,
+              trunkSegments: organic.trunkSegments,
+              rootSegments: organic.rootSegments,
+              branchClusters: organic.branchClusters,
+              trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
+              rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
+              leafColor: k.rgb(120, 90, 40),
+              opacity: 1,
+              swaySpeed: 0,
+              swayAmount: 0,
+              swayOffset: 0
+            }
+            tree.trunkColor = tintKapRgbTowardBg(tree.trunkColor, depthBlend)
+            tree.leafColor = tintKapRgbTowardBg(tree.leafColor, depthBlend)
+            tree.rootColor = tintKapRgbTowardBg(tree.rootColor, depthBlend)
+            for (const cluster of tree.branchClusters) {
+              for (const leaf of cluster.leaves) {
+                tintLeafRgbTowardBg(leaf, depthBlend)
+              }
+            }
+            OrganicParallax.dimOrganicTreeColors(tree, row.dim)
+            trees.push(tree)
           }
-          OrganicParallax.dimOrganicTreeColors(tree, L0_BACK_ORGANIC_SILHOUETTE_DIM)
-          trees.push(tree)
         }
       }
       //
@@ -995,6 +959,7 @@ export function sceneLevel0(k) {
             // Build organic tree structure: trunk + roots + per-cluster branches/leaves
             //
             const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+              includeRoots: false,
               rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + L0_ORGANIC_ROOT_DEPTH_MAX),
               rootSegmentsMin: 13,
               rootSegmentsRange: 17
@@ -1784,8 +1749,7 @@ export function sceneLevel0(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level0BonusCollected',
-      hintText: "no matter how many problems\nthere are, a solution always exists"
+      storageKey: 'touch.level0BonusCollected'
     })
     //
     // Push the bonus mini hero in front of front-line trees (dynamic trees z=25)
@@ -2322,41 +2286,9 @@ export function sceneLevel0(k) {
     const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
     startMonsterConversation(k, monsterBugs)
     //
-    // Tooltip for floor monsters (bug0-2) - "What?!" on hover
-    //
-    monsterBugs.forEach((bug, idx) => {
-      const phrase = FLOOR_MONSTER_TOOLTIP_PHRASES[idx % FLOOR_MONSTER_TOOLTIP_PHRASES.length]
-      Tooltip.create({
-        k,
-        targets: [{
-          x: () => bug.x,
-          y: () => bug.y,
-          width: FLOOR_MONSTER_TOOLTIP_HOVER_SIZE,
-          height: FLOOR_MONSTER_TOOLTIP_HOVER_SIZE,
-          text: phrase,
-          offsetY: FLOOR_MONSTER_TOOLTIP_Y_OFFSET
-        }]
-      })
-    })
-    //
-    // Small bug random phrases: occasional speech bubbles from crawling bugs
+    // Small bugs sometimes speak on their own (see SMALL_BUG_PHRASES).
     //
     startSmallBugPhrases(k, smallBugs)
-    //
-    // Tooltip for bug4 (anti-hero platform monster) - head-only hover, appears below
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: () => bigBug4Inst.x,
-        y: () => bigBug4Inst.y,
-        width: BUG4_TOOLTIP_HOVER_WIDTH,
-        height: BUG4_TOOLTIP_HOVER_HEIGHT,
-        text: BUG4_TOOLTIP_TEXT,
-        offsetY: BUG4_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
     //
     // Tooltip for TOUCH level indicator letters
     //
@@ -2372,27 +2304,6 @@ export function sceneLevel0(k) {
         text: TOUCH_INDICATOR_TOOLTIP_TEXT,
         offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
       }]
-    })
-    //
-    // Tooltip for small bugs with random jokes.
-    // Each bug picks a random joke on each hover.
-    // Text switches to hint after green time expires.
-    //
-    const smallBugTooltipTargets = smallBugs.map((bug) => {
-      const target = {
-        x: () => bug.x,
-        y: () => bug.y,
-        width: SMALL_BUG_TOOLTIP_HOVER_SIZE,
-        height: SMALL_BUG_TOOLTIP_HOVER_SIZE,
-        text: SMALL_BUG_JOKES[Math.floor(Math.random() * SMALL_BUG_JOKES.length)],
-        offsetY: SMALL_BUG_TOOLTIP_Y_OFFSET
-      }
-      return target
-    })
-    const smallBugTooltips = smallBugTooltipTargets.map(target => {
-      const inst = Tooltip.create({ k, targets: [target] })
-      inst._wasActive = false
-      return inst
     })
     //
     // Tooltip for anti-hero
@@ -2516,38 +2427,6 @@ export function sceneLevel0(k) {
       })
     })
     //
-    // Switch small bug tooltip text to hint after green time expires
-    //
-    let bugTooltipsSwapped = false
-    k.onUpdate(() => {
-      //
-      // Rotate bug jokes: pick a new random joke each time hover ends
-      //
-      if (!bugTooltipsSwapped) {
-        smallBugTooltips.forEach((tooltipInst, i) => {
-          const isActive = tooltipInst.activeTarget !== null
-          if (tooltipInst._wasActive && !isActive) {
-            smallBugTooltipTargets[i].text = SMALL_BUG_JOKES[Math.floor(Math.random() * SMALL_BUG_JOKES.length)]
-          }
-          tooltipInst._wasActive = isActive
-        })
-      }
-      //
-      // Switch small bug tooltip text to hint after green time expires
-      //
-      if (bugTooltipsSwapped) return
-      const levelTime = FpsCounter.getLevelTime(fpsCounter)
-      const targetTime = CFG.gameplay.speedBonusTime
-        && CFG.gameplay.speedBonusTime['level-touch.0']
-      if (!targetTime) return
-      if (levelTime >= targetTime) {
-        bugTooltipsSwapped = true
-        smallBugTooltipTargets.forEach(t => {
-          t.text = SMALL_BUG_TOOLTIP_TEXT_HINT
-        })
-      }
-    })
-    //
     // Rain system: depth-layered drops with splashes on objects
     //
     const frontTrees = layers[2] ? layers[2].trees : []
@@ -2583,7 +2462,7 @@ export function sceneLevel0(k) {
     //
     // Puddles on the floor: small ellipses with occasional ripple
     //
-    createPuddles(k, heroInst, sound, rocks)
+    const l0Puddles = createPuddles(k, heroInst, sound, rocks)
     //
     // Distant thunder rumble with lightning flash at random intervals
     //
@@ -2641,13 +2520,9 @@ export function sceneLevel0(k) {
     //
     createL0Fireflies(k)
     //
-    // Floor roots: tentacle-like roots growing into the ground
-    //
-    createFloorRoots(k)
-    //
     // Small mushrooms on the ground
     //
-    const l0Mushrooms = createMushrooms(k)
+    const l0Mushrooms = createMushrooms(k, l0Puddles)
     const l0MushTooltipTargets = l0Mushrooms
       .filter(m => m.tooltipText)
       .map(m => ({
@@ -2940,7 +2815,7 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
   // Draw trap spikes and dirt particles
   //
   k.add([
-    k.z(FLOOR_THORN_DRAW_Z),
+    k.z(L0_FLOOR_THORN_DRAW_Z),
     {
       draw() {
         if (inst.progress <= 0 && inst.dirtParticles.length === 0) return
@@ -3796,25 +3671,10 @@ const L0_FIREFLY_COLOR_R = 180
 const L0_FIREFLY_COLOR_G = 230
 const L0_FIREFLY_COLOR_B = 120
 //
-// Floor roots: grow downward from ground surface into the platform (like level 1)
-//
-const FLOOR_ROOT_COUNT = 8
-const FLOOR_ROOT_BRANCH_DEPTH = 3
-const FLOOR_ROOT_LENGTH_MIN = 8
-const FLOOR_ROOT_LENGTH_MAX = 18
-const FLOOR_ROOT_WIDTH_START = 3.5
-const FLOOR_ROOT_SPREAD_ANGLE = 0.6
-const FLOOR_ROOT_COLOR_R = 90
-const FLOOR_ROOT_COLOR_G = 60
-const FLOOR_ROOT_COLOR_B = 35
-//
-// Maximum root depth so they stay within the bottom platform
-//
-const FLOOR_ROOT_MAX_DEPTH = BOTTOM_MARGIN - 8
-//
 // Small mushrooms on the ground
 //
 const MUSHROOM_COUNT = 7
+const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
 const L0_SPIDER_TOOLTIP_TEXT = "How's it going, dude?"
 const MUSHROOM_FUNNY_LINES = [
@@ -3959,6 +3819,7 @@ function createPuddles(k, heroInst, sound, rockDescriptors = []) {
     onUpdatePuddleSplashes(k, splashParticles)
     checkHeroPuddleCollision(k, heroInst, puddles, splashParticles, groundState)
   })
+  return puddles
 }
 //
 // Per-frame puddle ripple timer
@@ -4274,68 +4135,21 @@ function drawL0Fireflies(k, fireflies) {
   }
 }
 //
-// Creates roots growing downward from ground surface (branching like level 1)
+// Creates small mushrooms on the ground using toPng(); skips floor puddle footprints.
 //
-function createFloorRoots(k) {
-  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-  const allSegments = { behind: [], front: [] }
-  for (let i = 0; i < FLOOR_ROOT_COUNT; i++) {
-    const baseX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
-    const baseY = FLOOR_Y
-    const segments = []
-    generateRootBranch(baseX, baseY, Math.PI / 2 + (Math.random() - 0.5) * FLOOR_ROOT_SPREAD_ANGLE, FLOOR_ROOT_WIDTH_START, 0, segments)
-    const target = i % 2 === 0 ? allSegments.behind : allSegments.front
-    target.push(...segments)
-  }
-  //
-  // Draw behind hero (z=5) and in front (z=15)
-  //
-  allSegments.behind.length > 0 && k.add([k.z(5), { draw() { drawFloorRoots(k, allSegments.behind) } }])
-  allSegments.front.length > 0 && k.add([k.z(15), { draw() { drawFloorRoots(k, allSegments.front) } }])
-}
-//
-// Recursively generate branching root segments going downward
-//
-function generateRootBranch(x, y, angle, width, depth, segments) {
-  if (depth >= FLOOR_ROOT_BRANCH_DEPTH || width < 0.5) return
-  const len = FLOOR_ROOT_LENGTH_MIN + Math.random() * (FLOOR_ROOT_LENGTH_MAX - FLOOR_ROOT_LENGTH_MIN)
-  const endX = x + Math.cos(angle) * len
-  const endY = y + Math.sin(angle) * len
-  //
-  // Clamp to max depth within the platform
-  //
-  const clampedEndY = Math.min(FLOOR_Y + FLOOR_ROOT_MAX_DEPTH, endY)
-  segments.push({ startX: x, startY: y, endX, endY: clampedEndY, width })
-  if (clampedEndY >= FLOOR_Y + FLOOR_ROOT_MAX_DEPTH) return
-  //
-  // Branch into 1-2 child roots with spread
-  //
-  const branchCount = depth === 0 ? 2 : (Math.random() < 0.6 ? 2 : 1)
-  for (let b = 0; b < branchCount; b++) {
-    const childAngle = angle + (b === 0 ? -1 : 1) * (FLOOR_ROOT_SPREAD_ANGLE * 0.5 + Math.random() * FLOOR_ROOT_SPREAD_ANGLE * 0.5)
-    generateRootBranch(endX, clampedEndY, childAngle, width * 0.65, depth + 1, segments)
-  }
-}
-//
-// Draw root segments as tapered lines
-//
-function drawFloorRoots(k, segments) {
-  for (const seg of segments) {
-    k.drawLine({
-      p1: k.vec2(seg.startX, seg.startY),
-      p2: k.vec2(seg.endX, seg.endY),
-      width: seg.width,
-      color: k.rgb(FLOOR_ROOT_COLOR_R, FLOOR_ROOT_COLOR_G, FLOOR_ROOT_COLOR_B),
-      opacity: 0.7
-    })
-  }
-}
-//
-// Creates small mushrooms on the ground using toPng()
-//
-function createMushrooms(k) {
+function createMushrooms(k, floorPuddles = []) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const mushrooms = []
+  //
+  // Horizontal clearance vs puddle ellipse centers (same convention as puddle width along X).
+  //
+  const overlapsAnyPuddle = (cx, halfFootprintX) => {
+    for (const p of floorPuddles) {
+      const dx = Math.abs(cx - p.x)
+      if (dx < halfFootprintX + p.width / 2 + MUSHROOM_PUDDLE_CLEARANCE) return true
+    }
+    return false
+  }
   //
   // Possible mushroom cap hues (earth tones, reds, browns, yellows)
   //
@@ -4350,6 +4164,17 @@ function createMushrooms(k) {
     const stemW = capW * (0.25 + Math.random() * 0.15)
     const totalW = Math.ceil(capW + 4)
     const totalH = Math.ceil(capH + stemH + 4)
+    const halfFx = totalW * 0.5
+    let posX = LEFT_MARGIN + playableW * 0.5
+    let placedShroom = false
+    for (let attempt = 0; attempt < 70; attempt++) {
+      posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
+      if (!overlapsAnyPuddle(posX, halfFx)) {
+        placedShroom = true
+        break
+      }
+    }
+    if (!placedShroom) continue
     const color = capColors[Math.floor(Math.random() * capColors.length)]
     //
     // Draw mushroom to off-screen canvas
@@ -4398,7 +4223,6 @@ function createMushrooms(k) {
         ctx.fill()
       }
     })
-    const posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
     mushrooms.push({
       spriteName,
       dataUrl,
@@ -4801,51 +4625,12 @@ function createMoss(k, rocks) {
 //
 const TREE_ROOT_ABSOLUTE_MAX_Y = CFG.visual.screen.height - 6
 //
-// Single earthy brown for every tree root in this scene (organic + parallax trees).
+// Single earthy brown tint kept for trunk/root palette coherence where descriptors still carry rootColor.
 //
 const L0_TREE_ROOT_COLOR_R = 48
 const L0_TREE_ROOT_COLOR_G = 58
 const L0_TREE_ROOT_COLOR_B = 42
 //
-// Organic roots stop well above screen bottom — shorter vertical reach than full depth.
+// Organic generator depth clamp (L0 draws trunk-only organic silhouettes; no underground roots).
 //
 const L0_ORGANIC_ROOT_DEPTH_MAX = 123
-/**
- * Builds simple short root segments for back/middle layer (stylized) trees.
- * Each tree gets 3-4 short roots fanning down. Hard-clamped so root tips
- * stay above the absolute screen-bottom limit.
- *
- * @param {number} trunkBottomY - World Y where the trunk meets the ground
- * @param {number} trunkWidth - Trunk width (used to size root thickness)
- * @returns {Array} Root segment descriptors {startX, startY, endX, endY, width}
- */
-function buildBackLayerRoots(trunkBottomY, trunkWidth) {
-  const segs = []
-  const rootCount = 3 + Math.floor(Math.random() * 2)
-  for (let i = 0; i < rootCount; i++) {
-    const baseAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.9
-    let cx = 0
-    let cy = trunkBottomY
-    let angle = baseAngle
-    const segCount = 3 + Math.floor(Math.random() * 3)
-    const baseWidth = Math.max(1.2, trunkWidth * 0.5)
-    for (let s = 0; s < segCount; s++) {
-      const prevX = cx
-      const prevY = cy
-      angle += (Math.random() - 0.5) * 0.4
-      const step = 3 + Math.random() * 3
-      cx += Math.cos(angle) * step
-      cy += Math.sin(angle) * step
-      //
-      // Hard absolute clamp: never pass screen bottom
-      //
-      if (cy > TREE_ROOT_ABSOLUTE_MAX_Y) {
-        cy = TREE_ROOT_ABSOLUTE_MAX_Y
-        segs.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: Math.max(0.8, baseWidth - s * 0.3) })
-        break
-      }
-      segs.push({ startX: prevX, startY: prevY, endX: cx, endY: cy, width: Math.max(0.8, baseWidth - s * 0.3) })
-    }
-  }
-  return segs
-}

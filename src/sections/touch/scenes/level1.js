@@ -30,7 +30,7 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 const CORNER_RADIUS = 20
 const CORNER_SPRITE_NAME = 'touch1-corner-sprite'
-const WALL_COLOR_HEX = '#1F1F1F'
+const WALL_COLOR_HEX = '#2A2A2A'
 //
 // Platform dimensions
 //
@@ -419,28 +419,28 @@ export function sceneLevel1(k) {
           const ang = Math.random() * Math.PI * 2
           const baseX = centerX + Math.cos(ang) * dist * 0.94
           if (baseX < LEFT_MARGIN + 8 || baseX > LEFT_MARGIN + playableWidth - 8) continue
-          const height = (10 + Math.random() * 20) * scale
-          const bendX = (Math.random() - 0.5) * 6
-          const swaySpeed = 0.8 + Math.random() * 0.6
-          const swayAmount = (2 + Math.random() * 3) * scale
-          const swayOffset = Math.random() * Math.PI * 2
-          grassBlades.push({
-            x1: baseX,
-            y1: grassY,
-            baseX2: baseX + bendX,
-            y2: grassY - height,
-            height: height,
-            swaySpeed: swaySpeed,
-            swayAmount: swayAmount,
-            swayOffset: swayOffset,
-            color: k.rgb(
-              grassBaseR + Math.random() * 20,
-              grassBaseG + Math.random() * 20,
-              grassBaseB + Math.random() * 15
-            ),
-            opacity: baseOpacity + Math.random() * 0.15,
-            width: (0.8 + Math.random() * 0.4) * scale
-          })
+        const height = (10 + Math.random() * 20) * scale
+        const bendX = (Math.random() - 0.5) * 6
+        const swaySpeed = 0.8 + Math.random() * 0.6
+        const swayAmount = (2 + Math.random() * 3) * scale
+        const swayOffset = Math.random() * Math.PI * 2
+        grassBlades.push({
+          x1: baseX,
+          y1: grassY,
+          baseX2: baseX + bendX,
+          y2: grassY - height,
+          height: height,
+          swaySpeed: swaySpeed,
+          swayAmount: swayAmount,
+          swayOffset: swayOffset,
+          color: k.rgb(
+            grassBaseR + Math.random() * 20,
+            grassBaseG + Math.random() * 20,
+            grassBaseB + Math.random() * 15
+          ),
+          opacity: baseOpacity + Math.random() * 0.15,
+          width: (0.8 + Math.random() * 0.4) * scale
+        })
         }
       }
       //
@@ -608,11 +608,11 @@ export function sceneLevel1(k) {
           // Front canopy is organic-only (same generator as touch L0): rain reads crowns from leaf samples.
           //
           const baseTreeHeight = (175 + Math.random() * 285) * scale
-          const crownCenterY = grassY + yOffset - baseTreeHeight
-          const trunkBottom = grassY
+            const crownCenterY = grassY + yOffset - baseTreeHeight
+            const trunkBottom = grassY
           const trunkActualHeight = baseTreeHeight * (0.55 + Math.random() * 0.1)
-          const trunkTop = trunkBottom - trunkActualHeight
-          const trunkWidth = (5 + Math.random() * 3) * scale
+            const trunkTop = trunkBottom - trunkActualHeight
+            const trunkWidth = (5 + Math.random() * 3) * scale
           const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
             rootAbsoluteMaxY: CFG.visual.screen.height - 6,
             rootSegmentsMin: 10,
@@ -628,9 +628,9 @@ export function sceneLevel1(k) {
             }
           }
           const palette = OrganicParallax.buildTreePalette()
-          const tree = {
-            x: posX,
-            y: grassY + yOffset,
+            const tree = {
+              x: posX,
+              y: grassY + yOffset,
             trunkTop,
             trunkBottom,
             trunkHeight: trunkActualHeight,
@@ -643,14 +643,14 @@ export function sceneLevel1(k) {
             trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
             rootColor: k.rgb(palette.root.r, palette.root.g, palette.root.b),
             leafColor: k.rgb(120, 90, 40),
-            opacity: 0.95,
+              opacity: 0.95,
             swaySpeed: 0,
             swayAmount: 0,
             swayOffset: 0
           }
           OrganicParallax.dimOrganicTreeColors(tree, L1_FRONT_ORGANIC_COLOR_DIM)
           OrganicParallax.blendOrganicTowardBackground(tree, bgColor, L1_FRONT_ORGANIC_GREYWASH)
-          trees.push(tree)
+            trees.push(tree)
         }
       }
       
@@ -660,7 +660,9 @@ export function sceneLevel1(k) {
     // Baked PNGs: back carries distant rows + organic mids; front PNG carries grass + organic trees (static).
     //
     const createBackCanvas = () => {
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      const bw = CFG.visual.screen.width
+      const bh = CFG.visual.screen.height
+      return toPng({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
         if (layers[0]) {
           drawLayerToCanvas(ctx, layers[0], 0, null)
         }
@@ -671,10 +673,9 @@ export function sceneLevel1(k) {
     }
     
     const createFrontStaticCanvas = () => {
-      //
-      // Bake full front parallax layer including organic trees (no runtime branch sprites).
-      //
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      const bw = CFG.visual.screen.width
+      const bh = CFG.visual.screen.height
+      return toPng({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
         if (layers[2]) {
           drawLayerToCanvas(ctx, layers[2], 0, null)
         }
@@ -949,7 +950,7 @@ export function sceneLevel1(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -962,7 +963,7 @@ export function sceneLevel1(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -975,7 +976,7 @@ export function sceneLevel1(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -1039,7 +1040,7 @@ export function sceneLevel1(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -1385,8 +1386,8 @@ export function sceneLevel1(k) {
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.3 : 1.3
         k.wait(transitionDelay, () => {
-          createLevelTransition(k, 'level-touch.1', () => {
-            k.go('level-touch.2')
+        createLevelTransition(k, 'level-touch.1', () => {
+          k.go('level-touch.2')
           })
         })
       },
@@ -1444,8 +1445,7 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level1BonusCollected',
-      hintText: "don't touch what\nyou don't like"
+      storageKey: 'touch.level1BonusCollected'
     })
     //
     // Set hero reference for grass drawer
@@ -1517,7 +1517,7 @@ export function sceneLevel1(k) {
     //
     // Tooltip on the giant worm (dynamic position tracks the worm body)
     //
-    const WORM_TOOLTIP_TEXT = 'you are my soulmate'
+    const WORM_TOOLTIP_TEXT = "come closer,\ndon't be afraid"
     const WORM_TOOLTIP_WIDTH = 60
     const WORM_TOOLTIP_HEIGHT = 80
     const wormTooltipTarget = {
@@ -2502,19 +2502,19 @@ function createScrollingCloudConfigs() {
     const crownCount = 5 + Math.floor(Math.random() * 4)
     const crowns = []
     for (let j = 0; j < crownCount; j++) {
-      crowns.push({
-        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
-        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+          crowns.push({
+            offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+            offsetY: (Math.random() - 0.5) * crownSize * 0.5,
         sizeVariation: 0.6 + Math.random() * 0.6,
         opacityVariation: 0.7 + Math.random() * 0.2
       })
     }
     configs.push({
-      x: cloudX,
+          x: cloudX,
       y: cloudY,
       crownSize,
       crowns,
-      color: baseCloudColor,
+          color: baseCloudColor,
       opacity: 0.85 + Math.random() * 0.1
     })
   }
@@ -2735,7 +2735,7 @@ function createWorm(k, index) {
     yMin: WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT - 3,
     yMax: WORM_BASE_Y + (index + 1) * WORM_Y_ZONE_HEIGHT
   }
-  k.add([
+        k.add([
     k.z(WORM_DRAW_Z),
     { draw() { onDrawWorm(k, inst) } }
   ])
@@ -2997,8 +2997,8 @@ function createFireflies(k, heroInst) {
   FIREFLY_LAYERS_Z.forEach((zVal, li) => {
     k.add([
       k.z(zVal),
-      {
-        draw() {
+          {
+            draw() {
           drawFireflyLayer(k, fireflies, li)
         }
       }
@@ -3068,7 +3068,7 @@ function drawFireflyLayer(k, fireflies, layerIndex) {
     //
     // Soft glow halo
     //
-    k.drawCircle({
+                k.drawCircle({
       pos: k.vec2(f.x, f.y),
       radius: f.radius * 3,
       color: k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B),

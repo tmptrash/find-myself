@@ -598,7 +598,6 @@ export function sceneLevel0(k) {
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
       storageKey: BONUS_STORAGE_KEY,
-      hintText: "your curiosity matters",
       platformText: "00:00"
     })
   })

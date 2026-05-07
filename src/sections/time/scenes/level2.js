@@ -845,7 +845,6 @@ export function sceneLevel2(k) {
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
       storageKey: BONUS_STORAGE_KEY,
-      hintText: "patience is a virtue",
       platformText: "00"
     })
   })

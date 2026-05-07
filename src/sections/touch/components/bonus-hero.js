@@ -35,6 +35,10 @@ const COLLECT_PARTICLE_COUNT = 12
 const COLLECT_PARTICLE_SPEED = 120
 const COLLECT_PARTICLE_LIFETIME = 0.8
 //
+// Same HUD hint whenever any bonus mini-hero is collected (touch section).
+//
+const BONUS_COLLECT_HINT_TEXT = 'You got 3 points.'
+//
 // Float animation and time-style platform text
 //
 const FLOAT_SPEED = 1.5
@@ -91,7 +95,6 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {number} [config.revealDistance] - Custom reveal distance
  * @param {string} [config.heroBodyColor] - Body color for the mini-hero (defaults to main hero color)
  * @param {string} [config.storageKey] - localStorage key to persist collection state
- * @param {string} [config.hintText] - Tooltip text shown above hero on collection
  * @param {string} [config.platformText] - Time-style text for platform (e.g. "00:00"); uses log if null
  * @returns {Object} Bonus hero instance
  */
@@ -103,7 +106,6 @@ export function create(config) {
     revealDistance = REVEAL_DISTANCE,
     heroBodyColor = null,
     storageKey = null,
-    hintText = null,
     platformText = null
   } = config
   //
@@ -175,7 +177,6 @@ export function create(config) {
     logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
     storageKey,
     pulseTimer: 0,
-    hintText,
     platformText,
     floatOffset: Math.random() * Math.PI * 2,
     shakeTimer: 0,
@@ -592,9 +593,7 @@ function collectBonus(inst) {
   //
   // Show hint tooltip above the main hero
   //
-  if (inst.hintText) {
-    showCollectHint(inst)
-  }
+  showCollectHint(inst)
   //
   // Trigger speed bonus flash on the HUD small hero
   //
@@ -697,7 +696,7 @@ function showCollectHint(inst) {
     y: () => inst.heroInst.character?.pos?.y ?? heroPos.y,
     width: 1,
     height: 1,
-    text: inst.hintText,
+    text: BONUS_COLLECT_HINT_TEXT,
     offsetY: -60
   }
   const tooltip = Tooltip.create({

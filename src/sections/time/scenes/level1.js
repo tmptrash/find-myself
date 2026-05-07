@@ -658,7 +658,6 @@ export function sceneLevel1(k) {
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
       storageKey: BONUS_STORAGE_KEY,
-      hintText: "math is everywhere",
       platformText: "00"
     })
   })

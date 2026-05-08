@@ -15,6 +15,8 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 //
+const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
+//
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
 const PLATFORM_TOP_HEIGHT = 150
@@ -724,7 +726,8 @@ export function sceneLevel2(k) {
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
-        deductFlag: LIFE_DEDUCT_FLAG
+        deductFlag: LIFE_DEDUCT_FLAG,
+        sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
       })
     }
     const trapIndices = trapEnabled ? [TRAP_PLATFORM_INDEX_1, TRAP_PLATFORM_INDEX_2] : []

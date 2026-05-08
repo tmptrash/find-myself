@@ -37,7 +37,7 @@ const COLLECT_PARTICLE_LIFETIME = 0.8
 //
 // Same HUD hint whenever any bonus mini-hero is collected (touch section).
 //
-const BONUS_COLLECT_HINT_TEXT = 'You got 3 points.'
+const BONUS_COLLECT_HINT_TEXT = 'you got 3 points.'
 //
 // Float animation and time-style platform text
 //

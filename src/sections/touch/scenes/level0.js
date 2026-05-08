@@ -85,15 +85,17 @@ const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
 //
 // Z: floor + trap thorns above grass (20) and rocks (7), below hinged trees (25).
 //
-const L0_FLOOR_THORN_DRAW_Z = 21
+const L0_FLOOR_THORN_DRAW_Z = 27
 //
-// Parallax ladder (Kaplay z, larger draws above): grey circle crowns farthest, black crowns + strip,
-// back-row organic silhouettes, birds z=5, baked front bushes/static circles z=7, grass z=20,
+// Parallax ladder (Kaplay z, larger draws above): far circles, far grey organics, grey-leaf mid band,
+// black-leaf mid band, birds, baked front bushes/static circles z=7, grass z=20,
 // dim duplicate organics z=23 under hinged sway z=25.
 //
-const L0_PARALLAX_GREY_MIDDLE_Z = 2
-const L0_PARALLAX_BLACK_BACK_Z = 3
-const L0_PARALLAX_BACK_ORGANIC_Z = 4
+const L0_PARALLAX_FAR_CIRCLE_Z = 2
+const L0_PARALLAX_FAR_ORGANIC_Z = 3
+const L0_PARALLAX_GREY_LEAF_ROW_Z = 4
+const L0_PARALLAX_BLACK_LEAF_ROW_Z = 5
+const L0_BIRD_LAYER_Z = 6
 const L0_PARALLAX_FRONT_STATIC_Z = 7
 //
 const L0_FRONT_ORGANIC_DARK_BACKDROP_Z = 23
@@ -110,14 +112,61 @@ const L0_BACK_ORGANIC_MID_COUNT = 9
 //
 const L0_BACK_ORGANIC_FAR_COUNT = 15
 const L0_BACK_ORGANIC_FAR_HEIGHT_SCALE = 0.78
-const L0_MATCH_L1_BACK_ROW_FAR_BLEND = 0.62
-const L0_MATCH_L1_BACK_ROW_NEAR_BLEND = 0.36
+//
+// Far circle crowns blend toward Touch L1 cloud grey (scrolling clouds base rgb).
+//
+const L0_CLOUD_CIRCLE_R = 36
+const L0_CLOUD_CIRCLE_G = 37
+const L0_CLOUD_CIRCLE_B = 36
+const L0_CLOUD_CIRCLE_BLEND_FAR = 0.9
+const L0_CLOUD_CIRCLE_BLEND_NEAR = 0.74
+//
+// Far-back organic silhouettes (behind mid bands): heavier grey fog than before.
+//
+const L0_BACK_ORGANIC_GREY_BLEND_FAR = 0.96
+const L0_BACK_ORGANIC_GREY_BLEND_NEAR = 0.90
+//
+// Mid-depth organic bands: grey row farther / taller / denser than black; explicit neutrals (no brown tint).
+//
+const L0_GREY_LEAF_ROW_COUNT = 24
+const L0_BLACK_LEAF_ROW_COUNT = 14
+const L0_GREY_LEAF_ROW_SLOT_BIAS = 0.38
+const L0_BLACK_LEAF_ROW_SLOT_BIAS = 0.42
+//
+// Leafy grey band — cooler mid-grey, clearly lighter than cloud-circle crowns (~36) and than scene fill (~42).
+//
+const L0_GREY_ORGANIC_TRUNK_R = 22
+const L0_GREY_ORGANIC_TRUNK_G = 22
+const L0_GREY_ORGANIC_TRUNK_B = 22
+const L0_GREY_ORGANIC_LEAF_R = 24
+const L0_GREY_ORGANIC_LEAF_G = 24
+const L0_GREY_ORGANIC_LEAF_B = 24
+const L0_GREY_ORGANIC_JITTER = 4
+const L0_BLACK_LEAF_SILHOUETTE_DIM = 0.48
+const L0_BLACK_ORGANIC_TRUNK_R = 11
+const L0_BLACK_ORGANIC_TRUNK_G = 11
+const L0_BLACK_ORGANIC_TRUNK_B = 15
+const L0_BLACK_ORGANIC_LEAF_R = 15
+const L0_BLACK_ORGANIC_LEAF_G = 15
+const L0_BLACK_ORGANIC_LEAF_B = 20
 //
 // After fog tint, darken organic back silhouettes so they read between circle trees and swaying front row.
 //
 const L0_BACK_ORGANIC_SILHOUETTE_DIM = 0.26
 const L0_BACK_ORGANIC_FAR_SILHOUETTE_DIM = 0.12
-const L0_BACK_SIMPLE_TREE_COUNT = 13
+const L0_BACK_SIMPLE_TREE_COUNT = 22
+//
+// Parallax vertical bands: farther from camera uses more negative Y so crowns sit higher.
+//
+const L0_PARALLAX_BACK_Y_OFFSET = -78
+const L0_PARALLAX_GREY_LEAF_Y_OFFSET = -160
+const L0_PARALLAX_BLACK_LEAF_Y_OFFSET = -68
+const L0_PARALLAX_FRONT_Y_OFFSET = -12
+//
+const L0_PARALLAX_BACK_SCALE = 1.52
+const L0_PARALLAX_GREY_LEAF_SCALE = 1.34
+const L0_PARALLAX_BLACK_LEAF_SCALE = 0.88
+const L0_PARALLAX_FRONT_SCALE = 0.52
 //
 // Hero spawn positions
 //
@@ -164,6 +213,12 @@ const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 const LIFE_DEDUCT_THRESHOLD = 10
 const LIFE_DEDUCT_FLAG = 'touch.trapAdded'
 //
+// Flat playfield fill (matches rain sheet); letterbox dimmer uses same RGB as visible backdrop.
+//
+const L0_PLAYFIELD_BG_R = 42
+const L0_PLAYFIELD_BG_G = 42
+const L0_PLAYFIELD_BG_B = 42
+//
 // Instructions animation constants
 //
 const INSTRUCTIONS_INITIAL_DELAY = 1.0
@@ -206,7 +261,7 @@ const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
 // Hero tooltip (raised higher so it sits above bug tooltips)
 //
-const HERO_TOOLTIP_TEXT = "you are here.\ntry to find yourself"
+const HERO_TOOLTIP_TEXT = "who am I?"
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
@@ -343,6 +398,17 @@ export function sceneLevel0(k) {
     //
     k.setBackground(k.rgb(31, 31, 31))
     //
+    // Visible playfield fill is L0_PLAYFIELD_BG_*; canvas backing matches so letterboxing stays invisible.
+    //
+    k.canvas?.style.setProperty(
+      'background-color',
+      `rgb(${L0_PLAYFIELD_BG_R}, ${L0_PLAYFIELD_BG_G}, ${L0_PLAYFIELD_BG_B})`,
+      'important'
+    )
+    k.onSceneLeave(() => {
+      k.canvas?.style.removeProperty('background-color')
+    })
+    //
     // Set gravity
     //
     k.setGravity(CFG.game.gravity)
@@ -377,7 +443,7 @@ export function sceneLevel0(k) {
         width: k.width(),
         height: k.height(),
         pos: k.vec2(0, 0),
-        color: k.rgb(42, 42, 42)  // CFG.visual.colors.background
+        color: k.rgb(L0_PLAYFIELD_BG_R, L0_PLAYFIELD_BG_G, L0_PLAYFIELD_BG_B)
       })
     })
     //
@@ -475,7 +541,8 @@ export function sceneLevel0(k) {
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
-        sceneLock
+        sceneLock,
+        sceneBgRgb: { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
       })
     }
     //
@@ -547,7 +614,7 @@ export function sceneLevel0(k) {
     //
     const grassY = FLOOR_Y - 2
     const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-    const bgColor = { r: 42, g: 42, b: 42 }
+    const bgColor = { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
     //
     // Same fog tint as Touch level 1 back-row circle trees (trunk + leaf RGB pulled toward scene grey).
     //
@@ -563,13 +630,46 @@ export function sceneLevel0(k) {
       leaf.b = Math.round(leaf.b * (1 - amount) + bgColor.b * amount)
     }
     //
-    // Create parallax layers (all three layers)
+    // Far circle crowns only — blend palette toward cloud grey (Touch L1 scrolling clouds).
+    //
+    const tintKapRgbTowardCloudCircle = (kapRgb, amount) => k.rgb(
+      Math.round(kapRgb.r * (1 - amount) + L0_CLOUD_CIRCLE_R * amount),
+      Math.round(kapRgb.g * (1 - amount) + L0_CLOUD_CIRCLE_G * amount),
+      Math.round(kapRgb.b * (1 - amount) + L0_CLOUD_CIRCLE_B * amount)
+    )
+    //
+    // Four depth bands: far circles + far grey organics, grey-leaf mid, black-leaf mid, colorful front.
     //
     const layers = []
     const layerConfigs = [
-      { name: 'back', colorMix: 0.2, opacity: 1.0, yOffset: 0, scale: 1.5 },      // Tallest, opaque to cover darkened area
-      { name: 'middle', colorMix: 0.55, opacity: 1.0, yOffset: -15, scale: 1.0 }, // Medium height, medium contrast
-      { name: 'front', colorMix: 1.0, opacity: 0.95, yOffset: -30, scale: 0.6 }   // Shortest, bright colors
+      {
+        name: 'back',
+        colorMix: 0.2,
+        opacity: 1.0,
+        yOffset: L0_PARALLAX_BACK_Y_OFFSET,
+        scale: L0_PARALLAX_BACK_SCALE
+      },
+      {
+        name: 'greyLeaf',
+        colorMix: 0.55,
+        opacity: 1.0,
+        yOffset: L0_PARALLAX_GREY_LEAF_Y_OFFSET,
+        scale: L0_PARALLAX_GREY_LEAF_SCALE
+      },
+      {
+        name: 'blackLeaf',
+        colorMix: 0.55,
+        opacity: 1.0,
+        yOffset: L0_PARALLAX_BLACK_LEAF_Y_OFFSET,
+        scale: L0_PARALLAX_BLACK_LEAF_SCALE
+      },
+      {
+        name: 'front',
+        colorMix: 1.0,
+        opacity: 0.95,
+        yOffset: L0_PARALLAX_FRONT_Y_OFFSET,
+        scale: L0_PARALLAX_FRONT_SCALE
+      }
     ]
     
     for (let layerIndex = 0; layerIndex < layerConfigs.length; layerIndex++) {
@@ -579,26 +679,23 @@ export function sceneLevel0(k) {
       const yOffset = config.yOffset
       const scale = config.scale
       //
-      // Interpolate color towards background for distant layers
-      // Back layer (layerIndex 0) - monochrome dark
-      // Middle layer (layerIndex 1) - dark colored (dark green leaves, dark brown trunk)
-      // Front layer (layerIndex 2) - bright colored (bright green leaves, brown trunk, bright green grass)
+      // Depth rows (camera → back): front colorful; mid black/grey organics; far circles + grey organics.
       //
-      const grassBaseR = layerIndex === 2 ? 40 : 50 * colorMix + bgColor.r * (1 - colorMix)
-      const grassBaseG = layerIndex === 2 ? 85 : 80 * colorMix + bgColor.g * (1 - colorMix)
-      const grassBaseB = layerIndex === 2 ? 40 : 50 * colorMix + bgColor.b * (1 - colorMix)
+      const grassBaseR = layerIndex === 3 ? 28 : 50 * colorMix + bgColor.r * (1 - colorMix)
+      const grassBaseG = layerIndex === 3 ? 95 : 80 * colorMix + bgColor.g * (1 - colorMix)
+      const grassBaseB = layerIndex === 3 ? 24 : 50 * colorMix + bgColor.b * (1 - colorMix)
       
-      const bushBaseR = layerIndex === 2 ? 35 : 35 * colorMix + bgColor.r * (1 - colorMix)
-      const bushBaseG = layerIndex === 2 ? 70 : 55 * colorMix + bgColor.g * (1 - colorMix)
-      const bushBaseB = layerIndex === 2 ? 35 : 35 * colorMix + bgColor.b * (1 - colorMix)
+      const bushBaseR = layerIndex === 3 ? 24 : 35 * colorMix + bgColor.r * (1 - colorMix)
+      const bushBaseG = layerIndex === 3 ? 82 : 55 * colorMix + bgColor.g * (1 - colorMix)
+      const bushBaseB = layerIndex === 3 ? 20 : 35 * colorMix + bgColor.b * (1 - colorMix)
       
-      const treeLeafR = layerIndex === 0 ? 12 * colorMix + bgColor.r * (1 - colorMix) : (layerIndex === 1 ? 12 * colorMix + bgColor.r * (1 - colorMix) : 40)
-      const treeLeafG = layerIndex === 0 ? 16 * colorMix + bgColor.g * (1 - colorMix) : (layerIndex === 1 ? 16 * colorMix + bgColor.g * (1 - colorMix) : 75)
-      const treeLeafB = layerIndex === 0 ? 12 * colorMix + bgColor.b * (1 - colorMix) : (layerIndex === 1 ? 12 * colorMix + bgColor.b * (1 - colorMix) : 40)
+      const treeLeafR = layerIndex === 3 ? 28 : 12 * colorMix + bgColor.r * (1 - colorMix)
+      const treeLeafG = layerIndex === 3 ? 95 : 16 * colorMix + bgColor.g * (1 - colorMix)
+      const treeLeafB = layerIndex === 3 ? 24 : 12 * colorMix + bgColor.b * (1 - colorMix)
       
-      const treeTrunkR = layerIndex === 0 ? 10 * colorMix + bgColor.r * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.r * (1 - colorMix) : 70)
-      const treeTrunkG = layerIndex === 0 ? 10 * colorMix + bgColor.g * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.g * (1 - colorMix) : 50)
-      const treeTrunkB = layerIndex === 0 ? 10 * colorMix + bgColor.b * (1 - colorMix) : (layerIndex === 1 ? 10 * colorMix + bgColor.b * (1 - colorMix) : 30)
+      const treeTrunkR = layerIndex === 3 ? 78 : 10 * colorMix + bgColor.r * (1 - colorMix)
+      const treeTrunkG = layerIndex === 3 ? 48 : 10 * colorMix + bgColor.g * (1 - colorMix)
+      const treeTrunkB = layerIndex === 3 ? 20 : 10 * colorMix + bgColor.b * (1 - colorMix)
       //
       // Generate grass blade data for this layer.
       // Back/middle layers stay uniform-but-sparse for atmospheric haze.
@@ -607,7 +704,7 @@ export function sceneLevel0(k) {
       // between (more roots, rocks, moss can show through).
       //
       const grassBlades = []
-      if (layerIndex === 2) {
+      if (layerIndex === 3) {
         //
         // Front layer: 6-9 organic patches scattered along the platform.
         //
@@ -636,11 +733,15 @@ export function sceneLevel0(k) {
         }
       } else {
         //
-        // Back/middle: scattered tufts with bare gaps (same idea as front, tuned per depth).
+        // Far sheet + mid bands: scattered tufts (grey/black leaf rows slightly sparser than far sheet).
         //
         const clusterCount = layerIndex === 0
           ? 22 + Math.floor(Math.random() * 12)
-          : 11 + Math.floor(Math.random() * 8)
+          : layerIndex === 1
+            ? 13 + Math.floor(Math.random() * 9)
+            : layerIndex === 2
+              ? 11 + Math.floor(Math.random() * 7)
+              : 0
         for (let c = 0; c < clusterCount; c++) {
           let centerX = LEFT_MARGIN + 40 + Math.random() * (playableWidth - 80)
           let safety = 0
@@ -651,8 +752,16 @@ export function sceneLevel0(k) {
             centerX = LEFT_MARGIN + 40 + Math.random() * (playableWidth - 80)
             safety++
           }
-          const clusterRadius = (layerIndex === 0 ? 38 : 28) + Math.random() * (layerIndex === 0 ? 85 : 65)
-          const bladesInCluster = (layerIndex === 0 ? 5 : 4) + Math.floor(Math.random() * (layerIndex === 0 ? 14 : 11))
+          const clusterRadius = layerIndex === 0
+            ? 38 + Math.random() * 85
+            : layerIndex === 1
+              ? 32 + Math.random() * 72
+              : 26 + Math.random() * 58
+          const bladesInCluster = layerIndex === 0
+            ? 5 + Math.floor(Math.random() * 14)
+            : layerIndex === 1
+              ? 4 + Math.floor(Math.random() * 11)
+              : 4 + Math.floor(Math.random() * 9)
           if (Math.random() < 0.08) continue
           for (let b = 0; b < bladesInCluster; b++) {
             const dist = Math.pow(Math.random(), 1.55) * clusterRadius
@@ -668,11 +777,11 @@ export function sceneLevel0(k) {
       // For front layer: don't create bushes separately, will alternate with trees
       //
       const bushes = []
-      const bushCount = layerIndex === 2 ? 0 : 0
+      const bushCount = layerIndex === 3 ? 0 : 0
       
       for (let i = 0; i < bushCount; i++) {
         const spacing = playableWidth / (bushCount + 1)
-        const randomness = layerIndex === 0 ? 30 : (layerIndex === 1 ? 60 : 40)
+        const randomness = layerIndex === 0 ? 30 : (layerIndex === 1 ? 50 : 60)
         const bushX = LEFT_MARGIN + spacing * (i + 1) + (Math.random() - 0.5) * randomness
         const baseBushSize = (40 + Math.random() * 60) * scale
         
@@ -695,29 +804,29 @@ export function sceneLevel0(k) {
       // For front layer: create both trees and bushes in alternating pattern
       //
       const trees = []
-      const treeCount = layerIndex === 0 ? L0_BACK_SIMPLE_TREE_COUNT : (layerIndex === 1 ? 5 : 0)
+      const treeCount = layerIndex === 0 ? L0_BACK_SIMPLE_TREE_COUNT : 0
       
       for (let i = 0; i < treeCount; i++) {
         const spacing = playableWidth / (treeCount - 1)
-        const randomness = layerIndex === 0 ? 20 : (layerIndex === 1 ? 40 : 25)
+        const randomness = 20
         const treeX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
         const baseTreeHeight = (120 + Math.random() * 100) * scale
         const crownCenterY = grassY + yOffset - baseTreeHeight
         const trunkTop = crownCenterY
         const trunkBottom = grassY
         const trunkHeight = trunkBottom - trunkTop
-        const trunkWidth = layerIndex === 0 ? (4 + Math.random() * 4) * scale : (6 + Math.random() * 6) * scale
+        const trunkWidth = (4 + Math.random() * 4) * scale
         const crownSize = (50 + Math.random() * 60) * scale
         
-        const crownCount = layerIndex === 0 ? 5 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3)
+        const crownCount = 5 + Math.floor(Math.random() * 4)
         const crowns = []
         
         for (let j = 0; j < crownCount; j++) {
           crowns.push({
-            offsetX: (Math.random() - 0.5) * crownSize * (layerIndex === 0 ? 0.7 : 0.5),
-            offsetY: (Math.random() - 0.5) * crownSize * (layerIndex === 0 ? 0.5 : 0.4),
-            sizeVariation: layerIndex === 0 ? 0.6 + Math.random() * 0.6 : 0.8 + Math.random() * 0.5,
-            opacityVariation: layerIndex === 0 ? 0.7 + Math.random() * 0.2 : 0.85 + Math.random() * 0.15
+            offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+            offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+            sizeVariation: 0.6 + Math.random() * 0.6,
+            opacityVariation: 0.7 + Math.random() * 0.2
           })
         }
         
@@ -746,16 +855,16 @@ export function sceneLevel0(k) {
             treeLeafG,
             treeLeafB
           ),
-          opacity: layerIndex === 0 ? 0.85 + Math.random() * 0.1 : baseOpacity,
+          opacity: 0.85 + Math.random() * 0.1,
           swaySpeed: 0.2 + Math.random() * 0.15,
           swayAmount: (1 + Math.random() * 1.5) * scale,
           swayOffset: Math.random() * Math.PI * 2
         }
         if (layerIndex === 0) {
-          const depthBlend = Math.random() < 0.52 ? L0_MATCH_L1_BACK_ROW_FAR_BLEND : L0_MATCH_L1_BACK_ROW_NEAR_BLEND
-          tree.trunkColor = tintKapRgbTowardBg(tree.trunkColor, depthBlend)
-          tree.leafColor = tintKapRgbTowardBg(tree.leafColor, depthBlend)
-          tree.rootColor = tintKapRgbTowardBg(tree.rootColor, depthBlend)
+          const cloudBlend = Math.random() < 0.52 ? L0_CLOUD_CIRCLE_BLEND_FAR : L0_CLOUD_CIRCLE_BLEND_NEAR
+          tree.trunkColor = tintKapRgbTowardCloudCircle(tree.trunkColor, cloudBlend)
+          tree.leafColor = tintKapRgbTowardCloudCircle(tree.leafColor, cloudBlend)
+          tree.rootColor = tintKapRgbTowardCloudCircle(tree.rootColor, cloudBlend)
         }
         
         trees.push(tree)
@@ -807,7 +916,7 @@ export function sceneLevel0(k) {
               }
             }
             const palette = OrganicParallax.buildTreePalette()
-            const depthBlend = Math.random() < 0.52 ? L0_MATCH_L1_BACK_ROW_FAR_BLEND : L0_MATCH_L1_BACK_ROW_NEAR_BLEND
+            const depthBlend = Math.random() < 0.52 ? L0_BACK_ORGANIC_GREY_BLEND_FAR : L0_BACK_ORGANIC_GREY_BLEND_NEAR
             const tree = {
               x: posX,
               y: grassY + yOffset,
@@ -828,9 +937,9 @@ export function sceneLevel0(k) {
               swayAmount: 0,
               swayOffset: 0
             }
-            tree.trunkColor = tintKapRgbTowardBg(tree.trunkColor, depthBlend)
-            tree.leafColor = tintKapRgbTowardBg(tree.leafColor, depthBlend)
-            tree.rootColor = tintKapRgbTowardBg(tree.rootColor, depthBlend)
+            tree.trunkColor = tintKapRgbTowardCloudCircle(tree.trunkColor, depthBlend)
+            tree.leafColor = tintKapRgbTowardCloudCircle(tree.leafColor, depthBlend)
+            tree.rootColor = tintKapRgbTowardCloudCircle(tree.rootColor, depthBlend)
             for (const cluster of tree.branchClusters) {
               for (const leaf of cluster.leaves) {
                 tintLeafRgbTowardBg(leaf, depthBlend)
@@ -842,14 +951,146 @@ export function sceneLevel0(k) {
         }
       }
       //
-      // For front layer: create alternating trees and bushes
+      // Grey-leaf organic band — explicit neutral grey trunk + canopy (reads grey vs brown tint + vs circle crowns).
+      //
+      if (layerIndex === 1) {
+        for (let oi = 0; oi < L0_GREY_LEAF_ROW_COUNT; oi++) {
+          const slotT = (oi + 1 + L0_GREY_LEAF_ROW_SLOT_BIAS) / (L0_GREY_LEAF_ROW_COUNT + 1)
+          let posX = LEFT_MARGIN + playableWidth * slotT + (Math.random() - 0.5) * 38
+          if (posX < LEFT_MARGIN + 24 || posX > LEFT_MARGIN + playableWidth - 24) {
+            posX = LEFT_MARGIN + playableWidth * slotT
+          }
+          const baseTreeHeight = (210 + Math.random() * 140) * scale
+          const crownCenterY = grassY + yOffset - baseTreeHeight
+          const trunkBottom = grassY
+          const trunkActualHeight = baseTreeHeight * (0.52 + Math.random() * 0.12)
+          const trunkTop = trunkBottom - trunkActualHeight
+          const trunkWidth = (4 + Math.random() * 2.5) * scale
+          const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+            includeRoots: false,
+            rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + L0_ORGANIC_ROOT_DEPTH_MAX),
+            rootSegmentsMin: 11,
+            rootSegmentsRange: 14
+          })
+          const rainCrowns = []
+          for (const cluster of organic.branchClusters) {
+            for (let l = 0; l < cluster.leaves.length; l += 3) {
+              const leaf = cluster.leaves[l]
+              const worldLeafX = cluster.pivotX + leaf.x
+              const worldLeafY = cluster.pivotY + leaf.y
+              rainCrowns.push({ offsetX: worldLeafX, offsetY: worldLeafY - crownCenterY })
+            }
+          }
+          const trunkRgb = jitterL0GreyOrganicRgb(
+            L0_GREY_ORGANIC_TRUNK_R,
+            L0_GREY_ORGANIC_TRUNK_G,
+            L0_GREY_ORGANIC_TRUNK_B
+          )
+          const leafRgb = jitterL0GreyOrganicRgb(
+            L0_GREY_ORGANIC_LEAF_R,
+            L0_GREY_ORGANIC_LEAF_G,
+            L0_GREY_ORGANIC_LEAF_B
+          )
+          const tree = {
+            x: posX,
+            y: grassY + yOffset,
+            trunkTop,
+            trunkBottom,
+            trunkHeight: trunkActualHeight,
+            trunkWidth,
+            crownCenterY,
+            crowns: rainCrowns,
+            trunkSegments: organic.trunkSegments,
+            rootSegments: organic.rootSegments,
+            branchClusters: organic.branchClusters,
+            trunkColor: k.rgb(trunkRgb.r, trunkRgb.g, trunkRgb.b),
+            rootColor: k.rgb(trunkRgb.r, trunkRgb.g, trunkRgb.b),
+            leafColor: k.rgb(leafRgb.r, leafRgb.g, leafRgb.b),
+            opacity: 1,
+            swaySpeed: 0,
+            swayAmount: 0,
+            swayOffset: 0
+          }
+          for (const cluster of tree.branchClusters) {
+            for (const leaf of cluster.leaves) {
+              leaf.r = leafRgb.r
+              leaf.g = leafRgb.g
+              leaf.b = leafRgb.b
+            }
+          }
+          trees.push(tree)
+        }
+      }
+      //
+      // Black-leaf organic mid band — nearer than grey row, near-black mass reads in front of distant fog.
       //
       if (layerIndex === 2) {
+        for (let oi = 0; oi < L0_BLACK_LEAF_ROW_COUNT; oi++) {
+          const slotT = (oi + 1 + L0_BLACK_LEAF_ROW_SLOT_BIAS) / (L0_BLACK_LEAF_ROW_COUNT + 1)
+          let posX = LEFT_MARGIN + playableWidth * slotT + (Math.random() - 0.5) * 34
+          if (posX < LEFT_MARGIN + 24 || posX > LEFT_MARGIN + playableWidth - 24) {
+            posX = LEFT_MARGIN + playableWidth * slotT
+          }
+          const baseTreeHeight = (195 + Math.random() * 130) * scale
+          const crownCenterY = grassY + yOffset - baseTreeHeight
+          const trunkBottom = grassY
+          const trunkActualHeight = baseTreeHeight * (0.52 + Math.random() * 0.12)
+          const trunkTop = trunkBottom - trunkActualHeight
+          const trunkWidth = (4 + Math.random() * 2.5) * scale
+          const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+            includeRoots: false,
+            rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + L0_ORGANIC_ROOT_DEPTH_MAX),
+            rootSegmentsMin: 11,
+            rootSegmentsRange: 14
+          })
+          const rainCrowns = []
+          for (const cluster of organic.branchClusters) {
+            for (let l = 0; l < cluster.leaves.length; l += 3) {
+              const leaf = cluster.leaves[l]
+              const worldLeafX = cluster.pivotX + leaf.x
+              const worldLeafY = cluster.pivotY + leaf.y
+              rainCrowns.push({ offsetX: worldLeafX, offsetY: worldLeafY - crownCenterY })
+            }
+          }
+          const tree = {
+            x: posX,
+            y: grassY + yOffset,
+            trunkTop,
+            trunkBottom,
+            trunkHeight: trunkActualHeight,
+            trunkWidth,
+            crownCenterY,
+            crowns: rainCrowns,
+            trunkSegments: organic.trunkSegments,
+            rootSegments: organic.rootSegments,
+            branchClusters: organic.branchClusters,
+            trunkColor: k.rgb(L0_BLACK_ORGANIC_TRUNK_R, L0_BLACK_ORGANIC_TRUNK_G, L0_BLACK_ORGANIC_TRUNK_B),
+            rootColor: k.rgb(L0_BLACK_ORGANIC_TRUNK_R, L0_BLACK_ORGANIC_TRUNK_G, L0_BLACK_ORGANIC_TRUNK_B),
+            leafColor: k.rgb(L0_BLACK_ORGANIC_LEAF_R, L0_BLACK_ORGANIC_LEAF_G, L0_BLACK_ORGANIC_LEAF_B),
+            opacity: 1,
+            swaySpeed: 0,
+            swayAmount: 0,
+            swayOffset: 0
+          }
+          for (const cluster of tree.branchClusters) {
+            for (const leaf of cluster.leaves) {
+              leaf.r = L0_BLACK_ORGANIC_LEAF_R
+              leaf.g = L0_BLACK_ORGANIC_LEAF_G
+              leaf.b = L0_BLACK_ORGANIC_LEAF_B
+            }
+          }
+          OrganicParallax.dimOrganicTreeColors(tree, L0_BLACK_LEAF_SILHOUETTE_DIM)
+          trees.push(tree)
+        }
+      }
+      //
+      // For front layer: create alternating trees and bushes
+      //
+      if (layerIndex === 3) {
         //
-        // Increased from 14 to 17 (3 more trees), with lower bush probability
-        // so we get more trees rather than bushes
+        // Reduced by ~30% from 17 to 12 trees (fewer elements = more visible depth).
         //
-        const totalElements = 17
+        const totalElements = 12
         const spacing = playableWidth / (totalElements - 1)
         const TREE_MARGIN = 80
         
@@ -947,9 +1188,9 @@ export function sceneLevel0(k) {
             bushes.push(bush)
           } else {
             //
-            // Even lower trees per user request: was (170 + 0..230), now (130 + 0..160)
+            // Front colorful row: tall enough to read as the nearest layer.
             //
-            const baseTreeHeight = (130 + Math.random() * 160) * scale
+            const baseTreeHeight = (160 + Math.random() * 120) * scale
             const crownCenterY = grassY + yOffset - baseTreeHeight
             const trunkBottom = grassY
             const trunkActualHeight = baseTreeHeight * (0.55 + Math.random() * 0.1)
@@ -1015,8 +1256,8 @@ export function sceneLevel0(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Bake backgrounds: farthest grey circles-only sheet, black back row strip + circle trees,
-    // transparent back organics, front bushes/static circles (hinged organics at runtime).
+    // Bake backgrounds: far circle crowns + strip, far grey organics on PNG overlays,
+    // baked grey/black leaf mid bands, front bushes/static circles (hinged organics at runtime).
     //
     const createBlackBackBaseCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
@@ -1045,21 +1286,27 @@ export function sceneLevel0(k) {
       })
     }
     
-    const createGreyMiddleCanvas = () => {
+    const createGreyLeafMidCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        layers[1] && drawLayerToCanvas(ctx, layers[1], 0, {})
+        layers[1] && drawLayerToCanvas(ctx, layers[1], 0, { organicOnly: true })
+      })
+    }
+    
+    const createBlackLeafMidCanvas = () => {
+      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+        layers[2] && drawLayerToCanvas(ctx, layers[2], 0, { organicOnly: true })
       })
     }
     
     const createFrontStaticCanvas = () => {
       return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        if (!layers[2]) return
-        const staticTrees = layers[2].trees.filter(t => !t.branchClusters)
+        if (!layers[3]) return
+        const staticTrees = layers[3].trees.filter(t => !t.branchClusters)
         const frontLayerStatic = {
           trees: staticTrees,
-          bushes: layers[2].bushes,
-          grassBlades: layers[2].grassBlades,
-          name: layers[2].name
+          bushes: layers[3].bushes,
+          grassBlades: layers[3].grassBlades,
+          name: layers[3].name
         }
         drawLayerToCanvas(ctx, frontLayerStatic, 0, {})
       })
@@ -1161,31 +1408,21 @@ export function sceneLevel0(k) {
       }
     }
     
-    const greyMiddleDataURL = createGreyMiddleCanvas()
+    const greyLeafMidDataURL = createGreyLeafMidCanvas()
     const blackBackBaseDataURL = createBlackBackBaseCanvas()
     const backOrganicOverlayDataURL = createBackOrganicOverlayCanvas()
+    const blackLeafMidDataURL = createBlackLeafMidCanvas()
     const frontStaticDataURL = createFrontStaticCanvas()
-    k.loadSprite('bg-touch-l0-grey-middle', greyMiddleDataURL)
     k.loadSprite('bg-touch-l0-black-back', blackBackBaseDataURL)
     k.loadSprite('bg-touch-l0-back-organic', backOrganicOverlayDataURL)
+    k.loadSprite('bg-touch-l0-grey-leaf-mid', greyLeafMidDataURL)
+    k.loadSprite('bg-touch-l0-black-leaf-mid', blackLeafMidDataURL)
     k.loadSprite('bg-touch-l0-front-static', frontStaticDataURL)
     //
-    // Grey circle crowns (furthest), then black circle row + strip, then back organic silhouettes (below birds z=5).
+    // Far circles → far grey silhouettes → grey-leaf band → black-leaf band (birds sit above black-leaf z).
     //
     k.add([
-      k.z(L0_PARALLAX_GREY_MIDDLE_Z),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-l0-grey-middle',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
-      }
-    ])
-    k.add([
-      k.z(L0_PARALLAX_BLACK_BACK_Z),
+      k.z(L0_PARALLAX_FAR_CIRCLE_Z),
       {
         draw() {
           k.drawSprite({
@@ -1197,11 +1434,35 @@ export function sceneLevel0(k) {
       }
     ])
     k.add([
-      k.z(L0_PARALLAX_BACK_ORGANIC_Z),
+      k.z(L0_PARALLAX_FAR_ORGANIC_Z),
       {
         draw() {
           k.drawSprite({
             sprite: 'bg-touch-l0-back-organic',
+            pos: k.vec2(0, 0),
+            anchor: "topleft"
+          })
+        }
+      }
+    ])
+    k.add([
+      k.z(L0_PARALLAX_GREY_LEAF_ROW_Z),
+      {
+        draw() {
+          k.drawSprite({
+            sprite: 'bg-touch-l0-grey-leaf-mid',
+            pos: k.vec2(0, 0),
+            anchor: "topleft"
+          })
+        }
+      }
+    ])
+    k.add([
+      k.z(L0_PARALLAX_BLACK_LEAF_ROW_Z),
+      {
+        draw() {
+          k.drawSprite({
+            sprite: 'bg-touch-l0-black-leaf-mid',
             pos: k.vec2(0, 0),
             anchor: "topleft"
           })
@@ -1280,7 +1541,7 @@ export function sceneLevel0(k) {
     }
     
     k.add([
-      k.z(5),
+      k.z(L0_BIRD_LAYER_Z),
       {
         draw() {
           const time = k.time()
@@ -1382,8 +1643,8 @@ export function sceneLevel0(k) {
     //
     // Create dynamic foreground trees drawer (40% of front layer)
     //
-    if (layers[2]) {
-      const allFrontTrees = layers[2].trees
+    if (layers[3]) {
+      const allFrontTrees = layers[3].trees
       //
       // ALL organic trees sway now (per user request). Each tree is split
       // into a trunk+roots sprite (static) plus per-cluster sprites that
@@ -2429,7 +2690,7 @@ export function sceneLevel0(k) {
     //
     // Rain system: depth-layered drops with splashes on objects
     //
-    const frontTrees = layers[2] ? layers[2].trees : []
+    const frontTrees = layers[3] ? layers[3].trees : []
     Rain.create({
       k,
       topY: TOP_MARGIN,
@@ -3693,11 +3954,13 @@ const MUSHROOM_STEM_HEIGHT_MAX = 24
 // Rocks are larger now and frequently appear in clusters of 2-3 next to each other.
 //
 const ROCK_COUNT = 5
-const ROCK_RADIUS_MIN = 42
-const ROCK_RADIUS_MAX = 105
+const ROCK_RADIUS_MIN = 26
+const ROCK_RADIUS_MAX = 62
 const ROCK_BASE_R = 78
 const ROCK_BASE_G = 78
 const ROCK_BASE_B = 82
+const L0_ROCK_Z_BEHIND_COLORFUL_ROW = 6
+const L0_ROCK_Z_IN_FRONT_OF_COLORFUL_ROW = 26
 //
 // Each main rock has a chance of spawning 1-2 smaller satellite rocks beside it
 //
@@ -4340,17 +4603,23 @@ function addGrassAroundRocks(k, rocks, allBlades, grassY) {
  */
 function createRocks(k) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  //
+  // Reserve enough room so the rock sprite never extends outside the game area walls.
+  // Rock sprite width = radius * 2.6; use the max radius so all rocks are safe.
+  //
+  const maxRockSpriteW = Math.ceil(ROCK_RADIUS_MAX * 2.6)
   const rocks = []
   let spriteIdx = 0
   for (let i = 0; i < ROCK_COUNT; i++) {
     const radius = ROCK_RADIUS_MIN + Math.random() * (ROCK_RADIUS_MAX - ROCK_RADIUS_MIN)
     //
-    // Find a base X for the main rock, avoiding hero spawn corridor
+    // Find a base X for the main rock, avoiding hero spawn corridor.
+    // Upper bound ensures sprite right edge stays within the right game wall.
     //
-    let posX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+    let posX = LEFT_MARGIN + Math.random() * (playableW - maxRockSpriteW)
     let safety = 0
     while (Math.abs(posX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH && safety < 30) {
-      posX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
+      posX = LEFT_MARGIN + Math.random() * (playableW - maxRockSpriteW)
       safety++
     }
     const mainRock = buildSingleRock(k, posX, radius, `rock-l0-${spriteIdx++}`)
@@ -4368,18 +4637,38 @@ function createRocks(k) {
         //
         const sign = Math.random() < 0.5 ? -1 : 1
         const horizontalGap = radius * 0.55 + satRadius * 0.4 + Math.random() * 8
-        const satX = posX + sign * horizontalGap
+        const satSpriteW = Math.ceil(satRadius * 2.6)
+        const rawSatX = posX + sign * horizontalGap
+        //
+        // Clamp satellite so its sprite also stays inside the game area walls.
+        //
+        const satX = Math.max(LEFT_MARGIN, Math.min(LEFT_MARGIN + playableW - satSpriteW, rawSatX))
         if (Math.abs(satX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH) continue
         rocks.push(buildSingleRock(k, satX, satRadius, `rock-l0-${spriteIdx++}`))
       }
     }
   }
   rocks.forEach(r => k.loadSprite(r.spriteName, r.dataUrl))
+  const rocksBehind = []
+  const rocksInFront = []
+  for (const rock of rocks) {
+    (Math.random() < 0.5 ? rocksBehind : rocksInFront).push(rock)
+  }
   k.add([
-    k.z(7),
+    k.z(L0_ROCK_Z_BEHIND_COLORFUL_ROW),
     {
       draw() {
-        for (const rock of rocks) {
+        for (const rock of rocksBehind) {
+          k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
+        }
+      }
+    }
+  ])
+  k.add([
+    k.z(L0_ROCK_Z_IN_FRONT_OF_COLORFUL_ROW),
+    {
+      draw() {
+        for (const rock of rocksInFront) {
           k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
         }
       }
@@ -4439,6 +4728,13 @@ function buildSingleRock(k, posX, radius, spriteName) {
   const cx = totalW / 2
   const cy = totalH * 0.56
   //
+  // Compute posY first so we can crop the sprite canvas to the above-ground portion.
+  // Anything below FLOOR_Y is clipped by reducing the canvas height.
+  //
+  const randSink = Math.random() * 5
+  const posY = FLOOR_Y - totalH * 0.62 + randSink
+  const croppedH = Math.max(8, Math.ceil(totalH * 0.62 - randSink))
+  //
   // Helper to trace the rock outline as a smooth quadratic path
   //
   const traceOutline = (ctx) => {
@@ -4454,7 +4750,7 @@ function buildSingleRock(k, posX, radius, spriteName) {
     }
     ctx.closePath()
   }
-  const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toPng({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
     //
     // Soft drop shadow underneath the rock
     //
@@ -4541,11 +4837,7 @@ function buildSingleRock(k, posX, radius, spriteName) {
     traceOutline(ctx)
     ctx.stroke()
   })
-  //
-  // Place rock so its base sits roughly on FLOOR_Y
-  //
-  const posY = FLOOR_Y - totalH * 0.45 + Math.random() * 6
-  return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
+  return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH: croppedH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
 }
 /**
  * Generates moss patches on the bottom platform. Some patches are placed near
@@ -4618,6 +4910,17 @@ function createMoss(k, rocks) {
       }
     }
   ])
+}
+//
+// Per-tree RGB jitter for Touch L0 grey-leaf parallax band (keeps neutrals from reading flat).
+//
+function jitterL0GreyOrganicRgb(baseR, baseG, baseB) {
+  const j = L0_GREY_ORGANIC_JITTER
+  return {
+    r: Math.max(14, Math.min(32, Math.round(baseR + (Math.random() - 0.5) * j))),
+    g: Math.max(14, Math.min(32, Math.round(baseG + (Math.random() - 0.5) * j))),
+    b: Math.max(14, Math.min(32, Math.round(baseB + (Math.random() - 0.5) * j)))
+  }
 }
 //
 // Absolute bottom Y for any root in the scene. Computed once from screen height

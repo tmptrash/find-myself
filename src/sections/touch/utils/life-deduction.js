@@ -16,7 +16,7 @@ const BLINK_DURATION = 1.0
 const RESULT_FADE_IN = 0.5
 const RESULT_HOLD = 1.5
 const FADE_OUT = 0.8
-const OVERLAY_OPACITY = 0.7
+const OVERLAY_OPACITY = 0
 const LIFE_SCALE = 0.3
 const SHOW_DELAY = 0.5
 const INTRO_TEXT = "life strikes back"
@@ -37,6 +37,8 @@ const SCORE_X_OFFSET = 55
 const SCORE_Y_OFFSET = 0
 const OUTLINE_OFFSET = 1.5
 const BORDER_WIDTH = 3
+const BUBBLE_FRAME_ALPHA = 0.26
+const BUBBLE_FILL_ALPHA = 1.0
 //
 // Total animation duration (all phases combined)
 //
@@ -56,9 +58,13 @@ export const TOTAL_DURATION = SHOW_DELAY + FADE_IN + SCORE_HOLD + COUNT_DURATION
  * @param {string[]} [config.extraFlags] - Additional localStorage keys to set to true
  * @param {Object} [config.sceneLock] - Shared lock; heroInst.controlsDisabled cleared on end
  * @param {Function} [config.onComplete] - Callback fired after animation finishes
+ * @param {Object} [config.sceneBgRgb] - Scene backdrop RGB (matches visible fill); letterbox dimmer blends correctly
+ * @param {number} config.sceneBgRgb.r
+ * @param {number} config.sceneBgRgb.g
+ * @param {number} config.sceneBgRgb.b
  */
 export function show(config) {
-  const { k, currentScore, levelIndicator, sound, deductFlag, extraFlags, sceneLock, onComplete } = config
+  const { k, currentScore, levelIndicator, sound, deductFlag, extraFlags, sceneLock, onComplete, sceneBgRgb } = config
   const deductFlagValue = config.deductFlagValue ?? true
   //
   // Persist the deducted score and mark as used immediately
@@ -70,12 +76,14 @@ export function show(config) {
   //
   // Delay the visual hint by SHOW_DELAY seconds
   //
-  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete))
+  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb))
 }
 //
 // Runs the actual life deduction animation after the delay
 //
-function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete) {
+function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb) {
+  const canvas = k.canvas
+  const backdropSnap = sceneBgRgb ? captureBackdropForLifeModal(k, canvas, sceneBgRgb) : null
   const centerX = CFG.visual.screen.width / 2
   const centerY = CFG.visual.screen.height / 2
   Tooltip.suppressAll()
@@ -93,13 +101,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.opacity(0),
     {
       draw() {
-        k.drawRect({
-          width: k.width(),
-          height: k.height(),
-          pos: k.vec2(0, 0),
-          color: k.rgb(0, 0, 0),
-          opacity: overlay.opacity * OVERLAY_OPACITY
-        })
+        drawFullscreenDimmer(k, overlay.opacity, sceneBgRgb)
       }
     }
   ])
@@ -111,21 +113,22 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.opacity(0),
     {
       draw() {
+        const o = bubble.opacity
         k.drawRect({
           pos: k.vec2(boxX - BORDER_WIDTH, boxY - BORDER_WIDTH),
           width: BOX_WIDTH + BORDER_WIDTH * 2,
           height: BOX_HEIGHT + BORDER_WIDTH * 2,
           radius: BOX_RADIUS + BORDER_WIDTH,
-          color: k.rgb(20, 20, 20),
-          opacity: bubble.opacity
+          color: k.rgb(230, 233, 238),
+          opacity: o * BUBBLE_FRAME_ALPHA
         })
         k.drawRect({
           pos: k.vec2(boxX, boxY),
           width: BOX_WIDTH,
           height: BOX_HEIGHT,
           radius: BOX_RADIUS,
-          color: k.rgb(75, 75, 80),
-          opacity: bubble.opacity * 0.92
+          color: k.rgb(72, 74, 82),
+          opacity: o * BUBBLE_FILL_ALPHA
         })
       }
     }
@@ -225,7 +228,20 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   const el = { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines }
   const updateHandler = k.onUpdate(() => {
     state.timer += k.dt()
-    onUpdateDeduction(k, state, el, currentScore, newScore, updateHandler, levelIndicator, sound, sceneLock, onComplete)
+    onUpdateDeduction(
+      k,
+      state,
+      el,
+      currentScore,
+      newScore,
+      updateHandler,
+      levelIndicator,
+      sound,
+      sceneLock,
+      onComplete,
+      backdropSnap,
+      canvas
+    )
   })
 }
 //
@@ -243,7 +259,20 @@ function setOutlinesText(outlines, text) {
 //
 // Drives the animation phases
 //
-function onUpdateDeduction(k, state, el, fromScore, toScore, updateHandler, levelIndicator, sound, sceneLock, onComplete) {
+function onUpdateDeduction(
+  k,
+  state,
+  el,
+  fromScore,
+  toScore,
+  updateHandler,
+  levelIndicator,
+  sound,
+  sceneLock,
+  onComplete,
+  backdropSnap,
+  canvas
+) {
   const { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines } = el
   if (state.phase === 'fadeIn') {
     const p = Math.min(1, state.timer / FADE_IN)
@@ -330,9 +359,81 @@ function onUpdateDeduction(k, state, el, fromScore, toScore, updateHandler, leve
       k.destroy(resultText)
       resultOutlines.forEach(o => k.destroy(o))
       Tooltip.unsuppressAll()
+      backdropSnap && restoreSceneBackdrop(k, backdropSnap, canvas)
       sceneLock && (sceneLock.locked = false)
       sceneLock?.heroInst && (sceneLock.heroInst.controlsDisabled = false)
       onComplete?.()
     }
+  }
+}
+//
+// Snapshot Kaplay clear color, canvas CSS, and page chrome before locking modal backdrop.
+//
+function captureBackdropForLifeModal(k, canvas, sceneBgRgb) {
+  const snap = {
+    prevKapBg: k.getBackground(),
+    prevCanvasBg: canvas ? canvas.style.getPropertyValue('background-color') : '',
+    prevHtml: '',
+    prevBody: ''
+  }
+  if (typeof document !== 'undefined') {
+    snap.prevHtml = document.documentElement.style.backgroundColor
+    snap.prevBody = document.body.style.backgroundColor
+    const pageRgb = `rgb(${sceneBgRgb.r}, ${sceneBgRgb.g}, ${sceneBgRgb.b})`
+    document.documentElement.style.backgroundColor = pageRgb
+    document.body.style.backgroundColor = pageRgb
+  }
+  k.setBackground(k.rgb(sceneBgRgb.r, sceneBgRgb.g, sceneBgRgb.b))
+  canvas && canvas.style.setProperty(
+    'background-color',
+    `rgb(${sceneBgRgb.r}, ${sceneBgRgb.g}, ${sceneBgRgb.b})`,
+    'important'
+  )
+  return snap
+}
+//
+// Letterboxed margins live in fixed screen space — overlay must use fixed draw calls.
+//
+function drawFullscreenDimmer(k, overlayOpacity, sceneBgRgb) {
+  const dim = overlayOpacity * OVERLAY_OPACITY
+  if (dim <= 0) return
+  if (sceneBgRgb) {
+    //
+    // Same perceived darken as rgba(0,0,0,dim) over a flat sceneBg fill (letterbox + gameplay).
+    //
+    const r = Math.round(sceneBgRgb.r * (1 - dim))
+    const g = Math.round(sceneBgRgb.g * (1 - dim))
+    const b = Math.round(sceneBgRgb.b * (1 - dim))
+    k.drawRect({
+      width: k.width(),
+      height: k.height(),
+      pos: k.vec2(0, 0),
+      color: k.rgb(r, g, b),
+      opacity: 1,
+      fixed: true
+    })
+    return
+  }
+  k.drawRect({
+    width: k.width(),
+    height: k.height(),
+    pos: k.vec2(0, 0),
+    color: k.rgb(0, 0, 0),
+    opacity: dim,
+    fixed: true
+  })
+}
+//
+// Restore Kaplay clear color, canvas CSS, and page chrome after the modal.
+//
+function restoreSceneBackdrop(k, snap, canvas) {
+  if (!snap) return
+  snap.prevKapBg ? k.setBackground(snap.prevKapBg) : k.setBackground(0, 0, 0)
+  canvas && (snap.prevCanvasBg
+    ? canvas.style.setProperty('background-color', snap.prevCanvasBg, 'important')
+    : canvas.style.removeProperty('background-color'))
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.backgroundColor = snap.prevHtml
+    document.body.style.backgroundColor = snap.prevBody
   }
 }

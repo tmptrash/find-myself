@@ -13,6 +13,7 @@ import { arcY } from '../utils/trees.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import * as BonusHero from '../components/bonus-hero.js'
+import * as TouchLevel2Ambience from '../utils/touch-level2-ambience.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -20,6 +21,9 @@ const TOP_MARGIN = CFG.visual.gameArea.topMargin
 const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
+const L2_SCENE_BG_R = 31
+const L2_SCENE_BG_G = 31
+const L2_SCENE_BG_B = 31
 //
 // Rounded corner configuration for game area
 //
@@ -69,6 +73,11 @@ const HANGING_ICICLE_WIDTH_MIN = 5
 const HANGING_ICICLE_WIDTH_MAX = 10
 const HANGING_ICICLE_SKIP_INDICES = [1]
 //
+// Single killer icicle placed just to the left of the frozen lake.
+// Uses the same icicle kill-check path as the right-side icicles.
+//
+const LEFT_LAKE_KILLER_ICICLE_X_OFFSET = 10
+//
 // Icicle wobble (random icicles wobble left/right one at a time with creak)
 //
 const ICICLE_WOBBLE_INTERVAL_MIN = 2
@@ -79,8 +88,8 @@ const ICICLE_WOBBLE_AMPLITUDE = 3
 // Decorative floor logs (stacked piles between icicles and in the safe zone)
 //
 const DECOR_LOG_PILE_POSITIONS = [
-  LEFT_MARGIN + 200,
-  ICICLE_SAFE_ZONE_X + 130
+  LEFT_MARGIN + 560,
+  ICICLE_SAFE_ZONE_X + 198
 ]
 const DECOR_LOG_Z = 5
 const DECOR_LOG_WIDTH = 120
@@ -94,9 +103,9 @@ const SNOW_PUSH_DOWN_BOOST = 10
 //
 // Tooltip texts and layout
 //
-const ICICLE_TOOLTIP_TEXT = "I'm an icicle.\ncome closer and lick me"
+const ICICLE_TOOLTIP_TEXT = "i'm an icicle.\ncome closer and lick me"
 const ICICLE_TOOLTIP_Y_OFFSET = -30
-const ANTIHERO_TOOLTIP_TEXT = "I'm here :)"
+const ANTIHERO_TOOLTIP_TEXT = "i'm here :)"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
@@ -117,7 +126,7 @@ const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Hero tooltip
 //
-const HERO_TOOLTIP_TEXT = "maybe here I'm not\nfinding myself...\nbut the platforms"
+const HERO_TOOLTIP_TEXT = "maybe here i'm not\nfinding myself...\nbut the platforms"
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
@@ -129,6 +138,18 @@ const MOON_HOVER_GLOW_SPEED = 3
 // Antihero platform tooltip (log where antihero stands)
 //
 const ANTIHERO_PLATFORM_TOOLTIP_TEXT = "there are other\nplatforms below..."
+//
+// Snowman hover tooltip
+//
+const SNOWMAN_TOOLTIP_TEXT = "want some cold?"
+const SNOWMAN_TOOLTIP_HOVER_SIZE = 90
+const SNOWMAN_TOOLTIP_Y_OFFSET = -110
+//
+// Center icicle zone: fills the safe corridor when trap is active
+//
+const CENTER_ICICLE_START_X_OFFSET = 520
+const CENTER_ICICLE_END_MARGIN = 30
+const CENTER_ICICLE_SNOWMAN_CLEARANCE = 80
 const ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET = 40
 //
 // Antihero timed hint (shown if player hasn't completed level in time)
@@ -267,6 +288,7 @@ export function sceneLevel2(k) {
     //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
+    let stopTouchL2Wildlife = () => {}
     //
     // Start touch.mp3 background music with same volume as level 0
     // Use global CFG to ensure same volume as level 0
@@ -287,11 +309,18 @@ export function sceneLevel2(k) {
     //
     k.onSceneLeave(() => {
       touchMusic.stop()
+      stopTouchL2Wildlife()
+      k.canvas?.style.removeProperty('background-color')
     })
     //
-    // Set background to match wall color (prevents visible bars at top/bottom)
+    // Set background + CSS canvas backing (matches gameplay grey; letterboxing stays even).
     //
-    k.setBackground(k.rgb(31, 31, 31))
+    k.setBackground(k.rgb(L2_SCENE_BG_R, L2_SCENE_BG_G, L2_SCENE_BG_B))
+    k.canvas?.style.setProperty(
+      'background-color',
+      `rgb(${L2_SCENE_BG_R}, ${L2_SCENE_BG_G}, ${L2_SCENE_BG_B})`,
+      'important'
+    )
     //
     // Draw background (black)
     //
@@ -495,8 +524,8 @@ export function sceneLevel2(k) {
         k.wait(transitionDelay, () => {
           Sound.stopAmbient(sound)
           touchMusic.stop()
-          createLevelTransition(k, 'level-touch.2', () => {
-            k.go('level-touch.3')
+        createLevelTransition(k, 'level-touch.2', () => {
+          k.go('level-touch.3')
           })
         })
       },
@@ -531,13 +560,14 @@ export function sceneLevel2(k) {
         deductFlagValue: trapCount + 1,
         extraFlags,
         sceneLock,
+        sceneBgRgb: { r: L2_SCENE_BG_R, g: L2_SCENE_BG_G, b: L2_SCENE_BG_B },
         onComplete: () => {
           if (!iciclesAlreadyActive) {
             //
-            // First deduction: populate left-side floor icicles and hanging platform icicles
+            // First deduction: center corridor icicles appear after animation.
+            // Hanging icicles are already in hangingIcicleData from line 675 — don't duplicate.
             //
-            generateIcicles().forEach(ic => icicleData.push(ic))
-            generateHangingIcicles(platformStates).forEach(ic => hangingIcicleData.push(ic))
+            generateCenterIcicles(snowmanWorldX).forEach(ic => icicleData.push(ic))
           }
         }
       })
@@ -584,9 +614,33 @@ export function sceneLevel2(k) {
       color: { r: 255, g: 255, b: 255 }  // Snow color (pure white)
     })
     //
+    // Compute lake bounds before snow drifts so the lake area is kept snow-free.
+    //
+    const lakeBoundsForSnow = TouchLevel2Ambience.getLakeBounds(FLOOR_Y, LEFT_MARGIN)
+    //
     // Create blue snow drifts on bottom platform floor
     //
-    createSnowDrifts(k)
+    createSnowDrifts(k, lakeBoundsForSnow)
+    const touchL2AmbienceInst = TouchLevel2Ambience.setupTouchLevel2Ambience({
+      k,
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN,
+      topMargin: TOP_MARGIN,
+      heroInst,
+      sound,
+      logPileX: DECOR_LOG_PILE_POSITIONS[0]
+    })
+    stopTouchL2Wildlife = touchL2AmbienceInst.stopWildlife
+    const snowmanWorldX = touchL2AmbienceInst.snowmanX
+    //
+    // Track which surface the hero stands on so land/step sounds match the material.
+    //
+    const iceSlideState = { vel: 0 }
+    k.onUpdate(() => {
+      onUpdateSurfaceTracker(heroInst, sound, lakeBoundsForSnow)
+      onUpdateIceSlide(k, heroInst, lakeBoundsForSnow, iceSlideState)
+    })
     //
     // Hidden bonus hero on left wall, above the icicles.
     // Only reachable by jumping from an upper platform and flying left.
@@ -610,8 +664,18 @@ export function sceneLevel2(k) {
     // Right-side floor icicles always present from the start.
     // Left-side floor icicles appear only after the first life deduction.
     //
-    const leftIcicles = iciclesActive ? generateIcicles() : []
+    //
+    // Left icicles are always off — the frozen lake occupies the left zone.
+    //
+    const leftIcicles = [generateLeftLakeKillerIcicle()]
     const icicleData = [...generateRightIcicles(), ...leftIcicles]
+    //
+    // Center corridor icicles appear after first life deduction.
+    // Generate immediately on scene load when the flag was already saved from a previous visit.
+    //
+    if (iciclesAlreadyActive) {
+      generateCenterIcicles(snowmanWorldX).forEach(ic => icicleData.push(ic))
+    }
     //
     // Hanging icicles under log platforms (only after life deduction)
     //
@@ -641,8 +705,8 @@ export function sceneLevel2(k) {
     const allDecorLogs = DECOR_LOG_PILE_POSITIONS.map(x => generateDecorLogs(x))
     k.add([
       k.z(DECOR_LOG_Z),
-      {
-        draw() {
+    {
+      draw() {
           allDecorLogs.forEach(logs => drawDecorLogs(k, logs))
         }
       }
@@ -694,14 +758,17 @@ export function sceneLevel2(k) {
       const dt = k.dt()
       Dust.onUpdate(dustInst, dt)
       //
-      // Push snowflakes in hero's movement direction (like leaves in level 1)
+      // Push snowflakes in hero's movement direction (like leaves in level 1).
+      // Skip when hero is on the frozen lake — ice is smooth, no snow disturbance.
       //
       if (heroInst.character?.pos) {
         const heroX = heroInst.character.pos.x
         const heroY = heroInst.character.pos.y
         const heroVx = heroX - lastHeroX
         lastHeroX = heroX
-        if (Math.abs(heroVx) > 0.5) {
+        const heroOnLake = Math.abs(heroY - FLOOR_Y) < SURFACE_FLOOR_THRESHOLD
+          && heroX >= lakeBoundsForSnow.minX && heroX <= lakeBoundsForSnow.maxX
+        if (!heroOnLake && Math.abs(heroVx) > 0.5) {
           for (const p of dustInst.particles) {
             const dx = Math.abs(p.x - heroX)
             const dy = Math.abs(p.y - heroY)
@@ -1082,6 +1149,20 @@ export function sceneLevel2(k) {
       }]
     })
     //
+    // Tooltip: snowman
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: snowmanWorldX,
+        y: FLOOR_Y - 60,
+        width: SNOWMAN_TOOLTIP_HOVER_SIZE,
+        height: 120,
+        text: SNOWMAN_TOOLTIP_TEXT,
+        offsetY: SNOWMAN_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
     // Landing ring system: expanding circle of particles on hero landing
     //
     const jumpRings = []
@@ -1196,10 +1277,10 @@ function createCloudsUnderTopPlatform(k) {
   //
   // Draw two copies of the band so one always fills the visible area
   //
-  k.add([
+    k.add([
     k.z(CFG.visual.zIndex.platforms - 1),
-    {
-      draw() {
+      {
+        draw() {
         inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
         for (let copy = 0; copy < 2; copy++) {
           const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
@@ -1207,7 +1288,7 @@ function createCloudsUnderTopPlatform(k) {
             const cx = cloud.x + baseOffset
             if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
             for (const crown of cloud.crowns) {
-              k.drawCircle({
+          k.drawCircle({
                 pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
                 radius: cloud.crownSize * crown.sizeVariation,
                 color: cloud.color,
@@ -1221,19 +1302,32 @@ function createCloudsUnderTopPlatform(k) {
   ])
 }
 
+function drawSnowcapHighlightEllipse(k, cx, cy, rx, ry, color, opacity) {
+  const segs = 22
+  const pts = []
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2
+    pts.push(k.vec2(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry))
+  }
+  k.drawPolygon({ pts, color, opacity })
+}
+
 /**
  * Creates blue snow drifts on bottom platform floor
  * @param {Object} k - Kaplay instance
  */
-function createSnowDrifts(k) {
+function createSnowDrifts(k, lakeBounds) {
   //
   // Snow drift configurations for bottom platform
   //
   const floorY = FLOOR_Y
   //
-  // Generate many snow drifts with random sizes covering entire floor
+  // Generate many snow drifts with random sizes covering entire floor.
+  // Skip drifts whose centre falls within the frozen lake band.
   //
   const drifts = []
+  const lakeMinX = lakeBounds ? lakeBounds.minX : -1
+  const lakeMaxX = lakeBounds ? lakeBounds.maxX : -1
   //
   // Fill entire bottom platform with drifts
   //
@@ -1241,24 +1335,24 @@ function createSnowDrifts(k) {
   const corridorEnd = k.width() - RIGHT_MARGIN
   
   for (let x = corridorStart; x < corridorEnd; x += 40 + Math.random() * 30) {
-    const width = 50 + Math.random() * 90  // 50-140px width (larger and overlapping)
-    const height = 8 + Math.random() * 15   // 8-23px height
-    const zIndex = Math.random() > 0.5 ? 12 : 25  // 50% behind hero, 50% in front
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
-    
+    if (x >= lakeMinX - 20 && x <= lakeMaxX + 20) continue
+    const width = 50 + Math.random() * 90
+    const height = 8 + Math.random() * 15
+    const zIndex = Math.random() > 0.5 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     drifts.push({ x, width, height, y: floorY, z: zIndex, shapeType, skew })
   }
   //
   // Add some extra smaller drifts between main ones for more coverage
   //
   for (let x = corridorStart; x < corridorEnd; x += 30 + Math.random() * 25) {
-    const width = 30 + Math.random() * 50  // 30-80px width (medium)
-    const height = 5 + Math.random() * 8    // 5-13px height (smaller)
-    const zIndex = Math.random() > 0.3 ? 12 : 25  // More behind hero
-    const shapeType = Math.floor(Math.random() * 3)  // 0, 1, or 2 for different shapes
-    const skew = -0.3 + Math.random() * 0.6  // -0.3 to 0.3 for asymmetry
-    
+    if (x >= lakeMinX - 20 && x <= lakeMaxX + 20) continue
+    const width = 30 + Math.random() * 50
+    const height = 5 + Math.random() * 8
+    const zIndex = Math.random() > 0.3 ? 12 : 25
+    const shapeType = Math.floor(Math.random() * 3)
+    const skew = -0.3 + Math.random() * 0.6
     drifts.push({ x, width, height, y: floorY, z: zIndex, shapeType, skew })
   }
   //
@@ -1363,12 +1457,15 @@ function createSnowDrifts(k) {
           // Only draw highlight if it stays above the baseline
           //
           if (Math.abs(highlightY) - highlightRadius > 0) {
-            k.drawCircle({
-              radius: highlightRadius,
-              color: k.rgb(200, 220, 255),  // Bright blue highlight
-              pos: k.vec2(highlightOffset, highlightY),
-              opacity: highlightOpacity
-            })
+            drawSnowcapHighlightEllipse(
+              k,
+              highlightOffset,
+              highlightY,
+              highlightRadius * 1.38,
+              highlightRadius * 0.62,
+              k.rgb(200, 220, 255),
+              highlightOpacity
+            )
           }
         }
       }
@@ -1482,7 +1579,7 @@ function createDiagonalPlatforms(k, enableTrap = true) {
   // Define 7 platforms forming a path from top-left to bottom-right
   // Platforms arranged diagonally from top-left to bottom-right
   //
-  const startX = LEFT_MARGIN + 200
+  const startX = LEFT_MARGIN + 272
   const endX = CFG.visual.screen.width - RIGHT_MARGIN - 200
   const totalHorizontalDistance = endX - startX
   //
@@ -2480,9 +2577,9 @@ function generateDecorLogs(pileX) {
     })
   }
   //
-  // Middle row: 2 logs resting in the gaps of the bottom row
+  // Middle row: 2 logs resting in the gaps of the bottom row (overlap by 1px to close gaps)
   //
-  const midY = FLOOR_Y - h - halfH - 2
+  const midY = FLOOR_Y - h - halfH + 1
   for (let i = 0; i < 2; i++) {
     const spacing = h + 2
     logs.push({
@@ -2494,11 +2591,11 @@ function generateDecorLogs(pileX) {
     })
   }
   //
-  // Top: 1 log balanced on the middle row
+  // Top: 1 log balanced on the middle row (overlap by 1px to close gaps)
   //
   logs.push({
     x: baseX + (Math.random() - 0.5) * 6,
-    y: midY - h - 2,
+    y: midY - h + 1,
     w,
     h,
     detail: generateLogDetail(w, h, false)
@@ -3261,10 +3358,43 @@ function onUpdateAntiHeroHint(k, hintState, antiHeroInst) {
 }
 
 /**
+ * Generates center floor icicles that appear when the life-deduction trap activates.
+ * Fills the safe corridor from the snowman zone to the right icicle boundary.
+ * @param {number} snowmanX - World X of the snowman (icicles start after it)
+ * @returns {Array} Array of icicle objects
+ */
+function generateCenterIcicles(snowmanX) {
+  const icicles = []
+  const startX = (snowmanX ?? LEFT_MARGIN + CENTER_ICICLE_START_X_OFFSET) + CENTER_ICICLE_SNOWMAN_CLEARANCE
+  const endX = ICICLE_SAFE_ZONE_X - CENTER_ICICLE_END_MARGIN
+  for (let x = startX; x < endX; x += ICICLE_SPACING) {
+    const nearLog = DECOR_LOG_PILE_POSITIONS.some(logX => Math.abs(x - logX) < DECOR_LOG_WIDTH * 1.5)
+    if (nearLog) continue
+    icicles.push({
+      x: x + (Math.random() - 0.5) * 8,
+      baseY: FLOOR_Y,
+      width: ICICLE_WIDTH_MIN + Math.random() * (ICICLE_WIDTH_MAX - ICICLE_WIDTH_MIN),
+      height: ICICLE_HEIGHT_MIN + Math.random() * (ICICLE_HEIGHT_MAX - ICICLE_HEIGHT_MIN),
+      tipOffset: (Math.random() - 0.5) * 4
+    })
+  }
+  return icicles
+}
+/**
  * Generates right-side floor icicles (bottom platform right portion).
  * Always present from the start of the level.
  * @returns {Array} Array of icicle objects
  */
+function generateLeftLakeKillerIcicle() {
+  return {
+    x: LEFT_MARGIN + LEFT_LAKE_KILLER_ICICLE_X_OFFSET,
+    baseY: FLOOR_Y,
+    width: ICICLE_WIDTH_MAX,
+    height: ICICLE_HEIGHT_MAX,
+    tipOffset: 0
+  }
+}
+//
 function generateRightIcicles() {
   const icicles = []
   for (let x = RIGHT_ICICLE_START_X; x < RIGHT_ICICLE_END_X; x += RIGHT_ICICLE_SPACING) {
@@ -3414,6 +3544,62 @@ function onUpdateBreathVapor(k, heroInst, state) {
 }
 //
 // Draw breath vapor puffs
+//
+const SURFACE_FLOOR_THRESHOLD = 80
+//
+// Sets sound._l2Surface based on the surface the hero stands on:
+//   'ice'  — frozen lake (no sounds)
+//   'snow' — ground floor outside the lake
+//   'wood' — elevated log platform
+//
+function onUpdateSurfaceTracker(heroInst, sound, lakeBounds) {
+  if (!heroInst?.character?.exists?.()) return
+  const hx = heroInst.character.pos.x
+  const hy = heroInst.character.pos.y
+  const distFromFloor = Math.abs(hy - FLOOR_Y)
+  if (distFromFloor < SURFACE_FLOOR_THRESHOLD) {
+    const onLake = lakeBounds && hx >= lakeBounds.minX && hx <= lakeBounds.maxX
+    sound._l2Surface = onLake ? 'ice' : 'snow'
+  } else {
+    sound._l2Surface = 'wood'
+  }
+}
+//
+// Ice-slide constant: friction per frame (1.0 = no deceleration, lower = faster stop).
+//
+const ICE_SLIDE_FRICTION = 0.96
+const ICE_SLIDE_MIN_VEL = 2
+//
+// While hero is grounded on the frozen lake, preserve horizontal momentum so the
+// character slides instead of stopping the instant keys are released.
+//
+function onUpdateIceSlide(k, heroInst, lakeBounds, state) {
+  if (!heroInst?.character?.exists?.()) return
+  const hx = heroInst.character.pos.x
+  const hy = heroInst.character.pos.y
+  const onGround = Math.abs(hy - FLOOR_Y) < SURFACE_FLOOR_THRESHOLD
+  const onLake = onGround && hx >= lakeBounds.minX && hx <= lakeBounds.maxX
+  if (onLake) {
+    const leftDown = k.isKeyDown('left') || k.isKeyDown('a')
+    const rightDown = k.isKeyDown('right') || k.isKeyDown('d')
+    if (leftDown || rightDown) {
+      //
+      // Record velocity direction while keys are held.
+      //
+      state.vel = (rightDown ? 1 : -1) * (heroInst.speed ?? 0)
+    } else if (Math.abs(state.vel) > ICE_SLIDE_MIN_VEL) {
+      //
+      // No key pressed on ice: carry slide velocity forward with slow friction.
+      //
+      heroInst.character.move(state.vel, 0)
+      state.vel *= ICE_SLIDE_FRICTION
+    } else {
+      state.vel = 0
+    }
+  } else {
+    state.vel = 0
+  }
+}
 //
 function drawBreathVapor(k, particles) {
   for (const p of particles) {

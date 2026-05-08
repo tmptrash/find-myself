@@ -1,0 +1,349 @@
+import { CFG } from '../../../cfg.js'
+import * as Sound from '../../../utils/sound.js'
+
+//
+// Frozen lake band on the left (world coords relative to draw origin at 0,0)
+//
+const L2_LAKE_EDGE_PAD = 28
+//
+// Equal pads place the ellipse centre exactly at floorY so the widest
+// (left/right) edge of the oval lies precisely on the platform line.
+//
+const L2_LAKE_VERTICAL_PAD_TOP = 12
+const L2_LAKE_VERTICAL_PAD_BOTTOM = 12
+const L2_STAR_COUNT = 56
+const L2_STAR_TWINKLE_SPEED_MIN = 2.2
+const L2_STAR_TWINKLE_SPEED_MAX = 5.8
+const L2_BUNNY_ON_LAKE_CHANCE = 0.52
+const L2_SNOWMAN_BODY_R = 28
+const L2_SNOWMAN_HEAD_R = 18
+const L2_SNOWMAN_STACK_GAP = 6
+//
+// Snowman stands to the right side of the first log pile, in front of it.
+//
+const L2_SNOWMAN_LOG_OFFSET_X = 140
+//
+// Wildlife timer ranges (in seconds)
+//
+const L2_CROW_INTERVAL_MIN = 4
+const L2_CROW_INTERVAL_MAX = 10
+const L2_OWL_INTERVAL_MIN = 22
+const L2_OWL_INTERVAL_MAX = 48
+const L2_AMBIENCE_Z = 1
+//
+// Lake and snowman must render ABOVE the platform (CFG.visual.zIndex.platforms = 16).
+//
+const L2_DECOR_ABOVE_PLATFORMS_Z = 17
+//
+// Lake sun glints: small bright ovals on ice surface animated by sine
+//
+const L2_SUN_GLINT_COUNT = 6
+const L2_SNOWMAN_Z = 18
+
+/**
+ * Stars, frozen lake, lake rabbit, snowman with tracking eyes, distant crow/owl ambience.
+ * @param {Object} cfg
+ * @param {Object} cfg.k - Kaplay instance
+ * @param {number} cfg.floorY - Floor line Y
+ * @param {number} cfg.leftMargin
+ * @param {number} cfg.rightMargin
+ * @param {number} cfg.topMargin - Upper game inset (sky band starts below this)
+ * @param {Object} cfg.heroInst - Hero instance (eyes track position)
+ * @param {Object|null} cfg.sound - Sound instance
+ * @param {number} [cfg.logPileX] - X center of first decorative log pile (snowman placed beside it)
+ * @returns {{ lakeBounds: { minX: number, maxX: number, topY: number, botY: number }, stopWildlife: Function }}
+ */
+export function setupTouchLevel2Ambience(cfg) {
+  const { k, floorY, leftMargin, rightMargin, topMargin, heroInst, sound, logPileX } = cfg
+  const lakeBounds = computeLakeBounds(floorY, leftMargin)
+  addTwinklingStars(k, floorY, leftMargin, rightMargin, topMargin)
+  addFrozenLake(k, lakeBounds)
+  maybeAddLakeRabbit(k, lakeBounds)
+  const snowmanX = addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX)
+  const stopWildlife = startDistantWildlifeTimers(k, sound)
+  return { lakeBounds, stopWildlife, snowmanX }
+}
+
+/**
+ * Computes frozen lake bounding box.
+ * Exported so callers (e.g. level2.js) can exclude the lake area from snow drifts.
+ * @param {number} floorY
+ * @param {number} leftMargin
+ * @returns {{ minX, maxX, topY, botY }}
+ */
+export function getLakeBounds(floorY, leftMargin) {
+  return computeLakeBounds(floorY, leftMargin)
+}
+
+const L2_LAKE_WIDTH = 440
+
+function computeLakeBounds(floorY, leftMargin) {
+  const minX = leftMargin + L2_LAKE_EDGE_PAD
+  const maxX = minX + L2_LAKE_WIDTH
+  const topY = floorY - L2_LAKE_VERTICAL_PAD_TOP
+  const botY = floorY + L2_LAKE_VERTICAL_PAD_BOTTOM
+  return { minX, maxX, topY, botY }
+}
+
+function addTwinklingStars(k, floorY, leftMargin, rightMargin, topMargin) {
+  const stars = []
+  const skyBottom = floorY - 140
+  const skyTop = topMargin + 28
+  for (let i = 0; i < L2_STAR_COUNT; i++) {
+    stars.push({
+      x: leftMargin + 30 + Math.random() * (CFG.visual.screen.width - leftMargin - rightMargin - 60),
+      y: skyTop + Math.random() * Math.max(40, skyBottom - skyTop),
+      r: 0.6 + Math.random() * 1.35,
+      phase: Math.random() * Math.PI * 2,
+      speed: L2_STAR_TWINKLE_SPEED_MIN + Math.random() * (L2_STAR_TWINKLE_SPEED_MAX - L2_STAR_TWINKLE_SPEED_MIN),
+      base: 0.28 + Math.random() * 0.35
+    })
+  }
+  k.add([
+    k.z(L2_AMBIENCE_Z),
+    {
+      draw() {
+        const t = k.time()
+        for (const s of stars) {
+          const tw = s.base + (Math.sin(t * s.speed + s.phase) + 1) * 0.22
+          k.drawCircle({
+            pos: k.vec2(s.x, s.y),
+            radius: s.r,
+            color: k.rgb(245, 248, 255),
+            opacity: Math.min(0.95, tw)
+          })
+        }
+      }
+    }
+  ])
+}
+
+function addFrozenLake(k, bounds) {
+  const { minX, maxX, topY, botY } = bounds
+  const midY = (topY + botY) / 2
+  const rx = (maxX - minX) / 2
+  const ry = (botY - topY) / 2 + 4
+  const cx = (minX + maxX) / 2
+  //
+  // Sun glints: random positions inside the lake, each with its own phase/speed
+  //
+  const glints = []
+  for (let i = 0; i < L2_SUN_GLINT_COUNT; i++) {
+    const gAngle = Math.random() * Math.PI * 2
+    const gDist = Math.sqrt(Math.random())
+    glints.push({
+      x: cx + Math.cos(gAngle) * rx * 0.78 * gDist,
+      y: midY + Math.sin(gAngle) * ry * 0.62 * gDist,
+      rx: 5 + Math.random() * 14,
+      ry: 2 + Math.random() * 4,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.8 + Math.random() * 1.4
+    })
+  }
+  k.add([
+    k.z(L2_DECOR_ABOVE_PLATFORMS_Z),
+    {
+      draw() {
+        fillEllipse(k, cx, midY, rx * 1.02, ry * 0.92, k.rgb(128, 180, 238), 0.82)
+        fillEllipse(k, cx - rx * 0.08, midY - 3, rx * 0.88, ry * 0.72, k.rgb(185, 220, 255), 0.55)
+        strokeEllipse(k, cx, midY, rx * 1.02, ry * 0.92, k.rgb(95, 148, 210), 0.72, 2)
+        //
+        // Hairline cracks on ice
+        //
+        k.drawLine({
+          p1: k.vec2(cx - rx * 0.35, midY + ry * 0.15),
+          p2: k.vec2(cx + rx * 0.22, midY - ry * 0.05),
+          width: 1,
+          color: k.rgb(140, 178, 212),
+          opacity: 0.35
+        })
+        //
+        // Animated sun glints: bright ovals that pulse softly
+        //
+        const t = k.time()
+        for (const g of glints) {
+          const alpha = 0.18 + 0.32 * (Math.sin(t * g.speed + g.phase) * 0.5 + 0.5)
+          fillEllipse(k, g.x, g.y, g.rx, g.ry, k.rgb(248, 255, 255), alpha)
+        }
+      }
+    }
+  ])
+}
+
+function maybeAddLakeRabbit(k, bounds) {
+  if (Math.random() > L2_BUNNY_ON_LAKE_CHANCE) return
+  const { minX, maxX, topY, botY } = bounds
+  const bx = minX + (maxX - minX) * (0.28 + Math.random() * 0.46)
+  const by = topY + (botY - topY) * (0.42 + Math.random() * 0.28)
+  const facing = Math.random() < 0.5 ? -1 : 1
+  k.add([
+    k.z(L2_DECOR_ABOVE_PLATFORMS_Z + 1),
+    {
+      draw() {
+        const bodyRx = 11
+        const bodyRy = 7
+        fillEllipse(k, bx, by, bodyRx, bodyRy, k.rgb(252, 248, 242), 0.92)
+        fillEllipse(k, bx + facing * 9, by - 5, 5, 5, k.rgb(252, 248, 242), 0.92)
+        fillEllipse(k, bx + facing * 12, by - 10, 3, 9, k.rgb(252, 240, 246), 0.85)
+        fillEllipse(k, bx + facing * 11, by - 11, 3, 9, k.rgb(252, 240, 246), 0.85)
+        k.drawCircle({
+          pos: k.vec2(bx + facing * 10, by - 6),
+          radius: 1.1,
+          color: k.rgb(40, 38, 42),
+          opacity: 0.9
+        })
+      }
+    }
+  ])
+}
+
+function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
+  const footY = floorY - 4
+  //
+  // Place snowman to the right of the first log pile (or a fallback X).
+  //
+  const fallbackX = CFG.visual.screen.width - rightMargin - 200
+  const cx = logPileX != null
+    ? logPileX + L2_SNOWMAN_LOG_OFFSET_X
+    : fallbackX
+  const snowmanX = cx
+  const baseY = footY - L2_SNOWMAN_BODY_R
+  const midY = baseY - L2_SNOWMAN_BODY_R - L2_SNOWMAN_STACK_GAP
+  const headY = midY - L2_SNOWMAN_HEAD_R - L2_SNOWMAN_STACK_GAP
+  k.add([
+    k.z(L2_SNOWMAN_Z),
+    {
+      draw() {
+        k.drawCircle({
+          pos: k.vec2(cx, baseY),
+          radius: L2_SNOWMAN_BODY_R,
+          color: k.rgb(248, 252, 255),
+          opacity: 0.96
+        })
+        k.drawCircle({
+          pos: k.vec2(cx, midY),
+          radius: L2_SNOWMAN_BODY_R * 0.72,
+          color: k.rgb(242, 248, 252),
+          opacity: 0.95
+        })
+        k.drawCircle({
+          pos: k.vec2(cx, headY),
+          radius: L2_SNOWMAN_HEAD_R,
+          color: k.rgb(252, 254, 255),
+          opacity: 0.96
+        })
+        //
+        // Eyes track hero (same idea as hanging spider, simplified).
+        //
+        const hx = heroInst?.character?.pos?.x ?? cx
+        const hy = heroInst?.character?.pos?.y ?? headY
+        const dx = hx - cx
+        const dy = hy - headY
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const maxOff = 2.1
+        const pupDx = (dx / dist) * maxOff
+        const pupDy = (dy / dist) * maxOff
+        const eyeGap = 10
+        for (const side of [-1, 1]) {
+          const ex = cx + side * eyeGap * 0.5
+          const ey = headY - 2
+          //
+          // Black outline ring, white fill, black pupil — classic snowman eye.
+          //
+          k.drawCircle({
+            pos: k.vec2(ex, ey),
+            radius: 6.0,
+            color: k.rgb(18, 18, 20),
+            opacity: 0.96
+          })
+          k.drawCircle({
+            pos: k.vec2(ex, ey),
+            radius: 4.2,
+            color: k.rgb(252, 254, 255),
+            opacity: 0.97
+          })
+          k.drawCircle({
+            pos: k.vec2(ex + pupDx * 0.5, ey + pupDy * 0.5),
+            radius: 2.4,
+            color: k.rgb(18, 18, 20),
+            opacity: 0.96
+          })
+        }
+        //
+        // Carrot nose — orange triangle with a rounded base where it meets the head.
+        //
+        k.drawTriangle({
+          p1: k.vec2(cx, headY + 3),
+          p2: k.vec2(cx + 26, headY + 7),
+          p3: k.vec2(cx, headY + 13),
+          color: k.rgb(235, 128, 48),
+          opacity: 0.95
+        })
+        k.drawCircle({
+          pos: k.vec2(cx, headY + 8),
+          radius: 5.4,
+          color: k.rgb(235, 128, 48),
+          opacity: 0.95
+        })
+      }
+    }
+  ])
+  return snowmanX
+}
+
+const L2_CROW_MP3_VOLUME = 0.65
+const L2_CROW_MP3_NAMES = ['l2-crow-0', 'l2-crow-1']
+
+function startDistantWildlifeTimers(k, sound) {
+  //
+  // Pre-load mp3 crow samples once per scene load.
+  //
+  k.loadSound(L2_CROW_MP3_NAMES[0], '/assets/sounds/crow0.mp3')
+  k.loadSound(L2_CROW_MP3_NAMES[1], '/assets/sounds/crow1.mp3')
+  let crowTimer = L2_CROW_INTERVAL_MIN + Math.random() * (L2_CROW_INTERVAL_MAX - L2_CROW_INTERVAL_MIN)
+  let owlTimer = L2_OWL_INTERVAL_MIN + Math.random() * (L2_OWL_INTERVAL_MAX - L2_OWL_INTERVAL_MIN)
+  const ev = k.onUpdate(() => {
+    const dt = k.dt()
+    crowTimer -= dt
+    owlTimer -= dt
+    if (crowTimer <= 0) {
+      //
+      // Play only mp3 crow recordings; skip the generated crow entirely.
+      //
+      k.play(L2_CROW_MP3_NAMES[Math.floor(Math.random() * 2)], { volume: L2_CROW_MP3_VOLUME })
+      crowTimer = L2_CROW_INTERVAL_MIN + Math.random() * (L2_CROW_INTERVAL_MAX - L2_CROW_INTERVAL_MIN)
+    }
+    if (owlTimer <= 0) {
+      if (Math.random() < 0.55) {
+        sound && Sound.playOwlSound(sound)
+      }
+      owlTimer = L2_OWL_INTERVAL_MIN + Math.random() * (L2_OWL_INTERVAL_MAX - L2_OWL_INTERVAL_MIN)
+    }
+  })
+  return () => ev.cancel()
+}
+
+function fillEllipse(k, cx, cy, rx, ry, color, opacity) {
+  const segs = 28
+  const pts = []
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2
+    pts.push(k.vec2(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry))
+  }
+  k.drawPolygon({ pts, color, opacity })
+}
+
+function strokeEllipse(k, cx, cy, rx, ry, color, opacity, width) {
+  const segs = 36
+  for (let i = 0; i < segs; i++) {
+    const a0 = (i / segs) * Math.PI * 2
+    const a1 = ((i + 1) / segs) * Math.PI * 2
+    k.drawLine({
+      p1: k.vec2(cx + Math.cos(a0) * rx, cy + Math.sin(a0) * ry),
+      p2: k.vec2(cx + Math.cos(a1) * rx, cy + Math.sin(a1) * ry),
+      width,
+      color,
+      opacity
+    })
+  }
+}

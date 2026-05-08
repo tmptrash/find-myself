@@ -439,6 +439,9 @@ export function playLandSound(instance, currentLevel = null) {
     
     osc.start(now)
     osc.stop(now + duration)
+  } else if (currentLevel === 'level-touch.2') {
+    if (instance._l2Surface === 'ice') return
+    instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -925,6 +928,9 @@ export function playStepSound(instance, currentLevel = null) {
     
     osc.start(now)
     osc.stop(now + duration)
+  } else if (currentLevel === 'level-touch.2') {
+    if (instance._l2Surface === 'ice') return
+    instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -977,6 +983,183 @@ export function playStepSound(instance, currentLevel = null) {
     oscillator.start(now)
     oscillator.stop(now + CFG.audio.sfx.stepDuration)
   }
+}
+
+//
+// Touch level 2: louder icy snow crust under hero feet (noise + short tonal bite).
+//
+function playSnowCrunchLand(instance) {
+  //
+  // Same white-noise sweep as the step sound (matching character); slightly
+  // louder and a touch longer to reflect the heavier landing impact.
+  //
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.13
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(380, now)
+  filter.frequency.linearRampToValueAtTime(700, now + duration)
+  filter.Q.value = 0.5
+  const envelope = ctx.createGain()
+  const peak = CFG.audio.sfx.land * 4.8
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.015)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.landGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+function playSnowCrunchStep(instance) {
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.09
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  //
+  // Same low-pass / upward-sweep as touch jump sound so both sounds match.
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(420, now)
+  filter.frequency.linearRampToValueAtTime(650, now + duration)
+  filter.Q.value = 0.5
+  const envelope = ctx.createGain()
+  const peak = CFG.audio.sfx.step * 4.2
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.018)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.stepGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+function playSnowCrunchImpact(instance, destinationGain, peakAmp, duration) {
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  //
+  // Crispy high-frequency ice-crystal noise burst — no low frequencies so it
+  // sounds like compressed snow rather than a drum impact.
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const env = Math.exp(-(i / bufferSize) * 22)
+    noiseData[i] = (Math.random() * 2 - 1) * env
+  }
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  //
+  // High-pass removes all bass, bandpass cluster adds icy sparkle around 3-5 kHz.
+  //
+  const hp = ctx.createBiquadFilter()
+  hp.type = 'highpass'
+  hp.frequency.value = 2200
+  hp.Q.value = 0.5
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'peaking'
+  bp.frequency.value = 3800
+  bp.gain.value = 8
+  bp.Q.value = 1.4
+  const amp = ctx.createGain()
+  amp.gain.setValueAtTime(0.001, now)
+  amp.gain.linearRampToValueAtTime(peakAmp, now + 0.005)
+  amp.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(hp)
+  hp.connect(bp)
+  bp.connect(amp)
+  amp.connect(destinationGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration + 0.02)
+}
+
+function playWoodKnockLand(instance) {
+  //
+  // Heavier, more muffled thud for landing: lower pitch, longer decay, no noise.
+  //
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.18
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(210 + Math.random() * 60, now)
+  osc.frequency.exponentialRampToValueAtTime(90, now + duration)
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.value = 340
+  const peak = CFG.audio.sfx.land * 3.2
+  const oscGain = ctx.createGain()
+  oscGain.gain.setValueAtTime(0.001, now)
+  oscGain.gain.linearRampToValueAtTime(peak, now + 0.009)
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(lp)
+  lp.connect(oscGain)
+  oscGain.connect(instance.landGain)
+  osc.start(now)
+  osc.stop(now + duration)
+}
+
+function playWoodKnockStep(instance) {
+  playWoodKnockImpact(instance, instance.stepGain, CFG.audio.sfx.step * 3.2, 0.08)
+}
+
+function playWoodKnockImpact(instance, destinationGain, peakAmp, duration) {
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  //
+  // Tonal hollow-wood knock: damped sine with subtle noise texture.
+  //
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(680 + Math.random() * 140, now)
+  osc.frequency.exponentialRampToValueAtTime(220, now + duration)
+  const oscGain = ctx.createGain()
+  oscGain.gain.setValueAtTime(0.001, now)
+  oscGain.gain.linearRampToValueAtTime(peakAmp * 0.7, now + 0.007)
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(oscGain)
+  oscGain.connect(destinationGain)
+  osc.start(now)
+  osc.stop(now + duration + 0.02)
+  //
+  // Short noise burst for attack transient
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * 0.04)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufferSize) * 30)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = noiseBuffer
+  const noiseF = ctx.createBiquadFilter()
+  noiseF.type = 'bandpass'
+  noiseF.frequency.value = 800
+  noiseF.Q.value = 1.2
+  const noiseG = ctx.createGain()
+  noiseG.gain.setValueAtTime(peakAmp * 0.45, now)
+  noiseG.gain.exponentialRampToValueAtTime(0.001, now + 0.04)
+  noise.connect(noiseF)
+  noiseF.connect(noiseG)
+  noiseG.connect(destinationGain)
+  noise.start(now)
+  noise.stop(now + 0.05)
 }
 
 /**
@@ -3163,7 +3346,7 @@ export function playOwlSound(instance) {
   // Two soft hoots ("hoo... hoo") with short pause between them
   //
   const baseFreq = 280 + Math.random() * 60
-  const vol = 0.08 + Math.random() * 0.04
+  const vol = 0.22 + Math.random() * 0.08
   const hootDuration = 0.32
   const gap = 0.18
   for (let i = 0; i < 2; i++) {
@@ -3191,6 +3374,64 @@ export function playOwlSound(instance) {
     osc.stop(t + hootDuration + 0.05)
   }
 }
+
+/**
+ * Distant crow / corvid croak (quiet, slightly nasal filtered burst).
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playDistantCrowSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const cawCount = 2 + Math.floor(Math.random() * 2)
+  const cawDuration = 0.22 + Math.random() * 0.12
+  const cawGap = 0.14 + Math.random() * 0.08
+  const peak = 0.32 + Math.random() * 0.12
+  const baseFreq = 680 + Math.random() * 140
+  const toneFreq = 310 + Math.random() * 40
+  for (let i = 0; i < cawCount; i++) {
+    const t = now + i * (cawDuration + cawGap)
+    const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * cawDuration), ctx.sampleRate)
+    const data = noiseBuffer.getChannelData(0)
+    for (let j = 0; j < data.length; j++) {
+      const p = j / data.length
+      data[j] = (Math.random() * 2 - 1) * Math.exp(-p * 5)
+    }
+    const noise = ctx.createBufferSource()
+    noise.buffer = noiseBuffer
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.setValueAtTime(baseFreq, t)
+    bp.Q.value = 1.1
+    const amp = ctx.createGain()
+    amp.gain.setValueAtTime(0.001, t)
+    amp.gain.linearRampToValueAtTime(peak, t + cawDuration * 0.18)
+    amp.gain.exponentialRampToValueAtTime(0.001, t + cawDuration)
+    noise.connect(bp)
+    bp.connect(amp)
+    amp.connect(ctx.destination)
+    noise.start(t)
+    noise.stop(t + cawDuration + 0.02)
+    const tone = ctx.createOscillator()
+    tone.type = 'sawtooth'
+    tone.frequency.setValueAtTime(toneFreq, t)
+    tone.frequency.exponentialRampToValueAtTime(toneFreq * 0.56, t + cawDuration * 0.95)
+    const toneF = ctx.createBiquadFilter()
+    toneF.type = 'lowpass'
+    toneF.frequency.value = 900
+    const toneG = ctx.createGain()
+    toneG.gain.setValueAtTime(0.001, t)
+    toneG.gain.linearRampToValueAtTime(peak * 0.55, t + cawDuration * 0.14)
+    toneG.gain.exponentialRampToValueAtTime(0.001, t + cawDuration)
+    tone.connect(toneF)
+    toneF.connect(toneG)
+    toneG.connect(ctx.destination)
+    tone.start(t)
+    tone.stop(t + cawDuration + 0.02)
+  }
+}
+
 /**
  * Plays a chirpy small-bird tweet (1-3 short rising chirps)
  * @param {Object} instance - Sound instance
@@ -3202,7 +3443,7 @@ export function playBirdChirpSound(instance) {
   const now = ctx.currentTime
   const chirps = 1 + Math.floor(Math.random() * 3)
   const baseFreq = 1800 + Math.random() * 1200
-  const vol = 0.04 + Math.random() * 0.03
+  const vol = 0.13 + Math.random() * 0.07
   for (let i = 0; i < chirps; i++) {
     const t = now + i * (0.07 + Math.random() * 0.05)
     const dur = 0.06 + Math.random() * 0.05

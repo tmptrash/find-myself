@@ -105,6 +105,10 @@ const L1_CRICKET_INTERVAL_MIN = 3
 const L1_CRICKET_INTERVAL_MAX = 7
 const L1_FROG_INTERVAL_MIN = 6
 const L1_FROG_INTERVAL_MAX = 14
+const L1_CROW_MP3_INTERVAL_MIN = 8
+const L1_CROW_MP3_INTERVAL_MAX = 20
+const L1_CROW_MP3_VOLUME = 0.6
+const L1_CROW_MP3_NAMES = ['l1-crow-0', 'l1-crow-1']
 //
 // Middle parallax layer: same organic autumn trees as touch L0, darkened for depth.
 //
@@ -126,7 +130,7 @@ const L1_SCENE_BG_B = 42
 //
 const L1_MUSHROOM_COUNT = 6
 const L1_MUSHROOM_FUNNY_CHANCE = 0.38
-const L1_SPIDER_TOOLTIP_TEXT = 'Apartment for rent, cheap'
+const L1_SPIDER_TOOLTIP_TEXT = 'apartment for rent, cheap'
 //
 // Occasional mushroom hover jokes (English)
 //
@@ -321,6 +325,17 @@ export function sceneLevel1(k) {
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
     k.setBackground(k.rgb(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B))
+    //
+    // Letterbox outside the scaled game view stays transparent in CSS; pin canvas backing to scene grey.
+    //
+    k.canvas?.style.setProperty(
+      'background-color',
+      `rgb(${L1_SCENE_BG_R}, ${L1_SCENE_BG_G}, ${L1_SCENE_BG_B})`,
+      'important'
+    )
+    k.onSceneLeave(() => {
+      k.canvas?.style.removeProperty('background-color')
+    })
     //
     // Set gravity
     //
@@ -1415,6 +1430,7 @@ export function sceneLevel1(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         extraFlags: [LIFE_DEDUCT_LEAVES_FLAG],
         sceneLock,
+        sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
         onComplete: () => {
           fallingLeafInst.poisonChance = POISON_LEAF_CHANCE
         }
@@ -2205,6 +2221,13 @@ export function sceneLevel1(k) {
     const frogState = { timer: L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN) }
     k.onUpdate(() => onUpdateFrogAmbient(k, frogState, sound))
     //
+    // Random distant crow calls from mp3 samples (two files alternated).
+    //
+    k.loadSound(L1_CROW_MP3_NAMES[0], '/assets/sounds/crow0.mp3')
+    k.loadSound(L1_CROW_MP3_NAMES[1], '/assets/sounds/crow1.mp3')
+    const crowMp3State = { timer: L1_CROW_MP3_INTERVAL_MIN + Math.random() * (L1_CROW_MP3_INTERVAL_MAX - L1_CROW_MP3_INTERVAL_MIN) }
+    k.onUpdate(() => onUpdateCrowMp3Ambient(k, crowMp3State))
+    //
     // Small mushrooms scattered along the ground (some carry joke hovers)
     //
     const l1Mushrooms = createL1Mushrooms(k)
@@ -2462,13 +2485,17 @@ function createRoundedCorners(k) {
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
   //
+  // Bottom corners need higher z so grass / leaves / floor decor do not cover rounded clips.
+  //
+  const BOTTOM_CORNER_Z = 26
+  //
   // Bottom-left corner (rotate 270°) — at FLOOR_Y (raised platform)
   //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(LEFT_MARGIN, FLOOR_Y),
     k.rotate(270),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(BOTTOM_CORNER_Z)
   ])
   //
   // Bottom-right corner (rotate 180°) — at FLOOR_Y (raised platform)
@@ -2477,7 +2504,7 @@ function createRoundedCorners(k) {
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(CFG.visual.screen.width - RIGHT_MARGIN, FLOOR_Y),
     k.rotate(180),
-    k.z(CFG.visual.zIndex.platforms + 1)
+    k.z(BOTTOM_CORNER_Z)
   ])
 }
 
@@ -3122,21 +3149,53 @@ function playVariedThunder(sound) {
   }
 }
 //
-// Draw lightning flash: bright rectangle across upper portion of screen
+// Draw lightning flash: illuminates sky area between clouds and circle trees,
+// with a soft gradient fade at the bottom edge to avoid a hard visible line.
+//
+const LIGHTNING_FADE_STEPS = 14
 //
 function drawLightningFlash(k, state) {
   if (state.flashTimer <= 0) return
   const progress = state.flashTimer / LIGHTNING_FLASH_DURATION
-  const alpha = progress * LIGHTNING_FLASH_OPACITY
+  const baseAlpha = progress * LIGHTNING_FLASH_OPACITY
   const screenW = CFG.visual.screen.width
   const flashH = CFG.visual.screen.height * LIGHTNING_FLASH_HEIGHT_RATIO
+  //
+  // Solid upper portion
+  //
+  const solidH = flashH * 0.72
   k.drawRect({
     pos: k.vec2(0, 0),
     width: screenW,
-    height: flashH,
+    height: solidH,
     color: k.rgb(220, 225, 240),
-    opacity: alpha
+    opacity: baseAlpha
   })
+  //
+  // Gradient fade strips from solidH to flashH — each strip is slightly less opaque.
+  //
+  const fadeH = flashH - solidH
+  const stripH = fadeH / LIGHTNING_FADE_STEPS + 1
+  for (let i = 0; i < LIGHTNING_FADE_STEPS; i++) {
+    const t = i / LIGHTNING_FADE_STEPS
+    k.drawRect({
+      pos: k.vec2(0, solidH + t * fadeH),
+      width: screenW,
+      height: stripH,
+      color: k.rgb(220, 225, 240),
+      opacity: baseAlpha * (1 - t)
+    })
+  }
+}
+//
+// Periodically play a distant crow call from one of the two mp3 samples.
+//
+function onUpdateCrowMp3Ambient(k, state) {
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    k.play(L1_CROW_MP3_NAMES[Math.floor(Math.random() * 2)], { volume: L1_CROW_MP3_VOLUME })
+    state.timer = L1_CROW_MP3_INTERVAL_MIN + Math.random() * (L1_CROW_MP3_INTERVAL_MAX - L1_CROW_MP3_INTERVAL_MIN)
+  }
 }
 //
 // Periodically play a small bird chirp or owl hoot

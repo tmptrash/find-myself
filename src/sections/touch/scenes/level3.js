@@ -748,7 +748,8 @@ export function sceneLevel3(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         deductFlagValue: nextCount,
         extraFlags: [LIFE_DEDUCT_SCATTER_FLAG],
-        sceneLock
+        sceneLock,
+        sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B }
       })
     }
     //

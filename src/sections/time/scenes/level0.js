@@ -15,6 +15,8 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 //
+const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
+//
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 // Platforms fill entire top and bottom to hide background
 //
@@ -368,7 +370,8 @@ export function sceneLevel0(k) {
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
-        deductFlag: LIFE_DEDUCT_FLAG
+        deductFlag: LIFE_DEDUCT_FLAG,
+        sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
       })
     }
     let platform6HasActivated = !trapEnabled

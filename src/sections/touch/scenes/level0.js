@@ -1729,7 +1729,7 @@ export function sceneLevel0(k) {
     // Mix between black (#1A1C1A = rgb(26, 28, 26)) and tree color (#242524 = rgb(36, 37, 36))
     // Average: rgb(31, 32.5, 31) ≈ rgb(31, 33, 31) = #1F211F
     //
-    const BACK_LAYER_TREE_COLOR = "#1F211F"  // Color between black and back layer trees for better visibility
+    const BACK_LAYER_TREE_COLOR = "#000000"  // Pure black for long-legged monster bodies and legs
     //
     // Bug4 (anti-hero monster platform) z is in FRONT of hinged foliage (L0_FRONT_ORGANIC_DYNAMIC_Z)
     // monster + the anti-hero on its head are clearly in front of all foliage.
@@ -2071,7 +2071,7 @@ export function sceneLevel0(k) {
       legDropFactor: bug0LegDropFactor,
       customColor: BACK_LAYER_TREE_COLOR,
       zIndex: BIG_BUG_Z_INDEX,
-      showOutline: false,
+      showOutline: true,
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
@@ -2099,7 +2099,7 @@ export function sceneLevel0(k) {
       legDropFactor: bug1LegDropFactor,
       customColor: BACK_LAYER_TREE_COLOR,
       zIndex: BIG_BUG_Z_INDEX,
-      showOutline: false,
+      showOutline: true,
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
@@ -2143,7 +2143,7 @@ export function sceneLevel0(k) {
       legDropFactor: bug2LegDropFactor,
       customColor: BACK_LAYER_TREE_COLOR,
       zIndex: BIG_BUG_Z_INDEX,
-      showOutline: false,
+      showOutline: true,
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
@@ -2719,7 +2719,7 @@ export function sceneLevel0(k) {
     //
     // Rocks first so puddle placement can avoid their footprints.
     //
-    const rocks = createRocks(k)
+    const rocks = createRocks(k, floorThornData)
     //
     // Puddles on the floor: small ellipses with occasional ripple
     //
@@ -4601,27 +4601,47 @@ function addGrassAroundRocks(k, rocks, allBlades, grassY) {
  * @param {Object} k - Kaplay instance
  * @returns {Array} Array of {x, y, radius} for placed rocks
  */
-function createRocks(k) {
+function createRocks(k, thornData) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   //
   // Reserve enough room so the rock sprite never extends outside the game area walls.
   // Rock sprite width = radius * 2.6; use the max radius so all rocks are safe.
   //
   const maxRockSpriteW = Math.ceil(ROCK_RADIUS_MAX * 2.6)
+  //
+  // Derive thorn coverage bands: each thorn's X ± half its width plus a clearance margin.
+  // Rocks whose footprint overlaps a thorn band are rejected.
+  //
+  const ROCK_THORN_CLEARANCE = 28
+  const thornBands = (thornData ?? []).map(t => ({
+    minX: t.x - t.width / 2 - ROCK_THORN_CLEARANCE,
+    maxX: t.x + t.width / 2 + ROCK_THORN_CLEARANCE
+  }))
+  const rockOverlapsThorns = (rx, rw) => {
+    const rMin = rx
+    const rMax = rx + rw
+    return thornBands.some(b => rMax > b.minX && rMin < b.maxX)
+  }
   const rocks = []
   let spriteIdx = 0
   for (let i = 0; i < ROCK_COUNT; i++) {
     const radius = ROCK_RADIUS_MIN + Math.random() * (ROCK_RADIUS_MAX - ROCK_RADIUS_MIN)
+    const spriteW = Math.ceil(radius * 2.6)
     //
-    // Find a base X for the main rock, avoiding hero spawn corridor.
+    // Find a base X for the main rock, avoiding hero spawn corridor and thorn clusters.
     // Upper bound ensures sprite right edge stays within the right game wall.
     //
     let posX = LEFT_MARGIN + Math.random() * (playableW - maxRockSpriteW)
     let safety = 0
-    while (Math.abs(posX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH && safety < 30) {
+    while (
+      (Math.abs(posX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH
+        || rockOverlapsThorns(posX, spriteW))
+      && safety < 40
+    ) {
       posX = LEFT_MARGIN + Math.random() * (playableW - maxRockSpriteW)
       safety++
     }
+    if (rockOverlapsThorns(posX, spriteW)) continue
     const mainRock = buildSingleRock(k, posX, radius, `rock-l0-${spriteIdx++}`)
     rocks.push(mainRock)
     //
@@ -4644,6 +4664,7 @@ function createRocks(k) {
         //
         const satX = Math.max(LEFT_MARGIN, Math.min(LEFT_MARGIN + playableW - satSpriteW, rawSatX))
         if (Math.abs(satX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH) continue
+        if (rockOverlapsThorns(satX, satSpriteW)) continue
         rocks.push(buildSingleRock(k, satX, satRadius, `rock-l0-${spriteIdx++}`))
       }
     }

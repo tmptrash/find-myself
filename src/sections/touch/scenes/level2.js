@@ -629,7 +629,8 @@ export function sceneLevel2(k) {
       topMargin: TOP_MARGIN,
       heroInst,
       sound,
-      logPileX: DECOR_LOG_PILE_POSITIONS[0]
+      logPileX: DECOR_LOG_PILE_POSITIONS[0],
+      rightLogPileX: DECOR_LOG_PILE_POSITIONS[1]
     })
     stopTouchL2Wildlife = touchL2AmbienceInst.stopWildlife
     const snowmanWorldX = touchL2AmbienceInst.snowmanX

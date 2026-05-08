@@ -12,8 +12,8 @@ const L2_LAKE_EDGE_PAD = 28
 const L2_LAKE_VERTICAL_PAD_TOP = 12
 const L2_LAKE_VERTICAL_PAD_BOTTOM = 12
 const L2_STAR_COUNT = 56
-const L2_STAR_TWINKLE_SPEED_MIN = 2.2
-const L2_STAR_TWINKLE_SPEED_MAX = 5.8
+const L2_STAR_TWINKLE_SPEED_MIN = 0.35
+const L2_STAR_TWINKLE_SPEED_MAX = 1.1
 const L2_BUNNY_ON_LAKE_CHANCE = 0.52
 const L2_SNOWMAN_BODY_R = 28
 const L2_SNOWMAN_HEAD_R = 18
@@ -31,9 +31,10 @@ const L2_OWL_INTERVAL_MIN = 22
 const L2_OWL_INTERVAL_MAX = 48
 const L2_AMBIENCE_Z = 1
 //
-// Lake and snowman must render ABOVE the platform (CFG.visual.zIndex.platforms = 16).
+// Lake renders above the floor platform (CFG.visual.zIndex.platform = 1) but BELOW
+// the hero (CFG.visual.zIndex.player = 10) so the hero appears in front of the ice.
 //
-const L2_DECOR_ABOVE_PLATFORMS_Z = 17
+const L2_DECOR_ABOVE_PLATFORMS_Z = 8
 //
 // Lake sun glints: small bright ovals on ice surface animated by sine
 //
@@ -41,7 +42,7 @@ const L2_SUN_GLINT_COUNT = 6
 const L2_SNOWMAN_Z = 18
 
 /**
- * Stars, frozen lake, lake rabbit, snowman with tracking eyes, distant crow/owl ambience.
+ * Stars, frozen lake, snowman with tracking eyes, animated crow on right logs, distant crow/owl ambience.
  * @param {Object} cfg
  * @param {Object} cfg.k - Kaplay instance
  * @param {number} cfg.floorY - Floor line Y
@@ -51,16 +52,18 @@ const L2_SNOWMAN_Z = 18
  * @param {Object} cfg.heroInst - Hero instance (eyes track position)
  * @param {Object|null} cfg.sound - Sound instance
  * @param {number} [cfg.logPileX] - X center of first decorative log pile (snowman placed beside it)
- * @returns {{ lakeBounds: { minX: number, maxX: number, topY: number, botY: number }, stopWildlife: Function }}
+ * @param {number} [cfg.rightLogPileX] - X center of the right log pile (crow perches here)
+ * @returns {{ lakeBounds, stopWildlife, snowmanX }}
  */
 export function setupTouchLevel2Ambience(cfg) {
-  const { k, floorY, leftMargin, rightMargin, topMargin, heroInst, sound, logPileX } = cfg
+  const { k, floorY, leftMargin, rightMargin, topMargin, heroInst, sound, logPileX, rightLogPileX } = cfg
   const lakeBounds = computeLakeBounds(floorY, leftMargin)
   addTwinklingStars(k, floorY, leftMargin, rightMargin, topMargin)
   addFrozenLake(k, lakeBounds)
-  maybeAddLakeRabbit(k, lakeBounds)
+  const crowAnimState = { mouthOpen: false, mouthTimer: 0 }
   const snowmanX = addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX)
-  const stopWildlife = startDistantWildlifeTimers(k, sound)
+  addCrowOnLogs(k, floorY, rightLogPileX, crowAnimState)
+  const stopWildlife = startDistantWildlifeTimers(k, sound, crowAnimState)
   return { lakeBounds, stopWildlife, snowmanX }
 }
 
@@ -96,7 +99,10 @@ function addTwinklingStars(k, floorY, leftMargin, rightMargin, topMargin) {
       r: 0.6 + Math.random() * 1.35,
       phase: Math.random() * Math.PI * 2,
       speed: L2_STAR_TWINKLE_SPEED_MIN + Math.random() * (L2_STAR_TWINKLE_SPEED_MAX - L2_STAR_TWINKLE_SPEED_MIN),
-      base: 0.28 + Math.random() * 0.35
+      //
+      // peak: maximum brightness; sin oscillation passes through zero so star can fully vanish.
+      //
+      peak: 0.55 + Math.random() * 0.40
     })
   }
   k.add([
@@ -105,12 +111,15 @@ function addTwinklingStars(k, floorY, leftMargin, rightMargin, topMargin) {
       draw() {
         const t = k.time()
         for (const s of stars) {
-          const tw = s.base + (Math.sin(t * s.speed + s.phase) + 1) * 0.22
+          //
+          // Sin passes from -1 to +1; mapping to [0,1] lets the star fully disappear.
+          //
+          const tw = ((Math.sin(t * s.speed + s.phase) + 1) * 0.5) * s.peak
           k.drawCircle({
             pos: k.vec2(s.x, s.y),
             radius: s.r,
             color: k.rgb(245, 248, 255),
-            opacity: Math.min(0.95, tw)
+            opacity: tw
           })
         }
       }
@@ -214,23 +223,57 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
     k.z(L2_SNOWMAN_Z),
     {
       draw() {
+        //
+        // Branch arms — left and right sticks with two twigs each.
+        //
+        const armY = midY + 2
+        const armLen = 36
+        const armSpread = 14
+        for (const armSide of [-1, 1]) {
+          const armEndX = cx + armSide * (L2_SNOWMAN_BODY_R * 0.72 + armLen)
+          const armEndY = armY - 8
+          k.drawLine({
+            p1: k.vec2(cx + armSide * L2_SNOWMAN_BODY_R * 0.68, armY),
+            p2: k.vec2(armEndX, armEndY),
+            width: 2.5,
+            color: k.rgb(38, 28, 18),
+            opacity: 1
+          })
+          //
+          // Two short twigs branching from the arm tip
+          //
+          k.drawLine({
+            p1: k.vec2(armEndX, armEndY),
+            p2: k.vec2(armEndX + armSide * 10, armEndY - armSpread),
+            width: 1.5,
+            color: k.rgb(38, 28, 18),
+            opacity: 1
+          })
+          k.drawLine({
+            p1: k.vec2(armEndX, armEndY),
+            p2: k.vec2(armEndX + armSide * 14, armEndY + 4),
+            width: 1.5,
+            color: k.rgb(38, 28, 18),
+            opacity: 1
+          })
+        }
         k.drawCircle({
           pos: k.vec2(cx, baseY),
           radius: L2_SNOWMAN_BODY_R,
           color: k.rgb(248, 252, 255),
-          opacity: 0.96
+          opacity: 1
         })
         k.drawCircle({
           pos: k.vec2(cx, midY),
           radius: L2_SNOWMAN_BODY_R * 0.72,
           color: k.rgb(242, 248, 252),
-          opacity: 0.95
+          opacity: 1
         })
         k.drawCircle({
           pos: k.vec2(cx, headY),
           radius: L2_SNOWMAN_HEAD_R,
           color: k.rgb(252, 254, 255),
-          opacity: 0.96
+          opacity: 1
         })
         //
         // Eyes track hero (same idea as hanging spider, simplified).
@@ -254,19 +297,19 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
             pos: k.vec2(ex, ey),
             radius: 6.0,
             color: k.rgb(18, 18, 20),
-            opacity: 0.96
+            opacity: 1
           })
           k.drawCircle({
             pos: k.vec2(ex, ey),
             radius: 4.2,
             color: k.rgb(252, 254, 255),
-            opacity: 0.97
+            opacity: 1
           })
           k.drawCircle({
             pos: k.vec2(ex + pupDx * 0.5, ey + pupDy * 0.5),
             radius: 2.4,
             color: k.rgb(18, 18, 20),
-            opacity: 0.96
+            opacity: 1
           })
         }
         //
@@ -277,13 +320,13 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
           p2: k.vec2(cx + 26, headY + 7),
           p3: k.vec2(cx, headY + 13),
           color: k.rgb(235, 128, 48),
-          opacity: 0.95
+          opacity: 1
         })
         k.drawCircle({
           pos: k.vec2(cx, headY + 8),
           radius: 5.4,
           color: k.rgb(235, 128, 48),
-          opacity: 0.95
+          opacity: 1
         })
       }
     }
@@ -294,7 +337,11 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
 const L2_CROW_MP3_VOLUME = 0.65
 const L2_CROW_MP3_NAMES = ['l2-crow-0', 'l2-crow-1']
 
-function startDistantWildlifeTimers(k, sound) {
+//
+// How long the crow's beak stays open after a caw
+//
+const L2_CROW_MOUTH_OPEN_DURATION = 1.8
+function startDistantWildlifeTimers(k, sound, crowAnimState) {
   //
   // Pre-load mp3 crow samples once per scene load.
   //
@@ -306,11 +353,25 @@ function startDistantWildlifeTimers(k, sound) {
     const dt = k.dt()
     crowTimer -= dt
     owlTimer -= dt
+    //
+    // Decrement crow mouth open timer
+    //
+    if (crowAnimState.mouthTimer > 0) {
+      crowAnimState.mouthTimer -= dt
+      if (crowAnimState.mouthTimer <= 0) {
+        crowAnimState.mouthOpen = false
+      }
+    }
     if (crowTimer <= 0) {
       //
       // Play only mp3 crow recordings; skip the generated crow entirely.
       //
       k.play(L2_CROW_MP3_NAMES[Math.floor(Math.random() * 2)], { volume: L2_CROW_MP3_VOLUME })
+      //
+      // Open crow's beak for the duration of the call
+      //
+      crowAnimState.mouthOpen = true
+      crowAnimState.mouthTimer = L2_CROW_MOUTH_OPEN_DURATION
       crowTimer = L2_CROW_INTERVAL_MIN + Math.random() * (L2_CROW_INTERVAL_MAX - L2_CROW_INTERVAL_MIN)
     }
     if (owlTimer <= 0) {
@@ -323,6 +384,145 @@ function startDistantWildlifeTimers(k, sound) {
   return () => ev.cancel()
 }
 
+//
+// Crow perched on top of the right log pile: body, wings, tail, beak and eyes.
+// The beak opens when a crow.mp3 sample is playing (crowAnimState.mouthOpen).
+//
+const L2_CROW_Z = 19
+function addCrowOnLogs(k, floorY, logPileX, crowAnimState) {
+  //
+  // Fallback to a sensible position if no log pile X was provided
+  //
+  const cx = logPileX != null ? logPileX + 18 : CFG.visual.screen.width - 260
+  //
+  // Perch height: sit on top of the log pile (logs are stacked ~90px tall above floor)
+  //
+  const perchY = floorY - 94
+  k.add([
+    k.z(L2_CROW_Z),
+    {
+      draw() {
+        //
+        // Body — dark oval
+        //
+        k.drawEllipse({
+          pos: k.vec2(cx, perchY),
+          radiusX: 12,
+          radiusY: 9,
+          color: k.rgb(22, 20, 22),
+          opacity: 1
+        })
+        //
+        // Head — small circle
+        //
+        k.drawCircle({
+          pos: k.vec2(cx + 9, perchY - 8),
+          radius: 7,
+          color: k.rgb(18, 16, 18),
+          opacity: 1
+        })
+        //
+        // Wing highlight — slightly lighter stripe
+        //
+        k.drawEllipse({
+          pos: k.vec2(cx - 2, perchY - 1),
+          radiusX: 7,
+          radiusY: 4,
+          color: k.rgb(48, 44, 50),
+          opacity: 0.7
+        })
+        //
+        // Tail — narrow wedge pointing left
+        //
+        k.drawTriangle({
+          p1: k.vec2(cx - 10, perchY + 2),
+          p2: k.vec2(cx - 22, perchY + 6),
+          p3: k.vec2(cx - 10, perchY + 9),
+          color: k.rgb(20, 18, 20),
+          opacity: 1
+        })
+        //
+        // Eye — small white dot with pupil
+        //
+        k.drawCircle({
+          pos: k.vec2(cx + 12, perchY - 9),
+          radius: 2.2,
+          color: k.rgb(230, 230, 230),
+          opacity: 1
+        })
+        k.drawCircle({
+          pos: k.vec2(cx + 12.5, perchY - 9),
+          radius: 1.1,
+          color: k.rgb(10, 8, 10),
+          opacity: 1
+        })
+        //
+        // Beak — closed: two thin triangles; open: wider angle
+        //
+        if (crowAnimState.mouthOpen) {
+          //
+          // Upper mandible
+          //
+          k.drawTriangle({
+            p1: k.vec2(cx + 10, perchY - 8),
+            p2: k.vec2(cx + 20, perchY - 7),
+            p3: k.vec2(cx + 10, perchY - 5),
+            color: k.rgb(55, 50, 35),
+            opacity: 1
+          })
+          //
+          // Lower mandible (dropped open)
+          //
+          k.drawTriangle({
+            p1: k.vec2(cx + 10, perchY - 5),
+            p2: k.vec2(cx + 19, perchY - 3),
+            p3: k.vec2(cx + 10, perchY - 2),
+            color: k.rgb(45, 40, 28),
+            opacity: 1
+          })
+          //
+          // Mouth interior
+          //
+          k.drawTriangle({
+            p1: k.vec2(cx + 10, perchY - 5),
+            p2: k.vec2(cx + 19, perchY - 5),
+            p3: k.vec2(cx + 10, perchY - 3),
+            color: k.rgb(160, 80, 60),
+            opacity: 0.85
+          })
+        } else {
+          //
+          // Closed beak
+          //
+          k.drawTriangle({
+            p1: k.vec2(cx + 10, perchY - 8),
+            p2: k.vec2(cx + 20, perchY - 6),
+            p3: k.vec2(cx + 10, perchY - 4),
+            color: k.rgb(55, 50, 35),
+            opacity: 1
+          })
+        }
+        //
+        // Feet — two thin lines gripping the log
+        //
+        k.drawLine({
+          p1: k.vec2(cx + 2, perchY + 8),
+          p2: k.vec2(cx + 2, perchY + 15),
+          width: 1.5,
+          color: k.rgb(60, 50, 30),
+          opacity: 1
+        })
+        k.drawLine({
+          p1: k.vec2(cx + 8, perchY + 8),
+          p2: k.vec2(cx + 8, perchY + 15),
+          width: 1.5,
+          color: k.rgb(60, 50, 30),
+          opacity: 1
+        })
+      }
+    }
+  ])
+}
 function fillEllipse(k, cx, cy, rx, ry, color, opacity) {
   const segs = 28
   const pts = []

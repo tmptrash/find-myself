@@ -19,7 +19,7 @@ const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
 //
-const LIFE_IMAGE_Y_OFFSET = 8
+const LIFE_IMAGE_Y_OFFSET = 6
 //
 // Trap count badge: small red number below-right of life icon
 //

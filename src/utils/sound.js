@@ -931,6 +931,8 @@ export function playStepSound(instance, currentLevel = null) {
   } else if (currentLevel === 'level-touch.2') {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
+  } else if (currentLevel === 'level-touch.3') {
+    playSnowCrunchStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise

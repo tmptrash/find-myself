@@ -44,14 +44,17 @@ const GLOW_RING_COUNT = 8
 // Burning effect when creature is very close to a light source
 //
 const BURN_FLEE_SPEED = 180
-const BURN_PARTICLE_COUNT = 6
-const BURN_PARTICLE_SPEED_MIN = 40
-const BURN_PARTICLE_SPEED_EXTRA = 60
-const BURN_PARTICLE_UPWARD_BIAS = 15
-const BURN_PARTICLE_LIFETIME = 0.5
-const BURN_PARTICLE_SIZE = 5
-const BURN_GLOW_MAX_OPACITY = 0.35
-const BURN_GLOW_RADIUS_MULTIPLIER = 2.5
+const BURN_PARTICLE_COUNT = 14
+const BURN_PARTICLE_SPEED_MIN = 22
+const BURN_PARTICLE_SPEED_EXTRA = 55
+//
+// Strong upward bias so flames rise naturally above the body
+//
+const BURN_PARTICLE_UPWARD_BIAS = 80
+const BURN_PARTICLE_LIFETIME = 0.7
+const BURN_PARTICLE_SIZE = 6
+const BURN_GLOW_MAX_OPACITY = 0.55
+const BURN_GLOW_RADIUS_MULTIPLIER = 3.2
 //
 // Eye configuration
 //
@@ -346,12 +349,23 @@ export function onDrawOverlay(inst) {
   //
   if (inst.isBurning) {
     inst.burnParticles.forEach(p => {
-      const alpha = 1 - p.age / p.lifetime
+      //
+      // Fade out and shrink toward the tip; bright outer halo for a realistic ember glow.
+      //
+      const t = p.age / p.lifetime
+      const alpha = Math.pow(1 - t, 1.4)
+      const radius = (p.size ?? BURN_PARTICLE_SIZE) * (1 - t * 0.55)
       k.drawCircle({
         pos: k.vec2(p.x, p.y),
-        radius: BURN_PARTICLE_SIZE * alpha,
+        radius: radius * 1.9,
+        color: k.rgb(p.r, Math.max(0, p.g - 60), 0),
+        opacity: alpha * 0.28
+      })
+      k.drawCircle({
+        pos: k.vec2(p.x, p.y),
+        radius: radius,
         color: k.rgb(p.r, p.g, p.b),
-        opacity: alpha * 0.7
+        opacity: alpha * 0.88
       })
     })
   }
@@ -456,24 +470,43 @@ function updateBurnParticles(inst, dt) {
   // Spawn particles from random body segments so flames cover the whole creature
   //
   for (let i = 0; i < BURN_PARTICLE_COUNT; i++) {
-    if (Math.random() > 0.3) continue
+    if (Math.random() > 0.45) continue
     const seg = Math.floor(Math.random() * BODY_SEGMENTS)
     const segOffset = (seg - 1) * BODY_SEGMENT_SPACING
     const segX = inst.x - Math.cos(inst.facingAngle) * segOffset
     const segY = inst.y - Math.sin(inst.facingAngle) * segOffset
-    const angle = Math.random() * Math.PI * 2
+    //
+    // Cone-shaped upward spread — most particles rise, with horizontal jitter
+    //
+    const lateralAngle = (Math.random() - 0.5) * Math.PI * 0.8
     const speed = BURN_PARTICLE_SPEED_MIN + Math.random() * BURN_PARTICLE_SPEED_EXTRA
     const rVal = Math.random()
+    //
+    // Flame colour: white core → yellow → orange → deep red by age fraction
+    // encoded as a 'heat' value in [0,1] (1 = hottest / core)
+    //
+    const heat = Math.random()
+    let pr, pg, pb
+    if (heat > 0.82) {
+      pr = 255; pg = 252; pb = 240
+    } else if (heat > 0.55) {
+      pr = 255; pg = 200; pb = 40
+    } else if (heat > 0.28) {
+      pr = 255; pg = 110; pb = 18
+    } else {
+      pr = 180; pg = 30; pb = 8
+    }
     inst.burnParticles.push({
       x: segX + (Math.random() - 0.5) * BODY_RADIUS,
       y: segY + (Math.random() - 0.5) * BODY_RADIUS,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - BURN_PARTICLE_UPWARD_BIAS,
+      vx: Math.sin(lateralAngle) * speed * 0.35,
+      vy: -speed - BURN_PARTICLE_UPWARD_BIAS * (0.6 + Math.random() * 0.4),
       age: 0,
-      lifetime: BURN_PARTICLE_LIFETIME + Math.random() * 0.3,
-      r: rVal > 0.5 ? 255 : 220,
-      g: rVal > 0.5 ? 140 : 80,
-      b: 20
+      lifetime: BURN_PARTICLE_LIFETIME + Math.random() * 0.35,
+      r: pr,
+      g: pg,
+      b: pb,
+      size: BURN_PARTICLE_SIZE * (0.4 + heat * 0.9)
     })
   }
 }

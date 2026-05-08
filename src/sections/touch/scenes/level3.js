@@ -498,6 +498,38 @@ const BREATH_PARTICLE_SIZE_MAX = 5
 const BREATH_OFFSET_X = 12
 const BREATH_OFFSET_Y = -20
 //
+// Owl ambient sound: random interval in seconds
+//
+const L3_OWL_INTERVAL_MIN = 5
+const L3_OWL_INTERVAL_MAX = 10
+//
+// Stars: twinkle above the darkness layer so they're visible as a winter night sky
+//
+const L3_STAR_COUNT = 48
+const L3_STAR_TWINKLE_SPEED_MIN = 0.3
+const L3_STAR_TWINKLE_SPEED_MAX = 0.95
+//
+// Proximity heartbeat + breath: become active when creature is within this distance
+//
+const L3_PROXIMITY_RADIUS = 450
+const L3_HEARTBEAT_INTERVAL_CLOSE = 0.65
+const L3_HEARTBEAT_INTERVAL_FAR = 1.4
+const L3_BREATH_VOLUME_MAX = 0.5
+//
+// Screen shake: max amplitude when creature is very close
+//
+const L3_SHAKE_CLOSE_DIST = 160
+const L3_SHAKE_MAX = 3.5
+//
+// Swaying tree creak: random ambient sound
+//
+const L3_TREE_CREAK_INTERVAL_MIN = 6
+const L3_TREE_CREAK_INTERVAL_MAX = 16
+//
+// Watching eyes: fixed positions and appearance
+//
+const L3_EYE_PAIR_COUNT = 4
+//
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
@@ -1275,6 +1307,35 @@ export function sceneLevel3(k) {
       }
     ])
     k.onUpdate(() => onUpdateBreathVapor(k, heroInst, breathState))
+    //
+    // Owl ambient sound: random 5-10 second intervals
+    //
+    const owlState = { timer: L3_OWL_INTERVAL_MIN + Math.random() * (L3_OWL_INTERVAL_MAX - L3_OWL_INTERVAL_MIN) }
+    k.onUpdate(() => onUpdateOwlAmbient(k, owlState, sound))
+    //
+    // Twinkling stars above the darkness overlay
+    //
+    addL3TwinklingStars(k)
+    //
+    // Proximity-based heartbeat and breath.mp3 sound driven by creature distance
+    //
+    const heartbeatState = { timer: L3_HEARTBEAT_INTERVAL_FAR, lastHeartbeatTime: 0 }
+    const breathAudio = k.play('breath', { loop: true, volume: 0 })
+    k.onSceneLeave(() => { breathAudio?.stop?.() })
+    k.onUpdate(() => onUpdateProximityAudio(k, heroInst, creatureInst, sound, heartbeatState, breathAudio))
+    //
+    // Screen shake when creature is dangerously close
+    //
+    k.onUpdate(() => onUpdateScreenShake(k, heroInst, creatureInst))
+    //
+    // Swaying tree creak ambient sounds
+    //
+    const treeCreakState = { timer: L3_TREE_CREAK_INTERVAL_MIN + Math.random() * (L3_TREE_CREAK_INTERVAL_MAX - L3_TREE_CREAK_INTERVAL_MIN) }
+    k.onUpdate(() => onUpdateTreeCreakAmbient(k, treeCreakState, sound))
+    //
+    // Watching eyes: ambient eye pairs that follow the hero
+    //
+    addWatchingEyes(k, heroInst)
     //
     // ESC key to return to menu
     //
@@ -3766,4 +3827,169 @@ function drawBreathVapor(k, particles) {
       opacity: alpha * 0.3
     })
   }
+}
+//
+// Periodically play an owl hoot from the generated sound (5-10 s random interval)
+//
+function onUpdateOwlAmbient(k, state, sound) {
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    Sound.playOwlSound(sound)
+    state.timer = L3_OWL_INTERVAL_MIN + Math.random() * (L3_OWL_INTERVAL_MAX - L3_OWL_INTERVAL_MIN)
+  }
+}
+//
+// Add twinkling stars drawn above the darkness overlay (always visible as night sky)
+//
+function addL3TwinklingStars(k) {
+  const screenW = CFG.visual.screen.width
+  const screenH = CFG.visual.screen.height
+  const starAreaH = screenH * 0.42
+  const stars = []
+  for (let i = 0; i < L3_STAR_COUNT; i++) {
+    stars.push({
+      x: LEFT_MARGIN + 20 + Math.random() * (screenW - LEFT_MARGIN - RIGHT_MARGIN - 40),
+      y: TOP_MARGIN + 10 + Math.random() * starAreaH,
+      r: 0.5 + Math.random() * 1.2,
+      phase: Math.random() * Math.PI * 2,
+      speed: L3_STAR_TWINKLE_SPEED_MIN + Math.random() * (L3_STAR_TWINKLE_SPEED_MAX - L3_STAR_TWINKLE_SPEED_MIN),
+      peak: 0.45 + Math.random() * 0.45
+    })
+  }
+  k.add([
+    k.z(Z_DARKNESS + 6),
+    {
+      draw() {
+        const t = k.time()
+        for (const s of stars) {
+          const tw = ((Math.sin(t * s.speed + s.phase) + 1) * 0.5) * s.peak
+          k.drawCircle({
+            pos: k.vec2(s.x, s.y),
+            radius: s.r,
+            color: k.rgb(240, 245, 255),
+            opacity: tw
+          })
+        }
+      }
+    }
+  ])
+}
+//
+// Proximity-based heartbeat and breath audio: volume and interval tied to creature distance.
+//
+function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state, breathAudio) {
+  if (!heroInst?.character?.pos || !creatureInst) return
+  const hx = heroInst.character.pos.x
+  const hy = heroInst.character.pos.y
+  const dx = creatureInst.x - hx
+  const dy = creatureInst.y - hy
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  //
+  // Within proximity radius: scale volume and heartbeat interval by closeness
+  //
+  const t = Math.max(0, Math.min(1, 1 - dist / L3_PROXIMITY_RADIUS))
+  const breathVol = t * L3_BREATH_VOLUME_MAX
+  breathAudio && (breathAudio.volume = breathVol)
+  if (t <= 0) return
+  //
+  // Faster interval when closer
+  //
+  const interval = L3_HEARTBEAT_INTERVAL_FAR + (L3_HEARTBEAT_INTERVAL_CLOSE - L3_HEARTBEAT_INTERVAL_FAR) * t
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    Sound.playHeartbeatSound(sound)
+    state.timer = interval
+  }
+}
+//
+// Screen shake when creature is dangerously close to the hero
+//
+function onUpdateScreenShake(k, heroInst, creatureInst) {
+  if (!heroInst?.character?.pos || !creatureInst) return
+  const dx = creatureInst.x - heroInst.character.pos.x
+  const dy = creatureInst.y - heroInst.character.pos.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  if (dist < L3_SHAKE_CLOSE_DIST) {
+    const strength = (1 - dist / L3_SHAKE_CLOSE_DIST) * L3_SHAKE_MAX
+    k.shake(strength * k.dt() * 60)
+  }
+}
+//
+// Periodically play a wood creak to simulate swaying fir trees in the wind
+//
+function onUpdateTreeCreakAmbient(k, state, sound) {
+  state.timer -= k.dt()
+  if (state.timer <= 0) {
+    playWoodCreakSound(sound)
+    state.timer = L3_TREE_CREAK_INTERVAL_MIN + Math.random() * (L3_TREE_CREAK_INTERVAL_MAX - L3_TREE_CREAK_INTERVAL_MIN)
+  }
+}
+//
+// Watching eyes: three to four pairs of glowing eyes that track the hero from the dark edges
+//
+const L3_EYE_POSITIONS = [
+  { x: LEFT_MARGIN + 60,  y: TOP_MARGIN + 90 },
+  { x: LEFT_MARGIN + 180, y: TOP_MARGIN + 55 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 90, y: TOP_MARGIN + 75 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 200, y: TOP_MARGIN + 110 }
+]
+function addWatchingEyes(k, heroInst) {
+  const eyeData = L3_EYE_POSITIONS.slice(0, L3_EYE_PAIR_COUNT).map(pos => ({
+    ...pos,
+    phase: Math.random() * Math.PI * 2,
+    blinkSpeed: 0.18 + Math.random() * 0.12
+  }))
+  k.add([
+    k.z(Z_DARKNESS + 5),
+    {
+      draw() {
+        const t = k.time()
+        const hx = heroInst?.character?.pos?.x ?? CFG.visual.screen.width / 2
+        const hy = heroInst?.character?.pos?.y ?? CFG.visual.screen.height / 2
+        for (const e of eyeData) {
+          //
+          // Slow blink: eye height oscillates between almost-zero and full.
+          //
+          const blinkT = Math.sin(t * e.blinkSpeed + e.phase)
+          const eyelidRatio = Math.max(0.06, (blinkT + 1) * 0.5)
+          const eyeRx = 5.5
+          const eyeRy = 3.8 * eyelidRatio
+          if (eyeRy < 0.3) continue
+          //
+          // Pupil tracks hero direction.
+          //
+          const dx = hx - e.x
+          const dy = hy - e.y
+          const dlen = Math.sqrt(dx * dx + dy * dy) || 1
+          const pupilDx = (dx / dlen) * 1.8
+          const pupilDy = (dy / dlen) * 1.2
+          const eyeGap = 11
+          for (const side of [-1, 1]) {
+            const ex = e.x + side * eyeGap
+            const ey = e.y
+            k.drawEllipse({
+              pos: k.vec2(ex, ey),
+              radiusX: eyeRx + 1.5,
+              radiusY: eyeRy + 1.2,
+              color: k.rgb(10, 5, 5),
+              opacity: 0.82
+            })
+            k.drawEllipse({
+              pos: k.vec2(ex, ey),
+              radiusX: eyeRx,
+              radiusY: eyeRy,
+              color: k.rgb(220, 60, 30),
+              opacity: 0.72
+            })
+            k.drawCircle({
+              pos: k.vec2(ex + pupilDx, ey + pupilDy),
+              radius: 1.6,
+              color: k.rgb(8, 2, 2),
+              opacity: 0.95
+            })
+          }
+        }
+      }
+    }
+  ])
 }

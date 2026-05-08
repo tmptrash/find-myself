@@ -37,7 +37,7 @@ const SCORE_X_OFFSET = 55
 const SCORE_Y_OFFSET = 0
 const OUTLINE_OFFSET = 1.5
 const BORDER_WIDTH = 3
-const BUBBLE_FRAME_ALPHA = 0.26
+const BUBBLE_FRAME_ALPHA = 0.88
 const BUBBLE_FILL_ALPHA = 1.0
 //
 // Total animation duration (all phases combined)

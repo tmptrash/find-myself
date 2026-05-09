@@ -145,9 +145,13 @@ const SNOW_COLOR_R = 180
 const SNOW_COLOR_G = 195
 const SNOW_COLOR_B = 220
 //
+// Snowfall particle count (below global dust default to save FPS on level 3)
+//
+const L3_SNOW_PARTICLE_COUNT = 58
+//
 // Number of glow bugs on the bottom wall (with blades across full width)
 //
-const BOTTOM_WALL_BUG_COUNT = 10
+const BOTTOM_WALL_BUG_COUNT = 5
 //
 // Monster spawn position (just below upper-right anti-hero platform)
 //
@@ -498,13 +502,13 @@ const L3_OWL_INTERVAL_MAX = 10
 //
 // Stars: twinkle above the darkness layer so they're visible as a winter night sky
 //
-const L3_STAR_COUNT = 24
+const L3_STAR_COUNT = 16
 const L3_STAR_TWINKLE_SPEED_MIN = 0.3
 const L3_STAR_TWINKLE_SPEED_MAX = 0.95
 //
-// Proximity heartbeat + breath: become active when creature is within this distance
+// Proximity heartbeat: active only when creature is within this distance (smaller = closer before beats start)
 //
-const L3_PROXIMITY_RADIUS = 800
+const L3_PROXIMITY_RADIUS = 380
 const L3_HEARTBEAT_INTERVAL_CLOSE = 0.65
 const L3_HEARTBEAT_INTERVAL_FAR = 1.4
 //
@@ -522,8 +526,11 @@ const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
 const L3_EYE_MAX_RX = 14
 const L3_EYE_MAX_RY = 10
-const L3_EYE_COUNT = 34
+const L3_EYE_COUNT = 48
 //
+// Skip drawing the eye halo when barely open (saves one ellipse per eye per frame)
+//
+const L3_EYE_HALO_MIN_OPEN = 0.38
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
@@ -644,11 +651,14 @@ export function sceneLevel3(k) {
     const snowColor = { r: SNOW_COLOR_R, g: SNOW_COLOR_G, b: SNOW_COLOR_B }
     const dustInst = Dust.create({
       k,
+      particleCount: L3_SNOW_PARTICLE_COUNT,
       bounds: {
         left: LEFT_MARGIN,
         right: CFG.visual.screen.width - RIGHT_MARGIN,
         top: CLOUD_BOTTOM_Y,
-        bottom: CFG.visual.screen.height - BOTTOM_MARGIN
+        bottom: CFG.visual.screen.height - BOTTOM_MARGIN,
+        recycleYMin: CLOUD_BOTTOM_Y,
+        recycleYMax: CLOUD_BOTTOM_Y + 42
       },
       color: snowColor
     })
@@ -3887,7 +3897,7 @@ function addL3TwinklingStars(k) {
   ])
 }
 //
-// Proximity-based heartbeat and breath audio: volume and interval tied to creature distance.
+// Proximity-based heartbeat SFX: interval scales with creature distance.
 //
 function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state) {
   if (!heroInst?.character?.pos || !creatureInst) return
@@ -3966,6 +3976,23 @@ const L3_EYE_POSITIONS = [
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 172, y: 162, openRadius: 238 },
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 220, y: 278, openRadius: 218 },
   //
+  // Upper band — gaps between log platforms (horizontal corridors, still above platform tops)
+  //
+  { x: LEFT_MARGIN + 398,                            y: 136, openRadius: 218 },
+  { x: LEFT_MARGIN + 462,                            y: 212, openRadius: 208 },
+  { x: LEFT_MARGIN + 518,                            y: 168, openRadius: 200 },
+  { x: LEFT_MARGIN + 575,                            y: 258, openRadius: 198 },
+  { x: CFG.visual.screen.width / 2 - 118,            y: 132, openRadius: 222 },
+  { x: CFG.visual.screen.width / 2 + 28,             y: 272, openRadius: 212 },
+  { x: CFG.visual.screen.width / 2 - 720,            y: 248, openRadius: 205 },
+  { x: CFG.visual.screen.width / 2 + 310,            y: 188, openRadius: 215 },
+  { x: CFG.visual.screen.width / 2 + 640,            y: 228, openRadius: 202 },
+  { x: CFG.visual.screen.width / 2 + 760,            y: 158, openRadius: 208 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 588, y: 248, openRadius: 200 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 498, y: 172, openRadius: 210 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 668, y: 138, openRadius: 195 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 728, y: 268, openRadius: 192 },
+  //
   // Narrow middle band (y 412–438) — between platform 3 (+60) and lower cluster (-60)
   //
   { x: LEFT_MARGIN + 52,                            y: 420, openRadius: 282 },
@@ -4027,17 +4054,15 @@ function addWatchingEyes(k, heroInst) {
           const dlen = Math.sqrt(dx * dx + dy * dy) || 1
           const pupilDx = (dx / dlen) * eyeRx * 0.3
           const pupilDy = (dy / dlen) * eyeRy * 0.28
-          //
-          // Glow halo (slightly larger than iris)
-          //
-          k.drawEllipse({
-            pos: k.vec2(e.x, e.y),
-            radiusX: eyeRx + 3,
-            radiusY: eyeRy + 2.5,
-            color: eyeHalo,
-            opacity: 0.82 * openT
-          })
-          //
+          if (openT >= L3_EYE_HALO_MIN_OPEN) {
+            k.drawEllipse({
+              pos: k.vec2(e.x, e.y),
+              radiusX: eyeRx + 3,
+              radiusY: eyeRy + 2.5,
+              color: eyeHalo,
+              opacity: 0.82 * openT
+            })
+          }
           // Iris
           //
           k.drawEllipse({

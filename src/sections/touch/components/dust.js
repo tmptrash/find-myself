@@ -1,8 +1,7 @@
-import { CFG } from '../cfg.js'
 //
 // Dust parameters
 //
-const DUST_COUNT = 100  // Number of dust particles (increased from 80)
+const DUST_COUNT = 100
 const DUST_FALL_SPEED = 15  // Slow fall speed
 const DUST_DRIFT_SPEED = 5  // Slight horizontal drift
 const DUST_SIZE_MIN = 1.5  // Minimum size (increased from 1)
@@ -17,17 +16,20 @@ const DUST_DRIFT_DAMPING = 3.0  // How fast disturbed drift returns to natural s
  * @param {Object} config.k - Kaplay instance
  * @param {Object} config.bounds - Game area bounds {left, right, top, bottom}
  * @param {Object} [config.color] - Custom color {r, g, b} for particles (default: blue)
+ * @param {number} [config.particleCount] - Override particle count (default: DUST_COUNT)
+ * @param {number} [config.bounds.recycleYMin] - Respawn Y lower bound (inclusive); omit for legacy spawn above bounds.top
+ * @param {number} [config.bounds.recycleYMax] - Respawn Y upper bound (exclusive); requires recycleYMin
  * @returns {Object} Dust instance
  */
 export function create(config) {
-  const { k, bounds, color = null } = config
+  const { k, bounds, color = null, particleCount = DUST_COUNT } = config
   
   const particles = []
   //
-  // Create initial dust particles distributed across entire screen
+  // Create initial dust particles distributed across entire bounds
   //
-  for (let i = 0; i < DUST_COUNT; i++) {
-    particles.push(createParticle(k, bounds, true, color))  // initialSpawn = true
+  for (let i = 0; i < particleCount; i++) {
+    particles.push(createParticle(k, bounds, true, color))
   }
   
   return {
@@ -48,9 +50,18 @@ export function create(config) {
  */
 function createParticle(k, bounds, initialSpawn = false, customColor = null) {
   const x = bounds.left + Math.random() * (bounds.right - bounds.left)
-  const y = initialSpawn 
-    ? bounds.top + Math.random() * (bounds.bottom - bounds.top)  // Distribute in game area at start
-    : bounds.top - 10 - Math.random() * 50  // Start above game area during normal operation
+  //
+  // Recycle spawn: optional horizontal band [recycleYMin, recycleYMax) at cloud base etc.
+  //
+  let y
+  if (initialSpawn) {
+    y = bounds.top + Math.random() * (bounds.bottom - bounds.top)
+  } else if (bounds.recycleYMin !== undefined && bounds.recycleYMax !== undefined) {
+    const span = bounds.recycleYMax - bounds.recycleYMin
+    y = bounds.recycleYMin + (span > 0 ? Math.random() * span : 0)
+  } else {
+    y = bounds.top - 10 - Math.random() * 50
+  }
   const size = DUST_SIZE_MIN + Math.random() * (DUST_SIZE_MAX - DUST_SIZE_MIN)
   const fallSpeed = DUST_FALL_SPEED * (0.5 + Math.random() * 1.0)  // Vary speed
   const driftSpeed = (Math.random() - 0.5) * DUST_DRIFT_SPEED * 2  // Can drift left or right

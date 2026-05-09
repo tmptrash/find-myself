@@ -89,9 +89,10 @@ const FIREFLY_LAYERS_Z = [1, 4, 8, 24]
 //
 const THUNDER_INTERVAL_MIN = 8
 const THUNDER_INTERVAL_MAX = 15
-const LIGHTNING_FLASH_DURATION = 0.3
-const LIGHTNING_FLASH_OPACITY = 0.25
-const LIGHTNING_FLASH_HEIGHT_RATIO = 0.4
+const LIGHTNING_FLASH_DURATION = 0.18
+const LIGHTNING_FLASH_OPACITY = 0.28
+const LIGHTNING_BLINK_COUNT = 3
+const LIGHTNING_BLINK_INTERVAL = 0.06
 const THUNDER_MULTI_CHANCE = 0.5
 const THUNDER_MULTI_MAX = 3
 const THUNDER_MULTI_DELAY_MIN = 0.4
@@ -2207,7 +2208,9 @@ export function sceneLevel1(k) {
     //
     const lightningState = {
       timer: THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN),
-      flashTimer: 0
+      flashTimer: 0,
+      blinkCount: 0,
+      blinkTimer: 0
     }
     k.add([
       k.z(0),
@@ -3148,13 +3151,29 @@ function drawFireflyLayer(k, fireflies, layerIndex) {
 //
 function onUpdateLightning(k, state, sound) {
   const dt = k.dt()
+  //
+  // Count down active flash
+  //
   if (state.flashTimer > 0) {
     state.flashTimer = Math.max(0, state.flashTimer - dt)
+  }
+  //
+  // Blink: schedule additional short flashes after the main one
+  //
+  if (state.blinkCount > 0) {
+    state.blinkTimer -= dt
+    if (state.blinkTimer <= 0) {
+      state.flashTimer = LIGHTNING_FLASH_DURATION * 0.6
+      state.blinkCount--
+      state.blinkTimer = LIGHTNING_BLINK_INTERVAL
+    }
   }
   state.timer -= dt
   if (state.timer <= 0) {
     playVariedThunder(sound)
     state.flashTimer = LIGHTNING_FLASH_DURATION
+    state.blinkCount = LIGHTNING_BLINK_COUNT
+    state.blinkTimer = LIGHTNING_BLINK_INTERVAL
     state.timer = THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN)
   }
 }
@@ -3180,43 +3199,19 @@ function playVariedThunder(sound) {
   }
 }
 //
-// Draw lightning flash: illuminates sky area between clouds and circle trees,
-// with a soft gradient fade at the bottom edge to avoid a hard visible line.
-//
-const LIGHTNING_FADE_STEPS = 14
+// Draw lightning flash: a single full-screen white overlay that fades out smoothly.
+// No horizontal strips — uniform alpha prevents visible banding.
 //
 function drawLightningFlash(k, state) {
   if (state.flashTimer <= 0) return
   const progress = state.flashTimer / LIGHTNING_FLASH_DURATION
-  const baseAlpha = progress * LIGHTNING_FLASH_OPACITY
-  const screenW = CFG.visual.screen.width
-  const flashH = CFG.visual.screen.height * LIGHTNING_FLASH_HEIGHT_RATIO
-  //
-  // Solid upper portion
-  //
-  const solidH = flashH * 0.72
   k.drawRect({
     pos: k.vec2(0, 0),
-    width: screenW,
-    height: solidH,
-    color: k.rgb(220, 225, 240),
-    opacity: baseAlpha
+    width: CFG.visual.screen.width,
+    height: CFG.visual.screen.height,
+    color: k.rgb(225, 230, 248),
+    opacity: progress * LIGHTNING_FLASH_OPACITY
   })
-  //
-  // Gradient fade strips from solidH to flashH — each strip is slightly less opaque.
-  //
-  const fadeH = flashH - solidH
-  const stripH = fadeH / LIGHTNING_FADE_STEPS + 1
-  for (let i = 0; i < LIGHTNING_FADE_STEPS; i++) {
-    const t = i / LIGHTNING_FADE_STEPS
-    k.drawRect({
-      pos: k.vec2(0, solidH + t * fadeH),
-      width: screenW,
-      height: stripH,
-      color: k.rgb(220, 225, 240),
-      opacity: baseAlpha * (1 - t)
-    })
-  }
 }
 //
 // Periodically play a distant crow call from one of the two mp3 samples.

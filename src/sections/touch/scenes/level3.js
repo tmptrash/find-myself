@@ -413,6 +413,10 @@ const PLATFORM_ICICLE_COLOR_R = 210
 const PLATFORM_ICICLE_COLOR_G = 225
 const PLATFORM_ICICLE_COLOR_B = 240
 //
+// Hero half-width used for icicle collision (hero hitbox is roughly this wide)
+//
+const ICICLE_KILL_HERO_HALF_W = 18
+//
 // Icicle wobble (random platform icicles wobble one at a time with creak)
 //
 const ICICLE_WOBBLE_INTERVAL_MIN = 3
@@ -487,17 +491,6 @@ const DARKNESS_CREATURE_BURN_INTENSITY = 1.0
 //
 const SNOW_AMBIENT_BRIGHTNESS = 0.08
 //
-// Breath vapor: small white puffs from hero's mouth in cold air
-//
-const BREATH_INTERVAL = 2.0
-const BREATH_PARTICLE_COUNT = 5
-const BREATH_PARTICLE_SPEED = 15
-const BREATH_PARTICLE_LIFETIME = 0.8
-const BREATH_PARTICLE_SIZE_MIN = 2
-const BREATH_PARTICLE_SIZE_MAX = 5
-const BREATH_OFFSET_X = 12
-const BREATH_OFFSET_Y = -20
-//
 // Owl ambient sound: random interval in seconds
 //
 const L3_OWL_INTERVAL_MIN = 5
@@ -514,7 +507,6 @@ const L3_STAR_TWINKLE_SPEED_MAX = 0.95
 const L3_PROXIMITY_RADIUS = 800
 const L3_HEARTBEAT_INTERVAL_CLOSE = 0.65
 const L3_HEARTBEAT_INTERVAL_FAR = 1.4
-const L3_BREATH_VOLUME_MAX = 0.5
 //
 // Screen shake: max amplitude when creature is very close
 //
@@ -530,7 +522,7 @@ const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
 const L3_EYE_MAX_RX = 14
 const L3_EYE_MAX_RY = 10
-const L3_EYE_COUNT = 16
+const L3_EYE_COUNT = 34
 //
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
@@ -1265,7 +1257,7 @@ export function sceneLevel3(k) {
     // Main update loop
     //
     k.onUpdate(() => {
-      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState)
+      onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState, platformIcicles, logWobbleState)
       const dt = k.dt()
       updateHeroGlow(heroGlowState, dt)
       Dust.onUpdate(dustInst, dt)
@@ -1306,21 +1298,6 @@ export function sceneLevel3(k) {
       }
     })
     //
-    // Breath vapor: periodic white puffs from hero's mouth
-    //
-    const breathState = { timer: BREATH_INTERVAL, particles: [] }
-    const breathVaporColor = k.rgb(220, 230, 240)
-    const breathVaporColorOuter = k.rgb(200, 210, 220)
-    k.add([
-      k.z(CFG.visual.zIndex.player + 2),
-      {
-        draw() {
-          drawBreathVapor(k, breathState.particles, breathVaporColor, breathVaporColorOuter)
-        }
-      }
-    ])
-    k.onUpdate(() => onUpdateBreathVapor(k, heroInst, breathState))
-    //
     // Owl ambient sound: random 5-10 second intervals
     //
     const owlState = { timer: L3_OWL_INTERVAL_MIN + Math.random() * (L3_OWL_INTERVAL_MAX - L3_OWL_INTERVAL_MIN) }
@@ -1330,12 +1307,10 @@ export function sceneLevel3(k) {
     //
     addL3TwinklingStars(k)
     //
-    // Proximity-based heartbeat and breath.mp3 sound driven by creature distance
+    // Proximity-based heartbeat sound driven by creature distance
     //
     const heartbeatState = { timer: L3_HEARTBEAT_INTERVAL_FAR, lastHeartbeatTime: 0 }
-    const breathAudio = k.play('breath', { loop: true, volume: 0 })
-    k.onSceneLeave(() => { breathAudio?.stop?.() })
-    k.onUpdate(() => onUpdateProximityAudio(k, heroInst, creatureInst, sound, heartbeatState, breathAudio))
+    k.onUpdate(() => onUpdateProximityAudio(k, heroInst, creatureInst, sound, heartbeatState))
     //
     // Screen shake when creature is dangerously close
     //
@@ -1373,7 +1348,7 @@ export function sceneLevel3(k) {
  * @param {Object} levelIndicator - Level indicator for life score effects on death
  * @param {Array} trapLeftThorns - Thorn data on the left trap half (moves with platform)
  */
-function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState) {
+function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroInst, trapState, trapLeftBlades, trapRightBlades, levelIndicator, trapLeftThorns, heroScoreAtStart, heroGlowState, platformIcicles, logWobbleState) {
   const dt = k.dt()
   FpsCounter.onUpdate(fpsCounter)
   GlowBug.onUpdate(glowBugInst, dt)
@@ -1418,6 +1393,7 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
     checkBottomThorns(k, heroInst, levelIndicator, heroScoreAtStart)
     checkPlatformThorns(k, heroInst, [...glowBugInst.entries, ...trapBugInst.entries, ...bottomBugInst.entries], levelIndicator, heroScoreAtStart)
     checkTrapLeftThorns(k, heroInst, trapLeftThorns, trapState, levelIndicator, heroScoreAtStart)
+    checkPlatformIcicles(k, heroInst, platformIcicles, logWobbleState, levelIndicator, heroScoreAtStart)
   }
   //
   // Get glow positions with darkness glow radius (creature burns within visible light)
@@ -1600,6 +1576,49 @@ function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator, her
       return
     }
   }
+}
+/**
+ * Checks if hero's head collides with any icicle tip hanging from a log platform.
+ * Icicles are lethal when the hero jumps into them from below.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} heroInst - Hero instance
+ * @param {Array} platformIcicles - Per-platform icicle data (from generatePlatformIcicles)
+ * @param {Object} logWobbleState - Current wobble state for Y offset sync
+ * @param {Object} levelIndicator - Level indicator for life score effects
+ * @param {number} heroScoreAtStart - Hero score when level began
+ */
+function checkPlatformIcicles(k, heroInst, platformIcicles, logWobbleState, levelIndicator, heroScoreAtStart) {
+  if (!heroInst.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroHeadY = heroInst.character.pos.y - HERO_COLLISION_HEIGHT_SCALED / 2
+  CORRIDOR_PLATFORMS.forEach((platform, idx) => {
+    if (idx === TRAP_PLATFORM_INDEX) return
+    const icicles = platformIcicles[idx]
+    if (!icicles || icicles.length === 0) return
+    const baseY = platform.y + PLATFORM_HEIGHT
+    //
+    // Apply active wobble Y offset to stay in sync with visual
+    //
+    let wobbleOffsetY = 0
+    if (logWobbleState.activeIndex === idx && logWobbleState.elapsed < LOG_WOBBLE_DURATION) {
+      const progress = logWobbleState.elapsed / LOG_WOBBLE_DURATION
+      const decay = 1 - progress
+      wobbleOffsetY = Math.sin(progress * Math.PI * LOG_WOBBLE_FREQUENCY) * LOG_WOBBLE_AMPLITUDE * decay
+    }
+    const topY = baseY + wobbleOffsetY
+    for (const icicle of icicles) {
+      const cx = platform.x + icicle.offsetX
+      const tipY = topY + icicle.height
+      //
+      // Kill when hero head enters the icicle column (jumped into it from below)
+      //
+      if (heroHeadY >= topY && heroHeadY <= tipY &&
+          Math.abs(heroX - cx) < icicle.width / 2 + ICICLE_KILL_HERO_HALF_W) {
+        onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart)
+        return
+      }
+    }
+  })
 }
 /**
  * Handles Shift key press to activate hero glow ability
@@ -3817,65 +3836,6 @@ function updateBurnSound(sfx, isBurning, wasBurning, currentNode) {
   return currentNode
 }
 //
-// Update breath vapor: spawn puffs periodically, age existing particles
-//
-function onUpdateBreathVapor(k, heroInst, state) {
-  const dt = k.dt()
-  //
-  // Age and remove expired particles
-  //
-  for (let i = state.particles.length - 1; i >= 0; i--) {
-    const p = state.particles[i]
-    p.life -= dt
-    p.x += p.vx * dt
-    p.y += p.vy * dt
-    p.size += 2 * dt
-    if (p.life <= 0) state.particles.splice(i, 1)
-  }
-  if (!heroInst?.character?.pos) return
-  state.timer -= dt
-  if (state.timer > 0) return
-  state.timer = BREATH_INTERVAL
-  //
-  // Spawn breath puff from hero's mouth area
-  //
-  const dir = heroInst.direction ?? 1
-  const baseX = heroInst.character.pos.x + BREATH_OFFSET_X * dir
-  const baseY = heroInst.character.pos.y + BREATH_OFFSET_Y
-  for (let i = 0; i < BREATH_PARTICLE_COUNT; i++) {
-    const angle = (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.8
-    const speed = BREATH_PARTICLE_SPEED * (0.5 + Math.random())
-    state.particles.push({
-      x: baseX + (Math.random() - 0.5) * 4,
-      y: baseY + (Math.random() - 0.5) * 4,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 8,
-      size: BREATH_PARTICLE_SIZE_MIN + Math.random() * (BREATH_PARTICLE_SIZE_MAX - BREATH_PARTICLE_SIZE_MIN),
-      life: BREATH_PARTICLE_LIFETIME * (0.6 + Math.random() * 0.4),
-      maxLife: BREATH_PARTICLE_LIFETIME
-    })
-  }
-}
-//
-// Draw breath vapor puffs
-//
-function drawBreathVapor(k, particles, vaporColor, vaporColorOuter) {
-  for (const p of particles) {
-    const alpha = Math.max(0, p.life / p.maxLife) * 0.4
-    k.drawCircle({
-      pos: k.vec2(p.x, p.y),
-      radius: p.size,
-      color: vaporColor,
-      opacity: alpha
-    })
-    k.drawCircle({
-      pos: k.vec2(p.x, p.y),
-      radius: p.size * 1.8,
-      color: vaporColorOuter,
-      opacity: alpha * 0.3
-    })
-  }
-}
 //
 // Periodically play an owl hoot from the generated sound (5-10 s random interval)
 //
@@ -3909,7 +3869,7 @@ function addL3TwinklingStars(k) {
     })
   }
   k.add([
-    k.z(Z_DARKNESS + 6),
+    k.z(Z_CLOUDS - 1),
     {
       draw() {
         const t = k.time()
@@ -3929,7 +3889,7 @@ function addL3TwinklingStars(k) {
 //
 // Proximity-based heartbeat and breath audio: volume and interval tied to creature distance.
 //
-function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state, breathAudio) {
+function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state) {
   if (!heroInst?.character?.pos || !creatureInst) return
   const hx = heroInst.character.pos.x
   const hy = heroInst.character.pos.y
@@ -3937,11 +3897,9 @@ function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state, breathA
   const dy = creatureInst.y - hy
   const dist = Math.sqrt(dx * dx + dy * dy)
   //
-  // Within proximity radius: scale volume and heartbeat interval by closeness
+  // Within proximity radius: scale heartbeat interval by closeness
   //
   const t = Math.max(0, Math.min(1, 1 - dist / L3_PROXIMITY_RADIUS))
-  const breathVol = t * L3_BREATH_VOLUME_MAX
-  breathAudio && (breathAudio.volume = breathVol)
   if (t <= 0) return
   //
   // Faster interval when closer
@@ -3982,41 +3940,53 @@ function onUpdateTreeCreakAmbient(k, state, sound) {
 // Each eye has its own openRadius; the eye is fully closed when the hero
 // is farther than openRadius, and fully open when the hero is right on top.
 //
+// Minimum Y-distance from any log platform surface to avoid eyes appearing on logs.
+// Platforms are at y=350, 500, 550, 600 — exclusion zones (±60) leave three safe bands:
+//   [TOP_MARGIN .. 290], [410 .. 440] (narrow), [660 .. FLOOR_Y]
 const L3_EYE_POSITIONS = [
   //
-  // Top-edge eyes — left cluster
+  // Upper band (y 120–285) — above all platforms
   //
-  { x: LEFT_MARGIN + 55,  y: TOP_MARGIN + 90,  openRadius: 290 },
-  { x: LEFT_MARGIN + 70,  y: TOP_MARGIN + 185, openRadius: 260 },
-  { x: LEFT_MARGIN + 140, y: TOP_MARGIN + 130, openRadius: 220 },
+  { x: LEFT_MARGIN + 55,                             y: 130, openRadius: 290 },
+  { x: LEFT_MARGIN + 92,                             y: 200, openRadius: 265 },
+  { x: LEFT_MARGIN + 158,                            y: 148, openRadius: 225 },
+  { x: LEFT_MARGIN + 210,                            y: 270, openRadius: 215 },
+  { x: LEFT_MARGIN + 268,                            y: 195, openRadius: 210 },
+  { x: LEFT_MARGIN + 345,                            y: 152, openRadius: 205 },
+  { x: CFG.visual.screen.width / 2 - 460,            y: 148, openRadius: 245 },
+  { x: CFG.visual.screen.width / 2 - 340,            y: 238, openRadius: 238 },
+  { x: CFG.visual.screen.width / 2 - 220,            y: 178, openRadius: 250 },
+  { x: CFG.visual.screen.width / 2 + 195,            y: 242, openRadius: 242 },
+  { x: CFG.visual.screen.width / 2 + 380,            y: 148, openRadius: 245 },
+  { x: CFG.visual.screen.width / 2 + 490,            y: 260, openRadius: 238 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 272, y: 198, openRadius: 210 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 348, y: 158, openRadius: 205 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 80,  y: 125, openRadius: 285 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68,  y: 215, openRadius: 258 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 172, y: 162, openRadius: 238 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 220, y: 278, openRadius: 218 },
   //
-  // Top-edge eyes — right cluster
+  // Narrow middle band (y 412–438) — between platform 3 (+60) and lower cluster (-60)
   //
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 85,  y: TOP_MARGIN + 75,  openRadius: 280 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 75,  y: TOP_MARGIN + 200, openRadius: 255 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 175, y: TOP_MARGIN + 145, openRadius: 235 },
+  { x: LEFT_MARGIN + 52,                            y: 420, openRadius: 282 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 58, y: 428, openRadius: 276 },
+  { x: LEFT_MARGIN + 315,                           y: 416, openRadius: 232 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 318, y: 434, openRadius: 226 },
   //
-  // Mid-height eyes — left side margin (dark wall area)
+  // Lower band (y 662–970) — below all platforms, dark floor area
   //
-  { x: LEFT_MARGIN + 45,  y: TOP_MARGIN + 340, openRadius: 300 },
-  { x: LEFT_MARGIN + 80,  y: TOP_MARGIN + 480, openRadius: 270 },
-  //
-  // Mid-height eyes — right side margin
-  //
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 50,  y: TOP_MARGIN + 360, openRadius: 300 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 90,  y: TOP_MARGIN + 500, openRadius: 265 },
-  //
-  // Mid-height eyes — centre of game zone (in the dark interior)
-  //
-  { x: CFG.visual.screen.width / 2 - 240, y: TOP_MARGIN + 310, openRadius: 240 },
-  { x: CFG.visual.screen.width / 2 + 180, y: TOP_MARGIN + 380, openRadius: 225 },
-  //
-  // Low eyes near the floor — emerge from the ground shadow
-  //
-  { x: LEFT_MARGIN + 60,  y: TOP_MARGIN + 620, openRadius: 280 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 65, y: TOP_MARGIN + 650, openRadius: 270 },
-  { x: CFG.visual.screen.width / 2 - 320, y: TOP_MARGIN + 580, openRadius: 210 },
-  { x: CFG.visual.screen.width / 2 + 280, y: TOP_MARGIN + 600, openRadius: 220 }
+  { x: LEFT_MARGIN + 62,                            y: 680, openRadius: 280 },
+  { x: LEFT_MARGIN + 98,                            y: 770, openRadius: 268 },
+  { x: LEFT_MARGIN + 145,                           y: 855, openRadius: 252 },
+  { x: LEFT_MARGIN + 88,                            y: 940, openRadius: 240 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68, y: 698, openRadius: 272 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 108, y: 788, openRadius: 260 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 158, y: 872, openRadius: 246 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 95, y: 958, openRadius: 235 },
+  { x: CFG.visual.screen.width / 2 - 308,           y: 730, openRadius: 218 },
+  { x: CFG.visual.screen.width / 2 + 278,           y: 752, openRadius: 222 },
+  { x: CFG.visual.screen.width / 2 - 152,           y: 838, openRadius: 208 },
+  { x: CFG.visual.screen.width / 2 + 122,           y: 892, openRadius: 202 }
 ]
 function addWatchingEyes(k, heroInst) {
   const eyeColor = k.rgb(220, 60, 30)

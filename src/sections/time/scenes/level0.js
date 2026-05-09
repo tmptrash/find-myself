@@ -94,15 +94,14 @@ const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
 export function sceneLevel0(k) {
   k.scene("level-time.0", () => {
     //
-    // Reset scores only if coming from a different section (not a reload after death)
+    // Reset scores when entering from a different section.
+    // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
     //
-    const lastLevel = get('lastLevel', '')
-    const isComingFromDifferentSection = !lastLevel || typeof lastLevel !== 'string' || !lastLevel.startsWith('level-time.')
-    
-    if (isComingFromDifferentSection) {
+    if (get('lastSection', null) !== 'time') {
       set('heroScore', 0)
       set('lifeScore', 0)
     }
+    set('lastSection', 'time')
     //
     // Save progress immediately when entering this level
     //

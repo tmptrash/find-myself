@@ -47,15 +47,14 @@ const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 export function sceneLevel0(k) {
   k.scene("level-word.0", () => {
     //
-    // Reset scores only if coming from a different section (not a reload after death)
+    // Reset scores when entering from a different section.
+    // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
     //
-    const lastLevel = get('lastLevel', '')
-    const isComingFromDifferentSection = !lastLevel || typeof lastLevel !== 'string' || !lastLevel.startsWith('level-word.')
-    
-    if (isComingFromDifferentSection) {
+    if (get('lastSection', null) !== 'word') {
       set('heroScore', 0)
       set('lifeScore', 0)
     }
+    set('lastSection', 'word')
     //
     // Save progress immediately when entering this level
     //

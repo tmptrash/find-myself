@@ -505,13 +505,13 @@ const L3_OWL_INTERVAL_MAX = 10
 //
 // Stars: twinkle above the darkness layer so they're visible as a winter night sky
 //
-const L3_STAR_COUNT = 48
+const L3_STAR_COUNT = 24
 const L3_STAR_TWINKLE_SPEED_MIN = 0.3
 const L3_STAR_TWINKLE_SPEED_MAX = 0.95
 //
 // Proximity heartbeat + breath: become active when creature is within this distance
 //
-const L3_PROXIMITY_RADIUS = 450
+const L3_PROXIMITY_RADIUS = 800
 const L3_HEARTBEAT_INTERVAL_CLOSE = 0.65
 const L3_HEARTBEAT_INTERVAL_FAR = 1.4
 const L3_BREATH_VOLUME_MAX = 0.5
@@ -519,16 +519,18 @@ const L3_BREATH_VOLUME_MAX = 0.5
 // Screen shake: max amplitude when creature is very close
 //
 const L3_SHAKE_CLOSE_DIST = 160
-const L3_SHAKE_MAX = 3.5
+const L3_SHAKE_MAX = 1.2
 //
 // Swaying tree creak: random ambient sound
 //
 const L3_TREE_CREAK_INTERVAL_MIN = 6
 const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
-// Watching eyes: fixed positions and appearance
+// Watching eyes: max radius when fully open
 //
-const L3_EYE_PAIR_COUNT = 4
+const L3_EYE_MAX_RX = 14
+const L3_EYE_MAX_RY = 10
+const L3_EYE_COUNT = 16
 //
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
@@ -1025,10 +1027,10 @@ export function sceneLevel3(k) {
     // Moon hover glow system (glows when mouse hovers over it)
     //
     const moonGlowState = { intensity: 0 }
-    k.add([
+        k.add([
       k.z(Z_DARKNESS + 4),
-      {
-        draw() {
+          {
+            draw() {
           drawMoonHoverGlow(k, moonGlowState)
         }
       }
@@ -1061,6 +1063,17 @@ export function sceneLevel3(k) {
       }
     ])
     //
+    // Collect active lights once per frame in onUpdate and share the result between
+    // the snow overlay draw and the darkness shader draw, avoiding a double iteration
+    // over all bug entries per frame.
+    //
+    const gameAreaWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const gameAreaHeight = CFG.visual.screen.height - TOP_MARGIN - BOTTOM_MARGIN
+    const sharedLightsState = { lights: [] }
+    k.onUpdate(() => {
+      sharedLightsState.lights = collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst)
+    })
+    //
     // Draw snow caps on log platforms and bottom snow above hero and bugs
     // Snow calculates its own darkness based on proximity to glowing bugs
     //
@@ -1068,9 +1081,8 @@ export function sceneLevel3(k) {
       k.z(Z_DARKNESS + 3),
       {
         draw() {
-          const lights = collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst)
-          drawAllLogSnowOverlay(k, logDetails, trapState, logWobbleState, lights)
-          drawBottomPlatformSnow(k, bottomSnowProfile, lights)
+          drawAllLogSnowOverlay(k, logDetails, trapState, logWobbleState, sharedLightsState.lights)
+          drawBottomPlatformSnow(k, bottomSnowProfile, sharedLightsState.lights)
         }
       }
     ])
@@ -1091,10 +1103,9 @@ export function sceneLevel3(k) {
     k.loadShader("level3-darkness", null, generateDarknessShader(MAX_DARKNESS_LIGHTS))
     //
     // Darkness overlay covers only the game area (not walls/margins)
-    // Uses drawUVQuad which provides proper UV coords for the shader
+    // Uses drawUVQuad which provides proper UV coords for the shader.
+    // Fresh uniforms object built each frame from the pre-collected shared lights.
     //
-    const gameAreaWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-    const gameAreaHeight = CFG.visual.screen.height - TOP_MARGIN - BOTTOM_MARGIN
     k.add([
       k.pos(LEFT_MARGIN, TOP_MARGIN),
       k.z(Z_DARKNESS),
@@ -1105,7 +1116,7 @@ export function sceneLevel3(k) {
             height: gameAreaHeight,
             anchor: "topleft",
             shader: "level3-darkness",
-            uniform: collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst, gameAreaWidth, gameAreaHeight),
+            uniform: buildLightUniforms(sharedLightsState.lights, gameAreaWidth, gameAreaHeight),
             fixed: true
           })
         }
@@ -1298,11 +1309,13 @@ export function sceneLevel3(k) {
     // Breath vapor: periodic white puffs from hero's mouth
     //
     const breathState = { timer: BREATH_INTERVAL, particles: [] }
+    const breathVaporColor = k.rgb(220, 230, 240)
+    const breathVaporColorOuter = k.rgb(200, 210, 220)
     k.add([
       k.z(CFG.visual.zIndex.player + 2),
       {
         draw() {
-          drawBreathVapor(k, breathState.particles)
+          drawBreathVapor(k, breathState.particles, breathVaporColor, breathVaporColorOuter)
         }
       }
     ])
@@ -2628,15 +2641,15 @@ function addDepthLayer(k, sprite, z, depthOpacity) {
 }
 
 /**
- * Creates a pre-rendered foreground tree layer with transparent background
- * Small, bright trees drawn in front of the creature for depth parallax
+ * Creates a pre-rendered foreground tree layer baked to a static PNG sprite.
+ * Static rather than dynamic to reduce per-frame draw call overhead.
  * @param {Object} k - Kaplay instance
  */
 function createFrontTrees(k) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   //
-  // Render small foreground trees onto transparent canvas
+  // Bake all front trees onto a transparent canvas once
   //
   const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     const treePeriod = PLAY_AREA_WIDTH / FRONT_TREES_COUNT
@@ -2656,9 +2669,6 @@ function createFrontTrees(k) {
     }
   })
   k.loadSprite(FRONT_TREES_SPRITE, png)
-  //
-  // Front trees use the same depth layer pattern (closest, brightest)
-  //
   addDepthLayer(k, FRONT_TREES_SPRITE, Z_FRONT_TREES, FRONT_TREES_DEPTH_OPACITY)
 }
 
@@ -2707,10 +2717,10 @@ function createScrollingClouds(k) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   const wallColor = k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B)
-  k.add([
+    k.add([
     k.z(Z_CLOUDS),
-    {
-      draw() {
+      {
+        draw() {
         scrollState.scrollX = (scrollState.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
         for (let copy = 0; copy < 2; copy++) {
           const baseOffset = areaLeft + scrollState.scrollX - copy * bandWidth
@@ -2718,7 +2728,7 @@ function createScrollingClouds(k) {
             const cx = cloud.x + baseOffset
             if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
             for (const crown of cloud.crowns) {
-              k.drawCircle({
+          k.drawCircle({
                 pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
                 radius: cloud.crownSize * crown.sizeVariation,
                 color: cloud.color,
@@ -2921,8 +2931,13 @@ function generateDarknessShader(maxLights) {
   uniforms += 'uniform float u_cr;\n'
   let lightCalc = ''
   for (let i = 0; i < maxLights; i++) {
-    uniforms += `uniform vec2 u_p${i}; uniform float u_r${i}; uniform float u_i${i};\n`
-    lightCalc += `d = length(wp - u_p${i}); f = smoothstep(u_r${i}, 0.0, d); light = max(light, u_i${i} * f * f);\n`
+    //
+    // Use two separate float uniforms (u_px / u_py) instead of vec2 so that
+    // Kaplay's shader.send() handles them as plain numbers (typeof === "number"),
+    // avoiding any instanceof Vec2 edge-cases that trigger "Unsupported uniform data type".
+    //
+    uniforms += `uniform float u_px${i}; uniform float u_py${i}; uniform float u_r${i}; uniform float u_i${i};\n`
+    lightCalc += `d = length(wp - vec2(u_px${i}, u_py${i})); f = smoothstep(u_r${i}, 0.0, d); light = max(light, u_i${i} * f * f);\n`
   }
   return `${uniforms}
 vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
@@ -2950,7 +2965,7 @@ vec4 frag(vec2 pos, vec2 uv, vec4 color, sampler2D tex) {
  * @param {Object} trapBugInst - Trap bug manager instance
  * @param {Object} bottomBugInst - Bottom bug manager instance
  * @param {Object} creatureInst - Shadow creature instance
- * @returns {Array} Array of { x, y, r } for each active light
+ * @returns {Array} Array of { x, y, r, i } for each active light
  */
 function collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureInst, heroGlowState, heroInst) {
   const activeLights = []
@@ -2959,13 +2974,15 @@ function collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureIn
     entry.isGlowing && activeLights.push({
       x: entry.bug.x,
       y: entry.bug.y,
-      r: DARKNESS_GLOW_RADIUS
+      r: DARKNESS_GLOW_RADIUS,
+      i: DARKNESS_GLOW_INTENSITY
     })
   })
   creatureInst.isBurning && activeLights.push({
     x: creatureInst.x,
     y: creatureInst.y,
-    r: DARKNESS_CREATURE_BURN_RADIUS
+    r: DARKNESS_CREATURE_BURN_RADIUS,
+    i: DARKNESS_CREATURE_BURN_INTENSITY
   })
   //
   // Hero glow as a light source when active
@@ -2973,7 +2990,8 @@ function collectActiveLights(glowBugInst, trapBugInst, bottomBugInst, creatureIn
   heroGlowState.active && heroInst.character?.pos && activeLights.push({
     x: heroInst.character.pos.x,
     y: heroInst.character.pos.y,
-    r: DARKNESS_GLOW_RADIUS * heroGlowState.intensity
+    r: DARKNESS_GLOW_RADIUS * heroGlowState.intensity,
+    i: heroGlowState.intensity
   })
   return activeLights
 }
@@ -3058,9 +3076,39 @@ function collectLightUniforms(k, glowBugInst, trapBugInst, bottomBugInst, creatu
   }
   for (let idx = 0; idx < MAX_DARKNESS_LIGHTS; idx++) {
     const light = lights[idx]
-    uniforms[`u_p${idx}`] = light ? k.vec2(light.x, light.y) : k.vec2(-9999, -9999)
+    //
+    // Use separate float uniforms instead of vec2 to guarantee Kaplay sends them
+    // as plain numbers (typeof === "number"), avoiding instanceof Vec2 edge-cases.
+    //
+    uniforms[`u_px${idx}`] = light ? light.x : -9999
+    uniforms[`u_py${idx}`] = light ? light.y : -9999
     uniforms[`u_r${idx}`] = light ? light.r : 0
-    uniforms[`u_i${idx}`] = light ? light.i : 0
+    uniforms[`u_i${idx}`] = light ? (light.i ?? 0) : 0
+  }
+  return uniforms
+}
+//
+// Accepts the lights array directly so collectActiveLights is only called once
+// per frame (via sharedLightsState) instead of inside this function.
+// All values are plain numbers — no Vec2 — so Kaplay's shader.send() never
+// encounters an unsupported uniform type.
+//
+function buildLightUniforms(lights, gaWidth, gaHeight) {
+  const uniforms = {
+    u_ambient: DARKNESS_AMBIENT,
+    u_darkness: DARKNESS_OPACITY,
+    u_gw: gaWidth,
+    u_gh: gaHeight,
+    u_ox: LEFT_MARGIN,
+    u_oy: TOP_MARGIN,
+    u_cr: CORNER_RADIUS
+  }
+  for (let idx = 0; idx < MAX_DARKNESS_LIGHTS; idx++) {
+    const light = lights[idx]
+    uniforms[`u_px${idx}`] = light ? light.x : -9999
+    uniforms[`u_py${idx}`] = light ? light.y : -9999
+    uniforms[`u_r${idx}`] = light ? light.r : 0
+    uniforms[`u_i${idx}`] = light ? (light.i ?? 0) : 0
   }
   return uniforms
 }
@@ -3811,19 +3859,19 @@ function onUpdateBreathVapor(k, heroInst, state) {
 //
 // Draw breath vapor puffs
 //
-function drawBreathVapor(k, particles) {
+function drawBreathVapor(k, particles, vaporColor, vaporColorOuter) {
   for (const p of particles) {
     const alpha = Math.max(0, p.life / p.maxLife) * 0.4
     k.drawCircle({
       pos: k.vec2(p.x, p.y),
       radius: p.size,
-      color: k.rgb(220, 230, 240),
+      color: vaporColor,
       opacity: alpha
     })
     k.drawCircle({
       pos: k.vec2(p.x, p.y),
       radius: p.size * 1.8,
-      color: k.rgb(200, 210, 220),
+      color: vaporColorOuter,
       opacity: alpha * 0.3
     })
   }
@@ -3845,6 +3893,10 @@ function addL3TwinklingStars(k) {
   const screenW = CFG.visual.screen.width
   const screenH = CFG.visual.screen.height
   const starAreaH = screenH * 0.42
+  //
+  // Pre-cache the color to avoid allocating a new Color object every star every frame
+  //
+  const starColor = k.rgb(240, 245, 255)
   const stars = []
   for (let i = 0; i < L3_STAR_COUNT; i++) {
     stars.push({
@@ -3866,7 +3918,7 @@ function addL3TwinklingStars(k) {
           k.drawCircle({
             pos: k.vec2(s.x, s.y),
             radius: s.r,
-            color: k.rgb(240, 245, 255),
+            color: starColor,
             opacity: tw
           })
         }
@@ -3925,19 +3977,55 @@ function onUpdateTreeCreakAmbient(k, state, sound) {
   }
 }
 //
-// Watching eyes: three to four pairs of glowing eyes that track the hero from the dark edges
+// Watching eyes: single glowing eyes that open as the hero approaches.
+// Spread across the dark area (edges + mid-heights) for atmosphere.
+// Each eye has its own openRadius; the eye is fully closed when the hero
+// is farther than openRadius, and fully open when the hero is right on top.
 //
 const L3_EYE_POSITIONS = [
-  { x: LEFT_MARGIN + 60,  y: TOP_MARGIN + 90 },
-  { x: LEFT_MARGIN + 180, y: TOP_MARGIN + 55 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 90, y: TOP_MARGIN + 75 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 200, y: TOP_MARGIN + 110 }
+  //
+  // Top-edge eyes — left cluster
+  //
+  { x: LEFT_MARGIN + 55,  y: TOP_MARGIN + 90,  openRadius: 290 },
+  { x: LEFT_MARGIN + 70,  y: TOP_MARGIN + 185, openRadius: 260 },
+  { x: LEFT_MARGIN + 140, y: TOP_MARGIN + 130, openRadius: 220 },
+  //
+  // Top-edge eyes — right cluster
+  //
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 85,  y: TOP_MARGIN + 75,  openRadius: 280 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 75,  y: TOP_MARGIN + 200, openRadius: 255 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 175, y: TOP_MARGIN + 145, openRadius: 235 },
+  //
+  // Mid-height eyes — left side margin (dark wall area)
+  //
+  { x: LEFT_MARGIN + 45,  y: TOP_MARGIN + 340, openRadius: 300 },
+  { x: LEFT_MARGIN + 80,  y: TOP_MARGIN + 480, openRadius: 270 },
+  //
+  // Mid-height eyes — right side margin
+  //
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 50,  y: TOP_MARGIN + 360, openRadius: 300 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 90,  y: TOP_MARGIN + 500, openRadius: 265 },
+  //
+  // Mid-height eyes — centre of game zone (in the dark interior)
+  //
+  { x: CFG.visual.screen.width / 2 - 240, y: TOP_MARGIN + 310, openRadius: 240 },
+  { x: CFG.visual.screen.width / 2 + 180, y: TOP_MARGIN + 380, openRadius: 225 },
+  //
+  // Low eyes near the floor — emerge from the ground shadow
+  //
+  { x: LEFT_MARGIN + 60,  y: TOP_MARGIN + 620, openRadius: 280 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 65, y: TOP_MARGIN + 650, openRadius: 270 },
+  { x: CFG.visual.screen.width / 2 - 320, y: TOP_MARGIN + 580, openRadius: 210 },
+  { x: CFG.visual.screen.width / 2 + 280, y: TOP_MARGIN + 600, openRadius: 220 }
 ]
 function addWatchingEyes(k, heroInst) {
-  const eyeData = L3_EYE_POSITIONS.slice(0, L3_EYE_PAIR_COUNT).map(pos => ({
+  const eyeColor = k.rgb(220, 60, 30)
+  const eyeHalo = k.rgb(10, 5, 5)
+  const pupilColor = k.rgb(8, 2, 2)
+  const eyeData = L3_EYE_POSITIONS.slice(0, L3_EYE_COUNT).map(pos => ({
     ...pos,
     phase: Math.random() * Math.PI * 2,
-    blinkSpeed: 0.18 + Math.random() * 0.12
+    blinkSpeed: 0.14 + Math.random() * 0.10
   }))
   k.add([
     k.z(Z_DARKNESS + 5),
@@ -3948,46 +4036,56 @@ function addWatchingEyes(k, heroInst) {
         const hy = heroInst?.character?.pos?.y ?? CFG.visual.screen.height / 2
         for (const e of eyeData) {
           //
-          // Slow blink: eye height oscillates between almost-zero and full.
-          //
-          const blinkT = Math.sin(t * e.blinkSpeed + e.phase)
-          const eyelidRatio = Math.max(0.06, (blinkT + 1) * 0.5)
-          const eyeRx = 5.5
-          const eyeRy = 3.8 * eyelidRatio
-          if (eyeRy < 0.3) continue
-          //
-          // Pupil tracks hero direction.
+          // Proximity factor: 0 when far, 1 when right on top
           //
           const dx = hx - e.x
           const dy = hy - e.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          const openT = Math.max(0, Math.min(1, 1 - dist / e.openRadius))
+          if (openT < 0.03) continue
+          //
+          // Gentle blink overlaid on the proximity opening (only when fairly open)
+          //
+          const blink = 0.75 + Math.sin(t * e.blinkSpeed + e.phase) * 0.25
+          const eyelidRatio = openT * blink
+          const eyeRx = L3_EYE_MAX_RX * openT
+          const eyeRy = L3_EYE_MAX_RY * eyelidRatio
+          if (eyeRy < 0.5) continue
+          //
+          // Pupil direction: tracks hero
+          //
           const dlen = Math.sqrt(dx * dx + dy * dy) || 1
-          const pupilDx = (dx / dlen) * 1.8
-          const pupilDy = (dy / dlen) * 1.2
-          const eyeGap = 11
-          for (const side of [-1, 1]) {
-            const ex = e.x + side * eyeGap
-            const ey = e.y
-            k.drawEllipse({
-              pos: k.vec2(ex, ey),
-              radiusX: eyeRx + 1.5,
-              radiusY: eyeRy + 1.2,
-              color: k.rgb(10, 5, 5),
-              opacity: 0.82
-            })
-            k.drawEllipse({
-              pos: k.vec2(ex, ey),
-              radiusX: eyeRx,
-              radiusY: eyeRy,
-              color: k.rgb(220, 60, 30),
-              opacity: 0.72
-            })
-            k.drawCircle({
-              pos: k.vec2(ex + pupilDx, ey + pupilDy),
-              radius: 1.6,
-              color: k.rgb(8, 2, 2),
-              opacity: 0.95
-            })
-          }
+          const pupilDx = (dx / dlen) * eyeRx * 0.3
+          const pupilDy = (dy / dlen) * eyeRy * 0.28
+          //
+          // Glow halo (slightly larger than iris)
+          //
+          k.drawEllipse({
+            pos: k.vec2(e.x, e.y),
+            radiusX: eyeRx + 3,
+            radiusY: eyeRy + 2.5,
+            color: eyeHalo,
+            opacity: 0.82 * openT
+          })
+          //
+          // Iris
+          //
+          k.drawEllipse({
+            pos: k.vec2(e.x, e.y),
+            radiusX: eyeRx,
+            radiusY: eyeRy,
+            color: eyeColor,
+            opacity: 0.72 * openT
+          })
+          //
+          // Pupil
+          //
+          k.drawCircle({
+            pos: k.vec2(e.x + pupilDx, e.y + pupilDy),
+            radius: 3 * openT,
+            color: pupilColor,
+            opacity: 0.95
+          })
         }
       }
     }

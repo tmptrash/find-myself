@@ -428,44 +428,44 @@ export function onUpdate(inst) {
               //
               // No heartSystem - original death behavior (for level1 with killOnOne)
               //
-              const savedSfx = inst.sfx
-              const savedLevelIndicator = inst.levelIndicator
-              const savedK = inst.k
-              const savedCurrentLevel = inst.currentLevel
-              
-              Sound.stopSubtitleSound()
-              Hero.death(inst.hero, () => {
-                savedK.wait(0.1, () => {
-                  if (savedSfx && savedSfx.audioContext) {
-                    const ctx = savedSfx.audioContext
-                    if (savedSfx.ambientGain) {
-                      savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                      savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                    }
+            const savedSfx = inst.sfx
+            const savedLevelIndicator = inst.levelIndicator
+            const savedK = inst.k
+            const savedCurrentLevel = inst.currentLevel
+            
+            Sound.stopSubtitleSound()
+            Hero.death(inst.hero, () => {
+              savedK.wait(0.1, () => {
+                if (savedSfx && savedSfx.audioContext) {
+                  const ctx = savedSfx.audioContext
+                  if (savedSfx.ambientGain) {
+                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
                   }
-                  Sound.fadeOutAllMusic()
-                  
-                  const currentScore = get('lifeScore', 0)
-                  const newScore = currentScore + 1
-                  set('lifeScore', newScore)
-                  
-                  if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                    if (savedLevelIndicator.updateLifeScore) {
-                      savedLevelIndicator.updateLifeScore(newScore)
-                    }
-                    Sound.playLifeSound(savedK)
-                    const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                    flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
-                    createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+                }
+                Sound.fadeOutAllMusic()
+                
+                const currentScore = get('lifeScore', 0)
+                const newScore = currentScore + 1
+                set('lifeScore', newScore)
+                
+                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                  if (savedLevelIndicator.updateLifeScore) {
+                    savedLevelIndicator.updateLifeScore(newScore)
                   }
-                  
-                  savedK.wait(0.8, () => {
-                    if (savedCurrentLevel) {
-                      savedK.go(savedCurrentLevel)
-                    }
-                  })
+                  Sound.playLifeSound(savedK)
+                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                  flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                  createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
+                }
+                
+                savedK.wait(0.8, () => {
+                  if (savedCurrentLevel) {
+                    savedK.go(savedCurrentLevel)
+                  }
                 })
               })
+            })
             }
           }
         }
@@ -473,45 +473,45 @@ export function onUpdate(inst) {
         // Handle killOnOne separately (for level1)
         //
         if (isHostile && inst.killOnOne && !inst.heartSystem) {
-          const savedSfx = inst.sfx
-          const savedLevelIndicator = inst.levelIndicator
-          const savedK = inst.k
-          const savedCurrentLevel = inst.currentLevel
-          
-          Sound.stopSubtitleSound()
-          Hero.death(inst.hero, () => {
-            savedK.wait(0.1, () => {
-              if (savedSfx && savedSfx.audioContext) {
-                const ctx = savedSfx.audioContext
-                if (savedSfx.ambientGain) {
-                  savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                  savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+            const savedSfx = inst.sfx
+            const savedLevelIndicator = inst.levelIndicator
+            const savedK = inst.k
+            const savedCurrentLevel = inst.currentLevel
+            
+            Sound.stopSubtitleSound()
+            Hero.death(inst.hero, () => {
+              savedK.wait(0.1, () => {
+                if (savedSfx && savedSfx.audioContext) {
+                  const ctx = savedSfx.audioContext
+                  if (savedSfx.ambientGain) {
+                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+                  }
                 }
-              }
-              Sound.fadeOutAllMusic()
-              
-              const currentScore = get('lifeScore', 0)
-              const newScore = currentScore + 1
-              set('lifeScore', newScore)
-              
-              if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                if (savedLevelIndicator.updateLifeScore) {
-                  savedLevelIndicator.updateLifeScore(newScore)
+                Sound.fadeOutAllMusic()
+                
+                const currentScore = get('lifeScore', 0)
+                const newScore = currentScore + 1
+                set('lifeScore', newScore)
+                
+                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
+                  if (savedLevelIndicator.updateLifeScore) {
+                    savedLevelIndicator.updateLifeScore(newScore)
+                  }
+                  Sound.playLifeSound(savedK)
+                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
+                  flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
+                  createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
                 }
-                Sound.playLifeSound(savedK)
-                const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                flashLifeImagePlatformSaved(savedK, savedLevelIndicator, originalColor, 0)
-                createLifeScoreParticlesPlatform(savedK, savedLevelIndicator)
-              }
-              
-              savedK.wait(0.8, () => {
-                if (savedCurrentLevel) {
-                  savedK.go(savedCurrentLevel)
-                }
+                
+                savedK.wait(0.8, () => {
+                  if (savedCurrentLevel) {
+                    savedK.go(savedCurrentLevel)
+                  }
+                })
               })
             })
-          })
-        }
+          }
         //
         // If opacity becomes 0 or landing count reaches 5, destroy the platform
         //

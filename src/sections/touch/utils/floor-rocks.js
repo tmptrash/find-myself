@@ -84,6 +84,30 @@ export function addTouchSectionFloorRocks(k, opts) {
   return rocks
 }
 
+/**
+ * Creates a single floor rock at a specific X position and adds it to the scene.
+ * Used to place a dedicated perch rock at a fixed location (e.g. for a crow).
+ * @param {Object} k - Kaplay instance
+ * @param {number} floorY - Y coordinate of the floor
+ * @param {number} posX - Horizontal center of the rock
+ * @param {string} spriteName - Unique sprite name for the rock
+ * @param {number} drawZ - z-index for drawing
+ * @returns {Object} Rock descriptor (worldX, radius, etc.)
+ */
+export function addSingleFloorRockAt(k, floorY, posX, spriteName, drawZ) {
+  const radius = TOUCH_FLOOR_ROCK_RADIUS_MIN + Math.random() * (TOUCH_FLOOR_ROCK_RADIUS_MAX - TOUCH_FLOOR_ROCK_RADIUS_MIN) * 0.45
+  const rock = buildSingleFloorRock(k, floorY, posX, radius, spriteName)
+  k.loadSprite(rock.spriteName, rock.dataUrl)
+  k.add([
+    k.z(drawZ),
+    {
+      draw() {
+        k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
+      }
+    }
+  ])
+  return rock
+}
 function buildSingleFloorRock(k, floorY, posX, radius, spriteName) {
   const vertCount = 14 + Math.floor(Math.random() * 9)
   const verts = []

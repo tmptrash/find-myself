@@ -34,7 +34,7 @@ const L2_AMBIENCE_Z = 1
 // Lake renders above the floor platform (CFG.visual.zIndex.platform = 1) but BELOW
 // the hero (CFG.visual.zIndex.player = 10) so the hero appears in front of the ice.
 //
-const L2_DECOR_ABOVE_PLATFORMS_Z = 8
+const L2_DECOR_ABOVE_PLATFORMS_Z = 17
 //
 // Lake sun glints: small bright ovals on ice surface animated by sine
 //
@@ -62,9 +62,9 @@ export function setupTouchLevel2Ambience(cfg) {
   addFrozenLake(k, lakeBounds)
   const crowAnimState = { mouthOpen: false, mouthTimer: 0 }
   const snowmanX = addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX)
-  addCrowOnLogs(k, floorY, rightLogPileX, crowAnimState)
+  const crowInfo = addCrowOnLogs(k, floorY, rightLogPileX, crowAnimState, heroInst)
   const stopWildlife = startDistantWildlifeTimers(k, sound, crowAnimState)
-  return { lakeBounds, stopWildlife, snowmanX }
+  return { lakeBounds, stopWildlife, snowmanX, crowInfo }
 }
 
 /**
@@ -340,7 +340,7 @@ const L2_CROW_MP3_NAMES = ['l2-crow-0', 'l2-crow-1']
 //
 // How long the crow's beak stays open after a caw
 //
-const L2_CROW_MOUTH_OPEN_DURATION = 1.8
+const L2_CROW_MOUTH_OPEN_DURATION = 0.9
 function startDistantWildlifeTimers(k, sound, crowAnimState) {
   //
   // Pre-load mp3 crow samples once per scene load.
@@ -386,14 +386,28 @@ function startDistantWildlifeTimers(k, sound, crowAnimState) {
 
 //
 // Crow perched on top of the right log pile: body, wings, tail, beak and eyes.
-// The beak opens when a crow.mp3 sample is playing (crowAnimState.mouthOpen).
+// Crow perched on the right log pile. The beak opens when a crow.mp3 sample plays.
+// The crow always faces the hero: beak points toward heroInst's current position.
 //
-const L2_CROW_Z = 19
-function addCrowOnLogs(k, floorY, logPileX, crowAnimState) {
+const L2_CROW_Z = 5
+function addCrowOnLogs(k, floorY, logPileX, crowAnimState, heroInst) {
   //
-  // Fallback to a sensible position if no log pile X was provided
+  // Fallback to a sensible position if no log pile X was provided.
+  // Scale factor of 1.35 enlarges the crow relative to the original design.
+  // Pre-cache colors to avoid allocating new Color objects each frame.
   //
-  const cx = logPileX != null ? logPileX + 18 : CFG.visual.screen.width - 260
+  const bodyColor  = k.rgb(22, 20, 22)
+  const headColor  = k.rgb(18, 16, 18)
+  const wingColor  = k.rgb(32, 28, 36)
+  const tailColor  = k.rgb(20, 18, 20)
+  const eyeWhite   = k.rgb(230, 230, 230)
+  const pupilColor = k.rgb(10, 8, 10)
+  const beakUpper  = k.rgb(55, 50, 35)
+  const beakLower  = k.rgb(45, 40, 28)
+  const mouthInner = k.rgb(160, 80, 60)
+  const feetColor  = k.rgb(60, 50, 30)
+  const sc = 1.35
+  const cx = logPileX != null ? logPileX + 22 : CFG.visual.screen.width - 260
   //
   // Perch height: sit on top of the log pile (logs are stacked ~90px tall above floor)
   //
@@ -403,125 +417,119 @@ function addCrowOnLogs(k, floorY, logPileX, crowAnimState) {
     {
       draw() {
         //
+        // Facing direction: +1 = beak points right (hero is right of crow)
+        //
+        const heroX = heroInst?.character?.pos?.x ?? cx + 1
+        const s = heroX >= cx ? 1 : -1
+        //
         // Body — dark oval
         //
         k.drawEllipse({
           pos: k.vec2(cx, perchY),
-          radiusX: 12,
-          radiusY: 9,
-          color: k.rgb(22, 20, 22),
+          radiusX: 12 * sc,
+          radiusY: 9 * sc,
+          color: bodyColor,
           opacity: 1
         })
         //
-        // Head — small circle
+        // Head — small circle on the beak side
         //
         k.drawCircle({
-          pos: k.vec2(cx + 9, perchY - 8),
-          radius: 7,
-          color: k.rgb(18, 16, 18),
+          pos: k.vec2(cx + 9 * sc * s, perchY - 8 * sc),
+          radius: 7 * sc,
+          color: headColor,
           opacity: 1
         })
         //
-        // Wing highlight — slightly lighter stripe
+        // Wing highlight — dark feather sheen away from head
         //
         k.drawEllipse({
-          pos: k.vec2(cx - 2, perchY - 1),
-          radiusX: 7,
-          radiusY: 4,
-          color: k.rgb(48, 44, 50),
-          opacity: 0.7
+          pos: k.vec2(cx - 2 * sc * s, perchY - 1 * sc),
+          radiusX: 7 * sc,
+          radiusY: 4 * sc,
+          color: wingColor,
+          opacity: 0.9
         })
         //
-        // Tail — narrow wedge pointing left
+        // Tail — wedge pointing opposite to the beak
         //
         k.drawTriangle({
-          p1: k.vec2(cx - 10, perchY + 2),
-          p2: k.vec2(cx - 22, perchY + 6),
-          p3: k.vec2(cx - 10, perchY + 9),
-          color: k.rgb(20, 18, 20),
+          p1: k.vec2(cx - 10 * sc * s, perchY + 2 * sc),
+          p2: k.vec2(cx - 22 * sc * s, perchY + 6 * sc),
+          p3: k.vec2(cx - 10 * sc * s, perchY + 9 * sc),
+          color: tailColor,
           opacity: 1
         })
         //
-        // Eye — small white dot with pupil
+        // Eye — on the beak side
         //
         k.drawCircle({
-          pos: k.vec2(cx + 12, perchY - 9),
-          radius: 2.2,
-          color: k.rgb(230, 230, 230),
+          pos: k.vec2(cx + 12 * sc * s, perchY - 9 * sc),
+          radius: 2.2 * sc,
+          color: eyeWhite,
           opacity: 1
         })
         k.drawCircle({
-          pos: k.vec2(cx + 12.5, perchY - 9),
-          radius: 1.1,
-          color: k.rgb(10, 8, 10),
+          pos: k.vec2(cx + 12.5 * sc * s, perchY - 9 * sc),
+          radius: 1.1 * sc,
+          color: pupilColor,
           opacity: 1
         })
         //
-        // Beak — closed: two thin triangles; open: wider angle
+        // Beak pointing toward hero
         //
         if (crowAnimState.mouthOpen) {
-          //
-          // Upper mandible
-          //
           k.drawTriangle({
-            p1: k.vec2(cx + 10, perchY - 8),
-            p2: k.vec2(cx + 20, perchY - 7),
-            p3: k.vec2(cx + 10, perchY - 5),
-            color: k.rgb(55, 50, 35),
+            p1: k.vec2(cx + 10 * sc * s, perchY - 8 * sc),
+            p2: k.vec2(cx + 20 * sc * s, perchY - 7 * sc),
+            p3: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
+            color: beakUpper,
             opacity: 1
           })
-          //
-          // Lower mandible (dropped open)
-          //
           k.drawTriangle({
-            p1: k.vec2(cx + 10, perchY - 5),
-            p2: k.vec2(cx + 19, perchY - 3),
-            p3: k.vec2(cx + 10, perchY - 2),
-            color: k.rgb(45, 40, 28),
+            p1: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
+            p2: k.vec2(cx + 19 * sc * s, perchY - 3 * sc),
+            p3: k.vec2(cx + 10 * sc * s, perchY - 2 * sc),
+            color: beakLower,
             opacity: 1
           })
-          //
-          // Mouth interior
-          //
           k.drawTriangle({
-            p1: k.vec2(cx + 10, perchY - 5),
-            p2: k.vec2(cx + 19, perchY - 5),
-            p3: k.vec2(cx + 10, perchY - 3),
-            color: k.rgb(160, 80, 60),
+            p1: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
+            p2: k.vec2(cx + 19 * sc * s, perchY - 5 * sc),
+            p3: k.vec2(cx + 10 * sc * s, perchY - 3 * sc),
+            color: mouthInner,
             opacity: 0.85
           })
         } else {
-          //
-          // Closed beak
-          //
           k.drawTriangle({
-            p1: k.vec2(cx + 10, perchY - 8),
-            p2: k.vec2(cx + 20, perchY - 6),
-            p3: k.vec2(cx + 10, perchY - 4),
-            color: k.rgb(55, 50, 35),
+            p1: k.vec2(cx + 10 * sc * s, perchY - 8 * sc),
+            p2: k.vec2(cx + 20 * sc * s, perchY - 6 * sc),
+            p3: k.vec2(cx + 10 * sc * s, perchY - 4 * sc),
+            color: beakUpper,
             opacity: 1
           })
         }
         //
-        // Feet — two thin lines gripping the log
+        // Feet — symmetric, grip the log
         //
         k.drawLine({
-          p1: k.vec2(cx + 2, perchY + 8),
-          p2: k.vec2(cx + 2, perchY + 15),
+          p1: k.vec2(cx + 2 * sc, perchY + 8 * sc),
+          p2: k.vec2(cx + 2 * sc, perchY + 15 * sc),
           width: 1.5,
-          color: k.rgb(60, 50, 30),
+          color: feetColor,
           opacity: 1
         })
         k.drawLine({
-          p1: k.vec2(cx + 8, perchY + 8),
-          p2: k.vec2(cx + 8, perchY + 15),
+          p1: k.vec2(cx + 8 * sc, perchY + 8 * sc),
+          p2: k.vec2(cx + 8 * sc, perchY + 15 * sc),
           width: 1.5,
-          color: k.rgb(60, 50, 30),
+          color: feetColor,
           opacity: 1
         })
       }
     }
   ])
+  return { cx, perchY }
 }
 function fillEllipse(k, cx, cy, rx, ry, color, opacity) {
   const segs = 28

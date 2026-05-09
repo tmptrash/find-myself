@@ -92,7 +92,12 @@ const DECOR_LOG_PILE_POSITIONS = [
   ICICLE_SAFE_ZONE_X + 198
 ]
 const DECOR_LOG_Z = 5
+const CROW_TREE_EXCLUDE_RADIUS = 80
 const DECOR_LOG_WIDTH = 120
+const L2_CROW_TOOLTIP_TEXT = 'you are a loser'
+const L2_CROW_TOOLTIP_HOVER_W = 52
+const L2_CROW_TOOLTIP_HOVER_H = 48
+const L2_CROW_TOOLTIP_OFFSET_Y = -52
 const DECOR_LOG_HEIGHT = 30
 //
 // Snowflake hero push (snowflakes fly when hero runs past)
@@ -343,7 +348,7 @@ export function sceneLevel2(k) {
     //
     // Create foreground trees with gray color (from previous level) in front of hero
     //
-    createForegroundTrees(k)
+    createForegroundTrees(k, DECOR_LOG_PILE_POSITIONS[1])
     //
     // Create walls
     //
@@ -536,6 +541,10 @@ export function sceneLevel2(k) {
       bodyColor: heroBodyColor
     })
     //
+    // Raise hero z above lake/decor layer (L2_DECOR_ABOVE_PLATFORMS_Z = 17) so hero renders on top.
+    //
+    heroInst.character.z = 20
+    //
     // Lock hero controls while life deduction animation plays
     //
     if (sceneLock.locked) {
@@ -634,6 +643,21 @@ export function sceneLevel2(k) {
     })
     stopTouchL2Wildlife = touchL2AmbienceInst.stopWildlife
     const snowmanWorldX = touchL2AmbienceInst.snowmanX
+    //
+    // Tooltip: hovering over the crow shows "you are a loser"
+    //
+    const crowInfo = touchL2AmbienceInst.crowInfo
+    crowInfo && Tooltip.create({
+      k,
+      targets: [{
+        x: crowInfo.cx,
+        y: crowInfo.perchY,
+        width: L2_CROW_TOOLTIP_HOVER_W,
+        height: L2_CROW_TOOLTIP_HOVER_H,
+        text: L2_CROW_TOOLTIP_TEXT,
+        offsetY: L2_CROW_TOOLTIP_OFFSET_Y
+      }]
+    })
     //
     // Track which surface the hero stands on so land/step sounds match the material.
     //
@@ -2167,13 +2191,14 @@ function createBackgroundDarkTrees(k) {
  * Creates all foreground trees as dynamic swaying objects
  * Both the behind-hero row and the in-front-of-hero overlay trees sway
  * @param {Object} k - Kaplay instance
+ * @param {number} crowExcludeX - X position of the crow; trees are cleared around it
  */
-function createForegroundTrees(k) {
+function createForegroundTrees(k, crowExcludeX) {
   const screenWidth = CFG.visual.screen.width
   //
-  // Pre-generate layer data for 15 foreground trees (behind hero)
+  // Pre-generate layer data for 15 foreground trees (behind hero); exclude crow area
   //
-  const foregroundTrees = generateForegroundTreeData()
+  const foregroundTrees = generateForegroundTreeData(crowExcludeX)
   k.add([
     k.z(CFG.visual.zIndex.player - 1),
     {
@@ -2183,9 +2208,9 @@ function createForegroundTrees(k) {
     }
   ])
   //
-  // Pre-generate layer data for 2 overlay trees that sway in front of hero
+  // Pre-generate layer data for 2 overlay trees that sway in front of hero; exclude crow area
   //
-  const overlayTrees = generateOverlayTreeData(screenWidth)
+  const overlayTrees = generateOverlayTreeData(screenWidth, crowExcludeX)
   k.add([
     k.z(CFG.visual.zIndex.player + 1),
     {
@@ -2199,15 +2224,20 @@ function createForegroundTrees(k) {
 /**
  * Pre-generates layer geometry for 15 foreground trees (behind hero)
  * Same data format as overlay trees so drawOverlayTreesSway can render both
+ * @param {number} [crowExcludeX] - Skip trees within CROW_TREE_EXCLUDE_RADIUS of this X
  * @returns {Array} Array of tree data objects
  */
-function generateForegroundTreeData() {
+function generateForegroundTreeData(crowExcludeX) {
   const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const treesAmount = 15
   const treePeriod = w / treesAmount
   const treeDefs = []
   for (let i = 0; i < treesAmount; i++) {
     const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN
+    //
+    // Skip tree slots too close to where the crow perches so no fir tree occludes the crow
+    //
+    if (crowExcludeX != null && Math.abs(x - crowExcludeX) < CROW_TREE_EXCLUDE_RADIUS) continue
     const height = arcY(x, LEFT_MARGIN, w, 200, 280)
     const layerCount = Math.floor(Math.random() * 4 + 4)
     treeDefs.push({
@@ -2265,9 +2295,10 @@ function buildTreeLayerData(def) {
  * Pre-generates static layer geometry for overlay trees (computed once)
  * Each tree stores its trunk rect and layer triangles for per-frame drawing
  * @param {number} screenWidth - Screen width for positioning
+ * @param {number} [crowExcludeX] - Skip trees within CROW_TREE_EXCLUDE_RADIUS of this X
  * @returns {Array} Array of tree data objects
  */
-function generateOverlayTreeData(screenWidth) {
+function generateOverlayTreeData(screenWidth, crowExcludeX) {
   const treeDefs = [
     {
       x: screenWidth - RIGHT_MARGIN - 180,
@@ -2296,7 +2327,9 @@ function generateOverlayTreeData(screenWidth) {
       phase: Math.random() * Math.PI * 2
     }
   ]
-  return treeDefs.map(def => buildTreeLayerData(def))
+  return treeDefs
+    .filter(def => crowExcludeX == null || Math.abs(def.x - crowExcludeX) >= CROW_TREE_EXCLUDE_RADIUS)
+    .map(def => buildTreeLayerData(def))
 }
 
 /**

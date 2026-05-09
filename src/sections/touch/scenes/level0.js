@@ -380,15 +380,14 @@ const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 80  // Above hero height (lo
 export function sceneLevel0(k) {
   k.scene("level-touch.0", () => {
     //
-    // Reset scores only if coming from a different section (not a reload after death)
+    // Reset scores when entering from a different section.
+    // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
     //
-    const lastLevel = get('lastLevel', '')
-    const isComingFromDifferentSection = !lastLevel || typeof lastLevel !== 'string' || !lastLevel.startsWith('level-touch.')
-    
-    if (isComingFromDifferentSection) {
+    if (get('lastSection', null) !== 'touch') {
       set('heroScore', 0)
       set('lifeScore', 0)
     }
+    set('lastSection', 'touch')
     //
     // Save progress
     //

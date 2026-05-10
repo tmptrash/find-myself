@@ -10,6 +10,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
 import * as MovingCars from '../components/moving-cars.js'
+import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
@@ -138,6 +139,7 @@ export function sceneLevel0(k) {
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
       antiHeroY: ANTIHERO_SPAWN_Y,
+      heroDustColor: '#000000',
       onAnnihilation: () => {
         stopTimeSectionMusic()
         //
@@ -256,6 +258,18 @@ export function sceneLevel0(k) {
       platformSideWidth: PLATFORM_SIDE_WIDTH,
       carCount: 5
     })
+    //
+    // Street ambience: distant motors, birds, faulty Г-shaped lamp, manhole steam
+    //
+    const level0Ambience = TimeLevel0Ambience.create({
+      k,
+      sound,
+      platformSideWidth: PLATFORM_SIDE_WIDTH,
+      platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
+      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      antiHeroSpawnX: ANTIHERO_SPAWN_X
+    })
+    k.onSceneLeave(() => level0Ambience.cleanup())
     //
     // Spawn hero immediately
     //

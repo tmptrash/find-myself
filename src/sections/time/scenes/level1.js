@@ -47,6 +47,12 @@ const LIFE_TOOLTIP_TEXT = "life score"
 const LIFE_TOOLTIP_SIZE = 80
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
+// Hero tooltip (hover body)
+//
+const HERO_TOOLTIP_TEXT = "damn it"
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -60
+//
 // Anti-hero tooltip
 //
 const ANTIHERO_TOOLTIP_TEXT = "learning to handle numbers"
@@ -636,6 +642,20 @@ export function sceneLevel1(k) {
       }]
     })
     //
+    // Tooltip for hero
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => hero.character.pos.x,
+        y: () => hero.character.pos.y,
+        width: HERO_TOOLTIP_HOVER_SIZE,
+        height: HERO_TOOLTIP_HOVER_SIZE,
+        text: HERO_TOOLTIP_TEXT,
+        offsetY: HERO_TOOLTIP_Y_OFFSET
+      }]
+    })
+    //
     // Tooltip for clock platforms
     //
     const platformTargets = clockPlatforms.map(p => ({
@@ -1087,6 +1107,27 @@ function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, 
     ctx.beginPath()
     ctx.arc(rearWheelX, wheelY, rimRadius, 0, Math.PI * 2)
     ctx.fill()
+    //
+    // Diffused headlights at front bumper (same blur as body — soft glow)
+    //
+    const frontSign = speed > 0 ? 1 : -1
+    const bumperY = centerY - bodyHeight * 0.26
+    const headSpread = bodyWidth * 0.22
+    const headRx = wheelRadius * 2.2
+    const drawHeadDisc = (hx, hy) => {
+      const grd = ctx.createRadialGradient(hx, hy, 0, hx, hy, headRx)
+      grd.addColorStop(0, 'rgba(255, 250, 228, 0.22)')
+      grd.addColorStop(0.35, 'rgba(255, 236, 195, 0.11)')
+      grd.addColorStop(0.7, 'rgba(255, 218, 165, 0.045)')
+      grd.addColorStop(1, 'rgba(255, 208, 150, 0)')
+      ctx.fillStyle = grd
+      ctx.beginPath()
+      ctx.arc(hx, hy, headRx, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    const hxBase = centerX + frontSign * (bodyWidth * 0.56)
+    drawHeadDisc(hxBase - frontSign * headSpread * 0.42, bumperY)
+    drawHeadDisc(hxBase - frontSign * headSpread * 0.95, bumperY + wheelRadius * 0.12)
   })
 }
 

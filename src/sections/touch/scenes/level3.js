@@ -3952,46 +3952,47 @@ function onUpdateTreeCreakAmbient(k, state, sound) {
 //
 // Minimum Y-distance from any log platform surface to avoid eyes appearing on logs.
 // Platforms are at y=350, 500, 550, 600 — exclusion zones (±60) leave three safe bands:
-//   [TOP_MARGIN .. 290], [410 .. 440] (narrow), [660 .. FLOOR_Y]
+//   [TOP_MARGIN .. ~302], [410 .. 440] (narrow), [660 .. FLOOR_Y]
+// Upper-band eyes sit slightly lower (closer to platform tops) while staying above y≈292.
 const L3_EYE_POSITIONS = [
   //
-  // Upper band (y 120–285) — above all platforms
+  // Upper band — above platform tops (shifted down vs earlier revision)
   //
-  { x: LEFT_MARGIN + 55,                             y: 130, openRadius: 290 },
-  { x: LEFT_MARGIN + 92,                             y: 200, openRadius: 265 },
-  { x: LEFT_MARGIN + 158,                            y: 148, openRadius: 225 },
-  { x: LEFT_MARGIN + 210,                            y: 270, openRadius: 215 },
-  { x: LEFT_MARGIN + 268,                            y: 195, openRadius: 210 },
-  { x: LEFT_MARGIN + 345,                            y: 152, openRadius: 205 },
-  { x: CFG.visual.screen.width / 2 - 460,            y: 148, openRadius: 245 },
-  { x: CFG.visual.screen.width / 2 - 340,            y: 238, openRadius: 238 },
-  { x: CFG.visual.screen.width / 2 - 220,            y: 178, openRadius: 250 },
-  { x: CFG.visual.screen.width / 2 + 195,            y: 242, openRadius: 242 },
-  { x: CFG.visual.screen.width / 2 + 380,            y: 148, openRadius: 245 },
-  { x: CFG.visual.screen.width / 2 + 490,            y: 260, openRadius: 238 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 272, y: 198, openRadius: 210 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 348, y: 158, openRadius: 205 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 80,  y: 125, openRadius: 285 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68,  y: 215, openRadius: 258 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 172, y: 162, openRadius: 238 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 220, y: 278, openRadius: 218 },
+  { x: LEFT_MARGIN + 55,                             y: 172, openRadius: 290 },
+  { x: LEFT_MARGIN + 92,                             y: 242, openRadius: 265 },
+  { x: LEFT_MARGIN + 158,                            y: 190, openRadius: 225 },
+  { x: LEFT_MARGIN + 210,                            y: 302, openRadius: 215 },
+  { x: LEFT_MARGIN + 268,                            y: 236, openRadius: 210 },
+  { x: LEFT_MARGIN + 345,                            y: 194, openRadius: 205 },
+  { x: CFG.visual.screen.width / 2 - 460,            y: 190, openRadius: 245 },
+  { x: CFG.visual.screen.width / 2 - 340,            y: 280, openRadius: 238 },
+  { x: CFG.visual.screen.width / 2 - 220,            y: 220, openRadius: 250 },
+  { x: CFG.visual.screen.width / 2 + 195,            y: 284, openRadius: 242 },
+  { x: CFG.visual.screen.width / 2 + 380,            y: 190, openRadius: 245 },
+  { x: CFG.visual.screen.width / 2 + 490,            y: 300, openRadius: 238 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 272, y: 240, openRadius: 210 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 348, y: 200, openRadius: 205 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 80,  y: 166, openRadius: 285 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68,  y: 256, openRadius: 258 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 172, y: 204, openRadius: 238 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 220, y: 302, openRadius: 218 },
   //
-  // Upper band — gaps between log platforms (horizontal corridors, still above platform tops)
+  // Upper band — gaps between log platforms (horizontal corridors)
   //
-  { x: LEFT_MARGIN + 398,                            y: 136, openRadius: 218 },
-  { x: LEFT_MARGIN + 462,                            y: 212, openRadius: 208 },
-  { x: LEFT_MARGIN + 518,                            y: 168, openRadius: 200 },
-  { x: LEFT_MARGIN + 575,                            y: 258, openRadius: 198 },
-  { x: CFG.visual.screen.width / 2 - 118,            y: 132, openRadius: 222 },
-  { x: CFG.visual.screen.width / 2 + 28,             y: 272, openRadius: 212 },
-  { x: CFG.visual.screen.width / 2 - 720,            y: 248, openRadius: 205 },
-  { x: CFG.visual.screen.width / 2 + 310,            y: 188, openRadius: 215 },
-  { x: CFG.visual.screen.width / 2 + 640,            y: 228, openRadius: 202 },
-  { x: CFG.visual.screen.width / 2 + 760,            y: 158, openRadius: 208 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 588, y: 248, openRadius: 200 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 498, y: 172, openRadius: 210 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 668, y: 138, openRadius: 195 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 728, y: 268, openRadius: 192 },
+  { x: LEFT_MARGIN + 398,                            y: 178, openRadius: 218 },
+  { x: LEFT_MARGIN + 462,                            y: 254, openRadius: 208 },
+  { x: LEFT_MARGIN + 518,                            y: 210, openRadius: 200 },
+  { x: LEFT_MARGIN + 575,                            y: 300, openRadius: 198 },
+  { x: CFG.visual.screen.width / 2 - 118,            y: 174, openRadius: 222 },
+  { x: CFG.visual.screen.width / 2 + 28,             y: 302, openRadius: 212 },
+  { x: CFG.visual.screen.width / 2 - 720,            y: 290, openRadius: 205 },
+  { x: CFG.visual.screen.width / 2 + 310,            y: 230, openRadius: 215 },
+  { x: CFG.visual.screen.width / 2 + 640,            y: 270, openRadius: 202 },
+  { x: CFG.visual.screen.width / 2 + 760,            y: 200, openRadius: 208 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 588, y: 290, openRadius: 200 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 498, y: 214, openRadius: 210 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 668, y: 180, openRadius: 195 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 728, y: 302, openRadius: 192 },
   //
   // Narrow middle band (y 412–438) — between platform 3 (+60) and lower cluster (-60)
   //

@@ -502,34 +502,39 @@ export function playLandSound(instance, currentLevel = null) {
  * Play lightning/electric discharge sound effect
  * @param {Object} instance - Sound instance from create()
  * @param {number} [volume=0.015] - Volume multiplier (default 0.015)
+ * @param {number} [startAtOffset=0] - Seconds after currentTime to schedule this burst
  */
-export function playLightningSound(instance, volume = 0.015) {
-  const now = instance.audioContext.currentTime
+export function playLightningSound(instance, volume = 0.015, startAtOffset = 0) {
+  if (globalMuteProceduralSounds) return
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  if (ctx.state !== 'running') return
+  const now = ctx.currentTime + startAtOffset
   const duration = 0.08
   // Create white noise for electric crackle
-  const bufferSize = instance.audioContext.sampleRate * duration
-  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
 
   for (let i = 0; i < bufferSize; i++) {
     noiseData[i] = Math.random() * 2 - 1
   }
 
-  const noiseSource = instance.audioContext.createBufferSource()
+  const noiseSource = ctx.createBufferSource()
   noiseSource.buffer = noiseBuffer
   // High-pass filter for electric snap
-  const filter = instance.audioContext.createBiquadFilter()
+  const filter = ctx.createBiquadFilter()
   filter.type = 'highpass'
   filter.frequency.setValueAtTime(2000, now)
   filter.Q.value = 1
 
-  const gain = instance.audioContext.createGain()
+  const gain = ctx.createGain()
   gain.gain.setValueAtTime(volume, now)
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
 
   noiseSource.connect(filter)
   filter.connect(gain)
-  gain.connect(instance.audioContext.destination)
+  gain.connect(ctx.destination)
 
   noiseSource.start(now)
   noiseSource.stop(now + duration)
@@ -2388,13 +2393,14 @@ export function playPyramidBreakSound(inst) {
 /**
  * Play electrical glitch sound (TV static noise)
  * @param {Object} inst - Sound instance
+ * @param {number} [gainMultiplier=1] - Scales envelope (quieter lamp flicker uses ~0.28)
+ * @param {number} [duration=0.4] - Noise duration in seconds
  */
-export function playElectricalGlitchSound(inst) {
+export function playElectricalGlitchSound(inst, gainMultiplier = 1, duration = 0.4) {
   if (!inst || !inst.audioContext || !inst.glitchSoundGain) return
   
   const { audioContext, glitchSoundGain } = inst
   const now = audioContext.currentTime
-  const duration = 0.4
   //
   // Create white noise buffer (TV static)
   //
@@ -2432,8 +2438,8 @@ export function playElectricalGlitchSound(inst) {
   //
   const envelope = audioContext.createGain()
   envelope.gain.setValueAtTime(0, now)
-  envelope.gain.linearRampToValueAtTime(0.8, now + 0.02)
-  envelope.gain.linearRampToValueAtTime(0.6, now + 0.15)
+  envelope.gain.linearRampToValueAtTime(0.8 * gainMultiplier, now + 0.02)
+  envelope.gain.linearRampToValueAtTime(0.6 * gainMultiplier, now + 0.15)
   envelope.gain.linearRampToValueAtTime(0, now + duration)
   //
   // Connect: noise -> highpass -> lowpass -> envelope -> output
@@ -3434,6 +3440,111 @@ export function playDistantCrowSound(instance) {
   }
 }
 
+/**
+ * Soft pigeon / dove coo (low mellow burst — urban rooftop ambience)
+ * @param {Object} instance - Sound instance
+ */
+export function playPigeonCooSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const vol = 0.042 + Math.random() * 0.028
+  const osc = ctx.createOscillator()
+  osc.type = 'triangle'
+  const f0 = 260 + Math.random() * 70
+  osc.frequency.setValueAtTime(f0, now)
+  osc.frequency.exponentialRampToValueAtTime(f0 * 0.62, now + 0.22)
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.exponentialRampToValueAtTime(vol, now + 0.05)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + 0.42)
+}
+/**
+ * Quiet distant traffic motor wash (looping — stop returned fn on scene leave)
+ * @param {Object} instance - Sound instance
+ * @returns {Function} stop — disconnects nodes
+ */
+export function startDistantMotorAmbience(instance) {
+  if (!instance?.audioContext) return () => {}
+  const ctx = instance.audioContext
+  if (ctx.state !== 'running') return () => {}
+  const master = ctx.createGain()
+  master.gain.value = 0.024
+  master.connect(ctx.destination)
+  const osc = ctx.createOscillator()
+  osc.type = 'sawtooth'
+  osc.frequency.value = 58 + Math.random() * 14
+  const lfo = ctx.createOscillator()
+  lfo.type = 'sine'
+  lfo.frequency.value = 2.4 + Math.random() * 1.4
+  const lfoDepth = ctx.createGain()
+  lfoDepth.gain.value = 6
+  lfo.connect(lfoDepth)
+  lfoDepth.connect(osc.frequency)
+  const filt = ctx.createBiquadFilter()
+  filt.type = 'lowpass'
+  filt.frequency.value = 340 + Math.random() * 90
+  filt.Q.value = 0.7
+  osc.connect(filt)
+  filt.connect(master)
+  const now = ctx.currentTime
+  osc.start(now)
+  lfo.start(now)
+  return () => {
+    try {
+      const tStop = ctx.currentTime
+      osc.stop(tStop)
+      lfo.stop(tStop)
+      osc.disconnect()
+      lfo.disconnect()
+      filt.disconnect()
+      master.disconnect()
+    } catch (_) {
+      //
+      // Context may already be closing
+      //
+    }
+  }
+}
+/**
+ * Faulty street lamp arc: layered lightning crackles + short bass punch (menu hover / connection vibe)
+ * @param {Object} instance - Sound instance
+ */
+export function playLampArcSound(instance) {
+  if (globalMuteProceduralSounds) return
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  if (ctx.state !== 'running') return
+  const now = ctx.currentTime
+  playLightningSound(instance, 0.052, 0)
+  playLightningSound(instance, 0.024, 0.042)
+  //
+  // Menu heartbeat-style single thump (scaled down, synced with crackles)
+  //
+  const bass = ctx.createOscillator()
+  const bassGain = ctx.createGain()
+  bass.type = 'sine'
+  bass.frequency.setValueAtTime(44, now + 0.018)
+  bass.frequency.exponentialRampToValueAtTime(27, now + 0.11)
+  bassGain.gain.setValueAtTime(0, now + 0.018)
+  bassGain.gain.linearRampToValueAtTime(0.42, now + 0.026)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14)
+  bass.connect(bassGain)
+  bassGain.connect(ctx.destination)
+  bass.start(now + 0.018)
+  bass.stop(now + 0.15)
+}
+/**
+ * Alias for playLampArcSound (street lamp fault burst)
+ */
+export function playLampFlickerElectricSound(instance) {
+  playLampArcSound(instance)
+}
 /**
  * Plays a chirpy small-bird tweet (1-3 short rising chirps)
  * @param {Object} instance - Sound instance

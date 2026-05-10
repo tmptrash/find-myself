@@ -35,7 +35,17 @@ const SUN_TOOTH_HEIGHT = 0.08
 const SUN_BROW_OFFSET_Y = -0.08
 const SUN_BROW_RAISE = 0.14
 const SUN_BROW_WIDTH = 0.16
-const SUN_BROW_THICKNESS = 2.5
+//
+// Unified stroke for brows, eye outlines, nose, and mouth contours on hover face
+//
+const SUN_FACE_LINE_WIDTH = 3
+const SUN_FACE_LINE_R = 90
+const SUN_FACE_LINE_G = 90
+const SUN_FACE_LINE_B = 90
+const SUN_NOSE_OFFSET_Y = 0.06
+const SUN_NOSE_HALF_W = 0.034
+const SUN_NOSE_DEPTH = 0.05
+const SUN_EYE_OUTLINE_SEGMENTS = 20
 //
 // Global music instances for time section (persist across level reloads)
 //
@@ -145,6 +155,7 @@ function addBackground(k, color) {
  * @param {number} [config.antiHeroY] - Anti-hero Y position
  * @param {Array} [config.platformGap] - Platform gaps configuration
  * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
+ * @param {string} [config.heroDustColor] - Hex dust under feet (hero only), e.g. '#000000'
  * @returns {Object} Scene instance with sound, hero, and antiHero
  */
 export function initScene(config) {
@@ -161,7 +172,8 @@ export function initScene(config) {
     antiHeroX = null,
     antiHeroY = null,
     platformGap = null,
-    onAnnihilation = null
+    onAnnihilation = null,
+    heroDustColor = null
   } = config  
   //
   // Set gravity
@@ -235,7 +247,7 @@ export function initScene(config) {
   // Create heroes if positions provided
   //
   if (heroX !== null && heroY !== null && antiHeroX !== null && antiHeroY !== null) {
-    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation)
+    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation, heroDustColor)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
   }
@@ -362,7 +374,7 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
  * @param {Function} onAnnihilation - Callback when hero meets anti-hero
  * @returns {Object} Object with hero and antiHero instances
  */
-function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation) {
+function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, onAnnihilation, heroDustColor = null) {
   //
   // Check completed sections for hero appearance
   //
@@ -400,7 +412,8 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     bodyColor: heroBodyColor,  // Yellow if time complete, gray otherwise
     outlineColor: CFG.visual.colors.hero.outline,
     addMouth: isWordComplete,  // Add mouth if word section is complete
-    addArms: isTouchComplete  // Add arms if touch section is complete
+    addArms: isTouchComplete,  // Add arms if touch section is complete
+    dustColor: heroDustColor
   })
   
   return {
@@ -441,9 +454,9 @@ function updateSunHover(k, state) {
 function drawSunFace(k, intensity) {
   if (intensity < 0.01) return
   const r = SUN_RADIUS
-  const darkColor = k.rgb(160, 160, 160)
   const white = k.rgb(255, 255, 255)
   const black = k.rgb(90, 90, 90)
+  const strokeRgb = k.rgb(SUN_FACE_LINE_R, SUN_FACE_LINE_G, SUN_FACE_LINE_B)
   //
   // Eye positions
   //
@@ -457,26 +470,31 @@ function drawSunFace(k, intensity) {
   //
   const browY = eyeY + SUN_BROW_OFFSET_Y * r - intensity * SUN_BROW_RAISE * r
   const browHalfW = SUN_BROW_WIDTH * r
-  drawSunBrow(k, leftEyeX, browY, browHalfW, intensity)
-  drawSunBrow(k, rightEyeX, browY, browHalfW, intensity)
+  drawSunBrow(k, leftEyeX, browY, browHalfW, intensity, strokeRgb)
+  drawSunBrow(k, rightEyeX, browY, browHalfW, intensity, strokeRgb)
   //
-  // Eyes — white sclera with dark pupils
+  // Eyes — white sclera with dark pupils + unified outline stroke
   //
   k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
   k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
   k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
   k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
+  drawSunStrokeCircle(k, leftEyeX, eyeY, eyeR, SUN_EYE_OUTLINE_SEGMENTS, strokeRgb, SUN_FACE_LINE_WIDTH, intensity)
+  drawSunStrokeCircle(k, rightEyeX, eyeY, eyeR, SUN_EYE_OUTLINE_SEGMENTS, strokeRgb, SUN_FACE_LINE_WIDTH, intensity)
   //
-  // Smile — curved arc that widens and rises with intensity
+  // Nose — simple wedge, same stroke as brows / mouth
   //
-  drawSunSmile(k, intensity, r, darkColor, white)
+  drawSunNose(k, intensity, r, strokeRgb)
+  //
+  // Smile — curved arcs that widen with intensity (lip strokes match face line width)
+  //
+  drawSunSmile(k, intensity, r, white, strokeRgb)
 }
 //
 // Draws a single eyebrow as a short curved arc above an eye
 //
-function drawSunBrow(k, cx, y, halfW, intensity) {
+function drawSunBrow(k, cx, y, halfW, intensity, strokeRgb) {
   const segments = 8
-  const browColor = k.rgb(90, 90, 90)
   for (let i = 0; i < segments; i++) {
     const t0 = i / segments
     const t1 = (i + 1) / segments
@@ -488,25 +506,63 @@ function drawSunBrow(k, cx, y, halfW, intensity) {
     k.drawLine({
       p1: k.vec2(x0, y0),
       p2: k.vec2(x1, y1),
-      width: SUN_BROW_THICKNESS + 1.5,
-      color: browColor,
+      width: SUN_FACE_LINE_WIDTH,
+      color: strokeRgb,
       opacity: intensity
     })
   }
 }
 //
+// Approximate circle outline from short segments (same stroke as brows / mouth)
+//
+function drawSunStrokeCircle(k, cx, cy, radius, segments, strokeRgb, lineWidth, opacity) {
+  for (let i = 0; i < segments; i++) {
+    const a0 = (i / segments) * Math.PI * 2
+    const a1 = ((i + 1) / segments) * Math.PI * 2
+    k.drawLine({
+      p1: k.vec2(cx + Math.cos(a0) * radius, cy + Math.sin(a0) * radius),
+      p2: k.vec2(cx + Math.cos(a1) * radius, cy + Math.sin(a1) * radius),
+      width: lineWidth,
+      color: strokeRgb,
+      opacity
+    })
+  }
+}
+//
+// Small inverted-V nose between eyes and mouth
+//
+function drawSunNose(k, intensity, scaleR, strokeRgb) {
+  const nx = SUN_X
+  const yTop = SUN_Y + SUN_NOSE_OFFSET_Y * scaleR
+  const yBot = yTop + SUN_NOSE_DEPTH * scaleR
+  const half = SUN_NOSE_HALF_W * scaleR
+  const w = SUN_FACE_LINE_WIDTH
+  k.drawLine({
+    p1: k.vec2(nx - half, yBot),
+    p2: k.vec2(nx, yTop),
+    width: w,
+    color: strokeRgb,
+    opacity: intensity
+  })
+  k.drawLine({
+    p1: k.vec2(nx + half, yBot),
+    p2: k.vec2(nx, yTop),
+    width: w,
+    color: strokeRgb,
+    opacity: intensity
+  })
+}
+//
 // Draws an unhinged grin on the sun with upper lip, teeth, and lower lip.
 // At low intensity it is a subtle line; at full intensity a wide deranged smile.
 //
-function drawSunSmile(k, intensity, r, darkColor, white) {
+function drawSunSmile(k, intensity, r, white, strokeRgb) {
   const mouthY = SUN_Y + SUN_MOUTH_Y * r
   const mouthW = SUN_MOUTH_WIDTH * r * (0.5 + intensity * 0.7)
   const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 1.2
   const segments = 12
-  const lipColor = k.rgb(100, 100, 100)
-  const lipWidth = 2 + intensity * 1.5
   //
-  // Upper lip — curved arc above the mouth opening
+  // Upper lip — curved arc above the mouth opening (single stroke style)
   //
   const upperLipY = mouthY - 1
   for (let i = 0; i < segments; i++) {
@@ -520,23 +576,13 @@ function drawSunSmile(k, intensity, r, darkColor, white) {
     k.drawLine({
       p1: k.vec2(x0, y0),
       p2: k.vec2(x1, y1),
-      width: lipWidth,
-      color: lipColor,
+      width: SUN_FACE_LINE_WIDTH,
+      color: strokeRgb,
       opacity: intensity
     })
   }
   //
-  // Dark mouth interior — filled with overlapping circles along the curve
-  //
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments
-    const x = SUN_X - mouthW / 2 + t * mouthW
-    const curveY = mouthY + Math.sin(t * Math.PI) * curveDepth
-    const dotR = 2 + intensity * 3.5
-    k.drawCircle({ pos: k.vec2(x, curveY), radius: dotR, color: darkColor, opacity: intensity })
-  }
-  //
-  // Lower lip — same gray color and width as upper lip
+  // Lower lip — same stroke as upper lip (no second gray band from filled discs)
   //
   for (let i = 0; i < segments; i++) {
     const t0 = i / segments
@@ -548,8 +594,8 @@ function drawSunSmile(k, intensity, r, darkColor, white) {
     k.drawLine({
       p1: k.vec2(x0, lowerY0),
       p2: k.vec2(x1, lowerY1),
-      width: lipWidth,
-      color: lipColor,
+      width: SUN_FACE_LINE_WIDTH,
+      color: strokeRgb,
       opacity: intensity
     })
   }

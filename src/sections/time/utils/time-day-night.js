@@ -39,7 +39,7 @@ const WINDOW_GLOW_SIZE = 7
 // Moon: full disc — right side of screen, clearly left of sun, appears after sun fades
 //
 const MOON_X = CFG.visual.screen.width * 0.72
-const MOON_Y = CFG.visual.screen.height * 0.20 + 90
+const MOON_Y = CFG.visual.screen.height * 0.20 + 150
 const MOON_RADIUS = 44
 //
 // Moon glow: large diffuse halo via many concentric circles with linear falloff (soft, not harsh)
@@ -106,7 +106,7 @@ const SUN_COLOR_B = 0
 // Smooth radial fade: more steps avoid visible ring transitions
 //
 const SUN_GLOW_STEPS = 28
-const SUN_GLOW_MAX_FACTOR = 1.22
+const SUN_GLOW_MAX_FACTOR = 0.488
 //
 // Sun fades from 100% → 0% opacity as darkness goes from SUN_FADE_START → SUN_FADE_END
 //

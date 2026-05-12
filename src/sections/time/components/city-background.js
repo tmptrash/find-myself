@@ -1,6 +1,21 @@
 import { CFG } from '../cfg.js'
 import { toPng } from '../../../utils/helper.js'
 
+//
+// Per-sprite window positions stored during generation.
+// Keyed by spriteName so each level can have its own set.
+//
+const windowsPerSprite = {}
+
+/**
+ * Returns window glow positions collected during the last preload of a given sprite.
+ * @param {string} spriteName - The sprite name used in preloadCityBackground
+ * @returns {Array<{x: number, y: number, size: number, warm: boolean}>}
+ */
+export function getWindowPositions(spriteName) {
+  return windowsPerSprite[spriteName] ?? []
+}
+
 /**
  * Creates city background sprite for time section levels
  * @param {Object} k - Kaplay instance
@@ -11,11 +26,23 @@ import { toPng } from '../../../utils/helper.js'
  * @param {number} [deepBuildingHeightMultiplier=0.25] - Height multiplier for deepest buildings (0.15-0.35 by default means 15-35%)
  * @returns {string} Data URL of the background sprite
  */
-export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25) {
+//
+// Upper bound on collected night-glow windows; sampling uses probability so all buildings are covered
+//
+const MAX_WINDOW_GLOWS = 180
+//
+// Probability each drawn window is sampled for night glow — keeps coverage even across all buildings
+//
+const WINDOW_SAMPLE_RATE = 0.18
+
+export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
-  
-  return toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  //
+  // Collect foreground building window positions for night glow
+  //
+  const windows = []
+  const dataUrl = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     //
     // Draw gradient background
     // Light gray goes to top of screen, dark gray goes to bottom
@@ -33,9 +60,9 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     //
     // Calculate sun position (needed for building height calculation)
     //
-    const sunX = screenWidth * 0.85 - 100  // Moved left by 100px
+    const sunX = screenWidth * 0.85 - 50
     const sunY = screenHeight * 0.2 + 150  // Moved down by 150px
-    const sunRadius = 90  // Increased size (was 60)
+    const sunRadius = 52
     const pulse = 1.0  // Static pulse for static image
     
     //
@@ -92,7 +119,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     // Calculate maximum building height to not cover the sun
     // Sun is at sunY, leave more space (sunRadius + 200px) below it
     //
-    const maxBuildingHeight = showSun ? (bottomPlatformY - sunY - sunRadius - 200) : bottomPlatformY
+    const maxBuildingHeight = capBySun ? (bottomPlatformY - sunY - sunRadius - 200) : bottomPlatformY
     
     //
     // First pass: Draw deepest background buildings (darkest, fill all gaps)
@@ -262,20 +289,17 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       //
       // Check if this building overlaps with sun horizontally and would be too tall
       //
-      if (showSun) {
+      if (capBySun) {
         const buildingRight = currentX + width
         const sunLeft = sunX - sunRadius - 50
         const sunRight = sunX + sunRadius + 50
         //
-        // If building overlaps with sun area horizontally
+        // If building overlaps with sun/moon area horizontally, cap its height
         //
         if (currentX < sunRight && buildingRight > sunLeft) {
-          //
-          // Limit building height to not reach sun
-          //
           const maxHeightForSun = bottomPlatformY - sunY - sunRadius - 100
           if (height > maxHeightForSun) {
-            height = Math.max(maxHeightForSun, availableHeight * 0.2)  // At least 20% height
+            height = Math.max(maxHeightForSun, availableHeight * 0.2)
           }
         }
       }
@@ -299,10 +323,19 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
             const windowX = currentX + (col + 0.5) * (width / windowCols)
             const windowY = finalBuildingY + (row + 0.5) * (height / windowRows)
             const windowSize = 6
-            const brightness = 150 + Math.random() * 20
-            
+            //
+            // Uniform brightness so all daytime windows look the same shade
+            //
+            const brightness = 158
             ctx.fillStyle = `rgb(${brightness}, ${brightness}, ${brightness})`
             ctx.fillRect(windowX - windowSize / 2, windowY - windowSize / 2, windowSize, windowSize)
+            //
+            // Sample ~18% of drawn windows across all buildings for night glow — ensures even
+            // coverage rather than filling the buffer with only the first building's windows
+            //
+            if (windows.length < MAX_WINDOW_GLOWS && Math.random() < WINDOW_SAMPLE_RATE) {
+              windows.push({ x: windowX, y: windowY, size: windowSize, warm: Math.random() > 0.3 })
+            }
           }
         }
       }
@@ -339,94 +372,134 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     }
     
     //
-    // Third pass: Draw blurred trees in front of buildings (but blurred for depth effect)
+    // Third pass: blurred organic trees (touch-like silhouette with uneven trunks + leaf clusters)
     //
-    ctx.filter = 'blur(8px)'  // Strong blur for trees
-    
-    //
-    // Calculate available height for trees (same as for buildings)
-    //
-    const availableHeightForTrees = bottomPlatformY
-    
-    currentX = 0
-    while (currentX < screenWidth * 1.2) {
-      //
-      // Trees are low and spread out
-      //
-      const treeWidth = randomRange(30, 80)
-      const treeHeight = randomRange(availableHeightForTrees * 0.08, availableHeightForTrees * 0.25)  // Low trees (8-25% of height)
-      const treeY = bottomPlatformY - treeHeight
-      const treeX = currentX + randomRange(0, treeWidth * 0.3)  // Slight random offset
-      
-      //
-      // Tree trunk (dark, narrow)
-      //
-      const trunkWidth = randomRange(4, 8)
-      const trunkHeight = treeHeight * randomRange(0.3, 0.5)
-      const trunkX = treeX + treeWidth / 2 - trunkWidth / 2
-      const trunkY = bottomPlatformY - trunkHeight
-      const trunkColor = randomInt(25, 35)  // Dark trunk
-      
-      ctx.fillStyle = `rgb(${trunkColor}, ${trunkColor}, ${trunkColor})`
-      ctx.fillRect(trunkX, trunkY, trunkWidth, trunkHeight)
-      
-      //
-      // Tree foliage (darker green-gray or autumn colors, rounded shape)
-      //
-      const foliageRadius = treeWidth * randomRange(0.4, 0.6)
-      const foliageX = treeX + treeWidth / 2
-      const foliageY = treeY + foliageRadius * 0.3
-      
-      //
-      // Draw foliage as overlapping circles for natural tree shape
-      // Use autumn colors (yellow/red/orange) if autumnLeaves is true
-      //
-      let foliageColorStyle
-      if (autumnLeaves) {
-        //
-        // Gray autumn leaves (various shades of gray)
-        //
-        const grayValue = randomInt(50, 80)
-        foliageColorStyle = `rgb(${grayValue}, ${grayValue}, ${grayValue})`
-      } else {
-        //
-        // Green-gray leaves (default)
-        //
-        const foliageColor = randomInt(30, 45)
-        foliageColorStyle = `rgb(${foliageColor}, ${foliageColor + 5}, ${foliageColor})`
-      }
-      ctx.fillStyle = foliageColorStyle
-      
-      //
-      // Main foliage circle
-      //
-      ctx.beginPath()
-      ctx.arc(foliageX, foliageY, foliageRadius, 0, Math.PI * 2)
-      ctx.fill()
-      
-      //
-      // Additional smaller circles for more natural shape
-      //
-      const additionalCircles = Math.floor(Math.random() * 3) + 1  // 1-3 additional circles
-      for (let i = 0; i < additionalCircles; i++) {
-        const offsetX = (Math.random() - 0.5) * foliageRadius * 0.8
-        const offsetY = (Math.random() - 0.5) * foliageRadius * 0.6
-        const smallRadius = foliageRadius * randomRange(0.4, 0.7)
-        
-        ctx.beginPath()
-        ctx.arc(foliageX + offsetX, foliageY + offsetY, smallRadius, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      
-      //
-      // Spacing between trees
-      //
-      const treeSpacing = randomRange(40, 100)
-      currentX += treeWidth + treeSpacing
-    }
-    
-    ctx.filter = 'none'
+    drawBlurredOrganicTrees(ctx, {
+      screenWidth,
+      bottomPlatformY,
+      autumnLeaves
+    })
   })
+  return { dataUrl, windows }
+}
+
+function drawBlurredOrganicTrees(ctx, cfg) {
+  const { screenWidth, bottomPlatformY, autumnLeaves } = cfg
+  ctx.filter = 'blur(7px)'
+  let currentX = 0
+  while (currentX < screenWidth * 1.2) {
+    const crownWidth = randomRange(44, 92)
+    const treeX = currentX + randomRange(0, crownWidth * 0.28)
+    const trunkHeight = randomRange(56, 125)
+    drawOrganicTrunk(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
+    const crownY = bottomPlatformY - trunkHeight - randomRange(14, 24)
+    drawOrganicLeafCluster(ctx, treeX + crownWidth * 0.5, crownY, crownWidth, autumnLeaves)
+    const treeSpacing = randomRange(52, 118)
+    currentX += crownWidth + treeSpacing
+  }
+  ctx.filter = 'none'
+}
+
+function drawOrganicTrunk(ctx, centerX, bottomY, trunkHeight) {
+  const segmentCount = 7 + Math.floor(Math.random() * 4)
+  const stepY = trunkHeight / segmentCount
+  const trunkColor = randomInt(28, 45)
+  const trunkR = trunkColor
+  const trunkG = trunkColor - randomInt(2, 5)
+  const trunkB = trunkColor - randomInt(8, 12)
+  ctx.strokeStyle = `rgba(${trunkR}, ${trunkG}, ${trunkB}, 0.9)`
+  ctx.lineCap = 'round'
+  let prevX = centerX + randomRange(-2.5, 2.5)
+  let prevY = bottomY
+  for (let i = 0; i < segmentCount; i++) {
+    const t = i / Math.max(1, segmentCount - 1)
+    const trunkW = 5.5 - t * 2.3 + randomRange(-0.35, 0.35)
+    const nextX = prevX + randomRange(-3.6, 3.6)
+    const nextY = bottomY - (i + 1) * stepY
+    ctx.lineWidth = Math.max(2.2, trunkW)
+    ctx.beginPath()
+    ctx.moveTo(prevX, prevY)
+    ctx.lineTo(nextX, nextY)
+    ctx.stroke()
+    prevX = nextX
+    prevY = nextY
+  }
+}
+
+function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLeaves) {
+  const leafCount = 28 + Math.floor(Math.random() * 24)
+  const spreadX = crownWidth * randomRange(0.4, 0.58)
+  const spreadY = crownWidth * randomRange(0.3, 0.42)
+  for (let i = 0; i < leafCount; i++) {
+    const angle = randomRange(0, Math.PI * 2)
+    const dist = Math.random()
+    const lx = centerX + Math.cos(angle) * spreadX * dist
+    const ly = crownCenterY + Math.sin(angle) * spreadY * dist * 0.8
+    const size = randomRange(4.4, 8.8)
+    const rot = randomRange(-Math.PI, Math.PI)
+    const leafColor = pickLeafColor(autumnLeaves)
+    drawLeafShape(ctx, lx, ly, size, rot, leafColor)
+  }
+}
+
+function pickLeafColor(autumnLeaves) {
+  if (autumnLeaves) {
+    const palette = [
+      [188, 78, 45],
+      [208, 112, 54],
+      [218, 154, 66],
+      [180, 66, 44],
+      [206, 132, 46]
+    ]
+    const base = palette[Math.floor(Math.random() * palette.length)]
+    return {
+      r: base[0] + randomInt(-12, 12),
+      g: base[1] + randomInt(-12, 12),
+      b: base[2] + randomInt(-10, 10),
+      a: randomRange(0.68, 0.92)
+    }
+  }
+  const greenPalette = [
+    [48, 106, 46],
+    [56, 122, 52],
+    [42, 92, 40],
+    [66, 132, 58]
+  ]
+  const base = greenPalette[Math.floor(Math.random() * greenPalette.length)]
+  return {
+    r: base[0] + randomInt(-10, 10),
+    g: base[1] + randomInt(-10, 10),
+    b: base[2] + randomInt(-10, 10),
+    a: randomRange(0.66, 0.9)
+  }
+}
+
+function drawLeafShape(ctx, x, y, size, angle, color) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(angle)
+  ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.quadraticCurveTo(-size * 0.62, -size * 0.35, 0, -size)
+  ctx.quadraticCurveTo(size * 0.62, -size * 0.35, 0, 0)
+  ctx.closePath()
+  ctx.fill()
+  ctx.strokeStyle = `rgba(${Math.max(0, color.r - 36)}, ${Math.max(0, color.g - 42)}, ${Math.max(0, color.b - 36)}, ${Math.min(0.35, color.a * 0.46)})`
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(0, -size)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function randomRange(min, max) {
+  return Math.random() * (max - min) + min
+}
+
+function randomInt(min, max) {
+  return Math.floor(randomRange(min, max))
 }
 
 /**
@@ -439,7 +512,8 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
  * @param {boolean} [showCars=true] - Whether to show moving cars
  * @param {number} [deepBuildingHeightMultiplier=0.25] - Height multiplier for deepest buildings
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25) {
-  const spriteData = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars, deepBuildingHeightMultiplier)
-  k.loadSprite(spriteName, spriteData)
+export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun) {
+  const { dataUrl, windows } = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars, deepBuildingHeightMultiplier, capBySun)
+  k.loadSprite(spriteName, dataUrl)
+  windowsPerSprite[spriteName] = windows
 }

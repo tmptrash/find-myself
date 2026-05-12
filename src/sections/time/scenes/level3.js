@@ -243,6 +243,8 @@ export function sceneLevel3(k) {
       levelName: 'level-time.3',
       levelNumber: 4,
       skipPlatforms: true,
+      spriteName: 'city-background-level3',
+      showSun: false,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: CORRIDOR_Y - 20,  // UI positioned lower, closer to upper corridor
       sideWallWidth: PLATFORM_SIDE_WIDTH,

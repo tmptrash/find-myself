@@ -29,16 +29,20 @@ const SPIKE_TAG = "time-spike"
  * @returns {Object} Time spikes instance
  */
 export function create(config) {
-  const { k, startX, endX, y, hero, currentLevel, digitCount = DIGIT_COUNT, fakeDigitCount = FAKE_DIGIT_COUNT, sfx = null, levelIndicator = null } = config
+  const { k, startX, endX, y, hero, currentLevel, digitCount = DIGIT_COUNT, fakeDigitCount = FAKE_DIGIT_COUNT, sfx = null, levelIndicator = null, excludeX = [], excludeHalfWidth = 22 } = config
   
   const spacing = (endX - startX) / (digitCount - 1)
   const spikes = []
   const fakeSpikes = []
   //
-  // Create spikes along the line
+  // Create spikes along the line, skipping positions near excluded X zones (e.g. lamp poles)
   //
   for (let i = 0; i < digitCount; i++) {
     const x = startX + i * spacing
+    //
+    // Skip spike if it falls within any excluded zone (lamp pole footprint)
+    //
+    if (excludeX.some(ex => Math.abs(x - ex) < excludeHalfWidth)) continue
     const yOffset = MIN_Y_OFFSET + Math.random() * (MAX_Y_OFFSET - MIN_Y_OFFSET)
     const rotation = MIN_ROTATION + Math.random() * (MAX_ROTATION - MIN_ROTATION)
     //

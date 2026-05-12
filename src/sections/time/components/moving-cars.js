@@ -1,4 +1,5 @@
 import { toPng } from '../../../utils/helper.js'
+import { getDarkness } from '../utils/time-day-night.js'
 /**
  * Creates a blurred car sprite using canvas with blur filter
  * @param {Object} params - Car parameters
@@ -191,6 +192,7 @@ export function create(config) {
   const gameAreaLeft = platformSideWidth
   const gameAreaRight = k.width() - platformSideWidth
   const gameAreaWidth = gameAreaRight - gameAreaLeft
+  const cars = []
   //
   // Create cars moving in different directions
   // Distribute cars horizontally across the platform at start
@@ -243,34 +245,95 @@ export function create(config) {
     //
     const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
     //
-    // Add car sprite to scene
+    // Headlight offset: front bumper area, raised to upper body (hood level)
+    // The body top in screen space is roughly car.pos.y - (canvasHeight/2 - 20 - wheelRadius - bodyHeight)
+    // so offsetY ≈ -(canvasHeight/2 - 20 - wheelRadius - bodyHeight * 0.35) gives upper body placement
     //
-    k.add([
+    const headlightOffsetX = bodyWidth * 0.68
+    const headlightOffsetY = -(canvasHeight / 2 - 20 - wheelRadius - bodyHeight * 0.30)
+    const frontSign = carSpeed > 0 ? 1 : -1
+    //
+    // Add car sprite to scene; opacity dims at night so only headlights glow
+    //
+    const carObj = k.add([
       k.sprite(spriteId),
       k.pos(startX, carY),
       k.anchor('center'),
-      k.z(15.6),  // Behind rounded corners (15.8) but above background (15.5)
+      k.z(15.6),
       {
         speed: carSpeed,
         gameAreaLeft,
-        gameAreaRight
+        gameAreaRight,
+        headlightOffsetX,
+        headlightOffsetY,
+        frontSign
       },
       {
         update() {
-          //
-          // Move car horizontally
-          //
           this.pos.x += this.speed * k.dt()
-          //
-          // Reset car position when it goes off-screen (wrap around)
-          //
           if (this.speed > 0 && this.pos.x > this.gameAreaRight + 100) {
             this.pos.x = this.gameAreaLeft - 100
           } else if (this.speed < 0 && this.pos.x < this.gameAreaLeft - 100) {
             this.pos.x = this.gameAreaRight + 100
           }
+          //
+          // Dim car body at night so only baked headlight glows remain visible
+          //
+          const darkness = getDarkness()
+          this.opacity = Math.max(0.08, 1 - darkness * 1.15)
         }
       }
     ])
+    cars.push(carObj)
+  }
+  createHeadlightLayer(k, cars)
+}
+/**
+ * Creates the fixed headlight overlay layer for a set of cars.
+ * Cars must have pos, frontSign, headlightOffsetX, headlightOffsetY properties.
+ * @param {Object} k - Kaplay instance
+ * @param {Array} cars - Array of car game objects
+ * @param {boolean} [alwaysOn=false] - When true, draw headlights even during daytime
+ * @param {number} [zIndex=15.62] - Z-index for the headlight layer
+ */
+export function createHeadlightLayer(k, cars, alwaysOn = false, zIndex = 15.62) {
+  k.add([
+    k.z(zIndex),
+    k.fixed(),
+    {
+      draw() { drawHeadlights(k, cars, alwaysOn) }
+    }
+  ])
+}
+//
+// Draw front headlight halos and red rear lights for each car.
+// When alwaysOn=true (winter/night levels), minimum intensity applied even during day.
+//
+function drawHeadlights(k, cars, alwaysOn) {
+  const darkness = getDarkness()
+  if (!alwaysOn && darkness < 0.2) return
+  const intensity = alwaysOn
+    ? Math.max(0.25, Math.min(1, darkness / 0.55))
+    : Math.min(1, (darkness - 0.2) / 0.35)
+  for (const car of cars) {
+    if (!car.pos) continue
+    const hy = car.pos.y + car.headlightOffsetY
+    //
+    // Front headlights — warm white soft-blur glow (outer to inner)
+    //
+    const hx = car.pos.x + car.frontSign * car.headlightOffsetX
+    k.drawCircle({ pos: k.vec2(hx, hy), radius: 48, color: k.rgb(255, 252, 210), opacity: intensity * 0.03 })
+    k.drawCircle({ pos: k.vec2(hx, hy), radius: 34, color: k.rgb(255, 252, 210), opacity: intensity * 0.06 })
+    k.drawCircle({ pos: k.vec2(hx, hy), radius: 22, color: k.rgb(255, 252, 210), opacity: intensity * 0.11 })
+    k.drawCircle({ pos: k.vec2(hx, hy), radius: 10, color: k.rgb(255, 255, 240), opacity: intensity * 0.34 })
+    k.drawCircle({ pos: k.vec2(hx, hy), radius: 4, color: k.rgb(255, 255, 255), opacity: intensity * 0.52 })
+    //
+    // Rear lights — red soft-blur glow
+    //
+    const rx = car.pos.x - car.frontSign * car.headlightOffsetX
+    k.drawCircle({ pos: k.vec2(rx, hy), radius: 28, color: k.rgb(255, 20, 10), opacity: intensity * 0.05 })
+    k.drawCircle({ pos: k.vec2(rx, hy), radius: 14, color: k.rgb(255, 20, 10), opacity: intensity * 0.12 })
+    k.drawCircle({ pos: k.vec2(rx, hy), radius: 6, color: k.rgb(255, 40, 20), opacity: intensity * 0.38 })
+    k.drawCircle({ pos: k.vec2(rx, hy), radius: 3, color: k.rgb(255, 80, 40), opacity: intensity * 0.62 })
   }
 }

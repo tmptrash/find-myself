@@ -324,13 +324,9 @@ export function onUpdate(inst) {
         let targetColor
         if (isHostile) {
           //
-          // Hostile platforms become blue
+          // Hostile platforms match the steel blue of the one-spikes digits below them
           //
-          if (inst.killOnOne) {
-            targetColor = inst.k.rgb(70, 130, 180)  // Steel blue for "1"
-          } else {
-            targetColor = inst.k.rgb(30, 60, 150)  // Dark blue for odd sum
-          }
+          targetColor = inst.k.rgb(135, 169, 189)
         } else {
           //
           // Non-hostile platforms keep gray color
@@ -1014,13 +1010,9 @@ export function updatePlatformColorByHostility(inst, text) {
   let targetColor
   if (isHostile) {
     //
-    // Hostile platforms become blue (killOnOne) or dark blue (killOnOddSum)
+    // Hostile platforms match the steel blue of the one-spikes digits below them
     //
-    if (inst.killOnOne) {
-      targetColor = inst.k.rgb(70, 130, 180)  // Steel blue for "1"
-    } else {
-      targetColor = inst.k.rgb(30, 60, 150)  // Dark blue for odd sum
-    }
+    targetColor = inst.k.rgb(135, 169, 189)
   } else {
     //
     // Non-hostile platforms keep gray color

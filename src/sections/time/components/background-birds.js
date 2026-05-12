@@ -1,8 +1,15 @@
+import { getDarkness } from '../utils/time-day-night.js'
+
 //
 // Background birds constants
 //
 const BIRD_COUNT = 5
 const SKY_HEIGHT = 300
+//
+// Birds start fading at this darkness threshold; fully gone by BIRD_FADE_DARKNESS_START + fade range
+//
+const BIRD_FADE_DARKNESS_START = 0.18
+const BIRD_FADE_RANGE = 0.22
 
 /**
  * Create background birds system
@@ -147,19 +154,25 @@ function drawBirds(k, birds) {
     //
     // Draw left wing (two segments)
     //
+    //
+    // Fade birds out as darkness increases (disappear at night)
+    //
+    const darkness = getDarkness()
+    const birdOpacity = 0.3 * Math.max(0, 1 - (darkness - BIRD_FADE_DARKNESS_START) / BIRD_FADE_RANGE)
+    if (birdOpacity < 0.01) continue
     k.drawLine({
       p1: k.vec2(centerX, centerY),
       p2: k.vec2(leftMidX, leftMidY),
       width: wingThickness,
       color: bird.color,
-      opacity: 0.3
+      opacity: birdOpacity
     })
     k.drawLine({
       p1: k.vec2(leftMidX, leftMidY),
       p2: k.vec2(leftTipX, leftTipY),
       width: wingThickness * 0.7,
       color: bird.color,
-      opacity: 0.3
+      opacity: birdOpacity
     })
     //
     // Draw right wing (two segments)
@@ -169,14 +182,14 @@ function drawBirds(k, birds) {
       p2: k.vec2(rightMidX, rightMidY),
       width: wingThickness,
       color: bird.color,
-      opacity: 0.3
+      opacity: birdOpacity
     })
     k.drawLine({
       p1: k.vec2(rightMidX, rightMidY),
       p2: k.vec2(rightTipX, rightTipY),
       width: wingThickness * 0.7,
       color: bird.color,
-      opacity: 0.3
+      opacity: birdOpacity
     })
   }
 }

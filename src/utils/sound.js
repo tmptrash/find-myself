@@ -3441,6 +3441,38 @@ export function playDistantCrowSound(instance) {
 }
 
 /**
+ * Distant owl hoot — deep double-syllable "hooo-hoo" for night ambience
+ * @param {Object} instance - Sound instance
+ */
+export function playOwlHootSound(instance) {
+  if (globalMuteProceduralSounds) return
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  if (ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Two-note hoot: longer low note then short follow-up
+  //
+  const notes = [
+    { delay: 0, startFreq: 318, endFreq: 248, dur: 0.38, vol: 0.036 },
+    { delay: 0.48, startFreq: 355, endFreq: 278, dur: 0.24, vol: 0.026 }
+  ]
+  for (const n of notes) {
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'triangle'
+    osc.frequency.setValueAtTime(n.startFreq, now + n.delay)
+    osc.frequency.exponentialRampToValueAtTime(n.endFreq, now + n.delay + n.dur)
+    gain.gain.setValueAtTime(0.001, now + n.delay)
+    gain.gain.linearRampToValueAtTime(n.vol, now + n.delay + 0.07)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + n.delay + n.dur)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now + n.delay)
+    osc.stop(now + n.delay + n.dur + 0.05)
+  }
+}
+/**
  * Soft pigeon / dove coo (low mellow burst — urban rooftop ambience)
  * @param {Object} instance - Sound instance
  */
@@ -3608,4 +3640,59 @@ export function playFrogSound(instance) {
   gain.connect(ctx.destination)
   osc.start(now)
   osc.stop(now + duration)
+}
+/**
+ * Plays a distant car pass-by sound (low rumble + Doppler whoosh) for night ambience
+ * @param {Object} instance - Sound instance
+ */
+export function playDistantCarPassBy(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Low-frequency engine rumble that rises then fades (car passing at distance)
+  //
+  const dur = 1.6 + Math.random() * 0.8
+  const baseFreq = 55 + Math.random() * 30
+  const vol = 0.030 + Math.random() * 0.018
+  const osc = ctx.createOscillator()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(baseFreq, now)
+  osc.frequency.linearRampToValueAtTime(baseFreq * 1.25, now + dur * 0.4)
+  osc.frequency.linearRampToValueAtTime(baseFreq * 0.7, now + dur)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(160, now)
+  filter.frequency.linearRampToValueAtTime(280, now + dur * 0.35)
+  filter.frequency.linearRampToValueAtTime(110, now + dur)
+  filter.Q.value = 0.6
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0, now)
+  gain.gain.linearRampToValueAtTime(vol, now + dur * 0.2)
+  gain.gain.setValueAtTime(vol, now + dur * 0.55)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + dur)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + dur + 0.05)
+}
+/**
+ * Plays a quick neon/fluorescent flicker burst — 2-4 sharp electrical crackles in rapid
+ * succession, synchronized to be called exactly when the lamp dims. No bass thump.
+ * @param {Object} instance - Sound instance
+ */
+export function playNeonFlickerBurst(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance?.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  //
+  // 2-4 quick crackle events with small time offsets (jerky feel)
+  //
+  const count = 2 + Math.floor(Math.random() * 3)
+  for (let i = 0; i < count; i++) {
+    const delay = i * (0.016 + Math.random() * 0.014)
+    playLightningSound(instance, 0.022 + Math.random() * 0.010, delay)
+  }
 }

@@ -1695,7 +1695,7 @@ function drawScene(inst) {
       //
       // Outline triangle (larger) - ensure tip is also outlined
       //
-      const outlineSize = ARROWHEAD_SIZE + ARROW_OUTLINE_WIDTH
+      const outlineSize = ARROWHEAD_SIZE + ARROW_OUTLINE_WIDTH + 1
       const outlineLeft = k.vec2(
         actualTipX + Math.cos(baseLeftAngle) * outlineSize,
         actualTipY + Math.sin(baseLeftAngle) * outlineSize
@@ -1704,14 +1704,12 @@ function drawScene(inst) {
         actualTipX + Math.cos(baseRightAngle) * outlineSize,
         actualTipY + Math.sin(baseRightAngle) * outlineSize
       )
-      
       //
       // Extend tip forward for outline to ensure tip is outlined
       //
-      const outlineTipX = actualTipX + Math.cos(arrowAngle) * ARROW_OUTLINE_WIDTH
-      const outlineTipY = actualTipY + Math.sin(arrowAngle) * ARROW_OUTLINE_WIDTH
+      const outlineTipX = actualTipX + Math.cos(arrowAngle) * (ARROW_OUTLINE_WIDTH + 1)
+      const outlineTipY = actualTipY + Math.sin(arrowAngle) * (ARROW_OUTLINE_WIDTH + 1)
       const outlineTipPoint = k.vec2(outlineTipX, outlineTipY)
-      
       //
       // Draw filled polygon for outline (black) - includes extended tip
       //
@@ -1720,7 +1718,6 @@ function drawScene(inst) {
         color: arrowOutlineColor,
         opacity: ARROW_OPACITY
       })
-      
       //
       // Draw main filled triangle (gray)
       //

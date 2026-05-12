@@ -3936,7 +3936,7 @@ const L0_FIREFLY_COLOR_B = 120
 const MUSHROOM_COUNT = 7
 const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
-const L0_SPIDER_TOOLTIP_TEXT = "How's it going, dude?"
+const L0_SPIDER_TOOLTIP_TEXT = "how's it going, dude?"
 const MUSHROOM_FUNNY_LINES = [
   'talk spore to me',
   'pay rent in compost',

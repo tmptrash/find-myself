@@ -46,7 +46,7 @@ export const TIME_CFG = {
         outline: "#000000"           // Black outline
       },
       antiHero: {
-        body: "#606060",             // Medium-light gray anti-hero (not too dark)
+        body: "#FF8C00",             // Orange anti-hero accent (matches TIME letters and sun)
         outline: "#000000"           // Black outline
       },
       text: "#FFFFFF",               // White text
@@ -56,8 +56,8 @@ export const TIME_CFG = {
     // Spike glint effect configuration (similar to blade glint)
     //
     spikeGlint: {
-      intervalMin: 40,     // Minimum seconds between glints (even slower)
-      intervalMax: 120,    // Maximum seconds between glints (even slower)
+      intervalMin: 72,     // Minimum seconds between glints (20% more frequent)
+      intervalMax: 240,    // Maximum seconds between glints (20% more frequent)
       duration: 0.6        // Duration of light glint effect (seconds)
     }
   }

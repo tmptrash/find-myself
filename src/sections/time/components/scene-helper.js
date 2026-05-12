@@ -4,48 +4,35 @@ import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { get, set } from '../../../utils/progress.js'
+import * as DayNight from '../utils/time-day-night.js'
 
 const MUSIC_START_DELAY = 6.0
 //
 // Sun position and radius (matches city-background.js calculations)
 //
-const SUN_X = CFG.visual.screen.width * 0.85 - 100
+const SUN_X = CFG.visual.screen.width * 0.85 - 50
 const SUN_Y = CFG.visual.screen.height * 0.2 + 150
-const SUN_RADIUS = 90
+const SUN_RADIUS = 52
 //
-// Sun hover detection and face fade speed
+// Sun hover detection radius margin
 //
-const SUN_HOVER_SPEED = 3
 const SUN_HOVER_MARGIN = 20
 //
-// Sun smiley face dimensions (relative to SUN_RADIUS)
+// Ray particle emission and movement parameters
 //
-const SUN_EYE_OFFSET_X = 0.28
-const SUN_EYE_OFFSET_Y = -0.15
-const SUN_EYE_RADIUS = 0.14
-const SUN_PUPIL_RADIUS = 0.07
-const SUN_MOUTH_Y = 0.25
-const SUN_MOUTH_WIDTH = 0.5
-const SUN_MOUTH_HEIGHT = 0.22
-const SUN_TOOTH_WIDTH = 0.1
-const SUN_TOOTH_HEIGHT = 0.08
+const SUN_RAY_EMIT_RATE = 0.055
+const SUN_RAY_SPEED_MIN = 55
+const SUN_RAY_SPEED_MAX = 140
+const SUN_RAY_LIFE_MIN = 0.75
+const SUN_RAY_LIFE_MAX = 1.4
+const SUN_RAY_GLOW_R_MIN = 3
+const SUN_RAY_GLOW_R_MAX = 6
+const SUN_RAY_MAX_COUNT = 60
 //
-// Eyebrow dimensions and raise distance (relative to SUN_RADIUS)
+// Rays emit only during first SUN_RAY_HOVER_DURATION seconds of hover; not at night
 //
-const SUN_BROW_OFFSET_Y = -0.08
-const SUN_BROW_RAISE = 0.14
-const SUN_BROW_WIDTH = 0.16
-//
-// Unified stroke for brows, eye outlines, nose, and mouth contours on hover face
-//
-const SUN_FACE_LINE_WIDTH = 3
-const SUN_FACE_LINE_R = 90
-const SUN_FACE_LINE_G = 90
-const SUN_FACE_LINE_B = 90
-const SUN_NOSE_OFFSET_Y = 0.06
-const SUN_NOSE_HALF_W = 0.034
-const SUN_NOSE_DEPTH = 0.05
-const SUN_EYE_OUTLINE_SEGMENTS = 20
+const SUN_RAY_HOVER_DURATION = 2.0
+const SUN_RAY_NIGHT_DARKNESS = 0.35
 //
 // Global music instances for time section (persist across level reloads)
 //
@@ -173,7 +160,23 @@ export function initScene(config) {
     antiHeroY = null,
     platformGap = null,
     onAnnihilation = null,
-    heroDustColor = null
+    heroDustColor = null,
+    //
+    // City background sprite name — used by DayNight to look up real window positions
+    //
+    spriteName = 'city-background',
+    //
+    // When false, skip drawing the dynamic sun (winter/autumn levels)
+    //
+    showSun = true,
+    //
+    // When set, stars are drawn on a separate layer at this z-index (e.g. below clouds)
+    //
+    starLayerZ = null,
+    //
+    // When set, moon is drawn on a separate layer at this z-index (e.g. below clouds)
+    //
+    moonLayerZ = null
   } = config  
   //
   // Set gravity
@@ -252,6 +255,11 @@ export function initScene(config) {
     antiHero = heroesResult.antiHero
   }
   
+  //
+  // Day/night cycle (persists across scene reloads via module-level state)
+  //
+  const dayNight = DayNight.create({ k, sound, timeSectionMusic, spriteName, showSun, starLayerZ, moonLayerZ })
+  k.onSceneLeave(() => dayNight.cleanup())
   return { sound, hero, antiHero, levelIndicator }
 }
 
@@ -422,210 +430,94 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
   }
 }
 /**
- * Creates a sun hover face system that shows a smiley when the mouse hovers the sun
+ * Creates a sun hover ray system: bright particles fly outward when mouse hovers the sun.
  * @param {Object} k - Kaplay instance
- * @param {number} zIndex - Z-index for the face overlay
+ * @param {number} zIndex - Z-index for the ray overlay
  */
 export function createSunHoverFace(k, zIndex = 16) {
-  const state = { intensity: 0 }
+  const state = { rays: [], emitTimer: 0, hoverTimer: 0 }
   k.add([
     k.z(zIndex),
-    { draw() { drawSunFace(k, state.intensity) } }
+    { draw() { drawSunRays(k, state) } }
   ])
-  k.onUpdate(() => updateSunHover(k, state))
+  k.onUpdate(() => updateSunHoverRays(k, state))
 }
 //
-// Update sun hover intensity based on mouse proximity
+// Emit rays only during first SUN_RAY_HOVER_DURATION seconds of hover;
+// stop at night (darkness above threshold); rays already in flight fade naturally
 //
-function updateSunHover(k, state) {
+function updateSunHoverRays(k, state) {
   const mousePos = k.mousePos()
   const dx = mousePos.x - SUN_X
   const dy = mousePos.y - SUN_Y
   const dist = Math.sqrt(dx * dx + dy * dy)
   const isHovering = dist < SUN_RADIUS + SUN_HOVER_MARGIN
-  const target = isHovering ? 1 : 0
-  state.intensity += (target - state.intensity) * SUN_HOVER_SPEED * k.dt()
-  state.intensity = Math.max(0, Math.min(1, state.intensity))
-}
-//
-// Draw smiley face on the sun with eyes, eyebrows, pupils, and a curved smile.
-// Eyebrows raise and smile widens gradually as intensity goes from 0 to 1.
-//
-function drawSunFace(k, intensity) {
-  if (intensity < 0.01) return
-  const r = SUN_RADIUS
-  const white = k.rgb(255, 255, 255)
-  const black = k.rgb(90, 90, 90)
-  const strokeRgb = k.rgb(SUN_FACE_LINE_R, SUN_FACE_LINE_G, SUN_FACE_LINE_B)
-  //
-  // Eye positions
-  //
-  const eyeR = SUN_EYE_RADIUS * r
-  const pupilR = SUN_PUPIL_RADIUS * r
-  const eyeY = SUN_Y + SUN_EYE_OFFSET_Y * r
-  const leftEyeX = SUN_X - SUN_EYE_OFFSET_X * r
-  const rightEyeX = SUN_X + SUN_EYE_OFFSET_X * r
-  //
-  // Eyebrows — raise upward as intensity increases
-  //
-  const browY = eyeY + SUN_BROW_OFFSET_Y * r - intensity * SUN_BROW_RAISE * r
-  const browHalfW = SUN_BROW_WIDTH * r
-  drawSunBrow(k, leftEyeX, browY, browHalfW, intensity, strokeRgb)
-  drawSunBrow(k, rightEyeX, browY, browHalfW, intensity, strokeRgb)
-  //
-  // Eyes — white sclera with dark pupils + unified outline stroke
-  //
-  k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
-  k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: eyeR, color: white, opacity: intensity })
-  k.drawCircle({ pos: k.vec2(leftEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
-  k.drawCircle({ pos: k.vec2(rightEyeX, eyeY), radius: pupilR, color: black, opacity: intensity })
-  drawSunStrokeCircle(k, leftEyeX, eyeY, eyeR, SUN_EYE_OUTLINE_SEGMENTS, strokeRgb, SUN_FACE_LINE_WIDTH, intensity)
-  drawSunStrokeCircle(k, rightEyeX, eyeY, eyeR, SUN_EYE_OUTLINE_SEGMENTS, strokeRgb, SUN_FACE_LINE_WIDTH, intensity)
-  //
-  // Nose — simple wedge, same stroke as brows / mouth
-  //
-  drawSunNose(k, intensity, r, strokeRgb)
-  //
-  // Smile — curved arcs that widen with intensity (lip strokes match face line width)
-  //
-  drawSunSmile(k, intensity, r, white, strokeRgb)
-}
-//
-// Draws a single eyebrow as a short curved arc above an eye
-//
-function drawSunBrow(k, cx, y, halfW, intensity, strokeRgb) {
-  const segments = 8
-  for (let i = 0; i < segments; i++) {
-    const t0 = i / segments
-    const t1 = (i + 1) / segments
-    const x0 = cx - halfW + t0 * halfW * 2
-    const x1 = cx - halfW + t1 * halfW * 2
-    const archHeight = -intensity * 4
-    const y0 = y + Math.sin(t0 * Math.PI) * archHeight
-    const y1 = y + Math.sin(t1 * Math.PI) * archHeight
-    k.drawLine({
-      p1: k.vec2(x0, y0),
-      p2: k.vec2(x1, y1),
-      width: SUN_FACE_LINE_WIDTH,
-      color: strokeRgb,
-      opacity: intensity
-    })
+  const dt = k.dt()
+  const darkness = DayNight.getDarkness()
+  if (isHovering) {
+    state.hoverTimer += dt
+  } else {
+    state.hoverTimer = 0
+  }
+  const canEmit = isHovering
+    && state.hoverTimer < SUN_RAY_HOVER_DURATION
+    && state.rays.length < SUN_RAY_MAX_COUNT
+    && darkness < SUN_RAY_NIGHT_DARKNESS
+  if (canEmit) {
+    state.emitTimer -= dt
+    if (state.emitTimer <= 0) {
+      spawnSunRay(state)
+      state.emitTimer = SUN_RAY_EMIT_RATE
+    }
+  }
+  for (let i = state.rays.length - 1; i >= 0; i--) {
+    const ray = state.rays[i]
+    ray.x += ray.vx * dt
+    ray.y += ray.vy * dt
+    ray.life -= dt / ray.maxLife
+    if (ray.life <= 0) state.rays.splice(i, 1)
   }
 }
 //
-// Approximate circle outline from short segments (same stroke as brows / mouth)
+// Spawn one ray from the sun's edge at a random angle
 //
-function drawSunStrokeCircle(k, cx, cy, radius, segments, strokeRgb, lineWidth, opacity) {
-  for (let i = 0; i < segments; i++) {
-    const a0 = (i / segments) * Math.PI * 2
-    const a1 = ((i + 1) / segments) * Math.PI * 2
-    k.drawLine({
-      p1: k.vec2(cx + Math.cos(a0) * radius, cy + Math.sin(a0) * radius),
-      p2: k.vec2(cx + Math.cos(a1) * radius, cy + Math.sin(a1) * radius),
-      width: lineWidth,
-      color: strokeRgb,
-      opacity
-    })
-  }
-}
-//
-// Small inverted-V nose between eyes and mouth
-//
-function drawSunNose(k, intensity, scaleR, strokeRgb) {
-  const nx = SUN_X
-  const yTop = SUN_Y + SUN_NOSE_OFFSET_Y * scaleR
-  const yBot = yTop + SUN_NOSE_DEPTH * scaleR
-  const half = SUN_NOSE_HALF_W * scaleR
-  const w = SUN_FACE_LINE_WIDTH
-  k.drawLine({
-    p1: k.vec2(nx - half, yBot),
-    p2: k.vec2(nx, yTop),
-    width: w,
-    color: strokeRgb,
-    opacity: intensity
-  })
-  k.drawLine({
-    p1: k.vec2(nx + half, yBot),
-    p2: k.vec2(nx, yTop),
-    width: w,
-    color: strokeRgb,
-    opacity: intensity
+function spawnSunRay(state) {
+  const angle = Math.random() * Math.PI * 2
+  const speed = SUN_RAY_SPEED_MIN + Math.random() * (SUN_RAY_SPEED_MAX - SUN_RAY_SPEED_MIN)
+  const maxLife = SUN_RAY_LIFE_MIN + Math.random() * (SUN_RAY_LIFE_MAX - SUN_RAY_LIFE_MIN)
+  const radius = SUN_RAY_GLOW_R_MIN + Math.random() * (SUN_RAY_GLOW_R_MAX - SUN_RAY_GLOW_R_MIN)
+  state.rays.push({
+    x: SUN_X + Math.cos(angle) * SUN_RADIUS,
+    y: SUN_Y + Math.sin(angle) * SUN_RADIUS,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    life: 1.0,
+    maxLife,
+    radius
   })
 }
 //
-// Draws an unhinged grin on the sun with upper lip, teeth, and lower lip.
-// At low intensity it is a subtle line; at full intensity a wide deranged smile.
+// Draw all active rays as bright lines flying outward from the sun edge
 //
-function drawSunSmile(k, intensity, r, white, strokeRgb) {
-  const mouthY = SUN_Y + SUN_MOUTH_Y * r
-  const mouthW = SUN_MOUTH_WIDTH * r * (0.5 + intensity * 0.7)
-  const curveDepth = intensity * SUN_MOUTH_HEIGHT * r * 1.2
-  const segments = 12
-  //
-  // Upper lip — curved arc above the mouth opening (single stroke style)
-  //
-  const upperLipY = mouthY - 1
-  for (let i = 0; i < segments; i++) {
-    const t0 = i / segments
-    const t1 = (i + 1) / segments
-    const x0 = SUN_X - mouthW / 2 + t0 * mouthW
-    const x1 = SUN_X - mouthW / 2 + t1 * mouthW
-    const lipCurve = -intensity * 3
-    const y0 = upperLipY + Math.sin(t0 * Math.PI) * lipCurve
-    const y1 = upperLipY + Math.sin(t1 * Math.PI) * lipCurve
+function drawSunRays(k, state) {
+  for (const ray of state.rays) {
+    const op = ray.life
+    const len = ray.radius * 5
+    const nx = ray.vx / Math.sqrt(ray.vx * ray.vx + ray.vy * ray.vy)
+    const ny = ray.vy / Math.sqrt(ray.vx * ray.vx + ray.vy * ray.vy)
     k.drawLine({
-      p1: k.vec2(x0, y0),
-      p2: k.vec2(x1, y1),
-      width: SUN_FACE_LINE_WIDTH,
-      color: strokeRgb,
-      opacity: intensity
+      p1: k.vec2(ray.x, ray.y),
+      p2: k.vec2(ray.x + nx * len * 1.5, ray.y + ny * len * 1.5),
+      width: ray.radius * 0.8,
+      color: k.rgb(255, 248, 180),
+      opacity: op * 0.18
     })
-  }
-  //
-  // Lower lip — same stroke as upper lip (no second gray band from filled discs)
-  //
-  for (let i = 0; i < segments; i++) {
-    const t0 = i / segments
-    const t1 = (i + 1) / segments
-    const x0 = SUN_X - mouthW / 2 + t0 * mouthW
-    const x1 = SUN_X - mouthW / 2 + t1 * mouthW
-    const lowerY0 = mouthY + Math.sin(t0 * Math.PI) * curveDepth + 1
-    const lowerY1 = mouthY + Math.sin(t1 * Math.PI) * curveDepth + 1
     k.drawLine({
-      p1: k.vec2(x0, lowerY0),
-      p2: k.vec2(x1, lowerY1),
-      width: SUN_FACE_LINE_WIDTH,
-      color: strokeRgb,
-      opacity: intensity
-    })
-  }
-  //
-  // Teeth — visible when smile opens wide enough, slightly uneven
-  //
-  if (intensity > 0.3) {
-    const toothOpacity = (intensity - 0.3) / 0.7
-    const toothW = SUN_TOOTH_WIDTH * r
-    const toothH = SUN_TOOTH_HEIGHT * r * intensity
-    const toothTopY = mouthY - 1
-    //
-    // Left tooth (noticeably taller, slightly tilted look)
-    //
-    k.drawRect({
-      pos: k.vec2(SUN_X - toothW - 3, toothTopY),
-      width: toothW * 0.9,
-      height: toothH * 1.3,
-      color: white,
-      opacity: toothOpacity
-    })
-    //
-    // Right tooth (shorter, wider)
-    //
-    k.drawRect({
-      pos: k.vec2(SUN_X + 2, toothTopY),
-      width: toothW * 1.1,
-      height: toothH * 0.85,
-      color: white,
-      opacity: toothOpacity
+      p1: k.vec2(ray.x, ray.y),
+      p2: k.vec2(ray.x + nx * len, ray.y + ny * len),
+      width: ray.radius * 0.45,
+      color: k.rgb(255, 255, 230),
+      opacity: op * 0.85
     })
   }
 }

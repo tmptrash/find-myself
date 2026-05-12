@@ -12,29 +12,29 @@
 		"zip": "npm run build && mkdir -p dist && zip -r dist/game.zip dist -x \"**/.DS_Store\""
 	},
 	"build": {
-    "appId": "com.findyourself.game",
-    "productName": "Find Yourself",
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ],
-    "directories": {
-      "buildResources": "build"
-    },
-    "mac": {
-      "target": "dmg",
+		"appId": "com.findyourself.game",
+		"productName": "Find Yourself",
+		"files": [
+			"dist/**/*",
+			"electron/**/*"
+		],
+		"directories": {
+			"buildResources": "build"
+		},
+		"mac": {
+			"target": "dmg",
 			"icon": "assets/icon.png"
-    },
-    "win": {
-      "target": "nsis",
+		},
+		"win": {
+			"target": "nsis",
 			"icon": "assets/icon.png"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
-  },
+		},
+		"linux": {
+			"target": "AppImage"
+		}
+	},
 	"dependencies": {
-		"kaplay": "^3001.0.19"
+		"kaplay": "latest"
 	},
 	"devDependencies": {
 		"@types/node": "^24.7.2",

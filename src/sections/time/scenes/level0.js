@@ -508,7 +508,11 @@ export function sceneLevel0(k) {
       digitCount: 36,
       fakeDigitCount: 0,
       sfx: sound,
-      levelIndicator
+      levelIndicator,
+      //
+      // Skip ones at lamp pole footprints: gaLeft(192) + LAMP_X_OFFSETS[1..3]
+      //
+      excludeX: [192 + 480, 192 + 810, 192 + 1140]
     })
     //
     // Tooltip for TIME level indicator letters

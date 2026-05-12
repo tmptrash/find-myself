@@ -27,6 +27,20 @@ import * as Cursor from "./utils/cursor.js"
 //
 const NETWORK_ASSET_PATTERN = /\.(mp3|png|js|css|ttf|woff2?)(\?|$)/i
 //
+// WebGL context fallback:
+// Some browser/device combos expose only "experimental-webgl" (or report webgl2 first).
+// Kaplay requests "webgl"; remap that request to compatible alternatives before init.
+//
+const originalGetContext = HTMLCanvasElement.prototype.getContext
+HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+  if (type === 'webgl') {
+    return originalGetContext.call(this, 'webgl', ...args)
+      || originalGetContext.call(this, 'experimental-webgl', ...args)
+      || originalGetContext.call(this, 'webgl2', ...args)
+  }
+  return originalGetContext.call(this, type, ...args)
+}
+//
 // Game initialization
 //
 const k = kaplay({
@@ -126,11 +140,11 @@ const assetTasks = [
   //
   () => {
     const PLATFORM_BOTTOM_HEIGHT_LEVEL0 = 250
-    CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL0, 'city-background', true, false, true, 2.0)
+    CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL0, 'city-background', false, false, true, 2.0, true)
   },
   () => {
     const PLATFORM_BOTTOM_HEIGHT_LEVEL1 = 150
-    CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1', true, false, true, 2.0)
+    CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1', false, false, true, 2.0, true)
   },
   () => {
     const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150

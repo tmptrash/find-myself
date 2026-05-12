@@ -1,5 +1,7 @@
 import { CFG } from '../cfg.js'
 import { initScene, startTimeSectionMusic, startClockMusic, checkSpeedBonus, createSunHoverFace } from '../components/scene-helper.js'
+import * as MovingCars from '../components/moving-cars.js'
+import { getDarkness } from '../utils/time-day-night.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -12,6 +14,7 @@ import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
 
 //
 const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
@@ -128,6 +131,7 @@ export function sceneLevel1(k) {
       levelName: 'level-time.1',
       levelNumber: 2,
       skipPlatforms: true,
+      spriteName: 'city-background-level1',
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -219,6 +223,17 @@ export function sceneLevel1(k) {
     // Create background birds
     //
     const birds = BackgroundBirds.create(k)
+    //
+    // Street ambience: lamps, grass, bird/cricket sounds
+    //
+    const level1Ambience = TimeLevel0Ambience.create({
+      k,
+      sound,
+      platformSideWidth: PLATFORM_SIDE_WIDTH,
+      platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
+      topPlatformHeight: PLATFORM_TOP_HEIGHT
+    })
+    k.onSceneLeave(() => level1Ambience.cleanup())
     //
     // Create FPS counter
     //
@@ -545,15 +560,19 @@ export function sceneLevel1(k) {
     //
     const timeSpikes = TimeSpikes.create({
       k,
-      startX: PLATFORM_SIDE_WIDTH + 10,  // Start from left wall + 10px (moved right)
-      endX: k.width() - PLATFORM_SIDE_WIDTH - 20,  // End closer to right wall (added one more spike)
-      y: BOTTOM_PLATFORM_TOP - 10,  // At bottom invisible platform level (910)
+      startX: PLATFORM_SIDE_WIDTH + 10,
+      endX: k.width() - PLATFORM_SIDE_WIDTH - 20,
+      y: BOTTOM_PLATFORM_TOP - 10,
       hero,
       currentLevel: 'level-time.1',
-      digitCount: 50,  // Increased to make spikes closer together
-      fakeDigitCount: 0,  // All spikes cut (no fake spikes)
+      digitCount: 50,
+      fakeDigitCount: 0,
       sfx: sound,
-      levelIndicator
+      levelIndicator,
+      //
+      // Skip ones at lamp pole footprints: gaLeft(192) + LAMP_X_OFFSETS
+      //
+      excludeX: [192 + 150, 192 + 480, 192 + 810, 192 + 1140]
     })
     //
     // Spawn hero immediately
@@ -942,7 +961,7 @@ function createMovingCars(k) {
   const gameAreaLeft = PLATFORM_SIDE_WIDTH
   const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH
   const gameAreaWidth = gameAreaRight - gameAreaLeft
-  
+  const cars = []
   for (let i = 0; i < carCount; i++) {
     const direction = Math.random() > 0.5 ? 1 : -1
     const carSpeed = (carSpeedMin + Math.random() * (carSpeedMax - carSpeedMin)) * direction
@@ -956,12 +975,10 @@ function createMovingCars(k) {
     const roofColor = bodyColor - 15
     const wheelColor = 30 + Math.random() * 15
     const windowColor = 80 + Math.random() * 20
-    
     const padding = 20
     const canvasHeight = roofHeight + bodyHeight + wheelRadius + padding * 2
     const centerY = canvasHeight - padding - wheelRadius
     const carY = platformTopY - (centerY + wheelRadius - canvasHeight / 2)
-    
     const carSpriteDataURL = createBlurredCarSprite({
       bodyWidth,
       bodyHeight,
@@ -974,34 +991,45 @@ function createMovingCars(k) {
       windowColor,
       speed: carSpeed
     })
-    
     const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
     k.loadSprite(spriteId, carSpriteDataURL)
-    
     const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
-    
-    k.add([
+    //
+    // Headlight geometry: front bumper area at hood level
+    //
+    const headlightOffsetX = bodyWidth * 0.68
+    const headlightOffsetY = -(canvasHeight / 2 - 20 - wheelRadius - bodyHeight * 0.30)
+    const frontSign = carSpeed > 0 ? 1 : -1
+    const carObj = k.add([
       k.sprite(spriteId),
       k.pos(startX, carY),
       k.anchor('center'),
       k.z(15.6),
       {
         speed: carSpeed,
-        bodyWidth: bodyWidth,
-        gameAreaLeft: gameAreaLeft,
-        gameAreaRight: gameAreaRight,
+        bodyWidth,
+        gameAreaLeft,
+        gameAreaRight,
+        headlightOffsetX,
+        headlightOffsetY,
+        frontSign,
         update() {
           this.pos.x += this.speed * k.dt()
-          
           if (this.speed > 0 && this.pos.x > this.gameAreaRight + 100) {
             this.pos.x = this.gameAreaLeft - this.bodyWidth - 100
           } else if (this.speed < 0 && this.pos.x < this.gameAreaLeft - this.bodyWidth - 100) {
             this.pos.x = this.gameAreaRight + 100
           }
+          //
+          // Dim body at night so only headlights remain prominent
+          //
+          this.opacity = Math.max(0.08, 1 - getDarkness() * 1.15)
         }
       }
     ])
+    cars.push(carObj)
   }
+  MovingCars.createHeadlightLayer(k, cars)
 }
 
 /**

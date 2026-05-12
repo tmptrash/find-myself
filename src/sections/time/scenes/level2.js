@@ -11,6 +11,9 @@ import { toPng, parseHex, hexToRgb, rgbToHex, getRGB } from '../../../utils/help
 import * as PixelClouds from '../../../components/pixel-clouds.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as BackgroundBirds from '../components/background-birds.js'
+import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
+import * as MovingCars from '../components/moving-cars.js'
+import { getDarkness } from '../utils/time-day-night.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
@@ -466,6 +469,12 @@ export function sceneLevel2(k) {
       levelName: 'level-time.2',
       levelNumber: 3,
       skipPlatforms: true,
+      spriteName: 'city-background-level2',
+      showSun: false,
+      //
+      // Stars at z=14.3: below clouds (14.5); moon stays in the overlay layer (bright)
+      //
+      starLayerZ: 14.3,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT + 17,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -573,6 +582,21 @@ export function sceneLevel2(k) {
     // Create background birds
     //
     const birds = BackgroundBirds.create(k)
+    //
+    // Street ambience: 6 lamps spread across the wider level (2 extra vs level 0/1)
+    //
+    const level2Ambience = TimeLevel0Ambience.create({
+      k,
+      sound,
+      platformSideWidth: PLATFORM_SIDE_WIDTH,
+      platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
+      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      lampXOffsets: [130, 435, 740, 1045, 1350],
+      lampModes: ['flicker', 'steady', 'flicker', 'off', 'steady'],
+      showGrass: false,
+      showSnow: true
+    })
+    k.onSceneLeave(() => level2Ambience.cleanup())
     //
     // Create custom platforms for this level
     //
@@ -694,15 +718,19 @@ export function sceneLevel2(k) {
     //
     TimeSpikes.create({
       k,
-      startX: PLATFORM_SIDE_WIDTH + 10,  // Start from left wall + 10px
-      endX: k.width() - PLATFORM_SIDE_WIDTH - 10,  // End at right wall - 10px
-      y: k.height() - PLATFORM_BOTTOM_HEIGHT - 10,  // Higher, partially in snow
+      startX: PLATFORM_SIDE_WIDTH + 10,
+      endX: k.width() - PLATFORM_SIDE_WIDTH - 10,
+      y: k.height() - PLATFORM_BOTTOM_HEIGHT - 10,
       hero,
       currentLevel: 'level-time.2',
-      digitCount: 50,  // Many spikes close together
-      fakeDigitCount: 0,  // All spikes kill (no bunnies)
+      digitCount: 50,
+      fakeDigitCount: 0,
       sfx: sound,
-      levelIndicator
+      levelIndicator,
+      //
+      // Skip ones at lamp pole footprints: gaLeft(50) + level2 LAMP_X_OFFSETS
+      //
+      excludeX: [50 + 130, 50 + 435, 50 + 740, 50 + 1045, 50 + 1350]
     })
     //
     // Create snow drifts on bottom platform floor
@@ -1830,11 +1858,7 @@ function createMovingCars(k) {
   const gameAreaLeft = PLATFORM_SIDE_WIDTH
   const gameAreaRight = k.width() - PLATFORM_SIDE_WIDTH
   const gameAreaWidth = gameAreaRight - gameAreaLeft
-  
-  //
-  // Create cars moving in different directions
-  // Distribute cars horizontally across the platform at start
-  //
+  const cars = []
   for (let i = 0; i < carCount; i++) {
     const direction = Math.random() > 0.5 ? 1 : -1  // Left (-1) or right (1)
     const carSpeed = (carSpeedMin + Math.random() * (carSpeedMax - carSpeedMin)) * direction
@@ -1888,35 +1912,45 @@ function createMovingCars(k) {
     // Distribute cars horizontally across the platform at start (not all from edges)
     //
     const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
-    
-    k.add([
+    //
+    // Headlight geometry: front bumper at hood level
+    //
+    const headlightOffsetX = bodyWidth * 0.68
+    const headlightOffsetY = -(canvasHeight / 2 - 20 - wheelRadius - bodyHeight * 0.30)
+    const frontSign = carSpeed > 0 ? 1 : -1
+    const carObj = k.add([
       k.sprite(spriteId),
       k.pos(startX, carY),
       k.anchor('center'),
-      k.z(14.2),  // Above background (14) but below snow (14.5)
+      k.z(14.2),
       {
         speed: carSpeed,
-        bodyWidth: bodyWidth,
-        gameAreaLeft: gameAreaLeft,
-        gameAreaRight: gameAreaRight,
+        bodyWidth,
+        gameAreaLeft,
+        gameAreaRight,
+        headlightOffsetX,
+        headlightOffsetY,
+        frontSign,
         update() {
-          //
-          // Move car horizontally
-          //
           this.pos.x += this.speed * k.dt()
-          
-          //
-          // Reset car position when it goes off-screen (wrap around)
-          //
           if (this.speed > 0 && this.pos.x > this.gameAreaRight + 100) {
             this.pos.x = this.gameAreaLeft - this.bodyWidth - 100
           } else if (this.speed < 0 && this.pos.x < this.gameAreaLeft - this.bodyWidth - 100) {
             this.pos.x = this.gameAreaRight + 100
           }
+          //
+          // Dim body at night so only headlights remain prominent
+          //
+          this.opacity = Math.max(0.08, 1 - getDarkness() * 1.15)
         }
       }
     ])
+    cars.push(carObj)
   }
+  //
+  // Match level 1 behavior: baked blur visible by day, overlay halos fade in at night
+  //
+  MovingCars.createHeadlightLayer(k, cars)
 }
 
 /**

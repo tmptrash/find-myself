@@ -472,10 +472,9 @@ export function sceneLevel2(k) {
       spriteName: 'city-background-level2',
       showSun: false,
       //
-      // Stars and moon below clouds (14.5) so moon appears behind cloud layer
+      // Stars below clouds; moon stays in overlay for clear foreground visibility
       //
       starLayerZ: 14.3,
-      moonLayerZ: 14.4,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT + 17,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,

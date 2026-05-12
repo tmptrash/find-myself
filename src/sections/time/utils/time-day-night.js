@@ -52,6 +52,8 @@ const MOON_GLOW_MAX_FACTOR = 1.4
 //
 const MOON_APPEAR_DARKNESS = 0.62
 const MOON_APPEAR_RANGE = 0.16
+const MOON_BEHIND_CLOUD_BRIGHTNESS_BOOST = 2.4
+const MOON_BEHIND_CLOUD_COLOR_BOOST = 24
 const MOON_COLOR_R = 200
 const MOON_COLOR_G = 195
 const MOON_COLOR_B = 180
@@ -334,7 +336,13 @@ function drawSun(k, darkness) {
 function drawMoon(inst, darkness) {
   const k = inst.k
   const moonOpacity = Math.min(1, (darkness - MOON_APPEAR_DARKNESS) / MOON_APPEAR_RANGE)
-  const mc = k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
+  const layerBoost = inst.moonInOverlay ? 1 : MOON_BEHIND_CLOUD_BRIGHTNESS_BOOST
+  const boostedOpacity = Math.min(1, moonOpacity * layerBoost)
+  const cb = inst.moonInOverlay ? 0 : MOON_BEHIND_CLOUD_COLOR_BOOST
+  const moonR = Math.min(255, MOON_COLOR_R + cb)
+  const moonG = Math.min(255, MOON_COLOR_G + cb)
+  const moonB = Math.min(255, MOON_COLOR_B + cb)
+  const mc = k.rgb(moonR, moonG, moonB)
   const pos = k.vec2(MOON_X, MOON_Y)
   //
   // Soft halo: many concentric circles, linear falloff with low max opacity (gentle diffuse glow)
@@ -342,13 +350,13 @@ function drawMoon(inst, darkness) {
   for (let s = 0; s < MOON_GLOW_STEPS; s++) {
     const t = s / MOON_GLOW_STEPS
     const r = MOON_RADIUS * (1 + (1 - t) * (MOON_GLOW_MAX_FACTOR - 1))
-    const op = moonOpacity * (1 - t) * 0.09
+    const op = boostedOpacity * (1 - t) * 0.12
     k.drawCircle({ pos, radius: r, color: mc, opacity: op })
   }
   //
   // Main disc
   //
-  k.drawCircle({ pos, radius: MOON_RADIUS, color: mc, opacity: moonOpacity * 0.93 })
+  k.drawCircle({ pos, radius: MOON_RADIUS, color: mc, opacity: boostedOpacity * 0.98 })
   //
   // Craters: slightly darker circles layered on top of the disc
   //
@@ -358,8 +366,8 @@ function drawMoon(inst, darkness) {
     k.drawCircle({
       pos: k.vec2(cx, cy),
       radius: cr.r * MOON_RADIUS,
-      color: k.rgb(MOON_COLOR_R - cr.dark, MOON_COLOR_G - cr.dark, MOON_COLOR_B - cr.dark),
-      opacity: moonOpacity * 0.85
+      color: k.rgb(moonR - cr.dark, moonG - cr.dark, moonB - cr.dark),
+      opacity: boostedOpacity * 0.88
     })
   }
 }

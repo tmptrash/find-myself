@@ -148,7 +148,7 @@ const assetTasks = [
   },
   () => {
     const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150
-    CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false, true, true, 0.4)
+    CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false, true, true, 0.4, true)
   },
   () => {
     const LOWER_CORRIDOR_Y_LEVEL3 = 680

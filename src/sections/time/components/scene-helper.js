@@ -12,7 +12,7 @@ const MUSIC_START_DELAY = 6.0
 //
 const SUN_X = CFG.visual.screen.width * 0.85 - 50
 const SUN_Y = CFG.visual.screen.height * 0.2 + 150
-const SUN_RADIUS = 52
+const SUN_RADIUS = 112
 //
 // Sun hover detection radius margin
 //

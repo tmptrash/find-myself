@@ -95,7 +95,7 @@ const OWL_APPEAR_DARKNESS = 0.45
 //
 const SUN_X = CFG.visual.screen.width * 0.85 - 50
 const SUN_Y = CFG.visual.screen.height * 0.2 + 150
-const SUN_RADIUS = 52
+const SUN_RADIUS = 112
 //
 // Sun color matches TIME letters / anti-hero accent in the time section
 //
@@ -106,7 +106,7 @@ const SUN_COLOR_B = 0
 // Smooth radial fade: more steps avoid visible ring transitions
 //
 const SUN_GLOW_STEPS = 28
-const SUN_GLOW_MAX_FACTOR = 1.45
+const SUN_GLOW_MAX_FACTOR = 1.22
 //
 // Sun fades from 100% → 0% opacity as darkness goes from SUN_FADE_START → SUN_FADE_END
 //

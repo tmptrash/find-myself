@@ -62,7 +62,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     //
     const sunX = screenWidth * 0.85 - 50
     const sunY = screenHeight * 0.2 + 150  // Moved down by 150px
-    const sunRadius = 52
+    const sunRadius = 112
     const pulse = 1.0  // Static pulse for static image
     
     //
@@ -74,7 +74,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       for (let i = 5; i > 0; i--) {
         const sunGradient = ctx.createRadialGradient(
           sunX, sunY, 0,
-          sunX, sunY, sunRadius * i * 0.5 * pulse
+          sunX, sunY, sunRadius * i * 0.36 * pulse
         )
         
         const opacity = 0.06 / i  // Increased brightness (was 0.03 / i)
@@ -83,7 +83,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
         
         ctx.fillStyle = sunGradient
         ctx.beginPath()
-        ctx.arc(sunX, sunY, sunRadius * i * 0.5 * pulse, 0, Math.PI * 2)
+        ctx.arc(sunX, sunY, sunRadius * i * 0.36 * pulse, 0, Math.PI * 2)
         ctx.fill()
       }
       

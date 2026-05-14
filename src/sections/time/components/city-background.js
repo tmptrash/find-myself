@@ -34,6 +34,19 @@ const MAX_WINDOW_GLOWS = 180
 // Probability each drawn window is sampled for night glow — keeps coverage even across all buildings
 //
 const WINDOW_SAMPLE_RATE = 0.18
+//
+// Level 0 tree tuning: higher trunks and denser green foliage
+//
+const LUSH_LEVEL0_MIN_PLATFORM_HEIGHT = 220
+const LUSH_LEVEL0_CROWN_WIDTH_MIN = 58
+const LUSH_LEVEL0_CROWN_WIDTH_MAX = 108
+const LUSH_LEVEL0_TRUNK_HEIGHT_MIN = 88
+const LUSH_LEVEL0_TRUNK_HEIGHT_MAX = 162
+const LUSH_LEVEL0_TREE_SPACING_MIN = 34
+const LUSH_LEVEL0_TREE_SPACING_MAX = 88
+const LUSH_LEVEL0_EXTRA_CLUSTERS = 2
+const LUSH_LEVEL0_LEAF_COUNT_BOOST = 1.75
+const LUSH_LEVEL0_LEAF_SIZE_BOOST = 1.2
 
 export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun) {
   const screenWidth = CFG.visual.screen.width
@@ -377,24 +390,53 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     drawBlurredOrganicTrees(ctx, {
       screenWidth,
       bottomPlatformY,
-      autumnLeaves
+      autumnLeaves,
+      lushGreenTrees: !autumnLeaves && bottomPlatformHeight >= LUSH_LEVEL0_MIN_PLATFORM_HEIGHT
     })
   })
   return { dataUrl, windows }
 }
 
 function drawBlurredOrganicTrees(ctx, cfg) {
-  const { screenWidth, bottomPlatformY, autumnLeaves } = cfg
+  const { screenWidth, bottomPlatformY, autumnLeaves, lushGreenTrees = false } = cfg
   ctx.filter = 'blur(7px)'
   let currentX = 0
   while (currentX < screenWidth * 1.2) {
-    const crownWidth = randomRange(44, 92)
+    const crownWidth = lushGreenTrees
+      ? randomRange(LUSH_LEVEL0_CROWN_WIDTH_MIN, LUSH_LEVEL0_CROWN_WIDTH_MAX)
+      : randomRange(44, 92)
     const treeX = currentX + randomRange(0, crownWidth * 0.28)
-    const trunkHeight = randomRange(56, 125)
+    const trunkHeight = lushGreenTrees
+      ? randomRange(LUSH_LEVEL0_TRUNK_HEIGHT_MIN, LUSH_LEVEL0_TRUNK_HEIGHT_MAX)
+      : randomRange(56, 125)
     drawOrganicTrunk(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
     const crownY = bottomPlatformY - trunkHeight - randomRange(14, 24)
-    drawOrganicLeafCluster(ctx, treeX + crownWidth * 0.5, crownY, crownWidth, autumnLeaves)
-    const treeSpacing = randomRange(52, 118)
+    drawOrganicLeafCluster(
+      ctx,
+      treeX + crownWidth * 0.5,
+      crownY,
+      crownWidth,
+      autumnLeaves,
+      lushGreenTrees ? LUSH_LEVEL0_LEAF_COUNT_BOOST : 1,
+      lushGreenTrees ? LUSH_LEVEL0_LEAF_SIZE_BOOST : 1
+    )
+    if (lushGreenTrees) {
+      for (let i = 0; i < LUSH_LEVEL0_EXTRA_CLUSTERS; i++) {
+        const sideSign = i % 2 === 0 ? -1 : 1
+        drawOrganicLeafCluster(
+          ctx,
+          treeX + crownWidth * (0.5 + sideSign * randomRange(0.08, 0.14)),
+          crownY - randomRange(8, 18),
+          crownWidth * randomRange(0.72, 0.86),
+          autumnLeaves,
+          LUSH_LEVEL0_LEAF_COUNT_BOOST * 0.82,
+          LUSH_LEVEL0_LEAF_SIZE_BOOST
+        )
+      }
+    }
+    const treeSpacing = lushGreenTrees
+      ? randomRange(LUSH_LEVEL0_TREE_SPACING_MIN, LUSH_LEVEL0_TREE_SPACING_MAX)
+      : randomRange(52, 118)
     currentX += crownWidth + treeSpacing
   }
   ctx.filter = 'none'
@@ -426,8 +468,8 @@ function drawOrganicTrunk(ctx, centerX, bottomY, trunkHeight) {
   }
 }
 
-function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLeaves) {
-  const leafCount = 28 + Math.floor(Math.random() * 24)
+function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLeaves, leafCountBoost = 1, leafSizeBoost = 1) {
+  const leafCount = Math.floor((28 + Math.floor(Math.random() * 24)) * leafCountBoost)
   const spreadX = crownWidth * randomRange(0.4, 0.58)
   const spreadY = crownWidth * randomRange(0.3, 0.42)
   for (let i = 0; i < leafCount; i++) {
@@ -435,7 +477,7 @@ function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLe
     const dist = Math.random()
     const lx = centerX + Math.cos(angle) * spreadX * dist
     const ly = crownCenterY + Math.sin(angle) * spreadY * dist * 0.8
-    const size = randomRange(4.4, 8.8)
+    const size = randomRange(4.4, 8.8) * leafSizeBoost
     const rot = randomRange(-Math.PI, Math.PI)
     const leafColor = pickLeafColor(autumnLeaves)
     drawLeafShape(ctx, lx, ly, size, rot, leafColor)

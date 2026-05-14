@@ -35,9 +35,8 @@ const MAX_WINDOW_GLOWS = 180
 //
 const WINDOW_SAMPLE_RATE = 0.18
 //
-// Level 0 tree tuning: higher trunks and denser green foliage
+// Level 0-1 tree tuning: higher trunks and denser green foliage
 //
-const LUSH_LEVEL0_MIN_PLATFORM_HEIGHT = 220
 const LUSH_LEVEL0_CROWN_WIDTH_MIN = 58
 const LUSH_LEVEL0_CROWN_WIDTH_MAX = 108
 const LUSH_LEVEL0_TRUNK_HEIGHT_MIN = 88
@@ -47,6 +46,10 @@ const LUSH_LEVEL0_TREE_SPACING_MAX = 88
 const LUSH_LEVEL0_EXTRA_CLUSTERS = 2
 const LUSH_LEVEL0_LEAF_COUNT_BOOST = 1.75
 const LUSH_LEVEL0_LEAF_SIZE_BOOST = 1.2
+const LUSH_LEVEL0_BRANCH_COUNT_MIN = 6
+const LUSH_LEVEL0_BRANCH_COUNT_MAX = 10
+const LUSH_LEVEL0_BRANCH_LENGTH_MIN = 16
+const LUSH_LEVEL0_BRANCH_LENGTH_MAX = 34
 
 export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun) {
   const screenWidth = CFG.visual.screen.width
@@ -391,7 +394,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       screenWidth,
       bottomPlatformY,
       autumnLeaves,
-      lushGreenTrees: !autumnLeaves && bottomPlatformHeight >= LUSH_LEVEL0_MIN_PLATFORM_HEIGHT
+      lushGreenTrees: !autumnLeaves
     })
   })
   return { dataUrl, windows }
@@ -410,6 +413,7 @@ function drawBlurredOrganicTrees(ctx, cfg) {
       ? randomRange(LUSH_LEVEL0_TRUNK_HEIGHT_MIN, LUSH_LEVEL0_TRUNK_HEIGHT_MAX)
       : randomRange(56, 125)
     drawOrganicTrunk(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
+    lushGreenTrees && drawOrganicBranches(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
     const crownY = bottomPlatformY - trunkHeight - randomRange(14, 24)
     drawOrganicLeafCluster(
       ctx,
@@ -465,6 +469,30 @@ function drawOrganicTrunk(ctx, centerX, bottomY, trunkHeight) {
     ctx.stroke()
     prevX = nextX
     prevY = nextY
+  }
+}
+//
+// Extra branch strokes for lush green trees (levels 0 and 1)
+//
+function drawOrganicBranches(ctx, centerX, bottomY, trunkHeight) {
+  const branchCount = randomInt(LUSH_LEVEL0_BRANCH_COUNT_MIN, LUSH_LEVEL0_BRANCH_COUNT_MAX)
+  const branchColor = randomInt(34, 52)
+  ctx.strokeStyle = `rgba(${branchColor}, ${branchColor - 4}, ${branchColor - 10}, 0.86)`
+  ctx.lineCap = 'round'
+  for (let i = 0; i < branchCount; i++) {
+    const t = randomRange(0.22, 0.84)
+    const branchY = bottomY - trunkHeight * t
+    const dir = Math.random() > 0.5 ? 1 : -1
+    const branchLen = randomRange(LUSH_LEVEL0_BRANCH_LENGTH_MIN, LUSH_LEVEL0_BRANCH_LENGTH_MAX) * (1 - t * 0.35)
+    const rise = branchLen * randomRange(0.22, 0.45)
+    const branchStartX = centerX + dir * randomRange(0.6, 2.2)
+    const branchEndX = branchStartX + dir * branchLen
+    const branchEndY = branchY - rise
+    ctx.lineWidth = randomRange(1.2, 2.6)
+    ctx.beginPath()
+    ctx.moveTo(branchStartX, branchY)
+    ctx.lineTo(branchEndX, branchEndY)
+    ctx.stroke()
   }
 }
 

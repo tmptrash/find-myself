@@ -1,4 +1,4 @@
-import { toPng } from '../../../utils/helper.js'
+import { toCanvas } from '../../../utils/helper.js'
 import { getDarkness } from '../utils/time-day-night.js'
 /**
  * Creates a blurred car sprite using canvas with blur filter
@@ -25,7 +25,7 @@ function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, 
   const centerX = canvasWidth / 2
   const centerY = canvasHeight - padding - wheelRadius
   
-  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+  return toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
     //
     // Clear canvas with transparent background
     //

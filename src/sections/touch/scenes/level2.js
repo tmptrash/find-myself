@@ -3,7 +3,7 @@ import { CFG as GLOBAL_CFG } from '../../../cfg.js'
 import * as Hero from '../../../components/hero.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
-import { toPng, getRGB } from '../../../utils/helper.js'
+import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -1812,7 +1812,7 @@ function createBackgroundBushesNear(k) {
   }
   
   //
-  // Create canvas and draw bushes on it using toPng
+  // Create canvas and draw bushes on it using toCanvas
   //
   const createBushesCanvas = () => {
     //
@@ -1821,7 +1821,7 @@ function createBackgroundBushesNear(k) {
     const screenCenter = k.width() / 2
     const maxDistance = Math.max(screenCenter - LEFT_MARGIN, k.width() - RIGHT_MARGIN - screenCenter)
     
-    return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+    return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
       //
       // Draw bushes on canvas with arc variation
       //
@@ -1987,7 +1987,7 @@ function createMountains(k) {
   }
   
   //
-  // Create canvas for mountains using toPng
+  // Create canvas for mountains using toCanvas
   //
   const createMountainsCanvas = () => {
     //
@@ -2032,7 +2032,7 @@ function createMountains(k) {
     const rightMountainX = screenThird * 2 - 150  // Start further left
     const rightMountainWidth = screenThird + 250  // Wider, extends to edge
     
-    return toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+    return toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
       //
       // Disable anti-aliasing for pixel art effect
       //
@@ -2124,7 +2124,7 @@ function drawBackgroundDarkestTrees(ctx) {
   }
 }
 function createBackgroundDarkestTrees(k) {
-  const png = toPng({ width: k.width(), height: k.height() }, drawBackgroundDarkestTrees)
+  const png = toCanvas({ width: k.width(), height: k.height() }, drawBackgroundDarkestTrees)
   k.loadSprite('bg-touch-level2-darkest-trees', png)  
   //
   // Draw trees canvas (behind all other trees - lowest z-index)
@@ -2169,7 +2169,7 @@ function drawBackgroundDarkTrees(ctx) {
 }
 
 function createBackgroundDarkTrees(k) {
-  const png = toPng({ width: k.width(), height: k.height() }, drawBackgroundDarkTrees)
+  const png = toCanvas({ width: k.width(), height: k.height() }, drawBackgroundDarkTrees)
   k.loadSprite('bg-touch-level2-background-dark-trees', png)
   //
   // Draw trees canvas (behind other trees)

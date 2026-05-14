@@ -11,7 +11,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { drawRealisticBird } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
-import { toPng, getRGB } from '../../../utils/helper.js'
+import { toCanvas, getRGB } from '../../../utils/helper.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import { drawThorns } from '../components/jungle-decor.js'
 import * as Tooltip from '../../../utils/tooltip.js'
@@ -1259,7 +1259,7 @@ export function sceneLevel0(k) {
     // baked grey/black leaf mid bands, front bushes/static circles (hinged organics at runtime).
     //
     const createBlackBackBaseCanvas = () => {
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         //
         // 1. Draw darkened ground area
         //
@@ -1279,26 +1279,26 @@ export function sceneLevel0(k) {
     }
     
     const createBackOrganicOverlayCanvas = () => {
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         ctx.clearRect(0, 0, k.width(), k.height())
         layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { organicOnly: true })
       })
     }
     
     const createGreyLeafMidCanvas = () => {
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         layers[1] && drawLayerToCanvas(ctx, layers[1], 0, { organicOnly: true })
       })
     }
     
     const createBlackLeafMidCanvas = () => {
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         layers[2] && drawLayerToCanvas(ctx, layers[2], 0, { organicOnly: true })
       })
     }
     
     const createFrontStaticCanvas = () => {
-      return toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         if (!layers[3]) return
         const staticTrees = layers[3].trees.filter(t => !t.branchClusters)
         const frontLayerStatic = {
@@ -4397,7 +4397,7 @@ function drawL0Fireflies(k, fireflies) {
   }
 }
 //
-// Creates small mushrooms on the ground using toPng(); skips floor puddle footprints.
+// Creates small mushrooms on the ground using toCanvas(); skips floor puddle footprints.
 //
 function createMushrooms(k, floorPuddles = []) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
@@ -4442,7 +4442,7 @@ function createMushrooms(k, floorPuddles = []) {
     // Draw mushroom to off-screen canvas
     //
     const spriteName = `mushroom-l0-${i}`
-    const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+    const dataUrl = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
       const cx = totalW / 2
       const stemTop = totalH - stemH - 2
       //
@@ -4770,7 +4770,7 @@ function buildSingleRock(k, posX, radius, spriteName) {
     }
     ctx.closePath()
   }
-  const dataUrl = toPng({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
     //
     // Soft drop shadow underneath the rock
     //

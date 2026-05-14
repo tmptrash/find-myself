@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { toPng } from '../../../utils/helper.js'
+import { toCanvas } from '../../../utils/helper.js'
 
 /**
  * Creates tree roots that grow from the bottom platform upward
@@ -382,7 +382,7 @@ export async function create(config) {
     })
     
     //
-    // Pre-render tree to an offscreen canvas for performance using toPng
+    // Pre-render tree to an offscreen canvas for performance using toCanvas
     //
     //
     // Calculate canvas size based on tree bounds
@@ -406,9 +406,9 @@ export async function create(config) {
     const offsetY = -minY + padding
     
     //
-    // Convert canvas to data URL using toPng
+    // Convert canvas to data URL using toCanvas
     //
-    const dataUrl = toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (treeCtx) => {
+    const dataUrl = toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (treeCtx) => {
       //
       // Draw root segments to canvas
       //
@@ -443,7 +443,7 @@ export async function create(config) {
     //
     // White root-only sprite for glow overlay on note touch
     //
-    const glowDataUrl = toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (glowCtx) => {
+    const glowDataUrl = toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (glowCtx) => {
       allRootSegments.forEach(segment => {
         const opacity = 0.9 - segment.depth * 0.06
         glowCtx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.3, opacity)})`

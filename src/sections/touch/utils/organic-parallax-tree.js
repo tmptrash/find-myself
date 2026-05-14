@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { toPng } from '../../../utils/helper.js'
+import { toCanvas } from '../../../utils/helper.js'
 
 //
 // Branch rotation easing used by dynamic organic-tree drawers (per frame).
@@ -376,7 +376,7 @@ export function prerenderOrganicDarkBackdropSprite(k, tree, baseSpriteName, dimR
   const h = Math.ceil(bb.maxY - bb.minY + pad * 2)
   const snap = dimOrganicTreeSnapshot(tree, dimRgbFactor, opacityScale)
   const name = `${baseSpriteName}-dark-backdrop`
-  const dataUrl = toPng({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toCanvas({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
     ctx.translate(-bb.minX + pad, -bb.minY + pad)
     drawOrganicTreeToCanvas(ctx, snap, 0)
   })
@@ -407,7 +407,7 @@ function prerenderTrunkSprite(k, tree, spriteName) {
   const trunkColorStr = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
   const rc = tree.rootColor || { r: 60, g: 40, b: 25 }
   const rootColorStr = `rgba(${rc.r}, ${rc.g}, ${rc.b}, 0.9)`
-  const dataUrl = toPng({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toCanvas({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
     ctx.translate(-minX + pad, -minY + pad)
     ctx.lineCap = 'round'
     for (const seg of tree.rootSegments) {
@@ -460,7 +460,7 @@ function prerenderClusterSprite(k, tree, cluster, spriteName) {
   const w = Math.ceil(maxX - minX + pad * 2)
   const h = Math.ceil(maxY - minY + pad * 2)
   const trunkColorStr = `rgba(${tree.trunkColor.r}, ${tree.trunkColor.g}, ${tree.trunkColor.b}, ${tree.opacity})`
-  const dataUrl = toPng({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toCanvas({ width: w, height: h, pixelRatio: 1 }, (ctx) => {
     ctx.translate(-minX + pad, -minY + pad)
     ctx.lineCap = 'round'
     for (const seg of cluster.branchSegments) {

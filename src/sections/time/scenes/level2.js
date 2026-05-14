@@ -7,7 +7,7 @@ import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as CityBackground from '../components/city-background.js'
-import { toPng, parseHex, hexToRgb, rgbToHex, getRGB } from '../../../utils/helper.js'
+import { toCanvas, parseHex, hexToRgb, rgbToHex, getRGB } from '../../../utils/helper.js'
 import * as PixelClouds from '../../../components/pixel-clouds.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as BackgroundBirds from '../components/background-birds.js'
@@ -1583,7 +1583,7 @@ function createLevelPlatforms(k, sound) {
  */
 function createRoundedCornerSprite(radius, backgroundColor) {
   const size = radius * 2
-  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+  const dataURL = toCanvas({ width: size, height: size }, (ctx) => {
     const [r, g, b] = parseHex(backgroundColor)
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
     //
@@ -1702,7 +1702,7 @@ function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, 
   const centerX = canvasWidth / 2
   const centerY = canvasHeight - padding - wheelRadius
   
-  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+  return toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
     //
     // Clear canvas with transparent background
     //

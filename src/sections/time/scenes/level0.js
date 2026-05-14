@@ -8,7 +8,7 @@ import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
+import { toCanvas, parseHex, getRGB } from '../../../utils/helper.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
 import * as BackgroundBirds from '../components/background-birds.js'
@@ -730,7 +730,7 @@ function createGroundStripe(k) {
  */
 function createRoundedCornerSprite(radius, backgroundColor) {
   const size = radius * 2
-  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+  const dataURL = toCanvas({ width: size, height: size }, (ctx) => {
     const [r, g, b] = parseHex(backgroundColor)
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
     //

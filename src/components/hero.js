@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, onPhysicalKeyPress, getColor, parseHex, getRGB, toPng } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, onPhysicalKeyPress, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
@@ -363,9 +363,10 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
       try {
         const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
         //
-        // Ensure sprite data is valid before loading
+        // createFrame now returns an HTMLCanvasElement (was a data URL string).
+        // Ensure we got a valid sprite source before passing to loadSprite.
         //
-        if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
+        if (spriteData) {
           try {
             k.loadSprite(spriteName, spriteData)
           } catch (loadError) {
@@ -387,7 +388,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
       const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
-      if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
+      if (spriteData) {
         try {
           k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
         } catch (loadError) {
@@ -408,7 +409,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
       const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
-      if (spriteData && typeof spriteData === 'string' && spriteData.startsWith('data:')) {
+      if (spriteData) {
         try {
           k.loadSprite(`${prefix}-run-${frame}`, spriteData)
         } catch (loadError) {
@@ -2253,10 +2254,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     rightLegHeight = legHeight
   }
   //
-  // Create sprite using toPng
+  // Create sprite using toCanvas
   //
   try {
-    return toPng({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: RENDER_SCALE }, (ctx) => {
+    return toCanvas({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: RENDER_SCALE }, (ctx) => {
       ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
       //
       // Black outline (1px) — filled rounded rect, then body on top

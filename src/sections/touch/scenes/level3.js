@@ -8,7 +8,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import * as GlowBug from '../components/glow-bug.js'
 import * as ShadowCreature from '../components/shadow-creature.js'
 import * as JungleDecor from '../components/jungle-decor.js'
-import { toPng, getRGB } from '../../../utils/helper.js'
+import { toCanvas, getRGB } from '../../../utils/helper.js'
 import * as Dust from '../components/dust.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { drawFirTree } from '../components/fir-tree.js'
@@ -2567,7 +2567,7 @@ function createDepthLayers(k) {
   //
   // Sky layer: background color fill + moon (opaque base, always behind everything)
   //
-  const skyPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const skyPng = toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     ctx.imageSmoothingEnabled = false
     ctx.fillStyle = BG_HEX
     ctx.fillRect(0, 0, screenWidth, screenHeight)
@@ -2585,7 +2585,7 @@ function createDepthLayers(k) {
   //
   // Mountains layer (farthest depth, dimmest)
   //
-  const mountainsPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const mountainsPng = toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     ctx.imageSmoothingEnabled = false
     //
     // Clip mountains to game area boundaries (no overflow into margins)
@@ -2604,7 +2604,7 @@ function createDepthLayers(k) {
   //
   // Dark trees layer (far depth)
   //
-  const darkTreesPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const darkTreesPng = toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     ctx.imageSmoothingEnabled = false
     const darkPeriod = PLAY_AREA_WIDTH / DARK_TREES_COUNT
     for (let i = 0; i < DARK_TREES_COUNT; i++) {
@@ -2627,7 +2627,7 @@ function createDepthLayers(k) {
   //
   // Medium trees layer (medium depth)
   //
-  const mediumTreesPng = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const mediumTreesPng = toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     ctx.imageSmoothingEnabled = false
     const bgPeriod = PLAY_AREA_WIDTH / BG_TREES_COUNT
     for (let i = 0; i < BG_TREES_COUNT; i++) {
@@ -2680,7 +2680,7 @@ function createFrontTrees(k) {
   //
   // Bake all front trees onto a transparent canvas once
   //
-  const png = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const png = toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     const treePeriod = PLAY_AREA_WIDTH / FRONT_TREES_COUNT
     for (let i = 0; i < FRONT_TREES_COUNT; i++) {
       const x = i * treePeriod + Math.random() * treePeriod + LEFT_MARGIN

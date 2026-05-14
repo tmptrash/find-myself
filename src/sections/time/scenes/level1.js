@@ -9,7 +9,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { set, get } from '../../../utils/progress.js'
-import { toPng, parseHex, getRGB } from '../../../utils/helper.js'
+import { toCanvas, parseHex, getRGB } from '../../../utils/helper.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
@@ -855,7 +855,7 @@ function flashSmallHeroForBonus(k, levelIndicator, heroColor, count) {
  */
 function createRoundedCornerSprite(radius, backgroundColor) {
   const size = radius * 2
-  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+  const dataURL = toCanvas({ width: size, height: size }, (ctx) => {
     const [r, g, b] = parseHex(backgroundColor)
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
     //
@@ -1044,7 +1044,7 @@ function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, 
   const centerX = canvasWidth / 2
   const centerY = canvasHeight - padding - wheelRadius
   
-  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+  return toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight)
     ctx.filter = 'blur(6px)'
     

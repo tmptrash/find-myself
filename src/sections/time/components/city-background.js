@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { toPng } from '../../../utils/helper.js'
+import { toCanvas } from '../../../utils/helper.js'
 
 //
 // Per-sprite window positions stored during generation.
@@ -58,7 +58,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
   // Collect foreground building window positions for night glow
   //
   const windows = []
-  const dataUrl = toPng({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toCanvas({ width: screenWidth, height: screenHeight, pixelRatio: 1 }, (ctx) => {
     //
     // Draw gradient background
     // Light gray goes to top of screen, dark gray goes to bottom

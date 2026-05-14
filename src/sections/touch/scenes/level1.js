@@ -7,7 +7,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { toPng, getRGB, parseHex } from '../../../utils/helper.js'
+import { toCanvas, getRGB, parseHex } from '../../../utils/helper.js'
 import * as FallingLeaf from '../components/falling-leaf.js'
 import * as Rain from '../components/rain.js'
 import * as Tooltip from '../../../utils/tooltip.js'
@@ -685,7 +685,7 @@ export function sceneLevel1(k) {
     const createBackCanvas = () => {
       const bw = CFG.visual.screen.width
       const bh = CFG.visual.screen.height
-      return toPng({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
         if (layers[0]) {
           drawLayerToCanvas(ctx, layers[0], 0, null)
         }
@@ -698,7 +698,7 @@ export function sceneLevel1(k) {
     const createFrontStaticCanvas = () => {
       const bw = CFG.visual.screen.width
       const bh = CFG.visual.screen.height
-      return toPng({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
+      return toCanvas({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
         if (layers[2]) {
           drawLayerToCanvas(ctx, layers[2], 0, null)
         }
@@ -3284,7 +3284,7 @@ function createL1Mushrooms(k) {
     const totalH = Math.ceil(capH + stemH + 4)
     const color = capColors[Math.floor(Math.random() * capColors.length)]
     const spriteName = `mushroom-l1-${i}`
-    const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+    const dataUrl = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
       drawMushroomShape(ctx, totalW, totalH, capW, capH, stemH, stemW, color)
     })
     const posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)

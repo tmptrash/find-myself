@@ -86,7 +86,19 @@ export function onPhysicalKeyPress(code, fn) {
   }}
 }
 
-export function toPng({ width, height, pixelRatio = 1 }, drawFn) {
+/**
+ * Render a procedural image into a canvas and return the canvas itself.
+ * Designed to be passed directly to k.loadSprite(name, canvas) — Kaplay
+ * accepts HTMLCanvasElement as a sprite source via its ImageSource type,
+ * so no data-URL / image-decode round-trip happens. Avoiding data URLs
+ * also keeps DevTools Network tab clean (each toDataURL call would
+ * otherwise show up as a separate "request" entry).
+ *
+ * @param {{width:number, height:number, pixelRatio?:number}} opts - Canvas size in CSS px
+ * @param {(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => void} drawFn - Drawing routine
+ * @returns {HTMLCanvasElement} Canvas with the rendered image, ready for loadSprite
+ */
+export function toCanvas({ width, height, pixelRatio = 1 }, drawFn) {
   const canvas = document.createElement('canvas')
   canvas.width = width * pixelRatio
   canvas.height = height * pixelRatio
@@ -97,7 +109,7 @@ export function toPng({ width, height, pixelRatio = 1 }, drawFn) {
   ctx.scale(pixelRatio, pixelRatio)
 
   drawFn(ctx, canvas)
-  return canvas.toDataURL('image/png')
+  return canvas
 }
 
 export const prop = (path, root = {}) => path.split(".").reduce(

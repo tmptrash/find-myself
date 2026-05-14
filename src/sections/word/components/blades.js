@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, toPng } from '../../../utils/helper.js'
+import { getHex, toCanvas } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 
@@ -611,7 +611,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
     [outlineWidth, outlineWidth]
   ]
   
-  return toPng({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
+  return toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
     //
     // Set text rendering properties
     //

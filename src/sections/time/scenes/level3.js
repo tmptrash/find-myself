@@ -3,7 +3,7 @@ import { initScene, stopTimeSectionMusic, timeSectionMusic } from '../components
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
-import { getColor, toPng, parseHex, hexToRgb, rgbToHex } from '../../../utils/helper.js'
+import { getColor, toCanvas, parseHex, hexToRgb, rgbToHex } from '../../../utils/helper.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
@@ -1956,13 +1956,13 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
       levelIndicator
     })
     //
-    // Create snow mound sprite at the base of each spike cluster using toPng()
+    // Create snow mound sprite at the base of each spike cluster using toCanvas()
     //
     const clusterCenterX = (cluster.startX + cluster.endX) / 2
     const clusterWidth = (cluster.endX - cluster.startX) + 40  // Extra width around spikes
     const moundHeight = 18  // Taller snow mound at base
     
-    const moundDataURL = toPng({ width: clusterWidth + 20, height: moundHeight + 10, pixelRatio: 1 }, (ctx) => {
+    const moundDataURL = toCanvas({ width: clusterWidth + 20, height: moundHeight + 10, pixelRatio: 1 }, (ctx) => {
       ctx.translate((clusterWidth + 20) / 2, moundHeight + 10)
       
       const points = []
@@ -2019,7 +2019,7 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
 }
 
 /**
- * Creates clouds at the very top of upper corridor using toPng() for performance
+ * Creates clouds at the very top of upper corridor using toCanvas() for performance
  * @param {Object} k - Kaplay instance
  */
 function createCloudsAtTop(k) {
@@ -2147,10 +2147,10 @@ function createCloudsAtTop(k) {
   }
   
   //
-  // Render all clouds to a single sprite using toPng()
+  // Render all clouds to a single sprite using toCanvas()
   // Canvas height increased to prevent clipping
   //
-  const cloudsDataURL = toPng({ width: screenWidth, height: 150, pixelRatio: 1 }, (ctx) => {
+  const cloudsDataURL = toCanvas({ width: screenWidth, height: 150, pixelRatio: 1 }, (ctx) => {
     cloudConfigs.forEach((cloudConfig) => {
       const canvasX = cloudConfig.x
       const canvasY = cloudConfig.y - cloudTopY  // Relative to top of canvas
@@ -2196,7 +2196,7 @@ function createCloudsAtTop(k) {
 }
 
 /**
- * Creates snow drifts on corridor floors using toPng() for performance
+ * Creates snow drifts on corridor floors using toCanvas() for performance
  * @param {Object} k - Kaplay instance
  */
 function createSnowDrifts(k) {
@@ -2405,14 +2405,14 @@ function createSnowDrifts(k) {
   //
   // Render back snow layer to sprite
   //
-  const snowBackDataURL = toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+  const snowBackDataURL = toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
     driftsBack.forEach(drift => drawDriftToCanvas(ctx, drift, false))
   })
   
   //
   // Render front snow layer to sprite
   //
-  const snowFrontDataURL = toPng({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
+  const snowFrontDataURL = toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
     driftsFront.forEach(drift => drawDriftToCanvas(ctx, drift, true))
   })
   
@@ -2524,7 +2524,7 @@ function createLifeScoreParticlesLevel3(k, levelIndicator) {
  */
 function createRoundedCornerSprite(radius, backgroundColor) {
   const size = radius * 2
-  const dataURL = toPng({ width: size, height: size }, (ctx) => {
+  const dataURL = toCanvas({ width: size, height: size }, (ctx) => {
     const [r, g, b] = parseHex(backgroundColor)
     ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
     //

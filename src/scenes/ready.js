@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor, toPng } from '../utils/helper.js'
+import { getColor } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Particles from '../utils/particles.js'
@@ -88,6 +88,17 @@ const HINT_Y = 1030
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
+    //
+    // Wait for @font-face fonts to finish loading before any canvas text
+    // sampling. Without this, measureText/fillText silently fall back to
+    // the system monospace, and on some browser/timing combos that fallback
+    // returns zero-width measurements — which makes generateLayout produce
+    // an empty positions array and crashes the particle system that
+    // expects at least one position.
+    //
+    if (document.fonts && document.fonts.ready) {
+      try { await document.fonts.ready } catch {}
+    }
     //
     // Set canvas background to match ready scene background color
     //
@@ -818,10 +829,17 @@ export function sceneReady(k) {
 }
 
 function createParticleSystem(k, layoutPositions, initialOpacity = 0.4) {
+  //
+  // Guard: empty layoutPositions would make `i % 0` produce NaN and crash
+  // on `base.x` below. Bail out cleanly with an empty system instead.
+  //
+  if (!layoutPositions || layoutPositions.length === 0) {
+    return { particles: [], layoutPositions: [], extendedPositions: [] }
+  }
   const count = Math.max(1, Math.floor(layoutPositions.length * DENSITY_MULTIPLIER))
   const extendedPositions = []
   const particles = []
-  
+
   for (let i = 0; i < count; i++) {
     const base = layoutPositions[i % layoutPositions.length]
     const pos = { x: base.x, y: base.y }
@@ -900,113 +918,92 @@ async function generateLayout({
   const effectiveWidth = rawCanvasWidth * scaleX
   
   //
-  // Render text using toPng, then extract ImageData for pixel processing
+  // Render text into a fresh, dedicated canvas so we don't depend on any
+  // transform state left behind by toCanvas (which always pre-applies a
+  // ctx.scale(pixelRatio, pixelRatio)). We need {willReadFrequently:true}
+  // because we read every single pixel back via getImageData; without it
+  // some Chrome builds keep the canvas GPU-backed and read-back can be
+  // surprisingly slow or, worse, return an empty bitmap if the GPU
+  // texture wasn't flushed yet.
   //
-  const dataURL = toPng({ width: rawCanvasWidth, height: canvasHeight, pixelRatio: 1 }, (ctx) => {
-    ctx.fillStyle = 'white'
-    ctx.font = `${fontSize}px ${fontFamily}`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    
-    ctx.save()
-    ctx.translate(rawCanvasWidth / 2, 0)
-    ctx.scale(scaleX, 1)
-    
-    const strokeWidth = singlePixelStroke ? Math.max(0.75, 1 / scaleX) : 1
-    ctx.lineWidth = strokeWidth
-    ctx.lineJoin = 'round'
-    ctx.lineCap = 'round'
-    ctx.strokeStyle = 'white'
-    
-    lines.forEach((line, index) => {
-      const lineY = padding + lineHeight * index + lineHeight / 2
-      if (singlePixelStroke) {
-        ctx.strokeText(line, 0, lineY)
-      } else {
-        ctx.fillText(line, 0, lineY)
-      }
-    })
-    
-    ctx.restore()
+  const renderCanvas = document.createElement('canvas')
+  renderCanvas.width = rawCanvasWidth
+  renderCanvas.height = canvasHeight
+  const ctx = renderCanvas.getContext('2d', { willReadFrequently: true })
+  ctx.fillStyle = 'white'
+  ctx.font = `${fontSize}px ${fontFamily}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  ctx.save()
+  ctx.translate(rawCanvasWidth / 2, 0)
+  ctx.scale(scaleX, 1)
+
+  const strokeWidth = singlePixelStroke ? Math.max(0.75, 1 / scaleX) : 1
+  ctx.lineWidth = strokeWidth
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = 'white'
+
+  lines.forEach((line, index) => {
+    const lineY = padding + lineHeight * index + lineHeight / 2
+    if (singlePixelStroke) {
+      ctx.strokeText(line, 0, lineY)
+    } else {
+      ctx.fillText(line, 0, lineY)
+    }
   })
-  
+
+  ctx.restore()
   //
-  // Convert data URL to ImageData for pixel extraction
-  // Need to load image and extract pixels
+  // Extract pixel data directly from the freshly-rendered canvas
   //
-  const img = new Image()
   return await new Promise((resolve, reject) => {
-    img.onload = () => {
-      try {
-        const renderCanvas = document.createElement('canvas')
-        renderCanvas.width = rawCanvasWidth
-        renderCanvas.height = canvasHeight
-        const renderCtx = renderCanvas.getContext('2d')
-        renderCtx.drawImage(img, 0, 0)
-        const imageData = renderCtx.getImageData(0, 0, rawCanvasWidth, canvasHeight)
-        const pixels = imageData.data
-        
-        const edgePixels = collectEdgePixels(rawCanvasWidth, canvasHeight, pixels)
-        shuffle(edgePixels)
-        
-        const positions = []
-        const temp = []
-        
-        for (let i = 0; i < edgePixels.length; i++) {
-          const pixel = edgePixels[i]
-          if (Math.random() > samplingProbability) continue
-          if (!isFarEnough(pixel.x, pixel.y, temp, minDistance)) continue
-          temp.push(pixel)
-          
-          const worldX = centerX - effectiveWidth / 2 + pixel.x * scaleX
-          const worldY = centerY - canvasHeight / 2 + pixel.y
-          positions.push({ x: worldX, y: worldY })
-        }
-        
-        let finalPositions = positions
-        if (desiredCount) {
-          finalPositions = normalizeLayoutCount(
-            positions,
-            desiredCount,
-            centerX,
-            centerY,
-            morphTargets
-          )
-        }
-        
-        const metrics = {
-          width: effectiveWidth,
-          height: canvasHeight,
-          lineHeight,
-          lines: lines.length
-        }
-        
-        resolve({
-          positions: finalPositions,
-          metrics
-        })
-      } catch (error) {
-        reject(error)
+    try {
+      const imageData = ctx.getImageData(0, 0, rawCanvasWidth, canvasHeight)
+      const pixels = imageData.data
+
+      const edgePixels = collectEdgePixels(rawCanvasWidth, canvasHeight, pixels)
+      shuffle(edgePixels)
+
+      const positions = []
+      const temp = []
+
+      for (let i = 0; i < edgePixels.length; i++) {
+        const pixel = edgePixels[i]
+        if (Math.random() > samplingProbability) continue
+        if (!isFarEnough(pixel.x, pixel.y, temp, minDistance)) continue
+        temp.push(pixel)
+
+        const worldX = centerX - effectiveWidth / 2 + pixel.x * scaleX
+        const worldY = centerY - canvasHeight / 2 + pixel.y
+        positions.push({ x: worldX, y: worldY })
       }
-    }
-    img.onerror = () => {
-      reject(new Error('Failed to load image from data URL'))
-    }
-    
-    //
-    // Set src after handlers are attached
-    //
-    img.src = dataURL
-    
-    //
-    // Check if image is already loaded (for cached images)
-    // This must be checked AFTER setting src
-    //
-    if (img.complete && img.naturalHeight !== 0) {
-      //
-      // Image already loaded, trigger onload manually
-      //
-      setTimeout(() => img.onload(), 0)
+
+      let finalPositions = positions
+      if (desiredCount) {
+        finalPositions = normalizeLayoutCount(
+          positions,
+          desiredCount,
+          centerX,
+          centerY,
+          morphTargets
+        )
+      }
+
+      const metrics = {
+        width: effectiveWidth,
+        height: canvasHeight,
+        lineHeight,
+        lines: lines.length
+      }
+
+      resolve({
+        positions: finalPositions,
+        metrics
+      })
+    } catch (error) {
+      reject(error)
     }
   })
 }

@@ -25,7 +25,7 @@ import * as Cursor from "./utils/cursor.js"
 //
 // Kaplay init: how many times to retry on transient WebGL failure
 // (Chrome can transiently fail context creation when the GPU process is busy,
-// e.g. right after HMR reload or while heavy parallel asset fetches are in flight).
+// e.g. right after HMR reload).
 //
 const KAPLAY_INIT_MAX_ATTEMPTS = 5
 const KAPLAY_INIT_RETRY_BASE_MS = 100
@@ -37,14 +37,19 @@ const KAPLAY_INIT_RETRY_STEP_MS = 250
 //
 const ASSET_LOAD_CONCURRENCY = 4
 //
-// Kaplay init options (kept as a constant so retry attempts use identical config)
+// WebGL context options we force onto Kaplay's canvas. By default Kaplay asks
+// for { preserveDrawingBuffer: true } which keeps a persistent GPU backbuffer
+// every frame — on heavy scenes this balloons GPU memory and is the most
+// common cause of:
+//   - context loss (the "sad canvas" / Aw-Snap icon in Chrome)
+//   - getContext() returning null on subsequent reloads
+// Setting preserveDrawingBuffer:false lets the driver discard the backbuffer
+// after each composite, which is the documented WebGL recommendation for
+// games and dramatically reduces VRAM pressure.
 //
-const KAPLAY_INIT_OPTS = {
-  width: CFG.visual.screen.width,
-  height: CFG.visual.screen.height,
-  font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
-  letterbox: true,
-  background: [0, 0, 0]
+const WEBGL_CONTEXT_OPTS_OVERRIDE = {
+  preserveDrawingBuffer: false,
+  failIfMajorPerformanceCaveat: false
 }
 //
 // Force dark background for all elements
@@ -54,6 +59,7 @@ document.body.style.backgroundColor = '#000000'
 //
 // Loader progress state (DOM element + counters)
 //
+const loaderEl = document.getElementById('loader')
 const loaderBar = document.getElementById('loader-bar')
 let completedTasks = 0
 let totalTasks = 0
@@ -62,7 +68,7 @@ let totalTasks = 0
 //
 boot()
 /**
- * Top-level boot sequence: init kaplay with retry, then load assets in batches.
+ * Top-level boot sequence: init kaplay with retry, then load all assets in batches.
  */
 async function boot() {
   let k
@@ -105,20 +111,36 @@ async function boot() {
   // All work queued — wait for kaplay's internal load promise to flush
   //
   k.onLoad(() => {
-    const loader = document.getElementById('loader')
-    if (loader) loader.remove()
+    hideLoader()
     k.go("ready")
   })
 }
 /**
  * Repeatedly try to initialize kaplay until WebGL succeeds or attempts run out.
  * Stale canvases from failed attempts are removed so their contexts can be released.
+ * Each attempt builds a fresh canvas with our patched getContext (so the WebGL
+ * options override is applied) and a webglcontextlost listener for crash recovery.
  */
 async function initKaplayWithRetry() {
   let lastError
   for (let attempt = 0; attempt < KAPLAY_INIT_MAX_ATTEMPTS; attempt++) {
+    const canvas = createPatchedCanvas()
+    //
+    // Kaplay sets fixedSize only when width+height are set AND letterbox is off.
+    // With letterbox:true it reads canvas.parentElement.offsetWidth/Height.
+    // A user-supplied canvas is never appendChild'd by Kaplay, so parentElement
+    // stays null and kaplay.ts crashes on offsetWidth.
+    //
+    document.body.appendChild(canvas)
     try {
-      return kaplay(KAPLAY_INIT_OPTS)
+      return kaplay({
+        width: CFG.visual.screen.width,
+        height: CFG.visual.screen.height,
+        font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+        letterbox: true,
+        background: [0, 0, 0],
+        canvas
+      })
     } catch (err) {
       lastError = err
       removeStaleCanvases()
@@ -130,6 +152,44 @@ async function initKaplayWithRetry() {
   }
   throw lastError ?? new Error('Kaplay init failed: WebGL not available')
 }
+/**
+ * Create a canvas whose getContext("webgl"|"webgl2") merges in our safer
+ * WEBGL_CONTEXT_OPTS_OVERRIDE on top of whatever Kaplay requests. Also wires
+ * up webglcontextlost/restored handlers — without preventDefault() on lost
+ * the browser refuses to ever fire restored, leaving the canvas frozen.
+ * On a real loss we just reload the page (cheap, and the only reliable way
+ * to rebuild Kaplay's GL state from scratch).
+ */
+function createPatchedCanvas() {
+  const canvas = document.createElement('canvas')
+  const originalGetContext = canvas.getContext.bind(canvas)
+  canvas.getContext = function patchedGetContext(type, opts) {
+    if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+      opts = { ...(opts || {}), ...WEBGL_CONTEXT_OPTS_OVERRIDE }
+    }
+    return originalGetContext(type, opts)
+  }
+  //
+  // Recover from GPU process crash / driver reset. Calling preventDefault()
+  // is required by spec for the browser to attempt restoration.
+  //
+  canvas.addEventListener('webglcontextlost', onWebGLContextLost, false)
+  canvas.addEventListener('webglcontextrestored', onWebGLContextRestored, false)
+  return canvas
+}
+//
+// WebGL context loss handler: prevent default + reload to fully reinit Kaplay
+//
+function onWebGLContextLost(e) {
+  e.preventDefault()
+  showFatalLoaderError('Graphics context lost. Reloading...')
+  setTimeout(() => location.reload(), 500)
+}
+//
+// WebGL context restored: in our flow we always reload on loss, so this is
+// kept as a no-op stub for completeness (browsers expect both listeners).
+//
+function onWebGLContextRestored() {}
 /**
  * Build the list of synchronous setup tasks (sprites, fonts, backgrounds, scenes).
  */
@@ -284,6 +344,13 @@ function onTaskFinished() {
 function yieldToRenderer() {
   return new Promise(r => setTimeout(r, 0))
 }
+//
+// Hide the boot loader after all assets are ready
+//
+function hideLoader() {
+  if (!loaderEl) return
+  loaderEl.style.display = 'none'
+}
 /**
  * Remove any leftover canvas elements (used between failed kaplay init attempts
  * so their dead WebGL contexts can be released by the browser).
@@ -296,7 +363,6 @@ function removeStaleCanvases() {
  * Replace the loader bar with a human-readable error message.
  */
 function showFatalLoaderError(message) {
-  const loader = document.getElementById('loader')
-  if (!loader) return
-  loader.innerHTML = `<div style="color:#fff;font-family:monospace;text-align:center;padding:24px">${message}</div>`
+  if (!loaderEl) return
+  loaderEl.innerHTML = `<div style="color:#fff;font-family:monospace;text-align:center;padding:24px">${message}</div>`
 }

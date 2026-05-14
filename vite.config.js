@@ -20,6 +20,23 @@ export default defineConfig({
     server: {
         port: 3001,
     },
+    //
+    // Dev server: keep deps debuggable.
+    // - exclude `kaplay` from Vite's pre-bundling so the browser loads
+    //   node_modules/kaplay/dist/kaplay.mjs directly. That file is minified
+    //   but ships a `kaplay.mjs.map` sourcemap next to it, which DevTools
+    //   resolves automatically — so Sources tab shows the original
+    //   TypeScript source and breakpoints work as expected.
+    // - keep sourcemaps for any other deps Vite still pre-bundles.
+    //
+    optimizeDeps: {
+        exclude: ["kaplay"],
+        rolldownOptions: {
+            output: {
+                sourcemap: true,
+            },
+        },
+    },
     build: {
         // disable this for low bundle sizes
         sourcemap: true,

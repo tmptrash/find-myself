@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { toPng } from '../../../utils/helper.js'
+import { toCanvas } from '../../../utils/helper.js'
 
 const TOUCH_FLOOR_ROCK_COUNT_DEFAULT = 5
 const TOUCH_FLOOR_ROCK_RADIUS_MIN = 38
@@ -145,7 +145,7 @@ function buildSingleFloorRock(k, floorY, posX, radius, spriteName) {
     }
     ctx.closePath()
   }
-  const dataUrl = toPng({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+  const dataUrl = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.28)'
     ctx.beginPath()
     ctx.ellipse(cx, cy + radius * 0.42, radius * 1.0, radius * 0.18, 0, 0, Math.PI * 2)

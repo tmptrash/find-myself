@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { toPng } from '../../../utils/helper.js'
+import { toCanvas } from '../../../utils/helper.js'
 //
 // Words and fragments related to pain, self-discovery, and introspection
 //
@@ -119,7 +119,7 @@ export function create(config) {
   
   wordDataLayers.forEach((layer, layerIndex) => {
     const layerWords = layer.words.map(word => ({ ...word, layerConfig: layer.config }))
-    const dataURL = toPng({ width, height, pixelRatio: 1 }, (ctx) => {
+    const dataURL = toCanvas({ width, height, pixelRatio: 1 }, (ctx) => {
       ctx.clearRect(0, 0, width, height)
       layerWords.forEach(word => renderWordToCanvas(ctx, word))
     })

@@ -405,26 +405,33 @@ function drawBlurredOrganicTrees(ctx, cfg) {
   ctx.filter = 'blur(7px)'
   let currentX = 0
   while (currentX < screenWidth * 1.2) {
-    const crownWidth = lushGreenTrees
+    const lushTrees = lushGreenTrees || autumnLeaves
+    const crownWidth = lushTrees
       ? randomRange(LUSH_LEVEL0_CROWN_WIDTH_MIN, LUSH_LEVEL0_CROWN_WIDTH_MAX)
       : randomRange(44, 92)
     const treeX = currentX + randomRange(0, crownWidth * 0.28)
-    const trunkHeight = lushGreenTrees
+    const trunkHeight = lushTrees
       ? randomRange(LUSH_LEVEL0_TRUNK_HEIGHT_MIN, LUSH_LEVEL0_TRUNK_HEIGHT_MAX)
       : randomRange(56, 125)
     drawOrganicTrunk(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
-    lushGreenTrees && drawOrganicBranches(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
+    lushTrees && drawOrganicBranches(ctx, treeX + crownWidth * 0.5, bottomPlatformY, trunkHeight)
     const crownY = bottomPlatformY - trunkHeight - randomRange(14, 24)
+    const leafCountBoost = lushTrees
+      ? (autumnLeaves ? LUSH_LEVEL0_LEAF_COUNT_BOOST * 1.08 : LUSH_LEVEL0_LEAF_COUNT_BOOST)
+      : 1
+    const leafSizeBoost = lushTrees
+      ? (autumnLeaves ? LUSH_LEVEL0_LEAF_SIZE_BOOST * 1.06 : LUSH_LEVEL0_LEAF_SIZE_BOOST)
+      : 1
     drawOrganicLeafCluster(
       ctx,
       treeX + crownWidth * 0.5,
       crownY,
       crownWidth,
       autumnLeaves,
-      lushGreenTrees ? LUSH_LEVEL0_LEAF_COUNT_BOOST : 1,
-      lushGreenTrees ? LUSH_LEVEL0_LEAF_SIZE_BOOST : 1
+      leafCountBoost,
+      leafSizeBoost
     )
-    if (lushGreenTrees) {
+    if (lushTrees) {
       for (let i = 0; i < LUSH_LEVEL0_EXTRA_CLUSTERS; i++) {
         const sideSign = i % 2 === 0 ? -1 : 1
         drawOrganicLeafCluster(
@@ -433,12 +440,12 @@ function drawBlurredOrganicTrees(ctx, cfg) {
           crownY - randomRange(8, 18),
           crownWidth * randomRange(0.72, 0.86),
           autumnLeaves,
-          LUSH_LEVEL0_LEAF_COUNT_BOOST * 0.82,
-          LUSH_LEVEL0_LEAF_SIZE_BOOST
+          leafCountBoost * 0.82,
+          leafSizeBoost
         )
       }
     }
-    const treeSpacing = lushGreenTrees
+    const treeSpacing = lushTrees
       ? randomRange(LUSH_LEVEL0_TREE_SPACING_MIN, LUSH_LEVEL0_TREE_SPACING_MAX)
       : randomRange(52, 118)
     currentX += crownWidth + treeSpacing
@@ -472,7 +479,7 @@ function drawOrganicTrunk(ctx, centerX, bottomY, trunkHeight) {
   }
 }
 //
-// Extra branch strokes for lush green trees (levels 0 and 1)
+// Extra branch strokes for lush trees (levels 0, 1 and autumn level 2)
 //
 function drawOrganicBranches(ctx, centerX, bottomY, trunkHeight) {
   const branchCount = randomInt(LUSH_LEVEL0_BRANCH_COUNT_MIN, LUSH_LEVEL0_BRANCH_COUNT_MAX)

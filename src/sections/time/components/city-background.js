@@ -46,8 +46,8 @@ const LUSH_LEVEL0_TREE_SPACING_MAX = 88
 const LUSH_LEVEL0_EXTRA_CLUSTERS = 2
 const LUSH_LEVEL0_LEAF_COUNT_BOOST = 1.75
 const LUSH_LEVEL0_LEAF_SIZE_BOOST = 1.2
-const LUSH_LEVEL0_BRANCH_COUNT_MIN = 6
-const LUSH_LEVEL0_BRANCH_COUNT_MAX = 10
+const LUSH_LEVEL0_BRANCH_COUNT_MIN = 10
+const LUSH_LEVEL0_BRANCH_COUNT_MAX = 16
 const LUSH_LEVEL0_BRANCH_LENGTH_MIN = 16
 const LUSH_LEVEL0_BRANCH_LENGTH_MAX = 34
 
@@ -500,6 +500,25 @@ function drawOrganicBranches(ctx, centerX, bottomY, trunkHeight) {
     ctx.moveTo(branchStartX, branchY)
     ctx.lineTo(branchEndX, branchEndY)
     ctx.stroke()
+    //
+    // Add a small secondary twig to make branch structure richer
+    //
+    if (Math.random() < 0.65) {
+      const twigDir = Math.random() > 0.5 ? 1 : -1
+      const twigLen = branchLen * randomRange(0.24, 0.42)
+      const twigRise = twigLen * randomRange(0.32, 0.56)
+      ctx.lineWidth = Math.max(0.8, ctx.lineWidth * 0.58)
+      ctx.beginPath()
+      ctx.moveTo(
+        branchStartX + (branchEndX - branchStartX) * randomRange(0.35, 0.72),
+        branchY + (branchEndY - branchY) * randomRange(0.35, 0.72)
+      )
+      ctx.lineTo(
+        branchEndX + twigDir * twigLen,
+        branchEndY - twigRise
+      )
+      ctx.stroke()
+    }
   }
 }
 

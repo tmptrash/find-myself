@@ -27,7 +27,7 @@
 		},
 		"win": {
 			"target": "nsis",
-			"icon": "assets/icon.png"
+			"icon": "assets/icon.png" 
 		},
 		"linux": {
 			"target": "AppImage"
@@ -40,6 +40,6 @@
 		"@types/node": "^24.7.2",
 		"electron": "^41.3.0",
 		"electron-builder": "^26.8.1",
-		"vite": "^7.1.10"
+		"vite": "^8.0.13"
 	}
 }

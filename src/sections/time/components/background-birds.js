@@ -14,9 +14,12 @@ const BIRD_FADE_RANGE = 0.22
 /**
  * Create background birds system
  * @param {Object} k - Kaplay instance
+ * @param {Object} [cfg] - Birds configuration
+ * @param {number} [cfg.zIndex=15.6] - Layer z-index for birds rendering
  * @returns {Object} Birds system instance
  */
-export function create(k) {
+export function create(k, cfg = {}) {
+  const { zIndex = 15.6 } = cfg
   //
   // Create birds data
   //
@@ -59,7 +62,7 @@ export function create(k) {
   // Create game object with draw function and z-index
   //
   const birdsLayer = k.add([
-    k.z(15.6),  // Above background and city buildings
+    k.z(zIndex),
     k.fixed(),
     {
       draw() {

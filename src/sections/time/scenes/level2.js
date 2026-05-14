@@ -581,7 +581,7 @@ export function sceneLevel2(k) {
     //
     // Create background birds
     //
-    const birds = BackgroundBirds.create(k)
+    const birds = BackgroundBirds.create(k, { zIndex: 14.3 })
     //
     // Street ambience: 6 lamps spread across the wider level (2 extra vs level 0/1)
     //

@@ -5,6 +5,9 @@ const TOP_MARGIN = CFG.visual.gameArea.topMargin
 //
 // Hanging spider from silk thread (shared touch decoration).
 //
+// Default ratio places the spider on the right side. Callers can override
+// via the xRatio option to anchor the thread lookup on a different side.
+//
 const SPIDER_THREAD_X_RATIO = 0.78
 const SPIDER_THREAD_TOP_Y = TOP_MARGIN + 80
 const SPIDER_THREAD_LENGTH = 220
@@ -78,13 +81,18 @@ export function spiderHoverTooltipTarget(inst, text) {
  * @returns {Object} Spider instance ({ threadAnchorX, threadAnchorY, threadLength, k, heroInst })
  */
 export function createHangingSpider(cfg) {
-  const { k, heroInst, frontTrees, treeRootsInst, noteTreeIndices, drawZ = 28, floorY } = cfg
+  const { k, heroInst, frontTrees, treeRootsInst, noteTreeIndices, drawZ = 28, floorY, xRatio } = cfg
   const playableW = CFG.visual.screen.width - CFG.visual.gameArea.leftMargin - CFG.visual.gameArea.rightMargin
   const leftMargin = CFG.visual.gameArea.leftMargin
-  let anchorX = leftMargin + playableW * SPIDER_THREAD_X_RATIO
+  //
+  // xRatio overrides the module default so individual scenes can position the spider
+  // on a specific side (e.g. 0.15 for left side, 0.78 for right side).
+  //
+  const ratio = xRatio ?? SPIDER_THREAD_X_RATIO
+  let anchorX = leftMargin + playableW * ratio
   let anchorY = SPIDER_THREAD_TOP_Y
   let threadLength = SPIDER_THREAD_LENGTH
-  const targetX = leftMargin + playableW * SPIDER_THREAD_X_RATIO
+  const targetX = leftMargin + playableW * ratio
   const roots = treeRootsInst?.roots
   const melodyRoots =
     roots &&

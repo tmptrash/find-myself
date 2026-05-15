@@ -1098,28 +1098,51 @@ function playSnowCrunchImpact(instance, destinationGain, peakAmp, duration) {
 
 function playWoodKnockLand(instance) {
   //
-  // Heavier, more muffled thud for landing: lower pitch, longer decay, no noise.
+  // Dry open knock on solid wood: short decay, higher end frequency,
+  // no low-pass muffling. Noise transient adds the click attack.
   //
   const ctx = instance.audioContext
   const now = ctx.currentTime
-  const duration = 0.18
+  const duration = 0.10
+  const peak = CFG.audio.sfx.land * 3.2
+  //
+  // Tonal body: pitch falls from knock attack down to a medium-low thud.
+  //
   const osc = ctx.createOscillator()
   osc.type = 'sine'
-  osc.frequency.setValueAtTime(210 + Math.random() * 60, now)
-  osc.frequency.exponentialRampToValueAtTime(90, now + duration)
-  const lp = ctx.createBiquadFilter()
-  lp.type = 'lowpass'
-  lp.frequency.value = 340
-  const peak = CFG.audio.sfx.land * 3.2
+  osc.frequency.setValueAtTime(320 + Math.random() * 80, now)
+  osc.frequency.exponentialRampToValueAtTime(150, now + duration)
   const oscGain = ctx.createGain()
   oscGain.gain.setValueAtTime(0.001, now)
-  oscGain.gain.linearRampToValueAtTime(peak, now + 0.009)
+  oscGain.gain.linearRampToValueAtTime(peak * 0.75, now + 0.006)
   oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  osc.connect(lp)
-  lp.connect(oscGain)
+  osc.connect(oscGain)
   oscGain.connect(instance.landGain)
   osc.start(now)
-  osc.stop(now + duration)
+  osc.stop(now + duration + 0.01)
+  //
+  // Short broadband click for the attack transient (gives the "open" character).
+  //
+  const bufferSize = Math.floor(ctx.sampleRate * 0.025)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufferSize) * 40)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = noiseBuffer
+  const noiseF = ctx.createBiquadFilter()
+  noiseF.type = 'bandpass'
+  noiseF.frequency.value = 1400
+  noiseF.Q.value = 0.8
+  const noiseG = ctx.createGain()
+  noiseG.gain.setValueAtTime(peak * 0.55, now)
+  noiseG.gain.exponentialRampToValueAtTime(0.001, now + 0.025)
+  noise.connect(noiseF)
+  noiseF.connect(noiseG)
+  noiseG.connect(instance.landGain)
+  noise.start(now)
+  noise.stop(now + 0.03)
 }
 
 function playWoodKnockStep(instance) {

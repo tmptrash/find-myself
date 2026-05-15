@@ -114,7 +114,10 @@ const L1_CROW_MP3_VOLUME = 0.6
 const L1_CROW_MP3_NAMES = ['l1-crow-0', 'l1-crow-1']
 const L1_CROW_MOUTH_OPEN_DURATION = 0.9
 const L1_CROW_ROCK_DRAW_Z = 9
-const L1_CROW_ROCK_X = LEFT_MARGIN + 280
+//
+// Crow sits on the bare ground just to the right of the hero spawn (no rock, no grass zone).
+//
+const L1_CROW_X = LEFT_MARGIN + 160
 const L1_CROW_TOOLTIP_TEXT = 'you are a loser'
 const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
@@ -2243,19 +2246,20 @@ export function sceneLevel1(k) {
       mouthTimer: 0
     }
     //
-    // Dedicated crow rock at a fixed left-side position, away from the worm on the right.
-    // addSingleFloorRockAt guarantees the crow always has a rock to sit on.
+    // Crow stands directly on the ground — no rock perch, no rock visual.
+    // A virtual perch descriptor with radius 0 places the body center at FLOOR_Y - 9*sc.
     //
-    const crowRock = addSingleFloorRockAt(k, FLOOR_Y, L1_CROW_ROCK_X, 'rock-l1-crow', L1_CROW_ROCK_DRAW_Z)
-    addCrowOnRock(k, crowRock, crowMp3State, heroInst)
+    const sc = 1.35
+    const crowPerch = { worldX: L1_CROW_X, worldY: FLOOR_Y, radius: 0 }
+    addCrowOnRock(k, crowPerch, crowMp3State, heroInst)
     //
     // Tooltip on crow hover: "you are a loser"
     //
     Tooltip.create({
       k,
       targets: [{
-        x: crowRock.worldX,
-        y: crowRock.worldY - crowRock.radius * 0.62 - 9 * 1.35,
+        x: crowPerch.worldX,
+        y: crowPerch.worldY - 9 * sc,
         width: L1_CROW_TOOLTIP_HOVER_W,
         height: L1_CROW_TOOLTIP_HOVER_H,
         text: L1_CROW_TOOLTIP_TEXT,

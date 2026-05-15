@@ -2728,7 +2728,7 @@ export function sceneLevel0(k) {
     //
     // Puddles on the floor: small ellipses with occasional ripple
     //
-    const l0Puddles = createPuddles(k, heroInst, sound, rocks)
+    const l0Puddles = createPuddles(k, heroInst, sound, rocks, floorThornData)
     //
     // Distant thunder rumble with lightning flash at random intervals
     //
@@ -2815,7 +2815,11 @@ export function sceneLevel0(k) {
       k,
       heroInst,
       frontTrees,
-      floorY: FLOOR_Y
+      floorY: FLOOR_Y,
+      //
+      // Place spider on the LEFT side so it hangs near the hero spawn area.
+      //
+      xRatio: 0.15
     })
     Tooltip.create({
       k,
@@ -3942,7 +3946,7 @@ const L0_FIREFLY_COLOR_B = 120
 const MUSHROOM_COUNT = 7
 const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
-const L0_SPIDER_TOOLTIP_TEXT = "how's it going, dude?"
+const L0_SPIDER_TOOLTIP_TEXT = "psst.\nnudge those little bugs\ncloser to each other"
 const MUSHROOM_FUNNY_LINES = [
   'talk spore to me',
   'pay rent in compost',
@@ -4011,10 +4015,11 @@ const PUDDLE_HERO_DETECT_Y = 35
 //
 // Creates small floor puddles with rain ripple effect
 //
-// Creates small floor puddles with rain ripple effect. Optional rockDescriptors
-// avoids placing ellipses over procedural rocks (world-space footprints).
+// Creates small floor puddles with rain ripple effect.
+// rockDescriptors avoids placing ellipses over rocks.
+// thornDescriptors avoids placing puddles under floor thorn spikes.
 //
-function createPuddles(k, heroInst, sound, rockDescriptors = []) {
+function createPuddles(k, heroInst, sound, rockDescriptors = [], thornDescriptors = []) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const puddles = []
   //
@@ -4022,6 +4027,11 @@ function createPuddles(k, heroInst, sound, rockDescriptors = []) {
   //
   const MIN_GAP = 30
   const padRock = 45
+  //
+  // Puddle must not cover a floor thorn (blade rises from dry ground).
+  // Each thorn has { x, width } so we clear (width/2 + padThorn) on each side.
+  //
+  const padThorn = 22
   //
   // Rocks use roughly elliptical footprints around worldX / worldY / radius.
   //
@@ -4032,12 +4042,19 @@ function createPuddles(k, heroInst, sound, rockDescriptors = []) {
     }
     return false
   }
+  const overlapsThorn = (cx, halfW) => {
+    for (const thorn of thornDescriptors) {
+      const thornHalf = (thorn.width ?? 6) / 2 + padThorn
+      if (Math.abs(cx - thorn.x) < halfW + thornHalf) return true
+    }
+    return false
+  }
   for (let i = 0; i < PUDDLE_COUNT; i++) {
     const w = PUDDLE_WIDTH_MIN + Math.random() * (PUDDLE_WIDTH_MAX - PUDDLE_WIDTH_MIN)
     let x = 0
     let placed = false
     //
-    // Retry placement until no overlap with existing puddles or rocks
+    // Retry placement until no overlap with existing puddles, rocks, or thorns
     //
     for (let attempt = 0; attempt < 80; attempt++) {
       x = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
@@ -4046,7 +4063,8 @@ function createPuddles(k, heroInst, sound, rockDescriptors = []) {
         return edgeDist < MIN_GAP
       })
       const overlapsStone = overlapsRock(x, w / 2)
-      if (!overlapsPuddle && !overlapsStone) { placed = true; break }
+      const overlapsSpike = overlapsThorn(x, w / 2)
+      if (!overlapsPuddle && !overlapsStone && !overlapsSpike) { placed = true; break }
     }
     if (!placed) continue
     puddles.push({
@@ -4452,7 +4470,13 @@ function createMushrooms(k, floorPuddles = []) {
       const cx = totalW / 2
       const stemTop = totalH - stemH - 2
       //
-      // Stem: slightly tapered rectangle
+      // Outline stroke shared by stem and cap
+      //
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.82)'
+      ctx.lineWidth = 1.5
+      ctx.lineJoin = 'round'
+      //
+      // Stem: slightly tapered rectangle with black outline
       //
       ctx.fillStyle = `rgb(${Math.min(255, color[0] + 40)}, ${Math.min(255, color[1] + 50)}, ${Math.min(255, color[2] + 30)})`
       ctx.beginPath()
@@ -4462,14 +4486,16 @@ function createMushrooms(k, floorPuddles = []) {
       ctx.lineTo(cx + stemW / 2, totalH - 2)
       ctx.closePath()
       ctx.fill()
+      ctx.stroke()
       //
-      // Cap: half-ellipse with slight color variation
+      // Cap: half-ellipse with black outline
       //
       ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
       ctx.beginPath()
       ctx.ellipse(cx, stemTop, capW / 2, capH, 0, Math.PI, 0)
       ctx.closePath()
       ctx.fill()
+      ctx.stroke()
       //
       // Cap highlight: lighter arc near the top
       //

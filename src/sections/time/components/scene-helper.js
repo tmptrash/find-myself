@@ -5,6 +5,7 @@ import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { get, set } from '../../../utils/progress.js'
 import * as DayNight from '../utils/time-day-night.js'
+import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
 const MUSIC_START_DELAY = 6.0
 //
@@ -239,7 +240,7 @@ export function initScene(config) {
       //
       k.volume(1)
       Sound.unmuteProceduralSounds()
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
   

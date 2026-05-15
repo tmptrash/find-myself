@@ -9,6 +9,8 @@ import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { arcY } from '../utils/trees.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
@@ -1244,7 +1246,7 @@ export function sceneLevel2(k) {
     //
     k.onKeyPress("escape", () => {
       Sound.stopAmbient(sound)
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
 }
@@ -1852,7 +1854,7 @@ function createBackgroundBushesNear(k) {
   }
   
   const bushesDataURL = createBushesCanvas()
-  const bushesTexture = k.loadSprite('bg-touch-level2-background-bushes-near', bushesDataURL)
+  loadTouchSprite(k, 'bg-touch-level2-background-bushes-near', bushesDataURL)
   
   //
   // Draw bushes canvas (in front of far bushes, but behind trees)
@@ -2080,7 +2082,7 @@ function createMountains(k) {
   }
   
   const mountainsDataURL = createMountainsCanvas()
-  k.loadSprite('bg-touch-level2-mountains', mountainsDataURL)
+  loadTouchSprite(k, 'bg-touch-level2-mountains', mountainsDataURL)
   
   //
   // Draw mountains canvas (behind everything)
@@ -2125,7 +2127,7 @@ function drawBackgroundDarkestTrees(ctx) {
 }
 function createBackgroundDarkestTrees(k) {
   const png = toCanvas({ width: k.width(), height: k.height() }, drawBackgroundDarkestTrees)
-  k.loadSprite('bg-touch-level2-darkest-trees', png)  
+  loadTouchSprite(k, 'bg-touch-level2-darkest-trees', png)  
   //
   // Draw trees canvas (behind all other trees - lowest z-index)
   //
@@ -2170,7 +2172,7 @@ function drawBackgroundDarkTrees(ctx) {
 
 function createBackgroundDarkTrees(k) {
   const png = toCanvas({ width: k.width(), height: k.height() }, drawBackgroundDarkTrees)
-  k.loadSprite('bg-touch-level2-background-dark-trees', png)
+  loadTouchSprite(k, 'bg-touch-level2-background-dark-trees', png)
   //
   // Draw trees canvas (behind other trees)
   //
@@ -2687,7 +2689,7 @@ function onHeroDeath(k, heroInst, levelIndicator) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    k.wait(DEATH_RELOAD_DELAY, () => k.go('level-touch.2'))
+    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.2'))
   })
 }
 
@@ -3055,7 +3057,7 @@ function createRoundedCornerSprite(radius, color) {
  */
 function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
-  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  loadTouchSprite(k, CORNER_SPRITE_NAME, cornerDataURL)
   //
   // Top-left corner
   //

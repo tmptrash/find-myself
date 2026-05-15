@@ -5,6 +5,8 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as GlowBug from '../components/glow-bug.js'
 import * as ShadowCreature from '../components/shadow-creature.js'
 import * as JungleDecor from '../components/jungle-decor.js'
@@ -1338,7 +1340,7 @@ export function sceneLevel3(k) {
     // ESC key to return to menu
     //
     k.onKeyPress("escape", () => {
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
 }
@@ -1838,7 +1840,7 @@ function onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    k.wait(DEATH_RELOAD_DELAY, () => k.go('level-touch.3'))
+    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.3'))
   })
 }
 
@@ -2512,7 +2514,7 @@ function createRoundedCornerSprite(radius, color) {
  */
 function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
-  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  loadTouchSprite(k, CORNER_SPRITE_NAME, cornerDataURL)
   //
   // Render corners above darkness overlay and snow overlay
   //
@@ -2573,7 +2575,7 @@ function createDepthLayers(k) {
     ctx.fillRect(0, 0, screenWidth, screenHeight)
     drawMoon(ctx)
   })
-  k.loadSprite(BG_SKY_SPRITE, skyPng)
+  loadTouchSprite(k, BG_SKY_SPRITE, skyPng)
   k.add([
     k.z(Z_SKY),
     {
@@ -2599,7 +2601,7 @@ function createDepthLayers(k) {
     drawMountainShape(ctx, screenThird * 2 + RIGHT_MOUNTAIN.xOffset, FLOOR_Y, screenThird + RIGHT_MOUNTAIN.widthExtra, RIGHT_MOUNTAIN, RIGHT_MOUNTAIN.colors)
     ctx.restore()
   })
-  k.loadSprite(MOUNTAINS_SPRITE, mountainsPng)
+  loadTouchSprite(k, MOUNTAINS_SPRITE, mountainsPng)
   addDepthLayer(k, MOUNTAINS_SPRITE, Z_MOUNTAINS, MOUNTAINS_DEPTH_OPACITY)
   //
   // Dark trees layer (far depth)
@@ -2622,7 +2624,7 @@ function createDepthLayers(k) {
       })
     }
   })
-  k.loadSprite(DARK_TREES_SPRITE, darkTreesPng)
+  loadTouchSprite(k, DARK_TREES_SPRITE, darkTreesPng)
   addDepthLayer(k, DARK_TREES_SPRITE, Z_DARK_TREES, DARK_TREES_DEPTH_OPACITY)
   //
   // Medium trees layer (medium depth)
@@ -2645,7 +2647,7 @@ function createDepthLayers(k) {
       })
     }
   })
-  k.loadSprite(MEDIUM_TREES_SPRITE, mediumTreesPng)
+  loadTouchSprite(k, MEDIUM_TREES_SPRITE, mediumTreesPng)
   addDepthLayer(k, MEDIUM_TREES_SPRITE, Z_MEDIUM_TREES, MEDIUM_TREES_DEPTH_OPACITY)
 }
 
@@ -2697,7 +2699,7 @@ function createFrontTrees(k) {
       })
     }
   })
-  k.loadSprite(FRONT_TREES_SPRITE, png)
+  loadTouchSprite(k, FRONT_TREES_SPRITE, png)
   addDepthLayer(k, FRONT_TREES_SPRITE, Z_FRONT_TREES, FRONT_TREES_DEPTH_OPACITY)
 }
 

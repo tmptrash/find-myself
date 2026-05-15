@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { toCanvas } from '../../../utils/helper.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 
 /**
  * Creates tree roots that grow from the bottom platform upward
@@ -485,8 +486,8 @@ export async function create(config) {
   //
   await Promise.all(roots.map(root => {
     return new Promise((resolve) => {
-      k.loadSprite(root.spriteName, root.dataUrl)
-      k.loadSprite(root.glowSpriteName, root.glowDataUrl)
+      loadTouchSprite(k, root.spriteName, root.dataUrl)
+      loadTouchSprite(k, root.glowSpriteName, root.glowDataUrl)
       setTimeout(resolve, 50)
     })
   }))

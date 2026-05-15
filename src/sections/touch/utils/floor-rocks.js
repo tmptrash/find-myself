@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { toCanvas } from '../../../utils/helper.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 
 const TOUCH_FLOOR_ROCK_COUNT_DEFAULT = 5
 const TOUCH_FLOOR_ROCK_RADIUS_MIN = 38
@@ -70,7 +71,7 @@ export function addTouchSectionFloorRocks(k, opts) {
       }
     }
   }
-  rocks.forEach(r => k.loadSprite(r.spriteName, r.dataUrl))
+  rocks.forEach(r => loadTouchSprite(k, r.spriteName, r.dataUrl))
   k.add([
     k.z(drawZ),
     {
@@ -97,7 +98,7 @@ export function addTouchSectionFloorRocks(k, opts) {
 export function addSingleFloorRockAt(k, floorY, posX, spriteName, drawZ) {
   const radius = TOUCH_FLOOR_ROCK_RADIUS_MIN + Math.random() * (TOUCH_FLOOR_ROCK_RADIUS_MAX - TOUCH_FLOOR_ROCK_RADIUS_MIN) * 0.45
   const rock = buildSingleFloorRock(k, floorY, posX, radius, spriteName)
-  k.loadSprite(rock.spriteName, rock.dataUrl)
+  loadTouchSprite(k, rock.spriteName, rock.dataUrl)
   k.add([
     k.z(drawZ),
     {

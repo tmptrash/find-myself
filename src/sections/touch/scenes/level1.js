@@ -7,6 +7,8 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { toCanvas, getRGB, parseHex } from '../../../utils/helper.js'
 import * as FallingLeaf from '../components/falling-leaf.js'
 import * as Rain from '../components/rain.js'
@@ -793,8 +795,8 @@ export function sceneLevel1(k) {
     
     const backDataURL = createBackCanvas()
     const frontStaticDataURL = createFrontStaticCanvas()
-    k.loadSprite('bg-touch-back', backDataURL)
-    k.loadSprite('bg-touch-front-static', frontStaticDataURL)
+    loadTouchSprite(k, 'bg-touch-back', backDataURL)
+    loadTouchSprite(k, 'bg-touch-front-static', frontStaticDataURL)
     //
     // Draw back canvas: clouds + back trees + middle trees (z=2)
     //
@@ -2291,7 +2293,7 @@ export function sceneLevel1(k) {
     // ESC key to return to menu
     //
     k.onKeyPress("escape", () => {
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
 }
@@ -2429,7 +2431,7 @@ function onPoisonLeafDeath(k, heroInst, levelIndicator) {
       flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnDeath(k, levelIndicator)
     }
-    k.wait(POISON_DEATH_RELOAD_DELAY, () => k.go('level-touch.1'))
+    k.wait(POISON_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.1'))
   })
 }
 //
@@ -2500,7 +2502,7 @@ function onUpdateDeathParticle(k, particle, pData) {
  */
 function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
-  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  loadTouchSprite(k, CORNER_SPRITE_NAME, cornerDataURL)
   //
   // Top-left corner
   //
@@ -3302,7 +3304,7 @@ function createL1Mushrooms(k) {
       tooltipText
     })
   }
-  mushrooms.forEach(m => k.loadSprite(m.spriteName, m.dataUrl))
+  mushrooms.forEach(m => loadTouchSprite(k, m.spriteName, m.dataUrl))
   k.add([
     k.z(6),
     {

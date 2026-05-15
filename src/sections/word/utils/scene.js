@@ -7,6 +7,7 @@ import * as WordGrass from '../components/word-grass.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { get, set } from '../../../utils/progress.js'
+import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -223,7 +224,7 @@ export function initScene(config) {
       if (breathMusic && breathMusic.stop) breathMusic.stop()
       WordPile.reset()  // Reset word pile state when leaving section
       WordGrass.reset()  // Reset grass state when leaving section
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
   

@@ -4,6 +4,7 @@ import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Particles from '../utils/particles.js'
 import * as Cursor from '../utils/cursor.js'
+import { goToMenuAfterAssets } from '../utils/level-assets.js'
 
 const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
@@ -814,7 +815,7 @@ export function sceneReady(k) {
     //
     const exitToMenu = () => {
       Sound.stopAmbient(sound)
-      k.go('menu')
+      goToMenuAfterAssets(k)
     }
     
     CFG.controls.startGame.forEach(key => {

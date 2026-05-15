@@ -3,6 +3,7 @@ import { CFG } from "../cfg.js"
 import { getRGB, parseHex } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
+import { goAfterPreparingAssets } from "../utils/level-assets.js"
 import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
@@ -113,6 +114,7 @@ export function sceneMenu(k) {
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
+    k.flyingWordsInstance = null
     //
     // Clean up life.png sprite from level indicators
     //
@@ -1031,7 +1033,8 @@ export function sceneMenu(k) {
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()
-      k.go("ready")
+      k.transitionCleanup?.()
+      goAfterPreparingAssets(k, "ready")
     })
     
     //

@@ -1,6 +1,7 @@
 import * as Sound from '../../../utils/sound.js'
 import { stopTimeSectionMusic } from '../components/scene-helper.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
+import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
 const FINAL_MESSAGE = "time shapes everything — even you.\n\nnow you know how to move with it."
 const MESSAGE_HOLD_DURATION = 5.0
@@ -121,7 +122,7 @@ function onUpdate(inst) {
       // Stop time section music
       //
       stopTimeSectionMusic()
-      inst.k.go('menu')
+      goToMenuAfterAssets(inst.k)
     }
   }
 }
@@ -136,5 +137,5 @@ function skipToMenu(inst) {
   // Stop time section music
   //
   stopTimeSectionMusic()
-  inst.k.go('menu')
+  goToMenuAfterAssets(inst.k)
 }

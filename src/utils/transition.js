@@ -3,6 +3,7 @@ import { parseHex } from './helper.js'
 import { setSectionCompleted, set } from './progress.js'
 import * as Sound from './sound.js'
 import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
+import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './level-assets.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -93,7 +94,7 @@ export function getNextLevel(currentLevel) {
  */
 export function showTransitionToLevel(k, targetLevel) {
   if (!targetLevel) {
-    k.go('menu')
+    goToMenuAfterAssets(k)
     return
   }
   //
@@ -104,7 +105,7 @@ export function showTransitionToLevel(k, targetLevel) {
   if (previousLevel) {
     createLevelTransition(k, previousLevel)
   } else {
-    k.go(targetLevel)
+    goAfterPreparingAssets(k, targetLevel)
   }
 }
 /**
@@ -148,7 +149,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     // Go directly to completion screen without transition overlay
     //
-    k.go(nextLevel)
+    goAfterPreparingAssets(k, nextLevel)
     return
   }
   
@@ -208,8 +209,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const isFromLevel = currentLevel !== 'menu' && currentLevel.startsWith('level-')
   const isFromMenuTime = currentLevel === 'menu-time'
   const isFromMenuTouch = currentLevel === 'menu-touch'
-  // Start with fade_to_black phase (unless from menu, menu-time, menu-touch or level, then skip to black_pause)
-  let phase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime || isFromMenuTouch) ? 'black_pause' : 'fade_to_black'
+  const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime || isFromMenuTouch) ? 'black_pause' : 'fade_to_black'
+  const needsEarlyAssetLoad = nextLevel.startsWith('level-')
+  let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   
   // Instance object to store text reference
   const inst = {
@@ -222,7 +224,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     soundName: null,
     textSound: null,
     soundsStopped: false,
-    originalVolume: originalVolume
+    originalVolume: originalVolume,
+    postAssetPreparePhase,
+    assetPrepareDone: !needsEarlyAssetLoad,
+    assetPreparePromise: null
   }
   
   //
@@ -246,15 +251,31 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     k.fixed()
   ])
   
+  if (needsEarlyAssetLoad) {
+    inst.assetPreparePromise = prepareSceneAssets(k, nextLevel).then(() => {
+      inst.assetPrepareDone = true
+    })
+  }
+  
+  const finalizeTransitionToLevel = (afterGo) => {
+    const enter = () => {
+      overlay.exists() && k.destroy(overlay)
+      enterPreparedScene(k, nextLevel, afterGo)
+    }
+    if (needsEarlyAssetLoad && inst.assetPreparePromise && !inst.assetPrepareDone) {
+      inst.assetPreparePromise.then(enter)
+      return
+    }
+    enter()
+  }
+  
   // Function to skip transition and go directly to next level
   const skipTransition = () => {
     if (inst.skipped) return // Already skipped
     inst.skipped = true
     
     // Clean up
-    transitionInterval.cancel()
-    inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
-    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+    k.transitionCleanup?.()
     //
     // Restore volume, unmute procedural sounds, and resume AudioContext
     //
@@ -264,11 +285,17 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     // Go to next level and add fade-in overlay so new scene doesn't flash
     //
-    k.go(nextLevel)
-    createSceneFadeIn(k, bgR, bgG, bgB)
+    finalizeTransitionToLevel(() => createSceneFadeIn(k, bgR, bgG, bgB))
   }
   
   const updateTransition = () => {
+    if (phase === 'asset_prepare') {
+      if (inst.assetPrepareDone) {
+        phase = inst.postAssetPreparePhase
+        timer = 0
+      }
+      return
+    }
     // Enable skip after 0.3 seconds to prevent accidental skip from menu button press
     if (!inst.skipEnabled) {
       inst.skipEnableTimer += k.dt()
@@ -283,14 +310,13 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     if (inst.skipEnabled && k.isKeyPressed("escape")) {
       if (inst.skipped) return
       inst.skipped = true
-      transitionInterval.cancel()
-      inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
-      inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+      bumpPrepareCancelNonce()
+      k.transitionCleanup?.()
       k.volume(inst.originalVolume)
       Sound.unmuteProceduralSounds()
       Sound.resumeGlobalAudio()
       stopTimeSectionMusic()
-      k.go("menu")
+      goToMenuAfterAssets(k)
       return
     }
     //
@@ -419,15 +445,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           inst.outlineTexts = outlineTexts
         } else {
           // No subtitle, go to next level immediately
-          transitionInterval.cancel()
-          overlay.exists() && k.destroy(overlay)
+          k.transitionCleanup?.()
           //
           // Restore volume and unmute procedural sounds before going to next level
           //
           k.volume(inst.originalVolume)
           Sound.unmuteProceduralSounds()
           Sound.resumeGlobalAudio()
-          k.go(nextLevel)
+          finalizeTransitionToLevel()
         }
       }
     } else if (phase === 'text_fade_in') {
@@ -482,7 +507,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     } else if (phase === 'final_pause') {
       // Short pause after text fades out before loading new level
       if (timer >= FINAL_PAUSE_DURATION) {
-        transitionInterval.cancel()
+        k.transitionCleanup?.()
         //
         // Restore volume and unmute procedural sounds before going to next level
         //
@@ -492,13 +517,21 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         //
         // Go to next level and add fade-in overlay so new scene doesn't flash
         //
-        k.go(nextLevel)
-        createSceneFadeIn(k, bgR, bgG, bgB)
+        finalizeTransitionToLevel(() => createSceneFadeIn(k, bgR, bgG, bgB))
       }
     }
   }
   
   const transitionInterval = k.onUpdate(updateTransition)
+  
+  k.transitionCleanup = () => {
+    transitionInterval.cancel()
+    overlay.exists() && k.destroy(overlay)
+    inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
+    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+    inst?.textSound?.stop()
+    k.transitionCleanup = null
+  }
   
   // Return cleanup function
   return () => {

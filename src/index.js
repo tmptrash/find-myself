@@ -19,9 +19,9 @@ import { sceneLevel2 as sceneTimeLevel2 } from "./sections/time/scenes/level2.js
 import { sceneLevel3 as sceneTimeLevel3 } from "./sections/time/scenes/level3.js"
 import { sceneTimeComplete } from "./sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
-import { loadSprites as loadBladeSprites } from "./sections/word/components/blades.js"
-import * as CityBackground from "./sections/time/components/city-background.js"
 import * as Cursor from "./utils/cursor.js"
+import * as BootLoader from "./utils/boot-loader.js"
+import { prepareSceneAssetsThenEnterScene } from "./utils/level-assets.js"
 //
 // Kaplay init: how many times to retry on transient WebGL failure
 // (Chrome can transiently fail context creation when the GPU process is busy,
@@ -36,6 +36,13 @@ const KAPLAY_INIT_RETRY_STEP_MS = 250
 // keep the GPU process responsive while it's acquiring a WebGL context.
 //
 const ASSET_LOAD_CONCURRENCY = 4
+//
+// If we reload immediately after context loss the GPU may still be reclaiming VRAM;
+// the next kaplay() then fails all retries → fatal "WebGL not available". Longer
+// delay during boot when the burst of textures is largest.
+//
+const WEBGL_LOST_RELOAD_MS_AFTER_BOOT = 4500
+const WEBGL_LOST_RELOAD_MS_INGAME = 1800
 //
 // WebGL context options we force onto Kaplay's canvas. By default Kaplay asks
 // for { preserveDrawingBuffer: true } which keeps a persistent GPU backbuffer
@@ -59,37 +66,41 @@ document.body.style.backgroundColor = '#000000'
 //
 // Loader progress state (DOM element + counters)
 //
-const loaderEl = document.getElementById('loader')
-const loaderBar = document.getElementById('loader-bar')
 let completedTasks = 0
 let totalTasks = 0
+//
+// True until k.onLoad runs — used to pace WebGL loss reload and document cause.
+//
+let kaplayBootReachedOnLoad = false
+//
+// Avoid scheduling multiple reloads from rapid duplicate context-loss events.
+//
+let webglLostReloadScheduled = false
 //
 // Boot the application (async so we can retry kaplay() and await asset batches)
 //
 boot()
 /**
- * Top-level boot sequence: init kaplay with retry, then load all assets in batches.
+ * Top-level boot sequence: init kaplay with retry, load core assets + sounds,
+ * then prepare lazy level packs on demand (see level-assets.js).
  */
 async function boot() {
   let k
   try {
     k = await initKaplayWithRetry()
   } catch (err) {
-    showFatalLoaderError('WebGL is not available in this browser. Please reload the page or try a different browser.')
+    BootLoader.showFatalLoaderError('WebGL is not available in this browser. Please reload the page or try a different browser.')
     throw err
   }
   Cursor.init(k)
   //
-  // Asset registration tasks (sprites, fonts, scenes) — synchronous setup work
+  // Core registration only — section-heavy sprites load per level via level-assets helpers
   //
   const setupTasks = buildSetupTasks(k)
-  //
-  // Sound files — loaded in concurrency-limited batches to avoid burst requests
-  //
   const soundTasks = buildSoundTasks(k)
   totalTasks = setupTasks.length + soundTasks.length
   //
-  // Phase 1: synchronous setup work, yielding to the renderer between steps
+  // Phase 1: synchronous setup work, yielding to the GPU between steps
   //
   for (const task of setupTasks) {
     try {
@@ -101,18 +112,18 @@ async function boot() {
     }
     completedTasks++
     updateLoaderBar()
-    await yieldToRenderer()
+    await BootLoader.yieldForGpu(BootLoader.DEFAULT_GPU_YIELD_FRAMES)
   }
   //
   // Phase 2: parallel-limited sound loading — actually awaits each network load
   //
   await runWithConcurrency(soundTasks, ASSET_LOAD_CONCURRENCY, onTaskFinished)
   //
-  // All work queued — wait for kaplay's internal load promise to flush
+  // Core assets queued — flush Kaplay loader, then preload hub pack + enter ready
   //
-  k.onLoad(() => {
-    hideLoader()
-    k.go("ready")
+  k.onLoad(async () => {
+    kaplayBootReachedOnLoad = true
+    await prepareSceneAssetsThenEnterScene(k, 'ready')
   })
 }
 /**
@@ -182,8 +193,18 @@ function createPatchedCanvas() {
 //
 function onWebGLContextLost(e) {
   e.preventDefault()
-  showFatalLoaderError('Graphics context lost. Reloading...')
-  setTimeout(() => location.reload(), 500)
+  if (webglLostReloadScheduled) return
+  webglLostReloadScheduled = true
+  //
+  // Integrated GPUs can lose the context under load; reloading too soon leaves
+  // VRAM pinned → initKaplayWithRetry fails → misleading "WebGL not available".
+  //
+  const delayMs = kaplayBootReachedOnLoad ? WEBGL_LOST_RELOAD_MS_INGAME : WEBGL_LOST_RELOAD_MS_AFTER_BOOT
+  const hint = kaplayBootReachedOnLoad
+    ? 'Graphics context lost. Reloading…'
+    : 'GPU was overloaded while loading assets. Waiting before reload…'
+  BootLoader.showFatalLoaderError(hint)
+  setTimeout(() => location.reload(), delayMs)
 }
 //
 // WebGL context restored: in our flow we always reload on loss, so this is
@@ -191,50 +212,16 @@ function onWebGLContextLost(e) {
 //
 function onWebGLContextRestored() {}
 /**
- * Build the list of synchronous setup tasks (sprites, fonts, backgrounds, scenes).
+ * Build the list of synchronous setup tasks (fonts, minimal sprites, scene registration).
  */
 function buildSetupTasks(k) {
   return [
-    //
-    // Fonts
-    //
     () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Regular.ttf"),
     () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Thin.ttf"),
-    //
-    // Sprites
-    //
     () => k.loadSprite("life", "./life.png"),
     () => k.loadSprite("menu-bg", "./menu.png"),
-    //
-    // Hero and blade sprites
-    //
     () => loadHeroSprites(k, HEROES.HERO),
     () => loadHeroSprites(k, HEROES.ANTIHERO),
-    () => loadBladeSprites(k),
-    //
-    // City background preloads (CPU-intensive canvas rendering)
-    //
-    () => {
-      const PLATFORM_BOTTOM_HEIGHT_LEVEL0 = 250
-      CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL0, 'city-background', false, false, true, 2.0, true)
-    },
-    () => {
-      const PLATFORM_BOTTOM_HEIGHT_LEVEL1 = 150
-      CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL1, 'city-background-level1', false, false, true, 2.0, true)
-    },
-    () => {
-      const PLATFORM_BOTTOM_HEIGHT_LEVEL2 = 150
-      CityBackground.preloadCityBackground(k, PLATFORM_BOTTOM_HEIGHT_LEVEL2, 'city-background-level2', false, true, true, 0.4, true)
-    },
-    () => {
-      const LOWER_CORRIDOR_Y_LEVEL3 = 680
-      const CORRIDOR_HEIGHT_LEVEL3 = 180
-      const groundLineLevel3 = k.height() - (LOWER_CORRIDOR_Y_LEVEL3 + CORRIDOR_HEIGHT_LEVEL3)
-      CityBackground.preloadCityBackground(k, groundLineLevel3, 'city-background-level3', false, true, false)
-    },
-    //
-    // Scene registration (each scene may do internal setup)
-    //
     () => sceneReady(k),
     () => sceneMenu(k),
     () => sceneLevel0(k),
@@ -261,9 +248,6 @@ function buildSetupTasks(k) {
  */
 function buildSoundTasks(k) {
   const sounds = [
-    //
-    // Audio: time section
-    //
     ['time', './sounds/time.mp3'],
     ['time0', './sounds/time0.mp3'],
     ['time0-pre', './sounds/time0-pre.mp3'],
@@ -271,9 +255,6 @@ function buildSoundTasks(k) {
     ['time1-pre', './sounds/time1-pre.mp3'],
     ['time2-pre', './sounds/time2-pre.mp3'],
     ['time3-pre', './sounds/time3-pre.mp3'],
-    //
-    // Audio: word section
-    //
     ['word', './sounds/word.mp3'],
     ['breath', './sounds/breath.mp3'],
     ['word0-pre', './sounds/word0-pre.mp3'],
@@ -281,9 +262,6 @@ function buildSoundTasks(k) {
     ['word2-pre', './sounds/word2-pre.mp3'],
     ['word3-pre', './sounds/word3-pre.mp3'],
     ['word4-pre', './sounds/word4-pre.mp3'],
-    //
-    // Audio: menu and touch section
-    //
     ['menu', './sounds/menu.mp3'],
     ['kids', './sounds/kids.mp3'],
     ['clock', './sounds/clock.mp3'],
@@ -327,6 +305,7 @@ async function runWithConcurrency(tasks, limit, onDone) {
  * Update the loader progress bar based on completed task count.
  */
 function updateLoaderBar() {
+  const loaderBar = document.getElementById('loader-bar')
   if (!loaderBar || totalTasks === 0) return
   const pct = Math.min(100, Math.round((completedTasks / totalTasks) * 100))
   loaderBar.style.width = `${pct}%`
@@ -338,19 +317,6 @@ function onTaskFinished() {
   completedTasks++
   updateLoaderBar()
 }
-//
-// Yield control to the browser so the progress bar can repaint between steps
-//
-function yieldToRenderer() {
-  return new Promise(r => setTimeout(r, 0))
-}
-//
-// Hide the boot loader after all assets are ready
-//
-function hideLoader() {
-  if (!loaderEl) return
-  loaderEl.style.display = 'none'
-}
 /**
  * Remove any leftover canvas elements (used between failed kaplay init attempts
  * so their dead WebGL contexts can be released by the browser).
@@ -358,11 +324,4 @@ function hideLoader() {
 function removeStaleCanvases() {
   const stale = document.querySelectorAll('canvas')
   stale.forEach(c => c.remove())
-}
-/**
- * Replace the loader bar with a human-readable error message.
- */
-function showFatalLoaderError(message) {
-  if (!loaderEl) return
-  loaderEl.innerHTML = `<div style="color:#fff;font-family:monospace;text-align:center;padding:24px">${message}</div>`
 }

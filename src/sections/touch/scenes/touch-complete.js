@@ -1,5 +1,6 @@
 import * as Sound from '../../../utils/sound.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
+import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
 const FINAL_MESSAGE = "you learned to reach out — to touch and be touched.\n\nnow you feel the difference between contact\n\nand connection."
 const MESSAGE_HOLD_DURATION = 5.0
@@ -118,7 +119,7 @@ function onUpdate(inst) {
 
     if (progress >= 1) {
       inst.phase = 'complete'
-      inst.k.go('menu')
+      goToMenuAfterAssets(inst.k)
     }
   }
 }
@@ -129,5 +130,5 @@ function onUpdate(inst) {
 function skipToMenu(inst) {
   if (inst.skipped) return
   inst.skipped = true
-  inst.k.go('menu')
+  goToMenuAfterAssets(inst.k)
 }

@@ -351,7 +351,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}`
   //
-  // Check if sprites with this configuration are already loaded
+  // Skip generation if sprites for this configuration are already in the asset registry.
   //
   try { if (k.getSprite(`${prefix}_0_0`)) return } catch (e) {}
   //

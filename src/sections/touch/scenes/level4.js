@@ -5,6 +5,8 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -393,7 +395,7 @@ export function sceneLevel4(k) {
         // Transition after annihilation to menu
         //
         createLevelTransition(k, 'level-touch.4', () => {
-          k.go('menu')
+          goToMenuAfterAssets(k)
         })
       },
       currentLevel: 'level-touch.4',
@@ -968,7 +970,7 @@ export function sceneLevel4(k) {
     // ESC key to return to menu
     //
     k.onKeyPress("escape", () => {
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
 }
@@ -1186,7 +1188,7 @@ function createCloudPlatformArrows(k, x, y, sound) {
   //
   // Load sprite from file (will be cached if already loaded)
   //
-  k.loadSprite(arrowSpriteId, './arrow.png')
+  loadTouchSprite(k, arrowSpriteId, './arrow.png')
   //
   // Get arrow sprite dimensions
   // Use larger default to ensure detection works - arrow.png is likely around 200-400px wide
@@ -1374,7 +1376,7 @@ function createCenterArrow(k) {
   //
   // Load sprite from file (will be cached if already loaded)
   //
-  k.loadSprite(arrowSpriteId, './arrow.png')
+  loadTouchSprite(k, arrowSpriteId, './arrow.png')
   //
   // Create arrow sprite object in center of screen
   //

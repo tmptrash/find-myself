@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { toCanvas } from '../../../utils/helper.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 
 //
 // Branch rotation easing used by dynamic organic-tree drawers (per frame).
@@ -380,7 +381,7 @@ export function prerenderOrganicDarkBackdropSprite(k, tree, baseSpriteName, dimR
     ctx.translate(-bb.minX + pad, -bb.minY + pad)
     drawOrganicTreeToCanvas(ctx, snap, 0)
   })
-  k.loadSprite(name, dataUrl)
+  loadTouchSprite(k, name, dataUrl)
   tree.darkBackdropSpriteName = name
   tree.darkBackdropX = bb.minX - pad
   tree.darkBackdropY = bb.minY - pad
@@ -427,7 +428,7 @@ function prerenderTrunkSprite(k, tree, spriteName) {
       ctx.stroke()
     }
   })
-  k.loadSprite(spriteName, dataUrl)
+  loadTouchSprite(k, spriteName, dataUrl)
   tree.trunkSpriteName = spriteName
   tree.trunkSpriteX = tree.x + minX - pad
   tree.trunkSpriteY = minY - pad
@@ -475,7 +476,7 @@ function prerenderClusterSprite(k, tree, cluster, spriteName) {
       drawRealisticLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.rotation, leaf.r, leaf.g, leaf.b, leaf.opacity * tree.opacity)
     }
   })
-  k.loadSprite(spriteName, dataUrl)
+  loadTouchSprite(k, spriteName, dataUrl)
   cluster.spriteName = spriteName
   const pivotPxX = -minX + pad
   const pivotPxY = -minY + pad

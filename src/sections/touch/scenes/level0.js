@@ -8,6 +8,8 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { drawRealisticBird } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
@@ -239,6 +241,10 @@ const MONSTER_CONVERSATION_LINES = [
   { speaker: 0, text: "why did the bug cross\nthe screen?\nbetter latency" },
   { speaker: 1, text: "that's not a joke.\nthat's just commuting" },
   { speaker: 2, text: "I laughed.\ninternally.\nI'm subtle" },
+  { speaker: 0, text: "hey.\nsee the small ones?\nscattered everywhere" },
+  { speaker: 1, text: "they need someone\nto nudge them\ncloser together" },
+  { speaker: 2, text: "push them into a pile.\nsomething good\nhappens when they meet" },
+  { speaker: 0, text: "that's literally\nhow connection works.\ntry it" },
   { speaker: 1, text: "my therapist says\nI stack trauma\nlike pancakes" },
   { speaker: 0, text: "mine says\nstop borrowing trouble\nfrom tomorrow" },
   { speaker: 2, text: "tomorrow said\n'already booked'" },
@@ -1412,11 +1418,11 @@ export function sceneLevel0(k) {
     const backOrganicOverlayDataURL = createBackOrganicOverlayCanvas()
     const blackLeafMidDataURL = createBlackLeafMidCanvas()
     const frontStaticDataURL = createFrontStaticCanvas()
-    k.loadSprite('bg-touch-l0-black-back', blackBackBaseDataURL)
-    k.loadSprite('bg-touch-l0-back-organic', backOrganicOverlayDataURL)
-    k.loadSprite('bg-touch-l0-grey-leaf-mid', greyLeafMidDataURL)
-    k.loadSprite('bg-touch-l0-black-leaf-mid', blackLeafMidDataURL)
-    k.loadSprite('bg-touch-l0-front-static', frontStaticDataURL)
+    loadTouchSprite(k, 'bg-touch-l0-black-back', blackBackBaseDataURL)
+    loadTouchSprite(k, 'bg-touch-l0-back-organic', backOrganicOverlayDataURL)
+    loadTouchSprite(k, 'bg-touch-l0-grey-leaf-mid', greyLeafMidDataURL)
+    loadTouchSprite(k, 'bg-touch-l0-black-leaf-mid', blackLeafMidDataURL)
+    loadTouchSprite(k, 'bg-touch-l0-front-static', frontStaticDataURL)
     //
     // Far circles → far grey silhouettes → grey-leaf band → black-leaf band (birds sit above black-leaf z).
     //
@@ -2820,7 +2826,7 @@ export function sceneLevel0(k) {
     //
     k.onKeyPress("escape", () => {
       Sound.stopAmbient(sound)
-      k.go("menu")
+      goToMenuAfterAssets(k)
     })
   })
 }
@@ -2970,7 +2976,7 @@ function onHeroFloorThornDeath(k, heroInst, levelIndicator) {
       flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnThornDeath(k, levelIndicator)
     }
-    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => k.go('level-touch.0'))
+    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.0'))
   })
 }
 
@@ -3392,7 +3398,7 @@ function createRoundedCornerSprite(radius, color) {
  */
 function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
-  k.loadSprite(CORNER_SPRITE_NAME, cornerDataURL)
+  loadTouchSprite(k, CORNER_SPRITE_NAME, cornerDataURL)
   //
   // Top-left corner
   //
@@ -4501,7 +4507,7 @@ function createMushrooms(k, floorPuddles = []) {
   // Load sprites and draw mushrooms
   //
   mushrooms.forEach(m => {
-    k.loadSprite(m.spriteName, m.dataUrl)
+    loadTouchSprite(k, m.spriteName, m.dataUrl)
   })
   k.add([
     k.z(6),
@@ -4668,7 +4674,7 @@ function createRocks(k, thornData) {
       }
     }
   }
-  rocks.forEach(r => k.loadSprite(r.spriteName, r.dataUrl))
+  rocks.forEach(r => loadTouchSprite(k, r.spriteName, r.dataUrl))
   const rocksBehind = []
   const rocksInFront = []
   for (const rock of rocks) {

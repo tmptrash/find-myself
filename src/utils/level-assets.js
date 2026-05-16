@@ -78,25 +78,34 @@ export function sceneToPackKey(sceneName) {
   return 'hub'
 }
 
-function loadTimeCityForLevel(k, sceneName) {
+async function loadTimeCityForLevel(k, sceneName) {
+  //
+  // onProgress is called inside preloadCityBackground between the draw phase
+  // and the blur phase (and again after blur). It updates the loader bar so the
+  // user sees gradual progress, and yields rAF frames so the browser can repaint.
+  //
+  const onProgress = async (pct) => {
+    BootLoader.setLoaderBarPct(pct)
+    await BootLoader.yieldForGpu(2)
+  }
   if (sceneName === 'level-time.0') {
-    CityBackground.preloadCityBackground(
+    await CityBackground.preloadCityBackground(
       k, TIME_LEVEL0_PLATFORM_BOTTOM, 'city-background',
-      false, false, true, 2.0, true
+      false, false, true, 2.0, true, onProgress
     )
     return
   }
   if (sceneName === 'level-time.1') {
-    CityBackground.preloadCityBackground(
+    await CityBackground.preloadCityBackground(
       k, TIME_LEVEL1_PLATFORM_BOTTOM, 'city-background-level1',
-      false, false, true, 2.0, true
+      false, false, true, 2.0, true, onProgress
     )
     return
   }
   if (sceneName === 'level-time.2') {
-    CityBackground.preloadCityBackground(
+    await CityBackground.preloadCityBackground(
       k, TIME_LEVEL2_PLATFORM_BOTTOM, 'city-background-level2',
-      false, true, true, 0.4, true
+      false, true, true, 0.4, true, onProgress
     )
     return
   }
@@ -105,7 +114,7 @@ function loadTimeCityForLevel(k, sceneName) {
     //
     // No trees and no sun for level 3 — keeps VRAM lower and matches the snowy aesthetic.
     //
-    CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false, 0.25, false, false)
+    await CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false, 0.25, false, false, onProgress)
     //
     // Register city bg so it gets squashed when leaving time-3.
     //
@@ -161,11 +170,21 @@ async function applyPack(k, packKey, sceneName) {
     Object.entries(TIME_CITY_SPRITE).forEach(([pack, spriteName]) => {
       pack !== packKey && squashSpriteReleaseGpu(k, spriteName)
     })
-    BootLoader.setLoaderBarPct(35)
-    await BootLoader.yieldForGpu(1)
-    loadTimeCityForLevel(k, sceneName)
-    BootLoader.setLoaderBarPct(90)
-    await BootLoader.yieldForGpu(4)
+    BootLoader.setLoaderBarPct(20)
+    //
+    // Yield extra frames after squashing so the browser can flush pending GPU
+    // work and give GC a chance to reclaim old texture memory before the new
+    // city background drawing starts.
+    //
+    await BootLoader.yieldForGpu(3)
+    //
+    // loadTimeCityForLevel is async: it draws the canvas (~65 ms), yields, blurs
+    // (~130 ms), yields, then calls k.loadSprite. onProgress inside the function
+    // updates the bar from 55 → 85 % with repaints between each phase.
+    //
+    await loadTimeCityForLevel(k, sceneName)
+    BootLoader.setLoaderBarPct(95)
+    await BootLoader.yieldForGpu(2)
   }
 }
 

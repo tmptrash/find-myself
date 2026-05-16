@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { toCanvas } from '../../../utils/helper.js'
+import { toCanvas, applyBoxBlur } from '../../../utils/helper.js'
 
 //
 // Per-sprite window positions stored during generation.
@@ -119,11 +119,12 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     }
     
     //
-    // Draw blurred buildings (even stronger blur)
-    // Buildings start from bottom platform and go only upward
+    // Buildings start from bottom platform and go only upward.
+    // No ctx.filter — blur is applied programmatically after all drawing
+    // via applyBoxBlur, which avoids GPU framebuffer allocation and keeps
+    // rendering on the fast GPU path.
     //
-    ctx.filter = 'blur(6px)'  // Slightly sharper than before (was 8px)
-    
+
     const randomRange = (min, max) => Math.random() * (max - min) + min
     const randomInt = (min, max) => Math.floor(randomRange(min, max))
     
@@ -402,7 +403,6 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
 
 function drawBlurredOrganicTrees(ctx, cfg) {
   const { screenWidth, bottomPlatformY, autumnLeaves, lushGreenTrees = false } = cfg
-  ctx.filter = 'blur(7px)'
   let currentX = 0
   while (currentX < screenWidth * 1.2) {
     const lushTrees = lushGreenTrees || autumnLeaves
@@ -450,7 +450,6 @@ function drawBlurredOrganicTrees(ctx, cfg) {
       : randomRange(52, 118)
     currentX += crownWidth + treeSpacing
   }
-  ctx.filter = 'none'
 }
 
 function drawOrganicTrunk(ctx, centerX, bottomY, trunkHeight) {
@@ -526,16 +525,27 @@ function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLe
   const leafCount = Math.floor((28 + Math.floor(Math.random() * 24)) * leafCountBoost)
   const spreadX = crownWidth * randomRange(0.4, 0.58)
   const spreadY = crownWidth * randomRange(0.3, 0.42)
+  //
+  // Draw all leaves as plain filled circles batched into a single beginPath/fill
+  // call per cluster. The programmatic box blur applied later makes the exact leaf
+  // shape (complex bezier vs circle) completely imperceptible, while the batching
+  // reduces Canvas API calls from ~14 per leaf (save, translate, rotate, 2×
+  // quadraticCurveTo, fill, stroke, restore …) to ~2 (arc + implicit close).
+  // One fillStyle set per cluster instead of per leaf also avoids per-leaf GPU
+  // state flushes, keeping the drawing phase fast on the GPU path.
+  //
+  const leafColor = pickLeafColor(autumnLeaves)
+  ctx.fillStyle = `rgba(${leafColor.r}, ${leafColor.g}, ${leafColor.b}, ${leafColor.a})`
+  ctx.beginPath()
   for (let i = 0; i < leafCount; i++) {
     const angle = randomRange(0, Math.PI * 2)
     const dist = Math.random()
     const lx = centerX + Math.cos(angle) * spreadX * dist
     const ly = crownCenterY + Math.sin(angle) * spreadY * dist * 0.8
     const size = randomRange(4.4, 8.8) * leafSizeBoost
-    const rot = randomRange(-Math.PI, Math.PI)
-    const leafColor = pickLeafColor(autumnLeaves)
-    drawLeafShape(ctx, lx, ly, size, rot, leafColor)
+    ctx.arc(lx, ly, size, 0, Math.PI * 2)
   }
+  ctx.fill()
 }
 
 function pickLeafColor(autumnLeaves) {
@@ -570,25 +580,6 @@ function pickLeafColor(autumnLeaves) {
   }
 }
 
-function drawLeafShape(ctx, x, y, size, angle, color) {
-  ctx.save()
-  ctx.translate(x, y)
-  ctx.rotate(angle)
-  ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.quadraticCurveTo(-size * 0.62, -size * 0.35, 0, -size)
-  ctx.quadraticCurveTo(size * 0.62, -size * 0.35, 0, 0)
-  ctx.closePath()
-  ctx.fill()
-  ctx.strokeStyle = `rgba(${Math.max(0, color.r - 36)}, ${Math.max(0, color.g - 42)}, ${Math.max(0, color.b - 36)}, ${Math.min(0.35, color.a * 0.46)})`
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.lineTo(0, -size)
-  ctx.stroke()
-  ctx.restore()
-}
 
 function randomRange(min, max) {
   return Math.random() * (max - min) + min
@@ -607,9 +598,28 @@ function randomInt(min, max) {
  * @param {boolean} [autumnLeaves=false] - Whether to use autumn colors for tree leaves
  * @param {boolean} [showCars=true] - Whether to show moving cars
  * @param {number} [deepBuildingHeightMultiplier=0.25] - Height multiplier for deepest buildings
+ * @param {boolean} [capBySun=showSun] - Whether to cap building height by sun position
+ * @param {boolean} [showTrees=true] - Whether to render trees
+ * @param {Function} [onProgress] - Optional async callback(pct) called between heavy phases
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun, showTrees = true) {
+export async function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun, showTrees = true, onProgress = null) {
   const { dataUrl: canvas, windows } = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars, deepBuildingHeightMultiplier, capBySun, showTrees)
+  //
+  // Yield after synchronous GPU drawing so the loader bar can repaint.
+  // getImageData + box blur run next — they take ~130 ms in total but are
+  // bounded operations that do not trigger "page not responding".
+  //
+  onProgress && await onProgress(55)
+  //
+  // Apply programmatic box blur to the fully-drawn canvas. This replaces
+  // ctx.filter which would allocate an ~8 MB GPU framebuffer on the 1920×1080
+  // surface and risk WebGL context loss. The sliding-window algorithm runs in
+  // O(width × height) regardless of radius and does two passes to approximate
+  // a Gaussian. The one-time getImageData read-back costs ~20–40 ms.
+  //
+  const ctx = canvas.getContext('2d')
+  applyBoxBlur(ctx, canvas.width, canvas.height)
+  onProgress && await onProgress(85)
   k.loadSprite(spriteName, canvas)
   //
   // Release the HTMLCanvasElement's 2D backing store immediately after Kaplay

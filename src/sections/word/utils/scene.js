@@ -627,7 +627,7 @@ function addLevelTitle(k, text, color, subText = null, subColor = null, customTo
  * Creates a rounded corner sprite using canvas (L-shaped with rounded inner corner)
  * @param {number} radius - Corner radius
  * @param {string} color - Platform color in hex format
- * @returns {string} Data URL of the corner sprite
+ * @returns {HTMLCanvasElement} Canvas element ready for k.loadSprite; caller must zero it after loading
  */
 function createRoundedCornerSprite(radius, color) {
   const canvas = document.createElement('canvas')
@@ -646,8 +646,8 @@ function createRoundedCornerSprite(radius, color) {
   ctx.beginPath()
   ctx.arc(radius, radius, radius, 0, Math.PI * 2)
   ctx.fill()
-  
-  return canvas.toDataURL()
+
+  return canvas
 }
 
 /**
@@ -667,13 +667,13 @@ export function createRoundedCorners(k, platformColor, dims = {}) {
   //
   // Create corner sprite
   //
-  const cornerDataURL = createRoundedCornerSprite(radius, platformColor)
-  k.loadSprite('word-corner-sprite', cornerDataURL)
+  const cornerCanvas = createRoundedCornerSprite(radius, platformColor)
+  k.loadSprite('word-corner-sprite', cornerCanvas)
   //
   // Release canvas backing store immediately after Kaplay reads it.
   //
-  cornerDataURL.width = 0
-  cornerDataURL.height = 0
+  cornerCanvas.width = 0
+  cornerCanvas.height = 0
   //
   // Top-left corner (rotate 0°)
   //

@@ -28,8 +28,8 @@ import { prepareSceneAssetsThenEnterScene } from "./utils/level-assets.js"
 // e.g. right after HMR reload).
 //
 const KAPLAY_INIT_MAX_ATTEMPTS = 5
-const KAPLAY_INIT_RETRY_BASE_MS = 100
-const KAPLAY_INIT_RETRY_STEP_MS = 250
+const KAPLAY_INIT_RETRY_BASE_MS = 200
+const KAPLAY_INIT_RETRY_STEP_MS = 400
 //
 // Cap concurrent network loads at boot so the browser does not fire 30+ parallel
 // mp3/png requests simultaneously. Smaller batches behave better under HMR and
@@ -41,8 +41,8 @@ const ASSET_LOAD_CONCURRENCY = 4
 // the next kaplay() then fails all retries → fatal "WebGL not available". Longer
 // delay during boot when the burst of textures is largest.
 //
-const WEBGL_LOST_RELOAD_MS_AFTER_BOOT = 4500
-const WEBGL_LOST_RELOAD_MS_INGAME = 1800
+const WEBGL_LOST_RELOAD_MS_AFTER_BOOT = 6000
+const WEBGL_LOST_RELOAD_MS_INGAME = 2500
 //
 // WebGL context options we force onto Kaplay's canvas. By default Kaplay asks
 // for { preserveDrawingBuffer: true } which keeps a persistent GPU backbuffer

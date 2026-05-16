@@ -94,18 +94,35 @@ export function onPhysicalKeyPress(code, fn) {
  * also keeps DevTools Network tab clean (each toDataURL call would
  * otherwise show up as a separate "request" entry).
  *
- * @param {{width:number, height:number, pixelRatio?:number}} opts - Canvas size in CSS px
+ * When softwareRendering is true the context is created with
+ * { willReadFrequently: true }, which forces Chrome to use Skia's CPU
+ * rasteriser instead of a GPU-backed surface. This prevents Chrome from
+ * allocating a full-resolution GPU FBO (framebuffer object) for every
+ * ctx.filter = 'blur(Xpx)' draw call. On a 1920×1080 canvas each GPU FBO
+ * is ~8 MB; multiple overlapping blur passes can push VRAM past the
+ * browser's WebGL context budget and trigger a context loss that prevents
+ * Kaplay from recreating its GL state. Use softwareRendering for any canvas
+ * that applies ctx.filter blur; leave it false for small or non-blurred
+ * canvases where GPU acceleration is beneficial.
+ *
+ * @param {{width:number, height:number, pixelRatio?:number, softwareRendering?:boolean}} opts - Canvas size in CSS px
  * @param {(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => void} drawFn - Drawing routine
  * @returns {HTMLCanvasElement} Canvas with the rendered image, ready for loadSprite
  */
-export function toCanvas({ width, height, pixelRatio = 1 }, drawFn) {
+export function toCanvas({ width, height, pixelRatio = 1, softwareRendering = false }, drawFn) {
   const canvas = document.createElement('canvas')
   canvas.width = width * pixelRatio
   canvas.height = height * pixelRatio
   canvas.style.width = width + 'px'
   canvas.style.height = height + 'px'
-
-  const ctx = canvas.getContext("2d")
+  //
+  // GPU-backed canvas (default) is fast for normal drawing but creates a large
+  // temporary GPU framebuffer for every blur filter call, risking context loss.
+  // Software-backed canvas routes all drawing through Skia on the CPU — no
+  // GPU FBOs, safe for large canvases that use ctx.filter.
+  //
+  const ctxOptions = softwareRendering ? { willReadFrequently: true } : undefined
+  const ctx = canvas.getContext("2d", ctxOptions)
   ctx.scale(pixelRatio, pixelRatio)
 
   drawFn(ctx, canvas)
@@ -147,3 +164,88 @@ export function rgbToHex(r, g, b) {
   return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
 }
 
+//
+// Blur parameters: radius controls softness, passes = 2 gives a good
+// Gaussian approximation for scenic backgrounds (cities, trees).
+//
+const BOX_BLUR_RADIUS = 5
+const BOX_BLUR_PASSES = 2
+
+/**
+ * Apply a fast in-place box blur to a canvas using a sliding-window algorithm.
+ * Runs in O(width × height) regardless of radius. Two passes approximate a
+ * Gaussian well enough for atmospheric background sprites (buildings, trees).
+ * Works well with both GPU-backed and CPU-backed canvases; for a GPU-backed
+ * canvas the one-time getImageData read-back takes ~20–40 ms on most hardware.
+ * @param {CanvasRenderingContext2D} ctx - 2D context of the canvas to blur
+ * @param {number} width  - Canvas pixel width
+ * @param {number} height - Canvas pixel height
+ */
+export function applyBoxBlur(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const data = imageData.data
+  const tmp = new Uint8ClampedArray(data.length)
+  for (let pass = 0; pass < BOX_BLUR_PASSES; pass++) {
+    blurHorizontal(data, tmp, width, height, BOX_BLUR_RADIUS)
+    blurVertical(tmp, data, width, height, BOX_BLUR_RADIUS)
+  }
+  ctx.putImageData(imageData, 0, 0)
+}
+//
+// Sliding-window horizontal blur: src → dst.
+// Initialises the running sum for the window centred at x = 0,
+// then each step adds the incoming right-edge pixel and removes the outgoing
+// left-edge pixel — O(1) per pixel regardless of radius.
+//
+function blurHorizontal(src, dst, w, h, radius) {
+  for (let y = 0; y < h; y++) {
+    const rowOffset = y * w
+    let r = 0, g = 0, b = 0, a = 0
+    const initEnd = Math.min(radius, w - 1)
+    for (let x = 0; x <= initEnd; x++) {
+      const i = (rowOffset + x) * 4
+      r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]
+    }
+    for (let x = 0; x < w; x++) {
+      const cnt = Math.min(x + radius, w - 1) - Math.max(0, x - radius) + 1
+      const o = (rowOffset + x) * 4
+      dst[o] = r / cnt; dst[o + 1] = g / cnt; dst[o + 2] = b / cnt; dst[o + 3] = a / cnt
+      if (x >= radius) {
+        const ri = (rowOffset + x - radius) * 4
+        r -= src[ri]; g -= src[ri + 1]; b -= src[ri + 2]; a -= src[ri + 3]
+      }
+      const addX = x + radius + 1
+      if (addX < w) {
+        const ai = (rowOffset + addX) * 4
+        r += src[ai]; g += src[ai + 1]; b += src[ai + 2]; a += src[ai + 3]
+      }
+    }
+  }
+}
+//
+// Sliding-window vertical blur: src → dst.
+//
+function blurVertical(src, dst, w, h, radius) {
+  for (let x = 0; x < w; x++) {
+    let r = 0, g = 0, b = 0, a = 0
+    const initEnd = Math.min(radius, h - 1)
+    for (let y = 0; y <= initEnd; y++) {
+      const i = (y * w + x) * 4
+      r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]
+    }
+    for (let y = 0; y < h; y++) {
+      const cnt = Math.min(y + radius, h - 1) - Math.max(0, y - radius) + 1
+      const o = (y * w + x) * 4
+      dst[o] = r / cnt; dst[o + 1] = g / cnt; dst[o + 2] = b / cnt; dst[o + 3] = a / cnt
+      if (y >= radius) {
+        const ri = ((y - radius) * w + x) * 4
+        r -= src[ri]; g -= src[ri + 1]; b -= src[ri + 2]; a -= src[ri + 3]
+      }
+      const addY = y + radius + 1
+      if (addY < h) {
+        const ai = (addY * w + x) * 4
+        r += src[ai]; g += src[ai + 1]; b += src[ai + 2]; a += src[ai + 3]
+      }
+    }
+  }
+}

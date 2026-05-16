@@ -290,6 +290,23 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   const updateTransition = () => {
     if (phase === 'asset_prepare') {
+      //
+      // Allow Esc to cancel loading and return to menu immediately,
+      // even while the asset_prepare phase is running.
+      //
+      if (k.isKeyPressed("escape")) {
+        if (!inst.skipped) {
+          inst.skipped = true
+          bumpPrepareCancelNonce()
+          k.transitionCleanup?.()
+          k.volume(inst.originalVolume)
+          Sound.unmuteProceduralSounds()
+          Sound.resumeGlobalAudio()
+          stopTimeSectionMusic()
+          goToMenuAfterAssets(k)
+        }
+        return
+      }
       if (inst.assetPrepareDone) {
         phase = inst.postAssetPreparePhase
         timer = 0

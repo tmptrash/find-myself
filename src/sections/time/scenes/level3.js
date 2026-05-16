@@ -9,6 +9,9 @@ import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import { registerTime3Sprite } from '../../../utils/level-assets.js'
+import { getDarkness } from '../utils/time-day-night.js'
+import * as BootLoader from '../../../utils/boot-loader.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -49,6 +52,11 @@ const MONSTER_SPAWN_Y = CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT / 2
 const ANTIHERO_SPAWN_X = PLATFORM_SIDE_WIDTH + 50  // Anti-hero at the left of lower corridor
 const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 //
+// Snowball instructions text Y — placed in the lower third of the upper corridor so it
+// doesn't overlap with the T1ME indicator near the corridor ceiling.
+//
+const SNOWBALL_INSTRUCTIONS_TEXT_Y = CORRIDOR_Y + 200
+//
 // Bullet configuration
 //
 const BULLET_RADIUS = 6
@@ -59,6 +67,48 @@ const MONSTER_FREEZE_DURATION = 1.0
 // Level decay constants (when monster eats clocks)
 //
 const randomRange = (min, max) => Math.random() * (max - min) + min
+//
+// Monster night effect thresholds and glow colours.
+// At night the overlay (z=15.51) hides the body; the glow circles sit above it.
+//
+const MONSTER_NIGHT_DARKNESS = 0.35
+const MONSTER_EYE_GLOW_Z = 16
+const MONSTER_EYE_DAY_Z = 14
+const MONSTER_EYE_GLOW_RADIUS = 9
+const MONSTER_EYE_GLOW_R = 255
+const MONSTER_EYE_GLOW_G = 140
+const MONSTER_EYE_GLOW_B = 20
+const MONSTER_BODY_DAY_OPACITY = 1.0
+const MONSTER_BODY_NIGHT_OPACITY = 0.18
+//
+// Night pupils sit one z-step above the glow circles so they remain visible
+// as dark spots inside the orange glow when the night overlay is active.
+//
+const MONSTER_NIGHT_PUPIL_Z = 17
+//
+// Night music constants for level 3.
+// Boss / kids / clock fade out after dark; crickets fill the silence.
+//
+const NIGHT_DARKNESS_THRESHOLD = 0.45
+const NIGHT_MUSIC_TRANSITION_SPEED = 0.6  // fraction per second
+const NIGHT_CRICKET_INTERVAL_MIN = 1.2
+const NIGHT_CRICKET_INTERVAL_MAX = 3.5
+//
+// Load a sprite and register it with the time-3 pack registry so it is squashed
+// (replaced with a 1×1 placeholder) when the player leaves this level, reducing
+// peak VRAM on re-entry.
+// If src is an HTMLCanvasElement, its 2D backing store is released immediately after
+// k.loadSprite uploads the pixels to a WebGL texture, freeing GPU memory right away
+// instead of waiting for GC.
+//
+function loadTime3Sprite(k, name, src) {
+  k.loadSprite(name, src)
+  registerTime3Sprite(name)
+  if (src && src.nodeName === 'CANVAS') {
+    src.width = 0
+    src.height = 0
+  }
+}
 
 /**
  * Draw realistic pixel art cloud on canvas
@@ -190,7 +240,13 @@ function drawCloud(context, config) {
  * @param {Object} k - Kaplay instance
  */
 export function sceneLevel3(k) {
-  k.scene("level-time.3", () => {
+  k.scene("level-time.3", async () => {
+    //
+    // Show loader immediately — this scene does heavy canvas generation that would
+    // otherwise freeze the browser without any visible progress indicator.
+    //
+    BootLoader.showLoader()
+    BootLoader.setLoaderBarPct(5)
     //
     // Save progress immediately when entering this level
     //
@@ -245,17 +301,29 @@ export function sceneLevel3(k) {
       skipPlatforms: true,
       spriteName: 'city-background-level3',
       showSun: false,
+      showMoon: false,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      topPlatformHeight: CORRIDOR_Y - 20,  // UI positioned lower, closer to upper corridor
+      topPlatformHeight: CORRIDOR_Y - 20,  // T1ME indicator above upper corridor ceiling
       sideWallWidth: PLATFORM_SIDE_WIDTH,
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
-      antiHeroY: ANTIHERO_SPAWN_Y
+      antiHeroY: ANTIHERO_SPAWN_Y,
+      //
+      // Restore heroScore before reloading so snowballs spent in this run are refunded.
+      //
+      onAnnihilation: () => {
+        set('heroScore', heroScoreAtStart)
+        k.go('level-time.3')
+      }
     })
     //
     // Array to store decay holes in platforms
     //
+    //
+    // Core scene objects created — update loader progress.
+    //
+    BootLoader.setLoaderBarPct(20)
     //
     // Create custom corridor platforms
     //
@@ -322,7 +390,12 @@ export function sceneLevel3(k) {
     // Convert to sprite and add to scene
     //
     const cloudsSprite = cloudsCanvas.toDataURL()
-    k.loadSprite('level3-clouds', cloudsSprite)
+    //
+    // Release 2D backing store immediately — data has been serialised to a PNG string.
+    //
+    cloudsCanvas.width = 0
+    cloudsCanvas.height = 0
+    loadTime3Sprite(k, 'level3-clouds', cloudsSprite)
     k.add([
       k.sprite('level3-clouds'),
       k.pos(0, cloudY - 70),
@@ -382,13 +455,37 @@ export function sceneLevel3(k) {
       updateSnowParticles(snowSystem)
     })
     //
+    // Night music controller: fade boss / kids / clock out when darkness rises;
+    // play crickets at intervals to fill the silence.
+    //
+    const nightMusicState = {
+      k,
+      sound,
+      timeMusic,
+      kidsMusic,
+      clockMusic,
+      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+    }
+    k.onUpdate(() => onUpdateNightMusic(nightMusicState))
+    //
     // Create obstacle spikes (digit "1") in clusters in both corridors
     //
-    createObstacleSpikes(k, hero, sound, levelIndicator, sections)
+    createObstacleSpikes(k, hero, sound, levelIndicator, sections, heroScoreAtStart)
+    //
+    // Yield to allow the browser to repaint the loader before the heavy snow
+    // canvas generation that follows.
+    //
+    BootLoader.setLoaderBarPct(55)
+    await BootLoader.yieldForGpu(1)
     //
     // Create snow drifts on corridor floors
     //
     createSnowDrifts(k)
+    //
+    // Yield again so the loader updates before the remaining setup.
+    //
+    BootLoader.setLoaderBarPct(85)
+    await BootLoader.yieldForGpu(1)
     //
     // Create ground stripe on down corridor floor
     //
@@ -397,6 +494,11 @@ export function sceneLevel3(k) {
     // Create rounded corners for corridors
     //
     createRoundedCorners(k)
+    //
+    // All heavy setup complete — update loader to 100 % and hide it.
+    //
+    BootLoader.setLoaderBarPct(100)
+    BootLoader.hideLoader()
     //
     // Check if monster collides with hero or clocks
     //
@@ -674,7 +776,7 @@ function showSnowballInstructions(k) {
   set('time.level3SnowballInstructionsCount', showCount + 1)
   
   const centerX = CFG.visual.screen.width / 2 - 20
-  const textY = CORRIDOR_Y + 100
+  const textY = SNOWBALL_INSTRUCTIONS_TEXT_Y
   const instructionsContent = "use Shift to throw snowballs at monster"
   //
   // Create instructions text with outline
@@ -789,7 +891,7 @@ function createCorridorPlatforms(k) {
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
   const middleWallHeight = LOWER_CORRIDOR_Y - (CORRIDOR_Y + UPPER_CORRIDOR_HEIGHT)
   const middleWallSprite = createMiddleWallSprite(passageStartX, middleWallHeight, platformHex)
-  k.loadSprite('middle-wall-level3', middleWallSprite)
+  loadTime3Sprite(k, 'middle-wall-level3', middleWallSprite)
   //
   // Top corridor wall (upper corridor ceiling)
   //
@@ -1368,7 +1470,43 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       offsetY: eyePos.y
     })
   }
-  
+  //
+  // Glow circles: sit above the night overlay (z=MONSTER_EYE_GLOW_Z) and are
+  // invisible during the day. At night their opacity rises so the eyes appear
+  // to emit orange light through the darkness.
+  //
+  const glowCircles = []
+  for (let i = 0; i < 4; i++) {
+    const eyePos = eyePositions[i]
+    const glow = k.add([
+      k.circle(MONSTER_EYE_GLOW_RADIUS),
+      k.pos(monsterX + eyePos.x, monsterY + eyePos.y),
+      k.color(MONSTER_EYE_GLOW_R, MONSTER_EYE_GLOW_G, MONSTER_EYE_GLOW_B),
+      k.opacity(0),
+      k.z(MONSTER_EYE_GLOW_Z),
+      k.fixed()
+    ])
+    glowCircles.push({ obj: glow, offsetX: eyePos.x, offsetY: eyePos.y })
+  }
+  //
+  // Night pupils: dark circles at z=MONSTER_NIGHT_PUPIL_Z placed on top of the
+  // glow circles so the eyes retain a visible pupil during night. They start
+  // invisible and fade in together with the glow circles.
+  //
+  const nightPupils = []
+  for (let i = 0; i < 4; i++) {
+    const eyePos = eyePositions[i]
+    const np = k.add([
+      k.circle(PUPIL_RADIUS),
+      k.pos(monsterX + eyePos.x, monsterY + eyePos.y),
+      k.color(0, 0, 0),
+      k.opacity(0),
+      k.z(MONSTER_NIGHT_PUPIL_Z),
+      k.fixed()
+    ])
+    nightPupils.push({ obj: np, offsetX: eyePos.x, offsetY: eyePos.y })
+  }
+
   const inst = {
     k,
     x: monsterX,
@@ -1381,6 +1519,8 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     legs,
     bodyCircles,
     eyes,
+    glowCircles,
+    nightPupils,
     bodySize: BODY_SIZE,
     legWidth: LEG_WIDTH,
     segmentLength: SEGMENT_LENGTH,
@@ -1761,6 +1901,10 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
         })
       }
     }
+    //
+    // Fade body and glow eyes based on day/night darkness.
+    //
+    updateMonsterNight(inst)
   })
   //
   // Draw legs with pads at the end (using game object with z-index)
@@ -1886,7 +2030,7 @@ function setupControlInversion(heroInst, sections) {
  * @param {Object} sound - Sound instance for effects
  * @param {Array} sections - Time sections to place spikes in their centers
  */
-function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
+function createObstacleSpikes(k, hero, sound, levelIndicator, sections, heroScoreAtStart) {
   //
   // Spike Y positions
   //
@@ -1953,7 +2097,11 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
       digitCount: cluster.count,
       fakeDigitCount: 0,  // No fake spikes - all are deadly
       sfx: sound,
-      levelIndicator
+      levelIndicator,
+      //
+      // Restore heroScore so snowballs spent this run are refunded on spike death.
+      //
+      onBeforeRestart: () => set('heroScore', heroScoreAtStart)
     })
     //
     // Create snow mound sprite at the base of each spike cluster using toCanvas()
@@ -2008,7 +2156,7 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections) {
       }
     })
     
-    k.loadSprite(`spike-mound-${cluster.startX}-${cluster.y}`, moundDataURL)
+    loadTime3Sprite(k, `spike-mound-${cluster.startX}-${cluster.y}`, moundDataURL)
     k.add([
       k.sprite(`spike-mound-${cluster.startX}-${cluster.y}`),
       k.pos(clusterCenterX, cluster.y + 10),
@@ -2186,7 +2334,7 @@ function createCloudsAtTop(k) {
   //
   // Load sprite and add to scene
   //
-  k.loadSprite('clouds-level3', cloudsDataURL)
+  loadTime3Sprite(k, 'clouds-level3', cloudsDataURL)
   k.add([
     k.sprite('clouds-level3'),
     k.pos(0, cloudTopY),
@@ -2218,7 +2366,10 @@ function createSnowDrifts(k) {
   const upperCorridorEnd = passageStartX - 80
   
   for (let x = upperCorridorStart; x < upperCorridorEnd; x += 20 + Math.random() * 15) {
-    const width = 60 + Math.random() * 120
+    //
+    // Clamp width so the drift never extends past the corridor's right boundary.
+    //
+    const width = Math.min(60 + Math.random() * 120, passageStartX - x)
     const height = 8 + Math.random() * 15
     const zIndex = Math.random() > 0.5 ? 12 : 25
     const shapeType = Math.floor(Math.random() * 3)
@@ -2236,7 +2387,10 @@ function createSnowDrifts(k) {
   const lowerCorridorEnd1 = passageStartX
   
   for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 20 + Math.random() * 15) {
-    const width = 60 + Math.random() * 120
+    //
+    // Clamp width so the drift stays within the left corridor segment.
+    //
+    const width = Math.min(60 + Math.random() * 120, passageStartX - x)
     const height = 8 + Math.random() * 15
     const zIndex = Math.random() > 0.5 ? 12 : 25
     const shapeType = Math.floor(Math.random() * 3)
@@ -2272,7 +2426,10 @@ function createSnowDrifts(k) {
   // Add extra smaller drifts
   //
   for (let x = upperCorridorStart; x < upperCorridorEnd; x += 15 + Math.random() * 12) {
-    const width = 40 + Math.random() * 70
+    //
+    // Clamp width so small drifts also stay within the corridor right boundary.
+    //
+    const width = Math.min(40 + Math.random() * 70, passageStartX - x)
     const height = 5 + Math.random() * 8
     const zIndex = Math.random() > 0.3 ? 12 : 25
     const shapeType = Math.floor(Math.random() * 3)
@@ -2287,7 +2444,10 @@ function createSnowDrifts(k) {
   }
   
   for (let x = lowerCorridorStart1; x < lowerCorridorEnd1; x += 15 + Math.random() * 12) {
-    const width = 40 + Math.random() * 70
+    //
+    // Clamp width so small drifts also stay within the left lower corridor segment.
+    //
+    const width = Math.min(40 + Math.random() * 70, passageStartX - x)
     const height = 5 + Math.random() * 8
     const zIndex = Math.random() > 0.3 ? 12 : 25
     const shapeType = Math.floor(Math.random() * 3)
@@ -2419,8 +2579,8 @@ function createSnowDrifts(k) {
   //
   // Load and add sprites
   //
-  k.loadSprite('snow-back-level3', snowBackDataURL)
-  k.loadSprite('snow-front-level3', snowFrontDataURL)
+  loadTime3Sprite(k, 'snow-back-level3', snowBackDataURL)
+  loadTime3Sprite(k, 'snow-front-level3', snowFrontDataURL)
   
   k.add([
     k.sprite('snow-back-level3'),
@@ -2580,7 +2740,7 @@ function createRoundedCorners(k) {
   // Create corner sprite
   //
   const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
-  k.loadSprite('corner-sprite-level3', cornerDataURL)
+  loadTime3Sprite(k, 'corner-sprite-level3', cornerDataURL)
   //
   // Bottom-left corner (where monster starts, lower part)
   //
@@ -2619,6 +2779,25 @@ function createRoundedCorners(k) {
     k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT + CORNER_RADIUS),
     k.rotate(180),
     k.z(30),  // High z-index to be visible above snow
+    k.anchor('topleft')
+  ])
+  //
+  // Top-left corner of upper corridor (left wall meets corridor ceiling)
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(PLATFORM_SIDE_WIDTH - CORNER_RADIUS, CORRIDOR_Y - CORNER_RADIUS),
+    k.z(30),
+    k.anchor('topleft')
+  ])
+  //
+  // Top-right corner of upper corridor (right wall meets corridor ceiling)
+  //
+  k.add([
+    k.sprite('corner-sprite-level3'),
+    k.pos(k.width() - PLATFORM_SIDE_WIDTH + CORNER_RADIUS, CORRIDOR_Y - CORNER_RADIUS),
+    k.rotate(90),
+    k.z(30),
     k.anchor('topleft')
   ])
 }
@@ -2880,4 +3059,73 @@ function flashMonster(k, monster, count) {
   }
   
   k.wait(0.1, () => flashMonster(k, monster, count + 1))
+}
+//
+// Night effect for the monster: elevate glow circle opacity as darkness rises
+// so the eyes appear to emit light above the night overlay.
+// The body circles stay at z=14 (below the overlay at z=15.51) and fade out
+// naturally as the overlay intensifies.
+//
+function updateMonsterNight(inst) {
+  const darkness = getDarkness()
+  const glowFactor = Math.max(0, Math.min(1, (darkness - MONSTER_NIGHT_DARKNESS) / 0.3))
+  //
+  // Dim body circles at night to make the creature even less visible.
+  //
+  const bodyOpacity = MONSTER_BODY_DAY_OPACITY - (MONSTER_BODY_DAY_OPACITY - MONSTER_BODY_NIGHT_OPACITY) * glowFactor
+  inst.bodyCircles.forEach(bc => {
+    bc.obj.opacity = bodyOpacity
+  })
+  //
+  // Raise glow circle opacity and keep them aligned with the regular eyes.
+  //
+  inst.glowCircles.forEach(gc => {
+    gc.obj.pos.x = inst.x + gc.offsetX + inst.wobbleX
+    gc.obj.pos.y = inst.y + gc.offsetY + inst.wobbleY
+    gc.obj.opacity = glowFactor * 0.92
+  })
+  //
+  // Night pupils follow the same position as glow circles and become opaque
+  // when the glow is active so dark pupils remain visible inside the orange glow.
+  //
+  inst.nightPupils.forEach(np => {
+    np.obj.pos.x = inst.x + np.offsetX + inst.wobbleX
+    np.obj.pos.y = inst.y + np.offsetY + inst.wobbleY
+    np.obj.opacity = glowFactor * 0.95
+  })
+}
+//
+// Night music controller: fades the three level-3 music tracks out once it gets
+// dark enough, and fires cricket sounds at random intervals while it is night.
+// Restores original volumes when the day returns.
+//
+function onUpdateNightMusic(inst) {
+  const darkness = getDarkness()
+  const isNight = darkness > NIGHT_DARKNESS_THRESHOLD
+  const dt = inst.k.dt()
+  if (isNight) {
+    //
+    // Fade music volumes toward zero.
+    //
+    const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
+    inst.timeMusic.volume = Math.max(0, inst.timeMusic.volume - fadeStep * CFG.audio.backgroundMusic.time)
+    inst.kidsMusic.volume = Math.max(0, inst.kidsMusic.volume - fadeStep * CFG.audio.backgroundMusic.kids)
+    inst.clockMusic.volume = Math.max(0, inst.clockMusic.volume - fadeStep * CFG.audio.backgroundMusic.clock)
+    //
+    // Trigger cricket chirps at random intervals.
+    //
+    inst.cricketTimer -= dt
+    if (inst.cricketTimer <= 0) {
+      Sound.playCricketSound(inst.sound)
+      inst.cricketTimer = NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+    }
+  } else {
+    //
+    // Restore music volumes toward their full values during the day.
+    //
+    const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
+    inst.timeMusic.volume = Math.min(CFG.audio.backgroundMusic.time, inst.timeMusic.volume + fadeStep * CFG.audio.backgroundMusic.time)
+    inst.kidsMusic.volume = Math.min(CFG.audio.backgroundMusic.kids, inst.kidsMusic.volume + fadeStep * CFG.audio.backgroundMusic.kids)
+    inst.clockMusic.volume = Math.min(CFG.audio.backgroundMusic.clock, inst.clockMusic.volume + fadeStep * CFG.audio.backgroundMusic.clock)
+  }
 }

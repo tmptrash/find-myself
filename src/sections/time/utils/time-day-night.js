@@ -158,6 +158,10 @@ export function create(cfg) {
   //
   const showSun = cfg.showSun !== false
   //
+  // showMoon: when false, the moon is never drawn (e.g. level 3 which has its own skybox).
+  //
+  const showMoon = cfg.showMoon !== false
+  //
   // starLayerZ: when provided, stars are drawn on their own layer at that z-index
   // (e.g. below clouds in level 2). Otherwise stars are drawn inside the main overlay.
   //
@@ -178,7 +182,8 @@ export function create(cfg) {
     windowBlinks: generateWindowBlinks(windows),
     owlTimer: OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN),
     starsInOverlay: starLayerZ === null,
-    moonInOverlay: moonLayerZ === null
+    moonInOverlay: moonLayerZ === null,
+    showMoon
   }
   //
   // Optional dynamic sun layer — sits just above the background sprite but below the overlay
@@ -229,7 +234,7 @@ export function create(cfg) {
   //
   // Optional separate moon layer so moon can be placed below clouds in certain levels
   //
-  if (moonLayerZ !== null) {
+  if (moonLayerZ !== null && showMoon) {
     inst.moonLayer = cfg.k.add([
       cfg.k.z(moonLayerZ),
       cfg.k.fixed(),
@@ -276,7 +281,7 @@ function updateKidsVolume(inst, darkness) {
 function onDraw(inst) {
   const darkness = getDarkness()
   drawNightOverlay(inst, darkness)
-  if (inst.moonInOverlay && darkness > MOON_APPEAR_DARKNESS) drawMoon(inst, darkness)
+  if (inst.showMoon && inst.moonInOverlay && darkness > MOON_APPEAR_DARKNESS) drawMoon(inst, darkness)
   if (inst.starsInOverlay && darkness > STAR_APPEAR_DARKNESS) drawStars(inst, darkness)
 }
 //

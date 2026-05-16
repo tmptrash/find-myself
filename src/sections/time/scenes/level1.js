@@ -909,6 +909,11 @@ function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
   k.loadSprite('corner-sprite-level1', cornerDataURL)
   //
+  // Release canvas backing store immediately after Kaplay reads it.
+  //
+  cornerDataURL.width = 0
+  cornerDataURL.height = 0
+  //
   // Top-left corner (rotate 0°)
   //
   k.add([
@@ -993,6 +998,11 @@ function createMovingCars(k) {
     })
     const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
     k.loadSprite(spriteId, carSpriteDataURL)
+    //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    carSpriteDataURL.width = 0
+    carSpriteDataURL.height = 0
     const startX = gameAreaLeft + (i / (carCount - 1)) * gameAreaWidth + (Math.random() - 0.5) * (gameAreaWidth / carCount)
     //
     // Headlight geometry: front bumper area at hood level

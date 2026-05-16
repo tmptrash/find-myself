@@ -103,7 +103,13 @@ export function create(config) {
   // Load blade sprite with custom color and blade count
   const spriteKey = `blade_${orientation}_${color}_${bladeCount}_v14`
   if (!k.getSprite(spriteKey)) {
-    k.loadSprite(spriteKey, createBladeSprite(orientation, blockSize, color, bladeCount))
+    const bladeCanvas = createBladeSprite(orientation, blockSize, color, bladeCount)
+    k.loadSprite(spriteKey, bladeCanvas)
+    //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    bladeCanvas.width = 0
+    bladeCanvas.height = 0
   }
 
   // Determine rotation and collision box based on orientation
@@ -205,6 +211,11 @@ export function loadSprites(k) {
   Object.values(ORIENTATIONS).forEach(orientation => {
     const spriteData = createBladeSprite(orientation, blockSize, defaultColor, defaultBladeCount)
     k.loadSprite(`blade_${orientation}`, spriteData)
+    //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    spriteData.width = 0
+    spriteData.height = 0
   })
 }
 

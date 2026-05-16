@@ -651,6 +651,11 @@ export function sceneLevel2(k) {
     // Convert to sprite and add to scene
     //
     const cloudsSprite = cloudsCanvas.toDataURL()
+    //
+    // Release 2D backing store right after serialising to PNG.
+    //
+    cloudsCanvas.width = 0
+    cloudsCanvas.height = 0
     k.loadSprite('level2-clouds', cloudsSprite)
     k.add([
       k.sprite('level2-clouds'),
@@ -1637,6 +1642,11 @@ function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
   k.loadSprite('corner-sprite-level2', cornerDataURL)
   //
+  // Release canvas backing store immediately after Kaplay reads it.
+  //
+  cornerDataURL.width = 0
+  cornerDataURL.height = 0
+  //
   // Top-left corner (rotate 0°)
   //
   k.add([
@@ -1907,6 +1917,11 @@ function createMovingCars(k) {
     //
     const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
     k.loadSprite(spriteId, carSpriteDataURL)
+    //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    carSpriteDataURL.width = 0
+    carSpriteDataURL.height = 0
     
     //
     // Distribute cars horizontally across the platform at start (not all from edges)

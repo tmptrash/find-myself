@@ -231,6 +231,11 @@ export function create(config) {
     const spriteId = `car-${Date.now()}-${i}-${Math.random()}`
     k.loadSprite(spriteId, carSpriteDataURL)
     //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    carSpriteDataURL.width = 0
+    carSpriteDataURL.height = 0
+    //
     // Position car on bottom platform
     // Calculate car center position relative to canvas
     // Canvas: padding + wheels + body + roof + padding

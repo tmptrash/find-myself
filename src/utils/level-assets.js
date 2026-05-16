@@ -1,6 +1,7 @@
 import * as CityBackground from '../sections/time/components/city-background.js'
 import * as BootLoader from './boot-loader.js'
 import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
+import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 
 //
 // City sprite names used by time levels — tracked so we can compare pack keys.
@@ -10,6 +11,20 @@ const TIME_LEVEL1_PLATFORM_BOTTOM = 150
 const TIME_LEVEL2_PLATFORM_BOTTOM = 150
 const TIME_LEVEL3_LOWER_CORRIDOR_Y = 680
 const TIME_LEVEL3_CORRIDOR_HEIGHT = 180
+//
+// City background sprite names for each time pack.
+// When entering any time level, the city backgrounds of ALL OTHER time levels
+// are squashed (replaced with a 1×1 placeholder) so their GPU textures become
+// eligible for GC before the new level's heavy canvas generation starts.
+// This prevents VRAM accumulation across level transitions, which caused
+// WebGL context loss on time level 1 and 2 entry.
+//
+const TIME_CITY_SPRITE = {
+  'time-0': 'city-background',
+  'time-1': 'city-background-level1',
+  'time-2': 'city-background-level2',
+  'time-3': 'city-background-level3'
+}
 //
 // Pack key active when the last prepareSceneAssets completed.
 //
@@ -24,6 +39,21 @@ let prepareCancelNonce = 0
 // Short packs (hub/touch) finish well under this threshold.
 //
 const LOADER_REVEAL_DELAY_MS = 2000
+//
+// Registry for sprites loaded exclusively by time level 3.
+// Squashed (replaced with 1×1 canvas) when the pack changes away from time-3
+// so their GPU texture objects become eligible for GC.
+//
+const time3SpriteRegistry = new Set()
+
+/**
+ * Register a sprite as belonging to the time-3 pack so it is squashed on pack exit.
+ * Called by time level 3 for every sprite it loads.
+ * @param {string} name - Kaplay sprite asset id
+ */
+export function registerTime3Sprite(name) {
+  time3SpriteRegistry.add(name)
+}
 
 /**
  * Invalidate async asset preparation started for a level transition (e.g. Esc to menu).
@@ -72,7 +102,14 @@ function loadTimeCityForLevel(k, sceneName) {
   }
   if (sceneName === 'level-time.3') {
     const groundLine = k.height() - (TIME_LEVEL3_LOWER_CORRIDOR_Y + TIME_LEVEL3_CORRIDOR_HEIGHT)
-    CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false)
+    //
+    // No trees and no sun for level 3 — keeps VRAM lower and matches the snowy aesthetic.
+    //
+    CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false, 0.25, false, false)
+    //
+    // Register city bg so it gets squashed when leaving time-3.
+    //
+    registerTime3Sprite('city-background-level3')
   }
 }
 
@@ -83,6 +120,17 @@ function loadTimeCityForLevel(k, sceneName) {
  * @param {string} sceneName
  */
 async function applyPack(k, packKey, sceneName) {
+  //
+  // When switching away from time-3, squash its large sprites so the GPU texture
+  // objects become orphaned and eligible for GC. This reduces VRAM pressure when
+  // entering time-3 on a second or subsequent visit.
+  //
+  if (packKey !== 'time-3' && time3SpriteRegistry.size > 0) {
+    for (const name of time3SpriteRegistry) {
+      squashSpriteReleaseGpu(k, name)
+    }
+    time3SpriteRegistry.clear()
+  }
   if (packKey === 'hub' || packKey.startsWith('touch-')) {
     //
     // Touch and hub scenes generate their own sprites inside the scene body — nothing to pre-load.
@@ -104,6 +152,15 @@ async function applyPack(k, packKey, sceneName) {
     return
   }
   if (packKey.startsWith('time-')) {
+    //
+    // Squash city backgrounds of every other time level before generating the
+    // new one. Each city background is a 1920×1080 GPU texture (~8 MB); letting
+    // them accumulate across level transitions can push VRAM past the browser
+    // budget and trigger WebGL context loss on level 1 and 2 entry.
+    //
+    Object.entries(TIME_CITY_SPRITE).forEach(([pack, spriteName]) => {
+      pack !== packKey && squashSpriteReleaseGpu(k, spriteName)
+    })
     BootLoader.setLoaderBarPct(35)
     await BootLoader.yieldForGpu(1)
     loadTimeCityForLevel(k, sceneName)
@@ -114,7 +171,9 @@ async function applyPack(k, packKey, sceneName) {
 
 /**
  * Ensures assets for the target scene are loaded.
- * Shows the DOM loader only when preparation takes longer than LOADER_REVEAL_DELAY_MS.
+ * For time packs (which do synchronous blocking canvas work) the loader is shown
+ * immediately and the DOM gets two paint frames before the blocking call.
+ * For all other packs the loader only appears if preparation exceeds LOADER_REVEAL_DELAY_MS.
  * @param {Object} k
  * @param {string} sceneName
  */
@@ -130,15 +189,31 @@ export async function prepareSceneAssets(k, sceneName) {
   // hide it quickly without a progress flash.
   //
   const quietFirstHub = activePackKey === null && packKey === 'hub'
+  //
+  // Time packs call createCityBackgroundSprite which is synchronous and blocks the JS
+  // thread for several seconds. Show the loader and yield frames so the browser can
+  // repaint before we hand the thread to the canvas generator.
+  //
+  const isTimePack = packKey.startsWith('time-')
   let loaderShown = false
   let loaderTimer = null
   if (!quietFirstHub) {
     BootLoader.setLoaderBarPct(5)
-    loaderTimer = setTimeout(() => {
-      if (nonceAtStart !== prepareCancelNonce) return
+    if (isTimePack) {
       BootLoader.showLoader()
       loaderShown = true
-    }, LOADER_REVEAL_DELAY_MS)
+      //
+      // Two rAF frames so the browser actually paints the loader before the sync block.
+      //
+      await BootLoader.yieldForGpu(2)
+      if (nonceAtStart !== prepareCancelNonce) return
+    } else {
+      loaderTimer = setTimeout(() => {
+        if (nonceAtStart !== prepareCancelNonce) return
+        BootLoader.showLoader()
+        loaderShown = true
+      }, LOADER_REVEAL_DELAY_MS)
+    }
   }
   try {
     await applyPack(k, packKey, sceneName)

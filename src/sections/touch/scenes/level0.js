@@ -1620,18 +1620,19 @@ export function sceneLevel0(k) {
           for (const blade of allGrassBlades) {
             const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
             //
-            // Check distance to hero
+            // Use squared distance to avoid sqrt on every blade every frame.
             //
             const dx = blade.x1 - heroX
             const dy = blade.y1 - heroY
-            const distance = Math.sqrt(dx * dx + dy * dy)
+            const distSq = dx * dx + dy * dy
             //
             // Add push effect if hero is close
             //
             let pushSway = 0
-            if (distance < HERO_RADIUS) {
+            if (distSq < HERO_RADIUS * HERO_RADIUS) {
+              const distance = Math.sqrt(distSq)
               const pushStrength = (1 - distance / HERO_RADIUS)
-              pushSway = (dx / distance) * pushStrength * PUSH_FORCE
+              pushSway = (dx / (distance || 1)) * pushStrength * PUSH_FORCE
             }
             
             k.drawLine({
@@ -2299,7 +2300,10 @@ export function sceneLevel0(k) {
         
         const dx = bugInst.x - heroX
         const dy = bugInst.y - heroY
-        const distance = Math.sqrt(dx * dx + dy * dy)
+        //
+        // Squared distance avoids sqrt on every bug every frame.
+        //
+        const distSq = dx * dx + dy * dy
         
         //
         // Update justRecovered timer - reset after short time regardless of distance
@@ -2315,7 +2319,7 @@ export function sceneLevel0(k) {
           }
         }
         
-        if (distance < HERO_RADIUS) {
+        if (distSq < HERO_RADIUS * HERO_RADIUS) {
           //
           // Hero is close
           //
@@ -2421,13 +2425,13 @@ export function sceneLevel0(k) {
           
           availableBugs.forEach(bug => {
             //
-            // Check distance to pyramid center
+            // Use squared distance to avoid sqrt in hot path.
             //
             const dx = bug.x - pyramid.centerX
             const dy = bug.y - pyramid.centerY
-            const dist = Math.sqrt(dx * dx + dy * dy)
+            const distSq = dx * dx + dy * dy
             
-            if (dist <= 60) {  // JOIN_DETECTION_RADIUS
+            if (distSq <= 60 * 60) {  // JOIN_DETECTION_RADIUS
               //
               // Try to add bug to pyramid (timer will be reset to 0 in addBug)
               //

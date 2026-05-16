@@ -43,15 +43,15 @@ const LUSH_LEVEL0_TRUNK_HEIGHT_MIN = 88
 const LUSH_LEVEL0_TRUNK_HEIGHT_MAX = 162
 const LUSH_LEVEL0_TREE_SPACING_MIN = 34
 const LUSH_LEVEL0_TREE_SPACING_MAX = 88
-const LUSH_LEVEL0_EXTRA_CLUSTERS = 2
-const LUSH_LEVEL0_LEAF_COUNT_BOOST = 1.75
-const LUSH_LEVEL0_LEAF_SIZE_BOOST = 1.2
-const LUSH_LEVEL0_BRANCH_COUNT_MIN = 10
-const LUSH_LEVEL0_BRANCH_COUNT_MAX = 16
-const LUSH_LEVEL0_BRANCH_LENGTH_MIN = 16
-const LUSH_LEVEL0_BRANCH_LENGTH_MAX = 34
+const LUSH_LEVEL0_EXTRA_CLUSTERS = 3
+const LUSH_LEVEL0_LEAF_COUNT_BOOST = 2.2
+const LUSH_LEVEL0_LEAF_SIZE_BOOST = 1.4
+const LUSH_LEVEL0_BRANCH_COUNT_MIN = 14
+const LUSH_LEVEL0_BRANCH_COUNT_MAX = 22
+const LUSH_LEVEL0_BRANCH_LENGTH_MIN = 18
+const LUSH_LEVEL0_BRANCH_LENGTH_MAX = 44
 
-export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun) {
+export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun, showTrees = true) {
   const screenWidth = CFG.visual.screen.width
   const screenHeight = CFG.visual.screen.height
   //
@@ -390,7 +390,7 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
     //
     // Third pass: blurred organic trees (touch-like silhouette with uneven trunks + leaf clusters)
     //
-    drawBlurredOrganicTrees(ctx, {
+    showTrees && drawBlurredOrganicTrees(ctx, {
       screenWidth,
       bottomPlatformY,
       autumnLeaves,
@@ -608,8 +608,16 @@ function randomInt(min, max) {
  * @param {boolean} [showCars=true] - Whether to show moving cars
  * @param {number} [deepBuildingHeightMultiplier=0.25] - Height multiplier for deepest buildings
  */
-export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun) {
-  const { dataUrl, windows } = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars, deepBuildingHeightMultiplier, capBySun)
-  k.loadSprite(spriteName, dataUrl)
+export function preloadCityBackground(k, bottomPlatformHeight, spriteName = 'city-background', showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun, showTrees = true) {
+  const { dataUrl: canvas, windows } = createCityBackgroundSprite(k, bottomPlatformHeight, showSun, autumnLeaves, showCars, deepBuildingHeightMultiplier, capBySun, showTrees)
+  k.loadSprite(spriteName, canvas)
+  //
+  // Release the HTMLCanvasElement's 2D backing store immediately after Kaplay
+  // uploads the pixels to a WebGL texture. Without this, the large canvas stays
+  // alive (and holds GPU memory) until GC runs, which can push total GPU allocation
+  // past the browser budget and trigger WebGL context loss.
+  //
+  canvas.width = 0
+  canvas.height = 0
   windowsPerSprite[spriteName] = windows
 }

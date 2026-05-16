@@ -125,6 +125,11 @@ export function create(config) {
     })
     const spriteId = `${baseSpriteId}-${layerIndex}`
     k.loadSprite(spriteId, dataURL)
+    //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    dataURL.width = 0
+    dataURL.height = 0
     const sprite = k.add([
       k.sprite(spriteId),
       k.pos(playableLeft, playableTop),

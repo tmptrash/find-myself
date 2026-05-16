@@ -369,6 +369,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
         if (spriteData) {
           try {
             k.loadSprite(spriteName, spriteData)
+            spriteData.width = 0
+            spriteData.height = 0
           } catch (loadError) {
             //
             // Skip this sprite if loading fails
@@ -391,6 +393,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
       if (spriteData) {
         try {
           k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
+          spriteData.width = 0
+          spriteData.height = 0
         } catch (loadError) {
           //
           // Skip this sprite if loading fails
@@ -412,6 +416,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
       if (spriteData) {
         try {
           k.loadSprite(`${prefix}-run-${frame}`, spriteData)
+          spriteData.width = 0
+          spriteData.height = 0
         } catch (loadError) {
           //
           // Skip this sprite if loading fails

@@ -528,7 +528,7 @@ const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
 const L3_EYE_MAX_RX = 14
 const L3_EYE_MAX_RY = 10
-const L3_EYE_COUNT = 48
+const L3_EYE_COUNT = 60
 //
 // Skip drawing the eye halo when barely open (saves one ellipse per eye per frame)
 //
@@ -3995,6 +3995,21 @@ const L3_EYE_POSITIONS = [
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 498, y: 214, openRadius: 210 },
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 668, y: 180, openRadius: 195 },
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 728, y: 302, openRadius: 192 },
+  //
+  // Upper band — additional coverage along hero's path between platforms
+  //
+  { x: CFG.visual.screen.width / 2 - 580,            y: 222, openRadius: 235 },
+  { x: CFG.visual.screen.width / 2 - 430,            y: 168, openRadius: 228 },
+  { x: CFG.visual.screen.width / 2 - 275,            y: 298, openRadius: 220 },
+  { x: CFG.visual.screen.width / 2 - 75,             y: 250, openRadius: 218 },
+  { x: CFG.visual.screen.width / 2 + 90,             y: 185, openRadius: 225 },
+  { x: CFG.visual.screen.width / 2 + 245,            y: 280, openRadius: 215 },
+  { x: CFG.visual.screen.width / 2 + 435,            y: 215, openRadius: 220 },
+  { x: CFG.visual.screen.width / 2 + 570,            y: 292, openRadius: 210 },
+  { x: CFG.visual.screen.width / 2 + 710,            y: 175, openRadius: 205 },
+  { x: LEFT_MARGIN + 620,                            y: 268, openRadius: 198 },
+  { x: LEFT_MARGIN + 700,                            y: 195, openRadius: 202 },
+  { x: CFG.visual.screen.width / 2 - 165,            y: 185, openRadius: 228 },
   //
   // Narrow middle band (y 412–438) — between platform 3 (+60) and lower cluster (-60)
   //

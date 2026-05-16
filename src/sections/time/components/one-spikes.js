@@ -23,13 +23,14 @@ const SPIKE_TAG = "time-spike"
  * @param {number} config.y - Y position (base line)
  * @param {Object} config.hero - Hero instance for collision detection
  * @param {string} config.currentLevel - Current level name for restart
+ * @param {Function} [config.onBeforeRestart] - Called just before reloading the level (e.g. restore score)
  * @param {number} [config.digitCount] - Number of digits to create (default: DIGIT_COUNT)
  * @param {number} [config.fakeDigitCount] - Number of fake digits at the end (default: FAKE_DIGIT_COUNT)
  * @param {Object} [config.sfx] - Sound instance for glint effects
  * @returns {Object} Time spikes instance
  */
 export function create(config) {
-  const { k, startX, endX, y, hero, currentLevel, digitCount = DIGIT_COUNT, fakeDigitCount = FAKE_DIGIT_COUNT, sfx = null, levelIndicator = null, excludeX = [], excludeHalfWidth = 22 } = config
+  const { k, startX, endX, y, hero, currentLevel, digitCount = DIGIT_COUNT, fakeDigitCount = FAKE_DIGIT_COUNT, sfx = null, levelIndicator = null, excludeX = [], excludeHalfWidth = 22, onBeforeRestart = null } = config
   
   const spacing = (endX - startX) / (digitCount - 1)
   const spikes = []
@@ -64,7 +65,8 @@ export function create(config) {
     fakeSpikes,
     hero,
     currentLevel,
-    levelIndicator
+    levelIndicator,
+    onBeforeRestart
   }
   //
   // Setup collision detection with hero character (only for real spikes)
@@ -212,6 +214,7 @@ function onSpikeHit(inst) {
   const savedLevelIndicator = inst.levelIndicator
   const savedK = inst.k
   const savedCurrentLevel = inst.currentLevel
+  const savedOnBeforeRestart = inst.onBeforeRestart
   //
   // 1. Stop subtitle sound immediately if playing
   //
@@ -273,6 +276,7 @@ function onSpikeHit(inst) {
       // 6. Wait 0.8 seconds for effects to be visible, then reload
       //
       savedK.wait(0.8, () => {
+        savedOnBeforeRestart?.()
         savedK.go(savedCurrentLevel)
       })
     })

@@ -62,5 +62,14 @@ export function drainTrackedTouchSpriteNames() {
  */
 export function loadTouchSprite(k, name, src) {
   registerTouchLevelSprite(name)
-  return k.loadSprite(name, src)
+  const result = k.loadSprite(name, src)
+  //
+  // Release the HTMLCanvasElement's 2D backing store right after Kaplay reads it,
+  // so the GPU buffer is freed without waiting for GC.
+  //
+  if (src && src.nodeName === 'CANVAS') {
+    src.width = 0
+    src.height = 0
+  }
+  return result
 }

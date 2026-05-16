@@ -171,6 +171,10 @@ export function initScene(config) {
     //
     showSun = true,
     //
+    // When false, skip drawing the moon entirely (e.g. level 3 has its own skybox)
+    //
+    showMoon = true,
+    //
     // When set, stars are drawn on a separate layer at this z-index (e.g. below clouds)
     //
     starLayerZ = null,
@@ -259,7 +263,7 @@ export function initScene(config) {
   //
   // Day/night cycle (persists across scene reloads via module-level state)
   //
-  const dayNight = DayNight.create({ k, sound, timeSectionMusic, spriteName, showSun, starLayerZ, moonLayerZ })
+  const dayNight = DayNight.create({ k, sound, timeSectionMusic, spriteName, showSun, showMoon, starLayerZ, moonLayerZ })
   k.onSceneLeave(() => dayNight.cleanup())
   return { sound, hero, antiHero, levelIndicator }
 }

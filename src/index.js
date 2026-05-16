@@ -119,9 +119,13 @@ async function boot() {
   //
   await runWithConcurrency(soundTasks, ASSET_LOAD_CONCURRENCY, onTaskFinished)
   //
-  // Core assets queued — flush Kaplay loader, then preload hub pack + enter ready
+  // Core assets queued — flush Kaplay loader, then preload hub pack + enter ready.
+  // The guard prevents k.onLoad from re-firing when later loadSprite calls complete.
   //
+  let bootOnLoadDone = false
   k.onLoad(async () => {
+    if (bootOnLoadDone) return
+    bootOnLoadDone = true
     kaplayBootReachedOnLoad = true
     await prepareSceneAssetsThenEnterScene(k, 'ready')
   })

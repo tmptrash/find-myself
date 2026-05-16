@@ -171,6 +171,11 @@ export function create(config) {
   // Convert canvas to data URL for Kaplay sprite
   //
   const cloudSprite = canvas.toDataURL()
+  //
+  // Release canvas backing store right after serialising to PNG.
+  //
+  canvas.width = 0
+  canvas.height = 0
   const spriteId = `cloud-${Date.now()}-${Math.random()}`
   k.loadSprite(spriteId, cloudSprite)
   //

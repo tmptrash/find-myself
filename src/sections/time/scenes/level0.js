@@ -768,6 +768,11 @@ function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
   k.loadSprite('corner-sprite', cornerDataURL)
   //
+  // Release canvas backing store immediately after Kaplay reads it.
+  //
+  cornerDataURL.width = 0
+  cornerDataURL.height = 0
+  //
   // Top-left corner (rotate 0°)
   //
   k.add([

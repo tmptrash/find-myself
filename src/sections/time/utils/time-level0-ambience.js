@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { getDarkness } from './time-day-night.js'
+import { drawCrow } from '../../../utils/crow.js'
 
 const Z_TIME_LEVEL0_AMBIENCE = 15.63
 //
@@ -34,6 +35,11 @@ const LAMP_CURVE_CTRL_DY = -20
 const LAMP_ARM_END_DX = 84
 const LAMP_ARM_END_DY = 29
 //
+// Parameter t on the arm bezier where the curve reaches its highest visual point.
+// Derived analytically: t = -CTRL_DY / (-2*CTRL_DY + END_DY) = 20/69 ≈ 0.29
+//
+const CROW_ARC_PERCH_T = (-LAMP_CURVE_CTRL_DY) / (-2 * LAMP_CURVE_CTRL_DY + LAMP_ARM_END_DY)
+//
 // Bell-shaped shade (6-point polygon: narrow top → wide mid → slight rim)
 //
 const LAMP_SHADE_HALF_TOP = 5
@@ -48,6 +54,18 @@ const LAMP_SHADE_OUTLINE_SCALE = 1.08
 const LAMP_GLOW_R1 = 16
 const LAMP_GLOW_R2 = 9
 const LAMP_GLOW_R3 = 4
+//
+// Crow perched on first lamp shade: MP3 sound keys and call timing
+//
+const CROW_SOUND_NAMES = ['t0-crow-0', 't0-crow-1']
+const CROW_CALL_INTERVAL_MIN = 5.0
+const CROW_CALL_INTERVAL_MAX = 14.0
+const CROW_MOUTH_OPEN_DURATION = 0.55
+const CROW_DRAW_Z = 19.5
+//
+// Crow scale (matches touch level1 crow)
+//
+const CROW_SCALE = 1.35
 //
 // Decorative wider base at pole bottom
 //
@@ -164,7 +182,12 @@ export function create(cfg) {
     //
     lamps: lampOffsets.map((xOff, idx) => createLampState(gaLeft + xOff, lampBaseY, (cfg.lampModes ?? LAMP_MODES)[idx] ?? 'flicker')),
     grassTufts,
-    showSnow
+    showSnow,
+    //
+    // Crow: hero reference set later (after the lamp layer is registered)
+    //
+    crow: null,
+    heroInst: cfg.heroInst ?? null
   }
   inst.layer = cfg.k.add([
     cfg.k.z(Z_TIME_LEVEL0_AMBIENCE),
@@ -197,6 +220,38 @@ export function create(cfg) {
       offsetY: LAMP_TOOLTIP_OFFSET_Y
     }]
   })
+  //
+  // Crow: load audio samples, then place crow on the lamp chosen by crowLampIndex.
+  // Each level can pass a different index so the crow sits on a unique lamppost.
+  //
+  cfg.k.loadSound(CROW_SOUND_NAMES[0], '/assets/sounds/crow0.mp3')
+  cfg.k.loadSound(CROW_SOUND_NAMES[1], '/assets/sounds/crow1.mp3')
+  //
+  // crowLampIndex defaults to 0; clamp to valid range in case a level over-specifies.
+  //
+  const crowLampIdx = Math.min(cfg.crowLampIndex ?? 0, inst.lamps.length - 1)
+  const crowLamp = inst.lamps[crowLampIdx]
+  //
+  // Compute crow's perch on the highest point of the chosen lamp arm bezier arc.
+  //
+  const poleTopCx = crowLamp.x + crowLamp.tiltPx
+  const arcCtrlX = poleTopCx + LAMP_CURVE_CTRL_DX
+  const arcCtrlY = crowLamp.topY + LAMP_CURVE_CTRL_DY
+  const crowCx = quadBezier(poleTopCx, arcCtrlX, crowLamp.armEndX, CROW_ARC_PERCH_T)
+  const crowArcTopY = quadBezier(crowLamp.topY, arcCtrlY, crowLamp.armEndY, CROW_ARC_PERCH_T)
+  inst.crow = {
+    cx: crowCx,
+    perchY: crowArcTopY - 9 * CROW_SCALE,
+    mouthOpen: false,
+    mouthTimer: 0,
+    callTimer: CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN),
+    soundIdx: 0
+  }
+  cfg.k.add([
+    cfg.k.z(CROW_DRAW_Z),
+    cfg.k.fixed(),
+    { draw() { drawCrowOnLamp(cfg.k, inst) } }
+  ])
   inst.cleanup = () => {
     cfg.k.destroy(inst.layer)
     cfg.k.destroy(inst.grassLayer)
@@ -207,6 +262,10 @@ export function create(cfg) {
 function onUpdateAmbience(inst) {
   const dt = inst.k.dt()
   const darkness = getDarkness()
+  //
+  // Crow call timer: opens beak and plays MP3 at random intervals
+  //
+  onUpdateCrow(inst, dt)
   //
   // Bird sounds only during daytime
   //
@@ -693,4 +752,40 @@ function drawOutlinedRect(k, x, y, w, h, fillRgb, strokeRgb, pad) {
     color: fillRgb,
     opacity: LAMP_POLE_OPACITY
   })
+}
+//
+// Crow update: counts down the call timer and fires the sound + opens the beak.
+//
+function onUpdateCrow(inst, dt) {
+  const crow = inst.crow
+  if (!crow) return
+  crow.callTimer -= dt
+  if (crow.mouthOpen) {
+    crow.mouthTimer -= dt
+    if (crow.mouthTimer <= 0) {
+      crow.mouthOpen = false
+    }
+  }
+  if (crow.callTimer <= 0) {
+    crow.mouthOpen = true
+    crow.mouthTimer = CROW_MOUTH_OPEN_DURATION
+    crow.callTimer = CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN)
+    const soundName = CROW_SOUND_NAMES[crow.soundIdx % CROW_SOUND_NAMES.length]
+    crow.soundIdx++
+    try { inst.k.play(soundName, { volume: 0.38 }) } catch {}
+  }
+}
+//
+// Crow drawing: realistic bird sitting on the top arc of the lamp arm.
+// Eyes track the hero. Delegates to the shared drawCrow utility.
+//
+function drawCrowOnLamp(k, inst) {
+  const crow = inst.crow
+  if (!crow) return
+  const sc = CROW_SCALE
+  const cx = crow.cx
+  const perchY = crow.perchY
+  const heroX = inst.heroInst?.character?.pos?.x ?? cx + 1
+  const s = heroX >= cx ? 1 : -1
+  drawCrow(k, cx, perchY, sc, s, crow.mouthOpen, inst.heroInst)
 }

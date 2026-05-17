@@ -87,6 +87,20 @@ const BONUS_HERO_COLOR = "#8B5A50"
 //
 const LIFE_DEDUCT_THRESHOLD = 10
 const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
+//
+// Resting birds near the anti-hero: small silhouettes that scatter on hero landing
+//
+const BIRD_COUNT = 4
+const BIRD_SPREAD_X = 220
+const BIRD_BASE_X = ANTIHERO_SPAWN_X - 200
+const BIRD_SCATTER_RADIUS = 260
+const BIRD_FLY_SPEED_X_MIN = 55
+const BIRD_FLY_SPEED_X_RANGE = 100
+const BIRD_FLY_SPEED_Y_MIN = 230
+const BIRD_FLY_SPEED_Y_RANGE = 130
+const BIRD_FLY_GRAVITY = 60
+const BIRD_FADE_DURATION = 1.4
+const BIRD_DRAW_Z = 18
 
 /**
  * Time section level 0 scene
@@ -196,7 +210,8 @@ export function sceneLevel0(k) {
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.0')
         })
-      }
+      },
+      showGameClock: true
     })
     
     //
@@ -267,7 +282,9 @@ export function sceneLevel0(k) {
       platformSideWidth: PLATFORM_SIDE_WIDTH,
       platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
-      antiHeroSpawnX: ANTIHERO_SPAWN_X
+      antiHeroSpawnX: ANTIHERO_SPAWN_X,
+      heroInst: hero,
+      crowLampIndex: 1
     })
     k.onSceneLeave(() => level0Ambience.cleanup())
     //
@@ -620,6 +637,10 @@ export function sceneLevel0(k) {
       storageKey: BONUS_STORAGE_KEY,
       platformText: "00:00"
     })
+    //
+    // Resting birds near the anti-hero: they scatter when the hero lands close by
+    //
+    createRestingBirds(k, hero, sound)
   })
 }
 
@@ -811,4 +832,97 @@ function createRoundedCorners(k) {
     k.z(CFG.visual.zIndex.platforms + 1),
     k.anchor('topleft')
   ])
+}
+//
+// Resting birds near the anti-hero, scattered to the left. They fly away when
+// the hero lands within BIRD_SCATTER_RADIUS. Wing-flap sound fires once.
+//
+function createRestingBirds(k, heroInst, sound) {
+  const floorY = ANTIHERO_SPAWN_Y
+  const birds = []
+  for (let i = 0; i < BIRD_COUNT; i++) {
+    birds.push({
+      x: BIRD_BASE_X - (i * (BIRD_SPREAD_X / BIRD_COUNT)) - Math.random() * 30,
+      y: floorY - 6 - Math.random() * 10,
+      vx: 0,
+      vy: 0,
+      scattered: false,
+      opacity: 1,
+      fadeTimer: 0,
+      size: 5 + Math.random() * 4
+    })
+  }
+  let scattered = false
+  let wasOnGround = false
+  k.add([
+    k.z(BIRD_DRAW_Z),
+    k.fixed(),
+    {
+      draw() { drawBirds(k, birds) },
+      update() { onUpdateBirds(k, heroInst, birds, scattered, sound) }
+    }
+  ])
+  //
+  // Detect hero landing near birds and trigger scatter
+  //
+  k.onUpdate(() => {
+    if (scattered) return
+    const heroOnGround = heroInst.character?.isGrounded?.() ?? false
+    const justLanded = heroOnGround && !wasOnGround
+    wasOnGround = heroOnGround
+    if (!justLanded) return
+    const heroX = heroInst.character?.pos?.x ?? 0
+    const heroY = heroInst.character?.pos?.y ?? 0
+    const distX = heroX - BIRD_BASE_X
+    const distY = heroY - floorY
+    const dist2 = distX * distX + distY * distY
+    if (dist2 > BIRD_SCATTER_RADIUS * BIRD_SCATTER_RADIUS) return
+    scattered = true
+    Sound.playWingFlapSound(sound)
+    for (const bird of birds) {
+      bird.scattered = true
+      bird.vx = -(BIRD_FLY_SPEED_X_MIN + Math.random() * BIRD_FLY_SPEED_X_RANGE)
+      bird.vy = -(BIRD_FLY_SPEED_Y_MIN + Math.random() * BIRD_FLY_SPEED_Y_RANGE)
+    }
+  })
+}
+//
+// Moves flying birds upward / outward and fades them when they scatter.
+//
+function onUpdateBirds(k, heroInst, birds, scattered, sound) {
+  const dt = k.dt()
+  for (const bird of birds) {
+    if (!bird.scattered) continue
+    bird.x += bird.vx * dt
+    bird.y += bird.vy * dt
+    bird.vy += BIRD_FLY_GRAVITY * dt
+    bird.fadeTimer += dt
+    bird.opacity = Math.max(0, 1 - bird.fadeTimer / BIRD_FADE_DURATION)
+  }
+}
+//
+// Draws each bird as a small dark silhouette only while it is in flight.
+// Resting birds are invisible — they appear by bursting into flight.
+//
+function drawBirds(k, birds) {
+  const bodyColor = k.rgb(30, 26, 30)
+  const wingColor = k.rgb(20, 18, 22)
+  for (const bird of birds) {
+    if (!bird.scattered) continue
+    if (bird.opacity <= 0) continue
+    const { x, y, size, opacity } = bird
+    //
+    // Body oval
+    //
+    k.drawEllipse({ pos: k.vec2(x, y), radiusX: size, radiusY: size * 0.55, color: bodyColor, opacity })
+    //
+    // Spread wings (only shown in flight)
+    //
+    if (bird.scattered) {
+      const wingSpread = size * 2.2
+      const wingTip = y - size * 1.4
+      k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x - wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })
+      k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x + wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })
+    }
+  }
 }

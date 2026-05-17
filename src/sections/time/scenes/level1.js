@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, startClockMusic, checkSpeedBonus, createSunHoverFace } from '../components/scene-helper.js'
+import { initScene, startTimeSectionMusic, startClockMusic, checkSpeedBonus, createSunHoverFace, timeSectionMusic } from '../components/scene-helper.js'
 import * as MovingCars from '../components/moving-cars.js'
 import { getDarkness } from '../utils/time-day-night.js'
 import * as Hero from '../../../components/hero.js'
@@ -82,6 +82,13 @@ const BONUS_HERO_COLOR = "#8B5A50"
 const LIFE_DEDUCT_THRESHOLD = 10
 const LIFE_DEDUCT_FLAG = 'time.level1TrapAdded'
 //
+// Night music controller: darkness threshold for fading music, and cricket intervals
+//
+const NIGHT_DARKNESS_THRESHOLD = 0.45
+const NIGHT_MUSIC_TRANSITION_SPEED = 0.55
+const NIGHT_CRICKET_INTERVAL_MIN = 1.5
+const NIGHT_CRICKET_INTERVAL_MAX = 4.0
+//
 // Level geometry - two platforms connected by stairs
 //
 const BOTTOM_PLATFORM_TOP = 1080 - PLATFORM_BOTTOM_HEIGHT  // 930
@@ -123,6 +130,16 @@ export function sceneLevel1(k) {
     // Start clock.mp3 (stored in timeSectionMusic for proper transition stopping)
     //
     startClockMusic(k)
+    //
+    // Night music controller: fades kids/time/clock music out as darkness rises,
+    // plays crickets at random intervals at night, restores volumes at dawn.
+    //
+    const nightMusicState = {
+      k,
+      sound,
+      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+    }
+    k.onUpdate(() => onUpdateNightMusic(nightMusicState))
     //
     // Initialize level with heroes and platforms (skip default platforms)
     //
@@ -194,7 +211,8 @@ export function sceneLevel1(k) {
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.1')
         })
-      }
+      },
+      showGameClock: true
     })
     
     //
@@ -231,7 +249,8 @@ export function sceneLevel1(k) {
       sound,
       platformSideWidth: PLATFORM_SIDE_WIDTH,
       platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
-      topPlatformHeight: PLATFORM_TOP_HEIGHT
+      topPlatformHeight: PLATFORM_TOP_HEIGHT,
+      crowLampIndex: 2
     })
     k.onSceneLeave(() => level1Ambience.cleanup())
     //
@@ -1168,4 +1187,51 @@ function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, 
     drawHeadDisc(hxBase - frontSign * headSpread * 0.95, bumperY + wheelRadius * 0.12)
   })
 }
-
+//
+// Night music controller: fades the three shared time-section music tracks out
+// once darkness rises above the threshold and restores them smoothly at dawn.
+// Also fires cricket chirps at random intervals during night.
+// Uses null-guards since timeSectionMusic handles are populated asynchronously
+// by startTimeSectionMusic / startClockMusic after their internal delays.
+//
+function onUpdateNightMusic(inst) {
+  const darkness = getDarkness()
+  const isNight = darkness > NIGHT_DARKNESS_THRESHOLD
+  const dt = inst.k.dt()
+  const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
+  if (isNight) {
+    //
+    // Fade music toward silence.
+    //
+    if (timeSectionMusic.kids) {
+      timeSectionMusic.kids.volume = Math.max(0, timeSectionMusic.kids.volume - fadeStep * CFG.audio.backgroundMusic.kids)
+    }
+    if (timeSectionMusic.time) {
+      timeSectionMusic.time.volume = Math.max(0, timeSectionMusic.time.volume - fadeStep * CFG.audio.backgroundMusic.time)
+    }
+    if (timeSectionMusic.clock) {
+      timeSectionMusic.clock.volume = Math.max(0, timeSectionMusic.clock.volume - fadeStep * CFG.audio.backgroundMusic.clock)
+    }
+    //
+    // Cricket chirps at random intervals.
+    //
+    inst.cricketTimer -= dt
+    if (inst.cricketTimer <= 0) {
+      Sound.playCricketSound(inst.sound)
+      inst.cricketTimer = NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+    }
+  } else {
+    //
+    // Restore volumes smoothly toward their target levels.
+    //
+    if (timeSectionMusic.kids) {
+      timeSectionMusic.kids.volume = Math.min(CFG.audio.backgroundMusic.kids, timeSectionMusic.kids.volume + fadeStep * CFG.audio.backgroundMusic.kids)
+    }
+    if (timeSectionMusic.time) {
+      timeSectionMusic.time.volume = Math.min(CFG.audio.backgroundMusic.time, timeSectionMusic.time.volume + fadeStep * CFG.audio.backgroundMusic.time)
+    }
+    if (timeSectionMusic.clock) {
+      timeSectionMusic.clock.volume = Math.min(CFG.audio.backgroundMusic.clock, timeSectionMusic.clock.volume + fadeStep * CFG.audio.backgroundMusic.clock)
+    }
+  }
+}

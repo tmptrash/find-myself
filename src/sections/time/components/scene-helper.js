@@ -9,6 +9,19 @@ import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
 const MUSIC_START_DELAY = 6.0
 //
+// In-game clock (top-right of game area, levels 0-2)
+// Positioned inside the game area, below the top platform.
+//
+const CLOCK_FONT_SIZE = 22
+const CLOCK_MARGIN_RIGHT = 24
+const CLOCK_GAME_AREA_OFFSET_Y = 36
+const CLOCK_COLOR_R = 160
+const CLOCK_COLOR_G = 160
+const CLOCK_COLOR_B = 160
+const CLOCK_OPACITY = 0.65
+const CLOCK_Z = 200
+const CLOCK_FONT = 'JetBrains Mono'
+//
 // Sun position and radius (matches city-background.js calculations)
 //
 const SUN_X = CFG.visual.screen.width * 0.85 - 50
@@ -181,8 +194,12 @@ export function initScene(config) {
     //
     // When set, moon is drawn on a separate layer at this z-index (e.g. below clouds)
     //
-    moonLayerZ = null
-  } = config  
+    moonLayerZ = null,
+    //
+    // Show the in-game clock in the top-right corner (levels 0, 1, 2)
+    //
+    showGameClock = false
+  } = config
   //
   // Set gravity
   //
@@ -265,6 +282,11 @@ export function initScene(config) {
   //
   const dayNight = DayNight.create({ k, sound, timeSectionMusic, spriteName, showSun, showMoon, starLayerZ, moonLayerZ })
   k.onSceneLeave(() => dayNight.cleanup())
+  //
+  // In-game clock: a grey HH:MM timer in the top-right corner, synchronized
+  // to the day/night cycle (full day = CYCLE_DURATION = 60 s of real time).
+  //
+  showGameClock && addGameClock(k, sideWallWidth, topPlatformHeight)
   return { sound, hero, antiHero, levelIndicator }
 }
 
@@ -543,4 +565,39 @@ export function checkSpeedBonus(k, levelName, levelTime, levelIndicator) {
   
   return earnedBonus
 }
-
+//
+// Creates a grey HH:MM clock in the top-right corner of the game area.
+// Reads moduleTimeOfDay via DayNight.getTimeOfDay() each frame.
+// A full 24-hour day takes CYCLE_DURATION (60 s) of real time.
+//
+function addGameClock(k, sideWallWidth, topPlatformHeight) {
+  const clockColor = k.rgb(CLOCK_COLOR_R, CLOCK_COLOR_G, CLOCK_COLOR_B)
+  const clockX = k.width() - sideWallWidth - CLOCK_MARGIN_RIGHT
+  //
+  // Position inside the game area, offset below the bottom of the top platform strip.
+  //
+  const clockY = topPlatformHeight + CLOCK_GAME_AREA_OFFSET_Y
+  k.add([
+    k.z(CLOCK_Z),
+    k.fixed(),
+    {
+      draw() {
+        const t = DayNight.getTimeOfDay()
+        const totalHours = t * 24
+        const hours = Math.floor(totalHours) % 24
+        const minutes = Math.floor((totalHours * 60) % 60)
+        const hh = String(hours).padStart(2, '0')
+        const mm = String(minutes).padStart(2, '0')
+        k.drawText({
+          text: `${hh}:${mm}`,
+          size: CLOCK_FONT_SIZE,
+          font: CLOCK_FONT,
+          anchor: 'right',
+          pos: k.vec2(clockX, clockY),
+          color: clockColor,
+          opacity: CLOCK_OPACITY
+        })
+      }
+    }
+  ])
+}

@@ -1161,7 +1161,9 @@ export function sceneLevel2(k) {
       updateMoonHoverGlow(k, moonGlowState)
     })
     //
-    // Tooltip: antihero platform (first platform where antihero stands)
+    // Tooltip: antihero platform (first platform where antihero stands).
+    // Only visible once at least one lower platform has been revealed so the
+    // hint is meaningful (the referenced invisible platforms are already found).
     //
     Tooltip.create({
       k,
@@ -1172,7 +1174,8 @@ export function sceneLevel2(k) {
         height: 30,
         text: ANTIHERO_PLATFORM_TOOLTIP_TEXT,
         offsetY: ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET,
-        forceBelow: true
+        forceBelow: true,
+        visible: () => platformStates.slice(1).some(ps => ps.opacity > 0.05)
       }]
     })
     //

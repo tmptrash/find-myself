@@ -2,731 +2,270 @@ import { CFG } from '../cfg.js'
 import { getColor } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
-import * as Particles from '../utils/particles.js'
 import * as Cursor from '../utils/cursor.js'
 import { goToMenuAfterAssets } from '../utils/level-assets.js'
+import { drawConnectionWave } from '../utils/connection.js'
 
+//
+// Hint flicker
+//
 const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
-
-const TITLE_TEXT = 'find yourself'
-const QUOTE_PRIMARY_TEXT = 'through death and pain'
-const QUOTE_SECONDARY_TEXT = '(c) someone very wise'
-const ARROW_TEXT = '↓'
-
-const INSTRUCTIONS_TITLE = `find yourself`
-const INSTRUCTIONS_TEXT_LINES = [
-  { text: 'is a game about discovering who you are. You play against life', normal: true },
-  { text: 'itself — the only opponent you will ever face.', normal: true },
-  { text: '', normal: true },
-  { text: 'In each world, you search for meaning — collecting fragments', normal: true },
-  { text: 'of yourself and learning to understand this world. Reaching', normal: true },
-  { text: 'the other "you" means meeting yourself honestly.', normal: true },
-  { text: 'Complete levels quickly to earn fragments — use them when you', normal: true },
-  { text: 'need them most. Speed rewards courage.', normal: true },
-  { text: '', normal: true },
-  { text: 'Life will confuse you. You will fall. ', normal: true, inline: true },
-  { text: 'But each fall brings you', important: true, sameLine: true },
-  { text: 'closer to who you truly are.', important: true }
-]
-
-const DENSITY_MULTIPLIER = 1.2
-
+const HINT_FONT_SIZE = 20
+const HINT_Y = 1042
+//
+// Crawling letter title
+//
+const INSTRUCTIONS_TITLE = 'find yourself in life'
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
-const QUOTE_FONT_FAMILY = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
-
-const TITLE_FONT_SIZE = 140
-const QUOTE_PRIMARY_FONT_SIZE = 70
-const QUOTE_SECONDARY_FONT_SIZE = 70
-const INSTRUCTIONS_FONT_SIZE = 34
-const INSTRUCTIONS_LINE_HEIGHT = 40
-const ARROW_FONT_SIZE = 240
-
-const TITLE_HOLD_DURATION = 2
-const QUOTE_PRIMARY_HOLD_DURATION = 2.5
-const QUOTE_SECONDARY_HOLD_DURATION = 2.5
-const INSTRUCTIONS_HOLD_DURATION = 70
-const INSTRUCTIONS_FADE_DURATION = 1.5
-
-const LAYOUT_HORIZONTAL_MARGIN = 180
-
-const TREMOR_FORMATION = 0.05
-const TREMOR_FREE = 8
-const GATHER_SPEED = 0.55
-const SCATTER_DISTANCE_MIN = 95
-const SCATTER_DISTANCE_MAX = 160
-
+const TITLE_FONT_SIZE = 54
 //
 // Spider configuration
 //
-const SPIDER_LEG_LENGTH_1 = 22  // First segment length
-const SPIDER_LEG_LENGTH_2 = 28  // Second segment length
+const SPIDER_LEG_LENGTH_1 = 22
+const SPIDER_LEG_LENGTH_2 = 28
 const SPIDER_SPEED = 60
 const SPIDER_DIRECTION_CHANGE_INTERVAL = 5.0
 const SPIDER_SCREEN_MARGIN = 80
 const SPIDER_SMOOTHING = 2.0
-const SPIDER_APPEAR_DELAY = 5.0    // Seconds before spiders start appearing (was 2.0)
-const SPIDER_FADE_DURATION = 11.0  // Seconds to fade in
-const SPIDER_MAX_OPACITY = 0.45    // Maximum opacity when fully visible
-const SPIDER_STEP_DISTANCE = 20     // Distance before leg takes a step
-const SPIDER_TURN_SPEED = 90        // Degrees per second for gradual rotation
-//
-// Spider eyes (small, positioned on the letter surface)
-//
+const SPIDER_APPEAR_DELAY = 5.0
+const SPIDER_FADE_DURATION = 11.0
+const SPIDER_MAX_OPACITY = 0.45
+const SPIDER_STEP_DISTANCE = 20
+const SPIDER_TURN_SPEED = 90
 const SPIDER_EYE_RADIUS = 3
 const SPIDER_PUPIL_RADIUS = 1.2
 const SPIDER_EYE_SPACING = 10
 const SPIDER_EYE_Y_OFFSET = -8
-//
-// Title flicker configuration
-//
 const TITLE_FLICKER_SPEED = 1.5
 const TITLE_FLICKER_MIN = 0.7
 const TITLE_FLICKER_MAX = 1.0
-
-const HINT_Y = 1030
+//
+// Layout z-layers
+//
+const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
+const Z_ILLUSTRATION = 5
+const Z_TEXT = 10
+const Z_TITLE = 15
+const Z_HINT = 100
+//
+// Left illustration (life-ready.png + hero sprite to the left)
+// Both are centered as a pair in the left half of the screen (center ≈ x=480).
+// Hero (130px) + gap (20px) + Life (300px) = 450px → left edge at 255.
+//
+const LIFE_X = 405
+const LIFE_Y = 575
+const LIFE_WIDTH = 300
+const LIFE_HEIGHT = 400
+const LIFE_OPACITY = 1.0
+const HERO_X = 320
+const HERO_Y = 930
+const HERO_SPRITE_SIZE = 130
+//
+// Hero sprite names (loaded in index.js at game start)
+// HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1) for the left illustration.
+//
+const HERO_SPRITE_NAME = 'hero_FF8C00_000000_0_0'
+const HERO_ILLUSTRATION_SPRITE_NAME = 'hero_FF8C00_000000_1_-1'
+const ANTIHERO_SPRITE_NAME = 'antiHero_8B5A50_000000_0_0'
+//
+// Right text panel
+//
+const TEXT_LEFT = 860
+const TITLE_TEXT_X = 866
+const TITLE_TEXT_Y = 90
+const TEXT_START_Y = 185
+const TEXT_FONT_SIZE = 34
+const TEXT_LINE_HEIGHT = 52
+const ICON_START_Y = 680
+const ICON_ROW_HEIGHT = 98
+const ICON_DRAW_R = 24
+const ICON_TEXT_OFFSET_X = 68
+const ICON_LABEL_FONT_SIZE = 28
+const ICON_LABEL_DESC_FONT_SIZE = 24
+const ICON_LABEL_DESC_OFFSET_Y = 36
+//
+// Extra Y offset for the two-heroes icon so the sprites are vertically centred
+// between the "Find the other you" label and its description line.
+//
+const ICON_TWO_HEROES_Y_EXTRA = 24
+//
+// Animated icon state (sun-bunny sparkle + hero-antihero electricity)
+// Fragment icon uses a soft 2-circle glint matching the bonus-hero sparkle in time section.
+//
+const SPARKLE_PULSE_SPEED = 2.5
+const SPARKLE_INNER_R = 6
+const SPARKLE_OUTER_R = 13
+//
+// Life icon periodic laugh animation (mimics hero death flash)
+//
+const LIFE_LAUGH_INTERVAL_MIN = 6.0
+const LIFE_LAUGH_INTERVAL_MAX = 14.0
+const LIFE_LAUGH_FLASH_DURATION = 0.16
+const LIFE_LAUGH_TOTAL_FLASHES = 8
+//
+// Inline color constants
+//
+const COLOR_WARM_ORANGE = '#C4874A'
+const COLOR_LIFE_RED = '#D84C4C'
+const COLOR_WORD_SECTION = '#DC143C'
+const COLOR_ICON_LABEL = '#C4874A'
+const COLOR_ICON_DESC = '#6A7A8A'
+const COLOR_TEXT_NORMAL = '#7AAACF'
+//
+// Approximate monospace char width multiplier (JetBrains Mono)
+//
+const MONO_CHAR_W_RATIO = 0.6
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
     //
-    // Wait for @font-face fonts to finish loading before any canvas text
-    // sampling. Without this, measureText/fillText silently fall back to
-    // the system monospace, and on some browser/timing combos that fallback
-    // returns zero-width measurements — which makes generateLayout produce
-    // an empty positions array and crashes the particle system that
-    // expects at least one position.
+    // Wait for @font-face fonts to finish loading before any canvas text sampling.
     //
     if (document.fonts && document.fonts.ready) {
       try { await document.fonts.ready } catch {}
     }
-    //
-    // Set canvas background to match ready scene background color
-    //
     k.setBackground(k.Color.fromHex(CFG.visual.colors.ready.background))
-    //
-    // Clean up persistent word-pile objects from previous scenes
-    //
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
-    
-    //
-    // Reset flying words instance so it can be recreated in next level
-    //
     k.flyingWordsInstance = null
-    
     Cursor.setCursor('arrow')
-    
     const centerX = k.width() / 2
-    const centerY = k.height() / 2
-    
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    
     addBackground(k, CFG.visual.colors.ready.background)
     //
-    // Draw menu background image (darkened) behind all content
+    // Background (menu-bg dark overlay)
     //
-    const bgOverlay = k.add([
-      k.pos(0, 0),
-      k.z(CFG.visual.zIndex.background + 1)
-    ])
-    bgOverlay.onDraw(() => {
-      k.drawSprite({
-        sprite: "menu-bg",
-        width: k.width(),
-        height: k.height(),
-        opacity: 0.3
-      })
+    k.add([k.pos(0, 0), k.z(Z_BG_OVERLAY), { draw() { onDrawBg(k) } }])
+    //
+    // Left illustration: life.png + procedural hero silhouette
+    //
+    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k) } }])
+    //
+    // Right text panel (static text objects)
+    //
+    addTextPanel(k, TEXT_LEFT, TEXT_START_Y)
+    //
+    // Animated icon state (sparkle pulse + electricity heartbeat phase)
+    //
+    const iconAnim = { sparklePhase: 0, heartbeatPhase: 0, lifeFlashTimer: 8.0, lifeFlashCount: 0, lifeFlashInterval: 0, lifeFlashPhase: 0 }
+    k.onUpdate(() => {
+      const dt = k.dt()
+      iconAnim.sparklePhase += dt * SPARKLE_PULSE_SPEED
+      iconAnim.heartbeatPhase = (iconAnim.heartbeatPhase + dt) % 1
+      //
+      // Life icon periodic laugh (flash red/white like hero death)
+      //
+      if (iconAnim.lifeFlashCount <= 0) {
+        iconAnim.lifeFlashTimer -= dt
+        if (iconAnim.lifeFlashTimer <= 0) {
+          iconAnim.lifeFlashCount = LIFE_LAUGH_TOTAL_FLASHES
+          iconAnim.lifeFlashInterval = 0
+          try { k.play('life', { volume: 0.32 }) } catch {}
+        }
+      } else {
+        iconAnim.lifeFlashInterval -= dt
+        if (iconAnim.lifeFlashInterval <= 0) {
+          iconAnim.lifeFlashCount--
+          iconAnim.lifeFlashPhase = iconAnim.lifeFlashCount % 2
+          iconAnim.lifeFlashInterval = LIFE_LAUGH_FLASH_DURATION
+          if (iconAnim.lifeFlashCount <= 0) {
+            iconAnim.lifeFlashPhase = 0
+            iconAnim.lifeFlashTimer = LIFE_LAUGH_INTERVAL_MIN + Math.random() * (LIFE_LAUGH_INTERVAL_MAX - LIFE_LAUGH_INTERVAL_MIN)
+          }
+        }
+      }
     })
     //
-    // Hint text (visible immediately)
+    // Icon rows (bottom of right panel)
     //
-    const hintOutlineOffsets = [
-      { dx: -2, dy: 0 },
-      { dx: 2, dy: 0 },
-      { dx: 0, dy: -2 },
-      { dx: 0, dy: 2 },
-      { dx: -1, dy: -1 },
-      { dx: 1, dy: -1 },
-      { dx: -1, dy: 1 },
-      { dx: 1, dy: 1 }
-    ]
-    
+    k.add([k.pos(0, 0), k.z(Z_TEXT), { draw() { onDrawIconIllustrations(k, iconAnim) } }])
+    addIconLabels(k, TEXT_LEFT)
+    //
+    // Title text (crawling letters detach from this)
+    //
+    const outlineOffsets = [[-2,-2],[0,-2],[2,-2],[-2,0],[2,0],[-2,2],[0,2],[2,2]]
+    const titleOutlines = []
+    outlineOffsets.forEach(([dx, dy]) => {
+      titleOutlines.push(k.add([
+        k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
+        k.pos(TITLE_TEXT_X + dx, TITLE_TEXT_Y + dy),
+        k.anchor('left'),
+        k.color(0, 0, 0),
+        k.opacity(1),
+        k.z(Z_TITLE)
+      ]))
+    })
+    const titleText = k.add([
+      k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
+      k.pos(TITLE_TEXT_X, TITLE_TEXT_Y),
+      k.anchor('left'),
+      getColor(k, CFG.visual.colors.ready.title),
+      k.opacity(1),
+      k.z(Z_TITLE)
+    ])
+    //
+    // Hint text
+    //
+    const hintOutlineOffsets = [[-2,0],[2,0],[0,-2],[0,2],[-1,-1],[1,-1],[-1,1],[1,1]]
     const hintOutlines = []
-    hintOutlineOffsets.forEach(({ dx, dy }) => {
-      const outline = k.add([
-        k.text('press Space, Enter or click to start', { size: 20 }),
+    hintOutlineOffsets.forEach(([dx, dy]) => {
+      hintOutlines.push(k.add([
+        k.text('press Space, Enter or click to start', { size: HINT_FONT_SIZE }),
         k.pos(centerX + dx, HINT_Y + dy),
         k.anchor('center'),
         k.color(0, 0, 0),
         k.opacity(1),
-        k.z(99)
-      ])
-      hintOutlines.push(outline)
+        k.z(Z_HINT - 1)
+      ]))
     })
-    
     const hint = k.add([
-      k.text('press Space, Enter or click to start', { size: 20 }),
+      k.text('press Space, Enter or click to start', { size: HINT_FONT_SIZE }),
       k.pos(centerX, HINT_Y),
       k.anchor('center'),
       getColor(k, CFG.visual.colors.ready.hint),
       k.opacity(1),
-      k.z(100)
+      k.z(Z_HINT)
     ])
-    
-    let hintFlickerTime = HINT_FLICKER_DURATION
-    let hintDirection = -1
-    let titleFlickerPhase = 0  // Phase for title flicker animation
-    let titleBaseOpacity = 0   // Stores the base opacity from tween
-    
     //
-    // Instructions text (shown at start)
+    // Create crawling letter spiders from the title
     //
-    const instructionsTextMargin = 200
-    const instructionsMaxWidth = k.width() - instructionsTextMargin * 2
-    const titleSize = 54
-    const lineHeight = INSTRUCTIONS_LINE_HEIGHT
-    const titleX = instructionsTextMargin + 50  // Left aligned with margin
-    const titleY = 280  // Top position (centered)
-    
-    //
-    // Title "Find Yourself" in red (top left)
-    //
-    const outlineOffsets = [
-      [-2, -2], [0, -2], [2, -2],
-      [-2, 0],           [2, 0],
-      [-2, 2],  [0, 2],  [2, 2]
-    ]
-    
-    const titleOutlines = []
-    outlineOffsets.forEach(([dx, dy]) => {
-      const outline = k.add([
-        k.text(INSTRUCTIONS_TITLE, {
-          size: titleSize,
-          font: TITLE_FONT_FAMILY
-        }),
-        k.pos(titleX + dx, titleY + dy),
-        k.anchor('left'),
-        k.color(0, 0, 0),
-        k.opacity(0)
-      ])
-      titleOutlines.push(outline)
-    })
-    
-    const titleText = k.add([
-      k.text(INSTRUCTIONS_TITLE, {
-        size: titleSize,
-        font: TITLE_FONT_FAMILY
-      }),
-      k.pos(titleX, titleY),
-      k.anchor('left'),
-      getColor(k, CFG.visual.colors.ready.title),  // Red #D84C4C
-      k.opacity(0)
-    ])
-    
-    //
-    // Body text lines with different colors
-    //
-    const bodyStartY = titleY + 80
-    const bodyX = titleX
-    const instructionsTextObjects = []
-    const instructionsOutlineObjects = []
-    
-    let currentY = bodyStartY
-    let previousLineObj = null
-    
-    INSTRUCTIONS_TEXT_LINES.forEach((line, index) => {
-      //
-      // If this line continues on the same line, calculate X offset
-      //
-      const isSameLine = line.sameLine && previousLineObj
-      const x = isSameLine ? previousLineObj.x + previousLineObj.width + 0 : bodyX
-      const y = isSameLine ? previousLineObj.y : currentY
-      
-      const textColor = line.important
-        ? CFG.visual.colors.ready.emphasis  // Almost white for important lines
-        : CFG.visual.colors.ready.text      // Muted blue for normal lines
-      //
-      // Create outlines for this line
-      //
-      const lineOutlines = []
-      outlineOffsets.forEach(([dx, dy]) => {
-        const outline = k.add([
-          k.text(line.text, {
-            size: INSTRUCTIONS_FONT_SIZE,
-            font: QUOTE_FONT_FAMILY
-          }),
-          k.pos(x + dx, y + dy),
-          k.anchor('left'),
-          k.color(0, 0, 0),
-          k.opacity(0)
-        ])
-        instructionsOutlineObjects.push(outline)
-        lineOutlines.push(outline)
-      })
-      //
-      // Create main text for this line
-      //
-      const textObj = k.add([
-        k.text(line.text, {
-          size: INSTRUCTIONS_FONT_SIZE,
-          font: QUOTE_FONT_FAMILY
-        }),
-        k.pos(x, y),
-        k.anchor('left'),
-        getColor(k, textColor),
-        k.opacity(0)
-      ])
-      //
-      // Store reference to outlines in textObj
-      //
-      textObj.outlines = lineOutlines
-      instructionsTextObjects.push(textObj)
-      
-      //
-      // Update Y position for next line (only if not inline continuation)
-      //
-      if (!isSameLine) {
-        currentY += lineHeight
-      }
-      
-      //
-      // Store reference for next line if this is inline
-      //
-      if (line.inline) {
-        previousLineObj = { x, y, width: textObj.width }
-      } else {
-        previousLineObj = null
-      }
-    })
-    
-    //
-    // Store all text objects for fade animations
-    //
-    const instructionsText = instructionsTextObjects[0]  // Reference for compatibility
-    const instructionsOutlines = instructionsOutlineObjects
-    //
-    // Spiders - creatures made from title letters crawling in the background
-    // Create spiders from all letters in "Find Yourself" title
-    //
-    const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, titleSize, TITLE_FONT_FAMILY)
+    const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
     const spiders = []
-    let spiderTimer = 0  // Timer for fade-in delay
+    let spiderTimer = 0
     //
-    // Wave-based appearance: letters appear in groups, far apart from each other
-    // "Find Yourself" (without space) = 10 letters (indices 0-9)
-    // F(0) i(1) n(2) d(3) M(4) y(5) s(6) e(7) l(8) f(9)
-    // Wave 1: indices 0, 4, 8 (F, M, l) - spread far apart
-    // Wave 2: indices 2, 5, 9 (n, y, f) - spread far apart
-    // Wave 3: indices 1, 6, 7 (i, s, e) - spread far apart
-    // Wave 4: index 3 (d) - last one
+    // "find yourself in life" has 18 non-space letters (indices 0-17).
+    // Five waves spread them so they appear far apart.
     //
-    const waves = [
-      [0, 4, 8],  // Wave 1: F, M, l
-      [2, 5, 9],  // Wave 2: n, y, f
-      [1, 6, 7],  // Wave 3: i, s, e
-      [3]         // Wave 4: d
-    ]
-    
-    const LEG_APPEAR_DURATION = 2.0  // Legs take 2 seconds to appear
-    const CRAWL_DURATION = 5.0       // Let them crawl for 5 seconds before next wave
-    const WAVE_INTERVAL = LEG_APPEAR_DURATION + CRAWL_DURATION  // 7 seconds between waves
-    
+    const waves = [[0, 5, 10, 15], [2, 7, 12, 17], [1, 6, 11, 16], [3, 8, 13], [4, 9, 14]]
+    const LEG_APPEAR_DURATION = 2.0
+    const CRAWL_DURATION = 5.0
+    const WAVE_INTERVAL = LEG_APPEAR_DURATION + CRAWL_DURATION
     letterInfos.forEach((letterInfo, i) => {
       const spider = createSpider(k, i, letterInfo)
-      //
-      // Find which wave this letter belongs to
-      //
       let waveIndex = 0
       for (let w = 0; w < waves.length; w++) {
-        if (waves[w].includes(i)) {
-          waveIndex = w
-          break
+        if (waves[w].includes(i)) { waveIndex = w; break }
         }
-      }
-      //
-      // Set leg appearance delay based on wave
-      //
       spider.legAppearDelay = waveIndex * WAVE_INTERVAL + Math.random() * 0.3
-      //
-      // Store reference to letterInfo and titleOutlines for later use
-      //
       spider.letterInfo = letterInfo
       spider.titleOutlines = titleOutlines
       spiders.push(spider)
     })
-    
-    //
-    // Prepare firefly layouts
-    //
-    const availableWidth = k.width() - LAYOUT_HORIZONTAL_MARGIN * 2
-    
-    let titleLayout
-    try {
-      titleLayout = await generateLayout({
-        text: TITLE_TEXT,
-        fontSize: TITLE_FONT_SIZE,
-        centerX,
-        centerY,
-        fontFamily: TITLE_FONT_FAMILY
-      })
-    } catch (error) {
-      console.error('Failed to generate title layout:', error)
-      return
-    }
-    
-    if (!titleLayout || !titleLayout.positions) {
-      console.error('Title layout is invalid:', titleLayout)
-      return
-    }
-    
-    const particleSystem = createParticleSystem(k, titleLayout.positions, 0)
-    
-    //
-    // Particles are created hidden (opacity = 0)
-    // They will fade in after instructions disappear
-    //
-    
-    const quotePrimaryLayout = await generateLayout({
-      text: QUOTE_PRIMARY_TEXT,
-      fontSize: QUOTE_PRIMARY_FONT_SIZE,
-      centerX,
-      centerY,
-      desiredCount: particleSystem.particles.length,
-      maxWidth: availableWidth,
-      samplingProbability: 1,
-      minDistance: 1.2,
-      singlePixelStroke: true,
-      fontFamily: QUOTE_FONT_FAMILY,
-      morphTargets: particleSystem.layoutPositions
-    })
-    
-    const quoteSecondaryCenterY = centerY
-    const quoteSecondaryLayout = await generateLayout({
-      text: QUOTE_SECONDARY_TEXT,
-      fontSize: QUOTE_SECONDARY_FONT_SIZE,
-      centerX,
-      centerY: quoteSecondaryCenterY,
-      desiredCount: particleSystem.particles.length,
-      maxWidth: availableWidth,
-      samplingProbability: 1,
-      minDistance: 1.2,
-      singlePixelStroke: true,
-      fontFamily: QUOTE_FONT_FAMILY,
-      morphTargets: quotePrimaryLayout.positions
-    })
-    
-    //
-    // Arrow layout - positioned above hint text
-    //
-    const arrowCenterY = HINT_Y - 180  // Position arrow higher above hint
-    const arrowLayout = await generateLayout({
-      text: ARROW_TEXT,
-      fontSize: ARROW_FONT_SIZE,
-      centerX,
-      centerY: arrowCenterY,
-      desiredCount: particleSystem.particles.length,
-      maxWidth: availableWidth,
-      samplingProbability: 1,
-      minDistance: 1.2,
-      singlePixelStroke: true,
-      fontFamily: TITLE_FONT_FAMILY,  // Use same font as title
-      morphTargets: null  // No morphing - gather from scattered positions
-    })
-
-    
-    //
-    // Scene timeline state
-    //
-    const PHASES = {
-      INSTRUCTIONS_FADE_IN: 'instructionsFadeIn',
-      INSTRUCTIONS_HOLD: 'instructionsHold',
-      INSTRUCTIONS_FADE_OUT: 'instructionsFadeOut',
-      TITLE_HOLD: 'titleHold',
-      TITLE_SCATTER: 'titleScatter',
-      QUOTE_PRIMARY_GATHER: 'quotePrimaryGather',
-      QUOTE_PRIMARY_HOLD: 'quotePrimaryHold',
-      QUOTE_PRIMARY_SCATTER: 'quotePrimaryScatter',
-      QUOTE_SECONDARY_GATHER: 'quoteSecondaryGather',
-      QUOTE_SECONDARY_HOLD: 'quoteSecondaryHold',
-      QUOTE_SECONDARY_SCATTER: 'quoteSecondaryScatter',
-      ARROW_GATHER: 'arrowGather',
-      ARROW_HOLD: 'arrowHold',
-      FREE: 'free'
-    }
-    
-    let currentPhase = PHASES.INSTRUCTIONS_FADE_IN
-    let phaseTimer = 0
-    let particlesFadedIn = false
-    let showParticles = false  // Flag to control particle rendering
-    let spidersFadingOut = false  // Flag to control spider fade-out
-    let spiderFadeOutProgress = 0  // Progress of spider fade-out (0-1)
-    let spidersReturningToTitle = false  // Flag to control spider return to title
-    let spiderReturnProgress = 0  // Progress of spider return (0-1)
-    
-    //
-    // Show instructions immediately with fade in
-    //
-    titleText.opacity = 0
-    titleOutlines.forEach(outline => outline.opacity = 0)
-    instructionsTextObjects.forEach(obj => obj.opacity = 0)
-    instructionsOutlineObjects.forEach(outline => outline.opacity = 0)
-    
-    k.tween(
-      0,
-      1,
-      INSTRUCTIONS_FADE_DURATION,
-      (val) => {
-        titleBaseOpacity = val
-        titleOutlines.forEach(outline => outline.opacity = val)
-        instructionsTextObjects.forEach(obj => obj.opacity = val)
-        instructionsOutlineObjects.forEach(outline => outline.opacity = val)
-      },
-      k.easings.easeOutQuad
-    )
-    
-    const setPhase = phase => {
-      currentPhase = phase
-      phaseTimer = 0
-    }
-    
-    //
-    // Update loop for particles and timeline
-    //
+    let hintFlickerTime = HINT_FLICKER_DURATION
+    let hintDirection = -1
+    let titleFlickerPhase = 0
     k.onUpdate(() => {
-      phaseTimer += k.dt()
-      
-      switch (currentPhase) {
-        case PHASES.INSTRUCTIONS_FADE_IN: {
-          if (phaseTimer >= INSTRUCTIONS_FADE_DURATION) {
-            setPhase(PHASES.INSTRUCTIONS_HOLD)
-          }
-          break
-        }
-        case PHASES.INSTRUCTIONS_HOLD: {
-          if (phaseTimer >= INSTRUCTIONS_HOLD_DURATION) {
-            //
-            // Fade out instructions
-            //
-            k.tween(
-              0,
-              1,
-              INSTRUCTIONS_FADE_DURATION,
-              (val) => {
-                const opacity = 1 - val
-                titleBaseOpacity = opacity
-                titleOutlines.forEach(outline => outline.opacity = opacity)
-                instructionsTextObjects.forEach(obj => obj.opacity = opacity)
-                instructionsOutlineObjects.forEach(outline => outline.opacity = opacity)
-              },
-              k.easings.easeOutQuad
-            )
-            setPhase(PHASES.INSTRUCTIONS_FADE_OUT)
-          }
-          break
-        }
-        case PHASES.INSTRUCTIONS_FADE_OUT: {
-          //
-          // Show particles with fade in at the start of fade out
-          //
-          if (!particlesFadedIn) {
-            particlesFadedIn = true
-            showParticles = true  // Enable particle rendering
-            spidersFadingOut = true  // Start fading out spiders
-            //
-            // Fade in particles
-            //
-            k.tween(
-              0,
-              0.4,
-              INSTRUCTIONS_FADE_DURATION,
-              (val) => {
-                particleSystem.particles.forEach(particle => {
-                  particle.opacity = val
-                })
-              },
-              k.easings.easeInQuad
-            )
-          }
-          
-          if (phaseTimer >= INSTRUCTIONS_FADE_DURATION) {
-            //
-            // Destroy instruction text objects
-            //
-            titleText.destroy()
-            titleOutlines.forEach(outline => outline.destroy())
-            instructionsTextObjects.forEach(obj => obj.destroy())
-            instructionsOutlineObjects.forEach(outline => outline.destroy())
-            //
-            // Start firefly animation with title
-            //
-            setPhase(PHASES.TITLE_HOLD)
-          }
-          break
-        }
-        case PHASES.TITLE_HOLD: {
-          if (phaseTimer >= TITLE_HOLD_DURATION) {
-            scatterParticles(particleSystem)
-            setPhase(PHASES.TITLE_SCATTER)
-          }
-          break
-        }
-        case PHASES.TITLE_SCATTER: {
-          if (particlesIdle(particleSystem.particles)) {
-            moveParticlesToLayout(particleSystem, quotePrimaryLayout.positions)
-            setPhase(PHASES.QUOTE_PRIMARY_GATHER)
-          }
-          break
-        }
-        case PHASES.QUOTE_PRIMARY_GATHER: {
-          if (particlesIdle(particleSystem.particles)) {
-            setPhase(PHASES.QUOTE_PRIMARY_HOLD)
-          }
-          break
-        }
-        case PHASES.QUOTE_PRIMARY_HOLD: {
-          if (phaseTimer >= QUOTE_PRIMARY_HOLD_DURATION) {
-            scatterParticles(particleSystem)
-            setPhase(PHASES.QUOTE_PRIMARY_SCATTER)
-          }
-          break
-        }
-        case PHASES.QUOTE_PRIMARY_SCATTER: {
-          if (particlesIdle(particleSystem.particles)) {
-            moveParticlesToLayout(particleSystem, quoteSecondaryLayout.positions)
-            setPhase(PHASES.QUOTE_SECONDARY_GATHER)
-          }
-          break
-        }
-        case PHASES.QUOTE_SECONDARY_GATHER: {
-          if (particlesIdle(particleSystem.particles)) {
-            setPhase(PHASES.QUOTE_SECONDARY_HOLD)
-          }
-          break
-        }
-        case PHASES.QUOTE_SECONDARY_HOLD: {
-          if (phaseTimer >= QUOTE_SECONDARY_HOLD_DURATION) {
-            scatterParticles(particleSystem)
-            setPhase(PHASES.QUOTE_SECONDARY_SCATTER)
-          }
-          break
-        }
-        case PHASES.QUOTE_SECONDARY_SCATTER: {
-          if (particlesIdle(particleSystem.particles)) {
-            moveParticlesToLayout(particleSystem, arrowLayout.positions)
-            setPhase(PHASES.ARROW_GATHER)
-          }
-          break
-        }
-        case PHASES.ARROW_GATHER: {
-          //
-          // Start spiders returning to title when arrow starts gathering
-          //
-          if (!spidersReturningToTitle) {
-            spidersReturningToTitle = true
-            spiderReturnProgress = 0
-            //
-            // Calculate target positions for "Find Yourself" above arrow
-            // Position title above arrow with spacing
-            // Use original letter positions but recalculate for vertical layout above arrow
-            //
-            const titleAboveArrowY = arrowCenterY - 200  // Position title 200px above arrow
-            const charWidth = titleSize * 0.6  // Character width (same as in pickLettersFromTitle)
-            const spaceWidth = charWidth * 0.5  // Space width (half of character width)
-            //
-            // Keep spaces in title for proper spacing: "find yourself"
-            //
-            const titleText = INSTRUCTIONS_TITLE  // "find yourself" with space
-            //
-            // Calculate total width including spaces
-            //
-            let totalWidth = 0
-            for (let i = 0; i < titleText.length; i++) {
-              if (titleText[i] === ' ') {
-                totalWidth += spaceWidth
-              } else {
-                totalWidth += charWidth
-              }
-            }
-            const startX = centerX - totalWidth / 2 + charWidth / 2  // Start from left edge, centered
-            
-            //
-            // Create mapping from original charIndex to X position
-            // Account for spaces in the title
-            //
-            const titleWithSpaces = INSTRUCTIONS_TITLE
-            let currentX = startX
-            const charIndexToX = {}
-            for (let i = 0; i < titleWithSpaces.length; i++) {
-              if (titleWithSpaces[i] === ' ') {
-                //
-                // Space - advance X position but don't assign to any spider
-                //
-                currentX += spaceWidth
-              } else {
-                //
-                // Letter - assign X position
-                //
-                charIndexToX[i] = currentX
-                currentX += charWidth
-              }
-            }
-            
-            //
-            // Assign target positions to spiders based on their original letter order
-            // Sort spiders by their original charIndex to maintain letter order
-            //
-            const sortedSpiders = [...spiders].sort((a, b) => {
-              const aIndex = a.letterInfo ? a.letterInfo.charIndex : 999
-              const bIndex = b.letterInfo ? b.letterInfo.charIndex : 999
-              return aIndex - bIndex
-            })
-            
-            sortedSpiders.forEach((spider) => {
-              if (spider.letterInfo) {
-                //
-                // Calculate horizontal position based on original charIndex
-                // Use charIndexToX mapping which accounts for spaces
-                //
-                const originalCharIndex = spider.letterInfo.charIndex
-                spider.targetReturnX = charIndexToX[originalCharIndex] ?? startX
-                spider.targetReturnY = titleAboveArrowY
-                spider.startReturnX = spider.x  // Save current position
-                spider.startReturnY = spider.y
-                spider.targetRotation = 0  // Normal horizontal text (no rotation)
-              }
-            })
-          }
-          if (particlesIdle(particleSystem.particles)) {
-            setPhase(PHASES.ARROW_HOLD)
-          }
-          break
-        }
-        case PHASES.ARROW_HOLD: {
-          //
-          // Arrow stays until user presses key
-          // Spiders continue returning to title
-          //
-          break
-        }
-        case PHASES.FREE:
-        default:
-          break
-      }
-      
+      const dt = k.dt()
+      spiderTimer += dt
+      spiders.forEach(spider => updateSpider(k, spider, dt, SPIDER_MAX_OPACITY, true))
       //
-      // Only update particles if they should be shown
+      // Hint flicker
       //
-      if (showParticles) {
-        Particles.onUpdate(particleSystem)
-      }
-
-      //
-      // Hint flicker (always active)
-      //
-      hintFlickerTime += k.dt() * hintDirection
+      hintFlickerTime += dt * hintDirection
       if (hintFlickerTime >= HINT_FLICKER_DURATION) {
         hintDirection = -1
         hintFlickerTime = HINT_FLICKER_DURATION
@@ -734,82 +273,27 @@ export function sceneReady(k) {
         hintDirection = 1
         hintFlickerTime = 0
       }
-      const hintProgress = hintFlickerTime / HINT_FLICKER_DURATION
-      hint.opacity = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * hintProgress
+      const hintOp = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * (hintFlickerTime / HINT_FLICKER_DURATION)
+      hint.opacity = hintOp
+      hintOutlines.forEach(o => o.opacity = hintOp)
       //
-      // Title flicker - subtle opacity variation
+      // Title subtle flicker
       //
-      titleFlickerPhase += k.dt() * TITLE_FLICKER_SPEED
+      titleFlickerPhase += dt * TITLE_FLICKER_SPEED
       const titleFlicker = TITLE_FLICKER_MIN + (TITLE_FLICKER_MAX - TITLE_FLICKER_MIN) * (0.5 + 0.5 * Math.sin(titleFlickerPhase))
-      //
-      // Apply flicker to title opacity (using base opacity from tween)
-      //
-      titleText.opacity = titleBaseOpacity * titleFlicker
-      
-      //
-      // Spider animation
-      //
-      const dt = k.dt()
-      spiderTimer += dt
-      //
-      // Update spider fade-out progress if fading out
-      //
-      if (spidersFadingOut && spiderFadeOutProgress < 1) {
-        spiderFadeOutProgress += dt / INSTRUCTIONS_FADE_DURATION
-        spiderFadeOutProgress = Math.min(1, spiderFadeOutProgress)
-      }
-      //
-      // Calculate current opacity based on timer
-      //
-      let currentOpacity = 0
-      if (spiderTimer > SPIDER_APPEAR_DELAY) {
-        const fadeProgress = Math.min(1, (spiderTimer - SPIDER_APPEAR_DELAY) / SPIDER_FADE_DURATION)
-        currentOpacity = fadeProgress * SPIDER_MAX_OPACITY
-        //
-        // Apply fade-out multiplier if spiders are fading out
-        //
-        if (spidersFadingOut) {
-          currentOpacity *= (1 - spiderFadeOutProgress)
-        }
-      }
-      //
-      // Update each spider
-      //
-      spiders.forEach(spider => {
-        //
-        // Allow full screen movement only after fireflies appear
-        //
-        updateSpider(k, spider, dt, currentOpacity, showParticles)
-      })
+      titleText.opacity = titleFlicker
+      titleOutlines.forEach(o => o.opacity = titleFlicker)
     })
-    
     k.onDraw(() => {
-      //
-      // Only draw particles if they should be shown
-      //
-      if (showParticles) {
-        Particles.draw(particleSystem)
-      }
-      //
-      // Draw spiders with individual fade-in (and fade-out) - AFTER particles (on top)
-      //
       spiders.forEach(spider => {
         let spiderOpacity = 0
         const timeToAppear = SPIDER_APPEAR_DELAY + spider.appearDelay
         if (spiderTimer > timeToAppear) {
-          const fadeProgress = Math.min(1, (spiderTimer - timeToAppear) / SPIDER_FADE_DURATION)
-          spiderOpacity = fadeProgress * SPIDER_MAX_OPACITY
-          //
-          // Apply fade-out multiplier if spiders are fading out
-          //
-          if (spidersFadingOut) {
-            spiderOpacity *= (1 - spiderFadeOutProgress)
-          }
+          spiderOpacity = Math.min(1, (spiderTimer - timeToAppear) / SPIDER_FADE_DURATION) * SPIDER_MAX_OPACITY
         }
         drawSpider(k, spider, spiderOpacity)
       })
     })
-    
     //
     // Controls
     //
@@ -817,464 +301,286 @@ export function sceneReady(k) {
       Sound.stopAmbient(sound)
       goToMenuAfterAssets(k)
     }
-    
-    CFG.controls.startGame.forEach(key => {
-      k.onKeyPress(key, exitToMenu)
-    })
-    CFG.controls.backToMenu.forEach(key => {
-      k.onKeyPress(key, exitToMenu)
-    })
-    
+    CFG.controls.startGame.forEach(key => k.onKeyPress(key, exitToMenu))
+    CFG.controls.backToMenu.forEach(key => k.onKeyPress(key, exitToMenu))
     k.onClick(exitToMenu)
   })
 }
-
-function createParticleSystem(k, layoutPositions, initialOpacity = 0.4) {
-  //
-  // Guard: empty layoutPositions would make `i % 0` produce NaN and crash
-  // on `base.x` below. Bail out cleanly with an empty system instead.
-  //
-  if (!layoutPositions || layoutPositions.length === 0) {
-    return { particles: [], layoutPositions: [], extendedPositions: [] }
-  }
-  const count = Math.max(1, Math.floor(layoutPositions.length * DENSITY_MULTIPLIER))
-  const extendedPositions = []
-  const particles = []
-
-  for (let i = 0; i < count; i++) {
-    const base = layoutPositions[i % layoutPositions.length]
-    const pos = { x: base.x, y: base.y }
-    extendedPositions.push(pos)
-    particles.push({
-      baseX: pos.x,
-      baseY: pos.y,
-      x: pos.x,
-      y: pos.y,
-      flickerPhase: Math.random() * Math.PI * 2,
-      tremblePhase: Math.random() * Math.PI * 2,
-      trembleSpeed: 0.8 + Math.random() * 0.4,
-      fleeSpeed: 0.7 + Math.random() * 0.6,
-      opacity: initialOpacity,
-      isFleeing: false,
-      isAutoFleeing: false,
-      fleeStartX: pos.x,
-      fleeStartY: pos.y,
-      fleeTargetX: pos.x,
-      fleeTargetY: pos.y,
-      fleeProgress: 0,
-      floatFadeIn: 0,
-      hasEverFled: false,
-      fleeCurveX: 0,
-      fleeCurveY: 0,
-      fleeTimeOffset: Math.random() * Math.PI * 2,
-      fleeCurveIntensity: 1 + Math.random() * 0.75
-    })
-  }
-  
-  return {
-    k,
-    particles,
-    color: CFG.visual.colors.ready.fireflies,
-    baseOpacity: 0.9,
-    flickerSpeed: 2,
-    trembleRadius: TREMOR_FORMATION,
-    trembleRadiusAfterFlee: TREMOR_FORMATION,
-    mouseInfluence: 0,
-    bounds: null,
-    time: 0,
-    isCursorVisible: () => false,
-    layoutPositions: extendedPositions.map(pos => ({ x: pos.x, y: pos.y }))
-  }
-}
-
-async function generateLayout({
-  text,
-  fontSize,
-  centerX,
-  centerY,  
-  desiredCount,
-  samplingProbability = 0.8,
-  minDistance = 4,
-  maxWidth,
-  singlePixelStroke = false,
-  fontFamily = TITLE_FONT_FAMILY,
-  morphTargets
-}) {
-  const lines = text.split('\n')
-  const padding = 24
-  const lineHeight = fontSize * 1.2
-  
-  //
-  // Measure text first (need temporary canvas for measurement)
-  //
-  const tempCanvas = document.createElement('canvas')
-  const tempCtx = tempCanvas.getContext('2d')
-  tempCtx.font = `${fontSize}px ${fontFamily}`
-  
-  const maxLineWidth = Math.max(...lines.map(line => tempCtx.measureText(line).width))
-  const rawCanvasWidth = Math.ceil(maxLineWidth + padding * 2)
-  const canvasHeight = Math.ceil(lineHeight * lines.length + padding * 2)
-  
-  const scaleX = maxWidth ? Math.min(1, maxWidth / rawCanvasWidth) : 1
-  const effectiveWidth = rawCanvasWidth * scaleX
-  
-  //
-  // Render text into a fresh, dedicated canvas so we don't depend on any
-  // transform state left behind by toCanvas (which always pre-applies a
-  // ctx.scale(pixelRatio, pixelRatio)). We need {willReadFrequently:true}
-  // because we read every single pixel back via getImageData; without it
-  // some Chrome builds keep the canvas GPU-backed and read-back can be
-  // surprisingly slow or, worse, return an empty bitmap if the GPU
-  // texture wasn't flushed yet.
-  //
-  const renderCanvas = document.createElement('canvas')
-  renderCanvas.width = rawCanvasWidth
-  renderCanvas.height = canvasHeight
-  const ctx = renderCanvas.getContext('2d', { willReadFrequently: true })
-  ctx.fillStyle = 'white'
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-
-  ctx.save()
-  ctx.translate(rawCanvasWidth / 2, 0)
-  ctx.scale(scaleX, 1)
-
-  const strokeWidth = singlePixelStroke ? Math.max(0.75, 1 / scaleX) : 1
-  ctx.lineWidth = strokeWidth
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
-  ctx.strokeStyle = 'white'
-
-  lines.forEach((line, index) => {
-    const lineY = padding + lineHeight * index + lineHeight / 2
-    if (singlePixelStroke) {
-      ctx.strokeText(line, 0, lineY)
-    } else {
-      ctx.fillText(line, 0, lineY)
-    }
-  })
-
-  ctx.restore()
-  //
-  // Extract pixel data directly from the freshly-rendered canvas
-  //
-  return await new Promise((resolve, reject) => {
-    try {
-      const imageData = ctx.getImageData(0, 0, rawCanvasWidth, canvasHeight)
-      const pixels = imageData.data
-
-      const edgePixels = collectEdgePixels(rawCanvasWidth, canvasHeight, pixels)
-      shuffle(edgePixels)
-
-      const positions = []
-      const temp = []
-
-      for (let i = 0; i < edgePixels.length; i++) {
-        const pixel = edgePixels[i]
-        if (Math.random() > samplingProbability) continue
-        if (!isFarEnough(pixel.x, pixel.y, temp, minDistance)) continue
-        temp.push(pixel)
-
-        const worldX = centerX - effectiveWidth / 2 + pixel.x * scaleX
-        const worldY = centerY - canvasHeight / 2 + pixel.y
-        positions.push({ x: worldX, y: worldY })
-      }
-
-      let finalPositions = positions
-      if (desiredCount) {
-        finalPositions = normalizeLayoutCount(
-          positions,
-          desiredCount,
-          centerX,
-          centerY,
-          morphTargets
-        )
-      }
-
-      const metrics = {
-        width: effectiveWidth,
-        height: canvasHeight,
-        lineHeight,
-        lines: lines.length
-      }
-
-      resolve({
-        positions: finalPositions,
-        metrics
-      })
-    } catch (error) {
-      reject(error)
-    }
+//
+// Draws the darkened background image
+//
+function onDrawBg(k) {
+  k.drawSprite({
+    sprite: "menu-bg",
+    width: k.width(),
+    height: k.height(),
+    opacity: 0.3
   })
 }
-
-function normalizeLayoutCount(positions, desiredCount, centerX, centerY, morphTargets) {
-  if (positions.length === desiredCount) {
-    return positions.map(pos => ({ x: pos.x, y: pos.y }))
-  }
-  
-  let adjusted = positions.map(pos => ({ x: pos.x, y: pos.y }))
-  
-  if (morphTargets && morphTargets.length && adjusted.length) {
-    const matched = []
-    const remaining = [...adjusted]
-    morphTargets.forEach(target => {
-      if (!remaining.length) return
-      let bestIndex = 0
-      let bestDist = Infinity
-      for (let i = 0; i < remaining.length; i++) {
-        const candidate = remaining[i]
-        const dx = candidate.x - target.x
-        const dy = candidate.y - target.y
-        const dist = dx * dx + dy * dy
-        if (dist < bestDist) {
-          bestDist = dist
-          bestIndex = i
-        }
-      }
-      matched.push(remaining.splice(bestIndex, 1)[0])
-    })
-    adjusted = matched.concat(remaining)
-  }
-  
-  if (adjusted.length > desiredCount) {
-    shuffle(adjusted)
-    return adjusted.slice(0, desiredCount)
-  }
-  
-  if (adjusted.length === 0) {
-    const fallbackX = centerX ?? 0
-    const fallbackY = centerY ?? 0
-    while (adjusted.length < desiredCount) {
-      adjusted.push({ x: fallbackX, y: fallbackY })
-    }
-    return adjusted
-  }
-  
-  const baseSource =
-    morphTargets && morphTargets.length ? morphTargets : positions.length ? positions : adjusted
-  let index = 0
-  const jitterAmount = 0.35
-  
-  while (adjusted.length < desiredCount) {
-    const source = baseSource[index % baseSource.length]
-    const fallback = positions[index % positions.length] || adjusted[adjusted.length - 1]
-    const base = source || fallback
-    adjusted.push({
-      x: base.x + (Math.random() - 0.5) * jitterAmount,
-      y: base.y + (Math.random() - 0.5) * jitterAmount
-    })
-    index++
-  }
-  
-  return adjusted
-}
-
-function collectEdgePixels(width, height, pixels) {
-  const edgePixels = []
-  
-  const getAlpha = (x, y) => {
-    if (x < 0 || x >= width || y < 0 || y >= height) return 0
-    return pixels[(y * width + x) * 4 + 3]
-  }
-  
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const alpha = getAlpha(x, y)
-      if (alpha <= 128) continue
-      
-      let isEdge = false
-      for (let dy = -1; dy <= 1 && !isEdge; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue
-          if (getAlpha(x + dx, y + dy) < 128) {
-            isEdge = true
-            break
-          }
-        }
-      }
-      
-      if (isEdge) {
-        edgePixels.push({ x, y })
-      }
-    }
-  }
-  
-  return edgePixels
-}
-
-function shuffle(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const temp = array[i]
-    array[i] = array[j]
-    array[j] = temp
-  }
-}
-
-function isFarEnough(x, y, existing, minDistance) {
-  const minDistSq = minDistance * minDistance
-  for (let i = 0; i < existing.length; i++) {
-    const dx = existing[i].x - x
-    const dy = existing[i].y - y
-    if (dx * dx + dy * dy < minDistSq) return false
-  }
-  return true
-}
-
-function scatterParticles(system) {
-  const { particles } = system
-  system.trembleRadius = TREMOR_FREE
-  system.trembleRadiusAfterFlee = TREMOR_FREE
-  particles.forEach(particle => {
-    if (particle.isFleeing) return
-    const angle = Math.random() * Math.PI * 2
-    const distance = SCATTER_DISTANCE_MIN + Math.random() * (SCATTER_DISTANCE_MAX - SCATTER_DISTANCE_MIN)
-    const targetX = particle.x + Math.cos(angle) * distance
-    const targetY = particle.y + Math.sin(angle) * distance
-    
-    particle.isFleeing = true
-    particle.isAutoFleeing = true
-    particle.fleeProgress = 0
-    particle.fleeSpeed = 2.5 + Math.random() * 1.5
-    particle.fleeStartX = particle.x
-    particle.fleeStartY = particle.y
-    particle.fleeTargetX = targetX
-    particle.fleeTargetY = targetY
-    particle.hasEverFled = true
-    particle.floatFadeIn = 0
+//
+// Draws the left illustration: life-ready.png as the creature + real hero sprite to its left.
+//
+function onDrawIllustration(k) {
+  //
+  // Real hero sprite on the LEFT of the creature (anchor bottom-center)
+  //
+  k.drawSprite({
+    sprite: HERO_ILLUSTRATION_SPRITE_NAME,
+    pos: k.vec2(HERO_X - HERO_SPRITE_SIZE / 2, HERO_Y - HERO_SPRITE_SIZE),
+    width: HERO_SPRITE_SIZE,
+    height: HERO_SPRITE_SIZE,
+    opacity: 1.0
+  })
+  //
+  // life-ready.png: fully opaque, reduced size, positioned next to the hero
+  //
+  k.drawSprite({
+    sprite: "life-ready",
+    pos: k.vec2(LIFE_X, LIFE_Y),
+    width: LIFE_WIDTH,
+    height: LIFE_HEIGHT,
+    opacity: LIFE_OPACITY
   })
 }
-
-function moveParticlesToLayout(system, layoutPositions) {
-  const { particles } = system
-  system.trembleRadius = TREMOR_FORMATION
-  system.trembleRadiusAfterFlee = TREMOR_FORMATION
-  
-  const average = layoutPositions.reduce(
-    (acc, pos) => {
-      acc.x += pos.x
-      acc.y += pos.y
-      return acc
+//
+// Adds the static text objects for the right panel body copy.
+// Handles inline coloring for key words by drawing segments.
+//
+function addTextPanel(k, leftX, startY) {
+  const z = Z_TEXT
+  const s = TEXT_FONT_SIZE
+  const lh = TEXT_LINE_HEIGHT
+  const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
+  const cw = s * MONO_CHAR_W_RATIO
+  //
+  // Helper: add one plain text segment
+  //
+  const seg = (text, x, y, colorHex) => k.add([
+    k.text(text, { size: s, font }),
+    k.pos(x, y),
+    k.anchor('left'),
+    getColor(k, colorHex),
+    k.z(z)
+  ])
+  //
+  // Block 1 (4 lines): self-discovery through life's obstacles
+  //
+  // Line 1: "Learn who you truly are."  ≈ 24 chars
+  //
+  const l1y = startY
+  seg('Learn who you truly are.', leftX, l1y, COLOR_TEXT_NORMAL)
+  //
+  // Line 2: "Life is your only teacher."  ≈ 26 chars — "Life" in red
+  //
+  const life1End = leftX + 4 * cw
+  seg('Life', leftX, l1y + lh, COLOR_LIFE_RED)
+  seg(' is your only teacher.', life1End, l1y + lh, COLOR_TEXT_NORMAL)
+  //
+  // Line 3: "Its faces challenge you —"  ≈ 25 chars
+  //
+  seg('Its faces challenge you \u2014', leftX, l1y + lh * 2, COLOR_TEXT_NORMAL)
+  //
+  // Line 4: "time, touch, and words."  ≈ 23 chars (colored)
+  //
+  const l4y = l1y + lh * 3
+  let cx = leftX
+  seg('time', cx, l4y, COLOR_WARM_ORANGE)
+  cx += 4 * cw
+  seg(', ', cx, l4y, COLOR_TEXT_NORMAL)
+  cx += 2 * cw
+  seg('touch', cx, l4y, COLOR_WARM_ORANGE)
+  cx += 5 * cw
+  seg(', and ', cx, l4y, COLOR_TEXT_NORMAL)
+  cx += 6 * cw
+  seg('words', cx, l4y, COLOR_WORD_SECTION)
+  cx += 5 * cw
+  seg('.', cx, l4y, COLOR_TEXT_NORMAL)
+  //
+  // Gap then second block
+  //
+  const l5y = l1y + lh * 4 + 14
+  //
+  // Line 5: "Explore worlds."  ≈ 15 chars
+  //
+  seg('Explore worlds.', leftX, l5y, COLOR_TEXT_NORMAL)
+  //
+  // Line 6: "Collect your fragments."  ≈ 22 chars
+  //
+  seg('Collect your fragments.', leftX, l5y + lh, COLOR_TEXT_NORMAL)
+  //
+  // Line 7: "Face Life in the end."  ≈ 21 chars — "Life" in red
+  //
+  const l7y = l5y + lh * 2
+  const life2End = leftX + 5 * cw
+  seg('Face ', leftX, l7y, COLOR_TEXT_NORMAL)
+  seg('Life', life2End, l7y, COLOR_LIFE_RED)
+  seg(' in the end.', life2End + 4 * cw, l7y, COLOR_TEXT_NORMAL)
+}
+//
+// Adds the three icon label + description text rows (bottom-right panel).
+//
+function addIconLabels(k, leftX) {
+  const z = Z_TEXT
+  const labelFont = "'JetBrains Mono', monospace"
+  const descFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
+  const iconTextX = leftX + ICON_TEXT_OFFSET_X
+  const rows = [
+    {
+      label: 'Collect fragments',
+      desc: 'Pieces of you. Scattered everywhere.'
     },
-    { x: 0, y: 0 }
-  )
-  const count = layoutPositions.length || 1
-  const centerX = average.x / count
-  const centerY = average.y / count
-  
-  const targets = layoutPositions.length
-    ? layoutPositions.map(pos => ({ ...pos }))
-    : [{ x: centerX, y: centerY }]
-  
-  const availableParticles = [...particles]
-  const assignments = []
-  
-  targets.forEach(target => {
-    if (availableParticles.length === 0) return
-    
-    let bestIndex = 0
-    let bestDistance = Infinity
-    
-    for (let i = 0; i < availableParticles.length; i++) {
-      const candidate = availableParticles[i]
-      const dx = target.x - candidate.x
-      const dy = target.y - candidate.y
-      const distSq = dx * dx + dy * dy
-      if (distSq < bestDistance) {
-        bestDistance = distSq
-        bestIndex = i
-      }
+    {
+      label: 'Find the other you',
+      desc: 'Touch them. Meet them. Understand them.'
+    },
+    {
+      label: 'Face Life',
+      desc: 'The final battle is within.'
     }
-    
-    const particle = availableParticles.splice(bestIndex, 1)[0]
-    assignments.push({ particle, target })
+  ]
+  rows.forEach((row, i) => {
+    const rowY = ICON_START_Y + i * ICON_ROW_HEIGHT
+    k.add([
+      k.text(row.label, { size: ICON_LABEL_FONT_SIZE, font: labelFont }),
+      k.pos(iconTextX, rowY),
+      k.anchor('left'),
+      getColor(k, COLOR_ICON_LABEL),
+      k.z(z)
+    ])
+    k.add([
+      k.text(row.desc, { size: ICON_LABEL_DESC_FONT_SIZE, font: descFont }),
+      k.pos(iconTextX, rowY + ICON_LABEL_DESC_OFFSET_Y),
+      k.anchor('left'),
+      getColor(k, COLOR_ICON_DESC),
+      k.z(z)
+    ])
   })
-  
-  assignments.forEach(({ particle, target }) => {
-    particle.isFleeing = true
-    particle.isAutoFleeing = true
-    particle.fleeSpeed = GATHER_SPEED + Math.random() * 0.22
-    particle.fleeProgress = 0
-    particle.fleeStartX = particle.x
-    particle.fleeStartY = particle.y
-    particle.fleeTargetX = target.x
-    particle.fleeTargetY = target.y
-    particle.hasEverFled = true
-    particle.floatFadeIn = 0
-    const curveMagnitude = 30 + Math.random() * 55
-    const curveAngle = Math.random() * Math.PI * 2
-    particle.fleeCurveX = Math.cos(curveAngle) * curveMagnitude
-    particle.fleeCurveY = Math.sin(curveAngle) * curveMagnitude
-    particle.fleeCurveIntensity = 1 + Math.random() * 0.75
+}
+//
+// Draws the three small icon illustrations beside each icon label row.
+//
+function onDrawIconIllustrations(k, iconAnim) {
+  const leftX = TEXT_LEFT + ICON_DRAW_R
+  //
+  // Icon 1: "Collect fragments" - animated sun-bunny sparkle on tiny bonus hero
+  //
+  drawFragmentIcon(k, leftX, ICON_START_Y + ICON_DRAW_R * 0.6, iconAnim.sparklePhase)
+  //
+  // Icon 2: "Find the other you" - hero + anti-hero with electric connection
+  // Extra offset centres the sprites between the label and description lines.
+  //
+  drawTwoHeroesIcon(k, leftX, ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim.heartbeatPhase)
+  //
+  // Icon 3: "Face Life" - life.png sprite (with occasional laugh)
+  //
+  drawLifeIcon(k, leftX, ICON_START_Y + ICON_ROW_HEIGHT * 2 + ICON_DRAW_R * 0.6, iconAnim)
+}
+//
+// Icon 1: animated sun-bunny sparkle — soft 2-circle glint matching the
+// bonus-hero sparkle used in the time section (outer glow + bright core).
+// No hero sprite; the glow is centered exactly at (cx, cy) to align with
+// the other two icons.
+//
+function drawFragmentIcon(k, cx, cy, sparklePhase) {
+  const pulse = 0.5 + 0.5 * Math.abs(Math.sin(sparklePhase))
+  const glintColor = k.rgb(255, 255, 220)
+  const r = SPARKLE_INNER_R * (0.6 + pulse * 0.4)
+  //
+  // Soft outer glow
+  //
+  k.drawCircle({ pos: k.vec2(cx, cy), radius: SPARKLE_OUTER_R * pulse, color: glintColor, opacity: 0.15 * pulse })
+  //
+  // Bright core
+  //
+  k.drawCircle({ pos: k.vec2(cx, cy), radius: r, color: glintColor, opacity: 0.85 * pulse })
+}
+//
+// Icon 2: hero + anti-hero sprites with animated electric connection between them
+//
+function drawTwoHeroesIcon(k, cx, cy, heartbeatPhase) {
+  const r = ICON_DRAW_R
+  const hh = r * 0.85
+  const spacing = r * 0.55
+  const spSize = hh * 2.2
+  //
+  // Hero sprite (left)
+  //
+  k.drawSprite({
+    sprite: HERO_SPRITE_NAME,
+    pos: k.vec2(cx - spacing - spSize / 2, cy - spSize * 0.9),
+    width: spSize,
+    height: spSize,
+    opacity: 0.9
   })
-  
-  if (availableParticles.length > 0 && targets.length > 0) {
-    availableParticles.forEach((particle, index) => {
-      const target = targets[index % targets.length]
-      particle.isFleeing = true
-      particle.isAutoFleeing = true
-      particle.fleeSpeed = GATHER_SPEED + Math.random() * 0.22
-      particle.fleeProgress = 0
-      particle.fleeStartX = particle.x
-      particle.fleeStartY = particle.y
-      particle.fleeTargetX = target.x
-      particle.fleeTargetY = target.y
-      particle.hasEverFled = true
-      particle.floatFadeIn = 0
-      const curveMagnitude = 30 + Math.random() * 55
-      const curveAngle = Math.random() * Math.PI * 2
-      particle.fleeCurveX = Math.cos(curveAngle) * curveMagnitude
-      particle.fleeCurveY = Math.sin(curveAngle) * curveMagnitude
-      particle.fleeCurveIntensity = 1 + Math.random() * 0.75
-    })
+  //
+  // Anti-hero sprite (right, flipped)
+  //
+  k.drawSprite({
+    sprite: ANTIHERO_SPRITE_NAME,
+    pos: k.vec2(cx + spacing - spSize / 2, cy - spSize * 0.9),
+    width: spSize,
+    height: spSize,
+    opacity: 0.9
+  })
+  //
+  // Electric connection between their chests
+  //
+  const midY = cy - hh * 0.35
+  drawConnectionWave(k,
+    { x: cx - spacing + spSize * 0.35, y: midY },
+    { x: cx + spacing - spSize * 0.35, y: midY },
+    { segmentWidth: 5, mainWidth: 1.8, opacity: 0.55, heartbeatPhase }
+  )
+}
+//
+// Icon 3: small life.png sprite with periodic laugh flash animation
+//
+function drawLifeIcon(k, cx, cy, iconAnim) {
+  const r = ICON_DRAW_R
+  //
+  // Color tint based on laugh animation phase: red → white alternating flashes
+  //
+  let tintColor
+  if (iconAnim.lifeFlashCount > 0) {
+    tintColor = iconAnim.lifeFlashPhase === 0
+      ? k.rgb(255, 100, 100)
+      : k.rgb(255, 255, 255)
   }
-  
-  system.layoutPositions = targets.map(pos => ({ x: pos.x, y: pos.y }))
+  k.drawSprite({
+    sprite: "life",
+    pos: k.vec2(cx - r, cy - r),
+    width: r * 2,
+    height: r * 2,
+    opacity: 0.9,
+    color: tintColor
+  })
 }
-
-function particlesIdle(particles) {
-  return particles.every(particle => !particle.isFleeing)
-}
+//
+// ────────── Spider / crawling letters system (kept from original) ──────────
+//
 
 /**
  * Creates a spider from a specific letter in a text object
  * @param {Object} k - Kaplay instance
  * @param {number} index - Spider index
- * @param {Object} sourceInfo - Info about source letter {textObj, charIndex, char, x, y, color, fontSize, fontFamily}
+ * @param {Object} sourceInfo - Info about source letter {char, x, y, color, fontSize, fontFamily}
  * @returns {Object} Spider instance
  */
 function createSpider(k, index, sourceInfo) {
   const { char, x, y, color, fontSize, fontFamily } = sourceInfo
-  //
-  // Spider starts stationary until legs fully appear
-  //
   const angle = Math.random() * Math.PI * 2
   const speed = SPIDER_SPEED * (0.5 + Math.random() * 0.5)
-  //
-  // Create 8 legs (4 on each side)
-  // Leg angles spread around the body with random variation
-  //
-  const baseAngleOffset = Math.random() * Math.PI * 2  // Random rotation for all legs
+  const baseAngleOffset = Math.random() * Math.PI * 2
   const legAngles = [
-    -Math.PI * 0.8, -Math.PI * 0.6, -Math.PI * 0.4, -Math.PI * 0.2,  // Left side
-    Math.PI * 0.2, Math.PI * 0.4, Math.PI * 0.6, Math.PI * 0.8       // Right side
+    -Math.PI * 0.8, -Math.PI * 0.6, -Math.PI * 0.4, -Math.PI * 0.2,
+    Math.PI * 0.2, Math.PI * 0.4, Math.PI * 0.6, Math.PI * 0.8
   ]
-  
   const legs = legAngles.map((baseAngle, i) => {
-    const side = i < 4 ? -1 : 1  // Left or right side
+    const side = i < 4 ? -1 : 1
     const reach = SPIDER_LEG_LENGTH_1 + SPIDER_LEG_LENGTH_2
-    //
-    // Apply random offset to base angle
-    //
     const randomizedAngle = baseAngle + baseAngleOffset
-    //
-    // Initial foot target position
-    //
     const footX = x + Math.cos(randomizedAngle) * reach * 0.8
     const footY = y + Math.sin(randomizedAngle) * reach * 0.8
-    
     return {
       baseAngle: randomizedAngle,
       side,
@@ -1289,11 +595,10 @@ function createSpider(k, index, sourceInfo) {
       phaseOffset: (i % 2) * Math.PI
     }
   })
-  
   return {
     x,
     y,
-    vx: 0,  // Start stationary
+    vx: 0,
     vy: 0,
     targetVx: Math.cos(angle) * speed,
     targetVy: Math.sin(angle) * speed,
@@ -1301,254 +606,99 @@ function createSpider(k, index, sourceInfo) {
     directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
     legs,
     distanceTraveled: 0,
-    color,  // Use original text color
+    color,
     appearDelay: index * 0.15,
-    legAppearDelay: 0,  // Will be set externally
-    legAppearTimer: 0,  // Timer for leg appearance
+    legAppearDelay: 0,
+    legAppearTimer: 0,
     letter: char,
-    letterSize: fontSize || INSTRUCTIONS_FONT_SIZE,
-    letterFont: fontFamily || QUOTE_FONT_FAMILY,
-    isActivated: false,  // Becomes true when legs fully appear
-    legExtendT: 0,  // 0=legs hidden inside body, 1=fully extended
-    displayAngle: 0,  // Smoothed rotation angle (degrees)
-    charHidden: false,  // Track if character was hidden from text
-    letterInfo: null,  // Will be set later
-    titleOutlines: null,  // Will be set later for title letters
-    targetReturnX: undefined,  // Target X position when returning to title
-    targetReturnY: undefined,  // Target Y position when returning to title
-    startReturnX: undefined,  // Starting X position when return begins
-    startReturnY: undefined,  // Starting Y position when return begins
-    targetRotation: 0,  // Target rotation angle when returning to title (degrees)
-    currentRotation: 0,  // Current rotation angle (degrees)
-    legsHidden: false  // Flag to hide legs when spider reaches target position
+    letterSize: fontSize,
+    letterFont: fontFamily,
+    isActivated: false,
+    legExtendT: 0,
+    displayAngle: 0,
+    charHidden: false,
+    letterInfo: null,
+    titleOutlines: null,
+    targetReturnX: undefined,
+    targetReturnY: undefined,
+    startReturnX: undefined,
+    startReturnY: undefined,
+    targetRotation: 0,
+    currentRotation: 0,
+    legsHidden: false,
+    settled: false
   }
 }
 
 /**
- * Picks all letters from title text
+ * Picks all letters from the title text object and returns position info.
  * @param {Object} k - Kaplay instance
  * @param {Object} titleTextObj - Title text object
- * @param {string} titleString - Title text string
- * @param {number} fontSize - Font size of the title
- * @param {string} fontFamily - Font family of the title
+ * @param {string} titleString - Title string
+ * @param {number} fontSize - Font size
+ * @param {string} fontFamily - Font family
  * @returns {Array} Array of letter info objects
  */
 function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
   const letterInfos = []
-  //
-  // Calculate character width more accurately
-  // For monospace font, width is approximately fontSize * 0.6
-  //
-  const charWidth = fontSize * 0.6
+  const charWidth = fontSize * MONO_CHAR_W_RATIO
   const startX = titleTextObj.pos.x
-  //
-  // Use same bright color as title at maximum brightness (matching first image)
-  //
-  const brighterColor = k.rgb(245, 110, 110)  // Slightly darker red
-  
+  const brighterColor = k.rgb(245, 110, 110)
   titleString.split('').forEach((char, charIndex) => {
-    //
-    // Skip spaces
-    //
     if (char.trim().length === 0) return
-    //
-    // Calculate center position of this character
-    // Add half char width to get center instead of left edge
-    //
     const charX = startX + (charIndex * charWidth) + (charWidth / 2)
     const charY = titleTextObj.pos.y
-    
     letterInfos.push({
       textObj: titleTextObj,
       charIndex,
       char,
       x: charX,
       y: charY,
-      color: brighterColor,  // Use brighter color instead of titleTextObj.color
+      color: brighterColor,
       fontSize,
       fontFamily
     })
   })
-  
   return letterInfos
 }
 
 /**
- * Picks random letters from text objects and returns their info
- * @param {Object} k - Kaplay instance
- * @param {Array} textObjects - Array of text objects
- * @param {number} count - Number of letters to pick
- * @returns {Array} Array of letter info objects
- */
-function pickLettersFromText(k, textObjects, count) {
-  const letterInfos = []
-  //
-  // Calculate approximate character widths for positioning
-  //
-  const charWidth = INSTRUCTIONS_FONT_SIZE * 0.5  // Approximate monospace width
-  
-  for (let i = 0; i < count; i++) {
-    if (textObjects.length === 0) break
-    //
-    // Pick random text object
-    //
-    const textObj = k.choose(textObjects)
-    const text = textObj.text
-    const textColor = textObj.color
-    //
-    // Filter non-space characters
-    //
-    const chars = text.split('')
-    const nonSpaceIndices = []
-    chars.forEach((c, idx) => {
-      if (c.trim().length > 0) {
-        nonSpaceIndices.push(idx)
-      }
-    })
-    
-    if (nonSpaceIndices.length === 0) continue
-    //
-    // Pick random character
-    //
-    const charIndex = k.choose(nonSpaceIndices)
-    const char = chars[charIndex]
-    //
-    // Calculate approximate position of this character
-    //
-    const charX = textObj.pos.x + charIndex * charWidth
-    const charY = textObj.pos.y
-    
-    letterInfos.push({
-      textObj,
-      charIndex,
-      char,
-      x: charX,
-      y: charY,
-      color: textColor
-    })
-  }
-  
-  return letterInfos
-}
-
-/**
- * Updates spider position and leg animations
+ * Updates spider position, leg timers and activation.
  * @param {Object} k - Kaplay instance
  * @param {Object} spider - Spider instance
  * @param {number} dt - Delta time
- * @param {number} opacity - Current opacity (for legs)
- * @param {boolean} allowFullScreenMovement - If true, spiders can move across full screen
+ * @param {number} opacity - Current global opacity (drives leg appear timer)
+ * @param {boolean} allowFullScreen - If true spiders roam the whole screen
  */
-function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
-  //
-  // Always update leg appearance timer once opacity is greater than 0
-  //
+function updateSpider(k, spider, dt, opacity, allowFullScreen) {
   if (opacity > 0) {
     spider.legAppearTimer += dt
   }
-  //
-  // Gradually extend legs from body (0 to 1 over LEG_APPEAR_DURATION)
-  //
   const legAppearTimeElapsed = spider.legAppearTimer - spider.legAppearDelay
   if (legAppearTimeElapsed > 0 && spider.legExtendT < 1) {
     const LEG_GROW_DURATION = 2.0
     spider.legExtendT = Math.min(1, legAppearTimeElapsed / LEG_GROW_DURATION)
   }
-  //
-  // Activate spider movement after legs have fully extended
-  //
   if (!spider.isActivated && spider.legExtendT >= 1) {
     spider.isActivated = true
-    //
-    // Capture the current color from the original text at the moment of activation
-    //
     if (spider.letterInfo && spider.letterInfo.textObj) {
       spider.color = spider.letterInfo.textObj.color
     }
-    //
-    // Hide the original character from text and outlines when spider activates
-    //
     if (spider.letterInfo && !spider.charHidden) {
       const { textObj, charIndex } = spider.letterInfo
       const chars = textObj.text.split('')
       chars[charIndex] = ' '
       textObj.text = chars.join('')
-      //
-      // Update outlines as well (either from textObj.outlines or spider.titleOutlines)
-      //
       const outlinesToUpdate = textObj.outlines || spider.titleOutlines
-      if (outlinesToUpdate) {
-        outlinesToUpdate.forEach(outline => {
+      outlinesToUpdate && outlinesToUpdate.forEach(outline => {
           outline.text = textObj.text
         })
-      }
       spider.charHidden = true
     }
   }
-  //
-  // Don't move if not activated yet
-  //
   if (!spider.isActivated) return
   //
-  // Check if spider should return to title position
-  //
-  if (spider.targetReturnX !== undefined && spider.targetReturnY !== undefined) {
-    //
-    // Spider is returning to title - move towards target position
-    //
-    const returnSpeed = 80  // Speed for returning to title
-    const dx = spider.targetReturnX - spider.x
-    const dy = spider.targetReturnY - spider.y
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    
-    //
-    // Smoothly rotate towards target rotation
-    //
-    if (spider.targetRotation !== undefined) {
-      const rotationDiff = spider.targetRotation - spider.currentRotation
-      let normalizedDiff = rotationDiff
-      while (normalizedDiff > 180) normalizedDiff -= 360
-      while (normalizedDiff < -180) normalizedDiff += 360
-      //
-      // Smooth rotation: 120 degrees per second
-      //
-      const maxTurnPerFrame = 120 * dt
-      if (Math.abs(normalizedDiff) > maxTurnPerFrame) {
-        spider.currentRotation += Math.sign(normalizedDiff) * maxTurnPerFrame
-      } else {
-        spider.currentRotation = spider.targetRotation
-      }
-    }
-    
-    if (distance > 5) {
-      //
-      // Move towards target
-      //
-      const angle = Math.atan2(dy, dx)
-      spider.targetVx = Math.cos(angle) * returnSpeed
-      spider.targetVy = Math.sin(angle) * returnSpeed
-    } else {
-      //
-      // Reached target - stop moving and ensure correct rotation
-      //
-      spider.targetVx = 0
-      spider.targetVy = 0
-      spider.x = spider.targetReturnX
-      spider.y = spider.targetReturnY
-      if (spider.targetRotation !== undefined) {
-        spider.currentRotation = spider.targetRotation
-      }
-      //
-      // Mark as settled and hide legs when spider reaches target position
-      //
-      spider.settled = true
-      spider.legsHidden = true
-    }
-  } else {
-    //
-    // Normal random movement
-    //
-    // Update direction timer
+  // Random movement (no return-to-title in the new scene design)
     //
     spider.directionTimer -= dt
     if (spider.directionTimer <= 0) {
@@ -1557,16 +707,9 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
       spider.targetVy = Math.sin(newAngle) * spider.speed
       spider.directionTimer = SPIDER_DIRECTION_CHANGE_INTERVAL * (0.5 + Math.random())
     }
-  }
-  //
-  // Smoothly interpolate velocity
-  //
   const smoothing = SPIDER_SMOOTHING * dt
   spider.vx += (spider.targetVx - spider.vx) * smoothing
   spider.vy += (spider.targetVy - spider.vy) * smoothing
-  //
-  // Smoothly interpolate display rotation toward movement direction
-  //
   const speed = Math.sqrt(spider.vx * spider.vx + spider.vy * spider.vy)
   if (speed > 1) {
     const targetAngleDeg = Math.atan2(spider.vy, spider.vx) * (180 / Math.PI)
@@ -1576,96 +719,42 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
     const maxTurn = SPIDER_TURN_SPEED * dt
     spider.displayAngle += Math.max(-maxTurn, Math.min(maxTurn, diff))
   }
-  //
-  // Store old position for distance calculation
-  //
   const oldX = spider.x
   const oldY = spider.y
-  //
-  // Move spider
-  //
   spider.x += spider.vx * dt
   spider.y += spider.vy * dt
-  //
-  // Track distance traveled
-  //
   const dx = spider.x - oldX
   const dy = spider.y - oldY
   spider.distanceTraveled += Math.sqrt(dx * dx + dy * dy)
   //
-  // Bounce off screen edges
-  // Before fireflies appear, restrict spiders to area above main text
-  // After fireflies appear, allow full screen movement
+  // Screen bounds
   //
   const minX = SPIDER_SCREEN_MARGIN
   const maxX = k.width() - SPIDER_SCREEN_MARGIN
-  let minY = SPIDER_SCREEN_MARGIN
-  let maxY = k.height() - SPIDER_SCREEN_MARGIN
-  
-  if (!allowFullScreenMovement) {
-    //
-    // Restrict spiders to area above main text (above bodyStartY)
-    // bodyStartY = titleY + 80 = 280 + 80 = 360
-    // Allow some margin above title (titleY = 280)
-    //
-    const TITLE_Y = 280
-    const BODY_START_Y = TITLE_Y + 80  // 360
-    minY = SPIDER_SCREEN_MARGIN
-    maxY = BODY_START_Y - 20  // 20px above main text
-  }
-  
-  if (spider.x < minX) {
-    spider.x = minX
-    spider.targetVx = Math.abs(spider.targetVx)
-    spider.vx = Math.abs(spider.vx) * 0.5
-  } else if (spider.x > maxX) {
-    spider.x = maxX
-    spider.targetVx = -Math.abs(spider.targetVx)
-    spider.vx = -Math.abs(spider.vx) * 0.5
-  }
-  
-  if (spider.y < minY) {
-    spider.y = minY
-    spider.targetVy = Math.abs(spider.targetVy)
-    spider.vy = Math.abs(spider.vy) * 0.5
-  } else if (spider.y > maxY) {
-    spider.y = maxY
-    spider.targetVy = -Math.abs(spider.targetVy)
-    spider.vy = -Math.abs(spider.vy) * 0.5
-  }
+  const minY = SPIDER_SCREEN_MARGIN
+  const maxY = allowFullScreen ? k.height() - SPIDER_SCREEN_MARGIN : TITLE_TEXT_Y + 80
+  if (spider.x < minX) { spider.x = minX; spider.targetVx = Math.abs(spider.targetVx); spider.vx = Math.abs(spider.vx) * 0.5 }
+  else if (spider.x > maxX) { spider.x = maxX; spider.targetVx = -Math.abs(spider.targetVx); spider.vx = -Math.abs(spider.vx) * 0.5 }
+  if (spider.y < minY) { spider.y = minY; spider.targetVy = Math.abs(spider.targetVy); spider.vy = Math.abs(spider.vy) * 0.5 }
+  else if (spider.y > maxY) { spider.y = maxY; spider.targetVy = -Math.abs(spider.targetVy); spider.vy = -Math.abs(spider.vy) * 0.5 }
   //
-  // Update legs: alternating gait with proper stepping
+  // Leg stepping
   //
   const movementAngle = Math.atan2(spider.vy, spider.vx)
   const reach = SPIDER_LEG_LENGTH_1 + SPIDER_LEG_LENGTH_2
   const maxReach = reach * 0.85
   spider.legs.forEach((leg, i) => {
-    //
-    // Ideal foot position relative to body based on movement direction
-    //
     const adjustedAngle = leg.baseAngle + movementAngle
     const idealX = spider.x + Math.cos(adjustedAngle) * reach * 0.6
     const idealY = spider.y + Math.sin(adjustedAngle) * reach * 0.6
-    //
-    // Distance from current foot to ideal position
-    //
     const footDx = idealX - leg.footX
     const footDy = idealY - leg.footY
     const footDist = Math.sqrt(footDx * footDx + footDy * footDy)
-    //
-    // Distance from body center to current foot (prevent over-stretching)
-    //
     const bodyDx = leg.footX - spider.x
     const bodyDy = leg.footY - spider.y
     const bodyDist = Math.sqrt(bodyDx * bodyDx + bodyDy * bodyDy)
-    //
-    // Force step if foot is too far from body or too far from ideal position
-    //
     const needsStep = footDist > SPIDER_STEP_DISTANCE || bodyDist > maxReach
     if (!leg.isStepping && needsStep) {
-      //
-      // Alternating gait: even/odd legs step on opposite halves of the walk cycle
-      //
       const phase = Math.floor(spider.distanceTraveled / SPIDER_STEP_DISTANCE) % 2
       const shouldStep = (i % 2 === 0) !== (phase === 0) || bodyDist > maxReach
       if (shouldStep) {
@@ -1677,9 +766,6 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
         leg.targetFootY = idealY
       }
     }
-    //
-    // Animate step: foot lifts in arc from old to new position
-    //
     if (leg.isStepping) {
       leg.stepProgress += dt * 10
       if (leg.stepProgress >= 1) {
@@ -1689,8 +775,7 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
         leg.footY = leg.targetFootY
       } else {
         const t = leg.stepProgress
-        const arcHeight = 4
-        const arc = Math.sin(t * Math.PI) * arcHeight
+        const arc = Math.sin(t * Math.PI) * 4
         leg.footX = leg.stepStartX + (leg.targetFootX - leg.stepStartX) * t
         leg.footY = leg.stepStartY + (leg.targetFootY - leg.stepStartY) * t - arc
       }
@@ -1699,84 +784,36 @@ function updateSpider(k, spider, dt, opacity, allowFullScreenMovement = false) {
 }
 
 /**
- * Draws a spider using inverse kinematics for legs and letter as body
+ * Draws a spider (legs + letter body + eyes).
  * @param {Object} k - Kaplay instance
  * @param {Object} spider - Spider instance
- * @param {number} textOpacity - Current text opacity
+ * @param {number} textOpacity - Opacity for the spider
  */
 function drawSpider(k, spider, textOpacity) {
-  //
-  // Draw legs that physically extend from the body.
-  // Effective foot position interpolated by legExtendT (0=at body, 1=full reach).
-  //
   if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = spider.color
-    //
-    // Once activated, legs stay at full opacity regardless of spider fade-out
-    //
     const legOpacity = spider.charHidden ? SPIDER_MAX_OPACITY : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
     if (legOpacity > 0) {
-      spider.legs.forEach(leg => {
-        //
-        // Scale effective foot position: lerp from body center to actual foot
-        //
+    spider.legs.forEach(leg => {
         const effFootX = spider.x + (leg.footX - spider.x) * spider.legExtendT
         const effFootY = spider.y + (leg.footY - spider.y) * spider.legExtendT
-        const { jointX, jointY } = solveIK(
-          spider.x, spider.y,
-          effFootX, effFootY,
-          SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2,
-          leg.side
+      const { jointX, jointY } = solveIK(
+          spider.x, spider.y, effFootX, effFootY,
+          SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2, leg.side
         )
-        k.drawLine({
-          p1: k.vec2(spider.x, spider.y),
-          p2: k.vec2(jointX, jointY),
-          width: 2,
-          color: legColor,
-          opacity: legOpacity
-        })
-        k.drawLine({
-          p1: k.vec2(jointX, jointY),
-          p2: k.vec2(effFootX, effFootY),
-          width: 2,
-          color: legColor,
-          opacity: legOpacity
-        })
-        k.drawCircle({
-          pos: k.vec2(jointX, jointY),
-          radius: 1,
-          color: legColor,
-          opacity: legOpacity
-        })
+        k.drawLine({ p1: k.vec2(spider.x, spider.y), p2: k.vec2(jointX, jointY), width: 2, color: legColor, opacity: legOpacity })
+        k.drawLine({ p1: k.vec2(jointX, jointY), p2: k.vec2(effFootX, effFootY), width: 2, color: legColor, opacity: legOpacity })
+        k.drawCircle({ pos: k.vec2(jointX, jointY), radius: 1, color: legColor, opacity: legOpacity })
       })
     }
   }
-  //
-  // Draw the letter (body) only if it's been hidden from original text
-  //
   if (spider.charHidden) {
-    const letterOpacity = 1.0
-    //
-    // Use smoothed display angle for gradual turning.
-    // When returning to title, use the return rotation.
-    //
-    let angleDeg = spider.displayAngle
-    if (spider.targetReturnX !== undefined && spider.targetReturnY !== undefined) {
-      angleDeg = spider.currentRotation
-    } else {
+    const angleDeg = spider.displayAngle
       spider.currentRotation = angleDeg
-    }
     k.pushTransform()
     k.pushTranslate(spider.x, spider.y)
     k.pushRotate(angleDeg)
-    //
-    // Draw black outlines for shadow effect (8 directions)
-    //
-    const outlineOffsets = [
-      [-2, -2], [0, -2], [2, -2],
-      [-2, 0],           [2, 0],
-      [-2, 2],  [0, 2],  [2, 2]
-    ]
+    const outlineOffsets = [[-2,-2],[0,-2],[2,-2],[-2,0],[2,0],[-2,2],[0,2],[2,2]]
     outlineOffsets.forEach(([dx, dy]) => {
       k.drawText({
         text: spider.letter,
@@ -1784,7 +821,7 @@ function drawSpider(k, spider, textOpacity) {
         pos: k.vec2(dx, dy),
         anchor: 'center',
         color: k.rgb(0, 0, 0),
-        opacity: letterOpacity,
+        opacity: 1.0,
         font: spider.letterFont
       })
     })
@@ -1794,95 +831,59 @@ function drawSpider(k, spider, textOpacity) {
       pos: k.vec2(0, 0),
       anchor: 'center',
       color: spider.color,
-      opacity: letterOpacity,
+      opacity: 1.0,
       font: spider.letterFont
     })
-    //
-    // Eyes on the letter surface: pupils track movement direction in local frame
-    //
     drawSpiderEyes(k, spider, angleDeg)
     k.popTransform()
   }
 }
 //
-// Draws two small eyes on the letter body with pupils tracking movement direction.
-// Drawn in the letter's local (rotated) coordinate system.
+// Draws two small eyes on the letter body, pupils tracking movement direction.
 //
 function drawSpiderEyes(k, spider, angleDeg) {
-  //
-  // Hide eyes after spider has settled into its title position
-  //
   if (spider.settled) return
   if (spider.legExtendT < 0.3) return
   const eyeOpacity = Math.min(1, (spider.legExtendT - 0.3) / 0.4)
   const scleraColor = k.rgb(220, 220, 210)
   const pupilColor = k.rgb(15, 8, 8)
-  //
-  // Eye positions on the letter surface (local coordinates, relative to center)
-  //
   const lx = -SPIDER_EYE_SPACING / 2
   const rx = SPIDER_EYE_SPACING / 2
   const ey = SPIDER_EYE_Y_OFFSET
-  //
-  // Pupil direction: convert world velocity to local frame
-  //
   const velAngle = Math.atan2(spider.vy, spider.vx)
   const localAngle = velAngle - angleDeg * (Math.PI / 180)
   const maxPupilOffset = SPIDER_EYE_RADIUS - SPIDER_PUPIL_RADIUS - 0.5
   const px = Math.cos(localAngle) * maxPupilOffset
   const py = Math.sin(localAngle) * maxPupilOffset
-  //
-  // Left eye
-  //
   k.drawCircle({ pos: k.vec2(lx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity })
   k.drawCircle({ pos: k.vec2(lx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity })
-  //
-  // Right eye
-  //
   k.drawCircle({ pos: k.vec2(rx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity })
   k.drawCircle({ pos: k.vec2(rx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity })
 }
 
 /**
- * Solves inverse kinematics for a 2-segment leg
- * @param {number} baseX - Base X (body position)
- * @param {number} baseY - Base Y (body position)
- * @param {number} targetX - Target X (foot position)
- * @param {number} targetY - Target Y (foot position)
- * @param {number} len1 - Length of first segment
- * @param {number} len2 - Length of second segment
- * @param {number} side - Side of the leg (-1 left, 1 right)
- * @returns {Object} Joint position { jointX, jointY }
+ * Solves 2-segment IK for a spider leg.
+ * @param {number} baseX - Body X
+ * @param {number} baseY - Body Y
+ * @param {number} targetX - Foot X
+ * @param {number} targetY - Foot Y
+ * @param {number} len1 - First segment length
+ * @param {number} len2 - Second segment length
+ * @param {number} side - Bend direction (-1 or 1)
+ * @returns {{ jointX: number, jointY: number }}
  */
 function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
-  //
-  // Distance from base to target
-  //
   const dx = targetX - baseX
   const dy = targetY - baseY
   let dist = Math.sqrt(dx * dx + dy * dy)
-  //
-  // Clamp distance to reachable range
-  //
   const maxReach = len1 + len2 - 0.1
   const minReach = Math.abs(len1 - len2) + 0.1
   dist = Math.max(minReach, Math.min(maxReach, dist))
-  //
-  // Use law of cosines to find angles
-  //
   const angleToTarget = Math.atan2(dy, dx)
-  //
-  // Angle at base joint
-  //
   const cosAngle1 = (dist * dist + len1 * len1 - len2 * len2) / (2 * dist * len1)
   const angle1 = Math.acos(Math.max(-1, Math.min(1, cosAngle1)))
-  //
-  // Calculate joint position
-  // Side determines which way the joint bends
-  //
   const jointAngle = angleToTarget + angle1 * side
   const jointX = baseX + Math.cos(jointAngle) * len1
   const jointY = baseY + Math.sin(jointAngle) * len1
-  
   return { jointX, jointY }
 }

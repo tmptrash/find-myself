@@ -1056,10 +1056,10 @@ export function sceneLevel3(k) {
     //
     // Draw thorns below darkness so they are only visible in bug light
     //
-    k.add([
+        k.add([
       k.z(Z_DARKNESS - 2),
-      {
-        draw() {
+          {
+            draw() {
           JungleDecor.onDrawBottomThorns(decorInst)
           drawPlatformThornsWithWobble(k, decorInst, logWobbleState)
           drawTrapLeftThorns(k, trapLeftThorns, trapState)
@@ -1527,7 +1527,7 @@ function drawPlatformThornsWithWobble(k, decorInst, wobbleState) {
     k.pushTranslate(0, wobbleOffsetY)
     JungleDecor.onDrawPlatformThorns(decorInst)
     k.popTransform()
-  } else {
+          } else {
     JungleDecor.onDrawPlatformThorns(decorInst)
   }
 }
@@ -1601,7 +1601,7 @@ function checkTrapLeftThorns(k, heroInst, thorns, trapState, levelIndicator, her
  */
 function checkPlatformIcicles(k, heroInst, platformIcicles, logWobbleState, levelIndicator, heroScoreAtStart) {
   if (!heroInst.character?.pos) return
-  const heroX = heroInst.character.pos.x
+        const heroX = heroInst.character.pos.x
   const heroHeadY = heroInst.character.pos.y - HERO_COLLISION_HEIGHT_SCALED / 2
   CORRIDOR_PLATFORMS.forEach((platform, idx) => {
     if (idx === TRAP_PLATFORM_INDEX) return
@@ -1794,11 +1794,11 @@ function showGlowInstructions(k) {
         updateHandler.cancel()
         mainText.exists() && k.destroy(mainText)
         outlineTexts.forEach(text => { text.exists() && k.destroy(text) })
+            }
+          }
+        })
       }
-    }
-  })
-}
-//
+      //
 // Life death effect constants
 //
 const LIFE_FLASH_COUNT = 20
@@ -3467,8 +3467,8 @@ function onLogPlatformClick(k, state, sfx) {
       state.activeIndex = idx
       state.elapsed = 0
       playWoodCreakSound(sfx)
-      return
-    }
+        return
+      }
   }
 }
 

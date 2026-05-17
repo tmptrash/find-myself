@@ -366,6 +366,11 @@ function onUpdate(inst) {
   for (const target of targets) {
     const tx = getTargetX(target)
     const ty = getTargetY(target)
+    //
+    // If the target has a visible() guard, skip when it returns false.
+    //
+    if (typeof target.visible === 'function' && !target.visible()) continue
+    if (target.visible === false) continue
     const halfW = target.width / 2
     const halfH = target.height / 2
     if (

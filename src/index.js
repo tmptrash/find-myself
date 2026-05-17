@@ -223,6 +223,7 @@ function buildSetupTasks(k) {
     () => k.loadFont(CFG.visual.fonts.regularFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Regular.ttf"),
     () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Thin.ttf"),
     () => k.loadSprite("life", "./life.png"),
+    () => k.loadSprite("life-ready", "./life-ready.png"),
     () => k.loadSprite("menu-bg", "./menu.png"),
     () => loadHeroSprites(k, HEROES.HERO),
     () => loadHeroSprites(k, HEROES.ANTIHERO),

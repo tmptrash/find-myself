@@ -1,5 +1,6 @@
 import { CFG } from '../../../cfg.js'
 import * as Sound from '../../../utils/sound.js'
+import { drawCrow } from '../../../utils/crow.js'
 
 //
 // Frozen lake band on the left (world coords relative to draw origin at 0,0)
@@ -385,27 +386,11 @@ function startDistantWildlifeTimers(k, sound, crowAnimState) {
 }
 
 //
-// Crow perched on top of the right log pile: body, wings, tail, beak and eyes.
-// Crow perched on the right log pile. The beak opens when a crow.mp3 sample plays.
-// The crow always faces the hero: beak points toward heroInst's current position.
+// Crow perched on top of the right log pile. Draws a realistic crow using the shared
+// drawCrow utility; beak opens when a crow.mp3 sample plays. Eyes track the hero.
 //
 const L2_CROW_Z = 5
 function addCrowOnLogs(k, floorY, logPileX, crowAnimState, heroInst) {
-  //
-  // Fallback to a sensible position if no log pile X was provided.
-  // Scale factor of 1.35 enlarges the crow relative to the original design.
-  // Pre-cache colors to avoid allocating new Color objects each frame.
-  //
-  const bodyColor  = k.rgb(22, 20, 22)
-  const headColor  = k.rgb(18, 16, 18)
-  const wingColor  = k.rgb(32, 28, 36)
-  const tailColor  = k.rgb(20, 18, 20)
-  const eyeWhite   = k.rgb(230, 230, 230)
-  const pupilColor = k.rgb(10, 8, 10)
-  const beakUpper  = k.rgb(55, 50, 35)
-  const beakLower  = k.rgb(45, 40, 28)
-  const mouthInner = k.rgb(160, 80, 60)
-  const feetColor  = k.rgb(60, 50, 30)
   const sc = 1.35
   const cx = logPileX != null ? logPileX + 22 : CFG.visual.screen.width - 260
   //
@@ -416,116 +401,9 @@ function addCrowOnLogs(k, floorY, logPileX, crowAnimState, heroInst) {
     k.z(L2_CROW_Z),
     {
       draw() {
-        //
-        // Facing direction: +1 = beak points right (hero is right of crow)
-        //
         const heroX = heroInst?.character?.pos?.x ?? cx + 1
         const s = heroX >= cx ? 1 : -1
-        //
-        // Body — dark oval
-        //
-        k.drawEllipse({
-          pos: k.vec2(cx, perchY),
-          radiusX: 12 * sc,
-          radiusY: 9 * sc,
-          color: bodyColor,
-          opacity: 1
-        })
-        //
-        // Head — small circle on the beak side
-        //
-        k.drawCircle({
-          pos: k.vec2(cx + 9 * sc * s, perchY - 8 * sc),
-          radius: 7 * sc,
-          color: headColor,
-          opacity: 1
-        })
-        //
-        // Wing highlight — dark feather sheen away from head
-        //
-        k.drawEllipse({
-          pos: k.vec2(cx - 2 * sc * s, perchY - 1 * sc),
-          radiusX: 7 * sc,
-          radiusY: 4 * sc,
-          color: wingColor,
-          opacity: 0.9
-        })
-        //
-        // Tail — wedge pointing opposite to the beak
-        //
-        k.drawTriangle({
-          p1: k.vec2(cx - 10 * sc * s, perchY + 2 * sc),
-          p2: k.vec2(cx - 22 * sc * s, perchY + 6 * sc),
-          p3: k.vec2(cx - 10 * sc * s, perchY + 9 * sc),
-          color: tailColor,
-          opacity: 1
-        })
-        //
-        // Eye — on the beak side
-        //
-        k.drawCircle({
-          pos: k.vec2(cx + 12 * sc * s, perchY - 9 * sc),
-          radius: 2.2 * sc,
-          color: eyeWhite,
-          opacity: 1
-        })
-        k.drawCircle({
-          pos: k.vec2(cx + 12.5 * sc * s, perchY - 9 * sc),
-          radius: 1.1 * sc,
-          color: pupilColor,
-          opacity: 1
-        })
-        //
-        // Beak pointing toward hero
-        //
-        if (crowAnimState.mouthOpen) {
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 8 * sc),
-            p2: k.vec2(cx + 20 * sc * s, perchY - 7 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
-            color: beakUpper,
-            opacity: 1
-          })
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
-            p2: k.vec2(cx + 19 * sc * s, perchY - 3 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 2 * sc),
-            color: beakLower,
-            opacity: 1
-          })
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
-            p2: k.vec2(cx + 19 * sc * s, perchY - 5 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 3 * sc),
-            color: mouthInner,
-            opacity: 0.85
-          })
-        } else {
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 8 * sc),
-            p2: k.vec2(cx + 20 * sc * s, perchY - 6 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 4 * sc),
-            color: beakUpper,
-            opacity: 1
-          })
-        }
-        //
-        // Feet — symmetric, grip the log
-        //
-        k.drawLine({
-          p1: k.vec2(cx + 2 * sc, perchY + 8 * sc),
-          p2: k.vec2(cx + 2 * sc, perchY + 15 * sc),
-          width: 1.5,
-          color: feetColor,
-          opacity: 1
-        })
-        k.drawLine({
-          p1: k.vec2(cx + 8 * sc, perchY + 8 * sc),
-          p2: k.vec2(cx + 8 * sc, perchY + 15 * sc),
-          width: 1.5,
-          color: feetColor,
-          opacity: 1
-        })
+        drawCrow(k, cx, perchY, sc, s, crowAnimState.mouthOpen, heroInst)
       }
     }
   ])

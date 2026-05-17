@@ -17,6 +17,7 @@ import * as LifeDeduction from '../utils/life-deduction.js'
 import * as GiantWorm from '../components/giant-worm.js'
 import { drawRealisticBird } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
+import { drawCrow } from '../../../utils/crow.js'
 import { addTouchSectionFloorRocks, addSingleFloorRockAt } from '../utils/floor-rocks.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import * as BonusHero from '../components/bonus-hero.js'
@@ -292,7 +293,7 @@ const LIFE_PARTICLE_SIZE_EXTRA = 4
 //
 const FIRST_TREE_TOOLTIP_TEXT = "C"
 const FIRST_TREE_TOOLTIP_HOVER_WIDTH = 40
-const FIRST_TREE_TOOLTIP_EXTRA_HEIGHT = 80
+const FIRST_TREE_TOOLTIP_EXTRA_HEIGHT = 20
 const FIRST_TREE_TOOLTIP_Y_OFFSET = -60
 //
 // Anti-hero tooltip (shown while gray/inactive)
@@ -3293,7 +3294,16 @@ function createL1Mushrooms(k) {
     const dataUrl = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
       drawMushroomShape(ctx, totalW, totalH, capW, capH, stemH, stemW, color)
     })
-    const posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
+    //
+    // Reject positions too close to the crow so no mushrooms appear next to it.
+    //
+    let posX
+    let attempts = 0
+    const CROW_CLEAR_RADIUS = 120
+    do {
+      posX = LEFT_MARGIN + 60 + Math.random() * (playableW - 120)
+      attempts++
+    } while (Math.abs(posX - L1_CROW_X) < CROW_CLEAR_RADIUS && attempts < 20)
     const tipRoll = Math.random()
     const tooltipText = tipRoll < L1_MUSHROOM_FUNNY_CHANCE
       ? L1_MUSHROOM_FUNNY_LINES[Math.floor(Math.random() * L1_MUSHROOM_FUNNY_LINES.length)]
@@ -3368,145 +3378,24 @@ function drawMushroomShape(ctx, totalW, totalH, capW, capH, stemH, stemW, color)
   }
 }
 //
-// Draws an animated crow perched on top of a floor rock.
+// Draws an animated crow perched on the ground (or on a rock if radius > 0).
 // The beak opens when a crow MP3 sample plays (crowMp3State.mouthOpen).
-// The crow always faces the hero: beak points toward hero's current position.
+// The crow always faces the hero; eyes track the hero position.
 //
 function addCrowOnRock(k, rock, crowMp3State, heroInst) {
-  //
-  // Pre-cache colors to avoid allocating new Color objects each frame
-  //
-  const bodyColor  = k.rgb(22, 20, 22)
-  const headColor  = k.rgb(18, 16, 18)
-  const wingColor  = k.rgb(32, 28, 36)
-  const tailColor  = k.rgb(20, 18, 20)
-  const eyeWhite   = k.rgb(230, 230, 230)
-  const pupilColor = k.rgb(10, 8, 10)
-  const beakUpper  = k.rgb(55, 50, 35)
-  const beakLower  = k.rgb(45, 40, 28)
-  const mouthInner = k.rgb(160, 80, 60)
-  const feetColor  = k.rgb(60, 50, 30)
   const sc = 1.35
   const cx = rock.worldX
   //
-  // Rock visual top is at worldY - radius*0.62 (ellipse vertical semi-axis).
-  // Offset up by half the crow body height (~9*sc) so it sits ON the rock surface.
+  // Ground-level perch: body center placed so feet touch the ground.
   //
   const perchY = rock.worldY - rock.radius * 0.62 - 9 * sc
   k.add([
     k.z(L1_CROW_ROCK_DRAW_Z),
     {
       draw() {
-        //
-        // Facing direction: +1 = beak points right, -1 = beak points left
-        //
         const heroX = heroInst?.character?.pos?.x ?? cx + 1
         const s = heroX >= cx ? 1 : -1
-        //
-        // Body — dark oval
-        //
-        k.drawEllipse({
-          pos: k.vec2(cx, perchY),
-          radiusX: 12 * sc,
-          radiusY: 9 * sc,
-          color: bodyColor,
-          opacity: 1
-        })
-        //
-        // Head — small circle on the beak side
-        //
-        k.drawCircle({
-          pos: k.vec2(cx + 9 * sc * s, perchY - 8 * sc),
-          radius: 7 * sc,
-          color: headColor,
-          opacity: 1
-        })
-        //
-        // Wing highlight — dark feather sheen on the body side (away from head)
-        //
-        k.drawEllipse({
-          pos: k.vec2(cx - 2 * sc * s, perchY - 1 * sc),
-          radiusX: 7 * sc,
-          radiusY: 4 * sc,
-          color: wingColor,
-          opacity: 0.9
-        })
-        //
-        // Tail — narrow wedge pointing opposite to the beak
-        //
-        k.drawTriangle({
-          p1: k.vec2(cx - 10 * sc * s, perchY + 2 * sc),
-          p2: k.vec2(cx - 22 * sc * s, perchY + 6 * sc),
-          p3: k.vec2(cx - 10 * sc * s, perchY + 9 * sc),
-          color: tailColor,
-          opacity: 1
-        })
-        //
-        // Eye — on the beak side
-        //
-        k.drawCircle({
-          pos: k.vec2(cx + 12 * sc * s, perchY - 9 * sc),
-          radius: 2.2 * sc,
-          color: eyeWhite,
-          opacity: 1
-        })
-        k.drawCircle({
-          pos: k.vec2(cx + 12.5 * sc * s, perchY - 9 * sc),
-          radius: 1.1 * sc,
-          color: pupilColor,
-          opacity: 1
-        })
-        //
-        // Beak pointing toward the hero
-        //
-        if (crowMp3State.mouthOpen) {
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 8 * sc),
-            p2: k.vec2(cx + 20 * sc * s, perchY - 7 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
-            color: beakUpper,
-            opacity: 1
-          })
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
-            p2: k.vec2(cx + 19 * sc * s, perchY - 3 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 2 * sc),
-            color: beakLower,
-            opacity: 1
-          })
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 5 * sc),
-            p2: k.vec2(cx + 19 * sc * s, perchY - 5 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 3 * sc),
-            color: mouthInner,
-            opacity: 0.85
-          })
-        } else {
-          k.drawTriangle({
-            p1: k.vec2(cx + 10 * sc * s, perchY - 8 * sc),
-            p2: k.vec2(cx + 20 * sc * s, perchY - 6 * sc),
-            p3: k.vec2(cx + 10 * sc * s, perchY - 4 * sc),
-            color: beakUpper,
-            opacity: 1
-          })
-        }
-        //
-        // Feet — symmetric, grip the rock surface
-        //
-        k.drawLine({
-          p1: k.vec2(cx + 2 * sc, perchY + 8 * sc),
-          p2: k.vec2(cx + 2 * sc, perchY + 15 * sc),
-          width: 1.5,
-          color: feetColor,
-          opacity: 1
-        })
-        k.drawLine({
-          p1: k.vec2(cx + 8 * sc, perchY + 8 * sc),
-          p2: k.vec2(cx + 8 * sc, perchY + 15 * sc),
-          width: 1.5,
-          color: feetColor,
-          opacity: 1
-        })
+        drawCrow(k, cx, perchY, sc, s, crowMp3State.mouthOpen, heroInst)
       }
     }
   ])

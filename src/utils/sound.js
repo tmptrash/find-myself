@@ -3719,3 +3719,39 @@ export function playNeonFlickerBurst(instance) {
     playLightningSound(instance, 0.022 + Math.random() * 0.010, delay)
   }
 }
+/**
+ * Plays a short flurry of wing-flap sounds (birds taking flight).
+ * Modulated noise bursts give a soft, papery flutter texture.
+ * @param {Object} instance - Sound instance
+ */
+export function playWingFlapSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const flaps = 3 + Math.floor(Math.random() * 3)
+  for (let i = 0; i < flaps; i++) {
+    const t = now + i * (0.048 + Math.random() * 0.032)
+    const dur = 0.055 + Math.random() * 0.04
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate)
+    const data = buf.getChannelData(0)
+    for (let s = 0; s < data.length; s++) {
+      data[s] = (Math.random() * 2 - 1) * Math.exp(-s / (data.length * 0.35))
+    }
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    const bpf = ctx.createBiquadFilter()
+    bpf.type = 'bandpass'
+    bpf.frequency.value = 900 + Math.random() * 600
+    bpf.Q.value = 0.8
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.001, t)
+    gain.gain.exponentialRampToValueAtTime(0.18 + Math.random() * 0.08, t + dur * 0.15)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur)
+    src.connect(bpf)
+    bpf.connect(gain)
+    gain.connect(ctx.destination)
+    src.start(t)
+    src.stop(t + dur + 0.01)
+  }
+}

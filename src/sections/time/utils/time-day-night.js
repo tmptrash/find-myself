@@ -27,6 +27,13 @@ const OVERLAY_MAX_OPACITY = 0.84
 //
 const Z_WINDOWS = 15.52
 const WINDOW_APPEAR_DARKNESS = 0.18
+//
+// Morning window turn-off times: each window has a personal threshold (timeOfDay) after
+// which it goes dark. Uniformly spread between 3 AM (0.125) and 5 AM (0.208) so that
+// nearly all windows are off by 5 AM.
+//
+const WINDOW_MORNING_OFF_MIN = 3 / 24
+const WINDOW_MORNING_OFF_MAX = 5 / 24
 const WINDOW_TWINKLE_SPEED = 1.4
 //
 // Window fallback: synthetic positions used only when real building windows unavailable
@@ -407,6 +414,10 @@ function generateWindowBlinks(windows) {
     const canBlink = (i * 1.618) % 1 < 0.18
     const revealDarkness = 0.30 + ((i * 2.718) % 1) * 0.35
     const hideDarkness = 0.15 + ((i * 3.141) % 1) * 0.20
+    //
+    // Personal morning off-time: deterministic per window, spread between 3 AM and 5 AM.
+    //
+    const lastOnTime = WINDOW_MORNING_OFF_MIN + ((i * 1.732) % 1) * (WINDOW_MORNING_OFF_MAX - WINDOW_MORNING_OFF_MIN)
     return {
       canBlink,
       isOn: true,
@@ -417,7 +428,8 @@ function generateWindowBlinks(windows) {
       onDuration: 6 + ((i * 0.618) % 1) * 14,
       offDuration: 0.10 + ((i * 1.414) % 1) * 0.45,
       revealDarkness,
-      hideDarkness
+      hideDarkness,
+      lastOnTime
     }
   })
 }
@@ -480,6 +492,11 @@ function drawWindowGlows(inst, darkness) {
     //
     if (!isGettingLighter && darkness < blink.revealDarkness) continue
     if (isGettingLighter && darkness < blink.hideDarkness) continue
+    //
+    // Morning: each window has a personal "last on" time between 3–5 AM.
+    // Once the cycle passes that time, the window is dark for the rest of the morning.
+    //
+    if (isGettingLighter && moduleTimeOfDay > blink.lastOnTime) continue
     //
     // Skip windows that are currently blinking off (person passing inside)
     //

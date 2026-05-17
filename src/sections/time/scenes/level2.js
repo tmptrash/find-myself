@@ -546,7 +546,8 @@ export function sceneLevel2(k) {
           //
           createLevelTransition(k, 'level-time.2')
         })
-      }
+      },
+      showGameClock: true
     })
     
     //
@@ -594,7 +595,8 @@ export function sceneLevel2(k) {
       lampXOffsets: [130, 435, 740, 1045, 1350],
       lampModes: ['flicker', 'steady', 'flicker', 'off', 'steady'],
       showGrass: false,
-      showSnow: true
+      showSnow: true,
+      crowLampIndex: 3
     })
     k.onSceneLeave(() => level2Ambience.cleanup())
     //

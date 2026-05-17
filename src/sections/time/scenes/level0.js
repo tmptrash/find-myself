@@ -841,15 +841,19 @@ function createRestingBirds(k, heroInst, sound) {
   const floorY = ANTIHERO_SPAWN_Y
   const birds = []
   for (let i = 0; i < BIRD_COUNT; i++) {
+    const size = 5 + Math.random() * 4
     birds.push({
       x: BIRD_BASE_X - (i * (BIRD_SPREAD_X / BIRD_COUNT)) - Math.random() * 30,
-      y: floorY - 6 - Math.random() * 10,
+      //
+      // Position body center so feet touch floorY: center 1.5×size above ground.
+      //
+      y: floorY - size * 1.5,
       vx: 0,
       vy: 0,
       scattered: false,
       opacity: 1,
       fadeTimer: 0,
-      size: 5 + Math.random() * 4
+      size
     })
   }
   let scattered = false
@@ -901,24 +905,63 @@ function onUpdateBirds(k, heroInst, birds, scattered, sound) {
   }
 }
 //
-// Draws each bird as a small dark silhouette only while it is in flight.
-// Resting birds are invisible — they appear by bursting into flight.
+// Draws each bird:
+//   Resting  — body oval + round head + short tail + tiny legs on the ground.
+//   In flight — body oval + spread wings (fades out as bird disappears).
 //
 function drawBirds(k, birds) {
   const bodyColor = k.rgb(30, 26, 30)
   const wingColor = k.rgb(20, 18, 22)
+  const legColor = k.rgb(70, 55, 30)
   for (const bird of birds) {
-    if (!bird.scattered) continue
-    if (bird.opacity <= 0) continue
-    const { x, y, size, opacity } = bird
+    if (bird.scattered && bird.opacity <= 0) continue
+    const { x, y, size, opacity, scattered } = bird
     //
     // Body oval
     //
-    k.drawEllipse({ pos: k.vec2(x, y), radiusX: size, radiusY: size * 0.55, color: bodyColor, opacity })
-    //
-    // Spread wings (only shown in flight)
-    //
-    if (bird.scattered) {
+    k.drawEllipse({
+      pos: k.vec2(x, y),
+      radiusX: size * (scattered ? 1.0 : 1.2),
+      radiusY: size * 0.55,
+      color: bodyColor,
+      opacity
+    })
+    if (!scattered) {
+      //
+      // Round head on the left side (birds face left, toward the hero start)
+      //
+      k.drawCircle({
+        pos: k.vec2(x - size * 0.85, y - size * 0.35),
+        radius: size * 0.5,
+        color: bodyColor,
+        opacity
+      })
+      //
+      // Short triangular tail pointing right (opposite to head)
+      //
+      k.drawTriangle({
+        p1: k.vec2(x + size * 0.7, y - size * 0.1),
+        p2: k.vec2(x + size * 1.5, y - size * 0.45),
+        p3: k.vec2(x + size * 1.5, y + size * 0.2),
+        color: bodyColor,
+        opacity
+      })
+      //
+      // Tiny legs down to ground level (body bottom → floorY)
+      //
+      const legTopY = y + size * 0.5
+      const legBotY = y + size * 1.5
+      k.drawLine({ p1: k.vec2(x - size * 0.2, legTopY), p2: k.vec2(x - size * 0.2, legBotY), width: 1.0, color: legColor, opacity })
+      k.drawLine({ p1: k.vec2(x + size * 0.2, legTopY), p2: k.vec2(x + size * 0.2, legBotY), width: 1.0, color: legColor, opacity })
+      //
+      // Short horizontal toe stubs
+      //
+      k.drawLine({ p1: k.vec2(x - size * 0.6, legBotY), p2: k.vec2(x + size * 0.2, legBotY), width: 1.0, color: legColor, opacity })
+      k.drawLine({ p1: k.vec2(x - size * 0.2, legBotY), p2: k.vec2(x + size * 0.6, legBotY), width: 1.0, color: legColor, opacity })
+    } else {
+      //
+      // Spread wings in flight
+      //
       const wingSpread = size * 2.2
       const wingTip = y - size * 1.4
       k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x - wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })

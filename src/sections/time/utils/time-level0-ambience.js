@@ -241,7 +241,11 @@ export function create(cfg) {
   const crowArcTopY = quadBezier(crowLamp.topY, arcCtrlY, crowLamp.armEndY, CROW_ARC_PERCH_T)
   inst.crow = {
     cx: crowCx,
-    perchY: crowArcTopY - 9 * CROW_SCALE,
+    //
+    // Raise body so that the crow's feet (legBot = perchY + 15*sc) sit exactly
+    // on top of the lamp arc rather than below it.
+    //
+    perchY: crowArcTopY - 18 * CROW_SCALE,
     mouthOpen: false,
     mouthTimer: 0,
     callTimer: CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN),

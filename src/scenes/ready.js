@@ -17,7 +17,7 @@ const HINT_Y = 1042
 //
 // Crawling letter title
 //
-const INSTRUCTIONS_TITLE = 'find yourself in life'
+const INSTRUCTIONS_TITLE = 'find yourself'
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
 const TITLE_FONT_SIZE = 54
 //
@@ -38,6 +38,11 @@ const SPIDER_EYE_RADIUS = 3
 const SPIDER_PUPIL_RADIUS = 1.2
 const SPIDER_EYE_SPACING = 10
 const SPIDER_EYE_Y_OFFSET = -8
+//
+// Minimum time before the first spider grows its legs after the scene loads.
+// Waves are staggered on top of this offset so letters never transform too early.
+//
+const SPIDER_LEGS_BASE_DELAY = 7.0
 const TITLE_FLICKER_SPEED = 1.5
 const TITLE_FLICKER_MIN = 0.7
 const TITLE_FLICKER_MAX = 1.0
@@ -48,57 +53,73 @@ const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
 const Z_ILLUSTRATION = 5
 const Z_TEXT = 10
 const Z_TITLE = 15
+const Z_SPIDER = 50
 const Z_HINT = 100
 //
-// Left illustration (life-ready.png + hero sprite to the left)
-// Both are centered as a pair in the left half of the screen (center ≈ x=480).
-// Hero (130px) + gap (20px) + Life (300px) = 450px → left edge at 255.
+// Left illustration (life-ready.png + hero sprite).
+// Moved to the left side of the screen to free the right half for text.
 //
-const LIFE_X = 405
-const LIFE_Y = 575
-const LIFE_WIDTH = 300
-const LIFE_HEIGHT = 400
+const LIFE_X = 280
+const LIFE_Y = 238
+const LIFE_WIDTH = 767
+const LIFE_HEIGHT = 512
 const LIFE_OPACITY = 1.0
-const HERO_X = 320
-const HERO_Y = 930
+const HERO_X = 580
+const HERO_Y = 765
 const HERO_SPRITE_SIZE = 130
 //
-// Hero sprite names (loaded in index.js at game start)
-// HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1) for the left illustration.
+// Hero sprite names (loaded in index.js at game start).
+// HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1).
 //
 const HERO_SPRITE_NAME = 'hero_FF8C00_000000_0_0'
-const HERO_ILLUSTRATION_SPRITE_NAME = 'hero_FF8C00_000000_1_-1'
+const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_FF8C00_000000'
 const ANTIHERO_SPRITE_NAME = 'antiHero_8B5A50_000000_0_0'
 //
-// Right text panel
+// Illustration hero eye wander (mirrors idle animation constants from hero.js)
 //
-const TEXT_LEFT = 860
-const TITLE_TEXT_X = 866
-const TITLE_TEXT_Y = 90
-const TEXT_START_Y = 185
-const TEXT_FONT_SIZE = 34
-const TEXT_LINE_HEIGHT = 52
-const ICON_START_Y = 680
-const ICON_ROW_HEIGHT = 98
-const ICON_DRAW_R = 24
-const ICON_TEXT_OFFSET_X = 68
-const ICON_LABEL_FONT_SIZE = 28
-const ICON_LABEL_DESC_FONT_SIZE = 24
-const ICON_LABEL_DESC_OFFSET_Y = 36
+const HERO_EYE_MIN_DELAY = 1.5
+const HERO_EYE_MAX_DELAY = 3.5
+const HERO_EYE_LERP_SPEED = 0.1
 //
-// Extra Y offset for the two-heroes icon so the sprites are vertically centred
-// between the "Find the other you" label and its description line.
+// Right-column layout (illustration sits on the left, text on the right):
+//   Narrative text + section icons share the same left edge (RIGHT_COLUMN_X).
+//   Title is centered above the right column.
+//   Narrative text is above the ground line (~y 960).
+//   Section icons are below the ground line (ICON_START_Y = 942), with illustrations.
 //
-const ICON_TWO_HEROES_Y_EXTRA = 24
+const RIGHT_COLUMN_X = 1400
+const LEFT_COLUMN_X = RIGHT_COLUMN_X
+const TEXT_LEFT = RIGHT_COLUMN_X
+const TITLE_TEXT_X = 700
+const TITLE_TEXT_Y = 830
+const TEXT_START_Y = 380
+const TEXT_FONT_SIZE = 24
+const TEXT_LINE_HEIGHT = 36
+const ICON_START_Y = 820
+const ICON_ROW_HEIGHT = 70
 //
-// Animated icon state (sun-bunny sparkle + hero-antihero electricity)
-// Fragment icon uses a soft 2-circle glint matching the bonus-hero sparkle in time section.
+// Icon illustration dimensions (icons sit to the LEFT of TEXT_LEFT so text aligns with narrative)
+//
+const ICON_DRAW_R = 13
+//
+// Horizontal offset from TEXT_LEFT to the icon center (negative = to the left).
+//
+const ICON_DRAW_CX_OFFSET = -23
+//
+// Extra Y to vertically centre the two-heroes pair between label and desc lines.
+//
+const ICON_TWO_HEROES_Y_EXTRA = 16
+//
+// Animated sparkle constants (matches bonus-hero glow used in time section)
 //
 const SPARKLE_PULSE_SPEED = 2.5
-const SPARKLE_INNER_R = 6
-const SPARKLE_OUTER_R = 13
+const SPARKLE_INNER_R = 5
+const SPARKLE_OUTER_R = 11
+const ICON_LABEL_FONT_SIZE = 20
+const ICON_LABEL_DESC_FONT_SIZE = 17
+const ICON_LABEL_DESC_OFFSET_Y = 22
 //
-// Life icon periodic laugh animation (mimics hero death flash)
+// Life laugh audio: plays a short ambient laugh at random intervals.
 //
 const LIFE_LAUGH_INTERVAL_MIN = 6.0
 const LIFE_LAUGH_INTERVAL_MAX = 14.0
@@ -108,11 +129,7 @@ const LIFE_LAUGH_TOTAL_FLASHES = 8
 // Inline color constants
 //
 const COLOR_WARM_ORANGE = '#C4874A'
-const COLOR_LIFE_RED = '#D84C4C'
-const COLOR_WORD_SECTION = '#DC143C'
-const COLOR_ICON_LABEL = '#C4874A'
-const COLOR_ICON_DESC = '#6A7A8A'
-const COLOR_TEXT_NORMAL = '#7AAACF'
+const COLOR_TEXT_GRAY = '#7A8090'
 //
 // Approximate monospace char width multiplier (JetBrains Mono)
 //
@@ -143,21 +160,51 @@ export function sceneReady(k) {
     //
     // Left illustration: life.png + procedural hero silhouette
     //
-    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k) } }])
     //
-    // Right text panel (static text objects)
+    // Hero illustration eye wander state (starts eyes right-up, matching the sprite prefix)
     //
-    addTextPanel(k, TEXT_LEFT, TEXT_START_Y)
+    const illAnim = {
+      eyeX: 1,
+      eyeY: -1,
+      targetEyeX: 1,
+      targetEyeY: -1,
+      eyeTimer: 0,
+      eyeNextSwitch: HERO_EYE_MIN_DELAY + Math.random() * (HERO_EYE_MAX_DELAY - HERO_EYE_MIN_DELAY)
+    }
+    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k, illAnim) } }])
     //
-    // Animated icon state (sparkle pulse + electricity heartbeat phase)
+    // Left text column (narrative text, starts at LEFT_COLUMN_X)
     //
-    const iconAnim = { sparklePhase: 0, heartbeatPhase: 0, lifeFlashTimer: 8.0, lifeFlashCount: 0, lifeFlashInterval: 0, lifeFlashPhase: 0 }
+    addTextPanel(k, LEFT_COLUMN_X, TEXT_START_Y)
+    //
+    // Animated icon state: sparkle pulse, electric heartbeat, life laugh flash.
+    //
+    const iconAnim = {
+      sparklePhase: 0,
+      heartbeatPhase: 0,
+      lifeFlashTimer: 8.0,
+      lifeFlashCount: 0,
+      lifeFlashInterval: 0,
+      lifeFlashPhase: 0
+    }
     k.onUpdate(() => {
       const dt = k.dt()
+      //
+      // Hero illustration eye wander
+      //
+      illAnim.eyeTimer += dt
+      if (illAnim.eyeTimer >= illAnim.eyeNextSwitch) {
+        illAnim.targetEyeX = k.choose([-1, 0, 1])
+        illAnim.targetEyeY = k.choose([-1, 0, 1])
+        illAnim.eyeTimer = 0
+        illAnim.eyeNextSwitch = HERO_EYE_MIN_DELAY + Math.random() * (HERO_EYE_MAX_DELAY - HERO_EYE_MIN_DELAY)
+      }
+      illAnim.eyeX = k.lerp(illAnim.eyeX, illAnim.targetEyeX, HERO_EYE_LERP_SPEED)
+      illAnim.eyeY = k.lerp(illAnim.eyeY, illAnim.targetEyeY, HERO_EYE_LERP_SPEED)
       iconAnim.sparklePhase += dt * SPARKLE_PULSE_SPEED
       iconAnim.heartbeatPhase = (iconAnim.heartbeatPhase + dt) % 1
       //
-      // Life icon periodic laugh (flash red/white like hero death)
+      // Life icon periodic laugh: audio + visual flash
       //
       if (iconAnim.lifeFlashCount <= 0) {
         iconAnim.lifeFlashTimer -= dt
@@ -180,9 +227,12 @@ export function sceneReady(k) {
       }
     })
     //
-    // Icon rows (bottom of right panel)
+    // Icon illustrations beside each section label
     //
     k.add([k.pos(0, 0), k.z(Z_TEXT), { draw() { onDrawIconIllustrations(k, iconAnim) } }])
+    //
+    // Section labels below the ground line
+    //
     addIconLabels(k, TEXT_LEFT)
     //
     // Title text (crawling letters detach from this)
@@ -193,7 +243,7 @@ export function sceneReady(k) {
       titleOutlines.push(k.add([
         k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
         k.pos(TITLE_TEXT_X + dx, TITLE_TEXT_Y + dy),
-        k.anchor('left'),
+        k.anchor('center'),
         k.color(0, 0, 0),
         k.opacity(1),
         k.z(Z_TITLE)
@@ -202,7 +252,7 @@ export function sceneReady(k) {
     const titleText = k.add([
       k.text(INSTRUCTIONS_TITLE, { size: TITLE_FONT_SIZE, font: TITLE_FONT_FAMILY }),
       k.pos(TITLE_TEXT_X, TITLE_TEXT_Y),
-      k.anchor('left'),
+      k.anchor('center'),
       getColor(k, CFG.visual.colors.ready.title),
       k.opacity(1),
       k.z(Z_TITLE)
@@ -235,9 +285,9 @@ export function sceneReady(k) {
     //
     const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
     const spiders = []
-    let spiderTimer = 0
+    const spiderState = { timer: 0 }
     //
-    // "find yourself in life" has 18 non-space letters (indices 0-17).
+    // "find yourself" has 13 non-space letters.
     // Five waves spread them so they appear far apart.
     //
     const waves = [[0, 5, 10, 15], [2, 7, 12, 17], [1, 6, 11, 16], [3, 8, 13], [4, 9, 14]]
@@ -250,7 +300,7 @@ export function sceneReady(k) {
       for (let w = 0; w < waves.length; w++) {
         if (waves[w].includes(i)) { waveIndex = w; break }
         }
-      spider.legAppearDelay = waveIndex * WAVE_INTERVAL + Math.random() * 0.3
+      spider.legAppearDelay = SPIDER_LEGS_BASE_DELAY + waveIndex * WAVE_INTERVAL + Math.random() * 0.3
       spider.letterInfo = letterInfo
       spider.titleOutlines = titleOutlines
       spiders.push(spider)
@@ -260,7 +310,7 @@ export function sceneReady(k) {
     let titleFlickerPhase = 0
     k.onUpdate(() => {
       const dt = k.dt()
-      spiderTimer += dt
+      spiderState.timer += dt
       spiders.forEach(spider => updateSpider(k, spider, dt, SPIDER_MAX_OPACITY, true))
       //
       // Hint flicker
@@ -284,16 +334,10 @@ export function sceneReady(k) {
       titleText.opacity = titleFlicker
       titleOutlines.forEach(o => o.opacity = titleFlicker)
     })
-    k.onDraw(() => {
-      spiders.forEach(spider => {
-        let spiderOpacity = 0
-        const timeToAppear = SPIDER_APPEAR_DELAY + spider.appearDelay
-        if (spiderTimer > timeToAppear) {
-          spiderOpacity = Math.min(1, (spiderTimer - timeToAppear) / SPIDER_FADE_DURATION) * SPIDER_MAX_OPACITY
-        }
-        drawSpider(k, spider, spiderOpacity)
-      })
-    })
+    //
+    // Spider draw layer — rendered above all text and title (Z_SPIDER)
+    //
+    k.add([k.pos(0, 0), k.z(Z_SPIDER), { draw() { onDrawSpidersLayer(k, spiders, spiderState) } }])
     //
     // Controls
     //
@@ -314,23 +358,14 @@ function onDrawBg(k) {
     sprite: "menu-bg",
     width: k.width(),
     height: k.height(),
-    opacity: 0.3
+    opacity: 0.5
   })
 }
 //
-// Draws the left illustration: life-ready.png as the creature + real hero sprite to its left.
+// Draws the center illustration: life-ready.png as the creature + hero sprite overlaid in front.
+// illAnim carries the current eye wander state for the hero sprite.
 //
-function onDrawIllustration(k) {
-  //
-  // Real hero sprite on the LEFT of the creature (anchor bottom-center)
-  //
-  k.drawSprite({
-    sprite: HERO_ILLUSTRATION_SPRITE_NAME,
-    pos: k.vec2(HERO_X - HERO_SPRITE_SIZE / 2, HERO_Y - HERO_SPRITE_SIZE),
-    width: HERO_SPRITE_SIZE,
-    height: HERO_SPRITE_SIZE,
-    opacity: 1.0
-  })
+function onDrawIllustration(k, illAnim) {
   //
   // life-ready.png: fully opaque, reduced size, positioned next to the hero
   //
@@ -341,145 +376,91 @@ function onDrawIllustration(k) {
     height: LIFE_HEIGHT,
     opacity: LIFE_OPACITY
   })
+  //
+  // Hero sprite with animated eyes (idle wander matching hero.js behaviour)
+  //
+  const eyeX = Math.round(illAnim.eyeX)
+  const eyeY = Math.round(illAnim.eyeY)
+  k.drawSprite({
+    sprite: `${HERO_ILLUSTRATION_SPRITE_PREFIX}_${eyeX}_${eyeY}`,
+    pos: k.vec2(HERO_X - HERO_SPRITE_SIZE / 2, HERO_Y - HERO_SPRITE_SIZE),
+    width: HERO_SPRITE_SIZE,
+    height: HERO_SPRITE_SIZE,
+    opacity: 1.0
+  })
 }
 //
-// Adds the static text objects for the right panel body copy.
-// Handles inline coloring for key words by drawing segments.
+// Adds the left-column narrative text at 24px with black outline.
+// Describes all six worlds and the player's goal.
+// Key words are colored (time/touch in orange, Life in red).
 //
 function addTextPanel(k, leftX, startY) {
   const z = Z_TEXT
   const s = TEXT_FONT_SIZE
   const lh = TEXT_LINE_HEIGHT
   const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
-  const cw = s * MONO_CHAR_W_RATIO
   //
-  // Helper: add one plain text segment
+  // Helper: segment with black outline then warm-orange text
   //
-  const seg = (text, x, y, colorHex) => k.add([
-    k.text(text, { size: s, font }),
-    k.pos(x, y),
-    k.anchor('left'),
-    getColor(k, colorHex),
-    k.z(z)
-  ])
+  const seg = (text, x, y) => addSegment(k, text, x, y, z, s, font, COLOR_TEXT_GRAY)
   //
-  // Block 1 (4 lines): self-discovery through life's obstacles
-  //
-  // Line 1: "Learn who you truly are."  ≈ 24 chars
+  // Block 1 (5 lines): six worlds intro
   //
   const l1y = startY
-  seg('Learn who you truly are.', leftX, l1y, COLOR_TEXT_NORMAL)
+  seg('Six worlds await you.', leftX, l1y)
+  seg('Time, touch, and words,', leftX, l1y + lh)
+  seg('feelings, mind, and stress.', leftX, l1y + lh * 2)
+  seg('Each hides a piece of your', leftX, l1y + lh * 3)
+  seg('scattered identity within.', leftX, l1y + lh * 4)
   //
-  // Line 2: "Life is your only teacher."  ≈ 26 chars — "Life" in red
+  // Block 2 (4 lines, after gap): gameplay and goal
   //
-  const life1End = leftX + 4 * cw
-  seg('Life', leftX, l1y + lh, COLOR_LIFE_RED)
-  seg(' is your only teacher.', life1End, l1y + lh, COLOR_TEXT_NORMAL)
-  //
-  // Line 3: "Its faces challenge you —"  ≈ 25 chars
-  //
-  seg('Its faces challenge you \u2014', leftX, l1y + lh * 2, COLOR_TEXT_NORMAL)
-  //
-  // Line 4: "time, touch, and words."  ≈ 23 chars (colored)
-  //
-  const l4y = l1y + lh * 3
-  let cx = leftX
-  seg('time', cx, l4y, COLOR_WARM_ORANGE)
-  cx += 4 * cw
-  seg(', ', cx, l4y, COLOR_TEXT_NORMAL)
-  cx += 2 * cw
-  seg('touch', cx, l4y, COLOR_WARM_ORANGE)
-  cx += 5 * cw
-  seg(', and ', cx, l4y, COLOR_TEXT_NORMAL)
-  cx += 6 * cw
-  seg('words', cx, l4y, COLOR_WORD_SECTION)
-  cx += 5 * cw
-  seg('.', cx, l4y, COLOR_TEXT_NORMAL)
-  //
-  // Gap then second block
-  //
-  const l5y = l1y + lh * 4 + 14
-  //
-  // Line 5: "Explore worlds."  ≈ 15 chars
-  //
-  seg('Explore worlds.', leftX, l5y, COLOR_TEXT_NORMAL)
-  //
-  // Line 6: "Collect your fragments."  ≈ 22 chars
-  //
-  seg('Collect your fragments.', leftX, l5y + lh, COLOR_TEXT_NORMAL)
-  //
-  // Line 7: "Face Life in the end."  ≈ 21 chars — "Life" in red
-  //
-  const l7y = l5y + lh * 2
-  const life2End = leftX + 5 * cw
-  seg('Face ', leftX, l7y, COLOR_TEXT_NORMAL)
-  seg('Life', life2End, l7y, COLOR_LIFE_RED)
-  seg(' in the end.', life2End + 4 * cw, l7y, COLOR_TEXT_NORMAL)
+  const l6y = l1y + lh * 5 + 14
+  seg('Platform, jump, survive.', leftX, l6y)
+  seg('Collect every lost fragment.', leftX, l6y + lh)
+  seg('Find your shadow self and', leftX, l6y + lh * 2)
+  seg('face Life \u2014 know yourself.', leftX, l6y + lh * 3)
 }
 //
-// Adds the three icon label + description text rows (bottom-right panel).
+// Adds the three section label rows below the ground line.
+// All labels share COLOR_WARM_ORANGE; icons are drawn by onDrawIconIllustrations.
 //
 function addIconLabels(k, leftX) {
   const z = Z_TEXT
   const labelFont = "'JetBrains Mono', monospace"
   const descFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
-  const iconTextX = leftX + ICON_TEXT_OFFSET_X
   const rows = [
-    {
-      label: 'Collect fragments',
-      desc: 'Pieces of you. Scattered everywhere.'
-    },
-    {
-      label: 'Find the other you',
-      desc: 'Touch them. Meet them. Understand them.'
-    },
-    {
-      label: 'Face Life',
-      desc: 'The final battle is within.'
-    }
+    { label: 'Collect fragments', desc: 'Pieces of you. Scattered everywhere.' },
+    { label: 'Find the other you', desc: 'Touch them. Know them.' },
+    { label: 'Face Life', desc: 'The final battle is within.' }
   ]
   rows.forEach((row, i) => {
     const rowY = ICON_START_Y + i * ICON_ROW_HEIGHT
-    k.add([
-      k.text(row.label, { size: ICON_LABEL_FONT_SIZE, font: labelFont }),
-      k.pos(iconTextX, rowY),
-      k.anchor('left'),
-      getColor(k, COLOR_ICON_LABEL),
-      k.z(z)
-    ])
-    k.add([
-      k.text(row.desc, { size: ICON_LABEL_DESC_FONT_SIZE, font: descFont }),
-      k.pos(iconTextX, rowY + ICON_LABEL_DESC_OFFSET_Y),
-      k.anchor('left'),
-      getColor(k, COLOR_ICON_DESC),
-      k.z(z)
-    ])
+    addSegment(k, row.label, leftX, rowY, z, ICON_LABEL_FONT_SIZE, labelFont, COLOR_WARM_ORANGE)
+    addSegment(k, row.desc, leftX, rowY + ICON_LABEL_DESC_OFFSET_Y, z, ICON_LABEL_DESC_FONT_SIZE, descFont, COLOR_TEXT_GRAY)
   })
 }
 //
-// Draws the three small icon illustrations beside each icon label row.
+// Draws the three small icon illustrations to the LEFT of TEXT_LEFT so text starts
+// at the same x as the narrative column above.
 //
 function onDrawIconIllustrations(k, iconAnim) {
-  const leftX = TEXT_LEFT + ICON_DRAW_R
+  const iconX = TEXT_LEFT + ICON_DRAW_CX_OFFSET
   //
-  // Icon 1: "Collect fragments" - animated sun-bunny sparkle on tiny bonus hero
+  // Icon 1: "Collect fragments" — animated sun-bunny sparkle glow
   //
-  drawFragmentIcon(k, leftX, ICON_START_Y + ICON_DRAW_R * 0.6, iconAnim.sparklePhase)
+  drawFragmentIcon(k, iconX, ICON_START_Y + ICON_DRAW_R * 0.6, iconAnim.sparklePhase)
   //
-  // Icon 2: "Find the other you" - hero + anti-hero with electric connection
-  // Extra offset centres the sprites between the label and description lines.
+  // Icon 2: "Find the other you" — hero + anti-hero with electric connection
   //
-  drawTwoHeroesIcon(k, leftX, ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim.heartbeatPhase)
+  drawTwoHeroesIcon(k, iconX, ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim.heartbeatPhase)
   //
-  // Icon 3: "Face Life" - life.png sprite (with occasional laugh)
+  // Icon 3: "Face Life" — life.png with periodic laugh flash
   //
-  drawLifeIcon(k, leftX, ICON_START_Y + ICON_ROW_HEIGHT * 2 + ICON_DRAW_R * 0.6, iconAnim)
+  drawLifeIcon(k, iconX, ICON_START_Y + ICON_ROW_HEIGHT * 2 + ICON_DRAW_R * 0.6, iconAnim)
 }
 //
-// Icon 1: animated sun-bunny sparkle — soft 2-circle glint matching the
-// bonus-hero sparkle used in the time section (outer glow + bright core).
-// No hero sprite; the glow is centered exactly at (cx, cy) to align with
-// the other two icons.
+// Icon 1: animated sun-bunny sparkle — outer glow + bright core pulse
 //
 function drawFragmentIcon(k, cx, cy, sparklePhase) {
   const pulse = 0.5 + 0.5 * Math.abs(Math.sin(sparklePhase))
@@ -495,15 +476,29 @@ function drawFragmentIcon(k, cx, cy, sparklePhase) {
   k.drawCircle({ pos: k.vec2(cx, cy), radius: r, color: glintColor, opacity: 0.85 * pulse })
 }
 //
-// Icon 2: hero + anti-hero sprites with animated electric connection between them
+// Icon 2: hero + anti-hero sprites with animated electric connection
 //
 function drawTwoHeroesIcon(k, cx, cy, heartbeatPhase) {
   const r = ICON_DRAW_R
   const hh = r * 0.85
-  const spacing = r * 0.55
-  const spSize = hh * 2.2
   //
-  // Hero sprite (left)
+  // Wider spacing so the arc gap between the two sprites is clearly visible.
+  //
+  const spacing = r * 0.85
+  const spSize = hh * 2.2
+  const midY = cy - hh * 0.35
+  //
+  // Connection drawn FIRST (underneath sprites) so the sprites render on top
+  // and cover the faded lightning endpoints — no visible gap between arc and bodies.
+  // Endpoints at each sprite center so the connection clearly starts inside each body.
+  //
+  drawConnectionWave(k,
+    { x: cx - spacing, y: midY },
+    { x: cx + spacing, y: midY },
+    { segmentWidth: 5, mainWidth: 1.8, opacity: 0.55, heartbeatPhase }
+  )
+  //
+  // Hero sprite (left) — drawn after connection to overlap faded arc ends
   //
   k.drawSprite({
     sprite: HERO_SPRITE_NAME,
@@ -513,7 +508,7 @@ function drawTwoHeroesIcon(k, cx, cy, heartbeatPhase) {
     opacity: 0.9
   })
   //
-  // Anti-hero sprite (right, flipped)
+  // Anti-hero sprite (right) — drawn after connection to overlap faded arc ends
   //
   k.drawSprite({
     sprite: ANTIHERO_SPRITE_NAME,
@@ -522,23 +517,14 @@ function drawTwoHeroesIcon(k, cx, cy, heartbeatPhase) {
     height: spSize,
     opacity: 0.9
   })
-  //
-  // Electric connection between their chests
-  //
-  const midY = cy - hh * 0.35
-  drawConnectionWave(k,
-    { x: cx - spacing + spSize * 0.35, y: midY },
-    { x: cx + spacing - spSize * 0.35, y: midY },
-    { segmentWidth: 5, mainWidth: 1.8, opacity: 0.55, heartbeatPhase }
-  )
 }
 //
-// Icon 3: small life.png sprite with periodic laugh flash animation
+// Icon 3: small life.png sprite with periodic laugh flash (red/white alternating)
 //
 function drawLifeIcon(k, cx, cy, iconAnim) {
   const r = ICON_DRAW_R
   //
-  // Color tint based on laugh animation phase: red → white alternating flashes
+  // Tint alternates between red and white during the laugh sequence
   //
   let tintColor
   if (iconAnim.lifeFlashCount > 0) {
@@ -547,7 +533,7 @@ function drawLifeIcon(k, cx, cy, iconAnim) {
       : k.rgb(255, 255, 255)
   }
   k.drawSprite({
-    sprite: "life",
+    sprite: 'life',
     pos: k.vec2(cx - r, cy - r),
     width: r * 2,
     height: r * 2,
@@ -556,7 +542,7 @@ function drawLifeIcon(k, cx, cy, iconAnim) {
   })
 }
 //
-// ────────── Spider / crawling letters system (kept from original) ──────────
+// ────────── Spider / crawling letters system ──────────
 //
 
 /**
@@ -642,7 +628,12 @@ function createSpider(k, index, sourceInfo) {
 function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
   const letterInfos = []
   const charWidth = fontSize * MONO_CHAR_W_RATIO
-  const startX = titleTextObj.pos.x
+  //
+  // titleTextObj uses anchor('center'), so pos.x is the CENTER of the string.
+  // Subtract half the total string width to get the true left edge.
+  //
+  const totalStringWidth = titleString.length * charWidth
+  const startX = titleTextObj.pos.x - totalStringWidth / 2
   const brighterColor = k.rgb(245, 110, 110)
   titleString.split('').forEach((char, charIndex) => {
     if (char.trim().length === 0) return
@@ -784,6 +775,24 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
 }
 
 /**
+ * Draws all spiders on the Z_SPIDER layer.
+ * Called each frame by the k.add draw callback registered with k.z(Z_SPIDER).
+ * @param {Object} k - Kaplay instance
+ * @param {Array} spiders - Array of spider instances
+ * @param {Object} spiderState - Mutable state carrying the scene timer
+ */
+function onDrawSpidersLayer(k, spiders, spiderState) {
+  const { timer } = spiderState
+  spiders.forEach(spider => {
+    let spiderOpacity = 0
+    const timeToAppear = SPIDER_APPEAR_DELAY + spider.appearDelay
+    if (timer > timeToAppear) {
+      spiderOpacity = Math.min(1, (timer - timeToAppear) / SPIDER_FADE_DURATION) * SPIDER_MAX_OPACITY
+    }
+    drawSpider(k, spider, spiderOpacity)
+  })
+}
+/**
  * Draws a spider (legs + letter body + eyes).
  * @param {Object} k - Kaplay instance
  * @param {Object} spider - Spider instance
@@ -791,7 +800,7 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
  */
 function drawSpider(k, spider, textOpacity) {
   if (spider.legExtendT > 0 && !spider.legsHidden) {
-    const legColor = spider.color
+    const legColor = k.rgb(12, 10, 14)
     const legOpacity = spider.charHidden ? SPIDER_MAX_OPACITY : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
     if (legOpacity > 0) {
     spider.legs.forEach(leg => {
@@ -886,4 +895,27 @@ function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   const jointX = baseX + Math.cos(jointAngle) * len1
   const jointY = baseY + Math.sin(jointAngle) * len1
   return { jointX, jointY }
+}
+//
+// Adds a text segment with 4-corner black outline (1px offset) then the colored text on top.
+// Used by addTextPanel and addIconLabels to give body text a readable dark stroke.
+//
+function addSegment(k, text, x, y, z, size, font, colorHex) {
+  const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+  offsets.forEach(([dx, dy]) => {
+    k.add([
+      k.text(text, { size, font }),
+      k.pos(x + dx, y + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.z(z - 1)
+    ])
+  })
+  return k.add([
+    k.text(text, { size, font }),
+    k.pos(x, y),
+    k.anchor('left'),
+    getColor(k, colorHex),
+    k.z(z)
+  ])
 }

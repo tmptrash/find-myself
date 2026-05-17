@@ -52,11 +52,18 @@ const MENU_AUDIO = {
   kidsMusicFadeInDuration: 4.0                         // Fade-in duration in seconds
 }
 
-/**
- * Get section name for display (singular form)
- * @param {string} section - Section name
- * @returns {string} Section name in singular form
- */
+//
+// Prohibited sign visual style (drawn on locked anti-heroes when hovered).
+// Ring + slash drawn in a dark crimson, pulsing gently.
+//
+const PROHIBITED_RING_RADIUS = 52
+const PROHIBITED_RING_SEGMENTS = 36
+const PROHIBITED_RING_WIDTH = 5
+const PROHIBITED_SLASH_WIDTH = 7
+const PROHIBITED_PULSE_SPEED = 2.8
+const PROHIBITED_COLOR = '#B82C2C'
+const PROHIBITED_BG_OPACITY = 0.10
+const PROHIBITED_SIGN_OPACITY = 0.88
 function getSectionDisplayName(section) {
   //
   // Return section name as-is (singular form)
@@ -1780,13 +1787,76 @@ function drawScene(inst) {
       heartbeatPhase: inst.heartbeatPhase
     })
   }
+  //
+  // Draw prohibited sign over hovered anti-hero when their section is locked
+  //
+  if (hoveredAntiHero && isAntiHeroLocked(hoveredAntiHero, progress, inst.currentSection)) {
+    drawProhibitedSign(k, hoveredAntiHero.character.pos.x, hoveredAntiHero.character.pos.y)
+  }
+}
+//
+// Returns true when the given anti-hero's section cannot be accessed yet:
+// the previous section must be completed first.
+//
+function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
+  const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
+  const idx = sectionOrder.indexOf(antiHeroInst.section)
+  if (idx <= 0) return false
+  const prevSection = sectionOrder[idx - 1]
+  const isPrevCompleted = progress[prevSection]?.completed || false
+  return !isPrevCompleted && !antiHeroInst.isCompleted && antiHeroInst.section !== currentSection
+}
+//
+// Draws a crimson ⊘ prohibition ring + slash centered on (cx, cy).
+// The circle encircles the anti-hero sprite, creating a "wearing the sign" look.
+//
+function drawProhibitedSign(k, cx, cy) {
+  const t = k.time()
+  const pulse = 0.85 + 0.10 * Math.sin(t * PROHIBITED_PULSE_SPEED)
+  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
+  const parsed = parseHex(PROHIBITED_COLOR)
+  const color = k.rgb(parsed.r, parsed.g, parsed.b)
+  //
+  // Soft inner tint (reinforces the "no entry" feel)
+  //
+  k.drawCircle({
+    pos: k.vec2(cx, cy),
+    radius: r,
+    color,
+    opacity: PROHIBITED_BG_OPACITY * pulse
+  })
+  //
+  // Ring outline drawn as arc line segments
+  //
+  for (let i = 0; i < PROHIBITED_RING_SEGMENTS; i++) {
+    const a1 = (i / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
+    const a2 = ((i + 1) / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
+    k.drawLine({
+      p1: k.vec2(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r),
+      p2: k.vec2(cx + Math.cos(a2) * r, cy + Math.sin(a2) * r),
+      width: PROHIBITED_RING_WIDTH,
+      color,
+      opacity: PROHIBITED_SIGN_OPACITY * pulse
+    })
+  }
+  //
+  // Diagonal slash (upper-left to lower-right, ⊘ style)
+  //
+  const slashR = r * 0.72
+  k.drawLine({
+    p1: k.vec2(cx - slashR, cy - slashR),
+    p2: k.vec2(cx + slashR, cy + slashR),
+    width: PROHIBITED_SLASH_WIDTH,
+    color,
+    opacity: PROHIBITED_SIGN_OPACITY * pulse
+  })
 }
 //
 // Draw menu background with section-specific fade transitions
 //
 function drawMenuBackground(inst) {
   const { k, bgDefaultOpacity } = inst
-  const BG_OPACITY = 0.55
+  const BG_OPACITY = 0.80
   //
   // Draw default background with fade (hidden when hovering anti-hero)
   //

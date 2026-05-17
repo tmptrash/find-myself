@@ -78,26 +78,23 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst) {
   const pup  = k.rgb(PUPIL_R, PUPIL_G, PUPIL_B)
   const feet = k.rgb(FEET_R, FEET_G, FEET_B)
   //
-  // Tail fan — drawn first so body overlaps the root of the feathers.
-  // Three layered wedge triangles for a spread tail.
+  // Tail: wide-fan shape — narrow root at body, wide spread at the outer tip.
+  // Drawn before the body so the root is naturally hidden.
   //
   k.drawTriangle({
-    p1: k.vec2(cx - 11 * sc * s, perchY + 2 * sc),
-    p2: k.vec2(cx - 26 * sc * s, perchY + 4 * sc),
-    p3: k.vec2(cx - 11 * sc * s, perchY + 8 * sc),
+    p1: k.vec2(cx - 10 * sc * s, perchY + 3 * sc),
+    p2: k.vec2(cx - 28 * sc * s, perchY - 6 * sc),
+    p3: k.vec2(cx - 28 * sc * s, perchY + 12 * sc),
     color: tail, opacity: 1
   })
+  //
+  // Inner feather layer — lighter shade gives texture and depth
+  //
   k.drawTriangle({
-    p1: k.vec2(cx - 10 * sc * s, perchY + 1 * sc),
-    p2: k.vec2(cx - 24 * sc * s, perchY + 8 * sc),
-    p3: k.vec2(cx - 10 * sc * s, perchY + 10 * sc),
-    color: k.rgb(TAIL_R + 6, TAIL_G + 5, TAIL_B + 6), opacity: 0.75
-  })
-  k.drawTriangle({
-    p1: k.vec2(cx - 9 * sc * s, perchY + 0 * sc),
-    p2: k.vec2(cx - 22 * sc * s, perchY + 11 * sc),
-    p3: k.vec2(cx - 9 * sc * s, perchY + 11 * sc),
-    color: k.rgb(TAIL_R + 10, TAIL_G + 8, TAIL_B + 12), opacity: 0.5
+    p1: k.vec2(cx - 10 * sc * s, perchY + 3 * sc),
+    p2: k.vec2(cx - 24 * sc * s, perchY - 2 * sc),
+    p3: k.vec2(cx - 24 * sc * s, perchY + 9 * sc),
+    color: k.rgb(TAIL_R + 8, TAIL_G + 6, TAIL_B + 8), opacity: 0.65
   })
   //
   // Body — elongated oval with slight lean toward beak side
@@ -226,30 +223,22 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst) {
     })
   } else {
     //
-    // Closed upper mandible (long, slight downward hook at tip)
+    // Closed beak: single sharp elongated triangle (upper mandible),
+    // with a thin lower mandible tightly beneath it.
     //
     k.drawTriangle({
-      p1: k.vec2(beakBaseX, beakBaseY - 1 * sc),
-      p2: k.vec2(beakBaseX + 21 * sc * s, beakBaseY - 5 * sc),
-      p3: k.vec2(beakBaseX, beakBaseY + 3 * sc),
+      p1: k.vec2(beakBaseX, beakBaseY - 1.5 * sc),
+      p2: k.vec2(beakBaseX + 20 * sc * s, beakBaseY - 3 * sc),
+      p3: k.vec2(beakBaseX + 2 * sc * s, beakBaseY + 1.5 * sc),
       color: bkU, opacity: 1
     })
     //
-    // Hook tip at end of closed beak
+    // Lower mandible — thin sliver, barely visible when closed
     //
     k.drawTriangle({
-      p1: k.vec2(beakBaseX + 17 * sc * s, beakBaseY - 5 * sc),
-      p2: k.vec2(beakBaseX + 22 * sc * s, beakBaseY - 2 * sc),
-      p3: k.vec2(beakBaseX + 18 * sc * s, beakBaseY + 0 * sc),
-      color: k.rgb(BEAK_UPPER_R - 8, BEAK_UPPER_G - 8, BEAK_UPPER_B - 8), opacity: 1
-    })
-    //
-    // Closed lower mandible
-    //
-    k.drawTriangle({
-      p1: k.vec2(beakBaseX, beakBaseY + 1 * sc),
-      p2: k.vec2(beakBaseX + 18 * sc * s, beakBaseY - 1 * sc),
-      p3: k.vec2(beakBaseX + 2 * sc * s, beakBaseY + 4 * sc),
+      p1: k.vec2(beakBaseX + 1 * sc * s, beakBaseY + 1.5 * sc),
+      p2: k.vec2(beakBaseX + 17 * sc * s, beakBaseY - 0.5 * sc),
+      p3: k.vec2(beakBaseX + 2 * sc * s, beakBaseY + 3.5 * sc),
       color: bkL, opacity: 1
     })
   }

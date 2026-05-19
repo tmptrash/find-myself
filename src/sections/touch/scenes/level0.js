@@ -1933,7 +1933,7 @@ export function sceneLevel0(k) {
         levelIndicator?.updateHeroScore?.(newScore)
         sound && Sound.playVictorySound(sound)
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
-        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
           //
           // Stop all audio before transition so nothing bleeds into the subtitle screen
@@ -1957,6 +1957,12 @@ export function sceneLevel0(k) {
     if (sceneLock.locked) {
       heroInst.controlsDisabled = true
       sceneLock.heroInst = heroInst
+    }
+    //
+    // Raise hero z above puddles (z=17) so it renders in front of them
+    //
+    if (heroInst.character) {
+      heroInst.character.z = 20
     }
     //
     // Hide character immediately to prevent double appearance

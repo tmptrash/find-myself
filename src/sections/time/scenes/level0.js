@@ -78,8 +78,12 @@ const HERO_TOOLTIP_Y_OFFSET = -60
 // Bonus hero — hidden platform shaped as 00:00, top-left of rightmost platform
 //
 const BONUS_PLATFORM_X = 1100
-const BONUS_PLATFORM_Y = 460
-const BONUS_PLATFORM_WIDTH = 100
+const BONUS_PLATFORM_Y = 530
+//
+// Collision width is wider than the visual "00:00" text so the hero can reliably
+// land on the platform. The visual (text) is drawn centered and is unaffected by this.
+//
+const BONUS_PLATFORM_WIDTH = 80
 const BONUS_STORAGE_KEY = 'time.level0BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
@@ -91,9 +95,36 @@ const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
 // Resting birds near the anti-hero: small silhouettes that scatter on hero landing
 //
 const BIRD_COUNT = 4
-const BIRD_SPREAD_X = 220
-const BIRD_BASE_X = ANTIHERO_SPAWN_X - 200
-const BIRD_SCATTER_RADIUS = 260
+//
+// Last lamp post: gaLeft(192) + LAMP_X_OFFSETS[3](1140) = 1332, arm extends +84px.
+// Birds perch clustered on the arc mid-span, close together.
+//
+const BIRD_PERCH_X = 1380
+//
+// Lamp arm bezier geometry for the last lamp (index 3), used to position birds on the arc.
+// poleTopCx = PLATFORM_SIDE_WIDTH + 1140 = 1332.
+// topY = streetSurfaceY(+17) - lampBase(-4) - poleHeight(-185) = height - bottom - 172 = 653.
+// Arc x(t) = poleTopCx + 124t - 40t².
+// Arc y(t) = topY - 40t + 69t².
+// LAMP_ARC_FOOT_OFFSET: half arm tube width; bird feet sit slightly below arc centerline.
+//
+const LAST_LAMP_POLE_X = PLATFORM_SIDE_WIDTH + 1140
+const LAST_LAMP_TOP_Y = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 172
+const LAMP_ARC_FOOT_OFFSET = 4
+//
+// Horizontal spread across the lamp beam: birds spaced ~12px apart along the arm.
+//
+const BIRD_SPREAD_X = 48
+//
+// Wing flap speed range when birds scatter (radians per second).
+//
+const BIRD_WING_FLAP_SPEED_MIN = 8
+const BIRD_WING_FLAP_SPEED_RANGE = 5
+//
+// Horizontal distance at which birds react. Y-distance is ignored because the hero
+// always stays far below the lamp arc and never reaches bird height.
+//
+const BIRD_SCATTER_DIST_X = 150
 const BIRD_FLY_SPEED_X_MIN = 55
 const BIRD_FLY_SPEED_X_RANGE = 100
 const BIRD_FLY_SPEED_Y_MIN = 230
@@ -140,6 +171,11 @@ export function sceneLevel0(k) {
     //
     Sound.playOnce(k, HERO_FIRST_THOUGHTS_DELAY, 'time0', CFG.audio.backgroundMusic.words)
     //
+    // Holds the bonus platform instance once created — used in onAnnihilation
+    // to persist the collected state only on successful level completion.
+    //
+    let bonusHeroInst = null
+    //
     // Initialize level with heroes and platforms
     //
     const { hero, antiHero, levelIndicator } = initScene({
@@ -155,6 +191,11 @@ export function sceneLevel0(k) {
       antiHeroY: ANTIHERO_SPAWN_Y,
       heroDustColor: '#000000',
       onAnnihilation: () => {
+        //
+        // Persist bonus collection to localStorage only on successful level completion.
+        // If the hero died, this never runs and the bonus reverts on restart.
+        //
+        BonusHero.finalizeCollection(bonusHeroInst)
         stopTimeSectionMusic()
         //
         // Fade out all sounds immediately
@@ -206,7 +247,7 @@ export function sceneLevel0(k) {
         //
         // Wait before transition (extra 1s if speed bonus earned for particle effect)
         //
-        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.0')
         })
@@ -284,7 +325,7 @@ export function sceneLevel0(k) {
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       antiHeroSpawnX: ANTIHERO_SPAWN_X,
       heroInst: hero,
-      crowLampIndex: 1
+      crowLampIndex: 0
     })
     k.onSceneLeave(() => level0Ambience.cleanup())
     //
@@ -624,7 +665,7 @@ export function sceneLevel0(k) {
     //
     // Hidden bonus hero — 00:00 platform top-left of the rightmost platform
     //
-    BonusHero.create({
+    bonusHeroInst = BonusHero.create({
       k,
       x: BONUS_PLATFORM_X,
       y: BONUS_PLATFORM_Y,
@@ -632,7 +673,6 @@ export function sceneLevel0(k) {
       heroInst: hero,
       levelIndicator,
       sfx: sound,
-      approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
       storageKey: BONUS_STORAGE_KEY,
       platformText: "00:00"
@@ -834,30 +874,49 @@ function createRoundedCorners(k) {
   ])
 }
 //
+// Returns the y position (feet level) on the last lamp arm bezier at a given world x.
+// Uses the quadratic bezier: y(t) = LAST_LAMP_TOP_Y - 40t + 69t², x(t) = LAST_LAMP_POLE_X + 124t - 40t².
+// Solves x(t) = xAbs for t, then evaluates y(t) minus LAMP_ARC_FOOT_OFFSET.
+//
+function birdArcFeetY(xAbs) {
+  const xRel = xAbs - LAST_LAMP_POLE_X
+  const disc = 15376 - 160 * xRel
+  if (disc < 0) return LAST_LAMP_TOP_Y - LAMP_ARC_FOOT_OFFSET
+  const t = (124 - Math.sqrt(disc)) / 80
+  return LAST_LAMP_TOP_Y - 40 * t + 69 * t * t - LAMP_ARC_FOOT_OFFSET
+}
+//
 // Resting birds near the anti-hero, scattered to the left. They fly away when
 // the hero lands within BIRD_SCATTER_RADIUS. Wing-flap sound fires once.
 //
 function createRestingBirds(k, heroInst, sound) {
-  const floorY = ANTIHERO_SPAWN_Y
   const birds = []
   for (let i = 0; i < BIRD_COUNT; i++) {
-    const size = 5 + Math.random() * 4
+    const size = 5 + Math.random() * 3
+    //
+    // Spread birds symmetrically around the lamp arc perch point, close together.
+    //
+    const xOff = (i - (BIRD_COUNT - 1) / 2) * (BIRD_SPREAD_X / BIRD_COUNT) + (Math.random() - 0.5) * 4
+    const birdX = BIRD_PERCH_X + xOff
+    //
+    // Compute the lamp arm arc y at this bird's x so each bird follows the curve.
+    // Bird center is placed so that feet (y + size*1.5) land on the arc surface.
+    //
+    const feetY = birdArcFeetY(birdX)
     birds.push({
-      x: BIRD_BASE_X - (i * (BIRD_SPREAD_X / BIRD_COUNT)) - Math.random() * 30,
-      //
-      // Position body center so feet touch floorY: center 1.5×size above ground.
-      //
-      y: floorY - size * 1.5,
+      x: birdX,
+      y: feetY - size * 1.5,
       vx: 0,
       vy: 0,
       scattered: false,
       opacity: 1,
       fadeTimer: 0,
-      size
+      size,
+      wingAngle: Math.random() * Math.PI * 2,
+      wingFlapSpeed: BIRD_WING_FLAP_SPEED_MIN + Math.random() * BIRD_WING_FLAP_SPEED_RANGE
     })
   }
   let scattered = false
-  let wasOnGround = false
   k.add([
     k.z(BIRD_DRAW_Z),
     k.fixed(),
@@ -867,25 +926,25 @@ function createRestingBirds(k, heroInst, sound) {
     }
   ])
   //
-  // Detect hero landing near birds and trigger scatter
+  // Scatter birds on horizontal proximity only — the hero always walks far below
+  // the lamp arc so Euclidean distance would never fall within a useful radius.
   //
   k.onUpdate(() => {
     if (scattered) return
-    const heroOnGround = heroInst.character?.isGrounded?.() ?? false
-    const justLanded = heroOnGround && !wasOnGround
-    wasOnGround = heroOnGround
-    if (!justLanded) return
     const heroX = heroInst.character?.pos?.x ?? 0
-    const heroY = heroInst.character?.pos?.y ?? 0
-    const distX = heroX - BIRD_BASE_X
-    const distY = heroY - floorY
-    const dist2 = distX * distX + distY * distY
-    if (dist2 > BIRD_SCATTER_RADIUS * BIRD_SCATTER_RADIUS) return
+    const distX = Math.abs(heroX - BIRD_PERCH_X)
+    if (distX > BIRD_SCATTER_DIST_X) return
     scattered = true
     Sound.playWingFlapSound(sound)
     for (const bird of birds) {
       bird.scattered = true
-      bird.vx = -(BIRD_FLY_SPEED_X_MIN + Math.random() * BIRD_FLY_SPEED_X_RANGE)
+      //
+      // Each bird flies in a slightly different direction for realistic dispersal.
+      // Most fly left (away from the hero who approaches from the left), but some
+      // curve right to create a natural flock split.
+      //
+      const dirX = Math.random() < 0.75 ? -1 : 1
+      bird.vx = dirX * (BIRD_FLY_SPEED_X_MIN + Math.random() * BIRD_FLY_SPEED_X_RANGE)
       bird.vy = -(BIRD_FLY_SPEED_Y_MIN + Math.random() * BIRD_FLY_SPEED_Y_RANGE)
     }
   })
@@ -902,6 +961,10 @@ function onUpdateBirds(k, heroInst, birds, scattered, sound) {
     bird.vy += BIRD_FLY_GRAVITY * dt
     bird.fadeTimer += dt
     bird.opacity = Math.max(0, 1 - bird.fadeTimer / BIRD_FADE_DURATION)
+    //
+    // Animate wings flapping while bird is in flight
+    //
+    bird.wingAngle += bird.wingFlapSpeed * dt
   }
 }
 //
@@ -913,6 +976,9 @@ function drawBirds(k, birds) {
   const bodyColor = k.rgb(30, 26, 30)
   const wingColor = k.rgb(20, 18, 22)
   const legColor = k.rgb(70, 55, 30)
+  const beakColor = k.rgb(160, 110, 40)
+  const eyeWhite = k.rgb(230, 225, 215)
+  const eyeDark = k.rgb(15, 12, 15)
   for (const bird of birds) {
     if (bird.scattered && bird.opacity <= 0) continue
     const { x, y, size, opacity, scattered } = bird
@@ -930,12 +996,31 @@ function drawBirds(k, birds) {
       //
       // Round head on the left side (birds face left, toward the hero start)
       //
+      const headX = x - size * 0.85
+      const headY = y - size * 0.35
       k.drawCircle({
-        pos: k.vec2(x - size * 0.85, y - size * 0.35),
+        pos: k.vec2(headX, headY),
         radius: size * 0.5,
         color: bodyColor,
         opacity
       })
+      //
+      // Small beak — tiny triangle pointing left from head
+      //
+      k.drawTriangle({
+        p1: k.vec2(headX - size * 0.55, headY),
+        p2: k.vec2(headX - size * 0.15, headY - size * 0.15),
+        p3: k.vec2(headX - size * 0.15, headY + size * 0.15),
+        color: beakColor,
+        opacity
+      })
+      //
+      // Eye: small white circle with dark pupil
+      //
+      const eyeX = headX - size * 0.1
+      const eyeY = headY - size * 0.22
+      k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: size * 0.2, color: eyeWhite, opacity })
+      k.drawCircle({ pos: k.vec2(eyeX - size * 0.07, eyeY), radius: size * 0.09, color: eyeDark, opacity })
       //
       // Short triangular tail pointing right (opposite to head)
       //
@@ -947,7 +1032,7 @@ function drawBirds(k, birds) {
         opacity
       })
       //
-      // Tiny legs down to ground level (body bottom → floorY)
+      // Tiny legs down to lamp arc surface
       //
       const legTopY = y + size * 0.5
       const legBotY = y + size * 1.5
@@ -960,10 +1045,12 @@ function drawBirds(k, birds) {
       k.drawLine({ p1: k.vec2(x - size * 0.2, legBotY), p2: k.vec2(x + size * 0.6, legBotY), width: 1.0, color: legColor, opacity })
     } else {
       //
-      // Spread wings in flight
+      // Flapping wings: tip Y oscillates via sine wave driven by bird.wingAngle.
+      // Full down: y + size*0.3, full up: y - size*1.6.
       //
       const wingSpread = size * 2.2
-      const wingTip = y - size * 1.4
+      const flapT = (Math.sin(bird.wingAngle) + 1) / 2
+      const wingTip = y + size * (0.3 - 1.9 * flapT)
       k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x - wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })
       k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x + wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })
     }

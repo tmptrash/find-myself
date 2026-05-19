@@ -527,7 +527,7 @@ export function sceneLevel2(k) {
         levelIndicator?.updateHeroScore?.(newScore)
         sound && Sound.playVictorySound(sound)
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
-        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
           Sound.stopAmbient(sound)
           touchMusic.stop()

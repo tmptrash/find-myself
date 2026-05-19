@@ -8,7 +8,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 // Hidden platform and collectible hero configuration
 //
 const PLATFORM_HEIGHT = 20
-const TIME_PLATFORM_COLLISION_HEIGHT = 48
+const TIME_PLATFORM_COLLISION_HEIGHT = 28
 const REVEAL_DISTANCE = 150
 //
 // Approximate distance from hero center to hero feet (half collision height + offset)
@@ -43,7 +43,7 @@ const BONUS_COLLECT_HINT_TEXT = 'you got 3 points.'
 //
 const FLOAT_SPEED = 1.5
 const FLOAT_AMPLITUDE = 6
-const TIME_PLATFORM_FONT_SIZE = 48
+const TIME_PLATFORM_FONT_SIZE = 24
 //
 // Post-reveal mini-hero opacity pulsation
 //
@@ -104,6 +104,7 @@ export function create(config) {
     heroInst, levelIndicator, sfx,
     approachFromAbove = false,
     revealDistance = REVEAL_DISTANCE,
+    revealWidth = null,
     heroBodyColor = null,
     storageKey = null,
     platformText = null
@@ -171,6 +172,12 @@ export function create(config) {
     collectParticles: [],
     approachFromAbove,
     revealDistance,
+    //
+    // revealWidth: horizontal tolerance for hero detection. Defaults to platform width.
+    // Pass a larger value when the platform is narrow to avoid detection failures.
+    //
+    revealWidth: revealWidth ?? width,
+    bonusPoints: 0,
     bonusFlashParticles: [],
     miniColor,
     offScreenY: OFF_SCREEN_Y,
@@ -200,6 +207,25 @@ export function create(config) {
   //
   k.onClick(() => onClickPlatform(inst))
   return inst
+}
+/**
+ * Persists bonus collection state to localStorage.
+ * Must be called by the level on successful completion (anti-hero touch).
+ * If the hero died before this is called, the score and storageKey remain
+ * unsaved, so the platform reappears and the score reverts on restart.
+ * @param {Object} inst - Bonus hero instance returned by create()
+ */
+export function finalizeCollection(inst) {
+  if (!inst || !inst.collected) return
+  //
+  // Mark platform as permanently collected so it won't appear on future visits
+  //
+  inst.storageKey && set(inst.storageKey, true)
+  //
+  // Add the in-session bonus to the stored score so it survives the next level start
+  //
+  const currentScore = get('heroScore', 0)
+  set('heroScore', currentScore + inst.bonusPoints)
 }
 //
 // Per-frame update: reveal, sparkle, collection detection
@@ -253,7 +279,7 @@ function onUpdate(inst) {
   if (inst.revealed) {
     inst.platform.pos.y = floatY
   } else {
-    const horizontallyAligned = dx < inst.width / 2
+    const horizontallyAligned = dx < inst.revealWidth / 2
     //
     // Check grounded BEFORE moving the platform, so the hero stays supported.
     // If the platform was collidable last frame and hero landed, isGrounded()
@@ -554,20 +580,24 @@ function generateLogDetail(w, h) {
   return { cracks, knots }
 }
 //
-// Collect the bonus: add score, spawn particles, trigger HUD effect
+// Collect the bonus: update in-memory HUD display only.
+// Intentionally does NOT write to localStorage — that is deferred to
+// finalizeCollection() which the level calls only on successful completion.
+// If the hero dies, the level restarts without any saved state, so the
+// platform reappears and the score reverts to its pre-collection value.
 //
 function collectBonus(inst) {
   if (inst.collected) return
   inst.collected = true
   inst.miniHero.character.opacity = 0
   inst.miniHero.character.paused = true
-  inst.storageKey && set(inst.storageKey, true)
   //
-  // Add bonus score
+  // Update HUD display immediately so the player sees the new score,
+  // but keep localStorage unchanged until level completion.
   //
   const currentScore = get('heroScore', 0)
   const newScore = currentScore + BONUS_POINTS
-  set('heroScore', newScore)
+  inst.bonusPoints = BONUS_POINTS
   inst.levelIndicator?.updateHeroScore?.(newScore)
   //
   // Play collection sound

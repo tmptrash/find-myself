@@ -112,7 +112,7 @@ const L1_FROG_INTERVAL_MAX = 14
 const L1_CROW_MP3_INTERVAL_MIN = 8
 const L1_CROW_MP3_INTERVAL_MAX = 20
 const L1_CROW_MP3_VOLUME = 0.6
-const L1_CROW_MP3_NAMES = ['l1-crow-0', 'l1-crow-1']
+const L1_CROW_MP3_NAMES = ['l1-crow-0']
 const L1_CROW_MOUTH_OPEN_DURATION = 0.9
 const L1_CROW_ROCK_DRAW_Z = 9
 //
@@ -1413,7 +1413,7 @@ export function sceneLevel1(k) {
         levelIndicator?.updateHeroScore?.(newScore)
         sound && Sound.playVictorySound(sound)
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
-        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
         createLevelTransition(k, 'level-touch.1', () => {
           k.go('level-touch.2')
@@ -2240,7 +2240,6 @@ export function sceneLevel1(k) {
     // Random distant crow calls from mp3 samples (two files alternated).
     //
     k.loadSound(L1_CROW_MP3_NAMES[0], '/assets/sounds/crow0.mp3')
-    k.loadSound(L1_CROW_MP3_NAMES[1], '/assets/sounds/crow1.mp3')
     const crowMp3State = {
       timer: L1_CROW_MP3_INTERVAL_MIN + Math.random() * (L1_CROW_MP3_INTERVAL_MAX - L1_CROW_MP3_INTERVAL_MIN),
       mouthOpen: false,
@@ -3233,7 +3232,7 @@ function onUpdateCrowMp3Ambient(k, state) {
   }
   state.timer -= k.dt()
   if (state.timer <= 0) {
-    k.play(L1_CROW_MP3_NAMES[Math.floor(Math.random() * 2)], { volume: L1_CROW_MP3_VOLUME })
+    k.play(L1_CROW_MP3_NAMES[0], { volume: L1_CROW_MP3_VOLUME })
     state.mouthOpen = true
     state.mouthTimer = L1_CROW_MOUTH_OPEN_DURATION
     state.timer = L1_CROW_MP3_INTERVAL_MIN + Math.random() * (L1_CROW_MP3_INTERVAL_MAX - L1_CROW_MP3_INTERVAL_MIN)
@@ -3386,9 +3385,9 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst) {
   const sc = 1.35
   const cx = rock.worldX
   //
-  // Ground-level perch: body center placed so feet touch the ground.
+  // Ground-level perch: body center placed so feet (legBot = perchY + 15*sc) align with FLOOR_Y.
   //
-  const perchY = rock.worldY - rock.radius * 0.62 - 9 * sc
+  const perchY = rock.worldY - rock.radius * 0.62 - 15 * sc
   k.add([
     k.z(L1_CROW_ROCK_DRAW_Z),
     {

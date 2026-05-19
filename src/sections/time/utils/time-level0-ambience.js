@@ -57,10 +57,15 @@ const LAMP_GLOW_R3 = 4
 //
 // Crow perched on first lamp shade: MP3 sound keys and call timing
 //
-const CROW_SOUND_NAMES = ['t0-crow-0', 't0-crow-1']
+const CROW_SOUND_NAMES = ['t0-crow-0']
 const CROW_CALL_INTERVAL_MIN = 5.0
 const CROW_CALL_INTERVAL_MAX = 14.0
 const CROW_MOUTH_OPEN_DURATION = 0.55
+//
+// Small delay between sound start and visible mouth-open so they sync visually.
+// The MP3 has a brief attack envelope — mouth opens slightly after audio onset.
+//
+const CROW_MOUTH_OPEN_DELAY = 0.13
 const CROW_DRAW_Z = 19.5
 //
 // Crow scale (matches touch level1 crow)
@@ -225,7 +230,6 @@ export function create(cfg) {
   // Each level can pass a different index so the crow sits on a unique lamppost.
   //
   cfg.k.loadSound(CROW_SOUND_NAMES[0], '/assets/sounds/crow0.mp3')
-  cfg.k.loadSound(CROW_SOUND_NAMES[1], '/assets/sounds/crow1.mp3')
   //
   // crowLampIndex defaults to 0; clamp to valid range in case a level over-specifies.
   //
@@ -248,6 +252,8 @@ export function create(cfg) {
     perchY: crowArcTopY - 18 * CROW_SCALE,
     mouthOpen: false,
     mouthTimer: 0,
+    mouthOpenPending: false,
+    mouthOpenDelay: 0,
     callTimer: CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN),
     soundIdx: 0
   }
@@ -764,19 +770,36 @@ function onUpdateCrow(inst, dt) {
   const crow = inst.crow
   if (!crow) return
   crow.callTimer -= dt
+  //
+  // Close mouth when timer expires
+  //
   if (crow.mouthOpen) {
     crow.mouthTimer -= dt
     if (crow.mouthTimer <= 0) {
       crow.mouthOpen = false
     }
   }
+  //
+  // Delayed mouth open: sound plays immediately, mouth opens after CROW_MOUTH_OPEN_DELAY
+  //
+  if (crow.mouthOpenPending) {
+    crow.mouthOpenDelay -= dt
+    if (crow.mouthOpenDelay <= 0) {
+      crow.mouthOpen = true
+      crow.mouthTimer = CROW_MOUTH_OPEN_DURATION
+      crow.mouthOpenPending = false
+    }
+  }
   if (crow.callTimer <= 0) {
-    crow.mouthOpen = true
-    crow.mouthTimer = CROW_MOUTH_OPEN_DURATION
     crow.callTimer = CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN)
     const soundName = CROW_SOUND_NAMES[crow.soundIdx % CROW_SOUND_NAMES.length]
     crow.soundIdx++
     try { inst.k.play(soundName, { volume: 0.38 }) } catch {}
+    //
+    // Schedule mouth open slightly after sound onset for visual sync
+    //
+    crow.mouthOpenPending = true
+    crow.mouthOpenDelay = CROW_MOUTH_OPEN_DELAY
   }
 }
 //

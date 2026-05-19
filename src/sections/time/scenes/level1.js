@@ -207,7 +207,7 @@ export function sceneLevel1(k) {
         //
         // Wait before transition (extra 1s if speed bonus earned for particle effect)
         //
-        const transitionDelay = speedBonusEarned ? 2.3 : 1.3
+        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.1')
         })
@@ -250,7 +250,8 @@ export function sceneLevel1(k) {
       platformSideWidth: PLATFORM_SIDE_WIDTH,
       platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
-      crowLampIndex: 2
+      heroInst: hero,
+      crowLampIndex: 3
     })
     k.onSceneLeave(() => level1Ambience.cleanup())
     //

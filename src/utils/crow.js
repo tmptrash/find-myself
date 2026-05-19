@@ -223,23 +223,14 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst) {
     })
   } else {
     //
-    // Closed beak: single sharp elongated triangle (upper mandible),
-    // with a thin lower mandible tightly beneath it.
+    // Closed beak: only the upper mandible drawn as a single solid hooked shape.
+    // No lower mandible — avoids any visible gap that would look like an open mouth.
     //
     k.drawTriangle({
       p1: k.vec2(beakBaseX, beakBaseY - 1.5 * sc),
       p2: k.vec2(beakBaseX + 20 * sc * s, beakBaseY - 3 * sc),
       p3: k.vec2(beakBaseX + 2 * sc * s, beakBaseY + 1.5 * sc),
       color: bkU, opacity: 1
-    })
-    //
-    // Lower mandible — thin sliver, barely visible when closed
-    //
-    k.drawTriangle({
-      p1: k.vec2(beakBaseX + 1 * sc * s, beakBaseY + 1.5 * sc),
-      p2: k.vec2(beakBaseX + 17 * sc * s, beakBaseY - 0.5 * sc),
-      p3: k.vec2(beakBaseX + 2 * sc * s, beakBaseY + 3.5 * sc),
-      color: bkL, opacity: 1
     })
   }
   //

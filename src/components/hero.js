@@ -4,10 +4,10 @@ import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
 //
-// Sprite rendering: native 96x96 via pixelRatio 3 on a 32x32 logical canvas
+// Sprite rendering: 96x96 at scale 1 for crisp 1px outlines
 //
-const SPRITE_SIZE = 32
-const RENDER_SCALE = 3
+const SPRITE_SIZE = 96
+const RENDER_SCALE = 1
 //
 // Collision box parameters (in 96x96 local sprite space)
 //
@@ -36,6 +36,7 @@ const ANTIHERO_TAG = 'annihilation'
 //
 // Landing dust particles
 //
+
 const DUST_PARTICLE_COUNT = 6
 const DUST_PARTICLE_SIZE = 6
 const DUST_PARTICLE_SPEED = 80
@@ -59,17 +60,33 @@ const FOOTPRINT_Z = 9
 const DEATH_ANIMATION_DURATION = 0.4
 const DEATH_PARTICLE_POINTS = 20
 //
-// Corner radii for rounded body parts (in sprite pixels)
+// Corner radii for rounded body parts — tuned for smooth cartoon look at 96px
 //
-const HEAD_CORNER_RADIUS = 3
-const BODY_CORNER_RADIUS = 2
-const ARM_CORNER_RADIUS = 1
-const LEG_CORNER_RADIUS = 1
+const HEAD_CORNER_RADIUS = 12
+const ARM_CORNER_RADIUS = 4
+const LEG_CORNER_RADIUS = 4
 //
-// Shoulder arc starts this many pixels above head bottom
-// for a smoother, earlier curve
+// Character width (head + body have same width, no shoulder bulge in new design)
 //
-const SHOULDER_RISE = 3
+const CHAR_WIDTH = 30
+//
+// Arm dimensions: each arm is exactly half of a full leg pill, cut vertically.
+// ARM_HALF_W is the fill half-width (half of leg fill width 9, rounded up).
+// ARM_H equals the default leg height so proportions match perfectly.
+//
+const ARM_HALF_W = 5
+const ARM_H = 28
+//
+// Eye geometry constants (all in 96px sprite coordinates)
+//
+const EYE_RING_RADIUS = 5
+const EYE_WHITE_RADIUS = 4
+const PUPIL_RADIUS = 2
+const EYE_OFFSET_X_LEFT = 9
+const EYE_OFFSET_X_RIGHT = 21
+const EYE_OFFSET_Y = 9
+const EYE_PUPIL_SHIFT = 2
+const PUPIL_SIDE_SHIFT = 2
 
 export const HEROES = {
   HERO: 'hero',
@@ -2082,21 +2099,21 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   //
   // Base parameters for different animations
   //
-  let headY = 6
-  let bodyY = 14
-  let headX = 12
-  let bodyX = 10
-  let bodyHeight = 8   // Body height (for stretching/squashing)
-  let headHeight = 8   // Head height
-  let leftArmY = 15
-  let rightArmY = 15
-  let leftLegY = 22
-  let rightLegY = 22
-  let leftArmX = 9
-  let rightArmX = 21
-  let leftLegX = 12
-  let rightLegX = 17
-  let legHeight = 6    // Leg height (for stretching/squashing)
+  let headY = 18
+  let bodyY = 42
+  let headX = 33
+  let bodyX = 33
+  let bodyHeight = 24
+  let headHeight = 24
+  let leftArmY = 40
+  let rightArmY = 40
+  let leftLegY = 66
+  let rightLegY = 66
+  let leftArmX = 25
+  let rightArmX = 65
+  let leftLegX = 33
+  let rightLegX = 54
+  let legHeight = 18
   let leftLegHeight = legHeight
   let rightLegHeight = legHeight
   //
@@ -2110,24 +2127,24 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       // Contact: left foot forward on ground, right foot back and lifted
       //
-      leftLegX = 10
-      rightLegX = 18
-      rightLegY = 21
-      rightLegHeight = 4
+      leftLegX = 33
+      rightLegX = 54
+      rightLegY = 63
+      rightLegHeight = 12
     } else if (frame === 1) {
       //
       // Drive: right foot lands, left foot lifts
       //
-      leftLegX = 11
-      rightLegX = 17
-      leftLegY = 21
-      leftLegHeight = 4
+      leftLegX = 33
+      rightLegX = 51
+      leftLegY = 63
+      leftLegHeight = 12
     } else if (frame === 2) {
       //
       // Pass: both legs close together at ground level
       //
-      leftLegX = 14
-      rightLegX = 14
+      leftLegX = 42
+      rightLegX = 42
     }
   }
   //
@@ -2140,119 +2157,113 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       // Everything pushed down, legs also SHORT
       //
-      headY = 15  // Very low (idle is 6, difference = 9)
-      headHeight = 5  // Shorter head
-      bodyY = 20  // headY + headHeight = 15 + 5
-      bodyHeight = 4  // Very short body
-      leftArmY = 21
-      rightArmY = 21
+      headY = 45
+      headHeight = 15
+      bodyY = 60
+      bodyHeight = 12
+      leftArmY = 63
+      rightArmY = 63
       //
       // Legs SHORT and wide
       //
-      rightLegY = 24  // bodyY + bodyHeight = 20 + 4
-      rightLegX = 18
-      leftLegY = 24
-      leftLegX = 11
-      legHeight = 4  // Short legs! Bottom: 24+4=28 (same as idle)
+      rightLegY = 72
+      rightLegX = 54
+      leftLegY = 72
+      leftLegX = 33
+      legHeight = 12
     } else if (frame === 1) {
       //
       // Frame 1: Stretch (ascending, in air) - hero elongated UP
       //
-      // Legs spread wider like frame 0
-      //
-      headY = 3  // Very high
-      headHeight = 8
-      bodyY = 11  // headY + headHeight = 3 + 8
-      bodyHeight = 12  // Very tall body
-      leftArmY = 13
-      rightArmY = 13
+      headY = 9
+      headHeight = 24
+      bodyY = 33
+      bodyHeight = 36
+      leftArmY = 39
+      rightArmY = 39
       //
       // Legs spread wider with gap between them
       //
-      rightLegY = 23  // bodyY + bodyHeight = 11 + 12
-      rightLegX = 18  // Wide spread (same as frame 0)
-      leftLegY = 23
-      leftLegX = 11   // Wide spread (same as frame 0)
-      legHeight = 5
+      rightLegY = 69
+      rightLegX = 54
+      leftLegY = 69
+      leftLegX = 33
+      legHeight = 15
     } else if (frame === 2) {
       //
       // Frame 2: Normal (near peak) - regular proportions moved to TOP
       //
-      headY = 2   // Very top
-      headHeight = 8
-      bodyY = 10  // headY + headHeight = 2 + 8
-      bodyHeight = 8
-      leftArmY = 11
-      rightArmY = 11
+      headY = 6
+      headHeight = 24
+      bodyY = 30
+      bodyHeight = 24
+      leftArmY = 33
+      rightArmY = 33
       //
       // Regular legs
       //
-      rightLegY = 18  // bodyY + bodyHeight = 10 + 8
-      rightLegX = 18
-      leftLegY = 18
-      leftLegX = 10
-      legHeight = 6  // Bottom: 18+6=24 (high in frame)
+      rightLegY = 54
+      rightLegX = 54
+      leftLegY = 54
+      leftLegX = 33
+      legHeight = 18
     } else if (frame === 3) {
       //
       // Frame 3: Intermediate (transitioning to squash) - between normal and squash
       //
-      // At very top of frame, slightly taller than before
-      //
-      headY = 2   // Very top
-      headHeight = 7  // Between normal (8) and squash (6)
-      bodyY = 9  // headY + headHeight = 2 + 7
-      bodyHeight = 7  // Taller body (was 6) - +1px
-      leftArmY = 10
-      rightArmY = 10
+      headY = 6
+      headHeight = 21
+      bodyY = 27
+      bodyHeight = 21
+      leftArmY = 30
+      rightArmY = 30
       //
       // Legs slightly taller
       //
-      rightLegY = 16  // bodyY + bodyHeight = 9 + 7
-      rightLegX = 19
-      leftLegY = 16
-      leftLegX = 10
-      legHeight = 6  // Taller legs (was 5) - +1px. Bottom: 16+6=22 (was 20)
+      rightLegY = 48
+      rightLegX = 54
+      leftLegY = 48
+      leftLegX = 33
+      legHeight = 18
     } else if (frame === 4) {
       //
       // Frame 4: Squash (descending, in air) - hero compressed DOWN
       //
-      // Top stays at very top, but body is slightly taller for smoother transition
-      //
-      headY = 2   // Very top (same as before)
-      headHeight = 6  // Slightly taller head (was 5)
-      bodyY = 8  // headY + headHeight = 2 + 6
-      bodyHeight = 5  // Slightly taller body (was 4)
-      leftArmY = 9
-      rightArmY = 9
+      headY = 6
+      headHeight = 18
+      bodyY = 24
+      bodyHeight = 15
+      leftArmY = 27
+      rightArmY = 27
       //
       // Legs SHORT and spread wider
       //
-      rightLegY = 13  // bodyY + bodyHeight = 8 + 5
-      rightLegX = 19
-      leftLegY = 13
-      leftLegX = 10
-      legHeight = 5  // Slightly taller legs (was 4) - Bottom: 13+5=18
+      rightLegY = 39
+      rightLegX = 54
+      leftLegY = 39
+      leftLegX = 33
+      legHeight = 15
     } else if (frame === 5) {
       //
       // Frame 5: Normal (landing/idle) - regular proportions
       //
-      headY = 6
-      headHeight = 8
-      bodyY = 14  // headY + headHeight = 6 + 8
-      bodyHeight = 8
-      leftArmY = 15
-      rightArmY = 15
+      headY = 18
+      headHeight = 24
+      bodyY = 42
+      bodyHeight = 24
+      leftArmY = 45
+      rightArmY = 45
       //
       // Regular legs
       //
-      rightLegY = 22  // bodyY + bodyHeight = 14 + 8
-      rightLegX = 17
-      leftLegY = 22
-      leftLegX = 12
-      legHeight = 6  // Bottom: 22+6=28 (same as idle)
+      rightLegY = 66
+      rightLegX = 51
+      leftLegY = 66
+      leftLegX = 36
+      legHeight = 18
     }
-    leftArmX = 9
-    rightArmX = 21
+    leftArmX = 25
+    rightArmX = 65
     //
     // Sync per-leg heights with the shared legHeight for jump frames
     //
@@ -2265,129 +2276,128 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   try {
     return toCanvas({ width: SPRITE_SIZE, height: SPRITE_SIZE, pixelRatio: RENDER_SCALE }, (ctx) => {
       ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+      const OL = getHex(outlineColor)
+      const BL = getHex(bodyColor)
       //
-      // Black outline (1px) — filled rounded rect, then body on top
+      // Arms are drawn only in idle mode (hidden during run and jump).
+      // Fully rounded (pill) shape — shoulder top mirrors the arm bottom curvature.
       //
-      ctx.fillStyle = getHex(outlineColor)
+      const showArms = addArms && animation !== 'run' && animation !== 'jump'
       //
-      // Head outline (rounded, 1px border around 8x8 inner)
+      // Step 1: draw all outlines in outline color (fill-based, sharp edges)
       //
-      fillRoundedRect(ctx, headX - 1, headY - 1, 10, 10, HEAD_CORNER_RADIUS)
+      ctx.fillStyle = OL
       //
-      // Body outline with shoulder arcs: smooth curve from head edge down to body side
+      // Arm outlines: each arm is half a leg pill (cut vertically). The flat side
+      // is flush against the body outline so the arm emerges seamlessly from the torso.
+      // Left arm: flat right side against body left, rounded outer-left edge.
+      // Right arm: flat left side against body right, rounded outer-right edge.
       //
-      drawBodyOutline(ctx, headX, headY, bodyX, bodyY, bodyHeight)
-      //
-      // Fill the neck area between body top and shoulder start at head width
-      //
-      const shoulderStart = headY + 9 - SHOULDER_RISE
-      const neckHeight = shoulderStart - (bodyY - 1)
-      if (neckHeight > 0) ctx.fillRect(headX - 1, bodyY - 1, 10, neckHeight)
-      //
-      // Arm outlines (rounded) — don't draw while running and jumping
-      //
-      if (animation !== 'run' && animation !== 'jump') {
-        fillRoundedRect(ctx, leftArmX - 1, leftArmY - 1, 4, 9, ARM_CORNER_RADIUS)
-        fillRoundedRect(ctx, rightArmX - 1, rightArmY - 1, 4, 9, ARM_CORNER_RADIUS)
+      if (showArms) {
+        fillHalfPillLeft(ctx, headX - 1 - ARM_HALF_W, leftArmY - 1, ARM_HALF_W + 1, ARM_H + 2, ARM_CORNER_RADIUS + 1)
+        fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY - 1, ARM_HALF_W + 1, ARM_H + 2, ARM_CORNER_RADIUS + 1)
       }
       //
-      // Leg outlines (rounded)
+      // Leg outlines: flat top so they merge seamlessly into body outline bottom
       //
-      fillRoundedRect(ctx, leftLegX - 1, leftLegY - 1, 5, leftLegHeight + 2, LEG_CORNER_RADIUS)
-      fillRoundedRect(ctx, rightLegX - 1, rightLegY - 1, 5, rightLegHeight + 2, LEG_CORNER_RADIUS)
+      fillRoundedRectBottom(ctx, leftLegX - 1, leftLegY - 1, 11, leftLegHeight + 2, LEG_CORNER_RADIUS + 1)
+      fillRoundedRectBottom(ctx, rightLegX - 1, rightLegY - 1, 11, rightLegHeight + 2, LEG_CORNER_RADIUS + 1)
       //
-      // Run/jump: extend body outline bottom to merge seamlessly with legs
+      // Body outline: always a clean straight-sided rect (same in both arms and no-arms mode).
+      // Arms are drawn separately beside it; there are no shoulder bezier curves.
       //
-      if (animation === 'run' || animation === 'jump') {
-        ctx.fillRect(bodyX - 1, bodyY + bodyHeight - 1, 14, 2)
-      }
+      fillRoundedRectTop(ctx, headX - 1, headY - 1, CHAR_WIDTH + 2, headHeight + bodyHeight + 2, HEAD_CORNER_RADIUS + 1)
       //
-      // Head fill (rounded) — skip for outline-only mode
+      // Step 2: draw body color fills on top of outlines
       //
       if (!outlineOnly) {
-        ctx.fillStyle = getHex(bodyColor)
-        fillRoundedRect(ctx, headX, headY, 8, 8, HEAD_CORNER_RADIUS - 1)
+        ctx.fillStyle = BL
         //
-        // Fill head bottom corner gaps to prevent stray outline dots under eyes
+        // Arm fills: half-pill bodies, flat side overlapping body so arm merges seamlessly
         //
-        ctx.fillRect(headX, headY + 6, 8, 2)
+        if (showArms) {
+          fillHalfPillLeft(ctx, headX - ARM_HALF_W, leftArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
+          fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
+        }
+        //
+        // Body fill: clean straight rect, identical in both arms and no-arms mode
+        //
+        fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, headHeight + bodyHeight + 1, HEAD_CORNER_RADIUS)
+        //
+        // Leg fills: flat top so they merge seamlessly into body fill bottom
+        //
+        fillRoundedRectBottom(ctx, leftLegX, leftLegY, 9, leftLegHeight, LEG_CORNER_RADIUS)
+        fillRoundedRectBottom(ctx, rightLegX, rightLegY, 9, rightLegHeight, LEG_CORNER_RADIUS)
       }
       //
-      // Eyes — for run and jump draw only ONE eye (side view)
+      // Step 3: circular eyes (drawn on head fill)
       //
-      ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
+      const eyeY = headY + EYE_OFFSET_Y
+      ctx.fillStyle = OL
       if (animation === 'run' || animation === 'jump') {
-        ctx.fillRect(headX + 6, headY + 2, 3, 3)
+        ctx.beginPath()
+        ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
       } else {
-        ctx.fillRect(headX + 1, headY + 2, 3, 3)
-        ctx.fillRect(headX + 6, headY + 2, 3, 3)
+        ctx.beginPath()
+        ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      //
+      // Eye whites (filled inside the ring)
+      //
+      if (!outlineOnly) {
+        ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
+        if (animation === 'run' || animation === 'jump') {
+          ctx.beginPath()
+          ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+        } else {
+          ctx.beginPath()
+          ctx.arc(headX + EYE_OFFSET_X_LEFT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.beginPath()
+          ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
       //
       // Pupils
       //
-      ctx.fillStyle = getHex(outlineColor)
+      ctx.fillStyle = OL
       if (animation === 'run' || animation === 'jump') {
-        ctx.fillRect(headX + 7, headY + 3, 1, 1)
+        ctx.beginPath()
+        ctx.arc(headX + EYE_OFFSET_X_RIGHT + PUPIL_SIDE_SHIFT, eyeY, PUPIL_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
       } else {
-        ctx.fillRect(headX + 2 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
-        ctx.fillRect(headX + 7 + eyeOffsetX, headY + 3 + eyeOffsetY, 1, 1)
+        ctx.beginPath()
+        ctx.arc(headX + EYE_OFFSET_X_LEFT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(headX + EYE_OFFSET_X_RIGHT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+        ctx.fill()
       }
       //
-      // Mouth (optional, only for idle animation)
+      // Mouth (optional, only for idle — small smile arc)
       //
       if (addMouth && animation === 'idle') {
-        ctx.fillStyle = getHex(outlineColor)
-        ctx.fillRect(headX + 2, headY + 7, 4, 1)
+        ctx.strokeStyle = OL
+        ctx.lineWidth = 2
+        ctx.lineCap = 'round'
+        ctx.beginPath()
+        ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI)
+        ctx.stroke()
       }
       //
-      // Body, arms, legs fill — skip for outline-only mode
-      //
-      if (!outlineOnly) {
-        ctx.fillStyle = getHex(bodyColor)
-        drawBodyFill(ctx, headX, headY, bodyX, bodyY, bodyHeight)
-        //
-        // Fill the neck area between body top and shoulder start at head fill width
-        //
-        const shoulderStartFill = headY + 9 - SHOULDER_RISE
-        const neckFillH = shoulderStartFill - bodyY
-        if (neckFillH > 0) ctx.fillRect(headX, bodyY, 8, neckFillH)
-        //
-        // Arms (rounded) — don't draw while running and jumping
-        //
-        if (animation !== 'run' && animation !== 'jump') {
-          fillRoundedRect(ctx, leftArmX, leftArmY, 2, 7, ARM_CORNER_RADIUS)
-          fillRoundedRect(ctx, rightArmX, rightArmY, 2, 7, ARM_CORNER_RADIUS)
-        }
-        //
-        // Run/jump: extend body fill bottom to merge seamlessly with legs
-        //
-        if (animation === 'run' || animation === 'jump') {
-          ctx.fillRect(bodyX, bodyY + bodyHeight - 1, 12, 1)
-        }
-        //
-        // Legs (rounded)
-        //
-        fillRoundedRect(ctx, leftLegX, leftLegY, 3, leftLegHeight, LEG_CORNER_RADIUS)
-        fillRoundedRect(ctx, rightLegX, rightLegY, 3, rightLegHeight, LEG_CORNER_RADIUS)
-      }
-      //
-      // Custom arms (optional, only in idle — hidden during run/jump like body arms)
-      //
-      if (addArms && animation === 'idle') {
-        ctx.fillStyle = getHex(outlineColor)
-        const armStartY = bodyY + 4
-        const armLength = 6
-        const armWidth = 1
-        ctx.fillRect(leftLegX - armWidth, armStartY, armWidth, armLength)
-        ctx.fillRect(rightLegX + 3, armStartY, armWidth, armLength)
-      }
-      //
-      // Watch on right wrist — drawn at body arm position, not custom arm
+      // Watch on right wrist — drawn at body arm position
       //
       if (addWatch && animation === 'idle') {
-        const watchY = rightArmY + 5
+        const watchY = rightArmY + ARM_H - 8
         ctx.fillStyle = '#FFFFFF'
-        ctx.fillRect(rightArmX + 1, watchY, 1, 1)
+        ctx.fillRect(headX + CHAR_WIDTH + 1, watchY, 3, 3)
       }
     })
   } catch (error) {
@@ -2918,69 +2928,88 @@ function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, parti
   ])
 }
 //
-// Draws a filled rectangle with rounded corners using Canvas arc API
+// Draws a filled rectangle with only the two bottom corners rounded.
+// Flat top connects seamlessly to the flat bottom of body outline/fill,
+// eliminating the body-to-leg gap visible in all animation frames.
+// Caller sets ctx.fillStyle before calling.
+//
+function fillRoundedRectBottom(ctx, x, y, w, h, r) {
+  const cr = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(x + w, y)
+  ctx.lineTo(x + w, y + h - cr)
+  ctx.arcTo(x + w, y + h, x, y + h, cr)
+  ctx.lineTo(x + cr, y + h)
+  ctx.arcTo(x, y + h, x, y, cr)
+  ctx.lineTo(x, y)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Draws a filled rectangle with only the two top corners rounded.
+// Bottom corners are flat so the shape connects to legs without narrowing.
+// Caller sets ctx.fillStyle before calling.
+//
+function fillRoundedRectTop(ctx, x, y, w, h, r) {
+  const cr = Math.min(r, w / 2, h)
+  ctx.beginPath()
+  ctx.moveTo(x + cr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, cr)
+  ctx.lineTo(x + w, y + h)
+  ctx.lineTo(x, y + h)
+  ctx.arcTo(x, y, x + w, y, cr)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Draws the left half of a vertical pill: flat right side, rounded left/top/bottom.
+// Used for the left arm — flat side is placed flush against the body left outline so
+// the arm merges into the torso without any visible gap or separator.
+// Caller sets ctx.fillStyle before calling.
+//
+function fillHalfPillLeft(ctx, x, y, w, h, r) {
+  const cr = Math.min(r, w, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + w, y)
+  ctx.lineTo(x + w, y + h)
+  ctx.lineTo(x + cr, y + h)
+  ctx.arcTo(x, y + h, x, y, cr)
+  ctx.lineTo(x, y + cr)
+  ctx.arcTo(x, y, x + w, y, cr)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Draws the right half of a vertical pill: flat left side, rounded right/top/bottom.
+// Used for the right arm — flat side is placed flush against the body right outline so
+// the arm merges into the torso without any visible gap or separator.
+// Caller sets ctx.fillStyle before calling.
+//
+function fillHalfPillRight(ctx, x, y, w, h, r) {
+  const cr = Math.min(r, w, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(x + w - cr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, cr)
+  ctx.lineTo(x + w, y + h - cr)
+  ctx.arcTo(x + w, y + h, x, y + h, cr)
+  ctx.lineTo(x, y + h)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Draws a filled rounded rectangle using arcTo for smooth corners.
+// Caller sets ctx.fillStyle before calling.
 //
 function fillRoundedRect(ctx, x, y, w, h, r) {
-  const clampedR = Math.min(r, w / 2, h / 2)
+  const cr = Math.min(r, w / 2, h / 2)
   ctx.beginPath()
-  ctx.moveTo(x + clampedR, y)
-  ctx.arcTo(x + w, y, x + w, y + h, clampedR)
-  ctx.arcTo(x + w, y + h, x, y + h, clampedR)
-  ctx.arcTo(x, y + h, x, y, clampedR)
-  ctx.arcTo(x, y, x + w, y, clampedR)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Body outline with smooth shoulder arcs.
-// The path starts at the head left edge, curves down to the body left side,
-// continues down, across the bottom, up the right side, and arcs back to
-// the head right edge. The shoulder depth equals the head-to-body width gap.
-//
-function drawBodyOutline(ctx, headX, headY, bodyX, bodyY, bodyHeight) {
-  const leftHeadEdge = headX - 1
-  const rightHeadEdge = headX + 9
-  const leftBodyEdge = bodyX - 1
-  const rightBodyEdge = bodyX + 13
-  const shoulderR = leftHeadEdge - leftBodyEdge
-  //
-  // Shoulder starts SHOULDER_RISE pixels above the head bottom. The first
-  // control point stays near the head edge but lower, pulling the curve
-  // down-and-outward (not perpendicular). The second control point sits
-  // below the midpoint to create a gradual S-curve into the body side.
-  //
-  const shoulderTop = headY + 9 - SHOULDER_RISE
-  const shoulderBottom = shoulderTop + shoulderR * 2.2
-  const bottom = bodyY + bodyHeight + 1
-  ctx.beginPath()
-  ctx.moveTo(leftHeadEdge, shoulderTop)
-  ctx.bezierCurveTo(leftHeadEdge - 1, shoulderTop + shoulderR * 1.2, leftBodyEdge, shoulderTop + shoulderR * 0.8, leftBodyEdge, shoulderBottom)
-  ctx.lineTo(leftBodyEdge, bottom)
-  ctx.lineTo(rightBodyEdge, bottom)
-  ctx.lineTo(rightBodyEdge, shoulderBottom)
-  ctx.bezierCurveTo(rightBodyEdge, shoulderTop + shoulderR * 0.8, rightHeadEdge + 1, shoulderTop + shoulderR * 1.2, rightHeadEdge, shoulderTop)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Body fill (inset 1px from outline) with matching cubic bezier shoulder curves.
-//
-function drawBodyFill(ctx, headX, headY, bodyX, bodyY, bodyHeight) {
-  const leftHeadEdge = headX
-  const rightHeadEdge = headX + 8
-  const leftBodyEdge = bodyX
-  const rightBodyEdge = bodyX + 12
-  const shoulderR = leftHeadEdge - leftBodyEdge
-  const shoulderTop = headY + 9 - SHOULDER_RISE
-  const shoulderBottom = shoulderTop + shoulderR * 2.2
-  const bottom = bodyY + bodyHeight
-  ctx.beginPath()
-  ctx.moveTo(leftHeadEdge, shoulderTop)
-  ctx.bezierCurveTo(leftHeadEdge - 1, shoulderTop + shoulderR * 1.2, leftBodyEdge, shoulderTop + shoulderR * 0.8, leftBodyEdge, shoulderBottom)
-  ctx.lineTo(leftBodyEdge, bottom)
-  ctx.lineTo(rightBodyEdge, bottom)
-  ctx.lineTo(rightBodyEdge, shoulderBottom)
-  ctx.bezierCurveTo(rightBodyEdge, shoulderTop + shoulderR * 0.8, rightHeadEdge + 1, shoulderTop + shoulderR * 1.2, rightHeadEdge, shoulderTop)
+  ctx.moveTo(x + cr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, cr)
+  ctx.arcTo(x + w, y + h, x, y + h, cr)
+  ctx.arcTo(x, y + h, x, y, cr)
+  ctx.arcTo(x, y, x + w, y, cr)
   ctx.closePath()
   ctx.fill()
 }

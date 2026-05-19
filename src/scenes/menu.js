@@ -56,14 +56,23 @@ const MENU_AUDIO = {
 // Prohibited sign visual style (drawn on locked anti-heroes when hovered).
 // Ring + slash drawn in a dark crimson, pulsing gently.
 //
-const PROHIBITED_RING_RADIUS = 52
+const PROHIBITED_RING_RADIUS = 40
 const PROHIBITED_RING_SEGMENTS = 36
 const PROHIBITED_RING_WIDTH = 5
 const PROHIBITED_SLASH_WIDTH = 7
 const PROHIBITED_PULSE_SPEED = 2.8
 const PROHIBITED_COLOR = '#B82C2C'
-const PROHIBITED_BG_OPACITY = 0.10
-const PROHIBITED_SIGN_OPACITY = 0.88
+const PROHIBITED_SIGN_OPACITY = 1.0
+//
+// Green checkmark displayed on completed anti-heroes when hovered
+//
+const CHECKMARK_COLOR_R = 90
+const CHECKMARK_COLOR_G = 210
+const CHECKMARK_COLOR_B = 100
+const CHECKMARK_SIZE = 28
+const CHECKMARK_WIDTH = 6
+const CHECKMARK_OPACITY = 1.0
+const CHECKMARK_PULSE_SPEED = 1.8
 function getSectionDisplayName(section) {
   //
   // Return section name as-is (singular form)
@@ -906,7 +915,18 @@ export function sceneMenu(k) {
     // Background layer with animation
     //
     k.onDraw(() => drawScene(inst))
-    
+    //
+    // High-z layer: draws the prohibited slash in front of all hero/anti-hero sprites
+    //
+    k.add([
+      k.z(CFG.visual.zIndex.player + 1),
+      {
+        draw() {
+          drawProhibitedSlashFront(k, inst)
+          drawCompletedCheckmarkFront(k, inst)
+        }
+      }
+    ])
     //
     // Check if there's a saved game
     //
@@ -1814,19 +1834,10 @@ function drawProhibitedSign(k, cx, cy) {
   const t = k.time()
   const pulse = 0.85 + 0.10 * Math.sin(t * PROHIBITED_PULSE_SPEED)
   const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
-  const parsed = parseHex(PROHIBITED_COLOR)
-  const color = k.rgb(parsed.r, parsed.g, parsed.b)
+  const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
+  const color = k.rgb(pr, pg, pb)
   //
-  // Soft inner tint (reinforces the "no entry" feel)
-  //
-  k.drawCircle({
-    pos: k.vec2(cx, cy),
-    radius: r,
-    color,
-    opacity: PROHIBITED_BG_OPACITY * pulse
-  })
-  //
-  // Ring outline drawn as arc line segments
+  // Red ring outline drawn as arc segments — circle is empty inside (no fill)
   //
   for (let i = 0; i < PROHIBITED_RING_SEGMENTS; i++) {
     const a1 = (i / PROHIBITED_RING_SEGMENTS) * Math.PI * 2
@@ -1836,27 +1847,63 @@ function drawProhibitedSign(k, cx, cy) {
       p2: k.vec2(cx + Math.cos(a2) * r, cy + Math.sin(a2) * r),
       width: PROHIBITED_RING_WIDTH,
       color,
-      opacity: PROHIBITED_SIGN_OPACITY * pulse
+      opacity: PROHIBITED_SIGN_OPACITY
     })
   }
-  //
-  // Diagonal slash (upper-left to lower-right, ⊘ style)
-  //
+}
+//
+// Draws only the diagonal slash (⊘ prohibition style) — called at high z-index so the
+// slash appears in front of the anti-hero sprite.
+//
+function drawProhibitedSlashFront(k, inst) {
+  const { hoveredAntiHero, progress, currentSection } = inst
+  if (!hoveredAntiHero || !isAntiHeroLocked(hoveredAntiHero, progress, currentSection)) return
+  const cx = hoveredAntiHero.character.pos.x
+  const cy = hoveredAntiHero.character.pos.y
+  const t = k.time()
+  const pulse = 0.85 + 0.10 * Math.sin(t * PROHIBITED_PULSE_SPEED)
+  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
+  const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
+  const color = k.rgb(pr, pg, pb)
   const slashR = r * 0.72
   k.drawLine({
     p1: k.vec2(cx - slashR, cy - slashR),
     p2: k.vec2(cx + slashR, cy + slashR),
     width: PROHIBITED_SLASH_WIDTH,
     color,
-    opacity: PROHIBITED_SIGN_OPACITY * pulse
+    opacity: PROHIBITED_SIGN_OPACITY
   })
+}
+//
+// Draws a green checkmark on completed anti-heroes when hovered — rendered at
+// high z-index so it appears in front of the anti-hero sprite.
+//
+function drawCompletedCheckmarkFront(k, inst) {
+  const { hoveredAntiHero } = inst
+  if (!hoveredAntiHero || !hoveredAntiHero.isCompleted) return
+  const cx = hoveredAntiHero.character.pos.x
+  const cy = hoveredAntiHero.character.pos.y
+  const t = k.time()
+  const pulse = 0.9 + 0.1 * Math.sin(t * CHECKMARK_PULSE_SPEED)
+  const s = CHECKMARK_SIZE * pulse
+  const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
+  const op = CHECKMARK_OPACITY
+  //
+  // Two lines forming a ✓: short down-right stroke, then long up-right stroke.
+  // A filled circle at the junction ensures no gap appears when the pulse animates.
+  //
+  const jx = cx - s * 0.1
+  const jy = cy + s * 0.45
+  k.drawLine({ p1: k.vec2(cx - s * 0.55, cy), p2: k.vec2(jx, jy), width: CHECKMARK_WIDTH, color, opacity: op })
+  k.drawLine({ p1: k.vec2(jx, jy), p2: k.vec2(cx + s * 0.65, cy - s * 0.45), width: CHECKMARK_WIDTH, color, opacity: op })
+  k.drawCircle({ pos: k.vec2(jx, jy), radius: CHECKMARK_WIDTH / 2, color, opacity: op })
 }
 //
 // Draw menu background with section-specific fade transitions
 //
 function drawMenuBackground(inst) {
   const { k, bgDefaultOpacity } = inst
-  const BG_OPACITY = 0.80
+  const BG_OPACITY = 0.35
   //
   // Draw default background with fade (hidden when hovering anti-hero)
   //

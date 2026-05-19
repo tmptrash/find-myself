@@ -336,7 +336,7 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
 }
 
 const L2_CROW_MP3_VOLUME = 0.65
-const L2_CROW_MP3_NAMES = ['l2-crow-0', 'l2-crow-1']
+const L2_CROW_MP3_NAMES = ['l2-crow-0']
 
 //
 // How long the crow's beak stays open after a caw
@@ -347,7 +347,6 @@ function startDistantWildlifeTimers(k, sound, crowAnimState) {
   // Pre-load mp3 crow samples once per scene load.
   //
   k.loadSound(L2_CROW_MP3_NAMES[0], '/assets/sounds/crow0.mp3')
-  k.loadSound(L2_CROW_MP3_NAMES[1], '/assets/sounds/crow1.mp3')
   let crowTimer = L2_CROW_INTERVAL_MIN + Math.random() * (L2_CROW_INTERVAL_MAX - L2_CROW_INTERVAL_MIN)
   let owlTimer = L2_OWL_INTERVAL_MIN + Math.random() * (L2_OWL_INTERVAL_MAX - L2_OWL_INTERVAL_MIN)
   const ev = k.onUpdate(() => {
@@ -367,7 +366,7 @@ function startDistantWildlifeTimers(k, sound, crowAnimState) {
       //
       // Play only mp3 crow recordings; skip the generated crow entirely.
       //
-      k.play(L2_CROW_MP3_NAMES[Math.floor(Math.random() * 2)], { volume: L2_CROW_MP3_VOLUME })
+      k.play(L2_CROW_MP3_NAMES[0], { volume: L2_CROW_MP3_VOLUME })
       //
       // Open crow's beak for the duration of the call
       //

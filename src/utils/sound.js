@@ -2604,76 +2604,68 @@ export function playMonsterStepSound(instance) {
   noise.stop(now + duration)
 }
 /**
- * Play clock disintegration sound (victory-like tone with scatter effect)
+ * Play clock destruction sound — ominous creak and splintering crack
  * @param {Object} instance - Sound instance
  */
 export function playClockDestroySound(instance) {
   const now = instance.audioContext.currentTime
-  const duration = 0.7
   //
-  // Create bright ascending tone (similar to victory)
+  // Slow sinister creak: sawtooth sweep downward through a bandpass resonator
   //
-  const mainTone = instance.audioContext.createOscillator()
-  const mainGain = instance.audioContext.createGain()
-  const filter = instance.audioContext.createBiquadFilter()
-  
-  mainTone.type = 'sine'
-  mainTone.frequency.setValueAtTime(440, now)
-  mainTone.frequency.exponentialRampToValueAtTime(554, now + 0.12)
-  mainTone.frequency.exponentialRampToValueAtTime(659, now + 0.25)
-  
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(3000, now)
-  filter.Q.value = 1
-  
-  mainGain.gain.setValueAtTime(0.001, now)
-  mainGain.gain.exponentialRampToValueAtTime(0.2, now + 0.03)
-  mainGain.gain.setValueAtTime(0.2, now + 0.4)
-  mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const creak = instance.audioContext.createOscillator()
+  const creakFilter = instance.audioContext.createBiquadFilter()
+  const creakGain = instance.audioContext.createGain()
+  creak.type = 'sawtooth'
+  creak.frequency.setValueAtTime(260, now)
+  creak.frequency.exponentialRampToValueAtTime(70, now + 0.65)
+  creakFilter.type = 'bandpass'
+  creakFilter.frequency.setValueAtTime(180, now)
+  creakFilter.Q.value = 9
+  creakGain.gain.setValueAtTime(0.001, now)
+  creakGain.gain.exponentialRampToValueAtTime(0.28, now + 0.06)
+  creakGain.gain.setValueAtTime(0.28, now + 0.35)
+  creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65)
+  creak.connect(creakFilter)
+  creakFilter.connect(creakGain)
+  creakGain.connect(instance.clockDestroyGain)
+  creak.start(now)
+  creak.stop(now + 0.65)
   //
-  // Add scatter effect with white noise burst
+  // Sharp crack / breaking wood: short noise burst through low-pass filter
   //
-  const bufferSize = instance.audioContext.sampleRate * 0.3
+  const bufferSize = Math.floor(instance.audioContext.sampleRate * 0.22)
   const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
-  const data = buffer.getChannelData(0)
-  //
-  // Create burst of noise for scatter effect
-  //
+  const crackData = buffer.getChannelData(0)
   for (let i = 0; i < bufferSize; i++) {
-    const progress = i / bufferSize
-    const envelope = Math.exp(-progress * 12)
-    data[i] = (Math.random() * 2 - 1) * envelope * 0.3
+    crackData[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufferSize) * 18)
   }
-  
-  const noise = instance.audioContext.createBufferSource()
-  noise.buffer = buffer
-  
-  const noiseFilter = instance.audioContext.createBiquadFilter()
-  noiseFilter.type = 'highpass'
-  noiseFilter.frequency.setValueAtTime(1200, now)
-  noiseFilter.Q.value = 1
-  
-  const noiseGain = instance.audioContext.createGain()
-  noiseGain.gain.setValueAtTime(0.15, now)
-  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3)
+  const crackSrc = instance.audioContext.createBufferSource()
+  crackSrc.buffer = buffer
+  const crackLp = instance.audioContext.createBiquadFilter()
+  crackLp.type = 'lowpass'
+  crackLp.frequency.setValueAtTime(700, now + 0.08)
+  const crackGain = instance.audioContext.createGain()
+  crackGain.gain.setValueAtTime(0.45, now + 0.08)
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32)
+  crackSrc.connect(crackLp)
+  crackLp.connect(crackGain)
+  crackGain.connect(instance.clockDestroyGain)
+  crackSrc.start(now + 0.08)
   //
-  // Connect chains
+  // Deep sub-bass thud: rumbling sine that fades into nothing
   //
-  mainTone.connect(filter)
-  filter.connect(mainGain)
-  mainGain.connect(instance.clockDestroyGain)
-  
-  noise.connect(noiseFilter)
-  noiseFilter.connect(noiseGain)
-  noiseGain.connect(instance.clockDestroyGain)
-  //
-  // Start sounds
-  //
-  mainTone.start(now)
-  mainTone.stop(now + duration)
-  
-  noise.start(now)
-  noise.stop(now + 0.3)
+  const thud = instance.audioContext.createOscillator()
+  const thudGain = instance.audioContext.createGain()
+  thud.type = 'sine'
+  thud.frequency.setValueAtTime(52, now + 0.1)
+  thud.frequency.exponentialRampToValueAtTime(28, now + 0.6)
+  thudGain.gain.setValueAtTime(0.001, now + 0.1)
+  thudGain.gain.exponentialRampToValueAtTime(0.48, now + 0.16)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.62)
+  thud.connect(thudGain)
+  thudGain.connect(instance.clockDestroyGain)
+  thud.start(now + 0.1)
+  thud.stop(now + 0.62)
 }
 /**
  * Play snowball shoot sound (soft whoosh)

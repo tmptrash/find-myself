@@ -3085,12 +3085,25 @@ function updateMonsterNight(inst) {
     gc.obj.opacity = glowFactor * 0.92
   })
   //
-  // Night pupils follow the same position as glow circles and become opaque
-  // when the glow is active so dark pupils remain visible inside the orange glow.
+  // Night pupils follow glow circles and track the hero direction so the eyes
+  // appear to look at the player during darkness.
   //
+  const heroX = inst.hero?.character?.pos?.x ?? inst.x
+  const heroY = inst.hero?.character?.pos?.y ?? inst.y
+  const NIGHT_PUPIL_MAX_OFFSET = 3
   inst.nightPupils.forEach(np => {
-    np.obj.pos.x = inst.x + np.offsetX + inst.wobbleX
-    np.obj.pos.y = inst.y + np.offsetY + inst.wobbleY
+    const eyeX = inst.x + np.offsetX + inst.wobbleX
+    const eyeY = inst.y + np.offsetY + inst.wobbleY
+    const toHeroX = heroX - eyeX
+    const toHeroY = heroY - eyeY
+    const distToHero = Math.hypot(toHeroX, toHeroY)
+    if (distToHero > 0 && glowFactor > 0) {
+      np.obj.pos.x = eyeX + (toHeroX / distToHero) * NIGHT_PUPIL_MAX_OFFSET
+      np.obj.pos.y = eyeY + (toHeroY / distToHero) * NIGHT_PUPIL_MAX_OFFSET
+    } else {
+      np.obj.pos.x = eyeX
+      np.obj.pos.y = eyeY
+    }
     np.obj.opacity = glowFactor * 0.95
   })
 }

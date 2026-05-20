@@ -119,7 +119,7 @@ const L1_CROW_ROCK_DRAW_Z = 9
 // Crow sits on the bare ground just to the right of the hero spawn (no rock, no grass zone).
 //
 const L1_CROW_X = LEFT_MARGIN + 160
-const L1_CROW_TOOLTIP_TEXT = 'you are a loser'
+const L1_CROW_TOOLTIP_TEXT = 'you sucker!'
 const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
 const L1_CROW_TOOLTIP_OFFSET_Y = -52

@@ -124,7 +124,7 @@ const BIRD_WING_FLAP_SPEED_RANGE = 5
 // Horizontal distance at which birds react. Y-distance is ignored because the hero
 // always stays far below the lamp arc and never reaches bird height.
 //
-const BIRD_SCATTER_DIST_X = 150
+const BIRD_SCATTER_DIST_X = 80
 const BIRD_FLY_SPEED_X_MIN = 55
 const BIRD_FLY_SPEED_X_RANGE = 100
 const BIRD_FLY_SPEED_Y_MIN = 230
@@ -325,7 +325,8 @@ export function sceneLevel0(k) {
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       antiHeroSpawnX: ANTIHERO_SPAWN_X,
       heroInst: hero,
-      crowLampIndex: 0
+      crowLampIndex: 0,
+      crowTooltipText: 'at least he has arms'
     })
     k.onSceneLeave(() => level0Ambience.cleanup())
     //

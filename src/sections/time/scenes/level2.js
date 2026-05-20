@@ -82,9 +82,9 @@ const CLOUD_TOOLTIP_Y_OFFSET = -50
 // Platform index 11 reaches rightWallX(≈1770); index 10 at x≈1550 is the last
 // platform on the right before the path turns. Place bonus just right of it.
 //
-const BONUS_PLATFORM_X = 1820
+const BONUS_PLATFORM_X = 1700
 const BONUS_PLATFORM_Y = 590
-const BONUS_PLATFORM_WIDTH = 80
+const BONUS_PLATFORM_WIDTH = 180
 const BONUS_STORAGE_KEY = 'time.level2BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
@@ -887,8 +887,7 @@ export function sceneLevel2(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
-      storageKey: BONUS_STORAGE_KEY,
-      platformText: "00"
+      storageKey: BONUS_STORAGE_KEY
     })
   })
 }

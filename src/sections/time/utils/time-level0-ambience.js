@@ -104,6 +104,12 @@ const STREET_SURFACE_ABOVE_PLATFORM_TOP = 17
 const LAMP_TOOLTIP_TEXT = 'find the one who\nshines beside you'
 const LAMP_TOOLTIP_OFFSET_Y = -44
 //
+// Crow tooltip hover area size and vertical offset
+//
+const CROW_TOOLTIP_HOVER_W = 52
+const CROW_TOOLTIP_HOVER_H = 44
+const CROW_TOOLTIP_OFFSET_Y = -50
+//
 // Grass tufts: small clusters around each lamp pole base
 //
 const GRASS_POLE_CLUSTER_SIZE = 5
@@ -262,6 +268,22 @@ export function create(cfg) {
     cfg.k.fixed(),
     { draw() { drawCrowOnLamp(cfg.k, inst) } }
   ])
+  //
+  // Crow tooltip — only created when the caller passes crowTooltipText
+  //
+  if (cfg.crowTooltipText) {
+    Tooltip.create({
+      k: cfg.k,
+      targets: [{
+        x: () => inst.crow.cx,
+        y: () => inst.crow.perchY,
+        width: CROW_TOOLTIP_HOVER_W,
+        height: CROW_TOOLTIP_HOVER_H,
+        text: cfg.crowTooltipText,
+        offsetY: CROW_TOOLTIP_OFFSET_Y
+      }]
+    })
+  }
   inst.cleanup = () => {
     cfg.k.destroy(inst.layer)
     cfg.k.destroy(inst.grassLayer)

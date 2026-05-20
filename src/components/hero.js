@@ -2395,7 +2395,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       // Watch on right wrist — drawn at body arm position
       //
       if (addWatch && animation === 'idle') {
-        const watchY = rightArmY + ARM_H - 8
+        const watchY = rightArmY + ARM_H - 6
         ctx.fillStyle = '#FFFFFF'
         ctx.fillRect(headX + CHAR_WIDTH + 1, watchY, 3, 3)
       }

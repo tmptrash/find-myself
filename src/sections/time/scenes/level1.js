@@ -72,8 +72,8 @@ const PLATFORM_TOOLTIP_Y_OFFSET = -50
 // Bonus hero — hidden platform right-below the "22" platform
 //
 const BONUS_PLATFORM_X = 720
-const BONUS_PLATFORM_Y = 800
-const BONUS_PLATFORM_WIDTH = 80
+const BONUS_PLATFORM_Y = 860
+const BONUS_PLATFORM_WIDTH = 180
 const BONUS_STORAGE_KEY = 'time.level1BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
@@ -251,7 +251,8 @@ export function sceneLevel1(k) {
       platformBottomHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       heroInst: hero,
-      crowLampIndex: 3
+      crowLampIndex: 3,
+      crowTooltipText: 'so much suffering for a watch...'
     })
     k.onSceneLeave(() => level1Ambience.cleanup())
     //
@@ -695,15 +696,16 @@ export function sceneLevel1(k) {
       }]
     })
     //
-    // Tooltip for clock platforms
+    // Tooltip for clock platforms — only show when platform has not yet fallen
     //
     const platformTargets = clockPlatforms.map(p => ({
-      x: p.platform.pos.x,
-      y: p.platform.pos.y,
+      x: () => p.platform.pos.x,
+      y: () => p.platform.pos.y,
       width: PLATFORM_TOOLTIP_WIDTH,
       height: PLATFORM_TOOLTIP_HEIGHT,
       text: PLATFORM_TOOLTIP_TEXT,
-      offsetY: PLATFORM_TOOLTIP_Y_OFFSET
+      offsetY: PLATFORM_TOOLTIP_Y_OFFSET,
+      visible: () => !p.hasFallen
     }))
     Tooltip.create({ k, targets: platformTargets })
     //
@@ -719,8 +721,7 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
-      storageKey: BONUS_STORAGE_KEY,
-      platformText: "00"
+      storageKey: BONUS_STORAGE_KEY
     })
   })
 }
@@ -1202,16 +1203,13 @@ function onUpdateNightMusic(inst) {
   const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
   if (isNight) {
     //
-    // Fade music toward silence.
+    // Fade ambient music toward silence (clock ticking stays audible at night).
     //
     if (timeSectionMusic.kids) {
       timeSectionMusic.kids.volume = Math.max(0, timeSectionMusic.kids.volume - fadeStep * CFG.audio.backgroundMusic.kids)
     }
     if (timeSectionMusic.time) {
       timeSectionMusic.time.volume = Math.max(0, timeSectionMusic.time.volume - fadeStep * CFG.audio.backgroundMusic.time)
-    }
-    if (timeSectionMusic.clock) {
-      timeSectionMusic.clock.volume = Math.max(0, timeSectionMusic.clock.volume - fadeStep * CFG.audio.backgroundMusic.clock)
     }
     //
     // Cricket chirps at random intervals.
@@ -1230,9 +1228,6 @@ function onUpdateNightMusic(inst) {
     }
     if (timeSectionMusic.time) {
       timeSectionMusic.time.volume = Math.min(CFG.audio.backgroundMusic.time, timeSectionMusic.time.volume + fadeStep * CFG.audio.backgroundMusic.time)
-    }
-    if (timeSectionMusic.clock) {
-      timeSectionMusic.clock.volume = Math.min(CFG.audio.backgroundMusic.clock, timeSectionMusic.clock.volume + fadeStep * CFG.audio.backgroundMusic.clock)
     }
   }
 }

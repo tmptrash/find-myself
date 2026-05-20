@@ -1057,6 +1057,11 @@ export function sceneMenu(k) {
     k.wait(SCENE_GUARD_DELAY, () => { sceneReady = true })
     k.onKeyPress("escape", () => {
       if (!sceneReady) return
+      //
+      // If a level transition overlay is active (pre-level text), let the
+      // transition's own Esc handler take care of navigation (it goes to menu).
+      //
+      if (k.transitionCleanup) return
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()

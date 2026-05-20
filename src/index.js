@@ -127,7 +127,7 @@ async function boot() {
     if (bootOnLoadDone) return
     bootOnLoadDone = true
     kaplayBootReachedOnLoad = true
-    await prepareSceneAssetsThenEnterScene(k, 'ready')
+    await prepareSceneAssetsThenEnterScene(k, 'ready');
   })
 }
 /**

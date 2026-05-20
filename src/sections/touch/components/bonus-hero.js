@@ -96,6 +96,8 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {string} [config.heroBodyColor] - Body color for the mini-hero (defaults to main hero color)
  * @param {string} [config.storageKey] - localStorage key to persist collection state
  * @param {string} [config.platformText] - Time-style text for platform (e.g. "00:00"); uses log if null
+ * @param {number} [config.platformFontSize] - Override font size for time-style platform text
+ * @param {number} [config.platformCollisionHeight] - Override collision height for time-style platform
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -107,7 +109,9 @@ export function create(config) {
     revealWidth = null,
     heroBodyColor = null,
     storageKey = null,
-    platformText = null
+    platformText = null,
+    platformFontSize = TIME_PLATFORM_FONT_SIZE,
+    platformCollisionHeight = null
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -119,9 +123,12 @@ export function create(config) {
   const OFF_SCREEN_Y = -5000
   const startY = approachFromAbove ? OFF_SCREEN_Y : y
   //
-  // Collision box height matches platform visual: taller for time-style platforms
+  // Collision box height: use explicit override if given, otherwise scale with font size
   //
-  const collisionHeight = platformText ? TIME_PLATFORM_COLLISION_HEIGHT : PLATFORM_HEIGHT
+  const collisionHeight = platformCollisionHeight
+    ?? (platformText
+      ? Math.round(TIME_PLATFORM_COLLISION_HEIGHT * platformFontSize / TIME_PLATFORM_FONT_SIZE)
+      : PLATFORM_HEIGHT)
   //
   // Invisible collision platform
   //
@@ -185,6 +192,8 @@ export function create(config) {
     storageKey,
     pulseTimer: 0,
     platformText,
+    platformFontSize,
+    platformCollisionHeight: collisionHeight,
     floatOffset: Math.random() * Math.PI * 2,
     shakeTimer: 0,
     shakeOffsetX: 0
@@ -427,7 +436,7 @@ function drawSparkleGlint(inst) {
 // Draw time-style text platform (e.g. "00:00" or "00")
 //
 function drawTimePlatform(inst) {
-  const { k, platformOpacity, platformText, floatOffset } = inst
+  const { k, platformOpacity, platformText, platformFontSize, floatOffset } = inst
   const x = inst.x + inst.shakeOffsetX
   const floatY = inst.y + Math.sin(floatOffset) * FLOAT_AMPLITUDE
   const outlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
@@ -437,7 +446,7 @@ function drawTimePlatform(inst) {
   outlineOffsets.forEach(([ox, oy]) => {
     k.drawText({
       text: platformText,
-      size: TIME_PLATFORM_FONT_SIZE,
+      size: platformFontSize,
       font: CFG.visual.fonts.thinFull.replace(/'/g, ''),
       pos: k.vec2(x + ox, floatY + oy),
       anchor: 'center',
@@ -450,7 +459,7 @@ function drawTimePlatform(inst) {
   //
   k.drawText({
     text: platformText,
-    size: TIME_PLATFORM_FONT_SIZE,
+    size: platformFontSize,
     font: CFG.visual.fonts.thinFull.replace(/'/g, ''),
     pos: k.vec2(x, floatY),
     anchor: 'center',

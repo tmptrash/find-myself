@@ -72,8 +72,12 @@ const PLATFORM_TOOLTIP_Y_OFFSET = -50
 // Bonus hero — hidden platform right-below the "22" platform
 //
 const BONUS_PLATFORM_X = 720
-const BONUS_PLATFORM_Y = 860
-const BONUS_PLATFORM_WIDTH = 180
+const BONUS_PLATFORM_Y = 830
+//
+// Match the regular time platform dimensions: 60px wide x 48px tall (showSecondsOnly format)
+//
+const BONUS_PLATFORM_WIDTH = 60
+const BONUS_PLATFORM_COLLISION_HEIGHT = 48
 const BONUS_STORAGE_KEY = 'time.level1BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
@@ -721,7 +725,10 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
-      storageKey: BONUS_STORAGE_KEY
+      storageKey: BONUS_STORAGE_KEY,
+      platformText: "00",
+      platformFontSize: 48,
+      platformCollisionHeight: BONUS_PLATFORM_COLLISION_HEIGHT
     })
   })
 }

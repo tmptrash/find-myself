@@ -112,14 +112,14 @@ const L1_FROG_INTERVAL_MAX = 14
 const L1_CROW_MP3_INTERVAL_MIN = 8
 const L1_CROW_MP3_INTERVAL_MAX = 20
 const L1_CROW_MP3_VOLUME = 0.6
-const L1_CROW_MP3_NAMES = ['l1-crow-0']
+const L1_CROW_MP3_NAMES = ['crow0']
 const L1_CROW_MOUTH_OPEN_DURATION = 0.9
 const L1_CROW_ROCK_DRAW_Z = 9
 //
 // Crow sits on the bare ground just to the right of the hero spawn (no rock, no grass zone).
 //
 const L1_CROW_X = LEFT_MARGIN + 160
-const L1_CROW_TOOLTIP_TEXT = 'you sucker!'
+const L1_CROW_TOOLTIP_TEXT = 'not much of a Mozart'
 const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
 const L1_CROW_TOOLTIP_OFFSET_Y = -52
@@ -170,7 +170,7 @@ const CLOUD_RANDOMNESS = 20
 //
 // Tooltip texts
 //
-const HERO_TOOLTIP_TEXT = "find yourself"
+const HERO_TOOLTIP_TEXT = "Do, Re, Mi..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
@@ -2237,9 +2237,8 @@ export function sceneLevel1(k) {
     const frogState = { timer: L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN) }
     k.onUpdate(() => onUpdateFrogAmbient(k, frogState, sound))
     //
-    // Random distant crow calls from mp3 samples (two files alternated).
+    // Random distant crow calls from mp3 samples ('crow0' is preloaded at boot).
     //
-    k.loadSound(L1_CROW_MP3_NAMES[0], '/assets/sounds/crow0.mp3')
     const crowMp3State = {
       timer: L1_CROW_MP3_INTERVAL_MIN + Math.random() * (L1_CROW_MP3_INTERVAL_MAX - L1_CROW_MP3_INTERVAL_MIN),
       mouthOpen: false,

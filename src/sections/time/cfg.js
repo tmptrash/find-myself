@@ -29,8 +29,8 @@ export const TIME_CFG = {
     //
     speedBonusTime: {
       'level-time.0': 15,   // Level 0: 15 seconds
-      'level-time.1': 55,   // Level 1: 55 seconds
-      'level-time.2': 80,   // Level 2: 80 seconds
+      'level-time.1': 75,   // Level 1: 75 seconds
+      'level-time.2': 100,   // Level 2: 100 seconds
       'level-time.3': 180   // Level 3: 180 seconds
     }
   },

@@ -61,6 +61,8 @@ const BURN_GLOW_RADIUS_MULTIPLIER = 3.2
 const EYE_OFFSET_RATIO = 0.45
 const EYE_RADIUS = 6
 const EYE_ANGLE_SPREAD = 0.7
+const PUPIL_RADIUS = 2.5
+const PUPIL_MAX_OFFSET = 2.5
 //
 // Tentacle rest angle offsets (radians from body center)
 // 3 per side: front, middle, back
@@ -345,7 +347,34 @@ export function onDraw(inst) {
 export function onDrawOverlay(inst) {
   const { k } = inst
   //
-  // Draw burn particles above darkness (bright fire wisps)
+  // Draw eyes first so fire renders on top of them when burning
+  //
+  const eyeOffset = BODY_RADIUS * EYE_OFFSET_RATIO
+  const eyeAngle1 = inst.facingAngle + EYE_ANGLE_SPREAD
+  const eyeAngle2 = inst.facingAngle - EYE_ANGLE_SPREAD
+  const eyeX1 = inst.x + Math.cos(eyeAngle1) * eyeOffset
+  const eyeY1 = inst.y + Math.sin(eyeAngle1) * eyeOffset
+  const eyeX2 = inst.x + Math.cos(eyeAngle2) * eyeOffset
+  const eyeY2 = inst.y + Math.sin(eyeAngle2) * eyeOffset
+  k.drawCircle({
+    pos: k.vec2(eyeX1, eyeY1),
+    radius: EYE_RADIUS,
+    color: k.rgb(140, 30, 30)
+  })
+  k.drawCircle({
+    pos: k.vec2(eyeX2, eyeY2),
+    radius: EYE_RADIUS,
+    color: k.rgb(140, 30, 30)
+  })
+  //
+  // Small dark pupils that always look toward the hero
+  //
+  const heroX = inst.hero?.character?.pos?.x ?? inst.x
+  const heroY = inst.hero?.character?.pos?.y ?? inst.y
+  drawPupil(k, eyeX1, eyeY1, heroX, heroY)
+  drawPupil(k, eyeX2, eyeY2, heroX, heroY)
+  //
+  // Draw burn particles above eyes so fire covers them when burning
   //
   if (inst.isBurning) {
     inst.burnParticles.forEach(p => {
@@ -369,25 +398,21 @@ export function onDrawOverlay(inst) {
       })
     })
   }
-  //
-  // Draw two eyes that look toward facing direction (always visible through darkness)
-  //
-  const eyeOffset = BODY_RADIUS * EYE_OFFSET_RATIO
-  const eyeAngle1 = inst.facingAngle + EYE_ANGLE_SPREAD
-  const eyeAngle2 = inst.facingAngle - EYE_ANGLE_SPREAD
-  const eyeX1 = inst.x + Math.cos(eyeAngle1) * eyeOffset
-  const eyeY1 = inst.y + Math.sin(eyeAngle1) * eyeOffset
-  const eyeX2 = inst.x + Math.cos(eyeAngle2) * eyeOffset
-  const eyeY2 = inst.y + Math.sin(eyeAngle2) * eyeOffset
+}
+
+//
+// Draw a small dark pupil inside the eye, offset toward the hero's position
+//
+function drawPupil(k, eyeX, eyeY, heroX, heroY) {
+  const dx = heroX - eyeX
+  const dy = heroY - eyeY
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const px = dist > 0 ? eyeX + (dx / dist) * PUPIL_MAX_OFFSET : eyeX
+  const py = dist > 0 ? eyeY + (dy / dist) * PUPIL_MAX_OFFSET : eyeY
   k.drawCircle({
-    pos: k.vec2(eyeX1, eyeY1),
-    radius: EYE_RADIUS,
-    color: k.rgb(140, 30, 30)
-  })
-  k.drawCircle({
-    pos: k.vec2(eyeX2, eyeY2),
-    radius: EYE_RADIUS,
-    color: k.rgb(140, 30, 30)
+    pos: k.vec2(px, py),
+    radius: PUPIL_RADIUS,
+    color: k.rgb(10, 0, 0)
   })
 }
 

@@ -57,7 +57,7 @@ const LAMP_GLOW_R3 = 4
 //
 // Crow perched on first lamp shade: MP3 sound keys and call timing
 //
-const CROW_SOUND_NAMES = ['t0-crow-0']
+const CROW_SOUND_NAMES = ['crow0']
 const CROW_CALL_INTERVAL_MIN = 5.0
 const CROW_CALL_INTERVAL_MAX = 14.0
 const CROW_MOUTH_OPEN_DURATION = 0.55
@@ -235,7 +235,9 @@ export function create(cfg) {
   // Crow: load audio samples, then place crow on the lamp chosen by crowLampIndex.
   // Each level can pass a different index so the crow sits on a unique lamppost.
   //
-  cfg.k.loadSound(CROW_SOUND_NAMES[0], '/assets/sounds/crow0.mp3')
+  //
+  // 'crow0' is preloaded at boot; no inline loadSound needed here.
+  //
   //
   // crowLampIndex defaults to 0; clamp to valid range in case a level over-specifies.
   //

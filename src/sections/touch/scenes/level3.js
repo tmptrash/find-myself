@@ -528,7 +528,7 @@ const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
 const L3_EYE_MAX_RX = 14
 const L3_EYE_MAX_RY = 10
-const L3_EYE_COUNT = 60
+const L3_EYE_COUNT = 72
 //
 // Skip drawing the eye halo when barely open (saves one ellipse per eye per frame)
 //
@@ -4031,7 +4031,25 @@ const L3_EYE_POSITIONS = [
   { x: CFG.visual.screen.width / 2 - 308,           y: 730, openRadius: 218 },
   { x: CFG.visual.screen.width / 2 + 278,           y: 752, openRadius: 222 },
   { x: CFG.visual.screen.width / 2 - 152,           y: 838, openRadius: 208 },
-  { x: CFG.visual.screen.width / 2 + 122,           y: 892, openRadius: 202 }
+  { x: CFG.visual.screen.width / 2 + 122,           y: 892, openRadius: 202 },
+  //
+  // Platform-proximity band A (y 268–288) — just above highest platform P3 (y=350, 62–82px gap)
+  //
+  { x: 1650,                                         y: 278, openRadius: 295 },
+  { x: 1420,                                         y: 272, openRadius: 285 },
+  { x: 1860,                                         y: 281, openRadius: 290 },
+  { x: 1240,                                         y: 268, openRadius: 280 },
+  { x: 870,                                          y: 284, openRadius: 285 },
+  { x: 540,                                          y: 272, openRadius: 275 },
+  //
+  // Platform-proximity band B (y 416–436) — between P3 zone end (y=410) and lower cluster (y=440)
+  //
+  { x: 1150,                                         y: 426, openRadius: 318 },
+  { x: 680,                                          y: 418, openRadius: 312 },
+  { x: 350,                                          y: 432, openRadius: 305 },
+  { x: 1460,                                         y: 422, openRadius: 308 },
+  { x: 910,                                          y: 430, openRadius: 310 },
+  { x: 180,                                          y: 435, openRadius: 298 }
 ]
 function addWatchingEyes(k, heroInst) {
   const eyeColor = k.rgb(220, 60, 30)

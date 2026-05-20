@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
 import { setSectionCompleted, set } from './progress.js'
 import * as Sound from './sound.js'
+import * as Tooltip from './tooltip.js'
 import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './level-assets.js'
 
@@ -46,7 +47,7 @@ const LEVEL_SUBTITLES = {
   'level-time.1': ['you are growing. you are learning. numbers begin\nto surround you. growing up means learning what you\ncan touch — and what you should leave alone. do not\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\nmistakes are allowed — but not forever. digits sum\neven safe, sum odd deadly.', 'time2-pre', 18],
   'level-time.3': ['life consumes time while you hesitate. act too\nslow — and it will catch you. throw snow. move\nfast. everything happens at once.', 'time3-pre', 16],
-  'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7],
+  'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7, 'collect bugs together to reach the goal'],
   'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 5],
   'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 4],
   'level-touch.3': ['when you cannot see… touch to survive', 'touch3-pre', 5]
@@ -217,6 +218,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const inst = {
     textObj: null,
     outlineTexts: null,
+    hintTextObj: null,
+    hintOutlineTexts: null,
     skipped: false,
     skipEnabled: false,
     skipEnableTimer: 0,
@@ -227,7 +230,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     originalVolume: originalVolume,
     postAssetPreparePhase,
     assetPrepareDone: !needsEarlyAssetLoad,
-    assetPreparePromise: null
+    assetPreparePromise: null,
+    tooltipSuppressed: false
   }
   
   //
@@ -259,6 +263,13 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   const finalizeTransitionToLevel = (afterGo) => {
     const enter = () => {
+      //
+      // Re-enable tooltips now that we are entering the level
+      //
+      if (inst.tooltipSuppressed) {
+        Tooltip.unsuppressAll()
+        inst.tooltipSuppressed = false
+      }
       overlay.exists() && k.destroy(overlay)
       enterPreparedScene(k, nextLevel, afterGo)
     }
@@ -303,6 +314,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           Sound.unmuteProceduralSounds()
           Sound.resumeGlobalAudio()
           stopTimeSectionMusic()
+          inst.tooltipSuppressed && Tooltip.unsuppressAll()
+          inst.tooltipSuppressed = false
           goToMenuAfterAssets(k)
         }
         return
@@ -333,6 +346,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       Sound.unmuteProceduralSounds()
       Sound.resumeGlobalAudio()
       stopTimeSectionMusic()
+      inst.tooltipSuppressed && Tooltip.unsuppressAll()
+      inst.tooltipSuppressed = false
       goToMenuAfterAssets(k)
       return
     }
@@ -387,14 +402,21 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         timer = 0
         
         // Create subtitle text for NEXT level (the one we're transitioning TO)
-        const subtitle = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[0] : LEVEL_SUBTITLES[nextLevel]
-        const soundName = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[1] : null
-        const textHoldDuration = Array.isArray(LEVEL_SUBTITLES[nextLevel]) ? LEVEL_SUBTITLES[nextLevel]?.[2] : DEFAULT_TEXT_HOLD_DURATION
-        
+        const subtitleEntry = LEVEL_SUBTITLES[nextLevel]
+        const subtitle = Array.isArray(subtitleEntry) ? subtitleEntry[0] : subtitleEntry
+        const soundName = Array.isArray(subtitleEntry) ? subtitleEntry[1] : null
+        const textHoldDuration = Array.isArray(subtitleEntry) ? subtitleEntry[2] : DEFAULT_TEXT_HOLD_DURATION
+        const hintText = Array.isArray(subtitleEntry) ? subtitleEntry[3] : null
+
         inst.soundName = soundName
         inst.textHoldDuration = textHoldDuration || DEFAULT_TEXT_HOLD_DURATION
 
         if (subtitle) {
+          //
+          // Suppress all game tooltips while pre-level text is on screen
+          //
+          Tooltip.suppressAll()
+          inst.tooltipSuppressed = true
           //
           // Stop all music and sound effects, keep only voice-over (xxx-pre files)
           //
@@ -460,6 +482,33 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           ])
           inst.textObj = textObj
           inst.outlineTexts = outlineTexts
+          //
+          // Optional small hint text below the main subtitle
+          //
+          if (hintText) {
+            const hintSize = textSize * 0.55
+            const hintY = textY + textSize * 1.9
+            const hintOutlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
+              k.text(hintText, { size: hintSize, align: "center" }),
+              k.pos(textX + dx, hintY + dy),
+              k.anchor("center"),
+              k.color(0, 0, 0),
+              k.opacity(0),
+              k.z(CFG.visual.zIndex.ui + 101),
+              k.fixed()
+            ]))
+            const hintTextObj = k.add([
+              k.text(hintText, { size: hintSize, align: "center" }),
+              k.pos(textX, hintY),
+              k.anchor("center"),
+              k.color(140, 140, 140),
+              k.opacity(0),
+              k.z(CFG.visual.zIndex.ui + 102),
+              k.fixed()
+            ])
+            inst.hintTextObj = hintTextObj
+            inst.hintOutlineTexts = hintOutlineTexts
+          }
         } else {
           // No subtitle, go to next level immediately
           k.transitionCleanup?.()
@@ -488,6 +537,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         inst.textObj.opacity = progress
         inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = progress })
       }
+      if (inst.hintTextObj) {
+        inst.hintTextObj.opacity = progress
+        inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => { o.opacity = progress })
+      }
       
       if (progress >= 1) {
         phase = 'text_hold'
@@ -506,6 +559,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         inst.textObj.opacity = 1 - progress
         inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = 1 - progress })
       }
+      if (inst.hintTextObj) {
+        inst.hintTextObj.opacity = 1 - progress
+        inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => { o.opacity = 1 - progress })
+      }
       
       if (progress >= 1) {
         // Clean up text and outlines
@@ -516,6 +573,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         if (inst.outlineTexts) {
           inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
           inst.outlineTexts = null
+        }
+        if (inst.hintTextObj) {
+          inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
+          inst.hintTextObj = null
+        }
+        if (inst.hintOutlineTexts) {
+          inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
+          inst.hintOutlineTexts = null
         }
         
         phase = 'final_pause'
@@ -546,7 +611,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+    inst.hintTextObj && inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
+    inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
     inst?.textSound?.stop()
+    inst.tooltipSuppressed && Tooltip.unsuppressAll()
+    inst.tooltipSuppressed = false
     k.transitionCleanup = null
   }
   
@@ -556,7 +625,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     overlay && overlay.exists() && k.destroy(overlay)
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
+    inst.hintTextObj && inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
+    inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
     inst?.textSound?.stop()
+    inst.tooltipSuppressed && Tooltip.unsuppressAll()
+    inst.tooltipSuppressed = false
   }
 }
 

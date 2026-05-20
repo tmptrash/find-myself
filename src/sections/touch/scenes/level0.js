@@ -299,6 +299,13 @@ const BIRD_TOOLTIP_TEXT = "I believe I can fly"
 const BIRD_TOOLTIP_HOVER_SIZE = 40
 const BIRD_TOOLTIP_Y_OFFSET = -30
 //
+// Long-legged monster hover tooltip (shown only when not in conversation)
+//
+const MONSTER_HOVER_TOOLTIP_TEXT = "collect bugs together\nto reach the goal"
+const MONSTER_HOVER_TOOLTIP_W = 70
+const MONSTER_HOVER_TOOLTIP_H = 80
+const MONSTER_HOVER_TOOLTIP_Y_OFFSET = -90
+//
 // Small bug random phrases (shown as speech bubbles with long pauses)
 //
 const BUG_PHRASE_MIN_PAUSE = 50
@@ -2560,7 +2567,11 @@ export function sceneLevel0(k) {
     // Starts after MONSTER_CONVERSATION_DELAY seconds and plays once.
     //
     const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
-    startMonsterConversation(k, monsterBugs)
+    const conversationState = startMonsterConversation(k, monsterBugs)
+    //
+    // Hover tooltips for long-legged monsters (only when not in conversation)
+    //
+    createMonsterHoverTooltips(k, monsterBugs, conversationState)
     //
     // Small bugs sometimes speak on their own (see SMALL_BUG_PHRASES).
     //
@@ -3683,7 +3694,7 @@ function startMonsterConversation(k, monsterBugs) {
   //
   // Only show conversation once per player (persisted in localStorage)
   //
-  if (get(MONSTERS_TALKED_KEY)) return
+  if (get(MONSTERS_TALKED_KEY)) return { phase: 'done' }
   //
   // Conversation state: tracks current line and timing
   //
@@ -3764,6 +3775,33 @@ function startMonsterConversation(k, monsterBugs) {
       }
     }
   })
+  //
+  // Return state so callers can check inst.phase to know if conversation is active
+  //
+  return inst
+}
+
+/**
+ * Creates hover tooltips for the three long-legged monsters.
+ * The tooltip only appears when the conversation is not currently displaying a line.
+ * @param {Object} k - Kaplay instance
+ * @param {Array<Object>} monsterBugs - Array of [bug0, bug1, bug2] instances
+ * @param {Object|undefined} conversationState - Conversation inst (may be undefined)
+ */
+function createMonsterHoverTooltips(k, monsterBugs, conversationState) {
+  const targets = monsterBugs.map(bug => ({
+    x: () => bug.x,
+    y: () => bug.y,
+    width: MONSTER_HOVER_TOOLTIP_W,
+    height: MONSTER_HOVER_TOOLTIP_H,
+    text: MONSTER_HOVER_TOOLTIP_TEXT,
+    offsetY: MONSTER_HOVER_TOOLTIP_Y_OFFSET,
+    //
+    // Hide during the entire active conversation (showing and pause phases)
+    //
+    visible: () => !conversationState || conversationState.phase === 'done' || conversationState.phase === 'delay'
+  }))
+  Tooltip.create({ k, targets })
 }
 
 /**

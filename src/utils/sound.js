@@ -3738,7 +3738,7 @@ export function playWingFlapSound(instance) {
     bpf.Q.value = 0.8
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(0.001, t)
-    gain.gain.exponentialRampToValueAtTime(0.18 + Math.random() * 0.08, t + dur * 0.15)
+    gain.gain.exponentialRampToValueAtTime(0.45 + Math.random() * 0.15, t + dur * 0.15)
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur)
     src.connect(bpf)
     bpf.connect(gain)

@@ -57,6 +57,8 @@ const WOBBLE_AMPLITUDE = 4
  * @param {string} [config.heroBodyColor] - Body color for small hero icon (hex), defaults to activeColor
  * @param {number} config.topPlatformHeight - Height of top platform
  * @param {number} config.sideWallWidth - Width of side wall
+ * @param {string} [config.sectionLabel] - Custom header label (e.g. TRAINING) instead of TOUCH
+ * @param {string} [config.labelColor] - Single color for all letters when sectionLabel is set
  * @returns {Object} Object with letterObjects, smallHero, lifeImage, and score update methods
  */
 export function create(config) {
@@ -68,9 +70,11 @@ export function create(config) {
     completedColor = CFG.visual.colors.sections.touch.antiHero,
     heroBodyColor = activeColor,
     topPlatformHeight,
-    sideWallWidth
+    sideWallWidth,
+    sectionLabel = null,
+    labelColor = null
   } = config
-  const letters = ['T', 'O', 'U', 'C', 'H']
+  const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
   const letterSpacing = -5
   const outlineThickness = 2
@@ -90,9 +94,11 @@ export function create(config) {
     //
     // Last letter "H" is always gray and tilted (falling effect)
     //
-    const isFallingLetter = i === FALLING_LETTER_INDEX
+    const isFallingLetter = !sectionLabel && i === FALLING_LETTER_INDEX
     let colorHex
-    if (isFallingLetter) {
+    if (labelColor) {
+      colorHex = labelColor
+    } else if (isFallingLetter) {
       colorHex = FALLING_LETTER_COLOR
     } else if (letterLevel < levelNumber) {
       colorHex = completedColor

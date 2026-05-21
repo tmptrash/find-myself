@@ -178,7 +178,7 @@ export function sceneMenu(k) {
     //
     let lastLevel = get('lastLevel', null)
     if (lastLevel === 'word-complete') {
-      lastLevel = 'level-touch.0'
+      lastLevel = 'level-touch.training'
       set('lastLevel', lastLevel)
     } else if (lastLevel === 'time-complete') {
       lastLevel = 'level-word.0'
@@ -434,15 +434,9 @@ export function sceneMenu(k) {
           const lastLevel = get('lastLevel', null)
           
           if (lastLevel && lastLevel.startsWith('level-touch.')) {
-            //
-            // Go to the last played touch level with transition (show subtitle)
-            //
             showTransitionToLevel(k, lastLevel)
           } else {
-            //
-            // Go to touch level 0 with transition
-            //
-            createLevelTransition(k, 'menu-touch')
+            goAfterPreparingAssets(k, 'level-touch.training')
           }
         })
       }
@@ -1039,11 +1033,11 @@ export function sceneMenu(k) {
       Cursor.setCursor('arrow')
       if (forceNew) {
         resetProgress()
-        createLevelTransition(k, 'menu-touch')
+        goAfterPreparingAssets(k, 'level-touch.training')
       } else if (hasSavedGame) {
         showTransitionToLevel(k, lastLevel)
       } else {
-        createLevelTransition(k, 'menu-touch')
+        goAfterPreparingAssets(k, 'level-touch.training')
       }
     }
     k.onKeyPress("space", () => startGame(false))

@@ -5,6 +5,7 @@ import * as Sound from '../utils/sound.js'
 import * as Cursor from '../utils/cursor.js'
 import { goToMenuAfterAssets } from '../utils/level-assets.js'
 import { drawConnectionWave } from '../utils/connection.js'
+import { loadHeroSprites, HEROES } from '../components/hero.js'
 
 //
 // Hint flicker
@@ -71,8 +72,17 @@ const HERO_SPRITE_SIZE = 130
 // Hero sprite names (loaded in index.js at game start).
 // HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1).
 //
-const HERO_SPRITE_NAME = 'hero_FF8C00_000000_0_0'
-const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_FF8C00_000000'
+const HERO_READY_BODY_COLOR = '#909090'
+//
+// Anti-hero hover scale effect in the icon row
+//
+const ANTIHERO_HOVER_RADIUS = 42
+const ANTIHERO_HOVER_BASE = 1.18
+const ANTIHERO_HOVER_AMP = 0.10
+const ANTIHERO_PULSE_SPEED = 2.4
+const ANTIHERO_HOVER_LERP_SPEED = 8
+const HERO_SPRITE_NAME = 'hero_909090_000000_0_0'
+const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_909090_000000'
 const ANTIHERO_SPRITE_NAME = 'antiHero_8B5A50_000000_0_0'
 //
 // Illustration hero eye wander (mirrors idle animation constants from hero.js)
@@ -121,10 +131,6 @@ const ICON_LABEL_DESC_OFFSET_Y = 22
 //
 // Life laugh audio: plays a short ambient laugh at random intervals.
 //
-const LIFE_LAUGH_INTERVAL_MIN = 6.0
-const LIFE_LAUGH_INTERVAL_MAX = 14.0
-const LIFE_LAUGH_FLASH_DURATION = 0.16
-const LIFE_LAUGH_TOTAL_FLASHES = 8
 //
 // Inline color constants
 //
@@ -143,6 +149,10 @@ export function sceneReady(k) {
     if (document.fonts && document.fonts.ready) {
       try { await document.fonts.ready } catch {}
     }
+    //
+    // Load gray hero sprites for the ready scene illustration (no arms, matching original style)
+    //
+    loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
     k.setBackground(k.Color.fromHex(CFG.visual.colors.ready.background))
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
@@ -182,10 +192,12 @@ export function sceneReady(k) {
     const iconAnim = {
       sparklePhase: 0,
       heartbeatPhase: 0,
-      lifeFlashTimer: 8.0,
-      lifeFlashCount: 0,
-      lifeFlashInterval: 0,
-      lifeFlashPhase: 0
+      //
+      // Anti-hero hover: lerps toward a sine-wave target when mouse is near the icon
+      //
+      antiHeroScale: 1.0,
+      antiHeroTargetScale: 1.0,
+      antiHeroPulsePhase: 0.0
     }
     k.onUpdate(() => {
       const dt = k.dt()
@@ -204,27 +216,29 @@ export function sceneReady(k) {
       iconAnim.sparklePhase += dt * SPARKLE_PULSE_SPEED
       iconAnim.heartbeatPhase = (iconAnim.heartbeatPhase + dt) % 1
       //
-      // Life icon periodic laugh: audio + visual flash
+      // Anti-hero hover: detect mouse proximity, set target scale, lerp smoothly
       //
-      if (iconAnim.lifeFlashCount <= 0) {
-        iconAnim.lifeFlashTimer -= dt
-        if (iconAnim.lifeFlashTimer <= 0) {
-          iconAnim.lifeFlashCount = LIFE_LAUGH_TOTAL_FLASHES
-          iconAnim.lifeFlashInterval = 0
-          try { k.play('life', { volume: 0.32 }) } catch {}
-        }
+      const iconX = TEXT_LEFT + ICON_DRAW_CX_OFFSET
+      const twoHeroY = ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA
+      const r = ICON_DRAW_R
+      const antiHeroCX = iconX + r * 0.85
+      const antiHeroCY = twoHeroY - r * 0.85 * 0.35
+      const mp = k.mousePos()
+      const dx = mp.x - antiHeroCX
+      const dy = mp.y - antiHeroCY
+      const distSq = dx * dx + dy * dy
+      //
+      // When hovering, advance pulse phase and oscillate the target scale like the
+      // checkmark / red circle in the menu; when not hovering, return to 1.0
+      //
+      const isHovering = distSq < ANTIHERO_HOVER_RADIUS * ANTIHERO_HOVER_RADIUS
+      if (isHovering) {
+        iconAnim.antiHeroPulsePhase += dt * ANTIHERO_PULSE_SPEED
+        iconAnim.antiHeroTargetScale = ANTIHERO_HOVER_BASE + ANTIHERO_HOVER_AMP * Math.sin(iconAnim.antiHeroPulsePhase)
       } else {
-        iconAnim.lifeFlashInterval -= dt
-        if (iconAnim.lifeFlashInterval <= 0) {
-          iconAnim.lifeFlashCount--
-          iconAnim.lifeFlashPhase = iconAnim.lifeFlashCount % 2
-          iconAnim.lifeFlashInterval = LIFE_LAUGH_FLASH_DURATION
-          if (iconAnim.lifeFlashCount <= 0) {
-            iconAnim.lifeFlashPhase = 0
-            iconAnim.lifeFlashTimer = LIFE_LAUGH_INTERVAL_MIN + Math.random() * (LIFE_LAUGH_INTERVAL_MAX - LIFE_LAUGH_INTERVAL_MIN)
-          }
-        }
+        iconAnim.antiHeroTargetScale = 1.0
       }
+      iconAnim.antiHeroScale += (iconAnim.antiHeroTargetScale - iconAnim.antiHeroScale) * Math.min(1, ANTIHERO_HOVER_LERP_SPEED * dt)
     })
     //
     // Icon illustrations beside each section label
@@ -418,8 +432,9 @@ function addTextPanel(k, leftX, startY) {
   const l6y = l1y + lh * 5 + 14
   seg('Platform, jump, survive.', leftX, l6y)
   seg('Collect every lost fragment.', leftX, l6y + lh)
-  seg('Find your shadow self and', leftX, l6y + lh * 2)
-  seg('face Life \u2014 know yourself.', leftX, l6y + lh * 3)
+  seg('Find your shadow self.', leftX, l6y + lh * 2)
+  seg('You play against Life —', leftX, l6y + lh * 3)
+  seg('know yourself to win.', leftX, l6y + lh * 4)
 }
 //
 // Adds the three section label rows below the ground line.
@@ -431,8 +446,7 @@ function addIconLabels(k, leftX) {
   const descFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
   const rows = [
     { label: 'Collect fragments', desc: 'Pieces of you. Scattered everywhere.' },
-    { label: 'Find the other you', desc: 'Touch them. Know them.' },
-    { label: 'Face Life', desc: 'The final battle is within.' }
+    { label: 'Find the other you', desc: 'Touch them. Know them.' }
   ]
   rows.forEach((row, i) => {
     const rowY = ICON_START_Y + i * ICON_ROW_HEIGHT
@@ -453,11 +467,7 @@ function onDrawIconIllustrations(k, iconAnim) {
   //
   // Icon 2: "Find the other you" — hero + anti-hero with electric connection
   //
-  drawTwoHeroesIcon(k, iconX, ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim.heartbeatPhase)
-  //
-  // Icon 3: "Face Life" — life.png with periodic laugh flash
-  //
-  drawLifeIcon(k, iconX, ICON_START_Y + ICON_ROW_HEIGHT * 2 + ICON_DRAW_R * 0.6, iconAnim)
+  drawTwoHeroesIcon(k, iconX, ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim)
 }
 //
 // Icon 1: animated sun-bunny sparkle — outer glow + bright core pulse
@@ -478,7 +488,8 @@ function drawFragmentIcon(k, cx, cy, sparklePhase) {
 //
 // Icon 2: hero + anti-hero sprites with animated electric connection
 //
-function drawTwoHeroesIcon(k, cx, cy, heartbeatPhase) {
+function drawTwoHeroesIcon(k, cx, cy, iconAnim) {
+  const { heartbeatPhase, antiHeroScale } = iconAnim
   const r = ICON_DRAW_R
   const hh = r * 0.85
   //
@@ -508,37 +519,15 @@ function drawTwoHeroesIcon(k, cx, cy, heartbeatPhase) {
     opacity: 0.9
   })
   //
-  // Anti-hero sprite (right) — drawn after connection to overlap faded arc ends
+  // Anti-hero sprite (right) with hover scale effect
   //
+  const ahSize = spSize * antiHeroScale
   k.drawSprite({
     sprite: ANTIHERO_SPRITE_NAME,
-    pos: k.vec2(cx + spacing - spSize / 2, cy - spSize * 0.9),
-    width: spSize,
-    height: spSize,
+    pos: k.vec2(cx + spacing - ahSize / 2, cy - ahSize * 0.9),
+    width: ahSize,
+    height: ahSize,
     opacity: 0.9
-  })
-}
-//
-// Icon 3: small life.png sprite with periodic laugh flash (red/white alternating)
-//
-function drawLifeIcon(k, cx, cy, iconAnim) {
-  const r = ICON_DRAW_R
-  //
-  // Tint alternates between red and white during the laugh sequence
-  //
-  let tintColor
-  if (iconAnim.lifeFlashCount > 0) {
-    tintColor = iconAnim.lifeFlashPhase === 0
-      ? k.rgb(255, 100, 100)
-      : k.rgb(255, 255, 255)
-  }
-  k.drawSprite({
-    sprite: 'life',
-    pos: k.vec2(cx - r, cy - r),
-    width: r * 2,
-    height: r * 2,
-    opacity: 0.9,
-    color: tintColor
   })
 }
 //

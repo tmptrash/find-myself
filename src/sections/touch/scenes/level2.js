@@ -96,7 +96,7 @@ const DECOR_LOG_PILE_POSITIONS = [
 const DECOR_LOG_Z = 5
 const CROW_TREE_EXCLUDE_RADIUS = 80
 const DECOR_LOG_WIDTH = 120
-const L2_CROW_TOOLTIP_TEXT = 'you are a loser'
+const L2_CROW_TOOLTIP_TEXT = 'will you ever calm down?'
 const L2_CROW_TOOLTIP_HOVER_W = 52
 const L2_CROW_TOOLTIP_HOVER_H = 48
 const L2_CROW_TOOLTIP_OFFSET_Y = -52
@@ -119,12 +119,12 @@ const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in lea
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 20
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
 const FPS_COUNTER_TOP_Y = 55
-const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"
@@ -157,6 +157,12 @@ const SNOWMAN_TOOLTIP_Y_OFFSET = -110
 const CENTER_ICICLE_START_X_OFFSET = 520
 const CENTER_ICICLE_END_MARGIN = 30
 const CENTER_ICICLE_SNOWMAN_CLEARANCE = 80
+//
+// Gap in the center icicle row so the hero can cross to the other side.
+// Positioned at the actual middle of the populated icicle section (after log-pile clearance).
+//
+const CENTER_ICICLE_GAP_CENTER_X = 1040
+const CENTER_ICICLE_GAP_HALF_WIDTH = 80
 const ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET = 40
 //
 // Antihero timed hint (shown if player hasn't completed level in time)
@@ -165,6 +171,15 @@ const ANTIHERO_HINT_DELAY = 60
 const ANTIHERO_HINT_TEXT = "use the edges\nof the platforms..."
 const ANTIHERO_HINT_DISPLAY_TIME = 8
 const ANTIHERO_HINT_Y_OFFSET = -140
+//
+// Stuck-hero hints shown above the hero when the player hasn't finished the level
+//
+const STUCK_HINT_1_DELAY = 30
+const STUCK_HINT_1_TEXT = "use platform edges"
+const STUCK_HINT_2_TEXT = "think where you jump —\nlife often fools you"
+const STUCK_HINT_REPEAT_INTERVAL = 30
+const STUCK_HINT_DISPLAY_TIME = 6
+const STUCK_HINT_Y_OFFSET = -110
 //
 // Jump ring: expanding circle of particles radiating from hero's feet
 //
@@ -348,9 +363,10 @@ export function sceneLevel2(k) {
     //
     createBackgroundDarkTrees(k)
     //
-    // Create foreground trees with gray color (from previous level) in front of hero
+    // Create foreground trees; pass lake right edge so trees don't grow on the lake
     //
-    createForegroundTrees(k, DECOR_LOG_PILE_POSITIONS[1])
+    const { maxX: lakeMaxX } = TouchLevel2Ambience.getLakeBounds(FLOOR_Y, LEFT_MARGIN)
+    createForegroundTrees(k, DECOR_LOG_PILE_POSITIONS[1], lakeMaxX)
     //
     // Create walls
     //
@@ -1220,6 +1236,21 @@ export function sceneLevel2(k) {
       currentHint: null
     }
     k.onUpdate(() => onUpdateAntiHeroHint(k, hintState, antiHeroInst))
+    //
+    // Stuck-hero hints: show progressive hints above the hero when they haven't finished
+    //
+    const stuckHintState = {
+      timer: 0,
+      phase: 0,
+      repeatTimer: 0,
+      levelDone: false,
+      currentHint: null
+    }
+    k.onUpdate(() => onUpdateStuckHeroHint(k, stuckHintState, heroInst))
+    //
+    // Mark level as done when hero touches anti-hero so hints stop
+    //
+    heroInst.character.onCollide('antiHero', () => { stuckHintState.levelDone = true })
     //
     // Breath vapor: periodic white puffs from hero's mouth
     //
@@ -2198,12 +2229,12 @@ function createBackgroundDarkTrees(k) {
  * @param {Object} k - Kaplay instance
  * @param {number} crowExcludeX - X position of the crow; trees are cleared around it
  */
-function createForegroundTrees(k, crowExcludeX) {
+function createForegroundTrees(k, crowExcludeX, lakeMaxX) {
   const screenWidth = CFG.visual.screen.width
   //
-  // Pre-generate layer data for 15 foreground trees (behind hero); exclude crow area
+  // Pre-generate layer data for 15 foreground trees (behind hero); exclude crow and lake areas
   //
-  const foregroundTrees = generateForegroundTreeData(crowExcludeX)
+  const foregroundTrees = generateForegroundTreeData(crowExcludeX, lakeMaxX)
   k.add([
     k.z(CFG.visual.zIndex.player - 1),
     {
@@ -2230,9 +2261,10 @@ function createForegroundTrees(k, crowExcludeX) {
  * Pre-generates layer geometry for 15 foreground trees (behind hero)
  * Same data format as overlay trees so drawOverlayTreesSway can render both
  * @param {number} [crowExcludeX] - Skip trees within CROW_TREE_EXCLUDE_RADIUS of this X
+ * @param {number} [lakeMaxX] - Skip trees whose x falls within the frozen lake
  * @returns {Array} Array of tree data objects
  */
-function generateForegroundTreeData(crowExcludeX) {
+function generateForegroundTreeData(crowExcludeX, lakeMaxX) {
   const w = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const treesAmount = 15
   const treePeriod = w / treesAmount
@@ -2243,6 +2275,10 @@ function generateForegroundTreeData(crowExcludeX) {
     // Skip tree slots too close to where the crow perches so no fir tree occludes the crow
     //
     if (crowExcludeX != null && Math.abs(x - crowExcludeX) < CROW_TREE_EXCLUDE_RADIUS) continue
+    //
+    // Skip trees on or left of the frozen lake
+    //
+    if (lakeMaxX != null && x < lakeMaxX + 20) continue
     const height = arcY(x, LEFT_MARGIN, w, 200, 280)
     const layerCount = Math.floor(Math.random() * 4 + 4)
     treeDefs.push({
@@ -3397,6 +3433,65 @@ function onUpdateAntiHeroHint(k, hintState, antiHeroInst) {
 }
 
 /**
+ * Shows progressive hints above the hero when the player seems stuck.
+ * Phase 0: first hint after STUCK_HINT_1_DELAY seconds.
+ * Phase 1+: second hint every STUCK_HINT_REPEAT_INTERVAL seconds.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Stuck hint state
+ * @param {Object} heroInst - Hero instance
+ */
+function onUpdateStuckHeroHint(k, state, heroInst) {
+  if (state.levelDone) return
+  const dt = k.dt()
+  state.timer += dt
+  if (state.phase === 0) {
+    //
+    // Phase 0: show first hint after initial delay
+    //
+    if (state.timer < STUCK_HINT_1_DELAY) return
+    state.phase = 1
+    state.repeatTimer = STUCK_HINT_REPEAT_INTERVAL
+    showStuckHint(k, state, heroInst, STUCK_HINT_1_TEXT)
+  } else {
+    //
+    // Phase 1+: show second hint every STUCK_HINT_REPEAT_INTERVAL seconds
+    //
+    state.repeatTimer -= dt
+    if (state.repeatTimer > 0) return
+    state.repeatTimer = STUCK_HINT_REPEAT_INTERVAL
+    showStuckHint(k, state, heroInst, STUCK_HINT_2_TEXT)
+  }
+}
+//
+// Shows a brief forced tooltip above the hero, replacing any active stuck hint
+//
+function showStuckHint(k, state, heroInst, text) {
+  state.currentHint && Tooltip.destroy(state.currentHint)
+  state.currentHint = null
+  if (state.levelDone) return
+  const target = {
+    x: () => heroInst.character?.pos?.x ?? 0,
+    y: () => heroInst.character?.pos?.y ?? 0,
+    width: 0,
+    height: 0,
+    text,
+    offsetY: STUCK_HINT_Y_OFFSET
+  }
+  const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+  tip.activeTarget = target
+  tip.frozenX = Math.round(heroInst.character?.pos?.x ?? 0)
+  tip.frozenY = Math.round(heroInst.character?.pos?.y ?? 0)
+  tip.opacity = 1
+  state.currentHint = tip
+  k.wait(STUCK_HINT_DISPLAY_TIME, () => {
+    if (state.currentHint === tip) {
+      Tooltip.destroy(tip)
+      state.currentHint = null
+    }
+  })
+}
+
+/**
  * Generates center floor icicles that appear when the life-deduction trap activates.
  * Fills the safe corridor from the snowman zone to the right icicle boundary.
  * @param {number} snowmanX - World X of the snowman (icicles start after it)
@@ -3409,6 +3504,10 @@ function generateCenterIcicles(snowmanX) {
   for (let x = startX; x < endX; x += ICICLE_SPACING) {
     const nearLog = DECOR_LOG_PILE_POSITIONS.some(logX => Math.abs(x - logX) < DECOR_LOG_WIDTH * 1.5)
     if (nearLog) continue
+    //
+    // Leave a passage in the middle so the hero can cross to the other side
+    //
+    if (Math.abs(x - CENTER_ICICLE_GAP_CENTER_X) < CENTER_ICICLE_GAP_HALF_WIDTH) continue
     icicles.push({
       x: x + (Math.random() - 0.5) * 8,
       baseY: FLOOR_Y,

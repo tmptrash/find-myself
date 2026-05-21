@@ -267,20 +267,20 @@ const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
 // Hero tooltip (raised higher so it sits above bug tooltips)
 //
-const HERO_TOOLTIP_TEXT = "who am I?"
+const HERO_TOOLTIP_TEXT = "I must find myself..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
 // Green timer tooltip (appears below the timer text)
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"

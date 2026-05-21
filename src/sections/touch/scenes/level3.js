@@ -347,7 +347,7 @@ const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in lea
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"
@@ -528,7 +528,7 @@ const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
 const L3_EYE_MAX_RX = 14
 const L3_EYE_MAX_RY = 10
-const L3_EYE_COUNT = 72
+const L3_EYE_COUNT = 64
 //
 // Skip drawing the eye halo when barely open (saves one ellipse per eye per frame)
 //
@@ -3958,98 +3958,84 @@ function onUpdateTreeCreakAmbient(k, state, sound) {
 // Upper-band eyes sit slightly lower (closer to platform tops) while staying above y≈292.
 const L3_EYE_POSITIONS = [
   //
-  // Upper band — above platform tops (shifted down vs earlier revision)
+  // Cloud band (y 166–250): sparse, only 12 eyes — platform-band eyes carry the main load
   //
   { x: LEFT_MARGIN + 55,                             y: 172, openRadius: 290 },
-  { x: LEFT_MARGIN + 92,                             y: 242, openRadius: 265 },
-  { x: LEFT_MARGIN + 158,                            y: 190, openRadius: 225 },
-  { x: LEFT_MARGIN + 210,                            y: 302, openRadius: 215 },
-  { x: LEFT_MARGIN + 268,                            y: 236, openRadius: 210 },
   { x: LEFT_MARGIN + 345,                            y: 194, openRadius: 205 },
   { x: CFG.visual.screen.width / 2 - 460,            y: 190, openRadius: 245 },
-  { x: CFG.visual.screen.width / 2 - 340,            y: 280, openRadius: 238 },
   { x: CFG.visual.screen.width / 2 - 220,            y: 220, openRadius: 250 },
-  { x: CFG.visual.screen.width / 2 + 195,            y: 284, openRadius: 242 },
-  { x: CFG.visual.screen.width / 2 + 380,            y: 190, openRadius: 245 },
-  { x: CFG.visual.screen.width / 2 + 490,            y: 300, openRadius: 238 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 272, y: 240, openRadius: 210 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 348, y: 200, openRadius: 205 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 80,  y: 166, openRadius: 285 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68,  y: 256, openRadius: 258 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 172, y: 204, openRadius: 238 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 220, y: 302, openRadius: 218 },
-  //
-  // Upper band — gaps between log platforms (horizontal corridors)
-  //
-  { x: LEFT_MARGIN + 398,                            y: 178, openRadius: 218 },
-  { x: LEFT_MARGIN + 462,                            y: 254, openRadius: 208 },
-  { x: LEFT_MARGIN + 518,                            y: 210, openRadius: 200 },
-  { x: LEFT_MARGIN + 575,                            y: 300, openRadius: 198 },
-  { x: CFG.visual.screen.width / 2 - 118,            y: 174, openRadius: 222 },
-  { x: CFG.visual.screen.width / 2 + 28,             y: 302, openRadius: 212 },
-  { x: CFG.visual.screen.width / 2 - 720,            y: 290, openRadius: 205 },
-  { x: CFG.visual.screen.width / 2 + 310,            y: 230, openRadius: 215 },
-  { x: CFG.visual.screen.width / 2 + 640,            y: 270, openRadius: 202 },
-  { x: CFG.visual.screen.width / 2 + 760,            y: 200, openRadius: 208 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 588, y: 290, openRadius: 200 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 498, y: 214, openRadius: 210 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 668, y: 180, openRadius: 195 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 728, y: 302, openRadius: 192 },
-  //
-  // Upper band — additional coverage along hero's path between platforms
-  //
-  { x: CFG.visual.screen.width / 2 - 580,            y: 222, openRadius: 235 },
-  { x: CFG.visual.screen.width / 2 - 430,            y: 168, openRadius: 228 },
-  { x: CFG.visual.screen.width / 2 - 275,            y: 298, openRadius: 220 },
-  { x: CFG.visual.screen.width / 2 - 75,             y: 250, openRadius: 218 },
   { x: CFG.visual.screen.width / 2 + 90,             y: 185, openRadius: 225 },
-  { x: CFG.visual.screen.width / 2 + 245,            y: 280, openRadius: 215 },
-  { x: CFG.visual.screen.width / 2 + 435,            y: 215, openRadius: 220 },
-  { x: CFG.visual.screen.width / 2 + 570,            y: 292, openRadius: 210 },
+  { x: CFG.visual.screen.width / 2 + 380,            y: 190, openRadius: 245 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 80,  y: 166, openRadius: 285 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 272, y: 240, openRadius: 210 },
+  { x: CFG.visual.screen.width / 2 - 118,            y: 174, openRadius: 222 },
+  { x: CFG.visual.screen.width / 2 + 640,            y: 210, openRadius: 202 },
+  { x: CFG.visual.screen.width / 2 - 430,            y: 168, openRadius: 228 },
   { x: CFG.visual.screen.width / 2 + 710,            y: 175, openRadius: 205 },
-  { x: LEFT_MARGIN + 620,                            y: 268, openRadius: 198 },
-  { x: LEFT_MARGIN + 700,                            y: 195, openRadius: 202 },
-  { x: CFG.visual.screen.width / 2 - 165,            y: 185, openRadius: 228 },
   //
-  // Narrow middle band (y 412–438) — between platform 3 (+60) and lower cluster (-60)
+  // Band A (y 268–289): just above P3 (y=350), 61–82 px clearance — visible from P3 and P1
   //
-  { x: LEFT_MARGIN + 52,                            y: 420, openRadius: 282 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 58, y: 428, openRadius: 276 },
-  { x: LEFT_MARGIN + 315,                           y: 416, openRadius: 232 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 318, y: 434, openRadius: 226 },
+  { x: 1650,                                         y: 278, openRadius: 310 },
+  { x: 1450,                                         y: 272, openRadius: 300 },
+  { x: 1860,                                         y: 282, openRadius: 305 },
+  { x: 1500,                                         y: 289, openRadius: 295 },
+  { x: 1240,                                         y: 268, openRadius: 295 },
+  { x: 1050,                                         y: 278, openRadius: 290 },
+  { x: 950,                                          y: 285, openRadius: 285 },
+  { x: 780,                                          y: 272, openRadius: 280 },
+  { x: 590,                                          y: 280, openRadius: 275 },
+  { x: 400,                                          y: 275, openRadius: 270 },
+  { x: 250,                                          y: 285, openRadius: 265 },
+  { x: 120,                                          y: 272, openRadius: 258 },
   //
-  // Lower band (y 662–970) — below all platforms, dark floor area
+  // Band B (y 415–438): narrow safe gap above the P1/P0/P2 cluster — concentrated near platform X positions
   //
-  { x: LEFT_MARGIN + 62,                            y: 680, openRadius: 280 },
-  { x: LEFT_MARGIN + 98,                            y: 770, openRadius: 268 },
-  { x: LEFT_MARGIN + 145,                           y: 855, openRadius: 252 },
-  { x: LEFT_MARGIN + 88,                            y: 940, openRadius: 240 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68, y: 698, openRadius: 272 },
+  { x: 1650,                                         y: 418, openRadius: 345 },
+  { x: 1820,                                         y: 425, openRadius: 335 },
+  { x: 1460,                                         y: 422, openRadius: 332 },
+  { x: 1330,                                         y: 432, openRadius: 328 },
+  { x: 1150,                                         y: 426, openRadius: 340 },
+  { x: 1000,                                         y: 430, openRadius: 330 },
+  { x: 1280,                                         y: 418, openRadius: 335 },
+  { x: 900,                                          y: 435, openRadius: 325 },
+  { x: 680,                                          y: 418, openRadius: 335 },
+  { x: 540,                                          y: 425, openRadius: 322 },
+  { x: 820,                                          y: 432, openRadius: 328 },
+  { x: 430,                                          y: 428, openRadius: 318 },
+  { x: 180,                                          y: 435, openRadius: 320 },
+  { x: 320,                                          y: 422, openRadius: 315 },
+  { x: 80,                                           y: 430, openRadius: 308 },
+  { x: 220,                                          y: 415, openRadius: 312 },
+  { x: CFG.visual.screen.width / 2 - 130,            y: 438, openRadius: 322 },
+  { x: CFG.visual.screen.width / 2 + 260,            y: 415, openRadius: 330 },
+  { x: CFG.visual.screen.width / 2 - 350,            y: 428, openRadius: 318 },
+  { x: CFG.visual.screen.width / 2 + 500,            y: 422, openRadius: 325 },
+  //
+  // Lower band (y 680–970): below all platforms, dark floor area
+  //
+  { x: LEFT_MARGIN + 62,                             y: 680, openRadius: 280 },
+  { x: LEFT_MARGIN + 98,                             y: 770, openRadius: 268 },
+  { x: LEFT_MARGIN + 145,                            y: 855, openRadius: 252 },
+  { x: LEFT_MARGIN + 88,                             y: 940, openRadius: 240 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 68,  y: 698, openRadius: 272 },
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 108, y: 788, openRadius: 260 },
   { x: CFG.visual.screen.width - RIGHT_MARGIN - 158, y: 872, openRadius: 246 },
-  { x: CFG.visual.screen.width - RIGHT_MARGIN - 95, y: 958, openRadius: 235 },
-  { x: CFG.visual.screen.width / 2 - 308,           y: 730, openRadius: 218 },
-  { x: CFG.visual.screen.width / 2 + 278,           y: 752, openRadius: 222 },
-  { x: CFG.visual.screen.width / 2 - 152,           y: 838, openRadius: 208 },
-  { x: CFG.visual.screen.width / 2 + 122,           y: 892, openRadius: 202 },
+  { x: CFG.visual.screen.width - RIGHT_MARGIN - 95,  y: 958, openRadius: 235 },
+  { x: CFG.visual.screen.width / 2 - 308,            y: 730, openRadius: 218 },
+  { x: CFG.visual.screen.width / 2 + 278,            y: 752, openRadius: 222 },
+  { x: CFG.visual.screen.width / 2 - 152,            y: 838, openRadius: 208 },
+  { x: CFG.visual.screen.width / 2 + 122,            y: 892, openRadius: 202 },
   //
-  // Platform-proximity band A (y 268–288) — just above highest platform P3 (y=350, 62–82px gap)
+  // Extra lower-band cover: horizontal mid-floor coverage on both sides
   //
-  { x: 1650,                                         y: 278, openRadius: 295 },
-  { x: 1420,                                         y: 272, openRadius: 285 },
-  { x: 1860,                                         y: 281, openRadius: 290 },
-  { x: 1240,                                         y: 268, openRadius: 280 },
-  { x: 870,                                          y: 284, openRadius: 285 },
-  { x: 540,                                          y: 272, openRadius: 275 },
-  //
-  // Platform-proximity band B (y 416–436) — between P3 zone end (y=410) and lower cluster (y=440)
-  //
-  { x: 1150,                                         y: 426, openRadius: 318 },
-  { x: 680,                                          y: 418, openRadius: 312 },
-  { x: 350,                                          y: 432, openRadius: 305 },
-  { x: 1460,                                         y: 422, openRadius: 308 },
-  { x: 910,                                          y: 430, openRadius: 310 },
-  { x: 180,                                          y: 435, openRadius: 298 }
+  { x: CFG.visual.screen.width / 2 - 580,            y: 710, openRadius: 225 },
+  { x: CFG.visual.screen.width / 2 + 450,            y: 740, openRadius: 218 },
+  { x: CFG.visual.screen.width / 2 - 100,            y: 800, openRadius: 215 },
+  { x: CFG.visual.screen.width / 2 + 150,            y: 680, openRadius: 228 },
+  { x: 500,                                          y: 860, openRadius: 210 },
+  { x: 1400,                                         y: 820, openRadius: 214 },
+  { x: 1050,                                         y: 900, openRadius: 208 },
+  { x: 750,                                          y: 950, openRadius: 205 }
 ]
 function addWatchingEyes(k, heroInst) {
   const eyeColor = k.rgb(220, 60, 30)

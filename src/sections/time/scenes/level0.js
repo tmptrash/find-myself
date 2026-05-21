@@ -11,6 +11,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { toCanvas, parseHex, getRGB } from '../../../utils/helper.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
+import { getDarkness } from '../utils/time-day-night.js'
 import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
@@ -48,14 +49,14 @@ const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 100
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 80
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"
@@ -131,6 +132,10 @@ const BIRD_FLY_SPEED_Y_MIN = 230
 const BIRD_FLY_SPEED_Y_RANGE = 130
 const BIRD_FLY_GRAVITY = 60
 const BIRD_FADE_DURATION = 1.4
+//
+// Darkness threshold: birds rest and scatter only during daytime (low darkness)
+//
+const BIRD_DAY_DARKNESS_MAX = 0.35
 const BIRD_DRAW_Z = 18
 
 /**
@@ -922,7 +927,12 @@ function createRestingBirds(k, heroInst, sound) {
     k.z(BIRD_DRAW_Z),
     k.fixed(),
     {
-      draw() { drawBirds(k, birds) },
+      draw() {
+        //
+        // Birds are only visible during daytime
+        //
+        if (getDarkness() <= BIRD_DAY_DARKNESS_MAX) drawBirds(k, birds)
+      },
       update() { onUpdateBirds(k, heroInst, birds, scattered, sound) }
     }
   ])
@@ -932,6 +942,10 @@ function createRestingBirds(k, heroInst, sound) {
   //
   k.onUpdate(() => {
     if (scattered) return
+    //
+    // Birds only react during daytime — stay still at night
+    //
+    if (getDarkness() > BIRD_DAY_DARKNESS_MAX) return
     const heroX = heroInst.character?.pos?.x ?? 0
     const distX = Math.abs(heroX - BIRD_PERCH_X)
     if (distX > BIRD_SCATTER_DIST_X) return

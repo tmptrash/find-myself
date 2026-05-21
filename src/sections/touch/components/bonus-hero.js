@@ -37,7 +37,7 @@ const COLLECT_PARTICLE_LIFETIME = 0.8
 //
 // Same HUD hint whenever any bonus mini-hero is collected (touch section).
 //
-const BONUS_COLLECT_HINT_TEXT = 'you got 3 points.'
+const BONUS_COLLECT_HINT_TEXT = 'you got 3 fragments.'
 //
 // Float animation and time-style platform text
 //
@@ -98,6 +98,7 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {string} [config.platformText] - Time-style text for platform (e.g. "00:00"); uses log if null
  * @param {number} [config.platformFontSize] - Override font size for time-style platform text
  * @param {number} [config.platformCollisionHeight] - Override collision height for time-style platform
+ * @param {number} [config.platformZ] - Z-index for platform collision and draw layer
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -111,7 +112,8 @@ export function create(config) {
     storageKey = null,
     platformText = null,
     platformFontSize = TIME_PLATFORM_FONT_SIZE,
-    platformCollisionHeight = null
+    platformCollisionHeight = null,
+    platformZ = CFG.visual.zIndex.platforms
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -139,7 +141,7 @@ export function create(config) {
     k.area(),
     k.body({ isStatic: true }),
     k.opacity(0),
-    k.z(CFG.visual.zIndex.platforms),
+    k.z(platformZ),
     CFG.game.platformName
   ])
   //
@@ -157,7 +159,7 @@ export function create(config) {
     bodyColor: miniColor
   })
   miniHero.character.opacity = 0
-  miniHero.character.z = CFG.visual.zIndex.platforms + 3
+  miniHero.character.z = platformZ + 3
 
   const inst = {
     k,
@@ -169,6 +171,7 @@ export function create(config) {
     x,
     y,
     width,
+    platformZ,
     collisionHeight,
     revealed: false,
     collected: false,
@@ -203,7 +206,7 @@ export function create(config) {
   //
   k.add([
     k.pos(0, 0),
-    k.z(CFG.visual.zIndex.platforms + 2),
+    k.z(platformZ + 2),
     {
       draw() {
         onDraw(inst)

@@ -36,14 +36,14 @@ const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 100
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 80
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"

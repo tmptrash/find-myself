@@ -788,9 +788,9 @@ function onUpdate(inst) {
     }
   }
   //
-  // Determine movement state (only for controllable characters, respects controlsDisabled)
+  // Determine movement state; requires spawn so keys don't trigger sounds before hero appears
   //
-  const isMoving = !inst.controlsDisabled && (isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
+  const isMoving = inst.isSpawned && !inst.controlsDisabled && (isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
     isAnyKeyDown(inst.k, CFG.controls.moveRight))
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)

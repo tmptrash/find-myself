@@ -1,0 +1,1467 @@
+import { CFG } from '../cfg.js'
+import * as Hero from '../../../components/hero.js'
+import { set, get } from '../../../utils/progress.js'
+import * as Sound from '../../../utils/sound.js'
+import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as Tooltip from '../../../utils/tooltip.js'
+import * as BonusHero from '../components/bonus-hero.js'
+import * as LevelIndicator from '../components/level-indicator.js'
+import * as LogPlatform from '../utils/log-platform.js'
+import { createLevelTransition } from '../../../utils/transition.js'
+import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
+import * as FloorRocks from '../utils/floor-rocks.js'
+import * as BackgroundBirds from '../../time/components/background-birds.js'
+import * as OrganicParallax from '../utils/organic-parallax-tree.js'
+import { drawThorns } from '../components/jungle-decor.js'
+import { getRGB } from '../../../utils/helper.js'
+
+//
+// Game area — same proportions as time section level 0
+//
+const TOP_MARGIN = 250
+const BOTTOM_MARGIN = 255
+const LEFT_MARGIN = 192
+const RIGHT_MARGIN = 192
+const SCREEN_W = CFG.visual.screen.width
+const SCREEN_H = CFG.visual.screen.height
+const FLOOR_Y = SCREEN_H - BOTTOM_MARGIN
+const PLAYABLE_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
+//
+// Background color
+//
+const BG_R = 26
+const BG_G = 26
+const BG_B = 26
+const WALL_COLOR = 31
+const WALL_COLOR_HEX = '#1F1F1F'
+//
+// Hero and anti-hero colors
+//
+const HERO_BODY_COLOR = '#909090'
+const ANTIHERO_BODY_COLOR = '#8B5A50'
+const TRAINING_LABEL_COLOR_HEX = '#8B5A50'
+//
+// Main log platform (center, lowered and smaller)
+//
+const MAIN_PLATFORM_X = LEFT_MARGIN + PLAYABLE_W / 2
+const MAIN_PLATFORM_Y = FLOOR_Y - 98
+const MAIN_PLATFORM_W = 140
+const MAIN_PLATFORM_H = 22
+//
+// Bonus platform (above and right of main platform, wider and shifted left)
+//
+const BONUS_PLATFORM_X = MAIN_PLATFORM_X + MAIN_PLATFORM_W / 2 + 88
+const BONUS_PLATFORM_Y = MAIN_PLATFORM_Y - 95
+const BONUS_PLATFORM_W = 50
+//
+// Single red spike cluster immediately after the main platform
+//
+const SPIKE_START_X = MAIN_PLATFORM_X + MAIN_PLATFORM_W / 2 + 16
+const SPIKE_ZONE_WIDTH = 130
+const SPIKE_END_X = SPIKE_START_X + SPIKE_ZONE_WIDTH
+const SPIKE_PASS_MARGIN = 36
+const SPIKE_MAX_CLUSTERS = 1
+const FLOOR_THORN_SPACING = 22
+const FLOOR_THORN_WIDTH_MIN = 7
+const FLOOR_THORN_WIDTH_MAX = 14
+const FLOOR_THORN_MIN_PER_CLUSTER = 2
+const FLOOR_THORN_MAX_PER_CLUSTER = 6
+const FLOOR_THORN_HEIGHT_MIN = 11
+const FLOOR_THORN_HEIGHT_MAX = 20
+const FLOOR_THORN_TIP_OFFSET = 3
+const FLOOR_THORN_RAISE_OFFSET = 1
+const FLOOR_THORN_CLUSTER_MIN = 70
+const FLOOR_THORN_CLUSTER_EXTRA = 140
+const FLOOR_THORN_GAP_MIN = 80
+const FLOOR_THORN_GAP_EXTRA = 140
+const FLOOR_THORN_FEET_TOLERANCE_LOW = 28
+const FLOOR_THORN_FEET_TOLERANCE_HIGH = 12
+const FLOOR_THORN_FEET_MIN_PENETRATION_PAST_TIP = 2
+const FLOOR_THORN_COLLISION_TIP_BIAS_DOWN = 14
+const FLOOR_THORN_FEET_BELOW_BASE_PAD = 10
+const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
+const FLOOR_THORN_DRAW_Z = 27
+const FLOOR_THORN_BLADE_FILL_R = 196
+const FLOOR_THORN_BLADE_FILL_G = 38
+const FLOOR_THORN_BLADE_FILL_B = 42
+const HERO_HITBOX_HEIGHT_FOR_THORNS = 69
+const HERO_HITBOX_OFFSET_Y_FOR_THORNS = 3
+const HERO_HALF_WIDTH_THORNS = 15
+//
+// Anti-hero and hero spawn
+//
+const ANTIHERO_X = SCREEN_W - RIGHT_MARGIN - 120
+const ANTIHERO_Y = FLOOR_Y - 50
+const HERO_SPAWN_X = LEFT_MARGIN + 110
+const HERO_SPAWN_Y = FLOOR_Y - 50
+const HERO_SPAWN_DELAY = 0.5
+const PLATFORM_FOREGROUND_Z = 26
+const HERO_SPAWN_Z = 28
+const ANTIHERO_Z = 28
+//
+// HUD small-hero flash on annihilation (touch level 0 pattern)
+//
+const HERO_SCORE_FLASH_COUNT = 20
+const HERO_SCORE_FLASH_INTERVAL = 0.05
+const HERO_SCORE_PARTICLE_COUNT = 8
+const HERO_SCORE_PARTICLE_SPEED_MIN = 30
+const HERO_SCORE_PARTICLE_SPEED_RANGE = 20
+const HERO_SCORE_PARTICLE_SIZE_MIN = 4
+const HERO_SCORE_PARTICLE_SIZE_RANGE = 4
+const HERO_SCORE_PARTICLE_LIFETIME_MIN = 0.8
+const HERO_SCORE_PARTICLE_LIFETIME_RANGE = 0.4
+//
+// Life image flash + red particles on thorn death (same as touch level 0)
+//
+const LIFE_FLASH_COUNT = 20
+const LIFE_FLASH_INTERVAL = 0.05
+const LIFE_PARTICLE_COUNT = 15
+const LIFE_PARTICLE_SPEED_MIN = 80
+const LIFE_PARTICLE_SPEED_EXTRA = 40
+const LIFE_PARTICLE_LIFETIME_MIN = 0.8
+const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
+const LIFE_PARTICLE_SIZE_MIN = 4
+const LIFE_PARTICLE_SIZE_EXTRA = 4
+//
+// Tutorial hints
+//
+const HINT_Y_OFFSET = -100
+const HINT_1_TEXT = 'use ← →, A D to\nrun to the platform'
+const HINT_2_TEXT = 'use Space, ↑ to\njump on the platform'
+const HINT_2_TRIGGER_X = MAIN_PLATFORM_X - 100
+const HINT_3_TEXT = 'find the blinking fragment\nand jump on it'
+const HINT_3_TRIGGER_Y = MAIN_PLATFORM_Y + 15
+const HINT_4_TEXT = 'spikes are to your right —\nif you fall on them you die'
+const HINT_5_TEXT = 'find yourself —\nyour other half and touch it'
+const HINT_DISPLAY_TIME = 9
+const BONUS_COLLECT_HINT_DURATION = 5
+//
+// Skip training text (below game area floor line)
+//
+const SKIP_TEXT = 'Press Enter to skip training'
+const SKIP_FONT_SIZE = 20
+const SKIP_TEXT_Y = FLOOR_Y + Math.round(BOTTOM_MARGIN * 0.42)
+const SKIP_MIN_OPACITY = 0.3
+const SKIP_MAX_OPACITY = 0.7
+const SKIP_FLICKER_SPEED = 0.9
+//
+// Rounded corners
+//
+const CORNER_RADIUS = 20
+const CORNER_SPRITE_NAME = 'training-corner-sprite'
+const BOTTOM_CORNER_Z = 26
+//
+// Clouds (touch level 0 style)
+//
+const CLOUD_SCROLL_SPEED = 8
+const CLOUD_TOP_Y = TOP_MARGIN + 20
+const CLOUD_BOTTOM_Y = TOP_MARGIN + 100
+const CLOUD_COUNT = 18
+const CLOUD_RANDOMNESS = 20
+const CLOUD_Z = 1
+const CLOUD_CIRCLE_R = 36
+const CLOUD_CIRCLE_G = 37
+const CLOUD_CIRCLE_B = 36
+//
+// Parallax tree layers (touch level 0 style)
+//
+const PARALLAX_FAR_CIRCLE_Z = 2
+const PARALLAX_FAR_ORGANIC_Z = 3
+const PARALLAX_GREY_LEAF_ROW_Z = 4
+const PARALLAX_BLACK_LEAF_ROW_Z = 5
+const FRONT_ORGANIC_DARK_BACKDROP_Z = 23
+const FRONT_ORGANIC_DYNAMIC_Z = 25
+const BACK_SIMPLE_TREE_COUNT = 22
+const BACK_ORGANIC_FAR_COUNT = 15
+const BACK_ORGANIC_MID_COUNT = 9
+const BACK_ORGANIC_FAR_HEIGHT_SCALE = 0.78
+const BACK_ORGANIC_FAR_SILHOUETTE_DIM = 0.12
+const BACK_ORGANIC_SILHOUETTE_DIM = 0.26
+const BACK_ORGANIC_GREY_BLEND_FAR = 0.96
+const BACK_ORGANIC_GREY_BLEND_NEAR = 0.90
+const CLOUD_CIRCLE_BLEND_FAR = 0.9
+const CLOUD_CIRCLE_BLEND_NEAR = 0.74
+const GREY_LEAF_ROW_COUNT = 24
+const BLACK_LEAF_ROW_COUNT = 14
+const GREY_LEAF_ROW_SLOT_BIAS = 0.38
+const BLACK_LEAF_ROW_SLOT_BIAS = 0.42
+const GREY_ORGANIC_TRUNK_R = 22
+const GREY_ORGANIC_TRUNK_G = 22
+const GREY_ORGANIC_TRUNK_B = 22
+const GREY_ORGANIC_LEAF_R = 24
+const GREY_ORGANIC_LEAF_G = 24
+const GREY_ORGANIC_LEAF_B = 24
+const GREY_ORGANIC_JITTER = 4
+const BLACK_LEAF_SILHOUETTE_DIM = 0.48
+const BLACK_ORGANIC_TRUNK_R = 11
+const BLACK_ORGANIC_TRUNK_G = 11
+const BLACK_ORGANIC_TRUNK_B = 15
+const BLACK_ORGANIC_LEAF_R = 15
+const BLACK_ORGANIC_LEAF_G = 15
+const BLACK_ORGANIC_LEAF_B = 20
+const PARALLAX_BACK_SCALE = 1.12
+const PARALLAX_GREY_LEAF_SCALE = 1.02
+const PARALLAX_BLACK_LEAF_SCALE = 0.68
+const PARALLAX_FRONT_SCALE = 0.36
+const FRONT_ORGANIC_TREE_COUNT = 12
+const FRONT_ORGANIC_DARK_DIM_RGB = 0.38
+const FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE = 0.88
+const FRONT_LEAF_R = 140
+const FRONT_LEAF_G = 105
+const FRONT_LEAF_B = 28
+const FRONT_LEAF_JITTER = 18
+const BLACK_LEAF_CLOUD_GAP = 48
+const BLACK_LEAF_BRANCH_CLEARANCE = 72
+const BLACK_LEAF_HEIGHT_MIN = 90
+const BLACK_LEAF_HEIGHT_RANGE = 55
+const TREE_ROOT_COLOR_R = 48
+const TREE_ROOT_COLOR_G = 58
+const TREE_ROOT_COLOR_B = 42
+const TREE_ROOT_ABSOLUTE_MAX_Y = CFG.visual.screen.height - 6
+const ORGANIC_ROOT_DEPTH_MAX = 123
+//
+// Grass clumps
+//
+const GRASS_CLUSTER_COUNT = 7
+const GRASS_BLADE_SWAY_SPEED = 0.9
+const GRASS_BLADE_SWAY_AMP = 0.18
+const GRASS_DRAW_Z = 19
+const GRASS_EXCLUDE_HALF_W = 120
+//
+// Rocks and birds
+//
+const ROCK_DRAW_Z = 7
+const ROCK_SPRITE_PREFIX = 'training-rock'
+const ROCK_EXCLUDE_CENTER_X = MAIN_PLATFORM_X
+const ROCK_EXCLUDE_HALF_W = 80
+const BIRD_LAYER_Z = 6
+//
+// Ambient sounds
+//
+const BIRD_CHIRP_INTERVAL_MIN = 4
+const BIRD_CHIRP_INTERVAL_EXTRA = 8
+const OWL_INTERVAL_MIN = 10
+const OWL_INTERVAL_EXTRA = 16
+const CRICKET_INTERVAL_MIN = 1.5
+const CRICKET_INTERVAL_EXTRA = 3
+
+/**
+ * Training level — tutorial introduction before touch.0.
+ * @param {Object} k - Kaplay instance
+ */
+export function sceneTouchTraining(k) {
+  k.scene('level-touch.training', () => {
+    //
+    // Reset scores when first entering the touch section from another section
+    //
+    if (get('lastSection', null) !== 'touch') {
+      set('heroScore', 0)
+      set('lifeScore', 0)
+    }
+    set('lastSection', 'touch')
+    set('lastLevel', 'level-touch.training')
+    Tooltip.unsuppressAll()
+    //
+    // Background and gravity
+    //
+    k.setBackground(k.rgb(BG_R, BG_G, BG_B))
+    k.canvas?.style.setProperty('background-color', `rgb(${BG_R}, ${BG_G}, ${BG_B})`, 'important')
+    k.onSceneLeave(() => { k.canvas?.style.removeProperty('background-color') })
+    k.setGravity(CFG.game.gravity)
+    k.onDraw(() => {
+      k.drawRect({ width: k.width(), height: k.height(), pos: k.vec2(0, 0), color: k.rgb(BG_R, BG_G, BG_B) })
+    })
+    //
+    // Sound
+    //
+    const sound = Sound.create()
+    Sound.startAudioContext(sound)
+    k.onSceneLeave(() => Sound.stopAmbient(sound))
+    //
+    // Touch level 0 style clouds and parallax background trees
+    //
+    createBackgroundClouds(k)
+    createBackParallaxTrees(k)
+    createFrontSwayingOrganicTrees(k)
+    //
+    // Background birds
+    //
+    BackgroundBirds.create(k, { zIndex: BIRD_LAYER_Z })
+    //
+    // Walls and corners
+    //
+    createWalls(k)
+    createRoundedCorners(k)
+    //
+    // Floor collision
+    //
+    k.add([
+      k.rect(PLAYABLE_W, BOTTOM_MARGIN + 10),
+      k.pos(LEFT_MARGIN, FLOOR_Y),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.color(WALL_COLOR, WALL_COLOR, WALL_COLOR),
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName
+    ])
+    //
+    // Grass in clumps along the floor
+    //
+    const grassState = { blades: generateGrassClumps(), timer: 0 }
+    k.add([k.z(GRASS_DRAW_Z), {
+      draw() { drawGrass(k, grassState) },
+      update() { onUpdateGrass(k, grassState) }
+    }])
+    //
+    // Floor rocks
+    //
+    FloorRocks.addTouchSectionFloorRocks(k, {
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN,
+      drawZ: ROCK_DRAW_Z,
+      spritePrefix: ROCK_SPRITE_PREFIX,
+      rockCount: 6,
+      excludeCenterX: ROCK_EXCLUDE_CENTER_X,
+      excludeHalfWidth: ROCK_EXCLUDE_HALF_W
+    })
+    //
+    // Main log platform (touch section style)
+    //
+    LogPlatform.create({
+      k,
+      x: MAIN_PLATFORM_X,
+      y: MAIN_PLATFORM_Y,
+      width: MAIN_PLATFORM_W,
+      height: MAIN_PLATFORM_H,
+      withSnow: false,
+      z: PLATFORM_FOREGROUND_Z
+    })
+    //
+    // Single spike cluster right after the main platform
+    //
+    const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
+    const thornsData = generateFloorThornsWithGaps(
+      SPIKE_START_X,
+      SPIKE_END_X,
+      floorThornBaseY,
+      [
+        { center: HERO_SPAWN_X, halfWidth: 100 },
+        { center: MAIN_PLATFORM_X, halfWidth: MAIN_PLATFORM_W / 2 + 40 }
+      ],
+      SPIKE_MAX_CLUSTERS
+    )
+    const spikePassX = thornsData.length
+      ? Math.max(...thornsData.map(t => t.x + t.width / 2)) + SPIKE_PASS_MARGIN
+      : SPIKE_END_X + SPIKE_PASS_MARGIN
+    k.add([k.z(FLOOR_THORN_DRAW_Z), {
+      draw() {
+        drawThorns(
+          k,
+          thornsData,
+          k.rgb(FLOOR_THORN_BLADE_FILL_R, FLOOR_THORN_BLADE_FILL_G, FLOOR_THORN_BLADE_FILL_B)
+        )
+      }
+    }])
+    //
+    // TRAINING header + score HUD (same sizes as touch levels)
+    //
+    const levelIndicator = LevelIndicator.create({
+      k,
+      levelNumber: 0,
+      sectionLabel: 'TRAINING',
+      labelColor: TRAINING_LABEL_COLOR_HEX,
+      activeColor: TRAINING_LABEL_COLOR_HEX,
+      inactiveColor: TRAINING_LABEL_COLOR_HEX,
+      completedColor: TRAINING_LABEL_COLOR_HEX,
+      heroBodyColor: HERO_BODY_COLOR,
+      topPlatformHeight: TOP_MARGIN,
+      sideWallWidth: LEFT_MARGIN
+    })
+    //
+    // FPS counter (no green bonus timer)
+    //
+    const fpsCounter = FpsCounter.create({ k, showTimer: true, targetTime: null })
+    k.onUpdate(() => FpsCounter.onUpdate(fpsCounter))
+    //
+    // Anti-hero
+    //
+    const antiHeroInst = Hero.create({
+      k,
+      x: ANTIHERO_X,
+      y: ANTIHERO_Y,
+      type: Hero.HEROES.ANTIHERO,
+      controllable: false,
+      sfx: sound,
+      antiHero: null,
+      bodyColor: ANTIHERO_BODY_COLOR
+    })
+    antiHeroInst.character && (antiHeroInst.character.hidden = true)
+    antiHeroInst.character && (antiHeroInst.character.z = ANTIHERO_Z)
+    //
+    // Hint and death state
+    //
+    let bonusJustCollected = false
+    const hintState = {
+      shown1: false,
+      shown2: false,
+      shown3: false,
+      shown4: false,
+      shown5: false,
+      spikesPassed: false,
+      bonusCollectUntil: 0,
+      spikePassX,
+      levelDone: false,
+      isDead: false,
+      currentTip: null,
+      currentHintType: null
+    }
+    const spikeDead = { active: false }
+    //
+    // Main hero
+    //
+    const heroInst = Hero.create({
+      k,
+      x: HERO_SPAWN_X,
+      y: HERO_SPAWN_Y,
+      type: Hero.HEROES.HERO,
+      controllable: true,
+      sfx: sound,
+      antiHero: antiHeroInst,
+      bodyColor: HERO_BODY_COLOR,
+      jumpForce: CFG.game.jumpForce,
+      currentLevel: 'level-touch.training',
+      onAnnihilation: () => {
+        hintState.levelDone = true
+        Tooltip.suppressAll()
+        const currentScore = get('heroScore', 0)
+        const newScore = currentScore + 1
+        set('heroScore', newScore)
+        levelIndicator.updateHeroScore(newScore)
+        playHeroScoreEffects(k, levelIndicator, HERO_BODY_COLOR)
+        Sound.playVictorySound(sound)
+        k.wait(1.8, () => {
+          Sound.stopAmbient(sound)
+          createLevelTransition(k, 'level-touch.training', () => {
+            set('lastLevel', 'level-touch.0')
+            k.go('level-touch.0')
+          })
+        })
+      }
+    })
+    heroInst.character && (heroInst.character.hidden = true)
+    heroInst.character && (heroInst.character.z = HERO_SPAWN_Z)
+    //
+    // Bonus hero on hidden platform
+    //
+    BonusHero.create({
+      k,
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: BONUS_PLATFORM_W,
+      heroInst,
+      levelIndicator,
+      sfx: sound,
+      heroBodyColor: HERO_BODY_COLOR,
+      storageKey: 'touch.trainingBonusCollected',
+      platformZ: PLATFORM_FOREGROUND_Z
+    })
+    levelIndicator.updateHeroScore = ((orig) => (score) => {
+      orig(score)
+      bonusJustCollected = true
+      hintState.bonusCollectUntil = k.time() + BONUS_COLLECT_HINT_DURATION
+      hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+      hintState.currentTip = null
+      hintState.currentHintType = null
+    })(levelIndicator.updateHeroScore)
+    //
+    // Spike death, hints, skip text
+    //
+    k.onUpdate(() => checkFloorThorns(k, heroInst, thornsData, levelIndicator, hintState, spikeDead))
+    k.onUpdate(() => onUpdateHints(k, hintState, heroInst, bonusJustCollected))
+    const skipAnim = createSkipText(k)
+    k.onUpdate(() => onUpdateSkipText(k, skipAnim))
+    //
+    // Enter: skip training
+    //
+    k.onKeyPress('enter', () => {
+      if (hintState.levelDone || spikeDead.active) return
+      Tooltip.suppressAll()
+      set('lastLevel', 'level-touch.0')
+      k.go('level-touch.0')
+    })
+    k.onKeyPress('escape', () => goToMenuAfterAssets(k))
+    //
+    // Spawn characters and show first hint
+    //
+    k.wait(HERO_SPAWN_DELAY, () => {
+      heroInst.character && Hero.spawn(heroInst)
+      antiHeroInst.character && Hero.spawn(antiHeroInst)
+      showHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
+      hintState.shown1 = true
+    })
+    scheduleAmbientSounds(k, sound)
+  })
+}
+
+//
+// Static boundary walls
+//
+function createWalls(k) {
+  k.add([
+    k.rect(LEFT_MARGIN, SCREEN_H),
+    k.pos(LEFT_MARGIN / 2, SCREEN_H / 2),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR, WALL_COLOR, WALL_COLOR),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  k.add([
+    k.rect(RIGHT_MARGIN, SCREEN_H),
+    k.pos(SCREEN_W - RIGHT_MARGIN / 2, SCREEN_H / 2),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR, WALL_COLOR, WALL_COLOR),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  k.add([
+    k.rect(SCREEN_W, TOP_MARGIN),
+    k.pos(SCREEN_W / 2, TOP_MARGIN / 2),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(WALL_COLOR, WALL_COLOR, WALL_COLOR),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+}
+
+//
+// Rounded corners at game area edges
+//
+function createRoundedCorners(k) {
+  const canvas = document.createElement('canvas')
+  canvas.width = CORNER_RADIUS
+  canvas.height = CORNER_RADIUS
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = WALL_COLOR_HEX
+  ctx.fillRect(0, 0, CORNER_RADIUS, CORNER_RADIUS)
+  ctx.globalCompositeOperation = 'destination-out'
+  ctx.beginPath()
+  ctx.arc(CORNER_RADIUS, CORNER_RADIUS, CORNER_RADIUS, 0, Math.PI * 2)
+  ctx.fill()
+  loadTouchSprite(k, CORNER_SPRITE_NAME, canvas.toDataURL())
+  k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(LEFT_MARGIN, TOP_MARGIN), k.z(CFG.visual.zIndex.platforms + 1)])
+  k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(SCREEN_W - RIGHT_MARGIN, TOP_MARGIN), k.rotate(90), k.z(CFG.visual.zIndex.platforms + 1)])
+  k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(LEFT_MARGIN, FLOOR_Y), k.rotate(270), k.z(BOTTOM_CORNER_Z)])
+  k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(SCREEN_W - RIGHT_MARGIN, FLOOR_Y), k.rotate(180), k.z(BOTTOM_CORNER_Z)])
+}
+
+//
+// Creates dark background clouds that scroll slowly (touch level 0 style)
+//
+function createBackgroundClouds(k) {
+  const baseCloudColor = k.rgb(CLOUD_CIRCLE_R, CLOUD_CIRCLE_G, CLOUD_CIRCLE_B)
+  const areaLeft = LEFT_MARGIN
+  const areaRight = SCREEN_W - RIGHT_MARGIN
+  const bandWidth = areaRight - areaLeft
+  const cloudSpacing = bandWidth / CLOUD_COUNT
+  const cloudConfigs = []
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const baseX = cloudSpacing * i + cloudSpacing * 0.5
+    const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
+    const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+    const crownSize = (50 + Math.random() * 60) * 1.2
+    const crownCount = 5 + Math.floor(Math.random() * 4)
+    const crowns = []
+    for (let j = 0; j < crownCount; j++) {
+      crowns.push({
+        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+        sizeVariation: 0.6 + Math.random() * 0.6,
+        opacityVariation: 0.7 + Math.random() * 0.2
+      })
+    }
+    cloudConfigs.push({
+      x: cloudX,
+      y: cloudY,
+      crownSize,
+      crowns,
+      color: baseCloudColor,
+      opacity: 0.85 + Math.random() * 0.1
+    })
+  }
+  const inst = { scrollX: 0 }
+  k.add([
+    k.z(CLOUD_Z),
+    {
+      draw() {
+        inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
+        for (let copy = 0; copy < 2; copy++) {
+          const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
+          for (const cloud of cloudConfigs) {
+            const cx = cloud.x + baseOffset
+            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
+            for (const crown of cloud.crowns) {
+              k.drawCircle({
+                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
+                radius: cloud.crownSize * crown.sizeVariation,
+                color: cloud.color,
+                opacity: cloud.opacity * crown.opacityVariation
+              })
+            }
+          }
+        }
+      }
+    }
+  ])
+}
+
+//
+// Builds all back parallax tree layers (touch level 0 style)
+//
+function createBackParallaxTrees(k) {
+  const treeFloorY = FLOOR_Y
+  createBackCircleTrees(k, treeFloorY)
+  createBackOrganicRows(k, treeFloorY)
+  createGreyLeafRow(k, treeFloorY)
+  createBlackLeafRow(k, treeFloorY)
+}
+
+//
+// Far-back grey circle-crown trees (touch level 0 back row)
+//
+function createBackCircleTrees(k, treeFloorY) {
+  const scale = PARALLAX_BACK_SCALE
+  const colorMix = 0.2
+  const treeTrunkR = Math.round(12 * colorMix + BG_R * (1 - colorMix))
+  const treeTrunkG = Math.round(16 * colorMix + BG_G * (1 - colorMix))
+  const treeTrunkB = Math.round(12 * colorMix + BG_B * (1 - colorMix))
+  const treeLeafR = Math.round(16 * colorMix + BG_R * (1 - colorMix))
+  const treeLeafG = Math.round(20 * colorMix + BG_G * (1 - colorMix))
+  const treeLeafB = Math.round(16 * colorMix + BG_B * (1 - colorMix))
+  const trees = []
+  for (let i = 0; i < BACK_SIMPLE_TREE_COUNT; i++) {
+    const spacing = PLAYABLE_W / (BACK_SIMPLE_TREE_COUNT - 1)
+    const treeX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * 20
+    const baseTreeHeight = (90 + Math.random() * 70) * scale
+    const crownCenterY = treeFloorY - baseTreeHeight
+    const trunkTop = crownCenterY
+    const trunkBottom = treeFloorY
+    const trunkHeight = trunkBottom - trunkTop
+    const trunkWidth = (4 + Math.random() * 4) * scale
+    const crownSize = (50 + Math.random() * 60) * scale
+    const crownCount = 5 + Math.floor(Math.random() * 4)
+    const crowns = []
+    for (let j = 0; j < crownCount; j++) {
+      crowns.push({
+        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
+        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
+        sizeVariation: 0.6 + Math.random() * 0.6,
+        opacityVariation: 0.7 + Math.random() * 0.2
+      })
+    }
+    const tree = {
+      x: treeX,
+      trunkTop,
+      trunkHeight,
+      trunkWidth,
+      crownSize,
+      crownCenterY,
+      crowns,
+      trunkColor: k.rgb(treeTrunkR, treeTrunkG, treeTrunkB),
+      leafColor: k.rgb(treeLeafR, treeLeafG, treeLeafB),
+      opacity: 0.85 + Math.random() * 0.1
+    }
+    const cloudBlend = Math.random() < 0.52 ? CLOUD_CIRCLE_BLEND_FAR : CLOUD_CIRCLE_BLEND_NEAR
+    tree.trunkColor = tintKapRgbTowardCloudCircle(k, tree.trunkColor, cloudBlend)
+    tree.leafColor = tintKapRgbTowardCloudCircle(k, tree.leafColor, cloudBlend)
+    trees.push(tree)
+  }
+  k.add([k.z(PARALLAX_FAR_CIRCLE_Z), {
+    draw() { drawBackCircleTrees(k, trees) }
+  }])
+}
+
+//
+// Draws far-back circle-crown trees
+//
+function drawBackCircleTrees(k, trees) {
+  for (const tree of trees) {
+    k.drawRect({
+      pos: k.vec2(tree.x - tree.trunkWidth / 2, tree.trunkTop),
+      width: tree.trunkWidth,
+      height: tree.trunkHeight,
+      color: tree.trunkColor,
+      opacity: tree.opacity
+    })
+    for (const crown of tree.crowns) {
+      k.drawCircle({
+        pos: k.vec2(tree.x + crown.offsetX, tree.crownCenterY + crown.offsetY),
+        radius: tree.crownSize * crown.sizeVariation,
+        color: tree.leafColor,
+        opacity: tree.opacity * crown.opacityVariation
+      })
+    }
+  }
+}
+
+//
+// Back organic far + mid silhouette rows (touch level 0 style)
+//
+function createBackOrganicRows(k, treeFloorY) {
+  const scale = PARALLAX_BACK_SCALE
+  const rows = [
+    {
+      count: BACK_ORGANIC_FAR_COUNT,
+      heightScale: BACK_ORGANIC_FAR_HEIGHT_SCALE,
+      dim: BACK_ORGANIC_FAR_SILHOUETTE_DIM,
+      slotBias: 0
+    },
+    {
+      count: BACK_ORGANIC_MID_COUNT,
+      heightScale: 1,
+      dim: BACK_ORGANIC_SILHOUETTE_DIM,
+      slotBias: 0.41
+    }
+  ]
+  let treeIdx = 0
+  for (const row of rows) {
+    for (let oi = 0; oi < row.count; oi++) {
+      const slotT = (oi + 1 + row.slotBias) / (row.count + 1)
+      let posX = LEFT_MARGIN + PLAYABLE_W * slotT + (Math.random() - 0.5) * 44
+      if (posX < LEFT_MARGIN + 28 || posX > LEFT_MARGIN + PLAYABLE_W - 28) {
+        posX = LEFT_MARGIN + PLAYABLE_W * slotT
+      }
+      const baseTreeHeight = (70 + Math.random() * 80) * scale * row.heightScale
+      const trunkBottom = treeFloorY
+      const trunkActualHeight = baseTreeHeight * (0.52 + Math.random() * 0.12)
+      const trunkTop = trunkBottom - trunkActualHeight
+      const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+        includeRoots: false,
+        rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + ORGANIC_ROOT_DEPTH_MAX),
+        rootSegmentsMin: 11,
+        rootSegmentsRange: 14
+      })
+      const palette = OrganicParallax.buildTreePalette()
+      const depthBlend = Math.random() < 0.52 ? BACK_ORGANIC_GREY_BLEND_FAR : BACK_ORGANIC_GREY_BLEND_NEAR
+      const tree = {
+        trunkTop,
+        trunkBottom,
+        trunkSegments: organic.trunkSegments,
+        rootSegments: organic.rootSegments,
+        branchClusters: organic.branchClusters,
+        trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
+        rootColor: k.rgb(TREE_ROOT_COLOR_R, TREE_ROOT_COLOR_G, TREE_ROOT_COLOR_B),
+        leafColor: k.rgb(120, 90, 40),
+        opacity: 1
+      }
+      tree.trunkColor = tintKapRgbTowardCloudCircle(k, tree.trunkColor, depthBlend)
+      tree.leafColor = tintKapRgbTowardCloudCircle(k, tree.leafColor, depthBlend)
+      tree.rootColor = tintKapRgbTowardCloudCircle(k, tree.rootColor, depthBlend)
+      for (const cluster of tree.branchClusters) {
+        for (const leaf of cluster.leaves) {
+          tintLeafRgbTowardBg(leaf, depthBlend)
+        }
+      }
+      OrganicParallax.dimOrganicTreeColors(tree, row.dim)
+      const spriteName = `training-back-organic-${treeIdx}`
+      OrganicParallax.prerenderOrganicTreeSprites(k, tree, spriteName)
+      k.add([k.z(PARALLAX_FAR_ORGANIC_Z), {
+        draw() { drawPrerenderedOrganicTree(k, tree) }
+      }])
+      treeIdx++
+    }
+  }
+}
+
+//
+// Grey-leaf organic mid band (static, touch level 0 style)
+//
+function createGreyLeafRow(k, treeFloorY) {
+  const scale = PARALLAX_GREY_LEAF_SCALE
+  for (let oi = 0; oi < GREY_LEAF_ROW_COUNT; oi++) {
+    const slotT = (oi + 1 + GREY_LEAF_ROW_SLOT_BIAS) / (GREY_LEAF_ROW_COUNT + 1)
+    let posX = LEFT_MARGIN + PLAYABLE_W * slotT + (Math.random() - 0.5) * 38
+    if (posX < LEFT_MARGIN + 24 || posX > LEFT_MARGIN + PLAYABLE_W - 24) {
+      posX = LEFT_MARGIN + PLAYABLE_W * slotT
+    }
+    const baseTreeHeight = (140 + Math.random() * 90) * scale
+    const trunkBottom = treeFloorY
+    const trunkActualHeight = baseTreeHeight * (0.52 + Math.random() * 0.12)
+    const trunkTop = trunkBottom - trunkActualHeight
+    const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+      includeRoots: false,
+      rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + ORGANIC_ROOT_DEPTH_MAX),
+      rootSegmentsMin: 11,
+      rootSegmentsRange: 14
+    })
+    const trunkRgb = jitterGreyOrganicRgb(GREY_ORGANIC_TRUNK_R, GREY_ORGANIC_TRUNK_G, GREY_ORGANIC_TRUNK_B)
+    const leafRgb = jitterGreyOrganicRgb(GREY_ORGANIC_LEAF_R, GREY_ORGANIC_LEAF_G, GREY_ORGANIC_LEAF_B)
+    const tree = {
+      trunkTop,
+      trunkBottom,
+      trunkSegments: organic.trunkSegments,
+      rootSegments: organic.rootSegments,
+      branchClusters: organic.branchClusters,
+      trunkColor: k.rgb(trunkRgb.r, trunkRgb.g, trunkRgb.b),
+      rootColor: k.rgb(trunkRgb.r, trunkRgb.g, trunkRgb.b),
+      leafColor: k.rgb(leafRgb.r, leafRgb.g, leafRgb.b),
+      opacity: 1
+    }
+    for (const cluster of tree.branchClusters) {
+      for (const leaf of cluster.leaves) {
+        leaf.r = leafRgb.r
+        leaf.g = leafRgb.g
+        leaf.b = leafRgb.b
+      }
+    }
+    const spriteName = `training-grey-leaf-${oi}`
+    OrganicParallax.prerenderOrganicTreeSprites(k, tree, spriteName)
+    k.add([k.z(PARALLAX_GREY_LEAF_ROW_Z), {
+      draw() { drawPrerenderedOrganicTree(k, tree) }
+    }])
+  }
+}
+
+//
+// Black-leaf organic mid band (static, touch level 0 style)
+//
+function createBlackLeafRow(k, treeFloorY) {
+  const scale = PARALLAX_BLACK_LEAF_SCALE
+  //
+  // Cap tree height so canopies sit below the cloud band with visible gap
+  //
+  const maxTrunkHeight = treeFloorY - (CLOUD_BOTTOM_Y + BLACK_LEAF_CLOUD_GAP) - BLACK_LEAF_BRANCH_CLEARANCE
+  for (let oi = 0; oi < BLACK_LEAF_ROW_COUNT; oi++) {
+    const slotT = (oi + 1 + BLACK_LEAF_ROW_SLOT_BIAS) / (BLACK_LEAF_ROW_COUNT + 1)
+    let posX = LEFT_MARGIN + PLAYABLE_W * slotT + (Math.random() - 0.5) * 38
+    if (posX < LEFT_MARGIN + 24 || posX > LEFT_MARGIN + PLAYABLE_W - 24) {
+      posX = LEFT_MARGIN + PLAYABLE_W * slotT
+    }
+    const baseTreeHeight = (BLACK_LEAF_HEIGHT_MIN + Math.random() * BLACK_LEAF_HEIGHT_RANGE) * scale
+    const trunkBottom = treeFloorY
+    const trunkActualHeight = Math.min(
+      baseTreeHeight * (0.52 + Math.random() * 0.12),
+      maxTrunkHeight
+    )
+    const trunkTop = trunkBottom - trunkActualHeight
+    const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+      includeRoots: false,
+      rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + ORGANIC_ROOT_DEPTH_MAX),
+      rootSegmentsMin: 11,
+      rootSegmentsRange: 14
+    })
+    const tree = {
+      trunkTop,
+      trunkBottom,
+      trunkSegments: organic.trunkSegments,
+      rootSegments: organic.rootSegments,
+      branchClusters: organic.branchClusters,
+      trunkColor: k.rgb(BLACK_ORGANIC_TRUNK_R, BLACK_ORGANIC_TRUNK_G, BLACK_ORGANIC_TRUNK_B),
+      rootColor: k.rgb(BLACK_ORGANIC_TRUNK_R, BLACK_ORGANIC_TRUNK_G, BLACK_ORGANIC_TRUNK_B),
+      leafColor: k.rgb(BLACK_ORGANIC_LEAF_R, BLACK_ORGANIC_LEAF_G, BLACK_ORGANIC_LEAF_B),
+      opacity: 1
+    }
+    for (const cluster of tree.branchClusters) {
+      for (const leaf of cluster.leaves) {
+        leaf.r = BLACK_ORGANIC_LEAF_R
+        leaf.g = BLACK_ORGANIC_LEAF_G
+        leaf.b = BLACK_ORGANIC_LEAF_B
+      }
+    }
+    OrganicParallax.dimOrganicTreeColors(tree, BLACK_LEAF_SILHOUETTE_DIM)
+    const spriteName = `training-black-leaf-${oi}`
+    OrganicParallax.prerenderOrganicTreeSprites(k, tree, spriteName)
+    k.add([k.z(PARALLAX_BLACK_LEAF_ROW_Z), {
+      draw() { drawPrerenderedOrganicTree(k, tree) }
+    }])
+  }
+}
+
+//
+// Front organic trees with swaying branch clusters (touch level 0 front row)
+//
+function createFrontSwayingOrganicTrees(k) {
+  const treeFloorY = FLOOR_Y
+  const scale = PARALLAX_FRONT_SCALE
+  const spacing = PLAYABLE_W / (FRONT_ORGANIC_TREE_COUNT - 1)
+  const treeMargin = 80
+  const dynamicTrees = []
+  for (let i = 0; i < FRONT_ORGANIC_TREE_COUNT; i++) {
+    let randomOffset = (Math.random() - 0.5) * 25
+    if (i === 0) randomOffset = Math.max(0, randomOffset) + treeMargin
+    if (i === FRONT_ORGANIC_TREE_COUNT - 1) randomOffset = Math.min(0, randomOffset) - treeMargin
+    const posX = LEFT_MARGIN + spacing * i + randomOffset
+    const baseTreeHeight = (120 + Math.random() * 90) * scale
+    const trunkBottom = treeFloorY
+    const trunkActualHeight = baseTreeHeight * (0.55 + Math.random() * 0.1)
+    const trunkTop = trunkBottom - trunkActualHeight
+    const organic = OrganicParallax.buildOrganicTreeData(trunkBottom, trunkTop, {
+      includeRoots: false,
+      rootAbsoluteMaxY: Math.min(TREE_ROOT_ABSOLUTE_MAX_Y, trunkBottom + ORGANIC_ROOT_DEPTH_MAX),
+      rootSegmentsMin: 13,
+      rootSegmentsRange: 17
+    })
+    const palette = OrganicParallax.buildTreePalette()
+    const tree = {
+      x: posX,
+      trunkTop,
+      trunkBottom,
+      trunkSegments: organic.trunkSegments,
+      rootSegments: organic.rootSegments,
+      branchClusters: organic.branchClusters,
+      trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
+      rootColor: k.rgb(TREE_ROOT_COLOR_R, TREE_ROOT_COLOR_G, TREE_ROOT_COLOR_B),
+      leafColor: k.rgb(FRONT_LEAF_R, FRONT_LEAF_G, FRONT_LEAF_B),
+      opacity: 0.95
+    }
+    applyFrontYellowLeafColors(tree)
+    dynamicTrees.push(tree)
+  }
+  dynamicTrees.forEach((tree, idx) => {
+    const baseName = `training-front-tree-${idx}`
+    OrganicParallax.prerenderOrganicDarkBackdropSprite(
+      k,
+      tree,
+      baseName,
+      FRONT_ORGANIC_DARK_DIM_RGB,
+      FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE
+    )
+    OrganicParallax.prerenderOrganicTreeSprites(k, tree, baseName)
+  })
+  k.add([k.z(FRONT_ORGANIC_DARK_BACKDROP_Z), {
+    draw() {
+      for (const tree of dynamicTrees) {
+        tree.darkBackdropSpriteName && k.drawSprite({
+          sprite: tree.darkBackdropSpriteName,
+          pos: k.vec2(tree.darkBackdropX, tree.darkBackdropY),
+          anchor: 'topleft'
+        })
+      }
+    }
+  }])
+  k.add([k.z(FRONT_ORGANIC_DYNAMIC_Z), {
+    draw() { drawFrontSwayingOrganicTrees(k, dynamicTrees) }
+  }])
+}
+
+//
+// Draws front organic trees with per-cluster branch sway
+//
+function drawFrontSwayingOrganicTrees(k, trees) {
+  const time = k.time()
+  for (const tree of trees) {
+    if (!tree.branchClusters) continue
+    tree.trunkSpriteName && k.drawSprite({
+      sprite: tree.trunkSpriteName,
+      pos: k.vec2(tree.trunkSpriteX, tree.trunkSpriteY)
+    })
+    for (const cluster of tree.branchClusters) {
+      if (!cluster.spriteName) continue
+      const dt = k.dt()
+      const targetDeg = Math.sin(time * cluster.swaySpeed + cluster.swayPhase) * cluster.swayAmount
+      const ease = Math.min(1, dt * OrganicParallax.BRANCH_SWAY_SMOOTH_PER_SEC)
+      cluster.smoothedAngleDeg = cluster.smoothedAngleDeg == null
+        ? targetDeg
+        : cluster.smoothedAngleDeg + (targetDeg - cluster.smoothedAngleDeg) * ease
+      k.drawSprite({
+        sprite: cluster.spriteName,
+        pos: k.vec2(cluster.worldPivotX, cluster.worldPivotY),
+        anchor: k.vec2(cluster.anchorX, cluster.anchorY),
+        angle: cluster.smoothedAngleDeg
+      })
+    }
+  }
+}
+
+//
+// Paints autumn-yellow leaves on front-row branch clusters (touch level 0 style)
+//
+function applyFrontYellowLeafColors(tree) {
+  for (const cluster of tree.branchClusters) {
+    for (const leaf of cluster.leaves) {
+      leaf.r = Math.max(110, Math.min(175, FRONT_LEAF_R + (Math.random() - 0.5) * FRONT_LEAF_JITTER))
+      leaf.g = Math.max(75, Math.min(130, FRONT_LEAF_G + (Math.random() - 0.5) * FRONT_LEAF_JITTER))
+      leaf.b = Math.max(12, Math.min(45, FRONT_LEAF_B + (Math.random() - 0.5) * FRONT_LEAF_JITTER))
+    }
+  }
+}
+
+//
+// Draws a prerendered static organic tree (trunk + branch clusters)
+//
+function drawPrerenderedOrganicTree(k, tree) {
+  tree.trunkSpriteName && k.drawSprite({
+    sprite: tree.trunkSpriteName,
+    pos: k.vec2(tree.trunkSpriteX, tree.trunkSpriteY)
+  })
+  for (const cluster of tree.branchClusters) {
+    cluster.spriteName && k.drawSprite({
+      sprite: cluster.spriteName,
+      pos: k.vec2(cluster.worldPivotX, cluster.worldPivotY),
+      anchor: k.vec2(cluster.anchorX, cluster.anchorY)
+    })
+  }
+}
+
+//
+// Blends Kaplay RGB toward cloud-grey circle color
+//
+function tintKapRgbTowardCloudCircle(k, kapRgb, amount) {
+  return k.rgb(
+    Math.round(kapRgb.r * (1 - amount) + CLOUD_CIRCLE_R * amount),
+    Math.round(kapRgb.g * (1 - amount) + CLOUD_CIRCLE_G * amount),
+    Math.round(kapRgb.b * (1 - amount) + CLOUD_CIRCLE_B * amount)
+  )
+}
+
+//
+// Blends leaf RGB toward scene background grey
+//
+function tintLeafRgbTowardBg(leaf, amount) {
+  leaf.r = Math.round(leaf.r * (1 - amount) + BG_R * amount)
+  leaf.g = Math.round(leaf.g * (1 - amount) + BG_G * amount)
+  leaf.b = Math.round(leaf.b * (1 - amount) + BG_B * amount)
+}
+
+//
+// Per-tree RGB jitter for grey-leaf parallax band
+//
+function jitterGreyOrganicRgb(baseR, baseG, baseB) {
+  const j = GREY_ORGANIC_JITTER
+  return {
+    r: Math.max(14, Math.min(32, Math.round(baseR + (Math.random() - 0.5) * j))),
+    g: Math.max(14, Math.min(32, Math.round(baseG + (Math.random() - 0.5) * j))),
+    b: Math.max(14, Math.min(32, Math.round(baseB + (Math.random() - 0.5) * j)))
+  }
+}
+
+//
+// Generates grass blades in organic clumps (not uniform)
+//
+function generateGrassClumps() {
+  const blades = []
+  for (let c = 0; c < GRASS_CLUSTER_COUNT; c++) {
+    let centerX = LEFT_MARGIN + 80 + Math.random() * (PLAYABLE_W - 160)
+    let safety = 0
+    while (Math.abs(centerX - HERO_SPAWN_X) < GRASS_EXCLUDE_HALF_W && safety < 25) {
+      centerX = LEFT_MARGIN + 80 + Math.random() * (PLAYABLE_W - 160)
+      safety++
+    }
+    const clusterRadius = 35 + Math.random() * 55
+    const bladesInCluster = 5 + Math.floor(Math.random() * 9)
+    for (let b = 0; b < bladesInCluster; b++) {
+      const dist = Math.pow(Math.random(), 1.6) * clusterRadius
+      const sign = Math.random() < 0.5 ? -1 : 1
+      const x = centerX + sign * dist
+      if (x < LEFT_MARGIN + 8 || x > LEFT_MARGIN + PLAYABLE_W - 8) continue
+      const h = 14 + Math.random() * 18
+      blades.push({
+        x,
+        h,
+        phase: Math.random() * Math.PI * 2,
+        r: 55 + Math.floor(Math.random() * 30),
+        g: 70 + Math.floor(Math.random() * 30)
+      })
+    }
+  }
+  return blades
+}
+
+//
+// Draws swaying grass clumps
+//
+function drawGrass(k, state) {
+  const t = state.timer
+  for (const blade of state.blades) {
+    const sway = Math.sin(t * GRASS_BLADE_SWAY_SPEED + blade.phase) * GRASS_BLADE_SWAY_AMP * blade.h
+    k.drawLine({
+      p1: k.vec2(blade.x, FLOOR_Y),
+      p2: k.vec2(blade.x + sway, FLOOR_Y - blade.h),
+      width: 1.5,
+      color: k.rgb(blade.r, blade.g, 30),
+      opacity: 0.65
+    })
+  }
+}
+
+//
+// Advances grass sway timer
+//
+function onUpdateGrass(k, state) {
+  state.timer += k.dt()
+}
+
+//
+// Generates floor thorns in clusters of 2–6 (touch level 0 pattern)
+//
+function generateFloorThornsWithGaps(startX, endX, baseY, excludeZones, maxClusters) {
+  const thorns = []
+  let x = startX
+  let clusterCount = 0
+  while (x < endX) {
+    if (maxClusters != null && clusterCount >= maxClusters) break
+    const clusterEnd = Math.min(
+      x + FLOOR_THORN_CLUSTER_MIN + Math.random() * FLOOR_THORN_CLUSTER_EXTRA,
+      endX
+    )
+    let cx = x
+    let placedInCluster = 0
+    const targetInCluster =
+      FLOOR_THORN_MIN_PER_CLUSTER +
+      Math.floor(
+        Math.random() *
+          (FLOOR_THORN_MAX_PER_CLUSTER - FLOOR_THORN_MIN_PER_CLUSTER + 1)
+      )
+    while (placedInCluster < targetInCluster && cx < clusterEnd) {
+      const tx = cx + (Math.random() - 0.5) * 6
+      cx += FLOOR_THORN_SPACING
+      const inExcluded = excludeZones.some(z => Math.abs(tx - z.center) < z.halfWidth)
+      if (inExcluded) continue
+      thorns.push({
+        x: tx,
+        baseY,
+        width: FLOOR_THORN_WIDTH_MIN + Math.random() * (FLOOR_THORN_WIDTH_MAX - FLOOR_THORN_WIDTH_MIN),
+        height: FLOOR_THORN_HEIGHT_MIN + Math.random() * (FLOOR_THORN_HEIGHT_MAX - FLOOR_THORN_HEIGHT_MIN),
+        tipOffset: (Math.random() - 0.5) * FLOOR_THORN_TIP_OFFSET
+      })
+      placedInCluster++
+    }
+    clusterCount++
+    const gap = FLOOR_THORN_GAP_MIN + Math.random() * FLOOR_THORN_GAP_EXTRA
+    x = clusterEnd + gap
+  }
+  return thorns
+}
+
+//
+// Checks hero feet against floor thorns each frame
+//
+function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, hintState, spikeDead) {
+  if (spikeDead.active || hintState.levelDone || heroInst.isDying) return
+  if (!heroInst.isSpawned || !heroInst.character?.pos) return
+  const heroX = heroInst.character.pos.x
+  const heroFeetY =
+    heroInst.character.pos.y +
+    HERO_HITBOX_HEIGHT_FOR_THORNS / 2 +
+    HERO_HITBOX_OFFSET_Y_FOR_THORNS
+  if (heroFeetY < FLOOR_Y - FLOOR_THORN_FEET_TOLERANCE_LOW ||
+      heroFeetY > FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH) {
+    return
+  }
+  for (const thorn of floorThornData) {
+    const collisionTipY = thorn.baseY - thorn.height + FLOOR_THORN_COLLISION_TIP_BIAS_DOWN
+    if (heroFeetY < collisionTipY + FLOOR_THORN_FEET_MIN_PENETRATION_PAST_TIP ||
+        heroFeetY > thorn.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
+      continue
+    }
+    if (Math.abs(heroX - thorn.x) < thorn.width / 2 + HERO_HALF_WIDTH_THORNS) {
+      onHeroSpikeDeath(k, heroInst, levelIndicator, hintState, spikeDead)
+      return
+    }
+  }
+}
+
+//
+// Hero death on spikes: disintegration, life laugh, reload training
+//
+function onHeroSpikeDeath(k, heroInst, levelIndicator, hintState, spikeDead) {
+  if (heroInst.isDying || spikeDead.active) return
+  spikeDead.active = true
+  hintState.isDead = true
+  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+  hintState.currentTip = null
+  Hero.death(heroInst, () => {
+    const currentScore = get('lifeScore', 0)
+    const newScore = currentScore + 1
+    set('lifeScore', newScore)
+    levelIndicator?.updateLifeScore?.(newScore)
+    if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
+      Sound.playLifeSound(k)
+      const originalColor = levelIndicator.lifeImage.sprite.color
+      flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
+      createLifeParticlesOnThornDeath(k, levelIndicator)
+    }
+    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => k.go('level-touch.training'))
+  })
+}
+
+//
+// Flashes life image red/white on thorn death (touch level 0 pattern)
+//
+function flashLifeImageOnThornDeath(k, levelIndicator, originalColor, count) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  if (count >= LIFE_FLASH_COUNT) {
+    levelIndicator.lifeImage.sprite.color = originalColor
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+    return
+  }
+  if (count % 2 === 0) {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 100, 100)
+    levelIndicator.lifeImage.sprite.opacity = 1.0
+  } else {
+    levelIndicator.lifeImage.sprite.color = k.rgb(255, 255, 255)
+    levelIndicator.lifeImage.sprite.opacity = 0.5
+  }
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnThornDeath(k, levelIndicator, originalColor, count + 1))
+}
+
+//
+// Red square particles radiating from life icon on thorn death
+//
+function createLifeParticlesOnThornDeath(k, levelIndicator) {
+  if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
+  const lifeX = levelIndicator.lifeImage.sprite.pos.x
+  const lifeY = levelIndicator.lifeImage.sprite.pos.y
+  for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
+    const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
+    const lifetime = LIFE_PARTICLE_LIFETIME_MIN + Math.random() * LIFE_PARTICLE_LIFETIME_EXTRA
+    const size = LIFE_PARTICLE_SIZE_MIN + Math.random() * LIFE_PARTICLE_SIZE_EXTRA
+    const particle = k.add([
+      k.rect(size, size),
+      k.pos(lifeX, lifeY),
+      k.color(255, 0, 0),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    const particleState = { elapsed: 0 }
+    particle.onUpdate(() => onUpdateLifeParticle(k, particle, vx, vy, lifetime, particleState))
+  }
+}
+
+//
+// Updates a single life-death particle until its lifetime expires
+//
+function onUpdateLifeParticle(k, particle, vx, vy, lifetime, particleState) {
+  particleState.elapsed += k.dt()
+  particle.pos.x += vx * k.dt()
+  particle.pos.y += vy * k.dt()
+  particle.opacity = 1 - particleState.elapsed / lifetime
+  if (particleState.elapsed >= lifetime) k.destroy(particle)
+}
+
+//
+// Creates flickering skip-training label below the game area
+//
+function createSkipText(k) {
+  const centerX = LEFT_MARGIN + PLAYABLE_W / 2
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const outlineOffsets = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
+  const outlines = outlineOffsets.map(([dx, dy]) => k.add([
+    k.text(SKIP_TEXT, { size: SKIP_FONT_SIZE, font }),
+    k.pos(centerX + dx, SKIP_TEXT_Y + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui),
+    k.opacity(SKIP_MIN_OPACITY)
+  ]))
+  const main = k.add([
+    k.text(SKIP_TEXT, { size: SKIP_FONT_SIZE, font }),
+    k.pos(centerX, SKIP_TEXT_Y),
+    k.anchor('center'),
+    k.color(180, 180, 180),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui),
+    k.opacity(SKIP_MIN_OPACITY)
+  ])
+  return { main, outlines, phase: 0, dir: 1 }
+}
+
+//
+// Flickers skip text opacity
+//
+function onUpdateSkipText(k, anim) {
+  const FLICKER_DUR = 1 / SKIP_FLICKER_SPEED
+  anim.phase += k.dt()
+  if (anim.phase >= FLICKER_DUR) {
+    anim.phase = 0
+    anim.dir *= -1
+  }
+  const t = anim.dir > 0 ? anim.phase / FLICKER_DUR : 1 - anim.phase / FLICKER_DUR
+  const op = SKIP_MIN_OPACITY + (SKIP_MAX_OPACITY - SKIP_MIN_OPACITY) * t
+  anim.main.opacity = op
+  anim.outlines.forEach(o => { o.opacity = op })
+}
+
+//
+// Shows a forced tooltip above the hero
+//
+function showHint(k, hintState, heroInst, text, hintType) {
+  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+  hintState.currentTip = null
+  hintState.currentHintType = null
+  if (hintState.levelDone || hintState.isDead) return
+  const target = {
+    x: () => heroInst.character?.pos?.x ?? 0,
+    y: () => heroInst.character?.pos?.y ?? 0,
+    width: 0,
+    height: 0,
+    text,
+    offsetY: HINT_Y_OFFSET
+  }
+  const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+  tip.activeTarget = target
+  tip.frozenX = Math.round(heroInst.character?.pos?.x ?? 0)
+  tip.frozenY = Math.round(heroInst.character?.pos?.y ?? 0)
+  tip.opacity = 1
+  hintState.currentTip = tip
+  hintState.currentHintType = hintType
+  k.wait(HINT_DISPLAY_TIME, () => {
+    if (hintState.currentTip === tip) {
+      Tooltip.destroy(tip)
+      hintState.currentTip = null
+      hintState.currentHintType = null
+    }
+  })
+}
+
+//
+// Updates tutorial hints and keeps active hint anchored to the hero
+//
+function onUpdateHints(k, hintState, heroInst, bonusJustCollected) {
+  if (hintState.levelDone || hintState.isDead) return
+  if (hintState.currentTip && heroInst.character) {
+    hintState.currentTip.frozenX = Math.round(heroInst.character.pos.x)
+    hintState.currentTip.frozenY = Math.round(heroInst.character.pos.y)
+  }
+  const heroX = heroInst.character?.pos?.x ?? 0
+  const heroY = heroInst.character?.pos?.y ?? 0
+  const bonusHintActive = k.time() < hintState.bonusCollectUntil
+  //
+  // Hero cleared the spike cluster — drop spike hint, queue find-yourself hint
+  //
+  if (!hintState.spikesPassed && heroX > hintState.spikePassX) {
+    hintState.spikesPassed = true
+    hintState.shown4 = true
+    if (hintState.currentHintType === 'spikes') {
+      Tooltip.destroy(hintState.currentTip)
+      hintState.currentTip = null
+      hintState.currentHintType = null
+    }
+  }
+  if (!hintState.shown2 && hintState.shown1 && !bonusHintActive && heroX > HINT_2_TRIGGER_X) {
+    hintState.shown2 = true
+    showHint(k, hintState, heroInst, HINT_2_TEXT, 'move')
+  }
+  if (!hintState.shown3 && hintState.shown2 && !bonusHintActive && heroY < HINT_3_TRIGGER_Y && heroX > MAIN_PLATFORM_X - MAIN_PLATFORM_W) {
+    hintState.shown3 = true
+    showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
+  }
+  if (!hintState.shown4 && !hintState.spikesPassed && bonusJustCollected && !bonusHintActive) {
+    hintState.shown4 = true
+    showHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
+  }
+  if (!hintState.shown5 && hintState.spikesPassed && !bonusHintActive) {
+    hintState.shown5 = true
+    showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+  }
+}
+
+//
+// Flashes HUD small hero and spawns particles on annihilation (touch level pattern)
+//
+function playHeroScoreEffects(k, levelIndicator, bodyColorHex) {
+  if (!levelIndicator?.smallHero?.character) return
+  const heroColor = getRGB(k, bodyColorHex)
+  flashSmallHeroScore(k, levelIndicator, heroColor, 0)
+  createHeroScoreParticles(k, levelIndicator, heroColor)
+}
+
+//
+// Flash small hero between hero color and white
+//
+function flashSmallHeroScore(k, levelIndicator, heroColor, count) {
+  if (!levelIndicator?.smallHero?.character?.exists?.()) return
+  if (count >= HERO_SCORE_FLASH_COUNT) {
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
+    return
+  }
+  levelIndicator.smallHero.character.color = count % 2 === 0
+    ? heroColor
+    : k.rgb(255, 255, 255)
+  k.wait(HERO_SCORE_FLASH_INTERVAL, () => flashSmallHeroScore(k, levelIndicator, heroColor, count + 1))
+}
+
+//
+// Circle particles radiating from HUD small hero on score gain
+//
+function createHeroScoreParticles(k, levelIndicator, heroColor) {
+  if (!levelIndicator?.smallHero?.character?.exists?.()) return
+  const heroX = levelIndicator.smallHero.character.pos.x
+  const heroY = levelIndicator.smallHero.character.pos.y
+  for (let i = 0; i < HERO_SCORE_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / HERO_SCORE_PARTICLE_COUNT
+    const speed = HERO_SCORE_PARTICLE_SPEED_MIN + Math.random() * HERO_SCORE_PARTICLE_SPEED_RANGE
+    const lifetime = HERO_SCORE_PARTICLE_LIFETIME_MIN + Math.random() * HERO_SCORE_PARTICLE_LIFETIME_RANGE
+    const size = HERO_SCORE_PARTICLE_SIZE_MIN + Math.random() * HERO_SCORE_PARTICLE_SIZE_RANGE
+    const particle = k.add([
+      k.circle(size),
+      k.pos(heroX, heroY),
+      k.color(heroColor.r, heroColor.g, heroColor.b),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 11),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    const particleState = { elapsed: 0 }
+    particle.onUpdate(() => onUpdateHeroScoreParticle(k, particle, vx, vy, lifetime, particleState))
+  }
+}
+
+//
+// Updates a single HUD score particle until its lifetime expires
+//
+function onUpdateHeroScoreParticle(k, particle, vx, vy, lifetime, particleState) {
+  particleState.elapsed += k.dt()
+  particle.pos.x += vx * k.dt()
+  particle.pos.y += vy * k.dt()
+  particle.opacity = 1 - particleState.elapsed / lifetime
+  if (particleState.elapsed >= lifetime) k.destroy(particle)
+}
+
+//
+// Schedules ambient bird, owl, and cricket sounds
+//
+function scheduleAmbientSounds(k, sound) {
+  scheduleBirdChirps(k, sound)
+  scheduleOwlHoots(k, sound)
+  scheduleCrickets(k, sound)
+}
+
+function scheduleBirdChirps(k, sound) {
+  const delay = BIRD_CHIRP_INTERVAL_MIN + Math.random() * BIRD_CHIRP_INTERVAL_EXTRA
+  k.wait(delay, () => {
+    Sound.playBirdChirpSound(sound)
+    scheduleBirdChirps(k, sound)
+  })
+}
+
+function scheduleOwlHoots(k, sound) {
+  const delay = OWL_INTERVAL_MIN + Math.random() * OWL_INTERVAL_EXTRA
+  k.wait(delay, () => {
+    Sound.playOwlSound(sound)
+    scheduleOwlHoots(k, sound)
+  })
+}
+
+function scheduleCrickets(k, sound) {
+  const delay = CRICKET_INTERVAL_MIN + Math.random() * CRICKET_INTERVAL_EXTRA
+  k.wait(delay, () => {
+    Sound.playCricketSound(sound)
+    scheduleCrickets(k, sound)
+  })
+}

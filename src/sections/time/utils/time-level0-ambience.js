@@ -217,20 +217,8 @@ export function create(cfg) {
     { draw() { drawGrass(inst) } }
   ])
   //
-  // Tooltip on the first lamp shade only (closest to hero)
+  // (No tooltip on the leftmost lamp — removed per user request)
   //
-  const firstLamp = inst.lamps[0]
-  Tooltip.create({
-    k: cfg.k,
-    targets: [{
-      x: firstLamp.armEndX,
-      y: firstLamp.armEndY + LAMP_SHADE_HEIGHT / 2,
-      width: LAMP_SHADE_HALF_WIDE * 2 + 24,
-      height: LAMP_SHADE_HEIGHT + 24,
-      text: LAMP_TOOLTIP_TEXT,
-      offsetY: LAMP_TOOLTIP_OFFSET_Y
-    }]
-  })
   //
   // Crow: load audio samples, then place crow on the lamp chosen by crowLampIndex.
   // Each level can pass a different index so the crow sits on a unique lamppost.

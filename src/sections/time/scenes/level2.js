@@ -37,14 +37,14 @@ const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more points"
+const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 100
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your points"
+const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 80
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
 const LIFE_TOOLTIP_TEXT = "life score"
@@ -82,9 +82,9 @@ const CLOUD_TOOLTIP_Y_OFFSET = -50
 // Platform index 11 reaches rightWallX(≈1770); index 10 at x≈1550 is the last
 // platform on the right before the path turns. Place bonus just right of it.
 //
-const BONUS_PLATFORM_X = 1700
+const BONUS_PLATFORM_X = 1740
 const BONUS_PLATFORM_Y = 590
-const BONUS_PLATFORM_WIDTH = 180
+const BONUS_PLATFORM_WIDTH = 72
 const BONUS_STORAGE_KEY = 'time.level2BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //

@@ -8,6 +8,7 @@ import { sceneLevel2 } from "./sections/word/scenes/level2.js"
 import { sceneLevel3 } from "./sections/word/scenes/level3.js"
 import { sceneLevel4 } from "./sections/word/scenes/level4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
+import { sceneTouchTraining } from "./sections/touch/scenes/training.js"
 import { sceneLevel0 as sceneTouchLevel0 } from "./sections/touch/scenes/level0.js"
 import { sceneLevel1 as sceneTouchLevel1 } from "./sections/touch/scenes/level1.js"
 import { sceneLevel2 as sceneTouchLevel2 } from "./sections/touch/scenes/level2.js"
@@ -235,6 +236,7 @@ function buildSetupTasks(k) {
     () => sceneLevel3(k),
     () => sceneLevel4(k),
     () => sceneWordComplete(k),
+    () => sceneTouchTraining(k),
     () => sceneTouchLevel0(k),
     () => sceneTouchLevel1(k),
     () => sceneTouchLevel2(k),

@@ -59,6 +59,8 @@ const WOBBLE_AMPLITUDE = 4
  * @param {number} config.sideWallWidth - Width of side wall
  * @param {string} [config.sectionLabel] - Custom header label (e.g. TRAINING) instead of TOUCH
  * @param {string} [config.labelColor] - Single color for all letters when sectionLabel is set
+ * @param {number} [config.sectionLabelLetterSpacing] - Tighter spacing for custom section labels
+ * @param {number} [config.sectionLabelY] - Top Y for section label row (lower = closer to game area)
  * @returns {Object} Object with letterObjects, smallHero, lifeImage, and score update methods
  */
 export function create(config) {
@@ -72,14 +74,16 @@ export function create(config) {
     topPlatformHeight,
     sideWallWidth,
     sectionLabel = null,
-    labelColor = null
+    labelColor = null,
+    sectionLabelLetterSpacing = null,
+    sectionLabelY = null
   } = config
   const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
-  const letterSpacing = -5
+  const letterSpacing = sectionLabelLetterSpacing ?? -5
   const outlineThickness = 2
   const startX = sideWallWidth + 40
-  const y = (topPlatformHeight - fontSize) / 2
+  const y = sectionLabelY ?? (topPlatformHeight - fontSize) / 2
   const fallingLetterExtraY = Math.round(fontSize * FALLING_LETTER_UNDER_C_RATIO)
   const letterObjects = []
   const fallingLetterObjects = []
@@ -170,7 +174,9 @@ export function create(config) {
   //
   // Create small hero icon and life.png image in top right corner
   //
-  const smallHeroY = topPlatformHeight - fontSize / 2 - TOP_OFFSET + SMALL_HERO_Y_ADJUST
+  const smallHeroY = sectionLabelY != null
+    ? sectionLabelY + fontSize / 2 + SMALL_HERO_Y_ADJUST
+    : topPlatformHeight - fontSize / 2 - TOP_OFFSET + SMALL_HERO_Y_ADJUST
   const isTouchComplete = get('touch.completed', false)
   const isWordComplete = get('word.completed', false)
   const lifeImageX = k.width() - sideWallWidth - UI_RIGHT_MARGIN - LIFE_IMAGE_HEIGHT / 2

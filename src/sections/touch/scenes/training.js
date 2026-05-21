@@ -41,6 +41,10 @@ const WALL_COLOR_HEX = '#1F1F1F'
 const HERO_BODY_COLOR = '#909090'
 const ANTIHERO_BODY_COLOR = '#8B5A50'
 const TRAINING_LABEL_COLOR_HEX = '#8B5A50'
+const TRAINING_LABEL_FONT_SIZE = 48
+const TRAINING_LABEL_Y = TOP_MARGIN - TRAINING_LABEL_FONT_SIZE - 32
+const TRAINING_LABEL_LETTER_SPACING = -14
+const TRAINING_HUD_CENTER_Y = TRAINING_LABEL_Y + TRAINING_LABEL_FONT_SIZE / 2 + 10
 //
 // Main log platform (center, lowered and smaller)
 //
@@ -53,11 +57,12 @@ const MAIN_PLATFORM_H = 22
 //
 const BONUS_PLATFORM_X = MAIN_PLATFORM_X + MAIN_PLATFORM_W / 2 + 88
 const BONUS_PLATFORM_Y = MAIN_PLATFORM_Y - 95
-const BONUS_PLATFORM_W = 50
+const BONUS_PLATFORM_W = 72
 //
-// Single red spike cluster immediately after the main platform
+// Single red spike cluster to the right of the hidden bonus platform
 //
-const SPIKE_START_X = MAIN_PLATFORM_X + MAIN_PLATFORM_W / 2 + 16
+const SPIKE_AFTER_BONUS_GAP = 24
+const SPIKE_START_X = BONUS_PLATFORM_X + BONUS_PLATFORM_W / 2 + SPIKE_AFTER_BONUS_GAP
 const SPIKE_ZONE_WIDTH = 130
 const SPIKE_END_X = SPIKE_START_X + SPIKE_ZONE_WIDTH
 const SPIKE_PASS_MARGIN = 36
@@ -129,13 +134,16 @@ const LIFE_PARTICLE_SIZE_EXTRA = 4
 const HINT_Y_OFFSET = -100
 const HINT_1_TEXT = 'use ← →, A D to\nrun to the platform'
 const HINT_2_TEXT = 'use Space, ↑ to\njump on the platform'
-const HINT_2_TRIGGER_X = MAIN_PLATFORM_X - 100
+const HINT_2_TRIGGER_X = MAIN_PLATFORM_X - 165
 const HINT_3_TEXT = 'find the blinking fragment\nand jump on it'
 const HINT_3_TRIGGER_Y = MAIN_PLATFORM_Y + 15
 const HINT_4_TEXT = 'spikes are to your right —\nif you fall on them you die'
-const HINT_5_TEXT = 'find yourself —\nyour other half and touch it'
+const HINT_5_TEXT = 'find yourself — your\nother half and touch it'
 const HINT_DISPLAY_TIME = 9
-const BONUS_COLLECT_HINT_DURATION = 5
+const BONUS_COLLECT_HINT_DURATION = 3
+const BONUS_PLATFORM_STAND_Y_MAX = BONUS_PLATFORM_Y + 30
+const BONUS_PLATFORM_STAND_Y_MIN = BONUS_PLATFORM_Y - 110
+const BONUS_PLATFORM_STAND_X_HALF = BONUS_PLATFORM_W / 2 + 40
 //
 // Skip training text (below game area floor line)
 //
@@ -339,7 +347,7 @@ export function sceneTouchTraining(k) {
       z: PLATFORM_FOREGROUND_Z
     })
     //
-    // Single spike cluster right after the main platform
+    // Single spike cluster to the right of the hidden bonus platform
     //
     const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
     const thornsData = generateFloorThornsWithGaps(
@@ -377,12 +385,14 @@ export function sceneTouchTraining(k) {
       completedColor: TRAINING_LABEL_COLOR_HEX,
       heroBodyColor: HERO_BODY_COLOR,
       topPlatformHeight: TOP_MARGIN,
-      sideWallWidth: LEFT_MARGIN
+      sideWallWidth: LEFT_MARGIN,
+      sectionLabelLetterSpacing: TRAINING_LABEL_LETTER_SPACING,
+      sectionLabelY: TRAINING_LABEL_Y
     })
     //
-    // FPS counter (no green bonus timer)
+    // FPS counter aligned with TRAINING row and HUD icons
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true, targetTime: null })
+    const fpsCounter = FpsCounter.create({ k, showTimer: true, targetTime: null, topY: TRAINING_HUD_CENTER_Y })
     k.onUpdate(() => FpsCounter.onUpdate(fpsCounter))
     //
     // Anti-hero
@@ -402,7 +412,6 @@ export function sceneTouchTraining(k) {
     //
     // Hint and death state
     //
-    let bonusJustCollected = false
     const hintState = {
       shown1: false,
       shown2: false,
@@ -469,7 +478,6 @@ export function sceneTouchTraining(k) {
     })
     levelIndicator.updateHeroScore = ((orig) => (score) => {
       orig(score)
-      bonusJustCollected = true
       hintState.bonusCollectUntil = k.time() + BONUS_COLLECT_HINT_DURATION
       hintState.currentTip && Tooltip.destroy(hintState.currentTip)
       hintState.currentTip = null
@@ -479,7 +487,7 @@ export function sceneTouchTraining(k) {
     // Spike death, hints, skip text
     //
     k.onUpdate(() => checkFloorThorns(k, heroInst, thornsData, levelIndicator, hintState, spikeDead))
-    k.onUpdate(() => onUpdateHints(k, hintState, heroInst, bonusJustCollected))
+    k.onUpdate(() => onUpdateHints(k, hintState, heroInst))
     const skipAnim = createSkipText(k)
     k.onUpdate(() => onUpdateSkipText(k, skipAnim))
     //
@@ -1330,7 +1338,7 @@ function showHint(k, hintState, heroInst, text, hintType) {
 //
 // Updates tutorial hints and keeps active hint anchored to the hero
 //
-function onUpdateHints(k, hintState, heroInst, bonusJustCollected) {
+function onUpdateHints(k, hintState, heroInst) {
   if (hintState.levelDone || hintState.isDead) return
   if (hintState.currentTip && heroInst.character) {
     hintState.currentTip.frozenX = Math.round(heroInst.character.pos.x)
@@ -1359,7 +1367,7 @@ function onUpdateHints(k, hintState, heroInst, bonusJustCollected) {
     hintState.shown3 = true
     showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
   }
-  if (!hintState.shown4 && !hintState.spikesPassed && bonusJustCollected && !bonusHintActive) {
+  if (!hintState.shown4 && !hintState.spikesPassed && !bonusHintActive && isHeroOnBonusPlatform(heroInst)) {
     hintState.shown4 = true
     showHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
   }
@@ -1367,6 +1375,18 @@ function onUpdateHints(k, hintState, heroInst, bonusJustCollected) {
     hintState.shown5 = true
     showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
   }
+}
+
+//
+// True when the hero is standing on the hidden bonus platform
+//
+function isHeroOnBonusPlatform(heroInst) {
+  if (!heroInst.character?.pos) return false
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  return Math.abs(heroX - BONUS_PLATFORM_X) < BONUS_PLATFORM_STAND_X_HALF
+    && heroY <= BONUS_PLATFORM_STAND_Y_MAX
+    && heroY >= BONUS_PLATFORM_STAND_Y_MIN
 }
 
 //

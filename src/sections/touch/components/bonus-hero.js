@@ -729,7 +729,7 @@ function drawBonusFlashParticles(inst) {
 //
 // Display tooltip hint above the main hero on bonus collection
 //
-const HINT_DISPLAY_DURATION = 5
+const HINT_DISPLAY_DURATION = 3
 function showCollectHint(inst) {
   const heroPos = inst.heroInst.character?.pos
   if (!heroPos) return

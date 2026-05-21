@@ -256,6 +256,13 @@ export async function prepareSceneAssets(k, sceneName) {
  */
 export function enterPreparedScene(k, sceneName, afterGo) {
   //
+  // Paint canvas immediately so the previous scene (menu) does not flash for a frame
+  //
+  if (sceneName.startsWith('level-touch')) {
+    k.setBackground(k.rgb(26, 26, 26))
+    k.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
+  }
+  //
   // Clear Touch sprite tracking so next scene starts with a clean registry list.
   //
   drainTrackedTouchSpriteNames()

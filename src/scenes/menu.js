@@ -908,7 +908,21 @@ export function sceneMenu(k) {
     //
     // Background layer with animation
     //
-    k.onDraw(() => drawScene(inst))
+    k.onDraw(() => {
+      //
+      // Solid cover while leaving — prevents menu art flashing during level load
+      //
+      if (inst.isLeavingScene) {
+        k.drawRect({
+          width: k.width(),
+          height: k.height(),
+          pos: k.vec2(0, 0),
+          color: k.rgb(26, 26, 26)
+        })
+        return
+      }
+      drawScene(inst)
+    })
     //
     // High-z layer: draws the prohibited slash in front of all hero/anti-hero sprites
     //
@@ -1027,6 +1041,8 @@ export function sceneMenu(k) {
     const startGame = (forceNew) => {
       if (allCompleted && !forceNew) return
       inst.isLeavingScene = true
+      k.setBackground(k.rgb(26, 26, 26))
+      k.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()

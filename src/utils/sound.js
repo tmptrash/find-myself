@@ -439,6 +439,8 @@ export function playLandSound(instance, currentLevel = null) {
     
     osc.start(now)
     osc.stop(now + duration)
+  } else if (currentLevel === 'level-touch.training' && instance._l2Surface === 'wood') {
+    playWoodKnockLand(instance)
   } else if (currentLevel === 'level-touch.2') {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)

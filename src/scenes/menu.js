@@ -60,7 +60,6 @@ const PROHIBITED_RING_RADIUS = 40
 const PROHIBITED_RING_SEGMENTS = 36
 const PROHIBITED_RING_WIDTH = 5
 const PROHIBITED_SLASH_WIDTH = 7
-const PROHIBITED_PULSE_SPEED = 2.8
 const PROHIBITED_COLOR = '#B82C2C'
 const PROHIBITED_SIGN_OPACITY = 1.0
 //
@@ -72,7 +71,13 @@ const CHECKMARK_COLOR_B = 100
 const CHECKMARK_SIZE = 28
 const CHECKMARK_WIDTH = 6
 const CHECKMARK_OPACITY = 1.0
-const CHECKMARK_PULSE_SPEED = 1.8
+//
+// Scene-leave cover — sits above menu sprites so anti-heroes do not flash during load
+//
+const MENU_LEAVE_COVER_Z = CFG.visual.zIndex.ui + 1000
+const MENU_LEAVE_BG_R = 26
+const MENU_LEAVE_BG_G = 26
+const MENU_LEAVE_BG_B = 26
 function getSectionDisplayName(section) {
   //
   // Return section name as-is (singular form)
@@ -273,6 +278,7 @@ export function sceneMenu(k) {
         type: Hero.HEROES.ANTIHERO,
         scale: 1,
         controllable: false,
+        isStatic: true,
         bodyColor,
         outlineColor,
         addMouth: config.section === 'word',
@@ -363,6 +369,7 @@ export function sceneMenu(k) {
       antiHeroInst.grayColor = grayColor
       antiHeroInst.yellowColor = yellowColor
       antiHeroInst.originalBodyColor = bodyColor
+      antiHeroInst.baseScale = 1
       
       //
       // Add click handlers for implemented sections
@@ -380,7 +387,7 @@ export function sceneMenu(k) {
           //
           // Mark that we're leaving the scene
           //
-          inst.isLeavingScene = true
+          beginMenuSceneLeave(k, inst)
           
           //
           // Stop ambient sound
@@ -413,10 +420,7 @@ export function sceneMenu(k) {
       
       if (config.section === 'touch' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
-          //
-          // Mark that we're leaving the scene
-          //
-          inst.isLeavingScene = true
+          beginMenuSceneLeave(k, inst)
           
           //
           // Stop ambient sound
@@ -443,10 +447,7 @@ export function sceneMenu(k) {
       
       if (config.section === 'time' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
-          //
-          // Mark that we're leaving the scene
-          //
-          inst.isLeavingScene = true
+          beginMenuSceneLeave(k, inst)
           
           //
           // Stop ambient sound
@@ -585,6 +586,7 @@ export function sceneMenu(k) {
     // Track mouse position and check for hover over anti-heroes
     //
     k.onUpdate(() => {
+      if (inst.isLeavingScene) return
       //
       // Update trembling particles
       //
@@ -673,6 +675,13 @@ export function sceneMenu(k) {
           antiHeroInst.spritePrefix = desiredPrefix
           antiHeroInst.character.use(k.sprite(`${desiredPrefix}_0_0`))
         }
+        //
+        // Keep anti-hero fixed at base position and scale — no hover breathing pulse
+        //
+        antiHeroInst.character.pos.x = antiHeroInst.baseX
+        antiHeroInst.character.pos.y = antiHeroInst.baseY
+        const baseScale = antiHeroInst.baseScale ?? 1
+        antiHeroInst.character.scale = k.vec2(baseScale, baseScale)
       })
       
       //
@@ -924,12 +933,31 @@ export function sceneMenu(k) {
       drawScene(inst)
     })
     //
+    // Full-screen cover while leaving — above all menu sprites (anti-heroes, hero, UI)
+    //
+    k.add([
+      k.z(MENU_LEAVE_COVER_Z),
+      k.fixed(),
+      {
+        draw() {
+          if (!inst.isLeavingScene) return
+          k.drawRect({
+            width: k.width(),
+            height: k.height(),
+            pos: k.vec2(0, 0),
+            color: k.rgb(MENU_LEAVE_BG_R, MENU_LEAVE_BG_G, MENU_LEAVE_BG_B)
+          })
+        }
+      }
+    ])
+    //
     // High-z layer: draws the prohibited slash in front of all hero/anti-hero sprites
     //
     k.add([
       k.z(CFG.visual.zIndex.player + 1),
       {
         draw() {
+          if (inst.isLeavingScene) return
           drawProhibitedSlashFront(k, inst)
           drawCompletedCheckmarkFront(k, inst)
         }
@@ -1040,9 +1068,7 @@ export function sceneMenu(k) {
     //
     const startGame = (forceNew) => {
       if (allCompleted && !forceNew) return
-      inst.isLeavingScene = true
-      k.setBackground(k.rgb(26, 26, 26))
-      k.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
+      beginMenuSceneLeave(k, inst)
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()
@@ -1830,6 +1856,24 @@ function drawScene(inst) {
   }
 }
 //
+// Hides menu sprites and paints a solid background while assets load for the next scene
+//
+function beginMenuSceneLeave(k, inst) {
+  if (inst.isLeavingScene) return
+  inst.isLeavingScene = true
+  k.setBackground(k.rgb(MENU_LEAVE_BG_R, MENU_LEAVE_BG_G, MENU_LEAVE_BG_B))
+  k.canvas?.style.setProperty('background-color', `rgb(${MENU_LEAVE_BG_R}, ${MENU_LEAVE_BG_G}, ${MENU_LEAVE_BG_B})`, 'important')
+  inst.heroInst?.character && (inst.heroInst.character.hidden = true)
+  inst.antiHeroes?.forEach((antiHeroInst) => {
+    antiHeroInst.character && (antiHeroInst.character.hidden = true)
+  })
+  inst.sectionLabels?.forEach((entry) => {
+    entry.label.hidden = true
+    entry.outlines.forEach((outlineObj) => { outlineObj.node.hidden = true })
+  })
+  inst.title && hideTitle(inst.title)
+}
+//
 // Returns true when the given anti-hero's section cannot be accessed yet:
 // the previous section must be completed first.
 //
@@ -1846,9 +1890,7 @@ function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
 // The circle encircles the anti-hero sprite, creating a "wearing the sign" look.
 //
 function drawProhibitedSign(k, cx, cy) {
-  const t = k.time()
-  const pulse = 0.85 + 0.10 * Math.sin(t * PROHIBITED_PULSE_SPEED)
-  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
+  const r = PROHIBITED_RING_RADIUS
   const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
   const color = k.rgb(pr, pg, pb)
   //
@@ -1875,9 +1917,7 @@ function drawProhibitedSlashFront(k, inst) {
   if (!hoveredAntiHero || !isAntiHeroLocked(hoveredAntiHero, progress, currentSection)) return
   const cx = hoveredAntiHero.character.pos.x
   const cy = hoveredAntiHero.character.pos.y
-  const t = k.time()
-  const pulse = 0.85 + 0.10 * Math.sin(t * PROHIBITED_PULSE_SPEED)
-  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
+  const r = PROHIBITED_RING_RADIUS
   const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
   const color = k.rgb(pr, pg, pb)
   const slashR = r * 0.72
@@ -1898,9 +1938,7 @@ function drawCompletedCheckmarkFront(k, inst) {
   if (!hoveredAntiHero || !hoveredAntiHero.isCompleted) return
   const cx = hoveredAntiHero.character.pos.x
   const cy = hoveredAntiHero.character.pos.y
-  const t = k.time()
-  const pulse = 0.9 + 0.1 * Math.sin(t * CHECKMARK_PULSE_SPEED)
-  const s = CHECKMARK_SIZE * pulse
+  const s = CHECKMARK_SIZE
   const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
   const op = CHECKMARK_OPACITY
   //

@@ -93,11 +93,14 @@ export function addTouchSectionFloorRocks(k, opts) {
  * @param {number} posX - Horizontal center of the rock
  * @param {string} spriteName - Unique sprite name for the rock
  * @param {number} drawZ - z-index for drawing
+ * @param {number} [radius] - Optional fixed radius (px)
+ * @param {boolean} [anchorBottom=false] - Align sprite bottom to floorY (no overlap below horizon)
  * @returns {Object} Rock descriptor (worldX, radius, etc.)
  */
-export function addSingleFloorRockAt(k, floorY, posX, spriteName, drawZ) {
-  const radius = TOUCH_FLOOR_ROCK_RADIUS_MIN + Math.random() * (TOUCH_FLOOR_ROCK_RADIUS_MAX - TOUCH_FLOOR_ROCK_RADIUS_MIN) * 0.45
-  const rock = buildSingleFloorRock(k, floorY, posX, radius, spriteName)
+export function addSingleFloorRockAt(k, floorY, posX, spriteName, drawZ, radius, anchorBottom = false) {
+  const rockRadius = radius ?? TOUCH_FLOOR_ROCK_RADIUS_MIN + Math.random() * (TOUCH_FLOOR_ROCK_RADIUS_MAX - TOUCH_FLOOR_ROCK_RADIUS_MIN) * 0.45
+  const rock = buildSingleFloorRock(k, floorY, posX, rockRadius, spriteName)
+  anchorBottom && (rock.y = floorY - rock.totalH)
   loadTouchSprite(k, rock.spriteName, rock.dataUrl)
   k.add([
     k.z(drawZ),

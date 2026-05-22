@@ -59,6 +59,8 @@ const WOBBLE_AMPLITUDE = 4
  * @param {number} config.sideWallWidth - Width of side wall
  * @param {string} [config.sectionLabel] - Custom header label (e.g. TRAINING) instead of TOUCH
  * @param {string} [config.labelColor] - Single color for all letters when sectionLabel is set
+ * @param {number} [config.sectionLabelStagePairs] - Pair count for staged letter coloring (2 letters per stage)
+ * @param {number} [config.sectionLabelCompletedStages] - Initial completed stage pairs (0-based count)
  * @param {number} [config.sectionLabelLetterSpacing] - Tighter spacing for custom section labels
  * @param {number} [config.sectionLabelY] - Top Y for section label row (lower = closer to game area)
  * @returns {Object} Object with letterObjects, smallHero, lifeImage, and score update methods
@@ -75,6 +77,8 @@ export function create(config) {
     sideWallWidth,
     sectionLabel = null,
     labelColor = null,
+    sectionLabelStagePairs = null,
+    sectionLabelCompletedStages = 0,
     sectionLabelLetterSpacing = null,
     sectionLabelY = null
   } = config
@@ -100,7 +104,10 @@ export function create(config) {
     //
     const isFallingLetter = !sectionLabel && i === FALLING_LETTER_INDEX
     let colorHex
-    if (labelColor) {
+    if (sectionLabelStagePairs) {
+      const stageIndex = Math.floor(i / 2)
+      colorHex = stageIndex < sectionLabelCompletedStages ? activeColor : inactiveColor
+    } else if (labelColor) {
       colorHex = labelColor
     } else if (isFallingLetter) {
       colorHex = FALLING_LETTER_COLOR
@@ -271,7 +278,11 @@ export function create(config) {
     k.z(CFG.visual.zIndex.ui + 1)
   ])
   return {
+    k,
     letterObjects,
+    sectionLabelStagePairs,
+    sectionLabelActiveColor: activeColor,
+    sectionLabelInactiveColor: inactiveColor,
     smallHero,
     lifeImage: lifeImageData,
     heroScoreText,
@@ -296,6 +307,23 @@ export function create(config) {
       trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
+}
+
+/**
+ * Colors TRAINING-style section label letter pairs as stages complete (2 letters per stage)
+ * @param {Object} inst - Level indicator instance from create()
+ * @param {number} completedStages - Number of completed 2-letter stages (0–4 for TRAINING)
+ */
+export function setSectionLabelStageProgress(inst, completedStages) {
+  if (!inst?.sectionLabelStagePairs || !inst.letterObjects?.length) return
+  const capped = Math.min(completedStages, inst.sectionLabelStagePairs)
+  inst.letterObjects.forEach((letter, i) => {
+    if (!letter?.exists?.()) return
+    const stageIndex = Math.floor(i / 2)
+    const colorHex = stageIndex < capped ? inst.sectionLabelActiveColor : inst.sectionLabelInactiveColor
+    const { r, g, b } = getRGB(inst.k, colorHex)
+    letter.color = inst.k.rgb(r, g, b)
+  })
 }
 
 /**

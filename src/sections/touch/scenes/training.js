@@ -14,7 +14,7 @@ import * as FloorRocks from '../utils/floor-rocks.js'
 import * as BackgroundBirds from '../../time/components/background-birds.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { drawThorns } from '../components/jungle-decor.js'
-import { getRGB } from '../../../utils/helper.js'
+import { getRGB, isAnyKeyDown } from '../../../utils/helper.js'
 
 //
 // Game area — same proportions as time section level 0
@@ -41,6 +41,8 @@ const WALL_COLOR_HEX = '#1F1F1F'
 const HERO_BODY_COLOR = '#909090'
 const ANTIHERO_BODY_COLOR = '#8B5A50'
 const TRAINING_LABEL_COLOR_HEX = '#8B5A50'
+const TRAINING_LABEL_INACTIVE_HEX = '#808080'
+const TRAINING_LABEL_STAGE_PAIRS = 4
 const TRAINING_LABEL_FONT_SIZE = 48
 const TRAINING_LABEL_Y = TOP_MARGIN - TRAINING_LABEL_FONT_SIZE - 32
 const TRAINING_LABEL_LETTER_SPACING = -14
@@ -61,13 +63,13 @@ const BONUS_PLATFORM_W = 72
 //
 // Single red spike cluster to the right of the hidden bonus platform
 //
-const SPIKE_AFTER_BONUS_GAP = 24
+const SPIKE_AFTER_BONUS_GAP = 52
 const SPIKE_START_X = BONUS_PLATFORM_X + BONUS_PLATFORM_W / 2 + SPIKE_AFTER_BONUS_GAP
 const SPIKE_ZONE_WIDTH = 130
 const SPIKE_END_X = SPIKE_START_X + SPIKE_ZONE_WIDTH
 const SPIKE_PASS_MARGIN = 36
 const SPIKE_MAX_CLUSTERS = 1
-const FLOOR_THORN_SPACING = 22
+const FLOOR_THORN_SPACING = 14
 const FLOOR_THORN_WIDTH_MIN = 7
 const FLOOR_THORN_WIDTH_MAX = 14
 const FLOOR_THORN_MIN_PER_CLUSTER = 2
@@ -104,6 +106,22 @@ const HERO_SPAWN_DELAY = 0.5
 const PLATFORM_FOREGROUND_Z = 26
 const HERO_SPAWN_Z = 28
 const ANTIHERO_Z = 28
+const ANTIHERO_TOOLTIP_TEXT = "i'm waiting for you here"
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+const ANTIHERO_MOUSE_HOVER_HALF = ANTIHERO_TOOLTIP_HOVER_SIZE / 2
+const TRAINING_SURFACE_FLOOR_THRESHOLD = 80
+//
+// TRAINING label letter-pair burst particles (life-death style circles)
+//
+const TRAINING_LABEL_PARTICLE_COUNT = 15
+const TRAINING_LABEL_PARTICLE_SPEED_MIN = 80
+const TRAINING_LABEL_PARTICLE_SPEED_EXTRA = 40
+const TRAINING_LABEL_PARTICLE_LIFETIME_MIN = 0.8
+const TRAINING_LABEL_PARTICLE_LIFETIME_EXTRA = 0.4
+const TRAINING_LABEL_PARTICLE_SIZE_MIN = 4
+const TRAINING_LABEL_PARTICLE_SIZE_EXTRA = 4
+const TRAINING_LABEL_PARTICLE_LETTER_Y_OFFSET = 24
 //
 // HUD small-hero flash on annihilation (touch level 0 pattern)
 //
@@ -129,21 +147,59 @@ const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
 const LIFE_PARTICLE_SIZE_MIN = 4
 const LIFE_PARTICLE_SIZE_EXTRA = 4
 //
+// Ground stripe above bottom platform (time level 0 style)
+//
+const GROUND_STRIPE_HEIGHT = 3
+const GROUND_STRIPE_COLOR_R = 20
+const GROUND_STRIPE_COLOR_G = 20
+const GROUND_STRIPE_COLOR_B = 20
+const GROUND_STRIPE_Z = 27
+//
+// Foreground tree row sits slightly above the floor line
+//
+const TREE_FLOOR_Y_OFFSET = -3
+//
+// Blocking rock under the main log platform (fits between log underside and floor line)
+//
+const MAIN_PLATFORM_BOTTOM_Y = MAIN_PLATFORM_Y + MAIN_PLATFORM_H / 2
+const BLOCKING_ROCK_TOP_GAP = 6
+const BLOCKING_ROCK_MAX_HEIGHT = FLOOR_Y - MAIN_PLATFORM_BOTTOM_Y - BLOCKING_ROCK_TOP_GAP
+const BLOCKING_ROCK_RADIUS = Math.floor(BLOCKING_ROCK_MAX_HEIGHT / 1.9)
+const BLOCKING_ROCK_CENTER_X = MAIN_PLATFORM_X - 24
+const BLOCKING_ROCK_FLOOR_DROP = 22
+const BLOCKING_ROCK_SPRITE = 'training-blocking-rock'
+const BLOCKING_ROCK_DRAW_Z = 24
+const BLOCKING_ROCK_SPRITE_HALF_W_EST = 1.3
+const BLOCKING_ROCK_COLLISION_RADIUS_RATIO = 0.82
+const BLOCKING_ROCK_COLLISION_FLOOR_INSET = 0.4
+const BLOCKING_ROCK_STRIPE_EXCLUDE_HALF_W = Math.ceil(BLOCKING_ROCK_RADIUS * BLOCKING_ROCK_SPRITE_HALF_W_EST) + 12
+//
 // Tutorial hints
 //
 const HINT_Y_OFFSET = -100
-const HINT_1_TEXT = 'use ← →, A D to\nrun to the platform'
+const HINT_0_TEXT = 'hi. let\'s learn how\nto control our hero. it\'s easy'
+const HINT_WELCOME_DURATION = 5
+const HINT_MOUSE_TEXT = 'using the mouse, hover your cursor\nover your other half to get a hint'
+const HINT_1_TEXT = 'good! now use ← →, A D to run to\nthe wooden platform ahead'
 const HINT_2_TEXT = 'use Space, ↑ to\njump on the platform'
-const HINT_2_TRIGGER_X = MAIN_PLATFORM_X - 165
-const HINT_3_TEXT = 'find the blinking fragment\nand jump on it'
-const HINT_3_TRIGGER_Y = MAIN_PLATFORM_Y + 15
+const HINT_2_APPROACH_X = MAIN_PLATFORM_X - 165
+const HINT_3_TEXT = 'find the blinking fragment\nand jump on it — a fragment\nis a piece of you that helps\nyou live your life'
 const HINT_4_TEXT = 'spikes are to your right —\nif you fall on them you die'
-const HINT_5_TEXT = 'find yourself — your\nother half and touch it'
+const HINT_5_TEXT = 'find yourself — your other half.\ntouch it to know yourself more'
 const HINT_DISPLAY_TIME = 9
+const MAIN_PLATFORM_STAND_Y_MAX = MAIN_PLATFORM_Y + 22
+const MAIN_PLATFORM_STAND_Y_MIN = MAIN_PLATFORM_Y - 88
+const MAIN_PLATFORM_STAND_X_HALF = MAIN_PLATFORM_W / 2 + 28
 const BONUS_COLLECT_HINT_DURATION = 3
 const BONUS_PLATFORM_STAND_Y_MAX = BONUS_PLATFORM_Y + 30
 const BONUS_PLATFORM_STAND_Y_MIN = BONUS_PLATFORM_Y - 110
 const BONUS_PLATFORM_STAND_X_HALF = BONUS_PLATFORM_W / 2 + 40
+//
+// Repeating hint reminders (30s) until the player completes each tutorial step
+//
+const HINT_REMINDER_INTERVAL = 30
+const FRAGMENT_LEAVE_FIND_YOURSELF_DELAY = 2
+const ANTIHERO_HOVER_PAUSE = 2
 //
 // Skip training text (below game area floor line)
 //
@@ -347,6 +403,10 @@ export function sceneTouchTraining(k) {
       z: PLATFORM_FOREGROUND_Z
     })
     //
+    // Large blocking rock under the log — hero cannot walk through
+    //
+    createBlockingRockUnderPlatform(k)
+    //
     // Single spike cluster to the right of the hidden bonus platform
     //
     const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
@@ -360,9 +420,8 @@ export function sceneTouchTraining(k) {
       ],
       SPIKE_MAX_CLUSTERS
     )
-    const spikePassX = thornsData.length
-      ? Math.max(...thornsData.map(t => t.x + t.width / 2)) + SPIKE_PASS_MARGIN
-      : SPIKE_END_X + SPIKE_PASS_MARGIN
+    const spikeCluster = computeSpikeClusterMetrics(thornsData)
+    const spikePassX = spikeCluster.passX
     k.add([k.z(FLOOR_THORN_DRAW_Z), {
       draw() {
         drawThorns(
@@ -373,15 +432,20 @@ export function sceneTouchTraining(k) {
       }
     }])
     //
+    // Black ground stripe above bottom platform — foreground layer (hero draws above)
+    //
+    createGroundStripe(k)
+    //
     // TRAINING header + score HUD (same sizes as touch levels)
     //
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 0,
       sectionLabel: 'TRAINING',
-      labelColor: TRAINING_LABEL_COLOR_HEX,
+      sectionLabelStagePairs: TRAINING_LABEL_STAGE_PAIRS,
+      sectionLabelCompletedStages: 0,
       activeColor: TRAINING_LABEL_COLOR_HEX,
-      inactiveColor: TRAINING_LABEL_COLOR_HEX,
+      inactiveColor: TRAINING_LABEL_INACTIVE_HEX,
       completedColor: TRAINING_LABEL_COLOR_HEX,
       heroBodyColor: HERO_BODY_COLOR,
       topPlatformHeight: TOP_MARGIN,
@@ -418,14 +482,43 @@ export function sceneTouchTraining(k) {
       shown3: false,
       shown4: false,
       shown5: false,
+      welcomeDone: false,
+      awaitingMouseHint: false,
+      mouseHintHovering: false,
+      mouseHintDone: false,
+      lastMouseHintTime: 0,
+      fragmentCollected: false,
+      wasOnBonusPlatform: false,
+      wasOnMainPlatform: false,
+      leftBonusPlatformAt: 0,
+      findYourselfAfterLeave: false,
+      trainingLabelStage: 0,
       spikesPassed: false,
       bonusCollectUntil: 0,
       spikePassX,
+      lastJumpPlatformHintTime: 0,
+      lastFragmentHintTime: 0,
+      lastFindYourselfHintTime: 0,
       levelDone: false,
       isDead: false,
       currentTip: null,
       currentHintType: null
     }
+    //
+    // Anti-hero hover tooltip (enabled after mouse tutorial completes)
+    //
+    Tooltip.create({
+      k,
+      targets: [{
+        x: () => antiHeroInst.character?.pos?.x ?? ANTIHERO_X,
+        y: () => antiHeroInst.character?.pos?.y ?? ANTIHERO_Y,
+        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+        text: ANTIHERO_TOOLTIP_TEXT,
+        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET,
+        visible: () => hintState.mouseHintDone && !hintState.mouseHintHovering
+      }]
+    })
     const spikeDead = { active: false }
     //
     // Main hero
@@ -443,6 +536,8 @@ export function sceneTouchTraining(k) {
       currentLevel: 'level-touch.training',
       onAnnihilation: () => {
         hintState.levelDone = true
+        LevelIndicator.setSectionLabelStageProgress(levelIndicator, TRAINING_LABEL_STAGE_PAIRS)
+        hintState.trainingLabelStage = TRAINING_LABEL_STAGE_PAIRS
         Tooltip.suppressAll()
         const currentScore = get('heroScore', 0)
         const newScore = currentScore + 1
@@ -478,6 +573,7 @@ export function sceneTouchTraining(k) {
     })
     levelIndicator.updateHeroScore = ((orig) => (score) => {
       orig(score)
+      hintState.fragmentCollected = true
       hintState.bonusCollectUntil = k.time() + BONUS_COLLECT_HINT_DURATION
       hintState.currentTip && Tooltip.destroy(hintState.currentTip)
       hintState.currentTip = null
@@ -486,8 +582,10 @@ export function sceneTouchTraining(k) {
     //
     // Spike death, hints, skip text
     //
-    k.onUpdate(() => checkFloorThorns(k, heroInst, thornsData, levelIndicator, hintState, spikeDead))
-    k.onUpdate(() => onUpdateHints(k, hintState, heroInst))
+    k.onUpdate(() => checkFloorThorns(k, heroInst, thornsData, spikeCluster, levelIndicator, hintState, spikeDead))
+    k.onUpdate(() => onUpdateHints(k, hintState, heroInst, levelIndicator, sound))
+    k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst))
+    k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
     const skipAnim = createSkipText(k)
     k.onUpdate(() => onUpdateSkipText(k, skipAnim))
     //
@@ -504,13 +602,86 @@ export function sceneTouchTraining(k) {
     // Spawn characters and show first hint
     //
     k.wait(HERO_SPAWN_DELAY, () => {
+      heroInst.controlsDisabled = true
       heroInst.character && Hero.spawn(heroInst)
       antiHeroInst.character && Hero.spawn(antiHeroInst)
-      showHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
-      hintState.shown1 = true
+      showTimedHint(k, hintState, heroInst, HINT_0_TEXT, 'welcome', HINT_WELCOME_DURATION, () => {
+        if (hintState.levelDone || hintState.isDead || hintState.awaitingMouseHint) return
+        hintState.welcomeDone = true
+        hintState.awaitingMouseHint = true
+        hintState.lastMouseHintTime = k.time()
+        showHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
+      })
     })
     scheduleAmbientSounds(k, sound)
   })
+}
+
+//
+// Black ground stripe above the bottom platform — skips blocking rock so no dark line on rock
+//
+function createGroundStripe(k) {
+  const stripeY = FLOOR_Y - GROUND_STRIPE_HEIGHT
+  const stripeRight = LEFT_MARGIN + PLAYABLE_W
+  const excludeLeft = BLOCKING_ROCK_CENTER_X - BLOCKING_ROCK_STRIPE_EXCLUDE_HALF_W
+  const excludeRight = BLOCKING_ROCK_CENTER_X + BLOCKING_ROCK_STRIPE_EXCLUDE_HALF_W
+  k.add([
+    k.z(GROUND_STRIPE_Z),
+    {
+      draw() {
+        const color = k.rgb(GROUND_STRIPE_COLOR_R, GROUND_STRIPE_COLOR_G, GROUND_STRIPE_COLOR_B)
+        if (LEFT_MARGIN < excludeLeft) {
+          k.drawRect({
+            width: excludeLeft - LEFT_MARGIN,
+            height: GROUND_STRIPE_HEIGHT,
+            pos: k.vec2(LEFT_MARGIN, stripeY),
+            color
+          })
+        }
+        if (excludeRight < stripeRight) {
+          k.drawRect({
+            width: stripeRight - excludeRight,
+            height: GROUND_STRIPE_HEIGHT,
+            pos: k.vec2(excludeRight, stripeY),
+            color
+          })
+        }
+      }
+    }
+  ])
+}
+
+//
+// Large floor rock under the log with solid collision — blocks horizontal passage
+//
+function createBlockingRockUnderPlatform(k) {
+  const rockDrawX = BLOCKING_ROCK_CENTER_X - Math.ceil(BLOCKING_ROCK_RADIUS * BLOCKING_ROCK_SPRITE_HALF_W_EST)
+  const rock = FloorRocks.addSingleFloorRockAt(
+    k,
+    FLOOR_Y,
+    rockDrawX,
+    BLOCKING_ROCK_SPRITE,
+    BLOCKING_ROCK_DRAW_Z,
+    BLOCKING_ROCK_RADIUS,
+    true
+  )
+  rock.y += BLOCKING_ROCK_FLOOR_DROP
+  //
+  // Collision aligned with the visible rock blob (bottom rests on FLOOR_Y)
+  //
+  const collisionCenterX = rock.x + rock.totalW / 2
+  const collisionCenterY = rock.y + rock.totalH - rock.radius * BLOCKING_ROCK_COLLISION_FLOOR_INSET
+  const collisionRadius = rock.radius * BLOCKING_ROCK_COLLISION_RADIUS_RATIO
+  k.add([
+    k.circle(collisionRadius),
+    k.pos(collisionCenterX, collisionCenterY),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    k.z(PLATFORM_FOREGROUND_Z - 1),
+    CFG.game.platformName
+  ])
 }
 
 //
@@ -634,7 +805,7 @@ function createBackgroundClouds(k) {
 // Builds all back parallax tree layers (touch level 0 style)
 //
 function createBackParallaxTrees(k) {
-  const treeFloorY = FLOOR_Y
+  const treeFloorY = FLOOR_Y + TREE_FLOOR_Y_OFFSET
   createBackCircleTrees(k, treeFloorY)
   createBackOrganicRows(k, treeFloorY)
   createGreyLeafRow(k, treeFloorY)
@@ -896,7 +1067,7 @@ function createBlackLeafRow(k, treeFloorY) {
 // Front organic trees with swaying branch clusters (touch level 0 front row)
 //
 function createFrontSwayingOrganicTrees(k) {
-  const treeFloorY = FLOOR_Y
+  const treeFloorY = FLOOR_Y + TREE_FLOOR_Y_OFFSET
   const scale = PARALLAX_FRONT_SCALE
   const spacing = PLAYABLE_W / (FRONT_ORGANIC_TREE_COUNT - 1)
   const treeMargin = 80
@@ -1149,9 +1320,34 @@ function generateFloorThornsWithGaps(startX, endX, baseY, excludeZones, maxClust
 }
 
 //
+// Spike cluster bounds from first to last thorn (count + horizontal span)
+//
+function computeSpikeClusterMetrics(thornsData) {
+  if (!thornsData.length) {
+    return {
+      count: 0,
+      leftX: SPIKE_START_X,
+      rightX: SPIKE_END_X,
+      passX: SPIKE_END_X + SPIKE_PASS_MARGIN
+    }
+  }
+  const sorted = [...thornsData].sort((a, b) => a.x - b.x)
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  const leftX = first.x - first.width / 2
+  const rightX = last.x + last.width / 2
+  return {
+    count: thornsData.length,
+    leftX,
+    rightX,
+    passX: rightX + SPIKE_PASS_MARGIN
+  }
+}
+
+//
 // Checks hero feet against floor thorns each frame
 //
-function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, hintState, spikeDead) {
+function checkFloorThorns(k, heroInst, floorThornData, spikeCluster, levelIndicator, hintState, spikeDead) {
   if (spikeDead.active || hintState.levelDone || heroInst.isDying) return
   if (!heroInst.isSpawned || !heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
@@ -1161,6 +1357,11 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, hintState
     HERO_HITBOX_OFFSET_Y_FOR_THORNS
   if (heroFeetY < FLOOR_Y - FLOOR_THORN_FEET_TOLERANCE_LOW ||
       heroFeetY > FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH) {
+    return
+  }
+  if (spikeCluster.count === 0) return
+  if (heroX < spikeCluster.leftX - HERO_HALF_WIDTH_THORNS ||
+      heroX > spikeCluster.rightX + HERO_HALF_WIDTH_THORNS) {
     return
   }
   for (const thorn of floorThornData) {
@@ -1306,7 +1507,7 @@ function onUpdateSkipText(k, anim) {
 //
 // Shows a forced tooltip above the hero
 //
-function showHint(k, hintState, heroInst, text, hintType) {
+function showHint(k, hintState, heroInst, text, hintType, duration = HINT_DISPLAY_TIME) {
   hintState.currentTip && Tooltip.destroy(hintState.currentTip)
   hintState.currentTip = null
   hintState.currentHintType = null
@@ -1326,7 +1527,7 @@ function showHint(k, hintState, heroInst, text, hintType) {
   tip.opacity = 1
   hintState.currentTip = tip
   hintState.currentHintType = hintType
-  k.wait(HINT_DISPLAY_TIME, () => {
+  k.wait(duration, () => {
     if (hintState.currentTip === tip) {
       Tooltip.destroy(tip)
       hintState.currentTip = null
@@ -1336,45 +1537,293 @@ function showHint(k, hintState, heroInst, text, hintType) {
 }
 
 //
+// Shows a hint for a fixed duration then runs an optional callback
+//
+function showTimedHint(k, hintState, heroInst, text, hintType, duration, onDone) {
+  showHint(k, hintState, heroInst, text, hintType, duration)
+  onDone && k.wait(duration, onDone)
+}
+
+//
 // Updates tutorial hints and keeps active hint anchored to the hero
 //
-function onUpdateHints(k, hintState, heroInst) {
+function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
   if (hintState.levelDone || hintState.isDead) return
+  updateTrainingLabelProgress(k, levelIndicator, hintState, heroInst, sound)
   if (hintState.currentTip && heroInst.character) {
     hintState.currentTip.frozenX = Math.round(heroInst.character.pos.x)
     hintState.currentTip.frozenY = Math.round(heroInst.character.pos.y)
   }
-  const heroX = heroInst.character?.pos?.x ?? 0
-  const heroY = heroInst.character?.pos?.y ?? 0
   const bonusHintActive = k.time() < hintState.bonusCollectUntil
+  const onMainPlatform = isHeroOnMainPlatform(heroInst)
+  const onBonusPlatform = isHeroOnBonusPlatform(heroInst)
+  const heroX = heroInst.character?.pos?.x ?? 0
   //
-  // Hero cleared the spike cluster — drop spike hint, queue find-yourself hint
+  // Hero runs up to the log — replace run hint with jump hint
   //
-  if (!hintState.spikesPassed && heroX > hintState.spikePassX) {
+  if (!hintState.shown2 && hintState.shown1 && !hintState.shown3 && !onMainPlatform && !onBonusPlatform &&
+      !bonusHintActive && !heroInst.controlsDisabled && !hintState.wasOnBonusPlatform &&
+      !hintState.findYourselfAfterLeave && heroX >= HINT_2_APPROACH_X) {
+    hintState.shown2 = true
+    hintState.lastJumpPlatformHintTime = k.time()
+    showHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
+  }
+  //
+  // Hero lands on the log — replace previous hint with fragment hint
+  //
+  if (!hintState.shown3 && hintState.shown2 && onMainPlatform && !hintState.wasOnMainPlatform && !bonusHintActive) {
+    hintState.shown3 = true
+    hintState.lastFragmentHintTime = k.time()
+    showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
+  }
+  hintState.wasOnMainPlatform = onMainPlatform
+  //
+  // After leaving the hidden platform for 2s — replace hint with find-yourself
+  //
+  if (onBonusPlatform) {
+    hintState.leftBonusPlatformAt = 0
+    hintState.findYourselfAfterLeave = false
+  } else if (hintState.wasOnBonusPlatform) {
+    hintState.leftBonusPlatformAt === 0 && (hintState.leftBonusPlatformAt = k.time())
+    if (k.time() - hintState.leftBonusPlatformAt >= FRAGMENT_LEAVE_FIND_YOURSELF_DELAY &&
+        !hintState.findYourselfAfterLeave) {
+      hintState.findYourselfAfterLeave = true
+      hintState.lastFindYourselfHintTime = k.time()
+      if (!bonusHintActive && !hintState.levelDone) {
+        hintState.shown5 = true
+        showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+      }
+    }
+  }
+  hintState.wasOnBonusPlatform = onBonusPlatform
+  //
+  // Hero cleared the spike cluster — drop spike hint, start find-yourself reminders
+  //
+  if (!hintState.spikesPassed && (heroInst.character?.pos?.x ?? 0) > hintState.spikePassX) {
     hintState.spikesPassed = true
     hintState.shown4 = true
+    hintState.lastFindYourselfHintTime = k.time()
     if (hintState.currentHintType === 'spikes') {
       Tooltip.destroy(hintState.currentTip)
       hintState.currentTip = null
       hintState.currentHintType = null
     }
   }
-  if (!hintState.shown2 && hintState.shown1 && !bonusHintActive && heroX > HINT_2_TRIGGER_X) {
-    hintState.shown2 = true
-    showHint(k, hintState, heroInst, HINT_2_TEXT, 'move')
+  //
+  // Jump-on-log reminder every 30s until the hero stands on the wooden platform
+  //
+  if (hintState.shown1 && !hintState.shown3 && !onMainPlatform && !onBonusPlatform && !bonusHintActive &&
+      !heroInst.controlsDisabled && !hintState.wasOnBonusPlatform && !hintState.findYourselfAfterLeave) {
+    hintState.lastJumpPlatformHintTime === 0 && (hintState.lastJumpPlatformHintTime = k.time())
+    if (k.time() - hintState.lastJumpPlatformHintTime >= HINT_REMINDER_INTERVAL) {
+      hintState.lastJumpPlatformHintTime = k.time()
+      hintState.shown2 = true
+      showHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
+    }
   }
-  if (!hintState.shown3 && hintState.shown2 && !bonusHintActive && heroY < HINT_3_TRIGGER_Y && heroX > MAIN_PLATFORM_X - MAIN_PLATFORM_W) {
-    hintState.shown3 = true
-    showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
+  if (onMainPlatform) {
+    hintState.lastJumpPlatformHintTime = 0
   }
-  if (!hintState.shown4 && !hintState.spikesPassed && !bonusHintActive && isHeroOnBonusPlatform(heroInst)) {
+  //
+  // Fragment reminder every 30s while on the log until the hero reaches the hidden platform
+  //
+  if (onMainPlatform && !onBonusPlatform && !hintState.fragmentCollected && !bonusHintActive) {
+    hintState.lastFragmentHintTime === 0 && (hintState.lastFragmentHintTime = k.time())
+    if (k.time() - hintState.lastFragmentHintTime >= HINT_REMINDER_INTERVAL) {
+      hintState.lastFragmentHintTime = k.time()
+      hintState.shown3 = true
+      showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
+    }
+  }
+  if (onBonusPlatform || hintState.fragmentCollected) {
+    hintState.lastFragmentHintTime = 0
+  }
+  if (!onMainPlatform) {
+    hintState.lastFragmentHintTime = 0
+  }
+  if (!hintState.shown4 && !hintState.spikesPassed && hintState.fragmentCollected && !bonusHintActive) {
     hintState.shown4 = true
     showHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
   }
-  if (!hintState.shown5 && hintState.spikesPassed && !bonusHintActive) {
-    hintState.shown5 = true
-    showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+  //
+  // Find-yourself reminder every 30s after spikes or leaving hidden platform
+  //
+  const findYourselfActive = hintState.spikesPassed || hintState.findYourselfAfterLeave
+  if (findYourselfActive && !bonusHintActive && !hintState.levelDone) {
+    hintState.lastFindYourselfHintTime === 0 && (hintState.lastFindYourselfHintTime = k.time())
+    if (k.time() - hintState.lastFindYourselfHintTime >= HINT_REMINDER_INTERVAL) {
+      hintState.lastFindYourselfHintTime = k.time()
+      hintState.shown5 = true
+      showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+    }
   }
+}
+
+//
+// Marks TRAINING label letter pairs brown as tutorial milestones complete
+//
+function updateTrainingLabelProgress(k, levelIndicator, hintState, heroInst, sound) {
+  if (!levelIndicator?.sectionLabelStagePairs) return
+  let stage = hintState.trainingLabelStage
+  if (stage < 1 && heroInst.isSpawned && !heroInst.controlsDisabled &&
+      (isAnyKeyDown(k, CFG.controls.moveLeft) || isAnyKeyDown(k, CFG.controls.moveRight))) {
+    stage = 1
+  }
+  if (stage < 2 && isHeroOnMainPlatform(heroInst)) {
+    stage = 2
+  }
+  if (stage < 3 && isHeroOnBonusPlatform(heroInst)) {
+    stage = 3
+  }
+  if (stage < TRAINING_LABEL_STAGE_PAIRS && hintState.levelDone) {
+    stage = TRAINING_LABEL_STAGE_PAIRS
+  }
+  if (stage !== hintState.trainingLabelStage) {
+    const prevStage = hintState.trainingLabelStage
+    hintState.trainingLabelStage = stage
+    LevelIndicator.setSectionLabelStageProgress(levelIndicator, stage)
+    //
+    // Victory chime per letter pair — final pair uses annihilation fanfare instead
+    //
+    stage > prevStage && stage < TRAINING_LABEL_STAGE_PAIRS && sound && Sound.playVictorySound(sound)
+    stage > prevStage && stage < TRAINING_LABEL_STAGE_PAIRS &&
+      createTrainingLabelParticles(k, levelIndicator, stage)
+  }
+}
+
+//
+// Tracks hero surface for wood knock landing (touch level 2 style)
+//
+function onUpdateTrainingSurface(heroInst, sound) {
+  if (!heroInst?.character?.exists?.()) return
+  const hx = heroInst.character.pos.x
+  const hy = heroInst.character.pos.y
+  if (Math.abs(hy - FLOOR_Y) < TRAINING_SURFACE_FLOOR_THRESHOLD) {
+    sound._l2Surface = null
+    return
+  }
+  const nearMain = Math.abs(hx - MAIN_PLATFORM_X) < MAIN_PLATFORM_STAND_X_HALF
+  const nearBonus = Math.abs(hx - BONUS_PLATFORM_X) < BONUS_PLATFORM_STAND_X_HALF
+  sound._l2Surface = (nearMain || nearBonus) ? 'wood' : null
+}
+
+//
+// After welcome hint, enables controls once the player hovers the anti-hero
+//
+function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst) {
+  if (hintState.levelDone || hintState.isDead || hintState.mouseHintDone) return
+  if (!antiHeroInst.character?.exists?.() || !heroInst.character?.exists?.()) return
+  //
+  // Re-show mouse hint every 30s until the player hovers the anti-hero
+  //
+  if (hintState.awaitingMouseHint && !hintState.mouseHintHovering) {
+    hintState.lastMouseHintTime === 0 && (hintState.lastMouseHintTime = k.time())
+    if (k.time() - hintState.lastMouseHintTime >= HINT_REMINDER_INTERVAL) {
+      hintState.lastMouseHintTime = k.time()
+      showHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
+    }
+  }
+  if (!hintState.awaitingMouseHint || hintState.mouseHintHovering) return
+  const mp = k.mousePos()
+  const ax = antiHeroInst.character.pos.x
+  const ay = antiHeroInst.character.pos.y
+  const hovered = Math.abs(mp.x - ax) < ANTIHERO_MOUSE_HOVER_HALF &&
+    Math.abs(mp.y - ay) < ANTIHERO_MOUSE_HOVER_HALF
+  hovered && beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst)
+}
+
+//
+// Shows anti-hero tooltip for 2s after first hover, then run hint and keyboard controls
+//
+function beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst) {
+  hintState.awaitingMouseHint = false
+  hintState.mouseHintHovering = true
+  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+  hintState.currentTip = null
+  hintState.currentHintType = null
+  const ax = Math.round(antiHeroInst.character.pos.x)
+  const ay = Math.round(antiHeroInst.character.pos.y)
+  const target = {
+    x: ax,
+    y: ay,
+    width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+    height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+    text: ANTIHERO_TOOLTIP_TEXT,
+    offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+  }
+  const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+  tip.activeTarget = target
+  tip.frozenX = ax
+  tip.frozenY = ay
+  tip.opacity = 1
+  k.wait(ANTIHERO_HOVER_PAUSE, () => {
+    Tooltip.destroy(tip)
+    if (hintState.mouseHintDone || hintState.levelDone || hintState.isDead) return
+    hintState.mouseHintHovering = false
+    hintState.mouseHintDone = true
+    heroInst.controlsDisabled = false
+    hintState.shown1 = true
+    hintState.lastJumpPlatformHintTime = k.time()
+    showHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
+  })
+}
+
+//
+// Circle particles radiating from the newly completed TRAINING letter pair
+//
+function createTrainingLabelParticles(k, levelIndicator, completedStage) {
+  if (!levelIndicator?.letterObjects?.length) return
+  const firstIndex = (completedStage - 1) * 2
+  const letters = [
+    levelIndicator.letterObjects[firstIndex],
+    levelIndicator.letterObjects[firstIndex + 1]
+  ].filter((letter) => letter?.exists?.())
+  if (!letters.length) return
+  const cx = letters.reduce((sum, letter) => sum + letter.pos.x, 0) / letters.length
+  const cy = letters.reduce((sum, letter) => sum + letter.pos.y, 0) / letters.length + TRAINING_LABEL_PARTICLE_LETTER_Y_OFFSET
+  const labelColor = getRGB(k, TRAINING_LABEL_COLOR_HEX)
+  for (let i = 0; i < TRAINING_LABEL_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / TRAINING_LABEL_PARTICLE_COUNT
+    const speed = TRAINING_LABEL_PARTICLE_SPEED_MIN + Math.random() * TRAINING_LABEL_PARTICLE_SPEED_EXTRA
+    const lifetime = TRAINING_LABEL_PARTICLE_LIFETIME_MIN + Math.random() * TRAINING_LABEL_PARTICLE_LIFETIME_EXTRA
+    const size = TRAINING_LABEL_PARTICLE_SIZE_MIN + Math.random() * TRAINING_LABEL_PARTICLE_SIZE_EXTRA
+    const particle = k.add([
+      k.circle(size),
+      k.pos(cx, cy),
+      k.color(labelColor.r, labelColor.g, labelColor.b),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    const particleState = { elapsed: 0 }
+    particle.onUpdate(() => onUpdateTrainingLabelParticle(k, particle, vx, vy, lifetime, particleState))
+  }
+}
+
+//
+// Updates a single TRAINING label burst particle until its lifetime expires
+//
+function onUpdateTrainingLabelParticle(k, particle, vx, vy, lifetime, particleState) {
+  particleState.elapsed += k.dt()
+  particle.pos.x += vx * k.dt()
+  particle.pos.y += vy * k.dt()
+  particle.opacity = 1 - particleState.elapsed / lifetime
+  particleState.elapsed >= lifetime && k.destroy(particle)
+}
+
+//
+// True when the hero is standing on the main log platform
+//
+function isHeroOnMainPlatform(heroInst) {
+  if (!heroInst.character?.pos) return false
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  return Math.abs(heroX - MAIN_PLATFORM_X) < MAIN_PLATFORM_STAND_X_HALF
+    && heroY <= MAIN_PLATFORM_STAND_Y_MAX
+    && heroY >= MAIN_PLATFORM_STAND_Y_MIN
 }
 
 //

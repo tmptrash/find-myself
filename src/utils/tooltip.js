@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import * as TouchInput from './touch-input.js'
 
 //
 // Tooltip styling constants
@@ -358,10 +359,10 @@ function onUpdate(inst) {
   // Forced-visible tooltips skip hover detection but still respect suppression above
   //
   if (inst.forceVisible) return
-  const mousePos = k.mousePos()
+  const pointers = TouchInput.getHoverPointers(k)
   const dt = k.dt()
   //
-  // Find which target the mouse is over (if any)
+  // Find which target a pointer is over (if any)
   //
   let hoveredTarget = null
   for (const target of targets) {
@@ -374,15 +375,18 @@ function onUpdate(inst) {
     if (target.visible === false) continue
     const halfW = target.width / 2
     const halfH = target.height / 2
-    if (
-      mousePos.x >= tx - halfW &&
-      mousePos.x <= tx + halfW &&
-      mousePos.y >= ty - halfH &&
-      mousePos.y <= ty + halfH
-    ) {
-      hoveredTarget = target
-      break
+    for (const pointerPos of pointers) {
+      if (
+        pointerPos.x >= tx - halfW &&
+        pointerPos.x <= tx + halfW &&
+        pointerPos.y >= ty - halfH &&
+        pointerPos.y <= ty + halfH
+      ) {
+        hoveredTarget = target
+        break
+      }
     }
+    if (hoveredTarget) break
   }
   //
   // Update active target and fade opacity.

@@ -11,6 +11,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
+import * as TouchInput from '../../../utils/touch-input.js'
 import * as FloorRocks from '../utils/floor-rocks.js'
 import * as BackgroundBirds from '../../time/components/background-birds.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
@@ -1787,7 +1788,7 @@ function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIn
     }
   }
   if (!hintState.awaitingMouseHint || hintState.mouseHintHovering) return
-  const mp = k.mousePos()
+  const mp = TouchInput.getPointerPos(k)
   const ax = antiHeroInst.character.pos.x
   const ay = antiHeroInst.character.pos.y
   const hovered = Math.abs(mp.x - ax) < ANTIHERO_MOUSE_HOVER_HALF &&
@@ -1845,7 +1846,7 @@ function beginHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounte
 function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound) {
   if (!hintState.mouseHintDone || hintState.hudTutorialStep === 'done' || hintState.levelDone || hintState.isDead) return
   if (hintState.hudFrozenTip) return
-  const mp = k.mousePos()
+  const mp = TouchInput.getPointerPos(k)
   if (hintState.hudTutorialStep === 'smallHeroHint' && !hintState.smallHeroTooltipDone) {
     const sh = levelIndicator.smallHero?.character
     if (!sh?.pos) return

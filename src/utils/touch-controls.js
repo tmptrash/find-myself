@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { clientToGame, isTouchDevice } from './touch-input.js'
 
 //
 // Virtual movement keys for touch devices without a physical keyboard
@@ -27,11 +28,7 @@ const CONTROL_Z = CFG.visual.zIndex.ui + 250
  * @returns {boolean}
  */
 export function needsTouchControls() {
-  if (typeof window === 'undefined') return false
-  const touchCapable = 'ontouchstart' in window && navigator.maxTouchPoints > 0
-  const coarsePointer = window.matchMedia('(pointer: coarse)').matches
-  const noHover = window.matchMedia('(hover: none)').matches
-  return touchCapable && (coarsePointer || noHover)
+  return isTouchDevice()
 }
 
 /**
@@ -83,6 +80,7 @@ export function create(config) {
   const inst = {
     k,
     buttons: [],
+    touchSlots: new Map(),
     leftX,
     rightX,
     jumpX,
@@ -91,6 +89,7 @@ export function create(config) {
   inst.buttons.push(createArrowButton(k, leftX, centerY, 'left', inst))
   inst.buttons.push(createArrowButton(k, rightX, centerY, 'right', inst))
   inst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump', inst))
+  setupMultiTouchHandlers(inst)
   k.onUpdate(() => onUpdate(inst))
   return inst
 }
@@ -158,9 +157,78 @@ function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
 }
 
 //
-// Tracks touch/mouse over virtual buttons each frame
+// Registers multi-touch handlers so run and jump can be held simultaneously
+//
+function setupMultiTouchHandlers(inst) {
+  const canvas = inst.k.canvas
+  if (!canvas) return
+  canvas.addEventListener('touchstart', e => onTouchStart(inst, e), { passive: true })
+  canvas.addEventListener('touchmove', e => onTouchMove(inst, e), { passive: true })
+  canvas.addEventListener('touchend', e => onTouchEnd(inst, e))
+  canvas.addEventListener('touchcancel', e => onTouchEnd(inst, e))
+}
+
+//
+// Maps new touches to virtual buttons and queues jump on jump press
+//
+function onTouchStart(inst, e) {
+  for (const touch of e.changedTouches) {
+    const pos = clientToGame(inst.k, touch.clientX, touch.clientY)
+    const btn = hitVirtualButton(inst, pos.x, pos.y)
+    if (!btn) continue
+    inst.touchSlots.set(touch.identifier, btn.type)
+    btn.type === 'jump' && (jumpPulse = true)
+  }
+  syncVirtualMovement(inst)
+}
+
+//
+// Reassigns moved touches when the finger slides between buttons
+//
+function onTouchMove(inst, e) {
+  for (const touch of e.changedTouches) {
+    if (!inst.touchSlots.has(touch.identifier)) continue
+    const pos = clientToGame(inst.k, touch.clientX, touch.clientY)
+    const btn = hitVirtualButton(inst, pos.x, pos.y)
+    btn ? inst.touchSlots.set(touch.identifier, btn.type) : inst.touchSlots.delete(touch.identifier)
+  }
+  syncVirtualMovement(inst)
+}
+
+//
+// Clears ended touches from the virtual button map
+//
+function onTouchEnd(inst, e) {
+  for (const touch of e.changedTouches) {
+    inst.touchSlots.delete(touch.identifier)
+  }
+  syncVirtualMovement(inst)
+}
+
+//
+// Applies combined left/right state from all active touch slots
+//
+function syncVirtualMovement(inst) {
+  const types = [...inst.touchSlots.values()]
+  virtualLeft.active = types.includes('left')
+  virtualRight.active = types.includes('right')
+}
+
+//
+// Returns the virtual button under a game-space point, if any
+//
+function hitVirtualButton(inst, x, y) {
+  for (const btn of inst.buttons) {
+    if (Math.abs(x - btn.x) < btn.half && Math.abs(y - btn.y) < btn.half) return btn
+  }
+  return null
+}
+
+//
+// Mouse fallback for hybrid devices when no touch slots are active
 //
 function onUpdate(inst) {
+  if (inst.touchSlots.size > 0) return
   const mp = inst.k.mousePos()
   const down = inst.k.isMouseDown()
   let leftActive = false

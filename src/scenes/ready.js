@@ -1,5 +1,7 @@
 import { CFG } from '../cfg.js'
-import { getColor, getRGB } from '../utils/helper.js'
+import { getColor } from '../utils/helper.js'
+import * as TouchInput from '../utils/touch-input.js'
+import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Cursor from '../utils/cursor.js'
@@ -153,14 +155,8 @@ export function sceneReady(k) {
     // Load gray hero sprites for the ready scene illustration (no arms, matching original style)
     //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
-    const readyBgRgb = getRGB(k, CFG.visual.colors.ready.background)
-    k.setBackground(k.Color.fromHex(CFG.visual.colors.ready.background))
-    k.canvas?.style.setProperty(
-      'background-color',
-      `rgb(${readyBgRgb.r}, ${readyBgRgb.g}, ${readyBgRgb.b})`,
-      'important'
-    )
-    k.onSceneLeave(() => { k.canvas?.style.removeProperty('background-color') })
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
+    k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
@@ -230,7 +226,7 @@ export function sceneReady(k) {
       const r = ICON_DRAW_R
       const antiHeroCX = iconX + r * 0.85
       const antiHeroCY = twoHeroY - r * 0.85 * 0.35
-      const mp = k.mousePos()
+      const mp = TouchInput.getPointerPos(k)
       const dx = mp.x - antiHeroCX
       const dy = mp.y - antiHeroCY
       const distSq = dx * dx + dy * dy

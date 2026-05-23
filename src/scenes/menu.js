@@ -8,6 +8,7 @@ import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
 import * as Cursor from "../utils/cursor.js"
+import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -133,13 +134,7 @@ export function sceneMenu(k) {
     //
     // Set canvas background to match menu background color
     //
-    const menuBgRgb = getRGB(k, CFG.visual.colors.menu.platformColor)
-    k.setBackground(k.Color.fromHex(CFG.visual.colors.menu.platformColor))
-    k.canvas?.style.setProperty(
-      'background-color',
-      `rgb(${menuBgRgb.r}, ${menuBgRgb.g}, ${menuBgRgb.b})`,
-      'important'
-    )
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.menu.platformColor)
     //
     // Clean up persistent word-pile objects from previous scenes
     //
@@ -1127,7 +1122,7 @@ export function sceneMenu(k) {
     // Cleanup when leaving scene
     //
     k.onSceneLeave(() => {
-      k.canvas?.style.removeProperty('background-color')
+      CanvasBackdrop.clearCanvasBackdrop(k)
       //
       // Stop menu music
       //

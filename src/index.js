@@ -21,6 +21,8 @@ import { sceneLevel3 as sceneTimeLevel3 } from "./sections/time/scenes/level3.js
 import { sceneTimeComplete } from "./sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
 import * as Cursor from "./utils/cursor.js"
+import * as TouchInput from "./utils/touch-input.js"
+import * as Fullscreen from "./utils/fullscreen.js"
 import * as BootLoader from "./utils/boot-loader.js"
 import { prepareSceneAssetsThenEnterScene } from "./utils/level-assets.js"
 //
@@ -94,6 +96,8 @@ async function boot() {
     throw err
   }
   Cursor.init(k)
+  TouchInput.initTouchInput(k)
+  Fullscreen.createFullscreenButton()
   //
   // Core registration only — section-heavy sprites load per level via level-assets helpers
   //

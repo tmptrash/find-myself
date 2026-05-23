@@ -58,6 +58,7 @@ const LEVEL_SUBTITLES = {
 const TRANSITION_SUBTITLE_Z = CFG.visual.zIndex.ui + 1500
 const TRANSITION_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
 const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
+const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level text
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
@@ -235,6 +236,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     assetPrepareDone: !needsEarlyAssetLoad,
     assetPreparePromise: null,
     tooltipSuppressed: false
+  }
+  //
+  // Hide all in-game tooltips for the entire pre-level transition
+  //
+  const preLevelSubtitle = LEVEL_SUBTITLES[nextLevel]
+  if ((isLevelToLevelTransition || isMenuToLevelTransition) && preLevelSubtitle) {
+    Tooltip.suppressAll()
+    inst.tooltipSuppressed = true
   }
   
   //
@@ -415,11 +424,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         inst.textHoldDuration = textHoldDuration || DEFAULT_TEXT_HOLD_DURATION
 
         if (subtitle) {
-          //
-          // Suppress all game tooltips while pre-level text is on screen
-          //
-          Tooltip.suppressAll()
-          inst.tooltipSuppressed = true
           //
           // Stop all music and sound effects, keep only voice-over (xxx-pre files)
           //

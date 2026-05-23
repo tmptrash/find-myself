@@ -8,6 +8,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as LevelHelp from '../../../utils/level-help.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
@@ -28,7 +29,8 @@ const BUG_BODY_SIZE = 6
 // Platform dimensions (minimal margins for large play area)
 //
 const TOP_MARGIN = CFG.visual.gameArea.topMargin
-const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
+const PLAY_AREA_BOTTOM_TRIM = 100
+const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin + PLAY_AREA_BOTTOM_TRIM
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
@@ -394,11 +396,11 @@ const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 80  // Above hero height (lo
 export function sceneLevel0(k) {
   k.scene("level-touch.0", () => {
     //
-    // Reset scores when entering from a different section.
+    // Reset life score when entering from a different section.
     // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
+    // heroScore is always read from localStorage and is not reset here.
     //
     if (get('lastSection', null) !== 'touch') {
-      set('heroScore', 0)
       set('lifeScore', 0)
     }
     set('lastSection', 'touch')
@@ -535,7 +537,15 @@ export function sceneLevel0(k) {
       k,
       levelName: 'level-touch.0',
       sideWallWidth: LEFT_MARGIN,
-      floorY: FLOOR_Y
+      floorY: FLOOR_Y,
+      levelIndicator,
+      sound
+    })
+    TouchControls.create({
+      k,
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN
     })
     //
     // Life deduction intro: show once when lifeScore reaches threshold for the first time

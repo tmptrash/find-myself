@@ -172,7 +172,8 @@ function onDraw(inst) {
   const liveY = getTargetY(target)
   const bubbleCenterX = inst.frozenX
   const offsetY = target.offsetY ?? TOOLTIP_Y_OFFSET
-  const { width: textW, height: textH } = measureText(k, target.text, inst.font)
+  const labelText = resolveTargetText(target)
+  const { width: textW, height: textH } = measureText(k, labelText, inst.font)
   const bubbleW = Math.round(textW + BUBBLE_PADDING_X * 2)
   const bubbleH = Math.round(textH + BUBBLE_PADDING_Y * 2)
   const totalW = bubbleW + BUBBLE_BORDER_WIDTH * 2
@@ -272,7 +273,7 @@ function onDraw(inst) {
   // Draw text centered inside the bubble
   //
   k.drawText({
-    text: target.text,
+    text: labelText,
     size: FONT_SIZE,
     font: inst.font,
     align: "center",
@@ -348,15 +349,15 @@ function onUpdate(inst) {
   // In forceVisible mode, skip hover detection entirely.
   // The caller manages activeTarget, frozenX/Y, and opacity directly.
   //
-  if (inst.forceVisible) return
-  //
-  // When globally suppressed, force all tooltips to fade out
-  //
   if (globalSuppressed) {
     inst.opacity = Math.max(0, inst.opacity - k.dt() * FADE_SPEED)
     if (inst.opacity <= 0) inst.activeTarget = null
     return
   }
+  //
+  // Forced-visible tooltips skip hover detection but still respect suppression above
+  //
+  if (inst.forceVisible) return
   const mousePos = k.mousePos()
   const dt = k.dt()
   //
@@ -403,4 +404,10 @@ function onUpdate(inst) {
     inst.opacity = 0
     inst.activeTarget = null
   }
+}
+//
+// Resolves tooltip label (supports dynamic getter functions)
+//
+function resolveTargetText(target) {
+  return typeof target.text === 'function' ? target.text() : target.text
 }

@@ -265,6 +265,7 @@ export function handleCollision(inst, currentLevel) {
  * @param {Object} inst - Blade instance
  */
 function updateLivingAnimation(inst) {
+  if (inst.isRushing) return
   const { blade, k, orientation, baseRotation, sfx, disableAnimation } = inst
   
   //

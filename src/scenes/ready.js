@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor } from '../utils/helper.js'
+import { getColor, getRGB } from '../utils/helper.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Cursor from '../utils/cursor.js'
@@ -153,7 +153,14 @@ export function sceneReady(k) {
     // Load gray hero sprites for the ready scene illustration (no arms, matching original style)
     //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
+    const readyBgRgb = getRGB(k, CFG.visual.colors.ready.background)
     k.setBackground(k.Color.fromHex(CFG.visual.colors.ready.background))
+    k.canvas?.style.setProperty(
+      'background-color',
+      `rgb(${readyBgRgb.r}, ${readyBgRgb.g}, ${readyBgRgb.b})`,
+      'important'
+    )
+    k.onSceneLeave(() => { k.canvas?.style.removeProperty('background-color') })
     k.get("word-pile-text").forEach(obj => obj.destroy())
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())

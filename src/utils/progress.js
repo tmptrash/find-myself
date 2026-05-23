@@ -89,7 +89,24 @@ export function getProgress() {
  * @returns {*} Value of the property or default value if the property is not found
  */
 export function get(path, defValue = null) {
-  return prop(path, getProgress()) || defValue
+  const val = prop(path, getProgress())
+  if (val !== null && val !== undefined) return val
+  //
+  // Legacy top-level localStorage keys (e.g. devtools edits outside find-yourself)
+  //
+  if (path === 'heroScore' || path === 'lifeScore') {
+    try {
+      const legacy = localStorage.getItem(path)
+      if (legacy !== null && legacy !== '') {
+        const n = Number(legacy)
+        if (!Number.isNaN(n)) {
+          set(path, n)
+          return n
+        }
+      }
+    } catch (_) {}
+  }
+  return defValue
 }
 /**
  * Universal setter — sets a prop's value by dot-separated path

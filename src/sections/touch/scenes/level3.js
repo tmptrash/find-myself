@@ -5,6 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as LevelHelp from '../../../utils/level-help.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
@@ -21,7 +22,8 @@ import * as LifeDeduction from '../utils/life-deduction.js'
 // Game area margins
 //
 const TOP_MARGIN = CFG.visual.gameArea.topMargin
-const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
+const PLAY_AREA_BOTTOM_TRIM = 100
+const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin + PLAY_AREA_BOTTOM_TRIM
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
@@ -163,7 +165,7 @@ const MONSTER_SPAWN_Y = 430
 //
 // Bottom wall kill zone Y threshold (top surface of bottom wall)
 //
-const BOTTOM_KILL_Y = CFG.visual.screen.height - CFG.visual.gameArea.bottomMargin
+const BOTTOM_KILL_Y = CFG.visual.screen.height - BOTTOM_MARGIN
 //
 // Floor Y for mountain and tree base (top of bottom wall)
 //
@@ -690,7 +692,15 @@ export function sceneLevel3(k) {
       k,
       levelName: 'level-touch.3',
       sideWallWidth: LEFT_MARGIN,
-      floorY: FLOOR_Y
+      floorY: FLOOR_Y,
+      levelIndicator,
+      sound
+    })
+    TouchControls.create({
+      k,
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN
     })
     //
     // Create anti-hero on the last (upper-right) platform
@@ -3935,6 +3945,7 @@ function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state) {
 //
 function onUpdateScreenShake(k, heroInst, creatureInst) {
   if (!heroInst?.character?.pos || !creatureInst) return
+  if (heroInst.isAnnihilating) return
   const dx = creatureInst.x - heroInst.character.pos.x
   const dy = creatureInst.y - heroInst.character.pos.y
   const dist = Math.sqrt(dx * dx + dy * dy)

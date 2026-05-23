@@ -10,6 +10,7 @@ import * as LogPlatform from '../utils/log-platform.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 import * as FloorRocks from '../utils/floor-rocks.js'
 import * as BackgroundBirds from '../../time/components/background-birds.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
@@ -44,9 +45,12 @@ const TRAINING_LABEL_COLOR_HEX = '#8B5A50'
 const TRAINING_LABEL_INACTIVE_HEX = '#808080'
 const TRAINING_LABEL_LETTER_COUNT = 8
 const TRAINING_LETTERS_AFTER_HOVER = 1
-const TRAINING_LETTERS_AFTER_RUN = 2
-const TRAINING_LETTERS_AFTER_MAIN = 4
-const TRAINING_LETTERS_AFTER_BONUS = 6
+const TRAINING_LETTERS_AFTER_HUD_SMALL_HERO = 2
+const TRAINING_LETTERS_AFTER_HUD_LIFE = 3
+const TRAINING_LETTERS_AFTER_HUD_TIME = 4
+const TRAINING_LETTERS_AFTER_RUN = 5
+const TRAINING_LETTERS_AFTER_MAIN = 6
+const TRAINING_LETTERS_AFTER_BONUS = 7
 const TRAINING_LETTERS_AFTER_COMPLETE = 8
 const TRAINING_LABEL_FONT_SIZE = 48
 const TRAINING_LABEL_Y = TOP_MARGIN - TRAINING_LABEL_FONT_SIZE - 32
@@ -205,6 +209,15 @@ const BONUS_PLATFORM_STAND_X_HALF = BONUS_PLATFORM_W / 2 + 40
 const HINT_REMINDER_INTERVAL = 30
 const FRAGMENT_LEAVE_FIND_YOURSELF_DELAY = 2
 const ANTIHERO_HOVER_PAUSE = 2
+const TRAINING_TARGET_TIME_SECONDS = 99 * 60
+const HUD_FROZEN_TOOLTIP_DURATION = 2
+const HUD_SMALL_HERO_HINT = 'hover over the small hero\nat the top-right to see how\nmany fragments you\'ve\ncollected. fragments help\nyou understand yourself and\novercome life\'s challenges'
+const HUD_SMALL_HERO_TOOLTIP = 'your fragments'
+const HUD_LIFE_HINT = 'great! to the right of the\nhero is life with its score.\nit plays against you and \ncauses trouble by turning\nthem into points. hover over it'
+const HUD_LIFE_TOOLTIP = 'life score'
+const HUD_TIME_HINT = 'super! now hover over the\ngreen time to the right of\nthe timer at the top — that\'s\nhow long you have to beat\nthe level and earn extra fragments'
+const HUD_TIME_TOOLTIP = "complete the level in time\nto earn more fragments"
+const HUD_UI_HOVER_HALF = 42
 const TRAINING_COMPLETE_MESSAGE = 'now you\'re ready to explore yourself.\nlet\'s start with touch...'
 const TRAINING_COMPLETE_MESSAGE_DURATION = 5
 const TRAINING_COMPLETE_FONT_SIZE_RATIO = 0.036
@@ -328,10 +341,10 @@ const CRICKET_INTERVAL_EXTRA = 3
 export function sceneTouchTraining(k) {
   k.scene('level-touch.training', () => {
     //
-    // Reset scores when first entering the touch section from another section
+    // Reset life score when first entering the touch section from another section.
+    // heroScore is always read from localStorage and is not reset here.
     //
     if (get('lastSection', null) !== 'touch') {
-      set('heroScore', 0)
       set('lifeScore', 0)
     }
     set('lastSection', 'touch')
@@ -466,8 +479,19 @@ export function sceneTouchTraining(k) {
     //
     // FPS counter aligned with TRAINING row and HUD icons
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true, targetTime: null, topY: TRAINING_HUD_CENTER_Y })
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      targetTime: TRAINING_TARGET_TIME_SECONDS,
+      topY: TRAINING_HUD_CENTER_Y
+    })
     k.onUpdate(() => FpsCounter.onUpdate(fpsCounter))
+    TouchControls.create({
+      k,
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN
+    })
     //
     // Anti-hero
     //
@@ -516,7 +540,12 @@ export function sceneTouchTraining(k) {
       levelDone: false,
       isDead: false,
       currentTip: null,
-      currentHintType: null
+      currentHintType: null,
+      hudTutorialStep: null,
+      hudFrozenTip: null,
+      smallHeroTooltipDone: false,
+      lifeTooltipDone: false,
+      timeTooltipDone: false
     }
     //
     // Anti-hero hover tooltip (enabled after mouse tutorial completes)
@@ -599,7 +628,8 @@ export function sceneTouchTraining(k) {
     //
     k.onUpdate(() => checkFloorThorns(k, heroInst, thornsData, spikeCluster, levelIndicator, hintState, spikeDead))
     k.onUpdate(() => onUpdateHints(k, hintState, heroInst, levelIndicator, sound))
-    k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, sound))
+    k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound))
+    k.onUpdate(() => onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
     const skipAnim = createSkipText(k)
     k.onUpdate(() => onUpdateSkipText(k, skipAnim))
@@ -608,6 +638,7 @@ export function sceneTouchTraining(k) {
     //
     k.onKeyPress('enter', () => {
       if (hintState.levelDone || spikeDead.active) return
+      destroyTrainingHints(k, hintState)
       Tooltip.suppressAll()
       Sound.stopAmbient(sound)
       createLevelTransition(k, 'level-touch.training')
@@ -1520,6 +1551,18 @@ function onUpdateSkipText(k, anim) {
 }
 
 //
+// Removes all active training hint tooltips before leaving the scene
+//
+function destroyTrainingHints(k, hintState) {
+  hintState.levelDone = true
+  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+  hintState.currentTip = null
+  hintState.currentHintType = null
+  hintState.hudFrozenTip && Tooltip.destroy(hintState.hudFrozenTip)
+  hintState.hudFrozenTip = null
+}
+
+//
 // Shows a forced tooltip above the hero
 //
 function showHint(k, hintState, heroInst, text, hintType, duration = HINT_DISPLAY_TIME) {
@@ -1730,7 +1773,7 @@ function onUpdateTrainingSurface(heroInst, sound) {
 //
 // After welcome hint, enables controls once the player hovers the anti-hero
 //
-function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, sound) {
+function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound) {
   if (hintState.levelDone || hintState.isDead || hintState.mouseHintDone) return
   if (!antiHeroInst.character?.exists?.() || !heroInst.character?.exists?.()) return
   //
@@ -1749,13 +1792,13 @@ function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIn
   const ay = antiHeroInst.character.pos.y
   const hovered = Math.abs(mp.x - ax) < ANTIHERO_MOUSE_HOVER_HALF &&
     Math.abs(mp.y - ay) < ANTIHERO_MOUSE_HOVER_HALF
-  hovered && beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelIndicator, sound)
+  hovered && beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound)
 }
 
 //
-// Shows anti-hero tooltip for 2s after first hover, then run hint and keyboard controls
+// Shows anti-hero tooltip for 2s after first hover, then HUD mouse tutorial
 //
-function beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelIndicator, sound) {
+function beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound) {
   hintState.awaitingMouseHint = false
   hintState.mouseHintHovering = true
   applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HOVER)
@@ -1783,11 +1826,123 @@ function beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelI
     hintState.mouseHintHovering = false
     hintState.mouseHintDone = true
     hintState.antiHeroPersistentTooltipDisabled = true
-    heroInst.controlsDisabled = false
-    hintState.shown1 = true
-    hintState.lastJumpPlatformHintTime = k.time()
-    showHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
+    heroInst.controlsDisabled = true
+    beginHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound)
   })
+}
+
+//
+// Starts the HUD hover tutorial chain before the run hint
+//
+function beginHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound) {
+  hintState.hudTutorialStep = 'smallHeroHint'
+  showHint(k, hintState, heroInst, HUD_SMALL_HERO_HINT, 'hudSmallHero')
+}
+
+//
+// Tracks HUD hover steps: small hero, life, green timer, then run hint
+//
+function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound) {
+  if (!hintState.mouseHintDone || hintState.hudTutorialStep === 'done' || hintState.levelDone || hintState.isDead) return
+  if (hintState.hudFrozenTip) return
+  const mp = k.mousePos()
+  if (hintState.hudTutorialStep === 'smallHeroHint' && !hintState.smallHeroTooltipDone) {
+    const sh = levelIndicator.smallHero?.character
+    if (!sh?.pos) return
+    isMouseOverPoint(mp, sh.pos.x, sh.pos.y, HUD_UI_HOVER_HALF) &&
+      (hintState.smallHeroTooltipDone = true) &&
+      beginHudStepTooltip(k, hintState, levelIndicator, sound, sh.pos.x, sh.pos.y, HUD_SMALL_HERO_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_SMALL_HERO, () => {
+        hintState.hudTutorialStep = 'lifeHint'
+        clearTrainingHeroHint(k, hintState)
+        showHint(k, hintState, heroInst, HUD_LIFE_HINT, 'hudLife')
+      })
+    return
+  }
+  if (hintState.hudTutorialStep === 'lifeHint' && !hintState.lifeTooltipDone) {
+    const life = levelIndicator.lifeImage?.pos
+    if (!life) return
+    isMouseOverPoint(mp, life.x, life.y, HUD_UI_HOVER_HALF) &&
+      (hintState.lifeTooltipDone = true) &&
+      beginHudStepTooltip(k, hintState, levelIndicator, sound, life.x, life.y, HUD_LIFE_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_LIFE, () => {
+        hintState.hudTutorialStep = 'timeHint'
+        clearTrainingHeroHint(k, hintState)
+        showHint(k, hintState, heroInst, HUD_TIME_HINT, 'hudTime')
+      })
+    return
+  }
+  if (hintState.hudTutorialStep === 'timeHint' && !hintState.timeTooltipDone) {
+    const targetText = fpsCounter?.targetText
+    if (!targetText?.pos) return
+    isMouseOverPoint(mp, targetText.pos.x, targetText.pos.y, HUD_UI_HOVER_HALF) &&
+      (hintState.timeTooltipDone = true) &&
+      beginHudStepTooltip(k, hintState, levelIndicator, sound, targetText.pos.x, targetText.pos.y, HUD_TIME_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_TIME, () => {
+        hintState.hudTutorialStep = 'done'
+        clearTrainingHeroHint(k, hintState)
+        finishHudMouseTutorial(k, hintState, heroInst)
+      })
+  }
+}
+
+//
+// Starts HUD tooltip on hover and colors the next TRAINING letter immediately
+//
+function beginHudStepTooltip(k, hintState, levelIndicator, sound, x, y, text, letterCount, onAfterTooltip) {
+  if (hintState.hudFrozenTip) return
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, letterCount)
+  showHudFrozenTooltip(k, hintState, x, y, text, onAfterTooltip)
+}
+
+//
+// Clears the hero-attached tutorial hint bubble
+//
+function clearTrainingHeroHint(k, hintState) {
+  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+  hintState.currentTip = null
+  hintState.currentHintType = null
+}
+
+//
+// Enables controls and shows the run hint after HUD tutorial completes
+//
+function finishHudMouseTutorial(k, hintState, heroInst) {
+  heroInst.controlsDisabled = false
+  hintState.shown1 = true
+  hintState.lastJumpPlatformHintTime = k.time()
+  showHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
+}
+
+//
+// Shows a fixed HUD tooltip for two seconds, then runs callback once
+//
+function showHudFrozenTooltip(k, hintState, x, y, text, onDone) {
+  hintState.hudFrozenTip && Tooltip.destroy(hintState.hudFrozenTip)
+  const target = {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: HUD_UI_HOVER_HALF * 2,
+    height: HUD_UI_HOVER_HALF * 2,
+    text,
+    offsetY: 50,
+    forceBelow: true
+  }
+  const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+  tip.activeTarget = target
+  tip.frozenX = target.x
+  tip.frozenY = target.y
+  tip.opacity = 1
+  hintState.hudFrozenTip = tip
+  k.wait(HUD_FROZEN_TOOLTIP_DURATION, () => {
+    Tooltip.destroy(tip)
+    if (hintState.hudFrozenTip === tip) hintState.hudFrozenTip = null
+    onDone?.()
+  })
+}
+
+//
+// True when the mouse is within a square hit area around a point
+//
+function isMouseOverPoint(mp, x, y, half) {
+  return Math.abs(mp.x - x) < half && Math.abs(mp.y - y) < half
 }
 
 //

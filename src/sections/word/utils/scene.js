@@ -9,6 +9,7 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import { get, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import * as LevelHelp from '../../../utils/level-help.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -198,7 +199,12 @@ export function initScene(config) {
     k,
     levelName,
     sideWallWidth,
-    floorY: k.height() - (bottomPlatformHeight ?? 360)
+    floorY: k.height() - (bottomPlatformHeight ?? 360),
+    helpY: levelName === 'level-word.0'
+      ? k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET
+      : undefined,
+    levelIndicator,
+    sound
   })
   //
   // Create FPS counter, timer and target time (aligned with WORDS and small hero)
@@ -215,6 +221,12 @@ export function initScene(config) {
   //
   k.onUpdate(() => {
     FpsCounter.onUpdate(fpsCounter)
+  })
+  TouchControls.create({
+    k,
+    floorY: k.height() - (bottomPlatformHeight ?? 360),
+    leftMargin: sideWallWidth ?? 192,
+    rightMargin: sideWallWidth ?? 192
   })
   
   // Level titles removed for cleaner visual experience

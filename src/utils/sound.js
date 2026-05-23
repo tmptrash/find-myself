@@ -610,6 +610,35 @@ export function playBladeSound(instance) {
 }
 
 /**
+ * Play metallic rattle when the hero is near blade letters
+ * @param {Object} instance - Sound instance from create()
+ * @param {number} [proximity=1] - 0 far, 1 very close (controls volume)
+ */
+export function playBladeProximityRattle(instance, proximity = 1) {
+  if (globalMuteProceduralSounds) return
+  const now = instance.audioContext.currentTime
+  const duration = 0.12
+  const masterVolume = CFG.audio.masterVolume
+  const vol = Math.max(0.02, Math.min(0.22, proximity * 0.22)) * masterVolume
+  const rattle = instance.audioContext.createOscillator()
+  rattle.type = 'square'
+  rattle.frequency.setValueAtTime(1800 + proximity * 1200, now)
+  rattle.frequency.exponentialRampToValueAtTime(900, now + duration)
+  const rattleGain = instance.audioContext.createGain()
+  rattleGain.gain.setValueAtTime(vol, now)
+  rattleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.value = 2400
+  filter.Q.value = 4
+  rattle.connect(rattleGain)
+  rattleGain.connect(filter)
+  filter.connect(instance.bladeSoundGain)
+  rattle.start(now)
+  rattle.stop(now + duration)
+}
+
+/**
  * Play metal ping sound (for blade glints) - katana-like sound
  * @param {Object} instance - Sound instance from create()
  */
@@ -3080,6 +3109,60 @@ export function playScoreTickSound(instance, progress) {
   gain.connect(ctx.destination)
   osc.start(now)
   osc.stop(now + 0.08)
+}
+
+/**
+ * Play ascending tick sounds when fragments are spent on level help
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playHelpPurchaseSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const tickGap = 0.09
+  for (let i = 0; i < 3; i++) {
+    const tickNow = now + i * tickGap
+    const freq = 520 - i * 90
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'triangle'
+    osc.frequency.setValueAtTime(freq, tickNow)
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.6, tickNow + 0.1)
+    gain.gain.setValueAtTime(0.001, tickNow)
+    gain.gain.linearRampToValueAtTime(0.14, tickNow + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.001, tickNow + 0.1)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(tickNow)
+    osc.stop(tickNow + 0.1)
+  }
+}
+
+/**
+ * Play short denial sound when the player cannot afford level help
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playHelpDeniedSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const duration = 0.22
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'square'
+  osc.frequency.setValueAtTime(280, now)
+  osc.frequency.exponentialRampToValueAtTime(120, now + duration)
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(0.16, now + 0.02)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 900
+  osc.connect(gain)
+  gain.connect(filter)
+  filter.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + duration)
 }
 /**
  * Plays a wet "splat/splash" sound (hero stepping/landing in puddle)

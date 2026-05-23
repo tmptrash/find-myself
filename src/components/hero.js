@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { getHex, isAnyKeyDown, onPhysicalKeyPress, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
+import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import { set } from '../utils/progress.js'
@@ -741,6 +742,10 @@ function createBodyPartParticles(inst) {
  */
 function onUpdate(inst) {
   //
+  // Virtual jump button (touch devices)
+  //
+  TouchControls.processVirtualJump()
+  //
   // Skip updates during annihilation (but allow paused for post-absorption idle)
   //
   if (inst.isAnnihilating) return
@@ -1076,6 +1081,7 @@ function setupControls(inst) {
       inst.k.onKeyPress(key, jumpAction)
     }
   })
+  TouchControls.registerVirtualJumpHandler(jumpAction)
 }
 
 /**
@@ -1310,6 +1316,10 @@ export function onAnnihilationCollide(inst) {
   if (inst.isAnnihilating) return
 
   inst.isAnnihilating = true
+  //
+  // Touch level 3: hero grows arms when meeting the anti-hero
+  //
+  inst.currentLevel === 'level-touch.3' && !inst.addArms && applyHeroArms(inst)
 
   const { k, character: player, sfx } = inst
   const target = inst.antiHero.character
@@ -2406,6 +2416,18 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     //
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
   }
+}
+//
+// Adds arms to hero sprites immediately (touch level 3 annihilation)
+//
+function applyHeroArms(inst) {
+  inst.addArms = true
+  const bodyColorClean = String(inst.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
+  const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
+  const hasMouth = inst.addMouth
+  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms`
+  loadHeroSprites(inst)
+  inst.character?.use?.(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
 }
 /**
  * Get sprite name for character (supports custom colors)

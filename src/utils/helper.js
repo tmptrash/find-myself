@@ -1,3 +1,5 @@
+import * as TouchControls from './touch-controls.js'
+
 // Get color as Kaplay object
 export function getColor(k, colorHex) {
   const [r, g, b] = parseHex(colorHex)
@@ -69,10 +71,12 @@ window.addEventListener('keyup', (e) => {
 // Check if any of the keys is pressed (down), supports both Kaplay key names and physical codes
 //
 export function isAnyKeyDown(k, keys) {
-  return keys.some(key => key.length > 1 && key.startsWith('Key')
-    ? physicalKeysDown.has(key)
-    : k.isKeyDown(key)
-  )
+  return keys.some(key => {
+    if (TouchControls.isVirtualKeyDown(key)) return true
+    return key.length > 1 && key.startsWith('Key')
+      ? physicalKeysDown.has(key)
+      : k.isKeyDown(key)
+  })
 }
 //
 // Register a callback for physical key press (fires once on keydown, not repeat)

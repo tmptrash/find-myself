@@ -133,7 +133,13 @@ export function sceneMenu(k) {
     //
     // Set canvas background to match menu background color
     //
+    const menuBgRgb = getRGB(k, CFG.visual.colors.menu.platformColor)
     k.setBackground(k.Color.fromHex(CFG.visual.colors.menu.platformColor))
+    k.canvas?.style.setProperty(
+      'background-color',
+      `rgb(${menuBgRgb.r}, ${menuBgRgb.g}, ${menuBgRgb.b})`,
+      'important'
+    )
     //
     // Clean up persistent word-pile objects from previous scenes
     //
@@ -1121,6 +1127,7 @@ export function sceneMenu(k) {
     // Cleanup when leaving scene
     //
     k.onSceneLeave(() => {
+      k.canvas?.style.removeProperty('background-color')
       //
       // Stop menu music
       //

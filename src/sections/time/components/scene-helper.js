@@ -7,6 +7,7 @@ import { get, set } from '../../../utils/progress.js'
 import * as DayNight from '../utils/time-day-night.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import * as LevelHelp from '../../../utils/level-help.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 
 const MUSIC_START_DELAY = 6.0
 //
@@ -251,7 +252,15 @@ export function initScene(config) {
     k,
     levelName,
     sideWallWidth,
-    floorY: k.height() - bottomPlatformHeight
+    floorY: k.height() - bottomPlatformHeight,
+    levelIndicator,
+    sound
+  })
+  TouchControls.create({
+    k,
+    floorY: k.height() - bottomPlatformHeight,
+    leftMargin: sideWallWidth,
+    rightMargin: sideWallWidth
   })
   
   //

@@ -6,6 +6,7 @@ import * as Bugs from '../components/bugs.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as LevelHelp from '../../../utils/level-help.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
@@ -26,7 +27,8 @@ import * as BonusHero from '../components/bonus-hero.js'
 // Platform dimensions (minimal margins for large play area)
 //
 const TOP_MARGIN = CFG.visual.gameArea.topMargin
-const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin
+const PLAY_AREA_BOTTOM_TRIM = 50
+const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin + PLAY_AREA_BOTTOM_TRIM
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
@@ -1038,7 +1040,15 @@ export function sceneLevel1(k) {
       k,
       levelName: 'level-touch.1',
       sideWallWidth: LEFT_MARGIN,
-      floorY: FLOOR_Y
+      floorY: FLOOR_Y,
+      levelIndicator,
+      sound
+    })
+    TouchControls.create({
+      k,
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN
     })
     //
     // Life deduction logic: leaves are paused until deduction animation plays.

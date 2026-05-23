@@ -4,6 +4,7 @@ import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
@@ -685,6 +686,12 @@ export function sceneLevel3(k) {
       sideWallWidth: LEFT_MARGIN
     })
     levelIndicator.updateTrapCount(displayTrapCount)
+    LevelHelp.create({
+      k,
+      levelName: 'level-touch.3',
+      sideWallWidth: LEFT_MARGIN,
+      floorY: FLOOR_Y
+    })
     //
     // Create anti-hero on the last (upper-right) platform
     //
@@ -4038,6 +4045,10 @@ const L3_EYE_POSITIONS = [
   { x: 750,                                          y: 950, openRadius: 205 }
 ]
 function addWatchingEyes(k, heroInst) {
+  const gameLeft = LEFT_MARGIN
+  const gameRight = CFG.visual.screen.width - RIGHT_MARGIN
+  const gameTop = TOP_MARGIN
+  const gameBottom = FLOOR_Y
   const eyeColor = k.rgb(220, 60, 30)
   const eyeHalo = k.rgb(10, 5, 5)
   const pupilColor = k.rgb(8, 2, 2)
@@ -4070,6 +4081,12 @@ function addWatchingEyes(k, heroInst) {
           const eyeRx = L3_EYE_MAX_RX * openT
           const eyeRy = L3_EYE_MAX_RY * eyelidRatio
           if (eyeRy < 0.5) continue
+          //
+          // Skip eyes outside the playable game area
+          //
+          if (e.x < gameLeft || e.x > gameRight || e.y < gameTop || e.y > gameBottom) continue
+          if (e.x - eyeRx - 3 < gameLeft || e.x + eyeRx + 3 > gameRight) continue
+          if (e.y - eyeRy - 2.5 < gameTop || e.y + eyeRy + 2.5 > gameBottom) continue
           //
           // Pupil direction: tracks hero
           //

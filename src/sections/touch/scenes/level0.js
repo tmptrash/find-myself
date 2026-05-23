@@ -7,6 +7,7 @@ import * as SmallBugs from '../components/small-bugs.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
@@ -529,6 +530,12 @@ export function sceneLevel0(k) {
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
+    })
+    LevelHelp.create({
+      k,
+      levelName: 'level-touch.0',
+      sideWallWidth: LEFT_MARGIN,
+      floorY: FLOOR_Y
     })
     //
     // Life deduction intro: show once when lifeScore reaches threshold for the first time
@@ -3994,7 +4001,7 @@ const L0_FIREFLY_COLOR_B = 120
 const MUSHROOM_COUNT = 7
 const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
-const L0_SPIDER_TOOLTIP_TEXT = "psst.\nnudge those little bugs\ncloser to each other"
+const L0_SPIDER_TOOLTIP_TEXT = "psst... nudge those\nlittle bugs closer\nto each other"
 const MUSHROOM_FUNNY_LINES = [
   'talk spore to me',
   'pay rent in compost',

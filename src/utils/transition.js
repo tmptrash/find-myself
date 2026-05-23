@@ -55,7 +55,8 @@ const LEVEL_SUBTITLES = {
   'level-touch.3': ['when you cannot see… touch to survive', 'touch3-pre', 5]
 }
 
-const FADE_TO_BLACK_DURATION = 0.8   // Duration of fade to black
+const TRANSITION_SUBTITLE_Z = CFG.visual.zIndex.ui + 1500
+const TRANSITION_FONT = CFG.visual.fonts.regularFull.replace(/'/g, '')
 const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
@@ -462,24 +463,24 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             [-TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET], [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
           ]
           const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING }),
+            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
             k.pos(textX + dx, textY + dy),
             k.anchor("center"),
             k.color(0, 0, 0),
             k.opacity(0),
-            k.z(CFG.visual.zIndex.ui + 101),
+            k.z(TRANSITION_SUBTITLE_Z),
             k.fixed()
           ]))
           //
           // Create main colored text above outlines
           //
           const textObj = k.add([
-            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING }),
+            k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
             k.pos(textX, textY),
             k.anchor("center"),
             k.color(r, g, b),
             k.opacity(0),
-            k.z(CFG.visual.zIndex.ui + 102),
+            k.z(TRANSITION_SUBTITLE_Z + 1),
             k.fixed()
           ])
           inst.textObj = textObj
@@ -491,21 +492,21 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             const hintSize = textSize * 0.55
             const hintY = textY + textSize * 1.9
             const hintOutlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-              k.text(hintText, { size: hintSize, align: "center" }),
+              k.text(hintText, { size: hintSize, align: "center", font: TRANSITION_FONT }),
               k.pos(textX + dx, hintY + dy),
               k.anchor("center"),
               k.color(0, 0, 0),
               k.opacity(0),
-              k.z(CFG.visual.zIndex.ui + 101),
+              k.z(TRANSITION_SUBTITLE_Z),
               k.fixed()
             ]))
             const hintTextObj = k.add([
-              k.text(hintText, { size: hintSize, align: "center" }),
+              k.text(hintText, { size: hintSize, align: "center", font: TRANSITION_FONT }),
               k.pos(textX, hintY),
               k.anchor("center"),
               k.color(140, 140, 140),
               k.opacity(0),
-              k.z(CFG.visual.zIndex.ui + 102),
+              k.z(TRANSITION_SUBTITLE_Z + 1),
               k.fixed()
             ])
             inst.hintTextObj = hintTextObj

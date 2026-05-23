@@ -60,8 +60,12 @@ const PROHIBITED_RING_RADIUS = 40
 const PROHIBITED_RING_SEGMENTS = 36
 const PROHIBITED_RING_WIDTH = 5
 const PROHIBITED_SLASH_WIDTH = 7
+const PROHIBITED_PULSE_SPEED = 2.8
 const PROHIBITED_COLOR = '#B82C2C'
 const PROHIBITED_SIGN_OPACITY = 1.0
+const MENU_ANTIHERO_HOVER_AMP = 0.08
+const MENU_ANTIHERO_PULSE_SPEED = 2.8
+const MENU_ANTIHERO_HOVER_LERP = 8
 //
 // Green checkmark displayed on completed anti-heroes when hovered
 //
@@ -71,6 +75,7 @@ const CHECKMARK_COLOR_B = 100
 const CHECKMARK_SIZE = 28
 const CHECKMARK_WIDTH = 6
 const CHECKMARK_OPACITY = 1.0
+const CHECKMARK_PULSE_SPEED = 1.8
 //
 // Scene-leave cover — sits above menu sprites so anti-heroes do not flash during load
 //
@@ -676,12 +681,19 @@ export function sceneMenu(k) {
           antiHeroInst.character.use(k.sprite(`${desiredPrefix}_0_0`))
         }
         //
-        // Keep anti-hero fixed at base position and scale — no hover breathing pulse
+        // Keep anti-hero at base position; scale breathes gently while hovered
         //
         antiHeroInst.character.pos.x = antiHeroInst.baseX
         antiHeroInst.character.pos.y = antiHeroInst.baseY
         const baseScale = antiHeroInst.baseScale ?? 1
-        antiHeroInst.character.scale = k.vec2(baseScale, baseScale)
+        antiHeroInst.hoverScale == null && (antiHeroInst.hoverScale = 1)
+        const targetHoverScale = isHovered
+          ? 1 + MENU_ANTIHERO_HOVER_AMP * Math.sin(k.time() * MENU_ANTIHERO_PULSE_SPEED)
+          : 1
+        antiHeroInst.hoverScale += (targetHoverScale - antiHeroInst.hoverScale) *
+          Math.min(1, MENU_ANTIHERO_HOVER_LERP * k.dt())
+        const pulseScale = baseScale * antiHeroInst.hoverScale
+        antiHeroInst.character.scale = k.vec2(pulseScale, pulseScale)
       })
       
       //
@@ -1890,7 +1902,8 @@ function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
 // The circle encircles the anti-hero sprite, creating a "wearing the sign" look.
 //
 function drawProhibitedSign(k, cx, cy) {
-  const r = PROHIBITED_RING_RADIUS
+  const t = k.time()
+  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
   const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
   const color = k.rgb(pr, pg, pb)
   //
@@ -1917,7 +1930,8 @@ function drawProhibitedSlashFront(k, inst) {
   if (!hoveredAntiHero || !isAntiHeroLocked(hoveredAntiHero, progress, currentSection)) return
   const cx = hoveredAntiHero.character.pos.x
   const cy = hoveredAntiHero.character.pos.y
-  const r = PROHIBITED_RING_RADIUS
+  const t = k.time()
+  const r = PROHIBITED_RING_RADIUS + Math.sin(t * PROHIBITED_PULSE_SPEED * 0.7) * 2
   const [pr, pg, pb] = parseHex(PROHIBITED_COLOR)
   const color = k.rgb(pr, pg, pb)
   const slashR = r * 0.72
@@ -1938,7 +1952,8 @@ function drawCompletedCheckmarkFront(k, inst) {
   if (!hoveredAntiHero || !hoveredAntiHero.isCompleted) return
   const cx = hoveredAntiHero.character.pos.x
   const cy = hoveredAntiHero.character.pos.y
-  const s = CHECKMARK_SIZE
+  const pulse = 0.9 + 0.1 * Math.sin(k.time() * CHECKMARK_PULSE_SPEED)
+  const s = CHECKMARK_SIZE * pulse
   const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
   const op = CHECKMARK_OPACITY
   //

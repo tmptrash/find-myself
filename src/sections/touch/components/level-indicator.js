@@ -61,6 +61,7 @@ const WOBBLE_AMPLITUDE = 4
  * @param {string} [config.labelColor] - Single color for all letters when sectionLabel is set
  * @param {number} [config.sectionLabelStagePairs] - Pair count for staged letter coloring (2 letters per stage)
  * @param {number} [config.sectionLabelCompletedStages] - Initial completed stage pairs (0-based count)
+ * @param {number} [config.sectionLabelCompletedLetters] - Initial completed letter count (TRAINING per-letter mode)
  * @param {number} [config.sectionLabelLetterSpacing] - Tighter spacing for custom section labels
  * @param {number} [config.sectionLabelY] - Top Y for section label row (lower = closer to game area)
  * @returns {Object} Object with letterObjects, smallHero, lifeImage, and score update methods
@@ -79,6 +80,7 @@ export function create(config) {
     labelColor = null,
     sectionLabelStagePairs = null,
     sectionLabelCompletedStages = 0,
+    sectionLabelCompletedLetters = null,
     sectionLabelLetterSpacing = null,
     sectionLabelY = null
   } = config
@@ -104,7 +106,9 @@ export function create(config) {
     //
     const isFallingLetter = !sectionLabel && i === FALLING_LETTER_INDEX
     let colorHex
-    if (sectionLabelStagePairs) {
+    if (sectionLabelCompletedLetters != null) {
+      colorHex = i < sectionLabelCompletedLetters ? activeColor : inactiveColor
+    } else if (sectionLabelStagePairs) {
       const stageIndex = Math.floor(i / 2)
       colorHex = stageIndex < sectionLabelCompletedStages ? activeColor : inactiveColor
     } else if (labelColor) {
@@ -307,6 +311,17 @@ export function create(config) {
       trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
+}
+
+export function setSectionLabelLetterProgress(inst, completedLetters) {
+  if (!inst?.letterObjects?.length) return
+  const capped = Math.min(completedLetters, inst.letterObjects.length)
+  inst.letterObjects.forEach((letter, i) => {
+    if (!letter?.exists?.()) return
+    const colorHex = i < capped ? inst.sectionLabelActiveColor : inst.sectionLabelInactiveColor
+    const { r, g, b } = getRGB(inst.k, colorHex)
+    letter.color = inst.k.rgb(r, g, b)
+  })
 }
 
 /**

@@ -6,6 +6,7 @@ import * as LevelIndicator from '../components/level-indicator.js'
 import { get, set } from '../../../utils/progress.js'
 import * as DayNight from '../utils/time-day-night.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 
 const MUSIC_START_DELAY = 6.0
 //
@@ -246,6 +247,12 @@ export function initScene(config) {
       sideWallWidth
     })
   }
+  levelName && LevelHelp.create({
+    k,
+    levelName,
+    sideWallWidth,
+    floorY: k.height() - bottomPlatformHeight
+  })
   
   //
   // Setup back to menu

@@ -446,7 +446,7 @@ function addIconLabels(k, leftX) {
   const descFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
   const rows = [
     { label: 'Collect fragments', desc: 'Pieces of you. Scattered everywhere.' },
-    { label: 'Find the other you', desc: 'Touch them. Know them.' }
+    { label: 'Find the other peaces of you', desc: 'Touch them. Know them.' }
   ]
   rows.forEach((row, i) => {
     const rowY = ICON_START_Y + i * ICON_ROW_HEIGHT

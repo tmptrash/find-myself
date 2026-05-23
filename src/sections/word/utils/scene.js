@@ -8,6 +8,7 @@ import * as LevelIndicator from '../components/level-indicator.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { get, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
@@ -193,6 +194,12 @@ export function initScene(config) {
       sideWallWidth
     })
   }
+  levelName && sideWallWidth != null && LevelHelp.create({
+    k,
+    levelName,
+    sideWallWidth,
+    floorY: k.height() - (bottomPlatformHeight ?? 360)
+  })
   //
   // Create FPS counter, timer and target time (aligned with WORDS and small hero)
   //
@@ -544,6 +551,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     sfx: sound,
     dustColor,
     addMouth: true,
+    addArms: true,
     addWatch: true,
     bodyColor: 'DC143C'
   })

@@ -8,6 +8,7 @@ import { drawFirTree } from '../components/fir-tree.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
@@ -434,6 +435,12 @@ export function sceneLevel2(k) {
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
+    })
+    LevelHelp.create({
+      k,
+      levelName: 'level-touch.2',
+      sideWallWidth: LEFT_MARGIN,
+      floorY: FLOOR_Y
     })
     //
     // Life deduction logic: icicles hidden until 1st deduction, trap platform until 2nd.

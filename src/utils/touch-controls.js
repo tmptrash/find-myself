@@ -27,10 +27,17 @@ let mouseUpHook = null
 // On-screen control layout (50% larger than base, wide gap between left/right)
 //
 const ARROW_SIZE = 108
-const ARROW_CENTER_GAP = 180
+const ARROW_CENTER_GAP = 260
 const ARROW_MARGIN_X = 36
 const JUMP_ARROW_MARGIN_X = 36
 const CIRCLE_RADIUS = 62
+//
+// Touch hit area is much larger than the visible circle (especially horizontally)
+// so fingers can land near a button without missing it. Vertical padding stays
+// modest to avoid stealing taps from the play area above/below.
+//
+const HIT_HALF_WIDTH = 112
+const HIT_HALF_HEIGHT = 90
 const CIRCLE_GRAY_R = 38
 const CIRCLE_GRAY_G = 38
 const CIRCLE_GRAY_B = 38
@@ -136,7 +143,7 @@ function createArrowButton(k, x, y, type) {
       }
     }
   ])
-  return { x, y, half: CIRCLE_RADIUS, type }
+  return { x, y, halfW: HIT_HALF_WIDTH, halfH: HIT_HALF_HEIGHT, type }
 }
 
 //
@@ -267,7 +274,7 @@ function syncVirtualMovement() {
 //
 function hitVirtualButton(inst, x, y) {
   for (const btn of inst.buttons) {
-    if (Math.abs(x - btn.x) < btn.half && Math.abs(y - btn.y) < btn.half) return btn
+    if (Math.abs(x - btn.x) < btn.halfW && Math.abs(y - btn.y) < btn.halfH) return btn
   }
   return null
 }

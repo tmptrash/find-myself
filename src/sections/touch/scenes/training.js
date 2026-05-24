@@ -12,6 +12,7 @@ import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as TouchInput from '../../../utils/touch-input.js'
+import * as TouchTapButton from '../../../utils/touch-tap-button.js'
 import * as FloorRocks from '../utils/floor-rocks.js'
 import * as BackgroundBirds from '../../time/components/background-birds.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
@@ -632,18 +633,34 @@ export function sceneTouchTraining(k) {
     k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
-    const skipAnim = createSkipText(k)
-    k.onUpdate(() => onUpdateSkipText(k, skipAnim))
     //
-    // Enter: skip training
+    // Skip-training prompt: keyboard hint on desktop, tappable Enter button on touch devices.
     //
-    k.onKeyPress('enter', () => {
+    const performSkipTraining = () => {
       if (hintState.levelDone || spikeDead.active) return
       destroyTrainingHints(k, hintState)
       Tooltip.suppressAll()
       Sound.stopAmbient(sound)
       createLevelTransition(k, 'level-touch.training')
-    })
+    }
+    let skipAnim = null
+    let skipTapButton = null
+    if (TouchInput.isTouchDevice()) {
+      skipTapButton = TouchTapButton.create({
+        k,
+        x: LEFT_MARGIN + PLAYABLE_W / 2,
+        y: SKIP_TEXT_Y,
+        label: 'Enter',
+        onTap: performSkipTraining
+      })
+    } else {
+      skipAnim = createSkipText(k)
+      k.onUpdate(() => onUpdateSkipText(k, skipAnim))
+    }
+    //
+    // Keyboard fallback for desktop and external keyboards on tablets.
+    //
+    k.onKeyPress('enter', performSkipTraining)
     k.onKeyPress('escape', () => goToMenuAfterAssets(k))
     //
     // Spawn characters and show first hint

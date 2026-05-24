@@ -97,7 +97,7 @@ async function boot() {
   }
   Cursor.init(k)
   TouchInput.initTouchInput(k)
-  Fullscreen.createFullscreenButton()
+  Fullscreen.createFullscreenButton(k)
   //
   // Core registration only — section-heavy sprites load per level via level-assets helpers
   //

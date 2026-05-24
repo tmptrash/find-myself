@@ -9,6 +9,8 @@ import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
 import * as Cursor from "../utils/cursor.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
+import * as TouchTapButton from "../utils/touch-tap-button.js"
+import { isTouchDevice } from "../utils/touch-input.js"
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -982,11 +984,13 @@ export function sceneMenu(k) {
     const hasSavedGame = lastLevel !== null
     
     //
-    // Hint text - Space to continue, Enter to start new, ESC to go back
-    // If all sections completed, don't show continue option
+    // Hint text - Space to continue, Enter to start new, ESC to go back.
+    // If all sections completed, don't show continue option.
+    // Touch devices replace the keyboard hint with a tappable Enter button
+    // since phones have no Space/Enter/Esc keys.
     //
     const allCompleted = progress.word?.completed && progress.touch?.completed
-    
+    const touchMode = isTouchDevice()
     let hintText
     if (allCompleted) {
       hintText = "Enter - new game  |  ESC - back"
@@ -995,82 +999,78 @@ export function sceneMenu(k) {
     } else {
       hintText = "Space / Enter - start  |  ESC - back"
     }
-    //
-    // Create outline shadows for hint text
-    //
-    const outlineOffsets = [
-      { dx: -2, dy: 0 },
-      { dx: 2, dy: 0 },
-      { dx: 0, dy: -2 },
-      { dx: 0, dy: 2 },
-      { dx: -1, dy: -1 },
-      { dx: 1, dy: -1 },
-      { dx: -1, dy: 1 },
-      { dx: 1, dy: 1 }
-    ]
-    
     const startTextOutlines = []
-    outlineOffsets.forEach(({ dx, dy }) => {
-      const outline = k.add([
-        k.text(hintText, { size: 20 }),
-        k.pos(960 + dx, 1030 + dy),
-      k.anchor("center"),
-      k.opacity(1),
-        k.color(0, 0, 0),
-        k.z(99)
-      ])
-      startTextOutlines.push(outline)
-    })
-    
-    const startText = k.add([
-      k.text(hintText, { size: 20 }),
-      k.pos(960, 1030),  // Fixed: k.width() / 2 = 960, k.height() - 50 = 1030
-      k.anchor("center"),
-      k.opacity(1),
-      k.color(150, 150, 150), // Gray
-      k.z(100)
-    ])
-    
-    //
-    // Smooth flicker animation for start text (like in ready scene)
-    //
-    const FLICKER_FADE_DURATION = 1.2
-    const FLICKER_MIN_OPACITY = 0.5
-    const FLICKER_MAX_OPACITY = 1.0
-    
-    let hintFlickerTime = FLICKER_FADE_DURATION  // Start at max opacity
-    let hintDirection = -1  // Start fading down
-    
-    k.onUpdate(() => {
+    let startText = null
+    let enterTapButton = null
+    if (touchMode) {
       //
-      // Update flicker timer
+      // Tappable Enter button — starts a new game from scratch.
       //
-      hintFlickerTime += hintDirection * k.dt()
-      
-      //
-      // Reverse direction at bounds
-      //
-      if (hintFlickerTime >= FLICKER_FADE_DURATION) {
-        hintDirection = -1
-        hintFlickerTime = FLICKER_FADE_DURATION
-      } else if (hintFlickerTime <= 0) {
-        hintDirection = 1
-        hintFlickerTime = 0
-      }
-      
-      //
-      // Interpolate opacity between min and max
-      //
-      const progress = hintFlickerTime / FLICKER_FADE_DURATION
-      const newOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-      startText.opacity = newOpacity
-      //
-      // Update outline opacity
-      //
-      startTextOutlines.forEach(outline => {
-        outline.opacity = newOpacity
+      enterTapButton = TouchTapButton.create({
+        k,
+        x: 960,
+        y: 1030,
+        label: 'Enter',
+        onTap: () => startGame(true)
       })
-    })
+    } else {
+      //
+      // Desktop: keyboard hint text with outline shadows.
+      //
+      const outlineOffsets = [
+        { dx: -2, dy: 0 },
+        { dx: 2, dy: 0 },
+        { dx: 0, dy: -2 },
+        { dx: 0, dy: 2 },
+        { dx: -1, dy: -1 },
+        { dx: 1, dy: -1 },
+        { dx: -1, dy: 1 },
+        { dx: 1, dy: 1 }
+      ]
+      outlineOffsets.forEach(({ dx, dy }) => {
+        const outline = k.add([
+          k.text(hintText, { size: 20 }),
+          k.pos(960 + dx, 1030 + dy),
+          k.anchor("center"),
+          k.opacity(1),
+          k.color(0, 0, 0),
+          k.z(99)
+        ])
+        startTextOutlines.push(outline)
+      })
+      startText = k.add([
+        k.text(hintText, { size: 20 }),
+        k.pos(960, 1030),
+        k.anchor("center"),
+        k.opacity(1),
+        k.color(150, 150, 150),
+        k.z(100)
+      ])
+      //
+      // Smooth flicker animation for start text (like in ready scene)
+      //
+      const FLICKER_FADE_DURATION = 1.2
+      const FLICKER_MIN_OPACITY = 0.5
+      const FLICKER_MAX_OPACITY = 1.0
+      let hintFlickerTime = FLICKER_FADE_DURATION
+      let hintDirection = -1
+      k.onUpdate(() => {
+        hintFlickerTime += hintDirection * k.dt()
+        if (hintFlickerTime >= FLICKER_FADE_DURATION) {
+          hintDirection = -1
+          hintFlickerTime = FLICKER_FADE_DURATION
+        } else if (hintFlickerTime <= 0) {
+          hintDirection = 1
+          hintFlickerTime = 0
+        }
+        const progress = hintFlickerTime / FLICKER_FADE_DURATION
+        const newOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
+        startText.opacity = newOpacity
+        startTextOutlines.forEach(outline => {
+          outline.opacity = newOpacity
+        })
+      })
+    }
     
     //
     // Start game controls
@@ -1150,7 +1150,8 @@ export function sceneMenu(k) {
       startTextOutlines.forEach(outline => {
         outline.destroy()
       })
-      startText.destroy()
+      startText?.destroy()
+      enterTapButton?.destroy()
       
       //
       // Stop ambient sound

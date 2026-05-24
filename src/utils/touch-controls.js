@@ -13,8 +13,8 @@ let jumpPulse = false
 //
 let activeInst = null
 let touchSlots = new Map()
-let canvasHandlersBound = false
-let updateLoopBound = false
+let boundCanvas = null
+let updateHook = null
 //
 // On-screen control layout (50% larger than base, wide gap between left/right)
 //
@@ -85,12 +85,13 @@ export function create(config) {
   const rightX = leftX + ARROW_CENTER_GAP
   const jumpX = k.width() - rightMargin - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
   //
-  // Reset slots when a new level mounts so stale scene handlers cannot clear movement
+  // Fresh scene mount — clear stale touches; hero re-registers jump on spawn
   //
   touchSlots.clear()
   virtualLeft.active = false
   virtualRight.active = false
   jumpPulse = false
+  jumpHandler = null
   activeInst = {
     k,
     buttons: [],
@@ -170,24 +171,35 @@ function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
 }
 
 //
-// Binds canvas touch handlers once for the whole game
+// Binds canvas touch handlers; re-binds when Kaplay replaces the canvas element
 //
 function ensureCanvasHandlers(k) {
-  if (canvasHandlersBound || !k.canvas) return
-  canvasHandlersBound = true
   const canvas = k.canvas
+  if (!canvas || boundCanvas === canvas) return
+  unbindCanvasHandlers()
+  boundCanvas = canvas
   canvas.addEventListener('touchstart', onTouchStart, { capture: true, passive: false })
   canvas.addEventListener('touchend', onTouchEnd, { capture: true })
   canvas.addEventListener('touchcancel', onTouchEnd, { capture: true })
 }
 
 //
-// Binds a single update loop once for the whole game
+// Removes canvas touch handlers from the previously bound element
+//
+function unbindCanvasHandlers() {
+  if (!boundCanvas) return
+  boundCanvas.removeEventListener('touchstart', onTouchStart, { capture: true })
+  boundCanvas.removeEventListener('touchend', onTouchEnd, { capture: true })
+  boundCanvas.removeEventListener('touchcancel', onTouchEnd, { capture: true })
+  boundCanvas = null
+}
+
+//
+// Registers the per-frame sync loop; Kaplay cancels scene onUpdate on k.go()
 //
 function ensureUpdateLoop(k) {
-  if (updateLoopBound) return
-  updateLoopBound = true
-  k.onUpdate(onUpdateGlobal)
+  updateHook?.cancel?.()
+  updateHook = k.onUpdate(onUpdateGlobal)
 }
 
 //

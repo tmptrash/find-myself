@@ -9,6 +9,13 @@ const virtualRight = { active: false }
 let jumpHandler = null
 let jumpPulse = false
 //
+// Shared touch state — one map/listener set for the whole game (scenes must not stack handlers)
+//
+let activeInst = null
+let touchSlots = new Map()
+let canvasHandlersBound = false
+let updateLoopBound = false
+//
 // On-screen control layout (50% larger than base, wide gap between left/right)
 //
 const ARROW_SIZE = 108
@@ -77,28 +84,34 @@ export function create(config) {
   const leftX = leftMargin + ARROW_MARGIN_X + CIRCLE_RADIUS
   const rightX = leftX + ARROW_CENTER_GAP
   const jumpX = k.width() - rightMargin - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
-  const inst = {
+  //
+  // Reset slots when a new level mounts so stale scene handlers cannot clear movement
+  //
+  touchSlots.clear()
+  virtualLeft.active = false
+  virtualRight.active = false
+  jumpPulse = false
+  activeInst = {
     k,
     buttons: [],
-    touchSlots: new Map(),
     leftX,
     rightX,
     jumpX,
-    centerY
+    centerY,
+    jumpWasDown: false
   }
-  inst.buttons.push(createArrowButton(k, leftX, centerY, 'left', inst))
-  inst.buttons.push(createArrowButton(k, rightX, centerY, 'right', inst))
-  inst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump', inst))
-  setupMultiTouchHandlers(inst)
-  k.onUpdate(() => onUpdate(inst))
-  return inst
+  activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left'))
+  activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right'))
+  activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump'))
+  ensureCanvasHandlers(k)
+  ensureUpdateLoop(k)
+  return activeInst
 }
 
 //
-// Creates one virtual arrow button with touch handlers
+// Creates one virtual arrow button drawable
 //
-function createArrowButton(k, x, y, type, inst) {
-  const half = CIRCLE_RADIUS
+function createArrowButton(k, x, y, type) {
   k.add([
     k.z(CONTROL_Z),
     k.fixed(),
@@ -108,7 +121,7 @@ function createArrowButton(k, x, y, type, inst) {
       }
     }
   ])
-  return { x, y, half, type }
+  return { x, y, half: CIRCLE_RADIUS, type }
 }
 
 //
@@ -157,45 +170,75 @@ function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
 }
 
 //
-// Registers multi-touch handlers so run and jump can be held simultaneously
+// Binds canvas touch handlers once for the whole game
 //
-function setupMultiTouchHandlers(inst) {
-  const canvas = inst.k.canvas
-  if (!canvas) return
-  canvas.addEventListener('touchstart', e => onTouchStart(inst, e), { capture: true, passive: false })
-  canvas.addEventListener('touchend', e => onTouchEnd(inst, e), { capture: true })
-  canvas.addEventListener('touchcancel', e => onTouchEnd(inst, e), { capture: true })
+function ensureCanvasHandlers(k) {
+  if (canvasHandlersBound || !k.canvas) return
+  canvasHandlersBound = true
+  const canvas = k.canvas
+  canvas.addEventListener('touchstart', onTouchStart, { capture: true, passive: false })
+  canvas.addEventListener('touchend', onTouchEnd, { capture: true })
+  canvas.addEventListener('touchcancel', onTouchEnd, { capture: true })
 }
 
 //
-// Maps new touches to virtual buttons and queues jump on jump press
+// Binds a single update loop once for the whole game
 //
-function onTouchStart(inst, e) {
+function ensureUpdateLoop(k) {
+  if (updateLoopBound) return
+  updateLoopBound = true
+  k.onUpdate(onUpdateGlobal)
+}
+
+//
+// Maps new touches to virtual buttons (sticky until lift) and queues jump
+//
+function onTouchStart(e) {
+  const inst = activeInst
+  if (!inst) return
+  let hitControl = false
   for (const touch of e.changedTouches) {
     const pos = clientToGame(inst.k, touch.clientX, touch.clientY)
     const btn = hitVirtualButton(inst, pos.x, pos.y)
     if (!btn) continue
-    inst.touchSlots.set(touch.identifier, btn.type)
+    hitControl = true
+    if (!touchSlots.has(touch.identifier)) {
+      touchSlots.set(touch.identifier, btn.type)
+    }
     btn.type === 'jump' && (jumpPulse = true)
   }
-  syncVirtualMovement(inst)
+  hitControl && e.preventDefault()
+  pruneTouchSlots(e.touches)
+  syncVirtualMovement()
 }
 
 //
-// Clears ended touches from the virtual button map
+// Drops lifted touches; keeps other fingers mapped to their buttons
 //
-function onTouchEnd(inst, e) {
-  for (const touch of e.changedTouches) {
-    inst.touchSlots.delete(touch.identifier)
+function onTouchEnd(e) {
+  if (!activeInst) return
+  pruneTouchSlots(e.touches)
+  syncVirtualMovement()
+}
+
+//
+// Removes touch ids that are no longer on screen
+//
+function pruneTouchSlots(activeTouches) {
+  const activeIds = new Set()
+  for (const touch of activeTouches) {
+    activeIds.add(touch.identifier)
   }
-  syncVirtualMovement(inst)
+  for (const id of touchSlots.keys()) {
+    activeIds.has(id) || touchSlots.delete(id)
+  }
 }
 
 //
 // Applies combined left/right state from all active touch slots
 //
-function syncVirtualMovement(inst) {
-  const types = [...inst.touchSlots.values()]
+function syncVirtualMovement() {
+  const types = [...touchSlots.values()]
   virtualLeft.active = types.includes('left')
   virtualRight.active = types.includes('right')
 }
@@ -213,9 +256,13 @@ function hitVirtualButton(inst, x, y) {
 //
 // Re-sync movement each frame; mouse fallback when no touch slots are active
 //
-function onUpdate(inst) {
-  inst.touchSlots.size > 0 && syncVirtualMovement(inst)
-  if (inst.touchSlots.size > 0) return
+function onUpdateGlobal() {
+  const inst = activeInst
+  if (!inst) return
+  if (touchSlots.size > 0) {
+    syncVirtualMovement()
+    return
+  }
   const mp = inst.k.mousePos()
   const down = inst.k.isMouseDown()
   let leftActive = false

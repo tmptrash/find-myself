@@ -1,3 +1,4 @@
+import { CFG } from '../cfg.js'
 import * as TouchControls from './touch-controls.js'
 
 // Get color as Kaplay object
@@ -73,10 +74,24 @@ window.addEventListener('keyup', (e) => {
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => {
     if (TouchControls.isVirtualKeyDown(key)) return true
-    return key.length > 1 && key.startsWith('Key')
-      ? physicalKeysDown.has(key)
-      : k.isKeyDown(key)
+    if (key.length > 1 && key.startsWith('Key')) {
+      return physicalKeysDown.has(key)
+    }
+    //
+    // On touch devices Kaplay maps touches to arrow keys — ignore for movement/jump
+    //
+    if (TouchControls.needsTouchControls() && isKaplayTouchEmulatedKey(key)) return false
+    return k.isKeyDown(key)
   })
+}
+
+//
+// Keys Kaplay synthesizes from touch positions; virtual buttons own these on phones
+//
+function isKaplayTouchEmulatedKey(key) {
+  return CFG.controls.moveLeft.includes(key)
+    || CFG.controls.moveRight.includes(key)
+    || CFG.controls.jump.includes(key)
 }
 //
 // Register a callback for physical key press (fires once on keydown, not repeat)

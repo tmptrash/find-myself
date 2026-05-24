@@ -771,8 +771,15 @@ function onUpdate(inst) {
   // Handle movement input (check if spawned first)
   //
   if (inst.isSpawned && !inst.controlsDisabled) {
-    let isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
-    let isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
+    let isMovingLeft = false
+    let isMovingRight = false
+    if (TouchControls.needsTouchControls()) {
+      isMovingLeft = TouchControls.isVirtualKeyDown('left')
+      isMovingRight = TouchControls.isVirtualKeyDown('right')
+    } else {
+      isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
+      isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
+    }
     //
     // Apply control inversion if flag is set (for time section level 3)
     //
@@ -795,8 +802,11 @@ function onUpdate(inst) {
   //
   // Determine movement state; requires spawn so keys don't trigger sounds before hero appears
   //
-  const isMoving = inst.isSpawned && !inst.controlsDisabled && (isAnyKeyDown(inst.k, CFG.controls.moveLeft) ||
-    isAnyKeyDown(inst.k, CFG.controls.moveRight))
+  const isMoving = inst.isSpawned && !inst.controlsDisabled && (
+    TouchControls.needsTouchControls()
+      ? (TouchControls.isVirtualKeyDown('left') || TouchControls.isVirtualKeyDown('right'))
+      : (isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
+  )
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   //

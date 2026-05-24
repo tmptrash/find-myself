@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { clientToGame, isTouchDevice } from './touch-input.js'
+import { isTouchDevice } from './touch-input.js'
 
 //
 // Virtual movement state — read by hero each frame
@@ -13,11 +13,16 @@ let jumpPulse = false
 //
 let activeInst = null
 //
-// Held movement fingers: identifier -> 'left' | 'right'. Jump is a one-shot pulse, not stored
+// Held movement fingers: touch id -> 'left' | 'right'. Jump is a one-shot pulse, not stored
 //
 const movementSlots = new Map()
-let boundCanvas = null
-let updateHook = null
+//
+// Kaplay event hooks; cancelled and re-registered on every scene mount
+//
+let touchStartHook = null
+let touchEndHook = null
+let mouseDownHook = null
+let mouseUpHook = null
 //
 // On-screen control layout (50% larger than base, wide gap between left/right)
 //
@@ -32,6 +37,10 @@ const CIRCLE_GRAY_B = 38
 const CIRCLE_OPACITY = 0.72
 const ARROW_OUTLINE_SHIFT = 4
 const CONTROL_Z = CFG.visual.zIndex.ui + 250
+//
+// Sentinel identifier for the desktop mouse fallback slot
+//
+const MOUSE_SLOT_ID = 'mouse'
 
 /**
  * True when the device likely has no keyboard (phones, tablets)
@@ -83,6 +92,10 @@ export function isVirtualKeyDown(key) {
 export function create(config) {
   if (!needsTouchControls()) return null
   const { k, floorY, leftMargin, rightMargin } = config
+  //
+  // Canvas-level CSS so the browser never scrolls/zooms on game touches
+  //
+  k.canvas && (k.canvas.style.touchAction = 'none')
   const centerY = (floorY + k.height()) / 2 + 5
   const leftX = leftMargin + ARROW_MARGIN_X + CIRCLE_RADIUS
   const rightX = leftX + ARROW_CENTER_GAP
@@ -101,14 +114,12 @@ export function create(config) {
     leftX,
     rightX,
     jumpX,
-    centerY,
-    jumpWasDown: false
+    centerY
   }
   activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left'))
   activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right'))
   activeInst.buttons.push(createArrowButton(k, jumpX, centerY, 'jump'))
-  ensureCanvasHandlers(k)
-  ensureUpdateLoop(k)
+  registerKaplayHandlers(k)
   return activeInst
 }
 
@@ -174,111 +185,66 @@ function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
 }
 
 //
-// Binds canvas handlers; re-binds when Kaplay replaces the canvas element
+// Re-binds Kaplay touch/mouse hooks each scene mount.
+// Using Kaplay's API (instead of raw DOM events) avoids the letterbox coordinate
+// offset bug and guarantees proper multitouch dispatch on iOS / Android.
 //
-function ensureCanvasHandlers(k) {
-  const canvas = k.canvas
-  if (!canvas || boundCanvas === canvas) return
-  unbindCanvasHandlers()
-  boundCanvas = canvas
-  canvas.style.touchAction = 'none'
-  //
-  // Only listen to raw touch events: multi-touch semantics are well defined.
-  // We do NOT use Pointer Events (setPointerCapture can hijack other fingers on iOS Safari).
-  // We do NOT call preventDefault/stopImmediatePropagation — they can suppress
-  // subsequent touchstart events for other fingers on Android Chrome.
-  //
-  canvas.addEventListener('touchstart', onTouchStart, { passive: true })
-  canvas.addEventListener('touchend', onTouchEnd, { passive: true })
-  canvas.addEventListener('touchcancel', onTouchCancel, { passive: true })
-  //
-  // Mouse fallback so devtools / hybrid laptops can still test the buttons
-  //
-  canvas.addEventListener('mousedown', onMouseDown)
-  canvas.addEventListener('mouseup', onMouseUp)
-  canvas.addEventListener('mouseleave', onMouseUp)
-}
-
-//
-// Removes canvas input handlers from the previously bound element
-//
-function unbindCanvasHandlers() {
-  if (!boundCanvas) return
-  boundCanvas.removeEventListener('touchstart', onTouchStart)
-  boundCanvas.removeEventListener('touchend', onTouchEnd)
-  boundCanvas.removeEventListener('touchcancel', onTouchCancel)
-  boundCanvas.removeEventListener('mousedown', onMouseDown)
-  boundCanvas.removeEventListener('mouseup', onMouseUp)
-  boundCanvas.removeEventListener('mouseleave', onMouseUp)
-  boundCanvas = null
-}
-
-//
-// Registers the per-frame sync loop; Kaplay cancels scene onUpdate on k.go()
-//
-function ensureUpdateLoop(k) {
-  updateHook?.cancel?.()
-  updateHook = k.onUpdate(onUpdateGlobal)
+function registerKaplayHandlers(k) {
+  touchStartHook?.cancel?.()
+  touchEndHook?.cancel?.()
+  mouseDownHook?.cancel?.()
+  mouseUpHook?.cancel?.()
+  touchStartHook = k.onTouchStart(onKaplayTouchStart)
+  touchEndHook = k.onTouchEnd(onKaplayTouchEnd)
+  mouseDownHook = k.onMousePress(onKaplayMousePress)
+  mouseUpHook = k.onMouseRelease(onKaplayMouseRelease)
 }
 
 //
 // Each new finger maps to a movement button (held) or fires the jump pulse (one-shot)
 //
-function onTouchStart(e) {
+function onKaplayTouchStart(pos, touch) {
   const inst = activeInst
   if (!inst) return
-  for (const touch of e.changedTouches) {
-    const pos = clientToGame(inst.k, touch.clientX, touch.clientY)
-    const btn = hitVirtualButton(inst, pos.x, pos.y)
-    if (!btn) continue
-    if (btn.type === 'jump') {
-      jumpPulse = true
-      continue
-    }
-    movementSlots.set(touch.identifier, btn.type)
-  }
-  syncVirtualMovement()
-}
-
-//
-// Only the finger that lifted clears its slot — other fingers stay held
-//
-function onTouchEnd(e) {
-  for (const touch of e.changedTouches) {
-    movementSlots.delete(touch.identifier)
-  }
-  syncVirtualMovement()
-}
-
-//
-// Same as touchend — release the cancelled finger but never the others
-//
-function onTouchCancel(e) {
-  for (const touch of e.changedTouches) {
-    movementSlots.delete(touch.identifier)
-  }
-  syncVirtualMovement()
-}
-
-//
-// Desktop / devtools mouse: single-pointer fallback
-//
-function onMouseDown(e) {
-  const inst = activeInst
-  if (!inst || e.button !== 0) return
-  const pos = clientToGame(inst.k, e.clientX, e.clientY)
   const btn = hitVirtualButton(inst, pos.x, pos.y)
   if (!btn) return
   if (btn.type === 'jump') {
     jumpPulse = true
     return
   }
-  movementSlots.set('mouse', btn.type)
+  const id = touch?.identifier ?? touch?.id ?? MOUSE_SLOT_ID
+  movementSlots.set(id, btn.type)
   syncVirtualMovement()
 }
 
-function onMouseUp() {
-  movementSlots.delete('mouse')
+//
+// Only the finger that lifted clears its slot — other fingers stay held
+//
+function onKaplayTouchEnd(_pos, touch) {
+  const id = touch?.identifier ?? touch?.id
+  id !== undefined && movementSlots.delete(id)
+  syncVirtualMovement()
+}
+
+//
+// Desktop / devtools mouse: single-pointer fallback
+//
+function onKaplayMousePress() {
+  const inst = activeInst
+  if (!inst) return
+  const pos = inst.k.mousePos()
+  const btn = hitVirtualButton(inst, pos.x, pos.y)
+  if (!btn) return
+  if (btn.type === 'jump') {
+    jumpPulse = true
+    return
+  }
+  movementSlots.set(MOUSE_SLOT_ID, btn.type)
+  syncVirtualMovement()
+}
+
+function onKaplayMouseRelease() {
+  movementSlots.delete(MOUSE_SLOT_ID)
   syncVirtualMovement()
 }
 
@@ -304,12 +270,4 @@ function hitVirtualButton(inst, x, y) {
     if (Math.abs(x - btn.x) < btn.half && Math.abs(y - btn.y) < btn.half) return btn
   }
   return null
-}
-
-//
-// Keeps run state fresh each frame in case a frame-skipped touch event slipped by
-//
-function onUpdateGlobal() {
-  if (!activeInst) return
-  syncVirtualMovement()
 }

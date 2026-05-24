@@ -1,5 +1,17 @@
 import { CFG } from '../cfg.js'
 
+//
+// Matches the top-left section indicator letters (48 px in section level
+// indicators) so the FPS counter and timer share the same HUD typography.
+//
+const HUD_FONT_SIZE = 48
+//
+// Horizontal gaps between the FPS / timer / target time slots, scaled up
+// from the previous 150/240 layout to fit the larger 48 px text.
+//
+const TIMER_OFFSET_X = 420
+const TARGET_OFFSET_X = 690
+
 /**
  * Creates FPS counter display
  * @param {Object} config - Configuration
@@ -11,14 +23,15 @@ import { CFG } from '../cfg.js'
  */
 export function create(config) {
   const { k, showTimer = false, targetTime = null, topY = 55 } = config
-  
+
   const centerX = k.width() / 2 - 100
   //
-  // Create FPS text
+  // FPS readout text — centered anchor so position stays stable as the
+  // numeric content changes.
   //
   const fpsText = k.add([
     k.text('FPS: 30', {
-      size: 16,
+      size: HUD_FONT_SIZE,
       font: CFG.visual.fonts.regularFull.replace(/'/g, '')
     }),
     k.pos(centerX, topY),
@@ -28,36 +41,33 @@ export function create(config) {
     k.opacity(0.7)
   ])
   //
-  // Create level timer text (if enabled)
+  // Optional level timer + green target time (shown for time-trial levels).
   //
   let timerText = null
   let targetText = null
   if (showTimer) {
     timerText = k.add([
       k.text('time: 00:00', {
-        size: 16,
+        size: HUD_FONT_SIZE,
         font: CFG.visual.fonts.regularFull.replace(/'/g, '')
       }),
-      k.pos(centerX + 150, topY),
+      k.pos(centerX + TIMER_OFFSET_X, topY),
       k.anchor('center'),
       k.z(CFG.visual.zIndex.ui),
       k.color(k.rgb(200, 200, 200)),
       k.opacity(0.7)
     ])
-    //
-    // Create target time text (if targetTime provided)
-    //
     if (targetTime) {
       const targetMinutes = Math.floor(targetTime / 60)
       const targetSeconds = Math.floor(targetTime % 60)
       const targetTimeStr = `${targetMinutes.toString().padStart(2, '0')}:${targetSeconds.toString().padStart(2, '0')}`
-      
+
       targetText = k.add([
         k.text(targetTimeStr, {
-          size: 16,
+          size: HUD_FONT_SIZE,
           font: CFG.visual.fonts.regularFull.replace(/'/g, '')
         }),
-        k.pos(centerX + 240, topY),
+        k.pos(centerX + TARGET_OFFSET_X, topY),
         k.anchor('center'),
         k.z(CFG.visual.zIndex.ui),
         k.color(k.rgb(100, 255, 100)),

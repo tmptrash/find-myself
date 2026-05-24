@@ -2167,13 +2167,18 @@ export function sceneLevel0(k) {
       bugs.push(inst)
     })
     //
-    // Create regular bugs
+    // Create regular bugs. Touch devices use a reduced count to keep the
+    // per-frame IK leg computation light enough to hit 60 FPS on mobile.
     //
-    for (let i = 0; i < 12; i++) {
+    const SMALL_BUG_COUNT_DESKTOP = 12
+    const SMALL_BUG_COUNT_TOUCH = 6
+    const smallBugCount = isTouchDevice() ? SMALL_BUG_COUNT_TOUCH : SMALL_BUG_COUNT_DESKTOP
+    for (let i = 0; i < smallBugCount; i++) {
       //
-      // Distribute bugs across the floor
+      // Distribute bugs across the floor (keep the original 11-step spacing
+      // so the layout stays visually similar regardless of the count).
       //
-      const spacing = (floorWidth - 200) / 11
+      const spacing = (floorWidth - 200) / Math.max(smallBugCount - 1, 1)
       const bugX = LEFT_MARGIN + 100 + i * spacing + (Math.random() - 0.5) * 30
       // Larger bugs with smaller size variation - closer to big bugs
       const bugScale = 1.0 + Math.random() * 0.3  // Range: 1.0 to 1.3 (was 0.6 to 1.4)
@@ -2685,9 +2690,10 @@ export function sceneLevel0(k) {
     //
     const frontTrees = layers[3] ? layers[3].trees : []
     //
-    // Touch devices are fillrate-bound; cut rain particle count roughly in half.
+    // Touch devices are fillrate-bound; drop rain particle count to roughly a
+    // third of desktop so the splash overdraw doesn't tank mobile frames.
     //
-    const rainIntensity = isTouchDevice() ? 0.5 : 1
+    const rainIntensity = isTouchDevice() ? 0.3 : 1
     Rain.create({
       k,
       topY: TOP_MARGIN,
@@ -4370,9 +4376,11 @@ function createL0Fireflies(k) {
   const fireflyMinY = FLOOR_Y - 150
   const fireflyMaxY = FLOOR_Y - 20
   //
-  // Mobile devices use a smaller swarm so fewer draw calls hit fillrate.
+  // Mobile devices use a much smaller swarm so we cut both the per-firefly
+  // glow draws and the onUpdate wander math. ~30% of the desktop count keeps
+  // the atmosphere readable while saving lots of overdraw.
   //
-  const fireflyCount = isTouchDevice() ? Math.round(L0_FIREFLY_COUNT * 0.5) : L0_FIREFLY_COUNT
+  const fireflyCount = isTouchDevice() ? Math.max(6, Math.round(L0_FIREFLY_COUNT * 0.3)) : L0_FIREFLY_COUNT
   for (let i = 0; i < fireflyCount; i++) {
     //
     // Distribute starting positions evenly across the width

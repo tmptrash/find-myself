@@ -15,12 +15,17 @@ const HELP_LABEL_TOOLTIP_TEXT = 'trade 3 fragments for level help'
 const HELP_LABEL_TOOLTIP_WIDTH = 200
 const HELP_LABEL_TOOLTIP_HEIGHT = 40
 const HELP_LABEL_TOOLTIP_Y_OFFSET = -36
-const HELP_FONT_SIZE = 26
-const HELP_PRESSED_FONT_SIZE = 22
-const HELP_PRESSED_SHIFT_X = 3
-const HELP_PRESSED_SHIFT_Y = 2
-const HELP_HIT_HALF_W = 120
-const HELP_HIT_HALF_H = 28
+//
+// Match the top-left section indicator letters (`fontSize = 48` in
+// `<section>/components/level-indicator.js`) so the HELP label visually
+// belongs to the same HUD typography level as the current-level title.
+//
+const HELP_FONT_SIZE = 48
+const HELP_PRESSED_FONT_SIZE = 44
+const HELP_PRESSED_SHIFT_X = 4
+const HELP_PRESSED_SHIFT_Y = 3
+const HELP_HIT_HALF_W = 180
+const HELP_HIT_HALF_H = 40
 const HELP_OUTLINE_OFFSET = 2
 //
 // Hint panel styling (life-deduction bubble, wider)

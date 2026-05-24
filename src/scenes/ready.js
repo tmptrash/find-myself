@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor } from '../utils/helper.js'
+import { getColor, parseHex } from '../utils/helper.js'
 import * as TouchInput from '../utils/touch-input.js'
 import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import { addBackground } from '../sections/word/utils/scene.js'
@@ -8,6 +8,7 @@ import * as Cursor from '../utils/cursor.js'
 import { goToMenuAfterAssets } from '../utils/level-assets.js'
 import { drawConnectionWave } from '../utils/connection.js'
 import { loadHeroSprites, HEROES } from '../components/hero.js'
+import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 
 //
 // Hint flicker
@@ -275,28 +276,21 @@ export function sceneReady(k) {
       k.z(Z_TITLE)
     ])
     //
-    // Hint text
+    // Hint text — desktop renders the full line; touch devices keep the same
+    // surrounding text and replace the "Enter" word with a tappable button.
     //
-    const hintOutlineOffsets = [[-2,0],[2,0],[0,-2],[0,2],[-1,-1],[1,-1],[-1,1],[1,1]]
-    const hintOutlines = []
-    hintOutlineOffsets.forEach(([dx, dy]) => {
-      hintOutlines.push(k.add([
-        k.text('press Space, Enter or click to start', { size: HINT_FONT_SIZE }),
-        k.pos(centerX + dx, HINT_Y + dy),
-        k.anchor('center'),
-        k.color(0, 0, 0),
-        k.opacity(1),
-        k.z(Z_HINT - 1)
-      ]))
+    const hintRgb = parseHex(CFG.visual.colors.ready.hint)
+    const hint = renderHintWithEnter({
+      k,
+      centerX,
+      y: HINT_Y,
+      prefix: 'press Space, ',
+      suffix: ' or click to start',
+      fontSize: HINT_FONT_SIZE,
+      color: hintRgb,
+      z: Z_HINT,
+      onTap: () => exitToMenu()
     })
-    const hint = k.add([
-      k.text('press Space, Enter or click to start', { size: HINT_FONT_SIZE }),
-      k.pos(centerX, HINT_Y),
-      k.anchor('center'),
-      getColor(k, CFG.visual.colors.ready.hint),
-      k.opacity(1),
-      k.z(Z_HINT)
-    ])
     //
     // Create crawling letter spiders from the title
     //
@@ -341,8 +335,7 @@ export function sceneReady(k) {
         hintFlickerTime = 0
       }
       const hintOp = HINT_MIN_OPACITY + (HINT_MAX_OPACITY - HINT_MIN_OPACITY) * (hintFlickerTime / HINT_FLICKER_DURATION)
-      hint.opacity = hintOp
-      hintOutlines.forEach(o => o.opacity = hintOp)
+      hint.setOpacity(hintOp)
       //
       // Title subtle flicker
       //

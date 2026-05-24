@@ -12,7 +12,7 @@ import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as TouchInput from '../../../utils/touch-input.js'
-import * as TouchTapButton from '../../../utils/touch-tap-button.js'
+import { renderHintWithEnter } from '../../../utils/touch-tap-button.js'
 import * as FloorRocks from '../utils/floor-rocks.js'
 import * as BackgroundBirds from '../../time/components/background-birds.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
@@ -229,7 +229,6 @@ const TRAINING_COMPLETE_TEXT_Z = CFG.visual.zIndex.ui + 1200
 //
 // Skip training text (below game area floor line)
 //
-const SKIP_TEXT = 'Press Enter to skip training'
 const SKIP_FONT_SIZE = 20
 const SKIP_TEXT_Y = FLOOR_Y + Math.round(BOTTOM_MARGIN * 0.42)
 const SKIP_MIN_OPACITY = 0.3
@@ -634,7 +633,9 @@ export function sceneTouchTraining(k) {
     k.onUpdate(() => onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
     //
-    // Skip-training prompt: keyboard hint on desktop, tappable Enter button on touch devices.
+    // Skip-training prompt: keyboard text on desktop, touch devices replace
+    // the "Enter" word with a tappable button while keeping the surrounding
+    // phrase visible. Flickering animation reuses the existing onUpdate path.
     //
     const performSkipTraining = () => {
       if (hintState.levelDone || spikeDead.active) return
@@ -643,20 +644,21 @@ export function sceneTouchTraining(k) {
       Sound.stopAmbient(sound)
       createLevelTransition(k, 'level-touch.training')
     }
-    let skipAnim = null
-    let skipTapButton = null
-    if (TouchInput.isTouchDevice()) {
-      skipTapButton = TouchTapButton.create({
-        k,
-        x: LEFT_MARGIN + PLAYABLE_W / 2,
-        y: SKIP_TEXT_Y,
-        label: 'Enter',
-        onTap: performSkipTraining
-      })
-    } else {
-      skipAnim = createSkipText(k)
-      k.onUpdate(() => onUpdateSkipText(k, skipAnim))
-    }
+    const skipFont = CFG.visual.fonts.thinFull.replace(/'/g, '')
+    const skipHintInst = renderHintWithEnter({
+      k,
+      centerX: LEFT_MARGIN + PLAYABLE_W / 2,
+      y: SKIP_TEXT_Y,
+      prefix: 'Press ',
+      suffix: ' to skip training',
+      fontSize: SKIP_FONT_SIZE,
+      font: skipFont,
+      color: [180, 180, 180],
+      z: CFG.visual.zIndex.ui,
+      onTap: performSkipTraining
+    })
+    const skipAnim = { hint: skipHintInst, phase: 0, dir: 1 }
+    k.onUpdate(() => onUpdateSkipHint(k, skipAnim))
     //
     // Keyboard fallback for desktop and external keyboards on tablets.
     //
@@ -1525,37 +1527,9 @@ function onUpdateLifeParticle(k, particle, vx, vy, lifetime, particleState) {
 }
 
 //
-// Creates flickering skip-training label below the game area
+// Flickers skip hint surrounding text opacity (Enter button stays solid).
 //
-function createSkipText(k) {
-  const centerX = LEFT_MARGIN + PLAYABLE_W / 2
-  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const outlineOffsets = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]
-  const outlines = outlineOffsets.map(([dx, dy]) => k.add([
-    k.text(SKIP_TEXT, { size: SKIP_FONT_SIZE, font }),
-    k.pos(centerX + dx, SKIP_TEXT_Y + dy),
-    k.anchor('center'),
-    k.color(0, 0, 0),
-    k.fixed(),
-    k.z(CFG.visual.zIndex.ui),
-    k.opacity(SKIP_MIN_OPACITY)
-  ]))
-  const main = k.add([
-    k.text(SKIP_TEXT, { size: SKIP_FONT_SIZE, font }),
-    k.pos(centerX, SKIP_TEXT_Y),
-    k.anchor('center'),
-    k.color(180, 180, 180),
-    k.fixed(),
-    k.z(CFG.visual.zIndex.ui),
-    k.opacity(SKIP_MIN_OPACITY)
-  ])
-  return { main, outlines, phase: 0, dir: 1 }
-}
-
-//
-// Flickers skip text opacity
-//
-function onUpdateSkipText(k, anim) {
+function onUpdateSkipHint(k, anim) {
   const FLICKER_DUR = 1 / SKIP_FLICKER_SPEED
   anim.phase += k.dt()
   if (anim.phase >= FLICKER_DUR) {
@@ -1564,8 +1538,7 @@ function onUpdateSkipText(k, anim) {
   }
   const t = anim.dir > 0 ? anim.phase / FLICKER_DUR : 1 - anim.phase / FLICKER_DUR
   const op = SKIP_MIN_OPACITY + (SKIP_MAX_OPACITY - SKIP_MIN_OPACITY) * t
-  anim.main.opacity = op
-  anim.outlines.forEach(o => { o.opacity = op })
+  anim.hint.setOpacity(op)
 }
 
 //

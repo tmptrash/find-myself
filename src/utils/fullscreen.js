@@ -30,7 +30,7 @@ let escBtn = null
 export function createFullscreenButton(k) {
   if (!isTouchDevice()) return
   //
-  // Fullscreen toggle (leftmost button).
+  // Fullscreen toggle (top button).
   //
   if (!fullscreenBtn) {
     fullscreenBtn = createHudButton({
@@ -38,12 +38,13 @@ export function createFullscreenButton(k) {
       ariaLabel: 'Toggle fullscreen',
       width: FULLSCREEN_BTN_WIDTH,
       fontSize: FULLSCREEN_BTN_FONT_SIZE,
-      left: BTN_MARGIN,
+      top: BTN_MARGIN,
       onClick: toggleFullscreen
     })
   }
   //
-  // Esc shortcut (right of the fullscreen button).
+  // Esc shortcut sits directly below the fullscreen button so both stick to
+  // the screen edge as a small vertical HUD stack.
   //
   if (!escBtn && k) {
     escBtn = createHudButton({
@@ -51,25 +52,25 @@ export function createFullscreenButton(k) {
       ariaLabel: 'Press Escape',
       width: ESC_BTN_WIDTH,
       fontSize: ESC_BTN_FONT_SIZE,
-      left: BTN_MARGIN + FULLSCREEN_BTN_WIDTH + BTN_GAP,
+      top: BTN_MARGIN + BTN_HEIGHT + BTN_GAP,
       onClick: () => dispatchEscape(k)
     })
   }
 }
 
 //
-// Builds a fixed-position HUD button with the shared visual style.
+// Builds a fixed-position HUD button anchored to the top-left of the viewport.
 //
 function createHudButton(opts) {
-  const { label, ariaLabel, width, fontSize, left, onClick } = opts
+  const { label, ariaLabel, width, fontSize, top, onClick } = opts
   const btn = document.createElement('button')
   btn.type = 'button'
   btn.textContent = label
   btn.setAttribute('aria-label', ariaLabel)
   btn.style.cssText = [
     'position:fixed',
-    `top:${BTN_MARGIN}px`,
-    `left:${left}px`,
+    `top:${top}px`,
+    `left:${BTN_MARGIN}px`,
     `width:${width}px`,
     `height:${BTN_HEIGHT}px`,
     `z-index:${BTN_Z}`,

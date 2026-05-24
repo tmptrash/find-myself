@@ -3,6 +3,7 @@ import { parseHex } from './helper.js'
 import { setSectionCompleted, set } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
+import * as TouchControls from './touch-controls.js'
 import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './level-assets.js'
 
@@ -238,13 +239,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     tooltipSuppressed: false
   }
   //
-  // Hide all in-game tooltips for the entire pre-level transition
+  // Hide all in-game tooltips for the entire pre-level transition. We also
+  // hide the touch run/jump buttons so the controls don't sit on top of the
+  // subtitle text — they are re-created by the next level scene.
   //
   const preLevelSubtitle = LEVEL_SUBTITLES[nextLevel]
   if ((isLevelToLevelTransition || isMenuToLevelTransition) && preLevelSubtitle) {
     Tooltip.suppressAll()
     inst.tooltipSuppressed = true
   }
+  TouchControls.setVisible(false)
   
   //
   // Set background to menu color when transitioning from level, menu-time, or menu-touch

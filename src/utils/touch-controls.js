@@ -88,6 +88,26 @@ export function isVirtualKeyDown(key) {
 }
 
 /**
+ * Shows or hides the on-screen run/jump buttons. Hidden buttons also stop
+ * accepting taps so pre-level transition text doesn't leak into gameplay.
+ * Safe to call when no controls exist (e.g. desktop) — it becomes a no-op.
+ * @param {boolean} visible
+ */
+export function setVisible(visible) {
+  if (!activeInst) return
+  activeInst.visible = visible
+  if (!visible) {
+    //
+    // Release any held fingers so the hero stops moving while controls are
+    // hidden during the pre-level overlay.
+    //
+    movementSlots.clear()
+    jumpPulse = false
+    syncVirtualMovement()
+  }
+}
+
+/**
  * Creates arrow buttons below the game area for touch devices
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
@@ -121,7 +141,8 @@ export function create(config) {
     leftX,
     rightX,
     jumpX,
-    centerY
+    centerY,
+    visible: true
   }
   activeInst.buttons.push(createArrowButton(k, leftX, centerY, 'left'))
   activeInst.buttons.push(createArrowButton(k, rightX, centerY, 'right'))
@@ -150,6 +171,7 @@ function createArrowButton(k, x, y, type) {
 // Draws gray circle with white arrow and black outline
 //
 function drawControlButton(k, cx, cy, type) {
+  if (!activeInst?.visible) return
   k.drawCircle({
     pos: k.vec2(cx, cy),
     radius: CIRCLE_RADIUS,
@@ -273,6 +295,7 @@ function syncVirtualMovement() {
 // Returns the virtual button under a game-space point, if any
 //
 function hitVirtualButton(inst, x, y) {
+  if (!inst.visible) return null
   for (const btn of inst.buttons) {
     if (Math.abs(x - btn.x) < btn.halfW && Math.abs(y - btn.y) < btn.halfH) return btn
   }

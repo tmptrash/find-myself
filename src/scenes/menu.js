@@ -9,8 +9,7 @@ import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
 import * as Cursor from "../utils/cursor.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
-import * as TouchTapButton from "../utils/touch-tap-button.js"
-import { isTouchDevice } from "../utils/touch-input.js"
+import { renderHintWithEnter } from "../utils/touch-tap-button.js"
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -986,91 +985,56 @@ export function sceneMenu(k) {
     //
     // Hint text - Space to continue, Enter to start new, ESC to go back.
     // If all sections completed, don't show continue option.
-    // Touch devices replace the keyboard hint with a tappable Enter button
-    // since phones have no Space/Enter/Esc keys.
+    // Touch devices keep the full hint visible but render the "Enter" word
+    // as a tappable button so phones can start a new game without a keyboard.
     //
     const allCompleted = progress.word?.completed && progress.touch?.completed
-    const touchMode = isTouchDevice()
-    let hintText
+    const HINT_FONT_SIZE = 20
+    const HINT_CENTER_X = 960
+    const HINT_Y = 1030
+    let hintPrefix
+    let hintSuffix
     if (allCompleted) {
-      hintText = "Enter - new game  |  ESC - back"
+      hintPrefix = ''
+      hintSuffix = ' - new game  |  ESC - back'
     } else if (hasSavedGame) {
-      hintText = "Space - continue  |  Enter - new game  |  ESC - back"
+      hintPrefix = 'Space - continue  |  '
+      hintSuffix = ' - new game  |  ESC - back'
     } else {
-      hintText = "Space / Enter - start  |  ESC - back"
+      hintPrefix = 'Space / '
+      hintSuffix = ' - start  |  ESC - back'
     }
-    const startTextOutlines = []
-    let startText = null
-    let enterTapButton = null
-    if (touchMode) {
-      //
-      // Tappable Enter button — starts a new game from scratch.
-      //
-      enterTapButton = TouchTapButton.create({
-        k,
-        x: 960,
-        y: 1030,
-        label: 'Enter',
-        onTap: () => startGame(true)
-      })
-    } else {
-      //
-      // Desktop: keyboard hint text with outline shadows.
-      //
-      const outlineOffsets = [
-        { dx: -2, dy: 0 },
-        { dx: 2, dy: 0 },
-        { dx: 0, dy: -2 },
-        { dx: 0, dy: 2 },
-        { dx: -1, dy: -1 },
-        { dx: 1, dy: -1 },
-        { dx: -1, dy: 1 },
-        { dx: 1, dy: 1 }
-      ]
-      outlineOffsets.forEach(({ dx, dy }) => {
-        const outline = k.add([
-          k.text(hintText, { size: 20 }),
-          k.pos(960 + dx, 1030 + dy),
-          k.anchor("center"),
-          k.opacity(1),
-          k.color(0, 0, 0),
-          k.z(99)
-        ])
-        startTextOutlines.push(outline)
-      })
-      startText = k.add([
-        k.text(hintText, { size: 20 }),
-        k.pos(960, 1030),
-        k.anchor("center"),
-        k.opacity(1),
-        k.color(150, 150, 150),
-        k.z(100)
-      ])
-      //
-      // Smooth flicker animation for start text (like in ready scene)
-      //
-      const FLICKER_FADE_DURATION = 1.2
-      const FLICKER_MIN_OPACITY = 0.5
-      const FLICKER_MAX_OPACITY = 1.0
-      let hintFlickerTime = FLICKER_FADE_DURATION
-      let hintDirection = -1
-      k.onUpdate(() => {
-        hintFlickerTime += hintDirection * k.dt()
-        if (hintFlickerTime >= FLICKER_FADE_DURATION) {
-          hintDirection = -1
-          hintFlickerTime = FLICKER_FADE_DURATION
-        } else if (hintFlickerTime <= 0) {
-          hintDirection = 1
-          hintFlickerTime = 0
-        }
-        const progress = hintFlickerTime / FLICKER_FADE_DURATION
-        const newOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
-        startText.opacity = newOpacity
-        startTextOutlines.forEach(outline => {
-          outline.opacity = newOpacity
-        })
-      })
-    }
+    const hintParts = renderHintWithEnter({
+      k,
+      centerX: HINT_CENTER_X,
+      y: HINT_Y,
+      prefix: hintPrefix,
+      suffix: hintSuffix,
+      fontSize: HINT_FONT_SIZE,
+      onTap: () => startGame(true)
+    })
+    //
+    // Smooth flicker animation for hint text (text only — the touch
+    // button keeps its high contrast so the tap target stays readable).
+    //
+    const FLICKER_FADE_DURATION = 1.2
+    const FLICKER_MIN_OPACITY = 0.5
+    const FLICKER_MAX_OPACITY = 1.0
+    let hintFlickerTime = FLICKER_FADE_DURATION
+    let hintDirection = -1
+    k.onUpdate(() => {
+      hintFlickerTime += hintDirection * k.dt()
+      if (hintFlickerTime >= FLICKER_FADE_DURATION) {
+        hintDirection = -1
+        hintFlickerTime = FLICKER_FADE_DURATION
+      } else if (hintFlickerTime <= 0) {
+        hintDirection = 1
+        hintFlickerTime = 0
+      }
+      const progress = hintFlickerTime / FLICKER_FADE_DURATION
+      const newOpacity = FLICKER_MIN_OPACITY + (FLICKER_MAX_OPACITY - FLICKER_MIN_OPACITY) * progress
+      hintParts.setOpacity(newOpacity)
+    })
     
     //
     // Start game controls
@@ -1147,11 +1111,7 @@ export function sceneMenu(k) {
         letter.destroy()
       })
       
-      startTextOutlines.forEach(outline => {
-        outline.destroy()
-      })
-      startText?.destroy()
-      enterTapButton?.destroy()
+      hintParts.destroy()
       
       //
       // Stop ambient sound

@@ -9,12 +9,13 @@ const virtualRight = { active: false }
 let jumpHandler = null
 let jumpPulse = false
 //
-// Shared touch state — one map/listener set for the whole game (scenes must not stack handlers)
+// Shared input state — one listener set for the whole game
 //
 let activeInst = null
-let touchSlots = new Map()
+let inputSlots = new Map()
 let boundCanvas = null
 let updateHook = null
+const usePointerEvents = typeof PointerEvent !== 'undefined'
 //
 // On-screen control layout (50% larger than base, wide gap between left/right)
 //
@@ -87,7 +88,7 @@ export function create(config) {
   //
   // Fresh scene mount — clear stale touches; hero re-registers jump on spawn
   //
-  touchSlots.clear()
+  inputSlots.clear()
   virtualLeft.active = false
   virtualRight.active = false
   jumpPulse = false
@@ -171,26 +172,39 @@ function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
 }
 
 //
-// Binds canvas touch handlers; re-binds when Kaplay replaces the canvas element
+// Binds canvas handlers; re-binds when Kaplay replaces the canvas element
 //
 function ensureCanvasHandlers(k) {
   const canvas = k.canvas
   if (!canvas || boundCanvas === canvas) return
   unbindCanvasHandlers()
   boundCanvas = canvas
+  canvas.style.touchAction = 'none'
+  if (usePointerEvents) {
+    canvas.addEventListener('pointerdown', onPointerDown, { capture: true })
+    canvas.addEventListener('pointerup', onPointerUp, { capture: true })
+    canvas.addEventListener('pointercancel', onPointerUp, { capture: true })
+    return
+  }
   canvas.addEventListener('touchstart', onTouchStart, { capture: true, passive: false })
   canvas.addEventListener('touchend', onTouchEnd, { capture: true })
   canvas.addEventListener('touchcancel', onTouchEnd, { capture: true })
 }
 
 //
-// Removes canvas touch handlers from the previously bound element
+// Removes canvas input handlers from the previously bound element
 //
 function unbindCanvasHandlers() {
   if (!boundCanvas) return
-  boundCanvas.removeEventListener('touchstart', onTouchStart, { capture: true })
-  boundCanvas.removeEventListener('touchend', onTouchEnd, { capture: true })
-  boundCanvas.removeEventListener('touchcancel', onTouchEnd, { capture: true })
+  if (usePointerEvents) {
+    boundCanvas.removeEventListener('pointerdown', onPointerDown, { capture: true })
+    boundCanvas.removeEventListener('pointerup', onPointerUp, { capture: true })
+    boundCanvas.removeEventListener('pointercancel', onPointerUp, { capture: true })
+  } else {
+    boundCanvas.removeEventListener('touchstart', onTouchStart, { capture: true })
+    boundCanvas.removeEventListener('touchend', onTouchEnd, { capture: true })
+    boundCanvas.removeEventListener('touchcancel', onTouchEnd, { capture: true })
+  }
   boundCanvas = null
 }
 
@@ -203,7 +217,35 @@ function ensureUpdateLoop(k) {
 }
 
 //
-// Maps new touches to virtual buttons (sticky until lift) and queues jump
+// Sticky pointer slot — each finger keeps its button until pointerup
+//
+function onPointerDown(e) {
+  const inst = activeInst
+  if (!inst) return
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  const pos = clientToGame(inst.k, e.clientX, e.clientY)
+  const btn = hitVirtualButton(inst, pos.x, pos.y)
+  if (!btn) return
+  e.preventDefault()
+  e.stopImmediatePropagation()
+  try {
+    boundCanvas?.setPointerCapture(e.pointerId)
+  } catch (_) {}
+  inputSlots.set(e.pointerId, btn.type)
+  btn.type === 'jump' && (jumpPulse = true)
+  syncVirtualMovement()
+}
+
+//
+// Clears only the pointer that lifted
+//
+function onPointerUp(e) {
+  inputSlots.delete(e.pointerId)
+  syncVirtualMovement()
+}
+
+//
+// Legacy touch fallback — sticky slots, never prune other fingers on touchstart
 //
 function onTouchStart(e) {
   const inst = activeInst
@@ -214,43 +256,31 @@ function onTouchStart(e) {
     const btn = hitVirtualButton(inst, pos.x, pos.y)
     if (!btn) continue
     hitControl = true
-    if (!touchSlots.has(touch.identifier)) {
-      touchSlots.set(touch.identifier, btn.type)
-    }
+    inputSlots.set(touch.identifier, btn.type)
     btn.type === 'jump' && (jumpPulse = true)
   }
-  hitControl && e.preventDefault()
-  pruneTouchSlots(e.touches)
+  if (hitControl) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+  }
   syncVirtualMovement()
 }
 
 //
-// Drops lifted touches; keeps other fingers mapped to their buttons
+// Clears only touches that ended
 //
 function onTouchEnd(e) {
-  if (!activeInst) return
-  pruneTouchSlots(e.touches)
+  for (const touch of e.changedTouches) {
+    inputSlots.delete(touch.identifier)
+  }
   syncVirtualMovement()
 }
 
 //
-// Removes touch ids that are no longer on screen
-//
-function pruneTouchSlots(activeTouches) {
-  const activeIds = new Set()
-  for (const touch of activeTouches) {
-    activeIds.add(touch.identifier)
-  }
-  for (const id of touchSlots.keys()) {
-    activeIds.has(id) || touchSlots.delete(id)
-  }
-}
-
-//
-// Applies combined left/right state from all active touch slots
+// Applies combined left/right state from all active input slots
 //
 function syncVirtualMovement() {
-  const types = [...touchSlots.values()]
+  const types = [...inputSlots.values()]
   virtualLeft.active = types.includes('left')
   virtualRight.active = types.includes('right')
 }
@@ -266,12 +296,12 @@ function hitVirtualButton(inst, x, y) {
 }
 
 //
-// Re-sync movement each frame; mouse fallback when no touch slots are active
+// Re-sync movement each frame; mouse fallback when no pointer slots are active
 //
 function onUpdateGlobal() {
   const inst = activeInst
   if (!inst) return
-  if (touchSlots.size > 0) {
+  if (inputSlots.size > 0) {
     syncVirtualMovement()
     return
   }

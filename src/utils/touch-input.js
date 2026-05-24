@@ -44,8 +44,9 @@ export function initTouchInput(k) {
   if (!isTouchDevice() || touchInputInitialized || !k.canvas) return
   touchInputInitialized = true
   const canvas = k.canvas
-  canvas.addEventListener('touchstart', e => onTouchChange(k, e), { passive: false })
-  canvas.addEventListener('touchmove', e => onTouchChange(k, e), { passive: false })
+  canvas.style.touchAction = 'none'
+  canvas.addEventListener('touchstart', e => onTouchChange(k, e), { passive: true })
+  canvas.addEventListener('touchmove', e => onTouchChange(k, e), { passive: true })
   canvas.addEventListener('touchend', e => onTouchEnd(e))
   canvas.addEventListener('touchcancel', e => onTouchEnd(e))
 }
@@ -94,7 +95,6 @@ export function getHoverPointers(k) {
 // Updates stored touch coordinates from a touch event
 //
 function onTouchChange(k, e) {
-  e.preventDefault()
   for (const touch of e.changedTouches) {
     touchPositions.set(touch.identifier, clientToGame(k, touch.clientX, touch.clientY))
   }

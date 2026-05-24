@@ -2,20 +2,22 @@ import { CFG } from '../cfg.js'
 import { clientToGame, isTouchDevice } from './touch-input.js'
 
 //
-// Virtual movement keys for touch devices without a physical keyboard
+// Virtual movement state — read by hero each frame
 //
 const virtualLeft = { active: false }
 const virtualRight = { active: false }
 let jumpHandler = null
 let jumpPulse = false
 //
-// Shared input state — one listener set for the whole game
+// Shared scene state (one set of listeners for the whole game)
 //
 let activeInst = null
-let movementSlots = new Map()
+//
+// Held movement fingers: identifier -> 'left' | 'right'. Jump is a one-shot pulse, not stored
+//
+const movementSlots = new Map()
 let boundCanvas = null
 let updateHook = null
-const usePointerEvents = typeof PointerEvent !== 'undefined'
 //
 // On-screen control layout (50% larger than base, wide gap between left/right)
 //
@@ -86,7 +88,7 @@ export function create(config) {
   const rightX = leftX + ARROW_CENTER_GAP
   const jumpX = k.width() - rightMargin - JUMP_ARROW_MARGIN_X - CIRCLE_RADIUS
   //
-  // Fresh scene mount — clear stale touches; hero re-registers jump on spawn
+  // Fresh scene mount — clear stale fingers; hero re-registers jump on spawn
   //
   movementSlots.clear()
   virtualLeft.active = false
@@ -180,15 +182,21 @@ function ensureCanvasHandlers(k) {
   unbindCanvasHandlers()
   boundCanvas = canvas
   canvas.style.touchAction = 'none'
-  if (usePointerEvents) {
-    canvas.addEventListener('pointerdown', onPointerDown, { capture: true, passive: false })
-    canvas.addEventListener('pointerup', onPointerUp, { capture: true })
-    canvas.addEventListener('pointercancel', onPointerCancel, { capture: true })
-    return
-  }
-  canvas.addEventListener('touchstart', onTouchStart, { capture: true, passive: false })
-  canvas.addEventListener('touchend', onTouchEnd, { capture: true })
-  canvas.addEventListener('touchcancel', onTouchCancel, { capture: true })
+  //
+  // Only listen to raw touch events: multi-touch semantics are well defined.
+  // We do NOT use Pointer Events (setPointerCapture can hijack other fingers on iOS Safari).
+  // We do NOT call preventDefault/stopImmediatePropagation — they can suppress
+  // subsequent touchstart events for other fingers on Android Chrome.
+  //
+  canvas.addEventListener('touchstart', onTouchStart, { passive: true })
+  canvas.addEventListener('touchend', onTouchEnd, { passive: true })
+  canvas.addEventListener('touchcancel', onTouchCancel, { passive: true })
+  //
+  // Mouse fallback so devtools / hybrid laptops can still test the buttons
+  //
+  canvas.addEventListener('mousedown', onMouseDown)
+  canvas.addEventListener('mouseup', onMouseUp)
+  canvas.addEventListener('mouseleave', onMouseUp)
 }
 
 //
@@ -196,15 +204,12 @@ function ensureCanvasHandlers(k) {
 //
 function unbindCanvasHandlers() {
   if (!boundCanvas) return
-  if (usePointerEvents) {
-    boundCanvas.removeEventListener('pointerdown', onPointerDown, { capture: true })
-    boundCanvas.removeEventListener('pointerup', onPointerUp, { capture: true })
-    boundCanvas.removeEventListener('pointercancel', onPointerCancel, { capture: true })
-  } else {
-    boundCanvas.removeEventListener('touchstart', onTouchStart, { capture: true })
-    boundCanvas.removeEventListener('touchend', onTouchEnd, { capture: true })
-    boundCanvas.removeEventListener('touchcancel', onTouchCancel, { capture: true })
-  }
+  boundCanvas.removeEventListener('touchstart', onTouchStart)
+  boundCanvas.removeEventListener('touchend', onTouchEnd)
+  boundCanvas.removeEventListener('touchcancel', onTouchCancel)
+  boundCanvas.removeEventListener('mousedown', onMouseDown)
+  boundCanvas.removeEventListener('mouseup', onMouseUp)
+  boundCanvas.removeEventListener('mouseleave', onMouseUp)
   boundCanvas = null
 }
 
@@ -217,70 +222,26 @@ function ensureUpdateLoop(k) {
 }
 
 //
-// Sticky run slot — jump is a one-shot pulse, not a held slot
-//
-function onPointerDown(e) {
-  const inst = activeInst
-  if (!inst) return
-  if (e.pointerType === 'mouse' && e.button !== 0) return
-  const pos = clientToGame(inst.k, e.clientX, e.clientY)
-  const btn = hitVirtualButton(inst, pos.x, pos.y)
-  if (!btn) return
-  e.preventDefault()
-  e.stopImmediatePropagation()
-  if (btn.type === 'jump') {
-    jumpPulse = true
-    return
-  }
-  try {
-    boundCanvas?.setPointerCapture(e.pointerId)
-  } catch (_) {}
-  movementSlots.set(e.pointerId, btn.type)
-  syncVirtualMovement()
-}
-
-//
-// Clears run slot only when that finger lifts
-//
-function onPointerUp(e) {
-  if (e.pointerType === 'mouse' && e.button !== 0) return
-  movementSlots.delete(e.pointerId)
-  syncVirtualMovement()
-}
-
-//
-// Ignore cancel for run — phones often fire it when a second finger lands
-//
-function onPointerCancel(_e) {
-}
-
-//
-// Legacy touch fallback — sticky run slots, jump as pulse only
+// Each new finger maps to a movement button (held) or fires the jump pulse (one-shot)
 //
 function onTouchStart(e) {
   const inst = activeInst
   if (!inst) return
-  let hitControl = false
   for (const touch of e.changedTouches) {
     const pos = clientToGame(inst.k, touch.clientX, touch.clientY)
     const btn = hitVirtualButton(inst, pos.x, pos.y)
     if (!btn) continue
-    hitControl = true
     if (btn.type === 'jump') {
       jumpPulse = true
       continue
     }
     movementSlots.set(touch.identifier, btn.type)
   }
-  if (hitControl) {
-    e.preventDefault()
-    e.stopImmediatePropagation()
-  }
   syncVirtualMovement()
 }
 
 //
-// Clears only the finger that lifted
+// Only the finger that lifted clears its slot — other fingers stay held
 //
 function onTouchEnd(e) {
   for (const touch of e.changedTouches) {
@@ -290,18 +251,49 @@ function onTouchEnd(e) {
 }
 
 //
-// Ignore touchcancel for run — same spurious-cancel issue as pointercancel
+// Same as touchend — release the cancelled finger but never the others
 //
-function onTouchCancel(_e) {
+function onTouchCancel(e) {
+  for (const touch of e.changedTouches) {
+    movementSlots.delete(touch.identifier)
+  }
+  syncVirtualMovement()
 }
 
 //
-// Applies combined left/right state from all held run fingers
+// Desktop / devtools mouse: single-pointer fallback
+//
+function onMouseDown(e) {
+  const inst = activeInst
+  if (!inst || e.button !== 0) return
+  const pos = clientToGame(inst.k, e.clientX, e.clientY)
+  const btn = hitVirtualButton(inst, pos.x, pos.y)
+  if (!btn) return
+  if (btn.type === 'jump') {
+    jumpPulse = true
+    return
+  }
+  movementSlots.set('mouse', btn.type)
+  syncVirtualMovement()
+}
+
+function onMouseUp() {
+  movementSlots.delete('mouse')
+  syncVirtualMovement()
+}
+
+//
+// Applies combined left/right state from all held movement fingers
 //
 function syncVirtualMovement() {
-  const types = [...movementSlots.values()]
-  virtualLeft.active = types.includes('left')
-  virtualRight.active = types.includes('right')
+  let left = false
+  let right = false
+  for (const type of movementSlots.values()) {
+    if (type === 'left') left = true
+    else if (type === 'right') right = true
+  }
+  virtualLeft.active = left
+  virtualRight.active = right
 }
 
 //
@@ -315,27 +307,9 @@ function hitVirtualButton(inst, x, y) {
 }
 
 //
-// Keeps run state synced each frame; desktop mouse fallback only
+// Keeps run state fresh each frame in case a frame-skipped touch event slipped by
 //
 function onUpdateGlobal() {
-  const inst = activeInst
-  if (!inst) return
+  if (!activeInst) return
   syncVirtualMovement()
-  if (needsTouchControls()) return
-  const mp = inst.k.mousePos()
-  const down = inst.k.isMouseDown()
-  let leftActive = false
-  let rightActive = false
-  let jumpActive = false
-  inst.buttons.forEach(btn => {
-    const hit = Math.abs(mp.x - btn.x) < btn.half && Math.abs(mp.y - btn.y) < btn.half
-    if (!hit || !down) return
-    btn.type === 'left' && (leftActive = true)
-    btn.type === 'right' && (rightActive = true)
-    btn.type === 'jump' && (jumpActive = true)
-  })
-  if (virtualLeft.active !== leftActive) virtualLeft.active = leftActive
-  if (virtualRight.active !== rightActive) virtualRight.active = rightActive
-  jumpActive && !inst.jumpWasDown && (jumpPulse = true)
-  inst.jumpWasDown = jumpActive
 }

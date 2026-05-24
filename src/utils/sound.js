@@ -613,13 +613,15 @@ export function playBladeSound(instance) {
  * Play metallic rattle when the hero is near blade letters
  * @param {Object} instance - Sound instance from create()
  * @param {number} [proximity=1] - 0 far, 1 very close (controls volume)
+ * @param {number} [volumeScale=1] - Extra multiplier when standing over the pit
  */
-export function playBladeProximityRattle(instance, proximity = 1) {
+export function playBladeProximityRattle(instance, proximity = 1, volumeScale = 1) {
   if (globalMuteProceduralSounds) return
   const now = instance.audioContext.currentTime
   const duration = 0.12
   const masterVolume = CFG.audio.masterVolume
-  const vol = Math.max(0.02, Math.min(0.22, proximity * 0.22)) * masterVolume
+  const peak = 0.42 * volumeScale
+  const vol = Math.max(0.03, Math.min(peak, proximity * peak)) * masterVolume
   const rattle = instance.audioContext.createOscillator()
   rattle.type = 'square'
   rattle.frequency.setValueAtTime(1800 + proximity * 1200, now)

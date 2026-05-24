@@ -477,7 +477,7 @@ function flashHelpDeniedHud(k, levelIndicator, heroColor, count) {
   const scoreWhite = k.rgb(255, 255, 255)
   const scoreOutlineBlack = k.rgb(0, 0, 0)
   if (count >= SPEND_FLASH_COUNT) {
-    levelIndicator.smallHero.character.color = normalHero
+    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
     levelIndicator.heroScoreText && (levelIndicator.heroScoreText.color = scoreWhite)
     levelIndicator.heroScoreOutlines?.forEach(outline => {
       outline.exists?.() && (outline.color = scoreOutlineBlack)

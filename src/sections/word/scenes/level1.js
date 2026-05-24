@@ -10,6 +10,7 @@ import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as Sound from '../../../utils/sound.js'
 import { createLevelTransition } from '../../../utils/transition.js'
+import * as WordCeilingTrap from '../utils/word-ceiling-trap.js'
 
 //
 // Death messages (shown randomly on death)
@@ -37,6 +38,10 @@ const HERO_SPAWN_X = 230    // 12% of 1920
 const HERO_SPAWN_Y = 705    // Adjusted to stand on platform
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
+//
+// Pit / moving platform shifted right so it does not overlap HELP label
+//
+const PIT_X_EXTRA_OFFSET = 100
 
 /**
  * Shows a random death message and then restarts the level
@@ -190,7 +195,7 @@ export function sceneLevel1(k) {
     //
     const centerX = CFG.visual.screen.width / 2
     const bladeWidth = Blades.getBladeWidth(k)
-    const movingPlatformX = centerX + CFG.visual.screen.width * 0.05  // Position platform left of center
+    const movingPlatformX = centerX + CFG.visual.screen.width * 0.05 + PIT_X_EXTRA_OFFSET
     
     //
     // Define platform gap
@@ -230,7 +235,7 @@ export function sceneLevel1(k) {
         set('heroScore', newScore)
         levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
         sound && Sound.playVictorySound(sound)
-        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-word.1')
@@ -300,7 +305,7 @@ export function sceneLevel1(k) {
     //
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     
-    MovingPlatform.create({
+    const movingPlatform = MovingPlatform.create({
       k,
       x: movingPlatformX,
       y: platformY,
@@ -309,6 +314,17 @@ export function sceneLevel1(k) {
       currentLevel: 'level-word.1',
       sfx: sound,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
+    })
+    let ceilingTrapInst = null
+    ceilingTrapInst = WordCeilingTrap.create({
+      k,
+      hero,
+      gapCenterX: movingPlatformX,
+      pitWidth: bladeWidth,
+      playfieldTopY: PLATFORM_TOP_HEIGHT,
+      platformTopY: platformY,
+      sfx: sound,
+      onHit: () => showDeathMessage(k, hero, ceilingTrapInst.ceilingBlades, levelIndicator, sound)
     })
   })
 }

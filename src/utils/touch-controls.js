@@ -162,10 +162,9 @@ function drawArrowShape(k, cx, cy, type, color, opacity, outlineOffset) {
 function setupMultiTouchHandlers(inst) {
   const canvas = inst.k.canvas
   if (!canvas) return
-  canvas.addEventListener('touchstart', e => onTouchStart(inst, e), { passive: true })
-  canvas.addEventListener('touchmove', e => onTouchMove(inst, e), { passive: true })
-  canvas.addEventListener('touchend', e => onTouchEnd(inst, e))
-  canvas.addEventListener('touchcancel', e => onTouchEnd(inst, e))
+  canvas.addEventListener('touchstart', e => onTouchStart(inst, e), { capture: true, passive: false })
+  canvas.addEventListener('touchend', e => onTouchEnd(inst, e), { capture: true })
+  canvas.addEventListener('touchcancel', e => onTouchEnd(inst, e), { capture: true })
 }
 
 //
@@ -178,19 +177,6 @@ function onTouchStart(inst, e) {
     if (!btn) continue
     inst.touchSlots.set(touch.identifier, btn.type)
     btn.type === 'jump' && (jumpPulse = true)
-  }
-  syncVirtualMovement(inst)
-}
-
-//
-// Reassigns moved touches when the finger slides between buttons
-//
-function onTouchMove(inst, e) {
-  for (const touch of e.changedTouches) {
-    if (!inst.touchSlots.has(touch.identifier)) continue
-    const pos = clientToGame(inst.k, touch.clientX, touch.clientY)
-    const btn = hitVirtualButton(inst, pos.x, pos.y)
-    btn ? inst.touchSlots.set(touch.identifier, btn.type) : inst.touchSlots.delete(touch.identifier)
   }
   syncVirtualMovement(inst)
 }
@@ -225,9 +211,10 @@ function hitVirtualButton(inst, x, y) {
 }
 
 //
-// Mouse fallback for hybrid devices when no touch slots are active
+// Re-sync movement each frame; mouse fallback when no touch slots are active
 //
 function onUpdate(inst) {
+  inst.touchSlots.size > 0 && syncVirtualMovement(inst)
   if (inst.touchSlots.size > 0) return
   const mp = inst.k.mousePos()
   const down = inst.k.isMouseDown()

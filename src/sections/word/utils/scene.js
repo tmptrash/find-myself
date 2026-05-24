@@ -10,7 +10,7 @@ import { get, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import * as LevelHelp from '../../../utils/level-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
-import { createLevelTransition } from '../../../utils/transition.js'
+import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 const CORNER_RADIUS = 20  // Radius for rounded corners
@@ -200,7 +200,7 @@ export function initScene(config) {
     levelName,
     sideWallWidth,
     floorY: k.height() - (bottomPlatformHeight ?? 360),
-    helpY: levelName === 'level-word.0'
+    helpY: (levelName === 'level-word.0' || levelName === 'level-word.1')
       ? k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET
       : undefined,
     levelIndicator,
@@ -257,6 +257,7 @@ export function initScene(config) {
     const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor, onAnnihilation)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
+    hero && WordHeroIdleSpeech.create(k, hero)
   }
   
   return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic }

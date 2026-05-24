@@ -405,6 +405,11 @@ export function sceneLevel0(k) {
     }
     set('lastSection', 'touch')
     //
+    // Touch level 0 starts with 3 fragments for HELP tutorial
+    //
+    const TOUCH_L0_START_FRAGMENTS = 3
+    set('heroScore', TOUCH_L0_START_FRAGMENTS)
+    //
     // Save progress
     //
     set('lastLevel', 'level-touch.0')
@@ -1945,6 +1950,7 @@ export function sceneLevel0(k) {
       sfx: sound,
       antiHero: antiHeroInst,
       onAnnihilation: () => {
+        Tooltip.suppressAll()
         //
         // Check for speed bonus before scoring
         //

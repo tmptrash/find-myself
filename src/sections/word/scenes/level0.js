@@ -53,8 +53,8 @@ const WORD_L0_PLAYFIELD_BG_B = 62
 const WORD_PROGRESS_TOOLTIP_TEXT = 'your progress'
 const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
 const WORD_HERO_TOOLTIP_TEXT = 'oh god, so many voices in my head...'
-const WORD_ANTIHERO_TOOLTIP_TEXT = 'pull yourself together and find me (yourself)'
-const WORD_BLADE_TOOLTIP_TEXT = 'touch me and I\'ll give you a couple of fragments'
+const WORD_ANTIHERO_TOOLTIP_TEXT = 'pull yourself together\nand find me (yourself)'
+const WORD_BLADE_TOOLTIP_TEXT = 'touch me and I\'ll give\nyou a couple of fragments'
 const SMALL_HERO_TOOLTIP_TEXT = 'your fragments'
 const LIFE_TOOLTIP_TEXT = 'life score'
 const WORD_INDICATOR_TOOLTIP_WIDTH = 220
@@ -82,7 +82,7 @@ const FLYING_WORD_TOOLTIP_Y_OFFSET = -36
 //
 const BLADES2_RUSH_APPROACH = 280
 const BLADES2_RUSH_SPEED = 820
-const BLADE_PROXIMITY_RANGE = 220
+const BLADE_PROXIMITY_RANGE = 120
 const BLADE_RATTLE_COOLDOWN = 0.35
 //
 // Funny hover lines for flying words (fallback when word is unmapped)
@@ -175,7 +175,7 @@ export function sceneLevel0(k) {
         set('heroScore', newScore)
         levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
         sound && Sound.playVictorySound(sound)
-        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
+        playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-word.0')
@@ -341,7 +341,8 @@ export function sceneLevel0(k) {
       blades1,
       blades2,
       blades3,
-      flyingWords
+      flyingWords,
+      platformBounds
     })
     if (showLifeTrap || lifeTrapAlreadyShown) {
       k.onUpdate(() => onUpdateBlades2Rush(k, blades2, hero, blades2RushState, blade2X))
@@ -541,7 +542,10 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
 // Registers hover tooltips for WORDS HUD, heroes, blades, and flying words
 //
 function setupWordLevel0HoverTooltips(k, ctx) {
-  const { levelIndicator, fpsCounter, hero, antiHero, blades1, blades2, blades3, flyingWords } = ctx
+  const { levelIndicator, fpsCounter, hero, antiHero, blades1, blades2, blades3, flyingWords, platformBounds } = ctx
+  const inPlayArea = (x, y) =>
+    x >= platformBounds.left && x <= platformBounds.right &&
+    y >= platformBounds.top && y <= platformBounds.bottom
   const letters = levelIndicator.letterObjects
   const wordsCenterX = letters.reduce((sum, letter) => sum + letter.pos.x, 0) / letters.length
   const wordsCenterY = letters[0]?.pos?.y ?? PLATFORM_TOP_HEIGHT / 2
@@ -635,7 +639,8 @@ function setupWordLevel0HoverTooltips(k, ctx) {
       width: FLYING_WORD_TOOLTIP_WIDTH,
       height: FLYING_WORD_TOOLTIP_HEIGHT,
       text: () => getFlyingWordTooltip(word.textObj.text),
-      offsetY: FLYING_WORD_TOOLTIP_Y_OFFSET
+      offsetY: FLYING_WORD_TOOLTIP_Y_OFFSET,
+      visible: () => inPlayArea(word.textObj.pos.x, word.textObj.pos.y)
     }))
   wordTargets.length && Tooltip.create({ k, targets: wordTargets })
 }

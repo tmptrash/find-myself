@@ -1,3 +1,4 @@
+import { isTouchDevice } from './touch-input.js'
 //
 // SVG markup for cursor shapes (chubby triangle and hand)
 //
@@ -42,6 +43,11 @@ export function setCursor(type) {
  * @param {Object} k - Kaplay instance
  */
 export function init(k) {
+  if (isTouchDevice()) {
+    document.body.style.cursor = 'none'
+    k.canvas && (k.canvas.style.cursor = 'none')
+    return
+  }
   cursorEl = document.createElement('div')
   cursorEl.style.position = 'fixed'
   cursorEl.style.pointerEvents = 'none'

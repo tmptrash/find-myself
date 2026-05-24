@@ -10,6 +10,9 @@ const SPIKE_APPEAR_DELAY = 0.15 // Delay before blades appear after drop starts 
 const RAISE_DELAY = 2.0         // Time before raising back up (seconds)
 const RAISE_TIMEOUT = 6.0       // Maximum time platform stays down (seconds)
 const RAISE_DURATION = 0.5      // Time to raise up (seconds)
+const PIT_RATTLE_RANGE = 140
+const PIT_RATTLE_COOLDOWN = 0.35
+const PIT_STAND_VOLUME_SCALE = 1.85
 
 /**
  * Creates a moving platform that drops when hero approaches
@@ -93,7 +96,8 @@ export function create(config) {
     dropDistance,
     state: 'idle',  // idle, dropping, waiting, disabled
     timer: 0,
-    hasActivated: false  // Track if trap was activated at least once
+    hasActivated: false,  // Track if trap was activated at least once
+    rattleCooldown: 0
   }
   
   // Auto-open platform if requested
@@ -133,6 +137,8 @@ export function create(config) {
  */
 function onUpdate(inst) {
   const { k, platform, blades, hero, originalY, dropDistance, sfx, jumpToDisableBlades, platformWidth } = inst
+  
+  updatePitProximityRattle(inst)
   
   // Check distance to hero (only check X distance, and only from left side)
   if (inst.state === 'idle' && !inst.hasActivated) {
@@ -265,8 +271,28 @@ function onUpdate(inst) {
       inst.state = 'disabled'  // Keep disabled, don't reset hasActivated
       blades.blade.opacity = 0  // Ensure fully hidden
       blades.glintDrawer.hidden = true  // Ensure glint drawer is hidden
+      blades.collisionEnabled = false
     }
   }
+}
+
+//
+// Plays blade rattle while the pit is open; stops when blades are hidden
+//
+function updatePitProximityRattle(inst) {
+  const { k, blades, hero, sfx, platform, platformWidth } = inst
+  if (!sfx || !hero?.character?.pos || blades.blade.opacity < 0.08) return
+  inst.rattleCooldown -= k.dt()
+  if (inst.rattleCooldown > 0) return
+  const dx = hero.character.pos.x - platform.pos.x
+  const dy = hero.character.pos.y - blades.blade.pos.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  if (dist >= PIT_RATTLE_RANGE) return
+  const proximity = 1 - dist / PIT_RATTLE_RANGE
+  const overPitX = Math.abs(hero.character.pos.x - platform.pos.x) <= platformWidth / 2
+  const volumeScale = overPitX ? PIT_STAND_VOLUME_SCALE : 1
+  Sound.playBladeProximityRattle(sfx, proximity, volumeScale)
+  inst.rattleCooldown = PIT_RATTLE_COOLDOWN
 }
 
 

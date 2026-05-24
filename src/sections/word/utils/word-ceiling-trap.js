@@ -158,16 +158,15 @@ function onUpdateHold(inst) {
 }
 
 //
-// Shortens tube + AAA and hides them for the next jump
+// Slides tube + AAA back up to the playfield top; hides only when fully retracted
 //
 function onUpdateRetract(inst) {
   inst.timer += inst.k.dt()
   const t = Math.min(1, inst.timer / RETRACT_DURATION)
   const bottomY = inst.dropStopBottomY + (inst.dropStartBottomY - inst.dropStopBottomY) * t
   setAssemblyBottomY(inst, bottomY)
-  const fade = 1 - t
-  inst.dropPlatform.opacity = fade
-  inst.ceilingBlades.blade.opacity = fade
+  inst.dropPlatform.opacity = 1
+  inst.ceilingBlades.blade.opacity = 1
   if (t >= 1) {
     inst.dropPlatform.opacity = 0
     inst.ceilingBlades.blade.opacity = 0

@@ -16,6 +16,7 @@ import { drawRealisticBird } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
+import { isTouchDevice } from '../../../utils/touch-input.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import { drawThorns } from '../components/jungle-decor.js'
 import * as Tooltip from '../../../utils/tooltip.js'
@@ -1290,44 +1291,29 @@ export function sceneLevel0(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Bake backgrounds: far circle crowns + strip, far grey organics on PNG overlays,
-    // baked grey/black leaf mid bands, front bushes/static circles (hinged organics at runtime).
+    // Bake backgrounds. To improve mobile FPS, all four back/mid sheets
+    // (black-back base + far-organic overlay + grey-leaf row + black-leaf row)
+    // are composited into a single PNG so the frame only pays fillrate for
+    // one full-screen draw instead of four. The front static sheet stays
+    // separate so birds (z=6) still fly between mid trees and front bushes.
     //
-    const createBlackBackBaseCanvas = () => {
+    const createBackgroundCompositeCanvas = () => {
       return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         //
-        // 1. Draw darkened ground area
+        // Darkened ground band sits below the average back-row crown line.
         //
         if (layers.length > 0 && layers[0].trees.length > 0) {
           const backLayer = layers[0]
           const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
-          const floorY = FLOOR_Y
-          
           ctx.fillStyle = 'rgb(28, 28, 28)'
-          ctx.fillRect(0, avgCrownY, k.width(), floorY - avgCrownY)
+          ctx.fillRect(0, avgCrownY, k.width(), FLOOR_Y - avgCrownY)
         }
         //
-        // 2. Back layer base only (grey fill above + circle-crown trees; organic goes on a separate PNG sheet).
+        // Bake in painter order: back base → back organic → grey mid → black mid.
         //
         layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { skipOrganic: true })
-      })
-    }
-    
-    const createBackOrganicOverlayCanvas = () => {
-      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        ctx.clearRect(0, 0, k.width(), k.height())
         layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { organicOnly: true })
-      })
-    }
-    
-    const createGreyLeafMidCanvas = () => {
-      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         layers[1] && drawLayerToCanvas(ctx, layers[1], 0, { organicOnly: true })
-      })
-    }
-    
-    const createBlackLeafMidCanvas = () => {
-      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
         layers[2] && drawLayerToCanvas(ctx, layers[2], 0, { organicOnly: true })
       })
     }
@@ -1442,61 +1428,19 @@ export function sceneLevel0(k) {
       }
     }
     
-    const greyLeafMidDataURL = createGreyLeafMidCanvas()
-    const blackBackBaseDataURL = createBlackBackBaseCanvas()
-    const backOrganicOverlayDataURL = createBackOrganicOverlayCanvas()
-    const blackLeafMidDataURL = createBlackLeafMidCanvas()
+    const backgroundCompositeDataURL = createBackgroundCompositeCanvas()
     const frontStaticDataURL = createFrontStaticCanvas()
-    loadTouchSprite(k, 'bg-touch-l0-black-back', blackBackBaseDataURL)
-    loadTouchSprite(k, 'bg-touch-l0-back-organic', backOrganicOverlayDataURL)
-    loadTouchSprite(k, 'bg-touch-l0-grey-leaf-mid', greyLeafMidDataURL)
-    loadTouchSprite(k, 'bg-touch-l0-black-leaf-mid', blackLeafMidDataURL)
+    loadTouchSprite(k, 'bg-touch-l0-background', backgroundCompositeDataURL)
     loadTouchSprite(k, 'bg-touch-l0-front-static', frontStaticDataURL)
     //
-    // Far circles → far grey silhouettes → grey-leaf band → black-leaf band (birds sit above black-leaf z).
+    // Single composite background sheet (z=2..5 layers baked together).
     //
     k.add([
       k.z(L0_PARALLAX_FAR_CIRCLE_Z),
       {
         draw() {
           k.drawSprite({
-            sprite: 'bg-touch-l0-black-back',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
-      }
-    ])
-    k.add([
-      k.z(L0_PARALLAX_FAR_ORGANIC_Z),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-l0-back-organic',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
-      }
-    ])
-    k.add([
-      k.z(L0_PARALLAX_GREY_LEAF_ROW_Z),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-l0-grey-leaf-mid',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
-      }
-    ])
-    k.add([
-      k.z(L0_PARALLAX_BLACK_LEAF_ROW_Z),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-l0-black-leaf-mid',
+            sprite: 'bg-touch-l0-background',
             pos: k.vec2(0, 0),
             anchor: "topleft"
           })
@@ -2740,6 +2684,10 @@ export function sceneLevel0(k) {
     // Rain system: depth-layered drops with splashes on objects
     //
     const frontTrees = layers[3] ? layers[3].trees : []
+    //
+    // Touch devices are fillrate-bound; cut rain particle count roughly in half.
+    //
+    const rainIntensity = isTouchDevice() ? 0.5 : 1
     Rain.create({
       k,
       topY: TOP_MARGIN,
@@ -2750,7 +2698,8 @@ export function sceneLevel0(k) {
       antiHeroInst,
       monsterBugs: [bigBug0Inst, bigBug1Inst, bigBug2Inst],
       smallBugs,
-      trees: frontTrees
+      trees: frontTrees,
+      intensity: rainIntensity
     })
     //
     // Rain drip sounds: retry until AudioContext is running
@@ -4420,12 +4369,16 @@ function createL0Fireflies(k) {
   //
   const fireflyMinY = FLOOR_Y - 150
   const fireflyMaxY = FLOOR_Y - 20
-  for (let i = 0; i < L0_FIREFLY_COUNT; i++) {
+  //
+  // Mobile devices use a smaller swarm so fewer draw calls hit fillrate.
+  //
+  const fireflyCount = isTouchDevice() ? Math.round(L0_FIREFLY_COUNT * 0.5) : L0_FIREFLY_COUNT
+  for (let i = 0; i < fireflyCount; i++) {
     //
     // Distribute starting positions evenly across the width
     //
     fireflies.push({
-      x: LEFT_MARGIN + (i / L0_FIREFLY_COUNT) * playableW + Math.random() * (playableW / L0_FIREFLY_COUNT),
+      x: LEFT_MARGIN + (i / fireflyCount) * playableW + Math.random() * (playableW / fireflyCount),
       y: fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY),
       radius: L0_FIREFLY_RADIUS_MIN + Math.random() * (L0_FIREFLY_RADIUS_MAX - L0_FIREFLY_RADIUS_MIN),
       glowSpeed: L0_FIREFLY_GLOW_SPEED_MIN + Math.random() * (L0_FIREFLY_GLOW_SPEED_MAX - L0_FIREFLY_GLOW_SPEED_MIN),
@@ -4474,15 +4427,21 @@ function onUpdateL0Fireflies(k, fireflies) {
 //
 function drawL0Fireflies(k, fireflies) {
   const t = k.time()
+  //
+  // Touch devices skip the soft halo (saves N drawCircle calls per frame).
+  //
+  const touchMode = isTouchDevice()
   for (const f of fireflies) {
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
     const alpha = 0.15 + glow * 0.7
-    k.drawCircle({
-      pos: k.vec2(f.x, f.y),
-      radius: f.radius * 3,
-      color: k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B),
-      opacity: alpha * 0.15
-    })
+    if (!touchMode) {
+      k.drawCircle({
+        pos: k.vec2(f.x, f.y),
+        radius: f.radius * 3,
+        color: k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B),
+        opacity: alpha * 0.15
+      })
+    }
     k.drawCircle({
       pos: k.vec2(f.x, f.y),
       radius: f.radius,

@@ -37,18 +37,16 @@ export function clientToGame(k, clientX, clientY) {
 }
 
 /**
- * Tracks active touch points on the canvas for tooltip hover emulation
+ * Registers global Kaplay touch hooks so tooltip hit-testing tracks active fingers
  * @param {Object} k - Kaplay instance
  */
 export function initTouchInput(k) {
-  if (!isTouchDevice() || touchInputInitialized || !k.canvas) return
+  if (!isTouchDevice() || touchInputInitialized || !k) return
   touchInputInitialized = true
-  const canvas = k.canvas
-  canvas.style.touchAction = 'none'
-  canvas.addEventListener('touchstart', e => onTouchChange(k, e), { passive: true })
-  canvas.addEventListener('touchmove', e => onTouchChange(k, e), { passive: true })
-  canvas.addEventListener('touchend', e => onTouchEnd(e))
-  canvas.addEventListener('touchcancel', e => onTouchEnd(e))
+  k.canvas && (k.canvas.style.touchAction = 'none')
+  k.onTouchStart(onKaplayTouchStart)
+  k.onTouchMove(onKaplayTouchMove)
+  k.onTouchEnd(onKaplayTouchEnd)
 }
 
 /**
@@ -58,8 +56,7 @@ export function initTouchInput(k) {
  */
 export function getPointerPos(k) {
   if (isTouchDevice() && touchPositions.size > 0) {
-    const first = touchPositions.values().next().value
-    return first
+    return touchPositions.values().next().value
   }
   return k.mousePos()
 }
@@ -85,26 +82,50 @@ export function hasActiveTouch() {
 //
 export function getHoverPointers(k) {
   if (isTouchDevice()) {
-    const touches = getTouchPositions()
-    return touches.length ? touches : []
+    //
+    // Show tooltips only while a finger is down. Kaplay mousePos lingers after
+    // touchend, so never use it as a hover source on touch devices.
+    //
+    return hasActiveTouch() ? getTouchPositions() : []
   }
   return [k.mousePos()]
 }
 
-//
-// Updates stored touch coordinates from a touch event
-//
-function onTouchChange(k, e) {
-  for (const touch of e.changedTouches) {
-    touchPositions.set(touch.identifier, clientToGame(k, touch.clientX, touch.clientY))
-  }
+/**
+ * Records an active touch point in game space (Kaplay touch hook sync)
+ * @param {number} id - Touch identifier
+ * @param {{ x: number, y: number }} pos - Game-space position
+ */
+export function setTouchPoint(id, pos) {
+  touchPositions.set(id, pos)
+}
+
+/**
+ * Removes a touch point when the finger lifts
+ * @param {number} id - Touch identifier
+ */
+export function removeTouchPoint(id) {
+  touchPositions.delete(id)
 }
 
 //
-// Removes ended touch points
+// Kaplay touch hook handlers — single source of truth for active finger positions
 //
-function onTouchEnd(e) {
-  for (const touch of e.changedTouches) {
-    touchPositions.delete(touch.identifier)
-  }
+function onKaplayTouchStart(pos, touch) {
+  setTouchPoint(getTouchId(touch), { x: pos.x, y: pos.y })
+}
+
+function onKaplayTouchMove(pos, touch) {
+  setTouchPoint(getTouchId(touch), { x: pos.x, y: pos.y })
+}
+
+function onKaplayTouchEnd(_pos, touch) {
+  removeTouchPoint(getTouchId(touch))
+}
+
+//
+// Resolves Kaplay / browser touch identifier
+//
+function getTouchId(touch) {
+  return touch?.identifier ?? touch?.id ?? 0
 }

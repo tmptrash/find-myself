@@ -2,8 +2,8 @@
 // Scrolling cloud band (seamless horizontal loop via PNG sprite)
 //
 const CLOUD_SCROLL_SPEED = 8
-const CLOUD_BAND_HEIGHT = 110
 const CLOUD_SPRITE_NAME = 'touch-l0-cloud-band'
+const CLOUD_CANVAS_PAD = 48
 //
 // Floor thorn bake sprite
 //
@@ -35,6 +35,10 @@ export function createScrollingCloudBand(k, layout) {
   const bandWidth = areaRight - areaLeft
   const cloudSpacing = bandWidth / cloudCount
   const cloudConfigs = []
+  let minDrawX = Infinity
+  let maxDrawX = -Infinity
+  let minDrawY = Infinity
+  let maxDrawY = -Infinity
   for (let i = 0; i < cloudCount; i++) {
     const baseX = cloudSpacing * i + cloudSpacing * 0.5
     const cloudX = baseX + (Math.random() - 0.5) * cloudRandomness
@@ -58,50 +62,74 @@ export function createScrollingCloudBand(k, layout) {
       color: baseCloudColor,
       opacity: 0.85 + Math.random() * 0.1
     })
+    crowns.forEach(crown => {
+      const r = crownSize * crown.sizeVariation
+      const cx = cloudX + crown.offsetX
+      const cy = (cloudY - cloudTopY) + crown.offsetY
+      minDrawX = Math.min(minDrawX, cx - r)
+      maxDrawX = Math.max(maxDrawX, cx + r)
+      minDrawY = Math.min(minDrawY, cy - r)
+      maxDrawY = Math.max(maxDrawY, cy + r)
+    })
   }
+  const pad = CLOUD_CANVAS_PAD
+  const contentWidth = Math.ceil(maxDrawX - minDrawX)
+  const contentHeight = Math.ceil(maxDrawY - minDrawY)
+  const canvasWidth = contentWidth + pad * 2
+  const canvasHeight = contentHeight + pad * 2
+  const originX = minDrawX - pad
+  const originY = minDrawY - pad
   const canvas = document.createElement('canvas')
-  canvas.width = bandWidth
-  canvas.height = CLOUD_BAND_HEIGHT
+  canvas.width = canvasWidth
+  canvas.height = canvasHeight
   const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, bandWidth, CLOUD_BAND_HEIGHT)
-  const yShift = cloudTopY - (cloudTopY + cloudBottomY) / 2 + CLOUD_BAND_HEIGHT / 2 - 50
-  for (const cloud of cloudConfigs) {
-    for (const crown of cloud.crowns) {
-      const cx = cloud.x + crown.offsetX
-      const cy = cloud.y + crown.offsetY - yShift
-      const r = cloud.crownSize * crown.sizeVariation
-      ctx.globalAlpha = cloud.opacity * crown.opacityVariation
-      ctx.fillStyle = `rgb(${baseCloudColor.r}, ${baseCloudColor.g}, ${baseCloudColor.b})`
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, 0, Math.PI * 2)
-      ctx.fill()
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+  //
+  // Draw each crown twice near the wrap edges so the strip tiles seamlessly
+  //
+  const drawCrowns = (offsetX) => {
+    for (const cloud of cloudConfigs) {
+      for (const crown of cloud.crowns) {
+        const cx = pad + (cloud.x + crown.offsetX + offsetX - originX)
+        const cy = pad + (cloud.y - cloudTopY + crown.offsetY - originY)
+        const r = cloud.crownSize * crown.sizeVariation
+        ctx.globalAlpha = cloud.opacity * crown.opacityVariation
+        ctx.fillStyle = `rgb(${baseCloudColor.r}, ${baseCloudColor.g}, ${baseCloudColor.b})`
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
   }
+  drawCrowns(0)
+  drawCrowns(-bandWidth)
+  drawCrowns(bandWidth)
   ctx.globalAlpha = 1
   k.loadSprite(CLOUD_SPRITE_NAME, canvas)
   canvas.width = 0
   canvas.height = 0
-  const bandY = (cloudTopY + cloudBottomY) / 2 - CLOUD_BAND_HEIGHT / 2
+  const bandY = cloudTopY + originY
   const scrollInst = { offset: 0 }
   const cloudZ = 1
+  const spriteLeft = areaLeft + originX
   k.add([
     k.sprite(CLOUD_SPRITE_NAME),
-    k.pos(areaLeft, bandY),
+    k.pos(spriteLeft, bandY),
     k.z(cloudZ),
     {
       update() {
         scrollInst.offset = (scrollInst.offset + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
-        this.pos.x = areaLeft + scrollInst.offset - bandWidth
+        this.pos.x = spriteLeft + scrollInst.offset - bandWidth
       }
     }
   ])
   k.add([
     k.sprite(CLOUD_SPRITE_NAME),
-    k.pos(areaLeft, bandY),
+    k.pos(spriteLeft, bandY),
     k.z(cloudZ),
     {
       update() {
-        this.pos.x = areaLeft + scrollInst.offset
+        this.pos.x = spriteLeft + scrollInst.offset
       }
     }
   ])

@@ -77,8 +77,13 @@ export function isAnyKeyDown(k, keys) {
     if (key.length > 1 && key.startsWith('Key')) {
       return physicalKeysDown.has(key)
     }
+    if (key === 'left' && physicalKeysDown.has('ArrowLeft')) return true
+    if (key === 'right' && physicalKeysDown.has('ArrowRight')) return true
+    if (key === 'a' && physicalKeysDown.has('KeyA')) return true
+    if (key === 'd' && physicalKeysDown.has('KeyD')) return true
     //
-    // On touch devices Kaplay maps touches to arrow keys — ignore for movement/jump
+    // On touch devices Kaplay maps touches to arrow keys — ignore synthetic
+    // emulated keys but still allow physical keyboard input above.
     //
     if (TouchControls.needsTouchControls() && isKaplayTouchEmulatedKey(key)) return false
     return k.isKeyDown(key)

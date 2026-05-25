@@ -16,6 +16,10 @@ const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 const ESC_BTN_FONT_SIZE = 16
 const BTN_BG = 'rgba(38, 38, 38, 0.82)'
 const BTN_COLOR = '#FFFFFF'
+const BTN_PRESSED_BG = 'rgba(55, 95, 130, 0.92)'
+const BTN_PRESSED_COLOR = '#B8E4FF'
+const BTN_PRESSED_BORDER = '2px solid #6EB8E8'
+const BTN_BORDER = '2px solid transparent'
 const FULLSCREEN_BTN_LABEL = '[ ]'
 const ESC_BTN_LABEL = 'Esc'
 
@@ -67,6 +71,7 @@ function createHudButton(opts) {
   btn.type = 'button'
   btn.textContent = label
   btn.setAttribute('aria-label', ariaLabel)
+  applyHudButtonReleased(btn)
   btn.style.cssText = [
     'position:fixed',
     `top:${top}px`,
@@ -76,18 +81,52 @@ function createHudButton(opts) {
     `z-index:${BTN_Z}`,
     `font-size:${fontSize}px`,
     `font-family:${CFG.visual.fonts.regularFull.replace(/'/g, '')}`,
-    'border:none',
     'border-radius:8px',
-    `background:${BTN_BG}`,
-    `color:${BTN_COLOR}`,
     'cursor:pointer',
     'padding:0',
     'line-height:1',
-    'touch-action:manipulation'
+    'touch-action:manipulation',
+    '-webkit-tap-highlight-color:transparent',
+    'outline:none'
   ].join(';')
   btn.addEventListener('click', onClick)
+  btn.addEventListener('touchstart', e => {
+    e.preventDefault()
+    applyHudButtonPressed(btn)
+  }, { passive: false })
+  btn.addEventListener('touchend', () => {
+    applyHudButtonReleased(btn)
+    btn.blur()
+  })
+  btn.addEventListener('touchcancel', () => {
+    applyHudButtonReleased(btn)
+    btn.blur()
+  })
+  btn.addEventListener('mousedown', () => applyHudButtonPressed(btn))
+  btn.addEventListener('mouseup', () => {
+    applyHudButtonReleased(btn)
+  })
+  btn.addEventListener('mouseleave', () => applyHudButtonReleased(btn))
   document.body.appendChild(btn)
   return btn
+}
+
+//
+// Pressed HUD button styling (blue highlight while finger is down)
+//
+function applyHudButtonPressed(btn) {
+  btn.style.background = BTN_PRESSED_BG
+  btn.style.color = BTN_PRESSED_COLOR
+  btn.style.border = BTN_PRESSED_BORDER
+}
+
+//
+// Default HUD button styling
+//
+function applyHudButtonReleased(btn) {
+  btn.style.background = BTN_BG
+  btn.style.color = BTN_COLOR
+  btn.style.border = BTN_BORDER
 }
 
 //

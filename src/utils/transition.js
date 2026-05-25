@@ -286,6 +286,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         Tooltip.unsuppressAll()
         inst.tooltipSuppressed = false
       }
+      TouchControls.setVisible(true)
       overlay.exists() && k.destroy(overlay)
       enterPreparedScene(k, nextLevel, afterGo)
     }

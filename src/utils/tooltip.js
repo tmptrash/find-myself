@@ -6,6 +6,7 @@ import * as TouchInput from './touch-input.js'
 //
 const FONT_SIZE = 26
 const FADE_SPEED = 6
+const TOUCH_INSTANT_OPACITY = 1
 const TOOLTIP_Y_OFFSET = -50
 const TOOLTIP_Z_INDEX = 500
 const SCREEN_EDGE_MARGIN = 6
@@ -361,6 +362,15 @@ function onUpdate(inst) {
   if (inst.forceVisible) return
   const pointers = TouchInput.getHoverPointers(k)
   const dt = k.dt()
+  const touchInstant = TouchInput.isTouchDevice()
+  //
+  // On touch devices tooltips exist only while a finger is down
+  //
+  if (touchInstant && !TouchInput.hasActiveTouch()) {
+    inst.opacity = 0
+    inst.activeTarget = null
+    return
+  }
   //
   // Find which target a pointer is over (if any)
   //
@@ -397,9 +407,11 @@ function onUpdate(inst) {
       inst.activeTarget = hoveredTarget
       inst.frozenX = Math.round(getTargetX(hoveredTarget))
       inst.frozenY = Math.round(getTargetY(hoveredTarget))
-      inst.opacity = 0
+      inst.opacity = touchInstant ? TOUCH_INSTANT_OPACITY : 0
     }
-    inst.opacity = Math.min(1, inst.opacity + dt * FADE_SPEED)
+    inst.opacity = touchInstant
+      ? TOUCH_INSTANT_OPACITY
+      : Math.min(1, inst.opacity + dt * FADE_SPEED)
   } else {
     //
     // Hide instantly when mouse leaves so a fading-out tooltip from one

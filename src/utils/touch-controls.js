@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { isTouchDevice } from './touch-input.js'
+import { isTouchDevice, setTouchPoint, removeTouchPoint } from './touch-input.js'
 
 //
 // Virtual movement state — read by hero each frame
@@ -21,6 +21,7 @@ const movementSlots = new Map()
 //
 let touchStartHook = null
 let touchEndHook = null
+let touchMoveHook = null
 let mouseDownHook = null
 let mouseUpHook = null
 //
@@ -85,6 +86,22 @@ export function isVirtualKeyDown(key) {
   if (leftKeys.includes(key) && virtualLeft.active) return true
   if (rightKeys.includes(key) && virtualRight.active) return true
   return false
+}
+
+/**
+ * True while the on-screen left run button is held
+ * @returns {boolean}
+ */
+export function isMoveLeftHeld() {
+  return virtualLeft.active
+}
+
+/**
+ * True while the on-screen right run button is held
+ * @returns {boolean}
+ */
+export function isMoveRightHeld() {
+  return virtualRight.active
 }
 
 /**
@@ -225,6 +242,8 @@ function registerKaplayHandlers(k) {
   mouseUpHook?.cancel?.()
   touchStartHook = k.onTouchStart(onKaplayTouchStart)
   touchEndHook = k.onTouchEnd(onKaplayTouchEnd)
+  touchMoveHook?.cancel?.()
+  touchMoveHook = k.onTouchMove(onKaplayTouchMove)
   mouseDownHook = k.onMousePress(onKaplayMousePress)
   mouseUpHook = k.onMouseRelease(onKaplayMouseRelease)
 }
@@ -233,26 +252,67 @@ function registerKaplayHandlers(k) {
 // Each new finger maps to a movement button (held) or fires the jump pulse (one-shot)
 //
 function onKaplayTouchStart(pos, touch) {
+  syncKaplayTouchPoint(pos, touch)
+  updateMovementSlotFromTouch(pos, touch, true)
+}
+
+//
+// Maps a touch to a held movement slot, or fires a one-shot jump pulse
+//
+function updateMovementSlotFromTouch(pos, touch, allowJump) {
   const inst = activeInst
   if (!inst) return
   const btn = hitVirtualButton(inst, pos.x, pos.y)
-  if (!btn) return
-  if (btn.type === 'jump') {
-    jumpPulse = true
+  const id = touch?.identifier ?? touch?.id ?? MOUSE_SLOT_ID
+  if (!btn) {
+    movementSlots.delete(id)
+    syncVirtualMovement()
     return
   }
-  const id = touch?.identifier ?? touch?.id ?? MOUSE_SLOT_ID
+  if (btn.type === 'jump') {
+    allowJump && (jumpPulse = true)
+    movementSlots.delete(id)
+    syncVirtualMovement()
+    return
+  }
   movementSlots.set(id, btn.type)
   syncVirtualMovement()
+}
+
+//
+// Keeps tooltip hit-testing aligned with Kaplay touch coordinates
+//
+function onKaplayTouchMove(pos, touch) {
+  syncKaplayTouchPoint(pos, touch)
+  updateMovementSlotFromTouch(pos, touch)
 }
 
 //
 // Only the finger that lifted clears its slot — other fingers stay held
 //
 function onKaplayTouchEnd(_pos, touch) {
-  const id = touch?.identifier ?? touch?.id
-  id !== undefined && movementSlots.delete(id)
+  clearKaplayTouchPoint(touch)
+  const id = touch?.identifier ?? touch?.id ?? MOUSE_SLOT_ID
+  movementSlots.delete(id)
   syncVirtualMovement()
+}
+
+//
+// Mirrors Kaplay touch positions into touch-input for tooltip hover
+//
+function syncKaplayTouchPoint(pos, touch) {
+  if (!isTouchDevice()) return
+  const id = touch?.identifier ?? touch?.id ?? 0
+  setTouchPoint(id, { x: pos.x, y: pos.y })
+}
+
+//
+// Removes Kaplay touch from shared touch-input map
+//
+function clearKaplayTouchPoint(touch) {
+  if (!isTouchDevice()) return
+  const id = touch?.identifier ?? touch?.id ?? 0
+  removeTouchPoint(id)
 }
 
 //

@@ -5,7 +5,7 @@ import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
-import * as WordTextPlatform from '../components/word-text-platform.js'
+import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as Tooltip from '../../../utils/tooltip.js'
@@ -42,11 +42,13 @@ const HERO_SPAWN_Y = 705    // Adjusted to stand on platform (1080 - 360 - 15 fo
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 //
-// Hidden text platform above hero (reach by moving right, then jumping back)
+// Hidden bonus platform above hero (invisible until hero jumps up from the right)
 //
-const HIDDEN_PLATFORM_X = 300
-const HIDDEN_PLATFORM_Y = 530
-const HIDDEN_PLATFORM_WIDTH = 220
+const BONUS_PLATFORM_X = 290
+const BONUS_PLATFORM_Y = 620
+const BONUS_PLATFORM_WIDTH = 180
+const BONUS_PLATFORM_REVEAL_WIDTH = 220
+const BONUS_STORAGE_KEY = 'word.level0BonusCollected'
 //
 // Life deduction trap (mirrors touch level 0)
 //
@@ -59,7 +61,7 @@ const WORD_L0_PLAYFIELD_BG_B = 62
 // Hover tooltip copy
 //
 const WORD_HERO_TOOLTIP_TEXT = "I'm calmnnnnn....."
-const WORD_ANTIHERO_TOOLTIP_TEXT = 'get yourself together - rag and come here )'
+const WORD_ANTIHERO_TOOLTIP_TEXT = 'get yourself together -\nrag and come here )'
 const WORD_BLADE_TOOLTIP_TEXT = 'touch me and I\'ll give\nyou a couple of fragments'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
@@ -327,11 +329,18 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       WordGrass.onUpdate(wordGrass)
     })
-    WordTextPlatform.create({
+    BonusHero.create({
       k,
-      x: HIDDEN_PLATFORM_X,
-      y: HIDDEN_PLATFORM_Y,
-      width: HIDDEN_PLATFORM_WIDTH
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: BONUS_PLATFORM_WIDTH,
+      heroInst: hero,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      platformText: 'platform',
+      revealWidth: BONUS_PLATFORM_REVEAL_WIDTH,
+      storageKey: BONUS_STORAGE_KEY
     })
     setupWordLevel0HoverTooltips(k, {
       levelIndicator,

@@ -747,7 +747,7 @@ export function sceneLevel0(k) {
         //
         const touchMode = isTouchDevice()
         const clusterCount = touchMode
-          ? 3 + Math.floor(Math.random() * 3)
+          ? 2 + Math.floor(Math.random() * 2)
           : 6 + Math.floor(Math.random() * 4)
         for (let c = 0; c < clusterCount; c++) {
           let centerX = LEFT_MARGIN + 80 + Math.random() * (playableWidth - 160)
@@ -761,7 +761,7 @@ export function sceneLevel0(k) {
           }
           const clusterRadius = 30 + Math.random() * 60
           const bladesInCluster = touchMode
-            ? 2 + Math.floor(Math.random() * 4)
+            ? 1 + Math.floor(Math.random() * 3)
             : 4 + Math.floor(Math.random() * 8)
           for (let b = 0; b < bladesInCluster; b++) {
             //
@@ -779,11 +779,11 @@ export function sceneLevel0(k) {
         //
         const touchMode = isTouchDevice()
         const clusterCount = layerIndex === 0
-          ? (touchMode ? 12 + Math.floor(Math.random() * 6) : 22 + Math.floor(Math.random() * 12))
+          ? (touchMode ? 7 + Math.floor(Math.random() * 4) : 22 + Math.floor(Math.random() * 12))
           : layerIndex === 1
-            ? (touchMode ? 7 + Math.floor(Math.random() * 5) : 13 + Math.floor(Math.random() * 9))
+            ? (touchMode ? 4 + Math.floor(Math.random() * 3) : 13 + Math.floor(Math.random() * 9))
             : layerIndex === 2
-              ? (touchMode ? 6 + Math.floor(Math.random() * 4) : 11 + Math.floor(Math.random() * 7))
+              ? (touchMode ? 3 + Math.floor(Math.random() * 3) : 11 + Math.floor(Math.random() * 7))
               : 0
         for (let c = 0; c < clusterCount; c++) {
           let centerX = LEFT_MARGIN + 40 + Math.random() * (playableWidth - 80)
@@ -800,12 +800,19 @@ export function sceneLevel0(k) {
             : layerIndex === 1
               ? 32 + Math.random() * 72
               : 26 + Math.random() * 58
-          const bladesInCluster = layerIndex === 0
-            ? 5 + Math.floor(Math.random() * 14)
-            : layerIndex === 1
-              ? 4 + Math.floor(Math.random() * 11)
-              : 4 + Math.floor(Math.random() * 9)
-          if (Math.random() < 0.08) continue
+          const bladesInCluster = touchMode
+            ? (layerIndex === 0
+              ? 2 + Math.floor(Math.random() * 5)
+              : layerIndex === 1
+                ? 2 + Math.floor(Math.random() * 4)
+                : 2 + Math.floor(Math.random() * 3))
+            : (layerIndex === 0
+              ? 5 + Math.floor(Math.random() * 14)
+              : layerIndex === 1
+                ? 4 + Math.floor(Math.random() * 11)
+                : 4 + Math.floor(Math.random() * 9))
+          if (!touchMode && Math.random() < 0.08) continue
+          if (touchMode && Math.random() < 0.18) continue
           for (let b = 0; b < bladesInCluster; b++) {
             const dist = Math.pow(Math.random(), 1.55) * clusterRadius
             const ang = Math.random() * Math.PI * 2
@@ -4568,11 +4575,14 @@ function addGrassAroundRocks(k, rocks, allBlades, grassY) {
   //
   // Front-layer color palette to match the rest of the front grass
   //
+  const touchMode = isTouchDevice()
   const grassBaseR = 60
   const grassBaseG = 85
   const grassBaseB = 40
   for (const rock of rocks) {
-    const blades = 3 + Math.floor(Math.random() * 5)
+    const blades = touchMode
+      ? 1 + Math.floor(Math.random() * 2)
+      : 3 + Math.floor(Math.random() * 5)
     for (let i = 0; i < blades; i++) {
       //
       // Place blades on either side of the rock base, never directly under

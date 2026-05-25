@@ -45,9 +45,10 @@ const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 // Hidden bonus platform above hero (invisible until hero jumps up from the right)
 //
 const BONUS_PLATFORM_X = 290
-const BONUS_PLATFORM_Y = 620
+const BONUS_PLATFORM_Y = 678
 const BONUS_PLATFORM_WIDTH = 180
-const BONUS_PLATFORM_REVEAL_WIDTH = 220
+const BONUS_PLATFORM_COLLISION_WIDTH = 128
+const BONUS_PLATFORM_REVEAL_WIDTH = 160
 const BONUS_STORAGE_KEY = 'word.level0BonusCollected'
 //
 // Life deduction trap (mirrors touch level 0)
@@ -334,6 +335,7 @@ export function sceneLevel0(k) {
       x: BONUS_PLATFORM_X,
       y: BONUS_PLATFORM_Y,
       width: BONUS_PLATFORM_WIDTH,
+      collisionWidth: BONUS_PLATFORM_COLLISION_WIDTH,
       heroInst: hero,
       levelIndicator,
       sfx: sound,

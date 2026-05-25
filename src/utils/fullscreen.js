@@ -14,17 +14,18 @@ const FULLSCREEN_BTN_WIDTH = 44
 const FULLSCREEN_BTN_FONT_SIZE = 18
 const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 const ESC_BTN_FONT_SIZE = 16
-const BTN_BG = 'rgba(38, 38, 38, 0.82)'
+const BTN_BG = 'rgba(26, 26, 26, 0.92)'
 const BTN_COLOR = '#FFFFFF'
-const BTN_PRESSED_BG = 'rgba(55, 95, 130, 0.92)'
+const BTN_BORDER = '2px solid rgba(255, 255, 255, 0.78)'
+const BTN_PRESSED_BG = 'rgba(26, 26, 26, 0.92)'
 const BTN_PRESSED_COLOR = '#B8E4FF'
 const BTN_PRESSED_BORDER = '2px solid #6EB8E8'
-const BTN_BORDER = '2px solid transparent'
 const FULLSCREEN_BTN_LABEL = '[ ]'
 const ESC_BTN_LABEL = 'Esc'
 
 let fullscreenBtn = null
 let escBtn = null
+let kaplayRef = null
 
 /**
  * Creates top-left fullscreen + Esc shortcut buttons on touch devices
@@ -33,6 +34,7 @@ let escBtn = null
  */
 export function createFullscreenButton(k) {
   if (!isTouchDevice()) return
+  k && (kaplayRef = k)
   //
   // Fullscreen toggle (top button).
   //
@@ -45,6 +47,8 @@ export function createFullscreenButton(k) {
       top: BTN_MARGIN,
       onClick: toggleFullscreen
     })
+  } else {
+    applyHudButtonReleased(fullscreenBtn)
   }
   //
   // Esc shortcut sits directly below the fullscreen button so both stick to
@@ -57,8 +61,10 @@ export function createFullscreenButton(k) {
       width: ESC_BTN_WIDTH,
       fontSize: ESC_BTN_FONT_SIZE,
       top: BTN_MARGIN + BTN_HEIGHT + BTN_GAP,
-      onClick: () => dispatchEscape(k)
+      onClick: () => dispatchEscape(kaplayRef)
     })
+  } else if (escBtn) {
+    applyHudButtonReleased(escBtn)
   }
 }
 
@@ -71,7 +77,6 @@ function createHudButton(opts) {
   btn.type = 'button'
   btn.textContent = label
   btn.setAttribute('aria-label', ariaLabel)
-  applyHudButtonReleased(btn)
   btn.style.cssText = [
     'position:fixed',
     `top:${top}px`,
@@ -87,44 +92,58 @@ function createHudButton(opts) {
     'line-height:1',
     'touch-action:manipulation',
     '-webkit-tap-highlight-color:transparent',
-    'outline:none'
+    'outline:none',
+    'appearance:none',
+    '-webkit-appearance:none',
+    'box-sizing:border-box'
   ].join(';')
-  btn.addEventListener('click', onClick)
-  btn.addEventListener('touchstart', e => {
-    e.preventDefault()
+  applyHudButtonReleased(btn)
+  //
+  // Touch: run action on touchend (preventDefault on touchstart blocks click).
+  // Desktop: normal click handler.
+  //
+  let touchHandled = false
+  btn.addEventListener('touchstart', () => {
     applyHudButtonPressed(btn)
-  }, { passive: false })
+  }, { passive: true })
   btn.addEventListener('touchend', () => {
     applyHudButtonReleased(btn)
     btn.blur()
-  })
+    touchHandled = true
+    onClick()
+  }, { passive: true })
   btn.addEventListener('touchcancel', () => {
     applyHudButtonReleased(btn)
     btn.blur()
+  }, { passive: true })
+  btn.addEventListener('click', () => {
+    if (touchHandled) {
+      touchHandled = false
+      return
+    }
+    onClick()
   })
   btn.addEventListener('mousedown', () => applyHudButtonPressed(btn))
-  btn.addEventListener('mouseup', () => {
-    applyHudButtonReleased(btn)
-  })
+  btn.addEventListener('mouseup', () => applyHudButtonReleased(btn))
   btn.addEventListener('mouseleave', () => applyHudButtonReleased(btn))
   document.body.appendChild(btn)
   return btn
 }
 
 //
-// Pressed HUD button styling (blue highlight while finger is down)
+// Pressed HUD button styling (dark fill, light blue label and outline)
 //
 function applyHudButtonPressed(btn) {
-  btn.style.background = BTN_PRESSED_BG
+  btn.style.backgroundColor = BTN_PRESSED_BG
   btn.style.color = BTN_PRESSED_COLOR
   btn.style.border = BTN_PRESSED_BORDER
 }
 
 //
-// Default HUD button styling
+// Default HUD button styling — dark fill, light label, light outline
 //
 function applyHudButtonReleased(btn) {
-  btn.style.background = BTN_BG
+  btn.style.backgroundColor = BTN_BG
   btn.style.color = BTN_COLOR
   btn.style.border = BTN_BORDER
 }

@@ -87,7 +87,8 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.x - Center X of the hidden platform
  * @param {number} config.y - Y position (top of platform)
- * @param {number} config.width - Platform width
+ * @param {number} config.width - Platform width (visual / log draw)
+ * @param {number} [config.collisionWidth] - Collision box width (defaults to width)
  * @param {Object} config.heroInst - Main hero instance to track
  * @param {Object} config.levelIndicator - Level indicator for score display
  * @param {Object} [config.sfx] - Sound instance
@@ -108,6 +109,7 @@ export function create(config) {
     approachFromAbove = false,
     revealDistance = REVEAL_DISTANCE,
     revealWidth = null,
+    collisionWidth = null,
     heroBodyColor = null,
     storageKey = null,
     platformText = null,
@@ -131,11 +133,12 @@ export function create(config) {
     ?? (platformText
       ? Math.round(TIME_PLATFORM_COLLISION_HEIGHT * platformFontSize / TIME_PLATFORM_FONT_SIZE)
       : PLATFORM_HEIGHT)
+  const collisionWidthResolved = collisionWidth ?? width
   //
   // Invisible collision platform
   //
   const platform = k.add([
-    k.rect(width, collisionHeight),
+    k.rect(collisionWidthResolved, collisionHeight),
     k.pos(x, startY),
     k.anchor('center'),
     k.area(),
@@ -171,6 +174,7 @@ export function create(config) {
     x,
     y,
     width,
+    collisionWidth: collisionWidthResolved,
     platformZ,
     collisionHeight,
     revealed: false,
@@ -796,7 +800,7 @@ function onClickPlatform(inst) {
   if (!inst.revealed || inst.collected || inst.shakeTimer > 0) return
   const { k } = inst
   const mousePos = k.mousePos()
-  const halfW = inst.width / 2
+  const halfW = inst.collisionWidth / 2
   const floatY = inst.y + Math.sin(k.time() * FLOAT_SPEED + inst.floatOffset) * FLOAT_AMPLITUDE
   const halfH = inst.collisionHeight / 2
   const withinX = mousePos.x >= inst.x - halfW && mousePos.x <= inst.x + halfW

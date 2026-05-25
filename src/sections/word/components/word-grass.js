@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { parseHex } from '../../../utils/helper.js'
+import { isTouchDevice } from '../../../utils/touch-input.js'
 //
 // Global state to persist grass positions across level restarts
 //
@@ -12,6 +13,7 @@ const GRASS_LETTERS = ['|', '/', 'v', 'V', 'y', 'y', 'Y']  // Letters that look 
 const GRASS_ROWS = 1  // Only one row on bottom platform
 const GRASS_HEIGHT = 40  // Height of each grass blade
 const GRASS_SPACING = 80  // Spacing between grass clusters
+const GRASS_SPACING_TOUCH = 140  // Wider spacing on touch devices (fewer clusters)
 const GRASS_VERTICAL_OFFSET = 12  // Move grass up on screen (from bottom platform edge)
 const SWAY_AMPLITUDE = 8  // How much grass sways at the top
 const SWAY_SPEED = 1.2  // Speed of swaying
@@ -102,11 +104,12 @@ export function create(config) {
   
   for (let row = 0; row < GRASS_ROWS; row++) {
     const rowY = playableBottom + GRASS_VERTICAL_OFFSET
-    const bladesInRow = Math.floor((playableRight - playableLeft) / GRASS_SPACING)
+    const spacing = isTouchDevice() ? GRASS_SPACING_TOUCH : GRASS_SPACING
+    const bladesInRow = Math.floor((playableRight - playableLeft) / spacing)
     
     let i = 0
     while (i < bladesInRow) {
-      const x = playableLeft + (i * GRASS_SPACING) + Math.random() * GRASS_SPACING * 0.5
+      const x = playableLeft + (i * spacing) + Math.random() * spacing * 0.5
       
       //
       // Check if grass is too close to any blade
@@ -161,7 +164,7 @@ export function create(config) {
       // Randomly skip some grass clusters (40% chance) to create natural gaps
       // This makes gaps in platform less obvious
       //
-      if (Math.random() < 0.4) {
+      if (Math.random() < (isTouchDevice() ? 0.55 : 0.4)) {
         i++
         continue
       }

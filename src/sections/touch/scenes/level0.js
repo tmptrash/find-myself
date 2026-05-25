@@ -18,7 +18,7 @@ import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { isTouchDevice } from '../../../utils/touch-input.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
-import { drawThorns } from '../components/jungle-decor.js'
+import { createScrollingCloudBand, createFloorThornSprite } from '../utils/level0-scenery-sprites.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
@@ -470,7 +470,15 @@ export function sceneLevel0(k) {
     //
     // Create dark background clouds in the distance at the top
     //
-    createBackgroundClouds(k)
+    createScrollingCloudBand(k, {
+      areaLeft: LEFT_MARGIN,
+      areaRight: CFG.visual.screen.width - RIGHT_MARGIN,
+      cloudTopY: TOP_MARGIN + 20,
+      cloudBottomY: TOP_MARGIN + 100,
+      cloudCount: isTouchDevice() ? 14 : 18,
+      cloudRandomness: 20,
+      baseCloudColor: k.rgb(36, 37, 36)
+    })
     //
     // Create simple bottom platform
     //
@@ -628,18 +636,12 @@ export function sceneLevel0(k) {
     //
     // Draw thorns above baked scenery (z=7), rocks (z=7), grass (z=20); below hinged trees (25).
     //
-    k.add([
-      k.z(L0_FLOOR_THORN_DRAW_Z),
-      {
-        draw() {
-          drawThorns(
-            k,
-            floorThornData,
-            k.rgb(FLOOR_THORN_BLADE_FILL_R, FLOOR_THORN_BLADE_FILL_G, FLOOR_THORN_BLADE_FILL_B)
-          )
-        }
-      }
-    ])
+    createFloorThornSprite(
+      k,
+      floorThornData,
+      k.rgb(FLOOR_THORN_BLADE_FILL_R, FLOOR_THORN_BLADE_FILL_G, FLOOR_THORN_BLADE_FILL_B),
+      L0_FLOOR_THORN_DRAW_Z
+    )
     //
     // Anti-hero platform position (for reference - will be replaced by bug)
     // Note: platformCenterX is defined later when creating bug4
@@ -741,9 +743,12 @@ export function sceneLevel0(k) {
       const grassBlades = []
       if (layerIndex === 3) {
         //
-        // Front layer: 6-9 organic patches scattered along the platform.
+        // Front layer: organic patches (fewer on touch devices)
         //
-        const clusterCount = 6 + Math.floor(Math.random() * 4)
+        const touchMode = isTouchDevice()
+        const clusterCount = touchMode
+          ? 3 + Math.floor(Math.random() * 3)
+          : 6 + Math.floor(Math.random() * 4)
         for (let c = 0; c < clusterCount; c++) {
           let centerX = LEFT_MARGIN + 80 + Math.random() * (playableWidth - 160)
           let safety = 0
@@ -755,7 +760,9 @@ export function sceneLevel0(k) {
             safety++
           }
           const clusterRadius = 30 + Math.random() * 60
-          const bladesInCluster = 4 + Math.floor(Math.random() * 8)
+          const bladesInCluster = touchMode
+            ? 2 + Math.floor(Math.random() * 4)
+            : 4 + Math.floor(Math.random() * 8)
           for (let b = 0; b < bladesInCluster; b++) {
             //
             // Place blades with falloff distribution near the cluster center
@@ -770,12 +777,13 @@ export function sceneLevel0(k) {
         //
         // Far sheet + mid bands: scattered tufts (grey/black leaf rows slightly sparser than far sheet).
         //
+        const touchMode = isTouchDevice()
         const clusterCount = layerIndex === 0
-          ? 22 + Math.floor(Math.random() * 12)
+          ? (touchMode ? 12 + Math.floor(Math.random() * 6) : 22 + Math.floor(Math.random() * 12))
           : layerIndex === 1
-            ? 13 + Math.floor(Math.random() * 9)
+            ? (touchMode ? 7 + Math.floor(Math.random() * 5) : 13 + Math.floor(Math.random() * 9))
             : layerIndex === 2
-              ? 11 + Math.floor(Math.random() * 7)
+              ? (touchMode ? 6 + Math.floor(Math.random() * 4) : 11 + Math.floor(Math.random() * 7))
               : 0
         for (let c = 0; c < clusterCount; c++) {
           let centerX = LEFT_MARGIN + 40 + Math.random() * (playableWidth - 80)
@@ -3440,90 +3448,6 @@ function createRoundedCorners(k) {
     k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
     k.rotate(180),
     k.z(BOTTOM_CORNER_Z)
-  ])
-}
-
-/**
- * Creates dark background clouds that scroll slowly to the right in a seamless loop.
- * Clouds are generated within a band width equal to the screen, then drawn twice
- * side-by-side so one copy always fills the visible area during scrolling.
- * @param {Object} k - Kaplay instance
- */
-function createBackgroundClouds(k) {
-  const CLOUD_SCROLL_SPEED = 8
-  const CLOUD_TOP_Y = TOP_MARGIN + 20
-  const CLOUD_BOTTOM_Y = TOP_MARGIN + 100
-  const CLOUD_COUNT = 18
-  const CLOUD_RANDOMNESS = 20
-  const baseCloudColor = k.rgb(36, 37, 36)
-  //
-  // Band covers the playable width; two copies tile seamlessly
-  //
-  const areaLeft = LEFT_MARGIN
-  const areaRight = CFG.visual.screen.width - RIGHT_MARGIN
-  const bandWidth = areaRight - areaLeft
-  const cloudSpacing = bandWidth / CLOUD_COUNT
-  //
-  // Cloud X positions are relative to the band (0 to bandWidth)
-  //
-  const cloudConfigs = []
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    const baseX = cloudSpacing * i + cloudSpacing * 0.5
-    const cloudX = baseX + (Math.random() - 0.5) * CLOUD_RANDOMNESS
-    const cloudY = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
-    const crownSize = (50 + Math.random() * 60) * 1.2
-    const crownCount = 5 + Math.floor(Math.random() * 4)
-    const crowns = []
-    for (let j = 0; j < crownCount; j++) {
-      crowns.push({
-        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
-        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
-        sizeVariation: 0.6 + Math.random() * 0.6,
-        opacityVariation: 0.7 + Math.random() * 0.2
-      })
-    }
-    cloudConfigs.push({
-      x: cloudX,
-      y: cloudY,
-      crownSize,
-      crowns,
-      color: baseCloudColor,
-      opacity: 0.85 + Math.random() * 0.1
-    })
-  }
-  //
-  // Scroll offset wraps within bandWidth
-  //
-  const inst = { scrollX: 0 }
-  //
-  // Draw two copies of the band so one always fills the visible area.
-  // The second copy is placed one bandWidth BEHIND (to the left of) the first.
-  //
-  k.add([
-    k.z(1),
-    {
-      draw() {
-        inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
-        for (let copy = 0; copy < 2; copy++) {
-          //
-          // copy 0: current position, copy 1: one band-width behind
-          //
-          const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
-          for (const cloud of cloudConfigs) {
-            const cx = cloud.x + baseOffset
-            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
-            for (const crown of cloud.crowns) {
-              k.drawCircle({
-                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
-                radius: cloud.crownSize * crown.sizeVariation,
-                color: cloud.color,
-                opacity: cloud.opacity * crown.opacityVariation
-              })
-            }
-          }
-        }
-      }
-    }
   ])
 }
 

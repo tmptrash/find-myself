@@ -6,6 +6,8 @@ import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
+import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as Sound from '../../../utils/sound.js'
@@ -36,6 +38,17 @@ const HERO_SPAWN_X = 230    // 12% of 1920
 const HERO_SPAWN_Y = 705    // Adjusted to stand on platform
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
+//
+// Hover tooltip copy
+//
+const WORD_L2_HERO_TOOLTIP_TEXT = 'wait… where did I see\nthat blade before?'
+const WORD_L2_ANTIHERO_TOOLTIP_TEXT = 'memory is a muscle.\nflex it, rag'
+const HERO_TOOLTIP_HOVER_SIZE = 80
+const HERO_TOOLTIP_Y_OFFSET = -100
+const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
+const ANTIHERO_TOOLTIP_Y_OFFSET = -60
+const BLADE_PROXIMITY_RANGE = 120
+const BLADE_RATTLE_COOLDOWN = 0.35
 
 /**
  * Shows a random death message and then restarts the level
@@ -356,7 +369,73 @@ export function sceneLevel2(k) {
     // Start blade animations after 1 second
     Blades.startAnimation(blades1)
     Blades.startAnimation(blades2)
-    
+    const bladeProximityState = { cooldown: 0 }
+    setupWordLevel2HoverTooltips(k, {
+      levelIndicator,
+      fpsCounter,
+      hero,
+      antiHero,
+      blades1,
+      blades2
+    })
+    k.onUpdate(() => onUpdateBladeProximity(k, hero, [blades1, blades2], sound, bladeProximityState))
     // Eerie sound effects removed for cleaner audio experience
   })
+}
+
+//
+// Registers standard HUD tooltips and level-themed hero hover lines
+//
+function setupWordLevel2HoverTooltips(k, ctx) {
+  const { levelIndicator, fpsCounter, hero, antiHero } = ctx
+  WordHudTooltips.setupStandardHudTooltips(k, {
+    levelIndicator,
+    fpsCounter,
+    topPlatformHeight: PLATFORM_TOP_HEIGHT
+  })
+  Tooltip.create({
+    k,
+    targets: [{
+      x: () => hero.character.pos.x,
+      y: () => hero.character.pos.y,
+      width: HERO_TOOLTIP_HOVER_SIZE,
+      height: HERO_TOOLTIP_HOVER_SIZE,
+      text: WORD_L2_HERO_TOOLTIP_TEXT,
+      offsetY: HERO_TOOLTIP_Y_OFFSET
+    }]
+  })
+  Tooltip.create({
+    k,
+    targets: [{
+      x: () => antiHero.character.pos.x,
+      y: () => antiHero.character.pos.y,
+      width: ANTIHERO_TOOLTIP_HOVER_SIZE,
+      height: ANTIHERO_TOOLTIP_HOVER_SIZE,
+      text: WORD_L2_ANTIHERO_TOOLTIP_TEXT,
+      offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+    }]
+  })
+}
+
+//
+// Plays metallic rattle when the hero is near blade letters
+//
+function onUpdateBladeProximity(k, heroInst, bladeInsts, sound, state) {
+  if (!heroInst?.character?.pos || !sound) return
+  state.cooldown -= k.dt()
+  if (state.cooldown > 0) return
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  let closest = BLADE_PROXIMITY_RANGE
+  bladeInsts.forEach(bladeInst => {
+    if (!bladeInst?.blade?.exists?.()) return
+    const dx = heroX - bladeInst.blade.pos.x
+    const dy = heroY - bladeInst.blade.pos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    dist < closest && (closest = dist)
+  })
+  if (closest >= BLADE_PROXIMITY_RANGE) return
+  const proximity = 1 - closest / BLADE_PROXIMITY_RANGE
+  Sound.playBladeProximityRattle(sound, proximity)
+  state.cooldown = BLADE_RATTLE_COOLDOWN
 }

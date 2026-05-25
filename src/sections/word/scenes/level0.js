@@ -5,6 +5,8 @@ import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
+import * as WordTextPlatform from '../components/word-text-platform.js'
+import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { get, set } from '../../../utils/progress.js'
@@ -40,6 +42,12 @@ const HERO_SPAWN_Y = 705    // Adjusted to stand on platform (1080 - 360 - 15 fo
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 //
+// Hidden text platform above hero (reach by moving right, then jumping back)
+//
+const HIDDEN_PLATFORM_X = 300
+const HIDDEN_PLATFORM_Y = 530
+const HIDDEN_PLATFORM_WIDTH = 220
+//
 // Life deduction trap (mirrors touch level 0)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
@@ -50,27 +58,13 @@ const WORD_L0_PLAYFIELD_BG_B = 62
 //
 // Hover tooltip copy
 //
-const WORD_PROGRESS_TOOLTIP_TEXT = 'your progress'
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
-const WORD_HERO_TOOLTIP_TEXT = 'oh god, so many voices in my head...'
-const WORD_ANTIHERO_TOOLTIP_TEXT = 'pull yourself together\nand find me (yourself)'
+const WORD_HERO_TOOLTIP_TEXT = "I'm calmnnnnn....."
+const WORD_ANTIHERO_TOOLTIP_TEXT = 'get yourself together - rag and come here )'
 const WORD_BLADE_TOOLTIP_TEXT = 'touch me and I\'ll give\nyou a couple of fragments'
-const SMALL_HERO_TOOLTIP_TEXT = 'your fragments'
-const LIFE_TOOLTIP_TEXT = 'life score'
-const WORD_INDICATOR_TOOLTIP_WIDTH = 220
-const WORD_INDICATOR_TOOLTIP_HEIGHT = 48
-const WORD_INDICATOR_TOOLTIP_Y_OFFSET = -30
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
-const GREEN_TIMER_TOOLTIP_WIDTH = 80
-const GREEN_TIMER_TOOLTIP_HEIGHT = 30
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
-const SMALL_HERO_TOOLTIP_SIZE = 60
-const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_SIZE = 60
-const LIFE_TOOLTIP_Y_OFFSET = 50
 const BLADE_TOOLTIP_WIDTH = 100
 const BLADE_TOOLTIP_HEIGHT = 60
 const BLADE_TOOLTIP_Y_OFFSET = -70
@@ -333,6 +327,12 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       WordGrass.onUpdate(wordGrass)
     })
+    WordTextPlatform.create({
+      k,
+      x: HIDDEN_PLATFORM_X,
+      y: HIDDEN_PLATFORM_Y,
+      width: HIDDEN_PLATFORM_WIDTH
+    })
     setupWordLevel0HoverTooltips(k, {
       levelIndicator,
       fpsCounter,
@@ -546,31 +546,10 @@ function setupWordLevel0HoverTooltips(k, ctx) {
   const inPlayArea = (x, y) =>
     x >= platformBounds.left && x <= platformBounds.right &&
     y >= platformBounds.top && y <= platformBounds.bottom
-  const letters = levelIndicator.letterObjects
-  const wordsCenterX = letters.reduce((sum, letter) => sum + letter.pos.x, 0) / letters.length
-  const wordsCenterY = letters[0]?.pos?.y ?? PLATFORM_TOP_HEIGHT / 2
-  Tooltip.create({
-    k,
-    targets: [{
-      x: wordsCenterX,
-      y: wordsCenterY,
-      width: WORD_INDICATOR_TOOLTIP_WIDTH,
-      height: WORD_INDICATOR_TOOLTIP_HEIGHT,
-      text: WORD_PROGRESS_TOOLTIP_TEXT,
-      offsetY: WORD_INDICATOR_TOOLTIP_Y_OFFSET
-    }]
-  })
-  fpsCounter.targetText && Tooltip.create({
-    k,
-    targets: [{
-      x: fpsCounter.targetText.pos.x,
-      y: fpsCounter.targetText.pos.y,
-      width: GREEN_TIMER_TOOLTIP_WIDTH,
-      height: GREEN_TIMER_TOOLTIP_HEIGHT,
-      text: GREEN_TIMER_TOOLTIP_TEXT,
-      offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
-      forceBelow: true
-    }]
+  WordHudTooltips.setupStandardHudTooltips(k, {
+    levelIndicator,
+    fpsCounter,
+    topPlatformHeight: PLATFORM_TOP_HEIGHT
   })
   Tooltip.create({
     k,
@@ -592,30 +571,6 @@ function setupWordLevel0HoverTooltips(k, ctx) {
       height: ANTIHERO_TOOLTIP_HOVER_SIZE,
       text: WORD_ANTIHERO_TOOLTIP_TEXT,
       offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
-    }]
-  })
-  Tooltip.create({
-    k,
-    targets: [{
-      x: levelIndicator.smallHero.character.pos.x,
-      y: levelIndicator.smallHero.character.pos.y,
-      width: SMALL_HERO_TOOLTIP_SIZE,
-      height: SMALL_HERO_TOOLTIP_SIZE,
-      text: SMALL_HERO_TOOLTIP_TEXT,
-      offsetY: SMALL_HERO_TOOLTIP_Y_OFFSET,
-      forceBelow: true
-    }]
-  })
-  Tooltip.create({
-    k,
-    targets: [{
-      x: levelIndicator.lifeImage.pos.x,
-      y: levelIndicator.lifeImage.pos.y,
-      width: LIFE_TOOLTIP_SIZE,
-      height: LIFE_TOOLTIP_SIZE,
-      text: LIFE_TOOLTIP_TEXT,
-      offsetY: LIFE_TOOLTIP_Y_OFFSET,
-      forceBelow: true
     }]
   })
   ;[blades1, blades2, blades3].forEach(bladeInst => {

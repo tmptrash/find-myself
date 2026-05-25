@@ -774,8 +774,8 @@ function onUpdate(inst) {
     let isMovingLeft = false
     let isMovingRight = false
     if (TouchControls.needsTouchControls()) {
-      isMovingLeft = TouchControls.isVirtualKeyDown('left')
-      isMovingRight = TouchControls.isVirtualKeyDown('right')
+      isMovingLeft = TouchControls.isVirtualKeyDown('left') || isAnyKeyDown(inst.k, CFG.controls.moveLeft)
+      isMovingRight = TouchControls.isVirtualKeyDown('right') || isAnyKeyDown(inst.k, CFG.controls.moveRight)
     } else {
       isMovingLeft = isAnyKeyDown(inst.k, CFG.controls.moveLeft)
       isMovingRight = isAnyKeyDown(inst.k, CFG.controls.moveRight)
@@ -804,7 +804,8 @@ function onUpdate(inst) {
   //
   const isMoving = inst.isSpawned && !inst.controlsDisabled && (
     TouchControls.needsTouchControls()
-      ? (TouchControls.isVirtualKeyDown('left') || TouchControls.isVirtualKeyDown('right'))
+      ? (TouchControls.isVirtualKeyDown('left') || TouchControls.isVirtualKeyDown('right')
+        || isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
       : (isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
   )
   //

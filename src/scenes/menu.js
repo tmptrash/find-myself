@@ -71,6 +71,10 @@ const MENU_ANTIHERO_HOVER_LERP = 8
 //
 // Green checkmark displayed on completed anti-heroes when hovered
 //
+const CHECKMARK_BG_R = 0
+const CHECKMARK_BG_G = 0
+const CHECKMARK_BG_B = 0
+const CHECKMARK_BG_RADIUS_SCALE = 0.62
 const CHECKMARK_COLOR_R = 90
 const CHECKMARK_COLOR_G = 210
 const CHECKMARK_COLOR_B = 100
@@ -1919,6 +1923,16 @@ function drawCompletedCheckmarkFront(k, inst) {
   const s = CHECKMARK_SIZE * pulse
   const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
   const op = CHECKMARK_OPACITY
+  const bgColor = k.rgb(CHECKMARK_BG_R, CHECKMARK_BG_G, CHECKMARK_BG_B)
+  //
+  // Black circle behind the checkmark for contrast on bright anti-hero sprites
+  //
+  k.drawCircle({
+    pos: k.vec2(cx, cy),
+    radius: s * CHECKMARK_BG_RADIUS_SCALE,
+    color: bgColor,
+    opacity: op
+  })
   //
   // Two lines forming a ✓: short down-right stroke, then long up-right stroke.
   // A filled circle at the junction ensures no gap appears when the pulse animates.

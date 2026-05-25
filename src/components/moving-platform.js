@@ -27,6 +27,7 @@ const PIT_STAND_VOLUME_SCALE = 1.85
  * @param {boolean} [config.autoOpen=false] - If true, platform opens automatically on level start
  * @param {Object} [config.sfx] - Sound instance
  * @param {number} [config.raiseTimeout] - Custom timeout before platform raises (seconds)
+ * @param {number} [config.raiseDelay] - Minimum wait before pit closes after hero leaves (seconds)
  * @param {Function} [config.onBladeHit] - Custom callback when hero hits blades (overrides default)
  * @returns {Object} Platform instance
  */
@@ -42,6 +43,7 @@ export function create(config) {
     autoOpen = false, 
     sfx = null,
     raiseTimeout = RAISE_TIMEOUT,
+    raiseDelay = RAISE_DELAY,
     onBladeHit = null
   } = config
   
@@ -88,6 +90,7 @@ export function create(config) {
     sfx,
     jumpToDisableBlades,
     raiseTimeout,
+    raiseDelay,
     platformWidth,
     heroInitialY: hero.character.pos.y,  // Store hero's initial Y position
     originalY: y,
@@ -221,7 +224,7 @@ function onUpdate(inst) {
       // Raise platform if: 
       // 1. Minimum delay passed AND hero left the area, OR
       // 2. Maximum timeout reached (regardless of hero position)
-      const shouldRaise = (inst.timer >= RAISE_DELAY && !heroStillNear) || 
+      const shouldRaise = (inst.timer >= inst.raiseDelay && !heroStillNear) || 
                           (inst.timer >= inst.raiseTimeout)
       
       if (shouldRaise) {

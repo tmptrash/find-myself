@@ -5,6 +5,11 @@ import { getColor } from '../../../utils/helper.js'
 // Spawn buffer: distance outside playable area where words can spawn/respawn
 //
 const SPAWN_BUFFER = 100
+//
+// Killer word color pulse
+//
+const KILLER_COLOR_PULSE_SPEED = 2.8
+const KILLER_COLOR_PULSE_AMOUNT = 0.22
 
 //
 // Words and fragments related to pain, self-discovery, and introspection
@@ -486,6 +491,10 @@ function updateWord(word, inst) {
     // if (word.textObj.pos.y < playableTop) {
     //   word.textObj.pos.y = playableTop + 10
     // }
+  //
+  // Subtle color pulse on killer words
+  //
+  word.isKiller && pulseKillerColor(word, inst)
 }
 
 /**
@@ -870,6 +879,12 @@ function createKillerLetter(k, params) {
   // Killer word color: from config (same as blades)
   //
   const killerColor = getColor(k, CFG.visual.colors.killerLetter)
+  const killerHex = CFG.visual.colors.killerLetter.replace('#', '')
+  const baseColorRgb = {
+    r: parseInt(killerHex.slice(0, 2), 16),
+    g: parseInt(killerHex.slice(2, 4), 16),
+    b: parseInt(killerHex.slice(4, 6), 16)
+  }
 
   //
   // Z-index: same as regular flying words
@@ -987,6 +1002,23 @@ function createKillerLetter(k, params) {
     isBehindHero: false,  // Killer words are always in front
     isLetter: true,
     sizeMultiplier: 1,
-    isKiller: true
+    isKiller: true,
+    pulsePhase: Math.random() * Math.PI * 2,
+    baseColorRgb
   }
+}
+
+//
+// Pulses killer word fill color between steel-blue and a slightly brighter tint
+//
+function pulseKillerColor(word, inst) {
+  const { k } = inst
+  word.pulsePhase += k.dt() * KILLER_COLOR_PULSE_SPEED
+  const pulse = 1 + Math.sin(word.pulsePhase) * KILLER_COLOR_PULSE_AMOUNT
+  const { r, g, b } = word.baseColorRgb
+  word.textObj.color = k.rgb(
+    Math.min(255, r * pulse),
+    Math.min(255, g * pulse),
+    Math.min(255, b * pulse)
+  )
 }

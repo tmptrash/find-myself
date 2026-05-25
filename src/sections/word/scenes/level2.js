@@ -379,7 +379,6 @@ export function sceneLevel2(k) {
       blades2
     })
     k.onUpdate(() => onUpdateBladeProximity(k, hero, [blades1, blades2], sound, bladeProximityState))
-    // Eerie sound effects removed for cleaner audio experience
   })
 }
 

@@ -308,7 +308,7 @@ const ANTIHERO_TOOLTIP_Y_OFFSET = -70
 // Antihero timed hints (shown if player hasn't solved the melody puzzle)
 //
 const ANTIHERO_HINT_WAIT_DELAY = 30
-const ANTIHERO_HINT_WAIT_TEXT = "I'm waiting for you here"
+const ANTIHERO_HINT_WAIT_TEXT = "I'm waiting for\nyou here"
 const ANTIHERO_HINT_NOTES_DELAY = 60
 const ANTIHERO_HINT_NOTES_TEXT = "C - Do, D - Re, E - Mi\nplay the trees"
 const ANTIHERO_HINT_DISPLAY_TIME = 5

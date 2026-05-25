@@ -16,10 +16,10 @@ const ESC_BTN_WIDTH = FULLSCREEN_BTN_WIDTH
 const ESC_BTN_FONT_SIZE = 16
 const BTN_BG = 'rgba(26, 26, 26, 0.92)'
 const BTN_COLOR = '#FFFFFF'
-const BTN_BORDER = '2px solid rgba(255, 255, 255, 0.78)'
+const BTN_BORDER = '2px solid rgba(58, 58, 58, 0.95)'
 const BTN_PRESSED_BG = 'rgba(26, 26, 26, 0.92)'
 const BTN_PRESSED_COLOR = '#B8E4FF'
-const BTN_PRESSED_BORDER = '2px solid #6EB8E8'
+const BTN_PRESSED_BORDER = '2px solid rgba(72, 130, 168, 0.95)'
 const FULLSCREEN_BTN_LABEL = '[ ]'
 const ESC_BTN_LABEL = 'Esc'
 

@@ -11,9 +11,17 @@ import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import * as LevelHelp from '../../../utils/level-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
+import * as WordBookshelfBg from './word-bookshelf-bg.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 const CORNER_RADIUS = 20  // Radius for rounded corners
+//
+// Eerie background drone timing (random glitch pulses between intervals)
+//
+const EERIE_SOUND_INITIAL_DELAY_MIN = 3
+const EERIE_SOUND_INITIAL_DELAY_MAX = 6
+const EERIE_SOUND_MIN_DELAY = 4
+const EERIE_SOUND_MAX_DELAY = 8
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -158,9 +166,27 @@ export function initScene(config) {
   k.onSceneLeave(() => {
     if (breathMusic && breathMusic.stop) breathMusic.stop()
   })
+  Sound.startAudioContext(sound)
+  Sound.unmuteProceduralSounds()
+  Sound.resumeGlobalAudio()
   //
-  // Add background
-  addBackground(k, bgColor)
+  // Eerie background drones at random intervals (word section atmosphere)
+  //
+  const eerieInst = {
+    k,
+    sound,
+    soundTimer: k.rand(EERIE_SOUND_INITIAL_DELAY_MIN, EERIE_SOUND_INITIAL_DELAY_MAX)
+  }
+  k.onUpdate(() => onUpdateEerieSound(eerieInst))
+  //
+  // Full-screen background with muted distant bookshelves (farthest layer)
+  //
+  const bottomPH = bottomPlatformHeight ?? k.height() * 0.12
+  WordBookshelfBg.create({
+    k,
+    bottomPlatformHeight: bottomPH,
+    backgroundColor: bgColor
+  })
   
   // Add platforms (unless skipped)
   if (!skipPlatforms) {
@@ -730,4 +756,10 @@ export function createRoundedCorners(k, platformColor, dims = {}) {
     k.rotate(180),
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
+}
+//
+// Drives periodic eerie glitch drones for word level atmosphere
+//
+function onUpdateEerieSound(inst) {
+  updateEerieSound(inst, EERIE_SOUND_MIN_DELAY, EERIE_SOUND_MAX_DELAY)
 }

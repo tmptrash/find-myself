@@ -12,6 +12,19 @@ const SINGLE_SPIKE_WIDTH_BLOCKS = 7
 const SPIKE_GAP_BLOCKS = 1
 const SPIKE_SCALE = 1
 const SPIKE_BLOCK_SIZE = 4
+//
+// Floor blade sprite layout — must stay in sync with createBladeSprite()
+//
+const BLADE_FONT_SIZE = 40
+const BLADE_SPRITE_PADDING = 8
+const BLADE_SPRITE_CANVAS_HEIGHT = BLADE_FONT_SIZE * 1.4 + BLADE_SPRITE_PADDING * 2
+const BLADE_SPRITE_BASE_Y = BLADE_SPRITE_CANVAS_HEIGHT - BLADE_SPRITE_PADDING - 12
+const FLOOR_BLADE_BOTTOM_OFFSET = BLADE_SPRITE_BASE_Y - BLADE_SPRITE_CANVAS_HEIGHT / 2
+const FLOOR_BLADE_TOP_OFFSET = BLADE_SPRITE_CANVAS_HEIGHT / 2 - (BLADE_SPRITE_BASE_Y - BLADE_FONT_SIZE)
+//
+// Extra sink so AAA baseline sits slightly inside the platform (matches level0 static blades feel)
+//
+const FLOOR_BLADE_PLATFORM_SINK = 12
 
 //
 // Blade animation parameters - realistic metal vibration
@@ -54,6 +67,31 @@ export function getBladeWidth(k) {
 export function getSingleBladeWidth(k) {
   const blockSize = getBladeBlockSize(k)
   return SINGLE_SPIKE_WIDTH_BLOCKS * blockSize
+}
+
+/**
+ * Center Y for floor blades so the letter baseline rests on the platform top
+ * @param {number} floorY - Platform top Y
+ * @returns {number} Blade center Y
+ */
+export function getFloorBladeRestCenterY(floorY) {
+  return floorY - FLOOR_BLADE_BOTTOM_OFFSET + FLOOR_BLADE_PLATFORM_SINK
+}
+
+/**
+ * Distance from blade center up to the visual top of the AAA letters
+ * @returns {number} Offset in pixels
+ */
+export function getFloorBladeTopOffset() {
+  return FLOOR_BLADE_TOP_OFFSET
+}
+
+/**
+ * Distance from blade center down to the letter baseline on floor blades
+ * @returns {number} Offset in pixels
+ */
+export function getFloorBladeBottomOffset() {
+  return FLOOR_BLADE_BOTTOM_OFFSET
 }
 
 /**

@@ -11,6 +11,8 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as Sound from '../../../utils/sound.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as WordCeilingTrap from '../utils/word-ceiling-trap.js'
+import * as BonusHero from '../../touch/components/bonus-hero.js'
+import * as WordIdleAaaTrap from '../utils/word-idle-aaa-trap.js'
 
 //
 // Death messages (shown randomly on death)
@@ -42,6 +44,15 @@ const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 // Pit / moving platform shifted right so it does not overlap HELP label
 //
 const PIT_X_EXTRA_OFFSET = 100
+const PIT_RAISE_DELAY = 4.5
+//
+// Hidden bonus platform to the right of the ceiling drop tube
+//
+const BONUS_PLATFORM_GAP = 48
+const BONUS_PLATFORM_Y_OFFSET = 58
+const BONUS_PLATFORM_COLLISION_WIDTH = 120
+const BONUS_PLATFORM_REVEAL_WIDTH = 150
+const BONUS_STORAGE_KEY = 'word.level1BonusCollected'
 
 /**
  * Shows a random death message and then restarts the level
@@ -208,6 +219,7 @@ export function sceneLevel1(k) {
     //
     // Initialize level with heroes and gap in platform (for trap)
     //
+    let bonusInst = null
     const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
       k,
       levelName: 'level-word.1',
@@ -227,6 +239,7 @@ export function sceneLevel1(k) {
       platformGap,
       onAnnihilation: () => {
         breathMusic && breathMusic.stop && breathMusic.stop()
+        bonusInst && BonusHero.finalizeCollection(bonusInst)
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
         const speedBonusEarned = checkSpeedBonus(k, 'level-word.1', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
@@ -313,7 +326,23 @@ export function sceneLevel1(k) {
       color: CFG.visual.colors.platform,
       currentLevel: 'level-word.1',
       sfx: sound,
+      raiseDelay: PIT_RAISE_DELAY,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
+    })
+    const bonusPlatformX = movingPlatformX + bladeWidth / 2 + BONUS_PLATFORM_GAP + BONUS_PLATFORM_COLLISION_WIDTH / 2
+    bonusInst = BonusHero.create({
+      k,
+      x: bonusPlatformX,
+      y: platformY - BONUS_PLATFORM_Y_OFFSET,
+      width: BONUS_PLATFORM_COLLISION_WIDTH,
+      collisionWidth: BONUS_PLATFORM_COLLISION_WIDTH,
+      heroInst: hero,
+      levelIndicator,
+      sfx: sound,
+      approachFromAbove: true,
+      platformText: 'platform',
+      revealWidth: BONUS_PLATFORM_REVEAL_WIDTH,
+      storageKey: BONUS_STORAGE_KEY
     })
     let ceilingTrapInst = null
     ceilingTrapInst = WordCeilingTrap.create({
@@ -325,6 +354,13 @@ export function sceneLevel1(k) {
       platformTopY: platformY,
       sfx: sound,
       onHit: () => showDeathMessage(k, hero, ceilingTrapInst.ceilingBlades, levelIndicator, sound)
+    })
+    WordIdleAaaTrap.create({
+      k,
+      hero,
+      floorY: platformY,
+      sfx: sound,
+      onHit: (bladesInst) => showDeathMessage(k, hero, bladesInst, levelIndicator, sound)
     })
   })
 }

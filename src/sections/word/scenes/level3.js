@@ -311,7 +311,7 @@ export function sceneLevel3(k) {
     
     // Create 3 blades (left floor, center ceiling, right floor)
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
-    const floorBladeY = platformY - bladeHeight * 1.2  // Extend up from floor
+    const floorBladeY = Blades.getFloorBladeRestCenterY(platformY)
     const ceilingBladeY = PLATFORM_TOP_HEIGHT + bladeHeight * 1.2  // Extend down from ceiling
     
     // Left blade (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
@@ -374,7 +374,6 @@ export function sceneLevel3(k) {
     const inst = {
       k,
       sound,
-      soundTimer: k.rand(3, 6),
       // Blade animation state
       blades1,
       blades2,

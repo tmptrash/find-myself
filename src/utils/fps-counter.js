@@ -82,7 +82,7 @@ export function onUpdate(inst) {
     //
     // Update target time (remaining time)
     //
-    if (targetText && targetTime && targetText.main.exists()) {
+    if (targetText && targetTime && targetText.exists?.()) {
       const remainingTime = Math.max(0, targetTime - inst.levelTime)
       if (remainingTime > 0) {
         const remainingMinutes = Math.floor(remainingTime / 60)

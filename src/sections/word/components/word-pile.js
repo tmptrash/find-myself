@@ -62,10 +62,11 @@ const DEPTH_LAYERS = [
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {Object} config.customBounds - Playable area bounds {left, right, top, bottom}
+ * @param {number[]} [config.layerCounts] - Optional per-layer word counts (overrides DEPTH_LAYERS defaults)
  * @returns {Object} Word pile instance
  */
 export function create(config) {
-  const { k, customBounds } = config
+  const { k, customBounds, layerCounts = null } = config
   
   if (!customBounds) {
     throw new Error('WordPile.create() requires customBounds parameter')
@@ -83,9 +84,10 @@ export function create(config) {
   //
   const wordDataLayers = []
   
-  DEPTH_LAYERS.forEach(layerConfig => {
+  DEPTH_LAYERS.forEach((layerConfig, layerIndex) => {
     const layerPositions = []
-    for (let i = 0; i < layerConfig.count; i++) {
+    const layerWordCount = layerCounts?.[layerIndex] ?? layerConfig.count
+    for (let i = 0; i < layerWordCount; i++) {
       layerPositions.push(i)
     }
     //
@@ -98,9 +100,9 @@ export function create(config) {
     
     const layerWords = []
     
-    for (let i = 0; i < layerConfig.count; i++) {
+    for (let i = 0; i < layerWordCount; i++) {
       const positionSlot = layerPositions[i]
-      const segment = (positionSlot + 0.5 + (Math.random() - 0.5) * 0.6) / layerConfig.count
+      const segment = (positionSlot + 0.5 + (Math.random() - 0.5) * 0.6) / layerWordCount
       
       const wordData = generateWordData(layerConfig, width, height, segment)
       layerWords.push(wordData)

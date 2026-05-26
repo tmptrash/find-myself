@@ -14,6 +14,12 @@ const FLOOR_SHELF_SCALE_MAX = 2.5
 const FLOOR_SHELF_X_POSITIONS = [0.14, 0.5, 0.86]
 const FLOOR_SHELF_OPACITY_MIN = 0.22
 const FLOOR_SHELF_OPACITY_MAX = 0.38
+//
+// Alternate tilt directions so shelves lean in different ways
+//
+const FLOOR_SHELF_ANGLE_SIGNS = [-1, 1, -1]
+const FLOOR_SHELF_ANGLE_MIN_DEG = 8
+const FLOOR_SHELF_ANGLE_MAX_DEG = 18
 const SCRATCH_COUNT = 12
 const BOOK_ROWS = [
   [
@@ -59,7 +65,7 @@ export function create(config) {
   const playAreaWidth = k.width() - SIDE_WALL_WIDTH * 2
   const palette = buildPalette(bgColor, CFG.visual.colors.platform)
   const placements = buildPlacements(playAreaLeft, playAreaWidth, floorY)
-  const spriteKey = `word-bg-bookshelves-gray-v2-${k.width()}x${k.height()}-${bgColor.replace('#', '')}`
+  const spriteKey = `word-bg-bookshelves-gray-v3-${k.width()}x${k.height()}-${bgColor.replace('#', '')}`
   if (!k.getSprite(spriteKey)) {
     const canvas = toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
       ctx.fillStyle = bgColor
@@ -87,11 +93,13 @@ function buildPlacements(playAreaLeft, playAreaWidth, floorY) {
   const rand = seededRandom(90210)
   for (let i = 0; i < FLOOR_SHELF_COUNT; i++) {
     const xRatio = FLOOR_SHELF_X_POSITIONS[i] ?? (i + 1) / (FLOOR_SHELF_COUNT + 1)
+    const angleSign = FLOOR_SHELF_ANGLE_SIGNS[i] ?? (i % 2 === 0 ? -1 : 1)
+    const angleDeg = FLOOR_SHELF_ANGLE_MIN_DEG + rand() * (FLOOR_SHELF_ANGLE_MAX_DEG - FLOOR_SHELF_ANGLE_MIN_DEG)
     placements.push({
       x: playAreaLeft + playAreaWidth * xRatio,
       y: floorY,
       scale: FLOOR_SHELF_SCALE_MIN + rand() * (FLOOR_SHELF_SCALE_MAX - FLOOR_SHELF_SCALE_MIN),
-      angle: (-10 + rand() * 20) * Math.PI / 180,
+      angle: angleSign * angleDeg * Math.PI / 180,
       opacity: FLOOR_SHELF_OPACITY_MIN + rand() * (FLOOR_SHELF_OPACITY_MAX - FLOOR_SHELF_OPACITY_MIN),
       seed: Math.floor(i * 137 + rand() * 50)
     })

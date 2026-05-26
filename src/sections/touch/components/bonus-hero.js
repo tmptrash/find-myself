@@ -99,6 +99,8 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {string} [config.platformText] - Time-style text for platform (e.g. "00:00"); uses log if null
  * @param {number} [config.platformFontSize] - Override font size for time-style platform text
  * @param {number} [config.platformCollisionHeight] - Override collision height for time-style platform
+ * @param {number} [config.platformCollisionTopTrim] - Pixels trimmed from the top of the collision box
+ * @param {number} [config.platformCollisionXOffset] - Horizontal shift of collision box (right = positive)
  * @param {number} [config.platformZ] - Z-index for platform collision and draw layer
  * @returns {Object} Bonus hero instance
  */
@@ -115,6 +117,8 @@ export function create(config) {
     platformText = null,
     platformFontSize = TIME_PLATFORM_FONT_SIZE,
     platformCollisionHeight = null,
+    platformCollisionTopTrim = 0,
+    platformCollisionXOffset = 0,
     platformZ = CFG.visual.zIndex.platforms
   } = config
   //
@@ -134,14 +138,24 @@ export function create(config) {
       ? Math.round(TIME_PLATFORM_COLLISION_HEIGHT * platformFontSize / TIME_PLATFORM_FONT_SIZE)
       : PLATFORM_HEIGHT)
   const collisionWidthResolved = collisionWidth ?? width
+  const collisionTopTrim = platformCollisionTopTrim ?? 0
+  const collisionXOffset = platformCollisionXOffset ?? 0
+  const collisionAreaHeight = Math.max(4, collisionHeight - collisionTopTrim)
+  const collisionAreaTop = -collisionHeight / 2 + collisionTopTrim
   //
   // Invisible collision platform
   //
   const platform = k.add([
-    k.rect(collisionWidthResolved, collisionHeight),
-    k.pos(x, startY),
+    k.rect(collisionWidthResolved, collisionAreaHeight),
+    k.pos(x + collisionXOffset, startY),
     k.anchor('center'),
-    k.area(),
+    k.area({
+      shape: new k.Rect(
+        k.vec2(-collisionWidthResolved / 2, collisionAreaTop),
+        collisionWidthResolved,
+        collisionAreaHeight
+      )
+    }),
     k.body({ isStatic: true }),
     k.opacity(0),
     k.z(platformZ),
@@ -177,6 +191,8 @@ export function create(config) {
     collisionWidth: collisionWidthResolved,
     platformZ,
     collisionHeight,
+    collisionAreaTop,
+    collisionXOffset,
     revealed: false,
     collected: false,
     platformOpacity: 0,
@@ -243,21 +259,49 @@ export function finalizeCollection(inst) {
   const currentScore = get('heroScore', 0)
   set('heroScore', currentScore + inst.bonusPoints)
 }
+
+/**
+ * True when the hero is grounded on this revealed bonus platform
+ * @param {Object} inst - Bonus hero instance
+ * @param {Object} heroInst - Main hero instance
+ * @returns {boolean}
+ */
+export function isHeroStandingOn(inst, heroInst) {
+  const ch = heroInst?.character
+  if (!inst?.revealed || inst.collected || !ch?.exists?.()) return false
+  if (!ch.isGrounded?.()) return false
+  const heroPos = ch.pos
+  const collisionCenterX = inst.x + (inst.collisionXOffset ?? 0)
+  if (Math.abs(heroPos.x - collisionCenterX) >= inst.revealWidth / 2) return false
+  const floatY = inst.platformText
+    ? inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
+    : inst.y
+  const platformSurface = floatY + inst.collisionAreaTop
+  const heroFeetY = heroPos.y + HERO_FEET_OFFSET
+  return heroFeetY >= platformSurface - LAND_TOLERANCE
+    && heroFeetY <= platformSurface + APPROACH_DISTANCE
+}
 //
 // Per-frame update: reveal, sparkle, collection detection
 //
 function onUpdate(inst) {
   const dt = inst.k.dt()
+  //
+  // Float animation for time-style platforms (continues after bonus collection)
+  //
+  inst.platformText && (inst.floatOffset += dt * FLOAT_SPEED)
   if (inst.collected) {
     updateCollectParticles(inst, dt)
     updateBonusFlashParticles(inst, dt)
+    //
+    // Keep platform swaying after the mini-hero is collected
+    //
+    if (inst.revealed && inst.platformText) {
+      const floatYCollected = inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
+      inst.platform.pos.y = floatYCollected
+      inst.platform.pos.x = inst.x + inst.collisionXOffset
+    }
     return
-  }
-  //
-  // Float animation for time-style platforms
-  //
-  if (inst.platformText) {
-    inst.floatOffset += dt * FLOAT_SPEED
   }
   const heroPos = inst.heroInst.character?.pos
   if (!heroPos) return
@@ -284,7 +328,12 @@ function onUpdate(inst) {
         * (inst.shakeTimer / SHAKE_DURATION)
     }
   }
-  const dx = Math.abs(heroPos.x - inst.x)
+  const collisionCenterX = inst.x + inst.collisionXOffset
+  //
+  // Text platforms sway together with their collision box
+  //
+  const collisionY = inst.platformText ? floatY : (inst.revealed ? inst.y : floatY)
+  const dx = Math.abs(heroPos.x - collisionCenterX)
   const dy = heroPos.y - floatY
   const heroChar = inst.heroInst.character
   //
@@ -293,7 +342,8 @@ function onUpdate(inst) {
   // is about to land, so it never interferes with upward jumps or side movement.
   //
   if (inst.revealed) {
-    inst.platform.pos.y = floatY
+    inst.platform.pos.y = collisionY
+    inst.platform.pos.x = collisionCenterX
   } else {
     const horizontallyAligned = dx < inst.revealWidth / 2
     //
@@ -305,20 +355,22 @@ function onUpdate(inst) {
       && inst.platform.pos.y !== inst.offScreenY
     if (heroOnPlatform) {
       inst.revealed = true
-      inst.platform.pos.y = floatY
+      inst.platform.pos.y = collisionY
+      inst.platform.pos.x = collisionCenterX
     } else {
       //
       // Use hero feet position (not center) to determine if the hero
       // is about to land. Only make collidable when feet are directly
       // above the platform surface and hero is falling downward.
       //
-      const platformSurface = floatY - inst.collisionHeight / 2
+      const platformSurface = floatY + inst.collisionAreaTop
       const heroFeetY = heroPos.y + HERO_FEET_OFFSET
       const isFalling = heroChar.vel && heroChar.vel.y > 0
       const feetAboveSurface = heroFeetY < platformSurface + LAND_TOLERANCE
       const feetNearSurface = heroFeetY > platformSurface - APPROACH_DISTANCE
       const shouldBeCollidable = isFalling && feetAboveSurface && feetNearSurface && horizontallyAligned
       inst.platform.pos.y = shouldBeCollidable ? floatY : inst.offScreenY
+      inst.platform.pos.x = collisionCenterX
     }
   }
   //
@@ -386,10 +438,9 @@ function onDraw(inst) {
   // Apply shake offset to platform and mini-hero during destruction animation
   //
   if (inst.shakeTimer > 0) {
-    inst.platform.pos.x = inst.x + inst.shakeOffsetX
+    inst.platform.pos.x = inst.x + inst.collisionXOffset + inst.shakeOffsetX
     inst.miniHero.character.pos.x = inst.x + inst.shakeOffsetX
   } else if (inst.revealed) {
-    inst.platform.pos.x = inst.x
     inst.miniHero.character.pos.x = inst.x
   }
   //

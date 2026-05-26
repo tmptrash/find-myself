@@ -50,8 +50,10 @@ const PIT_RAISE_DELAY = 4.5
 //
 const BONUS_PLATFORM_GAP = 48
 const BONUS_PLATFORM_Y_OFFSET = 58
-const BONUS_PLATFORM_COLLISION_WIDTH = 120
+const BONUS_PLATFORM_COLLISION_WIDTH = 80
 const BONUS_PLATFORM_REVEAL_WIDTH = 150
+const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
+const BONUS_PLATFORM_COLLISION_X_OFFSET = 18
 const BONUS_STORAGE_KEY = 'word.level1BonusCollected'
 
 /**
@@ -340,7 +342,9 @@ export function sceneLevel1(k) {
       levelIndicator,
       sfx: sound,
       approachFromAbove: true,
-      platformText: 'platform',
+      platformText: 'block',
+      platformCollisionTopTrim: BONUS_PLATFORM_COLLISION_TOP_TRIM,
+      platformCollisionXOffset: BONUS_PLATFORM_COLLISION_X_OFFSET,
       revealWidth: BONUS_PLATFORM_REVEAL_WIDTH,
       storageKey: BONUS_STORAGE_KEY
     })

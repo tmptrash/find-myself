@@ -216,14 +216,15 @@ export function create(config) {
     glintDirection: 0,  // Will be set when glint starts (left or right stroke)
     glintLetter: 0,  // Will be set when glint starts (left or right 'A')
     disableAnimation,  // Store animation flag
-    isLifted: false  // True when blade is retracting/disappearing (stops glint)
+    isLifted: false,  // True when blade is retracting/disappearing (stops glint)
+    isRushing: false  // Horizontal chase trap overrides vibration and drives baseX
   }
 
   // Setup collision detection with hero (works even when invisible)
   blade.onCollide("player", () => {
     // Only trigger collision if enabled
     if (inst.collisionEnabled) {
-      onHit?.(inst)
+      inst.onHit?.(inst)
     }
   })
   
@@ -288,6 +289,16 @@ export function show(inst) {
 }
 
 /**
+ * Clears in-progress glint so it does not freeze after blade movement stops
+ * @param {Object} inst - Blade instance
+ */
+export function resetBladeGlint(inst) {
+  inst.isGlinting = false
+  inst.glintProgress = 0
+  inst.glintSoundPlayed = false
+}
+
+/**
  * Handle blade collision with hero (shows blades and triggers hero death)
  * @param {Object} inst - Blade instance
  * @param {string} currentLevel - Level to restart on death
@@ -303,7 +314,17 @@ export function handleCollision(inst, currentLevel) {
  * @param {Object} inst - Blade instance
  */
 function updateLivingAnimation(inst) {
-  if (inst.isRushing) return
+  if (inst.isRushing) {
+    resetBladeGlint(inst)
+    //
+    // Rush logic moves baseX externally — keep sprite and glint aligned
+    //
+    inst.blade.pos.x = inst.baseX
+    inst.blade.pos.y = inst.baseY
+    inst.glintDrawer && (inst.glintDrawer.pos.x = inst.baseX)
+    inst.glintDrawer && (inst.glintDrawer.pos.y = inst.baseY)
+    return
+  }
   const { blade, k, orientation, baseRotation, sfx, disableAnimation } = inst
   
   //

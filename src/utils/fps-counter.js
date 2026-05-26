@@ -44,6 +44,10 @@ export function create(config) {
   layoutHudRow(k, [fpsText, timerText, targetText])
   const inst = {
     k,
+    topY,
+    fpsHud: fpsText,
+    timerHud: timerText,
+    targetHud: targetText,
     fpsText: fpsText.main,
     fpsTextOutlines: fpsText.outlineNodes,
     timerText: timerText?.main ?? null,
@@ -92,6 +96,8 @@ export function onUpdate(inst) {
         destroyOutlinedHudText(k, { main: targetText, outlineNodes: targetTextOutlines })
         inst.targetText = null
         inst.targetTextOutlines = []
+        inst.targetHud = null
+        layoutHudRow(k, [inst.fpsHud, inst.timerHud, inst.targetHud])
       }
     }
   }

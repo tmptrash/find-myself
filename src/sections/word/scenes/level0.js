@@ -8,6 +8,7 @@ import * as WordGrass from '../components/word-grass.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as WordBlades2ChaseTrap from '../utils/word-blades2-chase-trap.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { get, set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -47,9 +48,16 @@ const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 const BONUS_PLATFORM_X = 290
 const BONUS_PLATFORM_Y = 678
 const BONUS_PLATFORM_WIDTH = 180
-const BONUS_PLATFORM_COLLISION_WIDTH = 128
+const BONUS_PLATFORM_COLLISION_WIDTH = 76
+const BONUS_PLATFORM_COLLISION_X_OFFSET = 36
 const BONUS_PLATFORM_REVEAL_WIDTH = 160
+const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
 const BONUS_STORAGE_KEY = 'word.level0BonusCollected'
+//
+// Background word pile density (default layer counts are 37 + 10)
+//
+const WORD_PILE_LAYER_COUNTS = [14, 5]
+const FLYING_WORD_COUNT = 22
 //
 // Life deduction trap (mirrors touch level 0)
 //
@@ -61,7 +69,7 @@ const WORD_L0_PLAYFIELD_BG_B = 62
 //
 // Hover tooltip copy
 //
-const WORD_HERO_TOOLTIP_TEXT = "I'm calmnnnnn....."
+const WORD_HERO_TOOLTIP_TEXT = 'damn, so many thoughts'
 const WORD_ANTIHERO_TOOLTIP_TEXT = 'get yourself together -\nrag and come here )'
 const WORD_BLADE_TOOLTIP_TEXT = 'touch me and I\'ll give\nyou a couple of fragments'
 const HERO_TOOLTIP_HOVER_SIZE = 80
@@ -75,10 +83,9 @@ const FLYING_WORD_TOOLTIP_WIDTH = 72
 const FLYING_WORD_TOOLTIP_HEIGHT = 28
 const FLYING_WORD_TOOLTIP_Y_OFFSET = -36
 //
-// Blades rush trap and proximity rattle
+// Blades2 chase trap bounds and proximity rattle
 //
-const BLADES2_RUSH_APPROACH = 280
-const BLADES2_RUSH_SPEED = 820
+const BLADES2_PLAY_MARGIN = 48
 const BLADE_PROXIMITY_RANGE = 120
 const BLADE_RATTLE_COOLDOWN = 0.35
 //
@@ -185,6 +192,8 @@ export function sceneLevel0(k) {
     const currentLifeScore = get('lifeScore', 0)
     const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
     const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
+    levelIndicator.updateTrapCount(trapCount)
     const sceneLock = { locked: showLifeTrap }
     showLifeTrap && (hero.controlsDisabled = true) && (sceneLock.heroInst = hero)
     showLifeTrap && LifeDeduction.show({
@@ -213,7 +222,8 @@ export function sceneLevel0(k) {
     //
     const wordPile = WordPile.create({
       k,
-      customBounds: platformBounds
+      customBounds: platformBounds,
+      layerCounts: WORD_PILE_LAYER_COUNTS
     })
     
     //
@@ -226,6 +236,7 @@ export function sceneLevel0(k) {
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
+      wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
       killerLetterCount: 1  // Level 0: 1 killer letter
     })
@@ -245,6 +256,7 @@ export function sceneLevel0(k) {
     
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
+    const bladeWidth = Blades.getBladeWidth(k)
     
     //
     // Three blade blocks at equal distances
@@ -287,7 +299,6 @@ export function sceneLevel0(k) {
       zIndex: CFG.visual.zIndex.platforms - 0.5  // Behind platform
     })
     Blades.show(blades2)  // Show permanently
-    const blades2RushState = { triggered: false, active: false }
     const bladeProximityState = { cooldown: 0 }
     
     //
@@ -330,7 +341,7 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       WordGrass.onUpdate(wordGrass)
     })
-    BonusHero.create({
+    const bonusHeroInst = BonusHero.create({
       k,
       x: BONUS_PLATFORM_X,
       y: BONUS_PLATFORM_Y,
@@ -340,10 +351,19 @@ export function sceneLevel0(k) {
       levelIndicator,
       sfx: sound,
       approachFromAbove: true,
-      platformText: 'platform',
+      platformText: 'block',
+      platformCollisionTopTrim: BONUS_PLATFORM_COLLISION_TOP_TRIM,
+      platformCollisionXOffset: BONUS_PLATFORM_COLLISION_X_OFFSET,
       revealWidth: BONUS_PLATFORM_REVEAL_WIDTH,
       storageKey: BONUS_STORAGE_KEY
     })
+    //
+    // Floor AAA cannot hurt the hero while he stands on the elevated bonus block
+    //
+    blades2.onHit = () => {
+      if (BonusHero.isHeroStandingOn(bonusHeroInst, hero)) return
+      showDeathMessage(k, hero, blades2, levelIndicator, sound)
+    }
     setupWordLevel0HoverTooltips(k, {
       levelIndicator,
       fpsCounter,
@@ -355,16 +375,22 @@ export function sceneLevel0(k) {
       flyingWords,
       platformBounds
     })
-    if (showLifeTrap || lifeTrapAlreadyShown) {
-      k.onUpdate(() => onUpdateBlades2Rush(k, blades2, hero, blades2RushState, blade2X))
-    }
+    WordBlades2ChaseTrap.create({
+      k,
+      hero,
+      bladesInst: blades2,
+      deductFlag: LIFE_DEDUCT_FLAG,
+      minX: PLATFORM_SIDE_WIDTH + BLADES2_PLAY_MARGIN,
+      maxX: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH - BLADES2_PLAY_MARGIN,
+      bonusHeroInst,
+      onHit: () => showDeathMessage(k, hero, blades2, levelIndicator, sound)
+    })
     k.onUpdate(() => onUpdateBladeProximity(k, hero, [blades1, blades2, blades3], sound, bladeProximityState))
     
     //
     // Trap blades that appear when hero gets close to blade3
     //
     const trapDistance = 20  // Distance to trigger trap (very close)
-    const bladeWidth = Blades.getBladeWidth(k)
     const gapWidth = -4  // Overlap with blade3
     const trapBladeX = blade3X + bladeWidth / 2 + gapWidth + bladeWidth / 2  // Position overlapping
     
@@ -570,7 +596,8 @@ function setupWordLevel0HoverTooltips(k, ctx) {
       width: HERO_TOOLTIP_HOVER_SIZE,
       height: HERO_TOOLTIP_HOVER_SIZE,
       text: WORD_HERO_TOOLTIP_TEXT,
-      offsetY: HERO_TOOLTIP_Y_OFFSET
+      offsetY: HERO_TOOLTIP_Y_OFFSET,
+      visible: () => fpsCounter?.targetText?.exists?.()
     }]
   })
   Tooltip.create({
@@ -617,25 +644,6 @@ function setupWordLevel0HoverTooltips(k, ctx) {
 function getFlyingWordTooltip(wordText) {
   const key = String(wordText || '').toLowerCase()
   return FLYING_WORD_TOOLTIPS[key] || FLYING_WORD_TOOLTIP_FALLBACK
-}
-
-//
-// Rushes the second blade block horizontally when the hero approaches
-//
-function onUpdateBlades2Rush(k, bladesInst, heroInst, state, bladeStartX) {
-  if (state.done || !heroInst?.character?.pos || !bladesInst?.blade?.exists?.()) return
-  const heroX = heroInst.character.pos.x
-  const bladeX = bladesInst.baseX
-  if (!state.triggered && heroX > bladeStartX - BLADES2_RUSH_APPROACH && heroX < bladeStartX + 120) {
-    state.triggered = true
-    state.active = true
-    bladesInst.isRushing = true
-  }
-  if (!state.active) return
-  const dir = heroX >= bladeX ? 1 : -1
-  bladesInst.baseX += dir * BLADES2_RUSH_SPEED * k.dt()
-  bladesInst.blade.pos.x = bladesInst.baseX
-  Math.abs(heroX - bladesInst.baseX) < 40 && (state.done = true)
 }
 
 //

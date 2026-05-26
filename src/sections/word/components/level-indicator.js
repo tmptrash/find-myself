@@ -128,6 +128,16 @@ export function create(config) {
   // Lower the life icon a bit further below the small hero (UI polish)
   //
   const LIFE_IMAGE_Y_OFFSET = 8
+//
+// Trap count badge on life icon (same layout as touch section)
+//
+const TRAP_BADGE_OFFSET_X = 45
+const TRAP_BADGE_OFFSET_Y = 30
+const TRAP_BADGE_FONT_SIZE = 20
+const TRAP_BADGE_COLOR_R = 200
+const TRAP_BADGE_COLOR_G = 60
+const TRAP_BADGE_COLOR_B = 60
+const TRAP_BADGE_OUTLINE_THICKNESS = 2
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
@@ -209,6 +219,40 @@ export function create(config) {
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
+  //
+  // Trap count badge with outline (bold red number on life icon)
+  //
+  const trapBadgeX = lifeImageX + TRAP_BADGE_OFFSET_X
+  const trapBadgeY = smallHeroY + LIFE_IMAGE_Y_OFFSET + TRAP_BADGE_OFFSET_Y
+  const trapBadgeFont = CFG.visual.fonts.regularFull
+    ? CFG.visual.fonts.regularFull.replace(/'/g, '')
+    : CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const trapBadgeOutlineOffsets = [
+    [-TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
+    [0, -TRAP_BADGE_OUTLINE_THICKNESS],
+    [TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
+    [-TRAP_BADGE_OUTLINE_THICKNESS, 0],
+    [TRAP_BADGE_OUTLINE_THICKNESS, 0],
+    [-TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS],
+    [0, TRAP_BADGE_OUTLINE_THICKNESS],
+    [TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS]
+  ]
+  const trapBadgeOutlines = trapBadgeOutlineOffsets.map(([dx, dy]) => k.add([
+    k.text('', { size: TRAP_BADGE_FONT_SIZE, font: trapBadgeFont }),
+    k.pos(trapBadgeX + dx, trapBadgeY + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ]))
+  const trapBadgeText = k.add([
+    k.text('', { size: TRAP_BADGE_FONT_SIZE, font: trapBadgeFont }),
+    k.pos(trapBadgeX, trapBadgeY),
+    k.anchor('center'),
+    k.color(TRAP_BADGE_COLOR_R, TRAP_BADGE_COLOR_G, TRAP_BADGE_COLOR_B),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 2)
+  ])
   return {
     letterObjects,
     smallHero,
@@ -232,6 +276,11 @@ export function create(config) {
           outline.text = newScore.toString()
         }
       })
+    },
+    updateTrapCount: (count) => {
+      const val = count > 0 ? count.toString() : ''
+      trapBadgeText.text = val
+      trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
 }

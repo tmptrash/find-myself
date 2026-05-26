@@ -12,6 +12,7 @@ import * as LevelHelp from '../../../utils/level-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
 import * as WordBookshelfBg from './word-bookshelf-bg.js'
+import * as WordHangingVines from './word-hanging-vines.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 const CORNER_RADIUS = 20  // Radius for rounded corners
@@ -22,6 +23,10 @@ const EERIE_SOUND_INITIAL_DELAY_MIN = 3
 const EERIE_SOUND_INITIAL_DELAY_MAX = 6
 const EERIE_SOUND_MIN_DELAY = 4
 const EERIE_SOUND_MAX_DELAY = 8
+//
+// FPS / timer row sits below WORDS letters; small hero and life stay unchanged
+//
+const WORD_HUD_FPS_TOP_OFFSET = 32
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -187,6 +192,12 @@ export function initScene(config) {
     bottomPlatformHeight: bottomPH,
     backgroundColor: bgColor
   })
+  WordHangingVines.create({
+    k,
+    sideWallWidth: sideWallWidth ?? 192,
+    topPlatformHeight,
+    bottomPlatformHeight: bottomPH
+  })
   
   // Add platforms (unless skipped)
   if (!skipPlatforms) {
@@ -235,7 +246,7 @@ export function initScene(config) {
   //
   // Create FPS counter, timer and target time (aligned with WORDS and small hero)
   //
-  const uiTopY = topPlatformHeight ? topPlatformHeight - 50 : 55
+  const uiTopY = topPlatformHeight ? topPlatformHeight - WORD_HUD_FPS_TOP_OFFSET : 55
   const fpsCounter = FpsCounter.create({ 
     k,
     showTimer: true,

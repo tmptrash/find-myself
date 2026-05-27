@@ -596,8 +596,7 @@ function setupWordLevel0HoverTooltips(k, ctx) {
       width: HERO_TOOLTIP_HOVER_SIZE,
       height: HERO_TOOLTIP_HOVER_SIZE,
       text: WORD_HERO_TOOLTIP_TEXT,
-      offsetY: HERO_TOOLTIP_Y_OFFSET,
-      visible: () => fpsCounter?.targetText?.exists?.()
+      offsetY: HERO_TOOLTIP_Y_OFFSET
     }]
   })
   Tooltip.create({

@@ -1515,26 +1515,15 @@ function drawScene(inst) {
   //
   if (arrows && arrows.length > 0) {
     //
-    // IMPORTANT: Anti-hero sprites are drawn with #656565 in canvas (see hero.js:1753, 1788)
-    // But character.color is applied as a TINT on top of the sprite
-    // For inactive anti-heroes, targetColor is grayColor (#656565) and it's applied as:
-    // const rgb = getRGB(k, targetColor) -> k.rgb(101, 101, 101)
-    // antiHeroInst.character.color = k.rgb(rgb.r, rgb.g, rgb.b) -> k.rgb(101, 101, 101)
-    // 
-    // This tint multiplies with the sprite color, so the final color is NOT #656565!
-    // Let's use a LIGHTER color for the arrow to compensate for the multiplication
+    // Arrow material matches time-level0 street lamp metal:
+    // medium gray-blue body, black outline, and semi-transparent so they blend
+    // with the menu background the same way distant lamp poles do.
     //
-    const inactiveGrayColorHex = '#454545'  // Lighter gray to compensate for tint multiplication
-    const [r, g, b] = parseHex(inactiveGrayColorHex)
-    //
-    // Create color directly from hex values
-    //
-    const ARROW_COLOR = k.rgb(r, g, b)  // Lighter gray to match final displayed color
-    const arrowOutlineRgb = getRGB(k, CFG.visual.colors.outline)
-    const ARROW_OUTLINE_COLOR = k.rgb(arrowOutlineRgb.r, arrowOutlineRgb.g, arrowOutlineRgb.b)  // Same outline as completed anti-heroes
-    const ARROW_OPACITY = 1.0
-    const ARROW_WIDTH = 8  // Thick arrows
-    const ARROW_OUTLINE_WIDTH = 3  // Outline width (increased by 1 pixel)
+    const ARROW_COLOR = k.rgb(128, 130, 136)
+    const ARROW_OUTLINE_COLOR = k.rgb(0, 0, 0)
+    const ARROW_OPACITY = 0.78
+    const ARROW_WIDTH = 9
+    const ARROW_OUTLINE_WIDTH = 2
     const ARROW_START_OFFSET = 120  // Distance from anti-hero where arrow starts (increased for shorter arrows)
     const ARROW_END_OFFSET = 120  // Distance to anti-hero where arrow ends (increased for shorter arrows)
     const ARROWHEAD_SIZE = 22  // Arrowhead size

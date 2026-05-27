@@ -8,7 +8,7 @@ import { get } from '../../../utils/progress.js'
 //
 // Blades2 horizontal chase trap — word level 0 life deduction trap
 //
-const STAND_TIME = 2
+const STAND_TIME = 1
 const MOVE_VEL_THRESHOLD = 18
 const MOVE_DIST_THRESHOLD = 24
 const RUSH_SPEED = 820

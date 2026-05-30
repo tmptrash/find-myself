@@ -40,6 +40,8 @@ export function buildTreePalette() {
  * @param {number} [opts.rootSegmentsMin] - Minimum segments per primary root
  * @param {number} [opts.rootSegmentsRange] - Random span added to min (exclusive upper via Math.random)
  * @param {boolean} [opts.includeRoots=true] - When false, trunk-only (no underground roots)
+ * @param {number} [opts.rootAngleBase] - Base angle for primary roots (radians). Default `Math.PI / 2` (straight down). Use `0`/`PI` for horizontal spread, `PI/4` / `3*PI/4` for diagonal.
+ * @param {number} [opts.rootAngleSpread] - Random spread added to `rootAngleBase` per root. Default 0.95 rad.
  * @returns {{ trunkSegments: Array, rootSegments: Array, branchClusters: Array }}
  */
 export function buildOrganicTreeData(trunkBottomY, trunkTopY, opts = {}) {
@@ -49,6 +51,8 @@ export function buildOrganicTreeData(trunkBottomY, trunkTopY, opts = {}) {
   const rootSegmentsMin = opts.rootSegmentsMin ?? 22
   const rootSegmentsRange = opts.rootSegmentsRange ?? 14
   const includeRoots = opts.includeRoots !== false
+  const rootAngleBase = opts.rootAngleBase ?? Math.PI / 2
+  const rootAngleSpread = opts.rootAngleSpread ?? 0.95
   const trunkSegments = []
   const trunkSteps = 14
   const trunkStep = (trunkBottomY - trunkTopY) / trunkSteps
@@ -73,7 +77,7 @@ export function buildOrganicTreeData(trunkBottomY, trunkTopY, opts = {}) {
   if (includeRoots) {
     const rootCount = rootCountMin + Math.floor(Math.random() * (rootCountMax - rootCountMin + 1))
     for (let r = 0; r < rootCount; r++) {
-      const rootAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.95
+      const rootAngle = rootAngleBase + (Math.random() - 0.5) * rootAngleSpread
       const rootSegmentsCount = rootSegmentsMin + Math.floor(Math.random() * rootSegmentsRange)
       const rootThickness = 3 + Math.random() * 1.5
       rootSegments.push(...growTreeRoots(0, trunkBottomY, rootAngle, rootSegmentsCount, rootThickness, 0, rootAbsoluteMaxY))

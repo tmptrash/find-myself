@@ -1,6 +1,7 @@
 import { CFG } from '../cfg.js'
 import { toCanvas } from '../../../utils/helper.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
+import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 
 /**
  * Creates tree roots that grow from the bottom platform upward
@@ -61,91 +62,12 @@ export async function create(config) {
   
   const roots = rootPositions.map((rootX, index) => {
     //
-    // Organic root growth algorithm (adapted from canvas example)
+    // Root growth is delegated to the shared `grow-tree-root` primitive
+    // (`src/utils/grow-tree-root.js`) so the in-game L1 roots and the
+    // ready/menu background composite roots come out of one algorithm.
     //
-    const growRoot = (x, y, angle, segments, thickness, depth = 0) => {
-      const rootSegments = []
-      
-      if (segments <= 0 || thickness <= 0.4 || depth > 6) {
-        return rootSegments
-      }
-      
-      const step = rand(4, 7)
-      let cx = x
-      let cy = y
-      
-      //
-      // Build root path with organic curvature
-      //
-      for (let i = 0; i < segments; i++) {
-        const prevX = cx
-        const prevY = cy
-        
-        //
-        // Organic curvature
-        //
-        angle += rand(-0.18, 0.18)
-        cx += Math.cos(angle) * step
-        cy += Math.sin(angle) * step
-        
-        //
-        // Add segment
-        //
-        rootSegments.push({
-          startX: prevX,
-          startY: prevY,
-          endX: cx,
-          endY: cy,
-          width: thickness,
-          depth
-        })
-        
-        //
-        // Micro roots (small side branches)
-        //
-        if (Math.random() < 0.08 && depth < 5) {
-          const microRoots = growRoot(
-            cx,
-            cy,
-            angle + rand(-1.5, 1.5),
-            rand(2, 4),
-            thickness * 0.35,
-            depth + 2
-          )
-          rootSegments.push(...microRoots)
-        }
-      }
-      
-      //
-      // Main branching (40% chance)
-      //
-      if (Math.random() < 0.4) {
-        const branchRoots = growRoot(
-          cx,
-          cy,
-          angle + rand(-1, 1),
-          segments * 0.6,
-          thickness * 0.6,
-          depth + 1
-        )
-        rootSegments.push(...branchRoots)
-      }
-      
-      //
-      // Continue main root
-      //
-      const continueRoots = growRoot(
-        cx,
-        cy,
-        angle + rand(-0.3, 0.3),
-        segments * 0.8,
-        thickness * 0.8,
-        depth + 1
-      )
-      rootSegments.push(...continueRoots)
-      
-      return rootSegments
-    }
+    const growRoot = (x, y, angle, segments, thickness, depth = 0) =>
+      growTreeRootSegments({ x, y, angle, segments, thickness, depth, rand })
     
     //
     // Branch growth algorithm (adapted from new canvas example for tree tops)

@@ -1,3 +1,5 @@
+import { buildCloudCrown, computeCloudCrownsBounds, drawCloudCrownToCanvas } from '../../../utils/draw-cloud-crown.js'
+
 //
 // Scrolling cloud band (seamless horizontal loop via PNG sprite)
 //
@@ -34,44 +36,30 @@ export function createScrollingCloudBand(k, layout) {
   } = layout
   const bandWidth = areaRight - areaLeft
   const cloudSpacing = bandWidth / cloudCount
+  //
+  // Cloud crowns themselves are now built by the shared `draw-cloud-crown`
+  // primitive (`src/utils/draw-cloud-crown.js`) so L0 clouds, future
+  // touch-section cloud bands and the menu/ready background composite
+  // all share one cloud-puff visual style.
+  //
   const cloudConfigs = []
-  let minDrawX = Infinity
-  let maxDrawX = -Infinity
-  let minDrawY = Infinity
-  let maxDrawY = -Infinity
   for (let i = 0; i < cloudCount; i++) {
     const baseX = cloudSpacing * i + cloudSpacing * 0.5
     const cloudX = baseX + (Math.random() - 0.5) * cloudRandomness
+    //
+    // Clouds are drawn into the strip with Y relative to the cloud-band
+    // top so the strip can wrap seamlessly. We keep that convention by
+    // building each cloud at world Y and subtracting cloudTopY below.
+    //
     const cloudY = cloudTopY + Math.random() * (cloudBottomY - cloudTopY)
-    const crownSize = (50 + Math.random() * 60) * 1.2
-    const crownCount = 5 + Math.floor(Math.random() * 4)
-    const crowns = []
-    for (let j = 0; j < crownCount; j++) {
-      crowns.push({
-        offsetX: (Math.random() - 0.5) * crownSize * 0.7,
-        offsetY: (Math.random() - 0.5) * crownSize * 0.5,
-        sizeVariation: 0.6 + Math.random() * 0.6,
-        opacityVariation: 0.7 + Math.random() * 0.2
-      })
-    }
-    cloudConfigs.push({
-      x: cloudX,
-      y: cloudY,
-      crownSize,
-      crowns,
-      color: baseCloudColor,
-      opacity: 0.85 + Math.random() * 0.1
-    })
-    crowns.forEach(crown => {
-      const r = crownSize * crown.sizeVariation
-      const cx = cloudX + crown.offsetX
-      const cy = (cloudY - cloudTopY) + crown.offsetY
-      minDrawX = Math.min(minDrawX, cx - r)
-      maxDrawX = Math.max(maxDrawX, cx + r)
-      minDrawY = Math.min(minDrawY, cy - r)
-      maxDrawY = Math.max(maxDrawY, cy + r)
-    })
+    cloudConfigs.push(buildCloudCrown({ x: cloudX, y: cloudY }))
   }
+  //
+  // Bake bounds: shift cloud Y back to band-local space (0 at strip top)
+  // before measuring so the canvas only includes the actual painted area.
+  //
+  const localConfigs = cloudConfigs.map(c => ({ ...c, y: c.y - cloudTopY }))
+  const { minX: minDrawX, maxX: maxDrawX, minY: minDrawY, maxY: maxDrawY } = computeCloudCrownsBounds(localConfigs)
   const pad = CLOUD_CANVAS_PAD
   const contentWidth = Math.ceil(maxDrawX - minDrawX)
   const contentHeight = Math.ceil(maxDrawY - minDrawY)
@@ -85,26 +73,20 @@ export function createScrollingCloudBand(k, layout) {
   const ctx = canvas.getContext('2d')
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
   //
-  // Draw each crown twice near the wrap edges so the strip tiles seamlessly
+  // Draw each crown three times (centre + wrap-left + wrap-right) so the
+  // strip tiles seamlessly when scrolled.
   //
-  const drawCrowns = (offsetX) => {
-    for (const cloud of cloudConfigs) {
-      for (const crown of cloud.crowns) {
-        const cx = pad + (cloud.x + crown.offsetX + offsetX - originX)
-        const cy = pad + (cloud.y - cloudTopY + crown.offsetY - originY)
-        const r = cloud.crownSize * crown.sizeVariation
-        ctx.globalAlpha = cloud.opacity * crown.opacityVariation
-        ctx.fillStyle = `rgb(${baseCloudColor.r}, ${baseCloudColor.g}, ${baseCloudColor.b})`
-        ctx.beginPath()
-        ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.fill()
-      }
+  const drawAtWrapOffset = (wrapOffsetX) => {
+    for (const cloud of localConfigs) {
+      drawCloudCrownToCanvas(ctx, cloud, baseCloudColor, {
+        offsetX: wrapOffsetX - originX + pad,
+        offsetY: -originY + pad
+      })
     }
   }
-  drawCrowns(0)
-  drawCrowns(-bandWidth)
-  drawCrowns(bandWidth)
-  ctx.globalAlpha = 1
+  drawAtWrapOffset(0)
+  drawAtWrapOffset(-bandWidth)
+  drawAtWrapOffset(bandWidth)
   k.loadSprite(CLOUD_SPRITE_NAME, canvas)
   canvas.width = 0
   canvas.height = 0

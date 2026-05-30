@@ -19,6 +19,8 @@ import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { isTouchDevice } from '../../../utils/touch-input.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import { createScrollingCloudBand, createFloorThornSprite } from '../utils/level0-scenery-sprites.js'
+import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
+import { buildRockVertices, buildRockPalette, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
@@ -4550,56 +4552,22 @@ function createMushrooms(k, floorPuddles = []) {
     // Draw mushroom to off-screen canvas
     //
     const spriteName = `mushroom-l0-${i}`
+    //
+    // Mushroom drawing is delegated to the shared draw-mushroom
+    // primitive (`src/utils/draw-mushroom.js`) so on-screen mushrooms
+    // and background-image mushrooms (ready / menu scenes) come out of
+    // a single source of truth.
+    //
     const dataUrl = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      const cx = totalW / 2
-      const stemTop = totalH - stemH - 2
-      //
-      // Outline stroke shared by stem and cap
-      //
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.82)'
-      ctx.lineWidth = 1.5
-      ctx.lineJoin = 'round'
-      //
-      // Stem: slightly tapered rectangle with black outline
-      //
-      ctx.fillStyle = `rgb(${Math.min(255, color[0] + 40)}, ${Math.min(255, color[1] + 50)}, ${Math.min(255, color[2] + 30)})`
-      ctx.beginPath()
-      ctx.moveTo(cx - stemW / 2, totalH - 2)
-      ctx.lineTo(cx - stemW * 0.4, stemTop)
-      ctx.lineTo(cx + stemW * 0.4, stemTop)
-      ctx.lineTo(cx + stemW / 2, totalH - 2)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-      //
-      // Cap: half-ellipse with black outline
-      //
-      ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
-      ctx.beginPath()
-      ctx.ellipse(cx, stemTop, capW / 2, capH, 0, Math.PI, 0)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-      //
-      // Cap highlight: lighter arc near the top
-      //
-      ctx.fillStyle = `rgba(255, 255, 255, 0.15)`
-      ctx.beginPath()
-      ctx.ellipse(cx - capW * 0.1, stemTop - capH * 0.3, capW * 0.25, capH * 0.3, 0, Math.PI, 0)
-      ctx.closePath()
-      ctx.fill()
-      //
-      // Small dots on cap for texture
-      //
-      const dotCount = Math.floor(Math.random() * 3) + 1
-      ctx.fillStyle = `rgba(255, 255, 240, 0.3)`
-      for (let d = 0; d < dotCount; d++) {
-        const dotX = cx + (Math.random() - 0.5) * capW * 0.6
-        const dotY = stemTop - capH * (0.2 + Math.random() * 0.5)
-        ctx.beginPath()
-        ctx.arc(dotX, dotY, 1 + Math.random(), 0, Math.PI * 2)
-        ctx.fill()
-      }
+      drawMushroomToCanvas(ctx, {
+        cx: totalW / 2,
+        baseY: totalH - 2,
+        capWidth: capW,
+        capHeight: capH,
+        stemWidth: stemW,
+        stemHeight: stemH,
+        capColor: color
+      })
     })
     mushrooms.push({
       spriteName,
@@ -4827,160 +4795,35 @@ function createRocks(k, thornData) {
  */
 function buildSingleRock(k, posX, radius, spriteName) {
   //
-  // Build irregular rock outline with more vertices (14-22) and per-vertex
-  // angular jitter so the silhouette is smoother but still asymmetric. The
-  // bottom half is wider to suggest weight resting on the ground.
+  // Rock silhouette + palette come from the shared `draw-rock`
+  // primitive so L0's main rocks, the touch floor-rocks utility and
+  // the menu/ready background generator all paint the same boulder.
   //
-  const vertCount = 14 + Math.floor(Math.random() * 9)
-  const verts = []
-  for (let v = 0; v < vertCount; v++) {
-    const t = v / vertCount
-    const a = t * Math.PI * 2 + (Math.random() - 0.5) * 0.18
-    //
-    // Bottom-half radius bonus: pushes ground-touching points outward
-    //
-    const heavySide = Math.sin(a) > 0 ? 1.05 : 0.92
-    const r = radius * (0.82 + Math.random() * 0.28) * heavySide
-    verts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r * 0.62 })
-  }
+  const verts = buildRockVertices(radius)
+  const palette = buildRockPalette({ baseR: ROCK_BASE_R, baseG: ROCK_BASE_G, baseB: ROCK_BASE_B })
   //
-  // Slight per-rock color jitter for variety
-  //
-  const tint = -8 + Math.floor(Math.random() * 24)
-  const fillR = Math.max(0, Math.min(255, ROCK_BASE_R + tint))
-  const fillG = Math.max(0, Math.min(255, ROCK_BASE_G + tint))
-  const fillB = Math.max(0, Math.min(255, ROCK_BASE_B + tint + 4))
-  //
-  // Slightly lighter shade for the top facets and darker for the bottom
-  //
-  const lightR = Math.max(0, Math.min(255, fillR + 32))
-  const lightG = Math.max(0, Math.min(255, fillG + 32))
-  const lightB = Math.max(0, Math.min(255, fillB + 32))
-  const darkR = Math.max(0, Math.min(255, fillR - 28))
-  const darkG = Math.max(0, Math.min(255, fillG - 28))
-  const darkB = Math.max(0, Math.min(255, fillB - 28))
-  //
-  // Sprite canvas: room for outline shadow halo plus padding
+  // Sprite canvas dimensions match the shared rock outline footprint
+  // (radius * 2.6 wide, * 1.9 tall, with the silhouette centre at 0.56
+  // of the height).
   //
   const totalW = Math.ceil(radius * 2.6)
   const totalH = Math.ceil(radius * 1.9)
   const cx = totalW / 2
   const cy = totalH * 0.56
   //
-  // Compute posY first so we can crop the sprite canvas to the above-ground portion.
-  // Anything below FLOOR_Y is clipped by reducing the canvas height.
-  // `ROCK_LIFT_FROM_FLOOR` shifts every rock a few pixels above the
-  // grass line so their bases stop visibly biting into the ground
-  // edge — previously the rocks sat tangent to (or slightly below) the
-  // floor line, making them read as half-buried instead of resting on
-  // it.
+  // Crop the sprite canvas to the above-ground portion. Anything below
+  // FLOOR_Y is clipped by reducing the canvas height. `ROCK_LIFT_FROM_FLOOR`
+  // shifts every rock a few pixels above the grass line so their bases
+  // stop visibly biting into the ground edge — previously rocks sat
+  // tangent to (or slightly below) the floor line, reading as half-
+  // buried instead of resting on it.
   //
   const ROCK_LIFT_FROM_FLOOR = 3
   const randSink = Math.random() * 5
   const posY = FLOOR_Y - totalH * 0.62 + randSink - ROCK_LIFT_FROM_FLOOR
   const croppedH = Math.max(8, Math.ceil(totalH * 0.62 - randSink))
-  //
-  // Helper to trace the rock outline as a smooth quadratic path
-  //
-  const traceOutline = (ctx) => {
-    ctx.beginPath()
-    const v0 = verts[0]
-    ctx.moveTo(cx + v0.x, cy + v0.y)
-    for (let v = 0; v < verts.length; v++) {
-      const cur = verts[v]
-      const next = verts[(v + 1) % verts.length]
-      const midX = cx + (cur.x + next.x) / 2
-      const midY = cy + (cur.y + next.y) / 2
-      ctx.quadraticCurveTo(cx + cur.x, cy + cur.y, midX, midY)
-    }
-    ctx.closePath()
-  }
   const dataUrl = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
-    //
-    // Soft drop shadow underneath the rock
-    //
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)'
-    ctx.beginPath()
-    ctx.ellipse(cx, cy + radius * 0.42, radius * 1.0, radius * 0.18, 0, 0, Math.PI * 2)
-    ctx.closePath()
-    ctx.fill()
-    //
-    // Vertical fill gradient: lighter on top, darker at bottom — gives
-    // immediate volume cue and reads as a 3D rounded shape.
-    //
-    const grad = ctx.createLinearGradient(0, cy - radius * 0.7, 0, cy + radius * 0.7)
-    grad.addColorStop(0, `rgb(${lightR}, ${lightG}, ${lightB})`)
-    grad.addColorStop(0.55, `rgb(${fillR}, ${fillG}, ${fillB})`)
-    grad.addColorStop(1, `rgb(${darkR}, ${darkG}, ${darkB})`)
-    ctx.fillStyle = grad
-    traceOutline(ctx)
-    ctx.fill()
-    //
-    // Mottled texture: scatter a handful of subtle darker / lighter blotches
-    // inside the silhouette so the surface doesn't look flat.
-    //
-    ctx.save()
-    traceOutline(ctx)
-    ctx.clip()
-    const blotchCount = 6 + Math.floor(Math.random() * 6)
-    for (let b = 0; b < blotchCount; b++) {
-      const bx = cx + (Math.random() - 0.5) * radius * 1.4
-      const by = cy + (Math.random() - 0.5) * radius * 0.9
-      const br = radius * (0.08 + Math.random() * 0.18)
-      const lighter = Math.random() < 0.5
-      const a = 0.06 + Math.random() * 0.08
-      ctx.fillStyle = lighter
-        ? `rgba(255, 255, 255, ${a})`
-        : `rgba(0, 0, 0, ${a + 0.02})`
-      ctx.beginPath()
-      ctx.ellipse(bx, by, br, br * (0.6 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    //
-    // A couple of subtle crack lines for stone texture
-    //
-    const crackCount = 1 + Math.floor(Math.random() * 3)
-    for (let c = 0; c < crackCount; c++) {
-      const startA = Math.random() * Math.PI * 2
-      const startR = radius * (0.1 + Math.random() * 0.5)
-      let cxp = cx + Math.cos(startA) * startR
-      let cyp = cy + Math.sin(startA) * startR * 0.5
-      ctx.strokeStyle = `rgba(0, 0, 0, ${0.18 + Math.random() * 0.18})`
-      ctx.lineWidth = 0.8 + Math.random() * 0.7
-      ctx.beginPath()
-      ctx.moveTo(cxp, cyp)
-      const segs = 2 + Math.floor(Math.random() * 3)
-      let ang = Math.random() * Math.PI * 2
-      for (let s = 0; s < segs; s++) {
-        ang += (Math.random() - 0.5) * 1.2
-        cxp += Math.cos(ang) * radius * (0.18 + Math.random() * 0.18)
-        cyp += Math.sin(ang) * radius * 0.12
-        ctx.lineTo(cxp, cyp)
-      }
-      ctx.stroke()
-    }
-    ctx.restore()
-    //
-    // Top-left highlight (key light) for sheen
-    //
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'
-    ctx.beginPath()
-    ctx.ellipse(cx - radius * 0.32, cy - radius * 0.28, radius * 0.55, radius * 0.18, -0.45, 0, Math.PI * 2)
-    ctx.fill()
-    //
-    // Bottom rim contact shadow (where the rock meets the ground)
-    //
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
-    ctx.beginPath()
-    ctx.ellipse(cx, cy + radius * 0.34, radius * 0.78, radius * 0.18, 0, 0, Math.PI)
-    ctx.fill()
-    //
-    // Outline for clean definition against the soil
-    //
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)'
-    ctx.lineWidth = 1.4
-    traceOutline(ctx)
-    ctx.stroke()
+    drawRockToCanvas(ctx, { cx, cy, radius, verts, palette })
   })
   return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH: croppedH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
 }

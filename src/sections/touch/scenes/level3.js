@@ -18,6 +18,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import { arcY } from '../utils/trees.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
+import { drawMoonToCanvas } from '../../../utils/draw-moon.js'
 //
 // Game area margins
 //
@@ -2831,55 +2832,22 @@ function createScrollingClouds(k) {
 }
 
 /**
- * Draws a full moon with smooth radial glow and craters on the background canvas
- * Uses canvas radial gradient for seamless glow falloff (no visible rings)
+ * Draws the L3 moon onto the background canvas. The actual painting
+ * (warm amber disc + radial halo + clipped craters) is delegated to
+ * the shared `draw-moon` primitive (`src/utils/draw-moon.js`) so the
+ * same celestial body is shared with the menu/ready background.
+ *
  * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
  */
 function drawMoon(ctx) {
-  ctx.save()
-  //
-  // Draw smooth radial glow using canvas gradient (no discrete rings)
-  //
-  const outerR = MOON_RADIUS + MOON_GLOW_RADIUS
-  const gradient = ctx.createRadialGradient(MOON_X, MOON_Y, MOON_RADIUS * 0.8, MOON_X, MOON_Y, outerR)
-  gradient.addColorStop(0, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.15)`)
-  gradient.addColorStop(0.4, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.06)`)
-  gradient.addColorStop(1, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0)`)
-  ctx.beginPath()
-  ctx.arc(MOON_X, MOON_Y, outerR, 0, Math.PI * 2)
-  ctx.fillStyle = gradient
-  ctx.fill()
-  //
-  // Draw solid moon disc
-  //
-  ctx.beginPath()
-  ctx.arc(MOON_X, MOON_Y, MOON_RADIUS, 0, Math.PI * 2)
-  ctx.fillStyle = `rgb(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B})`
-  ctx.fill()
-  //
-  // Draw craters as darker circles clipped to moon disc
-  // Each crater has its own darkness level for surface variation
-  //
-  ctx.save()
-  ctx.beginPath()
-  ctx.arc(MOON_X, MOON_Y, MOON_RADIUS, 0, Math.PI * 2)
-  ctx.clip()
-  MOON_CRATERS.forEach(crater => {
-    const cr = MOON_COLOR_R - crater.dark
-    const cg = MOON_COLOR_G - crater.dark
-    const cb = MOON_COLOR_B - crater.dark
-    ctx.beginPath()
-    ctx.arc(
-      MOON_X + crater.x * MOON_RADIUS,
-      MOON_Y + crater.y * MOON_RADIUS,
-      crater.r * MOON_RADIUS,
-      0, Math.PI * 2
-    )
-    ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`
-    ctx.fill()
+  drawMoonToCanvas(ctx, {
+    cx: MOON_X,
+    cy: MOON_Y,
+    radius: MOON_RADIUS,
+    glowRadius: MOON_GLOW_RADIUS,
+    color: { r: MOON_COLOR_R, g: MOON_COLOR_G, b: MOON_COLOR_B },
+    craters: MOON_CRATERS
   })
-  ctx.restore()
-  ctx.restore()
 }
 
 /**

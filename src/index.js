@@ -25,6 +25,7 @@ import * as TouchInput from "./utils/touch-input.js"
 import * as Fullscreen from "./utils/fullscreen.js"
 import * as BootLoader from "./utils/boot-loader.js"
 import { prepareSceneAssetsThenEnterScene } from "./utils/level-assets.js"
+import { generateMenuBackgroundCanvas } from "./utils/menu-bg-generator.js"
 //
 // Kaplay init: how many times to retry on transient WebGL failure
 // (Chrome can transiently fail context creation when the GPU process is busy,
@@ -229,7 +230,7 @@ function buildSetupTasks(k) {
     () => k.loadFont(CFG.visual.fonts.thinFull.replace(/'/g, ''), "./fonts/JetBrainsMono-Thin.ttf"),
     () => k.loadSprite("life", "./life.png"),
     () => k.loadSprite("life-ready", "./life-ready.png"),
-    () => k.loadSprite("menu-bg", "./menu.png"),
+    () => k.loadSprite("menu-bg", generateMenuBackgroundCanvas()),
     () => loadHeroSprites(k, HEROES.HERO),
     () => loadHeroSprites(k, HEROES.ANTIHERO),
     () => sceneReady(k),

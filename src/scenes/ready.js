@@ -54,11 +54,55 @@ const TITLE_FLICKER_MAX = 1.0
 // Layout z-layers
 //
 const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
+const Z_STARS = CFG.visual.zIndex.background + 2
 const Z_ILLUSTRATION = 5
 const Z_TEXT = 10
 const Z_TITLE = 15
 const Z_SPIDER = 50
 const Z_HINT = 100
+//
+// Blinking stars (sky overlay above the menu-bg sprite). Each star is a
+// tiny dot whose alpha (and, for the largest ones, a faint 4-point cross
+// flare) is modulated by `sin(time * freq + phase)` so the field reads
+// as a slow shimmering night sky rather than fixed dots. Configuration
+// constants below stay declarative so the scene file keeps no per-star
+// state of its own — the field is generated once on scene enter.
+//
+const STAR_COUNT_SMALL = 38
+const STAR_COUNT_LARGE = 7
+const STAR_RADIUS_SMALL_MIN = 0.9
+const STAR_RADIUS_SMALL_RANGE = 1.3
+const STAR_RADIUS_LARGE_MIN = 1.6
+const STAR_RADIUS_LARGE_RANGE = 1.4
+const STAR_TWINKLE_FREQ_MIN = 0.5
+const STAR_TWINKLE_FREQ_RANGE = 2.4
+const STAR_BASE_ALPHA_MIN = 0.35
+const STAR_BASE_ALPHA_RANGE = 0.45
+const STAR_AMBER_RATIO = 0.62
+const STAR_AMBER_R = 244
+const STAR_AMBER_G = 192
+const STAR_AMBER_B = 96
+const STAR_WHITE_R = 230
+const STAR_WHITE_G = 240
+const STAR_WHITE_B = 250
+const STAR_AREA_TOP_RATIO = 0.05
+const STAR_AREA_BOTTOM_RATIO = 0.55
+const STAR_AREA_LEFT_RATIO = 0.03
+const STAR_AREA_RIGHT_RATIO = 0.97
+//
+// Moon zone (in the baked menu-bg). Stars are repelled from this
+// rectangle so they don't fight the moon halo for visual attention.
+// Coordinates are unit ratios of viewport width/height — the moon
+// sprite scales with the bg.
+//
+const MOON_ZONE_CENTER_X_RATIO = 1700 / 1920
+const MOON_ZONE_CENTER_Y_RATIO = 160 / 1080
+const MOON_ZONE_RADIUS_RATIO = 220 / 1920
+//
+// Flare cross radius multiplier for large stars (small stars get no
+// cross flare — they're just twinkling dots).
+//
+const STAR_FLARE_RADIUS_MULT = 3.2
 //
 // Left illustration (life-ready.png + hero sprite).
 // Moved to the left side of the screen to free the right half for text.
@@ -192,6 +236,12 @@ export function sceneReady(k) {
     // Background (menu-bg dark overlay)
     //
     k.add([k.pos(0, 0), k.z(Z_BG_OVERLAY), { draw() { onDrawBg(k) } }])
+    //
+    // Twinkling star field overlaid on the baked menu-bg so the ready
+    // scene gets a living night sky on top of the static composition.
+    //
+    const starField = createStarField(k)
+    k.add([k.pos(0, 0), k.z(Z_STARS), { draw() { drawStarField(k, starField) } }])
     //
     // Left illustration: life.png + procedural hero silhouette
     //
@@ -391,6 +441,123 @@ function onDrawBg(k) {
     height: k.height(),
     opacity: 0.5
   })
+}
+//
+// Pre-computes the star field once per scene enter so the per-frame
+// drawer only modulates alpha. Returns an array of star descriptors
+// with viewport-pixel positions, so the field follows window resizes
+// implicitly via the same pos-recompute path the rest of the scene
+// uses (re-entering the scene rebuilds the field).
+//
+function createStarField(k) {
+  const w = k.width()
+  const h = k.height()
+  const stars = []
+  //
+  // Moon-zone repulsion: stars whose centre falls within
+  // `MOON_ZONE_RADIUS_RATIO * w` of the moon centre get re-rolled up to
+  // a few times. Avoids visual clutter around the moon's halo.
+  //
+  const moonCx = MOON_ZONE_CENTER_X_RATIO * w
+  const moonCy = MOON_ZONE_CENTER_Y_RATIO * h
+  const moonRadius = MOON_ZONE_RADIUS_RATIO * w
+  const xMin = STAR_AREA_LEFT_RATIO * w
+  const xMax = STAR_AREA_RIGHT_RATIO * w
+  const yMin = STAR_AREA_TOP_RATIO * h
+  const yMax = STAR_AREA_BOTTOM_RATIO * h
+  const tryPlace = () => {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const x = xMin + Math.random() * (xMax - xMin)
+      const y = yMin + Math.random() * (yMax - yMin)
+      if (Math.hypot(x - moonCx, y - moonCy) > moonRadius) return { x, y }
+    }
+    return null
+  }
+  //
+  // Small twinkling dots — the bulk of the field
+  //
+  for (let i = 0; i < STAR_COUNT_SMALL; i++) {
+    const pos = tryPlace()
+    if (!pos) continue
+    stars.push(buildStar(pos.x, pos.y, false))
+  }
+  //
+  // Larger stars with cross flares — sparse highlights
+  //
+  for (let i = 0; i < STAR_COUNT_LARGE; i++) {
+    const pos = tryPlace()
+    if (!pos) continue
+    stars.push(buildStar(pos.x, pos.y, true))
+  }
+  return stars
+}
+//
+// Builds a single star descriptor. Large stars get a wider radius and
+// a flag enabling the cross flare; small stars stay as simple dots.
+//
+function buildStar(x, y, isLarge) {
+  const radius = isLarge
+    ? STAR_RADIUS_LARGE_MIN + Math.random() * STAR_RADIUS_LARGE_RANGE
+    : STAR_RADIUS_SMALL_MIN + Math.random() * STAR_RADIUS_SMALL_RANGE
+  const isAmber = Math.random() < STAR_AMBER_RATIO
+  return {
+    x,
+    y,
+    radius,
+    isLarge,
+    r: isAmber ? STAR_AMBER_R : STAR_WHITE_R,
+    g: isAmber ? STAR_AMBER_G : STAR_WHITE_G,
+    b: isAmber ? STAR_AMBER_B : STAR_WHITE_B,
+    baseAlpha: STAR_BASE_ALPHA_MIN + Math.random() * STAR_BASE_ALPHA_RANGE,
+    twinkleFreq: STAR_TWINKLE_FREQ_MIN + Math.random() * STAR_TWINKLE_FREQ_RANGE,
+    twinklePhase: Math.random() * Math.PI * 2
+  }
+}
+//
+// Draws every star with alpha modulated by sin(time * freq + phase).
+// Large stars also draw a faint 4-point cross flare at the brightest
+// part of their cycle so the field reads as actual stars rather than
+// uniformly flickering dots.
+//
+function drawStarField(k, stars) {
+  const time = k.time()
+  for (const star of stars) {
+    //
+    // Twinkle: sin gives [-1, 1]; remap to [0.25, 1] so even the dim
+    // part of the cycle keeps the star visible (avoids strobe-like
+    // on/off flicker which reads as broken pixels).
+    //
+    const cycle = 0.5 * (1 + Math.sin(time * star.twinkleFreq + star.twinklePhase))
+    const alpha = star.baseAlpha * (0.25 + 0.75 * cycle)
+    const color = k.rgb(star.r, star.g, star.b)
+    k.drawCircle({
+      pos: k.vec2(star.x, star.y),
+      radius: star.radius,
+      color,
+      opacity: alpha
+    })
+    //
+    // Large stars: paint a thin cross flare. Length tracks the twinkle
+    // cycle so the flare grows/shrinks with the dot's brightness.
+    //
+    if (!star.isLarge) continue
+    const flareLen = star.radius * STAR_FLARE_RADIUS_MULT * (0.4 + 0.6 * cycle)
+    const flareAlpha = alpha * 0.55
+    k.drawLine({
+      p1: k.vec2(star.x - flareLen, star.y),
+      p2: k.vec2(star.x + flareLen, star.y),
+      width: 0.6,
+      color,
+      opacity: flareAlpha
+    })
+    k.drawLine({
+      p1: k.vec2(star.x, star.y - flareLen),
+      p2: k.vec2(star.x, star.y + flareLen),
+      width: 0.6,
+      color,
+      opacity: flareAlpha
+    })
+  }
 }
 //
 // Draws the center illustration: life-ready.png as the creature + hero sprite overlaid in front.

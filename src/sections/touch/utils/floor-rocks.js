@@ -193,6 +193,14 @@ function buildSingleFloorRock(k, floorY, posX, radius, spriteName) {
     traceOutline(ctx)
     ctx.stroke()
   })
-  const posY = floorY - totalH * 0.45 + Math.random() * 6
+  //
+  // Lift every rock a couple of pixels off the floor line — previously
+  // the small random downward jitter let stones bite into / sit below
+  // the grass line, making them read as half-buried instead of resting
+  // on the ground. Keeps the visual variance via the random jitter,
+  // just shifts the whole range up.
+  //
+  const ROCK_LIFT_FROM_FLOOR = 5
+  const posY = floorY - totalH * 0.45 + Math.random() * 6 - ROCK_LIFT_FROM_FLOOR
   return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
 }

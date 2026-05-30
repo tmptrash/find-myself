@@ -26,15 +26,30 @@ const PLAY_AREA_BOTTOM_TRIM = 100
 const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin + PLAY_AREA_BOTTOM_TRIM
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
-const L2_SCENE_BG_R = 31
-const L2_SCENE_BG_G = 31
-const L2_SCENE_BG_B = 31
+//
+// Scene fill — deep teal, the dominant cool half of the touch section's
+// teal+orange complementary palette. Matches L0 / L1 so the whole touch
+// run shares one cool atmospheric base. Cold-blue snow/ice elements
+// already live on the cool side, while warm log bark + hero accents
+// drive the orange complement.
+//
+const L2_SCENE_BG_R = 28
+const L2_SCENE_BG_G = 50
+const L2_SCENE_BG_B = 58
 //
 // Rounded corner configuration for game area
 //
 const CORNER_RADIUS = 20
 const CORNER_SPRITE_NAME = 'touch2-corner-sprite'
-const WALL_COLOR_HEX = '#1F1F1F'
+//
+// Wall / canvas / corner tint locked to the playfield teal so the L2
+// frame reads as a single flush surface — kills the previous darker
+// letterbox bars that floated at the top + bottom of the play area.
+//
+const WALL_COLOR_HEX = '#1C323A'
+const WALL_COLOR_R = 28
+const WALL_COLOR_G = 50
+const WALL_COLOR_B = 58
 //
 // Platform dimensions
 //
@@ -278,9 +293,15 @@ const SNOW_CLUMP_RADIUS_MAX = 8
 const MOON_X = 1400
 const MOON_Y = 320
 const MOON_RADIUS = 56
-const MOON_COLOR_R = 200
-const MOON_COLOR_G = 195
-const MOON_COLOR_B = 180
+//
+// Moon disc tinted warm amber — this is the dominant orange accent on
+// the cool teal sky and the strongest single complementary-palette
+// landmark in L2. The same RGB triplet also feeds the radial glow and
+// crater shading so the warm light spreads consistently outward.
+//
+const MOON_COLOR_R = 232
+const MOON_COLOR_G = 200
+const MOON_COLOR_B = 145
 const MOON_GLOW_RADIUS = 30
 //
 // Pre-defined crater positions relative to moon center (fraction of radius)
@@ -381,7 +402,7 @@ export function sceneLevel2(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -394,7 +415,7 @@ export function sceneLevel2(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -407,7 +428,7 @@ export function sceneLevel2(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -424,16 +445,25 @@ export function sceneLevel2(k) {
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
+    //
+    // Default silver hero. After completing touch he adopts the touch
+    // identity colour (steel teal — the cool complement of silver).
+    //
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 2,
-      activeColor: '#8B5A50',
-      inactiveColor: '#808080',
-      completedColor: '#8B5A50',
+      //
+      // TOUCH letters tint matches the section's steel-teal identity so
+      // the HUD agrees with the in-game anti-hero and the touch-
+      // completed hero progression colour.
+      //
+      activeColor: '#5A8898',
+      inactiveColor: '#B0B0B0',
+      completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
@@ -497,7 +527,7 @@ export function sceneLevel2(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -523,6 +553,11 @@ export function sceneLevel2(k) {
       sfx: sound,
       antiHero: null,
       addArms: true,
+      //
+      // Steel teal — the touch section's identity colour and the direct
+      // complementary of the silver hero in the teal+orange palette.
+      //
+      bodyColor: CFG.visual.colors.sections.touch.antiHero,
       //
       // Winter scene already animates the mouth with cold breath puffs,
       // so suppress the default idle hum + music notes here.
@@ -1339,7 +1374,12 @@ function createCloudsUnderTopPlatform(k) {
   const CLOUD_BOTTOM_Y = TOP_MARGIN + 55
   const CLOUD_COUNT = 22
   const CLOUD_RANDOMNESS = 15
-  const baseCloudColor = k.rgb(30, 35, 50)
+  //
+  // Cloud band tint matches the muted teal used by Touch L0's distance
+  // fog circles so all three touch levels share one cool-side cloud
+  // colour and the L2 sky reads as part of the same atmosphere.
+  //
+  const baseCloudColor = k.rgb(32, 60, 68)
   //
   // Band covers the playable width; two copies tile seamlessly
   //
@@ -1959,14 +1999,19 @@ function createMountains(k) {
   const screenHeight = k.height()
   const horizonY = FLOOR_Y  // Mountains start from bottom platform
   //
-  // Color palette
+  // Mountain palette tuned for the touch teal+orange complementary
+  // scheme: rock faces sit on the cool side (steel-teal saturated)
+  // while the snow caps catch a warm cream highlight so the moonlight
+  // reads as the orange complement that the rest of the level frames.
+  // Sky stays black — it's the canvas the warm moon and snow glow sit
+  // on top of.
   //
   const colors = {
-    sky: '#000000',            // Black background
-    snow: 'rgb(255, 255, 255)', // Pure white snow
-    rockLeft: 'rgb(73, 121, 141)',  // Left side rock color
-    rockRight: 'rgb(62, 105, 121)', // Right side rock color
-    rockRightLight: 'rgb(130, 176, 209)' // Right side light rock color
+    sky: '#000000',
+    snow: 'rgb(244, 232, 210)',
+    rockLeft: 'rgb(60, 118, 142)',
+    rockRight: 'rgb(48, 100, 122)',
+    rockRightLight: 'rgb(112, 168, 202)'
   }
   
   const fixedPointOnSegment = (x1, y1, x2, y2, percent) => {
@@ -2124,13 +2169,14 @@ function createMountains(k) {
       ctx.fillStyle = colors.sky
       ctx.fillRect(0, 0, screenWidth, screenHeight)
       //
-      // Draw left mountain (shadowed, darker colors)
+      // Left (shadow-side) mountain: deeper cool-teal rock, slightly
+      // duller snow (it's not catching the moonlight).
       //
       drawMountain(ctx, leftMountainX, horizonY, leftMountainWidth, leftMountainHeight, leftMountainParams, 1.0, {
-        snow: 'rgb(200, 210, 220)',  // Darker snow
-        rockLeft: 'rgb(50, 80, 100)',  // Darker left rock
-        rockRight: 'rgb(40, 70, 90)',  // Darker right rock
-        rockRightLight: 'rgb(90, 130, 150)'  // Darker light rock
+        snow: 'rgb(196, 196, 198)',
+        rockLeft: 'rgb(40, 80, 100)',
+        rockRight: 'rgb(28, 64, 86)',
+        rockRightLight: 'rgb(78, 124, 148)'
       })
       
       //
@@ -2144,13 +2190,15 @@ function createMountains(k) {
       })
       
       //
-      // Draw right mountain (light, brighter colors)
+      // Right (lit-side) mountain: brighter cool-teal rock + a warm
+      // cream snow cap so the strongest moonlit peak doubles as the
+      // dominant warm accent in the parallax band.
       //
       drawMountain(ctx, rightMountainX, horizonY, rightMountainWidth, rightMountainHeight, rightMountainParams, 1.0, {
-        snow: 'rgb(245, 248, 250)',  // Brighter snow
-        rockLeft: 'rgb(90, 140, 160)',  // Brighter left rock
-        rockRight: 'rgb(80, 130, 150)',  // Brighter right rock
-        rockRightLight: 'rgb(150, 190, 220)'  // Brighter light rock
+        snow: 'rgb(248, 232, 196)',
+        rockLeft: 'rgb(82, 144, 168)',
+        rockRight: 'rgb(70, 130, 156)',
+        rockRightLight: 'rgb(140, 196, 224)'
       })
       //
       // Draw moon in front of mountains
@@ -2194,9 +2242,14 @@ function drawBackgroundDarkestTrees(ctx) {
       layers: treesLayers,
       trunkWidthPercent: .03,
       trunkHeightPercent: Math.random() * .2 + .1,
-      trunkColor: '#050505',
-      leftColor: [7, 7, 7],
-      rightColor: [10, 10, 10],
+      //
+      // Furthest fir-tree silhouettes: very dark teal so the deepest
+      // parallax band stays cool and recessive on the new teal sky,
+      // instead of reading as pure neutral black holes.
+      //
+      trunkColor: '#0E1A1E',
+      leftColor: [12, 22, 26],
+      rightColor: [16, 28, 32],
       layer0WidthPercent: .5,
       layersDecWidthPercent: .15,
       layersSharpness: Math.floor(Math.random() * 10 + 10)
@@ -2238,9 +2291,14 @@ function drawBackgroundDarkTrees(ctx) {
       layers: Math.random() * treesLayers + 4,
       trunkWidthPercent: .03,
       trunkHeightPercent: Math.random() * .2 + .1,
-      trunkColor: '#101010',
-      leftColor: [15, 15, 15],
-      rightColor: [25, 20, 25],
+      //
+      // Mid-distance fir-trees: slightly brighter dark teal so they
+      // separate from the deepest band while staying on the cool side
+      // of the complementary palette.
+      //
+      trunkColor: '#152830',
+      leftColor: [18, 36, 42],
+      rightColor: [28, 48, 54],
       layer0WidthPercent: .3,
       layersDecWidthPercent: .15,
       layersSharpness: Math.floor(Math.random() * 10 + 10)
@@ -2331,8 +2389,14 @@ function generateForegroundTreeData(crowExcludeX, lakeMaxX) {
       layers: layerCount,
       trunkWidthPercent: 0.03,
       trunkHeightPercent: Math.random() * 0.2 + 0.1,
-      leftColor: [30, 100, 40],
-      rightColor: [30, 150, 40],
+      //
+      // Foreground fir-trees: pushed from pure spring-green toward warm
+      // olive / amber-green so the closest forest band carries a faint
+      // warm undertone — the warm complement to the cool teal sky and
+      // mountain rock.
+      //
+      leftColor: [62, 110, 50],
+      rightColor: [86, 142, 56],
       layer0WidthPercent: 0.3,
       layersDecWidthPercent: 0.15,
       layersSharpness: Math.floor(Math.random() * 10 + 10),
@@ -2391,8 +2455,13 @@ function generateOverlayTreeData(screenWidth, crowExcludeX) {
       layers: 5,
       trunkWidthPercent: 0.03,
       trunkHeightPercent: 0.15,
-      leftColor: [25, 85, 35],
-      rightColor: [25, 130, 35],
+      //
+      // Overlay fir-trees: same warm olive / amber-green tuning as
+      // the foreground row so the closest two trees stay on the warm
+      // side of the complementary palette.
+      //
+      leftColor: [58, 96, 46],
+      rightColor: [82, 128, 50],
       layer0WidthPercent: 0.3,
       layersDecWidthPercent: 0.15,
       layersSharpness: 14,
@@ -2404,8 +2473,8 @@ function generateOverlayTreeData(screenWidth, crowExcludeX) {
       layers: 4,
       trunkWidthPercent: 0.03,
       trunkHeightPercent: 0.12,
-      leftColor: [28, 90, 38],
-      rightColor: [28, 140, 38],
+      leftColor: [62, 104, 50],
+      rightColor: [88, 134, 54],
       layer0WidthPercent: 0.3,
       layersDecWidthPercent: 0.15,
       layersSharpness: 12,

@@ -31,19 +31,25 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 const HERO_COLLISION_HEIGHT_SCALED = 75
 //
-// Background color (near-black night sky)
+// Background colour — deep teal, the dominant cool half of the touch
+// section's teal+orange complementary palette. The night-sky reading
+// is preserved (the value stays in the same dark band as the previous
+// neutral charcoal) while the hue locks the scene onto the cool side
+// of the palette so the warm log bark, hero glow and moon become the
+// orange complement.
 //
-const BG_COLOR_R = 31
-const BG_COLOR_G = 31
-const BG_COLOR_B = 31
-const BG_HEX = '#1F1F1F'
+const BG_COLOR_R = 28
+const BG_COLOR_G = 50
+const BG_COLOR_B = 58
+const BG_HEX = '#1C323A'
 //
-// Wall color (matches background for seamless edges)
+// Wall color — slightly darker teal than the playfield so the frame
+// recedes behind the action while staying on the cool half.
 //
-const WALL_COLOR_R = 31
-const WALL_COLOR_G = 31
-const WALL_COLOR_B = 31
-const WALL_COLOR_HEX = '#1F1F1F'
+const WALL_COLOR_R = 21
+const WALL_COLOR_G = 37
+const WALL_COLOR_B = 40
+const WALL_COLOR_HEX = '#152528'
 //
 // Platform dimensions
 //
@@ -305,18 +311,30 @@ const CLOUD_BOTTOM_Y = TOP_MARGIN + 55
 const CLOUD_COUNT = 22
 const CLOUD_RANDOMNESS = 15
 const CLOUD_DENSE_Y = TOP_MARGIN + 30
-const CLOUD_BASE_COLOR_R = 14
-const CLOUD_BASE_COLOR_G = 16
-const CLOUD_BASE_COLOR_B = 30
+//
+// Cloud base tint matches the muted teal used by Touch L0's distance
+// fog circles so the night sky in L3 belongs to the same cool-side
+// cloud band as L0, L1 and L2 — no more isolated near-black-navy
+// clouds floating against the teal backdrop.
+//
+const CLOUD_BASE_COLOR_R = 32
+const CLOUD_BASE_COLOR_G = 60
+const CLOUD_BASE_COLOR_B = 68
 //
 // Moon configuration (drawn on background canvas)
 //
 const MOON_X = 1400
 const MOON_Y = 230
 const MOON_RADIUS = 56
-const MOON_COLOR_R = 200
-const MOON_COLOR_G = 195
-const MOON_COLOR_B = 180
+//
+// Moon disc tinted warm amber to match Touch L2 — the single dominant
+// orange accent on the cool teal night sky. The same RGB triplet also
+// feeds the radial glow and crater shading so the warm light spreads
+// consistently outward.
+//
+const MOON_COLOR_R = 232
+const MOON_COLOR_G = 200
+const MOON_COLOR_B = 145
 const MOON_GLOW_RADIUS = 30
 //
 // Moon hover glow configuration
@@ -673,16 +691,26 @@ export function sceneLevel3(k) {
     const isTouchComplete = get('touch.completed', false)
     const isWordComplete = get('word.completed', false)
     const isTimeComplete = get('time.completed', false)
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
+    //
+    // Default silver hero — the achromatic neutral the section pairs
+    // against. After completing touch he adopts the touch identity
+    // colour (steel teal, the cool complement of silver).
+    //
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 3,
-      activeColor: '#8B5A50',
-      inactiveColor: '#808080',
-      completedColor: '#8B5A50',
+      //
+      // TOUCH letters tint matches the section's steel-teal identity so
+      // the HUD agrees with the in-game anti-hero / touch-completed
+      // hero progression colour.
+      //
+      activeColor: '#5A8898',
+      inactiveColor: '#B0B0B0',
+      completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
@@ -716,7 +744,12 @@ export function sceneLevel3(k) {
       controllable: false,
       sfx: sound,
       antiHero: null,
-      addArms: true
+      addArms: true,
+      //
+      // Steel teal — the touch section's identity colour and the direct
+      // complementary of the silver hero in the teal+orange palette.
+      //
+      bodyColor: CFG.visual.colors.sections.touch.antiHero
     })
     //
     // Create hero on the first (bottom-left) platform

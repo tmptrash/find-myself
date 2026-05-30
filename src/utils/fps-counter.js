@@ -24,16 +24,21 @@ export function create(config) {
   const { k, showTimer = false, targetTime = null, topY = 55 } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
-  // FPS readout with black outline
+  // HUD numerals (FPS + timer) share the same neutral grey as the
+  // section indicator inactive letters and the top-right scoreboard so
+  // every quiet HUD slot reads as one consistent colour. Bumped from
+  // the previous mid-grey (#808080) to a brighter `#B0B0B0` so the
+  // small text stays legible above its black outline.
   //
-  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, k.rgb(200, 200, 200), topY)
+  const HUD_TEXT_GREY = k.rgb(176, 176, 176)
+  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, HUD_TEXT_GREY, topY)
   //
   // Optional level timer + green target time (shown for time-trial levels).
   //
   let timerText = null
   let targetText = null
   if (showTimer) {
-    timerText = createOutlinedHudText(k, 'time: 00:00', font, k.rgb(200, 200, 200), topY)
+    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY)
     if (targetTime) {
       const targetMinutes = Math.floor(targetTime / 60)
       const targetSeconds = Math.floor(targetTime % 60)

@@ -317,10 +317,14 @@ export async function create(config) {
     const crowns = []
     
     //
-    // Colors (brownish roots and grayish branches like in example)
+    // Colors: warm burnt-umber roots (the complementary warm half of the
+    // touch section's teal+orange palette — replaces the previous near-
+    // black brown that disappeared against the new teal playfield) and
+    // muted warm-grey branches so the leafless skeleton still feels like
+    // autumn wood rather than steel.
     //
-    const branchColor = k.rgb(120, 120, 120)  // Gray branches like in example
-    const rootColor = k.rgb(70, 45, 30)  // Base root color
+    const branchColor = k.rgb(150, 130, 110)
+    const rootColor = k.rgb(140, 78, 40)
     
     //
     // Generate leaf clusters at branch endpoints

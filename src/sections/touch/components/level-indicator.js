@@ -31,11 +31,29 @@ const TRAP_BADGE_COLOR_G = 60
 const TRAP_BADGE_COLOR_B = 60
 const TRAP_BADGE_OUTLINE_THICKNESS = 2
 //
+// HUD scoreboard grey: shared by the life-icon tint, score numerals
+// and the inactive TOUCH letters so every quiet HUD slot reads as one
+// neutral colour. Bumped from the previous `#808080` to the brighter
+// `#B0B0B0` because the previous mid-grey disappeared into its black
+// outline at HUD font sizes.
+//
+const HUD_SCORE_ICON_GREY_HEX = '#B0B0B0'
+const HUD_SCORE_ICON_GREY_R = 176
+const HUD_SCORE_ICON_GREY_G = 176
+const HUD_SCORE_ICON_GREY_B = 176
+//
 // Falling "H" letter configuration (last letter tilts as if falling)
 //
 const FALLING_LETTER_INDEX = 4
 const FALLING_LETTER_TILT = 22
-const FALLING_LETTER_COLOR = '#666666'
+//
+// Wobbly "H" letter shares the same neutral grey as every other quiet
+// HUD slot (inactive TOUCH letters, score numerals, life icon, FPS) —
+// the falling glyph is a quirky character, not a separate accent, so
+// it stays inside the single `#B0B0B0` HUD grey instead of drifting
+// to its own darker tone.
+//
+const FALLING_LETTER_COLOR = HUD_SCORE_ICON_GREY_HEX
 const FALLING_LETTER_OFFSET_X = 10
 //
 // Vertical offset so the top of "H" sits on the same line as the bottom of "C" (H lowered vs T,O,U,C)
@@ -200,6 +218,12 @@ export function create(config) {
     controllable: false,
     isStatic: true,
     scale: 2.6 / 3,
+    //
+    // HUD small hero mirrors the playable hero's body colour — silver
+    // by default, then teal / orange / red as the player completes
+    // each section. Keeps the top-right scoreboard's "you" icon in
+    // chromatic sync with the actual character running the level.
+    //
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
     addMouth: isWordComplete,
@@ -223,6 +247,11 @@ export function create(config) {
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
+      //
+      // Tint the white "life" PNG to the neutral grey used by the small
+      // hero so both HUD icons share one quiet scoreboard colour.
+      //
+      k.color(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B),
       k.z(CFG.visual.zIndex.ui)
     ]),
     pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
@@ -298,6 +327,13 @@ export function create(config) {
     lifeScoreText,
     lifeScoreOutlines,
     heroScoreOutlines,
+    //
+    // Exposed so external flash routines (life-deduct red blink,
+    // help-purchase / help-denied flashes) can reset the score numerals
+    // back to the same neutral grey we used at creation time — avoids
+    // them snapping to hard white when the flash ends.
+    //
+    scoreColorHex: HUD_SCORE_ICON_GREY_HEX,
     updateHeroScore: (newScore) => {
       heroScoreText.text = newScore.toString()
       heroScoreOutlines.forEach(outline => {
@@ -387,7 +423,12 @@ function createScoreText(k, score, x, y, fontSize) {
     }),
     k.pos(x, y),
     k.anchor('left'),
-    k.color(255, 255, 255),
+    //
+    // Score numerals share the same neutral grey as the small hero,
+    // life icon and inactive TOUCH letters — the entire HUD now reads
+    // as one quiet grey scoreboard against the in-game palette.
+    //
+    k.color(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])

@@ -36,7 +36,17 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 const CORNER_RADIUS = 20
 const CORNER_SPRITE_NAME = 'touch1-corner-sprite'
-const WALL_COLOR_HEX = '#2A2A2A'
+//
+// L1 walls / canvas backing / playfield all share `L1_SCENE_BG` for a
+// borderless look, so the rounded corner L-shapes must blend into that
+// same teal — otherwise the corners read as four dark blobs against the
+// brighter teal frame. We expose RGB constants so the corner sprite
+// builder and any future wall-tinted decorations stay in sync.
+//
+const WALL_COLOR_HEX = '#1C323A'
+const WALL_COLOR_R = 28
+const WALL_COLOR_G = 50
+const WALL_COLOR_B = 58
 //
 // Platform dimensions
 //
@@ -78,9 +88,14 @@ const FIREFLY_RADIUS_MIN = 1.5
 const FIREFLY_RADIUS_MAX = 3
 const FIREFLY_GLOW_SPEED_MIN = 0.8
 const FIREFLY_GLOW_SPEED_MAX = 2.5
-const FIREFLY_COLOR_R = 220
-const FIREFLY_COLOR_G = 255
-const FIREFLY_COLOR_B = 180
+//
+// Fireflies — pulled from the previous near-white-green to warm amber
+// gold so the floating dots become the sparkling warm accent against
+// the cool teal forest, matching Touch L0's fireflies.
+//
+const FIREFLY_COLOR_R = 244
+const FIREFLY_COLOR_G = 192
+const FIREFLY_COLOR_B = 64
 //
 // Hero push distance for fireflies (same mechanic as snowflakes)
 //
@@ -90,6 +105,13 @@ const FIREFLY_PUSH_STRENGTH = 8
 // Z-indices for firefly layers (behind/between/in front of trees)
 //
 const FIREFLY_LAYERS_Z = [1, 4, 8, 24]
+//
+// Vertical ceiling for fireflies: they should never drift above the
+// foreground tree canopy (the yellow-leaved row), so they read as
+// little glints inside / beneath the foliage instead of floating
+// freely against the open sky. Measured upward from the floor.
+//
+const FIREFLY_MIN_Y_OFFSET_FROM_FLOOR = 360
 //
 // Thunder and lightning configuration
 //
@@ -139,9 +161,14 @@ const L1_FRONT_ORGANIC_COLOR_DIM = 0.2
 const L1_FRONT_ORGANIC_GREYWASH = 0.58
 const L1_BACK_ROW_FAR_BLEND = 0.62
 const L1_BACK_ROW_NEAR_BLEND = 0.36
-const L1_SCENE_BG_R = 42
-const L1_SCENE_BG_G = 42
-const L1_SCENE_BG_B = 42
+//
+// Scene fill — deep teal, the dominant cool half of the complementary
+// palette (matches Touch L0's playfield). Same darkness band as the
+// previous neutral grey so silhouette contrast stays intact.
+//
+const L1_SCENE_BG_R = 28
+const L1_SCENE_BG_G = 50
+const L1_SCENE_BG_B = 58
 //
 // Mushroom decoration constants for level 1
 //
@@ -232,7 +259,13 @@ const LEAF_TOOLTIP_Y_OFFSET = -30
 // Poison leaf settings (blue leaves that kill the hero on contact)
 //
 const POISON_LEAF_CHANCE = 0.4
-const POISON_LEAF_COLOR_HEX = '#4488CC'
+//
+// Poison leaves — kept on the cool half of the complementary palette
+// but pulled toward steel teal so they read as on-palette danger
+// (instead of an isolated bright cyan-blue accent against the warm
+// autumn leaves).
+//
+const POISON_LEAF_COLOR_HEX = '#3E708A'
 const POISON_DEATH_RELOAD_DELAY = 0.8
 //
 // Worm crawling on root level — peristaltic wave locomotion.
@@ -386,7 +419,14 @@ export function sceneLevel1(k) {
     //
     // Create grass/bushes/trees decoration with parallax depth layers
     //
-    const grassY = FLOOR_Y - 2
+    //
+    // `grassY` is the visible ground line — the y where every blade
+    // base, bush root and trunk bottom is anchored. Lowered by 1 px
+    // from `FLOOR_Y - 2` to `FLOOR_Y - 1` so the grass line sits a
+    // touch closer to the actual physics floor, matching the eye-line
+    // the player reads as "ground" against the deeper teal playfield.
+    //
+    const grassY = FLOOR_Y - 1
     const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
     const bgColor = { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B }
     //
@@ -1044,13 +1084,23 @@ export function sceneLevel1(k) {
     const isTouchComplete = get('touch.completed', false)
     const isWordComplete = get('word.completed', false)
     const isTimeComplete = get('time.completed', false)
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
+    //
+    // Default silver hero. After completing touch he adopts the touch
+    // identity colour, which is now steel teal — the cool complement of
+    // silver in the teal+orange palette.
+    //
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 1,
-      activeColor: '#8B5A50',
-      inactiveColor: '#808080',
-      completedColor: '#8B5A50',
+      //
+      // TOUCH letters tint matches the new section identity (steel teal),
+      // so the HUD agrees with the in-game anti-hero and the
+      // touch-completed hero progression colour.
+      //
+      activeColor: '#5A8898',
+      inactiveColor: '#B0B0B0',
+      completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
@@ -1305,10 +1355,12 @@ export function sceneLevel1(k) {
       k.wait(0.5, () => {
         gameState.antiHeroActive = true
         //
-        // Change anti-hero color to brown (active) by reloading sprites
-        // This preserves white eyes with black pupils, as eyes are drawn separately
+        // Snap the anti-hero from grey (inactive) to the touch section's
+        // identity steel-teal once the player solves the melody puzzle.
+        // White eyes / black pupils are drawn separately so they are
+        // preserved across the sprite reload.
         //
-        const activeColor = CFG.visual.colors.antiHero.body  // #8B5A50
+        const activeColor = CFG.visual.colors.sections.touch.antiHero
         Hero.loadHeroSprites({
           k,
           type: Hero.HEROES.ANTIHERO,
@@ -1384,17 +1436,20 @@ export function sceneLevel1(k) {
             k.wait(0.2, () => {
               if (!applySpriteChange()) {
                 //
-                // Fallback: use tint method if sprite loading fails
+                // Fallback: if the recoloured sprite never finishes
+                // loading, tint the grey base sprite toward the active
+                // touch identity teal so the anti-hero still snaps onto
+                // the right palette (R≈90, G≈136, B≈152 for #5A8898).
                 //
-                const brownR = 139  // #8B5A50
-                const brownG = 90
-                const brownB = 80
-                const grayR = 176  // #B0B0B0
+                const tealR = 90    // #5A
+                const tealG = 136   // #88
+                const tealB = 152   // #98
+                const grayR = 176   // #B0
                 const grayG = 176
                 const grayB = 176
-                const tintR = Math.round((brownR / grayR) * 255)
-                const tintG = Math.round((brownG / grayG) * 255)
-                const tintB = Math.round((brownB / grayB) * 255)
+                const tintR = Math.round((tealR / grayR) * 255)
+                const tintG = Math.round((tealG / grayG) * 255)
+                const tintB = Math.round((tealB / grayB) * 255)
                 antiHeroInst.character.color = k.rgb(
                   Math.min(255, Math.max(0, tintR)),
                   Math.min(255, Math.max(0, tintG)),
@@ -1518,16 +1573,14 @@ export function sceneLevel1(k) {
       heroBodyColor,
       storageKey: 'touch.level1BonusCollected',
       //
-      // The visible log is drawn centered on `x` with width 80 plus the
-      // squashed endcaps (~91 px on screen). Center the collider on the
-      // log so its full visible length is collidable — earlier xOffset
-      // values shifted the collider far to the right of the painted
-      // barrel, leaving most of the visible log with no collision
-      // under it.
+      // Collider pushed firmly right + a hair lower so it lands directly
+      // under the painted log. Previous `(10, 8)` pair still sat several
+      // pixels left of the visible barrel and a touch too high, so the
+      // hero's right-side landings were missing the collider entirely.
       //
       collisionWidth: 92,
-      platformCollisionXOffset: 0,
-      platformCollisionYOffset: 18
+      platformCollisionXOffset: 45,
+      platformCollisionYOffset: 10
     })
     //
     // Set hero reference for grass drawer
@@ -2610,7 +2663,12 @@ function createScrollingCloudConfigs() {
   const areaRight = CFG.visual.screen.width - RIGHT_MARGIN
   const bandWidth = areaRight - areaLeft
   const cloudSpacing = bandWidth / CLOUD_COUNT
-  const baseCloudColor = { r: 36, g: 37, b: 36 }
+  //
+  // Cloud base colour matches the muted teal used by L0's distance fog
+  // circles so both levels share one cool-side cloud band instead of
+  // L1's previous neutral grey clouds floating on top of the teal sky.
+  //
+  const baseCloudColor = { r: 32, g: 60, b: 68 }
   const configs = []
   for (let i = 0; i < CLOUD_COUNT; i++) {
     const baseX = cloudSpacing * i + cloudSpacing * 0.5
@@ -3125,11 +3183,18 @@ function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
 //
 function createFireflies(k, heroInst) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  //
+  // Spawn band is capped to the foliage zone — bounded above by the
+  // foreground tree canopy and below by a small ground clearance — so
+  // fireflies never appear floating above the painted yellow leaves.
+  //
+  const fireflyMinY = FLOOR_Y - FIREFLY_MIN_Y_OFFSET_FROM_FLOOR
+  const fireflyMaxY = FLOOR_Y - 20
   const fireflies = []
   for (let i = 0; i < FIREFLY_COUNT; i++) {
     fireflies.push({
       x: LEFT_MARGIN + Math.random() * playableW,
-      y: TOP_MARGIN + 50 + Math.random() * (FLOOR_Y - TOP_MARGIN - 100),
+      y: fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY),
       baseX: 0,
       baseY: 0,
       vx: (Math.random() - 0.5) * 2,
@@ -3199,7 +3264,12 @@ function onUpdateFireflies(k, fireflies) {
   const t = k.time()
   const minX = LEFT_MARGIN + 10
   const maxX = CFG.visual.screen.width - RIGHT_MARGIN - 10
-  const minY = TOP_MARGIN + 30
+  //
+  // Per-frame Y clamp uses the same canopy ceiling as spawn, so a
+  // firefly pushed by the hero can't briefly drift up above the
+  // foreground trees before settling back into the foliage band.
+  //
+  const minY = FLOOR_Y - FIREFLY_MIN_Y_OFFSET_FROM_FLOOR
   const maxY = FLOOR_Y - 20
   for (const f of fireflies) {
     f.x += Math.sin(t * f.glowSpeed + f.phase) * f.speed * dt + f.pushVx
@@ -3367,11 +3437,19 @@ function createL1Mushrooms(k) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const mushrooms = []
   //
-  // Earthy/forest mushroom palette (browns, reds, yellows)
+  // Mushroom cap palette tuned to the touch teal+orange complementary
+  // scheme. Warm earthy oranges / ambers dominate so mushrooms still
+  // read as forest floor, while two cool steel-teal variants echo the
+  // BG / anti-hero identity colour. Replaces the previous all-warm
+  // brown/red set that fought the new teal-side scenery.
   //
   const capColors = [
-    [120, 70, 35], [160, 80, 40], [180, 50, 50],
-    [140, 110, 50], [90, 60, 35], [170, 60, 70]
+    [220, 110, 40],
+    [200, 80, 30],
+    [240, 180, 70],
+    [180, 130, 60],
+    [90, 136, 152],
+    [60, 100, 120]
   ]
   for (let i = 0; i < L1_MUSHROOM_COUNT; i++) {
     const capW = L1_MUSHROOM_CAP_WIDTH_MIN + Math.random() * (L1_MUSHROOM_CAP_WIDTH_MAX - L1_MUSHROOM_CAP_WIDTH_MIN)

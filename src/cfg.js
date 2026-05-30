@@ -57,15 +57,22 @@ export const CFG = {
       menu: {
         platformColor: "#1A1A1A"       // Platform color (for menu background)
       },
-      // Ready screen colors
+      //
+      // Ready screen colors. The scene runs on a teal+orange
+      // complementary palette so the on-boarding story already shows the
+      // visual grammar the rest of the game speaks. Deep teal backs the
+      // dark frame; the hero in the illustration is steel teal; warm
+      // amber/orange focal points (title, glints, anti-hero in the
+      // duality icon) provide the complementary punch.
+      //
       ready: {
-        background: "#1B1B1B",         // Dark background (#1B1B1B)
-        fireflies: "#FF8C00",          // Hero color for fireflies
-        hint: "#BFBFBF",               // Secondary text (#BFBFBF)
-        text: "#7AAACF",               // Main narrative text (muted blue)
-        title: "#D84C4C",              // Title text (red accent)
-        emphasis: "#F0F0F0",           // Key words emphasis (almost white)
-        ghostWords: "#7AAACF"          // Ghost words in background (blue, very low opacity)
+        background: "#1A2530",
+        fireflies: "#F4C040",
+        hint: "#809AA8",
+        text: "#9AB5C4",
+        title: "#E07020",
+        emphasis: "#F4C040",
+        ghostWords: "#3E708A"
       },
       // Hero colors (for procedural generation)
       hero: {
@@ -88,7 +95,7 @@ export const CFG = {
           body: '#DC143C'      // Crimson red - matches anti-hero and WORDS indicator
         },
         touch: {
-          body: '#8B5A50'      // Reddish-brown - warm, earthy, tactile
+          body: '#5A8898'      // Steel teal — complementary to silver hero; matches in-game touch anti-hero
         },
         feel: {
           body: '#FF69B4'      // Hot pink - emotions, passion, feelings

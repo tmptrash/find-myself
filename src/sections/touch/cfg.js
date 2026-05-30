@@ -20,15 +20,22 @@ export const TOUCH_CFG = {
   },
   visual: {
     //
-    // Colors specific to touch section
+    // Colors specific to touch section. The section runs a teal+orange
+    // complementary palette: cool teals occupy the recessive frame
+    // (walls / sky / background fog) while warm oranges drive focal
+    // points (foliage, hazards, hero progression accents). The section
+    // identity color (used by the level indicator + hero-after-touch
+    // completion) is a steel teal — it's the direct complementary of
+    // the silver default hero, and the colour the anti-hero takes
+    // throughout every touch level.
     //
     colors: {
-      background: "#2A2A2A",         // Darker gray background
-      platform: "#1F1F1F",           // Dark platforms
+      background: "#1C323A",
+      platform: "#152528",
       sections: {
         touch: {
-          body: "#8B5A50",           // Reddish-brown - warm, earthy, tactile (matches global CFG)
-          antiHero: "#8B5A50"        // Reddish-brown anti-hero (same as section body)
+          body: "#5A8898",
+          antiHero: "#5A8898"
         }
       }
     },

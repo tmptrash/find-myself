@@ -13,11 +13,14 @@ const CRAWL_DURATION = 8.0  // Time to crawl before stopping
 const STOP_DURATION = 2.0  // Pause duration before changing direction
 const STEP_SPEED = 8.0  // How fast legs step (increased for better sync at high speeds)
 //
-// Bug color patterns (ladybug-like)
+// Bug colour patterns — re-tuned to live inside the touch section's
+// teal+orange complementary palette. Two warm patterns (orange / amber)
+// and two cool patterns (steel teal / deep blue-teal) so a swarm of
+// bugs naturally distributes across both halves of the wheel.
 //
 const BUG_PATTERNS = [
   {
-    bodyColor: '#E74C3C',  // Red
+    bodyColor: '#E07020',
     spotColor: '#000000',
     spots: [
       { x: -0.3, y: -0.2 },
@@ -26,7 +29,7 @@ const BUG_PATTERNS = [
     ]
   },
   {
-    bodyColor: '#F39C12',  // Orange
+    bodyColor: '#F4C040',
     spotColor: '#000000',
     spots: [
       { x: -0.25, y: 0 },
@@ -34,7 +37,7 @@ const BUG_PATTERNS = [
     ]
   },
   {
-    bodyColor: '#9B59B6',  // Purple
+    bodyColor: '#5A8898',
     spotColor: '#FFFFFF',
     spots: [
       { x: -0.3, y: -0.3 },
@@ -44,7 +47,7 @@ const BUG_PATTERNS = [
     ]
   },
   {
-    bodyColor: '#3498DB',  // Blue
+    bodyColor: '#3E708A',
     spotColor: '#000000',
     spots: [
       { x: 0, y: -0.3 },

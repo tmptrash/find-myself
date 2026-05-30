@@ -117,7 +117,7 @@ export function sceneLevel4(k) {
       k,
       levelNumber: 4,
       activeColor: '#8B5A50',
-      inactiveColor: '#808080',
+      inactiveColor: '#B0B0B0',
       completedColor: '#8B5A50',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,

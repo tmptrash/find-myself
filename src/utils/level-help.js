@@ -73,10 +73,13 @@ const SPEND_PARTICLE_SIZE_RANGE = 3
 const SPEND_FLASH_COUNT = 8
 const SPEND_FLASH_INTERVAL = 0.05
 //
-// Section letter colors (match level indicator top-left)
+// Section letter colors (match level indicator top-left). Touch now uses
+// its complementary steel-teal identity (same as the in-game anti-hero
+// and the TOUCH HUD letters), so the "buy help" label keeps the same
+// chromatic conversation with the rest of the section.
 //
 const SECTION_HELP_COLORS = {
-  touch: '#8B5A50',
+  touch: '#5A8898',
   time: '#FF8C00',
   word: '#DC143C'
 }
@@ -479,11 +482,21 @@ function flashHelpDeniedHud(k, levelIndicator, heroColor, count) {
   if (!levelIndicator?.smallHero?.character?.exists?.()) return
   const normalHero = k.rgb(heroColor.r, heroColor.g, heroColor.b)
   const red = k.rgb(255, 80, 80)
-  const scoreWhite = k.rgb(255, 255, 255)
+  //
+  // Touch HUD scoreboard renders the numerals in neutral grey, while
+  // other sections still use white. The level-indicator exposes its
+  // resting score colour via `scoreColorHex`; fall back to white when
+  // that field is absent so word / time sections keep their existing
+  // bright numerals.
+  //
+  const scoreRest = levelIndicator?.scoreColorHex
+    ? getRGB(k, levelIndicator.scoreColorHex)
+    : { r: 255, g: 255, b: 255 }
+  const scoreRestColor = k.rgb(scoreRest.r, scoreRest.g, scoreRest.b)
   const scoreOutlineBlack = k.rgb(0, 0, 0)
   if (count >= SPEND_FLASH_COUNT) {
     levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
-    levelIndicator.heroScoreText && (levelIndicator.heroScoreText.color = scoreWhite)
+    levelIndicator.heroScoreText && (levelIndicator.heroScoreText.color = scoreRestColor)
     levelIndicator.heroScoreOutlines?.forEach(outline => {
       outline.exists?.() && (outline.color = scoreOutlineBlack)
     })
@@ -491,7 +504,7 @@ function flashHelpDeniedHud(k, levelIndicator, heroColor, count) {
   }
   const isRed = count % 2 === 0
   levelIndicator.smallHero.character.color = isRed ? red : normalHero
-  levelIndicator.heroScoreText && (levelIndicator.heroScoreText.color = isRed ? red : scoreWhite)
+  levelIndicator.heroScoreText && (levelIndicator.heroScoreText.color = isRed ? red : scoreRestColor)
   levelIndicator.heroScoreOutlines?.forEach(outline => {
     outline.exists?.() && (outline.color = isRed ? red : scoreOutlineBlack)
   })

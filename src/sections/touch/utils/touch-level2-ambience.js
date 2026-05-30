@@ -230,6 +230,14 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
         const armY = midY + 2
         const armLen = 36
         const armSpread = 14
+        //
+        // Stick-arm colour: warm amber/burnt-umber so the twigs read
+        // clearly against the new teal background (the previous near-
+        // black brown disappeared into the cool BG). Also doubles as a
+        // small warm complementary accent next to the snowman's white
+        // body and the cold teal sky.
+        //
+        const armColor = k.rgb(176, 104, 54)
         for (const armSide of [-1, 1]) {
           const armEndX = cx + armSide * (L2_SNOWMAN_BODY_R * 0.72 + armLen)
           const armEndY = armY - 8
@@ -237,7 +245,7 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
             p1: k.vec2(cx + armSide * L2_SNOWMAN_BODY_R * 0.68, armY),
             p2: k.vec2(armEndX, armEndY),
             width: 2.5,
-            color: k.rgb(38, 28, 18),
+            color: armColor,
             opacity: 1
           })
           //
@@ -247,14 +255,14 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
             p1: k.vec2(armEndX, armEndY),
             p2: k.vec2(armEndX + armSide * 10, armEndY - armSpread),
             width: 1.5,
-            color: k.rgb(38, 28, 18),
+            color: armColor,
             opacity: 1
           })
           k.drawLine({
             p1: k.vec2(armEndX, armEndY),
             p2: k.vec2(armEndX + armSide * 14, armEndY + 4),
             width: 1.5,
-            color: k.rgb(38, 28, 18),
+            color: armColor,
             opacity: 1
           })
         }

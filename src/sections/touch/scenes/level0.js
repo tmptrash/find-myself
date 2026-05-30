@@ -39,7 +39,19 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 const CORNER_RADIUS = 20
 const CORNER_SPRITE_NAME = 'touch0-corner-sprite'
-const WALL_COLOR_HEX = '#1F1F1F'
+//
+// Letterbox / wall tint is the darkest end of the cool side of the
+// teal+orange complementary palette so the playfield never breaks the
+// composition with a neutral grey frame.
+//
+const WALL_COLOR_HEX = '#152528'
+//
+// RGB form of WALL_COLOR_HEX used in inline k.color()/k.rgb() calls
+// (Kaplay's color components are RGB integers, not hex strings).
+//
+const WALL_COLOR_R = 21
+const WALL_COLOR_G = 37
+const WALL_COLOR_B = 40
 //
 // Platform dimensions
 //
@@ -119,11 +131,13 @@ const L0_BACK_ORGANIC_MID_COUNT = 9
 const L0_BACK_ORGANIC_FAR_COUNT = 15
 const L0_BACK_ORGANIC_FAR_HEIGHT_SCALE = 0.78
 //
-// Far circle crowns blend toward Touch L1 cloud grey (scrolling clouds base rgb).
+// Far circle crowns sit on the cool side of the complementary palette —
+// muted teal so the deepest parallax band reads as cold distance fog
+// rather than neutral grey.
 //
-const L0_CLOUD_CIRCLE_R = 36
-const L0_CLOUD_CIRCLE_G = 37
-const L0_CLOUD_CIRCLE_B = 36
+const L0_CLOUD_CIRCLE_R = 32
+const L0_CLOUD_CIRCLE_G = 60
+const L0_CLOUD_CIRCLE_B = 68
 const L0_CLOUD_CIRCLE_BLEND_FAR = 0.9
 const L0_CLOUD_CIRCLE_BLEND_NEAR = 0.74
 //
@@ -139,22 +153,28 @@ const L0_BLACK_LEAF_ROW_COUNT = 14
 const L0_GREY_LEAF_ROW_SLOT_BIAS = 0.38
 const L0_BLACK_LEAF_ROW_SLOT_BIAS = 0.42
 //
-// Leafy grey band — cooler mid-grey, clearly lighter than cloud-circle crowns (~36) and than scene fill (~42).
+// Leafy "grey" mid band — pushed cool toward deep teal so it reads as
+// the recessive half of the teal+orange complementary palette. Still
+// dark enough to live behind the closer black-leaf row.
 //
-const L0_GREY_ORGANIC_TRUNK_R = 22
-const L0_GREY_ORGANIC_TRUNK_G = 22
-const L0_GREY_ORGANIC_TRUNK_B = 22
-const L0_GREY_ORGANIC_LEAF_R = 24
-const L0_GREY_ORGANIC_LEAF_G = 24
-const L0_GREY_ORGANIC_LEAF_B = 24
+const L0_GREY_ORGANIC_TRUNK_R = 24
+const L0_GREY_ORGANIC_TRUNK_G = 46
+const L0_GREY_ORGANIC_TRUNK_B = 52
+const L0_GREY_ORGANIC_LEAF_R = 28
+const L0_GREY_ORGANIC_LEAF_G = 52
+const L0_GREY_ORGANIC_LEAF_B = 58
 const L0_GREY_ORGANIC_JITTER = 4
 const L0_BLACK_LEAF_SILHOUETTE_DIM = 0.48
-const L0_BLACK_ORGANIC_TRUNK_R = 11
-const L0_BLACK_ORGANIC_TRUNK_G = 11
-const L0_BLACK_ORGANIC_TRUNK_B = 15
-const L0_BLACK_ORGANIC_LEAF_R = 15
-const L0_BLACK_ORGANIC_LEAF_G = 15
-const L0_BLACK_ORGANIC_LEAF_B = 20
+//
+// "Black" mid band — near-black but still tinted toward the cool palette
+// so distant silhouettes don't drift back to neutral grey.
+//
+const L0_BLACK_ORGANIC_TRUNK_R = 12
+const L0_BLACK_ORGANIC_TRUNK_G = 26
+const L0_BLACK_ORGANIC_TRUNK_B = 32
+const L0_BLACK_ORGANIC_LEAF_R = 16
+const L0_BLACK_ORGANIC_LEAF_G = 32
+const L0_BLACK_ORGANIC_LEAF_B = 38
 //
 // After fog tint, darken organic back silhouettes so they read between circle trees and swaying front row.
 //
@@ -183,11 +203,13 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 const HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH = 140
 //
-// Floor hazards: rusted metal spikes / shattered rebar stubs jutting from damp soil (not magical blue blades)
+// Floor hazards: rusted metal spikes, pulled to a vibrant orange so they
+// glow as the warm complement against the teal playfield. The hue still
+// reads as oxidised iron, just on the orange side of red.
 //
-const FLOOR_THORN_BLADE_FILL_R = 196
-const FLOOR_THORN_BLADE_FILL_G = 38
-const FLOOR_THORN_BLADE_FILL_B = 42
+const FLOOR_THORN_BLADE_FILL_R = 224
+const FLOOR_THORN_BLADE_FILL_G = 112
+const FLOOR_THORN_BLADE_FILL_B = 32
 //
 // Life image flash + red particles on thorn death (same as touch level 3)
 //
@@ -219,11 +241,14 @@ const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 const LIFE_DEDUCT_THRESHOLD = 10
 const LIFE_DEDUCT_FLAG = 'touch.trapAdded'
 //
-// Flat playfield fill (matches rain sheet); letterbox dimmer uses same RGB as visible backdrop.
+// Flat playfield fill — deep teal, the dominant cool half of the
+// teal+orange complementary scheme. Same darkness band as the previous
+// neutral grey so contrast against hero/foreground silhouettes is
+// preserved, only the hue shifts.
 //
-const L0_PLAYFIELD_BG_R = 42
-const L0_PLAYFIELD_BG_G = 42
-const L0_PLAYFIELD_BG_B = 42
+const L0_PLAYFIELD_BG_R = 28
+const L0_PLAYFIELD_BG_G = 50
+const L0_PLAYFIELD_BG_B = 58
 //
 // Instructions animation constants
 //
@@ -380,12 +405,20 @@ const DIRT_PARTICLE_SPEED_MAX = 160
 const DIRT_PARTICLE_LIFETIME = 0.5
 const DIRT_PARTICLE_SIZE = 6
 const DIRT_PARTICLE_GRAVITY = 600
-const DIRT_PARTICLE_COLOR_R = 95
-const DIRT_PARTICLE_COLOR_G = 65
-const DIRT_PARTICLE_COLOR_B = 40
-const TRAP_SPIKE_FILL_R = 180
-const TRAP_SPIKE_FILL_G = 60
-const TRAP_SPIKE_FILL_B = 60
+//
+// Dirt thrown when tentacles burst out — warm orange-brown so the burst
+// reads as on-palette earth instead of muddy grey.
+//
+const DIRT_PARTICLE_COLOR_R = 160
+const DIRT_PARTICLE_COLOR_G = 97
+const DIRT_PARTICLE_COLOR_B = 44
+//
+// Trap tentacle spikes — hotter orange than the static floor thorns so
+// fast-rising hazards read as urgent fire-warning hue.
+//
+const TRAP_SPIKE_FILL_R = 240
+const TRAP_SPIKE_FILL_G = 128
+const TRAP_SPIKE_FILL_B = 48
 const TRAP_TOOLTIP_TEXT = "surpryyse!"
 const TRAP_TOOLTIP_Y_OFFSET = -30
 //
@@ -421,7 +454,7 @@ export function sceneLevel0(k) {
     //
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
-    k.setBackground(k.rgb(31, 31, 31))
+    k.setBackground(k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B))
     //
     // Visible playfield fill is L0_PLAYFIELD_BG_*; canvas backing matches so letterboxing stays invisible.
     //
@@ -481,7 +514,7 @@ export function sceneLevel0(k) {
       cloudBottomY: TOP_MARGIN + 100,
       cloudCount: isTouchDevice() ? 14 : 18,
       cloudRandomness: 20,
-      baseCloudColor: k.rgb(36, 37, 36)
+      baseCloudColor: k.rgb(L0_CLOUD_CIRCLE_R, L0_CLOUD_CIRCLE_G, L0_CLOUD_CIRCLE_B)
     })
     //
     // Create simple bottom platform
@@ -494,7 +527,7 @@ export function sceneLevel0(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -507,7 +540,7 @@ export function sceneLevel0(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -520,7 +553,7 @@ export function sceneLevel0(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -537,16 +570,28 @@ export function sceneLevel0(k) {
     //
     // Hero body color: red if word complete, orange if time complete, brown if touch complete, otherwise gray
     //
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : "#C0C0C0"
+    //
+    // Hero body color. Default silver `#C0C0C0` is the achromatic
+    // neutral the entire section pairs against (the anti-hero and the
+    // touch-completion identity color become its teal complement). When
+    // the player has finished a section, the hero adopts that section's
+    // identity colour: teal for touch, orange for time, red for word.
+    //
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
     //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 0,
-      activeColor: '#8B5A50',
-      inactiveColor: '#808080',
-      completedColor: '#8B5A50',
+      //
+      // TOUCH letters tint matches the new section identity (steel teal),
+      // so the HUD agrees with the in-game anti-hero / touch-completed
+      // hero progression colour.
+      //
+      activeColor: '#5A8898',
+      inactiveColor: '#B0B0B0',
+      completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
@@ -601,7 +646,7 @@ export function sceneLevel0(k) {
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(31, 31, 31),
+      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ])
@@ -722,21 +767,28 @@ export function sceneLevel0(k) {
       //
       // Depth rows (camera → back): front colorful; mid black/grey organics; far circles + grey organics.
       //
-      const grassBaseR = layerIndex === 3 ? 28 : 50 * colorMix + bgColor.r * (1 - colorMix)
-      const grassBaseG = layerIndex === 3 ? 95 : 80 * colorMix + bgColor.g * (1 - colorMix)
-      const grassBaseB = layerIndex === 3 ? 24 : 50 * colorMix + bgColor.b * (1 - colorMix)
-      
-      const bushBaseR = layerIndex === 3 ? 24 : 35 * colorMix + bgColor.r * (1 - colorMix)
-      const bushBaseG = layerIndex === 3 ? 82 : 55 * colorMix + bgColor.g * (1 - colorMix)
-      const bushBaseB = layerIndex === 3 ? 20 : 35 * colorMix + bgColor.b * (1 - colorMix)
-      
-      const treeLeafR = layerIndex === 3 ? 28 : 12 * colorMix + bgColor.r * (1 - colorMix)
-      const treeLeafG = layerIndex === 3 ? 95 : 16 * colorMix + bgColor.g * (1 - colorMix)
-      const treeLeafB = layerIndex === 3 ? 24 : 12 * colorMix + bgColor.b * (1 - colorMix)
-      
-      const treeTrunkR = layerIndex === 3 ? 78 : 10 * colorMix + bgColor.r * (1 - colorMix)
-      const treeTrunkG = layerIndex === 3 ? 48 : 10 * colorMix + bgColor.g * (1 - colorMix)
-      const treeTrunkB = layerIndex === 3 ? 20 : 10 * colorMix + bgColor.b * (1 - colorMix)
+      //
+      // Front parallax layer (layerIndex === 3) is the warm half of the
+      // teal+orange complementary palette: dry autumn grass, sun-bleached
+      // bushes, amber/orange leaves and burnt-umber trunks. The other
+      // layers stay neutral-cool because they get mixed toward the teal
+      // playfield bg below.
+      //
+      const grassBaseR = layerIndex === 3 ? 200 : 50 * colorMix + bgColor.r * (1 - colorMix)
+      const grassBaseG = layerIndex === 3 ? 156 : 80 * colorMix + bgColor.g * (1 - colorMix)
+      const grassBaseB = layerIndex === 3 ? 64 : 50 * colorMix + bgColor.b * (1 - colorMix)
+
+      const bushBaseR = layerIndex === 3 ? 180 : 35 * colorMix + bgColor.r * (1 - colorMix)
+      const bushBaseG = layerIndex === 3 ? 92 : 55 * colorMix + bgColor.g * (1 - colorMix)
+      const bushBaseB = layerIndex === 3 ? 36 : 35 * colorMix + bgColor.b * (1 - colorMix)
+
+      const treeLeafR = layerIndex === 3 ? 220 : 12 * colorMix + bgColor.r * (1 - colorMix)
+      const treeLeafG = layerIndex === 3 ? 128 : 16 * colorMix + bgColor.g * (1 - colorMix)
+      const treeLeafB = layerIndex === 3 ? 48 : 12 * colorMix + bgColor.b * (1 - colorMix)
+
+      const treeTrunkR = layerIndex === 3 ? 96 : 10 * colorMix + bgColor.r * (1 - colorMix)
+      const treeTrunkG = layerIndex === 3 ? 58 : 10 * colorMix + bgColor.g * (1 - colorMix)
+      const treeTrunkB = layerIndex === 3 ? 28 : 10 * colorMix + bgColor.b * (1 - colorMix)
       //
       // Generate grass blade data for this layer.
       // Back/middle layers stay uniform-but-sparse for atmospheric haze.
@@ -985,7 +1037,12 @@ export function sceneLevel0(k) {
               branchClusters: organic.branchClusters,
               trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
               rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
-              leafColor: k.rgb(120, 90, 40),
+              //
+              // Warm-orange seed leaf colour; it then gets heavily blended
+              // toward the cool teal cloud band below so only a faint
+              // amber undertone survives in the far parallax silhouettes.
+              //
+              leafColor: k.rgb(170, 105, 44),
               opacity: 1,
               swaySpeed: 0,
               swayAmount: 0,
@@ -1293,7 +1350,12 @@ export function sceneLevel0(k) {
               branchClusters: organic.branchClusters,
               trunkColor: k.rgb(palette.trunk.r, palette.trunk.g, palette.trunk.b),
               rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
-              leafColor: k.rgb(120, 90, 40),
+              //
+              // Warm-orange seed leaf colour; far-row tint pulls it toward
+              // the cool teal cloud band so a faint amber undertone
+              // survives in the foggy silhouettes.
+              //
+              leafColor: k.rgb(170, 105, 44),
               opacity: 0.95,
               //
               // Whole-tree sway is no longer used; clusters sway independently
@@ -1522,7 +1584,7 @@ export function sceneLevel0(k) {
         size: size,
         phaseOffset: phaseOffset,
         timeOffset: timeOffset,
-        color: isTreeColor ? k.rgb(36, 37, 36) : k.rgb(5, 5, 5),
+        color: isTreeColor ? k.rgb(L0_CLOUD_CIRCLE_R, L0_CLOUD_CIRCLE_G, L0_CLOUD_CIRCLE_B) : k.rgb(5, 5, 5),
         wingPhase: 0,
         isFlapping: initialFlapping,
         flapTimer: Math.random() * 3,
@@ -1720,7 +1782,12 @@ export function sceneLevel0(k) {
     //
     // Big bug constants (needed for bug4 creation)
     //
-    const BIG_BUG_COLOR = "#1A1C1A"  // Black color for bug4 (anti-hero platform)
+    //
+    // Big bug silhouette — near-black but pulled slightly toward the
+    // cool side so the long-legged anti-hero platform reads as part of
+    // the teal+orange composition instead of a pure neutral black blob.
+    //
+    const BIG_BUG_COLOR = "#0F1C20"
     //
     // Calculate back layer tree color for bugs 1, 2, 3
     // Back layer (layerIndex 0) tree color: 12 * 0.2 + 42 * 0.8 = 36 (R), 16 * 0.2 + 42 * 0.8 = 37 (G), 12 * 0.2 + 42 * 0.8 = 36 (B)
@@ -1889,7 +1956,14 @@ export function sceneLevel0(k) {
       controllable: false,
       sfx: sound,
       antiHero: null,
-      addArms: true
+      addArms: true,
+      //
+      // Steel teal — the cool half of the teal+orange complementary
+      // palette and the direct complement of the silver hero. Pulled
+      // from the touch section's identity colour so it stays consistent
+      // with the HUD indicator.
+      //
+      bodyColor: CFG.visual.colors.sections.touch.antiHero
     })
     //
     // Hide character immediately to prevent double appearance
@@ -2027,7 +2101,7 @@ export function sceneLevel0(k) {
       // reads as foreground geometry on top of the front-line trees.
       //
       collisionWidth: 92,
-      platformCollisionXOffset: 0,
+      platformCollisionXOffset: 60,
       platformCollisionYOffset: 9,
       platformZ: ANTIHERO_PLATFORM_Z_INDEX
     })
@@ -3911,9 +3985,14 @@ const L0_FIREFLY_RADIUS_MIN = 1.5
 const L0_FIREFLY_RADIUS_MAX = 2.5
 const L0_FIREFLY_GLOW_SPEED_MIN = 0.6
 const L0_FIREFLY_GLOW_SPEED_MAX = 2.0
-const L0_FIREFLY_COLOR_R = 180
-const L0_FIREFLY_COLOR_G = 230
-const L0_FIREFLY_COLOR_B = 120
+//
+// Fireflies — pulled from cool lime green to warm amber gold so the
+// little glowing dots become the sparkling warm accent on top of the
+// teal field, not a green outlier.
+//
+const L0_FIREFLY_COLOR_R = 244
+const L0_FIREFLY_COLOR_G = 192
+const L0_FIREFLY_COLOR_B = 64
 //
 // Small mushrooms on the ground
 //
@@ -3974,9 +4053,14 @@ const PUDDLE_OPACITY = 0.42
 const PUDDLE_RIPPLE_INTERVAL_MIN = 1.5
 const PUDDLE_RIPPLE_INTERVAL_MAX = 4.0
 const PUDDLE_RIPPLE_DURATION = 0.8
-const PUDDLE_COLOR_R = 8
-const PUDDLE_COLOR_G = 132
-const PUDDLE_COLOR_B = 255
+//
+// Puddles — deep teal so they sit comfortably on the cool side of the
+// complementary palette while still reading as reflective water (their
+// inner highlights add brightness via per-shade offsets).
+//
+const PUDDLE_COLOR_R = 26
+const PUDDLE_COLOR_G = 110
+const PUDDLE_COLOR_B = 128
 //
 // Puddle splash when hero steps on a puddle
 //
@@ -4245,7 +4329,12 @@ function checkHeroPuddleCollision(k, heroInst, puddles, splashParticles, groundS
   //
   // Override dust color to puddle blue while in water
   //
-  heroInst.dustColor = inAnyPuddle ? '#0896FF' : null
+  //
+  // When the hero splashes through a puddle his footfall dust takes the
+  // puddle's deep-teal tint so the splash reads as on-palette water
+  // rather than a stray bright cyan.
+  //
+  heroInst.dustColor = inAnyPuddle ? '#1A6E80' : null
   //
   // Suppress landing dust when above a puddle (set preemptively so
   // the physics collision callback sees it). Running dust is allowed.
@@ -4423,11 +4512,20 @@ function createMushrooms(k, floorPuddles = []) {
     return false
   }
   //
-  // Possible mushroom cap hues (earth tones, reds, browns, yellows)
+  // Mushroom cap palette tuned for the touch teal+orange complementary
+  // scheme. The warm half dominates (vibrant orange, burnt orange,
+  // amber, warm tan) so mushrooms still feel earthy, while two cool
+  // steel-teal variants thread through the cluster to echo the cool
+  // BG / anti-hero identity. Replaces the previous all-warm autumn
+  // set that read as a single colour blob on the new teal floor.
   //
   const capColors = [
-    [140, 60, 30], [180, 80, 40], [200, 50, 50],
-    [160, 130, 60], [100, 80, 50], [180, 40, 60]
+    [220, 110, 40],
+    [200, 80, 30],
+    [240, 180, 70],
+    [180, 130, 60],
+    [90, 136, 152],
+    [60, 100, 120]
   ]
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
     const capW = MUSHROOM_CAP_WIDTH_MIN + Math.random() * (MUSHROOM_CAP_WIDTH_MAX - MUSHROOM_CAP_WIDTH_MIN)
@@ -4771,9 +4869,15 @@ function buildSingleRock(k, posX, radius, spriteName) {
   //
   // Compute posY first so we can crop the sprite canvas to the above-ground portion.
   // Anything below FLOOR_Y is clipped by reducing the canvas height.
+  // `ROCK_LIFT_FROM_FLOOR` shifts every rock a few pixels above the
+  // grass line so their bases stop visibly biting into the ground
+  // edge — previously the rocks sat tangent to (or slightly below) the
+  // floor line, making them read as half-buried instead of resting on
+  // it.
   //
+  const ROCK_LIFT_FROM_FLOOR = 3
   const randSink = Math.random() * 5
-  const posY = FLOOR_Y - totalH * 0.62 + randSink
+  const posY = FLOOR_Y - totalH * 0.62 + randSink - ROCK_LIFT_FROM_FLOOR
   const croppedH = Math.max(8, Math.ceil(totalH * 0.62 - randSink))
   //
   // Helper to trace the rock outline as a smooth quadratic path
@@ -4971,9 +5075,13 @@ const TREE_ROOT_ABSOLUTE_MAX_Y = CFG.visual.screen.height - 6
 //
 // Single earthy brown tint kept for trunk/root palette coherence where descriptors still carry rootColor.
 //
-const L0_TREE_ROOT_COLOR_R = 48
-const L0_TREE_ROOT_COLOR_G = 58
-const L0_TREE_ROOT_COLOR_B = 42
+//
+// Foreground tree roots — burnt umber, the warm complement to the teal
+// world. Replaces the previous olive tone that fought the new palette.
+//
+const L0_TREE_ROOT_COLOR_R = 112
+const L0_TREE_ROOT_COLOR_G = 64
+const L0_TREE_ROOT_COLOR_B = 34
 //
 // Organic generator depth clamp (L0 draws trunk-only organic silhouettes; no underground roots).
 //

@@ -75,7 +75,14 @@ const HERO_SPRITE_SIZE = 130
 // Hero sprite names (loaded in index.js at game start).
 // HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1).
 //
-const HERO_READY_BODY_COLOR = '#909090'
+//
+// Hero in the ready scene now takes the touch section's identity steel
+// teal (`#5A8898`) — the cool half of the silver/teal complementary
+// pair and the same colour the anti-hero (and touch-completed hero)
+// wear throughout every touch level. Keeps the on-boarding hero in
+// chromatic agreement with the very first section the player enters.
+//
+const HERO_READY_BODY_COLOR = '#5A8898'
 //
 // Anti-hero hover scale effect in the icon row
 //
@@ -84,9 +91,16 @@ const ANTIHERO_HOVER_BASE = 1.18
 const ANTIHERO_HOVER_AMP = 0.10
 const ANTIHERO_PULSE_SPEED = 2.4
 const ANTIHERO_HOVER_LERP_SPEED = 8
-const HERO_SPRITE_NAME = 'hero_909090_000000_0_0'
-const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_909090_000000'
-const ANTIHERO_SPRITE_NAME = 'antiHero_8B5A50_000000_0_0'
+const HERO_SPRITE_NAME = 'hero_5A8898_000000_0_0'
+const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000'
+//
+// Anti-hero color in the duality icon is the warm complement of the
+// hero's steel teal — a vibrant orange that, paired with the teal
+// hero on the same row, visualises the "you vs shadow self" duality
+// through a textbook complementary colour pair.
+//
+const ANTIHERO_READY_BODY_COLOR = '#E07020'
+const ANTIHERO_SPRITE_NAME = 'antiHero_E07020_000000_0_0'
 //
 // Illustration hero eye wander (mirrors idle animation constants from hero.js)
 //
@@ -135,10 +149,13 @@ const ICON_LABEL_DESC_OFFSET_Y = 22
 // Life laugh audio: plays a short ambient laugh at random intervals.
 //
 //
-// Inline color constants
+// Inline color constants — the warm half of the teal+orange
+// complementary palette (orange labels) and the cool teal-gray used
+// for narrative body copy so it sits gently on top of the deep teal
+// background without competing with the orange title.
 //
-const COLOR_WARM_ORANGE = '#C4874A'
-const COLOR_TEXT_GRAY = '#7A8090'
+const COLOR_WARM_ORANGE = '#E08040'
+const COLOR_TEXT_GRAY = '#9AB5C4'
 //
 // Approximate monospace char width multiplier (JetBrains Mono)
 //
@@ -153,9 +170,13 @@ export function sceneReady(k) {
       try { await document.fonts.ready } catch {}
     }
     //
-    // Load gray hero sprites for the ready scene illustration (no arms, matching original style)
+    // Hero illustration is steel teal (cool half of the complementary
+    // pair); the anti-hero in the duality icon below is vibrant orange
+    // (warm half). Loading both up-front guarantees the icon row has
+    // its complementary sprite ready before draw.
     //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
+    loadHeroSprites(k, HEROES.ANTIHERO, ANTIHERO_READY_BODY_COLOR, null, false, false, false)
     CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
     k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     k.get("word-pile-text").forEach(obj => obj.destroy())
@@ -470,7 +491,13 @@ function onDrawIconIllustrations(k, iconAnim) {
 //
 function drawFragmentIcon(k, cx, cy, sparklePhase) {
   const pulse = 0.5 + 0.5 * Math.abs(Math.sin(sparklePhase))
-  const glintColor = k.rgb(255, 255, 220)
+  //
+  // Sparkle glint is warm amber gold — the same accent the rest of
+  // the scene uses for warm focal points (title, anti-hero, emphasis
+  // text). Replaces the previous near-white cream so the "fragment"
+  // visibly reads as on-palette warm light against the deep teal frame.
+  //
+  const glintColor = k.rgb(244, 192, 64)
   const r = SPARKLE_INNER_R * (0.6 + pulse * 0.4)
   //
   // Soft outer glow
@@ -619,7 +646,13 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
   //
   const totalStringWidth = titleString.length * charWidth
   const startX = titleTextObj.pos.x - totalStringWidth / 2
-  const brighterColor = k.rgb(245, 110, 110)
+  //
+  // Pre-activation spider letter tint — a brighter orange than the
+  // title (`#E07020`) so the letters glow a touch hotter just before
+  // they sprout legs. Sits firmly on the warm half of the teal+orange
+  // complementary palette.
+  //
+  const brighterColor = k.rgb(255, 150, 80)
   titleString.split('').forEach((char, charIndex) => {
     if (char.trim().length === 0) return
     const charX = startX + (charIndex * charWidth) + (charWidth / 2)

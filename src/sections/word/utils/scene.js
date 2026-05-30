@@ -81,7 +81,12 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
       scale: antiHeroScale,
       isStatic: true,
       addMouth: true,
-      addWatch: true
+      addWatch: true,
+      //
+      // HUD progression anti-heroes are decorative — suppress the default
+      // "z-Z" sleeping glyphs so the indicator stays clean.
+      //
+      idleVocalization: null
     })
     antiHero.character.z = CFG.visual.zIndex.ui  // Show above platforms
     antiHeroes.push(antiHero)

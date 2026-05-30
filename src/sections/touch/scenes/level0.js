@@ -2017,16 +2017,18 @@ export function sceneLevel0(k) {
       heroBodyColor,
       storageKey: 'touch.level0BonusCollected',
       //
-      // The log visual sits on top of the front-line trees, but the
-      // collider was previously misaligned (a bit too high and shifted
-      // left of the painted log). Push it down/right so it lines up with
-      // the visible bark, and bump the platform draw z-index up so the
-      // log itself reads as foreground geometry too. The bonus-hero
-      // component already places the mini hero at `platformZ + 3`, so we
-      // do not need to manually override its z any more.
+      // The visible log is drawn centered on `x` with width 80 plus
+      // ~5.5 px of squashed endcaps on each side (~91 px on-screen). The
+      // collider must cover that whole span — earlier xOffset values
+      // shifted the collider well to the right of the painted log, so
+      // the left half had no collision under it and the hero tunneled
+      // straight through unless he landed exactly on the mini hero. The
+      // log itself is bumped to the antihero platform z-index so it
+      // reads as foreground geometry on top of the front-line trees.
       //
-      platformCollisionXOffset: 18,
-      platformCollisionYOffset: 16,
+      collisionWidth: 92,
+      platformCollisionXOffset: 0,
+      platformCollisionYOffset: 9,
       platformZ: ANTIHERO_PLATFORM_Z_INDEX
     })
     //

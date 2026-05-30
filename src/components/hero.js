@@ -94,6 +94,13 @@ const IDLE_VOCALIZATION_DELAY = 2.0
 //
 const IDLE_HUM_SCALE_HERO = [523.25, 587.33, 659.25, 784.0, 880.0]
 //
+// Module-level kill switch for idle vocalization. Toggled from the scene
+// transition code so the menu hero stops emitting notes while the
+// pre-level overlay is on screen (notes are drawn at a very high z and
+// would otherwise float over the subtitle text).
+//
+let idleVocalizationSuppressed = false
+//
 // Death animation timing
 //
 const DEATH_ANIMATION_DURATION = 0.4
@@ -573,6 +580,24 @@ export function death(inst, onComplete) {
  */
 export function setLookAtPos(inst, pos) {
   inst.lookAtPos = pos
+}
+
+/**
+ * Globally suppresses idle vocalization (visual notes + whistle sounds)
+ * for every hero/anti-hero instance. Used by the pre-level transition
+ * overlay so the menu hero's notes don't bleed in front of the subtitle.
+ */
+export function suppressIdleVocalization() {
+  idleVocalizationSuppressed = true
+}
+
+/**
+ * Re-enables idle vocalization after a previous suppressIdleVocalization()
+ * call. Pre-existing per-instance settings (idleVocalization: null) are
+ * unaffected — only the module-level kill switch is released.
+ */
+export function unsuppressIdleVocalization() {
+  idleVocalizationSuppressed = false
 }
 
 /**
@@ -1420,6 +1445,7 @@ function drawFootprints(k, inst) {
 // checks so they can vocalize without needing a level scene around them.
 //
 function canVocalize(inst) {
+  if (idleVocalizationSuppressed) return false
   if (!inst.idleVocalization) return false
   if (!inst.character?.exists?.()) return false
   if (inst.isAnnihilating || inst.isDying) return false

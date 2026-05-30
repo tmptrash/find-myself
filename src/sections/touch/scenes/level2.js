@@ -734,9 +734,18 @@ export function sceneLevel2(k) {
       revealDistance: 120,
       heroBodyColor,
       storageKey: 'touch.level2BonusCollected',
-      collisionWidth: 74,
-      platformCollisionXOffset: 32,
-      platformCollisionYOffset: 6
+      //
+      // The visible log is drawn centered on `x` with width 70 plus
+      // ~5.5 px of squashed endcaps on each side, so the on-screen log
+      // spans roughly [x-41, x+41]. The collider must cover that whole
+      // span — earlier xOffset values shifted the collider far right of
+      // the log, leaving the left half of the visible barrel with no
+      // collision underneath and letting the hero fall straight through
+      // unless he landed exactly on the mini hero.
+      //
+      collisionWidth: 82,
+      platformCollisionXOffset: 0,
+      platformCollisionYOffset: 9
     })
     //
     // Right-side floor icicles always present from the start.

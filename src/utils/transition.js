@@ -4,6 +4,7 @@ import { setSectionCompleted, set } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
 import * as TouchControls from './touch-controls.js'
+import * as Hero from '../components/hero.js'
 import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './level-assets.js'
 
@@ -175,6 +176,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   Sound.muteProceduralSounds()
   Sound.suspendGlobalAudio()
   //
+  // Suppress any active hero idle vocalization (visual notes + whistle).
+  // Notes are drawn at z=9999 — without this, the menu hero's music
+  // glyphs float over the pre-level subtitle text. Re-enabled when the
+  // next scene actually starts (see finalizeTransitionToLevel below) or
+  // if the transition is skipped/escaped.
+  //
+  Hero.suppressIdleVocalization()
+  //
   // Store original volume and mute all sounds
   //
   const originalVolume = k.volume()
@@ -286,6 +295,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         Tooltip.unsuppressAll()
         inst.tooltipSuppressed = false
       }
+      //
+      // Re-enable hero idle vocalization for the new scene. The kill
+      // switch was flipped on at transition start so the menu hero's
+      // notes wouldn't bleed over the subtitle text.
+      //
+      Hero.unsuppressIdleVocalization()
       TouchControls.setVisible(true)
       overlay.exists() && k.destroy(overlay)
       enterPreparedScene(k, nextLevel, afterGo)
@@ -333,6 +348,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           stopTimeSectionMusic()
           inst.tooltipSuppressed && Tooltip.unsuppressAll()
           inst.tooltipSuppressed = false
+          Hero.unsuppressIdleVocalization()
           goToMenuAfterAssets(k)
         }
         return
@@ -365,6 +381,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       stopTimeSectionMusic()
       inst.tooltipSuppressed && Tooltip.unsuppressAll()
       inst.tooltipSuppressed = false
+      Hero.unsuppressIdleVocalization()
       goToMenuAfterAssets(k)
       return
     }

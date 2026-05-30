@@ -1517,9 +1517,17 @@ export function sceneLevel1(k) {
       approachFromAbove: true,
       heroBodyColor,
       storageKey: 'touch.level1BonusCollected',
-      collisionWidth: 96,
-      platformCollisionXOffset: 36,
-      platformCollisionYOffset: 4
+      //
+      // The visible log is drawn centered on `x` with width 80 plus the
+      // squashed endcaps (~91 px on screen). Center the collider on the
+      // log so its full visible length is collidable — earlier xOffset
+      // values shifted the collider far to the right of the painted
+      // barrel, leaving most of the visible log with no collision
+      // under it.
+      //
+      collisionWidth: 92,
+      platformCollisionXOffset: 0,
+      platformCollisionYOffset: 18
     })
     //
     // Set hero reference for grass drawer

@@ -15,19 +15,34 @@ const REVEAL_DISTANCE = 150
 //
 const HERO_FEET_OFFSET = 38
 //
-// How far above the platform surface the hero's feet can be to trigger collision
+// How far above the platform surface the hero's feet can be to trigger
+// collision. Very generous on purpose: enabling the invisible collider
+// many frames BEFORE impact gives Kaplay's discrete physics solver
+// multiple chances to register the landing even at high fall speeds and
+// low frame rates. The collider stays invisible (opacity 0) so a wide
+// activation radius has no visual cost — the log itself only appears
+// when the hero actually lands.
 //
-const APPROACH_DISTANCE = 25
+const APPROACH_DISTANCE = 320
 //
-// How far below the platform surface the hero's feet can be to still count as landing
+// How far below the platform surface the hero's feet can be to still count
+// as landing.
 //
-const LAND_TOLERANCE = 5
+const LAND_TOLERANCE = 14
 //
-// Velocity-based safety net: if the hero's downward velocity would push his
-// feet past the platform surface this frame (or the next), force collision
-// on so a fast fall never tunnels through the invisible log collider.
+// Velocity-based safety net: if the hero's downward velocity would push
+// his feet past the platform surface within this many frames, force the
+// collider on so a high-velocity fall never skips over the invisible log.
 //
-const VELOCITY_PREDICTION_FRAMES = 1.5
+const VELOCITY_PREDICTION_FRAMES = 4
+//
+// Once the collider has been enabled it remains "hot" for this many
+// seconds — enough for Kaplay to register the actual landing and mark
+// the hero as grounded. Without this hold the platform would flicker off
+// the moment vertical velocity hits zero (post-impact) and the hero
+// would fall through before `isGrounded()` returns true.
+//
+const COLLIDABLE_HOLD_DURATION = 0.25
 const BONUS_POINTS = 3
 const HERO_SCALE = 0.5
 const SPARKLE_INTERVAL_MIN = 1.5
@@ -219,10 +234,14 @@ export function create(config) {
     approachFromAbove,
     revealDistance,
     //
-    // revealWidth: horizontal tolerance for hero detection. Defaults to platform width.
-    // Pass a larger value when the platform is narrow to avoid detection failures.
+    // revealWidth: horizontal tolerance for hero detection. Defaults to the
+    // resolved collision width plus a small margin so the platform reveals
+    // along its FULL collider span. Earlier this defaulted to the visual
+    // `width`, which left a dead zone whenever `collisionWidth > width` —
+    // the hero would land on the very edge of the collider without ever
+    // triggering the reveal and tunnel right through.
     //
-    revealWidth: revealWidth ?? width,
+    revealWidth: revealWidth ?? (Math.max(collisionWidthResolved, width) + 8),
     bonusPoints: 0,
     bonusFlashParticles: [],
     miniColor,
@@ -235,7 +254,21 @@ export function create(config) {
     platformCollisionHeight: collisionHeight,
     floatOffset: Math.random() * Math.PI * 2,
     shakeTimer: 0,
-    shakeOffsetX: 0
+    shakeOffsetX: 0,
+    //
+    // Tracked between frames so the landing detector can catch a hero
+    // whose feet swept past the platform surface in a single tick (fast
+    // fall + low fps would otherwise tunnel through the invisible log).
+    //
+    lastHeroFeetY: null,
+    //
+    // Sticky "hold" timer: once the collider snaps on, we keep it on for
+    // at least COLLIDABLE_HOLD_DURATION seconds. This gives Kaplay's
+    // discrete physics solver several frames to register the landing
+    // (otherwise `isFalling` flips back to false after impact and the
+    // platform would teleport away mid-landing, dropping the hero).
+    //
+    collidableHoldTimer: 0
   }
   //
   // Draw log platform, sparkle hints, and collection particles
@@ -363,11 +396,22 @@ function onUpdate(inst) {
   } else {
     const horizontallyAligned = dx < inst.revealWidth / 2
     //
+    // Pre-compute the platform's collidable surface so the heroOnPlatform
+    // check below can verify the hero is grounded AT this platform (and
+    // not on some unrelated platform above/below that just happens to be
+    // horizontally aligned with the bonus). The aggressive APPROACH_DISTANCE
+    // means the collider may be live even when the hero is far above.
+    //
+    const platformSurfacePre = floatY + inst.collisionYOffset + inst.collisionAreaTop
+    const heroFeetYPre = heroPos.y + HERO_FEET_OFFSET
+    const heroAtPlatformSurface = Math.abs(heroFeetYPre - platformSurfacePre) <= LAND_TOLERANCE * 1.5
+    //
     // Check grounded BEFORE moving the platform, so the hero stays supported.
     // If the platform was collidable last frame and hero landed, isGrounded()
     // is true while the collision body is still in place.
     //
     const heroOnPlatform = heroChar.isGrounded?.() && horizontallyAligned
+      && heroAtPlatformSurface
       && inst.platform.pos.y !== inst.offScreenY
     if (heroOnPlatform) {
       inst.revealed = true
@@ -381,26 +425,87 @@ function onUpdate(inst) {
       // detection surface tracks the collision box so a downward Y offset
       // doesn't break landing detection.
       //
-      // We also project the hero's feet forward by their downward velocity
-      // (`VELOCITY_PREDICTION_FRAMES` * dt). At high fall speeds the hero
-      // would otherwise skip over the narrow detection window in a single
-      // tick and tunnel through the invisible log; predicting the next
-      // frame catches that case and snaps the collider on in time.
+      // Reveal logic (kept simple and aggressive to avoid timing issues):
+      //
+      //   ENABLE the invisible collider whenever the hero is *above* the
+      //   platform top AND within APPROACH_DISTANCE vertically AND
+      //   horizontally aligned — regardless of his current velocity.
+      //
+      // A previous version of this code gated detection behind
+      // `isFalling = velY > 0`, but that read the velocity AFTER Kaplay
+      // had already moved the body in the same frame, so a fast-falling
+      // hero could pass the platform during physics before our detector
+      // ran. By enabling the collider while the hero is still strictly
+      // above it (with a 5 px head-room margin so jumps from below don't
+      // bump it on the way up), the platform is always live by the time
+      // the hero's body actually intersects it.
+      //
+      // Three additional safety nets cover edge cases:
+      //   * Velocity prediction — projected feet next frames would land.
+      //   * Sweep detection — feet jumped from above to below in one tick.
+      //   * Sticky hold — once the collider is enabled, it stays live
+      //     for COLLIDABLE_HOLD_DURATION so Kaplay's discrete physics
+      //     solver has multiple frames to register the landing before we
+      //     hide the collider again.
       //
       const platformSurface = floatY + inst.collisionYOffset + inst.collisionAreaTop
       const heroFeetY = heroPos.y + HERO_FEET_OFFSET
       const velY = heroChar.vel?.y || 0
       const isFalling = velY > 0
-      const feetAboveSurface = heroFeetY < platformSurface + LAND_TOLERANCE
-      const feetNearSurface = heroFeetY > platformSurface - APPROACH_DISTANCE
+      //
+      // 5 px margin keeps a hero who is jumping up from below the
+      // platform from triggering it the instant his head reaches the
+      // bottom of the collider — he must be clearly above the surface
+      // before the platform pops in.
+      //
+      const ABOVE_MARGIN = 5
+      const heroAboveSurface = heroFeetY < platformSurface - ABOVE_MARGIN
+      const heroWithinApproachRange = heroFeetY > platformSurface - APPROACH_DISTANCE
+      const primaryDetection = heroAboveSurface && heroWithinApproachRange
       const predictedFeetY = heroFeetY + velY * dt * VELOCITY_PREDICTION_FRAMES
       const willCrossSurface = isFalling
         && heroFeetY <= platformSurface + LAND_TOLERANCE
         && predictedFeetY >= platformSurface - LAND_TOLERANCE
-      const shouldBeCollidable = (isFalling && feetAboveSurface && feetNearSurface || willCrossSurface) && horizontallyAligned
+      const sweptThroughSurface = isFalling
+        && inst.lastHeroFeetY !== null
+        && inst.lastHeroFeetY <= platformSurface + LAND_TOLERANCE
+        && heroFeetY > platformSurface
+        && heroFeetY <= platformSurface + APPROACH_DISTANCE
+      const detected = horizontallyAligned && (
+        primaryDetection
+        || willCrossSurface
+        || sweptThroughSurface
+      )
+      //
+      // Refresh the sticky-hold timer whenever the detector fires. The
+      // platform then stays collidable for COLLIDABLE_HOLD_DURATION even
+      // if `velY` momentarily drops to zero on impact, or the detector
+      // briefly flips off during the last few pixels before contact.
+      //
+      if (detected) {
+        inst.collidableHoldTimer = COLLIDABLE_HOLD_DURATION
+      } else if (inst.collidableHoldTimer > 0) {
+        inst.collidableHoldTimer -= dt
+      }
+      //
+      // Hold guard: keep the platform live as long as the hold timer
+      // hasn't expired AND the hero is still aligned + near the
+      // platform's vertical band. Disengage the hold the moment the
+      // hero clearly drifts away so a jump from below doesn't get
+      // stopped mid-air.
+      //
+      const stillNearVertically = heroFeetY > platformSurface - APPROACH_DISTANCE * 1.5
+        && heroFeetY < platformSurface + APPROACH_DISTANCE
+      const heldOpen = inst.collidableHoldTimer > 0 && horizontallyAligned && stillNearVertically
+      const shouldBeCollidable = detected || heldOpen
       inst.platform.pos.y = shouldBeCollidable ? floatY + inst.collisionYOffset : inst.offScreenY
       inst.platform.pos.x = collisionCenterX
     }
+    //
+    // Remember this frame's foot position so the next frame can detect a
+    // sweep-through if the hero falls past the surface in one tick.
+    //
+    inst.lastHeroFeetY = heroPos.y + HERO_FEET_OFFSET
   }
   //
   // Once revealed: show platform and start mini-hero opacity pulse

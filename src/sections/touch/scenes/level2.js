@@ -113,9 +113,9 @@ const SNOW_PUSH_DOWN_BOOST = 10
 //
 // Tooltip texts and layout
 //
-const ICICLE_TOOLTIP_TEXT = "i'm an icicle.\ncome closer and lick me"
+const ICICLE_TOOLTIP_TEXT = "im an icikle.\ncome closer and lick me"
 const ICICLE_TOOLTIP_Y_OFFSET = -30
-const ANTIHERO_TOOLTIP_TEXT = "i'm here :)"
+const ANTIHERO_TOOLTIP_TEXT = "im here :)"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
@@ -136,7 +136,7 @@ const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Hero tooltip
 //
-const HERO_TOOLTIP_TEXT = "maybe here i'm not\nfinding myself...\nbut the platforms"
+const HERO_TOOLTIP_TEXT = "maybe here I'm not\nfinding myself...\nbut the platforms"
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
@@ -171,15 +171,15 @@ const ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET = 40
 // Antihero timed hint (shown if player hasn't completed level in time)
 //
 const ANTIHERO_HINT_DELAY = 60
-const ANTIHERO_HINT_TEXT = "use the edges\nof the platforms..."
+const ANTIHERO_HINT_TEXT = "Use the edges\nof the platforms..."
 const ANTIHERO_HINT_DISPLAY_TIME = 8
 const ANTIHERO_HINT_Y_OFFSET = -140
 //
 // Stuck-hero hints shown above the hero when the player hasn't finished the level
 //
 const STUCK_HINT_1_DELAY = 30
-const STUCK_HINT_1_TEXT = "use platform edges"
-const STUCK_HINT_2_TEXT = "think where you jump —\nlife often fools you"
+const STUCK_HINT_1_TEXT = "Use platform edges"
+const STUCK_HINT_2_TEXT = "Think where you jump —\nlife often fools you"
 const STUCK_HINT_REPEAT_INTERVAL = 30
 const STUCK_HINT_DISPLAY_TIME = 6
 const STUCK_HINT_Y_OFFSET = -110
@@ -522,7 +522,12 @@ export function sceneLevel2(k) {
       controllable: false,
       sfx: sound,
       antiHero: null,
-      addArms: true
+      addArms: true,
+      //
+      // Winter scene already animates the mouth with cold breath puffs,
+      // so suppress the default idle hum + music notes here.
+      //
+      idleVocalization: null
     })
     //
     // Hide character immediately to prevent double appearance
@@ -547,6 +552,11 @@ export function sceneLevel2(k) {
       sfx: sound,
       antiHero: antiHeroInst,
       dustColor: snowColor,
+      //
+      // Cold breath puffs occupy the mouth in this winter scene, so the
+      // default idle hum + music notes are disabled to avoid layering.
+      //
+      idleVocalization: null,
       onAnnihilation: () => {
         //
         // Check for speed bonus before scoring
@@ -707,6 +717,11 @@ export function sceneLevel2(k) {
     //
     const BONUS_PLATFORM_X = LEFT_MARGIN + 50
     const BONUS_PLATFORM_Y = FLOOR_Y - 200
+    //
+    // Collision box covers the visible log: width spans body + endcaps,
+    // and the box is nudged right + down so it lines up under the log
+    // barrel instead of sitting left/above it.
+    //
     BonusHero.create({
       k,
       x: BONUS_PLATFORM_X,
@@ -718,7 +733,10 @@ export function sceneLevel2(k) {
       approachFromAbove: true,
       revealDistance: 120,
       heroBodyColor,
-      storageKey: 'touch.level2BonusCollected'
+      storageKey: 'touch.level2BonusCollected',
+      collisionWidth: 74,
+      platformCollisionXOffset: 32,
+      platformCollisionYOffset: 6
     })
     //
     // Right-side floor icicles always present from the start.

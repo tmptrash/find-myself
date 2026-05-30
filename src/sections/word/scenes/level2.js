@@ -41,8 +41,8 @@ const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 //
 // Hover tooltip copy
 //
-const WORD_L2_HERO_TOOLTIP_TEXT = 'wait… where did I see\nthat blade before?'
-const WORD_L2_ANTIHERO_TOOLTIP_TEXT = 'memory is a muscle.\nflex it, rag'
+const WORD_L2_HERO_TOOLTIP_TEXT = 'Wait… where did I see\nthat blade before?'
+const WORD_L2_ANTIHERO_TOOLTIP_TEXT = 'Memory is a muscle.\nFlex it, rag'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80

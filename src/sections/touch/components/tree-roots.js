@@ -553,83 +553,80 @@ function drawLeafToCanvas(ctx, x, y, size, angle, color, opacity) {
  * @param {Object} color - Leaf color
  * @param {number} opacity - Leaf opacity
  */
-function drawLeaf(k, x, y, size, angle, color, opacity) {
-  //
-  // Draw leaf shape using polygon (approximating quadratic curve)
-  //
-  const cos = Math.cos(angle)
-  const sin = Math.sin(angle)
-  
-  //
-  // Create leaf shape points (approximating bezier curve)
-  //
-  const points = []
+//
+// Local-space leaf polygons cached by quantized size. Each leaf used to
+// rebuild 22 bezier points + 22 vec2 objects every single frame; reusing
+// the cached template (and pushing a transform once per leaf) eliminates
+// thousands of allocations per render at no visual cost.
+//
+const LEAF_POINT_CACHE = new Map()
+//
+// Reusable vec2s for the leaf vein, hoisted so each leaf draw doesn't
+// allocate two more objects.
+//
+let _leafVeinP1 = null
+let _leafVeinP2 = null
+
+function getLeafTemplate(k, size) {
+  const key = Math.round(size * 4)
+  let pts = LEAF_POINT_CACHE.get(key)
+  if (pts) return pts
+  pts = []
   const steps = 10
-  
   //
-  // Left side of leaf (quadratic curve from base to tip)
-  //
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    //
-    // Quadratic bezier: P = (1-t)^2 * P0 + 2*(1-t)*t * P1 + t^2 * P2
-    // P0 = (0, 0), P1 = (-size*0.6, -size*0.3), P2 = (0, -size)
-    //
-    const px = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * (-size * 0.6) + t * t * 0
-    const py = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * (-size * 0.3) + t * t * (-size)
-    
-    //
-    // Rotate and translate point
-    //
-    points.push(k.vec2(
-      x + px * cos - py * sin,
-      y + px * sin + py * cos
-    ))
-  }
-  
-  //
-  // Right side of leaf (quadratic curve from tip to base)
+  // Left side: bezier base → tip (P0=(0,0), P1=(-s*0.6,-s*0.3), P2=(0,-s))
   //
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
-    //
-    // Quadratic bezier: P = (1-t)^2 * P0 + 2*(1-t)*t * P1 + t^2 * P2
-    // P0 = (0, -size), P1 = (size*0.6, -size*0.3), P2 = (0, 0)
-    //
-    const px = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * (size * 0.6) + t * t * 0
-    const py = (1 - t) * (1 - t) * (-size) + 2 * (1 - t) * t * (-size * 0.3) + t * t * 0
-    
-    //
-    // Rotate and translate point
-    //
-    points.push(k.vec2(
-      x + px * cos - py * sin,
-      y + px * sin + py * cos
-    ))
+    const px = 2 * (1 - t) * t * (-size * 0.6)
+    const py = 2 * (1 - t) * t * (-size * 0.3) + t * t * (-size)
+    pts.push(k.vec2(px, py))
   }
-  
   //
-  // Draw filled leaf
+  // Right side: bezier tip → base, mirrored
   //
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const px = 2 * (1 - t) * t * (size * 0.6)
+    const py = (1 - t) * (1 - t) * (-size) + 2 * (1 - t) * t * (-size * 0.3)
+    pts.push(k.vec2(px, py))
+  }
+  LEAF_POINT_CACHE.set(key, pts)
+  return pts
+}
+
+function drawLeaf(k, x, y, size, angle, color, opacity) {
+  const pts = getLeafTemplate(k, size)
+  //
+  // Push transform once: the cached point template is in local-leaf space,
+  // so a translate+rotate places it correctly without recomputing points.
+  //
+  k.pushTransform()
+  k.pushTranslate(x, y)
+  k.pushRotate((angle * 180) / Math.PI)
   k.drawPolygon({
-    pts: points,
-    color: color,
-    opacity: opacity
+    pts,
+    color,
+    opacity
   })
-  
   //
-  // Draw center vein (line from base to tip)
+  // Vein in local space — base (0,0) to tip (0,-size). Reuse pre-allocated
+  // vec2s so this branch never allocates either.
   //
-  const veinEndX = x + 0 * cos - (-size) * sin
-  const veinEndY = y + 0 * sin + (-size) * cos
-  
+  if (!_leafVeinP1) {
+    _leafVeinP1 = k.vec2(0, 0)
+    _leafVeinP2 = k.vec2(0, 0)
+  }
+  _leafVeinP1.x = 0; _leafVeinP1.y = 0
+  _leafVeinP2.x = 0; _leafVeinP2.y = -size
   k.drawLine({
-    p1: k.vec2(x, y),
-    p2: k.vec2(veinEndX, veinEndY),
+    p1: _leafVeinP1,
+    p2: _leafVeinP2,
     width: 1,
     color: k.rgb(40, 60, 40),
     opacity: 0.35
   })
+  k.popTransform()
 }
 
 /**

@@ -5,7 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 //
 // Walking creature parameters
 //
-const TEXT_MESSAGE = 'words that kill'
+const TEXT_MESSAGE = 'Words that kill'
 const TEXT_SIZE = 36
 const OUTLINE_THICKNESS = 2
 const WALK_SPEED = 60  // Pixels per second (slower walking speed)

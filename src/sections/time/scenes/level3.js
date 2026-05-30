@@ -21,14 +21,14 @@ const CORNER_RADIUS = 20  // Radius for rounded corners
 //
 // TIME indicator tooltip
 //
-const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
+const TIME_INDICATOR_TOOLTIP_TEXT = "Your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
 const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
 const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Monster and hero tooltips
 //
-const MONSTER_TOOLTIP_TEXT = "why are you running?"
+const MONSTER_TOOLTIP_TEXT = "Why are you running?"
 const MONSTER_TOOLTIP_SIZE = 120
 const MONSTER_TOOLTIP_Y_OFFSET = -80
 const HERO_TOOLTIP_TEXT = "I can't keep uuuuup!!!"

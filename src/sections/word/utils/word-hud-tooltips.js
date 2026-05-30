@@ -3,10 +3,10 @@ import * as Tooltip from '../../../utils/tooltip.js'
 //
 // Standard HUD hover zones (progress, green timer, small hero, life)
 //
-const WORD_PROGRESS_TOOLTIP_TEXT = 'your progress'
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
-const SMALL_HERO_TOOLTIP_TEXT = 'your fragments'
-const LIFE_TOOLTIP_TEXT = 'life score'
+const WORD_PROGRESS_TOOLTIP_TEXT = 'Your progress'
+const GREEN_TIMER_TOOLTIP_TEXT = "Complete the level in time\nto earn more fragments"
+const SMALL_HERO_TOOLTIP_TEXT = 'Your fragments'
+const LIFE_TOOLTIP_TEXT = 'Life score'
 const WORD_INDICATOR_TOOLTIP_WIDTH = 220
 const WORD_INDICATOR_TOOLTIP_HEIGHT = 48
 const WORD_INDICATOR_TOOLTIP_Y_OFFSET = -30

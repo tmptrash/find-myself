@@ -2272,6 +2272,232 @@ function createCrack(instance, time, freq, volume) {
   crack.stop(time + duration)
 }
 /**
+ * Play a short hero "meow" — triggered when a bug startles the hero into
+ * a crouch. Two stacked oscillators sweep up then back down to mimic the
+ * classic rising-falling cat vowel, with a band-pass filter for a softer
+ * mouth-shape texture and a snappy envelope so the sound stays cute.
+ * Volume is boosted relative to the previous version so it cuts through
+ * the busy bug ambience in touch level 0.
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playHeroMeowSound(inst) {
+  if (!inst?.audioContext) return
+  const ctx = inst.audioContext
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  const now = ctx.currentTime
+  const duration = 0.36
+  //
+  // Master gain — louder than ambient SFX so the meow is unmistakable.
+  //
+  const master = ctx.createGain()
+  master.gain.setValueAtTime(0.55, now)
+  master.connect(ctx.destination)
+  //
+  // Band-pass filter for a vowel-like timbre.
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(720, now)
+  filter.frequency.linearRampToValueAtTime(940, now + duration * 0.5)
+  filter.frequency.linearRampToValueAtTime(620, now + duration)
+  filter.Q.value = 4
+  filter.connect(master)
+  //
+  // Primary oscillator — fundamental pitch rising then falling.
+  //
+  const osc1 = ctx.createOscillator()
+  osc1.type = 'sawtooth'
+  osc1.frequency.setValueAtTime(380, now)
+  osc1.frequency.linearRampToValueAtTime(640, now + duration * 0.45)
+  osc1.frequency.linearRampToValueAtTime(340, now + duration)
+  //
+  // Detuned second oscillator adds warmth and body.
+  //
+  const osc2 = ctx.createOscillator()
+  osc2.type = 'triangle'
+  osc2.frequency.setValueAtTime(760, now)
+  osc2.frequency.linearRampToValueAtTime(1280, now + duration * 0.45)
+  osc2.frequency.linearRampToValueAtTime(680, now + duration)
+  //
+  // Envelope: quick attack, soft release for a clear meow shape.
+  //
+  const envelope = ctx.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(1, now + 0.025)
+  envelope.gain.linearRampToValueAtTime(0.9, now + duration * 0.55)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  envelope.connect(filter)
+  osc1.connect(envelope)
+  osc2.connect(envelope)
+  osc1.start(now)
+  osc2.start(now)
+  osc1.stop(now + duration)
+  osc2.stop(now + duration)
+}
+
+/**
+ * Play a tiny "yay!" cheer chirp from a bug — squeaky and triumphant.
+ * Each call picks a random pitch in a high band so multiple chirps stacked
+ * together sound like a chorus of varied thin voices celebrating. Pass an
+ * explicit `baseFreq` when you need a particular voice in a chord-like
+ * chorus (e.g. five different "bugs" cheering at once). `volumeOverride`
+ * lets callers ramp the chirp loudness with hero proximity.
+ * @param {Object} inst - Sound instance from create()
+ * @param {number} [delay=0] - Optional schedule offset in seconds
+ * @param {number|null} [baseFreqOverride=null] - Force a specific base pitch (Hz)
+ * @param {number|null} [volumeOverride=null] - Force a specific master gain (0..1)
+ */
+export function playBugCheerSound(inst, delay = 0, baseFreqOverride = null, volumeOverride = null) {
+  if (!inst?.audioContext) return
+  const ctx = inst.audioContext
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  const now = ctx.currentTime + delay
+  //
+  // Each bug picks a random base pitch in a high, squeaky range — unless
+  // the caller pinned a specific frequency to build a chord.
+  //
+  const baseFreq = baseFreqOverride ?? (1500 + Math.random() * 1400)
+  const peakFreq = baseFreq * (1.25 + Math.random() * 0.25)
+  const duration = 0.22 + Math.random() * 0.12
+  //
+  // Master gain keeps individual cheers gentle so the chorus does not clip.
+  //
+  const master = ctx.createGain()
+  master.gain.setValueAtTime(volumeOverride ?? 0.12, now)
+  master.connect(ctx.destination)
+  //
+  // Band-pass focuses the squeak on a vocal-like band.
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(baseFreq, now)
+  filter.frequency.linearRampToValueAtTime(peakFreq, now + duration * 0.4)
+  filter.frequency.linearRampToValueAtTime(baseFreq * 0.9, now + duration)
+  filter.Q.value = 5
+  filter.connect(master)
+  //
+  // Triangle gives a softer "ee!" instead of a harsh whistle.
+  //
+  const osc = ctx.createOscillator()
+  osc.type = 'triangle'
+  osc.frequency.setValueAtTime(baseFreq, now)
+  osc.frequency.linearRampToValueAtTime(peakFreq, now + duration * 0.45)
+  osc.frequency.linearRampToValueAtTime(baseFreq * 0.95, now + duration)
+  //
+  // Quick attack + soft release — short, chirpy excitement.
+  //
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(0, now)
+  env.gain.linearRampToValueAtTime(1, now + 0.015)
+  env.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(env)
+  env.connect(filter)
+  osc.start(now)
+  osc.stop(now + duration)
+}
+
+/**
+ * Soft humming/whistling note used as the default hero idle vocalization.
+ * One note plays per call — schedule several to imply a slow tune. A flute-like
+ * triangle wave with a vibrato adds the "humming" quality, while the
+ * `whistleMode` flag swaps it for a thinner, breathy sine + filtered noise so
+ * the hero appears to be lightly whistling in tutorial scenes.
+ * @param {Object} inst - Sound instance from create()
+ * @param {Object} [config] - Note parameters
+ * @param {number} [config.delay=0] - Schedule offset in seconds
+ * @param {number} [config.frequency=440] - Base pitch (Hz)
+ * @param {number} [config.duration=0.55] - Note length in seconds
+ * @param {boolean} [config.whistleMode=false] - Use a breathier whistle timbre
+ * @param {number} [config.volume=1] - Per-note gain multiplier
+ */
+export function playIdleHumNote(inst, config = {}) {
+  if (!inst?.audioContext) return
+  const ctx = inst.audioContext
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+  }
+  const {
+    delay = 0,
+    frequency = 440,
+    duration = 0.55,
+    whistleMode = false,
+    volume = 1
+  } = config
+  const now = ctx.currentTime + delay
+  //
+  // Master keeps the idle humming quiet enough to sit under sfx and ambience.
+  //
+  const master = ctx.createGain()
+  master.gain.setValueAtTime((whistleMode ? 0.05 : 0.07) * volume, now)
+  master.connect(ctx.destination)
+  //
+  // Soft low-pass smooths digital harshness for the humming variant.
+  //
+  const filter = ctx.createBiquadFilter()
+  filter.type = whistleMode ? 'bandpass' : 'lowpass'
+  filter.frequency.setValueAtTime(whistleMode ? frequency * 1.2 : 1800, now)
+  filter.Q.value = whistleMode ? 8 : 0.6
+  filter.connect(master)
+  //
+  // LFO adds a tiny vibrato so the note feels human instead of mechanical.
+  //
+  const lfo = ctx.createOscillator()
+  lfo.type = 'sine'
+  lfo.frequency.setValueAtTime(whistleMode ? 6 : 4.5, now)
+  const lfoGain = ctx.createGain()
+  lfoGain.gain.setValueAtTime(whistleMode ? 6 : 3, now)
+  lfo.connect(lfoGain)
+  //
+  // Carrier — whistle uses a pure sine, humming uses triangle for warmth.
+  //
+  const osc = ctx.createOscillator()
+  osc.type = whistleMode ? 'sine' : 'triangle'
+  osc.frequency.setValueAtTime(frequency, now)
+  lfoGain.connect(osc.frequency)
+  //
+  // Smooth bell-shaped envelope: gentle attack, hold, soft release.
+  //
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(0, now)
+  env.gain.linearRampToValueAtTime(1, now + 0.12)
+  env.gain.linearRampToValueAtTime(0.85, now + duration * 0.7)
+  env.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(env)
+  env.connect(filter)
+  osc.start(now)
+  osc.stop(now + duration + 0.05)
+  lfo.start(now)
+  lfo.stop(now + duration + 0.05)
+  //
+  // Whistle mode adds a faint breath layer so the listener hears air, not just tone.
+  //
+  if (whistleMode) {
+    const bufSize = Math.ceil(ctx.sampleRate * duration)
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+    const data = buf.getChannelData(0)
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1)
+    const noise = ctx.createBufferSource()
+    noise.buffer = buf
+    const noiseFilter = ctx.createBiquadFilter()
+    noiseFilter.type = 'highpass'
+    noiseFilter.frequency.value = 1400
+    const noiseEnv = ctx.createGain()
+    noiseEnv.gain.setValueAtTime(0, now)
+    noiseEnv.gain.linearRampToValueAtTime(0.12, now + 0.08)
+    noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + duration)
+    noise.connect(noiseFilter)
+    noiseFilter.connect(noiseEnv)
+    noiseEnv.connect(master)
+    noise.start(now)
+    noise.stop(now + duration)
+  }
+}
+
+/**
  * Play bug scare sound ("Ай!" - short squeak when bug gets scared)
  * @param {Object} inst - Sound instance
  */

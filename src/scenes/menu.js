@@ -243,7 +243,13 @@ export function sceneMenu(k) {
       addMouth: Boolean(progress.word?.completed),
       addArms: Boolean(progress.touch?.completed),
       bodyColor: heroBodyColor,
-      outlineColor: noSectionsComplete ? "#1A1A1A" : null
+      outlineColor: noSectionsComplete ? "#1A1A1A" : null,
+      //
+      // Menu hero whistles softly when the player stops moving the mouse,
+      // emitting music notes from his mouth (handled by Hero.create's
+      // built-in idle vocalization once a sound instance is available).
+      //
+      sfx: sound
     })
     
     const hero = heroInst.character
@@ -295,7 +301,12 @@ export function sceneMenu(k) {
         addMouth: config.section === 'word',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
         addWatch: config.section === 'time' || config.section === 'word',
-        hitboxPadding: 5
+        hitboxPadding: 5,
+        //
+        // Section icon anti-heroes are purely decorative; suppress the
+        // "z-Z" sleeping glyphs that would otherwise float over the UI.
+        //
+        idleVocalization: null
       })
       //
       // Preload section color variant with black outline for hover/completed state

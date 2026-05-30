@@ -29,42 +29,42 @@ const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
 // TIME indicator tooltip
 //
-const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
+const TIME_INDICATOR_TOOLTIP_TEXT = "Your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
 const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
 const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
+const GREEN_TIMER_TOOLTIP_TEXT = "Complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 100
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
+const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 80
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_TEXT = "Life score"
 const LIFE_TOOLTIP_SIZE = 80
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Hero tooltip (hover body)
 //
-const HERO_TOOLTIP_TEXT = "damn it"
+const HERO_TOOLTIP_TEXT = "Damn it"
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -60
 //
 // Anti-hero tooltip
 //
-const ANTIHERO_TOOLTIP_TEXT = "learning to handle numbers"
+const ANTIHERO_TOOLTIP_TEXT = "Learning to handle numbers"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
 // Platform tooltip
 //
-const PLATFORM_TOOLTIP_TEXT = "do not touch the one"
+const PLATFORM_TOOLTIP_TEXT = "Do not touch the one"
 const PLATFORM_TOOLTIP_WIDTH = 80
 const PLATFORM_TOOLTIP_HEIGHT = 40
 const PLATFORM_TOOLTIP_Y_OFFSET = -50

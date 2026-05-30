@@ -69,9 +69,9 @@ const WORD_L0_PLAYFIELD_BG_B = 62
 //
 // Hover tooltip copy
 //
-const WORD_HERO_TOOLTIP_TEXT = 'damn, so many thoughts'
-const WORD_ANTIHERO_TOOLTIP_TEXT = 'get yourself together -\nrag and come here )'
-const WORD_BLADE_TOOLTIP_TEXT = 'touch me and I\'ll give\nyou a couple of fragments'
+const WORD_HERO_TOOLTIP_TEXT = 'Damn, so many thoughts'
+const WORD_ANTIHERO_TOOLTIP_TEXT = 'Get yourself together -\nrag and come here )'
+const WORD_BLADE_TOOLTIP_TEXT = 'Touch me and I\'ll give\nyou a couple of fragments'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
@@ -91,43 +91,43 @@ const BLADE_RATTLE_COOLDOWN = 0.35
 //
 // Funny hover lines for flying words (fallback when word is unmapped)
 //
-const FLYING_WORD_TOOLTIP_FALLBACK = 'just a thought passing through...'
+const FLYING_WORD_TOOLTIP_FALLBACK = 'Just a thought passing through...'
 const FLYING_WORD_TOOLTIPS = {
-  pain: 'ouch, that one stings',
-  hurt: 'emotional damage: confirmed',
-  fear: 'boo! …still here?',
-  doubt: 'are you sure about that?',
-  lost: 'have you tried turning yourself around?',
-  dark: 'mood: midnight forever',
-  void: 'staring contest with nothingness',
-  empty: 'like my inbox on monday',
-  cold: 'brr — someone hug the hero',
-  numb: 'feelings.exe not responding',
-  alone: 'introvert simulator 3000',
-  torn: 'paper heart, scissors life',
-  break: 'please handle with care',
-  cut: 'words like blades, remember?',
-  bleed: 'that metaphor got too real',
-  scar: 'character development, they said',
-  wound: 'still tender, be gentle',
-  grief: 'heavy backpack of feelings',
-  cry: 'hydration via tears, valid',
-  fall: 'gravity is undefeated',
-  sink: 'quicksand but emotional',
-  drown: 'too many thoughts, not enough air',
-  fade: 'ghosting yourself again?',
-  die: 'dramatic much?',
-  end: 'plot twist incoming',
-  why: 'philosophy speedrun any%',
-  how: 'instructions unclear',
-  who: 'identity crisis loading…',
-  am: 'to be or not to be',
-  I: 'main character energy',
-  '...': 'the silence is loud',
-  no: 'boundary setting: elite',
-  never: 'famous last words',
-  'can\'t': 'challenge accepted?',
-  'won\'t': 'stubborn and proud'
+  pain: 'Ouch, that one stings',
+  hurt: 'Emotional damage: confirmed',
+  fear: 'Boo! …still here?',
+  doubt: 'Are you sure about that?',
+  lost: 'Have you tried turning yourself around?',
+  dark: 'Mood: midnight forever',
+  void: 'Staring contest with nothingness',
+  empty: 'Like my inbox on Monday',
+  cold: 'Brr — someone hug the hero',
+  numb: 'Feelings.exe not responding',
+  alone: 'Introvert simulator 3000',
+  torn: 'Paper heart, scissors life',
+  break: 'Please handle with care',
+  cut: 'Words like blades, remember?',
+  bleed: 'That metaphor got too real',
+  scar: 'Character development, they said',
+  wound: 'Still tender, be gentle',
+  grief: 'Heavy backpack of feelings',
+  cry: 'Hydration via tears, valid',
+  fall: 'Gravity is undefeated',
+  sink: 'Quicksand but emotional',
+  drown: 'Too many thoughts, not enough air',
+  fade: 'Ghosting yourself again?',
+  die: 'Dramatic much?',
+  end: 'Plot twist incoming',
+  why: 'Philosophy speedrun any%',
+  how: 'Instructions unclear',
+  who: 'Identity crisis loading…',
+  am: 'To be or not to be',
+  I: 'Main character energy',
+  '...': 'The silence is loud',
+  no: 'Boundary setting: elite',
+  never: 'Famous last words',
+  'can\'t': 'Challenge accepted?',
+  'won\'t': 'Stubborn and proud'
 }
 
 

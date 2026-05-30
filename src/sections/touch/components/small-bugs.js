@@ -317,7 +317,13 @@ export function create(config) {
     stepDistance: 0,  // Distance traveled for stepping sequence
     movementAngle: angle,
     dropOffset: 0,  // How much body has dropped when scared
-    isMother: false  // Small bugs are not mothers
+    isMother: false, // Small bugs are not mothers
+    //
+    // Pyramid glow halo: 0 = dark, 1 = fully lit. Driven by state === 'pyramid'
+    // and smoothly lerped each frame so the glow fades out when the tower
+    // dissolves instead of snapping off.
+    //
+    pyramidGlow: 0
   }
   
   return inst
@@ -346,6 +352,13 @@ export function onUpdate(inst, dt) {
   if (inst.scaredCooldown > 0) {
     inst.scaredCooldown -= dt
   }
+  //
+  // Drive the pyramid glow toward 1 while the bug is stacked in a tower,
+  // and toward 0 once the tower scatters — produces a soft fade-out.
+  //
+  const glowTarget = inst.state === 'pyramid' ? 1 : 0
+  const glowSpeed = glowTarget > inst.pyramidGlow ? 5 : 1.6
+  inst.pyramidGlow += (glowTarget - inst.pyramidGlow) * Math.min(1, glowSpeed * dt)
   
   //
   // Check for hero collision and react with fear
@@ -792,7 +805,28 @@ export function draw(inst) {
   k.pushTransform()
   k.pushTranslate(inst.x, bodyY)
   k.pushRotate(bodyRotation)
-  
+  //
+  // Pyramid glow halo — three nested translucent circles fade in/out via
+  // pyramidGlow. Drawn before the body so the body sits on top of the glow.
+  //
+  if (inst.pyramidGlow > 0.01) {
+    const glow = inst.pyramidGlow
+    const haloColor = k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b)
+    const haloLayers = [
+      { scale: 2.2, alpha: 0.18 },
+      { scale: 1.6, alpha: 0.28 },
+      { scale: 1.25, alpha: 0.42 }
+    ]
+    haloLayers.forEach(layer => {
+      k.drawCircle({
+        pos: k.vec2(0, 0),
+        radius: radius * layer.scale,
+        color: haloColor,
+        opacity: layer.alpha * glow
+      })
+    })
+  }
+
   if (inst.bodyShape === 'circle') {
     //
     // Draw full circle body

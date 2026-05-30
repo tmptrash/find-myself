@@ -53,16 +53,16 @@ const VINE_LAYOUT_SEED = 7331
 // Intrusive-thought sentences
 //
 const VINE_PHRASES = [
-  'said wrong thing',
-  'cant stop thinking',
-  'did they notice',
-  'they are judging me',
-  'something bad coming',
-  'stayed quiet again',
-  'they are angry',
-  'why did i do that',
-  'nobody likes me',
-  'that look meant it'
+  'Said wrong thing',
+  'Cant stop thinking',
+  'Did they notice',
+  'They are judging me',
+  'Something bad coming',
+  'Stayed quiet again',
+  'They are angry',
+  'Why did I do that',
+  'Nobody likes me',
+  'That look meant it'
 ]
 //
 // Horizontal slots — arc vs hang is chosen randomly per slot at create time

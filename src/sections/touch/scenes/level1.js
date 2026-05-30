@@ -122,7 +122,7 @@ const L1_CROW_ROCK_DRAW_Z = 9
 // Crow sits on the bare ground just to the right of the hero spawn (no rock, no grass zone).
 //
 const L1_CROW_X = LEFT_MARGIN + 160
-const L1_CROW_TOOLTIP_TEXT = 'not much of a Mozart'
+const L1_CROW_TOOLTIP_TEXT = 'not much of a Mozert'
 const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
 const L1_CROW_TOOLTIP_OFFSET_Y = -52
@@ -147,15 +147,15 @@ const L1_SCENE_BG_B = 42
 //
 const L1_MUSHROOM_COUNT = 6
 const L1_MUSHROOM_FUNNY_CHANCE = 0.38
-const L1_SPIDER_TOOLTIP_TEXT = 'apartment for rent, cheap'
+const L1_SPIDER_TOOLTIP_TEXT = 'apartment for rent, cheep'
 //
 // Occasional mushroom hover jokes (English)
 //
 const L1_MUSHROOM_FUNNY_LINES = [
-  'still more grounded than my ex',
-  'do not tap — union mushroom',
-  'certified organic-ish',
-  'contains zero bitcoin',
+  'Still more grounded than my ex',
+  'Do not tap — union mushroom',
+  'Certified organic-ish',
+  'Contains zero bitcoin',
   'I peaked in the spore era'
 ]
 const L1_MUSHROOM_CAP_WIDTH_MIN = 14
@@ -176,55 +176,55 @@ const CLOUD_RANDOMNESS = 20
 const HERO_TOOLTIP_TEXT = "Do, Re, Mi..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
-const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you can see how far\nyou hav come in lerning touch"
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
+const GREEN_TIMER_TOOLTIP_TEXT = "finish the levl in time\nto earn mor fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 20
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
 const FPS_COUNTER_TOP_Y = 55
-const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
+const SMALL_HERO_TOOLTIP_TEXT = "yor fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_TEXT = "lyfe score"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Falling leaf tooltip phrases (shown when hovering a leaf in the air)
 //
 const LEAF_FALLING_PHRASES = [
-  "aaaaaa!!!!",
+  "Aaaaaa!!!!",
   "I'm freeee!",
   "Wheee!!",
-  "not again...",
-  "fly, fly, fly!"
+  "Not again...",
+  "Fly, fly, fly!"
 ]
 //
 // Grounded leaf tooltip phrases (shown when hovering a leaf on the floor)
 //
 const LEAF_GROUND_PHRASES = [
   "I used to be somebody",
-  "don't step on me!",
-  "I'm fine. this is fine",
-  "tell my branch\nI said hi",
-  "floor life is\nnot so bad",
+  "Don't step on me!",
+  "I'm fine. This is fine",
+  "Tell my branch\nI said hi",
+  "Floor life is\nnot so bad",
   "I'm on a break",
-  "five more minutes...",
-  "was that a foot?!",
+  "Five more minutes...",
+  "Was that a foot?!",
   "I regret nothing",
-  "at least it's warm\ndown here"
+  "At least it's warm\ndown here"
 ]
 //
 // Poison leaf tooltip phrases (shown on hover over blue leaves)
 //
 const LEAF_POISON_PHRASES = [
-  "don't touch me",
+  "Don't touch me",
   "I dare you",
-  "feeling brave?",
-  "you won't like this",
-  "blue means danger"
+  "Feeling brave?",
+  "You won't like this",
+  "Blue means danger"
 ]
 const LEAF_TOOLTIP_HOVER_SIZE = 30
 const LEAF_TOOLTIP_Y_OFFSET = -30
@@ -256,8 +256,13 @@ const WORM_CONTRACT_MIN = 0.7
 const WORM_CONTRACT_MAX = 1.0
 const WORM_MAX_STRETCH = 1.2
 const WORM_BULGE_AMOUNT = 0.85
-const WORM_TRAIL_FADE_SPEED = 0.00035
-const WORM_TRAIL_MAX_POINTS = 420
+//
+// Trail cap was 420 with a near-zero fade — keeping ~1200 ellipses (3 worms
+// × 420) drawn every frame just for slime trails. Smaller cap + faster fade
+// keeps the visual but cuts ~80% of the per-frame draw calls.
+//
+const WORM_TRAIL_FADE_SPEED = 0.0035
+const WORM_TRAIL_MAX_POINTS = 80
 const WORM_TRAIL_COLOR = '#060806'
 const WORM_BODY_COLOR = '#6E4538'
 const WORM_HEAD_COLOR = '#8B5E48'
@@ -275,9 +280,9 @@ const WORM_HOVER_WIDTH = 50
 const WORM_HOVER_HEIGHT = 30
 const WORM_TOOLTIP_OFFSET_Y = -28
 const SMALL_WORM_PHRASES = [
-  "you should see\nmy dad",
+  "You should see\nmy dad",
   "I'm just a\nbaby noodle",
-  "do worms have\nfeelings? yes."
+  "Do worms have\nfeelings? Yes."
 ]
 //
 // Life icon flash/particle effects on death
@@ -301,7 +306,7 @@ const FIRST_TREE_TOOLTIP_Y_OFFSET = -60
 //
 // Anti-hero tooltip (shown while gray/inactive)
 //
-const ANTIHERO_TOOLTIP_TEXT = "wait... do I know you?\nyou look familiar"
+const ANTIHERO_TOOLTIP_TEXT = "wait... do i know you?\nyou look familar"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -70
 //
@@ -932,6 +937,21 @@ export function sceneLevel1(k) {
       allGrassBlades.push(...layer.grassBlades)
     }
     
+    //
+    // Grass hero-push tuning. Using squared radius lets the inner loop
+    // skip Math.sqrt entirely for the vast majority of off-radius blades
+    // — only the small minority within the hero halo pays for the sqrt.
+    //
+    const GRASS_HERO_RADIUS = 50
+    const GRASS_HERO_RADIUS_SQ = GRASS_HERO_RADIUS * GRASS_HERO_RADIUS
+    const GRASS_PUSH_FORCE = 15
+    //
+    // Reusable vec2 instances hoisted out of the per-blade loop so we
+    // don't allocate two vectors per blade per frame (~1500 GC objects
+    // /sec saved with ~750 blades at 60fps).
+    //
+    const grassP1 = k.vec2(0, 0)
+    const grassP2 = k.vec2(0, 0)
     const grassDrawer = k.add([
       k.z(20),
       {
@@ -940,29 +960,28 @@ export function sceneLevel1(k) {
           const time = k.time()
           const heroX = this.heroRef ? this.heroRef.character.pos.x : -1000
           const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
-          const HERO_RADIUS = 50
-          const PUSH_FORCE = 15
-          
           for (const blade of allGrassBlades) {
             const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
-            //
-            // Check distance to hero
-            //
             const dx = blade.x1 - heroX
             const dy = blade.y1 - heroY
-            const distance = Math.sqrt(dx * dx + dy * dy)
+            const distSq = dx * dx + dy * dy
             //
-            // Add push effect if hero is close
+            // Skip the expensive sqrt + push math when the blade is well
+            // outside the hero halo. Far blades just sway in the wind.
             //
             let pushSway = 0
-            if (distance < HERO_RADIUS) {
-              const pushStrength = (1 - distance / HERO_RADIUS)
-              pushSway = (dx / distance) * pushStrength * PUSH_FORCE
+            if (distSq < GRASS_HERO_RADIUS_SQ) {
+              const distance = Math.sqrt(distSq)
+              const pushStrength = 1 - distance / GRASS_HERO_RADIUS
+              pushSway = (distance > 0 ? dx / distance : 0) * pushStrength * GRASS_PUSH_FORCE
             }
-            
+            grassP1.x = blade.x1
+            grassP1.y = blade.y1
+            grassP2.x = blade.baseX2 + baseSway + pushSway
+            grassP2.y = blade.y2
             k.drawLine({
-              p1: k.vec2(blade.x1, blade.y1),
-              p2: k.vec2(blade.baseX2 + baseSway + pushSway, blade.y2),
+              p1: grassP1,
+              p2: grassP2,
               width: blade.width,
               color: blade.color,
               opacity: blade.opacity
@@ -1482,6 +1501,11 @@ export function sceneLevel1(k) {
     //
     const BONUS_X = ANTIHERO_SPAWN_X - 100
     const BONUS_Y = ANTIHERO_SPAWN_Y - 100
+    //
+    // Collision box is nudged right + down so it sits exactly under the
+    // visible log barrel instead of left/above it. Width covers the log
+    // body plus its endcaps.
+    //
     BonusHero.create({
       k,
       x: BONUS_X,
@@ -1492,7 +1516,10 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level1BonusCollected'
+      storageKey: 'touch.level1BonusCollected',
+      collisionWidth: 96,
+      platformCollisionXOffset: 36,
+      platformCollisionYOffset: 4
     })
     //
     // Set hero reference for grass drawer
@@ -1564,7 +1591,7 @@ export function sceneLevel1(k) {
     //
     // Tooltip on the giant worm (dynamic position tracks the worm body)
     //
-    const WORM_TOOLTIP_TEXT = "come closer,\ndon't be afraid"
+    const WORM_TOOLTIP_TEXT = "come closer,\ndont be afraid"
     const WORM_TOOLTIP_WIDTH = 60
     const WORM_TOOLTIP_HEIGHT = 80
     const wormTooltipTarget = {
@@ -2046,7 +2073,7 @@ export function sceneLevel1(k) {
           // Draw request text above notes
           //
           k.drawText({
-            text: 'play this:',
+            text: 'Play this:',
             pos: k.vec2(bubbleX, bubbleY - 35),
             size: 18,
             font: CFG.visual.fonts.regularFull,
@@ -2613,6 +2640,15 @@ function createScrollingCloudConfigs() {
 function createScrollingClouds(k, cloudData) {
   const { bandWidth, areaLeft, areaRight, configs } = cloudData
   const inst = { scrollX: 0 }
+  //
+  // Pre-bake each cloud's color into a kaplay rgb object once at setup
+  // time so the per-frame inner loop doesn't allocate ~220 rgb objects
+  // per render. Also reuse a single position vec2.
+  //
+  for (const cloud of configs) {
+    cloud._color = k.rgb(cloud.color.r, cloud.color.g, cloud.color.b)
+  }
+  const cloudPos = k.vec2(0, 0)
   k.add([
     k.z(1),
     {
@@ -2624,10 +2660,12 @@ function createScrollingClouds(k, cloudData) {
             const cx = cloud.x + baseOffset
             if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
             for (const crown of cloud.crowns) {
+              cloudPos.x = cx + crown.offsetX
+              cloudPos.y = cloud.y + crown.offsetY
               k.drawCircle({
-                pos: k.vec2(cx + crown.offsetX, cloud.y + crown.offsetY),
+                pos: cloudPos,
                 radius: cloud.crownSize * crown.sizeVariation,
-                color: k.rgb(cloud.color.r, cloud.color.g, cloud.color.b),
+                color: cloud._color,
                 opacity: cloud.opacity * crown.opacityVariation
               })
             }
@@ -2667,10 +2705,13 @@ function createLeafTooltips(k, fallingLeafInst) {
     return map.get(leaf)
   }
   //
-  // Pre-allocate tooltip target slots refreshed each frame via onUpdate
+  // Pre-allocate tooltip target slots refreshed each frame via onUpdate.
+  // The previous cap of 200 forced the tooltip system to hit-test 200
+  // entries (mostly empty stubs) every frame; 40 covers the active leaves
+  // on screen with plenty of headroom and slashes the per-frame work.
   //
   const tooltipTargets = []
-  const MAX_TRACKED_LEAVES = 200
+  const MAX_TRACKED_LEAVES = 40
   for (let i = 0; i < MAX_TRACKED_LEAVES; i++) {
     tooltipTargets.push({
       x: -9999,
@@ -2932,19 +2973,36 @@ function onUpdateWorm(k, inst) {
 // Draws the worm: dark trail, circle segments with peristaltic bulge, tiny eyes
 //
 function onDrawWorm(k, inst) {
+  //
+  // Hoist color + position objects out of the tight per-point loops so we
+  // don't allocate dozens of vec2/rgb objects every frame.
+  //
   const trailRgb = parseHex(WORM_TRAIL_COLOR)
   const bodyRgb = parseHex(WORM_BODY_COLOR)
   const headRgb = parseHex(WORM_HEAD_COLOR)
   const ventralRgb = parseHex(WORM_VENTRAL_HIGHLIGHT)
+  const trailColor = k.rgb(trailRgb[0], trailRgb[1], trailRgb[2])
+  const bodyColor = k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2])
+  const headColor = k.rgb(headRgb[0], headRgb[1], headRgb[2])
+  const ventralColor = k.rgb(ventralRgb[0], ventralRgb[1], ventralRgb[2])
+  const ringColor = k.rgb(26, 18, 14)
+  const trailPos = k.vec2(0, 0)
+  const segP1 = k.vec2(0, 0)
+  const segP2 = k.vec2(0, 0)
+  const ventralP1 = k.vec2(0, 0)
+  const ventralP2 = k.vec2(0, 0)
+  const ringPos = k.vec2(0, 0)
   //
   // Narrow damp-soil smear behind the worm (reads subtler than solid rects)
   //
   for (const pt of inst.trail) {
+    trailPos.x = pt.x
+    trailPos.y = pt.y
     k.drawEllipse({
-      pos: k.vec2(pt.x, pt.y),
+      pos: trailPos,
       radiusX: 5,
       radiusY: 1.8,
-      color: k.rgb(trailRgb[0], trailRgb[1], trailRgb[2]),
+      color: trailColor,
       opacity: pt.opacity * 0.55
     })
   }
@@ -2958,12 +3016,13 @@ function onDrawWorm(k, inst) {
     const segWave = (Math.sin((inst.wavePhase - i * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
     const bulge = 1 - segWave
     const tubeW = (WORM_SEGMENT_RADIUS + bulge * WORM_BULGE_AMOUNT) * 2.35
-    const rgb = i === 0 ? headRgb : bodyRgb
+    segP1.x = a.x; segP1.y = a.y
+    segP2.x = b.x; segP2.y = b.y
     k.drawLine({
-      p1: k.vec2(a.x, a.y),
-      p2: k.vec2(b.x, b.y),
+      p1: segP1,
+      p2: segP2,
       width: tubeW,
-      color: k.rgb(rgb[0], rgb[1], rgb[2]),
+      color: i === 0 ? headColor : bodyColor,
       opacity: 0.94
     })
     //
@@ -2971,11 +3030,13 @@ function onDrawWorm(k, inst) {
     //
     const mx = (a.x + b.x) / 2
     const my = (a.y + b.y) / 2
+    ventralP1.x = a.x; ventralP1.y = a.y + 1.1
+    ventralP2.x = b.x; ventralP2.y = b.y + 1.1
     k.drawLine({
-      p1: k.vec2(a.x, a.y + 1.1),
-      p2: k.vec2(b.x, b.y + 1.1),
+      p1: ventralP1,
+      p2: ventralP2,
       width: tubeW * 0.38,
-      color: k.rgb(ventralRgb[0], ventralRgb[1], ventralRgb[2]),
+      color: ventralColor,
       opacity: 0.45
     })
     //
@@ -2983,10 +3044,11 @@ function onDrawWorm(k, inst) {
     //
     const ringWave = (Math.sin((inst.wavePhase - (i + 0.5) * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
     const ringR = WORM_SEGMENT_RADIUS * 0.35 + ringWave * 0.25
+    ringPos.x = mx; ringPos.y = my
     k.drawCircle({
-      pos: k.vec2(mx, my),
+      pos: ringPos,
       radius: ringR,
-      color: k.rgb(26, 18, 14),
+      color: ringColor,
       opacity: WORM_SEGMENT_RING_OPACITY
     })
   }
@@ -3104,11 +3166,17 @@ function createFireflies(k, heroInst) {
     const heroSpeed = Math.abs(heroVx) + Math.abs(heroVy)
     if (heroSpeed < 0.5) return
     const dt = k.dt()
+    //
+    // Squared-distance early-out: most fireflies are far from the hero
+    // and never need the sqrt. Only nearby ones pay the cost.
+    //
+    const pushRadiusSq = FIREFLY_PUSH_DISTANCE * FIREFLY_PUSH_DISTANCE
     for (const f of fireflies) {
       const dx = f.x - heroX
       const dy = f.y - heroY
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist >= FIREFLY_PUSH_DISTANCE || dist < 1) continue
+      const distSq = dx * dx + dy * dy
+      if (distSq >= pushRadiusSq || distSq < 1) continue
+      const dist = Math.sqrt(distSq)
       const force = (1 - dist / FIREFLY_PUSH_DISTANCE) * FIREFLY_PUSH_STRENGTH * dt
       f.pushVx += (dx / dist) * force + heroVx * force * 0.3
       f.pushVy += (dy / dist) * force + heroVy * force * 0.3

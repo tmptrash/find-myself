@@ -72,6 +72,22 @@ const BONUS_PLATFORM_X = MAIN_PLATFORM_X + MAIN_PLATFORM_W / 2 + 88
 const BONUS_PLATFORM_Y = MAIN_PLATFORM_Y - 95
 const BONUS_PLATFORM_W = 72
 //
+// Collision box covers the whole visible log:
+// width spans the rendered log barrel (body + endcaps) and the box is
+// nudged right to line up with the visual log. Height matches the regular
+// wooden platform (MAIN_PLATFORM_H) so the hidden log feels like a real
+// platform when the hero lands on it.
+//
+const BONUS_PLATFORM_COLLISION_WIDTH = 80
+const BONUS_PLATFORM_COLLISION_HEIGHT = MAIN_PLATFORM_H
+//
+// X offset is raised in lockstep with the width reduction so the right
+// edge of the collider stays anchored to the log's right endcap while the
+// left edge slides inward (shrink from the left).
+//
+const BONUS_PLATFORM_COLLISION_X_OFFSET = 40
+const BONUS_PLATFORM_COLLISION_Y_OFFSET = 6
+//
 // Single red spike cluster to the right of the hidden bonus platform
 //
 const SPIKE_AFTER_BONUS_GAP = 52
@@ -117,7 +133,7 @@ const HERO_SPAWN_DELAY = 0.5
 const PLATFORM_FOREGROUND_Z = 26
 const HERO_SPAWN_Z = 28
 const ANTIHERO_Z = 28
-const ANTIHERO_TOOLTIP_TEXT = "i'm waiting for you here"
+const ANTIHERO_TOOLTIP_TEXT = "im waitn for u here"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const ANTIHERO_MOUSE_HOVER_HALF = ANTIHERO_TOOLTIP_HOVER_SIZE / 2
@@ -188,16 +204,15 @@ const BLOCKING_ROCK_STRIPE_EXCLUDE_HALF_W = Math.ceil(BLOCKING_ROCK_RADIUS * BLO
 // Tutorial hints
 //
 const HINT_Y_OFFSET = -100
-const HINT_0_TEXT = 'hi. let\'s learn\nhow to control\nour hero. it\'s easy'
-const HINT_WELCOME_DURATION = 5
-const HINT_MOUSE_TEXT = 'using the mouse, hover\nyour cursor over your\nother half to get a hint.\nthe mouse helps us learn\nmore about the world'
-const HINT_1_TEXT = 'good! now use ← →, A D\nto run to the wooden\nplatform ahead'
-const HINT_2_TEXT = 'excellent! use Space, ↑\nto jump on the platform'
+const HINT_0_TEXT = "hiii! im Yuna\n— a lil weerd lookin\nbut thats okayy!\nlets gro an lern\ntogetherrr ^_^"
+const HINT_WELCOME_DURATION = 6.5
+const HINT_MOUSE_TEXT = 'use the mouz to put\nur arro on yur uthr\nhalf to git a tip!\nthe mouz helps us\nlern bowt the werld'
+const HINT_1_TEXT = 'gud! now press ← →, A D\nto run to the woden\nplatform ovr there!'
+const HINT_2_TEXT = 'wow! press Space, ↑\nto jmp on the platform'
 const HINT_2_APPROACH_X = MAIN_PLATFORM_X - 165
-const HINT_3_TEXT = 'good! now, find the blinking\nfragment and jump on it — a\nfragment is a piece of you\nthat helps you live your life'
-const HINT_4_TEXT = 'spikes are to your right —\nif you fall on them you die'
-const HINT_5_TEXT = 'now, find yourself — your other half.\ntouch it to know yourself more'
-const HINT_DISPLAY_TIME = 9
+const HINT_3_TEXT = 'gud! now find the blinkn\npeece an jmp on it — a\npeece is a part of u\nit helps u liv yur life!'
+const HINT_4_TEXT = 'spykes is on yur rite!\nif u fal on them u die!'
+const HINT_5_TEXT = 'now find urself — yur uthr\nhalf. tuch it to no urself mor!'
 const MAIN_PLATFORM_STAND_Y_MAX = MAIN_PLATFORM_Y + 22
 const MAIN_PLATFORM_STAND_Y_MIN = MAIN_PLATFORM_Y - 88
 const MAIN_PLATFORM_STAND_X_HALF = MAIN_PLATFORM_W / 2 + 28
@@ -206,21 +221,22 @@ const BONUS_PLATFORM_STAND_Y_MAX = BONUS_PLATFORM_Y + 30
 const BONUS_PLATFORM_STAND_Y_MIN = BONUS_PLATFORM_Y - 110
 const BONUS_PLATFORM_STAND_X_HALF = BONUS_PLATFORM_W / 2 + 40
 //
-// Repeating hint reminders (30s) until the player completes each tutorial step
+// Pause inserted between an action completing and the next hint appearing.
+// Hints are now persistent (no auto-hide), so this is the only delay.
 //
-const HINT_REMINDER_INTERVAL = 30
+const HINT_TRANSITION_GAP = 0.5
 const FRAGMENT_LEAVE_FIND_YOURSELF_DELAY = 2
 const ANTIHERO_HOVER_PAUSE = 2
 const TRAINING_TARGET_TIME_SECONDS = 99 * 60
 const HUD_FROZEN_TOOLTIP_DURATION = 2
-const HUD_SMALL_HERO_HINT = 'hover over the small hero\nat the top-right to see how\nmany fragments you\'ve\ncollected. fragments help\nyou understand yourself and\novercome life\'s challenges'
-const HUD_SMALL_HERO_TOOLTIP = 'your fragments'
-const HUD_LIFE_HINT = 'great! to the right of the\nhero is life with its score.\nit plays against you and \ncauses trouble by turning\nthem into points. hover over it'
-const HUD_LIFE_TOOLTIP = 'life score'
-const HUD_TIME_HINT = 'super! now hover over the\ngreen time to the right of\nthe timer at the top — that\'s\nhow long you have to beat\nthe level and earn extra fragments'
-const HUD_TIME_TOOLTIP = "complete the level in time\nto earn more fragments"
+const HUD_SMALL_HERO_HINT = 'put ur arro on the litl\nhiro on the top-rite to\nsee how meny peeces u\ngot. peeces help u\nundrstand urself an bete\nlifes hard stuf!'
+const HUD_SMALL_HERO_TOOLTIP = 'ur peeces'
+const HUD_LIFE_HINT = 'yay! nxt to the hiro\nis life wif its scor.\nit plays aginst u an\nmaks trubl by turnig\nthem to points. hovr on it!'
+const HUD_LIFE_TOOLTIP = 'life scor'
+const HUD_TIME_HINT = 'supr! now hovr on the\ngrin time on the rite of\nthe timr on top — thats\nhow long u hav to bete\nthe lev to git mor peeces!'
+const HUD_TIME_TOOLTIP = "bete the lev in time\nto git mor peeces"
 const HUD_UI_HOVER_HALF = 42
-const TRAINING_COMPLETE_MESSAGE = 'now you\'re ready to explore yourself.\nlet\'s start with touch...'
+const TRAINING_COMPLETE_MESSAGE = 'now ur redy to explor urself.\nlets start wif tuch...'
 const TRAINING_COMPLETE_MESSAGE_DURATION = 5
 const TRAINING_COMPLETE_FONT_SIZE_RATIO = 0.036
 const TRAINING_COMPLETE_LINE_SPACING = 8
@@ -521,7 +537,6 @@ export function sceneTouchTraining(k) {
       awaitingMouseHint: false,
       mouseHintHovering: false,
       mouseHintDone: false,
-      lastMouseHintTime: 0,
       fragmentCollected: false,
       wasOnBonusPlatform: false,
       wasOnMainPlatform: false,
@@ -535,9 +550,6 @@ export function sceneTouchTraining(k) {
       spikesPassed: false,
       bonusCollectUntil: 0,
       spikePassX,
-      lastJumpPlatformHintTime: 0,
-      lastFragmentHintTime: 0,
-      lastFindYourselfHintTime: 0,
       levelDone: false,
       isDead: false,
       currentTip: null,
@@ -579,6 +591,11 @@ export function sceneTouchTraining(k) {
       bodyColor: HERO_BODY_COLOR,
       jumpForce: CFG.game.jumpForce,
       currentLevel: 'level-touch.training',
+      //
+      // Tutorial hero softly whistles + emits music notes while standing
+      // still, to keep the empty practice scene feeling alive.
+      //
+      idleVocalization: 'whistling',
       onAnnihilation: () => {
         hintState.levelDone = true
         heroInst.controlsDisabled = true
@@ -614,7 +631,11 @@ export function sceneTouchTraining(k) {
       sfx: sound,
       heroBodyColor: HERO_BODY_COLOR,
       storageKey: 'touch.trainingBonusCollected',
-      platformZ: PLATFORM_FOREGROUND_Z
+      platformZ: PLATFORM_FOREGROUND_Z,
+      collisionWidth: BONUS_PLATFORM_COLLISION_WIDTH,
+      platformCollisionHeight: BONUS_PLATFORM_COLLISION_HEIGHT,
+      platformCollisionXOffset: BONUS_PLATFORM_COLLISION_X_OFFSET,
+      platformCollisionYOffset: BONUS_PLATFORM_COLLISION_Y_OFFSET
     })
     levelIndicator.updateHeroScore = ((orig) => (score) => {
       orig(score)
@@ -675,8 +696,7 @@ export function sceneTouchTraining(k) {
         if (hintState.levelDone || hintState.isDead || hintState.awaitingMouseHint) return
         hintState.welcomeDone = true
         hintState.awaitingMouseHint = true
-        hintState.lastMouseHintTime = k.time()
-        showHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
+        transitionToHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
       })
     })
     scheduleAmbientSounds(k, sound)
@@ -1554,9 +1574,13 @@ function destroyTrainingHints(k, hintState) {
 }
 
 //
-// Shows a forced tooltip above the hero
+// Shows a forced tooltip above the hero.
+// When `duration` is Infinity (default) the bubble stays put forever and is
+// only cleared by another showHint() / transitionToHint() call (or scene
+// teardown). Use a finite `duration` for self-progressing hints like the
+// opening welcome message.
 //
-function showHint(k, hintState, heroInst, text, hintType, duration = HINT_DISPLAY_TIME) {
+function showHint(k, hintState, heroInst, text, hintType, duration = Infinity) {
   hintState.currentTip && Tooltip.destroy(hintState.currentTip)
   hintState.currentTip = null
   hintState.currentHintType = null
@@ -1576,12 +1600,27 @@ function showHint(k, hintState, heroInst, text, hintType, duration = HINT_DISPLA
   tip.opacity = 1
   hintState.currentTip = tip
   hintState.currentHintType = hintType
+  if (duration === Infinity) return
   k.wait(duration, () => {
     if (hintState.currentTip === tip) {
       Tooltip.destroy(tip)
       hintState.currentTip = null
       hintState.currentHintType = null
     }
+  })
+}
+
+//
+// Hides the current hint, waits HINT_TRANSITION_GAP seconds, then shows the
+// next hint. Used for "action complete → small pause → next hint" flow.
+//
+function transitionToHint(k, hintState, heroInst, text, hintType) {
+  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+  hintState.currentTip = null
+  hintState.currentHintType = null
+  k.wait(HINT_TRANSITION_GAP, () => {
+    if (hintState.levelDone || hintState.isDead) return
+    showHint(k, hintState, heroInst, text, hintType)
   })
 }
 
@@ -1608,31 +1647,29 @@ function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
   const onBonusPlatform = isHeroGroundedOnBonusPlatform(heroInst)
   const heroX = heroInst.character?.pos?.x ?? 0
   //
-  // Hero runs up to the log — replace run hint with jump hint
+  // Hero pressed a run key — replace the run hint with the jump hint
+  // (after a brief gap defined by HINT_TRANSITION_GAP).
   //
   if (!hintState.shown2 && hintState.shown1 && hintState.runKeysUsed && !hintState.shown3 &&
       !onMainPlatform && !onBonusPlatform && !bonusHintActive && !heroInst.controlsDisabled &&
       !hintState.wasOnBonusPlatform && !hintState.findYourselfAfterLeave &&
       heroX >= HINT_2_APPROACH_X) {
     hintState.shown2 = true
-    hintState.lastJumpPlatformHintTime = k.time()
-    showHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
+    transitionToHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
   }
   //
   // Hero lands on the log — replace previous hint with fragment hint
   //
   if (!hintState.shown3 && hintState.shown2 && onMainPlatform && !hintState.wasOnMainPlatform && !bonusHintActive) {
     hintState.shown3 = true
-    hintState.lastFragmentHintTime = k.time()
-    showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
+    transitionToHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
   }
   hintState.wasOnMainPlatform = onMainPlatform
   if (onBonusPlatform && !hintState.landedOnBonusPlatform) {
     hintState.landedOnBonusPlatform = true
-    hintState.lastFragmentHintTime = 0
     if (!hintState.shown4 && !hintState.spikesPassed && !bonusHintActive) {
       hintState.shown4 = true
-      showHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
+      transitionToHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
     }
   }
   //
@@ -1646,10 +1683,9 @@ function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
     if (k.time() - hintState.leftBonusPlatformAt >= FRAGMENT_LEAVE_FIND_YOURSELF_DELAY &&
         !hintState.findYourselfAfterLeave) {
       hintState.findYourselfAfterLeave = true
-      hintState.lastFindYourselfHintTime = k.time()
       if (!hintState.levelDone) {
         hintState.shown5 = true
-        showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+        transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
       }
     }
   }
@@ -1658,54 +1694,15 @@ function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
   }
   hintState.wasOnBonusPlatform = onBonusPlatform
   //
-  // Hero cleared the spike cluster — drop spike hint, start find-yourself reminders
+  // Hero cleared the spike cluster — swap the spike hint for the
+  // find-yourself one (with the standard transition gap).
   //
   if (!hintState.spikesPassed && (heroInst.character?.pos?.x ?? 0) > hintState.spikePassX) {
     hintState.spikesPassed = true
     hintState.shown4 = true
-    hintState.lastFindYourselfHintTime = k.time()
-    if (hintState.currentHintType === 'spikes') {
-      Tooltip.destroy(hintState.currentTip)
-      hintState.currentTip = null
-      hintState.currentHintType = null
-    }
-  }
-  //
-  // Jump-on-log reminder every 30s until the hero stands on the wooden platform
-  //
-  if (hintState.shown1 && hintState.runKeysUsed && !hintState.shown3 && !onMainPlatform &&
-      !onBonusPlatform && !bonusHintActive && !heroInst.controlsDisabled &&
-      !hintState.wasOnBonusPlatform && !hintState.findYourselfAfterLeave) {
-    hintState.lastJumpPlatformHintTime === 0 && (hintState.lastJumpPlatformHintTime = k.time())
-    if (k.time() - hintState.lastJumpPlatformHintTime >= HINT_REMINDER_INTERVAL) {
-      hintState.lastJumpPlatformHintTime = k.time()
-      hintState.shown2 = true
-      showHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
-    }
-  }
-  if (onMainPlatform) {
-    hintState.lastJumpPlatformHintTime = 0
-  }
-  //
-  // Fragment reminder every 30s after first log landing until hero lands on hidden platform
-  //
-  if (hintState.shown3 && !hintState.landedOnBonusPlatform && !bonusHintActive) {
-    hintState.lastFragmentHintTime === 0 && (hintState.lastFragmentHintTime = k.time())
-    if (k.time() - hintState.lastFragmentHintTime >= HINT_REMINDER_INTERVAL) {
-      hintState.lastFragmentHintTime = k.time()
-      showHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
-    }
-  }
-  //
-  // Find-yourself reminder every 30s after spikes or leaving hidden platform
-  //
-  const findYourselfActive = hintState.spikesPassed || hintState.findYourselfAfterLeave
-  if (findYourselfActive && !bonusHintActive && !hintState.levelDone) {
-    hintState.lastFindYourselfHintTime === 0 && (hintState.lastFindYourselfHintTime = k.time())
-    if (k.time() - hintState.lastFindYourselfHintTime >= HINT_REMINDER_INTERVAL) {
-      hintState.lastFindYourselfHintTime = k.time()
+    if (!hintState.shown5 && !hintState.levelDone) {
       hintState.shown5 = true
-      showHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+      transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
     }
   }
 }
@@ -1767,16 +1764,6 @@ function onUpdateTrainingSurface(heroInst, sound) {
 function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound) {
   if (hintState.levelDone || hintState.isDead || hintState.mouseHintDone) return
   if (!antiHeroInst.character?.exists?.() || !heroInst.character?.exists?.()) return
-  //
-  // Re-show mouse hint every 30s until the player hovers the anti-hero
-  //
-  if (hintState.awaitingMouseHint && !hintState.mouseHintHovering) {
-    hintState.lastMouseHintTime === 0 && (hintState.lastMouseHintTime = k.time())
-    if (k.time() - hintState.lastMouseHintTime >= HINT_REMINDER_INTERVAL) {
-      hintState.lastMouseHintTime = k.time()
-      showHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
-    }
-  }
   if (!hintState.awaitingMouseHint || hintState.mouseHintHovering) return
   const mp = TouchInput.getPointerPos(k)
   const ax = antiHeroInst.character.pos.x
@@ -1844,8 +1831,7 @@ function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCou
       (hintState.smallHeroTooltipDone = true) &&
       beginHudStepTooltip(k, hintState, levelIndicator, sound, sh.pos.x, sh.pos.y, HUD_SMALL_HERO_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_SMALL_HERO, () => {
         hintState.hudTutorialStep = 'lifeHint'
-        clearTrainingHeroHint(k, hintState)
-        showHint(k, hintState, heroInst, HUD_LIFE_HINT, 'hudLife')
+        transitionToHint(k, hintState, heroInst, HUD_LIFE_HINT, 'hudLife')
       })
     return
   }
@@ -1856,8 +1842,7 @@ function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCou
       (hintState.lifeTooltipDone = true) &&
       beginHudStepTooltip(k, hintState, levelIndicator, sound, life.x, life.y, HUD_LIFE_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_LIFE, () => {
         hintState.hudTutorialStep = 'timeHint'
-        clearTrainingHeroHint(k, hintState)
-        showHint(k, hintState, heroInst, HUD_TIME_HINT, 'hudTime')
+        transitionToHint(k, hintState, heroInst, HUD_TIME_HINT, 'hudTime')
       })
     return
   }
@@ -1868,7 +1853,6 @@ function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCou
       (hintState.timeTooltipDone = true) &&
       beginHudStepTooltip(k, hintState, levelIndicator, sound, targetText.pos.x, targetText.pos.y, HUD_TIME_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_TIME, () => {
         hintState.hudTutorialStep = 'done'
-        clearTrainingHeroHint(k, hintState)
         finishHudMouseTutorial(k, hintState, heroInst)
       })
   }
@@ -1884,22 +1868,12 @@ function beginHudStepTooltip(k, hintState, levelIndicator, sound, x, y, text, le
 }
 
 //
-// Clears the hero-attached tutorial hint bubble
-//
-function clearTrainingHeroHint(k, hintState) {
-  hintState.currentTip && Tooltip.destroy(hintState.currentTip)
-  hintState.currentTip = null
-  hintState.currentHintType = null
-}
-
-//
 // Enables controls and shows the run hint after HUD tutorial completes
 //
 function finishHudMouseTutorial(k, hintState, heroInst) {
   heroInst.controlsDisabled = false
   hintState.shown1 = true
-  hintState.lastJumpPlatformHintTime = k.time()
-  showHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
+  transitionToHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
 }
 
 //

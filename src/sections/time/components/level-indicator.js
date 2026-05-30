@@ -127,7 +127,12 @@ export function create(config) {
     bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.outline,
     addMouth: isWordComplete,  // Add mouth if word section is complete
-    addArms: isTouchComplete  // Add arms if touch section is complete
+    addArms: isTouchComplete,  // Add arms if touch section is complete
+    //
+    // HUD indicator hero is purely decorative — never whistles or emits
+    // floating notes during gameplay.
+    //
+    idleVocalization: null
   })
   smallHero.character.fixed = true  // Fixed position
   smallHero.character.z = CFG.visual.zIndex.ui

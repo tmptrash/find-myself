@@ -242,70 +242,74 @@ const MONSTER_CHARS_PER_SECOND = 12
 const MONSTER_MIN_DISPLAY_TIME = 2.5
 const MONSTER_PAUSE_BETWEEN = 1.0
 const MONSTER_CONVERSATION_LINES = [
-  { speaker: 0, text: "why did the bug cross\nthe screen?\nbetter latency" },
-  { speaker: 1, text: "that's not a joke.\nthat's just commuting" },
-  { speaker: 2, text: "I laughed.\ninternally.\nI'm subtle" },
-  { speaker: 0, text: "hey.\nsee the small ones?\nscattered everywhere" },
-  { speaker: 1, text: "they need someone\nto nudge them\ncloser together" },
-  { speaker: 2, text: "push them into a pile.\nsomething good\nhappens when they meet" },
-  { speaker: 0, text: "that's literally\nhow connection works.\ntry it" },
-  { speaker: 1, text: "my therapist says\nI stack trauma\nlike pancakes" },
-  { speaker: 0, text: "mine says\nstop borrowing trouble\nfrom tomorrow" },
-  { speaker: 2, text: "tomorrow said\n'already booked'" },
+  { speaker: 0, text: "Why did the bug cross\nthe screen?\nBetter latency" },
+  { speaker: 1, text: "That's not a joke.\nThat's just commuting" },
+  { speaker: 2, text: "I laughed.\nInternally.\nI'm subtle" },
+  { speaker: 0, text: "Hey.\nSee the small ones?\nScattered everywhere" },
+  { speaker: 1, text: "They need someone\nto nudge them\ncloser together" },
+  { speaker: 2, text: "Push them into a pile.\nSomething good\nhappens when they meet" },
+  { speaker: 0, text: "That's literally\nhow connection works.\nTry it" },
+  { speaker: 1, text: "My therapist says\nI stack trauma\nlike pancakes" },
+  { speaker: 0, text: "Mine says\nstop borrowing trouble\nfrom tomorrow" },
+  { speaker: 2, text: "Tomorrow said\n'already booked'" },
   { speaker: 1, text: "I'm not lazy.\nI'm on standby" },
-  { speaker: 0, text: "standing by\nis still standing.\ncount it" }
+  { speaker: 0, text: "Standing by\nis still standing.\nCount it" }
 ]
 const MONSTERS_TALKED_KEY = 'touch.monstersTalked'
 //
+// Hero reaction when a bug crawls onto him: short meow + crouch pose
+//
+const HERO_BUG_CROUCH_DURATION = 0.45
+//
 // TOUCH indicator tooltip
 //
-const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "heer u kan se how far\nu av com in lernin tuch"
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
-const ANTIHERO_TOOLTIP_TEXT = "try to reach me"
+const ANTIHERO_TOOLTIP_TEXT = "tryyy to reech meee"
 const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
 const ANTIHERO_TOOLTIP_HOVER_HEIGHT = 60
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
 // Hero tooltip (raised higher so it sits above bug tooltips)
 //
-const HERO_TOOLTIP_TEXT = "I must find myself..."
+const HERO_TOOLTIP_TEXT = "i muss fin myself..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
 // Green timer tooltip (appears below the timer text)
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
+const GREEN_TIMER_TOOLTIP_TEXT = "finsh the levl in tym\nto get mor fragmnts"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
+const SMALL_HERO_TOOLTIP_TEXT = "ur fragmnts"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_TEXT = "lyf skor"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Floor thorns tooltip
 //
-const FLOOR_THORNS_TOOLTIP_TEXT = "try to touch me"
+const FLOOR_THORNS_TOOLTIP_TEXT = "tryy to tuch me"
 const FLOOR_THORNS_TOOLTIP_HEIGHT = 40
 const FLOOR_THORNS_TOOLTIP_Y_OFFSET = -30
 //
 // Bird tooltip
 //
-const BIRD_TOOLTIP_TEXT = "I believe I can fly"
+const BIRD_TOOLTIP_TEXT = "i blive i kan flyyy"
 const BIRD_TOOLTIP_HOVER_SIZE = 40
 const BIRD_TOOLTIP_Y_OFFSET = -30
 //
 // Long-legged monster hover tooltip (shown only when not in conversation)
 //
-const MONSTER_HOVER_TOOLTIP_TEXT = "collect bugs together\nto reach the goal"
+const MONSTER_HOVER_TOOLTIP_TEXT = "kolekt buggs togethr\nto reech the gol"
 const MONSTER_HOVER_TOOLTIP_W = 70
 const MONSTER_HOVER_TOOLTIP_H = 80
 const MONSTER_HOVER_TOOLTIP_Y_OFFSET = -90
@@ -382,7 +386,7 @@ const DIRT_PARTICLE_COLOR_B = 40
 const TRAP_SPIKE_FILL_R = 180
 const TRAP_SPIKE_FILL_G = 60
 const TRAP_SPIKE_FILL_B = 60
-const TRAP_TOOLTIP_TEXT = "surprise"
+const TRAP_TOOLTIP_TEXT = "surpryyse!"
 const TRAP_TOOLTIP_Y_OFFSET = -30
 //
 // Anti-hero platform (right side, above hero height)
@@ -2011,15 +2015,20 @@ export function sceneLevel0(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level0BonusCollected'
+      storageKey: 'touch.level0BonusCollected',
+      //
+      // The log visual sits on top of the front-line trees, but the
+      // collider was previously misaligned (a bit too high and shifted
+      // left of the painted log). Push it down/right so it lines up with
+      // the visible bark, and bump the platform draw z-index up so the
+      // log itself reads as foreground geometry too. The bonus-hero
+      // component already places the mini hero at `platformZ + 3`, so we
+      // do not need to manually override its z any more.
+      //
+      platformCollisionXOffset: 18,
+      platformCollisionYOffset: 16,
+      platformZ: ANTIHERO_PLATFORM_Z_INDEX
     })
-    //
-    // Push the bonus mini hero in front of front-line trees (dynamic trees z=25)
-    // so the sparkly hint and revealed mini hero are not occluded by foliage.
-    //
-    if (bonusHeroInst?.miniHero?.character) {
-      bonusHeroInst.miniHero.character.z = ANTIHERO_PLATFORM_Z_INDEX
-    }
     //
     // Create bugs on the floor
     //
@@ -2336,6 +2345,12 @@ export function sceneLevel0(k) {
             // Play scare sound
             //
             sound && Sound.playBugScareSound(sound)
+            //
+            // Hero reacts to the bug crawling onto him: clearly audible
+            // meow + brief crouch pose so the player feels the contact.
+            //
+            sound && Sound.playHeroMeowSound(sound)
+            Hero.crouch(heroInst, HERO_BUG_CROUCH_DURATION)
             //
             // Calculate max drop based on actual leg lengths
             //
@@ -3903,13 +3918,13 @@ const L0_FIREFLY_COLOR_B = 120
 const MUSHROOM_COUNT = 7
 const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
-const L0_SPIDER_TOOLTIP_TEXT = "psst... nudge those\nlittle bugs closer\nto each other"
+const L0_SPIDER_TOOLTIP_TEXT = "psssst... pushh those\nlil buggs kloser\ntogetherrr"
 const MUSHROOM_FUNNY_LINES = [
-  'talk spore to me',
-  'pay rent in compost',
-  'this is not a power-up',
+  'Talk spore to me',
+  'Pay rent in compost',
+  'This is not a power-up',
   '404 fungus not found',
-  'slightly psychic, mostly chill'
+  'Slightly psychic, mostly chill'
 ]
 const MUSHROOM_CAP_WIDTH_MIN = 16
 const MUSHROOM_CAP_WIDTH_MAX = 32

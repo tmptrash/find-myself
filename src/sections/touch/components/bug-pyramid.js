@@ -6,11 +6,50 @@ import * as Sound from '../../../utils/sound.js'
 //
 const GROUP_DETECTION_RADIUS = 40  // Distance for bugs to form a group
 const PYRAMID_DURATION = 5.0  // How long pyramid exists (seconds)
-const TRAMPOLINE_BOUNCE_FORCE = 1200  // Bounce force for hero
 const BUG_SPACING = 20  // Spacing between bugs in pyramid
 const PYRAMID_BASE_HEIGHT = 8  // Height of pyramid base (for collision) - reduced to make hero land lower
 const JOIN_DETECTION_RADIUS = 60  // Distance for bugs to join existing tower
 const STACK_SOUND_STAGGER = 0.08  // Delay between stacked sounds (seconds)
+//
+// Screen shake intensities when the tower forms or grows
+//
+const PYRAMID_FORM_SHAKE = 3.5
+const PYRAMID_ADD_BUG_SHAKE = 1.8
+//
+// Hero "landed on tower" detection — distance in pixels and chorus tuning
+//
+const HERO_LAND_DETECT_DY = 36       // Hero's center can be at most this many px above platform top
+const HERO_LAND_DETECT_DY_BELOW = 16 // ...and at most this many px below it (small tolerance)
+const HERO_LAND_DETECT_DX_MARGIN = 36 // Extra horizontal tolerance beyond platform width
+//
+// Cheer chorus: five distinct "voices" overlap within a ~180 ms window so
+// the listener hears a chord of varied bug squeaks instead of a single
+// blended pulse. The wider stagger + faster repeat below keep chords
+// flowing into each other for a near-continuous chatter while the hero
+// stands on the tower.
+//
+const HERO_LAND_CHEER_VOICES = 5
+const HERO_LAND_CHEER_BASE_FREQS = [1500, 1850, 2200, 2600, 3000]
+const HERO_LAND_CHEER_JITTER_S = 0.18
+const HERO_LAND_CHEER_PITCH_JITTER = 0.18
+//
+// Proximity-based chirp ambience: bugs start squeaking quietly when the
+// hero is within HERO_PROXIMITY_RADIUS pixels and ramp up in both
+// loudness AND frequency the closer he gets. While the hero stands on
+// top of the tower, the chord chirps loop continuously at full volume.
+// Each proximity squeak picks a random voice from HERO_LAND_CHEER_BASE_FREQS
+// so the approach sounds like different bugs chirping in turn, not the
+// same single voice on repeat.
+//
+const HERO_PROXIMITY_RADIUS = 500
+const PROXIMITY_CHIRP_FAR_INTERVAL = 1.1   // Slowest cadence at the radius edge
+const PROXIMITY_CHIRP_NEAR_INTERVAL = 0.18 // Tightest cadence right next to the tower
+const PROXIMITY_INTERVAL_JITTER = 0.25     // Random ±25% multiplier on each interval
+const PROXIMITY_FAR_VOLUME = 0.04
+const PROXIMITY_NEAR_VOLUME = 0.32
+const ON_PYRAMID_VOLUME = 0.55
+const ON_PYRAMID_CHORD_MIN_INTERVAL = 0.22
+const ON_PYRAMID_CHORD_MAX_INTERVAL = 0.45
 //
 // Calculate tower layout based on bug count
 // Bugs stack vertically on top of each other
@@ -261,7 +300,14 @@ export function create(config) {
     lastBounceTime: 0,
     isActive: true,
     sfx: sound,
-    soundStaggerIndex: 0
+    soundStaggerIndex: 0,
+    //
+    // Hero-proximity chirp ambience: bugs squeak quietly while the hero
+    // approaches and lock into a continuous chord chorus while he stands
+    // on top of the tower. Each timer counts down independently.
+    //
+    proximityChirpTimer: PROXIMITY_CHIRP_FAR_INTERVAL,
+    onPyramidChirpTimer: 0
   }
   //
   // Audio feedback for each bug stacking into the tower (staggered)
@@ -271,7 +317,11 @@ export function create(config) {
       Sound.playPyramidStackSound(sound, i * STACK_SOUND_STAGGER)
     }
   }
-  
+  //
+  // Subtle screen shake on initial tower formation
+  //
+  k.shake && k.shake(PYRAMID_FORM_SHAKE)
+
   return inst
 }
 
@@ -316,7 +366,14 @@ export function onUpdate(inst, dt) {
   // Hero can jump normally from the platform
   // No need for manual collision handling - Kaplay handles it automatically
   //
-  
+  //
+  // Hero-proximity chirp ambience. Two cases:
+  //   1) Hero is standing on the tower → loop the loud 5-voice chord so
+  //      the bugs keep cheering while he's on top.
+  //   2) Hero is within HERO_PROXIMITY_RADIUS → solo squeaks at a volume
+  //      that grows as he approaches, signalling the tower is "alive".
+  //
+  updateProximityChirps(inst, dt)
   //
   // Check if pyramid duration expired
   //
@@ -326,6 +383,92 @@ export function onUpdate(inst, dt) {
     //
     destroy(inst)
     return  // Stop updating after destroy
+  }
+}
+
+//
+// Returns true when the hero is standing on this pyramid's platform.
+// Uses isGrounded + a generous bounding-box check around the invisible
+// trampoline collider, which is more reliable than scanning collision pairs.
+//
+function isHeroOnPyramidPlatform(inst) {
+  const ch = inst.hero?.character
+  if (!ch?.exists?.() || !inst.platform?.exists?.()) return false
+  if (!ch.isGrounded?.()) return false
+  const px = inst.platform.pos.x
+  const py = inst.platform.pos.y // top edge (anchor: 'top')
+  const dx = Math.abs(ch.pos.x - px)
+  const dy = ch.pos.y - py
+  const halfWidth = (inst.platform.width || 0) / 2 + HERO_LAND_DETECT_DX_MARGIN
+  if (dx > halfWidth) return false
+  if (dy > HERO_LAND_DETECT_DY_BELOW) return false
+  if (dy < -HERO_LAND_DETECT_DY) return false
+  return true
+}
+
+//
+// Plays five different bug voices (almost) simultaneously, each pinned to
+// a distinct base pitch with a small random jitter — produces a chord of
+// excited squeaks instead of a long sequence of identical chirps. Volume
+// is configurable so the same routine can drive both the on-tower loud
+// chorus and a quieter approach cue.
+//
+function playPyramidCheerChorus(inst, volume = ON_PYRAMID_VOLUME) {
+  if (!inst.sfx) return
+  for (let i = 0; i < HERO_LAND_CHEER_VOICES; i++) {
+    const baseFreq = HERO_LAND_CHEER_BASE_FREQS[i] * (1 + (Math.random() - 0.5) * HERO_LAND_CHEER_PITCH_JITTER)
+    const delay = Math.random() * HERO_LAND_CHEER_JITTER_S
+    Sound.playBugCheerSound(inst.sfx, delay, baseFreq, volume)
+  }
+}
+
+//
+// Drives both the proximity squeaks (rotating single voices, volume + rate
+// ramp with the hero's distance up to HERO_PROXIMITY_RADIUS) and the
+// continuous chord loop while the hero is parked on the tower.
+//
+function updateProximityChirps(inst, dt) {
+  if (!inst.sfx) return
+  const heroChar = inst.hero?.character
+  if (!heroChar?.exists?.() || !inst.platform?.exists?.()) return
+  const heroOnPlatform = isHeroOnPyramidPlatform(inst)
+  if (heroOnPlatform) {
+    inst.onPyramidChirpTimer -= dt
+    if (inst.onPyramidChirpTimer <= 0) {
+      playPyramidCheerChorus(inst, ON_PYRAMID_VOLUME)
+      inst.onPyramidChirpTimer = ON_PYRAMID_CHORD_MIN_INTERVAL + Math.random() * (ON_PYRAMID_CHORD_MAX_INTERVAL - ON_PYRAMID_CHORD_MIN_INTERVAL)
+    }
+    return
+  }
+  const dx = heroChar.pos.x - inst.platform.pos.x
+  const dy = heroChar.pos.y - inst.platform.pos.y
+  const distance = Math.hypot(dx, dy)
+  if (distance > HERO_PROXIMITY_RADIUS) return
+  inst.proximityChirpTimer -= dt
+  if (inst.proximityChirpTimer <= 0) {
+    //
+    // proximityFactor: 0 at the radius edge, 1 right next to the tower.
+    // Volume AND interval both ramp with proximity so the cue grows
+    // louder and tighter as the hero approaches — quiet sparse beeps at
+    // the edge of the radius, fast loud chatter right next to the tower.
+    //
+    const proximityFactor = 1 - distance / HERO_PROXIMITY_RADIUS
+    const volume = PROXIMITY_FAR_VOLUME + (PROXIMITY_NEAR_VOLUME - PROXIMITY_FAR_VOLUME) * proximityFactor
+    //
+    // Pick a random "bug voice" each chirp so the player hears different
+    // pitches rather than one identical squeak on a timer.
+    //
+    const voiceIdx = Math.floor(Math.random() * HERO_LAND_CHEER_BASE_FREQS.length)
+    const baseFreq = HERO_LAND_CHEER_BASE_FREQS[voiceIdx] * (1 + (Math.random() - 0.5) * HERO_LAND_CHEER_PITCH_JITTER)
+    Sound.playBugCheerSound(inst.sfx, 0, baseFreq, volume)
+    //
+    // Map proximityFactor → interval (far interval at the edge, near
+    // interval at the tower), then add ±PROXIMITY_INTERVAL_JITTER so the
+    // cadence never sounds metronomic.
+    //
+    const intervalBase = PROXIMITY_CHIRP_FAR_INTERVAL + (PROXIMITY_CHIRP_NEAR_INTERVAL - PROXIMITY_CHIRP_FAR_INTERVAL) * proximityFactor
+    const intervalJitter = 1 + (Math.random() - 0.5) * 2 * PROXIMITY_INTERVAL_JITTER
+    inst.proximityChirpTimer = Math.max(PROXIMITY_CHIRP_NEAR_INTERVAL * 0.5, intervalBase * intervalJitter)
   }
 }
 
@@ -496,7 +639,11 @@ export function addBug(inst, bug) {
     Sound.playPyramidStackSound(inst.sfx, inst.soundStaggerIndex * STACK_SOUND_STAGGER)
     inst.soundStaggerIndex++
   }
-  
+  //
+  // Small screen shake whenever a new bug joins the tower
+  //
+  inst.k?.shake && inst.k.shake(PYRAMID_ADD_BUG_SHAKE)
+
   return true
 }
 

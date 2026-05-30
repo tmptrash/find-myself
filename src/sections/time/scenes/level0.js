@@ -42,37 +42,37 @@ const CORNER_RADIUS = 20  // Radius for rounded corners of game area
 //
 // TIME indicator tooltip
 //
-const TIME_INDICATOR_TOOLTIP_TEXT = "your progress"
+const TIME_INDICATOR_TOOLTIP_TEXT = "Your progress"
 const TIME_INDICATOR_TOOLTIP_WIDTH = 200
 const TIME_INDICATOR_TOOLTIP_HEIGHT = 60
 const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
+const GREEN_TIMER_TOOLTIP_TEXT = "Complete the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 100
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
-const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
+const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 80
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_TEXT = "Life score"
 const LIFE_TOOLTIP_SIZE = 80
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Anti-hero tooltip
 //
-const ANTIHERO_TOOLTIP_TEXT = "time waits for no one"
+const ANTIHERO_TOOLTIP_TEXT = "Time waits for no one"
 const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
 const ANTIHERO_TOOLTIP_HOVER_HEIGHT = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
 // Hero tooltip
 //
-const HERO_TOOLTIP_TEXT = "time flies..."
+const HERO_TOOLTIP_TEXT = "Time flies..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -60
 //

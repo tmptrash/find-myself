@@ -4,7 +4,7 @@ import * as WordGrass from '../components/word-grass.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
-const FINAL_MESSAGE = "remember - not every word in your head is telling the truth"
+const FINAL_MESSAGE = "Remember - not every word in your head is telling the truth"
 const MESSAGE_HOLD_DURATION = 5.0
 const FADE_IN_DURATION = 1.0
 const FADE_OUT_DURATION = 1.5

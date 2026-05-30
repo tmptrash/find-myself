@@ -22,6 +22,12 @@ const APPROACH_DISTANCE = 25
 // How far below the platform surface the hero's feet can be to still count as landing
 //
 const LAND_TOLERANCE = 5
+//
+// Velocity-based safety net: if the hero's downward velocity would push his
+// feet past the platform surface this frame (or the next), force collision
+// on so a fast fall never tunnels through the invisible log collider.
+//
+const VELOCITY_PREDICTION_FRAMES = 1.5
 const BONUS_POINTS = 3
 const HERO_SCALE = 0.5
 const SPARKLE_INTERVAL_MIN = 1.5
@@ -37,7 +43,7 @@ const COLLECT_PARTICLE_LIFETIME = 0.8
 //
 // Same HUD hint whenever any bonus mini-hero is collected (touch section).
 //
-const BONUS_COLLECT_HINT_TEXT = 'you got 3 fragments.'
+const BONUS_COLLECT_HINT_TEXT = 'You got 3 fragments.'
 //
 // Float animation and time-style platform text
 //
@@ -101,6 +107,7 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {number} [config.platformCollisionHeight] - Override collision height for time-style platform
  * @param {number} [config.platformCollisionTopTrim] - Pixels trimmed from the top of the collision box
  * @param {number} [config.platformCollisionXOffset] - Horizontal shift of collision box (right = positive)
+ * @param {number} [config.platformCollisionYOffset] - Vertical shift of collision box (down = positive)
  * @param {number} [config.platformZ] - Z-index for platform collision and draw layer
  * @returns {Object} Bonus hero instance
  */
@@ -119,6 +126,7 @@ export function create(config) {
     platformCollisionHeight = null,
     platformCollisionTopTrim = 0,
     platformCollisionXOffset = 0,
+    platformCollisionYOffset = 0,
     platformZ = CFG.visual.zIndex.platforms
   } = config
   //
@@ -140,14 +148,18 @@ export function create(config) {
   const collisionWidthResolved = collisionWidth ?? width
   const collisionTopTrim = platformCollisionTopTrim ?? 0
   const collisionXOffset = platformCollisionXOffset ?? 0
+  const collisionYOffset = platformCollisionYOffset ?? 0
   const collisionAreaHeight = Math.max(4, collisionHeight - collisionTopTrim)
   const collisionAreaTop = -collisionHeight / 2 + collisionTopTrim
   //
-  // Invisible collision platform
+  // Invisible collision platform. `collisionYOffset` slides the entire
+  // hidden box down (positive) or up (negative) without changing its size,
+  // letting scenes line the collider up with off-center visual props
+  // (e.g. logs that sit lower than the calculated anchor point).
   //
   const platform = k.add([
     k.rect(collisionWidthResolved, collisionAreaHeight),
-    k.pos(x + collisionXOffset, startY),
+    k.pos(x + collisionXOffset, startY + (approachFromAbove ? 0 : collisionYOffset)),
     k.anchor('center'),
     k.area({
       shape: new k.Rect(
@@ -162,7 +174,9 @@ export function create(config) {
     CFG.game.platformName
   ])
   //
-  // Small hero on the platform (completely invisible - only sparkle hints)
+  // Small hero on the platform (completely invisible - only sparkle hints).
+  // Idle vocalization is disabled so this decorative mini hero never emits
+  // notes or whistle sounds — only the main playable hero should.
   //
   const miniColor = heroBodyColor || heroInst.bodyColor || CFG.visual.colors.hero.body
   const miniHero = Hero.create({
@@ -173,7 +187,8 @@ export function create(config) {
     controllable: false,
     isStatic: true,
     scale: HERO_SCALE,
-    bodyColor: miniColor
+    bodyColor: miniColor,
+    idleVocalization: null
   })
   miniHero.character.opacity = 0
   miniHero.character.z = platformZ + 3
@@ -193,6 +208,7 @@ export function create(config) {
     collisionHeight,
     collisionAreaTop,
     collisionXOffset,
+    collisionYOffset,
     revealed: false,
     collected: false,
     platformOpacity: 0,
@@ -298,7 +314,7 @@ function onUpdate(inst) {
     //
     if (inst.revealed && inst.platformText) {
       const floatYCollected = inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
-      inst.platform.pos.y = floatYCollected
+      inst.platform.pos.y = floatYCollected + inst.collisionYOffset
       inst.platform.pos.x = inst.x + inst.collisionXOffset
     }
     return
@@ -342,7 +358,7 @@ function onUpdate(inst) {
   // is about to land, so it never interferes with upward jumps or side movement.
   //
   if (inst.revealed) {
-    inst.platform.pos.y = collisionY
+    inst.platform.pos.y = collisionY + inst.collisionYOffset
     inst.platform.pos.x = collisionCenterX
   } else {
     const horizontallyAligned = dx < inst.revealWidth / 2
@@ -355,21 +371,34 @@ function onUpdate(inst) {
       && inst.platform.pos.y !== inst.offScreenY
     if (heroOnPlatform) {
       inst.revealed = true
-      inst.platform.pos.y = collisionY
+      inst.platform.pos.y = collisionY + inst.collisionYOffset
       inst.platform.pos.x = collisionCenterX
     } else {
       //
       // Use hero feet position (not center) to determine if the hero
       // is about to land. Only make collidable when feet are directly
-      // above the platform surface and hero is falling downward.
+      // above the platform surface and hero is falling downward. The
+      // detection surface tracks the collision box so a downward Y offset
+      // doesn't break landing detection.
       //
-      const platformSurface = floatY + inst.collisionAreaTop
+      // We also project the hero's feet forward by their downward velocity
+      // (`VELOCITY_PREDICTION_FRAMES` * dt). At high fall speeds the hero
+      // would otherwise skip over the narrow detection window in a single
+      // tick and tunnel through the invisible log; predicting the next
+      // frame catches that case and snaps the collider on in time.
+      //
+      const platformSurface = floatY + inst.collisionYOffset + inst.collisionAreaTop
       const heroFeetY = heroPos.y + HERO_FEET_OFFSET
-      const isFalling = heroChar.vel && heroChar.vel.y > 0
+      const velY = heroChar.vel?.y || 0
+      const isFalling = velY > 0
       const feetAboveSurface = heroFeetY < platformSurface + LAND_TOLERANCE
       const feetNearSurface = heroFeetY > platformSurface - APPROACH_DISTANCE
-      const shouldBeCollidable = isFalling && feetAboveSurface && feetNearSurface && horizontallyAligned
-      inst.platform.pos.y = shouldBeCollidable ? floatY : inst.offScreenY
+      const predictedFeetY = heroFeetY + velY * dt * VELOCITY_PREDICTION_FRAMES
+      const willCrossSurface = isFalling
+        && heroFeetY <= platformSurface + LAND_TOLERANCE
+        && predictedFeetY >= platformSurface - LAND_TOLERANCE
+      const shouldBeCollidable = (isFalling && feetAboveSurface && feetNearSurface || willCrossSurface) && horizontallyAligned
+      inst.platform.pos.y = shouldBeCollidable ? floatY + inst.collisionYOffset : inst.offScreenY
       inst.platform.pos.x = collisionCenterX
     }
   }

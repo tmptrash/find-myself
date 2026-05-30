@@ -346,23 +346,23 @@ const SNOW_CLUMP_RADIUS_MAX = 9
 //
 // Tooltip texts and layout
 //
-const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "Here you see how far you have\ncome in learning touch"
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
+const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "life score"
+const LIFE_TOOLTIP_TEXT = "Life score"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
-const MONSTER_TOOLTIP_TEXT = "come here little one"
+const MONSTER_TOOLTIP_TEXT = "Come here little one"
 const MONSTER_TOOLTIP_HOVER_SIZE = 100
 const MONSTER_TOOLTIP_Y_OFFSET = -80
-const ANTIHERO_TOOLTIP_TEXT = "come on, you can do it"
+const ANTIHERO_TOOLTIP_TEXT = "Come on, you can do it"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
-const HERO_TOOLTIP_TEXT = "it's dark and scary"
+const HERO_TOOLTIP_TEXT = "It's dark and scary"
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -80
 //
@@ -371,9 +371,9 @@ const HERO_TOOLTIP_Y_OFFSET = -80
 const BUG_TOOLTIP_HOVER_SIZE = 50
 const BUG_TOOLTIP_Y_OFFSET = -50
 const BUG_JOKES = [
-  "i'm not a trampoline!",
-  "stop bouncing on me!",
-  "watch your step, big guy"
+  "I'm not a trampoline!",
+  "Stop bouncing on me!",
+  "Watch your step, big guy"
 ]
 //
 // Bottom bug tooltip configuration (warning phrases)
@@ -381,16 +381,16 @@ const BUG_JOKES = [
 const BOTTOM_BUG_TOOLTIP_HOVER_SIZE = 50
 const BOTTOM_BUG_TOOLTIP_Y_OFFSET = -50
 const BOTTOM_BUG_WARNINGS = [
-  "you'd better not fall here",
-  "this place is ours",
-  "no visitors allowed",
-  "down here we bite",
-  "turn back while you can",
-  "we don't like guests",
-  "stay up there, big one",
-  "not a safe landing spot",
-  "only bugs down here",
-  "you won't like it here"
+  "You'd better not fall here",
+  "This place is ours",
+  "No visitors allowed",
+  "Down here we bite",
+  "Turn back while you can",
+  "We don't like guests",
+  "Stay up there, big one",
+  "Not a safe landing spot",
+  "Only bugs down here",
+  "You won't like it here"
 ]
 //
 // Hero glow (Shift ability): hero emits light for 3 seconds, costs 1 heroScore
@@ -406,7 +406,7 @@ const HERO_GLOW_COLOR_B = 100
 //
 // Hero glow hint text
 //
-const HERO_GLOW_HINT_TEXT = "press Shift to light up (costs 1 point)"
+const HERO_GLOW_HINT_TEXT = "Press Shift to light up (costs 1 point)"
 const HERO_GLOW_HINT_STORAGE_KEY = 'touch.level3GlowInstructionsCount'
 const HERO_GLOW_HINT_MAX_SHOWS = 2
 //

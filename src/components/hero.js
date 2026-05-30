@@ -56,6 +56,44 @@ const FOOTPRINT_COLOR_B = 18
 const FOOTPRINT_OPACITY_START = 0.55
 const FOOTPRINT_Z = 9
 //
+// Idle vocalization: notes drift from the hero's mouth while standing still
+// and a soft humming/whistling note plays in the background. Disabled by
+// passing `idleVocalization: null` (used by scenes that already render
+// another mouth effect, e.g. cold breath in winter levels).
+//
+const IDLE_NOTE_OFFSET_Y = -28          // Mouth height above hero center (pixels)
+const IDLE_NOTE_OFFSET_X = 4            // Forward offset in the facing direction
+const IDLE_NOTE_LIFETIME = 2.2          // How long each note stays visible (seconds)
+const IDLE_NOTE_RISE_SPEED = 28         // Vertical drift speed (px/s, upward)
+const IDLE_NOTE_DRIFT_AMPLITUDE = 16    // Horizontal sway amplitude (px)
+const IDLE_NOTE_DRIFT_FREQ = 1.4        // Horizontal sway frequency (Hz)
+const IDLE_NOTE_FONT_SIZE = 22          // Glyph size for drawText
+const IDLE_NOTE_Z = 9999                // Render notes in front of every other object
+const IDLE_NOTE_EMIT_MIN = 0.6          // Min seconds between note particles
+const IDLE_NOTE_EMIT_MAX = 1.6          // Max seconds between note particles
+//
+// Glyph set per vocalization mode. The 'sleeping' mode (default for the
+// anti-hero) shows soft "z-Z" letters to imply quiet snoring instead of
+// musical singing.
+//
+const IDLE_NOTE_GLYPHS = {
+  humming: ['♪', '♫', '♩', '♬'],
+  whistling: ['♪', '♫', '♩', '♬'],
+  sleeping: ['z', 'Z', 'z']
+}
+//
+// Vocalization only starts after the hero has been standing still for
+// this many seconds — keeps the audio quiet during normal play and only
+// kicks in when the player visibly pauses.
+//
+const IDLE_VOCALIZATION_DELAY = 2.0
+//
+// Pentatonic scale keeps the hum melodious even with a random note pick.
+// Only the hero is heard — the anti-hero produces visual notes but stays
+// silent so the soundscape never feels crowded by two voices.
+//
+const IDLE_HUM_SCALE_HERO = [523.25, 587.33, 659.25, 784.0, 880.0]
+//
 // Death animation timing
 //
 const DEATH_ANIMATION_DURATION = 0.4
@@ -131,6 +169,15 @@ export function create(config) {
     outlineOnly = false,   // If true, draw only outline (no body fill)
     hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
   } = config
+  //
+  // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
+  // the anti-hero shows quiet "z-Z" sleeping glyphs without sound. Scenes
+  // can override by passing an explicit `idleVocalization` (use `null` to
+  // disable entirely — useful when another mouth effect like cold breath
+  // is already rendered).
+  //
+  const defaultVocalization = type === HEROES.ANTIHERO ? 'sleeping' : 'humming'
+  const idleVocalization = config.idleVocalization !== undefined ? config.idleVocalization : defaultVocalization
 
   const defaultBodyColor = type === HEROES.HERO ? CFG.visual.colors.hero.body : CFG.visual.colors.antiHero.body
   //
@@ -240,6 +287,7 @@ export function create(config) {
     k,
     type,
     controllable,
+    isStatic,
     sfx,
     antiHero,
     onAnnihilation,
@@ -259,6 +307,8 @@ export function create(config) {
     jumpPhase: 'none', // 'squashing', 'jumping', 'none'
     squashTimer: 0,   // Timer for pre-jump squash animation
     isSquashing: false, // Flag for pre-jump squash
+    crouchTimer: 0,   // Remaining time the hero is forced into the squat pose
+    isCrouching: false, // True while crouchTimer > 0 and hero is grounded
     eyeOffsetX: 0,
     eyeOffsetY: 0,
     targetEyeX: 0,
@@ -274,7 +324,15 @@ export function create(config) {
     controlsReversed: false,  // Flag for control inversion (time section level 3)
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
-    lastFootprintFoot: 1     // Alternates between -1 (left foot) and +1 (right foot)
+    lastFootprintFoot: 1,    // Alternates between -1 (left foot) and +1 (right foot)
+    //
+    // Idle vocalization state: notes drift up from the mouth and a soft
+    // humming/whistling sound plays while the hero stands still.
+    //
+    idleVocalization,
+    idleNotes: [],
+    idleNoteEmitTimer: IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN),
+    idleStillTime: 0
   }
   //
   // Check ground touch through collisions
@@ -295,6 +353,22 @@ export function create(config) {
       },
       draw() {
         drawFootprints(k, inst)
+      }
+    }
+  ])
+  //
+  // Idle vocalization renderer: drifts music notes above the hero's mouth.
+  // Drawn slightly above the player (z = IDLE_NOTE_Z) so notes never hide
+  // behind the sprite while it animates.
+  //
+  k.add([
+    k.z(IDLE_NOTE_Z),
+    {
+      update() {
+        onUpdateIdleNotes(inst)
+      },
+      draw() {
+        drawIdleNotes(k, inst)
       }
     }
   ])
@@ -499,6 +573,25 @@ export function death(inst, onComplete) {
  */
 export function setLookAtPos(inst, pos) {
   inst.lookAtPos = pos
+}
+
+/**
+ * Forces the hero into the squat (jump-frame-0) pose for a short duration.
+ * Used to make the hero visibly cower when something startles him, e.g. a
+ * bug crawling onto his feet. Only affects controllable, grounded heroes
+ * and is suppressed while annihilating or dying.
+ * @param {Object} inst - Hero instance
+ * @param {number} duration - Crouch hold time in seconds
+ */
+export function crouch(inst, duration = 0.4) {
+  if (!inst || inst.isAnnihilating || inst.isDying) return
+  if (!inst.character?.exists?.()) return
+  //
+  // Extend existing crouch instead of restarting, so repeated bug taps
+  // keep the pose smooth.
+  //
+  inst.crouchTimer = Math.max(inst.crouchTimer || 0, duration)
+  inst.isCrouching = true
 }
 /**
  * Spawn hero with assembly effect from particles
@@ -812,6 +905,27 @@ function onUpdate(inst) {
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   //
   const isGrounded = inst.character.isGrounded()
+  //
+  // Forced crouch pose (e.g. bug touch reaction). Holds the hero in the
+  // squat sprite for a short duration and blocks the rest of the animation
+  // pipeline so running/idle frames don't immediately override it.
+  //
+  if (inst.crouchTimer > 0 && isGrounded) {
+    inst.crouchTimer -= inst.k.dt()
+    if (inst.crouchTimer <= 0) {
+      inst.crouchTimer = 0
+      inst.isCrouching = false
+    } else {
+      inst.isCrouching = true
+      const prefix = inst.spritePrefix || inst.type
+      if (inst.jumpFrame !== 0) {
+        inst.jumpFrame = 0
+        inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+      }
+      inst.character.flipX = inst.direction === -1
+      return
+    }
+  }
   //
   // Handle pre-jump squash animation (only when grounded)
   //
@@ -1293,6 +1407,135 @@ function drawFootprints(k, inst) {
       radiusY: FOOTPRINT_RADIUS_Y,
       color: k.rgb(FOOTPRINT_COLOR_R, FOOTPRINT_COLOR_G, FOOTPRINT_COLOR_B),
       opacity: alpha
+    })
+  }
+}
+
+//
+// True when the hero/anti-hero meets all conditions to emit idle notes
+// and (for the hero only) the whistle sound. The sfx gate is intentionally
+// lenient so the anti-hero still shows visual notes even when no audio
+// instance is passed in. Decorative (non-controllable / static) characters
+// — e.g. the central hero on the main menu — bypass the spawn/ground
+// checks so they can vocalize without needing a level scene around them.
+//
+function canVocalize(inst) {
+  if (!inst.idleVocalization) return false
+  if (!inst.character?.exists?.()) return false
+  if (inst.isAnnihilating || inst.isDying) return false
+  if (inst.controlsDisabled) return false
+  if (inst.isRunning || inst.wasJumping) return false
+  const isDecorative = inst.controllable === false || inst.isStatic === true
+  if (!isDecorative) {
+    if (!inst.isSpawned) return false
+    if (!inst.character.isGrounded?.()) return false
+  }
+  return true
+}
+
+//
+// Updates floating note particles and schedules new emissions + hum sounds.
+// Run every frame; cheap when no notes are alive and vocalization is off.
+//
+function onUpdateIdleNotes(inst) {
+  const dt = inst.k.dt()
+  const active = canVocalize(inst)
+  //
+  // Track how long the hero has been continuously idle. Moving, jumping,
+  // dying, etc. all reset the timer so the singing only starts after a
+  // visible pause.
+  //
+  if (active) {
+    inst.idleStillTime += dt
+  } else {
+    inst.idleStillTime = 0
+  }
+  //
+  // Always age + drift existing notes so they fade out naturally if the
+  // hero starts moving mid-emission.
+  //
+  for (const note of inst.idleNotes) {
+    note.age += dt
+    note.x = note.baseX + Math.sin((note.age + note.driftPhase) * IDLE_NOTE_DRIFT_FREQ * Math.PI * 2) * IDLE_NOTE_DRIFT_AMPLITUDE * (note.age / IDLE_NOTE_LIFETIME)
+    note.y -= IDLE_NOTE_RISE_SPEED * dt
+  }
+  inst.idleNotes = inst.idleNotes.filter(n => n.age < IDLE_NOTE_LIFETIME)
+  //
+  // Only emit fresh notes/sounds after the idle warm-up has elapsed.
+  //
+  if (!active) return
+  if (inst.idleStillTime < IDLE_VOCALIZATION_DELAY) return
+  //
+  // Single timer drives both the visual glyph and (for the hero) the
+  // whistle note, so every note the player sees coincides with the
+  // matching pitch in the audio.
+  //
+  inst.idleNoteEmitTimer -= dt
+  if (inst.idleNoteEmitTimer <= 0) {
+    spawnIdleNote(inst)
+    playIdleVocalNote(inst)
+    inst.idleNoteEmitTimer = IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN)
+  }
+}
+
+//
+// Pushes a new note particle near the hero's mouth, biased forward in the
+// facing direction so the notes appear to flow from the lips.
+//
+function spawnIdleNote(inst) {
+  const ch = inst.character
+  if (!ch?.pos) return
+  const mouthX = ch.pos.x + IDLE_NOTE_OFFSET_X * inst.direction
+  const mouthY = ch.pos.y + IDLE_NOTE_OFFSET_Y
+  const glyphs = IDLE_NOTE_GLYPHS[inst.idleVocalization] || IDLE_NOTE_GLYPHS.humming
+  inst.idleNotes.push({
+    baseX: mouthX,
+    x: mouthX,
+    y: mouthY,
+    age: 0,
+    driftPhase: Math.random(),
+    glyph: glyphs[Math.floor(Math.random() * glyphs.length)],
+    angle: (Math.random() - 0.5) * 18
+  })
+}
+
+//
+// Picks a pleasant pitch from the hero's scale and triggers a soft whistle
+// note through the shared sound system. The anti-hero and any "sleeping"
+// vocalization stay silent on purpose — only the hero is heard, while
+// other characters still get visual glyphs for atmosphere.
+//
+function playIdleVocalNote(inst) {
+  if (!inst.sfx) return
+  if (inst.type === HEROES.ANTIHERO) return
+  if (inst.idleVocalization === 'sleeping') return
+  const frequency = IDLE_HUM_SCALE_HERO[Math.floor(Math.random() * IDLE_HUM_SCALE_HERO.length)]
+  Sound.playIdleHumNote(inst.sfx, {
+    frequency,
+    duration: 0.45,
+    whistleMode: true
+  })
+}
+
+//
+// Renders the live note glyphs above the hero. Notes fade from full opacity
+// at birth to zero just before they expire.
+//
+function drawIdleNotes(k, inst) {
+  if (!inst.idleNotes?.length) return
+  const fontName = CFG?.visual?.fonts?.regularFull
+  for (const note of inst.idleNotes) {
+    const fade = 1 - note.age / IDLE_NOTE_LIFETIME
+    const alpha = Math.max(0, Math.min(1, fade))
+    k.drawText({
+      text: note.glyph,
+      pos: k.vec2(note.x, note.y),
+      size: IDLE_NOTE_FONT_SIZE,
+      anchor: 'center',
+      color: k.rgb(255, 255, 255),
+      opacity: alpha * 0.85,
+      angle: note.angle,
+      font: fontName
     })
   }
 }

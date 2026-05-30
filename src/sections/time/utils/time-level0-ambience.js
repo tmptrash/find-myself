@@ -101,7 +101,7 @@ const STREET_SURFACE_ABOVE_PLATFORM_TOP = 17
 //
 // Lamp tooltip text and offset (shown only on the first lamp near the hero)
 //
-const LAMP_TOOLTIP_TEXT = 'find the one who\nshines beside you'
+const LAMP_TOOLTIP_TEXT = 'Find the one who\nshines beside you'
 const LAMP_TOOLTIP_OFFSET_Y = -44
 //
 // Crow tooltip hover area size and vertical offset

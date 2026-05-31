@@ -155,28 +155,31 @@ const L0_BLACK_LEAF_ROW_COUNT = 14
 const L0_GREY_LEAF_ROW_SLOT_BIAS = 0.38
 const L0_BLACK_LEAF_ROW_SLOT_BIAS = 0.42
 //
-// Leafy "grey" mid band — pushed cool toward deep teal so it reads as
-// the recessive half of the teal+orange complementary palette. Still
-// dark enough to live behind the closer black-leaf row.
+// Leafy "grey" mid band — mid-distance silhouettes. Sit BETWEEN the
+// LIGHT back haze and the darker black-leaf row in the brightness
+// gradient (atmospheric perspective: lighter the further from
+// camera). Cool teal tone keeps them on the complementary palette's
+// cool half.
 //
-const L0_GREY_ORGANIC_TRUNK_R = 24
-const L0_GREY_ORGANIC_TRUNK_G = 46
-const L0_GREY_ORGANIC_TRUNK_B = 52
-const L0_GREY_ORGANIC_LEAF_R = 28
-const L0_GREY_ORGANIC_LEAF_G = 52
-const L0_GREY_ORGANIC_LEAF_B = 58
+const L0_GREY_ORGANIC_TRUNK_R = 60
+const L0_GREY_ORGANIC_TRUNK_G = 92
+const L0_GREY_ORGANIC_TRUNK_B = 108
+const L0_GREY_ORGANIC_LEAF_R = 70
+const L0_GREY_ORGANIC_LEAF_G = 105
+const L0_GREY_ORGANIC_LEAF_B = 122
 const L0_GREY_ORGANIC_JITTER = 4
-const L0_BLACK_LEAF_SILHOUETTE_DIM = 0.48
+const L0_BLACK_LEAF_SILHOUETTE_DIM = 0.72
 //
-// "Black" mid band — near-black but still tinted toward the cool palette
-// so distant silhouettes don't drift back to neutral grey.
+// "Black" mid band — closer to camera than grey-leaf row, so darker
+// (lighter farther principle) but still tinted cool so distant
+// silhouettes don't drift back to neutral grey.
 //
-const L0_BLACK_ORGANIC_TRUNK_R = 12
-const L0_BLACK_ORGANIC_TRUNK_G = 26
-const L0_BLACK_ORGANIC_TRUNK_B = 32
-const L0_BLACK_ORGANIC_LEAF_R = 16
-const L0_BLACK_ORGANIC_LEAF_G = 32
-const L0_BLACK_ORGANIC_LEAF_B = 38
+const L0_BLACK_ORGANIC_TRUNK_R = 30
+const L0_BLACK_ORGANIC_TRUNK_G = 52
+const L0_BLACK_ORGANIC_TRUNK_B = 62
+const L0_BLACK_ORGANIC_LEAF_R = 36
+const L0_BLACK_ORGANIC_LEAF_G = 60
+const L0_BLACK_ORGANIC_LEAF_B = 70
 //
 // After fog tint, darken organic back silhouettes so they read between circle trees and swaying front row.
 //
@@ -1041,7 +1044,7 @@ export function sceneLevel0(k) {
               rootColor: k.rgb(L0_TREE_ROOT_COLOR_R, L0_TREE_ROOT_COLOR_G, L0_TREE_ROOT_COLOR_B),
               //
               // Warm-orange seed leaf colour; it then gets heavily blended
-              // toward the cool teal cloud band below so only a faint
+              // toward the LIGHT haze tone below so only a faint
               // amber undertone survives in the far parallax silhouettes.
               //
               leafColor: k.rgb(170, 105, 44),
@@ -2912,6 +2915,12 @@ export function sceneLevel0(k) {
     //
     addGrassAroundRocks(k, rocks, allGrassBlades, FLOOR_Y - 2)
     //
+    // Trim grass blades whose base falls inside a puddle so grass
+    // never grows IN the water. Done after both layer-grass and
+    // around-rocks grass are merged into the shared array.
+    //
+    pruneGrassInPuddles(allGrassBlades, l0Puddles)
+    //
     // Moss patches: clustered near rocks plus standalone clumps for realism
     //
     createMoss(k, rocks)
@@ -4624,7 +4633,12 @@ function drawMushrooms(k, mushrooms) {
  * @returns {Object} Blade descriptor consumed by the grass drawer
  */
 function buildGrassBlade(k, baseX, grassY, scale, baseOpacity, baseR, baseG, baseB) {
-  const height = (10 + Math.random() * 20) * scale
+  //
+  // Blade height reduced by 30 % from the previous (10–30 px) range
+  // so the front-layer grass tufts sit lower on the floor and don't
+  // overpower the rest of the scene. Range = (7–21 px) × scale.
+  //
+  const height = (7 + Math.random() * 14) * scale
   const bendX = (Math.random() - 0.5) * 6
   return {
     x1: baseX,
@@ -4654,6 +4668,40 @@ function buildGrassBlade(k, baseX, grassY, scale, baseOpacity, baseR, baseG, bas
  * @param {Array} allBlades - Shared grass blade array (mutated)
  * @param {number} grassY - Ground Y for blade bases
  */
+/**
+ * Removes any grass blade whose base X sits inside one of the floor
+ * puddles. Mutates `allBlades` in place. Grass blades have a single
+ * base position `x1` (anchored to the floor line), so a horizontal
+ * range test against each puddle's ellipse width is sufficient — the
+ * floor + puddle Y already match by construction.
+ *
+ * @param {Array<Object>} allBlades - Shared grass-blade list
+ * @param {Array<Object>} puddles - Puddle descriptors with x + width
+ */
+function pruneGrassInPuddles(allBlades, puddles) {
+  if (!puddles || puddles.length === 0) return
+  //
+  // Build {min, max} ranges once so the inner loop is O(blades * puddles)
+  // of cheap numeric compares (puddle counts are tiny — 0..8).
+  //
+  const ranges = puddles.map(p => ({ min: p.x - p.width / 2, max: p.x + p.width / 2 }))
+  //
+  // In-place filter: walk the array, drop blades inside any puddle range.
+  //
+  let write = 0
+  for (let read = 0; read < allBlades.length; read++) {
+    const baseX = allBlades[read].x1
+    let inPuddle = false
+    for (const r of ranges) {
+      if (baseX >= r.min && baseX <= r.max) { inPuddle = true; break }
+    }
+    if (!inPuddle) {
+      allBlades[write++] = allBlades[read]
+    }
+  }
+  allBlades.length = write
+}
+
 function addGrassAroundRocks(k, rocks, allBlades, grassY) {
   //
   // Front-layer color palette to match the rest of the front grass

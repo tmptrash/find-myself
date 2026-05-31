@@ -7,9 +7,10 @@
 // sprite.
 //
 // Composition philosophy:
-//   - Complementary teal+orange palette. Cool teal sky + soil hold the
-//     cool half; warm amber moon, fireflies, grass tufts, mushroom caps
-//     and underground roots hold the warm half.
+//   - Sky + underground use the exact `ready` scene backdrop colour
+//     (`#1A2530`) so the baked image bleeds seamlessly into the page
+//     chrome — no visible top/bottom strips when the canvas is drawn
+//     at any opacity over the matching backdrop rect.
 //   - Layered side trees: a far/back layer of small cool-tinted
 //     silhouettes sits behind a near/front layer of taller near-black
 //     silhouettes. Both clusters frame the empty central UI zone.
@@ -21,13 +22,17 @@
 //   - Centre stays clean: trees, rocks and mushrooms are excluded from
 //     the central UI zone so the logo / hero illustration / hints have
 //     visual negative space.
+//   - Mushrooms grow FROM the black horizon strip — their stems are
+//     buried in the strip so they read as emerging from the soil.
+//   - Grass, fireflies and clouds are NOT baked here. The `ready`
+//     scene draws them as ANIMATED overlays (swaying grass, drifting
+//     clouds, wandering fireflies) on top of this static base.
 //
 import { CFG } from '../cfg.js'
+import { parseHex } from './helper.js'
 import * as OrganicParallax from '../sections/touch/utils/organic-parallax-tree.js'
 import { drawMushroomToCanvas } from './draw-mushroom.js'
 import { buildRockVertices, buildRockPalette, drawRockToCanvas } from './draw-rock.js'
-import { buildCloudCrown, drawCloudCrownToCanvas } from './draw-cloud-crown.js'
-import { buildGrassBladeData, drawGrassBladeToCanvas } from './draw-grass-blade.js'
 import { drawMoonToCanvas } from './draw-moon.js'
 import { growTreeRootSegments, drawTreeRootSegmentsToCanvas } from './grow-tree-root.js'
 //
@@ -41,27 +46,44 @@ const CANVAS_H = CFG.visual.screen.height
 // horizon at ≈ 66% from the top). Sky lives above, soil below.
 //
 const GROUND_Y = Math.round(CANVAS_H * 0.66)
-const HORIZON_LINE_HEIGHT = 6
+const HORIZON_LINE_HEIGHT = 3
 //
-// Cool teal sky + dark teal underground anchor the cool half of the
-// complementary palette. Warm accents (moon, fireflies, grass, mushroom
-// caps, roots) provide the opposing colour temperature.
+// Sky and underground fills both use the exact `ready` scene backdrop
+// colour (`CFG.visual.colors.ready.background`) so the canvas image
+// bleeds seamlessly into the surrounding page chrome — no top/bottom
+// colour strips visible at any sprite opacity over the matching
+// backdrop rect.
 //
-const SKY_FILL_R = 28
-const SKY_FILL_G = 42
-const SKY_FILL_B = 48
-const UNDERGROUND_FILL_R = 14
-const UNDERGROUND_FILL_G = 22
-const UNDERGROUND_FILL_B = 26
+const [READY_BG_R, READY_BG_G, READY_BG_B] = parseHex(CFG.visual.colors.ready.background)
+const SKY_FILL_R = READY_BG_R
+const SKY_FILL_G = READY_BG_G
+const SKY_FILL_B = READY_BG_B
+const UNDERGROUND_FILL_R = READY_BG_R
+const UNDERGROUND_FILL_G = READY_BG_G
+const UNDERGROUND_FILL_B = READY_BG_B
 const HORIZON_LINE_R = 0
 const HORIZON_LINE_G = 0
 const HORIZON_LINE_B = 0
+//
+// Exported so the `ready` scene can position its animated overlays
+// (grass at the strip, fireflies under the tree canopy, clouds in the
+// upper sky) against the exact same horizon used by this baked image.
+//
+export const MENU_BG_GROUND_Y = GROUND_Y
+export const MENU_BG_HORIZON_LINE_HEIGHT = HORIZON_LINE_HEIGHT
+export const MENU_BG_CANVAS_W = CANVAS_W
+export const MENU_BG_CANVAS_H = CANVAS_H
 //
 // Central UI keep-out zone (half-width). Trees never spawn inside it
 // and rocks / mushrooms are excluded from it too. Measured from the
 // canvas horizontal centre.
 //
-const CENTER_KEEPOUT_HALF = Math.round(CANVAS_W * 0.18)
+//
+// Wide enough to clear the full footprint of the centred monster
+// illustration drawn by `ready.js` (life-ready.png is 767 px wide).
+// Keeps trees, rocks and mushrooms from sprouting under the monster.
+//
+const CENTER_KEEPOUT_HALF = 400
 const CENTER_X = Math.round(CANVAS_W / 2)
 //
 // Side tree clusters. Trees frame the composition on the far left and
@@ -71,38 +93,83 @@ const CENTER_X = Math.round(CANVAS_W / 2)
 const SIDE_CLUSTER_WIDTH = 360
 const SIDE_CLUSTER_MARGIN = 20
 //
-// Front layer — taller, fewer, near-black silhouettes with subtle
-// warm leaf accents. Each tree extends into the underground band as
-// a network of roots.
+// Cloud puff palette — shared by the Touch L0 cloud band and the
+// ready scene's drifting cloud overlay. The farthest tree row tints
+// toward this cool-teal triplet so distant silhouettes merge with
+// the sky mass.
+//
+const MENU_BG_CLOUD_R = 32
+const MENU_BG_CLOUD_G = 60
+const MENU_BG_CLOUD_B = 68
+//
+// Warm yellow leaf + umber trunk — front-row anchor for the three-band
+// tree gradient (nearest = yellow, farthest = cloud teal).
+//
+const MENU_BG_TREE_YELLOW_LEAF_R = 220
+const MENU_BG_TREE_YELLOW_LEAF_G = 128
+const MENU_BG_TREE_YELLOW_LEAF_B = 48
+const MENU_BG_TREE_YELLOW_TRUNK_R = 96
+const MENU_BG_TREE_YELLOW_TRUNK_G = 58
+const MENU_BG_TREE_YELLOW_TRUNK_B = 28
+//
+// Depth mix factor for the mid row (0 = full yellow, 1 = cloud).
+//
+const MID_TREE_COLOR_MIX = 0.5
+//
+// Side trees are layered in THREE depth bands. Colour steps from warm
+// yellow (front) through a mid blend to cloud teal (back). Height
+// increases with distance — the farther the layer, the taller the
+// silhouettes read against the sky.
+//
+//   Front  – nearest, shortest, warm yellow-orange foliage.
+//   Mid    – mid-distance height + 50 % blend toward cloud teal.
+//   Back   – farthest, tallest, full cloud-teal silhouettes.
 //
 const FRONT_TREE_COUNT = 5
-const FRONT_TREE_TRUNK_HEIGHT_OUTER = 240
-const FRONT_TREE_TRUNK_HEIGHT_INNER = 110
-const FRONT_TREE_TRUNK_HEIGHT_JITTER = 36
+const FRONT_TREE_TRUNK_HEIGHT_OUTER = 140
+const FRONT_TREE_TRUNK_HEIGHT_INNER = 75
+const FRONT_TREE_TRUNK_HEIGHT_JITTER = 28
 const FRONT_TREE_OPACITY_MIN = 0.92
 const FRONT_TREE_OPACITY_RANGE = 0.06
-const FRONT_TREE_TRUNK_R = 8
-const FRONT_TREE_TRUNK_G = 12
-const FRONT_TREE_TRUNK_B = 14
-const FRONT_TREE_LEAF_R = 22
-const FRONT_TREE_LEAF_G = 16
-const FRONT_TREE_LEAF_B = 18
+const FRONT_TREE_TRUNK_R = MENU_BG_TREE_YELLOW_TRUNK_R
+const FRONT_TREE_TRUNK_G = MENU_BG_TREE_YELLOW_TRUNK_G
+const FRONT_TREE_TRUNK_B = MENU_BG_TREE_YELLOW_TRUNK_B
+const FRONT_TREE_LEAF_R = MENU_BG_TREE_YELLOW_LEAF_R
+const FRONT_TREE_LEAF_G = MENU_BG_TREE_YELLOW_LEAF_G
+const FRONT_TREE_LEAF_B = MENU_BG_TREE_YELLOW_LEAF_B
 //
-// Back layer — shorter, more numerous, cool teal-tinted silhouettes.
-// Sits behind the front layer and stays above ground (no roots) so
-// the underground belongs visually to the front layer alone.
+// Middle layer — between the dark front silhouettes and the light
+// hazy back row. Cool teal tint, opacity slightly faded so the
+// front row still pops over it.
 //
-const BACK_TREE_COUNT = 8
-const BACK_TREE_TRUNK_HEIGHT_OUTER = 160
-const BACK_TREE_TRUNK_HEIGHT_INNER = 90
-const BACK_TREE_TRUNK_HEIGHT_JITTER = 30
-const BACK_TREE_OPACITY = 0.55
-const BACK_TREE_TRUNK_R = 40
-const BACK_TREE_TRUNK_G = 64
-const BACK_TREE_TRUNK_B = 76
-const BACK_TREE_LEAF_R = 56
-const BACK_TREE_LEAF_G = 86
-const BACK_TREE_LEAF_B = 98
+const MID_TREE_COUNT = 7
+const MID_TREE_TRUNK_HEIGHT_OUTER = 210
+const MID_TREE_TRUNK_HEIGHT_INNER = 110
+const MID_TREE_TRUNK_HEIGHT_JITTER = 32
+const MID_TREE_OPACITY = 0.7
+const MID_TREE_TRUNK_R = Math.round(MENU_BG_TREE_YELLOW_TRUNK_R + (MENU_BG_CLOUD_R - MENU_BG_TREE_YELLOW_TRUNK_R) * MID_TREE_COLOR_MIX)
+const MID_TREE_TRUNK_G = Math.round(MENU_BG_TREE_YELLOW_TRUNK_G + (MENU_BG_CLOUD_G - MENU_BG_TREE_YELLOW_TRUNK_G) * MID_TREE_COLOR_MIX)
+const MID_TREE_TRUNK_B = Math.round(MENU_BG_TREE_YELLOW_TRUNK_B + (MENU_BG_CLOUD_B - MENU_BG_TREE_YELLOW_TRUNK_B) * MID_TREE_COLOR_MIX)
+const MID_TREE_LEAF_R = Math.round(MENU_BG_TREE_YELLOW_LEAF_R + (MENU_BG_CLOUD_R - MENU_BG_TREE_YELLOW_LEAF_R) * MID_TREE_COLOR_MIX)
+const MID_TREE_LEAF_G = Math.round(MENU_BG_TREE_YELLOW_LEAF_G + (MENU_BG_CLOUD_G - MENU_BG_TREE_YELLOW_LEAF_G) * MID_TREE_COLOR_MIX)
+const MID_TREE_LEAF_B = Math.round(MENU_BG_TREE_YELLOW_LEAF_B + (MENU_BG_CLOUD_B - MENU_BG_TREE_YELLOW_LEAF_B) * MID_TREE_COLOR_MIX)
+//
+// Back layer — tallest, most numerous, lightest cool teal silhouettes
+// (atmospheric haze). Sits behind both other layers and stays above
+// ground (no roots) so the underground belongs visually to the front
+// layer alone.
+//
+const BACK_TREE_COUNT = 9
+const BACK_TREE_TRUNK_HEIGHT_OUTER = 280
+const BACK_TREE_TRUNK_HEIGHT_INNER = 150
+const BACK_TREE_TRUNK_HEIGHT_JITTER = 36
+const BACK_TREE_OPACITY = 0.45
+const BACK_TREE_TRUNK_R = MENU_BG_CLOUD_R
+const BACK_TREE_TRUNK_G = MENU_BG_CLOUD_G
+const BACK_TREE_TRUNK_B = MENU_BG_CLOUD_B
+const BACK_TREE_LEAF_R = MENU_BG_CLOUD_R
+const BACK_TREE_LEAF_G = MENU_BG_CLOUD_G
+const BACK_TREE_LEAF_B = MENU_BG_CLOUD_B
 //
 // Underground roots (L1 style). Each front-layer tree generates
 // `ROOTS_PER_TREE` primary roots; each root is grown by
@@ -128,6 +195,8 @@ const ROOT_COLOR = 'rgba(150, 84, 42, 0.92)'
 //
 // Mushrooms — small caps studding the soil. Palette mirrors the L0
 // teal+orange complementary set so the menu reads as the same world.
+// Stems are buried into the black horizon strip so the caps appear to
+// grow from the strip itself.
 //
 const MUSHROOM_COUNT = 9
 const MUSHROOM_CAP_WIDTH_MIN = 18
@@ -135,6 +204,7 @@ const MUSHROOM_CAP_WIDTH_MAX = 34
 const MUSHROOM_STEM_HEIGHT_MIN = 14
 const MUSHROOM_STEM_HEIGHT_MAX = 26
 const MUSHROOM_EDGE_MARGIN = 140
+const MUSHROOM_BURY_DEPTH = HORIZON_LINE_HEIGHT
 const MUSHROOM_CAP_COLORS = [
   [220, 110, 40],
   [200, 80, 30],
@@ -150,51 +220,24 @@ const MUSHROOM_CAP_COLORS = [
 const ROCK_COUNT = 6
 const ROCK_RADIUS_MIN = 30
 const ROCK_RADIUS_MAX = 56
-const ROCK_LIFT_FROM_FLOOR = 3
 const ROCK_EDGE_MARGIN = 220
 //
-// Grass — drawn in TUFTS rather than a continuous band. Each tuft is a
-// dense cluster of short blades; tufts are scattered along the soil
-// with random gaps so the grass reads as patches growing where the
-// soil allows. Blades are shorter than the L0 default so the grass
-// stays low against the horizon line.
+// Fraction of the rock radius that extends BELOW its silhouette
+// centre — driven by the `VERT_FLATTEN_Y * VERT_HEAVY_SIDE` math in
+// `draw-rock.js` (0.62 * 1.05 ≈ 0.65, plus radius jitter up to ~0.10).
+// Used to land every rock's lower edge directly ON the black horizon
+// strip in the menu-bg composite (no extra lift — rocks REST on the
+// line rather than hovering above it).
 //
-const GRASS_TUFT_COUNT = 36
-const GRASS_TUFT_BLADES_MIN = 10
-const GRASS_TUFT_BLADES_RANGE = 14
-const GRASS_TUFT_WIDTH_MIN = 18
-const GRASS_TUFT_WIDTH_RANGE = 22
-const GRASS_TUFT_LEFT_INSET = 30
-const GRASS_TUFT_RIGHT_INSET = 30
-const GRASS_BLADE_SCALE_MIN = 0.45
-const GRASS_BLADE_SCALE_RANGE = 0.3
-const GRASS_BASE_R = 200
-const GRASS_BASE_G = 156
-const GRASS_BASE_B = 64
-const GRASS_OPACITY = 0.92
+const ROCK_BOTTOM_FACTOR = 0.72
 //
-// Background fireflies — static warm-amber sparkle baked into the
-// image. The ready scene adds a second, ANIMATED layer of blinking
-// stars on top of this baked image (see ready.js).
+// Power used to bias the rock X sampling toward the outer edges of
+// the canvas. `Math.pow(Math.random(), n)` with n > 1 pushes the
+// random sample toward 0, which the picker maps to the OUTER edge of
+// each side-band. Values around 2.5 give a clear edge preference
+// while still letting the occasional rock land mid-band.
 //
-const FIREFLY_COUNT = 10
-const FIREFLY_COLOR_R = 244
-const FIREFLY_COLOR_G = 192
-const FIREFLY_COLOR_B = 64
-const FIREFLY_RADIUS_MIN = 2
-const FIREFLY_RADIUS_RANGE = 2
-const FIREFLY_ALPHA_MIN = 0.4
-const FIREFLY_ALPHA_RANGE = 0.35
-//
-// Cloud band — denser puffs styled after the L0 cloud strip (same
-// teal-tinted base colour). Drawn statically (no scroll-wrap) since
-// the menu-bg is a single bake.
-//
-const CLOUD_COUNT = 18
-const CLOUD_TOP_Y = -10
-const CLOUD_BOTTOM_Y = 110
-const CLOUD_COLOR = { r: 32, g: 60, b: 68 }
-const CLOUD_OPACITY_SCALE = 0.95
+const ROCK_EDGE_BIAS = 2.5
 //
 // Moon — uses the shared L3 moon primitive (`draw-moon.js`) so the
 // celestial body is visually identical to the touch L3 night-sky moon.
@@ -203,7 +246,26 @@ const MOON_CENTER_X = CANVAS_W - 220
 const MOON_CENTER_Y = 220
 const MOON_RADIUS = 72
 const MOON_GLOW_RADIUS = 42
-const MOON_HALO_KEEPOUT = MOON_RADIUS + MOON_GLOW_RADIUS
+//
+// Wide smooth radial-gradient halo painted BEHIND the moon body.
+// Uses canvas2D `createRadialGradient` so the falloff is a single
+// continuous gradient (no visible rings). Reaches `MOON_HALO_RADIUS`
+// past the moon edge with an inner / mid / outer alpha curve.
+//
+const MOON_HALO_RADIUS = 40
+const MOON_HALO_INNER_ALPHA = 0.55
+const MOON_HALO_MID_ALPHA = 0.22
+const MOON_HALO_MID_STOP = 0.35
+const MOON_HALO_COLOR_R = 244
+const MOON_HALO_COLOR_G = 200
+const MOON_HALO_COLOR_B = 140
+//
+// Exported so the `ready` scene can keep its animated overlays
+// (fireflies, twinkling stars) clear of the moon's halo.
+//
+export const MENU_BG_MOON_CENTER_X = MOON_CENTER_X
+export const MENU_BG_MOON_CENTER_Y = MOON_CENTER_Y
+export const MENU_BG_MOON_HALO_KEEPOUT = MOON_RADIUS + MOON_HALO_RADIUS
 //
 // pickXAvoiding retry budget — generous so the placement loop has a
 // real chance to find a slot inside the constrained left/right bands.
@@ -252,6 +314,37 @@ export function generateMenuBackgroundCanvas() {
       leafColor: { r: BACK_TREE_LEAF_R, g: BACK_TREE_LEAF_G, b: BACK_TREE_LEAF_B }
     })
   ]
+  //
+  // Middle layer — sits between the lightest back silhouettes and
+  // the dark warm-leaf front silhouettes so the depth gradient
+  // (light far → dark near) reads in three clearly separated tiers.
+  //
+  const midTrees = [
+    ...buildSideCluster({
+      isRightSide: false,
+      clusterLeftX: SIDE_CLUSTER_MARGIN + 20,
+      clusterWidth: SIDE_CLUSTER_WIDTH - 40,
+      count: MID_TREE_COUNT,
+      heightOuter: MID_TREE_TRUNK_HEIGHT_OUTER,
+      heightInner: MID_TREE_TRUNK_HEIGHT_INNER,
+      heightJitter: MID_TREE_TRUNK_HEIGHT_JITTER,
+      opacity: MID_TREE_OPACITY,
+      trunkColor: { r: MID_TREE_TRUNK_R, g: MID_TREE_TRUNK_G, b: MID_TREE_TRUNK_B },
+      leafColor: { r: MID_TREE_LEAF_R, g: MID_TREE_LEAF_G, b: MID_TREE_LEAF_B }
+    }),
+    ...buildSideCluster({
+      isRightSide: true,
+      clusterLeftX: CANVAS_W - SIDE_CLUSTER_MARGIN - SIDE_CLUSTER_WIDTH + 20,
+      clusterWidth: SIDE_CLUSTER_WIDTH - 40,
+      count: MID_TREE_COUNT,
+      heightOuter: MID_TREE_TRUNK_HEIGHT_OUTER,
+      heightInner: MID_TREE_TRUNK_HEIGHT_INNER,
+      heightJitter: MID_TREE_TRUNK_HEIGHT_JITTER,
+      opacity: MID_TREE_OPACITY,
+      trunkColor: { r: MID_TREE_TRUNK_R, g: MID_TREE_TRUNK_G, b: MID_TREE_TRUNK_B },
+      leafColor: { r: MID_TREE_LEAF_R, g: MID_TREE_LEAF_G, b: MID_TREE_LEAF_B }
+    })
+  ]
   const frontTrees = [
     ...buildSideCluster({
       isRightSide: false,
@@ -289,21 +382,24 @@ export function generateMenuBackgroundCanvas() {
     tree.rootSegmentsL1 = buildL1RootSystem(tree)
   }
   //
-  // Composition order matters: sky/clouds/moon/stars go down first;
-  // back tree silhouettes overlay the sky; soil paints over the
-  // sky-coloured pixels below ground; front trees overlay; ground
-  // detail (grass/rocks/mushrooms) layers on top of soil; the black
-  // horizon strip caps the soil edge; and finally the front-tree
-  // roots are stroked across the underground band.
+  // Composition order matters: sky/moon go down first; back tree
+  // silhouettes overlay the sky; soil paints over the sky-coloured
+  // pixels below ground; front trees overlay; rocks/mushrooms layer
+  // on top of soil; the black horizon strip caps the soil edge; and
+  // finally the front-tree roots are stroked across the underground
+  // band.
+  //
+  // Grass, fireflies and clouds are intentionally NOT painted here —
+  // the `ready` scene renders them as animated overlays (`ready.js`)
+  // so they sway, twinkle and drift instead of sitting as a still
+  // image baked into the sprite.
   //
   drawSky(ctx)
-  drawClouds(ctx)
   drawMoon(ctx)
-  drawFireflies(ctx)
   drawTreeLayer(ctx, backTrees)
+  drawTreeLayer(ctx, midTrees)
   drawSoilFill(ctx)
   drawTreeLayer(ctx, frontTrees)
-  drawGrass(ctx)
   drawRocks(ctx)
   drawMushrooms(ctx)
   drawBlackHorizonLine(ctx)
@@ -339,29 +435,30 @@ function drawBlackHorizonLine(ctx) {
   ctx.fillRect(0, GROUND_Y, CANVAS_W, HORIZON_LINE_HEIGHT)
 }
 
-function drawClouds(ctx) {
-  //
-  // L0-style cloud puffs: teal-tinted base colour, denser packing than
-  // the previous wispy version. Each cloud uses the shared
-  // `draw-cloud-crown` primitive (the same L0 uses for its scrolling
-  // band) so the puffs feel identical to the in-game clouds.
-  //
-  const cloudConfigs = []
-  const cloudSpacing = CANVAS_W / CLOUD_COUNT
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    const x = cloudSpacing * i + cloudSpacing * 0.5 + (Math.random() - 0.5) * 40
-    const y = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
-    cloudConfigs.push(buildCloudCrown({ x, y }))
-  }
-  for (const cloud of cloudConfigs) {
-    drawCloudCrownToCanvas(ctx, cloud, CLOUD_COLOR, { opacityScale: CLOUD_OPACITY_SCALE })
-  }
-}
-
 function drawMoon(ctx) {
   //
-  // Delegates to the shared L3 moon primitive so the menu/ready moon
-  // is visually identical to the touch L3 night-sky moon.
+  // Wide smooth radial-gradient halo painted FIRST so the moon body
+  // (drawn below by `drawMoonToCanvas`) overlaps and tops it. Using
+  // `createRadialGradient` gives a perfectly continuous falloff — no
+  // visible rings around the disc — at any opacity the sprite is
+  // later drawn with.
+  //
+  const haloOuterR = MOON_RADIUS + MOON_HALO_RADIUS
+  const grad = ctx.createRadialGradient(
+    MOON_CENTER_X, MOON_CENTER_Y, MOON_RADIUS * 0.6,
+    MOON_CENTER_X, MOON_CENTER_Y, haloOuterR
+  )
+  grad.addColorStop(0, `rgba(${MOON_HALO_COLOR_R}, ${MOON_HALO_COLOR_G}, ${MOON_HALO_COLOR_B}, ${MOON_HALO_INNER_ALPHA})`)
+  grad.addColorStop(MOON_HALO_MID_STOP, `rgba(${MOON_HALO_COLOR_R}, ${MOON_HALO_COLOR_G}, ${MOON_HALO_COLOR_B}, ${MOON_HALO_MID_ALPHA})`)
+  grad.addColorStop(1, `rgba(${MOON_HALO_COLOR_R}, ${MOON_HALO_COLOR_G}, ${MOON_HALO_COLOR_B}, 0)`)
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.arc(MOON_CENTER_X, MOON_CENTER_Y, haloOuterR, 0, Math.PI * 2)
+  ctx.fill()
+  //
+  // Moon body + built-in halo. Delegates to the shared L3 moon
+  // primitive so the celestial disc + craters are visually identical
+  // to the touch L3 night-sky moon.
   //
   drawMoonToCanvas(ctx, {
     cx: MOON_CENTER_X,
@@ -371,29 +468,6 @@ function drawMoon(ctx) {
   })
 }
 
-function drawFireflies(ctx) {
-  //
-  // Warm-amber dots scattered through the upper sky — keeps the warm
-  // half of the complementary palette present even in the centre where
-  // there are no trees. Avoids overlapping the moon halo so the moon
-  // stays the dominant warm element.
-  //
-  for (let i = 0; i < FIREFLY_COUNT; i++) {
-    let x, y
-    let tries = 0
-    do {
-      x = 80 + Math.random() * (CANVAS_W - 160)
-      y = 40 + Math.random() * (GROUND_Y - 180)
-      tries++
-    } while (tries < 12 && Math.hypot(x - MOON_CENTER_X, y - MOON_CENTER_Y) < MOON_HALO_KEEPOUT * 0.9)
-    const r = FIREFLY_RADIUS_MIN + Math.random() * FIREFLY_RADIUS_RANGE
-    const alpha = FIREFLY_ALPHA_MIN + Math.random() * FIREFLY_ALPHA_RANGE
-    ctx.fillStyle = `rgba(${FIREFLY_COLOR_R}, ${FIREFLY_COLOR_G}, ${FIREFLY_COLOR_B}, ${alpha})`
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fill()
-  }
-}
 //
 // Builds the trunk + branch silhouette data for every tree of a
 // cluster. The cluster spans `clusterWidth` starting at `clusterLeftX`;
@@ -516,65 +590,36 @@ function drawFrontTreeRoots(ctx, frontTrees) {
   }
 }
 
-function drawGrass(ctx) {
-  //
-  // Grass grows in tufts — clusters of dense, SHORT blades inside a
-  // narrow X span, with random gaps between tufts. Inside a tuft, blade
-  // base X is loosely triangular-distributed around the tuft centre so
-  // blades stack densely in the middle and feather out at the edges.
-  //
-  const grassY = GROUND_Y - 2
-  const usableLeft = GRASS_TUFT_LEFT_INSET
-  const usableRight = CANVAS_W - GRASS_TUFT_RIGHT_INSET
-  for (let t = 0; t < GRASS_TUFT_COUNT; t++) {
-    const tuftCenter = usableLeft + Math.random() * (usableRight - usableLeft)
-    const tuftWidth = GRASS_TUFT_WIDTH_MIN + Math.random() * GRASS_TUFT_WIDTH_RANGE
-    const bladeCount = GRASS_TUFT_BLADES_MIN + Math.floor(Math.random() * GRASS_TUFT_BLADES_RANGE)
-    const tuftBlades = []
-    for (let b = 0; b < bladeCount; b++) {
-      //
-      // Two random samples averaged ≈ triangular distribution: blades
-      // densest near tuft centre, sparser at edges.
-      //
-      const offsetT = (Math.random() + Math.random() - 1) * 0.5
-      const baseX = tuftCenter + offsetT * tuftWidth
-      tuftBlades.push(buildGrassBladeData({
-        baseX,
-        grassY,
-        scale: GRASS_BLADE_SCALE_MIN + Math.random() * GRASS_BLADE_SCALE_RANGE,
-        baseOpacity: GRASS_OPACITY,
-        baseR: GRASS_BASE_R,
-        baseG: GRASS_BASE_G,
-        baseB: GRASS_BASE_B
-      }))
-    }
-    //
-    // Draw shorter blades first, taller last so tall blades sit on top
-    // of the cluster instead of being half-hidden.
-    //
-    tuftBlades.sort((a, b) => a.height - b.height)
-    for (const blade of tuftBlades) drawGrassBladeToCanvas(ctx, blade, 0)
-  }
-}
-
 function drawRocks(ctx) {
   //
-  // Boulders studding the soil line on the OUTER halves only — the
-  // central UI zone stays clear so the on-screen logo + hint live in
-  // visual negative space.
+  // Boulders RESTING on the black horizon strip on the OUTER halves
+  // only. The central UI zone stays clear so the on-screen logo +
+  // hint live in visual negative space.
+  //
+  // The rock silhouette extends ≈ `radius * ROCK_BOTTOM_FACTOR` below
+  // its centre, so positioning the centre at
+  // `GROUND_Y - radius * ROCK_BOTTOM_FACTOR` lands the lowest edge of
+  // the silhouette exactly ON the black line — no hovering, no
+  // dipping. Edge-biased X sampling makes rocks more likely to sit
+  // near the canvas borders than in the inner band.
   //
   const reserved = []
   for (let i = 0; i < ROCK_COUNT; i++) {
     const radius = ROCK_RADIUS_MIN + Math.random() * (ROCK_RADIUS_MAX - ROCK_RADIUS_MIN)
-    const totalH = Math.ceil(radius * 1.9)
-    const posX = pickXAvoidingCentre(reserved, ROCK_EDGE_MARGIN, radius * 1.6)
+    const posX = pickXAvoidingCentre(reserved, ROCK_EDGE_MARGIN, radius * 1.6, ROCK_EDGE_BIAS)
     if (posX == null) continue
     reserved.push({ x: posX, halfWidth: radius * 1.6 })
     const verts = buildRockVertices(radius)
     const palette = buildRockPalette()
-    const cy = totalH * 0.56
-    const canvasY = GROUND_Y - cy * 0.45 - ROCK_LIFT_FROM_FLOOR + Math.random() * 6
+    const canvasY = GROUND_Y - radius * ROCK_BOTTOM_FACTOR
     ctx.save()
+    //
+    // Clip to the sky + horizon strip so the rock silhouette is
+    // sliced flat at the black line — nothing renders below it.
+    //
+    ctx.beginPath()
+    ctx.rect(0, 0, CANVAS_W, GROUND_Y)
+    ctx.clip()
     ctx.translate(posX, canvasY)
     drawRockToCanvas(ctx, { cx: 0, cy: 0, radius, verts, palette })
     ctx.restore()
@@ -597,9 +642,14 @@ function drawMushrooms(ctx) {
     if (posX == null) continue
     reserved.push({ x: posX, halfWidth: capW * 0.9 })
     const capColor = MUSHROOM_CAP_COLORS[Math.floor(Math.random() * MUSHROOM_CAP_COLORS.length)]
+    //
+    // Bury the stem into the black horizon strip so the mushroom
+    // appears to grow FROM the strip — the bottom `MUSHROOM_BURY_DEPTH`
+    // pixels of every stem are hidden by the strip drawn on top.
+    //
     drawMushroomToCanvas(ctx, {
       cx: posX,
-      baseY: GROUND_Y - 2,
+      baseY: GROUND_Y + MUSHROOM_BURY_DEPTH,
       capWidth: capW,
       capHeight: capH,
       stemWidth: stemW,
@@ -616,7 +666,12 @@ function drawMushrooms(ctx) {
 // PLACEMENT_MAX_ATTEMPTS unsuccessful tries so the caller can skip
 // placing that element rather than crowd the soil line.
 //
-function pickXAvoidingCentre(reserved, edgeMargin, minGap) {
+// `edgeBias` (default 1 = uniform) controls how strongly the random
+// sample is pulled toward the OUTER edge of each side-band. Values
+// > 1 bias the sample toward the canvas borders (rocks); the default
+// keeps the original uniform spread (mushrooms).
+//
+function pickXAvoidingCentre(reserved, edgeMargin, minGap, edgeBias = 1) {
   const leftMin = edgeMargin
   const leftMax = CENTER_X - CENTER_KEEPOUT_HALF
   const rightMin = CENTER_X + CENTER_KEEPOUT_HALF
@@ -631,9 +686,16 @@ function pickXAvoidingCentre(reserved, edgeMargin, minGap) {
     // proportionally more candidates.
     //
     const pickLeft = Math.random() * totalSpan < leftSpan
+    //
+    // `t` is uniform in [0,1] when edgeBias === 1, otherwise biased
+    // toward 0 by raising the uniform sample to the `edgeBias` power.
+    // For the LEFT band, t=0 maps to `leftMin` (outer/canvas edge);
+    // for the RIGHT band, t=0 maps to `rightMax` (outer/canvas edge).
+    //
+    const t = edgeBias === 1 ? Math.random() : Math.pow(Math.random(), edgeBias)
     const candidate = pickLeft
-      ? leftMin + Math.random() * leftSpan
-      : rightMin + Math.random() * rightSpan
+      ? leftMin + t * leftSpan
+      : rightMax - t * rightSpan
     let ok = true
     for (const r of reserved) {
       if (Math.abs(candidate - r.x) < minGap + r.halfWidth) {

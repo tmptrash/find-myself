@@ -9,17 +9,27 @@ import { goToMenuAfterAssets } from '../utils/level-assets.js'
 import { drawConnectionWave } from '../utils/connection.js'
 import { loadHeroSprites, HEROES } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
+import {
+  MENU_BG_GROUND_Y,
+  MENU_BG_HORIZON_LINE_HEIGHT,
+  MENU_BG_CANVAS_W
+} from '../utils/menu-bg-generator.js'
+import { buildCloudCrown } from '../utils/draw-cloud-crown.js'
+import { buildGrassBladeData } from '../utils/draw-grass-blade.js'
 
 //
-// Hint flicker
+// Hint flicker — pinned at the very bottom of the screen so the
+// "press Space" callout sits below the description block, with the
+// title and monster occupying the upper half of the canvas.
 //
 const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
 const HINT_FONT_SIZE = 20
-const HINT_Y = 1042
+const HINT_Y = 1058
 //
-// Crawling letter title
+// Crawling letter title — centred at the very top of the canvas,
+// well above the central monster illustration.
 //
 const INSTRUCTIONS_TITLE = 'find yourself'
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
@@ -51,11 +61,21 @@ const TITLE_FLICKER_SPEED = 1.5
 const TITLE_FLICKER_MIN = 0.7
 const TITLE_FLICKER_MAX = 1.0
 //
-// Layout z-layers
+// Layout z-layers. Background pieces (clouds, stars, fireflies,
+// grass) stack between the baked menu-bg sprite and the foreground
+// illustration; foreground UI (text, title, spiders, hint) sits on
+// top of everything.
 //
 const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
+//
+// Stars sit BELOW the drifting cloud layer so twinkles never punch
+// through the cloud puffs — clouds read as the nearer sky element.
+//
 const Z_STARS = CFG.visual.zIndex.background + 2
-const Z_ILLUSTRATION = 5
+const Z_CLOUDS = CFG.visual.zIndex.background + 3
+const Z_FIREFLIES = CFG.visual.zIndex.background + 4
+const Z_GRASS = CFG.visual.zIndex.background + 5
+const Z_ILLUSTRATION = CFG.visual.zIndex.background + 6
 const Z_TEXT = 10
 const Z_TITLE = 15
 const Z_SPIDER = 50
@@ -99,22 +119,147 @@ const MOON_ZONE_CENTER_X_RATIO = 1700 / 1920
 const MOON_ZONE_CENTER_Y_RATIO = 160 / 1080
 const MOON_ZONE_RADIUS_RATIO = 220 / 1920
 //
-// Flare cross radius multiplier for large stars (small stars get no
-// cross flare — they're just twinkling dots).
+// Drifting clouds — styled to match the Touch L0 cloud band:
+// same `buildCloudCrown` primitive, same cool-teal puff colour and
+// drawn at full opacity so the puffs overlap into one continuous
+// cloud blanket instead of leaving visible holes between individual
+// clouds. The band is narrowed vertically (vs. the previous loose
+// sky-wide spread) so puffs bunch together tightly the same way they
+// do in L0.
 //
-const STAR_FLARE_RADIUS_MULT = 3.2
+const CLOUD_COUNT = 38
+const CLOUD_BRIDGE_COUNT = 36
+const CLOUD_X_JITTER = 10
+const CLOUD_HALF_WIDTH_MULT = 1.35
+const CLOUD_TOP_Y = -10
+const CLOUD_BOTTOM_Y = 130
+const CLOUD_DRIFT_SPEED_MIN = 6
+const CLOUD_DRIFT_SPEED_RANGE = 10
 //
-// Left illustration (life-ready.png + hero sprite).
-// Moved to the left side of the screen to free the right half for text.
+// Cool teal puff colour — exact Touch L0 cloud-circle palette
+// (`L0_CLOUD_CIRCLE_R/G/B` = 32, 60, 68) so the ready cloud band
+// reads as the same world.
 //
-const LIFE_X = 280
-const LIFE_Y = 238
+const CLOUD_COLOR_R = 32
+const CLOUD_COLOR_G = 60
+const CLOUD_COLOR_B = 68
+//
+// L0 paints its clouds at full opacity — no global scale-down. This
+// matches that behaviour so individual puffs overlap fully and the
+// band reads as a dense blanket rather than a wispy haze.
+//
+const CLOUD_OPACITY_SCALE = 1.0
+//
+// Wandering fireflies — never higher than the front-layer tree
+// canopy so they read as flying AMONG the trees rather than across
+// the open sky. Each firefly drifts on a slowly rotating velocity
+// vector and twinkles independently. The vertical clamp uses the
+// front-tree silhouette top from menu-bg-generator (`FIREFLY_MIN_Y`).
+//
+const FIREFLY_COUNT = 14
+const FIREFLY_MIN_Y = 450
+const FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
+const FIREFLY_MIN_X = 80
+const FIREFLY_MAX_X = MENU_BG_CANVAS_W - 80
+const FIREFLY_SPEED_MIN = 12
+const FIREFLY_SPEED_RANGE = 14
+const FIREFLY_DIR_CHANGE_INTERVAL_MIN = 2.5
+const FIREFLY_DIR_CHANGE_INTERVAL_RANGE = 3.5
+const FIREFLY_TURN_SMOOTHNESS = 1.6
+const FIREFLY_RADIUS_MIN = 1.7
+const FIREFLY_RADIUS_RANGE = 1.4
+const FIREFLY_GLOW_RADIUS_MULT = 3.0
+const FIREFLY_TWINKLE_FREQ_MIN = 0.6
+const FIREFLY_TWINKLE_FREQ_RANGE = 1.5
+const FIREFLY_BASE_ALPHA_MIN = 0.45
+const FIREFLY_BASE_ALPHA_RANGE = 0.45
+const FIREFLY_COLOR_R = 244
+const FIREFLY_COLOR_G = 192
+const FIREFLY_COLOR_B = 96
+//
+// Swaying grass — short blades growing from inside the black horizon
+// strip so the strip reads as soil they emerge from. Each tuft is a
+// cluster of blades that all sway with the same wind phase but their
+// own slight offsets, so the patch reads as a single piece of grass
+// reacting to a breeze.
+//
+const GRASS_TUFT_COUNT = 36
+const GRASS_TUFT_BLADES_MIN = 10
+const GRASS_TUFT_BLADES_RANGE = 14
+const GRASS_TUFT_WIDTH_MIN = 18
+const GRASS_TUFT_WIDTH_RANGE = 22
+const GRASS_TUFT_LEFT_INSET = 30
+const GRASS_TUFT_RIGHT_INSET = 30
+//
+// Grass is excluded from the central horizontal band where the
+// monster illustration stands (matches the keep-out used by rocks /
+// mushrooms in `menu-bg-generator.js`).
+//
+const GRASS_CENTER_KEEPOUT_HALF = 400
+const GRASS_BLADE_SCALE_MIN = 0.45
+const GRASS_BLADE_SCALE_RANGE = 0.3
+//
+// Grass base colour — the green tone Touch L0 uses for its
+// around-rocks grass (`addGrassAroundRocks`). Keeps the ready scene
+// chromatically tied to the very first level the player enters.
+//
+const GRASS_BASE_R = 60
+const GRASS_BASE_G = 85
+const GRASS_BASE_B = 40
+const GRASS_OPACITY = 0.92
+//
+// Wind sweeping the grass patch — a single low-frequency sine wave
+// scaled per blade by its own `swayAmount`. Yields a coherent gusty
+// motion across the whole horizon rather than independent random
+// flickering per blade.
+//
+const GRASS_WIND_FREQ = 0.45
+const GRASS_WIND_AMP = 1.0
+//
+// Cricket + owl ambient sounds — random intervals so the night soundscape
+// stays alive but never feels mechanical. Cricket bursts trigger every
+// few seconds; owl hoots are sparse and atmospheric.
+//
+const CRICKET_INTERVAL_MIN = 2.4
+const CRICKET_INTERVAL_RANGE = 4.2
+const OWL_INTERVAL_MIN = 14.0
+const OWL_INTERVAL_RANGE = 18.0
+const AMBIENT_FIRST_DELAY_MIN = 0.8
+const AMBIENT_FIRST_DELAY_RANGE = 2.0
+//
+// Central illustration (life-ready.png + hero sprite). Both are
+// horizontally centred around the canvas mid-line; the monster's
+// bottom edge sits on the black horizon strip and the hero stands
+// on the strip too.
+//
 const LIFE_WIDTH = 767
 const LIFE_HEIGHT = 512
+const LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
+const LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT
 const LIFE_OPACITY = 1.0
-const HERO_X = 580
-const HERO_Y = 765
-const HERO_SPRITE_SIZE = 130
+//
+// Hero offset preserved from the original layout (hero stood ~83 px
+// left of the monster centre) so the hero still reads as standing in
+// front of the monster's mouth, just now centred on the canvas.
+//
+const HERO_OFFSET_FROM_LIFE_CENTER_X = -84
+const HERO_X = Math.round(LIFE_X + LIFE_WIDTH / 2 + HERO_OFFSET_FROM_LIFE_CENTER_X)
+//
+// The hero sprite canvas (96×96) has ~12 px of empty padding below
+// the legs, so when the sprite is drawn with its BOTTOM at HERO_Y the
+// visible feet end above HERO_Y at the illustration display scale.
+// Push HERO_Y down by that padding so the hero's actual feet land
+// ON the black horizon strip rather than floating above it.
+//
+const HERO_FEET_PADDING = 17
+const HERO_Y = MENU_BG_GROUND_Y + HERO_FEET_PADDING
+//
+// Central illustration hero render size — matches the menu scene's
+// native SPRITE_SIZE (96 px) so the hero in front of the monster
+// reads at the same scale as the section anti-heroes orbiting the
+// menu. Distinct from the tiny two-heroes icon below the description.
+//
+const HERO_ILLUSTRATION_SPRITE_SIZE = 96
 //
 // Hero sprite names (loaded in index.js at game start).
 // HERO_ILLUSTRATION_SPRITE_NAME uses eyes right-up (1, -1).
@@ -136,7 +281,13 @@ const ANTIHERO_HOVER_AMP = 0.10
 const ANTIHERO_PULSE_SPEED = 2.4
 const ANTIHERO_HOVER_LERP_SPEED = 8
 const HERO_SPRITE_NAME = 'hero_5A8898_000000_0_0'
-const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000'
+//
+// The CENTRAL hero illustration uses a richer sprite variant that
+// adds a mouth, two visible arms and a wrist watch on top of the
+// plain hero body. The small two-heroes icon below (HERO_SPRITE_NAME)
+// keeps the plain variant so it stays readable at icon size.
+//
+const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000_mouth_arms_watch'
 //
 // Anti-hero color in the duality icon is the warm complement of the
 // hero's steel teal — a vibrant orange that, paired with the teal
@@ -152,43 +303,64 @@ const HERO_EYE_MIN_DELAY = 1.5
 const HERO_EYE_MAX_DELAY = 3.5
 const HERO_EYE_LERP_SPEED = 0.1
 //
-// Right-column layout (illustration sits on the left, text on the right):
-//   Narrative text + section icons share the same left edge (RIGHT_COLUMN_X).
-//   Title is centered above the right column.
-//   Narrative text is above the ground line (~y 960).
-//   Section icons are below the ground line (ICON_START_Y = 942), with illustrations.
+// Centered description layout. All narrative + section labels live in
+// a single centred block placed BELOW the black horizon strip so the
+// upper half of the canvas stays clean for the hint, title and the
+// monster + hero illustration. Each text line uses anchor 'center'
+// pinned at the canvas centre column.
 //
-const RIGHT_COLUMN_X = 1400
-const LEFT_COLUMN_X = RIGHT_COLUMN_X
-const TEXT_LEFT = RIGHT_COLUMN_X
-const TITLE_TEXT_X = 700
-const TITLE_TEXT_Y = 830
-const TEXT_START_Y = 380
+const CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
+const TITLE_TEXT_X = CENTER_X
+const TITLE_TEXT_Y = 130
+//
+// Description block geometry. Narrative paragraph sits CENTRED in a
+// column starting slightly below the horizon; the two section label
+// rows below it are LEFT-ALIGNED at a fixed column so the icon and
+// label edge of both rows form a clean left column.
+//
+const DESCRIPTION_START_Y = MENU_BG_GROUND_Y + 48
+//
+// Narrative text — bigger and wider than the previous 4-line block.
+// Two long lines (≈ 66 chars each in monospace) read as a single
+// breath and free up vertical space for the hint pinned to the very
+// bottom of the canvas.
+//
 const TEXT_FONT_SIZE = 24
-const TEXT_LINE_HEIGHT = 36
-const ICON_START_Y = 820
-const ICON_ROW_HEIGHT = 70
+const TEXT_LINE_HEIGHT = 34
 //
-// Icon illustration dimensions (icons sit to the LEFT of TEXT_LEFT so text aligns with narrative)
+// Extra space between the narrative paragraph and the section label
+// rows — gives the two "Collect / Find" labels their own visual
+// breathing room below the description.
 //
-const ICON_DRAW_R = 13
+const DESCRIPTION_BLOCK_GAP = 40
 //
-// Horizontal offset from TEXT_LEFT to the icon center (negative = to the left).
+// Section label icon — small glyph drawn to the LEFT of its label.
+// Both rows share the same left edge `LABEL_BLOCK_LEFT_X` so the
+// icons + labels form a clean left-aligned column. The X is picked
+// so the WIDER row (label2) ends up roughly centred on the canvas.
 //
-const ICON_DRAW_CX_OFFSET = -23
+const ICON_DRAW_R = 12
+const ICON_LABEL_GAP = 14
+const ICON_ROW_HEIGHT = 56
 //
-// Extra Y to vertically centre the two-heroes pair between label and desc lines.
+// Left column for the label-row block. Chosen so the longer of the
+// two rows is approximately canvas-centred.
 //
-const ICON_TWO_HEROES_Y_EXTRA = 16
+const LABEL_BLOCK_LEFT_X = 790
+//
+// Extra Y to vertically centre the two-heroes pair between label and
+// desc lines.
+//
+const ICON_TWO_HEROES_Y_EXTRA = 14
 //
 // Animated sparkle constants (matches bonus-hero glow used in time section)
 //
 const SPARKLE_PULSE_SPEED = 2.5
 const SPARKLE_INNER_R = 5
 const SPARKLE_OUTER_R = 11
-const ICON_LABEL_FONT_SIZE = 20
-const ICON_LABEL_DESC_FONT_SIZE = 17
-const ICON_LABEL_DESC_OFFSET_Y = 22
+const ICON_LABEL_FONT_SIZE = 18
+const ICON_LABEL_DESC_FONT_SIZE = 15
+const ICON_LABEL_DESC_OFFSET_Y = 20
 //
 // Life laugh audio: plays a short ambient laugh at random intervals.
 //
@@ -219,7 +391,19 @@ export function sceneReady(k) {
     // (warm half). Loading both up-front guarantees the icon row has
     // its complementary sprite ready before draw.
     //
+    //
+    // Plain hero variant — used by the small "two heroes" icon below
+    // the description. Keeps the icon readable at small sizes.
+    //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
+    //
+    // Richer hero variant for the CENTRAL illustration — adds mouth,
+    // both arms and a wrist watch on top of the plain body. Loaded
+    // alongside the plain variant so both sprites coexist; the
+    // illustration draw selects this one via the `_mouth_arms_watch`
+    // prefix suffix.
+    //
+    loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, true, true, true)
     loadHeroSprites(k, HEROES.ANTIHERO, ANTIHERO_READY_BODY_COLOR, null, false, false, false)
     CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
     k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
@@ -237,13 +421,48 @@ export function sceneReady(k) {
     //
     k.add([k.pos(0, 0), k.z(Z_BG_OVERLAY), { draw() { onDrawBg(k) } }])
     //
+    // Drifting clouds — L0-style cloud puffs that scroll right and
+    // wrap horizontally across the upper sky.
+    //
+    const cloudField = createCloudField()
+    k.add([k.pos(0, 0), k.z(Z_CLOUDS), {
+      update() { updateCloudField(k, cloudField) },
+      draw() { drawCloudField(k, cloudField) }
+    }])
+    //
     // Twinkling star field overlaid on the baked menu-bg so the ready
     // scene gets a living night sky on top of the static composition.
     //
     const starField = createStarField(k)
     k.add([k.pos(0, 0), k.z(Z_STARS), { draw() { drawStarField(k, starField) } }])
     //
-    // Left illustration: life.png + procedural hero silhouette
+    // Wandering fireflies — flicker through the lower sky band among
+    // the front-layer tree silhouettes, never rising above the canopy.
+    //
+    const fireflyField = createFireflyField()
+    k.add([k.pos(0, 0), k.z(Z_FIREFLIES), {
+      update() { updateFireflyField(k, fireflyField) },
+      draw() { drawFireflyField(k, fireflyField) }
+    }])
+    //
+    // Swaying grass tufts along the horizon strip — short blades
+    // gently leaning with a coherent wind sine.
+    //
+    const grassField = createGrassField()
+    k.add([k.pos(0, 0), k.z(Z_GRASS), { draw() { drawGrassField(k, grassField) } }])
+    //
+    // Ambient cricket + owl sounds — random intervals scheduled by
+    // local timer state. Sounds stay silent until the first user
+    // gesture unlocks the audio context (web audio policy).
+    //
+    const ambient = {
+      sound,
+      cricketTimer: AMBIENT_FIRST_DELAY_MIN + Math.random() * AMBIENT_FIRST_DELAY_RANGE,
+      owlTimer: 4 + Math.random() * 6
+    }
+    k.onUpdate(() => onUpdateAmbientSounds(k, ambient))
+    //
+    // Central illustration: life-ready.png + procedural hero silhouette
     //
     //
     // Hero illustration eye wander state (starts eyes right-up, matching the sprite prefix)
@@ -258,9 +477,10 @@ export function sceneReady(k) {
     }
     k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k, illAnim) } }])
     //
-    // Left text column (narrative text, starts at LEFT_COLUMN_X)
+    // Centered description block (narrative + section labels) below
+    // the black horizon strip.
     //
-    addTextPanel(k, LEFT_COLUMN_X, TEXT_START_Y)
+    const descriptionLayout = addDescriptionBlock(k)
     //
     // Animated icon state: sparkle pulse, electric heartbeat, life laugh flash.
     //
@@ -291,13 +511,17 @@ export function sceneReady(k) {
       iconAnim.sparklePhase += dt * SPARKLE_PULSE_SPEED
       iconAnim.heartbeatPhase = (iconAnim.heartbeatPhase + dt) % 1
       //
-      // Anti-hero hover: detect mouse proximity, set target scale, lerp smoothly
+      // Anti-hero hover: detect mouse proximity to the two-hero icon
+      // group of the second description row, set target scale, lerp
+      // smoothly. The hit-test point is the centre of the anti-hero
+      // sprite — same `(spacing, sprite_size * 0.35)` offset the icon
+      // draw routine uses below, so the hover ring sits exactly on
+      // the painted anti-hero face.
       //
-      const iconX = TEXT_LEFT + ICON_DRAW_CX_OFFSET
-      const twoHeroY = ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA
-      const r = ICON_DRAW_R
-      const antiHeroCX = iconX + r * 0.85
-      const antiHeroCY = twoHeroY - r * 0.85 * 0.35
+      const r2 = ICON_DRAW_R
+      const iconY = descriptionLayout.row2.iconY + r2 * 0.6 + ICON_TWO_HEROES_Y_EXTRA
+      const antiHeroCX = descriptionLayout.row2.iconX + r2 * 0.85
+      const antiHeroCY = iconY - r2 * 0.85 * 0.35
       const mp = TouchInput.getPointerPos(k)
       const dx = mp.x - antiHeroCX
       const dy = mp.y - antiHeroCY
@@ -316,13 +540,9 @@ export function sceneReady(k) {
       iconAnim.antiHeroScale += (iconAnim.antiHeroTargetScale - iconAnim.antiHeroScale) * Math.min(1, ANTIHERO_HOVER_LERP_SPEED * dt)
     })
     //
-    // Icon illustrations beside each section label
+    // Icon illustrations beside each centred section label row
     //
-    k.add([k.pos(0, 0), k.z(Z_TEXT), { draw() { onDrawIconIllustrations(k, iconAnim) } }])
-    //
-    // Section labels below the ground line
-    //
-    addIconLabels(k, TEXT_LEFT)
+    k.add([k.pos(0, 0), k.z(Z_TEXT), { draw() { onDrawIconIllustrations(k, iconAnim, descriptionLayout) } }])
     //
     // Title text (crawling letters detach from this)
     //
@@ -530,35 +750,26 @@ function drawStarField(k, stars) {
     const cycle = 0.5 * (1 + Math.sin(time * star.twinkleFreq + star.twinklePhase))
     const alpha = star.baseAlpha * (0.25 + 0.75 * cycle)
     const color = k.rgb(star.r, star.g, star.b)
+    //
+    // Large stars get a wider, brighter dot during the peak of the
+    // twinkle cycle (`radius * (1 + 0.6 * cycle)`) instead of an
+    // explicit cross flare — keeps the field free of vertical /
+    // horizontal lines while still letting big stars feel "bright".
+    //
+    const radius = star.isLarge ? star.radius * (1 + 0.6 * cycle) : star.radius
     k.drawCircle({
       pos: k.vec2(star.x, star.y),
-      radius: star.radius,
+      radius,
       color,
       opacity: alpha
     })
-    //
-    // Large stars: paint a thin cross flare. Length tracks the twinkle
-    // cycle so the flare grows/shrinks with the dot's brightness.
-    //
-    if (!star.isLarge) continue
-    const flareLen = star.radius * STAR_FLARE_RADIUS_MULT * (0.4 + 0.6 * cycle)
-    const flareAlpha = alpha * 0.55
-    k.drawLine({
-      p1: k.vec2(star.x - flareLen, star.y),
-      p2: k.vec2(star.x + flareLen, star.y),
-      width: 0.6,
-      color,
-      opacity: flareAlpha
-    })
-    k.drawLine({
-      p1: k.vec2(star.x, star.y - flareLen),
-      p2: k.vec2(star.x, star.y + flareLen),
-      width: 0.6,
-      color,
-      opacity: flareAlpha
-    })
   }
 }
+//
+// The moon glow is baked directly into the menu-bg sprite as a
+// smooth radial gradient (see `menu-bg-generator.js#drawMoon`), so no
+// runtime moon-glow draw layer is needed in the ready scene.
+//
 //
 // Draws the center illustration: life-ready.png as the creature + hero sprite overlaid in front.
 // illAnim carries the current eye wander state for the hero sprite.
@@ -581,77 +792,92 @@ function onDrawIllustration(k, illAnim) {
   const eyeY = Math.round(illAnim.eyeY)
   k.drawSprite({
     sprite: `${HERO_ILLUSTRATION_SPRITE_PREFIX}_${eyeX}_${eyeY}`,
-    pos: k.vec2(HERO_X - HERO_SPRITE_SIZE / 2, HERO_Y - HERO_SPRITE_SIZE),
-    width: HERO_SPRITE_SIZE,
-    height: HERO_SPRITE_SIZE,
+    pos: k.vec2(HERO_X - HERO_ILLUSTRATION_SPRITE_SIZE / 2, HERO_Y - HERO_ILLUSTRATION_SPRITE_SIZE),
+    width: HERO_ILLUSTRATION_SPRITE_SIZE,
+    height: HERO_ILLUSTRATION_SPRITE_SIZE,
     opacity: 1.0
   })
 }
 //
-// Adds the left-column narrative text at 24px with black outline.
-// Describes all six worlds and the player's goal.
-// Key words are colored (time/touch in orange, Life in red).
+// Adds the full centred description block below the black horizon.
+// Returns the layout descriptor (icon coordinates per label row) so
+// the icon overlay + hover hit-test can reuse the exact same row Y
+// values the text was placed at.
 //
-function addTextPanel(k, leftX, startY) {
+function addDescriptionBlock(k) {
   const z = Z_TEXT
-  const s = TEXT_FONT_SIZE
-  const lh = TEXT_LINE_HEIGHT
-  const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
-  //
-  // Helper: segment with black outline then warm-orange text
-  //
-  const seg = (text, x, y) => addSegment(k, text, x, y, z, s, font, COLOR_TEXT_GRAY)
-  //
-  // Block 1 (5 lines): six worlds intro
-  //
-  const l1y = startY
-  seg('Six worlds await you.', leftX, l1y)
-  seg('Time, touch, and words,', leftX, l1y + lh)
-  seg('feelings, mind, and stress.', leftX, l1y + lh * 2)
-  seg('Each hides a piece of your', leftX, l1y + lh * 3)
-  seg('scattered identity within.', leftX, l1y + lh * 4)
-  //
-  // Block 2 (4 lines, after gap): gameplay and goal
-  //
-  const l6y = l1y + lh * 5 + 14
-  seg('Platform, jump, survive.', leftX, l6y)
-  seg('Collect every lost fragment.', leftX, l6y + lh)
-  seg('Find your shadow self.', leftX, l6y + lh * 2)
-  seg('You play against Life —', leftX, l6y + lh * 3)
-  seg('know yourself to win.', leftX, l6y + lh * 4)
-}
-//
-// Adds the three section label rows below the ground line.
-// All labels share COLOR_WARM_ORANGE; icons are drawn by onDrawIconIllustrations.
-//
-function addIconLabels(k, leftX) {
-  const z = Z_TEXT
+  const narrativeFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
   const labelFont = "'JetBrains Mono', monospace"
   const descFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
+  //
+  // Narrative — four monospaced lines with near-equal character counts
+  // (≈ 30–35 each in JetBrains Mono) so every line ends at roughly
+  // the same horizontal width when centred under the horizon strip.
+  //
+  const narrativeLines = [
+    'Six worlds await you — time, touch,',
+    'words, feelings, mind, and stress.',
+    'Each hides a piece of you. Play',
+    'against Life to find yourself.'
+  ]
+  let cursorY = DESCRIPTION_START_Y
+  for (const line of narrativeLines) {
+    addCenteredSegment(k, line, CENTER_X, cursorY, z, TEXT_FONT_SIZE, narrativeFont, COLOR_TEXT_GRAY)
+    cursorY += TEXT_LINE_HEIGHT
+  }
+  cursorY += DESCRIPTION_BLOCK_GAP
+  //
+  // Section label rows — "Collect fragments" + "Find the other peaces
+  // of you". Both rows share the SAME left edge so the icon + label
+  // pair lines up vertically into a clean left-aligned column. The
+  // desc line under each label uses the same left X as the label so
+  // the whole row reads as one left-aligned block.
+  //
   const rows = [
     { label: 'Collect fragments', desc: 'Pieces of you. Scattered everywhere.' },
     { label: 'Find the other peaces of you', desc: 'Touch them. Know them.' }
   ]
-  rows.forEach((row, i) => {
-    const rowY = ICON_START_Y + i * ICON_ROW_HEIGHT
-    addSegment(k, row.label, leftX, rowY, z, ICON_LABEL_FONT_SIZE, labelFont, COLOR_WARM_ORANGE)
-    addSegment(k, row.desc, leftX, rowY + ICON_LABEL_DESC_OFFSET_Y, z, ICON_LABEL_DESC_FONT_SIZE, descFont, COLOR_TEXT_GRAY)
+  const layoutRows = []
+  rows.forEach(row => {
+    const rowMeta = addLeftAlignedIconLabelRow(k, row.label, row.desc, cursorY, z, labelFont, descFont)
+    layoutRows.push(rowMeta)
+    cursorY += ICON_ROW_HEIGHT
   })
+  return { row1: layoutRows[0], row2: layoutRows[1] }
 }
 //
-// Draws the three small icon illustrations to the LEFT of TEXT_LEFT so text starts
-// at the same x as the narrative column above.
+// Renders a single icon+label+desc row LEFT-ALIGNED at
+// `LABEL_BLOCK_LEFT_X`. The icon hugs the column's left edge, the
+// label follows on the same line, and the desc sits on a second line
+// at the same X as the label.
 //
-function onDrawIconIllustrations(k, iconAnim) {
-  const iconX = TEXT_LEFT + ICON_DRAW_CX_OFFSET
+function addLeftAlignedIconLabelRow(k, label, desc, rowY, z, labelFont, descFont) {
+  //
+  // Icon centre sits half a radius right of the column left edge.
+  // Label / desc text use anchor 'left' starting just past the icon
+  // plus the label gap.
+  //
+  const iconCenterX = LABEL_BLOCK_LEFT_X + ICON_DRAW_R
+  const textLeftX = LABEL_BLOCK_LEFT_X + ICON_DRAW_R * 2 + ICON_LABEL_GAP
+  addSegment(k, label, textLeftX, rowY, z, ICON_LABEL_FONT_SIZE, labelFont, COLOR_WARM_ORANGE)
+  addSegment(k, desc, textLeftX, rowY + ICON_LABEL_DESC_OFFSET_Y, z, ICON_LABEL_DESC_FONT_SIZE, descFont, COLOR_TEXT_GRAY)
+  return { iconX: iconCenterX, iconY: rowY }
+}
+//
+// Draws the two small icon illustrations next to their centred
+// section label rows. Coordinates come from the description-block
+// layout descriptor so the icons always line up with the row text.
+//
+function onDrawIconIllustrations(k, iconAnim, descriptionLayout) {
+  const r = ICON_DRAW_R
   //
   // Icon 1: "Collect fragments" — animated sun-bunny sparkle glow
   //
-  drawFragmentIcon(k, iconX, ICON_START_Y + ICON_DRAW_R * 0.6, iconAnim.sparklePhase)
+  drawFragmentIcon(k, descriptionLayout.row1.iconX, descriptionLayout.row1.iconY + r * 0.6, iconAnim.sparklePhase)
   //
   // Icon 2: "Find the other you" — hero + anti-hero with electric connection
   //
-  drawTwoHeroesIcon(k, iconX, ICON_START_Y + ICON_ROW_HEIGHT + ICON_DRAW_R * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim)
+  drawTwoHeroesIcon(k, descriptionLayout.row2.iconX, descriptionLayout.row2.iconY + r * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim)
 }
 //
 // Icon 1: animated sun-bunny sparkle — outer glow + bright core pulse
@@ -683,7 +909,8 @@ function drawTwoHeroesIcon(k, cx, cy, iconAnim) {
   const r = ICON_DRAW_R
   const hh = r * 0.85
   //
-  // Wider spacing so the arc gap between the two sprites is clearly visible.
+  // Compact icon scale — stays small beside the label row, matching
+  // the original layout before the mistaken 96 px enlargement.
   //
   const spacing = r * 0.85
   const spSize = hh * 2.2
@@ -1083,7 +1310,7 @@ function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
 }
 //
 // Adds a text segment with 4-corner black outline (1px offset) then the colored text on top.
-// Used by addTextPanel and addIconLabels to give body text a readable dark stroke.
+// Used by addDescriptionBlock to give body text a readable dark stroke.
 //
 function addSegment(k, text, x, y, z, size, font, colorHex) {
   const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
@@ -1103,4 +1330,285 @@ function addSegment(k, text, x, y, z, size, font, colorHex) {
     getColor(k, colorHex),
     k.z(z)
   ])
+}
+//
+// Centred variant of addSegment — places the text + 4-corner outline
+// with anchor 'center' so the line sits at `(x, y)` by its midpoint.
+//
+function addCenteredSegment(k, text, x, y, z, size, font, colorHex) {
+  const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+  offsets.forEach(([dx, dy]) => {
+    k.add([
+      k.text(text, { size, font }),
+      k.pos(x + dx, y + dy),
+      k.anchor('center'),
+      k.color(0, 0, 0),
+      k.z(z - 1)
+    ])
+  })
+  return k.add([
+    k.text(text, { size, font }),
+    k.pos(x, y),
+    k.anchor('center'),
+    getColor(k, colorHex),
+    k.z(z)
+  ])
+}
+//
+// ────────── Animated overlay helpers (clouds / fireflies / grass / ambient sound) ──────────
+//
+// Each helper pair (`create…` + `update…` / `draw…`) builds its data
+// once on scene enter and then updates/draws it per frame. State stays
+// inside the returned field object — no module-level mutation.
+//
+
+/**
+ * Builds an array of drifting clouds. Each cloud uses the shared
+ * `draw-cloud-crown` primitive to bake a list of puff offsets. Per
+ * frame, `updateCloudField` advances each cloud's X and wraps it back
+ * to the left edge when it exits the right edge.
+ */
+function createCloudField() {
+  const w = MENU_BG_CANVAS_W
+  const spacing = w / CLOUD_COUNT
+  const clouds = []
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    addCloudPuff(clouds, spacing * i + spacing * 0.5 + (Math.random() - 0.5) * CLOUD_X_JITTER)
+  }
+  //
+  // Bridge row — extra puffs offset by half a slot so horizontal gaps
+  // between primary clouds stay filled while the band drifts.
+  //
+  const bridgeSpacing = w / CLOUD_BRIDGE_COUNT
+  for (let i = 0; i < CLOUD_BRIDGE_COUNT; i++) {
+    addCloudPuff(clouds, bridgeSpacing * i + bridgeSpacing * 0.5 + (Math.random() - 0.5) * CLOUD_X_JITTER)
+  }
+  return { clouds }
+}
+
+function updateCloudField(k, field) {
+  const dt = k.dt()
+  const w = MENU_BG_CANVAS_W
+  for (const cloud of field.clouds) {
+    cloud.x += cloud.driftSpeed * dt
+    //
+    // Wrap: when the cloud's left edge passes the right side of the
+    // canvas, teleport it back to just left of the canvas. Uses the
+    // cached `halfWidth` so the wrap looks symmetric.
+    //
+    if (cloud.x - cloud.halfWidth > w) {
+      cloud.x = -cloud.halfWidth
+      cloud.y = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+    }
+  }
+}
+
+function drawCloudField(k, field) {
+  const color = k.rgb(CLOUD_COLOR_R, CLOUD_COLOR_G, CLOUD_COLOR_B)
+  for (const cloud of field.clouds) {
+    for (const crown of cloud.crowns) {
+      k.drawCircle({
+        pos: k.vec2(cloud.x + crown.offsetX, cloud.y + crown.offsetY),
+        radius: cloud.crownSize * crown.sizeVariation,
+        color,
+        opacity: cloud.opacity * crown.opacityVariation * CLOUD_OPACITY_SCALE
+      })
+    }
+  }
+}
+
+/**
+ * Builds a wandering-firefly field. Each firefly has a 2D position,
+ * a velocity that periodically retargets to a new random direction,
+ * and a twinkle phase that modulates its alpha. Fireflies stay below
+ * the front-layer tree canopy (`FIREFLY_MIN_Y`) so they never fly
+ * higher than the visible trees.
+ */
+function createFireflyField() {
+  const fireflies = []
+  for (let i = 0; i < FIREFLY_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = FIREFLY_SPEED_MIN + Math.random() * FIREFLY_SPEED_RANGE
+    fireflies.push({
+      x: FIREFLY_MIN_X + Math.random() * (FIREFLY_MAX_X - FIREFLY_MIN_X),
+      y: FIREFLY_MIN_Y + Math.random() * (FIREFLY_MAX_Y - FIREFLY_MIN_Y),
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      targetVx: Math.cos(angle) * speed,
+      targetVy: Math.sin(angle) * speed,
+      speed,
+      dirChangeTimer: FIREFLY_DIR_CHANGE_INTERVAL_MIN + Math.random() * FIREFLY_DIR_CHANGE_INTERVAL_RANGE,
+      radius: FIREFLY_RADIUS_MIN + Math.random() * FIREFLY_RADIUS_RANGE,
+      twinkleFreq: FIREFLY_TWINKLE_FREQ_MIN + Math.random() * FIREFLY_TWINKLE_FREQ_RANGE,
+      twinklePhase: Math.random() * Math.PI * 2,
+      baseAlpha: FIREFLY_BASE_ALPHA_MIN + Math.random() * FIREFLY_BASE_ALPHA_RANGE
+    })
+  }
+  return { fireflies }
+}
+
+function updateFireflyField(k, field) {
+  const dt = k.dt()
+  for (const fly of field.fireflies) {
+    //
+    // Retarget direction periodically so the firefly wanders organically.
+    //
+    fly.dirChangeTimer -= dt
+    if (fly.dirChangeTimer <= 0) {
+      const angle = Math.random() * Math.PI * 2
+      fly.targetVx = Math.cos(angle) * fly.speed
+      fly.targetVy = Math.sin(angle) * fly.speed
+      fly.dirChangeTimer = FIREFLY_DIR_CHANGE_INTERVAL_MIN + Math.random() * FIREFLY_DIR_CHANGE_INTERVAL_RANGE
+    }
+    //
+    // Smooth velocity toward the target so direction changes feel
+    // floaty rather than jerky.
+    //
+    const lerp = Math.min(1, FIREFLY_TURN_SMOOTHNESS * dt)
+    fly.vx += (fly.targetVx - fly.vx) * lerp
+    fly.vy += (fly.targetVy - fly.vy) * lerp
+    fly.x += fly.vx * dt
+    fly.y += fly.vy * dt
+    //
+    // Bounce off the bounding box (sky band between the tree canopy
+    // and the horizon) so fireflies never rise above the trees and
+    // never sink below the ground.
+    //
+    if (fly.x < FIREFLY_MIN_X) { fly.x = FIREFLY_MIN_X; fly.vx = Math.abs(fly.vx); fly.targetVx = Math.abs(fly.targetVx) }
+    else if (fly.x > FIREFLY_MAX_X) { fly.x = FIREFLY_MAX_X; fly.vx = -Math.abs(fly.vx); fly.targetVx = -Math.abs(fly.targetVx) }
+    if (fly.y < FIREFLY_MIN_Y) { fly.y = FIREFLY_MIN_Y; fly.vy = Math.abs(fly.vy); fly.targetVy = Math.abs(fly.targetVy) }
+    else if (fly.y > FIREFLY_MAX_Y) { fly.y = FIREFLY_MAX_Y; fly.vy = -Math.abs(fly.vy); fly.targetVy = -Math.abs(fly.targetVy) }
+  }
+}
+
+function drawFireflyField(k, field) {
+  const time = k.time()
+  const color = k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B)
+  for (const fly of field.fireflies) {
+    //
+    // Twinkle: cosine wave remapped to [0.25, 1] so the firefly never
+    // disappears entirely (avoids strobe-like on/off flicker).
+    //
+    const cycle = 0.5 * (1 + Math.sin(time * fly.twinkleFreq + fly.twinklePhase))
+    const alpha = fly.baseAlpha * (0.25 + 0.75 * cycle)
+    //
+    // Soft outer glow + bright core — two concentric circles, the
+    // outer one wider but faint, the inner one solid.
+    //
+    k.drawCircle({
+      pos: k.vec2(fly.x, fly.y),
+      radius: fly.radius * FIREFLY_GLOW_RADIUS_MULT,
+      color,
+      opacity: alpha * 0.18
+    })
+    k.drawCircle({
+      pos: k.vec2(fly.x, fly.y),
+      radius: fly.radius,
+      color,
+      opacity: alpha
+    })
+  }
+}
+
+/**
+ * Builds the swaying grass field: a list of tufts, each tuft a cluster
+ * of blades clustered around the tuft centre. Tuft base Y is set to
+ * the BOTTOM of the black horizon strip so each blade visually grows
+ * out of the strip.
+ */
+function createGrassField() {
+  const grassY = MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT
+  const usableLeft = GRASS_TUFT_LEFT_INSET
+  const usableRight = MENU_BG_CANVAS_W - GRASS_TUFT_RIGHT_INSET
+  //
+  // Central horizontal band where the monster illustration stands —
+  // grass should not appear behind/around its feet.
+  //
+  const centerMin = CENTER_X - GRASS_CENTER_KEEPOUT_HALF
+  const centerMax = CENTER_X + GRASS_CENTER_KEEPOUT_HALF
+  const blades = []
+  let placed = 0
+  let attempts = 0
+  while (placed < GRASS_TUFT_COUNT && attempts < GRASS_TUFT_COUNT * 8) {
+    attempts++
+    const tuftCenter = usableLeft + Math.random() * (usableRight - usableLeft)
+    //
+    // Skip tufts that fall inside the centred monster keep-out band.
+    //
+    if (tuftCenter >= centerMin && tuftCenter <= centerMax) continue
+    const tuftWidth = GRASS_TUFT_WIDTH_MIN + Math.random() * GRASS_TUFT_WIDTH_RANGE
+    const bladeCount = GRASS_TUFT_BLADES_MIN + Math.floor(Math.random() * GRASS_TUFT_BLADES_RANGE)
+    for (let b = 0; b < bladeCount; b++) {
+      //
+      // Two random samples averaged ≈ triangular distribution: blades
+      // densest near tuft centre, sparser at edges.
+      //
+      const offsetT = (Math.random() + Math.random() - 1) * 0.5
+      const baseX = tuftCenter + offsetT * tuftWidth
+      blades.push(buildGrassBladeData({
+        baseX,
+        grassY,
+        scale: GRASS_BLADE_SCALE_MIN + Math.random() * GRASS_BLADE_SCALE_RANGE,
+        baseOpacity: GRASS_OPACITY,
+        baseR: GRASS_BASE_R,
+        baseG: GRASS_BASE_G,
+        baseB: GRASS_BASE_B
+      }))
+    }
+    placed++
+  }
+  //
+  // Sort shortest first so taller blades render on top of their tuft.
+  //
+  blades.sort((a, b) => a.height - b.height)
+  return { blades }
+}
+
+function drawGrassField(k, field) {
+  const time = k.time()
+  for (const blade of field.blades) {
+    //
+    // Wind sway: a single coherent low-frequency sine modulated by
+    // the blade's individual `swayAmount` and `swayOffset` so the
+    // whole patch reacts together but each blade has its own tempo.
+    //
+    const sway = Math.sin(time * (GRASS_WIND_FREQ + blade.swaySpeed * 0.6) + blade.swayOffset) * blade.swayAmount * GRASS_WIND_AMP
+    k.drawLine({
+      p1: k.vec2(blade.x1, blade.y1),
+      p2: k.vec2(blade.baseX2 + sway, blade.y2),
+      width: blade.width,
+      color: k.rgb(Math.round(blade.color.r), Math.round(blade.color.g), Math.round(blade.color.b)),
+      opacity: blade.opacity
+    })
+  }
+}
+//
+// Spawns one drifting cloud puff and appends it to the field array.
+// Wider `halfWidth` keeps neighbouring crowns overlapping so the band
+// reads as a continuous blanket without horizontal holes.
+//
+function addCloudPuff(clouds, x) {
+  const y = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
+  const cloud = buildCloudCrown({ x, y })
+  cloud.driftSpeed = CLOUD_DRIFT_SPEED_MIN + Math.random() * CLOUD_DRIFT_SPEED_RANGE
+  cloud.halfWidth = cloud.crownSize * CLOUD_HALF_WIDTH_MULT
+  clouds.push(cloud)
+}
+//
+// Schedules cricket bursts + occasional owl hoots while the ready
+// scene is active. Both call into the existing procedural sound
+// primitives in `utils/sound.js` so no new audio nodes are introduced.
+//
+function onUpdateAmbientSounds(k, ambient) {
+  const dt = k.dt()
+  ambient.cricketTimer -= dt
+  if (ambient.cricketTimer <= 0) {
+    Sound.playCricketSound(ambient.sound)
+    ambient.cricketTimer = CRICKET_INTERVAL_MIN + Math.random() * CRICKET_INTERVAL_RANGE
+  }
+  ambient.owlTimer -= dt
+  if (ambient.owlTimer <= 0) {
+    Sound.playOwlSound(ambient.sound)
+    ambient.owlTimer = OWL_INTERVAL_MIN + Math.random() * OWL_INTERVAL_RANGE
+  }
 }

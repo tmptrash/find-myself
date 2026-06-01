@@ -232,7 +232,7 @@ export function sceneMenu(k) {
     // Color progression: gray → brown (touch) → orange (time) → red (word)
     //
     const noSectionsComplete = !progress.touch?.completed && !progress.time?.completed && !progress.word?.completed
-    const heroBodyColor = progress.word?.completed ? "#E74C3C" : progress.time?.completed ? "#FF8C00" : progress.touch?.completed ? "#8B5A50" : "#656565"
+    const heroBodyColor = progress.word?.completed ? "#E74C3C" : progress.time?.completed ? "#FF8C00" : progress.touch?.completed ? CFG.visual.colors.sections.touch.body : "#656565"
     const heroInst = Hero.create({
       k,
       x: centerX,

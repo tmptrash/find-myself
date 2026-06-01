@@ -131,8 +131,8 @@ const CLOUD_COUNT = 38
 const CLOUD_BRIDGE_COUNT = 36
 const CLOUD_X_JITTER = 10
 const CLOUD_HALF_WIDTH_MULT = 1.35
-const CLOUD_TOP_Y = -10
-const CLOUD_BOTTOM_Y = 130
+const CLOUD_TOP_Y = -40
+const CLOUD_BOTTOM_Y = 95
 const CLOUD_DRIFT_SPEED_MIN = 6
 const CLOUD_DRIFT_SPEED_RANGE = 10
 //
@@ -332,7 +332,7 @@ const TEXT_LINE_HEIGHT = 34
 // rows — gives the two "Collect / Find" labels their own visual
 // breathing room below the description.
 //
-const DESCRIPTION_BLOCK_GAP = 40
+const DESCRIPTION_BLOCK_GAP = 30
 //
 // Section label icon — small glyph drawn to the LEFT of its label.
 // Both rows share the same left edge `LABEL_BLOCK_LEFT_X` so the

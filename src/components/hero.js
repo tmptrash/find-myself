@@ -35,6 +35,11 @@ const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
 const ANTIHERO_TAG = 'annihilation'
 //
+// Touch section completion tint — steel teal matching the anti-hero
+// body colour used across touch levels (`#5A8898`).
+//
+const TOUCH_SECTION_HERO_COLOR = CFG.visual.colors.sections.touch.body
+//
 // Landing dust particles
 //
 
@@ -2048,9 +2053,9 @@ export function onAnnihilationCollide(inst) {
                   })
                 })
               })
-            } else if (inst.currentLevel === 'level-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== '#8B5A50')) {
+            } else if (inst.currentLevel === 'level-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== TOUCH_SECTION_HERO_COLOR)) {
               //
-              // Special sequence for completing touch section: change hero color to pink and add arms
+              // Special sequence for completing touch section: change hero color to touch anti-hero teal and add arms
               //
               k.wait(1.5, () => {
                 //
@@ -2090,7 +2095,7 @@ export function onAnnihilationCollide(inst) {
                   //
                   // Update inst: change to touch section color and add arms
                   //
-                  const touchColor = '#8B5A50'
+                  const touchColor = TOUCH_SECTION_HERO_COLOR
                   inst.bodyColor = touchColor
                   inst.addArms = true
                   const touchColorClean = String(touchColor).replace('#', '')

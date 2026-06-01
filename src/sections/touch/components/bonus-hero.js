@@ -500,6 +500,13 @@ function onUpdate(inst) {
       const shouldBeCollidable = detected || heldOpen
       inst.platform.pos.y = shouldBeCollidable ? floatY + inst.collisionYOffset : inst.offScreenY
       inst.platform.pos.x = collisionCenterX
+      //
+      // Pop the log in as soon as the collider goes live while the hero
+      // is falling (or during the post-detect hold window) so the
+      // platform reads as solid on the frame of impact — not only after
+      // Kaplay marks the hero grounded one tick later.
+      //
+      shouldBeCollidable && (isFalling || inst.collidableHoldTimer > 0) && (inst.revealed = true)
     }
     //
     // Remember this frame's foot position so the next frame can detect a

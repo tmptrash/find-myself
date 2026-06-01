@@ -229,7 +229,12 @@ const ROCK_EDGE_MARGIN = 220
 // strip in the menu-bg composite (no extra lift — rocks REST on the
 // line rather than hovering above it).
 //
-const ROCK_BOTTOM_FACTOR = 0.72
+const ROCK_BOTTOM_FACTOR = 0.63
+//
+// Extra pixels to sink the rock centre downward so the silhouette
+// meets the black horizon strip before the clip rect slices it flat.
+//
+const ROCK_GROUND_SINK = 5
 //
 // Power used to bias the rock X sampling toward the outer edges of
 // the canvas. `Math.pow(Math.random(), n)` with n > 1 pushes the
@@ -611,7 +616,7 @@ function drawRocks(ctx) {
     reserved.push({ x: posX, halfWidth: radius * 1.6 })
     const verts = buildRockVertices(radius)
     const palette = buildRockPalette()
-    const canvasY = GROUND_Y - radius * ROCK_BOTTOM_FACTOR
+    const canvasY = GROUND_Y - radius * ROCK_BOTTOM_FACTOR + ROCK_GROUND_SINK
     ctx.save()
     //
     // Clip to the sky + horizon strip so the rock silhouette is

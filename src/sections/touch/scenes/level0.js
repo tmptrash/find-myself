@@ -2082,7 +2082,7 @@ export function sceneLevel0(k) {
     // Only visible when hero approaches from above (jumping from a bug)
     //
     const BONUS_PLATFORM_X = LEFT_MARGIN + 140
-    const BONUS_PLATFORM_Y = ANTIHERO_PLATFORM_Y + 10
+    const BONUS_PLATFORM_Y = ANTIHERO_PLATFORM_Y + 18
     const BONUS_PLATFORM_WIDTH = 80
     const bonusHeroInst = BonusHero.create({
       k,
@@ -2093,20 +2093,18 @@ export function sceneLevel0(k) {
       levelIndicator,
       sfx: sound,
       approachFromAbove: true,
+      revealDistance: 120,
       heroBodyColor,
       storageKey: 'touch.level0BonusCollected',
       //
       // The visible log is drawn centered on `x` with width 80 plus
-      // ~5.5 px of squashed endcaps on each side (~91 px on-screen). The
-      // collider must cover that whole span — earlier xOffset values
-      // shifted the collider well to the right of the painted log, so
-      // the left half had no collision under it and the hero tunneled
-      // straight through unless he landed exactly on the mini hero. The
-      // log itself is bumped to the antihero platform z-index so it
-      // reads as foreground geometry on top of the front-line trees.
+      // ~5.5 px of squashed endcaps on each side (~91 px on-screen).
+      // Keep the collider centered on `x` (same as level 2) so the hero
+      // lands on the painted log instead of tunneling through a shifted
+      // invisible box offset to the right.
       //
-      collisionWidth: 92,
-      platformCollisionXOffset: 60,
+      collisionWidth: 82,
+      platformCollisionXOffset: 0,
       platformCollisionYOffset: 9,
       platformZ: ANTIHERO_PLATFORM_Z_INDEX
     })

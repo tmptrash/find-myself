@@ -5,19 +5,26 @@ import { toCanvas } from '../../../utils/helper.js'
 // Farthest static phrase layer — behind bookshelf furniture, no motion
 //
 const STATIC_WORD_Z = CFG.visual.zIndex.wordStaticBgWords ?? CFG.visual.zIndex.background - 8
-const WORD_COUNT_MIN = 58
-const WORD_COUNT_MAX = 82
-const FONT_SIZE_MIN = 44
-const FONT_SIZE_MAX = 96
-const WORD_EDGE_MARGIN = 36
-const ROTATION_MIN_DEG = -22
-const ROTATION_MAX_DEG = 22
-const PHRASE_ALPHA_MIN = 0.09
-const PHRASE_ALPHA_MAX = 0.19
-const COLOR_MIX_MIN = 0.05
-const COLOR_MIX_MAX = 0.13
-const LETTER_CHANCE = 0.18
-const PHRASE_CHANCE = 0.22
+const ROW_X_MARGIN = 56
+const ROW_WORD_GAP_MIN = 40
+const CHAR_WIDTH_RATIO = 0.58
+const PHRASE_ALPHA_MIN = 0.24
+const PHRASE_ALPHA_MAX = 0.4
+const LETTER_CHANCE = 0.12
+const PHRASE_CHANCE = 0.34
+//
+// Stacked horizontal rows — larger type, wider vertical spacing, gap-aware layout
+//
+const ROW_BANDS = [
+  { yRatio: 0.1, sizeMin: 44, sizeMax: 56, wordsMin: 9, wordsMax: 12 },
+  { yRatio: 0.22, sizeMin: 58, sizeMax: 74, wordsMin: 7, wordsMax: 9 },
+  { yRatio: 0.34, sizeMin: 50, sizeMax: 64, wordsMin: 8, wordsMax: 10 },
+  { yRatio: 0.46, sizeMin: 76, sizeMax: 96, wordsMin: 5, wordsMax: 7 },
+  { yRatio: 0.58, sizeMin: 54, sizeMax: 70, wordsMin: 7, wordsMax: 9 },
+  { yRatio: 0.7, sizeMin: 68, sizeMax: 88, wordsMin: 6, wordsMax: 8 },
+  { yRatio: 0.82, sizeMin: 46, sizeMax: 58, wordsMin: 9, wordsMax: 11 },
+  { yRatio: 0.93, sizeMin: 40, sizeMax: 52, wordsMin: 10, wordsMax: 13 }
+]
 //
 // Introspective fragments — same tone as flying words / word pile
 //
@@ -47,37 +54,23 @@ const PHRASES = [
 const LETTERS = ['a', 'e', 'i', 'o', 'u', 'y', '?', '.', '—']
 
 /**
- * Bakes a static playfield word layer — subtle phrases frozen against the platform tint
+ * Bakes a full-screen static word layer — horizontal rows stacked at varied heights
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
  * @param {string} config.backgroundColor - Section background hex
  * @param {string} config.platformColor - Playfield platform hex
- * @param {number} config.sideWallWidth - Left/right wall width in pixels
- * @param {number} config.topPlatformHeight - Top platform height in pixels
- * @param {number} config.bottomPlatformHeight - Bottom platform height in pixels
  * @returns {Object} Static background words instance
  */
 export function create(config) {
-  const {
-    k,
-    backgroundColor,
-    platformColor,
-    sideWallWidth,
-    topPlatformHeight,
-    bottomPlatformHeight
-  } = config
-  const playLeft = sideWallWidth ?? 192
-  const playTop = topPlatformHeight ?? k.height() * 0.33
-  const playBottom = k.height() - (bottomPlatformHeight ?? k.height() * 0.12)
-  const playWidth = k.width() - playLeft * 2
-  const playHeight = playBottom - playTop
+  const { k, backgroundColor, platformColor } = config
+  const canvasW = k.width()
+  const canvasH = k.height()
   const bgHex = backgroundColor || CFG.visual.colors.background
   const pfHex = platformColor || CFG.visual.colors.platform
-  const wordCount = WORD_COUNT_MIN + Math.floor(Math.random() * (WORD_COUNT_MAX - WORD_COUNT_MIN + 1))
-  const placements = buildPlacements(wordCount, playWidth, playHeight, bgHex, pfHex)
-  const spriteKey = `word-static-bg-${k.width()}x${playHeight}-${bgHex.replace('#', '')}-${pfHex.replace('#', '')}-${Date.now()}`
-  const canvas = toCanvas({ width: playWidth, height: playHeight, pixelRatio: 1 }, (ctx) => {
-    ctx.clearRect(0, 0, playWidth, playHeight)
+  const placements = buildRowPlacements(canvasW, canvasH, bgHex, pfHex)
+  const spriteKey = `word-static-bg-rows-v3-${canvasW}x${canvasH}-${bgHex.replace('#', '')}-${Date.now()}`
+  const canvas = toCanvas({ width: canvasW, height: canvasH, pixelRatio: 1 }, (ctx) => {
+    ctx.clearRect(0, 0, canvasW, canvasH)
     placements.forEach((word) => drawWord(ctx, word))
   })
   k.loadSprite(spriteKey, canvas)
@@ -85,47 +78,94 @@ export function create(config) {
   canvas.height = 0
   const sprite = k.add([
     k.sprite(spriteKey),
-    k.pos(playLeft, playTop),
+    k.pos(0, 0),
     k.z(STATIC_WORD_Z),
     k.fixed()
   ])
-  return { k, sprite, playLeft, playTop, playWidth, playHeight }
+  return { k, sprite, canvasW, canvasH }
 }
 
 //
-// Scatters word placements across the full playfield height
+// Places horizontal rows one above another, each row with its own font size range
 //
-function buildPlacements(count, width, height, bgHex, pfHex) {
+function buildRowPlacements(width, height, bgHex, pfHex) {
   const placements = []
-  for (let i = 0; i < count; i++) {
-    const roll = Math.random()
-    const text = roll < LETTER_CHANCE
-      ? LETTERS[Math.floor(Math.random() * LETTERS.length)]
-      : roll < LETTER_CHANCE + PHRASE_CHANCE
-        ? PHRASES[Math.floor(Math.random() * PHRASES.length)]
-        : WORDS[Math.floor(Math.random() * WORDS.length)]
-    const size = FONT_SIZE_MIN + Math.random() * (FONT_SIZE_MAX - FONT_SIZE_MIN)
-    placements.push({
-      text,
-      x: WORD_EDGE_MARGIN + Math.random() * (width - WORD_EDGE_MARGIN * 2),
-      y: WORD_EDGE_MARGIN + Math.random() * (height - WORD_EDGE_MARGIN * 2),
-      rotation: (ROTATION_MIN_DEG + Math.random() * (ROTATION_MAX_DEG - ROTATION_MIN_DEG)) * Math.PI / 180,
-      size,
-      color: pickSubtleColor(bgHex, pfHex),
-      opacity: PHRASE_ALPHA_MIN + Math.random() * (PHRASE_ALPHA_MAX - PHRASE_ALPHA_MIN)
+  ROW_BANDS.forEach((band, rowIndex) => {
+    const targetCount = band.wordsMin + Math.floor(Math.random() * (band.wordsMax - band.wordsMin + 1))
+    const rowY = height * band.yRatio
+    const rowColor = pickRowColor(rowIndex, bgHex, pfHex)
+    const rowWords = []
+    for (let i = 0; i < targetCount; i++) {
+      rowWords.push(createRowWord(band))
+    }
+    const packed = packRowWords(rowWords, width)
+    packed.forEach((word) => {
+      placements.push({
+        ...word,
+        y: rowY,
+        color: rowColor,
+        opacity: PHRASE_ALPHA_MIN + Math.random() * (PHRASE_ALPHA_MAX - PHRASE_ALPHA_MIN)
+      })
     })
-  }
+  })
   return placements
 }
 
 //
-// Picks a fill barely lighter or darker than the platform playfield
+// Builds one label candidate for a horizontal row
 //
-function pickSubtleColor(bgHex, pfHex) {
-  const mix = COLOR_MIX_MIN + Math.random() * (COLOR_MIX_MAX - COLOR_MIX_MIN)
-  return Math.random() < 0.5
-    ? mixHex(pfHex, bgHex, mix)
-    : mixHex(pfHex, lightenHex(pfHex, 0.06), mix * 0.85)
+function createRowWord(band) {
+  const roll = Math.random()
+  const text = roll < LETTER_CHANCE
+    ? LETTERS[Math.floor(Math.random() * LETTERS.length)]
+    : roll < LETTER_CHANCE + PHRASE_CHANCE
+      ? PHRASES[Math.floor(Math.random() * PHRASES.length)]
+      : WORDS[Math.floor(Math.random() * WORDS.length)]
+  const size = band.sizeMin + Math.random() * (band.sizeMax - band.sizeMin)
+  return { text, size, rotation: 0 }
+}
+
+//
+// Packs row words left-to-right with minimum gaps; drops labels that would not fit
+//
+function packRowWords(rowWords, width) {
+  const usableW = width - ROW_X_MARGIN * 2
+  const fitted = []
+  let usedWidth = 0
+  for (const word of rowWords) {
+    const wordWidth = estimateTextWidth(word.text, word.size)
+    const gap = fitted.length > 0 ? ROW_WORD_GAP_MIN : 0
+    if (usedWidth + gap + wordWidth > usableW) continue
+    usedWidth += gap + wordWidth
+    fitted.push({ ...word, width: wordWidth })
+  }
+  if (fitted.length === 0) return []
+  const totalWidth = fitted.reduce((sum, w, i) => sum + w.width + (i > 0 ? ROW_WORD_GAP_MIN : 0), 0)
+  let cursorX = ROW_X_MARGIN + (usableW - totalWidth) / 2
+  return fitted.map((word, index) => {
+    const x = cursorX + word.width / 2
+    cursorX += word.width + (index < fitted.length - 1 ? ROW_WORD_GAP_MIN : 0)
+    return { text: word.text, size: word.size, rotation: word.rotation, x }
+  })
+}
+
+//
+// Approximate rendered width for monospace gap packing
+//
+function estimateTextWidth(text, size) {
+  return text.length * size * CHAR_WIDTH_RATIO
+}
+
+//
+// Muted burgundy readable on the void — lifted from floatingPhrase palette
+//
+function pickRowColor(rowIndex, bgHex, pfHex) {
+  const palette = CFG.visual.colors.floatingPhrase
+  if (palette?.length) {
+    const idx = Math.min(palette.length - 1, 2 + (rowIndex % (palette.length - 2)))
+    return lightenHex(palette[idx], 0.1 + (rowIndex % 3) * 0.05)
+  }
+  return lightenHex(mixHex(bgHex, pfHex, 0.62), 0.14)
 }
 
 //
@@ -134,7 +174,6 @@ function pickSubtleColor(bgHex, pfHex) {
 function drawWord(ctx, word) {
   ctx.save()
   ctx.translate(word.x, word.y)
-  ctx.rotate(word.rotation)
   ctx.font = `${word.size}px ${CFG.visual.fonts.regularFull.replace(/'/g, '')}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'

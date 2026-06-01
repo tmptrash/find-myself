@@ -71,14 +71,18 @@ const VINE_PHRASES = [
 //
 const VINE_COUNT_MIN = 6
 const VINE_COUNT_MAX = 10
-const VINE_X_RATIO_MIN = 0.04
-const VINE_X_RATIO_MAX = 0.96
+const VINE_X_RATIO_MIN = 0.03
+const VINE_X_RATIO_MAX = 0.97
+//
+// Horizontal slot jitter — keeps vines spread edge-to-edge with slight randomness
+//
+const VINE_SLOT_JITTER = 0.55
 const VINE_LENGTH_MIN = 0.38
 const VINE_LENGTH_MAX = 1
-const VINE_DRIFT_MIN = -44
-const VINE_DRIFT_MAX = 44
-const VINE_SPAN_RATIO_MIN = 0.1
-const VINE_SPAN_RATIO_MAX = 0.18
+const VINE_DRIFT_MIN = -36
+const VINE_DRIFT_MAX = 36
+const VINE_SPAN_RATIO_MIN = 0.11
+const VINE_SPAN_RATIO_MAX = 0.2
 const VINE_SAG_MIN = 0.52
 const VINE_SAG_MAX = 0.9
 const VINE_DEPTH_OPACITY_MIN = 0.38
@@ -95,20 +99,22 @@ const VINE_DEPTH_OPACITY_MAX = 0.62
  */
 export function create(config) {
   const { k, sideWallWidth, topPlatformHeight, bottomPlatformHeight } = config
-  const playLeft = sideWallWidth ?? 192
-  const playRight = k.width() - playLeft
   const playTop = topPlatformHeight ?? k.height() * 0.33
   const playBottom = k.height() - (bottomPlatformHeight ?? k.height() * 0.12)
-  const playWidth = playRight - playLeft
+  const playWidth = k.width()
   const playHeight = playBottom - playTop
+  const spanLeft = 0
   const vineCount = VINE_COUNT_MIN + Math.floor(Math.random() * (VINE_COUNT_MAX - VINE_COUNT_MIN + 1))
   const vines = []
   for (let index = 0; index < vineCount; index++) {
-    const layout = resolveVineLayout()
+    const slotCenter = (index + 0.5) / vineCount
+    const jitter = (Math.random() - 0.5) * (VINE_SLOT_JITTER / vineCount)
+    const xRatio = Math.min(VINE_X_RATIO_MAX, Math.max(VINE_X_RATIO_MIN, slotCenter + jitter))
+    const layout = resolveVineLayout(xRatio)
     vines.push(buildVine(
       layout,
       pickRandomPhrase(),
-      playLeft,
+      spanLeft,
       playWidth,
       playTop,
       playBottom,
@@ -135,10 +141,10 @@ export function create(config) {
 //
 // Picks arc (both ends on top platform) or hang (single top anchor) with random layout
 //
-function resolveVineLayout() {
+function resolveVineLayout(xRatio) {
   const length = VINE_LENGTH_MIN + Math.random() * (VINE_LENGTH_MAX - VINE_LENGTH_MIN)
   return {
-    xRatio: VINE_X_RATIO_MIN + Math.random() * (VINE_X_RATIO_MAX - VINE_X_RATIO_MIN),
+    xRatio,
     length,
     drift: VINE_DRIFT_MIN + Math.random() * (VINE_DRIFT_MAX - VINE_DRIFT_MIN),
     spanRatio: VINE_SPAN_RATIO_MIN + Math.random() * (VINE_SPAN_RATIO_MAX - VINE_SPAN_RATIO_MIN),

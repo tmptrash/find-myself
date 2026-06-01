@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -7,6 +7,7 @@ import * as FlyingWords from '../components/flying-words.js'
 import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
+import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -76,25 +77,13 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   //
   // Create message text
   //
-  const messageText = k.add([
-    k.text(message, {
-      size: 28,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, messageY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Blade color (steel blue)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
-  
+  const deathMsg = createOutlinedDeathMessage(k, { message, centerX, messageY })
   //
   // Animation state
   //
   const inst = {
     k,
-    messageText,
+    deathMsg,
     timer: 0,
     phase: 'fade_in',
     skipRequested: false
@@ -139,7 +128,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       //
       updateInterval.cancel()
       skipHandlers.forEach(h => h.cancel())
-      k.destroy(messageText)
+      deathMsg.destroy()
       //
       // Restart level
       //
@@ -152,7 +141,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       // Fade in message
       //
       const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = progress
+      deathMsg.setOpacity(progress)
       
       if (progress >= 1) {
         inst.phase = 'hold'
@@ -171,7 +160,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       // Fade out message
       //
       const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = 1 - progress
+      deathMsg.setOpacity(1 - progress)
       
       if (progress >= 1) {
         //
@@ -179,7 +168,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
         //
         updateInterval.cancel()
         skipHandlers.forEach(h => h.cancel())
-        k.destroy(messageText)
+        deathMsg.destroy()
         k.go("level-word.2")
       }
     }
@@ -225,7 +214,7 @@ export function sceneLevel2(k) {
     ]
     
     // Initialize level with heroes and gaps in platform
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
       k,
       levelName: 'level-word.2',
       levelNumber: 3,
@@ -278,7 +267,6 @@ export function sceneLevel2(k) {
       hero,
       currentLevel: 'level-word.2',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
-      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
       killerLetterCount: 3  // Level 2: 5 killer letters
@@ -290,6 +278,11 @@ export function sceneLevel2(k) {
     const wordPile = WordPile.create({
       k,
       customBounds: platformBounds
+    })
+    spawnWordBackgroundHeroes(k, {
+      hero,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH
     })
     
     //
@@ -326,7 +319,7 @@ export function sceneLevel2(k) {
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.visual.colors.platform,
+      color: platformColor,
       currentLevel: 'level-word.2',
       sfx: sound,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
@@ -338,7 +331,7 @@ export function sceneLevel2(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.visual.colors.platform,
+      color: platformColor,
       currentLevel: 'level-word.2',
       sfx: sound,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
@@ -369,7 +362,6 @@ export function sceneLevel2(k) {
     // Start blade animations after 1 second
     Blades.startAnimation(blades1)
     Blades.startAnimation(blades2)
-    const bladeProximityState = { cooldown: 0 }
     setupWordLevel2HoverTooltips(k, {
       levelIndicator,
       fpsCounter,
@@ -378,7 +370,14 @@ export function sceneLevel2(k) {
       blades1,
       blades2
     })
-    k.onUpdate(() => onUpdateBladeProximity(k, hero, [blades1, blades2], sound, bladeProximityState))
+    WordBladeProximity.create({
+      k,
+      hero,
+      bladeInsts: [blades1, blades2],
+      sound,
+      proximityRange: BLADE_PROXIMITY_RANGE,
+      rattleCooldown: BLADE_RATTLE_COOLDOWN
+    })
   })
 }
 
@@ -414,27 +413,4 @@ function setupWordLevel2HoverTooltips(k, ctx) {
       offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
     }]
   })
-}
-
-//
-// Plays metallic rattle when the hero is near blade letters
-//
-function onUpdateBladeProximity(k, heroInst, bladeInsts, sound, state) {
-  if (!heroInst?.character?.pos || !sound) return
-  state.cooldown -= k.dt()
-  if (state.cooldown > 0) return
-  const heroX = heroInst.character.pos.x
-  const heroY = heroInst.character.pos.y
-  let closest = BLADE_PROXIMITY_RANGE
-  bladeInsts.forEach(bladeInst => {
-    if (!bladeInst?.blade?.exists?.()) return
-    const dx = heroX - bladeInst.blade.pos.x
-    const dy = heroY - bladeInst.blade.pos.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    dist < closest && (closest = dist)
-  })
-  if (closest >= BLADE_PROXIMITY_RANGE) return
-  const proximity = 1 - closest / BLADE_PROXIMITY_RANGE
-  Sound.playBladeProximityRattle(sound, proximity)
-  state.cooldown = BLADE_RATTLE_COOLDOWN
 }

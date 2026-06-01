@@ -3,6 +3,18 @@ import { CFG as GLOBAL_CFG, deepMerge } from '../../cfg.js'
 // Word section local configuration
 // This config is merged with global CFG
 //
+/**
+ * Resolves per-level background and platform colors (deeper levels get darker)
+ * @param {string} levelName - Level id (e.g. 'level-word.2')
+ * @returns {{ background: string, platform: string }}
+ */
+export function getLevelColors(levelName) {
+  const levelEntry = CFG.visual.levelColors?.[levelName]
+  return {
+    background: levelEntry?.background ?? CFG.visual.colors.background,
+    platform: levelEntry?.platform ?? CFG.visual.colors.platform
+  }
+}
 export const WORD_CFG = {
   audio: {
     //
@@ -15,13 +27,61 @@ export const WORD_CFG = {
   },
   visual: {
     //
-    // Colors specific to word section
+    // Burgundy playfield — warm red field with steel-blue AAA blades.
     //
     colors: {
-      background: "#3E3E3E",         // Dark gray (foggy gloom)
-      platform: "#1A1A1A",           // Nearly black platforms
-      blades: "#6B8E9F",             // Steel blue blades (cold steel)
-      killerLetter: "#6B8E9F"        // Steel blue killer words (same as blades)
+      background: "#080606",         // Default — near-black void between bookshelves
+      platform: "#452028",           // Default / level 0 playfield
+      blades: "#6B8E9F",             // Steel blue AAA blades
+      killerLetter: "#6B8E9F",       // Steel blue — matches AAA blades
+      deathMessage: "#D05060",       // Bottom death subtitle (light red)
+      //
+      // Hanging vine letters — light red fill, black outline in word-hanging-vines.js
+      //
+      vineLetter: [
+        "#C84858",
+        "#D05868",
+        "#D86878",
+        "#E07888"
+      ],
+      backgroundHero: [              // Muted burgundy silhouettes
+        "#5A2830",
+        "#6A3038",
+        "#482028"
+      ],
+      //
+      // Drifting background phrase layers — red shades (thin outline in flying-words.js)
+      //
+      floatingPhrase: [
+        "#2A1018",
+        "#381420",
+        "#481828",
+        "#582030",
+        "#682838",
+        "#783040",
+        "#883848"
+      ]
+    },
+    //
+    // Per-level playfield darkness — each deeper level is darker than the last
+    //
+    levelColors: {
+      'level-word.0': { background: '#0A0808', platform: '#452028' },
+      'level-word.1': { background: '#080606', platform: '#3A1820' },
+      'level-word.2': { background: '#060404', platform: '#301018' },
+      'level-word.3': { background: '#040303', platform: '#260C14' },
+      'level-word.4': { background: '#020202', platform: '#1E080C' }
+    },
+    //
+    // Layer order: word pile and flying words behind large background heroes
+    //
+    zIndex: {
+      wordVoidBackground: -112,
+      wordStaticBgWords: -108,
+      wordWordPileFar: -72,
+      wordWordPileMid: -58,
+      wordFlyingWords: -45,
+      wordBackgroundHero: -32
     },
     //
     // Flying words/letters configuration for word section

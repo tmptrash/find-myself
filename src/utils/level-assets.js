@@ -91,21 +91,21 @@ async function loadTimeCityForLevel(k, sceneName) {
   if (sceneName === 'level-time.0') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL0_PLATFORM_BOTTOM, 'city-background',
-      false, false, true, 2.0, true, onProgress
+      false, false, true, 2.0, true, true, onProgress, true
     )
     return
   }
   if (sceneName === 'level-time.1') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL1_PLATFORM_BOTTOM, 'city-background-level1',
-      false, false, true, 2.0, true, onProgress
+      false, false, true, 2.0, true, true, onProgress, true
     )
     return
   }
   if (sceneName === 'level-time.2') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL2_PLATFORM_BOTTOM, 'city-background-level2',
-      false, true, true, 0.4, true, onProgress
+      false, true, true, 0.4, true, true, onProgress, true
     )
     return
   }
@@ -114,7 +114,7 @@ async function loadTimeCityForLevel(k, sceneName) {
     //
     // No trees and no sun for level 3 — keeps VRAM lower and matches the snowy aesthetic.
     //
-    await CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false, 0.25, false, false, onProgress)
+    await CityBackground.preloadCityBackground(k, groundLine, 'city-background-level3', false, true, false, 0.25, false, false, onProgress, true)
     //
     // Register city bg so it gets squashed when leaving time-3.
     //

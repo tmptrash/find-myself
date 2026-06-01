@@ -24,33 +24,33 @@ const FREQ_MAX = 1.5
 const MIX_MIN = 0.3
 const MIX_MAX = 0.7
 //
-// Depth layers configuration - 2 levels of depth
+// Depth layer templates — z resolved at create() so pile stays behind bg heroes
 //
-const DEPTH_LAYERS = [
+const DEPTH_LAYER_TEMPLATES = [
   {
     name: 'far_back',
-    zIndex: -100,
-    minSize: 100,
-    maxSize: 180,
+    zKey: 'wordWordPileFar',
+    zFallback: -72,
+    minSize: 68,
+    maxSize: 105,
     opacity: 1.0,
-    color: '#3B3B3B',
-    outlineColor: null,
-    outlineOpacity: 0,
-    count: 37,
+    colorIndex: 0,
+    maxColorIndex: 2,
+    count: 18,
     letterRatio: 0,
     blurred: true,
     blurLevel: 'heavy'
   },
   {
     name: 'mid_depth',
-    zIndex: -50,
-    minSize: 90,
-    maxSize: 140,
+    zKey: 'wordWordPileMid',
+    zFallback: -58,
+    minSize: 78,
+    maxSize: 115,
     opacity: 1.0,
-    color: '#4A4A4A',
-    outlineColor: '#3A3A3A',
-    outlineOpacity: 0.8,
-    count: 10,
+    colorIndex: 2,
+    maxColorIndex: 4,
+    count: 6,
     letterRatio: 0,
     blurred: true,
     blurLevel: 'medium'
@@ -82,9 +82,10 @@ export function create(config) {
   //
   // Generate word data for all layers
   //
+  const depthLayers = resolveDepthLayers()
   const wordDataLayers = []
   
-  DEPTH_LAYERS.forEach((layerConfig, layerIndex) => {
+  depthLayers.forEach((layerConfig, layerIndex) => {
     const layerPositions = []
     const layerWordCount = layerCounts?.[layerIndex] ?? layerConfig.count
     for (let i = 0; i < layerWordCount; i++) {
@@ -213,13 +214,25 @@ function generateWordData(layerConfig, width, height, widthSegment) {
     rotation,
     size,
     zIndex,
-    color: layerConfig.color,
+    color: pickLayerColor(layerConfig),
     opacity: layerConfig.opacity * textOpacityMultiplier,
     outlineColor: layerConfig.outlineColor,
     outlineOpacity: layerConfig.outlineOpacity * blurOpacityMultiplier,
     hasOutline: layerConfig.outlineColor !== null,
     blurLevel
   }
+}
+
+//
+// Resolves a red phrase shade for a depth layer from section config
+//
+function pickLayerColor(layerConfig) {
+  const palette = CFG.visual.colors.floatingPhrase
+  if (!palette?.length) return CFG.visual.colors.platform
+  const start = layerConfig.colorIndex ?? 0
+  const end = Math.min(palette.length - 1, layerConfig.maxColorIndex ?? start)
+  const idx = start + Math.floor(Math.random() * Math.max(1, end - start + 1))
+  return palette[idx] ?? palette[start]
 }
 
 /**
@@ -311,6 +324,22 @@ function onUpdate(inst) {
     layer.dt = performance.now() / (600 * (i + .7))
     layer.sprite.pos.x = layer.baseX + Math.cos(layer.dt) * 10
     layer.sprite.pos.y = layer.baseY + Math.sin(layer.dt) * 15
+  })
+}
+
+//
+// Builds depth layers with z strictly behind large background heroes
+//
+function resolveDepthLayers() {
+  const heroZ = CFG.visual.zIndex.wordBackgroundHero ?? -32
+  return DEPTH_LAYER_TEMPLATES.map((template) => {
+    const configuredZ = CFG.visual.zIndex[template.zKey]
+    const zIndex = Math.min(
+      configuredZ ?? template.zFallback,
+      heroZ - (template.name === 'far_back' ? 18 : 10)
+    )
+    const { zKey, zFallback, ...layerConfig } = template
+    return { ...layerConfig, zIndex }
   })
 }
 

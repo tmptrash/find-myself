@@ -15,7 +15,7 @@ import {
   MENU_BG_CANVAS_W
 } from '../utils/menu-bg-generator.js'
 import { buildCloudCrown } from '../utils/draw-cloud-crown.js'
-import { buildGrassBladeData } from '../utils/draw-grass-blade.js'
+import { createSwayingGrassField, drawSwayingGrassField } from '../utils/swaying-grass-field.js'
 
 //
 // Hint flicker — pinned at the very bottom of the screen so the
@@ -177,45 +177,11 @@ const FIREFLY_COLOR_R = 244
 const FIREFLY_COLOR_G = 192
 const FIREFLY_COLOR_B = 96
 //
-// Swaying grass — short blades growing from inside the black horizon
-// strip so the strip reads as soil they emerge from. Each tuft is a
-// cluster of blades that all sway with the same wind phase but their
-// own slight offsets, so the patch reads as a single piece of grass
-// reacting to a breeze.
-//
-const GRASS_TUFT_COUNT = 36
-const GRASS_TUFT_BLADES_MIN = 10
-const GRASS_TUFT_BLADES_RANGE = 14
-const GRASS_TUFT_WIDTH_MIN = 18
-const GRASS_TUFT_WIDTH_RANGE = 22
-const GRASS_TUFT_LEFT_INSET = 30
-const GRASS_TUFT_RIGHT_INSET = 30
-//
 // Grass is excluded from the central horizontal band where the
 // monster illustration stands (matches the keep-out used by rocks /
 // mushrooms in `menu-bg-generator.js`).
 //
 const GRASS_CENTER_KEEPOUT_HALF = 400
-const GRASS_BLADE_SCALE_MIN = 0.45
-const GRASS_BLADE_SCALE_RANGE = 0.3
-//
-// Grass base colour — the green tone Touch L0 uses for its
-// around-rocks grass (`addGrassAroundRocks`). Keeps the ready scene
-// chromatically tied to the very first level the player enters.
-//
-const GRASS_BASE_R = 60
-const GRASS_BASE_G = 85
-const GRASS_BASE_B = 40
-const GRASS_OPACITY = 0.92
-//
-// Wind sweeping the grass patch — a single low-frequency sine wave
-// scaled per blade by its own `swayAmount`. Yields a coherent gusty
-// motion across the whole horizon rather than independent random
-// flickering per blade.
-//
-const GRASS_WIND_FREQ = 0.45
-const GRASS_WIND_AMP = 1.0
-//
 // Cricket + owl ambient sounds — random intervals so the night soundscape
 // stays alive but never feels mechanical. Cricket bursts trigger every
 // few seconds; owl hoots are sparse and atmospheric.
@@ -448,8 +414,11 @@ export function sceneReady(k) {
     // Swaying grass tufts along the horizon strip — short blades
     // gently leaning with a coherent wind sine.
     //
-    const grassField = createGrassField()
-    k.add([k.pos(0, 0), k.z(Z_GRASS), { draw() { drawGrassField(k, grassField) } }])
+    const grassField = createSwayingGrassField({
+      centerX: CENTER_X,
+      centerKeepoutHalf: GRASS_CENTER_KEEPOUT_HALF
+    })
+    k.add([k.pos(0, 0), k.z(Z_GRASS), { draw() { drawSwayingGrassField(k, grassField) } }])
     //
     // Ambient cricket + owl sounds — random intervals scheduled by
     // local timer state. Sounds stay silent until the first user
@@ -1510,83 +1479,6 @@ function drawFireflyField(k, field) {
   }
 }
 
-/**
- * Builds the swaying grass field: a list of tufts, each tuft a cluster
- * of blades clustered around the tuft centre. Tuft base Y is set to
- * the BOTTOM of the black horizon strip so each blade visually grows
- * out of the strip.
- */
-function createGrassField() {
-  const grassY = MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT
-  const usableLeft = GRASS_TUFT_LEFT_INSET
-  const usableRight = MENU_BG_CANVAS_W - GRASS_TUFT_RIGHT_INSET
-  //
-  // Central horizontal band where the monster illustration stands —
-  // grass should not appear behind/around its feet.
-  //
-  const centerMin = CENTER_X - GRASS_CENTER_KEEPOUT_HALF
-  const centerMax = CENTER_X + GRASS_CENTER_KEEPOUT_HALF
-  const blades = []
-  let placed = 0
-  let attempts = 0
-  while (placed < GRASS_TUFT_COUNT && attempts < GRASS_TUFT_COUNT * 8) {
-    attempts++
-    const tuftCenter = usableLeft + Math.random() * (usableRight - usableLeft)
-    //
-    // Skip tufts that fall inside the centred monster keep-out band.
-    //
-    if (tuftCenter >= centerMin && tuftCenter <= centerMax) continue
-    const tuftWidth = GRASS_TUFT_WIDTH_MIN + Math.random() * GRASS_TUFT_WIDTH_RANGE
-    const bladeCount = GRASS_TUFT_BLADES_MIN + Math.floor(Math.random() * GRASS_TUFT_BLADES_RANGE)
-    for (let b = 0; b < bladeCount; b++) {
-      //
-      // Two random samples averaged ≈ triangular distribution: blades
-      // densest near tuft centre, sparser at edges.
-      //
-      const offsetT = (Math.random() + Math.random() - 1) * 0.5
-      const baseX = tuftCenter + offsetT * tuftWidth
-      blades.push(buildGrassBladeData({
-        baseX,
-        grassY,
-        scale: GRASS_BLADE_SCALE_MIN + Math.random() * GRASS_BLADE_SCALE_RANGE,
-        baseOpacity: GRASS_OPACITY,
-        baseR: GRASS_BASE_R,
-        baseG: GRASS_BASE_G,
-        baseB: GRASS_BASE_B
-      }))
-    }
-    placed++
-  }
-  //
-  // Sort shortest first so taller blades render on top of their tuft.
-  //
-  blades.sort((a, b) => a.height - b.height)
-  return { blades }
-}
-
-function drawGrassField(k, field) {
-  const time = k.time()
-  for (const blade of field.blades) {
-    //
-    // Wind sway: a single coherent low-frequency sine modulated by
-    // the blade's individual `swayAmount` and `swayOffset` so the
-    // whole patch reacts together but each blade has its own tempo.
-    //
-    const sway = Math.sin(time * (GRASS_WIND_FREQ + blade.swaySpeed * 0.6) + blade.swayOffset) * blade.swayAmount * GRASS_WIND_AMP
-    k.drawLine({
-      p1: k.vec2(blade.x1, blade.y1),
-      p2: k.vec2(blade.baseX2 + sway, blade.y2),
-      width: blade.width,
-      color: k.rgb(Math.round(blade.color.r), Math.round(blade.color.g), Math.round(blade.color.b)),
-      opacity: blade.opacity
-    })
-  }
-}
-//
-// Spawns one drifting cloud puff and appends it to the field array.
-// Wider `halfWidth` keeps neighbouring crowns overlapping so the band
-// reads as a continuous blanket without horizontal holes.
-//
 function addCloudPuff(clouds, x) {
   const y = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
   const cloud = buildCloudCrown({ x, y })

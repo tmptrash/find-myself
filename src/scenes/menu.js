@@ -10,6 +10,7 @@ import * as Particles from "../utils/particles.js"
 import * as Cursor from "../utils/cursor.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { renderHintWithEnter } from "../utils/touch-tap-button.js"
+import { createSwayingGrassField, drawSwayingGrassField } from '../utils/swaying-grass-field.js'
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -71,10 +72,6 @@ const MENU_ANTIHERO_HOVER_LERP = 8
 //
 // Green checkmark displayed on completed anti-heroes when hovered
 //
-const CHECKMARK_BG_R = 0
-const CHECKMARK_BG_G = 0
-const CHECKMARK_BG_B = 0
-const CHECKMARK_BG_RADIUS_SCALE = 0.62
 const CHECKMARK_COLOR_R = 90
 const CHECKMARK_COLOR_G = 210
 const CHECKMARK_COLOR_B = 100
@@ -576,6 +573,10 @@ export function sceneMenu(k) {
     })
     
     //
+    // Swaying grass along the menu-bg horizon (same wind motion as ready scene)
+    //
+    const grassField = createSwayingGrassField({ centerX })
+    //
     // Scene instance with all state
     //
     const inst = {
@@ -585,7 +586,8 @@ export function sceneMenu(k) {
       hero,
       sound,
       particlesBg,
-      stars,  // Add stars to instance
+      stars,
+      grassField,
       title: createTitle(k, centerX, centerY, radius),
       antiHeroes,
       sectionLabels,
@@ -1486,7 +1488,7 @@ function createStars(k, count) {
  * @param {Object} inst - Scene instance
  */
 function drawScene(inst) {
-  const { k, hero, hoveredAntiHero, particlesBg, stars, arrows, centerX, centerY, antiHeroes, sectionLabels, progress } = inst
+  const { k, hero, hoveredAntiHero, particlesBg, stars, grassField, arrows, centerX, centerY, antiHeroes, sectionLabels, progress } = inst
   
   //
   // Get gray color from first anti-hero (same as inactive anti-heroes use)
@@ -1500,6 +1502,10 @@ function drawScene(inst) {
   // Draw menu background image (darkened)
   //
   drawMenuBackground(inst)
+  //
+  // Swaying grass on the horizon strip
+  //
+  drawSwayingGrassField(k, grassField)
   
   //
   // Draw stars with twinkling effect
@@ -1923,16 +1929,6 @@ function drawCompletedCheckmarkFront(k, inst) {
   const s = CHECKMARK_SIZE * pulse
   const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
   const op = CHECKMARK_OPACITY
-  const bgColor = k.rgb(CHECKMARK_BG_R, CHECKMARK_BG_G, CHECKMARK_BG_B)
-  //
-  // Black circle behind the checkmark for contrast on bright anti-hero sprites
-  //
-  k.drawCircle({
-    pos: k.vec2(cx, cy),
-    radius: s * CHECKMARK_BG_RADIUS_SCALE,
-    color: bgColor,
-    opacity: op
-  })
   //
   // Two lines forming a ✓: short down-right stroke, then long up-right stroke.
   // A filled circle at the junction ensures no gap appears when the pulse animates.

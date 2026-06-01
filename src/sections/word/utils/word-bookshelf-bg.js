@@ -12,8 +12,7 @@ const FLOOR_SHELF_COUNT = 3
 const FLOOR_SHELF_SCALE_MIN = 1.9
 const FLOOR_SHELF_SCALE_MAX = 2.5
 const FLOOR_SHELF_X_POSITIONS = [0.14, 0.5, 0.86]
-const FLOOR_SHELF_OPACITY_MIN = 0.22
-const FLOOR_SHELF_OPACITY_MAX = 0.38
+const FLOOR_SHELF_OPACITY = 1
 //
 // Alternate tilt directions so shelves lean in different ways
 //
@@ -65,11 +64,10 @@ export function create(config) {
   const playAreaWidth = k.width() - SIDE_WALL_WIDTH * 2
   const palette = buildPalette(bgColor, CFG.visual.colors.platform)
   const placements = buildPlacements(playAreaLeft, playAreaWidth, floorY)
-  const spriteKey = `word-bg-bookshelves-gray-v3-${k.width()}x${k.height()}-${bgColor.replace('#', '')}`
+  const spriteKey = `word-bg-bookshelves-gray-v5-${k.width()}x${k.height()}-${bgColor.replace('#', '')}`
   if (!k.getSprite(spriteKey)) {
     const canvas = toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, k.width(), k.height())
+      ctx.clearRect(0, 0, k.width(), k.height())
       placements.forEach((placement) => drawBookshelfOnFloor(ctx, placement, palette))
     })
     k.loadSprite(spriteKey, canvas)
@@ -100,7 +98,7 @@ function buildPlacements(playAreaLeft, playAreaWidth, floorY) {
       y: floorY,
       scale: FLOOR_SHELF_SCALE_MIN + rand() * (FLOOR_SHELF_SCALE_MAX - FLOOR_SHELF_SCALE_MIN),
       angle: angleSign * angleDeg * Math.PI / 180,
-      opacity: FLOOR_SHELF_OPACITY_MIN + rand() * (FLOOR_SHELF_OPACITY_MAX - FLOOR_SHELF_OPACITY_MIN),
+      opacity: FLOOR_SHELF_OPACITY,
       seed: Math.floor(i * 137 + rand() * 50)
     })
   }
@@ -128,16 +126,16 @@ function buildPalette(bgHex, platformHex) {
   const platform = platformHex || CFG.visual.colors.platform
   return {
     bg,
-    frame: mixHex(platform, bg, 0.35),
-    stroke: mixHex(platform, bg, 0.55),
-    wood: mixHex(bg, platform, 0.18),
-    woodDark: mixHex(platform, bg, 0.48),
-    woodLight: mixHex(bg, platform, 0.08),
-    shelf: mixHex(platform, bg, 0.42),
+    frame: mixHex(platform, bg, 0.18),
+    stroke: mixHex(platform, bg, 0.38),
+    wood: mixHex(bg, platform, 0.32),
+    woodDark: mixHex(platform, bg, 0.32),
+    woodLight: mixHex(bg, platform, 0.22),
+    shelf: mixHex(platform, bg, 0.24),
     books: [
-      mixHex(bg, platform, 0.12),
-      mixHex(bg, platform, 0.28),
-      mixHex(platform, bg, 0.22)
+      mixHex(bg, platform, 0.22),
+      mixHex(bg, platform, 0.38),
+      mixHex(platform, bg, 0.14)
     ]
   }
 }
@@ -204,13 +202,10 @@ function drawBook(ctx, x, y, w, h, shade, palette) {
   ctx.stroke()
   ctx.strokeStyle = palette.woodLight
   ctx.lineWidth = 1.5
-  ctx.save()
-  ctx.globalAlpha *= 0.14
   ctx.beginPath()
   ctx.moveTo(x + w * 0.35, y + 5)
   ctx.lineTo(x + w * 0.35, y + h - 5)
   ctx.stroke()
-  ctx.restore()
 }
 
 //
@@ -242,7 +237,6 @@ function drawBookshelf(ctx, x, y, scale, seed, palette) {
   BOOK_ROWS[2].forEach((book) => drawBook(ctx, book.x, book.y, book.w, book.h, book.shade, palette))
   ctx.strokeStyle = palette.woodLight
   ctx.lineWidth = 2
-  ctx.globalAlpha = 0.18
   ctx.beginPath()
   ctx.moveTo(18, 18)
   ctx.lineTo(130, 18)
@@ -250,7 +244,6 @@ function drawBookshelf(ctx, x, y, scale, seed, palette) {
   ctx.lineTo(128, 176)
   ctx.stroke()
   ctx.strokeStyle = palette.woodDark
-  ctx.globalAlpha = 0.28
   const rand = seededRandom(seed)
   for (let i = 0; i < SCRATCH_COUNT; i++) {
     const sx = 18 + rand() * 110

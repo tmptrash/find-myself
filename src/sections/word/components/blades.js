@@ -32,6 +32,13 @@ const FLOOR_BLADE_PLATFORM_SINK = 12
 const VIBRATION_AMPLITUDE = 0.3  // Degrees of subtle vibration
 const VIBRATION_SPEED = 20  // High frequency vibration (realistic metal)
 const MICRO_SHAKE = 0.2  // Tiny position shifts in pixels
+//
+// Hero proximity — letters stretch upward and widen slightly when approached
+//
+const PROXIMITY_STRETCH_Y = 0.22
+const PROXIMITY_STRETCH_X = 0.1
+const PROXIMITY_LERP_SPEED = 9
+const PROXIMITY_VISIBLE_OPACITY = 0.06
 
 export const ORIENTATIONS = {
   FLOOR: 'floor',
@@ -217,7 +224,9 @@ export function create(config) {
     glintLetter: 0,  // Will be set when glint starts (left or right 'A')
     disableAnimation,  // Store animation flag
     isLifted: false,  // True when blade is retracting/disappearing (stops glint)
-    isRushing: false  // Horizontal chase trap overrides vibration and drives baseX
+    isRushing: false,  // Horizontal chase trap overrides vibration and drives baseX
+    proximityLevel: 0,
+    proximityStretchY: 0
   }
 
   // Setup collision detection with hero (works even when invisible)
@@ -233,9 +242,23 @@ export function create(config) {
   //
   if (!disableAnimation) {
     blade.onUpdate(() => updateLivingAnimation(inst))
+  } else {
+    blade.onUpdate(() => applyProximityScale(inst))
   }
 
   return inst
+}
+
+/**
+ * Smoothly approaches target proximity (0 far, 1 at blade) for stretch visual
+ * @param {Object} inst - Blades instance
+ * @param {number} targetProximity - Target proximity level 0–1
+ */
+export function updateProximityVisual(inst, targetProximity) {
+  if (!inst?.blade?.exists?.()) return
+  const dt = inst.k.dt()
+  const t = Math.min(1, PROXIMITY_LERP_SPEED * dt)
+  inst.proximityLevel += (targetProximity - inst.proximityLevel) * t
 }
 
 /**
@@ -309,6 +332,42 @@ export function handleCollision(inst, currentLevel) {
   Hero.death(inst.hero, () => inst.k.go(currentLevel))
 }
 
+//
+// Stretches AAA letters when the hero is nearby — wider and taller (floor: grows upward)
+//
+function applyProximityScale(inst) {
+  const { blade, k, orientation, baseScale, baseY, baseX, bladeHeight } = inst
+  if (!blade?.exists?.()) return
+  const offsetX = inst.animOffsetX ?? 0
+  const offsetY = inst.animOffsetY ?? 0
+  if (blade.opacity < PROXIMITY_VISIBLE_OPACITY) {
+    blade.scale = k.vec2(baseScale, baseScale)
+    blade.pos.x = baseX + offsetX
+    blade.pos.y = baseY + offsetY
+    return
+  }
+  const p = inst.proximityLevel ?? 0
+  const sx = baseScale * (1 + p * PROXIMITY_STRETCH_X)
+  const sy = baseScale * (1 + p * PROXIMITY_STRETCH_Y)
+  blade.scale = k.vec2(sx, sy)
+  if (inst.disableAnimation) {
+    blade.pos.x = baseX + offsetX
+    return
+  }
+  if (orientation === ORIENTATIONS.FLOOR) {
+    const stretchUp = (sy / baseScale - 1) * bladeHeight * 0.42
+    blade.pos.x = baseX + offsetX
+    blade.pos.y = baseY + offsetY - stretchUp
+  } else if (orientation === ORIENTATIONS.CEILING) {
+    const stretchDown = (sy / baseScale - 1) * bladeHeight * 0.42
+    blade.pos.x = baseX + offsetX
+    blade.pos.y = baseY + offsetY + stretchDown
+  } else {
+    blade.pos.x = baseX + offsetX
+    blade.pos.y = baseY + offsetY
+  }
+}
+
 /**
  * Update living animation for blades (realistic metal vibration with glints)
  * @param {Object} inst - Blade instance
@@ -323,6 +382,7 @@ function updateLivingAnimation(inst) {
     inst.blade.pos.y = inst.baseY
     inst.glintDrawer && (inst.glintDrawer.pos.x = inst.baseX)
     inst.glintDrawer && (inst.glintDrawer.pos.y = inst.baseY)
+    applyProximityScale(inst)
     return
   }
   const { blade, k, orientation, baseRotation, sfx, disableAnimation } = inst
@@ -377,6 +437,9 @@ function updateLivingAnimation(inst) {
   blade.angle = baseRotation + vibration
   blade.pos.x = inst.baseX + microShakeX
   blade.pos.y = inst.baseY + microShakeY
+  inst.animOffsetX = microShakeX
+  inst.animOffsetY = microShakeY
+  applyProximityScale(inst)
   
   //
   // Light glint system (periodic light reflections)

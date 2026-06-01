@@ -72,7 +72,7 @@ export function create() {
   // Create master gain for clock destruction sound
   //
   const clockDestroyGain = ctx.createGain()
-  clockDestroyGain.gain.value = 0.5
+  clockDestroyGain.gain.value = 0.88
   clockDestroyGain.connect(ctx.destination)
 
   return {
@@ -2875,56 +2875,74 @@ export function playClockDestroySound(instance) {
   const creakFilter = instance.audioContext.createBiquadFilter()
   const creakGain = instance.audioContext.createGain()
   creak.type = 'sawtooth'
-  creak.frequency.setValueAtTime(260, now)
-  creak.frequency.exponentialRampToValueAtTime(70, now + 0.65)
+  creak.frequency.setValueAtTime(320, now)
+  creak.frequency.exponentialRampToValueAtTime(52, now + 0.85)
   creakFilter.type = 'bandpass'
-  creakFilter.frequency.setValueAtTime(180, now)
-  creakFilter.Q.value = 9
+  creakFilter.frequency.setValueAtTime(220, now)
+  creakFilter.frequency.exponentialRampToValueAtTime(90, now + 0.85)
+  creakFilter.Q.value = 11
   creakGain.gain.setValueAtTime(0.001, now)
-  creakGain.gain.exponentialRampToValueAtTime(0.28, now + 0.06)
-  creakGain.gain.setValueAtTime(0.28, now + 0.35)
-  creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65)
+  creakGain.gain.exponentialRampToValueAtTime(0.42, now + 0.05)
+  creakGain.gain.setValueAtTime(0.42, now + 0.45)
+  creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85)
   creak.connect(creakFilter)
   creakFilter.connect(creakGain)
   creakGain.connect(instance.clockDestroyGain)
   creak.start(now)
-  creak.stop(now + 0.65)
+  creak.stop(now + 0.85)
   //
-  // Sharp crack / breaking wood: short noise burst through low-pass filter
+  // Dissonant undertone — detuned triangle adds unease beneath the creak
   //
-  const bufferSize = Math.floor(instance.audioContext.sampleRate * 0.22)
+  const dread = instance.audioContext.createOscillator()
+  const dreadGain = instance.audioContext.createGain()
+  dread.type = 'triangle'
+  dread.frequency.setValueAtTime(146, now)
+  dread.frequency.exponentialRampToValueAtTime(38, now + 1.0)
+  dreadGain.gain.setValueAtTime(0.001, now)
+  dreadGain.gain.exponentialRampToValueAtTime(0.36, now + 0.08)
+  dreadGain.gain.exponentialRampToValueAtTime(0.001, now + 1.05)
+  dread.connect(dreadGain)
+  dreadGain.connect(instance.clockDestroyGain)
+  dread.start(now)
+  dread.stop(now + 1.05)
+  //
+  // Sharp crack / splintering glass: longer noise burst through resonant bandpass
+  //
+  const bufferSize = Math.floor(instance.audioContext.sampleRate * 0.38)
   const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
   const crackData = buffer.getChannelData(0)
   for (let i = 0; i < bufferSize; i++) {
-    crackData[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufferSize) * 18)
+    crackData[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufferSize) * 11)
   }
   const crackSrc = instance.audioContext.createBufferSource()
   crackSrc.buffer = buffer
-  const crackLp = instance.audioContext.createBiquadFilter()
-  crackLp.type = 'lowpass'
-  crackLp.frequency.setValueAtTime(700, now + 0.08)
+  const crackBp = instance.audioContext.createBiquadFilter()
+  crackBp.type = 'bandpass'
+  crackBp.frequency.setValueAtTime(920, now + 0.06)
+  crackBp.frequency.exponentialRampToValueAtTime(180, now + 0.42)
+  crackBp.Q.value = 2.4
   const crackGain = instance.audioContext.createGain()
-  crackGain.gain.setValueAtTime(0.45, now + 0.08)
-  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32)
-  crackSrc.connect(crackLp)
-  crackLp.connect(crackGain)
+  crackGain.gain.setValueAtTime(0.72, now + 0.06)
+  crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.48)
+  crackSrc.connect(crackBp)
+  crackBp.connect(crackGain)
   crackGain.connect(instance.clockDestroyGain)
-  crackSrc.start(now + 0.08)
+  crackSrc.start(now + 0.06)
   //
   // Deep sub-bass thud: rumbling sine that fades into nothing
   //
   const thud = instance.audioContext.createOscillator()
   const thudGain = instance.audioContext.createGain()
   thud.type = 'sine'
-  thud.frequency.setValueAtTime(52, now + 0.1)
-  thud.frequency.exponentialRampToValueAtTime(28, now + 0.6)
-  thudGain.gain.setValueAtTime(0.001, now + 0.1)
-  thudGain.gain.exponentialRampToValueAtTime(0.48, now + 0.16)
-  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.62)
+  thud.frequency.setValueAtTime(62, now + 0.08)
+  thud.frequency.exponentialRampToValueAtTime(22, now + 0.85)
+  thudGain.gain.setValueAtTime(0.001, now + 0.08)
+  thudGain.gain.exponentialRampToValueAtTime(0.62, now + 0.14)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.88)
   thud.connect(thudGain)
   thudGain.connect(instance.clockDestroyGain)
-  thud.start(now + 0.1)
-  thud.stop(now + 0.62)
+  thud.start(now + 0.08)
+  thud.stop(now + 0.88)
 }
 /**
  * Play snowball shoot sound (soft whoosh)

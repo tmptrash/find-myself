@@ -1,5 +1,5 @@
-import { CFG } from '../cfg.js'
-import { getColor, getRGB } from '../../../utils/helper.js'
+import { CFG, getLevelColors } from '../cfg.js'
+import { getColor, getRGB, parseHex } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as WordPile from '../components/word-pile.js'
@@ -13,6 +13,8 @@ import * as TouchControls from '../../../utils/touch-controls.js'
 import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
 import * as WordBookshelfBg from './word-bookshelf-bg.js'
 import * as WordHangingVines from './word-hanging-vines.js'
+import * as WordStaticBgWords from './word-static-bg-words.js'
+import * as WordBackgroundHeroes from './word-background-heroes.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 const CORNER_RADIUS = 20  // Radius for rounded corners
@@ -27,6 +29,86 @@ const EERIE_SOUND_MAX_DELAY = 8
 // FPS / timer row sits below WORDS letters; small hero and life stay unchanged
 //
 const WORD_HUD_FPS_TOP_OFFSET = 32
+//
+// Black outline offsets for bottom death subtitle (8-direction stroke)
+//
+const DEATH_MESSAGE_OUTLINE_OFFSETS = [
+  [-2, -2], [0, -2], [2, -2],
+  [-2, 0], [2, 0],
+  [-2, 2], [0, 2], [2, 2]
+]
+
+/**
+ * Creates red death subtitle with black outline at the bottom of the screen
+ * @param {Object} k - Kaplay instance
+ * @param {Object} cfg - Message configuration
+ * @param {string} cfg.message - Text to display
+ * @param {number} cfg.centerX - Horizontal center X
+ * @param {number} cfg.messageY - Vertical position
+ * @param {number} [cfg.fontSize=28] - Font size in pixels
+ * @param {number} [cfg.zIndex] - Draw order (defaults to UI + 10)
+ * @returns {Object} Handles with setOpacity() and destroy()
+ */
+export function createOutlinedDeathMessage(k, cfg) {
+  const {
+    message,
+    centerX,
+    messageY,
+    fontSize = 28,
+    zIndex = CFG.visual.zIndex.ui + 10
+  } = cfg
+  const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const [fillR, fillG, fillB] = parseHex(CFG.visual.colors.deathMessage)
+  const outlineTexts = DEATH_MESSAGE_OUTLINE_OFFSETS.map(([dx, dy]) =>
+    k.add([
+      k.text(message, { size: fontSize, align: 'center', font }),
+      k.pos(centerX + dx, messageY + dy),
+      k.anchor('center'),
+      k.color(0, 0, 0),
+      k.opacity(0),
+      k.z(zIndex)
+    ])
+  )
+  const messageText = k.add([
+    k.text(message, { size: fontSize, align: 'center', font }),
+    k.pos(centerX, messageY),
+    k.anchor('center'),
+    k.color(fillR, fillG, fillB),
+    k.opacity(0),
+    k.z(zIndex)
+  ])
+  return {
+    messageText,
+    setOpacity(value) {
+      messageText.opacity = value
+      outlineTexts.forEach(t => { t.opacity = value })
+    },
+    destroy() {
+      k.destroy(messageText)
+      outlineTexts.forEach(t => k.destroy(t))
+    }
+  }
+}
+
+/**
+ * Spawns large background heroes after word-pile layers so z-order stays correct
+ * @param {Object} k - Kaplay instance
+ * @param {Object} cfg - Hero spawn configuration
+ * @param {Object} cfg.hero - Playable hero instance (look-at target)
+ * @param {number} cfg.bottomPlatformHeight - Bottom platform height in pixels
+ * @param {number} cfg.sideWallWidth - Play area side margin
+ * @returns {Object} Background heroes instance
+ */
+export function spawnWordBackgroundHeroes(k, cfg) {
+  const { hero, bottomPlatformHeight, sideWallWidth } = cfg
+  return WordBackgroundHeroes.create({
+    k,
+    hero,
+    bottomPlatformHeight,
+    sideWallWidth
+  })
+}
+
 /**
  * Adds background to the scene
  * @param {Object} k - Kaplay instance
@@ -119,6 +201,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
  * @param {Number} [config.antiHeroX] - Anti-hero X position in pixels
  * @param {Number} [config.antiHeroY] - Anti-hero Y position in pixels
  * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
+ * @param {Boolean} [config.showBackgroundHeroes=false] - Use spawnWordBackgroundHeroes() after word pile instead
  * @returns {Object} Object with sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic
  */
 export function initScene(config) {
@@ -143,12 +226,16 @@ export function initScene(config) {
     heroY = null,
     antiHeroX = null,
     antiHeroY = null,
-    onAnnihilation = null
+    onAnnihilation = null,
+    showBackgroundHeroes = false
   } = config
   
-  // Use word section colors if not explicitly provided
-  const bgColor = backgroundColor || CFG.visual.colors.background
-  const pfColor = platformColor || CFG.visual.colors.platform
+  //
+  // Per-level palette when not overridden — deeper word levels get darker
+  //
+  const resolvedLevelColors = levelName ? getLevelColors(levelName) : null
+  const bgColor = backgroundColor || resolvedLevelColors?.background || CFG.visual.colors.background
+  const pfColor = platformColor || resolvedLevelColors?.platform || CFG.visual.colors.platform
   //
   // Set canvas background to match platform color at edges (avoids visible strips in letterbox)
   //
@@ -192,6 +279,25 @@ export function initScene(config) {
   // Full-screen background with muted distant bookshelves (farthest layer)
   //
   const bottomPH = bottomPlatformHeight ?? k.height() * 0.12
+  //
+  // Dark void fill — static words sit above this, bookshelf furniture above words
+  //
+  const voidBgZ = CFG.visual.zIndex.wordVoidBackground ?? CFG.visual.zIndex.background - 12
+  k.add([
+    k.rect(k.width(), k.height()),
+    getColor(k, bgColor),
+    k.pos(0, 0),
+    k.fixed(),
+    k.z(voidBgZ)
+  ])
+  WordStaticBgWords.create({
+    k,
+    backgroundColor: bgColor,
+    platformColor: pfColor,
+    sideWallWidth: sideWallWidth ?? 192,
+    topPlatformHeight,
+    bottomPlatformHeight: bottomPH
+  })
   WordBookshelfBg.create({
     k,
     bottomPlatformHeight: bottomPH,
@@ -302,7 +408,7 @@ export function initScene(config) {
     hero && WordHeroIdleSpeech.create(k, hero)
   }
   
-  return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic }
+  return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, backgroundColor: bgColor, platformColor: pfColor }
 }
 
 /**

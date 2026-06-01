@@ -19,17 +19,9 @@ const SAND_LINES_COUNT = 20  // Number of lines/snakes (increased)
 const SAND_PARTICLE_SPACING = 10  // Steps between particles on same line (10 steps = 50 pixels)
 const SAND_LINE_MAX_LENGTH = 300  // Maximum length of each line in pixels
 //
-// Shades of gray for digits
+// Steel-blue shades for floating background phrases (from section cfg)
 //
-const GRAY_SHADES = [
-  "#303030",  // Very dark gray
-  "#404040",  // Dark gray
-  "#505050",  // Medium-dark gray
-  "#606060",  // Medium gray
-  "#707070",  // Medium-light gray
-  "#808080",  // Light gray
-  "#909090"   // Very light gray
-]
+const PHRASE_SHADES = CFG.visual.colors.floatingPhrase
 
 /**
  * Creates time digits background effect
@@ -110,7 +102,7 @@ function createDigit(k, left, right, top, bottom) {
   const y = top + Math.random() * (bottom - top)
   const size = MIN_SIZE + Math.random() * (MAX_SIZE - MIN_SIZE)
   const opacity = MIN_OPACITY + Math.random() * (MAX_OPACITY - MIN_OPACITY)
-  const shade = GRAY_SHADES[Math.floor(Math.random() * GRAY_SHADES.length)]
+  const shade = PHRASE_SHADES[Math.floor(Math.random() * PHRASE_SHADES.length)]
   
   //
   // Start each digit with a random time offset
@@ -310,7 +302,7 @@ function initializeSandLines(inst) {
  */
 function populateInitialParticles(inst) {
   const { sandLines } = inst
-  const lightShades = ["#808080", "#909090", "#A0A0A0"]
+  const lightShades = PHRASE_SHADES.slice(-3)
   //
   // For each line, create particles at regular intervals
   // All particles form a continuous line
@@ -350,9 +342,9 @@ function populateInitialParticles(inst) {
 function createSandParticles(inst) {
   const { sandLines } = inst
   //
-  // Use lighter gray shades for better visibility
+  // Use lighter steel-blue shades for sand trails
   //
-  const lightShades = ["#808080", "#909090", "#A0A0A0"]
+  const lightShades = PHRASE_SHADES.slice(-3)
   //
   // Check each line
   //

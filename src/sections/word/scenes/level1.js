@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -87,25 +87,13 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   //
   // Create message text
   //
-  const messageText = k.add([
-    k.text(message, {
-      size: 28,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, messageY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Blade color (steel blue)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
-  
+  const deathMsg = createOutlinedDeathMessage(k, { message, centerX, messageY })
   //
   // Animation state
   //
   const inst = {
     k,
-    messageText,
+    deathMsg,
     timer: 0,
     phase: 'fade_in',
     skipRequested: false
@@ -150,7 +138,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       //
       updateInterval.cancel()
       skipHandlers.forEach(h => h.cancel())
-      k.destroy(messageText)
+      deathMsg.destroy()
       //
       // Restart level
       //
@@ -163,7 +151,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       // Fade in message
       //
       const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = progress
+      deathMsg.setOpacity(progress)
       
       if (progress >= 1) {
         inst.phase = 'hold'
@@ -182,7 +170,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       // Fade out message
       //
       const progress = Math.min(1, inst.timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = 1 - progress
+      deathMsg.setOpacity(1 - progress)
       
       if (progress >= 1) {
         //
@@ -190,7 +178,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
         //
         updateInterval.cancel()
         skipHandlers.forEach(h => h.cancel())
-        k.destroy(messageText)
+        deathMsg.destroy()
         k.go("level-word.1")
       }
     }
@@ -222,7 +210,7 @@ export function sceneLevel1(k) {
     // Initialize level with heroes and gap in platform (for trap)
     //
     let bonusInst = null
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
       k,
       levelName: 'level-word.1',
       levelNumber: 2,
@@ -276,7 +264,6 @@ export function sceneLevel1(k) {
       hero,
       currentLevel: 'level-word.1',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
-      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
       killerLetterCount: 2  // Level 1: 4 killer letters
@@ -288,6 +275,11 @@ export function sceneLevel1(k) {
     const wordPile = WordPile.create({
       k,
       customBounds: platformBounds
+    })
+    spawnWordBackgroundHeroes(k, {
+      hero,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH
     })
     
     //
@@ -325,7 +317,7 @@ export function sceneLevel1(k) {
       x: movingPlatformX,
       y: platformY,
       hero,
-      color: CFG.visual.colors.platform,
+      color: platformColor,
       currentLevel: 'level-word.1',
       sfx: sound,
       raiseDelay: PIT_RAISE_DELAY,

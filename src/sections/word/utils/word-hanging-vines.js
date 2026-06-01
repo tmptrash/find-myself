@@ -24,6 +24,13 @@ const SWAY_AMPLITUDE = 26
 const VINE_OPACITY = 0.55
 const SPACE_OPACITY = 0.35
 //
+// Thin outline on vine letters — black cardinal stroke (matches touch tree/cloud style)
+//
+const VINE_OUTLINE_OFFSETS = [
+  [-1, 0], [1, 0], [0, -1], [0, 1]
+]
+const VINE_OUTLINE_HEX = CFG.visual.colors.outline ?? '#000000'
+//
 // Letter placement: arc letters pin start and end on the top platform; hang drapes down
 //
 const HANG_LETTER_T_START = 0.02
@@ -31,9 +38,6 @@ const HANG_LETTER_T_END = 0.98
 const ARC_LETTER_T_START = 0
 const ARC_LETTER_T_END = 1
 const ARC_LENGTH_SAMPLES = 48
-const VINE_COLOR_R = 150
-const VINE_COLOR_G = 150
-const VINE_COLOR_B = 150
 //
 // Default horizontal span for parabolic arc vines (fraction of play width)
 //
@@ -47,8 +51,6 @@ const VINE_MIN_LENGTH = 0.8
 // Chance each slot becomes a top-anchored arc (both ends on the top platform)
 //
 const ARC_VINE_CHANCE = 0.42
-const VINE_SLOT_COUNT = 9
-const VINE_LAYOUT_SEED = 7331
 //
 // Intrusive-thought sentences
 //
@@ -65,19 +67,22 @@ const VINE_PHRASES = [
   'That look meant it'
 ]
 //
-// Horizontal slots — arc vs hang is chosen randomly per slot at create time
+// Random vine layout — varied anchor, length, span, and arc vs hang per level load
 //
-const VINE_SLOTS = [
-  { xRatio: 0.05, length: 1, drift: 28, spanRatio: 0.14, sag: 0.74, phase: 0.1 },
-  { xRatio: 0.16, length: 0.9, drift: -18, spanRatio: 0.13, sag: 0.72, phase: 1.4 },
-  { xRatio: 0.28, length: 0.88, drift: -32, spanRatio: 0.15, sag: 0.78, phase: 2.6 },
-  { xRatio: 0.4, length: 0.95, drift: 22, spanRatio: 0.16, sag: 0.85, phase: 0.8 },
-  { xRatio: 0.52, length: 0.94, drift: 14, spanRatio: 0.12, sag: 0.76, phase: 3.2 },
-  { xRatio: 0.64, length: 0.86, drift: -26, spanRatio: 0.14, sag: 0.8, phase: 1.9 },
-  { xRatio: 0.76, length: 1, drift: -24, spanRatio: 0.13, sag: 0.82, phase: 4.1 },
-  { xRatio: 0.88, length: 0.84, drift: 18, spanRatio: 0.15, sag: 0.7, phase: 2.3 },
-  { xRatio: 0.96, length: 0.82, drift: -12, spanRatio: 0.11, sag: 0.75, phase: 3.7 }
-]
+const VINE_COUNT_MIN = 6
+const VINE_COUNT_MAX = 10
+const VINE_X_RATIO_MIN = 0.04
+const VINE_X_RATIO_MAX = 0.96
+const VINE_LENGTH_MIN = 0.38
+const VINE_LENGTH_MAX = 1
+const VINE_DRIFT_MIN = -44
+const VINE_DRIFT_MAX = 44
+const VINE_SPAN_RATIO_MIN = 0.1
+const VINE_SPAN_RATIO_MAX = 0.18
+const VINE_SAG_MIN = 0.52
+const VINE_SAG_MAX = 0.9
+const VINE_DEPTH_OPACITY_MIN = 0.38
+const VINE_DEPTH_OPACITY_MAX = 0.62
 
 /**
  * Creates hanging vine phrases from small letters across the word section playfield
@@ -96,16 +101,20 @@ export function create(config) {
   const playBottom = k.height() - (bottomPlatformHeight ?? k.height() * 0.12)
   const playWidth = playRight - playLeft
   const playHeight = playBottom - playTop
-  const rand = seededRandom(VINE_LAYOUT_SEED + Math.round(playWidth))
-  const vines = VINE_SLOTS.slice(0, VINE_SLOT_COUNT).map((slot, index) => buildVine(
-    resolveVineLayout(slot, rand),
-    index,
-    playLeft,
-    playWidth,
-    playTop,
-    playBottom,
-    playHeight
-  ))
+  const vineCount = VINE_COUNT_MIN + Math.floor(Math.random() * (VINE_COUNT_MAX - VINE_COUNT_MIN + 1))
+  const vines = []
+  for (let index = 0; index < vineCount; index++) {
+    const layout = resolveVineLayout()
+    vines.push(buildVine(
+      layout,
+      pickRandomPhrase(),
+      playLeft,
+      playWidth,
+      playTop,
+      playBottom,
+      playHeight
+    ))
+  }
   const inst = {
     k,
     vines
@@ -124,24 +133,37 @@ export function create(config) {
 }
 
 //
-// Picks arc (both ends on top platform) or hang (single top anchor) per slot
+// Picks arc (both ends on top platform) or hang (single top anchor) with random layout
 //
-function resolveVineLayout(slot, rand) {
+function resolveVineLayout() {
+  const length = VINE_LENGTH_MIN + Math.random() * (VINE_LENGTH_MAX - VINE_LENGTH_MIN)
   return {
-    ...slot,
-    arc: rand() < ARC_VINE_CHANCE
+    xRatio: VINE_X_RATIO_MIN + Math.random() * (VINE_X_RATIO_MAX - VINE_X_RATIO_MIN),
+    length,
+    drift: VINE_DRIFT_MIN + Math.random() * (VINE_DRIFT_MAX - VINE_DRIFT_MIN),
+    spanRatio: VINE_SPAN_RATIO_MIN + Math.random() * (VINE_SPAN_RATIO_MAX - VINE_SPAN_RATIO_MIN),
+    sag: VINE_SAG_MIN + Math.random() * (VINE_SAG_MAX - VINE_SAG_MIN),
+    phase: Math.random() * Math.PI * 2,
+    depthOpacity: VINE_DEPTH_OPACITY_MIN + length * (VINE_DEPTH_OPACITY_MAX - VINE_DEPTH_OPACITY_MIN),
+    arc: Math.random() < ARC_VINE_CHANCE
   }
+}
+
+//
+// Picks a random intrusive-thought phrase for each vine on level load
+//
+function pickRandomPhrase() {
+  return VINE_PHRASES[Math.floor(Math.random() * VINE_PHRASES.length)]
 }
 
 //
 // Builds one vine — hang drapes from top platform; arc spans between two top anchors
 //
-function buildVine(layout, index, playLeft, playWidth, playTop, playBottom, playHeight) {
+function buildVine(layout, phrase, playLeft, playWidth, playTop, playBottom, playHeight) {
   //
   // Bottom edge of the top platform — both arc ends and hang starts pin here
   //
   const topAnchorY = playTop
-  const phrase = VINE_PHRASES[index % VINE_PHRASES.length]
   if (layout.arc) {
     const startX = playLeft + playWidth * layout.xRatio
     const span = playWidth * (layout.spanRatio ?? ARC_SPAN_RATIO_DEFAULT)
@@ -158,6 +180,7 @@ function buildVine(layout, index, playLeft, playWidth, playTop, playBottom, play
       controlX: startX + span / 2,
       controlY: playTop + playHeight * sag,
       phase: layout.phase,
+      depthOpacity: layout.depthOpacity ?? VINE_OPACITY,
       arcLength: 0
     }
     vine.arcLength = measureArcLength(vine)
@@ -184,6 +207,7 @@ function buildVine(layout, index, playLeft, playWidth, playTop, playBottom, play
     endX,
     endY,
     phase: layout.phase,
+    depthOpacity: layout.depthOpacity ?? VINE_OPACITY,
     arcLength: 0
   }
   vine.arcLength = measureArcLength(vine)
@@ -197,8 +221,12 @@ function onDraw(inst) {
   const { k, vines } = inst
   const time = k.time()
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const color = k.rgb(VINE_COLOR_R, VINE_COLOR_G, VINE_COLOR_B)
+  const outlineR = parseInt(VINE_OUTLINE_HEX.slice(1, 3), 16)
+  const outlineG = parseInt(VINE_OUTLINE_HEX.slice(3, 5), 16)
+  const outlineB = parseInt(VINE_OUTLINE_HEX.slice(5, 7), 16)
+  const outlineColor = k.rgb(outlineR, outlineG, outlineB)
   vines.forEach(vine => {
+    const vineOpacity = vine.depthOpacity ?? VINE_OPACITY
     getLetterLayout(vine).forEach(({ letter, t, size }) => {
       const base = quadraticPoint(vine, t)
       //
@@ -208,29 +236,56 @@ function onDraw(inst) {
       const swayPhase = time * SWAY_SPEED + vine.phase + t * 2.4
       const swayX = Math.sin(swayPhase) * SWAY_AMPLITUDE * swayFactor
       const swayY = Math.sin(swayPhase * 0.7 + 0.6) * SWAY_AMPLITUDE * 0.12 * swayFactor
+      const pos = k.vec2(base.x + swayX, base.y + swayY)
+      const phraseColor = pickVinePhraseColor(k, t)
       if (letter === ' ') {
         k.drawText({
           text: '·',
           size: Math.round(size * 0.45),
           font,
-          pos: k.vec2(base.x + swayX, base.y + swayY),
+          pos,
           anchor: 'center',
-          color,
-          opacity: SPACE_OPACITY
+          color: phraseColor,
+          opacity: SPACE_OPACITY * (vineOpacity / VINE_OPACITY)
         })
       } else {
+        VINE_OUTLINE_OFFSETS.forEach(([dx, dy]) => {
+          k.drawText({
+            text: letter,
+            size,
+            font,
+            pos: k.vec2(pos.x + dx, pos.y + dy),
+            anchor: 'center',
+            color: outlineColor,
+            opacity: vineOpacity
+          })
+        })
         k.drawText({
           text: letter,
           size,
           font,
-          pos: k.vec2(base.x + swayX, base.y + swayY),
+          pos,
           anchor: 'center',
-          color,
-          opacity: VINE_OPACITY
+          color: phraseColor,
+          opacity: vineOpacity
         })
       }
     })
   })
+}
+
+//
+// Picks a light red shade for vine glyphs from the section vineLetter palette
+//
+function pickVinePhraseColor(k, tAlongVine) {
+  const palette = CFG.visual.colors.vineLetter
+  if (!palette?.length) return k.rgb(200, 72, 88)
+  const idx = Math.floor(tAlongVine * palette.length * 0.85 + Math.random() * 2)
+  const hex = palette[Math.max(0, Math.min(palette.length - 1, idx))]
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return k.rgb(r, g, b)
 }
 
 //
@@ -365,15 +420,4 @@ function quadraticPoint(vine, t) {
 //
 function measureArcLength(vine) {
   return measureArcLengthBetween(vine, 0, 1)
-}
-
-//
-// Deterministic pseudo-random for stable arc/hang mix per playfield width
-//
-function seededRandom(seed) {
-  let state = seed >>> 0
-  return () => {
-    state = (state * 1103515245 + 12345) >>> 0
-    return state / 0xffffffff
-  }
 }

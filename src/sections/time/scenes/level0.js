@@ -17,6 +17,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 //
+//
 const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -681,6 +682,12 @@ export function sceneLevel0(k) {
       sfx: sound,
       heroBodyColor: BONUS_HERO_COLOR,
       storageKey: BONUS_STORAGE_KEY,
+      approachFromAbove: true,
+      revealDistance: 120,
+      collisionWidth: 88,
+      platformCollisionHeight: 12,
+      platformCollisionXOffset: 16,
+      platformCollisionYOffset: 12,
       platformText: "00:00"
     })
     //
@@ -778,7 +785,8 @@ function flashSmallHeroForBonus(k, levelIndicator, heroColor, count) {
  * @param {Object} k - Kaplay instance
  */
 function createGroundStripe(k) {
-  const groundColor = k.rgb(20, 20, 20)
+  const [stripeR, stripeG, stripeB] = parseHex(CFG.visual.colors.groundStripe)
+  const groundColor = k.rgb(stripeR, stripeG, stripeB)
   const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
   const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
   k.add([
@@ -828,11 +836,8 @@ function createRoundedCornerSprite(radius, backgroundColor) {
  */
 function createRoundedCorners(k) {
   const radius = CORNER_RADIUS
-  const backgroundColor = CFG.visual.colors.background
-  //
-  // Create corner sprite
-  //
-  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  const cornerColor = CFG.visual.colors.platform
+  const cornerDataURL = createRoundedCornerSprite(radius, cornerColor)
   k.loadSprite('corner-sprite', cornerDataURL)
   //
   // Release canvas backing store immediately after Kaplay reads it.

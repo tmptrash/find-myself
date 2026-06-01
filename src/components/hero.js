@@ -40,6 +40,10 @@ const ANTIHERO_TAG = 'annihilation'
 //
 const TOUCH_SECTION_HERO_COLOR = CFG.visual.colors.sections.touch.body
 //
+// Time section completion tint — orange/yellow anti-hero accent (`#FF8C00`), not global antiHero brown
+//
+const TIME_SECTION_HERO_COLOR = '#FF8C00'
+//
 // Landing dust particles
 //
 
@@ -2186,9 +2190,9 @@ export function onAnnihilationCollide(inst) {
                   })
                 })
               })
-            } else if (isLastTimeLevel && inst.bodyColor !== "#FF8C00") {
+            } else if (isLastTimeLevel && (inst.bodyColor !== TIME_SECTION_HERO_COLOR || !inst.addArms || !inst.addWatch)) {
               //
-              // Special sequence for completing time section: change hero color to yellow (anti-hero color)
+              // Special sequence for completing time section: orange anti-hero color with arms and watch
               //
               k.wait(1.5, () => {
                 //
@@ -2226,23 +2230,27 @@ export function onAnnihilationCollide(inst) {
                 k.wait(1.0, () => {
                   sfx && Sound.playMouthSound(sfx)
                   //
-                  // Update inst to use yellow color BEFORE loading sprites
+                  // Update inst: orange anti-hero color with arms and watch BEFORE loading sprites
                   //
-                  const yellowColor = "#FF8C00"  // Anti-hero color (orange/yellow)
-                  inst.bodyColor = yellowColor
-                  const yellowColorClean = String(yellowColor).replace('#', '')
+                  const timeColor = TIME_SECTION_HERO_COLOR
+                  inst.bodyColor = timeColor
+                  inst.addArms = true
+                  inst.addWatch = true
+                  const timeColorClean = String(timeColor).replace('#', '')
                   const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-                  inst.spritePrefix = `${inst.type}_${yellowColorClean}_${outlineColorClean}`
+                  const hasMouth = inst.addMouth
+                  inst.spritePrefix = `${inst.type}_${timeColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms_watch`
                   //
-                  // Reload sprites with yellow color
+                  // Reload sprites with orange color, arms and watch
                   //
                   loadHeroSprites({
                     k: inst.k,
                     type: inst.type,
-                    bodyColor: yellowColor,
+                    bodyColor: timeColor,
                     outlineColor: CFG.visual.colors.outline,
-                    addMouth: false,
-                    addArms: false,
+                    addMouth: hasMouth,
+                    addArms: true,
+                    addWatch: true,
                     character: null
                   })
                   //
@@ -2250,27 +2258,27 @@ export function onAnnihilationCollide(inst) {
                   //
                   k.wait(0.05, () => {
                     //
-                    // Use getSpriteName to get the correct sprite with yellow color
+                    // Use getSpriteName to get the correct sprite with orange color, arms and watch
                     //
                     const newSpriteName = getSpriteName(inst, 0, 0)
                     //
-                    // Update character sprite to show yellow color
+                    // Update character sprite to show orange hero with arms and watch
                     //
                     try {
                       player.use(k.sprite(newSpriteName))
                     } catch (error) {
-                      console.error(`Failed to load sprite ${newSpriteName}:`, error)
+                      // Sprite load failed, continue with transition
                     }
                     //
                     // Play color transformation sound
                     //
                     sfx && Sound.playMouthSound(sfx)
                     //
-                    // Create sparkle particles around hero (yellow/orange particles)
+                    // Create sparkle particles around hero (orange particles)
                     //
-                    createColorChangeSparkles(inst, yellowColor)
+                    createColorChangeSparkles(inst, timeColor)
                     //
-                    // Pause to show the yellow hero longer
+                    // Pause to show the transformed hero longer
                     //
                     k.wait(2.5, () => {
                       //

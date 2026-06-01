@@ -36,13 +36,15 @@ export const TIME_CFG = {
   },
   visual: {
     //
-    // Colors specific to time section (grayscale only)
+    // Complementary palette: steel-teal hero + cool playfield against warm
+    // orange anti-hero / sun accents (`#FF8C00`).
     //
     colors: {
-      background: "#505050",         // Same as platforms (medium gray)
-      platform: "#505050",           // Medium gray platforms
+      background: "#243840",         // Dark teal sky / letterbox
+      platform: "#2E4850",           // Teal platform + side walls
+      groundStripe: "#1A2830",       // Darker soil strip above bottom platform
       hero: {
-        body: "#C0C0C0",             // Light gray hero (not pure white)
+        body: "#5A8898",             // Steel teal — matches touch anti-hero teal
         outline: "#000000"           // Black outline
       },
       antiHero: {
@@ -50,7 +52,19 @@ export const TIME_CFG = {
         outline: "#000000"           // Black outline
       },
       text: "#FFFFFF",               // White text
-      accent: "#808080"              // Medium gray for accents
+      accent: "#808080",             // Medium gray for accents
+      //
+      // Floating background time phrases — steel-blue shades (complement orange sun)
+      //
+      floatingPhrase: [
+        "#1A2848",                   // Deep navy
+        "#243058",                   // Dark steel blue
+        "#2E3868",                   // Mid navy
+        "#384878",                   // Slate blue
+        "#425888",                   // Steel blue
+        "#4C6898",                   // Pale steel
+        "#5678A8"                    // Sky steel
+      ]
     },
     //
     // Spike glint effect configuration (similar to blade glint)

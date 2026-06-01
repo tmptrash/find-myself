@@ -220,8 +220,10 @@ function updateTrapProximityRattle(inst) {
   const dx = ch.pos.x - inst.gapCenterX
   const dy = ch.pos.y - (inst.assemblyBottomY + inst.bladeSection)
   const dist = Math.sqrt(dx * dx + dy * dy)
-  if (dist >= PIT_RATTLE_RANGE) return
-  const proximity = 1 - dist / PIT_RATTLE_RANGE
+  const proximity = dist < PIT_RATTLE_RANGE ? 1 - dist / PIT_RATTLE_RANGE : 0
+  const tubeVisible = inst.dropPlatform.opacity >= 0.08
+  Blades.updateProximityVisual(inst.ceilingBlades, tubeVisible ? proximity : 0)
+  if (!tubeVisible || dist >= PIT_RATTLE_RANGE) return
   const overPitX = Math.abs(dx) <= inst.pitWidth / 2
   const volumeScale = overPitX ? PIT_STAND_VOLUME_SCALE : 1
   Sound.playBladeProximityRattle(inst.sfx, proximity, volumeScale)

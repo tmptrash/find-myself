@@ -8,6 +8,8 @@ import * as DayNight from '../utils/time-day-night.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import * as LevelHelp from '../../../utils/level-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
+import * as TimeDigits from './time-digits.js'
 
 const MUSIC_START_DELAY = 6.0
 //
@@ -17,9 +19,9 @@ const MUSIC_START_DELAY = 6.0
 const CLOCK_FONT_SIZE = 22
 const CLOCK_MARGIN_RIGHT = 24
 const CLOCK_GAME_AREA_OFFSET_Y = 36
-const CLOCK_COLOR_R = 160
-const CLOCK_COLOR_G = 160
-const CLOCK_COLOR_B = 160
+const CLOCK_COLOR_R = 74
+const CLOCK_COLOR_G = 104
+const CLOCK_COLOR_B = 152
 const CLOCK_OPACITY = 0.65
 const CLOCK_Z = 200
 const CLOCK_FONT = 'JetBrains Mono'
@@ -44,6 +46,10 @@ const SUN_RAY_LIFE_MAX = 1.4
 const SUN_RAY_GLOW_R_MIN = 3
 const SUN_RAY_GLOW_R_MAX = 6
 const SUN_RAY_MAX_COUNT = 60
+//
+// Floating background MM:SS phrases — above city bg, below playfield
+//
+const FLOATING_PHRASE_Z = CFG.visual.zIndex.background + 3
 //
 // Rays emit only during first SUN_RAY_HOVER_DURATION seconds of hover; not at night
 //
@@ -177,6 +183,8 @@ export function initScene(config) {
     platformGap = null,
     onAnnihilation = null,
     heroDustColor = null,
+    backgroundColor = CFG.visual.colors.background,
+    platformColor = null,
     //
     // City background sprite name — used by DayNight to look up real window positions
     //
@@ -200,7 +208,11 @@ export function initScene(config) {
     //
     // Show the in-game clock in the top-right corner (levels 0, 1, 2)
     //
-    showGameClock = false
+    showGameClock = false,
+    //
+    // Semi-transparent countdown strings drifting on the background
+    //
+    showFloatingPhrases = true
   } = config
   //
   // Set gravity
@@ -216,26 +228,26 @@ export function initScene(config) {
   //
   // Set background color using Kaplay API
   //
-  k.setBackground(k.Color.fromHex(CFG.visual.colors.background))
-  
+  k.setBackground(k.Color.fromHex(backgroundColor))
+  CanvasBackdrop.applyCanvasBackdrop(k, backgroundColor)
   //
   // Add background rectangle as game object
   //
-  addBackground(k, CFG.visual.colors.background)
-  
+  addBackground(k, backgroundColor)
   //
   // Add platforms (unless skipped)
   //
+  const resolvedPlatformColor = platformColor ?? backgroundColor
   if (!skipPlatforms) {
-    addPlatforms(k, CFG.visual.colors.background, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap)
+    addPlatforms(k, resolvedPlatformColor, bottomPlatformHeight, topPlatformHeight, sideWallWidth, platformGap)
   }
   //
   // Add level indicator if levelNumber provided
-  // Hero body color matches the actual hero: orange when time complete, brown when touch complete, gray otherwise
+  // Hero body color matches the actual hero: orange when time complete, teal when touch complete, section hero otherwise
   //
   const isTimeCompleteForIndicator = get('time.completed', false)
   const isTouchCompleteForIndicator = get('touch.completed', false)
-  const indicatorHeroColor = isTimeCompleteForIndicator ? "#FF8C00" : isTouchCompleteForIndicator ? "#8B5A50" : CFG.visual.colors.hero.body
+  const indicatorHeroColor = isTimeCompleteForIndicator ? "#FF8C00" : isTouchCompleteForIndicator ? CFG.visual.colors.sections.touch.body : CFG.visual.colors.hero.body
   let levelIndicator = null
   if (levelNumber && topPlatformHeight && sideWallWidth) {
     levelIndicator = LevelIndicator.create({
@@ -297,7 +309,23 @@ export function initScene(config) {
   // Day/night cycle (persists across scene reloads via module-level state)
   //
   const dayNight = DayNight.create({ k, sound, timeSectionMusic, spriteName, showSun, showMoon, starLayerZ, moonLayerZ })
-  k.onSceneLeave(() => dayNight.cleanup())
+  //
+  // Floating background time phrases (steel-blue MM:SS strings)
+  //
+  let floatingPhrases = null
+  if (showFloatingPhrases) {
+    floatingPhrases = TimeDigits.create({ k })
+    k.onUpdate(() => TimeDigits.onUpdate(floatingPhrases))
+    k.add([
+      k.z(FLOATING_PHRASE_Z),
+      k.fixed(),
+      { draw() { TimeDigits.draw(floatingPhrases) } }
+    ])
+  }
+  k.onSceneLeave(() => {
+    dayNight.cleanup()
+    CanvasBackdrop.clearCanvasBackdrop(k)
+  })
   //
   // In-game clock: a grey HH:MM timer in the top-right corner, synchronized
   // to the day/night cycle (full day = CYCLE_DURATION = 60 s of real time).
@@ -433,9 +461,9 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
   const isTimeComplete = get('time.completed', false)
   const isTouchComplete = get('touch.completed', false)
   //
-  // Hero body color: yellow if time complete, brown if touch complete, otherwise gray
+  // Hero body color: orange if time complete, touch teal if touch complete, otherwise section steel teal
   //
-  const heroBodyColor = isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : CFG.visual.colors.hero.body
+  const heroBodyColor = isTimeComplete ? "#FF8C00" : isTouchComplete ? CFG.visual.colors.sections.touch.body : CFG.visual.colors.hero.body
   
   const antiHeroInst = Hero.create({
     k,
@@ -460,7 +488,7 @@ function createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHer
     antiHero: antiHeroInst,
     onAnnihilation: onAnnihilation || (() => k.go(levelName)),
     currentLevel: levelName,
-    bodyColor: heroBodyColor,  // Yellow if time complete, gray otherwise
+    bodyColor: heroBodyColor,
     outlineColor: CFG.visual.colors.hero.outline,
     addMouth: isWordComplete,  // Add mouth if word section is complete
     addArms: isTouchComplete,  // Add arms if touch section is complete

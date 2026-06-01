@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Blades from '../components/blades.js'
@@ -10,6 +10,7 @@ import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as Sound from '../../../utils/sound.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
@@ -95,18 +96,13 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
   //
   // Create message text
   //
-  const messageText = k.add([
-    k.text(message, {
-      size: 32,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, messageY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Steel blue (blade color)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 20)
-  ])
+  const deathMsg = createOutlinedDeathMessage(k, {
+    message,
+    centerX,
+    messageY,
+    fontSize: 32,
+    zIndex: CFG.visual.zIndex.ui + 20
+  })
   
   let timer = 0
   let phase = 'fade_in'
@@ -124,7 +120,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
     if (bladeArmInst) {
       bladeArmInst.heroIsDead = false
     }
-    k.destroy(messageText)
+    deathMsg.destroy()
     k.go("level-word.4")
   }
   
@@ -147,7 +143,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
     
     if (phase === 'fade_in') {
       const progress = Math.min(1, timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = progress
+      deathMsg.setOpacity(progress)
       if (progress >= 1) {
         phase = 'hold'
         timer = 0
@@ -159,7 +155,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
       }
     } else if (phase === 'fade_out') {
       const progress = Math.min(1, timer / CFG.visual.deathMessage.fadeDuration)
-      messageText.opacity = 1 - progress
+      deathMsg.setOpacity(1 - progress)
       if (progress >= 1) {
         updateInterval.cancel()
         restartLevel()
@@ -220,7 +216,7 @@ export function sceneLevel4(k) {
     ]
     
     // Initialize level with heroes and TWO gaps in platform
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
       k,
       levelName: 'level-word.4',
       levelNumber: 5,
@@ -292,7 +288,6 @@ export function sceneLevel4(k) {
         bladeArm.heroIsDead = true
         showDeathMessage(k, hero, null, bladeArm, levelIndicator, sound, heroScoreAtStart)
       },
-      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: platformBounds,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
       killerLetterCount: 4  // Level 4: 4 killer letters
@@ -304,6 +299,11 @@ export function sceneLevel4(k) {
     const wordPile = WordPile.create({
       k,
       customBounds: platformBounds
+    })
+    spawnWordBackgroundHeroes(k, {
+      hero,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH
     })
     
     //
@@ -340,7 +340,7 @@ export function sceneLevel4(k) {
       x: movingPlatform1X,
       y: platformY,
       hero,
-      color: CFG.visual.colors.platform,
+      color: platformColor,
       currentLevel: 'level-word.4',
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
@@ -354,7 +354,7 @@ export function sceneLevel4(k) {
       x: movingPlatform2X,
       y: platformY,
       hero,
-      color: CFG.visual.colors.platform,
+      color: platformColor,
       currentLevel: 'level-word.4',
       jumpToDisableBlades: false,  // Normal mode: timer-based (5 seconds)
       autoOpen: false,  // Triggered by hero proximity
@@ -410,6 +410,12 @@ export function sceneLevel4(k) {
     // Make second blades visible immediately
     //
     Blades.show(staticBlades2)
+    WordBladeProximity.create({
+      k,
+      hero,
+      bladeInsts: [staticBlades, staticBlades2],
+      sound
+    })
     //
     // Setup letter throwing mechanic (hero throws letters at creature)
     //

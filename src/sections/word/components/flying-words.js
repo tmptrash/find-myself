@@ -6,6 +6,15 @@ import { getColor } from '../../../utils/helper.js'
 //
 const SPAWN_BUFFER = 100
 //
+// Thin outline — four cardinal offsets (matches touch L0 tree/cloud stroke weight)
+//
+const WORD_OUTLINE_OFFSETS = [
+  [-1, 0], [1, 0], [0, -1], [0, 1]
+]
+const WORD_OUTLINE_COLOR_R = 18
+const WORD_OUTLINE_COLOR_G = 6
+const WORD_OUTLINE_COLOR_B = 10
+//
 // Killer word color pulse
 //
 const KILLER_COLOR_PULSE_SPEED = 2.8
@@ -276,16 +285,11 @@ function updateWord(word, inst) {
     word.textObj.angle = word.rotation
     
     //
-    // Sync outline texts (black border)
+    // Sync outline texts (thin border)
     //
     if (word.outlineTexts) {
-      const outlineOffsets = [
-        [-1, -1], [0, -1], [1, -1],
-        [-1, 0],           [1, 0],
-        [-1, 1],  [0, 1],  [1, 1]
-      ]
       word.outlineTexts.forEach((outlineText, i) => {
-        const [dx, dy] = outlineOffsets[i]
+        const [dx, dy] = WORD_OUTLINE_OFFSETS[i]
         outlineText.pos.x = word.textObj.pos.x + dx
         outlineText.pos.y = word.textObj.pos.y + dy
         outlineText.angle = word.rotation
@@ -293,24 +297,7 @@ function updateWord(word, inst) {
     }
     
     //
-    // Sync bold outline texts if they exist
-    //
-    if (word.boldOutlineTexts && word.boldOutlineTexts.length > 0) {
-      const outlineOffsets = [
-        [-1, -1], [0, -1], [1, -1],
-        [-1, 0],           [1, 0],
-        [-1, 1],  [0, 1],  [1, 1]
-      ]
-      word.boldOutlineTexts.forEach((boldText, i) => {
-        const [dx, dy] = outlineOffsets[i]
-        boldText.pos.x = word.textObj.pos.x + 0.5 + dx
-        boldText.pos.y = word.textObj.pos.y + 0.5 + dy
-        boldText.angle = word.rotation
-      })
-    }
-    
-    //
-    // Sync outline object if it exists (for bold effect)
+    // Sync outline object if it exists (legacy bold layer — unused)
     //
     if (word.outlineObj) {
       word.outlineObj.pos.x = word.textObj.pos.x + 0.5
@@ -374,18 +361,6 @@ function updateWord(word, inst) {
     }
     
     //
-    // Sync bold outline texts scale
-    //
-    if (word.boldOutlineTexts && word.boldOutlineTexts.length > 0) {
-      word.boldOutlineTexts.forEach(boldText => {
-        if (!boldText.scale) {
-          boldText.scale = k.vec2(1, 1)
-        }
-        boldText.scale.x = Math.max(0.05, scaleX)
-      })
-    }
-    
-    //
     // Sync outline scale if it exists
     //
     if (word.outlineObj) {
@@ -414,15 +389,6 @@ function updateWord(word, inst) {
     }
     
     //
-    // Sync bold outline texts opacity
-    //
-    if (word.boldOutlineTexts && word.boldOutlineTexts.length > 0) {
-      word.boldOutlineTexts.forEach(boldText => {
-        boldText.opacity = word.textObj.opacity * 0.5
-      })
-    }
-    
-    //
     // Sync outline opacity if it exists
     //
     if (word.outlineObj) {
@@ -446,13 +412,8 @@ function updateWord(word, inst) {
       // Sync outline texts position
       //
       if (word.outlineTexts) {
-        const outlineOffsets = [
-          [-1, -1], [0, -1], [1, -1],
-          [-1, 0],           [1, 0],
-          [-1, 1],  [0, 1],  [1, 1]
-        ]
         word.outlineTexts.forEach((outlineText, i) => {
-          const [dx, dy] = outlineOffsets[i]
+          const [dx, dy] = WORD_OUTLINE_OFFSETS[i]
           outlineText.pos.x = word.textObj.pos.x + dx
           outlineText.pos.y = word.textObj.pos.y + dy
         })
@@ -524,13 +485,8 @@ function updateKillerLetter(letter, inst) {
     // Reset outline positions
     //
     if (letter.outlineTexts) {
-      const outlineOffsets = [
-        [-1, -1], [0, -1], [1, -1],
-        [-1, 0],           [1, 0],
-        [-1, 1],  [0, 1],  [1, 1]
-      ]
       letter.outlineTexts.forEach((outline, i) => {
-        const [dx, dy] = outlineOffsets[i]
+        const [dx, dy] = WORD_OUTLINE_OFFSETS[i]
         outline.pos.x = x + dx
         outline.pos.y = y + dy
       })
@@ -632,39 +588,28 @@ function createWord(k, params) {
   }
 
   //
-  // Set z-index: all flying words behind platforms
+  // Set z-index: behind large background heroes, above bookshelf layer
   //
-  const zIndex = CFG.visual.zIndex.flyingWords
+  const zIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
 
   //
-  // Opacity based on depth: behind = less transparent (0.4-0.6), front = brighter (0.5-0.7)
+  // Opacity based on depth: behind = softer, front = brighter
   //
   const baseOpacity = isBehindHero
-    ? 0.4 + Math.random() * 0.2   // 0.4-0.6 for background (less transparent = more visible)
-    : 0.5 + Math.random() * 0.2    // 0.5-0.7 for foreground
+    ? 0.35 + Math.random() * 0.18
+    : 0.45 + Math.random() * 0.2
 
   //
   // Use JetBrains Mono font for all words
   //
   const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const phraseColor = pickPhraseColor(isBehindHero)
   
   //
-  // Font weight simulation: some words will have outline for bold effect
+  // Thin outline only on the far background layer — foreground words have no border
   //
-  const fontWeight = Math.random()
-  const isBold = fontWeight > 0.6  // 40% chance to be bold
-
-  //
-  // Create black outline by drawing text multiple times with offset
-  //
-  const outlineOffsets = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0],           [1, 0],
-    [-1, 1],  [0, 1],  [1, 1]
-  ]
-  
   const outlineTexts = []
-  outlineOffsets.forEach(([dx, dy]) => {
+  isBehindHero && WORD_OUTLINE_OFFSETS.forEach(([dx, dy]) => {
     const outlineText = k.add([
       k.text(text, {
         size: size,
@@ -672,11 +617,11 @@ function createWord(k, params) {
       }),
       k.pos(x + dx, y + dy),
       k.anchor('center'),
-      k.color(0, 0, 0),  // Black color for outline
+      k.color(WORD_OUTLINE_COLOR_R, WORD_OUTLINE_COLOR_G, WORD_OUTLINE_COLOR_B),
       k.opacity(baseOpacity),
-      k.z(zIndex - 0.1),  // Slightly behind main text
+      k.z(zIndex - 0.1),
       k.fixed(),
-      k.stay(),  // Stay persistent across scene changes
+      k.stay(),
       "flying-word"
     ])
     outlineTexts.push(outlineText)
@@ -689,61 +634,22 @@ function createWord(k, params) {
     }),
     k.pos(x, y),
     k.anchor('center'),
-    getColor(k, color),
+    getColor(k, phraseColor),
     k.opacity(baseOpacity),
     k.z(zIndex),
     k.fixed(),
-    k.stay(),  // Stay persistent across scene changes
+    k.stay(),
     "flying-word"
   ])
-  
-  //
-  // Create bold effect by adding additional layer
-  //
-  let boldOutlineTexts = []
-  let outlineObj = null
-  if (isBold) {
-    outlineOffsets.forEach(([dx, dy]) => {
-      const boldOutlineText = k.add([
-        k.text(text, {
-          size: size,
-          font: fontFamily
-        }),
-        k.pos(x + 0.5 + dx, y + 0.5 + dy),
-        k.anchor('center'),
-        k.color(0, 0, 0),  // Black color for outline
-        k.opacity(baseOpacity * 0.5),
-        k.z(zIndex - 0.05),  // Between outline and main text
-        k.fixed(),
-        k.stay(),  // Stay persistent across scene changes
-        "flying-word"
-      ])
-      boldOutlineTexts.push(boldOutlineText)
-    })
-    
-    outlineObj = k.add([
-      k.text(text, {
-        size: size,
-        font: fontFamily
-      }),
-      k.pos(x + 0.5, y + 0.5),
-      k.anchor('center'),
-      getColor(k, color),
-      k.opacity(baseOpacity * 0.5),
-      k.z(zIndex),
-      k.fixed(),
-      k.stay(),  // Stay persistent across scene changes
-      "flying-word"
-    ])
-  }
 
   return {
     textObj,
     outlineTexts,
-    outlineObj,
-    boldOutlineTexts,
-    isBold,
+    outlineObj: null,
+    boldOutlineTexts: [],
+    isBold: false,
     fontFamily,
+    phraseColor,
     speedX,
     speedY,
     rotation: Math.random() * 360,
@@ -878,8 +784,8 @@ function createKillerLetter(k, params) {
   //
   // Killer word color: from config (same as blades)
   //
-  const killerColor = getColor(k, CFG.visual.colors.killerLetter)
-  const killerHex = CFG.visual.colors.killerLetter.replace('#', '')
+  const killerColor = getColor(k, CFG.visual.colors.blades)
+  const killerHex = CFG.visual.colors.blades.replace('#', '')
   const baseColorRgb = {
     r: parseInt(killerHex.slice(0, 2), 16),
     g: parseInt(killerHex.slice(2, 4), 16),
@@ -887,28 +793,22 @@ function createKillerLetter(k, params) {
   }
 
   //
-  // Z-index: same as regular flying words
+  // Z-index: same layer as regular flying words (behind background heroes)
   //
-  const zIndex = CFG.visual.zIndex.flyingWords
+  const zIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
 
   //
   // Higher opacity for visibility (brighter than regular words)
   //
-  const baseOpacity = 0.85 + Math.random() * 0.15  // 0.85-1.0 (very bright)
+  const baseOpacity = 0.85 + Math.random() * 0.15
 
   const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
   
   //
-  // Create black outline
+  // Thin outline on killer words
   //
-  const outlineOffsets = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0],           [1, 0],
-    [-1, 1],  [0, 1],  [1, 1]
-  ]
-  
   const outlineTexts = []
-  outlineOffsets.forEach(([dx, dy]) => {
+  WORD_OUTLINE_OFFSETS.forEach(([dx, dy]) => {
     const outlineText = k.add([
       k.text(text, {
         size: size,
@@ -916,11 +816,11 @@ function createKillerLetter(k, params) {
       }),
       k.pos(x + dx, y + dy),
       k.anchor('center'),
-      k.color(0, 0, 0),
+      k.color(WORD_OUTLINE_COLOR_R, WORD_OUTLINE_COLOR_G, WORD_OUTLINE_COLOR_B),
       k.opacity(baseOpacity),
       k.z(zIndex - 0.1),
       k.fixed(),
-      k.stay(),  // Stay persistent across scene changes
+      k.stay(),
       "flying-word",
       "killer-letter-outline"
     ])
@@ -1021,4 +921,16 @@ function pulseKillerColor(word, inst) {
     Math.min(255, g * pulse),
     Math.min(255, b * pulse)
   )
+}
+
+//
+// Picks a red phrase shade — deeper layers use darker palette entries
+//
+function pickPhraseColor(isBehindHero) {
+  const palette = CFG.visual.colors.floatingPhrase
+  if (!palette?.length) return CFG.visual.colors.platform
+  const depthStart = isBehindHero ? 0 : Math.floor(palette.length * 0.35)
+  const depthEnd = isBehindHero ? Math.max(2, Math.floor(palette.length * 0.38)) : palette.length
+  const span = Math.max(1, depthEnd - depthStart)
+  return palette[depthStart + Math.floor(Math.random() * span)]
 }

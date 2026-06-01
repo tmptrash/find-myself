@@ -61,9 +61,9 @@ const MOON_APPEAR_DARKNESS = 0.62
 const MOON_APPEAR_RANGE = 0.16
 const MOON_BEHIND_CLOUD_BRIGHTNESS_BOOST = 2.4
 const MOON_BEHIND_CLOUD_COLOR_BOOST = 24
-const MOON_COLOR_R = 200
-const MOON_COLOR_G = 195
-const MOON_COLOR_B = 180
+const MOON_COLOR_R = 232
+const MOON_COLOR_G = 200
+const MOON_COLOR_B = 145
 //
 // Crater positions: {x, y} fraction of MOON_RADIUS, r = radius fraction, dark = brightness offset
 //

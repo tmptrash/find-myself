@@ -81,12 +81,12 @@ const LAMP_ARC_INTERVAL_MAX = 4.9
 const LAMP_ARC_RECOVER_MIN = 0.62
 const LAMP_ARC_RECOVER_MAX = 1.12
 //
-// Medium gray metal color so lamps blend with the city background silhouettes
+// Medium teal-gray metal so lamps blend with the complementary city silhouettes
 //
-const LAMP_POLE_FILL_R = 128
-const LAMP_POLE_FILL_G = 130
-const LAMP_POLE_FILL_B = 136
-const LAMP_POLE_OPACITY = 0.78
+const LAMP_POLE_FILL_R = 52
+const LAMP_POLE_FILL_G = 78
+const LAMP_POLE_FILL_B = 86
+const LAMP_POLE_OPACITY = 0.82
 const LAMP_POLE_OUTLINE_PAD = 2
 const LAMP_FLICKER_PHASE_SPEED = 44
 const LAMP_FLICKER_AMP1 = 0.14

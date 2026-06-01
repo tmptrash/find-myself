@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createRoundedCorners } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createRoundedCorners, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
@@ -9,6 +9,7 @@ import * as WordPile from '../components/word-pile.js'
 import * as WordGrass from '../components/word-grass.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
+import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
 //
@@ -60,24 +61,13 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   //
   // Create message text
   //
-  const messageText = k.add([
-    k.text(message, {
-      size: 28,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, messageY),
-    k.anchor("center"),
-    k.color(107, 142, 159),  // Blade color (steel blue)
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
+  const deathMsg = createOutlinedDeathMessage(k, { message, centerX, messageY })
   //
   // Animation state
   //
   const inst = {
     k,
-    messageText,
+    deathMsg,
     timer: 0,
     phase: 'fade_in',
     skipRequested: false
@@ -115,7 +105,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
     if (inst.phase === 'fade_in') {
       const fadeInDuration = 0.5
       const progress = Math.min(inst.timer / fadeInDuration, 1)
-      inst.messageText.opacity = progress
+      inst.deathMsg.setOpacity(progress)
       
       if (progress >= 1) {
         inst.phase = 'display'
@@ -139,13 +129,13 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
     else if (inst.phase === 'fade_out') {
       const fadeOutDuration = 0.5
       const progress = Math.min(inst.timer / fadeOutDuration, 1)
-      inst.messageText.opacity = 1 - progress
+      inst.deathMsg.setOpacity(1 - progress)
       
       if (progress >= 1) {
         //
         // Cleanup
         //
-        k.destroy(inst.messageText)
+        inst.deathMsg.destroy()
         updateInterval.cancel()
         skipHandlers.forEach(handler => handler.cancel())
         //
@@ -166,14 +156,22 @@ export function sceneLevel3(k) {
     //
     // Track level completion to stop blade animation and sounds
     //
-    let levelCompleted = false
+    // Pit gap for blood puddles and grass — same width as blade block
+    //
+    const pitWidth = Blades.getBladeWidth(k)
+    const pitCenterX = CFG.visual.screen.width / 2
+    const levelPitGap = { x: pitCenterX - pitWidth / 2, width: pitWidth }
+    //
     // Initialize level with heroes (skip standard platforms)
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
+    //
+    let levelCompleted = false
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
       k,
       levelName: 'level-word.3',
       levelNumber: 4,
       nextLevel: 'level-word.4',
       skipPlatforms: true,
+      platformGap: levelPitGap,
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
       subTitle: "words are blades that leave invisible wounds",
@@ -206,11 +204,11 @@ export function sceneLevel3(k) {
     })
     
     // Create custom platforms with pit in the middle
-    const pitInfo = createCustomPlatforms(k, CFG.visual.colors.platform)
+    const pitInfo = createCustomPlatforms(k, platformColor)
     //
     // Add rounded corners matching level 3's platform dimensions
     //
-    createRoundedCorners(k, CFG.visual.colors.platform, {
+    createRoundedCorners(k, platformColor, {
       sideWallWidth: PLATFORM_SIDE_WIDTH,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT
@@ -224,7 +222,6 @@ export function sceneLevel3(k) {
       hero,
       currentLevel: 'level-word.3',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
-      color: '#B0B0B0',  // Light gray for ghostly/ethereal flying words
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,
         right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH - 20,
@@ -247,6 +244,11 @@ export function sceneLevel3(k) {
         bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
       }
     })
+    spawnWordBackgroundHeroes(k, {
+      hero,
+      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH
+    })
     
     //
     // Update flying words animation
@@ -265,10 +267,7 @@ export function sceneLevel3(k) {
       top: PLATFORM_TOP_HEIGHT,
       bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - GRASS_RAISE_OFFSET
     }
-    const pitGap = {
-      x: pitInfo.centerX - pitInfo.width / 2,
-      width: pitInfo.width
-    }
+    const pitGap = levelPitGap
     const wordGrass = WordGrass.create({
       k,
       customBounds: grassBounds,
@@ -291,7 +290,7 @@ export function sceneLevel3(k) {
       k.pos(pitInfo.centerX - pitInfo.width / 2, pitBottomY),
       k.area(),
       k.body({ isStatic: true }),
-      getColor(k, CFG.visual.colors.platform),
+      getColor(k, platformColor),
       CFG.game.platformName
     ])
     
@@ -404,6 +403,13 @@ export function sceneLevel3(k) {
     // Setup blade animation (stops when level is completed)
     k.onUpdate(() => {
       if (!levelCompleted) updateBladesAnimation(inst)
+    })
+    WordBladeProximity.create({
+      k,
+      hero,
+      bladeInsts: [blades1, blades2, blades3, pitBlades],
+      sound,
+      proximityRange: 180
     })
   })
 }

@@ -2714,7 +2714,8 @@ function createRoundedCornerSprite(radius, backgroundColor) {
  * @param {Object} k - Kaplay instance
  */
 function createGroundStripe(k) {
-  const groundColor = k.rgb(20, 20, 20)
+  const [stripeR, stripeG, stripeB] = parseHex(CFG.visual.colors.groundStripe)
+  const groundColor = k.rgb(stripeR, stripeG, stripeB)
   const GROUND_STRIPE_HEIGHT = 5
   const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
   //
@@ -2735,11 +2736,8 @@ function createGroundStripe(k) {
  */
 function createRoundedCorners(k) {
   const radius = CORNER_RADIUS
-  const backgroundColor = CFG.visual.colors.background
-  //
-  // Create corner sprite
-  //
-  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  const cornerColor = CFG.visual.colors.platform
+  const cornerDataURL = createRoundedCornerSprite(radius, cornerColor)
   loadTime3Sprite(k, 'corner-sprite-level3', cornerDataURL)
   //
   // Bottom-left corner (where monster starts, lower part)

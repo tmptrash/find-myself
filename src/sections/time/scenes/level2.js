@@ -1624,7 +1624,8 @@ function createRoundedCornerSprite(radius, backgroundColor) {
  * @param {Object} k - Kaplay instance
  */
 function createGroundStripe(k) {
-  const groundColor = k.rgb(20, 20, 20)  // Dark gray ground
+  const [stripeR, stripeG, stripeB] = parseHex(CFG.visual.colors.groundStripe)
+  const groundColor = k.rgb(stripeR, stripeG, stripeB)
   const gameAreaWidth = k.width() - PLATFORM_SIDE_WIDTH * 2
   const groundY = k.height() - PLATFORM_BOTTOM_HEIGHT - 4
   k.add([
@@ -1641,11 +1642,8 @@ function createGroundStripe(k) {
  */
 function createRoundedCorners(k) {
   const radius = CORNER_RADIUS
-  const backgroundColor = CFG.visual.colors.background
-  //
-  // Create corner sprite
-  //
-  const cornerDataURL = createRoundedCornerSprite(radius, backgroundColor)
+  const cornerColor = CFG.visual.colors.platform
+  const cornerDataURL = createRoundedCornerSprite(radius, cornerColor)
   k.loadSprite('corner-sprite-level2', cornerDataURL)
   //
   // Release canvas backing store immediately after Kaplay reads it.

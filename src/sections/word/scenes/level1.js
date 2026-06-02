@@ -1,11 +1,10 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage } from '../utils/scene.js'
+import * as WordPitFill from '../utils/word-pit-fill.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as Sound from '../../../utils/sound.js'
@@ -13,6 +12,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import * as WordCeilingTrap from '../utils/word-ceiling-trap.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordIdleAaaTrap from '../utils/word-idle-aaa-trap.js'
+import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 
 //
 // Death messages (shown randomly on death)
@@ -53,7 +53,7 @@ const BONUS_PLATFORM_Y_OFFSET = 58
 const BONUS_PLATFORM_COLLISION_WIDTH = 80
 const BONUS_PLATFORM_REVEAL_WIDTH = 150
 const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
-const BONUS_PLATFORM_COLLISION_X_OFFSET = 18
+const BONUS_PLATFORM_COLLISION_X_OFFSET = 38
 const BONUS_STORAGE_KEY = 'word.level1BonusCollected'
 
 /**
@@ -210,7 +210,7 @@ export function sceneLevel1(k) {
     // Initialize level with heroes and gap in platform (for trap)
     //
     let bonusInst = null
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
       levelName: 'level-word.1',
       levelNumber: 2,
@@ -245,7 +245,6 @@ export function sceneLevel1(k) {
         })
       }
     })
-    
     //
     // Calculate platform boundaries for flying words
     //
@@ -270,48 +269,31 @@ export function sceneLevel1(k) {
     })
     
     //
-    // Create word pile for depth atmosphere effect
-    //
-    const wordPile = WordPile.create({
-      k,
-      customBounds: platformBounds
-    })
-    spawnWordBackgroundHeroes(k, {
-      hero,
-      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      sideWallWidth: PLATFORM_SIDE_WIDTH
-    })
-    
-    //
     // Update flying words animation
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    
-    //
-    // Create word grass on bottom platform (no static blades on this level)
-    //
-    const wordGrass = WordGrass.create({
+    WordKillerProximity.create({
       k,
-      customBounds: platformBounds,
       hero,
-      bladePositions: [],  // No static blades on this level
-      platformGaps: [platformGap],  // Pass the gap so grass doesn't spawn over it
-      movingPlatformPositions: [movingPlatformX]  // Grass avoids moving platform area
-    })
-    
-    //
-    // Update word grass animation
-    //
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
+      killerLetters: flyingWords.killerLetters,
+      sound
     })
     //
     // Create moving platform (at floor level)
     //
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
-    
+    //
+    // Floor gap column — playfield purple fill (baked sprite, above void)
+    //
+    WordPitFill.addPitShaftFill(k, {
+      x: platformGap.x,
+      width: platformGap.width,
+      topY: platformY,
+      bottomY: CFG.visual.screen.height,
+      playfieldColor
+    })
     const movingPlatform = MovingPlatform.create({
       k,
       x: movingPlatformX,
@@ -348,6 +330,7 @@ export function sceneLevel1(k) {
       pitWidth: bladeWidth,
       playfieldTopY: PLATFORM_TOP_HEIGHT,
       platformTopY: platformY,
+      platformColor,
       sfx: sound,
       onHit: () => showDeathMessage(k, hero, ceilingTrapInst.ceilingBlades, levelIndicator, sound)
     })

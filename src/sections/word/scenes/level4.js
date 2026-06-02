@@ -1,16 +1,15 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, createOutlinedDeathMessage } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
+import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as Sound from '../../../utils/sound.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
@@ -294,42 +293,16 @@ export function sceneLevel4(k) {
     })
     
     //
-    // Create word pile for depth atmosphere effect
-    //
-    const wordPile = WordPile.create({
-      k,
-      customBounds: platformBounds
-    })
-    spawnWordBackgroundHeroes(k, {
-      hero,
-      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      sideWallWidth: PLATFORM_SIDE_WIDTH
-    })
-    
-    //
     // Update flying words animation
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    
-    //
-    // Create word grass on bottom platform (no static blades on this level)
-    //
-    const wordGrass = WordGrass.create({
+    WordKillerProximity.create({
       k,
-      customBounds: platformBounds,
       hero,
-      bladePositions: [],  // No static blades on this level
-      platformGaps,  // Pass the gaps so grass doesn't spawn over them
-      movingPlatformPositions: [movingPlatform1X, movingPlatform2X]  // Two moving platforms
-    })
-    
-    //
-    // Update word grass animation
-    //
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
+      killerLetters: flyingWords.killerLetters,
+      sound
     })
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)

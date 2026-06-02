@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor } from '../../../utils/helper.js'
+import { getColor, getHex } from '../../../utils/helper.js'
 import * as Blades from '../components/blades.js'
 import * as Sound from '../../../utils/sound.js'
 
@@ -10,7 +10,6 @@ const TRIGGER_X_MARGIN = 24
 const DROP_DURATION = 0.32
 const RETRACT_DELAY = 1.1
 const RETRACT_DURATION = 0.35
-const TUBE_TOP_Y = 0
 const BLADE_HANG_OFFSET = 4
 const DROP_STOP_ABOVE_FLOOR = 52
 const CEILING_BLADE_COUNT = 3
@@ -30,22 +29,25 @@ const TRAP_Z = CFG.visual.zIndex.platforms + 3
  * @param {number} config.pitWidth - Pit / blade gap width in pixels
  * @param {number} config.playfieldTopY - Top edge of the main play area (below HUD strip)
  * @param {number} config.platformTopY - Bottom floor platform top Y
+ * @param {string} [config.platformColor] - Gray platform strip hex for the drop tube walls
  * @param {Function} config.onHit - Death callback when trap hits hero
  * @param {Object} [config.sfx] - Sound instance
  * @returns {Object} Trap instance
  */
 export function create(config) {
-  const { k, hero, gapCenterX, pitWidth, playfieldTopY, platformTopY, onHit, sfx } = config
+  const { k, hero, gapCenterX, pitWidth, playfieldTopY, platformTopY, platformColor, onHit, sfx } = config
+  const tubeColorHex = getHex(platformColor ?? CFG.visual.colors.platform)
   const bladeHeight = Blades.getBladeHeight(k)
   const bladeSection = BLADE_HANG_OFFSET + bladeHeight
+  const tubeTopY = playfieldTopY
   const dropStartBottomY = playfieldTopY
   const dropStopBottomY = platformTopY - DROP_STOP_ABOVE_FLOOR + bladeSection
   const dropPlatform = k.add([
-    k.rect(pitWidth, dropStartBottomY),
-    k.pos(gapCenterX, TUBE_TOP_Y),
+    k.rect(pitWidth, 0),
+    k.pos(gapCenterX, tubeTopY),
     k.anchor('top'),
     k.area(),
-    getColor(k, CFG.visual.colors.platform),
+    getColor(k, tubeColorHex),
     k.opacity(0),
     k.z(TRAP_Z),
     k.fixed()
@@ -76,7 +78,7 @@ export function create(config) {
     sfx,
     dropPlatform,
     ceilingBlades,
-    tubeTopY: TUBE_TOP_Y,
+    tubeTopY,
     bladeSection,
     dropStartBottomY,
     dropStopBottomY,

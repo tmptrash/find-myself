@@ -1,13 +1,13 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage } from '../utils/scene.js'
+import * as WordPitFill from '../utils/word-pit-fill.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as FlyingWords from '../components/flying-words.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
+import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -214,7 +214,7 @@ export function sceneLevel2(k) {
     ]
     
     // Initialize level with heroes and gaps in platform
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
       levelName: 'level-word.2',
       levelNumber: 3,
@@ -273,46 +273,31 @@ export function sceneLevel2(k) {
     })
     
     //
-    // Create word pile for depth atmosphere effect
-    //
-    const wordPile = WordPile.create({
-      k,
-      customBounds: platformBounds
-    })
-    spawnWordBackgroundHeroes(k, {
-      hero,
-      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      sideWallWidth: PLATFORM_SIDE_WIDTH
-    })
-    
-    //
     // Update flying words animation
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    
-    //
-    // Create word grass on bottom platform (pass blade positions)
-    //
-    const wordGrass = WordGrass.create({
+    WordKillerProximity.create({
       k,
-      customBounds: platformBounds,
       hero,
-      bladePositions: [blade1X, blade2X],  // Two static blades on this level
-      platformGaps,  // Pass the gaps so grass doesn't spawn over them
-      movingPlatformPositions: [movingPlatformX, movingPlatform2X]  // Two moving platforms
-    })
-    
-    //
-    // Update word grass animation
-    //
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
+      killerLetters: flyingWords.killerLetters,
+      sound
     })
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const bladeHeight = Blades.getBladeHeight(k)
-    
+    //
+    // Pit shafts under moving-platform gaps — playfield purple, not void black
+    //
+    platformGaps.forEach((gap) => {
+      WordPitFill.addPitShaftFill(k, {
+        x: gap.x,
+        width: gap.width,
+        topY: platformY,
+        bottomY: CFG.visual.screen.height,
+        playfieldColor
+      })
+    })
     // Create first moving platform
     MovingPlatform.create({
       k,

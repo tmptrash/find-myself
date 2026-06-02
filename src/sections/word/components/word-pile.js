@@ -1,4 +1,4 @@
-import { CFG } from '../cfg.js'
+import { CFG, getPlayfieldDepthColor } from '../cfg.js'
 import { toCanvas } from '../../../utils/helper.js'
 //
 // Words and fragments related to pain, self-discovery, and introspection
@@ -34,8 +34,7 @@ const DEPTH_LAYER_TEMPLATES = [
     minSize: 68,
     maxSize: 105,
     opacity: 1.0,
-    colorIndex: 0,
-    maxColorIndex: 2,
+    depthColorKey: 'wordsPileFar',
     count: 18,
     letterRatio: 0,
     blurred: true,
@@ -48,8 +47,7 @@ const DEPTH_LAYER_TEMPLATES = [
     minSize: 78,
     maxSize: 115,
     opacity: 1.0,
-    colorIndex: 2,
-    maxColorIndex: 4,
+    depthColorKey: 'wordsPileMid',
     count: 6,
     letterRatio: 0,
     blurred: true,
@@ -224,15 +222,11 @@ function generateWordData(layerConfig, width, height, widthSegment) {
 }
 
 //
-// Resolves a red phrase shade for a depth layer from section config
+// Depth shade from playfieldDepth slot (moving layer 2)
 //
 function pickLayerColor(layerConfig) {
-  const palette = CFG.visual.colors.floatingPhrase
-  if (!palette?.length) return CFG.visual.colors.platform
-  const start = layerConfig.colorIndex ?? 0
-  const end = Math.min(palette.length - 1, layerConfig.maxColorIndex ?? start)
-  const idx = start + Math.floor(Math.random() * Math.max(1, end - start + 1))
-  return palette[idx] ?? palette[start]
+  const key = layerConfig.depthColorKey ?? 'wordsPileMid'
+  return getPlayfieldDepthColor(key)
 }
 
 /**
@@ -328,18 +322,13 @@ function onUpdate(inst) {
 }
 
 //
-// Builds depth layers with z strictly behind large background heroes
+// Z from cfg — pile sits between static phrases and flying words
 //
 function resolveDepthLayers() {
-  const heroZ = CFG.visual.zIndex.wordBackgroundHero ?? -32
   return DEPTH_LAYER_TEMPLATES.map((template) => {
     const configuredZ = CFG.visual.zIndex[template.zKey]
-    const zIndex = Math.min(
-      configuredZ ?? template.zFallback,
-      heroZ - (template.name === 'far_back' ? 18 : 10)
-    )
     const { zKey, zFallback, ...layerConfig } = template
-    return { ...layerConfig, zIndex }
+    return { ...layerConfig, zIndex: configuredZ ?? zFallback }
   })
 }
 

@@ -183,7 +183,10 @@ export function create(config) {
     addArms = false,       // If true, add simple vertical arms
     addWatch = false,      // If true, draw small watch on right wrist (requires addArms)
     outlineOnly = false,   // If true, draw only outline (no body fill)
-    hitboxPadding = 0      // Additional padding around collision box (for menu hover/click)
+    hitboxPadding = 0,     // Additional padding around collision box (for menu hover/click)
+    ambient = false,       // Decorative background character — no annihilation tag
+    ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
+    ambientRunSpeed = null // Seconds per run frame when ambientWalk is true
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -296,7 +299,7 @@ export function create(config) {
     k.scale(scale),
     k.z(CFG.visual.zIndex.player),
   ])
-  type === HEROES.ANTIHERO && character.use(ANTIHERO_TAG)
+  type === HEROES.ANTIHERO && !ambient && character.use(ANTIHERO_TAG)
 
   const inst = {
     character,
@@ -348,7 +351,9 @@ export function create(config) {
     idleVocalization,
     idleNotes: [],
     idleNoteEmitTimer: IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN),
-    idleStillTime: 0
+    idleStillTime: 0,
+    ambientWalk,
+    ambientRunSpeed: ambientRunSpeed ?? RUN_ANIM_SPEED * 2.4
   }
   //
   // Check ground touch through collisions
@@ -890,7 +895,7 @@ function onUpdate(inst) {
   // For non-controllable characters (like in menu), always use idle animation
   //
   if (!inst.controllable) {
-    updateIdleAnimation(inst)
+    inst.ambientWalk ? updateAmbientWalkAnimation(inst) : updateIdleAnimation(inst)
     inst.character.flipX = inst.direction === -1
     return
   }
@@ -1208,6 +1213,23 @@ function updateIdleAnimation(inst) {
   if (inst.currentEyeSprite !== spriteName) {
     inst.character.use(inst.k.sprite(spriteName))
     inst.currentEyeSprite = spriteName
+  }
+}
+
+//
+// Slow run cycle for distant background walkers — avoids idle/run sprite fighting
+//
+function updateAmbientWalkAnimation(inst) {
+  const prefix = inst.spritePrefix || inst.type
+  inst.runTimer += inst.k.dt()
+  if (inst.runTimer >= inst.ambientRunSpeed) {
+    inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
+    inst.runTimer = 0
+  }
+  const runSprite = `${prefix}-run-${inst.runFrame}`
+  if (inst.currentEyeSprite !== runSprite) {
+    inst.character.use(inst.k.sprite(runSprite))
+    inst.currentEyeSprite = runSprite
   }
 }
 

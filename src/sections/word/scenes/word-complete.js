@@ -1,6 +1,4 @@
 import * as Sound from '../../../utils/sound.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
@@ -120,8 +118,6 @@ function onUpdate(inst) {
     
     if (progress >= 1) {
       inst.phase = 'complete'
-      WordPile.reset()  // Reset word pile state when leaving section
-      WordGrass.reset()  // Reset grass state when leaving section
       goToMenuAfterAssets(inst.k)
     }
   }
@@ -133,8 +129,5 @@ function onUpdate(inst) {
 function skipToMenu(inst) {
   if (inst.skipped) return
   inst.skipped = true
-  WordPile.reset()  // Reset word pile state when leaving section
-  WordGrass.reset()  // Reset grass state when leaving section
   goToMenuAfterAssets(inst.k)
 }
-

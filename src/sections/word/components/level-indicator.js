@@ -2,6 +2,12 @@ import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import { get } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
+//
+// HUD scoreboard grey — matches touch section inactive letters and FPS row
+//
+const HUD_SCORE_ICON_GREY_R = 176
+const HUD_SCORE_ICON_GREY_G = 176
+const HUD_SCORE_ICON_GREY_B = 176
 
 /**
  * Creates word section level indicator (letters "WORDS") with hero and life icons
@@ -194,7 +200,7 @@ const TRAP_BADGE_OUTLINE_THICKNESS = 2
     }),
     k.pos(smallHeroX + smallHeroSize / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
     k.anchor('left'),
-    k.color(255, 255, 255),
+    k.color(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
@@ -220,7 +226,7 @@ const TRAP_BADGE_OUTLINE_THICKNESS = 2
     }),
     k.pos(lifeImageX + lifeImageHeight / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
     k.anchor('left'),
-    k.color(255, 255, 255),
+    k.color(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])

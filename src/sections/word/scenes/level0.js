@@ -1,15 +1,14 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createOutlinedDeathMessage } from '../utils/scene.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as WordBlades2ChaseTrap from '../utils/word-blades2-chase-trap.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
+import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { get, set } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -54,19 +53,15 @@ const BONUS_PLATFORM_COLLISION_X_OFFSET = 36
 const BONUS_PLATFORM_REVEAL_WIDTH = 160
 const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
 const BONUS_STORAGE_KEY = 'word.level0BonusCollected'
-//
-// Background word pile density (default layer counts are 37 + 10)
-//
-const WORD_PILE_LAYER_COUNTS = [10, 4]
 const FLYING_WORD_COUNT = 22
 //
 // Life deduction trap (mirrors touch level 0)
 //
 const LIFE_DEDUCT_THRESHOLD = 10
 const LIFE_DEDUCT_FLAG = 'word.level0LifeDeduction'
-const WORD_L0_PLAYFIELD_BG_R = 62
-const WORD_L0_PLAYFIELD_BG_G = 62
-const WORD_L0_PLAYFIELD_BG_B = 62
+const WORD_L0_PLAYFIELD_BG_R = 90
+const WORD_L0_PLAYFIELD_BG_G = 90
+const WORD_L0_PLAYFIELD_BG_B = 112
 //
 // Hover tooltip copy
 //
@@ -218,21 +213,6 @@ export function sceneLevel0(k) {
     }
     
     //
-    // Create word pile for depth atmosphere effect
-    // Multiple layers of static words at different depths creating "word dump" feeling
-    //
-    const wordPile = WordPile.create({
-      k,
-      customBounds: platformBounds,
-      layerCounts: WORD_PILE_LAYER_COUNTS
-    })
-    spawnWordBackgroundHeroes(k, {
-      hero,
-      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      sideWallWidth: PLATFORM_SIDE_WIDTH
-    })
-    
-    //
     // Create flying words for atmosphere
     //
     const flyingWords = FlyingWords.create({
@@ -251,6 +231,12 @@ export function sceneLevel0(k) {
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
+    })
+    WordKillerProximity.create({
+      k,
+      hero,
+      killerLetters: flyingWords.killerLetters,
+      sound
     })
     //
     // Calculate positions
@@ -327,25 +313,6 @@ export function sceneLevel0(k) {
     blades3.blade.z = CFG.visual.zIndex.player + 1
     const proxBlades = [blades1, blades2, blades3]
     
-    //
-    // Create word grass and trees for additional atmosphere
-    // Pass blade positions so grass doesn't spawn near them
-    //
-    const bladePositions = [blade1X, blade2X, blade3X]
-    const wordGrass = WordGrass.create({
-      k,
-      customBounds: platformBounds,
-      hero,
-      bladePositions,
-      movingPlatformPositions: []  // No moving platforms on level 0
-    })
-    
-    //
-    // Update word grass animation
-    //
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
-    })
     const bonusHeroInst = BonusHero.create({
       k,
       x: BONUS_PLATFORM_X,

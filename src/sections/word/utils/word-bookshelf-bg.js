@@ -54,17 +54,19 @@ const BOOK_ROWS = [
  * @param {Object} config.k - Kaplay instance
  * @param {number} config.bottomPlatformHeight - Bottom platform height in pixels
  * @param {string} config.backgroundColor - Section background hex color
+ * @param {string} [config.platformColor] - Dark playfield hex for subtle shelf contrast
  * @returns {Object} Bookshelf background instance
  */
 export function create(config) {
-  const { k, bottomPlatformHeight, backgroundColor } = config
+  const { k, bottomPlatformHeight, backgroundColor, platformColor } = config
   const bgColor = backgroundColor || CFG.visual.colors.background
+  const pfColor = platformColor || CFG.visual.colors.platform
   const floorY = k.height() - bottomPlatformHeight
   const playAreaLeft = SIDE_WALL_WIDTH
   const playAreaWidth = k.width() - SIDE_WALL_WIDTH * 2
-  const palette = buildPalette(bgColor, CFG.visual.colors.platform)
+  const palette = buildPalette(bgColor, pfColor)
   const placements = buildPlacements(playAreaLeft, playAreaWidth, floorY)
-  const spriteKey = `word-bg-bookshelves-gray-v5-${k.width()}x${k.height()}-${bgColor.replace('#', '')}`
+  const spriteKey = `word-bg-bookshelves-light-v6-${k.width()}x${k.height()}-${bgColor.replace('#', '')}`
   if (!k.getSprite(spriteKey)) {
     const canvas = toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
       ctx.clearRect(0, 0, k.width(), k.height())
@@ -119,25 +121,42 @@ function drawBookshelfOnFloor(ctx, placement, palette) {
 }
 
 //
-// Builds a fully gray palette from the level background and platform colors
+// Light warm palette — shelves read against the bright void behind them
 //
 function buildPalette(bgHex, platformHex) {
   const bg = bgHex || CFG.visual.colors.background
   const platform = platformHex || CFG.visual.colors.platform
+  const lift = lightenHex(bg, 0.12)
+  const paper = lightenHex(bg, 0.28)
   return {
     bg,
-    frame: mixHex(platform, bg, 0.18),
-    stroke: mixHex(platform, bg, 0.38),
-    wood: mixHex(bg, platform, 0.32),
-    woodDark: mixHex(platform, bg, 0.32),
-    woodLight: mixHex(bg, platform, 0.22),
-    shelf: mixHex(platform, bg, 0.24),
+    frame: mixHex(lift, paper, 0.35),
+    stroke: mixHex(platform, bg, 0.22),
+    wood: mixHex(bg, paper, 0.4),
+    woodDark: mixHex(lift, platform, 0.12),
+    woodLight: mixHex(paper, '#FFFFFF', 0.35),
+    shelf: mixHex(paper, '#FFFFFF', 0.2),
     books: [
-      mixHex(bg, platform, 0.22),
-      mixHex(bg, platform, 0.38),
-      mixHex(platform, bg, 0.14)
+      mixHex(bg, paper, 0.3),
+      mixHex(lift, paper, 0.45),
+      mixHex(lift, platform, 0.08)
     ]
   }
+}
+
+//
+// Nudges a hex color toward white
+//
+function lightenHex(hex, amount) {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  const t = Math.min(1, Math.max(0, amount))
+  const lr = Math.round(r + (255 - r) * t)
+  const lg = Math.round(g + (255 - g) * t)
+  const lb = Math.round(b + (255 - b) * t)
+  return `#${lr.toString(16).padStart(2, '0')}${lg.toString(16).padStart(2, '0')}${lb.toString(16).padStart(2, '0')}`
 }
 
 //

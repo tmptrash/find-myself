@@ -155,7 +155,9 @@ async function applyPack(k, packKey, sceneName) {
     // Blade sprites use dynamic import to avoid a circular dependency chain.
     //
     const Blades = await import('../sections/word/components/blades.js')
+    const WordConsciousnessArt = await import('../sections/word/utils/word-consciousness-art.js')
     Blades.loadSprites(k)
+    WordConsciousnessArt.loadBrainSprite(k)
     BootLoader.setLoaderBarPct(85)
     await BootLoader.yieldForGpu(3)
     return

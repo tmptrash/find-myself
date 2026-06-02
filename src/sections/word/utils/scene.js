@@ -1,9 +1,7 @@
 import { CFG, getLevelColors } from '../cfg.js'
-import { getColor, getRGB, parseHex } from '../../../utils/helper.js'
+import { getColor, getRGB, parseHex, toCanvas } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import * as LevelIndicator from '../components/level-indicator.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { get, set } from '../../../utils/progress.js'
@@ -11,10 +9,10 @@ import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 import * as LevelHelp from '../../../utils/level-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
-import * as WordBookshelfBg from './word-bookshelf-bg.js'
 import * as WordHangingVines from './word-hanging-vines.js'
-import * as WordStaticBgWords from './word-static-bg-words.js'
+import * as WordConsciousnessLayers from './word-consciousness-layers.js'
 import * as WordBackgroundHeroes from './word-background-heroes.js'
+import * as WordBackgroundAntiheroes from './word-background-antiheroes.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 const CORNER_RADIUS = 20  // Radius for rounded corners
@@ -26,9 +24,9 @@ const EERIE_SOUND_INITIAL_DELAY_MAX = 6
 const EERIE_SOUND_MIN_DELAY = 4
 const EERIE_SOUND_MAX_DELAY = 8
 //
-// FPS / timer row sits below WORDS letters; small hero and life stay unchanged
+// FPS / timer row aligned vertically with WORDS letters and top-right score numerals
 //
-const WORD_HUD_FPS_TOP_OFFSET = 32
+const WORD_HUD_FPS_TOP_OFFSET = 43
 //
 // Black outline offsets for bottom death subtitle (8-direction stroke)
 //
@@ -88,25 +86,6 @@ export function createOutlinedDeathMessage(k, cfg) {
       outlineTexts.forEach(t => k.destroy(t))
     }
   }
-}
-
-/**
- * Spawns large background heroes after word-pile layers so z-order stays correct
- * @param {Object} k - Kaplay instance
- * @param {Object} cfg - Hero spawn configuration
- * @param {Object} cfg.hero - Playable hero instance (look-at target)
- * @param {number} cfg.bottomPlatformHeight - Bottom platform height in pixels
- * @param {number} cfg.sideWallWidth - Play area side margin
- * @returns {Object} Background heroes instance
- */
-export function spawnWordBackgroundHeroes(k, cfg) {
-  const { hero, bottomPlatformHeight, sideWallWidth } = cfg
-  return WordBackgroundHeroes.create({
-    k,
-    hero,
-    bottomPlatformHeight,
-    sideWallWidth
-  })
 }
 
 /**
@@ -201,7 +180,6 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
  * @param {Number} [config.antiHeroX] - Anti-hero X position in pixels
  * @param {Number} [config.antiHeroY] - Anti-hero Y position in pixels
  * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
- * @param {Boolean} [config.showBackgroundHeroes=false] - Use spawnWordBackgroundHeroes() after word pile instead
  * @returns {Object} Object with sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic
  */
 export function initScene(config) {
@@ -226,8 +204,7 @@ export function initScene(config) {
     heroY = null,
     antiHeroX = null,
     antiHeroY = null,
-    onAnnihilation = null,
-    showBackgroundHeroes = false
+    onAnnihilation = null
   } = config
   
   //
@@ -236,10 +213,11 @@ export function initScene(config) {
   const resolvedLevelColors = levelName ? getLevelColors(levelName) : null
   const bgColor = backgroundColor || resolvedLevelColors?.background || CFG.visual.colors.background
   const pfColor = platformColor || resolvedLevelColors?.platform || CFG.visual.colors.platform
+  const playfieldColor = resolvedLevelColors?.playfield ?? CFG.visual.colors.playfield ?? pfColor
   //
   // Set canvas background to match platform color at edges (avoids visible strips in letterbox)
   //
-  k.setBackground(k.Color.fromHex(pfColor))
+  k.setBackground(k.Color.fromHex(bgColor))
   //
   // Set gravity
   //
@@ -276,47 +254,41 @@ export function initScene(config) {
   }
   k.onUpdate(() => onUpdateEerieSound(eerieInst))
   //
-  // Full-screen background with muted distant bookshelves (farthest layer)
+  // Layer 0 — thought sky void; layer 5 — game-world playfield fill inside walls
   //
   const bottomPH = bottomPlatformHeight ?? k.height() * 0.12
-  //
-  // Dark void fill — static words sit above this, bookshelf furniture above words
-  //
-  const voidBgZ = CFG.visual.zIndex.wordVoidBackground ?? CFG.visual.zIndex.background - 12
+  const wall = sideWallWidth ?? 192
   k.add([
     k.rect(k.width(), k.height()),
     getColor(k, bgColor),
     k.pos(0, 0),
     k.fixed(),
-    k.z(voidBgZ)
+    k.z(CFG.visual.zIndex.wordThoughtSky ?? CFG.visual.zIndex.background - 18)
   ])
-  WordStaticBgWords.create({
+  addPlayfieldFill(k, playfieldColor, topPlatformHeight, bottomPH, wall)
+  WordConsciousnessLayers.create({
     k,
-    backgroundColor: bgColor,
-    platformColor: pfColor,
-    sideWallWidth: sideWallWidth ?? 192,
+    sideWallWidth: wall,
     topPlatformHeight,
-    bottomPlatformHeight: bottomPH
-  })
-  WordBookshelfBg.create({
-    k,
     bottomPlatformHeight: bottomPH,
-    backgroundColor: bgColor
+    playfieldColor
   })
   WordHangingVines.create({
     k,
     sideWallWidth: sideWallWidth ?? 192,
     topPlatformHeight,
-    bottomPlatformHeight: bottomPH
+    bottomPlatformHeight: bottomPH,
+    playfieldColor
   })
   
   // Add platforms (unless skipped)
   if (!skipPlatforms) {
     addPlatforms(k, pfColor, bottomPlatformHeight, topPlatformHeight, platformGap)
-    //
-    // Create rounded corners
-    //
-    createRoundedCorners(k, pfColor)
+    createRoundedCorners(k, pfColor, {
+      sideWallWidth: wall,
+      topPlatformHeight: topPlatformHeight ?? 360,
+      bottomPlatformHeight: bottomPH
+    })
   }
   
   // Setup camera
@@ -389,8 +361,6 @@ export function initScene(config) {
     k.onKeyPress(key, () => {
       Sound.stopBackgroundMusic(sound)
       if (breathMusic && breathMusic.stop) breathMusic.stop()
-      WordPile.reset()  // Reset word pile state when leaving section
-      WordGrass.reset()  // Reset grass state when leaving section
       goToMenuAfterAssets(k)
     })
   })
@@ -406,9 +376,26 @@ export function initScene(config) {
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
     hero && WordHeroIdleSpeech.create(k, hero)
+    hero && WordBackgroundHeroes.create({
+      k,
+      hero,
+      bottomPlatformHeight: bottomPH,
+      topPlatformHeight: topPlatformHeight ?? 360,
+      sideWallWidth: wall,
+      playfieldColor,
+      platformColor: pfColor
+    })
+    hero && WordBackgroundAntiheroes.create({
+      k,
+      hero,
+      bottomPlatformHeight: bottomPH,
+      topPlatformHeight: topPlatformHeight ?? 360,
+      sideWallWidth: wall,
+      playfieldColor
+    })
   }
   
-  return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, backgroundColor: bgColor, platformColor: pfColor }
+  return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, backgroundColor: bgColor, platformColor: pfColor, playfieldColor }
 }
 
 /**
@@ -610,6 +597,46 @@ function setupCamera(k) {
     k.camPos(k.width() / 2, k.height() / 2)
   })
 }
+
+//
+// Rounded playfield fill — lighter game zone distinct from dark void and platform frame
+//
+function addPlayfieldFill(k, playfieldColor, topPlatformHeight, bottomPlatformHeight, sideWallWidth) {
+  const wall = sideWallWidth
+  const topY = topPlatformHeight ?? 360
+  const bottomPH = bottomPlatformHeight ?? 360
+  const fillZ = CFG.visual.zIndex.wordPlayfieldFill ?? -90
+  const width = k.width() - wall * 2
+  const height = k.height() - topY - bottomPH
+  const spriteKey = `word-playfield-fill-${width}x${height}-${playfieldColor.replace('#', '')}`
+  if (!k.getSprite(spriteKey)) {
+    const canvas = toCanvas({ width, height, pixelRatio: 1 }, (ctx) => {
+      ctx.fillStyle = playfieldColor.startsWith('#') ? playfieldColor : `#${playfieldColor.replace('#', '')}`
+      ctx.beginPath()
+      ctx.moveTo(CORNER_RADIUS, 0)
+      ctx.lineTo(width - CORNER_RADIUS, 0)
+      ctx.quadraticCurveTo(width, 0, width, CORNER_RADIUS)
+      ctx.lineTo(width, height - CORNER_RADIUS)
+      ctx.quadraticCurveTo(width, height, width - CORNER_RADIUS, height)
+      ctx.lineTo(CORNER_RADIUS, height)
+      ctx.quadraticCurveTo(0, height, 0, height - CORNER_RADIUS)
+      ctx.lineTo(0, CORNER_RADIUS)
+      ctx.quadraticCurveTo(0, 0, CORNER_RADIUS, 0)
+      ctx.closePath()
+      ctx.fill()
+    })
+    k.loadSprite(spriteKey, canvas)
+    canvas.width = 0
+    canvas.height = 0
+  }
+  k.add([
+    k.sprite(spriteKey),
+    k.pos(wall, topY),
+    k.fixed(),
+    k.z(fillZ)
+  ])
+}
+
 /**
  * Adds standard platforms to the level (top, bottom, left wall, right wall)
  * @param {Object} k - Kaplay instance
@@ -702,7 +729,11 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
   //
   // Hero body color: orange if time complete, brown if touch complete, otherwise default
   //
-  const heroBodyColor = isTimeComplete ? "#FF8C00" : isTouchComplete ? "#8B5A50" : CFG.visual.colors.hero.body
+  const heroBodyColor = isTimeComplete
+    ? "#FF8C00"
+    : isTouchComplete
+      ? "#8B5A50"
+      : CFG.visual.colors.hero.body
   
   const antiHero = Hero.create({
     k,

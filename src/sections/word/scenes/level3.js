@@ -1,15 +1,15 @@
 import { CFG } from '../cfg.js'
-import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createRoundedCorners, createOutlinedDeathMessage, spawnWordBackgroundHeroes } from '../utils/scene.js'
+import { initScene, checkSpeedBonus, playLifeDeathEffects, playSpeedBonusEffects, createRoundedCorners, createOutlinedDeathMessage } from '../utils/scene.js'
 import { getColor } from '../../../utils/helper.js'
+import * as WordPitFill from '../utils/word-pit-fill.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
-import * as WordPile from '../components/word-pile.js'
-import * as WordGrass from '../components/word-grass.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
+import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
 //
@@ -165,7 +165,7 @@ export function sceneLevel3(k) {
     // Initialize level with heroes (skip standard platforms)
     //
     let levelCompleted = false
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
       levelName: 'level-word.3',
       levelNumber: 4,
@@ -233,66 +233,42 @@ export function sceneLevel3(k) {
     })
     
     //
-    // Create word pile for depth atmosphere effect
-    //
-    const wordPile = WordPile.create({
-      k,
-      customBounds: {
-        left: PLATFORM_SIDE_WIDTH,
-        right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
-        top: PLATFORM_TOP_HEIGHT,
-        bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
-      }
-    })
-    spawnWordBackgroundHeroes(k, {
-      hero,
-      bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
-      sideWallWidth: PLATFORM_SIDE_WIDTH
-    })
-    
-    //
     // Update flying words animation
     //
     k.onUpdate(() => {
       FlyingWords.onUpdate(flyingWords)
     })
-    //
-    // Create word grass on bottom platform (exclude pit area)
-    // Raise bottom bound so grass appears to grow from the floor surface
-    //
-    const GRASS_RAISE_OFFSET = 0
-    const grassBounds = {
-      left: PLATFORM_SIDE_WIDTH,
-      right: CFG.visual.screen.width - PLATFORM_SIDE_WIDTH,
-      top: PLATFORM_TOP_HEIGHT,
-      bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - GRASS_RAISE_OFFSET
-    }
-    const pitGap = levelPitGap
-    const wordGrass = WordGrass.create({
+    WordKillerProximity.create({
       k,
-      customBounds: grassBounds,
       hero,
-      bladePositions: [],
-      platformGaps: [pitGap],
-      movingPlatformPositions: []
+      killerLetters: flyingWords.killerLetters,
+      sound
     })
-    k.onUpdate(() => {
-      WordGrass.onUpdate(wordGrass)
-    })
+    //
     // Create bottom of the pit (platform at pit depth)
+    //
     const heroHeight = CFG.visual.screen.height * 0.08  // Approximate hero height (8% of screen)
     const pitDepth = heroHeight * 1.3  // Pit depth slightly more than hero height
     const pitBottomY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + pitDepth
-    
-    // Create pit bottom platform
-    k.add([
-      k.rect(pitInfo.width, k.height() - pitBottomY),
-      k.pos(pitInfo.centerX - pitInfo.width / 2, pitBottomY),
-      k.area(),
-      k.body({ isStatic: true }),
-      getColor(k, platformColor),
-      CFG.game.platformName
-    ])
+    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+    //
+    // Pit shaft and floor — playfield purple (baked sprites above void)
+    //
+    WordPitFill.addPitShaftFill(k, {
+      x: pitInfo.centerX - pitInfo.width / 2,
+      width: pitInfo.width,
+      topY: platformY,
+      bottomY: pitBottomY,
+      playfieldColor
+    })
+    WordPitFill.addPitShaftFill(k, {
+      x: pitInfo.centerX - pitInfo.width / 2,
+      width: pitInfo.width,
+      topY: pitBottomY,
+      bottomY: k.height(),
+      playfieldColor,
+      solidPlatform: true
+    })
     
     // Create blades at the bottom of the pit (pointing up)
     const bladeHeight = Blades.getBladeHeight(k)
@@ -309,7 +285,6 @@ export function sceneLevel3(k) {
     pitBlades.blade.opacity = 1
     
     // Create 3 blades (left floor, center ceiling, right floor)
-    const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     const floorBladeY = Blades.getFloorBladeRestCenterY(platformY)
     const ceilingBladeY = PLATFORM_TOP_HEIGHT + bladeHeight * 1.2  // Extend down from ceiling
     

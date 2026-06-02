@@ -1,9 +1,9 @@
-import { CFG } from '../cfg.js'
+import { CFG, getConsciousnessColor, atmosphericDepthColor } from '../cfg.js'
 
 //
 // Hanging vine phrases — intrusive-thought sentences draped between top playfield anchors
 //
-const VINE_Z = CFG.visual.zIndex.blades - 2
+const VINE_Z = CFG.visual.zIndex.wordVines ?? CFG.visual.zIndex.blades - 2
 const LETTER_SIZE_MIN = 42
 const LETTER_SIZE_MAX = 57
 const LETTER_SPACING = 92
@@ -21,15 +21,6 @@ const MIN_WORD_GAP_RATIO = 1.4
 const MIN_RENDER_LETTER_SIZE = 16
 const SWAY_SPEED = 1.35
 const SWAY_AMPLITUDE = 26
-const VINE_OPACITY = 0.55
-const SPACE_OPACITY = 0.35
-//
-// Thin outline on vine letters — black cardinal stroke (matches touch tree/cloud style)
-//
-const VINE_OUTLINE_OFFSETS = [
-  [-1, 0], [1, 0], [0, -1], [0, 1]
-]
-const VINE_OUTLINE_HEX = CFG.visual.colors.outline ?? '#000000'
 //
 // Letter placement: arc letters pin start and end on the top platform; hang drapes down
 //
@@ -85,8 +76,8 @@ const VINE_SPAN_RATIO_MIN = 0.11
 const VINE_SPAN_RATIO_MAX = 0.2
 const VINE_SAG_MIN = 0.52
 const VINE_SAG_MAX = 0.9
-const VINE_DEPTH_OPACITY_MIN = 0.38
-const VINE_DEPTH_OPACITY_MAX = 0.62
+const VINE_DEPTH_BLEND_MIN = 0.38
+const VINE_DEPTH_BLEND_MAX = 0.72
 
 /**
  * Creates hanging vine phrases from small letters across the word section playfield
@@ -95,10 +86,11 @@ const VINE_DEPTH_OPACITY_MAX = 0.62
  * @param {number} config.sideWallWidth - Left/right wall width in pixels
  * @param {number} config.topPlatformHeight - Top platform height in pixels
  * @param {number} config.bottomPlatformHeight - Bottom platform height in pixels
+ * @param {string} [config.playfieldColor] - Playfield fill hex for depth blending
  * @returns {Object} Hanging vines instance
  */
 export function create(config) {
-  const { k, sideWallWidth, topPlatformHeight, bottomPlatformHeight } = config
+  const { k, sideWallWidth, topPlatformHeight, bottomPlatformHeight, playfieldColor } = config
   const playTop = topPlatformHeight ?? k.height() * 0.33
   const playBottom = k.height() - (bottomPlatformHeight ?? k.height() * 0.12)
   const playWidth = k.width()
@@ -123,7 +115,8 @@ export function create(config) {
   }
   const inst = {
     k,
-    vines
+    vines,
+    playfieldColor: playfieldColor ?? getConsciousnessColor('gameWorld')
   }
   k.add([
     k.pos(0, 0),
@@ -150,7 +143,7 @@ function resolveVineLayout(xRatio) {
     spanRatio: VINE_SPAN_RATIO_MIN + Math.random() * (VINE_SPAN_RATIO_MAX - VINE_SPAN_RATIO_MIN),
     sag: VINE_SAG_MIN + Math.random() * (VINE_SAG_MAX - VINE_SAG_MIN),
     phase: Math.random() * Math.PI * 2,
-    depthOpacity: VINE_DEPTH_OPACITY_MIN + length * (VINE_DEPTH_OPACITY_MAX - VINE_DEPTH_OPACITY_MIN),
+    depthBlend: VINE_DEPTH_BLEND_MIN + length * (VINE_DEPTH_BLEND_MAX - VINE_DEPTH_BLEND_MIN),
     arc: Math.random() < ARC_VINE_CHANCE
   }
 }
@@ -186,7 +179,7 @@ function buildVine(layout, phrase, playLeft, playWidth, playTop, playBottom, pla
       controlX: startX + span / 2,
       controlY: playTop + playHeight * sag,
       phase: layout.phase,
-      depthOpacity: layout.depthOpacity ?? VINE_OPACITY,
+      depthBlend: layout.depthBlend ?? VINE_DEPTH_BLEND_MIN,
       arcLength: 0
     }
     vine.arcLength = measureArcLength(vine)
@@ -213,7 +206,7 @@ function buildVine(layout, phrase, playLeft, playWidth, playTop, playBottom, pla
     endX,
     endY,
     phase: layout.phase,
-    depthOpacity: layout.depthOpacity ?? VINE_OPACITY,
+    depthBlend: layout.depthBlend ?? VINE_DEPTH_BLEND_MIN,
     arcLength: 0
   }
   vine.arcLength = measureArcLength(vine)
@@ -224,15 +217,11 @@ function buildVine(layout, phrase, playLeft, playWidth, playTop, playBottom, pla
 // Draws letters and visible word spaces along a hanging curve
 //
 function onDraw(inst) {
-  const { k, vines } = inst
+  const { k, vines, playfieldColor } = inst
   const time = k.time()
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const outlineR = parseInt(VINE_OUTLINE_HEX.slice(1, 3), 16)
-  const outlineG = parseInt(VINE_OUTLINE_HEX.slice(3, 5), 16)
-  const outlineB = parseInt(VINE_OUTLINE_HEX.slice(5, 7), 16)
-  const outlineColor = k.rgb(outlineR, outlineG, outlineB)
   vines.forEach(vine => {
-    const vineOpacity = vine.depthOpacity ?? VINE_OPACITY
+    const depthBlend = vine.depthBlend ?? VINE_DEPTH_BLEND_MIN
     getLetterLayout(vine).forEach(({ letter, t, size }) => {
       const base = quadraticPoint(vine, t)
       //
@@ -243,51 +232,28 @@ function onDraw(inst) {
       const swayX = Math.sin(swayPhase) * SWAY_AMPLITUDE * swayFactor
       const swayY = Math.sin(swayPhase * 0.7 + 0.6) * SWAY_AMPLITUDE * 0.12 * swayFactor
       const pos = k.vec2(base.x + swayX, base.y + swayY)
-      const phraseColor = pickVinePhraseColor(k, t)
-      if (letter === ' ') {
-        k.drawText({
-          text: '·',
-          size: Math.round(size * 0.45),
-          font,
-          pos,
-          anchor: 'center',
-          color: phraseColor,
-          opacity: SPACE_OPACITY * (vineOpacity / VINE_OPACITY)
-        })
-      } else {
-        VINE_OUTLINE_OFFSETS.forEach(([dx, dy]) => {
-          k.drawText({
-            text: letter,
-            size,
-            font,
-            pos: k.vec2(pos.x + dx, pos.y + dy),
-            anchor: 'center',
-            color: outlineColor,
-            opacity: vineOpacity
-          })
-        })
-        k.drawText({
-          text: letter,
-          size,
-          font,
-          pos,
-          anchor: 'center',
-          color: phraseColor,
-          opacity: vineOpacity
-        })
-      }
+      const phraseColor = pickVinePhraseColor(k, t, depthBlend, playfieldColor)
+      const glyph = letter === ' ' ? '·' : letter
+      k.drawText({
+        text: glyph,
+        size: letter === ' ' ? Math.round(size * 0.45) : size,
+        font,
+        pos,
+        anchor: 'center',
+        color: phraseColor,
+        opacity: 1
+      })
     })
   })
 }
 
 //
-// Picks a light red shade for vine glyphs from the section vineLetter palette
+// Vine fill — depth slot between grass and background heroes
 //
-function pickVinePhraseColor(k, tAlongVine) {
-  const palette = CFG.visual.colors.vineLetter
-  if (!palette?.length) return k.rgb(200, 72, 88)
-  const idx = Math.floor(tAlongVine * palette.length * 0.85 + Math.random() * 2)
-  const hex = palette[Math.max(0, Math.min(palette.length - 1, idx))]
+function pickVinePhraseColor(k, tAlongVine, depthBlend, playfieldColor) {
+  const baseHex = getConsciousnessColor('vine')
+  const depth = Math.min(1, depthBlend + tAlongVine * 0.08)
+  const hex = atmosphericDepthColor(baseHex, playfieldColor, depth)
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)

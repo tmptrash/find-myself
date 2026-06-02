@@ -1,4 +1,4 @@
-import { CFG } from '../cfg.js'
+import { CFG, getPlayfieldDepthColor, recessPlayfieldColor } from '../cfg.js'
 import { toCanvas } from '../../../utils/helper.js'
 
 //
@@ -8,22 +8,24 @@ const STATIC_WORD_Z = CFG.visual.zIndex.wordStaticBgWords ?? CFG.visual.zIndex.b
 const ROW_X_MARGIN = 56
 const ROW_WORD_GAP_MIN = 40
 const CHAR_WIDTH_RATIO = 0.58
-const PHRASE_ALPHA_MIN = 0.24
-const PHRASE_ALPHA_MAX = 0.4
+const PHRASE_ALPHA_MIN = 0.2
+const PHRASE_ALPHA_MAX = 0.38
 const LETTER_CHANCE = 0.12
 const PHRASE_CHANCE = 0.34
 //
 // Stacked horizontal rows — larger type, wider vertical spacing, gap-aware layout
 //
 const ROW_BANDS = [
-  { yRatio: 0.1, sizeMin: 44, sizeMax: 56, wordsMin: 9, wordsMax: 12 },
-  { yRatio: 0.22, sizeMin: 58, sizeMax: 74, wordsMin: 7, wordsMax: 9 },
-  { yRatio: 0.34, sizeMin: 50, sizeMax: 64, wordsMin: 8, wordsMax: 10 },
-  { yRatio: 0.46, sizeMin: 76, sizeMax: 96, wordsMin: 5, wordsMax: 7 },
-  { yRatio: 0.58, sizeMin: 54, sizeMax: 70, wordsMin: 7, wordsMax: 9 },
-  { yRatio: 0.7, sizeMin: 68, sizeMax: 88, wordsMin: 6, wordsMax: 8 },
-  { yRatio: 0.82, sizeMin: 46, sizeMax: 58, wordsMin: 9, wordsMax: 11 },
-  { yRatio: 0.93, sizeMin: 40, sizeMax: 52, wordsMin: 10, wordsMax: 13 }
+  { yRatio: 0.08, sizeMin: 40, sizeMax: 52, wordsMin: 14, wordsMax: 18 },
+  { yRatio: 0.16, sizeMin: 44, sizeMax: 56, wordsMin: 13, wordsMax: 17 },
+  { yRatio: 0.24, sizeMin: 58, sizeMax: 74, wordsMin: 11, wordsMax: 14 },
+  { yRatio: 0.32, sizeMin: 50, sizeMax: 64, wordsMin: 12, wordsMax: 15 },
+  { yRatio: 0.42, sizeMin: 76, sizeMax: 96, wordsMin: 8, wordsMax: 11 },
+  { yRatio: 0.52, sizeMin: 54, sizeMax: 70, wordsMin: 11, wordsMax: 14 },
+  { yRatio: 0.62, sizeMin: 68, sizeMax: 88, wordsMin: 10, wordsMax: 13 },
+  { yRatio: 0.72, sizeMin: 46, sizeMax: 58, wordsMin: 14, wordsMax: 17 },
+  { yRatio: 0.82, sizeMin: 52, sizeMax: 66, wordsMin: 13, wordsMax: 16 },
+  { yRatio: 0.92, sizeMin: 40, sizeMax: 52, wordsMin: 15, wordsMax: 19 }
 ]
 //
 // Introspective fragments — same tone as flying words / word pile
@@ -68,7 +70,7 @@ export function create(config) {
   const bgHex = backgroundColor || CFG.visual.colors.background
   const pfHex = platformColor || CFG.visual.colors.platform
   const placements = buildRowPlacements(canvasW, canvasH, bgHex, pfHex)
-  const spriteKey = `word-static-bg-rows-v3-${canvasW}x${canvasH}-${bgHex.replace('#', '')}-${Date.now()}`
+  const spriteKey = `word-static-bg-rows-v6-${canvasW}x${canvasH}-${bgHex.replace('#', '')}-${Date.now()}`
   const canvas = toCanvas({ width: canvasW, height: canvasH, pixelRatio: 1 }, (ctx) => {
     ctx.clearRect(0, 0, canvasW, canvasH)
     placements.forEach((word) => drawWord(ctx, word))
@@ -90,10 +92,14 @@ export function create(config) {
 //
 function buildRowPlacements(width, height, bgHex, pfHex) {
   const placements = []
+  const rowCount = ROW_BANDS.length
   ROW_BANDS.forEach((band, rowIndex) => {
     const targetCount = band.wordsMin + Math.floor(Math.random() * (band.wordsMax - band.wordsMin + 1))
     const rowY = height * band.yRatio
     const rowColor = pickRowColor(rowIndex, bgHex, pfHex)
+    const rowDepthT = rowCount > 1 ? rowIndex / (rowCount - 1) : 0
+    const rowAlphaMax = PHRASE_ALPHA_MAX - rowDepthT * (PHRASE_ALPHA_MAX - PHRASE_ALPHA_MIN) * 0.5
+    const rowAlphaMin = PHRASE_ALPHA_MIN * (1 - rowDepthT * 0.4)
     const rowWords = []
     for (let i = 0; i < targetCount; i++) {
       rowWords.push(createRowWord(band))
@@ -104,7 +110,7 @@ function buildRowPlacements(width, height, bgHex, pfHex) {
         ...word,
         y: rowY,
         color: rowColor,
-        opacity: PHRASE_ALPHA_MIN + Math.random() * (PHRASE_ALPHA_MAX - PHRASE_ALPHA_MIN)
+        opacity: rowAlphaMin + Math.random() * Math.max(0.04, rowAlphaMax - rowAlphaMin)
       })
     })
   })
@@ -157,15 +163,15 @@ function estimateTextWidth(text, size) {
 }
 
 //
-// Muted burgundy readable on the void — lifted from floatingPhrase palette
+// Static phrase rows — depth slot above playfield fill, below moving layers
 //
 function pickRowColor(rowIndex, bgHex, pfHex) {
-  const palette = CFG.visual.colors.floatingPhrase
-  if (palette?.length) {
-    const idx = Math.min(palette.length - 1, 2 + (rowIndex % (palette.length - 2)))
-    return lightenHex(palette[idx], 0.1 + (rowIndex % 3) * 0.05)
-  }
-  return lightenHex(mixHex(bgHex, pfHex, 0.62), 0.14)
+  const base = getPlayfieldDepthColor('staticPhrase')
+  const rowCount = ROW_BANDS.length
+  const t = rowCount > 1 ? rowIndex / (rowCount - 1) : 0
+  const rear = getPlayfieldDepthColor('playfield')
+  const mixed = mixHex(base, rear, t * 0.6)
+  return recessPlayfieldColor(mixed, t * 0.2)
 }
 
 //

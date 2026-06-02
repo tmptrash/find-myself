@@ -1,5 +1,5 @@
-import { CFG } from '../cfg.js'
-import { getColor } from '../../../utils/helper.js'
+import { CFG, getConsciousnessColor, getLevelColors, atmosphericDepthColor } from '../cfg.js'
+import { getColor, getRGB } from '../../../utils/helper.js'
 
 //
 // Spawn buffer: distance outside playable area where words can spawn/respawn
@@ -8,15 +8,14 @@ const SPAWN_BUFFER = 100
 //
 // Thin outline — four cardinal offsets (matches touch L0 tree/cloud stroke weight)
 //
-const WORD_OUTLINE_OFFSETS = [
-  [-1, 0], [1, 0], [0, -1], [0, 1]
-]
-const WORD_OUTLINE_COLOR_R = 18
-const WORD_OUTLINE_COLOR_G = 6
-const WORD_OUTLINE_COLOR_B = 10
 //
 // Killer word color pulse
 //
+const FLYING_WORD_DRAW_OPACITY = 1
+const REGULAR_WORD_OPACITY = 0.38
+const FLYING_WORD_DEPTH_NEAR = 0.28
+const FLYING_WORD_DEPTH_FAR = 0.76
+const FLYING_WORD_EDGE_DEPTH_BOOST = 0.62
 const KILLER_COLOR_PULSE_SPEED = 2.8
 const KILLER_COLOR_PULSE_AMOUNT = 0.22
 
@@ -110,6 +109,7 @@ export function create(cfg) {
     k.flyingWordsInstance.hero = hero  // Update hero reference for new game session
     k.flyingWordsInstance.currentLevel = currentLevel
     k.flyingWordsInstance.onDeath = onDeath
+    k.flyingWordsInstance.playfieldHex = resolvePlayfieldHex(cfg)
     return k.flyingWordsInstance
   }
   
@@ -117,6 +117,7 @@ export function create(cfg) {
   const playableRight = customBounds.right
   const playableTop = customBounds.top
   const playableBottom = customBounds.bottom
+  const playfieldHex = resolvePlayfieldHex(cfg)
 
   const words = []
   const killerLetters = []
@@ -140,7 +141,8 @@ export function create(cfg) {
       isBehindHero,
       rotationSpeedZ,
       letterToWordRatio,
-      isKiller: false
+      isKiller: false,
+      playfieldHex
     })
     words.push(word)
   }
@@ -186,12 +188,9 @@ export function create(cfg) {
     playableLeft,
     playableRight,
     rotationSpeedZ,
-    letterToWordRatio
+    letterToWordRatio,
+    playfieldHex
   }
-  
-  //
-  // Store instance globally on k for persistence across scene restarts
-  //
   k.flyingWordsInstance = inst
 
   return inst
@@ -349,51 +348,10 @@ function updateWord(word, inst) {
     word.textObj.scale.x = Math.max(0.05, scaleX)
     
     //
-    // Sync outline texts scale and opacity
+    // Edge-on rotation blends toward playfield instead of fading alpha
+    // Killer words keep accent pulse — no phrase depth blend
     //
-    if (word.outlineTexts) {
-      word.outlineTexts.forEach(outlineText => {
-        if (!outlineText.scale) {
-          outlineText.scale = k.vec2(1, 1)
-        }
-        outlineText.scale.x = Math.max(0.05, scaleX)
-      })
-    }
-    
-    //
-    // Sync outline scale if it exists
-    //
-    if (word.outlineObj) {
-      if (!word.outlineObj.scale) {
-        word.outlineObj.scale = k.vec2(1, 1)
-      }
-      word.outlineObj.scale.x = Math.max(0.05, scaleX)
-    }
-    
-    //
-    // Adjust opacity based on angle and depth
-    // Background objects are more visible now (increased multiplier)
-    // Foreground objects are sharper (higher opacity)
-    //
-    const baseOpacity = word.baseOpacity
-    const depthOpacityMultiplier = word.isBehindHero ? 0.9 : 1.0  // Increased from 0.7 to 0.9 for better visibility
-    word.textObj.opacity = baseOpacity * (0.3 + 0.7 * scaleX) * depthOpacityMultiplier
-    
-    //
-    // Sync outline texts opacity
-    //
-    if (word.outlineTexts) {
-      word.outlineTexts.forEach(outlineText => {
-        outlineText.opacity = word.textObj.opacity
-      })
-    }
-    
-    //
-    // Sync outline opacity if it exists
-    //
-    if (word.outlineObj) {
-      word.outlineObj.opacity = word.textObj.opacity * 0.5
-    }
+    !word.isKiller && applyFlyingWordDepthColor(word, k, scaleX, inst.playfieldHex)
 
     //
     // Respawn logic: if word exits right or bottom (+ 100px buffer), respawn at left
@@ -593,40 +551,13 @@ function createWord(k, params) {
   const zIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
 
   //
-  // Opacity based on depth: behind = softer, front = brighter
+  // Depth based on layer — color shift toward playfield, not alpha
   //
-  const baseOpacity = isBehindHero
-    ? 0.35 + Math.random() * 0.18
-    : 0.45 + Math.random() * 0.2
-
-  //
-  // Use JetBrains Mono font for all words
-  //
+  const depthBase = isBehindHero ? FLYING_WORD_DEPTH_FAR : FLYING_WORD_DEPTH_NEAR
+  const playfieldHex = params.playfieldHex ?? getConsciousnessColor('gameWorld')
+  const phraseColor = pickPhraseColor(isBehindHero, playfieldHex)
   const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
-  const phraseColor = pickPhraseColor(isBehindHero)
   
-  //
-  // Thin outline only on the far background layer — foreground words have no border
-  //
-  const outlineTexts = []
-  isBehindHero && WORD_OUTLINE_OFFSETS.forEach(([dx, dy]) => {
-    const outlineText = k.add([
-      k.text(text, {
-        size: size,
-        font: fontFamily
-      }),
-      k.pos(x + dx, y + dy),
-      k.anchor('center'),
-      k.color(WORD_OUTLINE_COLOR_R, WORD_OUTLINE_COLOR_G, WORD_OUTLINE_COLOR_B),
-      k.opacity(baseOpacity),
-      k.z(zIndex - 0.1),
-      k.fixed(),
-      k.stay(),
-      "flying-word"
-    ])
-    outlineTexts.push(outlineText)
-  })
-
   const textObj = k.add([
     k.text(text, {
       size: size,
@@ -635,7 +566,7 @@ function createWord(k, params) {
     k.pos(x, y),
     k.anchor('center'),
     getColor(k, phraseColor),
-    k.opacity(baseOpacity),
+    k.opacity(REGULAR_WORD_OPACITY),
     k.z(zIndex),
     k.fixed(),
     k.stay(),
@@ -644,10 +575,8 @@ function createWord(k, params) {
 
   return {
     textObj,
-    outlineTexts,
+    outlineTexts: [],
     outlineObj: null,
-    boldOutlineTexts: [],
-    isBold: false,
     fontFamily,
     phraseColor,
     speedX,
@@ -659,7 +588,7 @@ function createWord(k, params) {
     wavePhase: Math.random() * Math.PI * 2,
     waveSpeed: 1.5 + Math.random() * 2,  // 1.5-3.5 wave frequency - subtle flutter
     waveAmplitude: 8 + Math.random() * 12,  // 8-20 amplitude for subtle horizontal wobble
-    baseOpacity,
+    depthBase,
     isBehindHero,
     isLetter,
     sizeMultiplier
@@ -693,11 +622,10 @@ function resetWord(word, inst, x) {
   const size = baseSize * word.sizeMultiplier
 
   //
-  // Opacity based on depth
+  // Depth based on layer — color shift instead of transparency
   //
-  word.baseOpacity = word.isBehindHero
-    ? 0.4 + Math.random() * 0.2   // 0.4-0.6 for background (less transparent = more visible)
-    : 0.5 + Math.random() * 0.2    // 0.5-0.7 for foreground
+  word.depthBase = word.isBehindHero ? FLYING_WORD_DEPTH_FAR : FLYING_WORD_DEPTH_NEAR
+  word.phraseColor = pickPhraseColor(word.isBehindHero, inst.playfieldHex)
 
   word.textObj.pos.x = x
   word.textObj.pos.y = playableTop + Math.random() * (playableBottom - playableTop)
@@ -710,7 +638,7 @@ function resetWord(word, inst, x) {
   word.wavePhase = Math.random() * Math.PI * 2
   word.waveSpeed = 1.5 + Math.random() * 2  // 1.5-3.5 wave frequency - subtle flutter
   word.waveAmplitude = 8 + Math.random() * 12  // 8-20 amplitude for subtle horizontal wobble
-  word.textObj.opacity = word.baseOpacity
+  applyFlyingWordDepthColor(word, inst.k, 1, inst.playfieldHex)
   word.textObj.text = text
   
   //
@@ -798,35 +726,10 @@ function createKillerLetter(k, params) {
   const zIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
 
   //
-  // Higher opacity for visibility (brighter than regular words)
+  // Killer words stay fully opaque — accent color from config
   //
-  const baseOpacity = 0.85 + Math.random() * 0.15
-
   const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
   
-  //
-  // Thin outline on killer words
-  //
-  const outlineTexts = []
-  WORD_OUTLINE_OFFSETS.forEach(([dx, dy]) => {
-    const outlineText = k.add([
-      k.text(text, {
-        size: size,
-        font: fontFamily
-      }),
-      k.pos(x + dx, y + dy),
-      k.anchor('center'),
-      k.color(WORD_OUTLINE_COLOR_R, WORD_OUTLINE_COLOR_G, WORD_OUTLINE_COLOR_B),
-      k.opacity(baseOpacity),
-      k.z(zIndex - 0.1),
-      k.fixed(),
-      k.stay(),
-      "flying-word",
-      "killer-letter-outline"
-    ])
-    outlineTexts.push(outlineText)
-  })
-
   //
   // Create main killer word with collision area
   //
@@ -838,7 +741,7 @@ function createKillerLetter(k, params) {
     k.pos(x, y),
     k.anchor('center'),
     killerColor,
-    k.opacity(baseOpacity),
+    k.opacity(FLYING_WORD_DRAW_OPACITY),
     k.area({ scale: 0.6 }),  // Collision area (slightly smaller than visual)
     k.z(zIndex),
     k.fixed(),
@@ -884,10 +787,8 @@ function createKillerLetter(k, params) {
 
   return {
     textObj,
-    outlineTexts,
+    outlineTexts: [],
     outlineObj: null,
-    boldOutlineTexts: [],
-    isBold: false,
     fontFamily,
     speedX,
     speedY,
@@ -898,13 +799,14 @@ function createKillerLetter(k, params) {
     wavePhase: Math.random() * Math.PI * 2,
     waveSpeed: 1.5 + Math.random() * 2,
     waveAmplitude: 8 + Math.random() * 12,
-    baseOpacity,
     isBehindHero: false,  // Killer words are always in front
     isLetter: true,
     sizeMultiplier: 1,
     isKiller: true,
     pulsePhase: Math.random() * Math.PI * 2,
-    baseColorRgb
+    baseColorRgb,
+    proximityLevel: 0,
+    baseScale: 1
   }
 }
 
@@ -924,13 +826,35 @@ function pulseKillerColor(word, inst) {
 }
 
 //
-// Picks a red phrase shade — deeper layers use darker palette entries
+// Moving layer 1 — all flying words share the wordsFlying depth slot
 //
-function pickPhraseColor(isBehindHero) {
-  const palette = CFG.visual.colors.floatingPhrase
-  if (!palette?.length) return CFG.visual.colors.platform
-  const depthStart = isBehindHero ? 0 : Math.floor(palette.length * 0.35)
-  const depthEnd = isBehindHero ? Math.max(2, Math.floor(palette.length * 0.38)) : palette.length
-  const span = Math.max(1, depthEnd - depthStart)
-  return palette[depthStart + Math.floor(Math.random() * span)]
+function resolvePlayfieldHex(cfg) {
+  const fromCfg = cfg.playfieldColor
+  if (fromCfg) return fromCfg
+  const fromLevel = cfg.currentLevel ? getLevelColors(cfg.currentLevel)?.playfield : null
+  return fromLevel ?? getConsciousnessColor('gameWorld')
 }
+
+//
+// Moving layer 1 — all flying words share the wordsFlying depth slot
+//
+function pickPhraseColor(isBehindHero, playfieldHex) {
+  const base = getConsciousnessColor('flyingWord')
+  return atmosphericDepthColor(
+    base,
+    playfieldHex,
+    isBehindHero ? FLYING_WORD_DEPTH_FAR : FLYING_WORD_DEPTH_NEAR
+  )
+}
+
+//
+// Depth cue via color blend — regular words are semi-transparent
+//
+function applyFlyingWordDepthColor(word, k, scaleX, playfieldHex) {
+  const edgeDepth = (1 - scaleX) * FLYING_WORD_EDGE_DEPTH_BOOST
+  const depth = Math.min(1, (word.depthBase ?? FLYING_WORD_DEPTH_NEAR) + edgeDepth)
+  const colorHex = atmosphericDepthColor(word.phraseColor, playfieldHex, depth)
+  word.textObj.opacity = REGULAR_WORD_OPACITY
+  word.textObj.color = getRGB(k, colorHex)
+}
+

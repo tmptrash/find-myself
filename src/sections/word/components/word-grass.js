@@ -1,4 +1,4 @@
-import { CFG } from '../cfg.js'
+import { CFG, getPlayfieldDepthColor } from '../cfg.js'
 import { parseHex } from '../../../utils/helper.js'
 import { isTouchDevice } from '../../../utils/touch-input.js'
 //
@@ -6,9 +6,9 @@ import { isTouchDevice } from '../../../utils/touch-input.js'
 //
 let savedGrassData = null
 //
-// Grass parameters
+// Grass parameters — wine-tinted to match the in-zone playfield palette
 //
-const GRASS_COLOR = '#2A4A2A'  // Dark green
+const GRASS_COLOR = getPlayfieldDepthColor('grass')
 const GRASS_LETTERS = ['|', '/', 'v', 'V', 'y', 'y', 'Y']  // Letters that look like grass blades
 const GRASS_ROWS = 1  // Only one row on bottom platform
 const GRASS_HEIGHT = 40  // Height of each grass blade

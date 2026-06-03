@@ -287,13 +287,18 @@ export function create(config) {
   const character = k.add([
     spriteComponent,
     k.pos(x, y),
-    k.area({
+    //
+    // Ambient decorative characters skip collision detection — they only move via manual
+    // position updates and never interact with platforms or other entities. Without k.area()
+    // they remain invisible in Kaplay debug mode (no hitbox outline rendered).
+    //
+    ...(!ambient ? [k.area({
       shape: new k.Rect(
         k.vec2(collisionOffsetX, collisionOffsetY),
         collisionWidth,
         collisionHeight
       )
-    }),
+    })] : []),
     ...(isStatic ? [k.fixed()] : [k.body()]),  // Use fixed() for static, body() for physics
     k.anchor("center"),
     k.scale(scale),
@@ -356,12 +361,12 @@ export function create(config) {
     ambientRunSpeed: ambientRunSpeed ?? RUN_ANIM_SPEED * 2.4
   }
   //
-  // Check ground touch through collisions
+  // Collision handlers require k.area() — skipped for ambient decorative characters
   //
-  character.onCollide(CFG.game.platformName, () => onCollisionPlatform(inst))
+  character.onCollide?.(CFG.game.platformName, () => onCollisionPlatform(inst))
   character.onUpdate(() => onUpdate(inst))
   controllable && setupControls(inst)
-  antiHero && character.onCollide(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
+  antiHero && character.onCollide?.(ANTIHERO_TAG, () => onAnnihilationCollide(inst))
   //
   // Footprint renderer: a single fixed entity that draws and ages footprints
   // for this hero. Drawn behind the player so prints sit on the ground.

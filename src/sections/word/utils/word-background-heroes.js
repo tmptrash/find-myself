@@ -80,6 +80,7 @@ export function create(config) {
       y,
       type: Hero.HEROES.HERO,
       controllable: false,
+      ambient: true,
       bodyColor,
       scale: slot.scale,
       isStatic: true,

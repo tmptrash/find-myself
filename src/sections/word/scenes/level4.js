@@ -6,6 +6,7 @@ import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
+import * as WordPitFill from '../utils/word-pit-fill.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
@@ -215,7 +216,7 @@ export function sceneLevel4(k) {
     ]
     
     // Initialize level with heroes and TWO gaps in platform
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor } = initScene({
+    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
       levelName: 'level-word.4',
       levelNumber: 5,
@@ -388,6 +389,24 @@ export function sceneLevel4(k) {
       hero,
       bladeInsts: [staticBlades, staticBlades2],
       sound
+    })
+    //
+    // Purple pit fills so both gaps show the playfield interior color
+    //
+    const pitTopY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
+    WordPitFill.addPitShaftFill(k, {
+      x: movingPlatform1X - bladeWidth / 2,
+      width: bladeWidth,
+      topY: pitTopY,
+      bottomY: k.height(),
+      playfieldColor
+    })
+    WordPitFill.addPitShaftFill(k, {
+      x: movingPlatform2X - bladeWidth / 2,
+      width: bladeWidth,
+      topY: pitTopY,
+      bottomY: k.height(),
+      playfieldColor
     })
     //
     // Setup letter throwing mechanic (hero throws letters at creature)

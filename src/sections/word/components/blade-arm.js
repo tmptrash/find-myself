@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { parseHex } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 
@@ -170,15 +171,16 @@ export function create(config) {
   })
   
   //
-  // Create main text (steel blue)
+  // Create main text — use the shared blade accent color so it matches the AAA letters
   //
+  const bladeRgb = parseHex(CFG.visual.colors.blades)
   const mainText = creatureContainer.add([
     k.text(TEXT_MESSAGE, {
       size: TEXT_SIZE,
       font: CFG.visual.fonts.thinFull.replace(/'/g, '')
     }),
     k.pos(0, 0),
-    k.color(107, 142, 159),
+    k.color(bladeRgb.r, bladeRgb.g, bladeRgb.b),
     k.anchor('center')
   ])
   textObjects.push(mainText)

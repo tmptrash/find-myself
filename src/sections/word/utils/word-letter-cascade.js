@@ -36,6 +36,11 @@ const CASCADE_PARTICLE_FADE_DURATION = 3.2
 //
 const CASCADE_PARTICLE_INITIAL_UP = 35
 //
+// Leaf-like spin — random direction, moderate speed so tumbling reads clearly
+//
+const CASCADE_PARTICLE_SPIN_MIN = 60
+const CASCADE_PARTICLE_SPIN_MAX = 200
+//
 // Approximate per-character width used to spread burst positions
 //
 const CASCADE_CHAR_STEP = CASCADE_FONT_SIZE * 0.58
@@ -109,7 +114,7 @@ function onUpdate(inst) {
     }
   }
   //
-  // Advance letter particles: gravity + horizontal swing + fade
+  // Advance letter particles: gravity + horizontal swing + leaf tumble + fade
   //
   for (let i = inst.particles.length - 1; i >= 0; i--) {
     const p = inst.particles[i]
@@ -117,6 +122,7 @@ function onUpdate(inst) {
     p.x += (p.vx + Math.sin(p.swingPhase) * CASCADE_PARTICLE_SWING) * dt
     p.y += p.vy * dt
     p.swingPhase += p.swingSpeed * dt
+    p.angle += p.angularVelocity * dt
     p.age += dt
     p.opacity = Math.max(0, 1 - p.age / CASCADE_PARTICLE_FADE_DURATION) * CASCADE_WORD_OPACITY
     if (p.opacity <= 0 || p.y > inst.playBottom + 140) inst.particles.splice(i, 1)
@@ -150,6 +156,10 @@ function dissolveWord(inst, w) {
     //
     // Each letter gets a slightly different horizontal drift and swing so they scatter visually
     //
+    //
+    // Random spin: positive or negative direction so letters tumble in both ways
+    //
+    const spinMag = CASCADE_PARTICLE_SPIN_MIN + Math.random() * (CASCADE_PARTICLE_SPIN_MAX - CASCADE_PARTICLE_SPIN_MIN)
     inst.particles.push({
       char,
       x: startX + idx * CASCADE_CHAR_STEP,
@@ -158,6 +168,8 @@ function dissolveWord(inst, w) {
       vy: -(CASCADE_PARTICLE_INITIAL_UP * (0.5 + Math.random() * 0.7)),
       swingPhase: Math.random() * Math.PI * 2,
       swingSpeed: 1.6 + Math.random() * 2.4,
+      angle: Math.random() * 360,
+      angularVelocity: spinMag * (Math.random() < 0.5 ? 1 : -1),
       age: 0,
       opacity: CASCADE_WORD_OPACITY
     })
@@ -187,6 +199,7 @@ function onDraw(inst) {
       size: Math.round(CASCADE_FONT_SIZE * 0.88),
       color,
       anchor: 'center',
+      angle: p.angle,
       opacity: p.opacity
     })
   })

@@ -261,12 +261,16 @@ export function sceneLevel3(k) {
       bottomY: pitBottomY,
       playfieldColor
     })
+    //
+    // Below AAA blades: use platform color so the pit visually ends under the blades.
+    // Collision is still added (solidPlatform) so the hero cannot fall through.
+    //
     WordPitFill.addPitShaftFill(k, {
       x: pitInfo.centerX - pitInfo.width / 2,
       width: pitInfo.width,
       topY: pitBottomY,
       bottomY: k.height(),
-      playfieldColor,
+      playfieldColor: platformColor,
       solidPlatform: true
     })
     
@@ -302,8 +306,7 @@ export function sceneLevel3(k) {
         showDeathMessage(k, hero, blades1, levelIndicator, sound)
       },
       sfx: sound,
-      disableAnimation: true,  // Disable vibration and glint for moving blades
-      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
+      disableAnimation: true
     })
     blades1.blade.opacity = 1
     
@@ -320,8 +323,7 @@ export function sceneLevel3(k) {
         showDeathMessage(k, hero, blades2, levelIndicator, sound)
       },
       sfx: sound,
-      disableAnimation: true,  // Disable vibration and glint for moving blades
-      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
+      disableAnimation: true
     })
     blades2.blade.opacity = 1
     
@@ -339,8 +341,7 @@ export function sceneLevel3(k) {
         showDeathMessage(k, hero, blades3, levelIndicator, sound)
       },
       sfx: sound,
-      disableAnimation: true,  // Disable vibration and glint for moving blades
-      zIndex: -25  // Behind platforms (z=1), in front of word pile (z=-50 to -100)
+      disableAnimation: true
     })
     blades3.blade.opacity = 1
     

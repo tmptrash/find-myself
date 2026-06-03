@@ -326,9 +326,7 @@ export function initScene(config) {
     levelName,
     sideWallWidth,
     floorY: k.height() - (bottomPlatformHeight ?? 360),
-    helpY: (levelName === 'level-word.0' || levelName === 'level-word.1' || levelName === 'level-word.2')
-      ? k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET
-      : undefined,
+    helpY: k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET,
     levelIndicator,
     sound
   })

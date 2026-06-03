@@ -82,16 +82,10 @@ function updateKillerProximityVisual(letter, targetProximity, k) {
   const baseScale = letter.baseScale ?? 1
   if (textObj.opacity < KILLER_VISIBLE_OPACITY) {
     textObj.scale = k.vec2(baseScale, baseScale)
-    letter.outlineTexts?.forEach((outline) => {
-      outline.exists?.() && (outline.scale = k.vec2(baseScale, baseScale))
-    })
     return
   }
   const p = letter.proximityLevel
   const sx = baseScale * (1 + p * PROXIMITY_STRETCH_X)
   const sy = baseScale * (1 + p * PROXIMITY_STRETCH_Y)
   textObj.scale = k.vec2(sx, sy)
-  letter.outlineTexts?.forEach((outline) => {
-    outline.exists?.() && (outline.scale = k.vec2(sx, sy))
-  })
 }

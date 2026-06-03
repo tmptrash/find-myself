@@ -2,6 +2,15 @@ import { CFG, getConsciousnessColor, getLevelColors, atmosphericDepthColor } fro
 import { getColor, getRGB } from '../../../utils/helper.js'
 
 //
+// Tracks the last time onUpdate() was called. Entities with k.stay() use this to know
+// whether they are currently inside a word-level scene. When the value is stale by more
+// than WORD_LEVEL_TIMEOUT seconds we assume the player is on the menu or another scene
+// and skip rendering / zero-out opacity so nothing bleeds through.
+//
+let lastOnUpdateTime = -9999
+const WORD_LEVEL_TIMEOUT = 0.12
+
+//
 // Spawn buffer: distance outside playable area where words can spawn/respawn
 //
 const SPAWN_BUFFER = 100
@@ -221,6 +230,11 @@ export function create(cfg) {
  */
 export function onUpdate(inst) {
   const { words, killerLetters } = inst
+  //
+  // Refresh scene-presence timestamp so persistent killer-word entities know we are
+  // currently inside a word-level (not on the menu or another scene).
+  //
+  lastOnUpdateTime = inst.k.time()
 
   //
   // Update regular words
@@ -301,26 +315,12 @@ function updateWord(word, inst) {
     
     word.rotation += currentRotationSpeed * k.dt()
     word.textObj.angle = word.rotation
-    
     //
-    // Sync outline texts (thin border)
+    // Keep outline entity position locked to the blue killer word each frame
     //
-    if (word.outlineTexts) {
-      word.outlineTexts.forEach((outlineText, i) => {
-        const [dx, dy] = WORD_OUTLINE_OFFSETS[i]
-        outlineText.pos.x = word.textObj.pos.x + dx
-        outlineText.pos.y = word.textObj.pos.y + dy
-        outlineText.angle = word.rotation
-      })
-    }
-    
-    //
-    // Sync outline object if it exists (legacy bold layer — unused)
-    //
-    if (word.outlineObj) {
-      word.outlineObj.pos.x = word.textObj.pos.x + 0.5
-      word.outlineObj.pos.y = word.textObj.pos.y + 0.5
-      word.outlineObj.angle = word.rotation
+    if (word.outlineEntity?.exists?.()) {
+      word.outlineEntity.pos.x = word.textObj.pos.x
+      word.outlineEntity.pos.y = word.textObj.pos.y
     }
 
     //
@@ -384,26 +384,6 @@ function updateWord(word, inst) {
       //
       word.textObj.pos.x = playableLeft - SPAWN_BUFFER - Math.random() * approximateWordWidth
       word.textObj.pos.y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
-      
-      //
-      // Sync outline texts position
-      //
-      if (word.outlineTexts) {
-        word.outlineTexts.forEach((outlineText, i) => {
-          const [dx, dy] = WORD_OUTLINE_OFFSETS[i]
-          outlineText.pos.x = word.textObj.pos.x + dx
-          outlineText.pos.y = word.textObj.pos.y + dy
-        })
-      }
-      
-      //
-      // Sync outline position if it exists
-      //
-      if (word.outlineObj) {
-        word.outlineObj.pos.x = word.textObj.pos.x + 0.5
-        word.outlineObj.pos.y = word.textObj.pos.y + 0.5
-      }
-      
       //
       // Randomize properties for variety
       //
@@ -416,19 +396,6 @@ function updateWord(word, inst) {
       word.wavePhase = Math.random() * Math.PI * 2
     }
     
-    // //
-    // // Keep words within left boundary
-    // //
-    // if (word.textObj.pos.x < playableLeft) {
-    //   word.textObj.pos.x = playableLeft + 10
-    // }
-    
-    // //
-    // // Keep words within top boundary
-    // //
-    // if (word.textObj.pos.y < playableTop) {
-    //   word.textObj.pos.y = playableTop + 10
-    // }
   //
   // Subtle color pulse on killer words
   //
@@ -457,18 +424,13 @@ function updateKillerLetter(letter, inst) {
     
     letter.textObj.pos.x = x
     letter.textObj.pos.y = y
-    
     //
-    // Reset outline positions
+    // Snap outline entity to the respawn position immediately
     //
-    if (letter.outlineTexts) {
-      letter.outlineTexts.forEach((outline, i) => {
-        const [dx, dy] = WORD_OUTLINE_OFFSETS[i]
-        outline.pos.x = x + dx
-        outline.pos.y = y + dy
-      })
+    if (letter.outlineEntity?.exists?.()) {
+      letter.outlineEntity.pos.x = x
+      letter.outlineEntity.pos.y = y
     }
-    
     //
     // Reset spawn delay
     //
@@ -805,23 +767,42 @@ function createKillerLetter(k, params) {
   })
 
   //
-  // Outline draw entity — k.pos(0,0) is required for draw() to use world-space coords.
-  // No k.stay() so it is destroyed on scene change (prevents bleed into menu).
-  // Reads textObj.pos and angle each frame to stay locked to the moving killer word.
+  // Outline draw entity — persists across word-level transitions via k.stay().
+  // Its update() hook checks lastOnUpdateTime to detect when the player navigates away
+  // from word levels (e.g. to the menu). When outside word levels both the outline and
+  // the blue textObj are hidden to prevent them bleeding onto other scenes.
+  // draw() renders the black outline in LOCAL space so its pos must stay synced to
+  // textObj.pos every frame (done in updateWord). When textObj.scale.x is near zero
+  // (edge-on 3D flip) drawing is also skipped to match the word's near-invisibility.
   //
-  k.add([
-    k.pos(0, 0),
+  const outlineEntity = k.add([
+    k.pos(textObj.pos.x, textObj.pos.y),
     k.z(zIndex - 0.01),
     k.fixed(),
+    k.stay(),
     {
+      update() {
+        //
+        // Show or hide both the blue word and the black outline depending on whether
+        // we are currently inside a word-level scene
+        //
+        const inWordLevel = k.time() - lastOnUpdateTime < WORD_LEVEL_TIMEOUT
+        if (textObj.exists?.()) {
+          textObj.opacity = inWordLevel ? FLYING_WORD_DRAW_OPACITY : 0
+        }
+      },
       draw() {
+        const inWordLevel = k.time() - lastOnUpdateTime < WORD_LEVEL_TIMEOUT
+        if (!inWordLevel) return
+        const scaleX = textObj.scale?.x ?? 1
+        if (scaleX < 0.12) return
         WORD_OUTLINE_OFFSETS.forEach(([ox, oy]) => {
           k.drawText({
             text,
             size,
             font: fontFamily,
             anchor: 'center',
-            pos: k.vec2(textObj.pos.x + ox, textObj.pos.y + oy),
+            pos: k.vec2(ox, oy),
             angle: textObj.angle,
             color: k.rgb(0, 0, 0),
             opacity: FLYING_WORD_DRAW_OPACITY
@@ -833,8 +814,7 @@ function createKillerLetter(k, params) {
 
   return {
     textObj,
-    outlineTexts: [],
-    outlineObj: null,
+    outlineEntity,
     fontFamily,
     speedX,
     speedY,

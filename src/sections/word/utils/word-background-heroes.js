@@ -17,6 +17,10 @@ const HERO_COLLISION_PAD = 36
 const SIDE_BODY_INSET = 48
 const UPSIDE_DOWN_ANGLE = 180
 //
+// Extra pixels to sink bottom-edge heroes below the floor cover rect — shows heads and shoulders only
+//
+const BG_HERO_BOTTOM_SINK = 36
+//
 // Candidate slots — positions resolved with overlap rejection (largest placed first)
 //
 const BG_HERO_SLOT_DEFS = [
@@ -169,10 +173,10 @@ function centerYSideInPlayfield(slot, topY, floorY) {
 }
 
 //
-// Center at floor line — upper half visible in playfield, lower half hidden by bottom cover rect
+// Center sunk below the floor cover so only the upper torso and head peek into the playfield
 //
 function centerYHalfBodyBelowFloor(floorY, scale) {
-  return floorY
+  return floorY + BG_HERO_BOTTOM_SINK
 }
 
 //

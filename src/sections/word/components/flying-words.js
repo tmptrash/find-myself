@@ -6,16 +6,35 @@ import { getColor, getRGB } from '../../../utils/helper.js'
 //
 const SPAWN_BUFFER = 100
 //
-// Thin outline — four cardinal offsets (matches touch L0 tree/cloud stroke weight)
+// Thin outline — four diagonal offsets create a solid black stroke around killer words
 //
+const WORD_OUTLINE_SIZE = 2.4
+const WORD_OUTLINE_OFFSETS = [
+  [-WORD_OUTLINE_SIZE, -WORD_OUTLINE_SIZE],
+  [WORD_OUTLINE_SIZE, -WORD_OUTLINE_SIZE],
+  [-WORD_OUTLINE_SIZE, WORD_OUTLINE_SIZE],
+  [WORD_OUTLINE_SIZE, WORD_OUTLINE_SIZE]
+]
 //
 // Killer word color pulse
 //
 const FLYING_WORD_DRAW_OPACITY = 1
-const REGULAR_WORD_OPACITY = 0.38
-const FLYING_WORD_DEPTH_NEAR = 0.28
-const FLYING_WORD_DEPTH_FAR = 0.76
+const REGULAR_WORD_OPACITY = 0.62
+//
+// Deeper background layer (isBehindHero) is BRIGHTER — less depth-blended toward playfield
+// Foreground layer is slightly more muted (higher depth = more blend)
+//
+const FLYING_WORD_DEPTH_NEAR = 0.44
+const FLYING_WORD_DEPTH_FAR = 0.16
 const FLYING_WORD_EDGE_DEPTH_BOOST = 0.62
+//
+// Gentle tilt speed — words drift slowly so the angle is clearly visible, not a blur
+//
+const WORD_ROTATION_SPEED_RANGE = 22
+//
+// Killer letters render in front of large background heroes, behind main player
+//
+const KILLER_LETTER_Z = (CFG.visual.zIndex.player ?? 10) - 0.8
 const KILLER_COLOR_PULSE_SPEED = 2.8
 const KILLER_COLOR_PULSE_AMOUNT = 0.22
 
@@ -582,7 +601,7 @@ function createWord(k, params) {
     speedX,
     speedY,
     rotation: Math.random() * 360,
-    rotationSpeed: (Math.random() - 0.5) * 120,  // -60 to +60 degrees per second - moderate tumbling
+    rotationSpeed: (Math.random() - 0.5) * WORD_ROTATION_SPEED_RANGE,
     rotationZ: Math.random() * 360,  // Initial Z rotation
     rotationSpeedZ: (Math.random() - 0.5) * rotationSpeedZ,  // Use parameter for Z-axis rotation speed
     wavePhase: Math.random() * Math.PI * 2,
@@ -632,7 +651,7 @@ function resetWord(word, inst, x) {
   word.speedX = minSpeed + Math.random() * (maxSpeed - minSpeed)
   word.speedY = 2 + Math.random() * 8  // Very slow falling down (2-10 px/s) - minimal vertical drift
   word.rotation = Math.random() * 360
-  word.rotationSpeed = (Math.random() - 0.5) * 120  // -60 to +60 degrees per second - moderate tumbling
+  word.rotationSpeed = (Math.random() - 0.5) * WORD_ROTATION_SPEED_RANGE
   word.rotationZ = Math.random() * 360
   word.rotationSpeedZ = (Math.random() - 0.5) * rotationSpeedZ  // Use parameter for Z-axis rotation speed
   word.wavePhase = Math.random() * Math.PI * 2
@@ -721,9 +740,9 @@ function createKillerLetter(k, params) {
   }
 
   //
-  // Z-index: same layer as regular flying words (behind background heroes)
+  // Killer words in front of bg heroes (z=9), behind player (z=10) and cover rects (z=9.5)
   //
-  const zIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
+  const zIndex = KILLER_LETTER_Z
 
   //
   // Killer words stay fully opaque — accent color from config
@@ -784,6 +803,33 @@ function createKillerLetter(k, params) {
       })
     }
   })
+
+  //
+  // Outline draw entity — k.pos(0,0) is required for draw() to use world-space coords.
+  // No k.stay() so it is destroyed on scene change (prevents bleed into menu).
+  // Reads textObj.pos and angle each frame to stay locked to the moving killer word.
+  //
+  k.add([
+    k.pos(0, 0),
+    k.z(zIndex - 0.01),
+    k.fixed(),
+    {
+      draw() {
+        WORD_OUTLINE_OFFSETS.forEach(([ox, oy]) => {
+          k.drawText({
+            text,
+            size,
+            font: fontFamily,
+            anchor: 'center',
+            pos: k.vec2(textObj.pos.x + ox, textObj.pos.y + oy),
+            angle: textObj.angle,
+            color: k.rgb(0, 0, 0),
+            opacity: FLYING_WORD_DRAW_OPACITY
+          })
+        })
+      }
+    }
+  ])
 
   return {
     textObj,

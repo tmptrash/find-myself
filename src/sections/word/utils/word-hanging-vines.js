@@ -1,4 +1,4 @@
-import { CFG, getConsciousnessColor, atmosphericDepthColor } from '../cfg.js'
+import { CFG, getConsciousnessColor } from '../cfg.js'
 
 //
 // Hanging vine phrases — intrusive-thought sentences draped between top playfield anchors
@@ -217,11 +217,20 @@ function buildVine(layout, phrase, playLeft, playWidth, playTop, playBottom, pla
 // Draws letters and visible word spaces along a hanging curve
 //
 function onDraw(inst) {
-  const { k, vines, playfieldColor } = inst
+  const { k, vines } = inst
   const time = k.time()
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  //
+  // Use raw vine hex without atmospheric depth blending so letters match
+  // the brain root filament color exactly (same RGB source in cfg)
+  //
+  const vineHex = getConsciousnessColor('vine')
+  const vineColor = k.rgb(
+    parseInt(vineHex.slice(1, 3), 16),
+    parseInt(vineHex.slice(3, 5), 16),
+    parseInt(vineHex.slice(5, 7), 16)
+  )
   vines.forEach(vine => {
-    const depthBlend = vine.depthBlend ?? VINE_DEPTH_BLEND_MIN
     getLetterLayout(vine).forEach(({ letter, t, size }) => {
       const base = quadraticPoint(vine, t)
       //
@@ -232,7 +241,6 @@ function onDraw(inst) {
       const swayX = Math.sin(swayPhase) * SWAY_AMPLITUDE * swayFactor
       const swayY = Math.sin(swayPhase * 0.7 + 0.6) * SWAY_AMPLITUDE * 0.12 * swayFactor
       const pos = k.vec2(base.x + swayX, base.y + swayY)
-      const phraseColor = pickVinePhraseColor(k, t, depthBlend, playfieldColor)
       const glyph = letter === ' ' ? '·' : letter
       k.drawText({
         text: glyph,
@@ -240,24 +248,11 @@ function onDraw(inst) {
         font,
         pos,
         anchor: 'center',
-        color: phraseColor,
+        color: vineColor,
         opacity: 1
       })
     })
   })
-}
-
-//
-// Vine fill — depth slot between grass and background heroes
-//
-function pickVinePhraseColor(k, tAlongVine, depthBlend, playfieldColor) {
-  const baseHex = getConsciousnessColor('vine')
-  const depth = Math.min(1, depthBlend + tAlongVine * 0.08)
-  const hex = atmosphericDepthColor(baseHex, playfieldColor, depth)
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return k.rgb(r, g, b)
 }
 
 //

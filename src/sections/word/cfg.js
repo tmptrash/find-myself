@@ -134,7 +134,7 @@ export const WORD_CFG = {
         gameWorld: "#5A5A70",          // Layer 5 — playable interior fill
         accent: "#4AC6F5",             // Traps, blades, killer words
         foregroundSilhouette: "#302C48", // Layer 7 — edge occlusion (dark violet)
-        vine: "#9898B2",               // Layer 6 — hanging vine letters (soft lilac)
+        vine: "#948ABC",               // Layer 6 — hanging vine letters (matches brain root filaments)
         flyingWord: "#7C7A96",         // Layer 6 — drifting thoughts (muted lavender)
         emotions: {
           anxiety: "#686690",          // Soft periwinkle

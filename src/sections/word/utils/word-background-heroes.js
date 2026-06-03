@@ -22,7 +22,7 @@ const UPSIDE_DOWN_ANGLE = 180
 const BG_HERO_SLOT_DEFS = [
   { edge: 'bottom', xRatio: 0.5, scale: 5.4, depth: 0.2 },
   { edge: 'bottom', xRatio: 0.2, scale: 4.4, depth: 0.26 },
-  { edge: 'bottom', xRatio: 0.8, scale: 4.4, depth: 0.26 },
+  { edge: 'bottom', xRatio: 0.90, scale: 4.4, depth: 0.26 },
   { edge: 'top', xRatio: 0.26, scale: 3.8, depth: 0.58 },
   { edge: 'top', xRatio: 0.74, scale: 3.6, depth: 0.62 },
   { edge: 'left', yRatio: 0.5, scale: 3.2, depth: 0.68 },

@@ -13,6 +13,9 @@ import * as WordHangingVines from './word-hanging-vines.js'
 import * as WordConsciousnessLayers from './word-consciousness-layers.js'
 import * as WordBackgroundHeroes from './word-background-heroes.js'
 import * as WordBackgroundAntiheroes from './word-background-antiheroes.js'
+import * as WordLetterSchools from './word-letter-schools.js'
+import * as WordDreamingEyes from './word-dreaming-eyes.js'
+import * as WordLetterCascade from './word-letter-cascade.js'
 
 const ANTIHERO_SPAWN_DELAY = 1.5
 const CORNER_RADIUS = 20  // Radius for rounded corners
@@ -266,6 +269,9 @@ export function initScene(config) {
     k.z(CFG.visual.zIndex.wordThoughtSky ?? CFG.visual.zIndex.background - 18)
   ])
   addPlayfieldFill(k, playfieldColor, topPlatformHeight, bottomPH, wall)
+  WordLetterSchools.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall })
+  WordDreamingEyes.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall })
+  WordLetterCascade.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall })
   WordConsciousnessLayers.create({
     k,
     sideWallWidth: wall,

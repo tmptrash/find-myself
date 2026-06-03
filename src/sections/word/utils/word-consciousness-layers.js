@@ -1,7 +1,6 @@
 import { CFG, getConsciousnessColor, depthConsciousnessColor, atmosphericDepthColor } from '../cfg.js'
-import { getRGB, getHex, toCanvas } from '../../../utils/helper.js'
+import { getRGB, toCanvas } from '../../../utils/helper.js'
 import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
-import * as WordSceneryClouds from './word-scenery-clouds.js'
 import { getFigureSpriteKey, getMoonSpriteKey, getTouchMoonSpriteKey, getTimeSunSpriteKey, getBrainSpriteKey, computeBrainFitSize } from './word-consciousness-art.js'
 
 //
@@ -13,15 +12,27 @@ const FIGURE_SPRITE_H = 160
 // Layer counts — tuned for subtle peripheral motion, not visual clutter
 //
 const THOUGHT_SKY_COUNT = 42
-const NOISE_SILHOUETTE_COUNT = 22
+//
+// No noise silhouette types remain after removing trees, forks, people, hand, houses
+//
+const NOISE_SILHOUETTE_COUNT = 0
 const THOUGHT_STREAM_COUNT = 52
-const CELESTIAL_COUNT = 7
+const CELESTIAL_COUNT = 5
 const FOREGROUND_PIECE_COUNT = 5
-const TEXT_CLOUD_COUNT = 9
+//
+// Text clouds disabled — their large grouped phrase text was the source of "big dark words"
+//
+const TEXT_CLOUD_COUNT = 0
 const DRIFT_MOTIF_COUNT = 22
 const MOTIF_FADE_PERIOD_MIN = 9
 const MOTIF_FADE_PERIOD_MAX = 22
 const MOTIF_FADE_MIN_OPACITY = 0.04
+const DRIFT_MOTIF_MAX_OPACITY = 0.68
+//
+// Wrap-fade: items fade out before teleporting to the opposite edge, then fade back in
+//
+const WRAP_BUFFER = 80
+const WRAP_FADE_SPEED = 3.0
 const MOON_DEPTH_BLEND_MIN = 0.55
 const MOON_DEPTH_BLEND_MAX = 0.82
 const BRAIN_PLAYFIELD_HEIGHT_RATIO = 0.5
@@ -37,48 +48,60 @@ const BRAIN_TINT_WARM_B = 212
 //
 // Neural root lines behind the brain — vine-palette violet filaments
 //
-const BRAIN_ROOT_ARM_COUNT = 12
-const BRAIN_ROOT_SEGMENTS = 36
-const BRAIN_ROOT_THICKNESS = 7
+const BRAIN_ROOT_ARM_COUNT = 20
+const BRAIN_ROOT_SEGMENTS = 58
+const BRAIN_ROOT_THICKNESS = 10
 const BRAIN_ROOT_COLOR_R = 148
 const BRAIN_ROOT_COLOR_G = 138
 const BRAIN_ROOT_COLOR_B = 188
 const BRAIN_ROOT_BASE_OPACITY = 0.52
 const BRAIN_ROOT_DEPTH_FADE = 0.07
+//
+// Root word runners — small words that travel outward along root segments from the brain
+//
+const ROOT_RUNNER_WORDS = [
+  'find', 'you', 'lost', 'self', 'fear', 'hope', 'void', 'dark',
+  'dream', 'wake', 'real', 'truth', 'feel', 'know', 'save', 'run',
+  'echo', 'soul', 'mind', 'near', 'gone', 'here', 'free', 'see'
+]
+const ROOT_RUNNER_SPEED = 95
+const ROOT_RUNNER_SPAWN_INTERVAL_MIN = 0.2
+const ROOT_RUNNER_SPAWN_INTERVAL_MAX = 0.9
+const ROOT_RUNNER_MAX_COUNT = 120
+const ROOT_RUNNER_FONT_MAX = 13
+const ROOT_RUNNER_FONT_MIN = 4
+const ROOT_RUNNER_OPACITY = 0.58
+const ROOT_RUNNER_FADE_SPEED = 2.0
 const LAYER_DRAW_OPACITY = 1
 //
 // Size ranges — wide spread so each level start feels unique
 //
-const SKY_SIZE_MIN = 16
-const SKY_SIZE_MAX = 118
-const CLOUD_TEXT_SIZE_MIN = 14
-const CLOUD_TEXT_SIZE_MAX = 78
+//
+// Sky and text sizes capped very small — user wants no large dark words
+//
+const SKY_SIZE_MIN = 7
+const SKY_SIZE_MAX = 11
+const CLOUD_TEXT_SIZE_MIN = 7
+const CLOUD_TEXT_SIZE_MAX = 10
 const NOISE_SCALE_MIN = 0.35
 const NOISE_SCALE_MAX = 4.8
-const STREAM_SIZE_MIN = 10
-const STREAM_SIZE_MAX = 62
-const MEMORY_SCALE_MIN = 0.45
-const MEMORY_SCALE_MAX = 3.2
+const STREAM_SIZE_MIN = 7
+const STREAM_SIZE_MAX = 11
 //
 // Celestial layer — small purple glows, touch moon, time sun
 //
-const CELESTIAL_KIND_GLOW = 'glow'
 const CELESTIAL_KIND_TOUCH_MOON = 'touchMoon'
 const CELESTIAL_KIND_TIME_SUN = 'timeSun'
+//
+// Only moons and suns — glow circles removed (user found them too grey/distracting)
+//
 const CELESTIAL_KIND_ORDER = [
-  CELESTIAL_KIND_GLOW,
   CELESTIAL_KIND_TOUCH_MOON,
   CELESTIAL_KIND_TOUCH_MOON,
   CELESTIAL_KIND_TIME_SUN,
-  CELESTIAL_KIND_GLOW,
   CELESTIAL_KIND_TOUCH_MOON,
   CELESTIAL_KIND_TIME_SUN
 ]
-const CELESTIAL_GLOW_RADIUS_MIN = 8
-const CELESTIAL_GLOW_RADIUS_MAX = 22
-const CELESTIAL_GLOW_RINGS = 4
-const CELESTIAL_GLOW_CENTER_OPACITY = 0.34
-const CELESTIAL_GLOW_EDGE_OPACITY = 0.05
 const CELESTIAL_MOON_SCALE_MIN = 0.42
 const CELESTIAL_MOON_SCALE_MAX = 0.92
 const CELESTIAL_SUN_SCALE_MIN = 0.34
@@ -91,14 +114,6 @@ const CELESTIAL_DEPTH_MAX = 0.82
 // Floating note glyphs on the void
 //
 const NOTE_GLYPHS = ['♪', '♫', '♩', '♬']
-//
-// Memory flash timing — rare involuntary recall
-//
-const MEMORY_MIN_INTERVAL = 9
-const MEMORY_MAX_INTERVAL = 22
-const MEMORY_FADE_IN = 0.35
-const MEMORY_FADE_OUT = 0.55
-const MEMORY_HOLD = 0.9
 //
 // Drift speeds (pixels per second)
 //
@@ -119,7 +134,7 @@ const SKY_FRAGMENTS = [
 //
 // Consciousness noise — shapes the brain tries to assemble
 //
-const NOISE_TYPES = ['person', 'eye', 'hand', 'house', 'tree', 'clock', 'face', 'fork']
+const NOISE_TYPES = []
 //
 // Thought stream — overlapping inner monologue debris
 //
@@ -136,30 +151,12 @@ const STREAM_SCRIBBLES = [
 //
 // Memory silhouettes — fleeting image flashes
 //
-const MEMORY_TYPES = ['house', 'tree', 'figure', 'toy', 'window', 'swings']
 //
 // Foreground occlusion — dark forms at screen edges
 //
 const FOREGROUND_TYPES = ['branch', 'root', 'hand', 'thread', 'abstract']
 //
 // Intermittent phrase clouds — drift across the full dark void
-//
-//
-// Static angled inscriptions — fixed phrases pinned at angles behind all other layers
-//
-const ANGLED_STATIC_COUNT = 42
-const ANGLED_STATIC_SIZE_MIN = 12
-const ANGLED_STATIC_SIZE_MAX = 42
-const ANGLED_STATIC_ANGLE_MAX = 44
-const ANGLED_STATIC_DEPTH_MIN = 0.56
-const ANGLED_STATIC_DEPTH_MAX = 0.82
-const ANGLED_STATIC_WORDS = [
-  'pain', 'hurt', 'ache', 'fear', 'doubt', 'lost', 'dark',
-  'void', 'empty', 'cold', 'numb', 'alone', 'torn',
-  'scar', 'grief', 'find', 'who', 'am', 'I', 'self',
-  'soul', 'mind', 'heart', 'silence', 'echo', 'shadow',
-  'words', 'like', 'blades', 'find yourself', 'not enough'
-]
 //
 const CLOUD_PHRASES = [
   ['cannot', 'sleep'],
@@ -179,13 +176,14 @@ const CLOUD_WORD_GAP_BASE = 42
 //
 // Drift motif kinds — count and scale vary randomly each level start
 //
+//
+// Crow sprites are baked once per instance at spawn time so onDraw uses a single
+// k.drawSprite call instead of 6 per-frame shape calls
+//
+const CROW_BAKE_SCALE = 4
 const DRIFT_KIND_DEFS = [
-  { kind: 'tree', countMin: 2, countMax: 6, scaleMin: 0.65, scaleMax: 4.2, depthMin: 0.36, depthMax: 0.62 },
-  { kind: 'house', countMin: 1, countMax: 5, scaleMin: 0.55, scaleMax: 3.6, depthMin: 0.30, depthMax: 0.56 },
   { kind: 'crow', countMin: 1, countMax: 4, scaleMin: 0.5, scaleMax: 2.8, depthMin: 0.26, depthMax: 0.52 },
-  { kind: 'driftHero', countMin: 1, countMax: 5, scaleMin: 0.7, scaleMax: 3.8, depthMin: 0.28, depthMax: 0.54 },
-  { kind: 'note', countMin: 3, countMax: 8, scaleMin: 0.45, scaleMax: 3.4, depthMin: 0.22, depthMax: 0.46 },
-  { kind: 'clock', countMin: 0, countMax: 3, scaleMin: 0.5, scaleMax: 2.6, depthMin: 0.32, depthMax: 0.58 }
+  { kind: 'note', countMin: 3, countMax: 8, scaleMin: 0.45, scaleMax: 3.4, depthMin: 0.22, depthMax: 0.46 }
 ]
 
 /**
@@ -220,7 +218,6 @@ export function create(config) {
     font,
     colors,
     playfieldColor: playfieldColor ?? colors.gameWorld ?? CFG.visual.colors.platform,
-    angledWords: [],
     thoughtSky: [],
     noiseShapes: [],
     streamItems: [],
@@ -228,13 +225,14 @@ export function create(config) {
     foregroundPieces: [],
     textClouds: [],
     driftMotifs: [],
-    memoryFlash: null,
-    memoryTimer: k.rand(MEMORY_MIN_INTERVAL, MEMORY_MAX_INTERVAL)
+    rootRunners: [],
+    rootStartSegs: [],
+    rootSegMap: null,
+    rootRunnerTimer: 0,
+    rootRunnerSpawnInterval: ROOT_RUNNER_SPAWN_INTERVAL_MIN
   }
-  spawnAngledWords(inst)
   spawnCenterBrain(inst)
   spawnBrainRoots(inst)
-  WordSceneryClouds.create(k, { playLeft, playRight, playTop })
   spawnTextClouds(inst)
   spawnDriftMotifs(inst)
   spawnThoughtSky(inst)
@@ -336,7 +334,7 @@ function spawnDriftMotifs(inst) {
       const yBand = def.kind === 'moon'
         ? screenH * randomInRange(0.05, 0.2)
         : screenH * randomInRange(0.12, 0.78)
-      inst.driftMotifs.push({
+      const motif = {
         kind: def.kind,
         x: Math.random() * screenW,
         y: yBand,
@@ -350,7 +348,25 @@ function spawnDriftMotifs(inst) {
         noteTilt: def.kind === 'note' ? k.rand(-22, 22) : 0,
         fadePhase: Math.random() * Math.PI * 2,
         fadePeriod: MOTIF_FADE_PERIOD_MIN + Math.random() * (MOTIF_FADE_PERIOD_MAX - MOTIF_FADE_PERIOD_MIN)
-      })
+      }
+      //
+      // Bake crow silhouette to a canvas sprite once at spawn so draw time
+      // uses a single k.drawSprite call instead of 6 per-frame shape calls
+      //
+      if (def.kind === 'crow') {
+        const colorHex = atmosphericDepthColor(colors.memories, inst.playfieldColor, depth)
+        const hex = colorHex.replace('#', '')
+        const cr = parseInt(hex.substring(0, 2), 16)
+        const cg = parseInt(hex.substring(2, 4), 16)
+        const cb = parseInt(hex.substring(4, 6), 16)
+        const crowCanvas = bakeCrowToCanvas(cr, cg, cb)
+        const crowKey = `word-crow-${spawned}-${Date.now()}`
+        k.loadSprite(crowKey, crowCanvas)
+        crowCanvas.width = 0
+        crowCanvas.height = 0
+        motif.spriteKey = crowKey
+      }
+      inst.driftMotifs.push(motif)
       spawned++
     }
   })
@@ -445,6 +461,27 @@ function spawnBrainRoots(inst) {
     k.z(rootsZ),
     k.opacity(LAYER_DRAW_OPACITY)
   ])
+  //
+  // Build segment connection map for word-runner animation
+  // Key: "Math.round(startX),Math.round(startY)" → segments starting at that point
+  //
+  const segMap = new Map()
+  allSegments.forEach(seg => {
+    const key = `${Math.round(seg.startX)},${Math.round(seg.startY)}`
+    const bucket = segMap.get(key) ?? []
+    bucket.push(seg)
+    segMap.set(key, bucket)
+  })
+  const rcx = Math.round(centerX)
+  const rcy = Math.round(centerY)
+  //
+  // Arm starter segments all begin exactly at brain center — find them by rounded coords
+  //
+  const startSegs = allSegments.filter(s =>
+    Math.abs(Math.round(s.startX) - rcx) <= 2 && Math.abs(Math.round(s.startY) - rcy) <= 2
+  )
+  inst.rootSegMap = segMap
+  inst.rootStartSegs = startSegs
 }
 
 //
@@ -497,12 +534,11 @@ function spawnThoughtStream(inst) {
 }
 
 //
-// Layer 3 — small purple glows, touch moon, and time sun
+// Layer 3 — touch moon and time sun sprites
 //
 function spawnCelestialMotifs(inst) {
-  const { k, playLeft, playTop, playWidth, playHeight, colors } = inst
+  const { k, playLeft, playTop, playWidth, playHeight } = inst
   const zIdx = CFG.visual.zIndex.wordEmotions ?? -102
-  const glowKeys = ['anxiety', 'fear', 'hope', 'anger']
   for (let i = 0; i < CELESTIAL_COUNT; i++) {
     const kind = CELESTIAL_KIND_ORDER[i % CELESTIAL_KIND_ORDER.length]
     const x = playLeft + Math.random() * playWidth
@@ -512,10 +548,6 @@ function spawnCelestialMotifs(inst) {
     const pulsePhase = Math.random() * Math.PI * 2
     const depth = CELESTIAL_DEPTH_MIN + Math.random() * (CELESTIAL_DEPTH_MAX - CELESTIAL_DEPTH_MIN)
     const entry = { kind, x, y, vx, vy, pulsePhase, depth, zIdx }
-    if (kind === CELESTIAL_KIND_GLOW) {
-      entry.hex = colors.emotions[glowKeys[i % glowKeys.length]]
-      entry.radius = randomInRange(CELESTIAL_GLOW_RADIUS_MIN, CELESTIAL_GLOW_RADIUS_MAX)
-    }
     kind === CELESTIAL_KIND_TOUCH_MOON && (entry.scale = randomInRange(CELESTIAL_MOON_SCALE_MIN, CELESTIAL_MOON_SCALE_MAX))
     kind === CELESTIAL_KIND_TIME_SUN && (entry.scale = randomInRange(CELESTIAL_SUN_SCALE_MIN, CELESTIAL_SUN_SCALE_MAX))
     inst.celestialMotifs.push(entry)
@@ -570,8 +602,8 @@ function onUpdate(inst) {
   wrapDrifters(inst.streamItems, playLeft, playTop, playWidth, playHeight, dt)
   updateTextClouds(inst, dt)
   updateCelestialMotifs(inst, dt)
-  updateMemoryFlash(inst, dt)
   updateCenterBrain(inst, dt)
+  updateRootRunners(inst, dt)
 }
 
 //
@@ -583,10 +615,33 @@ function wrapDrifters(items, left, top, width, height, dt) {
     item.y += item.vy * dt
     item.rot != null && (item.rot += item.rotSpeed * dt)
     item.pulsePhase != null && (item.pulsePhase += (item.pulseSpeed ?? 0) * dt)
-    if (item.x < left - 80) item.x = left + width + 80
-    if (item.x > left + width + 80) item.x = left - 80
-    if (item.y < top - 60) item.y = top + height + 60
-    if (item.y > top + height + 60) item.y = top - 60
+    //
+    // Fade-out → teleport → fade-in instead of instant wrapping
+    //
+    if (item.wrapState === 'out') {
+      item.wrapOpacity = Math.max(0, item.wrapOpacity - WRAP_FADE_SPEED * dt)
+      if (item.wrapOpacity <= 0) {
+        //
+        // Teleport to the opposite edge at the moment of full invisibility
+        //
+        if (item.x < left - WRAP_BUFFER) item.x = left + width + WRAP_BUFFER
+        else if (item.x > left + width + WRAP_BUFFER) item.x = left - WRAP_BUFFER
+        if (item.y < top - WRAP_BUFFER) item.y = top + height + WRAP_BUFFER
+        else if (item.y > top + height + WRAP_BUFFER) item.y = top - WRAP_BUFFER
+        item.wrapState = 'in'
+        item.wrapOpacity = 0
+      }
+    } else if (item.wrapState === 'in') {
+      item.wrapOpacity = Math.min(1, item.wrapOpacity + WRAP_FADE_SPEED * dt)
+      item.wrapOpacity >= 1 && (item.wrapState = null)
+    } else {
+      const past = item.x < left - WRAP_BUFFER || item.x > left + width + WRAP_BUFFER ||
+                   item.y < top - WRAP_BUFFER || item.y > top + height + WRAP_BUFFER
+      if (past) {
+        item.wrapState = 'out'
+        if (item.wrapOpacity == null) item.wrapOpacity = 1
+      }
+    }
   })
 }
 
@@ -598,10 +653,11 @@ function updateDriftMotifs(inst, dt) {
   inst.driftMotifs.forEach(motif => {
     //
     // Slow sin-wave fade: cubic shaping keeps motifs mostly visible, occasionally near-invisible
+    // Max capped at DRIFT_MOTIF_MAX_OPACITY so circles/ovals stay subtle, not overpowering
     //
     motif.fadePhase += (Math.PI * 2 / motif.fadePeriod) * dt
     const wave = (Math.sin(motif.fadePhase) + 1) * 0.5
-    motif.fadeOpacity = MOTIF_FADE_MIN_OPACITY + (LAYER_DRAW_OPACITY - MOTIF_FADE_MIN_OPACITY) * (wave * wave * wave)
+    motif.fadeOpacity = MOTIF_FADE_MIN_OPACITY + (DRIFT_MOTIF_MAX_OPACITY - MOTIF_FADE_MIN_OPACITY) * (wave * wave * wave)
     motif.kind === 'crow' && (motif.y += Math.sin(time * 3.2 + motif.phase) * 18 * dt)
     motif.kind === 'driftHero' && (motif.y += Math.sin(time * 0.9 + motif.phase) * 10 * dt)
     motif.kind === 'note' && (motif.noteTilt = motif.noteTilt + Math.sin(time * 1.1 + motif.phase) * 12 * dt)
@@ -656,85 +712,128 @@ function updateCenterBrain(inst, dt) {
 }
 
 //
-// Layer 4 — schedules and advances rare memory flashes
+// Root word runners — words travel outward from brain center along root segments,
+// splitting at branch points and shrinking as the root tapers, then fading at tips
 //
-function updateMemoryFlash(inst, dt) {
-  const { k } = inst
-  const flash = inst.memoryFlash
-  if (flash) {
-    flash.elapsed += dt
-    const total = MEMORY_FADE_IN + MEMORY_HOLD + MEMORY_FADE_OUT
-    if (flash.elapsed >= total) {
-      inst.memoryFlash = null
-      inst.memoryTimer = k.rand(MEMORY_MIN_INTERVAL, MEMORY_MAX_INTERVAL)
-      return
-    }
-    const nearDepth = 0.28
-    const farDepth = 0.82
-    if (flash.elapsed < MEMORY_FADE_IN) {
-      const t = flash.elapsed / MEMORY_FADE_IN
-      flash.blendDepth = farDepth - t * (farDepth - nearDepth)
-    } else if (flash.elapsed < MEMORY_FADE_IN + MEMORY_HOLD) {
-      flash.blendDepth = nearDepth
-    } else {
-      const t = (flash.elapsed - MEMORY_FADE_IN - MEMORY_HOLD) / MEMORY_FADE_OUT
-      flash.blendDepth = nearDepth + t * (farDepth - nearDepth)
-    }
-    return
+function updateRootRunners(inst, dt) {
+  if (!inst.rootSegMap) return
+  const { rootRunners, rootStartSegs, rootSegMap } = inst
+  //
+  // Periodically spawn a new runner from a random arm at the brain center
+  //
+  inst.rootRunnerTimer += dt
+  if (inst.rootRunnerTimer >= inst.rootRunnerSpawnInterval && rootRunners.length < ROOT_RUNNER_MAX_COUNT) {
+    inst.rootRunnerTimer = 0
+    inst.rootRunnerSpawnInterval = ROOT_RUNNER_SPAWN_INTERVAL_MIN + Math.random() * (ROOT_RUNNER_SPAWN_INTERVAL_MAX - ROOT_RUNNER_SPAWN_INTERVAL_MIN)
+    rootStartSegs.length > 0 && rootRunners.push(makeRootRunner(rootStartSegs[Math.floor(Math.random() * rootStartSegs.length)]))
   }
-  inst.memoryTimer -= dt
-  inst.memoryTimer <= 0 && spawnMemoryFlash(inst)
-}
-
-//
-// Spawns one fleeting memory silhouette inside the playfield
-//
-function spawnMemoryFlash(inst) {
-  const { k, playLeft, playTop, playWidth, playHeight, colors } = inst
-  const type = MEMORY_TYPES[Math.floor(Math.random() * MEMORY_TYPES.length)]
-  inst.memoryFlash = {
-    type,
-    fillHex: getHex(colors.memories),
-    x: playLeft + playWidth * (0.2 + Math.random() * 0.6),
-    y: playTop + playHeight * (0.25 + Math.random() * 0.5),
-    scale: randomInRange(MEMORY_SCALE_MIN, MEMORY_SCALE_MAX),
-    blendDepth: 0.82,
-    elapsed: 0,
-    zIdx: CFG.visual.zIndex.wordMemories ?? -96
+  //
+  // Advance each runner; spawn child runners at branches, fade at dead ends
+  //
+  for (let i = rootRunners.length - 1; i >= 0; i--) {
+    const r = rootRunners[i]
+    if (r.fading) {
+      r.opacity -= ROOT_RUNNER_FADE_SPEED * dt
+      r.opacity <= 0 && rootRunners.splice(i, 1)
+      continue
+    }
+    const dx = r.seg.endX - r.seg.startX
+    const dy = r.seg.endY - r.seg.startY
+    const len = Math.sqrt(dx * dx + dy * dy)
+    len > 0 && (r.t += (ROOT_RUNNER_SPEED / len) * dt)
+    if (r.t >= 1) {
+      const nextKey = `${Math.round(r.seg.endX)},${Math.round(r.seg.endY)}`
+      const nextSegs = rootSegMap.get(nextKey) ?? []
+      if (nextSegs.length === 0) {
+        r.fading = true
+        r.t = 1
+      } else {
+        //
+        // Continue along first next segment; spawn a runner for each branch
+        //
+        for (let j = 1; j < nextSegs.length && rootRunners.length < ROOT_RUNNER_MAX_COUNT; j++) {
+          rootRunners.push(makeRootRunner(nextSegs[j], r.word, r.opacity))
+        }
+        r.seg = nextSegs[0]
+        r.t = 0
+      }
+    }
   }
 }
-
+//
+// Creates a new runner state at the start of a segment
+//
+function makeRootRunner(seg, word, opacity) {
+  return {
+    seg,
+    t: 0,
+    word: word ?? ROOT_RUNNER_WORDS[Math.floor(Math.random() * ROOT_RUNNER_WORDS.length)],
+    opacity: opacity ?? ROOT_RUNNER_OPACITY,
+    fading: false
+  }
+}
+//
+// Draws each runner's word at its current position with size scaled to root thickness
+//
+function drawRootRunners(inst) {
+  if (!inst.rootRunners) return
+  const { k, rootRunners } = inst
+  const color = k.rgb(BRAIN_ROOT_COLOR_R + 20, BRAIN_ROOT_COLOR_G + 16, BRAIN_ROOT_COLOR_B + 16)
+  rootRunners.forEach(r => {
+    const x = r.seg.startX + (r.seg.endX - r.seg.startX) * r.t
+    const y = r.seg.startY + (r.seg.endY - r.seg.startY) * r.t
+    //
+    // Font size shrinks with root thickness: thick root near brain = large, thin tip = tiny
+    //
+    const fontSize = Math.max(ROOT_RUNNER_FONT_MIN, ROOT_RUNNER_FONT_MIN + (ROOT_RUNNER_FONT_MAX - ROOT_RUNNER_FONT_MIN) * (r.seg.width / BRAIN_ROOT_THICKNESS))
+    k.drawText({
+      text: r.word,
+      pos: k.vec2(x, y),
+      size: Math.round(fontSize),
+      color,
+      anchor: 'center',
+      opacity: r.opacity
+    })
+  })
+}
 //
 // Draws all consciousness layers back-to-front inside onDraw
 //
 function onDraw(inst) {
-  drawAngledWords(inst)
   drawDriftMotifs(inst)
   drawTextClouds(inst)
   drawThoughtSky(inst)
   drawNoiseSilhouettes(inst)
   drawThoughtStream(inst)
   drawCelestialMotifs(inst)
-  drawMemoryFlash(inst)
   drawForegroundPieces(inst)
+  drawRootRunners(inst)
 }
 
 function drawDriftMotifs(inst) {
   const { k, driftMotifs } = inst
   const sorted = [...driftMotifs].sort((a, b) => b.depth - a.depth)
   sorted.forEach(motif => {
-    const op = motif.fadeOpacity ?? LAYER_DRAW_OPACITY
+    const op = (motif.fadeOpacity ?? LAYER_DRAW_OPACITY) * (motif.wrapOpacity ?? 1)
     if (motif.kind === 'moon') {
       k.drawSprite({ sprite: getMoonSpriteKey(k), pos: k.vec2(motif.x, motif.y), anchor: 'center', scale: motif.scale, opacity: op })
       return
     }
     const motifColor = playfieldBlendRgb(k, inst, inst.colors.memories, motif.depth)
-    if (motif.kind === 'crow') { drawCrow(k, motif.x, motif.y, motif.scale, motifColor, op); return }
-    if (motif.kind === 'tree') { drawTree(k, motif.x, motif.y, motif.scale, motifColor, op); return }
-    if (motif.kind === 'driftHero') { drawBakedFigure(k, motif.x, motif.y, motif.scale, motif.fillHex, op); return }
+    if (motif.kind === 'crow') {
+      //
+      // Use pre-baked canvas sprite — single draw call vs 6 per-frame shape calls
+      //
+      k.drawSprite({
+        sprite: motif.spriteKey,
+        pos: k.vec2(motif.x, motif.y),
+        anchor: 'center',
+        scale: motif.scale / CROW_BAKE_SCALE,
+        opacity: op
+      })
+      return
+    }
     if (motif.kind === 'note') { drawNote(k, motif.x, motif.y, motif.scale, motifColor, op, inst.font, motif.glyph, motif.noteTilt); return }
-    if (motif.kind === 'house') { drawHouse(k, motif.x, motif.y, motif.scale, motifColor, op); return }
-    if (motif.kind === 'clock') { drawClock(k, motif.x, motif.y, motif.scale, motifColor, op) }
   })
 }
 
@@ -766,7 +865,7 @@ function drawTextClouds(inst) {
         pos: k.vec2(cloud.x + word.offsetX, cloud.y + word.offsetY),
         anchor: 'center',
         color,
-        opacity: LAYER_DRAW_OPACITY
+        opacity: LAYER_DRAW_OPACITY * (cloud.wrapOpacity ?? 1)
       })
     })
   })
@@ -785,7 +884,7 @@ function drawThoughtSky(inst) {
       pos: k.vec2(item.x, item.y),
       anchor: 'center',
       color: item.color,
-      opacity: LAYER_DRAW_OPACITY
+      opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1)
     })
   })
 }
@@ -798,7 +897,7 @@ function drawNoiseSilhouettes(inst) {
   const time = k.time()
   noiseShapes.forEach(shape => {
     const wobble = Math.sin(time * 0.4 + shape.phase) * 6
-    drawBackgroundMotif(k, shape.type, shape.x + wobble, shape.y, shape.scale, shape.color, LAYER_DRAW_OPACITY, shape.fillHex)
+    drawBackgroundMotif(k, shape.type, shape.x + wobble, shape.y, shape.scale, shape.color, LAYER_DRAW_OPACITY * (shape.wrapOpacity ?? 1), shape.fillHex)
   })
 }
 
@@ -815,35 +914,19 @@ function drawThoughtStream(inst) {
       pos: k.vec2(item.x, item.y),
       anchor: 'center',
       color: item.color,
-      opacity: LAYER_DRAW_OPACITY,
+      opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1),
       angle: item.rot ? item.rot * (180 / Math.PI) : 0
     })
   })
 }
 
 //
-// Layer 3 draw — compact purple glows, touch moon, time sun
+// Layer 3 draw — touch moon, time sun
 //
 function drawCelestialMotifs(inst) {
-  const { k, celestialMotifs, playfieldColor } = inst
+  const { k, celestialMotifs } = inst
   celestialMotifs.forEach(entry => {
     const depth = entry.currentDepth ?? entry.depth
-    if (entry.kind === CELESTIAL_KIND_GLOW) {
-      for (let r = CELESTIAL_GLOW_RINGS; r >= 1; r--) {
-        const t = r / CELESTIAL_GLOW_RINGS
-        const radius = entry.radius * (0.55 + t * 0.45)
-        const ringDepth = Math.min(1, depth + (1 - t) * 0.18)
-        const ringHex = atmosphericDepthColor(entry.hex, playfieldColor, ringDepth)
-        const ringOpacity = CELESTIAL_GLOW_EDGE_OPACITY + (CELESTIAL_GLOW_CENTER_OPACITY - CELESTIAL_GLOW_EDGE_OPACITY) * t
-        k.drawCircle({
-          pos: k.vec2(entry.x, entry.y),
-          radius,
-          color: getRGB(k, ringHex),
-          opacity: ringOpacity
-        })
-      }
-      return
-    }
     if (entry.kind === CELESTIAL_KIND_TOUCH_MOON) {
       k.drawSprite({
         sprite: getTouchMoonSpriteKey(k),
@@ -862,16 +945,6 @@ function drawCelestialMotifs(inst) {
       opacity: CELESTIAL_SUN_OPACITY * (1 - depth * 0.18)
     })
   })
-}
-
-//
-// Layer 4 draw — single active memory flash
-//
-function drawMemoryFlash(inst) {
-  const flash = inst.memoryFlash
-  if (!flash) return
-  const color = playfieldBlendRgb(inst.k, inst, inst.colors.memories, flash.blendDepth ?? 0.5)
-  drawBackgroundMotif(inst.k, flash.type, flash.x, flash.y, flash.scale * 2.2, color, LAYER_DRAW_OPACITY, flash.fillHex)
 }
 
 //
@@ -896,42 +969,6 @@ function depthRgb(k, hex, depth) {
 //
 // Blends accent toward playfield fill — depth without alpha
 //
-//
-// Static phrases pinned at random angles — drawn before all drifting layers
-//
-function spawnAngledWords(inst) {
-  const { k, screenW, screenH, font, colors } = inst
-  for (let i = 0; i < ANGLED_STATIC_COUNT; i++) {
-    const text = ANGLED_STATIC_WORDS[Math.floor(Math.random() * ANGLED_STATIC_WORDS.length)]
-    const size = ANGLED_STATIC_SIZE_MIN + Math.random() * (ANGLED_STATIC_SIZE_MAX - ANGLED_STATIC_SIZE_MIN)
-    const depth = ANGLED_STATIC_DEPTH_MIN + Math.random() * (ANGLED_STATIC_DEPTH_MAX - ANGLED_STATIC_DEPTH_MIN)
-    const angle = (Math.random() - 0.5) * 2 * ANGLED_STATIC_ANGLE_MAX
-    const x = screenW * (0.04 + Math.random() * 0.92)
-    const y = screenH * (0.04 + Math.random() * 0.92)
-    const colorHex = depthConsciousnessColor(colors.distantThoughts, depth)
-    inst.angledWords.push({ text, size, x, y, angle, font, colorHex })
-  }
-}
-
-//
-// Draws fixed angled inscriptions — pure depth-tinted color, full opacity
-//
-function drawAngledWords(inst) {
-  const { k, angledWords } = inst
-  angledWords.forEach(item => {
-    k.drawText({
-      text: item.text,
-      size: item.size,
-      font: item.font,
-      pos: k.vec2(item.x, item.y),
-      anchor: 'center',
-      angle: item.angle,
-      color: getRGB(k, item.colorHex),
-      opacity: LAYER_DRAW_OPACITY
-    })
-  })
-}
-
 function playfieldBlendRgb(k, inst, accentHex, depth) {
   return getRGB(k, atmosphericDepthColor(accentHex, inst.playfieldColor, depth))
 }
@@ -948,17 +985,6 @@ function voidBlendRgb(k, inst, accentHex, depth) {
 //
 function drawBackgroundMotif(k, type, x, y, scale, color, opacity, fillHex) {
   switch (type) {
-    case 'tree':
-      drawTree(k, x, y, scale, color, opacity)
-      break
-    case 'person':
-    case 'figure':
-    case 'driftHero':
-      drawBakedFigure(k, x, y, scale, fillHex ?? getHex(CFG.visual.colors.consciousness?.memories ?? '#222238'), opacity)
-      break
-    case 'house':
-      drawHouse(k, x, y, scale, color, opacity)
-      break
     case 'crow':
       drawCrow(k, x, y, scale, color, opacity)
       break
@@ -971,17 +997,8 @@ function drawBackgroundMotif(k, type, x, y, scale, color, opacity, fillHex) {
         opacity
       })
       break
-    case 'clock':
-      drawClock(k, x, y, scale, color, opacity)
-      break
-    case 'window':
-      drawWindow(k, x, y, scale, color, opacity)
-      break
     case 'toy':
       drawToy(k, x, y, scale, color, opacity)
-      break
-    case 'swings':
-      drawSwings(k, x, y, scale, color, opacity)
       break
     default:
       drawSilhouette(k, type, x, y, scale, color, opacity)
@@ -989,21 +1006,8 @@ function drawBackgroundMotif(k, type, x, y, scale, color, opacity, fillHex) {
 }
 
 //
-// Deciduous tree — rounded trunk, branching forks, and multi-cluster canopy
-//
-function drawTree(k, x, y, scale, color, opacity) {
-  const s = 24 * scale
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.16, height: s * 0.70, color, opacity, anchor: 'bot', radius: s * 0.04 })
-  k.drawRect({ pos: k.vec2(x - s * 0.06, y - s * 0.38), width: s * 0.09, height: s * 0.26, color, opacity, anchor: 'bot', angle: 32, radius: s * 0.03 })
-  k.drawRect({ pos: k.vec2(x + s * 0.06, y - s * 0.38), width: s * 0.09, height: s * 0.26, color, opacity, anchor: 'bot', angle: -32, radius: s * 0.03 })
-  k.drawEllipse({ pos: k.vec2(x, y - s * 0.64), radiusX: s * 0.44, radiusY: s * 0.30, color, opacity })
-  k.drawEllipse({ pos: k.vec2(x - s * 0.20, y - s * 0.80), radiusX: s * 0.30, radiusY: s * 0.24, color, opacity })
-  k.drawEllipse({ pos: k.vec2(x + s * 0.22, y - s * 0.76), radiusX: s * 0.28, radiusY: s * 0.22, color, opacity })
-  k.drawEllipse({ pos: k.vec2(x - s * 0.06, y - s * 0.96), radiusX: s * 0.22, radiusY: s * 0.18, color, opacity })
-}
-
-//
 // Crow in flight — round body, tail lobe, arched ellipse wings, eye, beak
+// Used by drawBackgroundMotif for memory flashes (rare; baked version used for drift motifs)
 //
 function drawCrow(k, x, y, scale, color, opacity) {
   const s = 14 * scale
@@ -1013,48 +1017,6 @@ function drawCrow(k, x, y, scale, color, opacity) {
   k.drawEllipse({ pos: k.vec2(x + s * 0.82, y - s * 0.22), radiusX: s * 0.74, radiusY: s * 0.18, color, opacity, angle: 16 })
   k.drawCircle({ pos: k.vec2(x + s * 0.28, y - s * 0.02), radius: s * 0.11, color, opacity })
   k.drawEllipse({ pos: k.vec2(x + s * 0.46, y + s * 0.04), radiusX: s * 0.12, radiusY: s * 0.05, color, opacity, angle: 10 })
-}
-
-//
-// Small house — rounded body, dome/arch roof, chimney, rounded door and two windows
-//
-function drawHouse(k, x, y, scale, color, opacity) {
-  const s = 24 * scale
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.82, height: s * 0.52, color, opacity, anchor: 'bot', radius: s * 0.06 })
-  k.drawEllipse({ pos: k.vec2(x, y - s * 0.54), radiusX: s * 0.52, radiusY: s * 0.42, color, opacity })
-  k.drawRect({ pos: k.vec2(x + s * 0.28, y - s * 0.84), width: s * 0.10, height: s * 0.24, color, opacity, anchor: 'bot', radius: s * 0.03 })
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.16, height: s * 0.28, color, opacity, anchor: 'bot', radius: s * 0.05 })
-  k.drawRect({ pos: k.vec2(x - s * 0.22, y - s * 0.32), width: s * 0.14, height: s * 0.12, color, opacity, anchor: 'center', radius: s * 0.03 })
-  k.drawRect({ pos: k.vec2(x + s * 0.22, y - s * 0.32), width: s * 0.14, height: s * 0.12, color, opacity, anchor: 'center', radius: s * 0.03 })
-}
-
-//
-// Wall clock — round rim, face, rounded hands, center pin, and four tick marks
-//
-function drawClock(k, x, y, scale, color, opacity) {
-  const s = 24 * scale
-  k.drawCircle({ pos: k.vec2(x, y), radius: s * 0.46, color, opacity })
-  k.drawCircle({ pos: k.vec2(x, y), radius: s * 0.38, color, opacity })
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.04, height: s * 0.26, color, opacity, anchor: 'bot', angle: -22, radius: s * 0.02 })
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.03, height: s * 0.33, color, opacity, anchor: 'bot', angle: 56, radius: s * 0.015 })
-  k.drawCircle({ pos: k.vec2(x, y), radius: s * 0.035, color, opacity })
-  for (let i = 0; i < 4; i++) {
-    const ang = i * Math.PI * 0.5 - Math.PI * 0.5
-    const tx = x + Math.cos(ang) * s * 0.32
-    const ty = y + Math.sin(ang) * s * 0.32
-    k.drawRect({ pos: k.vec2(tx, ty), width: s * 0.05, height: s * 0.10, color, opacity, anchor: 'center', angle: i * 90, radius: s * 0.02 })
-  }
-}
-
-//
-// Window frame with cross mullions and panes
-//
-function drawWindow(k, x, y, scale, color, opacity) {
-  const s = 24 * scale
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.72, height: s * 0.82, color, opacity: LAYER_DRAW_OPACITY, anchor: 'center' })
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.78, height: s * 0.88, color, opacity: LAYER_DRAW_OPACITY, anchor: 'center' })
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.04, height: s * 0.82, color, opacity: LAYER_DRAW_OPACITY, anchor: 'center' })
-  k.drawRect({ pos: k.vec2(x, y), width: s * 0.72, height: s * 0.04, color, opacity: LAYER_DRAW_OPACITY, anchor: 'center' })
 }
 
 //
@@ -1068,19 +1030,6 @@ function drawToy(k, x, y, scale, color, opacity) {
   k.drawCircle({ pos: k.vec2(x, y - s * 0.08), radius: s * 0.18, color, opacity: LAYER_DRAW_OPACITY })
 }
 
-//
-// Playground swings — frame and two seats
-//
-function drawSwings(k, x, y, scale, color, opacity) {
-  const s = 24 * scale
-  k.drawRect({ pos: k.vec2(x - s * 0.34, y - s * 0.52), width: s * 0.06, height: s * 0.88, color, opacity, anchor: 'top' })
-  k.drawRect({ pos: k.vec2(x + s * 0.34, y - s * 0.52), width: s * 0.06, height: s * 0.88, color, opacity, anchor: 'top' })
-  k.drawRect({ pos: k.vec2(x - s * 0.34, y - s * 0.14), width: s * 0.74, height: s * 0.04, color, opacity, anchor: 'left' })
-  k.drawRect({ pos: k.vec2(x - s * 0.18, y - s * 0.14), width: s * 0.03, height: s * 0.34, color, opacity, anchor: 'top' })
-  k.drawRect({ pos: k.vec2(x + s * 0.18, y - s * 0.14), width: s * 0.03, height: s * 0.28, color, opacity, anchor: 'top' })
-  k.drawRect({ pos: k.vec2(x - s * 0.22, y + s * 0.18), width: s * 0.14, height: s * 0.04, color, opacity, anchor: 'center' })
-  k.drawRect({ pos: k.vec2(x + s * 0.22, y + s * 0.12), width: s * 0.14, height: s * 0.04, color, opacity, anchor: 'center' })
-}
 
 //
 // Musical note — drawn head, stem, and optional flag glyph
@@ -1234,4 +1183,46 @@ function drawSilhouette(k, type, x, y, scale, color, opacity) {
 //
 function randomInRange(min, max) {
   return min + Math.random() * (max - min)
+}
+
+//
+// Renders a crow silhouette onto a fresh canvas using Canvas2D so Kaplay can load it as
+// a sprite. The shape is drawn in the given RGB colour at CROW_BAKE_SCALE × the drawCrow
+// reference size (14 px per unit). The crow is placed so its visual midpoint aligns with
+// the canvas centre — k.drawSprite with anchor:'center' will position it correctly.
+//
+function bakeCrowToCanvas(r, g, b) {
+  const s = 14 * CROW_BAKE_SCALE
+  const pad = Math.ceil(s * 0.22)
+  const W = Math.ceil(s * 3.2 + pad * 2)
+  const H = Math.ceil(s * 1.1 + pad * 2)
+  const cx = W / 2
+  //
+  // Crow top extends to -0.44s above origin — pad ensures it is not clipped
+  //
+  const cy = Math.ceil(s * 0.44 + pad)
+  return toCanvas({ width: W, height: H }, ctx => {
+    ctx.fillStyle = `rgb(${r},${g},${b})`
+    bakeEllipse2d(ctx, cx, cy + s * 0.05, s * 0.32, s * 0.22, 0)
+    bakeEllipse2d(ctx, cx, cy + s * 0.38, s * 0.18, s * 0.16, 0)
+    bakeEllipse2d(ctx, cx - s * 0.82, cy - s * 0.26, s * 0.74, s * 0.18, -16 * Math.PI / 180)
+    bakeEllipse2d(ctx, cx + s * 0.82, cy - s * 0.22, s * 0.74, s * 0.18, 16 * Math.PI / 180)
+    bakeCircle2d(ctx, cx + s * 0.28, cy - s * 0.02, s * 0.11)
+    bakeEllipse2d(ctx, cx + s * 0.46, cy + s * 0.04, s * 0.12, s * 0.05, 10 * Math.PI / 180)
+  })
+}
+//
+// Canvas2D helpers — mirror of Kaplay's k.drawEllipse / k.drawCircle for sprite baking
+//
+function bakeEllipse2d(ctx, cx, cy, rx, ry, angle) {
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, Math.max(0.5, rx), Math.max(0.5, ry), angle, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+function bakeCircle2d(ctx, cx, cy, r) {
+  ctx.beginPath()
+  ctx.arc(cx, cy, Math.max(0.5, r), 0, Math.PI * 2)
+  ctx.fill()
 }

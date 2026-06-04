@@ -51,9 +51,20 @@ const BRAIN_TINT_WARM_B = 212
 const BRAIN_ROOT_ARM_COUNT = 20
 const BRAIN_ROOT_SEGMENTS = 58
 const BRAIN_ROOT_THICKNESS = 10
-const BRAIN_ROOT_COLOR_R = 148
-const BRAIN_ROOT_COLOR_G = 138
-const BRAIN_ROOT_COLOR_B = 188
+//
+// Root filament color — shifted toward playfield background (#5A5A70) so roots read
+// as a subtle structural element rather than a bright accent
+//
+const BRAIN_ROOT_COLOR_R = 108
+const BRAIN_ROOT_COLOR_G = 100
+const BRAIN_ROOT_COLOR_B = 148
+//
+// Word-runner color is kept at the original brighter tint so runners are legible
+// even when the root lines they travel on are muted
+//
+const BRAIN_ROOT_RUNNER_COLOR_R = 168
+const BRAIN_ROOT_RUNNER_COLOR_G = 154
+const BRAIN_ROOT_RUNNER_COLOR_B = 204
 const BRAIN_ROOT_BASE_OPACITY = 0.52
 const BRAIN_ROOT_DEPTH_FADE = 0.07
 //
@@ -778,7 +789,7 @@ function makeRootRunner(seg, word, opacity) {
 function drawRootRunners(inst) {
   if (!inst.rootRunners) return
   const { k, rootRunners } = inst
-  const color = k.rgb(BRAIN_ROOT_COLOR_R + 20, BRAIN_ROOT_COLOR_G + 16, BRAIN_ROOT_COLOR_B + 16)
+  const color = k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
   rootRunners.forEach(r => {
     const x = r.seg.startX + (r.seg.endX - r.seg.startX) * r.t
     const y = r.seg.startY + (r.seg.endY - r.seg.startY) * r.t

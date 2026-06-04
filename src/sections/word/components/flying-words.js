@@ -17,7 +17,7 @@ const SPAWN_BUFFER = 100
 //
 // Thin outline — four diagonal offsets create a solid black stroke around killer words
 //
-const WORD_OUTLINE_SIZE = 2.4
+const WORD_OUTLINE_SIZE = 1.2
 const WORD_OUTLINE_OFFSETS = [
   [-WORD_OUTLINE_SIZE, -WORD_OUTLINE_SIZE],
   [WORD_OUTLINE_SIZE, -WORD_OUTLINE_SIZE],
@@ -315,13 +315,6 @@ function updateWord(word, inst) {
     
     word.rotation += currentRotationSpeed * k.dt()
     word.textObj.angle = word.rotation
-    //
-    // Keep outline entity position locked to the blue killer word each frame
-    //
-    if (word.outlineEntity?.exists?.()) {
-      word.outlineEntity.pos.x = word.textObj.pos.x
-      word.outlineEntity.pos.y = word.textObj.pos.y
-    }
 
     //
     // Update 3D rotation (turning to face viewer) - realistic tumbling
@@ -424,13 +417,6 @@ function updateKillerLetter(letter, inst) {
     
     letter.textObj.pos.x = x
     letter.textObj.pos.y = y
-    //
-    // Snap outline entity to the respawn position immediately
-    //
-    if (letter.outlineEntity?.exists?.()) {
-      letter.outlineEntity.pos.x = x
-      letter.outlineEntity.pos.y = y
-    }
     //
     // Reset spawn delay
     //
@@ -771,20 +757,19 @@ function createKillerLetter(k, params) {
   // Its update() hook checks lastOnUpdateTime to detect when the player navigates away
   // from word levels (e.g. to the menu). When outside word levels both the outline and
   // the blue textObj are hidden to prevent them bleeding onto other scenes.
-  // draw() renders the black outline in LOCAL space so its pos must stay synced to
-  // textObj.pos every frame (done in updateWord). When textObj.scale.x is near zero
-  // (edge-on 3D flip) drawing is also skipped to match the word's near-invisibility.
+  //
+  // draw() is anchored at (0,0) and reads textObj.pos directly each frame so it never
+  // shows a stale position regardless of update order — no pos-sync bookkeeping needed.
   //
   const outlineEntity = k.add([
-    k.pos(textObj.pos.x, textObj.pos.y),
+    k.pos(0, 0),
     k.z(zIndex - 0.01),
     k.fixed(),
     k.stay(),
     {
       update() {
         //
-        // Show or hide both the blue word and the black outline depending on whether
-        // we are currently inside a word-level scene
+        // Show or hide the blue word depending on whether we are inside a word-level scene
         //
         const inWordLevel = k.time() - lastOnUpdateTime < WORD_LEVEL_TIMEOUT
         if (textObj.exists?.()) {
@@ -794,15 +779,22 @@ function createKillerLetter(k, params) {
       draw() {
         const inWordLevel = k.time() - lastOnUpdateTime < WORD_LEVEL_TIMEOUT
         if (!inWordLevel) return
+        if (!textObj.exists?.()) return
         const scaleX = textObj.scale?.x ?? 1
         if (scaleX < 0.12) return
+        //
+        // Use textObj.pos directly so the outline is always pixel-perfect
+        // regardless of when this draw() fires relative to the pos sync in updateWord
+        //
+        const tx = textObj.pos.x
+        const ty = textObj.pos.y
         WORD_OUTLINE_OFFSETS.forEach(([ox, oy]) => {
           k.drawText({
             text,
             size,
             font: fontFamily,
             anchor: 'center',
-            pos: k.vec2(ox, oy),
+            pos: k.vec2(tx + ox, ty + oy),
             angle: textObj.angle,
             color: k.rgb(0, 0, 0),
             opacity: FLYING_WORD_DRAW_OPACITY

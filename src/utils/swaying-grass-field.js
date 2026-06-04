@@ -76,7 +76,7 @@ export function createSwayingGrassField(cfg = {}) {
  * @param {Object} k - Kaplay instance
  * @param {{ blades: Object[] }} field - Grass field from createSwayingGrassField
  */
-export function drawSwayingGrassField(k, field) {
+export function drawSwayingGrassField(k, field, opacityMultiplier = 1) {
   const time = k.time()
   for (const blade of field.blades) {
     const sway = Math.sin(time * (GRASS_WIND_FREQ + blade.swaySpeed * 0.6) + blade.swayOffset) * blade.swayAmount * GRASS_WIND_AMP
@@ -85,7 +85,7 @@ export function drawSwayingGrassField(k, field) {
       p2: k.vec2(blade.baseX2 + sway, blade.y2),
       width: blade.width,
       color: k.rgb(Math.round(blade.color.r), Math.round(blade.color.g), Math.round(blade.color.b)),
-      opacity: blade.opacity
+      opacity: blade.opacity * opacityMultiplier
     })
   }
 }

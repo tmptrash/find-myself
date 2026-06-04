@@ -5,9 +5,18 @@ import { parseHex } from '../../../utils/helper.js'
 //
 // Large muted heroes — bottom, top, and side margins; eyes track the playable hero
 //
-const BG_HERO_FOREGROUND_Z = (CFG.visual.zIndex.player ?? 10) - 1
+//
+// Place heroes just behind the brain roots (rootsZ = wordPlayfieldFill + 0.5) so
+// they appear as deep background silhouettes peeking through the transparent root gaps
+//
+const BG_HERO_BASE_Z = (CFG.visual.zIndex.wordPlayfieldFill ?? -90) + 0.4
 const BG_HERO_COVER_Z = (CFG.visual.zIndex.player ?? 10) - 0.5
-const BG_HERO_OPACITY = 1
+const BG_HERO_OPACITY = 0.55
+//
+// Extra depth boost makes heroes nearly match the playfield background color, so they
+// read as a very subtle atmospheric layer rather than prominent silhouettes
+//
+const BG_HERO_COLOR_DEPTH_BOOST = 0.68
 const BG_HERO_LOOK_Y_OFFSET = 52
 const BG_HERO_UPSIDE_DOWN_LOOK_Y_OFFSET = -40
 const DEFAULT_SIDE_WALL = 192
@@ -72,7 +81,7 @@ export function create(config) {
     floorY
   )
   placements.forEach(({ slot, x, y }) => {
-    const bodyColor = atmosphericDepthColor(baseHeroHex, depthBgHex, slot.depth)
+    const bodyColor = atmosphericDepthColor(baseHeroHex, depthBgHex, Math.min(1, slot.depth + BG_HERO_COLOR_DEPTH_BOOST))
     const upsideDown = slot.edge === 'top'
     const bgHero = Hero.create({
       k,
@@ -86,7 +95,7 @@ export function create(config) {
       isStatic: true,
       idleVocalization: null
     })
-    bgHero.character.z = BG_HERO_FOREGROUND_Z - slot.depth * 8
+    bgHero.character.z = BG_HERO_BASE_Z - slot.depth * 0.06
     bgHero.character.opacity = BG_HERO_OPACITY
     upsideDown && (bgHero.character.angle = UPSIDE_DOWN_ANGLE)
     slot.edge === 'left' && (bgHero.character.flipX = true)

@@ -46,6 +46,13 @@ const SCHOOL_WORD_OPACITY = 0.70
 const SCHOOL_ATTRACTOR_SPEED = 1.6
 const SCHOOL_ATTRACTOR_TURN = 0.04
 //
+// Each school is confined to one lateral half of the playfield so schools flank the
+// brain center rather than drifting through it. Left zone: 0–38% of width; gap 38–62%;
+// right zone: 62–100%.
+//
+const SCHOOL_LEFT_ZONE_RATIO = 0.38
+const SCHOOL_RIGHT_ZONE_RATIO = 0.62
+//
 // Purple-violet tones adapted to the word section palette
 //
 const SCHOOL_COLOR_DEFS = [
@@ -83,11 +90,20 @@ export function create(k, layout) {
   const playHeight = k.height() - topPlatformHeight - bottomPlatformHeight
   const inst = { k, boids: [], attractors: [], playLeft, playTop, playWidth, playHeight }
   for (let i = 0; i < SCHOOL_ATTRACTOR_COUNT; i++) {
+    //
+    // Even index → left zone, odd index → right zone; each attractor only
+    // wanders within its own lateral band so the school stays beside the brain
+    //
+    const isRight = i % 2 === 1
+    const xMin = isRight ? playLeft + playWidth * SCHOOL_RIGHT_ZONE_RATIO : playLeft
+    const xMax = isRight ? playLeft + playWidth : playLeft + playWidth * SCHOOL_LEFT_ZONE_RATIO
     inst.attractors.push({
-      x: playLeft + playWidth * (0.25 + i * 0.5),
+      x: (xMin + xMax) * 0.5,
       y: playTop + playHeight * (0.3 + (i % 2) * 0.4),
       angle: Math.random() * Math.PI * 2,
-      tx: playLeft + Math.random() * playWidth,
+      xMin,
+      xMax,
+      tx: xMin + Math.random() * (xMax - xMin),
       ty: playTop + Math.random() * playHeight,
       timer: Math.random() * 100,
       interval: 80 + Math.random() * 140
@@ -95,8 +111,14 @@ export function create(k, layout) {
   }
   for (let i = 0; i < SCHOOL_BOID_COUNT; i++) {
     const colorDef = SCHOOL_COLOR_DEFS[i % SCHOOL_COLOR_DEFS.length]
+    //
+    // Start each boid inside the zone of its assigned attractor
+    //
+    const isRight = i % 2 === 1
+    const boidXMin = isRight ? playLeft + playWidth * SCHOOL_RIGHT_ZONE_RATIO : playLeft
+    const boidXMax = isRight ? playLeft + playWidth : playLeft + playWidth * SCHOOL_LEFT_ZONE_RATIO
     inst.boids.push({
-      x: playLeft + Math.random() * playWidth,
+      x: boidXMin + Math.random() * (boidXMax - boidXMin),
       y: playTop + Math.random() * playHeight,
       vx: (Math.random() - 0.5) * 2,
       vy: (Math.random() - 0.5) * 2,
@@ -144,13 +166,17 @@ function onUpdate(inst) {
 // Wanders each attractor toward random targets, bouncing off playfield edges
 //
 function updateAttractors(attractors, playLeft, playTop, playWidth, playHeight, f) {
-  const margin = 90
+  const margin = 60
   attractors.forEach(a => {
     a.timer += f
     if (a.timer >= a.interval) {
       a.timer = 0
       a.interval = 70 + Math.random() * 150
-      a.tx = playLeft + margin + Math.random() * (playWidth - margin * 2)
+      //
+      // Target is constrained to the attractor's zone (left or right of brain)
+      //
+      const zoneW = a.xMax - a.xMin
+      a.tx = a.xMin + margin + Math.random() * Math.max(1, zoneW - margin * 2)
       a.ty = playTop + margin + Math.random() * (playHeight - margin * 2)
     }
     const dx = a.tx - a.x, dy = a.ty - a.y

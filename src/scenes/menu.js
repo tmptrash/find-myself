@@ -1503,9 +1503,9 @@ function drawScene(inst) {
   //
   drawMenuBackground(inst)
   //
-  // Swaying grass on the horizon strip
+  // Swaying grass on the horizon strip — fades with the background when hovering anti-hero
   //
-  drawSwayingGrassField(k, grassField)
+  drawSwayingGrassField(k, grassField, inst.bgDefaultOpacity)
   
   //
   // Draw stars with twinkling effect

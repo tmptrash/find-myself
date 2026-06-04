@@ -39,12 +39,20 @@ const BRAIN_PLAYFIELD_HEIGHT_RATIO = 0.5
 const BRAIN_MAX_WIDTH_RATIO = 0.78
 const BRAIN_PULSE_SPEED = 0.42
 const BRAIN_SIZE_PULSE = 0.05
-const BRAIN_TINT_COOL_R = 142
-const BRAIN_TINT_COOL_G = 136
-const BRAIN_TINT_COOL_B = 172
-const BRAIN_TINT_WARM_R = 188
-const BRAIN_TINT_WARM_G = 178
-const BRAIN_TINT_WARM_B = 212
+//
+// Tints tuned to the playfield fill palette (~#5A5A70 = RGB 90,90,112) — cool tint sits
+// just below the fill, warm tint barely lifts above it so the brain reads as a subtle shape
+//
+const BRAIN_TINT_COOL_R = 72
+const BRAIN_TINT_COOL_G = 66
+const BRAIN_TINT_COOL_B = 96
+const BRAIN_TINT_WARM_R = 92
+const BRAIN_TINT_WARM_G = 84
+const BRAIN_TINT_WARM_B = 118
+//
+// Opacity for the brain sprite — lower than LAYER_DRAW_OPACITY so it blends into background
+//
+const BRAIN_OPACITY = 0.65
 //
 // Neural root lines behind the brain — vine-palette violet filaments
 //
@@ -386,7 +394,7 @@ function spawnCenterBrain(inst) {
     k.anchor('center'),
     k.fixed(),
     k.z(brainZ),
-    k.opacity(LAYER_DRAW_OPACITY),
+    k.opacity(BRAIN_OPACITY),
     k.color(BRAIN_TINT_COOL_R, BRAIN_TINT_COOL_G, BRAIN_TINT_COOL_B)
   ])
   brainObj.width = baseWidth
@@ -709,7 +717,7 @@ function updateCenterBrain(inst, dt) {
   const sizeMul = 1 + (wave - 0.5) * 2 * BRAIN_SIZE_PULSE
   cfg.obj.width = cfg.baseWidth * sizeMul
   cfg.obj.height = cfg.baseHeight * sizeMul
-  cfg.obj.opacity = LAYER_DRAW_OPACITY
+  cfg.obj.opacity = BRAIN_OPACITY
   const r = Math.round(BRAIN_TINT_COOL_R + (BRAIN_TINT_WARM_R - BRAIN_TINT_COOL_R) * wave)
   const g = Math.round(BRAIN_TINT_COOL_G + (BRAIN_TINT_WARM_G - BRAIN_TINT_COOL_G) * wave)
   const b = Math.round(BRAIN_TINT_COOL_B + (BRAIN_TINT_WARM_B - BRAIN_TINT_COOL_B) * wave)

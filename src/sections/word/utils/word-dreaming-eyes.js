@@ -39,7 +39,24 @@ const GAZE_LERP = 0.05
 const BRAIN_HEIGHT_RATIO = 0.5
 const EYE_OFFSET_X = 185
 const EYE_SCALE = 0.80
-const EYE_OPACITY = 0.40
+const EYE_OPACITY = 0.30
+//
+// Derived iris / pupil geometry — used to clamp gaze so the pupil
+// never escapes the iris disc or clips the asymmetric lower arc.
+// EH matches the baked canvas half-height (EYE_HALF_H * EYE_SCALE).
+//
+const EYE_EH = Math.round(EYE_HALF_H * EYE_SCALE)
+const GAZE_IRIS_R = Math.round(EYE_EH * 0.95)
+const GAZE_PUPIL_R = Math.round(EYE_EH * 0.48)
+//
+// Maximum radial offset of the pupil centre within the iris disc
+//
+const GAZE_CIRCLE_MAX = GAZE_IRIS_R - GAZE_PUPIL_R - 1
+//
+// Lower arc factor is 0.62 × EH — cap downward gaze so the pupil
+// disc never crosses this boundary (2 px safety margin)
+//
+const GAZE_DOWN_MAX = Math.round(EYE_EH * 0.62) - GAZE_PUPIL_R - 2
 //
 // 90 precomputed fiber records — deterministic hash so baked sprite is stable
 //
@@ -61,7 +78,10 @@ export function create(k, layout, hero = null) {
   const playHeight = k.height() - topPlatformHeight - bottomPlatformHeight
   const brainCenterX = playLeft + playWidth * 0.5
   const brainCenterY = playTop + playHeight * BRAIN_HEIGHT_RATIO
-  const inst = { k, eyes: [], hero }
+  //
+  // Shared gaze state — both pupils use the same offset so they look in unison
+  //
+  const inst = { k, eyes: [], hero, brainCenterX, brainCenterY, gazeX: 0, gazeY: 0, gazeTargetX: 0, gazeTargetY: GAZE_MAX_Y }
   //
   // Two eyes: left eye and right eye, symmetrically around the brain center
   //
@@ -93,11 +113,7 @@ export function create(k, layout, hero = null) {
       openScale: 1,
       blinkState: 'open',
       blinkFrame: 0,
-      blinkTimer: BLINK_INTERVAL_MIN + Math.random() * (BLINK_INTERVAL_MAX - BLINK_INTERVAL_MIN),
-      gazeX: 0,
-      gazeY: 0,
-      gazeTargetX: 0,
-      gazeTargetY: GAZE_MAX_Y
+      blinkTimer: BLINK_INTERVAL_MIN + Math.random() * (BLINK_INTERVAL_MAX - BLINK_INTERVAL_MIN)
     })
   }
   k.onUpdate(() => onUpdate(inst))
@@ -105,13 +121,16 @@ export function create(k, layout, hero = null) {
 }
 
 //
-// Advances blink, gaze and pupil position for each eye every frame
+// Advances blink, shared gaze and pupil position every frame
 //
 function onUpdate(inst) {
-  const { eyes, hero } = inst
+  const { eyes } = inst
+  //
+  // Gaze target is computed once from the brain midpoint so both eyes move in unison
+  //
+  updateGaze(inst)
   eyes.forEach(eye => {
     updateBlink(eye)
-    updateGaze(eye, hero)
     //
     // Apply vertical blink scale — scaleY animates from 1 (open) to 0 (closed)
     //
@@ -121,10 +140,10 @@ function onUpdate(inst) {
     //
     eye.pupil.scaleY = eye.openScale
     //
-    // Feed current gaze offset to the live pupil object for rendering
+    // Both pupils receive the same shared gaze offset
     //
-    eye.pupil.gazeX = eye.gazeX
-    eye.pupil.gazeY = eye.gazeY
+    eye.pupil.gazeX = inst.gazeX
+    eye.pupil.gazeY = inst.gazeY
   })
 }
 
@@ -154,21 +173,35 @@ function updateBlink(eye) {
 }
 
 //
-// When a hero is present, gaze direction is computed from eye center toward hero position.
-// Without hero the gaze defaults to a gentle downward look (GAZE_MAX_Y).
+// Gaze direction is computed once from the brain center toward the hero.
+// Storing it on inst ensures both eyes share the exact same offset each frame.
+// Without a hero the gaze defaults to a gentle downward look (GAZE_MAX_Y).
 //
-function updateGaze(eye, hero) {
+function updateGaze(inst) {
+  const { hero, brainCenterX, brainCenterY } = inst
   if (hero?.character) {
-    const dx = hero.character.pos.x - eye.cx
-    const dy = hero.character.pos.y - eye.cy
+    const dx = hero.character.pos.x - brainCenterX
+    const dy = hero.character.pos.y - brainCenterY
     const len = Math.sqrt(dx * dx + dy * dy)
     if (len > 0) {
-      eye.gazeTargetX = (dx / len) * GAZE_MAX_X
-      eye.gazeTargetY = (dy / len) * GAZE_MAX_Y
+      inst.gazeTargetX = (dx / len) * GAZE_MAX_X
+      inst.gazeTargetY = (dy / len) * GAZE_MAX_Y
     }
   }
-  eye.gazeX += (eye.gazeTargetX - eye.gazeX) * GAZE_LERP
-  eye.gazeY += (eye.gazeTargetY - eye.gazeY) * GAZE_LERP
+  inst.gazeX += (inst.gazeTargetX - inst.gazeX) * GAZE_LERP
+  inst.gazeY += (inst.gazeTargetY - inst.gazeY) * GAZE_LERP
+  //
+  // Clamp downward travel so the pupil disc stays above the lower arc
+  //
+  inst.gazeY = Math.min(inst.gazeY, GAZE_DOWN_MAX)
+  //
+  // Circular clamp — keep pupil centre within the iris disc
+  //
+  const dist = Math.sqrt(inst.gazeX * inst.gazeX + inst.gazeY * inst.gazeY)
+  if (dist > GAZE_CIRCLE_MAX) {
+    inst.gazeX = (inst.gazeX / dist) * GAZE_CIRCLE_MAX
+    inst.gazeY = (inst.gazeY / dist) * GAZE_CIRCLE_MAX
+  }
 }
 
 //

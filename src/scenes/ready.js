@@ -201,14 +201,20 @@ const AMBIENT_FIRST_DELAY_RANGE = 2.0
 const LIFE_WIDTH = 767
 const LIFE_HEIGHT = 512
 const LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
-const LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT
+//
+// life-ready.png has transparent padding below the visible creature body.
+// LIFE_Y_SINK pushes the sprite down so the visible bottom rests on the
+// black horizon strip rather than floating above it.
+//
+const LIFE_Y_SINK = 89
+const LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
 const LIFE_OPACITY = 1.0
 //
 // Hero offset preserved from the original layout (hero stood ~83 px
 // left of the monster centre) so the hero still reads as standing in
 // front of the monster's mouth, just now centred on the canvas.
 //
-const HERO_OFFSET_FROM_LIFE_CENTER_X = -84
+const HERO_OFFSET_FROM_LIFE_CENTER_X = -2
 const HERO_X = Math.round(LIFE_X + LIFE_WIDTH / 2 + HERO_OFFSET_FROM_LIFE_CENTER_X)
 //
 // The hero sprite canvas (96×96) has ~12 px of empty padding below

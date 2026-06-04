@@ -5,8 +5,8 @@ import * as Hero from '../../../components/hero.js'
 // Distant slow-walking anti-heroes — depth via color blend toward playfield
 //
 const BG_ANTIH_Z = (CFG.visual.zIndex.wordPlayfieldFill ?? -90) - 2
-const ANTIHERO_COUNT_MIN = 3
-const ANTIHERO_COUNT_MAX = 7
+const ANTIHERO_COUNT_MIN = 2
+const ANTIHERO_COUNT_MAX = 4
 const WALK_SPEED_MIN = 6
 const WALK_SPEED_MAX = 18
 const SCALE_MIN = 0.65

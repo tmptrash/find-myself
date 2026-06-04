@@ -5,8 +5,8 @@ import { CFG } from '../cfg.js'
 // Using k.add with draw() component lets us specify an exact z in the scene sort order
 //
 const SCHOOL_Z = (CFG.visual.zIndex.wordPlayfieldFill ?? -90) + 0.2
-const SCHOOL_BOID_COUNT = 24
-const SCHOOL_ATTRACTOR_COUNT = 2
+const SCHOOL_BOID_COUNT = 12
+const SCHOOL_ATTRACTOR_COUNT = 1
 //
 // Per-boid max speed is random within this range (units: pixels per 1/60 s frame)
 //
@@ -112,11 +112,12 @@ export function create(k, layout) {
   for (let i = 0; i < SCHOOL_BOID_COUNT; i++) {
     const colorDef = SCHOOL_COLOR_DEFS[i % SCHOOL_COLOR_DEFS.length]
     //
-    // Start each boid inside the zone of its assigned attractor
+    // Each boid starts inside its assigned attractor's zone
     //
-    const isRight = i % 2 === 1
-    const boidXMin = isRight ? playLeft + playWidth * SCHOOL_RIGHT_ZONE_RATIO : playLeft
-    const boidXMax = isRight ? playLeft + playWidth : playLeft + playWidth * SCHOOL_LEFT_ZONE_RATIO
+    const attractorIdx = i % SCHOOL_ATTRACTOR_COUNT
+    const boidIsRight = attractorIdx % 2 === 1
+    const boidXMin = boidIsRight ? playLeft + playWidth * SCHOOL_RIGHT_ZONE_RATIO : playLeft
+    const boidXMax = boidIsRight ? playLeft + playWidth : playLeft + playWidth * SCHOOL_LEFT_ZONE_RATIO
     inst.boids.push({
       x: boidXMin + Math.random() * (boidXMax - boidXMin),
       y: playTop + Math.random() * playHeight,

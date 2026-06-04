@@ -11,19 +11,19 @@ const FIGURE_SPRITE_H = 160
 //
 // Layer counts — tuned for subtle peripheral motion, not visual clutter
 //
-const THOUGHT_SKY_COUNT = 42
+const THOUGHT_SKY_COUNT = 10
 //
 // No noise silhouette types remain after removing trees, forks, people, hand, houses
 //
 const NOISE_SILHOUETTE_COUNT = 0
-const THOUGHT_STREAM_COUNT = 52
-const CELESTIAL_COUNT = 5
-const FOREGROUND_PIECE_COUNT = 5
+const THOUGHT_STREAM_COUNT = 14
+const CELESTIAL_COUNT = 4
+const FOREGROUND_PIECE_COUNT = 4
 //
 // Text clouds disabled — their large grouped phrase text was the source of "big dark words"
 //
 const TEXT_CLOUD_COUNT = 0
-const DRIFT_MOTIF_COUNT = 22
+const DRIFT_MOTIF_COUNT = 12
 const MOTIF_FADE_PERIOD_MIN = 9
 const MOTIF_FADE_PERIOD_MAX = 22
 const MOTIF_FADE_MIN_OPACITY = 0.04
@@ -76,9 +76,9 @@ const ROOT_RUNNER_WORDS = [
   'echo', 'soul', 'mind', 'near', 'gone', 'here', 'free', 'see'
 ]
 const ROOT_RUNNER_SPEED = 95
-const ROOT_RUNNER_SPAWN_INTERVAL_MIN = 0.2
-const ROOT_RUNNER_SPAWN_INTERVAL_MAX = 0.9
-const ROOT_RUNNER_MAX_COUNT = 120
+const ROOT_RUNNER_SPAWN_INTERVAL_MIN = 1.0
+const ROOT_RUNNER_SPAWN_INTERVAL_MAX = 2.2
+const ROOT_RUNNER_MAX_COUNT = 12
 const ROOT_RUNNER_FONT_MAX = 13
 const ROOT_RUNNER_FONT_MIN = 4
 const ROOT_RUNNER_OPACITY = 0.58
@@ -188,12 +188,11 @@ const CLOUD_WORD_GAP_BASE = 42
 // Drift motif kinds — count and scale vary randomly each level start
 //
 //
-// Crow sprites are baked once per instance at spawn time so onDraw uses a single
-// k.drawSprite call instead of 6 per-frame shape calls
+// Module-level roots cache — stores the baked sprite key and segments so that when the
+// player dies and restarts the same level the expensive canvas bake is skipped entirely
 //
-const CROW_BAKE_SCALE = 4
+let rootsCache = null
 const DRIFT_KIND_DEFS = [
-  { kind: 'crow', countMin: 1, countMax: 4, scaleMin: 0.5, scaleMax: 2.8, depthMin: 0.26, depthMax: 0.52 },
   { kind: 'note', countMin: 3, countMax: 8, scaleMin: 0.45, scaleMax: 3.4, depthMin: 0.22, depthMax: 0.46 }
 ]
 
@@ -350,7 +349,7 @@ function spawnDriftMotifs(inst) {
         x: Math.random() * screenW,
         y: yBand,
         vx: (Math.random() > 0.5 ? 1 : -1) * k.rand(6, 24) * (1 - depth * 0.45),
-        vy: def.kind === 'crow' ? k.rand(-5, 5) : k.rand(-4, 4),
+        vy: k.rand(-4, 4),
         depth,
         scale,
         phase: Math.random() * Math.PI * 2,
@@ -359,23 +358,6 @@ function spawnDriftMotifs(inst) {
         noteTilt: def.kind === 'note' ? k.rand(-22, 22) : 0,
         fadePhase: Math.random() * Math.PI * 2,
         fadePeriod: MOTIF_FADE_PERIOD_MIN + Math.random() * (MOTIF_FADE_PERIOD_MAX - MOTIF_FADE_PERIOD_MIN)
-      }
-      //
-      // Bake crow silhouette to a canvas sprite once at spawn so draw time
-      // uses a single k.drawSprite call instead of 6 per-frame shape calls
-      //
-      if (def.kind === 'crow') {
-        const colorHex = atmosphericDepthColor(colors.memories, inst.playfieldColor, depth)
-        const hex = colorHex.replace('#', '')
-        const cr = parseInt(hex.substring(0, 2), 16)
-        const cg = parseInt(hex.substring(2, 4), 16)
-        const cb = parseInt(hex.substring(4, 6), 16)
-        const crowCanvas = bakeCrowToCanvas(cr, cg, cb)
-        const crowKey = `word-crow-${spawned}-${Date.now()}`
-        k.loadSprite(crowKey, crowCanvas)
-        crowCanvas.width = 0
-        crowCanvas.height = 0
-        motif.spriteKey = crowKey
       }
       inst.driftMotifs.push(motif)
       spawned++
@@ -418,7 +400,9 @@ function spawnCenterBrain(inst) {
 }
 
 //
-// Neural root network radiating from the brain center — baked once per scene to a canvas sprite
+// Neural root network radiating from the brain center — baked once per session to a canvas
+// sprite and cached in rootsCache. Subsequent level restarts (death/retry) reuse the cached
+// sprite and segment data, skipping the expensive canvas draw and k.loadSprite call.
 //
 function spawnBrainRoots(inst) {
   const { k, playLeft, playTop, playWidth, playHeight, screenW, screenH } = inst
@@ -429,41 +413,52 @@ function spawnBrainRoots(inst) {
   // Roots sit directly behind the brain sprite so the brain overlaps them at center
   //
   const rootsZ = brainZ - 0.5
-  const allSegments = []
-  for (let i = 0; i < BRAIN_ROOT_ARM_COUNT; i++) {
-    const angle = (i / BRAIN_ROOT_ARM_COUNT) * Math.PI * 2
+  let allSegments
+  let spriteKey
+  if (rootsCache && k.getSprite(rootsCache.spriteKey)) {
     //
-    // Each arm grows outward from brain center — recursive branching tapers thickness
+    // Reuse cached sprite and segments from a previous scene run
     //
-    const armSegs = growTreeRootSegments({
-      x: centerX,
-      y: centerY,
-      angle,
-      segments: BRAIN_ROOT_SEGMENTS,
-      thickness: BRAIN_ROOT_THICKNESS,
-      rand: (min, max) => min + Math.random() * (max - min)
+    spriteKey = rootsCache.spriteKey
+    allSegments = rootsCache.allSegments
+  } else {
+    //
+    // First run — grow segments, bake canvas sprite, store in cache
+    //
+    allSegments = []
+    for (let i = 0; i < BRAIN_ROOT_ARM_COUNT; i++) {
+      const angle = (i / BRAIN_ROOT_ARM_COUNT) * Math.PI * 2
+      //
+      // Each arm grows outward from brain center — recursive branching tapers thickness
+      //
+      const armSegs = growTreeRootSegments({
+        x: centerX,
+        y: centerY,
+        angle,
+        segments: BRAIN_ROOT_SEGMENTS,
+        thickness: BRAIN_ROOT_THICKNESS,
+        rand: (min, max) => min + Math.random() * (max - min)
+      })
+      allSegments.push(...armSegs)
+    }
+    spriteKey = 'word-brain-roots-cached'
+    const canvas = toCanvas({ width: screenW, height: screenH, pixelRatio: 1 }, (ctx) => {
+      ctx.lineCap = 'round'
+      allSegments.forEach(seg => {
+        const opacity = Math.max(0.04, BRAIN_ROOT_BASE_OPACITY - seg.depth * BRAIN_ROOT_DEPTH_FADE)
+        ctx.strokeStyle = `rgba(${BRAIN_ROOT_COLOR_R},${BRAIN_ROOT_COLOR_G},${BRAIN_ROOT_COLOR_B},${opacity})`
+        ctx.lineWidth = Math.max(0.5, seg.width)
+        ctx.beginPath()
+        ctx.moveTo(seg.startX, seg.startY)
+        ctx.lineTo(seg.endX, seg.endY)
+        ctx.stroke()
+      })
     })
-    allSegments.push(...armSegs)
+    k.loadSprite(spriteKey, canvas)
+    canvas.width = 0
+    canvas.height = 0
+    rootsCache = { spriteKey, allSegments }
   }
-  //
-  // Bake all root segments onto a full-screen canvas sprite (world coords match screen coords)
-  //
-  const spriteKey = `word-brain-roots-${Date.now()}`
-  const canvas = toCanvas({ width: screenW, height: screenH, pixelRatio: 1 }, (ctx) => {
-    ctx.lineCap = 'round'
-    allSegments.forEach(seg => {
-      const opacity = Math.max(0.04, BRAIN_ROOT_BASE_OPACITY - seg.depth * BRAIN_ROOT_DEPTH_FADE)
-      ctx.strokeStyle = `rgba(${BRAIN_ROOT_COLOR_R},${BRAIN_ROOT_COLOR_G},${BRAIN_ROOT_COLOR_B},${opacity})`
-      ctx.lineWidth = Math.max(0.5, seg.width)
-      ctx.beginPath()
-      ctx.moveTo(seg.startX, seg.startY)
-      ctx.lineTo(seg.endX, seg.endY)
-      ctx.stroke()
-    })
-  })
-  k.loadSprite(spriteKey, canvas)
-  canvas.width = 0
-  canvas.height = 0
   k.add([
     k.sprite(spriteKey),
     k.pos(0, 0),
@@ -669,7 +664,6 @@ function updateDriftMotifs(inst, dt) {
     motif.fadePhase += (Math.PI * 2 / motif.fadePeriod) * dt
     const wave = (Math.sin(motif.fadePhase) + 1) * 0.5
     motif.fadeOpacity = MOTIF_FADE_MIN_OPACITY + (DRIFT_MOTIF_MAX_OPACITY - MOTIF_FADE_MIN_OPACITY) * (wave * wave * wave)
-    motif.kind === 'crow' && (motif.y += Math.sin(time * 3.2 + motif.phase) * 18 * dt)
     motif.kind === 'driftHero' && (motif.y += Math.sin(time * 0.9 + motif.phase) * 10 * dt)
     motif.kind === 'note' && (motif.noteTilt = motif.noteTilt + Math.sin(time * 1.1 + motif.phase) * 12 * dt)
   })
@@ -831,19 +825,6 @@ function drawDriftMotifs(inst) {
       return
     }
     const motifColor = playfieldBlendRgb(k, inst, inst.colors.memories, motif.depth)
-    if (motif.kind === 'crow') {
-      //
-      // Use pre-baked canvas sprite — single draw call vs 6 per-frame shape calls
-      //
-      k.drawSprite({
-        sprite: motif.spriteKey,
-        pos: k.vec2(motif.x, motif.y),
-        anchor: 'center',
-        scale: motif.scale / CROW_BAKE_SCALE,
-        opacity: op
-      })
-      return
-    }
     if (motif.kind === 'note') { drawNote(k, motif.x, motif.y, motif.scale, motifColor, op, inst.font, motif.glyph, motif.noteTilt); return }
   })
 }
@@ -996,9 +977,6 @@ function voidBlendRgb(k, inst, accentHex, depth) {
 //
 function drawBackgroundMotif(k, type, x, y, scale, color, opacity, fillHex) {
   switch (type) {
-    case 'crow':
-      drawCrow(k, x, y, scale, color, opacity)
-      break
     case 'moon':
       k.drawSprite({
         sprite: getMoonSpriteKey(k),
@@ -1016,19 +994,6 @@ function drawBackgroundMotif(k, type, x, y, scale, color, opacity, fillHex) {
   }
 }
 
-//
-// Crow in flight — round body, tail lobe, arched ellipse wings, eye, beak
-// Used by drawBackgroundMotif for memory flashes (rare; baked version used for drift motifs)
-//
-function drawCrow(k, x, y, scale, color, opacity) {
-  const s = 14 * scale
-  k.drawEllipse({ pos: k.vec2(x, y + s * 0.05), radiusX: s * 0.32, radiusY: s * 0.22, color, opacity })
-  k.drawEllipse({ pos: k.vec2(x, y + s * 0.38), radiusX: s * 0.18, radiusY: s * 0.16, color, opacity })
-  k.drawEllipse({ pos: k.vec2(x - s * 0.82, y - s * 0.26), radiusX: s * 0.74, radiusY: s * 0.18, color, opacity, angle: -16 })
-  k.drawEllipse({ pos: k.vec2(x + s * 0.82, y - s * 0.22), radiusX: s * 0.74, radiusY: s * 0.18, color, opacity, angle: 16 })
-  k.drawCircle({ pos: k.vec2(x + s * 0.28, y - s * 0.02), radius: s * 0.11, color, opacity })
-  k.drawEllipse({ pos: k.vec2(x + s * 0.46, y + s * 0.04), radiusX: s * 0.12, radiusY: s * 0.05, color, opacity, angle: 10 })
-}
 
 //
 // Teddy silhouette — round body and ear discs
@@ -1196,44 +1161,3 @@ function randomInRange(min, max) {
   return min + Math.random() * (max - min)
 }
 
-//
-// Renders a crow silhouette onto a fresh canvas using Canvas2D so Kaplay can load it as
-// a sprite. The shape is drawn in the given RGB colour at CROW_BAKE_SCALE × the drawCrow
-// reference size (14 px per unit). The crow is placed so its visual midpoint aligns with
-// the canvas centre — k.drawSprite with anchor:'center' will position it correctly.
-//
-function bakeCrowToCanvas(r, g, b) {
-  const s = 14 * CROW_BAKE_SCALE
-  const pad = Math.ceil(s * 0.22)
-  const W = Math.ceil(s * 3.2 + pad * 2)
-  const H = Math.ceil(s * 1.1 + pad * 2)
-  const cx = W / 2
-  //
-  // Crow top extends to -0.44s above origin — pad ensures it is not clipped
-  //
-  const cy = Math.ceil(s * 0.44 + pad)
-  return toCanvas({ width: W, height: H }, ctx => {
-    ctx.fillStyle = `rgb(${r},${g},${b})`
-    bakeEllipse2d(ctx, cx, cy + s * 0.05, s * 0.32, s * 0.22, 0)
-    bakeEllipse2d(ctx, cx, cy + s * 0.38, s * 0.18, s * 0.16, 0)
-    bakeEllipse2d(ctx, cx - s * 0.82, cy - s * 0.26, s * 0.74, s * 0.18, -16 * Math.PI / 180)
-    bakeEllipse2d(ctx, cx + s * 0.82, cy - s * 0.22, s * 0.74, s * 0.18, 16 * Math.PI / 180)
-    bakeCircle2d(ctx, cx + s * 0.28, cy - s * 0.02, s * 0.11)
-    bakeEllipse2d(ctx, cx + s * 0.46, cy + s * 0.04, s * 0.12, s * 0.05, 10 * Math.PI / 180)
-  })
-}
-//
-// Canvas2D helpers — mirror of Kaplay's k.drawEllipse / k.drawCircle for sprite baking
-//
-function bakeEllipse2d(ctx, cx, cy, rx, ry, angle) {
-  ctx.save()
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, Math.max(0.5, rx), Math.max(0.5, ry), angle, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
-}
-function bakeCircle2d(ctx, cx, cy, r) {
-  ctx.beginPath()
-  ctx.arc(cx, cy, Math.max(0.5, r), 0, Math.PI * 2)
-  ctx.fill()
-}

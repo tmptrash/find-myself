@@ -11,7 +11,6 @@ import * as TouchControls from '../../../utils/touch-controls.js'
 import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
 import * as WordHangingVines from './word-hanging-vines.js'
 import * as WordConsciousnessLayers from './word-consciousness-layers.js'
-import * as WordBackgroundHeroes from './word-background-heroes.js'
 import * as WordBackgroundAntiheroes from './word-background-antiheroes.js'
 import * as WordLetterSchools from './word-letter-schools.js'
 import * as WordDreamingEyes from './word-dreaming-eyes.js'
@@ -270,7 +269,6 @@ export function initScene(config) {
   ])
   addPlayfieldFill(k, playfieldColor, topPlatformHeight, bottomPH, wall)
   WordLetterSchools.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall })
-  WordDreamingEyes.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall })
   WordLetterCascade.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall })
   WordConsciousnessLayers.create({
     k,
@@ -380,15 +378,7 @@ export function initScene(config) {
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
     hero && WordHeroIdleSpeech.create(k, hero)
-    hero && WordBackgroundHeroes.create({
-      k,
-      hero,
-      bottomPlatformHeight: bottomPH,
-      topPlatformHeight: topPlatformHeight ?? 360,
-      sideWallWidth: wall,
-      playfieldColor,
-      platformColor: pfColor
-    })
+    WordDreamingEyes.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall }, hero)
     hero && WordBackgroundAntiheroes.create({
       k,
       hero,

@@ -60,8 +60,8 @@ const VINE_PHRASES = [
 //
 // Random vine layout — varied anchor, length, span, and arc vs hang per level load
 //
-const VINE_COUNT_MIN = 6
-const VINE_COUNT_MAX = 10
+const VINE_COUNT_MIN = 4
+const VINE_COUNT_MAX = 6
 const VINE_X_RATIO_MIN = 0.03
 const VINE_X_RATIO_MAX = 0.97
 //
@@ -103,7 +103,7 @@ export function create(config) {
     const jitter = (Math.random() - 0.5) * (VINE_SLOT_JITTER / vineCount)
     const xRatio = Math.min(VINE_X_RATIO_MAX, Math.max(VINE_X_RATIO_MIN, slotCenter + jitter))
     const layout = resolveVineLayout(xRatio)
-    vines.push(buildVine(
+    const vine = buildVine(
       layout,
       pickRandomPhrase(),
       spanLeft,
@@ -111,7 +111,13 @@ export function create(config) {
       playTop,
       playBottom,
       playHeight
-    ))
+    )
+    //
+    // Letter layout depends only on static vine geometry — pre-compute once so
+    // onDraw never has to recalculate arc lengths or t-values every frame
+    //
+    vine.cachedLayout = getLetterLayout(vine)
+    vines.push(vine)
   }
   const inst = {
     k,
@@ -231,7 +237,7 @@ function onDraw(inst) {
     parseInt(vineHex.slice(5, 7), 16)
   )
   vines.forEach(vine => {
-    getLetterLayout(vine).forEach(({ letter, t, size }) => {
+    vine.cachedLayout.forEach(({ letter, t, size }) => {
       const base = quadraticPoint(vine, t)
       //
       // Arc: sway at sag; hang: sway grows toward the dangling tip

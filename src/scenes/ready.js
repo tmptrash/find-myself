@@ -14,7 +14,6 @@ import {
   MENU_BG_HORIZON_LINE_HEIGHT,
   MENU_BG_CANVAS_W
 } from '../utils/menu-bg-generator.js'
-import { buildCloudCrown } from '../utils/draw-cloud-crown.js'
 import { createSwayingGrassField, drawSwayingGrassField } from '../utils/swaying-grass-field.js'
 
 //
@@ -72,7 +71,6 @@ const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
 // through the cloud puffs — clouds read as the nearer sky element.
 //
 const Z_STARS = CFG.visual.zIndex.background + 2
-const Z_CLOUDS = CFG.visual.zIndex.background + 3
 const Z_FIREFLIES = CFG.visual.zIndex.background + 4
 const Z_GRASS = CFG.visual.zIndex.background + 5
 const Z_ILLUSTRATION = CFG.visual.zIndex.background + 6
@@ -118,37 +116,6 @@ const STAR_AREA_RIGHT_RATIO = 0.97
 const MOON_ZONE_CENTER_X_RATIO = 1700 / 1920
 const MOON_ZONE_CENTER_Y_RATIO = 160 / 1080
 const MOON_ZONE_RADIUS_RATIO = 220 / 1920
-//
-// Drifting clouds — styled to match the Touch L0 cloud band:
-// same `buildCloudCrown` primitive, same cool-teal puff colour and
-// drawn at full opacity so the puffs overlap into one continuous
-// cloud blanket instead of leaving visible holes between individual
-// clouds. The band is narrowed vertically (vs. the previous loose
-// sky-wide spread) so puffs bunch together tightly the same way they
-// do in L0.
-//
-const CLOUD_COUNT = 38
-const CLOUD_BRIDGE_COUNT = 36
-const CLOUD_X_JITTER = 10
-const CLOUD_HALF_WIDTH_MULT = 1.35
-const CLOUD_TOP_Y = -40
-const CLOUD_BOTTOM_Y = 95
-const CLOUD_DRIFT_SPEED_MIN = 6
-const CLOUD_DRIFT_SPEED_RANGE = 10
-//
-// Cool teal puff colour — exact Touch L0 cloud-circle palette
-// (`L0_CLOUD_CIRCLE_R/G/B` = 32, 60, 68) so the ready cloud band
-// reads as the same world.
-//
-const CLOUD_COLOR_R = 32
-const CLOUD_COLOR_G = 60
-const CLOUD_COLOR_B = 68
-//
-// L0 paints its clouds at full opacity — no global scale-down. This
-// matches that behaviour so individual puffs overlap fully and the
-// band reads as a dense blanket rather than a wispy haze.
-//
-const CLOUD_OPACITY_SCALE = 1.0
 //
 // Wandering fireflies — never higher than the front-layer tree
 // canopy so they read as flying AMONG the trees rather than across
@@ -392,15 +359,6 @@ export function sceneReady(k) {
     // Background (menu-bg dark overlay)
     //
     k.add([k.pos(0, 0), k.z(Z_BG_OVERLAY), { draw() { onDrawBg(k) } }])
-    //
-    // Drifting clouds — L0-style cloud puffs that scroll right and
-    // wrap horizontally across the upper sky.
-    //
-    const cloudField = createCloudField()
-    k.add([k.pos(0, 0), k.z(Z_CLOUDS), {
-      update() { updateCloudField(k, cloudField) },
-      draw() { drawCloudField(k, cloudField) }
-    }])
     //
     // Twinkling star field overlaid on the baked menu-bg so the ready
     // scene gets a living night sky on top of the static composition.
@@ -1337,60 +1295,6 @@ function addCenteredSegment(k, text, x, y, z, size, font, colorHex) {
 // inside the returned field object — no module-level mutation.
 //
 
-/**
- * Builds an array of drifting clouds. Each cloud uses the shared
- * `draw-cloud-crown` primitive to bake a list of puff offsets. Per
- * frame, `updateCloudField` advances each cloud's X and wraps it back
- * to the left edge when it exits the right edge.
- */
-function createCloudField() {
-  const w = MENU_BG_CANVAS_W
-  const spacing = w / CLOUD_COUNT
-  const clouds = []
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    addCloudPuff(clouds, spacing * i + spacing * 0.5 + (Math.random() - 0.5) * CLOUD_X_JITTER)
-  }
-  //
-  // Bridge row — extra puffs offset by half a slot so horizontal gaps
-  // between primary clouds stay filled while the band drifts.
-  //
-  const bridgeSpacing = w / CLOUD_BRIDGE_COUNT
-  for (let i = 0; i < CLOUD_BRIDGE_COUNT; i++) {
-    addCloudPuff(clouds, bridgeSpacing * i + bridgeSpacing * 0.5 + (Math.random() - 0.5) * CLOUD_X_JITTER)
-  }
-  return { clouds }
-}
-
-function updateCloudField(k, field) {
-  const dt = k.dt()
-  const w = MENU_BG_CANVAS_W
-  for (const cloud of field.clouds) {
-    cloud.x += cloud.driftSpeed * dt
-    //
-    // Wrap: when the cloud's left edge passes the right side of the
-    // canvas, teleport it back to just left of the canvas. Uses the
-    // cached `halfWidth` so the wrap looks symmetric.
-    //
-    if (cloud.x - cloud.halfWidth > w) {
-      cloud.x = -cloud.halfWidth
-      cloud.y = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
-    }
-  }
-}
-
-function drawCloudField(k, field) {
-  const color = k.rgb(CLOUD_COLOR_R, CLOUD_COLOR_G, CLOUD_COLOR_B)
-  for (const cloud of field.clouds) {
-    for (const crown of cloud.crowns) {
-      k.drawCircle({
-        pos: k.vec2(cloud.x + crown.offsetX, cloud.y + crown.offsetY),
-        radius: cloud.crownSize * crown.sizeVariation,
-        color,
-        opacity: cloud.opacity * crown.opacityVariation * CLOUD_OPACITY_SCALE
-      })
-    }
-  }
-}
 
 /**
  * Builds a wandering-firefly field. Each firefly has a 2D position,
@@ -1485,13 +1389,6 @@ function drawFireflyField(k, field) {
   }
 }
 
-function addCloudPuff(clouds, x) {
-  const y = CLOUD_TOP_Y + Math.random() * (CLOUD_BOTTOM_Y - CLOUD_TOP_Y)
-  const cloud = buildCloudCrown({ x, y })
-  cloud.driftSpeed = CLOUD_DRIFT_SPEED_MIN + Math.random() * CLOUD_DRIFT_SPEED_RANGE
-  cloud.halfWidth = cloud.crownSize * CLOUD_HALF_WIDTH_MULT
-  clouds.push(cloud)
-}
 //
 // Schedules cricket bursts + occasional owl hoots while the ready
 // scene is active. Both call into the existing procedural sound

@@ -134,9 +134,10 @@ export function sceneMenu(k) {
     //
     k.volume(1)
     //
-    // Set canvas background to match menu background color
+    // Set canvas background to the sky/ground colour used by the menu-bg sprite
+    // so the letterbox bars (top/bottom strips) match the canvas edges exactly.
     //
-    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.menu.platformColor)
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
     //
     // Clean up persistent word-pile objects from previous scenes
     //

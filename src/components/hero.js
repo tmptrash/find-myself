@@ -1992,20 +1992,22 @@ export function onAnnihilationCollide(inst) {
                   //
                   k.wait(0.2, () => {
                   //
-                  // Update inst: add mouth and red color (DC143C) before loading sprites
+                  // Update inst: add mouth, arms, watch and red color (DC143C) before loading sprites
                   //
                   inst.addMouth = true
+                  inst.addArms = true
+                  inst.addWatch = true
                   const redColor = '#DC143C'
                   inst.bodyColor = redColor
                   const bodyColorClean = String(redColor).replace('#', '')
                   const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
-                  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth`
+                  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}_mouth_arms_watch`
                     //
                     // Create visual effect (particles around hero)
                     //
                     createBodyPartParticles(inst)
                     //
-                    // Reload sprites with mouth
+                    // Reload sprites with mouth, arms and watch
                     //
                     loadHeroSprites({
                       k: inst.k,
@@ -2013,7 +2015,8 @@ export function onAnnihilationCollide(inst) {
                       bodyColor: redColor,
                       outlineColor: CFG.visual.colors.outline,
                       addMouth: true,
-                      addArms: false,
+                      addArms: true,
+                      addWatch: true,
                       character: null
                     })
                     //

@@ -17,10 +17,11 @@ const PIT_FILL_Z = (CFG.visual.zIndex.player ?? 10) - 0.3
  * @param {number} cfg.bottomY - Bottom Y of the fill region
  * @param {string} cfg.playfieldColor - Playfield hex color
  * @param {boolean} [cfg.solidPlatform=false] - Adds static platform collision body
+ * @param {number} [cfg.zIndex] - Override Z index (defaults to player-0.3, use a low value to let background layers show on top)
  * @returns {Object|null} Kaplay game object
  */
 export function addPitShaftFill(k, cfg) {
-  const { x, width, topY, bottomY, playfieldColor, solidPlatform = false } = cfg
+  const { x, width, topY, bottomY, playfieldColor, solidPlatform = false, zIndex } = cfg
   const height = Math.max(1, Math.round(bottomY - topY))
   const fillW = Math.max(1, Math.round(width))
   const hex = getHex(playfieldColor ?? CFG.visual.colors.consciousness?.gameWorld ?? '#5A5A70')
@@ -30,7 +31,7 @@ export function addPitShaftFill(k, cfg) {
     k.pos(x, topY),
     k.anchor('topleft'),
     k.fixed(),
-    k.z(PIT_FILL_Z),
+    k.z(zIndex ?? PIT_FILL_Z),
     k.opacity(1)
   ]
   solidPlatform && parts.push(

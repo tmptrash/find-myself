@@ -180,6 +180,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
  * @param {Number} [config.antiHeroX] - Anti-hero X position in pixels
  * @param {Number} [config.antiHeroY] - Anti-hero Y position in pixels
  * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
+ * @param {number} [config.helpY] - Override Y position for the "buy help" label (default: floor + offset)
  * @returns {Object} Object with sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic
  */
 export function initScene(config) {
@@ -204,7 +205,8 @@ export function initScene(config) {
     heroY = null,
     antiHeroX = null,
     antiHeroY = null,
-    onAnnihilation = null
+    onAnnihilation = null,
+    helpY: helpYOverride = null
   } = config
   
   //
@@ -320,7 +322,7 @@ export function initScene(config) {
     levelName,
     sideWallWidth,
     floorY: k.height() - (bottomPlatformHeight ?? 360),
-    helpY: k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET,
+    helpY: helpYOverride ?? k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET,
     levelIndicator,
     sound
   })
@@ -753,7 +755,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     dustColor,
     addMouth: isWordComplete,
     bodyColor: heroBodyColor,
-    addArms: isTouchComplete,
+    addArms: isTouchComplete || isWordComplete,
     addWatch: true
   })
   

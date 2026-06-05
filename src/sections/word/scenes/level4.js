@@ -20,6 +20,12 @@ import { createLevelTransition } from '../../../utils/transition.js'
 const PLATFORM_TOP_HEIGHT = 360      // Top platform height (33.3% of 1080)
 const PLATFORM_BOTTOM_HEIGHT = 360   // Bottom platform height (33.3% of 1080)
 const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
+//
+// "Buy help" label position — further below the playfield floor so it does
+// not crowd other elements in the platform area.
+//
+const HELP_Y_OFFSET = 160            // Pixels below playfield floor for buy-help label
+const DEATH_MESSAGE_Y_OFFSET = 280   // Pixels below playfield floor for death message
 
 //
 // Hero spawn positions (in pixels)
@@ -91,7 +97,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
   //
   const message = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)]
   const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 200
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + DEATH_MESSAGE_Y_OFFSET
   
   //
   // Create message text
@@ -228,6 +234,7 @@ export function sceneLevel4(k) {
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
+      helpY: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + HELP_Y_OFFSET,
       heroX: customHeroX,  // Custom hero position (shifted right by 3 pyramids)
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,

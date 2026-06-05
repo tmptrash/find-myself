@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { parseHex } from '../../../utils/helper.js'
+import { getColor, parseHex } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Sound from '../../../utils/sound.js'
 
@@ -173,14 +173,13 @@ export function create(config) {
   //
   // Create main text — use the shared blade accent color so it matches the AAA letters
   //
-  const bladeRgb = parseHex(CFG.visual.colors.blades)
   const mainText = creatureContainer.add([
     k.text(TEXT_MESSAGE, {
       size: TEXT_SIZE,
       font: CFG.visual.fonts.thinFull.replace(/'/g, '')
     }),
     k.pos(0, 0),
-    k.color(bladeRgb.r, bladeRgb.g, bladeRgb.b),
+    getColor(k, CFG.visual.colors.blades),
     k.anchor('center')
   ])
   textObjects.push(mainText)
@@ -200,6 +199,10 @@ export function create(config) {
     "blade-arm-text"
   ])
   
+  //
+  // Parse blade color once for use in drawLegs
+  //
+  const [bladeR, bladeG, bladeB] = parseHex(CFG.visual.colors.blades)
   const inst = {
     k,
     creatureContainer,
@@ -213,6 +216,9 @@ export function create(config) {
     textWidth,
     maxX,
     groundY,
+    bladeR,
+    bladeG,
+    bladeB,
     animationTime: 0,
     pauseTimer: 1.0,  // Initial pause before starting to walk
     bodyBounceOffset: 0,
@@ -513,7 +519,7 @@ function updateWalkingCreature(inst) {
  * @param {Object} inst - Walking creature instance
  */
 function drawLegs(inst) {
-  const { k, creatureContainer, legs } = inst
+  const { k, creatureContainer, legs, bladeR, bladeG, bladeB } = inst
   
   //
   // Don't draw during pause
@@ -577,46 +583,36 @@ function drawLegs(inst) {
     })
     
     //
-    // Draw upper leg (steel blue, same as text)
+    // Draw upper leg (blade accent color, same as text)
     //
     k.drawLine({
       p1: k.vec2(attachWorldX, attachWorldY),
       p2: k.vec2(kneeWorldX, kneeWorldY),
       width: 3,
-      color: k.rgb(107, 142, 159)
+      color: k.rgb(bladeR, bladeG, bladeB)
     })
-    
     //
-    // Draw lower leg (steel blue, same as text)
+    // Draw lower leg (blade accent color, same as text)
     //
     k.drawLine({
       p1: k.vec2(kneeWorldX, kneeWorldY),
       p2: k.vec2(footWorldX, footWorldY),
       width: 3,
-      color: k.rgb(107, 142, 159)
+      color: k.rgb(bladeR, bladeG, bladeB)
     })
-    
     //
-    // Draw foot knob (набалдашник) with black outline (smaller)
+    // Draw foot knob with black outline
     //
     const knobRadius = 4
-    
-    //
-    // Black outline for knob
-    //
     k.drawCircle({
       pos: k.vec2(footWorldX, footWorldY),
       radius: knobRadius + 1.2,
       color: k.rgb(0, 0, 0)
     })
-    
-    //
-    // Steel blue knob
-    //
     k.drawCircle({
       pos: k.vec2(footWorldX, footWorldY),
       radius: knobRadius,
-      color: k.rgb(107, 142, 159)
+      color: k.rgb(bladeR, bladeG, bladeB)
     })
   }
   

@@ -19,6 +19,18 @@ import { createLevelTransition } from '../../../utils/transition.js'
 const PLATFORM_TOP_HEIGHT = 475      // Top platform height (44% of 1080)
 const PLATFORM_BOTTOM_HEIGHT = 475   // Bottom platform height (44% of 1080)
 const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
+//
+// Vertical positions for text below the playfield (inside the bottom platform).
+// HELP_Y: "buy help" label sits lower so it never overlaps the death message.
+// DEATH_MESSAGE_Y: post-death phrase is placed well below the help label.
+//
+const HELP_Y_OFFSET = 200            // Pixels below playfield floor for buy-help label
+const DEATH_MESSAGE_Y_OFFSET = 360   // Pixels below playfield floor for death message
+//
+// Pixels of fade transition as a blade crosses the platform boundary.
+// Zero means blades pop in/out instantly at the boundary line.
+//
+const BLADE_EMERGE_PX = 30
 
 //
 // Hero spawn positions (in pixels)
@@ -57,7 +69,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   // Calculate position (below bottom platform, centered)
   //
   const centerX = CFG.visual.screen.width / 2
-  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 200
+  const messageY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + DEATH_MESSAGE_Y_OFFSET
   //
   // Create message text
   //
@@ -179,6 +191,7 @@ export function sceneLevel3(k) {
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
+      helpY: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + HELP_Y_OFFSET,
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,
@@ -252,18 +265,20 @@ export function sceneLevel3(k) {
     const pitBottomY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + pitDepth
     const platformY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     //
-    // Pit shaft and floor — playfield purple (baked sprites above void)
+    // Pit shaft fill at a Z below the roots (wordPlayfieldFill + 0.3) so the
+    // playfield-purple color shows in the pit while brain roots are still visible
+    // on top of it, extending visually into the shaft.
     //
     WordPitFill.addPitShaftFill(k, {
       x: pitInfo.centerX - pitInfo.width / 2,
       width: pitInfo.width,
       topY: platformY,
       bottomY: pitBottomY,
-      playfieldColor
+      playfieldColor,
+      zIndex: CFG.visual.zIndex.wordPlayfieldFill + 0.3
     })
     //
-    // Below AAA blades: use platform color so the pit visually ends under the blades.
-    // Collision is still added (solidPlatform) so the hero cannot fall through.
+    // Solid platform floor below the blades (stops the hero from falling through)
     //
     WordPitFill.addPitShaftFill(k, {
       x: pitInfo.centerX - pitInfo.width / 2,
@@ -292,7 +307,11 @@ export function sceneLevel3(k) {
     const floorBladeY = Blades.getFloorBladeRestCenterY(platformY)
     const ceilingBladeY = PLATFORM_TOP_HEIGHT + bladeHeight * 1.2  // Extend down from ceiling
     
-    // Left blade (floor, left of pit, closer to pit) - starts hidden BELOW platform (bigger Y)
+    //
+    // Animated blades start hidden (opacity 0) inside the platforms.
+    // Their opacity is driven by the animation state in updateBladesAnimation so
+    // they fade in as they enter the playfield and fade out as they retract.
+    //
     const leftBladeX = pitInfo.centerX - pitInfo.width / 2 - bladeWidth * 2.5
     const hiddenY1 = platformY + bladeHeight * 2  // Hidden deep below platform
     const blades1 = Blades.create({
@@ -301,33 +320,29 @@ export function sceneLevel3(k) {
       y: hiddenY1,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => {
-        blades1.blade.opacity = 1
-        showDeathMessage(k, hero, blades1, levelIndicator, sound)
-      },
+      onHit: () => showDeathMessage(k, hero, blades1, levelIndicator, sound),
       sfx: sound,
       disableAnimation: true
     })
-    blades1.blade.opacity = 1
-    
-    // Center blade (ceiling, over pit, pointing down) - starts hidden INSIDE platform (smaller Y)
-    const hiddenY2 = PLATFORM_TOP_HEIGHT - bladeHeight * 2  // Hidden deep above platform
+    blades1.blade.opacity = 0
+    //
+    // Center blade (ceiling, over pit, pointing down) — hidden above top platform
+    //
+    const hiddenY2 = PLATFORM_TOP_HEIGHT - bladeHeight * 2
     const blades2 = Blades.create({
       k,
       x: pitInfo.centerX,
       y: hiddenY2,
       hero,
       orientation: Blades.ORIENTATIONS.CEILING,
-      onHit: () => {
-        blades2.blade.opacity = 1
-        showDeathMessage(k, hero, blades2, levelIndicator, sound)
-      },
+      onHit: () => showDeathMessage(k, hero, blades2, levelIndicator, sound),
       sfx: sound,
       disableAnimation: true
     })
-    blades2.blade.opacity = 1
-    
-    // Right blade (floor, right of pit, closer to anti-hero but with jump space) - starts hidden BELOW platform (bigger Y)
+    blades2.blade.opacity = 0
+    //
+    // Right blade (floor) — hidden below bottom platform, right of pit
+    //
     const rightBladeX = pitInfo.centerX + pitInfo.width / 2 + bladeWidth * 1.5
     const hiddenY3 = platformY + bladeHeight * 2  // Hidden deep below platform
     const blades3 = Blades.create({
@@ -336,14 +351,11 @@ export function sceneLevel3(k) {
       y: hiddenY3,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => {
-        blades3.blade.opacity = 1
-        showDeathMessage(k, hero, blades3, levelIndicator, sound)
-      },
+      onHit: () => showDeathMessage(k, hero, blades3, levelIndicator, sound),
       sfx: sound,
       disableAnimation: true
     })
-    blades3.blade.opacity = 1
+    blades3.blade.opacity = 0
     
     // Scene instance with state
     const inst = {
@@ -391,20 +403,21 @@ export function sceneLevel3(k) {
 }
 
 /**
- * Update blades animation (cycle: extend, retract, repeat)
+ * Update blades animation (cycle: extend, retract, repeat).
+ * Positions are updated by the state machine; opacity is derived purely from
+ * the blade's current Y so blades are never drawn while inside a platform.
  * @param {Object} inst - Scene instance
  */
 function updateBladesAnimation(inst) {
   const { k, blades1, blades2, blades3, targetY1, visibleY1, targetY2, visibleY2, targetY3, visibleY3, animationSpeed, sound } = inst
-  
   inst.animationTimer += k.dt()
   inst.cycleTimer += k.dt()
-  
-  // SPIKE 1 STATE MACHINE (Left blades - first)
+  //
+  // Blade 1 (left floor blade — extends up from bottom platform)
+  //
   if (inst.blade1State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     blades1.blade.pos.y = targetY1 + (visibleY1 - targetY1) * progress
-    
     if (progress >= 1) {
       blades1.blade.pos.y = visibleY1
       inst.blade1State = 'retracting'
@@ -413,7 +426,6 @@ function updateBladesAnimation(inst) {
   } else if (inst.blade1State === 'retracting') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     blades1.blade.pos.y = visibleY1 + (targetY1 - visibleY1) * progress
-    
     if (progress >= 1) {
       blades1.blade.pos.y = targetY1
       inst.blade1State = 'waiting-for-blade3'
@@ -427,12 +439,12 @@ function updateBladesAnimation(inst) {
       sound && Sound.playBladeSound(sound)
     }
   }
-  
-  // SPIKE 2 STATE MACHINE (Center blades - third/last)
+  //
+  // Blade 2 (center ceiling blade — extends down from top platform)
+  //
   if (inst.blade2State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     blades2.blade.pos.y = targetY2 + (visibleY2 - targetY2) * progress
-    
     if (progress >= 1) {
       blades2.blade.pos.y = visibleY2
       inst.blade2State = 'retracting'
@@ -441,7 +453,6 @@ function updateBladesAnimation(inst) {
   } else if (inst.blade2State === 'retracting') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     blades2.blade.pos.y = visibleY2 + (targetY2 - visibleY2) * progress
-    
     if (progress >= 1) {
       blades2.blade.pos.y = targetY2
       inst.blade2State = 'cycle-complete'
@@ -451,12 +462,12 @@ function updateBladesAnimation(inst) {
       inst.cycleTimer = 0
     }
   }
-  
-  // SPIKE 3 STATE MACHINE (Right blades - second)
+  //
+  // Blade 3 (right floor blade — extends up from bottom platform)
+  //
   if (inst.blade3State === 'extending') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     blades3.blade.pos.y = targetY3 + (visibleY3 - targetY3) * progress
-    
     if (progress >= 1) {
       blades3.blade.pos.y = visibleY3
       inst.blade3State = 'retracting'
@@ -465,7 +476,6 @@ function updateBladesAnimation(inst) {
   } else if (inst.blade3State === 'retracting') {
     const progress = Math.min(1, inst.animationTimer / animationSpeed)
     blades3.blade.pos.y = visibleY3 + (targetY3 - visibleY3) * progress
-    
     if (progress >= 1) {
       blades3.blade.pos.y = targetY3
       inst.blade3State = 'waiting-for-blade2'
@@ -479,8 +489,9 @@ function updateBladesAnimation(inst) {
       sound && Sound.playBladeSound(sound)
     }
   }
-  
-  // RESTART CYCLE after delay
+  //
+  // Restart cycle — blades teleport back to hidden positions
+  //
   if (inst.blade1State === 'cycle-complete' && inst.cycleTimer >= inst.cycleDelay) {
     inst.cycleTimer = 0
     inst.animationTimer = 0
@@ -490,9 +501,36 @@ function updateBladesAnimation(inst) {
     inst.blade1State = 'extending'
     inst.blade2State = 'waiting'
     inst.blade3State = 'waiting'
-    
     sound && Sound.playBladeSound(sound)
   }
+  //
+  // Opacity derived from current blade position so blades are invisible
+  // while inside a platform and fade in only as they enter the playfield
+  //
+  updateBladesOpacity(inst)
+}
+
+/**
+ * Update blade opacity from current Y position so blades are invisible while
+ * inside a platform and fade in as they approach their visible resting position.
+ * Uses distance from the fully-extended position as the reference so blades
+ * reach full opacity exactly at visibleY regardless of blade geometry or sink.
+ * BLADE_EMERGE_PX controls the fade window (px before visibleY where fade begins).
+ * @param {Object} inst - Scene instance
+ */
+function updateBladesOpacity(inst) {
+  const { blades1, blades2, blades3, visibleY1, visibleY2, visibleY3 } = inst
+  //
+  // Floor blades move UP (decreasing Y) to visible position.
+  // Opacity = 1 at visibleY, fades to 0 BLADE_EMERGE_PX pixels above visibleY.
+  //
+  blades1.blade.opacity = Math.max(0, Math.min(1, 1 - (blades1.blade.pos.y - visibleY1) / BLADE_EMERGE_PX))
+  blades3.blade.opacity = Math.max(0, Math.min(1, 1 - (blades3.blade.pos.y - visibleY3) / BLADE_EMERGE_PX))
+  //
+  // Ceiling blade moves DOWN (increasing Y) to visible position.
+  // Opacity = 1 at visibleY2, fades to 0 BLADE_EMERGE_PX pixels below visibleY2.
+  //
+  blades2.blade.opacity = Math.max(0, Math.min(1, 1 - (visibleY2 - blades2.blade.pos.y) / BLADE_EMERGE_PX))
 }
 
 /**

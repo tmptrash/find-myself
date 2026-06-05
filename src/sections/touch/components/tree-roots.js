@@ -3,6 +3,30 @@ import { toCanvas } from '../../../utils/helper.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 
+//
+// Note-tree horizontal positions (7 trees between 25%–75% of play area)
+//
+const NOTE_TREE_COUNT = 7
+const NOTE_TREE_START_OFFSET = 0.25
+const NOTE_TREE_END_OFFSET = 0.75
+
+/**
+ * Returns world X positions of the seven melody note trees
+ * @param {number} leftMargin - Left play-area margin
+ * @param {number} rightMargin - Right play-area margin
+ * @param {number} screenWidth - Screen width in pixels
+ * @returns {number[]} X coordinates of each note tree
+ */
+export function getNoteTreePositions(leftMargin, rightMargin, screenWidth) {
+  const playableWidth = screenWidth - leftMargin - rightMargin
+  const positions = []
+  for (let i = 0; i < NOTE_TREE_COUNT; i++) {
+    const t = i / (NOTE_TREE_COUNT - 1)
+    positions.push(leftMargin + playableWidth * (NOTE_TREE_START_OFFSET + (NOTE_TREE_END_OFFSET - NOTE_TREE_START_OFFSET) * t))
+  }
+  return positions
+}
+
 /**
  * Creates tree roots that grow from the bottom platform upward
  * Uses organic growth algorithm for realistic root structures
@@ -27,20 +51,7 @@ export async function create(config) {
   // Create 7 tree roots with equal spacing between them
   // Distribute within 25%-75% of playable area (50% span)
   //
-  const playableWidth = screenWidth - leftMargin - rightMargin
-  const startOffset = 0.25  // Start at 25% from left
-  const endOffset = 0.75    // End at 75% from left
-  const numTrees = 7
-  
-  //
-  // Generate evenly spaced positions
-  //
-  const rootPositions = []
-  for (let i = 0; i < numTrees; i++) {
-    const t = i / (numTrees - 1)  // 0 to 1
-    const position = leftMargin + playableWidth * (startOffset + (endOffset - startOffset) * t)
-    rootPositions.push(position)
-  }
+  const rootPositions = getNoteTreePositions(leftMargin, rightMargin, screenWidth)
   
   //
   // Center Y position is exactly at floorY (top of bottom platform)

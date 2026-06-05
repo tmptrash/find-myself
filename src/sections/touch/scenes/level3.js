@@ -557,7 +557,7 @@ const L3_EYE_COUNT = 64
 const L3_EYE_HALO_MIN_OPEN = 0.38
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level3TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level3Visited'
 const LIFE_DEDUCT_MAX_COUNT = 1
@@ -723,7 +723,8 @@ export function sceneLevel3(k) {
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
-      sound
+      sound,
+      sceneBackdropHex: WALL_COLOR_HEX
     })
     TouchControls.create({
       k,

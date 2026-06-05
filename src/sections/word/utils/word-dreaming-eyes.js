@@ -32,14 +32,17 @@ const GAZE_MAX_Y = 9
 //
 // Gaze lerp speed — 0–1 per frame weight; lower = smoother
 //
-const GAZE_LERP = 0.05
+// Instant tracking — pupils snap to hero each frame with no easing delay
+const GAZE_LERP = 1
 //
 // Eyes sit left and right of the brain center
 //
 const BRAIN_HEIGHT_RATIO = 0.5
 const EYE_OFFSET_X = 185
 const EYE_SCALE = 0.80
-const EYE_OPACITY = 0.30
+// Eyes are kept subtle — opacity and scale kept low so they blend into the
+// background layer alongside the brain rather than drawing focus.
+const EYE_OPACITY = 0.18
 //
 // Derived iris / pupil geometry — used to clamp gaze so the pupil
 // never escapes the iris disc or clips the asymmetric lower arc.
@@ -295,24 +298,25 @@ function bakeEyeSclera(k, idx, scale) {
   drawEyePath(ctx, CX, CY, EW, EH)
   ctx.clip()
   //
-  // Sclera — light lavender tinted white
+  // Sclera — muted lavender close to the playfield background so the eye
+  // reads as a subtle atmospheric element rather than a bright focal point.
   //
   const sg = ctx.createRadialGradient(CX, CY - EH * 0.15, EH * 0.3, CX, CY, EW)
-  sg.addColorStop(0, '#EDE8F8')
-  sg.addColorStop(0.65, '#DDD8F0')
-  sg.addColorStop(1, '#C4BCE0')
+  sg.addColorStop(0, '#7A7890')
+  sg.addColorStop(0.65, '#6A6882')
+  sg.addColorStop(1, '#5A5870')
   ctx.fillStyle = sg
   ctx.fillRect(0, 0, CW, CH)
   //
-  // Iris base gradient — deep purple
+  // Iris base gradient — dark background-violet
   //
   const IX = CX, IY = CY
   const ig = ctx.createRadialGradient(IX, IY - irisR * 0.12, 4, IX, IY, irisR)
-  ig.addColorStop(0, '#3D2B5C')
-  ig.addColorStop(0.28, '#5A3D7A')
-  ig.addColorStop(0.55, '#4A3468')
-  ig.addColorStop(0.82, '#3A2854')
-  ig.addColorStop(1, '#281E40')
+  ig.addColorStop(0, '#2A2040')
+  ig.addColorStop(0.28, '#3A2E52')
+  ig.addColorStop(0.55, '#302848')
+  ig.addColorStop(0.82, '#241C38')
+  ig.addColorStop(1, '#18122A')
   ctx.beginPath()
   ctx.arc(IX, IY, irisR, 0, Math.PI * 2)
   ctx.fillStyle = ig

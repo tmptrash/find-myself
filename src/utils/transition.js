@@ -51,10 +51,10 @@ const LEVEL_SUBTITLES = {
   'level-time.1': ['you are growing. you are learning. numbers begin\nto surround you. growing up means learning what you\ncan touch — and what you should leave alone. do not\ntouch the one.', 'time1-pre', 17],
   'level-time.2': ['rules appear. some protect you, some punish you.\nmistakes are allowed — but not forever. digits sum\neven safe, sum odd deadly.', 'time2-pre', 18],
   'level-time.3': ['life consumes time while you hesitate. act too\nslow — and it will catch you. throw snow. move\nfast. everything happens at once.', 'time3-pre', 16],
-  'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7],
-  'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 5],
-  'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 4],
-  'level-touch.3': ['when you cannot see… touch to survive', 'touch3-pre', 5]
+  'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7, 'here you need to figure out how to gather bugs together by touching them'],
+  'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 5, 'here you need to figure out how to play the right melody by touching things'],
+  'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 4, 'jumping is beautiful. figure out how to use your legs to activate your path to yourself...'],
+  'level-touch.3': ['when you cannot see… touch to survive', 'touch3-pre', 5, 'touch the bugs and see what happens...']
 }
 
 const TRANSITION_SUBTITLE_Z = CFG.visual.zIndex.ui + 1500
@@ -68,6 +68,10 @@ const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level 
 const SCENE_FADE_IN_DURATION = 0.5   // Duration of fade-in overlay when entering new scene
 const TEXT_OUTLINE_OFFSET = 2        // Pixel offset for text outline shadows
 const SUBTITLE_LINE_SPACING = 12     // Extra vertical pixels between subtitle lines
+//
+// Approximate monospace char width ratio for subtitle / hint width matching
+//
+const HINT_CHAR_WIDTH_RATIO = 0.55
 //
 // Subtitle colors per section (matches anti-hero hover color in menu scene)
 //
@@ -516,9 +520,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           //
           if (hintText) {
             const hintSize = textSize * 0.55
-            const hintY = textY + textSize * 1.9
+            const hintYOffset = nextLevel === 'level-touch.0' ? textSize * 2.35 : textSize * 1.9
+            const hintY = textY + hintYOffset
+            const wrappedHint = wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize)
             const hintOutlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-              k.text(hintText, { size: hintSize, align: "center", font: TRANSITION_FONT }),
+              k.text(wrappedHint, { size: hintSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
               k.pos(textX + dx, hintY + dy),
               k.anchor("center"),
               k.color(0, 0, 0),
@@ -527,7 +533,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
               k.fixed()
             ]))
             const hintTextObj = k.add([
-              k.text(hintText, { size: hintSize, align: "center", font: TRANSITION_FONT }),
+              k.text(wrappedHint, { size: hintSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
               k.pos(textX, hintY),
               k.anchor("center"),
               k.color(140, 140, 140),
@@ -730,6 +736,34 @@ function getSectionSubtitleColor(level) {
   const match = level.match(/^(?:level-|menu-)(\w+)/)
   const section = match ? match[1] : null
   return SECTION_SUBTITLE_COLORS[section] || DEFAULT_SUBTITLE_COLOR
+}
+
+//
+// Wraps hint copy so no line is wider than the longest main-subtitle line
+//
+function wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize) {
+  const subtitleLines = subtitle.split('\n')
+  let maxLen = 0
+  for (const line of subtitleLines) {
+    if (line.length > maxLen) maxLen = line.length
+  }
+  const maxWidth = maxLen * textSize * HINT_CHAR_WIDTH_RATIO
+  const charWidth = hintSize * HINT_CHAR_WIDTH_RATIO
+  const maxChars = Math.max(16, Math.floor(maxWidth / charWidth))
+  const words = hintText.split(' ')
+  const lines = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (candidate.length > maxChars && current) {
+      lines.push(current)
+      current = word
+    } else {
+      current = candidate
+    }
+  }
+  current && lines.push(current)
+  return lines.join('\n')
 }
 
 /**

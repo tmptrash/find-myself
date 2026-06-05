@@ -245,7 +245,7 @@ const LOG_KNOT_RADIUS_MAX = 5
 //
 // Life deduction (level-specific flags and thresholds, up to 2 deductions)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level2TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level2Visited'
 const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
@@ -474,7 +474,8 @@ export function sceneLevel2(k) {
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
-      sound
+      sound,
+      sceneBackdropHex: '#1C323A'
     })
     TouchControls.create({
       k,
@@ -779,8 +780,9 @@ export function sceneLevel2(k) {
       // unless he landed exactly on the mini hero.
       //
       collisionWidth: 82,
-      platformCollisionXOffset: 0,
-      platformCollisionYOffset: 9
+      platformCollisionXOffset: 82 / 2,
+      platformCollisionYOffset: 9,
+      revealWidth: 110
     })
     //
     // Right-side floor icicles always present from the start.

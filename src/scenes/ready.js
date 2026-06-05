@@ -25,7 +25,7 @@ const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
 const HINT_FONT_SIZE = 20
-const HINT_Y = 1058
+const HINT_Y = 1075
 //
 // Crawling letter title — centred at the very top of the canvas,
 // well above the central monster illustration.
@@ -257,15 +257,17 @@ const TITLE_TEXT_Y = 130
 // rows below it are LEFT-ALIGNED at a fixed column so the icon and
 // label edge of both rows form a clean left column.
 //
-const DESCRIPTION_START_Y = MENU_BG_GROUND_Y + 48
+// Pulled up (smaller offset from horizon) so the taller narrative block
+// doesn't push the goal rows off-screen after the font size increase.
+const DESCRIPTION_START_Y = MENU_BG_GROUND_Y + 52
 //
 // Narrative text — bigger and wider than the previous 4-line block.
 // Two long lines (≈ 66 chars each in monospace) read as a single
 // breath and free up vertical space for the hint pinned to the very
 // bottom of the canvas.
 //
-const TEXT_FONT_SIZE = 24
-const TEXT_LINE_HEIGHT = 34
+const TEXT_FONT_SIZE = 30
+const TEXT_LINE_HEIGHT = 42
 //
 // Extra space between the narrative paragraph and the section label
 // rows — gives the two "Collect / Find" labels their own visual
@@ -287,6 +289,10 @@ const ICON_ROW_HEIGHT = 56
 //
 const LABEL_BLOCK_LEFT_X = 790
 //
+// "your goal is to ->" sits to the left of the two orange bullet rows
+//
+const GOAL_LABEL_X = LABEL_BLOCK_LEFT_X - 230
+//
 // Extra Y to vertically centre the two-heroes pair between label and
 // desc lines.
 //
@@ -297,7 +303,7 @@ const ICON_TWO_HEROES_Y_EXTRA = 14
 const SPARKLE_PULSE_SPEED = 2.5
 const SPARKLE_INNER_R = 5
 const SPARKLE_OUTER_R = 11
-const ICON_LABEL_FONT_SIZE = 18
+const ICON_LABEL_FONT_SIZE = 22
 const ICON_LABEL_DESC_FONT_SIZE = 15
 const ICON_LABEL_DESC_OFFSET_Y = 20
 //
@@ -748,10 +754,9 @@ function addDescriptionBlock(k) {
   // the same horizontal width when centred under the horizon strip.
   //
   const narrativeLines = [
-    'Six worlds await you — time, touch,',
-    'words, feelings, mind, and stress.',
-    'Each hides a piece of you. Play',
-    'against Life to find yourself.'
+    'Six worlds await you — time, touch, words,',
+    'feelings, mind, and stress. Each hides a piece',
+    'of you. Play against Life to find yourself.'
   ]
   let cursorY = DESCRIPTION_START_Y
   for (const line of narrativeLines) {
@@ -771,7 +776,11 @@ function addDescriptionBlock(k) {
     { label: 'Find the other peaces of you', desc: 'Touch them. Know them.' }
   ]
   const layoutRows = []
-  rows.forEach(row => {
+  rows.forEach((row, rowIdx) => {
+    //
+    // Goal label sits to the left of the first orange bullet row only
+    //
+    rowIdx === 0 && addSegment(k, 'your goal is to', GOAL_LABEL_X, cursorY + 35, z, ICON_LABEL_FONT_SIZE, narrativeFont, COLOR_TEXT_GRAY)
     const rowMeta = addLeftAlignedIconLabelRow(k, row.label, row.desc, cursorY, z, labelFont, descFont)
     layoutRows.push(rowMeta)
     cursorY += ICON_ROW_HEIGHT

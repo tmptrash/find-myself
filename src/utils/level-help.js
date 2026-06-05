@@ -1,8 +1,9 @@
 import { CFG } from '../cfg.js'
-import { getRGB } from './helper.js'
+import { getRGB, parseHex } from './helper.js'
 import { get, set } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
+import * as CanvasBackdrop from './canvas-backdrop.js'
 
 //
 // HELP label layout — centered in bottom margin below play area
@@ -84,12 +85,18 @@ const SECTION_HELP_COLORS = {
   word: '#DC143C'
 }
 //
+// Touch help panel uses complementary teal fill + warm orange text
+//
+const TOUCH_PANEL_FILL_HEX = '#1C323A'
+const TOUCH_PANEL_TEXT_HEX = '#E08040'
+const TOUCH_PANEL_BORDER_HEX = '#E08040'
+//
 // Per-level hint copy
 //
 export const LEVEL_HELP_TEXTS = {
-  'level-touch.0': 'herd all the bugs into one\nspot and see what happens',
+  'level-touch.0': 'collect all the bugs in one\nplace and they will help\nyou. notice what they do\nwhen you touch them',
   'level-touch.1': 'play the notes shown\nby your other half',
-  'level-touch.2': 'jump to the right of the icicles,\nthen you\'ll figure out the rest',
+  'level-touch.2': 'jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
   'level-touch.3': 'turns out the bugs\nare trampolines :)',
   'level-time.0': 'hurry — platforms\ndon\'t last forever',
   'level-time.1': 'ones kill you —\njust don\'t jump on them',
@@ -112,10 +119,11 @@ export const LEVEL_HELP_TEXTS = {
  * @param {number} [config.helpY] - Optional Y override for HELP label placement
  * @param {Object} [config.levelIndicator] - HUD with smallHero and updateHeroScore
  * @param {Object} [config.sound] - Sound instance for purchase/deny feedback
+ * @param {string} [config.sceneBackdropHex] - Level backdrop hex for letterbox sync while panel is open
  * @returns {Object|null} HELP instance or null when level has no hint text
  */
 export function create(config) {
-  const { k, levelName, sideWallWidth, floorY, helpY: helpYOverride, levelIndicator, sound } = config
+  const { k, levelName, sideWallWidth, floorY, helpY: helpYOverride, levelIndicator, sound, sceneBackdropHex } = config
   const hintText = LEVEL_HELP_TEXTS[levelName]
   if (!hintText) return null
   const sectionColorHex = getSectionHelpColor(levelName)
@@ -140,11 +148,14 @@ export function create(config) {
     k.fixed(),
     k.z(CFG.visual.zIndex.ui + 3)
   ])
+  const panelColors = getSectionPanelColors(levelName)
   const inst = {
     k,
     levelName,
     hintText,
     sectionColorHex,
+    panelColors,
+    sceneBackdropHex,
     levelIndicator,
     sound,
     helpX,
@@ -187,6 +198,19 @@ function getSectionHelpColor(levelName) {
   if (levelName.includes('time')) return SECTION_HELP_COLORS.time
   if (levelName.includes('word')) return SECTION_HELP_COLORS.word
   return SECTION_HELP_COLORS.touch
+}
+
+//
+// Resolves panel fill / text / border colours per section
+//
+function getSectionPanelColors(levelName) {
+  if (levelName.includes('touch')) {
+    const [fillR, fillG, fillB] = parseHex(TOUCH_PANEL_FILL_HEX)
+    const [textR, textG, textB] = parseHex(TOUCH_PANEL_TEXT_HEX)
+    const [borderR, borderG, borderB] = parseHex(TOUCH_PANEL_BORDER_HEX)
+    return { fillR, fillG, fillB, textR, textG, textB, borderR, borderG, borderB }
+  }
+  return { fillR: PANEL_FILL_R, fillG: PANEL_FILL_G, fillB: PANEL_FILL_B, textR: null, textG: null, textB: null, borderR: PANEL_BORDER_R, borderG: PANEL_BORDER_G, borderB: PANEL_BORDER_B }
 }
 
 //
@@ -315,7 +339,8 @@ function isMouseOverHelp(inst) {
 //
 function openPanel(inst) {
   if (inst.panelOpen) return
-  const { k, hintText } = inst
+  const { k, hintText, sceneBackdropHex } = inst
+  sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(k, sceneBackdropHex)
   inst.panelOpen = true
   inst.panelPhase = 'opening'
   inst.panelTimer = 0
@@ -330,7 +355,10 @@ function openPanel(inst) {
   const boxX = centerX - PANEL_BOX_WIDTH / 2
   const boxY = centerY - PANEL_BOX_HEIGHT / 2
   const closeRgb = getRGB(k, CLOSE_HINT_COLOR_HEX)
-  const hintRgb = getRGB(k, inst.sectionColorHex)
+  const { panelColors } = inst
+  const hintRgb = panelColors.textR != null
+    ? { r: panelColors.textR, g: panelColors.textG, b: panelColors.textB }
+    : getRGB(k, inst.sectionColorHex)
   const overlay = k.add([
     k.z(PANEL_Z),
     k.opacity(0),
@@ -359,7 +387,7 @@ function openPanel(inst) {
           width: PANEL_BOX_WIDTH + PANEL_BORDER_WIDTH * 2,
           height: PANEL_BOX_HEIGHT + PANEL_BORDER_WIDTH * 2,
           radius: PANEL_BOX_RADIUS + PANEL_BORDER_WIDTH,
-          color: k.rgb(PANEL_BORDER_R, PANEL_BORDER_G, PANEL_BORDER_B),
+          color: k.rgb(panelColors.borderR, panelColors.borderG, panelColors.borderB),
           opacity: o * PANEL_FRAME_ALPHA
         })
         k.drawRect({
@@ -367,7 +395,7 @@ function openPanel(inst) {
           width: PANEL_BOX_WIDTH,
           height: PANEL_BOX_HEIGHT,
           radius: PANEL_BOX_RADIUS,
-          color: k.rgb(PANEL_FILL_R, PANEL_FILL_G, PANEL_FILL_B),
+          color: k.rgb(panelColors.fillR, panelColors.fillG, panelColors.fillB),
           opacity: o * PANEL_FILL_ALPHA
         })
       }
@@ -463,6 +491,7 @@ function destroyPanel(inst) {
   closeHint?.destroy?.()
   closeHintOutlines?.forEach(node => node.destroy?.())
   inst.panelNodes = null
+  inst.sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(inst.k, inst.sceneBackdropHex)
 }
 
 //

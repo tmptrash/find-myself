@@ -382,9 +382,13 @@ function onUpdate(inst) {
   // Text platforms sway together with their collision box
   //
   const collisionY = inst.platformText ? floatY : (inst.revealed ? inst.y : floatY)
-  const dx = Math.abs(heroPos.x - collisionCenterX)
-  const dy = heroPos.y - floatY
   const heroChar = inst.heroInst.character
+  const velX = heroChar.vel?.x || 0
+  const velY = heroChar.vel?.y || 0
+  const predictedHeroX = heroPos.x + velX * dt * VELOCITY_PREDICTION_FRAMES
+  const dx = Math.abs(heroPos.x - collisionCenterX)
+  const dxPredicted = Math.abs(predictedHeroX - collisionCenterX)
+  const dy = heroPos.y - floatY
   //
   // One-way platform: only collidable when hero is actively falling with feet
   // very close to the surface. The platform must stay off-screen unless the hero
@@ -394,7 +398,8 @@ function onUpdate(inst) {
     inst.platform.pos.y = collisionY + inst.collisionYOffset
     inst.platform.pos.x = collisionCenterX
   } else {
-    const horizontallyAligned = dx < inst.revealWidth / 2
+    const halfReveal = inst.revealWidth / 2
+    const horizontallyAligned = dx < halfReveal || dxPredicted < halfReveal
     //
     // Pre-compute the platform's collidable surface so the heroOnPlatform
     // check below can verify the hero is grounded AT this platform (and
@@ -450,7 +455,6 @@ function onUpdate(inst) {
       //
       const platformSurface = floatY + inst.collisionYOffset + inst.collisionAreaTop
       const heroFeetY = heroPos.y + HERO_FEET_OFFSET
-      const velY = heroChar.vel?.y || 0
       const isFalling = velY > 0
       //
       // 5 px margin keeps a hero who is jumping up from below the
@@ -476,6 +480,16 @@ function onUpdate(inst) {
         || willCrossSurface
         || sweptThroughSurface
       )
+      //
+      // Fast diagonal falls can skip the collider in a single tick — snap
+      // the hero onto the platform surface so he cannot tunnel through.
+      //
+      if (sweptThroughSurface && horizontallyAligned && isFalling) {
+        heroChar.pos.y = platformSurface - HERO_FEET_OFFSET
+        heroChar.vel && (heroChar.vel.y = 0)
+        inst.revealed = true
+        inst.collidableHoldTimer = COLLIDABLE_HOLD_DURATION
+      }
       //
       // Refresh the sticky-hold timer whenever the detector fires. The
       // platform then stays collidable for COLLIDABLE_HOLD_DURATION even

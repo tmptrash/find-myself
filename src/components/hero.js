@@ -88,7 +88,8 @@ const IDLE_NOTE_EMIT_MAX = 1.6          // Max seconds between note particles
 const IDLE_NOTE_GLYPHS = {
   humming: ['♪', '♫', '♩', '♬'],
   whistling: ['♪', '♫', '♩', '♬'],
-  sleeping: ['z', 'Z', 'z']
+  sleeping: ['z', 'Z', 'z'],
+  childSinging: ['tu', 'ru', 'ruu', 'la', 'laa', 'tu-ru', 'tuuu', 'la-la']
 }
 //
 // Vocalization only starts after the hero has been standing still for

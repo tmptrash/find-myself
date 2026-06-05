@@ -29,9 +29,9 @@ const SECTION_COLORS = {
 const SECTION_DESCRIPTIONS = {
   time: 'time sense',
   word: 'inner voices',
-  touch: 'contact',
+  touch: 'physical contact',
   feel: 'emotions',
-  mind: 'thoughts',
+  mind: 'intellect',
   stress: 'pressure'
 }
 //

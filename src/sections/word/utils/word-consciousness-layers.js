@@ -43,16 +43,17 @@ const BRAIN_SIZE_PULSE = 0.05
 // Tints tuned to the playfield fill palette (~#5A5A70 = RGB 90,90,112) — cool tint sits
 // just below the fill, warm tint barely lifts above it so the brain reads as a subtle shape
 //
-const BRAIN_TINT_COOL_R = 72
-const BRAIN_TINT_COOL_G = 66
-const BRAIN_TINT_COOL_B = 96
-const BRAIN_TINT_WARM_R = 92
-const BRAIN_TINT_WARM_G = 84
-const BRAIN_TINT_WARM_B = 118
+const BRAIN_TINT_COOL_R = 82
+const BRAIN_TINT_COOL_G = 80
+const BRAIN_TINT_COOL_B = 108
+const BRAIN_TINT_WARM_R = 88
+const BRAIN_TINT_WARM_G = 86
+const BRAIN_TINT_WARM_B = 114
 //
-// Opacity for the brain sprite — lower than LAYER_DRAW_OPACITY so it blends into background
+// Brain is intentionally faded — closer to the playfield background (#5A5A70)
+// so it reads as a subtle shape rather than a prominent foreground element.
 //
-const BRAIN_OPACITY = 0.65
+const BRAIN_OPACITY = 0.35
 //
 // Neural root lines behind the brain — vine-palette violet filaments
 //
@@ -73,7 +74,7 @@ const BRAIN_ROOT_COLOR_B = 148
 const BRAIN_ROOT_RUNNER_COLOR_R = 168
 const BRAIN_ROOT_RUNNER_COLOR_G = 154
 const BRAIN_ROOT_RUNNER_COLOR_B = 204
-const BRAIN_ROOT_BASE_OPACITY = 0.52
+const BRAIN_ROOT_BASE_OPACITY = 0.32
 const BRAIN_ROOT_DEPTH_FADE = 0.07
 //
 // Root word runners — small words that travel outward along root segments from the brain

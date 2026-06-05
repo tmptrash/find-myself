@@ -90,7 +90,7 @@ const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Life deduction (show hint + control 2 falling platform traps)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level2TrapAdded'
 const TRAP_PLATFORM_INDEX_1 = 2
 const TRAP_PLATFORM_INDEX_2 = 6

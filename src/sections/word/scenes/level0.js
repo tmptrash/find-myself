@@ -57,7 +57,7 @@ const FLYING_WORD_COUNT = 22
 //
 // Life deduction trap (mirrors touch level 0)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level0LifeDeduction'
 const WORD_L0_PLAYFIELD_BG_R = 90
 const WORD_L0_PLAYFIELD_BG_G = 90

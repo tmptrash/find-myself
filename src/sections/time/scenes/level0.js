@@ -91,7 +91,7 @@ const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Life deduction (show hint + control platform 6 trap)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
 //
 // Resting birds near the anti-hero: small silhouettes that scatter on hero landing

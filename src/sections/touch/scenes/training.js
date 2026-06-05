@@ -239,7 +239,7 @@ const TRAINING_COMPLETE_TEXT_Z = CFG.visual.zIndex.ui + 1200
 //
 // Skip training text (below game area floor line)
 //
-const SKIP_FONT_SIZE = 20
+const SKIP_FONT_SIZE = 30
 const SKIP_TEXT_Y = FLOOR_Y + Math.round(BOTTOM_MARGIN * 0.42)
 const SKIP_MIN_OPACITY = 0.3
 const SKIP_MAX_OPACITY = 0.7

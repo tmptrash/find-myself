@@ -22,6 +22,7 @@ import { createScrollingCloudBand, createFloorThornSprite } from '../utils/level
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import { buildRockVertices, buildRockPalette, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
 //
@@ -240,17 +241,25 @@ const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
 const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 //
+// Life trap — first trap (spike adds) and second trap (bug4 starts moving)
 //
-// Life trap (level-specific flags and threshold)
-//
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.trapAdded'
+//
+// Second trap: the bug on which the anti-hero stands starts moving slowly.
+// Triggers when the first trap is already set AND lifeScore >= TRAP2_THRESHOLD.
+//
+const TRAP2_THRESHOLD = 5
+const TRAP2_FLAG = 'touch.trapAdded2'
+const TRAP2_VISITED_FLAG = 'touch.trapVisited2'
+const TRAP2_BUG_SPEED = 10
 //
 // Flat playfield fill — deep teal, the dominant cool half of the
 // teal+orange complementary scheme. Same darkness band as the previous
 // neutral grey so contrast against hero/foreground silhouettes is
 // preserved, only the hue shifts.
 //
+const L0_PLAYFIELD_BG_HEX = '#1C323A'
 const L0_PLAYFIELD_BG_R = 28
 const L0_PLAYFIELD_BG_G = 50
 const L0_PLAYFIELD_BG_B = 58
@@ -263,7 +272,7 @@ const INSTRUCTIONS_HOLD_DURATION = 4.0
 const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
 const INSTRUCTIONS_FONT_SIZE = 24
 const INSTRUCTIONS_OUTLINE_OFFSET = 2
-const INSTRUCTIONS_TEXT = "← → - move,  ↑ Space - jump,  ESC - menu,  use mouse"
+const INSTRUCTIONS_TEXT = "A D ← → - move,  ↑ Space - jump,  ESC - menu,  use mouse"
 //
 // Monster conversation system (timed dialogue between 3 monsters)
 //
@@ -459,17 +468,20 @@ export function sceneLevel0(k) {
     //
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
+    //
+    // Sync all CSS ancestors (letterbox wrappers, page chrome) to the playfield teal
+    // so any bars outside the canvas match the level background colour.
+    //
+    CanvasBackdrop.applyCanvasBackdrop(k, L0_PLAYFIELD_BG_HEX)
+    //
+    // Override Kaplay's own clear colour back to the dark wall tint so the
+    // areas inside the canvas that Kaplay blanks each frame (top / bottom
+    // of the viewport when the window aspect differs from the game ratio)
+    // match the drawn wall panels and produce no visible strip.
+    //
     k.setBackground(k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B))
-    //
-    // Visible playfield fill is L0_PLAYFIELD_BG_*; canvas backing matches so letterboxing stays invisible.
-    //
-    k.canvas?.style.setProperty(
-      'background-color',
-      `rgb(${L0_PLAYFIELD_BG_R}, ${L0_PLAYFIELD_BG_G}, ${L0_PLAYFIELD_BG_B})`,
-      'important'
-    )
     k.onSceneLeave(() => {
-      k.canvas?.style.removeProperty('background-color')
+      CanvasBackdrop.clearCanvasBackdrop(k)
     })
     //
     // Set gravity
@@ -607,7 +619,8 @@ export function sceneLevel0(k) {
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
-      sound
+      sound,
+      sceneBackdropHex: '#1C323A'
     })
     TouchControls.create({
       k,
@@ -621,16 +634,33 @@ export function sceneLevel0(k) {
     const currentLifeScore = get('lifeScore', 0)
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
-    const trapCount = (showTrap || trapAlreadyAdded) ? 1 : 0
+    //
+    // Second trap detection — mirrors the level 1 visited/eligible pattern
+    //
+    const trap2AlreadyAdded = get(TRAP2_FLAG, false)
+    const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
+    const trap2Eligible = !trap2AlreadyAdded && trapAlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
+    let showTrap2 = false
+    if (trap2Eligible && !trap2AlreadyVisited) {
+      set(TRAP2_VISITED_FLAG, true)
+    } else if (trap2Eligible && trap2AlreadyVisited) {
+      showTrap2 = true
+    }
+    const trap2Active = showTrap2 || trap2AlreadyAdded
+    //
+    // Trap badge: 0, 1 or 2
+    //
+    const trapCount = trap2Active ? 2 : (showTrap || trapAlreadyAdded) ? 1 : 0
     levelIndicator.updateTrapCount(trapCount)
     //
     // Scene-level lock: hero controls are disabled during the life deduction animation
     //
-    const sceneLock = { locked: showTrap }
+    const sceneLock = { locked: showTrap || showTrap2 }
     //
     // Show keyboard controls instructions (delayed if life deduction animation plays)
     //
-    showInstructions(k, showTrap ? LifeDeduction.TOTAL_DURATION : 0)
+    const totalDeductDuration = (showTrap ? LifeDeduction.TOTAL_DURATION : 0) + (showTrap2 ? LifeDeduction.TOTAL_DURATION + 0.5 : 0)
+    showInstructions(k, totalDeductDuration)
     if (showTrap) {
       LifeDeduction.show({
         k,
@@ -640,6 +670,20 @@ export function sceneLevel0(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
         sceneBgRgb: { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
+      })
+    }
+    if (showTrap2) {
+      const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
+      k.wait(trap2Delay, () => {
+        LifeDeduction.show({
+          k,
+          currentScore: get('lifeScore', 0),
+          levelIndicator,
+          sound,
+          deductFlag: TRAP2_FLAG,
+          sceneLock,
+          sceneBgRgb: { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
+        })
       })
     }
     //
@@ -1981,6 +2025,11 @@ export function sceneLevel0(k) {
       antiHeroInst.character.z = ANTIHERO_PLATFORM_Z_INDEX
     }
     //
+    // Second trap: make the bug (and its invisible platform) drift slowly left
+    // and right, bouncing between the play-area walls.
+    //
+    trap2Active && activateBug4Movement(k, bigBug4Inst, antiHeroPlatform, antiHeroInst, bug4Radius)
+    //
     // Create hero with anti-hero reference for annihilation
     //
     const heroInst = Hero.create({
@@ -2021,7 +2070,8 @@ export function sceneLevel0(k) {
       jumpForce: CFG.game.jumpForce,
       addMouth: isWordComplete,
       addArms: isTouchComplete,
-      bodyColor: heroBodyColor
+      bodyColor: heroBodyColor,
+      idleVocalization: 'childSinging'
     })
     //
     // Lock hero controls while life deduction animation plays
@@ -3056,16 +3106,12 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator) {
       heroFeetY > FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH) {
     return
   }
+  const heroTopY = heroFeetY - HERO_HITBOX_HEIGHT_FOR_THORNS
   for (const thorn of floorThornData) {
-    const collisionTipY = thorn.baseY - thorn.height + FLOOR_THORN_COLLISION_TIP_BIAS_DOWN
-    if (heroFeetY < collisionTipY + FLOOR_THORN_FEET_MIN_PENETRATION_PAST_TIP ||
-        heroFeetY > thorn.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
-      continue
-    }
-    //
-    // Hero half-width + thorn half-width for proper AABB overlap
-    //
-    if (Math.abs(heroX - thorn.x) < thorn.width / 2 + HERO_HALF_WIDTH_THORNS) {
+    const thornTopY = thorn.baseY - thorn.height
+    const halfW = thorn.width / 2 + HERO_HALF_WIDTH_THORNS
+    if (Math.abs(heroX - thorn.x) >= halfW) continue
+    if (heroFeetY > thornTopY && heroTopY < thorn.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
       onHeroFloorThornDeath(k, heroInst, levelIndicator)
       return
     }
@@ -3296,20 +3342,21 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
   //
   onUpdateDirtParticles(inst.dirtParticles, dt)
   //
-  // Kill hero if feet overlap any risen spike
+  // Kill hero when risen spike column overlaps the hero body.
+  // Tall trap spikes use a column test (not tip-penetration) so a hero
+  // standing on the floor beside an extended spike is still caught.
   //
   if (inst.progress > 0.3) {
     const onFloor = heroFeetY >= FLOOR_Y - FLOOR_THORN_FEET_TOLERANCE_LOW &&
                     heroFeetY <= FLOOR_Y + FLOOR_THORN_FEET_TOLERANCE_HIGH
     if (onFloor) {
+      const heroTopY = heroFeetY - HERO_HITBOX_HEIGHT_FOR_THORNS
       for (const spike of inst.spikes) {
         const visibleHeight = spike.height * inst.progress
-        const collisionTipY = spike.baseY - visibleHeight + FLOOR_THORN_COLLISION_TIP_BIAS_DOWN
-        if (heroFeetY < collisionTipY + FLOOR_THORN_FEET_MIN_PENETRATION_PAST_TIP ||
-            heroFeetY > spike.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
-          continue
-        }
-        if (Math.abs(heroX - spike.x) < TRAP_SPIKE_WIDTH_BASE + HERO_HALF_WIDTH_THORNS) {
+        const spikeTopY = spike.baseY - visibleHeight
+        const halfW = TRAP_SPIKE_WIDTH_BASE + HERO_HALF_WIDTH_THORNS
+        if (Math.abs(heroX - spike.x) >= halfW) continue
+        if (heroFeetY > spikeTopY && heroTopY < spike.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
           onHeroFloorThornDeath(k, heroInst, levelIndicator)
           return
         }
@@ -4027,7 +4074,7 @@ const ROCK_RADIUS_MAX = 62
 const ROCK_BASE_R = 78
 const ROCK_BASE_G = 78
 const ROCK_BASE_B = 82
-const L0_ROCK_Z_BEHIND_COLORFUL_ROW = 6
+const L0_ROCK_Z_BEHIND_COLORFUL_ROW = 8
 const L0_ROCK_Z_IN_FRONT_OF_COLORFUL_ROW = 26
 //
 // Each main rock has a chance of spawning 1-2 smaller satellite rocks beside it
@@ -4861,7 +4908,7 @@ function buildSingleRock(k, posX, radius, spriteName) {
   // tangent to (or slightly below) the floor line, reading as half-
   // buried instead of resting on it.
   //
-  const ROCK_LIFT_FROM_FLOOR = 3
+  const ROCK_LIFT_FROM_FLOOR = 0
   const randSink = Math.random() * 5
   const posY = FLOOR_Y - totalH * 0.62 + randSink - ROCK_LIFT_FROM_FLOOR
   const croppedH = Math.max(8, Math.ceil(totalH * 0.62 - randSink))
@@ -4972,3 +5019,31 @@ const L0_TREE_ROOT_COLOR_B = 34
 // Organic generator depth clamp (L0 draws trunk-only organic silhouettes; no underground roots).
 //
 const L0_ORGANIC_ROOT_DEPTH_MAX = 123
+//
+// Slowly oscillates bug4 (the anti-hero's platform bug) and its invisible
+// collision platform back and forth within the play area.
+// Uses Kaplay's k.onUpdate instead of a physics body because the platform
+// is a static body that can only be repositioned manually.
+//
+function activateBug4Movement(k, bug4Inst, platform, antiHeroInst, bugRadius) {
+  const minX = LEFT_MARGIN + bugRadius + 10
+  const maxX = CFG.visual.screen.width - RIGHT_MARGIN - bugRadius - 10
+  //
+  // Platform walker: always crawl left/right between play-area walls
+  //
+  bug4Inst.isPlatformWalker = true
+  bug4Inst.isMother = false
+  bug4Inst.crawlSpeed = TRAP2_BUG_SPEED
+  bug4Inst.state = 'crawling'
+  bug4Inst.movementAngle = 0
+  bug4Inst.vx = TRAP2_BUG_SPEED
+  bug4Inst.vy = 0
+  bug4Inst.bounds = { minX, maxX, minY: bug4Inst.y, maxY: bug4Inst.y }
+  k.onUpdate(() => {
+    //
+    // Sync invisible platform and anti-hero to the moving bug body
+    //
+    platform.pos.x = bug4Inst.x
+    antiHeroInst?.character?.exists?.() && (antiHeroInst.character.pos.x = bug4Inst.x)
+  })
+}

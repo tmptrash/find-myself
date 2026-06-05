@@ -83,7 +83,7 @@ const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Life deduction (show hint + control 5th platform falling)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level1TrapAdded'
 //
 // Night music controller: darkness threshold for fading music, and cricket intervals

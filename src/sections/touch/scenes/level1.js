@@ -358,12 +358,28 @@ const ANTIHERO_HINT_Y_OFFSET = -140
 //
 const GIANT_WORM_X_OFFSET = 200
 //
-// Life deduction (level-specific flags and threshold)
+// Life deduction — first trap (poison leaves) and second trap (random rising bugs)
 //
-const LIFE_DEDUCT_THRESHOLD = 10
+const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level1TrapAdded'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level1Visited'
 const LIFE_DEDUCT_LEAVES_FLAG = 'touch.level1LeavesActive'
+//
+// Second trap: random worms rising from the ground.
+// Triggers when the first trap is already active AND lifeScore >= TRAP2_THRESHOLD.
+//
+const TRAP2_THRESHOLD = 5
+const TRAP2_FLAG = 'touch.level1Trap2Added'
+const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
+//
+// Random worm constants for the second trap
+//
+const TRAP2_WORM_INTERVAL_MIN = 4.0
+const TRAP2_WORM_INTERVAL_MAX = 9.0
+//
+// Decorative parallax trees must not overlap the seven melody note trees
+//
+const NOTE_TREE_EXCLUSION_RADIUS = 70
 
 /**
  * Level 1 scene for touch section
@@ -428,6 +444,7 @@ export function sceneLevel1(k) {
     //
     const grassY = FLOOR_Y - 1
     const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const noteTreeXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
     const bgColor = { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B }
     //
     // Blend Kaplay RGB colours toward the flat scene fog for distant silhouettes.
@@ -562,6 +579,7 @@ export function sceneLevel1(k) {
           const spacing = playableWidth / (treeCount + 1)
           const randomness = 48
           const treeX = LEFT_MARGIN + spacing * (i + 1) + (Math.random() - 0.5) * randomness
+          if (isNearNoteTreeX(treeX, noteTreeXs)) continue
           const baseTreeHeight = (105 + Math.random() * 135) * scale
           const crownCenterY = grassY + yOffset - baseTreeHeight
           const trunkBottom = grassY
@@ -600,6 +618,7 @@ export function sceneLevel1(k) {
         const spacing = playableWidth / (treeCount - 1)
         const randomness = layerIndex === 0 ? 20 : 25
         const treeX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
+        if (isNearNoteTreeX(treeX, noteTreeXs)) continue
         const baseTreeHeight = (120 + Math.random() * 100) * scale
         const crownCenterY = grassY + yOffset - baseTreeHeight
         const trunkTop = crownCenterY
@@ -681,6 +700,7 @@ export function sceneLevel1(k) {
           }
           
           const posX = LEFT_MARGIN + spacing * i + randomOffset
+          if (isNearNoteTreeX(posX, noteTreeXs)) continue
           //
           // Front canopy is organic-only (same generator as touch L0): rain reads crowns from leaf samples.
           //
@@ -1111,7 +1131,8 @@ export function sceneLevel1(k) {
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
-      sound
+      sound,
+      sceneBackdropHex: '#1C323A'
     })
     TouchControls.create({
       k,
@@ -1140,7 +1161,23 @@ export function sceneLevel1(k) {
       showTrap = true
       leavesActive = true
     }
-    const trapCountValue = (showTrap || trapAlreadyAdded) ? 1 : 0
+    //
+    // Second trap: random rising bugs, active once first trap is set AND lifeScore >= TRAP2_THRESHOLD.
+    //
+    const trap2AlreadyAdded = get(TRAP2_FLAG, false)
+    const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
+    const trap2Eligible = !trap2AlreadyAdded && trapAlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
+    let showTrap2 = false
+    if (trap2Eligible && !trap2AlreadyVisited) {
+      set(TRAP2_VISITED_FLAG, true)
+    } else if (trap2Eligible && trap2AlreadyVisited) {
+      showTrap2 = true
+    }
+    const trap2Active = showTrap2 || trap2AlreadyAdded
+    //
+    // Badge count: 0, 1 or 2 depending on which traps are active
+    //
+    const trapCountValue = trap2Active ? 2 : (showTrap || trapAlreadyAdded) ? 1 : 0
     levelIndicator.updateTrapCount(trapCountValue)
     //
     // Scene-level lock: hero controls disabled during life deduction animation
@@ -1524,7 +1561,7 @@ export function sceneLevel1(k) {
       sceneLock.heroInst = heroInst
     }
     //
-    // Show life deduction animation if eligible on second visit
+    // Show life deduction animation for first trap if eligible on second visit
     //
     if (showTrap) {
       LifeDeduction.show({
@@ -1539,6 +1576,23 @@ export function sceneLevel1(k) {
         onComplete: () => {
           fallingLeafInst.poisonChance = POISON_LEAF_CHANCE
         }
+      })
+    }
+    //
+    // Show life deduction animation for second trap (random rising bugs)
+    //
+    if (showTrap2) {
+      const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
+      k.wait(trap2Delay, () => {
+        LifeDeduction.show({
+          k,
+          currentScore: get('lifeScore', 0),
+          levelIndicator,
+          sound,
+          deductFlag: TRAP2_FLAG,
+          sceneLock,
+          sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B }
+        })
       })
     }
     //
@@ -1669,6 +1723,10 @@ export function sceneLevel1(k) {
       wormTooltipTarget.x = giantWormInst.x + (giantWormInst.leanOffset || 0)
       wormTooltipTarget.height = Math.max(10, giantWormInst.riseAmount)
     })
+    //
+    // Second trap: spawn additional giant worms at random X positions on a timer
+    //
+    trap2Active && spawnTrap2WormBetweenTrees(k, heroInst, sound, FLOOR_Y)
     //
     // Tooltip on first tree trunk (note "C")
     //
@@ -3568,4 +3626,43 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst) {
       }
     }
   ])
+}
+//
+// Second trap: one giant worm at a time, emerging in gaps between the
+// seven melody note trees (never in front of them).
+//
+function spawnTrap2WormBetweenTrees(k, heroInst, sound, floorY) {
+  const noteXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
+  const gapCenters = []
+  for (let i = 0; i < noteXs.length - 1; i++) {
+    gapCenters.push((noteXs[i] + noteXs[i + 1]) / 2)
+  }
+  let activeWorm = null
+  const scheduleNext = () => {
+    const delay = TRAP2_WORM_INTERVAL_MIN + Math.random() * (TRAP2_WORM_INTERVAL_MAX - TRAP2_WORM_INTERVAL_MIN)
+    k.wait(delay, () => {
+      if (!heroInst?.character?.exists?.()) return
+      if (activeWorm && activeWorm.phase !== 'hidden') {
+        scheduleNext()
+        return
+      }
+      const x = gapCenters[Math.floor(Math.random() * gapCenters.length)]
+      activeWorm = GiantWorm.create({ k, x, floorY, hero: heroInst, sfx: sound })
+      const waitForRetract = () => {
+        if (!activeWorm || (activeWorm.phase === 'hidden' && activeWorm.riseAmount <= 0)) {
+          scheduleNext()
+          return
+        }
+        k.wait(0.4, waitForRetract)
+      }
+      k.wait(1.5, waitForRetract)
+    })
+  }
+  scheduleNext()
+}
+//
+// True when a decorative tree X would overlap a melody note-tree slot
+//
+function isNearNoteTreeX(x, noteTreeXs) {
+  return noteTreeXs.some(nx => Math.abs(x - nx) < NOTE_TREE_EXCLUSION_RADIUS)
 }

@@ -3,6 +3,7 @@ import * as Sound from '../../../utils/sound.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { set } from '../../../utils/progress.js'
 import { parseHex } from '../../../utils/helper.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 
 //
 // Life deduction animation constants
@@ -17,6 +18,10 @@ const RESULT_FADE_IN = 0.5
 const RESULT_HOLD = 1.5
 const FADE_OUT = 0.8
 const OVERLAY_OPACITY = 0
+//
+// How dark the level appears behind the life-deduction dialog (0 = none, 1 = black)
+//
+const OVERLAY_DIM_MAX = 0.42
 const LIFE_SCALE = 0.3
 const SHOW_DELAY = 0.5
 const INTRO_TEXT = "Life strikes back"
@@ -39,6 +44,18 @@ const OUTLINE_OFFSET = 1.5
 const BORDER_WIDTH = 3
 const BUBBLE_FRAME_ALPHA = 0.88
 const BUBBLE_FILL_ALPHA = 1.0
+//
+// Warm accent used as the complementary foreground on cool/dark scene backdrops
+//
+const COMPLEMENT_WARM_R = 224
+const COMPLEMENT_WARM_G = 128
+const COMPLEMENT_WARM_B = 64
+//
+// Time section uses black playfield — orange is its complement
+//
+const TIME_COMPLEMENT_R = 255
+const TIME_COMPLEMENT_G = 140
+const TIME_COMPLEMENT_B = 0
 //
 // Total animation duration (all phases combined)
 //
@@ -69,7 +86,7 @@ export function show(config) {
   //
   // Persist the deducted score and mark as used immediately
   //
-  const newScore = currentScore - DEDUCT_AMOUNT
+  const newScore = Math.max(0, currentScore - DEDUCT_AMOUNT)
   set('lifeScore', newScore)
   set(deductFlag, deductFlagValue)
   extraFlags?.forEach(flag => set(flag, true))
@@ -82,8 +99,9 @@ export function show(config) {
 // Runs the actual life deduction animation after the delay
 //
 function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb) {
-  const canvas = k.canvas
-  const backdropSnap = sceneBgRgb ? captureBackdropForLifeModal(k, canvas, sceneBgRgb) : null
+  const sceneBackdropHex = sceneBgRgb ? rgbToHex(sceneBgRgb) : null
+  sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(k, sceneBackdropHex)
+  const palette = resolveComplementaryPalette(sceneBgRgb)
   const centerX = CFG.visual.screen.width / 2
   const centerY = CFG.visual.screen.height / 2
   Tooltip.suppressAll()
@@ -94,9 +112,10 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   //
   sound && Sound.playScarySound(sound)
   //
-  // Dark overlay
+  // Full-screen cover in fixed screen space (letterbox + gameplay)
   //
   const overlay = k.add([
+    k.fixed(),
     k.z(CFG.visual.zIndex.ui + 50),
     k.opacity(0),
     {
@@ -106,9 +125,10 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     }
   ])
   //
-  // White rounded-rect bubble
+  // Rounded-rect bubble — scene fill with warm complementary border/text
   //
   const bubble = k.add([
+    k.fixed(),
     k.z(CFG.visual.zIndex.ui + 51),
     k.opacity(0),
     {
@@ -119,7 +139,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
           width: BOX_WIDTH + BORDER_WIDTH * 2,
           height: BOX_HEIGHT + BORDER_WIDTH * 2,
           radius: BOX_RADIUS + BORDER_WIDTH,
-          color: k.rgb(230, 233, 238),
+          color: k.rgb(palette.frameR, palette.frameG, palette.frameB),
           opacity: o * BUBBLE_FRAME_ALPHA
         })
         k.drawRect({
@@ -127,7 +147,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
           width: BOX_WIDTH,
           height: BOX_HEIGHT,
           radius: BOX_RADIUS,
-          color: k.rgb(72, 74, 82),
+          color: k.rgb(palette.fillR, palette.fillG, palette.fillB),
           opacity: o * BUBBLE_FILL_ALPHA
         })
       }
@@ -153,9 +173,10 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.text(INTRO_TEXT, { size: FONT_SIZE, align: 'center' }),
     k.pos(centerX, centerY + INTRO_Y_OFFSET),
     k.anchor('center'),
-    k.color(255, 255, 255),
+    k.color(palette.textR, palette.textG, palette.textB),
     k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 52.1)
+    k.z(CFG.visual.zIndex.ui + 52.1),
+    k.fixed()
   ])
   //
   // Life icon
@@ -189,9 +210,10 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.text(currentScore.toString(), { size: SCORE_FONT_SIZE }),
     k.pos(scoreX, scoreY),
     k.anchor('left'),
-    k.color(255, 255, 255),
+    k.color(palette.textR, palette.textG, palette.textB),
     k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 52.1)
+    k.z(CFG.visual.zIndex.ui + 52.1),
+    k.fixed()
   ])
   //
   // Result text outlines (black, drawn slightly behind)
@@ -211,9 +233,10 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.text(RESULT_TEXT, { size: FONT_SIZE }),
     k.pos(centerX, centerY + RESULT_Y_OFFSET),
     k.anchor('center'),
-    k.color(RESULT_COLOR_R, RESULT_COLOR_G, RESULT_COLOR_B),
+    k.color(palette.resultR, palette.resultG, palette.resultB),
     k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 52.1)
+    k.z(CFG.visual.zIndex.ui + 52.1),
+    k.fixed()
   ])
   //
   // Animation state machine
@@ -239,8 +262,8 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
       sound,
       sceneLock,
       onComplete,
-      backdropSnap,
-      canvas
+      sceneBackdropHex,
+      palette
     )
   })
 }
@@ -270,8 +293,8 @@ function onUpdateDeduction(
   sound,
   sceneLock,
   onComplete,
-  backdropSnap,
-  canvas
+  sceneBackdropHex,
+  palette
 ) {
   const { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines } = el
   if (state.phase === 'fadeIn') {
@@ -295,7 +318,7 @@ function onUpdateDeduction(
   } else if (state.phase === 'counting') {
     const p = Math.min(1, state.timer / COUNT_DURATION)
     const eased = 1 - Math.pow(1 - p, 2)
-    state.displayedScore = Math.round(fromScore - (fromScore - toScore) * eased)
+    state.displayedScore = Math.max(0, Math.round(fromScore - (fromScore - toScore) * eased))
     scoreText.text = state.displayedScore.toString()
     setOutlinesText(scoreOutlines, state.displayedScore.toString())
     if (state.displayedScore !== state.lastTickScore && sound) {
@@ -313,12 +336,12 @@ function onUpdateDeduction(
     const blinkValue = (Math.sin(state.blinkTimer * BLINK_SPEED * Math.PI * 2) + 1) / 2
     const blinkRgb = parseHex(BLINK_COLOR)
     scoreText.color = k.rgb(
-      30 + (blinkRgb[0] - 30) * blinkValue,
-      30 + (blinkRgb[1] - 30) * blinkValue,
-      30 + (blinkRgb[2] - 30) * blinkValue
+      palette.textR + (blinkRgb[0] - palette.textR) * blinkValue,
+      palette.textG + (blinkRgb[1] - palette.textG) * blinkValue,
+      palette.textB + (blinkRgb[2] - palette.textB) * blinkValue
     )
     if (state.blinkTimer >= BLINK_DURATION) {
-      scoreText.color = k.rgb(30, 30, 30)
+      scoreText.color = k.rgb(palette.textR, palette.textG, palette.textB)
       state.phase = 'resultFadeIn'
       state.timer = 0
     }
@@ -359,7 +382,7 @@ function onUpdateDeduction(
       k.destroy(resultText)
       resultOutlines.forEach(o => k.destroy(o))
       Tooltip.unsuppressAll()
-      backdropSnap && restoreSceneBackdrop(k, backdropSnap, canvas)
+      sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(k, sceneBackdropHex)
       sceneLock && (sceneLock.locked = false)
       sceneLock?.heroInst && (sceneLock.heroInst.controlsDisabled = false)
       onComplete?.()
@@ -367,53 +390,18 @@ function onUpdateDeduction(
   }
 }
 //
-// Snapshot Kaplay clear color, canvas CSS, and page chrome before locking modal backdrop.
-//
-function captureBackdropForLifeModal(k, canvas, sceneBgRgb) {
-  const snap = {
-    prevKapBg: k.getBackground(),
-    prevCanvasBg: canvas ? canvas.style.getPropertyValue('background-color') : '',
-    prevHtml: '',
-    prevBody: ''
-  }
-  if (typeof document !== 'undefined') {
-    snap.prevHtml = document.documentElement.style.backgroundColor
-    snap.prevBody = document.body.style.backgroundColor
-    const pageRgb = `rgb(${sceneBgRgb.r}, ${sceneBgRgb.g}, ${sceneBgRgb.b})`
-    document.documentElement.style.backgroundColor = pageRgb
-    document.body.style.backgroundColor = pageRgb
-  }
-  k.setBackground(k.rgb(sceneBgRgb.r, sceneBgRgb.g, sceneBgRgb.b))
-  canvas && canvas.style.setProperty(
-    'background-color',
-    `rgb(${sceneBgRgb.r}, ${sceneBgRgb.g}, ${sceneBgRgb.b})`,
-    'important'
-  )
-  return snap
-}
-//
 // Letterboxed margins live in fixed screen space — overlay must use fixed draw calls.
 //
 function drawFullscreenDimmer(k, overlayOpacity, sceneBgRgb) {
-  const dim = overlayOpacity * OVERLAY_OPACITY
+  if (overlayOpacity <= 0) return
+  //
+  // Semi-transparent black dim — the level stays visible underneath while
+  // the dialog reads clearly on top. Canvas CSS backdrop (set separately)
+  // keeps letterbox bars matched to the scene fill colour.
+  //
+  const dimStrength = sceneBgRgb ? OVERLAY_DIM_MAX : OVERLAY_OPACITY
+  const dim = overlayOpacity * dimStrength
   if (dim <= 0) return
-  if (sceneBgRgb) {
-    //
-    // Same perceived darken as rgba(0,0,0,dim) over a flat sceneBg fill (letterbox + gameplay).
-    //
-    const r = Math.round(sceneBgRgb.r * (1 - dim))
-    const g = Math.round(sceneBgRgb.g * (1 - dim))
-    const b = Math.round(sceneBgRgb.b * (1 - dim))
-    k.drawRect({
-      width: k.width(),
-      height: k.height(),
-      pos: k.vec2(0, 0),
-      color: k.rgb(r, g, b),
-      opacity: 1,
-      fixed: true
-    })
-    return
-  }
   k.drawRect({
     width: k.width(),
     height: k.height(),
@@ -424,16 +412,50 @@ function drawFullscreenDimmer(k, overlayOpacity, sceneBgRgb) {
   })
 }
 //
-// Restore Kaplay clear color, canvas CSS, and page chrome after the modal.
+// Builds fill + warm complementary text/frame colours from the scene backdrop
 //
-function restoreSceneBackdrop(k, snap, canvas) {
-  if (!snap) return
-  snap.prevKapBg ? k.setBackground(snap.prevKapBg) : k.setBackground(0, 0, 0)
-  canvas && (snap.prevCanvasBg
-    ? canvas.style.setProperty('background-color', snap.prevCanvasBg, 'important')
-    : canvas.style.removeProperty('background-color'))
-  if (typeof document !== 'undefined') {
-    document.documentElement.style.backgroundColor = snap.prevHtml
-    document.body.style.backgroundColor = snap.prevBody
+function resolveComplementaryPalette(sceneBgRgb) {
+  const fallback = {
+    fillR: 72,
+    fillG: 74,
+    fillB: 82,
+    frameR: 230,
+    frameG: 233,
+    frameB: 238,
+    textR: 255,
+    textG: 255,
+    textB: 255,
+    resultR: RESULT_COLOR_R,
+    resultG: RESULT_COLOR_G,
+    resultB: RESULT_COLOR_B
   }
+  if (!sceneBgRgb) return fallback
+  const { r, g, b } = sceneBgRgb
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b
+  const isTimeBlack = r < 8 && g < 8 && b < 8
+  const accentR = isTimeBlack ? TIME_COMPLEMENT_R : COMPLEMENT_WARM_R
+  const accentG = isTimeBlack ? TIME_COMPLEMENT_G : COMPLEMENT_WARM_G
+  const accentB = isTimeBlack ? TIME_COMPLEMENT_B : COMPLEMENT_WARM_B
+  const useWarmAccent = isTimeBlack || luminance < 130
+  return {
+    fillR: r,
+    fillG: g,
+    fillB: b,
+    frameR: useWarmAccent ? accentR : 230,
+    frameG: useWarmAccent ? accentG : 233,
+    frameB: useWarmAccent ? accentB : 238,
+    textR: useWarmAccent ? accentR : 255,
+    textG: useWarmAccent ? accentG : 255,
+    textB: useWarmAccent ? accentB : 255,
+    resultR: useWarmAccent ? accentR : RESULT_COLOR_R,
+    resultG: useWarmAccent ? accentG : RESULT_COLOR_G,
+    resultB: useWarmAccent ? accentB : RESULT_COLOR_B
+  }
+}
+//
+// Converts scene backdrop RGB to a hex string for canvas-backdrop sync
+//
+function rgbToHex(sceneBgRgb) {
+  const hex = (n) => n.toString(16).padStart(2, '0')
+  return `#${hex(sceneBgRgb.r)}${hex(sceneBgRgb.g)}${hex(sceneBgRgb.b)}`
 }

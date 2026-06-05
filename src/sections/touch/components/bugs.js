@@ -451,6 +451,12 @@ export function onUpdate(inst, dt) {
         inst.vx = Math.cos(inst.movementAngle) * inst.crawlSpeed
         inst.vy = Math.sin(inst.movementAngle) * inst.crawlSpeed
       }
+    } else if (inst.isPlatformWalker) {
+      //
+      // Platform walker (trap2 bug4): always crawl, never stop
+      //
+      inst.state = 'crawling'
+      inst.vy = 0
     } else if (!isSmallBug) {
       //
       // Big bugs: use timer-based state machine

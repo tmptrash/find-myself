@@ -1,5 +1,6 @@
 import { CFG, getLevelColors } from '../cfg.js'
 import { getColor, getRGB, parseHex, toCanvas } from '../../../utils/helper.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/level-indicator.js'
@@ -217,9 +218,11 @@ export function initScene(config) {
   const pfColor = platformColor || resolvedLevelColors?.platform || CFG.visual.colors.platform
   const playfieldColor = resolvedLevelColors?.playfield ?? CFG.visual.colors.playfield ?? pfColor
   //
-  // Set canvas background to match platform color at edges (avoids visible strips in letterbox)
+  // The very top/bottom edges of the canvas are covered by the platform strips
+  // (pfColor), so use pfColor as the backdrop to eliminate visible seams at
+  // the letterbox boundary.
   //
-  k.setBackground(k.Color.fromHex(bgColor))
+  CanvasBackdrop.applyCanvasBackdrop(k, pfColor)
   //
   // Set gravity
   //
@@ -242,6 +245,7 @@ export function initScene(config) {
   })
   k.onSceneLeave(() => {
     if (breathMusic && breathMusic.stop) breathMusic.stop()
+    CanvasBackdrop.clearCanvasBackdrop(k)
   })
   Sound.startAudioContext(sound)
   Sound.unmuteProceduralSounds()

@@ -2097,14 +2097,11 @@ export function sceneLevel0(k) {
       heroBodyColor,
       storageKey: 'touch.level0BonusCollected',
       //
-      // The visible log is drawn centered on `x` with width 80 plus
-      // ~5.5 px of squashed endcaps on each side (~91 px on-screen).
-      // Keep the collider centered on `x` (same as level 2) so the hero
-      // lands on the painted log instead of tunneling through a shifted
-      // invisible box offset to the right.
+      // Collision box shifted right by half its width so its left edge
+      // aligns with the platform anchor point.
       //
       collisionWidth: 82,
-      platformCollisionXOffset: 0,
+      platformCollisionXOffset: 82 / 2,
       platformCollisionYOffset: 9,
       platformZ: ANTIHERO_PLATFORM_Z_INDEX
     })

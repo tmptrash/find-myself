@@ -398,7 +398,8 @@ export function sceneLevel4(k) {
       sound
     })
     //
-    // Purple pit fills so both gaps show the playfield interior color
+    // Purple pit fills — z placed below the brain roots layer so roots
+    // extend visually into both pits (same technique as level 3 pit shaft).
     //
     const pitTopY = CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
     WordPitFill.addPitShaftFill(k, {
@@ -406,14 +407,16 @@ export function sceneLevel4(k) {
       width: bladeWidth,
       topY: pitTopY,
       bottomY: k.height(),
-      playfieldColor
+      playfieldColor,
+      zIndex: CFG.visual.zIndex.wordPlayfieldFill + 0.3
     })
     WordPitFill.addPitShaftFill(k, {
       x: movingPlatform2X - bladeWidth / 2,
       width: bladeWidth,
       topY: pitTopY,
       bottomY: k.height(),
-      playfieldColor
+      playfieldColor,
+      zIndex: CFG.visual.zIndex.wordPlayfieldFill + 0.3
     })
     //
     // Setup letter throwing mechanic (hero throws letters at creature)

@@ -72,18 +72,14 @@ const BONUS_PLATFORM_X = MAIN_PLATFORM_X + MAIN_PLATFORM_W / 2 + 88
 const BONUS_PLATFORM_Y = MAIN_PLATFORM_Y - 95
 const BONUS_PLATFORM_W = 72
 //
-// Collision box covers the whole visible log: width spans the rendered
-// log barrel (body + ~5.5 px squashed endcap on each side) and the box
-// stays centered on the log's x. Earlier X offsets shifted the collider
-// far to the right of the visible bark, leaving the left half of the log
-// with no collision under it and letting the hero fall through whenever
-// he didn't land squarely on the mini hero. Height matches the regular
-// wooden platform (MAIN_PLATFORM_H) so the hidden log feels like a real
-// platform when the hero lands on it.
+// Collision box for the hidden log platform.  The box is shifted right by
+// half its width so its left edge aligns with the platform anchor point.
+// Height matches the regular wooden platform (MAIN_PLATFORM_H) so the
+// hidden log feels like a real platform when the hero lands on it.
 //
 const BONUS_PLATFORM_COLLISION_WIDTH = 84
 const BONUS_PLATFORM_COLLISION_HEIGHT = MAIN_PLATFORM_H
-const BONUS_PLATFORM_COLLISION_X_OFFSET = 0
+const BONUS_PLATFORM_COLLISION_X_OFFSET = BONUS_PLATFORM_COLLISION_WIDTH / 2
 const BONUS_PLATFORM_COLLISION_Y_OFFSET = 9
 //
 // Single red spike cluster to the right of the hidden bonus platform

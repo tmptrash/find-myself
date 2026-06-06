@@ -23,6 +23,7 @@ import { drawCrow } from '../../../utils/crow.js'
 import { addTouchSectionFloorRocks, addSingleFloorRockAt } from '../utils/floor-rocks.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import * as BonusHero from '../components/bonus-hero.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -169,6 +170,7 @@ const L1_BACK_ROW_NEAR_BLEND = 0.36
 const L1_SCENE_BG_R = 28
 const L1_SCENE_BG_G = 50
 const L1_SCENE_BG_B = 58
+const L1_SCENE_BG_HEX = '#1C323A'
 //
 // Mushroom decoration constants for level 1
 //
@@ -372,10 +374,10 @@ const TRAP2_THRESHOLD = 5
 const TRAP2_FLAG = 'touch.level1Trap2Added'
 const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
 //
-// Random worm constants for the second trap
+// Minimum pause (seconds) after a trap2 worm fully retracts before it
+// teleports to a new random gap position and waits for hero proximity again.
 //
-const TRAP2_WORM_INTERVAL_MIN = 4.0
-const TRAP2_WORM_INTERVAL_MAX = 9.0
+const TRAP2_WORM_REPOSITION_DELAY = 1.5
 //
 // Decorative parallax trees must not overlap the seven melody note trees
 //
@@ -395,17 +397,12 @@ export function sceneLevel1(k) {
     //
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
-    k.setBackground(k.rgb(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B))
     //
-    // Letterbox outside the scaled game view stays transparent in CSS; pin canvas backing to scene grey.
+    // Sync canvas + CSS backdrop so letterbox bars match the scene background.
     //
-    k.canvas?.style.setProperty(
-      'background-color',
-      `rgb(${L1_SCENE_BG_R}, ${L1_SCENE_BG_G}, ${L1_SCENE_BG_B})`,
-      'important'
-    )
+    CanvasBackdrop.applyCanvasBackdrop(k, L1_SCENE_BG_HEX)
     k.onSceneLeave(() => {
-      k.canvas?.style.removeProperty('background-color')
+      CanvasBackdrop.clearCanvasBackdrop(k)
     })
     //
     // Set gravity
@@ -1724,9 +1721,14 @@ export function sceneLevel1(k) {
       wormTooltipTarget.height = Math.max(10, giantWormInst.riseAmount)
     })
     //
-    // Second trap: spawn additional giant worms at random X positions on a timer
+    // Second trap: a second permanent worm placed at a random gap between
+    // note trees. It uses proximity-based triggering (same TRIGGER_DISTANCE
+    // as the main worm). After it retracts, it teleports to a new random gap
+    // and waits again. Only one worm can rise at a time (mutex via .blocked).
     //
-    trap2Active && spawnTrap2WormBetweenTrees(k, heroInst, sound, FLOOR_Y)
+    const trap2WormInst = trap2Active
+      ? createTrap2Worm(k, heroInst, sound, FLOOR_Y)
+      : null
     //
     // Tooltip on first tree trunk (note "C")
     //
@@ -1804,10 +1806,21 @@ export function sceneLevel1(k) {
       //
       FallingLeaf.onUpdate(fallingLeafInst)
       //
+      // Giant worm mutex: only one worm may rise at a time.
+      // Block the other as long as either is not fully hidden.
+      //
+      if (trap2WormInst) {
+        const mainActive = giantWormInst.phase !== 'hidden' || giantWormInst.riseAmount > 0
+        const t2Active = trap2WormInst.phase !== 'hidden' || trap2WormInst.riseAmount > 0
+        giantWormInst.blocked = t2Active
+        trap2WormInst.blocked = mainActive
+      }
+      //
       // Giant worm collision: hero dies if overlapping any visible part of the body
       //
-      if (!heroInst.isDying && heroInst.character?.pos && giantWormInst.riseAmount > 0) {
-        checkGiantWormCollision(k, heroInst, giantWormInst, levelIndicator)
+      if (!heroInst.isDying && heroInst.character?.pos) {
+        giantWormInst.riseAmount > 0 && checkGiantWormCollision(k, heroInst, giantWormInst, levelIndicator)
+        trap2WormInst && trap2WormInst.riseAmount > 0 && checkGiantWormCollision(k, heroInst, trap2WormInst, levelIndicator)
       }
       
       //
@@ -2459,6 +2472,7 @@ export function sceneLevel1(k) {
     // ESC key to return to menu
     //
     k.onKeyPress("escape", () => {
+      if (LevelHelp.isAnyPanelOpen()) return
       goToMenuAfterAssets(k)
     })
   })
@@ -3631,34 +3645,39 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst) {
 // Second trap: one giant worm at a time, emerging in gaps between the
 // seven melody note trees (never in front of them).
 //
-function spawnTrap2WormBetweenTrees(k, heroInst, sound, floorY) {
+function createTrap2Worm(k, heroInst, sound, floorY) {
   const noteXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
   const gapCenters = []
   for (let i = 0; i < noteXs.length - 1; i++) {
     gapCenters.push((noteXs[i] + noteXs[i + 1]) / 2)
   }
-  let activeWorm = null
-  const scheduleNext = () => {
-    const delay = TRAP2_WORM_INTERVAL_MIN + Math.random() * (TRAP2_WORM_INTERVAL_MAX - TRAP2_WORM_INTERVAL_MIN)
-    k.wait(delay, () => {
-      if (!heroInst?.character?.exists?.()) return
-      if (activeWorm && activeWorm.phase !== 'hidden') {
-        scheduleNext()
-        return
-      }
-      const x = gapCenters[Math.floor(Math.random() * gapCenters.length)]
-      activeWorm = GiantWorm.create({ k, x, floorY, hero: heroInst, sfx: sound })
-      const waitForRetract = () => {
-        if (!activeWorm || (activeWorm.phase === 'hidden' && activeWorm.riseAmount <= 0)) {
-          scheduleNext()
-          return
-        }
-        k.wait(0.4, waitForRetract)
-      }
-      k.wait(1.5, waitForRetract)
-    })
+  const pickNewX = (currentX) => {
+    //
+    // Prefer a gap that is different from the current one to avoid
+    // the worm always re-emerging at the same spot.
+    //
+    const others = gapCenters.filter(x => x !== currentX)
+    const pool = others.length > 0 ? others : gapCenters
+    return pool[Math.floor(Math.random() * pool.length)]
   }
-  scheduleNext()
+  const initialX = pickNewX(null)
+  const worm = GiantWorm.create({ k, x: initialX, floorY, hero: heroInst, sfx: sound })
+  //
+  // After each retract, wait TRAP2_WORM_REPOSITION_DELAY then teleport the
+  // worm to a new random gap so it triggers the next time the hero walks by.
+  //
+  let wasVisible = false
+  k.onUpdate(() => {
+    const nowVisible = worm.phase !== 'hidden' || worm.riseAmount > 0
+    if (wasVisible && !nowVisible) {
+      k.wait(TRAP2_WORM_REPOSITION_DELAY, () => {
+        if (!heroInst?.character?.exists?.()) return
+        worm.x = pickNewX(worm.x)
+      })
+    }
+    wasVisible = nowVisible
+  })
+  return worm
 }
 //
 // True when a decorative tree X would overlap a melody note-tree slot

@@ -15,9 +15,14 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 
 //
-const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
+// Use platform color for the life-deduction backdrop and canvas letterbox,
+// because the visible top/bottom border areas are painted with the platform
+// color, not the sky background color.
+//
+const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.platform)
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -86,10 +91,31 @@ const BONUS_HERO_COLOR = "#8B5A50"
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level1TrapAdded'
 //
+// Second trap: anti-hero's clock platform slides RIGHT when hero approaches,
+// bumps into the neighboring platform, then returns.
+// Activated when hero score >= threshold.
+//
+const TRAP2_HERO_SCORE_THRESHOLD = 2
+const TRAP2_FLAG = 'time.level1Trap2Active'
+//
+// Reduced trigger distance so the platform only reacts when the hero is
+// actually airborne and close — not when standing on the platform to the right.
+//
+const TRAP2_TRIGGER_DISTANCE = 220
+const TRAP2_SLIDE_SPEED = 320
+const TRAP2_RETURN_SPEED = 200
+//
+// Rightward slide limit: must not exceed the first upper platform to the right.
+// With PLATFORM_SPACING=180 the first upper platform is ~160px right of the
+// anti-hero clock platform. Keep slide < that gap so the platforms just touch.
+//
+const TRAP2_SLIDE_MAX = 148
+const TRAP2_PAUSE_DURATION = 0.6
+//
 // Night music controller: darkness threshold for fading music, and cricket intervals
 //
 const NIGHT_DARKNESS_THRESHOLD = 0.45
-const NIGHT_MUSIC_TRANSITION_SPEED = 0.55
+const NIGHT_MUSIC_TRANSITION_SPEED = 1.5
 const NIGHT_CRICKET_INTERVAL_MIN = 1.5
 const NIGHT_CRICKET_INTERVAL_MAX = 4.0
 //
@@ -98,6 +124,12 @@ const NIGHT_CRICKET_INTERVAL_MAX = 4.0
 const BOTTOM_PLATFORM_TOP = 1080 - PLATFORM_BOTTOM_HEIGHT  // 930
 const FIRST_FLOOR_FLOOR_Y = 700   // Raised first floor (was 910)
 const SECOND_FLOOR_FLOOR_Y = 400  // Raised second floor (was 554)
+//
+// Hero must be well above this Y to trigger trap 2. Set to 30px below
+// the second floor so a hero jumping from the first floor (peak ≈ Y 548)
+// cannot trigger it — only heroes actually on or near the second floor can.
+//
+const TRAP2_MAX_HERO_Y = SECOND_FLOOR_FLOOR_Y + 30  // 430
 //
 // Lower platform: narrow platform in left part of screen
 //
@@ -218,7 +250,11 @@ export function sceneLevel1(k) {
       },
       showGameClock: true
     })
-    
+    //
+    // Override canvas backdrop to match the platform color (top/bottom border
+    // areas are painted with platform color, not sky background color).
+    //
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.platform)
     //
     // Override z-index for heroes
     //
@@ -324,6 +360,22 @@ export function sceneLevel1(k) {
       levelIndicator
     })
     //
+    // Trap 2: clock platform slides right when hero approaches, then returns.
+    // Activates once hero score reaches the threshold and persists across visits.
+    //
+    const currentHeroScore = get('heroScore', 0)
+    const trap2AlreadyActive = get(TRAP2_FLAG, false)
+    const trap2Active = trap2AlreadyActive || currentHeroScore >= TRAP2_HERO_SCORE_THRESHOLD
+    if (trap2Active && !trap2AlreadyActive) {
+      set(TRAP2_FLAG, true)
+    }
+    const trap2State = {
+      phase: 'idle',
+      slideOffset: 0,
+      pauseTimer: 0,
+      frozen: false
+    }
+    //
     // Life deduction: show hint at level start if lifeScore >= threshold
     // 5th platform only falls if the hint was shown (current or previous visit)
     //
@@ -331,7 +383,7 @@ export function sceneLevel1(k) {
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    levelIndicator.updateTrapCount((trapEnabled ? 1 : 0) + (trap2Active ? 1 : 0))
     if (showTrap) {
       LifeDeduction.show({
         k,
@@ -428,11 +480,10 @@ export function sceneLevel1(k) {
         enableColorChange: true,
         levelIndicator,
         falling: isFifthPlatform && trapEnabled,
-        fallTarget: isFifthPlatform && trapEnabled ? BOTTOM_PLATFORM_TOP + 20 : 0
+        fallTarget: isFifthPlatform && trapEnabled ? BOTTOM_PLATFORM_TOP + 30 : 0
       })
       
       clockPlatforms.push(platform)
-      
       //
       // Store reference to last lower platform
       //
@@ -561,6 +612,10 @@ export function sceneLevel1(k) {
       clockPlatforms.forEach(platform => {
         TimePlatform.onUpdate(platform)
       })
+      //
+      // Trap 2 update: slide the anti-hero clock platform right/back
+      //
+      trap2Active && onUpdateTrap2(k, trap2State, antiHeroClockPlatform, antiHero, hero)
       
       //
       // Check if hero reached last lower platform and show upper platforms
@@ -728,11 +783,116 @@ export function sceneLevel1(k) {
       storageKey: BONUS_STORAGE_KEY,
       platformText: "00",
       platformFontSize: 48,
-      platformCollisionHeight: BONUS_PLATFORM_COLLISION_HEIGHT
+      platformCollisionHeight: BONUS_PLATFORM_COLLISION_HEIGHT,
+      //
+      // Collision box shifted down by half its height and right by half its width.
+      //
+      platformCollisionYOffset: BONUS_PLATFORM_COLLISION_HEIGHT / 2,
+      platformCollisionXOffset: BONUS_PLATFORM_WIDTH / 2,
+      //
+      // Smaller approach distance so the platform only materialises when the hero
+      // is close (within ~180px vertically), not while jumping on the floor above.
+      //
+      revealDistance: 180
     })
   })
 }
 
+/**
+ * Updates trap 2 state: slides the anti-hero clock platform right when hero
+ * is near, bumps into the neighbor, returns, then repeats. If the hero lands
+ * on the platform at any point during the slide or while at the right limit,
+ * the platform freezes so the annihilation can occur naturally.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} state - Trap 2 mutable state
+ * @param {Object} platformInst - TimePlatform instance (anti-hero clock platform)
+ * @param {Object} antiHeroInst - Anti-hero instance
+ * @param {Object} heroInst - Hero instance
+ */
+function onUpdateTrap2(k, state, platformInst, antiHeroInst, heroInst) {
+  if (state.frozen) return
+  if (!heroInst?.character?.exists?.()) return
+  if (!antiHeroInst?.character?.exists?.()) return
+  if (!platformInst?.platform?.exists?.()) return
+  const dt = k.dt()
+  const platformX = platformInst.platform.pos.x
+  const heroX = heroInst.character.pos.x
+  const heroY = heroInst.character.pos.y
+  const platformY = platformInst.platform.pos.y
+  //
+  // Check if hero has landed on the sliding platform at any point.
+  // Use bounding-box proximity: feet within ±half-width, Y just above top.
+  //
+  const HALF_W = 30
+  const heroOnPlatform = (
+    Math.abs(heroX - platformX) < HALF_W + 10 &&
+    heroY >= platformY - 30 &&
+    heroY <= platformY + 20 &&
+    heroInst.character.isGrounded()
+  )
+  if (heroOnPlatform && state.phase !== 'idle') {
+    state.frozen = true
+    return
+  }
+  if (state.phase === 'idle') {
+    //
+    // Trigger only when hero is close, approaching from the right, AND
+    // at the same level (on or near the second floor — not below it).
+    // heroY < TRAP2_MAX_HERO_Y ensures the hero is in the air jumping up
+    // rather than standing on the first floor directly below.
+    //
+    const dist = Math.abs(heroX - platformX)
+    const heroAtSameLevel = heroY < TRAP2_MAX_HERO_Y
+    //
+    // Only trigger when hero is airborne (jumping) — not while standing on
+    // the platform to the right of the anti-hero. isGrounded() returns true
+    // when the hero is resting on any surface, so !isGrounded() means the
+    // hero is in the air, i.e. already in a jump toward the anti-hero.
+    //
+    const heroAirborne = !heroInst.character.isGrounded?.()
+    if (dist < TRAP2_TRIGGER_DISTANCE && heroX > platformX && heroAtSameLevel && heroAirborne) {
+      state.phase = 'sliding-out'
+    }
+    return
+  }
+  if (state.phase === 'sliding-out') {
+    state.slideOffset += TRAP2_SLIDE_SPEED * dt
+    if (state.slideOffset >= TRAP2_SLIDE_MAX) {
+      state.slideOffset = TRAP2_SLIDE_MAX
+      state.phase = 'pausing'
+      state.pauseTimer = 0
+    }
+    moveTrap2Platform(platformInst, antiHeroInst, ANTIHERO_CLOCK_PLATFORM_X + state.slideOffset)
+    return
+  }
+  if (state.phase === 'pausing') {
+    state.pauseTimer += dt
+    if (state.pauseTimer >= TRAP2_PAUSE_DURATION) {
+      state.phase = 'sliding-back'
+    }
+    return
+  }
+  if (state.phase === 'sliding-back') {
+    state.slideOffset -= TRAP2_RETURN_SPEED * dt
+    if (state.slideOffset <= 0) {
+      state.slideOffset = 0
+      state.phase = 'idle'
+    }
+    moveTrap2Platform(platformInst, antiHeroInst, ANTIHERO_CLOCK_PLATFORM_X + state.slideOffset)
+  }
+}
+//
+// Moves the anti-hero clock platform and its anti-hero character to targetX.
+//
+function moveTrap2Platform(platformInst, antiHeroInst, targetX) {
+  const dx = targetX - platformInst.platform.pos.x
+  platformInst.platform.pos.x = targetX
+  platformInst.timerText.pos.x += dx
+  platformInst.outlineTexts.forEach(t => { t.pos.x += dx })
+  if (antiHeroInst?.character?.exists?.()) {
+    antiHeroInst.character.pos.x += dx
+  }
+}
 /**
  * Creates all platforms for level 1 (two-floor corridor)
  * @param {Object} k - Kaplay instance

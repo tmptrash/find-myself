@@ -79,8 +79,8 @@ const HERO_TOOLTIP_Y_OFFSET = -60
 //
 // Bonus hero — hidden platform shaped as 00:00, top-left of rightmost platform
 //
-const BONUS_PLATFORM_X = 1100
-const BONUS_PLATFORM_Y = 530
+const BONUS_PLATFORM_X = 1020
+const BONUS_PLATFORM_Y = 555
 //
 // Collision width is wider than the visual "00:00" text so the hero can reliably
 // land on the platform. The visual (text) is drawn centered and is unaffected by this.
@@ -684,10 +684,14 @@ export function sceneLevel0(k) {
       storageKey: BONUS_STORAGE_KEY,
       approachFromAbove: true,
       revealDistance: 120,
-      collisionWidth: 88,
+      //
+      // Collision box: shifted right by ~half the original width, then widened 5px
+      // on each side. XOffset = original(60) − halfWidth(30) = 30.
+      //
+      collisionWidth: 69,
       platformCollisionHeight: 12,
-      platformCollisionXOffset: 16,
-      platformCollisionYOffset: 12,
+      platformCollisionXOffset: 30,
+      platformCollisionYOffset: 0,
       platformText: "00:00"
     })
     //

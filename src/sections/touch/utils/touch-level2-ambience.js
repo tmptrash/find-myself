@@ -343,7 +343,7 @@ function addWatchingSnowman(k, heroInst, floorY, rightMargin, logPileX) {
   return snowmanX
 }
 
-const L2_CROW_MP3_VOLUME = 0.65
+const L2_CROW_MP3_VOLUME = 0.9
 const L2_CROW_MP3_NAMES = ['crow0']
 
 //
@@ -383,7 +383,10 @@ function startDistantWildlifeTimers(k, sound, crowAnimState) {
     }
     if (owlTimer <= 0) {
       if (Math.random() < 0.55) {
-        sound && Sound.playOwlSound(sound)
+        //
+        // Louder owl so it cuts through the quieter background music in L2
+        //
+        sound && Sound.playOwlSound(sound, 1.6)
       }
       owlTimer = L2_OWL_INTERVAL_MIN + Math.random() * (L2_OWL_INTERVAL_MAX - L2_OWL_INTERVAL_MIN)
     }
@@ -409,7 +412,15 @@ function addCrowOnLogs(k, floorY, logPileX, crowAnimState, heroInst) {
       draw() {
         const heroX = heroInst?.character?.pos?.x ?? cx + 1
         const s = heroX >= cx ? 1 : -1
-        drawCrow(k, cx, perchY, sc, s, crowAnimState.mouthOpen, heroInst)
+        //
+        // Full brightness boost makes the crow white — stands out against
+        // the dark fir-tree background only in L2.
+        //
+        //
+        // Full brightness body (white crow), wings at lower boost so they
+        // remain visible as light gray against the white body.
+        //
+        drawCrow(k, cx, perchY, sc, s, crowAnimState.mouthOpen, heroInst, 255, 155)
       }
     }
   ])

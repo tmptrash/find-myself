@@ -9,19 +9,16 @@ import * as Tooltip from '../../../utils/tooltip.js'
 //
 const PLATFORM_HEIGHT = 20
 const TIME_PLATFORM_COLLISION_HEIGHT = 28
-const REVEAL_DISTANCE = 150
 //
 // Approximate distance from hero center to hero feet (half collision height + offset)
 //
 const HERO_FEET_OFFSET = 38
 //
-// How far above the platform surface the hero's feet can be to trigger
-// collision. Very generous on purpose: enabling the invisible collider
-// many frames BEFORE impact gives Kaplay's discrete physics solver
-// multiple chances to register the landing even at high fall speeds and
-// low frame rates. The collider stays invisible (opacity 0) so a wide
-// activation radius has no visual cost — the log itself only appears
-// when the hero actually lands.
+// Default vertical approach distance: how far above the platform the hero's
+// feet can be before the hidden collider activates. Generous on purpose —
+// the collider is invisible so a wide activation radius has no visual cost,
+// and it ensures high-velocity falls never skip over the invisible platform.
+// Individual platforms can override this via the revealDistance config param.
 //
 const APPROACH_DISTANCE = 320
 //
@@ -131,7 +128,7 @@ export function create(config) {
     k, x, y, width,
     heroInst, levelIndicator, sfx,
     approachFromAbove = false,
-    revealDistance = REVEAL_DISTANCE,
+    revealDistance = APPROACH_DISTANCE,
     revealWidth = null,
     collisionWidth = null,
     heroBodyColor = null,
@@ -328,7 +325,7 @@ export function isHeroStandingOn(inst, heroInst) {
   const platformSurface = floatY + inst.collisionAreaTop
   const heroFeetY = heroPos.y + HERO_FEET_OFFSET
   return heroFeetY >= platformSurface - LAND_TOLERANCE
-    && heroFeetY <= platformSurface + APPROACH_DISTANCE
+    && heroFeetY <= platformSurface + inst.revealDistance
 }
 //
 // Per-frame update: reveal, sparkle, collection detection
@@ -464,7 +461,7 @@ function onUpdate(inst) {
       //
       const ABOVE_MARGIN = 5
       const heroAboveSurface = heroFeetY < platformSurface - ABOVE_MARGIN
-      const heroWithinApproachRange = heroFeetY > platformSurface - APPROACH_DISTANCE
+      const heroWithinApproachRange = heroFeetY > platformSurface - inst.revealDistance
       const primaryDetection = heroAboveSurface && heroWithinApproachRange
       const predictedFeetY = heroFeetY + velY * dt * VELOCITY_PREDICTION_FRAMES
       const willCrossSurface = isFalling
@@ -474,7 +471,7 @@ function onUpdate(inst) {
         && inst.lastHeroFeetY !== null
         && inst.lastHeroFeetY <= platformSurface + LAND_TOLERANCE
         && heroFeetY > platformSurface
-        && heroFeetY <= platformSurface + APPROACH_DISTANCE
+        && heroFeetY <= platformSurface + inst.revealDistance
       const detected = horizontallyAligned && (
         primaryDetection
         || willCrossSurface
@@ -508,8 +505,8 @@ function onUpdate(inst) {
       // hero clearly drifts away so a jump from below doesn't get
       // stopped mid-air.
       //
-      const stillNearVertically = heroFeetY > platformSurface - APPROACH_DISTANCE * 1.5
-        && heroFeetY < platformSurface + APPROACH_DISTANCE
+      const stillNearVertically = heroFeetY > platformSurface - inst.revealDistance * 1.5
+        && heroFeetY < platformSurface + inst.revealDistance
       const heldOpen = inst.collidableHoldTimer > 0 && horizontallyAligned && stillNearVertically
       const shouldBeCollidable = detected || heldOpen
       inst.platform.pos.y = shouldBeCollidable ? floatY + inst.collisionYOffset : inst.offScreenY

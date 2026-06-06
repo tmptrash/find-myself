@@ -266,7 +266,12 @@ export function initScene(config) {
     sideWallWidth,
     floorY: k.height() - bottomPlatformHeight,
     levelIndicator,
-    sound
+    sound,
+    //
+    // Pass backdrop hex so syncPanelBackdrop can dim the canvas letterbox bars
+    // while the buy-help panel is open, preventing visible strips.
+    //
+    sceneBackdropHex: CFG.visual.colors.platform
   })
   TouchControls.create({
     k,
@@ -280,6 +285,11 @@ export function initScene(config) {
   //
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => {
+      //
+      // If a help panel is open, Esc closes only the panel (handled inside
+      // level-help.js). Do not also navigate to the menu.
+      //
+      if (LevelHelp.isAnyPanelOpen()) return
       //
       // Stop time section music when leaving section
       //

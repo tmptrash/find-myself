@@ -970,6 +970,7 @@ export function sceneLevel4(k) {
     // ESC key to return to menu
     //
     k.onKeyPress("escape", () => {
+      if (LevelHelp.isAnyPanelOpen()) return
       goToMenuAfterAssets(k)
     })
   })

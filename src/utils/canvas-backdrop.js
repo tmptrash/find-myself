@@ -32,6 +32,26 @@ export function applyCanvasBackdrop(k, colorHex) {
 }
 
 /**
+ * Updates ONLY the CSS backdrop (not Kaplay's background clear color).
+ * Used during animated transitions to gradually match the letterbox bars
+ * with the current canvas state without disturbing Kaplay's render loop.
+ * @param {HTMLCanvasElement} canvas - The Kaplay canvas element
+ * @param {number} r - Red channel 0–255
+ * @param {number} g - Green channel 0–255
+ * @param {number} b - Blue channel 0–255
+ */
+export function setCssBackdrop(canvas, r, g, b) {
+  const css = `rgb(${r}, ${g}, ${b})`
+  document.documentElement.style.setProperty('background-color', css, 'important')
+  document.body.style.setProperty('background-color', css, 'important')
+  let el = canvas
+  while (el) {
+    el.style.setProperty('background-color', css, 'important')
+    if (el === document.documentElement) break
+    el = el.parentElement
+  }
+}
+/**
  * Restores default black page chrome and clears canvas CSS backdrop
  * @param {Object} k - Kaplay instance
  */

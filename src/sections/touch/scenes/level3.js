@@ -19,6 +19,8 @@ import { drawFirTree } from '../components/fir-tree.js'
 import { arcY } from '../utils/trees.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import { drawMoonToCanvas } from '../../../utils/draw-moon.js'
+import * as BonusHero from '../components/bonus-hero.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 //
 // Game area margins
 //
@@ -550,7 +552,7 @@ const L3_TREE_CREAK_INTERVAL_MAX = 16
 //
 const L3_EYE_MAX_RX = 14
 const L3_EYE_MAX_RY = 10
-const L3_EYE_COUNT = 64
+const L3_EYE_COUNT = 86
 //
 // Skip drawing the eye halo when barely open (saves one ellipse per eye per frame)
 //
@@ -562,6 +564,28 @@ const LIFE_DEDUCT_FLAG = 'touch.level3TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level3Visited'
 const LIFE_DEDUCT_MAX_COUNT = 1
 const LIFE_DEDUCT_SCATTER_FLAG = 'touch.level3ScatterActive'
+//
+// Extra platforms in the bottom-right corner (added per r8).
+// Platform A is visible — lets the hero step up to P1 right half.
+// Platform B is hidden (BonusHero) with a mini-hero collectible.
+// Both get one trampoline bug each.
+//
+const EXTRA_PLATFORM_A_X = 1420
+//
+// Platform A is set 130px below P1 (y=500) so the hero can jump from A up
+// to P1 (jump height ≈ 145px at default gravity/jump-force).
+//
+const EXTRA_PLATFORM_A_Y = 580
+const EXTRA_PLATFORM_A_WIDTH = 180
+const EXTRA_PLATFORM_B_X = 1560
+//
+// Platform B is 140px below Platform A so the hero can jump from B to A without
+// a bug trampoline (still within maximum jump height).
+//
+const EXTRA_PLATFORM_B_Y = 670
+const EXTRA_PLATFORM_B_WIDTH = 150
+const EXTRA_PLATFORM_B_STORAGE_KEY = 'touch.level3BonusCollected'
+const EXTRA_PLATFORM_B_HERO_COLOR = '#8B5A50'
 /**
  * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
@@ -600,9 +624,10 @@ export function sceneLevel3(k) {
     //
     k.setGravity(CFG.game.gravity)
     //
-    // Set canvas background to wall color to prevent edge strips
+    // Sync canvas + CSS backdrop so letterbox bars match the scene background.
     //
-    k.setBackground(k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B))
+    CanvasBackdrop.applyCanvasBackdrop(k, WALL_COLOR_HEX)
+    k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     //
     // Create sound instance
     //
@@ -871,6 +896,57 @@ export function sceneLevel3(k) {
       minBugsPerPlatform: 1
     })
     //
+    // Extra platforms — bottom-right stepping stones (r8).
+    // Platform A: visible, lets hero reach P1 right half.
+    //
+    const extraLogDetailA = generateLogDetail(EXTRA_PLATFORM_A_WIDTH, PLATFORM_HEIGHT, true)
+    //
+    // Collision box raised by half the platform height (anchor 'center' at A_Y instead
+    // of A_Y + half-height) so the hero lands on top of the visible log, not below it.
+    //
+    k.add([
+      k.rect(EXTRA_PLATFORM_A_WIDTH, PLATFORM_HEIGHT),
+      k.pos(EXTRA_PLATFORM_A_X, EXTRA_PLATFORM_A_Y),
+      k.anchor('center'),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),
+      k.z(CFG.visual.zIndex.platforms),
+      CFG.game.platformName
+    ])
+    k.add([
+      k.pos(EXTRA_PLATFORM_A_X, EXTRA_PLATFORM_A_Y),
+      k.z(Z_PLATFORM_VISUALS),
+      k.opacity(1),
+      {
+        draw() {
+          drawLogPlatform(k, EXTRA_PLATFORM_A_WIDTH, PLATFORM_HEIGHT, 0, 0, 1, extraLogDetailA)
+        }
+      }
+    ])
+    //
+    // Platform B: hidden BonusHero platform with a collectible mini-hero.
+    // Collision box shifted right and slightly down to cover the visual log precisely.
+    //
+    BonusHero.create({
+      k,
+      x: EXTRA_PLATFORM_B_X,
+      y: EXTRA_PLATFORM_B_Y,
+      width: EXTRA_PLATFORM_B_WIDTH,
+      heroInst,
+      levelIndicator,
+      sfx: sound,
+      heroBodyColor: EXTRA_PLATFORM_B_HERO_COLOR,
+      storageKey: EXTRA_PLATFORM_B_STORAGE_KEY,
+      platformZ: CFG.visual.zIndex.platforms,
+      //
+      // Collision box offset: half the platform width to the right (two quarter-steps)
+      // and 7px down (3 from previous adjustment + 4 additional).
+      //
+      platformCollisionXOffset: Math.round(EXTRA_PLATFORM_B_WIDTH * 0.5),
+      platformCollisionYOffset: 7
+    })
+    //
     // Create glow bugs on the bottom wall (blade-covered floor)
     //
     const bottomWallPlatform = {
@@ -969,9 +1045,11 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Generate icicles hanging under stationary log platforms (skip trap platform)
+    // Icicles removed: per user request they are no longer drawn or lethal.
+    // Keep the variable as an empty array so all downstream draw/check calls
+    // receive well-typed data without needing further refactoring.
     //
-    const platformIcicles = generatePlatformIcicles()
+    const platformIcicles = CORRIDOR_PLATFORMS.map(() => [])
     //
     // Log platform wobble state (one platform wobbles at a time on mouse click)
     //
@@ -1392,6 +1470,7 @@ export function sceneLevel3(k) {
     // ESC key to return to menu
     //
     k.onKeyPress("escape", () => {
+      if (LevelHelp.isAnyPanelOpen()) return
       goToMenuAfterAssets(k)
     })
   })
@@ -4031,6 +4110,32 @@ const L3_EYE_POSITIONS = [
   { x: CFG.visual.screen.width / 2 - 350,            y: 428, openRadius: 318 },
   { x: CFG.visual.screen.width / 2 + 500,            y: 422, openRadius: 325 },
   //
+  // Path band (y 490–560): eyes along the hero jump corridor P0→P2→P1→P3.
+  // Dense coverage at platform heights so the hero walks through blinking eyes.
+  //
+  { x: 180,  y: 510, openRadius: 340 },
+  { x: 310,  y: 540, openRadius: 330 },
+  { x: 430,  y: 525, openRadius: 325 },
+  { x: 560,  y: 545, openRadius: 318 },
+  { x: 680,  y: 530, openRadius: 330 },
+  { x: 790,  y: 515, openRadius: 322 },
+  { x: 900,  y: 548, openRadius: 315 },
+  { x: 1020, y: 520, openRadius: 320 },
+  { x: 1150, y: 495, openRadius: 335 },
+  { x: 1270, y: 512, openRadius: 328 },
+  { x: 1380, y: 502, openRadius: 322 },
+  { x: 1480, y: 488, openRadius: 315 },
+  { x: 1580, y: 472, openRadius: 322 },
+  { x: 1650, y: 460, openRadius: 330 },
+  { x: 1760, y: 448, openRadius: 318 },
+  { x: 1860, y: 440, openRadius: 312 },
+  { x: 250,  y: 558, openRadius: 318 },
+  { x: 490,  y: 562, openRadius: 312 },
+  { x: 740,  y: 555, openRadius: 316 },
+  { x: 1060, y: 536, openRadius: 320 },
+  { x: 1320, y: 524, openRadius: 316 },
+  { x: 1540, y: 500, openRadius: 320 },
+  //
   // Lower band (y 680–970): below all platforms, dark floor area
   //
   { x: LEFT_MARGIN + 62,                             y: 680, openRadius: 280 },
@@ -4065,11 +4170,29 @@ function addWatchingEyes(k, heroInst) {
   const eyeColor = k.rgb(220, 60, 30)
   const eyeHalo = k.rgb(10, 5, 5)
   const pupilColor = k.rgb(8, 2, 2)
-  const eyeData = L3_EYE_POSITIONS.slice(0, L3_EYE_COUNT).map(pos => ({
-    ...pos,
-    phase: Math.random() * Math.PI * 2,
-    blinkSpeed: 0.14 + Math.random() * 0.10
+  //
+  // Build a list of platform bounding boxes to exclude from eye rendering.
+  // Eyes that overlap a platform surface appear in front of it, which looks
+  // incorrect. We skip those positions so eyes appear only beside/above/below.
+  //
+  const PLAT_MARGIN = 18
+  const platformExcludeZones = [
+    ...CORRIDOR_PLATFORMS,
+    { x: EXTRA_PLATFORM_A_X, y: EXTRA_PLATFORM_A_Y, width: EXTRA_PLATFORM_A_WIDTH },
+    { x: EXTRA_PLATFORM_B_X, y: EXTRA_PLATFORM_B_Y, width: EXTRA_PLATFORM_B_WIDTH }
+  ].map(p => ({
+    minX: p.x - p.width / 2 - PLAT_MARGIN,
+    maxX: p.x + p.width / 2 + PLAT_MARGIN,
+    minY: p.y - PLAT_MARGIN,
+    maxY: p.y + PLATFORM_HEIGHT + PLAT_MARGIN
   }))
+  const eyeData = L3_EYE_POSITIONS.slice(0, L3_EYE_COUNT)
+    .filter(pos => !platformExcludeZones.some(z => pos.x >= z.minX && pos.x <= z.maxX && pos.y >= z.minY && pos.y <= z.maxY))
+    .map(pos => ({
+      ...pos,
+      phase: Math.random() * Math.PI * 2,
+      blinkSpeed: 0.14 + Math.random() * 0.10
+    }))
   k.add([
     k.z(Z_DARKNESS + 5),
     {

@@ -806,7 +806,7 @@ function onUpdateCrow(inst, dt) {
     crow.callTimer = CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN)
     const soundName = CROW_SOUND_NAMES[crow.soundIdx % CROW_SOUND_NAMES.length]
     crow.soundIdx++
-    try { inst.k.play(soundName, { volume: 0.38 }) } catch {}
+    inst.k.play(soundName, { volume: 0.65 })
     //
     // Schedule mouth open slightly after sound onset for visual sync
     //

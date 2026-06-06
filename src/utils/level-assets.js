@@ -98,7 +98,7 @@ async function loadTimeCityForLevel(k, sceneName) {
   if (sceneName === 'level-time.1') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL1_PLATFORM_BOTTOM, 'city-background-level1',
-      false, false, true, 2.0, true, true, onProgress, true
+      false, false, true, 0.6, true, true, onProgress, true
     )
     return
   }

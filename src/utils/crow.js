@@ -63,20 +63,27 @@ const MAX_PUPIL_OFFSET = (EYE_RADIUS - PUPIL_RADIUS) * 0.65
  * @param {number} s - Facing direction: +1 = right (beak right), -1 = left
  * @param {boolean} mouthOpen - Whether the beak is open (calling)
  * @param {Object|null} heroInst - Hero instance for pupil direction (optional)
+ * @param {number} [brightnessBoost=0] - Add this value to all feather/body RGB channels
+ * @param {number} [wingBrightnessBoost=brightnessBoost] - Separate brightness boost for wings only;
+ *   defaults to brightnessBoost. Pass a lower value to make wings visible against a bright body.
  */
-export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst) {
-  const bdy  = k.rgb(BODY_R, BODY_G, BODY_B)
-  const hd   = k.rgb(HEAD_R, HEAD_G, HEAD_B)
-  const wing = k.rgb(WING_R, WING_G, WING_B)
-  const wing2 = k.rgb(WING2_R, WING2_G, WING2_B)
-  const tail = k.rgb(TAIL_R, TAIL_G, TAIL_B)
-  const bkU  = k.rgb(BEAK_UPPER_R, BEAK_UPPER_G, BEAK_UPPER_B)
-  const bkL  = k.rgb(BEAK_LOWER_R, BEAK_LOWER_G, BEAK_LOWER_B)
+export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBoost = 0, wingBrightnessBoost = brightnessBoost) {
+  const b = brightnessBoost
+  const wb = wingBrightnessBoost
+  const clamp = v => Math.min(255, v + b)
+  const clampW = v => Math.min(255, v + wb)
+  const bdy  = k.rgb(clamp(BODY_R), clamp(BODY_G), clamp(BODY_B))
+  const hd   = k.rgb(clamp(HEAD_R), clamp(HEAD_G), clamp(HEAD_B))
+  const wing = k.rgb(clampW(WING_R), clampW(WING_G), clampW(WING_B))
+  const wing2 = k.rgb(clampW(WING2_R), clampW(WING2_G), clampW(WING2_B))
+  const tail = k.rgb(clamp(TAIL_R), clamp(TAIL_G), clamp(TAIL_B))
+  const bkU  = k.rgb(clamp(BEAK_UPPER_R), clamp(BEAK_UPPER_G), clamp(BEAK_UPPER_B))
+  const bkL  = k.rgb(clamp(BEAK_LOWER_R), clamp(BEAK_LOWER_G), clamp(BEAK_LOWER_B))
   const mth  = k.rgb(MOUTH_R, MOUTH_G, MOUTH_B)
   const eRing = k.rgb(EYE_RING_R, EYE_RING_G, EYE_RING_B)
   const eWhi = k.rgb(EYE_WHITE_R, EYE_WHITE_G, EYE_WHITE_B)
   const pup  = k.rgb(PUPIL_R, PUPIL_G, PUPIL_B)
-  const feet = k.rgb(FEET_R, FEET_G, FEET_B)
+  const feet = k.rgb(clamp(FEET_R), clamp(FEET_G), clamp(FEET_B))
   //
   // Tail: wide-fan shape — narrow root at body, wide spread at the outer tip.
   // Drawn before the body so the root is naturally hidden.
@@ -94,7 +101,7 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst) {
     p1: k.vec2(cx - 10 * sc * s, perchY + 3 * sc),
     p2: k.vec2(cx - 24 * sc * s, perchY - 2 * sc),
     p3: k.vec2(cx - 24 * sc * s, perchY + 9 * sc),
-    color: k.rgb(TAIL_R + 8, TAIL_G + 6, TAIL_B + 8), opacity: 0.65
+    color: k.rgb(clamp(TAIL_R + 8), clamp(TAIL_G + 6), clamp(TAIL_B + 8)), opacity: 0.65
   })
   //
   // Body — elongated oval with slight lean toward beak side

@@ -47,6 +47,7 @@ const PANEL_FONT_SIZE = 44
 const PANEL_LINE_SPACING = 10
 const PANEL_HINT_Y_OFFSET = -28
 const PANEL_FADE_IN = 0.35
+const PANEL_OVERLAY_DIM = 0.45
 const PANEL_Z = 620
 const CLOSE_HINT_TEXT = 'Click to close'
 const CLOSE_HINT_FONT_SIZE = 20
@@ -93,15 +94,29 @@ const TOUCH_PANEL_BORDER_HEX = '#E08040'
 //
 // Per-level hint copy
 //
+//
+// Module-level reference to the currently active panel instance.
+// Updated when a panel opens or closes. Used by isAnyPanelOpen().
+//
+let activeInst = null
+/**
+ * Returns true when a help panel is currently visible (open or animating).
+ * Touch scene Escape handlers call this to avoid going to menu while the
+ * panel is open.
+ * @returns {boolean}
+ */
+export function isAnyPanelOpen() {
+  return activeInst?.panelOpen ?? false
+}
 export const LEVEL_HELP_TEXTS = {
   'level-touch.0': 'collect all the bugs in one\nplace and they will help\nyou. notice what they do\nwhen you touch them',
-  'level-touch.1': 'play the notes shown\nby your other half',
+  'level-touch.1': 'approach yourself and\nplay the melody you see',
   'level-touch.2': 'jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
   'level-touch.3': 'turns out the bugs\nare trampolines :)',
   'level-time.0': 'hurry — platforms\ndon\'t last forever',
   'level-time.1': 'ones kill you —\njust don\'t jump on them',
-  'level-time.2': 'an odd sum of digits kills you,\nan even sum doesn\'t',
-  'level-time.3': 'just reach your other half —\nwith or against the wind ;)',
+  'level-time.2': 'an odd sum of digits kills\nyou, an even sum doesn\'t',
+  'level-time.3': 'just reach your other\nhalf — with or against\nthe wind ;)',
   'level-word.0': 'some words cut like\nblades — avoid them',
   'level-word.1': 'life always finds a way to ruin\nyour plans. be careful',
   'level-word.2': 'use your memory to remember where\nthe blade-like words are...',
@@ -252,11 +267,13 @@ function onUpdate(inst) {
     inst.panelTimer += inst.k.dt()
     inst.panelOpacity = Math.min(1, inst.panelTimer / PANEL_FADE_IN)
     setPanelOpacity(inst, inst.panelOpacity)
+    syncPanelBackdrop(inst, inst.panelOpacity)
     inst.panelTimer >= PANEL_FADE_IN && (inst.panelPhase = 'open')
   } else if (inst.panelPhase === 'closing') {
     inst.panelTimer += inst.k.dt()
     inst.panelOpacity = Math.max(0, 1 - inst.panelTimer / PANEL_FADE_IN)
     setPanelOpacity(inst, inst.panelOpacity)
+    syncPanelBackdrop(inst, inst.panelOpacity)
     if (inst.panelTimer >= PANEL_FADE_IN) {
       destroyPanel(inst)
       inst.panelPhase = 'closed'
@@ -340,8 +357,8 @@ function isMouseOverHelp(inst) {
 function openPanel(inst) {
   if (inst.panelOpen) return
   const { k, hintText, sceneBackdropHex } = inst
-  sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(k, sceneBackdropHex)
   inst.panelOpen = true
+  activeInst = inst
   inst.panelPhase = 'opening'
   inst.panelTimer = 0
   inst.panelOpacity = 0
@@ -492,6 +509,7 @@ function destroyPanel(inst) {
   closeHintOutlines?.forEach(node => node.destroy?.())
   inst.panelNodes = null
   inst.sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(inst.k, inst.sceneBackdropHex)
+  if (activeInst === inst) activeInst = null
 }
 
 //
@@ -629,4 +647,30 @@ function onUpdateSpendParticle(k, particle, vx, vy, lifetime, state) {
   particle.pos.y += vy * k.dt()
   particle.opacity = 1 - state.elapsed / lifetime
   state.elapsed >= lifetime && k.destroy(particle)
+}
+//
+// Syncs CSS letterbox bars to the current panel overlay opacity.
+// panelOpacity 0 → original scene color, 1 → dimmed by PANEL_OVERLAY_DIM.
+//
+function syncPanelBackdrop(inst, panelOpacity) {
+  if (!inst.sceneBackdropHex) return
+  const [r, g, b] = parseHex(inst.sceneBackdropHex)
+  if (panelOpacity <= 0) {
+    //
+    // Fully closed: restore original background via applyCanvasBackdrop
+    // (updates both k.setBackground and all CSS ancestors).
+    //
+    CanvasBackdrop.applyCanvasBackdrop(inst.k, inst.sceneBackdropHex)
+    return
+  }
+  const dim = panelOpacity * PANEL_OVERLAY_DIM
+  const dr = Math.round(r * (1 - dim))
+  const dg = Math.round(g * (1 - dim))
+  const db = Math.round(b * (1 - dim))
+  //
+  // Update both Kaplay clear color and CSS backdrop every frame so canvas
+  // letterbox bars and any unrendered canvas areas match the dimmed scene.
+  //
+  inst.k.setBackground(inst.k.rgb(dr, dg, db))
+  CanvasBackdrop.setCssBackdrop(inst.k.canvas, dr, dg, db)
 }

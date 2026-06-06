@@ -8,7 +8,7 @@ import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 //
 // Life deduction animation constants
 //
-const DEDUCT_AMOUNT = 10
+const DEDUCT_AMOUNT = 5
 const FADE_IN = 0.6
 const SCORE_HOLD = 0.8
 const COUNT_DURATION = 0.8
@@ -100,7 +100,6 @@ export function show(config) {
 //
 function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb) {
   const sceneBackdropHex = sceneBgRgb ? rgbToHex(sceneBgRgb) : null
-  sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(k, sceneBackdropHex)
   const palette = resolveComplementaryPalette(sceneBgRgb)
   const centerX = CFG.visual.screen.width / 2
   const centerY = CFG.visual.screen.height / 2
@@ -304,6 +303,12 @@ function onUpdateDeduction(
     introText.opacity = p
     setOutlinesOpacity(introOutlines, p)
     lifeIcon.opacity = p
+    //
+    // Continuously sync CSS letterbox bars with the canvas dim level.
+    // The overlay dims the canvas by OVERLAY_DIM_MAX * p, so bars should
+    // match: rgb(r*(1-p*DIM), ...).
+    //
+    syncBackdropToDim(k, sceneBackdropHex, p)
     scoreText.opacity = p
     setOutlinesOpacity(scoreOutlines, p)
     if (p >= 1) {
@@ -361,6 +366,11 @@ function onUpdateDeduction(
   } else if (state.phase === 'fadeOut') {
     const p = Math.min(1, state.timer / FADE_OUT)
     const opacity = 1 - p
+    //
+    // Sync CSS bars to the current overlay dim: overlay.opacity goes 1→0,
+    // so dim also goes from OVERLAY_DIM_MAX down to 0.
+    //
+    syncBackdropToDim(k, sceneBackdropHex, opacity)
     overlay.opacity = opacity
     bubble.opacity = opacity
     introText.opacity = opacity
@@ -382,6 +392,9 @@ function onUpdateDeduction(
       k.destroy(resultText)
       resultOutlines.forEach(o => k.destroy(o))
       Tooltip.unsuppressAll()
+      //
+      // Final restoration: fully sync k.setBackground + CSS to the original scene color.
+      //
       sceneBackdropHex && CanvasBackdrop.applyCanvasBackdrop(k, sceneBackdropHex)
       sceneLock && (sceneLock.locked = false)
       sceneLock?.heroInst && (sceneLock.heroInst.controlsDisabled = false)
@@ -458,4 +471,22 @@ function resolveComplementaryPalette(sceneBgRgb) {
 function rgbToHex(sceneBgRgb) {
   const hex = (n) => n.toString(16).padStart(2, '0')
   return `#${hex(sceneBgRgb.r)}${hex(sceneBgRgb.g)}${hex(sceneBgRgb.b)}`
+}
+//
+// Syncs CSS letterbox bars with the current overlay dim level (overlayOpacity 0→1).
+// Called every frame during fadeIn and fadeOut so bars match the canvas exactly.
+//
+function syncBackdropToDim(k, sceneBackdropHex, overlayOpacity) {
+  if (!sceneBackdropHex) return
+  const [r, g, b] = parseHex(sceneBackdropHex)
+  const dim = overlayOpacity * OVERLAY_DIM_MAX
+  const dr = Math.round(r * (1 - dim))
+  const dg = Math.round(g * (1 - dim))
+  const db = Math.round(b * (1 - dim))
+  //
+  // Update both Kaplay clear color and CSS backdrop so letterbox bars,
+  // canvas edges, and any transparent canvas areas all match the dimmed scene.
+  //
+  k.setBackground(k.rgb(dr, dg, db))
+  CanvasBackdrop.setCssBackdrop(k.canvas, dr, dg, db)
 }

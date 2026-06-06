@@ -2,6 +2,13 @@ import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 import { get } from '../../../utils/progress.js'
 import * as Hero from '../../../components/hero.js'
+//
+// Unified gray for every HUD numeral/label in the time section.
+// Matches the neutral grey used by the FPS counter (fps-counter.js: #B0B0B0).
+//
+const HUD_GRAY_R = 176
+const HUD_GRAY_G = 176
+const HUD_GRAY_B = 176
 
 /**
  * Creates time section level indicator (letters "T1ME") with hero and life icons
@@ -41,25 +48,12 @@ export function create(config) {
     // - Completed and current: use completedColor (yellow/antiHero color)
     // - Future: use inactiveColor (gray)
     //
-    let colorHex
-    if (letterLevel <= levelNumber) {
-      //
-      // Completed levels (including current)
-      //
-      colorHex = completedColor
-    } else {
-      //
-      // Future levels
-      //
-      colorHex = inactiveColor
-    }
     //
-    // Calculate x position for this letter
+    // Completed and current levels use the orange/yellow completedColor;
+    // future levels stay in unified HUD gray.
     //
+    const isCompleted = letterLevel <= levelNumber
     const letterX = startX + i * (fontSize + letterSpacing)
-    //
-    // Create outline (8 directions)
-    //
     const offsets = [
       [-outlineThickness, -outlineThickness],
       [0, -outlineThickness],
@@ -81,17 +75,14 @@ export function create(config) {
         k.z(CFG.visual.zIndex.ui)
       ])
     })
-    //
-    // Create main letter
-    //
-    const {r, g, b} = getRGB(k, colorHex)
+    const letterColor = isCompleted ? getRGB(k, completedColor) : { r: HUD_GRAY_R, g: HUD_GRAY_G, b: HUD_GRAY_B }
     const mainLetter = k.add([
       k.text(letter, {
         size: fontSize,
         font: CFG.visual.fonts.thinFull.replace(/'/g, '')
       }),
       k.pos(letterX, y),
-      k.color(r, g, b),
+      k.color(letterColor.r, letterColor.g, letterColor.b),
       k.z(CFG.visual.zIndex.ui)
     ])
     letterObjects.push(mainLetter)
@@ -205,7 +196,7 @@ export function create(config) {
     }),
     k.pos(smallHeroX + smallHeroSize / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
     k.anchor('left'),
-    k.color(255, 255, 255),
+    k.color(HUD_GRAY_R, HUD_GRAY_G, HUD_GRAY_B),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])
@@ -237,7 +228,7 @@ export function create(config) {
     }),
     k.pos(lifeImageX + lifeImageHeight / 2 + scoreOffsetX, smallHeroY + scoreOffsetY),
     k.anchor('left'),
-    k.color(255, 255, 255),
+    k.color(HUD_GRAY_R, HUD_GRAY_G, HUD_GRAY_B),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui)
   ])

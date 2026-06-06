@@ -252,75 +252,62 @@ const CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
 const TITLE_TEXT_X = CENTER_X
 const TITLE_TEXT_Y = 130
 //
-// Description block geometry. Narrative paragraph sits CENTRED in a
-// column starting slightly below the horizon; the two section label
-// rows below it are LEFT-ALIGNED at a fixed column so the icon and
-// label edge of both rows form a clean left column.
+// Description block geometry. Three-line narrative block vertically
+// centred between the horizon line and the bottom hint. The last line
+// has two icons embedded inline between its words.
 //
-// Pulled up (smaller offset from horizon) so the taller narrative block
-// doesn't push the goal rows off-screen after the font size increase.
-const DESCRIPTION_START_Y = MENU_BG_GROUND_Y + 52
+const BLOCK_LINE_COUNT = 3
+const TEXT_FONT_SIZE = 36
+const TEXT_LINE_HEIGHT = 52
 //
-// Narrative text — bigger and wider than the previous 4-line block.
-// Two long lines (≈ 66 chars each in monospace) read as a single
-// breath and free up vertical space for the hint pinned to the very
-// bottom of the canvas.
+// Actual rendered block height: two inter-line gaps + one font height.
+// Using font height (not line-height) for the last line gives the true
+// visual bottom so the formula creates equal top/bottom gaps.
 //
-const TEXT_FONT_SIZE = 30
-const TEXT_LINE_HEIGHT = 42
+const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
+const AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
+const DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
 //
-// Extra space between the narrative paragraph and the section label
-// rows — gives the two "Collect / Find" labels their own visual
-// breathing room below the description.
+// Icon draw radius — enlarged for better visibility
 //
-const DESCRIPTION_BLOCK_GAP = 30
-//
-// Section label icon — small glyph drawn to the LEFT of its label.
-// Both rows share the same left edge `LABEL_BLOCK_LEFT_X` so the
-// icons + labels form a clean left-aligned column. The X is picked
-// so the WIDER row (label2) ends up roughly centred on the canvas.
-//
-const ICON_DRAW_R = 12
-const ICON_LABEL_GAP = 14
-const ICON_ROW_HEIGHT = 56
-//
-// Left column for the label-row block. Chosen so the longer of the
-// two rows is approximately canvas-centred.
-//
-const LABEL_BLOCK_LEFT_X = 790
-//
-// "your goal is to ->" sits to the left of the two orange bullet rows
-//
-const GOAL_LABEL_X = LABEL_BLOCK_LEFT_X - 230
-//
-// Extra Y to vertically centre the two-heroes pair between label and
-// desc lines.
-//
-const ICON_TWO_HEROES_Y_EXTRA = 14
-//
-// Animated sparkle constants (matches bonus-hero glow used in time section)
-//
-const SPARKLE_PULSE_SPEED = 2.5
-const SPARKLE_INNER_R = 5
-const SPARKLE_OUTER_R = 11
-const ICON_LABEL_FONT_SIZE = 22
-const ICON_LABEL_DESC_FONT_SIZE = 15
-const ICON_LABEL_DESC_OFFSET_Y = 20
-//
-// Life laugh audio: plays a short ambient laugh at random intervals.
-//
-//
-// Inline color constants — the warm half of the teal+orange
-// complementary palette (orange labels) and the cool teal-gray used
-// for narrative body copy so it sits gently on top of the deep teal
-// background without competing with the orange title.
-//
-const COLOR_WARM_ORANGE = '#E08040'
-const COLOR_TEXT_GRAY = '#9AB5C4'
+const ICON_DRAW_R = 20
 //
 // Approximate monospace char width multiplier (JetBrains Mono)
 //
 const MONO_CHAR_W_RATIO = 0.6
+//
+// Narrative body copy — cool teal-gray so text reads softly on the
+// deep teal background without competing with the orange title.
+//
+const COLOR_TEXT_GRAY = '#9AB5C4'
+//
+// Animated sparkle constants — enlarged to match new ICON_DRAW_R
+//
+const SPARKLE_PULSE_SPEED = 2.5
+const SPARKLE_INNER_R = 8
+const SPARKLE_OUTER_R = 16
+//
+// Icon line 3: three text segments split around two icons.
+// Layout (JetBrains Mono, size-36, char-width ≈ fontsize × 0.6 = 22 px):
+//   seg1 "Collect "   (8 ch) = 176 px
+//   icon1             (ICON_DRAW_R*2) = 36 px
+//   seg2 " fragments and find "  (20 ch) = 440 px
+//   icon2             = 36 px
+//   seg3 " the other you."  (15 ch) = 330 px
+//   Total ≈ 1018 px — matches the two narrative lines above (~46 ch × 22).
+//
+const ICON_LINE_SEG1 = 'Collect '
+const ICON_LINE_SEG2 = ' fragments and find '
+const ICON_LINE_SEG3 = ' the other you.'
+const ICON_LINE_CHAR_W = Math.round(TEXT_FONT_SIZE * MONO_CHAR_W_RATIO)
+const ICON_LINE_SEG1_W = ICON_LINE_SEG1.length * ICON_LINE_CHAR_W
+const ICON_LINE_SEG2_W = ICON_LINE_SEG2.length * ICON_LINE_CHAR_W
+const ICON_LINE_TOTAL_W = ICON_LINE_SEG1_W + ICON_DRAW_R * 2 + ICON_LINE_SEG2_W + ICON_DRAW_R * 2 + ICON_LINE_SEG3.length * ICON_LINE_CHAR_W
+const ICON_LINE_LEFT_X = CENTER_X - Math.round(ICON_LINE_TOTAL_W / 2)
+const ICON_LINE_ICON1_X = ICON_LINE_LEFT_X + ICON_LINE_SEG1_W + ICON_DRAW_R
+const ICON_LINE_SEG2_X = ICON_LINE_ICON1_X + ICON_DRAW_R
+const ICON_LINE_ICON2_X = ICON_LINE_SEG2_X + ICON_LINE_SEG2_W + ICON_DRAW_R
+const ICON_LINE_SEG3_X = ICON_LINE_ICON2_X + ICON_DRAW_R
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
@@ -458,7 +445,7 @@ export function sceneReady(k) {
       // the painted anti-hero face.
       //
       const r2 = ICON_DRAW_R
-      const iconY = descriptionLayout.row2.iconY + r2 * 0.6 + ICON_TWO_HEROES_Y_EXTRA
+      const iconY = descriptionLayout.row2.iconY - ICON_DRAW_R / 2
       const antiHeroCX = descriptionLayout.row2.iconX + r2 * 0.85
       const antiHeroCY = iconY - r2 * 0.85 * 0.35
       const mp = TouchInput.getPointerPos(k)
@@ -745,65 +732,32 @@ function onDrawIllustration(k, illAnim) {
 //
 function addDescriptionBlock(k) {
   const z = Z_TEXT
-  const narrativeFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
-  const labelFont = "'JetBrains Mono', monospace"
-  const descFont = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
+  const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
   //
-  // Narrative — four monospaced lines with near-equal character counts
-  // (≈ 30–35 each in JetBrains Mono) so every line ends at roughly
-  // the same horizontal width when centred under the horizon strip.
+  // Lines 1–2: pure narrative setting the scene.
   //
   const narrativeLines = [
-    'Six worlds await you — time, touch, words,',
-    'feelings, mind, and stress. Each hides a piece',
-    'of you. Play against Life to find yourself.'
+    'Six worlds wait — time, touch, words, feelings,',
+    'mind, stress. Each world hides a piece of you.'
   ]
   let cursorY = DESCRIPTION_START_Y
   for (const line of narrativeLines) {
-    addCenteredSegment(k, line, CENTER_X, cursorY, z, TEXT_FONT_SIZE, narrativeFont, COLOR_TEXT_GRAY)
+    addCenteredSegment(k, line, CENTER_X, cursorY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
     cursorY += TEXT_LINE_HEIGHT
   }
-  cursorY += DESCRIPTION_BLOCK_GAP
   //
-  // Section label rows — "Collect fragments" + "Find the other peaces
-  // of you". Both rows share the SAME left edge so the icon + label
-  // pair lines up vertically into a clean left-aligned column. The
-  // desc line under each label uses the same left X as the label so
-  // the whole row reads as one left-aligned block.
+  // Line 3: two icons are embedded inline between the text segments.
+  // Text segments are left-anchored and precisely positioned so the
+  // entire line reads as one centred sentence.
   //
-  const rows = [
-    { label: 'Collect fragments', desc: 'Pieces of you. Scattered everywhere.' },
-    { label: 'Find the other peaces of you', desc: 'Touch them. Know them.' }
-  ]
-  const layoutRows = []
-  rows.forEach((row, rowIdx) => {
-    //
-    // Goal label sits to the left of the first orange bullet row only
-    //
-    rowIdx === 0 && addSegment(k, 'your goal is to', GOAL_LABEL_X, cursorY + 35, z, ICON_LABEL_FONT_SIZE, narrativeFont, COLOR_TEXT_GRAY)
-    const rowMeta = addLeftAlignedIconLabelRow(k, row.label, row.desc, cursorY, z, labelFont, descFont)
-    layoutRows.push(rowMeta)
-    cursorY += ICON_ROW_HEIGHT
-  })
-  return { row1: layoutRows[0], row2: layoutRows[1] }
-}
-//
-// Renders a single icon+label+desc row LEFT-ALIGNED at
-// `LABEL_BLOCK_LEFT_X`. The icon hugs the column's left edge, the
-// label follows on the same line, and the desc sits on a second line
-// at the same X as the label.
-//
-function addLeftAlignedIconLabelRow(k, label, desc, rowY, z, labelFont, descFont) {
-  //
-  // Icon centre sits half a radius right of the column left edge.
-  // Label / desc text use anchor 'left' starting just past the icon
-  // plus the label gap.
-  //
-  const iconCenterX = LABEL_BLOCK_LEFT_X + ICON_DRAW_R
-  const textLeftX = LABEL_BLOCK_LEFT_X + ICON_DRAW_R * 2 + ICON_LABEL_GAP
-  addSegment(k, label, textLeftX, rowY, z, ICON_LABEL_FONT_SIZE, labelFont, COLOR_WARM_ORANGE)
-  addSegment(k, desc, textLeftX, rowY + ICON_LABEL_DESC_OFFSET_Y, z, ICON_LABEL_DESC_FONT_SIZE, descFont, COLOR_TEXT_GRAY)
-  return { iconX: iconCenterX, iconY: rowY }
+  const iconLineY = cursorY
+  addSegment(k, ICON_LINE_SEG1, ICON_LINE_LEFT_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
+  addSegment(k, ICON_LINE_SEG2, ICON_LINE_SEG2_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
+  addSegment(k, ICON_LINE_SEG3, ICON_LINE_SEG3_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
+  return {
+    row1: { iconX: ICON_LINE_ICON1_X, iconY: iconLineY },
+    row2: { iconX: ICON_LINE_ICON2_X, iconY: iconLineY }
+  }
 }
 //
 // Draws the two small icon illustrations next to their centred
@@ -815,11 +769,18 @@ function onDrawIconIllustrations(k, iconAnim, descriptionLayout) {
   //
   // Icon 1: "Collect fragments" — animated sun-bunny sparkle glow
   //
-  drawFragmentIcon(k, descriptionLayout.row1.iconX, descriptionLayout.row1.iconY + r * 0.6, iconAnim.sparklePhase)
+  // Icons are vertically centred on the text line's midpoint (font_size / 2 below line top).
+  //
+  //
+  // Icons are positioned above the text baseline: center sits at the top
+  // of the text line minus half a radius so they float above the words.
+  //
+  const iconRowCenterY = descriptionLayout.row1.iconY - ICON_DRAW_R / 2 + 6
+  drawFragmentIcon(k, descriptionLayout.row1.iconX, iconRowCenterY, iconAnim.sparklePhase)
   //
   // Icon 2: "Find the other you" — hero + anti-hero with electric connection
   //
-  drawTwoHeroesIcon(k, descriptionLayout.row2.iconX, descriptionLayout.row2.iconY + r * 0.6 + ICON_TWO_HEROES_Y_EXTRA, iconAnim)
+  drawTwoHeroesIcon(k, descriptionLayout.row2.iconX, iconRowCenterY + 15, iconAnim)
 }
 //
 // Icon 1: animated sun-bunny sparkle — outer glow + bright core pulse

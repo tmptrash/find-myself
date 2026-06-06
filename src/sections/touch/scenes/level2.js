@@ -18,6 +18,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as TouchLevel2Ambience from '../utils/touch-level2-ambience.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -252,6 +253,11 @@ const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
 const LIFE_DEDUCT_TRAP_FLAG = 'touch.level2TrapActive'
 const LIFE_DEDUCT_MAX_COUNT = 2
 //
+// Music volume multiplier for L2 — background music should sit quieter so
+// ambient wildlife and sound effects feel more prominent.
+//
+const L2_MUSIC_VOLUME_MULT = 0.6
+//
 // Trap platform: the second-to-last platform slides away on first approach
 //
 const TRAP_PLATFORM_SLIDE_SPEED = 1200
@@ -259,6 +265,12 @@ const TRAP_PLATFORM_RETURN_SPEED = 600
 const TRAP_PLATFORM_SLIDE_DISTANCE = 400
 const TRAP_PLATFORM_TRIGGER_RADIUS = 80
 const TRAP_PLATFORM_PAUSE_DURATION = 0.3
+//
+// After each flee cycle the platform holds still for this many seconds,
+// letting the hero approach before it flees again. Repeats indefinitely
+// until the hero actually lands on the platform (trapHasPassed = true).
+//
+const TRAP_CORRIDOR_DURATION = 6
 //
 // Breath vapor: small white puffs from hero's mouth in cold air
 //
@@ -341,14 +353,10 @@ export function sceneLevel2(k) {
     //
     const touchMusic = k.play('touch', {
       loop: true,
-      volume: GLOBAL_CFG.audio.backgroundMusic.touch
+      volume: GLOBAL_CFG.audio.backgroundMusic.touch * L2_MUSIC_VOLUME_MULT
     })
-    //
-    // Ensure music volume is set correctly (same as level 0)
-    // Set volume explicitly to match level 0 using global CFG
-    //
     k.wait(0.1, () => {
-      touchMusic.volume = GLOBAL_CFG.audio.backgroundMusic.touch
+      touchMusic.volume = GLOBAL_CFG.audio.backgroundMusic.touch * L2_MUSIC_VOLUME_MULT
     })
     //
     // Stop music when leaving the scene
@@ -361,12 +369,11 @@ export function sceneLevel2(k) {
     //
     // Set background + CSS canvas backing (matches gameplay grey; letterboxing stays even).
     //
-    k.setBackground(k.rgb(L2_SCENE_BG_R, L2_SCENE_BG_G, L2_SCENE_BG_B))
-    k.canvas?.style.setProperty(
-      'background-color',
-      `rgb(${L2_SCENE_BG_R}, ${L2_SCENE_BG_G}, ${L2_SCENE_BG_B})`,
-      'important'
-    )
+    //
+    // Sync canvas + CSS backdrop so letterbox bars match the scene background.
+    //
+    CanvasBackdrop.applyCanvasBackdrop(k, WALL_COLOR_HEX)
+    k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     //
     // Draw background (black)
     //
@@ -985,6 +992,37 @@ export function sceneLevel2(k) {
       //
       platformStates.forEach(state => {
         if (!state.isTrap) return
+        //
+        // Once hero has landed on the platform, no more cycling.
+        //
+        if (state.trapHasPassed) return
+        //
+        // Detect hero landing on the trap platform: hero feet at platform top
+        // within horizontal bounds and platform is visible.
+        //
+        const heroFeetY = heroY + 35
+        const platformTopY = state.y - 10
+        const onTop = Math.abs(heroX - state.x) < state.width / 2 + 20
+          && heroFeetY > platformTopY && heroFeetY < platformTopY + 30
+          && state.opacity > 0
+        if (onTop && (state.trapPhase === 'sliding-out' || state.trapPhase === 'pausing' || state.trapPhase === 'done' || state.trapPhase === 'corridor')) {
+          state.trapHasPassed = true
+          return
+        }
+        //
+        // Corridor phase: platform holds still, let hero approach freely.
+        //
+        if (state.trapPhase === 'corridor') {
+          state.trapCorridorTimer -= dt
+          if (state.trapCorridorTimer <= 0) {
+            //
+            // Corridor expired — allow the next approach to trigger a flee.
+            //
+            state.trapTriggered = false
+            state.trapPhase = 'idle'
+          }
+          return
+        }
         if (!state.trapTriggered) {
           const dx = Math.abs(heroX - state.x)
           const dy = Math.abs(heroY - state.y)
@@ -1015,7 +1053,11 @@ export function sceneLevel2(k) {
           state.trapSlideProgress -= TRAP_PLATFORM_RETURN_SPEED * dt
           if (state.trapSlideProgress <= 0) {
             state.trapSlideProgress = 0
-            state.trapPhase = 'done'
+            //
+            // Platform returned to original X — start the corridor window.
+            //
+            state.trapPhase = 'corridor'
+            state.trapCorridorTimer = TRAP_CORRIDOR_DURATION
           }
           const newX = state.trapOriginalX - state.trapSlideProgress
           state.x = newX
@@ -1360,6 +1402,7 @@ export function sceneLevel2(k) {
     // Return to menu on ESC
     //
     k.onKeyPress("escape", () => {
+      if (LevelHelp.isAnyPanelOpen()) return
       Sound.stopAmbient(sound)
       goToMenuAfterAssets(k)
     })
@@ -1857,6 +1900,15 @@ function createDiagonalPlatforms(k, enableTrap = true) {
   platformStates[TRAP_INDEX].trapSlideProgress = 0
   platformStates[TRAP_INDEX].trapPauseTimer = 0
   platformStates[TRAP_INDEX].trapOriginalX = platforms[TRAP_INDEX].x
+  //
+  // Corridor: after each flee+return cycle, the platform holds still for
+  // TRAP_CORRIDOR_DURATION seconds before triggering again.
+  //
+  platformStates[TRAP_INDEX].trapCorridorTimer = 0
+  //
+  // Once the hero lands on the trap platform (passes it) the cycling stops.
+  //
+  platformStates[TRAP_INDEX].trapHasPassed = false
   //
   // Return first platform position and platform states for visibility system
   //

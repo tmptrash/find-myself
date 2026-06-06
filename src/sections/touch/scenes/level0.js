@@ -2990,6 +2990,7 @@ export function sceneLevel0(k) {
     // Return to menu on ESC
     //
     k.onKeyPress("escape", () => {
+      if (LevelHelp.isAnyPanelOpen()) return
       Sound.stopAmbient(sound)
       goToMenuAfterAssets(k)
     })

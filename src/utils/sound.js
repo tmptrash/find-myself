@@ -3691,7 +3691,7 @@ export function playCricketSound(instance) {
  * Plays an owl hoot sound: two soft low-frequency tones
  * @param {Object} instance - Sound instance
  */
-export function playOwlSound(instance) {
+export function playOwlSound(instance, volumeMultiplier = 1) {
   if (globalMuteProceduralSounds) return
   const ctx = instance.audioContext
   if (!ctx || ctx.state !== 'running') return
@@ -3700,7 +3700,7 @@ export function playOwlSound(instance) {
   // Two soft hoots ("hoo... hoo") with short pause between them
   //
   const baseFreq = 280 + Math.random() * 60
-  const vol = 0.22 + Math.random() * 0.08
+  const vol = (0.22 + Math.random() * 0.08) * volumeMultiplier
   const hootDuration = 0.32
   const gap = 0.18
   for (let i = 0; i < 2; i++) {

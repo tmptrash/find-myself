@@ -45,7 +45,7 @@ const MOUND_SPREAD = 35
 //
 // Trigger and retract distances (hero must walk far to make worm hide)
 //
-const TRIGGER_DISTANCE = 100
+const TRIGGER_DISTANCE = 180
 const RETRACT_DISTANCE = 400
 //
 // Sideways lean toward hero
@@ -173,7 +173,13 @@ export function create(config) {
     frictionGain: null,
     alienTimer: 0,
     smiling: false,
-    smileT: 0
+    smileT: 0,
+    //
+    // When blocked = true the worm will not trigger from 'hidden' phase
+    // even when the hero is within TRIGGER_DISTANCE. Used externally to
+    // enforce a single-worm-at-a-time mutex across multiple instances.
+    //
+    blocked: false
   }
   k.add([
     k.z(CFG.visual.zIndex.platforms + 15),
@@ -244,7 +250,7 @@ function onUpdate(inst) {
   const dy = Math.abs(heroY - inst.floorY)
   const dist = Math.sqrt(dx * dx + dy * dy)
   if (inst.phase === 'hidden') {
-    if (dist < TRIGGER_DISTANCE) {
+    if (!inst.blocked && dist < TRIGGER_DISTANCE) {
       inst.phase = 'rising'
       inst.arcDirection = heroX > inst.x ? 1 : -1
       inst.arcAmount = 0

@@ -18,6 +18,7 @@ import * as BackgroundBirds from '../../time/components/background-birds.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { drawThorns } from '../components/jungle-decor.js'
 import { getRGB, isAnyKeyDown } from '../../../utils/helper.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 
 //
 // Game area — same proportions as time section level 0
@@ -36,6 +37,7 @@ const PLAYABLE_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
 const BG_R = 26
 const BG_G = 26
 const BG_B = 26
+const BG_HEX = '#1A1A1A'
 const WALL_COLOR = 31
 const WALL_COLOR_HEX = '#1F1F1F'
 //
@@ -364,9 +366,11 @@ export function sceneTouchTraining(k) {
     //
     // Background and gravity
     //
-    k.setBackground(k.rgb(BG_R, BG_G, BG_B))
-    k.canvas?.style.setProperty('background-color', `rgb(${BG_R}, ${BG_G}, ${BG_B})`, 'important')
-    k.onSceneLeave(() => { k.canvas?.style.removeProperty('background-color') })
+    //
+    // Sync canvas + CSS backdrop so letterbox bars match the scene background.
+    //
+    CanvasBackdrop.applyCanvasBackdrop(k, BG_HEX)
+    k.onSceneLeave(() => CanvasBackdrop.clearCanvasBackdrop(k))
     k.setGravity(CFG.game.gravity)
     k.onDraw(() => {
       k.drawRect({ width: k.width(), height: k.height(), pos: k.vec2(0, 0), color: k.rgb(BG_R, BG_G, BG_B) })

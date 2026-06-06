@@ -59,9 +59,13 @@ const FLYING_WORD_COUNT = 22
 //
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level0LifeDeduction'
-const WORD_L0_PLAYFIELD_BG_R = 90
-const WORD_L0_PLAYFIELD_BG_G = 90
-const WORD_L0_PLAYFIELD_BG_B = 112
+//
+// Platform color (top/bottom strips visible at canvas edges): matches
+// the pfColor used by initScene's applyCanvasBackdrop (#323242).
+//
+const WORD_L0_BACKDROP_R = 50
+const WORD_L0_BACKDROP_G = 50
+const WORD_L0_BACKDROP_B = 66
 //
 // Hover tooltip copy
 //
@@ -199,7 +203,7 @@ export function sceneLevel0(k) {
       sound,
       deductFlag: LIFE_DEDUCT_FLAG,
       sceneLock,
-      sceneBgRgb: { r: WORD_L0_PLAYFIELD_BG_R, g: WORD_L0_PLAYFIELD_BG_G, b: WORD_L0_PLAYFIELD_BG_B }
+      sceneBgRgb: { r: WORD_L0_BACKDROP_R, g: WORD_L0_BACKDROP_G, b: WORD_L0_BACKDROP_B }
     })
     
     //

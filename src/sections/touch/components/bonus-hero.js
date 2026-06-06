@@ -33,6 +33,17 @@ const LAND_TOLERANCE = 14
 //
 const VELOCITY_PREDICTION_FRAMES = 4
 //
+// When the hero is strictly above the platform AND falling downward we
+// apply a larger effective reveal distance so the collider is guaranteed
+// to be in place well before the hero reaches the surface. A tight
+// per-platform `revealDistance` (e.g. 100px) prevents the platform from
+// appearing while the hero is on a floor below it, but that same small
+// window can be crossed in a single physics tick at terminal velocity.
+// Using this larger distance only while the hero is actively falling
+// avoids any false-positive reveal from below.
+//
+const FALLING_REVEAL_DISTANCE = 260
+//
 // Once the collider has been enabled it remains "hot" for this many
 // seconds — enough for Kaplay to register the actual landing and mark
 // the hero as grounded. Without this hold the platform would flicker off
@@ -121,6 +132,10 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {number} [config.platformCollisionXOffset] - Horizontal shift of collision box (right = positive)
  * @param {number} [config.platformCollisionYOffset] - Vertical shift of collision box (down = positive)
  * @param {number} [config.platformZ] - Z-index for platform collision and draw layer
+ * @param {number} [config.triggerBelowY] - If set, the platform only reveals when the
+ *   hero's center Y exceeds this value while falling. Use this when the hidden platform
+ *   is below another floor: the platform stays invisible while the hero walks/jumps on
+ *   the floor above and only activates once the hero has dropped past that floor.
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -137,6 +152,7 @@ export function create(config) {
     platformFontSize = TIME_PLATFORM_FONT_SIZE,
     platformCollisionHeight = null,
     platformCollisionTopTrim = 0,
+    triggerBelowY = null,
     platformCollisionXOffset = 0,
     platformCollisionYOffset = 0,
     platformZ = CFG.visual.zIndex.platforms
@@ -239,6 +255,13 @@ export function create(config) {
     // triggering the reveal and tunnel right through.
     //
     revealWidth: revealWidth ?? (Math.max(collisionWidthResolved, width) + 8),
+    //
+    // When set, primaryDetection is replaced by a Y-threshold check:
+    // the platform only activates once the hero's center descends below
+    // this Y while falling. Useful when the hidden platform sits beneath
+    // another floor — prevents false reveals during jumps above that floor.
+    //
+    triggerBelowY,
     bonusPoints: 0,
     bonusFlashParticles: [],
     miniColor,
@@ -461,8 +484,29 @@ function onUpdate(inst) {
       //
       const ABOVE_MARGIN = 5
       const heroAboveSurface = heroFeetY < platformSurface - ABOVE_MARGIN
-      const heroWithinApproachRange = heroFeetY > platformSurface - inst.revealDistance
-      const primaryDetection = heroAboveSurface && heroWithinApproachRange
+      //
+      // While the hero is strictly above the platform AND already falling,
+      // switch to a larger reveal window so the collider is in place well
+      // before the body arrives — a tight window can be crossed in a single
+      // physics tick at high fall velocity, causing the hero to tunnel through.
+      // The expanded distance is only active while `isFalling` is true, so it
+      // never fires from a floor below the platform where the hero is standing.
+      //
+      const effectiveRevealDist = (isFalling && heroAboveSurface)
+        ? Math.max(inst.revealDistance, FALLING_REVEAL_DISTANCE)
+        : inst.revealDistance
+      const heroWithinApproachRange = heroFeetY > platformSurface - effectiveRevealDist
+      //
+      // triggerBelowY mode: ignore proximity to the hidden platform itself.
+      // Instead, activate only when the hero's center has dropped past the
+      // reference Y (e.g. the first-floor surface level) while falling.
+      // This prevents any reveal during a jump that passes over the platform
+      // from above — the platform only appears after the hero has actually
+      // fallen clear below the floor above it.
+      //
+      const primaryDetection = inst.triggerBelowY !== null
+        ? (isFalling && heroPos.y > inst.triggerBelowY)
+        : (heroAboveSurface && heroWithinApproachRange)
       const predictedFeetY = heroFeetY + velY * dt * VELOCITY_PREDICTION_FRAMES
       const willCrossSurface = isFalling
         && heroFeetY <= platformSurface + LAND_TOLERANCE

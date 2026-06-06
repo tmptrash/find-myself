@@ -66,7 +66,8 @@ export function create(config) {
     hero,
     currentLevel,
     levelIndicator,
-    onBeforeRestart
+    onBeforeRestart,
+    sfx
   }
   //
   // Setup collision detection with hero character (only for real spikes)
@@ -96,6 +97,34 @@ export function create(config) {
   })
   
   return inst
+}
+
+/**
+ * Adds one extra real spike at the given position and wires collision + glint.
+ * Use this to place a single "1" at a specific coordinate (e.g. below a falling platform)
+ * without affecting the normal spike distribution.
+ * @param {Object} inst - TimeSpikes instance returned by create()
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ */
+export function addSingleSpike(inst, x, y) {
+  const spike = createSingleSpike(inst.k, x, y, 0, false)
+  inst.spikes.push(spike)
+  //
+  // Glint animation state (matches the per-spike init done in create())
+  //
+  spike.glintTimer = Math.random() * CFG.visual.spikeGlint.intervalMax
+  spike.isGlinting = false
+  spike.glintProgress = 0
+  spike.glintSoundPlayed = false
+  spike.sfx = inst.sfx
+  spike.onUpdate(() => updateGlintAnimation(spike, inst.k))
+  //
+  // Collision: fire onSpikeHit when hero touches this spike
+  //
+  if (inst.hero?.character) {
+    inst.hero.character.onCollide(SPIKE_TAG, () => onSpikeHit(inst))
+  }
 }
 
 /**

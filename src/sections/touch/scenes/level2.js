@@ -250,27 +250,12 @@ const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level2TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level2Visited'
 const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
-const LIFE_DEDUCT_TRAP_FLAG = 'touch.level2TrapActive'
-const LIFE_DEDUCT_MAX_COUNT = 2
+const LIFE_DEDUCT_MAX_COUNT = 1
 //
 // Music volume multiplier for L2 — background music should sit quieter so
 // ambient wildlife and sound effects feel more prominent.
 //
 const L2_MUSIC_VOLUME_MULT = 0.6
-//
-// Trap platform: the second-to-last platform slides away on first approach
-//
-const TRAP_PLATFORM_SLIDE_SPEED = 1200
-const TRAP_PLATFORM_RETURN_SPEED = 600
-const TRAP_PLATFORM_SLIDE_DISTANCE = 400
-const TRAP_PLATFORM_TRIGGER_RADIUS = 80
-const TRAP_PLATFORM_PAUSE_DURATION = 0.3
-//
-// After each flee cycle the platform holds still for this many seconds,
-// letting the hero approach before it flees again. Repeats indefinitely
-// until the hero actually lands on the platform (trapHasPassed = true).
-//
-const TRAP_CORRIDOR_DURATION = 6
 //
 // Breath vapor: small white puffs from hero's mouth in cold air
 //
@@ -497,7 +482,6 @@ export function sceneLevel2(k) {
     const currentLifeScore = get('lifeScore', 0)
     const trapCount = get(LIFE_DEDUCT_FLAG, 0)
     const iciclesAlreadyActive = get(LIFE_DEDUCT_ICICLES_FLAG, false)
-    const trapAlreadyActive = get(LIFE_DEDUCT_TRAP_FLAG, false)
     const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
     const eligible = trapCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     //
@@ -511,14 +495,11 @@ export function sceneLevel2(k) {
       set(LIFE_DEDUCT_VISITED_FLAG, false)
     }
     //
-    // Resolve active states: icicles after 1st deduction, trap after 2nd
+    // Active states: icicles appear after the single life deduction
     //
     let iciclesActive = iciclesAlreadyActive
-    let trapPlatformActive = trapAlreadyActive
     if (showTrap) {
-      const nextCount = trapCount + 1
-      if (nextCount >= 1) iciclesActive = true
-      if (nextCount >= 2) trapPlatformActive = true
+      iciclesActive = true
     }
     const displayTrapCount = showTrap ? trapCount + 1 : trapCount
     levelIndicator.updateTrapCount(displayTrapCount)
@@ -546,7 +527,7 @@ export function sceneLevel2(k) {
     //
     // Create platforms first to get first platform position and states
     //
-    const platformsData = createDiagonalPlatforms(k, trapPlatformActive)
+    const platformsData = createDiagonalPlatforms(k)
     const firstPlatform = platformsData.firstPlatform
     const platformStates = platformsData.platformStates
     //
@@ -644,10 +625,7 @@ export function sceneLevel2(k) {
     // Updates deduct count and activates icicles/trap depending on which deduction this is.
     //
     if (showTrap) {
-      const nextCount = trapCount + 1
-      const extraFlags = []
-      if (nextCount >= 1) extraFlags.push(LIFE_DEDUCT_ICICLES_FLAG)
-      if (nextCount >= 2) extraFlags.push(LIFE_DEDUCT_TRAP_FLAG)
+      const extraFlags = [LIFE_DEDUCT_ICICLES_FLAG]
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
@@ -987,84 +965,6 @@ export function sceneLevel2(k) {
           }
         })
       }
-      //
-      // Trap platform: slides left, pauses, returns, then vanishes until next jump
-      //
-      platformStates.forEach(state => {
-        if (!state.isTrap) return
-        //
-        // Once hero has landed on the platform, no more cycling.
-        //
-        if (state.trapHasPassed) return
-        //
-        // Detect hero landing on the trap platform: hero feet at platform top
-        // within horizontal bounds and platform is visible.
-        //
-        const heroFeetY = heroY + 35
-        const platformTopY = state.y - 10
-        const onTop = Math.abs(heroX - state.x) < state.width / 2 + 20
-          && heroFeetY > platformTopY && heroFeetY < platformTopY + 30
-          && state.opacity > 0
-        if (onTop && (state.trapPhase === 'sliding-out' || state.trapPhase === 'pausing' || state.trapPhase === 'done' || state.trapPhase === 'corridor')) {
-          state.trapHasPassed = true
-          return
-        }
-        //
-        // Corridor phase: platform holds still, let hero approach freely.
-        //
-        if (state.trapPhase === 'corridor') {
-          state.trapCorridorTimer -= dt
-          if (state.trapCorridorTimer <= 0) {
-            //
-            // Corridor expired — allow the next approach to trigger a flee.
-            //
-            state.trapTriggered = false
-            state.trapPhase = 'idle'
-          }
-          return
-        }
-        if (!state.trapTriggered) {
-          const dx = Math.abs(heroX - state.x)
-          const dy = Math.abs(heroY - state.y)
-          if (state.opacity > 0 && dx < state.width / 2 + TRAP_PLATFORM_TRIGGER_RADIUS && dy < TRAP_PLATFORM_TRIGGER_RADIUS) {
-            state.trapTriggered = true
-            state.trapPhase = 'sliding-out'
-            state.trapSlideProgress = 0
-            state.trapPauseTimer = 0
-          }
-        }
-        if (state.trapPhase === 'sliding-out') {
-          state.trapSlideProgress += TRAP_PLATFORM_SLIDE_SPEED * dt
-          if (state.trapSlideProgress >= TRAP_PLATFORM_SLIDE_DISTANCE) {
-            state.trapSlideProgress = TRAP_PLATFORM_SLIDE_DISTANCE
-            state.trapPhase = 'pausing'
-            state.trapPauseTimer = 0
-          }
-          const newX = state.trapOriginalX - state.trapSlideProgress
-          state.x = newX
-          state.visualObject && (state.visualObject.pos.x = newX)
-          state.collisionObject && (state.collisionObject.pos.x = newX)
-        } else if (state.trapPhase === 'pausing') {
-          state.trapPauseTimer += dt
-          if (state.trapPauseTimer >= TRAP_PLATFORM_PAUSE_DURATION) {
-            state.trapPhase = 'sliding-back'
-          }
-        } else if (state.trapPhase === 'sliding-back') {
-          state.trapSlideProgress -= TRAP_PLATFORM_RETURN_SPEED * dt
-          if (state.trapSlideProgress <= 0) {
-            state.trapSlideProgress = 0
-            //
-            // Platform returned to original X — start the corridor window.
-            //
-            state.trapPhase = 'corridor'
-            state.trapCorridorTimer = TRAP_CORRIDOR_DURATION
-          }
-          const newX = state.trapOriginalX - state.trapSlideProgress
-          state.x = newX
-          state.visualObject && (state.visualObject.pos.x = newX)
-          state.collisionObject && (state.collisionObject.pos.x = newX)
-        }
-      })
       //
       // Update platform visibility timers and opacity
       //
@@ -1671,7 +1571,7 @@ function createSnowDrifts(k, lakeBounds) {
  * @param {Object} k - Kaplay instance
  * @returns {Object} Object with first platform position and platform states array
  */
-function createDiagonalPlatforms(k, enableTrap = true) {
+function createDiagonalPlatforms(k) {
   //
   // Platform parameters
   //
@@ -1889,26 +1789,6 @@ function createDiagonalPlatforms(k, enableTrap = true) {
     fakePlatformState.visualObject = fakeVisualObj
   })
   
-  //
-  // Mark the second-to-last platform (index 1) as a trap that slides away once
-  // Only activated after the 2nd life deduction in this level
-  //
-  const TRAP_INDEX = 1
-  platformStates[TRAP_INDEX].isTrap = enableTrap
-  platformStates[TRAP_INDEX].trapTriggered = false
-  platformStates[TRAP_INDEX].trapPhase = 'idle'
-  platformStates[TRAP_INDEX].trapSlideProgress = 0
-  platformStates[TRAP_INDEX].trapPauseTimer = 0
-  platformStates[TRAP_INDEX].trapOriginalX = platforms[TRAP_INDEX].x
-  //
-  // Corridor: after each flee+return cycle, the platform holds still for
-  // TRAP_CORRIDOR_DURATION seconds before triggering again.
-  //
-  platformStates[TRAP_INDEX].trapCorridorTimer = 0
-  //
-  // Once the hero lands on the trap platform (passes it) the cycling stops.
-  //
-  platformStates[TRAP_INDEX].trapHasPassed = false
   //
   // Return first platform position and platform states for visibility system
   //
@@ -3728,7 +3608,7 @@ function generateHangingIcicles(platformStates) {
   const icicles = []
   const platformHeight = 30
   platformStates.forEach((state, idx) => {
-    if (state.isTrap || state.isFake) return
+    if (state.isFake) return
     if (HANGING_ICICLE_SKIP_INDICES.includes(idx)) return
     const halfW = state.width / 2
     for (let i = 0; i < HANGING_ICICLE_COUNT_PER_PLATFORM; i++) {

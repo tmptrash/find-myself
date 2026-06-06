@@ -1554,6 +1554,14 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
     y: heroInst.character.pos.y,
     radius: DARKNESS_GLOW_RADIUS * heroGlowState.intensity
   })
+  //
+  // Stop the creature as soon as the annihilation sequence begins (not just
+  // after it completes). heroInst.isAnnihilating is set the moment hero and
+  // anti-hero first collide, well before the explosion animation finishes.
+  //
+  if (heroInst.isAnnihilating) {
+    creatureInst.stopped = true
+  }
   ShadowCreature.onUpdate(creatureInst, dt, glowPositions)
 }
 

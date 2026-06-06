@@ -469,17 +469,10 @@ export function sceneLevel0(k) {
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
     //
-    // Sync all CSS ancestors (letterbox wrappers, page chrome) to the playfield teal
-    // so any bars outside the canvas match the level background colour.
+    // Sync canvas + CSS backdrop to wall color (the top/bottom platform strips
+    // visible at the edge of the viewport are drawn with WALL_COLOR).
     //
-    CanvasBackdrop.applyCanvasBackdrop(k, L0_PLAYFIELD_BG_HEX)
-    //
-    // Override Kaplay's own clear colour back to the dark wall tint so the
-    // areas inside the canvas that Kaplay blanks each frame (top / bottom
-    // of the viewport when the window aspect differs from the game ratio)
-    // match the drawn wall panels and produce no visible strip.
-    //
-    k.setBackground(k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B))
+    CanvasBackdrop.applyCanvasBackdrop(k, WALL_COLOR_HEX)
     k.onSceneLeave(() => {
       CanvasBackdrop.clearCanvasBackdrop(k)
     })
@@ -669,7 +662,7 @@ export function sceneLevel0(k) {
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
-        sceneBgRgb: { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
+        sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B }
       })
     }
     if (showTrap2) {
@@ -682,7 +675,7 @@ export function sceneLevel0(k) {
           sound,
           deductFlag: TRAP2_FLAG,
           sceneLock,
-          sceneBgRgb: { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
+          sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B }
         })
       })
     }

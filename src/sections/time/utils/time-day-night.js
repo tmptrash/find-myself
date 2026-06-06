@@ -94,6 +94,14 @@ const OWL_INTERVAL_MIN = 18
 const OWL_INTERVAL_MAX = 44
 const OWL_APPEAR_DARKNESS = 0.45
 //
+// Kids music volume ramp: silence above NIGHT (deep dusk / night), full volume below DAY (8 AM).
+// Linear interpolation between the two thresholds gives a smooth ~30-minute transition.
+// 0.45 → darkness at ~6:23 AM / ~5:36 PM (threshold shared with OWL_APPEAR_DARKNESS)
+// 0.25 → darkness at ~8:00 AM / ~4:00 PM
+//
+const KIDS_MUSIC_NIGHT_DARKNESS = 0.45
+const KIDS_MUSIC_FULL_DARKNESS = 0.25
+//
 // Moon only appears after the general night overlay is thick enough to hide the sun.
 // At darkness=0.62 the overlay covers ~57% of brightness — sun is barely perceptible.
 //
@@ -282,7 +290,12 @@ function updateOwlSound(inst, darkness, dt) {
 
 function updateKidsVolume(inst, darkness) {
   if (!inst.music?.kids) return
-  inst.music.kids.volume = CFG.audio.backgroundMusic.kids * Math.max(0, 1 - darkness * 1.85)
+  //
+  // Linear ramp: silence at KIDS_MUSIC_NIGHT_DARKNESS, full volume at KIDS_MUSIC_FULL_DARKNESS.
+  // Music is fully restored by 8 AM (darkness ≈ 0.25) and fully gone after dusk (darkness ≥ 0.45).
+  //
+  const t = Math.min(1, Math.max(0, (KIDS_MUSIC_NIGHT_DARKNESS - darkness) / (KIDS_MUSIC_NIGHT_DARKNESS - KIDS_MUSIC_FULL_DARKNESS)))
+  inst.music.kids.volume = CFG.audio.backgroundMusic.kids * t
 }
 
 function onDraw(inst) {

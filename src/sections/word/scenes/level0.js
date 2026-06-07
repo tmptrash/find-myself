@@ -34,7 +34,6 @@ const DEATH_MESSAGES = [
 const PLATFORM_TOP_HEIGHT = 360      // Top platform height (33.3% of 1080)
 const PLATFORM_BOTTOM_HEIGHT = 360   // Bottom platform height (33.3% of 1080)
 const PLATFORM_SIDE_WIDTH = 192      // Side walls width (10% of 1920)
-
 //
 // Hero spawn positions (in pixels)
 //
@@ -598,13 +597,13 @@ function setupWordLevel0HoverTooltips(k, ctx) {
   const wordTargets = flyingWords.words
     .filter(word => !word.isLetter)
     .map(word => ({
-      x: () => word.textObj.pos.x,
-      y: () => word.textObj.pos.y,
+      x: () => word.x,
+      y: () => word.y,
       width: FLYING_WORD_TOOLTIP_WIDTH,
       height: FLYING_WORD_TOOLTIP_HEIGHT,
-      text: () => getFlyingWordTooltip(word.textObj.text),
+      text: () => getFlyingWordTooltip(word.text),
       offsetY: FLYING_WORD_TOOLTIP_Y_OFFSET,
-      visible: () => inPlayArea(word.textObj.pos.x, word.textObj.pos.y)
+      visible: () => inPlayArea(word.x, word.y)
     }))
   wordTargets.length && Tooltip.create({ k, targets: wordTargets })
 }

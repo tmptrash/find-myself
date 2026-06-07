@@ -277,13 +277,15 @@ function spawnThoughtSky(inst) {
     const y = Math.random() * screenH
     const vx = (Math.random() > 0.5 ? 1 : -1) * k.rand(SKY_DRIFT_MIN, SKY_DRIFT_MAX)
     const vy = k.rand(-SKY_DRIFT_MAX * 0.35, SKY_DRIFT_MAX * 0.35)
-    inst.thoughtSky.push({
+    const skyItem = {
       text, size, x, y, vx, vy,
       color: voidBlendRgb(k, inst, colors.distantThoughts, depth),
       font,
       blur: 2 + Math.floor(Math.random() * 3),
       depth
-    })
+    }
+    bakeTextItemSprite(k, skyItem)
+    inst.thoughtSky.push(skyItem)
   }
 }
 
@@ -353,6 +355,7 @@ function spawnDriftMotifs(inst) {
       const yBand = def.kind === 'moon'
         ? screenH * randomInRange(0.05, 0.2)
         : screenH * randomInRange(0.12, 0.78)
+      const fillHex = atmosphericDepthColor(colors.memories, inst.playfieldColor, depth)
       const motif = {
         kind: def.kind,
         x: Math.random() * screenW,
@@ -362,7 +365,11 @@ function spawnDriftMotifs(inst) {
         depth,
         scale,
         phase: Math.random() * Math.PI * 2,
-        fillHex: atmosphericDepthColor(colors.memories, inst.playfieldColor, depth),
+        fillHex,
+        //
+        // Pre-computed Color object — avoids per-frame atmosphericDepthColor + getRGB in draw
+        //
+        colorObj: getRGB(k, fillHex),
         glyph: def.kind === 'note' ? NOTE_GLYPHS[Math.floor(Math.random() * NOTE_GLYPHS.length)] : null,
         noteTilt: def.kind === 'note' ? k.rand(-22, 22) : 0,
         fadePhase: Math.random() * Math.PI * 2,
@@ -372,6 +379,10 @@ function spawnDriftMotifs(inst) {
       spawned++
     }
   })
+  //
+  // Sort once by depth (back-to-front) so drawDriftMotifs skips the per-frame sort
+  //
+  inst.driftMotifs.sort((a, b) => b.depth - a.depth)
 }
 
 //
@@ -484,6 +495,12 @@ function spawnBrainRoots(inst) {
   allSegments.forEach(seg => {
     const key = `${Math.round(seg.startX)},${Math.round(seg.startY)}`
     const bucket = segMap.get(key) ?? []
+    //
+    // Pre-compute length once — avoids Math.sqrt in the per-frame runner update loop
+    //
+    const dx = seg.endX - seg.startX
+    const dy = seg.endY - seg.startY
+    seg.len = Math.sqrt(dx * dx + dy * dy)
     bucket.push(seg)
     segMap.set(key, bucket)
   })
@@ -497,6 +514,10 @@ function spawnBrainRoots(inst) {
   )
   inst.rootSegMap = segMap
   inst.rootStartSegs = startSegs
+  //
+  // Cache constant runner color — avoids k.rgb() allocation every frame in drawRootRunners
+  //
+  inst.rootRunnerColor = k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
 }
 
 //
@@ -539,12 +560,14 @@ function spawnThoughtStream(inst) {
     const vy = k.rand(-STREAM_DRIFT_MAX * 0.4, STREAM_DRIFT_MAX * 0.4)
     const rot = Math.random() * Math.PI * 2
     const rotSpeed = k.rand(-0.4, 0.4)
-    inst.streamItems.push({
+    const streamItem = {
       text, size, x, y, vx, vy, rot, rotSpeed,
       color: playfieldBlendRgb(k, inst, colors.memories, depth),
       font,
       depth
-    })
+    }
+    bakeTextItemSprite(k, streamItem)
+    inst.streamItems.push(streamItem)
   }
 }
 
@@ -751,10 +774,7 @@ function updateRootRunners(inst, dt) {
       r.opacity <= 0 && rootRunners.splice(i, 1)
       continue
     }
-    const dx = r.seg.endX - r.seg.startX
-    const dy = r.seg.endY - r.seg.startY
-    const len = Math.sqrt(dx * dx + dy * dy)
-    len > 0 && (r.t += (ROOT_RUNNER_SPEED / len) * dt)
+    r.seg.len > 0 && (r.t += (ROOT_RUNNER_SPEED / r.seg.len) * dt)
     if (r.t >= 1) {
       const nextKey = `${Math.round(r.seg.endX)},${Math.round(r.seg.endY)}`
       const nextSegs = rootSegMap.get(nextKey) ?? []
@@ -791,8 +811,8 @@ function makeRootRunner(seg, word, opacity) {
 //
 function drawRootRunners(inst) {
   if (!inst.rootRunners) return
-  const { k, rootRunners } = inst
-  const color = k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
+  const { k, rootRunners, rootRunnerColor } = inst
+  const color = rootRunnerColor ?? k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
   rootRunners.forEach(r => {
     const x = r.seg.startX + (r.seg.endX - r.seg.startX) * r.t
     const y = r.seg.startY + (r.seg.endY - r.seg.startY) * r.t
@@ -826,15 +846,16 @@ function onDraw(inst) {
 
 function drawDriftMotifs(inst) {
   const { k, driftMotifs } = inst
-  const sorted = [...driftMotifs].sort((a, b) => b.depth - a.depth)
-  sorted.forEach(motif => {
+  driftMotifs.forEach(motif => {
     const op = (motif.fadeOpacity ?? LAYER_DRAW_OPACITY) * (motif.wrapOpacity ?? 1)
     if (motif.kind === 'moon') {
       k.drawSprite({ sprite: getMoonSpriteKey(k), pos: k.vec2(motif.x, motif.y), anchor: 'center', scale: motif.scale, opacity: op })
       return
     }
-    const motifColor = playfieldBlendRgb(k, inst, inst.colors.memories, motif.depth)
-    if (motif.kind === 'note') { drawNote(k, motif.x, motif.y, motif.scale, motifColor, op, inst.font, motif.glyph, motif.noteTilt); return }
+    //
+    // Use pre-cached colorObj — avoids per-frame atmosphericDepthColor hex computation
+    //
+    if (motif.kind === 'note') { drawNote(k, motif.x, motif.y, motif.scale, motif.colorObj, op, inst.font, motif.glyph, motif.noteTilt); return }
   })
 }
 
@@ -873,18 +894,16 @@ function drawTextClouds(inst) {
 }
 
 //
-// Layer 0 draw — ghost-blurred text fragments
+// Layer 0 draw — pre-baked text sprites for zero per-frame font rendering cost
 //
 function drawThoughtSky(inst) {
   const { k, thoughtSky } = inst
   thoughtSky.forEach(item => {
-    k.drawText({
-      text: item.text,
-      size: item.size,
-      font: item.font,
+    if (!item.spriteKey) return
+    k.drawSprite({
+      sprite: item.spriteKey,
       pos: k.vec2(item.x, item.y),
       anchor: 'center',
-      color: item.color,
       opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1)
     })
   })
@@ -903,18 +922,16 @@ function drawNoiseSilhouettes(inst) {
 }
 
 //
-// Layer 2 draw — drifting symbols and formulas
+// Layer 2 draw — pre-baked text sprites; rotation handled via k.drawSprite angle parameter
 //
 function drawThoughtStream(inst) {
   const { k, streamItems } = inst
   streamItems.forEach(item => {
-    k.drawText({
-      text: item.text,
-      size: item.size,
-      font: item.font,
+    if (!item.spriteKey) return
+    k.drawSprite({
+      sprite: item.spriteKey,
       pos: k.vec2(item.x, item.y),
       anchor: 'center',
-      color: item.color,
       opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1),
       angle: item.rot ? item.rot * (180 / Math.PI) : 0
     })
@@ -1161,6 +1178,58 @@ function drawSilhouette(k, type, x, y, scale, color, opacity) {
       k.drawRect({ pos: k.vec2(x + s * 0.2, y - s * 0.15), width: s * 0.55, height: s * 0.12, color, opacity: LAYER_DRAW_OPACITY, anchor: 'center', angle: 40 })
       break
   }
+}
+
+//
+// Module-level cache — avoids re-baking identical text sprites on scene restart.
+// Key: "{text}|{size}|{r}|{g}|{b}" → sprite key string
+//
+const textSpriteCache = new Map()
+
+//
+// Bakes a text item (thoughtSky or thoughtStream) into a Kaplay sprite so that
+// draw functions can call k.drawSprite instead of k.drawText each frame.
+// On repeated calls with the same content the cached sprite key is reused.
+//
+function bakeTextItemSprite(k, item) {
+  const { color, font } = item
+  const size = Math.round(item.size)
+  const r = Math.round(color.r)
+  const g = Math.round(color.g)
+  const b = Math.round(color.b)
+  const cacheKey = `${item.text}|${size}|${r}|${g}|${b}`
+  if (textSpriteCache.has(cacheKey)) {
+    item.spriteKey = textSpriteCache.get(cacheKey)
+    return
+  }
+  //
+  // Measure text on a temporary canvas before allocating the final one
+  //
+  const tmpCtx = document.createElement('canvas').getContext('2d')
+  tmpCtx.font = `${size}px '${font}'`
+  const measured = tmpCtx.measureText(item.text)
+  const TEXT_BAKE_PAD = 4
+  const w = Math.ceil(measured.width) + TEXT_BAKE_PAD * 2
+  const h = Math.ceil(size * 1.7) + TEXT_BAKE_PAD * 2
+  //
+  // Draw text centered on a canvas with the item's exact color
+  //
+  const canvas = toCanvas({ width: w, height: h, pixelRatio: 1 }, ctx => {
+    ctx.font = `${size}px '${font}'`
+    ctx.fillStyle = `rgb(${r},${g},${b})`
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillText(item.text, w / 2, h / 2)
+  })
+  const spriteKey = `wcl-text-${cacheKey.replace(/[^a-z0-9]/gi, '_')}`
+  k.loadSprite(spriteKey, canvas)
+  //
+  // Release canvas memory immediately after upload to GPU
+  //
+  canvas.width = 0
+  canvas.height = 0
+  textSpriteCache.set(cacheKey, spriteKey)
+  item.spriteKey = spriteKey
 }
 
 //

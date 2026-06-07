@@ -303,6 +303,7 @@ export function sceneLevel3(k) {
       spriteName: 'city-background-level3',
       showSun: false,
       showMoon: false,
+      showGameClock: true,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: CORRIDOR_Y - 20,  // T1ME indicator above upper corridor ceiling
       sideWallWidth: PLATFORM_SIDE_WIDTH,

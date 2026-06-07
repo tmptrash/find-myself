@@ -149,6 +149,10 @@ export function create(cfg) {
 
   const words = []
   const killerLetters = []
+  //
+  // Z-index for regular flying words draw entity
+  //
+  const wordZIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
 
   //
   // Create initial words (half behind hero, half in front)
@@ -221,6 +225,44 @@ export function create(cfg) {
   }
   k.flyingWordsInstance = inst
 
+  //
+  // Single draw entity renders all regular (non-killer) words each frame via k.drawText.
+  // Replaces 22 separate k.text game objects — eliminates per-entity overhead in Kaplay's
+  // entity loop while keeping the same visual result. Uses k.stay() to persist across
+  // scene restarts (same lifecycle as the killer-letter entities below).
+  //
+  k.add([
+    k.z(wordZIndex),
+    k.fixed(),
+    k.stay(),
+    'flying-words-draw',
+    {
+      draw() {
+        const currentInst = k.flyingWordsInstance
+        if (!currentInst) return
+        const inWordLevel = k.time() - lastOnUpdateTime < WORD_LEVEL_TIMEOUT
+        if (!inWordLevel) return
+        for (const word of currentInst.words) {
+          if (word.scaleX < 0.05) continue
+          k.pushTransform()
+          k.pushTranslate(k.vec2(word.x, word.y))
+          k.pushScale(word.scaleX, 1)
+          k.drawText({
+            text: word.text,
+            size: word.size,
+            font: word.fontFamily,
+            anchor: 'center',
+            pos: k.vec2(0, 0),
+            angle: word.angle,
+            color: word.color,
+            opacity: word.opacity
+          })
+          k.popTransform()
+        }
+      }
+    }
+  ])
+
   return inst
 }
 
@@ -264,24 +306,24 @@ function updateWord(word, inst) {
     //
     // Update horizontal position (constant wind to the right)
     //
-    word.textObj.pos.x += word.speedX * k.dt()
-    
+    word.x += word.speedX * k.dt()
+
     //
     // Realistic falling motion with subtle flutter
     // Leaves fall down with slight variations, not pure sine wave
     //
     word.wavePhase += word.waveSpeed * k.dt()
-    
+
     //
     // Combine downward drift with subtle horizontal wobble
     // Main motion: strong horizontal wind (right)
     // Secondary motion: slight vertical fall and horizontal flutter
     //
-    const flutter = Math.sin(word.wavePhase) * word.waveAmplitude * 0.2  // Very subtle horizontal flutter
-    const fallSpeed = word.speedY + Math.abs(Math.sin(word.wavePhase * 0.5)) * 5  // Minimal variable falling speed
-    
-    word.textObj.pos.x += flutter * k.dt()
-    word.textObj.pos.y += fallSpeed * k.dt()
+    const flutter = Math.sin(word.wavePhase) * word.waveAmplitude * 0.2
+    const fallSpeed = word.speedY + Math.abs(Math.sin(word.wavePhase * 0.5)) * 5
+
+    word.x += flutter * k.dt()
+    word.y += fallSpeed * k.dt()
 
     //
     // Update 2D rotation (spinning in plane) - leaves tumble as they fall
@@ -314,7 +356,7 @@ function updateWord(word, inst) {
     const currentRotationSpeed = word.rotationSpeed * (1 + word.rotationCurrentModifier * 0.7)
     
     word.rotation += currentRotationSpeed * k.dt()
-    word.textObj.angle = word.rotation
+    word.angle = word.rotation
 
     //
     // Update 3D rotation (turning to face viewer) - realistic tumbling
@@ -345,20 +387,13 @@ function updateWord(word, inst) {
     word.rotationZCurrentModifier += (word.rotationZTargetModifier - word.rotationZCurrentModifier) * lerpSpeedZ * k.dt()
     
     const currentRotationSpeedZ = word.rotationSpeedZ * (1 + word.rotationZCurrentModifier * 0.8)
-    
+
     word.rotationZ += currentRotationSpeedZ * k.dt()
     const zRotRad = word.rotationZ * Math.PI / 180
     const scaleX = Math.abs(Math.cos(zRotRad))
-    
-    //
-    // When word is edge-on (scaleX near 0), it becomes nearly invisible
-    // Initialize scale if it doesn't exist
-    //
-    if (!word.textObj.scale) {
-      word.textObj.scale = k.vec2(1, 1)
-    }
-    word.textObj.scale.x = Math.max(0.05, scaleX)
-    
+
+    word.scaleX = Math.max(0.05, scaleX)
+
     //
     // Edge-on rotation blends toward playfield instead of fading alpha
     // Killer words keep accent pulse — no phrase depth blend
@@ -369,14 +404,14 @@ function updateWord(word, inst) {
     // Respawn logic: if word exits right or bottom (+ 100px buffer), respawn at left
     //
     const approximateWordWidth = 150
-    
-    if (word.textObj.pos.x > playableRight + SPAWN_BUFFER || word.textObj.pos.y > playableBottom + SPAWN_BUFFER) {
+
+    if (word.x > playableRight + SPAWN_BUFFER || word.y > playableBottom + SPAWN_BUFFER) {
       //
       // Respawn at left, 100px before playable area
       // Y position: random from top-100px to bottom
       //
-      word.textObj.pos.x = playableLeft - SPAWN_BUFFER - Math.random() * approximateWordWidth
-      word.textObj.pos.y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
+      word.x = playableLeft - SPAWN_BUFFER - Math.random() * approximateWordWidth
+      word.y = playableTop - SPAWN_BUFFER + Math.random() * (playableBottom - playableTop + SPAWN_BUFFER)
       //
       // Randomize properties for variety
       //
@@ -388,11 +423,23 @@ function updateWord(word, inst) {
       word.rotationSpeedZ = (Math.random() - 0.5) * inst.rotationSpeedZ
       word.wavePhase = Math.random() * Math.PI * 2
     }
-    
+
   //
   // Subtle color pulse on killer words
   //
   word.isKiller && pulseKillerColor(word, inst)
+
+  //
+  // Sync position, angle and scale back to the Kaplay game object for killer letters.
+  // Regular words have no textObj — they are rendered by the shared draw entity.
+  //
+  if (word.textObj) {
+    word.textObj.pos.x = word.x
+    word.textObj.pos.y = word.y
+    word.textObj.angle = word.angle
+    if (!word.textObj.scale) word.textObj.scale = k.vec2(1, 1)
+    word.textObj.scale.x = word.scaleX
+  }
 }
 
 /**
@@ -417,6 +464,11 @@ function updateKillerLetter(letter, inst) {
     
     letter.textObj.pos.x = x
     letter.textObj.pos.y = y
+    //
+    // Keep plain-object coords in sync for killer letters (textObj is authoritative)
+    //
+    letter.x = x
+    letter.y = y
     //
     // Reset spawn delay
     //
@@ -513,48 +565,44 @@ function createWord(k, params) {
   }
 
   //
-  // Set z-index: behind large background heroes, above bookshelf layer
-  //
-  const zIndex = CFG.visual.zIndex.wordFlyingWords ?? CFG.visual.zIndex.flyingWords
-
-  //
   // Depth based on layer — color shift toward playfield, not alpha
   //
   const depthBase = isBehindHero ? FLYING_WORD_DEPTH_FAR : FLYING_WORD_DEPTH_NEAR
   const playfieldHex = params.playfieldHex ?? getConsciousnessColor('gameWorld')
   const phraseColor = pickPhraseColor(isBehindHero, playfieldHex)
   const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
-  
-  const textObj = k.add([
-    k.text(text, {
-      size: size,
-      font: fontFamily
-    }),
-    k.pos(x, y),
-    k.anchor('center'),
-    getColor(k, phraseColor),
-    k.opacity(REGULAR_WORD_OPACITY),
-    k.z(zIndex),
-    k.fixed(),
-    k.stay(),
-    "flying-word"
-  ])
-
+  //
+  // Pre-compute the two color endpoints used for edge-on depth blending.
+  // Avoids hex-string math in the per-frame applyFlyingWordDepthColor call.
+  //
+  const colorNear = getRGB(k, atmosphericDepthColor(phraseColor, playfieldHex, depthBase))
+  const colorFar = getRGB(k, atmosphericDepthColor(phraseColor, playfieldHex, Math.min(1, depthBase + FLYING_WORD_EDGE_DEPTH_BOOST)))
+  //
+  // Plain JS object — rendered by the shared draw entity instead of Kaplay's entity system.
+  // Eliminates per-word WebGL overhead without changing any visible behavior.
+  //
   return {
-    textObj,
-    outlineTexts: [],
-    outlineObj: null,
+    x,
+    y,
+    text,
+    size,
+    angle: 0,
+    scaleX: 1,
+    opacity: REGULAR_WORD_OPACITY,
+    color: k.rgb(colorNear.r, colorNear.g, colorNear.b),
+    colorNear,
+    colorFar,
     fontFamily,
     phraseColor,
     speedX,
     speedY,
     rotation: Math.random() * 360,
     rotationSpeed: (Math.random() - 0.5) * WORD_ROTATION_SPEED_RANGE,
-    rotationZ: Math.random() * 360,  // Initial Z rotation
-    rotationSpeedZ: (Math.random() - 0.5) * rotationSpeedZ,  // Use parameter for Z-axis rotation speed
+    rotationZ: Math.random() * 360,
+    rotationSpeedZ: (Math.random() - 0.5) * rotationSpeedZ,
     wavePhase: Math.random() * Math.PI * 2,
-    waveSpeed: 1.5 + Math.random() * 2,  // 1.5-3.5 wave frequency - subtle flutter
-    waveAmplitude: 8 + Math.random() * 12,  // 8-20 amplitude for subtle horizontal wobble
+    waveSpeed: 1.5 + Math.random() * 2,
+    waveAmplitude: 8 + Math.random() * 12,
     depthBase,
     isBehindHero,
     isLetter,
@@ -594,28 +642,25 @@ function resetWord(word, inst, x) {
   word.depthBase = word.isBehindHero ? FLYING_WORD_DEPTH_FAR : FLYING_WORD_DEPTH_NEAR
   word.phraseColor = pickPhraseColor(word.isBehindHero, inst.playfieldHex)
 
-  word.textObj.pos.x = x
-  word.textObj.pos.y = playableTop + Math.random() * (playableBottom - playableTop)
+  word.x = x
+  word.y = playableTop + Math.random() * (playableBottom - playableTop)
   word.speedX = minSpeed + Math.random() * (maxSpeed - minSpeed)
-  word.speedY = 2 + Math.random() * 8  // Very slow falling down (2-10 px/s) - minimal vertical drift
+  word.speedY = 2 + Math.random() * 8
   word.rotation = Math.random() * 360
   word.rotationSpeed = (Math.random() - 0.5) * WORD_ROTATION_SPEED_RANGE
   word.rotationZ = Math.random() * 360
-  word.rotationSpeedZ = (Math.random() - 0.5) * rotationSpeedZ  // Use parameter for Z-axis rotation speed
+  word.rotationSpeedZ = (Math.random() - 0.5) * rotationSpeedZ
   word.wavePhase = Math.random() * Math.PI * 2
-  word.waveSpeed = 1.5 + Math.random() * 2  // 1.5-3.5 wave frequency - subtle flutter
-  word.waveAmplitude = 8 + Math.random() * 12  // 8-20 amplitude for subtle horizontal wobble
+  word.waveSpeed = 1.5 + Math.random() * 2
+  word.waveAmplitude = 8 + Math.random() * 12
+  word.text = text
+  word.size = size
+  word.scaleX = 1
+  //
+  // Refresh cached color endpoints after depthBase and phraseColor changed
+  //
+  cacheWordColorEndpoints(word, inst.k, inst.playfieldHex)
   applyFlyingWordDepthColor(word, inst.k, 1, inst.playfieldHex)
-  word.textObj.text = text
-  
-  //
-  // Initialize scale if it doesn't exist
-  //
-  if (!word.textObj.scale) {
-    word.textObj.scale = inst.k.vec2(1, 1)
-  }
-  word.textObj.scale.x = 1
-  word.textObj.textSize = size
 }
 
 /**
@@ -808,6 +853,10 @@ function createKillerLetter(k, params) {
     textObj,
     outlineEntity,
     fontFamily,
+    x,
+    y,
+    angle: 0,
+    scaleX: 1,
     speedX,
     speedY,
     rotation: Math.random() * 360,
@@ -817,7 +866,7 @@ function createKillerLetter(k, params) {
     wavePhase: Math.random() * Math.PI * 2,
     waveSpeed: 1.5 + Math.random() * 2,
     waveAmplitude: 8 + Math.random() * 12,
-    isBehindHero: false,  // Killer words are always in front
+    isBehindHero: false,
     isLetter: true,
     sizeMultiplier: 1,
     isKiller: true,
@@ -866,13 +915,36 @@ function pickPhraseColor(isBehindHero, playfieldHex) {
 }
 
 //
-// Depth cue via color blend — regular words are semi-transparent
+// Pre-computes the two color extremes for a word: full-face (scaleX=1) and edge-on (scaleX=0).
+// These are cached on the word so that applyFlyingWordDepthColor can lerp numerically
+// instead of running the expensive atmosphericDepthColor hex pipeline every frame.
+//
+function cacheWordColorEndpoints(word, k, playfieldHex) {
+  const depthBase = word.depthBase ?? FLYING_WORD_DEPTH_NEAR
+  const depthFar = Math.min(1, depthBase + FLYING_WORD_EDGE_DEPTH_BOOST)
+  word.colorNear = getRGB(k, atmosphericDepthColor(word.phraseColor, playfieldHex, depthBase))
+  word.colorFar = getRGB(k, atmosphericDepthColor(word.phraseColor, playfieldHex, depthFar))
+  if (!word.color) word.color = k.rgb(word.colorNear.r, word.colorNear.g, word.colorNear.b)
+}
+
+//
+// Depth cue via color blend — lerps between two pre-cached Color extremes.
+// No hex parsing or string operations happen here — pure arithmetic per frame.
 //
 function applyFlyingWordDepthColor(word, k, scaleX, playfieldHex) {
-  const edgeDepth = (1 - scaleX) * FLYING_WORD_EDGE_DEPTH_BOOST
-  const depth = Math.min(1, (word.depthBase ?? FLYING_WORD_DEPTH_NEAR) + edgeDepth)
-  const colorHex = atmosphericDepthColor(word.phraseColor, playfieldHex, depth)
-  word.textObj.opacity = REGULAR_WORD_OPACITY
-  word.textObj.color = getRGB(k, colorHex)
+  const near = word.colorNear
+  const far = word.colorFar
+  if (!near || !far) {
+    //
+    // Fallback on first call before endpoints are cached
+    //
+    cacheWordColorEndpoints(word, k, playfieldHex)
+    return
+  }
+  const t = 1 - scaleX
+  word.color.r = near.r + (far.r - near.r) * t
+  word.color.g = near.g + (far.g - near.g) * t
+  word.color.b = near.b + (far.b - near.b) * t
+  word.opacity = REGULAR_WORD_OPACITY
 }
 

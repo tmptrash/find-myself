@@ -783,4 +783,11 @@ function onUpdate(inst) {
 - Follow these patterns consistently across the codebase
 - When in doubt, reference existing components (`hero.js`, `spikes.js`, `moving-platform.js`, `sound.js`)
 - Prioritize readability and maintainability
+
+---
+
+## Communication Language
+
+- **All responses and reports to the user must be written in Russian**
+- Code comments and JSDoc remain in English (as required by rule 9)
 - Keep it simple: don't over-engineer solutions

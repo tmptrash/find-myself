@@ -361,9 +361,8 @@ export async function create(config) {
         treeCtx.lineTo(segment.endX + offsetX, segment.endY + offsetY)
         treeCtx.stroke()
       })
-      
       //
-      // Draw branch segments to canvas (leaves are drawn dynamically now)
+      // Draw branch segments to canvas
       //
       allBranchSegments.forEach(segment => {
         const opacity = 0.7 - segment.depth * 0.07
@@ -378,6 +377,28 @@ export async function create(config) {
       })
     })
     const spriteName = `tree-${index}`
+    //
+    // Bake all leaf clusters to a sprite so draw() replaces thousands of
+    // per-frame k.drawPolygon + k.drawLine calls with a single drawSprite.
+    // Leaves keep their static positions; only the X shake offset is applied
+    // when positioning the sprite, identical to how the branch sprite works.
+    //
+    const leafDataUrl = toCanvas({ width: canvasWidth, height: canvasHeight, pixelRatio: 1 }, (leafCtx) => {
+      leafClusters.forEach(cluster => {
+        cluster.forEach(leaf => {
+          drawLeafToCanvas(
+            leafCtx,
+            leaf.x + offsetX,
+            leaf.y + offsetY,
+            leaf.size,
+            leaf.rotation,
+            leaf.color,
+            leaf.opacity
+          )
+        })
+      })
+    })
+    const leafSpriteName = `tree-leaf-${index}`
     //
     // White root-only sprite for glow overlay on note touch
     //
@@ -398,14 +419,15 @@ export async function create(config) {
     return {
       x: rootX,
       spriteName,
+      leafSpriteName,
       glowSpriteName,
       dataUrl,
+      leafDataUrl,
       glowDataUrl,
       minX,
       minY,
       padding,
       centerY,
-      leafClusters,
       trunkTop: { x: trunkX, y: trunkY },
       trunkBottom: { x: rootX, y: centerY },
       noteFrequency: notes[index],
@@ -424,6 +446,7 @@ export async function create(config) {
   await Promise.all(roots.map(root => {
     return new Promise((resolve) => {
       loadTouchSprite(k, root.spriteName, root.dataUrl)
+      loadTouchSprite(k, root.leafSpriteName, root.leafDataUrl)
       loadTouchSprite(k, root.glowSpriteName, root.glowDataUrl)
       setTimeout(resolve, 50)
     })
@@ -480,91 +503,6 @@ function drawLeafToCanvas(ctx, x, y, size, angle, color, opacity) {
   ctx.restore()
 }
 
-/**
- * Draw a single leaf using quadratic curves
- * @param {Object} k - Kaplay instance
- * @param {number} x - Center X position
- * @param {number} y - Center Y position
- * @param {number} size - Leaf size
- * @param {number} angle - Rotation angle
- * @param {Object} color - Leaf color
- * @param {number} opacity - Leaf opacity
- */
-//
-// Local-space leaf polygons cached by quantized size. Each leaf used to
-// rebuild 22 bezier points + 22 vec2 objects every single frame; reusing
-// the cached template (and pushing a transform once per leaf) eliminates
-// thousands of allocations per render at no visual cost.
-//
-const LEAF_POINT_CACHE = new Map()
-//
-// Reusable vec2s for the leaf vein, hoisted so each leaf draw doesn't
-// allocate two more objects.
-//
-let _leafVeinP1 = null
-let _leafVeinP2 = null
-
-function getLeafTemplate(k, size) {
-  const key = Math.round(size * 4)
-  let pts = LEAF_POINT_CACHE.get(key)
-  if (pts) return pts
-  pts = []
-  const steps = 10
-  //
-  // Left side: bezier base → tip (P0=(0,0), P1=(-s*0.6,-s*0.3), P2=(0,-s))
-  //
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const px = 2 * (1 - t) * t * (-size * 0.6)
-    const py = 2 * (1 - t) * t * (-size * 0.3) + t * t * (-size)
-    pts.push(k.vec2(px, py))
-  }
-  //
-  // Right side: bezier tip → base, mirrored
-  //
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const px = 2 * (1 - t) * t * (size * 0.6)
-    const py = (1 - t) * (1 - t) * (-size) + 2 * (1 - t) * t * (-size * 0.3)
-    pts.push(k.vec2(px, py))
-  }
-  LEAF_POINT_CACHE.set(key, pts)
-  return pts
-}
-
-function drawLeaf(k, x, y, size, angle, color, opacity) {
-  const pts = getLeafTemplate(k, size)
-  //
-  // Push transform once: the cached point template is in local-leaf space,
-  // so a translate+rotate places it correctly without recomputing points.
-  //
-  k.pushTransform()
-  k.pushTranslate(x, y)
-  k.pushRotate((angle * 180) / Math.PI)
-  k.drawPolygon({
-    pts,
-    color,
-    opacity
-  })
-  //
-  // Vein in local space — base (0,0) to tip (0,-size). Reuse pre-allocated
-  // vec2s so this branch never allocates either.
-  //
-  if (!_leafVeinP1) {
-    _leafVeinP1 = k.vec2(0, 0)
-    _leafVeinP2 = k.vec2(0, 0)
-  }
-  _leafVeinP1.x = 0; _leafVeinP1.y = 0
-  _leafVeinP2.x = 0; _leafVeinP2.y = -size
-  k.drawLine({
-    p1: _leafVeinP1,
-    p2: _leafVeinP2,
-    width: 1,
-    color: k.rgb(40, 60, 40),
-    opacity: 0.35
-  })
-  k.popTransform()
-}
 
 /**
  * Play a musical note using Web Audio API
@@ -739,25 +677,16 @@ export function draw(inst) {
     // Only shake when touched (no natural sway)
     //
     const touchShakeOffset = Math.sin(time * 30) * root.touchShake
+    const spritePos = k.vec2(root.minX - root.padding + touchShakeOffset, root.minY - root.padding)
     //
-    // Draw leaves dynamically BEFORE the sprite so branches cover them
+    // Draw baked leaf sprite BEFORE the branch sprite so branches cover them.
+    // A single drawSprite replaces thousands of per-frame drawPolygon + drawLine calls.
     //
-    for (const cluster of root.leafClusters) {
-      for (const leaf of cluster) {
-        drawLeaf(k, leaf.x + touchShakeOffset, leaf.y, leaf.size, leaf.rotation, leaf.color, leaf.opacity)
-      }
-    }
+    k.drawSprite({ sprite: root.leafSpriteName, pos: spritePos })
     //
-    // Draw pre-rendered tree sprite (roots + branches only)
-    // Sprite's top-left corner is at (minX - padding, minY - padding)
+    // Draw pre-rendered tree sprite (roots + branches)
     //
-    k.drawSprite({
-      sprite: root.spriteName,
-      pos: k.vec2(
-        root.minX - root.padding + touchShakeOffset,
-        root.minY - root.padding
-      )
-    })
+    k.drawSprite({ sprite: root.spriteName, pos: spritePos })
   })
 }
 /**

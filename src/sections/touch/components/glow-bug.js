@@ -1,7 +1,7 @@
 import { CFG } from '../cfg.js'
 import * as SmallBugs from './small-bugs.js'
 import * as Sound from '../../../utils/sound.js'
-import { getRGB } from '../../../utils/helper.js'
+import { getRGB, toCanvas } from '../../../utils/helper.js'
 //
 // Glow mechanics configuration
 //
@@ -34,6 +34,48 @@ const BUG_SURFACE_OFFSET = 20
 //
 const GLOW_RING_COUNT = 30
 const GLOW_MAX_OPACITY = 0.12
+//
+// Glow ring sprite size: must contain the full aura radius with a small margin.
+// Each unique color is baked once and reused across all bugs of that color.
+//
+const GLOW_SPRITE_SIZE = GLOW_AURA_RADIUS * 2 + 4
+const GLOW_SPRITE_HALF = GLOW_SPRITE_SIZE / 2
+//
+// Module-level cache: hex color string → sprite name. Prevents duplicate baking
+// when multiple GlowBug managers (or level restarts) use the same colors.
+//
+const _glowRingCache = new Map()
+//
+// Bake a radial glow gradient to a sprite and return its name.
+// Color is provided as separate r/g/b values; the hex string is the cache key.
+// The pre-baked texture is drawn at full GLOW_AURA_RADIUS (no pulse applied yet).
+// At draw time, applying k.drawSprite with scale=pulse gives the same result as
+// the original per-ring loop where ringRadius = GLOW_AURA_RADIUS * pulse * (1-t).
+//
+function getOrCreateGlowSprite(k, colorHex, r, g, b) {
+  if (_glowRingCache.has(colorHex)) return _glowRingCache.get(colorHex)
+  const spriteName = `glow-ring-${colorHex.replace('#', '')}`
+  const canvas = toCanvas({ width: GLOW_SPRITE_SIZE, height: GLOW_SPRITE_SIZE }, ctx => {
+    const cx = GLOW_SPRITE_HALF
+    const cy = GLOW_SPRITE_HALF
+    for (let i = 0; i < GLOW_RING_COUNT; i++) {
+      const t = i / GLOW_RING_COUNT
+      const ringRadius = GLOW_AURA_RADIUS * (1 - t)
+      const falloff = t * t
+      ctx.globalAlpha = GLOW_MAX_OPACITY * falloff
+      ctx.fillStyle = `rgb(${r},${g},${b})`
+      ctx.beginPath()
+      ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  })
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  _glowRingCache.set(colorHex, spriteName)
+  return spriteName
+}
 /**
  * Creates a glow bug manager that wraps SmallBugs with glow, trampoline,
  * and chain reaction mechanics
@@ -74,11 +116,13 @@ export function create(cfg) {
         crawlSpeed: 35 + Math.random() * 25,
         touchRadius: 45
       })
+      const glowColor = getRGB(k, smallBug.pattern.bodyColor)
+      const glowSpriteName = getOrCreateGlowSprite(k, smallBug.pattern.bodyColor, glowColor.r, glowColor.g, glowColor.b)
       entries.push({
         bug: smallBug,
         isGlowing: false,
         glowTimer: 0,
-        glowColor: getRGB(k, smallBug.pattern.bodyColor),
+        glowSpriteName,
         trampolineCooldown: 0
       })
     }
@@ -203,29 +247,19 @@ export function onDraw(inst) {
     // Draw glow aura when glowing
     //
     if (entry.isGlowing) {
+      //
+      // Pulse factor 0.7–1.0 scales the glow radius each frame.
+      // Applying it as sprite scale is equivalent to the original
+      // ringRadius = GLOW_AURA_RADIUS * pulse * (1-t) per ring loop.
+      // A single drawSprite replaces 30 per-frame drawCircle calls.
+      //
       const pulse = 0.7 + Math.sin(k.time() * GLOW_PULSE_SPEED) * 0.3
-      const radius = GLOW_AURA_RADIUS * pulse
-      const c = entry.glowColor
-      //
-      // Glow center follows bug body (shifts down when squatting via dropOffset)
-      //
       const glowY = entry.bug.y + (entry.bug.dropOffset || 0)
-      //
-      // Draw smooth radial gradient glow: each ring drawn from outer to inner
-      // with opacity following inverse-square falloff for natural light decay
-      //
-      for (let i = 0; i < GLOW_RING_COUNT; i++) {
-        const t = i / GLOW_RING_COUNT
-        const ringRadius = radius * (1 - t)
-        const falloff = t * t
-        const ringOpacity = GLOW_MAX_OPACITY * falloff
-        k.drawCircle({
-          pos: k.vec2(entry.bug.x, glowY),
-          radius: ringRadius,
-          color: k.rgb(c.r, c.g, c.b),
-          opacity: ringOpacity
-        })
-      }
+      k.drawSprite({
+        sprite: entry.glowSpriteName,
+        pos: k.vec2(entry.bug.x - GLOW_SPRITE_HALF * pulse, glowY - GLOW_SPRITE_HALF * pulse),
+        scale: k.vec2(pulse, pulse)
+      })
     }
     //
     // Draw the bug

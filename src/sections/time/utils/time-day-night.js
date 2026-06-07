@@ -1,6 +1,7 @@
 import { CFG } from '../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import { getWindowPositions } from '../components/city-background.js'
+import { toCanvas } from '../../../utils/helper.js'
 
 //
 // Module-level timeOfDay persists across scene reloads within the same session.
@@ -133,6 +134,20 @@ const SUN_FADE_END = 0.50
 // Z-index for the dynamic sun layer: between background (15.5) and overlay (15.51)
 //
 const Z_SUN = 15.505
+//
+// Pre-baked sprite canvas sizes. Sun glow reaches SUN_RADIUS * SUN_GLOW_MAX_FACTOR (~55 px);
+// Moon halo reaches MOON_RADIUS * MOON_GLOW_MAX_FACTOR (~62 px). Sizes add 8 px margin.
+//
+const SUN_SPRITE_SIZE = 120
+const SUN_SPRITE_HALF = SUN_SPRITE_SIZE / 2
+const MOON_SPRITE_SIZE = 140
+const MOON_SPRITE_HALF = MOON_SPRITE_SIZE / 2
+//
+// Module-level flags: sprites are shared across all DayNight instances in the session.
+//
+let _sunSpriteBaked = false
+let _moonInSpriteBaked = false
+let _moonOutSpriteBaked = false
 
 /**
  * Returns darkness 0 (full day) → 1 (full night). Pure function of internal timeOfDay.
@@ -150,6 +165,69 @@ export function getTimeOfDay() {
   return moduleTimeOfDay
 }
 
+//
+// Bake the sun glow to a canvas at full alpha=1. The caller draws it with
+// opacity = alpha so all concentric rings scale uniformly, matching the
+// original per-circle multiplication exactly.
+//
+function bakeSunCanvas() {
+  return toCanvas({ width: SUN_SPRITE_SIZE, height: SUN_SPRITE_SIZE }, ctx => {
+    const cx = SUN_SPRITE_HALF
+    const cy = SUN_SPRITE_HALF
+    for (let s = 0; s < SUN_GLOW_STEPS; s++) {
+      const t = s / (SUN_GLOW_STEPS - 1)
+      const r = SUN_RADIUS * (0.22 + t * (SUN_GLOW_MAX_FACTOR - 0.22))
+      const cr = Math.round(SUN_COLOR_R + (255 - SUN_COLOR_R) * (1 - t) * 0.32)
+      const cg = Math.round(SUN_COLOR_G + (216 - SUN_COLOR_G) * (1 - t) * 0.30)
+      const cb = Math.round(SUN_COLOR_B + (92 - SUN_COLOR_B) * (1 - t) * 0.18)
+      const op = (1 - t) * (1 - t) * 0.52
+      ctx.globalAlpha = op
+      ctx.fillStyle = `rgb(${cr},${cg},${cb})`
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 0.32
+    ctx.fillStyle = 'rgb(255,228,120)'
+    ctx.beginPath()
+    ctx.arc(cx, cy, SUN_RADIUS * 0.32, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
+  })
+}
+//
+// Bake the moon (halo + disc + craters) at boostedOpacity=1.
+// colorR/G/B are the pre-computed moon RGB values (varies by moonInOverlay).
+//
+function bakeMoonCanvas(colorR, colorG, colorB) {
+  return toCanvas({ width: MOON_SPRITE_SIZE, height: MOON_SPRITE_SIZE }, ctx => {
+    const cx = MOON_SPRITE_HALF
+    const cy = MOON_SPRITE_HALF
+    for (let s = 0; s < MOON_GLOW_STEPS; s++) {
+      const t = s / MOON_GLOW_STEPS
+      const r = MOON_RADIUS * (1 + (1 - t) * (MOON_GLOW_MAX_FACTOR - 1))
+      const op = (1 - t) * 0.12
+      ctx.globalAlpha = op
+      ctx.fillStyle = `rgb(${colorR},${colorG},${colorB})`
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 0.98
+    ctx.fillStyle = `rgb(${colorR},${colorG},${colorB})`
+    ctx.beginPath()
+    ctx.arc(cx, cy, MOON_RADIUS, 0, Math.PI * 2)
+    ctx.fill()
+    for (const cr of MOON_CRATERS) {
+      ctx.globalAlpha = 0.88
+      ctx.fillStyle = `rgb(${Math.max(0, colorR - cr.dark)},${Math.max(0, colorG - cr.dark)},${Math.max(0, colorB - cr.dark)})`
+      ctx.beginPath()
+      ctx.arc(cx + cr.x * MOON_RADIUS, cy + cr.y * MOON_RADIUS, cr.r * MOON_RADIUS, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  })
+}
 /**
  * Creates the day/night cycle layer for a scene. Returns cleanup fn.
  * @param {Object} cfg - Configuration
@@ -186,6 +264,40 @@ export function create(cfg) {
   // (e.g. below pixel clouds in level 2). Otherwise drawn inside the main overlay.
   //
   const moonLayerZ = cfg.moonLayerZ ?? null
+  const moonInOverlay = moonLayerZ === null
+  //
+  // Bake sun sprite once per session (shared across all DayNight instances).
+  //
+  if (showSun && !_sunSpriteBaked) {
+    const sunCanvas = bakeSunCanvas()
+    cfg.k.loadSprite('day-night-sun', sunCanvas)
+    sunCanvas.width = 0
+    sunCanvas.height = 0
+    _sunSpriteBaked = true
+  }
+  //
+  // Bake moon sprite once per session. Two variants: in-overlay uses the base
+  // moon colour; behind-clouds gets a brightness/color boost.
+  //
+  if (showMoon) {
+    if (moonInOverlay && !_moonInSpriteBaked) {
+      const c = bakeMoonCanvas(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
+      cfg.k.loadSprite('day-night-moon-in', c)
+      c.width = 0
+      c.height = 0
+      _moonInSpriteBaked = true
+    }
+    if (!moonInOverlay && !_moonOutSpriteBaked) {
+      const boostedR = Math.min(255, MOON_COLOR_R + MOON_BEHIND_CLOUD_COLOR_BOOST)
+      const boostedG = Math.min(255, MOON_COLOR_G + MOON_BEHIND_CLOUD_COLOR_BOOST)
+      const boostedB = Math.min(255, MOON_COLOR_B + MOON_BEHIND_CLOUD_COLOR_BOOST)
+      const c = bakeMoonCanvas(boostedR, boostedG, boostedB)
+      cfg.k.loadSprite('day-night-moon-out', c)
+      c.width = 0
+      c.height = 0
+      _moonOutSpriteBaked = true
+    }
+  }
   const inst = {
     k: cfg.k,
     sound: cfg.sound,
@@ -197,7 +309,7 @@ export function create(cfg) {
     windowBlinks: generateWindowBlinks(windows),
     owlTimer: OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN),
     starsInOverlay: starLayerZ === null,
-    moonInOverlay: moonLayerZ === null,
+    moonInOverlay,
     showMoon
   }
   //
@@ -210,7 +322,7 @@ export function create(cfg) {
       {
         draw() {
           const d = getDarkness()
-          if (d < SUN_FADE_END) drawSun(inst.k, d)
+          if (d < SUN_FADE_END) drawSun(inst, d)
         }
       }
     ])
@@ -329,72 +441,35 @@ function drawNightOverlay(inst, darkness) {
 }
 //
 // Dynamic sun: drawn below the night overlay so the overlay dims it naturally.
-// The sun also fades its own opacity as dusk approaches, guaranteeing it is fully
-// gone by SUN_FADE_END regardless of overlay opacity.
+// Replaces 29 per-frame drawCircle calls with a single sprite blit.
+// alpha is a uniform multiplier for all rings, so applying it as sprite opacity
+// is mathematically identical to the original per-circle alpha * baseOpacity.
 //
-function drawSun(k, darkness) {
+function drawSun(inst, darkness) {
   const alpha = darkness < SUN_FADE_START
     ? 1.0
     : 1.0 - (darkness - SUN_FADE_START) / (SUN_FADE_END - SUN_FADE_START)
-  const pos = k.vec2(SUN_X, SUN_Y)
-  //
-  // Draw from center to edge with gradual color/opacity interpolation.
-  // This keeps the core and halo continuous (no hard edge between disc and glow).
-  //
-  for (let s = 0; s < SUN_GLOW_STEPS; s++) {
-    const t = s / (SUN_GLOW_STEPS - 1)
-    const r = SUN_RADIUS * (0.22 + t * (SUN_GLOW_MAX_FACTOR - 0.22))
-    const cr = Math.round(SUN_COLOR_R + (255 - SUN_COLOR_R) * (1 - t) * 0.32)
-    const cg = Math.round(SUN_COLOR_G + (216 - SUN_COLOR_G) * (1 - t) * 0.30)
-    const cb = Math.round(SUN_COLOR_B + (92 - SUN_COLOR_B) * (1 - t) * 0.18)
-    const op = alpha * (1 - t) * (1 - t) * 0.52
-    k.drawCircle({ pos, radius: r, color: k.rgb(cr, cg, cb), opacity: op })
-  }
-  //
-  // Slight center boost so sun stays readable but still soft
-  //
-  k.drawCircle({ pos, radius: SUN_RADIUS * 0.32, color: k.rgb(255, 228, 120), opacity: alpha * 0.32 })
+  inst.k.drawSprite({
+    sprite: 'day-night-sun',
+    pos: inst.k.vec2(SUN_X - SUN_SPRITE_HALF, SUN_Y - SUN_SPRITE_HALF),
+    opacity: alpha
+  })
 }
 //
-// Full moon with gradient glow (concentric circles, smaller radius) and craters
+// Full moon with gradient glow. Replaces 19 per-frame drawCircle calls with a
+// single sprite blit. boostedOpacity multiplies every layer uniformly, so applying
+// it as sprite opacity is mathematically identical to the original per-circle values.
 //
 function drawMoon(inst, darkness) {
-  const k = inst.k
   const moonOpacity = Math.min(1, (darkness - MOON_APPEAR_DARKNESS) / MOON_APPEAR_RANGE)
   const layerBoost = inst.moonInOverlay ? 1 : MOON_BEHIND_CLOUD_BRIGHTNESS_BOOST
   const boostedOpacity = Math.min(1, moonOpacity * layerBoost)
-  const cb = inst.moonInOverlay ? 0 : MOON_BEHIND_CLOUD_COLOR_BOOST
-  const moonR = Math.min(255, MOON_COLOR_R + cb)
-  const moonG = Math.min(255, MOON_COLOR_G + cb)
-  const moonB = Math.min(255, MOON_COLOR_B + cb)
-  const mc = k.rgb(moonR, moonG, moonB)
-  const pos = k.vec2(MOON_X, MOON_Y)
-  //
-  // Soft halo: many concentric circles, linear falloff with low max opacity (gentle diffuse glow)
-  //
-  for (let s = 0; s < MOON_GLOW_STEPS; s++) {
-    const t = s / MOON_GLOW_STEPS
-    const r = MOON_RADIUS * (1 + (1 - t) * (MOON_GLOW_MAX_FACTOR - 1))
-    const op = boostedOpacity * (1 - t) * 0.12
-    k.drawCircle({ pos, radius: r, color: mc, opacity: op })
-  }
-  //
-  // Main disc
-  //
-  k.drawCircle({ pos, radius: MOON_RADIUS, color: mc, opacity: boostedOpacity * 0.98 })
-  //
-  // Craters: slightly darker circles layered on top of the disc
-  //
-  for (const cr of MOON_CRATERS) {
-    const cx = MOON_X + cr.x * MOON_RADIUS
-    const cy = MOON_Y + cr.y * MOON_RADIUS
-    k.drawCircle({
-      pos: k.vec2(cx, cy),
-      radius: cr.r * MOON_RADIUS,
-      color: k.rgb(moonR - cr.dark, moonG - cr.dark, moonB - cr.dark),
-      opacity: boostedOpacity * 0.88
-    })
-  }
+  const spriteName = inst.moonInOverlay ? 'day-night-moon-in' : 'day-night-moon-out'
+  inst.k.drawSprite({
+    sprite: spriteName,
+    pos: inst.k.vec2(MOON_X - MOON_SPRITE_HALF, MOON_Y - MOON_SPRITE_HALF),
+    opacity: boostedOpacity
+  })
 }
 
 function drawStars(inst, darkness) {

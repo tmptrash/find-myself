@@ -1,5 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene, stopTimeSectionMusic, startClockMusic, checkSpeedBonus } from '../components/scene-helper.js'
+import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as TimeSpikes from '../components/one-spikes.js'
@@ -18,7 +19,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 //
-const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
+const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.platform)
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -88,6 +89,12 @@ const BONUS_PLATFORM_WIDTH = 72
 const BONUS_STORAGE_KEY = 'time.level2BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
+// Collision box nudge: shift right so the box aligns with the visible log,
+// and down so it sits flush with the top surface.
+//
+const BONUS_COLLISION_X_OFFSET = 15
+const BONUS_COLLISION_Y_OFFSET = 5
+//
 // Life deduction (show hint + control 2 falling platform traps)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
@@ -113,6 +120,16 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 const FINAL_PLATFORM_INDEX = 28
 const randomRange = (min, max) => Math.random() * (max - min) + min
+//
+// Night audio: at this darkness level all sounds except clock fade to silence.
+// At dawn they gradually return. Speed is per-second volume fraction.
+//
+const NIGHT_DARKNESS_THRESHOLD = 0.45
+const NIGHT_MUSIC_FADE_SPEED = 1.5
+//
+// Default ambient gain at day (restored at dawn)
+//
+const AMBIENT_GAIN_DAY = 1.0
 
 /**
  * Draw realistic pixel art cloud on canvas
@@ -426,6 +443,12 @@ export function sceneLevel2(k) {
     const kidsMusic = Sound.playInScene(k, 'time0-kids', CFG.audio.backgroundMusic.kids, true)
     startClockMusic(k)
     //
+    // Night audio controller: at night only the clock sound remains.
+    // All other music and ambient SFX fade to silence, then restore at dawn.
+    //
+    const nightAudioState = { k, sound, timeMusic, kidsMusic }
+    k.onUpdate(() => onUpdateNightAudio(nightAudioState))
+    //
     // Calculate anti-hero position (on final platform)
     // Create the platform FIRST, then position hero above it
     // Lower the platform by 2 hero heights
@@ -554,6 +577,11 @@ export function sceneLevel2(k) {
       showGameClock: true
     })
     
+    //
+    // Override canvas backdrop to match the platform color (top/bottom border
+    // areas use platform color, so letterbox strips must match).
+    //
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.platform)
     //
     // Show anti-hero immediately (don't hide)
     //
@@ -760,13 +788,17 @@ export function sceneLevel2(k) {
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     const trapEnabled = showTrap || trapAlreadyAdded
     levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    const sceneLock = { locked: showTrap }
     if (showTrap) {
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
         sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
       })
     }
@@ -887,7 +919,9 @@ export function sceneLevel2(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor: BONUS_HERO_COLOR,
-      storageKey: BONUS_STORAGE_KEY
+      storageKey: BONUS_STORAGE_KEY,
+      platformCollisionXOffset: BONUS_COLLISION_X_OFFSET,
+      platformCollisionYOffset: BONUS_COLLISION_Y_OFFSET
     })
   })
 }
@@ -2338,6 +2372,42 @@ function drawSnowParticles(inst) {
  * Creates snow drifts on bottom platform floor
  * @param {Object} k - Kaplay instance
  */
+//
+// Night audio controller: fades all music and ambient SFX to silence as darkness
+// rises above threshold. Only clock.mp3 stays audible at night. At dawn, volumes
+// are smoothly restored to their configured targets.
+//
+function onUpdateNightAudio(inst) {
+  const darkness = getDarkness()
+  const isNight = darkness > NIGHT_DARKNESS_THRESHOLD
+  const dt = inst.k.dt()
+  const fadeStep = NIGHT_MUSIC_FADE_SPEED * dt
+  if (isNight) {
+    if (inst.timeMusic) {
+      inst.timeMusic.volume = Math.max(0, inst.timeMusic.volume - fadeStep * CFG.audio.backgroundMusic.time)
+    }
+    if (inst.kidsMusic) {
+      inst.kidsMusic.volume = Math.max(0, inst.kidsMusic.volume - fadeStep * CFG.audio.backgroundMusic.kids)
+    }
+    if (inst.sound?.ambientGain) {
+      const ag = inst.sound.ambientGain.gain
+      ag.setValueAtTime(ag.value, inst.sound.audioContext.currentTime)
+      ag.linearRampToValueAtTime(Math.max(0, ag.value - fadeStep), inst.sound.audioContext.currentTime + dt)
+    }
+  } else {
+    if (inst.timeMusic) {
+      inst.timeMusic.volume = Math.min(CFG.audio.backgroundMusic.time, inst.timeMusic.volume + fadeStep * CFG.audio.backgroundMusic.time)
+    }
+    if (inst.kidsMusic) {
+      inst.kidsMusic.volume = Math.min(CFG.audio.backgroundMusic.kids, inst.kidsMusic.volume + fadeStep * CFG.audio.backgroundMusic.kids)
+    }
+    if (inst.sound?.ambientGain) {
+      const ag = inst.sound.ambientGain.gain
+      ag.setValueAtTime(ag.value, inst.sound.audioContext.currentTime)
+      ag.linearRampToValueAtTime(Math.min(AMBIENT_GAIN_DAY, ag.value + fadeStep), inst.sound.audioContext.currentTime + dt)
+    }
+  }
+}
 function createSnowDrifts(k) {
   //
   // Snow drift configurations for bottom platform

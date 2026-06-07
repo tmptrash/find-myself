@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import { toCanvas } from '../../../utils/helper.js'
 //
 // Grass blade configuration (triangular blades for realism)
 //
@@ -48,9 +49,106 @@ const THORN_HEIGHT_MAX = 20
 const THORN_TIP_OFFSET = 3
 const THORN_OUTLINE_WIDTH = 2
 //
+// Thorn colors (matches defaults inside drawThorns)
+//
+const THORN_FILL_R = 72
+const THORN_FILL_G = 56
+const THORN_FILL_B = 42
+const THORN_OUTLINE_R = 10
+const THORN_OUTLINE_G = 9
+const THORN_OUTLINE_B = 8
+const THORN_HIGHLIGHT_R = 118
+const THORN_HIGHLIGHT_G = 98
+const THORN_HIGHLIGHT_B = 78
+const THORN_HIGHLIGHT_OPACITY = 0.35
+//
+// Canvas padding around the thorn bounding box to avoid clipping edge thorns
+//
+const THORN_CANVAS_PADDING = 8
+//
 // Vertical offset to raise thorns above platform surface (pixels)
 //
 const THORN_RAISE_OFFSET = 3
+//
+// Unique sprite name counter — prevents name collision when multiple JungleDecor
+// instances exist in the same session (e.g. level restart).
+//
+let _thornSpriteCounter = 0
+//
+// Bake thorn array to a tight canvas sprite and load it into Kaplay.
+// Returns { spriteName, offsetX, offsetY } — the sprite's top-left world position.
+// A single drawSprite call replaces 3 draw calls × N thorns every frame.
+//
+function bakeThornSprite(k, thornData) {
+  if (!thornData || thornData.length === 0) return null
+  //
+  // Calculate tight bounding box
+  //
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  const ow = 1.15
+  thornData.forEach(thorn => {
+    const hw = thorn.width / 2
+    minX = Math.min(minX, thorn.x - hw - ow - THORN_CANVAS_PADDING)
+    maxX = Math.max(maxX, thorn.x + hw + ow + THORN_CANVAS_PADDING)
+    minY = Math.min(minY, thorn.baseY - THORN_HEIGHT_MAX - ow - THORN_CANVAS_PADDING)
+    maxY = Math.max(maxY, thorn.baseY + ow + THORN_CANVAS_PADDING)
+  })
+  const canvasW = Math.ceil(maxX - minX)
+  const canvasH = Math.ceil(maxY - minY)
+  const canvas = toCanvas({ width: canvasW, height: canvasH }, ctx => {
+    const ox = -minX
+    const oy = -minY
+    thornData.forEach(thorn => {
+      const hw = thorn.width / 2
+      const thornH = thorn.height
+      const skew = Math.sin(thorn.x * 0.09 + thorn.baseY * 0.02) * (hw * 0.35)
+      const tipX = thorn.x + (thorn.tipOffset || 0) + Math.cos(thorn.x * 0.06) * (hw * 0.25)
+      const tipY = thorn.baseY - thornH
+      const midRX = thorn.x + hw * 0.25 + skew
+      const midLX = thorn.x - hw * 0.35 + skew * 0.4
+      const upperMidY = thorn.baseY - thornH * 0.38
+      //
+      // Outline pass
+      //
+      ctx.fillStyle = `rgb(${THORN_OUTLINE_R},${THORN_OUTLINE_G},${THORN_OUTLINE_B})`
+      ctx.beginPath()
+      ctx.moveTo(thorn.x - hw - ow + ox, thorn.baseY + ow * 0.6 + oy)
+      ctx.lineTo(thorn.x + hw + ow + ox, thorn.baseY + ow * 0.6 + oy)
+      ctx.lineTo(midRX + ow * 0.8 + ox, upperMidY + oy)
+      ctx.lineTo(tipX + ox, tipY - ow + oy)
+      ctx.closePath()
+      ctx.fill()
+      //
+      // Fill pass
+      //
+      ctx.fillStyle = `rgb(${THORN_FILL_R},${THORN_FILL_G},${THORN_FILL_B})`
+      ctx.beginPath()
+      ctx.moveTo(thorn.x - hw + ox, thorn.baseY + oy)
+      ctx.lineTo(thorn.x + hw + ox, thorn.baseY + oy)
+      ctx.lineTo(midRX + ox, upperMidY - 1 + oy)
+      ctx.lineTo(tipX + ox, tipY + oy)
+      ctx.closePath()
+      ctx.fill()
+      //
+      // Highlight line
+      //
+      ctx.globalAlpha = THORN_HIGHLIGHT_OPACITY
+      ctx.strokeStyle = `rgb(${THORN_HIGHLIGHT_R},${THORN_HIGHLIGHT_G},${THORN_HIGHLIGHT_B})`
+      ctx.lineWidth = 1.1
+      ctx.lineCap = 'butt'
+      ctx.beginPath()
+      ctx.moveTo(midLX + ox, thorn.baseY - 3 + oy)
+      ctx.lineTo(tipX - skew * 0.2 + ox, tipY + thornH * 0.08 + oy)
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    })
+  })
+  const spriteName = `thorn-baked-${_thornSpriteCounter++}`
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  return { spriteName, offsetX: minX, offsetY: minY }
+}
 /**
  * Creates jungle decoration system with grass, vines, thorns, and platform spikes
  * @param {Object} cfg - Configuration
@@ -75,13 +173,22 @@ export function create(cfg) {
   const vines = generateVines(platforms, platformHeight, skipVineIndices)
   const thornData = generateBottomWallThorns()
   const platformThornData = generatePlatformThorns(platformThorns)
+  //
+  // Bake static thorn geometry to sprites at create time.
+  // Each thorn set (bottom wall and platform zones) is drawn once to a tight
+  // canvas and loaded as a sprite; onDraw replaces N×3 draw calls with 1 drawSprite.
+  //
+  const bottomThornSprite = bakeThornSprite(k, thornData)
+  const platformThornSprite = bakeThornSprite(k, platformThornData)
   const inst = {
     k,
     hero,
     grassBlades,
     vines,
     thornData,
-    platformThornData
+    platformThornData,
+    bottomThornSprite,
+    platformThornSprite
   }
   return inst
 }
@@ -142,6 +249,11 @@ export function onDrawVines(inst) {
  * @param {Object} inst - Jungle decoration instance
  */
 export function onDrawBottomThorns(inst) {
+  const s = inst.bottomThornSprite
+  if (s) {
+    inst.k.drawSprite({ sprite: s.spriteName, pos: inst.k.vec2(s.offsetX, s.offsetY) })
+    return
+  }
   drawThorns(inst.k, inst.thornData, inst.thornColor)
 }
 
@@ -150,6 +262,11 @@ export function onDrawBottomThorns(inst) {
  * @param {Object} inst - Jungle decoration instance
  */
 export function onDrawPlatformThorns(inst) {
+  const s = inst.platformThornSprite
+  if (s) {
+    inst.k.drawSprite({ sprite: s.spriteName, pos: inst.k.vec2(s.offsetX, s.offsetY) })
+    return
+  }
   drawThorns(inst.k, inst.platformThornData, inst.thornColor)
 }
 

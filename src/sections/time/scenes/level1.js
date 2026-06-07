@@ -358,13 +358,17 @@ export function sceneLevel1(k) {
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     const trapEnabled = showTrap || trapAlreadyAdded
     levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    const sceneLock = { locked: showTrap }
     if (showTrap) {
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
         sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
       })
     }
@@ -632,11 +636,12 @@ export function sceneLevel1(k) {
     })
     //
     // When trap is enabled the 5th platform falls, leaving a gap with no digit "1"
-    // at that X position. Place one extra spike there, in front of the lamp pole,
-    // so the hero dies when the platform drops them onto it.
+    // at that X position. Place one extra spike in front of the lamp pole.
+    // FALLING_SPIKE_X_OFFSET shifts the digit right to align visually with the lamp.
     //
     if (trapEnabled && fifthPlatformX !== null) {
-      TimeSpikes.addSingleSpike(timeSpikes, fifthPlatformX, BOTTOM_PLATFORM_TOP - 10)
+      const FALLING_SPIKE_X_OFFSET = 30
+      TimeSpikes.addSingleSpike(timeSpikes, fifthPlatformX + FALLING_SPIKE_X_OFFSET, BOTTOM_PLATFORM_TOP - 10)
     }
     //
     // Spawn hero immediately

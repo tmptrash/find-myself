@@ -442,13 +442,17 @@ export function sceneLevel0(k) {
     const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     const trapEnabled = showTrap || trapAlreadyAdded
     levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    const sceneLock = { locked: showTrap }
     if (showTrap) {
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
         sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
       })
     }

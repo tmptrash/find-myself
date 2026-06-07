@@ -593,6 +593,27 @@ function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLe
 }
 
 function pickLeafColor(autumnLeaves, complementaryPalette = false) {
+  //
+  // Autumn takes priority over complementary palette: level 2 (snow) shows
+  // red and yellow foliage even though buildings use the complementary teal scheme.
+  //
+  if (autumnLeaves) {
+    const palette = [
+      [210, 50, 30],
+      [200, 70, 25],
+      [235, 150, 20],
+      [230, 185, 30],
+      [220, 110, 35],
+      [185, 45, 25]
+    ]
+    const base = palette[Math.floor(Math.random() * palette.length)]
+    return {
+      r: base[0] + randomInt(-12, 12),
+      g: base[1] + randomInt(-12, 12),
+      b: base[2] + randomInt(-10, 10),
+      a: randomRange(0.68, 0.92)
+    }
+  }
   if (complementaryPalette) {
     const tealPalette = [
       [32, 60, 68],
@@ -606,22 +627,6 @@ function pickLeafColor(autumnLeaves, complementaryPalette = false) {
       g: base[1] + randomInt(-10, 10),
       b: base[2] + randomInt(-10, 10),
       a: randomRange(0.66, 0.9)
-    }
-  }
-  if (autumnLeaves) {
-    const palette = [
-      [188, 78, 45],
-      [208, 112, 54],
-      [218, 154, 66],
-      [180, 66, 44],
-      [206, 132, 46]
-    ]
-    const base = palette[Math.floor(Math.random() * palette.length)]
-    return {
-      r: base[0] + randomInt(-12, 12),
-      g: base[1] + randomInt(-12, 12),
-      b: base[2] + randomInt(-10, 10),
-      a: randomRange(0.68, 0.92)
     }
   }
   const greenPalette = [

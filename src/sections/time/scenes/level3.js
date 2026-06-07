@@ -12,6 +12,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import { registerTime3Sprite } from '../../../utils/level-assets.js'
 import { getDarkness } from '../utils/time-day-night.js'
 import * as BootLoader from '../../../utils/boot-loader.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -697,6 +698,13 @@ export function sceneLevel3(k) {
         offsetY: HERO_TOOLTIP_Y_OFFSET
       }]
     })
+    //
+    // While the buy-help panel is open: lock hero input and flag monster to pause.
+    // Poll every frame; restoring controls on the tick after the panel closes is safe
+    // because hero input is already suppressed one extra frame at most.
+    //
+    let wasHelpOpen = false
+    k.onUpdate(() => onUpdateHelpLock({ hero, monster, wasHelpOpen: () => wasHelpOpen, setWasHelpOpen: v => { wasHelpOpen = v } }))
   })
 }
 
@@ -1000,7 +1008,10 @@ function createSnowParticles(k, sections) {
       k.pos(gameAreaLeft + Math.random() * gameAreaWidth, yPos),
       k.color(255, 255, 255),
       k.opacity(opacity),
-      k.z(15),
+      //
+      // z=22: above the night overlay (15.51) so snow remains visible at night.
+      //
+      k.z(22),
       k.fixed()
     ])
     
@@ -1532,6 +1543,7 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     wobbleY: 0,
     isReturningHome: false,
     isFrozen: false,
+    helpLocked: false,
     currentMoveDirectionX: 1,
     currentMoveDirectionY: 1
   }
@@ -1554,6 +1566,10 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     //
     const isFrozen = inst.isFrozen
     //
+    // Check if buy-help panel is open — monster freezes while dialog is visible
+    //
+    const isHelpLocked = inst.helpLocked
+    //
     // Check if monster should return home
     //
     if (inst.isReturningHome) {
@@ -1567,10 +1583,10 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       //
       // Move monster towards start position (straight line, no wobble)
       //
-      if (!isAnnihilating && !isFrozen && Math.abs(distanceToStartX) > 10) {
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceToStartX) > 10) {
         inst.x += moveDirectionX * inst.speed * dt
       }
-      if (!isAnnihilating && !isFrozen && Math.abs(distanceToStartY) > 10) {
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceToStartY) > 10) {
         inst.y += moveDirectionY * inst.speed * dt
       }
       //
@@ -1587,12 +1603,12 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       moveDirectionX = distanceX > 0 ? 1 : -1
       moveDirectionY = distanceY > 0 ? 1 : -1
       //
-      // Move monster towards hero (stop moving if annihilating or frozen)
+      // Move monster towards hero (stop moving if annihilating, frozen, or help panel open)
       //
-      if (!isAnnihilating && !isFrozen && Math.abs(distanceX) > 10) {
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceX) > 10) {
         inst.x += moveDirectionX * inst.speed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
       }
-      if (!isAnnihilating && !isFrozen && Math.abs(distanceY) > 10) {
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceY) > 10) {
         inst.y += moveDirectionY * inst.speed * dt
       }
     }
@@ -3139,4 +3155,17 @@ function onUpdateNightMusic(inst) {
     inst.kidsMusic.volume = Math.min(CFG.audio.backgroundMusic.kids, inst.kidsMusic.volume + fadeStep * CFG.audio.backgroundMusic.kids)
     inst.clockMusic.volume = Math.min(CFG.audio.backgroundMusic.clock, inst.clockMusic.volume + fadeStep * CFG.audio.backgroundMusic.clock)
   }
+}
+//
+// Polls LevelHelp.isAnyPanelOpen() every frame. When the panel opens:
+// - hero input is disabled (controlsDisabled = true)
+// - monster.helpLocked is set so movement stops
+// Both are restored the frame after the panel closes.
+//
+function onUpdateHelpLock(inst) {
+  const isOpen = LevelHelp.isAnyPanelOpen()
+  if (isOpen === inst.wasHelpOpen()) return
+  inst.setWasHelpOpen(isOpen)
+  inst.hero.controlsDisabled = isOpen
+  inst.monster.helpLocked = isOpen
 }

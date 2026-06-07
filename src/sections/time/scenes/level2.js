@@ -92,8 +92,8 @@ const BONUS_HERO_COLOR = "#8B5A50"
 // Collision box nudge: shift right so the box aligns with the visible log,
 // and down so it sits flush with the top surface.
 //
-const BONUS_COLLISION_X_OFFSET = 15
-const BONUS_COLLISION_Y_OFFSET = 5
+const BONUS_COLLISION_X_OFFSET = 39
+const BONUS_COLLISION_Y_OFFSET = 8
 //
 // Life deduction (show hint + control 2 falling platform traps)
 //

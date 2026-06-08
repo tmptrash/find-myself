@@ -799,7 +799,8 @@ export function sceneLevel2(k) {
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
-        sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
+        sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B },
+        textColorRgb: { r: 255, g: 220, b: 50 }
       })
     }
     const trapIndices = trapEnabled ? [TRAP_PLATFORM_INDEX_1, TRAP_PLATFORM_INDEX_2] : []

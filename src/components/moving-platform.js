@@ -10,6 +10,16 @@ const SPIKE_APPEAR_DELAY = 0.15 // Delay before blades appear after drop starts 
 const RAISE_DELAY = 2.0         // Time before raising back up (seconds)
 const RAISE_TIMEOUT = 6.0       // Maximum time platform stays down (seconds)
 const RAISE_DURATION = 0.5      // Time to raise up (seconds)
+//
+// Quick blade fade when hero runs away before the pit closes —
+// blades disappear first so the animation reads clearly
+//
+const BLADE_FADE_DURATION = 0.12
+//
+// Horizontal velocity below which the hero is considered stationary.
+// Used by the stationaryOnly closing mode (word L4 right pit).
+//
+const STATIONARY_VEL_THRESHOLD = 20
 const PIT_RATTLE_RANGE = 140
 const PIT_RATTLE_COOLDOWN = 0.35
 const PIT_STAND_VOLUME_SCALE = 1.85
@@ -44,7 +54,8 @@ export function create(config) {
     sfx = null,
     raiseTimeout = RAISE_TIMEOUT,
     raiseDelay = RAISE_DELAY,
-    onBladeHit = null
+    onBladeHit = null,
+    stationaryOnly = false
   } = config
   
   // Calculate platform dimensions based on blade width
@@ -92,15 +103,31 @@ export function create(config) {
     raiseTimeout,
     raiseDelay,
     platformWidth,
-    heroInitialY: hero.character.pos.y,  // Store hero's initial Y position
+    heroInitialY: hero.character.pos.y,
     originalY: y,
     targetY: y,
     currentY: y,
     dropDistance,
-    state: 'idle',  // idle, dropping, waiting, disabled
+    state: 'idle',
     timer: 0,
-    hasActivated: false,  // Track if trap was activated at least once
-    rattleCooldown: 0
+    hasActivated: false,
+    rattleCooldown: 0,
+    //
+    // When true the detection fires from either side (set automatically in reset())
+    //
+    bidirectional: false,
+    //
+    // When true closing timer only runs while the hero is stationary near the pit.
+    // Useful for pits that should punish hesitation, not proximity (word L4 right pit).
+    //
+    stationaryOnly,
+    //
+    // Set to true when the pit closes due to the hero running away (temporary).
+    // After the platform finishes rising the trap resets to idle so it can
+    // re-open the next time the hero approaches.
+    //
+    shouldResetAfterRise: false,
+    initialBladeY: blades.blade.pos.y
   }
   
   // Auto-open platform if requested
@@ -128,27 +155,55 @@ export function create(config) {
     })
   }
   
-  // Update logic
   platform.onUpdate(() => onUpdate(inst))
   
   return inst
 }
 
 /**
- * Update platform movement and detection
- * @param {Object} inst - Platform instance
+ * Resets a platform trap to its initial idle state so it can fire again.
+ * Call this when all traps must restart (e.g. anti-hero escape in word L2).
+ * @param {Object} inst - Platform instance returned by create()
  */
+export function reset(inst) {
+  const { blades } = inst
+  inst.state = 'idle'
+  inst.hasActivated = false
+  inst.shouldResetAfterRise = false
+  //
+  // After a reset the hero can approach from either side (e.g. returning from
+  // the right in word L2 after the anti-hero escape).
+  //
+  inst.bidirectional = true
+  inst.timer = 0
+  inst.currentY = inst.originalY
+  inst.platform.pos.y = inst.originalY
+  blades.blade.pos.y = inst.initialBladeY
+  blades.glintDrawer.pos.y = inst.initialBladeY
+  blades.glintDrawer.hidden = false
+  blades.blade.opacity = 0
+  blades.collisionEnabled = false
+}
+//
+// Update platform movement and detection
+//
 function onUpdate(inst) {
   const { k, platform, blades, hero, originalY, dropDistance, sfx, jumpToDisableBlades, platformWidth } = inst
   
   updatePitProximityRattle(inst)
   
-  // Check distance to hero (only check X distance, and only from left side)
+  //
+  // Check distance to hero and trigger the drop.
+  // Normal mode: only detects hero approaching from the left (distanceX > 0).
+  // Bidirectional mode (set after reset()): detects from either side — used when
+  // the hero returns from the right after the anti-hero escape in word L2.
+  //
   if (inst.state === 'idle' && !inst.hasActivated) {
     const distanceX = platform.pos.x - hero.character.pos.x
-    
-    // Hero approaching from left and within detection range
-    if (distanceX > 0 && distanceX <= DETECTION_DISTANCE) {
+    const withinRange = inst.bidirectional
+      ? Math.abs(distanceX) <= DETECTION_DISTANCE
+      : (distanceX > 0 && distanceX <= DETECTION_DISTANCE)
+    if (withinRange) {
       // Start dropping
       inst.state = 'dropping'
       inst.targetY = originalY + dropDistance
@@ -192,11 +247,17 @@ function onUpdate(inst) {
     }
   }
   
+  //
   // Handle waiting state
+  //
   if (inst.state === 'waiting') {
-    inst.timer += k.dt()
-    
+    //
+    // Timer for jumpToDisableBlades timeout tracking (not used in proximity mode)
+    //
+    jumpToDisableBlades && (inst.timer += k.dt())
+    //
     // Special mode: hero jumps down to disable blades
+    //
     if (jumpToDisableBlades) {
       // Check if hero is falling and is above or near the pit
       const heroY = hero.character.pos.y
@@ -216,36 +277,69 @@ function onUpdate(inst) {
         inst.timer = 0
       }
     } else {
-      // Standard mode: timer-based closing
-      // Check if hero is still in detection range
+      //
+      // Proximity-based closing:
+      // • Hero leaves  → pit closes immediately (temporary: resets to idle so
+      //   the trap can fire again next time hero approaches).
+      // • Hero stands near for raiseDelay seconds → pit closes permanently
+      //   (stays disabled, same behaviour as before).
+      //
       const distanceX = Math.abs(platform.pos.x - hero.character.pos.x)
       const heroStillNear = distanceX <= DETECTION_DISTANCE
-      
-      // Raise platform if: 
-      // 1. Minimum delay passed AND hero left the area, OR
-      // 2. Maximum timeout reached (regardless of hero position)
-      const shouldRaise = (inst.timer >= inst.raiseDelay && !heroStillNear) || 
-                          (inst.timer >= inst.raiseTimeout)
-      
-      if (shouldRaise) {
-        inst.state = 'disabled'  // Switch to disabled state (never activates again)
-        inst.targetY = originalY
+      if (!heroStillNear) {
+        //
+        // Hero ran away — fade blades out first, then raise the platform.
+        // blades_fading state prevents the disabled handler from running
+        // until the quick fade is complete.
+        //
         inst.timer = 0
-        
-        // Hide blades and disable collision
-        k.tween(
-          blades.blade.opacity,
-          0,
-          0.3,
-          (val) => blades.blade.opacity = val,
-          k.easings.linear
-        )
-        blades.collisionEnabled = false  // Disable collision when platform raises
+        inst.shouldResetAfterRise = true
+        inst.state = 'blades_fading'
+        blades.collisionEnabled = false
+        k.tween(blades.blade.opacity, 0, BLADE_FADE_DURATION, val => blades.blade.opacity = val, k.easings.linear)
+      } else {
+        //
+        // stationaryOnly: timer only runs while the hero is not moving —
+        // the pit closes after the hero has been standing still for raiseDelay.
+        // Normal mode: always count (hero just needs to stay near).
+        //
+        if (inst.stationaryOnly) {
+          const heroVelX = hero.character.vel ? Math.abs(hero.character.vel.x) : 0
+          heroVelX < STATIONARY_VEL_THRESHOLD && (inst.timer += k.dt())
+        } else {
+          inst.timer += k.dt()
+        }
+      }
+      const shouldRaise = inst.timer >= inst.raiseDelay && heroStillNear
+      if (shouldRaise) {
+        //
+        // Fade blades out first (same quick BLADE_FADE_DURATION), then raise permanently.
+        // shouldResetAfterRise = false keeps the trap in the disabled state after rising.
+        //
+        inst.timer = 0
+        inst.shouldResetAfterRise = false
+        inst.state = 'blades_fading'
+        blades.collisionEnabled = false
+        k.tween(blades.blade.opacity, 0, BLADE_FADE_DURATION, val => blades.blade.opacity = val, k.easings.linear)
       }
     }
   }
   
+  //
+  // Blades fade quickly before the platform rises (hero ran away path).
+  // Once the fade timer elapses, hand off to the disabled / rise handler.
+  //
+  if (inst.state === 'blades_fading') {
+    inst.timer += k.dt()
+    if (inst.timer >= BLADE_FADE_DURATION) {
+      inst.timer = 0
+      inst.state = 'disabled'
+      inst.targetY = originalY
+    }
+  }
+  //
   // Handle raising state (platform returns to original position)
+  //
   if (inst.state === 'disabled') {
     inst.timer += k.dt()
     const progress = Math.min(1, inst.timer / RAISE_DURATION)
@@ -269,12 +363,28 @@ function onUpdate(inst) {
     
     inst.currentY = newY
     
-    // Stay in disabled state (never reset to idle)
     if (progress >= 1) {
-      inst.state = 'disabled'  // Keep disabled, don't reset hasActivated
-      blades.blade.opacity = 0  // Ensure fully hidden
-      blades.glintDrawer.hidden = true  // Ensure glint drawer is hidden
-      blades.collisionEnabled = false
+      if (inst.shouldResetAfterRise) {
+        //
+        // Temporary close: restore the trap to idle so it can fire again
+        //
+        inst.state = 'idle'
+        inst.hasActivated = false
+        inst.shouldResetAfterRise = false
+        blades.blade.opacity = 0
+        blades.blade.pos.y = inst.initialBladeY
+        blades.glintDrawer.pos.y = inst.initialBladeY
+        blades.glintDrawer.hidden = false
+        blades.collisionEnabled = false
+      } else {
+        //
+        // Permanent close: keep disabled, trap will not re-open
+        //
+        inst.state = 'disabled'
+        blades.blade.opacity = 0
+        blades.glintDrawer.hidden = true
+        blades.collisionEnabled = false
+      }
     }
   }
 }

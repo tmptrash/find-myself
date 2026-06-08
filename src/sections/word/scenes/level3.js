@@ -6,10 +6,13 @@ import * as Sound from '../../../utils/sound.js'
 import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
+import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
 //
@@ -35,18 +38,48 @@ const BLADE_EMERGE_PX = 30
 //
 // Hero spawn positions (in pixels)
 //
-const HERO_SPAWN_X = 230    // 12% of 1920
+const HERO_SPAWN_X = 380    // 20% of 1920 (shifted right for better level start)
 const HERO_SPAWN_Y = 562    // 52% of 1080 (higher due to narrower pit)
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
 const ANTIHERO_SPAWN_Y = 562   // 52% of 1080
+//
+// Keep word count matching level 0 for consistent performance across all word levels
+//
+const FLYING_WORD_COUNT = 22
+//
+// Life deduction trap: shown once when lifeScore exceeds the threshold.
+// After the dialog the blade animation runs at double speed.
+//
+const LIFE_DEDUCT_THRESHOLD = 5
+const LIFE_DEDUCT_FLAG = 'word.level3LifeDeduction'
+//
+// Canvas backdrop RGB matching word section platform color (#2A2A38 = 42, 42, 56)
+//
+const WORD_L3_BACKDROP_R = 42
+const WORD_L3_BACKDROP_G = 42
+const WORD_L3_BACKDROP_B = 56
+//
+// Crimson section color for life-deduction dialog text
+//
+const WORD_TEXT_COLOR_R = 220
+const WORD_TEXT_COLOR_G = 20
+const WORD_TEXT_COLOR_B = 60
+//
+// Blade animation speed multiplier applied after life deduction fires
+//
+const BLADE_SPEED_BOOST_FACTOR = 2
 
 //
 // Death messages
 //
 const DEATH_MESSAGES = [
-  "Words pierce deeper than blades.",
-  "Some words cut through silence.",
-  "Words hit harder when you're running."
+  "Can't stop the thoughts?",
+  "Some words bite",
+  "Greetings from intrusive thoughts!",
+  "We never sleep \u00a9 Your thoughts",
+  "You can't hide from us",
+  "Peace is just a dream for us",
+  "Relax and we'll eat you up!"
 ]
 
 /**
@@ -56,6 +89,10 @@ const DEATH_MESSAGES = [
  * @param {Object} bladesInst - Blades instance that was hit
  */
 function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
+  //
+  // While the buy-help panel is open the hero is invulnerable — ignore the hit
+  //
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
   const currentLifeScore = get('lifeScore', 0)
   const newLifeScore = currentLifeScore + 1
   set('lifeScore', newLifeScore)
@@ -241,8 +278,9 @@ export function sceneLevel3(k) {
         top: PLATFORM_TOP_HEIGHT,
         bottom: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT
       },
+      wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 5  // Level 3: 5 killer letters
+      killerLetterCount: 6  // Level 3: 6 killer letters
     })
     
     //
@@ -298,7 +336,7 @@ export function sceneLevel3(k) {
       y: pitBottomY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => Blades.handleCollision(pitBlades, "level-word.3"),
+      onHit: () => LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive() || Blades.handleCollision(pitBlades, "level-word.3"),
       sfx: sound
     })
     pitBlades.blade.opacity = 1
@@ -357,31 +395,77 @@ export function sceneLevel3(k) {
     })
     blades3.blade.opacity = 0
     
+    //
     // Scene instance with state
+    //
     const inst = {
       k,
       sound,
-      // Blade animation state
       blades1,
       blades2,
       blades3,
-      targetY1: hiddenY1,      // Hidden position (retracted)
-      visibleY1: floorBladeY,  // Visible position (extended)
-      targetY2: hiddenY2,      // Hidden position (retracted up)
-      visibleY2: ceilingBladeY, // Visible position (extended down)
-      targetY3: hiddenY3,      // Hidden position (retracted)
-      visibleY3: floorBladeY,  // Visible position (extended)
+      targetY1: hiddenY1,
+      visibleY1: floorBladeY,
+      targetY2: hiddenY2,
+      visibleY2: ceilingBladeY,
+      targetY3: hiddenY3,
+      visibleY3: floorBladeY,
       blade1State: 'waiting',
       blade2State: 'waiting',
       blade3State: 'waiting',
       animationTimer: 0,
       cycleTimer: 0,
-      animationSpeed: 0.15,   // Seconds for extend/retract (slower blade movement)
-      bladeDelay: 0.12,      // Seconds between blades (pause between blade1->blade2 and blade2->blade3)
-      cycleDelay: 0.12       // Seconds after last blade before restart
+      animationSpeed: 0.15,
+      bladeDelay: 0.12,
+      cycleDelay: 0.12
     }
-    
+    //
+    // Life deduction trap — fires once when life score reaches threshold.
+    // After the dialog the blade animation runs at double speed.
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
+    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
+    levelIndicator.updateTrapCount(trapCount)
+    //
+    // If trap was already shown in a previous session, blades run fast immediately
+    //
+    if (lifeTrapAlreadyShown) {
+      inst.animationSpeed /= BLADE_SPEED_BOOST_FACTOR
+      inst.bladeDelay /= BLADE_SPEED_BOOST_FACTOR
+      inst.cycleDelay /= BLADE_SPEED_BOOST_FACTOR
+    }
+    if (showLifeTrap) {
+      const sceneLock = { locked: true }
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
+        sceneBgRgb: { r: WORD_L3_BACKDROP_R, g: WORD_L3_BACKDROP_G, b: WORD_L3_BACKDROP_B },
+        textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
+        onComplete: () => {
+          //
+          // Double blade speed to increase difficulty after the dialog
+          //
+          inst.animationSpeed /= BLADE_SPEED_BOOST_FACTOR
+          inst.bladeDelay /= BLADE_SPEED_BOOST_FACTOR
+          inst.cycleDelay /= BLADE_SPEED_BOOST_FACTOR
+          //
+          // Play blade sound so the player notices the speed change
+          //
+          sound && Sound.playBladeSound(sound)
+        }
+      })
+    }
+    //
     // Start blade animation after 0.5 second
+    //
     k.wait(0.5, () => {
       inst.blade1State = 'extending'
       inst.animationTimer = 0
@@ -399,7 +483,16 @@ export function sceneLevel3(k) {
       sound,
       proximityRange: 180
     })
+    setupWordLevel3HoverTooltips(k, { levelIndicator, fpsCounter, hero })
   })
+}
+//
+// Registers HUD and hero hover tooltips for word level 3
+//
+function setupWordLevel3HoverTooltips(k, ctx) {
+  const { levelIndicator, fpsCounter, hero } = ctx
+  WordHudTooltips.setupStandardHudTooltips(k, { levelIndicator, fpsCounter, topPlatformHeight: PLATFORM_TOP_HEIGHT })
+  WordHudTooltips.setupHeroInsecurityTooltip(k, hero)
 }
 
 /**

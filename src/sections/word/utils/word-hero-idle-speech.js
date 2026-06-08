@@ -1,19 +1,53 @@
 import { CFG } from '../../../cfg.js'
 
 //
-// Idle mouth wisps — small letters/words drifting up and fading
+// Idle mouth wisps — insecurity phrases drifting up and fading from hero's mouth
 //
-const SPAWN_INTERVAL_MIN = 1.4
-const SPAWN_INTERVAL_EXTRA = 2.2
+const SPAWN_INTERVAL_MIN = 0.9
+const SPAWN_INTERVAL_EXTRA = 1.6
 const MOUTH_SIDE_OFFSET = 16
 const MOUTH_Y_OFFSET = -38
-const WISP_FONT_SIZE = 16
-const WISP_LIFETIME = 1.1
-const WISP_RISE_SPEED = 28
-const WISP_DRIFT_RANGE = 12
+const WISP_FONT_SIZE = 15
+const WISP_LIFETIME = 1.4
+const WISP_RISE_SPEED = 26
+const WISP_DRIFT_RANGE = 14
 const WISP_Z = CFG.visual.zIndex.ui - 2
-const IDLE_SPEECH_CHARS = 'aeiouwhyamno'
-const IDLE_SPEECH_WORDS = ['why', 'no', 'I', 'am', '...', 'help', 'lost']
+//
+// Insecurity phrases emitted from the hero's mouth in the word section.
+// Short fragments so they fit above the head without wrapping.
+//
+const IDLE_SPEECH_PHRASES = [
+  "I'm afraid",
+  "why me",
+  "I can't",
+  "not enough",
+  "I'm scared",
+  "help",
+  "I fail",
+  "who am I",
+  "I'm lost",
+  "too weak",
+  "I'm wrong",
+  "I'm broken",
+  "not worthy",
+  "too much",
+  "I'm nothing",
+  "why try",
+  "I'm tired",
+  "leave me",
+  "don't look",
+  "I give up",
+  "scared",
+  "I don't know",
+  "why bother",
+  "no hope",
+  "too hard",
+  "I freeze",
+  "am I ok",
+  "I'm stuck",
+  "no way out",
+  "I mess up"
+]
 
 /**
  * Spawns drifting letters from the hero mouth while idle in word levels
@@ -62,10 +96,7 @@ function onUpdate(inst) {
 function spawnMouthWisp(inst) {
   const { k, heroInst } = inst
   const ch = heroInst.character
-  const useWord = Math.random() < 0.35
-  const text = useWord
-    ? IDLE_SPEECH_WORDS[Math.floor(Math.random() * IDLE_SPEECH_WORDS.length)]
-    : IDLE_SPEECH_CHARS[Math.floor(Math.random() * IDLE_SPEECH_CHARS.length)]
+  const text = IDLE_SPEECH_PHRASES[Math.floor(Math.random() * IDLE_SPEECH_PHRASES.length)]
   const faceSide = heroInst.direction || 1
   const mouthSideX = MOUTH_SIDE_OFFSET * faceSide
   const driftX = (Math.random() - 0.5) * WISP_DRIFT_RANGE

@@ -1570,6 +1570,7 @@ export function sceneLevel1(k) {
         extraFlags: [LIFE_DEDUCT_LEAVES_FLAG],
         sceneLock,
         sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
+        textColorRgb: { r: 90, g: 136, b: 152 },
         onComplete: () => {
           fallingLeafInst.poisonChance = POISON_LEAF_CHANCE
         }
@@ -1588,7 +1589,8 @@ export function sceneLevel1(k) {
           sound,
           deductFlag: TRAP2_FLAG,
           sceneLock,
-          sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B }
+          sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
+          textColorRgb: { r: 90, g: 136, b: 152 }
         })
       })
     }

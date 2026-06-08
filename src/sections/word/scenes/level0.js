@@ -6,6 +6,7 @@ import * as FlyingWords from '../components/flying-words.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import * as WordBlades2ChaseTrap from '../utils/word-blades2-chase-trap.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
@@ -19,13 +20,13 @@ import { createLevelTransition } from '../../../utils/transition.js'
 // Death messages (shown randomly on death)
 //
 const DEATH_MESSAGES = [
-  "Cut again.",
-  "Words hurt. Remember?",
-  "Too sharp for you?",
-  "It stings, doesn't it?",
-  "Still bleeding?",
-  "You let it cut you.",
-  "That one went deep."
+  "Can't stop the thoughts?",
+  "Some words bite",
+  "Greetings from intrusive thoughts!",
+  "We never sleep (C) Your thoughts",
+  "You can't hide from us",
+  "Peace is just a dream for us",
+  "Relax and we'll eat you up!"
 ]
 
 //
@@ -59,6 +60,12 @@ const FLYING_WORD_COUNT = 22
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level0LifeDeduction'
 //
+// Crimson section color for life-deduction dialog text
+//
+const WORD_TEXT_COLOR_R = 220
+const WORD_TEXT_COLOR_G = 20
+const WORD_TEXT_COLOR_B = 60
+//
 // Platform color (top/bottom strips visible at canvas edges): matches
 // the pfColor used by initScene's applyCanvasBackdrop (#323242).
 //
@@ -66,13 +73,10 @@ const WORD_L0_BACKDROP_R = 50
 const WORD_L0_BACKDROP_G = 50
 const WORD_L0_BACKDROP_B = 66
 //
-// Hover tooltip copy
+// Hover tooltip copy — first thought then cycling insecurity phrases
 //
-const WORD_HERO_TOOLTIP_TEXT = 'Damn, so many thoughts'
 const WORD_ANTIHERO_TOOLTIP_TEXT = 'Get yourself together -\nrag and come here )'
 const WORD_BLADE_TOOLTIP_TEXT = 'Touch me and I\'ll give\nyou a couple of fragments'
-const HERO_TOOLTIP_HOVER_SIZE = 80
-const HERO_TOOLTIP_Y_OFFSET = -100
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const BLADE_TOOLTIP_WIDTH = 100
@@ -202,7 +206,8 @@ export function sceneLevel0(k) {
       sound,
       deductFlag: LIFE_DEDUCT_FLAG,
       sceneLock,
-      sceneBgRgb: { r: WORD_L0_BACKDROP_R, g: WORD_L0_BACKDROP_G, b: WORD_L0_BACKDROP_B }
+      sceneBgRgb: { r: WORD_L0_BACKDROP_R, g: WORD_L0_BACKDROP_G, b: WORD_L0_BACKDROP_B },
+      textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B }
     })
     
     //
@@ -226,7 +231,7 @@ export function sceneLevel0(k) {
       customBounds: platformBounds,
       wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 1  // Level 0: 1 killer letter
+      killerLetterCount: 2  // Level 0: 2 killer letters
     })
     
     //
@@ -427,6 +432,10 @@ export function sceneLevel0(k) {
  */
 function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
   //
+  // While the buy-help panel is open the hero is invulnerable — ignore the hit
+  //
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
+  //
   // Increment life score and update display
   //
   const currentLifeScore = get('lifeScore', 0)
@@ -559,17 +568,7 @@ function setupWordLevel0HoverTooltips(k, ctx) {
     fpsCounter,
     topPlatformHeight: PLATFORM_TOP_HEIGHT
   })
-  Tooltip.create({
-    k,
-    targets: [{
-      x: () => hero.character.pos.x,
-      y: () => hero.character.pos.y,
-      width: HERO_TOOLTIP_HOVER_SIZE,
-      height: HERO_TOOLTIP_HOVER_SIZE,
-      text: WORD_HERO_TOOLTIP_TEXT,
-      offsetY: HERO_TOOLTIP_Y_OFFSET
-    }]
-  })
+  WordHudTooltips.setupHeroInsecurityTooltip(k, hero)
   Tooltip.create({
     k,
     targets: [{

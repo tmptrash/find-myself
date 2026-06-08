@@ -453,7 +453,8 @@ export function sceneLevel0(k) {
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
-        sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B }
+        sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B },
+        textColorRgb: { r: 255, g: 220, b: 50 }
       })
     }
     let platform6HasActivated = !trapEnabled

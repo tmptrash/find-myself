@@ -13,17 +13,21 @@ import * as WordCeilingTrap from '../utils/word-ceiling-trap.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordIdleAaaTrap from '../utils/word-idle-aaa-trap.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as LevelHelp from '../../../utils/level-help.js'
+import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 
 //
 // Death messages (shown randomly on death)
 //
 const DEATH_MESSAGES = [
-  "Falling is easy.",
-  "You fall the same way.",
-  "The ground always wins.",
-  "Fall fast. Learn slowly.",
-  "Not every fall teaches.",
-  "You fell for it again."
+  "Can't stop the thoughts?",
+  "Some words bite",
+  "Greetings from intrusive thoughts!",
+  "We never sleep \u00a9 Your thoughts",
+  "You can't hide from us",
+  "Peace is just a dream for us",
+  "Relax and we'll eat you up!"
 ]
 
 //
@@ -55,6 +59,27 @@ const BONUS_PLATFORM_REVEAL_WIDTH = 150
 const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
 const BONUS_PLATFORM_COLLISION_X_OFFSET = 38
 const BONUS_STORAGE_KEY = 'word.level1BonusCollected'
+//
+// Keep word count matching level 0 for consistent performance across all word levels
+//
+const FLYING_WORD_COUNT = 22
+//
+// Life deduction trap (shown once when life score reaches threshold)
+//
+const LIFE_DEDUCT_THRESHOLD = 5
+const LIFE_DEDUCT_FLAG = 'word.level1LifeDeduction'
+//
+// Canvas backdrop RGB for the life-deduction dialog overlay (word section dark purple)
+//
+const WORD_L1_BACKDROP_R = 50
+const WORD_L1_BACKDROP_G = 50
+const WORD_L1_BACKDROP_B = 66
+//
+// Crimson section color for life-deduction dialog text
+//
+const WORD_TEXT_COLOR_R = 220
+const WORD_TEXT_COLOR_G = 20
+const WORD_TEXT_COLOR_B = 60
 
 /**
  * Shows a random death message and then restarts the level
@@ -65,6 +90,10 @@ const BONUS_STORAGE_KEY = 'word.level1BonusCollected'
  * @param {Object} [sound] - Sound instance for effects
  */
 function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
+  //
+  // While the buy-help panel is open the hero is invulnerable — ignore the hit
+  //
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
   //
   // Increment life score and update display
   //
@@ -264,8 +293,9 @@ export function sceneLevel1(k) {
       currentLevel: 'level-word.1',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       customBounds: platformBounds,
+      wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 2  // Level 1: 4 killer letters
+      killerLetterCount: 3  // Level 1: 3 killer letters
     })
     
     //
@@ -334,12 +364,47 @@ export function sceneLevel1(k) {
       sfx: sound,
       onHit: () => showDeathMessage(k, hero, ceilingTrapInst.ceilingBlades, levelIndicator, sound)
     })
-    WordIdleAaaTrap.create({
+    //
+    // Life deduction dialog — shown once when life score reaches threshold
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
+    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
+    levelIndicator.updateTrapCount(trapCount)
+    const sceneLock = { locked: showLifeTrap }
+    showLifeTrap && (hero.controlsDisabled = true) && (sceneLock.heroInst = hero)
+    //
+    // AAA trap: starts disabled until the life dialog is dismissed (or immediately
+    // if the dialog was already shown in a previous session)
+    //
+    const aaaTrapInst = WordIdleAaaTrap.create({
       k,
       hero,
       floorY: platformY,
       sfx: sound,
+      enabled: lifeTrapAlreadyShown,
       onHit: (bladesInst) => showDeathMessage(k, hero, bladesInst, levelIndicator, sound)
     })
+    showLifeTrap && LifeDeduction.show({
+      k,
+      currentScore: currentLifeScore,
+      levelIndicator,
+      sound,
+      deductFlag: LIFE_DEDUCT_FLAG,
+      sceneLock,
+      sceneBgRgb: { r: WORD_L1_BACKDROP_R, g: WORD_L1_BACKDROP_G, b: WORD_L1_BACKDROP_B },
+      textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
+      onComplete: () => WordIdleAaaTrap.enable(aaaTrapInst)
+    })
+    setupWordLevel1HoverTooltips(k, { levelIndicator, fpsCounter, hero })
   })
+}
+//
+// Registers HUD and hero hover tooltips for word level 1
+//
+function setupWordLevel1HoverTooltips(k, ctx) {
+  const { levelIndicator, fpsCounter, hero } = ctx
+  WordHudTooltips.setupStandardHudTooltips(k, { levelIndicator, fpsCounter, topPlatformHeight: PLATFORM_TOP_HEIGHT })
+  WordHudTooltips.setupHeroInsecurityTooltip(k, hero)
 }

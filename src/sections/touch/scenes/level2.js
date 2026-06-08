@@ -636,6 +636,7 @@ export function sceneLevel2(k) {
         extraFlags,
         sceneLock,
         sceneBgRgb: { r: L2_SCENE_BG_R, g: L2_SCENE_BG_G, b: L2_SCENE_BG_B },
+        textColorRgb: { r: 90, g: 136, b: 152 },
         onComplete: () => {
           if (!iciclesAlreadyActive) {
             //

@@ -26,6 +26,14 @@ const COLLISION_OFFSET_Y = 3
 const HERO_SCALE = 1
 const RUN_ANIM_SPEED = 0.03333
 const PARTICLE_SHAPES = ['square', 'rect_h', 'rect_v', 'small_square']
+//
+// Annihilation explosion uses filled circles so the burst feels organic
+//
+const ANNIHILATION_PARTICLE_SHAPE = 'circle'
+//
+// Assembly (spawn) also uses circles — character materialises from round sparks
+//
+const SPAWN_PARTICLE_SHAPE = 'circle'
 const RUN_FRAME_COUNT = 3
 const JUMP_FRAME_COUNT = 6
 const JUMP_SQUASH_TIME = 0.03
@@ -695,14 +703,9 @@ export function spawn(inst) {
     const startX = x + k.rand(-100, 100)
     const startY = y + k.rand(-100, 100)
     //
-    // Random shape parameters
+    // Assembly uses circles — rotation is irrelevant for a circle
     //
-    const shapeType = k.choose(PARTICLE_SHAPES)
-    const rotation = k.rand(0, 360)
-    //
-    // Create particle using helper function
-    //
-    const particle = createParticleWithOutline(k, startX, startY, particleColor, shapeType, rotation, particleSize, scale)
+    const particle = createParticleWithOutline(k, startX, startY, particleColor, SPAWN_PARTICLE_SHAPE, 0, particleSize, scale)
     particle.use("assemblyParticle")
     //
     // Assign target point from the outline (cycle through points)
@@ -1697,14 +1700,9 @@ export function onAnnihilationCollide(inst) {
     const particleX = targetPos.x + k.rand(-20, 20)
     const particleY = targetPos.y + k.rand(-20, 20)
     //
-    // Random shape parameters
+    // Annihilation uses circles — rotation is irrelevant for a circle
     //
-    const shapeType = k.choose(PARTICLE_SHAPES)
-    const rotation = k.rand(0, 360)
-    //
-    // Create particle using helper function
-    //
-    const particle = createParticleWithOutline(k, particleX, particleY, particleColorHex, shapeType, rotation, particleSize, scale)
+    const particle = createParticleWithOutline(k, particleX, particleY, particleColorHex, ANNIHILATION_PARTICLE_SHAPE, 0, particleSize, scale)
     //
     // Random direction for explosion (scatter in all directions)
     //
@@ -3228,6 +3226,13 @@ function getParticleDimensions(k, shapeType, particleSize, scale) {
     pHeight = particleSize * scale * k.rand(1.3, 1.8)
     oWidth = pWidth + 1 * scale
     oHeight = pHeight + 1 * scale
+  } else if (shapeType === 'circle') {
+    //
+    // For circles pWidth/pHeight store the diameter; radius = pWidth / 2
+    //
+    const diameter = particleSize * scale * k.rand(0.7, 1.1)
+    pWidth = pHeight = diameter
+    oWidth = oHeight = diameter + 2 * scale
   } else {
     pWidth = pHeight = particleSize * scale * k.rand(0.7, 0.9)
     oWidth = oHeight = pWidth + 1 * scale
@@ -3241,6 +3246,7 @@ function getParticleDimensions(k, shapeType, particleSize, scale) {
 function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, particleSize, scale) {
   const [r, g, b] = parseHex(colorHex)
   const { pWidth, pHeight, oWidth, oHeight } = getParticleDimensions(k, shapeType, particleSize, scale)
+  const isCircle = shapeType === 'circle'
 
   return k.add([
     k.pos(x, y),
@@ -3249,26 +3255,39 @@ function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, parti
     k.z(CFG.visual.zIndex.assemblyParticles),
     {
       draw() {
-        //
-        // Draw outline first (behind)
-        //
-        k.drawRect({
-          width: oWidth,
-          height: oHeight,
-          pos: k.vec2(0, 0),
-          anchor: "center",
-          color: getRGB(k, CFG.visual.colors.outline)
-        })
-        //
-        // Draw colored particle on top
-        //
-        k.drawRect({
-          width: pWidth,
-          height: pHeight,
-          pos: k.vec2(0, 0),
-          anchor: "center",
-          color: k.rgb(r, g, b)
-        })
+        if (isCircle) {
+          //
+          // Draw outline circle behind, colored circle on top
+          //
+          k.drawCircle({
+            radius: oWidth / 2,
+            pos: k.vec2(0, 0),
+            color: getRGB(k, CFG.visual.colors.outline)
+          })
+          k.drawCircle({
+            radius: pWidth / 2,
+            pos: k.vec2(0, 0),
+            color: k.rgb(r, g, b)
+          })
+        } else {
+          //
+          // Draw outline rect behind, colored rect on top
+          //
+          k.drawRect({
+            width: oWidth,
+            height: oHeight,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: getRGB(k, CFG.visual.colors.outline)
+          })
+          k.drawRect({
+            width: pWidth,
+            height: pHeight,
+            pos: k.vec2(0, 0),
+            anchor: "center",
+            color: k.rgb(r, g, b)
+          })
+        }
       }
     }
   ])

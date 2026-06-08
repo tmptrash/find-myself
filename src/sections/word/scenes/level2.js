@@ -9,6 +9,8 @@ import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as LevelHelp from '../../../utils/level-help.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as Sound from '../../../utils/sound.js'
@@ -18,11 +20,13 @@ import { createLevelTransition } from '../../../utils/transition.js'
 // Death messages (shown randomly on death)
 //
 const DEATH_MESSAGES = [
-  "Forgotten words still cut.",
-  "What you forget returns sharper.",
-  "The words you drop still bleed you.",
-  "Some words stay, even when you don't.",
-  "You forgot them — they didn't forget you."
+  "Can't stop the thoughts?",
+  "Some words bite",
+  "Greetings from intrusive thoughts!",
+  "We never sleep \u00a9 Your thoughts",
+  "You can't hide from us",
+  "Peace is just a dream for us",
+  "Relax and we'll eat you up!"
 ]
 
 //
@@ -42,14 +46,49 @@ const ANTIHERO_SPAWN_Y = 705   // Adjusted to stand on platform
 //
 // Hover tooltip copy
 //
-const WORD_L2_HERO_TOOLTIP_TEXT = 'Wait… where did I see\nthat blade before?'
 const WORD_L2_ANTIHERO_TOOLTIP_TEXT = 'Memory is a muscle.\nFlex it, rag'
-const HERO_TOOLTIP_HOVER_SIZE = 80
-const HERO_TOOLTIP_Y_OFFSET = -100
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const BLADE_PROXIMITY_RANGE = 200
 const BLADE_RATTLE_COOLDOWN = 0.35
+//
+// Keep word count matching level 0 for consistent performance across all word levels
+//
+const FLYING_WORD_COUNT = 22
+//
+// Life deduction trap (shown once when life score reaches threshold)
+//
+const LIFE_DEDUCT_THRESHOLD = 5
+const LIFE_DEDUCT_FLAG = 'word.level2LifeDeduction'
+//
+// Canvas backdrop RGB for the life-deduction dialog overlay
+// matches word section platform color (#2A2A38 = 42, 42, 56)
+//
+const WORD_L2_BACKDROP_R = 42
+const WORD_L2_BACKDROP_G = 42
+const WORD_L2_BACKDROP_B = 56
+//
+// Crimson section color for life-deduction dialog text
+//
+const WORD_TEXT_COLOR_R = 220
+const WORD_TEXT_COLOR_G = 20
+const WORD_TEXT_COLOR_B = 60
+//
+// Anti-hero escape trap: once the life-deduction dialog has been shown the anti-hero
+// teleports to the hero's starting position so all traps must be crossed again.
+// All moving-platform traps are reset so they can fire again.
+//
+const ANTIHERO_ESCAPE_TRIGGER_DISTANCE = 120
+const ANTIHERO_HIDE_DURATION = 0.25
+//
+// Disappear / reappear particle burst — small crimson dust specks that scatter
+// outward from the teleport point and evaporate quickly.
+//
+const DISAPPEAR_PARTICLE_COUNT = 14
+const DISAPPEAR_PARTICLE_MIN_SPEED = 110
+const DISAPPEAR_PARTICLE_MAX_SPEED = 260
+const DISAPPEAR_PARTICLE_RADIUS = 3
+const DISAPPEAR_PARTICLE_LIFE = 0.5
 
 /**
  * Shows a random death message and then restarts the level
@@ -58,6 +97,10 @@ const BLADE_RATTLE_COOLDOWN = 0.35
  * @param {Object} bladesInst - Blades instance that was hit
  */
 function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = null) {
+  //
+  // While the buy-help panel is open the hero is invulnerable — ignore the hit
+  //
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
   const currentLifeScore = get('lifeScore', 0)
   const newLifeScore = currentLifeScore + 1
   set('lifeScore', newLifeScore)
@@ -268,8 +311,9 @@ export function sceneLevel2(k) {
       currentLevel: 'level-word.2',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       customBounds: platformBounds,
+      wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 3  // Level 2: 5 killer letters
+      killerLetterCount: 4  // Level 2: 4 killer letters
     })
     
     //
@@ -298,8 +342,10 @@ export function sceneLevel2(k) {
         playfieldColor
       })
     })
-    // Create first moving platform
-    MovingPlatform.create({
+    //
+    // Save platform references so the anti-hero escape trap can reset them
+    //
+    const movingPlatform1 = MovingPlatform.create({
       k,
       x: movingPlatformX,
       y: platformY,
@@ -309,9 +355,7 @@ export function sceneLevel2(k) {
       sfx: sound,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
     })
-    
-    // Create second moving platform (before second blade)
-    MovingPlatform.create({
+    const movingPlatform2 = MovingPlatform.create({
       k,
       x: movingPlatform2X,
       y: platformY,
@@ -319,9 +363,39 @@ export function sceneLevel2(k) {
       color: platformColor,
       currentLevel: 'level-word.2',
       sfx: sound,
+      raiseDelay: 5.0,  // 3 seconds more than default (2.0 s)
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
     })
-    
+    //
+    // Life deduction dialog — shown once when life score reaches threshold.
+    // Anti-hero escape trap activates after the dialog (or immediately if
+    // the dialog was already shown in a previous session).
+    //
+    const currentLifeScore = get('lifeScore', 0)
+    const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
+    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
+    levelIndicator.updateTrapCount(trapCount)
+    const sceneLock = { locked: showLifeTrap }
+    showLifeTrap && (hero.controlsDisabled = true) && (sceneLock.heroInst = hero)
+    showLifeTrap && LifeDeduction.show({
+      k,
+      currentScore: currentLifeScore,
+      levelIndicator,
+      sound,
+      deductFlag: LIFE_DEDUCT_FLAG,
+      sceneLock,
+      sceneBgRgb: { r: WORD_L2_BACKDROP_R, g: WORD_L2_BACKDROP_G, b: WORD_L2_BACKDROP_B },
+      textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
+      onComplete: () => setupAntiHeroEscapeTrap(k, hero, antiHero, movingPlatform1, movingPlatform2, sound)
+    })
+    //
+    // If dialog was already shown in a previous session, activate trap immediately.
+    // Do NOT re-check lifeScore here — the dialog already reduced it below the
+    // threshold, so we only need to confirm the flag was set.
+    //
+    lifeTrapAlreadyShown &&
+      setupAntiHeroEscapeTrap(k, hero, antiHero, movingPlatform1, movingPlatform2, sound)
     // Create first blade
     const blades1 = Blades.create({
       k,
@@ -376,17 +450,7 @@ function setupWordLevel2HoverTooltips(k, ctx) {
     fpsCounter,
     topPlatformHeight: PLATFORM_TOP_HEIGHT
   })
-  Tooltip.create({
-    k,
-    targets: [{
-      x: () => hero.character.pos.x,
-      y: () => hero.character.pos.y,
-      width: HERO_TOOLTIP_HOVER_SIZE,
-      height: HERO_TOOLTIP_HOVER_SIZE,
-      text: WORD_L2_HERO_TOOLTIP_TEXT,
-      offsetY: HERO_TOOLTIP_Y_OFFSET
-    }]
-  })
+  WordHudTooltips.setupHeroInsecurityTooltip(k, hero)
   Tooltip.create({
     k,
     targets: [{
@@ -398,4 +462,91 @@ function setupWordLevel2HoverTooltips(k, ctx) {
       offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
     }]
   })
+}
+//
+// Registers the anti-hero escape trap for word level 2.
+// When the hero gets within ANTIHERO_ESCAPE_TRIGGER_DISTANCE of the anti-hero
+// the anti-hero vanishes with a sound, reappears at the HERO's starting position
+// (left side of the level), and all moving-platform traps reset so they fire again.
+//
+function setupAntiHeroEscapeTrap(k, hero, antiHero, platform1, platform2, sound) {
+  //
+  // escaping: true while the teleport animation is in progress (debounce guard).
+  // escaped:  true after the first escape is complete — prevents a second escape
+  //           and allows the anti-hero to be annihilated normally.
+  //
+  const state = { escaping: false, escaped: false }
+  k.onUpdate(() => onUpdateAntiHeroEscape(k, hero, antiHero, platform1, platform2, state, sound))
+}
+//
+// Checks hero proximity each frame and triggers the anti-hero escape when close enough.
+// Only fires once per level session — after the first escape the trap is disarmed.
+//
+function onUpdateAntiHeroEscape(k, hero, antiHero, platform1, platform2, state, sound) {
+  if (state.escaping || state.escaped) return
+  if (!antiHero.character.exists()) return
+  const dist = Math.abs(hero.character.pos.x - antiHero.character.pos.x)
+  if (dist > ANTIHERO_ESCAPE_TRIGGER_DISTANCE) return
+  state.escaping = true
+  //
+  // Play disappear sound, hide the anti-hero, and burst crimson dust at vanish point
+  //
+  sound && Sound.playDisappearSound(sound)
+  spawnDisappearParticles(k, antiHero.character.pos.x, antiHero.character.pos.y)
+  antiHero.character.opacity = 0
+  k.wait(ANTIHERO_HIDE_DURATION, () => {
+    if (!antiHero.character.exists()) return
+    //
+    // Teleport to the hero's starting position (left side of the level)
+    // so the hero must traverse all traps again.
+    // Burst dust at the arrival point too.
+    //
+    antiHero.character.pos.x = HERO_SPAWN_X
+    antiHero.character.pos.y = HERO_SPAWN_Y
+    antiHero.character.opacity = 1
+    spawnDisappearParticles(k, HERO_SPAWN_X, HERO_SPAWN_Y)
+    MovingPlatform.reset(platform1)
+    MovingPlatform.reset(platform2)
+    //
+    // Mark escape as done — anti-hero stays put and can now be annihilated
+    //
+    state.escaping = false
+    state.escaped = true
+  })
+}
+//
+// Spawns crimson dust particles that scatter outward and fade, called when the
+// anti-hero vanishes or materialises so the teleport feels tangible.
+//
+function spawnDisappearParticles(k, x, y) {
+  for (let i = 0; i < DISAPPEAR_PARTICLE_COUNT; i++) {
+    const angle = (i / DISAPPEAR_PARTICLE_COUNT) * Math.PI * 2 + k.rand(-0.4, 0.4)
+    const speed = k.rand(DISAPPEAR_PARTICLE_MIN_SPEED, DISAPPEAR_PARTICLE_MAX_SPEED)
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    const startX = x + k.rand(-18, 18)
+    const startY = y + k.rand(-18, 18)
+    const state = { vx, vy, life: DISAPPEAR_PARTICLE_LIFE }
+    const particle = k.add([
+      k.pos(startX, startY),
+      k.z(CFG.visual.zIndex.player + 2),
+      {
+        draw() {
+          const ratio = Math.max(0, state.life / DISAPPEAR_PARTICLE_LIFE)
+          k.drawCircle({
+            pos: k.vec2(0, 0),
+            radius: DISAPPEAR_PARTICLE_RADIUS * ratio,
+            color: k.rgb(WORD_TEXT_COLOR_R, WORD_TEXT_COLOR_G, WORD_TEXT_COLOR_B),
+            opacity: ratio
+          })
+        }
+      }
+    ])
+    particle.onUpdate(() => {
+      state.life -= k.dt()
+      particle.pos.x += state.vx * k.dt()
+      particle.pos.y += state.vy * k.dt()
+      state.life <= 0 && particle.destroy()
+    })
+  }
 }

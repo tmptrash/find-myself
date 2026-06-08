@@ -1314,6 +1314,42 @@ export function playCrunchSound(instance) {
 }
 
 /**
+ * Quick descending pitch sweep played when a character disappears / teleports away.
+ * Mirror of playSpawnSweep — frequency falls rather than rises.
+ * @param {Object} instance - Sound instance
+ */
+export function playDisappearSound(instance) {
+  const now = instance.audioContext.currentTime
+  //
+  // Falling sweep (high → low) — character vanishes
+  //
+  const sweep = instance.audioContext.createOscillator()
+  const sweepEnvelope = instance.audioContext.createGain()
+  sweep.type = 'sine'
+  sweep.frequency.setValueAtTime(500, now)
+  sweep.frequency.exponentialRampToValueAtTime(80, now + 0.18)
+  sweepEnvelope.gain.setValueAtTime(0.35, now)
+  sweepEnvelope.gain.exponentialRampToValueAtTime(0.001, now + 0.18)
+  sweep.connect(sweepEnvelope)
+  sweepEnvelope.connect(instance.spawnGain)
+  sweep.start(now)
+  sweep.stop(now + 0.18)
+  //
+  // Short click at the end — clean cut-off feel
+  //
+  const click = instance.audioContext.createOscillator()
+  const clickEnv = instance.audioContext.createGain()
+  click.type = 'sine'
+  click.frequency.setValueAtTime(300, now + 0.16)
+  clickEnv.gain.setValueAtTime(0, now + 0.16)
+  clickEnv.gain.linearRampToValueAtTime(0.2, now + 0.17)
+  clickEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.22)
+  click.connect(clickEnv)
+  clickEnv.connect(instance.spawnGain)
+  click.start(now + 0.16)
+  click.stop(now + 0.22)
+}
+/**
  * Play hero spawn sweep sound (energy wave)
  * @param {Object} instance - Sound instance
  */

@@ -864,7 +864,8 @@ export function sceneLevel3(k) {
         deductFlagValue: nextCount,
         extraFlags: [LIFE_DEDUCT_SCATTER_FLAG],
         sceneLock,
-        sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B }
+        sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B },
+        textColorRgb: { r: 90, g: 136, b: 152 }
       })
     }
     //

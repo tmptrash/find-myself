@@ -80,3 +80,59 @@ export function setupStandardHudTooltips(k, ctx) {
     }]
   })
 }
+
+//
+// Insecurity thoughts shown on hero hover — shared across all word section levels.
+// The first entry is the default; subsequent ones cycle each new hover session.
+//
+export const HERO_INSECURITY_THOUGHTS = [
+  'Damn, so many thoughts',
+  'I\'m probably not good enough',
+  'I\'m not sure I can do this',
+  'Everyone is doing so well, but not me...',
+  'So much going on, I don\'t know where to start',
+  'What if something goes wrong?',
+  'Maybe just wait and it will sort itself out?',
+  'I\'m scared to take the first step',
+  'It\'s definitely easier for them than for me'
+]
+//
+// Hover zone and offset shared by all word-level hero tooltips
+//
+const HERO_INSECURITY_HOVER_SIZE = 80
+const HERO_INSECURITY_Y_OFFSET = -100
+
+/**
+ * Registers a hero hover tooltip that cycles through insecurity thoughts.
+ * Each new hover session (cursor leaves then returns) advances to the next thought;
+ * the text stays frozen for the entire duration the cursor is over the hero.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} hero - Hero instance
+ */
+export function setupHeroInsecurityTooltip(k, hero) {
+  const state = { idx: -1, lastCallTime: -Infinity }
+  Tooltip.create({
+    k,
+    targets: [{
+      x: () => hero.character.pos.x,
+      y: () => hero.character.pos.y,
+      width: HERO_INSECURITY_HOVER_SIZE,
+      height: HERO_INSECURITY_HOVER_SIZE,
+      text: () => getHeroThoughtText(k, state),
+      offsetY: HERO_INSECURITY_Y_OFFSET
+    }]
+  })
+}
+//
+// Advances the thought index once per hover session.
+// A gap of >100 ms between calls means the cursor left and came back.
+//
+function getHeroThoughtText(k, state) {
+  const now = k.time()
+  const isNewHover = (now - state.lastCallTime) > 0.1
+  if (isNewHover) {
+    state.idx = (state.idx + 1) % HERO_INSECURITY_THOUGHTS.length
+  }
+  state.lastCallTime = now
+  return HERO_INSECURITY_THOUGHTS[Math.max(0, state.idx)]
+}

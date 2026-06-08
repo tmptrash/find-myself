@@ -61,6 +61,19 @@ const TIME_COMPLEMENT_B = 0
 //
 export const TOTAL_DURATION = SHOW_DELAY + FADE_IN + SCORE_HOLD + COUNT_DURATION
   + BLINK_DURATION + RESULT_FADE_IN + RESULT_HOLD + FADE_OUT
+//
+// Module-level flag set while the deduction animation is running.
+// Scenes can call isActive() to make the hero invulnerable during the dialog.
+//
+let _isActive = false
+/**
+ * Returns true while the life-deduction animation is on screen.
+ * Use in showDeathMessage guards so the hero is invulnerable during the dialog.
+ * @returns {boolean}
+ */
+export function isActive() {
+  return _isActive
+}
 
 /**
  * Shows life score deduction animation inside a tooltip-styled white bubble.
@@ -79,9 +92,13 @@ export const TOTAL_DURATION = SHOW_DELAY + FADE_IN + SCORE_HOLD + COUNT_DURATION
  * @param {number} config.sceneBgRgb.r
  * @param {number} config.sceneBgRgb.g
  * @param {number} config.sceneBgRgb.b
+ * @param {Object} [config.textColorRgb] - Override text/frame color; used to match section identity
+ * @param {number} config.textColorRgb.r
+ * @param {number} config.textColorRgb.g
+ * @param {number} config.textColorRgb.b
  */
 export function show(config) {
-  const { k, currentScore, levelIndicator, sound, deductFlag, extraFlags, sceneLock, onComplete, sceneBgRgb } = config
+  const { k, currentScore, levelIndicator, sound, deductFlag, extraFlags, sceneLock, onComplete, sceneBgRgb, textColorRgb } = config
   const deductFlagValue = config.deductFlagValue ?? true
   //
   // Persist the deducted score and mark as used immediately
@@ -93,14 +110,15 @@ export function show(config) {
   //
   // Delay the visual hint by SHOW_DELAY seconds
   //
-  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb))
+  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb, textColorRgb))
 }
 //
 // Runs the actual life deduction animation after the delay
 //
-function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb) {
+function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb, textColorRgb) {
+  _isActive = true
   const sceneBackdropHex = sceneBgRgb ? rgbToHex(sceneBgRgb) : null
-  const palette = resolveComplementaryPalette(sceneBgRgb)
+  const palette = resolveComplementaryPalette(sceneBgRgb, textColorRgb)
   const centerX = CFG.visual.screen.width / 2
   const centerY = CFG.visual.screen.height / 2
   Tooltip.suppressAll()
@@ -392,6 +410,7 @@ function onUpdateDeduction(
       k.destroy(resultText)
       resultOutlines.forEach(o => k.destroy(o))
       Tooltip.unsuppressAll()
+      _isActive = false
       //
       // Final restoration: fully sync k.setBackground + CSS to the original scene color.
       //
@@ -425,9 +444,10 @@ function drawFullscreenDimmer(k, overlayOpacity, sceneBgRgb) {
   })
 }
 //
-// Builds fill + warm complementary text/frame colours from the scene backdrop
+// Builds fill + warm complementary text/frame colours from the scene backdrop.
+// Optional textColorRgb overrides the resolved text/frame accent (section identity colours).
 //
-function resolveComplementaryPalette(sceneBgRgb) {
+function resolveComplementaryPalette(sceneBgRgb, textColorRgb) {
   const fallback = {
     fillR: 72,
     fillG: 74,
@@ -442,7 +462,20 @@ function resolveComplementaryPalette(sceneBgRgb) {
     resultG: RESULT_COLOR_G,
     resultB: RESULT_COLOR_B
   }
-  if (!sceneBgRgb) return fallback
+  if (!sceneBgRgb) {
+    if (textColorRgb) {
+      fallback.textR = textColorRgb.r
+      fallback.textG = textColorRgb.g
+      fallback.textB = textColorRgb.b
+      fallback.frameR = textColorRgb.r
+      fallback.frameG = textColorRgb.g
+      fallback.frameB = textColorRgb.b
+      fallback.resultR = textColorRgb.r
+      fallback.resultG = textColorRgb.g
+      fallback.resultB = textColorRgb.b
+    }
+    return fallback
+  }
   const { r, g, b } = sceneBgRgb
   const luminance = 0.299 * r + 0.587 * g + 0.114 * b
   const isTimeBlack = r < 8 && g < 8 && b < 8
@@ -450,19 +483,25 @@ function resolveComplementaryPalette(sceneBgRgb) {
   const accentG = isTimeBlack ? TIME_COMPLEMENT_G : COMPLEMENT_WARM_G
   const accentB = isTimeBlack ? TIME_COMPLEMENT_B : COMPLEMENT_WARM_B
   const useWarmAccent = isTimeBlack || luminance < 130
+  //
+  // Section-provided textColorRgb takes priority over the auto-resolved accent
+  //
+  const finalR = textColorRgb?.r ?? (useWarmAccent ? accentR : 255)
+  const finalG = textColorRgb?.g ?? (useWarmAccent ? accentG : 255)
+  const finalB = textColorRgb?.b ?? (useWarmAccent ? accentB : 255)
   return {
     fillR: r,
     fillG: g,
     fillB: b,
-    frameR: useWarmAccent ? accentR : 230,
-    frameG: useWarmAccent ? accentG : 233,
-    frameB: useWarmAccent ? accentB : 238,
-    textR: useWarmAccent ? accentR : 255,
-    textG: useWarmAccent ? accentG : 255,
-    textB: useWarmAccent ? accentB : 255,
-    resultR: useWarmAccent ? accentR : RESULT_COLOR_R,
-    resultG: useWarmAccent ? accentG : RESULT_COLOR_G,
-    resultB: useWarmAccent ? accentB : RESULT_COLOR_B
+    frameR: finalR,
+    frameG: finalG,
+    frameB: finalB,
+    textR: finalR,
+    textG: finalG,
+    textB: finalB,
+    resultR: finalR,
+    resultG: finalG,
+    resultB: finalB
   }
 }
 //

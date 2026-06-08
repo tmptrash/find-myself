@@ -86,11 +86,75 @@ const MENU_LEAVE_COVER_Z = CFG.visual.zIndex.ui + 1000
 const MENU_LEAVE_BG_R = 26
 const MENU_LEAVE_BG_G = 26
 const MENU_LEAVE_BG_B = 26
+//
+// Per-letter progress labels below anti-heroes —
+// each letter represents one level (colored = completed, gray = not yet done).
+//
+const SECTION_LABEL_FONT_SIZE = 18
+const SECTION_LABEL_LETTER_SPACING = -1
+//
+// Letter sequences for each section (matching their in-game HUD indicators)
+//
+const SECTION_LETTERS = {
+  touch:  ['T', 'O', 'U', 'C', 'H'],
+  time:   ['T', '1', 'M', 'E'],
+  word:   ['W', 'O', 'R', 'D', 'S'],
+  feel:   ['F', 'E', 'E', 'L'],
+  mind:   ['M', 'I', 'N', 'D'],
+  stress: ['S', 'T', 'R', 'E', 'S', 'S']
+}
+//
+// Touch "H" hangs lower and continuously sways — mirroring the in-game TOUCH HUD indicator
+//
+const TOUCH_H_INDEX = 4
+const TOUCH_H_TILT = 22
+const TOUCH_H_Y_RATIO = 0.3
+const TOUCH_H_X_OFFSET = 0
+const TOUCH_H_WOBBLE_SPEED = 2.5
+const TOUCH_H_WOBBLE_AMPLITUDE = 4
 function getSectionDisplayName(section) {
   //
   // Return section name as-is (singular form)
   //
   return section
+}
+/**
+ * Returns how many letters in the section's HUD word should be shown in the active colour.
+ * Mirrors the levelNumber logic used by each section's in-game level indicator.
+ * @param {string} section - Section key ('touch', 'time', 'word', …)
+ * @param {string|null} lastLevel - Value of get('lastLevel')
+ * @param {Object} progress - Full progress object from getProgress()
+ * @returns {number} Count of colored letters (0 = all gray)
+ */
+function getSectionCompletedCount(section, lastLevel, progress) {
+  //
+  // Fully completed section → color all its letters
+  //
+  if (progress[section]?.completed) {
+    return (SECTION_LETTERS[section] || []).length
+  }
+  if (!lastLevel) return 0
+  if (section === 'touch' && lastLevel.startsWith('level-touch.')) {
+    const s = lastLevel.replace('level-touch.', '')
+    //
+    // Training level = not yet completed = 0; numeric level N = N+1 letters colored
+    //
+    if (s === 'training') return 0
+    const n = parseInt(s, 10)
+    return isNaN(n) ? 0 : n + 1
+  }
+  if (section === 'time' && lastLevel.startsWith('level-time.')) {
+    const n = parseInt(lastLevel.replace('level-time.', ''), 10)
+    //
+    // level 0 = on first level = 0 colored; level N = N colored
+    //
+    return isNaN(n) ? 0 : n
+  }
+  if (section === 'word' && lastLevel.startsWith('level-word.')) {
+    const n = parseInt(lastLevel.replace('level-word.', ''), 10)
+    return isNaN(n) ? 0 : n
+  }
+  return 0
 }
 
 /**
@@ -503,47 +567,14 @@ export function sceneMenu(k) {
       antiHeroes.push(antiHeroInst)
       
       //
-      // Add section label below anti-hero (in singular form)
+      // Per-letter progress label below the anti-hero.
+      // Completed levels → section colour; remaining → gray.
+      // Touch "H" hangs lower and sways like the in-game HUD indicator.
       //
-      const displayName = getSectionDisplayName(config.section)
-      const labelText = displayName
-      
-      const labelColor = isCompleted ? getRGB(k, bodyColor) : getRGB(k, grayColor)
-      const labelPosX = config.x
-      const labelPosY = config.y + 55
-      const label = k.add([
-        k.text(labelText, { size: 22 }),
-        k.pos(labelPosX, labelPosY),
-        k.anchor("center"),
-        k.color(labelColor.r, labelColor.g, labelColor.b),
-        k.z(100)
-      ])
-      const outlineOffsets = [
-        { dx: -1, dy: 0 },
-        { dx: 1, dy: 0 },
-        { dx: 0, dy: -1 },
-        { dx: 0, dy: 1 }
-      ]
-      const labelOutlines = outlineOffsets.map(offset => {
-        const outlineNode = k.add([
-          k.text(labelText, { size: 22 }),
-          k.pos(labelPosX + offset.dx, labelPosY + offset.dy),
-          k.anchor("center"),
-          k.color(0, 0, 0),
-          k.opacity(0),
-          k.z(99)
-        ])
-        return { node: outlineNode, dx: offset.dx, dy: offset.dy }
-      })
-      
-      sectionLabels.push({
-        label,
-        outlines: labelOutlines,
-        section: config.section,
-        sectionColor: config.color.body,
-        grayColor,
-        isCompleted
-      })
+      const labelEntry = createSectionProgressLabel(
+        k, config, progress, lastLevel, grayColor
+      )
+      sectionLabels.push(labelEntry)
     })
     
     //
@@ -717,62 +748,25 @@ export function sceneMenu(k) {
       })
       
       //
-      // Update section labels: color + outline on hover/completed/current
-      // If section is completed, highlight the NEXT section instead (the one player can play)
+      // Per-letter label update: show hover outlines and animate the touch "H" wobble
       //
-      const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
-      
       sectionLabels.forEach(entry => {
-        const { label, outlines, section, sectionColor, grayColor, isCompleted } = entry
+        const { letters, section, isCompleted, fallingH } = entry
         const isHover = hoveredInst && hoveredInst.section === section
         const isCurrent = inst.currentSection === section
-        
-        //
-        // If section is completed, don't highlight it
-        // Instead, check if this is the next section after a completed one
-        // BUT: if currentSection is set (player is playing a section), highlight that section instead
-        //
-        let isNextAfterCompleted = false
-        if (!isCompleted && !inst.currentSection) {
-          //
-          // Only check for "next after completed" if player is not currently playing any section
-          // Check if previous section is completed (this means player can play this section)
-          //
-          const currentIndex = sectionOrder.indexOf(section)
-          const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
-          const previousSection = sectionOrder[previousIndex]
-          const previousEntry = sectionLabels.find(e => e.section === previousSection)
-          if (previousEntry && previousEntry.isCompleted) {
-            isNextAfterCompleted = true
-          }
-        }
-        
-        //
-        // Highlight if: hovered, current, or next after completed (and not completed itself)
-        // Priority: current > hover > next after completed
-        //
-        const useHighlight = !isCompleted && (isCurrent || isHover || isNextAfterCompleted)
-        
-        //
-        // Completed sections use their section color, highlighted sections use section color,
-        // time section uses orange when highlighted, otherwise gray
-        //
-        let targetColor
-        if (isCompleted) {
-          targetColor = section === 'time' ? '#FF8C00' : sectionColor
-        } else if (section === 'time' && useHighlight) {
-          targetColor = '#FF8C00'
-        } else {
-          targetColor = useHighlight ? sectionColor : grayColor
-        }
-        const labelRgb = getRGB(k, targetColor)
-        label.color = k.rgb(labelRgb.r, labelRgb.g, labelRgb.b)
-        const outlineOpacity = (useHighlight || isCompleted) ? 1 : 0
-        outlines.forEach(outlineObj => {
-          outlineObj.node.opacity = outlineOpacity
-          outlineObj.node.pos.x = label.pos.x + outlineObj.dx
-          outlineObj.node.pos.y = label.pos.y + outlineObj.dy
+        const outlineOpacity = (isHover || isCurrent || isCompleted) ? 1 : 0
+        letters.forEach(letterEntry => {
+          letterEntry.outlines.forEach(outlineObj => {
+            outlineObj.opacity = outlineOpacity
+          })
         })
+        //
+        // Animate the dangling "H" for the touch section
+        //
+        if (section === 'touch' && fallingH && fallingH.length > 0) {
+          const wobbleAngle = TOUCH_H_TILT + Math.sin(k.time() * TOUCH_H_WOBBLE_SPEED) * TOUCH_H_WOBBLE_AMPLITUDE
+          fallingH.forEach(obj => { obj.angle = wobbleAngle })
+        }
       })
       
       //
@@ -1118,8 +1112,7 @@ export function sceneMenu(k) {
         antiHeroInst.character.destroy()
       })
       sectionLabels.forEach(entry => {
-        entry.label.destroy()
-        entry.outlines.forEach(outlineObj => outlineObj.node.destroy())
+        entry.allObjects.forEach(obj => obj.destroy())
       })
       
       //
@@ -1854,8 +1847,7 @@ function beginMenuSceneLeave(k, inst) {
     antiHeroInst.character && (antiHeroInst.character.hidden = true)
   })
   inst.sectionLabels?.forEach((entry) => {
-    entry.label.hidden = true
-    entry.outlines.forEach((outlineObj) => { outlineObj.node.hidden = true })
+    entry.allObjects.forEach(obj => { obj.hidden = true })
   })
   inst.title && hideTitle(inst.title)
 }
@@ -1956,5 +1948,98 @@ function drawMenuBackground(inst) {
     height: k.height(),
     opacity: BG_OPACITY * bgDefaultOpacity
   })
+}
+/**
+ * Creates the per-letter progress label displayed below each anti-hero.
+ * Colored letters = completed levels; gray letters = levels not yet reached.
+ * For the touch section the last letter "H" always hangs lower and sways.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} config - Section config object from getSectionPositions()
+ * @param {Object} progress - Full progress object from getProgress()
+ * @param {string|null} lastLevel - Value of get('lastLevel')
+ * @param {string} grayColor - Hex string for inactive/gray letters
+ * @returns {Object} Label entry stored in sectionLabels[]
+ */
+function createSectionProgressLabel(k, config, progress, lastLevel, grayColor) {
+  const section = config.section
+  const letters = SECTION_LETTERS[section] || [section.toUpperCase()]
+  const completedCount = getSectionCompletedCount(section, lastLevel, progress)
+  //
+  // Time section always uses the anti-hero's orange/yellow, matching the in-game HUD indicator
+  //
+  const sectionColor = section === 'time' ? '#FF8C00' : config.color.body
+  //
+  // Layout: center the word at (config.x, config.y + 55)
+  //
+  const fontSize = SECTION_LABEL_FONT_SIZE
+  const spacing = SECTION_LABEL_LETTER_SPACING
+  const letterStep = fontSize + spacing
+  const totalWidth = letters.length * letterStep - spacing
+  const baseX = config.x - totalWidth / 2 + fontSize / 2
+  const baseY = config.y + 55
+  const fallingExtraY = Math.round(fontSize * TOUCH_H_Y_RATIO)
+  const outlineOffsets = [
+    { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+    { dx: -1, dy:  0 },                     { dx: 1, dy:  0 },
+    { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 }
+  ]
+  const letterEntries = []
+  const fallingH = []
+  const allObjects = []
+  letters.forEach((letter, i) => {
+    const isFalling = section === 'touch' && i === TOUCH_H_INDEX
+    const isActive = i < completedCount
+    const colorHex = isFalling ? grayColor : (isActive ? sectionColor : grayColor)
+    const { r, g, b } = getRGB(k, colorHex)
+    const lx = baseX + i * letterStep
+    const ly = isFalling ? baseY + fallingExtraY : baseY
+    const lxOff = isFalling ? TOUCH_H_X_OFFSET : 0
+    //
+    // Black outlines (8 directions) — shown only when hovered / current section.
+    // Falling H uses the default topleft anchor so rotation pivots at the
+    // top-left corner of the glyph (the top of the left vertical stroke),
+    // giving a natural pendulum hang.  Regular letters keep anchor('center').
+    //
+    const outlines = outlineOffsets.map(({ dx, dy }) => {
+      const components = [
+        k.text(letter, { size: fontSize }),
+        k.pos(lx + lxOff + dx, ly + dy),
+        k.color(0, 0, 0),
+        k.opacity(0),
+        k.z(99)
+      ]
+      !isFalling && components.push(k.anchor('center'))
+      const outlineObj = k.add(components)
+      isFalling && (outlineObj.angle = TOUCH_H_TILT)
+      allObjects.push(outlineObj)
+      return outlineObj
+    })
+    //
+    // Main colored letter on top
+    //
+    const mainComponents = [
+      k.text(letter, { size: fontSize }),
+      k.pos(lx + lxOff, ly),
+      k.color(r, g, b),
+      k.z(100)
+    ]
+    !isFalling && mainComponents.push(k.anchor('center'))
+    const mainObj = k.add(mainComponents)
+    isFalling && (mainObj.angle = TOUCH_H_TILT)
+    allObjects.push(mainObj)
+    letterEntries.push({ main: mainObj, outlines })
+    if (isFalling) {
+      fallingH.push(mainObj, ...outlines)
+    }
+  })
+  return {
+    letters: letterEntries,
+    fallingH,
+    allObjects,
+    section,
+    sectionColor,
+    grayColor,
+    isCompleted: progress[section]?.completed || false
+  }
 }
 

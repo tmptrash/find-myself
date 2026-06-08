@@ -1,5 +1,7 @@
 import { CFG, getConsciousnessColor, getLevelColors, atmosphericDepthColor } from '../cfg.js'
 import { getColor, getRGB } from '../../../utils/helper.js'
+import * as LevelHelp from '../../../utils/level-help.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 
 //
 // Tracks the last time onUpdate() was called. Entities with k.stay() use this to know
@@ -9,6 +11,11 @@ import { getColor, getRGB } from '../../../utils/helper.js'
 //
 let lastOnUpdateTime = -9999
 const WORD_LEVEL_TIMEOUT = 0.12
+//
+// Seconds of spawn grace period at the start of each word level during which
+// killer letters cannot harm the hero (gives the player time to orient).
+//
+const SPAWN_GRACE_DURATION = 2.0
 
 //
 // Spawn buffer: distance outside playable area where words can spawn/respawn
@@ -134,10 +141,14 @@ export function create(cfg) {
     k.flyingWordsInstance.playableRight = customBounds.right
     k.flyingWordsInstance.playableTop = customBounds.top
     k.flyingWordsInstance.playableBottom = customBounds.bottom
-    k.flyingWordsInstance.hero = hero  // Update hero reference for new game session
+    k.flyingWordsInstance.hero = hero
     k.flyingWordsInstance.currentLevel = currentLevel
     k.flyingWordsInstance.onDeath = onDeath
     k.flyingWordsInstance.playfieldHex = resolvePlayfieldHex(cfg)
+    //
+    // Reset spawn grace timer so the hero is protected at the start of every level
+    //
+    k.flyingWordsInstance.spawnProtectionTimer = SPAWN_GRACE_DURATION
     return k.flyingWordsInstance
   }
   
@@ -210,6 +221,11 @@ export function create(cfg) {
     hero,
     currentLevel,
     onDeath,
+    //
+    // Countdown in seconds; killer letters cannot harm the hero while > 0.
+    // Reset to SPAWN_GRACE_DURATION each time a new level session starts.
+    //
+    spawnProtectionTimer: SPAWN_GRACE_DURATION,
     color,
     minSpeed,
     maxSpeed,
@@ -277,6 +293,10 @@ export function onUpdate(inst) {
   // currently inside a word-level (not on the menu or another scene).
   //
   lastOnUpdateTime = inst.k.time()
+  //
+  // Count down spawn grace period so killer letters are harmless for the first 2 s
+  //
+  inst.spawnProtectionTimer > 0 && (inst.spawnProtectionTimer -= inst.k.dt())
 
   //
   // Update regular words
@@ -772,9 +792,11 @@ function createKillerLetter(k, params) {
     const currentInst = k.flyingWordsInstance
     if (!currentInst) return
     //
-    // Don't kill hero if they're annihilating or already dying
+    // Don't kill hero if they're annihilating, already dying, or a help panel is open
     //
     if (currentInst.hero.isAnnihilating || currentInst.hero.isDying) return
+    if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
+    if (currentInst.spawnProtectionTimer > 0) return
     //
     // Mark word for respawn by setting flag
     //

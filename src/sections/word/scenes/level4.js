@@ -11,6 +11,9 @@ import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
+import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
+import * as LevelHelp from '../../../utils/level-help.js'
+import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as Sound from '../../../utils/sound.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 
@@ -60,14 +63,20 @@ const BULLET_LETTERS = [
   'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
 ]
 //
+// Keep word count matching level 0 for consistent performance across all word levels
+//
+const FLYING_WORD_COUNT = 22
+//
 // Death messages for level 4
 //
 const DEATH_MESSAGES = [
-  "Some words strike first.",
-  "Not every word waits to hurt you.",
-  "Sharp words move faster than you think.",
-  "Watch your step — and your words.",
-  "Words hit harder when you're running."
+  "Can't stop the thoughts?",
+  "Some words bite",
+  "Greetings from intrusive thoughts!",
+  "We never sleep \u00a9 Your thoughts",
+  "You can't hide from us",
+  "Peace is just a dream for us",
+  "Relax and we'll eat you up!"
 ]
 
 /**
@@ -80,6 +89,10 @@ const DEATH_MESSAGES = [
  * @param {Object} [sound] - Sound instance for effects
  */
 function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicator = null, sound = null, heroScoreAtStart = 0) {
+  //
+  // While the buy-help panel is open the hero is invulnerable — ignore the hit
+  //
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
   //
   // Increment life score and update display
   //
@@ -296,8 +309,9 @@ export function sceneLevel4(k) {
         showDeathMessage(k, hero, null, bladeArm, levelIndicator, sound, heroScoreAtStart)
       },
       customBounds: platformBounds,
+      wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 4  // Level 4: 4 killer letters
+      killerLetterCount: 5  // Level 4: 5 killer letters
     })
     
     //
@@ -329,7 +343,10 @@ export function sceneLevel4(k) {
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound, heroScoreAtStart)
     })
     
-    // Create second normal moving platform (timer-based mode)
+    //
+    // Create second normal moving platform — hero gets 2 extra seconds before
+    // the pit closes, giving more time to navigate the blades.
+    //
     MovingPlatform.create({
       k,
       x: movingPlatform2X,
@@ -337,10 +354,15 @@ export function sceneLevel4(k) {
       hero,
       color: platformColor,
       currentLevel: 'level-word.4',
-      jumpToDisableBlades: false,  // Normal mode: timer-based (5 seconds)
-      autoOpen: false,  // Triggered by hero proximity
+      jumpToDisableBlades: false,
+      autoOpen: false,
       sfx: sound,
-      raiseTimeout: 6.0,  // Close 1 second later than default (4 seconds)
+      //
+      // stationaryOnly: pit closes only after the hero stands still for 2 s.
+      // Moving near the pit keeps it open; running away resets the timer.
+      //
+      stationaryOnly: true,
+      raiseDelay: 2.0,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound, heroScoreAtStart)
     })
     //
@@ -423,7 +445,16 @@ export function sceneLevel4(k) {
     //
     setupHeroShooting(k, hero, bladeArm, levelIndicator)
     showLetterInstructions(k)
+    setupWordLevel4HoverTooltips(k, { levelIndicator, fpsCounter, hero })
   })
+}
+//
+// Registers HUD and hero hover tooltips for word level 4
+//
+function setupWordLevel4HoverTooltips(k, ctx) {
+  const { levelIndicator, fpsCounter, hero } = ctx
+  WordHudTooltips.setupStandardHudTooltips(k, { levelIndicator, fpsCounter, topPlatformHeight: PLATFORM_TOP_HEIGHT })
+  WordHudTooltips.setupHeroInsecurityTooltip(k, hero)
 }
 
 /**

@@ -109,19 +109,19 @@ export function isAnyPanelOpen() {
   return activeInst?.panelOpen ?? false
 }
 export const LEVEL_HELP_TEXTS = {
-  'level-touch.0': 'collect all the bugs in one\nplace and they will help\nyou. notice what they do\nwhen you touch them',
-  'level-touch.1': 'approach yourself and\nplay the melody you see',
-  'level-touch.2': 'jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
-  'level-touch.3': 'turns out the bugs\nare trampolines :)',
-  'level-time.0': 'hurry — platforms\ndon\'t last forever',
-  'level-time.1': 'ones kill you —\njust don\'t jump on them',
-  'level-time.2': 'an odd sum of digits kills\nyou, an even sum doesn\'t',
-  'level-time.3': 'just reach your other\nhalf — with or against\nthe wind ;)',
-  'level-word.0': 'some words cut like\nblades — avoid them',
-  'level-word.1': 'life always finds a way to ruin\nyour plans. be careful',
-  'level-word.2': 'use your memory to remember where\nthe blade-like words are...',
-  'level-word.3': 'be quick and focused.\nnothing more',
-  'level-word.4': 'do everything fast\nand don\'t trust logic'
+  'level-touch.0': 'Collect all the bugs in one\nplace and they will help\nyou. Notice what they do\nwhen you touch them',
+  'level-touch.1': 'Approach yourself and\nplay the melody you see',
+  'level-touch.2': 'Jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
+  'level-touch.3': 'Turns out the bugs\nare trampolines :)',
+  'level-time.0': 'Hurry — platforms\ndon\'t last forever',
+  'level-time.1': 'Ones kill you —\njust don\'t jump on them',
+  'level-time.2': 'An odd sum of digits kills\nyou, an even sum doesn\'t',
+  'level-time.3': 'Just reach your other\nhalf — with or against\nthe wind ;)',
+  'level-word.0': 'Some words cut like\nblades — avoid them\nFind and accept yourself\nas you are, to move forward',
+  'level-word.1': 'Life always finds a way\nto ruin your plans.\nBe careful',
+  'level-word.2': 'Use your memory to remember\nwhere the blade-like words\nare...',
+  'level-word.3': 'Be quick and focused.\nNothing more',
+  'level-word.4': 'Do everything fast\nand don\'t trust logic'
 }
 
 /**

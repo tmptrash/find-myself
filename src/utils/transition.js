@@ -42,19 +42,19 @@ const LEVEL_SUBTITLES = {
   'menu-time': '',
   'menu-touch': '',
   'level-touch.training': '',
-  'level-word.0': ['you are inside your own head now. these words\nare your thoughts — the voices within you.\nsome of them cut deeper than blades.', 'word0-pre', 16],
-  'level-word.1': ['sharp words don\'t cut - they make you fall', 'word1-pre', 6.5],
-  'level-word.2': ['the words you can\'t forget hurt the most', 'word2-pre', 6.0],
-  'level-word.3': ['sharp words move fast - so must you', 'word3-pre', 6.0],
-  'level-word.4': ['words that kill...', 'word4-pre', 5.5],
-  'level-time.0': ['time moves forward even when you stand still. you\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'platforms don\'t live forever...'],
-  'level-time.1': ['you are growing. you are learning. numbers begin\nto surround you. growing up means learning what you\ncan touch — and what you should leave alone. do not\ntouch the one.', 'time1-pre', 20, null, 'don\'t forget the fragments of yourself — they can be found in unexpected places'],
-  'level-time.2': ['rules appear. some protect you, some punish you.\nmistakes are allowed — but not forever. digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
-  'level-time.3': ['life consumes time while you hesitate. act too\nslow — and it will catch you. throw snow. move\nfast. everything happens at once.', 'time3-pre', 19],
-  'level-touch.0': ['before words, before understanding\nyou learn the world through touch', 'touch0-pre', 10, 'here you need to figure out how to gather bugs together by touching them'],
-  'level-touch.1': ['touch the roots in sequence - find the melody that awakens', 'touch1-pre', 8, 'here you need to figure out how to play the right melody by touching things'],
-  'level-touch.2': ['jump to reveal the path - find what stands nearby', 'touch2-pre', 7, 'jumping is beautiful. figure out how to use your legs to activate your path to yourself...'],
-  'level-touch.3': ['when you cannot see… touch to survive', 'touch3-pre', 8, 'touch the bugs and see what happens...']
+  'level-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
+  'level-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
+  'level-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
+  'level-word.3': ['Sharp words move fast — so must you', 'word3-pre', 6.0],
+  'level-word.4': ['Words that kill...', 'word4-pre', 5.5],
+  'level-time.0': ['Time moves forward even when you stand still. You\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'Platforms don\'t live forever...'],
+  'level-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places'],
+  'level-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
+  'level-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
+  'level-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 10, 'Here you need to figure out how to gather bugs together by touching them'],
+  'level-touch.1': ['Touch the roots in sequence — find the melody that awakens', 'touch1-pre', 8, 'Here you need to figure out how to play the right melody by touching things'],
+  'level-touch.2': ['Jump to reveal the path — find what stands nearby', 'touch2-pre', 7, 'Jumping is beautiful. Figure out how to use your legs to activate your path to yourself...'],
+  'level-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
 }
 
 const TRANSITION_SUBTITLE_Z = CFG.visual.zIndex.ui + 1500
@@ -451,6 +451,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         // Optional gray text shown ABOVE the main subtitle (index 4)
         //
         const preText = Array.isArray(subtitleEntry) ? subtitleEntry[4] : null
+        //
+        // Optional Y-multiplier override for the pre-text gap (index 5).
+        // Smaller value = pre-text sits closer to the main subtitle.
+        // Defaults to 3.2 which works for multi-line subtitles.
+        //
+        const preTextYMult = Array.isArray(subtitleEntry) && subtitleEntry[5] != null ? subtitleEntry[5] : 3.2
 
         inst.soundName = soundName
         inst.textHoldDuration = textHoldDuration || DEFAULT_TEXT_HOLD_DURATION
@@ -556,7 +562,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           //
           if (preText) {
             const preTextSize = textSize * 0.62
-            const preTextY = textY + textSize * 3.2
+            const preTextY = textY + textSize * preTextYMult
             const preTextOutlines = outlineOffsets.map(([dx, dy]) => k.add([
               k.text(preText, { size: preTextSize, align: 'center', lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
               k.pos(textX + dx, preTextY + dy),

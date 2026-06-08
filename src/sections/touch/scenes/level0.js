@@ -662,7 +662,8 @@ export function sceneLevel0(k) {
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
-        sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B }
+        sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B },
+        textColorRgb: { r: 90, g: 136, b: 152 }
       })
     }
     if (showTrap2) {
@@ -675,7 +676,8 @@ export function sceneLevel0(k) {
           sound,
           deductFlag: TRAP2_FLAG,
           sceneLock,
-          sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B }
+          sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B },
+          textColorRgb: { r: 90, g: 136, b: 152 }
         })
       })
     }

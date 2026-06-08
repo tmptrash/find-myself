@@ -81,6 +81,26 @@ let kaplayBootReachedOnLoad = false
 //
 let webglLostReloadScheduled = false
 //
+// Kaplay key names mapped to DOM KeyboardEvent { key, code } pairs.
+// All keys used across the game — used to dispatch synthetic keyup
+// events when the window loses focus so Kaplay's internal "held" state
+// is cleared. Without this, switching browser tabs leaves keys stuck
+// as "pressed" and onKeyPress never fires when the user presses them
+// again after returning to the tab.
+//
+const RESET_KEY_EVENTS = [
+  { key: ' ',          code: 'Space'       },
+  { key: 'Enter',      code: 'Enter'       },
+  { key: 'Escape',     code: 'Escape'      },
+  { key: 'ArrowLeft',  code: 'ArrowLeft'   },
+  { key: 'ArrowRight', code: 'ArrowRight'  },
+  { key: 'ArrowUp',    code: 'ArrowUp'     },
+  { key: 'ArrowDown',  code: 'ArrowDown'   },
+  { key: 'a',          code: 'KeyA'        },
+  { key: 'd',          code: 'KeyD'        },
+  { key: 'w',          code: 'KeyW'        }
+]
+//
 // Boot the application (async so we can retry kaplay() and await asset batches)
 //
 boot()
@@ -99,6 +119,7 @@ async function boot() {
   Cursor.init(k)
   TouchInput.initTouchInput(k)
   Fullscreen.createFullscreenButton(k)
+  initBlurKeyReset()
   //
   // Core registration only — section-heavy sprites load per level via level-assets helpers
   //
@@ -337,4 +358,25 @@ function onTaskFinished() {
 function removeStaleCanvases() {
   const stale = document.querySelectorAll('canvas')
   stale.forEach(c => c.remove())
+}
+/**
+ * Register a one-time window blur listener that dispatches synthetic keyup
+ * events for every game key. When the user switches browser tabs the browser
+ * fires blur but never fires keyup for held keys, leaving Kaplay's internal
+ * key-state map with keys stuck as "pressed". onKeyPress only triggers on the
+ * not-pressed → pressed transition, so the next real press is silently ignored.
+ * Dispatching keyup on blur forces Kaplay to clear those states so input works
+ * correctly after the user returns to the tab.
+ */
+function initBlurKeyReset() {
+  window.addEventListener('blur', onWindowBlur)
+}
+//
+// Synthetic keyup burst sent to window on each blur so Kaplay resets
+// its "held" flags for every key the player could have been pressing.
+//
+function onWindowBlur() {
+  RESET_KEY_EVENTS.forEach(({ key, code }) =>
+    window.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true }))
+  )
 }

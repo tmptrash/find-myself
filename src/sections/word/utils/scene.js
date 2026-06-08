@@ -328,7 +328,12 @@ export function initScene(config) {
     floorY: k.height() - (bottomPlatformHeight ?? 360),
     helpY: helpYOverride ?? k.height() - (bottomPlatformHeight ?? 360) + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET,
     levelIndicator,
-    sound
+    sound,
+    //
+    // Sync canvas letterbox color with the platform strips while the help
+    // panel is open or closing — eliminates visible horizontal seams.
+    //
+    sceneBackdropHex: pfColor
   })
   //
   // Create FPS counter, timer and target time (aligned with WORDS and small hero)
@@ -760,7 +765,12 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     addMouth: isWordComplete,
     bodyColor: heroBodyColor,
     addArms: isTouchComplete || isWordComplete,
-    addWatch: true
+    addWatch: true,
+    //
+    // word-hero-idle-speech handles mouth visuals in this section —
+    // disable built-in musical notes so they don't compete
+    //
+    idleVocalization: null
   })
   
   hero.character.use("player")

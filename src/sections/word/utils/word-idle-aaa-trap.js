@@ -27,16 +27,18 @@ const HERO_COLLISION_OFFSET_Y = 3
  * @param {number} config.floorY - Floor platform top Y
  * @param {Function} config.onHit - Death callback when AAA hits the hero (receives blades inst)
  * @param {Object} [config.sfx] - Sound instance
+ * @param {boolean} [config.enabled=true] - Whether the trap is active; pass false to delay activation
  * @returns {Object} Trap instance
  */
 export function create(config) {
-  const { k, hero, floorY, onHit, sfx } = config
+  const { k, hero, floorY, onHit, sfx, enabled = true } = config
   const inst = {
     k,
     hero,
     floorY,
     onHit,
     sfx,
+    enabled,
     idleTimer: 0,
     attackBlades: null,
     riseDistance: 0,
@@ -52,10 +54,19 @@ export function create(config) {
   return inst
 }
 
+/**
+ * Activates a previously disabled AAA trap
+ * @param {Object} inst - Trap instance returned by create()
+ */
+export function enable(inst) {
+  inst.enabled = true
+}
+
 //
 // Tracks idle time and drives the rising AAA attack
 //
 function onUpdate(inst) {
+  if (!inst.enabled) return
   if (inst.frozen) return
   if (inst.attackActive) {
     onUpdateAttack(inst)

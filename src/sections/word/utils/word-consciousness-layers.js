@@ -17,7 +17,7 @@ const THOUGHT_SKY_COUNT = 10
 //
 const NOISE_SILHOUETTE_COUNT = 0
 const THOUGHT_STREAM_COUNT = 14
-const CELESTIAL_COUNT = 4
+const CELESTIAL_COUNT = 0
 const FOREGROUND_PIECE_COUNT = 4
 //
 // Text clouds disabled — their large grouped phrase text was the source of "big dark words"
@@ -404,6 +404,7 @@ function spawnCenterBrain(inst) {
     k.sprite(spriteKey),
     k.pos(centerX, centerY),
     k.anchor('center'),
+    k.rotate(180),
     k.fixed(),
     k.z(brainZ),
     k.opacity(BRAIN_OPACITY),

@@ -71,7 +71,7 @@ const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
 // through the cloud puffs — clouds read as the nearer sky element.
 //
 const Z_STARS = CFG.visual.zIndex.background + 2
-const Z_FIREFLIES = CFG.visual.zIndex.background + 4
+const Z_FIREFLIES = CFG.visual.zIndex.background + 7
 const Z_GRASS = CFG.visual.zIndex.background + 5
 const Z_ILLUSTRATION = CFG.visual.zIndex.background + 6
 const Z_TEXT = 10

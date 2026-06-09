@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import { initScene, checkSpeedBonus, playLifeDeathEffects, createOutlinedDeathMessage } from '../utils/scene.js'
-import { getColor } from '../../../utils/helper.js'
+import { getColor, toCanvas, parseHex } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
@@ -66,6 +66,16 @@ const BULLET_LETTERS = [
 // Keep word count matching level 0 for consistent performance across all word levels
 //
 const FLYING_WORD_COUNT = 22
+//
+// Bullet canvas dimensions — adds padding around letter for outline room
+//
+const BULLET_CANVAS_PAD = 10
+const BULLET_CANVAS_SIZE = BULLET_SIZE + BULLET_CANVAS_PAD * 2
+//
+// Module-level cache: letter → sprite key. Sprites are loaded once and reused across
+// scene restarts so k.loadSprite is never called twice for the same letter.
+//
+const _bulletSpriteCache = new Map()
 //
 // Death messages for level 4
 //
@@ -494,68 +504,30 @@ function setupHeroShooting(k, hero, bladeArm, levelIndicator) {
 function createLetterBullet(k, hero, facingRight, bladeArm) {
   const heroPos = hero.character.pos
   const direction = facingRight ? 1 : -1
-  const heroColor = getColor(k, CFG.visual.colors.hero.body)
   const letter = BULLET_LETTERS[Math.floor(Math.random() * BULLET_LETTERS.length)]
-  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // Play shoot sound
   //
   Sound.playBulletShootSound(hero.sfx)
   //
-  // Create letter bullet with outline
+  // Get (or bake on first use) a pre-rendered sprite for this letter.
+  // Replaces 9 drawText calls per frame with a single drawSprite — eliminates
+  // per-frame font rendering overhead for every active bullet.
   //
+  const spriteKey = getBulletSpriteKey(k, letter)
   const bullet = k.add([
+    k.sprite(spriteKey, { width: BULLET_CANVAS_SIZE, height: BULLET_CANVAS_SIZE }),
     k.pos(heroPos.x, heroPos.y),
     k.z(21),
     k.anchor('center'),
-    'letter-bullet',
-    {
-      draw() {
-        //
-        // Draw black outline offsets
-        //
-        const outlineOffsets = [
-          [-BULLET_OUTLINE_WIDTH, -BULLET_OUTLINE_WIDTH],
-          [0, -BULLET_OUTLINE_WIDTH],
-          [BULLET_OUTLINE_WIDTH, -BULLET_OUTLINE_WIDTH],
-          [-BULLET_OUTLINE_WIDTH, 0],
-          [BULLET_OUTLINE_WIDTH, 0],
-          [-BULLET_OUTLINE_WIDTH, BULLET_OUTLINE_WIDTH],
-          [0, BULLET_OUTLINE_WIDTH],
-          [BULLET_OUTLINE_WIDTH, BULLET_OUTLINE_WIDTH]
-        ]
-        outlineOffsets.forEach(([dx, dy]) => {
-          k.drawText({
-            text: letter,
-            size: BULLET_SIZE,
-            font: fontFamily,
-            pos: k.vec2(dx, dy),
-            anchor: 'center',
-            color: k.rgb(0, 0, 0)
-          })
-        })
-        //
-        // Draw main letter in hero color
-        //
-        k.drawText({
-          text: letter,
-          size: BULLET_SIZE,
-          font: fontFamily,
-          pos: k.vec2(0, 0),
-          anchor: 'center',
-          color: heroColor
-        })
-      }
-    }
+    'letter-bullet'
   ])
   //
   // Move bullet horizontally
   //
   bullet.onUpdate(() => {
     bullet.pos.x += BULLET_SPEED * direction * k.dt()
-    if (bullet.pos.x < 0 || bullet.pos.x > k.width()) {
-      k.destroy(bullet)
-    }
+    ;(bullet.pos.x < 0 || bullet.pos.x > k.width()) && k.destroy(bullet)
   })
   //
   // Check collision with blade-arm creature
@@ -571,6 +543,44 @@ function createLetterBullet(k, hero, facingRight, bladeArm) {
       k.destroy(bullet)
     }
   })
+}
+
+/**
+ * Returns a cached sprite key for the given letter bullet, baking the sprite
+ * once from a canvas and caching in _bulletSpriteCache for subsequent calls.
+ * @param {Object} k - Kaplay instance
+ * @param {string} letter - Single letter character
+ * @returns {string} Kaplay sprite key
+ */
+function getBulletSpriteKey(k, letter) {
+  const cacheKey = `word-bullet-letter-${letter}`
+  if (_bulletSpriteCache.has(cacheKey)) return _bulletSpriteCache.get(cacheKey)
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const [hr, hg, hb] = parseHex(CFG.visual.colors.hero.body)
+  const bw = BULLET_OUTLINE_WIDTH
+  const cx = BULLET_CANVAS_SIZE / 2
+  const cy = BULLET_CANVAS_SIZE / 2
+  const canvas = toCanvas({ width: BULLET_CANVAS_SIZE, height: BULLET_CANVAS_SIZE, pixelRatio: 2 }, ctx => {
+    ctx.font = `${BULLET_SIZE}px "${fontFamily}"`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    //
+    // Draw 8-direction black outline
+    //
+    ctx.fillStyle = '#000000'
+    const offsets = [[-bw, -bw], [0, -bw], [bw, -bw], [-bw, 0], [bw, 0], [-bw, bw], [0, bw], [bw, bw]]
+    offsets.forEach(([dx, dy]) => ctx.fillText(letter, cx + dx, cy + dy))
+    //
+    // Draw main letter in hero body color
+    //
+    ctx.fillStyle = `rgb(${hr},${hg},${hb})`
+    ctx.fillText(letter, cx, cy)
+  })
+  k.loadSprite(cacheKey, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  _bulletSpriteCache.set(cacheKey, cacheKey)
+  return cacheKey
 }
 
 /**

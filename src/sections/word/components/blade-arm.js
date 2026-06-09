@@ -203,12 +203,19 @@ export function create(config) {
   // Parse blade color once for use in drawLegs
   //
   const [bladeR, bladeG, bladeB] = parseHex(CFG.visual.colors.blades)
+  //
+  // Pre-split near and far leg lists so drawLegs never calls filter() per frame
+  //
+  const nearLegs = legs.filter(leg => !leg.isFarLeg)
+  const farLegs = legs.filter(leg => leg.isFarLeg)
   const inst = {
     k,
     creatureContainer,
     textObjects,
     collisionArea,
     legs,
+    nearLegs,
+    farLegs,
     hero,
     currentLevel,
     sfx,
@@ -219,6 +226,11 @@ export function create(config) {
     bladeR,
     bladeG,
     bladeB,
+    //
+    // Pre-cached colors — avoids k.rgb() allocations per leg per frame in drawLegs
+    //
+    blackColor: k.rgb(0, 0, 0),
+    bladeColor: k.rgb(bladeR, bladeG, bladeB),
     animationTime: 0,
     pauseTimer: 1.0,  // Initial pause before starting to walk
     bodyBounceOffset: 0,
@@ -519,20 +531,16 @@ function updateWalkingCreature(inst) {
  * @param {Object} inst - Walking creature instance
  */
 function drawLegs(inst) {
-  const { k, creatureContainer, legs, bladeR, bladeG, bladeB } = inst
-  
   //
   // Don't draw during pause
   //
   if (inst.pauseTimer > 0) {
     return
   }
-  
   //
-  // Draw far legs first (behind), then near legs (in front)
+  // Use pre-cached arrays and colors to avoid per-frame allocations
   //
-  const farLegs = legs.filter(leg => leg.isFarLeg)
-  const nearLegs = legs.filter(leg => !leg.isFarLeg)
+  const { k, creatureContainer, nearLegs, farLegs, blackColor, bladeColor } = inst
   
   //
   // Helper function to draw a single leg
@@ -569,9 +577,8 @@ function drawLegs(inst) {
       p1: k.vec2(attachWorldX, attachWorldY),
       p2: k.vec2(kneeWorldX, kneeWorldY),
       width: 7,
-      color: k.rgb(0, 0, 0)
+      color: blackColor
     })
-    
     //
     // Draw black outline for lower leg (wider for visibility)
     //
@@ -579,9 +586,8 @@ function drawLegs(inst) {
       p1: k.vec2(kneeWorldX, kneeWorldY),
       p2: k.vec2(footWorldX, footWorldY),
       width: 7,
-      color: k.rgb(0, 0, 0)
+      color: blackColor
     })
-    
     //
     // Draw upper leg (blade accent color, same as text)
     //
@@ -589,7 +595,7 @@ function drawLegs(inst) {
       p1: k.vec2(attachWorldX, attachWorldY),
       p2: k.vec2(kneeWorldX, kneeWorldY),
       width: 3,
-      color: k.rgb(bladeR, bladeG, bladeB)
+      color: bladeColor
     })
     //
     // Draw lower leg (blade accent color, same as text)
@@ -598,7 +604,7 @@ function drawLegs(inst) {
       p1: k.vec2(kneeWorldX, kneeWorldY),
       p2: k.vec2(footWorldX, footWorldY),
       width: 3,
-      color: k.rgb(bladeR, bladeG, bladeB)
+      color: bladeColor
     })
     //
     // Draw foot knob with black outline
@@ -607,12 +613,12 @@ function drawLegs(inst) {
     k.drawCircle({
       pos: k.vec2(footWorldX, footWorldY),
       radius: knobRadius + 1.2,
-      color: k.rgb(0, 0, 0)
+      color: blackColor
     })
     k.drawCircle({
       pos: k.vec2(footWorldX, footWorldY),
       radius: knobRadius,
-      color: k.rgb(bladeR, bladeG, bladeB)
+      color: bladeColor
     })
   }
   

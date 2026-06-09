@@ -109,7 +109,7 @@ const SECTION_LETTERS = {
 const TOUCH_H_INDEX = 4
 const TOUCH_H_TILT = 22
 const TOUCH_H_Y_RATIO = 0.3
-const TOUCH_H_X_OFFSET = 0
+const TOUCH_H_X_OFFSET = -6
 const TOUCH_H_WOBBLE_SPEED = 2.5
 const TOUCH_H_WOBBLE_AMPLITUDE = 4
 function getSectionDisplayName(section) {

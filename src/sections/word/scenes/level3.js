@@ -39,9 +39,16 @@ const BLADE_EMERGE_PX = 30
 // Hero spawn positions (in pixels)
 //
 const HERO_SPAWN_X = 380    // 20% of 1920 (shifted right for better level start)
-const HERO_SPAWN_Y = 562    // 52% of 1080 (higher due to narrower pit)
+//
+// Spawn Y is set so the hero's foot lands 22 px inside the platform — identical to
+// level0's (heroCenter + COLLISION_HEIGHT/2 + COLLISION_OFFSET_Y > floorY) formula.
+// Kaplay resolves the overlap in a single frame (instant snap), avoiding the visible
+// multi-frame drop that happens when the hero is spawned slightly above the surface.
+// Formula: floorY (1080-475=605) + 22 - (COLLISION_HEIGHT/2 + COLLISION_OFFSET_Y=37.5) ≈ 590
+//
+const HERO_SPAWN_Y = 590
 const ANTIHERO_SPAWN_X = 1690  // 88% of 1920
-const ANTIHERO_SPAWN_Y = 562   // 52% of 1080
+const ANTIHERO_SPAWN_Y = 590
 //
 // Keep word count matching level 0 for consistent performance across all word levels
 //

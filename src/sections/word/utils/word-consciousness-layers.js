@@ -799,12 +799,17 @@ function updateRootRunners(inst, dt) {
 // Creates a new runner state at the start of a segment
 //
 function makeRootRunner(seg, word, opacity) {
+  //
+  // Pre-compute fontSize once — seg.width is static, so this never changes per runner
+  //
+  const fontSize = Math.round(Math.max(ROOT_RUNNER_FONT_MIN, ROOT_RUNNER_FONT_MIN + (ROOT_RUNNER_FONT_MAX - ROOT_RUNNER_FONT_MIN) * (seg.width / BRAIN_ROOT_THICKNESS)))
   return {
     seg,
     t: 0,
     word: word ?? ROOT_RUNNER_WORDS[Math.floor(Math.random() * ROOT_RUNNER_WORDS.length)],
     opacity: opacity ?? ROOT_RUNNER_OPACITY,
-    fading: false
+    fading: false,
+    fontSize
   }
 }
 //
@@ -817,14 +822,13 @@ function drawRootRunners(inst) {
   rootRunners.forEach(r => {
     const x = r.seg.startX + (r.seg.endX - r.seg.startX) * r.t
     const y = r.seg.startY + (r.seg.endY - r.seg.startY) * r.t
-    //
-    // Font size shrinks with root thickness: thick root near brain = large, thin tip = tiny
-    //
-    const fontSize = Math.max(ROOT_RUNNER_FONT_MIN, ROOT_RUNNER_FONT_MIN + (ROOT_RUNNER_FONT_MAX - ROOT_RUNNER_FONT_MIN) * (r.seg.width / BRAIN_ROOT_THICKNESS))
     k.drawText({
       text: r.word,
       pos: k.vec2(x, y),
-      size: Math.round(fontSize),
+      //
+      // Pre-cached fontSize (computed once in makeRootRunner, seg.width is static)
+      //
+      size: r.fontSize,
       color,
       anchor: 'center',
       opacity: r.opacity

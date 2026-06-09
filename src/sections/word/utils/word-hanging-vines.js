@@ -1,4 +1,5 @@
 import { CFG, getConsciousnessColor } from '../cfg.js'
+import { parseHex } from '../../../utils/helper.js'
 
 //
 // Hanging vine phrases — intrusive-thought sentences draped between top playfield anchors
@@ -119,9 +120,16 @@ export function create(config) {
     vine.cachedLayout = getLetterLayout(vine)
     vines.push(vine)
   }
+  //
+  // Pre-cache vine color and font to avoid per-frame allocations in onDraw
+  //
+  const vineHex = getConsciousnessColor('vine')
+  const [vr, vg, vb] = parseHex(vineHex)
   const inst = {
     k,
     vines,
+    vineColor: k.rgb(vr, vg, vb),
+    font: CFG.visual.fonts.thinFull.replace(/'/g, ''),
     playfieldColor: playfieldColor ?? getConsciousnessColor('gameWorld')
   }
   k.add([
@@ -223,19 +231,11 @@ function buildVine(layout, phrase, playLeft, playWidth, playTop, playBottom, pla
 // Draws letters and visible word spaces along a hanging curve
 //
 function onDraw(inst) {
-  const { k, vines } = inst
+  //
+  // vineColor and font are pre-cached in inst to avoid per-frame string parsing and k.rgb allocation
+  //
+  const { k, vines, vineColor, font } = inst
   const time = k.time()
-  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  //
-  // Use raw vine hex without atmospheric depth blending so letters match
-  // the brain root filament color exactly (same RGB source in cfg)
-  //
-  const vineHex = getConsciousnessColor('vine')
-  const vineColor = k.rgb(
-    parseInt(vineHex.slice(1, 3), 16),
-    parseInt(vineHex.slice(3, 5), 16),
-    parseInt(vineHex.slice(5, 7), 16)
-  )
   vines.forEach(vine => {
     vine.cachedLayout.forEach(({ letter, t, size }) => {
       const base = quadraticPoint(vine, t)

@@ -246,6 +246,10 @@ const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.trapAdded'
 //
+// Grace-period flag: hero gets one free attempt before trap1 dialog fires.
+//
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.trapVisited'
+//
 // Second trap: the bug on which the anti-hero stands starts moving slowly.
 // Triggers when the first trap is already set AND lifeScore >= TRAP2_THRESHOLD.
 //
@@ -626,7 +630,18 @@ export function sceneLevel0(k) {
     //
     const currentLifeScore = get('lifeScore', 0)
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
-    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const trap1AlreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const trap1Eligible = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    //
+    // Grace period: first visit marks visited flag, second visit shows dialog.
+    //
+    let showTrap = false
+    if (trap1Eligible && !trap1AlreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (trap1Eligible && trap1AlreadyVisited) {
+      showTrap = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
     //
     // Second trap detection — mirrors the level 1 visited/eligible pattern
     //
@@ -2056,6 +2071,7 @@ export function sceneLevel0(k) {
           //
           Sound.stopAmbient(sound)
           touchMusic.stop()
+          set(LIFE_DEDUCT_VISITED_FLAG, false)
           createLevelTransition(k, 'level-touch.0', () => {
             k.go('level-touch.1')
           })

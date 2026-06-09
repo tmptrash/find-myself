@@ -60,6 +60,11 @@ const FLYING_WORD_COUNT = 22
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level3LifeDeduction'
 //
+// Visited flag: set on the FIRST entry when conditions are met so the hero
+// gets one free attempt before the dialog fires on the SECOND entry.
+//
+const LIFE_DEDUCT_VISITED_FLAG = 'word.level3TrapVisited'
+//
 // Canvas backdrop RGB matching word section platform color (#2A2A38 = 42, 42, 56)
 //
 const WORD_L3_BACKDROP_R = 42
@@ -105,6 +110,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   set('lifeScore', newLifeScore)
   levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
   playLifeDeathEffects(k, levelIndicator)
+  Sound.playLifeSound(k)
   //
   // Select random message
   //
@@ -432,11 +438,25 @@ export function sceneLevel3(k) {
     //
     const currentLifeScore = get('lifeScore', 0)
     const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
-    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    //
+    // Life deduction: hero gets one free attempt before the dialog fires.
+    // First entry with eligible score: mark as visited, no dialog.
+    // Second entry: show dialog at level start (original behavior).
+    //
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    let showLifeTrap = false
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showLifeTrap = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
     const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
     levelIndicator.updateTrapCount(trapCount)
     //
-    // If trap was already shown in a previous session, blades run fast immediately
+    // If trap was already shown in a previous session, blades run fast immediately.
+    // Also boost if dialog fires right now so speed increases after dialog closes.
     //
     if (lifeTrapAlreadyShown) {
       inst.animationSpeed /= BLADE_SPEED_BOOST_FACTOR
@@ -463,9 +483,6 @@ export function sceneLevel3(k) {
           inst.animationSpeed /= BLADE_SPEED_BOOST_FACTOR
           inst.bladeDelay /= BLADE_SPEED_BOOST_FACTOR
           inst.cycleDelay /= BLADE_SPEED_BOOST_FACTOR
-          //
-          // Play blade sound so the player notices the speed change
-          //
           sound && Sound.playBladeSound(sound)
         }
       })

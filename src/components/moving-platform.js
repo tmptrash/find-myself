@@ -55,7 +55,8 @@ export function create(config) {
     raiseTimeout = RAISE_TIMEOUT,
     raiseDelay = RAISE_DELAY,
     onBladeHit = null,
-    stationaryOnly = false
+    stationaryOnly = false,
+    onPermanentClose = null
   } = config
   
   // Calculate platform dimensions based on blade width
@@ -127,6 +128,7 @@ export function create(config) {
     // re-open the next time the hero approaches.
     //
     shouldResetAfterRise: false,
+    onPermanentClose,
     initialBladeY: blades.blade.pos.y
   }
   
@@ -384,6 +386,7 @@ function onUpdate(inst) {
         blades.blade.opacity = 0
         blades.glintDrawer.hidden = true
         blades.collisionEnabled = false
+        inst.onPermanentClose?.()
       }
     }
   }

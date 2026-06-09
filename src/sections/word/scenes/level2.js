@@ -61,6 +61,11 @@ const FLYING_WORD_COUNT = 22
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level2LifeDeduction'
 //
+// Visited flag: set on the FIRST entry when conditions are met so the hero
+// gets one free attempt before the dialog fires on the SECOND entry.
+//
+const LIFE_DEDUCT_VISITED_FLAG = 'word.level2TrapVisited'
+//
 // Canvas backdrop RGB for the life-deduction dialog overlay
 // matches word section platform color (#2A2A38 = 42, 42, 56)
 //
@@ -89,6 +94,13 @@ const DISAPPEAR_PARTICLE_MIN_SPEED = 110
 const DISAPPEAR_PARTICLE_MAX_SPEED = 260
 const DISAPPEAR_PARTICLE_RADIUS = 3
 const DISAPPEAR_PARTICLE_LIFE = 0.5
+//
+// Fly-over reveal: blades2 (right of second pit) briefly show when hero jumps over them
+//
+const BLADE2_FLIGHT_X_MARGIN = 170   // Horizontal zone (px) around blade2X to trigger reveal
+const BLADE2_FLIGHT_Y_MARGIN = 100   // Hero must be this many px above floor center to count as "in air"
+const BLADE2_FLIGHT_REVEAL_DURATION = 1.0   // Seconds blades stay visible during fly-over
+const BLADE2_FLIGHT_COOLDOWN = 2.0   // Seconds before the next fly-over reveal
 
 /**
  * Shows a random death message and then restarts the level
@@ -106,6 +118,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   set('lifeScore', newLifeScore)
   levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
   playLifeDeathEffects(k, levelIndicator)
+  Sound.playLifeSound(k)
   //
   // Select random message
   //
@@ -367,32 +380,43 @@ export function sceneLevel2(k) {
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)
     })
     //
-    // Life deduction dialog — shown once when life score reaches threshold.
+    // Life deduction: hero gets one free attempt before the dialog fires.
+    // First entry with eligible score: mark as visited, no dialog.
+    // Second entry: show dialog at level start (original behavior).
     // Anti-hero escape trap activates after the dialog (or immediately if
     // the dialog was already shown in a previous session).
     //
     const currentLifeScore = get('lifeScore', 0)
     const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
-    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    let showLifeTrap = false
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showLifeTrap = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
     const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
     levelIndicator.updateTrapCount(trapCount)
     const sceneLock = { locked: showLifeTrap }
-    showLifeTrap && (hero.controlsDisabled = true) && (sceneLock.heroInst = hero)
-    showLifeTrap && LifeDeduction.show({
-      k,
-      currentScore: currentLifeScore,
-      levelIndicator,
-      sound,
-      deductFlag: LIFE_DEDUCT_FLAG,
-      sceneLock,
-      sceneBgRgb: { r: WORD_L2_BACKDROP_R, g: WORD_L2_BACKDROP_G, b: WORD_L2_BACKDROP_B },
-      textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
-      onComplete: () => setupAntiHeroEscapeTrap(k, hero, antiHero, movingPlatform1, movingPlatform2, sound)
-    })
+    if (showLifeTrap) {
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
+        sceneBgRgb: { r: WORD_L2_BACKDROP_R, g: WORD_L2_BACKDROP_G, b: WORD_L2_BACKDROP_B },
+        textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
+        onComplete: () => setupAntiHeroEscapeTrap(k, hero, antiHero, movingPlatform1, movingPlatform2, sound)
+      })
+    }
     //
     // If dialog was already shown in a previous session, activate trap immediately.
-    // Do NOT re-check lifeScore here — the dialog already reduced it below the
-    // threshold, so we only need to confirm the flag was set.
     //
     lifeTrapAlreadyShown &&
       setupAntiHeroEscapeTrap(k, hero, antiHero, movingPlatform1, movingPlatform2, sound)
@@ -406,8 +430,9 @@ export function sceneLevel2(k) {
       onHit: () => showDeathMessage(k, hero, blades1, levelIndicator, sound),
       sfx: sound
     })
-    
-    // Create second blade
+    //
+    // Create second blade — starts hidden (opacity 0); shown on contact and fly-over
+    //
     const blades2 = Blades.create({
       k,
       x: blade2X,
@@ -417,6 +442,7 @@ export function sceneLevel2(k) {
       onHit: () => showDeathMessage(k, hero, blades2, levelIndicator, sound),
       sfx: sound
     })
+    setupBladesFlightReveal(k, blades2, blade2X, platformY, hero)
     
     // Start blade animations after 1 second
     Blades.startAnimation(blades1)
@@ -489,9 +515,11 @@ function onUpdateAntiHeroEscape(k, hero, antiHero, platform1, platform2, state, 
   if (dist > ANTIHERO_ESCAPE_TRIGGER_DISTANCE) return
   state.escaping = true
   //
-  // Play disappear sound, hide the anti-hero, and burst crimson dust at vanish point
+  // Play disappear sound and life laugh (no points deducted) when the anti-hero
+  // teleports away — the laugh taunts the hero without affecting the life score.
   //
   sound && Sound.playDisappearSound(sound)
+  sound && Sound.playEvilLaughSound(sound)
   spawnDisappearParticles(k, antiHero.character.pos.x, antiHero.character.pos.y)
   antiHero.character.opacity = 0
   k.wait(ANTIHERO_HIDE_DURATION, () => {
@@ -548,5 +576,53 @@ function spawnDisappearParticles(k, x, y) {
       particle.pos.y += state.vy * k.dt()
       state.life <= 0 && particle.destroy()
     })
+  }
+}
+//
+// Watches the hero and temporarily shows blades2 when the hero jumps over them
+// (hero X within margin of blade2X AND hero is in the air). Hides after
+// BLADE2_FLIGHT_REVEAL_DURATION seconds. Also fires when the hero LANDS on
+// the blades (handled separately by showDeathMessage → Blades.show).
+//
+function setupBladesFlightReveal(k, bladesInst, bladeX, floorY, hero) {
+  const state = { showing: false, timer: 0, cooldown: 0 }
+  bladesInst.blade.onUpdate(() => onUpdateBladesFlightReveal(k, bladesInst, state, hero, bladeX, floorY))
+}
+//
+// Fly-over detection: show hidden blades briefly when the hero is in the air
+// directly above the blade position and the blades are not yet visible.
+//
+function onUpdateBladesFlightReveal(k, bladesInst, state, hero, bladeX, floorY) {
+  if (!hero?.character?.exists?.()) return
+  state.cooldown = Math.max(0, state.cooldown - k.dt())
+  //
+  // Count down reveal timer, then hide blades again
+  //
+  if (state.showing) {
+    state.timer -= k.dt()
+    if (state.timer <= 0) {
+      state.showing = false
+      //
+      // Only reset opacity if blades were not already shown by a death hit
+      //
+      if (!bladesInst.wasShownOnDeath) bladesInst.blade.opacity = 0
+    }
+    return
+  }
+  if (state.cooldown > 0) return
+  //
+  // Trigger: hero is horizontally near blade AND hero center is well above the floor
+  // AND blades are currently hidden (proximity hasn't revealed them yet)
+  //
+  const heroX = hero.character.pos.x
+  const heroY = hero.character.pos.y
+  const inXZone = Math.abs(heroX - bladeX) < BLADE2_FLIGHT_X_MARGIN
+  const inAir = heroY < floorY - BLADE2_FLIGHT_Y_MARGIN
+  if (inXZone && inAir && bladesInst.blade.opacity < 0.5) {
+    bladesInst.blade.opacity = 1
+    bladesInst.glintDrawer && (bladesInst.glintDrawer.hidden = false)
+    state.showing = true
+    state.timer = BLADE2_FLIGHT_REVEAL_DURATION
+    state.cooldown = BLADE2_FLIGHT_COOLDOWN
   }
 }

@@ -774,7 +774,12 @@ function createKillerLetter(k, params) {
     k.anchor('center'),
     killerColor,
     k.opacity(FLYING_WORD_DRAW_OPACITY),
-    k.area({ scale: 0.6 }),  // Collision area (slightly smaller than visual)
+    //
+    // Horizontal scale 1.1 — extends slightly past the text bounding box so all
+    // letters including serifs and right-side glyphs are inside the collision zone.
+    // Vertical 0.65 keeps the hit-box tighter than full height to avoid false hits.
+    //
+    k.area({ scale: k.vec2(1.1, 0.65) }),
     k.z(zIndex),
     k.fixed(),
     k.stay(),  // Stay persistent across scene changes

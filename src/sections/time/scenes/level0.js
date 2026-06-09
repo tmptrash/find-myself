@@ -94,6 +94,11 @@ const BONUS_HERO_COLOR = "#8B5A50"
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
 //
+// Grace-period flag: set on the FIRST entry when trap conditions are met so the
+// dialog fires on the SECOND entry (after the hero has had one free attempt).
+//
+const LIFE_DEDUCT_GRACE_FLAG = 'time.level0TrapGrace'
+//
 // Resting birds near the anti-hero: small silhouettes that scatter on hero landing
 //
 const BIRD_COUNT = 4
@@ -254,6 +259,10 @@ export function sceneLevel0(k) {
         // Wait before transition (extra 1s if speed bonus earned for particle effect)
         //
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
+        //
+        // Clear grace flag on level success so it doesn't linger
+        //
+        set(LIFE_DEDUCT_GRACE_FLAG, false)
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.0')
         })
@@ -439,9 +448,25 @@ export function sceneLevel0(k) {
     //
     const currentLifeScore = get('lifeScore', 0)
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
-    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const graceVisitDone = get(LIFE_DEDUCT_GRACE_FLAG, false)
+    //
+    // Grace period: on the first entry when conditions are met, set the grace flag
+    // and skip the dialog (give the hero one free attempt). On the second entry
+    // (graceVisitDone = true), show the dialog as usual.
+    //
+    const trapConditionsMet = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const showTrap = trapConditionsMet && graceVisitDone
+    if (trapConditionsMet && !graceVisitDone) {
+      set(LIFE_DEDUCT_GRACE_FLAG, true)
+    }
+    if (showTrap) {
+      //
+      // Clear grace flag since dialog is about to fire
+      //
+      set(LIFE_DEDUCT_GRACE_FLAG, false)
+    }
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    levelIndicator.updateTrapCount(trapEnabled || trapConditionsMet ? 1 : 0)
     const sceneLock = { locked: showTrap }
     if (showTrap) {
       hero.controlsDisabled = true

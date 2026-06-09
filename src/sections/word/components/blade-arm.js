@@ -6,11 +6,11 @@ import * as Sound from '../../../utils/sound.js'
 //
 // Walking creature parameters
 //
-const TEXT_MESSAGE = 'Words that kill'
+const TEXT_MESSAGE = 'self doubt'
 const TEXT_SIZE = 36
 const OUTLINE_THICKNESS = 2
 const WALK_SPEED = 60  // Pixels per second (slower walking speed)
-const LEG_COUNT = 6  // Number of legs (3 pairs)
+const LEG_COUNT = 4  // Number of legs (2 pairs, 4 near + 4 far = 8 total)
 const UPPER_LEG_LENGTH = 18  // Length of upper leg segment (longer for more reach)
 const LOWER_LEG_LENGTH = 18  // Length of lower leg segment
 const LEG_SPACING = 50  // Horizontal spacing between legs

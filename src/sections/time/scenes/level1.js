@@ -99,6 +99,11 @@ const BONUS_TRIGGER_BELOW_Y = 760
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level1TrapAdded'
 //
+// Grace-period flag: set on the FIRST entry when trap conditions are met so the
+// dialog fires on the SECOND entry (after the hero has had one free attempt).
+//
+const LIFE_DEDUCT_GRACE_FLAG = 'time.level1TrapGrace'
+//
 // Night music controller: darkness threshold for fading music, and cricket intervals
 //
 const NIGHT_DARKNESS_THRESHOLD = 0.45
@@ -230,6 +235,7 @@ export function sceneLevel1(k) {
         // Wait before transition (extra 1s if speed bonus earned for particle effect)
         //
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
+        set(LIFE_DEDUCT_GRACE_FLAG, false)
         k.wait(transitionDelay, () => {
           createLevelTransition(k, 'level-time.1')
         })
@@ -355,9 +361,18 @@ export function sceneLevel1(k) {
     //
     const currentLifeScore = get('lifeScore', 0)
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
-    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const graceVisitDone = get(LIFE_DEDUCT_GRACE_FLAG, false)
+    //
+    // Grace period: hero gets one free attempt before the dialog fires.
+    //
+    const trapConditionsMet = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const showTrap = trapConditionsMet && graceVisitDone
+    if (trapConditionsMet && !graceVisitDone) {
+      set(LIFE_DEDUCT_GRACE_FLAG, true)
+    }
+    showTrap && set(LIFE_DEDUCT_GRACE_FLAG, false)
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    levelIndicator.updateTrapCount(trapEnabled || trapConditionsMet ? 1 : 0)
     const sceneLock = { locked: showTrap }
     if (showTrap) {
       hero.controlsDisabled = true

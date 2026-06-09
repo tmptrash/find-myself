@@ -60,6 +60,11 @@ const FLYING_WORD_COUNT = 22
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level0LifeDeduction'
 //
+// Visited flag: set on the FIRST entry when conditions are met so the hero
+// gets one free attempt before the dialog fires on the SECOND entry.
+//
+const LIFE_DEDUCT_VISITED_FLAG = 'word.level0TrapVisited'
+//
 // Crimson section color for life-deduction dialog text
 //
 const WORD_TEXT_COLOR_R = 220
@@ -190,25 +195,38 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Life deduction intro when life score is high enough (once per save)
+    // Life deduction: hero gets one free attempt before the dialog fires.
+    // First entry with eligible score: mark as visited, no dialog.
+    // Second entry: show dialog at level start (original behavior).
     //
     const currentLifeScore = get('lifeScore', 0)
     const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
-    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = !lifeTrapAlreadyShown && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    let showLifeTrap = false
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showLifeTrap = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
     const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
     levelIndicator.updateTrapCount(trapCount)
     const sceneLock = { locked: showLifeTrap }
-    showLifeTrap && (hero.controlsDisabled = true) && (sceneLock.heroInst = hero)
-    showLifeTrap && LifeDeduction.show({
-      k,
-      currentScore: currentLifeScore,
-      levelIndicator,
-      sound,
-      deductFlag: LIFE_DEDUCT_FLAG,
-      sceneLock,
-      sceneBgRgb: { r: WORD_L0_BACKDROP_R, g: WORD_L0_BACKDROP_G, b: WORD_L0_BACKDROP_B },
-      textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B }
-    })
+    if (showLifeTrap) {
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
+        sceneBgRgb: { r: WORD_L0_BACKDROP_R, g: WORD_L0_BACKDROP_G, b: WORD_L0_BACKDROP_B },
+        textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B }
+      })
+    }
     
     //
     // Calculate platform boundaries for flying words
@@ -423,7 +441,9 @@ export function sceneLevel0(k) {
 }
 
 /**
- * Shows a random death message and then restarts the level
+ * Shows a random death message and then restarts the level.
+ * On the very first death when the life-deduction trap is pending (grace period),
+ * shows the deduction dialog instead and restarts afterward.
  * @param {Object} k - Kaplay instance
  * @param {Object} hero - Hero instance
  * @param {Object} bladesInst - Blades instance that was hit
@@ -443,6 +463,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   set('lifeScore', newLifeScore)
   levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
   playLifeDeathEffects(k, levelIndicator)
+  Sound.playLifeSound(k)
   //
   // Select random message
   //

@@ -99,6 +99,11 @@ const BONUS_COLLISION_Y_OFFSET = 8
 //
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'time.level2TrapAdded'
+//
+// Grace-period flag: set on the FIRST entry when trap conditions are met so the
+// dialog fires on the SECOND entry (after the hero has had one free attempt).
+//
+const LIFE_DEDUCT_GRACE_FLAG = 'time.level2TrapGrace'
 const TRAP_PLATFORM_INDEX_1 = 2
 const TRAP_PLATFORM_INDEX_2 = 6
 //
@@ -568,6 +573,7 @@ export function sceneLevel2(k) {
           timeMusic.stop()
           kidsMusic.stop()
           stopTimeSectionMusic()
+          set(LIFE_DEDUCT_GRACE_FLAG, false)
           //
           // Move to level 3 with transition
           //
@@ -785,9 +791,18 @@ export function sceneLevel2(k) {
     //
     const currentLifeScore = get('lifeScore', 0)
     const trapAlreadyAdded = get(LIFE_DEDUCT_FLAG, false)
-    const showTrap = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const graceVisitDone = get(LIFE_DEDUCT_GRACE_FLAG, false)
+    //
+    // Grace period: hero gets one free attempt before the dialog fires.
+    //
+    const trapConditionsMet = !trapAlreadyAdded && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
+    const showTrap = trapConditionsMet && graceVisitDone
+    if (trapConditionsMet && !graceVisitDone) {
+      set(LIFE_DEDUCT_GRACE_FLAG, true)
+    }
+    showTrap && set(LIFE_DEDUCT_GRACE_FLAG, false)
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
+    levelIndicator.updateTrapCount(trapEnabled || trapConditionsMet ? 1 : 0)
     const sceneLock = { locked: showTrap }
     if (showTrap) {
       hero.controlsDisabled = true

@@ -8,7 +8,7 @@ import { isAnyKeyDown } from '../../../utils/helper.js'
 //
 // Idle AAA rise trap — word level 1
 //
-const IDLE_STAND_THRESHOLD = 4
+const IDLE_STAND_THRESHOLD = 1
 const MOVE_VEL_THRESHOLD = 20
 const AAA_RISE_SPEED = 380
 const AAA_FADE_IN = 0.05

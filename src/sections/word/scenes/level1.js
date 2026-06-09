@@ -69,6 +69,11 @@ const FLYING_WORD_COUNT = 22
 const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'word.level1LifeDeduction'
 //
+// Visited flag: set on the FIRST entry when conditions are met so the hero
+// gets one free attempt before the dialog fires on the SECOND entry.
+//
+const LIFE_DEDUCT_VISITED_FLAG = 'word.level1TrapVisited'
+//
 // Canvas backdrop RGB for the life-deduction dialog overlay (word section dark purple)
 //
 const WORD_L1_BACKDROP_R = 50
@@ -102,6 +107,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   set('lifeScore', newLifeScore)
   levelIndicator && levelIndicator.updateLifeScore && levelIndicator.updateLifeScore(newLifeScore)
   playLifeDeathEffects(k, levelIndicator)
+  Sound.playLifeSound(k)
   //
   // Select random message
   //
@@ -365,18 +371,27 @@ export function sceneLevel1(k) {
       onHit: () => showDeathMessage(k, hero, ceilingTrapInst.ceilingBlades, levelIndicator, sound)
     })
     //
-    // Life deduction dialog — shown once when life score reaches threshold
+    // Life deduction: hero gets one free attempt before the dialog fires.
+    // First entry with eligible score: mark as visited, no dialog.
+    // Second entry: show dialog at level start (original behavior).
     //
     const currentLifeScore = get('lifeScore', 0)
     const lifeTrapAlreadyShown = get(LIFE_DEDUCT_FLAG, false)
-    const showLifeTrap = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
+    const eligible = !lifeTrapAlreadyShown && currentLifeScore > LIFE_DEDUCT_THRESHOLD
+    let showLifeTrap = false
+    if (eligible && !alreadyVisited) {
+      set(LIFE_DEDUCT_VISITED_FLAG, true)
+    } else if (eligible && alreadyVisited) {
+      showLifeTrap = true
+      set(LIFE_DEDUCT_VISITED_FLAG, false)
+    }
     const trapCount = (showLifeTrap || lifeTrapAlreadyShown) ? 1 : 0
     levelIndicator.updateTrapCount(trapCount)
     const sceneLock = { locked: showLifeTrap }
-    showLifeTrap && (hero.controlsDisabled = true) && (sceneLock.heroInst = hero)
     //
-    // AAA trap: starts disabled until the life dialog is dismissed (or immediately
-    // if the dialog was already shown in a previous session)
+    // AAA trap: starts disabled until the life dialog fires (or immediately
+    // if the dialog was already shown in a previous session).
     //
     const aaaTrapInst = WordIdleAaaTrap.create({
       k,
@@ -386,17 +401,21 @@ export function sceneLevel1(k) {
       enabled: lifeTrapAlreadyShown,
       onHit: (bladesInst) => showDeathMessage(k, hero, bladesInst, levelIndicator, sound)
     })
-    showLifeTrap && LifeDeduction.show({
-      k,
-      currentScore: currentLifeScore,
-      levelIndicator,
-      sound,
-      deductFlag: LIFE_DEDUCT_FLAG,
-      sceneLock,
-      sceneBgRgb: { r: WORD_L1_BACKDROP_R, g: WORD_L1_BACKDROP_G, b: WORD_L1_BACKDROP_B },
-      textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
-      onComplete: () => WordIdleAaaTrap.enable(aaaTrapInst)
-    })
+    if (showLifeTrap) {
+      hero.controlsDisabled = true
+      sceneLock.heroInst = hero
+      LifeDeduction.show({
+        k,
+        currentScore: currentLifeScore,
+        levelIndicator,
+        sound,
+        deductFlag: LIFE_DEDUCT_FLAG,
+        sceneLock,
+        sceneBgRgb: { r: WORD_L1_BACKDROP_R, g: WORD_L1_BACKDROP_G, b: WORD_L1_BACKDROP_B },
+        textColorRgb: { r: WORD_TEXT_COLOR_R, g: WORD_TEXT_COLOR_G, b: WORD_TEXT_COLOR_B },
+        onComplete: () => WordIdleAaaTrap.enable(aaaTrapInst)
+      })
+    }
     setupWordLevel1HoverTooltips(k, { levelIndicator, fpsCounter, hero })
   })
 }

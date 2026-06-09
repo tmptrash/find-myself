@@ -3157,6 +3157,52 @@ export function playWavePulseSound(instance) {
 }
 
 /**
+ * Play sinister laugh sound — three rising chuckle bursts on a sawtooth carrier
+ * with ring-mod shimmer. Used when the life counter laughs at the hero without
+ * deducting points (e.g. anti-hero escape in word L2).
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playEvilLaughSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Three chuckle bursts: "heh — heh — HEH" with rising pitch
+  //
+  const burstTimes = [0, 0.22, 0.48]
+  const burstFreqs = [160, 190, 240]
+  const masterGain = ctx.createGain()
+  masterGain.gain.setValueAtTime(0.28, now)
+  masterGain.connect(ctx.destination)
+  burstTimes.forEach((t, i) => {
+    const start = now + t
+    const carrier = ctx.createOscillator()
+    const env = ctx.createGain()
+    carrier.type = 'sawtooth'
+    carrier.frequency.setValueAtTime(burstFreqs[i], start)
+    carrier.frequency.linearRampToValueAtTime(burstFreqs[i] * 0.7, start + 0.18)
+    env.gain.setValueAtTime(0.001, start)
+    env.gain.linearRampToValueAtTime(1, start + 0.02)
+    env.gain.exponentialRampToValueAtTime(0.001, start + 0.18)
+    carrier.connect(env)
+    env.connect(masterGain)
+    carrier.start(start)
+    carrier.stop(start + 0.18)
+    //
+    // Shimmer: ring-mod style high-freq tremolo
+    //
+    const mod = ctx.createOscillator()
+    const modGain = ctx.createGain()
+    mod.frequency.value = 320
+    modGain.gain.value = 18
+    mod.connect(modGain)
+    modGain.connect(carrier.frequency)
+    mod.start(start)
+    mod.stop(start + 0.18)
+  })
+}
+/**
  * Play scary sound effect for life deduction hint appearance.
  * Deep dissonant drone with sudden sharp attack and eerie overtone.
  * @param {Object} instance - Sound instance from create()

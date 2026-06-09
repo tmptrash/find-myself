@@ -49,6 +49,12 @@ export function create(config) {
     phase: 'idle',
     rushTargetX: 0,
     frozen: false,
+    //
+    // Tracks whether the trap was active last frame; used to skip the hasRun
+    // requirement on first activation so the blades respond within STAND_TIME
+    // of the trap becoming armed (immediately after the life-deduction dialog).
+    //
+    wasActive: false,
     lastHeroX: hero.character?.pos?.x ?? 0
   }
   k.onUpdate(() => onUpdate(inst))
@@ -62,8 +68,17 @@ function onUpdate(inst) {
   const { hero, bladesInst } = inst
   if (!hero?.character?.pos || !bladesInst?.blade?.exists?.()) return
   if (!isTrapActive(inst)) {
+    inst.wasActive = false
     bladesInst.collisionEnabled = true
     return
+  }
+  //
+  // First frame the trap becomes active — bypass the hasRun gate so the
+  // stand timer starts counting immediately (1-second pause per STAND_TIME).
+  //
+  if (!inst.wasActive) {
+    inst.wasActive = true
+    inst.hasRun = true
   }
   const heroChar = hero.character
   const heroX = heroChar.pos.x

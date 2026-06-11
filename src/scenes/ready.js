@@ -25,7 +25,7 @@ const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
 const HINT_FONT_SIZE = 20
-const HINT_Y = 1075
+const HINT_Y = 1045
 //
 // Crawling letter title — centred at the very top of the canvas,
 // well above the central monster illustration.

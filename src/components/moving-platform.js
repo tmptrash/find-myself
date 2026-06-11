@@ -129,7 +129,12 @@ export function create(config) {
     //
     shouldResetAfterRise: false,
     onPermanentClose,
-    initialBladeY: blades.blade.pos.y
+    initialBladeY: blades.blade.pos.y,
+    //
+    // When true the pit is held closed (raised, blades off) so the walking
+    // creature can cross. Normal hero-driven logic is suspended meanwhile.
+    //
+    monsterClosed: false
   }
   
   // Auto-open platform if requested
@@ -186,11 +191,51 @@ export function reset(inst) {
   blades.blade.opacity = 0
   blades.collisionEnabled = false
 }
+/**
+ * Holds the pit closed (raised, blades disabled) so the walking creature can
+ * cross, or releases it back to its normal idle behaviour.
+ * @param {Object} inst - Platform instance returned by create()
+ * @param {boolean} closed - True to force-close for crossing, false to release
+ */
+export function setMonsterClosed(inst, closed) {
+  if (closed === inst.monsterClosed) return
+  inst.monsterClosed = closed
+  const { k, platform, blades, originalY } = inst
+  if (closed) {
+    //
+    // Animated close — same feel as a timer-expiry: fade the blades out quickly,
+    // then raise the platform smoothly up to fill the gap so the creature crosses
+    //
+    blades.collisionEnabled = false
+    inst._monsterTween?.cancel?.()
+    k.tween(blades.blade.opacity, 0, BLADE_FADE_DURATION, val => blades.blade.opacity = val, k.easings.linear)
+    inst._monsterTween = k.tween(platform.pos.y, originalY, RAISE_DURATION, val => {
+      platform.pos.y = val
+      inst.currentY = val
+    }, k.easings.linear)
+    inst._monsterTween.onEnd(() => {
+      blades.blade.opacity = 0
+      blades.glintDrawer.hidden = true
+    })
+  } else {
+    //
+    // Release: stop any in-flight raise tween and reset to a clean idle state
+    // so the hero trap can fire again
+    //
+    inst._monsterTween?.cancel?.()
+    inst._monsterTween = null
+    reset(inst)
+  }
+}
 //
 // Update platform movement and detection
 //
 function onUpdate(inst) {
   const { k, platform, blades, hero, originalY, dropDistance, sfx, jumpToDisableBlades, platformWidth } = inst
+  //
+  // While held closed for the crossing creature, suspend all hero-driven logic
+  //
+  if (inst.monsterClosed) return
   
   updatePitProximityRattle(inst)
   

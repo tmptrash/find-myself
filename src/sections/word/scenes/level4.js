@@ -48,6 +48,32 @@ const CREATURE_FREEZE_DURATION = 1.0
 const CREATURE_HIT_PARTICLE_COUNT = 15
 const CREATURE_HIT_PARTICLE_SIZE = 4
 const CREATURE_FLASH_COUNT = 10
+//
+// Each Shift-shot swaps the creature to a random word. There are only two
+// states: a blue word that kills on touch, and a green word that is harmless.
+// The colour is derived from each word's "good" flag.
+//
+const CREATURE_LETHAL_COLOR = '#4AC6F5'   // Blue — kills the hero on touch
+const CREATURE_SAFE_COLOR = '#6BCB77'     // Green — harmless
+const CREATURE_WORDS = [
+  { text: 'fear', good: false },
+  { text: 'doubt', good: false },
+  { text: 'hate', good: false },
+  { text: 'pain', good: false },
+  { text: 'friend', good: true },
+  { text: 'love', good: true },
+  { text: 'calm', good: true },
+  { text: 'hope', good: true }
+]
+//
+// How close (px) the walking creature must be to a pit for it to close so it can cross
+//
+const MONSTER_PIT_CLOSE_DISTANCE = 170
+//
+// Extra reach (px) beyond the creature's half-width at which a decoy anti-hero
+// in its path makes it stop
+//
+const MONSTER_ANTIHERO_BLOCK_DISTANCE = 70
 const CREATURE_HIT_DISTANCE = 50
 const SHOOT_KEYS = ['shift', 'ShiftLeft', 'ShiftRight']
 const INSTRUCTIONS_SHOW_MAX = 2
@@ -65,7 +91,82 @@ const BULLET_LETTERS = [
 //
 // Keep word count matching level 0 for consistent performance across all word levels
 //
-const FLYING_WORD_COUNT = 22
+const FLYING_WORD_COUNT = 20
+//
+// Slower horizontal drift for the blue flying words in this level
+//
+const FLYING_WORD_MIN_SPEED = 28
+const FLYING_WORD_MAX_SPEED = 85
+//
+// Level 4 uses only short killer words (3–4 letters) for visual clarity
+//
+const LEVEL4_KILLER_WORDS = ['end', 'cut', 'kill', 'drop']
+//
+// First pit is moved left so an empty gap appears between the two pits
+//
+const PIT1_DISTANCE_RATIO = 0.22   // Was 1/3 — shifted left to make room for confusion platform
+//
+// "confusion" word — a solid floating platform shaped like a killer word.
+// The hero cannot pass underneath it; they must jump on top, which triggers
+// one of several random "confusion" effects.
+//
+const CONFUSION_FONT_SIZE = 30
+const CONFUSION_TEXT_COLOR = '#4AC6F5'   // Same blue as killer words
+const CONFUSION_HOVER_Y = 62             // Pixels above floor where the platform floats
+const CONFUSION_DETECT_HALF_W = 95       // Half-width of the on-top detection zone
+const CONFUSION_BODY_WIDTH = 168         // Solid collision body width
+const CONFUSION_BODY_HEIGHT = 20         // Solid collision body height (tight around the word)
+const CONFUSION_TOP_TOLERANCE = 26       // Hero-feet distance from top counted as "standing on it"
+//
+// Confusion landing animation
+//
+const CONFUSION_WOBBLE_COUNT = 4         // Number of full up/down cycles
+const CONFUSION_WOBBLE_AMP = 14          // Pixels of wobble amplitude
+const CONFUSION_WOBBLE_FREQ = 18.0       // Wobbles per second
+const CONFUSION_PARTICLE_COUNT = 16
+const CONFUSION_PARTICLE_SIZE = 4
+//
+// Possible actions a control group can be reassigned to by the confusion platform
+//
+const CONFUSION_ACTIONS = ['moveLeft', 'moveRight', 'jump']
+//
+// Confusion landing outcomes — one is chosen at random each time the hero lands:
+// remap controls, swap hero/anti-hero places, spawn decoy anti-heroes, return the
+// hero to the start, hand control to the anti-hero, or shatter into killer letters.
+//
+const CONFUSION_OUTCOMES = ['remap', 'swap', 'decoys', 'return', 'control', 'shatter']
+//
+// Shatter outcome: confusion breaks into just three scattering killer letters
+//
+const CONFUSION_SHATTER_LETTER_SIZE = 30
+const CONFUSION_SHATTER_LETTERS = ['c', 'o', 'n']     // Three letters of "confusion"
+const CONFUSION_SHATTER_DELAY = 0.7      // Telegraph pause before it breaks — time to jump off
+//
+// Tight collision box for a scattered letter — smaller than the baked sprite so
+// it hugs the glyph (the sprite has outline + padding around the letter)
+//
+const SHARD_COLLISION_WIDTH = 20
+const SHARD_COLLISION_HEIGHT = 24
+//
+// Decoy outcome: extra anti-heroes, all but one are lethal fakes
+//
+const DECOY_COUNT = 2
+const DECOY_SPREAD = 150                 // Distance kept from the playfield edges
+const DECOY_MIN_SEPARATION = 200         // Minimum horizontal gap between any two anti-heroes
+const DECOY_CONFUSION_CLEARANCE = 130    // Keep anti-heroes this far from the confusion platform center
+//
+// "forget" floating platform — disappears a few seconds after hero lands, then reappears
+//
+const FORGET_COLLISION_WIDTH = 96        // Physics body width — matches the visible word glyphs
+const FORGET_PLATFORM_HEIGHT = 14
+const FORGET_FONT_SIZE = 21
+const FORGET_WORD_TEXT = 'forget'
+const FORGET_TEXT_COLOR = '#888899'
+const FORGET_OPACITY_NORMAL = 1.0
+const FORGET_OPACITY_FADING = 0.3
+const FORGET_DISAPPEAR_DELAY = 3.0    // Seconds on platform before it vanishes
+const FORGET_WARN_THRESHOLD = 0.8     // Seconds left before fade warning
+const FORGET_REAPPEAR_DELAY = 1.2     // Seconds before platform comes back
 //
 // Bullet canvas dimensions — adds padding around letter for outline room
 //
@@ -76,6 +177,12 @@ const BULLET_CANVAS_SIZE = BULLET_SIZE + BULLET_CANVAS_PAD * 2
 // scene restarts so k.loadSprite is never called twice for the same letter.
 //
 const _bulletSpriteCache = new Map()
+//
+// Module-level cache: "text|size|color" → baked sprite info {key, w, h}. The
+// confusion and forget word platforms render from these sprites instead of
+// issuing 9 drawText calls every frame, keeping the level's FPS high.
+//
+const _wordSpriteCache = new Map()
 //
 // Death messages for level 4
 //
@@ -225,7 +332,7 @@ export function sceneLevel4(k) {
     
     // Moving platforms at 1/3 and 2/3 distance
     const bladeWidth = Blades.getBladeWidth(k)
-    const movingPlatform1X = leftX + distance / 3  // First platform at 1/3 distance
+    const movingPlatform1X = leftX + distance * PIT1_DISTANCE_RATIO  // Shifted left to make room for FEAR
     const movingPlatform2X = leftX + distance * 2 / 3  // Second platform at 2/3 distance
     
     //
@@ -244,7 +351,7 @@ export function sceneLevel4(k) {
       }
     ]
     
-    // Initialize level with heroes and TWO gaps in platform
+    // Initialize level with heroes and two gaps in the bottom platform
     const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
       levelName: 'level-word.4',
@@ -321,7 +428,10 @@ export function sceneLevel4(k) {
       customBounds: platformBounds,
       wordCount: FLYING_WORD_COUNT,
       letterToWordRatio: CFG.visual.flyingWords.letterToWordRatio,
-      killerLetterCount: 5  // Level 4: 5 killer letters
+      killerLetterCount: 5,  // Level 4: 5 killer letters
+      killerWords: LEVEL4_KILLER_WORDS,  // Only short words for visual clarity
+      minSpeed: FLYING_WORD_MIN_SPEED,   // Slower drift than the default
+      maxSpeed: FLYING_WORD_MAX_SPEED
     })
     
     //
@@ -340,7 +450,7 @@ export function sceneLevel4(k) {
     const bladeHeight = Blades.getBladeHeight(k)
     
     // Create first special moving platform (jump-to-disable mode)
-    MovingPlatform.create({
+    const movingPlatform1 = MovingPlatform.create({
       k,
       x: movingPlatform1X,
       y: platformY,
@@ -357,7 +467,7 @@ export function sceneLevel4(k) {
     // Create second normal moving platform — hero gets 2 extra seconds before
     // the pit closes, giving more time to navigate the blades.
     //
-    MovingPlatform.create({
+    const movingPlatform2 = MovingPlatform.create({
       k,
       x: movingPlatform2X,
       y: platformY,
@@ -375,6 +485,11 @@ export function sceneLevel4(k) {
       raiseDelay: 2.0,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound, heroScoreAtStart)
     })
+    //
+    // Close each pit while the walking creature is over it so "fear" can cross,
+    // then release it back to its normal hero trap once the creature has passed.
+    //
+    setupPitsForMonster(k, bladeArm, [movingPlatform1, movingPlatform2])
     //
     // Create static blades after first pit to prevent jumping over
     //
@@ -423,6 +538,38 @@ export function sceneLevel4(k) {
     // Make second blades visible immediately
     //
     Blades.show(staticBlades2)
+    //
+    // "confusion" word floats between staticBlades and the second pit (closer to right)
+    //
+    const confusionWordX = staticBladesX + bladeWidth / 2 + (movingPlatform2X - bladeWidth / 2 - staticBladesX - bladeWidth / 2) * 0.65
+    const confusionWordY = platformY - CONFUSION_HOVER_Y
+    //
+    // Context handed to the confusion platform so its random outcomes can affect
+    // the hero, anti-hero, flying words, and spawn back to the level start.
+    //
+    const confusionCtx = {
+      sound,
+      hero,
+      antiHero,
+      levelIndicator,
+      heroScoreAtStart,
+      heroStartX: customHeroX,
+      heroStartY: HERO_SPAWN_Y,
+      platformBounds,
+      confusionX: confusionWordX,
+      currentLevel: 'level-word.4'
+    }
+    createConfusionWord(k, confusionWordX, confusionWordY, confusionCtx)
+    //
+    // Stop the walking creature when it bumps into a decoy anti-hero
+    //
+    setupMonsterAntiheroBlock(k, bladeArm, confusionCtx)
+    //
+    // Single "forget" floating platform — placed to the left of the first pit and
+    // raised enough that the hero clears its underside when jumping past it.
+    //
+    const forgetFloorY = platformY
+    createForgetPlatform(k, movingPlatform1X - 240, forgetFloorY - 85, sound, hero)
     WordBladeProximity.create({
       k,
       hero,
@@ -584,6 +731,110 @@ function getBulletSpriteKey(k, letter) {
 }
 
 /**
+ * Bakes a word into a sprite (coloured fill + 8-direction black outline) once
+ * and caches it, returning {key, w, h}. Used by the confusion and forget word
+ * platforms so they draw one sprite per frame instead of nine drawText calls.
+ * @param {Object} k - Kaplay instance
+ * @param {string} text - Word to bake
+ * @param {number} size - Font size in pixels
+ * @param {string} hex - Fill colour hex string
+ * @returns {Object} Cached sprite info {key, w, h}
+ */
+function getWordSpriteInfo(k, text, size, hex) {
+  const cacheKey = `word-platform-${text}-${size}-${hex}`
+  if (_wordSpriteCache.has(cacheKey)) return _wordSpriteCache.get(cacheKey)
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const [r, g, b] = parseHex(hex)
+  const ow = 2
+  //
+  // Canvas sized generously around the measured glyph run plus outline padding
+  //
+  const w = Math.ceil(size * text.length * 0.72) + 16
+  const h = Math.ceil(size * 1.7)
+  const cx = w / 2
+  const cy = h / 2
+  const canvas = toCanvas({ width: w, height: h, pixelRatio: 2 }, ctx => {
+    ctx.font = `${size}px "${fontFamily}"`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    //
+    // Draw 8-direction black outline
+    //
+    ctx.fillStyle = '#000000'
+    const offsets = [[-ow, -ow], [0, -ow], [ow, -ow], [-ow, 0], [ow, 0], [-ow, ow], [0, ow], [ow, ow]]
+    offsets.forEach(([dx, dy]) => ctx.fillText(text, cx + dx, cy + dy))
+    //
+    // Draw main word in its fill colour
+    //
+    ctx.fillStyle = `rgb(${r},${g},${b})`
+    ctx.fillText(text, cx, cy)
+  })
+  k.loadSprite(cacheKey, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  const info = { key: cacheKey, w, h }
+  _wordSpriteCache.set(cacheKey, info)
+  return info
+}
+
+/**
+ * Closes each moving-platform pit while the walking creature is near it (so it
+ * can cross) and releases it once the creature has moved away.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ * @param {Array} platforms - Moving platform instances to manage
+ */
+function setupPitsForMonster(k, bladeArm, platforms) {
+  k.onUpdate(() => onUpdatePitsForMonster(k, bladeArm, platforms))
+}
+//
+// Per-frame: close pits the creature is crossing, release the rest.
+//
+function onUpdatePitsForMonster(k, bladeArm, platforms) {
+  if (!bladeArm?.collisionArea?.exists?.()) return
+  const monsterX = bladeArm.collisionArea.pos.x
+  platforms.forEach(mp => {
+    const near = Math.abs(monsterX - mp.platform.pos.x) < MONSTER_PIT_CLOSE_DISTANCE
+    MovingPlatform.setMonsterClosed(mp, near)
+  })
+}
+
+/**
+ * Stops the walking creature when a decoy anti-hero stands in its path.
+ * @param {Object} k - Kaplay instance
+ * @param {Object} bladeArm - Blade arm creature instance
+ * @param {Object} ctx - Confusion context (holds the decoy list)
+ */
+function setupMonsterAntiheroBlock(k, bladeArm, ctx) {
+  k.onUpdate(() => onUpdateMonsterAntiheroBlock(k, bladeArm, ctx))
+}
+//
+// Per-frame: block the creature when a decoy is close ahead (or overlapping).
+//
+function onUpdateMonsterAntiheroBlock(k, bladeArm, ctx) {
+  if (!bladeArm?.collisionArea?.exists?.()) {
+    return
+  }
+  const decoys = ctx._decoys
+  if (!decoys || decoys.length === 0) {
+    bladeArm.stoppedByAntihero = false
+    return
+  }
+  const monsterX = bladeArm.collisionArea.pos.x
+  const reach = bladeArm.textWidth / 2 + MONSTER_ANTIHERO_BLOCK_DISTANCE
+  //
+  // Block when a decoy is ahead within reach, or virtually overlapping the body
+  //
+  const blocked = decoys.some(decoy => {
+    if (!decoy?.character?.exists?.()) return false
+    const dx = decoy.character.pos.x - monsterX
+    const ahead = Math.sign(dx) === bladeArm.walkDir
+    return Math.abs(dx) < reach && (ahead || Math.abs(dx) < bladeArm.textWidth / 2)
+  })
+  bladeArm.stoppedByAntihero = blocked
+}
+
+/**
  * Handle blade-arm creature being hit by letter
  * @param {Object} k - Kaplay instance
  * @param {Object} bladeArm - Blade arm creature instance
@@ -606,6 +857,17 @@ function onCreatureHit(k, bladeArm, sfx) {
   }
   sfx && Sound.playBulletHitSound(sfx)
   createCreatureHitParticles(k, bladeArm)
+  //
+  // Pick a random word. Its colour and lethality follow the "good" flag:
+  // green + harmless, or blue + lethal. The new state persists after the flash.
+  //
+  const entry = CREATURE_WORDS[Math.floor(Math.random() * CREATURE_WORDS.length)]
+  const [pr, pg, pb] = parseHex(entry.good ? CREATURE_SAFE_COLOR : CREATURE_LETHAL_COLOR)
+  bladeArm.persistColor = k.rgb(pr, pg, pb)
+  //
+  // Swap the displayed word and update lethality (good = harmless, bad = lethal)
+  //
+  BladeArm.setWord(bladeArm, entry.text, entry.good, bladeArm.persistColor)
   flashCreature(k, bladeArm, 0)
 }
 
@@ -662,23 +924,537 @@ function createCreatureHitParticles(k, bladeArm) {
 }
 
 /**
- * Flash creature text when hit (alternates between white and original)
+ * Flash creature when hit, alternating white and the new cycle colour, then
+ * leave it on the new colour permanently (text and legs both update).
  * @param {Object} k - Kaplay instance
  * @param {Object} bladeArm - Blade arm creature instance
  * @param {number} count - Current flash count
  */
 function flashCreature(k, bladeArm, count) {
-  if (count >= CREATURE_FLASH_COUNT) return
-  const isWhite = count % 2 === 0
-  const newColor = isWhite ? k.rgb(255, 255, 255) : k.rgb(107, 142, 159)
+  const persistColor = bladeArm.persistColor || k.rgb(107, 142, 159)
   //
-  // Flash all text objects (last one is main text)
+  // Flash finished: lock in the new colour on the text and the legs
   //
-  const mainText = bladeArm.textObjects[bladeArm.textObjects.length - 1]
-  if (mainText) {
-    mainText.color = newColor
+  if (count >= CREATURE_FLASH_COUNT) {
+    applyCreatureColor(bladeArm, persistColor)
+    return
   }
+  const isWhite = count % 2 === 0
+  const newColor = isWhite ? k.rgb(255, 255, 255) : persistColor
+  applyCreatureColor(bladeArm, newColor)
   k.wait(0.05, () => flashCreature(k, bladeArm, count + 1))
+}
+//
+// Applies a colour to the creature's main text and its IK legs.
+//
+function applyCreatureColor(bladeArm, color) {
+  const mainText = bladeArm.textObjects[bladeArm.textObjects.length - 1]
+  mainText && (mainText.color = color)
+  //
+  // drawLegs reads bladeArm.bladeColor each frame — updating it recolours the legs
+  //
+  bladeArm.bladeColor = color
+}
+
+/**
+ * Creates the "confusion" solid floating platform shaped like a word.
+ * The hero cannot pass underneath; they must jump on top. Landing on top
+ * wobbles the platform, emits particles, plays a sound, and then triggers one
+ * random confusion outcome (control remap / hero-antihero swap / decoys /
+ * return to start / hand control to the anti-hero / shatter into killer letters).
+ * @param {Object} k - Kaplay instance
+ * @param {number} x - Center X of the platform
+ * @param {number} y - Center Y of the platform (above the floor)
+ * @param {Object} ctx - Outcome context {sound, hero, antiHero, ...}
+ */
+function createConfusionWord(k, x, y, ctx) {
+  const state = {
+    heroOn: false,
+    wobbleTimer: -1,   // negative = not wobbling
+    yOffset: 0,
+    shattered: false,
+    triggering: false
+  }
+  //
+  // Solid physics body — blocks passage underneath and acts as a landing platform
+  //
+  const body = k.add([
+    k.rect(CONFUSION_BODY_WIDTH, CONFUSION_BODY_HEIGHT),
+    k.pos(x - CONFUSION_BODY_WIDTH / 2, y - CONFUSION_BODY_HEIGHT / 2),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.anchor('topleft'),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Word visual as a pre-baked sprite (fill + black outline). Far cheaper than
+  // re-rendering 9 drawText calls each frame; it just wobbles vertically.
+  //
+  const spriteInfo = getWordSpriteInfo(k, 'confusion', CONFUSION_FONT_SIZE, CONFUSION_TEXT_COLOR)
+  const obj = k.add([
+    k.sprite(spriteInfo.key, { width: spriteInfo.w, height: spriteInfo.h }),
+    k.pos(x, y),
+    k.anchor('center'),
+    k.z(CFG.visual.zIndex.ui - 5)
+  ])
+  obj.onUpdate(() => onUpdateConfusionWord(k, obj, body, state, x, y, ctx))
+}
+//
+// Detects the hero landing on TOP of the confusion platform.
+// On landing: wobbles, emits particles, plays sound, then triggers a random outcome.
+//
+function onUpdateConfusionWord(k, obj, body, state, wordX, wordY, ctx) {
+  const hero = ctx.hero
+  if (state.shattered) return
+  if (!hero?.character?.exists?.()) return
+  const heroX = hero.character.pos.x
+  const heroFeetY = hero.character.pos.y + 34
+  const platformTop = wordY - CONFUSION_BODY_HEIGHT / 2
+  const inRange = Math.abs(heroX - wordX) < CONFUSION_DETECT_HALF_W
+  const onTop = inRange && hero.character.isGrounded() && Math.abs(heroFeetY - platformTop) < CONFUSION_TOP_TOLERANCE
+  if (onTop && !state.heroOn && !state.triggering) {
+    state.heroOn = true
+    state.triggering = true
+    state.wobbleTimer = 0
+    spawnConfusionParticles(k, wordX, wordY, hero)
+    Sound.playScarySound(ctx.sound)
+    //
+    // Apply the chosen outcome after the wobble animation finishes
+    //
+    const wobbleDuration = CONFUSION_WOBBLE_COUNT / CONFUSION_WOBBLE_FREQ
+    k.wait(wobbleDuration, () => {
+      state.triggering = false
+      applyConfusionOutcome(k, obj, body, state, wordX, wordY, ctx)
+    })
+  } else if (!onTop) {
+    state.heroOn = false
+  }
+  //
+  // Animate wobble: sine wave over wobbleDuration seconds
+  //
+  if (state.wobbleTimer >= 0) {
+    state.wobbleTimer += k.dt()
+    const wobbleDuration = CONFUSION_WOBBLE_COUNT / CONFUSION_WOBBLE_FREQ
+    if (state.wobbleTimer < wobbleDuration) {
+      state.yOffset = Math.sin(state.wobbleTimer * CONFUSION_WOBBLE_FREQ * Math.PI * 2) * CONFUSION_WOBBLE_AMP
+    } else {
+      state.wobbleTimer = -1
+      state.yOffset = 0
+    }
+  }
+  //
+  // Apply the wobble offset to the baked word sprite
+  //
+  obj.pos.y = wordY + state.yOffset
+}
+//
+// Picks one random confusion outcome and applies it.
+//
+function applyConfusionOutcome(k, obj, body, state, wordX, wordY, ctx) {
+  const outcome = CONFUSION_OUTCOMES[Math.floor(Math.random() * CONFUSION_OUTCOMES.length)]
+  if (outcome === 'remap') {
+    ctx.hero.confusionMap = getRandomConfusionMap()
+  } else if (outcome === 'swap') {
+    confusionSwapAntiHero(k, ctx)
+  } else if (outcome === 'decoys') {
+    confusionSpawnDecoys(k, ctx)
+  } else if (outcome === 'return') {
+    confusionReturnHero(k, ctx)
+  } else if (outcome === 'control') {
+    confusionControlAntiHero(k, ctx)
+  } else if (outcome === 'shatter') {
+    //
+    // Keep the platform solid and wobbling for a short telegraph so the hero
+    // has time to jump off before it actually breaks apart
+    //
+    state.triggering = true
+    state.wobbleTimer = 0
+    k.wait(CONFUSION_SHATTER_DELAY, () => {
+      state.triggering = false
+      confusionShatter(k, obj, body, state, wordX, wordY, ctx)
+    })
+  }
+}
+//
+// Spawns small coloured particle squares that fly out from the confusion word.
+//
+function spawnConfusionParticles(k, x, y, hero) {
+  const [tr, tg, tb] = parseHex(CONFUSION_TEXT_COLOR)
+  for (let i = 0; i < CONFUSION_PARTICLE_COUNT; i++) {
+    const angle = (i / CONFUSION_PARTICLE_COUNT) * Math.PI * 2
+    const speed = k.rand(60, 180)
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed - 40
+    const particle = k.add([
+      k.rect(CONFUSION_PARTICLE_SIZE, CONFUSION_PARTICLE_SIZE),
+      k.pos(x, y),
+      k.anchor('center'),
+      k.color(tr, tg, tb),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui)
+    ])
+    const state = { vx, vy, life: 0.6 }
+    particle.onUpdate(() => {
+      state.life -= k.dt()
+      if (state.life <= 0) {
+        particle.destroy()
+        return
+      }
+      state.vy += 400 * k.dt()
+      particle.pos.x += state.vx * k.dt()
+      particle.pos.y += state.vy * k.dt()
+      particle.opacity = state.life / 0.6
+    })
+  }
+}
+//
+// Returns a random key map that always preserves all three control functions
+// (moveLeft / moveRight / jump). The three arrow keys get a random permutation
+// of the functions, the three letter keys (a/d/w) get an independent random
+// permutation, and space is reassigned to one of the three functions.
+//
+function getRandomConfusionMap() {
+  const arrows = shuffleActions()
+  const letters = shuffleActions()
+  const space = CONFUSION_ACTIONS[Math.floor(Math.random() * CONFUSION_ACTIONS.length)]
+  return {
+    keyMap: {
+      left: arrows[0], right: arrows[1], up: arrows[2],
+      a: letters[0], d: letters[1], w: letters[2],
+      space
+    }
+  }
+}
+//
+// Fisher–Yates shuffle of the three control actions, returning a fresh array
+//
+function shuffleActions() {
+  const a = CONFUSION_ACTIONS.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = a[i]
+    a[i] = a[j]
+    a[j] = tmp
+  }
+  return a
+}
+//
+// Confusion outcome: hero and anti-hero swap places. Both vanish (with a laugh,
+// no points) and reappear at each other's positions.
+//
+function confusionSwapAntiHero(k, ctx) {
+  const { antiHero, sound, hero } = ctx
+  if (!antiHero?.character?.exists?.() || !hero?.character?.exists?.()) return
+  //
+  // Capture both positions before swapping
+  //
+  const heroX = hero.character.pos.x
+  const heroY = hero.character.pos.y
+  const antiX = antiHero.character.pos.x
+  const antiY = antiHero.character.pos.y
+  Sound.playDisappearSound(sound)
+  Sound.playEvilLaughSound(sound)
+  spawnConfusionParticles(k, heroX, heroY, hero)
+  spawnConfusionParticles(k, antiX, antiY, hero)
+  antiHero.character.opacity = 0
+  hero.character.opacity = 0
+  k.wait(0.5, () => {
+    //
+    // Hero appears where the anti-hero stood; anti-hero appears where the hero stood
+    //
+    if (antiHero.character.exists()) {
+      antiHero.character.pos.x = heroX
+      antiHero.character.pos.y = heroY
+      antiHero.character.opacity = 1
+      spawnConfusionParticles(k, heroX, heroY, hero)
+    }
+    if (hero.character.exists()) {
+      hero.character.pos.x = antiX
+      hero.character.pos.y = antiY
+      hero.character.opacity = 1
+      spawnConfusionParticles(k, antiX, antiY, hero)
+    }
+  })
+}
+//
+// Confusion outcome: spawn DECOY_COUNT fake anti-heroes around the real one.
+// Fakes have no mouth notes and kill the hero on touch; only the original
+// anti-hero (with notes) can be annihilated.
+//
+function confusionSpawnDecoys(k, ctx) {
+  const { antiHero } = ctx
+  if (!antiHero?.character?.exists?.()) return
+  //
+  // Clear any decoys from a previous confusion landing so repeated triggers
+  // never accumulate extra anti-heroes (which would steadily drop the FPS)
+  //
+  clearDecoys(k, ctx)
+  ctx._decoys = []
+  const baseY = antiHero.character.pos.y
+  //
+  // Pick spots for the real anti-hero + every decoy. Spots fit a full-height
+  // anti-hero (never under the confusion platform) and are spaced apart.
+  //
+  const spots = pickAntiheroSpots(k, ctx, DECOY_COUNT + 1)
+  if (spots.length === 0) return
+  //
+  // Relocate the REAL anti-hero to the first spot (away from its original
+  // right-side position) so the hero cannot rely on where it stood
+  //
+  spawnConfusionParticles(k, antiHero.character.pos.x, antiHero.character.pos.y, ctx.hero)
+  antiHero.character.pos.x = spots[0]
+  antiHero.character.pos.y = baseY
+  spawnConfusionParticles(k, spots[0], baseY, ctx.hero)
+  //
+  // Spawn lethal decoys at the remaining spots
+  //
+  for (let i = 1; i < spots.length; i++) {
+    const decoy = Hero.create({
+      k,
+      x: spots[i],
+      y: baseY,
+      type: Hero.HEROES.ANTIHERO,
+      controllable: false,
+      sfx: ctx.sound,
+      bodyColor: 'DC143C',
+      addMouth: true,
+      addArms: true,
+      addWatch: true,
+      idleVocalization: null  // Fakes show no mouth notes — only the real one does
+    })
+    //
+    // Remove the annihilation tag so touching a fake kills the hero instead of
+    // winning — only the original anti-hero can be annihilated.
+    //
+    decoy.character.unuse?.('annihilation')
+    decoy.character.onCollide('player', () => onDecoyTouch(k, ctx))
+    Hero.spawn(decoy)
+    ctx._decoys.push(decoy)
+  }
+}
+//
+// Picks up to `count` valid X spots for anti-heroes: inside the playfield,
+// far enough from the confusion platform that a full-height anti-hero fits
+// (never tucked under it), and separated from each other.
+//
+function pickAntiheroSpots(k, ctx, count) {
+  const left = ctx.platformBounds.left + DECOY_SPREAD
+  const right = ctx.platformBounds.right - DECOY_SPREAD
+  const forbidLo = ctx.confusionX - DECOY_CONFUSION_CLEARANCE
+  const forbidHi = ctx.confusionX + DECOY_CONFUSION_CLEARANCE
+  const spots = []
+  let attempts = 0
+  while (spots.length < count && attempts < 200) {
+    attempts++
+    const x = k.rand(left, right)
+    //
+    // Reject spots under the confusion platform (no room for full height)
+    //
+    if (x > forbidLo && x < forbidHi) continue
+    //
+    // Reject spots too close to an already-chosen one
+    //
+    if (spots.some(s => Math.abs(s - x) < DECOY_MIN_SEPARATION)) continue
+    spots.push(x)
+  }
+  return spots
+}
+//
+// Destroys all currently spawned decoy anti-heroes (used before respawning a new
+// set, keeping the level free of accumulated objects).
+//
+function clearDecoys(k, ctx) {
+  if (!ctx._decoys) return
+  ctx._decoys.forEach(decoy => decoy?.character?.exists?.() && k.destroy(decoy.character))
+  ctx._decoys = []
+}
+//
+// Lethal touch handler for fake anti-heroes
+//
+function onDecoyTouch(k, ctx) {
+  if (ctx.hero.isAnnihilating || ctx.hero.isDying) return
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
+  showDeathMessage(k, ctx.hero, null, null, ctx.levelIndicator, ctx.sound, ctx.heroScoreAtStart)
+}
+//
+// Confusion outcome: the hero is teleported back to the level's start position.
+//
+function confusionReturnHero(k, ctx) {
+  const { hero } = ctx
+  if (!hero?.character?.exists?.()) return
+  spawnConfusionParticles(k, hero.character.pos.x, hero.character.pos.y, hero)
+  hero.character.pos.x = ctx.heroStartX
+  hero.character.pos.y = ctx.heroStartY
+  spawnConfusionParticles(k, ctx.heroStartX, ctx.heroStartY, hero)
+}
+//
+// Confusion outcome: control is handed to the anti-hero. The hero freezes in
+// place and the player drives the anti-hero; reaching the hero annihilates both.
+//
+function confusionControlAntiHero(k, ctx) {
+  const { hero, antiHero } = ctx
+  if (!hero?.character?.exists?.() || !antiHero?.character?.exists?.()) return
+  //
+  // Freeze the hero (it becomes the annihilation target) and give control to the
+  // anti-hero so the player walks it into the hero
+  //
+  hero.controlsDisabled = true
+  hero.confusionMap = null
+  Hero.enableControl(antiHero)
+  spawnConfusionParticles(k, antiHero.character.pos.x, antiHero.character.pos.y, hero)
+}
+//
+// Confusion outcome: the platform shatters into blue killer letters (half of
+// "confusion") that scatter, settle, and kill the hero on contact.
+//
+function confusionShatter(k, obj, body, state, wordX, wordY, ctx) {
+  state.shattered = true
+  body.destroy()
+  //
+  // Remove the baked word sprite — it is replaced by the scattering letters
+  //
+  obj.exists?.() && obj.destroy()
+  const letters = CONFUSION_SHATTER_LETTERS
+  const spacing = CONFUSION_BODY_WIDTH / (letters.length + 1)
+  letters.forEach((ch, i) => {
+    const lx = wordX - CONFUSION_BODY_WIDTH / 2 + spacing * (i + 1)
+    createConfusionShard(k, ch, lx, wordY, ctx)
+  })
+}
+//
+// Creates a single scattering killer letter from the shattered confusion word.
+//
+function createConfusionShard(k, ch, x, y, ctx) {
+  //
+  // Pre-baked sprite carries the black outline (k.outline does not render on
+  // text), so each scattered letter keeps a solid black stroke
+  //
+  const info = getWordSpriteInfo(k, ch, CONFUSION_SHATTER_LETTER_SIZE, CONFUSION_TEXT_COLOR)
+  //
+  // Real physics body (mass + gravity) so the letter falls and tumbles to rest
+  // on the floor platform. A custom tight rect hugs the glyph — the baked sprite
+  // has outline + padding, so the auto-area would be too tall and wide.
+  //
+  const shard = k.add([
+    k.sprite(info.key, { width: info.w, height: info.h }),
+    k.pos(x, y),
+    k.anchor('center'),
+    k.area({ shape: new k.Rect(k.vec2(-SHARD_COLLISION_WIDTH / 2, -SHARD_COLLISION_HEIGHT / 2), SHARD_COLLISION_WIDTH, SHARD_COLLISION_HEIGHT) }),
+    k.body(),
+    k.z(CFG.visual.zIndex.ui - 5),
+    'confusion-shard'
+  ])
+  //
+  // Pop the letter upward and give it a sideways kick; gravity + the solid floor
+  // make it scatter and settle along the ground
+  //
+  shard.jump(k.rand(120, 300))
+  const st = { vx: k.rand(-160, 160) }
+  shard.onUpdate(() => onUpdateConfusionShard(k, shard, st))
+  shard.onCollide('player', () => onDecoyTouch(k, ctx))
+}
+//
+// Per-frame horizontal scatter for a shard. Vertical motion is handled by the
+// body component; horizontal velocity decays with friction once it lands.
+//
+function onUpdateConfusionShard(k, shard, st) {
+  shard.move(st.vx, 0)
+  //
+  // Apply ground friction once the shard has settled vertically
+  //
+  shard.isGrounded?.() && (st.vx *= 0.9)
+  //
+  // Despawn if it falls into a pit and off the bottom of the screen
+  //
+  shard.pos.y > k.height() + 100 && k.destroy(shard)
+}
+
+/**
+ * Creates a "forget" platform — invisible physics body + outlined text label.
+ * The platform disappears 3 s after the hero lands on it, then reappears.
+ * @param {Object} k - Kaplay instance
+ * @param {number} x - Center X of the platform
+ * @param {number} y - Top surface Y of the platform
+ * @param {Object} sound - Sound instance (for optional sfx)
+ * @param {Object} hero - Hero instance
+ */
+function createForgetPlatform(k, x, y, sound, hero) {
+  const state = {
+    visible: true,
+    heroOn: false,
+    disappearTimer: FORGET_DISAPPEAR_DELAY,
+    reappearTimer: 0,
+    origY: y,
+    textOpacity: FORGET_OPACITY_NORMAL
+  }
+  //
+  // Invisible physics body — narrower than the word label so its edges line
+  // up with the visible glyphs instead of extending into empty space
+  //
+  const body = k.add([
+    k.rect(FORGET_COLLISION_WIDTH, FORGET_PLATFORM_HEIGHT),
+    k.pos(x - FORGET_COLLISION_WIDTH / 2, y),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.anchor('topleft'),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Text label as a pre-baked sprite (fill + black outline) — matches the
+  // hidden-blades style and avoids per-frame drawText calls
+  //
+  const spriteInfo = getWordSpriteInfo(k, FORGET_WORD_TEXT, FORGET_FONT_SIZE, FORGET_TEXT_COLOR)
+  const label = k.add([
+    k.sprite(spriteInfo.key, { width: spriteInfo.w, height: spriteInfo.h }),
+    k.pos(x, y + FORGET_PLATFORM_HEIGHT / 2),
+    k.anchor('center'),
+    k.z(CFG.visual.zIndex.platforms + 1),
+    k.opacity(state.textOpacity)
+  ])
+  body.onUpdate(() => onUpdateForgetPlatform(k, body, label, state, hero))
+}
+//
+// Manages the forget platform disappear / reappear lifecycle.
+// Counts down while the hero stands on it, then hides off-screen, then restores.
+//
+function onUpdateForgetPlatform(k, body, label, state, hero) {
+  if (!hero?.character?.exists?.()) return
+  const heroX = hero.character.pos.x
+  const heroY = hero.character.pos.y
+  const inXRange = heroX > body.pos.x - 20 && heroX < body.pos.x + FORGET_COLLISION_WIDTH + 20
+  const inYRange = Math.abs(heroY - body.pos.y) < 55
+  state.heroOn = state.visible && inXRange && inYRange && hero.character.isGrounded()
+  if (state.visible) {
+    if (state.heroOn) {
+      state.disappearTimer -= k.dt()
+      const fading = state.disappearTimer < FORGET_WARN_THRESHOLD
+      const targetOpacity = fading ? FORGET_OPACITY_FADING : FORGET_OPACITY_NORMAL
+      label.opacity = targetOpacity
+      if (state.disappearTimer <= 0) {
+        state.visible = false
+        state.reappearTimer = FORGET_REAPPEAR_DELAY
+        state.disappearTimer = FORGET_DISAPPEAR_DELAY
+        body.pos.y = -10000
+        label.pos.y = -10000
+        label.opacity = 0
+      }
+    } else {
+      state.disappearTimer = FORGET_DISAPPEAR_DELAY
+      label.opacity = FORGET_OPACITY_NORMAL
+    }
+  } else {
+    state.reappearTimer -= k.dt()
+    if (state.reappearTimer <= 0) {
+      state.visible = true
+      body.pos.y = state.origY
+      label.pos.y = state.origY + FORGET_PLATFORM_HEIGHT / 2
+      label.opacity = FORGET_OPACITY_NORMAL
+    }
+  }
 }
 
 /**

@@ -98,6 +98,7 @@ const KILLER_WORDS = [
  * @param {number} [cfg.rotationSpeedZ=480] - Maximum Z-axis rotation speed (degrees per second)
  * @param {number} [cfg.letterToWordRatio=0.8] - Ratio of letters to words (0.8 = 80% letters, 20% words)
  * @param {Object} [cfg.customBounds] - Custom playable area bounds {left, right, top, bottom}
+ * @param {string[]} [cfg.killerWords] - Override killer word list (defaults to global KILLER_WORDS)
  * @returns {Object} Flying words instance
  */
 export function create(cfg) {
@@ -115,7 +116,8 @@ export function create(cfg) {
     maxSize = 28,
     rotationSpeedZ = 150,
     letterToWordRatio = 0.75,
-    customBounds = null
+    customBounds = null,
+    killerWords = null
   } = cfg
 
   //
@@ -208,7 +210,8 @@ export function create(cfg) {
         playableLeft,
         playableRight,
         initialSpawn: false,  // Always spawn from left (off-screen)
-        rotationSpeedZ
+        rotationSpeedZ,
+        killerWords
       })
       killerLetters.push(killerLetter)
     }
@@ -707,9 +710,10 @@ function createKillerLetter(k, params) {
   } = params
 
   //
-  // Use a random killer word instead of a letter
+  // Use a random killer word — custom list per level overrides the default
   //
-  const text = KILLER_WORDS[Math.floor(Math.random() * KILLER_WORDS.length)]
+  const wordList = params.killerWords || KILLER_WORDS
+  const text = wordList[Math.floor(Math.random() * wordList.length)]
 
   //
   // Killer words are slightly larger than regular words for visibility

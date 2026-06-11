@@ -6,18 +6,38 @@ import * as Sound from '../../../utils/sound.js'
 //
 // Walking creature parameters
 //
-const TEXT_MESSAGE = 'self doubt'
+const TEXT_MESSAGE = 'fear'
 const TEXT_SIZE = 36
 const OUTLINE_THICKNESS = 2
-const WALK_SPEED = 60  // Pixels per second (slower walking speed)
-const LEG_COUNT = 4  // Number of legs (2 pairs, 4 near + 4 far = 8 total)
+const WALK_SPEED = 35  // Pixels per second (slow walking speed)
+const LEG_COUNT = 3  // Number of leg pairs (3 near + 3 far = 6 legs = 3 pairs)
 const UPPER_LEG_LENGTH = 18  // Length of upper leg segment (longer for more reach)
 const LOWER_LEG_LENGTH = 18  // Length of lower leg segment
 const LEG_SPACING = 50  // Horizontal spacing between legs
 const STEP_HEIGHT = 18  // How high to lift foot during step
 const STEP_LENGTH = 50  // How far forward to step (increased for more forward reach)
-const STEP_DURATION = 0.5  // Duration of one step (seconds)
+//
+// Return-as-friend behaviour: after walking off the right edge the creature comes
+// back as a harmless "friend" platform the hero can jump onto.
+//
+const RETURN_FRIEND_TEXT = 'friend'
+const FRIEND_COLOR = '#6BCB77'         // Friendly green once it returns
+const OFFSCREEN_MARGIN = 140           // Extra px past the right edge before turning around
+const STEP_DURATION = 0.32  // Duration of one step (seconds) — snappier, more dynamic gait
+//
+// Per-leg step-trigger lag (fraction of STEP_LENGTH the foot falls behind the
+// attachment before it steps). Front legs use a smaller lag so they step first,
+// creating a front-to-back wave. Far legs are offset to desync from near legs.
+//
+const STEP_LAG_FRONT = 0.4    // Front legs step soonest
+const STEP_LAG_BACK = 0.85    // Back legs step latest
+const STEP_LAG_FAR_OFFSET = 0.22  // Far-row legs lag slightly more than near-row
 const BODY_BOUNCE = 2  // Vertical bounce of body during walk (reduced)
+//
+// Tight collision height that hugs the word glyphs (was TEXT_SIZE + outline,
+// which sat noticeably above and below the visible letters)
+//
+const COLLISION_TIGHT_HEIGHT = TEXT_SIZE * 0.72
 
 /**
  * Creates a walking text creature with procedurally animated legs using inverse kinematics
@@ -90,11 +110,23 @@ export function create(config) {
   const textHeight = TEXT_SIZE
   const attachY = -textHeight / 2 + 20  // Attach lower in the letters (was +8)
   
+  //
+  // Unique group counter so every leg steps independently (no two legs are forced
+  // to wait on each other), producing a more dynamic, less synchronised gait.
+  //
+  let legGroupCounter = 0
   for (let i = 0; i < LEG_COUNT; i++) {
     //
     // Distribute legs evenly from first to last letter
     //
     const attachX = legStartX + (totalLegSpan / (LEG_COUNT - 1)) * i
+    //
+    // leadOrder: 0 for the front-most leg (largest attachX), 1 for the back-most.
+    // Front legs get a smaller step lag so they step before middle, middle before back.
+    //
+    const leadOrder = LEG_COUNT > 1 ? (LEG_COUNT - 1 - i) / (LEG_COUNT - 1) : 0
+    const nearLag = STEP_LAG_FRONT + leadOrder * (STEP_LAG_BACK - STEP_LAG_FRONT)
+    const farLag = nearLag + STEP_LAG_FAR_OFFSET
     
     //
     // Create NEAR leg (closer to player, in front)
@@ -108,7 +140,8 @@ export function create(config) {
       targetY: groundY,  // Target foot Y position
       isLifted: false,  // Is foot currently lifted?
       stepProgress: 0,  // Progress of current step (0-1)
-      pairGroup: i % 3,  // Group for alternating legs (0, 1, 2)
+      pairGroup: legGroupCounter++,  // Unique group — each leg steps on its own
+      stepTriggerDist: -STEP_LENGTH * nearLag,  // Foot-behind distance that triggers a step
       needsStep: false,  // Does this leg need to step?
       startX: startX + attachX,  // Step start position X
       startY: groundY,  // Step start position Y
@@ -118,8 +151,7 @@ export function create(config) {
     legs.push(nearLeg)
     
     //
-    // Create FAR leg (away from player, behind)
-    // Offset by half the spacing for alternating pattern
+    // Create FAR leg (away from player, behind) — desynced from the near leg
     //
     const farLeg = {
       attachX,  // Same attachment point X
@@ -130,12 +162,12 @@ export function create(config) {
       targetY: groundY,  // Target foot Y position
       isLifted: false,  // Is foot currently lifted?
       stepProgress: 0,  // Progress of current step (0-1)
-      pairGroup: i % 3,  // Group for alternating legs (0, 1, 2)
+      pairGroup: legGroupCounter++,  // Unique group — each leg steps on its own
+      stepTriggerDist: -STEP_LENGTH * farLag,  // Far legs lag slightly more than near
       needsStep: false,  // Does this leg need to step?
       startX: startX + attachX,  // Step start position X
       startY: groundY,  // Step start position Y
-      isFarLeg: true,  // This is a far leg (drawn behind)
-      phaseOffset: 0.5  // Start with opposite phase for alternating gait
+      isFarLeg: true  // This is a far leg (drawn behind)
     }
     
     legs.push(farLeg)
@@ -238,7 +270,16 @@ export function create(config) {
     currentSpeed: WALK_SPEED,  // Current walking speed
     heroIsDead: false,  // Flag to stop movement after killing hero
     isFrozen: false,
-    freezeTimeRemaining: 0
+    freezeTimeRemaining: 0,
+    //
+    // Walking phase: 'forward' (lethal "fear", moving right) →
+    // 'returning' (harmless "friend" platform, moving left)
+    //
+    phase: 'forward',
+    walkDir: 1,                                   // +1 right, -1 left (used by leg gait)
+    isFriend: false,                              // True once it returns as a platform
+    offscreenX: screenWidth + textWidth + OFFSCREEN_MARGIN,  // Turnaround point past right edge
+    leftStopX: sideWallWidth + (maxX - sideWallWidth) * 0.45 // Where the friend platform settles
   }
   
   //
@@ -260,10 +301,48 @@ export function create(config) {
 }
 
 /**
+ * Sets the creature's displayed word, its lethality, and its colour. Used when
+ * the hero shoots the creature with a letter: a "good" word makes it harmless
+ * (it no longer kills on touch), a "bad" word keeps it lethal.
+ * @param {Object} inst - Walking creature instance
+ * @param {string} text - New word to display
+ * @param {boolean} isGood - True = harmless (does not kill), false = lethal
+ * @param {Object} [color] - Optional kaplay colour for the main text + legs
+ */
+export function setWord(inst, text, isGood, color) {
+  //
+  // Lethality follows the word: good words are friendly (handleCollision no-ops)
+  //
+  inst.isFriend = isGood
+  //
+  // Relabel every outline + main text object with the new word
+  //
+  inst.textObjects.forEach(obj => { obj.text = text })
+  //
+  // Recolour the main text (last object) and the legs when a colour is given
+  //
+  if (color) {
+    const mainText = inst.textObjects[inst.textObjects.length - 1]
+    mainText && (mainText.color = color)
+    inst.bladeColor = color
+  }
+  //
+  // Resize the collision box to hug the new word: measure the rendered width and
+  // use a tighter height so the box follows the glyphs exactly (was too tall and
+  // narrower than wide words)
+  //
+  resizeCollision(inst, text)
+}
+
+/**
  * Handle collision with walking creature
  * @param {Object} inst - Walking creature instance
  */
 function handleCollision(inst) {
+  //
+  // Once it has returned as the friend platform it is harmless — hero stands on it
+  //
+  if (inst.isFriend) return
   //
   // Mark hero as dead to stop creature movement
   //
@@ -277,6 +356,61 @@ function handleCollision(inst) {
   } else {
   Hero.death(inst.hero, () => inst.k.go(inst.currentLevel))
   }
+}
+
+/**
+ * Transforms the lethal "fear" creature into the harmless "friend" platform:
+ * relabels every text object, recolours it green, flips its walking direction,
+ * and switches to the returning phase. The static body stays solid so the hero
+ * can jump onto it, but handleCollision now no-ops.
+ * @param {Object} inst - Walking creature instance
+ */
+function becomeFriend(inst) {
+  if (inst.isFriend) return
+  inst.isFriend = true
+  inst.phase = 'returning'
+  inst.walkDir = -1
+  const friendColor = inst.k.rgb(...parseHex(FRIEND_COLOR))
+  //
+  // Relabel every outline + main text object and recolour the main text
+  //
+  inst.textObjects.forEach((obj, index) => {
+    obj.text = RETURN_FRIEND_TEXT
+    //
+    // The last text object is the coloured main text; outlines stay black
+    //
+    index === inst.textObjects.length - 1 && (obj.color = friendColor)
+  })
+  //
+  // Recolour the legs to match the friendly main text
+  //
+  inst.bladeColor = friendColor
+}
+
+/**
+ * Re-measures the given word and resizes the collision body to hug it: full
+ * rendered width and a tight height that follows the glyphs.
+ * @param {Object} inst - Walking creature instance
+ * @param {string} text - Current word being displayed
+ */
+function resizeCollision(inst, text) {
+  const { k } = inst
+  //
+  // Measure the rendered width of the new word off-screen
+  //
+  const temp = k.add([
+    k.text(text, { size: TEXT_SIZE, font: CFG.visual.fonts.thinFull.replace(/'/g, '') }),
+    k.pos(-10000, -10000),
+    k.opacity(0)
+  ])
+  const measuredWidth = temp.width
+  temp.destroy()
+  //
+  // Apply the new dimensions to the collision rect (area recomputes from these)
+  //
+  inst.textWidth = measuredWidth
+  inst.collisionArea.width = measuredWidth
+  inst.collisionArea.height = COLLISION_TIGHT_HEIGHT
 }
 
 /**
@@ -329,6 +463,10 @@ function solveIK(targetX, targetY, attachX, attachY, upperLength, lowerLength) {
  */
 function updateProceduralLegs(inst) {
   const { legs, creatureContainer, groundY } = inst
+  //
+  // Walking direction (+1 right, -1 left) — legs step in the direction of travel
+  //
+  const dir = inst.walkDir
   
   //
   // Track which pair groups just completed a step (to play sound once per group)
@@ -345,14 +483,18 @@ function updateProceduralLegs(inst) {
     const attachWorldX = creatureContainer.pos.x + leg.attachX
     
     //
-    // Check if leg needs to step (foot is far behind attachment point)
+    // How far the foot trails the attachment along the walking direction
+    // (positive = foot is behind, regardless of left/right movement)
     //
     const distanceFromAttach = leg.footX - attachWorldX
+    const behind = -dir * distanceFromAttach
     
     //
-    // Trigger step when foot is significantly behind attachment (at back of stride)
+    // Trigger step when the foot trails by this leg's own lag — front legs use a
+    // shorter lag so they step first (front-to-back wave). stepTriggerDist is
+    // negative, so -stepTriggerDist is the positive lag threshold.
     //
-    if (!leg.isLifted && distanceFromAttach < -STEP_LENGTH * 0.6) {
+    if (!leg.isLifted && behind > -leg.stepTriggerDist) {
       //
       // Check if legs in same pair group are not already stepping
       //
@@ -380,11 +522,10 @@ function updateProceduralLegs(inst) {
       leg.startY = leg.footY
       
       //
-      // Set target position: FAR ahead of attachment point
-      // Foot moves from behind attachment to far in front
-      // This creates proper stride: back -> forward through center
+      // Set target position: one step length ahead of the attachment in the
+      // current walking direction (creates a proper back-to-front stride)
       //
-      leg.targetX = attachWorldX + STEP_LENGTH * 1.0  // 100% of step length AHEAD of attachment
+      leg.targetX = attachWorldX + dir * STEP_LENGTH * 1.0
       leg.targetY = groundY
     }
     
@@ -493,16 +634,28 @@ function updateWalkingCreature(inst) {
   inst.currentSpeed += (targetSpeed - inst.currentSpeed) * dt * 5  // Fast transition
   
   //
-  // Move creature to the right (walking)
+  // Move creature according to its phase — held in place while it is blocked by
+  // an anti-hero standing in its way (e.g. the confusion decoys)
   //
-  const newX = inst.creatureContainer.pos.x + inst.currentSpeed * dt
-  
-  //
-  // Check if reached right wall
-  //
-  if (newX < inst.maxX) {
-    inst.creatureContainer.pos.x = newX
-    inst.collisionArea.pos.x = newX
+  if (!inst.stoppedByAntihero) {
+    if (inst.phase === 'forward') {
+      //
+      // "fear" walks right, off the right edge, then turns into the friend platform
+      //
+      inst.creatureContainer.pos.x += inst.currentSpeed * dt
+      inst.collisionArea.pos.x = inst.creatureContainer.pos.x
+      if (inst.creatureContainer.pos.x > inst.offscreenX) {
+        becomeFriend(inst)
+      }
+    } else if (inst.phase === 'returning') {
+      //
+      // "friend" walks back left until it settles, remaining a standable platform
+      //
+      if (inst.creatureContainer.pos.x > inst.leftStopX) {
+        inst.creatureContainer.pos.x -= inst.currentSpeed * dt
+        inst.collisionArea.pos.x = inst.creatureContainer.pos.x
+      }
+    }
   }
   
   //

@@ -35,6 +35,22 @@ const ANNIHILATION_PARTICLE_SHAPE = 'circle'
 //
 const SPAWN_PARTICLE_SHAPE = 'circle'
 const RUN_FRAME_COUNT = 3
+//
+// Confusion key set — each control key (kaplay name + physical code) that the
+// word level 4 confusion platform can remap to moveLeft / moveRight / jump.
+// Arrows (left/right/up) and letters (a/d/w) are shuffled independently; space
+// is reassigned to one of the three actions.
+//
+const CONFUSION_KEYS = [
+  { name: 'left', phys: 'ArrowLeft' },
+  { name: 'right', phys: 'ArrowRight' },
+  { name: 'up', phys: 'ArrowUp' },
+  { name: 'a', phys: 'KeyA' },
+  { name: 'd', phys: 'KeyD' },
+  { name: 'w', phys: 'KeyW' },
+  { name: 'space', phys: null }
+]
+const CONFUSION_NORMAL_JUMP_NAMES = ['up', 'w', 'space']
 const JUMP_FRAME_COUNT = 6
 const JUMP_SQUASH_TIME = 0.03
 const JUMP_STRETCH_START = 0.1
@@ -355,6 +371,7 @@ export function create(config) {
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
     isInvulnerable: false,  // Flag for spawn invulnerability
     controlsReversed: false,  // Flag for control inversion (time section level 3)
+    confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
     lastFootprintFoot: 1,    // Alternates between -1 (left foot) and +1 (right foot)
@@ -608,6 +625,20 @@ export function death(inst, onComplete) {
  */
 export function setLookAtPos(inst, pos) {
   inst.lookAtPos = pos
+}
+
+/**
+ * Enables keyboard control on a previously non-controllable character at
+ * runtime (e.g. the word level 4 confusion outcome that hands control to the
+ * anti-hero). Marks it spawned, controllable, and registers its key handlers.
+ * @param {Object} inst - Hero/anti-hero instance
+ */
+export function enableControl(inst) {
+  if (!inst || inst.controllable) return
+  inst.controllable = true
+  inst.controlsDisabled = false
+  inst.isSpawned = true
+  setupControls(inst)
 }
 
 /**
@@ -930,6 +961,23 @@ function onUpdate(inst) {
       isMovingRight = temp
     }
     //
+    // Apply confusion key map if set (word level 4 confusion platform).
+    // Each remapped key that resolves to a movement action drives that movement;
+    // jump-mapped keys are handled separately in setupControls.
+    //
+    if (inst.confusionMap) {
+      const km = inst.confusionMap.keyMap
+      isMovingLeft = false
+      isMovingRight = false
+      CONFUSION_KEYS.forEach(entry => {
+        const action = km[entry.name]
+        if (action !== 'moveLeft' && action !== 'moveRight') return
+        const keys = entry.phys ? [entry.name, entry.phys] : [entry.name]
+        if (!isAnyKeyDown(inst.k, keys)) return
+        action === 'moveLeft' ? (isMovingLeft = true) : (isMovingRight = true)
+      })
+    }
+    //
     // Apply movement only once per frame, prioritizing last pressed direction
     //
     if (isMovingLeft && !isMovingRight) {
@@ -939,15 +987,24 @@ function onUpdate(inst) {
       inst.character.move(inst.speed, 0)
       inst.direction = 1
     }
+    //
+    // Store effective movement so the animation system can use it even when
+    // confused remapping routes non-standard keys (up/down/space) into movement
+    //
+    inst._effectivelyMoving = isMovingLeft || isMovingRight
   }
   //
-  // Determine movement state; requires spawn so keys don't trigger sounds before hero appears
+  // Determine movement state; requires spawn so keys don't trigger sounds before hero appears.
+  // When confusion is active, use the stored effective flag instead of raw key state so the
+  // run animation plays correctly for any key that resolves to horizontal movement.
   //
   const isMoving = inst.isSpawned && !inst.controlsDisabled && (
-    TouchControls.needsTouchControls()
-      ? (TouchControls.isMoveLeftHeld() || TouchControls.isMoveRightHeld()
-        || isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
-      : (isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
+    inst.confusionMap
+      ? (inst._effectivelyMoving === true)
+      : (TouchControls.needsTouchControls()
+          ? (TouchControls.isMoveLeftHeld() || TouchControls.isMoveRightHeld()
+            || isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight))
+          : (isAnyKeyDown(inst.k, CFG.controls.moveLeft) || isAnyKeyDown(inst.k, CFG.controls.moveRight)))
   )
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
@@ -1248,9 +1305,9 @@ function updateAmbientWalkAnimation(inst) {
  */
 function setupControls(inst) {
   //
-  // Jump action handler
+  // Core jump execution — shared by all key bindings
   //
-  const jumpAction = () => {
+  const executeJump = () => {
     if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled) return
     if (inst.canJump && !inst.isSquashing) {
       inst.isSquashing = true
@@ -1262,16 +1319,33 @@ function setupControls(inst) {
     }
   }
   //
-  // Register jump keys (Kaplay key names + physical key codes for non-English layouts)
+  // Resolve whether a confusion key (by kaplay name) is currently mapped to jump
   //
-  CFG.controls.jump.forEach(key => {
-    if (key.length > 1 && key.startsWith('Key')) {
-      onPhysicalKeyPress(key, jumpAction)
-    } else {
-      inst.k.onKeyPress(key, jumpAction)
+  const confusionJumps = (name) => inst.confusionMap && inst.confusionMap.keyMap[name] === 'jump'
+  //
+  // Unified jump handler for a single control key. When confused, the key only
+  // jumps if its remap resolves to jump; otherwise only the normal jump keys jump.
+  //
+  const jumpHandlerFor = (name) => () => {
+    if (inst.confusionMap) {
+      confusionJumps(name) && executeJump()
+    } else if (CONFUSION_NORMAL_JUMP_NAMES.includes(name)) {
+      executeJump()
     }
+  }
+  //
+  // Register a jump handler on every confusion key (kaplay name + physical code)
+  // so any key the confusion map reassigns to jump can trigger a jump.
+  //
+  CONFUSION_KEYS.forEach(entry => {
+    const handler = jumpHandlerFor(entry.name)
+    inst.k.onKeyPress(entry.name, handler)
+    entry.phys && onPhysicalKeyPress(entry.phys, handler)
   })
-  TouchControls.registerVirtualJumpHandler(jumpAction)
+  //
+  // Virtual jump button always jumps (touch controls are never confused)
+  //
+  TouchControls.registerVirtualJumpHandler(executeJump)
 }
 
 /**

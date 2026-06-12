@@ -121,7 +121,7 @@ export const LEVEL_HELP_TEXTS = {
   'level-word.1': 'Life always finds a way\nto ruin your plans.\nBe careful',
   'level-word.2': 'Use your memory to remember\nwhere the blade-like words\nare...',
   'level-word.3': 'Be quick and focused.\nNothing more',
-  'level-word.4': 'Do everything fast\nand don\'t trust logic'
+  'level-word.4': 'Do everything quickly\nand don\'t trust logic.\nTry to change a monster\nby throwing letters'
 }
 
 /**

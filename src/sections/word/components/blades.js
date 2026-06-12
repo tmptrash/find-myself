@@ -40,9 +40,14 @@ const PROXIMITY_STRETCH_X = 0.1
 const PROXIMITY_LERP_SPEED = 9
 const PROXIMITY_VISIBLE_OPACITY = 0.06
 //
-// Speed of the calm blue-AAA → green-UUU cross-fade (blend units per second)
+// Speed of the calm blue-AAA → green-OMM cross-fade (blend units per second)
 //
 const CALM_BLEND_SPEED = 2.4
+//
+// Glyphs shown on the calm (non-lethal) blades — the meditative "OMM" mantra,
+// one glyph per blade (the last repeats if there are more than three blades)
+//
+const CALM_BLADE_WORD = 'OMM'
 
 export const ORIENTATIONS = {
   FLOOR: 'floor',
@@ -223,7 +228,7 @@ export function create(config) {
     proximityLevel: 0,
     proximityStretchY: 0,
     //
-    // Cached params + state so setCalmMode() can cross-fade a green "UUU" overlay
+    // Cached params + state so setCalmMode() can cross-fade a green "OMM" overlay
     //
     blockSize,
     bladeCount,
@@ -257,12 +262,12 @@ export function create(config) {
 
 /**
  * Toggles "calm" mode: the lethal blue "AAA" blades cross-fade into harmless
- * green "UUU" glyphs (collision disabled immediately), and fade back when calm
- * ends. A green "UUU" overlay sprite is faded in/out over the blue "AAA" so the
+ * green "OMM" glyphs (collision disabled immediately), and fade back when calm
+ * ends. A green "OMM" overlay sprite is faded in/out over the blue "AAA" so the
  * colour change is gradual. Used by the word level 4 calm platform.
  * @param {Object} inst - Blades instance
- * @param {boolean} calm - True to fade to green non-lethal UUU, false to restore
- * @param {string} calmColor - Hex color for the calm UUU glyphs
+ * @param {boolean} calm - True to fade to green non-lethal OMM, false to restore
+ * @param {string} calmColor - Hex color for the calm OMM glyphs
  */
 export function setCalmMode(inst, calm, calmColor) {
   if (!inst?.blade?.exists?.() || calm === inst.isCalm) return
@@ -272,7 +277,7 @@ export function setCalmMode(inst, calm, calmColor) {
   inst.calmColor = calmColor
 }
 //
-// Lazily creates the green "UUU" overlay and fades it in/out over the blue
+// Lazily creates the green "OMM" overlay and fades it in/out over the blue
 // blades each frame, fading the base blades out underneath so the swap is smooth.
 //
 function updateCalmOverlay(inst) {
@@ -280,10 +285,10 @@ function updateCalmOverlay(inst) {
   const { k, blade, orientation, blockSize, bladeCount } = inst
   if (!blade?.exists?.()) return
   //
-  // Build the green UUU overlay the first time calm is requested
+  // Build the green OMM overlay the first time calm is requested
   //
   if (!inst.calmOverlay && inst.calmTarget > 0) {
-    const key = getBladeSpriteKey(k, orientation, blockSize, inst.calmColor, bladeCount, 'U')
+    const key = getBladeSpriteKey(k, orientation, blockSize, inst.calmColor, bladeCount, CALM_BLADE_WORD)
     inst.calmOverlay = k.add([
       k.sprite(key),
       k.pos(blade.pos.x, blade.pos.y),
@@ -810,7 +815,13 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3, letter
   const tempCanvas = document.createElement('canvas')
   const tempCtx = tempCanvas.getContext('2d')
   tempCtx.font = `${fontSize}px ${fontFamily}`
-  const letterText = letter.repeat(bladeCount)
+  //
+  // `letter` may be a single glyph (repeated across all blades, e.g. 'A') or a
+  // word with one glyph per blade (e.g. 'OMM'); the last glyph repeats if the
+  // word is shorter than bladeCount.
+  //
+  const glyphAt = (i) => letter.length <= 1 ? letter : letter[Math.min(i, letter.length - 1)]
+  const letterText = Array.from({ length: bladeCount }, (_, i) => glyphAt(i)).join('')
   const metrics = tempCtx.measureText(letterText)
   const textWidth = metrics.width + (bladeCount - 1) * letterSpacing
   const textHeight = fontSize * 1.4
@@ -851,7 +862,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3, letter
     for (let i = 0; i < bladeCount; i++) {
       const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
       offsets.forEach(([offsetX, offsetY]) => {
-        ctx.fillText(letter, letterX + offsetX, baseY + offsetY)
+        ctx.fillText(glyphAt(i), letterX + offsetX, baseY + offsetY)
       })
     }
     
@@ -861,7 +872,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3, letter
     ctx.fillStyle = getHex(color)
     for (let i = 0; i < bladeCount; i++) {
       const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
-      ctx.fillText(letter, letterX, baseY)
+      ctx.fillText(glyphAt(i), letterX, baseY)
     }
   })
 }

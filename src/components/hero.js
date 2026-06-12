@@ -375,6 +375,7 @@ export function create(config) {
     targetEyeY: 0,
     eyeTimer: 0,
     currentEyeSprite: null,
+    eyesClosed: false,  // When true, idle uses the closed-eyes sprite (calm)
     lookAtPos: null,
     isAnnihilating: false,
     isDying: false,
@@ -550,6 +551,28 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     }
   }
   //
+  // Closed-eyes idle frame (eyes filled with the body colour, no pupils) used
+  // when the hero is calm. Baked once as `${prefix}_closed`.
+  //
+  try {
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true)
+    if (closedData) {
+      try {
+        k.loadSprite(`${prefix}_closed`, closedData)
+        closedData.width = 0
+        closedData.height = 0
+      } catch (loadError) {
+        //
+        // Skip this sprite if loading fails
+        //
+      }
+    }
+  } catch (error) {
+    //
+    // Skip this sprite if there's an error creating it
+    //
+  }
+  //
   // Load jump animation frames (3 frames)
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
@@ -646,6 +669,17 @@ export function death(inst, onComplete) {
  */
 export function setLookAtPos(inst, pos) {
   inst.lookAtPos = pos
+}
+
+/**
+ * Toggles the calm "closed eyes" look. While enabled the idle animation holds a
+ * baked frame whose eyes are filled with the body colour (no pupils), reading as
+ * shut eyes. Disabling resumes normal eye wander/tracking.
+ * @param {Object} inst - Hero instance
+ * @param {boolean} closed - True to close the eyes, false to reopen
+ */
+export function setEyesClosed(inst, closed) {
+  inst.eyesClosed = !!closed
 }
 
 /**
@@ -1295,6 +1329,20 @@ function setJumpTuck(inst, tucked) {
  */
 function updateIdleAnimation(inst) {
   //
+  // Calm: hold the closed-eyes idle frame and skip all eye wander/tracking
+  //
+  if (inst.eyesClosed) {
+    inst.isRunning = false
+    inst.wasJumping = false
+    const prefix = inst.spritePrefix || inst.type
+    const closedName = `${prefix}_closed`
+    if (inst.currentEyeSprite !== closedName) {
+      inst.character.use(inst.k.sprite(closedName))
+      inst.currentEyeSprite = closedName
+    }
+    return
+  }
+  //
   // If just stopped running or just landed, instantly switch to idle
   //
   if (inst.isRunning || inst.wasJumping) {
@@ -1872,9 +1920,12 @@ export function onAnnihilationCollide(inst) {
     particles.push(particle)
   }
   //
-  // Play scatter sound immediately after particles are created, before they start moving
+  // Play scatter + deep boom immediately after particles are created, before they
+  // start moving. AnnihilationSound routes to the master output so it stays audible
+  // even when glitch gain is muted (e.g. word level 4 after the calm platform).
   //
   sfx && Sound.playScatterSound(sfx)
+  sfx && Sound.playAnnihilationSound(sfx)
   //
   // PHASE 1: Particles scatter outward (0.4 sec)
   //
@@ -2554,7 +2605,7 @@ export function onAnnihilationCollide(inst) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false) {
   //
   // Choose body color - custom or default
   //
@@ -2829,10 +2880,12 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.fill()
       }
       //
-      // Eye whites (filled inside the ring)
+      // Eye whites (filled inside the ring). When the eyes are "closed" (calm),
+      // fill them with the body colour so the eyeballs vanish into the head — a
+      // serene shut look — and the pupils below are skipped entirely.
       //
       if (!outlineOnly) {
-        ctx.fillStyle = getHex(CFG.visual.colors[type].eyeWhite)
+        ctx.fillStyle = eyesClosed ? BL : getHex(CFG.visual.colors[type].eyeWhite)
         if (animation === 'run' || animation === 'jump') {
           ctx.beginPath()
           ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
@@ -2847,20 +2900,22 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         }
       }
       //
-      // Pupils
+      // Pupils (skipped while the eyes are closed)
       //
-      ctx.fillStyle = OL
-      if (animation === 'run' || animation === 'jump') {
-        ctx.beginPath()
-        ctx.arc(headX + EYE_OFFSET_X_RIGHT + PUPIL_SIDE_SHIFT, eyeY, PUPIL_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
-      } else {
-        ctx.beginPath()
-        ctx.arc(headX + EYE_OFFSET_X_LEFT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.beginPath()
-        ctx.arc(headX + EYE_OFFSET_X_RIGHT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
-        ctx.fill()
+      if (!eyesClosed) {
+        ctx.fillStyle = OL
+        if (animation === 'run' || animation === 'jump') {
+          ctx.beginPath()
+          ctx.arc(headX + EYE_OFFSET_X_RIGHT + PUPIL_SIDE_SHIFT, eyeY, PUPIL_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+        } else {
+          ctx.beginPath()
+          ctx.arc(headX + EYE_OFFSET_X_LEFT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.beginPath()
+          ctx.arc(headX + EYE_OFFSET_X_RIGHT + eyeOffsetX * EYE_PUPIL_SHIFT, eyeY + eyeOffsetY * EYE_PUPIL_SHIFT, PUPIL_RADIUS, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
       //
       // Mouth (optional, only for idle — small smile arc)

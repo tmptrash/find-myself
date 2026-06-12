@@ -40,6 +40,16 @@ const GAZE_LERP = 1
 const BRAIN_HEIGHT_RATIO = 0.5
 const EYE_OFFSET_X = 185
 const EYE_SCALE = 0.80
+//
+// Third "ajna" eye, set inside the upper part of the brain (between the side
+// eyes at the brain centre and the brain's top edge, never poking above it).
+// Hidden until the calm meditation completes, then it slowly opens (scaleY 0→1)
+// while the side eyes stay shut. Drawn at half the side eyes' size.
+//
+const THIRD_EYE_UP_FRAC = 0.55           // How far up the brain's upper half it sits (kept within the brain)
+const THIRD_EYE_SCALE = EYE_SCALE * 0.5  // Half the size of the side eyes
+const THIRD_EYE_OPEN_SPEED = 1.2         // revealT units per second when opening
+const THIRD_EYE_OPACITY = 1              // Fully opaque — unlike the subtle side eyes
 // Eyes are kept subtle — opacity and scale kept low so they blend into the
 // background layer alongside the brain rather than drawing focus.
 const EYE_OPACITY = 0.18
@@ -72,12 +82,18 @@ const EYE_FIBERS = buildFibers()
 // muted lavender as the open eye so it stays a subtle background element.
 //
 const EYE_CLOSED_FADE_SPEED = 4.0        // closedT units per second when shutting/opening
-const EYE_CLOSED_SAMPLES = 22            // Points sampled along each lash arc
-const EYE_CLOSED_UP = 0.45               // Upper arc rise as a fraction of the eye half-height
-const EYE_CLOSED_LOW = 0.32              // Lower arc dip as a fraction of the eye half-height
-const EYE_CLOSED_STROKE_W = 6            // Lash line thickness
-const EYE_CLOSED_OPACITY = 0.42          // Peak lash opacity (a touch stronger than the open eye)
-const EYE_CLOSED_COLOR = [134, 132, 156] // Lavender lash tone (matches the sclera palette)
+const EYE_CLOSED_SAMPLES = 22            // Points sampled along each lid arc
+const EYE_CLOSED_UP = 0.55               // Upper lid rise as a fraction of the eye half-height
+const EYE_CLOSED_LOW = 0.42              // Lower lid dip as a fraction of the eye half-height
+const EYE_CLOSED_STROKE_W = 3            // Lid outline thickness
+//
+// Closed eye reuses the open eye's palette so it reads as the same eye, just
+// shut: the muted lavender sclera fill bounded by the dark eye outline, no pupil.
+//
+const EYE_CLOSED_FILL = [122, 120, 144]  // Sclera lavender (#7A7890) — matches the open eye
+const EYE_CLOSED_OUTLINE = [22, 14, 40]  // Dark eye-outline tone — matches the open eye
+const EYE_CLOSED_FILL_OPACITY = EYE_OPACITY  // Sclera fill matches the open eye's subtlety
+const EYE_CLOSED_OUTLINE_OPACITY = 0.4   // Slightly stronger outline so the shut lids read
 
 /**
  * Spawns two dreaming eye sprites that look down toward the hero
@@ -97,7 +113,7 @@ export function create(k, layout, hero = null) {
   //
   // Shared gaze state — both pupils use the same offset so they look in unison
   //
-  const inst = { k, eyes: [], hero, brainCenterX, brainCenterY, gazeX: 0, gazeY: 0, gazeTargetX: 0, gazeTargetY: GAZE_MAX_Y, eyesClosed: false }
+  const inst = { k, eyes: [], hero, brainCenterX, brainCenterY, gazeX: 0, gazeY: 0, gazeTargetX: 0, gazeTargetY: GAZE_MAX_Y, eyesClosed: false, thirdEyeOpen: false }
   //
   // Two eyes: left eye and right eye, symmetrically around the brain center
   //
@@ -140,12 +156,58 @@ export function create(k, layout, hero = null) {
     spawnClosedEye(k, eye, EYE_Z - idx * 0.4 + 0.06)
     inst.eyes.push(eye)
   }
+  //
+  // Third eye inside the brain's upper part — created closed (scaleY 0, opacity 0)
+  // and revealed later via openThirdEye() once the calm meditation completes. It
+  // sits partway up the brain's upper half so it never pokes above the brain, and
+  // is baked at half the side eyes' size.
+  //
+  const tcx = brainCenterX
+  const brainHalfH = playHeight * BRAIN_HEIGHT_RATIO / 2
+  const tcy = brainCenterY - brainHalfH * THIRD_EYE_UP_FRAC
+  const tBaked = bakeEyeSclera(k, 2, THIRD_EYE_SCALE)
+  const tSprite = k.add([
+    k.sprite(tBaked.key),
+    k.pos(tcx, tcy),
+    k.anchor('center'),
+    k.scale(1, 0),
+    k.fixed(),
+    k.opacity(0),
+    k.z(EYE_Z + 0.1)
+  ])
+  const TEW = Math.round(EYE_HALF_W * THIRD_EYE_SCALE)
+  const TEH = Math.round(EYE_HALF_H * THIRD_EYE_SCALE)
+  const tPupilR = Math.round(TEH * 0.48)
+  const tPupil = spawnLivePupil(k, tcx, tcy, tPupilR, EYE_Z + 0.15, THIRD_EYE_OPACITY)
+  tPupil.scaleY = 0
+  inst.eyes.push({
+    sprite: tSprite,
+    pupil: tPupil,
+    cx: tcx,
+    cy: tcy,
+    ew: TEW,
+    eh: TEH,
+    openScale: 1,
+    closedT: 0,
+    revealT: 0,
+    isThird: true
+  })
   k.onUpdate(() => onUpdate(inst))
   return inst
 }
+
+/**
+ * Opens the third eye at the top of the brain (it gently reveals while the two
+ * side eyes remain shut). Used when the word level 4 calm meditation completes.
+ * @param {Object} inst - Dreaming-eyes inst
+ */
+export function openThirdEye(inst) {
+  if (inst) inst.thirdEyeOpen = true
+}
 //
-// Draws the calm closed-eye as two lash arcs (upper + lower) meeting at the eye
-// corners, with no pupil. Visible only while the eye's closedT is faded in.
+// Draws the calm closed eye in the same style as the open eye: a muted lavender
+// sclera almond bounded by the dark eye outline (two arcs meeting at the corners)
+// but flatter and with no iris/pupil. Visible only while the eye's closedT is up.
 //
 function spawnClosedEye(k, eye, z) {
   k.add([
@@ -155,13 +217,12 @@ function spawnClosedEye(k, eye, z) {
     {
       draw() {
         if (eye.closedT < 0.01) return
-        const op = eye.closedT * EYE_CLOSED_OPACITY
         const { cx, cy, ew, eh } = eye
         const upH = eh * EYE_CLOSED_UP
         const lowH = eh * EYE_CLOSED_LOW
         //
-        // Sample the upper and lower lash curves: both peak away from the
-        // midline at the centre and meet flush at the corners (almond lens)
+        // Sample the upper and lower lid arcs: both bow away from the midline at
+        // the centre and meet flush at the corners, forming an almond eye shape.
         //
         const upper = []
         const lower = []
@@ -172,9 +233,18 @@ function spawnClosedEye(k, eye, z) {
           upper.push(k.vec2(cx + lx, cy - upH * fall))
           lower.push(k.vec2(cx + lx, cy + lowH * fall))
         }
-        const color = k.rgb(...EYE_CLOSED_COLOR)
-        k.drawLines({ pts: upper, width: EYE_CLOSED_STROKE_W, color, opacity: op, cap: 'round', join: 'round' })
-        k.drawLines({ pts: lower, width: EYE_CLOSED_STROKE_W, color, opacity: op, cap: 'round', join: 'round' })
+        //
+        // Lavender sclera fill (no iris/pupil), then the dark eye outline on top
+        //
+        k.drawPolygon({
+          pts: upper.concat(lower.slice().reverse()),
+          color: k.rgb(...EYE_CLOSED_FILL),
+          opacity: eye.closedT * EYE_CLOSED_FILL_OPACITY
+        })
+        const outline = k.rgb(...EYE_CLOSED_OUTLINE)
+        const outlineOp = eye.closedT * EYE_CLOSED_OUTLINE_OPACITY
+        k.drawLines({ pts: upper, width: EYE_CLOSED_STROKE_W, color: outline, opacity: outlineOp, cap: 'round', join: 'round' })
+        k.drawLines({ pts: lower, width: EYE_CLOSED_STROKE_W, color: outline, opacity: outlineOp, cap: 'round', join: 'round' })
       }
     }
   ])
@@ -200,6 +270,13 @@ function onUpdate(inst) {
   //
   updateGaze(inst)
   eyes.forEach(eye => {
+    //
+    // The third eye has its own reveal animation and ignores the calm shut state
+    //
+    if (eye.isThird) {
+      updateThirdEye(inst, eye)
+      return
+    }
     updateBlink(eye, inst.eyesClosed)
     //
     // Ease the calm closed-eye blend toward its target (1 = closed lash arcs)
@@ -227,6 +304,25 @@ function onUpdate(inst) {
     eye.pupil.gazeX = inst.gazeX
     eye.pupil.gazeY = inst.gazeY
   })
+}
+
+//
+// Eases the third eye open (revealT 0→1) once thirdEyeOpen is set, growing its
+// sclera sprite from a slit and fading it in. It tracks the shared gaze like the
+// other eyes. Stays fully hidden (opacity 0, scaleY 0) until then.
+//
+function updateThirdEye(inst, eye) {
+  const target = inst.thirdEyeOpen ? 1 : 0
+  if (eye.revealT !== target) {
+    const step = THIRD_EYE_OPEN_SPEED * inst.k.dt()
+    const diff = target - eye.revealT
+    eye.revealT += Math.sign(diff) * Math.min(Math.abs(diff), step)
+  }
+  eye.sprite.scale.y = eye.revealT
+  eye.sprite.opacity = THIRD_EYE_OPACITY * eye.revealT
+  eye.pupil.scaleY = eye.revealT
+  eye.pupil.gazeX = inst.gazeX
+  eye.pupil.gazeY = inst.gazeY
 }
 
 //

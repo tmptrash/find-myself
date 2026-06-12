@@ -173,9 +173,12 @@ const CALM_HOVER_Y = 150                 // Raised so it is only reachable by ju
 const CALM_BODY_PAD = 6                  // Small horizontal margin added to the measured glyph width
 const CALM_BODY_HEIGHT = 20
 const CALM_TOP_TOLERANCE = 26
-const CALM_FADE_DURATION = 4.0           // Seconds standing on calm to fully silence ambient
+const CALM_FADE_DURATION = 4.0           // Seconds standing on calm to fully silence the murmur
 const CALM_AUDIO_RESTORE_TIME = 1.4      // Seconds to fade the ambient back up after leaving calm
-const CALM_READY_TIME = 2.0              // Accumulated seconds on calm before stepping off turns the anti-hero red
+const CALM_TIMER_SECONDS = 10            // Countdown the hero must complete standing on calm
+const CALM_TIMER_FONT_SIZE = 24          // Countdown text size
+const CALM_TIMER_OFFSET_X = 34           // Countdown X offset from the hero centre (to the right)
+const CALM_TIMER_OFFSET_Y = 48           // Countdown Y offset above the hero centre
 const CALM_MONSTER_WORD = 'happy'        // Word shown on the monster while calm
 const CALM_MONSTER_COLOR = '#6BCB77'     // Friendly green for the monster + UUU blades + root runners + calm platform
 //
@@ -189,10 +192,22 @@ const CALM_BREATH_MULT = 2.8
 //
 const MONSTER_RIDE_TOLERANCE = 36
 const MONSTER_RIDE_WRAP_GUARD = 40
-const CALM_HINT_TEXT = "you're not ready yet. you need to calm down..."
-const CALM_HINT_DURATION = 1.6           // Seconds the grey anti-hero hint stays up
+const CALM_HINT_TEXT = "you're not ready yet.\nyou need to calm down..."
+const CALM_HINT_DURATION = 3.6           // Seconds the grey anti-hero hint stays up
 const ANTIHERO_GRAY_COLOR = '#B0B0B0'    // Inert grey anti-hero (until calmed)
 const ANTIHERO_RED_COLOR = '#DC143C'     // Active red anti-hero (after calm)
+//
+// Gentle vertical bob shared by the calm / forget / chaos word platforms, matching
+// the floating platforms in time level 0.
+//
+const PLATFORM_FLOAT_AMP = 6             // Pixels of vertical float
+const PLATFORM_FLOAT_SPEED = 1.5         // Float phase advance per second
+//
+// Mercy points: after every block of deaths, if the hero has spent all bullets
+// (0 score) the game grants a few so the level stays beatable without points.
+//
+const MERCY_DEATH_INTERVAL = 10          // Deaths per mercy check
+const MERCY_POINTS = 3                   // Bullets granted each mercy
 //
 // Engine time of the last calm hint bubble — throttles repeated touch collisions
 //
@@ -264,6 +279,13 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
   // Restore heroScore to value at level start so spent bullets are refunded
   //
   set('heroScore', heroScoreAtStart)
+  //
+  // Mercy: after every block of deaths, if the hero is out of bullets (0 score)
+  // grant a few so the level stays beatable without points. The grant is gated to
+  // one per death block (10, 20, 30 ... deaths) so it only repeats as the life
+  // score climbs another 10.
+  //
+  grantMercyPoints(levelIndicator)
   playLifeDeathEffects(k, levelIndicator)
   //
   // Select random message
@@ -353,6 +375,28 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
     updateInterval.cancel()
     restartLevel()
   })
+}
+
+/**
+ * Grants mercy bullets once per death block when the hero is out of points, so the
+ * level stays beatable without score. Tracks total deaths and how many grants were
+ * handed out; each block of MERCY_DEATH_INTERVAL deaths grants MERCY_POINTS at most
+ * once (and only if the hero currently has 0 points).
+ * @param {Object} levelIndicator - Level indicator (updates the hero score display)
+ */
+function grantMercyPoints(levelIndicator) {
+  const deaths = get('word.level4Deaths', 0) + 1
+  set('word.level4Deaths', deaths)
+  const dueGrants = Math.floor(deaths / MERCY_DEATH_INTERVAL)
+  if (dueGrants <= get('word.level4MercyGranted', 0)) return
+  //
+  // Consume this death block whether or not we grant, so the next grant needs
+  // another full block of deaths (i.e. the life score climbing another 10)
+  //
+  set('word.level4MercyGranted', dueGrants)
+  if (get('heroScore', 0) !== 0) return
+  set('heroScore', MERCY_POINTS)
+  levelIndicator?.updateHeroScore?.(MERCY_POINTS)
 }
 
 
@@ -546,10 +590,9 @@ export function sceneLevel4(k) {
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, bladeArm, levelIndicator, sound, heroScoreAtStart)
     })
     //
-    // Close each pit while the walking creature is over it so "fear" can cross,
-    // then release it back to its normal hero trap once the creature has passed.
+    // The pit-for-monster handler is registered later, once calmCtx exists, so it
+    // can also hold the pits closed while the hero is calm.
     //
-    setupPitsForMonster(k, bladeArm, [movingPlatform1, movingPlatform2])
     //
     // Create static blades after first pit to prevent jumping over
     //
@@ -619,7 +662,7 @@ export function sceneLevel4(k) {
       confusionX: confusionWordX,
       currentLevel: 'level-word.4'
     }
-    createConfusionWord(k, confusionWordX, confusionWordY, confusionCtx)
+    const confusionWord = createConfusionWord(k, confusionWordX, confusionWordY, confusionCtx)
     //
     // Single "forget" floating platform — placed to the left of the first pit and
     // raised enough that the hero clears its underside when jumping past it.
@@ -649,9 +692,17 @@ export function sceneLevel4(k) {
       heroSpeech,
       consciousnessLayers,
       bladeInsts: [staticBlades, staticBlades2],
+      confusionWord,
       completed: false
     }
     const calmPlatform = createCalmPlatform(k, calmRightX, calmLeftX, calmWordY, calmCtx)
+    //
+    // Close each pit while the walking creature is over it so "fear" can cross,
+    // then release it back to its normal hero trap once the creature has passed.
+    // Also holds both pits closed while the hero is calm (calmCtx.pitsHeldClosed)
+    // so they never re-open under it once it has stepped onto the calm platform.
+    //
+    setupPitsForMonster(k, bladeArm, [movingPlatform1, movingPlatform2], calmCtx)
     //
     // Let the chaos outcomes relocate the calm platform (anti-cheese on swap/return)
     //
@@ -662,6 +713,12 @@ export function sceneLevel4(k) {
     //
     const monsterRide = { lastX: bladeArm.collisionArea.pos.x }
     k.onUpdate(() => updateMonsterRide(hero, bladeArm, monsterRide))
+    //
+    // The calm pad lives on the persistent AudioContext, so stepping off fades it
+    // out via progress — but a death (or any other exit) skips that. Stop it on
+    // scene leave so the meditation drone always fades out and never lingers.
+    //
+    k.onSceneLeave(() => sound && Sound.stopCalmPad(sound))
     WordBladeProximity.create({
       k,
       hero,
@@ -890,17 +947,21 @@ function getWordSpriteInfo(k, text, size, hex) {
  * @param {Object} bladeArm - Blade arm creature instance
  * @param {Array} platforms - Moving platform instances to manage
  */
-function setupPitsForMonster(k, bladeArm, platforms) {
-  k.onUpdate(() => onUpdatePitsForMonster(k, bladeArm, platforms))
+function setupPitsForMonster(k, bladeArm, platforms, calmCtx = null) {
+  k.onUpdate(() => onUpdatePitsForMonster(k, bladeArm, platforms, calmCtx))
 }
 //
-// Per-frame: close pits the creature is crossing, release the rest.
+// Per-frame: close pits the creature is crossing, release the rest. While the hero
+// is calm (calmCtx.pitsHeldClosed) every pit is held closed so none re-open under
+// the hero once it has stepped onto the calm platform.
 //
-function onUpdatePitsForMonster(k, bladeArm, platforms) {
-  if (!bladeArm?.collisionArea?.exists?.()) return
-  const monsterX = bladeArm.collisionArea.pos.x
+function onUpdatePitsForMonster(k, bladeArm, platforms, calmCtx) {
+  const heldClosed = !!calmCtx?.pitsHeldClosed
+  const area = bladeArm?.collisionArea
+  if (!heldClosed && !area?.exists?.()) return
+  const monsterX = area?.exists?.() ? area.pos.x : null
   platforms.forEach(mp => {
-    const near = Math.abs(monsterX - mp.platform.pos.x) < MONSTER_PIT_CLOSE_DISTANCE
+    const near = heldClosed || (monsterX !== null && Math.abs(monsterX - mp.platform.pos.x) < MONSTER_PIT_CLOSE_DISTANCE)
     MovingPlatform.setMonsterClosed(mp, near)
   })
 }
@@ -1048,8 +1109,10 @@ function createConfusionWord(k, x, y, ctx) {
     heroOn: false,
     wobbleTimer: -1,   // negative = not wobbling
     yOffset: 0,
+    floatOffset: Math.random() * Math.PI * 2,
     shattered: false,
     triggering: false,
+    passive: false,
     detectHalfW: bodyWidth / 2
   }
   //
@@ -1077,6 +1140,21 @@ function createConfusionWord(k, x, y, ctx) {
     k.z(CFG.visual.zIndex.ui - 5)
   ])
   obj.onUpdate(() => onUpdateConfusionWord(k, obj, body, state, x, y, ctx))
+  return {
+    //
+    // After the calm meditation completes, chaos turns green and stops triggering
+    // random outcomes — it becomes a plain floating platform.
+    //
+    setPassiveGreen(instK) {
+      if (state.passive) return
+      state.passive = true
+      state.triggering = false
+      state.wobbleTimer = -1
+      state.yOffset = 0
+      const greenInfo = getWordSpriteInfo(instK, CONFUSION_WORD_TEXT, CONFUSION_FONT_SIZE, CALM_MONSTER_COLOR)
+      obj.use(instK.sprite(greenInfo.key, { width: greenInfo.w, height: greenInfo.h }))
+    }
+  }
 }
 //
 // Detects the hero landing on TOP of the confusion platform.
@@ -1086,9 +1164,32 @@ function onUpdateConfusionWord(k, obj, body, state, wordX, wordY, ctx) {
   const hero = ctx.hero
   if (state.shattered) return
   if (!hero?.character?.exists?.()) return
+  //
+  // After calm completes, chaos is a passive green platform — float only, no effects
+  //
+  if (state.passive) {
+    state.floatOffset += k.dt() * PLATFORM_FLOAT_SPEED
+    const floatY = Math.sin(state.floatOffset) * PLATFORM_FLOAT_AMP
+    body.pos.y = wordY - CONFUSION_BODY_HEIGHT / 2 + floatY
+    obj.pos.y = wordY + floatY
+    const heroX = hero.character.pos.x
+    const heroFeetY = hero.character.pos.y + 34
+    const platformTop = wordY - CONFUSION_BODY_HEIGHT / 2 + floatY
+    const inRange = Math.abs(heroX - wordX) < state.detectHalfW
+    const onTop = inRange && hero.character.isGrounded() && Math.abs(heroFeetY - platformTop) < CONFUSION_TOP_TOLERANCE
+    state.heroOn = onTop
+    return
+  }
+  //
+  // Gentle vertical float (matches the time level 0 platforms), layered under the
+  // landing wobble so the platform always drifts up and down a little
+  //
+  state.floatOffset += k.dt() * PLATFORM_FLOAT_SPEED
+  const floatY = Math.sin(state.floatOffset) * PLATFORM_FLOAT_AMP
+  body.pos.y = wordY - CONFUSION_BODY_HEIGHT / 2 + floatY
   const heroX = hero.character.pos.x
   const heroFeetY = hero.character.pos.y + 34
-  const platformTop = wordY - CONFUSION_BODY_HEIGHT / 2
+  const platformTop = wordY - CONFUSION_BODY_HEIGHT / 2 + floatY
   const inRange = Math.abs(heroX - wordX) < state.detectHalfW
   const onTop = inRange && hero.character.isGrounded() && Math.abs(heroFeetY - platformTop) < CONFUSION_TOP_TOLERANCE
   if (onTop && !state.heroOn && !state.triggering) {
@@ -1122,9 +1223,9 @@ function onUpdateConfusionWord(k, obj, body, state, wordX, wordY, ctx) {
     }
   }
   //
-  // Apply the wobble offset to the baked word sprite
+  // Apply the wobble + gentle float offset to the baked word sprite
   //
-  obj.pos.y = wordY + state.yOffset
+  obj.pos.y = wordY + state.yOffset + floatY
 }
 //
 // Picks one random confusion outcome and applies it.
@@ -1469,6 +1570,7 @@ function createForgetPlatform(k, x, y, sound, hero) {
     disappearTimer: FORGET_DISAPPEAR_DELAY,
     reappearTimer: 0,
     origY: y,
+    floatOffset: Math.random() * Math.PI * 2,
     textOpacity: FORGET_OPACITY_NORMAL
   }
   //
@@ -1537,6 +1639,15 @@ function onUpdateForgetPlatform(k, body, label, state, hero) {
       label.opacity = FORGET_OPACITY_NORMAL
     }
   }
+  //
+  // Gentle vertical float while visible (matches the time level 0 platforms)
+  //
+  if (state.visible) {
+    state.floatOffset += k.dt() * PLATFORM_FLOAT_SPEED
+    const floatY = Math.sin(state.floatOffset) * PLATFORM_FLOAT_AMP
+    body.pos.y = state.origY + floatY
+    label.pos.y = state.origY + FORGET_PLATFORM_HEIGHT / 2 + floatY
+  }
 }
 
 /**
@@ -1566,10 +1677,13 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
   const greenInfo = getWordSpriteInfo(k, CALM_WORD_TEXT, CALM_FONT_SIZE, CALM_MONSTER_COLOR)
   const state = {
     heroOn: false,
-    progress: 0,
     audioProgress: 0,
-    calmTime: 0,
+    timer: CALM_TIMER_SECONDS,
     audioActive: false,
+    completed: false,
+    floatOffset: Math.random() * Math.PI * 2,
+    timerLabel: null,
+    body: null,
     x: rightX,
     rightX,
     leftX,
@@ -1596,6 +1710,7 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
+  state.body = body
   //
   // Word visual as a pre-baked sprite (blue fill + black outline)
   //
@@ -1619,7 +1734,8 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
   // Restore ambient volumes to full at scene start — a previous run may have left
   // word.mp3/breath/glitch faded out, and startBackgroundMusic does not reset them
   //
-  setCalmAudioFade(ctx, 0)
+  setCalmMurmurFade(ctx, 0)
+  ctx.breathMusic && (ctx.breathMusic.volume = ctx.audioBase.breath)
   body.onUpdate(() => onUpdateCalmPlatform(k, state, ctx))
   return {
     relocate(side) {
@@ -1632,77 +1748,168 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
   }
 }
 //
-// Per-frame calm logic: detect the hero standing on top, fade the ambient up/down
-// with progress, toggle the green/harmless calm visuals, and finish calming once
-// the ambient is fully silent.
+// Per-frame calm logic: float the platform gently, detect the hero standing on it,
+// run the 10s meditation countdown (shown beside the hero), and fade the ambient.
+// When the countdown completes the calm becomes permanent — the level stays green.
 //
 function onUpdateCalmPlatform(k, state, ctx) {
   const hero = ctx.hero
   if (!hero?.character?.exists?.()) return
+  //
+  // Gentle vertical float (matches the time level 0 platforms)
+  //
+  state.floatOffset += k.dt() * PLATFORM_FLOAT_SPEED
+  const floatY = Math.sin(state.floatOffset) * PLATFORM_FLOAT_AMP
+  const platformTop = state.y - CALM_BODY_HEIGHT / 2 + floatY
+  state.body && (state.body.pos.y = platformTop)
+  state.label && (state.label.pos.y = state.y + floatY)
+  //
+  // Detect the hero standing on the floated platform top
+  //
   const heroX = hero.character.pos.x
   const heroFeetY = hero.character.pos.y + 34
-  const platformTop = state.y - CALM_BODY_HEIGHT / 2
   const inRange = Math.abs(heroX - state.x) < state.detectHalfW
   const onTop = inRange && hero.character.isGrounded() && Math.abs(heroFeetY - platformTop) < CALM_TOP_TOLERANCE
   //
-  // Toggle the calm visuals when the hero steps on or off. Stepping off after
-  // standing long enough is what flips the grey anti-hero to red.
+  // Toggle the calm visuals on step on/off. Frozen once completed: the calm is
+  // permanent (level stays green, hero's eyes stay open), so re-entering must NOT
+  // re-run enterCalm — that would re-close the hero's eyes and corrupt its
+  // run/jump animation when it walks off afterwards.
   //
-  if (onTop !== state.heroOn) {
+  if (!state.completed && onTop !== state.heroOn) {
     state.heroOn = onTop
+    if (onTop) enterCalm(k, state, ctx)
+    else exitCalm(k, state, ctx)
+  }
+  //
+  // Meditation countdown — runs only while standing, resets on stepping off
+  //
+  if (!state.completed) {
     if (onTop) {
-      enterCalm(k, state, ctx)
-    } else {
-      exitCalm(k, state, ctx)
-      if (!ctx.completed && state.calmTime >= CALM_READY_TIME) {
-        ctx.completed = true
-        onCalmComplete(k, ctx)
-      }
+      state.timer = Math.max(0, state.timer - k.dt())
+      updateCalmTimer(k, state, hero)
+      if (state.timer <= 0) completeCalm(k, state, ctx)
+    } else if (state.timer !== CALM_TIMER_SECONDS) {
+      state.timer = CALM_TIMER_SECONDS
+      destroyCalmTimer(state)
     }
   }
   //
-  // Accumulate how long the hero has stood on calm (gates the red transformation)
+  // word.mp3 murmur + eerie glitch fade out while calming and stay muted once
+  // completed; they restore quickly if the hero steps off before finishing.
   //
-  onTop && (state.calmTime += k.dt())
+  const murmurCalm = state.completed || onTop
+  const murmurRate = murmurCalm ? 1 / CALM_FADE_DURATION : 1 / CALM_AUDIO_RESTORE_TIME
+  state.audioProgress = Math.max(0, Math.min(1, state.audioProgress + (murmurCalm ? 1 : -1) * k.dt() * murmurRate))
+  setCalmMurmurFade(ctx, state.audioProgress)
   //
-  // Advance the slow calm progress (drives the ambient fade depth).
+  // Meditation pad plays through the countdown, removed on completion / leave
   //
-  const dir = onTop ? 1 : -1
-  state.progress = Math.max(0, Math.min(1, state.progress + dir * k.dt() / CALM_FADE_DURATION))
-  //
-  // Audio uses its own progress that rises slowly with calm but restores quickly
-  // when stepping off, so word.mp3 audibly fades back up instead of staying muted.
-  //
-  const audioRate = onTop ? 1 / CALM_FADE_DURATION : 1 / CALM_AUDIO_RESTORE_TIME
-  state.audioProgress = Math.max(0, Math.min(1, state.audioProgress + dir * k.dt() * audioRate))
-  if (state.audioProgress > 0) {
-    if (!state.audioActive) {
-      state.audioActive = true
-      Sound.startCalmPad(ctx.sound)
-    }
-    setCalmAudioFade(ctx, state.audioProgress)
-  } else if (state.audioActive) {
+  const wantPad = onTop && !state.completed
+  if (wantPad && !state.audioActive) {
+    state.audioActive = true
+    Sound.startCalmPad(ctx.sound)
+    Sound.setCalmPadVolume(ctx.sound, 1)
+  } else if (!wantPad && state.audioActive) {
     state.audioActive = false
-    setCalmAudioFade(ctx, 0)
     Sound.stopCalmPad(ctx.sound)
+  }
+  //
+  // Breath eases from the calm swell down to silence across the countdown
+  //
+  setCalmBreath(ctx, state, onTop)
+}
+//
+// Completes the meditation: keeps the level green, opens the hero's eyes, turns
+// the anti-hero red, opens the brain's third eye (side eyes stay shut), and fully
+// fades out the breath + meditation pad.
+//
+function completeCalm(k, state, ctx) {
+  if (state.completed) return
+  state.completed = true
+  ctx.completed = true
+  destroyCalmTimer(state)
+  ctx.hero && Hero.setEyesClosed(ctx.hero, false)
+  //
+  // Keep both pits permanently closed now the calm is complete
+  //
+  ctx.pitsHeldClosed = true
+  ctx.dreamingEyes && WordDreamingEyes.openThirdEye(ctx.dreamingEyes)
+  //
+  // Resonant awakening cue marking the moment the anti-hero comes alive; the
+  // recolor below also plays the touch-L1 transform sound + sparkle burst.
+  //
+  ctx.sound && Sound.playWavePulseSound(ctx.sound)
+  onCalmComplete(k, ctx)
+  //
+  // Chaos becomes a plain green platform — no more random outcomes
+  //
+  ctx.confusionWord?.setPassiveGreen?.(k)
+  //
+  // Restore glitch gain so annihilation scatter/absorption SFX are audible
+  //
+  ctx.audioBase && Sound.setGlitchSoundVolume(ctx.sound, ctx.audioBase.glitch)
+  if (state.audioActive) {
+    state.audioActive = false
+    Sound.stopCalmPad(ctx.sound)
+  }
+  ctx.breathMusic?.stop?.()
+}
+//
+// Creates/updates the small yellow (hero-coloured) countdown label shown to the
+// upper-right of the hero while it meditates on the calm platform.
+//
+function updateCalmTimer(k, state, hero) {
+  const seconds = Math.max(0, Math.ceil(state.timer))
+  if (!state.timerLabel) {
+    state.timerLabel = k.add([
+      k.text(String(seconds), { size: CALM_TIMER_FONT_SIZE, font: CFG.visual.fonts.regularFull.replace(/'/g, '') }),
+      k.pos(0, 0),
+      k.anchor('center'),
+      //
+      // Match the hero's actual body colour (it varies with section progress —
+      // yellow/orange/brown) so the countdown reads as the hero's own timer
+      //
+      k.color(...parseHex(hero.bodyColor || CFG.visual.colors.hero.body)),
+      k.outline(1, k.rgb(0, 0, 0)),
+      k.z(CFG.visual.zIndex.ui + 10)
+    ])
+  }
+  state.timerLabel.text = String(seconds)
+  state.timerLabel.pos.x = hero.character.pos.x + CALM_TIMER_OFFSET_X
+  state.timerLabel.pos.y = hero.character.pos.y - CALM_TIMER_OFFSET_Y
+}
+//
+// Removes the countdown label if present.
+//
+function destroyCalmTimer(state) {
+  if (state.timerLabel) {
+    state.timerLabel.destroy()
+    state.timerLabel = null
   }
 }
 //
-// Sets the ambient volumes for a given calm progress (0 = full, 1 = silent).
-// Uses the configured CFG targets so word.mp3 always returns to its true level.
+// Fades word.mp3 + the eerie glitch out (progress 1 = silent), restoring to base.
 //
-function setCalmAudioFade(ctx, progress) {
+function setCalmMurmurFade(ctx, progress) {
   const base = ctx.audioBase
   if (!base) return
   const fade = 1 - progress
-  //
-  // Whisper (word.mp3) and eerie glitch fade out; breath swells in as the calming
-  // breath; the soft calm pad fades in. All return to base when progress is 0.
-  //
   Sound.setBackgroundMusicVolume(ctx.sound, base.music * fade)
   Sound.setGlitchSoundVolume(ctx.sound, base.glitch * fade)
-  ctx.breathMusic && (ctx.breathMusic.volume = base.breath * (1 + (CALM_BREATH_MULT - 1) * progress))
-  Sound.setCalmPadVolume(ctx.sound, progress)
+}
+//
+// Breath volume: base level off the platform, swelling on entry, then easing down
+// to silence as the countdown runs out (and fully off once completed).
+//
+function setCalmBreath(ctx, state, onTop) {
+  const base = ctx.audioBase
+  if (!base || !ctx.breathMusic) return
+  let target
+  if (state.completed) target = 0
+  else if (onTop) target = base.breath * CALM_BREATH_MULT * (state.timer / CALM_TIMER_SECONDS)
+  else target = base.breath
+  ctx.breathMusic.volume = ctx.breathMusic.volume + (target - ctx.breathMusic.volume) * 0.12
 }
 //
 // Applies the calm look: green harmless/pleasant words, green non-lethal "UUU"
@@ -1718,6 +1925,11 @@ function enterCalm(k, state, ctx) {
     state.label.use(k.sprite(state.greenKey.key, { width: state.greenKey.w, height: state.greenKey.h }))
   }
   ctx.flyingWords && FlyingWords.setHarmless(ctx.flyingWords, true)
+  ctx.hero && Hero.setEyesClosed(ctx.hero, true)
+  //
+  // Hold both pits closed so they can't open under the calm hero
+  //
+  ctx.pitsHeldClosed = true
   ctx.dreamingEyes && WordDreamingEyes.setEyesClosed(ctx.dreamingEyes, true)
   ctx.heroSpeech && WordHeroIdleSpeech.setCalm(ctx.heroSpeech, true)
   ctx.consciousnessLayers && WordConsciousnessLayers.setRootRunnerColor(ctx.consciousnessLayers, k.rgb(...parseHex(CALM_MONSTER_COLOR)))
@@ -1751,6 +1963,11 @@ function exitCalm(k, state, ctx) {
     state.label.use(k.sprite(state.blueKey.key, { width: state.blueKey.w, height: state.blueKey.h }))
   }
   ctx.flyingWords && FlyingWords.setHarmless(ctx.flyingWords, false)
+  ctx.hero && Hero.setEyesClosed(ctx.hero, false)
+  //
+  // Release the pits back to their normal hero trap (only reached pre-completion)
+  //
+  ctx.pitsHeldClosed = false
   ctx.dreamingEyes && WordDreamingEyes.setEyesClosed(ctx.dreamingEyes, false)
   ctx.heroSpeech && WordHeroIdleSpeech.setCalm(ctx.heroSpeech, false)
   ctx.consciousnessLayers && WordConsciousnessLayers.setRootRunnerColor(ctx.consciousnessLayers, null)
@@ -1823,12 +2040,20 @@ function showCalmHint(k, charObj) {
   const now = k.time()
   if (now - lastCalmHintTime < CALM_HINT_DURATION) return
   lastCalmHintTime = now
+  spawnHintBubble(k, charObj, CALM_HINT_TEXT, CALM_HINT_DURATION)
+}
+//
+// Spawns a forced-visible white speech bubble above a character for `duration`
+// seconds, then destroys it. Shared by the grey-hint and the calm "ready" hint.
+//
+function spawnHintBubble(k, charObj, text, duration) {
+  if (!charObj?.exists?.()) return
   const target = {
     x: () => charObj.pos.x,
     y: () => charObj.pos.y,
     width: 1,
     height: 1,
-    text: CALM_HINT_TEXT,
+    text,
     offsetY: -70
   }
   const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
@@ -1839,7 +2064,7 @@ function showCalmHint(k, charObj) {
   tip.frozenX = charObj.pos.x
   tip.frozenY = charObj.pos.y
   tip.opacity = 1
-  k.wait(CALM_HINT_DURATION, () => tip && Tooltip.destroy(tip))
+  k.wait(duration, () => tip && Tooltip.destroy(tip))
 }
 
 /**

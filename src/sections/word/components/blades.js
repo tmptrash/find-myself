@@ -39,6 +39,10 @@ const PROXIMITY_STRETCH_Y = 0.22
 const PROXIMITY_STRETCH_X = 0.1
 const PROXIMITY_LERP_SPEED = 9
 const PROXIMITY_VISIBLE_OPACITY = 0.06
+//
+// Speed of the calm blue-AAA → green-UUU cross-fade (blend units per second)
+//
+const CALM_BLEND_SPEED = 2.4
 
 export const ORIENTATIONS = {
   FLOOR: 'floor',
@@ -146,16 +150,7 @@ export function create(config) {
   const bladeHeight = fontSize - 8  // Reduce 12px from bottom total
 
   // Load blade sprite with custom color and blade count
-  const spriteKey = `blade_${orientation}_${color}_${bladeCount}_v14`
-  if (!k.getSprite(spriteKey)) {
-    const bladeCanvas = createBladeSprite(orientation, blockSize, color, bladeCount)
-    k.loadSprite(spriteKey, bladeCanvas)
-    //
-    // Release canvas backing store immediately after Kaplay reads it.
-    //
-    bladeCanvas.width = 0
-    bladeCanvas.height = 0
-  }
+  const spriteKey = getBladeSpriteKey(k, orientation, blockSize, color, bladeCount, 'A')
 
   // Determine rotation and collision box based on orientation
   const rotation = getRotation(orientation)
@@ -226,7 +221,18 @@ export function create(config) {
     isLifted: false,  // True when blade is retracting/disappearing (stops glint)
     isRushing: false,  // Horizontal chase trap overrides vibration and drives baseX
     proximityLevel: 0,
-    proximityStretchY: 0
+    proximityStretchY: 0,
+    //
+    // Cached params + state so setCalmMode() can cross-fade a green "UUU" overlay
+    //
+    blockSize,
+    bladeCount,
+    baseSpriteKey: spriteKey,
+    isCalm: false,
+    calmTarget: 0,
+    calmBlend: 0,
+    calmColor: null,
+    calmOverlay: null
   }
 
   // Setup collision detection with hero (works even when invisible)
@@ -247,6 +253,65 @@ export function create(config) {
   }
 
   return inst
+}
+
+/**
+ * Toggles "calm" mode: the lethal blue "AAA" blades cross-fade into harmless
+ * green "UUU" glyphs (collision disabled immediately), and fade back when calm
+ * ends. A green "UUU" overlay sprite is faded in/out over the blue "AAA" so the
+ * colour change is gradual. Used by the word level 4 calm platform.
+ * @param {Object} inst - Blades instance
+ * @param {boolean} calm - True to fade to green non-lethal UUU, false to restore
+ * @param {string} calmColor - Hex color for the calm UUU glyphs
+ */
+export function setCalmMode(inst, calm, calmColor) {
+  if (!inst?.blade?.exists?.() || calm === inst.isCalm) return
+  inst.isCalm = calm
+  inst.collisionEnabled = !calm
+  inst.calmTarget = calm ? 1 : 0
+  inst.calmColor = calmColor
+}
+//
+// Lazily creates the green "UUU" overlay and fades it in/out over the blue
+// blades each frame, fading the base blades out underneath so the swap is smooth.
+//
+function updateCalmOverlay(inst) {
+  if (!inst.calmOverlay && inst.calmTarget === 0 && inst.calmBlend === 0) return
+  const { k, blade, orientation, blockSize, bladeCount } = inst
+  if (!blade?.exists?.()) return
+  //
+  // Build the green UUU overlay the first time calm is requested
+  //
+  if (!inst.calmOverlay && inst.calmTarget > 0) {
+    const key = getBladeSpriteKey(k, orientation, blockSize, inst.calmColor, bladeCount, 'U')
+    inst.calmOverlay = k.add([
+      k.sprite(key),
+      k.pos(blade.pos.x, blade.pos.y),
+      k.anchor('center'),
+      k.rotate(blade.angle),
+      k.scale(inst.baseScale),
+      k.z((blade.z ?? 0) + 0.02),
+      k.opacity(0)
+    ])
+  }
+  //
+  // Ease the cross-fade blend toward the target
+  //
+  const step = CALM_BLEND_SPEED * k.dt()
+  const diff = inst.calmTarget - inst.calmBlend
+  inst.calmBlend += Math.sign(diff) * Math.min(Math.abs(diff), step)
+  inst.calmBlend = Math.max(0, Math.min(1, inst.calmBlend))
+  //
+  // Fade the blue base down and the green overlay up; keep the overlay aligned
+  //
+  inst.blade.opacity = 1 - inst.calmBlend
+  if (inst.calmOverlay?.exists?.()) {
+    inst.calmOverlay.pos.x = blade.pos.x
+    inst.calmOverlay.pos.y = blade.pos.y
+    inst.calmOverlay.angle = blade.angle
+    inst.calmOverlay.scale = blade.scale
+    inst.calmOverlay.opacity = inst.calmBlend
+  }
 }
 
 /**
@@ -338,6 +403,10 @@ export function handleCollision(inst, currentLevel) {
 function applyProximityScale(inst) {
   const { blade, k, orientation, baseScale, baseY, baseX, bladeHeight } = inst
   if (!blade?.exists?.()) return
+  //
+  // Drive the calm cross-fade overlay (no-op until calm mode is engaged)
+  //
+  updateCalmOverlay(inst)
   const offsetX = inst.animOffsetX ?? 0
   const offsetY = inst.animOffsetY ?? 0
   if (blade.opacity < PROXIMITY_VISIBLE_OPACITY) {
@@ -694,14 +763,39 @@ function drawGlint(inst) {
 }
 
 /**
- * Create blade sprite procedurally - renders letters 'A' instead of pyramids
+ * Returns a cached blade sprite key, baking the sprite on first use.
+ * @param {Object} k - Kaplay instance
  * @param {string} orientation - Blade orientation
  * @param {number} blockSize - Size of one block in pixels
  * @param {string} color - Hex color string for the blade
  * @param {number} bladeCount - Number of letters to render
+ * @param {string} letter - Glyph to render ('A' lethal, 'U' calm)
+ * @returns {string} Sprite key
+ */
+function getBladeSpriteKey(k, orientation, blockSize, color, bladeCount, letter) {
+  const spriteKey = `blade_${orientation}_${color}_${bladeCount}_${letter}_v14`
+  if (!k.getSprite(spriteKey)) {
+    const bladeCanvas = createBladeSprite(orientation, blockSize, color, bladeCount, letter)
+    k.loadSprite(spriteKey, bladeCanvas)
+    //
+    // Release canvas backing store immediately after Kaplay reads it.
+    //
+    bladeCanvas.width = 0
+    bladeCanvas.height = 0
+  }
+  return spriteKey
+}
+
+/**
+ * Create blade sprite procedurally - renders letters instead of pyramids
+ * @param {string} orientation - Blade orientation
+ * @param {number} blockSize - Size of one block in pixels
+ * @param {string} color - Hex color string for the blade
+ * @param {number} bladeCount - Number of letters to render
+ * @param {string} letter - Glyph to render (defaults to 'A')
  * @returns {string} Base64 encoded sprite data
  */
-function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
+function createBladeSprite(orientation, blockSize, color, bladeCount = 3, letter = 'A') {
   //
   // Font settings
   //
@@ -716,7 +810,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
   const tempCanvas = document.createElement('canvas')
   const tempCtx = tempCanvas.getContext('2d')
   tempCtx.font = `${fontSize}px ${fontFamily}`
-  const letterText = 'A'.repeat(bladeCount)
+  const letterText = letter.repeat(bladeCount)
   const metrics = tempCtx.measureText(letterText)
   const textWidth = metrics.width + (bladeCount - 1) * letterSpacing
   const textHeight = fontSize * 1.4
@@ -757,7 +851,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
     for (let i = 0; i < bladeCount; i++) {
       const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
       offsets.forEach(([offsetX, offsetY]) => {
-        ctx.fillText('A', letterX + offsetX, baseY + offsetY)
+        ctx.fillText(letter, letterX + offsetX, baseY + offsetY)
       })
     }
     
@@ -767,7 +861,7 @@ function createBladeSprite(orientation, blockSize, color, bladeCount = 3) {
     ctx.fillStyle = getHex(color)
     for (let i = 0; i < bladeCount; i++) {
       const letterX = baseX + i * (fontSize * 0.6 + letterSpacing)
-      ctx.fillText('A', letterX, baseY)
+      ctx.fillText(letter, letterX, baseY)
     }
   })
 }

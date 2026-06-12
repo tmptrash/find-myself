@@ -92,6 +92,10 @@ const ROOT_RUNNER_FONT_MAX = 13
 const ROOT_RUNNER_FONT_MIN = 4
 const ROOT_RUNNER_OPACITY = 0.58
 const ROOT_RUNNER_FADE_SPEED = 2.0
+//
+// Lerp rate for easing the root-runner colour toward its target (calm green / revert)
+//
+const ROOT_RUNNER_COLOR_LERP = 2.2
 const LAYER_DRAW_OPACITY = 1
 //
 // Size ranges — wide spread so each level start feels unique
@@ -262,6 +266,21 @@ export function create(config) {
   k.onUpdate(() => onUpdate(inst))
   k.onDraw(() => onDraw(inst))
   return inst
+}
+
+/**
+ * Recolours the words running along the brain roots (e.g. green while the hero
+ * stands on the calm platform). Pass null to restore the default colour.
+ * @param {Object} inst - Consciousness layers inst
+ * @param {Object|null} color - Kaplay color, or null to revert to default
+ */
+export function setRootRunnerColor(inst, color) {
+  if (!inst) return
+  //
+  // Set a target colour; updateRootRunners eases the live colour toward it so
+  // the transition is gradual rather than an instant recolour.
+  //
+  inst.rootRunnerColorTarget = color ?? inst.rootRunnerColorDefault
 }
 
 //
@@ -516,9 +535,12 @@ function spawnBrainRoots(inst) {
   inst.rootSegMap = segMap
   inst.rootStartSegs = startSegs
   //
-  // Cache constant runner color — avoids k.rgb() allocation every frame in drawRootRunners
+  // Live runner color plus a default + target so the calm platform can fade it
+  // gradually toward green and back (lerped each frame in updateRootRunners).
   //
   inst.rootRunnerColor = k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
+  inst.rootRunnerColorDefault = k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
+  inst.rootRunnerColorTarget = k.rgb(BRAIN_ROOT_RUNNER_COLOR_R, BRAIN_ROOT_RUNNER_COLOR_G, BRAIN_ROOT_RUNNER_COLOR_B)
 }
 
 //
@@ -756,6 +778,17 @@ function updateCenterBrain(inst, dt) {
 function updateRootRunners(inst, dt) {
   if (!inst.rootSegMap) return
   const { rootRunners, rootStartSegs, rootSegMap } = inst
+  //
+  // Ease the live runner colour toward its target (gradual calm green / revert)
+  //
+  const cur = inst.rootRunnerColor
+  const tgt = inst.rootRunnerColorTarget
+  if (cur && tgt) {
+    const t = Math.min(1, ROOT_RUNNER_COLOR_LERP * dt)
+    cur.r += (tgt.r - cur.r) * t
+    cur.g += (tgt.g - cur.g) * t
+    cur.b += (tgt.b - cur.b) * t
+  }
   //
   // Periodically spawn a new runner from a random arm at the brain center
   //

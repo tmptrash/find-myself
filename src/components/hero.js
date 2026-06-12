@@ -54,6 +54,13 @@ const CONFUSION_NORMAL_JUMP_NAMES = ['up', 'w', 'space']
 const JUMP_FRAME_COUNT = 6
 const JUMP_SQUASH_TIME = 0.03
 const JUMP_STRETCH_START = 0.1
+//
+// While ascending/at peak the hero tucks its legs up, so the collision box is
+// shortened from the bottom by this many pixels. Once the descent velocity
+// passes the release threshold (landing phase) the box is restored to full.
+//
+const JUMP_TUCK_AMOUNT = 22
+const JUMP_TUCK_RELEASE_VELOCITY = 200
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -342,6 +349,10 @@ export function create(config) {
     onAnnihilation,
     currentLevel,
     bodyColor: effectiveBodyColor,        // Store effective body color (not null)
+    outlineColor: effectiveOutlineColor,  // Store effective outline color for re-baking
+    addMouth,                             // Feature flags persisted for runtime recolour
+    addArms,
+    addWatch,
     spritePrefix,
     dustColor,
     speed: CFG.game.moveSpeed,
@@ -371,6 +382,16 @@ export function create(config) {
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
     isInvulnerable: false,  // Flag for spawn invulnerability
     controlsReversed: false,  // Flag for control inversion (time section level 3)
+    annihilationLocked: false, // When true, touching the anti-hero does not annihilate
+    //
+    // Base collision-box params (in local sprite space) cached so the jump
+    // leg-tuck can shrink the box from the bottom and restore it on landing.
+    //
+    collisionBaseOffsetX: collisionOffsetX,
+    collisionBaseOffsetY: collisionOffsetY,
+    collisionBaseWidth: collisionWidth,
+    collisionBaseHeight: collisionHeight,
+    jumpTucked: false,          // True while the jump leg-tuck shortened the box
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
@@ -628,17 +649,39 @@ export function setLookAtPos(inst, pos) {
 }
 
 /**
- * Enables keyboard control on a previously non-controllable character at
- * runtime (e.g. the word level 4 confusion outcome that hands control to the
- * anti-hero). Marks it spawned, controllable, and registers its key handlers.
- * @param {Object} inst - Hero/anti-hero instance
+ * Recolours an existing anti-hero's body at runtime, rebaking its sprites and
+ * swapping the visible sprite, then plays a sparkle + sound flourish. Mirrors
+ * the touch level 1 grey→active transformation so other sections can reuse it.
+ * @param {Object} inst - Anti-hero instance
+ * @param {string} bodyColorHex - New body colour (hex, with or without leading #)
  */
-export function enableControl(inst) {
-  if (!inst || inst.controllable) return
-  inst.controllable = true
-  inst.controlsDisabled = false
-  inst.isSpawned = true
-  setupControls(inst)
+export function recolorAntiHero(inst, bodyColorHex) {
+  const { k } = inst
+  if (!inst.character?.exists?.()) return
+  inst.bodyColor = bodyColorHex
+  const newHex = String(bodyColorHex).replace('#', '')
+  const outlineHex = String(inst.outlineColor || CFG.visual.colors.outline).replace('#', '')
+  //
+  // Rebuild the sprite prefix with the new body colour, keeping feature flags
+  //
+  inst.spritePrefix = `${inst.type}_${newHex}_${outlineHex}${inst.addMouth ? '_mouth' : ''}${inst.addArms ? '_arms' : ''}${inst.addWatch ? '_watch' : ''}`
+  loadHeroSprites(inst)
+  //
+  // Wait a frame for the sprites to bake, then swap the visible sprite and flourish
+  //
+  k.wait(0.05, () => {
+    if (!inst.character?.exists?.()) return
+    try {
+      inst.character.use(k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
+    } catch (error) {
+      //
+      // Sprite not ready — the tint fallback below still snaps to the new colour
+      //
+    }
+    inst.character.color = k.rgb(255, 255, 255)
+    createColorChangeSparkles(inst, bodyColorHex)
+    inst.sfx && Sound.playMouthSound(inst.sfx)
+  })
 }
 
 /**
@@ -1090,6 +1133,11 @@ function onUpdate(inst) {
     const prefix = inst.spritePrefix || inst.type
     const velocity = inst.character.vel.y
     //
+    // Tuck the collision box up while rising/at peak (legs pulled in); restore
+    // it once the descent crosses the landing-phase velocity threshold.
+    //
+    setJumpTuck(inst, velocity < JUMP_TUCK_RELEASE_VELOCITY)
+    //
     // Determine jump frame based on vertical velocity
     //
     // Frame 0: squash (pre-jump, on ground only)
@@ -1167,6 +1215,10 @@ function onUpdate(inst) {
       inst.isSquashing = false
       inst.squashTimer = 0
     }
+    //
+    // Restore the full collision box once the hero is back on the ground
+    //
+    setJumpTuck(inst, false)
   }
 
   if (isMoving) {
@@ -1216,6 +1268,25 @@ function onUpdate(inst) {
   // Mirror based on direction
   //
   inst.character.flipX = inst.direction === -1
+}
+//
+// Shrinks the hero collision box from the bottom while the legs are tucked
+// during a jump, and restores it when grounded/landing. The box top edge stays
+// fixed: height drops by JUMP_TUCK_AMOUNT and the center rises by half of that.
+//
+function setJumpTuck(inst, tucked) {
+  if (tucked === inst.jumpTucked) return
+  const area = inst.character.area
+  if (!area) return
+  inst.jumpTucked = tucked
+  const reduce = tucked ? JUMP_TUCK_AMOUNT : 0
+  const height = inst.collisionBaseHeight - reduce
+  const offsetY = inst.collisionBaseOffsetY - reduce / 2
+  area.shape = new inst.k.Rect(
+    inst.k.vec2(inst.collisionBaseOffsetX, offsetY),
+    inst.collisionBaseWidth,
+    height
+  )
 }
 
 /**
@@ -1708,6 +1779,11 @@ function onCollisionPlatform(inst) {
  */
 export function onAnnihilationCollide(inst) {
   if (inst.isAnnihilating) return
+  //
+  // Annihilation can be temporarily locked (e.g. word level 4 keeps the grey
+  // anti-hero inert until the hero calms it). While locked, touching does nothing.
+  //
+  if (inst.annihilationLocked) return
 
   inst.isAnnihilating = true
   //

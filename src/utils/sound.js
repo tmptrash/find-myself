@@ -19,6 +19,20 @@ let globalSubtitleSound = null
 // Global mute flag for procedural sounds (used during transitions)
 //
 let globalMuteProceduralSounds = false
+//
+// Master volume ceiling for the calm pad (word level 4 calm platform)
+//
+const CALM_PAD_MASTER = 0.13
+//
+// Sustained drone (Hz) for the calm pad — octaves + a perfect fifth (no third),
+// the classic open "om" voicing that reads as a meditation mantra.
+//
+const CALM_PAD_FREQS = [55, 110, 164.81, 220]
+//
+// Slow mantra "breathing" swell applied to the whole pad (Hz + depth)
+//
+const CALM_PAD_CHANT_RATE = 0.16
+const CALM_PAD_CHANT_DEPTH = 0.34
 /**
  * Create sound instance with AudioContext and all audio resources
  * @returns {Object} Sound instance with context, gains, and ambient state
@@ -1985,6 +1999,108 @@ export function setGlitchSoundVolume(instance, volume) {
   if (instance.glitchSoundGain) {
     instance.glitchSoundGain.gain.value = Math.max(0, Math.min(1, volume))
   }
+}
+/**
+ * Get the current glitch (eerie drone) gain so it can be faded and restored.
+ * @param {Object} instance - Sound instance
+ * @returns {number} Current glitch gain (0-1)
+ */
+export function getGlitchSoundVolume(instance) {
+  return instance.glitchSoundGain ? instance.glitchSoundGain.gain.value : 0
+}
+/**
+ * Starts a soft sustained calm pad (gentle low major chord with slow tremolo).
+ * Idempotent — calling twice has no effect. Begins silent; fade in with
+ * setCalmPadVolume(). Used by the word level 4 calm platform.
+ * @param {Object} instance - Sound instance
+ */
+export function startCalmPad(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running' || instance.calmPad) return
+  const now = ctx.currentTime
+  //
+  // Signal chain: voices → lowpass filter → chant swell gain → output gain →
+  // destination. The output gain is the fade handle; the chant gain carries the
+  // slow mantra breathing so it is independent of the fade volume.
+  //
+  const out = ctx.createGain()
+  out.gain.value = 0.0001
+  const chant = ctx.createGain()
+  chant.gain.value = 1 - CALM_PAD_CHANT_DEPTH
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 760
+  filter.Q.value = 0.5
+  filter.connect(chant)
+  chant.connect(out)
+  out.connect(ctx.destination)
+  //
+  // Slow swell LFO that makes the drone "breathe" like a chanted mantra
+  //
+  const chantLfo = ctx.createOscillator()
+  const chantLfoGain = ctx.createGain()
+  chantLfo.frequency.value = CALM_PAD_CHANT_RATE
+  chantLfoGain.gain.value = CALM_PAD_CHANT_DEPTH
+  chantLfo.connect(chantLfoGain)
+  chantLfoGain.connect(chant.gain)
+  chantLfo.start(now)
+  //
+  // One gently-detuned sine per drone note, each with a slow tremolo LFO
+  //
+  const oscillators = [chantLfo]
+  CALM_PAD_FREQS.forEach((freq, i) => {
+    const osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.value = freq
+    osc.detune.value = (i - 1.5) * 3
+    const voice = ctx.createGain()
+    voice.gain.value = i === 0 ? 0.5 : 0.28
+    const lfo = ctx.createOscillator()
+    const lfoGain = ctx.createGain()
+    lfo.frequency.value = 0.07 + i * 0.025
+    lfoGain.gain.value = 0.1
+    lfo.connect(lfoGain)
+    lfoGain.connect(voice.gain)
+    osc.connect(voice)
+    voice.connect(filter)
+    osc.start(now)
+    lfo.start(now)
+    oscillators.push(osc, lfo)
+  })
+  instance.calmPad = { out, oscillators }
+}
+/**
+ * Fades the calm pad toward a target volume (0-1, scaled by the soft master).
+ * @param {Object} instance - Sound instance
+ * @param {number} volume - Target level 0-1
+ */
+export function setCalmPadVolume(instance, volume) {
+  if (!instance.calmPad) return
+  const ctx = instance.audioContext
+  const target = Math.max(0.0001, Math.min(1, volume) * CALM_PAD_MASTER)
+  instance.calmPad.out.gain.setTargetAtTime(target, ctx.currentTime, 0.12)
+}
+/**
+ * Fades out and stops the calm pad, releasing its oscillators.
+ * @param {Object} instance - Sound instance
+ */
+export function stopCalmPad(instance) {
+  if (!instance.calmPad) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const { out, oscillators } = instance.calmPad
+  out.gain.setTargetAtTime(0.0001, now, 0.2)
+  oscillators.forEach(osc => {
+    try {
+      osc.stop(now + 0.6)
+    } catch (error) {
+      //
+      // Oscillator already stopped — safe to ignore
+      //
+    }
+  })
+  instance.calmPad = null
 }
 /**
  * Start clock ticking sound for time section

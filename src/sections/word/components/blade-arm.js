@@ -17,12 +17,10 @@ const LEG_SPACING = 50  // Horizontal spacing between legs
 const STEP_HEIGHT = 18  // How high to lift foot during step
 const STEP_LENGTH = 50  // How far forward to step (increased for more forward reach)
 //
-// Return-as-friend behaviour: after walking off the right edge the creature comes
-// back as a harmless "friend" platform the hero can jump onto.
+// Wrap-around behaviour: when the creature walks off the right edge it
+// re-enters from the left and keeps walking right, looping forever.
 //
-const RETURN_FRIEND_TEXT = 'friend'
-const FRIEND_COLOR = '#6BCB77'         // Friendly green once it returns
-const OFFSCREEN_MARGIN = 140           // Extra px past the right edge before turning around
+const OFFSCREEN_MARGIN = 140           // Extra px past the right edge before wrapping
 const STEP_DURATION = 0.32  // Duration of one step (seconds) — snappier, more dynamic gait
 //
 // Per-leg step-trigger lag (fraction of STEP_LENGTH the foot falls behind the
@@ -223,7 +221,12 @@ export function create(config) {
   const collisionArea = k.add([
     k.pos(startX, y),
     k.rect(textWidth, collisionHeight),
-    k.area(),
+    //
+    // Ignore anti-heroes (tagged 'annihilation') so the creature walks past/behind
+    // them instead of shoving them with its static body. The hero ('player') still
+    // collides so it can stand on and ride the creature.
+    //
+    k.area({ collisionIgnore: ['annihilation'] }),
     k.body({ isStatic: true }),
     k.opacity(0),
     k.anchor('center'),
@@ -271,15 +274,14 @@ export function create(config) {
     heroIsDead: false,  // Flag to stop movement after killing hero
     isFrozen: false,
     freezeTimeRemaining: 0,
+    walkDir: 1,                                   // +1 right (used by leg gait)
+    isFriend: false,                              // True when shot with a kind word (handleCollision no-ops)
+    startX,                                        // Left re-entry point used by the wrap-around
+    offscreenX: screenWidth + textWidth + OFFSCREEN_MARGIN,  // Wrap point past the right edge
     //
-    // Walking phase: 'forward' (lethal "fear", moving right) →
-    // 'returning' (harmless "friend" platform, moving left)
+    // Held still while standing on the calm platform (word level 4)
     //
-    phase: 'forward',
-    walkDir: 1,                                   // +1 right, -1 left (used by leg gait)
-    isFriend: false,                              // True once it returns as a platform
-    offscreenX: screenWidth + textWidth + OFFSCREEN_MARGIN,  // Turnaround point past right edge
-    leftStopX: sideWallWidth + (maxX - sideWallWidth) * 0.45 // Where the friend platform settles
+    calmStopped: false
   }
   
   //
@@ -288,9 +290,19 @@ export function create(config) {
   collisionArea.onUpdate(() => updateWalkingCreature(inst))
   
   //
-  // Draw legs
+  // Draw the legs from a real game object placed in the same z-slot as the body
+  // (just in front of it) instead of a global onDraw. This keeps the whole
+  // creature — body text + legs — on one level that renders in front of the
+  // anti-hero (player z), rather than the legs floating on a separate layer.
   //
-  k.onDraw(() => drawLegs(inst))
+  k.add([
+    k.z(CFG.visual.zIndex.platforms - 1),
+    {
+      draw() {
+        drawLegs(inst)
+      }
+    }
+  ])
   
   //
   // Handle collision with text
@@ -356,35 +368,6 @@ function handleCollision(inst) {
   } else {
   Hero.death(inst.hero, () => inst.k.go(inst.currentLevel))
   }
-}
-
-/**
- * Transforms the lethal "fear" creature into the harmless "friend" platform:
- * relabels every text object, recolours it green, flips its walking direction,
- * and switches to the returning phase. The static body stays solid so the hero
- * can jump onto it, but handleCollision now no-ops.
- * @param {Object} inst - Walking creature instance
- */
-function becomeFriend(inst) {
-  if (inst.isFriend) return
-  inst.isFriend = true
-  inst.phase = 'returning'
-  inst.walkDir = -1
-  const friendColor = inst.k.rgb(...parseHex(FRIEND_COLOR))
-  //
-  // Relabel every outline + main text object and recolour the main text
-  //
-  inst.textObjects.forEach((obj, index) => {
-    obj.text = RETURN_FRIEND_TEXT
-    //
-    // The last text object is the coloured main text; outlines stay black
-    //
-    index === inst.textObjects.length - 1 && (obj.color = friendColor)
-  })
-  //
-  // Recolour the legs to match the friendly main text
-  //
-  inst.bladeColor = friendColor
 }
 
 /**
@@ -634,28 +617,27 @@ function updateWalkingCreature(inst) {
   inst.currentSpeed += (targetSpeed - inst.currentSpeed) * dt * 5  // Fast transition
   
   //
-  // Move creature according to its phase — held in place while it is blocked by
-  // an anti-hero standing in its way (e.g. the confusion decoys)
+  // Move creature right, wrapping back to the left edge once it walks off the
+  // right side. Held in place only while the hero stands on the calm platform —
+  // anti-heroes no longer stop it; the creature simply walks past behind them.
   //
-  if (!inst.stoppedByAntihero) {
-    if (inst.phase === 'forward') {
-      //
-      // "fear" walks right, off the right edge, then turns into the friend platform
-      //
-      inst.creatureContainer.pos.x += inst.currentSpeed * dt
-      inst.collisionArea.pos.x = inst.creatureContainer.pos.x
-      if (inst.creatureContainer.pos.x > inst.offscreenX) {
-        becomeFriend(inst)
-      }
-    } else if (inst.phase === 'returning') {
-      //
-      // "friend" walks back left until it settles, remaining a standable platform
-      //
-      if (inst.creatureContainer.pos.x > inst.leftStopX) {
-        inst.creatureContainer.pos.x -= inst.currentSpeed * dt
-        inst.collisionArea.pos.x = inst.creatureContainer.pos.x
-      }
+  if (!inst.calmStopped) {
+    inst.creatureContainer.pos.x += inst.currentSpeed * dt
+    //
+    // Wrap-around: re-enter from the left start and keep walking right forever.
+    // The feet live in world space, so shift them by the same teleport delta —
+    // otherwise the legs stretch from the old right-edge feet to the new body.
+    //
+    if (inst.creatureContainer.pos.x > inst.offscreenX) {
+      const wrapDelta = inst.startX - inst.creatureContainer.pos.x
+      inst.creatureContainer.pos.x = inst.startX
+      inst.legs.forEach(leg => {
+        leg.footX += wrapDelta
+        leg.startX += wrapDelta
+        leg.targetX += wrapDelta
+      })
     }
+    inst.collisionArea.pos.x = inst.creatureContainer.pos.x
   }
   
   //

@@ -48,6 +48,28 @@ const IDLE_SPEECH_PHRASES = [
   "no way out",
   "I mess up"
 ]
+//
+// Pleasant phrases emitted while the hero stands on the calm platform (level 4)
+//
+const CALM_SPEECH_PHRASES = [
+  "I'm happy",
+  "I'm calm",
+  "I'm okay",
+  "I can do this",
+  "I'm enough",
+  "it's alright",
+  "I'm at peace",
+  "I'm safe",
+  "I belong",
+  "I'm free",
+  "I matter",
+  "breathe"
+]
+//
+// Green tint for the calm pleasant wisps (matches the calm platform palette)
+//
+const CALM_WISP_COLOR = [107, 203, 119]
+const WISP_COLOR = [180, 180, 190]
 
 /**
  * Spawns drifting letters from the hero mouth while idle in word levels
@@ -61,10 +83,23 @@ export function create(k, heroInst) {
     k,
     heroInst,
     timer: 0,
+    //
+    // When true the hero emits pleasant green phrases instead of insecurity ones
+    //
+    calm: false,
     nextDelay: SPAWN_INTERVAL_MIN + Math.random() * SPAWN_INTERVAL_EXTRA
   }
   k.onUpdate(() => onUpdate(inst))
   return inst
+}
+
+/**
+ * Switches the hero's idle mouth wisps between insecurity and calm phrases.
+ * @param {Object} inst - Speech inst (may be null outside word levels)
+ * @param {boolean} calm - True to emit pleasant green phrases
+ */
+export function setCalm(inst, calm) {
+  inst && (inst.calm = calm)
 }
 
 //
@@ -96,7 +131,9 @@ function onUpdate(inst) {
 function spawnMouthWisp(inst) {
   const { k, heroInst } = inst
   const ch = heroInst.character
-  const text = IDLE_SPEECH_PHRASES[Math.floor(Math.random() * IDLE_SPEECH_PHRASES.length)]
+  const phrases = inst.calm ? CALM_SPEECH_PHRASES : IDLE_SPEECH_PHRASES
+  const text = phrases[Math.floor(Math.random() * phrases.length)]
+  const [cr, cg, cb] = inst.calm ? CALM_WISP_COLOR : WISP_COLOR
   const faceSide = heroInst.direction || 1
   const mouthSideX = MOUTH_SIDE_OFFSET * faceSide
   const driftX = (Math.random() - 0.5) * WISP_DRIFT_RANGE
@@ -107,7 +144,7 @@ function spawnMouthWisp(inst) {
     }),
     k.pos(ch.pos.x + mouthSideX + driftX, ch.pos.y + MOUTH_Y_OFFSET),
     k.anchor('center'),
-    k.color(180, 180, 190),
+    k.color(cr, cg, cb),
     k.opacity(0.85),
     k.z(WISP_Z)
   ])

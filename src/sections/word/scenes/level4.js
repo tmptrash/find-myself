@@ -6,12 +6,16 @@ import * as Blades from '../components/blades.js'
 import * as MovingPlatform from '../../../components/moving-platform.js'
 import * as BladeArm from '../components/blade-arm.js'
 import * as FlyingWords from '../components/flying-words.js'
+import * as WordDreamingEyes from '../utils/word-dreaming-eyes.js'
+import * as WordHeroIdleSpeech from '../utils/word-hero-idle-speech.js'
+import * as WordConsciousnessLayers from '../utils/word-consciousness-layers.js'
 import * as WordPitFill from '../utils/word-pit-fill.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
+import * as Tooltip from '../../../utils/tooltip.js'
 import * as LevelHelp from '../../../utils/level-help.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as Sound from '../../../utils/sound.js'
@@ -69,11 +73,6 @@ const CREATURE_WORDS = [
 // How close (px) the walking creature must be to a pit for it to close so it can cross
 //
 const MONSTER_PIT_CLOSE_DISTANCE = 170
-//
-// Extra reach (px) beyond the creature's half-width at which a decoy anti-hero
-// in its path makes it stop
-//
-const MONSTER_ANTIHERO_BLOCK_DISTANCE = 70
 const CREATURE_HIT_DISTANCE = 50
 const SHOOT_KEYS = ['shift', 'ShiftLeft', 'ShiftRight']
 const INSTRUCTIONS_SHOW_MAX = 2
@@ -102,19 +101,25 @@ const FLYING_WORD_MAX_SPEED = 85
 //
 const LEVEL4_KILLER_WORDS = ['end', 'cut', 'kill', 'drop']
 //
-// First pit is moved left so an empty gap appears between the two pits
+// Pits and platforms are shifted left so a calm platform + the anti-hero fit on
+// the right. The hero also starts further left (see customHeroX below).
 //
-const PIT1_DISTANCE_RATIO = 0.22   // Was 1/3 — shifted left to make room for confusion platform
+const PIT1_DISTANCE_RATIO = 0.12   // First pit, very close to the hero start
+const PIT2_DISTANCE_RATIO = 0.5    // Second pit, moved left to open right-side room
+//
+// Extra leftward shift of the hero spawn (and, by extension, the first pit)
+//
+const HERO_EXTRA_LEFT = 120
 //
 // "confusion" word — a solid floating platform shaped like a killer word.
 // The hero cannot pass underneath it; they must jump on top, which triggers
 // one of several random "confusion" effects.
 //
+const CONFUSION_WORD_TEXT = 'chaos'      // Word shown on the confusion platform
 const CONFUSION_FONT_SIZE = 30
 const CONFUSION_TEXT_COLOR = '#4AC6F5'   // Same blue as killer words
 const CONFUSION_HOVER_Y = 62             // Pixels above floor where the platform floats
-const CONFUSION_DETECT_HALF_W = 95       // Half-width of the on-top detection zone
-const CONFUSION_BODY_WIDTH = 168         // Solid collision body width
+const CONFUSION_BODY_PAD = 6             // Small horizontal margin added to the measured glyph width
 const CONFUSION_BODY_HEIGHT = 20         // Solid collision body height (tight around the word)
 const CONFUSION_TOP_TOLERANCE = 26       // Hero-feet distance from top counted as "standing on it"
 //
@@ -132,14 +137,15 @@ const CONFUSION_ACTIONS = ['moveLeft', 'moveRight', 'jump']
 //
 // Confusion landing outcomes — one is chosen at random each time the hero lands:
 // remap controls, swap hero/anti-hero places, spawn decoy anti-heroes, return the
-// hero to the start, hand control to the anti-hero, or shatter into killer letters.
+// hero to the start, or shatter into killer letters. (Control-handoff was removed
+// because the anti-hero is inert until calmed, which would soft-lock the player.)
 //
-const CONFUSION_OUTCOMES = ['remap', 'swap', 'decoys', 'return', 'control', 'shatter']
+const CONFUSION_OUTCOMES = ['remap', 'swap', 'decoys', 'return', 'shatter']
 //
 // Shatter outcome: confusion breaks into just three scattering killer letters
 //
 const CONFUSION_SHATTER_LETTER_SIZE = 30
-const CONFUSION_SHATTER_LETTERS = ['c', 'o', 'n']     // Three letters of "confusion"
+const CONFUSION_SHATTER_LETTERS = ['c', 'h', 'a']     // Three letters of "chaos"
 const CONFUSION_SHATTER_DELAY = 0.7      // Telegraph pause before it breaks — time to jump off
 //
 // Tight collision box for a scattered letter — smaller than the baked sprite so
@@ -154,6 +160,43 @@ const DECOY_COUNT = 2
 const DECOY_SPREAD = 150                 // Distance kept from the playfield edges
 const DECOY_MIN_SEPARATION = 200         // Minimum horizontal gap between any two anti-heroes
 const DECOY_CONFUSION_CLEARANCE = 130    // Keep anti-heroes this far from the confusion platform center
+//
+// "calm" word — a friendly green floating platform placed after the last blades.
+// Standing on it fades out the ambient murmur/breath, turns flying words green and
+// harmless, makes the monster a green "happy", and shuts the brain's eyes.
+// Once the ambient fully fades, the grey anti-hero turns red and can be annihilated.
+//
+const CALM_WORD_TEXT = 'calm'
+const CALM_FONT_SIZE = 30
+const CALM_TEXT_COLOR = '#4AC6F5'        // Calm platform is blue (matches the killer-word blue)
+const CALM_HOVER_Y = 150                 // Raised so it is only reachable by jumping off the monster
+const CALM_BODY_PAD = 6                  // Small horizontal margin added to the measured glyph width
+const CALM_BODY_HEIGHT = 20
+const CALM_TOP_TOLERANCE = 26
+const CALM_FADE_DURATION = 4.0           // Seconds standing on calm to fully silence ambient
+const CALM_AUDIO_RESTORE_TIME = 1.4      // Seconds to fade the ambient back up after leaving calm
+const CALM_READY_TIME = 2.0              // Accumulated seconds on calm before stepping off turns the anti-hero red
+const CALM_MONSTER_WORD = 'happy'        // Word shown on the monster while calm
+const CALM_MONSTER_COLOR = '#6BCB77'     // Friendly green for the monster + UUU blades + root runners + calm platform
+//
+// While calm, breath.mp3 swells to this multiple of its base volume (it becomes
+// the calming breathing) and a soft calm pad fades in; both revert on leaving.
+//
+const CALM_BREATH_MULT = 2.8
+//
+// Riding the green (friendly) monster: how close the hero's feet must be to the
+// monster's top, and the per-frame move cap that ignores the wrap-around teleport.
+//
+const MONSTER_RIDE_TOLERANCE = 36
+const MONSTER_RIDE_WRAP_GUARD = 40
+const CALM_HINT_TEXT = "you're not ready yet. you need to calm down..."
+const CALM_HINT_DURATION = 1.6           // Seconds the grey anti-hero hint stays up
+const ANTIHERO_GRAY_COLOR = '#B0B0B0'    // Inert grey anti-hero (until calmed)
+const ANTIHERO_RED_COLOR = '#DC143C'     // Active red anti-hero (after calm)
+//
+// Engine time of the last calm hint bubble — throttles repeated touch collisions
+//
+let lastCalmHintTime = -999
 //
 // "forget" floating platform — disappears a few seconds after hero lands, then reappears
 //
@@ -323,17 +366,17 @@ export function sceneLevel4(k) {
     // Save heroScore at level start for restoration on death
     //
     const heroScoreAtStart = get('heroScore', 0)
-    // Calculate hero position shifted right by 3 blade widths
+    // Hero starts further left so the first pit + AAA shift left with it
     const singleBladeWidth = Blades.getSingleBladeWidth(k)
-    const customHeroX = HERO_SPAWN_X_BASE + singleBladeWidth * 3  // Shift right by 3 pyramids
+    const customHeroX = HERO_SPAWN_X_BASE - HERO_EXTRA_LEFT
     const leftX = Math.min(customHeroX, ANTIHERO_SPAWN_X)
     const rightX = Math.max(customHeroX, ANTIHERO_SPAWN_X)
     const distance = rightX - leftX
     
     // Moving platforms at 1/3 and 2/3 distance
     const bladeWidth = Blades.getBladeWidth(k)
-    const movingPlatform1X = leftX + distance * PIT1_DISTANCE_RATIO  // Shifted left to make room for FEAR
-    const movingPlatform2X = leftX + distance * 2 / 3  // Second platform at 2/3 distance
+    const movingPlatform1X = leftX + distance * PIT1_DISTANCE_RATIO  // First pit near the hero
+    const movingPlatform2X = leftX + distance * PIT2_DISTANCE_RATIO  // Second pit moved left
     
     //
     // Define platform gaps
@@ -352,11 +395,17 @@ export function sceneLevel4(k) {
     ]
     
     // Initialize level with heroes and two gaps in the bottom platform
-    const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
+    const { sound, hero, antiHero, dreamingEyes, heroSpeech, consciousnessLayers, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
       levelName: 'level-word.4',
       levelNumber: 5,
       nextLevel: 'word-complete',
+      //
+      // Anti-hero starts grey and silent — it only turns red (and becomes
+      // annihilable) once the hero calms the level on the calm platform.
+      //
+      antiHeroBodyColor: ANTIHERO_GRAY_COLOR,
+      antiHeroSilent: true,
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
       subTitle: "when feelings grow dull, words become sharper",
@@ -372,6 +421,7 @@ export function sceneLevel4(k) {
       platformGap: platformGaps,
       onAnnihilation: () => {
         breathMusic && breathMusic.stop && breathMusic.stop()
+        sound && Sound.stopCalmPad(sound)
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
         const speedBonusEarned = checkSpeedBonus(k, 'level-word.4', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
@@ -386,6 +436,11 @@ export function sceneLevel4(k) {
       }
     })
     
+    //
+    // Anti-hero stays inert (grey) until calmed; touching it only shows a hint
+    //
+    hero.annihilationLocked = true
+    antiHero.character.onCollide('player', () => onGrayAntiHeroTouch(k, hero, antiHero))
     //
     // Calculate platform boundaries for flying words
     //
@@ -431,7 +486,12 @@ export function sceneLevel4(k) {
       killerLetterCount: 5,  // Level 4: 5 killer letters
       killerWords: LEVEL4_KILLER_WORDS,  // Only short words for visual clarity
       minSpeed: FLYING_WORD_MIN_SPEED,   // Slower drift than the default
-      maxSpeed: FLYING_WORD_MAX_SPEED
+      maxSpeed: FLYING_WORD_MAX_SPEED,
+      //
+      // Hide the atmospheric drifting words — only killer letters and the brain
+      // root-runner words remain in level 4.
+      //
+      showRegularWords: false
     })
     
     //
@@ -561,15 +621,47 @@ export function sceneLevel4(k) {
     }
     createConfusionWord(k, confusionWordX, confusionWordY, confusionCtx)
     //
-    // Stop the walking creature when it bumps into a decoy anti-hero
-    //
-    setupMonsterAntiheroBlock(k, bladeArm, confusionCtx)
-    //
     // Single "forget" floating platform — placed to the left of the first pit and
     // raised enough that the hero clears its underside when jumping past it.
     //
     const forgetFloorY = platformY
     createForgetPlatform(k, movingPlatform1X - 240, forgetFloorY - 85, sound, hero)
+    //
+    // "calm" platform sits between the last blades and the anti-hero. Standing on
+    // it fades the ambient, greens the words/monster, shuts the brain eyes, and
+    // (once silent) turns the grey anti-hero red so it can finally be annihilated.
+    //
+    const calmRightX = staticBlades2X + bladeWidth / 2 + (ANTIHERO_SPAWN_X - staticBlades2X - bladeWidth / 2) * 0.5
+    //
+    // Left-side parking spot (just right of the hero start) used when the chaos
+    // swap drops the hero next to the calm platform on the right.
+    //
+    const calmLeftX = leftX + 130
+    const calmWordY = platformY - CALM_HOVER_Y
+    const calmCtx = {
+      sound,
+      breathMusic,
+      hero,
+      antiHero,
+      flyingWords,
+      bladeArm,
+      dreamingEyes,
+      heroSpeech,
+      consciousnessLayers,
+      bladeInsts: [staticBlades, staticBlades2],
+      completed: false
+    }
+    const calmPlatform = createCalmPlatform(k, calmRightX, calmLeftX, calmWordY, calmCtx)
+    //
+    // Let the chaos outcomes relocate the calm platform (anti-cheese on swap/return)
+    //
+    confusionCtx.calm = calmPlatform
+    //
+    // Carry the hero along while it rides the friendly (green) monster, so it can
+    // be used as a moving step up to the raised calm platform.
+    //
+    const monsterRide = { lastX: bladeArm.collisionArea.pos.x }
+    k.onUpdate(() => updateMonsterRide(hero, bladeArm, monsterRide))
     WordBladeProximity.create({
       k,
       hero,
@@ -731,6 +823,20 @@ function getBulletSpriteKey(k, letter) {
 }
 
 /**
+ * Measures the rendered pixel width of a word at a given font size.
+ * @param {Object} k - Kaplay instance (unused, kept for signature consistency)
+ * @param {string} text - Word to measure
+ * @param {number} size - Font size in pixels
+ * @returns {number} Rendered width in pixels
+ */
+function measureWordWidth(k, text, size) {
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const measureCtx = document.createElement('canvas').getContext('2d')
+  measureCtx.font = `${size}px "${fontFamily}"`
+  return measureCtx.measureText(text).width
+}
+
+/**
  * Bakes a word into a sprite (coloured fill + 8-direction black outline) once
  * and caches it, returning {key, w, h}. Used by the confusion and forget word
  * platforms so they draw one sprite per frame instead of nine drawText calls.
@@ -797,41 +903,6 @@ function onUpdatePitsForMonster(k, bladeArm, platforms) {
     const near = Math.abs(monsterX - mp.platform.pos.x) < MONSTER_PIT_CLOSE_DISTANCE
     MovingPlatform.setMonsterClosed(mp, near)
   })
-}
-
-/**
- * Stops the walking creature when a decoy anti-hero stands in its path.
- * @param {Object} k - Kaplay instance
- * @param {Object} bladeArm - Blade arm creature instance
- * @param {Object} ctx - Confusion context (holds the decoy list)
- */
-function setupMonsterAntiheroBlock(k, bladeArm, ctx) {
-  k.onUpdate(() => onUpdateMonsterAntiheroBlock(k, bladeArm, ctx))
-}
-//
-// Per-frame: block the creature when a decoy is close ahead (or overlapping).
-//
-function onUpdateMonsterAntiheroBlock(k, bladeArm, ctx) {
-  if (!bladeArm?.collisionArea?.exists?.()) {
-    return
-  }
-  const decoys = ctx._decoys
-  if (!decoys || decoys.length === 0) {
-    bladeArm.stoppedByAntihero = false
-    return
-  }
-  const monsterX = bladeArm.collisionArea.pos.x
-  const reach = bladeArm.textWidth / 2 + MONSTER_ANTIHERO_BLOCK_DISTANCE
-  //
-  // Block when a decoy is ahead within reach, or virtually overlapping the body
-  //
-  const blocked = decoys.some(decoy => {
-    if (!decoy?.character?.exists?.()) return false
-    const dx = decoy.character.pos.x - monsterX
-    const ahead = Math.sign(dx) === bladeArm.walkDir
-    return Math.abs(dx) < reach && (ahead || Math.abs(dx) < bladeArm.textWidth / 2)
-  })
-  bladeArm.stoppedByAntihero = blocked
 }
 
 /**
@@ -968,19 +1039,25 @@ function applyCreatureColor(bladeArm, color) {
  * @param {Object} ctx - Outcome context {sound, hero, antiHero, ...}
  */
 function createConfusionWord(k, x, y, ctx) {
+  //
+  // Measure the actual rendered width of "chaos" so the collision body ends
+  // exactly on the first and last letter (the baked sprite has extra padding)
+  //
+  const bodyWidth = measureWordWidth(k, CONFUSION_WORD_TEXT, CONFUSION_FONT_SIZE) + CONFUSION_BODY_PAD
   const state = {
     heroOn: false,
     wobbleTimer: -1,   // negative = not wobbling
     yOffset: 0,
     shattered: false,
-    triggering: false
+    triggering: false,
+    detectHalfW: bodyWidth / 2
   }
   //
   // Solid physics body — blocks passage underneath and acts as a landing platform
   //
   const body = k.add([
-    k.rect(CONFUSION_BODY_WIDTH, CONFUSION_BODY_HEIGHT),
-    k.pos(x - CONFUSION_BODY_WIDTH / 2, y - CONFUSION_BODY_HEIGHT / 2),
+    k.rect(bodyWidth, CONFUSION_BODY_HEIGHT),
+    k.pos(x - bodyWidth / 2, y - CONFUSION_BODY_HEIGHT / 2),
     k.area(),
     k.body({ isStatic: true }),
     k.anchor('topleft'),
@@ -992,7 +1069,7 @@ function createConfusionWord(k, x, y, ctx) {
   // Word visual as a pre-baked sprite (fill + black outline). Far cheaper than
   // re-rendering 9 drawText calls each frame; it just wobbles vertically.
   //
-  const spriteInfo = getWordSpriteInfo(k, 'confusion', CONFUSION_FONT_SIZE, CONFUSION_TEXT_COLOR)
+  const spriteInfo = getWordSpriteInfo(k, CONFUSION_WORD_TEXT, CONFUSION_FONT_SIZE, CONFUSION_TEXT_COLOR)
   const obj = k.add([
     k.sprite(spriteInfo.key, { width: spriteInfo.w, height: spriteInfo.h }),
     k.pos(x, y),
@@ -1012,7 +1089,7 @@ function onUpdateConfusionWord(k, obj, body, state, wordX, wordY, ctx) {
   const heroX = hero.character.pos.x
   const heroFeetY = hero.character.pos.y + 34
   const platformTop = wordY - CONFUSION_BODY_HEIGHT / 2
-  const inRange = Math.abs(heroX - wordX) < CONFUSION_DETECT_HALF_W
+  const inRange = Math.abs(heroX - wordX) < state.detectHalfW
   const onTop = inRange && hero.character.isGrounded() && Math.abs(heroFeetY - platformTop) < CONFUSION_TOP_TOLERANCE
   if (onTop && !state.heroOn && !state.triggering) {
     state.heroOn = true
@@ -1062,8 +1139,6 @@ function applyConfusionOutcome(k, obj, body, state, wordX, wordY, ctx) {
     confusionSpawnDecoys(k, ctx)
   } else if (outcome === 'return') {
     confusionReturnHero(k, ctx)
-  } else if (outcome === 'control') {
-    confusionControlAntiHero(k, ctx)
   } else if (outcome === 'shatter') {
     //
     // Keep the platform solid and wobbling for a short telegraph so the hero
@@ -1176,6 +1251,11 @@ function confusionSwapAntiHero(k, ctx) {
       hero.character.opacity = 1
       spawnConfusionParticles(k, antiX, antiY, hero)
     }
+    //
+    // Hero now stands on the right (next to calm) — move calm to the left so the
+    // swap does not hand the player an easy calm.
+    //
+    ctx.calm?.relocate('left')
   })
 }
 //
@@ -1218,11 +1298,11 @@ function confusionSpawnDecoys(k, ctx) {
       type: Hero.HEROES.ANTIHERO,
       controllable: false,
       sfx: ctx.sound,
-      bodyColor: 'DC143C',
+      bodyColor: ANTIHERO_GRAY_COLOR,  // Decoys are grey like the inert anti-hero
       addMouth: true,
       addArms: true,
       addWatch: true,
-      idleVocalization: null  // Fakes show no mouth notes — only the real one does
+      idleVocalization: null  // Grey anti-heroes never emit mouth notes
     })
     //
     // Remove the annihilation tag so touching a fake kills the hero instead of
@@ -1271,9 +1351,18 @@ function clearDecoys(k, ctx) {
   ctx._decoys = []
 }
 //
-// Lethal touch handler for fake anti-heroes
+// Touch handler for decoy anti-heroes — grey decoys are inert and only show the
+// "you lack calm" hint, exactly like the real grey anti-hero.
 //
 function onDecoyTouch(k, ctx) {
+  if (ctx.hero.isAnnihilating || ctx.hero.isDying) return
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
+  showCalmHint(k, ctx.hero.character)
+}
+//
+// Lethal touch handler for shattered chaos letters — these still kill the hero
+//
+function onShardTouch(k, ctx) {
   if (ctx.hero.isAnnihilating || ctx.hero.isDying) return
   if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
   showDeathMessage(k, ctx.hero, null, null, ctx.levelIndicator, ctx.sound, ctx.heroScoreAtStart)
@@ -1288,26 +1377,14 @@ function confusionReturnHero(k, ctx) {
   hero.character.pos.x = ctx.heroStartX
   hero.character.pos.y = ctx.heroStartY
   spawnConfusionParticles(k, ctx.heroStartX, ctx.heroStartY, hero)
+  //
+  // Hero is back at the start (left) — if calm was parked left, send it back right
+  //
+  ctx.calm?.relocate('right')
 }
 //
-// Confusion outcome: control is handed to the anti-hero. The hero freezes in
-// place and the player drives the anti-hero; reaching the hero annihilates both.
-//
-function confusionControlAntiHero(k, ctx) {
-  const { hero, antiHero } = ctx
-  if (!hero?.character?.exists?.() || !antiHero?.character?.exists?.()) return
-  //
-  // Freeze the hero (it becomes the annihilation target) and give control to the
-  // anti-hero so the player walks it into the hero
-  //
-  hero.controlsDisabled = true
-  hero.confusionMap = null
-  Hero.enableControl(antiHero)
-  spawnConfusionParticles(k, antiHero.character.pos.x, antiHero.character.pos.y, hero)
-}
-//
-// Confusion outcome: the platform shatters into blue killer letters (half of
-// "confusion") that scatter, settle, and kill the hero on contact.
+// Confusion outcome: the platform shatters into blue killer letters (part of
+// "chaos") that scatter, settle, and kill the hero on contact.
 //
 function confusionShatter(k, obj, body, state, wordX, wordY, ctx) {
   state.shattered = true
@@ -1317,9 +1394,13 @@ function confusionShatter(k, obj, body, state, wordX, wordY, ctx) {
   //
   obj.exists?.() && obj.destroy()
   const letters = CONFUSION_SHATTER_LETTERS
-  const spacing = CONFUSION_BODY_WIDTH / (letters.length + 1)
+  //
+  // Spread the shards across the measured word width (state.detectHalfW = half-width)
+  //
+  const wordWidth = state.detectHalfW * 2
+  const spacing = wordWidth / (letters.length + 1)
   letters.forEach((ch, i) => {
-    const lx = wordX - CONFUSION_BODY_WIDTH / 2 + spacing * (i + 1)
+    const lx = wordX - wordWidth / 2 + spacing * (i + 1)
     createConfusionShard(k, ch, lx, wordY, ctx)
   })
 }
@@ -1334,14 +1415,15 @@ function createConfusionShard(k, ch, x, y, ctx) {
   const info = getWordSpriteInfo(k, ch, CONFUSION_SHATTER_LETTER_SIZE, CONFUSION_TEXT_COLOR)
   //
   // Real physics body (mass + gravity) so the letter falls and tumbles to rest
-  // on the floor platform. A custom tight rect hugs the glyph — the baked sprite
-  // has outline + padding, so the auto-area would be too tall and wide.
+  // on the floor platform. A custom tight rect (centered on the sprite, since the
+  // Rect pos is the box center) hugs the glyph — the baked sprite has outline +
+  // padding, so the auto-area would be too tall and wide and shifted.
   //
   const shard = k.add([
     k.sprite(info.key, { width: info.w, height: info.h }),
     k.pos(x, y),
     k.anchor('center'),
-    k.area({ shape: new k.Rect(k.vec2(-SHARD_COLLISION_WIDTH / 2, -SHARD_COLLISION_HEIGHT / 2), SHARD_COLLISION_WIDTH, SHARD_COLLISION_HEIGHT) }),
+    k.area({ shape: new k.Rect(k.vec2(0, 0), SHARD_COLLISION_WIDTH, SHARD_COLLISION_HEIGHT) }),
     k.body(),
     k.z(CFG.visual.zIndex.ui - 5),
     'confusion-shard'
@@ -1353,7 +1435,7 @@ function createConfusionShard(k, ch, x, y, ctx) {
   shard.jump(k.rand(120, 300))
   const st = { vx: k.rand(-160, 160) }
   shard.onUpdate(() => onUpdateConfusionShard(k, shard, st))
-  shard.onCollide('player', () => onDecoyTouch(k, ctx))
+  shard.onCollide('player', () => onShardTouch(k, ctx))
 }
 //
 // Per-frame horizontal scatter for a shard. Vertical motion is handled by the
@@ -1455,6 +1537,309 @@ function onUpdateForgetPlatform(k, body, label, state, hero) {
       label.opacity = FORGET_OPACITY_NORMAL
     }
   }
+}
+
+/**
+ * Creates the "calm" platform: a solid blue word the hero can stand on. While
+ * standing, the ambient/eerie sound fades out, flying words turn green/harmless
+ * (and read as pleasant words), the AAA blades become green non-lethal "UUU",
+ * the monster turns green "happy" and stops walking, the brain shows a teeth
+ * smile, the root-runner words go green, and the hero speaks pleasant phrases.
+ * Once the ambient fully fades, the grey anti-hero turns red and is annihilable.
+ * The platform can also be relocated left/right by the chaos swap outcome.
+ * @param {Object} k - Kaplay instance
+ * @param {number} rightX - Default (right-side) center X of the platform
+ * @param {number} leftX - Alternate (left-side) center X for the swap anti-cheese
+ * @param {number} y - Center Y of the platform (above the floor)
+ * @param {Object} ctx - Calm context
+ * @returns {Object} Calm platform inst with a relocate() helper
+ */
+function createCalmPlatform(k, rightX, leftX, y, ctx) {
+  //
+  // Measure the rendered "calm" width so the collision body hugs the word
+  //
+  const bodyWidth = measureWordWidth(k, CALM_WORD_TEXT, CALM_FONT_SIZE) + CALM_BODY_PAD
+  //
+  // Pre-bake both the blue (idle) and green (active) word sprites for swapping
+  //
+  const blueInfo = getWordSpriteInfo(k, CALM_WORD_TEXT, CALM_FONT_SIZE, CALM_TEXT_COLOR)
+  const greenInfo = getWordSpriteInfo(k, CALM_WORD_TEXT, CALM_FONT_SIZE, CALM_MONSTER_COLOR)
+  const state = {
+    heroOn: false,
+    progress: 0,
+    audioProgress: 0,
+    calmTime: 0,
+    audioActive: false,
+    x: rightX,
+    rightX,
+    leftX,
+    y,
+    bodyWidth,
+    detectHalfW: bodyWidth / 2,
+    side: 'right',
+    monsterSnapshot: null,
+    label: null,
+    blueKey: blueInfo,
+    greenKey: greenInfo,
+    isGreen: false
+  }
+  //
+  // Solid landing body — same construction as the chaos platform
+  //
+  const body = k.add([
+    k.rect(bodyWidth, CALM_BODY_HEIGHT),
+    k.pos(rightX - bodyWidth / 2, y - CALM_BODY_HEIGHT / 2),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.anchor('topleft'),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+  //
+  // Word visual as a pre-baked sprite (blue fill + black outline)
+  //
+  const label = k.add([
+    k.sprite(blueInfo.key, { width: blueInfo.w, height: blueInfo.h }),
+    k.pos(rightX, y),
+    k.anchor('center'),
+    k.z(CFG.visual.zIndex.ui - 5)
+  ])
+  state.label = label
+  //
+  // Capture the true ambient base volumes once so calm fades restore exactly the
+  // same levels afterwards (word.mp3 returns, glitch keeps its 0.6 base, etc.)
+  //
+  ctx.audioBase = {
+    music: CFG.audio.backgroundMusic.word,
+    breath: CFG.audio.backgroundMusic.breath ?? CFG.audio.backgroundMusic.word * 0.5,
+    glitch: Sound.getGlitchSoundVolume(ctx.sound)
+  }
+  //
+  // Restore ambient volumes to full at scene start — a previous run may have left
+  // word.mp3/breath/glitch faded out, and startBackgroundMusic does not reset them
+  //
+  setCalmAudioFade(ctx, 0)
+  body.onUpdate(() => onUpdateCalmPlatform(k, state, ctx))
+  return {
+    relocate(side) {
+      if (side === state.side) return
+      state.side = side
+      state.x = side === 'left' ? state.leftX : state.rightX
+      body.pos.x = state.x - state.bodyWidth / 2
+      label.pos.x = state.x
+    }
+  }
+}
+//
+// Per-frame calm logic: detect the hero standing on top, fade the ambient up/down
+// with progress, toggle the green/harmless calm visuals, and finish calming once
+// the ambient is fully silent.
+//
+function onUpdateCalmPlatform(k, state, ctx) {
+  const hero = ctx.hero
+  if (!hero?.character?.exists?.()) return
+  const heroX = hero.character.pos.x
+  const heroFeetY = hero.character.pos.y + 34
+  const platformTop = state.y - CALM_BODY_HEIGHT / 2
+  const inRange = Math.abs(heroX - state.x) < state.detectHalfW
+  const onTop = inRange && hero.character.isGrounded() && Math.abs(heroFeetY - platformTop) < CALM_TOP_TOLERANCE
+  //
+  // Toggle the calm visuals when the hero steps on or off. Stepping off after
+  // standing long enough is what flips the grey anti-hero to red.
+  //
+  if (onTop !== state.heroOn) {
+    state.heroOn = onTop
+    if (onTop) {
+      enterCalm(k, state, ctx)
+    } else {
+      exitCalm(k, state, ctx)
+      if (!ctx.completed && state.calmTime >= CALM_READY_TIME) {
+        ctx.completed = true
+        onCalmComplete(k, ctx)
+      }
+    }
+  }
+  //
+  // Accumulate how long the hero has stood on calm (gates the red transformation)
+  //
+  onTop && (state.calmTime += k.dt())
+  //
+  // Advance the slow calm progress (drives the ambient fade depth).
+  //
+  const dir = onTop ? 1 : -1
+  state.progress = Math.max(0, Math.min(1, state.progress + dir * k.dt() / CALM_FADE_DURATION))
+  //
+  // Audio uses its own progress that rises slowly with calm but restores quickly
+  // when stepping off, so word.mp3 audibly fades back up instead of staying muted.
+  //
+  const audioRate = onTop ? 1 / CALM_FADE_DURATION : 1 / CALM_AUDIO_RESTORE_TIME
+  state.audioProgress = Math.max(0, Math.min(1, state.audioProgress + dir * k.dt() * audioRate))
+  if (state.audioProgress > 0) {
+    if (!state.audioActive) {
+      state.audioActive = true
+      Sound.startCalmPad(ctx.sound)
+    }
+    setCalmAudioFade(ctx, state.audioProgress)
+  } else if (state.audioActive) {
+    state.audioActive = false
+    setCalmAudioFade(ctx, 0)
+    Sound.stopCalmPad(ctx.sound)
+  }
+}
+//
+// Sets the ambient volumes for a given calm progress (0 = full, 1 = silent).
+// Uses the configured CFG targets so word.mp3 always returns to its true level.
+//
+function setCalmAudioFade(ctx, progress) {
+  const base = ctx.audioBase
+  if (!base) return
+  const fade = 1 - progress
+  //
+  // Whisper (word.mp3) and eerie glitch fade out; breath swells in as the calming
+  // breath; the soft calm pad fades in. All return to base when progress is 0.
+  //
+  Sound.setBackgroundMusicVolume(ctx.sound, base.music * fade)
+  Sound.setGlitchSoundVolume(ctx.sound, base.glitch * fade)
+  ctx.breathMusic && (ctx.breathMusic.volume = base.breath * (1 + (CALM_BREATH_MULT - 1) * progress))
+  Sound.setCalmPadVolume(ctx.sound, progress)
+}
+//
+// Applies the calm look: green harmless/pleasant words, green non-lethal "UUU"
+// blades, a green "happy" monster that stops walking, the brain eyes shut closed,
+// green root runners, and pleasant hero phrases. Snapshots the monster for exit.
+//
+function enterCalm(k, state, ctx) {
+  //
+  // The calm word itself turns green while the hero stands on it
+  //
+  if (state.label?.exists?.() && !state.isGreen) {
+    state.isGreen = true
+    state.label.use(k.sprite(state.greenKey.key, { width: state.greenKey.w, height: state.greenKey.h }))
+  }
+  ctx.flyingWords && FlyingWords.setHarmless(ctx.flyingWords, true)
+  ctx.dreamingEyes && WordDreamingEyes.setEyesClosed(ctx.dreamingEyes, true)
+  ctx.heroSpeech && WordHeroIdleSpeech.setCalm(ctx.heroSpeech, true)
+  ctx.consciousnessLayers && WordConsciousnessLayers.setRootRunnerColor(ctx.consciousnessLayers, k.rgb(...parseHex(CALM_MONSTER_COLOR)))
+  //
+  // Turn the lethal AAA blades into harmless green UUU
+  //
+  ctx.bladeInsts?.forEach(b => Blades.setCalmMode(b, true, CALM_MONSTER_COLOR))
+  const bladeArm = ctx.bladeArm
+  if (bladeArm) {
+    if (!state.monsterSnapshot) {
+      const mainText = bladeArm.textObjects[bladeArm.textObjects.length - 1]
+      state.monsterSnapshot = {
+        text: mainText?.text ?? 'fear',
+        isFriend: bladeArm.isFriend,
+        color: bladeArm.bladeColor
+      }
+    }
+    BladeArm.setWord(bladeArm, CALM_MONSTER_WORD, true, k.rgb(...parseHex(CALM_MONSTER_COLOR)))
+    bladeArm.calmStopped = true
+  }
+}
+//
+// Reverts the calm look when the hero steps off (sounds restore via progress).
+//
+function exitCalm(k, state, ctx) {
+  //
+  // Revert the calm word back to its blue idle sprite
+  //
+  if (state.label?.exists?.() && state.isGreen) {
+    state.isGreen = false
+    state.label.use(k.sprite(state.blueKey.key, { width: state.blueKey.w, height: state.blueKey.h }))
+  }
+  ctx.flyingWords && FlyingWords.setHarmless(ctx.flyingWords, false)
+  ctx.dreamingEyes && WordDreamingEyes.setEyesClosed(ctx.dreamingEyes, false)
+  ctx.heroSpeech && WordHeroIdleSpeech.setCalm(ctx.heroSpeech, false)
+  ctx.consciousnessLayers && WordConsciousnessLayers.setRootRunnerColor(ctx.consciousnessLayers, null)
+  ctx.bladeInsts?.forEach(b => Blades.setCalmMode(b, false, CALM_MONSTER_COLOR))
+  //
+  // Restore the monster's lethal "fear" word/colour and let it walk again
+  //
+  const bladeArm = ctx.bladeArm
+  const snap = state.monsterSnapshot
+  if (bladeArm && snap) {
+    BladeArm.setWord(bladeArm, snap.text, snap.isFriend, snap.color)
+    state.monsterSnapshot = null
+  }
+  bladeArm && (bladeArm.calmStopped = false)
+}
+//
+// Calm fully achieved: turn the grey anti-hero red (touch level 1 style) and
+// allow it to be annihilated to finish the level.
+//
+function onCalmComplete(k, ctx) {
+  const { hero, antiHero } = ctx
+  antiHero?.character?.exists?.() && Hero.recolorAntiHero(antiHero, ANTIHERO_RED_COLOR)
+  hero && (hero.annihilationLocked = false)
+}
+//
+// When the monster is friendly (green, after being shot with a kind word) and the
+// hero stands on its back, the hero is carried along with it. The wrap-around
+// teleport is ignored via the per-frame move guard so the hero is not dragged off.
+//
+function updateMonsterRide(hero, bladeArm, ride) {
+  const area = bladeArm?.collisionArea
+  if (!area?.exists?.() || !hero?.character?.exists?.()) return
+  const dx = area.pos.x - ride.lastX
+  ride.lastX = area.pos.x
+  const monsterTop = area.pos.y - area.height / 2
+  const heroFeetY = hero.character.pos.y + 34
+  const onBack = bladeArm.isFriend
+    && hero.character.isGrounded()
+    && heroFeetY > monsterTop - 12
+    && heroFeetY < monsterTop + MONSTER_RIDE_TOLERANCE
+    && Math.abs(hero.character.pos.x - area.pos.x) < bladeArm.textWidth / 2 + 20
+  //
+  // The monster body is tagged as a creature, not a platform, so the hero's
+  // canJump flag is never reset while standing on it. Force it here so the hero
+  // can jump off the monster's back — at the same height as a normal ground jump.
+  //
+  onBack && (hero.canJump = true)
+  //
+  // Carry the hero horizontally with the monster (ignoring the wrap teleport)
+  //
+  onBack && Math.abs(dx) <= MONSTER_RIDE_WRAP_GUARD && (hero.character.pos.x += dx)
+}
+//
+// Grey anti-hero touch: inert until calmed — only shows the calm hint.
+//
+function onGrayAntiHeroTouch(k, hero, antiHero) {
+  if (!hero.annihilationLocked) return
+  if (hero.isAnnihilating || hero.isDying) return
+  if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
+  showCalmHint(k, antiHero.character)
+}
+//
+// Standard white speech-bubble hint shown above a character (grey anti-hero or a
+// decoy) when touched, reusing the shared tooltip so it matches every other level.
+// Throttled so repeated collisions do not stack bubbles; auto-destroys after the
+// hint duration.
+//
+function showCalmHint(k, charObj) {
+  if (!charObj?.exists?.()) return
+  const now = k.time()
+  if (now - lastCalmHintTime < CALM_HINT_DURATION) return
+  lastCalmHintTime = now
+  const target = {
+    x: () => charObj.pos.x,
+    y: () => charObj.pos.y,
+    width: 1,
+    height: 1,
+    text: CALM_HINT_TEXT,
+    offsetY: -70
+  }
+  const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+  //
+  // forceVisible skips hover detection, so populate the render state manually
+  //
+  tip.activeTarget = target
+  tip.frozenX = charObj.pos.x
+  tip.frozenY = charObj.pos.y
+  tip.opacity = 1
+  k.wait(CALM_HINT_DURATION, () => tip && Tooltip.destroy(tip))
 }
 
 /**

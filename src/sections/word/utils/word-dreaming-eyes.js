@@ -65,6 +65,19 @@ const GAZE_DOWN_MAX = Math.round(EYE_EH * 0.62) - GAZE_PUPIL_R - 2
 //
 const FIBER_COUNT = 90
 const EYE_FIBERS = buildFibers()
+//
+// Calm "closed eye" look — when the hero stands on the calm platform the open
+// sclera/pupil fade out and each eye is drawn as two gentle lash arcs (an upper
+// and a lower curve) meeting at the corners, with no pupil. Stroked in the same
+// muted lavender as the open eye so it stays a subtle background element.
+//
+const EYE_CLOSED_FADE_SPEED = 4.0        // closedT units per second when shutting/opening
+const EYE_CLOSED_SAMPLES = 22            // Points sampled along each lash arc
+const EYE_CLOSED_UP = 0.45               // Upper arc rise as a fraction of the eye half-height
+const EYE_CLOSED_LOW = 0.32              // Lower arc dip as a fraction of the eye half-height
+const EYE_CLOSED_STROKE_W = 6            // Lash line thickness
+const EYE_CLOSED_OPACITY = 0.42          // Peak lash opacity (a touch stronger than the open eye)
+const EYE_CLOSED_COLOR = [134, 132, 156] // Lavender lash tone (matches the sclera palette)
 
 /**
  * Spawns two dreaming eye sprites that look down toward the hero
@@ -84,7 +97,7 @@ export function create(k, layout, hero = null) {
   //
   // Shared gaze state — both pupils use the same offset so they look in unison
   //
-  const inst = { k, eyes: [], hero, brainCenterX, brainCenterY, gazeX: 0, gazeY: 0, gazeTargetX: 0, gazeTargetY: GAZE_MAX_Y }
+  const inst = { k, eyes: [], hero, brainCenterX, brainCenterY, gazeX: 0, gazeY: 0, gazeTargetX: 0, gazeTargetY: GAZE_MAX_Y, eyesClosed: false }
   //
   // Two eyes: left eye and right eye, symmetrically around the brain center
   //
@@ -108,19 +121,73 @@ export function create(k, layout, hero = null) {
     const EH = Math.round(EYE_HALF_H * EYE_SCALE)
     const pupilR = Math.round(EH * 0.48)
     const pupil = spawnLivePupil(k, cx, cy, pupilR, EYE_Z - idx * 0.4 + 0.05, EYE_OPACITY)
-    inst.eyes.push({
+    const eye = {
       sprite,
       pupil,
       cx,
       cy,
+      ew: EW,
+      eh: EH,
       openScale: 1,
+      closedT: 0,
       blinkState: 'open',
       blinkFrame: 0,
       blinkTimer: BLINK_INTERVAL_MIN + Math.random() * (BLINK_INTERVAL_MAX - BLINK_INTERVAL_MIN)
-    })
+    }
+    //
+    // Live "closed eye" lash arcs, faded in by closedT while calm
+    //
+    spawnClosedEye(k, eye, EYE_Z - idx * 0.4 + 0.06)
+    inst.eyes.push(eye)
   }
   k.onUpdate(() => onUpdate(inst))
   return inst
+}
+//
+// Draws the calm closed-eye as two lash arcs (upper + lower) meeting at the eye
+// corners, with no pupil. Visible only while the eye's closedT is faded in.
+//
+function spawnClosedEye(k, eye, z) {
+  k.add([
+    k.pos(0, 0),
+    k.fixed(),
+    k.z(z),
+    {
+      draw() {
+        if (eye.closedT < 0.01) return
+        const op = eye.closedT * EYE_CLOSED_OPACITY
+        const { cx, cy, ew, eh } = eye
+        const upH = eh * EYE_CLOSED_UP
+        const lowH = eh * EYE_CLOSED_LOW
+        //
+        // Sample the upper and lower lash curves: both peak away from the
+        // midline at the centre and meet flush at the corners (almond lens)
+        //
+        const upper = []
+        const lower = []
+        for (let i = 0; i < EYE_CLOSED_SAMPLES; i++) {
+          const t = i / (EYE_CLOSED_SAMPLES - 1)
+          const lx = -ew + t * ew * 2
+          const fall = 1 - (lx / ew) * (lx / ew)
+          upper.push(k.vec2(cx + lx, cy - upH * fall))
+          lower.push(k.vec2(cx + lx, cy + lowH * fall))
+        }
+        const color = k.rgb(...EYE_CLOSED_COLOR)
+        k.drawLines({ pts: upper, width: EYE_CLOSED_STROKE_W, color, opacity: op, cap: 'round', join: 'round' })
+        k.drawLines({ pts: lower, width: EYE_CLOSED_STROKE_W, color, opacity: op, cap: 'round', join: 'round' })
+      }
+    }
+  ])
+}
+
+/**
+ * Closes (or re-opens) the brain eyes and holds them shut — used by the word
+ * level 4 calm platform so the brain "rests" while the hero stands on calm.
+ * @param {Object} inst - Dreaming-eyes inst
+ * @param {boolean} closed - True to gently shut the eyes, false to re-open them
+ */
+export function setEyesClosed(inst, closed) {
+  if (inst) inst.eyesClosed = closed
 }
 
 //
@@ -133,11 +200,23 @@ function onUpdate(inst) {
   //
   updateGaze(inst)
   eyes.forEach(eye => {
-    updateBlink(eye)
+    updateBlink(eye, inst.eyesClosed)
     //
-    // Apply vertical blink scale — scaleY animates from 1 (open) to 0 (closed)
+    // Ease the calm closed-eye blend toward its target (1 = closed lash arcs)
+    //
+    const closedTarget = inst.eyesClosed ? 1 : 0
+    if (eye.closedT !== closedTarget) {
+      const step = EYE_CLOSED_FADE_SPEED * inst.k.dt()
+      const diff = closedTarget - eye.closedT
+      eye.closedT += Math.sign(diff) * Math.min(Math.abs(diff), step)
+    }
+    //
+    // Apply vertical blink scale — scaleY animates from 1 (open) to 0 (closed).
+    // Fade the baked open sclera out as the calm lash arcs take over so the eye
+    // never collapses into a flat horizontal stripe.
     //
     eye.sprite.scale.y = eye.openScale
+    eye.sprite.opacity = EYE_OPACITY * (1 - eye.closedT)
     //
     // Scale pupil vertically with the blink so it disappears when eye closes
     //
@@ -151,9 +230,23 @@ function onUpdate(inst) {
 }
 
 //
-// Finite-state blink: open → closing → opening → open
+// Finite-state blink: open → closing → opening → open. While forceClosed (calm)
+// the eyelid eases shut and stays down, then re-opens once calm ends.
 //
-function updateBlink(eye) {
+function updateBlink(eye, forceClosed) {
+  if (forceClosed) {
+    eye.openScale = Math.max(0.02, eye.openScale - 1 / BLINK_CLOSE_FRAMES)
+    eye.wasForceClosed = true
+    return
+  }
+  //
+  // Just released from the calm hold — animate the lids back open
+  //
+  if (eye.wasForceClosed) {
+    eye.wasForceClosed = false
+    eye.blinkState = 'opening'
+    eye.blinkFrame = 0
+  }
   if (eye.blinkState === 'open') {
     eye.blinkTimer--
     if (eye.blinkTimer <= 0) {

@@ -53,6 +53,19 @@ const WORD_ROTATION_SPEED_RANGE = 22
 const KILLER_LETTER_Z = (CFG.visual.zIndex.player ?? 10) - 0.8
 const KILLER_COLOR_PULSE_SPEED = 2.8
 const KILLER_COLOR_PULSE_AMOUNT = 0.22
+//
+// Calm "harmless" tint — every word turns this soft green and stops killing
+// while the hero stands on the calm platform (word level 4)
+//
+const HARMLESS_WORD_COLOR = { r: 107, g: 203, b: 119 }   // #6BCB77
+//
+// Speed of the eased fade in/out of the calm green tint (blend units per second)
+//
+const HARMLESS_BLEND_SPEED = 1.8
+//
+// Kind words shown on the killer letters while the calm platform is active
+//
+const PLEASANT_WORDS = ['joy', 'happy', 'calm', 'hope', 'love', 'peace', 'smile', 'kind', 'warm', 'free', 'light', 'glad']
 
 //
 // Words and fragments related to pain, self-discovery, and introspection
@@ -117,7 +130,12 @@ export function create(cfg) {
     rotationSpeedZ = 150,
     letterToWordRatio = 0.75,
     customBounds = null,
-    killerWords = null
+    killerWords = null,
+    //
+    // When false the atmospheric drifting words are hidden (word level 4 keeps
+    // only the killer letters + root runners on a calm-able background)
+    //
+    showRegularWords = true
   } = cfg
 
   //
@@ -151,6 +169,13 @@ export function create(cfg) {
     // Reset spawn grace timer so the hero is protected at the start of every level
     //
     k.flyingWordsInstance.spawnProtectionTimer = SPAWN_GRACE_DURATION
+    //
+    // Clear any calm "harmless" state left over from a previous run
+    //
+    k.flyingWordsInstance.harmless = false
+    k.flyingWordsInstance.harmlessBlend = 0
+    restoreKillerWords(k.flyingWordsInstance)
+    k.flyingWordsInstance.showRegularWords = showRegularWords
     return k.flyingWordsInstance
   }
   
@@ -229,6 +254,19 @@ export function create(cfg) {
     // Reset to SPAWN_GRACE_DURATION each time a new level session starts.
     //
     spawnProtectionTimer: SPAWN_GRACE_DURATION,
+    //
+    // When true every word turns green and killer letters cannot harm the hero
+    // (set by the calm platform in word level 4)
+    //
+    harmless: false,
+    //
+    // Eased 0→1 blend toward the harmless green tint (smooth calm transition)
+    //
+    harmlessBlend: 0,
+    //
+    // Hides the atmospheric drifting words while still drawing killer letters
+    //
+    showRegularWords,
     color,
     minSpeed,
     maxSpeed,
@@ -259,6 +297,7 @@ export function create(cfg) {
       draw() {
         const currentInst = k.flyingWordsInstance
         if (!currentInst) return
+        if (currentInst.showRegularWords === false) return
         const inWordLevel = k.time() - lastOnUpdateTime < WORD_LEVEL_TIMEOUT
         if (!inWordLevel) return
         for (const word of currentInst.words) {
@@ -316,6 +355,66 @@ export function onUpdate(inst) {
       updateKillerLetter(letter, inst)
     })
   }
+  //
+  // Ease the green calm tint in/out and apply it once it is meaningfully visible
+  //
+  const target = inst.harmless ? 1 : 0
+  if (inst.harmlessBlend !== target) {
+    const step = HARMLESS_BLEND_SPEED * inst.k.dt()
+    const diff = target - inst.harmlessBlend
+    inst.harmlessBlend += Math.sign(diff) * Math.min(Math.abs(diff), step)
+  }
+  inst.harmlessBlend > 0.001 && applyHarmlessTint(inst, inst.harmlessBlend)
+}
+
+/**
+ * Toggles the calm state: green tint + non-lethal killer letters. While calm the
+ * killer letters also read as pleasant words; they revert when calm ends.
+ * @param {Object} inst - Flying words instance
+ * @param {boolean} harmless - True to make all words green and harmless
+ */
+export function setHarmless(inst, harmless) {
+  if (inst.harmless === harmless) return
+  inst.harmless = harmless
+  harmless ? swapKillerWords(inst) : restoreKillerWords(inst)
+}
+//
+// Blends all regular and killer words toward the harmless green by `blend` (0–1),
+// so the transition is gradual rather than an instant recolour.
+//
+function applyHarmlessTint(inst, blend) {
+  const { r, g, b } = HARMLESS_WORD_COLOR
+  inst.words.forEach(word => {
+    if (!word.color) return
+    word.color.r += (r - word.color.r) * blend
+    word.color.g += (g - word.color.g) * blend
+    word.color.b += (b - word.color.b) * blend
+  })
+  inst.killerLetters.forEach(letter => {
+    const c = letter.textObj
+    if (!c?.exists?.()) return
+    c.color.r += (r - c.color.r) * blend
+    c.color.g += (g - c.color.g) * blend
+    c.color.b += (b - c.color.b) * blend
+  })
+}
+//
+// Swaps each killer letter's word to a random pleasant word (storing the original)
+//
+function swapKillerWords(inst) {
+  inst.killerLetters.forEach(letter => {
+    if (!letter.textObj?.exists?.()) return
+    letter._origText = letter._origText ?? letter.textObj.text
+    letter.textObj.text = PLEASANT_WORDS[Math.floor(Math.random() * PLEASANT_WORDS.length)]
+  })
+}
+//
+// Restores each killer letter's original (lethal) word after calm ends
+//
+function restoreKillerWords(inst) {
+  inst.killerLetters?.forEach(letter => {
+    letter.textObj?.exists?.() && letter._origText !== undefined && (letter.textObj.text = letter._origText)
+  })
 }
 
 /**
@@ -807,6 +906,10 @@ function createKillerLetter(k, params) {
     if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
     if (currentInst.spawnProtectionTimer > 0) return
     //
+    // Calm platform makes all words harmless — ignore the hit
+    //
+    if (currentInst.harmless) return
+    //
     // Mark word for respawn by setting flag
     //
     const killerWord = currentInst.killerLetters.find(kw => kw.textObj === textObj)
@@ -866,7 +969,10 @@ function createKillerLetter(k, params) {
         const ty = textObj.pos.y
         WORD_OUTLINE_OFFSETS.forEach(([ox, oy]) => {
           k.drawText({
-            text,
+            //
+            // Read the live text so the outline follows the calm pleasant-word swap
+            //
+            text: textObj.text,
             size,
             font: fontFamily,
             anchor: 'center',

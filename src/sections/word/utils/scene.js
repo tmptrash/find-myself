@@ -207,7 +207,13 @@ export function initScene(config) {
     antiHeroX = null,
     antiHeroY = null,
     onAnnihilation = null,
-    helpY: helpYOverride = null
+    helpY: helpYOverride = null,
+    //
+    // Optional anti-hero overrides (word level 4 uses a grey, silent anti-hero
+    // until the hero calms it)
+    //
+    antiHeroBodyColor = null,
+    antiHeroSilent = false
   } = config
   
   //
@@ -272,7 +278,7 @@ export function initScene(config) {
     k.z(CFG.visual.zIndex.wordThoughtSky ?? CFG.visual.zIndex.background - 18)
   ])
   addPlayfieldFill(k, playfieldColor, topPlatformHeight, bottomPH, wall)
-  WordConsciousnessLayers.create({
+  const consciousnessLayers = WordConsciousnessLayers.create({
     k,
     sideWallWidth: wall,
     topPlatformHeight,
@@ -376,16 +382,18 @@ export function initScene(config) {
   
   let hero = null
   let antiHero = null
+  let dreamingEyes = null
+  let heroSpeech = null
   
   //
   // Create heroes if requested
   //
   if (createHeroes && levelName && heroX !== null && heroY !== null && antiHeroX !== null && antiHeroY !== null) {
-    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor, onAnnihilation)
+    const heroesResult = createLevelHeroes(k, sound, levelName, heroX, heroY, antiHeroX, antiHeroY, pfColor, onAnnihilation, antiHeroBodyColor, antiHeroSilent)
     hero = heroesResult.hero
     antiHero = heroesResult.antiHero
-    hero && WordHeroIdleSpeech.create(k, hero)
-    WordDreamingEyes.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall }, hero)
+    hero && (heroSpeech = WordHeroIdleSpeech.create(k, hero))
+    dreamingEyes = WordDreamingEyes.create(k, { topPlatformHeight, bottomPlatformHeight: bottomPH, sideWallWidth: wall }, hero)
     hero && WordBackgroundAntiheroes.create({
       k,
       hero,
@@ -396,7 +404,7 @@ export function initScene(config) {
     })
   }
   
-  return { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, backgroundColor: bgColor, platformColor: pfColor, playfieldColor }
+  return { sound, hero, antiHero, dreamingEyes, heroSpeech, consciousnessLayers, levelIndicator, fpsCounter, breathMusic, backgroundColor: bgColor, platformColor: pfColor, playfieldColor }
 }
 
 /**
@@ -716,7 +724,7 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
  * @param {Function} [onAnnihilation] - Callback when hero meets anti-hero
  * @returns {Object} {hero, antiHero}
  */
-function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY, platformColor = null, onAnnihilation = null) {
+function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, antiHeroY, platformColor = null, onAnnihilation = null, antiHeroBodyColor = null, antiHeroSilent = false) {
   //
   // Use platform color for dust particles (black platforms)
   //
@@ -746,7 +754,11 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     addMouth: true,
     addArms: true,
     addWatch: true,
-    bodyColor: 'DC143C'
+    bodyColor: antiHeroBodyColor || 'DC143C',
+    //
+    // Silent anti-hero (word level 4 grey state) suppresses mouth notes
+    //
+    ...(antiHeroSilent ? { idleVocalization: null } : {})
   })
   
   // Hide anti-hero initially (will be shown when spawned)

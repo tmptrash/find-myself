@@ -46,7 +46,7 @@ const LEVEL_SUBTITLES = {
   'level-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
   'level-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
   'level-word.3': ['Sharp words move fast — so must you', 'word3-pre', 6.0],
-  'level-word.4': ['Words that kill...', 'word4-pre', 5.5],
+  'level-word.4': ['Thoughts you can\'t stop, no matter how hard you try...', 'word4-pre', 5.5],
   'level-time.0': ['Time moves forward even when you stand still. You\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'Platforms don\'t live forever...'],
   'level-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places'],
   'level-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],

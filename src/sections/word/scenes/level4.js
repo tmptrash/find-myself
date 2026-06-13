@@ -682,7 +682,8 @@ export function sceneLevel4(k) {
       heroStartY: HERO_SPAWN_Y,
       platformBounds,
       confusionX: confusionWordX,
-      currentLevel: 'level-word.4'
+      currentLevel: 'level-word.4',
+      confusionShards: []
     }
     const confusionWord = createConfusionWord(k, confusionWordX, confusionWordY, confusionCtx)
     //
@@ -716,6 +717,7 @@ export function sceneLevel4(k) {
       bladeInsts: [staticBlades, staticBlades2],
       confusionWord,
       forgetPlatform,
+      confusionShards: confusionCtx.confusionShards,
       movingPlatforms: [movingPlatform1, movingPlatform2],
       completed: false
     }
@@ -1490,9 +1492,10 @@ function onDecoyTouch(k, ctx) {
   showCalmHint(k, ctx.hero.character)
 }
 //
-// Lethal touch handler for shattered chaos letters — these still kill the hero
+// Lethal touch handler for shattered chaos letters — harmless while calm timer runs
 //
-function onShardTouch(k, ctx) {
+function onShardTouch(k, ctx, shardState) {
+  if (shardState?.harmless) return
   if (ctx.hero.isAnnihilating || ctx.hero.isDying) return
   if (LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()) return
   showDeathMessage(k, ctx.hero, null, null, ctx.levelIndicator, ctx.sound, ctx.heroScoreAtStart)
@@ -1563,9 +1566,23 @@ function createConfusionShard(k, ch, x, y, ctx) {
   // make it scatter and settle along the ground
   //
   shard.jump(k.rand(120, 300))
-  const st = { vx: k.rand(-160, 160) }
+  const st = { vx: k.rand(-160, 160), harmless: false, letter: ch }
   shard.onUpdate(() => onUpdateConfusionShard(k, shard, st))
-  shard.onCollide('player', () => onShardTouch(k, ctx))
+  shard.onCollide('player', () => onShardTouch(k, ctx, st))
+  ctx.confusionShards?.push({ shard, st, letter: ch })
+}
+//
+// While the calm meditation timer runs, shattered chaos letters turn green and safe.
+//
+function setConfusionShardsCalm(k, ctx, calm) {
+  ctx.confusionShards?.forEach(entry => {
+    const { shard, st, letter } = entry
+    if (!shard?.exists?.()) return
+    st.harmless = calm
+    const colorHex = calm ? CALM_MONSTER_COLOR : CONFUSION_TEXT_COLOR
+    const info = getWordSpriteInfo(k, letter, CONFUSION_SHATTER_LETTER_SIZE, colorHex)
+    shard.use(k.sprite(info.key, { width: info.w, height: info.h }))
+  })
 }
 //
 // Per-frame horizontal scatter for a shard. Vertical motion is handled by the
@@ -1836,12 +1853,14 @@ function onUpdateCalmPlatform(k, state, ctx) {
           Hero.setEyesClosed(hero, false)
           state.timer = CALM_TIMER_SECONDS
           destroyCalmTimer(state)
+          setConfusionShardsCalm(k, ctx, false)
         }
       } else {
         if (!state.meditating) {
           state.meditating = true
           Hero.enterCalmPose(hero)
           state.timer = CALM_TIMER_SECONDS
+          setConfusionShardsCalm(k, ctx, true)
         }
         state.timer = Math.max(0, state.timer - k.dt())
         updateCalmTimer(k, state, hero)
@@ -1851,6 +1870,7 @@ function onUpdateCalmPlatform(k, state, ctx) {
       state.timer = CALM_TIMER_SECONDS
       state.meditating = false
       destroyCalmTimer(state)
+      setConfusionShardsCalm(k, ctx, false)
     }
   }
   //
@@ -1951,6 +1971,13 @@ function beginCalmDissolve(k, ctx) {
   chaos?.state && (chaos.state.dissolving = true)
   chaos?.obj?.exists?.() && ctx.dissolveVisuals.push({ obj: chaos.obj, base: 1 })
   chaos?.body?.exists?.() && ctx.dissolveVisuals.push({ obj: chaos.body, base: 0, isBody: true, destroyOnComplete: true })
+  ctx.confusionShards?.forEach(entry => {
+    entry.shard?.exists?.() && ctx.dissolveVisuals.push({
+      obj: entry.shard,
+      base: entry.shard.opacity ?? 1,
+      destroyOnComplete: true
+    })
+  })
 }
 //
 // Per-frame dissolve progress for platform visuals and the post-dissolve hint
@@ -2130,6 +2157,7 @@ function exitCalm(k, state, ctx) {
     state.monsterSnapshot = null
   }
   bladeArm && (bladeArm.calmStopped = false)
+  !state.completed && setConfusionShardsCalm(k, ctx, false)
 }
 //
 // Calm fully achieved: turn the grey anti-hero red (touch level 1 style) and

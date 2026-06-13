@@ -584,6 +584,8 @@ const EXTRA_PLATFORM_B_X = 1560
 //
 const EXTRA_PLATFORM_B_Y = 670
 const EXTRA_PLATFORM_B_WIDTH = 150
+const EXTRA_PLATFORM_B_COLLISION_WIDTH = EXTRA_PLATFORM_B_WIDTH + 12
+const EXTRA_PLATFORM_B_COLLISION_X_OFFSET = EXTRA_PLATFORM_B_COLLISION_WIDTH / 2
 const EXTRA_PLATFORM_B_STORAGE_KEY = 'touch.level3BonusCollected'
 const EXTRA_PLATFORM_B_HERO_COLOR = '#8B5A50'
 /**
@@ -942,8 +944,8 @@ export function sceneLevel3(k) {
       platformZ: CFG.visual.zIndex.platforms,
       requireMovingToward: true,
       revealDistance: 320,
-      collisionWidth: EXTRA_PLATFORM_B_WIDTH + 12,
-      platformCollisionXOffset: 0,
+      collisionWidth: EXTRA_PLATFORM_B_COLLISION_WIDTH,
+      platformCollisionXOffset: EXTRA_PLATFORM_B_COLLISION_X_OFFSET,
       platformCollisionYOffset: 7,
       revealWidth: EXTRA_PLATFORM_B_WIDTH + 24
     })

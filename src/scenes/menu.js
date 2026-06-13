@@ -88,7 +88,7 @@ const MENU_LEAVE_BG_G = 26
 const MENU_LEAVE_BG_B = 26
 //
 // Per-letter progress labels below anti-heroes —
-// each letter represents one level (colored = completed, gray = not yet done).
+// the current level letter and every letter before it are highlighted; completed sections show all.
 //
 const SECTION_LABEL_FONT_SIZE = 18
 const SECTION_LABEL_LETTER_SPACING = -1
@@ -119,42 +119,37 @@ function getSectionDisplayName(section) {
   return section
 }
 /**
- * Returns how many letters in the section's HUD word should be shown in the active colour.
- * Mirrors the levelNumber logic used by each section's in-game level indicator.
+ * Returns the index of the HUD letter that matches the player's current level.
+ * Level 0 maps to the first letter (e.g. word "W"), level 1 to the second ("O"), etc.
  * @param {string} section - Section key ('touch', 'time', 'word', …)
  * @param {string|null} lastLevel - Value of get('lastLevel')
  * @param {Object} progress - Full progress object from getProgress()
- * @returns {number} Count of colored letters (0 = all gray)
+ * @returns {number} Active letter index, -1 when unknown, -2 when the whole section is done
  */
-function getSectionCompletedCount(section, lastLevel, progress) {
+function getSectionActiveLetterIndex(section, lastLevel, progress) {
   //
-  // Fully completed section → color all its letters
+  // Fully completed section → highlight every letter
   //
-  if (progress[section]?.completed) {
-    return (SECTION_LETTERS[section] || []).length
-  }
-  if (!lastLevel) return 0
+  if (progress[section]?.completed) return -2
+  if (!lastLevel) return -1
   if (section === 'touch' && lastLevel.startsWith('level-touch.')) {
     const s = lastLevel.replace('level-touch.', '')
     //
-    // Training level = not yet completed = 0; numeric level N = N+1 letters colored
+    // Training sits on the first letter; numeric level N maps to letter index N
     //
     if (s === 'training') return 0
     const n = parseInt(s, 10)
-    return isNaN(n) ? 0 : n + 1
+    return isNaN(n) ? -1 : n
   }
   if (section === 'time' && lastLevel.startsWith('level-time.')) {
     const n = parseInt(lastLevel.replace('level-time.', ''), 10)
-    //
-    // level 0 = on first level = 0 colored; level N = N colored
-    //
-    return isNaN(n) ? 0 : n
+    return isNaN(n) ? -1 : n
   }
   if (section === 'word' && lastLevel.startsWith('level-word.')) {
     const n = parseInt(lastLevel.replace('level-word.', ''), 10)
-    return isNaN(n) ? 0 : n
+    return isNaN(n) ? -1 : n
   }
-  return 0
+  return -1
 }
 
 /**
@@ -1951,7 +1946,7 @@ function drawMenuBackground(inst) {
 }
 /**
  * Creates the per-letter progress label displayed below each anti-hero.
- * Colored letters = completed levels; gray letters = levels not yet reached.
+ * Colored letters = current level and every level before it; gray = not yet reached.
  * For the touch section the last letter "H" always hangs lower and sways.
  * @param {Object} k - Kaplay instance
  * @param {Object} config - Section config object from getSectionPositions()
@@ -1963,7 +1958,8 @@ function drawMenuBackground(inst) {
 function createSectionProgressLabel(k, config, progress, lastLevel, grayColor) {
   const section = config.section
   const letters = SECTION_LETTERS[section] || [section.toUpperCase()]
-  const completedCount = getSectionCompletedCount(section, lastLevel, progress)
+  const activeLetterIndex = getSectionActiveLetterIndex(section, lastLevel, progress)
+  const allLettersActive = activeLetterIndex === -2
   //
   // Time section always uses the anti-hero's orange/yellow, matching the in-game HUD indicator
   //
@@ -1988,8 +1984,8 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor) {
   const allObjects = []
   letters.forEach((letter, i) => {
     const isFalling = section === 'touch' && i === TOUCH_H_INDEX
-    const isActive = i < completedCount
-    const colorHex = isFalling ? grayColor : (isActive ? sectionColor : grayColor)
+    const isActive = allLettersActive || (activeLetterIndex >= 0 && i <= activeLetterIndex)
+    const colorHex = isFalling && !isActive ? grayColor : (isActive ? sectionColor : grayColor)
     const { r, g, b } = getRGB(k, colorHex)
     const lx = baseX + i * letterStep
     const ly = isFalling ? baseY + fallingExtraY : baseY

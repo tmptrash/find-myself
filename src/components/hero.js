@@ -1874,6 +1874,25 @@ export function setEyesLookingAt(inst, worldX, worldY) {
 }
 
 /**
+ * Forces pupils toward a face-to-face partner even when the heroes stand very close.
+ * @param {Object} inst - Hero or anti-hero instance
+ * @param {number} partnerX - Partner world X
+ * @param {number} partnerY - Partner world Y
+ */
+export function setEyesLookingAtPartner(inst, partnerX, partnerY) {
+  const pos = inst.character?.pos
+  if (!pos?.exists?.()) return
+  const dx = partnerX - pos.x
+  const dy = partnerY - pos.y
+  //
+  // Always pick a horizontal gaze direction; vertical only when clearly above/below
+  //
+  inst.eyeOffsetX = dx >= 0 ? 1 : -1
+  inst.eyeOffsetY = dy > 6 ? 1 : dy < -6 ? -1 : 0
+  inst.character.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
+}
+
+/**
  * Temporarily hides baked sprite arms (used during touch L3 hand-hold draw).
  * @param {Object} inst - Hero or anti-hero instance
  * @param {boolean} hidden - When true, swap to a no-arms sprite

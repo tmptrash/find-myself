@@ -250,12 +250,24 @@ const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level2TrapCount'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level2Visited'
 const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
-const LIFE_DEDUCT_MAX_COUNT = 1
+const LIFE_DEDUCT_TRAP_FLAG = 'touch.level2TrapActive'
+const LIFE_DEDUCT_MAX_COUNT = 2
 //
 // Music volume multiplier for L2 — background music should sit quieter so
 // ambient wildlife and sound effects feel more prominent.
 //
 const L2_MUSIC_VOLUME_MULT = 0.6
+//
+// Trap platform: the 2nd log (index 1) slides left while the hero stands on the 3rd (index 2)
+//
+const TRAP_PLATFORM_INDEX = 1
+const TRAP_TRIGGER_PLATFORM_INDEX = 2
+const TRAP_PLATFORM_SLIDE_SPEED = 1200
+const TRAP_PLATFORM_RETURN_SPEED = 600
+const TRAP_PLATFORM_SLIDE_DISTANCE = 400
+const TRAP_PLATFORM_PAUSE_DURATION = 0.3
+const TRAP_CORRIDOR_DURATION = 6
+const TRAP_PLATFORM_TOP_TOLERANCE = 30
 //
 // Breath vapor: small white puffs from hero's mouth in cold air
 //
@@ -482,6 +494,7 @@ export function sceneLevel2(k) {
     const currentLifeScore = get('lifeScore', 0)
     const trapCount = get(LIFE_DEDUCT_FLAG, 0)
     const iciclesAlreadyActive = get(LIFE_DEDUCT_ICICLES_FLAG, false)
+    const trapAlreadyActive = get(LIFE_DEDUCT_TRAP_FLAG, false)
     const alreadyVisited = get(LIFE_DEDUCT_VISITED_FLAG, false)
     const eligible = trapCount < LIFE_DEDUCT_MAX_COUNT && currentLifeScore >= LIFE_DEDUCT_THRESHOLD
     //
@@ -495,11 +508,14 @@ export function sceneLevel2(k) {
       set(LIFE_DEDUCT_VISITED_FLAG, false)
     }
     //
-    // Active states: icicles appear after the single life deduction
+    // Active states: icicles after 1st deduction, sliding trap after 2nd
     //
     let iciclesActive = iciclesAlreadyActive
+    let trapPlatformActive = trapAlreadyActive
     if (showTrap) {
-      iciclesActive = true
+      const nextCount = trapCount + 1
+      nextCount >= 1 && (iciclesActive = true)
+      nextCount >= 2 && (trapPlatformActive = true)
     }
     const displayTrapCount = showTrap ? trapCount + 1 : trapCount
     levelIndicator.updateTrapCount(displayTrapCount)
@@ -527,7 +543,7 @@ export function sceneLevel2(k) {
     //
     // Create platforms first to get first platform position and states
     //
-    const platformsData = createDiagonalPlatforms(k)
+    const platformsData = createDiagonalPlatforms(k, trapPlatformActive)
     const firstPlatform = platformsData.firstPlatform
     const platformStates = platformsData.platformStates
     //
@@ -625,14 +641,17 @@ export function sceneLevel2(k) {
     // Updates deduct count and activates icicles/trap depending on which deduction this is.
     //
     if (showTrap) {
-      const extraFlags = [LIFE_DEDUCT_ICICLES_FLAG]
+      const nextCount = trapCount + 1
+      const extraFlags = []
+      nextCount >= 1 && extraFlags.push(LIFE_DEDUCT_ICICLES_FLAG)
+      nextCount >= 2 && extraFlags.push(LIFE_DEDUCT_TRAP_FLAG)
       LifeDeduction.show({
         k,
         currentScore: currentLifeScore,
         levelIndicator,
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
-        deductFlagValue: trapCount + 1,
+        deductFlagValue: nextCount,
         extraFlags,
         sceneLock,
         sceneBgRgb: { r: L2_SCENE_BG_R, g: L2_SCENE_BG_G, b: L2_SCENE_BG_B },
@@ -766,9 +785,9 @@ export function sceneLevel2(k) {
       // unless he landed exactly on the mini hero.
       //
       collisionWidth: 82,
-      platformCollisionXOffset: 82 / 2,
+      platformCollisionXOffset: 0,
       platformCollisionYOffset: 9,
-      revealWidth: 110
+      revealWidth: 120
     })
     //
     // Right-side floor icicles always present from the start.
@@ -966,6 +985,11 @@ export function sceneLevel2(k) {
           }
         })
       }
+      //
+      // Trap platform: while the hero stands on the 3rd log, the 2nd log slides
+      // left, pauses, returns, then waits before it can flee again.
+      //
+      updateTrapPlatformSlide(k, platformStates, heroX, heroY, dt)
       //
       // Update platform visibility timers and opacity
       //
@@ -1572,7 +1596,7 @@ function createSnowDrifts(k, lakeBounds) {
  * @param {Object} k - Kaplay instance
  * @returns {Object} Object with first platform position and platform states array
  */
-function createDiagonalPlatforms(k) {
+function createDiagonalPlatforms(k, enableTrap = false) {
   //
   // Platform parameters
   //
@@ -1789,7 +1813,21 @@ function createDiagonalPlatforms(k) {
     ])
     fakePlatformState.visualObject = fakeVisualObj
   })
-  
+  //
+  // Mark the 2nd log (index 1) as a trap that slides away while the hero
+  // stands on the 3rd log (index 2).
+  //
+  const trapState = platformStates[TRAP_PLATFORM_INDEX]
+  if (trapState && enableTrap) {
+    trapState.isTrap = true
+    trapState.trapTriggered = false
+    trapState.trapPhase = 'idle'
+    trapState.trapSlideProgress = 0
+    trapState.trapPauseTimer = 0
+    trapState.trapOriginalX = platforms[TRAP_PLATFORM_INDEX].x
+    trapState.trapCorridorTimer = 0
+    trapState.trapHasPassed = false
+  }
   //
   // Return first platform position and platform states for visibility system
   //
@@ -3662,6 +3700,81 @@ function drawHangingIcicles(k, data, platformStates) {
       opacity: pState.opacity * 0.85
     })
   }
+}
+//
+// True when the hero's feet are grounded on a visible log platform state.
+//
+function isHeroOnLogPlatform(heroX, heroFeetY, state, platformHeight) {
+  if (!state || state.opacity <= 0) return false
+  const platformTopY = state.y - platformHeight / 2
+  return Math.abs(heroX - state.x) < state.width / 2 + 20
+    && heroFeetY >= platformTopY - 5
+    && heroFeetY <= platformTopY + TRAP_PLATFORM_TOP_TOLERANCE
+}
+//
+// Slides the 2nd log left while the hero stands on the 3rd log, then returns it.
+//
+function updateTrapPlatformSlide(k, platformStates, heroX, heroY, dt) {
+  const triggerPlatform = platformStates[TRAP_TRIGGER_PLATFORM_INDEX]
+  const heroFeetY = heroY + 35
+  const heroOnThird = isHeroOnLogPlatform(heroX, heroFeetY, triggerPlatform, 30)
+  platformStates.forEach(state => {
+    if (!state.isTrap) return
+    if (state.trapHasPassed) return
+    const platformTopY = state.y - 15
+    const onTrap = Math.abs(heroX - state.x) < state.width / 2 + 20
+      && heroFeetY > platformTopY && heroFeetY < platformTopY + TRAP_PLATFORM_TOP_TOLERANCE
+      && state.opacity > 0
+    if (onTrap && (state.trapPhase === 'sliding-out' || state.trapPhase === 'pausing' || state.trapPhase === 'corridor')) {
+      state.trapHasPassed = true
+      return
+    }
+    if (state.trapPhase === 'corridor') {
+      state.trapCorridorTimer -= dt
+      if (state.trapCorridorTimer <= 0) {
+        state.trapTriggered = false
+        state.trapPhase = 'idle'
+      }
+      return
+    }
+    if (!state.trapTriggered && heroOnThird && state.opacity > 0) {
+      state.trapTriggered = true
+      state.trapPhase = 'sliding-out'
+      state.trapSlideProgress = 0
+      state.trapPauseTimer = 0
+    }
+    if (state.trapPhase === 'sliding-out') {
+      state.trapSlideProgress += TRAP_PLATFORM_SLIDE_SPEED * dt
+      if (state.trapSlideProgress >= TRAP_PLATFORM_SLIDE_DISTANCE) {
+        state.trapSlideProgress = TRAP_PLATFORM_SLIDE_DISTANCE
+        state.trapPhase = 'pausing'
+        state.trapPauseTimer = 0
+      }
+      syncTrapPlatformX(state, state.trapOriginalX - state.trapSlideProgress)
+    } else if (state.trapPhase === 'pausing') {
+      state.trapPauseTimer += dt
+      if (state.trapPauseTimer >= TRAP_PLATFORM_PAUSE_DURATION) {
+        state.trapPhase = 'sliding-back'
+      }
+    } else if (state.trapPhase === 'sliding-back') {
+      state.trapSlideProgress -= TRAP_PLATFORM_RETURN_SPEED * dt
+      if (state.trapSlideProgress <= 0) {
+        state.trapSlideProgress = 0
+        state.trapPhase = 'corridor'
+        state.trapCorridorTimer = TRAP_CORRIDOR_DURATION
+        state.trapTriggered = false
+      }
+      syncTrapPlatformX(state, state.trapOriginalX - state.trapSlideProgress)
+    }
+  })
+}
+//
+// Moves a trap platform's collision + visual objects together.
+//
+function syncTrapPlatformX(state, newX) {
+  state.x = newX
+  state.visualObject && (state.visualObject.pos.x = newX)
+  state.collisionObject && (state.collisionObject.pos.x = newX)
 }
 //
 // Checks if hero collides with hanging icicles.

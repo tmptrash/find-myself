@@ -940,12 +940,12 @@ export function sceneLevel3(k) {
       heroBodyColor: EXTRA_PLATFORM_B_HERO_COLOR,
       storageKey: EXTRA_PLATFORM_B_STORAGE_KEY,
       platformZ: CFG.visual.zIndex.platforms,
-      //
-      // Collision box offset: half the platform width to the right (two quarter-steps)
-      // and 7px down (3 from previous adjustment + 4 additional).
-      //
-      platformCollisionXOffset: Math.round(EXTRA_PLATFORM_B_WIDTH * 0.5),
-      platformCollisionYOffset: 7
+      requireMovingToward: true,
+      revealDistance: 320,
+      collisionWidth: EXTRA_PLATFORM_B_WIDTH + 12,
+      platformCollisionXOffset: 0,
+      platformCollisionYOffset: 7,
+      revealWidth: EXTRA_PLATFORM_B_WIDTH + 24
     })
     //
     // Create glow bugs on the bottom wall (blade-covered floor)

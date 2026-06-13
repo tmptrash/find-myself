@@ -3,6 +3,7 @@ import { getHex, isAnyKeyDown, onPhysicalKeyPress, getColor, parseHex, getRGB, t
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
+import * as TouchHandHold from '../sections/touch/utils/touch-hand-hold.js'
 import { set } from '../utils/progress.js'
 //
 // Sprite rendering: 96x96 at scale 1 for crisp 1px outlines
@@ -1857,6 +1858,53 @@ function onCollisionPlatform(inst) {
 }
 
 /**
+ * Points a character's pupils toward a world position.
+ * @param {Object} inst - Hero or anti-hero instance
+ * @param {number} worldX - Target world X
+ * @param {number} worldY - Target world Y
+ */
+export function setEyesLookingAt(inst, worldX, worldY) {
+  const pos = inst.character?.pos
+  if (!pos?.exists?.()) return
+  const dx = worldX - pos.x
+  const dy = worldY - pos.y
+  inst.eyeOffsetX = dx > 8 ? 1 : dx < -8 ? -1 : 0
+  inst.eyeOffsetY = dy > 8 ? 1 : dy < -8 ? -1 : 0
+  inst.character.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
+}
+
+/**
+ * Temporarily hides baked sprite arms (used during touch L3 hand-hold draw).
+ * @param {Object} inst - Hero or anti-hero instance
+ * @param {boolean} hidden - When true, swap to a no-arms sprite
+ */
+export function setArmsHidden(inst, hidden) {
+  if (hidden) {
+    inst._savedAddArms === undefined && (inst._savedAddArms = inst.addArms)
+    inst.addArms = false
+  } else if (inst._savedAddArms !== undefined) {
+    inst.addArms = inst._savedAddArms
+    inst._savedAddArms = undefined
+  }
+  refreshHeroSpriteForArms(inst)
+}
+
+/**
+ * Faces a character toward its partner and holds the idle frame during hand-hold.
+ * @param {Object} inst - Hero or anti-hero instance
+ * @param {number} partnerX - Partner world X
+ */
+export function forceIdleFacingPartner(inst, partnerX) {
+  const ch = inst.character
+  if (!ch?.exists?.()) return
+  inst.isRunning = false
+  inst.wasJumping = false
+  inst.jumpPhase = 'none'
+  ch.flipX = ch.pos.x > partnerX
+  ch.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
+}
+
+/**
  * Handle annihilation collision between hero and anti-hero
  * Both characters dissolve into particles and merge
  * @param {Object} inst - Hero instance
@@ -1870,29 +1918,22 @@ export function onAnnihilationCollide(inst) {
   if (inst.annihilationLocked) return
 
   inst.isAnnihilating = true
-  //
-  // Touch level 3: hero grows arms when meeting the anti-hero
-  //
-  inst.currentLevel === 'level-touch.3' && !inst.addArms && applyHeroArms(inst)
-
-  const { k, character: player, sfx } = inst
+  const { k } = inst
+  if (inst.currentLevel === 'level-touch.3' && inst.antiHero?.character?.exists?.()) {
+    TouchHandHold.begin(inst, (targetPos) => startAnnihilationExplosion(inst, targetPos))
+    return
+  }
   const target = inst.antiHero.character
-  //
-  // Pause anti-hero only
-  //
   target.paused = true
-
   const targetPos = k.vec2(target.pos.x, target.pos.y)
-  //
-  // INSTANT EXPLOSION: Anti-hero explodes immediately with sound and particles
-  //
-  //
-  // STEP 2: Immediately hide anti-hero (exploded)
-  //
   k.destroy(target)
-  //
-  // STEP 3: Force hero to idle state immediately after explosion
-  //
+  startAnnihilationExplosion(inst, targetPos)
+}
+//
+// Particle scatter / absorption sequence after anti-hero is removed.
+//
+function startAnnihilationExplosion(inst, targetPos) {
+  const { k, character: player, sfx } = inst
   inst.isRunning = false
   inst.runFrame = 0
   inst.runTimer = 0
@@ -2985,12 +3026,19 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
 //
 function applyHeroArms(inst) {
   inst.addArms = true
+  refreshHeroSpriteForArms(inst)
+}
+//
+// Rebuilds the visible sprite after addArms toggles.
+//
+function refreshHeroSpriteForArms(inst) {
   const bodyColorClean = String(inst.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
   const outlineColorClean = String(CFG.visual.colors.outline).replace('#', '')
   const hasMouth = inst.addMouth
-  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}_arms`
+  const hasWatch = inst.addWatch
+  inst.spritePrefix = `${inst.type}_${bodyColorClean}_${outlineColorClean}${hasMouth ? '_mouth' : ''}${inst.addArms ? '_arms' : ''}${hasWatch ? '_watch' : ''}`
   loadHeroSprites(inst)
-  inst.character?.use?.(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX, inst.eyeOffsetY)))
+  inst.character?.use?.(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
 }
 /**
  * Get sprite name for character (supports custom colors)

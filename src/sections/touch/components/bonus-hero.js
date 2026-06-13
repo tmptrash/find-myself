@@ -153,6 +153,7 @@ export function create(config) {
     platformCollisionHeight = null,
     platformCollisionTopTrim = 0,
     triggerBelowY = null,
+    requireMovingToward = false,
     platformCollisionXOffset = 0,
     platformCollisionYOffset = 0,
     platformZ = CFG.visual.zIndex.platforms
@@ -262,6 +263,7 @@ export function create(config) {
     // another floor — prevents false reveals during jumps above that floor.
     //
     triggerBelowY,
+    requireMovingToward,
     bonusPoints: 0,
     bonusFlashParticles: [],
     miniColor,
@@ -418,8 +420,12 @@ function onUpdate(inst) {
     inst.platform.pos.y = collisionY + inst.collisionYOffset
     inst.platform.pos.x = collisionCenterX
   } else {
-    const collLeft = collisionCenterX - inst.collisionWidth / 2 - 8
-    const collRight = collisionCenterX + inst.collisionWidth / 2 + 8
+    const platformSurfacePre = floatY + inst.collisionYOffset + inst.collisionAreaTop
+    const heroFeetYPre = heroPos.y + HERO_FEET_OFFSET
+    const heroAboveSurfacePre = heroFeetYPre < platformSurfacePre - 5
+    const aboveMargin = heroAboveSurfacePre ? 52 : 8
+    const collLeft = collisionCenterX - inst.collisionWidth / 2 - aboveMargin
+    const collRight = collisionCenterX + inst.collisionWidth / 2 + aboveMargin
     const horizontallyAligned = heroPos.x >= collLeft && heroPos.x <= collRight
       || (predictedHeroX >= collLeft && predictedHeroX <= collRight)
     //
@@ -429,8 +435,6 @@ function onUpdate(inst) {
     // horizontally aligned with the bonus). The aggressive APPROACH_DISTANCE
     // means the collider may be live even when the hero is far above.
     //
-    const platformSurfacePre = floatY + inst.collisionYOffset + inst.collisionAreaTop
-    const heroFeetYPre = heroPos.y + HERO_FEET_OFFSET
     const heroAtPlatformSurface = Math.abs(heroFeetYPre - platformSurfacePre) <= LAND_TOLERANCE * 1.5
     //
     // Check grounded BEFORE moving the platform, so the hero stays supported.
@@ -486,6 +490,8 @@ function onUpdate(inst) {
       //
       const ABOVE_MARGIN = 5
       const heroAboveSurface = heroFeetY < platformSurface - ABOVE_MARGIN
+      const towardCenter = Math.sign(collisionCenterX - heroPos.x)
+      const movingToward = Math.abs(velX) > 12 && towardCenter !== 0 && Math.sign(velX) === towardCenter
       //
       // While the hero is strictly above the platform AND already falling,
       // switch to a larger reveal window so the collider is in place well
@@ -494,7 +500,8 @@ function onUpdate(inst) {
       // The expanded distance is only active while `isFalling` is true, so it
       // never fires from a floor below the platform where the hero is standing.
       //
-      const effectiveRevealDist = (isFalling && heroAboveSurface)
+      const effectiveRevealDist = (inst.requireMovingToward && heroAboveSurface && movingToward)
+        || (isFalling && heroAboveSurface)
         ? Math.max(inst.revealDistance, FALLING_REVEAL_DISTANCE)
         : inst.revealDistance
       const heroWithinApproachRange = heroFeetY > platformSurface - effectiveRevealDist
@@ -506,9 +513,11 @@ function onUpdate(inst) {
       // from above — the platform only appears after the hero has actually
       // fallen clear below the floor above it.
       //
-      const primaryDetection = inst.triggerBelowY !== null
-        ? (isFalling && heroPos.y > inst.triggerBelowY)
-        : (heroAboveSurface && heroWithinApproachRange)
+      const primaryDetection = inst.requireMovingToward
+        ? (heroAboveSurface && movingToward && heroWithinApproachRange)
+        : inst.triggerBelowY !== null
+          ? (isFalling && heroPos.y > inst.triggerBelowY)
+          : (heroAboveSurface && heroWithinApproachRange)
       const predictedFeetY = heroFeetY + velY * dt * VELOCITY_PREDICTION_FRAMES
       const willCrossSurface = isFalling
         && heroFeetY <= platformSurface + LAND_TOLERANCE

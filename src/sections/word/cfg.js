@@ -152,7 +152,7 @@ export const WORD_CFG = {
       'level-word.1': { background: '#090911', platform: '#2E2E3C', playfield: '#56566C' },
       'level-word.2': { background: '#080810', platform: '#2A2A38', playfield: '#525268' },
       'level-word.3': { background: '#07070E', platform: '#262634', playfield: '#4E4E64' },
-      'level-word.4': { background: '#06060C', platform: '#222230', playfield: '#4A4A60' }
+      'level-word.4': { background: '#4A4A60', platform: '#222230', playfield: '#4A4A60' }
     },
     //
     // Z-order inside playfield (back → front): sky, noise, stream, emotions, memories, world, flying, vines, foreground

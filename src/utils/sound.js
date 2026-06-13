@@ -1609,11 +1609,12 @@ export function playScatterSound(inst) {
   
   const noiseGain = inst.audioContext.createGain()
   noiseGain.gain.setValueAtTime(0, now)
-  noiseGain.gain.linearRampToValueAtTime(0.4, now + 0.01)  // Sharp attack
+  noiseGain.gain.linearRampToValueAtTime(0.85, now + 0.01)
   noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   //
-  // Low-pass filter for muffled explosion
+  // Low-pass filter for muffled explosion — routed to master output so annihilation
+  // stays audible even when glitch gain is muted (word level 4 calm)
   //
   const filter = inst.audioContext.createBiquadFilter()
   filter.type = 'lowpass'
@@ -1622,7 +1623,7 @@ export function playScatterSound(inst) {
   
   noise.connect(filter)
   filter.connect(noiseGain)
-  noiseGain.connect(inst.glitchSoundGain)
+  noiseGain.connect(inst.audioContext.destination)
   
   //
   // Deep bass thump (explosion impact)
@@ -1635,11 +1636,11 @@ export function playScatterSound(inst) {
   bass.frequency.exponentialRampToValueAtTime(30, now + duration)
   
   bassGain.gain.setValueAtTime(0, now)
-  bassGain.gain.linearRampToValueAtTime(0.3, now + 0.02)
+  bassGain.gain.linearRampToValueAtTime(0.75, now + 0.02)
   bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   bass.connect(bassGain)
-  bassGain.connect(inst.glitchSoundGain)
+  bassGain.connect(inst.audioContext.destination)
   
   noise.start(now)
   noise.stop(now + duration)
@@ -1668,12 +1669,12 @@ export function playAbsorptionSound(inst) {
   tone1.frequency.linearRampToValueAtTime(300, now + duration)  // Slight fall at end
   
   tone1Gain.gain.setValueAtTime(0, now)
-  tone1Gain.gain.linearRampToValueAtTime(0.25, now + 0.2)
-  tone1Gain.gain.setValueAtTime(0.25, now + duration * 0.7)
+  tone1Gain.gain.linearRampToValueAtTime(0.55, now + 0.2)
+  tone1Gain.gain.setValueAtTime(0.55, now + duration * 0.7)
   tone1Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   tone1.connect(tone1Gain)
-  tone1Gain.connect(inst.glitchSoundGain)
+  tone1Gain.connect(inst.audioContext.destination)
   
   //
   // Harmonic overtone (fifth above) for richness
@@ -1687,12 +1688,12 @@ export function playAbsorptionSound(inst) {
   tone2.frequency.linearRampToValueAtTime(450, now + duration)
   
   tone2Gain.gain.setValueAtTime(0, now)
-  tone2Gain.gain.linearRampToValueAtTime(0.15, now + 0.3)
-  tone2Gain.gain.setValueAtTime(0.15, now + duration * 0.7)
+  tone2Gain.gain.linearRampToValueAtTime(0.35, now + 0.3)
+  tone2Gain.gain.setValueAtTime(0.35, now + duration * 0.7)
   tone2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   tone2.connect(tone2Gain)
-  tone2Gain.connect(inst.glitchSoundGain)
+  tone2Gain.connect(inst.audioContext.destination)
   
   //
   // Low rumble - particles converging
@@ -1705,12 +1706,12 @@ export function playAbsorptionSound(inst) {
   rumble.frequency.linearRampToValueAtTime(60, now + duration)
   
   rumbleGain.gain.setValueAtTime(0, now)
-  rumbleGain.gain.linearRampToValueAtTime(0.1, now + 0.4)
-  rumbleGain.gain.setValueAtTime(0.1, now + duration * 0.8)
+  rumbleGain.gain.linearRampToValueAtTime(0.28, now + 0.4)
+  rumbleGain.gain.setValueAtTime(0.28, now + duration * 0.8)
   rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   rumble.connect(rumbleGain)
-  rumbleGain.connect(inst.glitchSoundGain)
+  rumbleGain.connect(inst.audioContext.destination)
   
   tone1.start(now)
   tone1.stop(now + duration)
@@ -1740,12 +1741,12 @@ export function playMouthSound(inst) {
   main.frequency.exponentialRampToValueAtTime(400, now + duration)
   
   mainGain.gain.setValueAtTime(0.001, now)
-  mainGain.gain.exponentialRampToValueAtTime(0.3, now + 0.1)
-  mainGain.gain.setValueAtTime(0.3, now + 0.4)
+  mainGain.gain.exponentialRampToValueAtTime(0.65, now + 0.1)
+  mainGain.gain.setValueAtTime(0.65, now + 0.4)
   mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   main.connect(mainGain)
-  mainGain.connect(inst.glitchSoundGain)
+  mainGain.connect(inst.audioContext.destination)
   //
   // Sparkle harmonics (bright overtones)
   //
@@ -1758,11 +1759,11 @@ export function playMouthSound(inst) {
   sparkle.frequency.exponentialRampToValueAtTime(1600, now + duration)
   
   sparkleGain.gain.setValueAtTime(0.001, now)
-  sparkleGain.gain.exponentialRampToValueAtTime(0.15, now + 0.15)
+  sparkleGain.gain.exponentialRampToValueAtTime(0.38, now + 0.15)
   sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   sparkle.connect(sparkleGain)
-  sparkleGain.connect(inst.glitchSoundGain)
+  sparkleGain.connect(inst.audioContext.destination)
   //
   // Deep pulse (mysterious undertone)
   //
@@ -1774,11 +1775,11 @@ export function playMouthSound(inst) {
   pulse.frequency.linearRampToValueAtTime(60, now + duration)
   
   pulseGain.gain.setValueAtTime(0.001, now)
-  pulseGain.gain.exponentialRampToValueAtTime(0.2, now + 0.2)
+  pulseGain.gain.exponentialRampToValueAtTime(0.48, now + 0.2)
   pulseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   pulse.connect(pulseGain)
-  pulseGain.connect(inst.glitchSoundGain)
+  pulseGain.connect(inst.audioContext.destination)
   //
   // Start all oscillators
   //
@@ -1790,6 +1791,16 @@ export function playMouthSound(inst) {
   pulse.stop(now + duration)
 }
 
+/**
+ * Loud awakening cue for word level 4 calm completion — resonant pulse on the
+ * master output while glitch SFX are muted. The anti-hero recolor plays the
+ * transform mouth sound separately when the red colour appears.
+ * @param {Object} inst - Sound instance from create()
+ */
+export function playCalmAwakeningSound(inst) {
+  playWavePulseSound(inst)
+}
+
 export function playAnnihilationSound(instance) {
   const now = instance.audioContext.currentTime
   // Deep bass (50Hz -> 20Hz)
@@ -1798,23 +1809,48 @@ export function playAnnihilationSound(instance) {
   bass.type = 'sine'
   bass.frequency.setValueAtTime(50, now)
   bass.frequency.exponentialRampToValueAtTime(20, now + 0.5)
-  bassGain.gain.setValueAtTime(0.7, now)
-  bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
+  bassGain.gain.setValueAtTime(1.0, now)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65)
   bass.connect(bassGain)
   bassGain.connect(instance.audioContext.destination)
   bass.start(now)
-  bass.stop(now + 0.5)
+  bass.stop(now + 0.65)
   // Very low "hum" (30Hz)
   const subBass = instance.audioContext.createOscillator()
   const subBassGain = instance.audioContext.createGain()
   subBass.type = 'sine'
   subBass.frequency.setValueAtTime(30, now)
-  subBassGain.gain.setValueAtTime(0.6, now)
-  subBassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6)
+  subBassGain.gain.setValueAtTime(0.88, now)
+  subBassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75)
   subBass.connect(subBassGain)
   subBassGain.connect(instance.audioContext.destination)
   subBass.start(now)
-  subBass.stop(now + 0.6)
+  subBass.stop(now + 0.75)
+  //
+  // Mid crackle layer so the annihilation punch cuts through ambient music
+  //
+  const crackleDur = 0.45
+  const bufferSize = instance.audioContext.sampleRate * crackleDur
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const progress = i / bufferSize
+    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-progress * 8)
+  }
+  const noise = instance.audioContext.createBufferSource()
+  noise.buffer = noiseBuffer
+  const noiseGain = instance.audioContext.createGain()
+  noiseGain.gain.setValueAtTime(0.55, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + crackleDur)
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(900, now)
+  filter.Q.setValueAtTime(1.2, now)
+  noise.connect(filter)
+  filter.connect(noiseGain)
+  noiseGain.connect(instance.audioContext.destination)
+  noise.start(now)
+  noise.stop(now + crackleDur)
 }
 
 /**
@@ -3263,7 +3299,7 @@ export function playWavePulseSound(instance) {
   //
   const gain = ctx.createGain()
   gain.gain.setValueAtTime(0, now)
-  gain.gain.linearRampToValueAtTime(0.12, now + 0.01)
+  gain.gain.linearRampToValueAtTime(0.52, now + 0.01)
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   osc.connect(filter)
   filter.connect(gain)

@@ -321,8 +321,14 @@ function updateThirdEye(inst, eye) {
   eye.sprite.scale.y = eye.revealT
   eye.sprite.opacity = THIRD_EYE_OPACITY * eye.revealT
   eye.pupil.scaleY = eye.revealT
-  eye.pupil.gazeX = inst.gazeX
-  eye.pupil.gazeY = inst.gazeY
+  //
+  // Shared gaze is tuned for the larger side eyes — scale down and clamp to this
+  // eye's iris disc so the pupil never escapes the cornea circle
+  //
+  const gazeScale = THIRD_EYE_SCALE / EYE_SCALE
+  const clamped = clampPupilGaze(inst.gazeX * gazeScale, inst.gazeY * gazeScale, eye.eh)
+  eye.pupil.gazeX = clamped.gx
+  eye.pupil.gazeY = clamped.gy
 }
 
 //
@@ -394,6 +400,29 @@ function updateGaze(inst) {
     inst.gazeX = (inst.gazeX / dist) * GAZE_CIRCLE_MAX
     inst.gazeY = (inst.gazeY / dist) * GAZE_CIRCLE_MAX
   }
+}
+
+//
+// Keeps a pupil centre (gx, gy) inside the iris disc for an eye of half-height eh.
+// Matches the side-eye clamp in updateGaze but accepts per-eye dimensions so the
+// smaller third eye can reuse the shared gaze target safely.
+//
+function clampPupilGaze(gx, gy, eh) {
+  const irisR = Math.round(eh * 0.95)
+  const pupilR = Math.round(eh * 0.48)
+  //
+  // The drawn pupil includes a soft outer ring — clamp using its full radius
+  //
+  const drawR = Math.ceil(pupilR * 1.18)
+  const circleMax = irisR - drawR - 1
+  const downMax = Math.round(eh * 0.62) - pupilR - 2
+  let clampedY = Math.min(gy, downMax)
+  const dist = Math.sqrt(gx * gx + clampedY * clampedY)
+  if (dist > circleMax) {
+    gx = (gx / dist) * circleMax
+    clampedY = (clampedY / dist) * circleMax
+  }
+  return { gx, gy: clampedY }
 }
 
 //

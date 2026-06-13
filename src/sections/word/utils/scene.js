@@ -283,7 +283,12 @@ export function initScene(config) {
     sideWallWidth: wall,
     topPlatformHeight,
     bottomPlatformHeight: bottomPH,
-    playfieldColor
+    playfieldColor,
+    //
+    // Level 4 — no moon, clip roots and drifting words to the playfield interior
+    //
+    skipMoon: levelName === 'level-word.4',
+    clipToPlayfield: levelName === 'level-word.4'
   })
   WordHangingVines.create({
     k,

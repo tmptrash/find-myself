@@ -789,5 +789,6 @@ function onUpdate(inst) {
 ## Communication Language
 
 - **All responses and reports to the user must be written in Russian**
+- **All intermediate model reasoning (thinking, planning steps, internal analysis) must also be written in Russian**
 - Code comments and JSDoc remain in English (as required by rule 9)
 - Keep it simple: don't over-engineer solutions

@@ -180,7 +180,16 @@ const CALM_TIMER_FONT_SIZE = 24          // Countdown text size
 const CALM_TIMER_OFFSET_X = 34           // Countdown X offset from the hero centre (to the right)
 const CALM_TIMER_OFFSET_Y = 48           // Countdown Y offset above the hero centre
 const CALM_MONSTER_WORD = 'happy'        // Word shown on the monster while calm
-const CALM_MONSTER_COLOR = '#6BCB77'     // Friendly green for the monster + UUU blades + root runners + calm platform
+const CALM_MONSTER_FRIEND_WORD = 'friend' // Word shown on the monster after calm completes
+const CALM_MONSTER_COLOR = '#6BCB77'     // Friendly green for the monster + OMM blades + root runners + calm platform
+//
+// After the 10 s calm countdown finishes, the playfield slowly empties; then a
+// short pause before the hero speaks about feeling at one with the world.
+//
+const CALM_DISSOLVE_DURATION = 3.0       // Seconds for words / platforms / OMM to fade out
+const CALM_DISSOLVE_HINT_DELAY = 2.0     // Seconds after dissolve finishes before the hint
+const CALM_DISSOLVE_HINT_TEXT = "I feel at one with the world..."
+const CALM_DISSOLVE_HINT_DURATION = 4.0
 //
 // While calm, breath.mp3 swells to this multiple of its base volume (it becomes
 // the calming breathing) and a soft calm pad fades in; both revert on leaving.
@@ -668,7 +677,7 @@ export function sceneLevel4(k) {
     // raised enough that the hero clears its underside when jumping past it.
     //
     const forgetFloorY = platformY
-    createForgetPlatform(k, movingPlatform1X - 240, forgetFloorY - 85, sound, hero)
+    const forgetPlatform = createForgetPlatform(k, movingPlatform1X - 240, forgetFloorY - 85, sound, hero)
     //
     // "calm" platform sits between the last blades and the anti-hero. Standing on
     // it fades the ambient, greens the words/monster, shuts the brain eyes, and
@@ -693,9 +702,12 @@ export function sceneLevel4(k) {
       consciousnessLayers,
       bladeInsts: [staticBlades, staticBlades2],
       confusionWord,
+      forgetPlatform,
+      movingPlatforms: [movingPlatform1, movingPlatform2],
       completed: false
     }
     const calmPlatform = createCalmPlatform(k, calmRightX, calmLeftX, calmWordY, calmCtx)
+    calmCtx.calmState = calmPlatform.state
     //
     // Close each pit while the walking creature is over it so "fear" can cross,
     // then release it back to its normal hero trap once the creature has passed.
@@ -719,6 +731,7 @@ export function sceneLevel4(k) {
     // scene leave so the meditation drone always fades out and never lingers.
     //
     k.onSceneLeave(() => sound && Sound.stopCalmPad(sound))
+    k.onUpdate(() => onUpdateCalmDissolve(k, calmCtx))
     WordBladeProximity.create({
       k,
       hero,
@@ -1141,6 +1154,9 @@ function createConfusionWord(k, x, y, ctx) {
   ])
   obj.onUpdate(() => onUpdateConfusionWord(k, obj, body, state, x, y, ctx))
   return {
+    body,
+    obj,
+    state,
     //
     // After the calm meditation completes, chaos turns green and stops triggering
     // random outcomes — it becomes a plain floating platform.
@@ -1162,7 +1178,7 @@ function createConfusionWord(k, x, y, ctx) {
 //
 function onUpdateConfusionWord(k, obj, body, state, wordX, wordY, ctx) {
   const hero = ctx.hero
-  if (state.shattered) return
+  if (state.shattered || state.dissolving) return
   if (!hero?.character?.exists?.()) return
   //
   // After calm completes, chaos is a passive green platform — float only, no effects
@@ -1600,12 +1616,14 @@ function createForgetPlatform(k, x, y, sound, hero) {
     k.opacity(state.textOpacity)
   ])
   body.onUpdate(() => onUpdateForgetPlatform(k, body, label, state, hero))
+  return { body, label, state }
 }
 //
 // Manages the forget platform disappear / reappear lifecycle.
 // Counts down while the hero stands on it, then hides off-screen, then restores.
 //
 function onUpdateForgetPlatform(k, body, label, state, hero) {
+  if (state.dissolving) return
   if (!hero?.character?.exists?.()) return
   const heroX = hero.character.pos.x
   const heroY = hero.character.pos.y
@@ -1738,6 +1756,7 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
   ctx.breathMusic && (ctx.breathMusic.volume = ctx.audioBase.breath)
   body.onUpdate(() => onUpdateCalmPlatform(k, state, ctx))
   return {
+    state,
     relocate(side) {
       if (side === state.side) return
       state.side = side
@@ -1753,6 +1772,7 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
 // When the countdown completes the calm becomes permanent — the level stays green.
 //
 function onUpdateCalmPlatform(k, state, ctx) {
+  if (state.dissolving) return
   const hero = ctx.hero
   if (!hero?.character?.exists?.()) return
   //
@@ -1839,7 +1859,7 @@ function completeCalm(k, state, ctx) {
   // Resonant awakening cue marking the moment the anti-hero comes alive; the
   // recolor below also plays the touch-L1 transform sound + sparkle burst.
   //
-  ctx.sound && Sound.playWavePulseSound(ctx.sound)
+  ctx.sound && Sound.playCalmAwakeningSound(ctx.sound)
   onCalmComplete(k, ctx)
   //
   // Chaos becomes a plain green platform — no more random outcomes
@@ -1854,6 +1874,79 @@ function completeCalm(k, state, ctx) {
     Sound.stopCalmPad(ctx.sound)
   }
   ctx.breathMusic?.stop?.()
+  settleHeroesOnFloor(k, ctx)
+  beginCalmDissolve(k, ctx)
+}
+//
+// Moves the hero and anti-hero onto the main bottom platform before word-only
+// platforms are removed so they do not fall through the playfield.
+//
+function settleHeroesOnFloor(k, ctx) {
+  const { hero, antiHero } = ctx
+  hero?.character?.exists?.() && (hero.character.pos.y = HERO_SPAWN_Y)
+  antiHero?.character?.exists?.() && (antiHero.character.pos.y = ANTIHERO_SPAWN_Y)
+}
+//
+// Slowly fades every platform and word label out after calm completes, turns the
+// monster into a swaying "friend", and schedules the solitude hint on the hero.
+//
+function beginCalmDissolve(k, ctx) {
+  if (ctx.dissolve?.started) return
+  ctx.dissolve = { started: true, progress: 0, hintScheduled: false }
+  ctx.flyingWords && FlyingWords.beginDissolve(ctx.flyingWords, CALM_DISSOLVE_DURATION)
+  ctx.consciousnessLayers && WordConsciousnessLayers.beginDissolveRootRunners(ctx.consciousnessLayers)
+  ctx.consciousnessLayers && WordConsciousnessLayers.beginDissolveBackgroundWords(ctx.consciousnessLayers, CALM_DISSOLVE_DURATION)
+  ctx.bladeInsts?.forEach(b => Blades.beginDissolve(b, CALM_DISSOLVE_DURATION))
+  ctx.heroSpeech && WordHeroIdleSpeech.setCalm(ctx.heroSpeech, false)
+  //
+  // Monster becomes "friend" — stays in place with its idle sway/bounce animation
+  //
+  const bladeArm = ctx.bladeArm
+  if (bladeArm) {
+    bladeArm.calmStopped = true
+    BladeArm.setWord(bladeArm, CALM_MONSTER_FRIEND_WORD, true, k.rgb(...parseHex(CALM_MONSTER_COLOR)))
+  }
+  //
+  // Only word-based platforms fade out — structural floor/walls and moving pits stay
+  //
+  ctx.dissolveVisuals = []
+  const calmState = ctx.calmState
+  calmState && (calmState.dissolving = true)
+  calmState?.label?.exists?.() && ctx.dissolveVisuals.push({ obj: calmState.label, base: calmState.label.opacity ?? 1 })
+  calmState?.body?.exists?.() && ctx.dissolveVisuals.push({ obj: calmState.body, base: 0, isBody: true, destroyOnComplete: true })
+  const forget = ctx.forgetPlatform
+  forget?.state && (forget.state.dissolving = true)
+  forget?.label?.exists?.() && ctx.dissolveVisuals.push({ obj: forget.label, base: forget.label.opacity ?? 1 })
+  forget?.body?.exists?.() && ctx.dissolveVisuals.push({ obj: forget.body, base: 0, isBody: true, destroyOnComplete: true })
+  const chaos = ctx.confusionWord
+  chaos?.state && (chaos.state.dissolving = true)
+  chaos?.obj?.exists?.() && ctx.dissolveVisuals.push({ obj: chaos.obj, base: 1 })
+  chaos?.body?.exists?.() && ctx.dissolveVisuals.push({ obj: chaos.body, base: 0, isBody: true, destroyOnComplete: true })
+}
+//
+// Per-frame dissolve progress for platform visuals and the post-dissolve hint
+//
+function onUpdateCalmDissolve(k, ctx) {
+  const dissolve = ctx.dissolve
+  if (!dissolve?.started || dissolve.complete) return
+  dissolve.progress += k.dt() / CALM_DISSOLVE_DURATION
+  const fade = Math.max(0, 1 - dissolve.progress)
+  ctx.dissolveVisuals?.forEach(item => {
+    if (!item.obj?.exists?.()) return
+    item.obj.opacity = item.base > 0 ? item.base * fade : 0
+    if (dissolve.progress >= 1 && item.isBody && item.destroyOnComplete) {
+      item.obj.destroy()
+    }
+  })
+  if (dissolve.progress >= 1) {
+    dissolve.complete = true
+    if (!dissolve.hintScheduled) {
+      dissolve.hintScheduled = true
+      k.wait(CALM_DISSOLVE_HINT_DELAY, () => {
+        ctx.hero?.character?.exists?.() && spawnHintBubble(k, ctx.hero.character, CALM_DISSOLVE_HINT_TEXT, CALM_DISSOLVE_HINT_DURATION)
+      })
+    }
+  }
 }
 //
 // Creates/updates the small yellow (hero-coloured) countdown label shown to the

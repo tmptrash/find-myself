@@ -313,7 +313,7 @@ export function create(cfg) {
             pos: k.vec2(0, 0),
             angle: word.angle,
             color: word.color,
-            opacity: word.opacity
+            opacity: word.opacity * (currentInst.dissolveOpacity ?? 1)
           })
           k.popTransform()
         }
@@ -339,6 +339,23 @@ export function onUpdate(inst) {
   // Count down spawn grace period so killer letters are harmless for the first 2 s
   //
   inst.spawnProtectionTimer > 0 && (inst.spawnProtectionTimer -= inst.k.dt())
+  //
+  // Calm dissolve — fade everything out and stop motion until gone
+  //
+  if (inst.dissolving) {
+    inst.dissolveOpacity = Math.max(0, inst.dissolveOpacity - inst.k.dt() / inst.dissolveDuration)
+    killerLetters?.forEach(letter => {
+      letter.textObj?.exists?.() && (letter.textObj.opacity = inst.dissolveOpacity)
+    })
+    if (inst.dissolveOpacity <= 0) {
+      inst.dissolving = false
+      inst.showRegularWords = false
+      killerLetters?.forEach(letter => letter.textObj?.exists?.() && letter.textObj.destroy())
+      inst.killerLetters.length = 0
+      inst.words.length = 0
+    }
+    return
+  }
 
   //
   // Update regular words
@@ -377,6 +394,19 @@ export function setHarmless(inst, harmless) {
   if (inst.harmless === harmless) return
   inst.harmless = harmless
   harmless ? swapKillerWords(inst) : restoreKillerWords(inst)
+}
+
+/**
+ * Slowly fades all flying and killer words out and stops their motion. Used when
+ * the word level 4 calm meditation completes so the playfield empties peacefully.
+ * @param {Object} inst - Flying words instance
+ * @param {number} duration - Seconds until fully gone
+ */
+export function beginDissolve(inst, duration) {
+  if (!inst || inst.dissolving) return
+  inst.dissolving = true
+  inst.dissolveDuration = duration
+  inst.dissolveOpacity = 1
 }
 //
 // Blends all regular and killer words toward the harmless green by `blend` (0–1),

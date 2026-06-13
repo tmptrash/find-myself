@@ -276,6 +276,19 @@ export function setCalmMode(inst, calm, calmColor) {
   inst.calmTarget = calm ? 1 : 0
   inst.calmColor = calmColor
 }
+
+/**
+ * Slowly fades the blade (and its calm overlay, e.g. green OMM) until invisible.
+ * Used when the word level 4 calm meditation completes.
+ * @param {Object} inst - Blades instance
+ * @param {number} duration - Seconds until fully gone
+ */
+export function beginDissolve(inst, duration) {
+  if (!inst?.blade?.exists?.() || inst.dissolving) return
+  inst.dissolving = true
+  inst.dissolveDuration = duration
+  inst.dissolveOpacity = 1
+}
 //
 // Lazily creates the green "OMM" overlay and fades it in/out over the blue
 // blades each frame, fading the base blades out underneath so the swap is smooth.
@@ -306,6 +319,25 @@ function updateCalmOverlay(inst) {
   const diff = inst.calmTarget - inst.calmBlend
   inst.calmBlend += Math.sign(diff) * Math.min(Math.abs(diff), step)
   inst.calmBlend = Math.max(0, Math.min(1, inst.calmBlend))
+  //
+  // Calm dissolve — fade the whole blade stack out and disable collision
+  //
+  if (inst.dissolving) {
+    inst.dissolveOpacity = Math.max(0, inst.dissolveOpacity - k.dt() / inst.dissolveDuration)
+    const d = inst.dissolveOpacity
+    inst.blade.opacity = (1 - inst.calmBlend) * d
+    if (inst.calmOverlay?.exists?.()) {
+      inst.calmOverlay.opacity = inst.calmBlend * d
+    }
+    if (inst.dissolveOpacity <= 0) {
+      inst.dissolving = false
+      inst.collisionEnabled = false
+      inst.blade.hidden = true
+      inst.calmOverlay?.exists?.() && inst.calmOverlay.destroy()
+      inst.calmOverlay = null
+    }
+    return
+  }
   //
   // Fade the blue base down and the green overlay up; keep the overlay aligned
   //

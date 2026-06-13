@@ -216,10 +216,12 @@ const DRIFT_KIND_DEFS = [
  * @param {number} config.sideWallWidth - Play area side margin
  * @param {number} config.topPlatformHeight - Top platform height in pixels
  * @param {number} config.bottomPlatformHeight - Bottom platform height in pixels
+ * @param {boolean} [config.skipMoon=false] - Omit drift and celestial moons (word level 4)
+ * @param {boolean} [config.clipToPlayfield=false] - Keep roots and drifting words inside play bounds
  * @returns {Object} Consciousness layers instance
  */
 export function create(config) {
-  const { k, sideWallWidth, topPlatformHeight, bottomPlatformHeight, playfieldColor } = config
+  const { k, sideWallWidth, topPlatformHeight, bottomPlatformHeight, playfieldColor, skipMoon = false, clipToPlayfield = false } = config
   const colors = CFG.visual.colors.consciousness
   const playLeft = sideWallWidth ?? 192
   const playRight = k.width() - playLeft
@@ -234,6 +236,8 @@ export function create(config) {
     k,
     playLeft,
     playTop,
+    playRight,
+    playBottom,
     playWidth,
     playHeight,
     screenW,
@@ -241,6 +245,11 @@ export function create(config) {
     font,
     colors,
     playfieldColor: playfieldColor ?? colors.gameWorld ?? CFG.visual.colors.platform,
+    skipMoon,
+    clipToPlayfield,
+    backgroundWordsDissolving: false,
+    backgroundWordsOpacity: 1,
+    backgroundWordsDissolveDuration: 3,
     thoughtSky: [],
     noiseShapes: [],
     streamItems: [],
@@ -283,17 +292,47 @@ export function setRootRunnerColor(inst, color) {
   inst.rootRunnerColorTarget = color ?? inst.rootRunnerColorDefault
 }
 
+/**
+ * Stops spawning root runners and fades out every active one. Used when the word
+ * level 4 calm meditation completes so words along the brain roots disappear.
+ * @param {Object} inst - Consciousness layers inst
+ */
+export function beginDissolveRootRunners(inst) {
+  if (!inst) return
+  inst.rootRunnersDissolving = true
+  inst.rootRunners?.forEach(r => {
+    r.fading = true
+  })
+}
+
+/**
+ * Stops and slowly fades every drifting background word layer (thought sky, phrase
+ * clouds, thought stream). Used when word level 4 calm meditation completes.
+ * @param {Object} inst - Consciousness layers inst
+ * @param {number} [duration=3] - Seconds until fully gone
+ */
+export function beginDissolveBackgroundWords(inst, duration = 3) {
+  if (!inst || inst.backgroundWordsDissolving) return
+  inst.backgroundWordsDissolving = true
+  inst.backgroundWordsOpacity = 1
+  inst.backgroundWordsDissolveDuration = duration
+}
+
 //
 // Layer 0 — drifting blurred word clouds at the far back
 //
 function spawnThoughtSky(inst) {
-  const { k, screenW, screenH, colors, font } = inst
+  const { k, colors, font, clipToPlayfield, playLeft, playTop, playWidth, playHeight, screenW, screenH } = inst
+  const spanW = clipToPlayfield ? playWidth : screenW
+  const spanH = clipToPlayfield ? playHeight : screenH
+  const originX = clipToPlayfield ? playLeft : 0
+  const originY = clipToPlayfield ? playTop : 0
   for (let i = 0; i < THOUGHT_SKY_COUNT; i++) {
     const text = SKY_FRAGMENTS[Math.floor(Math.random() * SKY_FRAGMENTS.length)]
     const size = randomInRange(SKY_SIZE_MIN, SKY_SIZE_MAX)
     const depth = 0.52 + Math.random() * 0.24
-    const x = Math.random() * screenW
-    const y = Math.random() * screenH
+    const x = originX + Math.random() * spanW
+    const y = originY + Math.random() * spanH
     const vx = (Math.random() > 0.5 ? 1 : -1) * k.rand(SKY_DRIFT_MIN, SKY_DRIFT_MAX)
     const vy = k.rand(-SKY_DRIFT_MAX * 0.35, SKY_DRIFT_MAX * 0.35)
     const skyItem = {
@@ -312,7 +351,11 @@ function spawnThoughtSky(inst) {
 // Layer 0b — intermittent multi-word clouds across the full void
 //
 function spawnTextClouds(inst) {
-  const { k, screenW, screenH, colors, font } = inst
+  const { k, colors, font, clipToPlayfield, playLeft, playTop, playWidth, playHeight, screenW, screenH } = inst
+  const spanW = clipToPlayfield ? playWidth : screenW
+  const spanH = clipToPlayfield ? playHeight : screenH
+  const originX = clipToPlayfield ? playLeft : 0
+  const originY = clipToPlayfield ? playTop : 0
   for (let i = 0; i < TEXT_CLOUD_COUNT; i++) {
     const phrase = CLOUD_PHRASES[Math.floor(Math.random() * CLOUD_PHRASES.length)]
     const depth = 0.42 + Math.random() * 0.22
@@ -325,8 +368,8 @@ function spawnTextClouds(inst) {
     }))
     inst.textClouds.push({
       words,
-      x: Math.random() * screenW,
-      y: Math.random() * screenH,
+      x: originX + Math.random() * spanW,
+      y: originY + Math.random() * spanH,
       vx: (Math.random() > 0.5 ? 1 : -1) * k.rand(5, 16),
       vy: k.rand(-6, 6),
       depth,
@@ -345,39 +388,43 @@ function spawnTextClouds(inst) {
 // Distant drifting moon, trees, crow, and hero silhouettes on the dark void
 //
 function spawnDriftMotifs(inst) {
-  const { k, screenW, screenH, colors } = inst
+  const { k, screenW, screenH, colors, skipMoon, clipToPlayfield, playLeft, playTop, playWidth, playHeight } = inst
+  const spanW = clipToPlayfield ? playWidth : screenW
+  const spanH = clipToPlayfield ? playHeight : screenH
+  const originX = clipToPlayfield ? playLeft : 0
+  const originY = clipToPlayfield ? playTop : 0
   let spawned = 0
-  const moonCount = Math.floor(randomInRange(1, 3))
-  for (let i = 0; i < moonCount && spawned < DRIFT_MOTIF_COUNT; i++) {
-    const depth = randomInRange(0.44, 0.66)
-    const scale = randomInRange(1.4, 3.2)
-    inst.driftMotifs.push({
-      kind: 'moon',
-      x: screenW * randomInRange(0.12, 0.88),
-      y: screenH * randomInRange(0.06, 0.2),
-      vx: (Math.random() > 0.5 ? 1 : -1) * k.rand(4, 14) * (1 - depth * 0.35),
-      vy: k.rand(-2, 2),
-      depth,
-      scale,
-      phase: Math.random() * Math.PI * 2,
-      moonTint: randomInRange(MOON_DEPTH_BLEND_MIN, MOON_DEPTH_BLEND_MAX),
-      fadePhase: Math.random() * Math.PI * 2,
-      fadePeriod: MOTIF_FADE_PERIOD_MIN + Math.random() * (MOTIF_FADE_PERIOD_MAX - MOTIF_FADE_PERIOD_MIN)
-    })
-    spawned++
+  if (!skipMoon) {
+    const moonCount = Math.floor(randomInRange(1, 3))
+    for (let i = 0; i < moonCount && spawned < DRIFT_MOTIF_COUNT; i++) {
+      const depth = randomInRange(0.44, 0.66)
+      const scale = randomInRange(1.4, 3.2)
+      inst.driftMotifs.push({
+        kind: 'moon',
+        x: originX + spanW * randomInRange(0.12, 0.88),
+        y: originY + spanH * randomInRange(0.06, 0.2),
+        vx: (Math.random() > 0.5 ? 1 : -1) * k.rand(4, 14) * (1 - depth * 0.35),
+        vy: k.rand(-2, 2),
+        depth,
+        scale,
+        phase: Math.random() * Math.PI * 2,
+        moonTint: randomInRange(MOON_DEPTH_BLEND_MIN, MOON_DEPTH_BLEND_MAX),
+        fadePhase: Math.random() * Math.PI * 2,
+        fadePeriod: MOTIF_FADE_PERIOD_MIN + Math.random() * (MOTIF_FADE_PERIOD_MAX - MOTIF_FADE_PERIOD_MIN)
+      })
+      spawned++
+    }
   }
   DRIFT_KIND_DEFS.filter(def => def.kind !== 'moon').forEach(def => {
     const kindCount = Math.floor(randomInRange(def.countMin, def.countMax + 1))
     for (let i = 0; i < kindCount && spawned < DRIFT_MOTIF_COUNT; i++) {
       const depth = randomInRange(def.depthMin, def.depthMax)
       const scale = randomInRange(def.scaleMin, def.scaleMax)
-      const yBand = def.kind === 'moon'
-        ? screenH * randomInRange(0.05, 0.2)
-        : screenH * randomInRange(0.12, 0.78)
+      const yBand = originY + spanH * randomInRange(0.12, 0.78)
       const fillHex = atmosphericDepthColor(colors.memories, inst.playfieldColor, depth)
       const motif = {
         kind: def.kind,
-        x: Math.random() * screenW,
+        x: originX + Math.random() * spanW,
         y: yBand,
         vx: (Math.random() > 0.5 ? 1 : -1) * k.rand(6, 24) * (1 - depth * 0.45),
         vy: k.rand(-4, 4),
@@ -445,7 +492,7 @@ function spawnCenterBrain(inst) {
 // sprite and segment data, skipping the expensive canvas draw and k.loadSprite call.
 //
 function spawnBrainRoots(inst) {
-  const { k, playLeft, playTop, playWidth, playHeight, screenW, screenH } = inst
+  const { k, playLeft, playTop, playWidth, playHeight, screenW, screenH, clipToPlayfield } = inst
   const centerX = playLeft + playWidth * 0.5
   const centerY = playTop + playHeight * 0.5
   const brainZ = (CFG.visual.zIndex.wordPlayfieldFill ?? -90) + 1
@@ -453,9 +500,11 @@ function spawnBrainRoots(inst) {
   // Roots sit directly behind the brain sprite so the brain overlaps them at center
   //
   const rootsZ = brainZ - 0.5
+  const cacheSuffix = clipToPlayfield ? '-clipped' : ''
   let allSegments
   let spriteKey
-  if (rootsCache && k.getSprite(rootsCache.spriteKey)) {
+  const cached = rootsCache && rootsCache.clipToPlayfield === clipToPlayfield && k.getSprite(rootsCache.spriteKey)
+  if (cached) {
     //
     // Reuse cached sprite and segments from a previous scene run
     //
@@ -481,9 +530,10 @@ function spawnBrainRoots(inst) {
       })
       allSegments.push(...armSegs)
     }
-    spriteKey = 'word-brain-roots-cached'
+    spriteKey = `word-brain-roots-cached${cacheSuffix}`
     const canvas = toCanvas({ width: screenW, height: screenH, pixelRatio: 1 }, (ctx) => {
       ctx.lineCap = 'round'
+      clipToPlayfield && (ctx.save(), ctx.beginPath(), ctx.rect(playLeft, playTop, playWidth, playHeight), ctx.clip())
       allSegments.forEach(seg => {
         const opacity = Math.max(0.04, BRAIN_ROOT_BASE_OPACITY - seg.depth * BRAIN_ROOT_DEPTH_FADE)
         ctx.strokeStyle = `rgba(${BRAIN_ROOT_COLOR_R},${BRAIN_ROOT_COLOR_G},${BRAIN_ROOT_COLOR_B},${opacity})`
@@ -493,11 +543,12 @@ function spawnBrainRoots(inst) {
         ctx.lineTo(seg.endX, seg.endY)
         ctx.stroke()
       })
+      clipToPlayfield && ctx.restore()
     })
     k.loadSprite(spriteKey, canvas)
     canvas.width = 0
     canvas.height = 0
-    rootsCache = { spriteKey, allSegments }
+    rootsCache = { spriteKey, allSegments, clipToPlayfield }
   }
   k.add([
     k.sprite(spriteKey),
@@ -598,10 +649,14 @@ function spawnThoughtStream(inst) {
 // Layer 3 — touch moon and time sun sprites
 //
 function spawnCelestialMotifs(inst) {
-  const { k, playLeft, playTop, playWidth, playHeight } = inst
+  const { k, playLeft, playTop, playWidth, playHeight, skipMoon } = inst
   const zIdx = CFG.visual.zIndex.wordEmotions ?? -102
+  const kindOrder = skipMoon
+    ? CELESTIAL_KIND_ORDER.filter(k => k !== CELESTIAL_KIND_TOUCH_MOON)
+    : CELESTIAL_KIND_ORDER
+  if (!kindOrder.length) return
   for (let i = 0; i < CELESTIAL_COUNT; i++) {
-    const kind = CELESTIAL_KIND_ORDER[i % CELESTIAL_KIND_ORDER.length]
+    const kind = kindOrder[i % kindOrder.length]
     const x = playLeft + Math.random() * playWidth
     const y = playTop + Math.random() * playHeight
     const vx = k.rand(-8, 8)
@@ -653,15 +708,27 @@ function spawnForegroundPieces(inst) {
 // Per-frame motion, wrap-around, and memory flash scheduling
 //
 function onUpdate(inst) {
-  const { k, playLeft, playTop, playWidth, playHeight, screenW, screenH } = inst
+  const { k, playLeft, playTop, playWidth, playHeight, screenW, screenH, clipToPlayfield } = inst
   const dt = k.dt()
-  wrapDrifters(inst.thoughtSky, 0, 0, screenW, screenH, dt)
-  wrapDrifters(inst.textClouds, 0, 0, screenW, screenH, dt)
-  wrapDrifters(inst.driftMotifs, 0, 0, screenW, screenH, dt)
+  const wordLeft = clipToPlayfield ? playLeft : 0
+  const wordTop = clipToPlayfield ? playTop : 0
+  const wordWidth = clipToPlayfield ? playWidth : screenW
+  const wordHeight = clipToPlayfield ? playHeight : screenH
+  //
+  // After calm completes on word level 4, fade every drifting background word out
+  //
+  if (inst.backgroundWordsDissolving) {
+    inst.backgroundWordsOpacity = Math.max(0, inst.backgroundWordsOpacity - dt / inst.backgroundWordsDissolveDuration)
+    inst.backgroundWordsOpacity <= 0 && (inst.backgroundWordsDissolving = false)
+  } else {
+    wrapDrifters(inst.thoughtSky, wordLeft, wordTop, wordWidth, wordHeight, dt)
+    wrapDrifters(inst.textClouds, wordLeft, wordTop, wordWidth, wordHeight, dt)
+    wrapDrifters(inst.streamItems, playLeft, playTop, playWidth, playHeight, dt)
+    updateTextClouds(inst, dt)
+  }
+  wrapDrifters(inst.driftMotifs, wordLeft, wordTop, wordWidth, wordHeight, dt)
   updateDriftMotifs(inst, dt)
   wrapDrifters(inst.noiseShapes, playLeft, playTop, playWidth, playHeight, dt)
-  wrapDrifters(inst.streamItems, playLeft, playTop, playWidth, playHeight, dt)
-  updateTextClouds(inst, dt)
   updateCelestialMotifs(inst, dt)
   updateCenterBrain(inst, dt)
   updateRootRunners(inst, dt)
@@ -793,7 +860,7 @@ function updateRootRunners(inst, dt) {
   // Periodically spawn a new runner from a random arm at the brain center
   //
   inst.rootRunnerTimer += dt
-  if (inst.rootRunnerTimer >= inst.rootRunnerSpawnInterval && rootRunners.length < ROOT_RUNNER_MAX_COUNT) {
+  if (!inst.rootRunnersDissolving && inst.rootRunnerTimer >= inst.rootRunnerSpawnInterval && rootRunners.length < ROOT_RUNNER_MAX_COUNT) {
     inst.rootRunnerTimer = 0
     inst.rootRunnerSpawnInterval = ROOT_RUNNER_SPAWN_INTERVAL_MIN + Math.random() * (ROOT_RUNNER_SPAWN_INTERVAL_MAX - ROOT_RUNNER_SPAWN_INTERVAL_MIN)
     rootStartSegs.length > 0 && rootRunners.push(makeRootRunner(rootStartSegs[Math.floor(Math.random() * rootStartSegs.length)]))
@@ -804,7 +871,8 @@ function updateRootRunners(inst, dt) {
   for (let i = rootRunners.length - 1; i >= 0; i--) {
     const r = rootRunners[i]
     if (r.fading) {
-      r.opacity -= ROOT_RUNNER_FADE_SPEED * dt
+      const fadeRate = inst.rootRunnersDissolving ? ROOT_RUNNER_FADE_SPEED * 2.4 : ROOT_RUNNER_FADE_SPEED
+      r.opacity -= fadeRate * dt
       r.opacity <= 0 && rootRunners.splice(i, 1)
       continue
     }
@@ -872,11 +940,12 @@ function drawRootRunners(inst) {
 // Draws all consciousness layers back-to-front inside onDraw
 //
 function onDraw(inst) {
-  drawDriftMotifs(inst)
-  drawTextClouds(inst)
-  drawThoughtSky(inst)
+  const bgWordOp = inst.backgroundWordsOpacity ?? 1
+  bgWordOp > 0 && drawDriftMotifs(inst)
+  bgWordOp > 0 && drawTextClouds(inst, bgWordOp)
+  bgWordOp > 0 && drawThoughtSky(inst, bgWordOp)
   drawNoiseSilhouettes(inst)
-  drawThoughtStream(inst)
+  bgWordOp > 0 && drawThoughtStream(inst, bgWordOp)
   drawCelestialMotifs(inst)
   drawForegroundPieces(inst)
   drawRootRunners(inst)
@@ -913,7 +982,7 @@ function drawBakedFigure(k, x, y, scale, fillHex, opacity) {
 //
 // Intermittent phrase clouds on the dark void
 //
-function drawTextClouds(inst) {
+function drawTextClouds(inst, bgWordOp = 1) {
   const { k, textClouds } = inst
   textClouds.forEach(cloud => {
     const color = cloud.currentColor ?? cloud.color
@@ -925,7 +994,7 @@ function drawTextClouds(inst) {
         pos: k.vec2(cloud.x + word.offsetX, cloud.y + word.offsetY),
         anchor: 'center',
         color,
-        opacity: LAYER_DRAW_OPACITY * (cloud.wrapOpacity ?? 1)
+        opacity: LAYER_DRAW_OPACITY * (cloud.wrapOpacity ?? 1) * bgWordOp
       })
     })
   })
@@ -934,7 +1003,7 @@ function drawTextClouds(inst) {
 //
 // Layer 0 draw — pre-baked text sprites for zero per-frame font rendering cost
 //
-function drawThoughtSky(inst) {
+function drawThoughtSky(inst, bgWordOp = 1) {
   const { k, thoughtSky } = inst
   thoughtSky.forEach(item => {
     if (!item.spriteKey) return
@@ -942,7 +1011,7 @@ function drawThoughtSky(inst) {
       sprite: item.spriteKey,
       pos: k.vec2(item.x, item.y),
       anchor: 'center',
-      opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1)
+      opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1) * bgWordOp
     })
   })
 }
@@ -962,7 +1031,7 @@ function drawNoiseSilhouettes(inst) {
 //
 // Layer 2 draw — pre-baked text sprites; rotation handled via k.drawSprite angle parameter
 //
-function drawThoughtStream(inst) {
+function drawThoughtStream(inst, bgWordOp = 1) {
   const { k, streamItems } = inst
   streamItems.forEach(item => {
     if (!item.spriteKey) return
@@ -970,7 +1039,7 @@ function drawThoughtStream(inst) {
       sprite: item.spriteKey,
       pos: k.vec2(item.x, item.y),
       anchor: 'center',
-      opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1),
+      opacity: LAYER_DRAW_OPACITY * (item.wrapOpacity ?? 1) * bgWordOp,
       angle: item.rot ? item.rot * (180 / Math.PI) : 0
     })
   })

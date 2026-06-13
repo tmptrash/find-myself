@@ -6,42 +6,54 @@ This is a Kaplay.js-based 2D platformer game with procedural graphics and audio.
 ---
 
 ## 1. Module Organization
+Entire application should be splitted into the modules - files with import/export keywords inside, which incapsulate some logic by hidding it in a functions and local variables. These functions and vars have no export keywords, so they are available only within a module. Folders structure may be different except high level structure. On a root level it's an "assets" folder for game assets. "dist" - for compiled version of the game. "electron" - for compiled standalone version of the game. In a "src" folder this structure should be: index.js, cfg.js - files with game entry point and global configuration. Folders "components" - for global game components, "scenes" - for global game scenes, "sections" - for game sections (big game parts), "utils" - for global game utilities. Folder "sections" consists of sub-folders for every section with similar structure inside - "components", "scenes", "utils". "scenes" folder in this list contains concrete levels in format "levelX.js".
 
 ### Structure
-- **All constants at the top of the file (before any functions)**
-- **Every module should export create() function & it should be on the top**
-- **All exported functions at the top**
-- **All private functions at the bottom**
+- All constants at the top of the file (before any functions)
+- Every module should export create() function & it should be on the top of the file
+- All exported functions at the top of the file
+- All private functions at the bottom of the file
 - Use `export function name()` syntax (not `export default`)
 
 ### Example
 ```javascript
 import { cfg } from '../cfg.js'
-
+//
 // Module constants
+//
 const SOME_CONSTANT = 42
-
+//
 // Exported constants (if needed)
+//
 export const TYPES = {
   TYPE_A: 'a',
   TYPE_B: 'b'
 }
-
+//
+// Creates an instance of some entity
+//
 export function create(cfg) {
   const inst = {}
   // Implementation
   return inst
 }
-
+//
+// inst must be passed as a first parameter to all public & private
+// functions. Otherwise they are static functions
+//
 export function loadSprites(inst) {
   // Implementation
 }
-
+//
+// No export, so this is a private function of the module
+//
 function privateHelper(inst) {
   // Implementation
 }
-
-function anotherHelper(inst) {
+//
+// No export, so this is a private function of the module
+//
+function anotherPrivateHelper(inst) {
   // Implementation
 }
 ```

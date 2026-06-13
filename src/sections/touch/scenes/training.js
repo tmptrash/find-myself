@@ -81,7 +81,7 @@ const BONUS_PLATFORM_W = 72
 //
 const BONUS_PLATFORM_COLLISION_WIDTH = 84
 const BONUS_PLATFORM_COLLISION_HEIGHT = MAIN_PLATFORM_H
-const BONUS_PLATFORM_COLLISION_X_OFFSET = BONUS_PLATFORM_COLLISION_WIDTH / 2
+const BONUS_PLATFORM_COLLISION_X_OFFSET = 0
 const BONUS_PLATFORM_COLLISION_Y_OFFSET = 9
 //
 // Single red spike cluster to the right of the hidden bonus platform
@@ -619,6 +619,10 @@ export function sceneTouchTraining(k) {
     //
     // Bonus hero on hidden platform
     //
+    //
+    // Hidden bonus log — collider centred on the visual barrel so left-edge
+    // landings register the same as centre jumps
+    //
     const bonusHeroInst = BonusHero.create({
       k,
       x: BONUS_PLATFORM_X,
@@ -633,7 +637,8 @@ export function sceneTouchTraining(k) {
       collisionWidth: BONUS_PLATFORM_COLLISION_WIDTH,
       platformCollisionHeight: BONUS_PLATFORM_COLLISION_HEIGHT,
       platformCollisionXOffset: BONUS_PLATFORM_COLLISION_X_OFFSET,
-      platformCollisionYOffset: BONUS_PLATFORM_COLLISION_Y_OFFSET
+      platformCollisionYOffset: BONUS_PLATFORM_COLLISION_Y_OFFSET,
+      approachFromAbove: true
     })
     levelIndicator.updateHeroScore = ((orig) => (score) => {
       orig(score)

@@ -37,10 +37,11 @@ export function getNoteTreePositions(leftMargin, rightMargin, screenWidth) {
  * @param {number} config.leftMargin - Left margin of playable area
  * @param {number} config.rightMargin - Right margin of playable area
  * @param {number} config.screenWidth - Screen width
+ * @param {Object} [config.sfx] - Shared Sound instance (uses its AudioContext for notes)
  * @returns {Promise<Object>} Tree roots instance
  */
 export async function create(config) {
-  const { k, floorY, leftMargin, rightMargin, screenWidth } = config
+  const { k, floorY, leftMargin, rightMargin, screenWidth, sfx } = config
   
   //
   // Random helper
@@ -436,7 +437,11 @@ export async function create(config) {
       glowTimer: 0,
       swaySpeed: 0.1 + Math.random() * 0.05,
       swayOffset: Math.random() * Math.PI * 2,
-      rootSegments: allRootSegments
+      rootSegments: allRootSegments,
+      //
+      // Live leaf pool for FallingLeaf — positions match the baked sprite canopy
+      //
+      leafClusters
     }
   })
   
@@ -456,7 +461,9 @@ export async function create(config) {
     k,
     roots,
     floorY,
-    audioContext: null
+    audioContext: null,
+    sfx: sfx ?? null,
+    echoBus: null
   }
 }
 
@@ -510,13 +517,17 @@ function drawLeafToCanvas(ctx, x, y, size, angle, color, opacity) {
  * @param {number} frequency - Note frequency in Hz
  */
 function playNote(inst, frequency) {
-  const { k } = inst
-
+  const { k, sfx } = inst
+  //
+  // Prefer the level's shared Sound AudioContext (already unlocked by gameplay)
+  //
   if (!inst.audioContext) {
-    inst.audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    inst.audioContext = sfx?.audioContext
+      ?? new (window.AudioContext || window.webkitAudioContext)()
   }
 
   const ctx = inst.audioContext
+  ctx.state === 'suspended' && ctx.resume()
   //
   // Lazily build a shared echo bus: feedback delay with a lowpass filter
   // so each note naturally trails off into echoes. Output is mixed into
@@ -595,8 +606,8 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
   
   const heroX = heroCharacter.pos.x
   const heroY = heroCharacter.pos.y
-  const heroWidth = 60  // Increased width for better detection during flight
-  const trunkWidth = 25  // Increased trunk collision width
+  const heroWidth = 70  // Horizontal reach for trunk touch while walking
+  const trunkWidth = 30  // Trunk collision half-width
   
   let touchedTreeIndex = -1
   

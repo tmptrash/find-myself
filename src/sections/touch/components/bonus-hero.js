@@ -418,8 +418,10 @@ function onUpdate(inst) {
     inst.platform.pos.y = collisionY + inst.collisionYOffset
     inst.platform.pos.x = collisionCenterX
   } else {
-    const halfReveal = inst.revealWidth / 2
-    const horizontallyAligned = dx < halfReveal || dxPredicted < halfReveal
+    const collLeft = collisionCenterX - inst.collisionWidth / 2 - 8
+    const collRight = collisionCenterX + inst.collisionWidth / 2 + 8
+    const horizontallyAligned = heroPos.x >= collLeft && heroPos.x <= collRight
+      || (predictedHeroX >= collLeft && predictedHeroX <= collRight)
     //
     // Pre-compute the platform's collidable surface so the heroOnPlatform
     // check below can verify the hero is grounded AT this platform (and

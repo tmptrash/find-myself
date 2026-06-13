@@ -1,4 +1,7 @@
 import { CFG } from '../cfg.js'
+import { CFG as GAME_CFG } from '../../../cfg.js'
+import { isAnyKeyDown } from '../../../utils/helper.js'
+import * as TouchControls from '../../../utils/touch-controls.js'
 import { initScene, checkSpeedBonus, playLifeDeathEffects, createOutlinedDeathMessage } from '../utils/scene.js'
 import { getColor, toCanvas, parseHex } from '../../../utils/helper.js'
 import * as Hero from '../../../components/hero.js'
@@ -187,6 +190,16 @@ const CALM_MONSTER_COLOR = '#6BCB77'     // Friendly green for the monster + OMM
 // short pause before the hero speaks about feeling at one with the world.
 //
 const CALM_DISSOLVE_DURATION = 3.0       // Seconds for words / platforms / OMM to fade out
+const CALM_PLATFORM_DISSOLVE_DURATION = 6.0 // Calm word platform fades slower; hero falls when it vanishes
+const CALM_TIMER_OUTLINE_OFFSETS = [
+  [-2, -2], [0, -2], [2, -2],
+  [-2, 0], [2, 0],
+  [-2, 2], [0, 2], [2, 2]
+]
+//
+// Vertical offset of the forget platform above the floor (smaller = lower)
+//
+const FORGET_HOVER_OFFSET = 70
 const CALM_DISSOLVE_HINT_DELAY = 2.0     // Seconds after dissolve finishes before the hint
 const CALM_DISSOLVE_HINT_TEXT = "I feel at one with the world..."
 const CALM_DISSOLVE_HINT_DURATION = 4.0
@@ -677,7 +690,7 @@ export function sceneLevel4(k) {
     // raised enough that the hero clears its underside when jumping past it.
     //
     const forgetFloorY = platformY
-    const forgetPlatform = createForgetPlatform(k, movingPlatform1X - 240, forgetFloorY - 85, sound, hero)
+    const forgetPlatform = createForgetPlatform(k, movingPlatform1X - 240, forgetFloorY - FORGET_HOVER_OFFSET, sound, hero)
     //
     // "calm" platform sits between the last blades and the anti-hero. Standing on
     // it fades the ambient, greens the words/monster, shuts the brain eyes, and
@@ -1701,6 +1714,8 @@ function createCalmPlatform(k, rightX, leftX, y, ctx) {
     completed: false,
     floatOffset: Math.random() * Math.PI * 2,
     timerLabel: null,
+    timerOutlineLabels: null,
+    meditating: false,
     body: null,
     x: rightX,
     rightX,
@@ -1798,19 +1813,43 @@ function onUpdateCalmPlatform(k, state, ctx) {
   //
   if (!state.completed && onTop !== state.heroOn) {
     state.heroOn = onTop
-    if (onTop) enterCalm(k, state, ctx)
-    else exitCalm(k, state, ctx)
+    if (onTop) {
+      enterCalm(k, state, ctx)
+      const moving = isCalmHeroMoving(hero)
+      state.meditating = !moving
+      moving ? Hero.setEyesClosed(hero, false) : Hero.enterCalmPose(hero)
+    } else {
+      exitCalm(k, state, ctx)
+      state.meditating = false
+    }
   }
   //
-  // Meditation countdown — runs only while standing, resets on stepping off
+  // Meditation countdown — ticks only while standing still on calm; running resets
+  // the timer and shows normal run animation until the hero idles again.
   //
   if (!state.completed) {
     if (onTop) {
-      state.timer = Math.max(0, state.timer - k.dt())
-      updateCalmTimer(k, state, hero)
-      if (state.timer <= 0) completeCalm(k, state, ctx)
-    } else if (state.timer !== CALM_TIMER_SECONDS) {
+      const heroMoving = isCalmHeroMoving(hero)
+      if (heroMoving) {
+        if (state.meditating) {
+          state.meditating = false
+          Hero.setEyesClosed(hero, false)
+          state.timer = CALM_TIMER_SECONDS
+          destroyCalmTimer(state)
+        }
+      } else {
+        if (!state.meditating) {
+          state.meditating = true
+          Hero.enterCalmPose(hero)
+          state.timer = CALM_TIMER_SECONDS
+        }
+        state.timer = Math.max(0, state.timer - k.dt())
+        updateCalmTimer(k, state, hero)
+        if (state.timer <= 0) completeCalm(k, state, ctx)
+      }
+    } else if (state.timer !== CALM_TIMER_SECONDS || state.timerLabel) {
       state.timer = CALM_TIMER_SECONDS
+      state.meditating = false
       destroyCalmTimer(state)
     }
   }
@@ -1874,17 +1913,7 @@ function completeCalm(k, state, ctx) {
     Sound.stopCalmPad(ctx.sound)
   }
   ctx.breathMusic?.stop?.()
-  settleHeroesOnFloor(k, ctx)
   beginCalmDissolve(k, ctx)
-}
-//
-// Moves the hero and anti-hero onto the main bottom platform before word-only
-// platforms are removed so they do not fall through the playfield.
-//
-function settleHeroesOnFloor(k, ctx) {
-  const { hero, antiHero } = ctx
-  hero?.character?.exists?.() && (hero.character.pos.y = HERO_SPAWN_Y)
-  antiHero?.character?.exists?.() && (antiHero.character.pos.y = ANTIHERO_SPAWN_Y)
 }
 //
 // Slowly fades every platform and word label out after calm completes, turns the
@@ -1892,7 +1921,7 @@ function settleHeroesOnFloor(k, ctx) {
 //
 function beginCalmDissolve(k, ctx) {
   if (ctx.dissolve?.started) return
-  ctx.dissolve = { started: true, progress: 0, hintScheduled: false }
+  ctx.dissolve = { started: true, progress: 0, calmProgress: 0, hintScheduled: false }
   ctx.flyingWords && FlyingWords.beginDissolve(ctx.flyingWords, CALM_DISSOLVE_DURATION)
   ctx.consciousnessLayers && WordConsciousnessLayers.beginDissolveRootRunners(ctx.consciousnessLayers)
   ctx.consciousnessLayers && WordConsciousnessLayers.beginDissolveBackgroundWords(ctx.consciousnessLayers, CALM_DISSOLVE_DURATION)
@@ -1912,8 +1941,8 @@ function beginCalmDissolve(k, ctx) {
   ctx.dissolveVisuals = []
   const calmState = ctx.calmState
   calmState && (calmState.dissolving = true)
-  calmState?.label?.exists?.() && ctx.dissolveVisuals.push({ obj: calmState.label, base: calmState.label.opacity ?? 1 })
-  calmState?.body?.exists?.() && ctx.dissolveVisuals.push({ obj: calmState.body, base: 0, isBody: true, destroyOnComplete: true })
+  calmState?.label?.exists?.() && ctx.dissolveVisuals.push({ obj: calmState.label, base: calmState.label.opacity ?? 1, calmOnly: true })
+  calmState?.body?.exists?.() && ctx.dissolveVisuals.push({ obj: calmState.body, base: 0, isBody: true, destroyOnComplete: true, calmOnly: true })
   const forget = ctx.forgetPlatform
   forget?.state && (forget.state.dissolving = true)
   forget?.label?.exists?.() && ctx.dissolveVisuals.push({ obj: forget.label, base: forget.label.opacity ?? 1 })
@@ -1930,15 +1959,19 @@ function onUpdateCalmDissolve(k, ctx) {
   const dissolve = ctx.dissolve
   if (!dissolve?.started || dissolve.complete) return
   dissolve.progress += k.dt() / CALM_DISSOLVE_DURATION
+  dissolve.calmProgress += k.dt() / CALM_PLATFORM_DISSOLVE_DURATION
   const fade = Math.max(0, 1 - dissolve.progress)
+  const calmFade = Math.max(0, 1 - dissolve.calmProgress)
   ctx.dissolveVisuals?.forEach(item => {
     if (!item.obj?.exists?.()) return
-    item.obj.opacity = item.base > 0 ? item.base * fade : 0
-    if (dissolve.progress >= 1 && item.isBody && item.destroyOnComplete) {
+    const itemFade = item.calmOnly ? calmFade : fade
+    item.obj.opacity = item.base > 0 ? item.base * itemFade : 0
+    const itemDone = item.calmOnly ? dissolve.calmProgress >= 1 : dissolve.progress >= 1
+    if (itemDone && item.isBody && item.destroyOnComplete) {
       item.obj.destroy()
     }
   })
-  if (dissolve.progress >= 1) {
+  if (dissolve.progress >= 1 && dissolve.calmProgress >= 1) {
     dissolve.complete = true
     if (!dissolve.hintScheduled) {
       dissolve.hintScheduled = true
@@ -1954,28 +1987,51 @@ function onUpdateCalmDissolve(k, ctx) {
 //
 function updateCalmTimer(k, state, hero) {
   const seconds = Math.max(0, Math.ceil(state.timer))
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const timerX = hero.character.pos.x + CALM_TIMER_OFFSET_X
+  const timerY = hero.character.pos.y - CALM_TIMER_OFFSET_Y
+  const fillColor = parseHex(hero.bodyColor || CFG.visual.colors.hero.body)
   if (!state.timerLabel) {
+    //
+    // k.outline does not render on k.text — bake a black halo from 8 offset copies
+    //
+    state.timerOutlineLabels = CALM_TIMER_OUTLINE_OFFSETS.map(([dx, dy]) =>
+      k.add([
+        k.text(String(seconds), { size: CALM_TIMER_FONT_SIZE, font: fontFamily }),
+        k.pos(timerX + dx, timerY + dy),
+        k.anchor('center'),
+        k.color(0, 0, 0),
+        k.z(CFG.visual.zIndex.ui + 9)
+      ])
+    )
     state.timerLabel = k.add([
-      k.text(String(seconds), { size: CALM_TIMER_FONT_SIZE, font: CFG.visual.fonts.regularFull.replace(/'/g, '') }),
-      k.pos(0, 0),
+      k.text(String(seconds), { size: CALM_TIMER_FONT_SIZE, font: fontFamily }),
+      k.pos(timerX, timerY),
       k.anchor('center'),
       //
       // Match the hero's actual body colour (it varies with section progress —
       // yellow/orange/brown) so the countdown reads as the hero's own timer
       //
-      k.color(...parseHex(hero.bodyColor || CFG.visual.colors.hero.body)),
-      k.outline(1, k.rgb(0, 0, 0)),
+      k.color(...fillColor),
       k.z(CFG.visual.zIndex.ui + 10)
     ])
   }
   state.timerLabel.text = String(seconds)
-  state.timerLabel.pos.x = hero.character.pos.x + CALM_TIMER_OFFSET_X
-  state.timerLabel.pos.y = hero.character.pos.y - CALM_TIMER_OFFSET_Y
+  state.timerLabel.pos.x = timerX
+  state.timerLabel.pos.y = timerY
+  state.timerOutlineLabels?.forEach((label, i) => {
+    const [dx, dy] = CALM_TIMER_OUTLINE_OFFSETS[i]
+    label.text = String(seconds)
+    label.pos.x = timerX + dx
+    label.pos.y = timerY + dy
+  })
 }
 //
 // Removes the countdown label if present.
 //
 function destroyCalmTimer(state) {
+  state.timerOutlineLabels?.forEach(label => label.destroy())
+  state.timerOutlineLabels = null
   if (state.timerLabel) {
     state.timerLabel.destroy()
     state.timerLabel = null
@@ -2018,7 +2074,6 @@ function enterCalm(k, state, ctx) {
     state.label.use(k.sprite(state.greenKey.key, { width: state.greenKey.w, height: state.greenKey.h }))
   }
   ctx.flyingWords && FlyingWords.setHarmless(ctx.flyingWords, true)
-  ctx.hero && Hero.setEyesClosed(ctx.hero, true)
   //
   // Hold both pits closed so they can't open under the calm hero
   //
@@ -2235,5 +2290,17 @@ function showLetterInstructions(k) {
       }
     }
   })
+}
+//
+// True when the hero is holding a horizontal move key (or touch control) on calm.
+//
+function isCalmHeroMoving(hero) {
+  if (!hero?.isSpawned || hero.controlsDisabled || hero.isAnnihilating) return false
+  const k = hero.k
+  if (TouchControls.needsTouchControls()) {
+    return TouchControls.isMoveLeftHeld() || TouchControls.isMoveRightHeld()
+      || isAnyKeyDown(k, GAME_CFG.controls.moveLeft) || isAnyKeyDown(k, GAME_CFG.controls.moveRight)
+  }
+  return isAnyKeyDown(k, GAME_CFG.controls.moveLeft) || isAnyKeyDown(k, GAME_CFG.controls.moveRight)
 }
 

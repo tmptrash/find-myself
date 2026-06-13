@@ -53,6 +53,7 @@ const CONFUSION_KEYS = [
 const CONFUSION_NORMAL_JUMP_NAMES = ['up', 'w', 'space']
 const JUMP_FRAME_COUNT = 6
 const JUMP_SQUASH_TIME = 0.03
+const JUMP_CEILING_CLEARANCE = 44
 const JUMP_STRETCH_START = 0.1
 //
 // While ascending/at peak the hero tucks its legs up, so the collision box is
@@ -683,6 +684,25 @@ export function setEyesClosed(inst, closed) {
 }
 
 /**
+ * Puts the hero into calm meditation pose: closed eyes, idle frame, jump/run
+ * state cleared so re-entering the calm platform never leaves a sideways squat.
+ * @param {Object} inst - Hero instance
+ */
+export function enterCalmPose(inst) {
+  setEyesClosed(inst, true)
+  inst.isSquashing = false
+  inst.squashTimer = 0
+  inst.isCrouching = false
+  inst.crouchTimer = 0
+  inst.jumpPhase = 'none'
+  inst.jumpFrame = 0
+  inst.isRunning = false
+  inst.wasJumping = false
+  inst.runFrame = 0
+  inst.runTimer = 0
+}
+
+/**
  * Recolours an existing anti-hero's body at runtime, rebaking its sprites and
  * swapping the visible sprite, then plays a sparkle + sound flourish. Mirrors
  * the touch level 1 grey→active transformation so other sections can reuse it.
@@ -1112,6 +1132,12 @@ function onUpdate(inst) {
   // Handle pre-jump squash animation (only when grounded)
   //
   if (inst.isSquashing && isGrounded) {
+    if (isJumpCeilingBlocked(inst)) {
+      cancelJumpSquash(inst)
+      inst.eyesClosed && updateIdleAnimation(inst)
+      inst.character.flipX = inst.direction === -1
+      return
+    }
     inst.squashTimer += inst.k.dt()
     const prefix = inst.spritePrefix || inst.type
     //
@@ -1253,6 +1279,15 @@ function onUpdate(inst) {
     // Restore the full collision box once the hero is back on the ground
     //
     setJumpTuck(inst, false)
+  }
+  //
+  // Calm meditation: always hold the closed-eyes idle frame on the ground,
+  // even while walking on the calm platform (no run/side-view frames).
+  //
+  if (inst.eyesClosed && isGrounded && inst.jumpPhase === 'none' && !inst.isSquashing) {
+    updateIdleAnimation(inst)
+    inst.character.flipX = inst.direction === -1
+    return
   }
 
   if (isMoving) {
@@ -1428,6 +1463,7 @@ function setupControls(inst) {
   //
   const executeJump = () => {
     if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled) return
+    if (isJumpCeilingBlocked(inst)) return
     if (inst.canJump && !inst.isSquashing) {
       inst.isSquashing = true
       inst.squashTimer = 0
@@ -2147,7 +2183,7 @@ export function onAnnihilationCollide(inst) {
               //
               // Special sequence for completing word section: add mouth and red color before transition
               //
-              k.wait(1.5, () => {
+              k.wait(0.4, () => {
                 //
                 // Store original volumes
                 //
@@ -2185,7 +2221,7 @@ export function onAnnihilationCollide(inst) {
                 //
                 // Play pre-mouth sound (louder glitch) - wait 1.3 seconds after fade completes
                 //
-                k.wait(1.3, () => {
+                k.wait(0.35, () => {
                   sfx && Sound.playMouthSound(sfx)
                   //
                   // Add mouth to hero sprite
@@ -2246,7 +2282,7 @@ export function onAnnihilationCollide(inst) {
                       //
                       // Pause to show the mouth longer
                       //
-                      k.wait(2.5, () => {
+                      k.wait(1.0, () => {
                         //
                         // Fade volumes back to normal
                         //
@@ -3582,4 +3618,56 @@ function fillRoundedRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y, x + w, y, cr)
   ctx.closePath()
   ctx.fill()
+}
+//
+// Aborts a blocked pre-jump squash so the hero returns to idle instead of
+// staying stuck in the squat frame under a low platform ceiling.
+//
+function cancelJumpSquash(inst) {
+  inst.isSquashing = false
+  inst.squashTimer = 0
+  inst.jumpFrame = 0
+  inst.jumpPhase = 'none'
+}
+//
+// True when a platform sits directly above the hero with too little room to jump.
+//
+function isJumpCeilingBlocked(inst) {
+  const ch = inst.character
+  if (!ch?.exists?.() || !ch.isGrounded()) return false
+  const headTop = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) - (inst.collisionBaseHeight ?? 74) / 2
+  const heroHalfW = (inst.collisionBaseWidth ?? 40) / 2 + 6
+  const heroLeft = ch.pos.x - heroHalfW
+  const heroRight = ch.pos.x + heroHalfW
+  const platforms = [...inst.k.get(CFG.game.platformName), ...inst.k.get('platform')]
+  for (const obj of platforms) {
+    if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
+    const rect = getPlatformWorldRect(obj)
+    if (!rect) continue
+    const hOverlap = heroRight > rect.left && heroLeft < rect.right
+    const overhead = rect.bottom > headTop + 2 && rect.top < headTop + JUMP_CEILING_CLEARANCE
+    if (hOverlap && overhead) return true
+  }
+  return false
+}
+//
+// World-space AABB for a static platform body (supports topleft and center anchors).
+//
+function getPlatformWorldRect(obj) {
+  const w = obj.width ?? obj.area?.shape?.width ?? 0
+  const h = obj.height ?? obj.area?.shape?.height ?? 0
+  if (!w || !h) return null
+  const offX = obj.area?.offset?.x ?? 0
+  const offY = obj.area?.offset?.y ?? 0
+  const anchor = obj.anchor ?? 'topleft'
+  let left
+  let top
+  if (anchor === 'topleft' || anchor === 'top' || anchor === 'botleft') {
+    left = obj.pos.x + offX
+    top = obj.pos.y + offY
+  } else {
+    left = obj.pos.x + offX - w / 2
+    top = obj.pos.y + offY - h / 2
+  }
+  return { left, top, right: left + w, bottom: top + h }
 }

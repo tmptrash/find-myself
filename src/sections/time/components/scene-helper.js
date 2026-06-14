@@ -118,7 +118,7 @@ export function stopTimeSectionMusic(k) {
   // Also try to stop sounds directly via Kaplay (fallback)
   //
   if (k) {
-    const soundsToStop = ['clock', 'time', 'time0-kids']
+    const soundsToStop = ['clock', 'time', 'time0-kids', 'boss']
     soundsToStop.forEach(soundName => {
       try {
         const sound = k.getSound(soundName)
@@ -212,7 +212,8 @@ export function initScene(config) {
     //
     // Semi-transparent countdown strings drifting on the background
     //
-    showFloatingPhrases = true
+    showFloatingPhrases = true,
+    sceneBackdropHex = CFG.visual.colors.platform
   } = config
   //
   // Set gravity
@@ -271,7 +272,7 @@ export function initScene(config) {
     // Pass backdrop hex so syncPanelBackdrop can dim the canvas letterbox bars
     // while the buy-help panel is open, preventing visible strips.
     //
-    sceneBackdropHex: CFG.visual.colors.platform
+    sceneBackdropHex
   })
   TouchControls.create({
     k,

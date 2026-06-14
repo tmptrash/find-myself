@@ -13,6 +13,7 @@ import { registerTime3Sprite } from '../../../utils/level-assets.js'
 import { getDarkness } from '../utils/time-day-night.js'
 import * as BootLoader from '../../../utils/boot-loader.js'
 import * as LevelHelp from '../../../utils/level-help.js'
+import * as TimeLevel3Finale from '../utils/time-level3-finale.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
 //
@@ -57,6 +58,10 @@ const ANTIHERO_SPAWN_Y = LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT / 2
 // doesn't overlap with the T1ME indicator near the corridor ceiling.
 //
 const SNOWBALL_INSTRUCTIONS_TEXT_Y = CORRIDOR_Y + 200
+//
+// Guards against duplicate music when the async scene setup is interrupted and restarted.
+//
+let level3SceneGeneration = 0
 //
 // Bullet configuration
 //
@@ -242,6 +247,8 @@ function drawCloud(context, config) {
  */
 export function sceneLevel3(k) {
   k.scene("level-time.3", async () => {
+    const sceneGeneration = ++level3SceneGeneration
+    const isStaleScene = () => sceneGeneration !== level3SceneGeneration
     //
     // Show loader immediately — this scene does heavy canvas generation that would
     // otherwise freeze the browser without any visible progress indicator.
@@ -257,41 +264,16 @@ export function sceneLevel3(k) {
     //
     const heroScoreAtStart = get('heroScore', 0)
     //
-    // Stop previous level music
+    // Stop any leftover tracks from a prior visit or interrupted load.
     //
-    stopTimeSectionMusic()
+    stopLevel3BackgroundMusic(k)
     //
     // Create sound instance
     //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    //
-    // Start boss.mp3, kids.mp3 and clock.mp3 background music
-    //
-    const timeMusic = k.play('boss', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.time
-    })
-    const kidsMusic = k.play('time0-kids', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.kids
-    })
-    const clockMusic = k.play('clock', {
-      loop: true,
-      volume: CFG.audio.backgroundMusic.clock
-    })
-    //
-    // Store clock music reference for stopping during transitions
-    //
-    timeSectionMusic.clock = clockMusic
-    //
-    // Stop all music when leaving the scene
-    //
-    k.onSceneLeave(() => {
-      timeMusic.stop()
-      kidsMusic.stop()
-      clockMusic.stop()
-    })
+    Sound.resumeGlobalAudio()
+    let nightMusicState = null
     //
     // Initialize level with heroes (skip default platforms)
     //
@@ -304,6 +286,8 @@ export function sceneLevel3(k) {
       showSun: false,
       showMoon: false,
       showGameClock: true,
+      backgroundColor: CFG.visual.colors.background,
+      sceneBackdropHex: CFG.visual.colors.background,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: CORRIDOR_Y - 20,  // T1ME indicator above upper corridor ceiling
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -319,6 +303,7 @@ export function sceneLevel3(k) {
         k.go('level-time.3')
       }
     })
+    if (isStaleScene()) return
     //
     // Array to store decay holes in platforms
     //
@@ -422,6 +407,22 @@ export function sceneLevel3(k) {
     //
     const monster = createMonster(k, hero, sound, levelIndicator, heroScoreAtStart)
     //
+    // Lower-corridor finale: calm approach wall + monster pacing near the anti-hero.
+    //
+    TimeLevel3Finale.create({
+      k,
+      hero,
+      antiHero,
+      monster,
+      lowerCorridorY: LOWER_CORRIDOR_Y,
+      lowerCorridorHeight: CORRIDOR_HEIGHT,
+      sideWallWidth: PLATFORM_SIDE_WIDTH
+    })
+    //
+    // Monster–hero collision runs after finale flags update each frame.
+    //
+    k.onUpdate(() => onUpdateMonsterHeroCollision(k, hero, monster, levelIndicator, heroScoreAtStart))
+    //
     // Setup control inversion based on current section for BOTH hero and anti-hero
     //
     setupControlInversion(hero, sections)
@@ -457,19 +458,6 @@ export function sceneLevel3(k) {
       updateSnowParticles(snowSystem)
     })
     //
-    // Night music controller: fade boss / kids / clock out when darkness rises;
-    // play crickets at intervals to fill the silence.
-    //
-    const nightMusicState = {
-      k,
-      sound,
-      timeMusic,
-      kidsMusic,
-      clockMusic,
-      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
-    }
-    k.onUpdate(() => onUpdateNightMusic(nightMusicState))
-    //
     // Create obstacle spikes (digit "1") in clusters in both corridors
     //
     createObstacleSpikes(k, hero, sound, levelIndicator, sections, heroScoreAtStart)
@@ -479,6 +467,7 @@ export function sceneLevel3(k) {
     //
     BootLoader.setLoaderBarPct(55)
     await BootLoader.yieldForGpu(1)
+    if (isStaleScene()) return
     //
     // Create snow drifts on corridor floors
     //
@@ -488,6 +477,7 @@ export function sceneLevel3(k) {
     //
     BootLoader.setLoaderBarPct(85)
     await BootLoader.yieldForGpu(1)
+    if (isStaleScene()) return
     //
     // Create ground stripe on down corridor floor
     //
@@ -501,96 +491,20 @@ export function sceneLevel3(k) {
     //
     BootLoader.setLoaderBarPct(100)
     BootLoader.hideLoader()
+    if (isStaleScene()) return
     //
-    // Check if monster collides with hero or clocks
+    // Start music once after setup completes so rapid scene re-entry never stacks tracks.
+    //
+    nightMusicState = startLevel3MusicSession(k, sound, sceneGeneration)
+    k.onUpdate(() => {
+      if (nightMusicState.sceneGeneration !== level3SceneGeneration) return
+      onUpdateNightMusic(nightMusicState)
+    })
+    applyDayMusicVolumes(nightMusicState)
+    //
+    // Check if monster collides with clocks
     //
     k.onUpdate(() => {
-      //
-      // Check collision with hero
-      //
-      if (hero && !hero.isDying && !hero.isAnnihilating) {
-        const bodyDistX = Math.abs(monster.x - hero.character.pos.x)
-        const bodyDistY = Math.abs(monster.y - hero.character.pos.y)
-        
-        if (bodyDistX < 50 && bodyDistY < 50) {
-          //
-          // Monster touched hero - trigger death sequence with life score effects
-          //
-          const savedSfx = hero.sfx
-          const savedLevelIndicator = levelIndicator
-          //
-          // 1. Stop subtitle sound immediately if playing
-          //
-          Sound.stopSubtitleSound()
-          //
-          // 2. Trigger death animation
-          //
-          Hero.death(hero, () => {
-            //
-            // 3. After death particles dispersed, minimal pause before life effects
-            //
-            k.wait(0.1, () => {
-              //
-              // 4. Lower all level sounds (ambient, background music)
-              //
-              if (savedSfx && savedSfx.audioContext) {
-                const ctx = savedSfx.audioContext
-                //
-                // Fade out ambient and other sounds quickly
-                //
-                if (savedSfx.ambientGain) {
-                  savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                  savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                }
-              }
-              //
-              // Stop or fade all background music tracks
-              //
-              Sound.fadeOutAllMusic()
-              //
-              // 5. Increment life score and show all effects
-              //
-              const currentScore = get('lifeScore', 0)
-              const newScore = currentScore + 1
-              set('lifeScore', newScore)
-              //
-              // Restore heroScore to value at level start so spent snowballs are refunded
-              //
-              set('heroScore', heroScoreAtStart)
-              
-              if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                //
-                // Update score text and remove old outline
-                //
-                if (savedLevelIndicator.updateLifeScore) {
-                  savedLevelIndicator.updateLifeScore(newScore)
-                }
-                //
-                // Play life sound
-                //
-                Sound.playLifeSound(k)
-                //
-                // Flash life image red aggressively (20 flashes = 1 second, faster)
-                //
-                const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                flashLifeImageLevel3(k, savedLevelIndicator, originalColor, 0)
-                //
-                // Create particles around life score
-                //
-                createLifeScoreParticlesLevel3(k, savedLevelIndicator)
-              }
-              //
-              // 6. Wait 0.8 seconds for effects to be visible, then reload
-              //
-              k.wait(0.8, () => {
-                Sound.stopSubtitleSound()
-                k.go('level-time.3')
-              })
-            })
-          })
-        }
-      }
-      
       sections.forEach(section => {
         if (section.clock && section.clock.exists && section.clock.exists()) {
           let shouldDestroy = false
@@ -893,6 +807,7 @@ function createMiddleWallSprite(width, height, colorHex) {
  */
 function createCorridorPlatforms(k) {
   const platformColor = getColor(k, CFG.visual.colors.platform)
+  const skyColor = getColor(k, CFG.visual.colors.background)
   const platformHex = CFG.visual.colors.platform
   //
   // Create sprite for middle wall with rounded right corners
@@ -902,14 +817,14 @@ function createCorridorPlatforms(k) {
   const middleWallSprite = createMiddleWallSprite(passageStartX, middleWallHeight, platformHex)
   loadTime3Sprite(k, 'middle-wall-level3', middleWallSprite)
   //
-  // Top corridor wall (upper corridor ceiling)
+  // Top sky fill above the upper corridor (matches letterbox / backdrop)
   //
   k.add([
     k.rect(k.width(), CORRIDOR_Y),
     k.pos(0, 0),
     k.area(),
     k.body({ isStatic: true }),
-    platformColor,
+    skyColor,
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
@@ -926,14 +841,14 @@ function createCorridorPlatforms(k) {
     CFG.game.platformName
   ])
   //
-  // Bottom wall (lower corridor floor)
+  // Bottom sky fill below the lower corridor (matches letterbox / backdrop)
   //
   k.add([
     k.rect(k.width(), k.height() - (LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT)),
     k.pos(0, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
-    platformColor,
+    skyColor,
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
@@ -1545,6 +1460,10 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     isReturningHome: false,
     isFrozen: false,
     helpLocked: false,
+    finalePauseChase: false,
+    finaleAllowEat: true,
+    finaleChaseScale: 1,
+    finaleIdleSway: false,
     currentMoveDirectionX: 1,
     currentMoveDirectionY: 1
   }
@@ -1570,6 +1489,9 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     // Check if buy-help panel is open — monster freezes while dialog is visible
     //
     const isHelpLocked = inst.helpLocked
+    const finalePauseChase = inst.finalePauseChase
+    const finaleIdleSway = inst.finaleIdleSway
+    const chaseSpeed = inst.speed * (inst.finaleChaseScale ?? 1)
     //
     // Check if monster should return home
     //
@@ -1584,11 +1506,11 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       //
       // Move monster towards start position (straight line, no wobble)
       //
-      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceToStartX) > 10) {
-        inst.x += moveDirectionX * inst.speed * dt
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && !finalePauseChase && Math.abs(distanceToStartX) > 10) {
+        inst.x += moveDirectionX * chaseSpeed * dt
       }
-      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceToStartY) > 10) {
-        inst.y += moveDirectionY * inst.speed * dt
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && !finalePauseChase && Math.abs(distanceToStartY) > 10) {
+        inst.y += moveDirectionY * chaseSpeed * dt
       }
       //
       // No wobble when returning home
@@ -1606,11 +1528,11 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       //
       // Move monster towards hero (stop moving if annihilating, frozen, or help panel open)
       //
-      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceX) > 10) {
-        inst.x += moveDirectionX * inst.speed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && !finalePauseChase && Math.abs(distanceX) > 10) {
+        inst.x += moveDirectionX * chaseSpeed * dt + Math.sin(inst.morphTimer * 5) * 8 * dt
       }
-      if (!isAnnihilating && !isFrozen && !isHelpLocked && Math.abs(distanceY) > 10) {
-        inst.y += moveDirectionY * inst.speed * dt
+      if (!isAnnihilating && !isFrozen && !isHelpLocked && !finalePauseChase && Math.abs(distanceY) > 10) {
+        inst.y += moveDirectionY * chaseSpeed * dt
       }
     }
     //
@@ -1620,9 +1542,12 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     inst.currentMoveDirectionY = moveDirectionY
     //
     // Add chaotic wobble to movement (reduced) - only when chasing (not when returning home)
-    // Keep wobble during annihilation for natural look
+    // Keep wobble during annihilation for natural look; idle sway when paused near anti-hero.
     //
-    if (!inst.isReturningHome) {
+    if (finaleIdleSway && !inst.isReturningHome) {
+      inst.wobbleX = Math.sin(inst.morphTimer * 2.4) * 7
+      inst.wobbleY = Math.cos(inst.morphTimer * 1.7) * 5
+    } else if (!inst.isReturningHome) {
       inst.wobbleX = Math.sin(inst.morphTimer * 3) * 10
       inst.wobbleY = Math.cos(inst.morphTimer * 2.3) * 8
     } else {
@@ -1689,6 +1614,7 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     // Update legs with proper IK and stepping
     //
     inst.legs.forEach((leg, legIndex) => {
+      const idleSway = finaleIdleSway && !inst.isReturningHome
       const stepCycle = (inst.stepTimer + leg.stepPhase) % 2
       const restDistance = 60  // Distance from center when at rest
       //
@@ -1727,19 +1653,21 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       // Check if leg needs to step (too far from ideal position)
       //
       const distToIdeal = Math.hypot(leg.groundTargetX - idealGroundX, leg.groundTargetY - idealGroundY)
+      const stepThreshold = idleSway ? 18 : 50
+      const stepLiftWindow = idleSway ? 0.55 : 0.4
       
-      if (stepCycle < 0.4 && distToIdeal > 50) {
+      if (stepCycle < stepLiftWindow && distToIdeal > stepThreshold) {
         //
         // Lift leg and move to new position
         //
         leg.isLifted = true
-        leg.liftProgress = stepCycle / 0.4
+        leg.liftProgress = stepCycle / stepLiftWindow
         //
         // Interpolate ground target
         //
         leg.groundTargetX = leg.groundTargetX + (idealGroundX - leg.groundTargetX) * 0.3
         leg.groundTargetY = leg.groundTargetY + (idealGroundY - leg.groundTargetY) * 0.3
-      } else if (stepCycle >= 0.4) {
+      } else if (stepCycle >= stepLiftWindow) {
         leg.isLifted = false
         leg.liftProgress = 0
       }
@@ -1813,111 +1741,6 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
         }
       }
     })
-    //
-    // Check collision with hero
-    //
-    const heroBox = {
-      x: inst.hero.character.pos.x - 48,
-      y: inst.hero.character.pos.y - 48,
-      width: 96,
-      height: 96
-    }
-    
-    const monsterBox = {
-      x: inst.x - inst.bodySize / 2,
-      y: inst.y - inst.bodySize / 2,
-      width: inst.bodySize,
-      height: inst.bodySize
-    }
-    
-    if (monsterBox.x < heroBox.x + heroBox.width &&
-        monsterBox.x + monsterBox.width > heroBox.x &&
-        monsterBox.y < heroBox.y + heroBox.height &&
-        monsterBox.y + monsterBox.height > heroBox.y) {
-      if (!inst.hero.isDying && !inst.hero.isAnnihilating) {
-        import('../../../components/hero.js').then(Hero => {
-          //
-          // Save references before death animation
-          //
-          const savedSfx = inst.hero.sfx
-          const savedLevelIndicator = levelIndicator
-          //
-          // 1. Stop subtitle sound immediately if playing
-          //
-          import('../../../utils/sound.js').then(Sound => {
-            Sound.stopSubtitleSound()
-          })
-          //
-          // 2. Trigger death animation
-          //
-          Hero.death(inst.hero, () => {
-            //
-            // 3. After death particles dispersed, minimal pause before life effects
-            //
-            k.wait(0.1, () => {
-              import('../../../utils/sound.js').then(Sound => {
-                //
-                // 4. Lower all level sounds (ambient, background music)
-                //
-                if (savedSfx && savedSfx.audioContext) {
-                  const ctx = savedSfx.audioContext
-                  //
-                  // Fade out ambient and other sounds quickly
-                  //
-                  if (savedSfx.ambientGain) {
-                    savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
-                    savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
-                  }
-                }
-                //
-                // Stop or fade all background music tracks
-                //
-                Sound.fadeOutAllMusic()
-                //
-                // 5. Increment life score and show all effects
-                //
-                const currentScore = get('lifeScore', 0)
-                const newScore = currentScore + 1
-                set('lifeScore', newScore)
-                //
-                // Restore heroScore to value at level start so spent snowballs are refunded
-                //
-                set('heroScore', heroScoreAtStart)
-                
-                if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
-                  //
-                  // Update score text and remove old outline
-                  //
-                  if (savedLevelIndicator.updateLifeScore) {
-                    savedLevelIndicator.updateLifeScore(newScore)
-                  }
-                  //
-                  // Play life sound
-                  //
-                  Sound.playLifeSound(k)
-                  //
-                  // Flash life image red aggressively (20 flashes = 1 second, faster)
-                  //
-                  const originalColor = savedLevelIndicator.lifeImage.sprite.color
-                  flashLifeImageLevel3(k, savedLevelIndicator, originalColor, 0)
-                  //
-                  // Create particles around life score
-                  //
-                  createLifeScoreParticlesLevel3(k, savedLevelIndicator)
-                }
-                  //
-                  // 6. Wait 0.8 seconds for effects to be visible, then reload
-                  //
-                  k.wait(0.8, () => {
-                    Sound.stopSubtitleSound()
-                    k.go('level-time.3')
-                  })
-              })
-            })
-          })
-        })
-      }
-    }
     //
     // Fade body and glow eyes based on day/night darkness.
     //
@@ -2056,7 +1879,7 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections, heroScor
   //
   // Place spikes in CENTER of alternating sections (avoid section boundaries)
   // Upper corridor: sections 0 and 2 (indices 0, 2)
-  // Lower corridor: sections 0, 2, 4 (indices 4, 6, 8 in combined array)
+  // Lower corridor: sections 2 and 4 (indices 6, 8 in combined array)
   //
   const spikePositions = [
     //
@@ -2067,10 +1890,6 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections, heroScor
     // Upper corridor - section 2 (third section, center)
     //
     { sectionIndex: 2, count: 3 },
-    //
-    // Lower corridor - section 0 (first section, center) - index 4 in sections array
-    //
-    { sectionIndex: 4, count: 3 },
     //
     // Lower corridor - section 2 (third section, center) - index 6 in sections array
     //
@@ -3123,11 +2942,72 @@ function updateMonsterNight(inst) {
   })
 }
 //
+// Stops all level-3 background music tracks (boss, kids, clock).
+//
+function stopLevel3BackgroundMusic(k) {
+  stopTimeSectionMusic(k)
+  const soundsToStop = ['boss', 'clock', 'time0-kids', 'time']
+  soundsToStop.forEach(soundName => {
+    try {
+      const track = k.getSound(soundName)
+      track?.stop?.()
+    } catch (e) {
+      // Sound not found or already stopped
+    }
+  })
+}
+//
+// Starts boss / kids / clock background music for level 3 (single instance per scene).
+//
+function startLevel3Music(k) {
+  Sound.resumeGlobalAudio()
+  k.volume(1)
+  stopLevel3BackgroundMusic(k)
+  const timeMusic = Sound.playInScene(k, 'boss', CFG.audio.backgroundMusic.time, true)
+  const kidsMusic = Sound.playInScene(k, 'time0-kids', CFG.audio.backgroundMusic.kids, true)
+  const clockMusic = Sound.playInScene(k, 'clock', CFG.audio.backgroundMusic.clock, true)
+  timeSectionMusic.clock = clockMusic
+  return { timeMusic, kidsMusic, clockMusic }
+}
+//
+// Creates the night-music controller state and starts the three background tracks once.
+//
+function startLevel3MusicSession(k, sound, sceneGeneration) {
+  const { timeMusic, kidsMusic, clockMusic } = startLevel3Music(k)
+  return {
+    k,
+    sound,
+    timeMusic,
+    kidsMusic,
+    clockMusic,
+    sceneGeneration,
+    cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+  }
+}
+//
+// Sets volume on an existing music track (never spawns duplicates).
+//
+function setMusicTrackVolume(track, volume) {
+  if (!track) return
+  track.volume = volume
+  track.paused === true && (track.paused = false)
+}
+//
+// Snaps boss / kids / clock to configured day volumes when it is not night.
+//
+function applyDayMusicVolumes(inst) {
+  if (getDarkness() > NIGHT_DARKNESS_THRESHOLD) return
+  setMusicTrackVolume(inst.timeMusic, CFG.audio.backgroundMusic.time)
+  setMusicTrackVolume(inst.kidsMusic, CFG.audio.backgroundMusic.kids)
+  setMusicTrackVolume(inst.clockMusic, CFG.audio.backgroundMusic.clock)
+}
+//
 // Night music controller: fades the three level-3 music tracks out once it gets
 // dark enough, and fires cricket sounds at random intervals while it is night.
 // Restores original volumes when the day returns.
 //
 function onUpdateNightMusic(inst) {
+  if (inst.sceneGeneration !== level3SceneGeneration) return
   const darkness = getDarkness()
   const isNight = darkness > NIGHT_DARKNESS_THRESHOLD
   const dt = inst.k.dt()
@@ -3136,9 +3016,9 @@ function onUpdateNightMusic(inst) {
     // Fade music volumes toward zero.
     //
     const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
-    inst.timeMusic.volume = Math.max(0, inst.timeMusic.volume - fadeStep * CFG.audio.backgroundMusic.time)
-    inst.kidsMusic.volume = Math.max(0, inst.kidsMusic.volume - fadeStep * CFG.audio.backgroundMusic.kids)
-    inst.clockMusic.volume = Math.max(0, inst.clockMusic.volume - fadeStep * CFG.audio.backgroundMusic.clock)
+    inst.timeMusic && (inst.timeMusic.volume = Math.max(0, inst.timeMusic.volume - fadeStep * CFG.audio.backgroundMusic.time))
+    inst.kidsMusic && (inst.kidsMusic.volume = Math.max(0, inst.kidsMusic.volume - fadeStep * CFG.audio.backgroundMusic.kids))
+    inst.clockMusic && (inst.clockMusic.volume = Math.max(0, inst.clockMusic.volume - fadeStep * CFG.audio.backgroundMusic.clock))
     //
     // Trigger cricket chirps at random intervals.
     //
@@ -3149,13 +3029,47 @@ function onUpdateNightMusic(inst) {
     }
   } else {
     //
-    // Restore music volumes toward their full values during the day.
+    // Day: restore all three tracks to full configured volume (including after dawn).
     //
-    const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
-    inst.timeMusic.volume = Math.min(CFG.audio.backgroundMusic.time, inst.timeMusic.volume + fadeStep * CFG.audio.backgroundMusic.time)
-    inst.kidsMusic.volume = Math.min(CFG.audio.backgroundMusic.kids, inst.kidsMusic.volume + fadeStep * CFG.audio.backgroundMusic.kids)
-    inst.clockMusic.volume = Math.min(CFG.audio.backgroundMusic.clock, inst.clockMusic.volume + fadeStep * CFG.audio.backgroundMusic.clock)
+    applyDayMusicVolumes(inst)
   }
+}
+//
+// Checks monster–hero overlap after finale flags update; triggers death when allowed.
+//
+function onUpdateMonsterHeroCollision(k, hero, monster, levelIndicator, heroScoreAtStart) {
+  if (!hero || hero.isDying || hero.isAnnihilating || monster.finaleAllowEat === false) return
+  const bodyDistX = Math.abs(monster.x - hero.character.pos.x)
+  const bodyDistY = Math.abs(monster.y - hero.character.pos.y)
+  if (bodyDistX >= 50 || bodyDistY >= 50) return
+  const savedSfx = hero.sfx
+  const savedLevelIndicator = levelIndicator
+  Sound.stopSubtitleSound()
+  Hero.death(hero, () => {
+    k.wait(0.1, () => {
+      if (savedSfx?.audioContext && savedSfx.ambientGain) {
+        const ctx = savedSfx.audioContext
+        savedSfx.ambientGain.gain.setValueAtTime(savedSfx.ambientGain.gain.value, ctx.currentTime)
+        savedSfx.ambientGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+      }
+      Sound.fadeOutAllMusic()
+      const currentScore = get('lifeScore', 0)
+      const newScore = currentScore + 1
+      set('lifeScore', newScore)
+      set('heroScore', heroScoreAtStart)
+      if (savedLevelIndicator?.lifeImage?.sprite?.exists()) {
+        savedLevelIndicator.updateLifeScore?.(newScore)
+        Sound.playLifeSound(k)
+        const originalColor = savedLevelIndicator.lifeImage.sprite.color
+        flashLifeImageLevel3(k, savedLevelIndicator, originalColor, 0)
+        createLifeScoreParticlesLevel3(k, savedLevelIndicator)
+      }
+      k.wait(0.8, () => {
+        Sound.stopSubtitleSound()
+        k.go('level-time.3')
+      })
+    })
+  })
 }
 //
 // Polls LevelHelp.isAnyPanelOpen() every frame. When the panel opens:

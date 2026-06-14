@@ -116,7 +116,7 @@ export const LEVEL_HELP_TEXTS = {
   'level-time.0': 'Hurry — platforms\ndon\'t last forever',
   'level-time.1': 'Ones kill you —\njust don\'t jump on them',
   'level-time.2': 'An odd sum of digits kills\nyou, an even sum doesn\'t',
-  'level-time.3': 'Just reach your other\nhalf — with or against\nthe wind ;)',
+  'level-time.3': 'Just reach your other half\nwith or against the wind.\nRemember: rushing doesn\'t\nalways make you faster.',
   'level-word.0': 'Some words cut like\nblades — avoid them\nFind and accept yourself\nas you are, to move forward',
   'level-word.1': 'Life always finds a way\nto ruin your plans.\nBe careful',
   'level-word.2': 'Use your memory to remember\nwhere the blade-like words\nare...',

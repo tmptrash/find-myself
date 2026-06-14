@@ -780,7 +780,14 @@ export function sceneLevel4(k) {
     setupHeroShooting(k, hero, bladeArm, levelIndicator)
     showLetterInstructions(k)
     setupWordLevel4HoverTooltips(k, { levelIndicator, fpsCounter, hero })
+    k.onUpdate(() => onUpdateWordLevel4HelpLock(hero))
   })
+}
+//
+// Disables hero input and keeps the hero invulnerable while buy-help is open.
+//
+function onUpdateWordLevel4HelpLock(hero) {
+  hero.controlsDisabled = LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive()
 }
 //
 // Registers HUD and hero hover tooltips for word level 4

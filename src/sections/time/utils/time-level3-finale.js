@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor, getRGB, isAnyKeyDown } from '../../../utils/helper.js'
+import { getColor, getRGB, isAnyKeyDown, parseHex } from '../../../utils/helper.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 
 //
@@ -17,6 +17,14 @@ const ANTIHERO_WALL_OFFSET_X = 58
 const ANTIHERO_WALL_WIDTH = 44
 const WALL_OUTLINE_WIDTH = 2
 const WALL_OUTLINE_COLOR = '#000000'
+const CALM_COUNTDOWN_FONT_SIZE = 22
+const CALM_COUNTDOWN_OFFSET_X = 34
+const CALM_COUNTDOWN_OFFSET_Y = 48
+const CALM_COUNTDOWN_OUTLINE_OFFSETS = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1]
+]
 
 /**
  * Creates the anti-hero finale controller (wall + movement sampling for monster pacing).
@@ -45,7 +53,7 @@ export function create(cfg) {
   const playWidth = playRight - playLeft
   const finaleZoneMaxX = playLeft + playWidth * LOWER_FINALE_ZONE_RATIO
   const floorY = lowerCorridorY + lowerCorridorHeight
-  const wallFillColor = getColor(k, CFG.visual.colors.background)
+  const wallFillColor = getColor(k, CFG.visual.colors.platform)
   const outlineColor = getRGB(k, WALL_OUTLINE_COLOR)
   const inst = {
     k,
@@ -69,6 +77,8 @@ export function create(cfg) {
     wallDrawOpacity: 0,
     wallBody: null,
     wallVisual: null,
+    calmTimerLabel: null,
+    calmTimerOutlineLabels: null,
     pauseChase: false,
     allowMonsterEat: true,
     chaseScale: 1
@@ -86,14 +96,13 @@ export function create(cfg) {
     CFG.game.platformName
   ])
   inst.wallVisual = k.add([
+    k.rect(ANTIHERO_WALL_WIDTH, 1),
     k.pos(0, floorY),
     k.anchor('botleft'),
-    k.z(CFG.visual.zIndex.platforms + 3),
-    {
-      draw() {
-        drawWallVisual(inst, wallFillColor, outlineColor)
-      }
-    }
+    wallFillColor,
+    k.outline(WALL_OUTLINE_WIDTH, outlineColor),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms + 3)
   ])
   setupJumpPressListeners(inst)
   k.onUpdate(() => onUpdate(inst))
@@ -165,6 +174,7 @@ function updateFinaleZone(inst) {
   recordActionInputSample(inst)
   const movementMode = classifyHeroMovement(inst)
   updateFinalePacing(inst, movementMode)
+  updateCalmCountdownTimer(inst)
 }
 
 /**
@@ -192,6 +202,7 @@ function resetPacingState(inst) {
   inst.pauseChase = false
   inst.allowMonsterEat = true
   inst.chaseScale = 1
+  destroyCalmCountdownTimer(inst)
 }
 
 /**
@@ -333,6 +344,7 @@ function openWallPermanently(inst) {
   inst.wallLowering = true
   inst.wallRaised = false
   inst.calmTimer = 0
+  destroyCalmCountdownTimer(inst)
 }
 
 /**
@@ -414,25 +426,62 @@ function setWallHeight(inst, height) {
   inst.wallDrawOpacity = visible ? 1 : 0
   inst.wallBody.height = h
   inst.wallBody.opacity = visible ? 1 : 0
+  inst.wallVisual.height = h
+  inst.wallVisual.opacity = visible ? 1 : 0
 }
 
 /**
- * Draws the wall fill and black outline frame.
+ * Shows a small countdown near the hero while calm pacing holds the monster still.
  * @param {Object} inst - Finale instance
- * @param {Object} fillColor - Kaplay fill color
- * @param {Object} outlineColor - Kaplay outline color
  */
-function drawWallVisual(inst, fillColor, outlineColor) {
-  if (inst.wallDrawOpacity < 0.01 || inst.wallDrawHeight <= 1) return
-  const { k } = inst
-  const w = ANTIHERO_WALL_WIDTH
-  const h = inst.wallDrawHeight
-  const x = inst.wallVisual.pos.x
-  const topY = inst.wallVisual.pos.y - h
-  const lw = WALL_OUTLINE_WIDTH
-  k.drawRect({ pos: k.vec2(x, topY), width: w, height: h, color: fillColor })
-  k.drawRect({ pos: k.vec2(x, topY), width: w, height: lw, color: outlineColor })
-  k.drawRect({ pos: k.vec2(x, inst.wallVisual.pos.y - lw), width: w, height: lw, color: outlineColor })
-  k.drawRect({ pos: k.vec2(x, topY), width: lw, height: h, color: outlineColor })
-  k.drawRect({ pos: k.vec2(x + w - lw, topY), width: lw, height: h, color: outlineColor })
+function updateCalmCountdownTimer(inst) {
+  const { k, hero } = inst
+  const showTimer = inst.pauseChase && !inst.wallOpened && inst.active
+  if (!showTimer) {
+    destroyCalmCountdownTimer(inst)
+    return
+  }
+  const seconds = Math.max(0, Math.ceil(CALM_HOLD_DURATION - inst.calmTimer))
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const timerX = hero.character.pos.x + CALM_COUNTDOWN_OFFSET_X
+  const timerY = hero.character.pos.y - CALM_COUNTDOWN_OFFSET_Y
+  const fillColor = parseHex(CFG.visual.colors.hero.body)
+  if (!inst.calmTimerLabel) {
+    inst.calmTimerOutlineLabels = CALM_COUNTDOWN_OUTLINE_OFFSETS.map(([dx, dy]) =>
+      k.add([
+        k.text(String(seconds), { size: CALM_COUNTDOWN_FONT_SIZE, font: fontFamily }),
+        k.pos(timerX + dx, timerY + dy),
+        k.anchor('center'),
+        k.color(0, 0, 0),
+        k.z(CFG.visual.zIndex.ui + 9)
+      ])
+    )
+    inst.calmTimerLabel = k.add([
+      k.text(String(seconds), { size: CALM_COUNTDOWN_FONT_SIZE, font: fontFamily }),
+      k.pos(timerX, timerY),
+      k.anchor('center'),
+      k.color(...fillColor),
+      k.z(CFG.visual.zIndex.ui + 10)
+    ])
+  }
+  inst.calmTimerLabel.text = String(seconds)
+  inst.calmTimerLabel.pos.x = timerX
+  inst.calmTimerLabel.pos.y = timerY
+  inst.calmTimerOutlineLabels?.forEach((label, i) => {
+    const [dx, dy] = CALM_COUNTDOWN_OUTLINE_OFFSETS[i]
+    label.text = String(seconds)
+    label.pos.x = timerX + dx
+    label.pos.y = timerY + dy
+  })
+}
+
+/**
+ * Removes the calm countdown label near the hero.
+ * @param {Object} inst - Finale instance
+ */
+function destroyCalmCountdownTimer(inst) {
+  inst.calmTimerOutlineLabels?.forEach(label => label.destroy())
+  inst.calmTimerOutlineLabels = null
+  inst.calmTimerLabel?.destroy()
+  inst.calmTimerLabel = null
 }

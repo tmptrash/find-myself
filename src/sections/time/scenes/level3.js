@@ -286,8 +286,8 @@ export function sceneLevel3(k) {
       showSun: false,
       showMoon: false,
       showGameClock: true,
-      backgroundColor: CFG.visual.colors.background,
-      sceneBackdropHex: CFG.visual.colors.background,
+      backgroundColor: CFG.visual.colors.platform,
+      sceneBackdropHex: CFG.visual.colors.platform,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: CORRIDOR_Y - 20,  // T1ME indicator above upper corridor ceiling
       sideWallWidth: PLATFORM_SIDE_WIDTH,
@@ -807,7 +807,6 @@ function createMiddleWallSprite(width, height, colorHex) {
  */
 function createCorridorPlatforms(k) {
   const platformColor = getColor(k, CFG.visual.colors.platform)
-  const skyColor = getColor(k, CFG.visual.colors.background)
   const platformHex = CFG.visual.colors.platform
   //
   // Create sprite for middle wall with rounded right corners
@@ -817,14 +816,14 @@ function createCorridorPlatforms(k) {
   const middleWallSprite = createMiddleWallSprite(passageStartX, middleWallHeight, platformHex)
   loadTime3Sprite(k, 'middle-wall-level3', middleWallSprite)
   //
-  // Top sky fill above the upper corridor (matches letterbox / backdrop)
+  // Top fill above the upper corridor (matches middle wall / letterbox)
   //
   k.add([
     k.rect(k.width(), CORRIDOR_Y),
     k.pos(0, 0),
     k.area(),
     k.body({ isStatic: true }),
-    skyColor,
+    platformColor,
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
@@ -841,14 +840,14 @@ function createCorridorPlatforms(k) {
     CFG.game.platformName
   ])
   //
-  // Bottom sky fill below the lower corridor (matches letterbox / backdrop)
+  // Bottom fill below the lower corridor (matches middle wall / letterbox)
   //
   k.add([
     k.rect(k.width(), k.height() - (LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT)),
     k.pos(0, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
-    skyColor,
+    platformColor,
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])

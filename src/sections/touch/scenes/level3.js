@@ -815,6 +815,14 @@ export function sceneLevel3(k) {
     heroInst.deathParticleZ = Z_DARKNESS + 1
     antiHeroInst.character.z = Z_DARKNESS + 1
     //
+    // Fade boss music out when the hero touches the anti-hero (hand-hold begins).
+    //
+    const touchMusicFade = {
+      bossMusic,
+      targetVolume: CFG.audio.backgroundMusic.time
+    }
+    k.onUpdate(() => onUpdateTouchL3MusicFade(heroInst, touchMusicFade))
+    //
     // Lock hero controls while life deduction animation plays
     //
     if (sceneLock.locked) {
@@ -1566,6 +1574,17 @@ function onUpdate(k, fpsCounter, glowBugInst, trapBugInst, bottomBugInst, creatu
     creatureInst.stopped = true
   }
   ShadowCreature.onUpdate(creatureInst, dt, glowPositions)
+}
+
+const TOUCH_L3_MUSIC_FADE_SPEED = 0.85
+//
+// Fades boss background music while the hand-hold annihilation sequence plays.
+//
+function onUpdateTouchL3MusicFade(heroInst, fadeInst) {
+  if (!heroInst?.isAnnihilating || !fadeInst.bossMusic) return
+  const dt = heroInst.k.dt()
+  const fadeStep = TOUCH_L3_MUSIC_FADE_SPEED * fadeInst.targetVolume * dt
+  fadeInst.bossMusic.volume = Math.max(0, fadeInst.bossMusic.volume - fadeStep)
 }
 
 /**

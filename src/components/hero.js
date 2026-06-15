@@ -2647,6 +2647,19 @@ function startAnnihilationExplosion(inst, targetPos) {
                   })
                 })
               })
+            } else if (isLastTimeLevel) {
+              //
+              // Time section finale when hero already has orange body, arms and watch
+              //
+              k.wait(0.6, () => {
+                if (nextLevel && nextLevel !== 'menu') {
+                  set('lastLevel', nextLevel)
+                }
+                inst.character.hidden = true
+                k.wait(0.5, () => {
+                  createLevelTransition(k, inst.currentLevel)
+                })
+              })
             } else {
               //
               // Normal sequence: pause after absorption and shake, then fade and show text

@@ -1,6 +1,6 @@
 import { CFG } from '../cfg.js'
 import { parseHex } from './helper.js'
-import { setSectionCompleted, set } from './progress.js'
+import { setSectionCompleted, set, normalizeSceneName } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
 import * as TouchControls from './touch-controls.js'
@@ -48,7 +48,7 @@ const LEVEL_SUBTITLES = {
   'level-word.3': ['Sharp words move fast — so must you', 'word3-pre', 6.0],
   'level-word.4': ['Thoughts you can\'t stop, no matter how hard you try...', 'word4-pre', 5.5],
   'level-time.0': ['Time moves forward even when you stand still. You\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'Platforms don\'t live forever...'],
-  'level-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places'],
+  'level-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places', 4.2],
   'level-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
   'level-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
   'level-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 10, 'Here you need to figure out how to gather bugs together by touching them'],
@@ -104,6 +104,7 @@ export function getNextLevel(currentLevel) {
  * @param {string} targetLevel - Target level to go to (e.g., 'level-time.0')
  */
 export function showTransitionToLevel(k, targetLevel) {
+  targetLevel = normalizeSceneName(targetLevel)
   if (!targetLevel) {
     goToMenuAfterAssets(k)
     return

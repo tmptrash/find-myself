@@ -2,6 +2,7 @@ import * as CityBackground from '../sections/time/components/city-background.js'
 import * as BootLoader from './boot-loader.js'
 import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
 import { squashSpriteReleaseGpu } from './sprite-gpu.js'
+import { normalizeSceneName } from './progress.js'
 
 //
 // City sprite names used by time levels — tracked so we can compare pack keys.
@@ -290,7 +291,7 @@ export async function prepareSceneAssetsThenEnterScene(k, sceneName, afterGo) {
  * @param {Function} [afterGo]
  */
 export function goAfterPreparingAssets(k, sceneName, afterGo) {
-  return prepareSceneAssetsThenEnterScene(k, sceneName, afterGo)
+  return prepareSceneAssetsThenEnterScene(k, normalizeSceneName(sceneName), afterGo)
 }
 
 /**

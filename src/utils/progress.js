@@ -10,6 +10,22 @@ import { prop, setProp } from './helper.js'
 const STORAGE_KEY = 'find-yourself'
 const SECTIONS = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
 //
+// Time section scene indices run 0–3 (HUD letter levelNumber is 1–4).
+//
+const TIME_SCENE_MAX_INDEX = 3
+
+/**
+ * Maps invalid time scene names (e.g. level-time.4 from stale saves) to the last valid level.
+ * @param {string|null} sceneName
+ * @returns {string|null}
+ */
+export function normalizeSceneName(sceneName) {
+  if (!sceneName || !sceneName.startsWith('level-time.')) return sceneName
+  const index = parseInt(sceneName.replace('level-time.', ''), 10)
+  if (Number.isNaN(index) || index <= TIME_SCENE_MAX_INDEX) return sceneName
+  return `level-time.${TIME_SCENE_MAX_INDEX}`
+}
+//
 // Default progress with section objects
 //
 function createDefault() {

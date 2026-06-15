@@ -1609,7 +1609,7 @@ export function playScatterSound(inst) {
   
   const noiseGain = inst.audioContext.createGain()
   noiseGain.gain.setValueAtTime(0, now)
-  noiseGain.gain.linearRampToValueAtTime(0.85, now + 0.01)
+  noiseGain.gain.linearRampToValueAtTime(0.22, now + 0.01)
   noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   //
@@ -1618,8 +1618,8 @@ export function playScatterSound(inst) {
   //
   const filter = inst.audioContext.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(2000, now)
-  filter.frequency.exponentialRampToValueAtTime(500, now + duration)
+  filter.frequency.setValueAtTime(1200, now)
+  filter.frequency.exponentialRampToValueAtTime(400, now + duration)
   
   noise.connect(filter)
   filter.connect(noiseGain)
@@ -1636,7 +1636,7 @@ export function playScatterSound(inst) {
   bass.frequency.exponentialRampToValueAtTime(30, now + duration)
   
   bassGain.gain.setValueAtTime(0, now)
-  bassGain.gain.linearRampToValueAtTime(0.75, now + 0.02)
+  bassGain.gain.linearRampToValueAtTime(0.2, now + 0.02)
   bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   bass.connect(bassGain)
@@ -1669,8 +1669,8 @@ export function playAbsorptionSound(inst) {
   tone1.frequency.linearRampToValueAtTime(300, now + duration)  // Slight fall at end
   
   tone1Gain.gain.setValueAtTime(0, now)
-  tone1Gain.gain.linearRampToValueAtTime(0.55, now + 0.2)
-  tone1Gain.gain.setValueAtTime(0.55, now + duration * 0.7)
+  tone1Gain.gain.linearRampToValueAtTime(0.16, now + 0.2)
+  tone1Gain.gain.setValueAtTime(0.16, now + duration * 0.7)
   tone1Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   tone1.connect(tone1Gain)
@@ -1682,14 +1682,14 @@ export function playAbsorptionSound(inst) {
   const tone2 = inst.audioContext.createOscillator()
   const tone2Gain = inst.audioContext.createGain()
   
-  tone2.type = 'triangle'
+  tone2.type = 'sine'
   tone2.frequency.setValueAtTime(225, now)  // Fifth above (1.5x)
   tone2.frequency.exponentialRampToValueAtTime(600, now + duration * 0.7)
   tone2.frequency.linearRampToValueAtTime(450, now + duration)
   
   tone2Gain.gain.setValueAtTime(0, now)
-  tone2Gain.gain.linearRampToValueAtTime(0.35, now + 0.3)
-  tone2Gain.gain.setValueAtTime(0.35, now + duration * 0.7)
+  tone2Gain.gain.linearRampToValueAtTime(0.1, now + 0.3)
+  tone2Gain.gain.setValueAtTime(0.1, now + duration * 0.7)
   tone2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   tone2.connect(tone2Gain)
@@ -1701,13 +1701,13 @@ export function playAbsorptionSound(inst) {
   const rumble = inst.audioContext.createOscillator()
   const rumbleGain = inst.audioContext.createGain()
   
-  rumble.type = 'sawtooth'
-  rumble.frequency.setValueAtTime(40, now)
-  rumble.frequency.linearRampToValueAtTime(60, now + duration)
+  rumble.type = 'sine'
+  rumble.frequency.setValueAtTime(55, now)
+  rumble.frequency.linearRampToValueAtTime(80, now + duration)
   
   rumbleGain.gain.setValueAtTime(0, now)
-  rumbleGain.gain.linearRampToValueAtTime(0.28, now + 0.4)
-  rumbleGain.gain.setValueAtTime(0.28, now + duration * 0.8)
+  rumbleGain.gain.linearRampToValueAtTime(0.08, now + 0.4)
+  rumbleGain.gain.setValueAtTime(0.08, now + duration * 0.8)
   rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   
   rumble.connect(rumbleGain)
@@ -1809,7 +1809,7 @@ export function playAnnihilationSound(instance) {
   bass.type = 'sine'
   bass.frequency.setValueAtTime(50, now)
   bass.frequency.exponentialRampToValueAtTime(20, now + 0.5)
-  bassGain.gain.setValueAtTime(1.0, now)
+  bassGain.gain.setValueAtTime(0.28, now)
   bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.65)
   bass.connect(bassGain)
   bassGain.connect(instance.audioContext.destination)
@@ -1820,7 +1820,7 @@ export function playAnnihilationSound(instance) {
   const subBassGain = instance.audioContext.createGain()
   subBass.type = 'sine'
   subBass.frequency.setValueAtTime(30, now)
-  subBassGain.gain.setValueAtTime(0.88, now)
+  subBassGain.gain.setValueAtTime(0.18, now)
   subBassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75)
   subBass.connect(subBassGain)
   subBassGain.connect(instance.audioContext.destination)
@@ -1840,12 +1840,12 @@ export function playAnnihilationSound(instance) {
   const noise = instance.audioContext.createBufferSource()
   noise.buffer = noiseBuffer
   const noiseGain = instance.audioContext.createGain()
-  noiseGain.gain.setValueAtTime(0.55, now)
+  noiseGain.gain.setValueAtTime(0.12, now)
   noiseGain.gain.exponentialRampToValueAtTime(0.001, now + crackleDur)
   const filter = instance.audioContext.createBiquadFilter()
   filter.type = 'bandpass'
-  filter.frequency.setValueAtTime(900, now)
-  filter.Q.setValueAtTime(1.2, now)
+  filter.frequency.setValueAtTime(600, now)
+  filter.Q.setValueAtTime(0.6, now)
   noise.connect(filter)
   filter.connect(noiseGain)
   noiseGain.connect(instance.audioContext.destination)

@@ -3,6 +3,7 @@ import { CFG } from "../cfg.js"
 import { getRGB, parseHex } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
+import { normalizeSceneName } from "../utils/progress.js"
 import { goAfterPreparingAssets } from "../utils/level-assets.js"
 import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
@@ -250,6 +251,11 @@ export function sceneMenu(k) {
     // Sanitize lastLevel: section-complete markers should point to the next section
     //
     let lastLevel = get('lastLevel', null)
+    const normalizedLastLevel = normalizeSceneName(lastLevel)
+    if (normalizedLastLevel !== lastLevel) {
+      lastLevel = normalizedLastLevel
+      set('lastLevel', lastLevel)
+    }
     if (lastLevel === 'word-complete') {
       lastLevel = 'level-touch.training'
       set('lastLevel', lastLevel)

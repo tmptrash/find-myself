@@ -12,6 +12,7 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import { registerTime3Sprite } from '../../../utils/level-assets.js'
 import { getDarkness } from '../utils/time-day-night.js'
 import * as BootLoader from '../../../utils/boot-loader.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 import * as LevelHelp from '../../../utils/level-help.js'
 import * as TimeLevel3Finale from '../utils/time-level3-finale.js'
 //
@@ -300,7 +301,10 @@ export function sceneLevel3(k) {
       //
       onAnnihilation: () => {
         set('heroScore', heroScoreAtStart)
-        k.go('level-time.3')
+        stopLevel3BackgroundMusic(k)
+        stopTimeSectionMusic()
+        Sound.fadeOutAllMusic()
+        createLevelTransition(k, 'level-time.3')
       }
     })
     if (isStaleScene()) return
@@ -3028,9 +3032,12 @@ function onUpdateNightMusic(inst) {
     }
   } else {
     //
-    // Day: restore all three tracks to full configured volume (including after dawn).
+    // Dawn: restore music volumes smoothly (same fade rate as night).
     //
-    applyDayMusicVolumes(inst)
+    const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
+    inst.timeMusic && (inst.timeMusic.volume = Math.min(CFG.audio.backgroundMusic.time, inst.timeMusic.volume + fadeStep * CFG.audio.backgroundMusic.time))
+    inst.kidsMusic && (inst.kidsMusic.volume = Math.min(CFG.audio.backgroundMusic.kids, inst.kidsMusic.volume + fadeStep * CFG.audio.backgroundMusic.kids))
+    inst.clockMusic && (inst.clockMusic.volume = Math.min(CFG.audio.backgroundMusic.clock, inst.clockMusic.volume + fadeStep * CFG.audio.backgroundMusic.clock))
   }
 }
 //

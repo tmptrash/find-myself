@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { initScene, startTimeSectionMusic, stopTimeSectionMusic, startClockMusic, checkSpeedBonus, createSunHoverFace } from '../components/scene-helper.js'
+import { initScene, startTimeSectionMusic, stopTimeSectionMusic, startClockMusic, checkSpeedBonus, createSunHoverFace, timeSectionMusic } from '../components/scene-helper.js'
 import * as Hero from '../../../components/hero.js'
 import * as TimePlatform from '../components/time-platform.js'
 import * as StaticTimePlatform from '../components/static-time-platform.js'
@@ -40,6 +40,10 @@ const ANTIHERO_SPAWN_Y = 795  // Raised by 5px due to ground stripe
 const ANTIHERO_SPAWN_DELAY = 1.0  // Anti-hero spawns 1 second after hero
 const HERO_FIRST_THOUGHTS_DELAY = 2.0
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
+const NIGHT_DARKNESS_THRESHOLD = 0.45
+const NIGHT_MUSIC_TRANSITION_SPEED = 1.5
+const NIGHT_CRICKET_INTERVAL_MIN = 1.5
+const NIGHT_CRICKET_INTERVAL_MAX = 4.0
 //
 // TIME indicator tooltip
 //
@@ -177,6 +181,15 @@ export function sceneLevel0(k) {
     // Start clock.mp3 (stored in timeSectionMusic for proper transition stopping)
     //
     startClockMusic(k)
+    //
+    // Night music controller: fade kids/time tracks at dusk, restore at dawn.
+    //
+    const nightMusicState = {
+      k,
+      sound,
+      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+    }
+    k.onUpdate(() => onUpdateNightMusic(nightMusicState))
     //
     // Start beginning phrase about time
     //
@@ -870,7 +883,7 @@ function createRoundedCornerSprite(radius, backgroundColor) {
  */
 function createRoundedCorners(k) {
   const radius = CORNER_RADIUS
-  const cornerColor = CFG.visual.colors.platform
+  const cornerColor = CFG.visual.colors.background
   const cornerDataURL = createRoundedCornerSprite(radius, cornerColor)
   k.loadSprite('corner-sprite', cornerDataURL)
   //
@@ -1107,6 +1120,45 @@ function drawBirds(k, birds) {
       const wingTip = y + size * (0.3 - 1.9 * flapT)
       k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x - wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })
       k.drawTriangle({ p1: k.vec2(x, y - size * 0.3), p2: k.vec2(x + wingSpread, wingTip), p3: k.vec2(x, y + size * 0.2), color: wingColor, opacity })
+    }
+  }
+}
+//
+// Night music controller: fades the shared time-section music tracks out at dusk
+// and restores them smoothly at dawn. Also fires cricket chirps during night.
+//
+function onUpdateNightMusic(inst) {
+  const darkness = getDarkness()
+  const isNight = darkness > NIGHT_DARKNESS_THRESHOLD
+  const dt = inst.k.dt()
+  const fadeStep = NIGHT_MUSIC_TRANSITION_SPEED * dt
+  if (isNight) {
+    //
+    // Fade ambient music toward silence (clock ticking stays audible at night).
+    //
+    if (timeSectionMusic.kids) {
+      timeSectionMusic.kids.volume = Math.max(0, timeSectionMusic.kids.volume - fadeStep * CFG.audio.backgroundMusic.kids)
+    }
+    if (timeSectionMusic.time) {
+      timeSectionMusic.time.volume = Math.max(0, timeSectionMusic.time.volume - fadeStep * CFG.audio.backgroundMusic.time)
+    }
+    //
+    // Cricket chirps at random intervals.
+    //
+    inst.cricketTimer -= dt
+    if (inst.cricketTimer <= 0) {
+      Sound.playCricketSound(inst.sound)
+      inst.cricketTimer = NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+    }
+  } else {
+    //
+    // Restore volumes smoothly toward their target levels.
+    //
+    if (timeSectionMusic.kids) {
+      timeSectionMusic.kids.volume = Math.min(CFG.audio.backgroundMusic.kids, timeSectionMusic.kids.volume + fadeStep * CFG.audio.backgroundMusic.kids)
+    }
+    if (timeSectionMusic.time) {
+      timeSectionMusic.time.volume = Math.min(CFG.audio.backgroundMusic.time, timeSectionMusic.time.volume + fadeStep * CFG.audio.backgroundMusic.time)
     }
   }
 }

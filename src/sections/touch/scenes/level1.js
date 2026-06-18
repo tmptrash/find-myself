@@ -116,8 +116,6 @@ const FIREFLY_MIN_Y_OFFSET_FROM_FLOOR = 360
 //
 // Thunder and lightning configuration
 //
-const THUNDER_INTERVAL_MIN = 8
-const THUNDER_INTERVAL_MAX = 15
 const LIGHTNING_FLASH_DURATION = 0.18
 const LIGHTNING_FLASH_OPACITY = 0.28
 const LIGHTNING_BLINK_COUNT = 3
@@ -133,8 +131,8 @@ const L1_BIRD_INTERVAL_MIN = 4
 const L1_BIRD_INTERVAL_MAX = 9
 const L1_CRICKET_INTERVAL_MIN = 3
 const L1_CRICKET_INTERVAL_MAX = 7
-const L1_FROG_INTERVAL_MIN = 6
-const L1_FROG_INTERVAL_MAX = 14
+const L1_FROG_INTERVAL_MIN = 5
+const L1_FROG_INTERVAL_MAX = 15
 const L1_CROW_MP3_INTERVAL_MIN = 8
 const L1_CROW_MP3_INTERVAL_MAX = 20
 const L1_CROW_MP3_VOLUME = 0.6
@@ -191,6 +189,13 @@ const L1_MUSHROOM_CAP_WIDTH_MIN = 14
 const L1_MUSHROOM_CAP_WIDTH_MAX = 26
 const L1_MUSHROOM_STEM_HEIGHT_MIN = 10
 const L1_MUSHROOM_STEM_HEIGHT_MAX = 20
+//
+// Soft contour glow around level 1 mushrooms
+//
+const L1_MUSHROOM_GLOW_OUTLINE_PAD = 1.4
+const L1_MUSHROOM_GLOW_ALPHA_MIN = 0.08
+const L1_MUSHROOM_GLOW_ALPHA_RANGE = 0.24
+const L1_MUSHROOM_GLOW_SPEED = 1.7
 //
 // Scrolling cloud constants
 //
@@ -1880,7 +1885,7 @@ export function sceneLevel1(k) {
       // Check sequence regardless of proximity to anti-hero
       //
       if (touchedTreeIndex !== -1 && !gameState.antiHeroActive) {
-        processTreeMelodyTouch(k, gameState, touchedTreeIndex, SEQUENCE_PAUSE_MINIMUM)
+        processTreeMelodyTouch(k, gameState, touchedTreeIndex, SEQUENCE_PAUSE_MINIMUM, { sound, lightningState })
       } else if (touchedTreeIndex === -1) {
         //
         // No tree touched — allow re-touching the same tree on the next edge
@@ -2184,7 +2189,6 @@ export function sceneLevel1(k) {
     // Thunder + lightning flash at random intervals
     //
     const lightningState = {
-      timer: THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN),
       flashTimer: 0,
       blinkCount: 0,
       blinkTimer: 0
@@ -2197,7 +2201,7 @@ export function sceneLevel1(k) {
         }
       }
     ])
-    k.onUpdate(() => onUpdateLightning(k, lightningState, sound))
+    k.onUpdate(() => onUpdateLightning(k, lightningState))
     //
     // Forest ambience: birds, cicadas/crickets and frogs at random intervals
     //
@@ -2206,7 +2210,7 @@ export function sceneLevel1(k) {
     const cricketState = { timer: L1_CRICKET_INTERVAL_MIN + Math.random() * (L1_CRICKET_INTERVAL_MAX - L1_CRICKET_INTERVAL_MIN) }
     k.onUpdate(() => onUpdateCricketAmbient(k, cricketState, sound))
     const frogState = { timer: L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN) }
-    k.onUpdate(() => onUpdateFrogAmbient(k, frogState, sound))
+    k.onUpdate(() => onUpdateFrogAmbient(k, frogState))
     //
     // Random distant crow calls from mp3 samples ('crow0' is preloaded at boot).
     //
@@ -2696,7 +2700,10 @@ function onUpdateLeafTooltips(fallingLeafInst, targets, getPhrase) {
 //
 // Validates a new tree touch against the target melody and updates playerSequence.
 //
-function processTreeMelodyTouch(k, gameState, touchedTreeIndex, sequencePauseMinimum) {
+function processTreeMelodyTouch(k, gameState, touchedTreeIndex, sequencePauseMinimum, melodyFeedback) {
+  const { sound, lightningState } = melodyFeedback ?? {}
+  const targetSequence = gameState.targetSequence
+  const firstNoteIndex = targetSequence[0]
   //
   // If same tree is touched twice in a row, reset sequence
   //
@@ -2721,83 +2728,26 @@ function processTreeMelodyTouch(k, gameState, touchedTreeIndex, sequencePauseMin
     gameState.sequenceCompleteTime = null
     gameState.pauseTimer = 0
   }
-  const currentSequence = gameState.playerSequence
-  const targetSequence = gameState.targetSequence
-  const firstNoteIndex = targetSequence[0]
-  //
-  // If sequence is empty, only accept first note (0) to start
-  //
-  if (currentSequence.length === 0) {
-    if (touchedTreeIndex !== firstNoteIndex) {
-      gameState.lastTouchedTreeIndex = -1
-      return
-    }
-  }
-  let matchingStartPosition = -1
-  if (currentSequence.length > 0) {
-    const firstNote = currentSequence[0]
-    for (let i = 0; i <= targetSequence.length - currentSequence.length; i++) {
-      if (targetSequence[i] === firstNote) {
-        let matches = true
-        for (let j = 0; j < currentSequence.length; j++) {
-          if (targetSequence[i + j] !== currentSequence[j]) {
-            matches = false
-            break
-          }
-        }
-        matches && (matchingStartPosition = i)
-        if (matchingStartPosition !== -1) break
-      }
-    }
-  } else {
-    matchingStartPosition = 0
-  }
-  if (matchingStartPosition === -1) {
-    gameState.playerSequence = []
-    gameState.lastTouchedTreeIndex = -1
-    gameState.sequenceCompleteTime = null
-    gameState.pauseTimer = 0
-    if (touchedTreeIndex !== firstNoteIndex) return
-    matchingStartPosition = 0
-  }
-  const nextPosition = matchingStartPosition + currentSequence.length
-  if (nextPosition >= targetSequence.length) {
-    gameState.playerSequence = []
-    gameState.lastTouchedTreeIndex = -1
-    gameState.sequenceCompleteTime = null
-    gameState.pauseTimer = 0
-    if (touchedTreeIndex !== firstNoteIndex) return
-  } else {
-    const expectedNote = targetSequence[nextPosition]
-    if (touchedTreeIndex !== expectedNote) {
-      gameState.playerSequence = []
-      gameState.lastTouchedTreeIndex = -1
-      gameState.sequenceCompleteTime = null
-      gameState.pauseTimer = 0
-      if (touchedTreeIndex !== firstNoteIndex) return
-    }
-  }
-  gameState.playerSequence.push(touchedTreeIndex)
-  gameState.lastTouchedTreeIndex = touchedTreeIndex
-  const newSequence = gameState.playerSequence
-  if (newSequence.length === targetSequence.length) {
-    let exactMatch = true
-    for (let i = 0; i < targetSequence.length; i++) {
-      if (newSequence[i] !== targetSequence[i]) {
-        exactMatch = false
-        break
-      }
-    }
-    if (exactMatch) {
+  const expectedNote = gameState.playerSequence.length < targetSequence.length
+    ? targetSequence[gameState.playerSequence.length]
+    : firstNoteIndex
+  if (touchedTreeIndex === expectedNote) {
+    gameState.playerSequence.push(touchedTreeIndex)
+    gameState.lastTouchedTreeIndex = touchedTreeIndex
+    if (gameState.playerSequence.length === targetSequence.length) {
       gameState.sequenceCompleteTime = k.time()
       gameState.pauseTimer = 0
-    } else {
-      gameState.playerSequence = []
-      gameState.lastTouchedTreeIndex = -1
-      gameState.sequenceCompleteTime = null
-      gameState.pauseTimer = 0
     }
+    return
   }
+  //
+  // Wrong note — thunder on every mistake until the player hits Do again
+  //
+  gameState.playerSequence = []
+  gameState.lastTouchedTreeIndex = -1
+  gameState.sequenceCompleteTime = null
+  gameState.pauseTimer = 0
+  !gameState.antiHeroActive && sound && lightningState && triggerMelodyWrongThunder(sound, lightningState)
 }
 //
 // Shows timed speech bubbles from the anti-hero if the melody puzzle
@@ -3288,9 +3238,9 @@ function drawFireflyLayer(k, fireflies, layerIndex) {
   }
 }
 //
-// Update lightning timer: trigger thunder sound and flash
+// Update lightning flash decay (thunder only on wrong melody notes)
 //
-function onUpdateLightning(k, state, sound) {
+function onUpdateLightning(k, state) {
   const dt = k.dt()
   //
   // Count down active flash
@@ -3309,14 +3259,15 @@ function onUpdateLightning(k, state, sound) {
       state.blinkTimer = LIGHTNING_BLINK_INTERVAL
     }
   }
-  state.timer -= dt
-  if (state.timer <= 0) {
-    playVariedThunder(sound)
-    state.flashTimer = LIGHTNING_FLASH_DURATION
-    state.blinkCount = LIGHTNING_BLINK_COUNT
-    state.blinkTimer = LIGHTNING_BLINK_INTERVAL
-    state.timer = THUNDER_INTERVAL_MIN + Math.random() * (THUNDER_INTERVAL_MAX - THUNDER_INTERVAL_MIN)
-  }
+}
+//
+// Thunder + flash when the player hits a wrong note in the melody puzzle
+//
+function triggerMelodyWrongThunder(sound, state) {
+  playVariedThunder(sound)
+  state.flashTimer = LIGHTNING_FLASH_DURATION
+  state.blinkCount = LIGHTNING_BLINK_COUNT
+  state.blinkTimer = LIGHTNING_BLINK_INTERVAL
 }
 //
 // Play 1-3 thunder rumbles with random durations and delays
@@ -3396,10 +3347,10 @@ function onUpdateCricketAmbient(k, state, sound) {
 //
 // Periodically play a frog croak
 //
-function onUpdateFrogAmbient(k, state, sound) {
+function onUpdateFrogAmbient(k, state) {
   state.timer -= k.dt()
   if (state.timer <= 0) {
-    Sound.playFrogSound(sound)
+    Sound.playFrogSound(k)
     state.timer = L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN)
   }
 }
@@ -3457,6 +3408,12 @@ function createL1Mushrooms(k) {
       y: FLOOR_Y - totalH + 2,
       width: totalW,
       height: totalH,
+      capW,
+      capH,
+      stemH,
+      stemW,
+      capColor: color,
+      glowPhase: Math.random() * Math.PI * 2,
       tooltipText
     })
   }
@@ -3465,13 +3422,46 @@ function createL1Mushrooms(k) {
     k.z(6),
     {
       draw() {
+        const t = k.time()
         for (const m of mushrooms) {
           k.drawSprite({ sprite: m.spriteName, pos: k.vec2(m.x, m.y) })
+          drawL1MushroomContourGlow(k, m, t)
         }
       }
     }
   ])
   return mushrooms
+}
+//
+// Tiny pulsing halo traced along the mushroom cap and stem silhouette
+//
+function drawL1MushroomContourGlow(k, m, time) {
+  const glow = (Math.sin(time * L1_MUSHROOM_GLOW_SPEED + m.glowPhase) + 1) / 2
+  const alpha = L1_MUSHROOM_GLOW_ALPHA_MIN + glow * L1_MUSHROOM_GLOW_ALPHA_RANGE
+  const glowColor = k.rgb(m.capColor[0], m.capColor[1], m.capColor[2])
+  const cx = m.x + m.width * 0.5
+  const stemTop = m.y + m.height - m.stemH - 2
+  const pad = L1_MUSHROOM_GLOW_OUTLINE_PAD
+  //
+  // Cap outline — slightly inflated half-ellipse hugging the cap edge
+  //
+  k.drawEllipse({
+    pos: k.vec2(cx, stemTop),
+    radiusX: m.capW / 2 + pad,
+    radiusY: m.capH + pad,
+    color: glowColor,
+    opacity: alpha
+  })
+  //
+  // Stem outline — thin tapered quad matching the stem silhouette
+  //
+  k.drawRect({
+    pos: k.vec2(cx - m.stemW / 2 - pad, stemTop),
+    width: m.stemW + pad * 2,
+    height: m.stemH + pad,
+    color: glowColor,
+    opacity: alpha * 0.75
+  })
 }
 //
 // Draw a mushroom on a 2D canvas (cap + stem + texture dots)

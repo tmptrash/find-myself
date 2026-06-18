@@ -86,11 +86,11 @@ const SECTION_HELP_COLORS = {
   word: '#DC143C'
 }
 //
-// Touch help panel uses complementary teal fill + warm orange text
+// Touch help panel matches touch life-deduction bubble (wall fill + steel-teal accent)
 //
-const TOUCH_PANEL_FILL_HEX = '#1C323A'
-const TOUCH_PANEL_TEXT_HEX = '#E08040'
-const TOUCH_PANEL_BORDER_HEX = '#E08040'
+const TOUCH_PANEL_FILL_HEX = '#152528'
+const TOUCH_PANEL_TEXT_HEX = '#5A8898'
+const TOUCH_PANEL_BORDER_HEX = '#5A8898'
 //
 // Per-level hint copy
 //

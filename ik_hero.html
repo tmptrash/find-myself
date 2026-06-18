@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IK Hero – Rain World Style</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d0d1a; overflow: hidden; font-family: monospace; }
+  canvas { display: block; }
+  #controls {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    color: #556; font-size: 11px; letter-spacing: .08em; text-align: center;
+    pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="controls">← → — move &nbsp;|&nbsp; ↑ — jump</div>
+<script>
+// ─── Canvas setup ───────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W = canvas.width  = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+window.addEventListener('resize', () => {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  buildTerrain();
+});
+
+// ─── Input ──────────────────────────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true;  e.preventDefault(); });
+window.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+// ─── Math helpers ───────────────────────────────────────────────────────────
+const lerp   = (a, b, t) => a + (b - a) * t;
+const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const dist   = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+const norm   = v => { const l = Math.hypot(v.x, v.y) || 1; return { x: v.x/l, y: v.y/l }; };
+const v2     = (x, y) => ({ x, y });
+const vadd   = (a, b) => v2(a.x+b.x, a.y+b.y);
+const vsub   = (a, b) => v2(a.x-b.x, a.y-b.y);
+const vscale = (v, s) => v2(v.x*s, v.y*s);
+
+// ─── Terrain ────────────────────────────────────────────────────────────────
+let terrain = [];
+const TERRAIN_SEGS = 400; // more segments = smoother curves
+
+// Value noise: smoothly interpolated random lattice
+function makeNoise(seed, count) {
+  const r = [];
+  let s = seed | 0;
+  for (let i = 0; i <= count; i++) {
+    s = Math.imul(s, 1664525) + 1013904223 | 0;
+    r.push(((s >>> 0) / 0xffffffff) * 2 - 1);
+  }
+  return (t) => {
+    const i0 = Math.floor(t) % count;
+    const f  = t - Math.floor(t);
+    const u  = f * f * (3 - 2 * f); // smoothstep
+    return r[i0] + (r[(i0 + 1) % count] - r[i0]) * u;
+  };
+}
+
+function buildTerrain() {
+  terrain = [];
+  const s = () => Math.floor(Math.random() * 999983);
+  // Four noise layers: slow drift, big hills, medium ridges, fine texture
+  const n0 = makeNoise(s(), 16);
+  const n1 = makeNoise(s(), 48);
+  const n2 = makeNoise(s(), 128);
+  const n3 = makeNoise(s(), 256);
+
+  const base = H * 0.66;
+  // Amplitudes – large enough to feel like real coastline terrain
+  const a0 = H * 0.06;  // very slow overall tilt
+  const a1 = H * 0.07;  // tall hill features
+  const a2 = H * 0.03;  // medium bumps
+  const a3 = H * 0.012; // fine surface roughness
+
+  for (let i = 0; i <= TERRAIN_SEGS; i++) {
+    const t = i / TERRAIN_SEGS;
+    const y = base
+      + n0(t * 3)   * a0
+      + n1(t * 9)   * a1
+      + n2(t * 20)  * a2
+      + n3(t * 44)  * a3;
+    terrain.push({ x: t * W, y: clamp(y, H * 0.28, H * 0.87) });
+  }
+}
+buildTerrain();
+
+// Get surface Y at world x (linear interpolation)
+function surfaceY(x) {
+  const segW = W / TERRAIN_SEGS;
+  const idx  = clamp(Math.floor(x / segW), 0, TERRAIN_SEGS - 1);
+  const t    = (x / segW) - idx;
+  const p0   = terrain[idx];
+  const p1   = terrain[Math.min(idx + 1, TERRAIN_SEGS)];
+  if (!p0 || !p1) return H * 0.72;
+  return lerp(p0.y, p1.y, t);
+}
+
+// Slope angle at x
+function surfaceAngle(x) {
+  const dx = 2;
+  return Math.atan2(surfaceY(x + dx) - surfaceY(x - dx), dx * 2);
+}
+
+// ─── FABRIK IK solver ────────────────────────────────────────────────────────
+// joints: [{x,y}, ...]  lengths: [l01, l12, ...]
+function fabrik(joints, lengths, target, anchor, iterations = 8) {
+  const n = joints.length;
+  // Guard: ensure all joints are valid before solving
+  for (let i = 0; i < n; i++) {
+    if (!joints[i] || !isFinite(joints[i].x) || !isFinite(joints[i].y)) {
+      joints[i] = { ...anchor };
+    }
+  }
+  // Forward pass – reach toward target
+  joints[n - 1] = { ...target };
+  for (let i = n - 2; i >= 0; i--) {
+    const d = dist(joints[i], joints[i + 1]);
+    if (d < 0.0001) continue; // skip degenerate segment
+    const t = lengths[i] / d;
+    joints[i] = {
+      x: lerp(joints[i + 1].x, joints[i].x, t),
+      y: lerp(joints[i + 1].y, joints[i].y, t),
+    };
+  }
+  // Backward pass – pull back to anchor
+  joints[0] = { ...anchor };
+  for (let i = 0; i < n - 1; i++) {
+    const d = dist(joints[i], joints[i + 1]);
+    if (d < 0.0001) continue; // skip degenerate segment
+    const t = lengths[i] / d;
+    joints[i + 1] = {
+      x: lerp(joints[i].x, joints[i + 1].x, t),
+      y: lerp(joints[i].y, joints[i + 1].y, t),
+    };
+  }
+  return joints;
+}
+
+// ─── Hero ───────────────────────────────────────────────────────────────────
+const GRAVITY   = 980;
+const WALK_SPD  = 120;
+const JUMP_VEL  = -380;
+
+// Plush blob proportions
+const BODY_W    = 13;   // body half-width
+const BODY_H    = 19;   // body half-height
+const HEAD_R    = 13;   // big round head
+const LEG_W     = 4.5;  // leg stroke half-width
+const LEG_SEP   = 8;    // horizontal distance between leg centers
+const ARM_W     = 3.5;  // arm stroke half-width
+const ARM_UP    = 10;
+const ARM_LO    = 9;
+// IK leg lengths
+const THIGH_LEN = 10;
+const SHIN_LEN  = 10;
+// Body center Y = ground - legs - body_half
+// legs go from bottom of body to ground: THIGH_LEN+SHIN_LEN
+const LEG_TOTAL = THIGH_LEN + SHIN_LEN;
+const BODY_ABOVE_GROUND = LEG_TOTAL + BODY_H; // center of body above ground
+// Colours – all same family, legs/arms slightly darker
+const HERO_COLOR  = '#5b8fa8';
+const HERO_LIMB   = '#4e7d94';   // slightly darker for depth
+const OUTLINE_W   = 3.0;
+
+class Hero {
+  constructor(x, y) {
+    // px,py = feet contact point on ground
+    this.px = x;
+    this.py = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.onGround = false;
+
+    this.facing = 1;
+    this.facingSmooth = 1;
+
+    // Body center above ground
+    const bodyY = y - BODY_ABOVE_GROUND;
+
+    // Legs: IK chains, foot targets on ground
+    this.legs = [
+      { joints: [v2(x - LEG_SEP, bodyY + BODY_H), v2(x - LEG_SEP, bodyY + BODY_H + THIGH_LEN), v2(x - LEG_SEP, y)],
+        lengths: [THIGH_LEN, SHIN_LEN] },
+      { joints: [v2(x + LEG_SEP, bodyY + BODY_H), v2(x + LEG_SEP, bodyY + BODY_H + THIGH_LEN), v2(x + LEG_SEP, y)],
+        lengths: [THIGH_LEN, SHIN_LEN] },
+    ];
+
+    this.footCurrent = [v2(x - LEG_SEP, y), v2(x + LEG_SEP, y)];
+    this.footLifting  = [false, false];
+    this.footLiftT    = [0, 0];
+    this.footLiftFrom = [v2(x - LEG_SEP, y), v2(x + LEG_SEP, y)];
+    this.footLiftTo   = [v2(x - LEG_SEP, y), v2(x + LEG_SEP, y)];
+    this.stepPhase    = 0;
+
+    // Arms
+    this.arms = [
+      { joints: [v2(x - BODY_W, bodyY - 2), v2(x - BODY_W - ARM_UP, bodyY + 5), v2(x - BODY_W - ARM_UP - ARM_LO + 2, bodyY + 12)],
+        lengths: [ARM_UP, ARM_LO] },
+      { joints: [v2(x + BODY_W, bodyY - 2), v2(x + BODY_W + ARM_UP, bodyY + 5), v2(x + BODY_W + ARM_UP + ARM_LO - 2, bodyY + 12)],
+        lengths: [ARM_UP, ARM_LO] },
+    ];
+    this.armTarget = [v2(x - BODY_W - 10, bodyY + 14), v2(x + BODY_W + 10, bodyY + 14)];
+
+    // Body center (smoothed for rendering)
+    this.bodyCX = x;
+    this.bodyCY = bodyY;
+
+    this.headBob  = 0;
+    this.walkT    = 0;
+    this.speed    = 0;
+    this.squash   = 1;
+    this.squashV  = 0;
+  }
+
+  update(dt) {
+    // ── Input ──
+    let moveX = 0;
+    if (keys['ArrowLeft']  || keys['KeyA']) { moveX = -1; this.facing = -1; }
+    if (keys['ArrowRight'] || keys['KeyD']) { moveX =  1; this.facing =  1; }
+    // Jump — simultaneous with move, 120ms coyote buffer
+    const wantJump = !!(keys['ArrowUp'] || keys['KeyW'] || keys['Space']);
+    if (wantJump && this.onGround) {
+      this.vy = JUMP_VEL;
+      this.onGround = false;
+      this.squashV = 0.7;
+      this._jumpBuffered = false;
+      this._jumpBuffer   = 0;
+    } else if (wantJump && !this.onGround && !this._jumpBuffered) {
+      this._jumpBuffer   = 0.12;
+      this._jumpBuffered = true;
+    }
+    if (this._jumpBuffer > 0) {
+      this._jumpBuffer -= dt;
+      if (this.onGround && this._jumpBuffer > 0) {
+        this.vy = JUMP_VEL;
+        this.onGround = false;
+        this.squashV       = 0.7;
+        this._jumpBuffer   = 0;
+        this._jumpBuffered = false;
+      }
+    }
+    if (!wantJump) { this._jumpBuffered = false; }
+
+    this.speed = Math.abs(moveX) * WALK_SPD;
+    this.vx = lerp(this.vx, moveX * WALK_SPD, dt * 10);
+    if (!this.onGround) this.vy += GRAVITY * dt;
+
+    this.px += this.vx * dt;
+    this.py += this.vy * dt;
+    this.px = clamp(this.px, 40, W - 40);
+
+    // Ground collision – py is the foot level
+    const groundY = surfaceY(this.px);
+    if (this.py >= groundY) {
+      const wasAir = !this.onGround;
+      this.py = groundY;
+      if (wasAir && this.vy > 60) this.squashV = -0.7;
+      this.vy = 0;
+      this.onGround = true;
+    } else {
+      this.onGround = false;
+    }
+
+    // ── Squash/stretch ──
+    this.squashV -= (this.squash - 1) * 45 * dt;
+    this.squashV *= Math.pow(0.04, dt);
+    this.squash  += this.squashV * dt;
+    this.squash   = clamp(this.squash, 0.88, 1.12);
+
+    const slope = surfaceAngle(this.px);
+
+    // ── Body center: py is ground contact, body center floats above ──
+    const targetCY = this.py - BODY_ABOVE_GROUND;
+    const targetCX = this.px + this.vx * 0.025 + Math.sin(slope) * BODY_H * 0.25;
+    this.bodyCX = lerp(this.bodyCX, targetCX, dt * 14);
+    this.bodyCY = lerp(this.bodyCY, targetCY, dt * 14);
+
+    // ── Smooth facing ──
+    this.facingSmooth = lerp(this.facingSmooth, this.facing, dt * 7);
+
+    // ── Walk cycle ──
+    if (this.onGround && Math.abs(this.vx) > 8) this.walkT += dt * 4;
+
+    // ── Feet ──
+    this._updateFeet(dt, slope);
+
+    // ── Solve legs: anchor at bottom of body ellipse ──
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? -1 : 1;
+      // Hip at bottom of body, slightly to each side
+      const hipAnchor = v2(
+        this.bodyCX + side * LEG_SEP * 0.7,
+        this.bodyCY + BODY_H   // bottom of body ellipse
+      );
+      this.legs[i].joints = fabrik(
+        this.legs[i].joints, this.legs[i].lengths,
+        this.footCurrent[i], hipAnchor
+      );
+    }
+
+    // ── Arms: heavy, always hang DOWN — never rise above shoulder ──
+    const walkFactor = clamp(Math.abs(this.vx) / WALK_SPD, 0, 1);
+    const armSwing   = Math.sin(this.walkT) * 0.4 * walkFactor;
+    if (!this.armTargetSmooth) this.armTargetSmooth = [null, null];
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? -1 : 1;
+      const shoulder = v2(
+        this.bodyCX + side * BODY_W * 0.82,
+        this.bodyCY - 10
+      );
+      // Walk swing: horizontal only — no vertical during walk
+      const swingX = side * -armSwing * 7;
+      // Hang distance below shoulder — fixed, no airDrop that could cause issues
+      const hangDist = ARM_UP + ARM_LO * 1.2;
+
+      // Ideal hand position in world space, always below shoulder
+      const idealX = shoulder.x + side * 3 + swingX;
+      const idealY = shoulder.y + hangDist; // always strictly below
+
+      if (!this.armTargetSmooth[i]) this.armTargetSmooth[i] = v2(idealX, idealY);
+
+      // Smooth X slowly (swing feel), but Y must ALWAYS chase downward fast
+      // and never go above shoulder.y + MIN_HANG
+      const MIN_HANG = 6; // hand always at least this far below shoulder
+      const spdX = this.onGround ? 7 : 4;
+      const spdY = this.onGround ? 9 : 9; // fast Y always — prevents floating up
+      let smoothX = lerp(this.armTargetSmooth[i].x, idealX, dt * spdX);
+      let smoothY = lerp(this.armTargetSmooth[i].y, idealY, dt * spdY);
+      // Hard clamp: hand Y can never be above shoulder + MIN_HANG
+      smoothY = Math.max(smoothY, shoulder.y + MIN_HANG);
+      this.armTargetSmooth[i] = v2(smoothX, smoothY);
+
+      this.armTarget[i] = this.armTargetSmooth[i];
+      this.arms[i].joints = fabrik(
+        this.arms[i].joints, this.arms[i].lengths,
+        this.armTarget[i], shoulder
+      );
+    }
+
+    // ── Head bob ──
+    const bobAmt = this.onGround ? Math.sin(this.walkT * 2) * 1.5 * (this.speed / WALK_SPD) : 0;
+    this.headBob = lerp(this.headBob, bobAmt, dt * 10);
+  }
+
+  _updateFeet(dt, slope) {
+    const reach = THIGH_LEN + SHIN_LEN;
+
+    for (let i = 0; i < 2; i++) {
+      if (this.footLifting[i]) {
+        this.footLiftT[i] = Math.min(1, this.footLiftT[i] + dt * 7);
+        const t    = this.footLiftT[i];
+        const ease = t < .5 ? 2*t*t : -1+(4-2*t)*t;
+        const arcH = 12 * Math.sin(Math.PI * t);
+        this.footCurrent[i] = v2(
+          lerp(this.footLiftFrom[i].x, this.footLiftTo[i].x, ease),
+          lerp(this.footLiftFrom[i].y, this.footLiftTo[i].y, ease) - arcH
+        );
+        if (this.footLiftT[i] >= 1) {
+          this.footLifting[i] = false;
+          this.footCurrent[i] = { ...this.footLiftTo[i] };
+          this.stepPhase ^= 1;
+        }
+        continue;
+      }
+
+      const side      = i === 0 ? -1 : 1;
+      const stepAhead = this.vx * 0.14 + side * LEG_SEP * 0.8;
+      const idealX    = this.px + stepAhead;
+      const idealY    = surfaceY(idealX);
+
+      const cur = this.footCurrent[i];
+      const err = dist(cur, v2(idealX, idealY));
+
+      const shouldStep =
+        err > reach * 0.52 ||
+        (err > reach * 0.28 && this.stepPhase === i && Math.abs(this.vx) > 15 && !this.footLifting[i ^ 1]);
+
+      if (shouldStep && !this.footLifting[i ^ 1]) {
+        this.footLifting[i]  = true;
+        this.footLiftT[i]    = 0;
+        this.footLiftFrom[i] = { ...this.footCurrent[i] };
+        this.footLiftTo[i]   = v2(idealX, idealY);
+      }
+    }
+  }
+
+  // Stroke a limb as a single smooth polyline (no segment joints visible)
+  _strokeLimb(octx, joints, w) {
+    const [a, b, c] = joints;
+    if (!a || !b || !c) return;
+    octx.lineWidth  = w * 2;
+    octx.lineCap    = 'round';
+    octx.lineJoin   = 'round';
+    octx.beginPath();
+    octx.moveTo(a.x, a.y);
+    octx.lineTo(b.x, b.y);
+    octx.lineTo(c.x, c.y);
+    octx.stroke();
+  }
+
+  // Draw entire hero onto octx at full colour, no outlines
+  _drawColour(octx) {
+    const cx = this.bodyCX, cy = this.bodyCY;
+    const slope = surfaceAngle(this.px);
+    const tilt  = slope * 0.3 + this.vx * 0.001;
+    const bW = BODY_W * (2 - this.squash + 0.1);
+    const bH = BODY_H * this.squash;
+
+    octx.lineCap  = 'round';
+    octx.lineJoin = 'round';
+    octx.strokeStyle = HERO_COLOR;
+    octx.fillStyle   = HERO_COLOR;
+
+    // ── LEGS: stroke from hip (inside body bottom) all the way to foot ──
+    // Root starts INSIDE the body so body fully covers the joint — no gap ever
+    for (let i = 0; i < 2; i++) {
+      const [a, b, c] = this.legs[i].joints;
+      if (!a || !b || !c) continue;
+      // Pull root point up into body center so leg disappears seamlessly
+      const root = v2(a.x, a.y - LEG_W * 0.5);
+      octx.lineWidth = LEG_W * 2;
+      octx.beginPath();
+      octx.moveTo(root.x, root.y);
+      octx.lineTo(b.x, b.y);
+      octx.lineTo(c.x, c.y);
+      octx.stroke();
+    }
+
+    // ── ARMS: same — root inside body ──
+    for (let i = 0; i < 2; i++) {
+      const [a, b, c] = this.arms[i].joints;
+      if (!a || !b || !c) continue;
+      const side = i === 0 ? -1 : 1;
+      // Pull root slightly into body
+      const root = v2(a.x + side * ARM_W * 0.3, a.y);
+      octx.lineWidth = ARM_W * 2;
+      octx.beginPath();
+      octx.moveTo(root.x, root.y);
+      octx.lineTo(b.x, b.y);
+      octx.lineTo(c.x, c.y);
+      octx.stroke();
+    }
+
+    // ── BODY + HEAD (drawn on top, covers all roots) ──
+    octx.save();
+    octx.translate(cx, cy);
+    octx.rotate(tilt);
+
+    const headRelY   = -bH - HEAD_R + 5;
+    const headShiftX = this.vx * 0.01;
+
+    // Body ellipse
+    octx.beginPath();
+    octx.ellipse(0, 0, bW, bH, 0, 0, Math.PI * 2);
+    octx.fillStyle = HERO_COLOR;
+    octx.fill();
+
+    // ── Smooth neck: connect head to body with a filled bezier shape ──
+    // This creates organic "shoulder" curves instead of a gap or hard rect
+    const neckW = HEAD_R * 0.75;
+    const neckTop = headRelY + HEAD_R * 0.7;
+    const neckBot = -bH + 2;
+    octx.beginPath();
+    octx.moveTo(headShiftX - neckW, neckTop);
+    octx.bezierCurveTo(
+      headShiftX - neckW * 1.4, neckTop + (neckBot - neckTop) * 0.3,
+      -bW * 0.55, neckBot - 3,
+      -bW * 0.45, neckBot
+    );
+    octx.lineTo(bW * 0.45, neckBot);
+    octx.bezierCurveTo(
+      bW * 0.55, neckBot - 3,
+      headShiftX + neckW * 1.4, neckTop + (neckBot - neckTop) * 0.3,
+      headShiftX + neckW, neckTop
+    );
+    octx.closePath();
+    octx.fillStyle = HERO_COLOR;
+    octx.fill();
+
+    // Head circle (on top of neck shape)
+    octx.beginPath();
+    octx.arc(headShiftX, headRelY, HEAD_R, 0, Math.PI * 2);
+    octx.fillStyle = HERO_COLOR;
+    octx.fill();
+
+    // ── Eyes ──
+    const eyeSpread = 4;
+    const eyeOffX   = this.facingSmooth * 4.5;
+    const eyeY      = headRelY - 1 + this.headBob;
+
+    [-eyeSpread, eyeSpread].forEach(ex => {
+      octx.beginPath();
+      octx.arc(eyeOffX + ex, eyeY, 4, 0, Math.PI * 2);
+      octx.fillStyle = '#fff';
+      octx.fill();
+    });
+    [-eyeSpread, eyeSpread].forEach(ex => {
+      octx.beginPath();
+      octx.arc(eyeOffX + ex + this.facingSmooth * 0.5, eyeY, 2.2, 0, Math.PI * 2);
+      octx.fillStyle = '#111';
+      octx.fill();
+    });
+    [-eyeSpread, eyeSpread].forEach(ex => {
+      octx.beginPath();
+      octx.arc(eyeOffX + ex + this.facingSmooth * 0.5 + 0.9, eyeY - 1, 0.9, 0, Math.PI * 2);
+      octx.fillStyle = '#fff';
+      octx.fill();
+    });
+
+    octx.restore();
+  }
+
+  drawSkeleton(ctx) {
+    const dot = (p, r=3, color='#0ff') => {
+      if (!p) return;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    };
+    const line = (a, b, color='#0ff', w=1.5) => {
+      if (!a || !b) return;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.stroke();
+    };
+
+    ctx.lineCap = 'round';
+
+    const cx = this.bodyCX, cy = this.bodyCY;
+    const slope = surfaceAngle(this.px);
+    const tilt  = slope * 0.3 + this.vx * 0.001;
+    const bW = BODY_W * (2 - this.squash + 0.1);
+    const bH = BODY_H * this.squash;
+    const headRelY   = -bH - HEAD_R + 5;
+    const headShiftX = this.vx * 0.01;
+
+    // Body ellipse outline
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(tilt);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, bW, bH, 0, 0, Math.PI*2);
+    ctx.strokeStyle = '#0ff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Head circle
+    ctx.beginPath();
+    ctx.arc(headShiftX, headRelY, HEAD_R, 0, Math.PI*2);
+    ctx.strokeStyle = '#0ff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Body center cross
+    ctx.strokeStyle = '#ff0';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-4); ctx.lineTo(0,4); ctx.stroke();
+    // Head center
+    dot({x: headShiftX, y: headRelY}, 2, '#ff0');
+    ctx.restore();
+
+    // Legs
+    for (let i = 0; i < 2; i++) {
+      const [a,b,c] = this.legs[i].joints;
+      const col = i===0 ? '#f80' : '#fa0';
+      line(a, b, col, 2);
+      line(b, c, col, 2);
+      dot(a, 4, '#fff');
+      dot(b, 3, col);
+      dot(c, 4, '#0f0'); // foot
+    }
+
+    // Arms
+    for (let i = 0; i < 2; i++) {
+      const [a,b,c] = this.arms[i].joints;
+      const col = i===0 ? '#f0f' : '#c0f';
+      line(a, b, col, 2);
+      line(b, c, col, 2);
+      dot(a, 3, '#fff');
+      dot(b, 3, col);
+      dot(c, 3, col);
+    }
+
+    // Foot targets
+    for (let i = 0; i < 2; i++) {
+      const f = this.footCurrent[i];
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 4, 0, Math.PI*2);
+      ctx.strokeStyle = this.footLifting[i] ? '#f00' : '#0f0';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Labels
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(`vx:${this.vx.toFixed(1)} vy:${this.vy.toFixed(1)}`, cx - 30, cy - bH - HEAD_R*2 - 18);
+    ctx.fillText(`ground:${this.onGround}`, cx - 25, cy - bH - HEAD_R*2 - 6);
+  }
+
+    draw(ctx) {
+    // Strategy: draw hero onto offscreen canvas, then stamp:
+    //   1. Black shadow (dilated) — outer silhouette only
+    //   2. Colour image on top
+    // This ensures NO black lines appear between body and limbs.
+
+    const pad = Math.ceil(OUTLINE_W) + 2;
+    // bounding box of hero (rough)
+    const cx = this.bodyCX, cy = this.bodyCY;
+    const bH = BODY_H * this.squash;
+    const headRelY = -bH - HEAD_R + 4;
+    const spread = Math.max(BODY_W, HEAD_R, LEG_W) + ARM_W + ARM_UP + ARM_LO + pad + 4;
+
+    const ox = Math.round(cx - spread);
+    const oy = Math.round(cy + headRelY - HEAD_R - pad);
+    const ow = Math.round(spread * 2);
+    const oh = Math.round(this.py - oy + LEG_W + pad * 2);
+
+    // Offscreen canvas (reuse or create)
+    if (!this._ofc || this._ofc.width < ow || this._ofc.height < oh) {
+      this._ofc = document.createElement('canvas');
+    }
+    this._ofc.width  = ow;
+    this._ofc.height = oh;
+    const octx = this._ofc.getContext('2d');
+    octx.clearRect(0, 0, ow, oh);
+    octx.save();
+    octx.translate(-ox, -oy);
+    this._drawColour(octx);
+    octx.restore();
+
+    // ── 1. Black outline: use shadowBlur trick ──
+    ctx.save();
+    ctx.shadowColor = '#111';
+    ctx.shadowBlur  = 0;
+    // Draw the offscreen image shifted in 8 directions by OUTLINE_W to create dilation
+    const ow2 = OUTLINE_W;
+    const dirs = [[-ow2,-ow2],[ 0,-ow2],[ ow2,-ow2],
+                  [-ow2, 0  ],           [ ow2, 0  ],
+                  [-ow2, ow2],[ 0, ow2],[ ow2, ow2]];
+    // Use compositing: draw black version of sprite
+    const fc2 = document.createElement('canvas');
+    fc2.width = ow; fc2.height = oh;
+    const c2  = fc2.getContext('2d');
+    c2.drawImage(this._ofc, 0, 0);
+    c2.globalCompositeOperation = 'source-in';
+    c2.fillStyle = '#111';
+    c2.fillRect(0, 0, ow, oh);
+
+    for (const [dx, dy] of dirs) {
+      ctx.drawImage(fc2, ox + dx, oy + dy);
+    }
+    ctx.restore();
+
+    // ── 2. Colour on top ──
+    ctx.drawImage(this._ofc, ox, oy);
+  }
+}
+
+// ─── Parallax background layers ─────────────────────────────────────────────
+function drawBackground() {
+  // Sky gradient
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0,   '#090916');
+  sky.addColorStop(0.6, '#12182e');
+  sky.addColorStop(1,   '#1e2d40');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  ctx.fillStyle = 'rgba(200,220,255,0.55)';
+  for (let i = 0; i < 120; i++) {
+    const sx = (i * 173.13) % W;
+    const sy = (i * 97.41)  % (H * 0.55);
+    const r  = (i % 3 === 0) ? 1.2 : .6;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Distant hills (parallax layer 2)
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 6) {
+    const y = H * 0.60 + Math.sin(x * 0.008 + 1.2) * 40 + Math.sin(x * 0.003) * 60;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, H);
+  ctx.fillStyle = '#111a2a';
+  ctx.fill();
+
+  // Mid hills
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 4) {
+    const y = H * 0.66 + Math.sin(x * 0.013 + 3.1) * 28 + Math.sin(x * 0.005 + 1) * 45;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, H);
+  ctx.fillStyle = '#162030';
+  ctx.fill();
+}
+
+function drawTerrain() {
+  // Deep ground fill with vertical gradient
+  const grd = ctx.createLinearGradient(0, H * 0.3, 0, H);
+  grd.addColorStop(0,   '#1a2d40');
+  grd.addColorStop(0.3, '#162438');
+  grd.addColorStop(1,   '#0d141e');
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  ctx.lineTo(terrain[0].x, terrain[0].y);
+  for (const p of terrain) ctx.lineTo(p.x, p.y);
+  ctx.lineTo(W, H);
+  ctx.closePath();
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // Rocky layer — slightly lighter strip just under surface
+  ctx.beginPath();
+  ctx.moveTo(terrain[0].x, terrain[0].y);
+  for (const p of terrain) ctx.lineTo(p.x, p.y + 6);
+  ctx.strokeStyle = 'rgba(40,70,95,0.6)';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+
+  // Surface edge — bright rim
+  ctx.beginPath();
+  ctx.moveTo(terrain[0].x, terrain[0].y);
+  for (const p of terrain) ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = '#3a6080';
+  ctx.lineWidth   = 2.5;
+  ctx.stroke();
+
+  // Highlight glint on surface
+  ctx.beginPath();
+  ctx.moveTo(terrain[0].x, terrain[0].y);
+  for (const p of terrain) ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = 'rgba(140,200,255,0.18)';
+  ctx.lineWidth   = 1.2;
+  ctx.stroke();
+}
+
+// ─── Main loop ───────────────────────────────────────────────────────────────
+const DEBUG_SKELETON = false; // ← set false to show normal hero
+const hero = new Hero(W / 2, surfaceY(W / 2));
+
+let last = performance.now();
+let fps = 0, fpsAccum = 0, fpsFrames = 0;
+
+function drawFPS() {
+  ctx.save();
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const label = fps + ' fps';
+  const tw = ctx.measureText(label).width;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(W / 2 - tw / 2 - 6, 10, tw + 12, 20);
+  ctx.fillStyle = fps >= 55 ? '#7ecf8a' : fps >= 30 ? '#e8c76a' : '#e87a6a';
+  ctx.fillText(label, W / 2, 13);
+  ctx.restore();
+}
+
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+
+  // FPS smoothed over ~0.5s
+  fpsAccum  += dt;
+  fpsFrames += 1;
+  if (fpsAccum >= 0.5) {
+    fps = Math.round(fpsFrames / fpsAccum);
+    fpsAccum = fpsFrames = 0;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawTerrain();
+  hero.update(dt);
+  if (DEBUG_SKELETON) hero.drawSkeleton(ctx); else hero.draw(ctx);
+  drawFPS();
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

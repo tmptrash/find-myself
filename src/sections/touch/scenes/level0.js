@@ -213,9 +213,12 @@ const HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH = 140
 // glow as the warm complement against the teal playfield. The hue still
 // reads as oxidised iron, just on the orange side of red.
 //
-const FLOOR_THORN_BLADE_FILL_R = 224
-const FLOOR_THORN_BLADE_FILL_G = 112
-const FLOOR_THORN_BLADE_FILL_B = 32
+//
+// Bright aqua-teal spikes — visible on the dark playfield while staying in the touch palette
+//
+const FLOOR_THORN_BLADE_FILL_R = 130
+const FLOOR_THORN_BLADE_FILL_G = 205
+const FLOOR_THORN_BLADE_FILL_B = 215
 //
 // Life image flash + red particles on thorn death (same as touch level 3)
 //
@@ -617,7 +620,7 @@ export function sceneLevel0(k) {
       floorY: FLOOR_Y,
       levelIndicator,
       sound,
-      sceneBackdropHex: '#1C323A'
+      sceneBackdropHex: WALL_COLOR_HEX
     })
     TouchControls.create({
       k,
@@ -2929,7 +2932,7 @@ export function sceneLevel0(k) {
     k.onUpdate(() => {
       frogState.timer -= k.dt()
       if (frogState.timer <= 0) {
-        Sound.playFrogSound(sound)
+        Sound.playFrogSound(k)
         frogState.timer = FROG_INTERVAL_MIN + Math.random() * (FROG_INTERVAL_MAX - FROG_INTERVAL_MIN)
       }
     })

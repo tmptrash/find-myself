@@ -256,7 +256,7 @@ const TITLE_TEXT_Y = 130
 // centred between the horizon line and the bottom hint. The last line
 // has two icons embedded inline between its words.
 //
-const BLOCK_LINE_COUNT = 3
+const BLOCK_LINE_COUNT = 4
 const TEXT_FONT_SIZE = 36
 const TEXT_LINE_HEIGHT = 52
 //
@@ -308,6 +308,25 @@ const ICON_LINE_ICON1_X = ICON_LINE_LEFT_X + ICON_LINE_SEG1_W + ICON_DRAW_R
 const ICON_LINE_SEG2_X = ICON_LINE_ICON1_X + ICON_DRAW_R
 const ICON_LINE_ICON2_X = ICON_LINE_SEG2_X + ICON_LINE_SEG2_W + ICON_DRAW_R
 const ICON_LINE_SEG3_X = ICON_LINE_ICON2_X + ICON_DRAW_R
+//
+// Life line: inline life sprite plus the word "life", total width matches icon line
+//
+const LIFE_LINE_SEG1 = 'Your only enemy is '
+const LIFE_LINE_SEG2 = ' life, hidden in every world.'
+const LIFE_SPRITE_ASPECT = 427 / 443
+const LIFE_LINE_ICON_W = ICON_DRAW_R * 2
+const LIFE_LINE_SEG1_W = LIFE_LINE_SEG1.length * ICON_LINE_CHAR_W
+const LIFE_LINE_SEG2_W = LIFE_LINE_SEG2.length * ICON_LINE_CHAR_W
+const LIFE_LINE_TOTAL_W = LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W + LIFE_LINE_SEG2_W
+const LIFE_LINE_LEFT_X = CENTER_X - Math.round(LIFE_LINE_TOTAL_W / 2)
+const LIFE_LINE_ICON_X = LIFE_LINE_LEFT_X + LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W / 2
+const LIFE_LINE_SEG2_X = LIFE_LINE_LEFT_X + LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W
+//
+// Inline life sprite — uniform scale from life.png aspect ratio (427×443)
+//
+const LIFE_INLINE_ICON_H = Math.round(TEXT_FONT_SIZE * 0.92)
+const LIFE_INLINE_ICON_W = Math.round(LIFE_INLINE_ICON_H * LIFE_SPRITE_ASPECT)
+const LIFE_INLINE_ICON_Y_OFFSET = 6
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
@@ -746,7 +765,14 @@ function addDescriptionBlock(k) {
     cursorY += TEXT_LINE_HEIGHT
   }
   //
-  // Line 3: two icons are embedded inline between the text segments.
+  // Line 3: life icon plus the word "life" inline
+  //
+  const lifeLineY = cursorY
+  addSegment(k, LIFE_LINE_SEG1, LIFE_LINE_LEFT_X, lifeLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
+  addSegment(k, LIFE_LINE_SEG2, LIFE_LINE_SEG2_X, lifeLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
+  cursorY += TEXT_LINE_HEIGHT
+  //
+  // Line 4: two icons are embedded inline between the text segments.
   // Text segments are left-anchored and precisely positioned so the
   // entire line reads as one centred sentence.
   //
@@ -755,6 +781,7 @@ function addDescriptionBlock(k) {
   addSegment(k, ICON_LINE_SEG2, ICON_LINE_SEG2_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
   addSegment(k, ICON_LINE_SEG3, ICON_LINE_SEG3_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
   return {
+    lifeLine: { iconX: LIFE_LINE_ICON_X, iconY: lifeLineY },
     row1: { iconX: ICON_LINE_ICON1_X, iconY: iconLineY },
     row2: { iconX: ICON_LINE_ICON2_X, iconY: iconLineY }
   }
@@ -766,6 +793,17 @@ function addDescriptionBlock(k) {
 //
 function onDrawIconIllustrations(k, iconAnim, descriptionLayout) {
   const r = ICON_DRAW_R
+  //
+  // Life icon on the "Your only enemy is …" row
+  //
+  const lifeIconY = descriptionLayout.lifeLine.iconY - LIFE_INLINE_ICON_H + TEXT_FONT_SIZE * 0.22 + LIFE_INLINE_ICON_Y_OFFSET
+  k.drawSprite({
+    sprite: 'life',
+    pos: k.vec2(descriptionLayout.lifeLine.iconX - LIFE_INLINE_ICON_W / 2, lifeIconY),
+    width: LIFE_INLINE_ICON_W,
+    height: LIFE_INLINE_ICON_H,
+    opacity: 0.92
+  })
   //
   // Icon 1: "Collect fragments" — animated sun-bunny sparkle glow
   //

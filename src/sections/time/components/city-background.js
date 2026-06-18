@@ -76,6 +76,29 @@ const MOON_GLOW_MAX_FACTOR = 1.4
 const SUN_GLOW_EXTENT = SUN_RADIUS * 5 * 0.144
 const CELESTIAL_CLEARANCE = 240
 const CELESTIAL_ZONE_MARGIN = 48
+//
+// Sun-only horizontal zone — only towers under the sun are height-capped
+//
+const SUN_ZONE_CLEARANCE = 80
+//
+// Off-zone skyline (most of the width): tall towers as a fraction of platform height
+//
+const DEEP_OFF_ZONE_MIN_FRAC = 0.4
+const DEEP_OFF_ZONE_MAX_FRAC = 0.54
+const BG_OFF_ZONE_MIN_FRAC = 0.46
+const BG_OFF_ZONE_MAX_FRAC = 0.6
+const FG_OFF_ZONE_MIN_FRAC = 0.5
+const FG_OFF_ZONE_MAX_FRAC = 0.66
+//
+// Sun/moon zone (top-right): shorter band so towers stay below the discs
+//
+const DEEP_CELESTIAL_MIN_FRAC = 0.58
+const DEEP_CELESTIAL_MAX_FRAC = 0.74
+const BG_CELESTIAL_MIN_FRAC = 0.64
+const BG_CELESTIAL_MAX_FRAC = 0.78
+const FG_CELESTIAL_MIN_FRAC = 0.68
+const FG_CELESTIAL_MAX_FRAC = 0.82
+const MOON_ZONE_EXTRA_REACH = 24
 const MIN_BUILDING_HEIGHT = 40
 
 export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = true, autumnLeaves = false, showCars = true, deepBuildingHeightMultiplier = 0.25, capBySun = showSun, showTrees = true, complementaryPalette = false) {
@@ -182,7 +205,19 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       // Deepest buildings are smallest, darkest, and fill all gaps
       //
       const deepWidth = randomRange(40, 120)
-      const deepHeight = randomRange(maxBuildingHeight * 0.1, maxBuildingHeight * deepBuildingHeightMultiplier)
+      let deepHeight = resolveLayerBuildingHeight(
+        currentX,
+        deepWidth,
+        maxBuildingHeight,
+        DEEP_OFF_ZONE_MIN_FRAC,
+        DEEP_OFF_ZONE_MAX_FRAC,
+        DEEP_CELESTIAL_MIN_FRAC,
+        DEEP_CELESTIAL_MAX_FRAC,
+        bottomPlatformY,
+        screenWidth,
+        screenHeight,
+        capBySun
+      )
       const deepBuildingY = bottomPlatformY - deepHeight
       const deepRgb = randomBuildingRgb(complementaryPalette, 22, 38)
       
@@ -255,10 +290,19 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       // Background buildings are smaller and darker
       //
       const bgWidth = randomRange(60, 180)
-      const bgHeight = Math.min(
-        randomRange(maxBuildingHeight * 0.15, maxBuildingHeight * 0.4),
-        maxBuildingHeight
-      )  // Lower buildings (15-40% of max height, but not above max)
+      let bgHeight = resolveLayerBuildingHeight(
+        currentX,
+        bgWidth,
+        maxBuildingHeight,
+        BG_OFF_ZONE_MIN_FRAC,
+        BG_OFF_ZONE_MAX_FRAC,
+        BG_CELESTIAL_MIN_FRAC,
+        BG_CELESTIAL_MAX_FRAC,
+        bottomPlatformY,
+        screenWidth,
+        screenHeight,
+        capBySun
+      )
       const bgBuildingY = bottomPlatformY - bgHeight
       const bgRgb = randomBuildingRgb(complementaryPalette, 36, 54)
       
@@ -346,14 +390,21 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
         width = randomRange(220, 350)
       }
       //
-      // Foreground buildings go from bottom platform upward (not below it)
-      // Height varies from 40% to 70% of available space (higher than background)
-      // But check if building would overlap with sun
+      // Foreground buildings — same height band as darker layers, capped under sun/moon
       //
-      const availableHeight = bottomPlatformY
-      let height = randomRange(availableHeight * 0.4, availableHeight * 0.7)
-      height = Math.min(height, maxBuildingHeight)
-      height = capHeightForCelestialZones(currentX, width, height, bottomPlatformY, screenWidth, screenHeight, capBySun)
+      let height = resolveLayerBuildingHeight(
+        currentX,
+        width,
+        maxBuildingHeight,
+        FG_OFF_ZONE_MIN_FRAC,
+        FG_OFF_ZONE_MAX_FRAC,
+        FG_CELESTIAL_MIN_FRAC,
+        FG_CELESTIAL_MAX_FRAC,
+        bottomPlatformY,
+        screenWidth,
+        screenHeight,
+        capBySun
+      )
       const finalBuildingY = bottomPlatformY - height
       const windowRows = Math.floor(height / 25)
       const windowCols = Math.floor(width / 20)
@@ -673,27 +724,86 @@ function computeMaxBuildingHeight(screenHeight, bottomPlatformY, capBySun) {
   return Math.max(MIN_BUILDING_HEIGHT, bottomPlatformY - skyCeilingY - CELESTIAL_CLEARANCE)
 }
 //
+// True when a building footprint overlaps the sun or moon on the right
+//
+function isUnderCelestialZone(buildingX, buildingWidth, screenWidth) {
+  const bLeft = buildingX
+  const bRight = buildingX + buildingWidth
+  const sunCx = screenWidth * SUN_X_FACTOR + SUN_X_OFFSET
+  const sunReach = SUN_RADIUS + SUN_GLOW_EXTENT + CELESTIAL_ZONE_MARGIN
+  const moonCx = screenWidth * MOON_X_FACTOR
+  const moonReach = MOON_RADIUS * MOON_GLOW_MAX_FACTOR + CELESTIAL_ZONE_MARGIN + MOON_ZONE_EXTRA_REACH
+  const underSun = bLeft < sunCx + sunReach && bRight > sunCx - sunReach
+  const underMoon = bLeft < moonCx + moonReach && bRight > moonCx - moonReach
+  return underSun || underMoon
+}
+//
+// Pick a layer height; tall away from sun/moon, shorter under the discs
+//
+function resolveLayerBuildingHeight(
+  buildingX,
+  buildingWidth,
+  maxBuildingHeight,
+  offMinFrac,
+  offMaxFrac,
+  celestialMinFrac,
+  celestialMaxFrac,
+  bottomPlatformY,
+  screenWidth,
+  screenHeight,
+  capBySun
+) {
+  let height
+  if (isUnderCelestialZone(buildingX, buildingWidth, screenWidth) && capBySun) {
+    const zoneMax = capHeightForCelestialZones(
+      buildingX,
+      buildingWidth,
+      maxBuildingHeight,
+      bottomPlatformY,
+      screenWidth,
+      screenHeight,
+      capBySun
+    )
+    height = zoneMax * (celestialMinFrac + Math.random() * (celestialMaxFrac - celestialMinFrac))
+  } else {
+    height = bottomPlatformY * (offMinFrac + Math.random() * (offMaxFrac - offMinFrac))
+  }
+  return capHeightForCelestialZones(
+    buildingX,
+    buildingWidth,
+    height,
+    bottomPlatformY,
+    screenWidth,
+    screenHeight,
+    capBySun
+  )
+}
+//
 // Extra per-building cap when a tower overlaps the sun or moon horizontally
 //
 function capHeightForCelestialZones(buildingX, buildingWidth, height, bottomPlatformY, screenWidth, screenHeight, capBySun) {
   if (!capBySun) return height
   const celestialY = screenHeight * CELESTIAL_Y_FACTOR + CELESTIAL_Y_OFFSET
-  const zones = [
-    { cx: screenWidth * SUN_X_FACTOR + SUN_X_OFFSET, reach: SUN_RADIUS + SUN_GLOW_EXTENT + CELESTIAL_ZONE_MARGIN },
-    { cx: screenWidth * MOON_X_FACTOR, reach: MOON_RADIUS * MOON_GLOW_MAX_FACTOR + CELESTIAL_ZONE_MARGIN + 24 }
-  ]
-  let capped = height
   const bLeft = buildingX
   const bRight = buildingX + buildingWidth
-  zones.forEach(({ cx, reach }) => {
-    const zLeft = cx - reach
-    const zRight = cx + reach
-    if (bLeft < zRight && bRight > zLeft) {
-      const maxTopY = celestialY - reach - CELESTIAL_ZONE_MARGIN
-      capped = Math.min(capped, bottomPlatformY - maxTopY)
+  const zones = [
+    {
+      cx: screenWidth * SUN_X_FACTOR + SUN_X_OFFSET,
+      reach: SUN_RADIUS + SUN_GLOW_EXTENT + CELESTIAL_ZONE_MARGIN,
+      bottom: celestialY + SUN_RADIUS + SUN_GLOW_EXTENT + CELESTIAL_ZONE_MARGIN
+    },
+    {
+      cx: screenWidth * MOON_X_FACTOR,
+      reach: MOON_RADIUS * MOON_GLOW_MAX_FACTOR + CELESTIAL_ZONE_MARGIN + MOON_ZONE_EXTRA_REACH,
+      bottom: celestialY + MOON_RADIUS * MOON_GLOW_MAX_FACTOR + CELESTIAL_ZONE_MARGIN
+    }
+  ]
+  zones.forEach(({ cx, reach, bottom }) => {
+    if (bLeft < cx + reach && bRight > cx - reach) {
+      height = Math.min(height, bottomPlatformY - bottom - SUN_ZONE_CLEARANCE)
     }
   })
-  return Math.max(MIN_BUILDING_HEIGHT, capped)
+  return Math.max(MIN_BUILDING_HEIGHT, height)
 }
 
 /**

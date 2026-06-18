@@ -304,6 +304,7 @@ function buildSoundTasks(k) {
     ['touch2-pre', './sounds/touch2-pre.mp3'],
     ['touch3-pre', './sounds/touch3-pre.mp3'],
     ['crow0', './sounds/crow0.mp3'],
+    ['frog', './sounds/frog.mp3'],
     ['life', './sounds/life.mp3'],
     ['boss', './sounds/boss.mp3'],
     ['water', './sounds/water.mp3']

@@ -4186,40 +4186,19 @@ export function playBirdChirpSound(instance) {
     osc.stop(t + dur + 0.02)
   }
 }
+//
+// frog.mp3 ambient croak volume
+//
+const FROG_MP3_VOLUME_MIN = 0.45
+const FROG_MP3_VOLUME_RANGE = 0.2
 /**
- * Plays a frog croak sound (low frequency warble)
- * @param {Object} instance - Sound instance
+ * Plays frog croak from preloaded frog.mp3
+ * @param {Object} k - Kaplay instance
  */
-export function playFrogSound(instance) {
+export function playFrogSound(k) {
   if (globalMuteProceduralSounds) return
-  const ctx = instance.audioContext
-  if (!ctx || ctx.state !== 'running') return
-  const now = ctx.currentTime
-  const duration = 0.15 + Math.random() * 0.2
-  const freq = 150 + Math.random() * 100
-  const vol = 0.06 + Math.random() * 0.04
-  //
-  // Low warbling tone shaped by bandpass filter
-  //
-  const osc = ctx.createOscillator()
-  osc.type = 'sawtooth'
-  osc.frequency.setValueAtTime(freq, now)
-  osc.frequency.linearRampToValueAtTime(freq * 1.3, now + duration * 0.3)
-  osc.frequency.linearRampToValueAtTime(freq * 0.8, now + duration)
-  const filter = ctx.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.frequency.value = freq * 2
-  filter.Q.value = 3
-  const gain = ctx.createGain()
-  gain.gain.setValueAtTime(0.001, now)
-  gain.gain.linearRampToValueAtTime(vol, now + 0.02)
-  gain.gain.setValueAtTime(vol, now + duration * 0.5)
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  osc.connect(filter)
-  filter.connect(gain)
-  gain.connect(ctx.destination)
-  osc.start(now)
-  osc.stop(now + duration)
+  const volume = FROG_MP3_VOLUME_MIN + Math.random() * FROG_MP3_VOLUME_RANGE
+  k?.play?.('frog', { volume })
 }
 /**
  * Plays a distant car pass-by sound (low rumble + Doppler whoosh) for night ambience

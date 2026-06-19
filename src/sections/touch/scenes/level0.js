@@ -25,6 +25,8 @@ import * as Tooltip from '../../../utils/tooltip.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
+import { getCameraCenterX, getDistanceThreshold, isWithinDistance } from '../utils/scene-perf.js'
+import { onUpdateLevel0GameLoop, drawL0Birds } from '../utils/level0-runtime.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -447,6 +449,11 @@ const TRAP_TOOLTIP_Y_OFFSET = -30
 //
 const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
 const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 80  // Above hero height (lowered)
+//
+// Decorative culling and atmosphere activation (multiples of viewport width)
+//
+const L0_CULL_SCREEN_MULT = 2
+const L0_ATMOSPHERE_SCREEN_MULT = 1.5
 /**
  * Level 0 scene for touch section - Introduction level
  * Large game area with minimal obstacles
@@ -1661,56 +1668,15 @@ export function sceneLevel0(k) {
       })
     }
     
+    birds._topMargin = TOP_MARGIN
+    
     k.add([
       k.z(L0_BIRD_LAYER_Z),
       {
         draw() {
-          const time = k.time()
-          const dt = k.dt()
-          for (const bird of birds) {
-            //
-            // Position update + screen wrap
-            //
-            bird.x += bird.speed * dt
-            if (bird.x > k.width() + 50) {
-              bird.x = -50
-              bird.baseY = TOP_MARGIN + Math.random() * SKY_HEIGHT
-            }
-            //
-            // Sine wave flight path
-            //
-            bird.y = bird.baseY + Math.sin((time + bird.timeOffset) * bird.frequency + bird.phaseOffset) * bird.amplitude
-            //
-            // Flap/glide state machine
-            //
-            bird.flapTimer += dt
-            const currentDuration = bird.isFlapping ? bird.flapDuration : bird.glideDuration
-            if (bird.flapTimer > currentDuration) {
-              bird.isFlapping = !bird.isFlapping
-              bird.flapTimer = 0
-            }
-            //
-            // Smoothly ease modeBlend toward the current state's target so
-            // the wing transition into/out of gliding is gradual instead of
-            // snapping at the end of the last flap cycle.
-            //
-            const targetBlend = bird.isFlapping ? 1 : 0
-            const blendStep = dt / BIRD_FLAP_GLIDE_BLEND_TIME
-            if (bird.modeBlend < targetBlend) {
-              bird.modeBlend = Math.min(targetBlend, bird.modeBlend + blendStep)
-            } else if (bird.modeBlend > targetBlend) {
-              bird.modeBlend = Math.max(targetBlend, bird.modeBlend - blendStep)
-            }
-            //
-            // Wing position: linear blend between sine flap and glide pose.
-            // When modeBlend=0 the wing sits at the static glide pose; when
-            // modeBlend=1 it follows the full sine; in-between it eases.
-            //
-            const flapWave = Math.sin((time + bird.timeOffset) * 8 + bird.phaseOffset)
-            const wingFlap = BIRD_GLIDE_POSE + (flapWave - BIRD_GLIDE_POSE) * bird.modeBlend
-            bird.wingPhase = wingFlap
-            drawRealisticBird(k, bird, wingFlap)
-          }
+          const cameraX = getCameraCenterX(k, birds._heroRef)
+          const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
+          drawL0Birds(k, birds, cameraX, cullDist)
         }
       }
     ])
@@ -2129,16 +2095,10 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Hero vs floor thorns (death + reload level)
-    //
-    k.onUpdate(() => {
-      checkFloorThorns(k, heroInst, floorThornData, levelIndicator)
-    })
-    //
-    // Trap tentacles: appear if life was just deducted or if trap was already active from a previous attempt
+    // Hero vs floor thorns (death + reload level) — merged into main game loop below
     //
     const trapsEnabled = showTrap || trapAlreadyAdded
-    trapsEnabled && createTrapSpikes(k, heroInst, levelIndicator, sound)
+    const trapRuntime = trapsEnabled ? createTrapSpikes(k, heroInst, levelIndicator, sound) : null
     //
     // Hidden bonus hero on the left side at antihero height
     // Only visible when hero approaches from above (jumping from a bug)
@@ -2400,276 +2360,11 @@ export function sceneLevel0(k) {
       smallBugs.push(bugInst)
     }
     //
-    // Update bug4 platform and anti-hero position to follow bug movement
-    //
-    k.onUpdate(() => {
-      //
-      // Sync platform and anti-hero with bug4 movement
-      //
-      if (bigBug4Inst && antiHeroPlatform && antiHeroInst) {
-        //
-        // Update platform position to follow bug's head top
-        // Top of flat head is at bug4BodyY - flatHeadHeight / 2
-        //
-        const flatHeadHeight = bug4Radius * 0.8
-        const headTopY = bigBug4Inst.y - flatHeadHeight / 2
-        antiHeroPlatform.pos.x = bigBug4Inst.x
-        antiHeroPlatform.pos.y = headTopY
-        
-        //
-        // Update anti-hero position to stay on platform
-        //
-        if (antiHeroInst.character) {
-          antiHeroInst.character.pos.x = bigBug4Inst.x
-          //
-          // Keep anti-hero on platform (let physics handle Y, but sync X)
-          //
-        }
-      }
-    })
-    //
-    // Add hero collision check for bugs to trigger scare behavior
-    //
-    k.onUpdate(() => {
-      const heroX = heroInst.character.pos.x
-      const heroY = heroInst.character.pos.y
-      const HERO_RADIUS = 50  // Increased distance for level 0
-      const dt = k.dt()
-      
-      for (const bugInst of bugs) {
-        //
-        // Bugs in pyramid don't react to hero (don't get scared)
-        // Platform bug (bug4) also doesn't react to hero
-        //
-        if (bugInst.state === 'pyramid' || bugInst.isPlatformBug) {
-          continue
-        }
-        
-        const dx = bugInst.x - heroX
-        const dy = bugInst.y - heroY
-        //
-        // Squared distance avoids sqrt on every bug every frame.
-        //
-        const distSq = dx * dx + dy * dy
-        
-        //
-        // Update justRecovered timer - reset after short time regardless of distance
-        //
-        if (bugInst.justRecovered) {
-          if (bugInst.justRecoveredTimer === undefined) {
-            bugInst.justRecoveredTimer = 0.5  // Short cooldown period
-          }
-          bugInst.justRecoveredTimer -= dt
-          if (bugInst.justRecoveredTimer <= 0) {
-            bugInst.justRecovered = false
-            bugInst.justRecoveredTimer = undefined
-          }
-        }
-        
-        if (distSq < HERO_RADIUS * HERO_RADIUS) {
-          //
-          // Hero is close
-          //
-          if (!bugInst.isScared && !bugInst.justRecovered) {
-            //
-            // Bug gets scared
-            //
-            bugInst.isScared = true
-            bugInst.scareTimer = 0
-            bugInst.state = 'scared'
-            bugInst.vx = 0
-            bugInst.vy = 0
-            //
-            // Play scare sound
-            //
-            sound && Sound.playBugScareSound(sound)
-            //
-            // Hero reacts to the bug crawling onto him: clearly audible
-            // meow + brief crouch pose so the player feels the contact.
-            //
-            sound && Sound.playHeroMeowSound(sound)
-            Hero.crouch(heroInst, HERO_BUG_CROUCH_DURATION)
-            //
-            // Calculate max drop based on actual leg lengths
-            //
-            const reach = (bugInst.legLength1 + bugInst.legLength2) * bugInst.scale
-            bugInst.maxDrop = reach * 0.5
-          }
-        }
-        
-        if (bugInst.isScared) {
-          //
-          // Bug is scared - drop body and wait
-          //
-          if (bugInst.dropOffset < bugInst.maxDrop) {
-            bugInst.dropOffset += dt * 200
-            if (bugInst.dropOffset > bugInst.maxDrop) bugInst.dropOffset = bugInst.maxDrop
-          }
-          //
-          // Count scare time
-          //
-          bugInst.scareTimer += dt
-          
-          if (bugInst.scareTimer >= bugInst.scareDuration) {
-            //
-            // Scare duration is over - determine escape direction and start crawling
-            // Direction is based on hero position at THIS moment
-            //
-            const currentDx = bugInst.x - heroX
-            const escapeDirection = currentDx < 0 ? -1 : 1
-            //
-            // Start crawling away from hero
-            //
-            bugInst.isScared = false
-            bugInst.justRecovered = true
-            bugInst.justRecoveredTimer = 0.5  // Short cooldown period
-            bugInst.state = 'crawling'
-            bugInst.movementAngle = escapeDirection < 0 ? Math.PI : 0
-            bugInst.vx = Math.cos(bugInst.movementAngle) * bugInst.crawlSpeed
-            bugInst.vy = 0
-          }
-        }
-        
-        if (!bugInst.isScared && bugInst.dropOffset > 0) {
-          //
-          // Lift body back up when not scared
-          //
-          bugInst.dropOffset -= dt * 150
-          if (bugInst.dropOffset < 0) bugInst.dropOffset = 0
-        }
-      }
-    })
-    //
-    // Bug pyramid system
+    // Bug pyramid system — updates run in unified game loop
     //
     const activePyramids = []
-    const pyramidCheckInterval = 0.5  // Check for groups every 0.5 seconds
-    let pyramidCheckTimer = 0
-    
-    //
-      // Update bugs and pyramids
-    //
-    k.onUpdate(() => {
-      if (heroInst.isAnnihilating) return
-      const dt = k.dt()
-      
-      bugs.forEach(bug => Bugs.onUpdate(bug, dt))
-      smallBugs.forEach(bug => SmallBugs.onUpdate(bug, dt))
-      
-      //
-      // Update active pyramids (iterate backwards to safely remove)
-      //
-      for (let i = activePyramids.length - 1; i >= 0; i--) {
-        const pyramid = activePyramids[i]
-        BugPyramid.onUpdate(pyramid, dt)
-        //
-        // Check for bugs that can join this pyramid
-        // Check both big bugs and small bugs
-        //
-        if (pyramid.isActive) {
-          const allBugs = [...bugs, ...smallBugs]
-          const availableBugs = allBugs.filter(bug => 
-            bug.isMother === false && 
-            bug.state !== 'pyramid' && 
-            bug.state !== 'scared' &&
-            bug.state !== 'recovering' &&
-            !bug.isScattering
-          )
-          
-          availableBugs.forEach(bug => {
-            //
-            // Use squared distance to avoid sqrt in hot path.
-            //
-            const dx = bug.x - pyramid.centerX
-            const dy = bug.y - pyramid.centerY
-            const distSq = dx * dx + dy * dy
-            
-            if (distSq <= 60 * 60) {  // JOIN_DETECTION_RADIUS
-              //
-              // Try to add bug to pyramid (timer will be reset to 0 in addBug)
-              //
-              const added = BugPyramid.addBug(pyramid, bug)
-              if (added) {
-                //
-                // Bug successfully added, timer reset to 0 for another 5 seconds
-                //
-              }
-            }
-          })
-        }
-        //
-        // Remove destroyed pyramids
-        //
-        if (!pyramid.isActive) {
-          activePyramids.splice(i, 1)
-        }
-      }
-      
-      //
-      // Check for new bug groups to form pyramids
-      //
-      pyramidCheckTimer += dt
-      if (pyramidCheckTimer >= pyramidCheckInterval) {
-        pyramidCheckTimer = 0
-        
-        //
-        // Check if any bugs are still scattering (can't form new pyramid until all scattered)
-        //
-        const anyScattering = bugs.some(bug => bug.isScattering === true)
-        
-        if (anyScattering) {
-          //
-          // Wait for all bugs to finish scattering before allowing new pyramid
-          //
-          return
-        }
-        
-        //
-        // Get only small bugs (not in pyramid, not scared, not scattering)
-        // Use all bugs (big + small) and filter for small bugs
-        //
-        const allBugs = [...bugs, ...smallBugs]
-        const availableSmallBugs = allBugs.filter(bug => 
-          bug.isMother === false && 
-          bug.state !== 'pyramid' && 
-          bug.state !== 'scared' &&
-          bug.state !== 'recovering' &&
-          !bug.isScattering
-        )
-        
-        //
-        // Find bug groups
-        //
-        const group = BugPyramid.findBugGroup(availableSmallBugs)
-        
-        if (group && group.length >= 5) {
-          //
-          // Check if bugs in this group are already in a pyramid
-          //
-          const alreadyInPyramid = group.some(bug => 
-            activePyramids.some(pyramid => 
-              pyramid.bugs.some(b => b.inst === bug)
-            )
-          )
-          
-          if (!alreadyInPyramid) {
-            //
-            // Create new pyramid
-            //
-            const pyramid = BugPyramid.create({
-              k,
-              bugs: group,
-              hero: heroInst,
-              sound
-            })
-            
-            if (pyramid) {
-              activePyramids.push(pyramid)
-            }
-          }
-        }
-      }
-    })
+    const pyramidRuntime = { timer: 0 }
+    const allBugsCombined = [...bugs, ...smallBugs]
     //
     // Create FPS counter
     //
@@ -2679,12 +2374,6 @@ export function sceneLevel0(k) {
       targetTime: CFG.gameplay.speedBonusTime
         ? CFG.gameplay.speedBonusTime['level-touch.0']
         : null
-    })
-    //
-    // Update FPS counter
-    //
-    k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
     })
     //
     // Draw bugs with individual z-indices
@@ -2715,7 +2404,7 @@ export function sceneLevel0(k) {
     //
     // Small bugs sometimes speak on their own (see SMALL_BUG_PHRASES).
     //
-    startSmallBugPhrases(k, smallBugs)
+    const smallBugPhraseRuntime = startSmallBugPhrases(k, smallBugs)
     //
     // Tooltip for TOUCH level indicator letters
     //
@@ -2843,17 +2532,6 @@ export function sceneLevel0(k) {
       smallBugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
     //
-    // Update z-index for bugs in pyramid state each frame
-    //
-    k.onUpdate(() => {
-      smallBugDrawObjects.forEach(({ bug, obj }) => {
-        const pyramidZIndex = bug.state === 'pyramid' ? 30 : bug.zIndex
-        if (obj.exists()) {
-          obj.z = pyramidZIndex
-        }
-      })
-    })
-    //
     // Rain system: depth-layered drops with splashes on objects
     //
     const frontTrees = layers[3] ? layers[3].trees : []
@@ -2862,7 +2540,7 @@ export function sceneLevel0(k) {
     // third of desktop so the splash overdraw doesn't tank mobile frames.
     //
     const rainIntensity = isTouchDevice() ? 0.3 : 1
-    Rain.create({
+    const rainInst = Rain.create({
       k,
       topY: TOP_MARGIN,
       floorY: FLOOR_Y,
@@ -2887,7 +2565,6 @@ export function sceneLevel0(k) {
       }
     }
     startRainWhenReady()
-    k.onUpdate(() => startRainWhenReady())
     //
     // Rocks first so puddle placement can avoid their footprints.
     //
@@ -2895,7 +2572,7 @@ export function sceneLevel0(k) {
     //
     // Puddles on the floor: small ellipses with occasional ripple
     //
-    const l0Puddles = createPuddles(k, heroInst, sound, rocks, floorThornData)
+    const puddleRuntime = createPuddles(k, heroInst, sound, rocks, floorThornData)
     //
     // Distant thunder rumble with lightning flash at random intervals
     //
@@ -2911,51 +2588,38 @@ export function sceneLevel0(k) {
         }
       }
     ])
-    k.onUpdate(() => onUpdateThunder(k, thunderState, sound))
     //
     // Cricket/cicada ambient chirps at random intervals
     //
-    const cricketState = { timer: CRICKET_INTERVAL_MIN + Math.random() * (CRICKET_INTERVAL_MAX - CRICKET_INTERVAL_MIN) }
-    k.onUpdate(() => {
-      cricketState.timer -= k.dt()
-      if (cricketState.timer <= 0) {
-        Sound.playCricketSound(sound)
-        cricketState.timer = CRICKET_INTERVAL_MIN + Math.random() * (CRICKET_INTERVAL_MAX - CRICKET_INTERVAL_MIN)
-      }
-    })
+    const cricketState = {
+      timer: CRICKET_INTERVAL_MIN + Math.random() * (CRICKET_INTERVAL_MAX - CRICKET_INTERVAL_MIN),
+      intervalMin: CRICKET_INTERVAL_MIN,
+      intervalMax: CRICKET_INTERVAL_MAX
+    }
     //
     // Frog croaks at random intervals
     //
-    const frogState = { timer: FROG_INTERVAL_MIN + Math.random() * (FROG_INTERVAL_MAX - FROG_INTERVAL_MIN) }
-    k.onUpdate(() => {
-      frogState.timer -= k.dt()
-      if (frogState.timer <= 0) {
-        Sound.playFrogSound(k)
-        frogState.timer = FROG_INTERVAL_MIN + Math.random() * (FROG_INTERVAL_MAX - FROG_INTERVAL_MIN)
-      }
-    })
+    const frogState = {
+      timer: FROG_INTERVAL_MIN + Math.random() * (FROG_INTERVAL_MAX - FROG_INTERVAL_MIN),
+      intervalMin: FROG_INTERVAL_MIN,
+      intervalMax: FROG_INTERVAL_MAX
+    }
     //
     // Owl/bird ambient hoots at random intervals (5-10s)
     //
-    const owlState = { timer: OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN) }
-    k.onUpdate(() => {
-      owlState.timer -= k.dt()
-      if (owlState.timer <= 0) {
-        //
-        // Mix between owl hoots and lighter bird chirps for variety
-        //
-        Math.random() < 0.6 ? Sound.playOwlSound(sound) : Sound.playBirdChirpSound(sound)
-        owlState.timer = OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN)
-      }
-    })
+    const owlState = {
+      timer: OWL_INTERVAL_MIN + Math.random() * (OWL_INTERVAL_MAX - OWL_INTERVAL_MIN),
+      intervalMin: OWL_INTERVAL_MIN,
+      intervalMax: OWL_INTERVAL_MAX
+    }
     //
     // Fireflies: small glowing dots drifting over the swamp
     //
-    createL0Fireflies(k)
+    const fireflyRuntime = createL0Fireflies(k)
     //
     // Small mushrooms on the ground
     //
-    const l0Mushrooms = createMushrooms(k, l0Puddles)
+    const l0Mushrooms = createMushrooms(k, puddleRuntime.puddles)
     const l0MushTooltipTargets = l0Mushrooms
       .filter(m => m.tooltipText)
       .map(m => ({
@@ -2976,7 +2640,7 @@ export function sceneLevel0(k) {
     // never grows IN the water. Done after both layer-grass and
     // around-rocks grass are merged into the shared array.
     //
-    pruneGrassInPuddles(allGrassBlades, l0Puddles)
+    pruneGrassInPuddles(allGrassBlades, puddleRuntime.puddles)
     //
     // Moss patches: clustered near rocks plus standalone clumps for realism
     //
@@ -2998,6 +2662,45 @@ export function sceneLevel0(k) {
       k,
       targets: [spiderHoverTooltipTarget(spiderL0Inst, L0_SPIDER_TOOLTIP_TEXT)]
     })
+    birds._heroRef = heroInst
+    const atmosphereAnchorX = LEFT_MARGIN + (CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN) / 2
+    k.onUpdate(() => onUpdateLevel0GameLoop(k, {
+      heroInst,
+      checkFloorThorns,
+      floorThornData,
+      levelIndicator,
+      bigBug4Inst,
+      antiHeroPlatform,
+      antiHeroInst,
+      bug4Radius,
+      bugs,
+      smallBugs,
+      allBugsCombined,
+      activePyramids,
+      pyramidRuntime,
+      fpsCounter,
+      smallBugDrawObjects,
+      rainRef,
+      rainInst,
+      startRainWhenReady,
+      thunderState,
+      cricketState,
+      frogState,
+      owlState,
+      trapOnUpdate: trapRuntime?.onUpdate,
+      conversationOnUpdate: conversationState?.onUpdate,
+      smallBugPhraseOnUpdate: smallBugPhraseRuntime?.onUpdate,
+      puddleOnUpdate: puddleRuntime.onUpdate,
+      fireflies: fireflyRuntime.fireflies,
+      birds,
+      birdSkyHeight: SKY_HEIGHT,
+      birdFlapBlendTime: BIRD_FLAP_GLIDE_BLEND_TIME,
+      birdGlidePose: BIRD_GLIDE_POSE,
+      atmosphereAnchorX,
+      heroBugCrouchDuration: HERO_BUG_CROUCH_DURATION,
+      onUpdateThunder,
+      sound
+    }))
     //
     // Return to menu on ESC
     //
@@ -3267,7 +2970,7 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
   //
   // Update: detect hero proximity, animate rise/hold/retract, check collision
   //
-  k.onUpdate(() => onUpdateTrap(k, inst, heroInst, levelIndicator, sound))
+  const onUpdate = () => onUpdateTrap(k, inst, heroInst, levelIndicator, sound)
   //
   // Tooltip appears only while spikes are visible
   //
@@ -3286,7 +2989,7 @@ function createTrapSpikes(k, heroInst, levelIndicator, sound) {
       offsetY: TRAP_TOOLTIP_Y_OFFSET
     }]
   })
-  return inst
+  return { inst, onUpdate }
 }
 //
 // Animates trap spike phases: hidden -> rising -> holding -> retracting -> hidden
@@ -3760,7 +3463,7 @@ function startMonsterConversation(k, monsterBugs) {
   //
   // Only show conversation once per player (persisted in localStorage)
   //
-  if (get(MONSTERS_TALKED_KEY)) return { phase: 'done' }
+  if (get(MONSTERS_TALKED_KEY)) return { phase: 'done', onUpdate: null }
   //
   // Conversation state: tracks current line and timing
   //
@@ -3799,9 +3502,9 @@ function startMonsterConversation(k, monsterBugs) {
     inst.currentDisplayTime = Math.max(MONSTER_MIN_DISPLAY_TIME, chars / MONSTER_CHARS_PER_SECOND)
   }
   //
-  // Update handler drives the conversation timeline
+  // Update handler drives the conversation timeline (registered via main game loop)
   //
-  k.onUpdate(() => {
+  inst.onUpdate = () => {
     inst.timer += k.dt()
     if (inst.phase === 'delay') {
       if (inst.timer >= MONSTER_CONVERSATION_DELAY) {
@@ -3840,7 +3543,7 @@ function startMonsterConversation(k, monsterBugs) {
         showLine(MONSTER_CONVERSATION_LINES[inst.lineIndex])
       }
     }
-  })
+  }
   //
   // Return state so callers can check inst.phase to know if conversation is active
   //
@@ -3930,7 +3633,7 @@ function startSmallBugPhrases(k, smallBugs) {
     const chars = text.replace(/\n/g, '').length
     inst.currentDisplayTime = Math.max(BUG_PHRASE_MIN_DISPLAY_TIME, chars / BUG_PHRASE_CHARS_PER_SECOND)
   }
-  k.onUpdate(() => {
+  inst.onUpdate = () => {
     inst.timer += k.dt()
     if (inst.phase === 'pause') {
       if (inst.timer >= inst.pauseDuration) {
@@ -3953,7 +3656,8 @@ function startSmallBugPhrases(k, smallBugs) {
         inst.pauseDuration = BUG_PHRASE_MIN_PAUSE + Math.random() * BUG_PHRASE_EXTRA_PAUSE
       }
     }
-  })
+  }
+  return inst
 }
 
 /**
@@ -4224,12 +3928,12 @@ function createPuddles(k, heroInst, sound, rockDescriptors = [], thornDescriptor
       }
     }
   ])
-  k.onUpdate(() => {
+  const onUpdate = () => {
     onUpdatePuddles(k, puddles)
     onUpdatePuddleSplashes(k, splashParticles)
     checkHeroPuddleCollision(k, heroInst, puddles, splashParticles, groundState)
-  })
-  return puddles
+  }
+  return { puddles, onUpdate }
 }
 //
 // Per-frame puddle ripple timer
@@ -4498,6 +4202,12 @@ function createL0Fireflies(k) {
       driftVx: (Math.random() - 0.5) * 12
     })
   }
+  fireflies._bounds = {
+    minX: LEFT_MARGIN + 10,
+    maxX: CFG.visual.screen.width - RIGHT_MARGIN - 10,
+    minY: FLOOR_Y - 150,
+    maxY: FLOOR_Y - 20
+  }
   k.add([
     k.z(24),
     {
@@ -4506,32 +4216,7 @@ function createL0Fireflies(k) {
       }
     }
   ])
-  k.onUpdate(() => onUpdateL0Fireflies(k, fireflies))
-}
-//
-// Per-frame firefly drift: gentle sine-wave wander
-//
-function onUpdateL0Fireflies(k, fireflies) {
-  const dt = k.dt()
-  const t = k.time()
-  const minX = LEFT_MARGIN + 10
-  const maxX = CFG.visual.screen.width - RIGHT_MARGIN - 10
-  const minY = FLOOR_Y - 150
-  const maxY = FLOOR_Y - 20
-  for (const f of fireflies) {
-    //
-    // Horizontal drift + sine wobble for natural wandering across the screen
-    //
-    f.x += f.driftVx * dt + Math.sin(t * f.glowSpeed + f.phase) * f.speed * 0.3 * dt
-    f.y += Math.cos(t * f.glowSpeed * 0.7 + f.phase) * f.speed * 0.6 * dt
-    //
-    // Wrap around when reaching screen edges
-    //
-    if (f.x < minX) f.x = maxX
-    if (f.x > maxX) f.x = minX
-    if (f.y < minY) f.y = minY
-    if (f.y > maxY) f.y = maxY
-  }
+  return { fireflies }
 }
 //
 // Draw firefly glow dots
@@ -5052,11 +4737,4 @@ function activateBug4Movement(k, bug4Inst, platform, antiHeroInst, bugRadius) {
   bug4Inst.vx = TRAP2_BUG_SPEED
   bug4Inst.vy = 0
   bug4Inst.bounds = { minX, maxX, minY: bug4Inst.y, maxY: bug4Inst.y }
-  k.onUpdate(() => {
-    //
-    // Sync invisible platform and anti-hero to the moving bug body
-    //
-    platform.pos.x = bug4Inst.x
-    antiHeroInst?.character?.exists?.() && (antiHeroInst.character.pos.x = bug4Inst.x)
-  })
 }

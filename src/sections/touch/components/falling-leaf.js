@@ -85,6 +85,11 @@ const POISON_HERO_HALF_H = 12
 // Leaf shape bezier resolution
 //
 const BEZIER_STEPS = 8
+//
+// Cache: pre-computed polygon points indexed by rounded size.
+// Avoids 18 vec2 allocations per leaf per frame.
+//
+const leafPointsCache = new Map()
 
 /**
  * Creates falling leaves system that detaches leaves from TreeRoots trees.
@@ -133,7 +138,13 @@ export function create(config) {
     fallingLeaves: [],
     groundLeaves: [],
     totalInitialLeaves,
+    //
+    // Cached leaf count — avoids O(roots × clusters) scan every frame.
+    // Decremented by 1 each time spawnLeaf takes a leaf from the tree.
+    //
+    remainingLeavesCache: totalInitialLeaves,
     spawnedCount: 0,
+    spawnedCountPrev: 0,
     spawnTimer: 0,
     nextSpawnTime: INITIAL_SPAWN_DELAY,
     poisonChance,
@@ -174,21 +185,29 @@ export function create(config) {
 export function onUpdate(inst) {
   const dt = inst.k.dt()
   //
-  // Count remaining leaves on all trees
-  //
-  const remaining = countRemainingLeaves(inst)
-  const minLeaves = Math.floor(inst.totalInitialLeaves * MIN_LEAVES_RATIO)
-  //
-  // Spawn new leaves on a timer (stop when too few remain on trees)
+  // Spawn on a timer; re-count only when the spawn window opens to avoid
+  // iterating all tree clusters every single frame (O(roots × clusters)).
   //
   inst.spawnTimer += dt
-  if (!inst.paused && inst.spawnTimer >= inst.nextSpawnTime && remaining > minLeaves && inst.spawnedCount < MAX_FALLEN_LEAVES) {
-    spawnLeaf(inst)
+  if (inst.spawnTimer >= inst.nextSpawnTime) {
+    const minLeaves = Math.floor(inst.totalInitialLeaves * MIN_LEAVES_RATIO)
+    if (!inst.paused && inst.remainingLeavesCache > minLeaves && inst.spawnedCount < MAX_FALLEN_LEAVES) {
+      const hadLeaves = inst.remainingLeavesCache
+      spawnLeaf(inst)
+      //
+      // Decrement cached count only if a leaf was actually removed from a cluster.
+      // spawnedCount increasing means a leaf was taken.
+      //
+      if (inst.spawnedCount > inst.spawnedCountPrev) {
+        inst.remainingLeavesCache = Math.max(0, hadLeaves - 1)
+        inst.spawnedCountPrev = inst.spawnedCount
+      }
+    }
     inst.spawnTimer = 0
     inst.nextSpawnTime = SPAWN_INTERVAL_MIN + Math.random() * SPAWN_INTERVAL_RANGE
   }
   //
-  // Update falling leaves
+  // Update falling leaves (iterate backwards for safe in-loop splice)
   //
   for (let i = inst.fallingLeaves.length - 1; i >= 0; i--) {
     const leaf = inst.fallingLeaves[i]
@@ -202,9 +221,11 @@ export function onUpdate(inst) {
     }
   }
   //
-  // Update grounded leaves (hero drag interaction)
+  // Update grounded leaves: skip leaves that have fully settled
+  // (no hero nearby and velocity below threshold) to save per-leaf work.
   //
   for (const leaf of inst.groundLeaves) {
+    if (leaf.settled) continue
     updateGroundLeaf(inst, leaf)
   }
   //
@@ -220,18 +241,13 @@ export function onUpdate(inst) {
  */
 function drawLeaves(inst, leaves) {
   const k = inst.k
-
   for (const leaf of leaves) {
     k.pushTransform()
     k.pushTranslate(leaf.x, leaf.y)
     k.pushRotate(leaf.angle)
     k.pushScale(leaf.scaleX, 1)
-    //
-    // Build teardrop polygon points (centered at origin)
-    //
-    const pts = buildLeafPoints(k, leaf.size)
     k.drawPolygon({
-      pts,
+      pts: leaf.pts,
       color: leaf.color,
       opacity: leaf.opacity
     })
@@ -240,12 +256,16 @@ function drawLeaves(inst, leaves) {
 }
 
 /**
- * Build teardrop leaf shape points using quadratic bezier curves
+ * Build teardrop leaf shape points using quadratic bezier curves.
+ * Results are cached by size (rounded to 0.5px) so each unique size is
+ * computed only once and reused across all leaves.
  * @param {Object} k - Kaplay instance
  * @param {number} size - Leaf size (height)
  * @returns {Array} Array of vec2 points
  */
 function buildLeafPoints(k, size) {
+  const key = Math.round(size * 2) / 2
+  if (leafPointsCache.has(key)) return leafPointsCache.get(key)
   const pts = []
   //
   // Left side: base (0,0) → control (-size*0.6, -size*0.3) → tip (0, -size)
@@ -267,6 +287,7 @@ function buildLeafPoints(k, size) {
     const py = oneMinusT * oneMinusT * (-size) + 2 * oneMinusT * t * (-size * 0.3)
     pts.push(k.vec2(px, py))
   }
+  leafPointsCache.set(key, pts)
   return pts
 }
 
@@ -328,6 +349,7 @@ function spawnLeaf(inst) {
     x: srcLeaf.x,
     y: srcLeaf.y,
     size: srcLeaf.size,
+    pts: buildLeafPoints(inst.k, srcLeaf.size),
     color: leafColor,
     opacity: srcLeaf.opacity,
     baseOpacity: srcLeaf.opacity,
@@ -472,6 +494,7 @@ function updateGroundLeaf(inst, leaf) {
   //
   // One-shot impulse on first contact (not repeated while hero stays on leaf)
   //
+  if (isTouching) leaf.settled = false
   if (isTouching && !leaf.heroTouching) {
     //
     // Poison leaf on ground kills hero when feet horizontally overlap the leaf
@@ -526,4 +549,14 @@ function updateGroundLeaf(inst, leaf) {
   // Keep within bounds
   //
   leaf.x = Math.max(inst.leftBound, Math.min(inst.rightBound, leaf.x))
+  //
+  // Mark as settled once all velocities have decayed below perception threshold.
+  // Settled leaves are skipped by onUpdate to save per-leaf work each frame.
+  //
+  const absVx = Math.abs(leaf.groundVx)
+  const absSpin = Math.abs(leaf.groundSpin ?? 0)
+  const absTumble = Math.abs(leaf.groundTumble ?? 0)
+  if (!isTouching && absVx < 0.05 && absSpin < 0.05 && absTumble < 0.1) {
+    leaf.settled = true
+  }
 }

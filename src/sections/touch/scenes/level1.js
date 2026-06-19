@@ -13,17 +13,19 @@ import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/leve
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { toCanvas, getRGB, parseHex } from '../../../utils/helper.js'
 import * as FallingLeaf from '../components/falling-leaf.js'
-import * as Rain from '../components/rain.js'
+// Rain removed from level 1
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
 import * as GiantWorm from '../components/giant-worm.js'
-import { drawRealisticBird } from '../utils/realistic-bird.js'
+import { drawRealisticBird, buildBirdDrawCache } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { drawCrow } from '../../../utils/crow.js'
 import { addTouchSectionFloorRocks, addSingleFloorRockAt } from '../utils/floor-rocks.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
+import { onUpdateLevel1GameLoop } from '../utils/level1-runtime.js'
+import { getActiveZoneIndex, isZoneAwake } from '../utils/scene-perf.js'
 //
 // Platform dimensions (minimal margins for large play area)
 //
@@ -78,10 +80,6 @@ const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
 const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
 const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
 const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
-//
-// Rain intensity (fraction of default drop count)
-//
-const RAIN_INTENSITY = 0.1
 //
 // Firefly configuration: small glowing dots that drift between tree layers
 //
@@ -173,6 +171,12 @@ const L1_SCENE_BG_R = 28
 const L1_SCENE_BG_G = 50
 const L1_SCENE_BG_B = 58
 const L1_SCENE_BG_HEX = '#1C323A'
+//
+// Zone sleep + TreeRoots proximity (touch level 1 performance)
+//
+const L1_ZONE_COUNT = 4
+const L1_TREE_ROOT_UPDATE_MAX_DIST = 1500
+const L1_TREE_COLLISION_MAX_DIST = 100
 //
 // Mushroom decoration constants for level 1
 //
@@ -278,56 +282,45 @@ const POISON_LEAF_CHANCE = 0.4
 //
 const POISON_LEAF_COLOR_HEX = '#3E708A'
 const POISON_DEATH_RELOAD_DELAY = 0.8
-//
-// Worm crawling on root level — peristaltic wave locomotion.
-// Worms move mostly straight with large-radius arcs.
-// Body contracts ~30% during wave, never bunching into a cluster.
-//
-const WORM_BASE_Y = FLOOR_Y + 30
-const WORM_DRAW_Z = 17
-const WORM_SEGMENT_COUNT = 12
-const WORM_SEGMENT_RADIUS = 2.5
-const WORM_REST_SPACING = 4.0
-const WORM_WAVE_SPEED = 0.3
-const WORM_HEAD_SPEED = 3.5
-const WORM_FOLLOW_SPEED = 6
-const WORM_STEER_SPEED = 0.4
-const WORM_STEER_AMPLITUDE = 0.15
-const WORM_DIRECTION_CHANGE_MIN = 10
-const WORM_DIRECTION_CHANGE_RANGE = 20
-const WORM_WAVE_DELAY = 0.4
-const WORM_CONTRACT_MIN = 0.7
-const WORM_CONTRACT_MAX = 1.0
-const WORM_MAX_STRETCH = 1.2
-const WORM_BULGE_AMOUNT = 0.85
-//
-// Trail cap was 420 with a near-zero fade — keeping ~1200 ellipses (3 worms
-// × 420) drawn every frame just for slime trails. Smaller cap + faster fade
-// keeps the visual but cuts ~80% of the per-frame draw calls.
-//
-const WORM_TRAIL_FADE_SPEED = 0.0035
-const WORM_TRAIL_MAX_POINTS = 80
-const WORM_TRAIL_COLOR = '#060806'
-const WORM_BODY_COLOR = '#6E4538'
-const WORM_HEAD_COLOR = '#8B5E48'
-const WORM_VENTRAL_HIGHLIGHT = '#A07868'
-const WORM_SEGMENT_RING_OPACITY = 0.42
-const WORM_EYE_RADIUS = 1.4
-const WORM_PUPIL_RADIUS = 0.7
-const WORM_EYE_SPACING = 2.0
-const WORM_COUNT = 3
-const WORM_Y_ZONE_HEIGHT = 15
-//
-// Small worm hover tooltips
-//
-const WORM_HOVER_WIDTH = 50
-const WORM_HOVER_HEIGHT = 30
-const WORM_TOOLTIP_OFFSET_Y = -28
-const SMALL_WORM_PHRASES = [
-  "You should see\nmy dad",
-  "I'm just a\nbaby noodle",
-  "Do worms have\nfeelings? Yes."
-]
+// WORM_DISABLED_START — small worm (peristaltic crawlers)
+// const WORM_BASE_Y = FLOOR_Y + 30
+// const WORM_DRAW_Z = 17
+// const WORM_SEGMENT_COUNT = 12
+// const WORM_SEGMENT_RADIUS = 2.5
+// const WORM_REST_SPACING = 4.0
+// const WORM_WAVE_SPEED = 0.3
+// const WORM_HEAD_SPEED = 3.5
+// const WORM_FOLLOW_SPEED = 6
+// const WORM_STEER_SPEED = 0.4
+// const WORM_STEER_AMPLITUDE = 0.15
+// const WORM_DIRECTION_CHANGE_MIN = 10
+// const WORM_DIRECTION_CHANGE_RANGE = 20
+// const WORM_WAVE_DELAY = 0.4
+// const WORM_CONTRACT_MIN = 0.7
+// const WORM_CONTRACT_MAX = 1.0
+// const WORM_MAX_STRETCH = 1.2
+// const WORM_BULGE_AMOUNT = 0.85
+// const WORM_TRAIL_FADE_SPEED = 0.0035
+// const WORM_TRAIL_MAX_POINTS = 80
+// const WORM_TRAIL_COLOR = '#060806'
+// const WORM_BODY_COLOR = '#6E4538'
+// const WORM_HEAD_COLOR = '#8B5E48'
+// const WORM_VENTRAL_HIGHLIGHT = '#A07868'
+// const WORM_SEGMENT_RING_OPACITY = 0.42
+// const WORM_EYE_RADIUS = 1.4
+// const WORM_PUPIL_RADIUS = 0.7
+// const WORM_EYE_SPACING = 2.0
+// const WORM_COUNT = 3
+// const WORM_Y_ZONE_HEIGHT = 15
+// const WORM_HOVER_WIDTH = 50
+// const WORM_HOVER_HEIGHT = 30
+// const WORM_TOOLTIP_OFFSET_Y = -28
+// const SMALL_WORM_PHRASES = [
+//   "You should see\nmy dad",
+//   "I'm just a\nbaby noodle",
+//   "Do worms have\nfeelings? Yes."
+// ]
+// WORM_DISABLED_END
 //
 // Life icon flash/particle effects on death
 //
@@ -364,9 +357,6 @@ const ANTIHERO_HINT_DISPLAY_TIME = 5
 const ANTIHERO_HINT_NOTES_DISPLAY_TIME = 10
 const ANTIHERO_HINT_NOTES_REPEAT_INTERVAL = 30
 const ANTIHERO_HINT_Y_OFFSET = -140
-//
-// Giant worm obstacle (emerges from ground left of antihero)
-//
 const GIANT_WORM_X_OFFSET = 200
 //
 // Life deduction — first trap (poison leaves) and second trap (random rising bugs)
@@ -375,18 +365,12 @@ const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level1TrapAdded'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level1Visited'
 const LIFE_DEDUCT_LEAVES_FLAG = 'touch.level1LeavesActive'
-//
-// Second trap: random worms rising from the ground.
-// Triggers when the first trap is already active AND lifeScore >= TRAP2_THRESHOLD.
-//
-const TRAP2_THRESHOLD = 5
-const TRAP2_FLAG = 'touch.level1Trap2Added'
-const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
-//
-// Minimum pause (seconds) after a trap2 worm fully retracts before it
-// teleports to a new random gap position and waits for hero proximity again.
-//
-const TRAP2_WORM_REPOSITION_DELAY = 1.5
+// WORM_DISABLED_START — trap2 (second rising worm) constants
+// const TRAP2_THRESHOLD = 5
+// const TRAP2_FLAG = 'touch.level1Trap2Added'
+// const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
+// const TRAP2_WORM_REPOSITION_DELAY = 1.5
+// WORM_DISABLED_END
 //
 // Decorative parallax trees must not overlap the seven melody note trees
 //
@@ -508,17 +492,33 @@ export function sceneLevel1(k) {
       // Back layer most dense (continuous), front layer least dense
       //
       const grassBlades = []
-      const clusterBands = layerIndex === 0 ? 26 + Math.floor(Math.random() * 14) : 13 + Math.floor(Math.random() * 10)
-      for (let c = 0; c < clusterBands; c++) {
-        if (Math.random() < 0.085) continue
-        let centerX = LEFT_MARGIN + 50 + Math.random() * (playableWidth - 100)
-        let guard = 0
-        while (Math.abs(centerX - HERO_SPAWN_X) < 130 && guard < 40) {
-          centerX = LEFT_MARGIN + 50 + Math.random() * (playableWidth - 100)
-          guard++
+      //
+      // Section-based placement: divide the playable width into equal sections,
+      // place one cluster per section with random jitter within the section.
+      // This guarantees even horizontal coverage across the full game zone
+      // while still giving a patchy, organic look (some sections are skipped).
+      //
+      const sectionCount = layerIndex === 0 ? 14 : 8
+      const sectionW = playableWidth / sectionCount
+      for (let c = 0; c < sectionCount; c++) {
+        //
+        // Skip ~20% of sections at random to create natural gaps
+        //
+        if (Math.random() < 0.2) continue
+        const sectionLeft = LEFT_MARGIN + c * sectionW
+        //
+        // Cluster center is random within the section, with a small margin
+        //
+        let centerX = sectionLeft + sectionW * 0.15 + Math.random() * (sectionW * 0.7)
+        //
+        // Avoid placing right at the hero spawn
+        //
+        if (Math.abs(centerX - HERO_SPAWN_X) < 120) {
+          centerX = HERO_SPAWN_X + 130
+          if (centerX > sectionLeft + sectionW) continue
         }
-        const clusterRadius = (layerIndex === 0 ? 36 : 24) + Math.random() * (layerIndex === 0 ? 110 : 80)
-        const bladesInCluster = (layerIndex === 0 ? 6 : 5) + Math.floor(Math.random() * (layerIndex === 0 ? 16 : 14))
+        const clusterRadius = (layerIndex === 0 ? 30 : 20) + Math.random() * (layerIndex === 0 ? 45 : 30)
+        const bladesInCluster = (layerIndex === 0 ? 10 : 7) + Math.floor(Math.random() * (layerIndex === 0 ? 10 : 7))
         for (let b = 0; b < bladesInCluster; b++) {
           const dist = Math.pow(Math.random(), 1.52) * clusterRadius
           const ang = Math.random() * Math.PI * 2
@@ -580,17 +580,21 @@ export function sceneLevel1(k) {
       // For front layer: create both trees and bushes in alternating pattern
       //
       const trees = []
-      const treeCount = layerIndex === 0 ? 18 : (layerIndex === 1 ? L1_MIDDLE_ORGANIC_TREE_COUNT : 0)
+      const treeCount = layerIndex === 0 ? 26 : (layerIndex === 1 ? 14 : 0)
       
       for (let i = 0; i < treeCount; i++) {
         //
         // Mid-distance organic canopy — procedural twin of touch L0, dimmed so front stays brightest.
         //
         if (layerIndex === 1) {
-          const spacing = playableWidth / (treeCount + 1)
-          const randomness = 48
-          const treeX = LEFT_MARGIN + spacing * (i + 1) + (Math.random() - 0.5) * randomness
-          if (isNearNoteTreeX(treeX, noteTreeXs)) continue
+          //
+          // Edge-to-edge spacing: first tree near left edge, last near right edge.
+          // Background parallax trees don't need to avoid note trees — they render
+          // behind the gameplay layer and never visually conflict with note trees.
+          //
+          const spacing = playableWidth / (treeCount - 1)
+          const randomness = 40
+          const treeX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
           const baseTreeHeight = (105 + Math.random() * 135) * scale
           const crownCenterY = grassY + yOffset - baseTreeHeight
           const trunkBottom = grassY
@@ -626,10 +630,13 @@ export function sceneLevel1(k) {
           trees.push(tree)
           continue
         }
+        //
+        // Back layer: round-crown trees distributed edge-to-edge.
+        // No exclusion for note trees — these render in the background baked PNG.
+        //
         const spacing = playableWidth / (treeCount - 1)
         const randomness = layerIndex === 0 ? 20 : 25
         const treeX = LEFT_MARGIN + spacing * i + (Math.random() - 0.5) * randomness
-        if (isNearNoteTreeX(treeX, noteTreeXs)) continue
         const baseTreeHeight = (120 + Math.random() * 100) * scale
         const crownCenterY = grassY + yOffset - baseTreeHeight
         const trunkTop = crownCenterY
@@ -765,27 +772,16 @@ export function sceneLevel1(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Baked PNGs: back carries distant rows + organic mids; front PNG carries grass + organic trees (static).
+    // Single merged PNG bakes all three parallax tree layers at once.
+    // This eliminates one extra draw call and one texture sample per frame.
+    // Draw order: back (0) → middle (1) → front (2) — layers compose correctly.
     //
-    const createBackCanvas = () => {
+    const createAllTreesCanvas = () => {
       const bw = CFG.visual.screen.width
       const bh = CFG.visual.screen.height
       return toCanvas({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
-        if (layers[0]) {
-          drawLayerToCanvas(ctx, layers[0], 0, null)
-        }
-        if (layers[1]) {
-          drawLayerToCanvas(ctx, layers[1], 0, null)
-        }
-      })
-    }
-    
-    const createFrontStaticCanvas = () => {
-      const bw = CFG.visual.screen.width
-      const bh = CFG.visual.screen.height
-      return toCanvas({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
-        if (layers[2]) {
-          drawLayerToCanvas(ctx, layers[2], 0, null)
+        for (const layer of layers) {
+          drawLayerToCanvas(ctx, layer, 0, null)
         }
       })
     }
@@ -876,37 +872,16 @@ export function sceneLevel1(k) {
       }
     }
     
-    const backDataURL = createBackCanvas()
-    const frontStaticDataURL = createFrontStaticCanvas()
-    loadTouchSprite(k, 'bg-touch-back', backDataURL)
-    loadTouchSprite(k, 'bg-touch-front-static', frontStaticDataURL)
     //
-    // Draw back canvas: clouds + back trees + middle trees (z=2)
+    // One sprite for all background tree layers — single draw call per frame
     //
+    const allTreesDataURL = createAllTreesCanvas()
+    loadTouchSprite(k, 'bg-touch-all-trees', allTreesDataURL)
     k.add([
       k.z(2),
       {
         draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-back',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
-      }
-    ])
-    //
-    // Draw front static trees canvas (z=7, in front of birds at z=5)
-    //
-    k.add([
-      k.z(7),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-front-static',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
+          drawL1StaticAllTrees(k)
         }
       }
     ])
@@ -928,7 +903,6 @@ export function sceneLevel1(k) {
     const SKY_HEIGHT = 400
     const BIRD_FLAP_GLIDE_BLEND_TIME = 0.45
     const BIRD_GLIDE_POSE = 0.45
-    
     for (let i = 0; i < BIRD_COUNT; i++) {
       const startX = Math.random() * k.width()
       const startY = TOP_MARGIN + Math.random() * SKY_HEIGHT
@@ -942,7 +916,6 @@ export function sceneLevel1(k) {
       // Black birds are bigger (closer), gray birds are smaller (farther)
       //
       const size = isTreeColor ? (4 + Math.random() * 3) : (8 + Math.random() * 6)
-      
       const initialFlapping = Math.random() > 0.5
       birds.push({
         x: startX,
@@ -960,42 +933,19 @@ export function sceneLevel1(k) {
         flapTimer: Math.random() * 3,
         flapDuration: 0.8 + Math.random() * 0.4,
         glideDuration: 2.0 + Math.random() * 2.0,
-        modeBlend: initialFlapping ? 1 : 0
+        modeBlend: initialFlapping ? 1 : 0,
+        //
+        // Pre-allocated draw positions — eliminates 8 k.vec2 allocations per bird per frame
+        //
+        dc: buildBirdDrawCache(k)
       })
     }
-    
     k.add([
       k.z(5),
       {
         draw() {
-          const time = k.time()
-          const dt = k.dt()
-          
           for (const bird of birds) {
-            bird.x += bird.speed * dt
-            if (bird.x > k.width() + 50) {
-              bird.x = -50
-              bird.baseY = TOP_MARGIN + Math.random() * SKY_HEIGHT
-            }
-            bird.y = bird.baseY + Math.sin((time + bird.timeOffset) * bird.frequency + bird.phaseOffset) * bird.amplitude
-            bird.flapTimer += dt
-            const currentDuration = bird.isFlapping ? bird.flapDuration : bird.glideDuration
-            
-            if (bird.flapTimer > currentDuration) {
-              bird.isFlapping = !bird.isFlapping
-              bird.flapTimer = 0
-            }
-            const targetBlend = bird.isFlapping ? 1 : 0
-            const blendStep = dt / BIRD_FLAP_GLIDE_BLEND_TIME
-            if (bird.modeBlend < targetBlend) {
-              bird.modeBlend = Math.min(targetBlend, bird.modeBlend + blendStep)
-            } else if (bird.modeBlend > targetBlend) {
-              bird.modeBlend = Math.max(targetBlend, bird.modeBlend - blendStep)
-            }
-            const flapWave = Math.sin((time + bird.timeOffset) * 8 + bird.phaseOffset)
-            const wingFlap = BIRD_GLIDE_POSE + (flapWave - BIRD_GLIDE_POSE) * bird.modeBlend
-            bird.wingPhase = wingFlap
-            drawRealisticBird(k, bird, wingFlap)
+            drawRealisticBird(k, bird, bird.wingPhase, bird.dc)
           }
         }
       }
@@ -1007,7 +957,17 @@ export function sceneLevel1(k) {
     for (const layer of layers) {
       allGrassBlades.push(...layer.grassBlades)
     }
-    
+    //
+    // Tag each blade with a zone index at setup time so the draw loop can
+    // skip zones that are far from the hero without per-frame division.
+    //
+    const grassPlayW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const grassZoneW = grassPlayW / L1_ZONE_COUNT
+    for (const blade of allGrassBlades) {
+      blade.zone = Math.max(0, Math.min(L1_ZONE_COUNT - 1,
+        Math.floor((blade.x1 - LEFT_MARGIN) / grassZoneW)
+      ))
+    }
     //
     // Grass hero-push tuning. Using squared radius lets the inner loop
     // skip Math.sqrt entirely for the vast majority of off-radius blades
@@ -1031,7 +991,15 @@ export function sceneLevel1(k) {
           const time = k.time()
           const heroX = this.heroRef ? this.heroRef.character.pos.x : -1000
           const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
+          const heroZone = Math.max(0, Math.min(L1_ZONE_COUNT - 1,
+            Math.floor((heroX - LEFT_MARGIN) / grassZoneW)
+          ))
           for (const blade of allGrassBlades) {
+            //
+            // Zone culling: skip blades more than 1 zone away from the hero.
+            // With L1_ZONE_COUNT=4 this cuts ~1200 drawLine down to ~400-600.
+            //
+            if (Math.abs(blade.zone - heroZone) > 1) continue
             const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
             const dx = blade.x1 - heroX
             const dy = blade.y1 - heroY
@@ -1180,18 +1148,20 @@ export function sceneLevel1(k) {
       leavesActive = true
     }
     //
-    // Second trap: random rising bugs, active once first trap is set AND lifeScore >= TRAP2_THRESHOLD.
+    // WORM_DISABLED: second trap (rising worm) disabled — trap2Active is always false.
+    // To restore: uncomment the block below and remove the const trap2Active = false line.
     //
-    const trap2AlreadyAdded = get(TRAP2_FLAG, false)
-    const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
-    const trap2Eligible = !trap2AlreadyAdded && trapAlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
-    let showTrap2 = false
-    if (trap2Eligible && !trap2AlreadyVisited) {
-      set(TRAP2_VISITED_FLAG, true)
-    } else if (trap2Eligible && trap2AlreadyVisited) {
-      showTrap2 = true
-    }
-    const trap2Active = showTrap2 || trap2AlreadyAdded
+    // const trap2AlreadyAdded = get(TRAP2_FLAG, false)
+    // const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
+    // const trap2Eligible = !trap2AlreadyAdded && trapAlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
+    // let showTrap2 = false
+    // if (trap2Eligible && !trap2AlreadyVisited) {
+    //   set(TRAP2_VISITED_FLAG, true)
+    // } else if (trap2Eligible && trap2AlreadyVisited) {
+    //   showTrap2 = true
+    // }
+    // const trap2Active = showTrap2 || trap2AlreadyAdded
+    const trap2Active = false
     //
     // Badge count: 0, 1 or 2 depending on which traps are active
     //
@@ -1599,24 +1569,22 @@ export function sceneLevel1(k) {
         }
       })
     }
-    //
-    // Show life deduction animation for second trap (random rising bugs)
-    //
-    if (showTrap2) {
-      const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
-      k.wait(trap2Delay, () => {
-        LifeDeduction.show({
-          k,
-          currentScore: get('lifeScore', 0),
-          levelIndicator,
-          sound,
-          deductFlag: TRAP2_FLAG,
-          sceneLock,
-          sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
-          textColorRgb: { r: 90, g: 136, b: 152 }
-        })
-      })
-    }
+    // WORM_DISABLED: life deduction for second trap (worm) — showTrap2 / TRAP2_FLAG disabled
+    // if (showTrap2) {
+    //   const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
+    //   k.wait(trap2Delay, () => {
+    //     LifeDeduction.show({
+    //       k,
+    //       currentScore: get('lifeScore', 0),
+    //       levelIndicator,
+    //       sound,
+    //       deductFlag: TRAP2_FLAG,
+    //       sceneLock,
+    //       sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
+    //       textColorRgb: { r: 90, g: 136, b: 152 }
+    //     })
+    //   })
+    // }
     //
     // Spawn hero and anti-hero
     //
@@ -1697,28 +1665,12 @@ export function sceneLevel1(k) {
         }
       }
     ])
-    //
-    // Worms crawling along the root level leaving dark trails
-    //
+    // WORM_DISABLED_START — small worms (peristaltic crawlers)
     const wormInsts = []
-    for (let i = 0; i < WORM_COUNT; i++) {
-      wormInsts.push(createWorm(k, i))
-    }
+    // const WORM_TOOLTIP_TARGETS created from wormInsts — disabled while wormInsts is empty
+    // WORM_DISABLED_END
     //
-    // Tooltips on small worms: each has a unique funny English phrase.
-    // Position tracked dynamically via getter functions.
-    //
-    const wormTooltipTargets = wormInsts.map((wormInst, i) => ({
-      x: () => wormInst.segments[0].x,
-      y: () => wormInst.segments[0].y,
-      width: WORM_HOVER_WIDTH,
-      height: WORM_HOVER_HEIGHT,
-      text: SMALL_WORM_PHRASES[i % SMALL_WORM_PHRASES.length],
-      offsetY: WORM_TOOLTIP_OFFSET_Y
-    }))
-    Tooltip.create({ k, targets: wormTooltipTargets })
-    //
-    // Giant worm obstacle: emerges from the ground left of the antihero
+    // Giant rising worm — appears near anti-hero platform, triggered by proximity
     //
     const giantWormInst = GiantWorm.create({
       k,
@@ -1728,7 +1680,7 @@ export function sceneLevel1(k) {
       sfx: sound
     })
     //
-    // Tooltip on the giant worm (dynamic position tracks the worm body)
+    // Floating tooltip for giant worm — position is updated each frame via wormTooltipOnUpdate
     //
     const WORM_TOOLTIP_TEXT = "come closer,\ndont be afraid"
     const WORM_TOOLTIP_WIDTH = 60
@@ -1742,20 +1694,9 @@ export function sceneLevel1(k) {
       offsetY: -90
     }
     Tooltip.create({ k, targets: [wormTooltipTarget] })
-    k.onUpdate(() => {
-      wormTooltipTarget.y = FLOOR_Y - giantWormInst.riseAmount / 2
-      wormTooltipTarget.x = giantWormInst.x + (giantWormInst.leanOffset || 0)
-      wormTooltipTarget.height = Math.max(10, giantWormInst.riseAmount)
-    })
-    //
-    // Second trap: a second permanent worm placed at a random gap between
-    // note trees. It uses proximity-based triggering (same TRIGGER_DISTANCE
-    // as the main worm). After it retracts, it teleports to a new random gap
-    // and waits again. Only one worm can rise at a time (mutex via .blocked).
-    //
-    const trap2WormInst = trap2Active
-      ? createTrap2Worm(k, heroInst, sound, FLOOR_Y)
-      : null
+    // WORM_DISABLED_START — trap2 worm (second rising worm, triggered by second life deduction)
+    const trap2WormInst = null
+    // WORM_DISABLED_END
     //
     // Tooltip on first tree trunk (note "C")
     //
@@ -1820,122 +1761,23 @@ export function sceneLevel1(k) {
         : null
     })
     //
-    // Update FPS counter and check tree collisions
+    // Pre-allocated colors and positions for notes bubble — prevents k.rgb/k.vec2
+    // allocations inside the per-frame draw() callback.
     //
-    k.onUpdate(() => {
-      FpsCounter.onUpdate(fpsCounter)
-      //
-      // Update tree shake animations
-      //
-      TreeRoots.onUpdate(treeRootsInst)
-      //
-      // Update falling leaves (spawn, fall, ground interaction)
-      //
-      FallingLeaf.onUpdate(fallingLeafInst)
-      //
-      // Giant worm mutex: only one worm may rise at a time.
-      // Block the other as long as either is not fully hidden.
-      //
-      if (trap2WormInst) {
-        const mainActive = giantWormInst.phase !== 'hidden' || giantWormInst.riseAmount > 0
-        const t2Active = trap2WormInst.phase !== 'hidden' || trap2WormInst.riseAmount > 0
-        giantWormInst.blocked = t2Active
-        trap2WormInst.blocked = mainActive
-      }
-      //
-      // Giant worm collision: hero dies if overlapping any visible part of the body
-      //
-      if (!heroInst.isDying && heroInst.character?.pos) {
-        giantWormInst.riseAmount > 0 && checkGiantWormCollision(k, heroInst, giantWormInst, levelIndicator)
-        trap2WormInst && trap2WormInst.riseAmount > 0 && checkGiantWormCollision(k, heroInst, trap2WormInst, levelIndicator)
-      }
-      
-      //
-      // Update pause timer if sequence was completed
-      //
-      if (gameState.sequenceCompleteTime !== null) {
-        gameState.pauseTimer += k.dt()
-        
-        //
-        // Check if pause is sufficient and activate anti-hero
-        //
-        if (gameState.pauseTimer >= SEQUENCE_PAUSE_MINIMUM) {
-          //
-          // Pause was sufficient - activate anti-hero
-          //
-          try {
-            activateAntiHero()
-            gameState.sequenceCompleteTime = null
-            gameState.pauseTimer = 0
-          } catch (error) {
-            //
-            // If activation fails, reset
-            //
-            gameState.sequenceCompleteTime = null
-            gameState.pauseTimer = 0
-          }
-        }
-      }
-      
-      //
-      // Check if hero is touching tree trunks
-      //
-      const touchedTreeIndex = TreeRoots.checkHeroTreeCollision(treeRootsInst, heroInst.character)
-      
-      //
-      // Track when player stops touching a tree to allow re-touching the same tree
-      //
-      if (touchedTreeIndex === -1 && gameState.lastTouchedTreeIndex !== -1) {
-        //
-        // Player stopped touching a tree - reset to allow touching the same tree again
-        //
-        gameState.lastTouchedTreeIndex = -1
-      }
-      
-      //
-      // If a tree was touched, add to player sequence
-      // Check sequence regardless of proximity to anti-hero
-      //
-      if (touchedTreeIndex !== -1 && !gameState.antiHeroActive) {
-        processTreeMelodyTouch(k, gameState, touchedTreeIndex, SEQUENCE_PAUSE_MINIMUM, { sound, lightningState })
-      } else if (touchedTreeIndex === -1) {
-        //
-        // No tree touched — allow re-touching the same tree on the next edge
-        //
-        gameState.lastTouchedTreeIndex = -1
-      }
-      
-      //
-      // Check collision with anti-hero to trigger melody (actual touch)
-      //
-      if (heroInst.character && antiHeroInst.character) {
-        //
-        // Check if characters are actually touching (collision distance)
-        //
-        const dx = heroInst.character.pos.x - antiHeroInst.character.pos.x
-        const dy = heroInst.character.pos.y - antiHeroInst.character.pos.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        const touchDistance = 80  // Characters must be within this range to trigger melody
-        
-        const wasNear = gameState.isNearAntiHero
-        gameState.isNearAntiHero = distance < touchDistance
-        
-        //
-        // If just got near (wasn't near before, now near), play melody
-        //
-        if (!gameState.isNearAntiHero && wasNear) {
-          gameState.notesBubbleVisible = false
-        }
-        if (gameState.isNearAntiHero && !wasNear && !gameState.antiHeroActive) {
-          playMelody()
-        }
-      }
-      //
-      // Timed hints from anti-hero while melody puzzle is unsolved
-      //
-      onUpdateAntiHeroHints(k, gameState, antiHeroInst)
-    })
-    
+    const BUBBLE_WIDTH = 280
+    const BUBBLE_HEIGHT = 120
+    const BUBBLE_CORNER_RADIUS = 10
+    const BUBBLE_OUTLINE_WIDTH = 3
+    const BUBBLE_MARGIN = 20
+    const BUBBLE_NOTE_SPACING = 50
+    const BUBBLE_NOTE_OUTLINE_WIDTH = 2
+    const bubbleColorBlack = k.rgb(0, 0, 0)
+    const bubbleColorWhite = k.rgb(255, 255, 255)
+    const bubbleColorText = k.rgb(40, 40, 40)
+    const bubbleColorActiveNote = k.rgb(80, 130, 80)
+    const bubbleColorInactiveNote = k.rgb(120, 120, 120)
+    const bubblePos = k.vec2(0, 0)
+    const bubbleNotePos = k.vec2(0, 0)
     //
     // Draw speech bubble with notes
     //
@@ -1948,139 +1790,91 @@ export function sceneLevel1(k) {
           //
           if (!gameState.notesBubbleVisible && !gameState.isPlayingMelody) return
           if (gameState.antiHeroActive) return
-          
           let bubbleX = antiHeroInst.character.pos.x
           const bubbleY = antiHeroInst.character.pos.y - 100
-          
           //
-          // Draw speech bubble background (larger for better readability)
+          // Clamp bubble to screen bounds
           //
-          const bubbleWidth = 280
-          const bubbleHeight = 120  // Increased height for text
-          const cornerRadius = 10
-          const outlineWidth = 3
-          
-          //
-          // Adjust bubble position to stay within screen bounds
-          //
-          const screenWidth = k.width()
-          const screenHeight = k.height()
-          const margin = 20  // Additional margin from screen edges
-          const screenRight = screenWidth - margin
-          const screenLeft = margin
-          const bubbleRight = bubbleX + bubbleWidth / 2 + outlineWidth
-          const bubbleLeft = bubbleX - bubbleWidth / 2 - outlineWidth
-          
-          //
-          // Shift left if bubble goes off right edge
-          //
-          if (bubbleRight > screenRight) {
-            bubbleX = screenRight - bubbleWidth / 2 - outlineWidth
+          const screenRight = k.width() - BUBBLE_MARGIN
+          const screenLeft = BUBBLE_MARGIN
+          if (bubbleX + BUBBLE_WIDTH / 2 + BUBBLE_OUTLINE_WIDTH > screenRight) {
+            bubbleX = screenRight - BUBBLE_WIDTH / 2 - BUBBLE_OUTLINE_WIDTH
+          }
+          if (bubbleX - BUBBLE_WIDTH / 2 - BUBBLE_OUTLINE_WIDTH < screenLeft) {
+            bubbleX = screenLeft + BUBBLE_WIDTH / 2 + BUBBLE_OUTLINE_WIDTH
           }
           //
-          // Shift right if bubble goes off left edge
+          // Outline rectangle
           //
-          if (bubbleLeft < screenLeft) {
-            bubbleX = screenLeft + bubbleWidth / 2 + outlineWidth
-          }
-          //
-          // Also check top boundary (don't let bubble go above screen)
-          //
-          const bubbleTop = bubbleY - bubbleHeight / 2 - outlineWidth
-          if (bubbleTop < margin) {
-            // If bubble would go above screen, move it down
-            // (but this shouldn't happen normally)
-          }
-          
-          //
-          // Draw outline (slightly larger rectangle)
-          //
+          bubblePos.x = bubbleX - BUBBLE_WIDTH / 2 - BUBBLE_OUTLINE_WIDTH
+          bubblePos.y = bubbleY - BUBBLE_HEIGHT / 2 - BUBBLE_OUTLINE_WIDTH
           k.drawRect({
-            pos: k.vec2(bubbleX - bubbleWidth / 2 - outlineWidth, bubbleY - bubbleHeight / 2 - outlineWidth),
-            width: bubbleWidth + outlineWidth * 2,
-            height: bubbleHeight + outlineWidth * 2,
-            radius: cornerRadius + outlineWidth,
-            color: k.rgb(0, 0, 0),
+            pos: bubblePos,
+            width: BUBBLE_WIDTH + BUBBLE_OUTLINE_WIDTH * 2,
+            height: BUBBLE_HEIGHT + BUBBLE_OUTLINE_WIDTH * 2,
+            radius: BUBBLE_CORNER_RADIUS + BUBBLE_OUTLINE_WIDTH,
+            color: bubbleColorBlack,
             opacity: 0.96
           })
-          
           //
-          // Draw white background
+          // White background
           //
+          bubblePos.x = bubbleX - BUBBLE_WIDTH / 2
+          bubblePos.y = bubbleY - BUBBLE_HEIGHT / 2
           k.drawRect({
-            pos: k.vec2(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2),
-            width: bubbleWidth,
-            height: bubbleHeight,
-            radius: cornerRadius,
-            color: k.rgb(255, 255, 255),
+            pos: bubblePos,
+            width: BUBBLE_WIDTH,
+            height: BUBBLE_HEIGHT,
+            radius: BUBBLE_CORNER_RADIUS,
+            color: bubbleColorWhite,
             opacity: 0.98
           })
-          
           //
-          // Draw request text above notes
+          // "Play this:" label
           //
+          bubblePos.x = bubbleX
+          bubblePos.y = bubbleY - 35
           k.drawText({
             text: 'Play this:',
-            pos: k.vec2(bubbleX, bubbleY - 35),
+            pos: bubblePos,
             size: 18,
             font: CFG.visual.fonts.regularFull,
-            color: k.rgb(40, 40, 40),
+            color: bubbleColorText,
             anchor: 'center'
           })
-          
           //
-          // Draw notes (larger and more visible)
+          // Note circles
           //
-          const noteSpacing = 50
-          const startX = bubbleX - (gameState.targetSequence.length - 1) * noteSpacing / 2
-          
-          gameState.targetSequence.forEach((noteIndex, i) => {
-            const noteX = startX + i * noteSpacing
-            const noteY = bubbleY + 10  // Moved down a bit to make room for text
-            
-            //
-            // Highlight current note if melody is playing
-            //
+          const startX = bubbleX - (gameState.targetSequence.length - 1) * BUBBLE_NOTE_SPACING / 2
+          for (let i = 0; i < gameState.targetSequence.length; i++) {
+            const noteX = startX + i * BUBBLE_NOTE_SPACING
+            const noteY = bubbleY + 10
             const isCurrentNote = gameState.isPlayingMelody && i === gameState.currentNoteIndex
-            
-            //
-            // Draw note circle with black outline
-            //
             const circleRadius = isCurrentNote ? 20 : 18
-            const outlineWidth = 2
-            
-            //
-            // Draw black outline circle
-            //
+            bubbleNotePos.x = noteX
+            bubbleNotePos.y = noteY
             k.drawCircle({
-              pos: k.vec2(noteX, noteY),
-              radius: circleRadius + outlineWidth,
-              color: k.rgb(0, 0, 0),
+              pos: bubbleNotePos,
+              radius: circleRadius + BUBBLE_NOTE_OUTLINE_WIDTH,
+              color: bubbleColorBlack,
               opacity: 1.0
             })
-            
-            //
-            // Draw circle - dark green when current note is playing, gray otherwise
-            //
             k.drawCircle({
-              pos: k.vec2(noteX, noteY),
+              pos: bubbleNotePos,
               radius: circleRadius,
-              color: isCurrentNote ? k.rgb(80, 130, 80) : k.rgb(120, 120, 120),
+              color: isCurrentNote ? bubbleColorActiveNote : bubbleColorInactiveNote,
               opacity: 1.0
             })
-            
-            //
-            // Draw note name (moved down by 1 pixel)
-            //
+            bubbleNotePos.y = noteY + 1
             k.drawText({
               text: noteNames[i],
-              pos: k.vec2(noteX, noteY + 1),
+              pos: bubbleNotePos,
               size: isCurrentNote ? 24 : 20,
               font: CFG.visual.fonts.regularFull,
-              color: k.rgb(255, 255, 255),
+              color: bubbleColorWhite,
               anchor: 'center'
             })
-          })
+          }
         }
       }
     ])
@@ -2089,24 +1883,9 @@ export function sceneLevel1(k) {
     //
     const transition = createLevelTransition(k)
     //
-    // Rain: very light rain (25% of default intensity)
+    // Fireflies: small glowing dots drifting between tree layers (loop registered below)
     //
-    const frontTrees = layers[2] ? layers[2].trees : []
-    Rain.create({
-      k,
-      topY: TOP_MARGIN,
-      floorY: FLOOR_Y,
-      leftX: LEFT_MARGIN,
-      rightX: CFG.visual.screen.width - RIGHT_MARGIN,
-      heroInst,
-      antiHeroInst,
-      trees: frontTrees,
-      intensity: RAIN_INTENSITY
-    })
-    //
-    // Fireflies: small glowing dots drifting between tree layers
-    //
-    createFireflies(k, heroInst)
+    const fireflyRuntime = createFireflies(k, heroInst)
     //
     // Tooltip: hero (tracks hero position dynamically)
     //
@@ -2216,16 +1995,12 @@ export function sceneLevel1(k) {
         }
       }
     ])
-    k.onUpdate(() => onUpdateLightning(k, lightningState))
     //
     // Forest ambience: birds, cicadas/crickets and frogs at random intervals
     //
     const birdState = { timer: L1_BIRD_INTERVAL_MIN + Math.random() * (L1_BIRD_INTERVAL_MAX - L1_BIRD_INTERVAL_MIN) }
-    k.onUpdate(() => onUpdateBirdAmbient(k, birdState, sound))
     const cricketState = { timer: L1_CRICKET_INTERVAL_MIN + Math.random() * (L1_CRICKET_INTERVAL_MAX - L1_CRICKET_INTERVAL_MIN) }
-    k.onUpdate(() => onUpdateCricketAmbient(k, cricketState, sound))
     const frogState = { timer: L1_FROG_INTERVAL_MIN + Math.random() * (L1_FROG_INTERVAL_MAX - L1_FROG_INTERVAL_MIN) }
-    k.onUpdate(() => onUpdateFrogAmbient(k, frogState))
     //
     // Random distant crow calls from mp3 samples ('crow0' is preloaded at boot).
     //
@@ -2255,7 +2030,64 @@ export function sceneLevel1(k) {
         offsetY: L1_CROW_TOOLTIP_OFFSET_Y
       }]
     })
-    k.onUpdate(() => onUpdateCrowMp3Ambient(k, crowMp3State))
+    const playLeft = LEFT_MARGIN
+    const playRight = CFG.visual.screen.width - RIGHT_MARGIN
+    const treeRootsCenterX = noteTreeXs.reduce((a, b) => a + b, 0) / noteTreeXs.length
+    // WORM_DISABLED: const trap2RepositionRuntime = trap2WormInst ? createTrap2WormReposition(k, trap2WormInst, heroInst) : null
+    const trap2RepositionRuntime = null
+    k.onUpdate(() => {
+      onUpdateLevel1GameLoop(k, {
+        heroInst,
+        defaultHeroX: HERO_SPAWN_X,
+        playLeft,
+        playRight,
+        zoneCount: L1_ZONE_COUNT,
+        fpsCounter,
+        treeRootsInst,
+        treeRootsCenterX,
+        treeRootUpdateMaxDist: L1_TREE_ROOT_UPDATE_MAX_DIST,
+        treeCollisionMaxDist: L1_TREE_COLLISION_MAX_DIST,
+        fallingLeafInst,
+        giantWormInst,
+        trap2WormInst: null,
+        levelIndicator,
+        gameState,
+        antiHeroInst,
+        sound,
+        lightningState,
+        sequencePauseMinimum: SEQUENCE_PAUSE_MINIMUM,
+        activateAntiHero,
+        processTreeMelodyTouch,
+        playMelody,
+        onUpdateAntiHeroHints,
+        checkGiantWormCollision,
+        wormTooltipOnUpdate: () => {
+          wormTooltipTarget.y = FLOOR_Y - giantWormInst.riseAmount / 2
+          wormTooltipTarget.x = giantWormInst.x + (giantWormInst.leanOffset || 0)
+          wormTooltipTarget.height = Math.max(10, giantWormInst.riseAmount)
+        },
+        fireflyOnUpdate: (kk, activeZone) => fireflyRuntime.onUpdate(kk, activeZone),
+        rainOnUpdate: null,
+        ambientOnUpdate: (kk) => {
+          onUpdateLightning(kk, lightningState)
+          onUpdateBirdAmbient(kk, birdState, sound)
+          onUpdateCricketAmbient(kk, cricketState, sound)
+          onUpdateFrogAmbient(kk, frogState)
+          onUpdateCrowMp3Ambient(kk, crowMp3State)
+        },
+        birdsOnUpdate: () => onUpdateL1Birds(k, birds, SKY_HEIGHT, TOP_MARGIN, BIRD_FLAP_GLIDE_BLEND_TIME, BIRD_GLIDE_POSE)
+      })
+      // WORM_DISABLED_START — small worm update loop + trap2 reposition
+      // const hz = getActiveZoneIndex(heroInst.character?.pos?.x ?? HERO_SPAWN_X, playLeft, playRight, L1_ZONE_COUNT)
+      // for (const wormInst of wormInsts) {
+      //   const wz = getActiveZoneIndex(wormInst.segments[0].x, playLeft, playRight, L1_ZONE_COUNT)
+      //   const awake = isZoneAwake(wz, hz, L1_ZONE_COUNT)
+      //   wormInst.sleeping = !awake
+      //   awake && onUpdateWorm(k, wormInst)
+      // }
+      // trap2RepositionRuntime?.onUpdate?.()
+      // WORM_DISABLED_END
+    })
     //
     // Small mushrooms scattered along the ground (some carry joke hovers)
     //
@@ -2584,45 +2416,80 @@ function createScrollingCloudConfigs() {
 }
 
 /**
- * Creates the scrolling cloud draw object that moves clouds to the right
- * in a seamless loop (two copies of the band tiled side-by-side).
+ * Creates the scrolling cloud draw object.
+ * Bakes all clouds onto an offscreen canvas sprite once (one copy = bandWidth wide).
+ * At runtime only 2 drawSprite calls replace the previous ~250 drawCircle/frame.
  * @param {Object} k - Kaplay instance
  * @param {Object} cloudData - Output of createScrollingCloudConfigs
  */
 function createScrollingClouds(k, cloudData) {
   const { bandWidth, areaLeft, areaRight, configs } = cloudData
-  const inst = { scrollX: 0 }
   //
-  // Pre-bake each cloud's color into a kaplay rgb object once at setup
-  // time so the per-frame inner loop doesn't allocate ~220 rgb objects
-  // per render. Also reuse a single position vec2.
+  // Determine sprite canvas dimensions: full band width × enough vertical headroom
+  //
+  //
+  // Account for sizeVariation (up to 1.2) and offsetX/offsetY spread when sizing the canvas.
+  // Without this, large crowns near the edges get clipped.
+  //
+  const MAX_SIZE_VARIATION = 1.2
+  const maxActualRadius = configs.reduce((m, c) => Math.max(m, c.crownSize * MAX_SIZE_VARIATION), 0)
+  const maxOffsetSpread = configs.reduce((m, c) => {
+    const maxOff = c.crowns.reduce((mo, cr) => Math.max(mo, Math.abs(cr.offsetX), Math.abs(cr.offsetY)), 0)
+    return Math.max(m, maxOff)
+  }, 0)
+  //
+  // Total vertical padding: largest crown radius + largest offset contribution
+  //
+  const verticalPad = Math.ceil(maxActualRadius + maxOffsetSpread + 8)
+  const stripTop = CLOUD_TOP_Y - verticalPad
+  const stripBottom = CLOUD_BOTTOM_Y + verticalPad
+  const stripH = Math.ceil(stripBottom - stripTop)
+  //
+  // Horizontal padding for edge clouds that extend beyond the band boundaries
+  //
+  const horizPad = Math.ceil(maxActualRadius + maxOffsetSpread + 8)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(bandWidth) + horizPad * 2
+  canvas.height = stripH
+  const ctx = canvas.getContext('2d')
+  //
+  // Render all clouds once into the offscreen canvas (shifted right by horizPad)
   //
   for (const cloud of configs) {
-    cloud._color = k.rgb(cloud.color.r, cloud.color.g, cloud.color.b)
+    const r = cloud.color.r
+    const g = cloud.color.g
+    const b = cloud.color.b
+    for (const crown of cloud.crowns) {
+      const cx = cloud.x + crown.offsetX + horizPad
+      const cy = cloud.y + crown.offsetY - stripTop
+      const radius = cloud.crownSize * crown.sizeVariation
+      const alpha = cloud.opacity * crown.opacityVariation
+      ctx.beginPath()
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`
+      ctx.fill()
+    }
   }
-  const cloudPos = k.vec2(0, 0)
+  const spriteName = 'l1-clouds-strip'
+  loadTouchSprite(k, spriteName, canvas.toDataURL())
+  //
+  // Reusable draw positions for the two seamless copies.
+  // Shift left by horizPad so the extra canvas padding is invisible.
+  //
+  const posA = k.vec2(0, 0)
+  const posB = k.vec2(0, 0)
+  const inst = { scrollX: 0 }
   k.add([
     k.z(1),
     {
       draw() {
         inst.scrollX = (inst.scrollX + CLOUD_SCROLL_SPEED * k.dt()) % bandWidth
-        for (let copy = 0; copy < 2; copy++) {
-          const baseOffset = areaLeft + inst.scrollX - copy * bandWidth
-          for (const cloud of configs) {
-            const cx = cloud.x + baseOffset
-            if (cx + cloud.crownSize < areaLeft || cx - cloud.crownSize > areaRight) continue
-            for (const crown of cloud.crowns) {
-              cloudPos.x = cx + crown.offsetX
-              cloudPos.y = cloud.y + crown.offsetY
-              k.drawCircle({
-                pos: cloudPos,
-                radius: cloud.crownSize * crown.sizeVariation,
-                color: cloud._color,
-                opacity: cloud.opacity * crown.opacityVariation
-              })
-            }
-          }
-        }
+        posA.x = areaLeft + inst.scrollX - horizPad
+        posA.y = stripTop
+        posB.x = areaLeft + inst.scrollX - bandWidth - horizPad
+        posB.y = stripTop
+        k.drawSprite({ sprite: spriteName, pos: posA, anchor: 'topleft' })
+        k.drawSprite({ sprite: spriteName, pos: posB, anchor: 'topleft' })
       }
     }
   ])
@@ -2637,7 +2504,7 @@ function createScrollingClouds(k, cloudData) {
  */
 function createLeafTooltips(k, fallingLeafInst) {
   //
-  // Separate phrase maps: falling vs grounded (so phrase changes on landing).
+  // Separate phrase maps: falling vs grounded so phrase changes on landing.
   // Poison leaves always use the poison pool regardless of state.
   //
   const fallingPhraseMap = new WeakMap()
@@ -2658,9 +2525,7 @@ function createLeafTooltips(k, fallingLeafInst) {
   }
   //
   // Pre-allocate tooltip target slots refreshed each frame via onUpdate.
-  // The previous cap of 200 forced the tooltip system to hit-test 200
-  // entries (mostly empty stubs) every frame; 40 covers the active leaves
-  // on screen with plenty of headroom and slashes the per-frame work.
+  // Capped at 40 to cover active leaves on screen without hit-testing empty stubs.
   //
   const tooltipTargets = []
   const MAX_TRACKED_LEAVES = 40
@@ -2676,7 +2541,7 @@ function createLeafTooltips(k, fallingLeafInst) {
   }
   Tooltip.create({ k, targets: tooltipTargets })
   //
-  // Sync tooltip target positions/texts with actual leaf positions each frame
+  // Sync tooltip positions/texts with actual leaf positions each frame
   //
   k.onUpdate(() => onUpdateLeafTooltips(fallingLeafInst, tooltipTargets, getPhrase))
 }
@@ -2822,291 +2687,87 @@ function showAntiHeroHint(k, gameState, antiHeroInst, text, duration) {
     gameState.currentHint = null
   })
 }
-/**
- * Creates a small worm that crawls along the root level with peristaltic locomotion.
- * A contraction wave travels head-to-tail through connected segments.
- * The head leads movement; body follows with distance constraints.
- * @param {Object} k - Kaplay instance
- * @param {number} index - Worm index for varied starting position and direction
- * @returns {Object} Worm instance
- */
-function createWorm(k, index) {
-  const leftBound = LEFT_MARGIN + 40
-  const rightBound = CFG.visual.screen.width - RIGHT_MARGIN - 40
-  const range = rightBound - leftBound
-  //
-  // Spread worms across the playable area
-  //
-  const zoneWidth = range / WORM_COUNT
-  const startX = leftBound + zoneWidth * index + Math.random() * zoneWidth
-  const yZoneCenter = WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT
-  const startAngle = (index % 2 === 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.5
-  //
-  // Initialize segments in a line behind the head
-  //
-  const segments = []
-  for (let i = 0; i < WORM_SEGMENT_COUNT; i++) {
-    segments.push({
-      x: startX - i * WORM_REST_SPACING * Math.cos(startAngle),
-      y: yZoneCenter - i * WORM_REST_SPACING * Math.sin(startAngle)
-    })
-  }
-  const inst = {
-    segments,
-    heading: startAngle,
-    wavePhase: Math.random() * Math.PI * 2,
-    steerPhase: Math.random() * Math.PI * 2,
-    directionTimer: WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE,
-    trail: [],
-    leftBound,
-    rightBound,
-    yMin: WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT - 3,
-    yMax: WORM_BASE_Y + (index + 1) * WORM_Y_ZONE_HEIGHT
-  }
-        k.add([
-    k.z(WORM_DRAW_Z),
-    { draw() { onDrawWorm(k, inst) } }
-  ])
-  k.onUpdate(() => onUpdateWorm(k, inst))
-  return inst
-}
+// WORM_DISABLED_START — createWorm (small worm peristaltic crawler)
+// /**
+//  * Creates a small worm that crawls along the root level with peristaltic locomotion.
+//  * A contraction wave travels head-to-tail through connected segments.
+//  * The head leads movement; body follows with distance constraints.
+//  * @param {Object} k - Kaplay instance
+//  * @param {number} index - Worm index for varied starting position and direction
+//  * @returns {Object} Worm instance
+//  */
+// function createWorm(k, index) {
+//   const leftBound = LEFT_MARGIN + 40
+//   const rightBound = CFG.visual.screen.width - RIGHT_MARGIN - 40
+//   const range = rightBound - leftBound
+//   const zoneWidth = range / WORM_COUNT
+//   const startX = leftBound + zoneWidth * index + Math.random() * zoneWidth
+//   const yZoneCenter = WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT
+//   const startAngle = (index % 2 === 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.5
+//   const segments = []
+//   for (let i = 0; i < WORM_SEGMENT_COUNT; i++) {
+//     segments.push({
+//       x: startX - i * WORM_REST_SPACING * Math.cos(startAngle),
+//       y: yZoneCenter - i * WORM_REST_SPACING * Math.sin(startAngle)
+//     })
+//   }
+//   const trailRgb = parseHex(WORM_TRAIL_COLOR)
+//   const bodyRgb = parseHex(WORM_BODY_COLOR)
+//   const headRgb = parseHex(WORM_HEAD_COLOR)
+//   const ventralRgb = parseHex(WORM_VENTRAL_HIGHLIGHT)
+//   const inst = {
+//     segments,
+//     heading: startAngle,
+//     wavePhase: Math.random() * Math.PI * 2,
+//     steerPhase: Math.random() * Math.PI * 2,
+//     directionTimer: WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE,
+//     trail: Array.from({ length: WORM_TRAIL_MAX_POINTS }, () => ({ x: 0, y: 0, opacity: 0 })),
+//     trailHead: 0,
+//     leftBound,
+//     rightBound,
+//     yMin: WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT - 3,
+//     yMax: WORM_BASE_Y + (index + 1) * WORM_Y_ZONE_HEIGHT,
+//     sleeping: false,
+//     drawColors: {
+//       trail: k.rgb(trailRgb[0], trailRgb[1], trailRgb[2]),
+//       body: k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2]),
+//       head: k.rgb(headRgb[0], headRgb[1], headRgb[2]),
+//       ventral: k.rgb(ventralRgb[0], ventralRgb[1], ventralRgb[2]),
+//       ring: k.rgb(26, 18, 14),
+//       outline: k.rgb(12, 10, 8),
+//       eye: k.rgb(220, 220, 210),
+//       pupil: k.rgb(20, 20, 20)
+//     },
+//     drawVecs: {
+//       trail: k.vec2(0, 0),
+//       segP1: k.vec2(0, 0),
+//       segP2: k.vec2(0, 0),
+//       ventralP1: k.vec2(0, 0),
+//       ventralP2: k.vec2(0, 0),
+//       ring: k.vec2(0, 0),
+//       head: k.vec2(0, 0),
+//       eye: k.vec2(0, 0),
+//       pupil: k.vec2(0, 0)
+//     }
+//   }
+//   k.add([
+//     k.z(WORM_DRAW_Z),
+//     { draw() { onDrawWorm(k, inst) } }
+//   ])
+//   return inst
+// }
+// WORM_DISABLED_END
 //
-// Peristaltic wave locomotion: head leads, contraction wave travels head-to-tail.
-// Segments smoothly follow their predecessor with soft lerp and hard distance clamp.
+// WORM_DISABLED_START — onUpdateWorm (peristaltic locomotion)
 //
-function onUpdateWorm(k, inst) {
-  const dt = k.dt()
-  const head = inst.segments[0]
-  inst.wavePhase += dt * WORM_WAVE_SPEED
-  inst.steerPhase += dt * WORM_STEER_SPEED
-  //
-  // Periodic direction reversal
-  //
-  inst.directionTimer -= dt
-  if (inst.directionTimer <= 0) {
-    inst.heading += Math.PI
-    inst.directionTimer = WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE
-  }
-  //
-  // Head pulses forward: speed modulated by the contraction wave
-  //
-  const headWave = (Math.sin(inst.wavePhase * Math.PI * 2) + 1) / 2
-  const speed = WORM_HEAD_SPEED * (0.2 + headWave * 0.8)
-  //
-  // Sinusoidal steering for gentle curves
-  //
-  inst.heading += Math.sin(inst.steerPhase) * WORM_STEER_AMPLITUDE * dt
-  //
-  // Boundary steering: gentle turn away from edges (large-radius arc)
-  //
-  const edgeMargin = 50
-  if (head.x < inst.leftBound + edgeMargin && Math.cos(inst.heading) < 0) {
-    inst.heading += 0.02
-  } else if (head.x > inst.rightBound - edgeMargin && Math.cos(inst.heading) > 0) {
-    inst.heading -= 0.02
-  }
-  if (head.y < inst.yMin && Math.sin(inst.heading) < 0) {
-    inst.heading += 0.03
-  } else if (head.y > inst.yMax && Math.sin(inst.heading) > 0) {
-    inst.heading -= 0.03
-  }
-  //
-  // Keep heading mostly horizontal with gentle correction
-  //
-  inst.heading -= Math.sin(inst.heading) * 0.005
-  //
-  // Advance head along curved heading
-  //
-  head.x += Math.cos(inst.heading) * speed * dt
-  head.y += Math.sin(inst.heading) * speed * dt
-  head.y = Math.max(inst.yMin, Math.min(inst.yMax, head.y))
-  //
-  // Body segments: each follows its predecessor with a soft lerp.
-  // The contraction wave modulates target distance (short = contracted, long = extended).
-  // Hard clamp enforces max stretch so segments never disconnect.
-  //
-  for (let i = 1; i < inst.segments.length; i++) {
-    const prev = inst.segments[i - 1]
-    const seg = inst.segments[i]
-    const dx = prev.x - seg.x
-    const dy = prev.y - seg.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist < 0.01) continue
-    //
-    // Contraction wave: phase-shifted per segment so wave travels along body
-    //
-    const segWave = (Math.sin((inst.wavePhase - i * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
-    const targetDist = WORM_REST_SPACING * (WORM_CONTRACT_MIN + segWave * (WORM_CONTRACT_MAX - WORM_CONTRACT_MIN))
-    //
-    // Soft follow: smoothly move toward target position behind predecessor
-    //
-    const targetX = prev.x - (dx / dist) * targetDist
-    const targetY = prev.y - (dy / dist) * targetDist
-    const lerp = Math.min(1, WORM_FOLLOW_SPEED * dt)
-    seg.x += (targetX - seg.x) * lerp
-    seg.y += (targetY - seg.y) * lerp
-    //
-    // Hard distance constraint: never stretch beyond max
-    //
-    const cdx = prev.x - seg.x
-    const cdy = prev.y - seg.y
-    const cDist = Math.sqrt(cdx * cdx + cdy * cdy)
-    const maxDist = WORM_REST_SPACING * WORM_MAX_STRETCH
-    if (cDist > maxDist) {
-      seg.x = prev.x - (cdx / cDist) * maxDist
-      seg.y = prev.y - (cdy / cDist) * maxDist
-    }
-    seg.y = Math.max(inst.yMin, Math.min(inst.yMax, seg.y))
-  }
-  //
-  // Trail: record tail position, slowly fade old points
-  //
-  const tail = inst.segments[inst.segments.length - 1]
-  inst.trail.push({ x: tail.x, y: tail.y, opacity: 1 })
-  if (inst.trail.length > WORM_TRAIL_MAX_POINTS) {
-    inst.trail.shift()
-  }
-  for (let i = inst.trail.length - 1; i >= 0; i--) {
-    inst.trail[i].opacity -= WORM_TRAIL_FADE_SPEED
-    if (inst.trail[i].opacity <= 0) {
-      inst.trail.splice(i, 1)
-    }
-  }
-}
+// function onUpdateWorm(k, inst) { ... }
+// WORM_DISABLED_END
+// WORM_DISABLED_START — onDrawWorm, drawWormEyes (small worm draw helpers)
+// function onDrawWorm(k, inst) { ... }
+// function drawWormEyes(k, inst, head) { ... }
+// WORM_DISABLED_END
 //
-// Draws the worm: dark trail, circle segments with peristaltic bulge, tiny eyes
-//
-function onDrawWorm(k, inst) {
-  //
-  // Hoist color + position objects out of the tight per-point loops so we
-  // don't allocate dozens of vec2/rgb objects every frame.
-  //
-  const trailRgb = parseHex(WORM_TRAIL_COLOR)
-  const bodyRgb = parseHex(WORM_BODY_COLOR)
-  const headRgb = parseHex(WORM_HEAD_COLOR)
-  const ventralRgb = parseHex(WORM_VENTRAL_HIGHLIGHT)
-  const trailColor = k.rgb(trailRgb[0], trailRgb[1], trailRgb[2])
-  const bodyColor = k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2])
-  const headColor = k.rgb(headRgb[0], headRgb[1], headRgb[2])
-  const ventralColor = k.rgb(ventralRgb[0], ventralRgb[1], ventralRgb[2])
-  const ringColor = k.rgb(26, 18, 14)
-  const trailPos = k.vec2(0, 0)
-  const segP1 = k.vec2(0, 0)
-  const segP2 = k.vec2(0, 0)
-  const ventralP1 = k.vec2(0, 0)
-  const ventralP2 = k.vec2(0, 0)
-  const ringPos = k.vec2(0, 0)
-  //
-  // Narrow damp-soil smear behind the worm (reads subtler than solid rects)
-  //
-  for (const pt of inst.trail) {
-    trailPos.x = pt.x
-    trailPos.y = pt.y
-    k.drawEllipse({
-      pos: trailPos,
-      radiusX: 5,
-      radiusY: 1.8,
-      color: trailColor,
-      opacity: pt.opacity * 0.55
-    })
-  }
-  const segs = inst.segments
-  //
-  // Continuous muscular tube: thick stroke along the spine with peristaltic width
-  //
-  for (let i = 0; i < segs.length - 1; i++) {
-    const a = segs[i]
-    const b = segs[i + 1]
-    const segWave = (Math.sin((inst.wavePhase - i * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
-    const bulge = 1 - segWave
-    const tubeW = (WORM_SEGMENT_RADIUS + bulge * WORM_BULGE_AMOUNT) * 2.35
-    segP1.x = a.x; segP1.y = a.y
-    segP2.x = b.x; segP2.y = b.y
-    k.drawLine({
-      p1: segP1,
-      p2: segP2,
-      width: tubeW,
-      color: i === 0 ? headColor : bodyColor,
-      opacity: 0.94
-    })
-    //
-    // Soft ventral highlight (lighter underside band)
-    //
-    const mx = (a.x + b.x) / 2
-    const my = (a.y + b.y) / 2
-    ventralP1.x = a.x; ventralP1.y = a.y + 1.1
-    ventralP2.x = b.x; ventralP2.y = b.y + 1.1
-    k.drawLine({
-      p1: ventralP1,
-      p2: ventralP2,
-      width: tubeW * 0.38,
-      color: ventralColor,
-      opacity: 0.45
-    })
-    //
-    // Annulated rings at segment joins for an earthworm-like segmentation
-    //
-    const ringWave = (Math.sin((inst.wavePhase - (i + 0.5) * WORM_WAVE_DELAY) * Math.PI * 2) + 1) / 2
-    const ringR = WORM_SEGMENT_RADIUS * 0.35 + ringWave * 0.25
-    ringPos.x = mx; ringPos.y = my
-    k.drawCircle({
-      pos: ringPos,
-      radius: ringR,
-      color: ringColor,
-      opacity: WORM_SEGMENT_RING_OPACITY
-    })
-  }
-  //
-  // Head cap + eyes (detail sits on top of the tube)
-  //
-  const head = segs[0]
-  const headWave = (Math.sin(inst.wavePhase * Math.PI * 2) + 1) / 2
-  const headR = WORM_SEGMENT_RADIUS + (1 - headWave) * WORM_BULGE_AMOUNT + 0.9
-  k.drawCircle({
-    pos: k.vec2(head.x, head.y),
-    radius: headR + 1,
-    color: k.rgb(12, 10, 8),
-    opacity: 0.65
-  })
-  k.drawCircle({
-    pos: k.vec2(head.x, head.y),
-    radius: headR,
-    color: k.rgb(headRgb[0], headRgb[1], headRgb[2]),
-    opacity: 1
-  })
-  drawWormEyes(k, inst, head)
-}
-//
-// Draws two tiny eyes on the worm's head, facing the movement direction
-//
-function drawWormEyes(k, inst, head) {
-  const next = inst.segments[1]
-  const dx = head.x - next.x
-  const dy = head.y - next.y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const nx = dist > 0 ? dx / dist : Math.cos(inst.heading)
-  const ny = dist > 0 ? dy / dist : 0
-  const px = -ny
-  const py = nx
-  const eyeForward = 1.5
-  for (let side = -1; side <= 1; side += 2) {
-    const ex = head.x + nx * eyeForward + px * WORM_EYE_SPACING * side
-    const ey = head.y + ny * eyeForward + py * WORM_EYE_SPACING * side
-    k.drawCircle({
-      pos: k.vec2(ex, ey),
-      radius: WORM_EYE_RADIUS,
-      color: k.rgb(220, 220, 210)
-    })
-    k.drawCircle({
-      pos: k.vec2(ex + nx * 0.3, ey + ny * 0.3),
-      radius: WORM_PUPIL_RADIUS,
-      color: k.rgb(20, 20, 20)
-    })
-  }
-}
-//
-// Checks hero collision against the giant worm's risen body.
-// Delegates to GiantWorm.checkCollision which accounts for spine offsets and tapered width.
+// Checks if hero overlaps the giant worm body and triggers death + smile.
 //
 function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
   const heroX = heroInst.character.pos.x
@@ -3128,13 +2789,16 @@ function createFireflies(k, heroInst) {
   //
   const fireflyMinY = FLOOR_Y - FIREFLY_MIN_Y_OFFSET_FROM_FLOOR
   const fireflyMaxY = FLOOR_Y - 20
+  const fireflyColor = k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B)
   const fireflies = []
   for (let i = 0; i < FIREFLY_COUNT; i++) {
+    const x = LEFT_MARGIN + Math.random() * playableW
+    const y = fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY)
     fireflies.push({
-      x: LEFT_MARGIN + Math.random() * playableW,
-      y: fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY),
-      baseX: 0,
-      baseY: 0,
+      x,
+      y,
+      baseX: x,
+      baseY: y,
       vx: (Math.random() - 0.5) * 2,
       vy: (Math.random() - 0.5) * 2,
       pushVx: 0,
@@ -3143,10 +2807,14 @@ function createFireflies(k, heroInst) {
       glowSpeed: FIREFLY_GLOW_SPEED_MIN + Math.random() * (FIREFLY_GLOW_SPEED_MAX - FIREFLY_GLOW_SPEED_MIN),
       phase: Math.random() * Math.PI * 2,
       speed: FIREFLY_MIN_SPEED + Math.random() * (FIREFLY_MAX_SPEED - FIREFLY_MIN_SPEED),
-      layerIndex: i % FIREFLY_LAYERS_Z.length
+      layerIndex: i % FIREFLY_LAYERS_Z.length,
+      //
+      // Pre-baked draw objects to avoid per-frame allocations
+      //
+      pos: k.vec2(x, y),
+      color: fireflyColor
     })
   }
-  fireflies.forEach(f => { f.baseX = f.x; f.baseY = f.y })
   //
   // One draw object per z-layer so fireflies interleave with tree sprites
   //
@@ -3162,11 +2830,11 @@ function createFireflies(k, heroInst) {
   })
   let lastHeroX = heroInst.character?.pos?.x ?? 0
   let lastHeroY = heroInst.character?.pos?.y ?? 0
-  k.onUpdate(() => {
-    onUpdateFireflies(k, fireflies)
-    //
-    // Push fireflies away when hero runs or jumps nearby
-    //
+  const playRight = CFG.visual.screen.width - RIGHT_MARGIN
+  const zoneForX = (x) => getActiveZoneIndex(x, LEFT_MARGIN, playRight, L1_ZONE_COUNT)
+  const onUpdate = (k, activeZone) => {
+    const isAwake = (x) => isZoneAwake(zoneForX(x), activeZone, L1_ZONE_COUNT)
+    onUpdateFireflies(k, fireflies, isAwake)
     if (!heroInst.character?.pos) return
     const heroX = heroInst.character.pos.x
     const heroY = heroInst.character.pos.y
@@ -3177,12 +2845,9 @@ function createFireflies(k, heroInst) {
     const heroSpeed = Math.abs(heroVx) + Math.abs(heroVy)
     if (heroSpeed < 0.5) return
     const dt = k.dt()
-    //
-    // Squared-distance early-out: most fireflies are far from the hero
-    // and never need the sqrt. Only nearby ones pay the cost.
-    //
     const pushRadiusSq = FIREFLY_PUSH_DISTANCE * FIREFLY_PUSH_DISTANCE
     for (const f of fireflies) {
+      if (!isAwake(f.x)) continue
       const dx = f.x - heroX
       const dy = f.y - heroY
       const distSq = dx * dx + dy * dy
@@ -3192,12 +2857,13 @@ function createFireflies(k, heroInst) {
       f.pushVx += (dx / dist) * force + heroVx * force * 0.3
       f.pushVy += (dy / dist) * force + heroVy * force * 0.3
     }
-  })
+  }
+  return { fireflies, onUpdate }
 }
 //
 // Per-frame drift: gentle sine-wave wander within bounds
 //
-function onUpdateFireflies(k, fireflies) {
+function onUpdateFireflies(k, fireflies, isAwake = null) {
   const dt = k.dt()
   const t = k.time()
   const minX = LEFT_MARGIN + 10
@@ -3210,6 +2876,7 @@ function onUpdateFireflies(k, fireflies) {
   const minY = FLOOR_Y - FIREFLY_MIN_Y_OFFSET_FROM_FLOOR
   const maxY = FLOOR_Y - 20
   for (const f of fireflies) {
+    if (isAwake && !isAwake(f.x)) continue
     f.x += Math.sin(t * f.glowSpeed + f.phase) * f.speed * dt + f.pushVx
     f.y += Math.cos(t * f.glowSpeed * 0.7 + f.phase) * f.speed * 0.6 * dt + f.pushVy
     //
@@ -3232,22 +2899,24 @@ function drawFireflyLayer(k, fireflies, layerIndex) {
     if (f.layerIndex !== layerIndex) continue
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
     const alpha = 0.15 + glow * 0.7
+    f.pos.x = f.x
+    f.pos.y = f.y
     //
     // Soft glow halo
     //
-                k.drawCircle({
-      pos: k.vec2(f.x, f.y),
+    k.drawCircle({
+      pos: f.pos,
       radius: f.radius * 3,
-      color: k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B),
+      color: f.color,
       opacity: alpha * 0.15
     })
     //
     // Bright core
     //
     k.drawCircle({
-      pos: k.vec2(f.x, f.y),
+      pos: f.pos,
       radius: f.radius,
-      color: k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B),
+      color: f.color,
       opacity: alpha
     })
   }
@@ -3416,11 +3085,15 @@ function createL1Mushrooms(k) {
     const tooltipText = tipRoll < L1_MUSHROOM_FUNNY_CHANCE
       ? L1_MUSHROOM_FUNNY_LINES[Math.floor(Math.random() * L1_MUSHROOM_FUNNY_LINES.length)]
       : null
+    const mX = posX
+    const mY = FLOOR_Y - totalH + 2
+    const mCx = mX + totalW * 0.5
+    const mStemTop = mY + totalH - stemH - 2
     mushrooms.push({
       spriteName,
       dataUrl,
-      x: posX,
-      y: FLOOR_Y - totalH + 2,
+      x: mX,
+      y: mY,
       width: totalW,
       height: totalH,
       capW,
@@ -3429,7 +3102,14 @@ function createL1Mushrooms(k) {
       stemW,
       capColor: color,
       glowPhase: Math.random() * Math.PI * 2,
-      tooltipText
+      tooltipText,
+      //
+      // Pre-baked draw objects — eliminates 2 k.rgb + 3 k.vec2 per mushroom per frame
+      //
+      glowColor: k.rgb(color[0], color[1], color[2]),
+      glowCapPos: k.vec2(mCx, mStemTop),
+      glowStemPos: k.vec2(mCx - stemW / 2 - L1_MUSHROOM_GLOW_OUTLINE_PAD, mStemTop),
+      spritePos: k.vec2(mX, mY)
     })
   }
   mushrooms.forEach(m => loadTouchSprite(k, m.spriteName, m.dataUrl))
@@ -3439,8 +3119,8 @@ function createL1Mushrooms(k) {
       draw() {
         const t = k.time()
         for (const m of mushrooms) {
-          k.drawSprite({ sprite: m.spriteName, pos: k.vec2(m.x, m.y) })
-          drawL1MushroomContourGlow(k, m, t)
+          k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
+          // FPS_DISABLED: drawL1MushroomContourGlow(k, m, t)
         }
       }
     }
@@ -3453,28 +3133,25 @@ function createL1Mushrooms(k) {
 function drawL1MushroomContourGlow(k, m, time) {
   const glow = (Math.sin(time * L1_MUSHROOM_GLOW_SPEED + m.glowPhase) + 1) / 2
   const alpha = L1_MUSHROOM_GLOW_ALPHA_MIN + glow * L1_MUSHROOM_GLOW_ALPHA_RANGE
-  const glowColor = k.rgb(m.capColor[0], m.capColor[1], m.capColor[2])
-  const cx = m.x + m.width * 0.5
-  const stemTop = m.y + m.height - m.stemH - 2
   const pad = L1_MUSHROOM_GLOW_OUTLINE_PAD
   //
   // Cap outline — slightly inflated half-ellipse hugging the cap edge
   //
   k.drawEllipse({
-    pos: k.vec2(cx, stemTop),
+    pos: m.glowCapPos,
     radiusX: m.capW / 2 + pad,
     radiusY: m.capH + pad,
-    color: glowColor,
+    color: m.glowColor,
     opacity: alpha
   })
   //
   // Stem outline — thin tapered quad matching the stem silhouette
   //
   k.drawRect({
-    pos: k.vec2(cx - m.stemW / 2 - pad, stemTop),
+    pos: m.glowStemPos,
     width: m.stemW + pad * 2,
     height: m.stemH + pad,
-    color: glowColor,
+    color: m.glowColor,
     opacity: alpha * 0.75
   })
 }
@@ -3547,10 +3224,8 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst) {
     }
   ])
 }
-//
-// Second trap: one giant worm at a time, emerging in gaps between the
-// seven melody note trees (never in front of them).
-//
+// WORM_DISABLED_START — createTrap2Worm, createTrap2WormReposition
+/* WORM_DISABLED
 function createTrap2Worm(k, heroInst, sound, floorY) {
   const noteXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
   const gapCenters = []
@@ -3558,22 +3233,27 @@ function createTrap2Worm(k, heroInst, sound, floorY) {
     gapCenters.push((noteXs[i] + noteXs[i + 1]) / 2)
   }
   const pickNewX = (currentX) => {
-    //
-    // Prefer a gap that is different from the current one to avoid
-    // the worm always re-emerging at the same spot.
-    //
     const others = gapCenters.filter(x => x !== currentX)
     const pool = others.length > 0 ? others : gapCenters
     return pool[Math.floor(Math.random() * pool.length)]
   }
   const initialX = pickNewX(null)
   const worm = GiantWorm.create({ k, x: initialX, floorY, hero: heroInst, sfx: sound })
-  //
-  // After each retract, wait TRAP2_WORM_REPOSITION_DELAY then teleport the
-  // worm to a new random gap so it triggers the next time the hero walks by.
-  //
+  return worm
+}
+function createTrap2WormReposition(k, worm, heroInst) {
+  const noteXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
+  const gapCenters = []
+  for (let i = 0; i < noteXs.length - 1; i++) {
+    gapCenters.push((noteXs[i] + noteXs[i + 1]) / 2)
+  }
+  const pickNewX = (currentX) => {
+    const others = gapCenters.filter(x => x !== currentX)
+    const pool = others.length > 0 ? others : gapCenters
+    return pool[Math.floor(Math.random() * pool.length)]
+  }
   let wasVisible = false
-  k.onUpdate(() => {
+  const onUpdate = () => {
     const nowVisible = worm.phase !== 'hidden' || worm.riseAmount > 0
     if (wasVisible && !nowVisible) {
       k.wait(TRAP2_WORM_REPOSITION_DELAY, () => {
@@ -3582,12 +3262,58 @@ function createTrap2Worm(k, heroInst, sound, floorY) {
       })
     }
     wasVisible = nowVisible
-  })
-  return worm
+  }
+  return { onUpdate }
 }
+WORM_DISABLED */
+// WORM_DISABLED_END
 //
 // True when a decorative tree X would overlap a melody note-tree slot
 //
 function isNearNoteTreeX(x, noteTreeXs) {
   return noteTreeXs.some(nx => Math.abs(x - nx) < NOTE_TREE_EXCLUSION_RADIUS)
+}
+//
+// Merged baked background PNG — all three parallax tree layers in one draw call
+//
+function drawL1StaticAllTrees(k) {
+  k.drawSprite({
+    sprite: 'bg-touch-all-trees',
+    pos: k.vec2(0, 0),
+    anchor: 'topleft'
+  })
+}
+//
+// Per-frame bird physics: position, sine flight path, flap/glide state machine.
+// Called from the unified game loop so draw() stays allocation-free.
+//
+function onUpdateL1Birds(k, birds, skyHeight, topMargin, flapBlendTime, glidePose) {
+  const time = k.time()
+  const dt = k.dt()
+  for (const bird of birds) {
+    bird.x += bird.speed * dt
+    if (bird.x > k.width() + 50) {
+      bird.x = -50
+      bird.baseY = topMargin + Math.random() * skyHeight
+    }
+    bird.y = bird.baseY + Math.sin((time + bird.timeOffset) * bird.frequency + bird.phaseOffset) * bird.amplitude
+    bird.flapTimer += dt
+    const currentDuration = bird.isFlapping ? bird.flapDuration : bird.glideDuration
+    if (bird.flapTimer > currentDuration) {
+      bird.isFlapping = !bird.isFlapping
+      bird.flapTimer = 0
+    }
+    const targetBlend = bird.isFlapping ? 1 : 0
+    const blendStep = dt / flapBlendTime
+    if (bird.modeBlend < targetBlend) {
+      bird.modeBlend = Math.min(targetBlend, bird.modeBlend + blendStep)
+    } else if (bird.modeBlend > targetBlend) {
+      bird.modeBlend = Math.max(targetBlend, bird.modeBlend - blendStep)
+    }
+    //
+    // Smoothly blend wing position between flap sine and static glide pose
+    //
+    const flapWave = Math.sin((time + bird.timeOffset) * 8 + bird.phaseOffset)
+    bird.wingPhase = glidePose + (flapWave - glidePose) * bird.modeBlend
+  }
 }

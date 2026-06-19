@@ -101,7 +101,8 @@ export function create(cfg) {
     smallBugs,
     canopyPoints,
     screenW,
-    screenH
+    screenH,
+    logicPaused: false
   }
   //
   // Register draw objects for each layer at their respective z-indices
@@ -116,11 +117,16 @@ export function create(cfg) {
       }
     ])
   })
-  //
-  // Single update handler for all layers
-  //
-  k.onUpdate(() => onUpdate(inst))
   return inst
+}
+
+/**
+ * Updates all rain layers (call from scene game loop).
+ * @param {Object} inst - Rain instance from create()
+ */
+export function onUpdate(inst) {
+  if (inst.logicPaused) return
+  onUpdateRain(inst)
 }
 
 /**
@@ -163,7 +169,7 @@ function spawnDrop(leftX, playableW, topY, floorY, canopyPoints) {
  * Updates all rain layers: moves drops, checks collisions, spawns splashes
  * @param {Object} inst - Rain instance
  */
-function onUpdate(inst) {
+function onUpdateRain(inst) {
   const { k, layers, topY, floorY, leftX, rightX, heroInst, antiHeroInst, monsterBugs, smallBugs, canopyPoints } = inst
   const dt = k.dt()
   const playableW = rightX - leftX

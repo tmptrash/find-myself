@@ -72,11 +72,6 @@ const BULGE_COUNT = 5
 const BULGE_EXTRA_WIDTH = 7
 const BULGE_ASPECT = 0.4
 //
-// Segment divider lines: dark horizontal stripes between segments
-//
-const SEGMENT_LINE_COUNT = 6
-const SEGMENT_LINE_WIDTH = 2.5
-//
 // Eyes (near the tip)
 //
 const EYE_RADIUS = 9
@@ -179,12 +174,24 @@ export function create(config) {
     // even when the hero is within TRIGGER_DISTANCE. Used externally to
     // enforce a single-worm-at-a-time mutex across multiple instances.
     //
-    blocked: false
+    blocked: false,
+    //
+    // When sleeping = true (set externally by level zone system),
+    // internal onUpdate is skipped entirely to save CPU in far zones.
+    //
+    sleeping: false,
+    //
+    // Pre-baked draw colors and shared vec2 instances — eliminates ~140
+    // k.rgb/k.vec2 allocations per frame while the worm is visible.
+    //
+    drawCache: null
   }
+  inst.drawCache = buildDrawCache(k)
   k.add([
     k.z(CFG.visual.zIndex.platforms + 15),
     {
       draw() {
+        if (inst.sleeping) return
         if (inst.riseAmount <= 0 && inst.dirtParticles.length === 0) return
         onDraw(inst)
       }
@@ -242,6 +249,7 @@ export function checkCollision(inst, heroX, heroY) {
 // Per-frame update: trigger, rise, hold, retract
 //
 function onUpdate(inst) {
+  if (inst.sleeping && inst.phase === 'hidden' && inst.dirtParticles.length === 0) return
   const dt = inst.k.dt()
   inst.time += dt
   const heroX = inst.hero?.character?.pos?.x ?? -1000
@@ -364,10 +372,10 @@ function onDraw(inst) {
   inst.surfaceDrawOpacity = wormBurrowSurfaceOpacity(inst)
   const surfaceOp = inst.surfaceDrawOpacity
   const topY = floorY - riseAmount
+  const dc = inst.drawCache
   if (riseAmount > 0) drawEarthMounds(inst)
   drawDirtParticles(inst)
   if (riseAmount <= 0) return
-  const outlineColor = k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B)
   //
   // Outline pass: slightly larger circles for dark border (only above ground)
   //
@@ -379,15 +387,17 @@ function onDraw(inst) {
     const r = w / 2 + 2
     if (ny - r > floorY) continue
     const nx = x + (inst.spineOffsets[i] || 0)
+    dc.pos.x = nx
+    dc.pos.y = Math.min(ny, floorY - r * 0.3)
     k.drawCircle({
-      pos: k.vec2(nx, Math.min(ny, floorY - r * 0.3)),
+      pos: dc.pos,
       radius: r,
-      color: outlineColor,
+      color: dc.outlineColor,
       opacity: surfaceOp
     })
   }
   //
-  // Body fill pass: overlapping circles with subtle gradient (only above ground)
+  // Body fill pass: overlapping circles with pre-baked gradient colors (only above ground)
   //
   for (let i = 0; i < NODE_COUNT; i++) {
     const t = i / (NODE_COUNT - 1)
@@ -397,21 +407,19 @@ function onDraw(inst) {
     const r = w / 2
     if (ny - r > floorY) continue
     const nx = x + (inst.spineOffsets[i] || 0)
-    const colorShift = t * 0.15
-    const cr = BODY_COLOR_R + (BODY_HIGHLIGHT_R - BODY_COLOR_R) * colorShift
-    const cg = BODY_COLOR_G + (BODY_HIGHLIGHT_G - BODY_COLOR_G) * colorShift
-    const cb = BODY_COLOR_B + (BODY_HIGHLIGHT_B - BODY_COLOR_B) * colorShift
+    dc.pos.x = nx
+    dc.pos.y = Math.min(ny, floorY - r * 0.3)
     k.drawCircle({
-      pos: k.vec2(nx, Math.min(ny, floorY - r * 0.3)),
+      pos: dc.pos,
       radius: r,
-      color: k.rgb(cr, cg, cb),
+      color: dc.nodeColors[i],
       opacity: surfaceOp
     })
   }
   //
   // Fat body bulges: rounded bumps with dark outline for organic roundness
   //
-  drawBulges(inst, outlineColor)
+  drawBulges(inst)
   //
   // Highlight sheen along left side for 3D roundness
   //
@@ -421,11 +429,13 @@ function onDraw(inst) {
     if (ny < topY || ny > floorY - 4) continue
     const w = getWidth(t)
     const nx = x + (inst.spineOffsets[i] || 0)
+    dc.pos.x = nx - w * 0.2
+    dc.pos.y = ny
     k.drawEllipse({
-      pos: k.vec2(nx - w * 0.2, ny),
+      pos: dc.pos,
       radiusX: w * 0.12,
       radiusY: BODY_HEIGHT / NODE_COUNT * 0.5,
-      color: k.rgb(BODY_HIGHLIGHT_R + 30, BODY_HIGHLIGHT_G + 20, BODY_HIGHLIGHT_B + 15),
+      color: dc.highlightColor,
       opacity: 0.25 * surfaceOp
     })
   }
@@ -436,10 +446,11 @@ function onDraw(inst) {
 // Draw fat body bulges: horizontal ellipses protruding from the body
 // with a dark outline, creating an organic segmented look
 //
-function drawBulges(inst, outlineColor) {
+function drawBulges(inst) {
   const { k, x, floorY, riseAmount } = inst
   const topY = floorY - riseAmount
   const surfaceOp = inst.surfaceDrawOpacity ?? 1
+  const dc = inst.drawCache
   for (const bulge of inst.bulges) {
     const ny = floorY - bulge.t * BODY_HEIGHT
     if (ny < topY || ny > floorY - 4) continue
@@ -452,18 +463,20 @@ function drawBulges(inst, outlineColor) {
     // Subtle breathing animation
     //
     const breathe = 1 + Math.sin(inst.time * 1.5 + bulge.wobble) * 0.04
+    dc.pos.x = nx
+    dc.pos.y = ny
     k.drawEllipse({
-      pos: k.vec2(nx, ny),
+      pos: dc.pos,
       radiusX: (bulgeRX + 2) * breathe,
       radiusY: (bulgeRY + 1.5) * breathe,
-      color: outlineColor,
+      color: dc.outlineColor,
       opacity: 0.85 * surfaceOp
     })
     k.drawEllipse({
-      pos: k.vec2(nx, ny),
+      pos: dc.pos,
       radiusX: bulgeRX * breathe,
       radiusY: bulgeRY * breathe,
-      color: k.rgb(BODY_COLOR_R + 5, BODY_COLOR_G + 3, BODY_COLOR_B + 2),
+      color: dc.bulgeBodyColor,
       opacity: 0.9 * surfaceOp
     })
   }
@@ -473,41 +486,17 @@ function drawBulges(inst, outlineColor) {
 //
 function drawEarthMounds(inst) {
   const { k, x, floorY } = inst
-  const moundColor = k.rgb(DIRT_COLOR_R, DIRT_COLOR_G, DIRT_COLOR_B)
   const surfaceOp = inst.surfaceDrawOpacity ?? 1
+  const dc = inst.drawCache
   for (const m of inst.earthMounds) {
+    dc.pos.x = x + m.dx
+    dc.pos.y = floorY + m.dy
     k.drawEllipse({
-      pos: k.vec2(x + m.dx, floorY + m.dy),
+      pos: dc.pos,
       radiusX: m.size,
       radiusY: m.size * m.aspect,
-      color: moundColor,
+      color: dc.moundColor,
       opacity: 0.8 * surfaceOp
-    })
-  }
-}
-//
-// Draw dark horizontal lines across the body to define worm segments
-//
-function drawSegmentLines(inst, outlineColor) {
-  const { k, x, floorY, riseAmount } = inst
-  const topY = floorY - riseAmount
-  for (let s = 1; s < SEGMENT_LINE_COUNT; s++) {
-    const t = s / SEGMENT_LINE_COUNT
-    const ny = floorY - t * BODY_HEIGHT
-    if (ny < topY || ny > floorY - 4) continue
-    const idx = Math.round(t * (NODE_COUNT - 1))
-    const nx = x + (inst.spineOffsets[idx] || 0)
-    const w = getWidth(t)
-    const halfW = w / 2 - 3
-    //
-    // Slight curve on segment lines using a thin ellipse
-    //
-    k.drawEllipse({
-      pos: k.vec2(nx, ny),
-      radiusX: halfW,
-      radiusY: SEGMENT_LINE_WIDTH,
-      color: outlineColor,
-      opacity: 0.65
     })
   }
 }
@@ -521,6 +510,7 @@ function drawMouth(inst) {
   const topY = floorY - riseAmount
   const pos = getNodePos(inst, MOUTH_FROM_TIP_T)
   if (pos.y < topY) return
+  const dc = inst.drawCache
   //
   // When smiling, draw a curved grin instead of the normal mouth
   //
@@ -531,30 +521,40 @@ function drawMouth(inst) {
   const geo = resolveMouthOpening(inst, pos)
   if (!geo) return
   const { mouthW, mouthH, openT } = geo
+  dc.pos.x = pos.x
+  dc.pos.y = pos.y
   k.drawEllipse({
-    pos: k.vec2(pos.x, pos.y),
+    pos: dc.pos,
     radiusX: mouthW / 2,
     radiusY: mouthH / 2,
-    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B),
+    color: dc.mouthColor,
     opacity: surfaceOp
   })
-  const toothColor = k.rgb(TOOTH_COLOR_R, TOOTH_COLOR_G, TOOTH_COLOR_B)
   for (let i = 0; i < TOOTH_COUNT; i++) {
     const tx = pos.x - mouthW / 2 + (i + 0.5) * (mouthW / TOOTH_COUNT)
     const th = TOOTH_HEIGHT * openT
     if (th < 0.5) continue
+    dc.toothP1.x = tx - TOOTH_WIDTH / 2
+    dc.toothP1.y = pos.y - mouthH / 2
+    dc.toothP2.x = tx + TOOTH_WIDTH / 2
+    dc.toothP2.y = pos.y - mouthH / 2
+    dc.toothP3.x = tx
+    dc.toothP3.y = pos.y - mouthH / 2 + th
     k.drawTriangle({
-      p1: k.vec2(tx - TOOTH_WIDTH / 2, pos.y - mouthH / 2),
-      p2: k.vec2(tx + TOOTH_WIDTH / 2, pos.y - mouthH / 2),
-      p3: k.vec2(tx, pos.y - mouthH / 2 + th),
-      color: toothColor,
+      p1: dc.toothP1,
+      p2: dc.toothP2,
+      p3: dc.toothP3,
+      color: dc.toothColor,
       opacity: surfaceOp
     })
+    dc.toothP1.y = pos.y + mouthH / 2
+    dc.toothP2.y = pos.y + mouthH / 2
+    dc.toothP3.y = pos.y + mouthH / 2 - th
     k.drawTriangle({
-      p1: k.vec2(tx - TOOTH_WIDTH / 2, pos.y + mouthH / 2),
-      p2: k.vec2(tx + TOOTH_WIDTH / 2, pos.y + mouthH / 2),
-      p3: k.vec2(tx, pos.y + mouthH / 2 - th),
-      color: toothColor,
+      p1: dc.toothP1,
+      p2: dc.toothP2,
+      p3: dc.toothP3,
+      color: dc.toothColor,
       opacity: surfaceOp
     })
   }
@@ -584,23 +584,25 @@ function drawEyes(inst) {
   const heroX = inst.hero?.character?.pos?.x ?? x
   const heroY = inst.hero?.character?.pos?.y ?? pos.y
   const surfaceOp = inst.surfaceDrawOpacity ?? 1
-  drawEye(k, pos.x - EYE_SPACING / 2, pos.y, heroX, heroY, surfaceOp)
-  drawEye(k, pos.x + EYE_SPACING / 2, pos.y, heroX, heroY, surfaceOp)
+  drawEye(k, pos.x - EYE_SPACING / 2, pos.y, heroX, heroY, surfaceOp, inst.drawCache)
+  drawEye(k, pos.x + EYE_SPACING / 2, pos.y, heroX, heroY, surfaceOp, inst.drawCache)
 }
 //
 // Draw a single eye with pupil tracking the hero
 //
-function drawEye(k, eyeX, eyeY, heroX, heroY, surfaceOp = 1) {
+function drawEye(k, eyeX, eyeY, heroX, heroY, surfaceOp = 1, dc) {
+  dc.pos.x = eyeX
+  dc.pos.y = eyeY
   k.drawCircle({
-    pos: k.vec2(eyeX, eyeY),
+    pos: dc.pos,
     radius: EYE_RADIUS + 2,
-    color: k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B),
+    color: dc.outlineColor,
     opacity: surfaceOp
   })
   k.drawCircle({
-    pos: k.vec2(eyeX, eyeY),
+    pos: dc.pos,
     radius: EYE_RADIUS,
-    color: k.rgb(SCLERA_R, SCLERA_G, SCLERA_B),
+    color: dc.scleraColor,
     opacity: surfaceOp
   })
   const dx = heroX - eyeX
@@ -609,10 +611,12 @@ function drawEye(k, eyeX, eyeY, heroX, heroY, surfaceOp = 1) {
   const maxOffset = EYE_RADIUS - PUPIL_RADIUS - 1
   const nx = dist > 0 ? dx / dist : 0
   const ny = dist > 0 ? dy / dist : 0
+  dc.pos2.x = eyeX + nx * maxOffset
+  dc.pos2.y = eyeY + ny * maxOffset
   k.drawCircle({
-    pos: k.vec2(eyeX + nx * maxOffset, eyeY + ny * maxOffset),
+    pos: dc.pos2,
     radius: PUPIL_RADIUS,
-    color: k.rgb(PUPIL_R, PUPIL_G, PUPIL_B),
+    color: dc.pupilColor,
     opacity: surfaceOp
   })
 }
@@ -658,23 +662,26 @@ function updateDirtParticles(inst, dt) {
 //
 function drawDirtParticles(inst) {
   const { k } = inst
-  const dirtColor = k.rgb(DIRT_COLOR_R, DIRT_COLOR_G, DIRT_COLOR_B)
-  const darkColor = k.rgb(DIRT_COLOR_R - 15, DIRT_COLOR_G - 12, DIRT_COLOR_B - 10)
+  const dc = inst.drawCache
   const surfaceOp = inst.surfaceDrawOpacity ?? 1
   for (const p of inst.dirtParticles) {
     const alpha = Math.max(0, p.life / DIRT_LIFETIME)
+    dc.pos.x = p.x - p.size / 2
+    dc.pos.y = p.y - p.size / 2
     k.drawRect({
-      pos: k.vec2(p.x - p.size / 2, p.y - p.size / 2),
+      pos: dc.pos,
       width: p.size,
       height: p.size * 0.6,
-      color: dirtColor,
+      color: dc.dirtColor,
       opacity: alpha * 0.9 * surfaceOp
     })
+    dc.pos2.x = p.x - p.size * 0.3
+    dc.pos2.y = p.y - p.size * 0.3
     k.drawRect({
-      pos: k.vec2(p.x - p.size * 0.3, p.y - p.size * 0.3),
+      pos: dc.pos2,
       width: p.size * 0.5,
       height: p.size * 0.4,
-      color: darkColor,
+      color: dc.darkDirtColor,
       opacity: alpha * 0.5 * surfaceOp
     })
   }
@@ -837,51 +844,101 @@ function drawSmile(inst, mouthPos, surfaceOp = 1) {
   const smileW = Math.min(MOUTH_MAX_WIDTH * 0.8, bodyW * 0.85) * t
   const smileH = MOUTH_MAX_HEIGHT * 0.35 * t
   if (smileW < 1) return
+  const dc = inst.drawCache
   //
   // Dark mouth interior (narrow ellipse for closed-mouth grin)
   //
+  dc.pos.x = mouthPos.x
+  dc.pos.y = mouthPos.y
   k.drawEllipse({
-    pos: k.vec2(mouthPos.x, mouthPos.y),
+    pos: dc.pos,
     radiusX: smileW / 2,
     radiusY: smileH / 2,
-    color: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B),
+    color: dc.mouthColor,
     opacity: surfaceOp
   })
   //
   // Curved smile line (arc of small segments)
   //
   const arcSegments = 8
-  const smileColor = k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B)
+  const curveDepth = smileH * 0.6
   for (let i = 0; i < arcSegments; i++) {
     const a1 = (i / arcSegments) * Math.PI
     const a2 = ((i + 1) / arcSegments) * Math.PI
-    const x1 = mouthPos.x - smileW / 2 + (smileW * i / arcSegments)
-    const x2 = mouthPos.x - smileW / 2 + (smileW * (i + 1) / arcSegments)
-    const curveDepth = smileH * 0.6
-    const y1 = mouthPos.y + Math.sin(a1) * curveDepth
-    const y2 = mouthPos.y + Math.sin(a2) * curveDepth
+    dc.lineP1.x = mouthPos.x - smileW / 2 + (smileW * i / arcSegments)
+    dc.lineP1.y = mouthPos.y + Math.sin(a1) * curveDepth
+    dc.lineP2.x = mouthPos.x - smileW / 2 + (smileW * (i + 1) / arcSegments)
+    dc.lineP2.y = mouthPos.y + Math.sin(a2) * curveDepth
     k.drawLine({
-      p1: k.vec2(x1, y1),
-      p2: k.vec2(x2, y2),
+      p1: dc.lineP1,
+      p2: dc.lineP2,
       width: 2 * t,
-      color: smileColor,
+      color: dc.outlineColor,
       opacity: surfaceOp
     })
   }
   //
   // Small teeth peeking from the top of the smile
   //
-  const toothColor = k.rgb(TOOTH_COLOR_R, TOOTH_COLOR_G, TOOTH_COLOR_B)
   const toothCount = 3
   for (let i = 0; i < toothCount; i++) {
     const tx = mouthPos.x - smileW * 0.3 + (i * smileW * 0.3)
     const th = 3 * t
+    dc.toothP1.x = tx - 2
+    dc.toothP1.y = mouthPos.y - smileH * 0.3
+    dc.toothP2.x = tx + 2
+    dc.toothP2.y = mouthPos.y - smileH * 0.3
+    dc.toothP3.x = tx
+    dc.toothP3.y = mouthPos.y - smileH * 0.3 + th
     k.drawTriangle({
-      p1: k.vec2(tx - 2, mouthPos.y - smileH * 0.3),
-      p2: k.vec2(tx + 2, mouthPos.y - smileH * 0.3),
-      p3: k.vec2(tx, mouthPos.y - smileH * 0.3 + th),
-      color: toothColor,
+      p1: dc.toothP1,
+      p2: dc.toothP2,
+      p3: dc.toothP3,
+      color: dc.toothColor,
       opacity: surfaceOp
     })
+  }
+}
+//
+// Pre-allocates all colors and shared vec2 instances used in draw functions.
+// Called once in create(); eliminates ~140 k.rgb/k.vec2 allocations per frame
+// while the worm is visible.
+//
+function buildDrawCache(k) {
+  return {
+    outlineColor: k.rgb(OUTLINE_COLOR_R, OUTLINE_COLOR_G, OUTLINE_COLOR_B),
+    //
+    // 24 gradient colors for body fill — one per node, t = i / (NODE_COUNT - 1).
+    // colorShift = t * 0.15 interpolates from base toward highlight.
+    //
+    nodeColors: Array.from({ length: NODE_COUNT }, (_, i) => {
+      const t = i / (NODE_COUNT - 1)
+      const s = t * 0.15
+      return k.rgb(
+        BODY_COLOR_R + (BODY_HIGHLIGHT_R - BODY_COLOR_R) * s,
+        BODY_COLOR_G + (BODY_HIGHLIGHT_G - BODY_COLOR_G) * s,
+        BODY_COLOR_B + (BODY_HIGHLIGHT_B - BODY_COLOR_B) * s
+      )
+    }),
+    highlightColor: k.rgb(BODY_HIGHLIGHT_R + 30, BODY_HIGHLIGHT_G + 20, BODY_HIGHLIGHT_B + 15),
+    bulgeBodyColor: k.rgb(BODY_COLOR_R + 5, BODY_COLOR_G + 3, BODY_COLOR_B + 2),
+    moundColor: k.rgb(DIRT_COLOR_R, DIRT_COLOR_G, DIRT_COLOR_B),
+    dirtColor: k.rgb(DIRT_COLOR_R, DIRT_COLOR_G, DIRT_COLOR_B),
+    darkDirtColor: k.rgb(DIRT_COLOR_R - 15, DIRT_COLOR_G - 12, DIRT_COLOR_B - 10),
+    mouthColor: k.rgb(MOUTH_COLOR_R, MOUTH_COLOR_G, MOUTH_COLOR_B),
+    toothColor: k.rgb(TOOTH_COLOR_R, TOOTH_COLOR_G, TOOTH_COLOR_B),
+    scleraColor: k.rgb(SCLERA_R, SCLERA_G, SCLERA_B),
+    pupilColor: k.rgb(PUPIL_R, PUPIL_G, PUPIL_B),
+    //
+    // Shared position vec2s — mutated before each draw call, safe because
+    // Kaplay draw calls are synchronous and immediate (canvas-based).
+    //
+    pos: k.vec2(0, 0),
+    pos2: k.vec2(0, 0),
+    toothP1: k.vec2(0, 0),
+    toothP2: k.vec2(0, 0),
+    toothP3: k.vec2(0, 0),
+    lineP1: k.vec2(0, 0),
+    lineP2: k.vec2(0, 0)
   }
 }

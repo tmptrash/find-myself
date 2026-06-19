@@ -597,9 +597,10 @@ export function playNoteExternal(inst, frequency) {
  * Check if hero is touching any tree trunk and play note
  * @param {Object} inst - Tree roots instance
  * @param {Object} heroCharacter - Hero's Kaplay character object
+ * @param {number} [maxCheckDistance=Infinity] - Skip roots farther than this from hero X
  * @returns {number} Index of touched tree (-1 if none)
  */
-export function checkHeroTreeCollision(inst, heroCharacter) {
+export function checkHeroTreeCollision(inst, heroCharacter, maxCheckDistance = Infinity) {
   const { k, roots } = inst
   
   if (!heroCharacter || !heroCharacter.pos) return -1
@@ -611,7 +612,9 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
   
   let touchedTreeIndex = -1
   
-  roots.forEach((root, index) => {
+  for (let index = 0; index < roots.length; index++) {
+    const root = roots[index]
+    if (Math.abs(heroX - root.x) > maxCheckDistance) continue
     //
     // Check if hero is horizontally aligned with trunk
     //
@@ -647,7 +650,7 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
     // Update touching state
     //
     root.isTouching = isTouchingNow
-  })
+  }
   
   return touchedTreeIndex
 }
@@ -655,12 +658,17 @@ export function checkHeroTreeCollision(inst, heroCharacter) {
 /**
  * Update tree shake animations
  * @param {Object} inst - Tree roots instance
+ * @param {number} [heroX] - Hero world X for proximity culling
+ * @param {number} [maxUpdateDistance=Infinity] - Skip idle roots beyond this distance
  */
-export function onUpdate(inst) {
+export function onUpdate(inst, heroX = null, maxUpdateDistance = Infinity) {
   const { roots } = inst
   
   const dt = inst.k.dt()
-  roots.forEach(root => {
+  for (const root of roots) {
+    const dist = heroX == null ? 0 : Math.abs(root.x - heroX)
+    const animating = root.touchShake > 0 || root.glowTimer > 0
+    if (heroX != null && dist > maxUpdateDistance && !animating) continue
     //
     // Decay touch shake over time
     //
@@ -676,7 +684,7 @@ export function onUpdate(inst) {
     if (root.glowTimer > 0) {
       root.glowTimer = Math.max(0, root.glowTimer - dt)
     }
-  })
+  }
 }
 
 export function draw(inst) {

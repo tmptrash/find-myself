@@ -365,12 +365,14 @@ const LIFE_DEDUCT_THRESHOLD = 5
 const LIFE_DEDUCT_FLAG = 'touch.level1TrapAdded'
 const LIFE_DEDUCT_VISITED_FLAG = 'touch.level1Visited'
 const LIFE_DEDUCT_LEAVES_FLAG = 'touch.level1LeavesActive'
-// WORM_DISABLED_START — trap2 (second rising worm) constants
-// const TRAP2_THRESHOLD = 5
-// const TRAP2_FLAG = 'touch.level1Trap2Added'
-// const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
-// const TRAP2_WORM_REPOSITION_DELAY = 1.5
-// WORM_DISABLED_END
+//
+// Second trap — giant worm that resurfaces between note trees.
+// Activates independently of the first trap when lifeScore > 6 (>= 7 points).
+//
+const TRAP2_THRESHOLD = 7
+const TRAP2_FLAG = 'touch.level1Trap2Added'
+const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
+const TRAP2_WORM_REPOSITION_DELAY = 1.5
 //
 // Decorative parallax trees must not overlap the seven melody note trees
 //
@@ -1148,20 +1150,20 @@ export function sceneLevel1(k) {
       leavesActive = true
     }
     //
-    // WORM_DISABLED: second trap (rising worm) disabled — trap2Active is always false.
-    // To restore: uncomment the block below and remove the const trap2Active = false line.
+    // Second trap: giant worm that resurfaces between note trees.
+    // Condition: lifeScore > 6 (TRAP2_THRESHOLD = 7), independent of trap1.
+    // Two-visit mechanism matches trap1: first visit marks flag, second shows deduction.
     //
-    // const trap2AlreadyAdded = get(TRAP2_FLAG, false)
-    // const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
-    // const trap2Eligible = !trap2AlreadyAdded && trapAlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
-    // let showTrap2 = false
-    // if (trap2Eligible && !trap2AlreadyVisited) {
-    //   set(TRAP2_VISITED_FLAG, true)
-    // } else if (trap2Eligible && trap2AlreadyVisited) {
-    //   showTrap2 = true
-    // }
-    // const trap2Active = showTrap2 || trap2AlreadyAdded
-    const trap2Active = false
+    const trap2AlreadyAdded = get(TRAP2_FLAG, false)
+    const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
+    const trap2Eligible = !trap2AlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
+    let showTrap2 = false
+    if (trap2Eligible && !trap2AlreadyVisited) {
+      set(TRAP2_VISITED_FLAG, true)
+    } else if (trap2Eligible && trap2AlreadyVisited) {
+      showTrap2 = true
+    }
+    const trap2Active = showTrap2 || trap2AlreadyAdded
     //
     // Badge count: 0, 1 or 2 depending on which traps are active
     //
@@ -1170,7 +1172,7 @@ export function sceneLevel1(k) {
     //
     // Scene-level lock: hero controls disabled during life deduction animation
     //
-    const sceneLock = { locked: showTrap }
+    const sceneLock = { locked: showTrap || showTrap2 }
     //
     // Bottom platform (full width) - raised by 200px, but extends to bottom
     //
@@ -1569,22 +1571,24 @@ export function sceneLevel1(k) {
         }
       })
     }
-    // WORM_DISABLED: life deduction for second trap (worm) — showTrap2 / TRAP2_FLAG disabled
-    // if (showTrap2) {
-    //   const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
-    //   k.wait(trap2Delay, () => {
-    //     LifeDeduction.show({
-    //       k,
-    //       currentScore: get('lifeScore', 0),
-    //       levelIndicator,
-    //       sound,
-    //       deductFlag: TRAP2_FLAG,
-    //       sceneLock,
-    //       sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
-    //       textColorRgb: { r: 90, g: 136, b: 152 }
-    //     })
-    //   })
-    // }
+    //
+    // Life deduction for second trap (worm): 5 points taken, delayed after trap1 if both fire.
+    //
+    if (showTrap2) {
+      const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
+      k.wait(trap2Delay, () => {
+        LifeDeduction.show({
+          k,
+          currentScore: get('lifeScore', 0),
+          levelIndicator,
+          sound,
+          deductFlag: TRAP2_FLAG,
+          sceneLock,
+          sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
+          textColorRgb: { r: 90, g: 136, b: 152 }
+        })
+      })
+    }
     //
     // Spawn hero and anti-hero
     //
@@ -1694,9 +1698,11 @@ export function sceneLevel1(k) {
       offsetY: -90
     }
     Tooltip.create({ k, targets: [wormTooltipTarget] })
-    // WORM_DISABLED_START — trap2 worm (second rising worm, triggered by second life deduction)
-    const trap2WormInst = null
-    // WORM_DISABLED_END
+    //
+    // Second giant worm — only created when trap2 is active.
+    // Repositions randomly between note trees after each retract cycle.
+    //
+    const trap2WormInst = trap2Active ? createTrap2Worm(k, heroInst, sound, FLOOR_Y) : null
     //
     // Tooltip on first tree trunk (note "C")
     //
@@ -2033,8 +2039,11 @@ export function sceneLevel1(k) {
     const playLeft = LEFT_MARGIN
     const playRight = CFG.visual.screen.width - RIGHT_MARGIN
     const treeRootsCenterX = noteTreeXs.reduce((a, b) => a + b, 0) / noteTreeXs.length
-    // WORM_DISABLED: const trap2RepositionRuntime = trap2WormInst ? createTrap2WormReposition(k, trap2WormInst, heroInst) : null
-    const trap2RepositionRuntime = null
+    //
+    // When trap2 is active, reposition the worm to a new gap between note trees
+    // after each retract cycle (delayed by TRAP2_WORM_REPOSITION_DELAY seconds).
+    //
+    const trap2RepositionRuntime = trap2WormInst ? createTrap2WormReposition(k, trap2WormInst, heroInst) : null
     k.onUpdate(() => {
       onUpdateLevel1GameLoop(k, {
         heroInst,
@@ -2049,7 +2058,7 @@ export function sceneLevel1(k) {
         treeCollisionMaxDist: L1_TREE_COLLISION_MAX_DIST,
         fallingLeafInst,
         giantWormInst,
-        trap2WormInst: null,
+        trap2WormInst,
         levelIndicator,
         gameState,
         antiHeroInst,
@@ -2077,16 +2086,7 @@ export function sceneLevel1(k) {
         },
         birdsOnUpdate: () => onUpdateL1Birds(k, birds, SKY_HEIGHT, TOP_MARGIN, BIRD_FLAP_GLIDE_BLEND_TIME, BIRD_GLIDE_POSE)
       })
-      // WORM_DISABLED_START — small worm update loop + trap2 reposition
-      // const hz = getActiveZoneIndex(heroInst.character?.pos?.x ?? HERO_SPAWN_X, playLeft, playRight, L1_ZONE_COUNT)
-      // for (const wormInst of wormInsts) {
-      //   const wz = getActiveZoneIndex(wormInst.segments[0].x, playLeft, playRight, L1_ZONE_COUNT)
-      //   const awake = isZoneAwake(wz, hz, L1_ZONE_COUNT)
-      //   wormInst.sleeping = !awake
-      //   awake && onUpdateWorm(k, wormInst)
-      // }
-      // trap2RepositionRuntime?.onUpdate?.()
-      // WORM_DISABLED_END
+      trap2RepositionRuntime?.onUpdate?.()
     })
     //
     // Small mushrooms scattered along the ground (some carry joke hovers)
@@ -2791,10 +2791,16 @@ function createFireflies(k, heroInst) {
   const fireflyMaxY = FLOOR_Y - 20
   const fireflyColor = k.rgb(FIREFLY_COLOR_R, FIREFLY_COLOR_G, FIREFLY_COLOR_B)
   const fireflies = []
+  //
+  // Pre-group fireflies by layer: eliminates per-layer scan of all fireflies in drawFireflyLayer.
+  // Each draw call only iterates its own subset (~4–5 fireflies) instead of all 18.
+  //
+  const fireflyLayers = FIREFLY_LAYERS_Z.map(() => [])
   for (let i = 0; i < FIREFLY_COUNT; i++) {
     const x = LEFT_MARGIN + Math.random() * playableW
     const y = fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY)
-    fireflies.push({
+    const li = i % FIREFLY_LAYERS_Z.length
+    const f = {
       x,
       y,
       baseX: x,
@@ -2807,23 +2813,26 @@ function createFireflies(k, heroInst) {
       glowSpeed: FIREFLY_GLOW_SPEED_MIN + Math.random() * (FIREFLY_GLOW_SPEED_MAX - FIREFLY_GLOW_SPEED_MIN),
       phase: Math.random() * Math.PI * 2,
       speed: FIREFLY_MIN_SPEED + Math.random() * (FIREFLY_MAX_SPEED - FIREFLY_MIN_SPEED),
-      layerIndex: i % FIREFLY_LAYERS_Z.length,
+      layerIndex: li,
       //
       // Pre-baked draw objects to avoid per-frame allocations
       //
       pos: k.vec2(x, y),
       color: fireflyColor
-    })
+    }
+    fireflies.push(f)
+    fireflyLayers[li].push(f)
   }
   //
-  // One draw object per z-layer so fireflies interleave with tree sprites
+  // One draw object per z-layer — passes pre-grouped layer array so no filtering is needed
   //
   FIREFLY_LAYERS_Z.forEach((zVal, li) => {
+    const layerFireflies = fireflyLayers[li]
     k.add([
       k.z(zVal),
-          {
-            draw() {
-          drawFireflyLayer(k, fireflies, li)
+      {
+        draw() {
+          drawFireflyLayer(k, layerFireflies)
         }
       }
     ])
@@ -2891,12 +2900,11 @@ function onUpdateFireflies(k, fireflies, isAwake = null) {
   }
 }
 //
-// Draw fireflies belonging to a specific z-layer
+// Draw fireflies from a pre-grouped layer array (no layerIndex filtering needed).
 //
-function drawFireflyLayer(k, fireflies, layerIndex) {
+function drawFireflyLayer(k, fireflies) {
   const t = k.time()
   for (const f of fireflies) {
-    if (f.layerIndex !== layerIndex) continue
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
     const alpha = 0.15 + glow * 0.7
     f.pos.x = f.x
@@ -3224,8 +3232,10 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst) {
     }
   ])
 }
-// WORM_DISABLED_START — createTrap2Worm, createTrap2WormReposition
-/* WORM_DISABLED
+//
+// Creates the second giant worm at a random position between note trees.
+// The worm spawns at the midpoint of a random gap between two adjacent note trees.
+//
 function createTrap2Worm(k, heroInst, sound, floorY) {
   const noteXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
   const gapCenters = []
@@ -3241,6 +3251,10 @@ function createTrap2Worm(k, heroInst, sound, floorY) {
   const worm = GiantWorm.create({ k, x: initialX, floorY, hero: heroInst, sfx: sound })
   return worm
 }
+//
+// Watches the trap2 worm's visibility state and repositions it to a new random
+// gap after each retract cycle, after TRAP2_WORM_REPOSITION_DELAY seconds.
+//
 function createTrap2WormReposition(k, worm, heroInst) {
   const noteXs = TreeRoots.getNoteTreePositions(LEFT_MARGIN, RIGHT_MARGIN, CFG.visual.screen.width)
   const gapCenters = []
@@ -3265,8 +3279,6 @@ function createTrap2WormReposition(k, worm, heroInst) {
   }
   return { onUpdate }
 }
-WORM_DISABLED */
-// WORM_DISABLED_END
 //
 // True when a decorative tree X would overlap a melody note-tree slot
 //

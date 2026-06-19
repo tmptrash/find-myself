@@ -417,6 +417,12 @@ export async function create(config) {
     })
     const glowSpriteName = `tree-glow-${index}`
 
+    //
+    // Pre-cache mutable pos objects so draw() and drawGlow() never allocate vec2 per frame.
+    // The x component is updated in-place when touchShake is active; y is always constant.
+    //
+    const spritePosBaseX = minX - padding
+    const spritePosBaseY = minY - padding
     return {
       x: rootX,
       spriteName,
@@ -441,7 +447,11 @@ export async function create(config) {
       //
       // Live leaf pool for FallingLeaf — positions match the baked sprite canopy
       //
-      leafClusters
+      leafClusters,
+      spritePosBaseX,
+      spritePosBaseY,
+      spritePos: k.vec2(spritePosBaseX, spritePosBaseY),
+      glowPos: k.vec2(spritePosBaseX, spritePosBaseY)
     }
   })
   
@@ -690,23 +700,22 @@ export function onUpdate(inst, heroX = null, maxUpdateDistance = Infinity) {
 export function draw(inst) {
   const { k, roots } = inst
   const time = k.time()
-
-  roots.forEach(root => {
+  for (const root of roots) {
     //
-    // Only shake when touched (no natural sway)
+    // Mutate pre-cached pos in place — avoids vec2 allocation per frame.
+    // X offset is only non-zero while touchShake > 0 (brief touch feedback).
     //
-    const touchShakeOffset = Math.sin(time * 30) * root.touchShake
-    const spritePos = k.vec2(root.minX - root.padding + touchShakeOffset, root.minY - root.padding)
+    root.spritePos.x = root.spritePosBaseX + (root.touchShake !== 0 ? Math.sin(time * 30) * root.touchShake : 0)
     //
     // Draw baked leaf sprite BEFORE the branch sprite so branches cover them.
     // A single drawSprite replaces thousands of per-frame drawPolygon + drawLine calls.
     //
-    k.drawSprite({ sprite: root.leafSpriteName, pos: spritePos })
+    k.drawSprite({ sprite: root.leafSpriteName, pos: root.spritePos })
     //
     // Draw pre-rendered tree sprite (roots + branches)
     //
-    k.drawSprite({ sprite: root.spriteName, pos: spritePos })
-  })
+    k.drawSprite({ sprite: root.spriteName, pos: root.spritePos })
+  }
 }
 /**
  * Draws blinking white root overlay for trees whose glowTimer is active
@@ -715,9 +724,12 @@ export function draw(inst) {
 export function drawGlow(inst) {
   const { k, roots } = inst
   const time = k.time()
-  roots.forEach(root => {
-    if (root.glowTimer <= 0) return
-    const touchShakeOffset = Math.sin(time * 30) * root.touchShake
+  for (const root of roots) {
+    if (root.glowTimer <= 0) continue
+    //
+    // Mutate pre-cached glow pos in place — no vec2 allocation.
+    //
+    root.glowPos.x = root.spritePosBaseX + (root.touchShake !== 0 ? Math.sin(time * 30) * root.touchShake : 0)
     //
     // Blink at ~10Hz, fade out during last 0.5s of the timer
     //
@@ -726,12 +738,9 @@ export function drawGlow(inst) {
     const alpha = (0.4 + blink * 0.6) * fadeOut
     k.drawSprite({
       sprite: root.glowSpriteName,
-      pos: k.vec2(
-        root.minX - root.padding + touchShakeOffset,
-        root.minY - root.padding
-      ),
+      pos: root.glowPos,
       opacity: alpha
     })
-  })
+  }
 }
 

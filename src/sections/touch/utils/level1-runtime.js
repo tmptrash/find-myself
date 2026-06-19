@@ -87,10 +87,12 @@ function onUpdateMelodyGameplay(k, ctx) {
   if (antiHeroInst.character) {
     const dx = heroChar.pos.x - antiHeroInst.character.pos.x
     const dy = heroChar.pos.y - antiHeroInst.character.pos.y
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    const touchDistance = 80
+    //
+    // Squared distance avoids Math.sqrt — equivalent to distance < 80
+    //
+    const distSq = dx * dx + dy * dy
     const wasNear = gameState.isNearAntiHero
-    gameState.isNearAntiHero = distance < touchDistance
+    gameState.isNearAntiHero = distSq < 6400
     if (!gameState.isNearAntiHero && wasNear) {
       gameState.notesBubbleVisible = false
     }

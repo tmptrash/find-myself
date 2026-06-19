@@ -2075,9 +2075,7 @@ export function sceneLevel0(k) {
           Sound.stopAmbient(sound)
           touchMusic.stop()
           set(LIFE_DEDUCT_VISITED_FLAG, false)
-          createLevelTransition(k, 'level-touch.0', () => {
-            k.go('level-touch.1')
-          })
+          createLevelTransition(k, 'level-touch.0')
         })
       },
       currentLevel: 'level-touch.0',

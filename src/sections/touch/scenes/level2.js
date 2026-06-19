@@ -158,8 +158,9 @@ const HERO_TOOLTIP_Y_OFFSET = -100
 //
 // Moon hover glow configuration
 //
-const MOON_HOVER_GLOW_EXTRA = 40
-const MOON_HOVER_GLOW_SPEED = 3
+const MOON_HOVER_GLOW_EXTRA = 28
+const MOON_HOVER_GLOW_SPEED = 1.4
+const MOON_AMBIENT_PULSE_SPEED = 0.65
 //
 // Antihero platform tooltip (log where antihero stands)
 //
@@ -199,6 +200,15 @@ const STUCK_HINT_2_TEXT = "Think where you jump —\nlife often fools you"
 const STUCK_HINT_REPEAT_INTERVAL = 30
 const STUCK_HINT_DISPLAY_TIME = 6
 const STUCK_HINT_Y_OFFSET = -110
+//
+// Cold idle: gentle screen shake and hint when the hero stands still too long
+//
+const COLD_IDLE_STILL_TIME = 10
+const COLD_IDLE_MOVE_THRESHOLD = 4
+const COLD_HINT_TEXT = "It's so cold..."
+const COLD_HINT_Y_OFFSET = -100
+const COLD_SHAKE_WAVE_SPEED = 2.2
+const COLD_SHAKE_MAX = 0.38
 //
 // Jump ring: expanding circle of particles radiating from hero's feet
 //
@@ -311,7 +321,7 @@ const MOON_RADIUS = 56
 const MOON_COLOR_R = 232
 const MOON_COLOR_G = 200
 const MOON_COLOR_B = 145
-const MOON_GLOW_RADIUS = 30
+const MOON_GLOW_RADIUS = 22
 //
 // Pre-defined crater positions relative to moon center (fraction of radius)
 //
@@ -614,9 +624,7 @@ export function sceneLevel2(k) {
         k.wait(transitionDelay, () => {
           Sound.stopAmbient(sound)
           touchMusic.stop()
-        createLevelTransition(k, 'level-touch.2', () => {
-          k.go('level-touch.3')
-          })
+        createLevelTransition(k, 'level-touch.2')
         })
       },
       currentLevel: 'level-touch.2',
@@ -1312,6 +1320,17 @@ export function sceneLevel2(k) {
       }
     ])
     k.onUpdate(() => onUpdateBreathVapor(k, heroInst, breathState))
+    //
+    // Cold idle shake and hint when the hero stands still for a long time
+    //
+    const coldIdleState = {
+      stillTimer: 0,
+      active: false,
+      lastX: heroInst.character?.pos?.x ?? 0,
+      lastY: heroInst.character?.pos?.y ?? 0,
+      currentHint: null
+    }
+    k.onUpdate(() => onUpdateColdIdle(k, coldIdleState, heroInst, stuckHintState))
     //
     // Tree creak: periodic procedural creak sound
     //
@@ -3320,8 +3339,8 @@ function drawLevel2Moon(ctx) {
   //
   const outerR = MOON_RADIUS + MOON_GLOW_RADIUS
   const gradient = ctx.createRadialGradient(MOON_X, MOON_Y, MOON_RADIUS * 0.8, MOON_X, MOON_Y, outerR)
-  gradient.addColorStop(0, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.15)`)
-  gradient.addColorStop(0.4, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.06)`)
+  gradient.addColorStop(0, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.11)`)
+  gradient.addColorStop(0.4, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0.045)`)
   gradient.addColorStop(1, `rgba(${MOON_COLOR_R}, ${MOON_COLOR_G}, ${MOON_COLOR_B}, 0)`)
   ctx.beginPath()
   ctx.arc(MOON_X, MOON_Y, outerR, 0, Math.PI * 2)
@@ -3360,22 +3379,14 @@ function drawLevel2Moon(ctx) {
 }
 
 /**
- * Updates moon hover glow intensity based on mouse proximity
+ * Updates moon ambient glow with a smooth always-on pulse (no mouse hover).
  * @param {Object} k - Kaplay instance
  * @param {Object} state - Moon glow state { intensity: 0-1 }
  */
 function updateMoonHoverGlow(k, state) {
-  const mousePos = k.mousePos()
-  const dx = mousePos.x - MOON_X
-  const dy = mousePos.y - MOON_Y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const isHovering = dist < MOON_RADIUS + 20
+  const pulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(k.time() * MOON_AMBIENT_PULSE_SPEED))
   const dt = k.dt()
-  //
-  // Smooth transition toward target intensity
-  //
-  const target = isHovering ? 1 : 0
-  state.intensity += (target - state.intensity) * MOON_HOVER_GLOW_SPEED * dt
+  state.intensity += (pulse - state.intensity) * MOON_HOVER_GLOW_SPEED * dt
   state.intensity = Math.max(0, Math.min(1, state.intensity))
 }
 
@@ -3388,15 +3399,15 @@ function updateMoonHoverGlow(k, state) {
 function drawMoonHoverGlow(k, state) {
   if (state.intensity < 0.01) return
   const glowColor = k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
-  const rings = 8
+  const rings = 12
   for (let i = rings; i > 0; i--) {
     const t = i / rings
-    const radius = MOON_RADIUS + MOON_HOVER_GLOW_EXTRA * t
+    const radius = MOON_RADIUS + MOON_HOVER_GLOW_EXTRA * t * 1.1
     k.drawCircle({
       pos: k.vec2(MOON_X, MOON_Y),
       radius,
       color: glowColor,
-      opacity: state.intensity * 0.12 * (1 - t)
+      opacity: state.intensity * 0.07 * (1 - t * t)
     })
   }
 }
@@ -3575,6 +3586,50 @@ function showStuckHint(k, state, heroInst, text) {
       state.currentHint = null
     }
   })
+}
+//
+// Detects long idle standing and triggers cold screen shake plus a hint above the hero.
+//
+function onUpdateColdIdle(k, state, heroInst, stuckHintState) {
+  if (stuckHintState.levelDone || !heroInst.character?.pos) return
+  const x = heroInst.character.pos.x
+  const y = heroInst.character.pos.y
+  const moved = Math.abs(x - state.lastX) + Math.abs(y - state.lastY)
+  state.lastX = x
+  state.lastY = y
+  if (moved > COLD_IDLE_MOVE_THRESHOLD) {
+    state.stillTimer = 0
+    state.active = false
+    state.currentHint && Tooltip.destroy(state.currentHint)
+    state.currentHint = null
+    return
+  }
+  state.stillTimer += k.dt()
+  if (state.stillTimer < COLD_IDLE_STILL_TIME) return
+  state.active = true
+  if (!state.currentHint) {
+    const target = {
+      x: () => heroInst.character?.pos?.x ?? 0,
+      y: () => heroInst.character?.pos?.y ?? 0,
+      width: 0,
+      height: 0,
+      text: COLD_HINT_TEXT,
+      offsetY: COLD_HINT_Y_OFFSET
+    }
+    const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+    tip.activeTarget = target
+    tip.frozenX = Math.round(x)
+    tip.frozenY = Math.round(y)
+    tip.opacity = 1
+    state.currentHint = tip
+  }
+  //
+  // Wave-shaped micro-shake while the hero stays frozen in the cold.
+  //
+  const wave = 0.5 + 0.5 * Math.sin(k.time() * COLD_SHAKE_WAVE_SPEED)
+  const secondary = 0.5 + 0.5 * Math.sin(k.time() * COLD_SHAKE_WAVE_SPEED * 0.67 + 1.2)
+  const strength = COLD_SHAKE_MAX * wave * secondary * k.dt() * 60
+  k.shake(strength)
 }
 
 /**

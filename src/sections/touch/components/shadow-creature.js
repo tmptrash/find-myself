@@ -1,4 +1,5 @@
 import { CFG } from '../cfg.js'
+import * as Sound from '../../../utils/sound.js'
 //
 // Creature body configuration (solid black)
 //
@@ -56,6 +57,15 @@ const BURN_PARTICLE_SIZE = 6
 const BURN_GLOW_MAX_OPACITY = 0.55
 const BURN_GLOW_RADIUS_MULTIPLIER = 3.2
 //
+// Chromatic aberration offset for burn particles drawn above darkness
+//
+const FIRE_CHROMA_OFFSET = 2.5
+//
+// Temporary glow smear left by the creature's eyes while it moves
+//
+const EYE_TRAIL_LIFETIME = 0.85
+const EYE_TRAIL_SPAWN_CHANCE = 0.32
+//
 // Eye configuration
 //
 const EYE_OFFSET_RATIO = 0.45
@@ -94,10 +104,11 @@ const TIP_DOT_RADIUS = 4
  * @param {Function} cfg.onHeroTouch - Callback when creature touches hero
  * @param {Array} [cfg.platforms=[]] - Platform rectangles {x, y, width} for collision avoidance
  * @param {number} [cfg.platformHeight=40] - Platform thickness in pixels
+ * @param {Object} [cfg.sound] - Sound instance for metallic footstep SFX
  * @returns {Object} Shadow creature instance
  */
 export function create(cfg) {
-  const { k, x, y, hero, onHeroTouch, platforms = [], platformHeight = 40 } = cfg
+  const { k, x, y, hero, onHeroTouch, platforms = [], platformHeight = 40, sound = null } = cfg
   //
   // Initialize tentacles with rest positions around body
   //
@@ -127,14 +138,16 @@ export function create(cfg) {
     tentacles,
     platforms,
     platformHeight,
+    sound,
+    stepSoundFrame: -1,
     facingAngle: 0,
     targetFacingAngle: 0,
     isFleeing: false,
-    lastStepIndex: -1,
     stopped: false,
     nearestLightDist: Infinity,
     isBurning: false,
-    burnParticles: []
+    burnParticles: [],
+    eyeTrails: []
   }
   return inst
 }
@@ -241,6 +254,9 @@ export function onUpdate(inst, dt, glowPositions) {
   // Update burn particles and spawn new ones while burning
   //
   updateBurnParticles(inst, dt)
+  inst.moveSpeed = speed
+  updateEyeTrails(inst, dt)
+  spawnCreatureEyeTrails(inst)
   //
   // Check hero collision (kill on touch)
   //
@@ -346,6 +362,7 @@ export function onDraw(inst) {
  */
 export function onDrawOverlay(inst) {
   const { k } = inst
+  drawCreatureEyeTrails(k, inst.eyeTrails)
   //
   // Draw eyes first so fire renders on top of them when burning
   //
@@ -384,6 +401,21 @@ export function onDrawOverlay(inst) {
       const t = p.age / p.lifetime
       const alpha = Math.pow(1 - t, 1.4)
       const radius = (p.size ?? BURN_PARTICLE_SIZE) * (1 - t * 0.55)
+      //
+      // Chromatic aberration in darkness: red/cyan fringes around each ember.
+      //
+      k.drawCircle({
+        pos: k.vec2(p.x - FIRE_CHROMA_OFFSET, p.y),
+        radius: radius * 1.5,
+        color: k.rgb(255, 50, 30),
+        opacity: alpha * 0.22
+      })
+      k.drawCircle({
+        pos: k.vec2(p.x + FIRE_CHROMA_OFFSET, p.y),
+        radius: radius * 1.4,
+        color: k.rgb(40, 180, 255),
+        opacity: alpha * 0.16
+      })
       k.drawCircle({
         pos: k.vec2(p.x, p.y),
         radius: radius * 1.9,
@@ -460,6 +492,7 @@ function updateTentacles(inst, dt) {
         tentacle.isStepping = false
         tentacle.footX = tentacle.targetX
         tentacle.footY = tentacle.targetY
+        playFootStep(inst)
       } else {
         const t = tentacle.stepProgress
         const arc = Math.sin(t * Math.PI) * STEP_ARC_HEIGHT
@@ -651,5 +684,74 @@ function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   return {
     jointX: baseX + Math.cos(jointAngle) * len1,
     jointY: baseY + Math.sin(jointAngle) * len1
+  }
+}
+//
+// Metallic footstep when a tentacle finishes its arc — volume scales with hero distance.
+//
+function playFootStep(inst) {
+  if (!inst.sound || inst.stopped) return
+  const frameId = Math.floor(inst.k.time() * 60)
+  if (inst.stepSoundFrame === frameId) return
+  inst.stepSoundFrame = frameId
+  const heroPos = inst.hero?.character?.pos
+  if (!heroPos) return
+  const dx = inst.x - heroPos.x
+  const dy = inst.y - heroPos.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  if (dist > LIGHT_FEAR_RADIUS) return
+  const volume = 1 - dist / LIGHT_FEAR_RADIUS
+  Sound.playMonsterStepSound(inst.sound, volume)
+}
+//
+// Ages and removes temporary glow smears left by the creature's eyes.
+//
+function updateEyeTrails(inst, dt) {
+  for (let i = inst.eyeTrails.length - 1; i >= 0; i--) {
+    inst.eyeTrails[i].age += dt
+    inst.eyeTrails[i].age >= EYE_TRAIL_LIFETIME && inst.eyeTrails.splice(i, 1)
+  }
+}
+//
+// Spawns glow trail points at the monster eye positions while it is moving.
+//
+function spawnCreatureEyeTrails(inst) {
+  if (inst.stopped || inst.moveSpeed <= 0) return
+  const eyeOffset = BODY_RADIUS * EYE_OFFSET_RATIO
+  const eyeAngle1 = inst.facingAngle + EYE_ANGLE_SPREAD
+  const eyeAngle2 = inst.facingAngle - EYE_ANGLE_SPREAD
+  const eyes = [
+    { x: inst.x + Math.cos(eyeAngle1) * eyeOffset, y: inst.y + Math.sin(eyeAngle1) * eyeOffset },
+    { x: inst.x + Math.cos(eyeAngle2) * eyeOffset, y: inst.y + Math.sin(eyeAngle2) * eyeOffset }
+  ]
+  for (const eye of eyes) {
+    Math.random() < EYE_TRAIL_SPAWN_CHANCE && inst.eyeTrails.push({
+      x: eye.x,
+      y: eye.y,
+      age: 0,
+      radius: EYE_RADIUS
+    })
+  }
+}
+//
+// Draws fading halos from the creature eye glow trails.
+//
+function drawCreatureEyeTrails(k, trails) {
+  const trailColor = k.rgb(140, 30, 30)
+  for (const trail of trails) {
+    const t = trail.age / EYE_TRAIL_LIFETIME
+    const alpha = (1 - t) * (1 - t) * 0.6
+    k.drawCircle({
+      pos: k.vec2(trail.x, trail.y),
+      radius: trail.radius + 5 * (1 - t),
+      color: trailColor,
+      opacity: alpha * 0.35
+    })
+    k.drawCircle({
+      pos: k.vec2(trail.x, trail.y),
+      radius: trail.radius * (1 - t * 0.4),
+      color: trailColor,
+      opacity: alpha * 0.75
+    })
   }
 }

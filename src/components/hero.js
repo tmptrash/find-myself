@@ -1268,6 +1268,10 @@ function onUpdate(inst) {
     return
   } else {
     //
+    // Kaplay platform onCollide fires on contact enter — refresh canJump every grounded frame.
+    //
+    !inst.isSquashing && (inst.canJump = true)
+    //
     // Reset jump phase when grounded
     //
     if (inst.jumpPhase !== 'none') {
@@ -3716,17 +3720,28 @@ function isJumpCeilingBlocked(inst) {
   const ch = inst.character
   if (!ch?.exists?.() || !ch.isGrounded()) return false
   const headTop = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) - (inst.collisionBaseHeight ?? 74) / 2
+  const heroFeetY = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) + (inst.collisionBaseHeight ?? 74) / 2
   const heroHalfW = (inst.collisionBaseWidth ?? 40) / 2 + 6
   const heroLeft = ch.pos.x - heroHalfW
   const heroRight = ch.pos.x + heroHalfW
   const platforms = [...inst.k.get(CFG.game.platformName), ...inst.k.get('platform')]
   for (const obj of platforms) {
     if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
+    //
+    // Anti-hero bodies must not count as jump ceilings — only dedicated head colliders do.
+    //
+    if (obj.is?.(ANTIHERO_TAG)) continue
     const rect = getPlatformWorldRect(obj)
     if (!rect) continue
     const hOverlap = heroRight > rect.left && heroLeft < rect.right
     const overhead = rect.bottom > headTop + 2 && rect.top < headTop + JUMP_CEILING_CLEARANCE
-    if (hOverlap && overhead) return true
+    if (!hOverlap || !overhead) continue
+    //
+    // Ignore the surface the hero is standing on (e.g. anti-hero head).
+    //
+    const standingOn = heroFeetY >= rect.top - 6 && heroFeetY <= rect.bottom + 10
+    if (standingOn) continue
+    return true
   }
   return false
 }

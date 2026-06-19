@@ -338,12 +338,13 @@ const MOON_RADIUS = 56
 const MOON_COLOR_R = 232
 const MOON_COLOR_G = 200
 const MOON_COLOR_B = 145
-const MOON_GLOW_RADIUS = 30
+const MOON_GLOW_RADIUS = 22
 //
-// Moon hover glow configuration
+// Moon ambient glow configuration
 //
-const MOON_HOVER_GLOW_EXTRA = 40
-const MOON_HOVER_GLOW_SPEED = 3
+const MOON_HOVER_GLOW_EXTRA = 28
+const MOON_HOVER_GLOW_SPEED = 1.4
+const MOON_AMBIENT_PULSE_SPEED = 0.65
 //
 // Pre-defined crater positions relative to moon center (fraction of radius)
 // Each crater has a slightly darker shade defined by brightness offset
@@ -557,6 +558,24 @@ const L3_EYE_COUNT = 86
 // Skip drawing the eye halo when barely open (saves one ellipse per eye per frame)
 //
 const L3_EYE_HALO_MIN_OPEN = 0.38
+//
+// Fireflies drifting above the darkness layer in the jungle corridor
+//
+const L3_FIREFLY_COUNT = 16
+const L3_FIREFLY_MIN_SPEED = 5
+const L3_FIREFLY_MAX_SPEED = 16
+const L3_FIREFLY_RADIUS_MIN = 1.5
+const L3_FIREFLY_RADIUS_MAX = 2.8
+const L3_FIREFLY_GLOW_SPEED_MIN = 0.5
+const L3_FIREFLY_GLOW_SPEED_MAX = 1.8
+const L3_FIREFLY_COLOR_R = 244
+const L3_FIREFLY_COLOR_G = 192
+const L3_FIREFLY_COLOR_B = 64
+//
+// Breath.mp3 proximity volume when the shadow creature approaches
+//
+const L3_BREATH_BASE_VOLUME = CFG.audio.backgroundMusic.breath ?? CFG.audio.backgroundMusic.word * 0.5
+const L3_BREATH_MAX_MULTIPLIER = 2.4
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
@@ -643,10 +662,18 @@ export function sceneLevel3(k) {
       volume: CFG.audio.backgroundMusic.time
     })
     //
+    // Breath layer grows louder as the creature gets closer to the hero
+    //
+    const breathMusic = k.play('breath', {
+      loop: true,
+      volume: 0
+    })
+    //
     // Stop music when leaving the scene
     //
     k.onSceneLeave(() => {
       bossMusic.stop()
+      breathMusic.stop()
     })
     //
     // Create boundary walls
@@ -981,6 +1008,7 @@ export function sceneLevel3(k) {
       x: MONSTER_SPAWN_X,
       y: MONSTER_SPAWN_Y,
       hero: heroInst,
+      sound,
       platforms: CORRIDOR_PLATFORMS,
       platformHeight: PLATFORM_HEIGHT,
       onHeroTouch: () => {
@@ -1169,7 +1197,7 @@ export function sceneLevel3(k) {
       }
     ])
     //
-    // Moon hover glow system (glows when mouse hovers over it)
+    // Moon ambient glow (smooth pulse, always visible)
     //
     const moonGlowState = { intensity: 0 }
         k.add([
@@ -1464,6 +1492,7 @@ export function sceneLevel3(k) {
     //
     const heartbeatState = { timer: L3_HEARTBEAT_INTERVAL_FAR, lastHeartbeatTime: 0 }
     k.onUpdate(() => onUpdateProximityAudio(k, heroInst, creatureInst, sound, heartbeatState))
+    k.onUpdate(() => onUpdateProximityBreath(k, heroInst, creatureInst, breathMusic))
     //
     // Screen shake when creature is dangerously close
     //
@@ -1477,6 +1506,7 @@ export function sceneLevel3(k) {
     // Watching eyes: ambient eye pairs that follow the hero
     //
     addWatchingEyes(k, heroInst)
+    createL3Fireflies(k)
     //
     // ESC key to return to menu
     //
@@ -3286,7 +3316,7 @@ function drawMoonOverlay(k) {
   for (let i = 0; i < GLOW_RINGS; i++) {
     const t = i / GLOW_RINGS
     const ringRadius = GLOW_OUTER * (1 - t)
-    const ringOpacity = t * t * 0.15
+    const ringOpacity = t * t * 0.11
     k.drawCircle({
       pos: k.vec2(MOON_X, MOON_Y),
       radius: ringRadius,
@@ -3324,19 +3354,14 @@ function drawMoonOverlay(k) {
 }
 
 /**
- * Updates moon hover glow intensity based on mouse proximity
+ * Updates moon ambient glow with a smooth always-on pulse (no mouse hover).
  * @param {Object} k - Kaplay instance
  * @param {Object} state - Moon glow state { intensity: 0-1 }
  */
 function updateMoonHoverGlow(k, state) {
-  const mousePos = k.mousePos()
-  const dx = mousePos.x - MOON_X
-  const dy = mousePos.y - MOON_Y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const isHovering = dist < MOON_RADIUS + 20
+  const pulse = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(k.time() * MOON_AMBIENT_PULSE_SPEED))
   const dt = k.dt()
-  const target = isHovering ? 1 : 0
-  state.intensity += (target - state.intensity) * MOON_HOVER_GLOW_SPEED * dt
+  state.intensity += (pulse - state.intensity) * MOON_HOVER_GLOW_SPEED * dt
   state.intensity = Math.max(0, Math.min(1, state.intensity))
 }
 
@@ -3349,15 +3374,15 @@ function updateMoonHoverGlow(k, state) {
 function drawMoonHoverGlow(k, state) {
   if (state.intensity < 0.01) return
   const glowColor = k.rgb(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
-  const rings = 8
+  const rings = 12
   for (let i = rings; i > 0; i--) {
     const t = i / rings
-    const radius = MOON_RADIUS + MOON_HOVER_GLOW_EXTRA * t
+    const radius = MOON_RADIUS + MOON_HOVER_GLOW_EXTRA * t * 1.1
     k.drawCircle({
       pos: k.vec2(MOON_X, MOON_Y),
       radius,
       color: glowColor,
-      opacity: state.intensity * 0.12 * (1 - t)
+      opacity: state.intensity * 0.07 * (1 - t * t)
     })
   }
 }
@@ -4052,6 +4077,18 @@ function onUpdateProximityAudio(k, heroInst, creatureInst, sound, state) {
   }
 }
 //
+// Scales breath.mp3 volume with creature proximity (screen shake companion).
+//
+function onUpdateProximityBreath(k, heroInst, creatureInst, breathMusic) {
+  if (!heroInst?.character?.pos || !creatureInst || !breathMusic) return
+  const dx = creatureInst.x - heroInst.character.pos.x
+  const dy = creatureInst.y - heroInst.character.pos.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const t = Math.max(0, Math.min(1, 1 - dist / L3_PROXIMITY_RADIUS))
+  const target = L3_BREATH_BASE_VOLUME * t * L3_BREATH_MAX_MULTIPLIER
+  breathMusic.volume = breathMusic.volume + (target - breathMusic.volume) * 0.1
+}
+//
 // Screen shake when creature is dangerously close to the hero
 //
 function onUpdateScreenShake(k, heroInst, creatureInst) {
@@ -4290,4 +4327,71 @@ function addWatchingEyes(k, heroInst) {
       }
     }
   ])
+}
+//
+// Creates fireflies drifting above the darkness layer in the jungle corridor.
+//
+function createL3Fireflies(k) {
+  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const fireflyMinY = CLOUD_BOTTOM_Y + 40
+  const fireflyMaxY = FLOOR_Y - 60
+  const fireflies = []
+  for (let i = 0; i < L3_FIREFLY_COUNT; i++) {
+    fireflies.push({
+      x: LEFT_MARGIN + Math.random() * playableW,
+      y: fireflyMinY + Math.random() * (fireflyMaxY - fireflyMinY),
+      radius: L3_FIREFLY_RADIUS_MIN + Math.random() * (L3_FIREFLY_RADIUS_MAX - L3_FIREFLY_RADIUS_MIN),
+      glowSpeed: L3_FIREFLY_GLOW_SPEED_MIN + Math.random() * (L3_FIREFLY_GLOW_SPEED_MAX - L3_FIREFLY_GLOW_SPEED_MIN),
+      phase: Math.random() * Math.PI * 2,
+      speed: L3_FIREFLY_MIN_SPEED + Math.random() * (L3_FIREFLY_MAX_SPEED - L3_FIREFLY_MIN_SPEED),
+      driftVx: (Math.random() - 0.5) * 10
+    })
+  }
+  k.add([
+    k.z(Z_DARKNESS + 6),
+    {
+      draw() {
+        drawL3Fireflies(k, fireflies)
+      }
+    }
+  ])
+  k.onUpdate(() => onUpdateL3Fireflies(k, fireflies, fireflyMinY, fireflyMaxY))
+}
+//
+// Gentle wander for level 3 fireflies inside the playable band.
+//
+function onUpdateL3Fireflies(k, fireflies, minY, maxY) {
+  const dt = k.dt()
+  const t = k.time()
+  const minX = LEFT_MARGIN + 10
+  const maxX = CFG.visual.screen.width - RIGHT_MARGIN - 10
+  for (const f of fireflies) {
+    f.x += f.driftVx * dt + Math.sin(t * 0.7 + f.phase) * dt * f.speed * 0.35
+    f.y += Math.cos(t * 0.55 + f.phase * 1.3) * dt * f.speed * 0.25
+    f.x < minX && (f.x = minX, f.driftVx *= -1)
+    f.x > maxX && (f.x = maxX, f.driftVx *= -1)
+    f.y = Math.max(minY, Math.min(maxY, f.y))
+  }
+}
+//
+// Draws pulsing amber fireflies above the darkness overlay.
+//
+function drawL3Fireflies(k, fireflies) {
+  const color = k.rgb(L3_FIREFLY_COLOR_R, L3_FIREFLY_COLOR_G, L3_FIREFLY_COLOR_B)
+  const t = k.time()
+  for (const f of fireflies) {
+    const glow = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * f.glowSpeed + f.phase))
+    k.drawCircle({
+      pos: k.vec2(f.x, f.y),
+      radius: f.radius * 2.6,
+      color,
+      opacity: glow * 0.18
+    })
+    k.drawCircle({
+      pos: k.vec2(f.x, f.y),
+      radius: f.radius,
+      color,
+      opacity: glow * 0.85
+    })
+  }
 }

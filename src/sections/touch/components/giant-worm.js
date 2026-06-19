@@ -56,12 +56,12 @@ const IK_FOLLOW_SPEED = 5.0
 //
 // Visual colors (warm reddish-brown, cartoon worm style)
 //
-const BODY_COLOR_R = 140
-const BODY_COLOR_G = 65
-const BODY_COLOR_B = 50
-const BODY_HIGHLIGHT_R = 180
-const BODY_HIGHLIGHT_G = 95
-const BODY_HIGHLIGHT_B = 70
+const BODY_COLOR_R = 172
+const BODY_COLOR_G = 42
+const BODY_COLOR_B = 38
+const BODY_HIGHLIGHT_R = 210
+const BODY_HIGHLIGHT_G = 55
+const BODY_HIGHLIGHT_B = 42
 const OUTLINE_COLOR_R = 25
 const OUTLINE_COLOR_G = 18
 const OUTLINE_COLOR_B = 15

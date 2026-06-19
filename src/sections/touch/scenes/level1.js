@@ -63,6 +63,10 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
 const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
 //
+// Notes bubble stays visible for this long after the demo melody finishes.
+//
+const NOTES_BUBBLE_HIDE_DELAY = 2.0
+//
 // Speed bonus effects (flash small hero + particles on quick completion)
 //
 const SPEED_BONUS_FLASH_COUNT = 20
@@ -406,7 +410,12 @@ export function sceneLevel1(k) {
     // Sync canvas + CSS backdrop so letterbox bars match the scene background.
     //
     CanvasBackdrop.applyCanvasBackdrop(k, L1_SCENE_BG_HEX)
+    //
+    // Async sprite load can outlive a quick re-enter; bail before adding duplicate draw layers.
+    //
+    let sceneActive = true
     k.onSceneLeave(() => {
+      sceneActive = false
       CanvasBackdrop.clearCanvasBackdrop(k)
     })
     //
@@ -1227,6 +1236,7 @@ export function sceneLevel1(k) {
       targetSequence: [0, 1, 2, 1, 2],  // C, D, E, D, E (tree indices) - exactly 5 notes
       melodyNotes: [261.63, 293.66, 329.63, 293.66, 329.63],  // Frequencies
       isNearAntiHero: false,
+      notesBubbleVisible: false,
       isPlayingMelody: false,
       melodyTimer: 0,
       lastTouchedTreeIndex: -1,  // Track last touched tree to prevent duplicate detection
@@ -1258,7 +1268,7 @@ export function sceneLevel1(k) {
     //
     function playMelody() {
       if (gameState.isPlayingMelody) return
-      
+      gameState.notesBubbleVisible = true
       gameState.isPlayingMelody = true
       gameState.currentNoteIndex = -1
       let noteIndex = 0
@@ -1278,6 +1288,9 @@ export function sceneLevel1(k) {
             k.wait(0.6, () => {
               gameState.isPlayingMelody = false
               gameState.currentNoteIndex = -1
+              k.wait(NOTES_BUBBLE_HIDE_DELAY, () => {
+                gameState.notesBubbleVisible = false
+              })
             })
           }
         }
@@ -1552,9 +1565,7 @@ export function sceneLevel1(k) {
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
-        createLevelTransition(k, 'level-touch.1', () => {
-          k.go('level-touch.2')
-          })
+        createLevelTransition(k, 'level-touch.1')
         })
       },
       currentLevel: 'level-touch.1',
@@ -1612,7 +1623,7 @@ export function sceneLevel1(k) {
     Hero.spawn(heroInst)
     Hero.spawn(antiHeroInst)
     //
-    // Allow hero to jump when standing on the antihero's head
+    // Hero lands directly on the anti-hero sprite (no separate head collider).
     //
     antiHeroInst.character.use(CFG.game.platformName)
     //
@@ -1662,6 +1673,7 @@ export function sceneLevel1(k) {
       screenWidth: CFG.visual.screen.width,
       sfx: sound
     })
+    if (!sceneActive) return
     //
     // Add custom drawing for tree roots (above platform z=15, but behind player z=10)
     // Set z=16 so roots draw on top of platform
@@ -1911,6 +1923,9 @@ export function sceneLevel1(k) {
         //
         // If just got near (wasn't near before, now near), play melody
         //
+        if (!gameState.isNearAntiHero && wasNear) {
+          gameState.notesBubbleVisible = false
+        }
         if (gameState.isNearAntiHero && !wasNear && !gameState.antiHeroActive) {
           playMelody()
         }
@@ -1929,10 +1944,10 @@ export function sceneLevel1(k) {
       {
         draw() {
           //
-          // Only show bubble when near anti-hero or playing melody
+          // Show bubble only while the demo melody plays or briefly after it.
           //
-          if (!gameState.isNearAntiHero && !gameState.isPlayingMelody) return
-          if (gameState.antiHeroActive) return  // Hide after activation
+          if (!gameState.notesBubbleVisible && !gameState.isPlayingMelody) return
+          if (gameState.antiHeroActive) return
           
           let bubbleX = antiHeroInst.character.pos.x
           const bubbleY = antiHeroInst.character.pos.y - 100

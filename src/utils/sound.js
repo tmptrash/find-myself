@@ -458,6 +458,8 @@ export function playLandSound(instance, currentLevel = null) {
   } else if (currentLevel === 'level-touch.2') {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
+  } else if (currentLevel === 'level-touch.3') {
+    playWoodKnockLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -984,7 +986,7 @@ export function playStepSound(instance, currentLevel = null) {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
   } else if (currentLevel === 'level-touch.3') {
-    playSnowCrunchStep(instance)
+    playWoodKnockStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -3003,52 +3005,50 @@ export function playBugStepSound(inst) {
 }
 
 /**
- * Play monster leg step sound - soft, creepy scuttling sound
+ * Play monster leg step sound - short metallic clang, louder when closer to the hero
  * @param {Object} instance - Sound instance from create()
+ * @param {number} [volumeScale=1] - 0..1 proximity multiplier
  */
-export function playMonsterStepSound(instance) {
+export function playMonsterStepSound(instance, volumeScale = 1) {
+  if (volumeScale <= 0.01) return
   const now = instance.audioContext.currentTime
-  const duration = 0.06
+  const duration = 0.055
+  const peak = 0.42 * volumeScale
+  const osc = instance.audioContext.createOscillator()
+  osc.type = 'triangle'
+  osc.frequency.setValueAtTime(2200 + Math.random() * 500, now)
+  osc.frequency.exponentialRampToValueAtTime(680, now + duration)
+  const toneGain = instance.audioContext.createGain()
+  toneGain.gain.setValueAtTime(0.001, now)
+  toneGain.gain.linearRampToValueAtTime(peak, now + 0.004)
+  toneGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(toneGain)
+  toneGain.connect(instance.stepGain)
+  osc.start(now)
+  osc.stop(now + duration + 0.01)
   //
-  // Create subtle white noise for scuttling texture
+  // Metallic click transient
   //
-  const bufferSize = instance.audioContext.sampleRate * duration
+  const bufferSize = Math.floor(instance.audioContext.sampleRate * 0.03)
   const buffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
   const data = buffer.getChannelData(0)
-  //
-  // Fill with soft white noise
-  //
   for (let i = 0; i < bufferSize; i++) {
-    const progress = i / bufferSize
-    const envelopeShape = Math.exp(-progress * 12)
-    data[i] = (Math.random() * 2 - 1) * envelopeShape * 0.3
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufferSize) * 36)
   }
-  
   const noise = instance.audioContext.createBufferSource()
   noise.buffer = buffer
-  //
-  // Low-pass filter for muffled, creepy sound
-  //
   const filter = instance.audioContext.createBiquadFilter()
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(800, now)
-  filter.Q.value = 2
-  //
-  // Maximum volume envelope
-  //
-  const envelope = instance.audioContext.createGain()
-  envelope.gain.setValueAtTime(0, now)
-  envelope.gain.linearRampToValueAtTime(2.5, now + 0.005)
-  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  //
-  // Connect chain
-  //
+  filter.type = 'bandpass'
+  filter.frequency.value = 3200
+  filter.Q.value = 1.4
+  const noiseGain = instance.audioContext.createGain()
+  noiseGain.gain.setValueAtTime(peak * 0.65, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03)
   noise.connect(filter)
-  filter.connect(envelope)
-  envelope.connect(instance.audioContext.destination)
-  
+  filter.connect(noiseGain)
+  noiseGain.connect(instance.stepGain)
   noise.start(now)
-  noise.stop(now + duration)
+  noise.stop(now + 0.035)
 }
 /**
  * Play clock destruction sound — ominous creak and splintering crack

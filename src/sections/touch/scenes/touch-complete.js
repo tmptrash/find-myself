@@ -3,7 +3,7 @@ import { setSectionCompleted, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
 const FINAL_MESSAGE = "You learned to reach out — to touch and be touched.\n\nNow you feel the difference between contact\n\nand connection with yourself."
-const MESSAGE_HOLD_DURATION = 5.0
+const MESSAGE_HOLD_DURATION = 7.0
 const FADE_IN_DURATION = 1.0
 const FADE_OUT_DURATION = 1.5
 //

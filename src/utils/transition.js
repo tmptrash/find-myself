@@ -252,7 +252,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     postAssetPreparePhase,
     assetPrepareDone: !needsEarlyAssetLoad,
     assetPreparePromise: null,
-    tooltipSuppressed: false
+    tooltipSuppressed: false,
+    entered: false
   }
   //
   // Hide all in-game tooltips for the entire pre-level transition. We also
@@ -294,7 +295,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   const finalizeTransitionToLevel = (afterGo) => {
+    if (inst.entered) return
     const enter = () => {
+      if (inst.entered) return
+      inst.entered = true
       //
       // Re-enable tooltips now that we are entering the level
       //

@@ -2,6 +2,7 @@ import { CFG } from '../cfg.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import { get, set } from '../../../utils/progress.js'
+import { parseHex } from '../../../utils/helper.js'
 //
 // Time platform configuration
 //
@@ -9,6 +10,16 @@ const FONT_SIZE = 48
 const TIMER_DURATION = 3  // 3 seconds
 const PLATFORM_WIDTH = 140
 const PLATFORM_HEIGHT = 48
+//
+// Shake effect before platform disappears
+//
+const SHAKE_THRESHOLD = 1.2   // Start shaking this many seconds before disappearance
+const SHAKE_AMPLITUDE = 3      // Max horizontal pixel offset
+//
+// Color used for staticTime platforms (fixed-time, always safe to jump on).
+// Matches the forest green of StaticTimePlatform to signal safety.
+//
+const STATIC_PLATFORM_COLOR_HEX = '#3A8A4A'
 //
 // Global variable to prevent multiple heart losses in same frame
 //
@@ -174,7 +185,8 @@ export function create(config) {
     fadeTimer: 0,  // Timer for fade animation
     fadeDuration: 4.0 + Math.random() * 2.0,  // Longer duration for smoother fade
     fadeDirection: 1,  // 1 for brighter, -1 for darker
-    lastSecondsValue: null  // Track last seconds value for snap opacity change
+    lastSecondsValue: null,  // Track last seconds value for snap opacity change
+    shakeOffset: 0        // Current horizontal shake displacement
   }
   //
   // Set initial color based on hostility (for enableColorChange platforms)
@@ -182,7 +194,17 @@ export function create(config) {
   if (enableColorChange && persistent) {
     updatePlatformColorByHostility(inst, initialText)
   }
-  
+  //
+  // staticTime platforms (fixed timer, always safe) are rendered in forest green
+  // so players can immediately identify safe platforms.
+  //
+  if (staticTime) {
+    const [sr, sg, sb] = parseHex(STATIC_PLATFORM_COLOR_HEX)
+    const staticColor = k.rgb(sr, sg, sb)
+    timerText.color = staticColor
+    inst.currentPlatformColor = staticColor
+    outlineTexts.forEach(t => { t.color = k.rgb(0, 0, 0) })
+  }
   return inst
 }
 
@@ -231,10 +253,17 @@ export function onUpdate(inst) {
         }
       })
       //
-      // Update color for static platforms too (enableColorChange platforms only)
+      // Non-static platforms with enableColorChange follow the hostility color logic.
+      // staticTime platforms skip this and always stay green (applied below).
       //
-      if (inst.enableColorChange) {
+      if (inst.enableColorChange && !inst.staticTime) {
         updatePlatformColorByHostility(inst, staticText)
+      }
+      //
+      // Enforce green last so nothing above can overwrite it for staticTime platforms.
+      //
+      if (inst.staticTime && inst.currentPlatformColor) {
+        inst.timerText.color = inst.currentPlatformColor
       }
     } else {
       inst.updateTimer += inst.k.dt()
@@ -294,7 +323,7 @@ export function onUpdate(inst) {
       //
       // Detect landing: hero was in air (not on this platform) and now lands on this platform
       //
-      if (inst.enableColorChange && !inst.falling && isNewLanding) {
+      if (inst.enableColorChange && !inst.falling && !inst.staticTime && isNewLanding) {
         //
         // Increment landing count and make platform more transparent
         //
@@ -705,6 +734,10 @@ export function onUpdate(inst) {
       inst.lastSecondsValue = seconds
     }
     //
+    // Shake + creak when countdown is nearly expired
+    //
+    updatePlatformShake(inst)
+    //
     // Destroy when timer reaches zero
     //
     if (inst.timeRemaining <= 0) {
@@ -1026,4 +1059,34 @@ export function updatePlatformColorByHostility(inst, text) {
   inst.timerText.color = targetColor
   inst.currentPlatformColor = targetColor
 }
-
+//
+// Applies horizontal shake to platform text elements when countdown is nearly zero.
+// No ambient creak during countdown — a single snap fires at the exact moment
+// of disappearance (inside destroy()) so the audio event aligns with the visual.
+//
+function updatePlatformShake(inst) {
+  if (inst.timeRemaining > SHAKE_THRESHOLD) {
+    //
+    // Reset shake offset once platform is safe again (reactivated)
+    //
+    if (inst.shakeOffset !== 0) {
+      inst.timerText.pos.x = inst.timerText.pos.x - inst.shakeOffset
+      inst.outlineTexts.forEach(t => { t.pos.x = t.pos.x - inst.shakeOffset })
+      inst.shakeOffset = 0
+    }
+    return
+  }
+  //
+  // Intensity increases as time runs out (0 at threshold, 1 at zero)
+  //
+  const progress = 1 - inst.timeRemaining / SHAKE_THRESHOLD
+  const amplitude = SHAKE_AMPLITUDE * progress
+  //
+  // Generate new shake offset each frame
+  //
+  const newOffset = (Math.random() * 2 - 1) * amplitude
+  const delta = newOffset - inst.shakeOffset
+  inst.shakeOffset = newOffset
+  inst.timerText.pos.x += delta
+  inst.outlineTexts.forEach(t => { t.pos.x += delta })
+}

@@ -225,6 +225,17 @@ function getSectionPanelColors(levelName) {
     const [borderR, borderG, borderB] = parseHex(TOUCH_PANEL_BORDER_HEX)
     return { fillR, fillG, fillB, textR, textG, textB, borderR, borderG, borderB }
   }
+  //
+  // Time section: orange border and text to match the life-deduction dialog
+  // (textColorRgb: { r: 255, g: 140, b: 0 } = #FF8C00 hero orange)
+  //
+  if (levelName.includes('time')) {
+    return {
+      fillR: PANEL_FILL_R, fillG: PANEL_FILL_G, fillB: PANEL_FILL_B,
+      textR: 255, textG: 140, textB: 0,
+      borderR: 255, borderG: 140, borderB: 0
+    }
+  }
   return { fillR: PANEL_FILL_R, fillG: PANEL_FILL_G, fillB: PANEL_FILL_B, textR: null, textG: null, textB: null, borderR: PANEL_BORDER_R, borderG: PANEL_BORDER_G, borderB: PANEL_BORDER_B }
 }
 

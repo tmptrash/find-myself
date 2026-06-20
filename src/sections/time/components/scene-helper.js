@@ -47,9 +47,10 @@ const SUN_RAY_GLOW_R_MIN = 3
 const SUN_RAY_GLOW_R_MAX = 6
 const SUN_RAY_MAX_COUNT = 60
 //
-// Floating background MM:SS phrases — above city bg, below playfield
+// Floating background MM:SS phrases — above night overlay (15.51) but below
+// platforms (16), so they're always readable regardless of day/night cycle.
 //
-const FLOATING_PHRASE_Z = CFG.visual.zIndex.background + 3
+const FLOATING_PHRASE_Z = 15.53
 //
 // Rays emit only during first SUN_RAY_HOVER_DURATION seconds of hover; not at night
 //
@@ -211,8 +212,9 @@ export function initScene(config) {
     showGameClock = false,
     //
     // Semi-transparent countdown strings drifting on the background
+    // (disabled — removed per visual cleanup; sand particles also removed)
     //
-    showFloatingPhrases = true,
+    showFloatingPhrases = false,
     sceneBackdropHex = CFG.visual.colors.platform
   } = config
   //
@@ -342,6 +344,10 @@ export function initScene(config) {
   // to the day/night cycle (full day = CYCLE_DURATION = 60 s of real time).
   //
   showGameClock && addGameClock(k, sideWallWidth, topPlatformHeight)
+  //
+  // Daytime dust motes floating near the bottom of the game area
+  //
+  createDustParticles(k, k.height() - bottomPlatformHeight)
   return { sound, hero, antiHero, levelIndicator }
 }
 
@@ -357,11 +363,16 @@ export function initScene(config) {
 function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null) {
   const platformRgb = getColor(k, color)?.color
   //
-  // Top platform (starts from y=0, extends down by topHeight)
+  // Extra vertical padding added to top and bottom platforms so that camera
+  // shake (k.shake) cannot reveal the canvas background through the edges.
+  //
+  const SHAKE_BUFFER = 40
+  //
+  // Top platform (starts ABOVE y=0 by SHAKE_BUFFER, extends down by topHeight)
   //
   k.add([
-    k.rect(k.width(), topHeight),
-    k.pos(0, 0),  // Start from top of screen (y = 0)
+    k.rect(k.width(), topHeight + SHAKE_BUFFER),
+    k.pos(0, -SHAKE_BUFFER),
     k.area(),
     k.body({ isStatic: true }),
     k.color(platformRgb.r, platformRgb.g, platformRgb.b),
@@ -374,14 +385,14 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
   //
   if (gaps && gaps.length > 0) {
     //
-    // Create platform segments with gaps
+    // Create platform segments with gaps (extended downward by SHAKE_BUFFER)
     //
     let currentX = 0
     gaps.forEach(gap => {
       const segmentWidth = gap.x - currentX
       if (segmentWidth > 0) {
         k.add([
-          k.rect(segmentWidth, bottomHeight),
+          k.rect(segmentWidth, bottomHeight + SHAKE_BUFFER),
           k.pos(currentX, k.height() - bottomHeight),
           k.area(),
           k.body({ isStatic: true }),
@@ -392,14 +403,13 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
       }
       currentX = gap.x + gap.width
     })
-    
     //
     // Final segment after last gap
     //
     const finalWidth = k.width() - currentX
     if (finalWidth > 0) {
       k.add([
-        k.rect(finalWidth, bottomHeight),
+        k.rect(finalWidth, bottomHeight + SHAKE_BUFFER),
         k.pos(currentX, k.height() - bottomHeight),
         k.area(),
         k.body({ isStatic: true }),
@@ -410,13 +420,13 @@ function addPlatforms(k, color, bottomHeight, topHeight, sideWidth, gaps = null)
     }
   } else {
     //
-    // Solid bottom platform (extends up from bottom of screen)
-    // For level-time.0, make it reach to the very bottom
+    // Solid bottom platform — extends BELOW the screen edge by SHAKE_BUFFER so
+    // camera shake cannot reveal the canvas background at the bottom.
     //
-    const bottomY = k.height() - bottomHeight  // Position so platform extends to k.height()
+    const bottomY = k.height() - bottomHeight
     k.add([
-      k.rect(k.width(), bottomHeight),
-      k.pos(0, bottomY),  // Start from calculated Y, extends down to k.height()
+      k.rect(k.width(), bottomHeight + SHAKE_BUFFER),
+      k.pos(0, bottomY),
       k.area(),
       k.body({ isStatic: true }),
       k.color(platformRgb.r, platformRgb.g, platformRgb.b),
@@ -655,4 +665,95 @@ function addGameClock(k, sideWallWidth, topPlatformHeight) {
       }
     }
   ])
+}
+//
+// Dust particle constants
+//
+const DUST_COUNT = 60
+const DUST_DAY_MAX_DARKNESS = 0.25
+const DUST_HERO_HEIGHT_ZONES = 2
+const DUST_HERO_HEIGHT_PX = 55
+const DUST_ZONE_HEIGHT = DUST_HERO_HEIGHT_PX * DUST_HERO_HEIGHT_ZONES
+const DUST_PIXEL_SIZE = 2
+const DUST_SPEED_MIN = 0.3
+const DUST_SPEED_MAX = 1.2
+const DUST_DRIFT_MIN = -0.15
+const DUST_DRIFT_MAX = 0.15
+const DUST_FADE_SPEED = 0.004
+const DUST_Z = 15.55
+//
+// Creates a subtle dust particle system near the bottom of the game area.
+// Particles are visible only during daytime and stay within 2 hero heights of the floor.
+//
+function createDustParticles(k, floorY) {
+  const screenWidth = k.width()
+  const dustTop = floorY - DUST_ZONE_HEIGHT
+  const dustBottom = floorY
+  //
+  // Initialise particles scattered across the dust zone
+  //
+  const particles = []
+  for (let i = 0; i < DUST_COUNT; i++) {
+    particles.push(spawnDust(screenWidth, dustTop, dustBottom))
+  }
+  const dustInst = { k, particles, dustTop, dustBottom, screenWidth }
+  k.add([
+    k.z(DUST_Z),
+    k.fixed(),
+    {
+      draw() { onDrawDust(dustInst) },
+      update() { onUpdateDust(dustInst) }
+    }
+  ])
+}
+//
+// Draws all visible dust motes during daytime
+//
+function onDrawDust(inst) {
+  if (DayNight.getDarkness() > DUST_DAY_MAX_DARKNESS) return
+  const dustColor = inst.k.Color.fromHex('#e8dcc8')
+  for (const p of inst.particles) {
+    inst.k.drawRect({
+      pos: inst.k.vec2(p.x, p.y),
+      width: DUST_PIXEL_SIZE,
+      height: DUST_PIXEL_SIZE,
+      color: dustColor,
+      opacity: p.opacity
+    })
+  }
+}
+//
+// Moves dust particles upward and sideways; respawns them when out of zone
+//
+function onUpdateDust(inst) {
+  if (DayNight.getDarkness() > DUST_DAY_MAX_DARKNESS) return
+  const dt = inst.k.dt()
+  for (const p of inst.particles) {
+    p.y -= p.vy * dt
+    p.x += p.vx * dt
+    p.opacity += p.dOpacity * dt
+    //
+    // Respawn when out of zone or fully transparent/opaque
+    //
+    if (
+      p.y < inst.dustTop || p.y > inst.dustBottom ||
+      p.opacity <= 0 || p.opacity > 0.55 ||
+      p.x < 0 || p.x > inst.screenWidth
+    ) {
+      Object.assign(p, spawnDust(inst.screenWidth, inst.dustTop, inst.dustBottom))
+    }
+  }
+}
+//
+// Creates a single dust particle with randomised position and motion
+//
+function spawnDust(screenWidth, dustTop, dustBottom) {
+  return {
+    x: Math.random() * screenWidth,
+    y: dustTop + Math.random() * (dustBottom - dustTop),
+    vy: DUST_SPEED_MIN + Math.random() * (DUST_SPEED_MAX - DUST_SPEED_MIN),
+    vx: (DUST_DRIFT_MIN + Math.random() * (DUST_DRIFT_MAX - DUST_DRIFT_MIN)) * 60,
+    opacity: 0.05 + Math.random() * 0.35,
+    dOpacity: (Math.random() < 0.5 ? 1 : -1) * DUST_FADE_SPEED * (1 + Math.random())
+  }
 }

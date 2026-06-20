@@ -110,6 +110,12 @@ const NIGHT_DARKNESS_THRESHOLD = 0.45
 const NIGHT_MUSIC_TRANSITION_SPEED = 1.5
 const NIGHT_CRICKET_INTERVAL_MIN = 1.5
 const NIGHT_CRICKET_INTERVAL_MAX = 4.0
+const NIGHT_CAR_HORN_INTERVAL_MIN = 8
+const NIGHT_CAR_HORN_INTERVAL_MAX = 22
+//
+// Screen shake when second floor unlocks
+//
+const SECOND_FLOOR_REVEAL_SHAKE = 6
 //
 // Level geometry - two platforms connected by stairs
 //
@@ -164,7 +170,8 @@ export function sceneLevel1(k) {
     const nightMusicState = {
       k,
       sound,
-      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN),
+      carHornTimer: NIGHT_CAR_HORN_INTERVAL_MIN + Math.random() * (NIGHT_CAR_HORN_INTERVAL_MAX - NIGHT_CAR_HORN_INTERVAL_MIN)
     }
     k.onUpdate(() => onUpdateNightMusic(nightMusicState))
     //
@@ -352,10 +359,6 @@ export function sceneLevel1(k) {
       levelIndicator
     })
     //
-    // Trap 2: clock platform slides right when hero approaches, then returns.
-    // Activates once hero score reaches the threshold and persists across visits.
-    //
-    //
     // Life deduction: show hint at level start if lifeScore >= threshold
     // 5th platform only falls if the hint was shown (current or previous visit)
     //
@@ -372,7 +375,7 @@ export function sceneLevel1(k) {
     }
     showTrap && set(LIFE_DEDUCT_GRACE_FLAG, false)
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled || trapConditionsMet ? 1 : 0)
+    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
     const sceneLock = { locked: showTrap }
     if (showTrap) {
       hero.controlsDisabled = true
@@ -385,7 +388,7 @@ export function sceneLevel1(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
         sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B },
-        textColorRgb: { r: 255, g: 220, b: 50 }
+        textColorRgb: { r: 255, g: 140, b: 0 }
       })
     }
     //
@@ -622,11 +625,12 @@ export function sceneLevel1(k) {
         //
         if (lastLowerPlatform.platform.isColliding(hero.character) && hero.character.isGrounded()) {
           //
-          // Show all upper platforms
+          // Show all upper platforms and shake screen to signal the new floor
           //
           upperPlatforms.forEach(platform => {
             TimePlatform.show(platform)
           })
+          k.shake(SECOND_FLOOR_REVEAL_SHAKE)
           upperPlatformsShown = true
         }
       }
@@ -815,25 +819,28 @@ export function sceneLevel1(k) {
  */
 function createLevelPlatforms(k) {
   const backgroundPlatformColor = k.Color.fromHex(CFG.visual.colors.platform)
-  
   //
-  // Top platform (ceiling for entire level)
+  // Extra buffer so that camera shake cannot reveal the canvas background.
+  // Same value used in scene-helper.js addPlatforms for level0.
+  //
+  const SHAKE_BUFFER = 40
+  //
+  // Top platform (extends ABOVE y=0 by SHAKE_BUFFER)
   //
   k.add([
-    k.rect(k.width(), PLATFORM_TOP_HEIGHT),
-    k.pos(0, 0),
+    k.rect(k.width(), PLATFORM_TOP_HEIGHT + SHAKE_BUFFER),
+    k.pos(0, -SHAKE_BUFFER),
     k.area(),
     k.body({ isStatic: true }),
     k.color(backgroundPlatformColor),
     k.z(CFG.visual.zIndex.platforms),
     CFG.game.platformName
   ])
-  
   //
-  // Bottom platform (floor for entire level)
+  // Bottom platform (extends BELOW k.height() by SHAKE_BUFFER)
   //
   k.add([
-    k.rect(k.width(), PLATFORM_BOTTOM_HEIGHT),
+    k.rect(k.width(), PLATFORM_BOTTOM_HEIGHT + SHAKE_BUFFER),
     k.pos(0, k.height() - PLATFORM_BOTTOM_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
@@ -1275,7 +1282,7 @@ function createBlurredCarSprite({ bodyWidth, bodyHeight, roofWidth, roofHeight, 
 // once darkness rises above the threshold and restores them smoothly at dawn.
 // Also fires cricket chirps at random intervals during night.
 // Uses null-guards since timeSectionMusic handles are populated asynchronously
-// by startTimeSectionMusic / startClockMusic after their internal delays.
+// by startTimeSectionMusic after its internal delay.
 //
 function onUpdateNightMusic(inst) {
   const darkness = getDarkness()
@@ -1310,5 +1317,13 @@ function onUpdateNightMusic(inst) {
     if (timeSectionMusic.time) {
       timeSectionMusic.time.volume = Math.min(CFG.audio.backgroundMusic.time, timeSectionMusic.time.volume + fadeStep * CFG.audio.backgroundMusic.time)
     }
+  }
+  //
+  // Car horns play both day and night (city always has traffic)
+  //
+  inst.carHornTimer -= dt
+  if (inst.carHornTimer <= 0) {
+    Sound.playCarHornSound(inst.sound)
+    inst.carHornTimer = NIGHT_CAR_HORN_INTERVAL_MIN + Math.random() * (NIGHT_CAR_HORN_INTERVAL_MAX - NIGHT_CAR_HORN_INTERVAL_MIN)
   }
 }

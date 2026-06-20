@@ -455,6 +455,17 @@ const ICICLE_WOBBLE_INTERVAL_MAX = 6
 const ICICLE_WOBBLE_DURATION = 1.2
 const ICICLE_WOBBLE_AMPLITUDE = 3
 //
+// Tag added to log platforms (CORRIDOR_PLATFORMS) for direct wood-sound collision detection.
+// Hero.onCollide with this tag guarantees wood sound even if the generic playLandSound path
+// does not trigger (e.g. audio context timing edge-cases).
+//
+const LOG_PLATFORM_TAG = 'log-platform'
+//
+// Surface tracker: threshold to decide if hero is on the floor vs elevated wood platform.
+// Same role as SURFACE_FLOOR_THRESHOLD in level2.js.
+//
+const L3_SURFACE_FLOOR_THRESHOLD = 80
+//
 // Log platform click wobble (wooden creak on mouse click)
 //
 const LOG_WOBBLE_DURATION = 0.6
@@ -849,6 +860,16 @@ export function sceneLevel3(k) {
       targetVolume: CFG.audio.backgroundMusic.time
     }
     k.onUpdate(() => onUpdateTouchL3MusicFade(heroInst, touchMusicFade))
+    //
+    // Track surface under hero: wood (elevated log platforms) vs snow (floor).
+    // Mirrors the level2 _l2Surface mechanism so sound.js picks the right land sfx.
+    //
+    k.onUpdate(() => onUpdateL3SurfaceTracker(heroInst, sound))
+    //
+    // Direct wood-sound handler: fires when hero first collides with a log platform.
+    // This guarantees the knock sound plays regardless of audio-context timing.
+    //
+    heroInst.character.onCollide(LOG_PLATFORM_TAG, () => onHeroLogPlatformLand(heroInst, sound))
     //
     // Lock hero controls while life deduction animation plays
     //
@@ -2172,7 +2193,8 @@ function createCorridorPlatforms(k) {
       k.body({ isStatic: true }),
       k.opacity(0),
       k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
+      CFG.game.platformName,
+      LOG_PLATFORM_TAG
     ])
   })
 }
@@ -4375,6 +4397,34 @@ function onUpdateL3Fireflies(k, fireflies, minY, maxY) {
 }
 //
 // Draws pulsing amber fireflies above the darkness overlay.
+//
+//
+// Sets sound._l2Surface based on whether the hero is near the floor or on an
+// elevated log platform. Uses the same _l2Surface key as level2 so that
+// sound.js playLandSound() automatically picks wood vs snow SFX.
+// Also tracks whether hero is airborne so onHeroLogPlatformLand knows it's a real landing.
+//
+function onUpdateL3SurfaceTracker(heroInst, sound) {
+  if (!heroInst?.character?.exists?.()) return
+  const hy = heroInst.character.pos.y
+  const distFromFloor = Math.abs(hy - FLOOR_Y)
+  sound._l2Surface = distFromFloor < L3_SURFACE_FLOOR_THRESHOLD ? 'snow' : 'wood'
+  //
+  // Mark hero as airborne so the log-platform collision handler knows it is a real landing
+  //
+  if (!heroInst.character.isGrounded()) {
+    heroInst.wasInAirBeforeLog = true
+  }
+}
+//
+// Fires on the first frame hero collides with a log platform (transition from air).
+// Directly plays the wood knock sound — bypasses _l2Surface timing edge-cases.
+//
+function onHeroLogPlatformLand(heroInst, sound) {
+  if (!heroInst.wasInAirBeforeLog) return
+  heroInst.wasInAirBeforeLog = false
+  sound && Sound.playSnowCrunchLand(sound)
+}
 //
 function drawL3Fireflies(k, fireflies) {
   const color = k.rgb(L3_FIREFLY_COLOR_R, L3_FIREFLY_COLOR_G, L3_FIREFLY_COLOR_B)

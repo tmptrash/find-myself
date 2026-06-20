@@ -1189,6 +1189,16 @@ function onUpdate(inst) {
 
   if (!isGrounded) {
     //
+    // Cancel any squash that was accidentally started while airborne (e.g. when
+    // standing on a dynamic/floating platform that Kaplay doesn't mark as grounded).
+    // Without this, the squash state persists until the hero next touches solid
+    // ground, causing an involuntary jump on landing.
+    //
+    if (inst.isSquashing) {
+      inst.isSquashing = false
+      inst.squashTimer = 0
+    }
+    //
     // Jumping - update animation based on velocity (position in jump arc)
     //
     const prefix = inst.spritePrefix || inst.type

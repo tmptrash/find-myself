@@ -7,7 +7,7 @@ const PLATFORM_WIDTH = 100
 const PLATFORM_HEIGHT = 36
 const COUNTDOWN_START = 300  // 5 minutes in seconds
 const FIXED_OPACITY = 0.25  // Very subtle, barely visible
-const FIXED_COLOR = "#425888"  // Steel blue — matches floating phrase palette
+const FIXED_COLOR = "#8a8896"  // Muted steel gray — neutral, decorative role only
 
 /**
  * Creates a static time platform with running timer

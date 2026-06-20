@@ -16,6 +16,7 @@ import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
+import * as PixelClouds from '../../../components/pixel-clouds.js'
 //
 //
 const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
@@ -44,6 +45,24 @@ const NIGHT_DARKNESS_THRESHOLD = 0.45
 const NIGHT_MUSIC_TRANSITION_SPEED = 1.5
 const NIGHT_CRICKET_INTERVAL_MIN = 1.5
 const NIGHT_CRICKET_INTERVAL_MAX = 4.0
+const NIGHT_CAR_HORN_INTERVAL_MIN = 8
+const NIGHT_CAR_HORN_INTERVAL_MAX = 22
+//
+// Background clouds — 8 clouds at fully random X positions within the play area
+//
+const CLOUD_COUNT = 8
+const CLOUD_Z = 15.52
+const CLOUD_SIZE_MIN = 45
+const CLOUD_SIZE_MAX = 110
+const CLOUD_LAYERS_MIN = 8
+const CLOUD_LAYERS_MAX = 16
+const CLOUD_Y_OFFSET_MIN = 20
+const CLOUD_Y_OFFSET_MAX = 150
+const CLOUD_SCHEMES = [
+  { baseColor: '#f0f0f0', shadowColor: '#a0a0b8', highlightColor: '#ffffff' },
+  { baseColor: '#606060', shadowColor: '#202030', highlightColor: '#909090' },
+  { baseColor: '#405070', shadowColor: '#151828', highlightColor: '#708090' }
+]
 //
 // TIME indicator tooltip
 //
@@ -83,7 +102,7 @@ const HERO_TOOLTIP_Y_OFFSET = -60
 //
 // Bonus hero — hidden platform shaped as 00:00, top-left of rightmost platform
 //
-const BONUS_PLATFORM_X = 1020
+const BONUS_PLATFORM_X = 920
 const BONUS_PLATFORM_Y = 555
 //
 // Collision width is wider than the visual "00:00" text so the hero can reliably
@@ -155,13 +174,8 @@ const BIRD_DRAW_Z = 18
 export function sceneLevel0(k) {
   k.scene("level-time.0", () => {
     //
-    // Reset scores when entering from a different section.
-    // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
+    // Track current section for music routing; scores carry over from touch unchanged.
     //
-    if (get('lastSection', null) !== 'time') {
-      set('heroScore', 0)
-      set('lifeScore', 0)
-    }
     set('lastSection', 'time')
     //
     // Save progress immediately when entering this level
@@ -178,6 +192,16 @@ export function sceneLevel0(k) {
     //
     startTimeSectionMusic(k)
     //
+    // Restore kids volume if it was muted during a previous night cycle.
+    // Happens when the scene restarts (hero dies) while music was faded out at night
+    // but the day/night cycle has since returned to daytime.
+    //
+    k.wait(0.2, () => {
+      if (timeSectionMusic.kids && getDarkness() < NIGHT_DARKNESS_THRESHOLD) {
+        timeSectionMusic.kids.volume = CFG.audio.backgroundMusic.kids
+      }
+    })
+    //
     // Start clock.mp3 (stored in timeSectionMusic for proper transition stopping)
     //
     startClockMusic(k)
@@ -187,7 +211,8 @@ export function sceneLevel0(k) {
     const nightMusicState = {
       k,
       sound,
-      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN)
+      cricketTimer: NIGHT_CRICKET_INTERVAL_MIN + Math.random() * (NIGHT_CRICKET_INTERVAL_MAX - NIGHT_CRICKET_INTERVAL_MIN),
+      carHornTimer: NIGHT_CAR_HORN_INTERVAL_MIN + Math.random() * (NIGHT_CAR_HORN_INTERVAL_MAX - NIGHT_CAR_HORN_INTERVAL_MIN)
     }
     k.onUpdate(() => onUpdateNightMusic(nightMusicState))
     //
@@ -330,6 +355,10 @@ export function sceneLevel0(k) {
     //
     createRoundedCorners(k)
     //
+    // Sparse decorative clouds (very rare — 3 total across the level)
+    //
+    createSparseClouds(k)
+    //
     // Create ground stripe above bottom platform
     //
     createGroundStripe(k)
@@ -357,6 +386,10 @@ export function sceneLevel0(k) {
       crowTooltipText: 'at least he has arms'
     })
     k.onSceneLeave(() => level0Ambience.cleanup())
+    //
+    // Force-refresh HUD life score display (guards against init-order edge cases)
+    //
+    levelIndicator.updateLifeScore(get('lifeScore', 0))
     //
     // Spawn hero immediately
     //
@@ -479,7 +512,7 @@ export function sceneLevel0(k) {
       set(LIFE_DEDUCT_GRACE_FLAG, false)
     }
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled || trapConditionsMet ? 1 : 0)
+    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
     const sceneLock = { locked: showTrap }
     if (showTrap) {
       hero.controlsDisabled = true
@@ -492,7 +525,7 @@ export function sceneLevel0(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
         sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B },
-        textColorRgb: { r: 255, g: 220, b: 50 }
+        textColorRgb: { r: 255, g: 140, b: 0 }
       })
     }
     let platform6HasActivated = !trapEnabled
@@ -1124,6 +1157,123 @@ function drawBirds(k, birds) {
   }
 }
 //
+// Creates decorative pixel clouds at fully random positions in the top area.
+// Clouds are pre-baked on one canvas and shown as a single sprite.
+//
+function createSparseClouds(k) {
+  const screenWidth = k.width()
+  const cloudY = PLATFORM_TOP_HEIGHT + 70
+  const playAreaWidth = screenWidth - PLATFORM_SIDE_WIDTH * 2
+  const canvas = document.createElement('canvas')
+  canvas.width = screenWidth
+  canvas.height = 350
+  const ctx = canvas.getContext('2d')
+  //
+  // Draw each cloud at a fully random X position within the play area
+  //
+  for (let i = 0; i < CLOUD_COUNT; i++) {
+    const x = PLATFORM_SIDE_WIDTH + Math.random() * playAreaWidth
+    const yOffset = CLOUD_Y_OFFSET_MIN + Math.random() * (CLOUD_Y_OFFSET_MAX - CLOUD_Y_OFFSET_MIN)
+    const size = CLOUD_SIZE_MIN + Math.random() * (CLOUD_SIZE_MAX - CLOUD_SIZE_MIN)
+    const layers = CLOUD_LAYERS_MIN + Math.floor(Math.random() * (CLOUD_LAYERS_MAX - CLOUD_LAYERS_MIN))
+    const scheme = CLOUD_SCHEMES[Math.floor(Math.random() * CLOUD_SCHEMES.length)]
+    const lightSide = Math.random() > 0.5 ? 'left' : 'right'
+    drawCloudOnCanvas(ctx, { x, y: yOffset, size, layers, lightSide, ...scheme, pixelSize: 2 })
+  }
+  const spriteData = canvas.toDataURL()
+  canvas.width = 0
+  canvas.height = 0
+  k.loadSprite('level0-clouds', spriteData)
+  k.add([
+    k.sprite('level0-clouds'),
+    k.pos(0, cloudY - 70),
+    k.z(CLOUD_Z),
+    k.fixed()
+  ])
+}
+//
+// Draws a single cloud using the metaball (bubble) technique onto a canvas context.
+// Mirrors the algorithm from level2.js for shared pixel-art style.
+//
+function drawCloudOnCanvas(ctx, config) {
+  const {
+    x,
+    y,
+    size = 80,
+    layers = 12,
+    lightSide = 'right',
+    baseColor = '#f0f0f0',
+    shadowColor = '#a0a0b8',
+    highlightColor = '#ffffff',
+    pixelSize = 2
+  } = config
+  const base = parseCloudHex(baseColor)
+  const shadow = parseCloudHex(shadowColor)
+  const highlight = parseCloudHex(highlightColor)
+  const cloudLayers = []
+  for (let li = 0; li < layers; li++) {
+    const depth = li / layers
+    const bubbles = []
+    const count = 3 + Math.floor(Math.random() * 5)
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const dist = Math.random() * size * 0.5
+      const radius = size * 0.15 + Math.random() * size * 0.25
+      bubbles.push({
+        x: Math.cos(angle) * dist,
+        y: Math.sin(angle) * dist * 0.6 - (depth - 0.5) * size * 0.3,
+        radius,
+        density: 0.5 + Math.random() * 0.4
+      })
+    }
+    cloudLayers.push({ bubbles, depth, lightBoost: depth * 0.6, darkness: (1 - depth) * 0.3 })
+  }
+  const half = size
+  for (const layer of cloudLayers) {
+    for (let py = -half; py <= half; py += pixelSize) {
+      for (let px = -half; px <= half; px += pixelSize) {
+        let density = 0
+        for (const b of layer.bubbles) {
+          const d = Math.sqrt((px - b.x) ** 2 + (py - b.y) ** 2)
+          if (d < b.radius) {
+            const f = 1 - d / b.radius
+            density += f * f * b.density
+          }
+        }
+        if (density <= 0.25 - layer.depth * 0.1) continue
+        density = Math.min(density, 1)
+        let lf
+        if (lightSide === 'right') lf = (px / half) * 0.5 + 0.5
+        else lf = (-px / half) * 0.5 + 0.5
+        lf = Math.max(0, Math.min(1, lf * 0.5 + density * 0.2 + layer.lightBoost - layer.darkness))
+        let r, g, b
+        if (lf > 0.65) {
+          const t = (lf - 0.65) / 0.35
+          r = Math.floor(base.r + (highlight.r - base.r) * t)
+          g = Math.floor(base.g + (highlight.g - base.g) * t)
+          b = Math.floor(base.b + (highlight.b - base.b) * t)
+        } else if (lf > 0.3) {
+          r = base.r; g = base.g; b = base.b
+        } else {
+          const t = lf / 0.3
+          r = Math.floor(shadow.r + (base.r - shadow.r) * t)
+          g = Math.floor(shadow.g + (base.g - shadow.g) * t)
+          b = Math.floor(shadow.b + (base.b - shadow.b) * t)
+        }
+        ctx.fillStyle = `rgb(${r},${g},${b})`
+        ctx.fillRect(x + px, y + py, pixelSize, pixelSize)
+      }
+    }
+  }
+}
+//
+// Converts #rrggbb hex string to { r, g, b } object (cloud rendering helper)
+//
+function parseCloudHex(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 255, g: 255, b: 255 }
+}
+//
 // Night music controller: fades the shared time-section music tracks out at dusk
 // and restores them smoothly at dawn. Also fires cricket chirps during night.
 //
@@ -1160,5 +1310,13 @@ function onUpdateNightMusic(inst) {
     if (timeSectionMusic.time) {
       timeSectionMusic.time.volume = Math.min(CFG.audio.backgroundMusic.time, timeSectionMusic.time.volume + fadeStep * CFG.audio.backgroundMusic.time)
     }
+  }
+  //
+  // Car horns play both day and night (city always has traffic)
+  //
+  inst.carHornTimer -= dt
+  if (inst.carHornTimer <= 0) {
+    Sound.playCarHornSound(inst.sound)
+    inst.carHornTimer = NIGHT_CAR_HORN_INTERVAL_MIN + Math.random() * (NIGHT_CAR_HORN_INTERVAL_MAX - NIGHT_CAR_HORN_INTERVAL_MIN)
   }
 }

@@ -866,12 +866,14 @@ function collectBonus(inst) {
   inst.miniHero.character.opacity = 0
   inst.miniHero.character.paused = true
   //
-  // Update HUD display immediately so the player sees the new score,
-  // but keep localStorage unchanged until level completion.
+  // Update HUD display AND localStorage immediately so the buy-help button
+  // can read the correct score from tryPurchaseHelp (which reads localStorage).
+  // finalizeCollection still persists on level completion as before.
   //
   const currentScore = get('heroScore', 0)
   const newScore = currentScore + BONUS_POINTS
   inst.bonusPoints = BONUS_POINTS
+  set('heroScore', newScore)
   inst.levelIndicator?.updateHeroScore?.(newScore)
   //
   // Play collection sound

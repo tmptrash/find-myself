@@ -13,6 +13,7 @@ const MAX_Y_OFFSET = 3
 const MIN_ROTATION = -3
 const MAX_ROTATION = 3
 const SPIKE_TAG = "time-spike"
+const SCREEN_SHAKE_INTENSITY = 5
 
 /**
  * Creates time spikes with digit "1"
@@ -249,7 +250,11 @@ function onSpikeHit(inst) {
   //
   Sound.stopSubtitleSound()
   //
-  // 2. Trigger death animation
+  // 2. Shake screen at the moment hero breaks into particles
+  //
+  savedK.shake(SCREEN_SHAKE_INTENSITY)
+  //
+  // 3. Trigger death animation
   //
   Hero.death(inst.hero, () => {
     //
@@ -280,6 +285,10 @@ function onSpikeHit(inst) {
       const newScore = currentScore + 1
       set('lifeScore', newScore)
       
+      //
+      // Life laughs at hero's misfortune — same sound as touch level 0
+      //
+      Sound.playLifeSound(savedK)
       if (savedLevelIndicator && savedLevelIndicator.lifeImage && savedLevelIndicator.lifeImage.sprite && savedLevelIndicator.lifeImage.sprite.exists()) {
         //
         // Update score text and remove old outline
@@ -287,10 +296,6 @@ function onSpikeHit(inst) {
         if (savedLevelIndicator.updateLifeScore) {
           savedLevelIndicator.updateLifeScore(newScore)
         }
-        //
-        // Play life sound
-        //
-        Sound.playLifeSound(savedK)
         //
         // Flash life image red aggressively (20 flashes = 1 second, faster)
         //

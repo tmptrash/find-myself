@@ -55,11 +55,13 @@ const LAMP_GLOW_R1 = 16
 const LAMP_GLOW_R2 = 9
 const LAMP_GLOW_R3 = 4
 //
-// Crow perched on first lamp shade: MP3 sound keys and call timing
+// Crow perched on first lamp shade: MP3 sound keys and call timing.
+// CROW_DAY_DARKNESS_MAX: crows only call during daytime (below this darkness level).
 //
 const CROW_SOUND_NAMES = ['crow0']
 const CROW_CALL_INTERVAL_MIN = 5.0
 const CROW_CALL_INTERVAL_MAX = 14.0
+const CROW_DAY_DARKNESS_MAX = 0.35
 const CROW_MOUTH_OPEN_DURATION = 0.55
 //
 // Small delay between sound start and visible mouth-open so they sync visually.
@@ -319,10 +321,20 @@ function onUpdateAmbience(inst) {
 
 //
 // Slow arc envelope (fault + recovery + sound) × fast multi-band flicker (real lamp)
-// Only applies to lamps with mode='flicker'; 'steady' holds max brightness; 'off' stays dark
+// Only applies to lamps with mode='flicker'; 'steady' holds max brightness; 'off' stays dark.
+// Lamps are silent and dim during daytime — they only activate at night.
+//
+const LAMP_NIGHT_MIN_DARKNESS = 0.15
 //
 function updateLampBrightness(lamp, dt, sound) {
   if (lamp.mode === 'off') {
+    lamp.brightness = 0
+    return
+  }
+  //
+  // Lamps don't flicker or emit light during daytime
+  //
+  if (getDarkness() < LAMP_NIGHT_MIN_DARKNESS) {
     lamp.brightness = 0
     return
   }
@@ -360,9 +372,9 @@ function updateLampArcEnvelope(lamp, dt, sound) {
   lamp.nextArcIn -= dt
   if (lamp.nextArcIn > 0) return
   //
-  // Play synchronized neon flicker burst (no bass thump — only electrical crackle)
+  // Play synchronized neon flicker burst only at night (lamp is visually active)
   //
-  Sound.playNeonFlickerBurst?.(sound)
+  getDarkness() >= LAMP_NIGHT_MIN_DARKNESS && Sound.playNeonFlickerBurst?.(sound)
   lamp.dimPeak = 0.035 + Math.random() * 0.055
   lamp.envelope = lamp.dimPeak
   lamp.recoveryDuration = LAMP_ARC_RECOVER_MIN + Math.random() * (LAMP_ARC_RECOVER_MAX - LAMP_ARC_RECOVER_MIN)
@@ -804,14 +816,19 @@ function onUpdateCrow(inst, dt) {
   }
   if (crow.callTimer <= 0) {
     crow.callTimer = CROW_CALL_INTERVAL_MIN + Math.random() * (CROW_CALL_INTERVAL_MAX - CROW_CALL_INTERVAL_MIN)
-    const soundName = CROW_SOUND_NAMES[crow.soundIdx % CROW_SOUND_NAMES.length]
-    crow.soundIdx++
-    inst.k.play(soundName, { volume: 0.65 })
     //
-    // Schedule mouth open slightly after sound onset for visual sync
+    // Crows are silent at night — only call during daytime
     //
-    crow.mouthOpenPending = true
-    crow.mouthOpenDelay = CROW_MOUTH_OPEN_DELAY
+    if (getDarkness() < CROW_DAY_DARKNESS_MAX) {
+      const soundName = CROW_SOUND_NAMES[crow.soundIdx % CROW_SOUND_NAMES.length]
+      crow.soundIdx++
+      inst.k.play(soundName, { volume: 0.65 })
+      //
+      // Schedule mouth open slightly after sound onset for visual sync
+      //
+      crow.mouthOpenPending = true
+      crow.mouthOpenDelay = CROW_MOUTH_OPEN_DELAY
+    }
   }
 }
 //

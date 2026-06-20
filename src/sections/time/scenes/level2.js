@@ -802,7 +802,7 @@ export function sceneLevel2(k) {
     }
     showTrap && set(LIFE_DEDUCT_GRACE_FLAG, false)
     const trapEnabled = showTrap || trapAlreadyAdded
-    levelIndicator.updateTrapCount(trapEnabled || trapConditionsMet ? 1 : 0)
+    levelIndicator.updateTrapCount(trapEnabled ? 1 : 0)
     const sceneLock = { locked: showTrap }
     if (showTrap) {
       hero.controlsDisabled = true
@@ -815,7 +815,7 @@ export function sceneLevel2(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
         sceneBgRgb: { r: TIME_LIFE_DEDUCT_BG_R, g: TIME_LIFE_DEDUCT_BG_G, b: TIME_LIFE_DEDUCT_BG_B },
-        textColorRgb: { r: 255, g: 220, b: 50 }
+        textColorRgb: { r: 255, g: 140, b: 0 }
       })
     }
     const trapIndices = trapEnabled ? [TRAP_PLATFORM_INDEX_1, TRAP_PLATFORM_INDEX_2] : []

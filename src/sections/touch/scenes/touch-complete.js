@@ -3,9 +3,11 @@ import { setSectionCompleted, set } from '../../../utils/progress.js'
 import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
 
 const FINAL_MESSAGE = "You learned to reach out — to touch and be touched.\n\nNow you feel the difference between contact\n\nand connection with yourself."
-const MESSAGE_HOLD_DURATION = 7.0
+const MESSAGE_HOLD_DURATION = 11.0
 const FADE_IN_DURATION = 1.0
 const FADE_OUT_DURATION = 1.5
+const TOUCH_END_MUSIC_PATH = 'assets/sounds/touch-end.mp3'
+const TOUCH_END_MUSIC_VOLUME = 0.7
 //
 // Touch section completion message color (brown, matches pre-level subtitle color)
 //
@@ -31,6 +33,13 @@ export function sceneTouchComplete(k) {
     //
     const sound = Sound.create()
     Sound.stopBackgroundMusic(sound)
+    //
+    // Play touch-end music using HTML Audio API (no preload needed)
+    //
+    const endMusic = new Audio(TOUCH_END_MUSIC_PATH)
+    endMusic.loop = true
+    endMusic.volume = TOUCH_END_MUSIC_VOLUME
+    endMusic.play().catch(() => {})
     //
     // Set canvas background to black
     //
@@ -64,6 +73,7 @@ export function sceneTouchComplete(k) {
     const inst = {
       k,
       messageText,
+      endMusic,
       timer: 0,
       phase: 'fade_in',
       skipped: false
@@ -119,6 +129,10 @@ function onUpdate(inst) {
 
     if (progress >= 1) {
       inst.phase = 'complete'
+      if (inst.endMusic) {
+        inst.endMusic.pause()
+        inst.endMusic.currentTime = 0
+      }
       goToMenuAfterAssets(inst.k)
     }
   }
@@ -130,5 +144,12 @@ function onUpdate(inst) {
 function skipToMenu(inst) {
   if (inst.skipped) return
   inst.skipped = true
+  //
+  // Stop the end music before going to menu
+  //
+  if (inst.endMusic) {
+    inst.endMusic.pause()
+    inst.endMusic.currentTime = 0
+  }
   goToMenuAfterAssets(inst.k)
 }

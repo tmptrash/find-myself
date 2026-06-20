@@ -80,7 +80,7 @@ export function create() {
   // Create master gain for clock ticking sound
   //
   const clockTickGain = ctx.createGain()
-  clockTickGain.gain.value = 0.4
+  clockTickGain.gain.value = 0.6
   clockTickGain.connect(ctx.destination)
   //
   // Create master gain for clock destruction sound
@@ -371,6 +371,7 @@ export function isAmbientPlaying(instance) {
  * @param {string} [currentLevel] - Current level name to determine sound type
  */
 export function playLandSound(instance, currentLevel = null) {
+  if (!instance?.audioContext || instance.audioContext.state !== 'running') return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section level 3 (monster footstep sound)
@@ -459,7 +460,7 @@ export function playLandSound(instance, currentLevel = null) {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
   } else if (currentLevel === 'level-touch.3') {
-    playWoodKnockLand(instance)
+    instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -1042,37 +1043,39 @@ export function playStepSound(instance, currentLevel = null) {
 }
 
 //
-// Touch level 2: louder icy snow crust under hero feet (noise + short tonal bite).
+// Touch levels 2 & 3: snow landing.
+// Uses the same filter sweep and duration as playSnowCrunchStep so both
+// events share identical timbre. Routes through landGain so the volume
+// is independent of the step gain channel.
 //
-function playSnowCrunchLand(instance) {
-  //
-  // Same white-noise sweep as the step sound (matching character); slightly
-  // louder and a touch longer to reflect the heavier landing impact.
-  //
+export function playSnowCrunchLand(instance) {
   const ctx = instance.audioContext
   const now = ctx.currentTime
-  const duration = 0.13
+  const duration = 0.09
   const bufferSize = Math.floor(ctx.sampleRate * duration)
   const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
   for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1
   const noiseSource = ctx.createBufferSource()
   noiseSource.buffer = noiseBuffer
+  //
+  // Same low-pass upward sweep as playSnowCrunchStep for matching timbre.
+  //
   const filter = ctx.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(380, now)
-  filter.frequency.linearRampToValueAtTime(700, now + duration)
+  filter.frequency.setValueAtTime(420, now)
+  filter.frequency.linearRampToValueAtTime(650, now + duration)
   filter.Q.value = 0.5
   const envelope = ctx.createGain()
-  const peak = CFG.audio.sfx.land * 4.8
+  const peak = CFG.audio.sfx.land * 4.2
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.015)
+  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.018)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)
   envelope.connect(instance.landGain)
   noiseSource.start(now)
-  noiseSource.stop(now + duration)
+  noiseSource.stop(now + duration + 0.002)
 }
 
 function playSnowCrunchStep(instance) {
@@ -1145,7 +1148,7 @@ function playSnowCrunchImpact(instance, destinationGain, peakAmp, duration) {
   noiseSource.stop(now + duration + 0.02)
 }
 
-function playWoodKnockLand(instance) {
+export function playWoodKnockLand(instance) {
   //
   // Dry open knock on solid wood: short decay, higher end frequency,
   // no low-pass muffling. Noise transient adds the click attack.
@@ -1462,14 +1465,20 @@ export function playDeathSound(instance) {
  * @param {Object} instance - Sound instance
  */
 /**
- * Play life sound (death sound effect)
- * @param {Object} k - Kaplay instance
+ * Play life sound (death sound effect).
+ * Uses a native HTMLAudioElement instead of k.play() so the laugh survives
+ * Kaplay scene transitions — k.go() stops Kaplay-managed sounds but never
+ * touches browser-native Audio nodes.
+ * @param {Object} _k - Kaplay instance (kept for API compatibility, not used)
  */
-export function playLifeSound(k) {
-  const lifeSound = k.play("life", {
-    volume: 0.7
-  })
-  return lifeSound
+export function playLifeSound(_k) {
+  try {
+    const audio = new Audio('./sounds/life.mp3')
+    audio.volume = 0.85
+    audio.play().catch(() => {})
+  } catch (_) {
+    _k?.play?.('life', { volume: 0.7 })
+  }
 }
 /**
  * Play victory sound (ascending bright tones)
@@ -2191,95 +2200,37 @@ export function stopClockTicking(instance) {
 function playClockTickSound(instance) {
   const { audioContext, clockTickGain } = instance
   const now = audioContext.currentTime
-  const duration = 0.12
   //
-  // Create deep mechanical clock sound (old mechanism)
-  // 1. Low-frequency thump (heavy escapement)
-  // 2. Gear grinding/friction sound
-  // 3. Mechanical rumble
+  // Muffled mechanical "tok" — bandpass noise at a low-mid frequency (~200 Hz).
+  // White noise through a tight bandpass at this frequency produces a dull thud
+  // with no ringing or brightness, like a padded clock escapement.
+  // No oscillator is used because sine/sawtooth waveforms ring and sound
+  // like a heel tap; shaped noise stays muffled and organic.
   //
-  // Heavy mechanical thump (deep and dull)
+  const DUR = 0.010
+  const bufSize = Math.ceil(audioContext.sampleRate * DUR)
+  const buf = audioContext.createBuffer(1, bufSize, audioContext.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1
+  const src = audioContext.createBufferSource()
+  src.buffer = buf
   //
-  const thump = audioContext.createOscillator()
-  const thumpEnvelope = audioContext.createGain()
-  const thumpFilter = audioContext.createBiquadFilter()
-  
-  thump.type = 'sawtooth'
-  thump.frequency.setValueAtTime(120, now)
-  thump.frequency.exponentialRampToValueAtTime(40, now + duration)
-  
-  thumpFilter.type = 'lowpass'
-  thumpFilter.frequency.setValueAtTime(300, now)
-  thumpFilter.Q.value = 0.5
-
-  thumpEnvelope.gain.setValueAtTime(0.001, now)
-  thumpEnvelope.gain.exponentialRampToValueAtTime(0.5, now + 0.005)
-  thumpEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  // Bandpass centered at 180-240 Hz — low enough to sound heavy and padded,
+  // tight Q to suppress both high-frequency click and sub-bass rumble.
   //
-  // Gear grinding (dull friction sound)
-  //
-  const grind = audioContext.createOscillator()
-  const grindEnvelope = audioContext.createGain()
-  const grindFilter = audioContext.createBiquadFilter()
-  
-  grind.type = 'sawtooth'
-  grind.frequency.setValueAtTime(280, now)
-  grind.frequency.linearRampToValueAtTime(240, now + duration)
-  
-  grindFilter.type = 'lowpass'
-  grindFilter.frequency.setValueAtTime(600, now)
-  grindFilter.Q.value = 1
-
-  grindEnvelope.gain.setValueAtTime(0.001, now + 0.003)
-  grindEnvelope.gain.exponentialRampToValueAtTime(0.2, now + 0.015)
-  grindEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8)
-  //
-  // Mechanical rumble (filtered noise)
-  //
-  const bufferSize = audioContext.sampleRate * duration
-  const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate)
-  const noiseData = noiseBuffer.getChannelData(0)
-  
-  for (let i = 0; i < bufferSize; i++) {
-    noiseData[i] = (Math.random() * 2 - 1) * 0.3
-  }
-
-  const noise = audioContext.createBufferSource()
-  noise.buffer = noiseBuffer
-  
-  const noiseFilter = audioContext.createBiquadFilter()
-  noiseFilter.type = 'lowpass'
-  noiseFilter.frequency.setValueAtTime(400, now)
-  noiseFilter.Q.value = 0.7
-  
-  const noiseEnvelope = audioContext.createGain()
-  noiseEnvelope.gain.setValueAtTime(0.001, now)
-  noiseEnvelope.gain.exponentialRampToValueAtTime(0.18, now + 0.004)
-  noiseEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5)
-  //
-  // Connect everything
-  //
-  thump.connect(thumpFilter)
-  thumpFilter.connect(thumpEnvelope)
-  thumpEnvelope.connect(clockTickGain)
-
-  grind.connect(grindFilter)
-  grindFilter.connect(grindEnvelope)
-  grindEnvelope.connect(clockTickGain)
-
-  noise.connect(noiseFilter)
-  noiseFilter.connect(noiseEnvelope)
-  noiseEnvelope.connect(clockTickGain)
-  //
-  // Play all components
-  //
-  thump.start(now)
-  thump.stop(now + duration)
-
-  grind.start(now + 0.003)
-  grind.stop(now + duration)
-
-  noise.start(now)
+  const bpf = audioContext.createBiquadFilter()
+  bpf.type = 'bandpass'
+  bpf.frequency.value = 180 + Math.random() * 60
+  bpf.Q.value = 3.0
+  const env = audioContext.createGain()
+  env.gain.setValueAtTime(0.0001, now)
+  env.gain.linearRampToValueAtTime(0.95, now + 0.0012)
+  env.gain.exponentialRampToValueAtTime(0.0001, now + DUR)
+  src.connect(bpf)
+  bpf.connect(env)
+  env.connect(clockTickGain)
+  src.start(now)
+  src.stop(now + DUR + 0.001)
 }
 //
 // Private functions
@@ -2933,32 +2884,52 @@ export function playElectricalGlitchSound(inst, gainMultiplier = 1, duration = 0
 export function playPlatformDisappearSound(inst) {
   const { audioContext, clockTickGain } = inst
   const now = audioContext.currentTime
-  const duration = 0.5
   //
-  // Create single descending tone (like mechanism powering down)
+  // Sharp, brief "vanish" snap — platform blinks out of existence instantly.
+  // Two layers fire simultaneously at the exact moment of disappearance:
+  //   1. High-freq bandpass noise click (metallic "pop", ~30 ms)
+  //   2. Short pitched descending tone (mechanism releasing, ~40 ms)
+  // Total duration is under 50 ms so it never bleeds past the visual event.
   //
+  const SNAP_DUR = 0.03
+  const snapBufSize = Math.ceil(audioContext.sampleRate * SNAP_DUR)
+  const snapBuf = audioContext.createBuffer(1, snapBufSize, audioContext.sampleRate)
+  const snapData = snapBuf.getChannelData(0)
+  for (let i = 0; i < snapBufSize; i++) {
+    const env = 1 - i / snapBufSize
+    snapData[i] = (Math.random() * 2 - 1) * env
+  }
+  const snapSrc = audioContext.createBufferSource()
+  snapSrc.buffer = snapBuf
+  const snapBpf = audioContext.createBiquadFilter()
+  snapBpf.type = 'bandpass'
+  snapBpf.frequency.value = 1800 + Math.random() * 600
+  snapBpf.Q.value = 2.5
+  const snapGain = audioContext.createGain()
+  snapGain.gain.setValueAtTime(0.0001, now)
+  snapGain.gain.linearRampToValueAtTime(0.45, now + 0.003)
+  snapGain.gain.exponentialRampToValueAtTime(0.0001, now + SNAP_DUR)
+  snapSrc.connect(snapBpf)
+  snapBpf.connect(snapGain)
+  snapGain.connect(clockTickGain)
+  snapSrc.start(now)
+  snapSrc.stop(now + SNAP_DUR + 0.001)
+  //
+  // Short descending sine — a tiny "plink" as the number evaporates
+  //
+  const TONE_DUR = 0.04
   const tone = audioContext.createOscillator()
-  const envelope = audioContext.createGain()
-  
-  tone.type = 'triangle'
-  tone.frequency.setValueAtTime(380, now)
-  tone.frequency.exponentialRampToValueAtTime(120, now + duration)
-  //
-  // Smooth fade out envelope
-  //
-  envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.exponentialRampToValueAtTime(0.28, now + 0.02)
-  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  //
-  // Connect
-  //
-  tone.connect(envelope)
-  envelope.connect(clockTickGain)
-  //
-  // Play
-  //
+  const toneGain = audioContext.createGain()
+  tone.type = 'sine'
+  tone.frequency.setValueAtTime(520 + Math.random() * 80, now)
+  tone.frequency.exponentialRampToValueAtTime(200, now + TONE_DUR)
+  toneGain.gain.setValueAtTime(0.0001, now)
+  toneGain.gain.linearRampToValueAtTime(0.18, now + 0.004)
+  toneGain.gain.exponentialRampToValueAtTime(0.0001, now + TONE_DUR)
+  tone.connect(toneGain)
+  toneGain.connect(clockTickGain)
   tone.start(now)
-  tone.stop(now + duration)
+  tone.stop(now + TONE_DUR + 0.001)
 }
 /**
  * Play bug step sound (very soft, like a tiny leaf touch)
@@ -4238,6 +4209,107 @@ export function playDistantCarPassBy(instance) {
   osc.stop(now + dur + 0.05)
 }
 /**
+ * Plays a short metallic creaking/scraping sound — used when a disappearing
+ * platform is about to collapse. Sounds like stressed metal fasteners.
+ * @param {Object} instance - Sound instance
+ */
+export function playPlatformCreakSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance?.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Short metallic screech: 40 ms total, immediate hard peak, no long tail.
+  // Two fast noise bursts simulate the sound of metal dragging over metal.
+  //
+  const SCREECH_DUR = 0.04
+  //
+  // Burst 1: high-frequency harsh scrape (abrasive mid-high noise, hard cutoff)
+  //
+  const bufSize1 = Math.ceil(ctx.sampleRate * SCREECH_DUR)
+  const noiseBuf1 = ctx.createBuffer(1, bufSize1, ctx.sampleRate)
+  const nd1 = noiseBuf1.getChannelData(0)
+  for (let i = 0; i < bufSize1; i++) {
+    nd1[i] = Math.random() * 2 - 1
+  }
+  const ns1 = ctx.createBufferSource()
+  ns1.buffer = noiseBuf1
+  const f1 = ctx.createBiquadFilter()
+  f1.type = 'bandpass'
+  f1.frequency.value = 2800 + Math.random() * 800
+  f1.Q.value = 4.0
+  const g1 = ctx.createGain()
+  g1.gain.setValueAtTime(0.0001, now)
+  g1.gain.linearRampToValueAtTime(0.22, now + 0.003)
+  g1.gain.setValueAtTime(0.0001, now + SCREECH_DUR)
+  ns1.connect(f1)
+  f1.connect(g1)
+  g1.connect(ctx.destination)
+  ns1.start(now)
+  ns1.stop(now + SCREECH_DUR + 0.001)
+  //
+  // Burst 2: low metallic grind component for body (brief sawtooth thud)
+  //
+  const grind = ctx.createOscillator()
+  const grindF = ctx.createBiquadFilter()
+  const grindG = ctx.createGain()
+  grind.type = 'sawtooth'
+  grind.frequency.setValueAtTime(300 + Math.random() * 120, now)
+  grind.frequency.exponentialRampToValueAtTime(180, now + SCREECH_DUR)
+  grindF.type = 'bandpass'
+  grindF.frequency.value = 400
+  grindF.Q.value = 6
+  grindG.gain.setValueAtTime(0.0001, now)
+  grindG.gain.linearRampToValueAtTime(0.18, now + 0.003)
+  grindG.gain.setValueAtTime(0.0001, now + SCREECH_DUR)
+  grind.connect(grindF)
+  grindF.connect(grindG)
+  grindG.connect(ctx.destination)
+  grind.start(now)
+  grind.stop(now + SCREECH_DUR + 0.001)
+}
+/**
+ * Plays a distant car horn — a short two-tone beep with reverb tail, realistic
+ * city nighttime ambience. Volume is kept low to stay non-intrusive.
+ * @param {Object} instance - Sound instance
+ */
+export function playCarHornSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance?.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Two-tone horn: first beep slightly higher, second slightly lower (classic city horn)
+  //
+  const masterGain = ctx.createGain()
+  masterGain.connect(ctx.destination)
+  masterGain.gain.setValueAtTime(0.001, now)
+  masterGain.gain.linearRampToValueAtTime(0.18, now + 0.04)
+  masterGain.gain.setValueAtTime(0.18, now + 0.22)
+  masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45)
+  masterGain.gain.setValueAtTime(0.001, now + 0.52)
+  masterGain.gain.linearRampToValueAtTime(0.15, now + 0.56)
+  masterGain.gain.setValueAtTime(0.15, now + 0.70)
+  masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.95)
+  //
+  // Slightly detuned harmonics for realism
+  //
+  const freqs = [370, 460, 740]
+  freqs.forEach(freq => {
+    const osc = ctx.createOscillator()
+    const filter = ctx.createBiquadFilter()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(freq, now)
+    filter.type = 'bandpass'
+    filter.frequency.setValueAtTime(freq, now)
+    filter.Q.value = 4
+    osc.connect(filter)
+    filter.connect(masterGain)
+    osc.start(now)
+    osc.stop(now + 1.0)
+  })
+}
+/**
  * Plays a quick neon/fluorescent flicker burst — 2-4 sharp electrical crackles in rapid
  * succession, synchronized to be called exactly when the lamp dims. No bass thump.
  * @param {Object} instance - Sound instance
@@ -4265,10 +4337,15 @@ export function playWingFlapSound(instance) {
   const ctx = instance.audioContext
   if (!ctx || ctx.state !== 'running') return
   const now = ctx.currentTime
-  const flaps = 3 + Math.floor(Math.random() * 3)
+  //
+  // More flaps and longer fade-out so the flock sounds like it truly disperses.
+  // Interval between flaps gradually widens (birds space out as they fly away).
+  //
+  const flaps = 7 + Math.floor(Math.random() * 4)
   for (let i = 0; i < flaps; i++) {
-    const t = now + i * (0.048 + Math.random() * 0.032)
-    const dur = 0.055 + Math.random() * 0.04
+    const spacing = 0.055 + i * 0.018 + Math.random() * 0.02
+    const t = now + i * spacing
+    const dur = 0.07 + Math.random() * 0.06
     const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate)
     const data = buf.getChannelData(0)
     for (let s = 0; s < data.length; s++) {
@@ -4278,11 +4355,15 @@ export function playWingFlapSound(instance) {
     src.buffer = buf
     const bpf = ctx.createBiquadFilter()
     bpf.type = 'bandpass'
-    bpf.frequency.value = 900 + Math.random() * 600
+    bpf.frequency.value = 800 + Math.random() * 700
     bpf.Q.value = 0.8
     const gain = ctx.createGain()
+    //
+    // Peak volume decreases for later flaps as birds scatter farther
+    //
+    const peak = Math.max(0.12, (0.52 - i * 0.028) + Math.random() * 0.1)
     gain.gain.setValueAtTime(0.001, t)
-    gain.gain.exponentialRampToValueAtTime(0.45 + Math.random() * 0.15, t + dur * 0.15)
+    gain.gain.exponentialRampToValueAtTime(peak, t + dur * 0.12)
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur)
     src.connect(bpf)
     bpf.connect(gain)

@@ -487,14 +487,20 @@ export function createCityBackgroundSprite(k, bottomPlatformHeight, showSun = tr
       bottomPlatformY,
       autumnLeaves,
       lushGreenTrees: !autumnLeaves,
-      complementaryPalette
+      complementaryPalette,
+      //
+      // Force green leaves for lush (non-autumn) trees even when the building
+      // palette is complementary teal (levels 0, 1). Autumn trees keep their
+      // orange/red hues (forceGreenLeaves is false when autumnLeaves is true).
+      //
+      forceGreenLeaves: !autumnLeaves
     })
   })
   return { dataUrl, windows }
 }
 
 function drawBlurredOrganicTrees(ctx, cfg) {
-  const { screenWidth, bottomPlatformY, autumnLeaves, lushGreenTrees = false, complementaryPalette = false } = cfg
+  const { screenWidth, bottomPlatformY, autumnLeaves, lushGreenTrees = false, complementaryPalette = false, forceGreenLeaves = false } = cfg
   let currentX = 0
   while (currentX < screenWidth * 1.2) {
     const lushTrees = lushGreenTrees || autumnLeaves
@@ -522,7 +528,8 @@ function drawBlurredOrganicTrees(ctx, cfg) {
       autumnLeaves,
       leafCountBoost,
       leafSizeBoost,
-      complementaryPalette
+      complementaryPalette,
+      forceGreenLeaves
     )
     if (lushTrees) {
       for (let i = 0; i < LUSH_LEVEL0_EXTRA_CLUSTERS; i++) {
@@ -535,7 +542,8 @@ function drawBlurredOrganicTrees(ctx, cfg) {
           autumnLeaves,
           leafCountBoost * 0.82,
           leafSizeBoost,
-          complementaryPalette
+          complementaryPalette,
+          forceGreenLeaves
         )
       }
     }
@@ -616,7 +624,7 @@ function drawOrganicBranches(ctx, centerX, bottomY, trunkHeight, complementaryPa
   }
 }
 
-function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLeaves, leafCountBoost = 1, leafSizeBoost = 1, complementaryPalette = false) {
+function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLeaves, leafCountBoost = 1, leafSizeBoost = 1, complementaryPalette = false, forceGreen = false) {
   const leafCount = Math.floor((28 + Math.floor(Math.random() * 24)) * leafCountBoost)
   const spreadX = crownWidth * randomRange(0.4, 0.58)
   const spreadY = crownWidth * randomRange(0.3, 0.42)
@@ -629,7 +637,7 @@ function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLe
   // One fillStyle set per cluster instead of per leaf also avoids per-leaf GPU
   // state flushes, keeping the drawing phase fast on the GPU path.
   //
-  const leafColor = pickLeafColor(autumnLeaves, complementaryPalette)
+  const leafColor = pickLeafColor(autumnLeaves, complementaryPalette, forceGreen)
   ctx.fillStyle = `rgba(${leafColor.r}, ${leafColor.g}, ${leafColor.b}, ${leafColor.a})`
   ctx.beginPath()
   for (let i = 0; i < leafCount; i++) {
@@ -643,7 +651,7 @@ function drawOrganicLeafCluster(ctx, centerX, crownCenterY, crownWidth, autumnLe
   ctx.fill()
 }
 
-function pickLeafColor(autumnLeaves, complementaryPalette = false) {
+function pickLeafColor(autumnLeaves, complementaryPalette = false, forceGreen = false) {
   //
   // Autumn takes priority over complementary palette: level 2 (snow) shows
   // red and yellow foliage even though buildings use the complementary teal scheme.
@@ -665,7 +673,11 @@ function pickLeafColor(autumnLeaves, complementaryPalette = false) {
       a: randomRange(0.68, 0.92)
     }
   }
-  if (complementaryPalette) {
+  //
+  // forceGreen overrides the complementary teal palette — used for lush levels
+  // (0, 1) so trees remain green even though buildings use the teal scheme.
+  //
+  if (complementaryPalette && !forceGreen) {
     const tealPalette = [
       [32, 60, 68],
       [48, 88, 96],

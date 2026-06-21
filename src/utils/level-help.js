@@ -92,8 +92,34 @@ const TOUCH_PANEL_FILL_HEX = '#152528'
 const TOUCH_PANEL_TEXT_HEX = '#5A8898'
 const TOUCH_PANEL_BORDER_HEX = '#5A8898'
 //
-// Per-level hint copy
+// Goal text per level (gray text shown under the main subtitle before each level)
 //
+export const LEVEL_GOAL_TEXTS = {
+  'level-touch.0': 'Here you need to figure out\nhow to gather bugs together\nby touching them',
+  'level-touch.1': 'Here you need to figure out\nhow to play the right melody\nby touching things',
+  'level-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
+  'level-touch.3': 'Touch the bugs and see what happens...',
+  'level-time.0': 'Platforms don\'t live forever...',
+  'level-time.1': 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places',
+  'level-word.0': 'Find yourself and accept that\nthe voices in your head\nwon\'t go away',
+  'level-word.1': 'The task is the same —\nfind and accept yourself'
+}
+//
+// Goal label text and layout
+//
+const GOAL_LABEL_TEXT = 'goal'
+const GOAL_GAP = 140
+const GOAL_HIT_HALF_W = 80
+//
+// Button border: 4-line rect drawn around buy-help and goal labels.
+// Color is derived from sceneBackdropHex (brightened), so it blends
+// with the level background while still being visible.
+//
+const BTN_BORDER_PAD_X = 18
+const BTN_BORDER_PAD_Y = 8
+const BTN_BORDER_WIDTH = 1.5
+const BTN_BORDER_OPACITY = 0.8
+const BTN_BORDER_LIGHTEN = 60
 //
 // Module-level reference to the currently active panel instance.
 // Updated when a panel opens or closes. Used by isAnyPanelOpen().
@@ -110,7 +136,7 @@ export function isAnyPanelOpen() {
 }
 export const LEVEL_HELP_TEXTS = {
   'level-touch.0': 'Collect all the bugs in one\nplace and they will help\nyou. Notice what they do\nwhen you touch them',
-  'level-touch.1': 'Approach yourself and\nplay the melody you see',
+  'level-touch.1': 'Approach yourself to get\nthe sequence of notes to\nplay. The hero will become\ncolorful if you play right.',
   'level-touch.2': 'Jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
   'level-touch.3': 'Turns out the bugs\nare trampolines :)',
   'level-time.0': 'Hurry — platforms\ndon\'t last forever',
@@ -141,15 +167,18 @@ export function create(config) {
   const { k, levelName, sideWallWidth, floorY, helpY: helpYOverride, levelIndicator, sound, sceneBackdropHex } = config
   const hintText = LEVEL_HELP_TEXTS[levelName]
   if (!hintText) return null
+  const goalText = LEVEL_GOAL_TEXTS[levelName] ?? null
   const sectionColorHex = getSectionHelpColor(levelName)
   const { r, g, b } = getRGB(k, sectionColorHex)
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const helpX = k.width() / 2
   const helpY = helpYOverride ?? ((floorY + k.height()) / 2 + HELP_UI_VERTICAL_OFFSET)
   const outlineOffsets = buildOutlineOffsets(HELP_OUTLINE_OFFSET)
+  //
+  // Create "buy help" label first at placeholder position — layout follows after measuring widths
+  //
   const outlineNodes = outlineOffsets.map(([dx, dy]) => k.add([
     k.text(HELP_LABEL_TEXT, { size: HELP_FONT_SIZE, font, align: 'center' }),
-    k.pos(helpX + dx, helpY + dy),
+    k.pos(0 + dx, helpY + dy),
     k.anchor('center'),
     k.color(0, 0, 0),
     k.fixed(),
@@ -157,17 +186,69 @@ export function create(config) {
   ]))
   const labelNode = k.add([
     k.text(HELP_LABEL_TEXT, { size: HELP_FONT_SIZE, font, align: 'center' }),
-    k.pos(helpX, helpY),
+    k.pos(0, helpY),
     k.anchor('center'),
     k.color(r, g, b),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui + 3)
   ])
+  //
+  // Optional "goal" label (only when this level has a goal text)
+  //
+  let goalLabelNode = null
+  let goalOutlineNodes = []
+  if (goalText) {
+    goalOutlineNodes = outlineOffsets.map(([dx, dy]) => k.add([
+      k.text(GOAL_LABEL_TEXT, { size: HELP_FONT_SIZE, font, align: 'center' }),
+      k.pos(0 + dx, helpY + dy),
+      k.anchor('center'),
+      k.color(0, 0, 0),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui + 2)
+    ]))
+    goalLabelNode = k.add([
+      k.text(GOAL_LABEL_TEXT, { size: HELP_FONT_SIZE, font, align: 'center' }),
+      k.pos(0, helpY),
+      k.anchor('center'),
+      k.color(r, g, b),
+      k.fixed(),
+      k.z(CFG.visual.zIndex.ui + 3)
+    ])
+  }
+  //
+  // Lay out labels centered around screen midpoint
+  //
+  const centerX = k.width() / 2
+  const helpW = labelNode.width
+  const goalW = goalLabelNode ? goalLabelNode.width : 0
+  const totalW = helpW + (goalLabelNode ? GOAL_GAP + goalW : 0)
+  const groupStart = centerX - totalW / 2
+  const helpX = groupStart + helpW / 2
+  const goalX = goalLabelNode ? groupStart + helpW + GOAL_GAP + goalW / 2 : centerX
+  //
+  // Apply positions to buy help
+  //
+  labelNode.pos.x = helpX
+  outlineNodes.forEach((node, i) => {
+    const [dx, dy] = outlineOffsets[i]
+    node.pos.x = helpX + dx
+  })
+  //
+  // Apply positions to goal
+  //
+  if (goalLabelNode) {
+    goalLabelNode.pos.x = goalX
+    goalOutlineNodes.forEach((node, i) => {
+      const [dx, dy] = outlineOffsets[i]
+      node.pos.x = goalX + dx
+    })
+  }
   const panelColors = getSectionPanelColors(levelName)
   const inst = {
     k,
     levelName,
     hintText,
+    goalText,
     sectionColorHex,
     panelColors,
     sceneBackdropHex,
@@ -175,11 +256,17 @@ export function create(config) {
     sound,
     helpX,
     helpY,
+    goalX,
     font,
+    outlineOffsets,
     labelNode,
     outlineNodes,
+    goalLabelNode,
+    goalOutlineNodes,
     pressed: false,
+    goalPressed: false,
     panelOpen: false,
+    panelIsGoal: false,
     panelNodes: null,
     panelOpacity: 0,
     panelPhase: 'closed',
@@ -202,6 +289,23 @@ export function create(config) {
   k.onMousePress(() => onMousePress(inst))
   k.onMouseRelease(() => onMouseRelease(inst))
   k.onKeyPress('escape', () => inst.panelOpen && closePanel(inst))
+  //
+  // Derive border color from backdrop (lightened) so it blends with the
+  // level background but remains visible
+  //
+  const backdropRgb = sceneBackdropHex ? parseHex(sceneBackdropHex) : [26, 26, 26]
+  const borderR = Math.min(255, backdropRgb[0] + BTN_BORDER_LIGHTEN)
+  const borderG = Math.min(255, backdropRgb[1] + BTN_BORDER_LIGHTEN)
+  const borderB = Math.min(255, backdropRgb[2] + BTN_BORDER_LIGHTEN)
+  k.add([
+    k.z(CFG.visual.zIndex.ui + 2),
+    k.fixed(),
+    {
+      draw() {
+        drawButtonBorder(k, inst, borderR, borderG, borderB)
+      }
+    }
+  ])
   return inst
 }
 
@@ -266,7 +370,7 @@ function onUpdate(inst) {
   inst.labelNode.scale = inst.k.vec2(scale, scale)
   inst.labelNode.pos.x = inst.helpX + shiftX
   inst.labelNode.pos.y = inst.helpY + shiftY
-  const outlineOffsets = buildOutlineOffsets(HELP_OUTLINE_OFFSET)
+  const outlineOffsets = inst.outlineOffsets
   inst.outlineNodes.forEach((node, i) => {
     if (!node?.exists?.()) return
     const [dx, dy] = outlineOffsets[i]
@@ -274,6 +378,24 @@ function onUpdate(inst) {
     node.pos.x = inst.helpX + shiftX + dx
     node.pos.y = inst.helpY + shiftY + dy
   })
+  //
+  // Animate goal label press (same shrink effect)
+  //
+  if (inst.goalLabelNode?.exists?.()) {
+    const gScale = inst.goalPressed ? HELP_PRESSED_FONT_SIZE / HELP_FONT_SIZE : 1
+    const gShiftX = inst.goalPressed ? HELP_PRESSED_SHIFT_X : 0
+    const gShiftY = inst.goalPressed ? HELP_PRESSED_SHIFT_Y : 0
+    inst.goalLabelNode.scale = inst.k.vec2(gScale, gScale)
+    inst.goalLabelNode.pos.x = inst.goalX + gShiftX
+    inst.goalLabelNode.pos.y = inst.helpY + gShiftY
+    inst.goalOutlineNodes.forEach((node, i) => {
+      if (!node?.exists?.()) return
+      const [dx, dy] = outlineOffsets[i]
+      node.scale = inst.k.vec2(gScale, gScale)
+      node.pos.x = inst.goalX + gShiftX + dx
+      node.pos.y = inst.helpY + gShiftY + dy
+    })
+  }
   if (inst.panelPhase === 'opening') {
     inst.panelTimer += inst.k.dt()
     inst.panelOpacity = Math.min(1, inst.panelTimer / PANEL_FADE_IN)
@@ -289,6 +411,7 @@ function onUpdate(inst) {
       destroyPanel(inst)
       inst.panelPhase = 'closed'
       inst.panelOpen = false
+      inst.panelIsGoal = false
       Tooltip.unsuppressAll()
     }
   }
@@ -316,7 +439,7 @@ function updateCloseHintPulse(inst) {
 }
 
 //
-// Shrinks HELP on press; closes open panel on any click
+// Shrinks HELP / GOAL on press; closes open panel on any click
 //
 function onMousePress(inst) {
   if (inst.panelOpen) {
@@ -324,16 +447,21 @@ function onMousePress(inst) {
     return
   }
   isMouseOverHelp(inst) && (inst.pressed = true)
+  isMouseOverGoal(inst) && (inst.goalPressed = true)
 }
 
 //
-// Opens hint panel after click release on HELP
+// Opens hint or goal panel after click release
 //
 function onMouseRelease(inst) {
-  if (!inst.pressed) return
-  inst.pressed = false
-  if (!isMouseOverHelp(inst) || inst.panelOpen) return
-  tryPurchaseHelp(inst)
+  if (inst.pressed) {
+    inst.pressed = false
+    isMouseOverHelp(inst) && !inst.panelOpen && tryPurchaseHelp(inst)
+  }
+  if (inst.goalPressed) {
+    inst.goalPressed = false
+    isMouseOverGoal(inst) && !inst.panelOpen && openGoalPanel(inst)
+  }
 }
 
 //
@@ -351,6 +479,7 @@ function tryPurchaseHelp(inst) {
   inst.levelIndicator?.updateHeroScore?.(newScore)
   inst.sound && Sound.playHelpPurchaseSound(inst.sound)
   playFragmentSpendEffect(inst.k, inst.levelIndicator)
+  inst.panelIsGoal = false
   openPanel(inst)
 }
 
@@ -361,13 +490,22 @@ function isMouseOverHelp(inst) {
   const mp = inst.k.mousePos()
   return Math.abs(mp.x - inst.helpX) < HELP_HIT_HALF_W && Math.abs(mp.y - inst.helpY) < HELP_HIT_HALF_H
 }
+//
+// True when cursor is over the GOAL hit area
+//
+function isMouseOverGoal(inst) {
+  if (!inst.goalLabelNode) return false
+  const mp = inst.k.mousePos()
+  return Math.abs(mp.x - inst.goalX) < GOAL_HIT_HALF_W && Math.abs(mp.y - inst.helpY) < HELP_HIT_HALF_H
+}
 
 //
 // Builds centered hint panel and dims the scene
 //
 function openPanel(inst) {
   if (inst.panelOpen) return
-  const { k, hintText, sceneBackdropHex } = inst
+  const { k, sceneBackdropHex } = inst
+  const hintText = inst.panelIsGoal ? inst.goalText : inst.hintText
   inst.panelOpen = true
   activeInst = inst
   inst.panelPhase = 'opening'
@@ -479,6 +617,14 @@ function openPanel(inst) {
   inst.panelNodes = { overlay, bubble, hintOutlines, hintMain, closeHintOutlines, closeHint }
 }
 
+//
+// Opens the goal panel with the level description text (no fragment cost)
+//
+function openGoalPanel(inst) {
+  if (inst.panelOpen || !inst.goalText) return
+  inst.panelIsGoal = true
+  openPanel(inst)
+}
 //
 // Starts panel fade-out
 //
@@ -684,4 +830,30 @@ function syncPanelBackdrop(inst, panelOpacity) {
   //
   inst.k.setBackground(inst.k.rgb(dr, dg, db))
   CanvasBackdrop.setCssBackdrop(inst.k.canvas, dr, dg, db)
+}
+//
+// Draws 4 border lines around a label node to form a visible button outline.
+// Uses k.drawLine which is reliable across all Kaplay versions.
+//
+function drawLabelBorderLines(k, node, r, g, b) {
+  const color = k.rgb(r, g, b)
+  const w = node.width
+  const h = node.height
+  const x = node.pos.x
+  const y = node.pos.y
+  const x1 = x - w / 2 - BTN_BORDER_PAD_X
+  const y1 = y - h / 2 - BTN_BORDER_PAD_Y
+  const x2 = x + w / 2 + BTN_BORDER_PAD_X
+  const y2 = y + h / 2 + BTN_BORDER_PAD_Y
+  k.drawLine({ p1: k.vec2(x1, y1), p2: k.vec2(x2, y1), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
+  k.drawLine({ p1: k.vec2(x2, y1), p2: k.vec2(x2, y2), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
+  k.drawLine({ p1: k.vec2(x2, y2), p2: k.vec2(x1, y2), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
+  k.drawLine({ p1: k.vec2(x1, y2), p2: k.vec2(x1, y1), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
+}
+//
+// Draws borders around the buy-help label (and goal label if present).
+//
+function drawButtonBorder(k, inst, r, g, b) {
+  inst.labelNode?.exists?.() && drawLabelBorderLines(k, inst.labelNode, r, g, b)
+  inst.goalLabelNode?.exists?.() && drawLabelBorderLines(k, inst.goalLabelNode, r, g, b)
 }

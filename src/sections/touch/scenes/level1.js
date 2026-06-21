@@ -145,7 +145,7 @@ const L1_CROW_ROCK_DRAW_Z = 9
 // Crow sits on the bare ground just to the right of the hero spawn (no rock, no grass zone).
 //
 const L1_CROW_X = LEFT_MARGIN + 160
-const L1_CROW_TOOLTIP_TEXT = 'not much of a Mozert'
+const L1_CROW_TOOLTIP_TEXT = 'Not much of a Mozart'
 const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
 const L1_CROW_TOOLTIP_OFFSET_Y = -52
@@ -218,19 +218,19 @@ const CLOUD_RANDOMNESS = 20
 const HERO_TOOLTIP_TEXT = "Do, Re, Mi..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
-const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you can see how far\nyou hav come in lerning touch"
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "Here you can see how far\nyou have come in learning touch"
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const GREEN_TIMER_TOOLTIP_TEXT = "finish the levl in time\nto earn mor fragments"
+const GREEN_TIMER_TOOLTIP_TEXT = "Finish the level in time\nto earn more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 20
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
 const FPS_COUNTER_TOP_Y = 55
-const SMALL_HERO_TOOLTIP_TEXT = "yor fragments"
+const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "lyfe score"
+const LIFE_TOOLTIP_TEXT = "Life score"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
@@ -336,14 +336,14 @@ const LIFE_PARTICLE_SIZE_EXTRA = 4
 //
 // First tree trunk tooltip (note name hint)
 //
-const FIRST_TREE_TOOLTIP_TEXT = "C"
+const FIRST_TREE_TOOLTIP_TEXT = "Do"
 const FIRST_TREE_TOOLTIP_HOVER_WIDTH = 40
 const FIRST_TREE_TOOLTIP_EXTRA_HEIGHT = 20
 const FIRST_TREE_TOOLTIP_Y_OFFSET = -60
 //
 // Anti-hero tooltip (shown while gray/inactive)
 //
-const ANTIHERO_TOOLTIP_TEXT = "wait... do i know you?\nyou look familar"
+const ANTIHERO_TOOLTIP_TEXT = "Wait... do I know you?\nYou look familiar"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -70
 //
@@ -352,7 +352,7 @@ const ANTIHERO_TOOLTIP_Y_OFFSET = -70
 const ANTIHERO_HINT_WAIT_DELAY = 30
 const ANTIHERO_HINT_WAIT_TEXT = "I'm waiting for\nyou here"
 const ANTIHERO_HINT_NOTES_DELAY = 60
-const ANTIHERO_HINT_NOTES_TEXT = "C - Do, D - Re, E - Mi\nplay the trees"
+const ANTIHERO_HINT_NOTES_TEXT = "Do, Re, Mi, Fa, Sol...\nplay the trees"
 const ANTIHERO_HINT_DISPLAY_TIME = 5
 const ANTIHERO_HINT_NOTES_DISPLAY_TIME = 10
 const ANTIHERO_HINT_NOTES_REPEAT_INTERVAL = 30
@@ -1233,7 +1233,7 @@ export function sceneLevel1(k) {
     //
     // Note names for display
     //
-    const noteNames = ['C', 'D', 'E', 'D', 'E']
+    const noteNames = ['Do', 'Re', 'Mi', 'Re', 'Mi']
     
     //
     // Function to play melody sequence
@@ -1427,7 +1427,14 @@ export function sceneLevel1(k) {
               // Create sparkle particles around anti-hero
               //
               createAntiHeroSparkles(activeColor)
-              
+              //
+              // Light up all tree roots after anti-hero turns colored
+              //
+              k.wait(0.1, () => triggerAllRootsGlow(treeRootsInst))
+              //
+              // Anti-hero blinks white several times with mouth sound on each flash
+              //
+              blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, 0)
               //
               // Play success sound after color change (same as mouth sound)
               //
@@ -1686,7 +1693,7 @@ export function sceneLevel1(k) {
     //
     // Floating tooltip for giant worm — position is updated each frame via wormTooltipOnUpdate
     //
-    const WORM_TOOLTIP_TEXT = "come closer,\ndont be afraid"
+    const WORM_TOOLTIP_TEXT = "Don't jump over,\ncome closer..."
     const WORM_TOOLTIP_WIDTH = 60
     const WORM_TOOLTIP_HEIGHT = 80
     const wormTooltipTarget = {
@@ -1762,6 +1769,7 @@ export function sceneLevel1(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
+      showElapsedTimer: false,
       targetTime: CFG.gameplay.speedBonusTime
         ? CFG.gameplay.speedBonusTime['level-touch.1']
         : null
@@ -3328,4 +3336,30 @@ function onUpdateL1Birds(k, birds, skyHeight, topMargin, flapBlendTime, glidePos
     const flapWave = Math.sin((time + bird.timeOffset) * 8 + bird.phaseOffset)
     bird.wingPhase = glidePose + (flapWave - glidePose) * bird.modeBlend
   }
+}
+//
+// Triggers all tree roots to glow and shake for 1 second (melody success effect)
+//
+function triggerAllRootsGlow(treeRootsInst) {
+  for (const root of treeRootsInst.roots) {
+    root.touchShake = 2
+    root.glowTimer = 1.0
+  }
+}
+//
+// Blinks the anti-hero white and back to activeColor several times
+// with a mouth sound on each white flash (melody success celebration)
+//
+const ANTIHERO_BLINK_COUNT = 16
+const ANTIHERO_BLINK_INTERVAL = 0.13
+function blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, count) {
+  if (!antiHeroInst.character?.exists?.()) return
+  if (count >= ANTIHERO_BLINK_COUNT * 2) {
+    antiHeroInst.character.color = k.rgb(255, 255, 255)
+    return
+  }
+  const isWhite = count % 2 === 0
+  antiHeroInst.character.color = isWhite ? k.rgb(255, 255, 255) : k.Color.fromHex(activeColor)
+  isWhite && Sound.playMouthSound(sound)
+  k.wait(ANTIHERO_BLINK_INTERVAL, () => blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, count + 1))
 }

@@ -311,53 +311,53 @@ const HERO_BUG_CROUCH_DURATION = 0.45
 //
 // TOUCH indicator tooltip
 //
-const TOUCH_INDICATOR_TOOLTIP_TEXT = "heer u kan se how far\nu av com in lernin tuch"
+const TOUCH_INDICATOR_TOOLTIP_TEXT = "Here you can see how far\nyou have come in learning touch"
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
-const ANTIHERO_TOOLTIP_TEXT = "tryyy to reech meee"
+const ANTIHERO_TOOLTIP_TEXT = "Try to reach me"
 const ANTIHERO_TOOLTIP_HOVER_WIDTH = 80
 const ANTIHERO_TOOLTIP_HOVER_HEIGHT = 60
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 //
 // Hero tooltip (raised higher so it sits above bug tooltips)
 //
-const HERO_TOOLTIP_TEXT = "i muss fin myself..."
+const HERO_TOOLTIP_TEXT = "I must find myself..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
 // Green timer tooltip (appears below the timer text)
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "finsh the levl in tym\nto get mor fragmnts"
+const GREEN_TIMER_TOOLTIP_TEXT = "Finish the level in time\nto get more fragments"
 const GREEN_TIMER_TOOLTIP_WIDTH = 80
 const GREEN_TIMER_TOOLTIP_HEIGHT = 30
 const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
-const SMALL_HERO_TOOLTIP_TEXT = "ur fragmnts"
+const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "lyf skor"
+const LIFE_TOOLTIP_TEXT = "Life score"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // Floor thorns tooltip
 //
-const FLOOR_THORNS_TOOLTIP_TEXT = "tryy to tuch me"
+const FLOOR_THORNS_TOOLTIP_TEXT = "Try to touch me"
 const FLOOR_THORNS_TOOLTIP_HEIGHT = 40
 const FLOOR_THORNS_TOOLTIP_Y_OFFSET = -30
 //
 // Bird tooltip
 //
-const BIRD_TOOLTIP_TEXT = "i blive i kan flyyy"
+const BIRD_TOOLTIP_TEXT = "I believe I can fly"
 const BIRD_TOOLTIP_HOVER_SIZE = 40
 const BIRD_TOOLTIP_Y_OFFSET = -30
 //
 // Long-legged monster hover tooltip (shown only when not in conversation)
 //
-const MONSTER_HOVER_TOOLTIP_TEXT = "kolekt buggs togethr\nto reech the gol"
+const MONSTER_HOVER_TOOLTIP_TEXT = "Collect bugs together\nto reach the goal"
 const MONSTER_HOVER_TOOLTIP_W = 70
 const MONSTER_HOVER_TOOLTIP_H = 80
 const MONSTER_HOVER_TOOLTIP_Y_OFFSET = -90
@@ -442,7 +442,7 @@ const DIRT_PARTICLE_COLOR_B = 44
 const TRAP_SPIKE_FILL_R = 240
 const TRAP_SPIKE_FILL_G = 128
 const TRAP_SPIKE_FILL_B = 48
-const TRAP_TOOLTIP_TEXT = "surpryyse!"
+const TRAP_TOOLTIP_TEXT = "Surprise!"
 const TRAP_TOOLTIP_Y_OFFSET = -30
 //
 // Anti-hero platform (right side, above hero height)
@@ -2371,6 +2371,7 @@ export function sceneLevel0(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
+      showElapsedTimer: false,
       targetTime: CFG.gameplay.speedBonusTime
         ? CFG.gameplay.speedBonusTime['level-touch.0']
         : null
@@ -3769,7 +3770,7 @@ const L0_FIREFLY_COLOR_B = 64
 const MUSHROOM_COUNT = 7
 const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
-const L0_SPIDER_TOOLTIP_TEXT = "psssst... pushh those\nlil buggs kloser\ntogetherrr"
+const L0_SPIDER_TOOLTIP_TEXT = "Psst... push those\nlittle bugs closer\ntogether"
 const MUSHROOM_FUNNY_LINES = [
   'Talk spore to me',
   'Pay rent in compost',

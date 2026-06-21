@@ -110,8 +110,8 @@ const NIGHT_DARKNESS_THRESHOLD = 0.45
 const NIGHT_MUSIC_TRANSITION_SPEED = 1.5
 const NIGHT_CRICKET_INTERVAL_MIN = 1.5
 const NIGHT_CRICKET_INTERVAL_MAX = 4.0
-const NIGHT_CAR_HORN_INTERVAL_MIN = 8
-const NIGHT_CAR_HORN_INTERVAL_MAX = 22
+const NIGHT_CAR_HORN_INTERVAL_MIN = 5
+const NIGHT_CAR_HORN_INTERVAL_MAX = 15
 //
 // Screen shake when second floor unlocks
 //
@@ -247,7 +247,11 @@ export function sceneLevel1(k) {
           createLevelTransition(k, 'level-time.1')
         })
       },
-      showGameClock: true
+      showGameClock: true,
+      //
+      // Lower buy help / goal buttons closer to the bottom platform
+      //
+      helpY: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT + 45
     })
     //
     // Override canvas backdrop to match the platform color (top/bottom border
@@ -297,9 +301,10 @@ export function sceneLevel1(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ 
-      k, 
-      showTimer: true, 
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      showElapsedTimer: false,
       targetTime: CFG.gameplay.speedBonusTime['level-time.1'],
       topY: PLATFORM_TOP_HEIGHT - 57
     })

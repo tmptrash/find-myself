@@ -45,19 +45,19 @@ const NIGHT_DARKNESS_THRESHOLD = 0.45
 const NIGHT_MUSIC_TRANSITION_SPEED = 1.5
 const NIGHT_CRICKET_INTERVAL_MIN = 1.5
 const NIGHT_CRICKET_INTERVAL_MAX = 4.0
-const NIGHT_CAR_HORN_INTERVAL_MIN = 8
-const NIGHT_CAR_HORN_INTERVAL_MAX = 22
+const NIGHT_CAR_HORN_INTERVAL_MIN = 5
+const NIGHT_CAR_HORN_INTERVAL_MAX = 15
 //
 // Background clouds — 8 clouds at fully random X positions within the play area
 //
 const CLOUD_COUNT = 8
-const CLOUD_Z = 15.52
+const CLOUD_Z = 14.5
 const CLOUD_SIZE_MIN = 45
 const CLOUD_SIZE_MAX = 110
 const CLOUD_LAYERS_MIN = 8
 const CLOUD_LAYERS_MAX = 16
-const CLOUD_Y_OFFSET_MIN = 20
-const CLOUD_Y_OFFSET_MAX = 150
+const CLOUD_Y_OFFSET_MIN = 15
+const CLOUD_Y_OFFSET_MAX = 130
 const CLOUD_SCHEMES = [
   { baseColor: '#f0f0f0', shadowColor: '#a0a0b8', highlightColor: '#ffffff' },
   { baseColor: '#606060', shadowColor: '#202030', highlightColor: '#909090' },
@@ -338,9 +338,10 @@ export function sceneLevel0(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ 
-      k, 
-      showTimer: true, 
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      showElapsedTimer: false,
       targetTime: CFG.gameplay.speedBonusTime['level-time.0'],
       topY: PLATFORM_TOP_HEIGHT - 57
     })
@@ -1162,7 +1163,7 @@ function drawBirds(k, birds) {
 //
 function createSparseClouds(k) {
   const screenWidth = k.width()
-  const cloudY = PLATFORM_TOP_HEIGHT + 70
+  const cloudY = PLATFORM_TOP_HEIGHT + 55
   const playAreaWidth = screenWidth - PLATFORM_SIDE_WIDTH * 2
   const canvas = document.createElement('canvas')
   canvas.width = screenWidth
@@ -1186,7 +1187,7 @@ function createSparseClouds(k) {
   k.loadSprite('level0-clouds', spriteData)
   k.add([
     k.sprite('level0-clouds'),
-    k.pos(0, cloudY - 70),
+    k.pos(0, cloudY - 55),
     k.z(CLOUD_Z),
     k.fixed()
   ])

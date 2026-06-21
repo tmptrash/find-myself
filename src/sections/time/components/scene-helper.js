@@ -215,7 +215,8 @@ export function initScene(config) {
     // (disabled — removed per visual cleanup; sand particles also removed)
     //
     showFloatingPhrases = false,
-    sceneBackdropHex = CFG.visual.colors.platform
+    sceneBackdropHex = CFG.visual.colors.platform,
+    helpY = null
   } = config
   //
   // Set gravity
@@ -268,6 +269,7 @@ export function initScene(config) {
     levelName,
     sideWallWidth,
     floorY: k.height() - bottomPlatformHeight,
+    helpY: helpY ?? undefined,
     levelIndicator,
     sound,
     //

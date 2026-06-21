@@ -1319,7 +1319,7 @@ export function sceneLevel3(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true })
+    const fpsCounter = FpsCounter.create({ k, showTimer: true, showElapsedTimer: false })
     //
     // Tooltip: TOUCH indicator letters (top-left corner)
     //

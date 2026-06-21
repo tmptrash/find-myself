@@ -38,8 +38,8 @@ const BG_R = 26
 const BG_G = 26
 const BG_B = 26
 const BG_HEX = '#1A1A1A'
-const WALL_COLOR = 31
-const WALL_COLOR_HEX = '#1F1F1F'
+const WALL_COLOR = BG_R
+const WALL_COLOR_HEX = BG_HEX
 //
 // Hero and anti-hero colors
 //
@@ -81,7 +81,7 @@ const BONUS_PLATFORM_W = 72
 //
 const BONUS_PLATFORM_COLLISION_WIDTH = 84
 const BONUS_PLATFORM_COLLISION_HEIGHT = MAIN_PLATFORM_H
-const BONUS_PLATFORM_COLLISION_X_OFFSET = 0
+const BONUS_PLATFORM_COLLISION_X_OFFSET = BONUS_PLATFORM_COLLISION_WIDTH / 2
 const BONUS_PLATFORM_COLLISION_Y_OFFSET = 9
 //
 // Single red spike cluster to the right of the hidden bonus platform
@@ -129,7 +129,7 @@ const HERO_SPAWN_DELAY = 0.5
 const PLATFORM_FOREGROUND_Z = 26
 const HERO_SPAWN_Z = 28
 const ANTIHERO_Z = 28
-const ANTIHERO_TOOLTIP_TEXT = "im waitn for u here"
+const ANTIHERO_TOOLTIP_TEXT = "I'm waiting\nfor you here"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const ANTIHERO_MOUSE_HOVER_HALF = ANTIHERO_TOOLTIP_HOVER_SIZE / 2
@@ -200,15 +200,15 @@ const BLOCKING_ROCK_STRIPE_EXCLUDE_HALF_W = Math.ceil(BLOCKING_ROCK_RADIUS * BLO
 // Tutorial hints
 //
 const HINT_Y_OFFSET = -100
-const HINT_0_TEXT = "hiii! im Yuna\n— a lil weerd lookin\nbut thats okayy!\nlets gro an lern\ntogetherrr ^_^"
+const HINT_0_TEXT = "Hi! I'm Yuna. I look a\nlittle different, but\nthat's fine. Let's grow\nand learn together."
 const HINT_WELCOME_DURATION = 6.5
-const HINT_MOUSE_TEXT = 'use the mouz to put\nur arro on yur uthr\nhalf to git a tip!\nthe mouz helps us\nlern bowt the werld'
-const HINT_1_TEXT = 'gud! now press ← →, A D\nto run to the woden\nplatform ovr there!'
-const HINT_2_TEXT = 'wow! press Space, ↑\nto jmp on the platform'
+const HINT_MOUSE_TEXT = 'Use the mouse to hover\nover your other half\nand get a tip. The\nmouse helps us learn\nabout the world.'
+const HINT_1_TEXT = 'Good! Now press ← →, A D\nto run to the wooden\nplatform over there.'
+const HINT_2_TEXT = 'Great! Press Space or ↑\nto jump onto the platform.'
 const HINT_2_APPROACH_X = MAIN_PLATFORM_X - 165
-const HINT_3_TEXT = 'gud! now find the blinkn\npeece an jmp on it — a\npeece is a part of u\nit helps u liv yur life!'
-const HINT_4_TEXT = 'spykes is on yur rite!\nif u fal on them u die!'
-const HINT_5_TEXT = 'now find urself — yur uthr\nhalf. tuch it to no urself mor!'
+const HINT_3_TEXT = 'Good! Now find the blinking\nfragment and jump on it —\na fragment is a part of you.\nIt helps you live your life.'
+const HINT_4_TEXT = 'Spikes are on your right!\nIf you fall on them, you die.'
+const HINT_5_TEXT = 'Now find yourself — your\nother half. Touch it\nto know yourself better.'
 const MAIN_PLATFORM_STAND_Y_MAX = MAIN_PLATFORM_Y + 22
 const MAIN_PLATFORM_STAND_Y_MIN = MAIN_PLATFORM_Y - 88
 const MAIN_PLATFORM_STAND_X_HALF = MAIN_PLATFORM_W / 2 + 28
@@ -225,14 +225,14 @@ const FRAGMENT_LEAVE_FIND_YOURSELF_DELAY = 2
 const ANTIHERO_HOVER_PAUSE = 2
 const TRAINING_TARGET_TIME_SECONDS = 99 * 60
 const HUD_FROZEN_TOOLTIP_DURATION = 2
-const HUD_SMALL_HERO_HINT = 'put ur arro on the litl\nhiro on the top-rite to\nsee how meny peeces u\ngot. peeces help u\nundrstand urself an bete\nlifes hard stuf!'
-const HUD_SMALL_HERO_TOOLTIP = 'ur peeces'
-const HUD_LIFE_HINT = 'yay! nxt to the hiro\nis life wif its scor.\nit plays aginst u an\nmaks trubl by turnig\nthem to points. hovr on it!'
-const HUD_LIFE_TOOLTIP = 'life scor'
-const HUD_TIME_HINT = 'supr! now hovr on the\ngrin time on the rite of\nthe timr on top — thats\nhow long u hav to bete\nthe lev to git mor peeces!'
-const HUD_TIME_TOOLTIP = "bete the lev in time\nto git mor peeces"
+const HUD_SMALL_HERO_HINT = 'Hover over the small hero\nin the top-right corner\nto see how many fragments\nyou have. Fragments help\nyou understand yourself\nand overcome life\'s challenges.'
+const HUD_SMALL_HERO_TOOLTIP = 'Your fragments'
+const HUD_LIFE_HINT = 'Next to the hero is Life\nwith its score. It plays\nagainst you and causes\ntrouble by turning events\ninto points. Hover over it.'
+const HUD_LIFE_TOOLTIP = 'Life score'
+const HUD_TIME_HINT = 'Now hover over the green\ntime on the right of the\ntimer at the top — that\'s\nhow long you have to beat\nthe level to earn more fragments.'
+const HUD_TIME_TOOLTIP = "Beat the level in time\nto earn more fragments"
 const HUD_UI_HOVER_HALF = 42
-const TRAINING_COMPLETE_MESSAGE = 'now ur redy to explor urself.\nlets start wif tuch...'
+const TRAINING_COMPLETE_MESSAGE = 'You are ready to explore yourself.\nLet\'s start with touch...'
 const TRAINING_COMPLETE_MESSAGE_DURATION = 5
 const TRAINING_COMPLETE_FONT_SIZE_RATIO = 0.036
 const TRAINING_COMPLETE_LINE_SPACING = 8
@@ -243,6 +243,16 @@ const TRAINING_COMPLETE_TEXT_Z = CFG.visual.zIndex.ui + 1200
 //
 const SKIP_FONT_SIZE = 30
 const SKIP_TEXT_Y = FLOOR_Y + Math.round(BOTTOM_MARGIN * 0.42)
+//
+// localStorage key for saving tutorial progress between deaths
+//
+const TRAINING_STEP_KEY = 'touch.trainingStep'
+//
+// Blink speed (radians per second) for target elements awaiting hover
+//
+const BLINK_SPEED = 4.0
+const BLINK_MIN_OPACITY = 0.3
+const BLINK_MAX_OPACITY = 1.0
 const SKIP_MIN_OPACITY = 0.3
 const SKIP_MAX_OPACITY = 0.7
 const SKIP_FLICKER_SPEED = 0.9
@@ -497,6 +507,7 @@ export function sceneTouchTraining(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
+      showElapsedTimer: false,
       targetTime: TRAINING_TARGET_TIME_SECONDS,
       topY: TRAINING_HUD_CENTER_Y
     })
@@ -597,6 +608,7 @@ export function sceneTouchTraining(k) {
       onAnnihilation: () => {
         hintState.levelDone = true
         heroInst.controlsDisabled = true
+        set(TRAINING_STEP_KEY, 0)
         hintState.currentTip && Tooltip.destroy(hintState.currentTip)
         hintState.currentTip = null
         hintState.currentHintType = null
@@ -655,6 +667,11 @@ export function sceneTouchTraining(k) {
     k.onUpdate(() => onUpdateHints(k, hintState, heroInst, levelIndicator, sound))
     k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
+    //
+    // Blink the element the player must hover over
+    //
+    const blinkState = { phase: 0 }
+    k.onUpdate(() => onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, fpsCounter))
     k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
     //
     // Skip-training prompt: keyboard text on desktop, touch devices replace
@@ -695,12 +712,20 @@ export function sceneTouchTraining(k) {
       heroInst.controlsDisabled = true
       heroInst.character && Hero.spawn(heroInst)
       antiHeroInst.character && Hero.spawn(antiHeroInst)
-      showTimedHint(k, hintState, heroInst, HINT_0_TEXT, 'welcome', HINT_WELCOME_DURATION, () => {
-        if (hintState.levelDone || hintState.isDead || hintState.awaitingMouseHint) return
-        hintState.welcomeDone = true
-        hintState.awaitingMouseHint = true
-        transitionToHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
-      })
+      //
+      // If the player died mid-tutorial, restore progress instead of restarting
+      //
+      const savedStep = get(TRAINING_STEP_KEY, 0)
+      if (savedStep > 0) {
+        restoreTrainingProgress(k, savedStep, hintState, heroInst, levelIndicator, fpsCounter, sound)
+      } else {
+        showTimedHint(k, hintState, heroInst, HINT_0_TEXT, 'welcome', HINT_WELCOME_DURATION, () => {
+          if (hintState.levelDone || hintState.isDead || hintState.awaitingMouseHint) return
+          hintState.welcomeDone = true
+          hintState.awaitingMouseHint = true
+          transitionToHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
+        })
+      }
     })
     scheduleAmbientSounds(k, sound)
   })
@@ -1475,6 +1500,10 @@ function onHeroSpikeDeath(k, heroInst, levelIndicator, hintState, spikeDead) {
   hintState.isDead = true
   hintState.currentTip && Tooltip.destroy(hintState.currentTip)
   hintState.currentTip = null
+  //
+  // Save current tutorial step so the restart can resume from here
+  //
+  set(TRAINING_STEP_KEY, hintTypeToStep(hintState.currentHintType))
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
@@ -2143,4 +2172,187 @@ function scheduleCrickets(k, sound) {
     Sound.playCricketSound(sound)
     scheduleCrickets(k, sound)
   })
+}
+//
+// Maps hint type string to a numeric step index for progress persistence
+//
+function hintTypeToStep(hintType) {
+  const map = {
+    welcome: 0,
+    mouse: 1,
+    hudSmallHero: 2,
+    hudLife: 3,
+    hudTime: 4,
+    run: 5,
+    jump: 6,
+    fragment: 7,
+    spikes: 8,
+    antihero: 9
+  }
+  return map[hintType] ?? 0
+}
+//
+// Restores tutorial state after a death so the player continues mid-tutorial
+//
+function restoreTrainingProgress(k, step, hintState, heroInst, levelIndicator, fpsCounter, sound) {
+  //
+  // Common: welcome is done at every step
+  //
+  hintState.welcomeDone = true
+  if (step <= 1) {
+    //
+    // Restore to "awaiting mouse hover on anti-hero"
+    //
+    hintState.awaitingMouseHint = true
+    hintState.trainingLabelLetters = 0
+    applyTrainingLetterProgress(k, levelIndicator, hintState, sound, 0)
+    transitionToHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
+    return
+  }
+  //
+  // HUD tutorial steps: controls remain disabled
+  //
+  hintState.mouseHintDone = true
+  hintState.antiHeroPersistentTooltipDisabled = true
+  heroInst.controlsDisabled = true
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HOVER)
+  if (step === 2) {
+    hintState.hudTutorialStep = 'smallHeroHint'
+    showHint(k, hintState, heroInst, HUD_SMALL_HERO_HINT, 'hudSmallHero')
+    return
+  }
+  hintState.smallHeroTooltipDone = true
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HUD_SMALL_HERO)
+  if (step === 3) {
+    hintState.hudTutorialStep = 'lifeHint'
+    showHint(k, hintState, heroInst, HUD_LIFE_HINT, 'hudLife')
+    return
+  }
+  hintState.lifeTooltipDone = true
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HUD_LIFE)
+  if (step === 4) {
+    hintState.hudTutorialStep = 'timeHint'
+    showHint(k, hintState, heroInst, HUD_TIME_HINT, 'hudTime')
+    return
+  }
+  hintState.timeTooltipDone = true
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HUD_TIME)
+  hintState.hudTutorialStep = 'done'
+  //
+  // All HUD steps done: enable controls and show the matching run/jump/etc hint
+  //
+  heroInst.controlsDisabled = false
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_RUN)
+  hintState.shown1 = true
+  if (step === 5) {
+    transitionToHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
+    return
+  }
+  hintState.shown2 = true
+  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_MAIN)
+  if (step === 6) {
+    transitionToHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
+    return
+  }
+  hintState.shown3 = true
+  if (step === 7) {
+    transitionToHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
+    return
+  }
+  hintState.shown4 = true
+  if (step === 8) {
+    transitionToHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
+    return
+  }
+  hintState.shown5 = true
+  transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+}
+//
+// Blinks the element the player needs to hover over: flashes to white then
+// back to its original color until the player hovers over it.
+//
+function onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, fpsCounter) {
+  if (hintState.levelDone || hintState.isDead) return
+  blinkState.phase += k.dt() * BLINK_SPEED
+  if (blinkState.phase > Math.PI * 2) blinkState.phase -= Math.PI * 2
+  //
+  // Binary toggle: white during positive half of sine cycle, original during negative
+  //
+  const isWhite = Math.sin(blinkState.phase) > 0
+  const white = k.rgb(255, 255, 255)
+  const needsBlink = hintState.awaitingMouseHint && !hintState.mouseHintHovering
+  const needsSmallHeroBlink = hintState.hudTutorialStep === 'smallHeroHint' && !hintState.smallHeroTooltipDone
+  const needsLifeBlink = hintState.hudTutorialStep === 'lifeHint' && !hintState.lifeTooltipDone
+  const needsTimeBlink = hintState.hudTutorialStep === 'timeHint' && !hintState.timeTooltipDone
+  //
+  // Anti-hero flash (awaiting mouse hover)
+  //
+  if (antiHeroInst.character?.exists?.()) {
+    if (needsBlink) {
+      if (!blinkState.antiHeroOrigColor) {
+        blinkState.antiHeroOrigColor = cloneColor(antiHeroInst.character.color) ?? white
+      }
+      antiHeroInst.character.color = isWhite ? white : blinkState.antiHeroOrigColor
+    } else {
+      if (blinkState.antiHeroOrigColor) {
+        antiHeroInst.character.color = blinkState.antiHeroOrigColor
+        blinkState.antiHeroOrigColor = null
+      }
+    }
+  }
+  //
+  // Small hero flash (HUD hover hint)
+  //
+  if (levelIndicator.smallHero?.character?.exists?.()) {
+    if (needsSmallHeroBlink) {
+      if (!blinkState.smallHeroOrigColor) {
+        blinkState.smallHeroOrigColor = cloneColor(levelIndicator.smallHero.character.color) ?? white
+      }
+      levelIndicator.smallHero.character.color = isWhite ? white : blinkState.smallHeroOrigColor
+    } else {
+      if (blinkState.smallHeroOrigColor) {
+        levelIndicator.smallHero.character.color = blinkState.smallHeroOrigColor
+        blinkState.smallHeroOrigColor = null
+      }
+    }
+  }
+  //
+  // Life image flash
+  //
+  if (levelIndicator.lifeImage?.sprite?.exists?.()) {
+    if (needsLifeBlink) {
+      if (!blinkState.lifeOrigColor) {
+        blinkState.lifeOrigColor = cloneColor(levelIndicator.lifeImage.sprite.color) ?? white
+      }
+      levelIndicator.lifeImage.sprite.color = isWhite ? white : blinkState.lifeOrigColor
+    } else {
+      if (blinkState.lifeOrigColor) {
+        levelIndicator.lifeImage.sprite.color = blinkState.lifeOrigColor
+        blinkState.lifeOrigColor = null
+      }
+    }
+  }
+  //
+  // Target time text flash
+  //
+  if (fpsCounter?.targetText?.exists?.()) {
+    if (needsTimeBlink) {
+      if (!blinkState.targetOrigColor) {
+        blinkState.targetOrigColor = cloneColor(fpsCounter.targetText.color) ?? white
+      }
+      fpsCounter.targetText.color = isWhite ? white : blinkState.targetOrigColor
+    } else {
+      if (blinkState.targetOrigColor) {
+        fpsCounter.targetText.color = blinkState.targetOrigColor
+        blinkState.targetOrigColor = null
+      }
+    }
+  }
+}
+//
+// Safely clones a Kaplay color object. Returns null if color is undefined/null.
+//
+function cloneColor(color) {
+  if (!color) return null
+  return color.clone?.() ?? { r: color.r, g: color.g, b: color.b }
 }

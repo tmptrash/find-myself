@@ -15,13 +15,14 @@ const HUD_OUTLINE_OFFSET = 1
  * Creates FPS counter display
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
- * @param {boolean} [config.showTimer=false] - Whether to show level timer
+ * @param {boolean} [config.showTimer=false] - Whether to show level timer (elapsed + green target)
+ * @param {boolean} [config.showElapsedTimer=true] - Whether to show elapsed time text (requires showTimer)
  * @param {number} [config.targetTime=null] - Target time for speed bonus (in seconds)
  * @param {number} [config.topY=55] - Vertical position (pixels from top)
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, targetTime = null, topY = 55 } = config
+  const { k, showTimer = false, showElapsedTimer = true, targetTime = null, topY = 55 } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // HUD numerals (FPS + timer) share the same neutral grey as the
@@ -38,7 +39,9 @@ export function create(config) {
   let timerText = null
   let targetText = null
   if (showTimer) {
-    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY)
+    if (showElapsedTimer) {
+      timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY)
+    }
     if (targetTime) {
       const targetMinutes = Math.floor(targetTime / 60)
       const targetSeconds = Math.floor(targetTime % 60)
@@ -81,15 +84,17 @@ export function onUpdate(inst) {
   inst.fpsCount++
   inst.updateTimer += k.dt()
   //
-  // Update level time
+  // Always track level time when there is a target time or an elapsed timer
   //
-  if (timerText) {
+  if (timerText || targetTime) {
     inst.levelTime += k.dt()
-    const minutes = Math.floor(inst.levelTime / 60)
-    const seconds = Math.floor(inst.levelTime % 60)
-    setOutlinedHudText({ main: timerText, outlineNodes: timerTextOutlines }, `time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+    if (timerText) {
+      const minutes = Math.floor(inst.levelTime / 60)
+      const seconds = Math.floor(inst.levelTime % 60)
+      setOutlinedHudText({ main: timerText, outlineNodes: timerTextOutlines }, `time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+    }
     //
-    // Update target time (remaining time)
+    // Update green target time (remaining time)
     //
     if (targetText && targetTime && targetText.exists?.()) {
       const remainingTime = Math.max(0, targetTime - inst.levelTime)

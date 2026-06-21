@@ -4271,6 +4271,7 @@ export function playPlatformCreakSound(instance) {
 /**
  * Plays a distant car horn — a short two-tone beep with reverb tail, realistic
  * city nighttime ambience. Volume is kept low to stay non-intrusive.
+ * Each call varies pitch, timing and volume slightly so horns never sound identical.
  * @param {Object} instance - Sound instance
  */
 export function playCarHornSound(instance) {
@@ -4279,34 +4280,49 @@ export function playCarHornSound(instance) {
   if (!ctx || ctx.state !== 'running') return
   const now = ctx.currentTime
   //
-  // Two-tone horn: first beep slightly higher, second slightly lower (classic city horn)
+  // Randomise base pitch ±25 Hz so each horn sounds distinct
   //
+  const pitchShift = (Math.random() - 0.5) * 50
+  //
+  // Randomise volume slightly (city trucks vs compact cars)
+  //
+  const volume = 0.13 + Math.random() * 0.10
+  //
+  // Randomise whether it is a single long beep or the classic two-tone pattern
+  //
+  const twoTone = Math.random() > 0.35
+  //
+  // Duration multiplier (short sharp vs longer lean)
+  //
+  const dur = 0.7 + Math.random() * 0.6
   const masterGain = ctx.createGain()
   masterGain.connect(ctx.destination)
   masterGain.gain.setValueAtTime(0.001, now)
-  masterGain.gain.linearRampToValueAtTime(0.18, now + 0.04)
-  masterGain.gain.setValueAtTime(0.18, now + 0.22)
-  masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45)
-  masterGain.gain.setValueAtTime(0.001, now + 0.52)
-  masterGain.gain.linearRampToValueAtTime(0.15, now + 0.56)
-  masterGain.gain.setValueAtTime(0.15, now + 0.70)
-  masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.95)
+  masterGain.gain.linearRampToValueAtTime(volume, now + 0.04)
+  masterGain.gain.setValueAtTime(volume, now + 0.20 * dur)
+  masterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42 * dur)
+  if (twoTone) {
+    masterGain.gain.setValueAtTime(0.001, now + 0.50 * dur)
+    masterGain.gain.linearRampToValueAtTime(volume * 0.85, now + 0.54 * dur)
+    masterGain.gain.setValueAtTime(volume * 0.85, now + 0.68 * dur)
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.90 * dur)
+  }
   //
-  // Slightly detuned harmonics for realism
+  // Slightly detuned harmonics for realism — pitch shifts with the random base
   //
-  const freqs = [370, 460, 740]
-  freqs.forEach(freq => {
+  const baseFreqs = [370 + pitchShift, 460 + pitchShift, 740 + pitchShift * 2]
+  baseFreqs.forEach(freq => {
     const osc = ctx.createOscillator()
     const filter = ctx.createBiquadFilter()
     osc.type = 'sawtooth'
     osc.frequency.setValueAtTime(freq, now)
     filter.type = 'bandpass'
     filter.frequency.setValueAtTime(freq, now)
-    filter.Q.value = 4
+    filter.Q.value = 3 + Math.random() * 3
     osc.connect(filter)
     filter.connect(masterGain)
     osc.start(now)
-    osc.stop(now + 1.0)
+    osc.stop(now + dur + 0.1)
   })
 }
 /**

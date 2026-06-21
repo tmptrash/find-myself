@@ -351,9 +351,10 @@ export function initScene(config) {
   // Create FPS counter, timer and target time (aligned with WORDS and small hero)
   //
   const uiTopY = topPlatformHeight ? topPlatformHeight - WORD_HUD_FPS_TOP_OFFSET : 55
-  const fpsCounter = FpsCounter.create({ 
+  const fpsCounter = FpsCounter.create({
     k,
     showTimer: true,
+    showElapsedTimer: false,
     targetTime: levelName && CFG.gameplay.speedBonusTime ? CFG.gameplay.speedBonusTime[levelName] : null,
     topY: uiTopY
   })

@@ -129,9 +129,9 @@ const SNOW_PUSH_DOWN_BOOST = 10
 //
 // Tooltip texts and layout
 //
-const ICICLE_TOOLTIP_TEXT = "im an icikle.\ncome closer and lick me"
+const ICICLE_TOOLTIP_TEXT = "I'm an icicle.\nCome closer and lick me"
 const ICICLE_TOOLTIP_Y_OFFSET = -30
-const ANTIHERO_TOOLTIP_TEXT = "im here :)"
+const ANTIHERO_TOOLTIP_TEXT = "I'm here :)"
 const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
 const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
@@ -278,6 +278,12 @@ const TRAP_PLATFORM_SLIDE_DISTANCE = 400
 const TRAP_PLATFORM_PAUSE_DURATION = 0.3
 const TRAP_CORRIDOR_DURATION = 6
 const TRAP_PLATFORM_TOP_TOLERANCE = 30
+//
+// Screen shake on hero death and extra wall height to prevent
+// dark canvas strips from showing during shake
+//
+const DEATH_SHAKE_STRENGTH = 6
+const SHAKE_BUFFER = 80
 //
 // Breath vapor: small white puffs from hero's mouth in cold air
 //
@@ -434,12 +440,12 @@ export function sceneLevel2(k) {
       CFG.game.platformName
     ])
     //
-    // Top wall (full width)
+    // Top wall extends SHAKE_BUFFER above y=0 so camera shake cannot
+    // reveal the canvas background through the top edge
     //
     k.add([
-      k.rect(CFG.visual.screen.width, TOP_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, TOP_MARGIN / 2),
-      k.anchor("center"),
+      k.rect(CFG.visual.screen.width, TOP_MARGIN + SHAKE_BUFFER),
+      k.pos(0, -SHAKE_BUFFER),
       k.area(),
       k.body({ isStatic: true }),
       k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
@@ -534,12 +540,11 @@ export function sceneLevel2(k) {
     //
     const sceneLock = { locked: showTrap }
     //
-    // Bottom platform (full width)
+    // Bottom platform extends SHAKE_BUFFER below screen height
     //
     k.add([
-      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
-      k.anchor("center"),
+      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN + SHAKE_BUFFER),
+      k.pos(0, CFG.visual.screen.height - BOTTOM_MARGIN),
       k.area(),
       k.body({ isStatic: true }),
       k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
@@ -1093,6 +1098,7 @@ export function sceneLevel2(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
+      showElapsedTimer: false,
       targetTime: CFG.gameplay.speedBonusTime
         ? CFG.gameplay.speedBonusTime['level-touch.2']
         : null
@@ -2819,6 +2825,7 @@ const DEATH_RELOAD_DELAY = 0.8
  */
 function onHeroDeath(k, heroInst, levelIndicator) {
   if (heroInst.isDying) return
+  k.shake(DEATH_SHAKE_STRENGTH)
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1

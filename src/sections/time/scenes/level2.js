@@ -29,6 +29,17 @@ const PLATFORM_SIDE_WIDTH = 50  // Reduced from 192 to 50 for more space
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
 const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
+// Breath vapor: small cold-air puffs from hero's mouth
+//
+const BREATH_INTERVAL = 2.0
+const BREATH_PARTICLE_COUNT = 5
+const BREATH_PARTICLE_SPEED = 15
+const BREATH_PARTICLE_LIFETIME = 0.8
+const BREATH_PARTICLE_SIZE_MIN = 2
+const BREATH_PARTICLE_SIZE_MAX = 5
+const BREATH_OFFSET_X = 12
+const BREATH_OFFSET_Y = -20
+//
 // TIME indicator tooltip
 //
 const TIME_INDICATOR_TOOLTIP_TEXT = "Your progress"
@@ -135,6 +146,11 @@ const NIGHT_MUSIC_FADE_SPEED = 1.5
 // Default ambient gain at day (restored at dawn)
 //
 const AMBIENT_GAIN_DAY = 1.0
+//
+// Car horn interval: random 5-15 seconds, same as level 0/1
+//
+const CAR_HORN_INTERVAL_MIN = 5
+const CAR_HORN_INTERVAL_MAX = 15
 
 /**
  * Draw realistic pixel art cloud on canvas
@@ -451,7 +467,13 @@ export function sceneLevel2(k) {
     // Night audio controller: at night only the clock sound remains.
     // All other music and ambient SFX fade to silence, then restore at dawn.
     //
-    const nightAudioState = { k, sound, timeMusic, kidsMusic }
+    const nightAudioState = {
+      k,
+      sound,
+      timeMusic,
+      kidsMusic,
+      carHornTimer: CAR_HORN_INTERVAL_MIN + Math.random() * (CAR_HORN_INTERVAL_MAX - CAR_HORN_INTERVAL_MIN)
+    }
     k.onUpdate(() => onUpdateNightAudio(nightAudioState))
     //
     // Calculate anti-hero position (on final platform)
@@ -594,11 +616,16 @@ export function sceneLevel2(k) {
     antiHero.character.z = 20
     hero.character.z = 20
     //
+    // Disable idle note glyphs — breath vapor is used instead as mouth effect
+    //
+    hero.idleVocalization = null
+    //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ 
-      k, 
-      showTimer: true, 
+    const fpsCounter = FpsCounter.create({
+      k,
+      showTimer: true,
+      showElapsedTimer: false,
       targetTime: CFG.gameplay.speedBonusTime['level-time.2'],
       topY: PLATFORM_TOP_HEIGHT - 57
     })
@@ -646,7 +673,7 @@ export function sceneLevel2(k) {
     // Create realistic pixel art clouds under top platform
     // Use single canvas for all clouds for better performance
     //
-    const cloudY = PLATFORM_TOP_HEIGHT + 70
+    const cloudY = PLATFORM_TOP_HEIGHT + 55
     const screenWidth = k.width()
     const cloudCount = 16
     const cloudSpacing = (screenWidth - PLATFORM_SIDE_WIDTH * 2) / cloudCount
@@ -832,6 +859,19 @@ export function sceneLevel2(k) {
     // Spawn anti-hero immediately (no delay)
     //
     Hero.spawn(antiHero)
+    //
+    // Breath vapor — small white puffs from hero's mouth (cold winter air)
+    //
+    const breathState = { timer: 0, particles: [] }
+    k.add([
+      k.z(CFG.visual.zIndex.player + 12),
+      {
+        draw() {
+          drawBreathVapor(k, breathState.particles)
+        }
+      }
+    ])
+    k.onUpdate(() => onUpdateBreathVapor(k, hero, breathState))
     //
     // Tooltip for TIME level indicator letters
     //
@@ -1154,6 +1194,10 @@ function updateHearts(inst) {
   // Update position
   //
   updateHeartsPosition(inst)
+  //
+  // Control breath.mp3 volume based on remaining attempts
+  //
+  updateBreathAudio(inst)
 }
 
 /**
@@ -1185,6 +1229,13 @@ function destroyHearts(inst) {
   })
   
   inst.hearts = null
+  //
+  // Stop breath audio when hero dies
+  //
+  if (inst.breathAudio) {
+    inst.breathAudio.pause()
+    inst.breathAudio.currentTime = 0
+  }
 }
 
 /**
@@ -1229,6 +1280,12 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndi
     lastGlobalTime: 0  // Track last global time to detect second changes
   })
   
+  //
+  // Create breath audio element (looping, started when hero loses a heart)
+  //
+  const breathAudio = new Audio('./sounds/breath.mp3')
+  breathAudio.loop = true
+  breathAudio.volume = 0
   const inst = {
     k,
     sound,
@@ -1243,7 +1300,8 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndi
     attemptsRemaining: 3,  // Number of wrong platform attempts remaining (starts at 3)
     hearts: null,  // Array of heart objects showing remaining attempts
     lastErrorTime: 0,  // Track when last error occurred to prevent multiple triggers
-    trapIndices
+    trapIndices,
+    breathAudio
   }
   
   //
@@ -1262,6 +1320,11 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndi
   //
   inst.updateHearts = (heartSystem) => updateHearts(heartSystem)
   inst.destroyHearts = (heartSystem) => destroyHearts(heartSystem)
+  //
+  // The startPlatform was created before inst existed so it had no heartSystem.
+  // Assign it now so an odd-sum landing removes a heart instead of killing immediately.
+  //
+  startPlatform.heartSystem = inst
   //
   // DEBUG: Create all platforms at once for visualization
   //
@@ -1587,11 +1650,16 @@ function createNextPlatform(inst) {
 function createLevelPlatforms(k, sound) {
   const backgroundPlatformColor = k.Color.fromHex(CFG.visual.colors.platform)
   //
-  // Top platform (ceiling)
+  //
+  // Extra padding so camera shake cannot reveal the canvas background.
+  //
+  const SHAKE_BUFFER = 80
+  //
+  // Top platform (extends ABOVE y=0 by SHAKE_BUFFER)
   //
   k.add([
-    k.rect(k.width(), PLATFORM_TOP_HEIGHT),
-    k.pos(0, 0),
+    k.rect(k.width(), PLATFORM_TOP_HEIGHT + SHAKE_BUFFER),
+    k.pos(0, -SHAKE_BUFFER),
     k.area(),
     k.body({ isStatic: true }),
     k.color(backgroundPlatformColor),
@@ -1599,10 +1667,10 @@ function createLevelPlatforms(k, sound) {
     CFG.game.platformName
   ])
   //
-  // Bottom platform (floor)
+  // Bottom platform (extends BELOW k.height() by SHAKE_BUFFER)
   //
   k.add([
-    k.rect(k.width(), PLATFORM_BOTTOM_HEIGHT),
+    k.rect(k.width(), PLATFORM_BOTTOM_HEIGHT + SHAKE_BUFFER),
     k.pos(0, k.height() - PLATFORM_BOTTOM_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
@@ -2030,10 +2098,10 @@ function createCloudsUnderTopPlatform(k) {
   //
   // Cloud parameters
   //
-  const cloudTopY = PLATFORM_TOP_HEIGHT + 40  // Top Y position (dense layer here)
-  const cloudBottomY = PLATFORM_TOP_HEIGHT + 100  // Bottom Y position (sparse clouds here)
-  const cloudDenseLayerY = PLATFORM_TOP_HEIGHT + 50  // Dense layer Y position
-  const cloudSparseLayerStartY = PLATFORM_TOP_HEIGHT + 60  // Start of sparse layer
+  const cloudTopY = PLATFORM_TOP_HEIGHT + 30  // Top Y position (dense layer here)
+  const cloudBottomY = PLATFORM_TOP_HEIGHT + 90  // Bottom Y position (sparse clouds here)
+  const cloudDenseLayerY = PLATFORM_TOP_HEIGHT + 40  // Dense layer Y position
+  const cloudSparseLayerStartY = PLATFORM_TOP_HEIGHT + 50  // Start of sparse layer
   const cloudSparseLayerEndY = cloudBottomY  // End of sparse layer
   const baseCloudColor = k.rgb(250, 250, 255)  // White with slight blue tint for clouds
   
@@ -2423,6 +2491,14 @@ function onUpdateNightAudio(inst) {
       ag.linearRampToValueAtTime(Math.min(AMBIENT_GAIN_DAY, ag.value + fadeStep), inst.sound.audioContext.currentTime + dt)
     }
   }
+  //
+  // Car horns play day and night (city always has traffic)
+  //
+  inst.carHornTimer -= dt
+  if (inst.carHornTimer <= 0) {
+    Sound.playCarHornSound(inst.sound)
+    inst.carHornTimer = CAR_HORN_INTERVAL_MIN + Math.random() * (CAR_HORN_INTERVAL_MAX - CAR_HORN_INTERVAL_MIN)
+  }
 }
 function createSnowDrifts(k) {
   //
@@ -2563,4 +2639,84 @@ function createSnowDrifts(k) {
       }
     ])
   })
+}
+//
+// Controls breath.mp3 volume according to remaining hearts
+//
+const BREATH_VOLUME_TWO_HEARTS = 0.07
+const BREATH_VOLUME_ONE_HEART = 0.21
+//
+function updateBreathAudio(inst) {
+  const { breathAudio, attemptsRemaining } = inst
+  if (!breathAudio) return
+  if (attemptsRemaining === 2) {
+    if (breathAudio.paused) breathAudio.play().catch(() => {})
+    breathAudio.volume = BREATH_VOLUME_TWO_HEARTS
+  } else if (attemptsRemaining === 1) {
+    if (breathAudio.paused) breathAudio.play().catch(() => {})
+    breathAudio.volume = BREATH_VOLUME_ONE_HEART
+  } else {
+    breathAudio.pause()
+    breathAudio.currentTime = 0
+  }
+}
+//
+// Breath vapor: periodic cold-air puffs from hero's mouth
+//
+function onUpdateBreathVapor(k, heroInst, state) {
+  const dt = k.dt()
+  //
+  // Age and remove expired particles
+  //
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i]
+    p.life -= dt
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    p.size += 2 * dt
+    if (p.life <= 0) state.particles.splice(i, 1)
+  }
+  if (!heroInst?.character?.pos) return
+  state.timer -= dt
+  if (state.timer > 0) return
+  state.timer = BREATH_INTERVAL
+  //
+  // Spawn puff from hero's mouth area
+  //
+  const dir = heroInst.direction ?? 1
+  const baseX = heroInst.character.pos.x + BREATH_OFFSET_X * dir
+  const baseY = heroInst.character.pos.y + BREATH_OFFSET_Y
+  for (let i = 0; i < BREATH_PARTICLE_COUNT; i++) {
+    const angle = (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.8
+    const speed = BREATH_PARTICLE_SPEED * (0.5 + Math.random())
+    state.particles.push({
+      x: baseX + (Math.random() - 0.5) * 4,
+      y: baseY + (Math.random() - 0.5) * 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 8,
+      size: BREATH_PARTICLE_SIZE_MIN + Math.random() * (BREATH_PARTICLE_SIZE_MAX - BREATH_PARTICLE_SIZE_MIN),
+      life: BREATH_PARTICLE_LIFETIME * (0.6 + Math.random() * 0.4),
+      maxLife: BREATH_PARTICLE_LIFETIME
+    })
+  }
+}
+//
+// Draw breath vapor puffs as semi-transparent circles
+//
+function drawBreathVapor(k, particles) {
+  for (const p of particles) {
+    const alpha = Math.max(0, p.life / p.maxLife) * 0.4
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: p.size,
+      color: k.rgb(220, 230, 240),
+      opacity: alpha
+    })
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: p.size * 1.8,
+      color: k.rgb(200, 210, 220),
+      opacity: alpha * 0.3
+    })
+  }
 }

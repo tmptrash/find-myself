@@ -525,6 +525,7 @@ export function sceneLevel2(k) {
       skipPlatforms: true,
       spriteName: 'city-background-level2',
       showSun: false,
+      skipDust: true,
       //
       // Stars below clouds; moon stays in overlay for clear foreground visibility
       //

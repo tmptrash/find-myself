@@ -292,6 +292,7 @@ export function sceneLevel3(k) {
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: CORRIDOR_Y - 20,  // T1ME indicator above upper corridor ceiling
       sideWallWidth: PLATFORM_SIDE_WIDTH,
+      helpY: CFG.visual.screen.height - PLATFORM_BOTTOM_HEIGHT - 35,
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,

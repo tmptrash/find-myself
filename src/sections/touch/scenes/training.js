@@ -248,11 +248,11 @@ const SKIP_TEXT_Y = FLOOR_Y + Math.round(BOTTOM_MARGIN * 0.42)
 //
 const TRAINING_STEP_KEY = 'touch.trainingStep'
 //
-// Blink speed (radians per second) for target elements awaiting hover
+// Blink: 3π rad/s gives |sin| = 3 pulses/sec with smooth fade in/out.
+// opacity pulses between BLINK_MIN_OPACITY and 1.0 on the target object itself.
 //
-const BLINK_SPEED = 4.0
-const BLINK_MIN_OPACITY = 0.3
-const BLINK_MAX_OPACITY = 1.0
+const BLINK_SPEED = 9.42
+const BLINK_MIN_OPACITY = 0.05
 const SKIP_MIN_OPACITY = 0.3
 const SKIP_MAX_OPACITY = 0.7
 const SKIP_FLICKER_SPEED = 0.9
@@ -668,9 +668,10 @@ export function sceneTouchTraining(k) {
     k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
     //
-    // Blink the element the player must hover over
+    // Blink the element the player must hover over.
+    // Direct opacity pulse on the target objects — guaranteed to work in Kaplay.
     //
-    const blinkState = { phase: 0 }
+    const blinkState = { phase: 0, opacity: 0 }
     k.onUpdate(() => onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, fpsCounter))
     k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
     //
@@ -2268,91 +2269,83 @@ function restoreTrainingProgress(k, step, hintState, heroInst, levelIndicator, f
   transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
 }
 //
-// Blinks the element the player needs to hover over: flashes to white then
-// back to its original color until the player hovers over it.
+// Updates blink state: smooth opacity pulse 3 times/sec via |sin(phase)|.
+// Sets opacity directly on the target character/sprite — no separate overlay objects.
+// Life icon and timer text use color lerp toward white for additional contrast.
 //
 function onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, fpsCounter) {
-  if (hintState.levelDone || hintState.isDead) return
-  blinkState.phase += k.dt() * BLINK_SPEED
-  if (blinkState.phase > Math.PI * 2) blinkState.phase -= Math.PI * 2
-  //
-  // Binary toggle: white during positive half of sine cycle, original during negative
-  //
-  const isWhite = Math.sin(blinkState.phase) > 0
-  const white = k.rgb(255, 255, 255)
-  const needsBlink = hintState.awaitingMouseHint && !hintState.mouseHintHovering
+  const needsAntiBlink = hintState.awaitingMouseHint && !hintState.mouseHintHovering
   const needsSmallHeroBlink = hintState.hudTutorialStep === 'smallHeroHint' && !hintState.smallHeroTooltipDone
   const needsLifeBlink = hintState.hudTutorialStep === 'lifeHint' && !hintState.lifeTooltipDone
   const needsTimeBlink = hintState.hudTutorialStep === 'timeHint' && !hintState.timeTooltipDone
+  if (hintState.levelDone || hintState.isDead) {
+    antiHeroInst.character?.exists?.() && (antiHeroInst.character.opacity = 1.0)
+    levelIndicator.smallHero?.character?.exists?.() && (levelIndicator.smallHero.character.opacity = 1.0)
+    levelIndicator.lifeImage?.sprite?.exists?.() && (levelIndicator.lifeImage.sprite.opacity = 1.0)
+    return
+  }
+  blinkState.phase += k.dt() * BLINK_SPEED
+  if (blinkState.phase > Math.PI * 2) blinkState.phase -= Math.PI * 2
   //
-  // Anti-hero flash (awaiting mouse hover)
+  // Smooth fade: |sin| goes 0 → 1 → 0, three pulses per second
+  //
+  blinkState.opacity = Math.abs(Math.sin(blinkState.phase))
+  const pulseOpacity = BLINK_MIN_OPACITY + (1.0 - BLINK_MIN_OPACITY) * blinkState.opacity
+  //
+  // Anti-hero: opacity pulse directly on character
   //
   if (antiHeroInst.character?.exists?.()) {
-    if (needsBlink) {
-      if (!blinkState.antiHeroOrigColor) {
-        blinkState.antiHeroOrigColor = cloneColor(antiHeroInst.character.color) ?? white
-      }
-      antiHeroInst.character.color = isWhite ? white : blinkState.antiHeroOrigColor
-    } else {
-      if (blinkState.antiHeroOrigColor) {
-        antiHeroInst.character.color = blinkState.antiHeroOrigColor
-        blinkState.antiHeroOrigColor = null
-      }
-    }
+    antiHeroInst.character.opacity = needsAntiBlink ? pulseOpacity : 1.0
   }
   //
-  // Small hero flash (HUD hover hint)
+  // Small hero HUD: opacity pulse directly on character
   //
   if (levelIndicator.smallHero?.character?.exists?.()) {
-    if (needsSmallHeroBlink) {
-      if (!blinkState.smallHeroOrigColor) {
-        blinkState.smallHeroOrigColor = cloneColor(levelIndicator.smallHero.character.color) ?? white
-      }
-      levelIndicator.smallHero.character.color = isWhite ? white : blinkState.smallHeroOrigColor
-    } else {
-      if (blinkState.smallHeroOrigColor) {
-        levelIndicator.smallHero.character.color = blinkState.smallHeroOrigColor
-        blinkState.smallHeroOrigColor = null
-      }
-    }
+    levelIndicator.smallHero.character.opacity = needsSmallHeroBlink ? pulseOpacity : 1.0
   }
   //
-  // Life image flash
+  // Life icon: lerp tint from original grey toward white for a bright pulse
   //
   if (levelIndicator.lifeImage?.sprite?.exists?.()) {
     if (needsLifeBlink) {
       if (!blinkState.lifeOrigColor) {
-        blinkState.lifeOrigColor = cloneColor(levelIndicator.lifeImage.sprite.color) ?? white
+        blinkState.lifeOrigColor = {
+          r: levelIndicator.lifeImage.sprite.color.r,
+          g: levelIndicator.lifeImage.sprite.color.g,
+          b: levelIndicator.lifeImage.sprite.color.b
+        }
       }
-      levelIndicator.lifeImage.sprite.color = isWhite ? white : blinkState.lifeOrigColor
-    } else {
-      if (blinkState.lifeOrigColor) {
-        levelIndicator.lifeImage.sprite.color = blinkState.lifeOrigColor
-        blinkState.lifeOrigColor = null
-      }
+      const t = blinkState.opacity
+      levelIndicator.lifeImage.sprite.color = k.rgb(
+        Math.round(blinkState.lifeOrigColor.r + (255 - blinkState.lifeOrigColor.r) * t),
+        Math.round(blinkState.lifeOrigColor.g + (255 - blinkState.lifeOrigColor.g) * t),
+        Math.round(blinkState.lifeOrigColor.b + (255 - blinkState.lifeOrigColor.b) * t)
+      )
+    } else if (blinkState.lifeOrigColor) {
+      levelIndicator.lifeImage.sprite.color = k.rgb(blinkState.lifeOrigColor.r, blinkState.lifeOrigColor.g, blinkState.lifeOrigColor.b)
+      blinkState.lifeOrigColor = null
     }
   }
   //
-  // Target time text flash
+  // Timer text: lerp color from original green toward white
   //
   if (fpsCounter?.targetText?.exists?.()) {
     if (needsTimeBlink) {
-      if (!blinkState.targetOrigColor) {
-        blinkState.targetOrigColor = cloneColor(fpsCounter.targetText.color) ?? white
+      if (!blinkState.timerOrigColor) {
+        blinkState.timerOrigColor = fpsCounter.targetText.color
       }
-      fpsCounter.targetText.color = isWhite ? white : blinkState.targetOrigColor
-    } else {
-      if (blinkState.targetOrigColor) {
-        fpsCounter.targetText.color = blinkState.targetOrigColor
-        blinkState.targetOrigColor = null
-      }
+      const t = blinkState.opacity
+      const origR = blinkState.timerOrigColor?.r ?? 100
+      const origG = blinkState.timerOrigColor?.g ?? 255
+      const origB = blinkState.timerOrigColor?.b ?? 100
+      fpsCounter.targetText.color = k.rgb(
+        Math.round(origR + (255 - origR) * t),
+        Math.round(origG + (255 - origG) * t),
+        Math.round(origB + (255 - origB) * t)
+      )
+    } else if (blinkState.timerOrigColor) {
+      fpsCounter.targetText.color = blinkState.timerOrigColor
+      blinkState.timerOrigColor = null
     }
   }
-}
-//
-// Safely clones a Kaplay color object. Returns null if color is undefined/null.
-//
-function cloneColor(color) {
-  if (!color) return null
-  return color.clone?.() ?? { r: color.r, g: color.g, b: color.b }
 }

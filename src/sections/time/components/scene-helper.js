@@ -216,7 +216,11 @@ export function initScene(config) {
     //
     showFloatingPhrases = false,
     sceneBackdropHex = CFG.visual.colors.platform,
-    helpY = null
+    helpY = null,
+    //
+    // When true, skip creating dust motes (e.g. snow levels where dust looks wrong)
+    //
+    skipDust = false
   } = config
   //
   // Set gravity
@@ -349,7 +353,7 @@ export function initScene(config) {
   //
   // Daytime dust motes floating near the bottom of the game area
   //
-  createDustParticles(k, k.height() - bottomPlatformHeight)
+  !skipDust && createDustParticles(k, k.height() - bottomPlatformHeight)
   return { sound, hero, antiHero, levelIndicator }
 }
 

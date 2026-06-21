@@ -223,7 +223,7 @@ export function checkCollision(inst, heroX, heroY) {
   // Ground-level collision: hero dies when running through the emergence hole
   // Height is limited so jumping over the base is still possible
   //
-  const GROUND_COLLISION_HALF_W = BASE_WIDTH / 2 + 30
+  const GROUND_COLLISION_HALF_W = BASE_WIDTH / 2 + 10
   const GROUND_COLLISION_HEIGHT = 50
   if (heroY > inst.floorY - GROUND_COLLISION_HEIGHT && Math.abs(heroX - inst.x) < GROUND_COLLISION_HALF_W) {
     return true
@@ -233,7 +233,7 @@ export function checkCollision(inst, heroX, heroY) {
   // Check multiple vertical sample points on the hero for reliable collision
   //
   const HERO_HEIGHT_SAMPLES = [0, -20, -40, -60]
-  const COLLISION_PADDING = 18
+  const COLLISION_PADDING = 5
   for (const offset of HERO_HEIGHT_SAMPLES) {
     const sampleY = heroY + offset
     if (sampleY < wormTop || sampleY > inst.floorY) continue

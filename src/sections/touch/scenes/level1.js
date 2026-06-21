@@ -67,7 +67,7 @@ const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
 //
 // Notes bubble stays visible for this long after the demo melody finishes.
 //
-const NOTES_BUBBLE_HIDE_DELAY = 2.0
+const NOTES_BUBBLE_HIDE_DELAY = 10.0
 //
 // Speed bonus effects (flash small hero + particles on quick completion)
 //
@@ -1111,6 +1111,7 @@ export function sceneLevel1(k) {
       levelName: 'level-touch.1',
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
+      helpY: CFG.visual.screen.height - 55,
       levelIndicator,
       sound,
       sceneBackdropHex: '#1C323A'
@@ -3350,7 +3351,7 @@ function triggerAllRootsGlow(treeRootsInst) {
 // Blinks the anti-hero white and back to activeColor several times
 // with a mouth sound on each white flash (melody success celebration)
 //
-const ANTIHERO_BLINK_COUNT = 16
+const ANTIHERO_BLINK_COUNT = 9
 const ANTIHERO_BLINK_INTERVAL = 0.13
 function blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, count) {
   if (!antiHeroInst.character?.exists?.()) return

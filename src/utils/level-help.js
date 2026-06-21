@@ -96,7 +96,7 @@ const TOUCH_PANEL_BORDER_HEX = '#5A8898'
 //
 export const LEVEL_GOAL_TEXTS = {
   'level-touch.0': 'Here you need to figure out\nhow to gather bugs together\nby touching them',
-  'level-touch.1': 'Here you need to figure out\nhow to play the right melody\nby touching things',
+  'level-touch.1': 'Here you need to figure out\nhow to play the right\nmelody by touching things',
   'level-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
   'level-touch.3': 'Touch the bugs and see what happens...',
   'level-time.0': 'Platforms don\'t live forever...',
@@ -111,14 +111,16 @@ const GOAL_LABEL_TEXT = 'goal'
 const GOAL_GAP = 140
 const GOAL_HIT_HALF_W = 80
 //
-// Button border: 4-line rect drawn around buy-help and goal labels.
-// Color is derived from sceneBackdropHex (brightened), so it blends
-// with the level background while still being visible.
+// Button border: rounded-corner rect around buy-help and goal labels.
+// Drawn as outer (border color) + inner (backdrop color) rounded rects,
+// creating a visible ring with rounded corners.
+// Color is derived from sceneBackdropHex (brightened).
 //
 const BTN_BORDER_PAD_X = 18
 const BTN_BORDER_PAD_Y = 8
-const BTN_BORDER_WIDTH = 1.5
-const BTN_BORDER_OPACITY = 0.8
+const BTN_BORDER_RADIUS = 8
+const BTN_BORDER_WIDTH = 2
+const BTN_BORDER_OPACITY = 0.85
 const BTN_BORDER_LIGHTEN = 60
 //
 // Module-level reference to the currently active panel instance.
@@ -290,19 +292,21 @@ export function create(config) {
   k.onMouseRelease(() => onMouseRelease(inst))
   k.onKeyPress('escape', () => inst.panelOpen && closePanel(inst))
   //
-  // Derive border color from backdrop (lightened) so it blends with the
-  // level background but remains visible
+  // Border = backdrop lightened; inner fill = panel fill color — so the button
+  // background is visually distinct from the scene background (matches the panel
+  // dialog that opens on click).
   //
   const backdropRgb = sceneBackdropHex ? parseHex(sceneBackdropHex) : [26, 26, 26]
   const borderR = Math.min(255, backdropRgb[0] + BTN_BORDER_LIGHTEN)
   const borderG = Math.min(255, backdropRgb[1] + BTN_BORDER_LIGHTEN)
   const borderB = Math.min(255, backdropRgb[2] + BTN_BORDER_LIGHTEN)
+  const { fillR: innerFillR, fillG: innerFillG, fillB: innerFillB } = panelColors
   k.add([
     k.z(CFG.visual.zIndex.ui + 2),
     k.fixed(),
     {
       draw() {
-        drawButtonBorder(k, inst, borderR, borderG, borderB)
+        drawButtonBorder(k, inst, borderR, borderG, borderB, innerFillR, innerFillG, innerFillB)
       }
     }
   ])
@@ -832,28 +836,39 @@ function syncPanelBackdrop(inst, panelOpacity) {
   CanvasBackdrop.setCssBackdrop(inst.k.canvas, dr, dg, db)
 }
 //
-// Draws 4 border lines around a label node to form a visible button outline.
-// Uses k.drawLine which is reliable across all Kaplay versions.
+// Draws a rounded-corner border ring around a label node.
+// Outer rect uses the border color; inner rect uses the backdrop color
+// to cut out the fill area, leaving only the rounded ring visible.
 //
-function drawLabelBorderLines(k, node, r, g, b) {
-  const color = k.rgb(r, g, b)
+function drawLabelBorderRing(k, node, br, bg, bb, bgR, bgG, bgB) {
+  const bw = BTN_BORDER_WIDTH
   const w = node.width
   const h = node.height
-  const x = node.pos.x
-  const y = node.pos.y
-  const x1 = x - w / 2 - BTN_BORDER_PAD_X
-  const y1 = y - h / 2 - BTN_BORDER_PAD_Y
-  const x2 = x + w / 2 + BTN_BORDER_PAD_X
-  const y2 = y + h / 2 + BTN_BORDER_PAD_Y
-  k.drawLine({ p1: k.vec2(x1, y1), p2: k.vec2(x2, y1), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
-  k.drawLine({ p1: k.vec2(x2, y1), p2: k.vec2(x2, y2), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
-  k.drawLine({ p1: k.vec2(x2, y2), p2: k.vec2(x1, y2), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
-  k.drawLine({ p1: k.vec2(x1, y2), p2: k.vec2(x1, y1), width: BTN_BORDER_WIDTH, color, opacity: BTN_BORDER_OPACITY })
+  const x = node.pos.x - w / 2 - BTN_BORDER_PAD_X
+  const y = node.pos.y - h / 2 - BTN_BORDER_PAD_Y
+  const outerW = w + BTN_BORDER_PAD_X * 2
+  const outerH = h + BTN_BORDER_PAD_Y * 2
+  k.drawRect({
+    pos: k.vec2(x, y),
+    width: outerW,
+    height: outerH,
+    radius: BTN_BORDER_RADIUS,
+    color: k.rgb(br, bg, bb),
+    opacity: BTN_BORDER_OPACITY
+  })
+  k.drawRect({
+    pos: k.vec2(x + bw, y + bw),
+    width: outerW - bw * 2,
+    height: outerH - bw * 2,
+    radius: Math.max(0, BTN_BORDER_RADIUS - bw),
+    color: k.rgb(bgR, bgG, bgB),
+    opacity: 1.0
+  })
 }
 //
-// Draws borders around the buy-help label (and goal label if present).
+// Draws rounded borders around the buy-help label (and goal label if present).
 //
-function drawButtonBorder(k, inst, r, g, b) {
-  inst.labelNode?.exists?.() && drawLabelBorderLines(k, inst.labelNode, r, g, b)
-  inst.goalLabelNode?.exists?.() && drawLabelBorderLines(k, inst.goalLabelNode, r, g, b)
+function drawButtonBorder(k, inst, br, bg, bb, bgR, bgG, bgB) {
+  inst.labelNode?.exists?.() && drawLabelBorderRing(k, inst.labelNode, br, bg, bb, bgR, bgG, bgB)
+  inst.goalLabelNode?.exists?.() && drawLabelBorderRing(k, inst.goalLabelNode, br, bg, bb, bgR, bgG, bgB)
 }

@@ -8,7 +8,7 @@ import * as Sound from '../../../utils/sound.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { toCanvas, parseHex, getRGB } from '../../../utils/helper.js'
+import { toCanvas, parseHex, getRGB, hexToRgb, rgbToHex } from '../../../utils/helper.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as TimeLevel0Ambience from '../utils/time-level0-ambience.js'
 import { getDarkness } from '../utils/time-day-night.js'
@@ -16,7 +16,6 @@ import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
-import * as PixelClouds from '../../../components/pixel-clouds.js'
 //
 //
 const [TIME_LIFE_DEDUCT_BG_R, TIME_LIFE_DEDUCT_BG_G, TIME_LIFE_DEDUCT_BG_B] = parseHex(CFG.visual.colors.background)
@@ -48,21 +47,22 @@ const NIGHT_CRICKET_INTERVAL_MAX = 4.0
 const NIGHT_CAR_HORN_INTERVAL_MIN = 5
 const NIGHT_CAR_HORN_INTERVAL_MAX = 15
 //
-// Background clouds — 8 clouds at fully random X positions within the play area
+// Background clouds — same pixel-art canvas approach as time level 2
 //
-const CLOUD_COUNT = 8
-const CLOUD_Z = 14.5
-const CLOUD_SIZE_MIN = 45
-const CLOUD_SIZE_MAX = 110
-const CLOUD_LAYERS_MIN = 8
-const CLOUD_LAYERS_MAX = 16
-const CLOUD_Y_OFFSET_MIN = 15
-const CLOUD_Y_OFFSET_MAX = 130
+const CLOUD_Z = 15.503
+const CLOUD_COUNT = 5
+const CLOUD_CANVAS_HEIGHT = 350
+const CLOUD_CANVAS_CENTER_Y = 175
+const CLOUD_Y_OFFSET = 55
 const CLOUD_SCHEMES = [
   { baseColor: '#f0f0f0', shadowColor: '#a0a0b8', highlightColor: '#ffffff' },
   { baseColor: '#606060', shadowColor: '#202030', highlightColor: '#909090' },
   { baseColor: '#405070', shadowColor: '#151828', highlightColor: '#708090' }
 ]
+//
+// Helper for random float in [min, max)
+//
+const randomRange = (min, max) => Math.random() * (max - min) + min
 //
 // TIME indicator tooltip
 //
@@ -1158,121 +1158,130 @@ function drawBirds(k, birds) {
   }
 }
 //
-// Creates decorative pixel clouds at fully random positions in the top area.
-// Clouds are pre-baked on one canvas and shown as a single sprite.
+// Creates pixel-art clouds using same canvas + sprite approach as time level 2.
+// All clouds are drawn on a single canvas for performance, then baked to a sprite.
+// CLOUD_Z = 15.503 sits just above the city background (15.5) and below the
+// night overlay (15.51), so clouds darken automatically at night.
 //
 function createSparseClouds(k) {
+  const cloudY = PLATFORM_TOP_HEIGHT + CLOUD_Y_OFFSET
   const screenWidth = k.width()
-  const cloudY = PLATFORM_TOP_HEIGHT + 55
-  const playAreaWidth = screenWidth - PLATFORM_SIDE_WIDTH * 2
-  const canvas = document.createElement('canvas')
-  canvas.width = screenWidth
-  canvas.height = 350
-  const ctx = canvas.getContext('2d')
-  //
-  // Draw each cloud at a fully random X position within the play area
-  //
+  const cloudSpacing = (screenWidth - PLATFORM_SIDE_WIDTH * 2) / CLOUD_COUNT
+  const cloudsCanvas = document.createElement('canvas')
+  cloudsCanvas.width = screenWidth
+  cloudsCanvas.height = CLOUD_CANVAS_HEIGHT
+  const cloudsCtx = cloudsCanvas.getContext('2d')
   for (let i = 0; i < CLOUD_COUNT; i++) {
-    const x = PLATFORM_SIDE_WIDTH + Math.random() * playAreaWidth
-    const yOffset = CLOUD_Y_OFFSET_MIN + Math.random() * (CLOUD_Y_OFFSET_MAX - CLOUD_Y_OFFSET_MIN)
-    const size = CLOUD_SIZE_MIN + Math.random() * (CLOUD_SIZE_MAX - CLOUD_SIZE_MIN)
-    const layers = CLOUD_LAYERS_MIN + Math.floor(Math.random() * (CLOUD_LAYERS_MAX - CLOUD_LAYERS_MIN))
+    const x = cloudSpacing * i + (Math.random() - 0.5) * cloudSpacing * 0.5
+    const yOffset = (Math.random() - 0.5) * 80
+    const cloudSize = 50 + Math.random() * 145
+    const layers = 8 + Math.floor(Math.random() * 15)
     const scheme = CLOUD_SCHEMES[Math.floor(Math.random() * CLOUD_SCHEMES.length)]
     const lightSide = Math.random() > 0.5 ? 'left' : 'right'
-    drawCloudOnCanvas(ctx, { x, y: yOffset, size, layers, lightSide, ...scheme, pixelSize: 2 })
+    drawCloudOnCanvas(cloudsCtx, {
+      x,
+      y: CLOUD_CANVAS_CENTER_Y + yOffset,
+      size: cloudSize,
+      layers,
+      lightSide,
+      baseColor: scheme.baseColor,
+      shadowColor: scheme.shadowColor,
+      highlightColor: scheme.highlightColor,
+      pixelSize: 2
+    })
   }
-  const spriteData = canvas.toDataURL()
-  canvas.width = 0
-  canvas.height = 0
-  k.loadSprite('level0-clouds', spriteData)
+  const cloudsSprite = cloudsCanvas.toDataURL()
+  //
+  // Release 2D backing store right after serialising to PNG
+  //
+  cloudsCanvas.width = 0
+  cloudsCanvas.height = 0
+  k.loadSprite('level0-clouds', cloudsSprite)
   k.add([
     k.sprite('level0-clouds'),
-    k.pos(0, cloudY - 55),
+    k.pos(PLATFORM_SIDE_WIDTH, cloudY - CLOUD_CANVAS_CENTER_Y),
     k.z(CLOUD_Z),
     k.fixed()
   ])
 }
 //
-// Draws a single cloud using the metaball (bubble) technique onto a canvas context.
-// Mirrors the algorithm from level2.js for shared pixel-art style.
+// Draws a single pixel-art cloud using metaball technique onto a 2D canvas context.
+// Same algorithm as time level 2 drawCloud() — shared visual style.
 //
-function drawCloudOnCanvas(ctx, config) {
+function drawCloudOnCanvas(context, config) {
   const {
     x,
     y,
-    size = 80,
-    layers = 12,
+    size = 200,
+    layers = 15,
     lightSide = 'right',
-    baseColor = '#f0f0f0',
-    shadowColor = '#a0a0b8',
-    highlightColor = '#ffffff',
+    baseColor = '#f5d5b8',
+    shadowColor = '#9ba4d6',
+    highlightColor = '#ffeedd',
     pixelSize = 2
   } = config
-  const base = parseCloudHex(baseColor)
-  const shadow = parseCloudHex(shadowColor)
-  const highlight = parseCloudHex(highlightColor)
+  const base = hexToRgb(baseColor)
+  const shadow = hexToRgb(shadowColor)
+  const highlight = hexToRgb(highlightColor)
   const cloudLayers = []
-  for (let li = 0; li < layers; li++) {
-    const depth = li / layers
+  for (let layerIndex = 0; layerIndex < layers; layerIndex++) {
+    const layerDepth = layerIndex / layers
+    const bubblesInLayer = Math.floor(randomRange(3, 8))
     const bubbles = []
-    const count = 3 + Math.floor(Math.random() * 5)
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2
-      const dist = Math.random() * size * 0.5
-      const radius = size * 0.15 + Math.random() * size * 0.25
-      bubbles.push({
-        x: Math.cos(angle) * dist,
-        y: Math.sin(angle) * dist * 0.6 - (depth - 0.5) * size * 0.3,
-        radius,
-        density: 0.5 + Math.random() * 0.4
-      })
+    const layerLightBoost = layerDepth * 0.6
+    const layerDarkness = (1 - layerDepth) * 0.3
+    for (let i = 0; i < bubblesInLayer; i++) {
+      const angle = randomRange(0, Math.PI * 2)
+      const distance = randomRange(0, size * 0.5)
+      const radius = randomRange(size * 0.15, size * 0.4)
+      const bx = Math.cos(angle) * distance
+      const by = Math.sin(angle) * distance * 0.6 - (layerDepth - 0.5) * size * 0.3
+      bubbles.push({ x: bx, y: by, radius, density: randomRange(0.5, 0.9) })
     }
-    cloudLayers.push({ bubbles, depth, lightBoost: depth * 0.6, darkness: (1 - depth) * 0.3 })
+    cloudLayers.push({ bubbles, depth: layerDepth, lightBoost: layerLightBoost, darkness: layerDarkness })
   }
-  const half = size
   for (const layer of cloudLayers) {
-    for (let py = -half; py <= half; py += pixelSize) {
-      for (let px = -half; px <= half; px += pixelSize) {
-        let density = 0
-        for (const b of layer.bubbles) {
-          const d = Math.sqrt((px - b.x) ** 2 + (py - b.y) ** 2)
-          if (d < b.radius) {
-            const f = 1 - d / b.radius
-            density += f * f * b.density
+    const halfSize = size
+    for (let py = -halfSize; py <= halfSize; py += pixelSize) {
+      for (let px = -halfSize; px <= halfSize; px += pixelSize) {
+        let totalDensity = 0
+        for (const bubble of layer.bubbles) {
+          const dx = px - bubble.x
+          const dy = py - bubble.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < bubble.radius) {
+            const falloff = 1 - dist / bubble.radius
+            totalDensity += falloff * falloff * bubble.density
           }
         }
-        if (density <= 0.25 - layer.depth * 0.1) continue
-        density = Math.min(density, 1)
-        let lf
-        if (lightSide === 'right') lf = (px / half) * 0.5 + 0.5
-        else lf = (-px / half) * 0.5 + 0.5
-        lf = Math.max(0, Math.min(1, lf * 0.5 + density * 0.2 + layer.lightBoost - layer.darkness))
+        const threshold = 0.25 - layer.depth * 0.1
+        if (totalDensity <= threshold) continue
+        const density = Math.min(totalDensity, 1)
+        let lightFactor
+        if (lightSide === 'right') lightFactor = (px / halfSize) * 0.5 + 0.5
+        else if (lightSide === 'left') lightFactor = (-px / halfSize) * 0.5 + 0.5
+        else if (lightSide === 'top') lightFactor = (-py / halfSize) * 0.5 + 0.5
+        else lightFactor = (py / halfSize) * 0.5 + 0.5
+        lightFactor = Math.max(0, Math.min(1, lightFactor * 0.5 + density * 0.2 + layer.lightBoost - layer.darkness))
         let r, g, b
-        if (lf > 0.65) {
-          const t = (lf - 0.65) / 0.35
+        if (lightFactor > 0.65) {
+          const t = (lightFactor - 0.65) / 0.35
           r = Math.floor(base.r + (highlight.r - base.r) * t)
           g = Math.floor(base.g + (highlight.g - base.g) * t)
           b = Math.floor(base.b + (highlight.b - base.b) * t)
-        } else if (lf > 0.3) {
+        } else if (lightFactor > 0.3) {
           r = base.r; g = base.g; b = base.b
         } else {
-          const t = lf / 0.3
+          const t = lightFactor / 0.3
           r = Math.floor(shadow.r + (base.r - shadow.r) * t)
           g = Math.floor(shadow.g + (base.g - shadow.g) * t)
           b = Math.floor(shadow.b + (base.b - shadow.b) * t)
         }
-        ctx.fillStyle = `rgb(${r},${g},${b})`
-        ctx.fillRect(x + px, y + py, pixelSize, pixelSize)
+        context.fillStyle = rgbToHex(r, g, b)
+        context.fillRect(x + px, y + py, pixelSize, pixelSize)
       }
     }
   }
-}
-//
-// Converts #rrggbb hex string to { r, g, b } object (cloud rendering helper)
-//
-function parseCloudHex(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 255, g: 255, b: 255 }
 }
 //
 // Night music controller: fades the shared time-section music tracks out at dusk

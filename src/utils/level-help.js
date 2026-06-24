@@ -99,9 +99,9 @@ export const LEVEL_GOAL_TEXTS = {
   'level-touch.1': 'Here you need to figure out\nhow to play the right\nmelody by touching things',
   'level-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
   'level-touch.3': 'Touch the bugs and see what happens...',
-  'level-time.0': 'Platforms don\'t live forever...',
+  'level-time.0': 'Platforms don\'t live\nforever...',
   'level-time.1': 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places',
-  'level-word.0': 'Find yourself and accept that\nthe voices in your head\nwon\'t go away',
+  'level-word.0': 'Find yourself and accept\nthat the voices in your\nhead won\'t go away',
   'level-word.1': 'The task is the same —\nfind and accept yourself'
 }
 //
@@ -117,7 +117,8 @@ const GOAL_HIT_HALF_W = 80
 // Color is derived from sceneBackdropHex (brightened).
 //
 const BTN_BORDER_PAD_X = 18
-const BTN_BORDER_PAD_Y = 8
+const BTN_BORDER_PAD_Y_TOP = 13
+const BTN_BORDER_PAD_Y_BOT = 8
 const BTN_BORDER_RADIUS = 8
 const BTN_BORDER_WIDTH = 2
 const BTN_BORDER_OPACITY = 0.85
@@ -845,9 +846,9 @@ function drawLabelBorderRing(k, node, br, bg, bb, bgR, bgG, bgB) {
   const w = node.width
   const h = node.height
   const x = node.pos.x - w / 2 - BTN_BORDER_PAD_X
-  const y = node.pos.y - h / 2 - BTN_BORDER_PAD_Y
+  const y = node.pos.y - h / 2 - BTN_BORDER_PAD_Y_TOP
   const outerW = w + BTN_BORDER_PAD_X * 2
-  const outerH = h + BTN_BORDER_PAD_Y * 2
+  const outerH = h + BTN_BORDER_PAD_Y_TOP + BTN_BORDER_PAD_Y_BOT
   k.drawRect({
     pos: k.vec2(x, y),
     width: outerW,

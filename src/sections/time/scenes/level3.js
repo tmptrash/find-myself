@@ -7,7 +7,6 @@ import { getColor, toCanvas, parseHex, hexToRgb, rgbToHex } from '../../../utils
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
-import * as BackgroundBirds from '../components/background-birds.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import { registerTime3Sprite } from '../../../utils/level-assets.js'
 import { getDarkness } from '../utils/time-day-night.js'
@@ -92,6 +91,39 @@ const MONSTER_BODY_NIGHT_OPACITY = 0.18
 // as dark spots inside the orange glow when the night overlay is active.
 //
 const MONSTER_NIGHT_PUPIL_Z = 17
+//
+// Proximity: distance at which growl / shake start and reach full intensity.
+//
+const MONSTER_PROXIMITY_START = 180
+const MONSTER_PROXIMITY_FULL = 60
+const MONSTER_PROXIMITY_GROWL_INTERVAL = 0.22
+const MONSTER_SHAKE_MAX = 1.5
+//
+// Trail: how many pixels monster must move before dropping a new shadow blob.
+// Shadow blobs live for TRAIL_FADE_SPEED seconds (opacity fades to 0).
+//
+const MONSTER_TRAIL_DISTANCE = 30
+const MONSTER_TRAIL_RADIUS = 38
+const MONSTER_TRAIL_OPACITY_START = 0.28
+const MONSTER_TRAIL_FADE_SPEED = 0.04
+//
+// Clock wobble when monster nearby — starts at this distance.
+//
+const CLOCK_WOBBLE_DISTANCE = 220
+const CLOCK_WOBBLE_AMP = 2
+//
+// Frozen color (white) — applied to body circles while isFrozen, removed when unfrozen.
+//
+const MONSTER_FROZEN_R = 220
+const MONSTER_FROZEN_G = 240
+const MONSTER_FROZEN_B = 255
+const MONSTER_NORMAL_R = 40
+const MONSTER_NORMAL_G = 40
+const MONSTER_NORMAL_B = 45
+//
+// Control change shake amount (px).
+//
+const CONTROL_CHANGE_SHAKE = 5
 //
 // Night music constants for level 3.
 // Boss / kids / clock fade out after dark; crickets fill the silence.
@@ -330,10 +362,6 @@ export function sceneLevel3(k) {
       k.z(13)  // Behind everything except gradient
     ])
     //
-    // Create background birds
-    //
-    const birds = BackgroundBirds.create(k)
-    //
     // Create small clouds at the top
     //
     const cloudY = CORRIDOR_Y - 30
@@ -550,6 +578,26 @@ export function sceneLevel3(k) {
             createClockDisintegrationEffect(k, section.clock, sound)
             k.destroy(section.clock)
             section.clock = null  // Mark as destroyed
+          } else {
+            //
+            // Wobble clock when monster is nearby — jitter proportional to proximity
+            //
+            const clockDist = Math.hypot(monster.x - section.clock.pos.x, monster.y - section.clock.pos.y)
+            if (clockDist < CLOCK_WOBBLE_DISTANCE) {
+              if (!section.clockOrigX) {
+                section.clockOrigX = section.clock.pos.x
+                section.clockOrigY = section.clock.pos.y
+              }
+              applyClockWobble(section.clock, section.clockOrigX, section.clockOrigY, monster.morphTimer)
+            } else if (section.clockOrigX) {
+              //
+              // Restore original position when monster moves away
+              //
+              section.clock.pos.x = section.clockOrigX
+              section.clock.pos.y = section.clockOrigY
+              section.clockOrigX = null
+              section.clockOrigY = null
+            }
           }
         }
       })
@@ -815,6 +863,11 @@ function createCorridorPlatforms(k) {
   const platformColor = getColor(k, CFG.visual.colors.platform)
   const platformHex = CFG.visual.colors.platform
   //
+  // Extra buffer so camera shake (up to 14 px for monster death) never reveals
+  // the black canvas behind the level geometry.
+  //
+  const SHAKE_BUFFER = 40
+  //
   // Create sprite for middle wall with rounded right corners
   //
   const passageStartX = k.width() - PLATFORM_SIDE_WIDTH - PASSAGE_WIDTH
@@ -822,11 +875,11 @@ function createCorridorPlatforms(k) {
   const middleWallSprite = createMiddleWallSprite(passageStartX, middleWallHeight, platformHex)
   loadTime3Sprite(k, 'middle-wall-level3', middleWallSprite)
   //
-  // Top fill above the upper corridor (matches middle wall / letterbox)
+  // Top fill: starts ABOVE y=0 by SHAKE_BUFFER so shaking never exposes the canvas
   //
   k.add([
-    k.rect(k.width(), CORRIDOR_Y),
-    k.pos(0, 0),
+    k.rect(k.width(), CORRIDOR_Y + SHAKE_BUFFER),
+    k.pos(0, -SHAKE_BUFFER),
     k.area(),
     k.body({ isStatic: true }),
     platformColor,
@@ -846,10 +899,10 @@ function createCorridorPlatforms(k) {
     CFG.game.platformName
   ])
   //
-  // Bottom fill below the lower corridor (matches middle wall / letterbox)
+  // Bottom fill: extends BELOW screen by SHAKE_BUFFER so shake never reveals the canvas
   //
   k.add([
-    k.rect(k.width(), k.height() - (LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT)),
+    k.rect(k.width(), k.height() - (LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT) + SHAKE_BUFFER),
     k.pos(0, LOWER_CORRIDOR_Y + CORRIDOR_HEIGHT),
     k.area(),
     k.body({ isStatic: true }),
@@ -1470,7 +1523,21 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     finaleChaseScale: 1,
     finaleIdleSway: false,
     currentMoveDirectionX: 1,
-    currentMoveDirectionY: 1
+    currentMoveDirectionY: 1,
+    //
+    // Trail: last position where a shadow was dropped; distance threshold prevents
+    // spawning shadows every frame when the monster barely moves.
+    //
+    trailLastX: monsterX,
+    trailLastY: monsterY,
+    //
+    // Proximity growl timer — throttle sound to avoid audio clutter.
+    //
+    growlTimer: 0,
+    //
+    // Visual shake timer when hit by snowball — body circles jitter while > 0
+    //
+    hitShakeTimer: 0
   }
   //
   // Update monster
@@ -1568,17 +1635,39 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
       }
     }
     //
-    // Update body morphing - create organic blob-like shape
+    // Update body morphing - create organic blob-like shape.
+    // Also update frozen color and hit-shake every frame for reliability.
     //
     inst.morphTimer += dt * 2
+    if (inst.hitShakeTimer > 0) {
+      inst.hitShakeTimer -= dt
+    }
     inst.bodyCircles.forEach((bc, i) => {
       const phase = inst.morphTimer * bc.speed + bc.phaseOffset
       const offsetX = Math.cos(phase) * 10 * bc.radius
       const offsetY = Math.sin(phase * 1.3) * 10 * bc.radius
-      bc.obj.pos.x = inst.x + offsetX + inst.wobbleX
-      bc.obj.pos.y = inst.y + offsetY + inst.wobbleY
+      //
+      // Add random jitter to circle positions while hit-shake is active
+      //
+      const hitJitterX = inst.hitShakeTimer > 0 ? (Math.random() - 0.5) * 14 : 0
+      const hitJitterY = inst.hitShakeTimer > 0 ? (Math.random() - 0.5) * 14 : 0
+      bc.obj.pos.x = inst.x + offsetX + inst.wobbleX + hitJitterX
+      bc.obj.pos.y = inst.y + offsetY + inst.wobbleY + hitJitterY
       const scale = 0.9 + Math.sin(phase * 2) * 0.1
       bc.obj.radius = bc.baseRadius * scale
+      //
+      // Frozen = icy blue-white; normal = near-black. Set every frame so no
+      // one-shot assignment can be missed or overwritten.
+      //
+      if (inst.isFrozen) {
+        bc.obj.color.r = MONSTER_FROZEN_R
+        bc.obj.color.g = MONSTER_FROZEN_G
+        bc.obj.color.b = MONSTER_FROZEN_B
+      } else {
+        bc.obj.color.r = MONSTER_NORMAL_R
+        bc.obj.color.g = MONSTER_NORMAL_G
+        bc.obj.color.b = MONSTER_NORMAL_B
+      }
     })
     //
     // Update eyes position and make pupils look at hero
@@ -1750,6 +1839,14 @@ function createMonster(k, heroInst, sfx, levelIndicator, heroScoreAtStart) {
     // Fade body and glow eyes based on day/night darkness.
     //
     updateMonsterNight(inst)
+    //
+    // Proximity shake + growl: scale with inverse distance to hero.
+    //
+    onUpdateMonsterProximity(k, inst, heroX, heroY, dt)
+    //
+    // Drop a dark shadow blob every time the monster moves far enough.
+    //
+    onUpdateMonsterTrail(k, inst)
   })
   //
   // Draw legs with pads at the end (using game object with z-index)
@@ -1860,6 +1957,11 @@ function setupControlInversion(heroInst, sections) {
       //
       if (shouldUpdateControls) {
         heroInst.controlsReversed = newSection.isReversed
+        //
+        // Disorienting blip + screen jolt when the control direction flips
+        //
+        heroInst.sfx && Sound.playControlChangeSound(heroInst.sfx)
+        k.shake(CONTROL_CHANGE_SHAKE)
       }
       
       currentSection = newSection
@@ -2792,23 +2894,21 @@ function onMonsterHit(k, monster, sfx) {
   //
   if (!monster.isFrozen) {
     monster.isFrozen = true
-    //
-    // Start countdown timer
-    //
     startFreezeCountdown(k, monster)
   }
   //
-  // Play hit sound
+  // Visual body shake on monster + screen jolt
+  //
+  monster.hitShakeTimer = 0.4
+  k.shake(7)
+  //
+  // Play louder hit sound
   //
   sfx && Sound.playBulletHitSound(sfx)
   //
   // Create hit particles
   //
   createMonsterHitParticles(k, monster)
-  //
-  // Flash monster
-  //
-  flashMonster(k, monster, 0)
 }
 /**
  * Start freeze countdown for monster
@@ -2817,18 +2917,16 @@ function onMonsterHit(k, monster, sfx) {
  */
 function startFreezeCountdown(k, monster) {
   //
-  // Decrease freeze time each frame
+  // Body circle color is updated each frame by the main update loop based
+  // on inst.isFrozen — no one-shot color assignment needed here.
+  // Just track the freeze timer.
   //
   const unfreezeLoop = k.onUpdate(() => {
     if (!monster || !monster.freezeTimeRemaining) {
       unfreezeLoop.cancel()
       return
     }
-    
     monster.freezeTimeRemaining -= k.dt()
-    //
-    // Unfreeze when time runs out
-    //
     if (monster.freezeTimeRemaining <= 0) {
       monster.isFrozen = false
       monster.freezeTimeRemaining = 0
@@ -3053,6 +3151,10 @@ function onUpdateMonsterHeroCollision(k, hero, monster, levelIndicator, heroScor
   const savedSfx = hero.sfx
   const savedLevelIndicator = levelIndicator
   Sound.stopSubtitleSound()
+  //
+  // Violent shake when monster catches the hero
+  //
+  k.shake(14)
   Hero.death(hero, () => {
     k.wait(0.1, () => {
       if (savedSfx?.audioContext && savedSfx.ambientGain) {
@@ -3091,4 +3193,81 @@ function onUpdateHelpLock(inst) {
   inst.setWasHelpOpen(isOpen)
   inst.hero.controlsDisabled = isOpen
   inst.monster.helpLocked = isOpen
+}
+//
+// Screen shake + low growl scaled by how close the monster is to the hero.
+// Called each frame from the monster onUpdate.
+//
+function onUpdateMonsterProximity(k, inst, heroX, heroY, dt) {
+  if (inst.isReturningHome) return
+  const dist = Math.hypot(heroX - inst.x, heroY - inst.y)
+  if (dist >= MONSTER_PROXIMITY_START) return
+  //
+  // proximity 0 = at MONSTER_PROXIMITY_START, 1 = at or beyond MONSTER_PROXIMITY_FULL
+  //
+  const proximity = 1 - Math.min(1, Math.max(0, (dist - MONSTER_PROXIMITY_FULL) / (MONSTER_PROXIMITY_START - MONSTER_PROXIMITY_FULL)))
+  //
+  // Scale by k.dt()*60 so it is frame-rate independent and accumulates visibly.
+  // Even when monster is frozen the player still feels it looming.
+  //
+  const shakeAmt = proximity * MONSTER_SHAKE_MAX * dt * 60
+  if (shakeAmt > 0.1) {
+    k.shake(shakeAmt * (0.7 + Math.random() * 0.3))
+  }
+  //
+  // Throttled growl
+  //
+  inst.growlTimer -= dt
+  if (inst.growlTimer <= 0) {
+    Sound.playMonsterProximityGrowl(inst.sfx, proximity)
+    inst.growlTimer = MONSTER_PROXIMITY_GROWL_INTERVAL
+  }
+}
+//
+// Drops a semi-transparent dark blob at the monster's current position.
+// The blob stays permanently as a "scorched" footprint on the floor.
+//
+function onUpdateMonsterTrail(k, inst) {
+  const dx = inst.x - inst.trailLastX
+  const dy = inst.y - inst.trailLastY
+  if (Math.hypot(dx, dy) < MONSTER_TRAIL_DISTANCE) return
+  inst.trailLastX = inst.x
+  inst.trailLastY = inst.y
+  //
+  // Add a fading dark blob at z=12 — behind body (14) and legs (13)
+  //
+  const blob = k.add([
+    k.circle(MONSTER_TRAIL_RADIUS),
+    k.pos(inst.x, inst.y),
+    k.color(15, 15, 20),
+    k.opacity(MONSTER_TRAIL_OPACITY_START),
+    k.anchor('center'),
+    k.z(12),
+    k.fixed()
+  ])
+  blob.onUpdate(() => {
+    blob.opacity -= MONSTER_TRAIL_FADE_SPEED * k.dt() * 60
+    if (blob.opacity <= 0) k.destroy(blob)
+  })
+}
+//
+// Updates body circle colors: white while frozen, dark when thawed.
+// Called from startFreezeCountdown on state change.
+//
+function setMonsterBodyColor(monster, r, g, b) {
+  if (!monster.bodyCircles) return
+  monster.bodyCircles.forEach(bc => {
+    try { bc.obj.color = bc.obj.color.clone ? bc.obj.color.clone() : bc.obj.color } catch (e) {}
+    try { bc.obj.color = { r, g, b } } catch (e) {}
+  })
+}
+//
+// Wobble a clock object when the monster is nearby — small position oscillation.
+// originalPos must be stored before wobbling begins.
+//
+function applyClockWobble(clock, originalX, originalY, phase) {
+  if (!clock || !clock.exists || !clock.exists()) return
+  const amp = CLOCK_WOBBLE_AMP
+  clock.pos.x = originalX + Math.sin(phase * 18) * amp
+  clock.pos.y = originalY + Math.cos(phase * 22) * amp
 }

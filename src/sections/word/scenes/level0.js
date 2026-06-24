@@ -91,6 +91,10 @@ const FLYING_WORD_TOOLTIP_WIDTH = 72
 const FLYING_WORD_TOOLTIP_HEIGHT = 28
 const FLYING_WORD_TOOLTIP_Y_OFFSET = -36
 //
+// Extra vertical offset to lower buy help / goal buttons below default position
+//
+const HELP_Y_EXTRA_OFFSET = 18
+//
 // Blades2 chase trap bounds and proximity rattle
 //
 const BLADES2_PLAY_MARGIN = 48
@@ -147,11 +151,10 @@ const FLYING_WORD_TOOLTIPS = {
 export function sceneLevel0(k) {
   k.scene("level-word.0", () => {
     //
-    // Reset scores when entering from a different section.
-    // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
+    // Reset lifeScore when entering from a different section (word section starts fresh).
+    // heroScore carries over from localStorage as accumulated across sections.
     //
     if (get('lastSection', null) !== 'word') {
-      set('heroScore', 0)
       set('lifeScore', 0)
     }
     set('lastSection', 'word')
@@ -173,6 +176,7 @@ export function sceneLevel0(k) {
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
       sideWallWidth: PLATFORM_SIDE_WIDTH,
+      helpY: k.height() - PLATFORM_BOTTOM_HEIGHT + LevelHelp.HELP_UNDER_PLAY_AREA_OFFSET + HELP_Y_EXTRA_OFFSET,
       heroX: HERO_SPAWN_X,
       heroY: HERO_SPAWN_Y,
       antiHeroX: ANTIHERO_SPAWN_X,

@@ -381,6 +381,7 @@ export function initScene(config) {
   //
   CFG.controls.backToMenu.forEach(key => {
     k.onKeyPress(key, () => {
+      if (LevelHelp.isAnyPanelOpen()) return
       Sound.stopBackgroundMusic(sound)
       if (breathMusic && breathMusic.stop) breathMusic.stop()
       goToMenuAfterAssets(k)

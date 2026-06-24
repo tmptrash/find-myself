@@ -3191,21 +3191,31 @@ export function playBulletHitSound(instance) {
   toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1)
   
   const envelope = instance.audioContext.createGain()
-  envelope.gain.setValueAtTime(0.5, now)
+  envelope.gain.setValueAtTime(1.4, now)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
-  
+  //
+  // Thick impact body — sub-bass thud
+  //
+  const thud = instance.audioContext.createOscillator()
+  const thudGain = instance.audioContext.createGain()
+  thud.type = 'sine'
+  thud.frequency.setValueAtTime(80, now)
+  thud.frequency.exponentialRampToValueAtTime(30, now + 0.12)
+  thudGain.gain.setValueAtTime(0.7, now)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
   noise.connect(filter)
   filter.connect(envelope)
   envelope.connect(instance.audioContext.destination)
-  
   tone.connect(toneGain)
   toneGain.connect(instance.audioContext.destination)
-  
+  thud.connect(thudGain)
+  thudGain.connect(instance.audioContext.destination)
   noise.start(now)
   noise.stop(now + duration)
-  
   tone.start(now)
   tone.stop(now + 0.1)
+  thud.start(now)
+  thud.stop(now + 0.13)
 }
 /**
  * Play empty click sound when hero has no bullets
@@ -4387,4 +4397,99 @@ export function playWingFlapSound(instance) {
     src.start(t)
     src.stop(t + dur + 0.01)
   }
+}
+/**
+ * Play a low menacing growl that scales in volume with monster proximity.
+ * Called repeatedly as the monster approaches — proximity 0=far, 1=very close.
+ * Uses a sub-bass rumble + a slow-attack sawtooth snarl so it feels organic.
+ * @param {Object} instance - Sound instance
+ * @param {number} proximity - 0 (far) to 1 (touching)
+ */
+export function playMonsterProximityGrowl(instance, proximity) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const vol = proximity * proximity * 0.38
+  if (vol < 0.01) return
+  const now = ctx.currentTime
+  const duration = 0.18
+  //
+  // Sub-bass rumble — gives physical sense of mass
+  //
+  const bass = ctx.createOscillator()
+  bass.type = 'sawtooth'
+  bass.frequency.setValueAtTime(38 + proximity * 22, now)
+  bass.frequency.linearRampToValueAtTime(28 + proximity * 12, now + duration)
+  const bassGain = ctx.createGain()
+  bassGain.gain.setValueAtTime(0.001, now)
+  bassGain.gain.linearRampToValueAtTime(vol, now + 0.04)
+  bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  //
+  // Low-pass to keep it rumble-y, not buzzy
+  //
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(180, now)
+  lp.Q.value = 2
+  bass.connect(lp)
+  lp.connect(bassGain)
+  bassGain.connect(ctx.destination)
+  bass.start(now)
+  bass.stop(now + duration + 0.01)
+  //
+  // Chest-rattle: broadband noise burst shaped through a resonant peak
+  //
+  const bufSize = Math.ceil(ctx.sampleRate * duration)
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-(i / bufSize) * 6)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = buf
+  const peaking = ctx.createBiquadFilter()
+  peaking.type = 'peaking'
+  peaking.frequency.value = 90
+  peaking.gain.value = 12
+  peaking.Q.value = 0.7
+  const noiseGain = ctx.createGain()
+  noiseGain.gain.setValueAtTime(vol * 0.45, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noise.connect(peaking)
+  peaking.connect(noiseGain)
+  noiseGain.connect(ctx.destination)
+  noise.start(now)
+  noise.stop(now + duration + 0.01)
+}
+/**
+ * Play a brief disorienting blip when hero controls are inverted.
+ * Short descending tritone click gives a "glitch" feel.
+ * @param {Object} instance - Sound instance
+ */
+export function playControlChangeSound(instance) {
+  if (globalMuteProceduralSounds) return
+  const ctx = instance.audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  //
+  // Two-note descending chirp — unsettling tritone interval
+  //
+  const freqs = [660, 440]
+  freqs.forEach((freq, i) => {
+    const osc = ctx.createOscillator()
+    osc.type = 'square'
+    osc.frequency.setValueAtTime(freq, now + i * 0.06)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.001, now + i * 0.06)
+    g.gain.linearRampToValueAtTime(0.12, now + i * 0.06 + 0.008)
+    g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.065)
+    const hp = ctx.createBiquadFilter()
+    hp.type = 'highpass'
+    hp.frequency.value = 200
+    osc.connect(hp)
+    hp.connect(g)
+    g.connect(ctx.destination)
+    osc.start(now + i * 0.06)
+    osc.stop(now + i * 0.06 + 0.07)
+  })
 }

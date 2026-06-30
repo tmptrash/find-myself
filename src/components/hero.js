@@ -1952,7 +1952,7 @@ export function onAnnihilationCollide(inst) {
 
   inst.isAnnihilating = true
   const { k } = inst
-  if (inst.currentLevel === 'level-touch.3' && inst.antiHero?.character?.exists?.()) {
+  if (inst.currentLevel === 'lesson-touch.3' && inst.antiHero?.character?.exists?.()) {
     TouchHandHold.begin(inst, (targetPos) => startAnnihilationExplosion(inst, targetPos))
     return
   }
@@ -2250,8 +2250,8 @@ function startAnnihilationExplosion(inst, targetPos) {
             // STEP 7: Check if this is the last level of word, touch or time section
             //
             const nextLevel = getNextLevel(inst.currentLevel)
-            const isLastWordLevel = inst.currentLevel === 'level-word.4' && nextLevel === 'word-complete'
-            const isLastTimeLevel = inst.currentLevel === 'level-time.3' && nextLevel === 'time-complete'
+            const isLastWordLevel = inst.currentLevel === 'lesson-word.4' && nextLevel === 'word-complete'
+            const isLastTimeLevel = inst.currentLevel === 'lesson-time.3' && nextLevel === 'time-complete'
             
             if (isLastWordLevel && (!inst.addMouth || inst.bodyColor !== '#DC143C')) {
               //
@@ -2388,7 +2388,7 @@ function startAnnihilationExplosion(inst, targetPos) {
                         // Save progress and show transition
                         //
                         if (nextLevel && nextLevel !== 'menu') {
-                          set('lastLevel', nextLevel)
+                          set('lastLesson', nextLevel)
                         }
                         inst.character.hidden = true
                         createLevelTransition(k, inst.currentLevel)
@@ -2397,7 +2397,7 @@ function startAnnihilationExplosion(inst, targetPos) {
                   })
                 })
               })
-            } else if (inst.currentLevel === 'level-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== TOUCH_SECTION_HERO_COLOR)) {
+            } else if (inst.currentLevel === 'lesson-touch.3' && nextLevel === 'touch-complete' && (!inst.addArms || inst.bodyColor !== TOUCH_SECTION_HERO_COLOR)) {
               //
               // Special sequence for completing touch section: change hero color to touch anti-hero teal and add arms
               //
@@ -2517,7 +2517,7 @@ function startAnnihilationExplosion(inst, targetPos) {
                       // Save progress and show transition
                       //
                       if (nextLevel && nextLevel !== 'menu') {
-                        set('lastLevel', nextLevel)
+                        set('lastLesson', nextLevel)
                       }
                       inst.character.hidden = true
                       //
@@ -2648,7 +2648,7 @@ function startAnnihilationExplosion(inst, targetPos) {
                       // Save progress and show transition
                       //
                       if (nextLevel && nextLevel !== 'menu') {
-                        set('lastLevel', nextLevel)
+                        set('lastLesson', nextLevel)
                       }
                       inst.character.hidden = true
                       //
@@ -2667,7 +2667,7 @@ function startAnnihilationExplosion(inst, targetPos) {
               //
               k.wait(0.6, () => {
                 if (nextLevel && nextLevel !== 'menu') {
-                  set('lastLevel', nextLevel)
+                  set('lastLesson', nextLevel)
                 }
                 inst.character.hidden = true
                 k.wait(0.5, () => {
@@ -2686,7 +2686,7 @@ function startAnnihilationExplosion(inst, targetPos) {
                   // (so player continues from the next level, not the current one)
                   //
                   if (nextLevel && nextLevel !== 'menu') {
-                    set('lastLevel', nextLevel)
+                    set('lastLesson', nextLevel)
                   }
                   inst.character.hidden = true
                   //
@@ -3130,7 +3130,7 @@ function getParticleColors(inst) {
   //
   // Death shards stay filled with body hues plus thin outline only — never solid outline blobs.
   //
-  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('level-time.')
+  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('lesson-time.')
   if (isTimeSection) {
     const { type } = inst
     return type === HEROES.HERO
@@ -3478,7 +3478,7 @@ function createEyeParticles(inst, centerX, centerY) {
   //
   // Check if we're in time section for grayscale eyes
   //
-  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('level-time.')
+  const isTimeSection = inst.currentLevel && inst.currentLevel.startsWith('lesson-time.')
   const eyeWhiteColor = isTimeSection ? [200, 200, 200] : [255, 255, 255]  // Light gray or white
   const pupilColor = isTimeSection ? [100, 100, 100] : [0, 0, 0]  // Dark gray or black
   

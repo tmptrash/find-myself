@@ -8,11 +8,11 @@ import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as OneSpikes from '../components/one-spikes.js'
 import * as MovingCars from '../components/moving-cars.js'
 import * as Tooltip from '../../../utils/tooltip.js'
-import { registerTime3Sprite } from '../../../utils/level-assets.js'
+import { registerTime3Sprite } from '../../../utils/lesson-assets.js'
 import { getDarkness } from '../utils/time-day-night.js'
 import * as BootLoader from '../../../utils/boot-loader.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TimeLevel3Finale from '../utils/time-level3-finale.js'
 //
 // Platform dimensions (in pixels, for 1920x1080 resolution)
@@ -278,8 +278,8 @@ function drawCloud(context, config) {
  * Time section level 3 scene
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel3(k) {
-  k.scene("level-time.3", async () => {
+export function sceneLesson3(k) {
+  k.scene("lesson-time.3", async () => {
     const sceneGeneration = ++level3SceneGeneration
     const isStaleScene = () => sceneGeneration !== level3SceneGeneration
     //
@@ -291,7 +291,7 @@ export function sceneLevel3(k) {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-time.3')
+    set('lastLesson', 'lesson-time.3')
     //
     // Save heroScore at level start for restoration on death
     //
@@ -312,7 +312,7 @@ export function sceneLevel3(k) {
     //
     const { hero, antiHero, levelIndicator } = initScene({
       k,
-      levelName: 'level-time.3',
+      levelName: 'lesson-time.3',
       levelNumber: 4,
       skipPlatforms: true,
       spriteName: 'city-background-level3',
@@ -337,7 +337,7 @@ export function sceneLevel3(k) {
         stopLevel3BackgroundMusic(k)
         stopTimeSectionMusic()
         Sound.fadeOutAllMusic()
-        createLevelTransition(k, 'level-time.3')
+        createLevelTransition(k, 'lesson-time.3')
       }
     })
     if (isStaleScene()) return
@@ -608,8 +608,6 @@ export function sceneLevel3(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
-      showElapsedTimer: false,
-      targetTime: null,
       topY: CORRIDOR_Y - 20 - 57
     })
     //
@@ -740,7 +738,7 @@ function showSnowballInstructions(k) {
   //
   // Check progress storage for how many times instructions were shown
   //
-  let showCount = get('time.level3SnowballInstructionsCount', 0)
+  let showCount = get('time.lesson3SnowballInstructionsCount', 0)
   //
   // Only show instructions first 2 times
   //
@@ -750,7 +748,7 @@ function showSnowballInstructions(k) {
   //
   // Increment show count
   //
-  set('time.level3SnowballInstructionsCount', showCount + 1)
+  set('time.lesson3SnowballInstructionsCount', showCount + 1)
   
   const centerX = CFG.visual.screen.width / 2 - 20
   const textY = SNOWBALL_INSTRUCTIONS_TEXT_Y
@@ -2036,7 +2034,7 @@ function createObstacleSpikes(k, hero, sound, levelIndicator, sections, heroScor
       endX: cluster.endX,
       y: cluster.y,
       hero,
-      currentLevel: 'level-time.3',
+      currentLevel: 'lesson-time.3',
       digitCount: cluster.count,
       fakeDigitCount: 0,  // No fake spikes - all are deadly
       sfx: sound,
@@ -3176,7 +3174,7 @@ function onUpdateMonsterHeroCollision(k, hero, monster, levelIndicator, heroScor
       }
       k.wait(0.8, () => {
         Sound.stopSubtitleSound()
-        k.go('level-time.3')
+        k.go('lesson-time.3')
       })
     })
   })

@@ -3,11 +3,11 @@ import { getColor, getRGB, parseHex, toCanvas } from '../../../utils/helper.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import { get, set } from '../../../utils/progress.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as WordHeroIdleSpeech from './word-hero-idle-speech.js'
 import * as WordHangingVines from './word-hanging-vines.js'
@@ -161,7 +161,7 @@ export function addLevelIndicator(k, levelNumber, activeColor, inactiveColor, to
  * Initializes a level with common setup (gravity, sound, background, platforms, camera, controls)
  * @param {Object} config - Level configuration
  * @param {Object} config.k - Kaplay instance
- * @param {string} [config.levelName] - Level name (e.g., 'level-word.1') for config lookup
+ * @param {string} [config.levelName] - Level name (e.g., 'lesson-word.1') for config lookup
  * @param {number} [config.levelNumber] - Level number for indicator (1-5)
  * @param {string} [config.nextLevel] - Next level name for annihilation
  * @param {string} [config.levelTitle] - Level title text to display at the top
@@ -289,7 +289,7 @@ export function initScene(config) {
     // drifting words to the playfield interior
     //
     skipMoon: true,
-    clipToPlayfield: levelName === 'level-word.4'
+    clipToPlayfield: levelName === 'lesson-word.4'
   })
   WordHangingVines.create({
     k,
@@ -354,8 +354,6 @@ export function initScene(config) {
   const fpsCounter = FpsCounter.create({
     k,
     showTimer: true,
-    showElapsedTimer: false,
-    targetTime: levelName && CFG.gameplay.speedBonusTime ? CFG.gameplay.speedBonusTime[levelName] : null,
     topY: uiTopY
   })
   //
@@ -418,7 +416,7 @@ export function initScene(config) {
 /**
  * Check if player earned speed bonus for completing level faster than target
  * @param {Object} k - Kaplay instance
- * @param {string} levelName - Current level name (e.g. 'level-word.0')
+ * @param {string} levelName - Current level name (e.g. 'lesson-word.0')
  * @param {number} levelTime - Time taken to complete level (seconds)
  * @param {Object} levelIndicator - Level indicator instance
  * @returns {boolean} True if speed bonus earned
@@ -723,7 +721,7 @@ function addPlatforms(k, color, bottomPlatformHeight, topPlatformHeight, gap) {
  * Create hero and anti-hero for a level
  * @param {Object} k - Kaplay instance
  * @param {Object} sound - Sound instance
- * @param {string} currentLevel - Level name (e.g., 'level-word.1')
+ * @param {string} currentLevel - Level name (e.g., 'lesson-word.1')
  * @param {number} heroX - Hero X position
  * @param {number} heroY - Hero Y position
  * @param {number} antiHeroX - Anti-hero X position

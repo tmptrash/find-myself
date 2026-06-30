@@ -5,7 +5,7 @@ import { CFG as GLOBAL_CFG, deepMerge } from '../../cfg.js'
 //
 /**
  * Resolves per-level consciousness palette
- * @param {string} levelName - Level id (e.g. 'level-word.2')
+ * @param {string} levelName - Level id (e.g. 'lesson-word.2')
  * @returns {{ background: string, platform: string, playfield: string }}
  */
 export function getLevelColors(levelName) {
@@ -148,11 +148,11 @@ export const WORD_CFG = {
     // Per-level palette — deeper levels darken the interior slightly
     //
     levelColors: {
-      'level-word.0': { background: '#0A0A12', platform: '#323242', playfield: '#5A5A70' },
-      'level-word.1': { background: '#090911', platform: '#2E2E3C', playfield: '#56566C' },
-      'level-word.2': { background: '#080810', platform: '#2A2A38', playfield: '#525268' },
-      'level-word.3': { background: '#07070E', platform: '#262634', playfield: '#4E4E64' },
-      'level-word.4': { background: '#4A4A60', platform: '#222230', playfield: '#4A4A60' }
+      'lesson-word.0': { background: '#0A0A12', platform: '#323242', playfield: '#5A5A70' },
+      'lesson-word.1': { background: '#090911', platform: '#2E2E3C', playfield: '#56566C' },
+      'lesson-word.2': { background: '#080810', platform: '#2A2A38', playfield: '#525268' },
+      'lesson-word.3': { background: '#07070E', platform: '#262634', playfield: '#4E4E64' },
+      'lesson-word.4': { background: '#4A4A60', platform: '#222230', playfield: '#4A4A60' }
     },
     //
     // Z-order inside playfield (back → front): sky, noise, stream, emotions, memories, world, flying, vines, foreground
@@ -203,10 +203,10 @@ export const WORD_CFG = {
     // Player gets bonus point if completing level faster than this
     //
     speedBonusTime: {
-      'level-word.0': 10,   // Level 0
-      'level-word.1': 10,   // Level 1
-      'level-word.2': 15,   // Level 2
-      'level-word.3': 15    // Level 3
+      'lesson-word.0': 10,   // Level 0
+      'lesson-word.1': 10,   // Level 1
+      'lesson-word.2': 15,   // Level 2
+      'lesson-word.3': 15    // Level 3
     }
   }
 }

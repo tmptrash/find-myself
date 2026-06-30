@@ -4,7 +4,7 @@ import { getRGB, parseHex } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
 import { normalizeSceneName } from "../utils/progress.js"
-import { goAfterPreparingAssets } from "../utils/level-assets.js"
+import { goAfterPreparingAssets } from "../utils/lesson-assets.js"
 import { getProgress, get, set, resetProgress } from "../utils/progress.js"
 import { drawConnectionWave } from "../utils/connection.js"
 import * as Particles from "../utils/particles.js"
@@ -123,7 +123,7 @@ function getSectionDisplayName(section) {
  * Returns the index of the HUD letter that matches the player's current level.
  * Level 0 maps to the first letter (e.g. word "W"), level 1 to the second ("O"), etc.
  * @param {string} section - Section key ('touch', 'time', 'word', …)
- * @param {string|null} lastLevel - Value of get('lastLevel')
+ * @param {string|null} lastLevel - Value of get('lastLesson')
  * @param {Object} progress - Full progress object from getProgress()
  * @returns {number} Active letter index, -1 when unknown, -2 when the whole section is done
  */
@@ -133,8 +133,8 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
   //
   if (progress[section]?.completed) return -2
   if (!lastLevel) return -1
-  if (section === 'touch' && lastLevel.startsWith('level-touch.')) {
-    const s = lastLevel.replace('level-touch.', '')
+  if (section === 'touch' && lastLevel.startsWith('lesson-touch.')) {
+    const s = lastLevel.replace('lesson-touch.', '')
     //
     // Training sits on the first letter; numeric level N maps to letter index N
     //
@@ -142,12 +142,12 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
     const n = parseInt(s, 10)
     return isNaN(n) ? -1 : n
   }
-  if (section === 'time' && lastLevel.startsWith('level-time.')) {
-    const n = parseInt(lastLevel.replace('level-time.', ''), 10)
+  if (section === 'time' && lastLevel.startsWith('lesson-time.')) {
+    const n = parseInt(lastLevel.replace('lesson-time.', ''), 10)
     return isNaN(n) ? -1 : n
   }
-  if (section === 'word' && lastLevel.startsWith('level-word.')) {
-    const n = parseInt(lastLevel.replace('level-word.', ''), 10)
+  if (section === 'word' && lastLevel.startsWith('lesson-word.')) {
+    const n = parseInt(lastLevel.replace('lesson-word.', ''), 10)
     return isNaN(n) ? -1 : n
   }
   return -1
@@ -161,7 +161,7 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
  * @returns {Array} Array of section configs with positions
  */
 function getSectionPositions(centerX, centerY, radius) {
-  const sections = ['time', 'word', 'feel', 'mind', 'stress', 'touch']
+  const sections = ['word', 'time', 'feel', 'mind', 'stress', 'touch']
   const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
   //
   // Start angle shifted to have 2 anti-heroes at top
@@ -250,21 +250,21 @@ export function sceneMenu(k) {
     //
     // Sanitize lastLevel: section-complete markers should point to the next section
     //
-    let lastLevel = get('lastLevel', null)
+    let lastLevel = get('lastLesson', null)
     const normalizedLastLevel = normalizeSceneName(lastLevel)
     if (normalizedLastLevel !== lastLevel) {
       lastLevel = normalizedLastLevel
-      set('lastLevel', lastLevel)
+      set('lastLesson', lastLevel)
     }
     if (lastLevel === 'word-complete') {
-      lastLevel = 'level-touch.training'
-      set('lastLevel', lastLevel)
+      lastLevel = 'lesson-time.0'
+      set('lastLesson', lastLevel)
     } else if (lastLevel === 'time-complete') {
-      lastLevel = 'level-word.0'
-      set('lastLevel', lastLevel)
-    } else if (lastLevel === 'touch-complete') {
       lastLevel = null
-      set('lastLevel', lastLevel)
+      set('lastLesson', lastLevel)
+    } else if (lastLevel === 'touch-complete') {
+      lastLevel = 'lesson-word.0'
+      set('lastLesson', lastLevel)
     }
     const currentSection = getSectionFromLevel(lastLevel)
     
@@ -483,7 +483,7 @@ export function sceneMenu(k) {
           //
           // Get last level for word section or start from beginning
           //
-          const isWordLevel = lastLevel && lastLevel.startsWith('level-word.')
+          const isWordLevel = lastLevel && lastLevel.startsWith('lesson-word.')
           
           if (isWordLevel) {
             //
@@ -520,12 +520,12 @@ export function sceneMenu(k) {
           //
           // Determine which level to go to
           //
-          const lastLevel = get('lastLevel', null)
+          const lastLevel = get('lastLesson', null)
           
-          if (lastLevel && lastLevel.startsWith('level-touch.')) {
+          if (lastLevel && lastLevel.startsWith('lesson-touch.')) {
             showTransitionToLevel(k, lastLevel)
           } else {
-            goAfterPreparingAssets(k, 'level-touch.training')
+            goAfterPreparingAssets(k, 'lesson-touch.training')
           }
         })
       }
@@ -549,7 +549,7 @@ export function sceneMenu(k) {
           //
           // Get last level for time section or start from beginning
           //
-          const isTimeLevel = lastLevel && lastLevel.startsWith('level-time.')
+          const isTimeLevel = lastLevel && lastLevel.startsWith('lesson-time.')
           
           if (isTimeLevel) {
             //
@@ -824,7 +824,7 @@ export function sceneMenu(k) {
       //
       // Fireflies only appear for antiheroes whose section is completed or currently being played
       //
-      const lastLevel = get('lastLevel', null)
+      const lastLevel = get('lastLesson', null)
       const isEmptyLS = lastLevel === null
       const touchAH = antiHeroes.find(ah => ah.section === 'touch')
       const fireflyAllowed = hoveredInst && (
@@ -1065,11 +1065,11 @@ export function sceneMenu(k) {
       Cursor.setCursor('arrow')
       if (forceNew) {
         resetProgress()
-        goAfterPreparingAssets(k, 'level-touch.training')
+        goAfterPreparingAssets(k, 'lesson-touch.training')
       } else if (hasSavedGame) {
         showTransitionToLevel(k, lastLevel)
       } else {
-        goAfterPreparingAssets(k, 'level-touch.training')
+        goAfterPreparingAssets(k, 'lesson-touch.training')
       }
     }
     k.onKeyPress("space", () => startGame(false))
@@ -1446,13 +1446,12 @@ function hideTitle(titleInst) {
 }
 
 //
-// Extract section name from level id (e.g., 'level-word.2' -> 'word')
+// Extract section name from level id (e.g., 'lesson-word.2' -> 'word')
 //
 function getSectionFromLevel(levelName) {
-  if (!levelName || !levelName.startsWith('level-')) return null
-  const withoutPrefix = levelName.slice('level-'.length)
-  const parts = withoutPrefix.split('.')
-  return parts[0] || null
+  if (!levelName) return null
+  const match = levelName.match(/^(?:level|lesson)-(\w+)\./)
+  return match ? match[1] : null
 }
 
 /**
@@ -1785,7 +1784,7 @@ function drawScene(inst) {
   // Only for incomplete sections that match the current section being played
   // OR if localStorage is empty, show electricity on touch anti-hero when hovered
   //
-  const lastLevel = get('lastLevel', null)
+  const lastLevel = get('lastLesson', null)
   const isEmptyLocalStorage = lastLevel === null
   
   if (isEmptyLocalStorage) {
@@ -1957,7 +1956,7 @@ function drawMenuBackground(inst) {
  * @param {Object} k - Kaplay instance
  * @param {Object} config - Section config object from getSectionPositions()
  * @param {Object} progress - Full progress object from getProgress()
- * @param {string|null} lastLevel - Value of get('lastLevel')
+ * @param {string|null} lastLevel - Value of get('lastLesson')
  * @param {string} grayColor - Hex string for inactive/gray letters
  * @returns {Object} Label entry stored in sectionLabels[]
  */

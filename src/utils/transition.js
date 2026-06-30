@@ -6,32 +6,33 @@ import * as Tooltip from './tooltip.js'
 import * as TouchControls from './touch-controls.js'
 import * as Hero from '../components/hero.js'
 import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
-import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './level-assets.js'
+import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './lesson-assets.js'
+import * as CanvasBackdrop from './canvas-backdrop.js'
 
 /**
  * Level transition configuration - maps current level to next level
  */
 // TODO: complete this by two items arrays
 const LEVEL_TRANSITIONS = {
-  'menu': 'level-word.0',
-  'menu-time': 'level-time.0',
-  'menu-touch': 'level-touch.training',
-  'level-word.0': 'level-word.1',
-  'level-word.1': 'level-word.2',
-  'level-word.2': 'level-word.3',
-  'level-word.3': 'level-word.4',
-  'level-word.4': 'word-complete',
+  'menu': 'lesson-word.0',
+  'menu-time': 'lesson-time.0',
+  'menu-touch': 'lesson-touch.training',
+  'lesson-word.0': 'lesson-word.1',
+  'lesson-word.1': 'lesson-word.2',
+  'lesson-word.2': 'lesson-word.3',
+  'lesson-word.3': 'lesson-word.4',
+  'lesson-word.4': 'word-complete',
   'word-complete': 'menu',
-  'level-time.0': 'level-time.1',
-  'level-time.1': 'level-time.2',
-  'level-time.2': 'level-time.3',
-  'level-time.3': 'time-complete',
+  'lesson-time.0': 'lesson-time.1',
+  'lesson-time.1': 'lesson-time.2',
+  'lesson-time.2': 'lesson-time.3',
+  'lesson-time.3': 'time-complete',
   'time-complete': 'menu',
-  'level-touch.training': 'level-touch.0',
-  'level-touch.0': 'level-touch.1',
-  'level-touch.1': 'level-touch.2',
-  'level-touch.2': 'level-touch.3',
-  'level-touch.3': 'touch-complete',
+  'lesson-touch.training': 'lesson-touch.0',
+  'lesson-touch.0': 'lesson-touch.1',
+  'lesson-touch.1': 'lesson-touch.2',
+  'lesson-touch.2': 'lesson-touch.3',
+  'lesson-touch.3': 'touch-complete',
   'touch-complete': 'menu'
 }
 
@@ -41,20 +42,20 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'level-touch.training': '',
-  'level-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
-  'level-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
-  'level-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
-  'level-word.3': ['Sharp words move fast — so must you', 'word3-pre', 6.0],
-  'level-word.4': ['Thoughts you can\'t stop, no matter how hard you try...', 'word4-pre', 5.5],
-  'level-time.0': ['Time moves forward even when you stand still. You\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'Platforms don\'t live forever...'],
-  'level-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places', 4.2],
-  'level-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
-  'level-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
-  'level-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 10, 'Here you need to figure out how to gather bugs together by touching them'],
-  'level-touch.1': ['Touch the roots in sequence — find the melody that awakens', 'touch1-pre', 8, 'Here you need to figure out how to play the right melody by touching things'],
-  'level-touch.2': ['Jump to reveal the path — find what stands nearby', 'touch2-pre', 7, 'Jumping is beautiful. Figure out how to use your legs to activate your path to yourself...'],
-  'level-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
+  'lesson-touch.training': '',
+  'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
+  'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
+  'lesson-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
+  'lesson-word.3': ['Sharp words move fast — so must you', 'word3-pre', 6.0],
+  'lesson-word.4': ['Thoughts you can\'t stop, no matter how hard you try...', 'word4-pre', 5.5],
+  'lesson-time.0': ['Time moves forward even when you stand still. You\nstart to notice it slipping — and you start to run.', 'time0-pre', 11, null, 'Platforms don\'t live forever...'],
+  'lesson-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places', 4.2],
+  'lesson-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
+  'lesson-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
+  'lesson-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 10, 'Find all letters of \'TOUCH\''],
+  'lesson-touch.1': ['Touch the roots in sequence — find the melody that awakens', 'touch1-pre', 8, 'Here you need to figure out how to play the right melody by touching things'],
+  'lesson-touch.2': ['Jump to reveal the path — find what stands nearby', 'touch2-pre', 7, 'Jumping is beautiful. Figure out how to use your legs to activate your path to yourself...'],
+  'lesson-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
 }
 
 const TRANSITION_SUBTITLE_Z = CFG.visual.zIndex.ui + 1500
@@ -101,7 +102,7 @@ export function getNextLevel(currentLevel) {
  * Looks up which "menu-to-section" key produces targetLevel and replays
  * the transition from there so the subtitle is shown again.
  * @param {Object} k - Kaplay instance
- * @param {string} targetLevel - Target level to go to (e.g., 'level-time.0')
+ * @param {string} targetLevel - Target level to go to (e.g., 'lesson-time.0')
  */
 export function showTransitionToLevel(k, targetLevel) {
   targetLevel = normalizeSceneName(targetLevel)
@@ -111,7 +112,7 @@ export function showTransitionToLevel(k, targetLevel) {
   }
   //
   // Find the key whose transition chain starts at targetLevel.
-  // E.g. if targetLevel is 'level-time.0', previousLevel is 'menu-time'.
+  // E.g. if targetLevel is 'lesson-time.0', previousLevel is 'menu-time'.
   //
   const previousLevel = getPreviousLevel(targetLevel)
   if (previousLevel) {
@@ -132,7 +133,7 @@ export function showTransitionToLevel(k, targetLevel) {
  * User can press Space, ENTER or click mouse to skip the transition and go directly to next level
  * 
  * @param {Object} k - Kaplay instance
- * @param {string} currentLevel - Current level name (e.g., 'level-word.0' or 'menu')
+ * @param {string} currentLevel - Current level name (e.g., 'lesson-word.0' or 'menu')
  * @param {Function} onComplete - Callback when transition completes
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
@@ -142,9 +143,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   //
   if (nextLevel === 'word-complete' || nextLevel === 'time-complete' || nextLevel === 'touch-complete') {
     //
-    // Extract section name from level name (e.g., 'level-word.4' -> 'word')
+    // Extract section name from level name (e.g., 'lesson-word.4' -> 'word')
     //
-    const sectionMatch = currentLevel.match(/level-(\w+)\.\d+/)
+    const sectionMatch = currentLevel.match(/(?:level|lesson)-(\w+)\.\d+/)
     if (sectionMatch) {
       const sectionName = sectionMatch[1]
       setSectionCompleted(sectionName)
@@ -155,9 +156,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     //
     // Set lastLevel to the first level of the NEXT section
     //
-    if (nextLevel === 'word-complete') set('lastLevel', 'level-touch.0')
-    if (nextLevel === 'time-complete') set('lastLevel', 'level-word.0')
-    if (nextLevel === 'touch-complete') set('lastLevel', 'level-time.0')
+    if (nextLevel === 'word-complete') set('lastLesson', 'lesson-time.0')
+    if (nextLevel === 'time-complete') set('lastLesson', null)
+    if (nextLevel === 'touch-complete') set('lastLesson', 'lesson-word.0')
     //
     // Go directly to completion screen without transition overlay
     //
@@ -210,15 +211,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // This ensures progress is saved even if user interrupts transition with ESC
   // But DON'T save progress for transitions from menu/menu-time/menu-touch, as these are entry points
   //
-  const isLevelToLevelTransition = currentLevel.startsWith('level-') && nextLevel.startsWith('level-')
-  const isMenuToLevelTransition = currentLevel.startsWith('menu') && nextLevel.startsWith('level-')
+  const isLessonScene = (s) => s.startsWith('level-') || s.startsWith('lesson-')
+  const isLevelToLevelTransition = isLessonScene(currentLevel) && isLessonScene(nextLevel)
+  const isMenuToLevelTransition = currentLevel.startsWith('menu') && isLessonScene(nextLevel)
   if (isLevelToLevelTransition || isMenuToLevelTransition) {
-    set('lastLevel', nextLevel)
-  } else if (nextLevel === 'time-complete') {
-    //
-    // When completing time section, save first level of next section (word) instead of completion screen
-    //
-    set('lastLevel', 'level-word.0')
+    set('lastLesson', nextLevel)
   }
   
   let timer = 0
@@ -226,11 +223,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // Check if transitioning from a level, menu-time, or menu-touch (not from menu)
   // If so, start with black_pause phase since overlay is already opaque (no slow fade)
   //
-  const isFromLevel = currentLevel !== 'menu' && currentLevel.startsWith('level-')
+  const isFromLevel = currentLevel !== 'menu' && isLessonScene(currentLevel)
   const isFromMenuTime = currentLevel === 'menu-time'
   const isFromMenuTouch = currentLevel === 'menu-touch'
   const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime || isFromMenuTouch) ? 'black_pause' : 'fade_to_black'
-  const needsEarlyAssetLoad = nextLevel.startsWith('level-')
+  const needsEarlyAssetLoad = isLessonScene(nextLevel)
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   
   // Instance object to store text reference
@@ -268,12 +265,13 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   TouchControls.setVisible(false)
   
   //
-  // Set background to menu color when transitioning from level, menu-time, or menu-touch
+  // Set background to menu color when transitioning from level, menu-time, or menu-touch.
+  // Sync both Kaplay clear color and CSS letterbox bars to eliminate stripes.
   //
   const transitionBgHex = CFG.visual.colors.menu.platformColor
   const [bgR, bgG, bgB] = parseHex(transitionBgHex)
   if (isFromLevel || isFromMenuTime || isFromMenuTouch) {
-    k.setBackground(k.Color.fromHex(transitionBgHex))
+    CanvasBackdrop.applyCanvasBackdrop(k, transitionBgHex)
   }
   //
   // Create overlay matching menu background color
@@ -537,7 +535,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           //
           if (hintText) {
             const hintSize = textSize * 0.55
-            const hintYOffset = nextLevel === 'level-touch.0' ? textSize * 2.35 : textSize * 1.9
+            const hintYOffset = nextLevel === 'lesson-touch.0' ? textSize * 2.35 : textSize * 1.9
             const hintY = textY + hintYOffset
             const wrappedHint = wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize)
             const hintOutlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
@@ -786,13 +784,13 @@ function playCRTShutdownSound(k) {
 
 /**
  * Extracts section name from level identifier and returns matching subtitle color
- * @param {string} level - Level name (e.g., 'level-word.2', 'menu-touch')
+ * @param {string} level - Level name (e.g., 'lesson-word.2', 'menu-touch')
  * @returns {string} Hex color string for that section's subtitle
  */
 function getSectionSubtitleColor(level) {
   if (!level) return DEFAULT_SUBTITLE_COLOR
   //
-  // Extract section from level name (handles 'level-word.2' and 'menu-touch' formats)
+  // Extract section from level name (handles 'lesson-word.2' and 'menu-touch' formats)
   //
   const match = level.match(/^(?:level-|menu-)(\w+)/)
   const section = match ? match[1] : null

@@ -5,8 +5,7 @@ import * as CanvasBackdrop from '../utils/canvas-backdrop.js'
 import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Cursor from '../utils/cursor.js'
-import { goToMenuAfterAssets } from '../utils/level-assets.js'
-import { drawConnectionWave } from '../utils/connection.js'
+import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
 import { loadHeroSprites, HEROES } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
@@ -173,7 +172,7 @@ const LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
 // LIFE_Y_SINK pushes the sprite down so the visible bottom rests on the
 // black horizon strip rather than floating above it.
 //
-const LIFE_Y_SINK = 89
+const LIFE_Y_SINK = 79
 const LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
 const LIFE_OPACITY = 1.0
 //
@@ -181,7 +180,7 @@ const LIFE_OPACITY = 1.0
 // left of the monster centre) so the hero still reads as standing in
 // front of the monster's mouth, just now centred on the canvas.
 //
-const HERO_OFFSET_FROM_LIFE_CENTER_X = -2
+const HERO_OFFSET_FROM_LIFE_CENTER_X = -260
 const HERO_X = Math.round(LIFE_X + LIFE_WIDTH / 2 + HERO_OFFSET_FROM_LIFE_CENTER_X)
 //
 // The hero sprite canvas (96×96) has ~12 px of empty padding below
@@ -212,19 +211,9 @@ const HERO_ILLUSTRATION_SPRITE_SIZE = 96
 //
 const HERO_READY_BODY_COLOR = '#5A8898'
 //
-// Anti-hero hover scale effect in the icon row
-//
-const ANTIHERO_HOVER_RADIUS = 42
-const ANTIHERO_HOVER_BASE = 1.18
-const ANTIHERO_HOVER_AMP = 0.10
-const ANTIHERO_PULSE_SPEED = 2.4
-const ANTIHERO_HOVER_LERP_SPEED = 8
-const HERO_SPRITE_NAME = 'hero_5A8898_000000_0_0'
-//
 // The CENTRAL hero illustration uses a richer sprite variant that
 // adds a mouth, two visible arms and a wrist watch on top of the
-// plain hero body. The small two-heroes icon below (HERO_SPRITE_NAME)
-// keeps the plain variant so it stays readable at icon size.
+// plain hero body.
 //
 const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000_mouth_arms_watch'
 //
@@ -234,7 +223,6 @@ const HERO_ILLUSTRATION_SPRITE_PREFIX = 'hero_5A8898_000000_mouth_arms_watch'
 // through a textbook complementary colour pair.
 //
 const ANTIHERO_READY_BODY_COLOR = '#E07020'
-const ANTIHERO_SPRITE_NAME = 'antiHero_E07020_000000_0_0'
 //
 // Illustration hero eye wander (mirrors idle animation constants from hero.js)
 //
@@ -296,25 +284,39 @@ const SPARKLE_OUTER_R = 16
 //   seg3 " the other you."  (15 ch) = 330 px
 //   Total ≈ 1018 px — matches the two narrative lines above (~46 ch × 22).
 //
-const ICON_LINE_SEG1 = 'Collect '
-const ICON_LINE_SEG2 = ' fragments and find '
-const ICON_LINE_SEG3 = ' the other you.'
+const ICON_LINE_SEG1 = 'Collect fragments '
+//
+// Line 4: fragment icon + peace message — "find the other you" removed
+//
+const ICON_LINE_SEG2 = ' to find peace and calm.'
 const ICON_LINE_CHAR_W = Math.round(TEXT_FONT_SIZE * MONO_CHAR_W_RATIO)
 const ICON_LINE_SEG1_W = ICON_LINE_SEG1.length * ICON_LINE_CHAR_W
 const ICON_LINE_SEG2_W = ICON_LINE_SEG2.length * ICON_LINE_CHAR_W
-const ICON_LINE_TOTAL_W = ICON_LINE_SEG1_W + ICON_DRAW_R * 2 + ICON_LINE_SEG2_W + ICON_DRAW_R * 2 + ICON_LINE_SEG3.length * ICON_LINE_CHAR_W
+const ICON_LINE_TOTAL_W = ICON_LINE_SEG1_W + ICON_DRAW_R * 2 + ICON_LINE_SEG2_W
 const ICON_LINE_LEFT_X = CENTER_X - Math.round(ICON_LINE_TOTAL_W / 2)
 const ICON_LINE_ICON1_X = ICON_LINE_LEFT_X + ICON_LINE_SEG1_W + ICON_DRAW_R
 const ICON_LINE_SEG2_X = ICON_LINE_ICON1_X + ICON_DRAW_R
+//
+// Virtual position for the anti-hero hover animation — sits past the end of line 4 text
+//
 const ICON_LINE_ICON2_X = ICON_LINE_SEG2_X + ICON_LINE_SEG2_W + ICON_DRAW_R
-const ICON_LINE_SEG3_X = ICON_LINE_ICON2_X + ICON_DRAW_R
 //
-// Life line: inline life sprite plus the word "life", total width matches icon line
+// Life line: "Life [icon] is here to teach you, not to test."
+// "life " prefix before the icon + bigger sprite so the head is clearly visible
 //
-const LIFE_LINE_SEG1 = 'Your only enemy is '
-const LIFE_LINE_SEG2 = ' life, hidden in every world.'
+const LIFE_LINE_SEG1 = 'life '
+const LIFE_LINE_SEG2 = ' is here to teach you, not to test.'
 const LIFE_SPRITE_ASPECT = 427 / 443
-const LIFE_LINE_ICON_W = ICON_DRAW_R * 2
+//
+// Natural height of the life.png sprite (same constant used in lesson-indicator.js)
+// Used to compute a uniform k.scale() that preserves the sprite aspect ratio
+//
+const LIFE_ICON_NATURAL_H = 1197
+//
+// Bigger inline life icon — 2.2× font so the teacher's head is clearly visible
+//
+const LIFE_INLINE_ICON_H_SCALE = 2.2
+const LIFE_LINE_ICON_W = Math.round(Math.round(TEXT_FONT_SIZE * LIFE_INLINE_ICON_H_SCALE) * LIFE_SPRITE_ASPECT) + 4
 const LIFE_LINE_SEG1_W = LIFE_LINE_SEG1.length * ICON_LINE_CHAR_W
 const LIFE_LINE_SEG2_W = LIFE_LINE_SEG2.length * ICON_LINE_CHAR_W
 const LIFE_LINE_TOTAL_W = LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W + LIFE_LINE_SEG2_W
@@ -324,9 +326,15 @@ const LIFE_LINE_SEG2_X = LIFE_LINE_LEFT_X + LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W
 //
 // Inline life sprite — uniform scale from life.png aspect ratio (427×443)
 //
-const LIFE_INLINE_ICON_H = Math.round(TEXT_FONT_SIZE * 0.92)
+const LIFE_INLINE_ICON_H = Math.round(TEXT_FONT_SIZE * LIFE_INLINE_ICON_H_SCALE)
+//
+// Preserve natural aspect ratio of life.png (427 × 443) — no distortion
+//
 const LIFE_INLINE_ICON_W = Math.round(LIFE_INLINE_ICON_H * LIFE_SPRITE_ASPECT)
-const LIFE_INLINE_ICON_Y_OFFSET = 6
+//
+// Push the larger icon up so it aligns with the text cap-height
+//
+const LIFE_INLINE_ICON_Y_OFFSET = 34
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
@@ -427,17 +435,25 @@ export function sceneReady(k) {
     //
     const descriptionLayout = addDescriptionBlock(k)
     //
+    // Inline life sprite — persistent k.add() object so Kaplay uses the sprite's
+    // natural aspect ratio via uniform k.scale(), identical to the HUD in lesson-indicator.js
+    //
+    const lifeIconTopY = descriptionLayout.lifeLine.iconY - LIFE_INLINE_ICON_H + TEXT_FONT_SIZE * 0.22 + LIFE_INLINE_ICON_Y_OFFSET
+    const lifeIconScale = LIFE_INLINE_ICON_H / LIFE_ICON_NATURAL_H
+    k.add([
+      k.sprite('life'),
+      k.pos(descriptionLayout.lifeLine.iconX, lifeIconTopY),
+      k.scale(lifeIconScale),
+      k.anchor('top'),
+      k.z(Z_TEXT),
+      k.fixed(),
+      k.opacity(0.92)
+    ])
+    //
     // Animated icon state: sparkle pulse, electric heartbeat, life laugh flash.
     //
     const iconAnim = {
-      sparklePhase: 0,
-      heartbeatPhase: 0,
-      //
-      // Anti-hero hover: lerps toward a sine-wave target when mouse is near the icon
-      //
-      antiHeroScale: 1.0,
-      antiHeroTargetScale: 1.0,
-      antiHeroPulsePhase: 0.0
+      sparklePhase: 0
     }
     k.onUpdate(() => {
       const dt = k.dt()
@@ -454,35 +470,6 @@ export function sceneReady(k) {
       illAnim.eyeX = k.lerp(illAnim.eyeX, illAnim.targetEyeX, HERO_EYE_LERP_SPEED)
       illAnim.eyeY = k.lerp(illAnim.eyeY, illAnim.targetEyeY, HERO_EYE_LERP_SPEED)
       iconAnim.sparklePhase += dt * SPARKLE_PULSE_SPEED
-      iconAnim.heartbeatPhase = (iconAnim.heartbeatPhase + dt) % 1
-      //
-      // Anti-hero hover: detect mouse proximity to the two-hero icon
-      // group of the second description row, set target scale, lerp
-      // smoothly. The hit-test point is the centre of the anti-hero
-      // sprite — same `(spacing, sprite_size * 0.35)` offset the icon
-      // draw routine uses below, so the hover ring sits exactly on
-      // the painted anti-hero face.
-      //
-      const r2 = ICON_DRAW_R
-      const iconY = descriptionLayout.row2.iconY - ICON_DRAW_R / 2
-      const antiHeroCX = descriptionLayout.row2.iconX + r2 * 0.85
-      const antiHeroCY = iconY - r2 * 0.85 * 0.35
-      const mp = TouchInput.getPointerPos(k)
-      const dx = mp.x - antiHeroCX
-      const dy = mp.y - antiHeroCY
-      const distSq = dx * dx + dy * dy
-      //
-      // When hovering, advance pulse phase and oscillate the target scale like the
-      // checkmark / red circle in the menu; when not hovering, return to 1.0
-      //
-      const isHovering = distSq < ANTIHERO_HOVER_RADIUS * ANTIHERO_HOVER_RADIUS
-      if (isHovering) {
-        iconAnim.antiHeroPulsePhase += dt * ANTIHERO_PULSE_SPEED
-        iconAnim.antiHeroTargetScale = ANTIHERO_HOVER_BASE + ANTIHERO_HOVER_AMP * Math.sin(iconAnim.antiHeroPulsePhase)
-      } else {
-        iconAnim.antiHeroTargetScale = 1.0
-      }
-      iconAnim.antiHeroScale += (iconAnim.antiHeroTargetScale - iconAnim.antiHeroScale) * Math.min(1, ANTIHERO_HOVER_LERP_SPEED * dt)
     })
     //
     // Icon illustrations beside each centred section label row
@@ -753,11 +740,12 @@ function addDescriptionBlock(k) {
   const z = Z_TEXT
   const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
   //
-  // Lines 1–2: pure narrative setting the scene.
+  // Lines 1–2: concept — 6 worlds listed, life is your teacher
+  // Both lines are kept roughly equal in character width (~42 chars each)
   //
   const narrativeLines = [
-    'Six worlds wait — time, touch, words, feelings,',
-    'mind, stress. Each world hides a piece of you.'
+    'Six worlds — touch, time, words, feelings,',
+    'mind, stress. Each will teach you something.'
   ]
   let cursorY = DESCRIPTION_START_Y
   for (const line of narrativeLines) {
@@ -765,24 +753,24 @@ function addDescriptionBlock(k) {
     cursorY += TEXT_LINE_HEIGHT
   }
   //
-  // Line 3: life icon plus the word "life" inline
+  // Line 3: life icon — conveys "life is your teacher"
   //
   const lifeLineY = cursorY
   addSegment(k, LIFE_LINE_SEG1, LIFE_LINE_LEFT_X, lifeLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
   addSegment(k, LIFE_LINE_SEG2, LIFE_LINE_SEG2_X, lifeLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
   cursorY += TEXT_LINE_HEIGHT
   //
-  // Line 4: two icons are embedded inline between the text segments.
-  // Text segments are left-anchored and precisely positioned so the
-  // entire line reads as one centred sentence.
+  // Line 4: single icon — fragment + peace message (second icon removed with "the other you")
   //
   const iconLineY = cursorY
   addSegment(k, ICON_LINE_SEG1, ICON_LINE_LEFT_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
   addSegment(k, ICON_LINE_SEG2, ICON_LINE_SEG2_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
-  addSegment(k, ICON_LINE_SEG3, ICON_LINE_SEG3_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
   return {
     lifeLine: { iconX: LIFE_LINE_ICON_X, iconY: lifeLineY },
     row1: { iconX: ICON_LINE_ICON1_X, iconY: iconLineY },
+    //
+    // row2 kept for anti-hero hover animation compatibility — sits past end of line 4
+    //
     row2: { iconX: ICON_LINE_ICON2_X, iconY: iconLineY }
   }
 }
@@ -793,17 +781,6 @@ function addDescriptionBlock(k) {
 //
 function onDrawIconIllustrations(k, iconAnim, descriptionLayout) {
   const r = ICON_DRAW_R
-  //
-  // Life icon on the "Your only enemy is …" row
-  //
-  const lifeIconY = descriptionLayout.lifeLine.iconY - LIFE_INLINE_ICON_H + TEXT_FONT_SIZE * 0.22 + LIFE_INLINE_ICON_Y_OFFSET
-  k.drawSprite({
-    sprite: 'life',
-    pos: k.vec2(descriptionLayout.lifeLine.iconX - LIFE_INLINE_ICON_W / 2, lifeIconY),
-    width: LIFE_INLINE_ICON_W,
-    height: LIFE_INLINE_ICON_H,
-    opacity: 0.92
-  })
   //
   // Icon 1: "Collect fragments" — animated sun-bunny sparkle glow
   //
@@ -816,9 +793,7 @@ function onDrawIconIllustrations(k, iconAnim, descriptionLayout) {
   const iconRowCenterY = descriptionLayout.row1.iconY - ICON_DRAW_R / 2 + 6
   drawFragmentIcon(k, descriptionLayout.row1.iconX, iconRowCenterY, iconAnim.sparklePhase)
   //
-  // Icon 2: "Find the other you" — hero + anti-hero with electric connection
-  //
-  drawTwoHeroesIcon(k, descriptionLayout.row2.iconX, iconRowCenterY + 15, iconAnim)
+  // Icon 2 removed — "find the other you" concept replaced with "find peace and calm"
 }
 //
 // Icon 1: animated sun-bunny sparkle — outer glow + bright core pulse
@@ -841,52 +816,6 @@ function drawFragmentIcon(k, cx, cy, sparklePhase) {
   // Bright core
   //
   k.drawCircle({ pos: k.vec2(cx, cy), radius: r, color: glintColor, opacity: 0.85 * pulse })
-}
-//
-// Icon 2: hero + anti-hero sprites with animated electric connection
-//
-function drawTwoHeroesIcon(k, cx, cy, iconAnim) {
-  const { heartbeatPhase, antiHeroScale } = iconAnim
-  const r = ICON_DRAW_R
-  const hh = r * 0.85
-  //
-  // Compact icon scale — stays small beside the label row, matching
-  // the original layout before the mistaken 96 px enlargement.
-  //
-  const spacing = r * 0.85
-  const spSize = hh * 2.2
-  const midY = cy - hh * 0.35
-  //
-  // Connection drawn FIRST (underneath sprites) so the sprites render on top
-  // and cover the faded lightning endpoints — no visible gap between arc and bodies.
-  // Endpoints at each sprite center so the connection clearly starts inside each body.
-  //
-  drawConnectionWave(k,
-    { x: cx - spacing, y: midY },
-    { x: cx + spacing, y: midY },
-    { segmentWidth: 5, mainWidth: 1.8, opacity: 0.55, heartbeatPhase }
-  )
-  //
-  // Hero sprite (left) — drawn after connection to overlap faded arc ends
-  //
-  k.drawSprite({
-    sprite: HERO_SPRITE_NAME,
-    pos: k.vec2(cx - spacing - spSize / 2, cy - spSize * 0.9),
-    width: spSize,
-    height: spSize,
-    opacity: 0.9
-  })
-  //
-  // Anti-hero sprite (right) with hover scale effect
-  //
-  const ahSize = spSize * antiHeroScale
-  k.drawSprite({
-    sprite: ANTIHERO_SPRITE_NAME,
-    pos: k.vec2(cx + spacing - ahSize / 2, cy - ahSize * 0.9),
-    width: ahSize,
-    height: ahSize,
-    opacity: 0.9
-  })
 }
 //
 // ────────── Spider / crawling letters system ──────────

@@ -28,10 +28,10 @@ export const TIME_CFG = {
     // Target time for speed bonus (in seconds) for each level
     //
     speedBonusTime: {
-      'level-time.0': 15,   // Level 0: 15 seconds
-      'level-time.1': 75,   // Level 1: 75 seconds
-      'level-time.2': 100,   // Level 2: 100 seconds
-      'level-time.3': 180   // Level 3: 180 seconds
+      'lesson-time.0': 15,   // Level 0: 15 seconds
+      'lesson-time.1': 75,   // Level 1: 75 seconds
+      'lesson-time.2': 100,   // Level 2: 100 seconds
+      'lesson-time.3': 180   // Level 3: 180 seconds
     }
   },
   visual: {

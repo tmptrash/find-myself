@@ -1,6 +1,6 @@
 import * as Sound from '../../../utils/sound.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 
 const FINAL_MESSAGE = "Remember — not every word in your head is telling the truth.\n\nAccept them, but don't let them control you"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -19,7 +19,7 @@ export function sceneWordComplete(k) {
     // Mark word section complete and point to next section
     //
     setSectionCompleted('word')
-    set('lastLevel', 'level-touch.training')
+    set('lastLesson', 'lesson-touch.training')
     //
     // Create sound instance and stop background music
     //

@@ -5,10 +5,10 @@ import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as BonusHero from '../components/bonus-hero.js'
-import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
 import * as LogPlatform from '../utils/log-platform.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as TouchInput from '../../../utils/touch-input.js'
@@ -44,14 +44,12 @@ const WALL_COLOR_HEX = BG_HEX
 // Hero and anti-hero colors
 //
 const HERO_BODY_COLOR = '#909090'
-const ANTIHERO_BODY_COLOR = '#8B5A50'
 const TRAINING_LABEL_COLOR_HEX = '#8B5A50'
 const TRAINING_LABEL_INACTIVE_HEX = '#B0B0B0'
 const TRAINING_LABEL_LETTER_COUNT = 8
 const TRAINING_LETTERS_AFTER_HOVER = 1
 const TRAINING_LETTERS_AFTER_HUD_SMALL_HERO = 2
 const TRAINING_LETTERS_AFTER_HUD_LIFE = 3
-const TRAINING_LETTERS_AFTER_HUD_TIME = 4
 const TRAINING_LETTERS_AFTER_RUN = 5
 const TRAINING_LETTERS_AFTER_MAIN = 6
 const TRAINING_LETTERS_AFTER_BONUS = 7
@@ -121,18 +119,11 @@ const HERO_HALF_WIDTH_THORNS = 15
 //
 // Anti-hero and hero spawn
 //
-const ANTIHERO_X = SCREEN_W - RIGHT_MARGIN - 120
-const ANTIHERO_Y = FLOOR_Y - 50
 const HERO_SPAWN_X = LEFT_MARGIN + 110
 const HERO_SPAWN_Y = FLOOR_Y - 50
 const HERO_SPAWN_DELAY = 0.5
 const PLATFORM_FOREGROUND_Z = 26
 const HERO_SPAWN_Z = 28
-const ANTIHERO_Z = 28
-const ANTIHERO_TOOLTIP_TEXT = "I'm waiting\nfor you here"
-const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
-const ANTIHERO_TOOLTIP_Y_OFFSET = -60
-const ANTIHERO_MOUSE_HOVER_HALF = ANTIHERO_TOOLTIP_HOVER_SIZE / 2
 const TRAINING_SURFACE_FLOOR_THRESHOLD = 80
 //
 // TRAINING label letter-pair burst particles (life-death style circles)
@@ -202,13 +193,25 @@ const BLOCKING_ROCK_STRIPE_EXCLUDE_HALF_W = Math.ceil(BLOCKING_ROCK_RADIUS * BLO
 const HINT_Y_OFFSET = -100
 const HINT_0_TEXT = "Hi! I'm Yuna. I look a\nlittle different, but\nthat's fine. Let's grow\nand learn together."
 const HINT_WELCOME_DURATION = 6.5
-const HINT_MOUSE_TEXT = 'Use the mouse to hover\nover your other half\nand get a tip. The\nmouse helps us learn\nabout the world.'
+const HINT_TRAINING_LABEL_TEXT = 'See the TRAINING label\nat the top-left corner?\nHover over it to see\nyour lesson progress.'
+const TRAINING_LABEL_HOVER_TOOLTIP = 'Here your lesson\nprogress is shown'
+//
+// Compute center and half-size of TRAINING label from existing layout constants.
+// startX = sideWallWidth + 40 = LEFT_MARGIN + 40
+// Label occupies (LETTER_COUNT - 1) steps plus one font-width at the end.
+//
+const TRAINING_LABEL_LETTER_STEP = TRAINING_LABEL_FONT_SIZE + TRAINING_LABEL_LETTER_SPACING
+const TRAINING_LABEL_START_X = LEFT_MARGIN + 40
+const TRAINING_LABEL_END_X = TRAINING_LABEL_START_X + (TRAINING_LABEL_LETTER_COUNT - 1) * TRAINING_LABEL_LETTER_STEP + TRAINING_LABEL_FONT_SIZE
+const TRAINING_LABEL_CENTER_X = Math.round((TRAINING_LABEL_START_X + TRAINING_LABEL_END_X) / 2)
+const TRAINING_LABEL_HOVER_HALF_W = Math.round((TRAINING_LABEL_END_X - TRAINING_LABEL_START_X) / 2) + 20
+const TRAINING_LABEL_HOVER_HALF_H = 34
+const TRAINING_LABEL_HOVER_PAUSE = 2
 const HINT_1_TEXT = 'Good! Now press ← →, A D\nto run to the wooden\nplatform over there.'
 const HINT_2_TEXT = 'Great! Press Space or ↑\nto jump onto the platform.'
 const HINT_2_APPROACH_X = MAIN_PLATFORM_X - 165
 const HINT_3_TEXT = 'Good! Now find the blinking\nfragment and jump on it —\na fragment is a part of you.\nIt helps you live your life.'
 const HINT_4_TEXT = 'Spikes are on your right!\nIf you fall on them, you die.'
-const HINT_5_TEXT = 'Now find yourself — your\nother half. Touch it\nto know yourself better.'
 const MAIN_PLATFORM_STAND_Y_MAX = MAIN_PLATFORM_Y + 22
 const MAIN_PLATFORM_STAND_Y_MIN = MAIN_PLATFORM_Y - 88
 const MAIN_PLATFORM_STAND_X_HALF = MAIN_PLATFORM_W / 2 + 28
@@ -217,20 +220,51 @@ const BONUS_PLATFORM_STAND_Y_MAX = BONUS_PLATFORM_Y + 30
 const BONUS_PLATFORM_STAND_Y_MIN = BONUS_PLATFORM_Y - 110
 const BONUS_PLATFORM_STAND_X_HALF = BONUS_PLATFORM_W / 2 + 40
 //
+// Letter T placed on the ground to the right of the spike zone — a visual
+// preview of the first letter the hero will collect in lesson 0
+//
+const T_LETTER_FONT_SIZE = 80
+const T_LETTER_X = SPIKE_END_X + 200
+//
+// Sink the letter T into the ground — bottom anchor below floor line.
+// The floor mask (drawn at higher Z) clips the submerged portion.
+//
+const T_LETTER_SINK = 35
+const T_LETTER_Y = FLOOR_Y + T_LETTER_SINK
+//
+// T letter fill color: same brown (#8B5A50) as the TRAINING label letters
+//
+const T_LETTER_FILL_R = 139
+const T_LETTER_FILL_G = 90
+const T_LETTER_FILL_B = 80
+const T_LETTER_Z = 22
+const T_LETTER_MASK_Z = 28
+const T_LETTER_MASK_W_RATIO = 1.3
+const T_LETTER_OUTLINE_THICKNESS = 3
+const T_LETTER_OUTLINE_OFFSETS = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+//
+// Lean angle (degrees clockwise) — makes the letter look stuck in the ground at a slant
+//
+const T_LETTER_ANGLE = 12
+//
+// Collection detection range (hero X centre vs letter left edge)
+//
+const T_LETTER_COLLECT_MARGIN = 70
+//
+// Hint shown right after collecting the bonus hero — points the player to letter T
+//
+const BONUS_HERO_COLLECTED_HINT = 'Take the letter T\nto your right —\nit\'s the first step\nto understanding...'
+//
 // Pause inserted between an action completing and the next hint appearing.
 // Hints are now persistent (no auto-hide), so this is the only delay.
 //
 const HINT_TRANSITION_GAP = 0.5
 const FRAGMENT_LEAVE_FIND_YOURSELF_DELAY = 2
-const ANTIHERO_HOVER_PAUSE = 2
-const TRAINING_TARGET_TIME_SECONDS = 99 * 60
 const HUD_FROZEN_TOOLTIP_DURATION = 2
 const HUD_SMALL_HERO_HINT = 'Hover over the small hero\nin the top-right corner\nto see how many fragments\nyou have. Fragments help\nyou understand yourself\nand overcome life\'s challenges.'
 const HUD_SMALL_HERO_TOOLTIP = 'Your fragments'
-const HUD_LIFE_HINT = 'Next to the hero is Life\nwith its score. It plays\nagainst you and causes\ntrouble by turning events\ninto points. Hover over it.'
+const HUD_LIFE_HINT = 'Life is not against you —\nit is your teacher. This\nis not a life score, it is\nyour experience. Sometimes\nit creates challenges that\nmake you stronger. Hover!'
 const HUD_LIFE_TOOLTIP = 'Life score'
-const HUD_TIME_HINT = 'Now hover over the green\ntime on the right of the\ntimer at the top — that\'s\nhow long you have to beat\nthe level to earn more fragments.'
-const HUD_TIME_TOOLTIP = "Beat the level in time\nto earn more fragments"
 const HUD_UI_HOVER_HALF = 42
 const TRAINING_COMPLETE_MESSAGE = 'You are ready to explore yourself.\nLet\'s start with touch...'
 const TRAINING_COMPLETE_MESSAGE_DURATION = 5
@@ -244,9 +278,10 @@ const TRAINING_COMPLETE_TEXT_Z = CFG.visual.zIndex.ui + 1200
 const SKIP_FONT_SIZE = 30
 const SKIP_TEXT_Y = FLOOR_Y + Math.round(BOTTOM_MARGIN * 0.42)
 //
-// localStorage key for saving tutorial progress between deaths
+// localStorage key for bonus hero collection — cleared on each scene entry
+// so the hidden platform always resets after death
 //
-const TRAINING_STEP_KEY = 'touch.trainingStep'
+const TRAINING_BONUS_COLLECTED_KEY = 'touch.trainingBonusCollected'
 //
 // Blink: 3π rad/s gives |sin| = 3 pulses/sec with smooth fade in/out.
 // opacity pulses between BLINK_MIN_OPACITY and 1.0 on the target object itself.
@@ -362,7 +397,7 @@ const CRICKET_INTERVAL_EXTRA = 3
  * @param {Object} k - Kaplay instance
  */
 export function sceneTouchTraining(k) {
-  k.scene('level-touch.training', () => {
+  k.scene('lesson-touch.training', () => {
     //
     // Reset life score when first entering the touch section from another section.
     // heroScore is always read from localStorage and is not reset here.
@@ -371,7 +406,12 @@ export function sceneTouchTraining(k) {
       set('lifeScore', 0)
     }
     set('lastSection', 'touch')
-    set('lastLevel', 'level-touch.training')
+    set('lastLesson', 'lesson-touch.training')
+    //
+    // Always reset bonus hero and do not persist tutorial progress between deaths —
+    // each scene entry (including after death) starts fresh
+    //
+    set(TRAINING_BONUS_COLLECTED_KEY, false)
     Tooltip.unsuppressAll()
     //
     // Background and gravity
@@ -506,9 +546,6 @@ export function sceneTouchTraining(k) {
     //
     const fpsCounter = FpsCounter.create({
       k,
-      showTimer: true,
-      showElapsedTimer: false,
-      targetTime: TRAINING_TARGET_TIME_SECONDS,
       topY: TRAINING_HUD_CENTER_Y
     })
     k.onUpdate(() => FpsCounter.onUpdate(fpsCounter))
@@ -519,21 +556,6 @@ export function sceneTouchTraining(k) {
       rightMargin: RIGHT_MARGIN
     })
     //
-    // Anti-hero
-    //
-    const antiHeroInst = Hero.create({
-      k,
-      x: ANTIHERO_X,
-      y: ANTIHERO_Y,
-      type: Hero.HEROES.ANTIHERO,
-      controllable: false,
-      sfx: sound,
-      antiHero: null,
-      bodyColor: ANTIHERO_BODY_COLOR
-    })
-    antiHeroInst.character && (antiHeroInst.character.hidden = true)
-    antiHeroInst.character && (antiHeroInst.character.z = ANTIHERO_Z)
-    //
     // Hint and death state
     //
     const hintState = {
@@ -543,20 +565,20 @@ export function sceneTouchTraining(k) {
       shown4: false,
       shown5: false,
       welcomeDone: false,
-      awaitingMouseHint: false,
-      mouseHintHovering: false,
-      mouseHintDone: false,
+      awaitingTrainingLabelHover: false,
+      trainingLabelHovering: false,
+      trainingLabelHoverDone: false,
       fragmentCollected: false,
       wasOnBonusPlatform: false,
       wasOnMainPlatform: false,
       visitedBonusPlatform: false,
       landedOnBonusPlatform: false,
       runKeysUsed: false,
-      antiHeroPersistentTooltipDisabled: false,
       leftBonusPlatformAt: 0,
       findYourselfAfterLeave: false,
       trainingLabelLetters: 0,
       spikesPassed: false,
+      tLetterCollected: false,
       bonusCollectUntil: 0,
       spikePassX,
       levelDone: false,
@@ -567,24 +589,8 @@ export function sceneTouchTraining(k) {
       hudFrozenTip: null,
       smallHeroTooltipDone: false,
       lifeTooltipDone: false,
-      timeTooltipDone: false
+      timeTooltipDone: true
     }
-    //
-    // Anti-hero hover tooltip (enabled after mouse tutorial completes)
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: () => antiHeroInst.character?.pos?.x ?? ANTIHERO_X,
-        y: () => antiHeroInst.character?.pos?.y ?? ANTIHERO_Y,
-        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
-        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
-        text: ANTIHERO_TOOLTIP_TEXT,
-        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET,
-        visible: () => hintState.mouseHintDone && !hintState.mouseHintHovering &&
-          !hintState.antiHeroPersistentTooltipDisabled
-      }]
-    })
     const spikeDead = { active: false }
     //
     // Main hero
@@ -596,35 +602,15 @@ export function sceneTouchTraining(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: antiHeroInst,
       bodyColor: HERO_BODY_COLOR,
       jumpForce: CFG.game.jumpForce,
-      currentLevel: 'level-touch.training',
+      currentLevel: 'lesson-touch.training',
       //
       // Tutorial hero softly whistles + emits music notes while standing
       // still, to keep the empty practice scene feeling alive.
       //
       idleVocalization: 'whistling',
-      onAnnihilation: () => {
-        hintState.levelDone = true
-        heroInst.controlsDisabled = true
-        set(TRAINING_STEP_KEY, 0)
-        hintState.currentTip && Tooltip.destroy(hintState.currentTip)
-        hintState.currentTip = null
-        hintState.currentHintType = null
-        applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_COMPLETE)
-        BonusHero.finalizeCollection(bonusHeroInst)
-        Tooltip.suppressAll()
-        const newScore = get('heroScore', 0) + 1
-        set('heroScore', newScore)
-        levelIndicator.updateHeroScore(newScore)
-        playHeroScoreEffects(k, levelIndicator, HERO_BODY_COLOR)
-        Sound.playVictorySound(sound)
-        showTrainingCompleteMessage(k, () => {
-          Sound.stopAmbient(sound)
-          createLevelTransition(k, 'level-touch.training')
-        })
-      }
+      onAnnihilation: null
     })
     heroInst.character && (heroInst.character.hidden = true)
     heroInst.character && (heroInst.character.z = HERO_SPAWN_Z)
@@ -644,7 +630,7 @@ export function sceneTouchTraining(k) {
       levelIndicator,
       sfx: sound,
       heroBodyColor: HERO_BODY_COLOR,
-      storageKey: 'touch.trainingBonusCollected',
+      storageKey: TRAINING_BONUS_COLLECTED_KEY,
       platformZ: PLATFORM_FOREGROUND_Z,
       collisionWidth: BONUS_PLATFORM_COLLISION_WIDTH,
       platformCollisionHeight: BONUS_PLATFORM_COLLISION_HEIGHT,
@@ -652,6 +638,11 @@ export function sceneTouchTraining(k) {
       platformCollisionYOffset: BONUS_PLATFORM_COLLISION_Y_OFFSET,
       approachFromAbove: true
     })
+    //
+    // Letter T on the ground to the right of the spike zone — collectible
+    //
+    const tLetterData = addTrainingLetterT(k)
+    k.onUpdate(() => checkTLetterCollection(k, hintState, heroInst, tLetterData, levelIndicator, sound))
     levelIndicator.updateHeroScore = ((orig) => (score) => {
       orig(score)
       hintState.fragmentCollected = true
@@ -659,20 +650,29 @@ export function sceneTouchTraining(k) {
       hintState.currentTip && Tooltip.destroy(hintState.currentTip)
       hintState.currentTip = null
       hintState.currentHintType = null
+      //
+      // Show a hint about letter T after collecting the bonus hero
+      //
+      k.wait(BONUS_COLLECT_HINT_DURATION + 0.5, () => {
+        if (hintState.levelDone || hintState.isDead) return
+        showHint(k, hintState, heroInst, BONUS_HERO_COLLECTED_HINT, 'bonusTLetterHint')
+      })
     })(levelIndicator.updateHeroScore)
     //
-    // Spike death, hints, skip text
+    // Spike death, hints, skip text, and training completion
     //
+    const completionState = { triggered: false }
     k.onUpdate(() => checkFloorThorns(k, heroInst, thornsData, spikeCluster, levelIndicator, hintState, spikeDead))
     k.onUpdate(() => onUpdateHints(k, hintState, heroInst, levelIndicator, sound))
-    k.onUpdate(() => onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound))
+    k.onUpdate(() => checkTrainingLabelHover(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
     k.onUpdate(() => onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound))
+    k.onUpdate(() => checkTrainingCompletion(k, completionState, hintState, heroInst, levelIndicator, bonusHeroInst, sound))
     //
     // Blink the element the player must hover over.
     // Direct opacity pulse on the target objects — guaranteed to work in Kaplay.
     //
     const blinkState = { phase: 0, opacity: 0 }
-    k.onUpdate(() => onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, fpsCounter))
+    k.onUpdate(() => onUpdateBlink(k, blinkState, hintState, levelIndicator))
     k.onUpdate(() => onUpdateTrainingSurface(heroInst, sound))
     //
     // Skip-training prompt: keyboard text on desktop, touch devices replace
@@ -684,7 +684,7 @@ export function sceneTouchTraining(k) {
       destroyTrainingHints(k, hintState)
       Tooltip.suppressAll()
       Sound.stopAmbient(sound)
-      createLevelTransition(k, 'level-touch.training')
+      createLevelTransition(k, 'lesson-touch.training')
     }
     const skipFont = CFG.visual.fonts.thinFull.replace(/'/g, '')
     const skipHintInst = renderHintWithEnter({
@@ -712,21 +712,15 @@ export function sceneTouchTraining(k) {
     k.wait(HERO_SPAWN_DELAY, () => {
       heroInst.controlsDisabled = true
       heroInst.character && Hero.spawn(heroInst)
-      antiHeroInst.character && Hero.spawn(antiHeroInst)
       //
-      // If the player died mid-tutorial, restore progress instead of restarting
+      // Always start tutorial from the beginning — no progress is saved between deaths
       //
-      const savedStep = get(TRAINING_STEP_KEY, 0)
-      if (savedStep > 0) {
-        restoreTrainingProgress(k, savedStep, hintState, heroInst, levelIndicator, fpsCounter, sound)
-      } else {
-        showTimedHint(k, hintState, heroInst, HINT_0_TEXT, 'welcome', HINT_WELCOME_DURATION, () => {
-          if (hintState.levelDone || hintState.isDead || hintState.awaitingMouseHint) return
-          hintState.welcomeDone = true
-          hintState.awaitingMouseHint = true
-          transitionToHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
-        })
-      }
+      showTimedHint(k, hintState, heroInst, HINT_0_TEXT, 'welcome', HINT_WELCOME_DURATION, () => {
+        if (hintState.levelDone || hintState.isDead || hintState.awaitingTrainingLabelHover) return
+        hintState.welcomeDone = true
+        hintState.awaitingTrainingLabelHover = true
+        transitionToHint(k, hintState, heroInst, HINT_TRAINING_LABEL_TEXT, 'trainingLabel')
+      })
     })
     scheduleAmbientSounds(k, sound)
   })
@@ -1501,10 +1495,6 @@ function onHeroSpikeDeath(k, heroInst, levelIndicator, hintState, spikeDead) {
   hintState.isDead = true
   hintState.currentTip && Tooltip.destroy(hintState.currentTip)
   hintState.currentTip = null
-  //
-  // Save current tutorial step so the restart can resume from here
-  //
-  set(TRAINING_STEP_KEY, hintTypeToStep(hintState.currentHintType))
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
@@ -1516,7 +1506,7 @@ function onHeroSpikeDeath(k, heroInst, levelIndicator, hintState, spikeDead) {
       flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnThornDeath(k, levelIndicator)
     }
-    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => k.go('level-touch.training'))
+    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => k.go('lesson-touch.training'))
   })
 }
 
@@ -1718,7 +1708,6 @@ function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
       hintState.findYourselfAfterLeave = true
       if (!hintState.levelDone) {
         hintState.shown5 = true
-        transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
       }
     }
   }
@@ -1727,16 +1716,12 @@ function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
   }
   hintState.wasOnBonusPlatform = onBonusPlatform
   //
-  // Hero cleared the spike cluster — swap the spike hint for the
-  // find-yourself one (with the standard transition gap).
+  // Hero cleared the spike cluster — signal completion
   //
   if (!hintState.spikesPassed && (heroInst.character?.pos?.x ?? 0) > hintState.spikePassX) {
     hintState.spikesPassed = true
     hintState.shown4 = true
-    if (!hintState.shown5 && !hintState.levelDone) {
-      hintState.shown5 = true
-      transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
-    }
+    !hintState.shown5 && !hintState.levelDone && (hintState.shown5 = true)
   }
 }
 
@@ -1745,7 +1730,7 @@ function onUpdateHints(k, hintState, heroInst, levelIndicator, sound) {
 //
 function updateTrainingLabelProgress(k, levelIndicator, hintState, heroInst, sound) {
   if (!levelIndicator?.letterObjects?.length) return
-  if (hintState.mouseHintDone && hintState.trainingLabelLetters < TRAINING_LETTERS_AFTER_RUN &&
+  if (hintState.trainingLabelHoverDone && hintState.trainingLabelLetters < TRAINING_LETTERS_AFTER_RUN &&
       heroInst.isSpawned && !heroInst.controlsDisabled &&
       (isAnyKeyDown(k, CFG.controls.moveLeft) || isAnyKeyDown(k, CFG.controls.moveRight))) {
     hintState.runKeysUsed = true
@@ -1792,51 +1777,49 @@ function onUpdateTrainingSurface(heroInst, sound) {
 }
 
 //
-// After welcome hint, enables controls once the player hovers the anti-hero
+// After welcome hint, enables HUD tutorial when player hovers the TRAINING label
 //
-function onUpdateAntiHeroMouseHint(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound) {
-  if (hintState.levelDone || hintState.isDead || hintState.mouseHintDone) return
-  if (!antiHeroInst.character?.exists?.() || !heroInst.character?.exists?.()) return
-  if (!hintState.awaitingMouseHint || hintState.mouseHintHovering) return
+function checkTrainingLabelHover(k, hintState, heroInst, levelIndicator, fpsCounter, sound) {
+  if (hintState.levelDone || hintState.isDead || hintState.trainingLabelHoverDone) return
+  if (!hintState.awaitingTrainingLabelHover || hintState.trainingLabelHovering) return
   const mp = TouchInput.getPointerPos(k)
-  const ax = antiHeroInst.character.pos.x
-  const ay = antiHeroInst.character.pos.y
-  const hovered = Math.abs(mp.x - ax) < ANTIHERO_MOUSE_HOVER_HALF &&
-    Math.abs(mp.y - ay) < ANTIHERO_MOUSE_HOVER_HALF
-  hovered && beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound)
+  const labelCX = TRAINING_LABEL_CENTER_X
+  const labelCY = TRAINING_LABEL_Y + TRAINING_LABEL_FONT_SIZE / 2
+  const hovered = Math.abs(mp.x - labelCX) < TRAINING_LABEL_HOVER_HALF_W &&
+    Math.abs(mp.y - labelCY) < TRAINING_LABEL_HOVER_HALF_H
+  hovered && beginTrainingLabelHoverTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound)
 }
 
 //
-// Shows anti-hero tooltip for 2s after first hover, then HUD mouse tutorial
+// Shows TRAINING label tooltip for 2s after first hover, then HUD tutorial
 //
-function beginAntiHeroHoverTutorial(k, antiHeroInst, hintState, heroInst, levelIndicator, fpsCounter, sound) {
-  hintState.awaitingMouseHint = false
-  hintState.mouseHintHovering = true
+function beginTrainingLabelHoverTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound) {
+  hintState.awaitingTrainingLabelHover = false
+  hintState.trainingLabelHovering = true
   applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HOVER)
   hintState.currentTip && Tooltip.destroy(hintState.currentTip)
   hintState.currentTip = null
   hintState.currentHintType = null
-  const ax = Math.round(antiHeroInst.character.pos.x)
-  const ay = Math.round(antiHeroInst.character.pos.y)
+  const labelCX = TRAINING_LABEL_CENTER_X
+  const labelCY = Math.round(TRAINING_LABEL_Y + TRAINING_LABEL_FONT_SIZE / 2)
   const target = {
-    x: ax,
-    y: ay,
-    width: ANTIHERO_TOOLTIP_HOVER_SIZE,
-    height: ANTIHERO_TOOLTIP_HOVER_SIZE,
-    text: ANTIHERO_TOOLTIP_TEXT,
-    offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
+    x: labelCX,
+    y: labelCY,
+    width: TRAINING_LABEL_HOVER_HALF_W * 2,
+    height: TRAINING_LABEL_HOVER_HALF_H * 2,
+    text: TRAINING_LABEL_HOVER_TOOLTIP,
+    offsetY: -TRAINING_LABEL_FONT_SIZE - 20
   }
   const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
   tip.activeTarget = target
-  tip.frozenX = ax
-  tip.frozenY = ay
+  tip.frozenX = labelCX
+  tip.frozenY = labelCY
   tip.opacity = 1
-  k.wait(ANTIHERO_HOVER_PAUSE, () => {
+  k.wait(TRAINING_LABEL_HOVER_PAUSE, () => {
     Tooltip.destroy(tip)
-    if (hintState.mouseHintDone || hintState.levelDone || hintState.isDead) return
-    hintState.mouseHintHovering = false
-    hintState.mouseHintDone = true
-    hintState.antiHeroPersistentTooltipDisabled = true
+    if (hintState.trainingLabelHoverDone || hintState.levelDone || hintState.isDead) return
+    hintState.trainingLabelHovering = false
+    hintState.trainingLabelHoverDone = true
     heroInst.controlsDisabled = true
     beginHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound)
   })
@@ -1854,7 +1837,7 @@ function beginHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounte
 // Tracks HUD hover steps: small hero, life, green timer, then run hint
 //
 function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCounter, sound) {
-  if (!hintState.mouseHintDone || hintState.hudTutorialStep === 'done' || hintState.levelDone || hintState.isDead) return
+  if (!hintState.trainingLabelHoverDone || hintState.hudTutorialStep === 'done' || hintState.levelDone || hintState.isDead) return
   if (hintState.hudFrozenTip) return
   const mp = TouchInput.getPointerPos(k)
   if (hintState.hudTutorialStep === 'smallHeroHint' && !hintState.smallHeroTooltipDone) {
@@ -1874,17 +1857,6 @@ function onUpdateHudMouseTutorial(k, hintState, heroInst, levelIndicator, fpsCou
     isMouseOverPoint(mp, life.x, life.y, HUD_UI_HOVER_HALF) &&
       (hintState.lifeTooltipDone = true) &&
       beginHudStepTooltip(k, hintState, levelIndicator, sound, life.x, life.y, HUD_LIFE_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_LIFE, () => {
-        hintState.hudTutorialStep = 'timeHint'
-        transitionToHint(k, hintState, heroInst, HUD_TIME_HINT, 'hudTime')
-      })
-    return
-  }
-  if (hintState.hudTutorialStep === 'timeHint' && !hintState.timeTooltipDone) {
-    const targetText = fpsCounter?.targetText
-    if (!targetText?.pos) return
-    isMouseOverPoint(mp, targetText.pos.x, targetText.pos.y, HUD_UI_HOVER_HALF) &&
-      (hintState.timeTooltipDone = true) &&
-      beginHudStepTooltip(k, hintState, levelIndicator, sound, targetText.pos.x, targetText.pos.y, HUD_TIME_TOOLTIP, TRAINING_LETTERS_AFTER_HUD_TIME, () => {
         hintState.hudTutorialStep = 'done'
         finishHudMouseTutorial(k, hintState, heroInst)
       })
@@ -2175,113 +2147,47 @@ function scheduleCrickets(k, sound) {
   })
 }
 //
-// Maps hint type string to a numeric step index for progress persistence
+// Triggers training completion after the hero collects the letter T to the right.
+// Completion requires the hero to have picked up the T letter.
 //
-function hintTypeToStep(hintType) {
-  const map = {
-    welcome: 0,
-    mouse: 1,
-    hudSmallHero: 2,
-    hudLife: 3,
-    hudTime: 4,
-    run: 5,
-    jump: 6,
-    fragment: 7,
-    spikes: 8,
-    antihero: 9
-  }
-  return map[hintType] ?? 0
-}
-//
-// Restores tutorial state after a death so the player continues mid-tutorial
-//
-function restoreTrainingProgress(k, step, hintState, heroInst, levelIndicator, fpsCounter, sound) {
-  //
-  // Common: welcome is done at every step
-  //
-  hintState.welcomeDone = true
-  if (step <= 1) {
-    //
-    // Restore to "awaiting mouse hover on anti-hero"
-    //
-    hintState.awaitingMouseHint = true
-    hintState.trainingLabelLetters = 0
-    applyTrainingLetterProgress(k, levelIndicator, hintState, sound, 0)
-    transitionToHint(k, hintState, heroInst, HINT_MOUSE_TEXT, 'mouse')
-    return
-  }
-  //
-  // HUD tutorial steps: controls remain disabled
-  //
-  hintState.mouseHintDone = true
-  hintState.antiHeroPersistentTooltipDisabled = true
-  heroInst.controlsDisabled = true
-  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HOVER)
-  if (step === 2) {
-    hintState.hudTutorialStep = 'smallHeroHint'
-    showHint(k, hintState, heroInst, HUD_SMALL_HERO_HINT, 'hudSmallHero')
-    return
-  }
-  hintState.smallHeroTooltipDone = true
-  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HUD_SMALL_HERO)
-  if (step === 3) {
-    hintState.hudTutorialStep = 'lifeHint'
-    showHint(k, hintState, heroInst, HUD_LIFE_HINT, 'hudLife')
-    return
-  }
-  hintState.lifeTooltipDone = true
-  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HUD_LIFE)
-  if (step === 4) {
-    hintState.hudTutorialStep = 'timeHint'
-    showHint(k, hintState, heroInst, HUD_TIME_HINT, 'hudTime')
-    return
-  }
-  hintState.timeTooltipDone = true
-  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_HUD_TIME)
-  hintState.hudTutorialStep = 'done'
-  //
-  // All HUD steps done: enable controls and show the matching run/jump/etc hint
-  //
-  heroInst.controlsDisabled = false
-  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_RUN)
-  hintState.shown1 = true
-  if (step === 5) {
-    transitionToHint(k, hintState, heroInst, HINT_1_TEXT, 'run')
-    return
-  }
-  hintState.shown2 = true
-  applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_MAIN)
-  if (step === 6) {
-    transitionToHint(k, hintState, heroInst, HINT_2_TEXT, 'jump')
-    return
-  }
-  hintState.shown3 = true
-  if (step === 7) {
-    transitionToHint(k, hintState, heroInst, HINT_3_TEXT, 'fragment')
-    return
-  }
-  hintState.shown4 = true
-  if (step === 8) {
-    transitionToHint(k, hintState, heroInst, HINT_4_TEXT, 'spikes')
-    return
-  }
-  hintState.shown5 = true
-  transitionToHint(k, hintState, heroInst, HINT_5_TEXT, 'antihero')
+function checkTrainingCompletion(k, completionState, hintState, heroInst, levelIndicator, bonusHeroInst, sound) {
+  if (completionState.triggered || hintState.levelDone || hintState.isDead) return
+  if (!hintState.tLetterCollected) return
+  completionState.triggered = true
+  k.wait(1.5, () => {
+    if (hintState.levelDone) return
+    hintState.levelDone = true
+    heroInst.controlsDisabled = true
+    hintState.currentTip && Tooltip.destroy(hintState.currentTip)
+    hintState.currentTip = null
+    hintState.currentHintType = null
+    applyTrainingLetterProgress(k, levelIndicator, hintState, sound, TRAINING_LETTERS_AFTER_COMPLETE)
+    BonusHero.finalizeCollection(bonusHeroInst)
+    Tooltip.suppressAll()
+    const newScore = get('heroScore', 0) + 1
+    set('heroScore', newScore)
+    levelIndicator.updateHeroScore(newScore)
+    playHeroScoreEffects(k, levelIndicator, HERO_BODY_COLOR)
+    Sound.playVictorySound(sound)
+    showTrainingCompleteMessage(k, () => {
+      Sound.stopAmbient(sound)
+      createLevelTransition(k, 'lesson-touch.training')
+    })
+  })
 }
 //
 // Updates blink state: smooth opacity pulse 3 times/sec via |sin(phase)|.
 // Sets opacity directly on the target character/sprite — no separate overlay objects.
 // Life icon and timer text use color lerp toward white for additional contrast.
 //
-function onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, fpsCounter) {
-  const needsAntiBlink = hintState.awaitingMouseHint && !hintState.mouseHintHovering
+function onUpdateBlink(k, blinkState, hintState, levelIndicator) {
+  const needsLabelBlink = hintState.awaitingTrainingLabelHover && !hintState.trainingLabelHovering
   const needsSmallHeroBlink = hintState.hudTutorialStep === 'smallHeroHint' && !hintState.smallHeroTooltipDone
   const needsLifeBlink = hintState.hudTutorialStep === 'lifeHint' && !hintState.lifeTooltipDone
-  const needsTimeBlink = hintState.hudTutorialStep === 'timeHint' && !hintState.timeTooltipDone
   if (hintState.levelDone || hintState.isDead) {
-    antiHeroInst.character?.exists?.() && (antiHeroInst.character.opacity = 1.0)
     levelIndicator.smallHero?.character?.exists?.() && (levelIndicator.smallHero.character.opacity = 1.0)
     levelIndicator.lifeImage?.sprite?.exists?.() && (levelIndicator.lifeImage.sprite.opacity = 1.0)
+    levelIndicator.letterObjects?.forEach(obj => { obj?.exists?.() && (obj.opacity = 1.0) })
     return
   }
   blinkState.phase += k.dt() * BLINK_SPEED
@@ -2292,10 +2198,12 @@ function onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, f
   blinkState.opacity = Math.abs(Math.sin(blinkState.phase))
   const pulseOpacity = BLINK_MIN_OPACITY + (1.0 - BLINK_MIN_OPACITY) * blinkState.opacity
   //
-  // Anti-hero: opacity pulse directly on character
+  // TRAINING label: pulse opacity on all letters to draw attention when awaiting hover
   //
-  if (antiHeroInst.character?.exists?.()) {
-    antiHeroInst.character.opacity = needsAntiBlink ? pulseOpacity : 1.0
+  if (levelIndicator.letterObjects?.length) {
+    levelIndicator.letterObjects.forEach(obj => {
+      obj?.exists?.() && (obj.opacity = needsLabelBlink ? pulseOpacity : 1.0)
+    })
   }
   //
   // Small hero HUD: opacity pulse directly on character
@@ -2326,26 +2234,67 @@ function onUpdateBlink(k, blinkState, hintState, antiHeroInst, levelIndicator, f
       blinkState.lifeOrigColor = null
     }
   }
+}
+//
+// Draws the letter T on the ground to the right of the spike zone.
+// The letter is partially sunk into the ground; a floor mask clips the buried portion.
+// Returns an object with the visual objects so they can be destroyed on collection.
+//
+function addTrainingLetterT(k) {
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const outlineObjs = T_LETTER_OUTLINE_OFFSETS.map(([dx, dy]) => k.add([
+    k.text('T', { size: T_LETTER_FONT_SIZE, font }),
+    k.pos(T_LETTER_X + dx * T_LETTER_OUTLINE_THICKNESS, T_LETTER_Y + dy * T_LETTER_OUTLINE_THICKNESS),
+    k.anchor('botleft'),
+    k.rotate(T_LETTER_ANGLE),
+    k.color(0, 0, 0),
+    k.z(T_LETTER_Z)
+  ]))
+  const fillObj = k.add([
+    k.text('T', { size: T_LETTER_FONT_SIZE, font }),
+    k.pos(T_LETTER_X, T_LETTER_Y),
+    k.anchor('botleft'),
+    k.rotate(T_LETTER_ANGLE),
+    k.color(T_LETTER_FILL_R, T_LETTER_FILL_G, T_LETTER_FILL_B),
+    k.z(T_LETTER_Z)
+  ])
   //
-  // Timer text: lerp color from original green toward white
+  // Floor mask: solid background rect below floor line so the buried
+  // portion of the letter T is clipped and not visible
   //
-  if (fpsCounter?.targetText?.exists?.()) {
-    if (needsTimeBlink) {
-      if (!blinkState.timerOrigColor) {
-        blinkState.timerOrigColor = fpsCounter.targetText.color
+  const maskW = T_LETTER_FONT_SIZE * T_LETTER_MASK_W_RATIO
+  const maskObj = k.add([
+    k.pos(T_LETTER_X - maskW / 4, FLOOR_Y),
+    k.z(T_LETTER_MASK_Z),
+    {
+      draw() {
+        k.drawRect({
+          pos: k.vec2(0, 0),
+          width: maskW,
+          height: T_LETTER_SINK + 4,
+          color: k.rgb(BG_R, BG_G, BG_B)
+        })
       }
-      const t = blinkState.opacity
-      const origR = blinkState.timerOrigColor?.r ?? 100
-      const origG = blinkState.timerOrigColor?.g ?? 255
-      const origB = blinkState.timerOrigColor?.b ?? 100
-      fpsCounter.targetText.color = k.rgb(
-        Math.round(origR + (255 - origR) * t),
-        Math.round(origG + (255 - origG) * t),
-        Math.round(origB + (255 - origB) * t)
-      )
-    } else if (blinkState.timerOrigColor) {
-      fpsCounter.targetText.color = blinkState.timerOrigColor
-      blinkState.timerOrigColor = null
     }
-  }
+  ])
+  return { objs: [...outlineObjs, fillObj], maskObj }
+}
+//
+// Checks whether the hero has walked into the letter T pickup zone.
+// When collected, destroys the visual objects and sets tLetterCollected.
+//
+function checkTLetterCollection(k, hintState, heroInst, tLetterData, levelIndicator, sound) {
+  if (hintState.tLetterCollected || hintState.levelDone || hintState.isDead) return
+  if (!hintState.spikesPassed) return
+  const heroX = heroInst.character?.pos?.x ?? 0
+  const inRange = heroX > T_LETTER_X - T_LETTER_COLLECT_MARGIN &&
+    heroX < T_LETTER_X + T_LETTER_FONT_SIZE + T_LETTER_COLLECT_MARGIN
+  if (!inRange) return
+  hintState.tLetterCollected = true
+  tLetterData.objs.forEach(obj => obj?.exists?.() && k.destroy(obj))
+  tLetterData.maskObj?.exists?.() && k.destroy(tLetterData.maskObj)
+  //
+  // Play collection victory sound
+  //
+  sound && Sound.playVictorySound(sound)
 }

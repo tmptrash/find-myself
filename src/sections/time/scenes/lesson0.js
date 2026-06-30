@@ -73,10 +73,6 @@ const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "Complete the level in time\nto earn more fragments"
-const GREEN_TIMER_TOOLTIP_WIDTH = 100
-const GREEN_TIMER_TOOLTIP_HEIGHT = 30
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips (appear below)
 //
@@ -109,18 +105,18 @@ const BONUS_PLATFORM_Y = 555
 // land on the platform. The visual (text) is drawn centered and is unaffected by this.
 //
 const BONUS_PLATFORM_WIDTH = 80
-const BONUS_STORAGE_KEY = 'time.level0BonusCollected'
+const BONUS_STORAGE_KEY = 'time.lesson0BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Life deduction (show hint + control platform 6 trap)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'time.level0TrapAdded'
+const LIFE_DEDUCT_FLAG = 'time.lesson0TrapAdded'
 //
 // Grace-period flag: set on the FIRST entry when trap conditions are met so the
 // dialog fires on the SECOND entry (after the hero has had one free attempt).
 //
-const LIFE_DEDUCT_GRACE_FLAG = 'time.level0TrapGrace'
+const LIFE_DEDUCT_GRACE_FLAG = 'time.lesson0TrapGrace'
 //
 // Resting birds near the anti-hero: small silhouettes that scatter on hero landing
 //
@@ -171,8 +167,8 @@ const BIRD_DRAW_Z = 18
  * Time section level 0 scene
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel0(k) {
-  k.scene("level-time.0", () => {
+export function sceneLesson0(k) {
+  k.scene("lesson-time.0", () => {
     //
     // Track current section for music routing; scores carry over from touch unchanged.
     //
@@ -180,7 +176,7 @@ export function sceneLevel0(k) {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-time.0')
+    set('lastLesson', 'lesson-time.0')
     //
     // Create sound instance
     //
@@ -229,7 +225,7 @@ export function sceneLevel0(k) {
     //
     const { hero, antiHero, levelIndicator } = initScene({
       k,
-      levelName: 'level-time.0',
+      levelName: 'lesson-time.0',
       levelNumber: 1,
       bottomPlatformHeight: PLATFORM_BOTTOM_HEIGHT,
       topPlatformHeight: PLATFORM_TOP_HEIGHT,
@@ -261,7 +257,7 @@ export function sceneLevel0(k) {
         // Check for speed bonus before incrementing normal score
         //
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-time.0', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-time.0', levelTime, levelIndicator)
         //
         // Increment hero score (level completed + speed bonus if earned)
         //
@@ -302,7 +298,7 @@ export function sceneLevel0(k) {
         //
         set(LIFE_DEDUCT_GRACE_FLAG, false)
         k.wait(transitionDelay, () => {
-          createLevelTransition(k, 'level-time.0')
+          createLevelTransition(k, 'lesson-time.0')
         })
       },
       showGameClock: true
@@ -341,8 +337,6 @@ export function sceneLevel0(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
-      showElapsedTimer: false,
-      targetTime: CFG.gameplay.speedBonusTime['level-time.0'],
       topY: PLATFORM_TOP_HEIGHT - 57
     })
     //
@@ -646,7 +640,7 @@ export function sceneLevel0(k) {
       endX: 1400,
       y: 815,
       hero,
-      currentLevel: 'level-time.0',
+      currentLevel: 'lesson-time.0',
       digitCount: 36,
       fakeDigitCount: 0,
       sfx: sound,
@@ -670,21 +664,6 @@ export function sceneLevel0(k) {
         height: TIME_INDICATOR_TOOLTIP_HEIGHT,
         text: TIME_INDICATOR_TOOLTIP_TEXT,
         offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
-    // Tooltip for green timer (target time countdown)
-    //
-    fpsCounter.targetText && Tooltip.create({
-      k,
-      targets: [{
-        x: fpsCounter.targetText.pos.x,
-        y: fpsCounter.targetText.pos.y,
-        width: GREEN_TIMER_TOOLTIP_WIDTH,
-        height: GREEN_TIMER_TOOLTIP_HEIGHT,
-        text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
         forceBelow: true
       }]
     })

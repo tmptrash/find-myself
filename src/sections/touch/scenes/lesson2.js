@@ -7,11 +7,11 @@ import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { drawFirTree } from '../components/fir-tree.js'
 import * as Dust from '../components/dust.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import * as LevelIndicator from '../components/level-indicator.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/lesson-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { arcY } from '../utils/trees.js'
 import * as Tooltip from '../../../utils/tooltip.js'
@@ -138,10 +138,6 @@ const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in lea
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const GREEN_TIMER_TOOLTIP_TEXT = "complete the level in time\nto earn more fragments"
-const GREEN_TIMER_TOOLTIP_WIDTH = 80
-const GREEN_TIMER_TOOLTIP_HEIGHT = 20
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
 const FPS_COUNTER_TOP_Y = 55
 const SMALL_HERO_TOOLTIP_TEXT = "your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
@@ -257,10 +253,10 @@ const LOG_KNOT_RADIUS_MAX = 5
 // Life deduction (level-specific flags and thresholds, up to 2 deductions)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'touch.level2TrapCount'
-const LIFE_DEDUCT_VISITED_FLAG = 'touch.level2Visited'
-const LIFE_DEDUCT_ICICLES_FLAG = 'touch.level2IciclesActive'
-const LIFE_DEDUCT_TRAP_FLAG = 'touch.level2TrapActive'
+const LIFE_DEDUCT_FLAG = 'touch.lesson2TrapCount'
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.lesson2Visited'
+const LIFE_DEDUCT_ICICLES_FLAG = 'touch.lesson2IciclesActive'
+const LIFE_DEDUCT_TRAP_FLAG = 'touch.lesson2TrapActive'
 const LIFE_DEDUCT_MAX_COUNT = 2
 //
 // Music volume multiplier for L2 — background music should sit quieter so
@@ -344,12 +340,12 @@ const MOON_CRATERS = [
  * Level 2 scene for touch section - Simple level without obstacles
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel2(k) {
-  k.scene("level-touch.2", () => {
+export function sceneLesson2(k) {
+  k.scene("lesson-touch.2", () => {
     //
     // Save progress
     //
-    set('lastLevel', 'level-touch.2')
+    set('lastLesson', 'lesson-touch.2')
     //
     // Set gravity
     //
@@ -490,7 +486,7 @@ export function sceneLevel2(k) {
     })
     LevelHelp.create({
       k,
-      levelName: 'level-touch.2',
+      levelName: 'lesson-touch.2',
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
@@ -629,10 +625,10 @@ export function sceneLevel2(k) {
         k.wait(transitionDelay, () => {
           Sound.stopAmbient(sound)
           touchMusic.stop()
-        createLevelTransition(k, 'level-touch.2')
+        createLevelTransition(k, 'lesson-touch.2')
         })
       },
-      currentLevel: 'level-touch.2',
+      currentLevel: 'lesson-touch.2',
       jumpForce: CFG.game.jumpForce,
       addMouth: isWordComplete,
       addArms: isTouchComplete,
@@ -787,7 +783,7 @@ export function sceneLevel2(k) {
       approachFromAbove: true,
       revealDistance: 120,
       heroBodyColor,
-      storageKey: 'touch.level2BonusCollected',
+      storageKey: 'touch.lesson2BonusCollected',
       //
       // The visible log is drawn centered on `x` with width 70 plus
       // ~5.5 px of squashed endcaps on each side, so the on-screen log
@@ -1097,11 +1093,7 @@ export function sceneLevel2(k) {
     //
     const fpsCounter = FpsCounter.create({
       k,
-      showTimer: true,
-      showElapsedTimer: false,
-      targetTime: CFG.gameplay.speedBonusTime
-        ? CFG.gameplay.speedBonusTime['level-touch.2']
-        : null
+      showTimer: true
     })
     //
     // Update FPS counter
@@ -1176,21 +1168,6 @@ export function sceneLevel2(k) {
         height: TOUCH_INDICATOR_TOOLTIP_HEIGHT,
         text: TOUCH_INDICATOR_TOOLTIP_TEXT,
         offsetY: TOUCH_INDICATOR_TOOLTIP_Y_OFFSET
-      }]
-    })
-    //
-    // Tooltip: green timer (appears below, positioned at FPS counter row)
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: k.width() / 2 + 140,
-        y: FPS_COUNTER_TOP_Y,
-        width: GREEN_TIMER_TOOLTIP_WIDTH,
-        height: GREEN_TIMER_TOOLTIP_HEIGHT,
-        text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
-        forceBelow: true
       }]
     })
     //
@@ -2840,7 +2817,7 @@ function onHeroDeath(k, heroInst, levelIndicator) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.2'))
+    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.2'))
   })
 }
 
@@ -3257,7 +3234,7 @@ function createRoundedCorners(k) {
  */
 function checkSpeedBonus(levelTime) {
   const targetTime = CFG.gameplay.speedBonusTime
-    && CFG.gameplay.speedBonusTime['level-touch.2']
+    && CFG.gameplay.speedBonusTime['lesson-touch.2']
   if (!targetTime) return false
   return levelTime < targetTime
 }

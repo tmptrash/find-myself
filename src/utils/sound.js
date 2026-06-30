@@ -376,15 +376,15 @@ export function playLandSound(instance, currentLevel = null) {
   //
   // Check if we're in time section level 3 (monster footstep sound)
   //
-  const isTimeLevel3 = currentLevel === 'level-time.3'
+  const isTimeLevel3 = currentLevel === 'lesson-time.3'
   //
   // Check if we're in time section (clock tick landing)
   //
-  const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
+  const isTimeSection = currentLevel && currentLevel.startsWith('lesson-time.')
   //
   // Check if we're in touch section (soft landing)
   //
-  const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
+  const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
   
   if (isTimeLevel3) {
     //
@@ -454,12 +454,12 @@ export function playLandSound(instance, currentLevel = null) {
     
     osc.start(now)
     osc.stop(now + duration)
-  } else if (currentLevel === 'level-touch.training' && instance._l2Surface === 'wood') {
+  } else if (currentLevel === 'lesson-touch.training' && instance._l2Surface === 'wood') {
     playWoodKnockLand(instance)
-  } else if (currentLevel === 'level-touch.2') {
+  } else if (currentLevel === 'lesson-touch.2') {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
-  } else if (currentLevel === 'level-touch.3') {
+  } else if (currentLevel === 'lesson-touch.3') {
     instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
   } else if (isTouchSection) {
     //
@@ -798,11 +798,11 @@ export function playJumpSound(instance, currentLevel = null) {
   //
   // Check if we're in time section (clock tick jump)
   //
-  const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
+  const isTimeSection = currentLevel && currentLevel.startsWith('lesson-time.')
   //
   // Check if we're in touch section (soft jump)
   //
-  const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
+  const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
   
   if (isTimeSection) {
     //
@@ -905,15 +905,15 @@ export function playStepSound(instance, currentLevel = null) {
   //
   // Check if we're in time section level 3 (monster footstep sound)
   //
-  const isTimeLevel3 = currentLevel === 'level-time.3'
+  const isTimeLevel3 = currentLevel === 'lesson-time.3'
   //
   // Check if we're in time section (clock tick steps)
   //
-  const isTimeSection = currentLevel && currentLevel.startsWith('level-time.')
+  const isTimeSection = currentLevel && currentLevel.startsWith('lesson-time.')
   //
   // Check if we're in touch section (soft steps)
   //
-  const isTouchSection = currentLevel && currentLevel.startsWith('level-touch.')
+  const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
   
   if (isTimeLevel3) {
     //
@@ -983,10 +983,10 @@ export function playStepSound(instance, currentLevel = null) {
     
     osc.start(now)
     osc.stop(now + duration)
-  } else if (currentLevel === 'level-touch.2') {
+  } else if (currentLevel === 'lesson-touch.2') {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
-  } else if (currentLevel === 'level-touch.3') {
+  } else if (currentLevel === 'lesson-touch.3') {
     playWoodKnockStep(instance)
   } else if (isTouchSection) {
     //
@@ -1484,6 +1484,33 @@ export function playLifeSound(_k) {
  * Play victory sound (ascending bright tones)
  * @param {Object} instance - Sound instance
  */
+/**
+ * Play a soft, gentle sound when the hero dies (replaces the laugh in touch section)
+ * @param {Object} instance - Sound instance
+ */
+export function playGentleLifeSound(instance) {
+  const { audioContext } = instance
+  const now = audioContext.currentTime
+  //
+  // Soft descending sine tone: empathetic, not harsh
+  //
+  const osc = audioContext.createOscillator()
+  const gain = audioContext.createGain()
+  const filter = audioContext.createBiquadFilter()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(520, now)
+  osc.frequency.exponentialRampToValueAtTime(260, now + 0.9)
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(1200, now)
+  gain.gain.setValueAtTime(0, now)
+  gain.gain.linearRampToValueAtTime(0.14, now + 0.06)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(audioContext.destination)
+  osc.start(now)
+  osc.stop(now + 1.1)
+}
 export function playVictorySound(instance) {
   const now = instance.audioContext.currentTime
   const duration = 1.0
@@ -4492,4 +4519,65 @@ export function playControlChangeSound(instance) {
     osc.start(now + i * 0.06)
     osc.stop(now + i * 0.06 + 0.07)
   })
+}
+//
+// Constants for firefly sounds
+//
+const FIREFLY_PICKUP_FREQ_MIN = 900
+const FIREFLY_PICKUP_FREQ_MAX = 1600
+const FIREFLY_PICKUP_DECAY = 0.18
+const FIREFLY_PICKUP_VOLUME = 0.18
+const FIREFLY_BURST_COUNT = 22
+//
+// Spread over 2 seconds so all fireflies chirp in a long staggered chorus
+//
+const FIREFLY_BURST_SPREAD = 4.5
+const FIREFLY_BURST_DECAY = 0.55
+const FIREFLY_BURST_VOLUME = 0.055
+/**
+ * Soft high-pitched chime played when hero collects a single firefly.
+ * @param {Object} inst - Sound instance
+ */
+export function playFireflyPickupSound(inst) {
+  const ctx = inst?.audioContext
+  if (!ctx) return
+  const now = ctx.currentTime
+  const freq = FIREFLY_PICKUP_FREQ_MIN + Math.random() * (FIREFLY_PICKUP_FREQ_MAX - FIREFLY_PICKUP_FREQ_MIN)
+  const osc = ctx.createOscillator()
+  const g = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(freq, now)
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.6, now + FIREFLY_PICKUP_DECAY)
+  g.gain.setValueAtTime(FIREFLY_PICKUP_VOLUME, now)
+  g.gain.exponentialRampToValueAtTime(0.001, now + FIREFLY_PICKUP_DECAY)
+  osc.connect(g)
+  g.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + FIREFLY_PICKUP_DECAY)
+}
+/**
+ * Random chirp burst when the last firefly is collected — all fireflies squeak in staggered order.
+ * @param {Object} inst - Sound instance
+ * @param {number} count - Number of fireflies (controls chirp count)
+ */
+export function playFireflyBurstSound(inst, count) {
+  const ctx = inst?.audioContext
+  if (!ctx) return
+  const chirps = Math.min(count, FIREFLY_BURST_COUNT)
+  for (let i = 0; i < chirps; i++) {
+    const delay = Math.random() * FIREFLY_BURST_SPREAD
+    const now = ctx.currentTime + delay
+    const freq = FIREFLY_PICKUP_FREQ_MIN + Math.random() * (FIREFLY_PICKUP_FREQ_MAX - FIREFLY_PICKUP_FREQ_MIN)
+    const osc = ctx.createOscillator()
+    const g = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(freq, now)
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.55, now + FIREFLY_BURST_DECAY)
+    g.gain.setValueAtTime(FIREFLY_BURST_VOLUME, now)
+    g.gain.exponentialRampToValueAtTime(0.001, now + FIREFLY_BURST_DECAY)
+    osc.connect(g)
+    g.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + FIREFLY_BURST_DECAY)
+  }
 }

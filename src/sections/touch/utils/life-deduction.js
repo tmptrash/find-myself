@@ -15,14 +15,14 @@ const COUNT_DURATION = 0.8
 const BLINK_SPEED = 6
 const BLINK_DURATION = 1.0
 const RESULT_FADE_IN = 0.5
-const RESULT_HOLD = 1.5
+const RESULT_HOLD = 2.5
 const FADE_OUT = 0.8
 const OVERLAY_OPACITY = 0
 //
 // How dark the level appears behind the life-deduction dialog (0 = none, 1 = black)
 //
 const OVERLAY_DIM_MAX = 0.42
-const LIFE_SCALE = 0.3
+const LIFE_SCALE = 0.22
 const SHOW_DELAY = 0.5
 const INTRO_TEXT = "Life strikes back"
 const RESULT_TEXT = "One problem added"
@@ -98,24 +98,28 @@ export function isActive() {
  * @param {number} config.textColorRgb.b
  */
 export function show(config) {
-  const { k, currentScore, levelIndicator, sound, deductFlag, extraFlags, sceneLock, onComplete, sceneBgRgb, textColorRgb } = config
+  const {
+    k, currentScore, levelIndicator, sound, deductFlag, extraFlags,
+    sceneLock, onComplete, sceneBgRgb, textColorRgb,
+    noDeduct, hideScore, resultTextOverride, introTextOverride
+  } = config
   const deductFlagValue = config.deductFlagValue ?? true
   //
-  // Persist the deducted score and mark as used immediately
+  // When noDeduct is true, skip the score subtraction — only the visual is shown
   //
-  const newScore = Math.max(0, currentScore - DEDUCT_AMOUNT)
-  set('lifeScore', newScore)
+  const newScore = noDeduct ? currentScore : Math.max(0, currentScore - DEDUCT_AMOUNT)
+  if (!noDeduct) set('lifeScore', newScore)
   set(deductFlag, deductFlagValue)
   extraFlags?.forEach(flag => set(flag, true))
   //
   // Delay the visual hint by SHOW_DELAY seconds
   //
-  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb, textColorRgb))
+  k.wait(SHOW_DELAY, () => showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb, textColorRgb, resultTextOverride, introTextOverride, hideScore))
 }
 //
 // Runs the actual life deduction animation after the delay
 //
-function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb, textColorRgb) {
+function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLock, onComplete, sceneBgRgb, textColorRgb, resultTextOverride, introTextOverride, hideScore) {
   _isActive = true
   const sceneBackdropHex = sceneBgRgb ? rgbToHex(sceneBgRgb) : null
   const palette = resolveComplementaryPalette(sceneBgRgb, textColorRgb)
@@ -171,12 +175,17 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     }
   ])
   //
+  // Resolve overridable text values before any game objects are created
+  //
+  const activeIntroText = introTextOverride ?? INTRO_TEXT
+  const activeResultText = resultTextOverride ?? RESULT_TEXT
+  //
   // Intro text outlines (black, drawn slightly behind)
   //
   const oo = OUTLINE_OFFSET
   const introOutlineOffsets = [[-oo, -oo], [0, -oo], [oo, -oo], [-oo, 0], [oo, 0], [-oo, oo], [0, oo], [oo, oo]]
   const introOutlines = introOutlineOffsets.map(([dx, dy]) => k.add([
-    k.text(INTRO_TEXT, { size: FONT_SIZE, align: 'center' }),
+    k.text(activeIntroText, { size: FONT_SIZE, align: 'center' }),
     k.pos(centerX + dx, centerY + INTRO_Y_OFFSET + dy),
     k.anchor('center'),
     k.color(0, 0, 0),
@@ -187,7 +196,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   // Intro text (white, drawn on top of outlines)
   //
   const introText = k.add([
-    k.text(INTRO_TEXT, { size: FONT_SIZE, align: 'center' }),
+    k.text(activeIntroText, { size: FONT_SIZE, align: 'center' }),
     k.pos(centerX, centerY + INTRO_Y_OFFSET),
     k.anchor('center'),
     k.color(palette.textR, palette.textG, palette.textB),
@@ -196,18 +205,19 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.fixed()
   ])
   //
-  // Life icon
+  // Life icon: centered horizontally when hideScore is true, offset otherwise
   //
+  const lifeIconX = hideScore ? centerX : centerX + LIFE_X_OFFSET
   const lifeIcon = k.add([
     k.sprite('life'),
-    k.pos(centerX + LIFE_X_OFFSET, centerY + SCORE_Y_OFFSET),
+    k.pos(lifeIconX, centerY + SCORE_Y_OFFSET),
     k.anchor('center'),
     k.scale(LIFE_SCALE),
     k.opacity(0),
     k.z(CFG.visual.zIndex.ui + 52)
   ])
   //
-  // Score outlines (black)
+  // Score outlines (black) — hidden when hideScore is true
   //
   const scoreX = centerX + SCORE_X_OFFSET
   const scoreY = centerY + SCORE_Y_OFFSET + 15
@@ -217,11 +227,11 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.pos(scoreX + dx, scoreY + dy),
     k.anchor('left'),
     k.color(0, 0, 0),
-    k.opacity(0),
+    k.opacity(hideScore ? 0 : 0),
     k.z(CFG.visual.zIndex.ui + 52)
   ]))
   //
-  // Score text
+  // Score text — hidden when hideScore is true
   //
   const scoreText = k.add([
     k.text(currentScore.toString(), { size: SCORE_FONT_SIZE }),
@@ -236,7 +246,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   // Result text outlines (black, drawn slightly behind)
   //
   const resultOutlines = introOutlineOffsets.map(([dx, dy]) => k.add([
-    k.text(RESULT_TEXT, { size: FONT_SIZE }),
+    k.text(activeResultText, { size: FONT_SIZE }),
     k.pos(centerX + dx, centerY + RESULT_Y_OFFSET + dy),
     k.anchor('center'),
     k.color(0, 0, 0),
@@ -247,7 +257,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   // Result text (red, drawn on top of outlines)
   //
   const resultText = k.add([
-    k.text(RESULT_TEXT, { size: FONT_SIZE }),
+    k.text(activeResultText, { size: FONT_SIZE }),
     k.pos(centerX, centerY + RESULT_Y_OFFSET),
     k.anchor('center'),
     k.color(palette.resultR, palette.resultG, palette.resultB),
@@ -265,7 +275,7 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     blinkTimer: 0,
     lastTickScore: currentScore
   }
-  const el = { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines }
+  const el = { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines, hideScore }
   const updateHandler = k.onUpdate(() => {
     state.timer += k.dt()
     onUpdateDeduction(
@@ -313,7 +323,7 @@ function onUpdateDeduction(
   sceneBackdropHex,
   palette
 ) {
-  const { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines } = el
+  const { overlay, bubble, introText, introOutlines, lifeIcon, scoreText, scoreOutlines, resultText, resultOutlines, hideScore } = el
   if (state.phase === 'fadeIn') {
     const p = Math.min(1, state.timer / FADE_IN)
     overlay.opacity = p
@@ -327,10 +337,21 @@ function onUpdateDeduction(
     // match: rgb(r*(1-p*DIM), ...).
     //
     syncBackdropToDim(k, sceneBackdropHex, p)
-    scoreText.opacity = p
-    setOutlinesOpacity(scoreOutlines, p)
+    if (!hideScore) {
+      scoreText.opacity = p
+      setOutlinesOpacity(scoreOutlines, p)
+    } else {
+      //
+      // When score is hidden, show the result text at the same time as the intro text
+      //
+      resultText.opacity = p
+      setOutlinesOpacity(resultOutlines, p)
+    }
     if (p >= 1) {
-      state.phase = 'scoreHold'
+      //
+      // Skip score phases when score is not shown — jump straight to result hold
+      //
+      state.phase = hideScore ? 'resultHold' : 'scoreHold'
       state.timer = 0
     }
   } else if (state.phase === 'scoreHold') {
@@ -394,8 +415,10 @@ function onUpdateDeduction(
     introText.opacity = opacity
     setOutlinesOpacity(introOutlines, opacity)
     lifeIcon.opacity = opacity
-    scoreText.opacity = opacity
-    setOutlinesOpacity(scoreOutlines, opacity)
+    if (!hideScore) {
+      scoreText.opacity = opacity
+      setOutlinesOpacity(scoreOutlines, opacity)
+    }
     resultText.opacity = opacity
     setOutlinesOpacity(resultOutlines, opacity)
     if (p >= 1) {

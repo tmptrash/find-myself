@@ -41,10 +41,6 @@ const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "Complete the level in time\nto earn more fragments"
-const GREEN_TIMER_TOOLTIP_WIDTH = 100
-const GREEN_TIMER_TOOLTIP_HEIGHT = 30
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips
 //
@@ -83,7 +79,7 @@ const BONUS_PLATFORM_Y = 830
 //
 const BONUS_PLATFORM_WIDTH = 60
 const BONUS_PLATFORM_COLLISION_HEIGHT = 48
-const BONUS_STORAGE_KEY = 'time.level1BonusCollected'
+const BONUS_STORAGE_KEY = 'time.lesson1BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Y threshold for the hidden platform's triggerBelowY detection.
@@ -97,12 +93,12 @@ const BONUS_TRIGGER_BELOW_Y = 760
 // Life deduction (show hint + control 5th platform falling)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'time.level1TrapAdded'
+const LIFE_DEDUCT_FLAG = 'time.lesson1TrapAdded'
 //
 // Grace-period flag: set on the FIRST entry when trap conditions are met so the
 // dialog fires on the SECOND entry (after the hero has had one free attempt).
 //
-const LIFE_DEDUCT_GRACE_FLAG = 'time.level1TrapGrace'
+const LIFE_DEDUCT_GRACE_FLAG = 'time.lesson1TrapGrace'
 //
 // Night music controller: darkness threshold for fading music, and cricket intervals
 //
@@ -160,12 +156,12 @@ const randomRange = (min, max) => Math.random() * (max - min) + min
  * Time section level 1 scene
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel1(k) {
-  k.scene("level-time.1", () => {
+export function sceneLesson1(k) {
+  k.scene("lesson-time.1", () => {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-time.1')
+    set('lastLesson', 'lesson-time.1')
     //
     // Create sound instance
     //
@@ -196,7 +192,7 @@ export function sceneLevel1(k) {
     //
     const { hero, antiHero, levelIndicator } = initScene({
       k,
-      levelName: 'level-time.1',
+      levelName: 'lesson-time.1',
       levelNumber: 2,
       skipPlatforms: true,
       spriteName: 'city-background-level1',
@@ -223,7 +219,7 @@ export function sceneLevel1(k) {
         // Check for speed bonus before incrementing normal score
         //
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-time.1', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-time.1', levelTime, levelIndicator)
         //
         // Increment hero score (level completed + speed bonus if earned)
         //
@@ -261,7 +257,7 @@ export function sceneLevel1(k) {
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         set(LIFE_DEDUCT_GRACE_FLAG, false)
         k.wait(transitionDelay, () => {
-          createLevelTransition(k, 'level-time.1')
+          createLevelTransition(k, 'lesson-time.1')
         })
       },
       showGameClock: true,
@@ -325,8 +321,6 @@ export function sceneLevel1(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
-      showElapsedTimer: false,
-      targetTime: CFG.gameplay.speedBonusTime['level-time.1'],
       topY: PLATFORM_TOP_HEIGHT - 57
     })
     //
@@ -504,7 +498,7 @@ export function sceneLevel1(k) {
         initialTime: platformInitialTime,
         staticTime: isStaticTime,  // Third platform never changes time
         killOnOne: true,  // Kill hero when time contains digit 1
-        currentLevel: 'level-time.1',
+        currentLevel: 'lesson-time.1',
         duration: 0,  // Not used for persistent platforms
         sfx: sound,
         enableColorChange: true,
@@ -606,7 +600,7 @@ export function sceneLevel1(k) {
         initialTime: isRightmostPlatform ? 33 : upperInitialTime,  // Rightmost platform shows 33
         staticTime: isRightmostPlatform,  // Rightmost platform time never changes
         killOnOne: !isRightmostPlatform,  // Rightmost platform doesn't kill hero
-        currentLevel: 'level-time.1',
+        currentLevel: 'lesson-time.1',
         duration: 0,  // Not used for persistent platforms
         sfx: sound,
         hidden: true,  // Hide text initially
@@ -670,7 +664,7 @@ export function sceneLevel1(k) {
       endX: k.width() - PLATFORM_SIDE_WIDTH - 20,
       y: BOTTOM_PLATFORM_TOP - 10,
       hero,
-      currentLevel: 'level-time.1',
+      currentLevel: 'lesson-time.1',
       digitCount: 50,
       fakeDigitCount: 0,
       sfx: sound,
@@ -713,21 +707,6 @@ export function sceneLevel1(k) {
         height: TIME_INDICATOR_TOOLTIP_HEIGHT,
         text: TIME_INDICATOR_TOOLTIP_TEXT,
         offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
-    // Tooltip for green timer (target time countdown)
-    //
-    fpsCounter.targetText && Tooltip.create({
-      k,
-      targets: [{
-        x: fpsCounter.targetText.pos.x,
-        y: fpsCounter.targetText.pos.y,
-        width: GREEN_TIMER_TOOLTIP_WIDTH,
-        height: GREEN_TIMER_TOOLTIP_HEIGHT,
-        text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
         forceBelow: true
       }]
     })

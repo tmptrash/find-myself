@@ -14,7 +14,7 @@ import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordIdleAaaTrap from '../utils/word-idle-aaa-trap.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 
 //
@@ -58,7 +58,7 @@ const BONUS_PLATFORM_COLLISION_WIDTH = 80
 const BONUS_PLATFORM_REVEAL_WIDTH = 150
 const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
 const BONUS_PLATFORM_COLLISION_X_OFFSET = 38
-const BONUS_STORAGE_KEY = 'word.level1BonusCollected'
+const BONUS_STORAGE_KEY = 'word.lesson1BonusCollected'
 //
 // Keep word count matching level 0 for consistent performance across all word levels
 //
@@ -67,12 +67,12 @@ const FLYING_WORD_COUNT = 22
 // Life deduction trap (shown once when life score reaches threshold)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'word.level1LifeDeduction'
+const LIFE_DEDUCT_FLAG = 'word.lesson1LifeDeduction'
 //
 // Visited flag: set on the FIRST entry when conditions are met so the hero
 // gets one free attempt before the dialog fires on the SECOND entry.
 //
-const LIFE_DEDUCT_VISITED_FLAG = 'word.level1TrapVisited'
+const LIFE_DEDUCT_VISITED_FLAG = 'word.lesson1TrapVisited'
 //
 // Canvas backdrop RGB for the life-deduction dialog overlay (word section dark purple)
 //
@@ -177,7 +177,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       //
       // Restart level
       //
-      k.go("level-word.1")
+      k.go("lesson-word.1")
       return
     }
     
@@ -214,18 +214,18 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
         updateInterval.cancel()
         skipHandlers.forEach(h => h.cancel())
         deathMsg.destroy()
-        k.go("level-word.1")
+        k.go("lesson-word.1")
       }
     }
   })
 }
 
-export function sceneLevel1(k) {
-  k.scene("level-word.1", () => {
+export function sceneLesson1(k) {
+  k.scene("lesson-word.1", () => {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-word.1')
+    set('lastLesson', 'lesson-word.1')
     //
     // Calculate moving platform position and gap
     //
@@ -247,9 +247,9 @@ export function sceneLevel1(k) {
     let bonusInst = null
     const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
-      levelName: 'level-word.1',
+      levelName: 'lesson-word.1',
       levelNumber: 2,
-      nextLevel: 'level-word.2',
+      nextLevel: 'lesson-word.2',
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
       subTitle: "sometimes words cut deeper than blades...",
@@ -266,7 +266,7 @@ export function sceneLevel1(k) {
         breathMusic && breathMusic.stop && breathMusic.stop()
         bonusInst && BonusHero.finalizeCollection(bonusInst)
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-word.1', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-word.1', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
         const pointsToAdd = speedBonusEarned ? 2 : 1
         const newScore = currentScore + pointsToAdd
@@ -276,7 +276,7 @@ export function sceneLevel1(k) {
         playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
-          createLevelTransition(k, 'level-word.1')
+          createLevelTransition(k, 'lesson-word.1')
         })
       }
     })
@@ -296,7 +296,7 @@ export function sceneLevel1(k) {
     const flyingWords = FlyingWords.create({
       k,
       hero,
-      currentLevel: 'level-word.1',
+      currentLevel: 'lesson-word.1',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       customBounds: platformBounds,
       wordCount: FLYING_WORD_COUNT,
@@ -336,7 +336,7 @@ export function sceneLevel1(k) {
       y: platformY,
       hero,
       color: platformColor,
-      currentLevel: 'level-word.1',
+      currentLevel: 'lesson-word.1',
       sfx: sound,
       raiseDelay: PIT_RAISE_DELAY,
       onBladeHit: (blades) => showDeathMessage(k, hero, blades, levelIndicator, sound)

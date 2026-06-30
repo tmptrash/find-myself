@@ -4,6 +4,7 @@ import { get, set } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
 import * as CanvasBackdrop from './canvas-backdrop.js'
+import * as Dialog from './dialog.js'
 
 //
 // HELP label layout — centered in bottom margin below play area
@@ -18,7 +19,7 @@ const HELP_LABEL_TOOLTIP_HEIGHT = 40
 const HELP_LABEL_TOOLTIP_Y_OFFSET = -36
 //
 // Match the top-left section indicator letters (`fontSize = 48` in
-// `<section>/components/level-indicator.js`) so the HELP label visually
+// `<section>/components/lesson-indicator.js`) so the HELP label visually
 // belongs to the same HUD typography level as the current-level title.
 //
 const HELP_FONT_SIZE = 48
@@ -31,8 +32,8 @@ const HELP_OUTLINE_OFFSET = 2
 //
 // Hint panel styling (life-deduction bubble, wider)
 //
-const PANEL_BOX_WIDTH = 760
-const PANEL_BOX_HEIGHT = 340
+const PANEL_BOX_WIDTH = 830
+const PANEL_BOX_HEIGHT = 380
 const PANEL_BOX_RADIUS = 16
 const PANEL_BORDER_WIDTH = 3
 const PANEL_FRAME_ALPHA = 0.88
@@ -44,14 +45,15 @@ const PANEL_BORDER_G = 0
 const PANEL_BORDER_B = 0
 const PANEL_FILL_ALPHA = 1.0
 const PANEL_FONT_SIZE = 44
+const PANEL_FONT_SIZE_MIN = 20
 const PANEL_LINE_SPACING = 10
 const PANEL_HINT_Y_OFFSET = -28
 const PANEL_FADE_IN = 0.35
 const PANEL_OVERLAY_DIM = 0.45
 const PANEL_Z = 620
-const CLOSE_HINT_TEXT = 'Click to close'
+const CLOSE_HINT_TEXT = 'Click or Esc to close'
 const CLOSE_HINT_FONT_SIZE = 20
-const CLOSE_HINT_Y_OFFSET = 118
+const CLOSE_HINT_Y_OFFSET = 162
 const CLOSE_HINT_COLOR_HEX = '#BFBFBF'
 const CLOSE_HINT_FLICKER_DURATION = 1.2
 const CLOSE_HINT_MIN_OPACITY = 0.4
@@ -94,15 +96,15 @@ const TOUCH_PANEL_BORDER_HEX = '#5A8898'
 //
 // Goal text per level (gray text shown under the main subtitle before each level)
 //
-export const LEVEL_GOAL_TEXTS = {
-  'level-touch.0': 'Here you need to figure out\nhow to gather bugs together\nby touching them',
-  'level-touch.1': 'Here you need to figure out\nhow to play the right\nmelody by touching things',
-  'level-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
-  'level-touch.3': 'Touch the bugs and see what happens...',
-  'level-time.0': 'Platforms don\'t live\nforever...',
-  'level-time.1': 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places',
-  'level-word.0': 'Find yourself and accept\nthat the voices in your\nhead won\'t go away',
-  'level-word.1': 'The task is the same —\nfind and accept yourself'
+export const LESSON_GOAL_TEXTS = {
+  'lesson-touch.0': 'You cannot feel the world,\nand the world cannot feel\nyou. Touch starts with T.\nFind it.',
+  'lesson-touch.1': 'Here you need to figure out\nhow to play the right\nmelody by touching things',
+  'lesson-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
+  'lesson-touch.3': 'Touch the bugs and see what happens...',
+  'lesson-time.0': 'Platforms don\'t live\nforever...',
+  'lesson-time.1': 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places',
+  'lesson-word.0': 'Find yourself and accept\nthat the voices in your\nhead won\'t go away',
+  'lesson-word.1': 'The task is the same —\nfind and accept yourself'
 }
 //
 // Goal label text and layout
@@ -128,6 +130,11 @@ const BTN_BORDER_LIGHTEN = 60
 // Updated when a panel opens or closes. Used by isAnyPanelOpen().
 //
 let activeInst = null
+//
+// True while a standalone panel (letter dialog) is visible.
+// Prevents the ESC key handler in scenes from navigating to menu.
+//
+let _standaloneOpen = false
 /**
  * Returns true when a help panel is currently visible (open or animating).
  * Touch scene Escape handlers call this to avoid going to menu while the
@@ -135,29 +142,29 @@ let activeInst = null
  * @returns {boolean}
  */
 export function isAnyPanelOpen() {
-  return activeInst?.panelOpen ?? false
+  return (activeInst?.panelOpen ?? false) || _standaloneOpen
 }
-export const LEVEL_HELP_TEXTS = {
-  'level-touch.0': 'Collect all the bugs in one\nplace and they will help\nyou. Notice what they do\nwhen you touch them',
-  'level-touch.1': 'Approach yourself to get\nthe sequence of notes to\nplay. The hero will become\ncolorful if you play right.',
-  'level-touch.2': 'Jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
-  'level-touch.3': 'Turns out the bugs\nare trampolines :)',
-  'level-time.0': 'Hurry — platforms\ndon\'t last forever',
-  'level-time.1': 'Ones kill you —\njust don\'t jump on them',
-  'level-time.2': 'An odd sum of digits kills\nyou, an even sum doesn\'t',
-  'level-time.3': 'Just reach your other half\nwith or against the wind.\nRemember: rushing doesn\'t\nalways make you faster.',
-  'level-word.0': 'Some words cut like\nblades — avoid them\nFind and accept yourself\nas you are, to move forward',
-  'level-word.1': 'Life always finds a way\nto ruin your plans.\nBe careful',
-  'level-word.2': 'Use your memory to remember\nwhere the blade-like words\nare...',
-  'level-word.3': 'Be quick and focused.\nNothing more',
-  'level-word.4': 'Do everything quickly\nand don\'t trust logic.\nTry to change a monster\nby throwing letters'
+export const LESSON_HELP_TEXTS = {
+  'lesson-touch.0': 'T — right of the tall bug. O — on\nthe monster head. U — platform\nin a center. C,H — platform after\nfinding U. Gather bugs near the\nplatform to jump!',
+  'lesson-touch.1': 'Approach yourself to get\nthe sequence of notes to\nplay. The hero will become\ncolorful if you play right.',
+  'lesson-touch.2': 'Jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
+  'lesson-touch.3': 'Turns out the bugs\nare trampolines :)',
+  'lesson-time.0': 'Hurry — platforms\ndon\'t last forever',
+  'lesson-time.1': 'Ones kill you —\njust don\'t jump on them',
+  'lesson-time.2': 'An odd sum of digits kills\nyou, an even sum doesn\'t',
+  'lesson-time.3': 'Just reach your other half\nwith or against the wind.\nRemember: rushing doesn\'t\nalways make you faster.',
+  'lesson-word.0': 'Some words cut like\nblades — avoid them\nFind and accept yourself\nas you are, to move forward',
+  'lesson-word.1': 'Life always finds a way\nto ruin your plans.\nBe careful',
+  'lesson-word.2': 'Use your memory to remember\nwhere the blade-like words\nare...',
+  'lesson-word.3': 'Be quick and focused.\nNothing more',
+  'lesson-word.4': 'Do everything quickly\nand don\'t trust logic.\nTry to change a monster\nby throwing letters'
 }
 
 /**
  * Creates bottom-right HELP label with click-to-open hint panel
  * @param {Object} config - Configuration
  * @param {Object} config.k - Kaplay instance
- * @param {string} config.levelName - Scene name (e.g. level-touch.0)
+ * @param {string} config.levelName - Scene name (e.g. lesson-touch.0)
  * @param {number} config.sideWallWidth - Right game-area inset
  * @param {number} config.floorY - Top Y of the bottom platform / game floor
  * @param {number} [config.helpY] - Optional Y override for HELP label placement
@@ -168,9 +175,9 @@ export const LEVEL_HELP_TEXTS = {
  */
 export function create(config) {
   const { k, levelName, sideWallWidth, floorY, helpY: helpYOverride, levelIndicator, sound, sceneBackdropHex } = config
-  const hintText = LEVEL_HELP_TEXTS[levelName]
+  const hintText = LESSON_HELP_TEXTS[levelName]
   if (!hintText) return null
-  const goalText = LEVEL_GOAL_TEXTS[levelName] ?? null
+  const goalText = LESSON_GOAL_TEXTS[levelName] ?? null
   const sectionColorHex = getSectionHelpColor(levelName)
   const { r, g, b } = getRGB(k, sectionColorHex)
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
@@ -572,10 +579,16 @@ function openPanel(inst) {
       }
     }
   ])
+  //
+  // Auto-shrink font for buy help text if it overflows the panel box
+  //
+  const activeFontSize = inst.panelIsGoal
+    ? PANEL_FONT_SIZE
+    : calcFittingFontSize(k, hintText, PANEL_BOX_WIDTH - 60, PANEL_BOX_HEIGHT - 90, inst.font)
   const outlineOffsets = buildOutlineOffsets(HELP_OUTLINE_OFFSET)
   const hintOutlines = outlineOffsets.map(([dx, dy]) => k.add([
     k.text(hintText, {
-      size: PANEL_FONT_SIZE,
+      size: activeFontSize,
       align: 'center',
       lineSpacing: PANEL_LINE_SPACING,
       font: inst.font
@@ -589,7 +602,7 @@ function openPanel(inst) {
   ]))
   const hintMain = k.add([
     k.text(hintText, {
-      size: PANEL_FONT_SIZE,
+      size: activeFontSize,
       align: 'center',
       lineSpacing: PANEL_LINE_SPACING,
       font: inst.font
@@ -872,4 +885,46 @@ function drawLabelBorderRing(k, node, br, bg, bb, bgR, bgG, bgB) {
 function drawButtonBorder(k, inst, br, bg, bb, bgR, bgG, bgB) {
   inst.labelNode?.exists?.() && drawLabelBorderRing(k, inst.labelNode, br, bg, bb, bgR, bgG, bgB)
   inst.goalLabelNode?.exists?.() && drawLabelBorderRing(k, inst.goalLabelNode, br, bg, bb, bgR, bgG, bgB)
+}
+//
+// Returns the largest font size that makes the text fit within maxHeight.
+// Decrements by 2px steps down to PANEL_FONT_SIZE_MIN.
+//
+function calcFittingFontSize(k, text, maxWidth, maxHeight, font) {
+  let size = PANEL_FONT_SIZE
+  while (size > PANEL_FONT_SIZE_MIN) {
+    const formatted = k.formatText({ text, size, width: maxWidth, lineSpacing: PANEL_LINE_SPACING, font })
+    if (formatted.height <= maxHeight) return size
+    size -= 2
+  }
+  return PANEL_FONT_SIZE_MIN
+}
+/**
+ * Opens a standalone dialog panel in the goal/help style without requiring a lesson-help inst.
+ * Manages its own fade-in/out animation via k.onUpdate.
+ * @param {Object} k - Kaplay instance
+ * @param {string} text - Text to display
+ * @param {Object} [opts] - Optional styling/callbacks
+ * @param {Object} [opts.fillRgb] - Panel fill color {r,g,b}
+ * @param {Object} [opts.textRgb] - Text color {r,g,b}
+ * @param {Object} [opts.borderRgb] - Border color {r,g,b}
+ * @param {string} [opts.font] - Font name
+ * @param {Function} [opts.onClose] - Callback on close
+ */
+export function openStandalonePanel(k, text, opts = {}) {
+  _standaloneOpen = true
+  const { onClose: outerOnClose, ...rest } = opts
+  Dialog.openDialog(k, text, {
+    ...rest,
+    //
+    // Reset _standaloneOpen the instant the dialog begins closing so subsequent
+    // Esc presses are not blocked by isAnyPanelOpen() during the fade-out animation.
+    //
+    onCloseStart: () => {
+      _standaloneOpen = false
+    },
+    onClose: () => {
+      outerOnClose?.()
+    }
+  })
 }

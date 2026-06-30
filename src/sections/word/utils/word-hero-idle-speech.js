@@ -78,7 +78,7 @@ const WISP_COLOR = [180, 180, 190]
  * @returns {Object|null} Speech inst
  */
 export function create(k, heroInst) {
-  if (!heroInst?.currentLevel?.startsWith('level-word.')) return null
+  if (!heroInst?.currentLevel?.startsWith('lesson-word.')) return null
   const inst = {
     k,
     heroInst,

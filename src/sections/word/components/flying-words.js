@@ -1,6 +1,6 @@
 import { CFG, getConsciousnessColor, getLevelColors, atmosphericDepthColor } from '../cfg.js'
 import { getColor, getRGB } from '../../../utils/helper.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 
 //

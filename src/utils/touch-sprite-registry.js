@@ -4,7 +4,7 @@
 // automatically via loadTouchSprite().
 //
 export const TOUCH_LEVEL_KNOWN_SPRITE_IDS = {
-  'level-touch.0': [
+  'lesson-touch.0': [
     'bg-touch-l0-black-back',
     'bg-touch-l0-back-organic',
     'bg-touch-l0-grey-leaf-mid',
@@ -12,19 +12,19 @@ export const TOUCH_LEVEL_KNOWN_SPRITE_IDS = {
     'bg-touch-l0-front-static',
     'touch0-corner-sprite'
   ],
-  'level-touch.1': [
+  'lesson-touch.1': [
     'bg-touch-back',
     'bg-touch-front-static',
     'touch1-corner-sprite'
   ],
-  'level-touch.2': [
+  'lesson-touch.2': [
     'bg-touch-level2-background-bushes-near',
     'bg-touch-level2-mountains',
     'bg-touch-level2-darkest-trees',
     'bg-touch-level2-background-dark-trees',
     'touch2-corner-sprite'
   ],
-  'level-touch.3': [
+  'lesson-touch.3': [
     'touch3-corner-sprite',
     'bg-touch-level3-sky',
     'bg-touch-level3-mountains',
@@ -32,7 +32,7 @@ export const TOUCH_LEVEL_KNOWN_SPRITE_IDS = {
     'bg-touch-level3-medium-trees',
     'bg-touch-level3-front-trees'
   ],
-  'level-touch.4': [
+  'lesson-touch.4': [
     'center-arrow-level3'
   ]
 }

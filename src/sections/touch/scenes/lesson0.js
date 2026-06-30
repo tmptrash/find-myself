@@ -6,11 +6,11 @@ import * as Bugs from '../components/bugs.js'
 import * as SmallBugs from '../components/small-bugs.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as BugPyramid from '../components/bug-pyramid.js'
-import * as LevelIndicator from '../components/level-indicator.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/lesson-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { drawRealisticBird } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
@@ -18,15 +18,16 @@ import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import { isTouchDevice } from '../../../utils/touch-input.js'
 import * as LifeDeduction from '../utils/life-deduction.js'
-import { createScrollingCloudBand, createFloorThornSprite } from '../utils/level0-scenery-sprites.js'
+import { createScrollingCloudBand, createFloorThornSprite } from '../utils/lesson0-scenery-sprites.js'
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import { buildRockVertices, buildRockPalette, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
+import * as LogPlatform from '../components/log-platform.js'
 import { getCameraCenterX, getDistanceThreshold, isWithinDistance } from '../utils/scene-perf.js'
-import { onUpdateLevel0GameLoop, drawL0Birds } from '../utils/level0-runtime.js'
+import { onUpdateLesson0GameLoop, drawL0Birds } from '../utils/lesson0-runtime.js'
 //
 // Bug constants (from bugs.js)
 //
@@ -283,27 +284,54 @@ const INSTRUCTIONS_FONT_SIZE = 24
 const INSTRUCTIONS_OUTLINE_OFFSET = 2
 const INSTRUCTIONS_TEXT = "A D ← → - move,  ↑ Space - jump,  ESC - menu,  use mouse"
 //
-// Monster conversation system (timed dialogue between 3 monsters)
+// Monster conversation system (context-aware per-act dialogue between 3 monsters)
 //
-const MONSTER_CONVERSATION_DELAY = 20
 const MONSTER_CHARS_PER_SECOND = 12
 const MONSTER_MIN_DISPLAY_TIME = 2.5
 const MONSTER_PAUSE_BETWEEN = 1.0
-const MONSTER_CONVERSATION_LINES = [
-  { speaker: 0, text: "Why did the bug cross\nthe screen?\nBetter latency" },
-  { speaker: 1, text: "That's not a joke.\nThat's just commuting" },
-  { speaker: 2, text: "I laughed.\nInternally.\nI'm subtle" },
-  { speaker: 0, text: "Hey.\nSee the small ones?\nScattered everywhere" },
-  { speaker: 1, text: "They need someone\nto nudge them\ncloser together" },
-  { speaker: 2, text: "Push them into a pile.\nSomething good\nhappens when they meet" },
-  { speaker: 0, text: "That's literally\nhow connection works.\nTry it" },
-  { speaker: 1, text: "My therapist says\nI stack trauma\nlike pancakes" },
-  { speaker: 0, text: "Mine says\nstop borrowing trouble\nfrom tomorrow" },
-  { speaker: 2, text: "Tomorrow said\n'already booked'" },
-  { speaker: 1, text: "I'm not lazy.\nI'm on standby" },
-  { speaker: 0, text: "Standing by\nis still standing.\nCount it" }
+const MONSTER_ACTS = [
+  {
+    key: 'touch.monstersTalkedT',
+    condition: () => true,
+    delay: 20,
+    lines: [
+      { speaker: 0, text: "That little one again.\nDoes he even know\nwhat 'touch' is?" },
+      { speaker: 1, text: "Doubt it. Look how\nhe walks. Like a\nconfused potato" },
+      { speaker: 2, text: "Potatoes can't walk.\nThat's the whole\nproblem with potatoes" }
+    ]
+  },
+  {
+    key: 'touch.monstersTalkedO',
+    condition: () => true,
+    delay: 5,
+    lines: [
+      { speaker: 1, text: "The fireflies like him.\nThey have terrible\ntaste in friends" },
+      { speaker: 2, text: "Those bugs trust him.\nThey also eat dirt.\nSo." },
+      { speaker: 0, text: "Maybe tiny is growing.\nOr maybe he just\nsmells better now" }
+    ]
+  },
+  {
+    key: 'touch.monstersTalkedU',
+    condition: () => true,
+    delay: 5,
+    lines: [
+      { speaker: 2, text: "He's collecting letters.\nAt that speed he'll\nfinish in... decades" },
+      { speaker: 0, text: "We could just give\nhim the letters.\nBut where's the fun?" },
+      { speaker: 1, text: "Honestly? I'm rooting\nfor him a little.\nDon't tell the others" }
+    ]
+  },
+  {
+    key: 'touch.monstersTalkedC',
+    condition: () => true,
+    delay: 5,
+    lines: [
+      { speaker: 0, text: "Do you think he\nknows we're watching?" },
+      { speaker: 2, text: "Of course not.\nHumans never look up.\nThat's their thing." },
+      { speaker: 1, text: "If he finishes,\nwe might actually\nhave to work" }
+    ]
+  }
 ]
-const MONSTERS_TALKED_KEY = 'touch.monstersTalked'
+const MONSTER_IDLE_CHECK_INTERVAL = 3.0
 //
 // Hero reaction when a bug crawls onto him: short meow + crouch pose
 //
@@ -327,19 +355,12 @@ const HERO_TOOLTIP_TEXT = "I must find myself..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
-// Green timer tooltip (appears below the timer text)
-//
-const GREEN_TIMER_TOOLTIP_TEXT = "Finish the level in time\nto get more fragments"
-const GREEN_TIMER_TOOLTIP_WIDTH = 80
-const GREEN_TIMER_TOOLTIP_HEIGHT = 30
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
-//
 // Small hero and life icon tooltips (appear below)
 //
 const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "Life score"
+const LIFE_TOOLTIP_TEXT = "Your experience"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
@@ -351,16 +372,9 @@ const FLOOR_THORNS_TOOLTIP_Y_OFFSET = -30
 //
 // Bird tooltip
 //
-const BIRD_TOOLTIP_TEXT = "I believe I can fly"
+const BIRD_TOOLTIP_TEXT = "I belieeeve I can flyyyy"
 const BIRD_TOOLTIP_HOVER_SIZE = 40
 const BIRD_TOOLTIP_Y_OFFSET = -30
-//
-// Long-legged monster hover tooltip (shown only when not in conversation)
-//
-const MONSTER_HOVER_TOOLTIP_TEXT = "Collect bugs together\nto reach the goal"
-const MONSTER_HOVER_TOOLTIP_W = 70
-const MONSTER_HOVER_TOOLTIP_H = 80
-const MONSTER_HOVER_TOOLTIP_Y_OFFSET = -90
 //
 // Small bug random phrases (shown as speech bubbles with long pauses)
 //
@@ -448,19 +462,166 @@ const TRAP_TOOLTIP_Y_OFFSET = -30
 // Anti-hero platform (right side, above hero height)
 //
 const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
-const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 80  // Above hero height (lowered)
+//
+// Raised so letter O is only reachable via firefly platform (not a normal jump from floor)
+//
+const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 165  // Well above hero jump reach
 //
 // Decorative culling and atmosphere activation (multiples of viewport width)
 //
 const L0_CULL_SCREEN_MULT = 2
 const L0_ATMOSPHERE_SCREEN_MULT = 1.5
+//
+// TOUCH letter pickup system constants
+//
+const TOUCH_LETTER_SIZE = 68
+const TOUCH_LETTER_COLLECT_RADIUS = 58
+const TOUCH_LETTER_T_X_OFFSET = 190
+//
+// Teal color matching TOUCH HUD letters (#5A8898)
+//
+const TOUCH_LETTER_COLOR_R = 90
+const TOUCH_LETTER_COLOR_G = 136
+const TOUCH_LETTER_COLOR_B = 152
+//
+// Outline thickness (same as lesson-indicator.js)
+//
+const TOUCH_LETTER_OUTLINE = 2
+//
+// Fade pulse: opacity cycles between MIN and 1.0
+//
+const TOUCH_LETTER_PULSE_SPEED = 1.8
+const TOUCH_LETTER_PULSE_MIN = 0.35
+//
+// Letter tilts (degrees): alternating lean per letter
+//
+const TOUCH_LETTER_TILTS = [-8, 12, 6, -5]
+//
+// Tilt for the H letter (paired with C) and opacity for the semi-transparent U letter
+//
+const TOUCH_LETTER_TILT_H = 7
+const TOUCH_U_LETTER_OPACITY = 0.50
+//
+// Horizontal gap between the C and H letters when displayed together
+//
+const TOUCH_CH_SPACING = 72
+const TOUCH_FIREFLY_FLEE_RADIUS = 195
+const TOUCH_FIREFLY_FOLLOW_DIST = 85
+//
+// Radius within which a hero touch collects an individual firefly
+//
+const TOUCH_FIREFLY_TOUCH_RADIUS = 35
+const TOUCH_FIREFLY_PLATFORM_FORM_DIST = 380
+const TOUCH_FIREFLY_PLATFORM_W = 155
+const TOUCH_FIREFLY_PLATFORM_H = 20
+//
+// Platform height above floor
+//
+const TOUCH_FIREFLY_PLATFORM_Y_ABOVE_FLOOR = 115
+//
+// Precomputed absolute Y of the firefly platform center
+//
+const TOUCH_FIREFLY_PLATFORM_ACTUAL_Y = FLOOR_Y - TOUCH_FIREFLY_PLATFORM_Y_ABOVE_FLOOR
+//
+// Side offset of firefly platform from the monster center (in px)
+//
+const TOUCH_FIREFLY_PLATFORM_SIDE_OFFSET = 85
+//
+// How many seconds the firefly platform stays before dissolving back to follow mode
+//
+const TOUCH_FIREFLY_PLATFORM_DURATION = 5
+//
+// Max height fireflies can reach in normal flight modes. Platform mode bypasses this bound
+// so fireflies can still form a platform above tree crown level.
+//
+const TOUCH_FIREFLY_MAX_HEIGHT_ABOVE_FLOOR = 90
+//
+// Extra pixels beyond the half-screen to still draw fireflies (avoids pop-in at edges)
+//
+const L0_FIREFLY_DRAW_MARGIN = 120
+//
+// X/Y counter offsets relative to hero position
+//
+const TOUCH_FIREFLY_COUNTER_FONT = 22
+const TOUCH_FIREFLY_COUNTER_X_OFFSET = 28
+const TOUCH_FIREFLY_COUNTER_Y_OFFSET = -58
+//
+// Log platform dimensions for U letter (same height as bonus-hero log)
+//
+//
+// Log platform dimensions (halved width per design; height = log diameter)
+//
+const TOUCH_LOG_PLATFORM_W = 82
+const TOUCH_LOG_PLATFORM_H = 28
+//
+// How many pixels lower the U log platform is placed vs ANTIHERO_PLATFORM_Y
+//
+const TOUCH_U_PLATFORM_Y_LOWER = 120
+//
+// How many extra pixels the U letter sits below the platform top surface
+//
+const TOUCH_U_LETTER_Y_EXTRA = 10
+//
+// How many pixels lower the C log platform is placed vs ANTIHERO_PLATFORM_Y
+//
+const TOUCH_C_PLATFORM_Y_LOWER = 50
+const TOUCH_HIDDEN_PLATFORM_W = 165
+const TOUCH_HIDDEN_PLATFORM_H = 22
+//
+// X-distance from hero within which bugs stop approaching and just walk near him
+//
+const TOUCH_BUG_GATHER_NEAR_DIST = 150
+//
+// Random interval range (seconds) between ambient bug cheer sounds during gather phase
+//
+const TOUCH_GATHER_SOUND_INTERVAL_MIN = 0.35
+const TOUCH_GATHER_SOUND_INTERVAL_MAX = 1.1
+//
+// How long to wait after all bugs have arrived near the hero before transitioning
+//
+const TOUCH_GATHER_POST_ARRIVE_DELAY = 3
+//
+// Fallback: force transition after this many seconds even if bugs haven't all arrived
+//
+const TOUCH_GATHER_MAX_WAIT = 18
+//
+// How many pixels the O letter's bottom sits below the monster head top edge
+//
+const TOUCH_LETTER_O_Y_OFFSET = 17
+//
+// Y tolerance for hero-on-platform detection (hero bottom vs platform top)
+//
+//
+// Offset from hero center to its physics foot (matches hero.js COLLISION_HEIGHT/2 + COLLISION_OFFSET_Y)
+//
+const HERO_FOOT_OFFSET_Y = 37.5
+const ANTIHERO_PLATFORM_DETECT_Y_TOL = 30
+//
+// X half-width tolerance for hero-on-platform detection
+//
+const ANTIHERO_PLATFORM_DETECT_HALF_W = 130
+//
+// TOUCH letter dialog texts. All use Kaplay inline style tag [hl]...[/hl] for the yellow letter.
+// Lines are kept to ~20-28 visible characters each for a balanced dialog layout.
+//
+const TOUCH_DIALOG_T = "[hl]T[/hl]rust cannot be taken. It must\nbe earned. The fireflies follow\nyou now. Collect them all, then\nfollow the low monster."
+const TOUCH_DIALOG_O = "The world has always been\nspeaking. You just started\nnoticing. [hl]O[/hl]bservation is not\na gift — it is attention."
+const TOUCH_DIALOG_U = "Five bugs together become\nsomething more. You did not\ngain power — you [hl]U[/hl]nderstood\nhow things connect when\nyou give them space to meet."
+const TOUCH_DIALOG_C = "The world acts as one whole.\n[hl]C[/hl]onnection and [hl]H[/hl]armony\nwere always here.\nNow you are part of them."
+//
+// Clean (tag-free) versions used in the goal panel so [hl] markup is not shown as literals
+//
+const TOUCH_GOAL_TEXT_T = "Trust is earned, not taken.\nThe fireflies follow you now.\nCollect them all, then follow\nthe low monster."
+const TOUCH_GOAL_TEXT_O = "The world has always been\nspeaking. You just started\nnoticing. Look carefully —\nnot everything is visible\nat first glance."
+const TOUCH_GOAL_TEXT_U = "Five bugs together become\nsomething more. Gather them in\none spot and wait. They form a\nplatform — connection you\nrecognized. Touch connects."
+const TOUCH_GOAL_TEXT_C = "The world acts as one whole.\nConnection and Harmony\nwere always here.\nNow you are part of them."
 /**
  * Level 0 scene for touch section - Introduction level
  * Large game area with minimal obstacles
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel0(k) {
-  k.scene("level-touch.0", () => {
+export function sceneLesson0(k) {
+  k.scene("lesson-touch.0", () => {
     //
     // Reset life score when entering from a different section.
     // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
@@ -478,7 +639,7 @@ export function sceneLevel0(k) {
     //
     // Save progress
     //
-    set('lastLevel', 'level-touch.0')
+    set('lastLesson', 'lesson-touch.0')
     //
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
@@ -601,13 +762,13 @@ export function sceneLevel0(k) {
     // the player has finished a section, the hero adopts that section's
     // identity colour: teal for touch, orange for time, red for word.
     //
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
+    const heroBodyColor = CFG.visual.colors.sections.touch.antiHero
     //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
       k,
-      levelNumber: 0,
+      levelNumber: -1,
       //
       // TOUCH letters tint matches the new section identity (steel teal),
       // so the HUD agrees with the in-game anti-hero / touch-completed
@@ -620,9 +781,9 @@ export function sceneLevel0(k) {
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
-    LevelHelp.create({
+    const levelHelpInst = LevelHelp.create({
       k,
-      levelName: 'level-touch.0',
+      levelName: 'lesson-touch.0',
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
@@ -664,6 +825,13 @@ export function sceneLevel0(k) {
     } else if (trap2Eligible && trap2AlreadyVisited) {
       showTrap2 = true
     }
+    //
+    // Prevent two correction dialogs in the same level entry — defer trap2 if trap1 also shows
+    //
+    if (showTrap && showTrap2) {
+      showTrap2 = false
+      set(TRAP2_VISITED_FLAG, false)
+    }
     const trap2Active = showTrap2 || trap2AlreadyAdded
     //
     // Trap badge: 0, 1 or 2
@@ -687,6 +855,10 @@ export function sceneLevel0(k) {
         sound,
         deductFlag: LIFE_DEDUCT_FLAG,
         sceneLock,
+        noDeduct: true,
+        hideScore: true,
+        introTextOverride: 'Life made corrections.',
+        resultTextOverride: 'Learn this lesson.',
         sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B },
         textColorRgb: { r: 90, g: 136, b: 152 }
       })
@@ -694,13 +866,17 @@ export function sceneLevel0(k) {
     if (showTrap2) {
       const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
       k.wait(trap2Delay, () => {
-        LifeDeduction.show({
+          LifeDeduction.show({
           k,
           currentScore: get('lifeScore', 0),
           levelIndicator,
           sound,
           deductFlag: TRAP2_FLAG,
           sceneLock,
+          noDeduct: true,
+          hideScore: true,
+          introTextOverride: 'Life made corrections.',
+          resultTextOverride: 'Learn this lesson.',
           sceneBgRgb: { r: WALL_COLOR_R, g: WALL_COLOR_G, b: WALL_COLOR_B },
           textColorRgb: { r: 90, g: 136, b: 152 }
         })
@@ -837,27 +1013,25 @@ export function sceneLevel0(k) {
       // Depth rows (camera → back): front colorful; mid black/grey organics; far circles + grey organics.
       //
       //
-      // Front parallax layer (layerIndex === 3) is the warm half of the
-      // teal+orange complementary palette: dry autumn grass, sun-bleached
-      // bushes, amber/orange leaves and burnt-umber trunks. The other
-      // layers stay neutral-cool because they get mixed toward the teal
-      // playfield bg below.
+      // All parallax layers use neutral-cool tones mixed toward the teal background.
+      // The warm amber/orange override for the front layer was removed to eliminate
+      // the yellow grass appearance.
       //
-      const grassBaseR = layerIndex === 3 ? 200 : 50 * colorMix + bgColor.r * (1 - colorMix)
-      const grassBaseG = layerIndex === 3 ? 156 : 80 * colorMix + bgColor.g * (1 - colorMix)
-      const grassBaseB = layerIndex === 3 ? 64 : 50 * colorMix + bgColor.b * (1 - colorMix)
+      const grassBaseR = 50 * colorMix + bgColor.r * (1 - colorMix)
+      const grassBaseG = 80 * colorMix + bgColor.g * (1 - colorMix)
+      const grassBaseB = 50 * colorMix + bgColor.b * (1 - colorMix)
 
-      const bushBaseR = layerIndex === 3 ? 180 : 35 * colorMix + bgColor.r * (1 - colorMix)
-      const bushBaseG = layerIndex === 3 ? 92 : 55 * colorMix + bgColor.g * (1 - colorMix)
-      const bushBaseB = layerIndex === 3 ? 36 : 35 * colorMix + bgColor.b * (1 - colorMix)
+      const bushBaseR = 35 * colorMix + bgColor.r * (1 - colorMix)
+      const bushBaseG = 55 * colorMix + bgColor.g * (1 - colorMix)
+      const bushBaseB = 35 * colorMix + bgColor.b * (1 - colorMix)
 
-      const treeLeafR = layerIndex === 3 ? 220 : 12 * colorMix + bgColor.r * (1 - colorMix)
-      const treeLeafG = layerIndex === 3 ? 128 : 16 * colorMix + bgColor.g * (1 - colorMix)
-      const treeLeafB = layerIndex === 3 ? 48 : 12 * colorMix + bgColor.b * (1 - colorMix)
+      const treeLeafR = 12 * colorMix + bgColor.r * (1 - colorMix)
+      const treeLeafG = 16 * colorMix + bgColor.g * (1 - colorMix)
+      const treeLeafB = 12 * colorMix + bgColor.b * (1 - colorMix)
 
-      const treeTrunkR = layerIndex === 3 ? 96 : 10 * colorMix + bgColor.r * (1 - colorMix)
-      const treeTrunkG = layerIndex === 3 ? 58 : 10 * colorMix + bgColor.g * (1 - colorMix)
-      const treeTrunkB = layerIndex === 3 ? 28 : 10 * colorMix + bgColor.b * (1 - colorMix)
+      const treeTrunkR = 10 * colorMix + bgColor.r * (1 - colorMix)
+      const treeTrunkG = 10 * colorMix + bgColor.g * (1 - colorMix)
+      const treeTrunkB = 10 * colorMix + bgColor.b * (1 - colorMix)
       //
       // Generate grass blade data for this layer.
       // Back/middle layers stay uniform-but-sparse for atmospheric haze.
@@ -1698,8 +1872,14 @@ export function sceneLevel0(k) {
           const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
           const HERO_RADIUS = 50
           const PUSH_FORCE = 15
-          
+          //
+          // Cull grass blades outside ~1 screen width from camera center (hero X).
+          // The level is wider than the viewport so far-away blades waste draw calls.
+          //
+          const cameraX = getCameraCenterX(k, this.heroRef)
+          const grassCullDist = getDistanceThreshold(k, 0.65)
           for (const blade of allGrassBlades) {
+            if (!isWithinDistance(blade.x1, cameraX, grassCullDist)) continue
             const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
             //
             // Use squared distance to avoid sqrt on every blade every frame.
@@ -1716,7 +1896,6 @@ export function sceneLevel0(k) {
               const pushStrength = (1 - distance / HERO_RADIUS)
               pushSway = (dx / (distance || 1)) * pushStrength * PUSH_FORCE
             }
-            
             k.drawLine({
               p1: k.vec2(blade.x1, blade.y1),
               p2: k.vec2(blade.baseX2 + baseSway + pushSway, blade.y2),
@@ -1971,45 +2150,11 @@ export function sceneLevel0(k) {
       CFG.game.platformName
     ])
     //
-    // Create anti-hero first (needed for hero annihilation setup)
-    // Position anti-hero directly on top of platform (on top of bug's head)
+    // Second trap: make the bug (and its invisible platform) drift slowly.
     //
-    const antiHeroSpawnX = bug4X  // Center on bug's back
-    const antiHeroSpawnY = bug4BackPlatformY - 50  // On top of platform (slightly above to let physics settle)
-    const antiHeroInst = Hero.create({
-      k,
-      x: antiHeroSpawnX,
-      y: antiHeroSpawnY,
-      type: Hero.HEROES.ANTIHERO,
-      controllable: false,
-      sfx: sound,
-      antiHero: null,
-      addArms: true,
-      //
-      // Steel teal — the cool half of the teal+orange complementary
-      // palette and the direct complement of the silver hero. Pulled
-      // from the touch section's identity colour so it stays consistent
-      // with the HUD indicator.
-      //
-      bodyColor: CFG.visual.colors.sections.touch.antiHero
-    })
+    trap2Active && activateBug4Movement(k, bigBug4Inst, antiHeroPlatform, null, bug4Radius)
     //
-    // Hide character immediately to prevent double appearance
-    //
-    if (antiHeroInst.character) {
-      antiHeroInst.character.hidden = true
-      //
-      // Bump anti-hero z so it's drawn in front of dynamic trees (z=25)
-      //
-      antiHeroInst.character.z = ANTIHERO_PLATFORM_Z_INDEX
-    }
-    //
-    // Second trap: make the bug (and its invisible platform) drift slowly left
-    // and right, bouncing between the play-area walls.
-    //
-    trap2Active && activateBug4Movement(k, bigBug4Inst, antiHeroPlatform, antiHeroInst, bug4Radius)
-    //
-    // Create hero with anti-hero reference for annihilation
+    // Create hero (no annihilation in this lesson — TOUCH letters drive progression)
     //
     const heroInst = Hero.create({
       k,
@@ -2018,33 +2163,8 @@ export function sceneLevel0(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: antiHeroInst,
-      onAnnihilation: () => {
-        Tooltip.suppressAll()
-        //
-        // Check for speed bonus before scoring
-        //
-        const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(levelTime)
-        const currentScore = get('heroScore', 0)
-        const pointsToAdd = speedBonusEarned ? 3 : 1
-        const newScore = currentScore + pointsToAdd
-        set('heroScore', newScore)
-        levelIndicator?.updateHeroScore?.(newScore)
-        sound && Sound.playVictorySound(sound)
-        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
-        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
-        k.wait(transitionDelay, () => {
-          //
-          // Stop all audio before transition so nothing bleeds into the subtitle screen
-          //
-          Sound.stopAmbient(sound)
-          touchMusic.stop()
-          set(LIFE_DEDUCT_VISITED_FLAG, false)
-          createLevelTransition(k, 'level-touch.0')
-        })
-      },
-      currentLevel: 'level-touch.0',
+      antiHero: null,
+      currentLevel: 'lesson-touch.0',
       jumpForce: CFG.game.jumpForce,
       addMouth: isWordComplete,
       addArms: isTouchComplete,
@@ -2083,18 +2203,6 @@ export function sceneLevel0(k) {
       }
     })
     //
-    // Spawn anti-hero after delay
-    // Position is already set correctly at creation time
-    // Use flag to ensure spawn is called only once
-    //
-    let antiHeroSpawned = false
-    k.wait(HERO_SPAWN_DELAY, () => {
-      if (!antiHeroSpawned && antiHeroInst.character) {
-        Hero.spawn(antiHeroInst)
-        antiHeroSpawned = true
-      }
-    })
-    //
     // Hero vs floor thorns (death + reload level) — merged into main game loop below
     //
     const trapsEnabled = showTrap || trapAlreadyAdded
@@ -2104,7 +2212,7 @@ export function sceneLevel0(k) {
     // Only visible when hero approaches from above (jumping from a bug)
     //
     const BONUS_PLATFORM_X = LEFT_MARGIN + 140
-    const BONUS_PLATFORM_Y = ANTIHERO_PLATFORM_Y + 18
+    const BONUS_PLATFORM_Y = ANTIHERO_PLATFORM_Y + 80
     const BONUS_PLATFORM_WIDTH = 80
     const bonusHeroInst = BonusHero.create({
       k,
@@ -2117,7 +2225,7 @@ export function sceneLevel0(k) {
       approachFromAbove: true,
       revealDistance: 120,
       heroBodyColor,
-      storageKey: 'touch.level0BonusCollected',
+      storageKey: 'touch.lesson0BonusCollected',
       //
       // Collision box shifted right by half its width so its left edge
       // aligns with the platform anchor point.
@@ -2368,14 +2476,7 @@ export function sceneLevel0(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({
-      k,
-      showTimer: true,
-      showElapsedTimer: false,
-      targetTime: CFG.gameplay.speedBonusTime
-        ? CFG.gameplay.speedBonusTime['level-touch.0']
-        : null
-    })
+    const fpsCounter = FpsCounter.create({ k })
     //
     // Draw bugs with individual z-indices
     // Create drawing objects that check state dynamically
@@ -2392,16 +2493,7 @@ export function sceneLevel0(k) {
       ])
       bugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
-    //
-    // Monster conversation system: timed dialogue between 3 monsters.
-    // Starts after MONSTER_CONVERSATION_DELAY seconds and plays once.
-    //
     const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
-    const conversationState = startMonsterConversation(k, monsterBugs)
-    //
-    // Hover tooltips for long-legged monsters (only when not in conversation)
-    //
-    createMonsterHoverTooltips(k, monsterBugs, conversationState)
     //
     // Small bugs sometimes speak on their own (see SMALL_BUG_PHRASES).
     //
@@ -2423,20 +2515,6 @@ export function sceneLevel0(k) {
       }]
     })
     //
-    // Tooltip for anti-hero
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: () => antiHeroInst.character.pos.x,
-        y: () => antiHeroInst.character.pos.y,
-        width: ANTIHERO_TOOLTIP_HOVER_WIDTH,
-        height: ANTIHERO_TOOLTIP_HOVER_HEIGHT,
-        text: ANTIHERO_TOOLTIP_TEXT,
-        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
-      }]
-    })
-    //
     // Tooltip for hero
     //
     Tooltip.create({
@@ -2448,21 +2526,6 @@ export function sceneLevel0(k) {
         height: HERO_TOOLTIP_HOVER_SIZE,
         text: HERO_TOOLTIP_TEXT,
         offsetY: HERO_TOOLTIP_Y_OFFSET
-      }]
-    })
-    //
-    // Tooltip for green timer (target time)
-    //
-    fpsCounter.targetText && Tooltip.create({
-      k,
-      targets: [{
-        x: fpsCounter.targetText.pos.x,
-        y: fpsCounter.targetText.pos.y,
-        width: GREEN_TIMER_TOOLTIP_WIDTH,
-        height: GREEN_TIMER_TOOLTIP_HEIGHT,
-        text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
-        forceBelow: true
       }]
     })
     //
@@ -2548,7 +2611,6 @@ export function sceneLevel0(k) {
       leftX: LEFT_MARGIN,
       rightX: CFG.visual.screen.width - RIGHT_MARGIN,
       heroInst,
-      antiHeroInst,
       monsterBugs: [bigBug0Inst, bigBug1Inst, bigBug2Inst],
       smallBugs,
       trees: frontTrees,
@@ -2618,6 +2680,38 @@ export function sceneLevel0(k) {
     //
     const fireflyRuntime = createL0Fireflies(k)
     //
+    // Init firefly flee mode — fireflies flee from hero until letter T is collected
+    //
+    fireflyRuntime.fireflies._mode = 'flee'
+    fireflyRuntime.fireflies._heroRef = null
+    //
+    // TOUCH letter collection system: T on ground, O on monster head, U+C on hidden platforms
+    //
+    const touchLetterState = setupTouchLetterSystem(k, {
+      bug4X,
+      bug4BackPlatformY,
+      antiHeroPlatform,
+      fireflyRuntime,
+      bugs,
+      allBugsCombined,
+      levelIndicator,
+      sound,
+      touchMusic,
+      wallColorHex: WALL_COLOR_HEX,
+      levelHelpInst
+    })
+    //
+    // Connect hero reference to firefly and letter system (heroInst exists by this point)
+    //
+    fireflyRuntime.fireflies._heroRef = heroInst
+    touchLetterState.heroInst = heroInst
+    //
+    // Monster conversation system: context-aware dialogue between the 3 tall monsters.
+    // Different acts play based on which TOUCH letters have been collected.
+    // Starts after a delay and replays with new lines as player progresses.
+    //
+    const conversationState = startMonsterConversation(k, monsterBugs, touchLetterState)
+    //
     // Small mushrooms on the ground
     //
     const l0Mushrooms = createMushrooms(k, puddleRuntime.puddles)
@@ -2645,7 +2739,9 @@ export function sceneLevel0(k) {
     //
     // Moss patches: clustered near rocks plus standalone clumps for realism
     //
-    createMoss(k, rocks)
+    //
+    // Moss removed — was a significant per-frame draw cost with no gameplay value
+    //
     //
     // Hanging spider on a thread tied to a tree branch (eyes follow the hero)
     //
@@ -2665,14 +2761,13 @@ export function sceneLevel0(k) {
     })
     birds._heroRef = heroInst
     const atmosphereAnchorX = LEFT_MARGIN + (CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN) / 2
-    k.onUpdate(() => onUpdateLevel0GameLoop(k, {
+    k.onUpdate(() => onUpdateLesson0GameLoop(k, {
       heroInst,
       checkFloorThorns,
       floorThornData,
       levelIndicator,
       bigBug4Inst,
       antiHeroPlatform,
-      antiHeroInst,
       bug4Radius,
       bugs,
       smallBugs,
@@ -2700,7 +2795,8 @@ export function sceneLevel0(k) {
       atmosphereAnchorX,
       heroBugCrouchDuration: HERO_BUG_CROUCH_DURATION,
       onUpdateThunder,
-      sound
+      sound,
+      touchLetterState
     }))
     //
     // Return to menu on ESC
@@ -2812,7 +2908,7 @@ function computeThornClusterTargets(thornData) {
  * @param {Array} floorThornData - Thorn definitions from generateFloorThornsWithGaps
  * @param {Object} levelIndicator - Level indicator inst (life score UI)
  */
-function checkFloorThorns(k, heroInst, floorThornData, levelIndicator) {
+function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, sound) {
   if (!heroInst.character?.pos) return
   const heroX = heroInst.character.pos.x
   const heroFeetY =
@@ -2829,19 +2925,20 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator) {
     const halfW = thorn.width / 2 + HERO_HALF_WIDTH_THORNS
     if (Math.abs(heroX - thorn.x) >= halfW) continue
     if (heroFeetY > thornTopY && heroTopY < thorn.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
-      onHeroFloorThornDeath(k, heroInst, levelIndicator)
+      onHeroFloorThornDeath(k, heroInst, levelIndicator, sound)
       return
     }
   }
 }
 
 /**
- * Hero death on floor thorns: life score, laugh, reload touch level 0
+ * Hero death on floor thorns: life score, gentle sound, reload touch lesson 0
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator inst
+ * @param {Object} sound - Sound instance
  */
-function onHeroFloorThornDeath(k, heroInst, levelIndicator) {
+function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound) {
   if (heroInst.isDying) return
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
@@ -2849,12 +2946,12 @@ function onHeroFloorThornDeath(k, heroInst, levelIndicator) {
     set('lifeScore', newScore)
     levelIndicator?.updateLifeScore?.(newScore)
     if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
-      Sound.playLifeSound(k)
+      Sound.playGentleLifeSound(sound)
       const originalColor = levelIndicator.lifeImage.sprite.color
       flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnThornDeath(k, levelIndicator)
     }
-    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.0'))
+    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.0'))
   })
 }
 
@@ -3074,7 +3171,7 @@ function onUpdateTrap(k, inst, heroInst, levelIndicator, sound) {
         const halfW = TRAP_SPIKE_WIDTH_BASE + HERO_HALF_WIDTH_THORNS
         if (Math.abs(heroX - spike.x) >= halfW) continue
         if (heroFeetY > spikeTopY && heroTopY < spike.baseY + FLOOR_THORN_FEET_BELOW_BASE_PAD) {
-          onHeroFloorThornDeath(k, heroInst, levelIndicator)
+          onHeroFloorThornDeath(k, heroInst, levelIndicator, sound)
           return
         }
       }
@@ -3326,7 +3423,7 @@ function createRoundedCorners(k) {
  */
 function checkSpeedBonus(levelTime) {
   const targetTime = CFG.gameplay.speedBonusTime
-    && CFG.gameplay.speedBonusTime['level-touch.0']
+    && CFG.gameplay.speedBonusTime['lesson-touch.0']
   if (!targetTime) return false
   return levelTime < targetTime
 }
@@ -3459,24 +3556,38 @@ function createInstructionsText(k, centerX, textY) {
  * Display duration is based on text length. Plays once after initial delay.
  * @param {Object} k - Kaplay instance
  * @param {Array<Object>} monsterBugs - Array of [bug0, bug1, bug2] instances
+ * @param {Object} touchLetterState - Current TOUCH letter collection state
  */
-function startMonsterConversation(k, monsterBugs) {
+function startMonsterConversation(k, monsterBugs, touchLetterState) {
   //
-  // Only show conversation once per player (persisted in localStorage)
-  //
-  if (get(MONSTERS_TALKED_KEY)) return { phase: 'done', onUpdate: null }
-  //
-  // Conversation state: tracks current line and timing
+  // Conversation state
   //
   const inst = {
-    lineIndex: 0,
+    phase: 'idle',
     timer: 0,
-    phase: 'delay',
+    lineIndex: 0,
     currentTooltip: null,
-    currentDisplayTime: 0
+    currentAct: null,
+    currentDisplayTime: 0,
+    idleCheckTimer: 0
   }
   //
-  // Show a conversation line as a forced-visible tooltip above the speaking monster
+  // Find the first act whose condition is met and hasn't been shown yet
+  //
+  const tryStartAct = () => {
+    for (const act of MONSTER_ACTS) {
+      if (!get(act.key) && act.condition(touchLetterState)) {
+        inst.currentAct = act
+        inst.lineIndex = 0
+        inst.phase = 'delay'
+        inst.timer = 0
+        return true
+      }
+    }
+    return false
+  }
+  //
+  // Show a single line as a forced-visible tooltip above the speaking monster
   //
   const showLine = (lineData) => {
     const bug = monsterBugs[lineData.speaker]
@@ -3490,11 +3601,7 @@ function startMonsterConversation(k, monsterBugs) {
       text: lineData.text,
       offsetY: -80
     }
-    inst.currentTooltip = Tooltip.create({
-      k,
-      targets: [target],
-      forceVisible: true
-    })
+    inst.currentTooltip = Tooltip.create({ k, targets: [target], forceVisible: true })
     inst.currentTooltip.activeTarget = target
     inst.currentTooltip.frozenX = Math.round(bug.x)
     inst.currentTooltip.frozenY = Math.round(bug.y)
@@ -3503,35 +3610,49 @@ function startMonsterConversation(k, monsterBugs) {
     inst.currentDisplayTime = Math.max(MONSTER_MIN_DISPLAY_TIME, chars / MONSTER_CHARS_PER_SECOND)
   }
   //
-  // Update handler drives the conversation timeline (registered via main game loop)
+  // Per-frame update drives the conversation timeline
   //
   inst.onUpdate = () => {
     inst.timer += k.dt()
-    if (inst.phase === 'delay') {
-      if (inst.timer >= MONSTER_CONVERSATION_DELAY) {
-        inst.phase = 'showing'
+    if (inst.phase === 'idle') {
+      //
+      // Periodically check if a new act should start
+      //
+      inst.idleCheckTimer += k.dt()
+      if (inst.idleCheckTimer >= MONSTER_IDLE_CHECK_INTERVAL) {
+        inst.idleCheckTimer = 0
+        tryStartAct()
+      }
+    } else if (inst.phase === 'delay') {
+      if (inst.timer >= inst.currentAct.delay) {
         inst.timer = 0
-        showLine(MONSTER_CONVERSATION_LINES[0])
+        inst.phase = 'showing'
+        showLine(inst.currentAct.lines[0])
       }
     } else if (inst.phase === 'showing') {
       //
       // Keep frozen position updated so bubble tracks the swaying monster
       //
       if (inst.currentTooltip) {
-        const bug = monsterBugs[MONSTER_CONVERSATION_LINES[inst.lineIndex].speaker]
-        inst.currentTooltip.frozenX = Math.round(bug.x)
-        inst.currentTooltip.frozenY = Math.round(bug.y)
+        const bug = monsterBugs[inst.currentAct.lines[inst.lineIndex].speaker]
+        if (bug) {
+          inst.currentTooltip.frozenX = Math.round(bug.x)
+          inst.currentTooltip.frozenY = Math.round(bug.y)
+        }
       }
       if (inst.timer >= inst.currentDisplayTime) {
         inst.currentTooltip && Tooltip.destroy(inst.currentTooltip)
         inst.currentTooltip = null
         inst.lineIndex++
-        if (inst.lineIndex >= MONSTER_CONVERSATION_LINES.length) {
-          inst.phase = 'done'
+        if (inst.lineIndex >= inst.currentAct.lines.length) {
           //
-          // Persist only after the full conversation has played
+          // Act complete: persist and return to idle to wait for next act
           //
-          set(MONSTERS_TALKED_KEY, true)
+          set(inst.currentAct.key, true)
+          inst.currentAct = null
+          inst.phase = 'idle'
+          inst.timer = 0
+          inst.idleCheckTimer = 0
           return
         }
         inst.phase = 'pause'
@@ -3539,39 +3660,17 @@ function startMonsterConversation(k, monsterBugs) {
       }
     } else if (inst.phase === 'pause') {
       if (inst.timer >= MONSTER_PAUSE_BETWEEN) {
-        inst.phase = 'showing'
         inst.timer = 0
-        showLine(MONSTER_CONVERSATION_LINES[inst.lineIndex])
+        inst.phase = 'showing'
+        showLine(inst.currentAct.lines[inst.lineIndex])
       }
     }
   }
   //
-  // Return state so callers can check inst.phase to know if conversation is active
+  // Check immediately on startup in case an act condition is already met
   //
+  tryStartAct()
   return inst
-}
-
-/**
- * Creates hover tooltips for the three long-legged monsters.
- * The tooltip only appears when the conversation is not currently displaying a line.
- * @param {Object} k - Kaplay instance
- * @param {Array<Object>} monsterBugs - Array of [bug0, bug1, bug2] instances
- * @param {Object|undefined} conversationState - Conversation inst (may be undefined)
- */
-function createMonsterHoverTooltips(k, monsterBugs, conversationState) {
-  const targets = monsterBugs.map(bug => ({
-    x: () => bug.x,
-    y: () => bug.y,
-    width: MONSTER_HOVER_TOOLTIP_W,
-    height: MONSTER_HOVER_TOOLTIP_H,
-    text: MONSTER_HOVER_TOOLTIP_TEXT,
-    offsetY: MONSTER_HOVER_TOOLTIP_Y_OFFSET,
-    //
-    // Hide during the entire active conversation (showing and pause phases)
-    //
-    visible: () => !conversationState || conversationState.phase === 'done' || conversationState.phase === 'delay'
-  }))
-  Tooltip.create({ k, targets })
 }
 
 /**
@@ -3752,8 +3851,8 @@ const OWL_INTERVAL_MAX = 10
 const L0_FIREFLY_COUNT = 22
 const L0_FIREFLY_MIN_SPEED = 6
 const L0_FIREFLY_MAX_SPEED = 18
-const L0_FIREFLY_RADIUS_MIN = 1.5
-const L0_FIREFLY_RADIUS_MAX = 2.5
+const L0_FIREFLY_RADIUS_MIN = 2.8
+const L0_FIREFLY_RADIUS_MAX = 4.5
 const L0_FIREFLY_GLOW_SPEED_MIN = 0.6
 const L0_FIREFLY_GLOW_SPEED_MAX = 2.0
 //
@@ -3770,7 +3869,7 @@ const L0_FIREFLY_COLOR_B = 64
 const MUSHROOM_COUNT = 7
 const MUSHROOM_PUDDLE_CLEARANCE = 26
 const MUSHROOM_FUNNY_TOOLTIP_CHANCE = 0.38
-const L0_SPIDER_TOOLTIP_TEXT = "Psst... push those\nlittle bugs closer\ntogether"
+const L0_SPIDER_TOOLTIP_TEXT = "How many letters\ndid you find?"
 const MUSHROOM_FUNNY_LINES = [
   'Talk spore to me',
   'Pay rent in compost',
@@ -4181,7 +4280,10 @@ function createL0Fireflies(k) {
   //
   // Fireflies stay in the lower third of the play area near the ground
   //
-  const fireflyMinY = FLOOR_Y - 150
+  //
+  // Keep fireflies within hero jump reach and away from floor-level blades
+  //
+  const fireflyMinY = FLOOR_Y - TOUCH_FIREFLY_MAX_HEIGHT_ABOVE_FLOOR
   const fireflyMaxY = FLOOR_Y - 20
   //
   // Mobile devices use a much smaller swarm so we cut both the per-firefly
@@ -4200,17 +4302,21 @@ function createL0Fireflies(k) {
       glowSpeed: L0_FIREFLY_GLOW_SPEED_MIN + Math.random() * (L0_FIREFLY_GLOW_SPEED_MAX - L0_FIREFLY_GLOW_SPEED_MIN),
       phase: Math.random() * Math.PI * 2,
       speed: L0_FIREFLY_MIN_SPEED + Math.random() * (L0_FIREFLY_MAX_SPEED - L0_FIREFLY_MIN_SPEED),
-      driftVx: (Math.random() - 0.5) * 12
+      driftVx: (Math.random() - 0.5) * 12,
+      driftVy: (Math.random() - 0.5) * 12
     })
   }
   fireflies._bounds = {
     minX: LEFT_MARGIN + 10,
     maxX: CFG.visual.screen.width - RIGHT_MARGIN - 10,
-    minY: FLOOR_Y - 150,
+    minY: FLOOR_Y - TOUCH_FIREFLY_MAX_HEIGHT_ABOVE_FLOOR,
     maxY: FLOOR_Y - 20
   }
   k.add([
-    k.z(24),
+    //
+    // z=26 places fireflies in front of trees (z=25) so they're never hidden
+    //
+    k.z(26),
     {
       draw() {
         drawL0Fireflies(k, fireflies)
@@ -4224,25 +4330,34 @@ function createL0Fireflies(k) {
 //
 function drawL0Fireflies(k, fireflies) {
   const t = k.time()
-  //
-  // Touch devices skip the soft halo (saves N drawCircle calls per frame).
-  //
   const touchMode = isTouchDevice()
+  //
+  // Cache shared color and camera X once per frame to avoid per-firefly allocations.
+  // Culling uses hero position (camera proxy) with a half-screen margin.
+  //
+  const color = k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B)
+  const heroRef = fireflies._heroRef
+  const cameraX = heroRef?.character?.pos?.x ?? k.width() / 2
+  const screenHalfW = k.width() / 2 + L0_FIREFLY_DRAW_MARGIN
   for (const f of fireflies) {
+    //
+    // Skip fireflies that are off-screen (more than half a screen from camera center).
+    //
+    if (Math.abs(f.x - cameraX) > screenHalfW) continue
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
     const alpha = 0.15 + glow * 0.7
     if (!touchMode) {
       k.drawCircle({
         pos: k.vec2(f.x, f.y),
         radius: f.radius * 3,
-        color: k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B),
+        color,
         opacity: alpha * 0.15
       })
     }
     k.drawCircle({
       pos: k.vec2(f.x, f.y),
       radius: f.radius,
-      color: k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B),
+      color,
       opacity: alpha
     })
   }
@@ -4336,6 +4451,10 @@ function createMushrooms(k, floorPuddles = []) {
   //
   mushrooms.forEach(m => {
     loadTouchSprite(k, m.spriteName, m.dataUrl)
+    //
+    // Free the canvas reference so GC can collect the object after sprite upload
+    //
+    m.dataUrl = null
   })
   k.add([
     k.z(6),
@@ -4544,7 +4663,13 @@ function createRocks(k, thornData) {
       }
     }
   }
-  rocks.forEach(r => loadTouchSprite(k, r.spriteName, r.dataUrl))
+  rocks.forEach(r => {
+    loadTouchSprite(k, r.spriteName, r.dataUrl)
+    //
+    // Release canvas reference after GPU upload so GC can reclaim the object
+    //
+    r.dataUrl = null
+  })
   const rocksBehind = []
   const rocksInFront = []
   for (const rock of rocks) {
@@ -4624,7 +4749,7 @@ function buildSingleRock(k, posX, radius, spriteName) {
  * @param {Object} k - Kaplay instance
  * @param {Array} rocks - Rocks returned from createRocks (used as anchors)
  */
-function createMoss(k, rocks) {
+function createMoss(k, rocks, heroInst) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const patches = []
   for (let i = 0; i < MOSS_PATCH_COUNT; i++) {
@@ -4674,7 +4799,13 @@ function createMoss(k, rocks) {
     k.z(7.5),
     {
       draw() {
+        //
+        // Cull moss patches outside ~1 screen width from camera center.
+        //
+        const cameraX = getCameraCenterX(k, heroInst)
+        const mossCullDist = getDistanceThreshold(k, 0.65)
         for (const p of patches) {
+          if (!isWithinDistance(p.x, cameraX, mossCullDist)) continue
           for (const dot of p.dots) {
             k.drawCircle({
               pos: k.vec2(p.x + dot.offsetX, p.y + dot.offsetY),
@@ -4718,6 +4849,740 @@ const L0_TREE_ROOT_COLOR_B = 34
 // Organic generator depth clamp (L0 draws trunk-only organic silhouettes; no underground roots).
 //
 const L0_ORGANIC_ROOT_DEPTH_MAX = 123
+//
+//
+// Sets up the TOUCH letter collection system (T → O → U → C).
+// Draws letters as glowing world-space objects and checks hero proximity each frame.
+//
+function setupTouchLetterSystem(k, cfg) {
+  const {
+    bug4X, bug4BackPlatformY, antiHeroPlatform,
+    fireflyRuntime, bugs, allBugsCombined,
+    levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst
+  } = cfg
+  const fireflies = fireflyRuntime.fireflies
+  //
+  // Initialize all fireflies without collected flag
+  //
+  fireflies.forEach(f => { f.collected = false })
+  fireflies._allCollected = false
+  //
+  // Mutable state
+  //
+  const tX = bug4X + TOUCH_LETTER_T_X_OFFSET
+  //
+  // T is "stuck in the ground" — bottom anchor sits below the floor line
+  //
+  const tY = FLOOR_Y + 28
+  const oInitX = antiHeroPlatform?.pos?.x ?? bug4X
+  //
+  // O rests on the monster head; anchor = 'bot', bottom of letter sinks
+  // TOUCH_LETTER_O_Y_OFFSET px below the platform top so it looks embedded
+  //
+  const oInitY = (antiHeroPlatform?.pos?.y ?? bug4BackPlatformY) + TOUCH_LETTER_O_Y_OFFSET
+  const state = {
+    tCollected: false,
+    oCollected: false,
+    uCollected: false,
+    cCollected: false,
+    heroInst: null,
+    gatherActive: false,
+    gatherBugsArrived: false,
+    gatherWaitTimer: 0,
+    gatherTimer: 0,
+    gatherSoundTimer: 0,
+    gatherSoundInterval: TOUCH_GATHER_SOUND_INTERVAL_MIN,
+    //
+    // Letter game objects (teal outlined, tilt, bottom-anchored at floor)
+    //
+    tObj: createPickupLetter(k, 'T', tX, tY, TOUCH_LETTER_TILTS[0]),
+    //
+    // Mask rect drawn above the T letter to clip its below-floor portion
+    //
+    tMask: createFloorMask(k, tX, tY),
+    //
+    // O is always visible on the monster from the start
+    //
+    oObj: createPickupLetter(k, 'O', oInitX, oInitY, TOUCH_LETTER_TILTS[1]),
+    uObj: null,
+    cObj: null,
+    //
+    // Firefly platform Kaplay physics object (invisible collision body)
+    //
+    fireflyPlatformObj: null,
+    fireflyPlatformVisible: false,
+    //
+    // Which side of the monster the platform was locked to ('left'|'right'|null)
+    //
+    fireflyPlatformSide: null,
+    //
+    // Frozen X/Y position of the firefly platform — set once on creation, not updated per frame
+    //
+    fireflyPlatformLockedX: null,
+    fireflyPlatformLockedY: null,
+    //
+    // Seconds the current firefly platform has been active
+    //
+    fireflyPlatformTimer: 0,
+    //
+    // Hidden platforms for U and C
+    //
+    hiddenPlatformU: null,
+    hiddenPlatformC: null,
+    //
+    // X/Y firefly counter displayed near hero head during collect mode
+    //
+    fireflyCounterObj: null,
+    fireflyCounterOutlines: null,
+    //
+    // Dialog lock: prevent pickup while dialog is open
+    //
+    dialogOpen: false,
+    //
+    // Previous frame X of anti-hero platform for hero-carry detection
+    //
+    prevPlatX: antiHeroPlatform?.pos?.x ?? 0,
+    //
+    // onUpdate is called by the runtime every frame
+    //
+    onUpdate: null
+  }
+  //
+  // Shared pulse updater: all letters fade in and out together
+  //
+  k.onUpdate(() => {
+    const t = k.time()
+    const pulse = (Math.sin(t * TOUCH_LETTER_PULSE_SPEED) + 1) / 2
+    const opacity = TOUCH_LETTER_PULSE_MIN + (1 - TOUCH_LETTER_PULSE_MIN) * pulse
+    //
+    // Color lerps from teal toward white as pulse peaks, for maximum contrast
+    //
+    const cr = Math.round(TOUCH_LETTER_COLOR_R + (255 - TOUCH_LETTER_COLOR_R) * pulse)
+    const cg = Math.round(TOUCH_LETTER_COLOR_G + (255 - TOUCH_LETTER_COLOR_G) * pulse)
+    const cb = Math.round(TOUCH_LETTER_COLOR_B + (255 - TOUCH_LETTER_COLOR_B) * pulse)
+    const applyOpacity = (obj) => {
+      if (!obj) return
+      obj.main.opacity = opacity
+      obj.main.color = k.rgb(cr, cg, cb)
+      obj.outlines.forEach(o => o.exists?.() && (o.opacity = opacity))
+    }
+    !state.tCollected && applyOpacity(state.tObj)
+    !state.oCollected && applyOpacity(state.oObj)
+    //
+    // U letter doesn't blink — stays at its semi-transparent static opacity
+    //
+    !state.cCollected && applyOpacity(state.cObj)
+    !state.cCollected && applyOpacity(state.hObj)
+  })
+  //
+  // Frame-by-frame update: letter pickup detection and phase transitions
+  //
+  state.onUpdate = () => onUpdateTouchLetterSystem(k, state, fireflies, bug4X, bug4BackPlatformY, antiHeroPlatform, bugs, allBugsCombined, levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst)
+  return state
+}
+/**
+ * Creates a single pickup letter as Kaplay game objects (outlined teal text with tilt).
+ * Returns an object with moveTo(x,y) and destroy() methods.
+ * @param {Object} k - Kaplay instance
+ * @param {string} letter - Letter to render
+ * @param {number} x - World X position (bottom center)
+ * @param {number} y - World Y position (bottom of letter = floor level)
+ * @param {number} tiltDeg - Rotation in degrees
+ * @returns {Object} Letter handle with moveTo and destroy
+ */
+function createPickupLetter(k, letter, x, y, tiltDeg) {
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const oo = TOUCH_LETTER_OUTLINE
+  const offsets = [
+    [-oo, -oo], [0, -oo], [oo, -oo],
+    [-oo, 0], [oo, 0],
+    [-oo, oo], [0, oo], [oo, oo]
+  ]
+  const outlines = offsets.map(([dx, dy]) => k.add([
+    k.text(letter, { size: TOUCH_LETTER_SIZE, font }),
+    k.pos(x + dx, y + dy),
+    k.anchor('bot'),
+    k.rotate(tiltDeg),
+    k.color(0, 0, 0),
+    k.z(26)
+  ]))
+  const main = k.add([
+    k.text(letter, { size: TOUCH_LETTER_SIZE, font }),
+    k.pos(x, y),
+    k.anchor('bot'),
+    k.rotate(tiltDeg),
+    k.color(TOUCH_LETTER_COLOR_R, TOUCH_LETTER_COLOR_G, TOUCH_LETTER_COLOR_B),
+    k.z(27)
+  ])
+  const moveTo = (nx, ny) => {
+    main.pos.x = nx
+    main.pos.y = ny
+    offsets.forEach(([dx, dy], i) => {
+      outlines[i].pos.x = nx + dx
+      outlines[i].pos.y = ny + dy
+    })
+  }
+  const destroy = () => {
+    main.destroy?.()
+    outlines.forEach(o => o.destroy?.())
+  }
+  return { main, outlines, moveTo, destroy }
+}
+//
+// Main per-frame update for the TOUCH letter system.
+//
+function onUpdateTouchLetterSystem(k, state, fireflies, bug4X, bug4BackPlatformY, antiHeroPlatform, bugs, allBugsCombined, levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst) {
+  if (state.gatherActive) {
+    onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
+    return
+  }
+  const hero = state.heroInst
+  if (!hero?.character?.pos) return
+  const heroX = hero.character.pos.x
+  const heroY = hero.character.pos.y
+  //
+  // Carry hero with the walking monster platform (activated during trap 2)
+  //
+  if (antiHeroPlatform?.pos) {
+    const currentPlatX = antiHeroPlatform.pos.x
+    const deltaX = currentPlatX - state.prevPlatX
+    if (Math.abs(deltaX) > 0.01) {
+      const platTopY = antiHeroPlatform.pos.y
+      const heroFoot = heroY + HERO_FOOT_OFFSET_Y
+      const onPlatY = heroFoot >= platTopY - ANTIHERO_PLATFORM_DETECT_Y_TOL && heroFoot <= platTopY + ANTIHERO_PLATFORM_DETECT_Y_TOL
+      const onPlatX = Math.abs(heroX - currentPlatX) < ANTIHERO_PLATFORM_DETECT_HALF_W
+      if (onPlatY && onPlatX) {
+        hero.character.pos.x += deltaX
+      }
+    }
+    state.prevPlatX = currentPlatX
+  }
+  if (state.dialogOpen) return
+  //
+  // O game object always tracks the bug4 monster head position
+  //
+  if (state.oObj && antiHeroPlatform?.pos) {
+    //
+    // O tracks monster head; anchor = 'bot', bottom sinks TOUCH_LETTER_O_Y_OFFSET below head top
+    //
+    state.oObj.moveTo(antiHeroPlatform.pos.x, antiHeroPlatform.pos.y + TOUCH_LETTER_O_Y_OFFSET)
+  }
+  //
+  // Firefly mode state machine
+  //
+  if (!state.tCollected) {
+    //
+    // Before T: fireflies flee from hero
+    //
+    fireflies._mode = 'flee'
+  } else if (!state.oCollected) {
+    //
+    // After T: hero must touch individual fireflies.
+    // Check proximity and mark each one as collected.
+    //
+    fireflies._mode = 'collect'
+    const touchRSq = TOUCH_FIREFLY_TOUCH_RADIUS * TOUCH_FIREFLY_TOUCH_RADIUS
+    let allDone = true
+    let collectedCount = 0
+    for (const f of fireflies) {
+      if (!f.collected) {
+        const dx = heroX - f.x
+        const dy = heroY - f.y
+        if (dx * dx + dy * dy < touchRSq) {
+          f.collected = true
+          //
+          // Play soft chime for each individually collected firefly
+          //
+          sound && Sound.playFireflyPickupSound(sound)
+        } else {
+          allDone = false
+        }
+      } else {
+        collectedCount++
+      }
+    }
+    if (allDone && !fireflies._allCollected) {
+      fireflies._allCollected = true
+      //
+      // Burst chirp when the last firefly is collected
+      //
+      sound && Sound.playFireflyBurstSound(sound, fireflies.length)
+    }
+    //
+    // Show / update X/Y counter near hero head
+    //
+    updateFireflyCounter(k, state, collectedCount, fireflies.length, heroX, heroY)
+    //
+    // When all collected and hero is near monster: form platform on hero's side
+    //
+    if (fireflies._allCollected) {
+      const monsterX = antiHeroPlatform?.pos?.x ?? bug4X
+      const distToMonster = Math.abs(heroX - monsterX)
+      if (distToMonster < TOUCH_FIREFLY_PLATFORM_FORM_DIST) {
+        //
+        // Start timer on the very first frame of this platform session
+        //
+        if (!state.fireflyPlatformSide) {
+          state.fireflyPlatformTimer = 0
+        }
+        state.fireflyPlatformTimer += k.dt()
+        if (state.fireflyPlatformTimer >= TOUCH_FIREFLY_PLATFORM_DURATION) {
+          //
+          // Timer expired: dissolve platform, fireflies return to hero.
+          //
+          destroyFireflyPlatform(state, fireflies)
+        } else {
+          fireflies._mode = 'platform'
+          //
+          // Determine side from hero's CURRENT position relative to monster each frame
+          // until all fireflies arrive. This ensures fireflies always fly directly to
+          // the final assembly point without an intermediate leftward/rightward detour.
+          //
+          const currentSide = heroX < monsterX ? 'left' : 'right'
+          const sideSign = currentSide === 'left' ? -1 : 1
+          const platX = monsterX + sideSign * TOUCH_FIREFLY_PLATFORM_SIDE_OFFSET
+          const platY = TOUCH_FIREFLY_PLATFORM_ACTUAL_Y
+          if (!fireflies._allAtPlatform) {
+            state.fireflyPlatformSide = currentSide
+            state.fireflyPlatformLockedX = platX
+            state.fireflyPlatformLockedY = platY
+          } else if (!state.fireflyPlatformLockedX) {
+            state.fireflyPlatformLockedX = platX
+            state.fireflyPlatformLockedY = platY
+          }
+          state.fireflyPlatformSide = state.fireflyPlatformSide ?? currentSide
+          fireflies._platformX = state.fireflyPlatformLockedX
+          fireflies._platformY = state.fireflyPlatformLockedY
+          //
+          // Create collision box only after ALL fireflies have reached their target.
+          // Also reset the 5-sec hold timer at this moment — it must count from
+          // when the platform is actually formed, not from when the hero first walked near.
+          //
+          if (!state.fireflyPlatformObj && fireflies._allAtPlatform) {
+            state.fireflyPlatformObj = createFireflyPlatform(k, state.fireflyPlatformLockedX, state.fireflyPlatformLockedY)
+            state.fireflyPlatformTimer = 0
+          }
+          state.fireflyPlatformVisible = true
+        }
+      } else {
+        //
+        // Hero moved away from monster: dissolve platform and follow hero
+        //
+        state.fireflyPlatformObj && destroyFireflyPlatform(state, fireflies)
+      }
+    }
+  } else if (!state.uCollected) {
+    //
+    // O collected: ensure any active firefly platform is cleaned up, then follow hero
+    //
+    state.fireflyPlatformObj && destroyFireflyPlatform(state, fireflies)
+    fireflies._mode = 'follow'
+    destroyFireflyCounter(state)
+  } else {
+    //
+    // U collected: randomise each firefly's drift on first frame, then scatter freely
+    //
+    if (!fireflies._scattered) {
+      fireflies._scattered = true
+      for (const f of fireflies) {
+        f.driftVx = (Math.random() - 0.5) * 90
+        f.driftVy = (Math.random() * 55 + 15) * (Math.random() < 0.5 ? 1 : -1)
+      }
+    }
+    fireflies._mode = 'scatter'
+    destroyFireflyCounter(state)
+  }
+  //
+  // Check letter pickups using game object positions
+  //
+  if (!state.tCollected && state.tObj) {
+    const tx = state.tObj.main.pos.x
+    const ty = state.tObj.main.pos.y
+    checkLetterPickup(heroX, heroY, { x: tx, y: ty - TOUCH_LETTER_SIZE / 2 }, () => collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex, levelHelpInst))
+  }
+  if (state.tCollected && !state.oCollected && state.oObj) {
+    const ox = state.oObj.main.pos.x
+    const oy = state.oObj.main.pos.y
+    checkLetterPickup(heroX, heroY, { x: ox, y: oy - TOUCH_LETTER_SIZE / 2 }, () => collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelpInst))
+  }
+  if (state.oCollected && !state.uCollected && state.uObj) {
+    const ux = state.uObj.main.pos.x
+    const uy = state.uObj.main.pos.y
+    checkLetterPickup(heroX, heroY, { x: ux, y: uy - TOUCH_LETTER_SIZE / 2 }, () => collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelpInst))
+  }
+  if (state.uCollected && !state.cCollected && state.cObj) {
+    const cx = state.cObj.main.pos.x
+    const cy = state.cObj.main.pos.y
+    checkLetterPickup(heroX, heroY, { x: cx, y: cy - TOUCH_LETTER_SIZE / 2 }, () => collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst))
+  }
+}
+//
+// Checks if hero is close enough to a letter position to collect it.
+//
+function checkLetterPickup(heroX, heroY, pos, onCollect) {
+  if (!pos) return
+  const dx = heroX - pos.x
+  const dy = heroY - pos.y
+  if (dx * dx + dy * dy < TOUCH_LETTER_COLLECT_RADIUS * TOUCH_LETTER_COLLECT_RADIUS) {
+    onCollect()
+  }
+}
+//
+// Hero collects letter T — switches to individual collect mode, dialog shown.
+//
+function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex, levelHelpInst) {
+  if (state.tCollected) return
+  state.tCollected = true
+  state.dialogOpen = true
+  state.tObj?.destroy()
+  state.tObj = null
+  state.tMask?.destroy?.()
+  state.tMask = null
+  sound && Sound.playVictorySound(sound)
+  //
+  // After T: individual collect mode (flee stops)
+  //
+  fireflies._mode = 'collect'
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 1)
+  LevelIndicator.flashLetterBurst(levelIndicator, 1)
+  levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_T)
+  LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_T, {
+    fillRgb: { r: 21, g: 37, b: 40 },
+    textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    sceneBackdropHex: wallColorHex,
+    //
+    // Yellow highlight for the T in "Trust" via Kaplay inline style tag [hl]
+    //
+    textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onClose: () => { state.dialogOpen = false }
+  })
+}
+//
+// Hero collects letter O — hidden platform + letter U appear.
+//
+function collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelpInst) {
+  if (state.oCollected) return
+  state.oCollected = true
+  state.dialogOpen = true
+  state.oObj?.destroy()
+  state.oObj = null
+  sound && Sound.playVictorySound(sound)
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 2)
+  LevelIndicator.flashLetterBurst(levelIndicator, 2)
+  levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_O)
+  LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_O, {
+    fillRgb: { r: 21, g: 37, b: 40 },
+    textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    sceneBackdropHex: wallColorHex,
+    textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onClose: () => {
+      state.dialogOpen = false
+      //
+      // Spawn letter U floating in air (no platform beneath it — hero must use bugs to reach)
+      //
+      const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+      const uPlatCX = LEFT_MARGIN + playW * 0.48
+      const uFloatY = ANTIHERO_PLATFORM_Y + TOUCH_U_PLATFORM_Y_LOWER
+      state.uObj = createPickupLetter(k, 'U', uPlatCX, uFloatY + TOUCH_U_LETTER_Y_EXTRA, TOUCH_LETTER_TILTS[2])
+      //
+      // U letter is intentionally hard to see — hero must search for it
+      //
+      state.uObj.main.opacity = TOUCH_U_LETTER_OPACITY
+      state.uObj.outlines.forEach(o => { o.opacity = TOUCH_U_LETTER_OPACITY * 0.5 })
+    }
+  })
+}
+//
+// Hero collects letter U — second hidden platform + letter C appear.
+//
+function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelpInst) {
+  if (state.uCollected) return
+  state.uCollected = true
+  state.dialogOpen = true
+  state.uObj?.destroy()
+  state.uObj = null
+  sound && Sound.playVictorySound(sound)
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 3)
+  LevelIndicator.flashLetterBurst(levelIndicator, 3)
+  levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_U)
+  LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_U, {
+    fillRgb: { r: 21, g: 37, b: 40 },
+    textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    sceneBackdropHex: wallColorHex,
+    textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onClose: () => {
+      state.dialogOpen = false
+      //
+      // Spawn second hidden platform and letter C (fireflies scatter after this)
+      //
+      const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+      //
+      // C platform: same log style and size as U platform, placed slightly right of center
+      //
+      const cPlatCX = LEFT_MARGIN + playW * 0.72
+      const cPlatY = ANTIHERO_PLATFORM_Y + TOUCH_C_PLATFORM_Y_LOWER
+      const cLogHalfW = TOUCH_LOG_PLATFORM_W / 2
+      state.hiddenPlatformC = LogPlatform.create({ k, x: cPlatCX - cLogHalfW, y: cPlatY, width: TOUCH_LOG_PLATFORM_W, height: TOUCH_LOG_PLATFORM_H })
+      //
+      // CH are collected together — C on the left, H on the right, side by side on the platform
+      //
+      state.cObj = createPickupLetter(k, 'C', cPlatCX - TOUCH_CH_SPACING / 2, cPlatY + 12, TOUCH_LETTER_TILTS[3])
+      state.hObj = createPickupLetter(k, 'H', cPlatCX + TOUCH_CH_SPACING / 2, cPlatY + 14, TOUCH_LETTER_TILT_H)
+    }
+  })
+}
+//
+// Hero collects letter C — gather all bugs + fireflies, then transition.
+//
+function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst) {
+  if (state.cCollected) return
+  state.cCollected = true
+  state.dialogOpen = true
+  state.cObj?.destroy()
+  state.cObj = null
+  //
+  // H is always collected with C as a pair
+  //
+  state.hObj?.destroy()
+  state.hObj = null
+  //
+  // Remove the C platform so the hero falls down after collecting the last letter
+  //
+  state.hiddenPlatformC?.destroy()
+  state.hiddenPlatformC = null
+  //
+  // Clear any lingering scared state on bugs so they walk freely from this point.
+  // Also reset state to 'crawling' for any currently scared bug — the scare guard
+  // in onUpdateBugScare will now prevent new scares, but bugs already in 'scared'
+  // state would stay visually crouched and be skipped by onUpdateGatherPhase.
+  //
+  const resetBug = (bugInst) => {
+    bugInst.isScared = false
+    bugInst.justRecovered = false
+    bugInst.justRecoveredTimer = 0
+    bugInst.dropOffset = 0
+    //
+    // Reset both 'scared' and 'recovering' states so bugs walk normally
+    // and their legs are not held in the crouched/contracted position.
+    //
+    if (bugInst.state === 'scared' || bugInst.state === 'recovering') {
+      bugInst.state = 'crawling'
+      bugInst.stateTimer = bugInst.crawlDuration ?? 2
+      bugInst.vx = bugInst.crawlSpeed ?? Math.sign(bugInst.vx || 1) * 30
+    }
+  }
+  for (const bugInst of bugs) resetBug(bugInst)
+  for (const bugInst of allBugsCombined) resetBug(bugInst)
+  sound && Sound.playVictorySound(sound)
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 4)
+  LevelIndicator.flashLetterBurst(levelIndicator, 4)
+  //
+  // H is always paired with C — light up both simultaneously
+  //
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 5)
+  LevelIndicator.flashLetterBurst(levelIndicator, 5)
+  levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_C)
+  LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_C, {
+    fillRgb: { r: 21, g: 37, b: 40 },
+    textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
+    sceneBackdropHex: wallColorHex,
+    textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onClose: () => {
+      state.dialogOpen = false
+      state.gatherActive = true
+      state.gatherTimer = 0
+      state.gatherBugsArrived = false
+      state.gatherWaitTimer = 0
+      state.gatherSoundTimer = 0
+      state.gatherSoundInterval = TOUCH_GATHER_SOUND_INTERVAL_MIN
+      //
+      // Fireflies orbit hero (follow mode), bugs walk toward hero
+      //
+      fireflies._mode = 'follow'
+      sound && Sound.playBugScareSound(sound)
+      k.wait(0.4, () => { sound && Sound.playBugScareSound(sound) })
+      k.wait(0.9, () => { sound && Sound.playBugScareSound(sound) })
+    }
+  })
+}
+//
+// Updates the post-C "gather" phase: bugs walk to hero, then wait 3 sec, then transition.
+//
+function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound) {
+  const dt = k.dt()
+  state.gatherTimer += dt
+  //
+  // Play random bug cheer sounds to simulate excited gathering behaviour
+  //
+  state.gatherSoundTimer += dt
+  if (state.gatherSoundTimer >= state.gatherSoundInterval) {
+    state.gatherSoundTimer = 0
+    state.gatherSoundInterval = TOUCH_GATHER_SOUND_INTERVAL_MIN + Math.random() * (TOUCH_GATHER_SOUND_INTERVAL_MAX - TOUCH_GATHER_SOUND_INTERVAL_MIN)
+    sound && Sound.playBugCheerSound(sound)
+  }
+  //
+  // Direct ground bugs toward hero so they walk close and oscillate around him
+  //
+  const heroX = state.heroInst?.character?.pos?.x ?? null
+  if (heroX !== null) {
+    for (const bugInst of allBugsCombined) {
+      if (bugInst.state === 'pyramid' || bugInst.state === 'scared') continue
+      const dist = bugInst.x - heroX
+      if (Math.abs(dist) > TOUCH_BUG_GATHER_NEAR_DIST) {
+        const crawl = Math.abs(bugInst.crawlSpeed ?? bugInst.vx ?? 30)
+        bugInst.vx = dist > 0 ? -crawl : crawl
+        bugInst.movementAngle = dist > 0 ? Math.PI : 0
+      }
+    }
+    //
+    // Check if all bugs have arrived near hero
+    //
+    if (!state.gatherBugsArrived) {
+      const allNear = allBugsCombined.every(b => Math.abs(b.x - heroX) <= TOUCH_BUG_GATHER_NEAR_DIST)
+      if (allNear) {
+        state.gatherBugsArrived = true
+        state.gatherWaitTimer = 0
+      }
+    }
+  }
+  //
+  // Count down post-arrive delay once all bugs are near.
+  // Also use fallback timer so level never gets permanently stuck.
+  //
+  const forceTransition = state.gatherTimer >= TOUCH_GATHER_MAX_WAIT
+  if (state.gatherBugsArrived) {
+    state.gatherWaitTimer += dt
+  }
+  const waitDone = state.gatherBugsArrived && state.gatherWaitTimer >= TOUCH_GATHER_POST_ARRIVE_DELAY
+  if ((waitDone || forceTransition) && !state.levelDone) {
+    state.levelDone = true
+    Sound.stopAmbient(sound)
+    touchMusic?.stop()
+    createLevelTransition(k, 'lesson-touch.0')
+  }
+}
+//
+// Creates an invisible Kaplay platform for fireflies to form.
+//
+function createFireflyPlatform(k, x, y) {
+  return k.add([
+    k.rect(TOUCH_FIREFLY_PLATFORM_W, TOUCH_FIREFLY_PLATFORM_H),
+    k.pos(x, y),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+}
+//
+// Creates a semi-transparent visible platform for hidden letter spots.
+//
+function createHiddenPlatform(k, x, y) {
+  return k.add([
+    k.rect(TOUCH_HIDDEN_PLATFORM_W, TOUCH_HIDDEN_PLATFORM_H),
+    k.pos(x, y),
+    k.anchor('center'),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.color(k.rgb(TOUCH_LETTER_COLOR_R, TOUCH_LETTER_COLOR_G, TOUCH_LETTER_COLOR_B)),
+    k.opacity(0.35),
+    k.z(CFG.visual.zIndex.platforms),
+    CFG.game.platformName
+  ])
+}
+//
+// Log-style visible platform for the U letter — same visual as bonus-hero log.
+//
+function createFloorMask(k, tX, tY) {
+  //
+  // Solid rect drawn above the T letter (z=28 > letter z=27) to clip
+  // the portion that sticks below the floor line.
+  //
+  const maskW = TOUCH_LETTER_SIZE * 1.4
+  return k.add([
+    k.pos(tX - maskW / 2, FLOOR_Y),
+    k.z(28),
+    {
+      draw() {
+        k.drawRect({
+          pos: k.vec2(0, 0),
+          width: maskW,
+          height: tY - FLOOR_Y + 4,
+          color: k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B)
+        })
+      }
+    }
+  ])
+}
+//
+// Updates the X/Y firefly counter text and outlines near the hero's head.
+// Creates them on first call; repositions and updates text every frame.
+//
+function updateFireflyCounter(k, state, collected, total, heroX, heroY) {
+  const text = `${collected}/${total}`
+  const cx = heroX + TOUCH_FIREFLY_COUNTER_X_OFFSET
+  const cy = heroY + TOUCH_FIREFLY_COUNTER_Y_OFFSET
+  if (!state.fireflyCounterObj) {
+    const outlineOffsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+    state.fireflyCounterOutlines = outlineOffsets.map(([dx, dy]) => k.add([
+      k.text(text, { size: TOUCH_FIREFLY_COUNTER_FONT }),
+      k.pos(cx + dx, cy + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.opacity(0.8),
+      k.z(CFG.visual.zIndex.ui + 10)
+    ]))
+    state.fireflyCounterObj = k.add([
+      k.text(text, { size: TOUCH_FIREFLY_COUNTER_FONT }),
+      k.pos(cx, cy),
+      k.anchor('left'),
+      k.color(k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B)),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10.1)
+    ])
+    return
+  }
+  state.fireflyCounterObj.text = text
+  state.fireflyCounterObj.pos.x = cx
+  state.fireflyCounterObj.pos.y = cy
+  state.fireflyCounterOutlines?.forEach((n, i) => {
+    if (!n.exists?.()) return
+    const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+    n.text = text
+    n.pos.x = cx + offsets[i][0]
+    n.pos.y = cy + offsets[i][1]
+  })
+}
+//
+// Destroys the firefly platform and resets all related state.
+// After this call, fireflies follow the hero.
+//
+function destroyFireflyPlatform(state, fireflies) {
+  state.fireflyPlatformObj?.destroy()
+  state.fireflyPlatformObj = null
+  state.fireflyPlatformSide = null
+  state.fireflyPlatformLockedX = null
+  state.fireflyPlatformLockedY = null
+  state.fireflyPlatformTimer = 0
+  state.fireflyPlatformVisible = false
+  fireflies._allAtPlatform = false
+  fireflies._mode = 'follow'
+}
+//
+// Destroys the firefly counter text objects and clears state refs.
+//
+function destroyFireflyCounter(state) {
+  state.fireflyCounterObj?.destroy?.()
+  state.fireflyCounterObj = null
+  state.fireflyCounterOutlines?.forEach(n => n.destroy?.())
+  state.fireflyCounterOutlines = null
+}
 //
 // Slowly oscillates bug4 (the anti-hero's platform bug) and its invisible
 // collision platform back and forth within the play area.

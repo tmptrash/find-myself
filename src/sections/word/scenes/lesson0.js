@@ -6,7 +6,7 @@ import * as FlyingWords from '../components/flying-words.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as WordBlades2ChaseTrap from '../utils/word-blades2-chase-trap.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
@@ -52,18 +52,18 @@ const BONUS_PLATFORM_COLLISION_WIDTH = 76
 const BONUS_PLATFORM_COLLISION_X_OFFSET = 36
 const BONUS_PLATFORM_REVEAL_WIDTH = 160
 const BONUS_PLATFORM_COLLISION_TOP_TRIM = 12
-const BONUS_STORAGE_KEY = 'word.level0BonusCollected'
+const BONUS_STORAGE_KEY = 'word.lesson0BonusCollected'
 const FLYING_WORD_COUNT = 22
 //
 // Life deduction trap (mirrors touch level 0)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'word.level0LifeDeduction'
+const LIFE_DEDUCT_FLAG = 'word.lesson0LifeDeduction'
 //
 // Visited flag: set on the FIRST entry when conditions are met so the hero
 // gets one free attempt before the dialog fires on the SECOND entry.
 //
-const LIFE_DEDUCT_VISITED_FLAG = 'word.level0TrapVisited'
+const LIFE_DEDUCT_VISITED_FLAG = 'word.lesson0TrapVisited'
 //
 // Crimson section color for life-deduction dialog text
 //
@@ -148,8 +148,8 @@ const FLYING_WORD_TOOLTIPS = {
  * Three blade blocks: two static, one trap with appearing blades
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel0(k) {
-  k.scene("level-word.0", () => {
+export function sceneLesson0(k) {
+  k.scene("lesson-word.0", () => {
     //
     // Reset lifeScore when entering from a different section (word section starts fresh).
     // heroScore carries over from localStorage as accumulated across sections.
@@ -161,14 +161,14 @@ export function sceneLevel0(k) {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-word.0')
+    set('lastLesson', 'lesson-word.0')
     //
     // Initialize level with heroes
     const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic } = initScene({
       k,
-      levelName: 'level-word.0',
+      levelName: 'lesson-word.0',
       levelNumber: 1,
-      nextLevel: 'level-word.1',
+      nextLevel: 'lesson-word.1',
       levelTitle: "words like blades",
       levelTitleColor: CFG.visual.colors.blades,
       subTitle: "some words are sharper than any blade...",
@@ -184,7 +184,7 @@ export function sceneLevel0(k) {
       onAnnihilation: () => {
         breathMusic && breathMusic.stop && breathMusic.stop()
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-word.0', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-word.0', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
         const pointsToAdd = speedBonusEarned ? 2 : 1
         const newScore = currentScore + pointsToAdd
@@ -194,7 +194,7 @@ export function sceneLevel0(k) {
         playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
-          createLevelTransition(k, 'level-word.0')
+          createLevelTransition(k, 'lesson-word.0')
         })
       }
     })
@@ -248,7 +248,7 @@ export function sceneLevel0(k) {
     const flyingWords = FlyingWords.create({
       k,
       hero,
-      currentLevel: 'level-word.0',
+      currentLevel: 'lesson-word.0',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       customBounds: platformBounds,
       wordCount: FLYING_WORD_COUNT,
@@ -537,7 +537,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
       //
       // Restart level
       //
-      k.go("level-word.0")
+      k.go("lesson-word.0")
       return
     }
     
@@ -574,7 +574,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
         updateInterval.cancel()
         skipHandlers.forEach(h => h.cancel())
         deathMsg.destroy()
-        k.go("level-word.0")
+        k.go("lesson-word.0")
       }
     }
   })

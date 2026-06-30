@@ -13,9 +13,9 @@ export const TOUCH_CFG = {
     // Player gets 3 bonus points if completing level faster than this
     //
     speedBonusTime: {
-      'level-touch.0': 360,  // Level 0: 6 minutes
-      'level-touch.1': 40,   // Level 1: 40 seconds
-      'level-touch.2': 50    // Level 2: 50 seconds
+      'lesson-touch.0': 360,  // Level 0: 6 minutes
+      'lesson-touch.1': 40,   // Level 1: 40 seconds
+      'lesson-touch.2': 50    // Level 2: 50 seconds
     }
   },
   visual: {

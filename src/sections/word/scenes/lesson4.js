@@ -19,7 +19,7 @@ import * as WordBladeProximity from '../utils/word-blade-proximity.js'
 import * as WordKillerProximity from '../utils/word-killer-proximity.js'
 import * as WordHudTooltips from '../utils/word-hud-tooltips.js'
 import * as Tooltip from '../../../utils/tooltip.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
 import * as Sound from '../../../utils/sound.js'
 import { createLevelTransition } from '../../../utils/transition.js'
@@ -344,7 +344,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
       bladeArmInst.heroIsDead = false
     }
     deathMsg.destroy()
-    k.go("level-word.4")
+    k.go("lesson-word.4")
   }
   
   //
@@ -407,27 +407,27 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
  * @param {Object} levelIndicator - Level indicator (updates the hero score display)
  */
 function grantMercyPoints(levelIndicator) {
-  const deaths = get('word.level4Deaths', 0) + 1
-  set('word.level4Deaths', deaths)
+  const deaths = get('word.lesson4Deaths', 0) + 1
+  set('word.lesson4Deaths', deaths)
   const dueGrants = Math.floor(deaths / MERCY_DEATH_INTERVAL)
-  if (dueGrants <= get('word.level4MercyGranted', 0)) return
+  if (dueGrants <= get('word.lesson4MercyGranted', 0)) return
   //
   // Consume this death block whether or not we grant, so the next grant needs
   // another full block of deaths (i.e. the life score climbing another 10)
   //
-  set('word.level4MercyGranted', dueGrants)
+  set('word.lesson4MercyGranted', dueGrants)
   if (get('heroScore', 0) !== 0) return
   set('heroScore', MERCY_POINTS)
   levelIndicator?.updateHeroScore?.(MERCY_POINTS)
 }
 
 
-export function sceneLevel4(k) {
-  k.scene("level-word.4", () => {
+export function sceneLesson4(k) {
+  k.scene("lesson-word.4", () => {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-word.4')
+    set('lastLesson', 'lesson-word.4')
     //
     // Save heroScore at level start for restoration on death
     //
@@ -463,7 +463,7 @@ export function sceneLevel4(k) {
     // Initialize level with heroes and two gaps in the bottom platform
     const { sound, hero, antiHero, dreamingEyes, heroSpeech, consciousnessLayers, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
-      levelName: 'level-word.4',
+      levelName: 'lesson-word.4',
       levelNumber: 5,
       nextLevel: 'word-complete',
       //
@@ -489,7 +489,7 @@ export function sceneLevel4(k) {
         breathMusic && breathMusic.stop && breathMusic.stop()
         sound && Sound.stopCalmPad(sound)
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-word.4', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-word.4', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
         const pointsToAdd = speedBonusEarned ? 2 : 1
         const newScore = currentScore + pointsToAdd
@@ -497,7 +497,7 @@ export function sceneLevel4(k) {
         levelIndicator && levelIndicator.updateHeroScore && levelIndicator.updateHeroScore(newScore)
         sound && Sound.playVictorySound(sound)
         k.wait(1.3, () => {
-          createLevelTransition(k, 'level-word.4')
+          createLevelTransition(k, 'lesson-word.4')
         })
       }
     })
@@ -527,7 +527,7 @@ export function sceneLevel4(k) {
       k,
       y: textY,
       hero,
-      currentLevel: 'level-word.4',
+      currentLevel: 'lesson-word.4',
       sfx: sound,
       onHit: (bladeArmInst) => showDeathMessage(k, hero, null, bladeArmInst, levelIndicator, sound, heroScoreAtStart)
     })
@@ -538,7 +538,7 @@ export function sceneLevel4(k) {
     const flyingWords = FlyingWords.create({
       k,
       hero,
-      currentLevel: 'level-word.4',
+      currentLevel: 'lesson-word.4',
       onDeath: () => {
         //
         // Stop blade arm movement
@@ -582,7 +582,7 @@ export function sceneLevel4(k) {
       y: platformY,
       hero,
       color: platformColor,
-      currentLevel: 'level-word.4',
+      currentLevel: 'lesson-word.4',
       jumpToDisableBlades: true,  // Special mode: jump down to disable blades
       autoOpen: true,  // Auto-open on level start
       sfx: sound,
@@ -599,7 +599,7 @@ export function sceneLevel4(k) {
       y: platformY,
       hero,
       color: platformColor,
-      currentLevel: 'level-word.4',
+      currentLevel: 'lesson-word.4',
       jumpToDisableBlades: false,
       autoOpen: false,
       sfx: sound,
@@ -682,7 +682,7 @@ export function sceneLevel4(k) {
       heroStartY: HERO_SPAWN_Y,
       platformBounds,
       confusionX: confusionWordX,
-      currentLevel: 'level-word.4',
+      currentLevel: 'lesson-word.4',
       confusionShards: []
     }
     const confusionWord = createConfusionWord(k, confusionWordX, confusionWordY, confusionCtx)
@@ -2255,9 +2255,9 @@ function spawnHintBubble(k, charObj, text, duration) {
  * @param {Object} k - Kaplay instance
  */
 function showLetterInstructions(k) {
-  let showCount = get('word.level4LetterInstructionsCount', 0)
+  let showCount = get('word.lesson4LetterInstructionsCount', 0)
   if (showCount >= INSTRUCTIONS_SHOW_MAX) return
-  set('word.level4LetterInstructionsCount', showCount + 1)
+  set('word.lesson4LetterInstructionsCount', showCount + 1)
   const centerX = CFG.visual.screen.width / 2 - 20
   const textY = 140
   const content = "use Shift to throw letters at the creature"

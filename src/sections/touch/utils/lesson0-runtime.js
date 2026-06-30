@@ -16,13 +16,24 @@ const L0_PYRAMID_JOIN_RADIUS_SQ = 60 * 60
 const L0_PYRAMID_CHECK_INTERVAL = 0.5
 const L0_CULL_SCREEN_MULT = 2
 const L0_ATMOSPHERE_SCREEN_MULT = 1.5
+//
+// Max fly-in speed (px/s) when fireflies converge to form a platform
+//
+const L0_PLATFORM_FLY_SPEED = 160
+//
+// Speed at which fireflies are gently pushed back inside the Y bounds (px/s).
+// Soft clamp prevents the instantaneous position snap that occurs when exiting
+// platform mode (where Y clamping is disabled so fireflies can reach the exact
+// platform height above the normal minY bound).
+//
+const L0_SOFT_CLAMP_SPEED = 220
 
 /**
  * Single per-frame game loop for touch level 0 (preserves legacy call order).
  * @param {Object} k - Kaplay instance
- * @param {Object} ctx - Scene runtime context assembled in sceneLevel0
+ * @param {Object} ctx - Scene runtime context assembled in sceneLesson0
  */
-export function onUpdateLevel0GameLoop(k, ctx) {
+export function onUpdateLesson0GameLoop(k, ctx) {
   const cameraX = getCameraCenterX(k, ctx.heroInst)
   const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
   const atmosphereDist = getDistanceThreshold(k, L0_ATMOSPHERE_SCREEN_MULT)
@@ -31,7 +42,7 @@ export function onUpdateLevel0GameLoop(k, ctx) {
   //
   // 1. Floor thorns
   //
-  ctx.checkFloorThorns(k, ctx.heroInst, ctx.floorThornData, ctx.levelIndicator)
+  ctx.checkFloorThorns(k, ctx.heroInst, ctx.floorThornData, ctx.levelIndicator, ctx.sound)
   //
   // 2. Bug4 platform + anti-hero sync
   //
@@ -84,24 +95,27 @@ export function onUpdateLevel0GameLoop(k, ctx) {
   //
   ctx.puddleOnUpdate?.()
   //
-  // 17. Fireflies (per-object cull)
+  // 17. Fireflies (per-object cull) with behavior mode
   //
-  onUpdateL0FirefliesCulled(k, ctx.fireflies, cameraX, cullDist)
+  onUpdateL0FirefliesCulled(k, ctx.fireflies, cameraX, cullDist, ctx.touchLetterState)
   //
-  // 18. Background birds (per-object cull)
+  // 18. TOUCH letter system
+  //
+  ctx.touchLetterState?.onUpdate?.()
+  //
+  // 19. Background birds (per-object cull)
   //
   onUpdateL0Birds(k, ctx.birds, ctx.birdSkyHeight, ctx.birdFlapBlendTime, ctx.birdGlidePose, cameraX, cullDist)
 }
 //
-// Keeps anti-hero platform glued to the platform bug head.
+// Keeps the monster-head platform glued to the platform bug head.
 //
-function syncBug4Platform(bigBug4Inst, antiHeroPlatform, antiHeroInst, bug4Radius) {
-  if (!bigBug4Inst || !antiHeroPlatform || !antiHeroInst) return
+function syncBug4Platform(bigBug4Inst, antiHeroPlatform, _unused, bug4Radius) {
+  if (!bigBug4Inst || !antiHeroPlatform) return
   const flatHeadHeight = bug4Radius * 0.8
   const headTopY = bigBug4Inst.y - flatHeadHeight / 2
   antiHeroPlatform.pos.x = bigBug4Inst.x
   antiHeroPlatform.pos.y = headTopY
-  antiHeroInst.character && (antiHeroInst.character.pos.x = bigBug4Inst.x)
 }
 //
 // Hero proximity scare logic for floor bugs.
@@ -109,6 +123,10 @@ function syncBug4Platform(bigBug4Inst, antiHeroPlatform, antiHeroInst, bug4Radiu
 function onUpdateBugScare(k, ctx) {
   const { heroInst, bugs, sound } = ctx
   if (!heroInst?.character?.pos) return
+  //
+  // In gather phase (after C) bugs walk near the hero without fright
+  //
+  if (ctx.touchLetterState?.cCollected) return
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
   const dt = k.dt()
@@ -197,6 +215,11 @@ function onUpdateBugsAndPyramids(k, ctx, cameraX, cullDist) {
   pyramidRuntime.timer += dt
   if (pyramidRuntime.timer < L0_PYRAMID_CHECK_INTERVAL) return
   pyramidRuntime.timer = 0
+  //
+  // Pyramids only form after letter U is collected and before letter C is collected
+  //
+  if (!ctx.touchLetterState?.uCollected) return
+  if (ctx.touchLetterState?.cCollected) return
   if (bugs.some(bug => bug.isScattering === true)) return
   const availableSmallBugs = []
   for (const bug of allBugsCombined) {
@@ -286,21 +309,197 @@ export function drawL0Birds(k, birds, cameraX, cullDist) {
   }
 }
 //
-// Firefly drift with decorative culling.
+// Firefly drift with decorative culling and behavioral modes.
+// Mode is stored on fireflies._mode; hero ref on fireflies._heroRef.
 //
-function onUpdateL0FirefliesCulled(k, fireflies, cameraX, cullDist) {
+function onUpdateL0FirefliesCulled(k, fireflies, cameraX, cullDist, touchLetterState) {
   if (!fireflies?.length) return
   const dt = k.dt()
   const t = k.time()
   const bounds = fireflies._bounds
   if (!bounds) return
+  const mode = fireflies._mode ?? 'default'
+  const hero = fireflies._heroRef
+  const heroPos = hero?.character?.pos
+  const heroX = heroPos?.x ?? -9999
+  const heroY = heroPos?.y ?? -9999
+  const L0_FLEE_RADIUS = 195
+  const L0_FLEE_SPEED = 180
+  const L0_FOLLOW_DIST = 85
+  const L0_FOLLOW_SPEED = 120
+  const L0_GATHER_SPEED = 320
+  //
+  // Track whether every firefly in platform mode has reached its locked target position.
+  // Starts true; flipped to false if any firefly is still in flight.
+  //
+  let allAtPlatform = mode === 'platform'
   for (const f of fireflies) {
-    if (!isWithinDistance(f.x, cameraX, cullDist)) continue
-    f.x += f.driftVx * dt + Math.sin(t * f.glowSpeed + f.phase) * f.speed * 0.3 * dt
-    f.y += Math.cos(t * f.glowSpeed * 0.7 + f.phase) * f.speed * 0.6 * dt
-    if (f.x < bounds.minX) f.x = bounds.maxX
-    if (f.x > bounds.maxX) f.x = bounds.minX
-    if (f.y < bounds.minY) f.y = bounds.minY
-    if (f.y > bounds.maxY) f.y = bounds.maxY
+    //
+    // In platform mode all fireflies must converge regardless of screen position
+    // so that the arrival check is accurate; otherwise culled fireflies would be
+    // missed and _allAtPlatform would flip true prematurely.
+    //
+    if (mode !== 'platform' && !isWithinDistance(f.x, cameraX, cullDist)) continue
+    //
+    // Wander baseline (always applied as a gentle undercurrent)
+    //
+    const wander = Math.sin(t * f.glowSpeed + f.phase) * f.speed * 0.15 * dt
+    const wanderY = Math.cos(t * f.glowSpeed * 0.7 + f.phase) * f.speed * 0.25 * dt
+    if (mode === 'flee') {
+      //
+      // Flee from hero when within radius
+      //
+      const dx = f.x - heroX
+      const dy = f.y - heroY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < L0_FLEE_RADIUS && dist > 1) {
+        const nx = dx / dist
+        const ny = dy / dist
+        const strength = (1 - dist / L0_FLEE_RADIUS) * L0_FLEE_SPEED * dt
+        f.x += nx * strength + wander
+        f.y += ny * strength + wanderY
+      } else {
+        f.x += f.driftVx * dt + wander
+        f.y += (f.driftVy ?? 0) * dt + wanderY
+        if (f.y <= bounds.minY || f.y >= bounds.maxY) {
+          f.driftVy = -(f.driftVy ?? 8)
+        }
+      }
+    } else if (mode === 'follow') {
+      //
+      // Orbit hero with random offset, clamped so fireflies stay within bounds
+      //
+      const targetX = heroX + Math.cos(f.phase * 3 + t * 0.6) * L0_FOLLOW_DIST
+      const targetY = Math.max(bounds.minY, heroY - 30 + Math.sin(f.phase * 2.1 + t * 0.5) * L0_FOLLOW_DIST * 0.5)
+      const dx = targetX - f.x
+      const dy = targetY - f.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const moveSpeed = Math.min(dist * 2.5, L0_FOLLOW_SPEED) * dt
+      if (dist > 2) {
+        f.x += (dx / dist) * moveSpeed + wander * 0.3
+        f.y += (dy / dist) * moveSpeed + wanderY * 0.3
+      }
+    } else if (mode === 'platform') {
+      //
+      // Converge at normal speed to fixed platform position, then hold still.
+      // No oscillation — firefly positions must match the collision box exactly.
+      //
+      const platformX = fireflies._platformX ?? heroX
+      const platformY = fireflies._platformY ?? heroY
+      const spreadX = (f.phase * 7919) % 130 - 65
+      const targetX = platformX + spreadX
+      const targetY = platformY
+      const dx = targetX - f.x
+      const dy = targetY - f.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < 0.5) {
+        //
+        // Close enough — snap and freeze in place
+        //
+        f.x = targetX
+        f.y = targetY
+      } else {
+        //
+        // Move at constant speed toward target so approach looks natural
+        //
+        const move = Math.min(dist, L0_PLATFORM_FLY_SPEED * dt)
+        f.x += (dx / dist) * move
+        f.y += (dy / dist) * move
+        //
+        // This firefly hasn't arrived yet — platform is not fully formed
+        //
+        allAtPlatform = false
+      }
+    } else if (mode === 'collect') {
+      //
+      // Each firefly has individual f.collected flag:
+      // collected ones orbit hero; uncollected ones wander normally
+      //
+      if (f.collected) {
+        const targetX = heroX + Math.cos(f.phase * 3 + t * 0.6) * L0_FOLLOW_DIST
+        const targetY = Math.max(bounds.minY, heroY - 30 + Math.sin(f.phase * 2.1 + t * 0.5) * L0_FOLLOW_DIST * 0.5)
+        const dx = targetX - f.x
+        const dy = targetY - f.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const moveSpeed = Math.min(dist * 2.5, L0_FOLLOW_SPEED) * dt
+        if (dist > 2) {
+          f.x += (dx / dist) * moveSpeed + wander * 0.3
+          f.y += (dy / dist) * moveSpeed + wanderY * 0.3
+        }
+      } else {
+        //
+        // Uncollected: drift horizontally AND vertically for natural random flight
+        //
+        f.x += f.driftVx * dt + wander
+        f.y += (f.driftVy ?? 0) * dt + wanderY
+        if (f.y <= bounds.minY || f.y >= bounds.maxY) {
+          f.driftVy = -(f.driftVy ?? 8)
+        }
+      }
+    } else if (mode === 'gather') {
+      //
+      // Rush to hero position
+      //
+      const dx = heroX - f.x
+      const dy = (heroY - 20) - f.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const speed = Math.min(dist * 4, L0_GATHER_SPEED) * dt
+      if (dist > 8) {
+        f.x += (dx / dist) * speed + wander * 0.2
+        f.y += (dy / dist) * speed + wanderY * 0.2
+      }
+    } else if (mode === 'scatter') {
+      //
+      // Post-U scatter: each firefly has its own randomised X and Y velocity
+      //
+      f.x += (f.driftVx ?? 20) * dt + wander
+      f.y += (f.driftVy ?? 0) * dt + wanderY
+      //
+      // Reverse Y velocity when hitting top/bottom bounds
+      //
+      if (f.y <= bounds.minY || f.y >= bounds.maxY) {
+        f.driftVy = -(f.driftVy ?? 20)
+      }
+    } else {
+      //
+      // Default: drift horizontally and vertically for natural random movement
+      //
+      f.x += f.driftVx * dt + wander
+      f.y += (f.driftVy ?? 0) * dt + wanderY
+      if (f.y <= bounds.minY || f.y >= bounds.maxY) {
+        f.driftVy = -(f.driftVy ?? 8)
+      }
+    }
+    //
+    // Bounce off horizontal bounds instead of teleporting to opposite side.
+    // In platform mode, skip the Y clamp so fireflies can reach the exact
+    // target height even if it sits above the normal minY bound.
+    //
+    if (f.x < bounds.minX) { f.x = bounds.minX; f.driftVx = Math.abs(f.driftVx ?? 5) }
+    else if (f.x > bounds.maxX) { f.x = bounds.maxX; f.driftVx = -Math.abs(f.driftVx ?? 5) }
+    if (mode !== 'platform') {
+      //
+      // Soft clamp: gradually push fireflies back inside bounds at L0_SOFT_CLAMP_SPEED.
+      // A hard snap would cause a visible jump when exiting platform mode (where Y
+      // clamping is disabled and fireflies can sit above bounds.minY).
+      //
+      const softMove = L0_SOFT_CLAMP_SPEED * dt
+      if (f.y < bounds.minY) f.y = Math.min(f.y + softMove, bounds.minY)
+      else if (f.y > bounds.maxY) f.y = Math.max(f.y - softMove, bounds.maxY)
+    }
+    //
+    // Ensure minimum horizontal drift so fireflies never become completely static
+    //
+    const MIN_DRIFT = 4
+    if (Math.abs(f.driftVx ?? 0) < MIN_DRIFT) {
+      f.driftVx = (f.driftVx ?? 0) >= 0 ? MIN_DRIFT : -MIN_DRIFT
+    }
+  }
+  //
+  // Expose whether all fireflies have reached platform position so the scene can
+  // delay creating the collision box until every firefly is actually in place.
+  //
+  if (mode === 'platform') {
+    fireflies._allAtPlatform = allAtPlatform
   }
 }

@@ -73,9 +73,9 @@ export function sceneToPackKey(sceneName) {
   if (sceneName === 'word-complete' || sceneName === 'time-complete' || sceneName === 'touch-complete') {
     return 'hub'
   }
-  if (sceneName.startsWith('level-word')) return 'word'
-  if (sceneName.startsWith('level-time')) return `time-${sceneName.split('.')[1]}`
-  if (sceneName.startsWith('level-touch')) return `touch-${sceneName.split('.')[1]}`
+  if (sceneName.startsWith('lesson-word')) return 'word'
+  if (sceneName.startsWith('lesson-time')) return `time-${sceneName.split('.')[1]}`
+  if (sceneName.startsWith('lesson-touch')) return `touch-${sceneName.split('.')[1]}`
   return 'hub'
 }
 
@@ -89,28 +89,28 @@ async function loadTimeCityForLevel(k, sceneName) {
     BootLoader.setLoaderBarPct(pct)
     await BootLoader.yieldForGpu(2)
   }
-  if (sceneName === 'level-time.0') {
+  if (sceneName === 'lesson-time.0') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL0_PLATFORM_BOTTOM, 'city-background',
       false, false, true, 2.0, true, true, onProgress, true
     )
     return
   }
-  if (sceneName === 'level-time.1') {
+  if (sceneName === 'lesson-time.1') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL1_PLATFORM_BOTTOM, 'city-background-level1',
       false, false, true, 0.6, true, true, onProgress, true
     )
     return
   }
-  if (sceneName === 'level-time.2') {
+  if (sceneName === 'lesson-time.2') {
     await CityBackground.preloadCityBackground(
       k, TIME_LEVEL2_PLATFORM_BOTTOM, 'city-background-level2',
       false, true, true, 0.4, true, true, onProgress, true
     )
     return
   }
-  if (sceneName === 'level-time.3') {
+  if (sceneName === 'lesson-time.3') {
     const groundLine = k.height() - (TIME_LEVEL3_LOWER_CORRIDOR_Y + TIME_LEVEL3_CORRIDOR_HEIGHT)
     //
     // No trees and no sun for level 3 — keeps VRAM lower and matches the snowy aesthetic.
@@ -261,7 +261,7 @@ export function enterPreparedScene(k, sceneName, afterGo) {
   //
   // Paint canvas immediately so the previous scene (menu) does not flash for a frame
   //
-  if (sceneName.startsWith('level-touch')) {
+  if (sceneName.startsWith('lesson-touch')) {
     k.setBackground(k.rgb(26, 26, 26))
     k.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
   }

@@ -6,6 +6,8 @@ A philosophical 2D platformer about self-discovery through life's challenges. Na
 
 ![Menu](assets/screenshots/menu.png)
 
+![Touch](assets/screenshots/touch0.png)
+
 ![Touch](assets/screenshots/touch.png)
 
 ![Word](assets/screenshots/word.png)

@@ -3,8 +3,8 @@ import { prop, setProp } from './helper.js'
  * Progress tracking using localStorage.
  * All section-specific properties are namespaced under their section key:
  *   touch.completed, touch.lifeDeducted, touch.trapActive,
- *   word.completed, word.level4LetterInstructionsCount,
- *   time.completed, time.level3SnowballInstructionsCount, etc.
+ *   word.completed, word.lesson4LetterInstructionsCount,
+ *   time.completed, time.lesson3SnowballInstructionsCount, etc.
  * Global properties: lastLevel, heroScore, lifeScore, sounds
  */
 const STORAGE_KEY = 'find-yourself'
@@ -15,22 +15,22 @@ const SECTIONS = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
 const TIME_SCENE_MAX_INDEX = 3
 
 /**
- * Maps invalid time scene names (e.g. level-time.4 from stale saves) to the last valid level.
+ * Maps invalid time scene names (e.g. lesson-time.4 from stale saves) to the last valid level.
  * @param {string|null} sceneName
  * @returns {string|null}
  */
 export function normalizeSceneName(sceneName) {
-  if (!sceneName || !sceneName.startsWith('level-time.')) return sceneName
-  const index = parseInt(sceneName.replace('level-time.', ''), 10)
+  if (!sceneName || !sceneName.startsWith('lesson-time.')) return sceneName
+  const index = parseInt(sceneName.replace('lesson-time.', ''), 10)
   if (Number.isNaN(index) || index <= TIME_SCENE_MAX_INDEX) return sceneName
-  return `level-time.${TIME_SCENE_MAX_INDEX}`
+  return `lesson-time.${TIME_SCENE_MAX_INDEX}`
 }
 //
 // Default progress with section objects
 //
 function createDefault() {
   const progress = {
-    lastLevel: null,
+    lastLesson: null,
     heroScore: 0,
     lifeScore: 0,
     sounds: {}
@@ -59,17 +59,17 @@ function migrate(data) {
     changed = true
   }
   if (data.level4LetterInstructionsCount !== undefined) {
-    data.word.level4LetterInstructionsCount = data.level4LetterInstructionsCount
+    data.word.lesson4LetterInstructionsCount = data.level4LetterInstructionsCount
     delete data.level4LetterInstructionsCount
     changed = true
   }
   if (data.level3SnowballInstructionsCount !== undefined) {
-    data.time.level3SnowballInstructionsCount = data.level3SnowballInstructionsCount
+    data.time.lesson3SnowballInstructionsCount = data.level3SnowballInstructionsCount
     delete data.level3SnowballInstructionsCount
     changed = true
   }
   if (data.level3GlowInstructionsCount !== undefined) {
-    data.touch.level3GlowInstructionsCount = data.level3GlowInstructionsCount
+    data.touch.lesson3GlowInstructionsCount = data.level3GlowInstructionsCount
     delete data.level3GlowInstructionsCount
     changed = true
   }

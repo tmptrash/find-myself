@@ -32,7 +32,7 @@ const PIT_STAND_VOLUME_SCALE = 1.85
  * @param {number} config.y - Y position (top of platform, at floor level)
  * @param {Object} config.hero - Hero instance to detect
  * @param {string} config.color - Platform color
- * @param {string} config.currentLevel - Current level name (e.g., 'level-word.1')
+ * @param {string} config.currentLevel - Current level name (e.g., 'lesson-word.1')
  * @param {boolean} [config.jumpToDisableBlades=false] - If true, blades disappear when hero jumps down
  * @param {boolean} [config.autoOpen=false] - If true, platform opens automatically on level start
  * @param {Object} [config.sfx] - Sound instance

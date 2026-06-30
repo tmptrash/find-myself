@@ -174,7 +174,7 @@ function onUpdateRain(inst) {
   const dt = k.dt()
   const playableW = rightX - leftX
   const heroPos = heroInst.character ? heroInst.character.pos : null
-  const antiPos = antiHeroInst.character ? antiHeroInst.character.pos : null
+  const antiPos = antiHeroInst?.character ? antiHeroInst.character.pos : null
   for (let li = 0; li < layers.length; li++) {
     const layer = layers[li]
     const speed = layer.cfg.speed
@@ -338,6 +338,7 @@ function resetDrop(drop, leftX, playableW, topY, canopyPoints) {
  * @param {number} li - Layer index
  */
 function onDraw(inst, li) {
+  if (inst.logicPaused) return
   const { k, layers } = inst
   const layer = layers[li]
   const cfg = layer.cfg

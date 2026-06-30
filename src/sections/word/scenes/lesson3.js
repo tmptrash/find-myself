@@ -7,7 +7,7 @@ import * as Blades from '../components/blades.js'
 import * as Hero from '../../../components/hero.js'
 import * as FlyingWords from '../components/flying-words.js'
 import * as LifeDeduction from '../../touch/utils/life-deduction.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import { set, get } from '../../../utils/progress.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
 import * as WordBladeProximity from '../utils/word-blade-proximity.js'
@@ -58,12 +58,12 @@ const FLYING_WORD_COUNT = 22
 // After the dialog the blade animation runs at double speed.
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'word.level3LifeDeduction'
+const LIFE_DEDUCT_FLAG = 'word.lesson3LifeDeduction'
 //
 // Visited flag: set on the FIRST entry when conditions are met so the hero
 // gets one free attempt before the dialog fires on the SECOND entry.
 //
-const LIFE_DEDUCT_VISITED_FLAG = 'word.level3TrapVisited'
+const LIFE_DEDUCT_VISITED_FLAG = 'word.lesson3TrapVisited'
 //
 // Canvas backdrop RGB matching word section platform color (#2A2A38 = 42, 42, 56)
 //
@@ -203,18 +203,18 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
         //
         // Restart level
         //
-        k.go('level-word.3')
+        k.go('lesson-word.3')
       }
     }
   })
 }
 
-export function sceneLevel3(k) {
-  k.scene("level-word.3", () => {
+export function sceneLesson3(k) {
+  k.scene("lesson-word.3", () => {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-word.3')
+    set('lastLesson', 'lesson-word.3')
     //
     // Track level completion to stop blade animation and sounds
     //
@@ -229,9 +229,9 @@ export function sceneLevel3(k) {
     let levelCompleted = false
     const { sound, hero, antiHero, levelIndicator, fpsCounter, breathMusic, platformColor, playfieldColor } = initScene({
       k,
-      levelName: 'level-word.3',
+      levelName: 'lesson-word.3',
       levelNumber: 4,
-      nextLevel: 'level-word.4',
+      nextLevel: 'lesson-word.4',
       skipPlatforms: true,
       platformGap: levelPitGap,
       levelTitle: "words like blades",
@@ -251,7 +251,7 @@ export function sceneLevel3(k) {
         breathMusic && breathMusic.stop && breathMusic.stop()
         Sound.fadeOutAllMusic()
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-word.3', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-word.3', levelTime, levelIndicator)
         const currentScore = get('heroScore', 0)
         const pointsToAdd = speedBonusEarned ? 2 : 1
         const newScore = currentScore + pointsToAdd
@@ -261,7 +261,7 @@ export function sceneLevel3(k) {
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
-          createLevelTransition(k, 'level-word.3')
+          createLevelTransition(k, 'lesson-word.3')
         })
       }
     })
@@ -283,7 +283,7 @@ export function sceneLevel3(k) {
     const flyingWords = FlyingWords.create({
       k,
       hero,
-      currentLevel: 'level-word.3',
+      currentLevel: 'lesson-word.3',
       onDeath: () => showDeathMessage(k, hero, null, levelIndicator, sound),
       customBounds: {
         left: PLATFORM_SIDE_WIDTH + 20,
@@ -349,7 +349,7 @@ export function sceneLevel3(k) {
       y: pitBottomY - bladeHeight / 2,
       hero,
       orientation: Blades.ORIENTATIONS.FLOOR,
-      onHit: () => LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive() || Blades.handleCollision(pitBlades, "level-word.3"),
+      onHit: () => LevelHelp.isAnyPanelOpen() || LifeDeduction.isActive() || Blades.handleCollision(pitBlades, "lesson-word.3"),
       sfx: sound
     })
     pitBlades.blade.opacity = 1

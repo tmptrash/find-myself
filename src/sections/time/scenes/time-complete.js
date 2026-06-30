@@ -1,7 +1,7 @@
 import * as Sound from '../../../utils/sound.js'
 import { stopTimeSectionMusic } from '../components/scene-helper.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 
 const FINAL_MESSAGE = "Time changes everything — even you.\n\nYou must find the pace that is truly yours"
 const MESSAGE_HOLD_DURATION = 5.0
@@ -24,7 +24,7 @@ export function sceneTimeComplete(k) {
     // Save first level of next section (word) as lastLevel
     // This ensures that after completing time section, progress points to next section
     //
-    set('lastLevel', 'level-word.0')
+    set('lastLesson', 'lesson-word.0')
     //
     // Create sound instance and stop background music
     //

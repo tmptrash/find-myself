@@ -3,9 +3,9 @@ import * as Hero from '../../../components/hero.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 //
 // Platform dimensions (minimal margins for large play area)
@@ -18,12 +18,12 @@ const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
  * Level 4 scene for touch section
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel4(k) {
-  k.scene("level-touch.4", () => {
+export function sceneLesson4(k) {
+  k.scene("lesson-touch.4", () => {
     //
     // Save progress
     //
-    set('lastLevel', 'level-touch.4')
+    set('lastLesson', 'lesson-touch.4')
     //
     // Set gravity
     //
@@ -394,11 +394,11 @@ export function sceneLevel4(k) {
         //
         // Transition after annihilation to menu
         //
-        createLevelTransition(k, 'level-touch.4', () => {
+        createLevelTransition(k, 'lesson-touch.4', () => {
           goToMenuAfterAssets(k)
         })
       },
-      currentLevel: 'level-touch.4',
+      currentLevel: 'lesson-touch.4',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor

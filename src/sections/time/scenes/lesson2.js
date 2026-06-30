@@ -49,10 +49,6 @@ const TIME_INDICATOR_TOOLTIP_Y_OFFSET = 40
 //
 // Green timer tooltip
 //
-const GREEN_TIMER_TOOLTIP_TEXT = "Complete the level in time\nto earn more fragments"
-const GREEN_TIMER_TOOLTIP_WIDTH = 100
-const GREEN_TIMER_TOOLTIP_HEIGHT = 30
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 50
 //
 // Small hero and life icon tooltips
 //
@@ -97,7 +93,7 @@ const CLOUD_TOOLTIP_Y_OFFSET = -50
 const BONUS_PLATFORM_X = 1740
 const BONUS_PLATFORM_Y = 590
 const BONUS_PLATFORM_WIDTH = 72
-const BONUS_STORAGE_KEY = 'time.level2BonusCollected'
+const BONUS_STORAGE_KEY = 'time.lesson2BonusCollected'
 const BONUS_HERO_COLOR = "#8B5A50"
 //
 // Collision box nudge: shift right so the box aligns with the visible log,
@@ -109,12 +105,12 @@ const BONUS_COLLISION_Y_OFFSET = 8
 // Life deduction (show hint + control 2 falling platform traps)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'time.level2TrapAdded'
+const LIFE_DEDUCT_FLAG = 'time.lesson2TrapAdded'
 //
 // Grace-period flag: set on the FIRST entry when trap conditions are met so the
 // dialog fires on the SECOND entry (after the hero has had one free attempt).
 //
-const LIFE_DEDUCT_GRACE_FLAG = 'time.level2TrapGrace'
+const LIFE_DEDUCT_GRACE_FLAG = 'time.lesson2TrapGrace'
 const TRAP_PLATFORM_INDEX_1 = 2
 const TRAP_PLATFORM_INDEX_2 = 6
 //
@@ -442,12 +438,12 @@ function flashSmallHeroForBonus(k, levelIndicator, heroColor, count) {
  * Time section level 2 scene
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel2(k) {
-  k.scene("level-time.2", () => {
+export function sceneLesson2(k) {
+  k.scene("lesson-time.2", () => {
     //
     // Save progress immediately when entering this level
     //
-    set('lastLevel', 'level-time.2')
+    set('lastLesson', 'lesson-time.2')
     //
     // Stop previous level music (kids.mp3, time.mp3 and clock.mp3 from level 1)
     //
@@ -520,7 +516,7 @@ export function sceneLevel2(k) {
     //
     const { hero, antiHero, levelIndicator } = initScene({
       k,
-      levelName: 'level-time.2',
+      levelName: 'lesson-time.2',
       levelNumber: 3,
       skipPlatforms: true,
       spriteName: 'city-background-level2',
@@ -553,7 +549,7 @@ export function sceneLevel2(k) {
         // Check for speed bonus before incrementing normal score
         //
         const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(k, 'level-time.2', levelTime, levelIndicator)
+        const speedBonusEarned = checkSpeedBonus(k, 'lesson-time.2', levelTime, levelIndicator)
         //
         // Increment hero score (level completed + speed bonus if earned)
         //
@@ -600,7 +596,7 @@ export function sceneLevel2(k) {
           //
           // Move to level 3 with transition
           //
-          createLevelTransition(k, 'level-time.2')
+          createLevelTransition(k, 'lesson-time.2')
         })
       },
       showGameClock: true
@@ -626,8 +622,6 @@ export function sceneLevel2(k) {
     const fpsCounter = FpsCounter.create({
       k,
       showTimer: true,
-      showElapsedTimer: false,
-      targetTime: CFG.gameplay.speedBonusTime['level-time.2'],
       topY: PLATFORM_TOP_HEIGHT - 57
     })
     //
@@ -796,7 +790,7 @@ export function sceneLevel2(k) {
       endX: k.width() - PLATFORM_SIDE_WIDTH - 10,
       y: k.height() - PLATFORM_BOTTOM_HEIGHT - 10,
       hero,
-      currentLevel: 'level-time.2',
+      currentLevel: 'lesson-time.2',
       digitCount: 50,
       fakeDigitCount: 0,
       sfx: sound,
@@ -887,21 +881,6 @@ export function sceneLevel2(k) {
         height: TIME_INDICATOR_TOOLTIP_HEIGHT,
         text: TIME_INDICATOR_TOOLTIP_TEXT,
         offsetY: TIME_INDICATOR_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
-    // Tooltip for green timer (target time countdown)
-    //
-    fpsCounter.targetText && Tooltip.create({
-      k,
-      targets: [{
-        x: fpsCounter.targetText.pos.x,
-        y: fpsCounter.targetText.pos.y,
-        width: GREEN_TIMER_TOOLTIP_WIDTH,
-        height: GREEN_TIMER_TOOLTIP_HEIGHT,
-        text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
         forceBelow: true
       }]
     })
@@ -1270,7 +1249,7 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndi
     sfx: sound,
     enableColorChange: true,  // Enable color change on landing
     levelIndicator,
-    currentLevel: 'level-time.2'
+    currentLevel: 'lesson-time.2'
   })
   platforms.push({
     inst: startPlatform,
@@ -1348,7 +1327,7 @@ function createPlatformSystem(k, sound, hero, antiHero, levelIndicator, trapIndi
         sfx: sound,
         enableColorChange: true,  // Enable color change on landing
         levelIndicator,
-        currentLevel: 'level-time.2',
+        currentLevel: 'lesson-time.2',
         heartSystem: inst  // Pass inst that contains attemptsRemaining, updateHearts, destroyHearts
       })
       platforms.push({
@@ -1624,7 +1603,7 @@ function createNextPlatform(inst) {
     sfx: sound,
     enableColorChange: true,
     levelIndicator,
-    currentLevel: 'level-time.2',
+    currentLevel: 'lesson-time.2',
     heartSystem: inst,
     falling: isTrap,
     fallTarget

@@ -6,7 +6,7 @@ import * as Hero from '../../../components/hero.js'
 // Small hero and life icon layout constants
 //
 const SMALL_HERO_SIZE = 78
-const LIFE_IMAGE_HEIGHT = 120
+const LIFE_IMAGE_HEIGHT = 86
 const SPACING_BETWEEN = 110
 const LIFE_IMAGE_ORIGINAL_HEIGHT = 1197
 const UI_RIGHT_MARGIN = 70
@@ -19,12 +19,23 @@ const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
 //
-const LIFE_IMAGE_Y_OFFSET = 6
+const LIFE_IMAGE_Y_OFFSET = 14
 //
 // Trap count badge: small red number below-right of life icon
 //
-const TRAP_BADGE_OFFSET_X = 45
-const TRAP_BADGE_OFFSET_Y = 30
+const TRAP_BADGE_OFFSET_X = 28
+const TRAP_BADGE_OFFSET_Y = 38
+//
+// Letter burst effect: circles radiating from a newly activated HUD letter
+//
+const LETTER_BURST_PARTICLE_COUNT = 15
+const LETTER_BURST_SPEED_MIN = 80
+const LETTER_BURST_SPEED_EXTRA = 40
+const LETTER_BURST_LIFETIME_MIN = 0.8
+const LETTER_BURST_LIFETIME_EXTRA = 0.4
+const LETTER_BURST_SIZE_MIN = 4
+const LETTER_BURST_SIZE_EXTRA = 4
+const LETTER_BURST_Y_OFFSET = 24
 const TRAP_BADGE_FONT_SIZE = 20
 const TRAP_BADGE_COLOR_R = 200
 const TRAP_BADGE_COLOR_G = 60
@@ -243,7 +254,7 @@ export function create(config) {
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),
-      k.pos(lifeImageX + 12, smallHeroY + LIFE_IMAGE_Y_OFFSET),
+      k.pos(lifeImageX - 5, smallHeroY + LIFE_IMAGE_Y_OFFSET),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
@@ -366,6 +377,40 @@ export function setSectionLabelLetterProgress(inst, completedLetters) {
 }
 
 /**
+ * Spawns burst particles radiating from the newly lit HUD letter at the given 1-based index.
+ * Mirrors the stage-complete burst effect used in the training scene.
+ * @param {Object} inst - Level indicator instance from create()
+ * @param {number} letterIndex - 1-based index of the letter that was just collected (1 = T, 2 = O…)
+ */
+export function flashLetterBurst(inst, letterIndex) {
+  if (!inst?.letterObjects?.length || !inst.k) return
+  const letter = inst.letterObjects[letterIndex - 1]
+  if (!letter?.exists?.()) return
+  const k = inst.k
+  const cx = letter.pos.x
+  const cy = letter.pos.y + LETTER_BURST_Y_OFFSET
+  const { r, g, b } = getRGB(k, inst.sectionLabelActiveColor)
+  for (let i = 0; i < LETTER_BURST_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / LETTER_BURST_PARTICLE_COUNT
+    const speed = LETTER_BURST_SPEED_MIN + Math.random() * LETTER_BURST_SPEED_EXTRA
+    const lifetime = LETTER_BURST_LIFETIME_MIN + Math.random() * LETTER_BURST_LIFETIME_EXTRA
+    const size = LETTER_BURST_SIZE_MIN + Math.random() * LETTER_BURST_SIZE_EXTRA
+    const particle = k.add([
+      k.circle(size),
+      k.pos(cx, cy),
+      k.color(r, g, b),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10),
+      k.anchor('center'),
+      k.fixed()
+    ])
+    const vx = Math.cos(angle) * speed
+    const vy = Math.sin(angle) * speed
+    const ps = { elapsed: 0 }
+    particle.onUpdate(() => onUpdateLetterBurstParticle(k, particle, vx, vy, lifetime, ps))
+  }
+}
+/**
  * Colors TRAINING-style section label letter pairs as stages complete (2 letters per stage)
  * @param {Object} inst - Level indicator instance from create()
  * @param {number} completedStages - Number of completed 2-letter stages (0–4 for TRAINING)
@@ -433,4 +478,13 @@ function createScoreText(k, score, x, y, fontSize) {
     k.z(CFG.visual.zIndex.ui)
   ])
 }
-
+//
+// Advances a single burst particle: moves, fades, and destroys it on expiry
+//
+function onUpdateLetterBurstParticle(k, particle, vx, vy, lifetime, ps) {
+  ps.elapsed += k.dt()
+  particle.pos.x += vx * k.dt()
+  particle.pos.y += vy * k.dt()
+  particle.opacity = 1 - ps.elapsed / lifetime
+  ps.elapsed >= lifetime && k.destroy(particle)
+}

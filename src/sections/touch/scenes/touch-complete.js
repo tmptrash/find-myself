@@ -1,6 +1,6 @@
 import * as Sound from '../../../utils/sound.js'
 import { setSectionCompleted, set } from '../../../utils/progress.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
 
 const FINAL_MESSAGE = "You learned to reach out — to touch and be touched.\n\nNow you feel the difference between contact\n\nand connection with yourself."
 const MESSAGE_HOLD_DURATION = 11.0
@@ -27,7 +27,7 @@ export function sceneTouchComplete(k) {
     // Mark touch section as complete
     //
     setSectionCompleted('touch')
-    set('lastLevel', 'level-time.0')
+    set('lastLesson', 'lesson-time.0')
     //
     // Create sound instance and stop background music
     //

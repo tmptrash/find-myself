@@ -4,12 +4,12 @@ import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Bugs from '../components/bugs.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import * as LevelIndicator from '../components/level-indicator.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as TreeRoots from '../components/tree-roots.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/lesson-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import { toCanvas, getRGB, parseHex } from '../../../utils/helper.js'
 import * as FallingLeaf from '../components/falling-leaf.js'
@@ -24,7 +24,7 @@ import { addTouchSectionFloorRocks, addSingleFloorRockAt } from '../utils/floor-
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
-import { onUpdateLevel1GameLoop } from '../utils/level1-runtime.js'
+import { onUpdateLesson1GameLoop } from '../utils/lesson1-runtime.js'
 import { getActiveZoneIndex, isZoneAwake } from '../utils/scene-perf.js'
 //
 // Platform dimensions (minimal margins for large play area)
@@ -222,10 +222,6 @@ const TOUCH_INDICATOR_TOOLTIP_TEXT = "Here you can see how far\nyou have come in
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
 const TOUCH_INDICATOR_TOOLTIP_Y_OFFSET = -30
-const GREEN_TIMER_TOOLTIP_TEXT = "Finish the level in time\nto earn more fragments"
-const GREEN_TIMER_TOOLTIP_WIDTH = 80
-const GREEN_TIMER_TOOLTIP_HEIGHT = 20
-const GREEN_TIMER_TOOLTIP_Y_OFFSET = 30
 const FPS_COUNTER_TOP_Y = 55
 const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
@@ -362,16 +358,16 @@ const GIANT_WORM_X_OFFSET = 200
 // Life deduction — first trap (poison leaves) and second trap (random rising bugs)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'touch.level1TrapAdded'
-const LIFE_DEDUCT_VISITED_FLAG = 'touch.level1Visited'
-const LIFE_DEDUCT_LEAVES_FLAG = 'touch.level1LeavesActive'
+const LIFE_DEDUCT_FLAG = 'touch.lesson1TrapAdded'
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.lesson1Visited'
+const LIFE_DEDUCT_LEAVES_FLAG = 'touch.lesson1LeavesActive'
 //
 // Second trap — giant worm that resurfaces between note trees.
 // Activates independently of the first trap when lifeScore > 6 (>= 7 points).
 //
 const TRAP2_THRESHOLD = 7
-const TRAP2_FLAG = 'touch.level1Trap2Added'
-const TRAP2_VISITED_FLAG = 'touch.level1Trap2Visited'
+const TRAP2_FLAG = 'touch.lesson1Trap2Added'
+const TRAP2_VISITED_FLAG = 'touch.lesson1Trap2Visited'
 const TRAP2_WORM_REPOSITION_DELAY = 1.5
 //
 // Decorative parallax trees must not overlap the seven melody note trees
@@ -383,12 +379,12 @@ const NOTE_TREE_EXCLUSION_RADIUS = 70
  * Basic platform layout with simple obstacles
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel1(k) {
-  k.scene("level-touch.1", async () => {
+export function sceneLesson1(k) {
+  k.scene("lesson-touch.1", async () => {
     //
     // Save progress
     //
-    set('lastLevel', 'level-touch.1')
+    set('lastLesson', 'lesson-touch.1')
     //
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
@@ -1108,7 +1104,7 @@ export function sceneLevel1(k) {
     })
     LevelHelp.create({
       k,
-      levelName: 'level-touch.1',
+      levelName: 'lesson-touch.1',
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       helpY: CFG.visual.screen.height - 55,
@@ -1545,10 +1541,10 @@ export function sceneLevel1(k) {
         speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
         const transitionDelay = speedBonusEarned ? 2.8 : 1.8
         k.wait(transitionDelay, () => {
-        createLevelTransition(k, 'level-touch.1')
+        createLevelTransition(k, 'lesson-touch.1')
         })
       },
-      currentLevel: 'level-touch.1',
+      currentLevel: 'lesson-touch.1',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
@@ -1627,7 +1623,7 @@ export function sceneLevel1(k) {
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
-      storageKey: 'touch.level1BonusCollected',
+      storageKey: 'touch.lesson1BonusCollected',
       //
       // Collider pushed firmly right + a hair lower so it lands directly
       // under the painted log. Previous `(10, 8)` pair still sat several
@@ -1769,11 +1765,7 @@ export function sceneLevel1(k) {
     //
     const fpsCounter = FpsCounter.create({
       k,
-      showTimer: true,
-      showElapsedTimer: false,
-      targetTime: CFG.gameplay.speedBonusTime
-        ? CFG.gameplay.speedBonusTime['level-touch.1']
-        : null
+      showTimer: true
     })
     //
     // Pre-allocated colors and positions for notes bubble — prevents k.rgb/k.vec2
@@ -1932,21 +1924,6 @@ export function sceneLevel1(k) {
       }]
     })
     //
-    // Tooltip: green timer (appears below, positioned at FPS counter row)
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: k.width() / 2 + 140,
-        y: FPS_COUNTER_TOP_Y,
-        width: GREEN_TIMER_TOOLTIP_WIDTH,
-        height: GREEN_TIMER_TOOLTIP_HEIGHT,
-        text: GREEN_TIMER_TOOLTIP_TEXT,
-        offsetY: GREEN_TIMER_TOOLTIP_Y_OFFSET,
-        forceBelow: true
-      }]
-    })
-    //
     // Tooltip: small hero icon (score) - appears below
     //
     Tooltip.create({
@@ -2054,7 +2031,7 @@ export function sceneLevel1(k) {
     //
     const trap2RepositionRuntime = trap2WormInst ? createTrap2WormReposition(k, trap2WormInst, heroInst) : null
     k.onUpdate(() => {
-      onUpdateLevel1GameLoop(k, {
+      onUpdateLesson1GameLoop(k, {
         heroInst,
         defaultHeroX: HERO_SPAWN_X,
         playLeft,
@@ -2140,7 +2117,7 @@ export function sceneLevel1(k) {
  */
 function checkSpeedBonus(levelTime) {
   const targetTime = CFG.gameplay.speedBonusTime
-    && CFG.gameplay.speedBonusTime['level-touch.1']
+    && CFG.gameplay.speedBonusTime['lesson-touch.1']
   if (!targetTime) return false
   return levelTime < targetTime
 }
@@ -2266,7 +2243,7 @@ function onPoisonLeafDeath(k, heroInst, levelIndicator) {
       flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnDeath(k, levelIndicator)
     }
-    k.wait(POISON_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.1'))
+    k.wait(POISON_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.1'))
   })
 }
 //

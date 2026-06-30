@@ -8,7 +8,7 @@ import { getActiveZoneIndex, isZoneAwake } from './scene-perf.js'
  * @param {Object} k - Kaplay instance
  * @param {Object} ctx - Scene runtime context
  */
-export function onUpdateLevel1GameLoop(k, ctx) {
+export function onUpdateLesson1GameLoop(k, ctx) {
   const heroX = ctx.heroInst?.character?.pos?.x ?? ctx.defaultHeroX
   const activeZone = getActiveZoneIndex(heroX, ctx.playLeft, ctx.playRight, ctx.zoneCount)
   FpsCounter.onUpdate(ctx.fpsCounter)

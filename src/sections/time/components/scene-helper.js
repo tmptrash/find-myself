@@ -2,11 +2,11 @@ import { CFG } from '../cfg.js'
 import { getColor } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
-import * as LevelIndicator from '../components/level-indicator.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
 import { get, set } from '../../../utils/progress.js'
 import * as DayNight from '../utils/time-day-night.js'
-import { goToMenuAfterAssets } from '../../../utils/level-assets.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as TimeDigits from './time-digits.js'
@@ -152,7 +152,7 @@ function addBackground(k, color) {
  * Initialize time section scene with heroes and common setup
  * @param {Object} config - Scene configuration
  * @param {Object} config.k - Kaplay instance
- * @param {string} config.levelName - Level name (e.g., 'level-time.0')
+ * @param {string} config.levelName - Level name (e.g., 'lesson-time.0')
  * @param {number} [config.levelNumber] - Level number for indicator (1-4 for T, 1, M, E)
  * @param {string} [config.nextLevel] - Next level name
  * @param {boolean} [config.skipPlatforms=false] - Skip platform creation
@@ -622,7 +622,7 @@ function drawSunRays(k, state) {
 /**
  * Check if player earned speed bonus and display message
  * @param {Object} k - Kaplay instance
- * @param {string} levelName - Current level name (e.g. 'level-time.0')
+ * @param {string} levelName - Current level name (e.g. 'lesson-time.0')
  * @param {number} levelTime - Time taken to complete level (seconds)
  * @param {Object} levelIndicator - Level indicator instance
  * @returns {boolean} True if speed bonus earned

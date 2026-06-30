@@ -2,29 +2,29 @@ import kaplay from "kaplay"
 import { CFG } from "./cfg.js"
 import { sceneReady } from "./scenes/ready.js"
 import { sceneMenu } from "./scenes/menu.js"
-import { sceneLevel0 } from "./sections/word/scenes/level0.js"
-import { sceneLevel1 } from "./sections/word/scenes/level1.js"
-import { sceneLevel2 } from "./sections/word/scenes/level2.js"
-import { sceneLevel3 } from "./sections/word/scenes/level3.js"
-import { sceneLevel4 } from "./sections/word/scenes/level4.js"
+import { sceneLesson0 } from "./sections/word/scenes/lesson0.js"
+import { sceneLesson1 } from "./sections/word/scenes/lesson1.js"
+import { sceneLesson2 } from "./sections/word/scenes/lesson2.js"
+import { sceneLesson3 } from "./sections/word/scenes/lesson3.js"
+import { sceneLesson4 } from "./sections/word/scenes/lesson4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
 import { sceneTouchTraining } from "./sections/touch/scenes/training.js"
-import { sceneLevel0 as sceneTouchLevel0 } from "./sections/touch/scenes/level0.js"
-import { sceneLevel1 as sceneTouchLevel1 } from "./sections/touch/scenes/level1.js"
-import { sceneLevel2 as sceneTouchLevel2 } from "./sections/touch/scenes/level2.js"
-import { sceneLevel3 as sceneTouchLevel3 } from "./sections/touch/scenes/level3.js"
+import { sceneLesson0 as sceneTouchLevel0 } from "./sections/touch/scenes/lesson0.js"
+import { sceneLesson1 as sceneTouchLevel1 } from "./sections/touch/scenes/lesson1.js"
+import { sceneLesson2 as sceneTouchLevel2 } from "./sections/touch/scenes/lesson2.js"
+import { sceneLesson3 as sceneTouchLevel3 } from "./sections/touch/scenes/lesson3.js"
 import { sceneTouchComplete } from "./sections/touch/scenes/touch-complete.js"
-import { sceneLevel0 as sceneTimeLevel0 } from "./sections/time/scenes/level0.js"
-import { sceneLevel1 as sceneTimeLevel1 } from "./sections/time/scenes/level1.js"
-import { sceneLevel2 as sceneTimeLevel2 } from "./sections/time/scenes/level2.js"
-import { sceneLevel3 as sceneTimeLevel3 } from "./sections/time/scenes/level3.js"
+import { sceneLesson0 as sceneTimeLevel0 } from "./sections/time/scenes/lesson0.js"
+import { sceneLesson1 as sceneTimeLevel1 } from "./sections/time/scenes/lesson1.js"
+import { sceneLesson2 as sceneTimeLevel2 } from "./sections/time/scenes/lesson2.js"
+import { sceneLesson3 as sceneTimeLevel3 } from "./sections/time/scenes/lesson3.js"
 import { sceneTimeComplete } from "./sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "./components/hero.js"
 import * as Cursor from "./utils/cursor.js"
 import * as TouchInput from "./utils/touch-input.js"
 import * as Fullscreen from "./utils/fullscreen.js"
 import * as BootLoader from "./utils/boot-loader.js"
-import { prepareSceneAssetsThenEnterScene } from "./utils/level-assets.js"
+import { prepareSceneAssetsThenEnterScene } from "./utils/lesson-assets.js"
 import { generateMenuBackgroundCanvas } from "./utils/menu-bg-generator.js"
 //
 // Kaplay init: how many times to retry on transient WebGL failure
@@ -256,11 +256,11 @@ function buildSetupTasks(k) {
     () => loadHeroSprites(k, HEROES.ANTIHERO),
     () => sceneReady(k),
     () => sceneMenu(k),
-    () => sceneLevel0(k),
-    () => sceneLevel1(k),
-    () => sceneLevel2(k),
-    () => sceneLevel3(k),
-    () => sceneLevel4(k),
+    () => sceneLesson0(k),
+    () => sceneLesson1(k),
+    () => sceneLesson2(k),
+    () => sceneLesson3(k),
+    () => sceneLesson4(k),
     () => sceneWordComplete(k),
     () => sceneTouchTraining(k),
     () => sceneTouchLevel0(k),

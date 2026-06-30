@@ -3,11 +3,11 @@ import * as Hero from '../../../components/hero.js'
 import { set, get } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import * as LevelIndicator from '../components/level-indicator.js'
-import * as LevelHelp from '../../../utils/level-help.js'
+import * as LevelIndicator from '../components/lesson-indicator.js'
+import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
-import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/level-assets.js'
+import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/lesson-assets.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as GlowBug from '../components/glow-bug.js'
 import * as ShadowCreature from '../components/shadow-creature.js'
@@ -429,7 +429,7 @@ const HERO_GLOW_COLOR_B = 100
 // Hero glow hint text
 //
 const HERO_GLOW_HINT_TEXT = "Press Shift to light up (costs 1 point)"
-const HERO_GLOW_HINT_STORAGE_KEY = 'touch.level3GlowInstructionsCount'
+const HERO_GLOW_HINT_STORAGE_KEY = 'touch.lesson3GlowInstructionsCount'
 const HERO_GLOW_HINT_MAX_SHOWS = 2
 //
 // Icicles hanging under stationary log platforms (white, longer)
@@ -590,10 +590,10 @@ const L3_BREATH_MAX_MULTIPLIER = 2.4
 // Life deduction (level-specific flags and threshold, max 1 deduction)
 //
 const LIFE_DEDUCT_THRESHOLD = 5
-const LIFE_DEDUCT_FLAG = 'touch.level3TrapCount'
-const LIFE_DEDUCT_VISITED_FLAG = 'touch.level3Visited'
+const LIFE_DEDUCT_FLAG = 'touch.lesson3TrapCount'
+const LIFE_DEDUCT_VISITED_FLAG = 'touch.lesson3Visited'
 const LIFE_DEDUCT_MAX_COUNT = 1
-const LIFE_DEDUCT_SCATTER_FLAG = 'touch.level3ScatterActive'
+const LIFE_DEDUCT_SCATTER_FLAG = 'touch.lesson3ScatterActive'
 //
 // Extra platforms in the bottom-right corner (added per r8).
 // Platform A is visible — lets the hero step up to P1 right half.
@@ -616,18 +616,18 @@ const EXTRA_PLATFORM_B_Y = 670
 const EXTRA_PLATFORM_B_WIDTH = 150
 const EXTRA_PLATFORM_B_COLLISION_WIDTH = EXTRA_PLATFORM_B_WIDTH + 12
 const EXTRA_PLATFORM_B_COLLISION_X_OFFSET = EXTRA_PLATFORM_B_COLLISION_WIDTH / 2
-const EXTRA_PLATFORM_B_STORAGE_KEY = 'touch.level3BonusCollected'
+const EXTRA_PLATFORM_B_STORAGE_KEY = 'touch.lesson3BonusCollected'
 const EXTRA_PLATFORM_B_HERO_COLOR = '#8B5A50'
 /**
  * Level 3 scene for touch section - dark jungle corridor with glowing bugs and shadow creature
  * @param {Object} k - Kaplay instance
  */
-export function sceneLevel3(k) {
-  k.scene("level-touch.3", () => {
+export function sceneLesson3(k) {
+  k.scene("lesson-touch.3", () => {
     //
     // Save progress
     //
-    set('lastLevel', 'level-touch.3')
+    set('lastLesson', 'lesson-touch.3')
     //
     // Save heroScore at level start for restoration on death
     //
@@ -784,7 +784,7 @@ export function sceneLevel3(k) {
     levelIndicator.updateTrapCount(displayTrapCount)
     LevelHelp.create({
       k,
-      levelName: 'level-touch.3',
+      levelName: 'lesson-touch.3',
       sideWallWidth: LEFT_MARGIN,
       floorY: FLOOR_Y,
       levelIndicator,
@@ -837,9 +837,9 @@ export function sceneLevel3(k) {
         // Stop creature and transition after completing touch section
         //
         creatureInst.stopped = true
-        createLevelTransition(k, 'level-touch.3')
+        createLevelTransition(k, 'lesson-touch.3')
       },
-      currentLevel: 'level-touch.3',
+      currentLevel: 'lesson-touch.3',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
       bodyColor: heroBodyColor
@@ -1319,7 +1319,7 @@ export function sceneLevel3(k) {
     //
     // Create FPS counter
     //
-    const fpsCounter = FpsCounter.create({ k, showTimer: true, showElapsedTimer: false })
+    const fpsCounter = FpsCounter.create({ k })
     //
     // Tooltip: TOUCH indicator letters (top-left corner)
     //
@@ -2052,7 +2052,7 @@ function onHeroDeath(k, heroInst, levelIndicator, heroScoreAtStart) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'level-touch.3'))
+    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.3'))
   })
 }
 

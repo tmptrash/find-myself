@@ -111,14 +111,14 @@ const CH_PLATFORM_W = Math.round(LOG_PLATFORM_W * 0.85)
 //
 // Touch counter (x/7) position relative to hero head
 //
-const TOUCH_COUNTER_X_OFFSET = 38
-const TOUCH_COUNTER_Y_OFFSET = -65
+const TOUCH_COUNTER_X_OFFSET = 18
+const TOUCH_COUNTER_Y_OFFSET = -95
 const TOUCH_COUNTER_FONT = 20
 //
 // Melody note counter (x/5) shown near hero during melody phase
 //
-const MELODY_COUNTER_X_OFFSET = 38
-const MELODY_COUNTER_Y_OFFSET = -65
+const MELODY_COUNTER_X_OFFSET = 18
+const MELODY_COUNTER_Y_OFFSET = -95
 const MELODY_COUNTER_FONT = 20
 const MELODY_COUNTER_TOTAL = 5
 //
@@ -157,10 +157,14 @@ const BONUS_PLATFORM_Y = FLOOR_Y - 220
 // End music state constants
 //
 const FLOOR_STRIPE_H = 3
+//
+// Raise the stripe so its bottom edge clears the platform's rounded corner arc
+//
+const FLOOR_STRIPE_Y_OFFSET = 3
 const END_MUSIC_NAME = 'touch1-end'
 const END_MUSIC_TEXT = 'Press Enter to end the lesson'
 const END_MUSIC_TEXT_FONT = 26
-const END_MUSIC_TEXT_Y = TOP_MARGIN + 38
+const END_MUSIC_TEXT_Y = TOP_MARGIN + 62
 //
 // Duration of fade-to-black overlay before the level transition fires
 //
@@ -187,7 +191,7 @@ const TOUCH_LETTER_PULSE_MIN = 0.35
 //
 // Firefly configuration: small glowing dots that drift between tree layers
 //
-const FIREFLY_COUNT = 18
+const FIREFLY_COUNT = 12
 const FIREFLY_MIN_SPEED = 8
 const FIREFLY_MAX_SPEED = 25
 const FIREFLY_DRIFT_RANGE = 40
@@ -385,7 +389,7 @@ const POISON_LEAF_COLOR_HEX = '#3E708A'
 const POISON_DEATH_RELOAD_DELAY = 0.8
 const WORM_BASE_Y = FLOOR_Y + 30
 const WORM_DRAW_Z = 17
-const WORM_SEGMENT_COUNT = 7
+const WORM_SEGMENT_COUNT = 5
 const WORM_SEGMENT_RADIUS = 2.5
 const WORM_REST_SPACING = 4.0
 const WORM_WAVE_SPEED = 0.3
@@ -410,7 +414,7 @@ const WORM_SEGMENT_RING_OPACITY = 0.42
 const WORM_EYE_RADIUS = 1.4
 const WORM_PUPIL_RADIUS = 0.7
 const WORM_EYE_SPACING = 2.0
-const WORM_COUNT = 2
+const WORM_COUNT = 1
 const WORM_Y_ZONE_HEIGHT = 15
 const WORM_HOVER_WIDTH = 50
 const WORM_HOVER_HEIGHT = 30
@@ -1318,7 +1322,7 @@ export function sceneLesson1(k) {
           const stripeX = LEFT_MARGIN + CORNER_RADIUS
           const stripeW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN - 2 * CORNER_RADIUS
           k.drawRect({
-            pos: k.vec2(stripeX, FLOOR_Y),
+            pos: k.vec2(stripeX, FLOOR_Y - FLOOR_STRIPE_Y_OFFSET),
             width: stripeW,
             height: FLOOR_STRIPE_H,
             color: k.rgb(0, 0, 0),
@@ -1719,21 +1723,6 @@ export function sceneLesson1(k) {
             k.drawText({ text: msg, pos: k.vec2(cx + dx, cy + dy), size: END_MUSIC_TEXT_FONT, font: CFG.visual.fonts.regularFull, color: k.rgb(0, 0, 0), anchor: 'center', opacity: 0.85 })
           })
           k.drawText({ text: msg, pos: k.vec2(cx, cy), size: END_MUSIC_TEXT_FONT, font: CFG.visual.fonts.regularFull, color: k.rgb(220, 200, 160), anchor: 'center', opacity: 1 })
-        }
-      }
-    ])
-    //
-    // REMOVED: old notes speech bubble (was tied to anti-hero)
-    // Placeholder draw (never shows anything)
-    //
-    k.add([
-      k.z(CFG.visual.zIndex.ui),
-      {
-        draw() {
-          //
-          // Show bubble only while the demo melody plays or briefly after it.
-          //
-          // nothing to draw (removed)
         }
       }
     ])
@@ -2583,24 +2572,11 @@ function onDrawWorm(k, inst) {
     const isHead = i === 0
     drawVecs.segP1.x = seg.x
     drawVecs.segP1.y = seg.y
+    //
+    // Outline + fill — ventral highlight and segment rings removed for performance
+    //
     k.drawCircle({ pos: drawVecs.segP1, radius: r + 0.8, color: drawColors.outline, opacity: 0.9 })
     k.drawCircle({ pos: drawVecs.segP1, radius: r, color: isHead ? drawColors.head : drawColors.body, opacity: 1 })
-    //
-    // Ventral highlight on body segments
-    //
-    if (!isHead && r > 1.5) {
-      drawVecs.segP2.x = seg.x
-      drawVecs.segP2.y = seg.y - r * 0.35
-      k.drawCircle({ pos: drawVecs.segP2, radius: r * 0.45, color: drawColors.ventral, opacity: 0.3 })
-    }
-    //
-    // Segment rings (subtle division lines)
-    //
-    if (!isHead && i % 2 === 0) {
-      drawVecs.ring.x = seg.x
-      drawVecs.ring.y = seg.y
-      k.drawCircle({ pos: drawVecs.ring, radius: r, color: drawColors.ring, opacity: WORM_SEGMENT_RING_OPACITY, fill: false, width: 0.6 })
-    }
   }
   //
   // Eyes on the head segment
@@ -2773,16 +2749,7 @@ function drawFireflyLayer(k, fireflies) {
     f.pos.x = f.x
     f.pos.y = f.y
     //
-    // Soft glow halo
-    //
-    k.drawCircle({
-      pos: f.pos,
-      radius: f.radius * 3,
-      color: f.color,
-      opacity: alpha * 0.15
-    })
-    //
-    // Bright core
+    // Single bright core — glow halo removed for performance
     //
     k.drawCircle({
       pos: f.pos,
@@ -3417,6 +3384,10 @@ function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
   //
   BonusHero.finalizeCollection(gameState._bonusHeroRef)
   //
+  // Hero closes eyes when idle during the celebration (calm, peaceful look)
+  //
+  gameState._heroRef && Hero.setEyesClosed(gameState._heroRef, true)
+  //
   // Flash CH in TOUCH HUD (letters 4 and 5)
   //
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 5)
@@ -3739,12 +3710,22 @@ function destroyTreeCounter(k, gameState) {
 //
 //
 // Fades the scene to black over `duration` seconds, then calls onComplete.
-// Used before createLevelTransition so the music/disco don't cut abruptly.
+// Syncs Kaplay clear color + CSS letterbox bars so top/bottom strips
+// also fade — they are not covered by the overlay rect but respond to
+// k.setBackground + CanvasBackdrop.setCssBackdrop changes.
 //
 function fadeOutLesson1(k, duration, onComplete) {
+  const [sr, sg, sb] = parseHex(L1_SCENE_BG_HEX)
   let elapsed = 0
+  //
+  // Oversized rect covers the canvas + any letterbox area the overlay rect
+  // itself might miss (e.g. sub-pixel overflows). Safe because k.fixed()
+  // anchors it to screen space regardless of camera position.
+  //
+  const OVERSCAN = 60
   const overlay = k.add([
-    k.rect(CFG.visual.screen.width, CFG.visual.screen.height),
+    k.pos(-OVERSCAN, -OVERSCAN),
+    k.rect(CFG.visual.screen.width + OVERSCAN * 2, CFG.visual.screen.height + OVERSCAN * 2),
     k.color(0, 0, 0),
     k.opacity(0),
     k.z(CFG.visual.zIndex.ui + 200),
@@ -3752,7 +3733,16 @@ function fadeOutLesson1(k, duration, onComplete) {
   ])
   const cancel = k.onUpdate(() => {
     elapsed += k.dt()
-    overlay.opacity = Math.min(1, elapsed / duration)
+    const progress = Math.min(1, elapsed / duration)
+    overlay.opacity = progress
+    //
+    // Lerp scene background colour toward black so letterbox bars match
+    //
+    const r = Math.round(sr * (1 - progress))
+    const g = Math.round(sg * (1 - progress))
+    const b = Math.round(sb * (1 - progress))
+    k.setBackground(k.rgb(r, g, b))
+    CanvasBackdrop.setCssBackdrop(k.canvas, r, g, b)
     if (elapsed >= duration) {
       cancel.cancel()
       onComplete?.()

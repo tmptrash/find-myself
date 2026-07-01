@@ -543,8 +543,8 @@ const L0_FIREFLY_DRAW_MARGIN = 120
 // X/Y counter offsets relative to hero position
 //
 const TOUCH_FIREFLY_COUNTER_FONT = 22
-const TOUCH_FIREFLY_COUNTER_X_OFFSET = 28
-const TOUCH_FIREFLY_COUNTER_Y_OFFSET = -58
+const TOUCH_FIREFLY_COUNTER_X_OFFSET = 14
+const TOUCH_FIREFLY_COUNTER_Y_OFFSET = -80
 //
 // Log platform dimensions for U letter (same height as bonus-hero log)
 //

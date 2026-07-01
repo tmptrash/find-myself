@@ -7,9 +7,9 @@ import * as Hero from '../../../components/hero.js'
 //
 const SMALL_HERO_SIZE = 78
 const LIFE_IMAGE_HEIGHT = 86
-const SPACING_BETWEEN = 110
+const SPACING_BETWEEN = 70
 const LIFE_IMAGE_ORIGINAL_HEIGHT = 1197
-const UI_RIGHT_MARGIN = 120
+const UI_RIGHT_MARGIN = 160
 const TOP_OFFSET = 40
 const SMALL_HERO_Y_ADJUST = 10
 const LIFE_SCALE_FACTOR = 1.3

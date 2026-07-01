@@ -24,6 +24,7 @@ import { addTouchSectionFloorRocks, addSingleFloorRockAt } from '../utils/floor-
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
+import * as LogPlatform from '../components/log-platform.js'
 import { onUpdateLesson1GameLoop } from '../utils/lesson1-runtime.js'
 import { getActiveZoneIndex, isZoneAwake } from '../utils/scene-perf.js'
 //
@@ -60,26 +61,129 @@ const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN - 200
 const HERO_SPAWN_X = LEFT_MARGIN + 100
 const HERO_SPAWN_Y = FLOOR_Y - 50
 //
-// Anti-hero spawn position
+// T letter (right side, on the ground — replaces anti-hero)
 //
-const ANTIHERO_SPAWN_X = CFG.visual.screen.width - RIGHT_MARGIN - 100
-const ANTIHERO_SPAWN_Y = FLOOR_Y - 50
+const T_LETTER_X = CFG.visual.screen.width - RIGHT_MARGIN - 310
 //
-// Notes bubble stays visible for this long after the demo melody finishes.
+// 'bot' anchor: Y is the bottom edge of the letter — 28px below floor so
+// the letter appears stuck in the ground, matching lesson0 T style.
 //
-const NOTES_BUBBLE_HIDE_DELAY = 10.0
+const T_LETTER_Y = FLOOR_Y + 28
+const T_LETTER_FONT_SIZE = 68
+const T_LETTER_ANGLE = 10
 //
-// Speed bonus effects (flash small hero + particles on quick completion)
+// Teal fill — matches lesson0 TOUCH letter palette (90 136 152)
 //
-const SPEED_BONUS_FLASH_COUNT = 20
-const SPEED_BONUS_FLASH_INTERVAL = 0.05
-const SPEED_BONUS_PARTICLE_COUNT = 8
-const SPEED_BONUS_PARTICLE_SPEED_MIN = 30
-const SPEED_BONUS_PARTICLE_SPEED_RANGE = 20
-const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
-const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
-const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
-const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
+const T_LETTER_FILL_R = 90
+const T_LETTER_FILL_G = 136
+const T_LETTER_FILL_B = 152
+const T_LETTER_OUTLINE = 2
+const T_LETTER_Z = 27
+const T_LETTER_MASK_Z = 28
+//
+// Collection radius: circular check like lesson0 (radius px)
+//
+const T_LETTER_COLLECT_RADIUS = 58
+//
+// Log platforms for collectible letters
+//
+const LOG_PLATFORM_W = 120
+const LOG_PLATFORM_H = 28
+//
+// O letter platform (left side — appears after 7 tree touches phase 1).
+// Low enough that hero can jump onto it from the ground.
+//
+const O_PLATFORM_X = LEFT_MARGIN + 280
+const O_PLATFORM_Y = FLOOR_Y - 101
+//
+// U letter platform (right side, before giant worm).
+// Width reduced 40% vs standard log; shifted one full standard width further left.
+//
+const U_PLATFORM_W = Math.round(LOG_PLATFORM_W * 0.6)
+const U_PLATFORM_X = CFG.visual.screen.width - RIGHT_MARGIN - 280 - LOG_PLATFORM_W + Math.round(U_PLATFORM_W / 2)
+const U_PLATFORM_Y = FLOOR_Y - 171
+//
+// CH letter platform (left side — appears after melody solved)
+//
+const CH_PLATFORM_X = LEFT_MARGIN + 160
+const CH_PLATFORM_Y = FLOOR_Y - 102
+const CH_PLATFORM_W = Math.round(LOG_PLATFORM_W * 0.85)
+//
+// Touch counter (x/7) position relative to hero head
+//
+const TOUCH_COUNTER_X_OFFSET = 38
+const TOUCH_COUNTER_Y_OFFSET = -65
+const TOUCH_COUNTER_FONT = 20
+//
+// Melody note counter (x/5) shown near hero during melody phase
+//
+const MELODY_COUNTER_X_OFFSET = 38
+const MELODY_COUNTER_Y_OFFSET = -65
+const MELODY_COUNTER_FONT = 20
+const MELODY_COUNTER_TOTAL = 5
+//
+// Mushroom trampoline (right corner — helps reach bonus hero platform)
+//
+const MUSHROOM_TRAMP_X = CFG.visual.screen.width - RIGHT_MARGIN - 20
+const MUSHROOM_TRAMP_Y = FLOOR_Y
+const MUSHROOM_TRAMP_RADIUS = 30
+const MUSHROOM_TRAMP_FORCE = 1350
+const MUSHROOM_TRAMP_COOLDOWN = 0.4
+//
+// Trampoline mushroom visual dimensions — same scale as large decorative mushrooms
+//
+const MUSHROOM_TRAMP_CAP_W = 28
+const MUSHROOM_TRAMP_CAP_H = 13
+const MUSHROOM_TRAMP_STEM_H = 17
+const MUSHROOM_TRAMP_STEM_W = 8
+const MUSHROOM_TRAMP_TOTAL_W = Math.ceil(MUSHROOM_TRAMP_CAP_W + 4)
+const MUSHROOM_TRAMP_TOTAL_H = Math.ceil(MUSHROOM_TRAMP_CAP_H + MUSHROOM_TRAMP_STEM_H + 4)
+//
+// Squash amount on bounce (0=normal, 1=full squash)
+//
+const MUSHROOM_SQUASH_MAX = 0.35
+const MUSHROOM_TRAMP_SPRITE = 'mushroom-trampoline'
+//
+// Warm orange-red cap — same dominant color as trampoline mushrooms in lesson3
+//
+const MUSHROOM_TRAMP_COLOR = [220, 90, 40]
+//
+// Bonus hero platform position (reachable via mushroom trampoline).
+// Placed high-right but not too high — the mushroom force reaches it cleanly.
+//
+const BONUS_PLATFORM_X = CFG.visual.screen.width - RIGHT_MARGIN - 240
+const BONUS_PLATFORM_Y = FLOOR_Y - 220
+//
+// End music state constants
+//
+const FLOOR_STRIPE_H = 3
+const END_MUSIC_NAME = 'touch1-end'
+const END_MUSIC_TEXT = 'Press Enter to end the lesson'
+const END_MUSIC_TEXT_FONT = 26
+const END_MUSIC_TEXT_Y = TOP_MARGIN + 38
+//
+// Duration of fade-to-black overlay before the level transition fires
+//
+const SCENE_FADE_OUT_DURATION = 1.5
+//
+// Dialogs for each letter
+//
+const L1_DIALOG_T = "Every conversation begins with\na [hl]T[/hl]ouch. Speak with Trees..."
+const L1_DIALOG_O = "[hl]O[/hl]bserve. Every voice is\ndifferent."
+const L1_DIALOG_U = "[hl]U[/hl]nderstand. Patterns create\nmeaning. Maybe birds may help\nyou?"
+const L1_DIALOG_CH = "Every [hl]C[/hl]onnection carries\n[hl]H[/hl]armony within it."
+//
+// Goal texts matching dialogs (shown when goal button pressed)
+//
+const L1_GOAL_T = "Every conversation begins\nwith a Touch. Speak with\nTrees — touch all of them."
+const L1_GOAL_O = "Observe. Every voice is\ndifferent. Touch all 7\ntrees again."
+const L1_GOAL_U = "Understand. Patterns create\nmeaning. Hover the bird to\nhear the sequence."
+const L1_GOAL_CH = "Connection and Harmony.\nYou found yourself."
+//
+// Letter blink animation: matches lesson0 TOUCH letter pulse behaviour
+//
+const TOUCH_LETTER_PULSE_SPEED = 1.8
+const TOUCH_LETTER_PULSE_MIN = 0.35
 //
 // Firefly configuration: small glowing dots that drift between tree layers
 //
@@ -145,7 +249,8 @@ const L1_CROW_ROCK_DRAW_Z = 9
 // Crow sits on the bare ground just to the right of the hero spawn (no rock, no grass zone).
 //
 const L1_CROW_X = LEFT_MARGIN + 160
-const L1_CROW_TOOLTIP_TEXT = 'Not much of a Mozart'
+const L1_CROW_LOSER_TEXT = "You're a loser!"
+const L1_CROW_DISCO_TEXT = 'Yuhuuu, discooo!!!'
 const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
 const L1_CROW_TOOLTIP_OFFSET_Y = -52
@@ -226,7 +331,7 @@ const FPS_COUNTER_TOP_Y = 55
 const SMALL_HERO_TOOLTIP_TEXT = "Your fragments"
 const SMALL_HERO_TOOLTIP_SIZE = 60
 const SMALL_HERO_TOOLTIP_Y_OFFSET = 50
-const LIFE_TOOLTIP_TEXT = "Life score"
+const LIFE_TOOLTIP_TEXT = "Your experience"
 const LIFE_TOOLTIP_SIZE = 60
 const LIFE_TOOLTIP_Y_OFFSET = 50
 //
@@ -278,45 +383,43 @@ const POISON_LEAF_CHANCE = 0.4
 //
 const POISON_LEAF_COLOR_HEX = '#3E708A'
 const POISON_DEATH_RELOAD_DELAY = 0.8
-// WORM_DISABLED_START — small worm (peristaltic crawlers)
-// const WORM_BASE_Y = FLOOR_Y + 30
-// const WORM_DRAW_Z = 17
-// const WORM_SEGMENT_COUNT = 12
-// const WORM_SEGMENT_RADIUS = 2.5
-// const WORM_REST_SPACING = 4.0
-// const WORM_WAVE_SPEED = 0.3
-// const WORM_HEAD_SPEED = 3.5
-// const WORM_FOLLOW_SPEED = 6
-// const WORM_STEER_SPEED = 0.4
-// const WORM_STEER_AMPLITUDE = 0.15
-// const WORM_DIRECTION_CHANGE_MIN = 10
-// const WORM_DIRECTION_CHANGE_RANGE = 20
-// const WORM_WAVE_DELAY = 0.4
-// const WORM_CONTRACT_MIN = 0.7
-// const WORM_CONTRACT_MAX = 1.0
-// const WORM_MAX_STRETCH = 1.2
-// const WORM_BULGE_AMOUNT = 0.85
-// const WORM_TRAIL_FADE_SPEED = 0.0035
-// const WORM_TRAIL_MAX_POINTS = 80
-// const WORM_TRAIL_COLOR = '#060806'
-// const WORM_BODY_COLOR = '#6E4538'
-// const WORM_HEAD_COLOR = '#8B5E48'
-// const WORM_VENTRAL_HIGHLIGHT = '#A07868'
-// const WORM_SEGMENT_RING_OPACITY = 0.42
-// const WORM_EYE_RADIUS = 1.4
-// const WORM_PUPIL_RADIUS = 0.7
-// const WORM_EYE_SPACING = 2.0
-// const WORM_COUNT = 3
-// const WORM_Y_ZONE_HEIGHT = 15
-// const WORM_HOVER_WIDTH = 50
-// const WORM_HOVER_HEIGHT = 30
-// const WORM_TOOLTIP_OFFSET_Y = -28
-// const SMALL_WORM_PHRASES = [
-//   "You should see\nmy dad",
-//   "I'm just a\nbaby noodle",
-//   "Do worms have\nfeelings? Yes."
-// ]
-// WORM_DISABLED_END
+const WORM_BASE_Y = FLOOR_Y + 30
+const WORM_DRAW_Z = 17
+const WORM_SEGMENT_COUNT = 7
+const WORM_SEGMENT_RADIUS = 2.5
+const WORM_REST_SPACING = 4.0
+const WORM_WAVE_SPEED = 0.3
+const WORM_HEAD_SPEED = 3.5
+const WORM_FOLLOW_SPEED = 6
+const WORM_STEER_SPEED = 0.4
+const WORM_STEER_AMPLITUDE = 0.15
+const WORM_DIRECTION_CHANGE_MIN = 10
+const WORM_DIRECTION_CHANGE_RANGE = 20
+const WORM_WAVE_DELAY = 0.4
+const WORM_CONTRACT_MIN = 0.7
+const WORM_CONTRACT_MAX = 1.0
+const WORM_MAX_STRETCH = 1.2
+const WORM_BULGE_AMOUNT = 0.85
+const WORM_TRAIL_FADE_SPEED = 0.0035
+const WORM_TRAIL_MAX_POINTS = 30
+const WORM_TRAIL_COLOR = '#060806'
+const WORM_BODY_COLOR = '#6E4538'
+const WORM_HEAD_COLOR = '#8B5E48'
+const WORM_VENTRAL_HIGHLIGHT = '#A07868'
+const WORM_SEGMENT_RING_OPACITY = 0.42
+const WORM_EYE_RADIUS = 1.4
+const WORM_PUPIL_RADIUS = 0.7
+const WORM_EYE_SPACING = 2.0
+const WORM_COUNT = 2
+const WORM_Y_ZONE_HEIGHT = 15
+const WORM_HOVER_WIDTH = 50
+const WORM_HOVER_HEIGHT = 30
+const WORM_TOOLTIP_OFFSET_Y = -28
+const SMALL_WORM_PHRASES = [
+  "You should see\nmy dad",
+  "I'm just a\nbaby noodle",
+  "Do worms have\nfeelings? Yes."
+]
 //
 // Life icon flash/particle effects on death
 //
@@ -337,22 +440,9 @@ const FIRST_TREE_TOOLTIP_HOVER_WIDTH = 40
 const FIRST_TREE_TOOLTIP_EXTRA_HEIGHT = 20
 const FIRST_TREE_TOOLTIP_Y_OFFSET = -60
 //
-// Anti-hero tooltip (shown while gray/inactive)
+// Crow hint — note sequence shown on hover after U collected
 //
-const ANTIHERO_TOOLTIP_TEXT = "Wait... do I know you?\nYou look familiar"
-const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
-const ANTIHERO_TOOLTIP_Y_OFFSET = -70
-//
-// Antihero timed hints (shown if player hasn't solved the melody puzzle)
-//
-const ANTIHERO_HINT_WAIT_DELAY = 30
-const ANTIHERO_HINT_WAIT_TEXT = "I'm waiting for\nyou here"
-const ANTIHERO_HINT_NOTES_DELAY = 60
-const ANTIHERO_HINT_NOTES_TEXT = "Do, Re, Mi, Fa, Sol...\nplay the trees"
-const ANTIHERO_HINT_DISPLAY_TIME = 5
-const ANTIHERO_HINT_NOTES_DISPLAY_TIME = 10
-const ANTIHERO_HINT_NOTES_REPEAT_INTERVAL = 30
-const ANTIHERO_HINT_Y_OFFSET = -140
+const L1_CROW_SEQUENCE_HINT = "Do, Re, Mi, Re, Mi\nplay the trees"
 const GIANT_WORM_X_OFFSET = 200
 //
 // Life deduction — first trap (poison leaves) and second trap (random rising bugs)
@@ -365,7 +455,7 @@ const LIFE_DEDUCT_LEAVES_FLAG = 'touch.lesson1LeavesActive'
 // Second trap — giant worm that resurfaces between note trees.
 // Activates independently of the first trap when lifeScore > 6 (>= 7 points).
 //
-const TRAP2_THRESHOLD = 7
+const TRAP2_THRESHOLD = 10
 const TRAP2_FLAG = 'touch.lesson1Trap2Added'
 const TRAP2_VISITED_FLAG = 'touch.lesson1Trap2Visited'
 const TRAP2_WORM_REPOSITION_DELAY = 1.5
@@ -496,7 +586,7 @@ export function sceneLesson1(k) {
       // This guarantees even horizontal coverage across the full game zone
       // while still giving a patchy, organic look (some sections are skipped).
       //
-      const sectionCount = layerIndex === 0 ? 14 : 8
+      const sectionCount = layerIndex === 0 ? 9 : 5
       const sectionW = playableWidth / sectionCount
       for (let c = 0; c < sectionCount; c++) {
         //
@@ -891,7 +981,11 @@ export function sceneLesson1(k) {
       spritePrefix: 'rock-l1',
       rockCount: 5,
       excludeCenterX: HERO_SPAWN_X,
-      excludeHalfWidth: 125
+      excludeHalfWidth: 125,
+      //
+      // Keep rocks away from the mushroom trampoline area
+      //
+      excludeZones: [{ centerX: MUSHROOM_TRAMP_X, halfWidth: 80 }]
     })
     //
     // Create birds flying in the background (same realistic silhouette as Touch L0).
@@ -994,8 +1088,8 @@ export function sceneLesson1(k) {
           ))
           for (const blade of allGrassBlades) {
             //
-            // Zone culling: skip blades more than 1 zone away from the hero.
-            // With L1_ZONE_COUNT=4 this cuts ~1200 drawLine down to ~400-600.
+            // Zone culling: skip blades more than 1 zone away from hero.
+            // With 4 zones this cuts ~50% of drawLine calls per frame.
             //
             if (Math.abs(blade.zone - heroZone) > 1) continue
             const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
@@ -1086,15 +1180,19 @@ export function sceneLesson1(k) {
     // identity colour, which is now steel teal — the cool complement of
     // silver in the teal+orange palette.
     //
-    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
+    //
+    // Touch section identity teal — same as lesson0 antiHero/hero colour.
+    // Upper sections override: word=red, time=orange, otherwise teal always.
+    //
+    const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : CFG.visual.colors.sections.touch.body
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 1,
       //
-      // TOUCH letters tint matches the new section identity (steel teal),
-      // so the HUD agrees with the in-game anti-hero and the
-      // touch-completed hero progression colour.
+      // Start all TOUCH letters gray — each letter lights up teal when collected.
+      // setSectionLabelLetterProgress is called in each onXLetterCollect callback.
       //
+      sectionLabelCompletedLetters: 0,
       activeColor: '#5A8898',
       inactiveColor: '#B0B0B0',
       completedColor: '#5A8898',
@@ -1102,6 +1200,11 @@ export function sceneLesson1(k) {
       topPlatformHeight: TOP_MARGIN,
       sideWallWidth: LEFT_MARGIN
     })
+    //
+    // Mutable ref updated by letter collection callbacks so the goal button
+    // always shows the most recent letter dialog (before gameState exists).
+    //
+    const l1GoalRef = { text: LevelHelp.LESSON_GOAL_TEXTS?.['lesson-touch.1'] ?? '' }
     LevelHelp.create({
       k,
       levelName: 'lesson-touch.1',
@@ -1110,7 +1213,11 @@ export function sceneLesson1(k) {
       helpY: CFG.visual.screen.height - 55,
       levelIndicator,
       sound,
-      sceneBackdropHex: '#1C323A'
+      sceneBackdropHex: '#1C323A',
+      //
+      // Dynamic goal text — shows text from the last letter collection dialog
+      //
+      getGoalText: () => l1GoalRef.text
     })
     TouchControls.create({
       k,
@@ -1147,20 +1254,31 @@ export function sceneLesson1(k) {
       leavesActive = true
     }
     //
-    // Second trap: giant worm that resurfaces between note trees.
-    // Condition: lifeScore > 6 (TRAP2_THRESHOLD = 7), independent of trap1.
-    // Two-visit mechanism matches trap1: first visit marks flag, second shows deduction.
+    // Second trap: giant worm that resurfaces between note trees + blue leaves.
+    // Requires trap1 to already be set (matches lesson0 pattern).
+    // Two-visit mechanism: first visit marks flag, second shows the dialog.
     //
     const trap2AlreadyAdded = get(TRAP2_FLAG, false)
     const trap2AlreadyVisited = get(TRAP2_VISITED_FLAG, false)
-    const trap2Eligible = !trap2AlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
+    const trap2Eligible = !trap2AlreadyAdded && trapAlreadyAdded && currentLifeScore >= TRAP2_THRESHOLD
     let showTrap2 = false
     if (trap2Eligible && !trap2AlreadyVisited) {
       set(TRAP2_VISITED_FLAG, true)
     } else if (trap2Eligible && trap2AlreadyVisited) {
       showTrap2 = true
     }
+    //
+    // Prevent both traps in the same visit — defer trap2 to next level entry
+    //
+    if (showTrap && showTrap2) {
+      showTrap2 = false
+      set(TRAP2_VISITED_FLAG, false)
+    }
     const trap2Active = showTrap2 || trap2AlreadyAdded
+    //
+    // Trap2 also needs leaves to fall
+    //
+    if (trap2Active) leavesActive = true
     //
     // Badge count: 0, 1 or 2 depending on which traps are active
     //
@@ -1184,339 +1302,110 @@ export function sceneLesson1(k) {
       CFG.game.platformName
     ])
     //
-    // Create anti-hero first (starts gray/inactive)
+    // Black stripe along the top edge of the bottom platform — thin capsule shape
+    // that starts and ends at the platform's side wall rounded corners.
+    // Z must be above T_LETTER_MASK_Z (28) so the background mask used to clip the
+    // submerged letter does not cut through the stripe.
     //
-    const antiHeroInst = Hero.create({
-      k,
-      x: ANTIHERO_SPAWN_X,
-      y: ANTIHERO_SPAWN_Y,
-      type: Hero.HEROES.ANTIHERO,
-      controllable: false,
-      bodyColor: '#B0B0B0',  // Gray color for inactive state
-      addArms: true
-    })
-    
+    k.add([
+      k.z(T_LETTER_MASK_Z + 1),
+      {
+        draw() {
+          //
+          // Inset by CORNER_RADIUS so the stripe ends before the bottom
+          // corner arcs begin — the corner sprites (z=26) overlay the ends.
+          //
+          const stripeX = LEFT_MARGIN + CORNER_RADIUS
+          const stripeW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN - 2 * CORNER_RADIUS
+          k.drawRect({
+            pos: k.vec2(stripeX, FLOOR_Y),
+            width: stripeW,
+            height: FLOOR_STRIPE_H,
+            color: k.rgb(0, 0, 0),
+            opacity: 1,
+            radius: Math.ceil(FLOOR_STRIPE_H / 2)
+          })
+        }
+      }
+    ])
     //
-    // Game state for melody puzzle
+    // Game state for letter-collection phase progression
     //
     const gameState = {
-      antiHeroActive: false,
+      //
+      // Progression phases:
+      //   'pre_t'  — waiting for hero to collect T letter
+      //   'phase1' — T collected, trees make same note, count 7 unique touches → O platform
+      //   'wait_o' — O platform visible, waiting for hero to collect O
+      //   'phase2' — O collected, trees make unique notes, count 7 touches → U platform
+      //   'wait_u' — U platform visible, waiting for hero to collect U
+      //   'melody' — U collected, crow shows sequence, hero plays melody → CH platform
+      //   'wait_ch' — CH platform visible, waiting for hero to collect CH
+      //   'end'    — CH collected, playing end music
+      //
+      phase: 'pre_t',
+      treesEnabled: false,
+      treesPhase1Touched: new Set(),
+      treesPhase2Touched: new Set(),
+      tCollected: false,
+      oCollected: false,
+      uCollected: false,
+      chCollected: false,
+      dialogOpen: false,
+      //
+      // Melody puzzle state (phase 'melody')
+      //
       playerSequence: [],
-      targetSequence: [0, 1, 2, 1, 2],  // C, D, E, D, E (tree indices) - exactly 5 notes
-      melodyNotes: [261.63, 293.66, 329.63, 293.66, 329.63],  // Frequencies
-      isNearAntiHero: false,
-      notesBubbleVisible: false,
-      isPlayingMelody: false,
-      melodyTimer: 0,
-      lastTouchedTreeIndex: -1,  // Track last touched tree to prevent duplicate detection
-      sequenceCompleteTime: null,  // Time when sequence was completed (for pause check)
-      pauseTimer: 0,  // Timer for tracking pause after sequence completion
-      hintTimer: 0,
-      hintWaitShown: false,
-      hintNotesFirstShown: false,
-      hintNotesLastShownAt: 0,
-      currentHint: null
+      targetSequence: [0, 1, 2, 1, 2],
+      lastTouchedTreeIndex: -1,
+      sequenceCompleteTime: null,
+      pauseTimer: 0,
+      //
+      // Goal text shown when goal button pressed (also synced to l1GoalRef.text)
+      //
+      lastDialogText: '',
+      goalRef: l1GoalRef,
+      //
+      // Touch counter objects
+      //
+      counterObj: null,
+      counterOutlines: null,
+      //
+      // Platform refs created during gameplay
+      //
+      oPlatformObj: null,
+      uPlatformObj: null,
+      chPlatformObj: null,
+      oLetterObjs: null,
+      uLetterObjs: null,
+      chLetterObjs: null,
+      //
+      // Mushroom trampoline cooldown and squash animation (0=normal, 1=full squash)
+      //
+      mushroomCooldown: 0,
+      mushroomSquash: 0,
+      //
+      // Melody note counter objects (x/5, visible during 'melody' phase)
+      //
+      melodyCounterObj: null,
+      melodyCounterOutlines: null
     }
+    //
+    // Minimum pause after melody sequence before it counts as valid
+    //
+    const SEQUENCE_PAUSE_MINIMUM = 1.0
     
     //
-    // Minimum pause after completing sequence before it's considered valid
+    // Activate CH platform after melody solved
     //
-    const SEQUENCE_PAUSE_MINIMUM = 1.0  // 1 second
-    //
-    // Pause before anti-hero starts playing the melody
-    //
-    const MELODY_PRE_PLAY_DELAY = 1.0  // 1 second
-    
-    //
-    // Note names for display
-    //
-    const noteNames = ['Do', 'Re', 'Mi', 'Re', 'Mi']
-    
-    //
-    // Function to play melody sequence
-    //
-    function playMelody() {
-      if (gameState.isPlayingMelody) return
-      gameState.notesBubbleVisible = true
-      gameState.isPlayingMelody = true
-      gameState.currentNoteIndex = -1
-      let noteIndex = 0
-      
-      const playNextNote = () => {
-        if (noteIndex < gameState.melodyNotes.length) {
-          //
-          // Set current note index before playing
-          //
-          gameState.currentNoteIndex = noteIndex
-          TreeRoots.playNoteExternal(treeRootsInst, gameState.melodyNotes[noteIndex])
-          noteIndex++
-          
-          if (noteIndex < gameState.melodyNotes.length) {
-            k.wait(0.6, playNextNote)
-          } else {
-            k.wait(0.6, () => {
-              gameState.isPlayingMelody = false
-              gameState.currentNoteIndex = -1
-              k.wait(NOTES_BUBBLE_HIDE_DELAY, () => {
-                gameState.notesBubbleVisible = false
-              })
-            })
-          }
-        }
-      }
-      //
-      // Wait before playing the first note so player can see the bubble
-      //
-      k.wait(MELODY_PRE_PLAY_DELAY, playNextNote)
+    function onMelodySolved() {
+      if (gameState.phase !== 'melody') return
+      gameState.phase = 'wait_ch'
+      k.wait(0.3, () => createCHPlatform(k, gameState, sound, levelIndicator, treeRootsInst))
     }
-    
     //
-    // Function to create sparkle particles around anti-hero for color change
     //
-    function createAntiHeroSparkles(colorHex) {
-      const centerX = antiHeroInst.character.pos.x
-      const centerY = antiHeroInst.character.pos.y
-      //
-      // Parse hex color to RGB
-      //
-      const colorValue = parseInt(colorHex.replace('#', ''), 16)
-      const r = (colorValue >> 16) & 0xFF
-      const g = (colorValue >> 8) & 0xFF
-      const b = colorValue & 0xFF
-      //
-      // Create small sparkle particles
-      //
-      const sparkleCount = 12
-      const sparkles = []
-      
-      for (let i = 0; i < sparkleCount; i++) {
-        //
-        // Position sparkles around anti-hero body
-        //
-        const angle = (Math.PI * 2 * i) / sparkleCount
-        const distance = 15 + Math.random() * 10
-        const offsetX = Math.cos(angle) * distance
-        const offsetY = Math.sin(angle) * distance
-        //
-        // Sparkle colors (variations of brown)
-        //
-        const colors = [
-          k.rgb(r, g, b),  // Base brown
-          k.rgb(Math.min(255, r + 30), Math.min(255, g + 20), Math.min(255, b + 15)),  // Lighter brown
-          k.rgb(Math.max(0, r - 20), Math.max(0, g - 15), Math.max(0, b - 10)),  // Darker brown
-          k.rgb(200, 150, 120)  // Light brown
-        ]
-        const sparkleColor = colors[Math.floor(Math.random() * colors.length)]
-        //
-        // Create sparkle particle (small circle)
-        //
-        const size = 2 + Math.random() * 3
-        const sparkle = k.add([
-          k.circle(size),
-          k.pos(centerX + offsetX, centerY + offsetY),
-          k.color(sparkleColor),
-          k.opacity(0.8),
-          k.z(CFG.visual.zIndex.player + 1)
-        ])
-        //
-        // Store sparkle data
-        //
-        sparkle.vx = (Math.random() - 0.5) * 40
-        sparkle.vy = -20 - Math.random() * 30  // Move up
-        sparkle.lifetime = 0
-        sparkle.maxLifetime = 0.8 + Math.random() * 0.4
-        sparkle.originalSize = size
-        
-        sparkles.push(sparkle)
-      }
-      //
-      // Animate sparkles
-      //
-      const sparkleInterval = k.onUpdate(() => {
-        sparkles.forEach((sparkle) => {
-          if (!sparkle.exists()) return
-          
-          sparkle.lifetime += k.dt()
-          //
-          // Move sparkle
-          //
-          sparkle.pos.x += sparkle.vx * k.dt()
-          sparkle.pos.y += sparkle.vy * k.dt()
-          //
-          // Apply gravity
-          //
-          sparkle.vy -= 80 * k.dt()  // Upward acceleration
-          sparkle.vx *= 0.95
-          //
-          // Fade out
-          //
-          const progress = sparkle.lifetime / sparkle.maxLifetime
-          sparkle.opacity = 0.8 * (1 - progress)
-          //
-          // Twinkle effect
-          //
-          const twinkle = Math.sin(sparkle.lifetime * 20) * 0.3 + 0.7
-          sparkle.scale = twinkle
-          
-          if (sparkle.lifetime >= sparkle.maxLifetime) {
-            k.destroy(sparkle)
-          }
-        })
-        //
-        // Clean up when all sparkles are done
-        //
-        if (sparkles.every(s => !s.exists())) {
-          sparkleInterval.cancel()
-        }
-      })
-    }
-    
-    //
-    // Function to activate anti-hero
-    //
-    function activateAntiHero() {
-      if (gameState.antiHeroActive) return  // Already activated
-      
-      //
-      // Pause before activation to let player realize they succeeded
-      //
-      k.wait(0.5, () => {
-        gameState.antiHeroActive = true
-        //
-        // Snap the anti-hero from grey (inactive) to the touch section's
-        // identity steel-teal once the player solves the melody puzzle.
-        // White eyes / black pupils are drawn separately so they are
-        // preserved across the sprite reload.
-        //
-        const activeColor = CFG.visual.colors.sections.touch.antiHero
-        Hero.loadHeroSprites({
-          k,
-          type: Hero.HEROES.ANTIHERO,
-          bodyColor: activeColor,
-          outlineColor: CFG.visual.colors.outline,
-          addArms: true
-        })
-        //
-        // Update sprite prefix and change character sprite
-        //
-        const spritePrefix = `antiHero_${activeColor.replace('#', '')}_${CFG.visual.colors.outline.replace('#', '')}_arms`
-        const newSpriteName = `${spritePrefix}_0_0`
-        
-        //
-        // Function to apply sprite change
-        //
-        const applySpriteChange = () => {
-          try {
-            //
-            // Check if sprite exists before using it
-            //
-            const sprite = k.getSprite(newSpriteName)
-            if (sprite) {
-              antiHeroInst.character.use(k.sprite(newSpriteName))
-              antiHeroInst.spritePrefix = spritePrefix
-              antiHeroInst.bodyColor = activeColor
-              //
-              // Reset color tint to white (no tint) since sprite is already brown
-              //
-              antiHeroInst.character.color = k.rgb(255, 255, 255)
-              
-              //
-              // Create sparkle particles around anti-hero
-              //
-              createAntiHeroSparkles(activeColor)
-              //
-              // Light up all tree roots after anti-hero turns colored
-              //
-              k.wait(0.1, () => triggerAllRootsGlow(treeRootsInst))
-              //
-              // Anti-hero blinks white several times with mouth sound on each flash
-              //
-              blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, 0)
-              //
-              // Play success sound after color change (same as mouth sound)
-              //
-              k.wait(0.2, () => {
-                Sound.playMouthSound(sound)
-              })
-              
-              //
-              // Enable annihilation by setting antiHero reference and setting up collision
-              //
-              heroInst.antiHero = antiHeroInst
-              //
-              // Set up collision handler for annihilation using Hero's full logic
-              //
-              heroInst.character.onCollide('annihilation', () => {
-                Hero.onAnnihilationCollide(heroInst)
-              })
-              return true
-            }
-          } catch (error) {
-            //
-            // Sprite not found, will retry
-            //
-          }
-          return false
-        }
-        
-        //
-        // Wait for sprites to load, then update
-        // Try multiple times with increasing delays
-        //
-        k.wait(0.1, () => {
-          if (!applySpriteChange()) {
-            //
-            // Retry after longer delay
-            //
-            k.wait(0.2, () => {
-              if (!applySpriteChange()) {
-                //
-                // Fallback: if the recoloured sprite never finishes
-                // loading, tint the grey base sprite toward the active
-                // touch identity teal so the anti-hero still snaps onto
-                // the right palette (R≈90, G≈136, B≈152 for #5A8898).
-                //
-                const tealR = 90    // #5A
-                const tealG = 136   // #88
-                const tealB = 152   // #98
-                const grayR = 176   // #B0
-                const grayG = 176
-                const grayB = 176
-                const tintR = Math.round((tealR / grayR) * 255)
-                const tintG = Math.round((tealG / grayG) * 255)
-                const tintB = Math.round((tealB / grayB) * 255)
-                antiHeroInst.character.color = k.rgb(
-                  Math.min(255, Math.max(0, tintR)),
-                  Math.min(255, Math.max(0, tintG)),
-                  Math.min(255, Math.max(0, tintB))
-                )
-                createAntiHeroSparkles(activeColor)
-                k.wait(0.2, () => {
-                  Sound.playMouthSound(sound)
-                })
-                //
-                // Enable annihilation by setting antiHero reference and setting up collision
-                //
-                heroInst.antiHero = antiHeroInst
-                //
-                // Set up collision handler for annihilation using Hero's full logic
-                //
-                heroInst.character.onCollide('annihilation', () => {
-                  Hero.onAnnihilationCollide(heroInst)
-                })
-              }
-            })
-          }
-        })
-      })
-    }
-    
-    //
-    // No need to set gray color - it's already set via bodyColor parameter
-    //
-    
-    //
-    // Create hero with anti-hero reference
+    // Create hero (no anti-hero — completion is driven by CH letter collection)
     //
     const heroInst = Hero.create({
       k,
@@ -1525,25 +1414,6 @@ export function sceneLesson1(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: gameState.antiHeroActive ? antiHeroInst : null,
-      onAnnihilation: () => {
-        //
-        // Check for speed bonus before scoring
-        //
-        const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(levelTime)
-        const currentScore = get('heroScore', 0)
-        const pointsToAdd = speedBonusEarned ? 3 : 1
-        const newScore = currentScore + pointsToAdd
-        set('heroScore', newScore)
-        levelIndicator?.updateHeroScore?.(newScore)
-        sound && Sound.playVictorySound(sound)
-        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
-        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
-        k.wait(transitionDelay, () => {
-        createLevelTransition(k, 'lesson-touch.1')
-        })
-      },
       currentLevel: 'lesson-touch.1',
       addMouth: isWordComplete,
       addArms: isTouchComplete,
@@ -1557,7 +1427,7 @@ export function sceneLesson1(k) {
       sceneLock.heroInst = heroInst
     }
     //
-    // Show life deduction animation for first trap if eligible on second visit
+    // Show "Life made corrections" dialog for first trap (no score deduction)
     //
     if (showTrap) {
       LifeDeduction.show({
@@ -1568,15 +1438,19 @@ export function sceneLesson1(k) {
         deductFlag: LIFE_DEDUCT_FLAG,
         extraFlags: [LIFE_DEDUCT_LEAVES_FLAG],
         sceneLock,
+        noDeduct: true,
+        hideScore: true,
+        introTextOverride: 'Life made corrections.',
+        resultTextOverride: 'Learn this lesson.',
         sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
         textColorRgb: { r: 90, g: 136, b: 152 },
         onComplete: () => {
-          fallingLeafInst.poisonChance = POISON_LEAF_CHANCE
+          gameState._leavesRef && (gameState._leavesRef.poisonChance = POISON_LEAF_CHANCE)
         }
       })
     }
     //
-    // Life deduction for second trap (worm): 5 points taken, delayed after trap1 if both fire.
+    // "Life made corrections" for second trap (worm + blue leaves)
     //
     if (showTrap2) {
       const trap2Delay = showTrap ? LifeDeduction.TOTAL_DURATION + 0.5 : 0
@@ -1587,57 +1461,48 @@ export function sceneLesson1(k) {
           levelIndicator,
           sound,
           deductFlag: TRAP2_FLAG,
+          extraFlags: [LIFE_DEDUCT_LEAVES_FLAG],
           sceneLock,
+          noDeduct: true,
+          hideScore: true,
+          introTextOverride: 'Life made corrections.',
+          resultTextOverride: 'Learn this lesson.',
           sceneBgRgb: { r: L1_SCENE_BG_R, g: L1_SCENE_BG_G, b: L1_SCENE_BG_B },
-          textColorRgb: { r: 90, g: 136, b: 152 }
+          textColorRgb: { r: 90, g: 136, b: 152 },
+          onComplete: () => {
+            gameState._leavesRef && (gameState._leavesRef.poisonChance = POISON_LEAF_CHANCE)
+          }
         })
       })
     }
     //
-    // Spawn hero and anti-hero
+    // Spawn hero
     //
     Hero.spawn(heroInst)
-    Hero.spawn(antiHeroInst)
     //
-    // Hero lands directly on the anti-hero sprite (no separate head collider).
+    // Hidden bonus hero (reachable via mushroom trampoline in right corner)
     //
-    antiHeroInst.character.use(CFG.game.platformName)
-    //
-    // Hidden bonus hero to the left and above antihero
-    // Reachable by jumping from the antihero's platform area
-    //
-    const BONUS_X = ANTIHERO_SPAWN_X - 100
-    const BONUS_Y = ANTIHERO_SPAWN_Y - 100
-    //
-    // Collision box is nudged right + down so it sits exactly under the
-    // visible log barrel instead of left/above it. Width covers the log
-    // body plus its endcaps.
-    //
-    BonusHero.create({
+    const bonusHeroInst = BonusHero.create({
       k,
-      x: BONUS_X,
-      y: BONUS_Y,
-      width: 80,
+      x: BONUS_PLATFORM_X,
+      y: BONUS_PLATFORM_Y,
+      width: 90,
       heroInst,
       levelIndicator,
       sfx: sound,
       approachFromAbove: true,
       heroBodyColor,
       storageKey: 'touch.lesson1BonusCollected',
-      //
-      // Collider pushed firmly right + a hair lower so it lands directly
-      // under the painted log. Previous `(10, 8)` pair still sat several
-      // pixels left of the visible barrel and a touch too high, so the
-      // hero's right-side landings were missing the collider entirely.
-      //
-      collisionWidth: 92,
-      platformCollisionXOffset: 45,
+      collisionWidth: 96,
+      platformCollisionXOffset: 48,
       platformCollisionYOffset: 10
     })
+    gameState._bonusHeroRef = bonusHeroInst
     //
-    // Set hero reference for grass drawer
+    // Set hero reference for grass drawer and gameState
     //
     grassDrawer.heroRef = heroInst
+    gameState._heroRef = heroInst
     //
     // Create tree roots (async - wait for sprites to load)
     //
@@ -1650,6 +1515,48 @@ export function sceneLesson1(k) {
       sfx: sound
     })
     if (!sceneActive) return
+    gameState._treeRootsRef = treeRootsInst
+    //
+    // Trampoline mushroom — rendered as canvas sprite matching regular mushrooms style.
+    // Positioned so the stem base aligns with FLOOR_Y.
+    //
+    const trampDataUrl = toCanvas({ width: MUSHROOM_TRAMP_TOTAL_W, height: MUSHROOM_TRAMP_TOTAL_H, pixelRatio: 1 }, (ctx) => {
+      drawMushroomShape(ctx, MUSHROOM_TRAMP_TOTAL_W, MUSHROOM_TRAMP_TOTAL_H, MUSHROOM_TRAMP_CAP_W, MUSHROOM_TRAMP_CAP_H, MUSHROOM_TRAMP_STEM_H, MUSHROOM_TRAMP_STEM_W, MUSHROOM_TRAMP_COLOR)
+    })
+    loadTouchSprite(k, MUSHROOM_TRAMP_SPRITE, trampDataUrl)
+    const trampSpriteBaseX = MUSHROOM_TRAMP_X - MUSHROOM_TRAMP_TOTAL_W / 2
+    const trampSpritePos = k.vec2(trampSpriteBaseX, MUSHROOM_TRAMP_Y - MUSHROOM_TRAMP_TOTAL_H)
+    k.add([
+      k.z(6),
+      {
+        draw() {
+          const sq = gameState.mushroomSquash
+          if (sq > 0.01) {
+            //
+            // Squash: scale Y down, offset pos so bottom stays on the floor
+            //
+            const scaleY = 1 - sq * 0.35
+            trampSpritePos.y = MUSHROOM_TRAMP_Y - MUSHROOM_TRAMP_TOTAL_H * scaleY
+            k.drawSprite({ sprite: MUSHROOM_TRAMP_SPRITE, pos: trampSpritePos, scale: k.vec2(1, scaleY) })
+          } else {
+            trampSpritePos.y = MUSHROOM_TRAMP_Y - MUSHROOM_TRAMP_TOTAL_H
+            k.drawSprite({ sprite: MUSHROOM_TRAMP_SPRITE, pos: trampSpritePos })
+          }
+        }
+      }
+    ])
+    //
+    // Invisible solid cap platform so the hero stands on top of the mushroom
+    // without visually sinking into it.
+    //
+    k.add([
+      k.rect(MUSHROOM_TRAMP_CAP_W, 6),
+      k.pos(MUSHROOM_TRAMP_X - MUSHROOM_TRAMP_CAP_W / 2, MUSHROOM_TRAMP_Y - MUSHROOM_TRAMP_TOTAL_H),
+      k.area(),
+      k.body({ isStatic: true }),
+      k.opacity(0),
+      CFG.game.platformName
+    ])
     //
     // Add custom drawing for tree roots (above platform z=15, but behind player z=10)
     // Set z=16 so roots draw on top of platform
@@ -1673,20 +1580,34 @@ export function sceneLesson1(k) {
         }
       }
     ])
-    // WORM_DISABLED_START — small worms (peristaltic crawlers)
-    const wormInsts = []
-    // const WORM_TOOLTIP_TARGETS created from wormInsts — disabled while wormInsts is empty
-    // WORM_DISABLED_END
+    //
+    // Small peristaltic worms crawling along the root level
+    //
+    const wormInsts = Array.from({ length: WORM_COUNT }, (_, i) => createWorm(k, i))
+    //
+    // Per-frame worm update (called inside k.onUpdate below)
+    //
+    const wormUpdateTimer = k.onUpdate(() => wormInsts.forEach(w => onUpdateWorm(k, w)))
+    const wormTooltipTargets = wormInsts.map((w, i) => ({
+      x: () => w.segments[0].x,
+      y: () => w.segments[0].y,
+      width: WORM_HOVER_WIDTH,
+      height: WORM_HOVER_HEIGHT,
+      text: SMALL_WORM_PHRASES[i % SMALL_WORM_PHRASES.length],
+      offsetY: WORM_TOOLTIP_OFFSET_Y
+    }))
+    Tooltip.create({ k, targets: wormTooltipTargets })
     //
     // Giant rising worm — appears near anti-hero platform, triggered by proximity
     //
     const giantWormInst = GiantWorm.create({
       k,
-      x: ANTIHERO_SPAWN_X - GIANT_WORM_X_OFFSET,
+      x: T_LETTER_X - GIANT_WORM_X_OFFSET,
       floorY: FLOOR_Y,
       hero: heroInst,
       sfx: sound
     })
+    gameState._giantWormRef = giantWormInst
     //
     // Floating tooltip for giant worm — position is updated each frame via wormTooltipOnUpdate
     //
@@ -1739,9 +1660,23 @@ export function sceneLesson1(k) {
       rightBound: CFG.visual.screen.width - RIGHT_MARGIN,
       poisonChance: leavesActive ? POISON_LEAF_CHANCE : 0,
       poisonColor,
-      onPoisonHit: () => onPoisonLeafDeath(k, heroInst, levelIndicator),
+      //
+      // Ground leaves must render above the black floor stripe (z = T_LETTER_MASK_Z + 1 = 29)
+      //
+      groundZ: T_LETTER_MASK_Z + 2,
+      onPoisonHit: () => {
+        //
+        // During the celebration phase (end music) leaves are harmless
+        //
+        if (gameState?.phase === 'end') return
+        onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst)
+      },
       onLeafGroundLand: () => Sound.playLeafGroundRustle(sound, 0.16 + Math.random() * 0.14)
     })
+    //
+    // Store ref so trap onComplete callbacks can activate poison leaves
+    //
+    gameState._leavesRef = fallingLeafInst
     //
     // Normal leaves always fall; poison (blue) leaves only after deduction
     //
@@ -1765,28 +1700,31 @@ export function sceneLesson1(k) {
     //
     const fpsCounter = FpsCounter.create({
       k,
-      showTimer: true
+      showTimer: false
     })
     //
-    // Pre-allocated colors and positions for notes bubble — prevents k.rgb/k.vec2
-    // allocations inside the per-frame draw() callback.
+    // End music text display (shown while touch1-end.mp3 plays after CH collected)
     //
-    const BUBBLE_WIDTH = 280
-    const BUBBLE_HEIGHT = 120
-    const BUBBLE_CORNER_RADIUS = 10
-    const BUBBLE_OUTLINE_WIDTH = 3
-    const BUBBLE_MARGIN = 20
-    const BUBBLE_NOTE_SPACING = 50
-    const BUBBLE_NOTE_OUTLINE_WIDTH = 2
-    const bubbleColorBlack = k.rgb(0, 0, 0)
-    const bubbleColorWhite = k.rgb(255, 255, 255)
-    const bubbleColorText = k.rgb(40, 40, 40)
-    const bubbleColorActiveNote = k.rgb(80, 130, 80)
-    const bubbleColorInactiveNote = k.rgb(120, 120, 120)
-    const bubblePos = k.vec2(0, 0)
-    const bubbleNotePos = k.vec2(0, 0)
+    const endMusicTextObj = { text: null, outlines: [] }
+    k.add([
+      k.z(CFG.visual.zIndex.ui + 5),
+      {
+        draw() {
+          if (!gameState.chCollected) return
+          const msg = END_MUSIC_TEXT
+          const cx = CFG.visual.screen.width / 2
+          const cy = END_MUSIC_TEXT_Y
+          const outlineOffsets = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+          outlineOffsets.forEach(([dx, dy]) => {
+            k.drawText({ text: msg, pos: k.vec2(cx + dx, cy + dy), size: END_MUSIC_TEXT_FONT, font: CFG.visual.fonts.regularFull, color: k.rgb(0, 0, 0), anchor: 'center', opacity: 0.85 })
+          })
+          k.drawText({ text: msg, pos: k.vec2(cx, cy), size: END_MUSIC_TEXT_FONT, font: CFG.visual.fonts.regularFull, color: k.rgb(220, 200, 160), anchor: 'center', opacity: 1 })
+        }
+      }
+    ])
     //
-    // Draw speech bubble with notes
+    // REMOVED: old notes speech bubble (was tied to anti-hero)
+    // Placeholder draw (never shows anything)
     //
     k.add([
       k.z(CFG.visual.zIndex.ui),
@@ -1795,93 +1733,7 @@ export function sceneLesson1(k) {
           //
           // Show bubble only while the demo melody plays or briefly after it.
           //
-          if (!gameState.notesBubbleVisible && !gameState.isPlayingMelody) return
-          if (gameState.antiHeroActive) return
-          let bubbleX = antiHeroInst.character.pos.x
-          const bubbleY = antiHeroInst.character.pos.y - 100
-          //
-          // Clamp bubble to screen bounds
-          //
-          const screenRight = k.width() - BUBBLE_MARGIN
-          const screenLeft = BUBBLE_MARGIN
-          if (bubbleX + BUBBLE_WIDTH / 2 + BUBBLE_OUTLINE_WIDTH > screenRight) {
-            bubbleX = screenRight - BUBBLE_WIDTH / 2 - BUBBLE_OUTLINE_WIDTH
-          }
-          if (bubbleX - BUBBLE_WIDTH / 2 - BUBBLE_OUTLINE_WIDTH < screenLeft) {
-            bubbleX = screenLeft + BUBBLE_WIDTH / 2 + BUBBLE_OUTLINE_WIDTH
-          }
-          //
-          // Outline rectangle
-          //
-          bubblePos.x = bubbleX - BUBBLE_WIDTH / 2 - BUBBLE_OUTLINE_WIDTH
-          bubblePos.y = bubbleY - BUBBLE_HEIGHT / 2 - BUBBLE_OUTLINE_WIDTH
-          k.drawRect({
-            pos: bubblePos,
-            width: BUBBLE_WIDTH + BUBBLE_OUTLINE_WIDTH * 2,
-            height: BUBBLE_HEIGHT + BUBBLE_OUTLINE_WIDTH * 2,
-            radius: BUBBLE_CORNER_RADIUS + BUBBLE_OUTLINE_WIDTH,
-            color: bubbleColorBlack,
-            opacity: 0.96
-          })
-          //
-          // White background
-          //
-          bubblePos.x = bubbleX - BUBBLE_WIDTH / 2
-          bubblePos.y = bubbleY - BUBBLE_HEIGHT / 2
-          k.drawRect({
-            pos: bubblePos,
-            width: BUBBLE_WIDTH,
-            height: BUBBLE_HEIGHT,
-            radius: BUBBLE_CORNER_RADIUS,
-            color: bubbleColorWhite,
-            opacity: 0.98
-          })
-          //
-          // "Play this:" label
-          //
-          bubblePos.x = bubbleX
-          bubblePos.y = bubbleY - 35
-          k.drawText({
-            text: 'Play this:',
-            pos: bubblePos,
-            size: 18,
-            font: CFG.visual.fonts.regularFull,
-            color: bubbleColorText,
-            anchor: 'center'
-          })
-          //
-          // Note circles
-          //
-          const startX = bubbleX - (gameState.targetSequence.length - 1) * BUBBLE_NOTE_SPACING / 2
-          for (let i = 0; i < gameState.targetSequence.length; i++) {
-            const noteX = startX + i * BUBBLE_NOTE_SPACING
-            const noteY = bubbleY + 10
-            const isCurrentNote = gameState.isPlayingMelody && i === gameState.currentNoteIndex
-            const circleRadius = isCurrentNote ? 20 : 18
-            bubbleNotePos.x = noteX
-            bubbleNotePos.y = noteY
-            k.drawCircle({
-              pos: bubbleNotePos,
-              radius: circleRadius + BUBBLE_NOTE_OUTLINE_WIDTH,
-              color: bubbleColorBlack,
-              opacity: 1.0
-            })
-            k.drawCircle({
-              pos: bubbleNotePos,
-              radius: circleRadius,
-              color: isCurrentNote ? bubbleColorActiveNote : bubbleColorInactiveNote,
-              opacity: 1.0
-            })
-            bubbleNotePos.y = noteY + 1
-            k.drawText({
-              text: noteNames[i],
-              pos: bubbleNotePos,
-              size: isCurrentNote ? 24 : 20,
-              font: CFG.visual.fonts.regularFull,
-              color: bubbleColorWhite,
-              anchor: 'center'
-            })
-          }
+          // nothing to draw (removed)
         }
       }
     ])
@@ -1954,19 +1806,20 @@ export function sceneLesson1(k) {
       }]
     })
     //
-    // Tooltip: anti-hero (shown only while gray/inactive, hidden once activated)
+    // T letter: stands on ground at right side (where anti-hero used to be)
+    // Blinks brown to signal it's collectable. Removed when collected.
     //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: () => gameState.antiHeroActive ? -9999 : antiHeroInst.character.pos.x,
-        y: () => antiHeroInst.character.pos.y,
-        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
-        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
-        text: ANTIHERO_TOOLTIP_TEXT,
-        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
-      }]
-    })
+    const tLetterObjs = createStandingLetter(k, 'T', T_LETTER_X, T_LETTER_Y, T_LETTER_FONT_SIZE, T_LETTER_ANGLE, T_LETTER_FILL_R, T_LETTER_FILL_G, T_LETTER_FILL_B, T_LETTER_Z)
+    const tLetterMask = createTLetterMask(k, T_LETTER_X, T_LETTER_Y)
+    const tBlinkState = { timer: 0, phase: 0 }
+    k.add([
+      k.z(T_LETTER_Z + 0.5),
+      {
+        draw() {
+          animateLetterBlink(k, tLetterObjs, tBlinkState, gameState.tCollected)
+        }
+      }
+    ])
     //
     // Tooltip: falling and grounded leaves (separate phrases per state)
     //
@@ -2007,10 +1860,11 @@ export function sceneLesson1(k) {
     //
     const sc = 1.35
     const crowPerch = { worldX: L1_CROW_X, worldY: FLOOR_Y, radius: 0 }
-    addCrowOnRock(k, crowPerch, crowMp3State, heroInst)
+    addCrowOnRock(k, crowPerch, crowMp3State, heroInst, gameState)
     //
-    // Tooltip on crow hover: "you are a loser"
+    // Crow tooltip — dynamic: shows sequence hint after U is collected
     //
+    const crowTooltipState = { inst: null }
     Tooltip.create({
       k,
       targets: [{
@@ -2018,7 +1872,7 @@ export function sceneLesson1(k) {
         y: crowPerch.worldY - 9 * sc,
         width: L1_CROW_TOOLTIP_HOVER_W,
         height: L1_CROW_TOOLTIP_HOVER_H,
-        text: L1_CROW_TOOLTIP_TEXT,
+        text: () => gameState.phase === 'end' ? L1_CROW_DISCO_TEXT : gameState.phase === 'melody' ? L1_CROW_SEQUENCE_HINT : L1_CROW_LOSER_TEXT,
         offsetY: L1_CROW_TOOLTIP_OFFSET_Y
       }]
     })
@@ -2047,15 +1901,12 @@ export function sceneLesson1(k) {
         trap2WormInst,
         levelIndicator,
         gameState,
-        antiHeroInst,
         sound,
         lightningState,
         sequencePauseMinimum: SEQUENCE_PAUSE_MINIMUM,
-        activateAntiHero,
-        processTreeMelodyTouch,
-        playMelody,
-        onUpdateAntiHeroHints,
-        checkGiantWormCollision,
+        onMelodySolved,
+        processTreeTouch: (touchedIdx) => processL1TreeTouch(k, gameState, touchedIdx, sound, levelIndicator, treeRootsInst, transition),
+        checkGiantWormCollision: (k, heroInst, wormInst, levelIndicator, sound) => checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, bonusHeroInst),
         wormTooltipOnUpdate: () => {
           wormTooltipTarget.y = FLOOR_Y - giantWormInst.riseAmount / 2
           wormTooltipTarget.x = giantWormInst.x + (giantWormInst.leanOffset || 0)
@@ -2073,11 +1924,102 @@ export function sceneLesson1(k) {
         birdsOnUpdate: () => onUpdateL1Birds(k, birds, SKY_HEIGHT, TOP_MARGIN, BIRD_FLAP_GLIDE_BLEND_TIME, BIRD_GLIDE_POSE)
       })
       trap2RepositionRuntime?.onUpdate?.()
+      //
+      // Per-frame letter collection checks (hero proximity to letter platforms)
+      //
+      if (heroInst.character?.pos) {
+        const heroX = heroInst.character.pos.x
+        const heroY = heroInst.character.pos.y
+        //
+        // T letter
+        //
+        if (!gameState.tCollected) {
+          //
+          // Check using circular radius vs center of visible letter portion
+          // (top half center: T_LETTER_Y - T_LETTER_FONT_SIZE * 0.5)
+          //
+          const tCenterY = T_LETTER_Y - T_LETTER_FONT_SIZE / 2
+          const dx = heroX - T_LETTER_X
+          const dy = heroY - tCenterY
+          if (dx * dx + dy * dy < T_LETTER_COLLECT_RADIUS * T_LETTER_COLLECT_RADIUS) {
+            onTLetterCollect(k, gameState, tLetterObjs, tLetterMask, sound, levelIndicator, treeRootsInst, crowTooltipState)
+          }
+        }
+        //
+        // O letter (on platform)
+        //
+        if (gameState.phase === 'wait_o' && gameState.oPlatformObj?.exists?.() && !gameState.oCollected) {
+          if (Math.abs(heroX - O_PLATFORM_X) < LOG_PLATFORM_W / 2 + 20 && heroY < O_PLATFORM_Y + 8 && heroY > O_PLATFORM_Y - 90) {
+            gameState.oLetterObjs?.forEach(o => o?.exists?.() && k.destroy(o))
+            onOLetterCollect(k, gameState, sound, levelIndicator, treeRootsInst)
+          }
+        }
+        //
+        // U letter (on platform)
+        //
+        if (gameState.phase === 'wait_u' && gameState.uPlatformObj?.exists?.() && !gameState.uCollected) {
+          if (Math.abs(heroX - U_PLATFORM_X) < U_PLATFORM_W / 2 + 20 && heroY < U_PLATFORM_Y + 8 && heroY > U_PLATFORM_Y - 90) {
+            gameState.uLetterObjs?.forEach(o => o?.exists?.() && k.destroy(o))
+            onULetterCollect(k, gameState, sound, levelIndicator, treeRootsInst)
+          }
+        }
+        //
+        // CH letter (on platform)
+        //
+        if (gameState.phase === 'wait_ch' && gameState.chPlatformObj?.exists?.() && !gameState.chCollected) {
+          if (Math.abs(heroX - CH_PLATFORM_X) < CH_PLATFORM_W / 2 + 20 && heroY < CH_PLATFORM_Y + 8 && heroY > CH_PLATFORM_Y - 90) {
+            gameState.chLetterObjs?.forEach(o => o?.exists?.() && k.destroy(o))
+            onCHLetterCollect(k, gameState, sound, levelIndicator, transition)
+          }
+        }
+      }
+      //
+      // Mushroom trampoline: proximity-based bounce check (same pattern as glow bugs).
+      // Cap top is at FLOOR_Y - MUSHROOM_TRAMP_TOTAL_H. Hero center is ~20px above feet.
+      //
+      gameState.mushroomCooldown > 0 && (gameState.mushroomCooldown -= k.dt())
+      gameState.mushroomSquash > 0 && (gameState.mushroomSquash = Math.max(0, gameState.mushroomSquash - k.dt() * 4))
+      if (gameState.mushroomCooldown <= 0 && heroInst.character?.pos) {
+        const mDx = Math.abs(heroInst.character.pos.x - MUSHROOM_TRAMP_X)
+        const mDy = heroInst.character.pos.y - MUSHROOM_TRAMP_Y
+        const capTopDy = -(MUSHROOM_TRAMP_TOTAL_H + 18)
+        if (mDx < MUSHROOM_TRAMP_RADIUS && mDy < capTopDy + 22 && mDy > capTopDy - 20 && heroInst.character.vel?.y >= 0) {
+          heroInst.character.vel.y = -MUSHROOM_TRAMP_FORCE
+          gameState.mushroomCooldown = MUSHROOM_TRAMP_COOLDOWN
+          gameState.mushroomSquash = MUSHROOM_SQUASH_MAX
+          sound && Sound.playJumpSound(sound)
+        }
+      }
+      //
+      // Counter follows hero every frame (phase1 / phase2 tree count display)
+      //
+      if ((gameState.phase === 'phase1' || gameState.phase === 'phase2') && gameState.counterObj?.exists?.() && heroInst.character?.pos) {
+        const hx = heroInst.character.pos.x
+        const hy = heroInst.character.pos.y
+        const cx = hx + TOUCH_COUNTER_X_OFFSET
+        const cy = hy + TOUCH_COUNTER_Y_OFFSET
+        gameState.counterObj.pos.x = cx
+        gameState.counterObj.pos.y = cy
+        const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+        gameState.counterOutlines?.forEach((n, i) => {
+          if (!n?.exists?.()) return
+          n.pos.x = cx + offs[i][0]
+          n.pos.y = cy + offs[i][1]
+        })
+      }
+      //
+      // Melody note counter: show x/5 near hero while melody phase is active
+      //
+      if (gameState.phase === 'melody' && heroInst.character?.pos) {
+        updateMelodyCounter(k, gameState, heroInst.character.pos.x, heroInst.character.pos.y)
+      } else if (gameState.phase !== 'melody' && gameState.melodyCounterObj?.exists?.()) {
+        destroyMelodyCounter(k, gameState)
+      }
     })
     //
     // Small mushrooms scattered along the ground (some carry joke hovers)
     //
-    const l1Mushrooms = createL1Mushrooms(k)
+    const l1Mushrooms = createL1Mushrooms(k, gameState)
     const mushroomTipTargets = l1Mushrooms
       .filter(m => m.tooltipText)
       .map(m => ({
@@ -2098,103 +2040,17 @@ export function sceneLesson1(k) {
     })
     Tooltip.create({
       k,
-      targets: [spiderHoverTooltipTarget(spiderL1Inst, L1_SPIDER_TOOLTIP_TEXT)]
+      targets: [spiderHoverTooltipTarget(spiderL1Inst, () => gameState.phase === 'end' ? 'Yuhuuu, discooo!!!' : L1_SPIDER_TOOLTIP_TEXT)]
     })
     //
-    // ESC key to return to menu
+    // ESC key to return to menu — also stops end music if playing
     //
     k.onKeyPress("escape", () => {
       if (LevelHelp.isAnyPanelOpen()) return
+      gameState._endMusicRef?.stop?.()
       goToMenuAfterAssets(k)
     })
   })
-}
-
-/**
- * Check if player earned speed bonus for completing level faster than target
- * @param {number} levelTime - Time taken to complete level (seconds)
- * @returns {boolean} True if speed bonus earned
- */
-function checkSpeedBonus(levelTime) {
-  const targetTime = CFG.gameplay.speedBonusTime
-    && CFG.gameplay.speedBonusTime['lesson-touch.1']
-  if (!targetTime) return false
-  return levelTime < targetTime
-}
-
-/**
- * Play speed bonus visual effects on the small hero indicator
- * Flashes hero color/white and creates circle particles flying outward
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator with smallHero
- */
-function playSpeedBonusEffects(k, levelIndicator) {
-  if (!levelIndicator?.smallHero?.character) return
-  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.sections.touch.body
-  const heroColor = getRGB(k, bodyColorHex)
-  flashSmallHeroBonus(k, levelIndicator, heroColor, 0)
-  createSpeedBonusParticles(k, levelIndicator, heroColor)
-}
-
-/**
- * Flash small hero between hero color and white for speed bonus
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator with smallHero
- * @param {Object} heroColor - RGB color matching the hero body
- * @param {number} count - Current flash iteration
- */
-function flashSmallHeroBonus(k, levelIndicator, heroColor, count) {
-  if (count >= SPEED_BONUS_FLASH_COUNT) {
-    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
-    return
-  }
-  levelIndicator.smallHero.character.color = count % 2 === 0
-    ? heroColor
-    : k.rgb(255, 255, 255)
-  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, heroColor, count + 1))
-}
-
-/**
- * Create circle particles flying outward from small hero on speed bonus
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator with smallHero
- * @param {Object} heroColor - RGB color matching the hero body
- */
-function createSpeedBonusParticles(k, levelIndicator, heroColor) {
-  if (!levelIndicator?.smallHero?.character) return
-  const heroX = levelIndicator.smallHero.character.pos.x
-  const heroY = levelIndicator.smallHero.character.pos.y
-  for (let i = 0; i < SPEED_BONUS_PARTICLE_COUNT; i++) {
-    const angle = (Math.PI * 2 * i) / SPEED_BONUS_PARTICLE_COUNT
-    const speed = SPEED_BONUS_PARTICLE_SPEED_MIN + Math.random() * SPEED_BONUS_PARTICLE_SPEED_RANGE
-    const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
-    const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
-    //
-    // Create small circle particle matching hero body color
-    //
-    const particle = k.add([
-      k.circle(size),
-      k.pos(heroX, heroY),
-      k.color(heroColor.r, heroColor.g, heroColor.b),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 11),
-      k.anchor('center'),
-      k.fixed()
-    ])
-    const velocityX = Math.cos(angle) * speed
-    const velocityY = Math.sin(angle) * speed
-    let age = 0
-    particle.onUpdate(() => {
-      const dt = k.dt()
-      age += dt
-      particle.pos.x += velocityX * dt
-      particle.pos.y += velocityY * dt
-      particle.opacity = 1 - (age / lifetime)
-      if (age >= lifetime && particle.exists?.()) {
-        k.destroy(particle)
-      }
-    })
-  }
 }
 
 /**
@@ -2230,15 +2086,20 @@ function createRoundedCornerSprite(radius, color) {
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator with lifeImage
  */
-function onPoisonLeafDeath(k, heroInst, levelIndicator) {
+function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst) {
   if (heroInst.isDying) return
   Hero.death(heroInst, () => {
+    //
+    // Revert any bonus fragments collected this session — they carry over
+    // only when the hero completes the level, not on death.
+    //
+    BonusHero.revertCollection(bonusHeroInst)
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
     set('lifeScore', newScore)
     levelIndicator?.updateLifeScore?.(newScore)
     if (levelIndicator?.lifeImage?.sprite?.exists?.()) {
-      Sound.playLifeSound(k)
+      Sound.playGentleLifeSound(sound)
       const originalColor = levelIndicator.lifeImage.sprite.color
       flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnDeath(k, levelIndicator)
@@ -2564,203 +2425,219 @@ function onUpdateLeafTooltips(fallingLeafInst, targets, getPhrase) {
   }
 }
 //
-// Validates a new tree touch against the target melody and updates playerSequence.
+// Placeholder — melody logic now lives in lesson1-runtime.js processMelodySequence
 //
-function processTreeMelodyTouch(k, gameState, touchedTreeIndex, sequencePauseMinimum, melodyFeedback) {
-  const { sound, lightningState } = melodyFeedback ?? {}
-  const targetSequence = gameState.targetSequence
-  const firstNoteIndex = targetSequence[0]
-  //
-  // If same tree is touched twice in a row, reset sequence
-  //
-  if (touchedTreeIndex === gameState.lastTouchedTreeIndex) {
-    gameState.playerSequence = []
-    gameState.lastTouchedTreeIndex = -1
-    gameState.sequenceCompleteTime = null
-    gameState.pauseTimer = 0
-    return
+/**
+ * Creates a small worm that crawls along the root level with peristaltic locomotion.
+ * The head steers sinusoidally; body segments follow with distance constraints.
+ * @param {Object} k - Kaplay instance
+ * @param {number} index - Worm index for varied starting position and direction
+ * @returns {Object} Worm instance
+ */
+function createWorm(k, index) {
+  const leftBound = LEFT_MARGIN + 40
+  const rightBound = CFG.visual.screen.width - RIGHT_MARGIN - 40
+  const range = rightBound - leftBound
+  const zoneWidth = range / WORM_COUNT
+  const startX = leftBound + zoneWidth * index + Math.random() * zoneWidth
+  const yZoneCenter = WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT
+  const startAngle = (index % 2 === 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.5
+  const segments = []
+  for (let i = 0; i < WORM_SEGMENT_COUNT; i++) {
+    segments.push({
+      x: startX - i * WORM_REST_SPACING * Math.cos(startAngle),
+      y: yZoneCenter - i * WORM_REST_SPACING * Math.sin(startAngle)
+    })
   }
-  //
-  // Check if sequence was recently completed - if pause is too short, reset
-  //
-  if (gameState.sequenceCompleteTime !== null) {
-    if (gameState.pauseTimer < sequencePauseMinimum) {
-      gameState.playerSequence = []
-      gameState.sequenceCompleteTime = null
-      gameState.pauseTimer = 0
-      gameState.lastTouchedTreeIndex = -1
-      return
-    }
-    gameState.sequenceCompleteTime = null
-    gameState.pauseTimer = 0
-  }
-  const expectedNote = gameState.playerSequence.length < targetSequence.length
-    ? targetSequence[gameState.playerSequence.length]
-    : firstNoteIndex
-  if (touchedTreeIndex === expectedNote) {
-    gameState.playerSequence.push(touchedTreeIndex)
-    gameState.lastTouchedTreeIndex = touchedTreeIndex
-    if (gameState.playerSequence.length === targetSequence.length) {
-      gameState.sequenceCompleteTime = k.time()
-      gameState.pauseTimer = 0
-    }
-    return
-  }
-  //
-  // Wrong note — thunder on every mistake until the player hits Do again
-  //
-  gameState.playerSequence = []
-  gameState.lastTouchedTreeIndex = -1
-  gameState.sequenceCompleteTime = null
-  gameState.pauseTimer = 0
-  !gameState.antiHeroActive && sound && lightningState && triggerMelodyWrongThunder(sound, lightningState)
-}
-//
-// Shows timed speech bubbles from the anti-hero if the melody puzzle
-// is unsolved for too long. First hint at 30s, notes hint at 60s,
-// then notes hint repeats every 30s.
-//
-function onUpdateAntiHeroHints(k, gameState, antiHeroInst) {
-  if (gameState.antiHeroActive) return
-  gameState.hintTimer += k.dt()
-  //
-  // First hint: "I'm waiting for you here" after 30 seconds (once)
-  //
-  if (!gameState.hintWaitShown && gameState.hintTimer >= ANTIHERO_HINT_WAIT_DELAY) {
-    gameState.hintWaitShown = true
-    showAntiHeroHint(k, gameState, antiHeroInst, ANTIHERO_HINT_WAIT_TEXT, ANTIHERO_HINT_DISPLAY_TIME)
-  }
-  //
-  // Notes hint: first at 60s, then repeats every 30s
-  //
-  if (!gameState.hintNotesFirstShown && gameState.hintTimer >= ANTIHERO_HINT_NOTES_DELAY) {
-    gameState.hintNotesFirstShown = true
-    gameState.hintNotesLastShownAt = gameState.hintTimer
-    showAntiHeroHint(k, gameState, antiHeroInst, ANTIHERO_HINT_NOTES_TEXT, ANTIHERO_HINT_NOTES_DISPLAY_TIME)
-  } else if (gameState.hintNotesFirstShown && !gameState.currentHint) {
-    const elapsed = gameState.hintTimer - gameState.hintNotesLastShownAt
-    if (elapsed >= ANTIHERO_HINT_NOTES_REPEAT_INTERVAL) {
-      gameState.hintNotesLastShownAt = gameState.hintTimer
-      showAntiHeroHint(k, gameState, antiHeroInst, ANTIHERO_HINT_NOTES_TEXT, ANTIHERO_HINT_NOTES_DISPLAY_TIME)
+  const trailRgb = parseHex(WORM_TRAIL_COLOR)
+  const bodyRgb = parseHex(WORM_BODY_COLOR)
+  const headRgb = parseHex(WORM_HEAD_COLOR)
+  const ventralRgb = parseHex(WORM_VENTRAL_HIGHLIGHT)
+  const inst = {
+    segments,
+    heading: startAngle,
+    wavePhase: Math.random() * Math.PI * 2,
+    steerPhase: Math.random() * Math.PI * 2,
+    directionTimer: WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE,
+    trail: Array.from({ length: WORM_TRAIL_MAX_POINTS }, () => ({ x: 0, y: 0, opacity: 0 })),
+    trailHead: 0,
+    leftBound,
+    rightBound,
+    yMin: WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT - 3,
+    yMax: WORM_BASE_Y + (index + 1) * WORM_Y_ZONE_HEIGHT,
+    sleeping: false,
+    drawColors: {
+      trail: k.rgb(trailRgb[0], trailRgb[1], trailRgb[2]),
+      body: k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2]),
+      head: k.rgb(headRgb[0], headRgb[1], headRgb[2]),
+      ventral: k.rgb(ventralRgb[0], ventralRgb[1], ventralRgb[2]),
+      ring: k.rgb(26, 18, 14),
+      outline: k.rgb(12, 10, 8),
+      eye: k.rgb(220, 220, 210),
+      pupil: k.rgb(20, 20, 20)
+    },
+    drawVecs: {
+      trail: k.vec2(0, 0),
+      segP1: k.vec2(0, 0),
+      segP2: k.vec2(0, 0),
+      ring: k.vec2(0, 0),
+      head: k.vec2(0, 0),
+      eye: k.vec2(0, 0),
+      pupil: k.vec2(0, 0)
     }
   }
+  k.add([
+    k.z(WORM_DRAW_Z),
+    { draw() { onDrawWorm(k, inst) } }
+  ])
+  return inst
 }
 //
-// Displays a forced-visible tooltip above the anti-hero for a fixed duration.
-// Uses a higher Y offset when the hover tooltip is also visible to avoid overlap.
+// Per-frame peristaltic locomotion: steers head, drags body segments.
 //
-function showAntiHeroHint(k, gameState, antiHeroInst, text, duration) {
-  gameState.currentHint && Tooltip.destroy(gameState.currentHint)
-  const target = {
-    x: () => antiHeroInst.character.pos.x,
-    y: () => antiHeroInst.character.pos.y,
-    width: 0,
-    height: 0,
-    text,
-    offsetY: ANTIHERO_HINT_Y_OFFSET
+function onUpdateWorm(k, inst) {
+  if (inst.sleeping) return
+  const dt = k.dt()
+  inst.wavePhase += WORM_WAVE_SPEED * dt
+  inst.steerPhase += WORM_STEER_SPEED * dt
+  inst.directionTimer -= dt
+  //
+  // Flip heading at random intervals or when hitting bounds
+  //
+  if (inst.directionTimer <= 0) {
+    inst.heading += Math.PI + (Math.random() - 0.5) * 0.8
+    inst.directionTimer = WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE
   }
-  gameState.currentHint = Tooltip.create({
-    k,
-    targets: [target],
-    forceVisible: true
-  })
-  gameState.currentHint.activeTarget = target
-  gameState.currentHint.frozenX = Math.round(antiHeroInst.character.pos.x)
-  gameState.currentHint.frozenY = Math.round(antiHeroInst.character.pos.y)
-  gameState.currentHint.opacity = 1
-  k.wait(duration, () => {
-    gameState.currentHint && Tooltip.destroy(gameState.currentHint)
-    gameState.currentHint = null
-  })
+  const steerOffset = Math.sin(inst.steerPhase) * WORM_STEER_AMPLITUDE
+  const actualHeading = inst.heading + steerOffset
+  const head = inst.segments[0]
+  head.x += Math.cos(actualHeading) * WORM_HEAD_SPEED * dt
+  head.y += Math.sin(actualHeading) * WORM_HEAD_SPEED * dt
+  //
+  // Bounce off horizontal bounds
+  //
+  if (head.x < inst.leftBound) { head.x = inst.leftBound; inst.heading = Math.abs(inst.heading % (Math.PI * 2)) * (inst.heading < 0 ? -1 : 1); inst.heading = 0 }
+  if (head.x > inst.rightBound) { head.x = inst.rightBound; inst.heading = Math.PI }
+  //
+  // Clamp Y to zone
+  //
+  head.y = Math.max(inst.yMin, Math.min(inst.yMax, head.y))
+  //
+  // Body segments follow head with distance constraints
+  //
+  for (let i = 1; i < inst.segments.length; i++) {
+    const prev = inst.segments[i - 1]
+    const seg = inst.segments[i]
+    const dx = seg.x - prev.x
+    const dy = seg.y - prev.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const target = WORM_REST_SPACING
+    if (dist > target * WORM_MAX_STRETCH) {
+      const ratio = (dist - target) / dist
+      seg.x -= dx * ratio * WORM_FOLLOW_SPEED * dt
+      seg.y -= dy * ratio * WORM_FOLLOW_SPEED * dt
+    }
+    seg.y = Math.max(inst.yMin, Math.min(inst.yMax, seg.y))
+  }
+  //
+  // Update trail ring buffer — store head position with full opacity
+  //
+  const t = inst.trail[inst.trailHead]
+  t.x = head.x
+  t.y = head.y
+  t.opacity = 0.45
+  inst.trailHead = (inst.trailHead + 1) % WORM_TRAIL_MAX_POINTS
+  for (let i = 0; i < WORM_TRAIL_MAX_POINTS; i++) {
+    if (inst.trail[i].opacity > 0) inst.trail[i].opacity -= WORM_TRAIL_FADE_SPEED
+  }
 }
-// WORM_DISABLED_START — createWorm (small worm peristaltic crawler)
-// /**
-//  * Creates a small worm that crawls along the root level with peristaltic locomotion.
-//  * A contraction wave travels head-to-tail through connected segments.
-//  * The head leads movement; body follows with distance constraints.
-//  * @param {Object} k - Kaplay instance
-//  * @param {number} index - Worm index for varied starting position and direction
-//  * @returns {Object} Worm instance
-//  */
-// function createWorm(k, index) {
-//   const leftBound = LEFT_MARGIN + 40
-//   const rightBound = CFG.visual.screen.width - RIGHT_MARGIN - 40
-//   const range = rightBound - leftBound
-//   const zoneWidth = range / WORM_COUNT
-//   const startX = leftBound + zoneWidth * index + Math.random() * zoneWidth
-//   const yZoneCenter = WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT
-//   const startAngle = (index % 2 === 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.5
-//   const segments = []
-//   for (let i = 0; i < WORM_SEGMENT_COUNT; i++) {
-//     segments.push({
-//       x: startX - i * WORM_REST_SPACING * Math.cos(startAngle),
-//       y: yZoneCenter - i * WORM_REST_SPACING * Math.sin(startAngle)
-//     })
-//   }
-//   const trailRgb = parseHex(WORM_TRAIL_COLOR)
-//   const bodyRgb = parseHex(WORM_BODY_COLOR)
-//   const headRgb = parseHex(WORM_HEAD_COLOR)
-//   const ventralRgb = parseHex(WORM_VENTRAL_HIGHLIGHT)
-//   const inst = {
-//     segments,
-//     heading: startAngle,
-//     wavePhase: Math.random() * Math.PI * 2,
-//     steerPhase: Math.random() * Math.PI * 2,
-//     directionTimer: WORM_DIRECTION_CHANGE_MIN + Math.random() * WORM_DIRECTION_CHANGE_RANGE,
-//     trail: Array.from({ length: WORM_TRAIL_MAX_POINTS }, () => ({ x: 0, y: 0, opacity: 0 })),
-//     trailHead: 0,
-//     leftBound,
-//     rightBound,
-//     yMin: WORM_BASE_Y + index * WORM_Y_ZONE_HEIGHT - 3,
-//     yMax: WORM_BASE_Y + (index + 1) * WORM_Y_ZONE_HEIGHT,
-//     sleeping: false,
-//     drawColors: {
-//       trail: k.rgb(trailRgb[0], trailRgb[1], trailRgb[2]),
-//       body: k.rgb(bodyRgb[0], bodyRgb[1], bodyRgb[2]),
-//       head: k.rgb(headRgb[0], headRgb[1], headRgb[2]),
-//       ventral: k.rgb(ventralRgb[0], ventralRgb[1], ventralRgb[2]),
-//       ring: k.rgb(26, 18, 14),
-//       outline: k.rgb(12, 10, 8),
-//       eye: k.rgb(220, 220, 210),
-//       pupil: k.rgb(20, 20, 20)
-//     },
-//     drawVecs: {
-//       trail: k.vec2(0, 0),
-//       segP1: k.vec2(0, 0),
-//       segP2: k.vec2(0, 0),
-//       ventralP1: k.vec2(0, 0),
-//       ventralP2: k.vec2(0, 0),
-//       ring: k.vec2(0, 0),
-//       head: k.vec2(0, 0),
-//       eye: k.vec2(0, 0),
-//       pupil: k.vec2(0, 0)
-//     }
-//   }
-//   k.add([
-//     k.z(WORM_DRAW_Z),
-//     { draw() { onDrawWorm(k, inst) } }
-//   ])
-//   return inst
-// }
-// WORM_DISABLED_END
 //
-// WORM_DISABLED_START — onUpdateWorm (peristaltic locomotion)
+// Draws the worm: faint trail, body segments with peristaltic bulge, eyes.
 //
-// function onUpdateWorm(k, inst) { ... }
-// WORM_DISABLED_END
-// WORM_DISABLED_START — onDrawWorm, drawWormEyes (small worm draw helpers)
-// function onDrawWorm(k, inst) { ... }
-// function drawWormEyes(k, inst, head) { ... }
-// WORM_DISABLED_END
+function onDrawWorm(k, inst) {
+  const { segments, drawColors, drawVecs, wavePhase } = inst
+  //
+  // Trail rendered every other frame to halve circle draw calls
+  //
+  inst._trailFrame = (inst._trailFrame ?? 0) + 1
+  if (inst._trailFrame % 2 === 0) {
+    for (let i = 0; i < WORM_TRAIL_MAX_POINTS; i++) {
+      const tp = inst.trail[i]
+      if (tp.opacity <= 0) continue
+      drawVecs.trail.x = tp.x
+      drawVecs.trail.y = tp.y
+      k.drawCircle({ pos: drawVecs.trail, radius: 1.2, color: drawColors.trail, opacity: tp.opacity })
+    }
+  }
+  //
+  // Body segments — radius varies with peristaltic wave
+  //
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i]
+    //
+    // Peristaltic bulge: wave travels tail-to-head
+    //
+    const waveOffset = (i / segments.length) * Math.PI * 2
+    const bulge = WORM_CONTRACT_MIN + (WORM_CONTRACT_MAX - WORM_CONTRACT_MIN) * (0.5 + 0.5 * Math.sin(wavePhase - waveOffset))
+    const r = WORM_SEGMENT_RADIUS * (i === 0 ? 1.6 : bulge)
+    const isHead = i === 0
+    drawVecs.segP1.x = seg.x
+    drawVecs.segP1.y = seg.y
+    k.drawCircle({ pos: drawVecs.segP1, radius: r + 0.8, color: drawColors.outline, opacity: 0.9 })
+    k.drawCircle({ pos: drawVecs.segP1, radius: r, color: isHead ? drawColors.head : drawColors.body, opacity: 1 })
+    //
+    // Ventral highlight on body segments
+    //
+    if (!isHead && r > 1.5) {
+      drawVecs.segP2.x = seg.x
+      drawVecs.segP2.y = seg.y - r * 0.35
+      k.drawCircle({ pos: drawVecs.segP2, radius: r * 0.45, color: drawColors.ventral, opacity: 0.3 })
+    }
+    //
+    // Segment rings (subtle division lines)
+    //
+    if (!isHead && i % 2 === 0) {
+      drawVecs.ring.x = seg.x
+      drawVecs.ring.y = seg.y
+      k.drawCircle({ pos: drawVecs.ring, radius: r, color: drawColors.ring, opacity: WORM_SEGMENT_RING_OPACITY, fill: false, width: 0.6 })
+    }
+  }
+  //
+  // Eyes on the head segment
+  //
+  drawWormEyes(k, inst, segments[0])
+}
+//
+// Draws two small eyes on the worm head, oriented along the heading direction.
+//
+function drawWormEyes(k, inst, head) {
+  const { drawColors, drawVecs, heading } = inst
+  const perp = heading + Math.PI / 2
+  const eyeDist = WORM_EYE_SPACING
+  for (let side = -1; side <= 1; side += 2) {
+    const ex = head.x + Math.cos(perp) * eyeDist * side + Math.cos(heading) * 2
+    const ey = head.y + Math.sin(perp) * eyeDist * side + Math.sin(heading) * 2
+    drawVecs.eye.x = ex
+    drawVecs.eye.y = ey
+    k.drawCircle({ pos: drawVecs.eye, radius: WORM_EYE_RADIUS, color: drawColors.eye, opacity: 1 })
+    drawVecs.pupil.x = ex + Math.cos(heading) * 0.5
+    drawVecs.pupil.y = ey + Math.sin(heading) * 0.5
+    k.drawCircle({ pos: drawVecs.pupil, radius: WORM_PUPIL_RADIUS, color: drawColors.pupil, opacity: 1 })
+  }
+}
 //
 // Checks if hero overlaps the giant worm body and triggers death + smile.
 //
-function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator) {
+function checkGiantWormCollision(k, heroInst, wormInst, levelIndicator, sound, bonusHeroInst) {
+  //
+  // Worm in disco-dance mode does not hurt the hero
+  //
+  if (wormInst.phase === 'dancing') return
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
   if (GiantWorm.checkCollision(wormInst, heroX, heroY)) {
     GiantWorm.startSmiling(wormInst)
-    onPoisonLeafDeath(k, heroInst, levelIndicator)
+    onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst)
   }
 }
 //
@@ -3035,7 +2912,7 @@ function onUpdateFrogAmbient(k, state) {
 //
 // Creates small mushrooms scattered along the level 1 ground
 //
-function createL1Mushrooms(k) {
+function createL1Mushrooms(k, gameState) {
   const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
   const mushrooms = []
   //
@@ -3106,14 +2983,34 @@ function createL1Mushrooms(k) {
       spritePos: k.vec2(mX, mY)
     })
   }
+  //
+  // Disco dance constants: mushrooms sway left/right when end music plays
+  //
+  const MUSHROOM_DANCE_AMP_DEG = 12
+  const MUSHROOM_DANCE_FREQ = 3.5
   mushrooms.forEach(m => loadTouchSprite(k, m.spriteName, m.dataUrl))
   k.add([
     k.z(6),
     {
       draw() {
         const t = k.time()
+        const dancing = gameState?.phase === 'end'
         for (const m of mushrooms) {
-          k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
+          if (dancing) {
+            //
+            // Sway around base center: use anchor:'bot' so rotation origin is
+            // the bottom-center of the sprite, then apply sine wave angle.
+            //
+            const angle = Math.sin(t * MUSHROOM_DANCE_FREQ + m.glowPhase) * MUSHROOM_DANCE_AMP_DEG
+            k.drawSprite({
+              sprite: m.spriteName,
+              pos: k.vec2(m.x + m.width * 0.5, m.y + m.height),
+              angle,
+              anchor: 'bot'
+            })
+          } else {
+            k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
+          }
           // FPS_DISABLED: drawL1MushroomContourGlow(k, m, t)
         }
       }
@@ -3200,20 +3097,27 @@ function drawMushroomShape(ctx, totalW, totalH, capW, capH, stemH, stemW, color)
 // The beak opens when a crow MP3 sample plays (crowMp3State.mouthOpen).
 // The crow always faces the hero; eyes track the hero position.
 //
-function addCrowOnRock(k, rock, crowMp3State, heroInst) {
+function addCrowOnRock(k, rock, crowMp3State, heroInst, gameState) {
   const sc = 1.35
   const cx = rock.worldX
   //
   // Ground-level perch: body center placed so feet (legBot = perchY + 15*sc) align with FLOOR_Y.
   //
   const perchY = rock.worldY - rock.radius * 0.62 - 15 * sc
+  //
+  // Crow dance: hop up/down at ~2Hz when end music is playing (phase 'end')
+  //
+  const CROW_DANCE_AMP = 6
+  const CROW_DANCE_FREQ = 4.0
   k.add([
     k.z(L1_CROW_ROCK_DRAW_Z),
     {
       draw() {
         const heroX = heroInst?.character?.pos?.x ?? cx + 1
         const s = heroX >= cx ? 1 : -1
-        drawCrow(k, cx, perchY, sc, s, crowMp3State.mouthOpen, heroInst)
+        const dancing = gameState?.phase === 'end'
+        const bounce = dancing ? Math.abs(Math.sin(k.time() * CROW_DANCE_FREQ)) * CROW_DANCE_AMP : 0
+        drawCrow(k, cx, perchY - bounce, sc, s, crowMp3State.mouthOpen, heroInst)
       }
     }
   ])
@@ -3325,19 +3229,533 @@ function triggerAllRootsGlow(treeRootsInst) {
   }
 }
 //
-// Blinks the anti-hero white and back to activeColor several times
-// with a mouth sound on each white flash (melody success celebration)
+// Creates two text objects for a standing letter (fill + outline)
+// Returns array [outlineObj, fillObj] for later manipulation
 //
-const ANTIHERO_BLINK_COUNT = 9
-const ANTIHERO_BLINK_INTERVAL = 0.13
-function blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, count) {
-  if (!antiHeroInst.character?.exists?.()) return
-  if (count >= ANTIHERO_BLINK_COUNT * 2) {
-    antiHeroInst.character.color = k.rgb(255, 255, 255)
+function createStandingLetter(k, letter, x, y, size, angle, fillR, fillG, fillB, z) {
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const oo = T_LETTER_OUTLINE
+  //
+  // 8-direction outline offsets matching lesson0 createPickupLetter style
+  //
+  const offsets = [
+    [-oo, -oo], [0, -oo], [oo, -oo],
+    [-oo, 0], [oo, 0],
+    [-oo, oo], [0, oo], [oo, oo]
+  ]
+  const outlines = offsets.map(([dx, dy]) => k.add([
+    k.text(letter, { size, font }),
+    k.pos(x + dx, y + dy),
+    k.anchor('bot'),
+    k.rotate(angle),
+    k.color(0, 0, 0),
+    k.z(z)
+  ]))
+  const fill = k.add([
+    k.text(letter, { size, font }),
+    k.pos(x, y),
+    k.anchor('bot'),
+    k.rotate(angle),
+    k.color(fillR, fillG, fillB),
+    k.z(z + 0.1)
+  ])
+  return [...outlines, fill]
+}
+//
+// Floor mask for T letter — clips the submerged portion below FLOOR_Y
+//
+function createTLetterMask(k, tX, tY) {
+  //
+  // tY is the bottom edge of the letter (anchor 'bot'). The mask draws a
+  // background-coloured rect from FLOOR_Y down to tY to hide the
+  // submerged portion, matching lesson0 createFloorMask style.
+  //
+  const maskW = T_LETTER_FONT_SIZE * 1.4
+  return k.add([
+    k.pos(tX - maskW / 2, FLOOR_Y),
+    k.z(T_LETTER_MASK_Z),
+    {
+      draw() {
+        k.drawRect({
+          pos: k.vec2(0, 0),
+          width: maskW,
+          height: tY - FLOOR_Y + 4,
+          color: k.rgb(L1_SCENE_BG_R, L1_SCENE_BG_G, L1_SCENE_BG_B)
+        })
+      }
+    }
+  ])
+}
+//
+// Animates a standing letter blinking (teal → white pulse) until collected.
+// Matches lesson0's TOUCH letter pulse: TOUCH_LETTER_PULSE_SPEED / TOUCH_LETTER_PULSE_MIN.
+// letterObjs layout: [...outlines (0..n-2), fill (last)]
+//
+function animateLetterBlink(k, letterObjs, blinkState, collected) {
+  if (collected) return
+  blinkState.timer += k.dt()
+  const pulse = (Math.sin(blinkState.timer * TOUCH_LETTER_PULSE_SPEED) + 1) / 2
+  const opacity = TOUCH_LETTER_PULSE_MIN + (1 - TOUCH_LETTER_PULSE_MIN) * pulse
+  const cr = Math.round(T_LETTER_FILL_R + (255 - T_LETTER_FILL_R) * pulse)
+  const cg = Math.round(T_LETTER_FILL_G + (255 - T_LETTER_FILL_G) * pulse)
+  const cb = Math.round(T_LETTER_FILL_B + (255 - T_LETTER_FILL_B) * pulse)
+  const fill = letterObjs[letterObjs.length - 1]
+  if (fill?.exists?.()) {
+    fill.opacity = opacity
+    fill.color = k.rgb(cr, cg, cb)
+  }
+  for (let i = 0; i < letterObjs.length - 1; i++) {
+    letterObjs[i]?.exists?.() && (letterObjs[i].opacity = opacity)
+  }
+}
+//
+// Called when hero collects the T letter
+//
+function onTLetterCollect(k, gameState, tLetterObjs, tLetterMask, sound, levelIndicator, treeRootsInst, crowTooltipState) {
+  gameState.tCollected = true
+  gameState.phase = 'phase1'
+  gameState.treesEnabled = true
+  //
+  // Destroy T letter visuals
+  //
+  tLetterObjs.forEach(o => o?.exists?.() && k.destroy(o))
+  tLetterMask?.exists?.() && k.destroy(tLetterMask)
+  //
+  // Enable tree glow and same-note mode
+  //
+  TreeRoots.enableSameNoteMode && TreeRoots.enableSameNoteMode(treeRootsInst)
+  //
+  // Show dialog
+  //
+  gameState.dialogOpen = true
+  gameState.lastDialogText = L1_GOAL_T
+  gameState.goalRef && (gameState.goalRef.text = L1_GOAL_T)
+  LevelHelp.openStandalonePanel(k, L1_DIALOG_T, {
+    textStyles: { hl: { color: k.rgb(255, 200, 60) } },
+    sceneBackdropHex: L1_SCENE_BG_HEX,
+    onClose: () => { gameState.dialogOpen = false }
+  })
+  //
+  // Flash T in TOUCH HUD
+  //
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 1)
+  LevelIndicator.flashLetterBurst(levelIndicator, 1)
+  sound && Sound.playVictorySound(sound)
+}
+//
+// Called when O letter is collected
+//
+function onOLetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
+  if (gameState.oCollected) return
+  gameState.oCollected = true
+  gameState.phase = 'phase2'
+  gameState.treesPhase2Touched = new Set()
+  //
+  // Destroy O platform after short delay
+  //
+  k.wait(2.5, () => {
+    gameState.oPlatformObj?.exists?.() && k.destroy(gameState.oPlatformObj)
+    gameState.oPlatformObj = null
+  })
+  //
+  // Enable unique notes per tree
+  //
+  TreeRoots.enableUniqueNoteMode && TreeRoots.enableUniqueNoteMode(treeRootsInst)
+  //
+  // Show dialog
+  //
+  gameState.dialogOpen = true
+  gameState.lastDialogText = L1_GOAL_O
+  gameState.goalRef && (gameState.goalRef.text = L1_GOAL_O)
+  LevelHelp.openStandalonePanel(k, L1_DIALOG_O, {
+    textStyles: { hl: { color: k.rgb(255, 200, 60) } },
+    sceneBackdropHex: L1_SCENE_BG_HEX,
+    onClose: () => { gameState.dialogOpen = false }
+  })
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 2)
+  LevelIndicator.flashLetterBurst(levelIndicator, 2)
+  sound && Sound.playVictorySound(sound)
+}
+//
+// Called when U letter is collected
+//
+function onULetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
+  if (gameState.uCollected) return
+  gameState.uCollected = true
+  gameState.phase = 'melody'
+  //
+  // Destroy U platform after short delay
+  //
+  k.wait(2.5, () => {
+    gameState.uPlatformObj?.exists?.() && k.destroy(gameState.uPlatformObj)
+    gameState.uPlatformObj = null
+  })
+  //
+  // Show dialog
+  //
+  gameState.dialogOpen = true
+  gameState.lastDialogText = L1_GOAL_U
+  gameState.goalRef && (gameState.goalRef.text = L1_GOAL_U)
+  LevelHelp.openStandalonePanel(k, L1_DIALOG_U, {
+    textStyles: { hl: { color: k.rgb(255, 200, 60) } },
+    sceneBackdropHex: L1_SCENE_BG_HEX,
+    onClose: () => { gameState.dialogOpen = false }
+  })
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 3)
+  LevelIndicator.flashLetterBurst(levelIndicator, 3)
+  sound && Sound.playVictorySound(sound)
+}
+//
+// Called when CH letters are collected — plays end music, blocks controls
+//
+function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
+  if (gameState.chCollected) return
+  gameState.chCollected = true
+  gameState.phase = 'end'
+  //
+  // Level completed — persist bonus fragments so they survive the next session
+  //
+  BonusHero.finalizeCollection(gameState._bonusHeroRef)
+  //
+  // Flash CH in TOUCH HUD (letters 4 and 5)
+  //
+  LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 5)
+  LevelIndicator.flashLetterBurst(levelIndicator, 4)
+  k.wait(0.3, () => LevelIndicator.flashLetterBurst(levelIndicator, 5))
+  //
+  // Play victory sound, then start end music + disco effects
+  //
+  sound && Sound.playVictorySound(sound)
+  k.wait(0.8, () => {
+    //
+    // Start visual effects immediately so worm rises and trees cycle color
+    // even if music play is delayed by the browser.
+    //
+    gameState._giantWormRef && GiantWorm.startDancing(gameState._giantWormRef)
+    gameState._treeRootsRef && TreeRoots.startDisco(gameState._treeRootsRef)
+    //
+    // Try playing end music; retry once if k.play returns null (audio context
+    // may be suspended on first attempt after a long pause).
+    //
+    const tryPlayMusic = () => {
+      const m = k.play(END_MUSIC_NAME, { loop: false, volume: 0.8 })
+      if (m) gameState._endMusicRef = m
+      return !!m
+    }
+    if (!tryPlayMusic()) {
+      k.wait(0.4, tryPlayMusic)
+    }
+    //
+    // Fade screen to black over SCENE_FADE_OUT_DURATION, then run transition
+    //
+    const goNext = () => {
+      gameState._endMusicRef?.stop?.()
+      gameState._treeRootsRef && TreeRoots.stopDisco(gameState._treeRootsRef)
+      fadeOutLesson1(k, SCENE_FADE_OUT_DURATION, () => createLevelTransition(k, 'lesson-touch.1'))
+    }
+    const enterCancel = k.onKeyPress('enter', () => {
+      enterCancel.cancel()
+      goNext()
+    })
+    //
+    // Auto-transition when music ends (~60s). enterCancel guarded so goNext
+    // never fires twice if Enter was pressed before the timer fires.
+    //
+    k.wait(62, () => {
+      enterCancel.cancel()
+      goNext()
+    })
+  })
+  gameState.lastDialogText = L1_GOAL_CH
+  gameState.goalRef && (gameState.goalRef.text = L1_GOAL_CH)
+}
+//
+// Creates a log platform with a letter label on top of it
+// Returns { platformObj, letterObjs }
+//
+function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0) {
+  const platformObj = LogPlatform.create({ k, x: platX - w / 2, y: platY, width: w, height: h, opacity: 0 })
+  //
+  // Fade in platform
+  //
+  const fadeInterval = k.onUpdate(() => {
+    if (!platformObj.exists?.()) { fadeInterval.cancel(); return }
+    if (platformObj.opacity >= 1) { platformObj.opacity = 1; fadeInterval.cancel(); return }
+    platformObj.opacity = Math.min(1, platformObj.opacity + k.dt() * 1.5)
+  })
+  //
+  // Letter sinks 10px into the platform: bottom edge = platY + 10.
+  // Size matches lesson0 TOUCH letter size (68px).
+  // Optional tiltDeg rotates the letter for a casual, hand-placed look.
+  //
+  const LETTER_SINK_PX = 10
+  const letterX = platX
+  const letterY = platY + LETTER_SINK_PX
+  const oo = T_LETTER_OUTLINE
+  const offsets = [
+    [-oo, -oo], [0, -oo], [oo, -oo],
+    [-oo, 0], [oo, 0],
+    [-oo, oo], [0, oo], [oo, oo]
+  ]
+  const outlines = offsets.map(([ox, oy]) => k.add([
+    k.text(letter, { size: T_LETTER_FONT_SIZE, font: CFG.visual.fonts.thinFull }),
+    k.pos(letterX + ox, letterY + oy),
+    k.anchor('bot'),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.rotate(tiltDeg),
+    k.z(CFG.visual.zIndex.platforms + 1)
+  ]))
+  const fill = k.add([
+    k.text(letter, { size: T_LETTER_FONT_SIZE, font: CFG.visual.fonts.thinFull }),
+    k.pos(letterX, letterY),
+    k.anchor('bot'),
+    k.color(T_LETTER_FILL_R, T_LETTER_FILL_G, T_LETTER_FILL_B),
+    k.opacity(0),
+    k.rotate(tiltDeg),
+    k.z(CFG.visual.zIndex.platforms + 1.1)
+  ])
+  const letterFade = k.onUpdate(() => {
+    if (!fill.exists?.()) { letterFade.cancel(); return }
+    if (fill.opacity >= 1) {
+      fill.opacity = 1
+      outlines.forEach(o => { o.exists?.() && (o.opacity = 1) })
+      letterFade.cancel()
+      return
+    }
+    fill.opacity = Math.min(1, fill.opacity + k.dt() * 1.5)
+    outlines.forEach(o => { o.exists?.() && (o.opacity = fill.opacity) })
+  })
+  return { platformObj, letterObjs: [...outlines, fill] }
+}
+//
+// Creates the O platform (left side) after 7/7 tree touches in phase 1
+//
+function createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
+  if (gameState.oPlatformObj) return
+  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'O', O_PLATFORM_X, O_PLATFORM_Y, LOG_PLATFORM_W, LOG_PLATFORM_H, -9)
+  gameState.oPlatformObj = platformObj
+  gameState.oLetterObjs = letterObjs
+  gameState.phase = 'wait_o'
+  triggerAllRootsGlow(gameState._treeRootsRef ?? treeRootsInst)
+  sound && Sound.playVictorySound(sound)
+  //
+  // O letter blink state
+  //
+  const blinkState = { timer: 0, phase: 0 }
+  k.add([
+    k.z(CFG.visual.zIndex.platforms + 1.5),
+    {
+      draw() {
+        animateLetterBlink(k, letterObjs, blinkState, gameState.oCollected)
+      }
+    }
+  ])
+}
+//
+// Creates the U platform (right side) after 7/7 tree touches in phase 2
+//
+function createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
+  if (gameState.uPlatformObj) return
+  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'U', U_PLATFORM_X, U_PLATFORM_Y, U_PLATFORM_W, LOG_PLATFORM_H, 7)
+  gameState.uPlatformObj = platformObj
+  gameState.uLetterObjs = letterObjs
+  gameState.phase = 'wait_u'
+  triggerAllRootsGlow(treeRootsInst)
+  sound && Sound.playVictorySound(sound)
+  //
+  // U letter blink state
+  //
+  const blinkState = { timer: 0, phase: 0 }
+  k.add([
+    k.z(CFG.visual.zIndex.platforms + 1.5),
+    {
+      draw() {
+        animateLetterBlink(k, letterObjs, blinkState, gameState.uCollected)
+      }
+    }
+  ])
+}
+//
+// Creates the CH platform (left side) after melody solved
+//
+function createCHPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
+  if (gameState.chPlatformObj) return
+  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'CH', CH_PLATFORM_X, CH_PLATFORM_Y, CH_PLATFORM_W, LOG_PLATFORM_H)
+  gameState.chPlatformObj = platformObj
+  gameState.chLetterObjs = letterObjs
+  triggerAllRootsGlow(treeRootsInst)
+  sound && Sound.playVictorySound(sound)
+  const blinkState = { timer: 0, phase: 0 }
+  k.add([
+    k.z(CFG.visual.zIndex.platforms + 1.5),
+    {
+      draw() {
+        animateLetterBlink(k, letterObjs, blinkState, gameState.chCollected)
+      }
+    }
+  ])
+}
+//
+// Per-frame function — updates touch counter display and checks letter collections
+//
+function processL1TreeTouch(k, gameState, touchedIdx, sound, levelIndicator, treeRootsInst, transition) {
+  const heroChar = gameState._heroRef?.character
+  if (!heroChar) return
+  const heroX = heroChar.pos.x
+  const heroY = heroChar.pos.y
+  //
+  // Phase 1: count unique tree touches → O platform
+  //
+  if (gameState.phase === 'phase1' && touchedIdx !== -1) {
+    if (!gameState.treesPhase1Touched.has(touchedIdx)) {
+      gameState.treesPhase1Touched.add(touchedIdx)
+      updateTreeCounter(k, gameState, gameState.treesPhase1Touched.size, 7, heroX, heroY)
+    }
+    if (gameState.treesPhase1Touched.size >= 7) {
+      destroyTreeCounter(k, gameState)
+      createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst)
+    }
+  }
+  //
+  // Phase 2: count unique tree touches → U platform
+  //
+  if (gameState.phase === 'phase2' && touchedIdx !== -1) {
+    if (!gameState.treesPhase2Touched.has(touchedIdx)) {
+      gameState.treesPhase2Touched.add(touchedIdx)
+      updateTreeCounter(k, gameState, gameState.treesPhase2Touched.size, 7, heroX, heroY)
+    }
+    if (gameState.treesPhase2Touched.size >= 7) {
+      destroyTreeCounter(k, gameState)
+      createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst)
+    }
+  }
+  //
+  // Phase 1/2: update counter position each frame
+  //
+  if ((gameState.phase === 'phase1' || gameState.phase === 'phase2') && gameState.counterObj?.exists?.()) {
+    const count = gameState.phase === 'phase1' ? gameState.treesPhase1Touched.size : gameState.treesPhase2Touched.size
+    const cx = heroX + TOUCH_COUNTER_X_OFFSET
+    const cy = heroY + TOUCH_COUNTER_Y_OFFSET
+    gameState.counterObj.pos.x = cx
+    gameState.counterObj.pos.y = cy
+    gameState.counterOutlines?.forEach((n, i) => {
+      if (!n?.exists?.()) return
+      const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+      n.pos.x = cx + offs[i][0]
+      n.pos.y = cy + offs[i][1]
+    })
+  }
+}
+//
+// Shows and updates melody note counter (x/5) near hero during melody phase
+//
+function updateMelodyCounter(k, gameState, heroX, heroY) {
+  const count = gameState.playerSequence.length
+  const text = `${count}/${MELODY_COUNTER_TOTAL}`
+  const cx = heroX + MELODY_COUNTER_X_OFFSET
+  const cy = heroY + MELODY_COUNTER_Y_OFFSET
+  if (!gameState.melodyCounterObj || !gameState.melodyCounterObj?.exists?.()) {
+    const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+    gameState.melodyCounterOutlines = offs.map(([dx, dy]) => k.add([
+      k.text(text, { size: MELODY_COUNTER_FONT }),
+      k.pos(cx + dx, cy + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.opacity(0.85),
+      k.z(CFG.visual.zIndex.ui + 10)
+    ]))
+    gameState.melodyCounterObj = k.add([
+      k.text(text, { size: MELODY_COUNTER_FONT }),
+      k.pos(cx, cy),
+      k.anchor('left'),
+      k.color(k.rgb(255, 210, 60)),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10.1)
+    ])
     return
   }
-  const isWhite = count % 2 === 0
-  antiHeroInst.character.color = isWhite ? k.rgb(255, 255, 255) : k.Color.fromHex(activeColor)
-  isWhite && Sound.playMouthSound(sound)
-  k.wait(ANTIHERO_BLINK_INTERVAL, () => blinkAntiHeroWhite(k, antiHeroInst, sound, activeColor, count + 1))
+  gameState.melodyCounterObj.text = text
+  gameState.melodyCounterOutlines?.forEach(n => n?.exists?.() && (n.text = text))
+  gameState.melodyCounterObj.pos.x = cx
+  gameState.melodyCounterObj.pos.y = cy
+  const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+  gameState.melodyCounterOutlines?.forEach((n, i) => {
+    if (!n?.exists?.()) return
+    n.pos.x = cx + offs[i][0]
+    n.pos.y = cy + offs[i][1]
+  })
+}
+//
+// Destroys the melody note counter
+//
+function destroyMelodyCounter(k, gameState) {
+  gameState.melodyCounterObj?.exists?.() && k.destroy(gameState.melodyCounterObj)
+  gameState.melodyCounterObj = null
+  gameState.melodyCounterOutlines?.forEach(n => n?.exists?.() && k.destroy(n))
+  gameState.melodyCounterOutlines = null
+}
+//
+// Updates x/y touch counter near hero head
+//
+function updateTreeCounter(k, gameState, count, total, heroX, heroY) {
+  const text = `${count}/${total}`
+  const cx = heroX + TOUCH_COUNTER_X_OFFSET
+  const cy = heroY + TOUCH_COUNTER_Y_OFFSET
+  if (!gameState.counterObj || !gameState.counterObj?.exists?.()) {
+    const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+    gameState.counterOutlines = offs.map(([dx, dy]) => k.add([
+      k.text(text, { size: TOUCH_COUNTER_FONT }),
+      k.pos(cx + dx, cy + dy),
+      k.anchor('left'),
+      k.color(0, 0, 0),
+      k.opacity(0.85),
+      k.z(CFG.visual.zIndex.ui + 10)
+    ]))
+    gameState.counterObj = k.add([
+      k.text(text, { size: TOUCH_COUNTER_FONT }),
+      k.pos(cx, cy),
+      k.anchor('left'),
+      k.color(k.rgb(80, 230, 80)),
+      k.opacity(1),
+      k.z(CFG.visual.zIndex.ui + 10.1)
+    ])
+    return
+  }
+  gameState.counterObj.text = text
+  gameState.counterOutlines?.forEach(n => n?.exists?.() && (n.text = text))
+}
+//
+// Destroys the touch counter
+//
+function destroyTreeCounter(k, gameState) {
+  gameState.counterObj?.exists?.() && k.destroy(gameState.counterObj)
+  gameState.counterObj = null
+  gameState.counterOutlines?.forEach(n => n?.exists?.() && k.destroy(n))
+  gameState.counterOutlines = null
+}
+//
+// Draws the big mushroom trampoline in the right corner
+//
+//
+// Fades the scene to black over `duration` seconds, then calls onComplete.
+// Used before createLevelTransition so the music/disco don't cut abruptly.
+//
+function fadeOutLesson1(k, duration, onComplete) {
+  let elapsed = 0
+  const overlay = k.add([
+    k.rect(CFG.visual.screen.width, CFG.visual.screen.height),
+    k.color(0, 0, 0),
+    k.opacity(0),
+    k.z(CFG.visual.zIndex.ui + 200),
+    k.fixed()
+  ])
+  const cancel = k.onUpdate(() => {
+    elapsed += k.dt()
+    overlay.opacity = Math.min(1, elapsed / duration)
+    if (elapsed >= duration) {
+      cancel.cancel()
+      onComplete?.()
+    }
+  })
 }

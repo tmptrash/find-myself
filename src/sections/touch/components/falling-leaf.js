@@ -116,7 +116,13 @@ export function create(config) {
     poisonChance = 0,
     poisonColor = null,
     onPoisonHit = null,
-    onLeafGroundLand = null
+    onLeafGroundLand = null,
+    //
+    // Override default z-index for grounded leaves (default = GROUND_Z).
+    // Pass a higher value when a scene has elements covering GROUND_Z that
+    // leaves should appear in front of (e.g. a floor stripe at z=29).
+    //
+    groundZ = GROUND_Z
   } = config
   //
   // Count total initial leaves across all trees
@@ -156,7 +162,7 @@ export function create(config) {
   // Drawer for grounded leaves (on floor surface, above platforms)
   //
   k.add([
-    k.z(GROUND_Z),
+    k.z(groundZ),
     {
       draw() {
         drawLeaves(inst, inst.groundLeaves)
@@ -497,9 +503,10 @@ function updateGroundLeaf(inst, leaf) {
   if (isTouching) leaf.settled = false
   if (isTouching && !leaf.heroTouching) {
     //
-    // Poison leaf on ground kills hero when feet horizontally overlap the leaf
+    // Poison leaf on ground kills hero — use same contact box as the general
+    // touch check (GROUND_CONTACT_DISTANCE_X) for reliable hit detection.
     //
-    if (leaf.poisonous && !leaf.poisonTriggered && inst.onPoisonHit && distX < leaf.size + POISON_HERO_HALF_W) {
+    if (leaf.poisonous && !leaf.poisonTriggered && inst.onPoisonHit) {
       leaf.poisonTriggered = true
       inst.onPoisonHit(leaf)
       return

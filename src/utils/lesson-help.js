@@ -98,7 +98,7 @@ const TOUCH_PANEL_BORDER_HEX = '#5A8898'
 //
 export const LESSON_GOAL_TEXTS = {
   'lesson-touch.0': 'You cannot feel the world,\nand the world cannot feel\nyou. Touch starts with T.\nFind it.',
-  'lesson-touch.1': 'Here you need to figure out\nhow to play the right\nmelody by touching things',
+  'lesson-touch.1': 'Touch starts with T.\nFind it on the right side.',
   'lesson-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
   'lesson-touch.3': 'Touch the bugs and see what happens...',
   'lesson-time.0': 'Platforms don\'t live\nforever...',
@@ -146,7 +146,7 @@ export function isAnyPanelOpen() {
 }
 export const LESSON_HELP_TEXTS = {
   'lesson-touch.0': 'T — right of the tall bug. O — on\nthe monster head. U — platform\nin a center. C,H — platform after\nfinding U. Gather bugs near the\nplatform to jump!',
-  'lesson-touch.1': 'Approach yourself to get\nthe sequence of notes to\nplay. The hero will become\ncolorful if you play right.',
+  'lesson-touch.1': 'Find T on the right, touch\nall 7 trees. Then listen\nto the crow for the melody.',
   'lesson-touch.2': 'Jump to the right of the\nicicles, then you\'ll\nfigure out the rest',
   'lesson-touch.3': 'Turns out the bugs\nare trampolines :)',
   'lesson-time.0': 'Hurry — platforms\ndon\'t last forever',
@@ -174,10 +174,14 @@ export const LESSON_HELP_TEXTS = {
  * @returns {Object|null} HELP instance or null when level has no hint text
  */
 export function create(config) {
-  const { k, levelName, sideWallWidth, floorY, helpY: helpYOverride, levelIndicator, sound, sceneBackdropHex } = config
+  const { k, levelName, sideWallWidth, floorY, helpY: helpYOverride, levelIndicator, sound, sceneBackdropHex, getGoalText } = config
   const hintText = LESSON_HELP_TEXTS[levelName]
   if (!hintText) return null
-  const goalText = LESSON_GOAL_TEXTS[levelName] ?? null
+  //
+  // getGoalText is optional callback that returns dynamic goal text.
+  // Falls back to static LESSON_GOAL_TEXTS when not provided.
+  //
+  const goalText = getGoalText ? getGoalText() : (LESSON_GOAL_TEXTS[levelName] ?? null)
   const sectionColorHex = getSectionHelpColor(levelName)
   const { r, g, b } = getRGB(k, sectionColorHex)
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
@@ -259,6 +263,7 @@ export function create(config) {
     levelName,
     hintText,
     goalText,
+    _getGoalText: getGoalText ?? null,
     sectionColorHex,
     panelColors,
     sceneBackdropHex,
@@ -639,7 +644,12 @@ function openPanel(inst) {
 // Opens the goal panel with the level description text (no fragment cost)
 //
 function openGoalPanel(inst) {
-  if (inst.panelOpen || !inst.goalText) return
+  if (inst.panelOpen) return
+  //
+  // Refresh dynamic goal text before opening (if callback provided)
+  //
+  if (inst._getGoalText) inst.goalText = inst._getGoalText()
+  if (!inst.goalText) return
   inst.panelIsGoal = true
   openPanel(inst)
 }

@@ -392,7 +392,7 @@ function onUpdateL0FirefliesCulled(k, fireflies, cameraX, cullDist, touchLetterS
       const dx = targetX - f.x
       const dy = targetY - f.y
       const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < 0.5) {
+      if (dist < 6) {
         //
         // Close enough — snap and freeze in place
         //

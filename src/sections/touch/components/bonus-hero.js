@@ -313,22 +313,33 @@ export function create(config) {
 }
 /**
  * Persists bonus collection state to localStorage.
- * Must be called by the level on successful completion (anti-hero touch).
- * If the hero died before this is called, the score and storageKey remain
- * unsaved, so the platform reappears and the score reverts on restart.
+ * Must be called by the level on successful completion.
+ * Score was already saved in collectBonus — only the storageKey is persisted here
+ * so the platform won't reappear on the next visit.
  * @param {Object} inst - Bonus hero instance returned by create()
  */
 export function finalizeCollection(inst) {
   if (!inst || !inst.collected) return
   //
-  // Mark platform as permanently collected so it won't appear on future visits
+  // Mark platform as permanently collected so it won't appear on future visits.
+  // Score is not re-added — collectBonus already wrote it to localStorage.
   //
   inst.storageKey && set(inst.storageKey, true)
+}
+/**
+ * Reverts bonus score from localStorage when the hero dies before level completion.
+ * Resets collected state so the platform reappears on restart.
+ * @param {Object} inst - Bonus hero instance returned by create()
+ */
+export function revertCollection(inst) {
+  if (!inst || !inst.collected) return
   //
-  // Add the in-session bonus to the stored score so it survives the next level start
+  // Undo the score that collectBonus wrote to localStorage
   //
   const currentScore = get('heroScore', 0)
-  set('heroScore', currentScore + inst.bonusPoints)
+  set('heroScore', Math.max(0, currentScore - inst.bonusPoints))
+  inst.collected = false
+  inst.bonusPoints = 0
 }
 
 /**

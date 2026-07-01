@@ -7,6 +7,14 @@ import { growTreeRootSegments } from '../../../utils/grow-tree-root.js'
 // Note-tree horizontal positions (7 trees between 25%–75% of play area)
 //
 const NOTE_TREE_COUNT = 7
+//
+// Disco beat: shake interval in seconds (≈120 BPM = 0.5s per beat)
+//
+const DISCO_BEAT_INTERVAL = 0.5
+//
+// Shake amplitude applied to all trees on each beat pulse
+//
+const DISCO_BEAT_SHAKE = 1.6
 const NOTE_TREE_START_OFFSET = 0.25
 const NOTE_TREE_END_OFFSET = 0.75
 
@@ -473,8 +481,70 @@ export async function create(config) {
     floorY,
     audioContext: null,
     sfx: sfx ?? null,
-    echoBus: null
+    echoBus: null,
+    //
+    // Notes are disabled by default — enabled when the hero collects T letter
+    //
+    notesEnabled: false,
+    //
+    // 'same' plays one shared frequency for all trees; 'unique' uses each tree's own note
+    //
+    noteMode: 'same',
+    //
+    // Shared note for 'same' mode (C4)
+    //
+    sameNoteFreq: 261.63,
+    //
+    // When true, trees cycle through rainbow hues (CH end-game disco)
+    //
+    discoMode: false,
+    discoTimer: 0
   }
+}
+
+/**
+ * Activates disco mode: all trees cycle through rainbow hues and pulse to the beat.
+ * Beat period ~0.5s (120 BPM) — trees shake briefly on each bass hit.
+ * @param {Object} inst - Tree roots instance
+ */
+export function startDisco(inst) {
+  inst.discoMode = true
+  inst.discoTimer = 0
+  //
+  // Beat pulse: fires every DISCO_BEAT_INTERVAL seconds and triggers a short shake
+  //
+  inst.discoBeatTimer = 0
+}
+
+/**
+ * Deactivates disco mode — trees return to normal tint.
+ * @param {Object} inst - Tree roots instance
+ */
+export function stopDisco(inst) {
+  inst.discoMode = false
+}
+
+/**
+ * Enables tree notes in same-note mode (all trees play one shared tone).
+ * Clears any leftover shake / glow so trees start calm.
+ * @param {Object} inst - Tree roots instance
+ */
+export function enableSameNoteMode(inst) {
+  inst.notesEnabled = true
+  inst.noteMode = 'same'
+  for (const root of inst.roots) {
+    root.touchShake = 0
+    root.glowTimer = 0
+  }
+}
+
+/**
+ * Enables tree notes in unique-note mode (each tree plays its own tone).
+ * @param {Object} inst - Tree roots instance
+ */
+export function enableUniqueNoteMode(inst) {
+  inst.notesEnabled = true
+  inst.noteMode = 'unique'
 }
 
 /**
@@ -647,12 +717,21 @@ export function checkHeroTreeCollision(inst, heroCharacter, maxCheckDistance = I
     // If just started touching (was not touching before, now touching)
     //
     if (isTouchingNow && !root.isTouching) {
-      playNote(inst, root.noteFrequency)
       //
-      // Start tree shake animation and root glow blink
+      // Only play audio and glow when notes are enabled (after T letter collected)
       //
-      root.touchShake = 2
-      root.glowTimer = 0.5
+      if (inst.notesEnabled) {
+        const freq = inst.noteMode === 'same' ? inst.sameNoteFreq : root.noteFrequency
+        playNote(inst, freq)
+        //
+        // Blink and shake only in unique-note mode (phase2+) — in same-note mode (phase1)
+        // the trees are silent background actors and should not flash.
+        //
+        if (inst.noteMode !== 'same') {
+          root.touchShake = 2
+          root.glowTimer = 0.5
+        }
+      }
       touchedTreeIndex = index
     }
     
@@ -700,21 +779,43 @@ export function onUpdate(inst, heroX = null, maxUpdateDistance = Infinity) {
 export function draw(inst) {
   const { k, roots } = inst
   const time = k.time()
-  for (const root of roots) {
+  //
+  // Disco mode: advance timers and trigger beat shake on each beat pulse
+  //
+  if (inst.discoMode) {
+    //
+    // Advance color-cycle timer only — no touchShake so trees stay still while
+    // cycling through rainbow hues (user asked to remove the beat shaking).
+    //
+    inst.discoTimer += k.dt()
+  }
+  for (let idx = 0; idx < roots.length; idx++) {
+    const root = roots[idx]
     //
     // Mutate pre-cached pos in place — avoids vec2 allocation per frame.
     // X offset is only non-zero while touchShake > 0 (brief touch feedback).
     //
     root.spritePos.x = root.spritePosBaseX + (root.touchShake !== 0 ? Math.sin(time * 30) * root.touchShake : 0)
-    //
-    // Draw baked leaf sprite BEFORE the branch sprite so branches cover them.
-    // A single drawSprite replaces thousands of per-frame drawPolygon + drawLine calls.
-    //
-    k.drawSprite({ sprite: root.leafSpriteName, pos: root.spritePos })
-    //
-    // Draw pre-rendered tree sprite (roots + branches)
-    //
-    k.drawSprite({ sprite: root.spriteName, pos: root.spritePos })
+    if (inst.discoMode) {
+      //
+      // Each tree cycles hue at a slightly different phase for wave effect
+      //
+      const hue = ((inst.discoTimer * 120 + idx * 55) % 360) / 360
+      const [dr, dg, db] = hslToRgb(hue, 0.85, 0.65)
+      const tint = k.rgb(dr, dg, db)
+      k.drawSprite({ sprite: root.leafSpriteName, pos: root.spritePos, color: tint })
+      k.drawSprite({ sprite: root.spriteName, pos: root.spritePos, color: tint })
+    } else {
+      //
+      // Draw baked leaf sprite BEFORE the branch sprite so branches cover them.
+      // A single drawSprite replaces thousands of per-frame drawPolygon + drawLine calls.
+      //
+      k.drawSprite({ sprite: root.leafSpriteName, pos: root.spritePos })
+      //
+      // Draw pre-rendered tree sprite (roots + branches)
+      //
+      k.drawSprite({ sprite: root.spriteName, pos: root.spritePos })
+    }
   }
 }
 /**
@@ -742,5 +843,23 @@ export function drawGlow(inst) {
       opacity: alpha
     })
   }
+}
+//
+// Converts HSL (0-1 range each) to [r, g, b] in 0-255 range
+//
+function hslToRgb(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s
+  const x = c * (1 - Math.abs((h * 6) % 2 - 1))
+  const m = l - c / 2
+  let r = 0
+  let g = 0
+  let b = 0
+  if (h < 1 / 6) { r = c; g = x }
+  else if (h < 2 / 6) { r = x; g = c }
+  else if (h < 3 / 6) { g = c; b = x }
+  else if (h < 4 / 6) { g = x; b = c }
+  else if (h < 5 / 6) { r = x; b = c }
+  else { r = c; b = x }
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)]
 }
 

@@ -191,7 +191,10 @@ export function create(config) {
     k.z(CFG.visual.zIndex.platforms + 15),
     {
       draw() {
-        if (inst.sleeping) return
+        //
+        // forceActive (set by startDancing) bypasses ALL sleeping/zone guards.
+        //
+        if (!inst.forceActive && inst.sleeping) return
         if (inst.riseAmount <= 0 && inst.dirtParticles.length === 0) return
         onDraw(inst)
       }
@@ -208,6 +211,42 @@ export function create(config) {
 export function startSmiling(inst) {
   inst.smiling = true
   inst.smileT = 0
+}
+/**
+ * Puts the worm into disco-dance mode: it rises fully and sways left/right
+ * in a rhythm, ignoring the hero and never retracting.
+ * @param {Object} inst - Worm instance
+ */
+export function startDancing(inst) {
+  //
+  // forceActive bypasses ALL sleeping and zone checks — the worm renders
+  // and updates every frame regardless of where the hero is.
+  //
+  inst.forceActive = true
+  inst.sleeping = false
+  inst.blocked = true
+  if (inst.phase === 'hidden') {
+    //
+    // Worm was underground: trigger rising sequence first so it has a visible
+    // emergence, then switch to dancing when fully risen.
+    //
+    inst.phase = 'rising'
+    inst.arcDirection = 1
+    inst.arcAmount = 0
+    inst.dancePending = true
+    playEmergenceSound(inst)
+    startFrictionSound(inst)
+    inst.k.shake(4)
+  } else {
+    //
+    // Already risen or retracting: snap to full rise and start dancing immediately.
+    //
+    inst.phase = 'dancing'
+    inst.riseAmount = BODY_HEIGHT
+    inst.dancingTimer = 0
+    stopFrictionSound(inst)
+    startAlienAmbient(inst)
+  }
 }
 /**
  * Checks if a point (hero) collides with the worm's risen body.
@@ -249,7 +288,7 @@ export function checkCollision(inst, heroX, heroY) {
 // Per-frame update: trigger, rise, hold, retract
 //
 function onUpdate(inst) {
-  if (inst.sleeping && inst.phase === 'hidden' && inst.dirtParticles.length === 0) return
+  if (!inst.forceActive && inst.sleeping && inst.phase === 'hidden' && inst.dirtParticles.length === 0) return
   const dt = inst.k.dt()
   inst.time += dt
   const heroX = inst.hero?.character?.pos?.x ?? -1000
@@ -276,9 +315,18 @@ function onUpdate(inst) {
     spawnDirtParticles(inst, dt)
     if (inst.riseAmount >= BODY_HEIGHT) {
       inst.riseAmount = BODY_HEIGHT
-      inst.phase = 'holding'
       stopFrictionSound(inst)
       startAlienAmbient(inst)
+      //
+      // dancePending: skip 'holding' and go straight to 'dancing' after the rise
+      //
+      if (inst.dancePending) {
+        inst.dancePending = false
+        inst.phase = 'dancing'
+        inst.dancingTimer = 0
+      } else {
+        inst.phase = 'holding'
+      }
     }
   } else if (inst.phase === 'holding') {
     inst.arcAmount += (0 - inst.arcAmount) * ARC_STRAIGHTEN_SPEED * dt
@@ -288,6 +336,24 @@ function onUpdate(inst) {
       stopAlienAmbient(inst)
       startFrictionSound(inst)
     }
+  } else if (inst.phase === 'dancing') {
+    //
+    // Disco dance: sway snaps left/right on every bass beat (120 BPM = 0.5s per beat).
+    // Amplitude ramps up over the first 4 seconds for a gradual entry feel.
+    //
+    inst.dancingTimer = (inst.dancingTimer ?? 0) + dt
+    const danceAmp = Math.min(LEAN_MAX, 15 + inst.dancingTimer * 4)
+    //
+    // Beat index alternates every 0.5s; odd beats lean left, even lean right
+    //
+    const beatIndex = Math.floor(inst.dancingTimer / 0.5)
+    const beatPhase = (inst.dancingTimer % 0.5) / 0.5
+    //
+    // Smooth transition within each beat using a sine ease (slow-start, slow-end)
+    //
+    const eased = Math.sin(beatPhase * Math.PI) * (beatIndex % 2 === 0 ? 1 : -1)
+    inst.leanTarget = eased * danceAmp
+    updateAlienAmbient(inst, dt)
   } else if (inst.phase === 'retracting') {
     if (dist < TRIGGER_DISTANCE) {
       inst.phase = 'rising'
@@ -321,12 +387,15 @@ function onUpdate(inst) {
   }
 }
 //
-// IK: tip leans toward hero, lower nodes follow with lag
+// IK: tip leans toward hero, lower nodes follow with lag.
+// In 'dancing' phase the caller sets leanTarget directly — skip hero-lean.
 //
 function updateIK(inst, dt, heroX) {
-  const heroDir = heroX - inst.x
-  const baseLean = heroDir * 0.15
-  inst.leanTarget = Math.max(-LEAN_MAX, Math.min(LEAN_MAX, baseLean))
+  if (inst.phase !== 'dancing') {
+    const heroDir = heroX - inst.x
+    const baseLean = heroDir * 0.15
+    inst.leanTarget = Math.max(-LEAN_MAX, Math.min(LEAN_MAX, baseLean))
+  }
   const tipIdx = NODE_COUNT - 1
   const tipDiff = inst.leanTarget - inst.spineOffsets[tipIdx]
   inst.spineOffsets[tipIdx] += tipDiff * LEAN_SPEED * dt

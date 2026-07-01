@@ -19,7 +19,7 @@ export function onUpdateLesson1GameLoop(k, ctx) {
   const melodyAwake = isZoneAwake(melodyZone, activeZone, ctx.zoneCount)
   ctx.fallingLeafInst && FallingLeaf.onUpdate(ctx.fallingLeafInst)
   onUpdateGiantWorms(k, ctx, activeZone)
-  onUpdateMelodyGameplay(k, ctx)
+  onUpdateTreePhases(k, ctx)
   ctx.wormTooltipOnUpdate?.()
   ctx.fireflyOnUpdate?.(k, activeZone)
   ctx.rainOnUpdate?.()
@@ -37,8 +37,9 @@ function onUpdateGiantWorms(k, ctx, activeZone) {
   //
   // Sync sleeping flag so the internal k.onUpdate in giant-worm.js skips
   // computation when the worm is in a distant zone.
+  // Exception: forceActive (set by startDancing) keeps worm awake regardless of zone.
   //
-  giantWormInst.sleeping = !mainAwake
+  if (!giantWormInst.forceActive) giantWormInst.sleeping = !mainAwake
   trap2WormInst && (trap2WormInst.sleeping = !trap2Awake)
   if (trap2WormInst) {
     const mainActive = giantWormInst.phase !== 'hidden' || giantWormInst.riseAmount > 0
@@ -47,27 +48,30 @@ function onUpdateGiantWorms(k, ctx, activeZone) {
     trap2WormInst.blocked = mainActive
   }
   if (!heroInst.isDying && heroInst.character?.pos) {
-    mainAwake && giantWormInst.riseAmount > 0 && ctx.checkGiantWormCollision(k, heroInst, giantWormInst, levelIndicator)
-    trap2Awake && trap2WormInst?.riseAmount > 0 && ctx.checkGiantWormCollision(k, heroInst, trap2WormInst, levelIndicator)
+    mainAwake && giantWormInst.riseAmount > 0 && ctx.checkGiantWormCollision(k, heroInst, giantWormInst, levelIndicator, ctx.sound)
+    trap2Awake && trap2WormInst?.riseAmount > 0 && ctx.checkGiantWormCollision(k, heroInst, trap2WormInst, levelIndicator, ctx.sound)
   }
 }
 //
-// Melody puzzle, tree touch, anti-hero proximity — unchanged order.
+// Phase-based tree interaction system:
+//   phase1/phase2 — count unique tree touches (no melody puzzle)
+//   melody        — full melody puzzle sequence
 //
-function onUpdateMelodyGameplay(k, ctx) {
-  const { heroInst, gameState, antiHeroInst, treeRootsInst, sound, lightningState } = ctx
-  if (gameState.sequenceCompleteTime !== null) {
+function onUpdateTreePhases(k, ctx) {
+  const { heroInst, gameState, treeRootsInst, sound, lightningState } = ctx
+  if (!gameState.treesEnabled) return
+  //
+  // Per-frame: tick melody pause timer so sequence completion fires without
+  // requiring another tree touch after the last note.
+  //
+  if (gameState.phase === 'melody' && gameState.sequenceCompleteTime !== null) {
     gameState.pauseTimer += k.dt()
     if (gameState.pauseTimer >= ctx.sequencePauseMinimum) {
-      try {
-        ctx.activateAntiHero()
-        gameState.sequenceCompleteTime = null
-        gameState.pauseTimer = 0
-      } catch (error) {
-        gameState.sequenceCompleteTime = null
-        gameState.pauseTimer = 0
-      }
+      ctx.onMelodySolved?.()
+      gameState.sequenceCompleteTime = null
+      gameState.pauseTimer = 0
     }
+    return
   }
   const heroChar = heroInst.character
   if (!heroChar) return
@@ -76,31 +80,68 @@ function onUpdateMelodyGameplay(k, ctx) {
     heroChar,
     ctx.treeCollisionMaxDist
   )
-  if (touchedTreeIndex === -1 && gameState.lastTouchedTreeIndex !== -1) {
+  //
+  // Reset duplicate-touch guard when hero leaves all trees
+  //
+  if (touchedTreeIndex === -1) {
     gameState.lastTouchedTreeIndex = -1
+    return
   }
-  if (touchedTreeIndex !== -1 && !gameState.antiHeroActive) {
-    ctx.processTreeMelodyTouch(k, gameState, touchedTreeIndex, ctx.sequencePauseMinimum, { sound, lightningState })
-  } else if (touchedTreeIndex === -1) {
-    gameState.lastTouchedTreeIndex = -1
+  if (touchedTreeIndex === gameState.lastTouchedTreeIndex) return
+  gameState.lastTouchedTreeIndex = touchedTreeIndex
+  //
+  // Delegate to the scene-provided handler (handles phase routing + collection checks)
+  //
+  ctx.processTreeTouch?.(touchedTreeIndex)
+  //
+  // Melody puzzle (phase 'melody') — register note and check wrong notes
+  //
+  if (gameState.phase === 'melody') {
+    processMelodySequence(k, gameState, touchedTreeIndex, ctx.sequencePauseMinimum, sound, lightningState, ctx.onMelodySolved)
   }
-  if (antiHeroInst.character) {
-    const dx = heroChar.pos.x - antiHeroInst.character.pos.x
-    const dy = heroChar.pos.y - antiHeroInst.character.pos.y
-    //
-    // Squared distance avoids Math.sqrt — equivalent to distance < 80
-    //
-    const distSq = dx * dx + dy * dy
-    const wasNear = gameState.isNearAntiHero
-    gameState.isNearAntiHero = distSq < 6400
-    if (!gameState.isNearAntiHero && wasNear) {
-      gameState.notesBubbleVisible = false
+}
+//
+// Melody sequence puzzle: hero must touch trees in order [0,1,2,1,2]
+// When complete, calls onMelodySolved callback.
+//
+function processMelodySequence(k, gameState, touchedTreeIndex, sequencePauseMinimum, sound, lightningState, onMelodySolved) {
+  //
+  // Handle pending completion pause
+  //
+  if (gameState.sequenceCompleteTime !== null) {
+    if (gameState.pauseTimer < sequencePauseMinimum) return
+    onMelodySolved?.()
+    gameState.sequenceCompleteTime = null
+    gameState.pauseTimer = 0
+    return
+  }
+  const targetSequence = gameState.targetSequence
+  const expectedNote = gameState.playerSequence.length < targetSequence.length
+    ? targetSequence[gameState.playerSequence.length]
+    : targetSequence[0]
+  if (touchedTreeIndex === expectedNote) {
+    gameState.playerSequence.push(touchedTreeIndex)
+    if (gameState.playerSequence.length === targetSequence.length) {
+      gameState.sequenceCompleteTime = k.time()
+      gameState.pauseTimer = 0
     }
-    if (gameState.isNearAntiHero && !wasNear && !gameState.antiHeroActive) {
-      ctx.playMelody()
-    }
+    return
   }
-  ctx.onUpdateAntiHeroHints(k, gameState, antiHeroInst)
+  //
+  // Wrong note — thunder feedback
+  //
+  gameState.playerSequence = []
+  gameState.sequenceCompleteTime = null
+  gameState.pauseTimer = 0
+  sound && lightningState && triggerMelodyWrongThunder(sound, lightningState)
+}
+//
+// Thunder flash on wrong melody note
+//
+function triggerMelodyWrongThunder(sound, lightningState) {
+  lightningState.flashTimer = 0.18
+  lightningState.blinkCount = 3
+  lightningState.blinkTimer = 0.06
 }
 
 /**

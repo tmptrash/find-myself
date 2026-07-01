@@ -248,7 +248,17 @@ export function sceneMenu(k) {
     
     const progress = getProgress()
     //
-    // Sanitize lastLevel: section-complete markers should point to the next section
+    // Migrate legacy 'lastLevel' key (old format: 'level-touch.1') to 'lastLesson'
+    // ('lesson-touch.1'). Only runs once — removes the old key afterwards.
+    //
+    const legacyLastLevel = get('lastLevel', null)
+    if (legacyLastLevel) {
+      const migrated = legacyLastLevel.startsWith('level-') ? legacyLastLevel.replace(/^level-/, 'lesson-') : legacyLastLevel
+      if (!get('lastLesson', null)) set('lastLesson', migrated)
+      localStorage.removeItem('lastLevel')
+    }
+    //
+    // Sanitize lastLesson: section-complete markers should point to the next section
     //
     let lastLevel = get('lastLesson', null)
     const normalizedLastLevel = normalizeSceneName(lastLevel)

@@ -36,8 +36,20 @@ export function addTouchSectionFloorRocks(k, opts) {
     spritePrefix,
     rockCount = TOUCH_FLOOR_ROCK_COUNT_DEFAULT,
     excludeCenterX,
-    excludeHalfWidth
+    excludeHalfWidth,
+    //
+    // Additional exclusion zones: [{centerX, halfWidth}, ...]
+    //
+    excludeZones = []
   } = opts
+  //
+  // Merge legacy single-zone params with the array for a unified check
+  //
+  const allZones = [...excludeZones]
+  if (excludeCenterX != null && excludeHalfWidth != null) {
+    allZones.push({ centerX: excludeCenterX, halfWidth: excludeHalfWidth })
+  }
+  const isExcluded = (px) => allZones.some(z => Math.abs(px - z.centerX) < z.halfWidth)
   const playableW = CFG.visual.screen.width - leftMargin - rightMargin
   const rocks = []
   let spriteIdx = 0
@@ -45,12 +57,7 @@ export function addTouchSectionFloorRocks(k, opts) {
     const radius = TOUCH_FLOOR_ROCK_RADIUS_MIN + Math.random() * (TOUCH_FLOOR_ROCK_RADIUS_MAX - TOUCH_FLOOR_ROCK_RADIUS_MIN)
     let posX = leftMargin + 40 + Math.random() * (playableW - 80)
     let safety = 0
-    while (
-      excludeCenterX != null &&
-      excludeHalfWidth != null &&
-      Math.abs(posX - excludeCenterX) < excludeHalfWidth &&
-      safety < 35
-    ) {
+    while (isExcluded(posX) && safety < 35) {
       posX = leftMargin + 40 + Math.random() * (playableW - 80)
       safety++
     }
@@ -64,7 +71,7 @@ export function addTouchSectionFloorRocks(k, opts) {
         const sign = Math.random() < 0.5 ? -1 : 1
         const horizontalGap = radius * 0.55 + satRadius * 0.4 + Math.random() * 8
         const satX = posX + sign * horizontalGap
-        if (excludeCenterX != null && excludeHalfWidth != null && Math.abs(satX - excludeCenterX) < excludeHalfWidth) continue
+        if (isExcluded(satX)) continue
         rocks.push(buildSingleFloorRock(k, floorY, satX, satRadius, `${spritePrefix}-${spriteIdx++}`))
       }
     }

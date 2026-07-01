@@ -109,6 +109,10 @@ const CH_PLATFORM_X = LEFT_MARGIN + 160
 const CH_PLATFORM_Y = FLOOR_Y - 102
 const CH_PLATFORM_W = Math.round(LOG_PLATFORM_W * 0.85)
 //
+// Platform and letters fade out this many seconds after the letters are collected
+//
+const CH_PLATFORM_HIDE_DELAY = 3
+//
 // Touch counter (x/7) position relative to hero head
 //
 const TOUCH_COUNTER_X_OFFSET = 18
@@ -386,7 +390,18 @@ const POISON_LEAF_CHANCE = 0.4
 // autumn leaves).
 //
 const POISON_LEAF_COLOR_HEX = '#3E708A'
-const POISON_DEATH_RELOAD_DELAY = 0.8
+//
+// Death animation — leaf burst and 10-second restart countdown
+//
+const DEATH_LEAF_COUNT = 22
+const DEATH_LEAF_BURST_SPEED_MIN = 90
+const DEATH_LEAF_BURST_SPEED_MAX = 240
+const DEATH_LEAF_GRAVITY = 320
+const DEATH_LEAF_DRAG = 0.97
+const DEATH_LEAF_LIFETIME = 4.5
+const DEATH_COUNTDOWN_SECONDS = 10
+const DEATH_COUNTDOWN_TEXT_SIZE = 20
+const DEATH_COUNTDOWN_Y_OFFSET = 60
 const WORM_BASE_Y = FLOOR_Y + 30
 const WORM_DRAW_Z = 17
 const WORM_SEGMENT_COUNT = 5
@@ -1047,72 +1062,35 @@ export function sceneLesson1(k) {
       }
     ])
     //
-    // Create dynamic grass drawer with hero interaction
+    // Merge all grass blades from all layers into one flat array.
+    // Per-blade drawLine gives each blade its own natural sway (base fixed,
+    // tip bending in wind) — the same approach as lesson0, which the user
+    // considers the reference for realistic grass movement.
     //
     const allGrassBlades = []
     for (const layer of layers) {
       allGrassBlades.push(...layer.grassBlades)
     }
     //
-    // Tag each blade with a zone index at setup time so the draw loop can
-    // skip zones that are far from the hero without per-frame division.
-    //
-    const grassPlayW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-    const grassZoneW = grassPlayW / L1_ZONE_COUNT
-    for (const blade of allGrassBlades) {
-      blade.zone = Math.max(0, Math.min(L1_ZONE_COUNT - 1,
-        Math.floor((blade.x1 - LEFT_MARGIN) / grassZoneW)
-      ))
-    }
-    //
-    // Grass hero-push tuning. Using squared radius lets the inner loop
-    // skip Math.sqrt entirely for the vast majority of off-radius blades
-    // — only the small minority within the hero halo pays for the sqrt.
-    //
-    const GRASS_HERO_RADIUS = 50
-    const GRASS_HERO_RADIUS_SQ = GRASS_HERO_RADIUS * GRASS_HERO_RADIUS
-    const GRASS_PUSH_FORCE = 15
-    //
-    // Reusable vec2 instances hoisted out of the per-blade loop so we
-    // don't allocate two vectors per blade per frame (~1500 GC objects
-    // /sec saved with ~750 blades at 60fps).
+    // Reusable vec2 instances — avoid allocating 2 vec2 objects per blade per frame
+    // (that would be ~500 short-lived allocations/sec at 60 fps with ~250 blades).
     //
     const grassP1 = k.vec2(0, 0)
     const grassP2 = k.vec2(0, 0)
+    //
+    // Grass drawer — always renders all blades (no zone culling, no hero push).
+    // Lesson1 is a fixed-viewport level so all blades are always on screen.
+    //
     const grassDrawer = k.add([
       k.z(20),
       {
-        heroRef: null,
         draw() {
           const time = k.time()
-          const heroX = this.heroRef ? this.heroRef.character.pos.x : -1000
-          const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
-          const heroZone = Math.max(0, Math.min(L1_ZONE_COUNT - 1,
-            Math.floor((heroX - LEFT_MARGIN) / grassZoneW)
-          ))
           for (const blade of allGrassBlades) {
-            //
-            // Zone culling: skip blades more than 1 zone away from hero.
-            // With 4 zones this cuts ~50% of drawLine calls per frame.
-            //
-            if (Math.abs(blade.zone - heroZone) > 1) continue
-            const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
-            const dx = blade.x1 - heroX
-            const dy = blade.y1 - heroY
-            const distSq = dx * dx + dy * dy
-            //
-            // Skip the expensive sqrt + push math when the blade is well
-            // outside the hero halo. Far blades just sway in the wind.
-            //
-            let pushSway = 0
-            if (distSq < GRASS_HERO_RADIUS_SQ) {
-              const distance = Math.sqrt(distSq)
-              const pushStrength = 1 - distance / GRASS_HERO_RADIUS
-              pushSway = (distance > 0 ? dx / distance : 0) * pushStrength * GRASS_PUSH_FORCE
-            }
+            const sway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
             grassP1.x = blade.x1
             grassP1.y = blade.y1
-            grassP2.x = blade.baseX2 + baseSway + pushSway
+            grassP2.x = blade.baseX2 + sway
             grassP2.y = blade.y2
             k.drawLine({
               p1: grassP1,
@@ -1306,21 +1284,17 @@ export function sceneLesson1(k) {
       CFG.game.platformName
     ])
     //
-    // Black stripe along the top edge of the bottom platform — thin capsule shape
-    // that starts and ends at the platform's side wall rounded corners.
-    // Z must be above T_LETTER_MASK_Z (28) so the background mask used to clip the
-    // submerged letter does not cut through the stripe.
+    // Black stripe along the top edge of the bottom platform — extends across
+    // the full platform width (no CORNER_RADIUS inset). The corner sprites are
+    // drawn at BOTTOM_CORNER_Z = 30 (above the stripe Z = 29) so they paint the
+    // wall color over the stripe ends, visually clipping it at the rounded arcs.
     //
     k.add([
       k.z(T_LETTER_MASK_Z + 1),
       {
         draw() {
-          //
-          // Inset by CORNER_RADIUS so the stripe ends before the bottom
-          // corner arcs begin — the corner sprites (z=26) overlay the ends.
-          //
-          const stripeX = LEFT_MARGIN + CORNER_RADIUS
-          const stripeW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN - 2 * CORNER_RADIUS
+          const stripeX = LEFT_MARGIN
+          const stripeW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
           k.drawRect({
             pos: k.vec2(stripeX, FLOOR_Y - FLOOR_STRIPE_Y_OFFSET),
             width: stripeW,
@@ -1503,9 +1477,8 @@ export function sceneLesson1(k) {
     })
     gameState._bonusHeroRef = bonusHeroInst
     //
-    // Set hero reference for grass drawer and gameState
+    // Store hero reference in gameState
     //
-    grassDrawer.heroRef = heroInst
     gameState._heroRef = heroInst
     //
     // Create tree roots (async - wait for sprites to load)
@@ -2077,6 +2050,16 @@ function createRoundedCornerSprite(radius, color) {
  */
 function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst) {
   if (heroInst.isDying) return
+  //
+  // Capture hero position before the character object is destroyed by Hero.death()
+  //
+  const deathX = heroInst.character.pos.x
+  const deathY = heroInst.character.pos.y
+  //
+  // Spawn leaf burst immediately — same frame the hero disappears (no delay).
+  // suppressParticles skips the default body/eye particle animation.
+  //
+  spawnLeafDeathBurst(k, deathX, deathY)
   Hero.death(heroInst, () => {
     //
     // Revert any bonus fragments collected this session — they carry over
@@ -2093,8 +2076,8 @@ function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst) {
       flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnDeath(k, levelIndicator)
     }
-    k.wait(POISON_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.1'))
-  })
+    startDeathCountdown(k, 'lesson-touch.1')
+  }, { suppressParticles: true })
 }
 //
 // Flashes life image red/white on poison death
@@ -2183,9 +2166,10 @@ function createRoundedCorners(k) {
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
   //
-  // Bottom corners need higher z so grass / leaves / floor decor do not cover rounded clips.
+  // Bottom corners must render ABOVE the floor stripe (z = T_LETTER_MASK_Z + 1 = 29)
+  // so the wall-color arcs visually clip the stripe at the rounded ends.
   //
-  const BOTTOM_CORNER_Z = 26
+  const BOTTOM_CORNER_Z = 30
   //
   // Bottom-left corner (rotate 270°) — at FLOOR_Y (raised platform)
   //
@@ -3388,6 +3372,16 @@ function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
   //
   gameState._heroRef && Hero.setEyesClosed(gameState._heroRef, true)
   //
+  // Remove CH platform and letters after a short delay so the hero has time
+  // to jump off before the ground disappears beneath them.
+  //
+  k.wait(CH_PLATFORM_HIDE_DELAY, () => {
+    gameState.chPlatformObj?.exists?.() && k.destroy(gameState.chPlatformObj)
+    gameState.chLetterObjs?.forEach(obj => obj?.exists?.() && k.destroy(obj))
+    gameState.chPlatformObj = null
+    gameState.chLetterObjs = null
+  })
+  //
   // Flash CH in TOUCH HUD (letters 4 and 5)
   //
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 5)
@@ -3745,7 +3739,207 @@ function fadeOutLesson1(k, duration, onComplete) {
     CanvasBackdrop.setCssBackdrop(k.canvas, r, g, b)
     if (elapsed >= duration) {
       cancel.cancel()
+      //
+      // Destroy the black overlay BEFORE calling onComplete so that the
+      // transition overlay (created synchronously inside onComplete) is the
+      // only thing covering the screen. Its CSS backdrop and the overlay rect
+      // share the same colour, eliminating mismatched letterbox strips.
+      //
+      overlay.exists() && k.destroy(overlay)
       onComplete?.()
     }
+  })
+}
+//
+// Spawns a burst of autumn leaf particles at the hero's death position.
+// Shape: teardrop bezier polygon identical to FallingLeaf and tree-roots leaves.
+// Physics: explosive burst → transitions to gentle flutter+fall identical to FallingLeaf.
+//
+function spawnLeafDeathBurst(k, x, y) {
+  //
+  // Build teardrop leaf shape using the same quadratic bezier formula as
+  // FallingLeaf.buildLeafPoints and tree-roots.js drawLeafToCanvas.
+  // Base at (0,0), tip at (0,-size), control points at (±size*0.6, -size*0.3).
+  //
+  const LEAF_BEZIER_STEPS = 8
+  function buildLeafPts(size) {
+    const pts = []
+    for (let i = 0; i <= LEAF_BEZIER_STEPS; i++) {
+      const t = i / LEAF_BEZIER_STEPS
+      const omt = 1 - t
+      pts.push(k.vec2(2 * omt * t * (-size * 0.6), 2 * omt * t * (-size * 0.3) + t * t * (-size)))
+    }
+    for (let i = 0; i <= LEAF_BEZIER_STEPS; i++) {
+      const t = i / LEAF_BEZIER_STEPS
+      const omt = 1 - t
+      pts.push(k.vec2(2 * omt * t * (size * 0.6), omt * omt * (-size) + 2 * omt * t * (-size * 0.3)))
+    }
+    return pts
+  }
+  //
+  // Autumn palette matching tree-roots.js leaf colors
+  //
+  const leafPalette = [
+    [220, 60, 50],
+    [235, 90, 50],
+    [240, 185, 55],
+    [235, 150, 55],
+    [245, 120, 45]
+  ]
+  const particles = []
+  for (let i = 0; i < DEATH_LEAF_COUNT; i++) {
+    const burstAngle = Math.random() * Math.PI * 2
+    const speed = DEATH_LEAF_BURST_SPEED_MIN + Math.random() * (DEATH_LEAF_BURST_SPEED_MAX - DEATH_LEAF_BURST_SPEED_MIN)
+    const col = leafPalette[Math.floor(Math.random() * leafPalette.length)]
+    //
+    // Leaf size matches tree-roots.js (rand 12-22)
+    //
+    const size = 12 + Math.random() * 10
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(burstAngle) * speed,
+      vy: Math.sin(burstAngle) * speed - 60,
+      pts: buildLeafPts(size),
+      //
+      // 2D rotation (deg): fast initial spin, slows to gentle leaf tumble
+      //
+      leafAngle: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 400,
+      //
+      // Z-axis pseudo-3D tumble via scaleX = |cos(rotZ)|, same as FallingLeaf
+      //
+      rotZ: Math.random() * 360,
+      tumbleSpeed: (Math.random() - 0.5) * 160,
+      scaleX: 1,
+      //
+      // Flutter wave — used in leaf-fall phase, matches FallingLeaf parameters
+      //
+      wavePhase: Math.random() * Math.PI * 2,
+      waveSpeed: 1.5 + Math.random() * 2.0,
+      waveAmplitude: 8 + Math.random() * 12,
+      windX: (Math.random() - 0.5) * 16,
+      r: col[0], g: col[1], b: col[2],
+      opacity: 0.88 + Math.random() * 0.12,
+      life: DEATH_LEAF_LIFETIME * (0.7 + Math.random() * 0.6),
+      //
+      // 1.0 = full burst energy (fast), decays to 0 → switches to leaf-fall physics
+      //
+      burstEnergy: 1.0,
+      settled: false
+    })
+  }
+  const drawer = k.add([
+    k.z(CFG.visual.zIndex.ui + 50),
+    {
+      draw() {
+        for (const p of particles) {
+          if (p.life <= 0) continue
+          const fade = p.settled ? Math.min(1, p.life / 1.2) : 1
+          k.pushTransform()
+          k.pushTranslate(p.x, p.y)
+          k.pushRotate(p.leafAngle)
+          k.pushScale(p.scaleX, 1)
+          k.drawPolygon({
+            pts: p.pts,
+            color: k.rgb(p.r, p.g, p.b),
+            opacity: p.opacity * fade
+          })
+          k.popTransform()
+        }
+      }
+    }
+  ])
+  const updater = k.onUpdate(() => {
+    const dt = k.dt()
+    let alive = false
+    for (const p of particles) {
+      if (p.life <= 0) continue
+      alive = true
+      if (p.settled) {
+        p.life -= dt
+        continue
+      }
+      //
+      // Burst energy decays over ~0.8s, then physics switches to FallingLeaf mode
+      //
+      p.burstEnergy = Math.max(0, p.burstEnergy - dt * 1.2)
+      if (p.burstEnergy > 0) {
+        //
+        // Burst phase: high velocity + gravity + drag
+        //
+        p.x += p.vx * dt
+        p.y += p.vy * dt
+        p.vy += DEATH_LEAF_GRAVITY * dt
+        p.vx *= DEATH_LEAF_DRAG
+        p.leafAngle += p.rotSpeed * dt
+        p.rotSpeed *= 0.95
+      } else {
+        //
+        // Leaf-fall phase: matches FallingLeaf flutter + gentle fall
+        //
+        p.wavePhase += p.waveSpeed * dt
+        const flutter = Math.sin(p.wavePhase) * p.waveAmplitude * 0.3
+        p.x += (p.windX + flutter) * dt
+        p.y += 35 * dt
+        p.leafAngle += (p.rotSpeed >= 0 ? 1 : -1) * 60 * dt
+      }
+      //
+      // Z-axis tumble active in both phases — identical to FallingLeaf
+      //
+      p.rotZ += p.tumbleSpeed * dt
+      p.scaleX = Math.max(0.1, Math.abs(Math.cos(p.rotZ * Math.PI / 180)))
+      //
+      // Settle on floor platform
+      //
+      if (p.y >= FLOOR_Y) {
+        p.y = FLOOR_Y
+        p.settled = true
+        p.rotSpeed = 0
+        p.life = 2.5 + Math.random() * 1.5
+      } else {
+        p.life -= dt
+      }
+    }
+    if (!alive) {
+      updater.cancel()
+      drawer.exists() && k.destroy(drawer)
+    }
+  })
+}
+//
+// Shows a countdown timer and listens for Space/Enter to restart the level early.
+// Auto-restarts after DEATH_COUNTDOWN_SECONDS seconds.
+//
+function startDeathCountdown(k, sceneName) {
+  let elapsed = 0
+  const centerX = CFG.visual.screen.width / 2
+  const centerY = CFG.visual.screen.height / 2 + DEATH_COUNTDOWN_Y_OFFSET
+  const countdownText = k.add([
+    k.text(`${DEATH_COUNTDOWN_SECONDS}`, {
+      size: DEATH_COUNTDOWN_TEXT_SIZE,
+      font: CFG.visual.fonts.regularFull,
+      align: 'center'
+    }),
+    k.pos(centerX, centerY),
+    k.anchor('center'),
+    k.color(k.rgb(200, 200, 200)),
+    k.opacity(0.55),
+    k.z(CFG.visual.zIndex.ui + 60)
+  ])
+  const doRestart = () => {
+    skipHandler.cancel()
+    updateTimer.cancel()
+    countdownText.exists() && k.destroy(countdownText)
+    goAfterPreparingAssets(k, sceneName)
+  }
+  const skipHandler = k.onKeyPress((key) => {
+    if (key === 'space' || key === 'enter') doRestart()
+  })
+  const updateTimer = k.onUpdate(() => {
+    elapsed += k.dt()
+    const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)
+    countdownText.exists() && (countdownText.text = `${Math.ceil(remaining)}`)
+    if (elapsed >= DEATH_COUNTDOWN_SECONDS) doRestart()
   })
 }

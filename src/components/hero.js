@@ -625,11 +625,13 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
  * Death effect with particle explosion
  * @param {Object} inst - Hero instance
  * @param {Function} onComplete - Callback when death animation completes
+ * @param {Object} [opts] - Options
+ * @param {boolean} [opts.suppressParticles] - Skip body/eye particles (scene provides custom ones)
  */
-export function death(inst, onComplete) {
+export function death(inst, onComplete, opts = {}) {
   if (inst.isDying) return
   inst.isDying = true
-  const { k, character, type, sfx } = inst
+  const { k, character, sfx } = inst
   const centerX = character.pos.x
   const centerY = character.pos.y
   //
@@ -642,14 +644,16 @@ export function death(inst, onComplete) {
   character.paused = true
   inst.controllable = false
   sfx && Sound.playDeathSound(sfx)
-  //
-  // Create body particles explosion
-  //
-  createBodyParticles(inst, centerX, centerY)
-  //
-  // Create eye particles
-  //
-  createEyeParticles(inst, centerX, centerY)
+  if (!opts.suppressParticles) {
+    //
+    // Create body particles explosion
+    //
+    createBodyParticles(inst, centerX, centerY)
+    //
+    // Create eye particles
+    //
+    createEyeParticles(inst, centerX, centerY)
+  }
   //
   // Hide character immediately
   //

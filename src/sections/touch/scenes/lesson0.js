@@ -105,7 +105,17 @@ const FLOOR_THORN_FEET_MIN_PENETRATION_PAST_TIP = 2
 //
 const FLOOR_THORN_COLLISION_TIP_BIAS_DOWN = 14
 const FLOOR_THORN_FEET_BELOW_BASE_PAD = 10
-const FLOOR_THORN_DEATH_RELOAD_DELAY = 0.8
+//
+// Death animation — firefly burst and 10-second restart countdown
+//
+const DEATH_FIREFLY_COUNT = 22
+const DEATH_FIREFLY_BURST_SPEED_MIN = 80
+const DEATH_FIREFLY_BURST_SPEED_MAX = 220
+const DEATH_FIREFLY_DRAG = 0.982
+const DEATH_FIREFLY_LIFETIME = 5.0
+const DEATH_COUNTDOWN_SECONDS_L0 = 10
+const DEATH_COUNTDOWN_TEXT_SIZE_L0 = 20
+const DEATH_COUNTDOWN_Y_OFFSET_L0 = 60
 //
 // Z: floor + trap thorns above grass (20) and rocks (7), below hinged trees (25).
 //
@@ -2940,6 +2950,16 @@ function checkFloorThorns(k, heroInst, floorThornData, levelIndicator, sound) {
  */
 function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound) {
   if (heroInst.isDying) return
+  //
+  // Capture hero position before the character object is destroyed by Hero.death()
+  //
+  const deathX = heroInst.character.pos.x
+  const deathY = heroInst.character.pos.y
+  //
+  // Spawn firefly burst immediately — same frame the hero disappears (no delay).
+  // suppressParticles skips the default body/eye particle animation.
+  //
+  spawnFireflyDeathBurst(k, deathX, deathY)
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
@@ -2951,8 +2971,8 @@ function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound) {
       flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnThornDeath(k, levelIndicator)
     }
-    k.wait(FLOOR_THORN_DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.0'))
-  })
+    startL0DeathCountdown(k, 'lesson-touch.0')
+  }, { suppressParticles: true })
 }
 
 /**
@@ -5603,4 +5623,131 @@ function activateBug4Movement(k, bug4Inst, platform, antiHeroInst, bugRadius) {
   bug4Inst.vx = TRAP2_BUG_SPEED
   bug4Inst.vy = 0
   bug4Inst.bounds = { minX, maxX, minY: bug4Inst.y, maxY: bug4Inst.y }
+}
+//
+// Spawns firefly particles visually identical to the collectible fireflies drawn by
+// drawL0Fireflies: tiny golden-yellow pulsing dots with a soft dim halo.
+// Core radius 2.8–4.5 px, single color rgb(244, 192, 64), halo at radius*3 opacity*0.15.
+//
+function spawnFireflyDeathBurst(k, x, y) {
+  //
+  // Visual constants mirrored from drawL0Fireflies and L0_FIREFLY_* scene constants
+  //
+  const FIREFLY_RADIUS_MIN = 2.8
+  const FIREFLY_RADIUS_MAX = 4.5
+  const FIREFLY_GLOW_SPEED_MIN = 0.6
+  const FIREFLY_GLOW_SPEED_MAX = 2.0
+  //
+  // Single golden-yellow color matching L0_FIREFLY_COLOR_R/G/B
+  //
+  const fireflyColor = k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B)
+  const particles = []
+  for (let i = 0; i < DEATH_FIREFLY_COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = DEATH_FIREFLY_BURST_SPEED_MIN + Math.random() * (DEATH_FIREFLY_BURST_SPEED_MAX - DEATH_FIREFLY_BURST_SPEED_MIN)
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius: FIREFLY_RADIUS_MIN + Math.random() * (FIREFLY_RADIUS_MAX - FIREFLY_RADIUS_MIN),
+      glowSpeed: FIREFLY_GLOW_SPEED_MIN + Math.random() * (FIREFLY_GLOW_SPEED_MAX - FIREFLY_GLOW_SPEED_MIN),
+      glowPhase: Math.random() * Math.PI * 2,
+      life: DEATH_FIREFLY_LIFETIME * (0.6 + Math.random() * 0.8)
+    })
+  }
+  //
+  // Reuse one vec2 instance to avoid per-circle allocation inside the draw loop
+  //
+  const corePos = k.vec2(0, 0)
+  const drawer = k.add([
+    k.z(CFG.visual.zIndex.ui + 50),
+    {
+      draw() {
+        const time = k.time()
+        for (const p of particles) {
+          if (p.life <= 0) continue
+          const fade = Math.min(1, p.life / 1.5)
+          //
+          // Pulsing alpha — identical to drawL0Fireflies: alpha = 0.15 + glow * 0.7
+          //
+          const glow = (Math.sin(time * p.glowSpeed + p.glowPhase) + 1) / 2
+          const alpha = (0.15 + glow * 0.7) * fade
+          corePos.x = p.x
+          corePos.y = p.y
+          //
+          // Dim outer halo (radius * 3, opacity * 0.15) — same as drawL0Fireflies
+          //
+          k.drawCircle({
+            pos: corePos,
+            radius: p.radius * 3,
+            color: fireflyColor,
+            opacity: alpha * 0.15
+          })
+          //
+          // Bright core — same as drawL0Fireflies
+          //
+          k.drawCircle({
+            pos: corePos,
+            radius: p.radius,
+            color: fireflyColor,
+            opacity: alpha
+          })
+        }
+      }
+    }
+  ])
+  const updater = k.onUpdate(() => {
+    const dt = k.dt()
+    let alive = false
+    for (const p of particles) {
+      if (p.life <= 0) continue
+      alive = true
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      p.vx *= DEATH_FIREFLY_DRAG
+      p.vy *= DEATH_FIREFLY_DRAG
+      p.life -= dt
+    }
+    if (!alive) {
+      updater.cancel()
+      drawer.exists() && k.destroy(drawer)
+    }
+  })
+}
+//
+// Shows a countdown number and listens for Space/Enter to restart immediately.
+// Auto-restarts after DEATH_COUNTDOWN_SECONDS_L0 seconds.
+//
+function startL0DeathCountdown(k, sceneName) {
+  let elapsed = 0
+  const centerX = CFG.visual.screen.width / 2
+  const centerY = CFG.visual.screen.height / 2 + DEATH_COUNTDOWN_Y_OFFSET_L0
+  const countdownText = k.add([
+    k.text(`${DEATH_COUNTDOWN_SECONDS_L0}`, {
+      size: DEATH_COUNTDOWN_TEXT_SIZE_L0,
+      font: CFG.visual.fonts.regularFull,
+      align: 'center'
+    }),
+    k.pos(centerX, centerY),
+    k.anchor('center'),
+    k.color(k.rgb(200, 200, 200)),
+    k.opacity(0.55),
+    k.z(CFG.visual.zIndex.ui + 60)
+  ])
+  const doRestart = () => {
+    skipHandler.cancel()
+    updateTimer.cancel()
+    countdownText.exists() && k.destroy(countdownText)
+    goAfterPreparingAssets(k, sceneName)
+  }
+  const skipHandler = k.onKeyPress((key) => {
+    if (key === 'space' || key === 'enter') doRestart()
+  })
+  const updateTimer = k.onUpdate(() => {
+    elapsed += k.dt()
+    const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS_L0 - elapsed)
+    countdownText.exists() && (countdownText.text = `${Math.ceil(remaining)}`)
+    if (elapsed >= DEATH_COUNTDOWN_SECONDS_L0) doRestart()
+  })
 }

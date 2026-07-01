@@ -96,9 +96,9 @@ export function create(config) {
   //
   const smallHeroSize = 78
   const lifeImageHeight = 120
-  const spacingBetween = 70
+  const spacingBetween = 120
   const lifeImageOriginalHeight = 1197
-  const rightMargin = 160
+  const rightMargin = 70
   const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 10
   //
   // Check completed sections for hero parts (mouth, arms)

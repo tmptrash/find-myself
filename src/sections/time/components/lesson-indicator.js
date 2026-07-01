@@ -92,9 +92,9 @@ export function create(config) {
   //
   const smallHeroSize = 78  // Increased by 30% (60 * 1.3)
   const lifeImageHeight = 120
-  const spacingBetween = 70
+  const spacingBetween = 120
   const lifeImageOriginalHeight = 1197
-  const rightMargin = 160
+  const rightMargin = 70
   const smallHeroY = topPlatformHeight - fontSize / 2 - topMargin + 10
   //
   // Create small hero (2x smaller, static, time section colors)

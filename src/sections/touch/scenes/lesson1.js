@@ -399,9 +399,15 @@ const DEATH_LEAF_BURST_SPEED_MAX = 240
 const DEATH_LEAF_GRAVITY = 320
 const DEATH_LEAF_DRAG = 0.97
 const DEATH_LEAF_LIFETIME = 4.5
-const DEATH_COUNTDOWN_SECONDS = 10
-const DEATH_COUNTDOWN_TEXT_SIZE = 20
-const DEATH_COUNTDOWN_Y_OFFSET = 60
+const DEATH_COUNTDOWN_SECONDS = 7
+//
+// Prompt shown at the top after hero death.
+// Player can press Space or Enter to restart; auto-restarts after 7 s.
+// Countdown number is appended inline after the three dots, same color as the text.
+//
+const L1_DEATH_PROMPT_BASE = 'Press Space or Enter to continue... '
+const L1_DEATH_PROMPT_Y = TOP_MARGIN + 62
+const L1_DEATH_PROMPT_FONT = 22
 const WORM_BASE_Y = FLOOR_Y + 30
 const WORM_DRAW_Z = 17
 const WORM_SEGMENT_COUNT = 5
@@ -494,6 +500,11 @@ export function sceneLesson1(k) {
     // Save progress
     //
     set('lastLesson', 'lesson-touch.1')
+    //
+    // Snapshot life score at level entry so deaths this level do not
+    // permanently inflate the teacher's score in the next level.
+    //
+    const initialLifeScore = get('lifeScore', 0)
     //
     // Set background to match wall color (prevents visible bars at top/bottom)
     //
@@ -1299,7 +1310,7 @@ export function sceneLesson1(k) {
             pos: k.vec2(stripeX, FLOOR_Y - FLOOR_STRIPE_Y_OFFSET),
             width: stripeW,
             height: FLOOR_STRIPE_H,
-            color: k.rgb(0, 0, 0),
+            color: k.rgb(22, 38, 24),
             opacity: 1,
             radius: Math.ceil(FLOOR_STRIPE_H / 2)
           })
@@ -1366,7 +1377,11 @@ export function sceneLesson1(k) {
       // Melody note counter objects (x/5, visible during 'melody' phase)
       //
       melodyCounterObj: null,
-      melodyCounterOutlines: null
+      melodyCounterOutlines: null,
+      //
+      // Snapshot of life score at level entry — used to undo death penalties on completion.
+      //
+      initialLifeScore: initialLifeScore ?? 0
     }
     //
     // Minimum pause after melody sequence before it counts as valid
@@ -2076,7 +2091,7 @@ function onPoisonLeafDeath(k, heroInst, levelIndicator, sound, bonusHeroInst) {
       flashLifeImageOnDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnDeath(k, levelIndicator)
     }
-    startDeathCountdown(k, 'lesson-touch.1')
+    startDeathCountdown(k, 'lesson-touch.1', deathX, deathY)
   }, { suppressParticles: true })
 }
 //
@@ -3416,6 +3431,11 @@ function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
     const goNext = () => {
       gameState._endMusicRef?.stop?.()
       gameState._treeRootsRef && TreeRoots.stopDisco(gameState._treeRootsRef)
+      //
+      // Restore life score to level-entry snapshot so deaths this session
+      // do not carry into the next level.
+      //
+      set('lifeScore', gameState.initialLifeScore ?? 0)
       fadeOutLesson1(k, SCENE_FADE_OUT_DURATION, () => createLevelTransition(k, 'lesson-touch.1'))
     }
     const enterCancel = k.onKeyPress('enter', () => {
@@ -3908,29 +3928,40 @@ function spawnLeafDeathBurst(k, x, y) {
   })
 }
 //
-// Shows a countdown timer and listens for Space/Enter to restart the level early.
-// Auto-restarts after DEATH_COUNTDOWN_SECONDS seconds.
+// Shows "Press Space or Enter to continue... N" at the top after hero death.
+// The countdown number is inline, same color as the prompt text.
+// Auto-restarts when the countdown reaches 0.
 //
-function startDeathCountdown(k, sceneName) {
+function startDeathCountdown(k, sceneName, deathX, deathY) {
   let elapsed = 0
-  const centerX = CFG.visual.screen.width / 2
-  const centerY = CFG.visual.screen.height / 2 + DEATH_COUNTDOWN_Y_OFFSET
-  const countdownText = k.add([
-    k.text(`${DEATH_COUNTDOWN_SECONDS}`, {
-      size: DEATH_COUNTDOWN_TEXT_SIZE,
-      font: CFG.visual.fonts.regularFull,
-      align: 'center'
-    }),
-    k.pos(centerX, centerY),
+  const cx = CFG.visual.screen.width / 2
+  const textCfg = { size: L1_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
+  const initText = L1_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS
+  const offs = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+  const outlines = offs.map(([dx, dy]) => k.add([
+    k.text(initText, textCfg),
+    k.pos(cx + dx, L1_DEATH_PROMPT_Y + dy),
     k.anchor('center'),
-    k.color(k.rgb(200, 200, 200)),
-    k.opacity(0.55),
+    k.color(0, 0, 0),
+    k.opacity(0.85),
     k.z(CFG.visual.zIndex.ui + 60)
+  ]))
+  const promptText = k.add([
+    k.text(initText, textCfg),
+    k.pos(cx, L1_DEATH_PROMPT_Y),
+    k.anchor('center'),
+    k.color(k.rgb(220, 220, 220)),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.ui + 60.1)
   ])
+  const destroyAll = () => {
+    outlines.forEach(o => o?.exists?.() && k.destroy(o))
+    promptText.exists() && k.destroy(promptText)
+  }
   const doRestart = () => {
     skipHandler.cancel()
     updateTimer.cancel()
-    countdownText.exists() && k.destroy(countdownText)
+    destroyAll()
     goAfterPreparingAssets(k, sceneName)
   }
   const skipHandler = k.onKeyPress((key) => {
@@ -3939,7 +3970,9 @@ function startDeathCountdown(k, sceneName) {
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)
-    countdownText.exists() && (countdownText.text = `${Math.ceil(remaining)}`)
+    const newText = L1_DEATH_PROMPT_BASE + Math.ceil(remaining)
+    if (promptText.exists()) promptText.text = newText
+    outlines.forEach(o => o?.exists?.() && (o.text = newText))
     if (elapsed >= DEATH_COUNTDOWN_SECONDS) doRestart()
   })
 }

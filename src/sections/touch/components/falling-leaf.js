@@ -213,16 +213,18 @@ export function onUpdate(inst) {
     inst.nextSpawnTime = SPAWN_INTERVAL_MIN + Math.random() * SPAWN_INTERVAL_RANGE
   }
   //
-  // Update falling leaves (iterate backwards for safe in-loop splice)
+  // Update falling leaves. Use swap-and-pop (O(1)) instead of splice (O(n))
+  // when moving a grounded leaf to the ground array.
   //
   for (let i = inst.fallingLeaves.length - 1; i >= 0; i--) {
     const leaf = inst.fallingLeaves[i]
     updateFallingLeaf(inst, leaf)
-    //
-    // Move to ground array when landed
-    //
     if (leaf.grounded) {
-      inst.fallingLeaves.splice(i, 1)
+      //
+      // Swap with last element and pop — avoids shifting the whole array.
+      //
+      inst.fallingLeaves[i] = inst.fallingLeaves[inst.fallingLeaves.length - 1]
+      inst.fallingLeaves.pop()
       inst.groundLeaves.push(leaf)
     }
   }

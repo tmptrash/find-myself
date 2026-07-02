@@ -41,6 +41,21 @@ const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin + PLAY_AREA_BOTTOM_TRIM
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
+// End-of-level hint shown at the top during the gather phase (bugs flying to hero).
+// Pressing Enter advances immediately without waiting for the full post-arrive delay.
+//
+const L0_END_TEXT = 'Press Enter to end the lesson'
+const L0_END_TEXT_Y = TOP_MARGIN + 62
+const L0_END_TEXT_FONT = 26
+//
+// Prompt shown at the top after hero death.
+// Player can press Space or Enter to restart; auto-restarts after 7 s.
+// Countdown number is appended inline after the three dots, same color as the text.
+//
+const L0_DEATH_PROMPT_BASE = 'Press Space or Enter to continue... '
+const L0_DEATH_PROMPT_Y = TOP_MARGIN + 62
+const L0_DEATH_PROMPT_FONT = 22
+//
 // Rounded corner configuration
 //
 const CORNER_RADIUS = 20
@@ -113,9 +128,7 @@ const DEATH_FIREFLY_BURST_SPEED_MIN = 80
 const DEATH_FIREFLY_BURST_SPEED_MAX = 220
 const DEATH_FIREFLY_DRAG = 0.982
 const DEATH_FIREFLY_LIFETIME = 5.0
-const DEATH_COUNTDOWN_SECONDS_L0 = 10
-const DEATH_COUNTDOWN_TEXT_SIZE_L0 = 20
-const DEATH_COUNTDOWN_Y_OFFSET_L0 = 60
+const DEATH_COUNTDOWN_SECONDS_L0 = 7
 //
 // Z: floor + trap thorns above grass (20) and rocks (7), below hinged trees (25).
 //
@@ -641,6 +654,11 @@ export function sceneLesson0(k) {
       set('lifeScore', 0)
     }
     set('lastSection', 'touch')
+    //
+    // Snapshot life score at level entry so it can be restored on completion
+    // — deaths within a level do not carry over to the next one.
+    //
+    const initialLifeScore = get('lifeScore', 0)
     //
     // Touch level 0 starts with 3 fragments for HELP tutorial
     //
@@ -1871,7 +1889,19 @@ export function sceneLesson0(k) {
     for (const layer of layers) {
       allGrassBlades.push(...layer.grassBlades)
     }
-    
+    //
+    // Grass push interaction constants — hoisted out of draw() so they are
+    // not re-declared every frame. HERO_RADIUS_SQ avoids a sqrt per blade.
+    //
+    const GRASS_HERO_RADIUS = 50
+    const GRASS_PUSH_FORCE = 15
+    const GRASS_HERO_RADIUS_SQ = GRASS_HERO_RADIUS * GRASS_HERO_RADIUS
+    //
+    // Reusable vec2 instances — drawLine requires Vec2 with .sub() method.
+    // Mutating them each blade avoids ~640 short-lived allocations/second.
+    //
+    const grassP1 = k.vec2(0, 0)
+    const grassP2 = k.vec2(0, 0)
     const grassDrawer = k.add([
       k.z(20),
       {
@@ -1880,8 +1910,6 @@ export function sceneLesson0(k) {
           const time = k.time()
           const heroX = this.heroRef ? this.heroRef.character.pos.x : -1000
           const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
-          const HERO_RADIUS = 50
-          const PUSH_FORCE = 15
           //
           // Cull grass blades outside ~1 screen width from camera center (hero X).
           // The level is wider than the viewport so far-away blades waste draw calls.
@@ -1892,23 +1920,24 @@ export function sceneLesson0(k) {
             if (!isWithinDistance(blade.x1, cameraX, grassCullDist)) continue
             const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
             //
-            // Use squared distance to avoid sqrt on every blade every frame.
+            // Squared distance check avoids sqrt on every blade every frame.
             //
             const dx = blade.x1 - heroX
             const dy = blade.y1 - heroY
             const distSq = dx * dx + dy * dy
-            //
-            // Add push effect if hero is close
-            //
             let pushSway = 0
-            if (distSq < HERO_RADIUS * HERO_RADIUS) {
+            if (distSq < GRASS_HERO_RADIUS_SQ) {
               const distance = Math.sqrt(distSq)
-              const pushStrength = (1 - distance / HERO_RADIUS)
-              pushSway = (dx / (distance || 1)) * pushStrength * PUSH_FORCE
+              const pushStrength = (1 - distance / GRASS_HERO_RADIUS)
+              pushSway = (dx / (distance || 1)) * pushStrength * GRASS_PUSH_FORCE
             }
+            grassP1.x = blade.x1
+            grassP1.y = blade.y1
+            grassP2.x = blade.baseX2 + baseSway + pushSway
+            grassP2.y = blade.y2
             k.drawLine({
-              p1: k.vec2(blade.x1, blade.y1),
-              p2: k.vec2(blade.baseX2 + baseSway + pushSway, blade.y2),
+              p1: grassP1,
+              p2: grassP2,
               width: blade.width,
               color: blade.color,
               opacity: blade.opacity
@@ -2708,13 +2737,53 @@ export function sceneLesson0(k) {
       sound,
       touchMusic,
       wallColorHex: WALL_COLOR_HEX,
-      levelHelpInst
+      levelHelpInst,
+      initialLifeScore
     })
     //
     // Connect hero reference to firefly and letter system (heroInst exists by this point)
     //
     fireflyRuntime.fireflies._heroRef = heroInst
     touchLetterState.heroInst = heroInst
+    //
+    // End-of-level hint: shown at the top when gather phase is active.
+    // Pressing Enter immediately advances to the next level.
+    //
+    k.add([
+      k.z(CFG.visual.zIndex.ui + 5),
+      {
+        draw() {
+          if (!touchLetterState.gatherActive) return
+          const cx = CFG.visual.screen.width / 2
+          const outlineOffsets = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+          outlineOffsets.forEach(([dx, dy]) => {
+            k.drawText({
+              text: L0_END_TEXT,
+              pos: k.vec2(cx + dx, L0_END_TEXT_Y + dy),
+              size: L0_END_TEXT_FONT,
+              font: CFG.visual.fonts.regularFull,
+              color: k.rgb(0, 0, 0),
+              anchor: 'center',
+              opacity: 0.85
+            })
+          })
+          k.drawText({
+            text: L0_END_TEXT,
+            pos: k.vec2(cx, L0_END_TEXT_Y),
+            size: L0_END_TEXT_FONT,
+            font: CFG.visual.fonts.regularFull,
+            color: k.rgb(220, 200, 160),
+            anchor: 'center',
+            opacity: 1
+          })
+        }
+      }
+    ])
+    k.onKeyPress('enter', () => {
+      if (touchLetterState.gatherActive && !touchLetterState.levelDone) {
+        touchLetterState.enterSkip = true
+      }
+    })
     //
     // Monster conversation system: context-aware dialogue between the 3 tall monsters.
     // Different acts play based on which TOUCH letters have been collected.
@@ -2746,12 +2815,6 @@ export function sceneLesson0(k) {
     // around-rocks grass are merged into the shared array.
     //
     pruneGrassInPuddles(allGrassBlades, puddleRuntime.puddles)
-    //
-    // Moss patches: clustered near rocks plus standalone clumps for realism
-    //
-    //
-    // Moss removed — was a significant per-frame draw cost with no gameplay value
-    //
     //
     // Hanging spider on a thread tied to a tree branch (eyes follow the hero)
     //
@@ -2971,7 +3034,7 @@ function onHeroFloorThornDeath(k, heroInst, levelIndicator, sound) {
       flashLifeImageOnThornDeath(k, levelIndicator, originalColor, 0)
       createLifeParticlesOnThornDeath(k, levelIndicator)
     }
-    startL0DeathCountdown(k, 'lesson-touch.0')
+    startL0DeathCountdown(k, 'lesson-touch.0', deathX, deathY)
   }, { suppressParticles: true })
 }
 
@@ -3922,17 +3985,6 @@ const ROCK_CLUSTER_SATELLITES_MAX = 2
 const ROCK_SATELLITE_RADIUS_RATIO_MIN = 0.45
 const ROCK_SATELLITE_RADIUS_RATIO_MAX = 0.85
 //
-// Moss patches on the bottom platform: small green clumps
-//
-const MOSS_PATCH_COUNT = 28
-const MOSS_PATCH_RADIUS_MIN = 8
-const MOSS_PATCH_RADIUS_MAX = 22
-const MOSS_DOT_COUNT_MIN = 6
-const MOSS_DOT_COUNT_MAX = 14
-const MOSS_BASE_R = 50
-const MOSS_BASE_G = 90
-const MOSS_BASE_B = 35
-//
 // Puddle constants
 //
 const PUDDLE_COUNT = 8
@@ -4761,84 +4813,6 @@ function buildSingleRock(k, posX, radius, spriteName) {
   })
   return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH: croppedH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
 }
-/**
- * Generates moss patches on the bottom platform. Some patches are placed near
- * rocks (clinging to the rock base) and others are scattered standalone for
- * realism. Each patch is several small green dots clustered together.
- *
- * @param {Object} k - Kaplay instance
- * @param {Array} rocks - Rocks returned from createRocks (used as anchors)
- */
-function createMoss(k, rocks, heroInst) {
-  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-  const patches = []
-  for (let i = 0; i < MOSS_PATCH_COUNT; i++) {
-    const patchRadius = MOSS_PATCH_RADIUS_MIN + Math.random() * (MOSS_PATCH_RADIUS_MAX - MOSS_PATCH_RADIUS_MIN)
-    //
-    // 60% of patches are anchored next to a rock, 40% are standalone
-    //
-    let cx, cy
-    if (rocks.length > 0 && Math.random() < 0.6) {
-      const rock = rocks[Math.floor(Math.random() * rocks.length)]
-      const offsetAngle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.9
-      const dist = rock.radius * (0.7 + Math.random() * 0.4)
-      cx = rock.worldX + Math.cos(offsetAngle) * dist
-      cy = rock.worldY + Math.abs(Math.sin(offsetAngle)) * dist * 0.4
-    } else {
-      let candidateX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
-      let safety = 0
-      while (Math.abs(candidateX - HERO_SPAWN_X) < HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH && safety < 20) {
-        candidateX = LEFT_MARGIN + 40 + Math.random() * (playableW - 80)
-        safety++
-      }
-      cx = candidateX
-      cy = FLOOR_Y + Math.random() * 12
-    }
-    //
-    // Build a cluster of small moss dots
-    //
-    const dotCount = MOSS_DOT_COUNT_MIN + Math.floor(Math.random() * (MOSS_DOT_COUNT_MAX - MOSS_DOT_COUNT_MIN))
-    const dots = []
-    for (let d = 0; d < dotCount; d++) {
-      const angle = Math.random() * Math.PI * 2
-      const dist = Math.random() * patchRadius
-      const dr = Math.max(0, Math.min(255, MOSS_BASE_R + Math.floor((Math.random() - 0.5) * 30)))
-      const dg = Math.max(0, Math.min(255, MOSS_BASE_G + Math.floor((Math.random() - 0.5) * 35)))
-      const db = Math.max(0, Math.min(255, MOSS_BASE_B + Math.floor((Math.random() - 0.5) * 25)))
-      dots.push({
-        offsetX: Math.cos(angle) * dist,
-        offsetY: Math.sin(angle) * dist * 0.5,
-        radius: 1.6 + Math.random() * 2.2,
-        color: k.rgb(dr, dg, db),
-        opacity: 0.6 + Math.random() * 0.35
-      })
-    }
-    patches.push({ x: cx, y: cy, dots })
-  }
-  k.add([
-    k.z(7.5),
-    {
-      draw() {
-        //
-        // Cull moss patches outside ~1 screen width from camera center.
-        //
-        const cameraX = getCameraCenterX(k, heroInst)
-        const mossCullDist = getDistanceThreshold(k, 0.65)
-        for (const p of patches) {
-          if (!isWithinDistance(p.x, cameraX, mossCullDist)) continue
-          for (const dot of p.dots) {
-            k.drawCircle({
-              pos: k.vec2(p.x + dot.offsetX, p.y + dot.offsetY),
-              radius: dot.radius,
-              color: dot.color,
-              opacity: dot.opacity
-            })
-          }
-        }
-      }
-    }
-  ])
-}
 //
 // Per-tree RGB jitter for Touch L0 grey-leaf parallax band (keeps neutrals from reading flat).
 //
@@ -4878,7 +4852,8 @@ function setupTouchLetterSystem(k, cfg) {
   const {
     bug4X, bug4BackPlatformY, antiHeroPlatform,
     fireflyRuntime, bugs, allBugsCombined,
-    levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst
+    levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst,
+    initialLifeScore
   } = cfg
   const fireflies = fireflyRuntime.fireflies
   //
@@ -4912,6 +4887,15 @@ function setupTouchLetterSystem(k, cfg) {
     gatherTimer: 0,
     gatherSoundTimer: 0,
     gatherSoundInterval: TOUCH_GATHER_SOUND_INTERVAL_MIN,
+    //
+    // Set to true by the Enter key listener to skip the post-arrive delay.
+    //
+    enterSkip: false,
+    //
+    // Snapshot taken at level entry; restored on completion so deaths this
+    // level do not permanently inflate the teacher's score.
+    //
+    _initialLifeScore: initialLifeScore ?? 0,
     //
     // Letter game objects (teal outlined, tilt, bottom-anchored at floor)
     //
@@ -5129,9 +5113,13 @@ function onUpdateTouchLetterSystem(k, state, fireflies, bug4X, bug4BackPlatformY
       sound && Sound.playFireflyBurstSound(sound, fireflies.length)
     }
     //
-    // Show / update X/Y counter near hero head
+    // Show / update X/Y counter near hero head — hidden while hero is dying
     //
-    updateFireflyCounter(k, state, collectedCount, fireflies.length, heroX, heroY)
+    if (state.heroInst?.isDying) {
+      hideFireflyCounter(state)
+    } else {
+      updateFireflyCounter(k, state, collectedCount, fireflies.length, heroX, heroY)
+    }
     //
     // When all collected and hero is near monster: form platform on hero's side
     //
@@ -5478,10 +5466,15 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     state.gatherWaitTimer += dt
   }
   const waitDone = state.gatherBugsArrived && state.gatherWaitTimer >= TOUCH_GATHER_POST_ARRIVE_DELAY
-  if ((waitDone || forceTransition) && !state.levelDone) {
+  if ((waitDone || forceTransition || state.enterSkip) && !state.levelDone) {
     state.levelDone = true
     Sound.stopAmbient(sound)
     touchMusic?.stop()
+    //
+    // Reset life score accumulated during this level so deaths here
+    // do not carry over to the next level.
+    //
+    set('lifeScore', state._initialLifeScore ?? 0)
     createLevelTransition(k, 'lesson-touch.0')
   }
 }
@@ -5593,6 +5586,16 @@ function destroyFireflyPlatform(state, fireflies) {
   state.fireflyPlatformVisible = false
   fireflies._allAtPlatform = false
   fireflies._mode = 'follow'
+}
+//
+// Hides the firefly counter without destroying it (used during hero death).
+// The counter stays hidden until the level restarts.
+//
+function hideFireflyCounter(state) {
+  if (state.fireflyCounterObj?.exists?.()) state.fireflyCounterObj.opacity = 0
+  state.fireflyCounterOutlines?.forEach(n => {
+    n?.exists?.() && (n.opacity = 0)
+  })
 }
 //
 // Destroys the firefly counter text objects and clears state refs.
@@ -5716,29 +5719,40 @@ function spawnFireflyDeathBurst(k, x, y) {
   })
 }
 //
-// Shows a countdown number and listens for Space/Enter to restart immediately.
-// Auto-restarts after DEATH_COUNTDOWN_SECONDS_L0 seconds.
+// Shows "Press Space or Enter to continue... N" at the top after hero death.
+// The countdown number is inline, same color as the prompt text.
+// Auto-restarts when the countdown reaches 0.
 //
-function startL0DeathCountdown(k, sceneName) {
+function startL0DeathCountdown(k, sceneName, deathX, deathY) {
   let elapsed = 0
-  const centerX = CFG.visual.screen.width / 2
-  const centerY = CFG.visual.screen.height / 2 + DEATH_COUNTDOWN_Y_OFFSET_L0
-  const countdownText = k.add([
-    k.text(`${DEATH_COUNTDOWN_SECONDS_L0}`, {
-      size: DEATH_COUNTDOWN_TEXT_SIZE_L0,
-      font: CFG.visual.fonts.regularFull,
-      align: 'center'
-    }),
-    k.pos(centerX, centerY),
+  const cx = CFG.visual.screen.width / 2
+  const textCfg = { size: L0_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
+  const initText = L0_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS_L0
+  const offs = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+  const outlines = offs.map(([dx, dy]) => k.add([
+    k.text(initText, textCfg),
+    k.pos(cx + dx, L0_DEATH_PROMPT_Y + dy),
     k.anchor('center'),
-    k.color(k.rgb(200, 200, 200)),
-    k.opacity(0.55),
+    k.color(0, 0, 0),
+    k.opacity(0.85),
     k.z(CFG.visual.zIndex.ui + 60)
+  ]))
+  const promptText = k.add([
+    k.text(initText, textCfg),
+    k.pos(cx, L0_DEATH_PROMPT_Y),
+    k.anchor('center'),
+    k.color(k.rgb(220, 220, 220)),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.ui + 60.1)
   ])
+  const destroyAll = () => {
+    outlines.forEach(o => o?.exists?.() && k.destroy(o))
+    promptText.exists() && k.destroy(promptText)
+  }
   const doRestart = () => {
     skipHandler.cancel()
     updateTimer.cancel()
-    countdownText.exists() && k.destroy(countdownText)
+    destroyAll()
     goAfterPreparingAssets(k, sceneName)
   }
   const skipHandler = k.onKeyPress((key) => {
@@ -5747,7 +5761,9 @@ function startL0DeathCountdown(k, sceneName) {
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS_L0 - elapsed)
-    countdownText.exists() && (countdownText.text = `${Math.ceil(remaining)}`)
+    const newText = L0_DEATH_PROMPT_BASE + Math.ceil(remaining)
+    if (promptText.exists()) promptText.text = newText
+    outlines.forEach(o => o?.exists?.() && (o.text = newText))
     if (elapsed >= DEATH_COUNTDOWN_SECONDS_L0) doRestart()
   })
 }

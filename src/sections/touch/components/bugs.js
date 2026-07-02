@@ -1,6 +1,12 @@
 import { CFG } from '../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 //
+// Cache of pre-computed semicircle polygon points indexed by scale.
+// Points are constant (depend only on BUG_BODY_SIZE and scale), so computing
+// them once and reusing eliminates ~42 k.vec2 allocations per semicircle bug per frame.
+//
+const _semicirclePtsCache = new Map()
+//
 // Bug parameters
 //
 const BUG_BODY_SIZE = 6
@@ -1120,228 +1126,105 @@ export function draw(inst) {
     bodyRotation = Math.PI / 2  // Against right wall
   }
   //
-  // Draw semicircle body (top half of circle)
+  // Radius is used for body drawing, eye positioning, and leg attachment.
   //
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
-  const segments = 20  // Number of segments for smooth curve
   //
   // Apply dropOffset to body Y position when drawing
   //
   const bodyY = inst.y + inst.dropOffset
-  
   k.pushTransform()
   k.pushTranslate(inst.x, bodyY)
   k.pushRotate(bodyRotation)
-  
+  //
+  // Draw body
+  //
   if (inst.bodyShape === 'circle') {
     //
-    // Draw full circle body
-    // For bugs with flat head, draw flattened ellipse instead
+    // Circle body: full circle or flattened ellipse for flat-head variant
     //
     if (inst.hasFlatHead) {
-      //
-      // Draw flattened head (ellipse with reduced height)
-      //
       const flatHeadWidth = radius * 2
-      const flatHeadHeight = radius * 0.8  // Flatter head
-      
+      const flatHeadHeight = radius * 0.8
       if (inst.showOutline) {
-        k.drawEllipse({
-          pos: k.vec2(0, 0),
-          radiusX: flatHeadWidth / 2 + 2,
-          radiusY: flatHeadHeight / 2 + 2,
-          color: k.rgb(0, 0, 0),
-          opacity: 1
-        })
+        k.drawEllipse({ pos: k.vec2(0, 0), radiusX: flatHeadWidth / 2 + 2, radiusY: flatHeadHeight / 2 + 2, color: k.rgb(0, 0, 0), opacity: 1 })
       }
-      k.drawEllipse({
-        pos: k.vec2(0, 0),
-        radiusX: flatHeadWidth / 2,
-        radiusY: flatHeadHeight / 2,
-        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-        opacity: 1
-      })
+      k.drawEllipse({ pos: k.vec2(0, 0), radiusX: flatHeadWidth / 2, radiusY: flatHeadHeight / 2, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
     } else {
-      //
-      // Draw normal circle body
-      //
       if (inst.showOutline) {
-        k.drawCircle({
-          pos: k.vec2(0, 0),
-          radius: radius + 2,
-          color: k.rgb(0, 0, 0),
-          opacity: 1
-        })
+        k.drawCircle({ pos: k.vec2(0, 0), radius: radius + 2, color: k.rgb(0, 0, 0), opacity: 1 })
       }
-      k.drawCircle({
-        pos: k.vec2(0, 0),
-        radius: radius,
-        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-        opacity: 1
-      })
+      k.drawCircle({ pos: k.vec2(0, 0), radius, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
     }
   } else {
     //
-    // Create points for semicircle (top half)
-    // Start from left (-radius, 0), curve up, end at right (radius, 0)
+    // Semicircle body — polygon points cached by scale to avoid 42 vec2 allocations
+    // per bug per frame. Points are constant for a given scale.
     //
-    const points = []
-    for (let i = 0; i <= segments; i++) {
-      const angle = Math.PI + (Math.PI * i / segments)  // From PI to 2*PI (top half)
-      const x = Math.cos(angle) * radius
-      const y = Math.sin(angle) * radius
-      points.push(k.vec2(x, y))
-    }
-    //
-    // Draw black outline semicircle (thicker) - only if showOutline is true
-    //
+    const cached = getSemicirclePts(k, inst.scale)
     if (inst.showOutline) {
-      const outlinePoints = []
-      for (let i = 0; i <= segments; i++) {
-        const angle = Math.PI + (Math.PI * i / segments)
-        const x = Math.cos(angle) * (radius + 2)
-        const y = Math.sin(angle) * (radius + 2)
-        outlinePoints.push(k.vec2(x, y))
-      }
-      k.drawPolygon({
-        pts: outlinePoints,
-        color: k.rgb(0, 0, 0),
-        opacity: 1
-      })
+      k.drawPolygon({ pts: cached.outlinePts, color: k.rgb(0, 0, 0), opacity: 1 })
     }
-    //
-    // Draw main body semicircle
-    //
-    k.drawPolygon({
-      pts: points,
-      color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-      opacity: 1
-    })
+    k.drawPolygon({ pts: cached.pts, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
   }
   //
   // Draw eye
   //
   if (inst.bodyShape === 'circle') {
-    //
-    // For circle body: large white sclera, thin outer ring in body/leg color (same as legs), black pupil
-    //
     const em = inst.eyeScaleMultiplier ?? 1
     const outlineW = LEG_THICKNESS * inst.legThickness
     const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em
     const outerR = scleraR + outlineW
     const pupilRadius = scleraR * 0.34
     const maxPupilOffset = scleraR * 0.32
-    //
-    // Calculate direction to hero
-    //
     const heroX = inst.hero?.character?.pos.x ?? inst.x
     const heroY = inst.hero?.character?.pos.y ?? inst.y
     const dx = heroX - inst.x
     const dy = heroY - (inst.y + inst.dropOffset)
     const dist = Math.sqrt(dx * dx + dy * dy)
-    //
-    // Calculate pupil position
-    //
     let pupilOffsetX = 0
     let pupilOffsetY = 0
     if (dist > 0) {
       pupilOffsetX = (dx / dist) * maxPupilOffset
       pupilOffsetY = (dy / dist) * maxPupilOffset
     }
-    //
-    // Draw eye - flat head for bug4, round for others
-    //
     if (inst.hasFlatHead) {
       //
-      // Flat head: body-colored outer frame, large white sclera, black pupil
+      // Flat-head: body-colored outer frame, white inner rect, tracked pupil
       //
       const eyeWidth = scleraR * 2.2
       const eyeHeight = scleraR * 0.85
       const outerW = eyeWidth + outlineW * 2
       const outerH = eyeHeight + outlineW * 2
-      k.drawRect({
-        width: outerW,
-        height: outerH,
-        pos: k.vec2(-outerW / 2, -outerH / 2),
-        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-        opacity: 1
-      })
-      k.drawRect({
-        width: eyeWidth,
-        height: eyeHeight,
-        pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2),
-        color: k.rgb(255, 255, 255),
-        opacity: 1
-      })
+      k.drawRect({ width: outerW, height: outerH, pos: k.vec2(-outerW / 2, -outerH / 2), color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+      k.drawRect({ width: eyeWidth, height: eyeHeight, pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2), color: k.rgb(255, 255, 255), opacity: 1 })
       const pupilWidth = pupilRadius * 2
       const pupilHeight = pupilRadius * 1.5
-      k.drawRect({
-        width: pupilWidth,
-        height: pupilHeight,
-        pos: k.vec2(pupilOffsetX - pupilWidth / 2, pupilOffsetY - pupilHeight / 2),
-        color: k.rgb(0, 0, 0),
-        opacity: 1
-      })
+      k.drawRect({ width: pupilWidth, height: pupilHeight, pos: k.vec2(pupilOffsetX - pupilWidth / 2, pupilOffsetY - pupilHeight / 2), color: k.rgb(0, 0, 0), opacity: 1 })
     } else {
       //
-      // Outer disk: body/leg color; inner: large white sclera; pupil on top
+      // Round: outer ring (body color) + white sclera + tracked pupil
       //
-      k.drawCircle({
-        pos: k.vec2(0, 0),
-        radius: outerR,
-        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
-        opacity: 1
-      })
-      k.drawCircle({
-        pos: k.vec2(0, 0),
-        radius: scleraR,
-        color: k.rgb(255, 255, 255),
-        opacity: 1
-      })
-      k.drawCircle({
-        pos: k.vec2(pupilOffsetX, pupilOffsetY),
-        radius: pupilRadius,
-        color: k.rgb(0, 0, 0),
-        opacity: 1
-      })
+      k.drawCircle({ pos: k.vec2(0, 0), radius: outerR, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+      k.drawCircle({ pos: k.vec2(0, 0), radius: scleraR, color: k.rgb(255, 255, 255), opacity: 1 })
+      k.drawCircle({ pos: k.vec2(pupilOffsetX, pupilOffsetY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
     }
   } else {
     //
-    // For semicircle body: draw eye on the side of movement direction
+    // Semicircle: side eye on movement direction
     //
     const isMovingRight = inst.vx > 0
     const isMovingLeft = inst.vx < 0
-    
     if (isMovingRight || isMovingLeft) {
       const em = inst.eyeScaleMultiplier ?? 1
       const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale * em
       const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale * em
-      //
-      // Position eye on the side of movement
-      //
       const eyeX = isMovingRight ? radius * 0.6 : -radius * 0.6
       const eyeY = -radius * 0.4
-      //
-      // Draw gray eye
-      //
-      k.drawCircle({
-        pos: k.vec2(eyeX, eyeY),
-        radius: eyeRadius,
-        color: k.rgb(180, 180, 180),
-        opacity: 1
-      })
-      //
-      // Draw black pupil
-      //
-      k.drawCircle({
-        pos: k.vec2(eyeX, eyeY),
-        radius: pupilRadius,
-        color: k.rgb(0, 0, 0),
-        opacity: 1
-      })
+      k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
+      k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
     }
   }
-  
   k.popTransform()
   //
   // Draw legs AFTER body (on top of body)
@@ -1519,6 +1402,31 @@ export function draw(inst) {
  * @param {number} side - Side of the leg (-1 left, 1 right)
  * @returns {Object} Joint position { jointX, jointY }
  */
+//
+// Returns cached pre-computed polygon point arrays for a semicircle body of the
+// given scale. Avoids ~42 k.vec2 allocations per semicircle bug per frame.
+// Points are in local (body-centered) coordinates.
+//
+function getSemicirclePts(k, scale) {
+  const key = Math.round(scale * 1000)
+  if (_semicirclePtsCache.has(key)) return _semicirclePtsCache.get(key)
+  const radius = BUG_BODY_SIZE * 1.5 * scale
+  const segments = 20
+  const pts = []
+  const outlinePts = []
+  for (let i = 0; i <= segments; i++) {
+    //
+    // Angles from PI to 2*PI trace the top half of the circle in Kaplay coords
+    //
+    const angle = Math.PI + (Math.PI * i / segments)
+    pts.push(k.vec2(Math.cos(angle) * radius, Math.sin(angle) * radius))
+    outlinePts.push(k.vec2(Math.cos(angle) * (radius + 2), Math.sin(angle) * (radius + 2)))
+  }
+  const result = { pts, outlinePts }
+  _semicirclePtsCache.set(key, result)
+  return result
+}
+//
 function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   //
   // Distance from base to target

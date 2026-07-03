@@ -1567,6 +1567,52 @@ export function playVictorySound(instance) {
   harmony.stop(now + duration)
 }
 /**
+ * Play a soft, gentle letter pickup chime for early touch levels
+ * @param {Object} instance - Sound instance from create()
+ */
+export function playLetterPickupSoft(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.55
+  //
+  // Warm triangle wave — softer timbre than sine
+  //
+  const osc = instance.audioContext.createOscillator()
+  const gain = instance.audioContext.createGain()
+  const filter = instance.audioContext.createBiquadFilter()
+  osc.type = 'triangle'
+  osc.frequency.setValueAtTime(523, now)
+  osc.frequency.exponentialRampToValueAtTime(659, now + 0.18)
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(1400, now)
+  filter.Q.value = 0.5
+  //
+  // Quiet attack, gentle decay — no sustain plateau
+  //
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.exponentialRampToValueAtTime(0.07, now + 0.03)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(instance.audioContext.destination)
+  osc.start(now)
+  osc.stop(now + duration)
+  //
+  // Soft overtone a fifth above for warmth
+  //
+  const osc2 = instance.audioContext.createOscillator()
+  const gain2 = instance.audioContext.createGain()
+  osc2.type = 'sine'
+  osc2.frequency.setValueAtTime(784, now)
+  osc2.frequency.exponentialRampToValueAtTime(988, now + 0.18)
+  gain2.gain.setValueAtTime(0.001, now)
+  gain2.gain.exponentialRampToValueAtTime(0.035, now + 0.03)
+  gain2.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc2.connect(gain2)
+  gain2.connect(instance.audioContext.destination)
+  osc2.start(now)
+  osc2.stop(now + duration)
+}
+/**
  * Play eerie/creepy sound effect (disturbing low frequency drone)
  * @param {Object} inst - Sound instance from create()
  */

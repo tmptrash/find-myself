@@ -152,7 +152,6 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
   }
   return -1
 }
-
 /**
  * Get section label positions (arranged in circle)
  * @param {number} centerX - Center X position
@@ -371,9 +370,9 @@ export function sceneMenu(k) {
         isStatic: true,
         bodyColor,
         outlineColor,
-        addMouth: config.section === 'word',
+        addMouth: config.section === 'word' || config.section === 'time',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time' || config.section === 'word',
+        addWatch: config.section === 'time',
         hitboxPadding: 5,
         //
         // Section icon anti-heroes are purely decorative; suppress the
@@ -389,12 +388,12 @@ export function sceneMenu(k) {
         type: Hero.HEROES.ANTIHERO,
         bodyColor: grayColor,
         outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word',
+        addMouth: config.section === 'word' || config.section === 'time',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time' || config.section === 'word'
+        addWatch: config.section === 'time'
       })
       //
-      // For time section, also preload yellow variant
+      // For time section, also preload yellow variant (with mouth, as time now has mouth)
       //
       if (config.section === 'time') {
         Hero.loadHeroSprites({
@@ -402,6 +401,7 @@ export function sceneMenu(k) {
           type: Hero.HEROES.ANTIHERO,
           bodyColor: yellowColor,
           outlineColor: CFG.visual.colors.outline,
+          addMouth: true,
           addArms: true,
           addWatch: true
         })
@@ -415,9 +415,9 @@ export function sceneMenu(k) {
         type: Hero.HEROES.ANTIHERO,
         bodyColor: config.color.body,
         outlineColor: CFG.visual.colors.outline,
-        addMouth: config.section === 'word',
+        addMouth: config.section === 'word' || config.section === 'time',
         addArms: config.section === 'touch' || config.section === 'word' || config.section === 'time',
-        addWatch: config.section === 'time' || config.section === 'word'
+        addWatch: config.section === 'time'
       })
       //
       // Cache sprite prefixes for outline switching
@@ -428,13 +428,13 @@ export function sceneMenu(k) {
       const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
       const yellowColorNoHash = yellowColor.replace('#', '')
       const sectionColorNoHash = config.color.body.replace('#', '')
-      const hasMouth = config.section === 'word'
+      const hasMouth = config.section === 'word' || config.section === 'time'
       const hasArms = config.section === 'touch' || config.section === 'word' || config.section === 'time'
-      const hasWatch = config.section === 'time' || config.section === 'word'
+      const hasWatch = config.section === 'time'
       const suffixes = `${hasMouth ? '_mouth' : ''}${hasArms ? '_arms' : ''}${hasWatch ? '_watch' : ''}`
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
-      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_arms_watch` : null
+      antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch` : null
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
       //
@@ -470,7 +470,7 @@ export function sceneMenu(k) {
       // Add click handlers for implemented sections
       // Only if section is not completed AND previous section is completed (or it's the first section)
       //
-      const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
+      const sectionOrder = ['touch', 'word', 'time', 'feel', 'mind', 'stress']
       const currentIndex = sectionOrder.indexOf(config.section)
       const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
       const previousSection = sectionOrder[previousIndex]
@@ -576,15 +576,25 @@ export function sceneMenu(k) {
       }
       
       antiHeroes.push(antiHeroInst)
-      
       //
       // Per-letter progress label below the anti-hero.
       // Completed levels → section colour; remaining → gray.
       // Touch "H" hangs lower and sways like the in-game HUD indicator.
+      // Labels are hidden for sections the player has not yet reached.
       //
       const labelEntry = createSectionProgressLabel(
         k, config, progress, lastLevel, grayColor
       )
+      //
+      // Only show label when the player is currently in this section or has completed it.
+      // Sections the hero has never played stay hidden.
+      //
+      const isCurrentSection = Boolean(lastLevel?.startsWith(`lesson-${config.section}.`))
+      const labelVisible = isCompleted || isCurrentSection
+      labelEntry.labelVisible = labelVisible
+      if (!labelVisible) {
+        labelEntry.allObjects.forEach(obj => { obj.hidden = true })
+      }
       sectionLabels.push(labelEntry)
     })
     
@@ -762,6 +772,7 @@ export function sceneMenu(k) {
       // Per-letter label update: show hover outlines and animate the touch "H" wobble
       //
       sectionLabels.forEach(entry => {
+        if (!entry.labelVisible) return
         const { letters, section, isCompleted, fallingH } = entry
         const isHover = hoveredInst && hoveredInst.section === section
         const isCurrent = inst.currentSection === section
@@ -790,7 +801,7 @@ export function sceneMenu(k) {
           //
           // Get previous section in clockwise order
           //
-          const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
+          const sectionOrder = ['touch', 'word', 'time', 'feel', 'mind', 'stress']
           const currentIndex = sectionOrder.indexOf(hoveredInst.section)
           const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
           const previousSection = sectionOrder[previousIndex]
@@ -1866,7 +1877,7 @@ function beginMenuSceneLeave(k, inst) {
 // the previous section must be completed first.
 //
 function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
-  const sectionOrder = ['touch', 'time', 'word', 'feel', 'mind', 'stress']
+  const sectionOrder = ['touch', 'word', 'time', 'feel', 'mind', 'stress']
   const idx = sectionOrder.indexOf(antiHeroInst.section)
   if (idx <= 0) return false
   const prevSection = sectionOrder[idx - 1]

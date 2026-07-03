@@ -97,7 +97,7 @@ const TOUCH_PANEL_BORDER_HEX = '#5A8898'
 // Goal text per level (gray text shown under the main subtitle before each level)
 //
 export const LESSON_GOAL_TEXTS = {
-  'lesson-touch.0': 'You cannot feel the world,\nand the world cannot feel\nyou. Touch starts with T.\nFind it.',
+  'lesson-touch.0': 'You cannot feel the world,\nand the world cannot feel\nyou. Touch starts with T.\nFind it first.',
   'lesson-touch.1': 'Touch starts with T.\nFind it on the right side.',
   'lesson-touch.2': 'Jumping is beautiful.\nFigure out how to use your\nlegs to activate your path\nto yourself...',
   'lesson-touch.3': 'Touch the bugs and see what happens...',

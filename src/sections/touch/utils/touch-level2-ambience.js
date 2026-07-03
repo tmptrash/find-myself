@@ -403,9 +403,10 @@ function addCrowOnLogs(k, floorY, logPileX, crowAnimState, heroInst) {
   const sc = 1.35
   const cx = logPileX != null ? logPileX + 22 : CFG.visual.screen.width - 260
   //
-  // Perch height: sit on top of the log pile (logs are stacked ~90px tall above floor)
+  // perchY = foot level; drawCrow raises body internally by BODY_RAISE*sc.
+  // Log pile top is approximately 64px above floor level.
   //
-  const perchY = floorY - 94
+  const perchY = floorY - 64
   k.add([
     k.z(L2_CROW_Z),
     {

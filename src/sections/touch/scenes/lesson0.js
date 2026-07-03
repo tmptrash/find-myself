@@ -42,9 +42,9 @@ const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
 //
 // End-of-level hint shown at the top during the gather phase (bugs flying to hero).
-// Pressing Enter advances immediately without waiting for the full post-arrive delay.
+// Pressing Space or Enter advances immediately; shows countdown from 15 seconds.
 //
-const L0_END_TEXT = 'Press Enter to end the lesson'
+const L0_GATHER_PROMPT_BASE = 'Press Space or Enter to continue... '
 const L0_END_TEXT_Y = TOP_MARGIN + 62
 const L0_END_TEXT_FONT = 26
 //
@@ -595,6 +595,18 @@ const TOUCH_HIDDEN_PLATFORM_H = 22
 //
 const TOUCH_BUG_GATHER_NEAR_DIST = 150
 //
+// Distance threshold for monster bugs to stop approaching the hero
+//
+const TOUCH_MONSTER_GATHER_NEAR_DIST = 200
+//
+// Speed at which monster bugs walk toward the hero during gather phase
+//
+const TOUCH_MONSTER_GATHER_SPEED = 65
+//
+// Velocity threshold below which the hero is considered idle
+//
+const TOUCH_GATHER_HERO_IDLE_VEL_THRESHOLD = 5
+//
 // Random interval range (seconds) between ambient bug cheer sounds during gather phase
 //
 const TOUCH_GATHER_SOUND_INTERVAL_MIN = 0.35
@@ -602,11 +614,11 @@ const TOUCH_GATHER_SOUND_INTERVAL_MAX = 1.1
 //
 // How long to wait after all bugs have arrived near the hero before transitioning
 //
-const TOUCH_GATHER_POST_ARRIVE_DELAY = 3
+const TOUCH_GATHER_POST_ARRIVE_DELAY = 15
 //
 // Fallback: force transition after this many seconds even if bugs haven't all arrived
 //
-const TOUCH_GATHER_MAX_WAIT = 18
+const TOUCH_GATHER_MAX_WAIT = 40
 //
 // How many pixels the O letter's bottom sits below the monster head top edge
 //
@@ -2754,11 +2766,18 @@ export function sceneLesson0(k) {
       {
         draw() {
           if (!touchLetterState.gatherActive) return
+          //
+          // Show countdown only after bugs have gathered around hero
+          //
+          const remaining = touchLetterState.gatherBugsArrived
+            ? Math.max(0, Math.ceil(TOUCH_GATHER_POST_ARRIVE_DELAY - touchLetterState.gatherWaitTimer))
+            : TOUCH_GATHER_POST_ARRIVE_DELAY
+          const displayText = L0_GATHER_PROMPT_BASE + remaining
           const cx = CFG.visual.screen.width / 2
           const outlineOffsets = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
           outlineOffsets.forEach(([dx, dy]) => {
             k.drawText({
-              text: L0_END_TEXT,
+              text: displayText,
               pos: k.vec2(cx + dx, L0_END_TEXT_Y + dy),
               size: L0_END_TEXT_FONT,
               font: CFG.visual.fonts.regularFull,
@@ -2768,7 +2787,7 @@ export function sceneLesson0(k) {
             })
           })
           k.drawText({
-            text: L0_END_TEXT,
+            text: displayText,
             pos: k.vec2(cx, L0_END_TEXT_Y),
             size: L0_END_TEXT_FONT,
             font: CFG.visual.fonts.regularFull,
@@ -2780,6 +2799,11 @@ export function sceneLesson0(k) {
       }
     ])
     k.onKeyPress('enter', () => {
+      if (touchLetterState.gatherActive && !touchLetterState.levelDone) {
+        touchLetterState.enterSkip = true
+      }
+    })
+    k.onKeyPress('space', () => {
       if (touchLetterState.gatherActive && !touchLetterState.levelDone) {
         touchLetterState.enterSkip = true
       }
@@ -4853,7 +4877,7 @@ function setupTouchLetterSystem(k, cfg) {
     bug4X, bug4BackPlatformY, antiHeroPlatform,
     fireflyRuntime, bugs, allBugsCombined,
     levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst,
-    initialLifeScore
+    initialLifeScore, monsterBugs
   } = cfg
   const fireflies = fireflyRuntime.fireflies
   //
@@ -4888,9 +4912,19 @@ function setupTouchLetterSystem(k, cfg) {
     gatherSoundTimer: 0,
     gatherSoundInterval: TOUCH_GATHER_SOUND_INTERVAL_MIN,
     //
-    // Set to true by the Enter key listener to skip the post-arrive delay.
+    // Set to true by the Enter/Space key listener to skip the post-arrive delay.
     //
     enterSkip: false,
+    //
+    // Tall monster bugs — moved toward hero during gather phase
+    //
+    monsterBugs: monsterBugs ?? [],
+    //
+    // Tracks previous hero X to detect idle state during gather
+    //
+    gatherHeroPrevX: null,
+    gatherHeroIdleTimer: 0,
+    gatherHeroIsIdle: false,
     //
     // Snapshot taken at level entry; restored on completion so deaths this
     // level do not permanently inflate the teacher's score.
@@ -5246,7 +5280,7 @@ function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex
   state.tObj = null
   state.tMask?.destroy?.()
   state.tMask = null
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   //
   // After T: individual collect mode (flee stops)
   //
@@ -5275,7 +5309,7 @@ function collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelp
   state.dialogOpen = true
   state.oObj?.destroy()
   state.oObj = null
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 2)
   LevelIndicator.flashLetterBurst(levelIndicator, 2)
   levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_O)
@@ -5311,7 +5345,7 @@ function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelp
   state.dialogOpen = true
   state.uObj?.destroy()
   state.uObj = null
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 3)
   LevelIndicator.flashLetterBurst(levelIndicator, 3)
   levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_U)
@@ -5384,7 +5418,7 @@ function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicat
   }
   for (const bugInst of bugs) resetBug(bugInst)
   for (const bugInst of allBugsCombined) resetBug(bugInst)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 4)
   LevelIndicator.flashLetterBurst(levelIndicator, 4)
   //
@@ -5418,7 +5452,7 @@ function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicat
   })
 }
 //
-// Updates the post-C "gather" phase: bugs walk to hero, then wait 3 sec, then transition.
+// Updates the post-C "gather" phase: bugs and monsters walk to hero, then 15-second countdown, then transition.
 //
 function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound) {
   const dt = k.dt()
@@ -5432,11 +5466,12 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     state.gatherSoundInterval = TOUCH_GATHER_SOUND_INTERVAL_MIN + Math.random() * (TOUCH_GATHER_SOUND_INTERVAL_MAX - TOUCH_GATHER_SOUND_INTERVAL_MIN)
     sound && Sound.playBugCheerSound(sound)
   }
-  //
-  // Direct ground bugs toward hero so they walk close and oscillate around him
-  //
   const heroX = state.heroInst?.character?.pos?.x ?? null
+  const heroVelX = state.heroInst?.character?.vel?.x ?? 0
   if (heroX !== null) {
+    //
+    // Direct small bugs toward hero so they walk close and oscillate around him
+    //
     for (const bugInst of allBugsCombined) {
       if (bugInst.state === 'pyramid' || bugInst.state === 'scared') continue
       const dist = bugInst.x - heroX
@@ -5447,7 +5482,41 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
       }
     }
     //
-    // Check if all bugs have arrived near hero
+    // Direct monster bugs (tall long-legged ones) toward hero at higher speed
+    //
+    for (const monsterInst of state.monsterBugs) {
+      const dist = monsterInst.x - heroX
+      if (Math.abs(dist) > TOUCH_MONSTER_GATHER_NEAR_DIST) {
+        monsterInst.vx = dist > 0 ? -TOUCH_MONSTER_GATHER_SPEED : TOUCH_MONSTER_GATHER_SPEED
+        monsterInst.movementAngle = dist > 0 ? Math.PI : 0
+        //
+        // Expand bounds so monster can reach the hero anywhere on the level
+        //
+        if (monsterInst.bounds) {
+          monsterInst.bounds.minX = 40
+          monsterInst.bounds.maxX = CFG.visual.screen.width - 40
+        }
+      }
+    }
+    //
+    // Detect hero idle: vel.x near zero for a sustained period → all bugs close eyes
+    //
+    const heroIsMoving = Math.abs(heroVelX) > TOUCH_GATHER_HERO_IDLE_VEL_THRESHOLD
+    if (heroIsMoving) {
+      state.gatherHeroIdleTimer = 0
+      if (state.gatherHeroIsIdle) {
+        state.gatherHeroIsIdle = false
+        openBugEyes(state.monsterBugs, allBugsCombined)
+      }
+    } else {
+      state.gatherHeroIdleTimer += dt
+      if (!state.gatherHeroIsIdle && state.gatherHeroIdleTimer >= 0.6) {
+        state.gatherHeroIsIdle = true
+        closeBugEyes(state.monsterBugs, allBugsCombined)
+      }
+    }
+    //
+    // Check if all small bugs have arrived near hero
     //
     if (!state.gatherBugsArrived) {
       const allNear = allBugsCombined.every(b => Math.abs(b.x - heroX) <= TOUCH_BUG_GATHER_NEAR_DIST)
@@ -5458,7 +5527,7 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     }
   }
   //
-  // Count down post-arrive delay once all bugs are near.
+  // Count down 15-second post-arrive delay once all bugs are near.
   // Also use fallback timer so level never gets permanently stuck.
   //
   const forceTransition = state.gatherTimer >= TOUCH_GATHER_MAX_WAIT
@@ -5468,6 +5537,7 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
   const waitDone = state.gatherBugsArrived && state.gatherWaitTimer >= TOUCH_GATHER_POST_ARRIVE_DELAY
   if ((waitDone || forceTransition || state.enterSkip) && !state.levelDone) {
     state.levelDone = true
+    openBugEyes(state.monsterBugs, allBugsCombined)
     Sound.stopAmbient(sound)
     touchMusic?.stop()
     //
@@ -5477,6 +5547,20 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     set('lifeScore', state._initialLifeScore ?? 0)
     createLevelTransition(k, 'lesson-touch.0')
   }
+}
+//
+// Sets closedEyes flag on all bugs — called when hero is idle during gather phase
+//
+function closeBugEyes(monsterBugs, allBugsCombined) {
+  for (const b of monsterBugs) b.closedEyes = true
+  for (const b of allBugsCombined) b.closedEyes = true
+}
+//
+// Clears closedEyes flag on all bugs — called when hero starts moving again
+//
+function openBugEyes(monsterBugs, allBugsCombined) {
+  for (const b of monsterBugs) b.closedEyes = false
+  for (const b of allBugsCombined) b.closedEyes = false
 }
 //
 // Creates an invisible Kaplay platform for fireflies to form.

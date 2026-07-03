@@ -1176,38 +1176,48 @@ export function draw(inst) {
     const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em
     const outerR = scleraR + outlineW
     const pupilRadius = scleraR * 0.34
-    const maxPupilOffset = scleraR * 0.32
-    const heroX = inst.hero?.character?.pos.x ?? inst.x
-    const heroY = inst.hero?.character?.pos.y ?? inst.y
-    const dx = heroX - inst.x
-    const dy = heroY - (inst.y + inst.dropOffset)
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    let pupilOffsetX = 0
-    let pupilOffsetY = 0
-    if (dist > 0) {
-      pupilOffsetX = (dx / dist) * maxPupilOffset
-      pupilOffsetY = (dy / dist) * maxPupilOffset
-    }
-    if (inst.hasFlatHead) {
-      //
-      // Flat-head: body-colored outer frame, white inner rect, tracked pupil
-      //
-      const eyeWidth = scleraR * 2.2
-      const eyeHeight = scleraR * 0.85
-      const outerW = eyeWidth + outlineW * 2
-      const outerH = eyeHeight + outlineW * 2
-      k.drawRect({ width: outerW, height: outerH, pos: k.vec2(-outerW / 2, -outerH / 2), color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-      k.drawRect({ width: eyeWidth, height: eyeHeight, pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2), color: k.rgb(255, 255, 255), opacity: 1 })
-      const pupilWidth = pupilRadius * 2
-      const pupilHeight = pupilRadius * 1.5
-      k.drawRect({ width: pupilWidth, height: pupilHeight, pos: k.vec2(pupilOffsetX - pupilWidth / 2, pupilOffsetY - pupilHeight / 2), color: k.rgb(0, 0, 0), opacity: 1 })
-    } else {
-      //
-      // Round: outer ring (body color) + white sclera + tracked pupil
-      //
+    //
+    // When hero is idle during gather phase, bugs close their eyes (eyelid line)
+    //
+    if (inst.closedEyes) {
       k.drawCircle({ pos: k.vec2(0, 0), radius: outerR, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-      k.drawCircle({ pos: k.vec2(0, 0), radius: scleraR, color: k.rgb(255, 255, 255), opacity: 1 })
-      k.drawCircle({ pos: k.vec2(pupilOffsetX, pupilOffsetY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
+      const lidW = scleraR * 2
+      const lidH = outlineW * 1.5
+      k.drawRect({ width: lidW, height: lidH, pos: k.vec2(-lidW / 2, -lidH / 2), color: k.rgb(0, 0, 0), opacity: 1 })
+    } else {
+      const maxPupilOffset = scleraR * 0.32
+      const heroX = inst.hero?.character?.pos.x ?? inst.x
+      const heroY = inst.hero?.character?.pos.y ?? inst.y
+      const dx = heroX - inst.x
+      const dy = heroY - (inst.y + inst.dropOffset)
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      let pupilOffsetX = 0
+      let pupilOffsetY = 0
+      if (dist > 0) {
+        pupilOffsetX = (dx / dist) * maxPupilOffset
+        pupilOffsetY = (dy / dist) * maxPupilOffset
+      }
+      if (inst.hasFlatHead) {
+        //
+        // Flat-head: body-colored outer frame, white inner rect, tracked pupil
+        //
+        const eyeWidth = scleraR * 2.2
+        const eyeHeight = scleraR * 0.85
+        const outerW = eyeWidth + outlineW * 2
+        const outerH = eyeHeight + outlineW * 2
+        k.drawRect({ width: outerW, height: outerH, pos: k.vec2(-outerW / 2, -outerH / 2), color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+        k.drawRect({ width: eyeWidth, height: eyeHeight, pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2), color: k.rgb(255, 255, 255), opacity: 1 })
+        const pupilWidth = pupilRadius * 2
+        const pupilHeight = pupilRadius * 1.5
+        k.drawRect({ width: pupilWidth, height: pupilHeight, pos: k.vec2(pupilOffsetX - pupilWidth / 2, pupilOffsetY - pupilHeight / 2), color: k.rgb(0, 0, 0), opacity: 1 })
+      } else {
+        //
+        // Round: outer ring (body color) + white sclera + tracked pupil
+        //
+        k.drawCircle({ pos: k.vec2(0, 0), radius: outerR, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+        k.drawCircle({ pos: k.vec2(0, 0), radius: scleraR, color: k.rgb(255, 255, 255), opacity: 1 })
+        k.drawCircle({ pos: k.vec2(pupilOffsetX, pupilOffsetY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
+      }
     }
   } else {
     //
@@ -1215,7 +1225,7 @@ export function draw(inst) {
     //
     const isMovingRight = inst.vx > 0
     const isMovingLeft = inst.vx < 0
-    if (isMovingRight || isMovingLeft) {
+    if (!inst.closedEyes && (isMovingRight || isMovingLeft)) {
       const em = inst.eyeScaleMultiplier ?? 1
       const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale * em
       const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale * em

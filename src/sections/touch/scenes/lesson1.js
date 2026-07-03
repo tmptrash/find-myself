@@ -1833,7 +1833,7 @@ export function sceneLesson1(k) {
     }
     //
     // Crow stands directly on the ground — no rock perch, no rock visual.
-    // A virtual perch descriptor with radius 0 places the body center at FLOOR_Y - 9*sc.
+    // radius 0 means feet land exactly at FLOOR_Y (body raised internally).
     //
     const sc = 1.35
     const crowPerch = { worldX: L1_CROW_X, worldY: FLOOR_Y, radius: 0 }
@@ -3067,9 +3067,10 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst, gameState) {
   const sc = 1.35
   const cx = rock.worldX
   //
-  // Ground-level perch: body center placed so feet (legBot = perchY + 15*sc) align with FLOOR_Y.
+  // perchY = foot level; drawCrow raises body BODY_RAISE*sc above this point.
+  // Rock top surface is the landing point for the crow's feet.
   //
-  const perchY = rock.worldY - rock.radius * 0.62 - 15 * sc
+  const perchY = rock.worldY - rock.radius * 0.62
   //
   // Crow dance: hop up/down at ~2Hz when end music is playing (phase 'end')
   //
@@ -3306,7 +3307,7 @@ function onTLetterCollect(k, gameState, tLetterObjs, tLetterMask, sound, levelIn
   //
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 1)
   LevelIndicator.flashLetterBurst(levelIndicator, 1)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
 }
 //
 // Called when O letter is collected
@@ -3340,7 +3341,7 @@ function onOLetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
   })
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 2)
   LevelIndicator.flashLetterBurst(levelIndicator, 2)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
 }
 //
 // Called when U letter is collected
@@ -3369,7 +3370,7 @@ function onULetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
   })
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 3)
   LevelIndicator.flashLetterBurst(levelIndicator, 3)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
 }
 //
 // Called when CH letters are collected — plays end music, blocks controls
@@ -3405,7 +3406,7 @@ function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
   //
   // Play victory sound, then start end music + disco effects
   //
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   k.wait(0.8, () => {
     //
     // Start visual effects immediately so worm rises and trees cycle color
@@ -3523,7 +3524,7 @@ function createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
   gameState.oLetterObjs = letterObjs
   gameState.phase = 'wait_o'
   triggerAllRootsGlow(gameState._treeRootsRef ?? treeRootsInst)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   //
   // O letter blink state
   //
@@ -3547,7 +3548,7 @@ function createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
   gameState.uLetterObjs = letterObjs
   gameState.phase = 'wait_u'
   triggerAllRootsGlow(treeRootsInst)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   //
   // U letter blink state
   //
@@ -3570,7 +3571,7 @@ function createCHPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
   gameState.chPlatformObj = platformObj
   gameState.chLetterObjs = letterObjs
   triggerAllRootsGlow(treeRootsInst)
-  sound && Sound.playVictorySound(sound)
+  sound && Sound.playLetterPickupSoft(sound)
   const blinkState = { timer: 0, phase: 0 }
   k.add([
     k.z(CFG.visual.zIndex.platforms + 1.5),

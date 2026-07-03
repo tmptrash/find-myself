@@ -244,10 +244,10 @@ export function create(cfg) {
   inst.crow = {
     cx: crowCx,
     //
-    // Raise body so that the crow's feet (legBot = perchY + 15*sc) sit exactly
-    // on top of the lamp arc rather than below it.
+    // perchY = foot level; drawCrow raises the body BODY_RAISE*sc internally.
+    // Lamp arc top is where the crow's feet rest.
     //
-    perchY: crowArcTopY - 18 * CROW_SCALE,
+    perchY: crowArcTopY,
     mouthOpen: false,
     mouthTimer: 0,
     mouthOpenPending: false,

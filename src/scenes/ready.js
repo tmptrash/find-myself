@@ -31,7 +31,7 @@ const HINT_Y = 1045
 //
 const INSTRUCTIONS_TITLE = 'find yourself'
 const TITLE_FONT_FAMILY = "'JetBrains Mono', monospace"
-const TITLE_FONT_SIZE = 54
+const TITLE_FONT_SIZE = 76
 //
 // Spider configuration
 //
@@ -230,6 +230,20 @@ const HERO_EYE_MIN_DELAY = 1.5
 const HERO_EYE_MAX_DELAY = 3.5
 const HERO_EYE_LERP_SPEED = 0.1
 //
+// Index of 'n' in "find yourself" — replaced by the hero sprite.
+// Extra pixel spacing added left/right of this position to let i and d breathe.
+//
+const HERO_N_CHAR_INDEX = 2
+const HERO_N_EXTRA_SPREAD = 12
+//
+// Rendered size of the hero sprite standing in place of 'n'
+//
+const HERO_N_SPRITE_SIZE = 58
+//
+// Sprite prefix for the plain hero (loaded with no extras in sceneReady)
+//
+const HERO_N_SPRITE_PREFIX = 'hero_5A8898_000000'
+//
 // Centered description layout. All narrative + section labels live in
 // a single centred block placed BELOW the black horizon strip so the
 // upper half of the canvas stays clean for the hint, title and the
@@ -244,9 +258,20 @@ const TITLE_TEXT_Y = 130
 // centred between the horizon line and the bottom hint. The last line
 // has two icons embedded inline between its words.
 //
-const BLOCK_LINE_COUNT = 4
-const TEXT_FONT_SIZE = 36
-const TEXT_LINE_HEIGHT = 52
+//
+// New description: 5 lines of narrative text, no icons
+//
+const READY_DESC_LINES = [
+  'A psychological platformer where',
+  'gameplay is the lesson. Every',
+  'obstacle teaches a new way to',
+  'interact with the world— and every',
+  'discovery brings you one step',
+  'closer to understanding yourself.'
+]
+const BLOCK_LINE_COUNT = 6
+const TEXT_FONT_SIZE = 34
+const TEXT_LINE_HEIGHT = 50
 //
 // Actual rendered block height: two inter-line gaps + one font height.
 // Using font height (not line-height) for the last line gives the true
@@ -415,66 +440,13 @@ export function sceneReady(k) {
     }
     k.onUpdate(() => onUpdateAmbientSounds(k, ambient))
     //
-    // Central illustration: life-ready.png + procedural hero silhouette
+    // Central illustration: life-ready.png (teacher creature only)
     //
+    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k) } }])
     //
-    // Hero illustration eye wander state (starts eyes right-up, matching the sprite prefix)
+    // Centered description block (new narrative text, no icons)
     //
-    const illAnim = {
-      eyeX: 1,
-      eyeY: -1,
-      targetEyeX: 1,
-      targetEyeY: -1,
-      eyeTimer: 0,
-      eyeNextSwitch: HERO_EYE_MIN_DELAY + Math.random() * (HERO_EYE_MAX_DELAY - HERO_EYE_MIN_DELAY)
-    }
-    k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k, illAnim) } }])
-    //
-    // Centered description block (narrative + section labels) below
-    // the black horizon strip.
-    //
-    const descriptionLayout = addDescriptionBlock(k)
-    //
-    // Inline life sprite — persistent k.add() object so Kaplay uses the sprite's
-    // natural aspect ratio via uniform k.scale(), identical to the HUD in lesson-indicator.js
-    //
-    const lifeIconTopY = descriptionLayout.lifeLine.iconY - LIFE_INLINE_ICON_H + TEXT_FONT_SIZE * 0.22 + LIFE_INLINE_ICON_Y_OFFSET
-    const lifeIconScale = LIFE_INLINE_ICON_H / LIFE_ICON_NATURAL_H
-    k.add([
-      k.sprite('life'),
-      k.pos(descriptionLayout.lifeLine.iconX, lifeIconTopY),
-      k.scale(lifeIconScale),
-      k.anchor('top'),
-      k.z(Z_TEXT),
-      k.fixed(),
-      k.opacity(0.92)
-    ])
-    //
-    // Animated icon state: sparkle pulse, electric heartbeat, life laugh flash.
-    //
-    const iconAnim = {
-      sparklePhase: 0
-    }
-    k.onUpdate(() => {
-      const dt = k.dt()
-      //
-      // Hero illustration eye wander
-      //
-      illAnim.eyeTimer += dt
-      if (illAnim.eyeTimer >= illAnim.eyeNextSwitch) {
-        illAnim.targetEyeX = k.choose([-1, 0, 1])
-        illAnim.targetEyeY = k.choose([-1, 0, 1])
-        illAnim.eyeTimer = 0
-        illAnim.eyeNextSwitch = HERO_EYE_MIN_DELAY + Math.random() * (HERO_EYE_MAX_DELAY - HERO_EYE_MIN_DELAY)
-      }
-      illAnim.eyeX = k.lerp(illAnim.eyeX, illAnim.targetEyeX, HERO_EYE_LERP_SPEED)
-      illAnim.eyeY = k.lerp(illAnim.eyeY, illAnim.targetEyeY, HERO_EYE_LERP_SPEED)
-      iconAnim.sparklePhase += dt * SPARKLE_PULSE_SPEED
-    })
-    //
-    // Icon illustrations beside each centred section label row
-    //
-    k.add([k.pos(0, 0), k.z(Z_TEXT), { draw() { onDrawIconIllustrations(k, iconAnim, descriptionLayout) } }])
+    addDescriptionBlock(k)
     //
     // Title text (crawling letters detach from this)
     //
@@ -706,9 +678,9 @@ function drawStarField(k, stars) {
 // Draws the center illustration: life-ready.png as the creature + hero sprite overlaid in front.
 // illAnim carries the current eye wander state for the hero sprite.
 //
-function onDrawIllustration(k, illAnim) {
+function onDrawIllustration(k) {
   //
-  // life-ready.png: fully opaque, reduced size, positioned next to the hero
+  // life-ready.png: the teacher creature only, no hero sprite overlaid
   //
   k.drawSprite({
     sprite: "life-ready",
@@ -716,18 +688,6 @@ function onDrawIllustration(k, illAnim) {
     width: LIFE_WIDTH,
     height: LIFE_HEIGHT,
     opacity: LIFE_OPACITY
-  })
-  //
-  // Hero sprite with animated eyes (idle wander matching hero.js behaviour)
-  //
-  const eyeX = Math.round(illAnim.eyeX)
-  const eyeY = Math.round(illAnim.eyeY)
-  k.drawSprite({
-    sprite: `${HERO_ILLUSTRATION_SPRITE_PREFIX}_${eyeX}_${eyeY}`,
-    pos: k.vec2(HERO_X - HERO_ILLUSTRATION_SPRITE_SIZE / 2, HERO_Y - HERO_ILLUSTRATION_SPRITE_SIZE),
-    width: HERO_ILLUSTRATION_SPRITE_SIZE,
-    height: HERO_ILLUSTRATION_SPRITE_SIZE,
-    opacity: 1.0
   })
 }
 //
@@ -740,39 +700,14 @@ function addDescriptionBlock(k) {
   const z = Z_TEXT
   const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
   //
-  // Lines 1–2: concept — 6 worlds listed, life is your teacher
-  // Both lines are kept roughly equal in character width (~42 chars each)
+  // New description: 5 centered narrative lines, no inline icons
   //
-  const narrativeLines = [
-    'Six worlds — touch, time, words, feelings,',
-    'mind, stress. Each will teach you something.'
-  ]
   let cursorY = DESCRIPTION_START_Y
-  for (const line of narrativeLines) {
+  for (const line of READY_DESC_LINES) {
     addCenteredSegment(k, line, CENTER_X, cursorY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
     cursorY += TEXT_LINE_HEIGHT
   }
-  //
-  // Line 3: life icon — conveys "life is your teacher"
-  //
-  const lifeLineY = cursorY
-  addSegment(k, LIFE_LINE_SEG1, LIFE_LINE_LEFT_X, lifeLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
-  addSegment(k, LIFE_LINE_SEG2, LIFE_LINE_SEG2_X, lifeLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
-  cursorY += TEXT_LINE_HEIGHT
-  //
-  // Line 4: single icon — fragment + peace message (second icon removed with "the other you")
-  //
-  const iconLineY = cursorY
-  addSegment(k, ICON_LINE_SEG1, ICON_LINE_LEFT_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
-  addSegment(k, ICON_LINE_SEG2, ICON_LINE_SEG2_X, iconLineY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
-  return {
-    lifeLine: { iconX: LIFE_LINE_ICON_X, iconY: lifeLineY },
-    row1: { iconX: ICON_LINE_ICON1_X, iconY: iconLineY },
-    //
-    // row2 kept for anti-hero hover animation compatibility — sits past end of line 4
-    //
-    row2: { iconX: ICON_LINE_ICON2_X, iconY: iconLineY }
-  }
+  return {}
 }
 //
 // Draws the two small icon illustrations next to their centred
@@ -888,7 +823,11 @@ function createSpider(k, index, sourceInfo) {
     targetRotation: 0,
     currentRotation: 0,
     legsHidden: false,
-    settled: false
+    settled: false,
+    //
+    // When true this spider stays fixed and renders a hero sprite instead of a letter
+    //
+    isHeroN: sourceInfo?.isHeroN ?? false
   }
 }
 
@@ -907,8 +846,9 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
   //
   // titleTextObj uses anchor('center'), so pos.x is the CENTER of the string.
   // Subtract half the total string width to get the true left edge.
+  // Add extra spread around the hero-n position so i and d breathe.
   //
-  const totalStringWidth = titleString.length * charWidth
+  const totalStringWidth = titleString.length * charWidth + HERO_N_EXTRA_SPREAD * 2
   const startX = titleTextObj.pos.x - totalStringWidth / 2
   //
   // Pre-activation spider letter tint — a brighter orange than the
@@ -919,8 +859,16 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
   const brighterColor = k.rgb(255, 150, 80)
   titleString.split('').forEach((char, charIndex) => {
     if (char.trim().length === 0) return
-    const charX = startX + (charIndex * charWidth) + (charWidth / 2)
+    //
+    // Shift letters after the hero-n by extra spread so i and d have breathing room
+    //
+    const extraShift = charIndex > HERO_N_CHAR_INDEX ? HERO_N_EXTRA_SPREAD * 2 : 0
+    const charX = startX + (charIndex * charWidth) + (charWidth / 2) + extraShift
     const charY = titleTextObj.pos.y
+    //
+    // Mark the 'n' at HERO_N_CHAR_INDEX — it will be replaced by a hero sprite
+    //
+    const isHeroN = charIndex === HERO_N_CHAR_INDEX
     letterInfos.push({
       textObj: titleTextObj,
       charIndex,
@@ -929,7 +877,8 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
       y: charY,
       color: brighterColor,
       fontSize,
-      fontFamily
+      fontFamily,
+      isHeroN
     })
   })
   return letterInfos
@@ -970,6 +919,10 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
     }
   }
   if (!spider.isActivated) return
+  //
+  // Hero-n stays at its original position — no wandering
+  //
+  if (spider.isHeroN) return
   //
   // Random movement (no return-to-title in the new scene design)
     //
@@ -1099,6 +1052,19 @@ function drawSpider(k, spider, textOpacity) {
     }
   }
   if (spider.charHidden) {
+    //
+    // Hero-n: draw a hero sprite at the fixed position instead of the letter
+    //
+    if (spider.isHeroN) {
+      k.drawSprite({
+        sprite: `${HERO_N_SPRITE_PREFIX}_0_0`,
+        pos: k.vec2(spider.x - HERO_N_SPRITE_SIZE / 2, spider.y - HERO_N_SPRITE_SIZE / 2),
+        width: HERO_N_SPRITE_SIZE,
+        height: HERO_N_SPRITE_SIZE,
+        opacity: 1.0
+      })
+      return
+    }
     const angleDeg = spider.displayAngle
       spider.currentRotation = angleDeg
     k.pushTransform()

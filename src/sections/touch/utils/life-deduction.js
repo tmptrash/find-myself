@@ -293,6 +293,16 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
       palette
     )
   })
+  //
+  // Allow Space or Enter to skip directly to the fade-out phase
+  //
+  const skipHandler = k.onKeyPress(key => {
+    if (key !== 'space' && key !== 'enter') return
+    if (state.phase === 'fadeOut') return
+    state.phase = 'fadeOut'
+    state.timer = 0
+    skipHandler.cancel()
+  })
 }
 //
 // Helper: set opacity on all score outlines

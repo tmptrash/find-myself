@@ -73,13 +73,13 @@ const BONUS_PLATFORM_Y = MAIN_PLATFORM_Y - 95
 const BONUS_PLATFORM_W = 72
 //
 // Collision box for the hidden log platform.  The box is shifted right by
-// half its width so its left edge aligns with the platform anchor point.
+// half the platform width so it aligns further to the right of the anchor.
 // Height matches the regular wooden platform (MAIN_PLATFORM_H) so the
 // hidden log feels like a real platform when the hero lands on it.
 //
 const BONUS_PLATFORM_COLLISION_WIDTH = 84
 const BONUS_PLATFORM_COLLISION_HEIGHT = MAIN_PLATFORM_H
-const BONUS_PLATFORM_COLLISION_X_OFFSET = BONUS_PLATFORM_COLLISION_WIDTH / 2
+const BONUS_PLATFORM_COLLISION_X_OFFSET = BONUS_PLATFORM_W / 2
 const BONUS_PLATFORM_COLLISION_Y_OFFSET = 9
 //
 // Single red spike cluster to the right of the hidden bonus platform

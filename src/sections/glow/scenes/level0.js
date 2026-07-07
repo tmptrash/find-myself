@@ -88,9 +88,14 @@ const PLATFORM_HIDE_Y = 9999
 // Tree.
 //
 const TREE_X = Math.round(SCREEN_W * 0.5)
-const TREE_TRUNK_BOTTOM_Y = FLOOR_Y
+//
+// The trunk geometry extends a few px below the ground so its base cannot
+// leave a gap above the floor line; rendering clips it at the roots' start
+// (ground level), so the trunk is cut exactly by the ground.
+//
+const TREE_TRUNK_SINK = 4
+const TREE_TRUNK_BOTTOM_Y = FLOOR_Y + TREE_TRUNK_SINK
 const TREE_ROOT_START_Y = FLOOR_Y
-const TREE_BOTTOM_Y = TREE_TRUNK_BOTTOM_Y
 const TREE_TOP_Y = 30
 const ROOT_MAX_Y = 1030
 const TREE_SPRITE_NAME = 'glow0-tree-sprite'
@@ -137,6 +142,26 @@ const LOG_H = 28
 // hero visually stands ON the wood instead of hovering above it.
 //
 const LOG_COLLISION_DROP_Y = 2
+//
+// Letter-log platforms mirror the main tree wood: warm sand tones in the lit
+// gray world (after L) and the tree's browns once the world gains colour.
+//
+const LOG_TREE_LIT_COLORS = {
+  bark: GLOW_PAL.treeLit.trunk,
+  barkLight: GLOW_PAL.treeLit.branch,
+  barkDark: GLOW_PAL.treeLit.root,
+  ring: GLOW_PAL.treeLit.branch,
+  ringDark: GLOW_PAL.treeLit.root,
+  core: GLOW_PAL.treeLit.leaf
+}
+const LOG_TREE_COLOR_COLORS = {
+  bark: GLOW_PAL.treeColor.trunk,
+  barkLight: GLOW_PAL.treeLit.trunk,
+  barkDark: GLOW_PAL.treeColor.root,
+  ring: GLOW_PAL.treeLit.trunk,
+  ringDark: GLOW_PAL.treeColor.root,
+  core: GLOW_PAL.treeLit.leaf
+}
 const RIGHT_PLAT_OFFSET_X = 100
 const W_PLAT_X_BASE = LEFT_MARGIN + 140 + LOG_W + 70
 const W_PLAT_Y_BELOW = 90
@@ -146,9 +171,9 @@ const W_PLAT_Y_BELOW = 90
 const O_PLAT_OFFSET_X = 210 + LOG_W / 2
 const O_PLAT_OFFSET_Y = 105
 //
-// The O letter floats 5 px higher above its log than the default placement.
+// The O letter floats 7 px higher above its log than the default placement.
 //
-const O_LETTER_RAISE_Y = 5
+const O_LETTER_RAISE_Y = 7
 //
 // The L letter floats 6 px higher above its log than the default placement.
 //
@@ -348,8 +373,8 @@ const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you ne
 //
 const HINT_INTRO_1_TEXT = 'I\'m Yuna. You don\'t need\nanswers yet. Just be curious.'
 const HINT_INTRO_1_DURATION = 6
-const HINT_INTRO_2_TEXT = 'To truly see this world, you\'ll\nneed to collect every letter of\nthe word GLOW. Each one will\nreveal another part of what\nyour eyes have yet to discover.'
-const HINT_INTRO_2_DURATION = 9
+const HINT_INTRO_2_TEXT = 'To truly see this world, you\'ll\nneed to collect every letter of\nthe word GLOW. Each one will\nreveal another part of what\nyour eyes have yet to discover.\nUse the mouse to learn more\nabout the world around you.'
+const HINT_INTRO_2_DURATION = 10
 const HINT_GROUND_RIGHT_TEXT = 'Curiosity lights the\nway. Keep walking'
 const HINT_WATER_TEXT = 'The unknown isn\'t empty.\nIt simply hasn\'t been\ndiscovered yet'
 const HINT_ZONE_DURATION = 5
@@ -1757,7 +1782,7 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones) {
         // before that the log is a flat gray environment silhouette.
         //
         fade > 0.01 || zones.lCollected
-          ? drawLogPlatform(k, w, h, ox, oy, 1, this._logDetail)
+          ? drawLogPlatform(k, w, h, ox, oy, 1, this._logDetail, glowLogColors(zones))
           : drawFlatLog(k, ox, oy, w, h, envColorGray)
       }
     }
@@ -1810,10 +1835,18 @@ function drawBonusPlatformLog(k, bonus, zones, logDetail) {
   const cy = bonus.y
   const fade = zones._sceneRef?.colorFade ?? 0
   if (fade > 0.01 || zones.lCollected) {
-    drawLogPlatform(k, BONUS_PLAT_W, LOG_H, cx, cy, bonus.platformOpacity, logDetail)
+    drawLogPlatform(k, BONUS_PLAT_W, LOG_H, cx, cy, bonus.platformOpacity, logDetail, glowLogColors(zones))
     return
   }
   drawFlatLog(k, cx, cy, BONUS_PLAT_W, LOG_H, getRGB(k, GLOW_PAL.treeGray.trunk))
+}
+//
+// Picks the log wood tones matching the main tree for the current phase:
+// sand tones while the world is gray-lit, brown tones in the colour world.
+//
+function glowLogColors(zones) {
+  const fade = zones._sceneRef?.colorFade ?? (zones.colorWorld ? 1 : 0)
+  return fade > 0.5 ? LOG_TREE_COLOR_COLORS : LOG_TREE_LIT_COLORS
 }
 //
 // Blinking letter — optional gold fill for G, value 1 offset-outline.
@@ -2756,6 +2789,11 @@ function collectLetterW(inst) {
 //
 function startMenuFadeOut(inst) {
   const k = inst.k
+  //
+  // Match the page/canvas backdrop to the fade colour so no bright strips
+  // remain above/below the letterboxed game area while the screen darkens.
+  //
+  CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
   const overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),

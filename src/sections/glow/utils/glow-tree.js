@@ -209,7 +209,12 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     traceRootFlarePath(ctx, trunkBaseX, trunkHalfW, groundY)
     ctx.fill()
   }
-  const trunkClipY = treeData.trunkSegs.length > 0 ? treeData.trunkSegs[0].sy : h
+  //
+  // Wood clip line: the trunk base or the ground line (roots start), whichever
+  // is higher. Trees built with the trunk sunk below ground are cut exactly at
+  // the ground line so the base never floats and never pokes below the floor.
+  //
+  const trunkClipY = Math.min(treeData.trunkSegs.length > 0 ? treeData.trunkSegs[0].sy : h, groundY)
   const trunkRgb = { r: trunkR, g: trunkG, b: trunkB }
   const branchRgb = { r: branchR, g: branchG, b: branchB }
   //

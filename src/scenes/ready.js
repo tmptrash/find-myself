@@ -264,6 +264,32 @@ const HERO_TITLE_BODY_COLOR = CFG.visual.colors.ready.title
 //
 const HERO_N_SPRITE_PREFIX = `hero_${HERO_TITLE_BODY_COLOR.replace('#', '')}_000000`
 //
+// Hero-n departure sequence. Once the letters start growing legs AND the
+// mouse stays still for HERO_N_MOUSE_STILL_DELAY seconds, the title hero
+// falls to the black ground line, stands up and runs off-screen right in
+// short bursts (≈3 steps, then a pause). Any mouse movement while he is on
+// the ground freezes him in a closed-eyes idle until the mouse rests again.
+//
+const HERO_N_MOUSE_STILL_DELAY = 10
+const HERO_N_FALL_SPEED = 460
+const HERO_N_RUN_SPEED = 170
+const HERO_N_RUN_FRAME_TIME = 0.12
+const HERO_N_RUN_FRAME_COUNT = 3
+const HERO_N_RUN_STEPS_PER_BURST = 3
+const HERO_N_RUN_BURST_DURATION = HERO_N_RUN_FRAME_TIME * HERO_N_RUN_FRAME_COUNT * HERO_N_RUN_STEPS_PER_BURST
+const HERO_N_RUN_PAUSE = 4
+//
+// The 80 px hero frame keeps ~14 px of transparent padding below the feet
+// (the 96 px canvas padding scaled to the 80 px display size), so the sprite
+// centre must sink below the ground line for the feet to rest ON the strip.
+//
+const HERO_N_FEET_PADDING = 14
+const HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
+//
+// Fade-out duration for the upside-down hero-u once the letters grow legs.
+//
+const HERO_U_FADE_DURATION = 1.0
+//
 // Centered description layout. All narrative + section labels live in
 // a single centred block placed BELOW the black horizon strip so the
 // upper half of the canvas stays clean for the hint, title and the
@@ -546,9 +572,25 @@ export function sceneReady(k) {
         titleOutlines.forEach(outline => { outline.text = textObj.text })
         spider.charHidden = true
         spider.isActivated = true
+        //
+        // Departure state machine fields (hero-n runs away, hero-u fades out)
+        //
+        spider.heroPhase = 'title'
+        spider.heroOpacity = 1
+        spider.heroX = 0
+        spider.heroY = 0
+        spider.heroRunFrame = 0
+        spider.heroRunTimer = 0
+        spider.heroFrameTimer = 0
+        spider.heroPauseTimer = 0
+        spider.heroGone = false
       }
       spiders.push(spider)
     })
+    //
+    // Shared mouse-stillness tracker driving the title-hero departure logic
+    //
+    const heroLetterState = { lastMouseX: -1, lastMouseY: -1, mouseMoved: false, mouseStillTime: 0 }
     let hintFlickerTime = HINT_FLICKER_DURATION
     let hintDirection = -1
     let titleFlickerPhase = 0
@@ -556,6 +598,7 @@ export function sceneReady(k) {
       const dt = k.dt()
       spiderState.timer += dt
       spiders.forEach(spider => updateSpider(k, spider, dt, SPIDER_MAX_OPACITY, true))
+      updateTitleHeroes(k, spiders, spiderState, heroLetterState, dt)
       //
       // Hint flicker
       //
@@ -1085,20 +1128,7 @@ function drawSpider(k, spider, textOpacity) {
   // creation. Hero-u is flipped vertically (upside down).
   //
   if (spider.isHeroN || spider.isHeroU) {
-    //
-    // Heroes are always fully visible from frame 1 — opacity is independent of title fade.
-    //
-    k.drawSprite({
-      sprite: `${HERO_N_SPRITE_PREFIX}_0_0`,
-      pos: k.vec2(
-        spider.x - HERO_N_SPRITE_SIZE / 2 + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X),
-        spider.y - HERO_N_SPRITE_SIZE / 2 + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y)
-      ),
-      width: HERO_N_SPRITE_SIZE,
-      height: HERO_N_SPRITE_SIZE,
-      flipY: spider.isHeroU,
-      opacity: 1.0
-    })
+    drawTitleHero(k, spider)
     return
   }
   if (spider.legExtendT > 0 && !spider.legsHidden) {
@@ -1363,4 +1393,127 @@ function onUpdateAmbientSounds(k, ambient) {
     Sound.playOwlSound(ambient.sound)
     ambient.owlTimer = OWL_INTERVAL_MIN + Math.random() * OWL_INTERVAL_RANGE
   }
+}
+//
+// Tracks mouse stillness and advances both title heroes: hero-u fades out
+// once the letters start growing legs; hero-n leaves the title after the
+// mouse has rested (see the HERO_N_* constants for the full sequence).
+//
+function updateTitleHeroes(k, spiders, spiderState, state, dt) {
+  const mp = k.mousePos()
+  if (mp.x !== state.lastMouseX || mp.y !== state.lastMouseY) {
+    state.lastMouseX = mp.x
+    state.lastMouseY = mp.y
+    state.mouseMoved = true
+    state.mouseStillTime = 0
+  } else {
+    state.mouseMoved = false
+    state.mouseStillTime += dt
+  }
+  const legsStarted = spiderState.timer > SPIDER_LEGS_BASE_DELAY
+  spiders.forEach(spider => {
+    spider.isHeroU && updateHeroU(spider, legsStarted, dt)
+    spider.isHeroN && updateHeroN(k, spider, state, legsStarted, dt)
+  })
+}
+//
+// Hero-u simply fades away once the letters start growing legs.
+//
+function updateHeroU(spider, legsStarted, dt) {
+  if (!legsStarted || spider.heroGone) return
+  spider.heroOpacity = Math.max(0, spider.heroOpacity - dt / HERO_U_FADE_DURATION)
+  spider.heroOpacity <= 0 && (spider.heroGone = true)
+}
+//
+// Hero-n departure state machine: title → fall → run bursts / pauses, with
+// an interruptible closed-eyes idle whenever the mouse moves on the ground.
+//
+function updateHeroN(k, spider, state, legsStarted, dt) {
+  if (spider.heroGone) return
+  if (spider.heroPhase === 'title') {
+    if (legsStarted && state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY) {
+      //
+      // Leave the title cell: from now on the hero is positioned by its own
+      // centre coordinates instead of the letter-cell offsets.
+      //
+      spider.heroPhase = 'fall'
+      spider.heroX = spider.x + HERO_N_OFFSET_X
+      spider.heroY = spider.y + HERO_N_OFFSET_Y
+    }
+    return
+  }
+  if (spider.heroPhase === 'fall') {
+    spider.heroY += HERO_N_FALL_SPEED * dt
+    if (spider.heroY >= HERO_N_GROUND_CENTER_Y) {
+      spider.heroY = HERO_N_GROUND_CENTER_Y
+      startHeroNBurst(spider)
+    }
+    return
+  }
+  //
+  // Ground phases — any mouse movement freezes the hero in closed-eyes idle.
+  //
+  state.mouseMoved && (spider.heroPhase = 'idle')
+  if (spider.heroPhase === 'idle') {
+    state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY && startHeroNBurst(spider)
+    return
+  }
+  if (spider.heroPhase === 'run') {
+    spider.heroRunTimer += dt
+    spider.heroX += HERO_N_RUN_SPEED * dt
+    //
+    // Cycle the run animation frames while the burst lasts.
+    //
+    spider.heroFrameTimer += dt
+    if (spider.heroFrameTimer >= HERO_N_RUN_FRAME_TIME) {
+      spider.heroFrameTimer = 0
+      spider.heroRunFrame = (spider.heroRunFrame + 1) % HERO_N_RUN_FRAME_COUNT
+    }
+    if (spider.heroX - HERO_N_SPRITE_SIZE / 2 > k.width()) {
+      spider.heroGone = true
+      return
+    }
+    if (spider.heroRunTimer >= HERO_N_RUN_BURST_DURATION) {
+      spider.heroPhase = 'pause'
+      spider.heroPauseTimer = 0
+    }
+    return
+  }
+  if (spider.heroPhase === 'pause') {
+    spider.heroPauseTimer += dt
+    spider.heroPauseTimer >= HERO_N_RUN_PAUSE && startHeroNBurst(spider)
+  }
+}
+//
+// Resets the burst timers and switches hero-n into the running phase.
+//
+function startHeroNBurst(spider) {
+  spider.heroPhase = 'run'
+  spider.heroRunTimer = 0
+  spider.heroFrameTimer = 0
+  spider.heroRunFrame = 0
+}
+//
+// Draws a title hero (hero-n or the flipped hero-u). Inside the title the
+// hero sits within its letter cell; after departure hero-n is positioned by
+// its own centre coordinates and picks a sprite matching the current phase.
+//
+function drawTitleHero(k, spider) {
+  if (spider.heroGone) return
+  const inTitle = spider.isHeroU || spider.heroPhase === 'title'
+  const cx = inTitle ? spider.x + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X) : spider.heroX
+  const cy = inTitle ? spider.y + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y) : spider.heroY
+  const sprite = spider.heroPhase === 'run'
+    ? `${HERO_N_SPRITE_PREFIX}-run-${spider.heroRunFrame}`
+    : spider.heroPhase === 'idle'
+      ? `${HERO_N_SPRITE_PREFIX}_closed`
+      : `${HERO_N_SPRITE_PREFIX}_0_0`
+  k.drawSprite({
+    sprite,
+    pos: k.vec2(cx - HERO_N_SPRITE_SIZE / 2, cy - HERO_N_SPRITE_SIZE / 2),
+    width: HERO_N_SPRITE_SIZE,
+    height: HERO_N_SPRITE_SIZE,
+    flipY: spider.isHeroU,
+    opacity: spider.isHeroU ? spider.heroOpacity : 1
+  })
 }

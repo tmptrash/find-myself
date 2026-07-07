@@ -5,7 +5,7 @@ import { CFG } from '../cfg.js'
 // countdown, ...): slightly to the right and just above the head.
 //
 const COUNTER_X_OFFSET = 22
-const COUNTER_Y_OFFSET = -64
+const COUNTER_Y_OFFSET = -52
 //
 // Full 8-direction outline so the digits read cleanly on any background.
 //

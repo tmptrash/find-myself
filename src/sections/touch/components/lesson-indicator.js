@@ -22,9 +22,9 @@ const SCORE_OFFSET_Y = 10
 const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
-// (raised slightly so the "teacher" reads higher in the HUD of every level)
+// (raised further so the "teacher" reads higher in the HUD of every level)
 //
-const LIFE_IMAGE_Y_OFFSET = 8
+const LIFE_IMAGE_Y_OFFSET = 3
 //
 // Trap count badge: small red number below-right of life icon
 //

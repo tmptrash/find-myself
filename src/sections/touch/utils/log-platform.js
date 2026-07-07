@@ -144,18 +144,19 @@ export function generateLogDetail(w, h, withSnow) {
  * @param {number} oy - Offset Y
  * @param {number} opacity - Draw opacity
  * @param {Object} detail - Pre-generated log detail
+ * @param {Object} [colors] - Optional hex tone overrides ({ bark, barkLight, barkDark, ring, ringDark, core })
  */
-export function drawLogPlatform(k, w, h, ox, oy, opacity, detail) {
+export function drawLogPlatform(k, w, h, ox, oy, opacity, detail, colors = null) {
   const halfW = w / 2
   const halfH = h / 2
   const endR = halfH
   const sq = LOG_END_SQUASH
-  const barkColor = getRGB(k, LOG_BARK_COLOR_HEX)
-  const barkLight = getRGB(k, LOG_BARK_LIGHT_HEX)
-  const barkDark = getRGB(k, LOG_BARK_DARK_HEX)
-  const ringColor = getRGB(k, LOG_RING_COLOR_HEX)
-  const ringDark = getRGB(k, LOG_RING_DARK_HEX)
-  const coreColor = getRGB(k, LOG_CORE_COLOR_HEX)
+  const barkColor = getRGB(k, colors?.bark ?? LOG_BARK_COLOR_HEX)
+  const barkLight = getRGB(k, colors?.barkLight ?? LOG_BARK_LIGHT_HEX)
+  const barkDark = getRGB(k, colors?.barkDark ?? LOG_BARK_DARK_HEX)
+  const ringColor = getRGB(k, colors?.ring ?? LOG_RING_COLOR_HEX)
+  const ringDark = getRGB(k, colors?.ringDark ?? LOG_RING_DARK_HEX)
+  const coreColor = getRGB(k, colors?.core ?? LOG_CORE_COLOR_HEX)
   const bodyPts = []
   for (let i = 0; i <= LOG_END_STEPS; i++) {
     const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS

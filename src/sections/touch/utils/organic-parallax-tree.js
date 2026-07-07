@@ -6,6 +6,11 @@ import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 // Branch rotation easing used by dynamic organic-tree drawers (per frame).
 //
 export const BRANCH_SWAY_SMOOTH_PER_SEC = 8.5
+//
+// Flat-canopy mode: leaf-to-blob radius scale. Overlapping full-alpha circles
+// merge into clean rounded canopy clumps (storybook style, no leaf details).
+//
+const FLAT_CANOPY_BLOB_SCALE = 0.85
 
 /**
  * Random trunk (+ paired root) palette — chocolates / gray-brown / reddish.
@@ -334,6 +339,24 @@ function drawClusterToCanvas(ctx, tree, cluster, sway, trunkColor) {
     ctx.lineTo(tree.x + cluster.pivotX + seg.endX + sway, cluster.pivotY + seg.endY)
     ctx.stroke()
   }
+  //
+  // Flat-canopy trees draw foliage as plain solid circles — overlapping
+  // full-alpha blobs merge into rounded storybook clumps without leaf details.
+  //
+  if (tree.flatCanopy) {
+    for (const leaf of cluster.leaves) {
+      ctx.fillStyle = `rgba(${leaf.r}, ${leaf.g}, ${leaf.b}, ${tree.opacity})`
+      ctx.beginPath()
+      ctx.arc(
+        tree.x + cluster.pivotX + leaf.x + sway,
+        cluster.pivotY + leaf.y,
+        leaf.size * FLAT_CANOPY_BLOB_SCALE,
+        0, Math.PI * 2
+      )
+      ctx.fill()
+    }
+    return
+  }
   for (const leaf of cluster.leaves) {
     drawRealisticLeafToCanvas(
       ctx,
@@ -567,4 +590,78 @@ function dimOrganicTreeSnapshot(tree, rgbFactor, opacityScale) {
     leafColor: cloneColor(lcBase),
     opacity: Math.min(1, tree.opacity * opacityScale)
   }
+}
+
+/**
+ * Scales trunk, branch and leaf dimensions for parallax depth rows.
+ * @param {Object} tree - Organic tree descriptor (mutated)
+ * @param {number} trunkScale - Trunk segment width multiplier
+ * @param {number} branchScale - Branch segment width multiplier
+ * @param {number} leafScale - Leaf size multiplier
+ */
+export function scaleOrganicParallaxTree(tree, trunkScale, branchScale, leafScale) {
+  if (!tree) return
+  tree.trunkSegments?.forEach(seg => { seg.width *= trunkScale })
+  tree.branchClusters?.forEach(cluster => {
+    cluster.branchSegments?.forEach(seg => { seg.width *= branchScale })
+    cluster.leaves?.forEach(leaf => { leaf.size *= leafScale })
+  })
+}
+
+/**
+ * Adds mid-trunk branch clusters so bare trunk sticks do not read as poles.
+ * @param {Object} tree - Organic tree descriptor (mutated)
+ * @param {{ r: number, g: number, b: number }} leafRgb - Leaf fill colour
+ * @param {number} branchScale - Branch width multiplier
+ * @param {number[]} [canopyFracs] - Trunk height fractions for extra clusters
+ */
+export function addLowerCanopyClusters(tree, leafRgb, branchScale = 1, canopyFracs = null) {
+  if (!tree?.trunkSegments?.length || !tree.branchClusters) return
+  const segs = tree.trunkSegments
+  const fracs = canopyFracs ?? [0.58, 0.72, 0.84]
+  const palette = [[leafRgb.r, leafRgb.g, leafRgb.b]]
+  fracs.forEach((frac, idx) => {
+    const segIdx = Math.min(segs.length - 1, Math.floor(frac * segs.length))
+    const seg = segs[segIdx]
+    const side = idx % 2 === 0 ? -1 : 1
+    const angle = -Math.PI / 2 + side * (0.28 + Math.random() * 0.38)
+    const clusterLen = 6 + idx * 2 + Math.floor(Math.random() * 4)
+    const cluster = buildBranchCluster(seg.endX, seg.endY, angle, clusterLen, 3.2 * branchScale, palette)
+    cluster.branchSegments?.forEach(s => { s.width *= branchScale })
+    cluster.leaves?.forEach(leaf => {
+      leaf.r = leafRgb.r
+      leaf.g = leafRgb.g
+      leaf.b = leafRgb.b
+      leaf.size *= 1.2 + Math.random() * 0.35
+    })
+    tree.branchClusters.push(cluster)
+  })
+}
+
+/**
+ * Tapers trunk and branch stroke width toward the crown (thinner higher up).
+ * Widest at the ground contact, narrowing to minFactor at the apex.
+ * @param {Object} tree - Organic tree descriptor (mutated)
+ * @param {number} trunkBottomY - Absolute Y of trunk base
+ * @param {number} trunkTopY - Absolute Y of trunk apex
+ * @param {number} [minFactor=0.22] - Width multiplier at the trunk apex
+ */
+export function taperOrganicBranchesByHeight(tree, trunkBottomY, trunkTopY, minFactor = 0.22) {
+  if (!tree) return
+  const treeH = Math.max(1, trunkBottomY - trunkTopY)
+  const factorAtY = (absY) => {
+    const frac = Math.max(0, Math.min(1, (trunkBottomY - absY) / treeH))
+    return 1 - frac * (1 - minFactor)
+  }
+  tree.trunkSegments?.forEach(seg => {
+    const midY = (seg.startY + seg.endY) * 0.5
+    seg.width *= factorAtY(midY)
+  })
+  tree.branchClusters?.forEach(cluster => {
+    const py = cluster.pivotY ?? 0
+    cluster.branchSegments?.forEach(seg => {
+      const midY = py + (seg.startY + seg.endY) * 0.5
+      seg.width *= factorAtY(midY)
+    })
+  })
 }

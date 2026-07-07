@@ -19,7 +19,7 @@ export function sceneWordComplete(k) {
     // Mark word section complete and point to next section
     //
     setSectionCompleted('word')
-    set('lastLesson', 'lesson-touch.training')
+    set('lastLesson', 'lesson-touch.0')
     //
     // Create sound instance and stop background music
     //

@@ -8,7 +8,8 @@ import { sceneLesson2 } from "./sections/word/scenes/lesson2.js"
 import { sceneLesson3 } from "./sections/word/scenes/lesson3.js"
 import { sceneLesson4 } from "./sections/word/scenes/lesson4.js"
 import { sceneWordComplete } from "./sections/word/scenes/word-complete.js"
-import { sceneTouchTraining } from "./sections/touch/scenes/training.js"
+import { sceneGlowLevel0 } from "./sections/glow/scenes/level0.js"
+import { sceneGlowComplete } from "./sections/glow/scenes/glow-complete.js"
 import { sceneLesson0 as sceneTouchLevel0 } from "./sections/touch/scenes/lesson0.js"
 import { sceneLesson1 as sceneTouchLevel1 } from "./sections/touch/scenes/lesson1.js"
 import { sceneLesson2 as sceneTouchLevel2 } from "./sections/touch/scenes/lesson2.js"
@@ -262,7 +263,8 @@ function buildSetupTasks(k) {
     () => sceneLesson3(k),
     () => sceneLesson4(k),
     () => sceneWordComplete(k),
-    () => sceneTouchTraining(k),
+    () => sceneGlowLevel0(k),
+    () => sceneGlowComplete(k),
     () => sceneTouchLevel0(k),
     () => sceneTouchLevel1(k),
     () => sceneTouchLevel2(k),
@@ -308,7 +310,9 @@ function buildSoundTasks(k) {
     ['frog', './sounds/frog.mp3'],
     ['life', './sounds/life.mp3'],
     ['boss', './sounds/boss.mp3'],
-    ['water', './sounds/water.mp3']
+    ['water', './sounds/water.mp3'],
+    ['water-steps', './sounds/water-steps.mp3'],
+    ['birds', './sounds/birds.mp3']
   ]
   return sounds.map(([name, path]) => () => k.loadSound(name, path))
 }

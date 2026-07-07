@@ -22,6 +22,7 @@ import { createScrollingCloudBand, createFloorThornSprite } from '../utils/lesso
 import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
 import { buildRockVertices, buildRockPalette, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import * as Tooltip from '../../../utils/tooltip.js'
+import * as HeroCounter from '../../../utils/hero-counter.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
@@ -563,11 +564,9 @@ const TOUCH_FIREFLY_MAX_HEIGHT_ABOVE_FLOOR = 90
 //
 const L0_FIREFLY_DRAW_MARGIN = 120
 //
-// X/Y counter offsets relative to hero position
+// Firefly counter font size (position offsets live in utils/hero-counter.js)
 //
 const TOUCH_FIREFLY_COUNTER_FONT = 22
-const TOUCH_FIREFLY_COUNTER_X_OFFSET = 14
-const TOUCH_FIREFLY_COUNTER_Y_OFFSET = -80
 //
 // Log platform dimensions for U letter (same height as bonus-hero log)
 //
@@ -4970,8 +4969,7 @@ function setupTouchLetterSystem(k, cfg) {
     //
     // X/Y firefly counter displayed near hero head during collect mode
     //
-    fireflyCounterObj: null,
-    fireflyCounterOutlines: null,
+    fireflyCounter: null,
     //
     // Dialog lock: prevent pickup while dialog is open
     //
@@ -5622,39 +5620,14 @@ function createFloorMask(k, tX, tY) {
 // Creates them on first call; repositions and updates text every frame.
 //
 function updateFireflyCounter(k, state, collected, total, heroX, heroY) {
-  const text = `${collected}/${total}`
-  const cx = heroX + TOUCH_FIREFLY_COUNTER_X_OFFSET
-  const cy = heroY + TOUCH_FIREFLY_COUNTER_Y_OFFSET
-  if (!state.fireflyCounterObj) {
-    const outlineOffsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-    state.fireflyCounterOutlines = outlineOffsets.map(([dx, dy]) => k.add([
-      k.text(text, { size: TOUCH_FIREFLY_COUNTER_FONT }),
-      k.pos(cx + dx, cy + dy),
-      k.anchor('left'),
-      k.color(0, 0, 0),
-      k.opacity(0.8),
-      k.z(CFG.visual.zIndex.ui + 10)
-    ]))
-    state.fireflyCounterObj = k.add([
-      k.text(text, { size: TOUCH_FIREFLY_COUNTER_FONT }),
-      k.pos(cx, cy),
-      k.anchor('left'),
-      k.color(k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B)),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 10.1)
-    ])
-    return
+  if (!state.fireflyCounter) {
+    state.fireflyCounter = HeroCounter.create({
+      k,
+      size: TOUCH_FIREFLY_COUNTER_FONT,
+      color: { r: L0_FIREFLY_COLOR_R, g: L0_FIREFLY_COLOR_G, b: L0_FIREFLY_COLOR_B }
+    })
   }
-  state.fireflyCounterObj.text = text
-  state.fireflyCounterObj.pos.x = cx
-  state.fireflyCounterObj.pos.y = cy
-  state.fireflyCounterOutlines?.forEach((n, i) => {
-    if (!n.exists?.()) return
-    const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-    n.text = text
-    n.pos.x = cx + offsets[i][0]
-    n.pos.y = cy + offsets[i][1]
-  })
+  HeroCounter.update(state.fireflyCounter, `${collected}/${total}`, heroX, heroY)
 }
 //
 // Destroys the firefly platform and resets all related state.
@@ -5676,19 +5649,14 @@ function destroyFireflyPlatform(state, fireflies) {
 // The counter stays hidden until the level restarts.
 //
 function hideFireflyCounter(state) {
-  if (state.fireflyCounterObj?.exists?.()) state.fireflyCounterObj.opacity = 0
-  state.fireflyCounterOutlines?.forEach(n => {
-    n?.exists?.() && (n.opacity = 0)
-  })
+  HeroCounter.hide(state.fireflyCounter)
 }
 //
 // Destroys the firefly counter text objects and clears state refs.
 //
 function destroyFireflyCounter(state) {
-  state.fireflyCounterObj?.destroy?.()
-  state.fireflyCounterObj = null
-  state.fireflyCounterOutlines?.forEach(n => n.destroy?.())
-  state.fireflyCounterOutlines = null
+  HeroCounter.destroy(state.fireflyCounter)
+  state.fireflyCounter = null
 }
 //
 // Slowly oscillates bug4 (the anti-hero's platform bug) and its invisible

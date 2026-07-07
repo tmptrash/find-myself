@@ -179,6 +179,8 @@ export function openDialog(k, text, opts = {}) {
     closeHint.destroy?.()
     closeOutlines.forEach(n => n.destroy?.())
     escHandler?.cancel?.()
+    spaceHandler?.cancel?.()
+    enterHandler?.cancel?.()
     clickHandler?.cancel?.()
     updateHandler?.cancel?.()
     onClose?.()
@@ -188,6 +190,8 @@ export function openDialog(k, text, opts = {}) {
     state.phase = 'closing'
     state.timer = 0
     escHandler?.cancel?.()
+    spaceHandler?.cancel?.()
+    enterHandler?.cancel?.()
     clickHandler?.cancel?.()
     //
     // Notify immediately so callers can release blocked input (e.g. Esc to menu)
@@ -196,6 +200,8 @@ export function openDialog(k, text, opts = {}) {
     onCloseStart?.()
   }
   const escHandler = k.onKeyPress('escape', close)
+  const spaceHandler = k.onKeyPress('space', close)
+  const enterHandler = k.onKeyPress('enter', close)
   const clickHandler = k.onMousePress(close)
   const updateHandler = k.onUpdate(() => {
     const dt = k.dt()

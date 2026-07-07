@@ -236,13 +236,33 @@ const HERO_EYE_LERP_SPEED = 0.1
 const HERO_N_CHAR_INDEX = 2
 const HERO_N_EXTRA_SPREAD = 12
 //
+// Index of 'u' in "yourself" — replaced by an upside-down hero sprite
+//
+const HERO_U_CHAR_INDEX = 7
+//
 // Rendered size of the hero sprite standing in place of 'n'
 //
-const HERO_N_SPRITE_SIZE = 58
+const HERO_N_SPRITE_SIZE = 80
 //
-// Sprite prefix for the plain hero (loaded with no extras in sceneReady)
+// Offset applied to hero-n position so it sits visually inside the title word
 //
-const HERO_N_SPRITE_PREFIX = 'hero_5A8898_000000'
+const HERO_N_OFFSET_X = 10
+const HERO_N_OFFSET_Y = -6
+//
+// Offsets for the flipped hero-u: shifted left of the char cell and mirrored
+// downwards vertically.
+//
+const HERO_U_OFFSET_X = -12
+const HERO_U_OFFSET_Y = -3
+//
+// Title heroes share the exact colour of the title letters so they read
+// as part of the word rather than separate characters.
+//
+const HERO_TITLE_BODY_COLOR = CFG.visual.colors.ready.title
+//
+// Sprite prefix for the title hero variant (body colour = title colour)
+//
+const HERO_N_SPRITE_PREFIX = `hero_${HERO_TITLE_BODY_COLOR.replace('#', '')}_000000`
 //
 // Centered description layout. All narrative + section labels live in
 // a single centred block placed BELOW the black horizon strip so the
@@ -262,15 +282,14 @@ const TITLE_TEXT_Y = 130
 // New description: 5 lines of narrative text, no icons
 //
 const READY_DESC_LINES = [
-  'A psychological platformer where',
-  'gameplay is the lesson. Every',
-  'obstacle teaches a new way to',
-  'interact with the world— and every',
-  'discovery brings you one step',
+  'A psychological platformer where gameplay',
+  'is the lesson. Every obstacle teaches a',
+  'new way to interact with the world —',
+  'and every discovery brings you one step',
   'closer to understanding yourself.'
 ]
-const BLOCK_LINE_COUNT = 6
-const TEXT_FONT_SIZE = 34
+const BLOCK_LINE_COUNT = 5
+const TEXT_FONT_SIZE = 36
 const TEXT_LINE_HEIGHT = 50
 //
 // Actual rendered block height: two inter-line gaps + one font height.
@@ -380,6 +399,11 @@ export function sceneReady(k) {
     // the description. Keeps the icon readable at small sizes.
     //
     loadHeroSprites(k, HEROES.HERO, HERO_READY_BODY_COLOR, null, false, false, false)
+    //
+    // Title hero variant — same body colour as the title letters, used by
+    // the hero-n and the upside-down hero-u inside "find yourself".
+    //
+    loadHeroSprites(k, HEROES.HERO, HERO_TITLE_BODY_COLOR, null, false, false, false)
     //
     // Richer hero variant for the CENTRAL illustration — adds mouth,
     // both arms and a wrist watch on top of the plain body. Loaded
@@ -509,6 +533,20 @@ export function sceneReady(k) {
       spider.legAppearDelay = SPIDER_LEGS_BASE_DELAY + waveIndex * WAVE_INTERVAL + Math.random() * 0.3
       spider.letterInfo = letterInfo
       spider.titleOutlines = titleOutlines
+      //
+      // Hero letters are pre-activated: immediately hide the underlying
+      // character in the title text so the hero sprites are visible from
+      // the first frame.
+      //
+      if (spider.isHeroN || spider.isHeroU) {
+        const { textObj, charIndex } = letterInfo
+        const chars = textObj.text.split('')
+        chars[charIndex] = ' '
+        textObj.text = chars.join('')
+        titleOutlines.forEach(outline => { outline.text = textObj.text })
+        spider.charHidden = true
+        spider.isActivated = true
+      }
       spiders.push(spider)
     })
     let hintFlickerTime = HINT_FLICKER_DURATION
@@ -827,7 +865,11 @@ function createSpider(k, index, sourceInfo) {
     //
     // When true this spider stays fixed and renders a hero sprite instead of a letter
     //
-    isHeroN: sourceInfo?.isHeroN ?? false
+    isHeroN: sourceInfo?.isHeroN ?? false,
+    //
+    // When true this spider renders an upside-down hero sprite (the 'u' in "yourself")
+    //
+    isHeroU: sourceInfo?.isHeroU ?? false
   }
 }
 
@@ -866,9 +908,11 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
     const charX = startX + (charIndex * charWidth) + (charWidth / 2) + extraShift
     const charY = titleTextObj.pos.y
     //
-    // Mark the 'n' at HERO_N_CHAR_INDEX — it will be replaced by a hero sprite
+    // Mark the 'n' (hero) and the 'u' in "yourself" (upside-down hero) —
+    // both will be replaced by hero sprites.
     //
     const isHeroN = charIndex === HERO_N_CHAR_INDEX
+    const isHeroU = charIndex === HERO_U_CHAR_INDEX
     letterInfos.push({
       textObj: titleTextObj,
       charIndex,
@@ -878,7 +922,8 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
       color: brighterColor,
       fontSize,
       fontFamily,
-      isHeroN
+      isHeroN,
+      isHeroU
     })
   })
   return letterInfos
@@ -920,9 +965,9 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
   }
   if (!spider.isActivated) return
   //
-  // Hero-n stays at its original position — no wandering
+  // Hero letters stay at their original positions — no wandering
   //
-  if (spider.isHeroN) return
+  if (spider.isHeroN || spider.isHeroU) return
   //
   // Random movement (no return-to-title in the new scene design)
     //
@@ -1034,6 +1079,28 @@ function onDrawSpidersLayer(k, spiders, spiderState) {
  * @param {number} textOpacity - Opacity for the spider
  */
 function drawSpider(k, spider, textOpacity) {
+  //
+  // Hero letters: always draw as hero sprites regardless of activation state.
+  // The underlying characters were already hidden in the title text at spider
+  // creation. Hero-u is flipped vertically (upside down).
+  //
+  if (spider.isHeroN || spider.isHeroU) {
+    //
+    // Heroes are always fully visible from frame 1 — opacity is independent of title fade.
+    //
+    k.drawSprite({
+      sprite: `${HERO_N_SPRITE_PREFIX}_0_0`,
+      pos: k.vec2(
+        spider.x - HERO_N_SPRITE_SIZE / 2 + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X),
+        spider.y - HERO_N_SPRITE_SIZE / 2 + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y)
+      ),
+      width: HERO_N_SPRITE_SIZE,
+      height: HERO_N_SPRITE_SIZE,
+      flipY: spider.isHeroU,
+      opacity: 1.0
+    })
+    return
+  }
   if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = k.rgb(12, 10, 14)
     const legOpacity = spider.charHidden ? SPIDER_MAX_OPACITY : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
@@ -1052,19 +1119,6 @@ function drawSpider(k, spider, textOpacity) {
     }
   }
   if (spider.charHidden) {
-    //
-    // Hero-n: draw a hero sprite at the fixed position instead of the letter
-    //
-    if (spider.isHeroN) {
-      k.drawSprite({
-        sprite: `${HERO_N_SPRITE_PREFIX}_0_0`,
-        pos: k.vec2(spider.x - HERO_N_SPRITE_SIZE / 2, spider.y - HERO_N_SPRITE_SIZE / 2),
-        width: HERO_N_SPRITE_SIZE,
-        height: HERO_N_SPRITE_SIZE,
-        opacity: 1.0
-      })
-      return
-    }
     const angleDeg = spider.displayAngle
       spider.currentRotation = angleDeg
     k.pushTransform()

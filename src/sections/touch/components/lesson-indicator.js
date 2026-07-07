@@ -22,8 +22,9 @@ const SCORE_OFFSET_Y = 10
 const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
+// (raised slightly so the "teacher" reads higher in the HUD of every level)
 //
-const LIFE_IMAGE_Y_OFFSET = 14
+const LIFE_IMAGE_Y_OFFSET = 8
 //
 // Trap count badge: small red number below-right of life icon
 //
@@ -115,7 +116,12 @@ export function create(config) {
     sectionLabelCompletedStages = 0,
     sectionLabelCompletedLetters = null,
     sectionLabelLetterSpacing = null,
-    sectionLabelY = null
+    sectionLabelY = null,
+    hideScoreboard = false,
+    scoreboardGreyLife = false,
+    heroOutlineColor = CFG.visual.colors.outline,
+    heroEyeWhiteColor = null,
+    heroLegStrip = false
   } = config
   const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
@@ -125,6 +131,7 @@ export function create(config) {
   const y = sectionLabelY ?? (topPlatformHeight - fontSize) / 2
   const fallingLetterExtraY = Math.round(fontSize * FALLING_LETTER_UNDER_C_RATIO)
   const letterObjects = []
+  const letterOutlineObjects = []
   const fallingLetterObjects = []
   letters.forEach((letter, i) => {
     const letterLevel = i
@@ -184,6 +191,7 @@ export function create(config) {
       ]
       isFallingLetter && outlineComponents.push(k.rotate(FALLING_LETTER_TILT))
       const outlineObj = k.add(outlineComponents)
+      letterOutlineObjects.push(outlineObj)
       isFallingLetter && fallingLetterObjects.push(outlineObj)
     })
     //
@@ -240,7 +248,9 @@ export function create(config) {
     // chromatic sync with the actual character running the level.
     //
     bodyColor: heroBodyColor,
-    outlineColor: CFG.visual.colors.outline,
+    outlineColor: heroOutlineColor,
+    eyeWhiteColor: heroEyeWhiteColor,
+    addLegStrip: heroLegStrip,
     addMouth: isWordComplete,
     addArms: isTouchComplete,
     //
@@ -330,9 +340,21 @@ export function create(config) {
     k.fixed(),
     k.z(CFG.visual.zIndex.ui + 1)
   ])
+  const scoreboardNodes = [
+    smallHero.character,
+    lifeImageData.sprite,
+    heroScoreText,
+    lifeScoreText,
+    ...heroScoreOutlines,
+    ...lifeScoreOutlines,
+    trapBadgeText,
+    ...trapBadgeOutlines
+  ]
+  hideScoreboard && scoreboardNodes.forEach(node => { node.hidden = true })
   return {
     k,
     letterObjects,
+    letterOutlineObjects,
     sectionLabelStagePairs,
     sectionLabelActiveColor: activeColor,
     sectionLabelInactiveColor: inactiveColor,
@@ -342,6 +364,10 @@ export function create(config) {
     lifeScoreText,
     lifeScoreOutlines,
     heroScoreOutlines,
+    scoreboardNodes,
+    scoreboardGreyLife,
+    smallHeroRevealed: !hideScoreboard,
+    lifeRevealed: !hideScoreboard,
     //
     // Exposed so external flash routines (life-deduct red blink,
     // help-purchase / help-denied flashes) can reset the score numerals
@@ -367,6 +393,47 @@ export function create(config) {
       trapBadgeOutlines.forEach(o => { o.exists?.() && (o.text = val) })
     }
   }
+}
+
+/**
+ * Hides or shows the section label letters (fills + outlines) in the top-left HUD.
+ * Used by levels where the label appears only after the first letter is earned.
+ * @param {Object} inst - Level indicator instance from create()
+ * @param {boolean} hidden - True to hide the letters, false to show them
+ */
+export function setSectionLabelHidden(inst, hidden) {
+  if (!inst) return
+  inst.letterObjects?.forEach(obj => { obj.exists?.() && (obj.hidden = hidden) })
+  inst.letterOutlineObjects?.forEach(obj => { obj.exists?.() && (obj.hidden = hidden) })
+}
+
+/**
+ * Reveals the small-hero icon and hero-score numerals in the top-right HUD.
+ * @param {Object} inst - Level indicator instance from create()
+ */
+export function revealSmallHeroHud(inst) {
+  if (!inst || inst.smallHeroRevealed) return
+  inst.smallHeroRevealed = true
+  inst.smallHero?.character && (inst.smallHero.character.hidden = false)
+  inst.heroScoreText && (inst.heroScoreText.hidden = false)
+  inst.heroScoreOutlines?.forEach(o => { o.hidden = false })
+}
+
+/**
+ * Reveals the life icon and life-score numerals in the top-right HUD.
+ * @param {Object} inst - Level indicator instance from create()
+ * @param {boolean} [greyLife=true] - Tint life icon grey (glow grayscale phase)
+ */
+export function revealLifeHud(inst, greyLife = true) {
+  if (!inst || inst.lifeRevealed) return
+  inst.lifeRevealed = true
+  const useGrey = greyLife || inst.scoreboardGreyLife
+  if (useGrey && inst.lifeImage?.sprite) {
+    inst.lifeImage.sprite.color = inst.k.rgb(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B)
+  }
+  inst.lifeImage?.sprite && (inst.lifeImage.sprite.hidden = false)
+  inst.lifeScoreText && (inst.lifeScoreText.hidden = false)
+  inst.lifeScoreOutlines?.forEach(o => { o.hidden = false })
 }
 
 export function setSectionLabelLetterProgress(inst, completedLetters) {

@@ -220,7 +220,9 @@ export function create(config) {
     hitboxPadding = 0,     // Additional padding around collision box (for menu hover/click)
     ambient = false,       // Decorative background character — no annihilation tag
     ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
-    ambientRunSpeed = null // Seconds per run frame when ambientWalk is true
+    ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
+    eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
+    addLegStrip = false    // If true, draw horizontal connecting strip between legs
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -255,6 +257,8 @@ export function create(config) {
       addArms,
       addWatch,
       outlineOnly,
+      eyeWhiteColor,
+      addLegStrip,
       character: null  // Marker to indicate this is an inst-like object
     })
   } catch (error) {
@@ -263,7 +267,8 @@ export function create(config) {
   //
   // Generate sprite prefix based on customization (colors already have # removed)
   //
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}`
+  const effectiveEyeWhiteKey = eyeWhiteColor ? String(eyeWhiteColor).replace('#', '') : ''
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}${addLegStrip ? '_ls' : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -355,6 +360,9 @@ export function create(config) {
     addMouth,                             // Feature flags persisted for runtime recolour
     addArms,
     addWatch,
+    outlineOnly,
+    eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
+    addLegStrip,                          // Leg strip flag persisted for runtime recolour
     spritePrefix,
     dustColor,
     speed: CFG.game.moveSpeed,
@@ -467,7 +475,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, hollow
+  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, legStrip
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -481,6 +489,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     arms = inst.addArms || false
     watch = inst.addWatch || false
     hollow = inst.outlineOnly || false
+    eyeWhite = inst.eyeWhiteColor || null
+    legStrip = inst.addLegStrip || false
   } else {
     //
     // Called with individual parameters (for preloading)
@@ -493,6 +503,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     arms = addArms
     watch = addWatch
     hollow = false
+    eyeWhite = null
+    legStrip = false
   }
   //
   // Use default colors from config if not provided
@@ -517,7 +529,8 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Generate unique prefix for this sprite variant
   //
-  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}`
+  const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${legStrip ? '_ls' : ''}`
   //
   // Skip generation if sprites for this configuration are already in the asset registry.
   //
@@ -529,7 +542,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, legStrip)
         //
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
@@ -557,7 +570,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // when the hero is calm. Baked once as `${prefix}_closed`.
   //
   try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true)
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite, legStrip)
     if (closedData) {
       try {
         k.loadSprite(`${prefix}_closed`, closedData)
@@ -579,7 +592,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, legStrip)
       if (spriteData) {
         try {
           k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
@@ -602,7 +615,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, legStrip)
       if (spriteData) {
         try {
           k.loadSprite(`${prefix}-run-${frame}`, spriteData)
@@ -686,6 +699,12 @@ export function setLookAtPos(inst, pos) {
  */
 export function setEyesClosed(inst, closed) {
   inst.eyesClosed = !!closed
+  //
+  // Any external eye-state change overrides a singing-induced closure, so
+  // the idle-notes updater never force-reopens eyes shut by drowning,
+  // meditation or a calm pose.
+  //
+  inst.eyesClosedBySinging = false
 }
 
 /**
@@ -1489,7 +1508,6 @@ function setupControls(inst) {
       inst.jumpFrame = 0
       const prefix = inst.spritePrefix || inst.type
       inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
-      inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
     }
   }
   //
@@ -1681,6 +1699,10 @@ function createDustParticles(inst, footX, footY, type = 'splash', direction = 1)
  * @param {Object} inst - Hero instance
  */
 function spawnFootprint(inst) {
+  //
+  // Levels can disable the footprint trail entirely (e.g. glow section).
+  //
+  if (inst.suppressFootprints) return
   if (!inst.character?.pos) return
   const footY = inst.character.pos.y + (COLLISION_HEIGHT / 2) + COLLISION_OFFSET_Y + FOOTPRINT_OFFSET_Y
   //
@@ -1739,6 +1761,13 @@ function canVocalize(inst) {
   if (inst.isAnnihilating || inst.isDying) return false
   if (inst.controlsDisabled) return false
   if (inst.isRunning || inst.wasJumping) return false
+  //
+  // Held movement keys also block vocalization: while the closed-eyes hold
+  // suppresses the run animation, isRunning stays false even though the hero
+  // is moving — without this check the singing (and the shut eyes) would
+  // never end once movement starts, freezing the idle frame during a run.
+  //
+  if (inst._effectivelyMoving) return false
   const isDecorative = inst.controllable === false || inst.isStatic === true
   if (!isDecorative) {
     if (!inst.isSpawned) return false
@@ -1763,6 +1792,19 @@ function onUpdateIdleNotes(inst) {
     inst.idleStillTime += dt
   } else {
     inst.idleStillTime = 0
+  }
+  //
+  // The singing hero keeps his eyes serenely shut while notes flow from his
+  // mouth. Only a closure made HERE is reopened when the song ends — eyes
+  // shut externally (drowning, meditation, calm pose) are left untouched.
+  //
+  const singing = active && inst.idleStillTime >= IDLE_VOCALIZATION_DELAY
+  if (singing && !inst.eyesClosed) {
+    inst.eyesClosed = true
+    inst.eyesClosedBySinging = true
+  } else if (!singing && inst.eyesClosedBySinging) {
+    inst.eyesClosedBySinging = false
+    inst.eyesClosed = false
   }
   //
   // Always age + drift existing notes so they fade out naturally if the
@@ -1869,6 +1911,11 @@ function onCollisionPlatform(inst) {
   if (wasInAir && inst.wasJumping) {
     inst.sfx && Sound.playLandSound(inst.sfx, inst.currentLevel)
     //
+    // Jump sound now plays on landing (not takeoff) — gives a satisfying
+    // impact feel instead of a pre-emptive boing at the moment of push-off.
+    //
+    inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
+    //
     // Skip dust particles when suppressDust is set (e.g. landing in water)
     //
     !inst.suppressDust && createLandingDust(inst)
@@ -1924,6 +1971,24 @@ export function setArmsHidden(inst, hidden) {
     inst._savedAddArms = undefined
   }
   refreshHeroSpriteForArms(inst)
+}
+
+/**
+ * Resets jump tuck and animation after manual platform snap (log platforms).
+ * @param {Object} inst - Hero instance
+ */
+export function syncPlatformLanding(inst) {
+  const char = inst?.character
+  if (!char?.exists?.()) return
+  setJumpTuck(inst, false)
+  inst.wasJumping = false
+  inst.jumpFrame = 0
+  inst.jumpPhase = 'none'
+  inst.canJump = true
+  inst.isSquashing = false
+  inst.squashTimer = 0
+  const prefix = inst.spritePrefix || inst.type
+  char.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
 }
 
 /**
@@ -2732,7 +2797,7 @@ function startAnnihilationExplosion(inst, targetPos) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, addLegStrip = false) {
   //
   // Choose body color - custom or default
   //
@@ -2988,6 +3053,18 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         //
         fillRoundedRectBottom(ctx, leftLegX, leftLegY, 9, leftLegHeight, LEG_CORNER_RADIUS)
         fillRoundedRectBottom(ctx, rightLegX, rightLegY, 9, rightLegHeight, LEG_CORNER_RADIUS)
+        //
+        // Optional horizontal strip connecting the two legs at their base
+        // (where they attach to the body). Drawn in outline color so it is
+        // visible as a gray line across the crotch area.
+        //
+        //
+        // Leg strip is idle-only — on run/jump frames it reads as an extra black line.
+        //
+        if (addLegStrip && animation === 'idle') {
+          ctx.fillStyle = OL
+          ctx.fillRect(leftLegX + 9, leftLegY, rightLegX - (leftLegX + 9), 2)
+        }
       }
       //
       // Step 3: circular eyes (drawn on head fill)
@@ -3012,7 +3089,7 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       // serene shut look — and the pupils below are skipped entirely.
       //
       if (!outlineOnly) {
-        ctx.fillStyle = eyesClosed ? BL : getHex(CFG.visual.colors[type].eyeWhite)
+        ctx.fillStyle = eyesClosed ? BL : (eyeWhiteColor ? getHex(eyeWhiteColor) : getHex(CFG.visual.colors[type].eyeWhite))
         if (animation === 'run' || animation === 'jump') {
           ctx.beginPath()
           ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_WHITE_RADIUS, 0, Math.PI * 2)
@@ -3732,7 +3809,11 @@ function cancelJumpSquash(inst) {
 //
 function isJumpCeilingBlocked(inst) {
   const ch = inst.character
-  if (!ch?.exists?.() || !ch.isGrounded()) return false
+  //
+  // Heroes without a body component (e.g. drowning hero after unuse('body'))
+  // have no isGrounded — treat them as never ceiling-blocked instead of crashing.
+  //
+  if (!ch?.exists?.() || typeof ch.isGrounded !== 'function' || !ch.isGrounded()) return false
   const headTop = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) - (inst.collisionBaseHeight ?? 74) / 2
   const heroFeetY = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) + (inst.collisionBaseHeight ?? 74) / 2
   const heroHalfW = (inst.collisionBaseWidth ?? 40) / 2 + 6

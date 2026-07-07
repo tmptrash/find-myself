@@ -2,14 +2,15 @@ import { CFG } from '../../../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 
 //
-// Log platform visual constants (shared with touch level 2)
+// Log platform visual constants (shared with touch level 2).
+// All wood tones come from the unified game palette (CFG.visual.colors.palette).
 //
-const LOG_BARK_COLOR_HEX = '#5C3A1E'
-const LOG_BARK_LIGHT_HEX = '#7A5030'
-const LOG_BARK_DARK_HEX = '#3E2510'
-const LOG_RING_COLOR_HEX = '#A07050'
-const LOG_RING_DARK_HEX = '#6B4930'
-const LOG_CORE_COLOR_HEX = '#C4956A'
+const LOG_BARK_COLOR_HEX = CFG.visual.colors.palette.log.bark
+const LOG_BARK_LIGHT_HEX = CFG.visual.colors.palette.log.barkLight
+const LOG_BARK_DARK_HEX = CFG.visual.colors.palette.log.barkDark
+const LOG_RING_COLOR_HEX = CFG.visual.colors.palette.log.ring
+const LOG_RING_DARK_HEX = CFG.visual.colors.palette.log.ringDark
+const LOG_CORE_COLOR_HEX = CFG.visual.colors.palette.log.core
 const LOG_END_STEPS = 16
 const LOG_BARK_LINE_COUNT = 5
 const LOG_END_SQUASH = 0.55

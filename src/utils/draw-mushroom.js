@@ -26,6 +26,11 @@ const DOT_MAX_COUNT = 3
  * @param {number} opts.stemHeight - Stem height (px)
  * @param {number[]} opts.capColor - `[r, g, b]` cap fill in 0..255
  * @param {number} [opts.outlineAlpha=0.82]
+ * @param {string} [opts.outlineColor=null] - CSS colour for the outline stroke
+ *   (null = default translucent black using outlineAlpha)
+ * @param {number} [opts.outlineWidth=1.5] - Outline stroke width (px)
+ * @param {boolean} [opts.flat=false] - Single-tone silhouette: stem uses the
+ *   cap colour and highlight/dots are skipped (glow gray-phase style)
  */
 export function drawMushroomToCanvas(ctx, opts) {
   const {
@@ -36,21 +41,27 @@ export function drawMushroomToCanvas(ctx, opts) {
     stemWidth,
     stemHeight,
     capColor,
-    outlineAlpha = DEFAULT_OUTLINE_ALPHA
+    outlineAlpha = DEFAULT_OUTLINE_ALPHA,
+    outlineColor = null,
+    outlineWidth = STEM_LINE_WIDTH,
+    flat = false
   } = opts
   //
   // Stem top sits exactly under the cap base so the half-ellipse cap
   // covers the stem joint cleanly without an outline seam.
   //
   const stemTop = baseY - stemHeight
-  ctx.strokeStyle = `rgba(0, 0, 0, ${outlineAlpha})`
-  ctx.lineWidth = STEM_LINE_WIDTH
+  ctx.strokeStyle = outlineColor ?? `rgba(0, 0, 0, ${outlineAlpha})`
+  ctx.lineWidth = outlineWidth
   ctx.lineJoin = 'round'
   //
   // Stem: slightly tapered trapezoid lightened from the cap colour so the
   // cap reads as the focal colour and the stem fades into shadow.
+  // Flat mode keeps the stem in the exact cap colour (single-tone silhouette).
   //
-  ctx.fillStyle = `rgb(${Math.min(255, capColor[0] + 40)}, ${Math.min(255, capColor[1] + 50)}, ${Math.min(255, capColor[2] + 30)})`
+  ctx.fillStyle = flat
+    ? `rgb(${capColor[0]}, ${capColor[1]}, ${capColor[2]})`
+    : `rgb(${Math.min(255, capColor[0] + 40)}, ${Math.min(255, capColor[1] + 50)}, ${Math.min(255, capColor[2] + 30)})`
   ctx.beginPath()
   ctx.moveTo(cx - stemWidth / 2, baseY)
   ctx.lineTo(cx - stemWidth * 0.4, stemTop)
@@ -68,6 +79,10 @@ export function drawMushroomToCanvas(ctx, opts) {
   ctx.closePath()
   ctx.fill()
   ctx.stroke()
+  //
+  // Flat mode ends here — no highlight arc and no cap dots.
+  //
+  if (flat) return
   //
   // Cap highlight: small lighter arc near the top-left gives a sense of
   // ambient light without needing a real light source.

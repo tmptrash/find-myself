@@ -16,7 +16,10 @@ import * as CanvasBackdrop from './canvas-backdrop.js'
 const LEVEL_TRANSITIONS = {
   'menu': 'lesson-word.0',
   'menu-time': 'lesson-time.0',
-  'menu-touch': 'lesson-touch.training',
+  'menu-touch': 'lesson-touch.0',
+  'menu-glow': 'lesson-glow.0',
+  'lesson-glow.0': 'glow-complete',
+  'glow-complete': 'menu',
   'lesson-word.0': 'lesson-word.1',
   'lesson-word.1': 'lesson-word.2',
   'lesson-word.2': 'lesson-word.3',
@@ -28,7 +31,6 @@ const LEVEL_TRANSITIONS = {
   'lesson-time.2': 'lesson-time.3',
   'lesson-time.3': 'time-complete',
   'time-complete': 'menu',
-  'lesson-touch.training': 'lesson-touch.0',
   'lesson-touch.0': 'lesson-touch.1',
   'lesson-touch.1': 'lesson-touch.2',
   'lesson-touch.2': 'lesson-touch.3',
@@ -42,7 +44,9 @@ const LEVEL_SUBTITLES = {
   'menu': '',
   'menu-time': '',
   'menu-touch': '',
-  'lesson-touch.training': '',
+  'menu-glow': '',
+  'lesson-glow.0': '',
+  'glow-complete': '',
   'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
   'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
   'lesson-word.2': ['The words you can\'t forget hurt the most', 'word2-pre', 6.0],
@@ -82,8 +86,7 @@ const SECTION_SUBTITLE_COLORS = {
   word: CFG.visual.colors.sections.word.body,
   touch: CFG.visual.colors.sections.touch.body,
   feel: CFG.visual.colors.sections.feel.body,
-  mind: CFG.visual.colors.sections.mind.body,
-  stress: CFG.visual.colors.sections.stress.body
+  mind: CFG.visual.colors.sections.mind.body
 }
 const DEFAULT_SUBTITLE_COLOR = '#6B8E9F'
 

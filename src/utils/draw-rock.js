@@ -109,7 +109,7 @@ export function buildRockPalette(opts = {}) {
  *           darkR: number, darkG: number, darkB: number }} opts.palette
  */
 export function drawRockToCanvas(ctx, opts) {
-  const { cx, cy, radius, verts, palette } = opts
+  const { cx, cy, radius, verts, palette, skipOutline = false, skipShadow = false, outlineAlpha = OUTLINE_ALPHA, outlineWidth = OUTLINE_WIDTH, outlineColor = null } = opts
   const { fillR, fillG, fillB, lightR, lightG, lightB, darkR, darkG, darkB } = palette
   //
   // Quadratic-Bezier outline: each segment uses the current vertex as the
@@ -132,12 +132,15 @@ export function drawRockToCanvas(ctx, opts) {
   //
   // Soft drop shadow underneath the rock — flat ellipse on the ground
   // line, slightly wider than the rock to suggest ambient occlusion.
+  // Buried rocks (skipShadow) rest inside the earth and cast none.
   //
-  ctx.fillStyle = `rgba(0, 0, 0, ${SHADOW_GROUND_ALPHA})`
-  ctx.beginPath()
-  ctx.ellipse(cx, cy + radius * 0.42, radius * 1.0, radius * 0.18, 0, 0, Math.PI * 2)
-  ctx.closePath()
-  ctx.fill()
+  if (!skipShadow) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${SHADOW_GROUND_ALPHA})`
+    ctx.beginPath()
+    ctx.ellipse(cx, cy + radius * 0.42, radius * 1.0, radius * 0.18, 0, 0, Math.PI * 2)
+    ctx.closePath()
+    ctx.fill()
+  }
   //
   // Body fill: vertical gradient — lighter at the top, darker at the
   // bottom — gives an immediate volumetric cue without per-pixel shading.
@@ -206,19 +209,21 @@ export function drawRockToCanvas(ctx, opts) {
   ctx.fill()
   //
   // Bottom-rim contact shadow — small dark arc where the rock meets the
-  // ground, giving the impression of weight pressing down.
+  // ground, giving the impression of weight pressing down. Skipped for
+  // buried rocks together with the ground drop shadow.
   //
-  ctx.fillStyle = `rgba(0, 0, 0, ${SHADOW_CONTACT_ALPHA})`
-  ctx.beginPath()
-  ctx.ellipse(cx, cy + radius * 0.34, radius * 0.78, radius * 0.18, 0, 0, Math.PI)
-  ctx.fill()
-  //
-  // Outline for clean definition against the soil
-  //
-  ctx.strokeStyle = `rgba(0, 0, 0, ${OUTLINE_ALPHA})`
-  ctx.lineWidth = OUTLINE_WIDTH
-  traceOutline()
-  ctx.stroke()
+  if (!skipShadow) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${SHADOW_CONTACT_ALPHA})`
+    ctx.beginPath()
+    ctx.ellipse(cx, cy + radius * 0.34, radius * 0.78, radius * 0.18, 0, 0, Math.PI)
+    ctx.fill()
+  }
+  if (!skipOutline) {
+    ctx.strokeStyle = outlineColor ?? `rgba(0, 0, 0, ${outlineAlpha})`
+    ctx.lineWidth = outlineWidth
+    traceOutline()
+    ctx.stroke()
+  }
 }
 
 function clamp255(v) {

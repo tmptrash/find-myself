@@ -68,6 +68,10 @@ const COLLECT_PARTICLE_LIFETIME = 0.8
 //
 const BONUS_COLLECT_HINT_TEXT = 'You got 3 fragments.'
 //
+// How long the collect hint bubble stays above the hero (seconds).
+//
+const HINT_DISPLAY_DURATION = 3
+//
 // Float animation and time-style platform text
 //
 const FLOAT_SPEED = 1.5
@@ -136,6 +140,9 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  *   hero's center Y exceeds this value while falling. Use this when the hidden platform
  *   is below another floor: the platform stays invisible while the hero walks/jumps on
  *   the floor above and only activates once the hero has dropped past that floor.
+ * @param {Function} [config.customPlatformDraw] - Replaces the built-in revealed
+ *   platform drawing. Called as customPlatformDraw(inst) so levels can render the
+ *   platform in their own visual style (e.g. glow letter logs).
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -156,7 +163,10 @@ export function create(config) {
     requireMovingToward = false,
     platformCollisionXOffset = 0,
     platformCollisionYOffset = 0,
-    platformZ = CFG.visual.zIndex.platforms
+    platformZ = CFG.visual.zIndex.platforms,
+    customPlatformDraw = null,
+    collectHintText = BONUS_COLLECT_HINT_TEXT,
+    collectHintDuration = HINT_DISPLAY_DURATION
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -268,6 +278,9 @@ export function create(config) {
     bonusFlashParticles: [],
     miniColor,
     offScreenY: OFF_SCREEN_Y,
+    customPlatformDraw,
+    collectHintText,
+    collectHintDuration,
     logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
     storageKey,
     pulseTimer: 0,
@@ -665,7 +678,9 @@ function onDraw(inst) {
   // Draw platform when revealed
   //
   if (inst.revealed && inst.platformOpacity > 0) {
-    if (inst.platformText) {
+    if (inst.customPlatformDraw) {
+      inst.customPlatformDraw(inst)
+    } else if (inst.platformText) {
       drawTimePlatform(inst)
     } else {
       drawLogPlatform(inst)
@@ -1004,7 +1019,6 @@ function drawBonusFlashParticles(inst) {
 //
 // Display tooltip hint above the main hero on bonus collection
 //
-const HINT_DISPLAY_DURATION = 3
 function showCollectHint(inst) {
   const heroPos = inst.heroInst.character?.pos
   if (!heroPos) return
@@ -1013,7 +1027,7 @@ function showCollectHint(inst) {
     y: () => inst.heroInst.character?.pos?.y ?? heroPos.y,
     width: 1,
     height: 1,
-    text: BONUS_COLLECT_HINT_TEXT,
+    text: inst.collectHintText,
     offsetY: -60
   }
   const tooltip = Tooltip.create({
@@ -1028,7 +1042,7 @@ function showCollectHint(inst) {
   tooltip.frozenX = heroPos.x
   tooltip.frozenY = heroPos.y
   tooltip.opacity = 1
-  inst.k.wait(HINT_DISPLAY_DURATION, () => tooltip && Tooltip.destroy(tooltip))
+  inst.k.wait(inst.collectHintDuration, () => tooltip && Tooltip.destroy(tooltip))
 }
 //
 // Plays a short bright chime sound on collection

@@ -17,23 +17,23 @@ import { createSwayingGrassField, drawSwayingGrassField } from '../utils/swaying
 // All colors are imported from global config (CFG.visual.colors.sections)
 //
 const SECTION_COLORS = {
+  glow: CFG.visual.colors.sections.glow,
   word: CFG.visual.colors.sections.word,
   touch: CFG.visual.colors.sections.touch,
   feel: CFG.visual.colors.sections.feel,
   mind: CFG.visual.colors.sections.mind,
-  stress: CFG.visual.colors.sections.stress,
   time: CFG.visual.colors.sections.time
 }
 //
 // Section hover descriptions (shown on floating title when hovering over anti-hero)
 //
 const SECTION_DESCRIPTIONS = {
+  glow: 'color perception',
   time: 'time sense',
   word: 'inner voices',
   touch: 'physical contact',
   feel: 'emotions',
-  mind: 'intellect',
-  stress: 'pressure'
+  mind: 'intellect'
 }
 //
 // Background fade transition speed (higher = faster)
@@ -97,13 +97,18 @@ const SECTION_LABEL_LETTER_SPACING = -1
 // Letter sequences for each section (matching their in-game HUD indicators)
 //
 const SECTION_LETTERS = {
+  glow:   ['G', 'L', 'O', 'W'],
   touch:  ['T', 'O', 'U', 'C', 'H'],
   time:   ['T', '1', 'M', 'E'],
   word:   ['W', 'O', 'R', 'D', 'S'],
   feel:   ['F', 'E', 'E', 'L'],
-  mind:   ['M', 'I', 'N', 'D'],
-  stress: ['S', 'T', 'R', 'E', 'S', 'S']
+  mind:   ['M', 'I', 'N', 'D']
 }
+//
+// Storage keys of the collected GLOW letters — the menu label under the glow
+// anti-hero lights up exactly as many letters as the hero has found.
+//
+const GLOW_LETTER_KEYS = ['glow.collectedG', 'glow.collectedL', 'glow.collectedO', 'glow.collectedW']
 //
 // Touch "H" hangs lower and continuously sways — mirroring the in-game TOUCH HUD indicator
 //
@@ -132,14 +137,17 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
   // Fully completed section → highlight every letter
   //
   if (progress[section]?.completed) return -2
+  //
+  // Glow lights one letter per collected in-level letter (G, L, O, W) —
+  // independent of the level number.
+  //
+  if (section === 'glow') {
+    const collected = GLOW_LETTER_KEYS.filter(key => get(key, false)).length
+    return collected - 1
+  }
   if (!lastLevel) return -1
   if (section === 'touch' && lastLevel.startsWith('lesson-touch.')) {
-    const s = lastLevel.replace('lesson-touch.', '')
-    //
-    // Training sits on the first letter; numeric level N maps to letter index N
-    //
-    if (s === 'training') return 0
-    const n = parseInt(s, 10)
+    const n = parseInt(lastLevel.replace('lesson-touch.', ''), 10)
     return isNaN(n) ? -1 : n
   }
   if (section === 'time' && lastLevel.startsWith('lesson-time.')) {
@@ -160,8 +168,11 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
  * @returns {Array} Array of section configs with positions
  */
 function getSectionPositions(centerX, centerY, radius) {
-  const sections = ['word', 'time', 'feel', 'mind', 'stress', 'touch']
-  const angleStep = (Math.PI * 2) / 6  // 360 / 6 = 60 degrees
+  //
+  // Clockwise order (6 sections, 60° apart): glow → touch → word → time → feel → mind.
+  //
+  const sections = ['touch', 'word', 'time', 'feel', 'mind', 'glow']
+  const angleStep = (Math.PI * 2) / sections.length
   //
   // Start angle shifted to have 2 anti-heroes at top
   // -120° puts first anti-hero at top-left, second at top-right
@@ -273,6 +284,9 @@ export function sceneMenu(k) {
       set('lastLesson', lastLevel)
     } else if (lastLevel === 'touch-complete') {
       lastLevel = 'lesson-word.0'
+      set('lastLesson', lastLevel)
+    } else if (lastLevel === 'glow-complete') {
+      lastLevel = 'lesson-touch.0'
       set('lastLesson', lastLevel)
     }
     const currentSection = getSectionFromLevel(lastLevel)
@@ -470,7 +484,7 @@ export function sceneMenu(k) {
       // Add click handlers for implemented sections
       // Only if section is not completed AND previous section is completed (or it's the first section)
       //
-      const sectionOrder = ['touch', 'word', 'time', 'feel', 'mind', 'stress']
+      const sectionOrder = ['glow', 'touch', 'word', 'time', 'feel', 'mind']
       const currentIndex = sectionOrder.indexOf(config.section)
       const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
       const previousSection = sectionOrder[previousIndex]
@@ -513,6 +527,21 @@ export function sceneMenu(k) {
         })
       }
       
+      if (config.section === 'glow' && !isCompleted && canAccess) {
+        antiHeroInst.character.onClick(() => {
+          beginMenuSceneLeave(k, inst)
+          Sound.stopAmbient(sound)
+          Cursor.setCursor('arrow')
+          menuMusic.stop()
+          kidsMusic.stop()
+          const currentLastLevel = get('lastLesson', null)
+          if (currentLastLevel && currentLastLevel.startsWith('lesson-glow.')) {
+            showTransitionToLevel(k, currentLastLevel)
+          } else {
+            goAfterPreparingAssets(k, 'lesson-glow.0')
+          }
+        })
+      }
       if (config.section === 'touch' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
           beginMenuSceneLeave(k, inst)
@@ -530,12 +559,12 @@ export function sceneMenu(k) {
           //
           // Determine which level to go to
           //
-          const lastLevel = get('lastLesson', null)
+          const lastTouchLevel = get('lastLesson', null)
           
-          if (lastLevel && lastLevel.startsWith('lesson-touch.')) {
-            showTransitionToLevel(k, lastLevel)
+          if (lastTouchLevel && lastTouchLevel.startsWith('lesson-touch.')) {
+            showTransitionToLevel(k, lastTouchLevel)
           } else {
-            goAfterPreparingAssets(k, 'lesson-touch.training')
+            goAfterPreparingAssets(k, 'lesson-touch.0')
           }
         })
       }
@@ -580,21 +609,18 @@ export function sceneMenu(k) {
       // Per-letter progress label below the anti-hero.
       // Completed levels → section colour; remaining → gray.
       // Touch "H" hangs lower and sways like the in-game HUD indicator.
-      // Labels are hidden for sections the player has not yet reached.
-      //
-      const labelEntry = createSectionProgressLabel(
-        k, config, progress, lastLevel, grayColor
-      )
-      //
-      // Only show label when the player is currently in this section or has completed it.
-      // Sections the hero has never played stay hidden.
+      // Unknown sections (never visited) are hidden — "unknown" appears in the
+      // hover-title floating label instead (see updateTitle).
       //
       const isCurrentSection = Boolean(lastLevel?.startsWith(`lesson-${config.section}.`))
       const labelVisible = isCompleted || isCurrentSection
-      labelEntry.labelVisible = labelVisible
-      if (!labelVisible) {
-        labelEntry.allObjects.forEach(obj => { obj.hidden = true })
-      }
+      //
+      // Store "unknown" flag on the anti-hero for hover-title lookup
+      //
+      antiHeroInst.isUnknown = !labelVisible
+      const labelEntry = createSectionProgressLabel(
+        k, config, progress, lastLevel, grayColor, labelVisible
+      )
       sectionLabels.push(labelEntry)
     })
     
@@ -801,7 +827,7 @@ export function sceneMenu(k) {
           //
           // Get previous section in clockwise order
           //
-          const sectionOrder = ['touch', 'word', 'time', 'feel', 'mind', 'stress']
+          const sectionOrder = ['glow', 'touch', 'word', 'time', 'feel', 'mind']
           const currentIndex = sectionOrder.indexOf(hoveredInst.section)
           const previousIndex = currentIndex === 0 ? sectionOrder.length - 1 : currentIndex - 1
           const previousSection = sectionOrder[previousIndex]
@@ -812,7 +838,7 @@ export function sceneMenu(k) {
           // Word, touch, and time sections are clickable
           // Can access if: previous section is completed (or it's the first section) OR if this is the current section being played
           //
-          const isImplementedSection = (hoveredInst.section === 'word' || hoveredInst.section === 'touch' || hoveredInst.section === 'time')
+          const isImplementedSection = (hoveredInst.section === 'glow' || hoveredInst.section === 'word' || hoveredInst.section === 'touch' || hoveredInst.section === 'time')
           const isCurrentSection = inst.currentSection === hoveredInst.section
           const canAccess = isCurrentSection || (currentIndex === 0 || isPreviousCompleted)  // Current section is always accessible, or first section, or previous completed
           
@@ -1086,11 +1112,11 @@ export function sceneMenu(k) {
       Cursor.setCursor('arrow')
       if (forceNew) {
         resetProgress()
-        goAfterPreparingAssets(k, 'lesson-touch.training')
+        goAfterPreparingAssets(k, 'lesson-glow.0')
       } else if (hasSavedGame) {
         showTransitionToLevel(k, lastLevel)
       } else {
-        goAfterPreparingAssets(k, 'lesson-touch.training')
+        goAfterPreparingAssets(k, 'lesson-glow.0')
       }
     }
     k.onKeyPress("space", () => startGame(false))
@@ -1263,8 +1289,11 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
   //
   // Determine target text based on hover state
   //
+  //
+  // Unknown sections (never visited) show generic "unknown" in the floating title
+  //
   const newTargetText = hoveredAntiHero
-    ? (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText)
+    ? (hoveredAntiHero.isUnknown ? 'unknown' : (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText))
     : titleInst.defaultText
   //
   // Start text change fade if target text changed
@@ -1877,7 +1906,7 @@ function beginMenuSceneLeave(k, inst) {
 // the previous section must be completed first.
 //
 function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
-  const sectionOrder = ['touch', 'word', 'time', 'feel', 'mind', 'stress']
+  const sectionOrder = ['glow', 'touch', 'word', 'time', 'feel', 'mind']
   const idx = sectionOrder.indexOf(antiHeroInst.section)
   if (idx <= 0) return false
   const prevSection = sectionOrder[idx - 1]
@@ -1979,10 +2008,27 @@ function drawMenuBackground(inst) {
  * @param {Object} progress - Full progress object from getProgress()
  * @param {string|null} lastLevel - Value of get('lastLesson')
  * @param {string} grayColor - Hex string for inactive/gray letters
+ * @param {boolean} [visible=true] - When false, shows "unknown" instead of letter sequence
  * @returns {Object} Label entry stored in sectionLabels[]
  */
-function createSectionProgressLabel(k, config, progress, lastLevel, grayColor) {
+function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, visible = true) {
   const section = config.section
+  //
+  // Sections the player hasn't reached yet: hide the label entirely.
+  // The word "unknown" will appear in the floating hover-title instead.
+  //
+  if (!visible) {
+    return {
+      letters: [],
+      fallingH: [],
+      allObjects: [],
+      labelVisible: false,
+      section,
+      sectionColor: grayColor,
+      grayColor,
+      isCompleted: false
+    }
+  }
   const letters = SECTION_LETTERS[section] || [section.toUpperCase()]
   const activeLetterIndex = getSectionActiveLetterIndex(section, lastLevel, progress)
   const allLettersActive = activeLetterIndex === -2
@@ -2061,7 +2107,8 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor) {
     section,
     sectionColor,
     grayColor,
-    isCompleted: progress[section]?.completed || false
+    isCompleted: progress[section]?.completed || false,
+    labelVisible: true
   }
 }
 

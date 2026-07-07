@@ -73,6 +73,8 @@ export function sceneToPackKey(sceneName) {
   if (sceneName === 'word-complete' || sceneName === 'time-complete' || sceneName === 'touch-complete') {
     return 'hub'
   }
+  if (sceneName.startsWith('lesson-glow')) return 'glow'
+  if (sceneName.startsWith('glow-complete')) return 'hub'
   if (sceneName.startsWith('lesson-word')) return 'word'
   if (sceneName.startsWith('lesson-time')) return `time-${sceneName.split('.')[1]}`
   if (sceneName.startsWith('lesson-touch')) return `touch-${sceneName.split('.')[1]}`

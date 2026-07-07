@@ -8,7 +8,7 @@ import { prop, setProp } from './helper.js'
  * Global properties: lastLevel, heroScore, lifeScore, sounds
  */
 const STORAGE_KEY = 'find-yourself'
-const SECTIONS = ['word', 'touch', 'feel', 'mind', 'stress', 'time']
+const SECTIONS = ['glow', 'word', 'touch', 'feel', 'mind', 'time']
 //
 // Time section scene indices run 0–3 (HUD letter levelNumber is 1–4).
 //

@@ -385,6 +385,7 @@ export function playLandSound(instance, currentLevel = null) {
   // Check if we're in touch section (soft landing)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
+  const isGlowSection = currentLevel && currentLevel.startsWith('lesson-glow.')
   
   if (isTimeLevel3) {
     //
@@ -454,13 +455,14 @@ export function playLandSound(instance, currentLevel = null) {
     
     osc.start(now)
     osc.stop(now + duration)
-  } else if (currentLevel === 'lesson-touch.training' && instance._l2Surface === 'wood') {
-    playWoodKnockLand(instance)
   } else if (currentLevel === 'lesson-touch.2') {
     if (instance._l2Surface === 'ice') return
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
   } else if (currentLevel === 'lesson-touch.3') {
     instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
+  } else if (isGlowSection) {
+    if (instance._glowSurface === 'water') return
+    instance._l2Surface === 'wood' ? playGlowWoodKnockLand(instance) : playGlowGroundLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -914,6 +916,7 @@ export function playStepSound(instance, currentLevel = null) {
   // Check if we're in touch section (soft steps)
   //
   const isTouchSection = currentLevel && currentLevel.startsWith('lesson-touch.')
+  const isGlowSection = currentLevel && currentLevel.startsWith('lesson-glow.')
   
   if (isTimeLevel3) {
     //
@@ -988,6 +991,9 @@ export function playStepSound(instance, currentLevel = null) {
     instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
   } else if (currentLevel === 'lesson-touch.3') {
     playWoodKnockStep(instance)
+  } else if (isGlowSection) {
+    if (instance._glowSurface === 'water') return
+    instance._l2Surface === 'wood' ? playGlowWoodKnockStep(instance) : playGlowGroundStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -1199,6 +1205,119 @@ export function playWoodKnockLand(instance) {
 
 function playWoodKnockStep(instance) {
   playWoodKnockImpact(instance, instance.stepGain, CFG.audio.sfx.step * 3.2, 0.08)
+}
+
+//
+// Glow section: dull muffled step on dry earth.
+//
+function playGlowGroundStep(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.08
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(160, now)
+  filter.frequency.linearRampToValueAtTime(80, now + duration)
+  filter.Q.value = 0.25
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 1.6, now + 0.012)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.stepGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+//
+// Glow section: dull muffled landing on dry earth (same timbre as step, louder).
+//
+function playGlowGroundLand(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.11
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(180, now)
+  filter.frequency.linearRampToValueAtTime(90, now + duration)
+  filter.Q.value = 0.25
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.land * 2.0, now + 0.012)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.landGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+
+//
+// Glow section: deep wooden knock on branches and log platforms.
+//
+function playGlowWoodKnockLand(instance) {
+  playGlowSoftWoodImpact(instance, instance.landGain, CFG.audio.sfx.land * 1.4, 0.1)
+}
+
+function playGlowWoodKnockStep(instance) {
+  playGlowSoftWoodImpact(instance, instance.stepGain, CFG.audio.sfx.step * 1.2, 0.07)
+}
+
+//
+// Soft padded wood step — muffled thump similar to mushroom-trampoline bounce.
+//
+function playGlowSoftWoodImpact(instance, destinationGain, peakAmp, duration) {
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  const bufferSize = Math.floor(ctx.sampleRate * duration)
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize)
+  }
+  const noise = ctx.createBufferSource()
+  noise.buffer = noiseBuffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(520, now)
+  filter.frequency.linearRampToValueAtTime(280, now + duration)
+  filter.Q.value = 0.4
+  const noiseGain = ctx.createGain()
+  noiseGain.gain.setValueAtTime(0.001, now)
+  noiseGain.gain.linearRampToValueAtTime(peakAmp * 0.65, now + 0.006)
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noise.connect(filter)
+  filter.connect(noiseGain)
+  noiseGain.connect(destinationGain)
+  noise.start(now)
+  noise.stop(now + duration + 0.02)
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(340 + Math.random() * 40, now)
+  osc.frequency.exponentialRampToValueAtTime(180, now + duration)
+  const oscGain = ctx.createGain()
+  oscGain.gain.setValueAtTime(0.001, now)
+  oscGain.gain.linearRampToValueAtTime(peakAmp * 0.35, now + 0.008)
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  osc.connect(oscGain)
+  oscGain.connect(destinationGain)
+  osc.start(now)
+  osc.stop(now + duration + 0.02)
 }
 
 function playWoodKnockImpact(instance, destinationGain, peakAmp, duration) {
@@ -2686,29 +2805,6 @@ export function playIdleHumNote(inst, config = {}) {
   osc.stop(now + duration + 0.05)
   lfo.start(now)
   lfo.stop(now + duration + 0.05)
-  //
-  // Whistle mode adds a faint breath layer so the listener hears air, not just tone.
-  //
-  if (whistleMode) {
-    const bufSize = Math.ceil(ctx.sampleRate * duration)
-    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate)
-    const data = buf.getChannelData(0)
-    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1)
-    const noise = ctx.createBufferSource()
-    noise.buffer = buf
-    const noiseFilter = ctx.createBiquadFilter()
-    noiseFilter.type = 'highpass'
-    noiseFilter.frequency.value = 1400
-    const noiseEnv = ctx.createGain()
-    noiseEnv.gain.setValueAtTime(0, now)
-    noiseEnv.gain.linearRampToValueAtTime(0.12, now + 0.08)
-    noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + duration)
-    noise.connect(noiseFilter)
-    noiseFilter.connect(noiseEnv)
-    noiseEnv.connect(master)
-    noise.start(now)
-    noise.stop(now + duration)
-  }
 }
 
 /**
@@ -3753,6 +3849,93 @@ export function playSplashSound(instance, volume = 0.3) {
   hissGain.connect(ctx.destination)
   hissNoise.start(now)
   hissNoise.stop(now + 0.14)
+}
+/**
+ * Footsteps / wading in shallow water: prefers Kaplay-loaded water-steps.mp3.
+ *
+ * @param {Object} k - Kaplay instance
+ * @param {number} [volume=0.4] - Playback volume 0..1
+ */
+export function playWaterStepsFootstepKaplay(k, volume = 0.4) {
+  if (globalMuteProceduralSounds) return
+  k?.play?.('water-steps', { volume: Math.min(1, Math.max(0.05, volume)) })
+}
+//
+// Glow shallow water — replay water-steps.mp3 while wading until hero leaves water.
+// Each take gets a random playback speed and volume so the chained loop never
+// sounds mechanical.
+//
+const WATER_STEPS_LOOP_DURATION = 2.1
+const WATER_STEPS_SPEED_MIN = 0.88
+const WATER_STEPS_SPEED_RANGE = 0.24
+const WATER_STEPS_VOLUME_JITTER = 0.3
+/**
+ * Marks hero as wading — starts water-steps when idle, chains replay after each finish.
+ * @param {Object} instance - Sound instance (must have _k Kaplay reference)
+ * @param {boolean} inWater - Whether the hero is currently in shallow water
+ * @param {number} [volume=0.42] - Playback volume 0..1
+ */
+export function updateWaterStepsPlayback(instance, inWater, volume = 0.42) {
+  if (!instance?._k) return
+  instance._waterStepsWanted = inWater
+  //
+  // When wading stops mid-take the current playback finishes naturally —
+  // only the chained replay is cancelled. Hard stop (stopWaterStepsLoop)
+  // remains for scene leave / drowning.
+  //
+  inWater && !instance._waterStepsHandle && playWaterStepsLoopOnce(instance, volume)
+}
+/**
+ * Starts looping water-steps playback for glow section wading.
+ * @param {Object} instance - Sound instance (must have _k Kaplay reference)
+ * @param {number} [volume=0.42] - Playback volume 0..1
+ */
+export function startWaterStepsLoop(instance, volume = 0.42) {
+  updateWaterStepsPlayback(instance, true, volume)
+}
+/**
+ * Stops glow water-steps loop playback.
+ * @param {Object} instance - Sound instance
+ */
+export function stopWaterStepsLoop(instance) {
+  instance._waterStepsWanted = false
+  try {
+    instance._waterStepsHandle?.stop?.()
+  } catch (error) {
+    //
+    // Already stopped
+    //
+  }
+  instance._waterStepsHandle = null
+  instance._waterStepsLoopActive = false
+}
+//
+// Plays one water-steps track and schedules the next if still wading.
+//
+function playWaterStepsLoopOnce(instance, volume) {
+  if (!instance._waterStepsWanted || globalMuteProceduralSounds || !instance._k) return
+  if (instance._waterStepsHandle) return
+  const k = instance._k
+  //
+  // Humanise the take: random speed (pitch follows) and a volume wobble
+  // around the base level make every chained repeat sound different.
+  //
+  const speed = WATER_STEPS_SPEED_MIN + Math.random() * WATER_STEPS_SPEED_RANGE
+  const jitter = 1 + (Math.random() - 0.5) * WATER_STEPS_VOLUME_JITTER
+  const vol = Math.min(1, Math.max(0.05, volume * jitter))
+  const handle = k.play('water-steps', { loop: false, volume: vol, speed })
+  if (!handle) return
+  instance._waterStepsHandle = handle
+  instance._waterStepsLoopActive = true
+  //
+  // A faster take finishes earlier — scale the chain delay by the speed.
+  //
+  k.wait(WATER_STEPS_LOOP_DURATION / speed, () => {
+    if (instance._waterStepsHandle !== handle) return
+    instance._waterStepsHandle = null
+    instance._waterStepsLoopActive = false
+    instance._waterStepsWanted && playWaterStepsLoopOnce(instance, volume)
+  })
 }
 /**
  * Footsteps / wading: prefers Kaplay-loaded water.mp3 (assets/sounds/water.mp3).

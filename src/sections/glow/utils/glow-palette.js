@@ -126,6 +126,38 @@ export function getTreePaletteColor() {
 }
 
 /**
+ * Warm amber background-forest palette for the colour world (after O):
+ * orange-brown wood dissolving into a golden haze, green foliage kept deep
+ * so the layers read like the reference forest picture.
+ * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ */
+export function getTreePaletteAmber() {
+  const t = GLOW_PAL.treeAmber
+  const root = darkenRgb(glowRgb(t.root), ROOT_DARKEN)
+  const trunk = glowRgb(t.trunk)
+  const branch = glowRgb(t.branch)
+  const leaf = glowRgb(t.leaf)
+  return {
+    rootR: root.r, rootG: root.g, rootB: root.b,
+    trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,
+    branchR: branch.r, branchG: branch.g, branchB: branch.b,
+    leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
+    leafOpacity: 1,
+    leafShades: [
+      glowRgb(t.trunk),
+      glowRgb(t.branch),
+      glowRgb(t.leaf)
+    ],
+    barkShades: {
+      dark: glowRgb(t.root),
+      highlight: glowRgb(GLOW_PAL.warmHaze)
+    },
+    leafVein: glowRgb(t.root),
+    woodOutline: glowRgb('void')
+  }
+}
+
+/**
  * Builds a dimmed background variant of a tree palette: every tone is blended
  * toward the given backdrop colour. Distant trees painted with this palette
  * stay fully OPAQUE — reduced brightness comes from the colours themselves,
@@ -136,9 +168,12 @@ export function getTreePaletteColor() {
  * @param {boolean} [flatLeaves=false] - Paint ALL leaves with one single tone
  * @param {number} [leafDarken=0] - Extra push of the foliage toward the darkest
  *   swatch so heavily blended leaves still differ slightly from the backdrop
+ * @param {boolean} [uniformWood=false] - Collapse the WHOLE tree to the blended
+ *   trunk tone: leaves, branches and bark all match the trunk exactly, so the
+ *   tree reads as one flat silhouette (2nd+ background rows)
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
-export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0) {
+export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false) {
   const mix = (r, g, b) => ({
     r: Math.round(r + (bg.r - r) * blend),
     g: Math.round(g + (bg.g - g) * blend),
@@ -147,8 +182,8 @@ export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leaf
   const mixRgb = (c) => mix(c.r, c.g, c.b)
   const root = mix(base.rootR, base.rootG, base.rootB)
   const trunk = mix(base.trunkR, base.trunkG, base.trunkB)
-  const branch = mix(base.branchR, base.branchG, base.branchB)
-  const leaf = darkenRgb(mix(base.leafR, base.leafG, base.leafB), leafDarken)
+  const branch = uniformWood ? trunk : mix(base.branchR, base.branchG, base.branchB)
+  const leaf = uniformWood ? trunk : darkenRgb(mix(base.leafR, base.leafG, base.leafB), leafDarken)
   const darkenLeafRgb = (c) => darkenRgb(mixRgb(c), leafDarken)
   return {
     rootR: root.r, rootG: root.g, rootB: root.b,
@@ -160,7 +195,11 @@ export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leaf
     // flatLeaves collapses the foliage to a single tone (far background rows).
     //
     leafShades: flatLeaves ? [leaf] : (base.leafShades ?? [leaf]).map(darkenLeafRgb),
-    barkShades: {
+    //
+    // Uniform wood keeps the bark texture invisible: both crack tones equal
+    // the trunk tone, so the silhouette stays one flat colour.
+    //
+    barkShades: uniformWood ? { dark: trunk, highlight: trunk } : {
       dark: mixRgb(base.barkShades?.dark ?? root),
       highlight: mixRgb(base.barkShades?.highlight ?? leaf)
     },

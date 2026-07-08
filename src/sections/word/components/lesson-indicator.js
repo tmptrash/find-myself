@@ -51,18 +51,9 @@ export function create(config) {
     //
     const letterX = startX + i * (fontSize + letterSpacing)
     //
-    // Create outline (8 directions)
+    // Drop shadow (single black copy offset right+down), glow-level style.
     //
-    const offsets = [
-      [-outlineThickness, -outlineThickness],
-      [0, -outlineThickness],
-      [outlineThickness, -outlineThickness],
-      [-outlineThickness, 0],
-      [outlineThickness, 0],
-      [-outlineThickness, outlineThickness],
-      [0, outlineThickness],
-      [outlineThickness, outlineThickness]
-    ]
+    const offsets = [[outlineThickness, outlineThickness]]
     
     offsets.forEach(([dx, dy]) => {
       k.add([
@@ -168,16 +159,10 @@ const TRAP_BADGE_OUTLINE_THICKNESS = 2
   const scoreOffsetX = 5
   const scoreOffsetY = 10
   const scoreOutlineThickness = 2
-  const scoreOffsets = [
-    [-scoreOutlineThickness, -scoreOutlineThickness],
-    [0, -scoreOutlineThickness],
-    [scoreOutlineThickness, -scoreOutlineThickness],
-    [-scoreOutlineThickness, 0],
-    [scoreOutlineThickness, 0],
-    [-scoreOutlineThickness, scoreOutlineThickness],
-    [0, scoreOutlineThickness],
-    [scoreOutlineThickness, scoreOutlineThickness]
-  ]
+  //
+  // Score drop shadow (single black copy offset right+down), glow-level style.
+  //
+  const scoreOffsets = [[scoreOutlineThickness, scoreOutlineThickness]]
   const heroScoreOutlines = []
   scoreOffsets.forEach(([dx, dy]) => {
     const outline = k.add([

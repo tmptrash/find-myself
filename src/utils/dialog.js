@@ -81,7 +81,10 @@ export function openDialog(k, text, opts = {}) {
   const closeY = centerY + CLOSE_HINT_Y_OFFSET
   const fontSize = calcFontSize(k, plainText, BOX_WIDTH - 60, BOX_HEIGHT - 90, font)
   const closeColor = parseHex(CLOSE_HINT_COLOR_HEX)
-  const outlineOffsets = [[-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET], [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]]
+  //
+  // Dialog texts cast a drop shadow (single black copy offset right+down)
+  //
+  const outlineOffsets = [[OUTLINE_OFFSET, OUTLINE_OFFSET]]
   const state = { opacity: 0, phase: 'opening', timer: 0, flickerDir: -1, flickerTime: CLOSE_HINT_FLICKER_DURATION }
   const overlay = k.add([
     k.z(DIALOG_Z),

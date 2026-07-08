@@ -45,7 +45,7 @@ const LEVEL_SUBTITLES = {
   'menu-time': '',
   'menu-touch': '',
   'menu-glow': '',
-  'lesson-glow.0': '',
+  'lesson-glow.0': ['Everything began with nothing... Just as you did.', 'glow0-pre', 4],
   'glow-complete': '',
   'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
   'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
@@ -69,6 +69,7 @@ const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level t
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
+const SKIP_TEXT_FADE_DURATION = 0.35 // Fast fade out when the player skips the text
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
 const SCENE_FADE_IN_DURATION = 0.5   // Duration of fade-in overlay when entering new scene
 const TEXT_OUTLINE_OFFSET = 2        // Pixel offset for text outline shadows
@@ -82,6 +83,7 @@ const HINT_CHAR_WIDTH_RATIO = 0.55
 //
 const TIME_SUBTITLE_COLOR = '#FF8C00'
 const SECTION_SUBTITLE_COLORS = {
+  glow: CFG.visual.colors.sections.glow.body,
   time: TIME_SUBTITLE_COLOR,
   word: CFG.visual.colors.sections.word.body,
   touch: CFG.visual.colors.sections.touch.body,
@@ -223,13 +225,15 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   let timer = 0
   //
-  // Check if transitioning from a level, menu-time, or menu-touch (not from menu)
+  // Check if transitioning from a level or a menu-section entry (not from menu)
   // If so, start with black_pause phase since overlay is already opaque (no slow fade)
   //
   const isFromLevel = currentLevel !== 'menu' && isLessonScene(currentLevel)
   const isFromMenuTime = currentLevel === 'menu-time'
   const isFromMenuTouch = currentLevel === 'menu-touch'
-  const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuTime || isFromMenuTouch) ? 'black_pause' : 'fade_to_black'
+  const isFromMenuGlow = currentLevel === 'menu-glow'
+  const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuGlow
+  const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   
@@ -268,23 +272,25 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   TouchControls.setVisible(false)
   
   //
-  // Set background to menu color when transitioning from level, menu-time, or menu-touch.
+  // Set background to menu color when transitioning from a level or a
+  // menu-section entry.
   // Sync both Kaplay clear color and CSS letterbox bars to eliminate stripes.
   //
   const transitionBgHex = CFG.visual.colors.menu.platformColor
   const [bgR, bgG, bgB] = parseHex(transitionBgHex)
-  if (isFromLevel || isFromMenuTime || isFromMenuTouch) {
+  if (isFromLevel || isFromMenuSection) {
     CanvasBackdrop.applyCanvasBackdrop(k, transitionBgHex)
   }
   //
   // Create overlay matching menu background color
-  // Starts fully opaque if from level, menu-time, or menu-touch, transparent if from menu
+  // Starts fully opaque if from a level or a menu-section entry,
+  // transparent otherwise
   //
   let overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
     k.color(bgR, bgG, bgB),
-    k.opacity(isFromLevel || isFromMenuTime || isFromMenuTouch ? 1 : (currentLevel === 'menu' ? 1 : 0)),
+    k.opacity(isFromLevel || isFromMenuSection ? 1 : (currentLevel === 'menu' ? 1 : 0)),
     k.z(CFG.visual.zIndex.ui + 100),
     k.fixed()
   ])
@@ -328,6 +334,18 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const skipTransition = () => {
     if (inst.skipped) return // Already skipped
     inst.skipped = true
+    //
+    // If the pre-level phrase is still on screen, don't cut it off — run a
+    // quick fade-out instead and let the normal phase flow finish the
+    // transition (final pause → level load).
+    //
+    if (phase === 'text_fade_in' || phase === 'text_hold') {
+      inst.fastTextFade = true
+      inst.textFadeFrom = inst.textObj ? inst.textObj.opacity : 1
+      phase = 'text_fade_out'
+      timer = 0
+      return
+    }
     
     // Clean up
     k.transitionCleanup?.()
@@ -502,13 +520,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           const textX = k.width() / 2
           const textY = k.height() / 2
           //
-          // Create 8-direction outline shadows (black)
+          // Drop shadow (single black copy offset right+down) — the same
+          // text shadow style the glow level uses.
           //
           const outlineOffsets = [
-            [-TEXT_OUTLINE_OFFSET, 0], [TEXT_OUTLINE_OFFSET, 0],
-            [0, -TEXT_OUTLINE_OFFSET], [0, TEXT_OUTLINE_OFFSET],
-            [-TEXT_OUTLINE_OFFSET, -TEXT_OUTLINE_OFFSET], [TEXT_OUTLINE_OFFSET, -TEXT_OUTLINE_OFFSET],
-            [-TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET], [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
+            [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
           ]
           const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
             k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
@@ -638,19 +654,25 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         timer = 0
       }
     } else if (phase === 'text_fade_out') {
-      // Fade out text
-      const progress = Math.min(timer / TEXT_FADE_OUT_DURATION, 1)
+      //
+      // Fade out text. A skip runs the same fade, only faster and starting
+      // from the opacity the text had at the moment of the skip.
+      //
+      const fadeDuration = inst.fastTextFade ? SKIP_TEXT_FADE_DURATION : TEXT_FADE_OUT_DURATION
+      const fadeFrom = inst.textFadeFrom ?? 1
+      const progress = Math.min(timer / fadeDuration, 1)
+      const fadeOpacity = fadeFrom * (1 - progress)
       if (inst.textObj) {
-        inst.textObj.opacity = 1 - progress
-        inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = 1 - progress })
+        inst.textObj.opacity = fadeOpacity
+        inst.outlineTexts && inst.outlineTexts.forEach(o => { o.opacity = fadeOpacity })
       }
       if (inst.hintTextObj) {
-        inst.hintTextObj.opacity = 1 - progress
-        inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => { o.opacity = 1 - progress })
+        inst.hintTextObj.opacity = fadeOpacity
+        inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => { o.opacity = fadeOpacity })
       }
       if (inst.preTextObj) {
-        inst.preTextObj.opacity = 1 - progress
-        inst.preTextOutlines && inst.preTextOutlines.forEach(o => { o.opacity = 1 - progress })
+        inst.preTextObj.opacity = fadeOpacity
+        inst.preTextOutlines && inst.preTextOutlines.forEach(o => { o.opacity = fadeOpacity })
       }
       
       if (progress >= 1) {
@@ -793,9 +815,10 @@ function playCRTShutdownSound(k) {
 function getSectionSubtitleColor(level) {
   if (!level) return DEFAULT_SUBTITLE_COLOR
   //
-  // Extract section from level name (handles 'lesson-word.2' and 'menu-touch' formats)
+  // Extract section from level name (handles 'lesson-word.2', 'level-word.2'
+  // and 'menu-touch' formats)
   //
-  const match = level.match(/^(?:level-|menu-)(\w+)/)
+  const match = level.match(/^(?:lesson-|level-|menu-)(\w+)/)
   const section = match ? match[1] : null
   return SECTION_SUBTITLE_COLORS[section] || DEFAULT_SUBTITLE_COLOR
 }

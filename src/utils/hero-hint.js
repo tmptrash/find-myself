@@ -32,6 +32,15 @@ export function create(cfg) {
 }
 
 /**
+ * Returns true while a hint bubble is on screen or more hints are queued.
+ * @param {Object} inst - Hero hint inst
+ * @returns {boolean} Whether a hint is currently active
+ */
+export function isActive(inst) {
+  return Boolean(inst && (inst.tooltip || inst.queue.length))
+}
+
+/**
  * Shows a single hint immediately, dropping any queued ones.
  * @param {Object} inst - Hero hint inst
  * @param {string} text - Hint text (supports \n for multiline)

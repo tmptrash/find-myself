@@ -298,16 +298,6 @@ const L0_PLAYFIELD_BG_R = 28
 const L0_PLAYFIELD_BG_G = 50
 const L0_PLAYFIELD_BG_B = 58
 //
-// Instructions animation constants
-//
-const INSTRUCTIONS_INITIAL_DELAY = 1.0
-const INSTRUCTIONS_FADE_IN_DURATION = 0.8
-const INSTRUCTIONS_HOLD_DURATION = 4.0
-const INSTRUCTIONS_FADE_OUT_DURATION = 0.8
-const INSTRUCTIONS_FONT_SIZE = 24
-const INSTRUCTIONS_OUTLINE_OFFSET = 2
-const INSTRUCTIONS_TEXT = "A D ← → - move,  ↑ Space - jump,  ESC - menu,  use mouse"
-//
 // Monster conversation system (context-aware per-act dialogue between 3 monsters)
 //
 const MONSTER_CHARS_PER_SECOND = 12
@@ -881,11 +871,6 @@ export function sceneLesson0(k) {
     // Scene-level lock: hero controls are disabled during the life deduction animation
     //
     const sceneLock = { locked: showTrap || showTrap2 }
-    //
-    // Show keyboard controls instructions (delayed if life deduction animation plays)
-    //
-    const totalDeductDuration = (showTrap ? LifeDeduction.TOTAL_DURATION : 0) + (showTrap2 ? LifeDeduction.TOTAL_DURATION + 0.5 : 0)
-    showInstructions(k, totalDeductDuration)
     if (showTrap) {
       LifeDeduction.show({
         k,
@@ -2773,7 +2758,10 @@ export function sceneLesson0(k) {
             : TOUCH_GATHER_POST_ARRIVE_DELAY
           const displayText = L0_GATHER_PROMPT_BASE + remaining
           const cx = CFG.visual.screen.width / 2
-          const outlineOffsets = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+          //
+          // Drop shadow (single black copy offset right+down), glow-level style.
+          //
+          const outlineOffsets = [[1.5, 1.5]]
           outlineOffsets.forEach(([dx, dy]) => {
             k.drawText({
               text: displayText,
@@ -3610,53 +3598,6 @@ function createSpeedBonusParticles(k, levelIndicator, heroColor) {
 }
 
 /**
- * Creates instructions text with manual black outline
- * @param {Object} k - Kaplay instance
- * @param {number} centerX - Center X position
- * @param {number} textY - Text Y position
- * @returns {Object} Object with mainText and outlineTexts array
- */
-function createInstructionsText(k, centerX, textY) {
-  //
-  // Create 8 outline texts (black)
-  //
-  const outlineOffsets = [
-    [-INSTRUCTIONS_OUTLINE_OFFSET, 0], [INSTRUCTIONS_OUTLINE_OFFSET, 0],
-    [0, -INSTRUCTIONS_OUTLINE_OFFSET], [0, INSTRUCTIONS_OUTLINE_OFFSET],
-    [-INSTRUCTIONS_OUTLINE_OFFSET, -INSTRUCTIONS_OUTLINE_OFFSET], [INSTRUCTIONS_OUTLINE_OFFSET, -INSTRUCTIONS_OUTLINE_OFFSET],
-    [-INSTRUCTIONS_OUTLINE_OFFSET, INSTRUCTIONS_OUTLINE_OFFSET], [INSTRUCTIONS_OUTLINE_OFFSET, INSTRUCTIONS_OUTLINE_OFFSET]
-  ]
-  const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
-    k.text(INSTRUCTIONS_TEXT, {
-      size: INSTRUCTIONS_FONT_SIZE,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX + dx, textY + dy),
-    k.anchor("center"),
-    k.color(0, 0, 0),
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 9)
-  ]))
-  //
-  // Create main text (white)
-  //
-  const mainText = k.add([
-    k.text(INSTRUCTIONS_TEXT, {
-      size: INSTRUCTIONS_FONT_SIZE,
-      align: "center",
-      font: CFG.visual.fonts.regularFull.replace(/'/g, '')
-    }),
-    k.pos(centerX, textY),
-    k.anchor("center"),
-    k.color(255, 255, 255),
-    k.opacity(0),
-    k.z(CFG.visual.zIndex.ui + 10)
-  ])
-  return { mainText, outlineTexts }
-}
-
-/**
  * Starts a timed conversation between three monsters (big bugs 0, 1, 2).
  * Each line appears as a speech bubble above the speaking monster.
  * Display duration is based on text length. Plays once after initial delay.
@@ -3866,61 +3807,6 @@ function startSmallBugPhrases(k, smallBugs) {
   return inst
 }
 
-/**
- * Shows keyboard instructions with fade in/hold/fade out animation
- * @param {Object} k - Kaplay instance
- * @param {number} extraDelay - Additional delay before showing (e.g. waiting for deduction animation)
- */
-function showInstructions(k, extraDelay = 0) {
-  const centerX = CFG.visual.screen.width / 2
-  const textY = TOP_MARGIN + 90
-  //
-  // Create instructions text with outline
-  //
-  const { mainText, outlineTexts } = createInstructionsText(k, centerX, textY)
-  //
-  // Animation state (extra delay added to initial delay)
-  //
-  const totalInitialDelay = INSTRUCTIONS_INITIAL_DELAY + extraDelay
-  const inst = {
-    timer: 0,
-    phase: 'initial_delay'
-  }
-  //
-  // Update animation
-  //
-  const updateInterval = k.onUpdate(() => {
-    inst.timer += k.dt()
-    if (inst.phase === 'initial_delay') {
-      if (inst.timer >= totalInitialDelay) {
-        inst.phase = 'fade_in'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'fade_in') {
-      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_IN_DURATION)
-      mainText.opacity = progress
-      outlineTexts.forEach(t => { t.opacity = progress })
-      if (progress >= 1) {
-        inst.phase = 'hold'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'hold') {
-      if (inst.timer >= INSTRUCTIONS_HOLD_DURATION) {
-        inst.phase = 'fade_out'
-        inst.timer = 0
-      }
-    } else if (inst.phase === 'fade_out') {
-      const progress = Math.min(1, inst.timer / INSTRUCTIONS_FADE_OUT_DURATION)
-      mainText.opacity = 1 - progress
-      outlineTexts.forEach(t => { t.opacity = 1 - progress })
-      if (progress >= 1) {
-        updateInterval.cancel()
-        k.destroy(mainText)
-        outlineTexts.forEach(t => k.destroy(t))
-      }
-    }
-  })
-}
 //
 // Thunder rumble interval (distant thunder every 7-10 seconds)
 //
@@ -5029,11 +4915,10 @@ function setupTouchLetterSystem(k, cfg) {
 function createPickupLetter(k, letter, x, y, tiltDeg) {
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
   const oo = TOUCH_LETTER_OUTLINE
-  const offsets = [
-    [-oo, -oo], [0, -oo], [oo, -oo],
-    [-oo, 0], [oo, 0],
-    [-oo, oo], [0, oo], [oo, oo]
-  ]
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style.
+  //
+  const offsets = [[oo, oo]]
   const outlines = offsets.map(([dx, dy]) => k.add([
     k.text(letter, { size: TOUCH_LETTER_SIZE, font }),
     k.pos(x + dx, y + dy),
@@ -5780,7 +5665,10 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
   const cx = CFG.visual.screen.width / 2
   const textCfg = { size: L0_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
   const initText = L0_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS_L0
-  const offs = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style.
+  //
+  const offs = [[1.5, 1.5]]
   const outlines = offs.map(([dx, dy]) => k.add([
     k.text(initText, textCfg),
     k.pos(cx + dx, L0_DEATH_PROMPT_Y + dy),

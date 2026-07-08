@@ -128,17 +128,12 @@ function setOutlinedHudText(node, text) {
 //
 // Eight-direction outline offset pairs
 //
+//
+// Drop shadow (single black copy offset right+down) — the same text shadow
+// style the glow level uses.
+//
 function buildOutlineOffsets(thickness) {
-  return [
-    [-thickness, -thickness],
-    [0, -thickness],
-    [thickness, -thickness],
-    [-thickness, 0],
-    [thickness, 0],
-    [-thickness, thickness],
-    [0, thickness],
-    [thickness, thickness]
-  ]
+  return [[thickness, thickness]]
 }
 //
 // Centers a horizontal row of pre-created HUD text objects (FPS, timer,

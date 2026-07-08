@@ -191,11 +191,11 @@ const CALM_MONSTER_COLOR = '#6BCB77'     // Friendly green for the monster + OMM
 //
 const CALM_DISSOLVE_DURATION = 3.0       // Seconds for words / platforms / OMM to fade out
 const CALM_PLATFORM_DISSOLVE_DURATION = 6.0 // Calm word platform fades slower; hero falls when it vanishes
-const CALM_TIMER_OUTLINE_OFFSETS = [
-  [-2, -2], [0, -2], [2, -2],
-  [-2, 0], [2, 0],
-  [-2, 2], [0, 2], [2, 2]
-]
+//
+// Drop shadow of the calm timer (single black copy offset right+down) — the
+// same text shadow style the glow level uses.
+//
+const CALM_TIMER_OUTLINE_OFFSETS = [[2, 2]]
 //
 // Vertical offset of the forget platform above the floor (smaller = lower)
 //
@@ -896,10 +896,10 @@ function getBulletSpriteKey(k, letter) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     //
-    // Draw 8-direction black outline
+    // Drop shadow (single black copy offset right+down), glow-level style.
     //
     ctx.fillStyle = '#000000'
-    const offsets = [[-bw, -bw], [0, -bw], [bw, -bw], [-bw, 0], [bw, 0], [-bw, bw], [0, bw], [bw, bw]]
+    const offsets = [[bw, bw]]
     offsets.forEach(([dx, dy]) => ctx.fillText(letter, cx + dx, cy + dy))
     //
     // Draw main letter in hero body color
@@ -929,7 +929,7 @@ function measureWordWidth(k, text, size) {
 }
 
 /**
- * Bakes a word into a sprite (coloured fill + 8-direction black outline) once
+ * Bakes a word into a sprite (coloured fill + black drop shadow) once
  * and caches it, returning {key, w, h}. Used by the confusion and forget word
  * platforms so they draw one sprite per frame instead of nine drawText calls.
  * @param {Object} k - Kaplay instance
@@ -956,10 +956,10 @@ function getWordSpriteInfo(k, text, size, hex) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     //
-    // Draw 8-direction black outline
+    // Drop shadow (single black copy offset right+down), glow-level style.
     //
     ctx.fillStyle = '#000000'
-    const offsets = [[-ow, -ow], [0, -ow], [ow, -ow], [-ow, 0], [ow, 0], [-ow, ow], [0, ow], [ow, ow]]
+    const offsets = [[ow, ow]]
     offsets.forEach(([dx, dy]) => ctx.fillText(text, cx + dx, cy + dy))
     //
     // Draw main word in its fill colour
@@ -2263,13 +2263,9 @@ function showLetterInstructions(k) {
   const content = "use Shift to throw letters at the creature"
   const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
-  // Create outline texts
+  // Drop shadow (single black copy offset right+down), glow-level style.
   //
-  const outlineOffsets = [
-    [-2, -2], [0, -2], [2, -2],
-    [-2, 0], [2, 0],
-    [-2, 2], [0, 2], [2, 2]
-  ]
+  const outlineOffsets = [[2, 2]]
   const outlineTexts = outlineOffsets.map(([dx, dy]) =>
     k.add([
       k.text(content, { size: 20, font: fontFamily }),

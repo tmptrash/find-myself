@@ -21,6 +21,11 @@ const SHAKE_AMPLITUDE = 3      // Max horizontal pixel offset
 //
 const STATIC_PLATFORM_COLOR_HEX = '#3A8A4A'
 //
+// Drop shadow of the timer text (single black copy offset right+down) — the
+// same text shadow style the glow level uses.
+//
+const TIMER_TEXT_SHADOW_OFFSETS = [[2, 2]]
+//
 // Global variable to prevent multiple heart losses in same frame
 //
 let lastHeartLossTime = -1
@@ -96,14 +101,9 @@ export function create(config) {
   }
   
   //
-  // Create timer text with manual outline
-  // Draw black outline by creating 8 text objects with offsets
+  // Timer text drop shadow (see TIMER_TEXT_SHADOW_OFFSETS).
   //
-  const outlineOffsets = [
-    [-2, -2], [0, -2], [2, -2],
-    [-2, 0],           [2, 0],
-    [-2, 2],  [0, 2],  [2, 2]
-  ]
+  const outlineOffsets = TIMER_TEXT_SHADOW_OFFSETS
   
   const outlineTexts = outlineOffsets.map(([ox, oy]) => {
     return k.add([
@@ -569,11 +569,7 @@ export function onUpdate(inst) {
     inst.platform.pos.y = inst.startY + floatY
     inst.timerText.pos.y = inst.startY + floatY
     inst.outlineTexts.forEach((text, i) => {
-      const [ox, oy] = [
-        [-2, -2], [0, -2], [2, -2],
-        [-2, 0],           [2, 0],
-        [-2, 2],  [0, 2],  [2, 2]
-      ][i]
+      const [, oy] = TIMER_TEXT_SHADOW_OFFSETS[i]
       text.pos.y = inst.startY + floatY + oy
     })
     //

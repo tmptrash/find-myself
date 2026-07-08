@@ -167,18 +167,9 @@ export function create(config) {
     //
     const letterX = startX + i * (fontSize + letterSpacing)
     //
-    // Create outline (8 directions)
+    // Create drop shadow (single black copy offset right+down)
     //
-    const offsets = [
-      [-outlineThickness, -outlineThickness],
-      [0, -outlineThickness],
-      [outlineThickness, -outlineThickness],
-      [-outlineThickness, 0],
-      [outlineThickness, 0],
-      [-outlineThickness, outlineThickness],
-      [0, outlineThickness],
-      [outlineThickness, outlineThickness]
-    ]
+    const offsets = [[outlineThickness, outlineThickness]]
     offsets.forEach(([dx, dy]) => {
       const outlineComponents = [
         k.text(letter, {
@@ -286,16 +277,10 @@ export function create(config) {
   //
   const heroScore = get('heroScore', 0)
   const lifeScore = get('lifeScore', 0)
-  const scoreOffsets = [
-    [-SCORE_OUTLINE_THICKNESS, -SCORE_OUTLINE_THICKNESS],
-    [0, -SCORE_OUTLINE_THICKNESS],
-    [SCORE_OUTLINE_THICKNESS, -SCORE_OUTLINE_THICKNESS],
-    [-SCORE_OUTLINE_THICKNESS, 0],
-    [SCORE_OUTLINE_THICKNESS, 0],
-    [-SCORE_OUTLINE_THICKNESS, SCORE_OUTLINE_THICKNESS],
-    [0, SCORE_OUTLINE_THICKNESS],
-    [SCORE_OUTLINE_THICKNESS, SCORE_OUTLINE_THICKNESS]
-  ]
+  //
+  // Score numerals cast a drop shadow (single black copy offset right+down)
+  //
+  const scoreOffsets = [[SCORE_OUTLINE_THICKNESS, SCORE_OUTLINE_THICKNESS]]
   //
   // Hero score outlines (black) and main text (white)
   //
@@ -314,16 +299,10 @@ export function create(config) {
   const trapBadgeFont = CFG.visual.fonts.regularFull
     ? CFG.visual.fonts.regularFull.replace(/'/g, '')
     : CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const trapBadgeOutlineOffsets = [
-    [-TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
-    [0, -TRAP_BADGE_OUTLINE_THICKNESS],
-    [TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
-    [-TRAP_BADGE_OUTLINE_THICKNESS, 0],
-    [TRAP_BADGE_OUTLINE_THICKNESS, 0],
-    [-TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS],
-    [0, TRAP_BADGE_OUTLINE_THICKNESS],
-    [TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS]
-  ]
+  //
+  // Trap badge shadow (single black copy offset right+down)
+  //
+  const trapBadgeOutlineOffsets = [[TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS]]
   const trapBadgeOutlines = trapBadgeOutlineOffsets.map(([dx, dy]) => k.add([
     k.text('', { size: TRAP_BADGE_FONT_SIZE, font: trapBadgeFont }),
     k.pos(trapBadgeX + dx, trapBadgeY + dy),
@@ -499,7 +478,7 @@ export function setSectionLabelStageProgress(inst, completedStages) {
 }
 
 /**
- * Creates outlined score text elements (black outlines in 8 directions)
+ * Creates score text drop-shadow elements (black copies at given offsets)
  * @param {Object} k - Kaplay instance
  * @param {number} score - Score value to display
  * @param {number} x - Base X position

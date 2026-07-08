@@ -63,6 +63,25 @@ const BARK_KNOT_ALPHA = 0.22
 //
 const WOOD_OUTLINE_PX = 1
 //
+// Default trunk-height band (fractions of the trunk) branches sprout from.
+// Background trees pass a higher minimum so their foliage gathers at the top.
+//
+const BRANCH_FRAC_MIN = 0.5
+const BRANCH_FRAC_MAX = 0.92
+//
+// Upward branch mode (background trees): branches leave the trunk close to
+// vertical instead of sideways, so their leaves stay near the crown.
+//
+const BRANCH_UP_SPREAD_MIN = 0.2
+const BRANCH_UP_SPREAD_RANGE = 0.45
+//
+// Canopy cluster leaves — size range of the dense top-crown teardrops.
+//
+const CANOPY_LEAF_SIZE_MIN = 13
+const CANOPY_LEAF_SIZE_RANGE = 11
+const CANOPY_LEAF_OPACITY_MIN = 0.85
+const CANOPY_LEAF_OPACITY_RANGE = 0.15
+//
 // Horizontal branch length (px) — the branch that extends left from the trunk.
 //
 export const HORIZ_BRANCH_LENGTH = 200
@@ -88,12 +107,20 @@ export function createRng(seed) {
  * @param {number} trunkTopY - Y coordinate of the trunk apex
  * @param {number} rootMaxY - Furthest Y down roots are allowed to reach
  * @param {number} [rootStartY] - Y where roots start (defaults to trunk base)
- * @param {Object} [opts] - { includeRoots, includeHeroBranch } — background
- *   parallax trees skip roots and the hero platform branch.
+ * @param {Object} [opts] - { includeRoots, includeHeroBranch, branchFracMin,
+ *   branchFracMax, branchUpward } — background parallax trees skip roots and
+ *   the hero platform branch, push branches to the top of the trunk and grow
+ *   them upward instead of sideways.
  * @returns {Object} { seed, trunkSegs, rootSegs, branchSegs, leaves, horizBranch }
  */
 export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, rootStartY, opts = {}) {
-  const { includeRoots = true, includeHeroBranch = true } = opts
+  const {
+    includeRoots = true,
+    includeHeroBranch = true,
+    branchFracMin = BRANCH_FRAC_MIN,
+    branchFracMax = BRANCH_FRAC_MAX,
+    branchUpward = false
+  } = opts
   const rng = createRng(seed)
   const treeH = trunkBottomY - trunkTopY
   const rootBaseY = rootStartY !== undefined ? rootStartY : trunkBottomY
@@ -103,9 +130,9 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   const branchSegs = []
   const leafEndpoints = []
   //
-  // Seeded branches sprout from random heights along the upper trunk.
+  // Seeded branches sprout from random heights along the configured trunk band.
   //
-  buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints)
+  buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints, branchFracMin, branchFracMax, branchUpward)
   //
   // Top crown — three clusters grow from the trunk apex for a full canopy.
   //
@@ -270,6 +297,35 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
     drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, shade.r, shade.g, shade.b, opacity, vein)
   })
+}
+
+/**
+ * Paints a dense elliptical canopy cluster of teardrop leaves — used to give
+ * the background parallax trees lush tops that merge into a solid leaf band.
+ * Leaves crowd toward the ellipse centre so the crown core reads solid while
+ * the rim stays organically ragged. Fully deterministic per seed.
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @param {Object} opts - { seed, cx, cy, rx, ry, count, palette }
+ */
+export function renderGlowCanopyIntoContext(ctx, opts) {
+  const { seed, cx, cy, rx, ry, count, palette } = opts
+  const rng = createRng(seed)
+  const leafShades = palette.leafShades ?? [{ r: palette.leafR, g: palette.leafG, b: palette.leafB }]
+  const vein = palette.noLeafDetails ? null : (palette.leafVein ?? null)
+  for (let i = 0; i < count; i++) {
+    //
+    // Square-root-free radial bias: multiplying two rng() samples pulls the
+    // distribution toward the centre, keeping the crown core dense.
+    //
+    const a = rng() * Math.PI * 2
+    const dist = rng() * (0.35 + rng() * 0.65)
+    const x = cx + Math.cos(a) * rx * dist
+    const y = cy + Math.sin(a) * ry * dist
+    const size = CANOPY_LEAF_SIZE_MIN + rng() * CANOPY_LEAF_SIZE_RANGE
+    const shade = leafShades[Math.min(leafShades.length - 1, Math.floor(rng() * leafShades.length + rng() * 0.4))]
+    const opacity = CANOPY_LEAF_OPACITY_MIN + rng() * CANOPY_LEAF_OPACITY_RANGE
+    drawLeafToCanvas(ctx, x, y, size, (rng() - 0.5) * 2, shade.r, shade.g, shade.b, opacity, vein)
+  }
 }
 //
 // Builds the trunk as tapered segments drifting organically from base to apex.
@@ -765,16 +821,20 @@ function buildRoots(rng, trunkSegs, trunkBottomY, treeH, rootMaxY) {
 // of every branch on the trunk is seeded-random. Each branch then splits
 // fractally into smaller leafy branches inside growBranch().
 //
-function buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints) {
+function buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints, fracMin = BRANCH_FRAC_MIN, fracMax = BRANCH_FRAC_MAX, upward = false) {
   const BRANCH_COUNT = 7 + Math.floor(rng() * 3)
-  const FRAC_MIN = 0.5
-  const FRAC_MAX = 0.92
   for (let i = 0; i < BRANCH_COUNT; i++) {
-    const frac = FRAC_MIN + rng() * (FRAC_MAX - FRAC_MIN)
+    const frac = fracMin + rng() * (fracMax - fracMin)
     const segIdx = Math.min(Math.floor(frac * trunkSegs.length), trunkSegs.length - 1)
     const seg = trunkSegs[segIdx]
     const side = i % 2 === 0 ? -1 : 1
-    const angleBase = side < 0 ? -Math.PI + 0.3 + rng() * 0.55 : -0.3 - rng() * 0.55
+    //
+    // Upward mode keeps every branch within a narrow fan around vertical, so
+    // the foliage climbs above the sprout point instead of spreading sideways.
+    //
+    const angleBase = upward
+      ? -Math.PI / 2 + side * (BRANCH_UP_SPREAD_MIN + rng() * BRANCH_UP_SPREAD_RANGE)
+      : (side < 0 ? -Math.PI + 0.3 + rng() * 0.55 : -0.3 - rng() * 0.55)
     const len = 14 + rng() * 20 - frac * 5
     const w = 8 + (1 - frac) * 16
     growBranch(rng, seg.ex, seg.ey, angleBase, Math.max(7, Math.round(len)), w, branchSegs, leafEndpoints, 0)

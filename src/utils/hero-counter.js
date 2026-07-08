@@ -7,9 +7,10 @@ import { CFG } from '../cfg.js'
 const COUNTER_X_OFFSET = 22
 const COUNTER_Y_OFFSET = -52
 //
-// Full 8-direction outline so the digits read cleanly on any background.
+// Hard drop shadow (single black copy offset right+down), matching the
+// pixel-text shadow style used by level letters and HUD texts.
 //
-const OUTLINE_OFFSETS = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+const OUTLINE_OFFSETS = [[2, 2]]
 const OUTLINE_OPACITY = 0.8
 const COUNTER_Z = 10
 

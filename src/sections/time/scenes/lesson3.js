@@ -686,14 +686,9 @@ export function sceneLesson3(k) {
 function createInstructionsText(k, centerX, textY, content) {
   const OUTLINE_OFFSET = 2
   //
-  // Create 8 outline texts (black)
+  // Drop shadow (single black copy offset right+down), glow-level style.
   //
-  const outlineOffsets = [
-    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
-    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
-    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
-    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
-  ]
+  const outlineOffsets = [[OUTLINE_OFFSET, OUTLINE_OFFSET]]
   
   const outlineTexts = outlineOffsets.map(([dx, dy]) => {
     return k.add([

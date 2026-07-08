@@ -28,7 +28,11 @@ export function sceneGlowComplete(k) {
       k.color(0, 0, 0),
       k.z(0)
     ])
-    const outlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
+    //
+    // Drop shadow (single black copy offset right+down) — the same text
+    // shadow style the glow level uses.
+    //
+    const outlineOffsets = [[2, 2]]
     outlineOffsets.forEach(([dx, dy]) => {
       k.add([
         k.text(GLOW_COMPLETE_TEXT, { size: TEXT_SIZE, font: CFG.visual.fonts.regularFull }),

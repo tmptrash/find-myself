@@ -11,7 +11,14 @@ import * as Particles from "../utils/particles.js"
 import * as Cursor from "../utils/cursor.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { renderHintWithEnter } from "../utils/touch-tap-button.js"
-import { createSwayingGrassField, drawSwayingGrassField } from '../utils/swaying-grass-field.js'
+import * as Grass from '../components/grass.js'
+import {
+  generateMenuBackgroundCanvas,
+  MENU_BG_GROUND_Y,
+  MENU_BG_HORIZON_LINE_HEIGHT,
+  MENU_BG_CANVAS_W,
+  MENU_BG_CANVAS_H
+} from '../utils/menu-bg-generator.js'
 //
 // Section colors configuration (body color only, outline is always black)
 // All colors are imported from global config (CFG.visual.colors.sections)
@@ -39,6 +46,24 @@ const SECTION_DESCRIPTIONS = {
 // Background fade transition speed (higher = faster)
 //
 const BG_FADE_SPEED = 3.0
+//
+// Combined static background — ONE baked full-screen image holding the
+// black base and the darkened menu-bg picture (moon, tree layers, rocks,
+// roots, mushrooms), drawn as a single sprite per frame. Baked lazily once
+// per session; re-entering the menu reuses the loaded sprite.
+//
+const MENU_STATIC_SPRITE = 'menu-static-bg'
+const MENU_BG_BASE_OPACITY = 0.35
+//
+// Swaying grass along the menu-bg horizon — the shared Grass component with
+// the same density principle the ready scene uses: the further from the
+// screen centre, the more tufts. The tint fades with the background when an
+// anti-hero is hovered.
+//
+const MENU_GRASS_TUFT_COUNT = 34
+const MENU_GRASS_EDGE_INSET = 30
+const MENU_GRASS_DENSITY_RAMP = 450
+const [MENU_GRASS_TINT_R, MENU_GRASS_TINT_G, MENU_GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen)
 //
 // Firefly particles target opacity when hovering an anti-hero
 //
@@ -535,10 +560,14 @@ export function sceneMenu(k) {
           menuMusic.stop()
           kidsMusic.stop()
           const currentLastLevel = get('lastLesson', null)
+          //
+          // Always route through the transition so the pre-level phrase
+          // (with its glow0-pre voice-over) plays before the glow level.
+          //
           if (currentLastLevel && currentLastLevel.startsWith('lesson-glow.')) {
             showTransitionToLevel(k, currentLastLevel)
           } else {
-            goAfterPreparingAssets(k, 'lesson-glow.0')
+            showTransitionToLevel(k, 'lesson-glow.0')
           }
         })
       }
@@ -652,9 +681,23 @@ export function sceneMenu(k) {
     })
     
     //
-    // Swaying grass along the menu-bg horizon (same wind motion as ready scene)
+    // Combined static background sprite (baked once per session).
     //
-    const grassField = createSwayingGrassField({ centerX })
+    buildMenuStaticSprite(k)
+    //
+    // Swaying grass along the menu-bg horizon — shared Grass component in
+    // manual-draw mode (no z given): drawScene renders it between the
+    // background and the stars, fading it together with the background.
+    //
+    const grassField = Grass.create({
+      k,
+      floorY: MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT,
+      left: MENU_GRASS_EDGE_INSET,
+      right: MENU_BG_CANVAS_W - MENU_GRASS_EDGE_INSET,
+      tuftCount: MENU_GRASS_TUFT_COUNT,
+      density: (x) => Math.min(1, Math.abs(x - centerX) / MENU_GRASS_DENSITY_RAMP),
+      getTint: () => getMenuGrassTint(inst)
+    })
     //
     // Scene instance with all state
     //
@@ -1110,13 +1153,17 @@ export function sceneMenu(k) {
       menuMusic.stop()
       kidsMusic.stop()
       Cursor.setCursor('arrow')
+      //
+      // The first glow level always enters through the transition, so the
+      // pre-level phrase (with its glow0-pre voice-over) is shown.
+      //
       if (forceNew) {
         resetProgress()
-        goAfterPreparingAssets(k, 'lesson-glow.0')
+        showTransitionToLevel(k, 'lesson-glow.0')
       } else if (hasSavedGame) {
         showTransitionToLevel(k, lastLevel)
       } else {
-        goAfterPreparingAssets(k, 'lesson-glow.0')
+        showTransitionToLevel(k, 'lesson-glow.0')
       }
     }
     k.onKeyPress("space", () => startGame(false))
@@ -1193,14 +1240,11 @@ function createTitle(k, centerX, centerY, radius) {
   const titleSize = 32
   const amberColor = k.rgb(228, 155, 36)
   const dimColor = k.rgb(120, 120, 120)
+  //
+  // Drop shadow (single black copy offset right+down) — the same text
+  // shadow style the glow level uses.
+  //
   const outlineOffsets = [
-    { dx: -2, dy: 0 },
-    { dx: 2, dy: 0 },
-    { dx: 0, dy: -2 },
-    { dx: 0, dy: 2 },
-    { dx: -2, dy: -2 },
-    { dx: 2, dy: -2 },
-    { dx: -2, dy: 2 },
     { dx: 2, dy: 2 }
   ]
   //
@@ -1218,7 +1262,7 @@ function createTitle(k, centerX, centerY, radius) {
     const char = i < defaultText.length ? defaultText[i] : ' '
     const isVisible = i < defaultText.length
     //
-    // Outline shadows (eight directions)
+    // Drop-shadow copies of the letter (see outlineOffsets above)
     //
     const shadows = outlineOffsets.map(offset => k.add([
       k.text(char, { size: titleSize }),
@@ -1547,9 +1591,10 @@ function drawScene(inst) {
   //
   drawMenuBackground(inst)
   //
-  // Swaying grass on the horizon strip — fades with the background when hovering anti-hero
+  // Swaying grass on the horizon strip — fades with the background when
+  // hovering an anti-hero (the tint darkens toward black, see getMenuGrassTint)
   //
-  drawSwayingGrassField(k, grassField, inst.bgDefaultOpacity)
+  Grass.draw(grassField)
   
   //
   // Draw stars with twinkling effect
@@ -1987,17 +2032,56 @@ function drawCompletedCheckmarkFront(k, inst) {
 //
 function drawMenuBackground(inst) {
   const { k, bgDefaultOpacity } = inst
-  const BG_OPACITY = 0.35
   //
-  // Draw default background with fade (hidden when hovering anti-hero)
+  // Draw the combined static background sprite with fade (hidden when
+  // hovering an anti-hero). The darkening is already baked into the image.
   //
   bgDefaultOpacity > 0.01 && k.drawSprite({
-    sprite: 'menu-bg',
+    sprite: MENU_STATIC_SPRITE,
     pos: k.vec2(0, 0),
     width: k.width(),
     height: k.height(),
-    opacity: BG_OPACITY * bgDefaultOpacity
+    opacity: bgDefaultOpacity
   })
+}
+//
+// Bakes the combined static menu background ONCE per session: the black
+// base plus the menu-bg picture (moon, tree layers, rocks, roots,
+// mushrooms) at its darkening alpha, loaded as a single sprite.
+//
+let menuStaticSpriteBaked = false
+function buildMenuStaticSprite(k) {
+  if (menuStaticSpriteBaked) return
+  menuStaticSpriteBaked = true
+  const canvas = document.createElement('canvas')
+  canvas.width = MENU_BG_CANVAS_W
+  canvas.height = MENU_BG_CANVAS_H
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = CFG.visual.colors.background
+  ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
+  const bgCanvas = generateMenuBackgroundCanvas()
+  ctx.globalAlpha = MENU_BG_BASE_OPACITY
+  ctx.drawImage(bgCanvas, 0, 0)
+  ctx.globalAlpha = 1
+  bgCanvas.width = 0
+  bgCanvas.height = 0
+  k.loadSprite(MENU_STATIC_SPRITE, canvas)
+  canvas.width = 0
+  canvas.height = 0
+}
+//
+// Grass tint for the menu horizon: the shared glow grass green scaled by
+// the background fade, so the blades dissolve into black together with the
+// background when an anti-hero is hovered.
+//
+function getMenuGrassTint(inst) {
+  const op = inst.bgDefaultOpacity
+  if (op <= 0.01) return null
+  return {
+    r: Math.round(MENU_GRASS_TINT_R * op),
+    g: Math.round(MENU_GRASS_TINT_G * op),
+    b: Math.round(MENU_GRASS_TINT_B * op)
+  }
 }
 /**
  * Creates the per-letter progress label displayed below each anti-hero.
@@ -2046,10 +2130,12 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, v
   const baseX = config.x - totalWidth / 2 + fontSize / 2
   const baseY = config.y + 55
   const fallingExtraY = Math.round(fontSize * TOUCH_H_Y_RATIO)
+  //
+  // Drop shadow (single black copy offset right+down) — the same text
+  // shadow style the glow level uses.
+  //
   const outlineOffsets = [
-    { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
-    { dx: -1, dy:  0 },                     { dx: 1, dy:  0 },
-    { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 }
+    { dx: 1, dy: 1 }
   ]
   const letterEntries = []
   const fallingH = []
@@ -2063,7 +2149,7 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, v
     const ly = isFalling ? baseY + fallingExtraY : baseY
     const lxOff = isFalling ? TOUCH_H_X_OFFSET : 0
     //
-    // Black outlines (8 directions) — shown only when hovered / current section.
+    // Black drop shadow — shown only when hovered / current section.
     // Falling H uses the default topleft anchor so rotation pivots at the
     // top-left corner of the glyph (the top of the left vertical stroke),
     // giving a natural pendulum hang.  Regular letters keep anchor('center').

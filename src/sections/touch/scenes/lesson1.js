@@ -126,6 +126,11 @@ const MELODY_COUNTER_Y_OFFSET = -95
 const MELODY_COUNTER_FONT = 20
 const MELODY_COUNTER_TOTAL = 5
 //
+// Drop shadow of the hero counters (single black copy offset right+down) —
+// the same text shadow style the glow level uses.
+//
+const COUNTER_SHADOW_OFFSETS = [[1, 1]]
+//
 // Mushroom trampoline (right corner — helps reach bonus hero platform)
 //
 const MUSHROOM_TRAMP_X = CFG.visual.screen.width - RIGHT_MARGIN - 20
@@ -1706,7 +1711,10 @@ export function sceneLesson1(k) {
           const msg = END_MUSIC_TEXT
           const cx = CFG.visual.screen.width / 2
           const cy = END_MUSIC_TEXT_Y
-          const outlineOffsets = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+          //
+          // Drop shadow (single black copy offset right+down), glow-level style.
+          //
+          const outlineOffsets = [[1.5, 1.5]]
           outlineOffsets.forEach(([dx, dy]) => {
             k.drawText({ text: msg, pos: k.vec2(cx + dx, cy + dy), size: END_MUSIC_TEXT_FONT, font: CFG.visual.fonts.regularFull, color: k.rgb(0, 0, 0), anchor: 'center', opacity: 0.85 })
           })
@@ -1977,11 +1985,10 @@ export function sceneLesson1(k) {
         const cy = hy + TOUCH_COUNTER_Y_OFFSET
         gameState.counterObj.pos.x = cx
         gameState.counterObj.pos.y = cy
-        const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
         gameState.counterOutlines?.forEach((n, i) => {
           if (!n?.exists?.()) return
-          n.pos.x = cx + offs[i][0]
-          n.pos.y = cy + offs[i][1]
+          n.pos.x = cx + COUNTER_SHADOW_OFFSETS[i][0]
+          n.pos.y = cy + COUNTER_SHADOW_OFFSETS[i][1]
         })
       }
       //
@@ -3203,13 +3210,9 @@ function createStandingLetter(k, letter, x, y, size, angle, fillR, fillG, fillB,
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
   const oo = T_LETTER_OUTLINE
   //
-  // 8-direction outline offsets matching lesson0 createPickupLetter style
+  // Drop shadow (single black copy offset right+down), glow-level style.
   //
-  const offsets = [
-    [-oo, -oo], [0, -oo], [oo, -oo],
-    [-oo, 0], [oo, 0],
-    [-oo, oo], [0, oo], [oo, oo]
-  ]
+  const offsets = [[oo, oo]]
   const outlines = offsets.map(([dx, dy]) => k.add([
     k.text(letter, { size, font }),
     k.pos(x + dx, y + dy),
@@ -3478,11 +3481,10 @@ function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0) {
   const letterX = platX
   const letterY = platY + LETTER_SINK_PX
   const oo = T_LETTER_OUTLINE
-  const offsets = [
-    [-oo, -oo], [0, -oo], [oo, -oo],
-    [-oo, 0], [oo, 0],
-    [-oo, oo], [0, oo], [oo, oo]
-  ]
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style.
+  //
+  const offsets = [[oo, oo]]
   const outlines = offsets.map(([ox, oy]) => k.add([
     k.text(letter, { size: T_LETTER_FONT_SIZE, font: CFG.visual.fonts.thinFull }),
     k.pos(letterX + ox, letterY + oy),
@@ -3627,9 +3629,8 @@ function processL1TreeTouch(k, gameState, touchedIdx, sound, levelIndicator, tre
     gameState.counterObj.pos.y = cy
     gameState.counterOutlines?.forEach((n, i) => {
       if (!n?.exists?.()) return
-      const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-      n.pos.x = cx + offs[i][0]
-      n.pos.y = cy + offs[i][1]
+      n.pos.x = cx + COUNTER_SHADOW_OFFSETS[i][0]
+      n.pos.y = cy + COUNTER_SHADOW_OFFSETS[i][1]
     })
   }
 }
@@ -3642,8 +3643,7 @@ function updateMelodyCounter(k, gameState, heroX, heroY) {
   const cx = heroX + MELODY_COUNTER_X_OFFSET
   const cy = heroY + MELODY_COUNTER_Y_OFFSET
   if (!gameState.melodyCounterObj || !gameState.melodyCounterObj?.exists?.()) {
-    const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-    gameState.melodyCounterOutlines = offs.map(([dx, dy]) => k.add([
+    gameState.melodyCounterOutlines = COUNTER_SHADOW_OFFSETS.map(([dx, dy]) => k.add([
       k.text(text, { size: MELODY_COUNTER_FONT }),
       k.pos(cx + dx, cy + dy),
       k.anchor('left'),
@@ -3665,11 +3665,10 @@ function updateMelodyCounter(k, gameState, heroX, heroY) {
   gameState.melodyCounterOutlines?.forEach(n => n?.exists?.() && (n.text = text))
   gameState.melodyCounterObj.pos.x = cx
   gameState.melodyCounterObj.pos.y = cy
-  const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
   gameState.melodyCounterOutlines?.forEach((n, i) => {
     if (!n?.exists?.()) return
-    n.pos.x = cx + offs[i][0]
-    n.pos.y = cy + offs[i][1]
+    n.pos.x = cx + COUNTER_SHADOW_OFFSETS[i][0]
+    n.pos.y = cy + COUNTER_SHADOW_OFFSETS[i][1]
   })
 }
 //
@@ -3689,8 +3688,7 @@ function updateTreeCounter(k, gameState, count, total, heroX, heroY) {
   const cx = heroX + TOUCH_COUNTER_X_OFFSET
   const cy = heroY + TOUCH_COUNTER_Y_OFFSET
   if (!gameState.counterObj || !gameState.counterObj?.exists?.()) {
-    const offs = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-    gameState.counterOutlines = offs.map(([dx, dy]) => k.add([
+    gameState.counterOutlines = COUNTER_SHADOW_OFFSETS.map(([dx, dy]) => k.add([
       k.text(text, { size: TOUCH_COUNTER_FONT }),
       k.pos(cx + dx, cy + dy),
       k.anchor('left'),
@@ -3938,7 +3936,10 @@ function startDeathCountdown(k, sceneName, deathX, deathY) {
   const cx = CFG.visual.screen.width / 2
   const textCfg = { size: L1_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
   const initText = L1_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS
-  const offs = [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style.
+  //
+  const offs = [[1.5, 1.5]]
   const outlines = offs.map(([dx, dy]) => k.add([
     k.text(initText, textCfg),
     k.pos(cx + dx, L1_DEATH_PROMPT_Y + dy),

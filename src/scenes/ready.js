@@ -6,14 +6,19 @@ import { addBackground } from '../sections/word/utils/scene.js'
 import * as Sound from '../utils/sound.js'
 import * as Cursor from '../utils/cursor.js'
 import { goToMenuAfterAssets } from '../utils/lesson-assets.js'
-import { loadHeroSprites, HEROES } from '../components/hero.js'
+import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP, IDLE_MELODY_SUSTAIN } from '../components/hero.js'
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
+  generateMenuBackgroundCanvas,
   MENU_BG_GROUND_Y,
   MENU_BG_HORIZON_LINE_HEIGHT,
-  MENU_BG_CANVAS_W
+  MENU_BG_CANVAS_W,
+  MENU_BG_CANVAS_H,
+  MENU_BG_MOON_CENTER_X,
+  MENU_BG_MOON_CENTER_Y,
+  MENU_BG_MOON_HALO_KEEPOUT
 } from '../utils/menu-bg-generator.js'
-import { createSwayingGrassField, drawSwayingGrassField } from '../utils/swaying-grass-field.js'
+import * as Grass from '../components/grass.js'
 
 //
 // Hint flicker — pinned at the very bottom of the screen so the
@@ -66,16 +71,28 @@ const TITLE_FLICKER_MAX = 1.0
 //
 const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
 //
+// Combined static background — ONE baked full-screen image holding every
+// static element of the scene: the darkened menu-bg picture (moon, all tree
+// layers, rocks, roots, mushrooms) plus the bottom description text. Drawn
+// as a single sprite each frame instead of many separate objects.
+//
+const READY_STATIC_SPRITE = 'ready-static-bg'
+const READY_BG_DARKEN_ALPHA = 0.5
+const READY_TEXT_SHADOW_OFFSET = 1
+//
 // Stars sit BELOW the drifting cloud layer so twinkles never punch
 // through the cloud puffs — clouds read as the nearer sky element.
 //
 const Z_STARS = CFG.visual.zIndex.background + 2
 const Z_FIREFLIES = CFG.visual.zIndex.background + 7
-const Z_GRASS = CFG.visual.zIndex.background + 5
 const Z_ILLUSTRATION = CFG.visual.zIndex.background + 6
-const Z_TEXT = 10
 const Z_TITLE = 15
 const Z_SPIDER = 50
+//
+// Grass renders ABOVE the spider/hero layer, so the hero-n running right
+// along the horizon passes BEHIND the blades before leaving the screen.
+//
+const Z_GRASS = Z_SPIDER + 5
 const Z_HINT = 100
 //
 // Blinking stars (sky overlay above the menu-bg sprite). Each star is a
@@ -107,14 +124,15 @@ const STAR_AREA_BOTTOM_RATIO = 0.55
 const STAR_AREA_LEFT_RATIO = 0.03
 const STAR_AREA_RIGHT_RATIO = 0.97
 //
-// Moon zone (in the baked menu-bg). Stars are repelled from this
-// rectangle so they don't fight the moon halo for visual attention.
-// Coordinates are unit ratios of viewport width/height — the moon
-// sprite scales with the bg.
+// Moon zone (in the baked menu-bg). Stars are repelled from this circle so
+// none of them ever twinkles over the moon disc or its halo. Ratios come
+// straight from the exported moon geometry of the bg generator, plus a
+// safety margin, so the zone always matches the actual baked moon.
 //
-const MOON_ZONE_CENTER_X_RATIO = 1700 / 1920
-const MOON_ZONE_CENTER_Y_RATIO = 160 / 1080
-const MOON_ZONE_RADIUS_RATIO = 220 / 1920
+const MOON_ZONE_MARGIN = 40
+const MOON_ZONE_CENTER_X_RATIO = MENU_BG_MOON_CENTER_X / MENU_BG_CANVAS_W
+const MOON_ZONE_CENTER_Y_RATIO = MENU_BG_MOON_CENTER_Y / MENU_BG_CANVAS_H
+const MOON_ZONE_RADIUS_RATIO = (MENU_BG_MOON_HALO_KEEPOUT + MOON_ZONE_MARGIN) / MENU_BG_CANVAS_W
 //
 // Wandering fireflies — never higher than the front-layer tree
 // canopy so they read as flying AMONG the trees rather than across
@@ -145,9 +163,20 @@ const FIREFLY_COLOR_B = 96
 //
 // Grass is excluded from the central horizontal band where the
 // monster illustration stands (matches the keep-out used by rocks /
-// mushrooms in `menu-bg-generator.js`).
+// mushrooms in `menu-bg-generator.js`). The field itself is the shared
+// Grass component (same tufts as the glow level) tinted glow-grass green.
 //
 const GRASS_CENTER_KEEPOUT_HALF = 400
+const GRASS_TUFT_COUNT = 34
+const GRASS_EDGE_INSET = 30
+//
+// Density gradient: the further from the screen centre, the more grass. The
+// weight ramps from 0 at the keep-out edge to 1 over this many pixels, so
+// tufts thicken towards both screen edges.
+//
+const GRASS_DENSITY_RAMP = 450
+const [GRASS_TINT_R, GRASS_TINT_G, GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen)
+const GRASS_TINT = { r: GRASS_TINT_R, g: GRASS_TINT_G, b: GRASS_TINT_B }
 // Cricket + owl ambient sounds — random intervals so the night soundscape
 // stays alive but never feels mechanical. Cricket bursts trigger every
 // few seconds; owl hoots are sparse and atmospheric.
@@ -271,13 +300,35 @@ const HERO_N_SPRITE_PREFIX = `hero_${HERO_TITLE_BODY_COLOR.replace('#', '')}_000
 // the ground freezes him in a closed-eyes idle until the mouse rests again.
 //
 const HERO_N_MOUSE_STILL_DELAY = 10
-const HERO_N_FALL_SPEED = 460
-const HERO_N_RUN_SPEED = 170
+const HERO_N_FALL_GRAVITY = 1500
+const HERO_N_RUN_SPEED = 42
 const HERO_N_RUN_FRAME_TIME = 0.12
 const HERO_N_RUN_FRAME_COUNT = 3
 const HERO_N_RUN_STEPS_PER_BURST = 3
 const HERO_N_RUN_BURST_DURATION = HERO_N_RUN_FRAME_TIME * HERO_N_RUN_FRAME_COUNT * HERO_N_RUN_STEPS_PER_BURST
 const HERO_N_RUN_PAUSE = 4
+//
+// Wake-up sequence after an idle interruption: the hero first opens ONE eye
+// and glances left/right with the pupil for a few seconds, then opens the
+// second eye briefly, and only then resumes running.
+//
+const HERO_N_WAKE_ONE_EYE_DURATION = 3
+const HERO_N_WAKE_BOTH_EYES_DURATION = 1
+const HERO_N_WAKE_PUPIL_FREQ = 0.7
+//
+// Geometry of the hero's eyes inside the 96 px sprite canvas (mirrors the
+// head/eye constants in components/hero.js), scaled to the 80 px title-hero
+// display size. Used to overlay a single open eye on the closed-eyes sprite
+// during the wake-up sequence.
+//
+const HERO_SPRITE_CANVAS_SIZE = 96
+const HERO_N_SPRITE_SCALE = HERO_N_SPRITE_SIZE / HERO_SPRITE_CANVAS_SIZE
+const HERO_EYE_RIGHT_X = 54            // headX (33) + EYE_OFFSET_X_RIGHT (21)
+const HERO_EYE_CANVAS_Y = 27           // headY (18) + EYE_OFFSET_Y (9)
+const HERO_EYE_RING_RADIUS = 5
+const HERO_EYE_WHITE_RADIUS = 4
+const HERO_EYE_PUPIL_RADIUS = 2
+const HERO_EYE_PUPIL_SHIFT = 2
 //
 // The 80 px hero frame keeps ~14 px of transparent padding below the feet
 // (the 96 px canvas padding scaled to the 80 px display size), so the sprite
@@ -289,6 +340,20 @@ const HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_S
 // Fade-out duration for the upside-down hero-u once the letters grow legs.
 //
 const HERO_U_FADE_DURATION = 1.0
+//
+// Idle notes for hero-n while he waits with closed eyes — the same melody
+// the in-game hero hums, with rising note glyphs above his head. Values
+// mirror the IDLE_NOTE_* constants in components/hero.js (mouth offset
+// scaled to the 80 px title-hero size).
+//
+const HERO_N_NOTE_GLYPHS = ['♪', '♫', '♩', '♬']
+const HERO_N_NOTE_LIFETIME = 2.2
+const HERO_N_NOTE_RISE_SPEED = 28
+const HERO_N_NOTE_DRIFT_AMPLITUDE = 16
+const HERO_N_NOTE_DRIFT_FREQ = 1.4
+const HERO_N_NOTE_FONT_SIZE = 22
+const HERO_N_NOTE_OFFSET_Y = -23
+const HERO_N_VOCAL_DELAY = 2.0
 //
 // Centered description layout. All narrative + section labels live in
 // a single centred block placed BELOW the black horizon strip so the
@@ -326,10 +391,6 @@ const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
 const AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
 const DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
 //
-// Icon draw radius — enlarged for better visibility
-//
-const ICON_DRAW_R = 20
-//
 // Approximate monospace char width multiplier (JetBrains Mono)
 //
 const MONO_CHAR_W_RATIO = 0.6
@@ -338,73 +399,6 @@ const MONO_CHAR_W_RATIO = 0.6
 // deep teal background without competing with the orange title.
 //
 const COLOR_TEXT_GRAY = '#9AB5C4'
-//
-// Animated sparkle constants — enlarged to match new ICON_DRAW_R
-//
-const SPARKLE_PULSE_SPEED = 2.5
-const SPARKLE_INNER_R = 8
-const SPARKLE_OUTER_R = 16
-//
-// Icon line 3: three text segments split around two icons.
-// Layout (JetBrains Mono, size-36, char-width ≈ fontsize × 0.6 = 22 px):
-//   seg1 "Collect "   (8 ch) = 176 px
-//   icon1             (ICON_DRAW_R*2) = 36 px
-//   seg2 " fragments and find "  (20 ch) = 440 px
-//   icon2             = 36 px
-//   seg3 " the other you."  (15 ch) = 330 px
-//   Total ≈ 1018 px — matches the two narrative lines above (~46 ch × 22).
-//
-const ICON_LINE_SEG1 = 'Collect fragments '
-//
-// Line 4: fragment icon + peace message — "find the other you" removed
-//
-const ICON_LINE_SEG2 = ' to find peace and calm.'
-const ICON_LINE_CHAR_W = Math.round(TEXT_FONT_SIZE * MONO_CHAR_W_RATIO)
-const ICON_LINE_SEG1_W = ICON_LINE_SEG1.length * ICON_LINE_CHAR_W
-const ICON_LINE_SEG2_W = ICON_LINE_SEG2.length * ICON_LINE_CHAR_W
-const ICON_LINE_TOTAL_W = ICON_LINE_SEG1_W + ICON_DRAW_R * 2 + ICON_LINE_SEG2_W
-const ICON_LINE_LEFT_X = CENTER_X - Math.round(ICON_LINE_TOTAL_W / 2)
-const ICON_LINE_ICON1_X = ICON_LINE_LEFT_X + ICON_LINE_SEG1_W + ICON_DRAW_R
-const ICON_LINE_SEG2_X = ICON_LINE_ICON1_X + ICON_DRAW_R
-//
-// Virtual position for the anti-hero hover animation — sits past the end of line 4 text
-//
-const ICON_LINE_ICON2_X = ICON_LINE_SEG2_X + ICON_LINE_SEG2_W + ICON_DRAW_R
-//
-// Life line: "Life [icon] is here to teach you, not to test."
-// "life " prefix before the icon + bigger sprite so the head is clearly visible
-//
-const LIFE_LINE_SEG1 = 'life '
-const LIFE_LINE_SEG2 = ' is here to teach you, not to test.'
-const LIFE_SPRITE_ASPECT = 427 / 443
-//
-// Natural height of the life.png sprite (same constant used in lesson-indicator.js)
-// Used to compute a uniform k.scale() that preserves the sprite aspect ratio
-//
-const LIFE_ICON_NATURAL_H = 1197
-//
-// Bigger inline life icon — 2.2× font so the teacher's head is clearly visible
-//
-const LIFE_INLINE_ICON_H_SCALE = 2.2
-const LIFE_LINE_ICON_W = Math.round(Math.round(TEXT_FONT_SIZE * LIFE_INLINE_ICON_H_SCALE) * LIFE_SPRITE_ASPECT) + 4
-const LIFE_LINE_SEG1_W = LIFE_LINE_SEG1.length * ICON_LINE_CHAR_W
-const LIFE_LINE_SEG2_W = LIFE_LINE_SEG2.length * ICON_LINE_CHAR_W
-const LIFE_LINE_TOTAL_W = LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W + LIFE_LINE_SEG2_W
-const LIFE_LINE_LEFT_X = CENTER_X - Math.round(LIFE_LINE_TOTAL_W / 2)
-const LIFE_LINE_ICON_X = LIFE_LINE_LEFT_X + LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W / 2
-const LIFE_LINE_SEG2_X = LIFE_LINE_LEFT_X + LIFE_LINE_SEG1_W + LIFE_LINE_ICON_W
-//
-// Inline life sprite — uniform scale from life.png aspect ratio (427×443)
-//
-const LIFE_INLINE_ICON_H = Math.round(TEXT_FONT_SIZE * LIFE_INLINE_ICON_H_SCALE)
-//
-// Preserve natural aspect ratio of life.png (427 × 443) — no distortion
-//
-const LIFE_INLINE_ICON_W = Math.round(LIFE_INLINE_ICON_H * LIFE_SPRITE_ASPECT)
-//
-// Push the larger icon up so it aligns with the text cap-height
-//
-const LIFE_INLINE_ICON_Y_OFFSET = 34
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
@@ -451,8 +445,10 @@ export function sceneReady(k) {
     Sound.startAudioContext(sound)
     addBackground(k, CFG.visual.colors.ready.background)
     //
-    // Background (menu-bg dark overlay)
+    // Combined static background — the darkened menu-bg picture plus the
+    // bottom description text, baked once into a single full-screen sprite.
     //
+    buildReadyStaticSprite(k)
     k.add([k.pos(0, 0), k.z(Z_BG_OVERLAY), { draw() { onDrawBg(k) } }])
     //
     // Twinkling star field overlaid on the baked menu-bg so the ready
@@ -470,14 +466,23 @@ export function sceneReady(k) {
       draw() { drawFireflyField(k, fireflyField) }
     }])
     //
-    // Swaying grass tufts along the horizon strip — short blades
-    // gently leaning with a coherent wind sine.
+    // Swaying grass tufts along the horizon strip — the shared Grass
+    // component (the same baked blades as the glow level), skipping the
+    // central keep-out band around the monster illustration. The density
+    // weight grows with the distance from the centre, so the field thickens
+    // towards the screen edges.
     //
-    const grassField = createSwayingGrassField({
-      centerX: CENTER_X,
-      centerKeepoutHalf: GRASS_CENTER_KEEPOUT_HALF
+    Grass.create({
+      k,
+      floorY: MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT,
+      left: GRASS_EDGE_INSET,
+      right: MENU_BG_CANVAS_W - GRASS_EDGE_INSET,
+      tuftCount: GRASS_TUFT_COUNT,
+      z: Z_GRASS,
+      excluded: (x) => Math.abs(x - CENTER_X) <= GRASS_CENTER_KEEPOUT_HALF,
+      density: (x) => Math.min(1, (Math.abs(x - CENTER_X) - GRASS_CENTER_KEEPOUT_HALF) / GRASS_DENSITY_RAMP),
+      getTint: () => GRASS_TINT
     })
-    k.add([k.pos(0, 0), k.z(Z_GRASS), { draw() { drawSwayingGrassField(k, grassField) } }])
     //
     // Ambient cricket + owl sounds — random intervals scheduled by
     // local timer state. Sounds stay silent until the first user
@@ -494,13 +499,10 @@ export function sceneReady(k) {
     //
     k.add([k.pos(0, 0), k.z(Z_ILLUSTRATION), { draw() { onDrawIllustration(k) } }])
     //
-    // Centered description block (new narrative text, no icons)
+    // Title text (crawling letters detach from this). The title carries a
+    // drop shadow (single black copy offset right+down) like the glow level.
     //
-    addDescriptionBlock(k)
-    //
-    // Title text (crawling letters detach from this)
-    //
-    const outlineOffsets = [[-2,-2],[0,-2],[2,-2],[-2,0],[2,0],[-2,2],[0,2],[2,2]]
+    const outlineOffsets = [[2, 2]]
     const titleOutlines = []
     outlineOffsets.forEach(([dx, dy]) => {
       titleOutlines.push(k.add([
@@ -583,14 +585,25 @@ export function sceneReady(k) {
         spider.heroRunTimer = 0
         spider.heroFrameTimer = 0
         spider.heroPauseTimer = 0
+        spider.heroWakeTimer = 0
+        spider.heroFallVel = 0
         spider.heroGone = false
+        //
+        // Idle singing state (notes + melody while eyes are closed)
+        //
+        spider.heroNotes = []
+        spider.heroNoteTimer = 0
+        spider.heroMelodyIndex = 0
+        spider.heroIdleTime = 0
       }
       spiders.push(spider)
     })
     //
-    // Shared mouse-stillness tracker driving the title-hero departure logic
+    // Shared input-stillness tracker driving the title-hero departure logic.
+    // Both mouse motion and key presses count as player activity.
     //
-    const heroLetterState = { lastMouseX: -1, lastMouseY: -1, mouseMoved: false, mouseStillTime: 0 }
+    const heroLetterState = { lastMouseX: -1, lastMouseY: -1, mouseMoved: false, mouseStillTime: 0, keyPulse: false }
+    k.onKeyPress(() => { heroLetterState.keyPulse = true })
     let hintFlickerTime = HINT_FLICKER_DURATION
     let hintDirection = -1
     let titleFlickerPhase = 0
@@ -598,7 +611,7 @@ export function sceneReady(k) {
       const dt = k.dt()
       spiderState.timer += dt
       spiders.forEach(spider => updateSpider(k, spider, dt, SPIDER_MAX_OPACITY, true))
-      updateTitleHeroes(k, spiders, spiderState, heroLetterState, dt)
+      updateTitleHeroes(k, spiders, spiderState, heroLetterState, sound, dt)
       //
       // Hint flicker
       //
@@ -637,15 +650,57 @@ export function sceneReady(k) {
   })
 }
 //
-// Draws the darkened background image
+// Draws the combined static background (one baked sprite, full opacity —
+// the darkening and the description text are already baked in).
 //
 function onDrawBg(k) {
   k.drawSprite({
-    sprite: "menu-bg",
+    sprite: READY_STATIC_SPRITE,
     width: k.width(),
-    height: k.height(),
-    opacity: 0.5
+    height: k.height()
   })
+}
+//
+// Bakes every static element of the ready scene into ONE full-screen
+// canvas and loads it as a sprite: the scene background colour, the
+// menu-bg picture (moon, tree layers, rocks, roots, mushrooms) at the
+// darkening alpha the scene used to apply per frame, and the centred
+// description block with its drop shadow.
+//
+function buildReadyStaticSprite(k) {
+  const canvas = document.createElement('canvas')
+  canvas.width = MENU_BG_CANVAS_W
+  canvas.height = MENU_BG_CANVAS_H
+  const ctx = canvas.getContext('2d')
+  //
+  // Base fill + the darkened background picture.
+  //
+  ctx.fillStyle = CFG.visual.colors.ready.background
+  ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
+  const bgCanvas = generateMenuBackgroundCanvas()
+  ctx.globalAlpha = READY_BG_DARKEN_ALPHA
+  ctx.drawImage(bgCanvas, 0, 0)
+  ctx.globalAlpha = 1
+  bgCanvas.width = 0
+  bgCanvas.height = 0
+  //
+  // Bottom description block — centred lines with a glow-style drop shadow
+  // (single black copy offset right+down).
+  //
+  ctx.font = `${TEXT_FONT_SIZE}px 'JetBrains Mono Thin', 'JetBrains Mono', monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  let cursorY = DESCRIPTION_START_Y
+  for (const line of READY_DESC_LINES) {
+    ctx.fillStyle = '#000000'
+    ctx.fillText(line, CENTER_X + READY_TEXT_SHADOW_OFFSET, cursorY + READY_TEXT_SHADOW_OFFSET)
+    ctx.fillStyle = COLOR_TEXT_GRAY
+    ctx.fillText(line, CENTER_X, cursorY)
+    cursorY += TEXT_LINE_HEIGHT
+  }
+  k.loadSprite(READY_STATIC_SPRITE, canvas)
+  canvas.width = 0
+  canvas.height = 0
 }
 //
 // Pre-computes the star field once per scene enter so the per-frame
@@ -770,68 +825,6 @@ function onDrawIllustration(k) {
     height: LIFE_HEIGHT,
     opacity: LIFE_OPACITY
   })
-}
-//
-// Adds the full centred description block below the black horizon.
-// Returns the layout descriptor (icon coordinates per label row) so
-// the icon overlay + hover hit-test can reuse the exact same row Y
-// values the text was placed at.
-//
-function addDescriptionBlock(k) {
-  const z = Z_TEXT
-  const font = "'JetBrains Mono Thin', 'JetBrains Mono', monospace"
-  //
-  // New description: 5 centered narrative lines, no inline icons
-  //
-  let cursorY = DESCRIPTION_START_Y
-  for (const line of READY_DESC_LINES) {
-    addCenteredSegment(k, line, CENTER_X, cursorY, z, TEXT_FONT_SIZE, font, COLOR_TEXT_GRAY)
-    cursorY += TEXT_LINE_HEIGHT
-  }
-  return {}
-}
-//
-// Draws the two small icon illustrations next to their centred
-// section label rows. Coordinates come from the description-block
-// layout descriptor so the icons always line up with the row text.
-//
-function onDrawIconIllustrations(k, iconAnim, descriptionLayout) {
-  const r = ICON_DRAW_R
-  //
-  // Icon 1: "Collect fragments" — animated sun-bunny sparkle glow
-  //
-  // Icons are vertically centred on the text line's midpoint (font_size / 2 below line top).
-  //
-  //
-  // Icons are positioned above the text baseline: center sits at the top
-  // of the text line minus half a radius so they float above the words.
-  //
-  const iconRowCenterY = descriptionLayout.row1.iconY - ICON_DRAW_R / 2 + 6
-  drawFragmentIcon(k, descriptionLayout.row1.iconX, iconRowCenterY, iconAnim.sparklePhase)
-  //
-  // Icon 2 removed — "find the other you" concept replaced with "find peace and calm"
-}
-//
-// Icon 1: animated sun-bunny sparkle — outer glow + bright core pulse
-//
-function drawFragmentIcon(k, cx, cy, sparklePhase) {
-  const pulse = 0.5 + 0.5 * Math.abs(Math.sin(sparklePhase))
-  //
-  // Sparkle glint is warm amber gold — the same accent the rest of
-  // the scene uses for warm focal points (title, anti-hero, emphasis
-  // text). Replaces the previous near-white cream so the "fragment"
-  // visibly reads as on-palette warm light against the deep teal frame.
-  //
-  const glintColor = k.rgb(244, 192, 64)
-  const r = SPARKLE_INNER_R * (0.6 + pulse * 0.4)
-  //
-  // Soft outer glow
-  //
-  k.drawCircle({ pos: k.vec2(cx, cy), radius: SPARKLE_OUTER_R * pulse, color: glintColor, opacity: 0.15 * pulse })
-  //
-  // Bright core
-  //
-  k.drawCircle({ pos: k.vec2(cx, cy), radius: r, color: glintColor, opacity: 0.85 * pulse })
 }
 //
 // ────────── Spider / crawling letters system ──────────
@@ -1154,7 +1147,10 @@ function drawSpider(k, spider, textOpacity) {
     k.pushTransform()
     k.pushTranslate(spider.x, spider.y)
     k.pushRotate(angleDeg)
-    const outlineOffsets = [[-2,-2],[0,-2],[2,-2],[-2,0],[2,0],[-2,2],[0,2],[2,2]]
+    //
+    // Drop shadow (single black copy offset right+down), glow-level style.
+    //
+    const outlineOffsets = [[2, 2]]
     outlineOffsets.forEach(([dx, dy]) => {
       k.drawText({
         text: spider.letter,
@@ -1227,52 +1223,6 @@ function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   const jointX = baseX + Math.cos(jointAngle) * len1
   const jointY = baseY + Math.sin(jointAngle) * len1
   return { jointX, jointY }
-}
-//
-// Adds a text segment with 4-corner black outline (1px offset) then the colored text on top.
-// Used by addDescriptionBlock to give body text a readable dark stroke.
-//
-function addSegment(k, text, x, y, z, size, font, colorHex) {
-  const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-  offsets.forEach(([dx, dy]) => {
-    k.add([
-      k.text(text, { size, font }),
-      k.pos(x + dx, y + dy),
-      k.anchor('left'),
-      k.color(0, 0, 0),
-      k.z(z - 1)
-    ])
-  })
-  return k.add([
-    k.text(text, { size, font }),
-    k.pos(x, y),
-    k.anchor('left'),
-    getColor(k, colorHex),
-    k.z(z)
-  ])
-}
-//
-// Centred variant of addSegment — places the text + 4-corner outline
-// with anchor 'center' so the line sits at `(x, y)` by its midpoint.
-//
-function addCenteredSegment(k, text, x, y, z, size, font, colorHex) {
-  const offsets = [[-1, -1], [1, -1], [-1, 1], [1, 1]]
-  offsets.forEach(([dx, dy]) => {
-    k.add([
-      k.text(text, { size, font }),
-      k.pos(x + dx, y + dy),
-      k.anchor('center'),
-      k.color(0, 0, 0),
-      k.z(z - 1)
-    ])
-  })
-  return k.add([
-    k.text(text, { size, font }),
-    k.pos(x, y),
-    k.anchor('center'),
-    getColor(k, colorHex),
-    k.z(z)
-  ])
 }
 //
 // ────────── Animated overlay helpers (clouds / fireflies / grass / ambient sound) ──────────
@@ -1395,13 +1345,16 @@ function onUpdateAmbientSounds(k, ambient) {
   }
 }
 //
-// Tracks mouse stillness and advances both title heroes: hero-u fades out
-// once the letters start growing legs; hero-n leaves the title after the
-// mouse has rested (see the HERO_N_* constants for the full sequence).
+// Tracks input stillness (mouse motion + key presses) and advances both
+// title heroes: hero-u fades out once the letters start growing legs;
+// hero-n leaves the title after the input has rested (see the HERO_N_*
+// constants for the full sequence).
 //
-function updateTitleHeroes(k, spiders, spiderState, state, dt) {
+function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
   const mp = k.mousePos()
-  if (mp.x !== state.lastMouseX || mp.y !== state.lastMouseY) {
+  const keyActivity = state.keyPulse
+  state.keyPulse = false
+  if (mp.x !== state.lastMouseX || mp.y !== state.lastMouseY || keyActivity) {
     state.lastMouseX = mp.x
     state.lastMouseY = mp.y
     state.mouseMoved = true
@@ -1413,8 +1366,56 @@ function updateTitleHeroes(k, spiders, spiderState, state, dt) {
   const legsStarted = spiderState.timer > SPIDER_LEGS_BASE_DELAY
   spiders.forEach(spider => {
     spider.isHeroU && updateHeroU(spider, legsStarted, dt)
-    spider.isHeroN && updateHeroN(k, spider, state, legsStarted, dt)
+    if (spider.isHeroN) {
+      updateHeroN(k, spider, state, legsStarted, dt)
+      updateHeroNNotes(spider, sound, dt)
+    }
   })
+}
+//
+// Idle singing for hero-n: while he stands with closed eyes the same melody
+// the in-game hero hums plays note by note, each pitch paired with a rising
+// glyph above his head. Interruptions restart the melody from the top.
+//
+function updateHeroNNotes(spider, sound, dt) {
+  //
+  // Age + drift existing notes so they fade out naturally in any phase.
+  //
+  for (const note of spider.heroNotes) {
+    note.age += dt
+    note.x = note.baseX + Math.sin((note.age + note.driftPhase) * HERO_N_NOTE_DRIFT_FREQ * Math.PI * 2) * HERO_N_NOTE_DRIFT_AMPLITUDE * (note.age / HERO_N_NOTE_LIFETIME)
+    note.y -= HERO_N_NOTE_RISE_SPEED * dt
+  }
+  spider.heroNotes = spider.heroNotes.filter(n => n.age < HERO_N_NOTE_LIFETIME)
+  if (spider.heroPhase !== 'idle' || spider.heroGone) {
+    spider.heroIdleTime = 0
+    spider.heroMelodyIndex = 0
+    spider.heroNoteTimer = 0
+    return
+  }
+  //
+  // Only sing after a short warm-up, like the in-game hero.
+  //
+  spider.heroIdleTime += dt
+  if (spider.heroIdleTime < HERO_N_VOCAL_DELAY) return
+  spider.heroNoteTimer -= dt
+  if (spider.heroNoteTimer > 0) return
+  const [frequency, beats] = IDLE_MELODY[spider.heroMelodyIndex % IDLE_MELODY.length]
+  spider.heroNotes.push({
+    baseX: spider.heroX,
+    x: spider.heroX,
+    y: spider.heroY + HERO_N_NOTE_OFFSET_Y,
+    age: 0,
+    driftPhase: Math.random(),
+    glyph: HERO_N_NOTE_GLYPHS[Math.floor(Math.random() * HERO_N_NOTE_GLYPHS.length)]
+  })
+  Sound.playIdleHumNote(sound, {
+    frequency,
+    duration: beats * IDLE_MELODY_BEAT * IDLE_MELODY_SUSTAIN,
+    whistleMode: true
+  })
+  spider.heroNoteTimer = beats * IDLE_MELODY_BEAT + IDLE_MELODY_GAP
+  spider.heroMelodyIndex = (spider.heroMelodyIndex + 1) % IDLE_MELODY.length
 }
 //
 // Hero-u simply fades away once the letters start growing legs.
@@ -1439,11 +1440,16 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
       spider.heroPhase = 'fall'
       spider.heroX = spider.x + HERO_N_OFFSET_X
       spider.heroY = spider.y + HERO_N_OFFSET_Y
+      spider.heroFallVel = 0
     }
     return
   }
   if (spider.heroPhase === 'fall') {
-    spider.heroY += HERO_N_FALL_SPEED * dt
+    //
+    // Free fall with gravity — the hero accelerates towards the ground.
+    //
+    spider.heroFallVel += HERO_N_FALL_GRAVITY * dt
+    spider.heroY += spider.heroFallVel * dt
     if (spider.heroY >= HERO_N_GROUND_CENTER_Y) {
       spider.heroY = HERO_N_GROUND_CENTER_Y
       startHeroNBurst(spider)
@@ -1455,7 +1461,27 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
   //
   state.mouseMoved && (spider.heroPhase = 'idle')
   if (spider.heroPhase === 'idle') {
-    state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY && startHeroNBurst(spider)
+    //
+    // After the mouse rests long enough the hero wakes up gradually: one eye
+    // first, glancing around, before committing to the run.
+    //
+    if (state.mouseStillTime >= HERO_N_MOUSE_STILL_DELAY) {
+      spider.heroPhase = 'wakeOneEye'
+      spider.heroWakeTimer = 0
+    }
+    return
+  }
+  if (spider.heroPhase === 'wakeOneEye') {
+    spider.heroWakeTimer += dt
+    if (spider.heroWakeTimer >= HERO_N_WAKE_ONE_EYE_DURATION) {
+      spider.heroPhase = 'wakeBothEyes'
+      spider.heroWakeTimer = 0
+    }
+    return
+  }
+  if (spider.heroPhase === 'wakeBothEyes') {
+    spider.heroWakeTimer += dt
+    spider.heroWakeTimer >= HERO_N_WAKE_BOTH_EYES_DURATION && startHeroNBurst(spider)
     return
   }
   if (spider.heroPhase === 'run') {
@@ -1503,9 +1529,15 @@ function drawTitleHero(k, spider) {
   const inTitle = spider.isHeroU || spider.heroPhase === 'title'
   const cx = inTitle ? spider.x + (spider.isHeroU ? HERO_U_OFFSET_X : HERO_N_OFFSET_X) : spider.heroX
   const cy = inTitle ? spider.y + (spider.isHeroU ? HERO_U_OFFSET_Y : HERO_N_OFFSET_Y) : spider.heroY
+  //
+  // Sprite per phase: run frames while bursting, closed eyes while idling or
+  // waking with one eye (the open eye is overlaid manually), open eyes
+  // otherwise (title, fall, pause, both-eyes wake step).
+  //
+  const closedEyes = spider.heroPhase === 'idle' || spider.heroPhase === 'wakeOneEye'
   const sprite = spider.heroPhase === 'run'
     ? `${HERO_N_SPRITE_PREFIX}-run-${spider.heroRunFrame}`
-    : spider.heroPhase === 'idle'
+    : closedEyes
       ? `${HERO_N_SPRITE_PREFIX}_closed`
       : `${HERO_N_SPRITE_PREFIX}_0_0`
   k.drawSprite({
@@ -1516,4 +1548,39 @@ function drawTitleHero(k, spider) {
     flipY: spider.isHeroU,
     opacity: spider.isHeroU ? spider.heroOpacity : 1
   })
+  spider.heroPhase === 'wakeOneEye' && drawHeroWakeEye(k, spider, cx, cy)
+  drawHeroNNotes(k, spider)
+}
+//
+// Draws the rising melody note glyphs above the idle hero-n's head.
+//
+function drawHeroNNotes(k, spider) {
+  if (!spider.heroNotes?.length) return
+  const fontName = CFG?.visual?.fonts?.regularFull
+  for (const note of spider.heroNotes) {
+    const fade = Math.max(0, Math.min(1, 1 - note.age / HERO_N_NOTE_LIFETIME))
+    k.drawText({
+      text: note.glyph,
+      pos: k.vec2(note.x, note.y),
+      size: HERO_N_NOTE_FONT_SIZE,
+      anchor: 'center',
+      color: k.rgb(255, 255, 255),
+      opacity: fade * 0.85,
+      font: fontName
+    })
+  }
+}
+//
+// Overlays one open eye (the right one) on the closed-eyes sprite during the
+// wake-up step: black ring, white eyeball and a pupil that wanders left and
+// right while the hero checks whether the coast is clear.
+//
+function drawHeroWakeEye(k, spider, cx, cy) {
+  const s = HERO_N_SPRITE_SCALE
+  const ex = cx - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_RIGHT_X * s
+  const ey = cy - HERO_N_SPRITE_SIZE / 2 + HERO_EYE_CANVAS_Y * s
+  const pupilDx = Math.sin(spider.heroWakeTimer * HERO_N_WAKE_PUPIL_FREQ * Math.PI * 2) * HERO_EYE_PUPIL_SHIFT * s
+  k.drawCircle({ pos: k.vec2(ex, ey), radius: HERO_EYE_RING_RADIUS * s, color: k.rgb(0, 0, 0) })
+  k.drawCircle({ pos: k.vec2(ex, ey), radius: HERO_EYE_WHITE_RADIUS * s, color: k.rgb(255, 255, 255) })
+  k.drawCircle({ pos: k.vec2(ex + pupilDx, ey), radius: HERO_EYE_PUPIL_RADIUS * s, color: k.rgb(0, 0, 0) })
 }

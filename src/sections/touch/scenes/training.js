@@ -241,7 +241,11 @@ const T_LETTER_Z = 22
 const T_LETTER_MASK_Z = 28
 const T_LETTER_MASK_W_RATIO = 1.3
 const T_LETTER_OUTLINE_THICKNESS = 3
-const T_LETTER_OUTLINE_OFFSETS = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+//
+// Drop shadow (single black copy offset right+down) — the same text shadow
+// style the glow level uses.
+//
+const T_LETTER_OUTLINE_OFFSETS = [[1, 1]]
 //
 // Lean angle (degrees clockwise) — makes the letter look stuck in the ground at a slant
 //
@@ -2010,12 +2014,11 @@ function showTrainingCompleteMessage(k, onDone) {
   const textX = k.width() / 2
   const textY = k.height() / 2
   const { r, g, b } = getRGB(k, TRAINING_LABEL_COLOR_HEX)
+  //
+  // Drop shadow (single black copy offset right+down) — the same text
+  // shadow style the glow level uses.
+  //
   const outlineOffsets = [
-    [-TRAINING_COMPLETE_OUTLINE_OFFSET, 0], [TRAINING_COMPLETE_OUTLINE_OFFSET, 0],
-    [0, -TRAINING_COMPLETE_OUTLINE_OFFSET], [0, TRAINING_COMPLETE_OUTLINE_OFFSET],
-    [-TRAINING_COMPLETE_OUTLINE_OFFSET, -TRAINING_COMPLETE_OUTLINE_OFFSET],
-    [TRAINING_COMPLETE_OUTLINE_OFFSET, -TRAINING_COMPLETE_OUTLINE_OFFSET],
-    [-TRAINING_COMPLETE_OUTLINE_OFFSET, TRAINING_COMPLETE_OUTLINE_OFFSET],
     [TRAINING_COMPLETE_OUTLINE_OFFSET, TRAINING_COMPLETE_OUTLINE_OFFSET]
   ]
   const nodes = outlineOffsets.map(([dx, dy]) => k.add([

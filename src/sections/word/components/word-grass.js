@@ -237,13 +237,9 @@ export function create(config) {
         const baseRotation = -5 + Math.random() * 10
       
       //
-      // Create outline by drawing black text multiple times with offsets
+      // Drop shadow (single black copy offset right+down), glow-level style.
       //
-      const outlineOffsets = [
-        [-1, -1], [0, -1], [1, -1],
-        [-1, 0],           [1, 0],
-        [-1, 1],  [0, 1],  [1, 1]
-      ]
+      const outlineOffsets = [[1, 1]]
       
       const outlineObjects = []
       outlineOffsets.forEach(([dx, dy]) => {

@@ -20,11 +20,11 @@ const WALL_OUTLINE_COLOR = '#000000'
 const CALM_COUNTDOWN_FONT_SIZE = 22
 const CALM_COUNTDOWN_OFFSET_X = 34
 const CALM_COUNTDOWN_OFFSET_Y = 48
-const CALM_COUNTDOWN_OUTLINE_OFFSETS = [
-  [-1, -1], [0, -1], [1, -1],
-  [-1, 0], [1, 0],
-  [-1, 1], [0, 1], [1, 1]
-]
+//
+// Drop shadow of the calm countdown (single black copy offset right+down) —
+// the same text shadow style the glow level uses.
+//
+const CALM_COUNTDOWN_OUTLINE_OFFSETS = [[1, 1]]
 
 /**
  * Creates the anti-hero finale controller (wall + movement sampling for monster pacing).

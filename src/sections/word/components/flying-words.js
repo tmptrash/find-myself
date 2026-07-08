@@ -22,13 +22,11 @@ const SPAWN_GRACE_DURATION = 2.0
 //
 const SPAWN_BUFFER = 100
 //
-// Thin outline — four diagonal offsets create a solid black stroke around killer words
+// Drop shadow of killer words (single black copy offset right+down) — the
+// same text shadow style the glow level uses.
 //
 const WORD_OUTLINE_SIZE = 1.2
 const WORD_OUTLINE_OFFSETS = [
-  [-WORD_OUTLINE_SIZE, -WORD_OUTLINE_SIZE],
-  [WORD_OUTLINE_SIZE, -WORD_OUTLINE_SIZE],
-  [-WORD_OUTLINE_SIZE, WORD_OUTLINE_SIZE],
   [WORD_OUTLINE_SIZE, WORD_OUTLINE_SIZE]
 ]
 //

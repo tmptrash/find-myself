@@ -9,12 +9,13 @@ import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import * as LevelHelp from '../../../utils/lesson-help.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
-import { drawMushroomToCanvas } from '../../../utils/draw-mushroom.js'
+import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT } from '../utils/cute-mushroom.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import {
   buildGlowTree,
   renderGlowTreeToCanvas,
   renderGlowTreeIntoContext,
+  renderGlowCanopyIntoContext,
   TREE_SEED
 } from '../utils/glow-tree.js'
 import {
@@ -23,8 +24,10 @@ import {
   getTreePaletteGray,
   getTreePaletteLit,
   getTreePaletteColor,
+  getTreePaletteAmber,
   buildDimmedTreePalette
 } from '../utils/glow-palette.js'
+import * as Grass from '../../../components/grass.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
 import * as Tooltip from '../../../utils/tooltip.js'
@@ -42,30 +45,32 @@ const LIGHT_GRAY = glowRgb('lightGray')
 const DECOR_GRAY = glowRgb('decorGray')
 const GRASS_GREEN = glowRgb('grassGreen')
 const WATER_COLOR = glowRgb('water')
-const SUN_CORE = glowRgb('sunCore')
-const SUN_BRIGHT = glowRgb('sunBright')
 const GLOW_GOLD_HEX = GLOW_PAL.gold
 const DIALOG_FILL = glowRgb('dialogFill')
 //
 // Colour-world backdrop split: sky above the ground line, dark earth below.
 //
-const SKY_COLOR = glowRgb('sky')
 const GROUND_DARK = glowRgb('groundDark')
+//
+// Golden haze the colour-world background forest dissolves into.
+//
+const WARM_HAZE = glowRgb('warmHaze')
 //
 // Dark rim tone for gray decor (rocks, trampoline) in the colour world.
 //
 const DECOR_OUTLINE_RGB = glowRgb('decorOutline')
-const MUSHROOM_CAP_COLORS = GLOW_PAL.mushrooms.map(hex => {
-  const c = glowRgb(hex)
-  return [c.r, c.g, c.b]
-})
 //
-// Dark counterpart of each cap colour — mushroom outlines in the colour world.
+// Cap colour families for the cute decor mushrooms (palette hex sets): the
+// cap tone, its dark counterpart (shading) and a lighter highlight tone.
 //
-const MUSHROOM_CAP_DARK_COLORS = GLOW_PAL.mushroomsDark.map(hex => {
-  const c = glowRgb(hex)
-  return [c.r, c.g, c.b]
-})
+const MUSHROOM_CAP_HEX = GLOW_PAL.mushrooms
+const MUSHROOM_CAP_DARK_HEX = GLOW_PAL.mushroomsDark
+const MUSHROOM_CAP_LIGHT_HEX = GLOW_PAL.mushroomsLight
+//
+// Cute mushroom palette sets: full colour and the gray-family mirror.
+//
+const CUTE_MUSH_COLORS = GLOW_PAL.cuteMushroom
+const CUTE_MUSH_GRAY_COLORS = GLOW_PAL.cuteMushroomGray
 //
 // Layout.
 //
@@ -102,27 +107,12 @@ const TREE_SPRITE_NAME = 'glow0-tree-sprite'
 const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
 const TRUNK_EXCLUDE_HALF = 50
 //
-// Sun — value 4 mid-distance decoration; trees near it are kept shorter.
+// Combined background sprites — ONE full-screen image per mode holding all
+// three tree planes, all three bush strips, the underground decor and the
+// dark earth band, so the whole backdrop costs two draw calls at most.
 //
-const SUN_X = SCREEN_W - RIGHT_MARGIN - 100
-const SUN_Y = TOP_MARGIN + 80
-const SUN_RADIUS = 44
-const SUN_HALO_EXTRA = 14
-const SUN_HALO_SPRITE = 'glow0-sun-halo'
-//
-// Keep-clear zone around the sun: parallax trees in this X band are capped so
-// their whole canopy (which reaches above the trunk apex) ends below the sun.
-//
-const SUN_ZONE_X = SUN_X - SUN_RADIUS - 110
-const SUN_CANOPY_CLEARANCE = 130
-const SUN_MAX_TOP_Y = SUN_Y + SUN_RADIUS + SUN_CANOPY_CLEARANCE
-//
-// Parallax sprites — two background planes of big trees (gray + colour).
-//
-const PAR_NEAR_SPRITE = 'glow0-par-near'
-const PAR_NEAR_COLOR_SPRITE = 'glow0-par-near-color'
-const PAR_FAR_SPRITE = 'glow0-par-far'
-const PAR_FAR_COLOR_SPRITE = 'glow0-par-far-color'
+const BG_COMBINED_GRAY_SPRITE = 'glow0-bg-gray'
+const BG_COMBINED_COLOR_SPRITE = 'glow0-bg-color'
 const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-sprite'
 //
 // Horizontal branch platform.
@@ -175,9 +165,9 @@ const O_PLAT_OFFSET_Y = 105
 //
 const O_LETTER_RAISE_Y = 7
 //
-// The L letter floats 6 px higher above its log than the default placement.
+// The L letter floats 9 px higher above its log than the default placement.
 //
-const L_LETTER_RAISE_Y = 6
+const L_LETTER_RAISE_Y = 9
 const BONUS_PLAT_OFFSET_X = 100
 //
 // Hidden bonus platform sits noticeably lower so it is reachable by jump.
@@ -185,22 +175,31 @@ const BONUS_PLAT_OFFSET_X = 100
 const BONUS_PLAT_OFFSET_Y = 40
 const BONUS_PLAT_W = 90
 //
-// Background forest — ONE plane of big trees baked and drawn fully OPAQUE.
-// Depth comes from colour only: the tones are pre-blended toward the backdrop
-// (gray mode → playfield gray, colour mode → sky) before baking, so the
-// forest reads dimmer without any draw transparency.
+// Background forest — three planes of big trees baked and drawn fully
+// OPAQUE. Depth comes from colour only: the tones are pre-blended toward the
+// backdrop before baking. Gray mode blends every row toward the playfield
+// gray; the colour mode blends toward the warm orange haze, so each deeper
+// row reads more orange and brighter — like the reference forest picture.
 //
 const PAR_L1_BG_BLEND = 0.62
+const PAR_L1_COLOR_BLEND = 0.3
 //
 // Second (far) plane behind the near one — dimmer still, foliage collapsed
 // to a single tone.
 //
 const PAR_L2_BG_BLEND = 0.87
+const PAR_L2_COLOR_BLEND = 0.55
+//
+// Third (farthest) plane — almost dissolved into the backdrop haze.
+//
+const PAR_L3_BG_BLEND = 0.94
+const PAR_L3_COLOR_BLEND = 0.78
 //
 // Far-plane foliage is pushed slightly toward the darkest swatch so the
 // leaves stay readable against the backdrop after L (never fully vanish).
 //
 const PAR_FAR_LEAF_DARKEN = 0.1
+const PAR_FARTHEST_LEAF_DARKEN = 0.14
 //
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
@@ -213,23 +212,49 @@ const PAR_TRUNK_BOTTOM_Y = FLOOR_Y + PAR_BIG_GROUND_SINK
 // generator as the main tree (wider trunks, no roots, no hero branch), all
 // baked onto one shared full-screen canvas per mode, drawn behind the main tree.
 //
-const PAR_BIG_TREE_COUNT = 5
+const PAR_BIG_TREE_COUNT = 6
 const PAR_BIG_SEED_BASE = 40000
-const PAR_FAR_TREE_COUNT = 6
+const PAR_FAR_TREE_COUNT = 7
 const PAR_FAR_SEED_BASE = 50000
+const PAR_FARTHEST_TREE_COUNT = 8
+const PAR_FARTHEST_SEED_BASE = 60000
 const PAR_BIG_SEED_STEP = 101
+//
+// Row heights: the near (1st) row holds the tallest trees, the far (2nd) row
+// sits lower, the farthest (3rd) row is the lowest of all. The steps are
+// kept tight so even the lowest crown stays well above the screen middle —
+// the horizontal centre band shows only bare trunks, no foliage.
+//
 const PAR_BIG_TOP_MIN_Y = TREE_TOP_Y - 20
-const PAR_BIG_TOP_RANGE = 130
-const PAR_FAR_TOP_MIN_Y = TREE_TOP_Y - 40
-const PAR_FAR_TOP_RANGE = 160
+const PAR_BIG_TOP_RANGE = 110
+const PAR_FAR_TOP_MIN_Y = TREE_TOP_Y + 70
+const PAR_FAR_TOP_RANGE = 90
+const PAR_FARTHEST_TOP_MIN_Y = TREE_TOP_Y + 140
+const PAR_FARTHEST_TOP_RANGE = 80
 const PAR_BIG_WIDTH_SCALE_MIN = 1.1
 const PAR_BIG_WIDTH_SCALE_RANGE = 0.3
 //
-// Centre clearing: no background trees at all within one sixth of the game
-// zone on each side of the main tree; beyond the band they grow at full
-// height with no restriction.
+// Background-tree branches sprout only from the very top band of the trunk
+// and grow upward, so all the foliage gathers at the crown and never dips
+// into the screen middle.
 //
-const PAR_CENTER_CLEAR_HALF = Math.round((SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN) / 6)
+const PAR_BRANCH_FRAC_MIN = 0.78
+const PAR_BRANCH_FRAC_MAX = 0.97
+//
+// Lush baked canopy per row: a dense elliptical leaf cloud around every
+// trunk apex. Neighbouring crowns merge into one leaf band, so the top of
+// the screen is covered by foliage while the middle keeps only bare trunks.
+//
+const PAR_BIG_CANOPY_RX = 215
+const PAR_BIG_CANOPY_RY = 150
+const PAR_BIG_CANOPY_COUNT = 420
+const PAR_FAR_CANOPY_RX = 180
+const PAR_FAR_CANOPY_RY = 125
+const PAR_FAR_CANOPY_COUNT = 340
+const PAR_FARTHEST_CANOPY_RX = 150
+const PAR_FARTHEST_CANOPY_RY = 105
+const PAR_FARTHEST_CANOPY_COUNT = 280
+const PAR_CANOPY_SEED_OFFSET = 7
 //
 // Forest fade-in duration (s) after the L letter reveals the parallax plane.
 //
@@ -242,29 +267,43 @@ const PAR_TREE_EDGE_PAD = 30
 const PAR_TREE_STEP_MIN_FRAC = 0.55
 const PAR_TREE_STEP_RANGE_FRAC = 0.9
 //
-// Background bushes — overlapping circles cut by the ground line, drawn IN
-// FRONT of the tree planes: leaf tone of the near trees in the gray world,
-// dark bark tone of the background trees in the colour world.
+// Background bushes — leafy mounds cut by the ground line, drawn IN FRONT of
+// the tree planes. Each mound is a filled dome scattered with small oval
+// leaves (a different leaf shape than the tree teardrops), so the strip
+// reads as real bushes instead of plain semicircles — in every mode.
 //
-const BUSH_GRAY_SPRITE = 'glow0-bush-gray'
-const BUSH_GREEN_SPRITE = 'glow0-bush-green'
-const BUSH_FAR_GRAY_SPRITE = 'glow0-bush-far-gray'
-const BUSH_FAR_GREEN_SPRITE = 'glow0-bush-far-green'
 const BUSH_RADIUS_MIN = 44
 const BUSH_RADIUS_MAX = 125
 const BUSH_STEP_MIN_FRAC = 0.45
 const BUSH_STEP_RANGE_FRAC = 0.5
 //
-// Bush tinting: a light green cast on every bush. The near strip matches the
-// trunk tone of the near tree plane exactly; the far strip is taller and
-// takes the leaf tone of the far tree plane.
+// Bush leaf texture: oval leaves scattered across each dome plus a ragged
+// leafy rim along the arc. Shades vary only in brightness (darkened base
+// tone), so the colour composition of every strip stays unchanged.
 //
-const BUSH_GREEN_TINT = 0.16
-const BUSH_FAR_HEIGHT_SCALE = 1.6
+const BUSH_LEAF_SIZE_MIN = 9
+const BUSH_LEAF_SIZE_RANGE = 8
+const BUSH_LEAF_DENSITY = 0.014
+const BUSH_RIM_LEAF_SPACING = 14
+const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
 //
-// Background birds — dim silhouettes gliding across the sky BEHIND the
-// forest planes; they appear with the colour world (after O). Their tone is
-// blended almost all the way into the sky so they read as faint specks.
+// Colour-world bush tones: the near (1st) strip stays slightly green and a
+// touch bright; the 2nd and 3rd strips reuse the exact flat orange trunk
+// tone of their tree row (see buildParallaxSprites), so trees and bushes of
+// one row always match. The gray world keeps every bush inside the gray family.
+//
+const BUSH_COLOR_HAZE_BLEND_NEAR = 0.15
+//
+// Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
+// lowest, each deeper strip is ~25% taller than the previous one. Even the
+// tallest strip stays below the screen-middle band, keeping it leaf-free.
+//
+const BUSH_FAR_HEIGHT_SCALE = 1.25
+const BUSH_FARTHEST_HEIGHT_SCALE = 1.56
+//
+// Background birds — dim silhouettes gliding BEHIND the forest planes; they
+// appear with the colour world (after O). Their tone is blended almost all
+// the way into the warm haze backdrop so they read as faint specks.
 //
 const BIRD_COUNT = 5
 const BIRD_MIN_Y = TOP_MARGIN + 10
@@ -278,7 +317,7 @@ const BIRD_FLAP_SPEED_RANGE = 3
 const BIRD_BOB_AMP = 9
 const BIRD_WRAP_PAD = 40
 const BIRD_LINE_WIDTH = 2
-const BIRD_SKY_BLEND = 0.72
+const BIRD_HAZE_BLEND = 0.72
 //
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
 // hanging rootlets and a fossil spiral (no burrows or holes). Baked once per
@@ -318,13 +357,14 @@ const DROWN_FADE_OUT_SPEED = 2.4
 //
 const GLOW_LETTER_FONT = 'JetBrains Mono'
 const GLOW_LETTER_SIZE = 68
-const GLOW_LETTER_OUTLINE = 2
 //
-// Pure black rim around every pickup letter (G, L, O, W).
+// Pure black drop shadow behind every pickup letter (G, L, O, W): a single
+// copy of the glyph offset right+down, like classic pixel-text shadows.
 //
-const GLOW_LETTER_OUTLINE_R = 0
-const GLOW_LETTER_OUTLINE_G = 0
-const GLOW_LETTER_OUTLINE_B = 0
+const GLOW_LETTER_SHADOW = 2
+const GLOW_LETTER_SHADOW_R = 0
+const GLOW_LETTER_SHADOW_G = 0
+const GLOW_LETTER_SHADOW_B = 0
 const GLOW_LETTER_TILT = 12
 const GLOW_LETTER_PULSE_SPEED = 1.8
 const GLOW_LETTER_PULSE_MIN = 0.35
@@ -350,7 +390,11 @@ const KEY_REVEALED_WATER = 'glow.revealedWater'
 const KEY_REVEALED_L = 'glow.revealedL'
 const KEY_REVEALED_W = 'glow.revealedW'
 const KEY_REVEALED_O = 'glow.revealedO'
-const KEY_REVEALED_L_SUN = 'glow.revealedLSun'
+//
+// First step of the two-step L reveal (ground darkening + reveal chime).
+// The storage key keeps its historical name so old saves stay valid.
+//
+const KEY_REVEALED_L_LIT = 'glow.revealedLSun'
 const KEY_REVEALED_L_PLAT = 'glow.revealedLPlat'
 const KEY_REVEALED_GROUND_DECOR = 'glow.revealedGroundDecor'
 const KEY_REVEALED_GROUND_DECOR_RIGHT = 'glow.revealedGroundDecorRight'
@@ -363,7 +407,7 @@ const KEY_INTRO_SHOWN = 'glow.introShown'
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = 'Just [hl]Go[/hl]... Sometimes the first\nstep is all you have to do.'
+const GLOW_DIALOG_G = '[hl]G[/hl]round is beneath you. Every\njourney begins with a single step.\nKeep your research.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades. The\nworld is rarely just black or white'
 const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Find [hl]W[/hl] by yourself.'
 //
@@ -374,12 +418,22 @@ const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you ne
 const HINT_INTRO_1_TEXT = 'I\'m Yuna. You don\'t need\nanswers yet. Just be curious.'
 const HINT_INTRO_1_DURATION = 6
 const HINT_INTRO_2_TEXT = 'To truly see this world, you\'ll\nneed to collect every letter of\nthe word GLOW. Each one will\nreveal another part of what\nyour eyes have yet to discover.\nUse the mouse to learn more\nabout the world around you.'
-const HINT_INTRO_2_DURATION = 10
+const HINT_INTRO_2_DURATION = 13
 const HINT_GROUND_RIGHT_TEXT = 'Curiosity lights the\nway. Keep walking'
 const HINT_WATER_TEXT = 'The unknown isn\'t empty.\nIt simply hasn\'t been\ndiscovered yet'
 const HINT_ZONE_DURATION = 5
 const HINT_DROWN_TEXT = 'That\'s not bad. Now you\nknow you can\'t go here.'
 const HINT_DROWN_DURATION = 4
+//
+// Repeat drownings get a random self-ironic joke over the sinking hero.
+//
+const DROWN_JOKES = [
+  'But I\'m still so young...',
+  'Tell the birds\nmy story...',
+  'Note to self:\nI am not a fish.',
+  'Okay, the lake wins.\nThis round.',
+  'I regret nothing.\nWell... one thing.'
+]
 //
 // After L the gray root zone darkens toward void by this amount.
 //
@@ -401,11 +455,25 @@ const MEDITATION_IDLE_PENALTY = 2
 const MEDITATION_COUNTDOWN = 10
 const MEDITATION_TIMER_FONT = 22
 //
-// Hero hover tooltip — the hero introduces herself.
+// Hero hover tooltip — the line follows how much colour the hero can see:
+// plain gray world, gray shades after L, full colour after O.
 //
-const HERO_TOOLTIP_TEXT = "Hi, I'm Yuna"
+const HERO_TOOLTIP_TEXT_GRAY = "Hi, I'm Yuna"
+const HERO_TOOLTIP_TEXT_SHADES = 'Wow! So many\ndetails around!'
+const HERO_TOOLTIP_TEXT_COLOR = 'I never thought the world\ncould be this beautiful'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
+//
+// G letter hover tooltip — a playful nudge to simply touch the letter.
+//
+const G_TOOLTIP_TEXT = "Ground? Glow? Geometry?\nDon't think too much.\nJust touch it."
+const G_TOOLTIP_HOVER_SIZE = 70
+const G_TOOLTIP_Y_OFFSET = -80
+//
+// While the hero stands on the start branch and G is still uncollected his
+// eyes stay locked on the letter (vertical slack around the branch top).
+//
+const GAZE_BRANCH_Y_TOLERANCE = 60
 //
 // HUD small-hero hover tooltip (same as touch lesson 0).
 //
@@ -430,10 +498,11 @@ const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
 const BONUS_HINT_DURATION = 6
 //
-// Pause between picking up the final W letter and returning to the menu,
-// followed by a full-screen fade-out before the scene switch.
+// After picking up the final W letter the hero shares a closing line for a
+// few seconds, then a full-screen fade-out leads back to the menu.
 //
-const W_MENU_TRANSITION_DELAY = 2.5
+const HINT_W_TEXT = 'Now I see everything.\nI\'m ready to move on.'
+const HINT_W_DURATION = 4
 const W_MENU_FADE_DURATION = 1.2
 const W_MENU_FADE_Z = 1000
 //
@@ -474,18 +543,6 @@ const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 //
 const GRASS_Z = 20
 const GRASS_TUFT_COUNT = 26
-const GRASS_TUFT_BLADES_MIN = 3
-const GRASS_TUFT_BLADES_RANGE = 4
-const GRASS_TUFT_SPREAD = 14
-const GRASS_BLADE_VARIANTS = 5
-const GRASS_BLADE_W = 14
-const GRASS_BLADE_H = 34
-const GRASS_BLADE_SCALE_MIN = 0.55
-const GRASS_BLADE_SCALE_RANGE = 0.65
-const GRASS_SWAY_DEG = 4
-const GRASS_SWAY_SPEED_MIN = 0.8
-const GRASS_SWAY_SPEED_RANGE = 0.7
-const GRASS_SPRITE_PREFIX = 'glow0-grass-blade-'
 //
 // Rocks.
 //
@@ -497,20 +554,34 @@ const SCATTER_ROCK_RADIUS_MAX = 24
 // Mushrooms.
 //
 const MUSHROOM_COUNT = 4
-const MUSHROOM_CAP_W_MIN = 18
-const MUSHROOM_CAP_W_MAX = 32
-const MUSHROOM_STEM_H_MIN = 10
-const MUSHROOM_STEM_H_MAX = 22
+const MUSHROOM_CAP_W_MIN = 22
+const MUSHROOM_CAP_W_MAX = 38
 const MUSHROOM_EXTRA_LOWER = 2
 //
-// Mushroom trampoline — right of the L platform.
+// Mushroom trampoline — right of the L platform. A cute chubby mushroom with
+// a blushy face; the eyes blink by swapping pre-baked open/closed variants.
 //
 const TRAMP_CAP_W = 56
-const TRAMP_CAP_H = 24
-const TRAMP_STEM_H = 34
-const TRAMP_STEM_W = 16
-const TRAMP_TOTAL_W = Math.ceil(TRAMP_CAP_W + 4)
-const TRAMP_TOTAL_H = Math.ceil(TRAMP_CAP_H + TRAMP_STEM_H + 4)
+const TRAMP_W = 70
+const TRAMP_TOTAL_W = TRAMP_W + 4
+const TRAMP_TOTAL_H = Math.ceil(TRAMP_W * CUTE_MUSHROOM_ASPECT) + 4
+//
+// No grass grows in front of the trampoline mushroom — blades this close to
+// its centre are skipped so nothing covers the face.
+//
+const TRAMP_GRASS_CLEAR_HALF = TRAMP_TOTAL_W / 2 + 12
+//
+// Small decor mushrooms keep the same distance from the trampoline centre —
+// wide enough that even the widest cap never overlaps the trampoline face.
+//
+const TRAMP_MUSHROOM_CLEAR_HALF = TRAMP_TOTAL_W / 2 + MUSHROOM_CAP_W_MAX / 2 + 10
+//
+// Blinking: random pause between blinks, short eyelid-down hold.
+//
+const TRAMP_BLINK_SPRITE_SUFFIX = '-blink'
+const TRAMP_BLINK_MIN_INTERVAL = 2.5
+const TRAMP_BLINK_MAX_INTERVAL = 6
+const TRAMP_BLINK_DURATION = 0.14
 //
 // Launch velocity tuned so the bounce apex is 30% lower than the original
 // 1350 px/s launch (height scales with velocity squared: 1350 * sqrt(0.7)).
@@ -530,9 +601,9 @@ const DECOR_OUTLINE_SUFFIX = '-o'
 const DECOR_OUTLINE_WIDTH = 1
 const TRAMP_OUTLINE_SPRITE = TRAMP_SPRITE + DECOR_OUTLINE_SUFFIX
 //
-// Sink the trampoline sprite 1 px into the ground so it does not float.
+// Sink the trampoline sprite 2 px into the ground so it does not float.
 //
-const TRAMP_SINK_Y = 1
+const TRAMP_SINK_Y = 2
 //
 // Lake. The right edge is trimmed a little so the water ends just before
 // the shore rock instead of poking past it.
@@ -623,10 +694,12 @@ export function sceneGlowLevel0(k) {
     k.loadSprite(TREE_COLOR_SPRITE_NAME, treeColorCanvas)
     treeColorCanvas.width = 0
     treeColorCanvas.height = 0
-    buildParallaxSprites(k)
-    loadBushSprites(k)
-    loadUndergroundSprites(k)
-    loadSunHaloSprite(k)
+    //
+    // Underground decor first: its generated spec is baked both into the
+    // standalone sprites (visible before L) and into the combined background.
+    //
+    const undergroundSpec = loadUndergroundSprites(k)
+    buildParallaxSprites(k, undergroundSpec)
     const initialGraySprite = zones.lCollected ? TREE_LIT_SPRITE_NAME : TREE_SPRITE_NAME
     const treeObj = k.add([
       k.sprite(initialGraySprite),
@@ -717,9 +790,9 @@ export function sceneGlowLevel0(k) {
     oLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
-    const grassLayer = createGlowGrass(k, lakeX1, waterX2, zones)
+    const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, zones)
     const rockObjs = createGlowRocks(k, horizBranch.x1, rightPlatX, zones)
-    const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, zones)
+    const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, zones)
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createDrownMask(k, lakeX1, lakeX2, zones)
     initTouchInput(k)
@@ -914,6 +987,14 @@ function finishGlowIntro(inst) {
   }
 }
 //
+// Picks the hero tooltip line matching how much colour the world shows.
+//
+function heroTooltipText(inst) {
+  if (inst.zones.oCollected || inst.zones.colorWorld) return HERO_TOOLTIP_TEXT_COLOR
+  if (inst.zones.lCollected) return HERO_TOOLTIP_TEXT_SHADES
+  return HERO_TOOLTIP_TEXT_GRAY
+}
+//
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the small
 // hero (fragments), the life icon (the "teacher") and the GLOW word.
 // Each target only activates once its HUD element has been revealed.
@@ -926,9 +1007,13 @@ function createSmallHeroTooltip(inst) {
       y: () => inst.heroInst?.character?.pos?.y ?? -1000,
       width: HERO_TOOLTIP_HOVER_SIZE,
       height: HERO_TOOLTIP_HOVER_SIZE,
-      text: HERO_TOOLTIP_TEXT,
+      text: () => heroTooltipText(inst),
       offsetY: HERO_TOOLTIP_Y_OFFSET,
-      visible: () => !inst.drowning && !inst.dialogOpen
+      //
+      // Suppressed while any speech-bubble hint is on screen so two bubbles
+      // never fight above the hero's head.
+      //
+      visible: () => !inst.drowning && !inst.dialogOpen && !HeroHint.isActive(inst.heroHint)
     }, {
       x: () => inst.levelIndicator?.smallHero?.character?.pos?.x ?? -1000,
       y: () => inst.levelIndicator?.smallHero?.character?.pos?.y ?? -1000,
@@ -958,6 +1043,17 @@ function createSmallHeroTooltip(inst) {
       // The GLOW word only exists in the HUD once the G letter names it.
       //
       visible: () => Boolean(inst.levelIndicator) && inst.zones.gCollected
+    }, {
+      x: () => inst.gLetter?.x ?? -1000,
+      y: () => inst.gLetter?.y ?? -1000,
+      width: G_TOOLTIP_HOVER_SIZE,
+      height: G_TOOLTIP_HOVER_SIZE,
+      text: G_TOOLTIP_TEXT,
+      offsetY: G_TOOLTIP_Y_OFFSET,
+      //
+      // Only while the G letter is visible and not yet collected.
+      //
+      visible: () => Boolean(inst.gLetter && !inst.gLetter.main.hidden && !inst.zones.gCollected)
     }]
   })
 }
@@ -1001,7 +1097,7 @@ function loadGlowZones() {
   //
   const groundDecorLeft = get(KEY_REVEALED_GROUND_DECOR_LEFT, false) || get(KEY_REVEALED_WATER, false)
   const lZoneParallax = gCollected && lCollected && get(KEY_REVEALED_L, false)
-  const lZoneSun = gCollected && lCollected && (get(KEY_REVEALED_L_SUN, false) || lCollected)
+  const lZoneLit = gCollected && lCollected && (get(KEY_REVEALED_L_LIT, false) || lCollected)
   const lPlatRevealed = gCollected && (get(KEY_REVEALED_L_PLAT, false) || lCollected)
   const oZone = gCollected && lCollected && (get(KEY_REVEALED_O, false) || oCollected)
   const wZone = gCollected && lCollected && oCollected && (get(KEY_REVEALED_W, false) || wCollected)
@@ -1019,10 +1115,10 @@ function loadGlowZones() {
     groundBg: get(KEY_REVEALED_GROUND_BG, false) || colorWorld,
     water: get(KEY_REVEALED_WATER, false),
     waterRocks: get(KEY_REVEALED_WATER, false),
-    lZoneSun,
+    lZoneLit,
     lZoneParallax,
     lPlatRevealed,
-    lZone: lZoneSun || lZoneParallax,
+    lZone: lZoneLit || lZoneParallax,
     wZone,
     oZone,
     colorWorld
@@ -1103,7 +1199,7 @@ function applyZoneVisibility(inst) {
   inst.mushObjs.forEach(o => {
     setDecorObjVisible(o, o._side === 'left' ? z.groundDecorLeft : z.groundDecorRight)
   })
-  inst.grassLayer.hidden = !z.groundDecorRight && !z.groundDecorLeft
+  inst.grassLayer.layer.hidden = !z.groundDecorRight && !z.groundDecorLeft
   rebuildWoodSurfaces(inst)
 }
 //
@@ -1172,12 +1268,6 @@ function buildParallaxTreeXs(count, gameLeft, gameRight) {
   return xs
 }
 //
-// Centre clearing test: true inside the tree-free band around the main tree.
-//
-function isInCenterClearBand(treeX) {
-  return Math.abs(treeX - TREE_X) <= PAR_CENTER_CLEAR_HALF
-}
-//
 // Linearly blends two RGB triplets.
 //
 function lerpRgb(a, b, t) {
@@ -1211,86 +1301,16 @@ function grayDecorTint(sc) {
   }
 }
 //
-// Preloads a radial spectrum halo sprite for the sun (half the previous size).
+// Builds the combined background — ONE full-screen canvas per mode (gray +
+// colour) holding all three tree planes interleaved with all three bush
+// strips, plus the dark earth band and the underground decor of the root
+// zone. Everything is baked once and drawn as a single opaque image per
+// mode, so the whole backdrop costs at most two draw calls per frame. Each
+// deeper plane is dimmer and lower; in the colour world the near row keeps
+// the green foreground foliage while the deeper rows dissolve into the warm
+// amber haze, so each farther row reads more orange and brighter.
 //
-function loadSunHaloSprite(k) {
-  const outerR = SUN_RADIUS + SUN_HALO_EXTRA
-  const size = outerR * 2 + 4
-  const cx = size / 2
-  const cy = size / 2
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  const grad = ctx.createRadialGradient(cx, cy, SUN_RADIUS * 0.82, cx, cy, outerR)
-  const haloStops = [
-    [0, GLOW_PAL.sunHalo[0], 0.38],
-    [0.18, GLOW_PAL.sunHalo[1], 0.3],
-    [0.36, GLOW_PAL.sunHalo[2], 0.22],
-    [0.52, GLOW_PAL.sunHalo[3], 0.16],
-    [0.68, GLOW_PAL.sunHalo[4], 0.12],
-    [0.84, GLOW_PAL.sunHalo[5], 0.08],
-    [1, GLOW_PAL.sunHalo[6], 0]
-  ]
-  haloStops.forEach(([pos, hex, alpha]) => {
-    const c = glowRgb(hex)
-    grad.addColorStop(pos, `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`)
-  })
-  ctx.fillStyle = grad
-  ctx.beginPath()
-  ctx.arc(cx, cy, outerR, 0, Math.PI * 2)
-  ctx.fill()
-  k.loadSprite(SUN_HALO_SPRITE, canvas)
-  canvas.width = 0
-  canvas.height = 0
-}
-//
-// Caps trunk top Y so trees in the sun zone stay below the sun disc.
-//
-function capTrunkTopForSun(treeX, trunkTopY) {
-  if (treeX < SUN_ZONE_X) return trunkTopY
-  return Math.max(trunkTopY, SUN_MAX_TOP_Y)
-}
-//
-// Builds the background forest — two planes of big glow trees baked with
-// pre-dimmed tones (gray + colour variants), drawn fully opaque. The far
-// plane is dimmer and its foliage is painted with a single flat tone.
-//
-function buildParallaxSprites(k) {
-  bakeGlowTreePlane(k, {
-    grayName: PAR_FAR_SPRITE,
-    colorName: PAR_FAR_COLOR_SPRITE,
-    count: PAR_FAR_TREE_COUNT,
-    seedBase: PAR_FAR_SEED_BASE,
-    topMinY: PAR_FAR_TOP_MIN_Y,
-    topRange: PAR_FAR_TOP_RANGE,
-    bgBlend: PAR_L2_BG_BLEND,
-    flatLeaves: true,
-    leafDarken: PAR_FAR_LEAF_DARKEN
-  })
-  bakeGlowTreePlane(k, {
-    grayName: PAR_NEAR_SPRITE,
-    colorName: PAR_NEAR_COLOR_SPRITE,
-    count: PAR_BIG_TREE_COUNT,
-    seedBase: PAR_BIG_SEED_BASE,
-    topMinY: PAR_BIG_TOP_MIN_Y,
-    topRange: PAR_BIG_TOP_RANGE,
-    bgBlend: PAR_L1_BG_BLEND,
-    flatLeaves: false,
-    leafDarken: 0
-  })
-}
-//
-// Bakes one parallax plane: BIG trees generated with the same glow-tree
-// algorithm as the main tree (wider trunks, no roots, no hero branch). All
-// trees of the layer share ONE full-screen canvas per mode; the tones are
-// pre-blended toward the backdrop so the sprite is drawn opaque — gray tones
-// in the gray world, sky-tinted gray tones in the colour world. Trees shrink
-// toward the centre of the screen and vanish inside the clear band around
-// the main tree.
-//
-function bakeGlowTreePlane(k, planeCfg) {
-  const { grayName, colorName, count, seedBase, topMinY, topRange, bgBlend, flatLeaves, leafDarken } = planeCfg
+function buildParallaxSprites(k, undergroundSpec) {
   const grayCanvas = document.createElement('canvas')
   grayCanvas.width = SCREEN_W
   grayCanvas.height = SCREEN_H
@@ -1300,28 +1320,154 @@ function bakeGlowTreePlane(k, planeCfg) {
   colorCanvas.height = SCREEN_H
   const colorCtx = colorCanvas.getContext('2d')
   //
-  // Both modes keep the background forest gray (never green): the colour-mode
-  // palette is the same gray tree palette blended toward the sky colour.
+  // Depth order, back to front: farthest bushes → farthest plane → far
+  // bushes → far plane → near plane → near bushes.
   //
-  const grayPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, bgBlend, flatLeaves, leafDarken)
-  const colorPal = buildDimmedTreePalette(getTreePaletteGray(), SKY_COLOR, bgBlend, flatLeaves, leafDarken)
+  const bushColorBase = glowRgb(GLOW_PAL.treeColor.leaf)
+  const grayNearPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L1_BG_BLEND)
+  const grayFarPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L2_BG_BLEND, true, PAR_FAR_LEAF_DARKEN)
+  const grayFarthestPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L3_BG_BLEND, true, PAR_FARTHEST_LEAF_DARKEN)
+  //
+  // Colour-world tones of the 2nd and 3rd rows: uniform-wood amber palettes
+  // whose trunk tone IS the single flat orange of the whole row — the far
+  // bushes reuse exactly these tones, so trees and bushes of one row match.
+  //
+  const colorFarPal = buildDimmedTreePalette(getTreePaletteAmber(), WARM_HAZE, PAR_L2_COLOR_BLEND, true, 0, true)
+  const colorFarthestPal = buildDimmedTreePalette(getTreePaletteAmber(), WARM_HAZE, PAR_L3_COLOR_BLEND, true, 0, true)
+  renderBushStrip(grayCtx, colorCtx, {
+    grayRgb: { r: grayFarthestPal.leafR, g: grayFarthestPal.leafG, b: grayFarthestPal.leafB },
+    colorRgb: { r: colorFarthestPal.trunkR, g: colorFarthestPal.trunkG, b: colorFarthestPal.trunkB },
+    colorFlat: true,
+    heightScale: BUSH_FARTHEST_HEIGHT_SCALE
+  })
+  renderGlowTreePlane(grayCtx, colorCtx, {
+    count: PAR_FARTHEST_TREE_COUNT,
+    seedBase: PAR_FARTHEST_SEED_BASE,
+    topMinY: PAR_FARTHEST_TOP_MIN_Y,
+    topRange: PAR_FARTHEST_TOP_RANGE,
+    grayBlend: PAR_L3_BG_BLEND,
+    colorBase: getTreePaletteAmber(),
+    colorBlend: PAR_L3_COLOR_BLEND,
+    flatLeaves: true,
+    leafDarken: PAR_FARTHEST_LEAF_DARKEN,
+    uniformColorWood: true,
+    canopyRx: PAR_FARTHEST_CANOPY_RX,
+    canopyRy: PAR_FARTHEST_CANOPY_RY,
+    canopyCount: PAR_FARTHEST_CANOPY_COUNT
+  })
+  renderBushStrip(grayCtx, colorCtx, {
+    grayRgb: { r: grayFarPal.leafR, g: grayFarPal.leafG, b: grayFarPal.leafB },
+    colorRgb: { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
+    colorFlat: true,
+    heightScale: BUSH_FAR_HEIGHT_SCALE
+  })
+  renderGlowTreePlane(grayCtx, colorCtx, {
+    count: PAR_FAR_TREE_COUNT,
+    seedBase: PAR_FAR_SEED_BASE,
+    topMinY: PAR_FAR_TOP_MIN_Y,
+    topRange: PAR_FAR_TOP_RANGE,
+    grayBlend: PAR_L2_BG_BLEND,
+    colorBase: getTreePaletteAmber(),
+    colorBlend: PAR_L2_COLOR_BLEND,
+    flatLeaves: true,
+    leafDarken: PAR_FAR_LEAF_DARKEN,
+    uniformColorWood: true,
+    canopyRx: PAR_FAR_CANOPY_RX,
+    canopyRy: PAR_FAR_CANOPY_RY,
+    canopyCount: PAR_FAR_CANOPY_COUNT
+  })
+  renderGlowTreePlane(grayCtx, colorCtx, {
+    count: PAR_BIG_TREE_COUNT,
+    seedBase: PAR_BIG_SEED_BASE,
+    topMinY: PAR_BIG_TOP_MIN_Y,
+    topRange: PAR_BIG_TOP_RANGE,
+    grayBlend: PAR_L1_BG_BLEND,
+    colorBase: getTreePaletteColor(),
+    colorBlend: PAR_L1_COLOR_BLEND,
+    flatLeaves: false,
+    leafDarken: 0,
+    uniformColorWood: false,
+    canopyRx: PAR_BIG_CANOPY_RX,
+    canopyRy: PAR_BIG_CANOPY_RY,
+    canopyCount: PAR_BIG_CANOPY_COUNT
+  })
+  renderBushStrip(grayCtx, colorCtx, {
+    grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
+    colorRgb: lerpRgb(bushColorBase, WARM_HAZE, BUSH_COLOR_HAZE_BLEND_NEAR),
+    colorFlat: false,
+    heightScale: 1
+  })
+  //
+  // Nothing below the ground line — trunks must never cross the ground band.
+  // The cleared root zone is then filled with the earth band plus the
+  // underground decor, matching the backdrop tones the image lies on: the
+  // gray band uses the after-L darkened gray (the image only exists after
+  // L), the colour band uses the dark colour-world earth.
+  //
+  grayCtx.clearRect(0, FLOOR_Y, SCREEN_W, SCREEN_H - FLOOR_Y)
+  colorCtx.clearRect(0, FLOOR_Y, SCREEN_W, SCREEN_H - FLOOR_Y)
+  const [ugGray, ugColor] = undergroundPaletteEntries()
+  renderCombinedGroundBand(grayCtx, lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN), undergroundSpec, ugGray)
+  renderCombinedGroundBand(colorCtx, GROUND_DARK, undergroundSpec, ugColor)
+  k.loadSprite(BG_COMBINED_GRAY_SPRITE, grayCanvas)
+  k.loadSprite(BG_COMBINED_COLOR_SPRITE, colorCanvas)
+  grayCanvas.width = 0
+  grayCanvas.height = 0
+  colorCanvas.width = 0
+  colorCanvas.height = 0
+}
+//
+// Paints the root-zone part of a combined background canvas: the flat earth
+// band inside the playfield margins topped with the underground decor.
+//
+function renderCombinedGroundBand(ctx, bandRgb, undergroundSpec, ugEntry) {
+  ctx.fillStyle = `rgb(${bandRgb.r}, ${bandRgb.g}, ${bandRgb.b})`
+  ctx.fillRect(LEFT_MARGIN, FLOOR_Y, SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN, PLAYFIELD_BOTTOM_Y - FLOOR_Y)
+  renderUndergroundSpec(ctx, undergroundSpec, ugEntry)
+}
+//
+// Renders one parallax plane into both combined canvases: BIG trees
+// generated with the same glow-tree algorithm as the main tree (wider
+// trunks, no roots, no hero branch, upward branches gathered at the trunk
+// top). The tones are pre-blended toward the backdrop so the image stays
+// opaque. Every trunk apex gets a lush baked canopy — neighbouring crowns
+// merge into a solid leaf band across the top, while the screen middle
+// keeps only the bare trunks. Trees grow across the entire width, including
+// behind the main tree.
+//
+function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
+  const {
+    count, seedBase, topMinY, topRange,
+    grayBlend, colorBase, colorBlend, flatLeaves, leafDarken, uniformColorWood,
+    canopyRx, canopyRy, canopyCount
+  } = planeCfg
+  //
+  // Gray mode keeps the forest gray; the colour mode (after O) paints the
+  // given colour base blended toward the warm haze, so deeper rows read
+  // more orange and brighter, like the reference forest picture. From the
+  // 2nd row on the colour palette collapses to uniform wood: leaves, wood
+  // and bark all share the exact trunk tone — one flat orange silhouette.
+  //
+  const grayPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken)
+  const colorPal = buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformColorWood)
   const treeXs = buildParallaxTreeXs(count, LEFT_MARGIN, SCREEN_W - RIGHT_MARGIN)
   treeXs.forEach((treeX, i) => {
-    //
-    // Centre clearing — no trees at all in the band around the main tree;
-    // outside the band every tree grows at its full random height.
-    //
-    if (isInCenterClearBand(treeX)) return
-    let trunkTopY = topMinY + Math.random() * topRange
-    trunkTopY = capTrunkTopForSun(treeX, trunkTopY)
+    const trunkTopY = topMinY + Math.random() * topRange
+    const treeSeed = TREE_SEED + seedBase + i * PAR_BIG_SEED_STEP
     const treeData = buildGlowTree(
-      TREE_SEED + seedBase + i * PAR_BIG_SEED_STEP,
+      treeSeed,
       Math.round(treeX),
       PAR_TRUNK_BOTTOM_Y,
       Math.round(trunkTopY),
       PAR_TRUNK_BOTTOM_Y,
       PAR_TRUNK_BOTTOM_Y,
-      { includeRoots: false, includeHeroBranch: false }
+      {
+        includeRoots: false,
+        includeHeroBranch: false,
+        branchFracMin: PAR_BRANCH_FRAC_MIN,
+        branchFracMax: PAR_BRANCH_FRAC_MAX,
+        branchUpward: true
+      }
     )
     //
     // Background trees read even bigger than the main tree via wider wood.
@@ -1330,18 +1476,15 @@ function bakeGlowTreePlane(k, planeCfg) {
     scaleGlowTreeWidths(treeData, widthScale)
     renderGlowTreeIntoContext(grayCtx, treeData, grayPal, SCREEN_W, SCREEN_H)
     renderGlowTreeIntoContext(colorCtx, treeData, colorPal, SCREEN_W, SCREEN_H)
+    //
+    // Lush crown centred on the trunk apex — one identical seeded cluster
+    // painted on both mode canvases so they stay pixel-aligned.
+    //
+    const apex = treeData.trunkSegs[treeData.trunkSegs.length - 1]
+    const canopyOpts = { seed: treeSeed + PAR_CANOPY_SEED_OFFSET, cx: apex.ex, cy: apex.ey, rx: canopyRx, ry: canopyRy, count: canopyCount }
+    renderGlowCanopyIntoContext(grayCtx, { ...canopyOpts, palette: grayPal })
+    renderGlowCanopyIntoContext(colorCtx, { ...canopyOpts, palette: colorPal })
   })
-  //
-  // Nothing below the ground line — trunks must never cross the ground band.
-  //
-  grayCtx.clearRect(0, FLOOR_Y, SCREEN_W, SCREEN_H - FLOOR_Y)
-  colorCtx.clearRect(0, FLOOR_Y, SCREEN_W, SCREEN_H - FLOOR_Y)
-  k.loadSprite(grayName, grayCanvas)
-  k.loadSprite(colorName, colorCanvas)
-  grayCanvas.width = 0
-  grayCanvas.height = 0
-  colorCanvas.width = 0
-  colorCanvas.height = 0
 }
 //
 // Scales trunk and branch widths of a glow tree (geometry stays the same).
@@ -1356,60 +1499,98 @@ function scaleGlowTreeWidths(treeData, scale) {
   })
 }
 //
-// Bakes the background bush strip: overlapping circles of varying radii
-// centred on the ground line — the canvas ends at FLOOR_Y so every circle is
-// cut by the ground. One continuous band from the left margin to the right.
-// The bushes use the exact same dimmed tone as the big background trees.
+// Renders one bush strip into both combined canvases: leafy mounds of
+// varying radii centred on the ground line (everything below FLOOR_Y is
+// cleared afterwards, so every mound is cut by the ground). The layout and
+// every leaf placement are generated ONCE and painted with the gray and
+// colour tones, so the two mode images stay pixel-aligned. Each mound is a
+// filled dome plus scattered oval leaves and a ragged leaf rim, so the
+// strip reads as real bushes in every mode.
 //
-function loadBushSprites(k) {
-  const grayNearPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L1_BG_BLEND)
-  const colorNearPal = buildDimmedTreePalette(getTreePaletteGray(), SKY_COLOR, PAR_L1_BG_BLEND)
-  const grayFarPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L2_BG_BLEND, true, PAR_FAR_LEAF_DARKEN)
-  const colorFarPal = buildDimmedTreePalette(getTreePaletteGray(), SKY_COLOR, PAR_L2_BG_BLEND, true, PAR_FAR_LEAF_DARKEN)
-  //
-  // Near bushes match the brightness of the near tree plane exactly (trunk
-  // tone + a light green cast, no extra darkening). Far bushes take the leaf
-  // tone of the far tree plane so both strips sit in their own depth layers.
-  // Colour world (after O): the same near/far dimming applied over the
-  // sky-blended palettes — the bushes stay as muted as the trees.
-  //
-  const grayTone = tintBushTone({ r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB })
-  const colorTone = tintBushTone({ r: colorNearPal.trunkR, g: colorNearPal.trunkG, b: colorNearPal.trunkB })
-  const entries = [
-    { name: BUSH_GRAY_SPRITE, rgb: grayTone, heightScale: 1 },
-    { name: BUSH_GREEN_SPRITE, rgb: colorTone, heightScale: 1 },
-    { name: BUSH_FAR_GRAY_SPRITE, rgb: { r: grayFarPal.leafR, g: grayFarPal.leafG, b: grayFarPal.leafB }, heightScale: BUSH_FAR_HEIGHT_SCALE },
-    { name: BUSH_FAR_GREEN_SPRITE, rgb: { r: colorFarPal.leafR, g: colorFarPal.leafG, b: colorFarPal.leafB }, heightScale: BUSH_FAR_HEIGHT_SCALE }
-  ]
-  entries.forEach(entry => {
-    const canvas = document.createElement('canvas')
-    canvas.width = SCREEN_W
-    canvas.height = FLOOR_Y
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = `rgb(${entry.rgb.r}, ${entry.rgb.g}, ${entry.rgb.b})`
-    let x = LEFT_MARGIN
-    const right = SCREEN_W - RIGHT_MARGIN
-    while (x < right) {
-      const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * entry.heightScale
-      ctx.beginPath()
-      ctx.arc(x, FLOOR_Y, radius, Math.PI, 0)
-      ctx.closePath()
-      ctx.fill()
-      //
-      // Advance less than a radius so each circle overlaps the next one.
-      //
-      x += radius * (BUSH_STEP_MIN_FRAC + Math.random() * BUSH_STEP_RANGE_FRAC)
-    }
-    k.loadSprite(entry.name, canvas)
-    canvas.width = 0
-    canvas.height = 0
-  })
+function renderBushStrip(grayCtx, colorCtx, stripCfg) {
+  const { grayRgb, colorRgb, colorFlat, heightScale } = stripCfg
+  let x = LEFT_MARGIN
+  const right = SCREEN_W - RIGHT_MARGIN
+  while (x < right) {
+    const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * heightScale
+    const mound = buildLeafyBushMoundSpec(x, radius)
+    drawLeafyBushMound(grayCtx, mound, grayRgb, false)
+    drawLeafyBushMound(colorCtx, mound, colorRgb, colorFlat)
+    //
+    // Advance less than a radius so each mound overlaps the next one.
+    //
+    x += radius * (BUSH_STEP_MIN_FRAC + Math.random() * BUSH_STEP_RANGE_FRAC)
+  }
 }
 //
-// Applies the shared bush tinting: a light green cast over the base tone.
+// Generates the geometry of one leafy bush mound: the dome plus the exact
+// position, size, tilt and shade index of every inner and rim leaf, so the
+// same mound can be painted identically with different tones.
 //
-function tintBushTone(rgb) {
-  return lerpRgb(rgb, GRASS_GREEN, BUSH_GREEN_TINT)
+function buildLeafyBushMoundSpec(x, radius) {
+  const leaves = []
+  //
+  // Inner leaves — density scales with the dome area; sqrt keeps the radial
+  // distribution uniform so no thin spots appear near the rim.
+  //
+  const innerCount = Math.round(radius * radius * BUSH_LEAF_DENSITY)
+  for (let i = 0; i < innerCount; i++) {
+    const a = Math.PI + Math.random() * Math.PI
+    const dist = radius * Math.sqrt(Math.random())
+    leaves.push({
+      x: x + Math.cos(a) * dist,
+      y: FLOOR_Y + Math.sin(a) * dist,
+      size: BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE,
+      angle: Math.random() * Math.PI * 2,
+      shadeIdx: Math.floor(Math.random() * BUSH_LEAF_DARKEN_STEPS.length)
+    })
+  }
+  //
+  // Rim leaves — spaced along the arc, tilted along it, poking past the dome
+  // edge so the silhouette gets an organic leafy fringe.
+  //
+  const rimCount = Math.max(4, Math.round(Math.PI * radius / BUSH_RIM_LEAF_SPACING))
+  for (let i = 0; i < rimCount; i++) {
+    const a = Math.PI + ((i + 0.5) / rimCount) * Math.PI + (Math.random() - 0.5) * 0.14
+    leaves.push({
+      x: x + Math.cos(a) * radius,
+      y: FLOOR_Y + Math.sin(a) * radius,
+      size: BUSH_LEAF_SIZE_MIN + Math.random() * BUSH_LEAF_SIZE_RANGE,
+      angle: a + Math.PI / 2 + (Math.random() - 0.5) * 0.6,
+      shadeIdx: Math.floor(Math.random() * 2)
+    })
+  }
+  return { x, radius, leaves }
+}
+//
+// Paints one prebuilt mound spec: a solid dome in the base tone (keeps the
+// silhouette closed) and the leaf scatter with brightness-only shade
+// variation resolved from the shade index of each leaf. With `flat` set all
+// leaves take the exact dome tone, so the mound reads as one flat colour
+// (the 2nd+ colour-world strips have no leaf details).
+//
+function drawLeafyBushMound(ctx, mound, rgb, flat = false) {
+  const shades = BUSH_LEAF_DARKEN_STEPS.map(t => flat ? rgb : lerpRgb(rgb, VOID, t))
+  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+  ctx.beginPath()
+  ctx.arc(mound.x, FLOOR_Y, mound.radius, Math.PI, 0)
+  ctx.closePath()
+  ctx.fill()
+  mound.leaves.forEach(leaf => drawBushLeaf(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, shades[leaf.shadeIdx]))
+}
+//
+// One bush leaf — a plain rounded oval, deliberately a different shape than
+// the teardrop tree leaves.
+//
+function drawBushLeaf(ctx, x, y, size, angle, rgb) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(angle)
+  ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+  ctx.beginPath()
+  ctx.ellipse(0, 0, size * 0.55, size * 0.32, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
 }
 //
 // Creates the background bird flock — each bird gets its own lane, flight
@@ -1456,9 +1637,9 @@ function drawBackgroundBirds(inst) {
   const k = inst.k
   //
   // Minimal brightness: the silhouette tone sits most of the way toward the
-  // sky colour, so the birds read as barely-there distant specks.
+  // warm haze backdrop, so the birds read as barely-there distant specks.
   //
-  const c = lerpRgb(VOID, SKY_COLOR, BIRD_SKY_BLEND)
+  const c = lerpRgb(VOID, WARM_HAZE, BIRD_HAZE_BLEND)
   inst.birds.forEach(bird => {
     const y = bird.baseY + Math.sin(inst.birdTime * 0.7 + bird.bobPhase) * BIRD_BOB_AMP
     const wingTipY = y + Math.sin(bird.flap) * bird.size * 0.7
@@ -1481,15 +1662,32 @@ function drawBackgroundBirds(inst) {
 // dress up the root-zone earth band: buried rocks, burrows with winding
 // tunnels, cracks, pebble clusters, hanging rootlets and a fossil spiral.
 // Both variants share the same generated geometry so the gray↔colour
-// crossfade never shifts a single stone.
+// crossfade never shifts a single stone. Returns the generated spec so the
+// combined background canvases can bake the exact same decor into their
+// root zones.
 //
 function loadUndergroundSprites(k) {
   const spec = buildUndergroundSpec()
-  //
-  // Gray world sits on the playfield-gray earth band; the colour world sits
-  // on the near-black earth, so its features read as slightly lighter tones.
-  //
-  const entries = [
+  const entries = undergroundPaletteEntries()
+  entries.forEach(entry => {
+    const canvas = document.createElement('canvas')
+    canvas.width = SCREEN_W
+    canvas.height = SCREEN_H
+    const ctx = canvas.getContext('2d')
+    renderUndergroundSpec(ctx, spec, entry)
+    k.loadSprite(entry.name, canvas)
+    canvas.width = 0
+    canvas.height = 0
+  })
+  return spec
+}
+//
+// Underground decor palettes: the gray world sits on the playfield-gray
+// earth band; the colour world sits on the near-black earth, so its
+// features read as slightly lighter tones.
+//
+function undergroundPaletteEntries() {
+  return [
     {
       name: UNDERGROUND_GRAY_SPRITE,
       fill: glowRgb('midGray'),
@@ -1503,16 +1701,6 @@ function loadUndergroundSprites(k) {
       light: glowRgb('playfieldOuter')
     }
   ]
-  entries.forEach(entry => {
-    const canvas = document.createElement('canvas')
-    canvas.width = SCREEN_W
-    canvas.height = SCREEN_H
-    const ctx = canvas.getContext('2d')
-    renderUndergroundSpec(ctx, spec, entry)
-    k.loadSprite(entry.name, canvas)
-    canvas.width = 0
-    canvas.height = 0
-  })
 }
 //
 // Generates the random layout of all underground features once, so both
@@ -1849,23 +2037,19 @@ function glowLogColors(zones) {
   return fade > 0.5 ? LOG_TREE_COLOR_COLORS : LOG_TREE_LIT_COLORS
 }
 //
-// Blinking letter — optional gold fill for G, value 1 offset-outline.
+// Blinking letter — optional gold fill for G, with a hard drop shadow (one
+// black copy offset right+down) instead of a full outline.
 //
 function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill) {
   const fill = getRGB(k, fillHex)
-  const oo = GLOW_LETTER_OUTLINE
-  const offsets = [
-    [-oo, -oo], [0, -oo], [oo, -oo],
-    [-oo, 0], [oo, 0],
-    [-oo, oo], [0, oo], [oo, oo]
-  ]
+  const offsets = [[GLOW_LETTER_SHADOW, GLOW_LETTER_SHADOW]]
   const outlines = offsets.map(([dx, dy]) => {
     const obj = k.add([
       k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
       k.pos(x + dx, y + dy),
       k.anchor('center'),
       k.rotate(tiltDeg),
-      k.color(GLOW_LETTER_OUTLINE_R, GLOW_LETTER_OUTLINE_G, GLOW_LETTER_OUTLINE_B),
+      k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
       k.z(CFG.visual.zIndex.player - 2)
     ])
     obj.hidden = true
@@ -1883,122 +2067,42 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill)
   return { main, outlines, allObjects: [main, ...outlines], char, x, y }
 }
 //
-// Swaying grass — thick baked blade sprites growing in tufts (never an even
-// spread), excludes water and trunk. Blades are baked white and tinted at
-// draw time so gray and green modes share the same sprites.
+// Swaying grass — the shared Grass component, excluding water, trunk and the
+// trampoline mushroom band (so no blade ever covers its face). The tint
+// callback also hides blades of unexplored ground sides.
 //
-function createGlowGrass(k, waterX1, waterX2, zones) {
-  loadGrassBladeSprites(k)
-  const left = LEFT_MARGIN + 20
-  const right = SCREEN_W - RIGHT_MARGIN - 20
+function createGlowGrass(k, waterX1, waterX2, trampX, zones) {
   const trunkL = TREE_X - TRUNK_EXCLUDE_HALF
   const trunkR = TREE_X + TRUNK_EXCLUDE_HALF
-  const excluded = (x) => (x >= waterX1 && x <= waterX2) || (x >= trunkL && x <= trunkR)
-  const blades = []
-  let tufts = 0
-  let attempts = 0
-  while (tufts < GRASS_TUFT_COUNT && attempts < GRASS_TUFT_COUNT * 8) {
-    attempts++
-    const centerX = left + Math.random() * (right - left)
-    if (excluded(centerX)) continue
-    tufts++
-    //
-    // Each tuft packs several blades close around its centre with mixed
-    // variants, scales and flips so no two tufts look alike.
-    //
-    const count = GRASS_TUFT_BLADES_MIN + Math.floor(Math.random() * (GRASS_TUFT_BLADES_RANGE + 1))
-    for (let b = 0; b < count; b++) {
-      const x = centerX + (Math.random() - 0.5) * 2 * GRASS_TUFT_SPREAD
-      if (excluded(x)) continue
-      blades.push({
-        x,
-        variant: Math.floor(Math.random() * GRASS_BLADE_VARIANTS),
-        scale: GRASS_BLADE_SCALE_MIN + Math.random() * GRASS_BLADE_SCALE_RANGE,
-        flipX: Math.random() < 0.5,
-        swaySpeed: GRASS_SWAY_SPEED_MIN + Math.random() * GRASS_SWAY_SPEED_RANGE,
-        swayPhase: Math.random() * Math.PI * 2,
-        side: x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-      })
-    }
-  }
-  const layer = k.add([
-    k.z(GRASS_Z),
-    {
-      draw() {
-        drawGlowGrassBlades(k, zones, blades)
-      }
-    }
-  ])
-  layer.hidden = true
-  return layer
+  const trampL = trampX - TRAMP_GRASS_CLEAR_HALF
+  const trampR = trampX + TRAMP_GRASS_CLEAR_HALF
+  const excluded = (x) => (x >= waterX1 && x <= waterX2) || (x >= trunkL && x <= trunkR) || (x >= trampL && x <= trampR)
+  const grass = Grass.create({
+    k,
+    floorY: FLOOR_Y,
+    left: LEFT_MARGIN + 20,
+    right: SCREEN_W - RIGHT_MARGIN - 20,
+    tuftCount: GRASS_TUFT_COUNT,
+    z: GRASS_Z,
+    excluded,
+    getTint: (blade) => glowGrassTint(zones, blade)
+  })
+  grass.layer.hidden = true
+  return grass
 }
 //
-// Bakes the white grass-blade sprite variants (tapered curved silhouettes,
-// some with a shorter side leaf) used by the tuft renderer.
+// Resolves the tint of one grass blade for the current frame: null while the
+// blade's ground side is unexplored; otherwise the shared decor tone — plain
+// decor gray before L, darkened toward void after L, cross-fading to green
+// in the colour world.
 //
-function loadGrassBladeSprites(k) {
-  for (let i = 0; i < GRASS_BLADE_VARIANTS; i++) {
-    const canvas = document.createElement('canvas')
-    canvas.width = GRASS_BLADE_W
-    canvas.height = GRASS_BLADE_H
-    const ctx = canvas.getContext('2d')
-    drawGrassBladeShape(ctx, GRASS_BLADE_W / 2, GRASS_BLADE_H, GRASS_BLADE_H)
-    //
-    // Roughly half the variants carry a shorter side leaf for variety.
-    //
-    Math.random() < 0.5 && drawGrassBladeShape(ctx, GRASS_BLADE_W / 2 + (Math.random() < 0.5 ? -3 : 3), GRASS_BLADE_H, GRASS_BLADE_H * (0.45 + Math.random() * 0.2))
-    k.loadSprite(GRASS_SPRITE_PREFIX + i, canvas)
-    canvas.width = 0
-    canvas.height = 0
-  }
-}
-//
-// Draws one tapered blade silhouette in white: wide at the base, curving to
-// a sharp tip, filled as a closed path so the blade reads thick.
-//
-function drawGrassBladeShape(ctx, baseX, baseY, height) {
-  const bend = (Math.random() - 0.5) * 9
-  const tipX = baseX + bend
-  const tipY = baseY - height + 2
-  const halfW = 1.6 + Math.random() * 1.5
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  ctx.moveTo(baseX - halfW, baseY)
-  ctx.quadraticCurveTo(baseX - halfW + bend * 0.35, baseY - height * 0.55, tipX, tipY)
-  ctx.quadraticCurveTo(baseX + halfW + bend * 0.35, baseY - height * 0.55, baseX + halfW, baseY)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Per-frame tuft renderer: each blade is a tinted sprite anchored at its
-// base, swaying by a few degrees of rotation.
-//
-function drawGlowGrassBlades(k, zones, blades) {
-  if (!zones.groundDecorRight && !zones.groundDecorLeft) return
+function glowGrassTint(zones, blade) {
+  const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
+  if (side === 'left' && !zones.groundDecorLeft) return null
+  if (side === 'right' && !zones.groundDecorRight) return null
   const fade = zones._sceneRef?.colorFade ?? 0
-  //
-  // Grass shares the mushroom/rock decor tone: plain decor gray before L,
-  // darkened toward void after L, cross-fading to green in the colour world.
-  //
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(zones._sceneRef))
-  const c = lerpRgb(gray, GRASS_GREEN, fade)
-  const color = k.rgb(c.r, c.g, c.b)
-  const time = k.time()
-  for (const blade of blades) {
-    if (blade.side === 'left' && !zones.groundDecorLeft) continue
-    if (blade.side === 'right' && !zones.groundDecorRight) continue
-    const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * GRASS_SWAY_DEG
-    k.drawSprite({
-      sprite: GRASS_SPRITE_PREFIX + blade.variant,
-      pos: k.vec2(blade.x, FLOOR_Y),
-      anchor: 'bot',
-      width: GRASS_BLADE_W * blade.scale,
-      height: GRASS_BLADE_H * blade.scale,
-      angle,
-      flipX: blade.flipX,
-      color
-    })
-  }
+  return lerpRgb(gray, GRASS_GREEN, fade)
 }
 //
 // Rocks — flat value 5 silhouettes.
@@ -2086,65 +2190,62 @@ function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z 
 //
 // Mushrooms — value 5, excluded from water zone.
 //
-function createGlowMushrooms(k, waterX1, waterX2, zones) {
+function createGlowMushrooms(k, waterX1, waterX2, trampX, zones) {
   const objs = []
   const left = LEFT_MARGIN + 60
   const right = SCREEN_W - RIGHT_MARGIN - 60
+  //
+  // A random X is rejected while it falls inside the water band OR inside
+  // the keep-out band around the trampoline mushroom (nothing may cover it).
+  //
+  const isBadSpot = (x) => (x >= waterX1 && x <= waterX2) || Math.abs(x - trampX) <= TRAMP_MUSHROOM_CLEAR_HALF
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
     const capW = MUSHROOM_CAP_W_MIN + Math.random() * (MUSHROOM_CAP_W_MAX - MUSHROOM_CAP_W_MIN)
-    const capH = capW * (0.38 + Math.random() * 0.25)
-    const stemH = MUSHROOM_STEM_H_MIN + Math.random() * (MUSHROOM_STEM_H_MAX - MUSHROOM_STEM_H_MIN)
-    const stemW = capW * (0.25 + Math.random() * 0.15)
-    const totalW = Math.ceil(capW + 4)
-    const totalH = Math.ceil(capH + stemH + 4)
+    const mushW = Math.ceil(capW)
+    const totalW = mushW + 2
+    const totalH = Math.ceil(mushW * CUTE_MUSHROOM_ASPECT) + 2
     let posX = left + Math.random() * (right - left)
     let safety = 0
-    while ((posX >= waterX1 && posX <= waterX2) && safety < 40) {
+    while (isBadSpot(posX) && safety < 40) {
       posX = left + Math.random() * (right - left)
       safety++
     }
-    if (posX >= waterX1 && posX <= waterX2) continue
+    if (isBadSpot(posX)) continue
     const posY = FLOOR_Y - totalH + MUSHROOM_EXTRA_LOWER
     const spriteName = `glow0-mush-${i}`
     //
-    // Bake a WHITE flat silhouette — the per-frame tint (updateMushroomTints)
-    // multiplies it to the exact palette tone: DECOR_GRAY in the gray phase
-    // (same tone as the trampoline mushroom), cap colour after O.
+    // Gray-phase variant — the same cute mushroom painted entirely inside the
+    // gray palette family (no face on the small decor mushrooms).
     //
     const mushCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawMushroomToCanvas(ctx, {
+      drawCuteMushroomToCanvas(ctx, {
         cx: totalW / 2,
         baseY: totalH - 2,
-        capWidth: capW,
-        capHeight: capH,
-        stemWidth: stemW,
-        stemHeight: stemH,
-        capColor: [255, 255, 255],
-        outlineAlpha: 0,
-        flat: true
+        width: mushW,
+        colors: CUTE_MUSH_GRAY_COLORS,
+        withFace: false
       })
     })
     k.loadSprite(spriteName, mushCanvas)
     mushCanvas.width = 0
     mushCanvas.height = 0
     //
-    // Colour-world variant — baked in the real cap colour with full detail
-    // (highlight arc, cap dots) and a thin outline in the dark counterpart of
-    // the cap colour. Displayed untinted (white tint) once the world colours.
+    // Colour-world variant — cap tones from this mushroom's colour family,
+    // cream body shared with the trampoline mushroom.
     //
-    const capIdx = i % MUSHROOM_CAP_COLORS.length
-    const capDark = MUSHROOM_CAP_DARK_COLORS[capIdx]
+    const capIdx = i % MUSHROOM_CAP_HEX.length
     const mushColorCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
-      drawMushroomToCanvas(ctx, {
+      drawCuteMushroomToCanvas(ctx, {
         cx: totalW / 2,
         baseY: totalH - 2,
-        capWidth: capW,
-        capHeight: capH,
-        stemWidth: stemW,
-        stemHeight: stemH,
-        capColor: MUSHROOM_CAP_COLORS[capIdx],
-        outlineColor: `rgb(${capDark[0]}, ${capDark[1]}, ${capDark[2]})`,
-        outlineWidth: DECOR_OUTLINE_WIDTH
+        width: mushW,
+        colors: {
+          ...CUTE_MUSH_COLORS,
+          cap: MUSHROOM_CAP_HEX[capIdx],
+          capDark: MUSHROOM_CAP_DARK_HEX[capIdx],
+          capLight: MUSHROOM_CAP_LIGHT_HEX[capIdx]
+        },
+        withFace: false
       })
     })
     k.loadSprite(spriteName + DECOR_OUTLINE_SUFFIX, mushColorCanvas)
@@ -2154,7 +2255,6 @@ function createGlowMushrooms(k, waterX1, waterX2, zones) {
     obj._graySprite = spriteName
     obj._outlineSprite = spriteName + DECOR_OUTLINE_SUFFIX
     obj._outlined = false
-    obj._colorCap = MUSHROOM_CAP_COLORS[capIdx]
     obj._side = posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
     obj._homeX = posX - totalW / 2
     obj._homeY = posY
@@ -2165,37 +2265,23 @@ function createGlowMushrooms(k, waterX1, waterX2, zones) {
   return objs
 }
 //
-// Mushroom trampoline — flat value 5 silhouette (no outline in the gray phase).
+// Mushroom trampoline — the cute chubby mushroom with a blushy face. Four
+// pre-baked variants cover both worlds and both eye states: gray family in
+// the gray phase, warm colours after O; the eyes blink by sprite swap.
 //
 function createMushroomTrampoline(k, trampX, floorY, zones) {
-  const mushCanvas = toCanvas({ width: TRAMP_TOTAL_W, height: TRAMP_TOTAL_H, pixelRatio: 1 }, (ctx) => {
-    drawTrampolineShape(ctx)
-  })
-  k.loadSprite(TRAMP_SPRITE, mushCanvas)
-  mushCanvas.width = 0
-  mushCanvas.height = 0
-  //
-  // Colour-world variant — same silhouette drawn through the shared mushroom
-  // primitive, so the cap carries the highlight + dots pattern and the rim.
-  //
-  const mushOutlineCanvas = toCanvas({ width: TRAMP_TOTAL_W, height: TRAMP_TOTAL_H, pixelRatio: 1 }, (ctx) => {
-    drawMushroomToCanvas(ctx, {
-      cx: TRAMP_TOTAL_W / 2,
-      baseY: TRAMP_TOTAL_H - 2,
-      capWidth: TRAMP_CAP_W,
-      capHeight: TRAMP_CAP_H,
-      stemWidth: TRAMP_STEM_W,
-      stemHeight: TRAMP_STEM_H,
-      capColor: [DECOR_GRAY.r, DECOR_GRAY.g, DECOR_GRAY.b],
-      outlineColor: `rgb(${DECOR_OUTLINE_RGB.r}, ${DECOR_OUTLINE_RGB.g}, ${DECOR_OUTLINE_RGB.b})`,
-      outlineWidth: DECOR_OUTLINE_WIDTH
-    })
-  })
-  k.loadSprite(TRAMP_OUTLINE_SPRITE, mushOutlineCanvas)
-  mushOutlineCanvas.width = 0
-  mushOutlineCanvas.height = 0
+  bakeTrampolineVariant(k, TRAMP_SPRITE, CUTE_MUSH_GRAY_COLORS, true)
+  bakeTrampolineVariant(k, TRAMP_SPRITE + TRAMP_BLINK_SPRITE_SUFFIX, CUTE_MUSH_GRAY_COLORS, false)
+  bakeTrampolineVariant(k, TRAMP_OUTLINE_SPRITE, CUTE_MUSH_COLORS, true)
+  bakeTrampolineVariant(k, TRAMP_OUTLINE_SPRITE + TRAMP_BLINK_SPRITE_SUFFIX, CUTE_MUSH_COLORS, false)
   const spritePos = k.vec2(trampX - TRAMP_TOTAL_W / 2, floorY - TRAMP_TOTAL_H + TRAMP_SINK_Y)
-  const state = { squash: 0, cooldown: 0, x: trampX }
+  const state = {
+    squash: 0,
+    cooldown: 0,
+    x: trampX,
+    blinking: false,
+    blinkTimer: TRAMP_BLINK_MIN_INTERVAL + Math.random() * (TRAMP_BLINK_MAX_INTERVAL - TRAMP_BLINK_MIN_INTERVAL)
+  }
   const colliderHome = { x: trampX - TRAMP_CAP_W / 2, y: floorY - TRAMP_TOTAL_H }
   const drawLayer = k.add([
     k.z(6),
@@ -2203,11 +2289,13 @@ function createMushroomTrampoline(k, trampX, floorY, zones) {
       draw() {
         if (!zones.groundDecorRight) return
         //
-        // Colour world swaps in the outlined sprite variant; the gray phase
-        // applies the after-L darkening tint (white = untinted).
+        // Colour world swaps in the coloured sprite set; the gray phase
+        // applies the after-L darkening tint (white = untinted). A blink
+        // swaps to the closed-eyes variant of the current set.
         //
         const outlined = (zones._sceneRef?.colorFade ?? 0) >= 0.5
-        const sprite = outlined ? TRAMP_OUTLINE_SPRITE : TRAMP_SPRITE
+        const base = outlined ? TRAMP_OUTLINE_SPRITE : TRAMP_SPRITE
+        const sprite = state.blinking ? base + TRAMP_BLINK_SPRITE_SUFFIX : base
         const tint = outlined ? { r: 255, g: 255, b: 255 } : grayDecorTint(zones._sceneRef)
         const color = k.rgb(tint.r, tint.g, tint.b)
         if (state.squash > 0.01) {
@@ -2221,29 +2309,42 @@ function createMushroomTrampoline(k, trampX, floorY, zones) {
       }
     }
   ])
+  drawLayer.onUpdate(() => onUpdateTrampolineBlink(k, state))
   drawLayer.hidden = true
   return { state, drawLayer, colliderHome }
 }
 //
-// Draws the gray-phase trampoline mushroom silhouette (stem trapezoid + cap
-// half-ellipse) in the flat decor tone with no outline and no cap details.
+// Bakes one static PNG variant of the trampoline mushroom (with face).
 //
-function drawTrampolineShape(ctx) {
-  const cx = TRAMP_TOTAL_W / 2
-  const stemTop = TRAMP_TOTAL_H - TRAMP_STEM_H - 2
-  ctx.fillStyle = `rgb(${DECOR_GRAY.r}, ${DECOR_GRAY.g}, ${DECOR_GRAY.b})`
-  ctx.lineJoin = 'round'
-  ctx.beginPath()
-  ctx.moveTo(cx - TRAMP_STEM_W / 2, TRAMP_TOTAL_H - 2)
-  ctx.lineTo(cx - TRAMP_STEM_W * 0.4, stemTop)
-  ctx.lineTo(cx + TRAMP_STEM_W * 0.4, stemTop)
-  ctx.lineTo(cx + TRAMP_STEM_W / 2, TRAMP_TOTAL_H - 2)
-  ctx.closePath()
-  ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(cx, stemTop, TRAMP_CAP_W / 2, TRAMP_CAP_H, 0, Math.PI, 0)
-  ctx.closePath()
-  ctx.fill()
+function bakeTrampolineVariant(k, name, colors, eyesOpen) {
+  const canvas = toCanvas({ width: TRAMP_TOTAL_W, height: TRAMP_TOTAL_H, pixelRatio: 1 }, (ctx) => {
+    drawCuteMushroomToCanvas(ctx, {
+      cx: TRAMP_TOTAL_W / 2,
+      baseY: TRAMP_TOTAL_H - 2,
+      width: TRAMP_W,
+      colors,
+      withFace: true,
+      eyesOpen
+    })
+  })
+  k.loadSprite(name, canvas)
+  canvas.width = 0
+  canvas.height = 0
+}
+//
+// Advances the trampoline blink cycle: long random pause with open eyes,
+// then a short closed-eyes hold.
+//
+function onUpdateTrampolineBlink(k, state) {
+  state.blinkTimer -= k.dt()
+  if (state.blinkTimer > 0) return
+  if (state.blinking) {
+    state.blinking = false
+    state.blinkTimer = TRAMP_BLINK_MIN_INTERVAL + Math.random() * (TRAMP_BLINK_MAX_INTERVAL - TRAMP_BLINK_MIN_INTERVAL)
+  } else {
+    state.blinking = true
+    state.blinkTimer = TRAMP_BLINK_DURATION
+  }
 }
 //
 // Water — value 5 fill bounded by wave polygon.
@@ -2319,31 +2420,6 @@ function createDrownMask(k, x1, x2, zones) {
   ])
 }
 //
-// Sun — drawn inside the background pass BEHIND the forest plane, so trees
-// near the right edge can overlap the disc instead of the sun floating in
-// front of them.
-//
-function drawSunLayer(inst) {
-  const k = inst.k
-  const zones = inst.zones
-  if (!zones.lZoneSun) return
-  const fade = inst.colorFade
-  //
-  // After L the sun matches the main tree's lit foliage tone; the colour
-  // world fades it toward the warm orange.
-  //
-  const litLeaf = glowRgb(GLOW_PAL.treeLit.leaf)
-  const orange = { r: SUN_BRIGHT.r, g: SUN_BRIGHT.g, b: SUN_BRIGHT.b }
-  const c = lerpRgb(litLeaf, orange, fade)
-  fade > 0.05 && k.drawSprite({
-    sprite: SUN_HALO_SPRITE,
-    pos: k.vec2(SUN_X, SUN_Y),
-    anchor: 'center',
-    opacity: 0.85 * fade
-  })
-  k.drawCircle({ pos: k.vec2(SUN_X, SUN_Y), radius: SUN_RADIUS, color: k.rgb(c.r, c.g, c.b) })
-}
-//
 // Detects which surface the hero stands on.
 //
 function detectGlowSurface(inst) {
@@ -2406,13 +2482,13 @@ function onDraw(inst) {
     k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: SCREEN_H, color: k.rgb(OUTER.r, OUTER.g, OUTER.b) })
     const inner = innerGray ? INNER_GRAY : VOID
     //
-    // Colour world splits the playfield backdrop at the ground line: light
-    // blue sky above it, dark earth in the root zone below. Both lerp from
-    // the flat inner gray as the colour fade progresses. After L the gray
-    // root zone already reads darker than the sky band above it.
+    // Colour world splits the playfield backdrop at the ground line: a
+    // bright warm orange haze above it (the glowing distance seen between
+    // the trunks at the screen centre), dark earth in the root zone below.
+    // Both lerp from the flat inner gray as the colour fade progresses.
     //
     const grayGround = zones.lZone && innerGray ? lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN) : inner
-    const skyC = lerpRgb(inner, SKY_COLOR, fade)
+    const skyC = lerpRgb(inner, WARM_HAZE, fade)
     const groundC = lerpRgb(grayGround, GROUND_DARK, fade)
     k.drawRect({
       pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
@@ -2435,31 +2511,19 @@ function onDraw(inst) {
     k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: SCREEN_H, color: k.rgb(VOID.r, VOID.g, VOID.b) })
   }
   //
-  // Sun is part of the background pass — BEHIND the birds and the forest.
-  //
-  drawSunLayer(inst)
-  //
-  // Birds glide across the sky behind both forest planes (colour world only).
+  // Birds glide across the sky behind the combined forest (colour world only).
   //
   drawBackgroundBirds(inst)
   if (inst.zones.lZoneParallax) {
     //
-    // The forest is OPAQUE — brightness is baked into the sprite colours.
-    // The only transparencies are transient: the fade-in reveal after L and
-    // the gray↔colour crossfade after O.
+    // The whole background (forest planes, bush strips, earth band and the
+    // underground decor) lives in ONE opaque image per mode. The only
+    // transparencies are transient: the fade-in reveal after L and the
+    // gray↔colour crossfade after O.
     //
     const pf = inst.parallaxFade
-    //
-    // Depth order: far bushes → far plane → near plane → near bushes.
-    //
-    k.drawSprite({ sprite: BUSH_FAR_GRAY_SPRITE, pos: k.vec2(0, 0), opacity: (1 - fade) * pf })
-    fade > 0 && k.drawSprite({ sprite: BUSH_FAR_GREEN_SPRITE, pos: k.vec2(0, 0), opacity: fade * pf })
-    k.drawSprite({ sprite: PAR_FAR_SPRITE, pos: k.vec2(0, 0), width: SCREEN_W, height: SCREEN_H, opacity: (1 - fade) * pf })
-    fade > 0 && k.drawSprite({ sprite: PAR_FAR_COLOR_SPRITE, pos: k.vec2(0, 0), width: SCREEN_W, height: SCREEN_H, opacity: fade * pf })
-    k.drawSprite({ sprite: PAR_NEAR_SPRITE, pos: k.vec2(0, 0), width: SCREEN_W, height: SCREEN_H, opacity: (1 - fade) * pf })
-    fade > 0 && k.drawSprite({ sprite: PAR_NEAR_COLOR_SPRITE, pos: k.vec2(0, 0), width: SCREEN_W, height: SCREEN_H, opacity: fade * pf })
-    k.drawSprite({ sprite: BUSH_GRAY_SPRITE, pos: k.vec2(0, 0), opacity: (1 - fade) * pf })
-    fade > 0 && k.drawSprite({ sprite: BUSH_GREEN_SPRITE, pos: k.vec2(0, 0), opacity: fade * pf })
+    k.drawSprite({ sprite: BG_COMBINED_GRAY_SPRITE, pos: k.vec2(0, 0), opacity: (1 - fade) * pf })
+    fade > 0 && k.drawSprite({ sprite: BG_COMBINED_COLOR_SPRITE, pos: k.vec2(0, 0), opacity: fade * pf })
   }
   if (inst.zones.tree) {
     const showColorTree = fade >= 0.5
@@ -2497,12 +2561,14 @@ function updateMushroomTints(inst) {
   //
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(inst))
   const white = { r: 255, g: 255, b: 255 }
+  const grayTint = grayDecorTint(inst)
   inst.mushObjs.forEach(obj => {
-    if (obj.hidden || !obj._colorCap) return
+    if (obj.hidden) return
     //
-    // Colour-world sprite is pre-baked in the real cap colour with details —
-    // fade its multiply tint from gray toward white so the true colours and
-    // the cap dots/highlight appear as the world colours in.
+    // Colour-world sprite is pre-baked in the real cap colours — fade its
+    // multiply tint from gray toward white so the true colours emerge as the
+    // world colours in. The gray-family sprite only takes the after-L
+    // darkening multiply (white = untinted).
     //
     if (obj._outlined) {
       const t = Math.max(0, (fade - 0.5) * 2)
@@ -2510,10 +2576,7 @@ function updateMushroomTints(inst) {
       obj.color = inst.k.rgb(c.r, c.g, c.b)
       return
     }
-    const cap = obj._colorCap
-    const color = { r: cap[0], g: cap[1], b: cap[2] }
-    const c = lerpRgb(gray, color, fade)
-    obj.color = inst.k.rgb(c.r, c.g, c.b)
+    obj.color = inst.k.rgb(grayTint.r, grayTint.g, grayTint.b)
   })
   updateRockTints(inst)
   updateDecorOutlines(inst)
@@ -2613,17 +2676,18 @@ function buildHeroSpritePrefix(hero) {
     + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${hero.addLegStrip ? '_ls' : ''}`
 }
 //
-// Reveals the sun after L dialog closes.
+// First L reveal step after the dialog closes: the ground darkens and the
+// reveal chime plays; the forest follows a second later.
 //
-function revealLSunZone(inst) {
-  if (inst.zones.lZoneSun) return
-  inst.zones.lZoneSun = true
+function revealLLitZone(inst) {
+  if (inst.zones.lZoneLit) return
+  inst.zones.lZoneLit = true
   inst.zones.lZone = true
-  set(KEY_REVEALED_L_SUN, true)
+  set(KEY_REVEALED_L_LIT, true)
   playSegmentRevealSound(inst)
 }
 //
-// Reveals parallax one second after the sun.
+// Reveals the combined background forest one second after the first L step.
 //
 function revealLParallaxZone(inst) {
   if (inst.zones.lZoneParallax) return
@@ -2727,7 +2791,7 @@ function collectLetterL(inst) {
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 2)
   applyZoneVisibility(inst)
   openGlowLetterDialog(inst, GLOW_DIALOG_L, () => {
-    revealLSunZone(inst)
+    revealLLitZone(inst)
     inst.lParallaxTimer = L_PARALLAX_DELAY
   })
 }
@@ -2782,18 +2846,17 @@ function collectLetterW(inst) {
   //
   setSectionCompleted('glow')
   set('lastLesson', 'glow-complete')
-  inst.k.wait(W_MENU_TRANSITION_DELAY, () => startMenuFadeOut(inst))
+  //
+  // Closing line above the hero, then the fade toward the menu.
+  //
+  HeroHint.show(inst.heroHint, HINT_W_TEXT, HINT_W_DURATION)
+  inst.k.wait(HINT_W_DURATION, () => startMenuFadeOut(inst))
 }
 //
 // Fades the whole screen to void, then switches to the menu scene.
 //
 function startMenuFadeOut(inst) {
   const k = inst.k
-  //
-  // Match the page/canvas backdrop to the fade colour so no bright strips
-  // remain above/below the letterboxed game area while the screen darkens.
-  //
-  CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
   const overlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
@@ -2809,10 +2872,23 @@ function startMenuFadeOut(inst) {
 //
 function onUpdateMenuFade(inst, overlay) {
   overlay.opacity = Math.min(1, overlay.opacity + inst.k.dt() / W_MENU_FADE_DURATION)
+  //
+  // The page/canvas backdrop (letterbox strips above/below the game area)
+  // darkens in lockstep with the overlay so no bright horizontal bands stay
+  // visible at any point of the fade.
+  //
+  const from = isOuterFrameVisible(inst.zones) ? OUTER : VOID
+  CanvasBackdrop.applyCanvasBackdrop(inst.k, rgbToHex(lerpRgb(from, VOID, overlay.opacity)))
   if (overlay.opacity >= 1 && !inst.menuFadeStarted) {
     inst.menuFadeStarted = true
     inst.k.go('menu')
   }
+}
+//
+// Converts an { r, g, b } tone to the hex string the backdrop helper expects.
+//
+function rgbToHex(c) {
+  return `#${((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1)}`
 }
 //
 // Full HUD after W: FPS counter top-centre plus the small-hero and life icons
@@ -2855,21 +2931,25 @@ function startDrowning(inst) {
   inst.heroInst.controlsDisabled = true
   inst.heroInst.suppressDust = true
   //
-  // The sinking hero shuts his eyes — the idle animation holds the baked
-  // closed-eyes frame for the whole drowning sequence.
+  // The sinking hero shuts his eyes and drops into a clean idle pose —
+  // enterCalmPose clears any mid-air jump/run frame so the hero never rests
+  // on the water surface sideways.
   //
-  Hero.setEyesClosed(inst.heroInst, true)
+  Hero.enterCalmPose(inst.heroInst)
   //
   // One water splash take marks the fall into the lake.
   //
   Sound.playWaterStepsFootstepKaplay(inst.k, WATER_STEPS_VOLUME)
   revealWaterZone(inst)
   //
-  // First drowning ever: a consolation hint over the sinking hero.
+  // First drowning ever: a consolation hint over the sinking hero. Every
+  // drowning after that gets a random self-ironic joke instead.
   //
   if (!get(KEY_DROWN_HINT_SHOWN, false)) {
     set(KEY_DROWN_HINT_SHOWN, true)
     HeroHint.show(inst.heroHint, HINT_DROWN_TEXT, HINT_DROWN_DURATION)
+  } else {
+    HeroHint.show(inst.heroHint, DROWN_JOKES[Math.floor(Math.random() * DROWN_JOKES.length)], HINT_DROWN_DURATION)
   }
   const char = inst.heroInst.character
   char.unuse('body')
@@ -3138,7 +3218,25 @@ function onUpdate(inst) {
   // Reveal water visuals the first time the hero enters the lake band.
   //
   isInWaterZone(inst, heroX, footY) && footY >= FLOOR_Y - 35 && revealWaterZone(inst)
+  updateHeroGazeAtG(inst)
   inst.lastHeroX = heroX
+}
+//
+// Locks the hero's gaze on the G letter while he stands on the start branch
+// and the letter is still uncollected; releases the eyes to their normal
+// wander everywhere else.
+//
+function updateHeroGazeAtG(inst) {
+  const heroInst = inst.heroInst
+  const ch = heroInst?.character
+  if (!ch?.pos) return
+  const g = inst.gLetter
+  const branch = inst.woodSurfaces?.[0]
+  const onBranch = Boolean(branch &&
+    ch.pos.x >= branch.x1 && ch.pos.x <= branch.x2 &&
+    Math.abs(ch.pos.y - branch.y) < GAZE_BRANCH_Y_TOLERANCE)
+  const shouldGaze = Boolean(g && !g.main.hidden && !inst.zones.gCollected && onBranch)
+  heroInst.lookAtPos = shouldGaze ? { x: g.x, y: g.y } : null
 }
 //
 // Advances the O-letter meditation: standing perfectly still (grounded, no

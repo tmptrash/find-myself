@@ -217,20 +217,20 @@ export const CFG = {
         water: PALETTE.cyan2,
         waterDeep: PALETTE.teal0,
         //
-        // Colour-world backdrop: light blue sky above the ground line and a
-        // dark earth band below it (main tree root zone).
+        // Colour-world backdrop: the bright warm haze above the ground line
+        // (warmHaze below) and a dark earth band under it (root zone).
         //
-        sky: PALETTE.blue4,
         groundDark: PALETTE.gray0,
-        sunCore: PALETTE.orange2,
-        sunBright: PALETTE.orange3,
-        sunHalo: [PALETTE.red0, PALETTE.orange2, PALETTE.orange5, PALETTE.green2, PALETTE.blue2, PALETTE.purple1, PALETTE.gray7],
         gold: PALETTE.gold3,
         mushrooms: [PALETTE.red1, PALETTE.orange2, PALETTE.purple1, PALETTE.blue2],
         //
         // Darkest tone of each mushroom cap family — used for cap outlines.
         //
         mushroomsDark: [PALETTE.red0, PALETTE.orange0, PALETTE.purple0, PALETTE.blue0],
+        //
+        // Lighter tone of each mushroom cap family — cap highlights.
+        //
+        mushroomsLight: [PALETTE.red3, PALETTE.orange4, PALETTE.purple3, PALETTE.blue3],
         //
         // Dark rim tone for gray ground decor (rocks, trampoline mushroom).
         //
@@ -252,14 +252,51 @@ export const CFG = {
           leaf: PALETTE.sand3
         },
         //
-        // Colour-world main tree: warm brown with a slight reddish tint so the
-        // hero's tree reads as the warmest wood in the scene.
+        // Colour-world main tree: dark brown wood with juicy green foliage —
+        // matches the foreground trees of the reference forest picture.
         //
         treeColor: {
           root: PALETTE.brown0,
-          trunk: PALETTE.brown1,  // Same tone as the branches — uniform wood colour
-          branch: PALETTE.brown1,
-          leaf: PALETTE.green2
+          trunk: PALETTE.brown1,
+          branch: PALETTE.brown2,
+          leaf: PALETTE.green3
+        },
+        //
+        // Colour-world background forest: warm amber wood dissolving into a
+        // golden haze (the backdrop tone the layers are blended toward).
+        //
+        treeAmber: {
+          root: PALETTE.orange0,
+          trunk: PALETTE.orange1,
+          branch: PALETTE.orange2,
+          leaf: PALETTE.green1
+        },
+        warmHaze: PALETTE.orange5,
+        //
+        // Cute chubby mushroom (glow trampoline + decor): cream body, warm
+        // orange spotted cap; the gray set mirrors it inside the gray family.
+        //
+        cuteMushroom: {
+          body: PALETTE.sand5,
+          bodyShade: PALETTE.sand3,
+          cap: PALETTE.orange3,
+          capDark: PALETTE.orange0,
+          capLight: PALETTE.orange5,
+          spot: PALETTE.gray7,
+          outline: PALETTE.brown0,
+          face: PALETTE.brown0,
+          blush: PALETTE.red3
+        },
+        cuteMushroomGray: {
+          body: PALETTE.gray5,
+          bodyShade: PALETTE.gray4,
+          cap: PALETTE.gray3,
+          capDark: PALETTE.gray1,
+          capLight: PALETTE.gray6,
+          spot: PALETTE.gray6,
+          outline: PALETTE.gray1,
+          face: PALETTE.gray0,
+          blush: PALETTE.gray4
         },
         bark: {
           dark: PALETTE.mauve0,

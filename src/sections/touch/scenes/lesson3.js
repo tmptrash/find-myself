@@ -1937,14 +1937,9 @@ function showGlowInstructions(k) {
   const HOLD_DURATION = 4.0
   const FADE_OUT_DURATION = 0.5
   //
-  // Create 8-direction outline texts (black)
+  // Drop shadow (single black copy offset right+down), glow-level style.
   //
-  const outlineOffsets = [
-    [-OUTLINE_OFFSET, 0], [OUTLINE_OFFSET, 0],
-    [0, -OUTLINE_OFFSET], [0, OUTLINE_OFFSET],
-    [-OUTLINE_OFFSET, -OUTLINE_OFFSET], [OUTLINE_OFFSET, -OUTLINE_OFFSET],
-    [-OUTLINE_OFFSET, OUTLINE_OFFSET], [OUTLINE_OFFSET, OUTLINE_OFFSET]
-  ]
+  const outlineOffsets = [[OUTLINE_OFFSET, OUTLINE_OFFSET]]
   const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
     k.text(HERO_GLOW_HINT_TEXT, {
       size: TEXT_SIZE,

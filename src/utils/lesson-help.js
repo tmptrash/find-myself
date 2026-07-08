@@ -363,17 +363,12 @@ function getSectionPanelColors(levelName) {
 //
 // Eight-direction outline offset pairs
 //
+//
+// Drop shadow (single black copy offset right+down) — the same text shadow
+// style the glow level uses.
+//
 function buildOutlineOffsets(thickness) {
-  return [
-    [-thickness, -thickness],
-    [0, -thickness],
-    [thickness, -thickness],
-    [-thickness, 0],
-    [thickness, 0],
-    [-thickness, thickness],
-    [0, thickness],
-    [thickness, thickness]
-  ]
+  return [[thickness, thickness]]
 }
 
 //

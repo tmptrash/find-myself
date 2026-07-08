@@ -29,13 +29,10 @@ const EERIE_SOUND_MAX_DELAY = 8
 //
 const WORD_HUD_FPS_TOP_OFFSET = 43
 //
-// Black outline offsets for bottom death subtitle (8-direction stroke)
+// Drop shadow of the bottom death subtitle (single black copy offset
+// right+down) — the same text shadow style the glow level uses.
 //
-const DEATH_MESSAGE_OUTLINE_OFFSETS = [
-  [-2, -2], [0, -2], [2, -2],
-  [-2, 0], [2, 0],
-  [-2, 2], [0, 2], [2, 2]
-]
+const DEATH_MESSAGE_OUTLINE_OFFSETS = [[2, 2]]
 
 /**
  * Creates red death subtitle with black outline at the bottom of the screen

@@ -180,10 +180,11 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
   const activeIntroText = introTextOverride ?? INTRO_TEXT
   const activeResultText = resultTextOverride ?? RESULT_TEXT
   //
-  // Intro text outlines (black, drawn slightly behind)
+  // Intro text drop shadow (single black copy offset right+down),
+  // glow-level style
   //
   const oo = OUTLINE_OFFSET
-  const introOutlineOffsets = [[-oo, -oo], [0, -oo], [oo, -oo], [-oo, 0], [oo, 0], [-oo, oo], [0, oo], [oo, oo]]
+  const introOutlineOffsets = [[oo, oo]]
   const introOutlines = introOutlineOffsets.map(([dx, dy]) => k.add([
     k.text(activeIntroText, { size: FONT_SIZE, align: 'center' }),
     k.pos(centerX + dx, centerY + INTRO_Y_OFFSET + dy),
@@ -217,11 +218,12 @@ function showAnimation(k, currentScore, newScore, levelIndicator, sound, sceneLo
     k.z(CFG.visual.zIndex.ui + 52)
   ])
   //
-  // Score outlines (black) — hidden when hideScore is true
+  // Score drop shadow (single black copy offset right+down, glow-level
+  // style) — hidden when hideScore is true
   //
   const scoreX = centerX + SCORE_X_OFFSET
   const scoreY = centerY + SCORE_Y_OFFSET + 15
-  const outlineOffsets = [[-oo, 0], [oo, 0], [0, -oo], [0, oo]]
+  const outlineOffsets = [[oo, oo]]
   const scoreOutlines = outlineOffsets.map(([dx, dy]) => k.add([
     k.text(currentScore.toString(), { size: SCORE_FONT_SIZE }),
     k.pos(scoreX + dx, scoreY + dy),

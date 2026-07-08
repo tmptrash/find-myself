@@ -131,11 +131,22 @@ const IDLE_NOTE_GLYPHS = {
 //
 const IDLE_VOCALIZATION_DELAY = 2.0
 //
-// Pentatonic scale keeps the hum melodious even with a random note pick.
-// Only the hero is heard — the anti-hero produces visual notes but stays
-// silent so the soundscape never feels crowded by two voices.
+// Idle melody the hero hums while standing still — a gentle looping motif
+// over the C-major pentatonic (C5 D5 E5 G5 A5). Each entry is
+// [frequency, beats]; the note emitter waits for the beat length before the
+// next note, so every visible glyph coincides with its pitch and the whole
+// stream reads as one synchronized tune. Only the hero is heard — the
+// anti-hero produces visual notes but stays silent.
 //
-const IDLE_HUM_SCALE_HERO = [523.25, 587.33, 659.25, 784.0, 880.0]
+export const IDLE_MELODY = [
+  [659.25, 1], [784.0, 1], [880.0, 1.5], [784.0, 0.5],
+  [659.25, 1], [587.33, 1], [523.25, 2],
+  [587.33, 1], [659.25, 1], [784.0, 1.5], [659.25, 0.5],
+  [587.33, 1], [523.25, 1], [587.33, 2]
+]
+export const IDLE_MELODY_BEAT = 0.42          // Seconds per beat
+export const IDLE_MELODY_GAP = 0.1            // Silence inserted between notes
+export const IDLE_MELODY_SUSTAIN = 0.9        // Fraction of the beat the tone rings
 //
 // Module-level kill switch for idle vocalization. Toggled from the scene
 // transition code so the menu hero stops emitting notes while the
@@ -414,6 +425,7 @@ export function create(config) {
     idleVocalization,
     idleNotes: [],
     idleNoteEmitTimer: IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN),
+    idleMelodyIndex: 0,
     idleStillTime: 0,
     ambientWalk,
     ambientRunSpeed: ambientRunSpeed ?? RUN_ANIM_SPEED * 2.4
@@ -699,6 +711,12 @@ export function setLookAtPos(inst, pos) {
  */
 export function setEyesClosed(inst, closed) {
   inst.eyesClosed = !!closed
+  //
+  // Drop the cached idle sprite name: run/jump frames swap the sprite
+  // without touching the cache, so a stale match could skip re-applying the
+  // idle frame and leave the hero frozen sideways (e.g. landing in water).
+  //
+  inst.currentEyeSprite = null
   //
   // Any external eye-state change overrides a singing-induced closure, so
   // the idle-notes updater never force-reopens eyes shut by drowning,
@@ -1807,6 +1825,10 @@ function onUpdateIdleNotes(inst) {
     inst.eyesClosed = false
   }
   //
+  // The melody restarts from its first note whenever the song is interrupted.
+  //
+  !singing && (inst.idleMelodyIndex = 0)
+  //
   // Always age + drift existing notes so they fade out naturally if the
   // hero starts moving mid-emission.
   //
@@ -1824,13 +1846,16 @@ function onUpdateIdleNotes(inst) {
   //
   // Single timer drives both the visual glyph and (for the hero) the
   // whistle note, so every note the player sees coincides with the
-  // matching pitch in the audio.
+  // matching pitch in the audio. The timer follows the melody rhythm: each
+  // note holds for its beat count before the next one is emitted.
   //
   inst.idleNoteEmitTimer -= dt
   if (inst.idleNoteEmitTimer <= 0) {
+    const [, beats] = IDLE_MELODY[inst.idleMelodyIndex % IDLE_MELODY.length]
     spawnIdleNote(inst)
     playIdleVocalNote(inst)
-    inst.idleNoteEmitTimer = IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN)
+    inst.idleNoteEmitTimer = beats * IDLE_MELODY_BEAT + IDLE_MELODY_GAP
+    inst.idleMelodyIndex = (inst.idleMelodyIndex + 1) % IDLE_MELODY.length
   }
 }
 
@@ -1865,10 +1890,14 @@ function playIdleVocalNote(inst) {
   if (!inst.sfx) return
   if (inst.type === HEROES.ANTIHERO) return
   if (inst.idleVocalization === 'sleeping') return
-  const frequency = IDLE_HUM_SCALE_HERO[Math.floor(Math.random() * IDLE_HUM_SCALE_HERO.length)]
+  //
+  // Pitch and length come from the current melody step so the audio follows
+  // the same tune the floating note glyphs visualize.
+  //
+  const [frequency, beats] = IDLE_MELODY[inst.idleMelodyIndex % IDLE_MELODY.length]
   Sound.playIdleHumNote(inst.sfx, {
     frequency,
-    duration: 0.45,
+    duration: beats * IDLE_MELODY_BEAT * IDLE_MELODY_SUSTAIN,
     whistleMode: true
   })
 }

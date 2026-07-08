@@ -139,13 +139,9 @@ export function addSingleSpike(inst, x, y) {
  */
 function createSingleSpike(k, x, y, rotation, isFake = false) {
   //
-  // Create outline texts (8 directions for black outline)
+  // Drop shadow (single black copy offset right+down), glow-level style.
   //
-  const outlineOffsets = [
-    [-2, -2], [0, -2], [2, -2],
-    [-2, 0],           [2, 0],
-    [-2, 2],  [0, 2],  [2, 2]
-  ]
+  const outlineOffsets = [[2, 2]]
   
   const outlineTexts = outlineOffsets.map(([ox, oy]) => {
     const outlineComponents = [

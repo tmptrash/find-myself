@@ -159,18 +159,10 @@ export function create(config) {
   const scoreOffsetY = 10  // Vertical offset down from hero/life center
   const scoreOutlineThickness = 2  // Outline thickness for score text
   //
-  // Create outline for hero score (8 directions) - store references to update later
+  // Score drop shadow (single black copy offset right+down, glow-level
+  // style) — references stored to update later
   //
-  const scoreOffsets = [
-    [-scoreOutlineThickness, -scoreOutlineThickness],
-    [0, -scoreOutlineThickness],
-    [scoreOutlineThickness, -scoreOutlineThickness],
-    [-scoreOutlineThickness, 0],
-    [scoreOutlineThickness, 0],
-    [-scoreOutlineThickness, scoreOutlineThickness],
-    [0, scoreOutlineThickness],
-    [scoreOutlineThickness, scoreOutlineThickness]
-  ]
+  const scoreOffsets = [[scoreOutlineThickness, scoreOutlineThickness]]
   const heroScoreOutlines = []
   scoreOffsets.forEach(([dx, dy]) => {
     const outline = k.add([
@@ -201,7 +193,7 @@ export function create(config) {
     k.z(CFG.visual.zIndex.ui)
   ])
   //
-  // Create outline for life score (8 directions) - store references to update later
+  // Life score drop shadow — same single-offset style, references stored
   //
   const lifeScoreOutlines = []
   scoreOffsets.forEach(([dx, dy]) => {
@@ -241,7 +233,10 @@ export function create(config) {
   const trapBadgeFont = CFG.visual.fonts.regularFull
     ? CFG.visual.fonts.regularFull.replace(/'/g, '')
     : CFG.visual.fonts.thinFull.replace(/'/g, '')
-  const trapOutlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style.
+  //
+  const trapOutlineOffsets = [[2, 2]]
   const trapBadgeOutlines = trapOutlineOffsets.map(([dx, dy]) => k.add([
     k.text('', { size: trapBadgeSize, font: trapBadgeFont }),
     k.pos(trapBadgeX + dx, trapBadgeY + dy),

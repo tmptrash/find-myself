@@ -730,10 +730,11 @@ function drawTimePlatform(inst) {
   const { k, platformOpacity, platformText, platformFontSize, floatOffset } = inst
   const x = inst.x + inst.shakeOffsetX
   const floatY = inst.y + Math.sin(floatOffset) * FLOAT_AMPLITUDE
-  const outlineOffsets = [[-2, -2], [0, -2], [2, -2], [-2, 0], [2, 0], [-2, 2], [0, 2], [2, 2]]
   //
-  // Black outline text (8 directions)
+  // Drop shadow (single black copy offset right+down) — the same text
+  // shadow style the glow level uses.
   //
+  const outlineOffsets = [[2, 2]]
   outlineOffsets.forEach(([ox, oy]) => {
     k.drawText({
       text: platformText,

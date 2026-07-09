@@ -76,11 +76,13 @@ const MENU_GRASS_EDGE_INSET = 30
 //
 const MENU_GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - MENU_GRASS_EDGE_INSET
 //
-// The blades are dimmed well below the raw glow-grass green — full-bright
-// tufts read as glowing against the dark menu backdrop.
+// The blades take the SAME tone as the near-row glow-forest foliage: the
+// palette tree-leaf green pushed toward the warm haze by the combined
+// near-row blend of the glow level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
 //
-const MENU_GRASS_BRIGHTNESS = 0.55
-const [MENU_GRASS_TINT_R, MENU_GRASS_TINT_G, MENU_GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen).map(c => Math.round(c * MENU_GRASS_BRIGHTNESS))
+const MENU_GRASS_LEAF_HAZE_BLEND = 0.51
+const MENU_GRASS_HAZE_RGB = parseHex(CFG.visual.colors.palette.warmHaze)
+const [MENU_GRASS_TINT_R, MENU_GRASS_TINT_G, MENU_GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.treeColor.leaf).map((c, i) => Math.round(c + (MENU_GRASS_HAZE_RGB[i] - c) * MENU_GRASS_LEAF_HAZE_BLEND))
 //
 // Firefly particles target opacity when hovering an anti-hero
 //
@@ -246,11 +248,12 @@ export function sceneMenu(k) {
     //
     k.volume(1)
     //
-    // Set the canvas backdrop to the MENU scene background: the baked static
-    // sprite blends into this exact colour at its top/bottom bands, so the
-    // letterbox bars never read as horizontal strips of a different tone.
+    // Set the canvas backdrop to the READY scene background: the menu shares
+    // the same tone, and the baked static sprite blends into this exact colour
+    // at its top/bottom bands, so the letterbox bars never read as horizontal
+    // strips of a different tone.
     //
-    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.background)
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
     //
     // Clean up persistent word-pile objects from previous scenes
     //
@@ -809,6 +812,15 @@ export function sceneMenu(k) {
           foundHover = true
         }
       })
+      //
+      // The sleeping singer wakes while an anti-hero is hovered: the song
+      // pauses, the eyes open and follow the hovered character; once the
+      // mouse leaves he dozes off and the idle tune resumes on its own.
+      //
+      Hero.setAwakeOverride(heroInst, Boolean(hoveredInst))
+      Hero.setLookAtPos(heroInst, hoveredInst
+        ? { x: hoveredInst.character.pos.x, y: hoveredInst.character.pos.y }
+        : null)
       
       //
       // Update colors for all anti-heroes based on hover state
@@ -2101,14 +2113,14 @@ function buildMenuStaticSprite(k) {
   canvas.width = MENU_BG_CANVAS_W
   canvas.height = MENU_BG_CANVAS_H
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = CFG.visual.colors.background
+  ctx.fillStyle = CFG.visual.colors.ready.background
   ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
   //
-  // The picture's plain sky/underground bands are filled with the MENU
-  // background colour, so blended over the same colour they disappear — no
-  // horizontal strips above and below the composition.
+  // The picture's plain sky/underground bands are filled with the same READY
+  // background colour the menu uses, so blended over the same colour they
+  // disappear — no horizontal strips above and below the composition.
   //
-  const bgCanvas = generateMenuBackgroundCanvas(CFG.visual.colors.background)
+  const bgCanvas = generateMenuBackgroundCanvas(CFG.visual.colors.ready.background)
   ctx.globalAlpha = MENU_BG_BASE_OPACITY
   ctx.drawImage(bgCanvas, 0, 0)
   ctx.globalAlpha = 1

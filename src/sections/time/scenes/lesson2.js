@@ -29,6 +29,11 @@ const PLATFORM_SIDE_WIDTH = 50  // Reduced from 192 to 50 for more space
 const CORNER_RADIUS = 20  // Radius for rounded corners of game area
 const GROUND_STRIPE_HEIGHT = 5  // Height of ground stripe above bottom platform
 //
+// Drop shadow offset for the attempts hearts above the hero (single black
+// copy offset right+down — the shared text shadow style of the game).
+//
+const HEART_SHADOW_OFFSET = 2
+//
 // Breath vapor: small cold-air puffs from hero's mouth
 //
 const BREATH_INTERVAL = 2.0
@@ -1015,37 +1020,30 @@ function createHearts(inst) {
   inst.hearts = []
   
   //
-  // Create outline offsets for black outline (thicker outline with larger size)
+  // Drop shadow (single black copy offset right+down) — the same text
+  // shadow style the glow level uses.
   //
   const outlineOffsets = [
-    [-4, -4], [-3, -4], [-2, -4], [-1, -4], [0, -4], [1, -4], [2, -4], [3, -4], [4, -4],
-    [-4, -3], [-3, -3], [-2, -3], [-1, -3], [0, -3], [1, -3], [2, -3], [3, -3], [4, -3],
-    [-4, -2], [-3, -2], [-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [3, -2], [4, -2],
-    [-4, -1], [-3, -1], [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1], [3, -1], [4, -1],
-    [-4, 0],  [-3, 0],  [-2, 0],  [-1, 0],           [1, 0],  [2, 0],  [3, 0],  [4, 0],
-    [-4, 1],  [-3, 1],  [-2, 1],  [-1, 1],  [0, 1],  [1, 1],  [2, 1],  [3, 1],  [4, 1],
-    [-4, 2],  [-3, 2],  [-2, 2],  [-1, 2],  [0, 2],  [1, 2],  [2, 2],  [3, 2],  [4, 2],
-    [-4, 3],  [-3, 3],  [-2, 3],  [-1, 3],  [0, 3],  [1, 3],  [2, 3],  [3, 3],  [4, 3],
-    [-4, 4],  [-3, 4],  [-2, 4],  [-1, 4],  [0, 4],  [1, 4],  [2, 4],  [3, 4],  [4, 4]
+    [HEART_SHADOW_OFFSET, HEART_SHADOW_OFFSET]
   ]
   
   //
-  // Create 3 hearts with black outline
+  // Create 3 hearts with a drop shadow
   //
   for (let i = 0; i < 3; i++) {
     //
-    // Create outline hearts (black, slightly larger for better visibility)
+    // Create shadow hearts (black copies behind the main glyph)
     //
     const outlineHearts = outlineOffsets.map(([ox, oy]) => {
       return k.add([
         k.text('♥', {
-          size: 22,  // Slightly larger than main heart for better outline visibility
+          size: 20,
           font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
           align: "center"
         }),
         k.pos(ox, oy),
         k.anchor("center"),
-        k.color(0, 0, 0),  // Black outline
+        k.color(0, 0, 0),  // Black shadow
         k.z(CFG.visual.zIndex.ui - 1),  // Behind main heart
         k.opacity(1)
       ])
@@ -1121,13 +1119,13 @@ function updateHeartsPosition(inst) {
         heart.pos.y = heartsY
         
         //
-        // Update outline hearts position
+        // Update shadow hearts position (kept offset right+down)
         //
         if (heart.outlineHearts) {
           heart.outlineHearts.forEach((outlineHeart) => {
             if (outlineHeart && outlineHeart.exists()) {
-              outlineHeart.pos.x = heartX
-              outlineHeart.pos.y = heartsY
+              outlineHeart.pos.x = heartX + HEART_SHADOW_OFFSET
+              outlineHeart.pos.y = heartsY + HEART_SHADOW_OFFSET
             }
           })
         }

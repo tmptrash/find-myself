@@ -95,7 +95,7 @@ export function getLevelTime(inst) {
   return inst.levelTime
 }
 //
-// Creates HUD text with an eight-direction black outline.
+// Creates HUD text with a single drop-shadow copy (glow-level style).
 //
 function createOutlinedHudText(k, text, font, color, topY) {
   const outlineNodes = buildOutlineOffsets(HUD_OUTLINE_OFFSET).map(([dx, dy]) => k.add([

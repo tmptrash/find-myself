@@ -216,21 +216,17 @@ const TRAP_BADGE_OUTLINE_THICKNESS = 2
     k.z(CFG.visual.zIndex.ui)
   ])
   //
-  // Trap count badge with outline (bold red number on life icon)
+  // Trap count badge with a drop shadow (bold red number on life icon)
   //
   const trapBadgeX = lifeImageX + TRAP_BADGE_OFFSET_X
   const trapBadgeY = smallHeroY + LIFE_IMAGE_Y_OFFSET + TRAP_BADGE_OFFSET_Y
   const trapBadgeFont = CFG.visual.fonts.regularFull
     ? CFG.visual.fonts.regularFull.replace(/'/g, '')
     : CFG.visual.fonts.thinFull.replace(/'/g, '')
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style.
+  //
   const trapBadgeOutlineOffsets = [
-    [-TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
-    [0, -TRAP_BADGE_OUTLINE_THICKNESS],
-    [TRAP_BADGE_OUTLINE_THICKNESS, -TRAP_BADGE_OUTLINE_THICKNESS],
-    [-TRAP_BADGE_OUTLINE_THICKNESS, 0],
-    [TRAP_BADGE_OUTLINE_THICKNESS, 0],
-    [-TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS],
-    [0, TRAP_BADGE_OUTLINE_THICKNESS],
     [TRAP_BADGE_OUTLINE_THICKNESS, TRAP_BADGE_OUTLINE_THICKNESS]
   ]
   const trapBadgeOutlines = trapBadgeOutlineOffsets.map(([dx, dy]) => k.add([

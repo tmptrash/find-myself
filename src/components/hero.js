@@ -35,7 +35,20 @@ const ANNIHILATION_PARTICLE_SHAPE = 'circle'
 // Assembly (spawn) also uses circles — character materialises from round sparks
 //
 const SPAWN_PARTICLE_SHAPE = 'circle'
-const RUN_FRAME_COUNT = 3
+//
+// Run cycle — 8 frames like the reference sheet. Each leg loops around the
+// same stride circle half a cycle apart: it plants at the front, sweeps
+// back along the ground, then lifts (shorter leg, raised foot) and swings
+// forward. All values are in 96px sprite space.
+//
+const RUN_FRAME_COUNT = 8
+const RUN_LEG_CENTER_X = 43
+const RUN_LEG_SPREAD = 11
+const RUN_LEG_HEIGHT = 18
+const RUN_LEG_LIFT_SHORTEN = 7
+const RUN_LEG_LIFT_RAISE = 9
+const RUN_FOOT_Y = 84
+const RUN_BODY_BOB = 2
 //
 // Confusion key set — each control key (kaplay name + physical code) that the
 // word level 4 confusion platform can remap to moveLeft / moveRight / jump.
@@ -52,7 +65,13 @@ const CONFUSION_KEYS = [
   { name: 'space', phys: null }
 ]
 const CONFUSION_NORMAL_JUMP_NAMES = ['up', 'w', 'space']
-const JUMP_FRAME_COUNT = 6
+//
+// Jump — 7 frames like the reference sheet: crouch, stretch take-off,
+// rising, peak with the legs tucked up, early descent, full-leg descent and
+// the landing crouch (held briefly right after touching the ground).
+//
+const JUMP_FRAME_COUNT = 7
+const LAND_SQUASH_TIME = 0.08
 const JUMP_SQUASH_TIME = 0.03
 const JUMP_CEILING_CLEARANCE = 44
 const JUMP_STRETCH_START = 0.1
@@ -104,7 +123,7 @@ const FOOTPRINT_Z = 9
 // another mouth effect, e.g. cold breath in winter levels).
 //
 const IDLE_NOTE_OFFSET_Y = -28          // Mouth height above hero center (pixels)
-const IDLE_NOTE_OFFSET_X = 4            // Forward offset in the facing direction
+const IDLE_NOTE_OFFSET_X = -16          // Notes emerge to the LEFT of the head
 const IDLE_NOTE_LIFETIME = 2.2          // How long each note stays visible (seconds)
 const IDLE_NOTE_RISE_SPEED = 28         // Vertical drift speed (px/s, upward)
 const IDLE_NOTE_DRIFT_AMPLITUDE = 16    // Horizontal sway amplitude (px)
@@ -388,6 +407,7 @@ export function create(config) {
     jumpPhase: 'none', // 'squashing', 'jumping', 'none'
     squashTimer: 0,   // Timer for pre-jump squash animation
     isSquashing: false, // Flag for pre-jump squash
+    landSquashTimer: 0, // Remaining time the landing crouch frame is held
     crouchTimer: 0,   // Remaining time the hero is forced into the squat pose
     isCrouching: false, // True while crouchTimer > 0 and hero is grounded
     eyeOffsetX: 0,
@@ -397,6 +417,7 @@ export function create(config) {
     eyeTimer: 0,
     currentEyeSprite: null,
     eyesClosed: false,  // When true, idle uses the closed-eyes sprite (calm)
+    awakeOverride: false, // When true, idle vocalization is paused (hero forced awake)
     lookAtPos: null,
     isAnnihilating: false,
     isDying: false,
@@ -700,6 +721,18 @@ export function death(inst, onComplete, opts = {}) {
  */
 export function setLookAtPos(inst, pos) {
   inst.lookAtPos = pos
+}
+
+/**
+ * Forces the character awake: idle vocalization stops and eyes shut by the
+ * singing reopen on the next update. Used by the menu while the player
+ * hovers an anti-hero so the central hero wakes up and watches it; clearing
+ * the override lets him doze off and resume the idle tune by himself.
+ * @param {Object} inst - Hero instance
+ * @param {boolean} awake - True to hold the character awake
+ */
+export function setAwakeOverride(inst, awake) {
+  inst.awakeOverride = !!awake
 }
 
 /**
@@ -1250,19 +1283,21 @@ function onUpdate(inst) {
     //
     setJumpTuck(inst, velocity < JUMP_TUCK_RELEASE_VELOCITY)
     //
-    // Determine jump frame based on vertical velocity
+    // Determine jump frame based on vertical velocity (reference sheet):
     //
-    // Frame 0: squash (pre-jump, on ground only)
+    // Frame 0: take-off crouch (pre-jump, on ground only)
     //
-    // Frame 1: stretch (ascending, first half) - velocity < -400
+    // Frame 1: stretch (ascending fast) - velocity < -400
     //
-    // Frame 2: normal (approaching peak) - velocity -400 to -250
+    // Frame 2: rising - velocity -400 to -150
     //
-    // Frame 3: intermediate (near peak) - velocity -250 to -100
+    // Frame 3: peak, legs tucked up - velocity -150 to 100
     //
-    // Frame 4: squash (at peak and early descent) - velocity -100 to 200
+    // Frame 4: early descent, legs extending - velocity 100 to 400
     //
-    // Frame 5: normal (landing) - after grounding
+    // Frame 5: fast descent, legs fully down bracing for landing
+    //
+    // Frame 6: landing crouch - held briefly after grounding
     //
     let targetFrame = inst.jumpFrame
 
@@ -1271,26 +1306,26 @@ function onUpdate(inst) {
       // First half of ascent - stretched (frame 1)
       //
       targetFrame = 1
-    } else if (velocity < -250) {
+    } else if (velocity < -150) {
       //
-      // Approaching peak - normal height (frame 2)
+      // Rising toward the peak (frame 2)
       //
       targetFrame = 2
-    } else if (velocity < -100) {
+    } else if (velocity < 100) {
       //
-      // Near peak - intermediate (frame 3)
+      // At the peak - legs tucked up (frame 3)
       //
       targetFrame = 3
-    } else if (velocity < 200) {
+    } else if (velocity < 400) {
       //
-      // At peak and early descent - squashed (frame 4)
+      // Early descent - legs extending down (frame 4)
       //
       targetFrame = 4
     } else {
       //
-      // Descending fast - back to normal for landing preparation (frame 2)
+      // Descending fast - legs fully extended for landing (frame 5)
       //
-      targetFrame = 2
+      targetFrame = 5
     }
     //
     // Update sprite only if frame changed
@@ -1323,18 +1358,35 @@ function onUpdate(inst) {
     //
     !inst.isSquashing && (inst.canJump = true)
     //
-    // Reset jump phase when grounded
+    // Reset jump phase when grounded and flash the landing crouch frame —
+    // the touch-down squat of the reference jump sheet.
     //
     if (inst.jumpPhase !== 'none') {
       inst.jumpPhase = 'none'
       inst.jumpFrame = 0
       inst.isSquashing = false
       inst.squashTimer = 0
+      inst.landSquashTimer = LAND_SQUASH_TIME
+      const prefix = inst.spritePrefix || inst.type
+      inst.character.use(inst.k.sprite(`${prefix}-jump-6`))
+      inst.currentEyeSprite = null
     }
     //
     // Restore the full collision box once the hero is back on the ground
     //
     setJumpTuck(inst, false)
+    //
+    // Hold the landing crouch for a beat unless the player is already
+    // running — the run cycle takes over immediately in that case.
+    //
+    if (inst.landSquashTimer > 0) {
+      inst.landSquashTimer -= inst.k.dt()
+      if (!isMoving && inst.landSquashTimer > 0) {
+        inst.character.flipX = inst.direction === -1
+        return
+      }
+      inst.landSquashTimer = 0
+    }
   }
   //
   // Calm meditation: always hold the closed-eyes idle frame on the ground,
@@ -1376,9 +1428,10 @@ function onUpdate(inst) {
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
       //
-      // Step sound + footprint on frame 0 (when foot touches ground)
+      // Step sound + footprint on the contact frames (a foot plants on the
+      // ground twice per 8-frame cycle — frames 0 and 4)
       //
-      if (inst.runFrame === 0) {
+      if (inst.runFrame % (RUN_FRAME_COUNT / 2) === 0) {
         inst.sfx && Sound.playStepSound(inst.sfx, inst.currentLevel)
         spawnFootprint(inst)
       }
@@ -1774,6 +1827,7 @@ function drawFootprints(k, inst) {
 //
 function canVocalize(inst) {
   if (idleVocalizationSuppressed) return false
+  if (inst.awakeOverride) return false
   if (!inst.idleVocalization) return false
   if (!inst.character?.exists?.()) return false
   if (inst.isAnnihilating || inst.isDying) return false
@@ -1860,13 +1914,13 @@ function onUpdateIdleNotes(inst) {
 }
 
 //
-// Pushes a new note particle near the hero's mouth, biased forward in the
-// facing direction so the notes appear to flow from the lips.
+// Pushes a new note particle beside the hero's mouth — offset to the LEFT
+// of the head so the stream never covers the face.
 //
 function spawnIdleNote(inst) {
   const ch = inst.character
   if (!ch?.pos) return
-  const mouthX = ch.pos.x + IDLE_NOTE_OFFSET_X * inst.direction
+  const mouthX = ch.pos.x + IDLE_NOTE_OFFSET_X
   const mouthY = ch.pos.y + IDLE_NOTE_OFFSET_Y
   const glyphs = IDLE_NOTE_GLYPHS[inst.idleVocalization] || IDLE_NOTE_GLYPHS.humming
   inst.idleNotes.push({
@@ -2871,35 +2925,30 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   let leftLegHeight = legHeight
   let rightLegHeight = legHeight
   //
-  // Run animation: 3 frames with horizontal spread and vertical leg lift.
-  // The ground-contact foot always reaches y=28 (same as idle).
-  // The lifted foot is shorter to show a realistic stride.
-  // Step sound plays on frame 0 when left foot makes contact.
+  // Run animation: 8-frame stride cycle (reference sheet). The two legs run
+  // the SAME loop half a cycle apart — plant at the front, sweep back along
+  // the ground, lift and swing forward. The body dips slightly on the
+  // contact poses. Step sound plays on the contact frames (0 and 4).
   //
   if (animation === 'run') {
-    if (frame === 0) {
-      //
-      // Contact: left foot forward on ground, right foot back and lifted
-      //
-      leftLegX = 33
-      rightLegX = 54
-      rightLegY = 63
-      rightLegHeight = 12
-    } else if (frame === 1) {
-      //
-      // Drive: right foot lands, left foot lifts
-      //
-      leftLegX = 33
-      rightLegX = 51
-      leftLegY = 63
-      leftLegHeight = 12
-    } else if (frame === 2) {
-      //
-      // Pass: both legs close together at ground level
-      //
-      leftLegX = 42
-      rightLegX = 42
-    }
+    const phase = frame / RUN_FRAME_COUNT
+    const left = runLegPose(phase)
+    const right = runLegPose(phase + 0.5)
+    leftLegX = left.x
+    leftLegY = left.y
+    leftLegHeight = left.height
+    rightLegX = right.x
+    rightLegY = right.y
+    rightLegHeight = right.height
+    //
+    // Contact bob: the body sits lowest when a foot plants (phase 0 / 0.5)
+    // and rises through the passing poses.
+    //
+    const bob = Math.round((1 - Math.abs(Math.sin(phase * Math.PI * 2))) * RUN_BODY_BOB)
+    headY += bob
+    bodyY += bob
+    leftArmY += bob
+    rightArmY += bob
   }
   //
   // Jump animation - 5 frames with squash and stretch
@@ -2963,58 +3012,78 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       legHeight = 18
     } else if (frame === 3) {
       //
-      // Frame 3: Intermediate (transitioning to squash) - between normal and squash
+      // Frame 3: Peak — legs TUCKED up under the body (reference pose):
+      // short legs, feet pulled almost into the body silhouette.
       //
       headY = 6
-      headHeight = 21
-      bodyY = 27
-      bodyHeight = 21
-      leftArmY = 30
-      rightArmY = 30
+      headHeight = 24
+      bodyY = 30
+      bodyHeight = 24
+      leftArmY = 33
+      rightArmY = 33
       //
-      // Legs slightly taller
+      // Tucked legs — short, feet raised, slightly spread
       //
-      rightLegY = 48
-      rightLegX = 54
-      leftLegY = 48
-      leftLegX = 33
-      legHeight = 18
+      rightLegY = 56
+      rightLegX = 52
+      leftLegY = 56
+      leftLegX = 35
+      legHeight = 10
     } else if (frame === 4) {
       //
-      // Frame 4: Squash (descending, in air) - hero compressed DOWN
+      // Frame 4: Early descent — the legs start extending back down
       //
       headY = 6
-      headHeight = 18
-      bodyY = 24
-      bodyHeight = 15
-      leftArmY = 27
-      rightArmY = 27
+      headHeight = 24
+      bodyY = 30
+      bodyHeight = 24
+      leftArmY = 33
+      rightArmY = 33
       //
-      // Legs SHORT and spread wider
+      // Legs half extended
       //
-      rightLegY = 39
+      rightLegY = 58
       rightLegX = 54
-      leftLegY = 39
+      leftLegY = 58
       leftLegX = 33
-      legHeight = 15
+      legHeight = 14
     } else if (frame === 5) {
       //
-      // Frame 5: Normal (landing/idle) - regular proportions
+      // Frame 5: Fast descent — legs reach fully DOWN toward the ground
       //
-      headY = 18
+      headY = 6
       headHeight = 24
-      bodyY = 42
+      bodyY = 30
       bodyHeight = 24
-      leftArmY = 45
-      rightArmY = 45
+      leftArmY = 33
+      rightArmY = 33
       //
-      // Regular legs
+      // Fully extended legs bracing for the landing
       //
-      rightLegY = 66
-      rightLegX = 51
-      leftLegY = 66
-      leftLegX = 36
-      legHeight = 18
+      rightLegY = 60
+      rightLegX = 53
+      leftLegY = 60
+      leftLegX = 34
+      legHeight = 20
+    } else if (frame === 6) {
+      //
+      // Frame 6: Landing crouch — same squat as the take-off crouch,
+      // held briefly right after touching the ground.
+      //
+      headY = 45
+      headHeight = 15
+      bodyY = 60
+      bodyHeight = 12
+      leftArmY = 63
+      rightArmY = 63
+      //
+      // Legs SHORT and wide
+      //
+      rightLegY = 72
+      rightLegX = 54
+      leftLegY = 72
+      leftLegX = 33
+      legHeight = 12
     }
     leftArmX = 25
     rightArmX = 65
@@ -3739,6 +3808,23 @@ function createParticleWithOutline(k, x, y, colorHex, shapeType, rotation, parti
 }
 //
 // Draws a filled rectangle with only the two bottom corners rounded.
+// One leg pose on the 8-frame run cycle: x sweeps between the front and
+// back stops on a cosine, and while the leg swings forward (negative half
+// of the sine) it lifts — the pill shortens and the foot rises off the
+// ground line. On the stance half the foot stays planted on RUN_FOOT_Y.
+//
+function runLegPose(phase) {
+  const angle = Math.PI * 2 * phase
+  const lift = Math.max(0, -Math.sin(angle))
+  const height = RUN_LEG_HEIGHT - Math.round(lift * RUN_LEG_LIFT_SHORTEN)
+  const footY = RUN_FOOT_Y - Math.round(lift * RUN_LEG_LIFT_RAISE)
+  return {
+    x: Math.round(RUN_LEG_CENTER_X + Math.cos(angle) * RUN_LEG_SPREAD),
+    y: footY - height,
+    height
+  }
+}
+//
 // Flat top connects seamlessly to the flat bottom of body outline/fill,
 // eliminating the body-to-leg gap visible in all animation frames.
 // Caller sets ctx.fillStyle before calling.

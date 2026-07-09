@@ -172,16 +172,10 @@ export function create(config) {
   }
   
   //
-  // Create 8 outline text objects (black, offset in all directions)
+  // Drop shadow (single black copy offset right+down) — the same text
+  // shadow style the glow level uses.
   //
   const offsets = [
-    [-OUTLINE_THICKNESS, -OUTLINE_THICKNESS],
-    [0, -OUTLINE_THICKNESS],
-    [OUTLINE_THICKNESS, -OUTLINE_THICKNESS],
-    [-OUTLINE_THICKNESS, 0],
-    [OUTLINE_THICKNESS, 0],
-    [-OUTLINE_THICKNESS, OUTLINE_THICKNESS],
-    [0, OUTLINE_THICKNESS],
     [OUTLINE_THICKNESS, OUTLINE_THICKNESS]
   ]
   

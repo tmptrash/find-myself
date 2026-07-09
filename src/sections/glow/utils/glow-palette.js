@@ -107,11 +107,11 @@ export function getTreePaletteColor() {
     leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
     leafOpacity: 1,
     leafShades: [
-      glowRgb('#32571d'),
-      glowRgb('#4b6c2e'),
-      glowRgb('#6d8740'),
-      glowRgb('#aabd68'),
-      glowRgb('#cfd496')
+      glowRgb('#2d5b16'),
+      glowRgb('#41761f'),
+      glowRgb('#569229'),
+      glowRgb('#93c653'),
+      glowRgb('#c0dc82')
     ],
     //
     // Colour-phase bark crack tones come from the palette bark set.
@@ -120,7 +120,7 @@ export function getTreePaletteColor() {
       dark: glowRgb(GLOW_PAL.bark.dark),
       highlight: glowRgb(GLOW_PAL.bark.highlight)
     },
-    leafVein: glowRgb('#32571d'),
+    leafVein: glowRgb('#2d5b16'),
     woodOutline: glowRgb('void')
   }
 }

@@ -15,13 +15,11 @@ import { getTreeBarkPalette } from './glow-palette.js'
 //
 export const TREE_SEED = 3712
 //
-// Root rendering tuning — taper zones and the trunk-base flare geometry.
+// Root rendering tuning — taper zones near the ends of every root run.
 //
 const ROOT_BOTTOM_TAPER_ZONE = 38
 const ROOT_GROUND_TAPER_ZONE = 42
 const ROOT_TRUNK_BOOST_FALLOFF = 44
-const ROOT_FLARE_H = 36
-const ROOT_FLARE_BOTTOM_FRAC = 0.55
 //
 // Roots are hard-clipped this many px BELOW the ground line — no root stroke
 // (taper aside) can ever poke above the ground surface.
@@ -31,8 +29,7 @@ const ROOT_CLIP_BELOW_GROUND = 2
 // Root relief — the roots are drawn in three passes so they read as round
 // wood instead of flat lines: a darker contour underdraw (silhouette rim),
 // the base fill strokes, then a thin light streak along the upper-left of
-// each segment (the lit side). Occasional knobby bulges mark the joints
-// where a root bends.
+// each segment (the lit side).
 //
 const ROOT_CONTOUR_EXTRA_W = 2.6
 const ROOT_CONTOUR_DARKEN = 0.45
@@ -41,9 +38,6 @@ const ROOT_HIGHLIGHT_ALPHA = 0.5
 const ROOT_HIGHLIGHT_OFFSET_X = -1.6
 const ROOT_HIGHLIGHT_OFFSET_Y = -1.6
 const ROOT_HIGHLIGHT_MIN_W = 3
-const ROOT_BULGE_CHANCE = 0.06
-const ROOT_BULGE_SCALE = 0.75
-const ROOT_BULGE_RIM_ALPHA = 0.4
 //
 // Side shading — the sun sits top-right, so trunk and branches carry a soft
 // dark band along their lower-left side. The band follows each segment (no
@@ -69,9 +63,9 @@ const BARK_LINE_ALPHA_RANGE = 0.12
 const BARK_LINE_JITTER = 3
 const BARK_LINE_WIDTH_MIN = 1
 const BARK_LINE_WIDTH_RANGE = 1.2
-const BARK_NOTCH_COUNT = 24
+const BARK_NOTCH_COUNT = 32
 const BARK_NOTCH_ALPHA = 0.16
-const BARK_KNOT_COUNT = 6
+const BARK_KNOT_COUNT = 7
 const BARK_KNOT_ALPHA = 0.22
 //
 // Horizontal ridge bands — the reference foreground trees show the trunk
@@ -79,7 +73,7 @@ const BARK_KNOT_ALPHA = 0.22
 // crossing the full trunk width with a thin highlight right below it, so the
 // bark reads as stacked plates.
 //
-const BARK_RIDGE_COUNT = 18
+const BARK_RIDGE_COUNT = 26
 const BARK_RIDGE_ALPHA = 0.26
 const BARK_RIDGE_SAG_MIN = 2
 const BARK_RIDGE_SAG_RANGE = 6
@@ -92,10 +86,10 @@ const BARK_RIDGE_HIGHLIGHT_OFFSET = 2.4
 // Vertical fissures — short near-vertical dark cuts between the ridge
 // plates, so the bark splits into separate slabs like the reference trees.
 //
-const BARK_FISSURE_COUNT = 22
+const BARK_FISSURE_COUNT = 34
 const BARK_FISSURE_ALPHA = 0.2
 const BARK_FISSURE_LEN_MIN = 8
-const BARK_FISSURE_LEN_RANGE = 16
+const BARK_FISSURE_LEN_RANGE = 28
 //
 // Vertical tonal streaks — long, soft dark/light bands following the trunk
 // centreline whose alpha swells and fades smoothly along the run, so the
@@ -106,6 +100,26 @@ const BARK_STREAK_ALPHA_MAX = 0.11
 const BARK_STREAK_WIDTH_FRAC_MIN = 0.22
 const BARK_STREAK_WIDTH_FRAC_RANGE = 0.18
 const BARK_STREAK_FRAC_SPAN = 0.6
+//
+// Deep vertical furrows — continuous dark grooves running down most of the
+// trunk with a thin lit rim beside each one, splitting the bark into long
+// vertical plates like the reference tree.
+//
+const BARK_FURROW_COUNT = 5
+const BARK_FURROW_ALPHA = 0.3
+const BARK_FURROW_WIDTH_MIN = 1.6
+const BARK_FURROW_WIDTH_RANGE = 1.6
+const BARK_FURROW_FRAC_SPAN = 0.7
+const BARK_FURROW_JITTER = 2.2
+const BARK_FURROW_HIGHLIGHT_ALPHA = 0.16
+const BARK_FURROW_HIGHLIGHT_OFFSET = 1.8
+//
+// Some knots grow a spiral curl inside instead of the plain inner ring —
+// the wood-grain swirl of the reference tree.
+//
+const BARK_CURL_KNOT_CHANCE = 0.4
+const BARK_CURL_TURNS = 2.2
+const BARK_CURL_POINTS = 26
 //
 // Branch bark — thick branches carry the same plate ridges as the trunk:
 // short dark curves crossing the branch width with a soft highlight beside
@@ -134,6 +148,13 @@ const BRANCH_FRAC_MAX = 0.92
 //
 const BRANCH_UP_SPREAD_MIN = 0.2
 const BRANCH_UP_SPREAD_RANGE = 0.45
+//
+// Extra upward branches added near the trunk top of EVERY tree so the crown
+// reads as reaching upward rather than only fanning sideways.
+//
+const BRANCH_TOP_EXTRA_COUNT = 4
+const BRANCH_TOP_FRAC_MIN = 0.78
+const BRANCH_TOP_FRAC_RANGE = 0.16
 //
 // Leaf-band teardrops — size/opacity ranges of the dense row-foliage leaves.
 //
@@ -281,8 +302,8 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     // Hard clip: root strokes may only paint below the ground line, so no root
     // ever pokes above the ground regardless of stroke width or round caps.
     // Three relief passes inside the clip: dark contour underdraw → base
-    // fill → lit-side highlight streaks + knobby joint bulges, so the roots
-    // read as round bending wood instead of flat lines.
+    // fill → lit-side highlight streaks, so the roots read as round bending
+    // wood instead of flat lines.
     //
     ctx.save()
     ctx.beginPath()
@@ -294,16 +315,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     drawRootStrokes(ctx, treeData, rootContourRgb, h, groundY, trunkBaseX, trunkHalfW, ROOT_CONTOUR_EXTRA_W)
     drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
     drawRootHighlights(ctx, treeData, rootHighlightRgb, h, groundY, trunkBaseX, trunkHalfW)
-    drawRootBulges(ctx, treeData, rootRgb, rootContourRgb, h, groundY, trunkBaseX, trunkHalfW)
     ctx.restore()
-    //
-    // Root flare — a tapering wedge in the root tone directly under the trunk
-    // base. Its top edge matches the trunk width EXACTLY, so the trunk-to-roots
-    // transition is seamless in width; individual root strokes grow out of it.
-    //
-    ctx.fillStyle = `rgb(${rootR}, ${rootG}, ${rootB})`
-    traceRootFlarePath(ctx, trunkBaseX, trunkHalfW, groundY)
-    ctx.fill()
   }
   //
   // Wood clip line: the trunk base or the ground line (roots start), whichever
@@ -620,32 +632,6 @@ function drawRootHighlights(ctx, treeData, rgb, h, groundY, trunkBaseX, trunkHal
   })
 }
 //
-// Knobby bulges at some root joints: a base-tone knot slightly wider than
-// the root with a dark rim arc along its lower side, marking the bends and
-// turns of the root run. Seeded per tree so both bake modes stay aligned.
-//
-function drawRootBulges(ctx, treeData, rgb, rimRgb, h, groundY, trunkBaseX, trunkHalfW) {
-  const rng = createRng((treeData.seed ?? TREE_SEED) + 4243)
-  treeData.rootSegs.forEach(seg => {
-    if (rng() > ROOT_BULGE_CHANCE) return
-    const width = rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW)
-    if (width < ROOT_HIGHLIGHT_MIN_W) return
-    const r = width * ROOT_BULGE_SCALE
-    ctx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
-    ctx.beginPath()
-    ctx.ellipse(seg.ex, seg.ey, r * (1.1 + rng() * 0.4), r, (rng() - 0.5) * 0.8, 0, Math.PI * 2)
-    ctx.fill()
-    //
-    // Dark rim along the shadowed lower side of the bulge.
-    //
-    ctx.strokeStyle = `rgba(${rimRgb.r}, ${rimRgb.g}, ${rimRgb.b}, ${ROOT_BULGE_RIM_ALPHA})`
-    ctx.lineWidth = 1.2
-    ctx.beginPath()
-    ctx.arc(seg.ex, seg.ey, r, Math.PI * 0.15, Math.PI * 0.85)
-    ctx.stroke()
-  })
-}
-//
 // Brightness-only helpers for the root relief tones: scale toward black or
 // blend toward white (allowed by the palette rule — no new hues appear).
 //
@@ -662,23 +648,6 @@ function lightenRgb(c, t) {
     g: Math.round(c.g + (255 - c.g) * t),
     b: Math.round(c.b + (255 - c.b) * t)
   }
-}
-//
-// Traces the closed trunk-base root flare path (for filling).
-//
-function traceRootFlarePath(ctx, trunkBaseX, trunkHalfW, groundY) {
-  ctx.beginPath()
-  ctx.moveTo(trunkBaseX + trunkHalfW, groundY)
-  ctx.quadraticCurveTo(
-    trunkBaseX + trunkHalfW, groundY + ROOT_FLARE_H * 0.6,
-    trunkBaseX + trunkHalfW * ROOT_FLARE_BOTTOM_FRAC, groundY + ROOT_FLARE_H
-  )
-  ctx.lineTo(trunkBaseX - trunkHalfW * ROOT_FLARE_BOTTOM_FRAC, groundY + ROOT_FLARE_H)
-  ctx.quadraticCurveTo(
-    trunkBaseX - trunkHalfW, groundY + ROOT_FLARE_H * 0.6,
-    trunkBaseX - trunkHalfW, groundY
-  )
-  ctx.closePath()
 }
 //
 // Returns a copy of a segment chain with widths grown by the given amount
@@ -810,11 +779,44 @@ function drawTrunkBark(ctx, segs, dark, highlight, seed, maxY) {
       ctx.stroke()
     })
     drawBarkStreaks(ctx, rng, spine, dark, highlight)
+    drawBarkFurrows(ctx, rng, spine, dark, highlight)
     drawBarkRidges(ctx, rng, spine, dark, highlight)
     drawBarkFissures(ctx, rng, spine, dark)
     drawBarkNotches(ctx, rng, spine, dark)
     drawBarkKnots(ctx, rng, spine, dark)
   })
+}
+//
+// Continuous vertical furrows: each groove follows one half-width fraction
+// down the whole trunk with per-point jitter, and a thin lit rim runs right
+// beside it — the bark splits into long vertical plates.
+//
+function drawBarkFurrows(ctx, rng, spine, dark, highlight) {
+  for (let i = 0; i < BARK_FURROW_COUNT; i++) {
+    const frac = (rng() * 2 - 1) * BARK_FURROW_FRAC_SPAN
+    const width = BARK_FURROW_WIDTH_MIN + rng() * BARK_FURROW_WIDTH_RANGE
+    //
+    // Groove path — one jittered polyline reused for both passes so the lit
+    // rim always hugs the same wiggle.
+    //
+    const pts = spine.map(j => ({
+      x: j.x + j.nx * j.hw * frac + (rng() - 0.5) * BARK_FURROW_JITTER,
+      y: j.y + j.ny * j.hw * frac + (rng() - 0.5) * BARK_FURROW_JITTER
+    }))
+    ctx.strokeStyle = `rgba(${dark.r}, ${dark.g}, ${dark.b}, ${BARK_FURROW_ALPHA})`
+    ctx.lineWidth = width
+    ctx.beginPath()
+    pts.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+    ctx.stroke()
+    ctx.strokeStyle = `rgba(${highlight.r}, ${highlight.g}, ${highlight.b}, ${BARK_FURROW_HIGHLIGHT_ALPHA})`
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    pts.forEach((p, idx) => {
+      const px = p.x + BARK_FURROW_HIGHLIGHT_OFFSET
+      idx === 0 ? ctx.moveTo(px, p.y) : ctx.lineTo(px, p.y)
+    })
+    ctx.stroke()
+  }
 }
 //
 // Long vertical tonal streaks following the trunk centreline: each streak
@@ -993,10 +995,35 @@ function drawBarkKnots(ctx, rng, spine, dark) {
     ctx.beginPath()
     ctx.ellipse(cx, cy, rx, rx * (1.5 + rng()), 0, 0, Math.PI * 2)
     ctx.stroke()
-    ctx.beginPath()
-    ctx.ellipse(cx, cy, rx * 0.45, rx * 0.8, 0, 0, Math.PI * 2)
-    ctx.stroke()
+    //
+    // Some knots carry a wood-grain spiral curl inside; the rest keep the
+    // plain inner ring.
+    //
+    if (rng() < BARK_CURL_KNOT_CHANCE) {
+      drawKnotCurl(ctx, rng, cx, cy, rx)
+    } else {
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, rx * 0.45, rx * 0.8, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
   }
+}
+//
+// A spiral curl inside a knot: the radius shrinks steadily while the angle
+// winds through a couple of turns — the grain swirl of a sawn-off branch.
+//
+function drawKnotCurl(ctx, rng, cx, cy, rx) {
+  const startAngle = rng() * Math.PI * 2
+  ctx.beginPath()
+  for (let p = 0; p <= BARK_CURL_POINTS; p++) {
+    const t = p / BARK_CURL_POINTS
+    const angle = startAngle + t * Math.PI * 2 * BARK_CURL_TURNS
+    const r = rx * (0.9 - 0.7 * t)
+    const px = cx + Math.cos(angle) * r
+    const py = cy + Math.sin(angle) * r * 1.4
+    p === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+  }
+  ctx.stroke()
 }
 //
 // Fills a soft band hugging one silhouette edge: outer points are the edge
@@ -1125,6 +1152,20 @@ function buildBranchesFromTrunk(rng, trunkSegs, branchSegs, leafEndpoints, fracM
     const len = 14 + rng() * 20 - frac * 5
     const w = 8 + (1 - frac) * 16
     growBranch(rng, seg.ex, seg.ey, angleBase, Math.max(7, Math.round(len)), w, branchSegs, leafEndpoints, 0)
+  }
+  //
+  // Extra near-vertical branches in the top band of the trunk: they thicken
+  // the crown with upward growth on every tree (foreground and parallax).
+  //
+  for (let i = 0; i < BRANCH_TOP_EXTRA_COUNT; i++) {
+    const frac = BRANCH_TOP_FRAC_MIN + rng() * BRANCH_TOP_FRAC_RANGE
+    const segIdx = Math.min(Math.floor(frac * trunkSegs.length), trunkSegs.length - 1)
+    const seg = trunkSegs[segIdx]
+    const side = i % 2 === 0 ? -1 : 1
+    const angle = -Math.PI / 2 + side * (BRANCH_UP_SPREAD_MIN + rng() * BRANCH_UP_SPREAD_RANGE)
+    const len = 16 + rng() * 18
+    const w = 7 + (1 - frac) * 10
+    growBranch(rng, seg.ex, seg.ey, angle, Math.max(8, Math.round(len)), w, branchSegs, leafEndpoints, 0)
   }
 }
 //

@@ -54,16 +54,10 @@ export function create(config) {
     //
     const isCompleted = letterLevel <= levelNumber
     const letterX = startX + i * (fontSize + letterSpacing)
-    const offsets = [
-      [-outlineThickness, -outlineThickness],
-      [0, -outlineThickness],
-      [outlineThickness, -outlineThickness],
-      [-outlineThickness, 0],
-      [outlineThickness, 0],
-      [-outlineThickness, outlineThickness],
-      [0, outlineThickness],
-      [outlineThickness, outlineThickness]
-    ]
+    //
+    // Drop shadow (single black copy offset right+down), glow-level style.
+    //
+    const offsets = [[outlineThickness, outlineThickness]]
     offsets.forEach(([dx, dy]) => {
       k.add([
         k.text(letter, {

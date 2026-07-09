@@ -62,12 +62,12 @@ const PALETTE = {
   gold3: '#ccb45c',
   gold4: '#e3d176',
   gold5: '#e6dfa1',
-  green0: '#32571d',
-  green1: '#4b6c2e',
-  green2: '#6d8740',
-  green3: '#8aa355',
-  green4: '#aabd68',
-  green5: '#cfd496',
+  green0: '#2d5b16',
+  green1: '#41761f',
+  green2: '#569229',
+  green3: '#6fae3a',
+  green4: '#93c653',
+  green5: '#c0dc82',
   teal0: '#255461',
   teal1: '#346c70',
   teal2: '#4d8a7e',
@@ -271,7 +271,7 @@ export const CFG = {
           branch: PALETTE.orange2,
           leaf: PALETTE.green1
         },
-        warmHaze: PALETTE.orange5,
+        warmHaze: PALETTE.orange4,
         //
         // Cute chubby mushroom (glow trampoline + decor): cream body, warm
         // orange spotted cap; the gray set mirrors it inside the gray family.

@@ -2027,7 +2027,8 @@ function updateCalmTimer(k, state, hero) {
   const fillColor = parseHex(hero.bodyColor || CFG.visual.colors.hero.body)
   if (!state.timerLabel) {
     //
-    // k.outline does not render on k.text — bake a black halo from 8 offset copies
+    // k.outline does not render on k.text — use one offset black copy as a
+    // drop shadow (glow-level style)
     //
     state.timerOutlineLabels = CALM_TIMER_OUTLINE_OFFSETS.map(([dx, dy]) =>
       k.add([

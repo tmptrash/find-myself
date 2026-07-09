@@ -184,11 +184,13 @@ const GRASS_EDGE_INSET = 30
 //
 const GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
 //
-// The blades are dimmed well below the raw glow-grass green — full-bright
-// tufts read as glowing against the dark night backdrop.
+// The blades take the SAME tone as the near-row glow-forest foliage: the
+// palette tree-leaf green pushed toward the warm haze by the combined
+// near-row blend of the glow level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
 //
-const GRASS_BRIGHTNESS = 0.55
-const [GRASS_TINT_R, GRASS_TINT_G, GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen).map(c => Math.round(c * GRASS_BRIGHTNESS))
+const GRASS_LEAF_HAZE_BLEND = 0.51
+const GRASS_HAZE_RGB = parseHex(CFG.visual.colors.palette.warmHaze)
+const [GRASS_TINT_R, GRASS_TINT_G, GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.treeColor.leaf).map((c, i) => Math.round(c + (GRASS_HAZE_RGB[i] - c) * GRASS_LEAF_HAZE_BLEND))
 const GRASS_TINT = { r: GRASS_TINT_R, g: GRASS_TINT_G, b: GRASS_TINT_B }
 // Cricket + owl ambient sounds — random intervals so the night soundscape
 // stays alive but never feels mechanical. Cricket bursts trigger every
@@ -316,11 +318,15 @@ const HERO_N_SPRITE_PREFIX = `hero_${HERO_TITLE_BODY_COLOR.replace('#', '')}_000
 const HERO_N_MOUSE_STILL_DELAY = 10
 const HERO_N_FALL_GRAVITY = 1500
 const HERO_N_RUN_SPEED = 42
-const HERO_N_RUN_FRAME_TIME = 0.12
-const HERO_N_RUN_FRAME_COUNT = 3
+const HERO_N_RUN_FRAME_TIME = 0.09
+const HERO_N_RUN_FRAME_COUNT = 8
 const HERO_N_RUN_STEPS_MIN = 4
 const HERO_N_RUN_STEPS_RANGE = 5
-const HERO_N_STEP_DURATION = HERO_N_RUN_FRAME_TIME * HERO_N_RUN_FRAME_COUNT
+//
+// The 8-frame run cycle contains TWO foot contacts, so one visible step
+// lasts half a full sprite cycle.
+//
+const HERO_N_STEP_DURATION = HERO_N_RUN_FRAME_TIME * HERO_N_RUN_FRAME_COUNT / 2
 const HERO_N_RUN_PAUSE = 4
 //
 // Wake-up sequence after an idle interruption: the hero first opens ONE eye
@@ -329,6 +335,11 @@ const HERO_N_RUN_PAUSE = 4
 //
 const HERO_N_WAKE_ONE_EYE_DURATION = 3
 const HERO_N_WAKE_BOTH_EYES_DURATION = 1
+//
+// After hero-n disappears past the right screen edge the scene waits this
+// long and then switches to the menu on its own.
+//
+const HERO_N_GONE_MENU_DELAY = 2
 const HERO_N_WAKE_PUPIL_FREQ = 0.7
 //
 // Geometry of the hero's eyes inside the 96 px sprite canvas (mirrors the
@@ -368,6 +379,10 @@ const HERO_N_NOTE_DRIFT_AMPLITUDE = 16
 const HERO_N_NOTE_DRIFT_FREQ = 1.4
 const HERO_N_NOTE_FONT_SIZE = 22
 const HERO_N_NOTE_OFFSET_Y = -23
+//
+// Notes emerge to the LEFT of the head so the stream never covers the face.
+//
+const HERO_N_NOTE_OFFSET_X = -16
 const HERO_N_VOCAL_DELAY = 2.0
 //
 // Centered description layout. All narrative + section labels live in
@@ -618,7 +633,7 @@ export function sceneReady(k) {
     // Shared input-stillness tracker driving the title-hero departure logic.
     // Both mouse motion and key presses count as player activity.
     //
-    const heroLetterState = { lastMouseX: -1, lastMouseY: -1, mouseMoved: false, mouseStillTime: 0, keyPulse: false }
+    const heroLetterState = { lastMouseX: -1, lastMouseY: -1, mouseMoved: false, mouseStillTime: 0, keyPulse: false, heroGoneTime: 0, heroGoneExited: false }
     k.onKeyPress(() => { heroLetterState.keyPulse = true })
     let hintFlickerTime = HINT_FLICKER_DURATION
     let hintDirection = -1
@@ -1386,6 +1401,18 @@ function updateTitleHeroes(k, spiders, spiderState, state, sound, dt) {
     if (spider.isHeroN) {
       updateHeroN(k, spider, state, legsStarted, dt)
       updateHeroNNotes(spider, sound, dt)
+      //
+      // Once hero-n has run past the right edge, the scene flows into the
+      // menu by itself after a short beat.
+      //
+      if (spider.heroGone) {
+        state.heroGoneTime += dt
+        if (state.heroGoneTime >= HERO_N_GONE_MENU_DELAY && !state.heroGoneExited) {
+          state.heroGoneExited = true
+          Sound.stopAmbient(sound)
+          goToMenuAfterAssets(k)
+        }
+      }
     }
   })
 }
@@ -1419,8 +1446,8 @@ function updateHeroNNotes(spider, sound, dt) {
   if (spider.heroNoteTimer > 0) return
   const [frequency, beats] = IDLE_MELODY[spider.heroMelodyIndex % IDLE_MELODY.length]
   spider.heroNotes.push({
-    baseX: spider.heroX,
-    x: spider.heroX,
+    baseX: spider.heroX + HERO_N_NOTE_OFFSET_X,
+    x: spider.heroX + HERO_N_NOTE_OFFSET_X,
     y: spider.heroY + HERO_N_NOTE_OFFSET_Y,
     age: 0,
     driftPhase: Math.random(),

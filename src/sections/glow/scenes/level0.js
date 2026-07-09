@@ -200,12 +200,6 @@ const PAR_L2_COLOR_BLEND = 0.55
 const PAR_L3_BG_BLEND = 0.94
 const PAR_L3_COLOR_BLEND = 0.78
 //
-// Far-plane foliage is pushed slightly toward the darkest swatch so the
-// leaves stay readable against the backdrop after L (never fully vanish).
-//
-const PAR_FAR_LEAF_DARKEN = 0.1
-const PAR_FARTHEST_LEAF_DARKEN = 0.14
-//
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
 // pokes below it either.
@@ -265,13 +259,13 @@ const PAR_LEAF_MAX_Y = Math.round(SCREEN_H * 0.43)
 //
 const PAR_BAND_SEED_OFFSET = 7700
 const PAR_BIG_BAND_TOP = PAR_BIG_TOP_MIN_Y - 40
-const PAR_BIG_BAND_BOTTOM = PAR_BIG_TOP_MIN_Y + PAR_BIG_TOP_RANGE + 180
+const PAR_BIG_BAND_BOTTOM = PAR_BIG_TOP_MIN_Y + PAR_BIG_TOP_RANGE + 140
 const PAR_BIG_BAND_COUNT = 4200
-const PAR_FAR_BAND_TOP = PAR_FAR_TOP_MIN_Y + 40
-const PAR_FAR_BAND_BOTTOM = PAR_FAR_TOP_MIN_Y + PAR_FAR_TOP_RANGE + 140
+const PAR_FAR_BAND_TOP = PAR_FAR_TOP_MIN_Y + 60
+const PAR_FAR_BAND_BOTTOM = PAR_FAR_TOP_MIN_Y + PAR_FAR_TOP_RANGE + 100
 const PAR_FAR_BAND_COUNT = 3200
-const PAR_FARTHEST_BAND_TOP = PAR_FARTHEST_TOP_MIN_Y + 80
-const PAR_FARTHEST_BAND_BOTTOM = PAR_FARTHEST_TOP_MIN_Y + PAR_FARTHEST_TOP_RANGE + 160
+const PAR_FARTHEST_BAND_TOP = PAR_FARTHEST_TOP_MIN_Y + 110
+const PAR_FARTHEST_BAND_BOTTOM = PAR_FARTHEST_TOP_MIN_Y + PAR_FARTHEST_TOP_RANGE + 130
 const PAR_FARTHEST_BAND_COUNT = 2400
 //
 // Forest fade-in duration (s) after the L letter reveals the parallax plane.
@@ -315,6 +309,12 @@ const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
 // gray world keeps every bush inside the gray family.
 //
 const BUSH_COLOR_HAZE_BLEND_NEAR = 0.55
+//
+// Colour-world 2nd/3rd bush strips are pushed this much further toward the
+// haze than the trees of their row, so each row's bushes read as a slightly
+// different (warmer) shade than the trunks behind them.
+//
+const BUSH_ROW_TINT_DELTA = 0.14
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is ~25% taller than the previous one. Even the
@@ -509,7 +509,7 @@ const L_TOOLTIP_Y_OFFSET = -80
 //
 // Trampoline mushroom hover tooltip — its own baffled reaction.
 //
-const TRAMP_TOOLTIP_TEXT = 'What!?'
+const TRAMP_TOOLTIP_TEXT = 'Wwhaaat!?'
 const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
 // While the hero stands on the start branch and G is still uncollected his
@@ -1013,6 +1013,12 @@ function startGlowIntro(inst) {
   if (get(KEY_INTRO_SHOWN, false)) {
     finishGlowIntro(inst)
     HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION)
+    //
+    // Any run/jump key dismisses the reminder right away — a player who
+    // already died knows the goal and should not wait out the long hint.
+    //
+    const replayKeys = [...CFG.controls.moveLeft, ...CFG.controls.moveRight, ...CFG.controls.jump]
+      .map(key => inst.k.onKeyPress(key, () => dismissReplayIntroHint(inst, replayKeys)))
     return
   }
   inst.introLock = true
@@ -1024,6 +1030,14 @@ function startGlowIntro(inst) {
     { text: HINT_INTRO_2_TEXT, duration: HINT_INTRO_2_DURATION }
   ], () => inst.introLock && finishGlowIntro(inst))
   const introKeys = inst.k.onKeyPress(() => advanceGlowIntro(inst, introKeys))
+}
+//
+// Clears the post-death goal reminder as soon as the player starts moving
+// and detaches all the run/jump key handlers registered for it.
+//
+function dismissReplayIntroHint(inst, handlers) {
+  handlers.forEach(handler => handler.cancel())
+  HeroHint.clear(inst.heroHint)
 }
 //
 // One key press moves the intro forward: 1st press shows the second hint,
@@ -1419,26 +1433,26 @@ function buildParallaxSprites(k, undergroundSpec) {
   colorCanvas.height = SCREEN_H
   const colorCtx = colorCanvas.getContext('2d')
   //
-  // Depth order, back to front: farthest bushes → farthest plane → far
-  // bushes → far plane → near plane → near bushes.
+  // Depth order, back to front, tree row BEHIND the bush row of the same
+  // depth: farthest plane → farthest bushes → far plane → far bushes →
+  // near plane → near bushes.
   //
   const bushColorBase = glowRgb(GLOW_PAL.treeColor.leaf)
   const grayNearPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L1_BG_BLEND)
-  const grayFarPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L2_BG_BLEND, true, PAR_FAR_LEAF_DARKEN)
-  const grayFarthestPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L3_BG_BLEND, true, PAR_FARTHEST_LEAF_DARKEN)
+  //
+  // Gray-phase 2nd/3rd rows collapse to uniform wood: leaves take the exact
+  // trunk tone, so each deeper row reads as one flat gray silhouette.
+  //
+  const grayFarPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L2_BG_BLEND, true, 0, true)
+  const grayFarthestPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L3_BG_BLEND, true, 0, true)
   //
   // Colour-world tones of the 2nd and 3rd rows: uniform-wood amber palettes
   // whose trunk tone IS the single flat orange of the whole row — the far
-  // bushes reuse exactly these tones, so trees and bushes of one row match.
+  // bushes take these tones pushed a touch further toward the haze, so the
+  // bushes of a row read slightly warmer than the trees of the same row.
   //
   const colorFarPal = buildDimmedTreePalette(getTreePaletteAmber(), WARM_HAZE, PAR_L2_COLOR_BLEND, true, 0, true)
   const colorFarthestPal = buildDimmedTreePalette(getTreePaletteAmber(), WARM_HAZE, PAR_L3_COLOR_BLEND, true, 0, true)
-  renderBushStrip(grayCtx, colorCtx, {
-    grayRgb: { r: grayFarthestPal.leafR, g: grayFarthestPal.leafG, b: grayFarthestPal.leafB },
-    colorRgb: { r: colorFarthestPal.trunkR, g: colorFarthestPal.trunkG, b: colorFarthestPal.trunkB },
-    colorFlat: true,
-    heightScale: BUSH_FARTHEST_HEIGHT_SCALE
-  })
   renderGlowTreePlane(grayCtx, colorCtx, {
     count: PAR_FARTHEST_TREE_COUNT,
     seedBase: PAR_FARTHEST_SEED_BASE,
@@ -1448,17 +1462,18 @@ function buildParallaxSprites(k, undergroundSpec) {
     colorBase: getTreePaletteAmber(),
     colorBlend: PAR_L3_COLOR_BLEND,
     flatLeaves: true,
-    leafDarken: PAR_FARTHEST_LEAF_DARKEN,
-    uniformColorWood: true,
+    leafDarken: 0,
+    uniformWood: true,
     bandTop: PAR_FARTHEST_BAND_TOP,
     bandBottom: PAR_FARTHEST_BAND_BOTTOM,
     bandCount: PAR_FARTHEST_BAND_COUNT
   })
   renderBushStrip(grayCtx, colorCtx, {
-    grayRgb: { r: grayFarPal.leafR, g: grayFarPal.leafG, b: grayFarPal.leafB },
-    colorRgb: { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
+    grayRgb: { r: grayFarthestPal.trunkR, g: grayFarthestPal.trunkG, b: grayFarthestPal.trunkB },
+    colorRgb: lerpRgb({ r: colorFarthestPal.trunkR, g: colorFarthestPal.trunkG, b: colorFarthestPal.trunkB }, WARM_HAZE, BUSH_ROW_TINT_DELTA),
     colorFlat: true,
-    heightScale: BUSH_FAR_HEIGHT_SCALE
+    grayFlat: true,
+    heightScale: BUSH_FARTHEST_HEIGHT_SCALE
   })
   renderGlowTreePlane(grayCtx, colorCtx, {
     count: PAR_FAR_TREE_COUNT,
@@ -1469,11 +1484,18 @@ function buildParallaxSprites(k, undergroundSpec) {
     colorBase: getTreePaletteAmber(),
     colorBlend: PAR_L2_COLOR_BLEND,
     flatLeaves: true,
-    leafDarken: PAR_FAR_LEAF_DARKEN,
-    uniformColorWood: true,
+    leafDarken: 0,
+    uniformWood: true,
     bandTop: PAR_FAR_BAND_TOP,
     bandBottom: PAR_FAR_BAND_BOTTOM,
     bandCount: PAR_FAR_BAND_COUNT
+  })
+  renderBushStrip(grayCtx, colorCtx, {
+    grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
+    colorRgb: lerpRgb({ r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB }, WARM_HAZE, BUSH_ROW_TINT_DELTA),
+    colorFlat: true,
+    grayFlat: true,
+    heightScale: BUSH_FAR_HEIGHT_SCALE
   })
   renderGlowTreePlane(grayCtx, colorCtx, {
     count: PAR_BIG_TREE_COUNT,
@@ -1485,7 +1507,7 @@ function buildParallaxSprites(k, undergroundSpec) {
     colorBlend: PAR_L1_COLOR_BLEND,
     flatLeaves: false,
     leafDarken: 0,
-    uniformColorWood: false,
+    uniformWood: false,
     leafWarmBlend: PAR_L1_LEAF_WARM_BLEND,
     bandTop: PAR_BIG_BAND_TOP,
     bandBottom: PAR_BIG_BAND_BOTTOM,
@@ -1495,6 +1517,7 @@ function buildParallaxSprites(k, undergroundSpec) {
     grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
     colorRgb: lerpRgb(bushColorBase, WARM_HAZE, BUSH_COLOR_HAZE_BLEND_NEAR),
     colorFlat: false,
+    grayFlat: false,
     heightScale: 1
   })
   //
@@ -1538,7 +1561,7 @@ function renderCombinedGroundBand(ctx, bandRgb, undergroundSpec, ugEntry) {
 function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
   const {
     count, seedBase, topMinY, topRange,
-    grayBlend, colorBase, colorBlend, flatLeaves, leafDarken, uniformColorWood,
+    grayBlend, colorBase, colorBlend, flatLeaves, leafDarken, uniformWood,
     leafWarmBlend = 0,
     bandTop, bandBottom, bandCount
   } = planeCfg
@@ -1546,11 +1569,11 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
   // Gray mode keeps the forest gray; the colour mode (after O) paints the
   // given colour base blended toward the warm haze, so deeper rows read
   // more orange and brighter, like the reference forest picture. From the
-  // 2nd row on the colour palette collapses to uniform wood: leaves, wood
-  // and bark all share the exact trunk tone — one flat orange silhouette.
+  // 2nd row on BOTH palettes collapse to uniform wood: leaves, wood and
+  // bark all share the exact trunk tone — one flat silhouette per row.
   //
-  const grayPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken)
-  const colorPal = buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformColorWood, leafWarmBlend)
+  const grayPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
+  const colorPal = buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformWood, leafWarmBlend)
   const treeXs = buildParallaxTreeXs(count, LEFT_MARGIN, SCREEN_W - RIGHT_MARGIN)
   treeXs.forEach((treeX, i) => {
     const trunkTopY = topMinY + Math.random() * topRange
@@ -1623,13 +1646,13 @@ function scaleGlowTreeWidths(treeData, scale) {
 // strip reads as real bushes in every mode.
 //
 function renderBushStrip(grayCtx, colorCtx, stripCfg) {
-  const { grayRgb, colorRgb, colorFlat, heightScale } = stripCfg
+  const { grayRgb, colorRgb, colorFlat, grayFlat, heightScale } = stripCfg
   let x = LEFT_MARGIN
   const right = SCREEN_W - RIGHT_MARGIN
   while (x < right) {
     const radius = (BUSH_RADIUS_MIN + Math.random() * (BUSH_RADIUS_MAX - BUSH_RADIUS_MIN)) * heightScale
     const mound = buildLeafyBushMoundSpec(x, radius)
-    drawLeafyBushMound(grayCtx, mound, grayRgb, false)
+    drawLeafyBushMound(grayCtx, mound, grayRgb, grayFlat)
     drawLeafyBushMound(colorCtx, mound, colorRgb, colorFlat)
     //
     // Advance less than a radius so each mound overlaps the next one.
@@ -3687,7 +3710,8 @@ function onUpdateDrowning(inst) {
   }
 }
 //
-// Flashes life icon red/white on drowning death (touch lesson 0 pattern).
+// Flashes life icon gold/white on drowning death (touch lesson 0 pattern
+// recoloured to the glow gold — perception happens through colour here).
 //
 function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
@@ -3696,10 +3720,10 @@ function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
     levelIndicator.lifeImage.sprite.opacity = 1.0
     return
   }
-  const flashRed = glowRgb(GLOW_PAL.mushrooms[0])
+  const flashGold = glowRgb(GLOW_GOLD_HEX)
   const flashLight = glowRgb('brightLight')
   if (count % 2 === 0) {
-    levelIndicator.lifeImage.sprite.color = k.rgb(flashRed.r, flashRed.g, flashRed.b)
+    levelIndicator.lifeImage.sprite.color = k.rgb(flashGold.r, flashGold.g, flashGold.b)
     levelIndicator.lifeImage.sprite.opacity = 1.0
   } else {
     levelIndicator.lifeImage.sprite.color = k.rgb(flashLight.r, flashLight.g, flashLight.b)
@@ -3708,12 +3732,13 @@ function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
   k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count + 1))
 }
 //
-// Red square particles radiating from life icon on drowning death.
+// Gold square particles radiating from life icon on drowning death.
 //
 function createLifeParticlesOnDrownDeath(k, levelIndicator) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
   const lifeX = levelIndicator.lifeImage.sprite.pos.x
   const lifeY = levelIndicator.lifeImage.sprite.pos.y
+  const gold = glowRgb(GLOW_GOLD_HEX)
   for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
     const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
     const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
@@ -3722,7 +3747,7 @@ function createLifeParticlesOnDrownDeath(k, levelIndicator) {
     const particle = k.add([
       k.rect(size, size),
       k.pos(lifeX, lifeY),
-      k.color(255, 0, 0),
+      k.color(gold.r, gold.g, gold.b),
       k.opacity(1),
       k.z(CFG.visual.zIndex.ui + 10),
       k.anchor('center'),

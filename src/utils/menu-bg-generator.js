@@ -48,19 +48,13 @@ const CANVAS_H = CFG.visual.screen.height
 const GROUND_Y = Math.round(CANVAS_H * 0.66)
 const HORIZON_LINE_HEIGHT = 3
 //
-// Sky and underground fills both use the exact `ready` scene backdrop
-// colour (`CFG.visual.colors.ready.background`) so the canvas image
-// bleeds seamlessly into the surrounding page chrome — no top/bottom
-// colour strips visible at any sprite opacity over the matching
-// backdrop rect.
+// Sky and underground fills default to the exact `ready` scene backdrop
+// colour so the canvas image bleeds seamlessly into the surrounding page
+// chrome — no top/bottom colour strips visible at any sprite opacity over
+// the matching backdrop rect. Scenes with a different backdrop (the menu)
+// pass their own fill hex, so the blend stays equal to the scene background.
 //
-const [READY_BG_R, READY_BG_G, READY_BG_B] = parseHex(CFG.visual.colors.ready.background)
-const SKY_FILL_R = READY_BG_R
-const SKY_FILL_G = READY_BG_G
-const SKY_FILL_B = READY_BG_B
-const UNDERGROUND_FILL_R = READY_BG_R
-const UNDERGROUND_FILL_G = READY_BG_G
-const UNDERGROUND_FILL_B = READY_BG_B
+const DEFAULT_BG_FILL_HEX = CFG.visual.colors.ready.background
 const HORIZON_LINE_R = 0
 const HORIZON_LINE_G = 0
 const HORIZON_LINE_B = 0
@@ -282,9 +276,13 @@ const PLACEMENT_MAX_ATTEMPTS = 80
  * canvas. Caller is expected to pass the canvas straight to
  * `k.loadSprite(name, canvas)`.
  *
+ * @param {string} [bgFillHex] - Sky/underground fill colour; pass the
+ *   calling scene's backdrop hex so the plain bands above and below the
+ *   composition blend into the scene background (no top/bottom strips)
  * @returns {HTMLCanvasElement}
  */
-export function generateMenuBackgroundCanvas() {
+export function generateMenuBackgroundCanvas(bgFillHex = DEFAULT_BG_FILL_HEX) {
+  const [bgFillR, bgFillG, bgFillB] = parseHex(bgFillHex)
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
   canvas.height = CANVAS_H
@@ -399,11 +397,11 @@ export function generateMenuBackgroundCanvas() {
   // so they sway, twinkle and drift instead of sitting as a still
   // image baked into the sprite.
   //
-  drawSky(ctx)
+  drawSky(ctx, bgFillR, bgFillG, bgFillB)
   drawMoon(ctx)
   drawTreeLayer(ctx, backTrees)
   drawTreeLayer(ctx, midTrees)
-  drawSoilFill(ctx)
+  drawSoilFill(ctx, bgFillR, bgFillG, bgFillB)
   drawTreeLayer(ctx, frontTrees)
   drawRocks(ctx)
   drawMushrooms(ctx)
@@ -412,22 +410,22 @@ export function generateMenuBackgroundCanvas() {
   return canvas
 }
 
-function drawSky(ctx) {
+function drawSky(ctx, fillR, fillG, fillB) {
   //
-  // Solid teal sky across the entire canvas. The underground band gets
-  // repainted on top of the lower portion further down in the pipeline.
+  // Solid backdrop-tone sky across the entire canvas. The underground band
+  // gets repainted on top of the lower portion further down in the pipeline.
   //
-  ctx.fillStyle = `rgb(${SKY_FILL_R}, ${SKY_FILL_G}, ${SKY_FILL_B})`
+  ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
 }
 
-function drawSoilFill(ctx) {
+function drawSoilFill(ctx, fillR, fillG, fillB) {
   //
   // Underground band painted AFTER back trees (so the back-tree
   // silhouettes only show above ground) but BEFORE front trees (so
   // the front trunks visually sit on the soil edge).
   //
-  ctx.fillStyle = `rgb(${UNDERGROUND_FILL_R}, ${UNDERGROUND_FILL_G}, ${UNDERGROUND_FILL_B})`
+  ctx.fillStyle = `rgb(${fillR}, ${fillG}, ${fillB})`
   ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y)
 }
 

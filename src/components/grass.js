@@ -36,8 +36,9 @@ const SPRITE_PREFIX = 'grass-blade-'
  * @param {Function} [cfg.excluded] - (x) => true to skip this X position
  * @param {Function} [cfg.density] - (x) => 0..1 acceptance weight; positions
  *   with a low weight grow fewer tufts (density gradient across the strip)
- * @param {Function} cfg.getTint - (blade) => {r,g,b} tint or null to hide
- *   the blade this frame
+ * @param {Function} cfg.getTint - (blade) => {r,g,b[,opacity]} tint or null
+ *   to hide the blade this frame; opacity (0..1) fades the blade without
+ *   darkening its colour
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
@@ -159,7 +160,8 @@ function onDraw(inst) {
       height: BLADE_H * blade.scale,
       angle,
       flipX: blade.flipX,
-      color: k.rgb(tint.r, tint.g, tint.b)
+      color: k.rgb(tint.r, tint.g, tint.b),
+      opacity: tint.opacity ?? 1
     })
   }
 }

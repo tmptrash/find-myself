@@ -171,20 +171,32 @@ export function getTreePaletteAmber() {
  * @param {boolean} [uniformWood=false] - Collapse the WHOLE tree to the blended
  *   trunk tone: leaves, branches and bark all match the trunk exactly, so the
  *   tree reads as one flat silhouette (2nd+ background rows)
+ * @param {number} [leafWarmBlend=0] - EXTRA blend of the foliage only toward
+ *   the backdrop tone — with a warm haze backdrop the leaves lean orange
+ *   while the wood keeps its base blend (near colour-world row)
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
-export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false) {
+export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false, leafWarmBlend = 0) {
   const mix = (r, g, b) => ({
     r: Math.round(r + (bg.r - r) * blend),
     g: Math.round(g + (bg.g - g) * blend),
     b: Math.round(b + (bg.b - b) * blend)
   })
   const mixRgb = (c) => mix(c.r, c.g, c.b)
+  //
+  // Extra leaf-only push toward the backdrop tone (orange haze warms the
+  // foliage while green stays the leading colour).
+  //
+  const warmRgb = (c) => ({
+    r: Math.round(c.r + (bg.r - c.r) * leafWarmBlend),
+    g: Math.round(c.g + (bg.g - c.g) * leafWarmBlend),
+    b: Math.round(c.b + (bg.b - c.b) * leafWarmBlend)
+  })
   const root = mix(base.rootR, base.rootG, base.rootB)
   const trunk = mix(base.trunkR, base.trunkG, base.trunkB)
   const branch = uniformWood ? trunk : mix(base.branchR, base.branchG, base.branchB)
-  const leaf = uniformWood ? trunk : darkenRgb(mix(base.leafR, base.leafG, base.leafB), leafDarken)
-  const darkenLeafRgb = (c) => darkenRgb(mixRgb(c), leafDarken)
+  const leaf = uniformWood ? trunk : warmRgb(darkenRgb(mix(base.leafR, base.leafG, base.leafB), leafDarken))
+  const darkenLeafRgb = (c) => warmRgb(darkenRgb(mixRgb(c), leafDarken))
   return {
     rootR: root.r, rootG: root.g, rootB: root.b,
     trunkR: trunk.r, trunkG: trunk.g, trunkB: trunk.b,

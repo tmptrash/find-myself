@@ -15,7 +15,7 @@ import {
   buildGlowTree,
   renderGlowTreeToCanvas,
   renderGlowTreeIntoContext,
-  renderGlowCanopyIntoContext,
+  renderGlowLeafBandIntoContext,
   TREE_SEED
 } from '../utils/glow-tree.js'
 import {
@@ -184,6 +184,11 @@ const BONUS_PLAT_W = 90
 const PAR_L1_BG_BLEND = 0.62
 const PAR_L1_COLOR_BLEND = 0.3
 //
+// Near-row foliage leans extra toward the warm orange haze (leaf-only blend)
+// while green stays the leading colour.
+//
+const PAR_L1_LEAF_WARM_BLEND = 0.3
+//
 // Second (far) plane behind the near one — dimmer still, foliage collapsed
 // to a single tone.
 //
@@ -227,9 +232,13 @@ const PAR_BIG_SEED_STEP = 101
 //
 const PAR_BIG_TOP_MIN_Y = TREE_TOP_Y - 20
 const PAR_BIG_TOP_RANGE = 110
-const PAR_FAR_TOP_MIN_Y = TREE_TOP_Y + 70
+//
+// 2nd and 3rd row crowns sit an extra ~10% of their tree height lower, so
+// each deeper leaf band starts visibly below the previous one.
+//
+const PAR_FAR_TOP_MIN_Y = TREE_TOP_Y + 130
 const PAR_FAR_TOP_RANGE = 90
-const PAR_FARTHEST_TOP_MIN_Y = TREE_TOP_Y + 140
+const PAR_FARTHEST_TOP_MIN_Y = TREE_TOP_Y + 190
 const PAR_FARTHEST_TOP_RANGE = 80
 const PAR_BIG_WIDTH_SCALE_MIN = 1.1
 const PAR_BIG_WIDTH_SCALE_RANGE = 0.3
@@ -241,20 +250,29 @@ const PAR_BIG_WIDTH_SCALE_RANGE = 0.3
 const PAR_BRANCH_FRAC_MIN = 0.78
 const PAR_BRANCH_FRAC_MAX = 0.97
 //
-// Lush baked canopy per row: a dense elliptical leaf cloud around every
-// trunk apex. Neighbouring crowns merge into one leaf band, so the top of
-// the screen is covered by foliage while the middle keeps only bare trunks.
+// Hard foliage floor: no background leaf (branch cluster or band leaf) may
+// ever paint below this line — the horizontal middle band of the screen
+// stays trunk-only in every row and every mode.
 //
-const PAR_BIG_CANOPY_RX = 215
-const PAR_BIG_CANOPY_RY = 150
-const PAR_BIG_CANOPY_COUNT = 420
-const PAR_FAR_CANOPY_RX = 180
-const PAR_FAR_CANOPY_RY = 125
-const PAR_FAR_CANOPY_COUNT = 340
-const PAR_FARTHEST_CANOPY_RX = 150
-const PAR_FARTHEST_CANOPY_RY = 105
-const PAR_FARTHEST_CANOPY_COUNT = 280
-const PAR_CANOPY_SEED_OFFSET = 7
+const PAR_LEAF_MAX_Y = Math.round(SCREEN_H * 0.43)
+//
+// Row foliage = ONE dense full-width horizontal band per row: every leaf of
+// a row sits at roughly the same vertical level with a small random step up
+// or down, uniform from the left edge to the right edge. Each deeper row's
+// band sits lower than the previous one (its bottom shows under the nearer
+// band), so the forest reads as three leaf strips descending with depth.
+// The near (1st) band is the thickest and densest.
+//
+const PAR_BAND_SEED_OFFSET = 7700
+const PAR_BIG_BAND_TOP = PAR_BIG_TOP_MIN_Y - 40
+const PAR_BIG_BAND_BOTTOM = PAR_BIG_TOP_MIN_Y + PAR_BIG_TOP_RANGE + 180
+const PAR_BIG_BAND_COUNT = 4200
+const PAR_FAR_BAND_TOP = PAR_FAR_TOP_MIN_Y + 40
+const PAR_FAR_BAND_BOTTOM = PAR_FAR_TOP_MIN_Y + PAR_FAR_TOP_RANGE + 140
+const PAR_FAR_BAND_COUNT = 3200
+const PAR_FARTHEST_BAND_TOP = PAR_FARTHEST_TOP_MIN_Y + 80
+const PAR_FARTHEST_BAND_BOTTOM = PAR_FARTHEST_TOP_MIN_Y + PAR_FARTHEST_TOP_RANGE + 160
+const PAR_FARTHEST_BAND_COUNT = 2400
 //
 // Forest fade-in duration (s) after the L letter reveals the parallax plane.
 //
@@ -271,9 +289,12 @@ const PAR_TREE_STEP_RANGE_FRAC = 0.9
 // the tree planes. Each mound is a filled dome scattered with small oval
 // leaves (a different leaf shape than the tree teardrops), so the strip
 // reads as real bushes instead of plain semicircles — in every mode.
+// The radius spread is kept narrow, so every strip holds one roughly even
+// height with only a small random step up/down — three uniform horizontal
+// hedge bands, like the reference picture.
 //
-const BUSH_RADIUS_MIN = 44
-const BUSH_RADIUS_MAX = 125
+const BUSH_RADIUS_MIN = 72
+const BUSH_RADIUS_MAX = 96
 const BUSH_STEP_MIN_FRAC = 0.45
 const BUSH_STEP_RANGE_FRAC = 0.5
 //
@@ -287,26 +308,31 @@ const BUSH_LEAF_DENSITY = 0.014
 const BUSH_RIM_LEAF_SPACING = 14
 const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
 //
-// Colour-world bush tones: the near (1st) strip stays slightly green and a
-// touch bright; the 2nd and 3rd strips reuse the exact flat orange trunk
-// tone of their tree row (see buildParallaxSprites), so trees and bushes of
-// one row always match. The gray world keeps every bush inside the gray family.
+// Colour-world bush tones: the near (1st) strip leans mostly toward the warm
+// orange haze while keeping a clear green tint; the 2nd and 3rd
+// strips reuse the exact flat orange trunk tone of their tree row (see
+// buildParallaxSprites), so trees and bushes of one row always match. The
+// gray world keeps every bush inside the gray family.
 //
-const BUSH_COLOR_HAZE_BLEND_NEAR = 0.15
+const BUSH_COLOR_HAZE_BLEND_NEAR = 0.55
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is ~25% taller than the previous one. Even the
 // tallest strip stays below the screen-middle band, keeping it leaf-free.
 //
-const BUSH_FAR_HEIGHT_SCALE = 1.25
-const BUSH_FARTHEST_HEIGHT_SCALE = 1.56
+const BUSH_FAR_HEIGHT_SCALE = 1.38
+const BUSH_FARTHEST_HEIGHT_SCALE = 1.72
 //
 // Background birds — dim silhouettes gliding BEHIND the forest planes; they
 // appear with the colour world (after O). Their tone is blended almost all
 // the way into the warm haze backdrop so they read as faint specks.
 //
 const BIRD_COUNT = 5
-const BIRD_MIN_Y = TOP_MARGIN + 10
+//
+// Birds glide through the bare-trunk band below the crowns, not at the very
+// top of the screen.
+//
+const BIRD_MIN_Y = TOP_MARGIN + 150
 const BIRD_Y_RANGE = 170
 const BIRD_SPEED_MIN = 22
 const BIRD_SPEED_RANGE = 26
@@ -320,13 +346,18 @@ const BIRD_LINE_WIDTH = 2
 const BIRD_HAZE_BLEND = 0.72
 //
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
-// hanging rootlets and a fossil spiral (no burrows or holes). Baked once per
-// mode (gray backdrop / dark colour-world earth).
+// hanging rootlets, a fossil spiral and one buried skeleton (no burrows or
+// holes). Baked once per mode (gray backdrop / dark colour-world earth).
 //
 const UNDERGROUND_GRAY_SPRITE = 'glow0-underground-gray'
 const UNDERGROUND_COLOR_SPRITE = 'glow0-underground-color'
 const UG_TOP_PAD = 30
 const UG_BOTTOM_PAD = 18
+//
+// The skeleton keeps clear of the main tree trunk: the root network spreads
+// about this far to each side, and no root may cover the bones.
+//
+const UG_SKELETON_TREE_CLEAR = 520
 const UG_ROCK_COUNT = 6
 const UG_CRACK_COUNT = 9
 const UG_PEBBLE_CLUSTER_COUNT = 6
@@ -409,7 +440,7 @@ const KEY_INTRO_SHOWN = 'glow.introShown'
 //
 const GLOW_DIALOG_G = '[hl]G[/hl]round is beneath you. Every\njourney begins with a single step.\nKeep your research.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades. The\nworld is rarely just black or white'
-const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Find [hl]W[/hl] by yourself.'
+const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see . Find [hl]W[/hl] by yourself.'
 //
 // Speech-bubble hints: two intro lines at spawn (the G letter appears only
 // after both finish), one-shot lines when the right ground / water zones
@@ -469,6 +500,17 @@ const HERO_TOOLTIP_Y_OFFSET = -100
 const G_TOOLTIP_TEXT = "Ground? Glow? Geometry?\nDon't think too much.\nJust touch it."
 const G_TOOLTIP_HOVER_SIZE = 70
 const G_TOOLTIP_Y_OFFSET = -80
+//
+// L letter hover tooltip — the letter's silhouette really does look like one.
+//
+const L_TOOLTIP_TEXT = 'Looks like a leg :)'
+const L_TOOLTIP_HOVER_SIZE = 70
+const L_TOOLTIP_Y_OFFSET = -80
+//
+// Trampoline mushroom hover tooltip — its own baffled reaction.
+//
+const TRAMP_TOOLTIP_TEXT = 'What!?'
+const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
 // While the hero stands on the start branch and G is still uncollected his
 // eyes stay locked on the letter (vertical slack around the branch top).
@@ -575,6 +617,11 @@ const TRAMP_GRASS_CLEAR_HALF = TRAMP_TOTAL_W / 2 + 12
 // wide enough that even the widest cap never overlaps the trampoline face.
 //
 const TRAMP_MUSHROOM_CLEAR_HALF = TRAMP_TOTAL_W / 2 + MUSHROOM_CAP_W_MAX / 2 + 10
+//
+// Scatter rocks keep clear of the trampoline too — even the widest rock
+// silhouette (radius * 1.3 half-width) never covers the mushroom face.
+//
+const TRAMP_ROCK_CLEAR_HALF = TRAMP_TOTAL_W / 2 + Math.ceil(SCATTER_ROCK_RADIUS_MAX * 1.3) + 10
 //
 // Blinking: random pause between blinks, short eyelid-down hold.
 //
@@ -791,7 +838,7 @@ export function sceneGlowLevel0(k) {
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, zones)
-    const rockObjs = createGlowRocks(k, horizBranch.x1, rightPlatX, zones)
+    const rockObjs = createGlowRocks(k, horizBranch.x1, rightPlatX, trampX, zones)
     const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, zones)
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createDrownMask(k, lakeX1, lakeX2, zones)
@@ -917,9 +964,11 @@ export function sceneGlowLevel0(k) {
       heroHint: HeroHint.create({ k, heroInst }),
       //
       // Controls stay locked while the intro hints play; the G letter
-      // appears only after both hints finish.
+      // appears only after both hints finish. introStep tracks which intro
+      // hint is on screen for the key-press advance.
       //
       introLock: false,
+      introStep: 0,
       //
       // O-letter meditation state (see MEDITATION_* constants).
       //
@@ -949,8 +998,11 @@ export function sceneGlowLevel0(k) {
   })
 }
 //
-// Plays the two intro hints with locked controls; the G letter appears once
-// both hints have finished. Skipped entirely after G is collected.
+// Plays the two intro hints with locked controls, advanced by key presses:
+// the first hint waits for ANY key, the next key swaps it for the second
+// hint, and one more key dismisses it and hands the run/jump keys back to
+// the player (the G letter appears at that moment). Each hint still expires
+// on its own timer as a fallback, so a keyboard-less player is never stuck.
 //
 function startGlowIntro(inst) {
   if (inst.zones.gCollected) return
@@ -964,12 +1016,37 @@ function startGlowIntro(inst) {
     return
   }
   inst.introLock = true
+  inst.introStep = 1
   inst.heroInst.controllable = false
   inst.heroInst.controlsDisabled = true
   HeroHint.queue(inst.heroHint, [
     { text: HINT_INTRO_1_TEXT, duration: HINT_INTRO_1_DURATION },
     { text: HINT_INTRO_2_TEXT, duration: HINT_INTRO_2_DURATION }
-  ], () => finishGlowIntro(inst))
+  ], () => inst.introLock && finishGlowIntro(inst))
+  const introKeys = inst.k.onKeyPress(() => advanceGlowIntro(inst, introKeys))
+}
+//
+// One key press moves the intro forward: 1st press shows the second hint,
+// 2nd press closes it and unlocks the controls immediately.
+//
+function advanceGlowIntro(inst, introKeys) {
+  if (!inst.introLock) {
+    introKeys.cancel()
+    return
+  }
+  if (inst.introStep === 1) {
+    inst.introStep = 2
+    //
+    // Re-queue (not show) so the timer fallback keeps its completion hook.
+    //
+    HeroHint.queue(inst.heroHint, [
+      { text: HINT_INTRO_2_TEXT, duration: HINT_INTRO_2_DURATION }
+    ], () => inst.introLock && finishGlowIntro(inst))
+    return
+  }
+  introKeys.cancel()
+  HeroHint.clear(inst.heroHint)
+  finishGlowIntro(inst)
 }
 //
 // Unlocks the hero and shows the G letter after the intro hints.
@@ -1054,6 +1131,28 @@ function createSmallHeroTooltip(inst) {
       // Only while the G letter is visible and not yet collected.
       //
       visible: () => Boolean(inst.gLetter && !inst.gLetter.main.hidden && !inst.zones.gCollected)
+    }, {
+      x: () => inst.lLetter?.x ?? -1000,
+      y: () => inst.lLetter?.y ?? -1000,
+      width: L_TOOLTIP_HOVER_SIZE,
+      height: L_TOOLTIP_HOVER_SIZE,
+      text: L_TOOLTIP_TEXT,
+      offsetY: L_TOOLTIP_Y_OFFSET,
+      //
+      // Only while the L letter is visible and not yet collected.
+      //
+      visible: () => Boolean(inst.lLetter && !inst.lLetter.main.hidden && !inst.zones.lCollected)
+    }, {
+      x: () => inst.trampState?.x ?? -1000,
+      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
+      width: TRAMP_TOTAL_W,
+      height: TRAMP_TOTAL_H,
+      text: TRAMP_TOOLTIP_TEXT,
+      offsetY: TRAMP_TOOLTIP_Y_OFFSET,
+      //
+      // Only once the right ground decor (the trampoline) has been revealed.
+      //
+      visible: () => Boolean(inst.zones.groundDecorRight)
     }]
   })
 }
@@ -1351,9 +1450,9 @@ function buildParallaxSprites(k, undergroundSpec) {
     flatLeaves: true,
     leafDarken: PAR_FARTHEST_LEAF_DARKEN,
     uniformColorWood: true,
-    canopyRx: PAR_FARTHEST_CANOPY_RX,
-    canopyRy: PAR_FARTHEST_CANOPY_RY,
-    canopyCount: PAR_FARTHEST_CANOPY_COUNT
+    bandTop: PAR_FARTHEST_BAND_TOP,
+    bandBottom: PAR_FARTHEST_BAND_BOTTOM,
+    bandCount: PAR_FARTHEST_BAND_COUNT
   })
   renderBushStrip(grayCtx, colorCtx, {
     grayRgb: { r: grayFarPal.leafR, g: grayFarPal.leafG, b: grayFarPal.leafB },
@@ -1372,9 +1471,9 @@ function buildParallaxSprites(k, undergroundSpec) {
     flatLeaves: true,
     leafDarken: PAR_FAR_LEAF_DARKEN,
     uniformColorWood: true,
-    canopyRx: PAR_FAR_CANOPY_RX,
-    canopyRy: PAR_FAR_CANOPY_RY,
-    canopyCount: PAR_FAR_CANOPY_COUNT
+    bandTop: PAR_FAR_BAND_TOP,
+    bandBottom: PAR_FAR_BAND_BOTTOM,
+    bandCount: PAR_FAR_BAND_COUNT
   })
   renderGlowTreePlane(grayCtx, colorCtx, {
     count: PAR_BIG_TREE_COUNT,
@@ -1387,9 +1486,10 @@ function buildParallaxSprites(k, undergroundSpec) {
     flatLeaves: false,
     leafDarken: 0,
     uniformColorWood: false,
-    canopyRx: PAR_BIG_CANOPY_RX,
-    canopyRy: PAR_BIG_CANOPY_RY,
-    canopyCount: PAR_BIG_CANOPY_COUNT
+    leafWarmBlend: PAR_L1_LEAF_WARM_BLEND,
+    bandTop: PAR_BIG_BAND_TOP,
+    bandBottom: PAR_BIG_BAND_BOTTOM,
+    bandCount: PAR_BIG_BAND_COUNT
   })
   renderBushStrip(grayCtx, colorCtx, {
     grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
@@ -1439,7 +1539,8 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
   const {
     count, seedBase, topMinY, topRange,
     grayBlend, colorBase, colorBlend, flatLeaves, leafDarken, uniformColorWood,
-    canopyRx, canopyRy, canopyCount
+    leafWarmBlend = 0,
+    bandTop, bandBottom, bandCount
   } = planeCfg
   //
   // Gray mode keeps the forest gray; the colour mode (after O) paints the
@@ -1449,7 +1550,7 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
   // and bark all share the exact trunk tone — one flat orange silhouette.
   //
   const grayPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken)
-  const colorPal = buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformColorWood)
+  const colorPal = buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformColorWood, leafWarmBlend)
   const treeXs = buildParallaxTreeXs(count, LEFT_MARGIN, SCREEN_W - RIGHT_MARGIN)
   treeXs.forEach((treeX, i) => {
     const trunkTopY = topMinY + Math.random() * topRange
@@ -1474,17 +1575,31 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     //
     const widthScale = PAR_BIG_WIDTH_SCALE_MIN + Math.random() * PAR_BIG_WIDTH_SCALE_RANGE
     scaleGlowTreeWidths(treeData, widthScale)
+    //
+    // Branch-cluster leaves stay inside the row's own leaf band — a
+    // wandering branch may end low, but its leaves never sink below the
+    // band bottom, so the whole row keeps one vertical leaf level.
+    //
+    const rowLeafFloor = Math.min(bandBottom, PAR_LEAF_MAX_Y)
+    treeData.leaves = treeData.leaves.filter(leaf => leaf.y <= rowLeafFloor)
     renderGlowTreeIntoContext(grayCtx, treeData, grayPal, SCREEN_W, SCREEN_H)
     renderGlowTreeIntoContext(colorCtx, treeData, colorPal, SCREEN_W, SCREEN_H)
-    //
-    // Lush crown centred on the trunk apex — one identical seeded cluster
-    // painted on both mode canvases so they stay pixel-aligned.
-    //
-    const apex = treeData.trunkSegs[treeData.trunkSegs.length - 1]
-    const canopyOpts = { seed: treeSeed + PAR_CANOPY_SEED_OFFSET, cx: apex.ex, cy: apex.ey, rx: canopyRx, ry: canopyRy, count: canopyCount }
-    renderGlowCanopyIntoContext(grayCtx, { ...canopyOpts, palette: grayPal })
-    renderGlowCanopyIntoContext(colorCtx, { ...canopyOpts, palette: colorPal })
   })
+  //
+  // Row foliage: one dense full-width horizontal leaf band — every leaf at
+  // roughly the same vertical level with a small random step up/down,
+  // continuous from the left edge to the right edge.
+  //
+  const bandOpts = {
+    seed: TREE_SEED + seedBase + PAR_BAND_SEED_OFFSET,
+    x1: 0,
+    x2: SCREEN_W,
+    yTop: bandTop,
+    yBottom: Math.min(bandBottom, PAR_LEAF_MAX_Y),
+    count: bandCount
+  }
+  renderGlowLeafBandIntoContext(grayCtx, { ...bandOpts, palette: grayPal })
+  renderGlowLeafBandIntoContext(colorCtx, { ...bandOpts, palette: colorPal })
 }
 //
 // Scales trunk and branch widths of a glow tree (geometry stays the same).
@@ -1773,7 +1888,29 @@ function buildUndergroundSpec() {
   // One fossil spiral — a small ammonite curled among the stones.
   //
   const fossil = { x: randX(), y: randY(), r: 9 + Math.random() * 5 }
-  return { rocks, cracks, pebbles, rootlets, fossil }
+  //
+  // One buried skeleton sitting upright among the roots, facing the viewer
+  // (reference-picture pose): a big front-view skull with dark eye sockets,
+  // nasal hole and teeth, a vertical vertebra spine and a wide front-view
+  // ribcage with arm bones along the sides. Tilted a touch, like it settled
+  // there long ago. x/y is the skull centre. Placed well to the SIDE of the
+  // main tree trunk, so the root network never covers it (resampled out of
+  // the root spread zone).
+  //
+  const nearTreeRoots = (x) => Math.abs(x - TREE_X) < UG_SKELETON_TREE_CLEAR
+  let skeletonX = areaX1 + 120 + Math.random() * (areaX2 - areaX1 - 240)
+  let skeletonSafety = 0
+  while (nearTreeRoots(skeletonX) && skeletonSafety < 40) {
+    skeletonX = areaX1 + 120 + Math.random() * (areaX2 - areaX1 - 240)
+    skeletonSafety++
+  }
+  const skeleton = {
+    x: skeletonX,
+    y: areaY1 + (areaY2 - areaY1) * (0.18 + Math.random() * 0.2),
+    angle: (Math.random() - 0.5) * 0.16,
+    skullR: 13 + Math.random() * 3
+  }
+  return { rocks, cracks, pebbles, rootlets, fossil, skeleton }
 }
 //
 // Renders the shared underground layout with one mode's tones.
@@ -1844,6 +1981,137 @@ function renderUndergroundSpec(ctx, spec, tones) {
   }
   ctx.stroke()
   ctx.globalAlpha = 1
+  //
+  // Buried skeleton lying among the roots.
+  //
+  drawUndergroundSkeleton(ctx, spec.skeleton, tones)
+}
+//
+// Draws the buried skeleton in the reference-picture pose: sitting upright
+// and facing the viewer. A filled front-view skull with big dark eye
+// sockets, a nasal hole and a toothy jaw; below it a vertical spine of
+// vertebra ticks, a clavicle line, a wide front-view ribcage (paired rib
+// arcs curving out and down from the spine) and two arm bones hanging along
+// the sides. Light bone tone on the dark earth.
+//
+function drawUndergroundSkeleton(ctx, sk, tones) {
+  const boneCss = `rgb(${tones.light.r}, ${tones.light.g}, ${tones.light.b})`
+  const deepCss = `rgb(${tones.deep.r}, ${tones.deep.g}, ${tones.deep.b})`
+  const r = sk.skullR
+  ctx.save()
+  ctx.translate(sk.x, sk.y)
+  ctx.rotate(sk.angle)
+  ctx.globalAlpha = 0.85
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  //
+  // Skull — filled cranium dome plus a narrower jaw block below it, so the
+  // head reads as one solid bone mass facing the viewer.
+  //
+  ctx.fillStyle = boneCss
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(-r * 0.62, r * 0.4)
+  ctx.lineTo(r * 0.62, r * 0.4)
+  ctx.lineTo(r * 0.5, r * 1.35)
+  ctx.lineTo(-r * 0.5, r * 1.35)
+  ctx.closePath()
+  ctx.fill()
+  //
+  // Face — two big round eye sockets, the triangular nasal hole and the
+  // mouth: a dark band across the jaw split by vertical bone teeth.
+  //
+  ctx.fillStyle = deepCss
+  ctx.beginPath()
+  ctx.arc(-r * 0.42, -r * 0.08, r * 0.3, 0, Math.PI * 2)
+  ctx.arc(r * 0.42, -r * 0.08, r * 0.3, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(0, r * 0.28)
+  ctx.lineTo(-r * 0.14, r * 0.62)
+  ctx.lineTo(r * 0.14, r * 0.62)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillRect(-r * 0.48, r * 0.88, r * 0.96, r * 0.34)
+  ctx.strokeStyle = boneCss
+  ctx.lineWidth = 1.4
+  for (let t = -1; t <= 1; t++) {
+    ctx.beginPath()
+    ctx.moveTo(t * r * 0.26, r * 0.84)
+    ctx.lineTo(t * r * 0.26, r * 1.26)
+    ctx.stroke()
+  }
+  //
+  // Spine — a vertical run of vertebra ticks from the jaw down through the
+  // chest, each tick a short horizontal bar so the column reads segmented.
+  //
+  const spineTopY = r * 1.5
+  const spineBottomY = r * 5.6
+  ctx.strokeStyle = boneCss
+  ctx.lineWidth = r * 0.16
+  ctx.beginPath()
+  ctx.moveTo(0, spineTopY)
+  ctx.lineTo(0, spineBottomY)
+  ctx.stroke()
+  ctx.lineWidth = r * 0.13
+  for (let v = 0; v < 7; v++) {
+    const vy = spineTopY + (spineBottomY - spineTopY) * (v / 6)
+    ctx.beginPath()
+    ctx.moveTo(-r * 0.24, vy)
+    ctx.lineTo(r * 0.24, vy)
+    ctx.stroke()
+  }
+  //
+  // Clavicles — a shallow V from the spine top out to both shoulders.
+  //
+  const shoulderX = r * 1.9
+  const shoulderY = r * 1.75
+  ctx.lineWidth = r * 0.16
+  ctx.beginPath()
+  ctx.moveTo(-shoulderX, shoulderY)
+  ctx.quadraticCurveTo(0, r * 2.05, shoulderX, shoulderY)
+  ctx.stroke()
+  //
+  // Ribcage — four rib pairs curving out and down from the spine, the upper
+  // pairs the widest, so the chest reads wide and rounded from the front.
+  //
+  ctx.lineWidth = r * 0.18
+  for (let rib = 0; rib < 4; rib++) {
+    const ribY = r * (2.35 + rib * 0.78)
+    const ribW = r * (2.15 - rib * 0.22)
+    const ribDrop = r * (0.85 - rib * 0.08)
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(0, ribY)
+      ctx.quadraticCurveTo(side * ribW, ribY + ribDrop * 0.2, side * ribW * 0.82, ribY + ribDrop)
+      ctx.stroke()
+    }
+  }
+  //
+  // Arms — humerus bones hanging from the shoulders slightly outward, with
+  // knobbed joints, like the arms rest at the skeleton's sides.
+  //
+  drawSkeletonBone(ctx, boneCss, -shoulderX, shoulderY, -shoulderX - r * 0.45, shoulderY + r * 2.6)
+  drawSkeletonBone(ctx, boneCss, shoulderX, shoulderY, shoulderX + r * 0.45, shoulderY + r * 2.6)
+  ctx.globalAlpha = 1
+  ctx.restore()
+}
+//
+// One bone: a line with small knob circles at both ends.
+//
+function drawSkeletonBone(ctx, boneCss, x1, y1, x2, y2) {
+  ctx.strokeStyle = boneCss
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(x1, y1, 1.7, 0, Math.PI * 2)
+  ctx.arc(x2, y2, 1.7, 0, Math.PI * 2)
+  ctx.stroke()
 }
 //
 // Strokes an open polyline through the given points.
@@ -2107,7 +2375,7 @@ function glowGrassTint(zones, blade) {
 //
 // Rocks — flat value 5 silhouettes.
 //
-function createGlowRocks(k, treeBaseLeftX, rightPlatX, zones) {
+function createGlowRocks(k, treeBaseLeftX, rightPlatX, trampX, zones) {
   const objs = []
   let spriteIdx = 0
   const clusterCenterX = treeBaseLeftX + 40
@@ -2126,12 +2394,20 @@ function createGlowRocks(k, treeBaseLeftX, rightPlatX, zones) {
   //
   objs.push(placeRock(k, shoreRockX, shoreRockR, `glow0-rock-${spriteIdx++}`, 'left', true, LAKE_Z + 2, SHORE_ROCK_WIDTH_SCALE))
   //
-  // Right side — scatter rocks spread across the whole lower-right ground.
+  // Right side — scatter rocks spread across the whole lower-right ground,
+  // never in front of the trampoline mushroom (resampled out of its zone).
   //
   const rightEdge = SCREEN_W - RIGHT_MARGIN - 40
+  const nearTramp = (x) => Math.abs(x - trampX) <= TRAMP_ROCK_CLEAR_HALF
   for (let i = 0; i < RIGHT_ROCK_COUNT; i++) {
     const radius = SCATTER_ROCK_RADIUS_MIN + Math.random() * (SCATTER_ROCK_RADIUS_MAX - SCATTER_ROCK_RADIUS_MIN)
-    const cx = TREE_X + 80 + Math.random() * (rightEdge - TREE_X - 80)
+    let cx = TREE_X + 80 + Math.random() * (rightEdge - TREE_X - 80)
+    let safety = 0
+    while (nearTramp(cx) && safety < 40) {
+      cx = TREE_X + 80 + Math.random() * (rightEdge - TREE_X - 80)
+      safety++
+    }
+    if (nearTramp(cx)) continue
     objs.push(placeRock(k, cx, radius, `glow0-rock-${spriteIdx++}`, 'right'))
   }
   return objs

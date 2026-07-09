@@ -55,15 +55,32 @@ const BG_FADE_SPEED = 3.0
 const MENU_STATIC_SPRITE = 'menu-static-bg'
 const MENU_BG_BASE_OPACITY = 0.35
 //
+// Full-screen sprites live in a texture atlas: linear sampling at the very
+// edge rows pulls in neighbour texels, which reads as thin horizontal lines
+// at the top/bottom of the canvas. Drawing the sprite overscanned by one
+// pixel pushes those edge rows off-screen.
+//
+const MENU_BG_EDGE_OVERSCAN = 1
+//
 // Swaying grass along the menu-bg horizon — the shared Grass component with
 // the same density principle the ready scene uses: the further from the
 // screen centre, the more tufts. The tint fades with the background when an
 // anti-hero is hovered.
 //
-const MENU_GRASS_TUFT_COUNT = 34
+const MENU_GRASS_TUFT_COUNT = 44
 const MENU_GRASS_EDGE_INSET = 30
-const MENU_GRASS_DENSITY_RAMP = 450
-const [MENU_GRASS_TINT_R, MENU_GRASS_TINT_G, MENU_GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen)
+//
+// The density ramp spans the FULL half-width of the canvas, so the tuft
+// probability keeps growing all the way to the screen edges instead of
+// saturating partway out.
+//
+const MENU_GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - MENU_GRASS_EDGE_INSET
+//
+// The blades are dimmed well below the raw glow-grass green — full-bright
+// tufts read as glowing against the dark menu backdrop.
+//
+const MENU_GRASS_BRIGHTNESS = 0.55
+const [MENU_GRASS_TINT_R, MENU_GRASS_TINT_G, MENU_GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen).map(c => Math.round(c * MENU_GRASS_BRIGHTNESS))
 //
 // Firefly particles target opacity when hovering an anti-hero
 //
@@ -229,10 +246,11 @@ export function sceneMenu(k) {
     //
     k.volume(1)
     //
-    // Set canvas background to the sky/ground colour used by the menu-bg sprite
-    // so the letterbox bars (top/bottom strips) match the canvas edges exactly.
+    // Set the canvas backdrop to the MENU scene background: the baked static
+    // sprite blends into this exact colour at its top/bottom bands, so the
+    // letterbox bars never read as horizontal strips of a different tone.
     //
-    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.ready.background)
+    CanvasBackdrop.applyCanvasBackdrop(k, CFG.visual.colors.background)
     //
     // Clean up persistent word-pile objects from previous scenes
     //
@@ -519,6 +537,11 @@ export function sceneMenu(k) {
       if (config.section === 'word' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
           //
+          // Ignore the click while a pre-level transition is running — the
+          // click is the transition's own skip, not a new section entry.
+          //
+          if (k.transitionCleanup) return
+          //
           // Mark that we're leaving the scene
           //
           beginMenuSceneLeave(k, inst)
@@ -554,6 +577,11 @@ export function sceneMenu(k) {
       
       if (config.section === 'glow' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
+          //
+          // Ignore the click while a pre-level transition is running — the
+          // click is the transition's own skip, not a new section entry.
+          //
+          if (k.transitionCleanup) return
           beginMenuSceneLeave(k, inst)
           Sound.stopAmbient(sound)
           Cursor.setCursor('arrow')
@@ -573,6 +601,11 @@ export function sceneMenu(k) {
       }
       if (config.section === 'touch' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
+          //
+          // Ignore the click while a pre-level transition is running — the
+          // click is the transition's own skip, not a new section entry.
+          //
+          if (k.transitionCleanup) return
           beginMenuSceneLeave(k, inst)
           
           //
@@ -600,6 +633,11 @@ export function sceneMenu(k) {
       
       if (config.section === 'time' && !isCompleted && canAccess) {
         antiHeroInst.character.onClick(() => {
+          //
+          // Ignore the click while a pre-level transition is running — the
+          // click is the transition's own skip, not a new section entry.
+          //
+          if (k.transitionCleanup) return
           beginMenuSceneLeave(k, inst)
           
           //
@@ -1148,6 +1186,12 @@ export function sceneMenu(k) {
     //
     const startGame = (forceNew) => {
       if (allCompleted && !forceNew) return
+      //
+      // A pre-level transition is already running (its overlay + phrase are
+      // on screen) — pressing Space again must skip INSIDE the transition,
+      // not restart it (a restart made the phrase blink and fade in again).
+      //
+      if (k.transitionCleanup) return
       beginMenuSceneLeave(k, inst)
       Sound.stopAmbient(sound)
       menuMusic.stop()
@@ -1591,8 +1635,8 @@ function drawScene(inst) {
   //
   drawMenuBackground(inst)
   //
-  // Swaying grass on the horizon strip — fades with the background when
-  // hovering an anti-hero (the tint darkens toward black, see getMenuGrassTint)
+  // Swaying grass on the horizon strip — fades out with the background when
+  // hovering an anti-hero (opacity fade, see getMenuGrassTint)
   //
   Grass.draw(grassField)
   
@@ -2038,9 +2082,9 @@ function drawMenuBackground(inst) {
   //
   bgDefaultOpacity > 0.01 && k.drawSprite({
     sprite: MENU_STATIC_SPRITE,
-    pos: k.vec2(0, 0),
-    width: k.width(),
-    height: k.height(),
+    pos: k.vec2(-MENU_BG_EDGE_OVERSCAN, -MENU_BG_EDGE_OVERSCAN),
+    width: k.width() + MENU_BG_EDGE_OVERSCAN * 2,
+    height: k.height() + MENU_BG_EDGE_OVERSCAN * 2,
     opacity: bgDefaultOpacity
   })
 }
@@ -2059,7 +2103,12 @@ function buildMenuStaticSprite(k) {
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = CFG.visual.colors.background
   ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
-  const bgCanvas = generateMenuBackgroundCanvas()
+  //
+  // The picture's plain sky/underground bands are filled with the MENU
+  // background colour, so blended over the same colour they disappear — no
+  // horizontal strips above and below the composition.
+  //
+  const bgCanvas = generateMenuBackgroundCanvas(CFG.visual.colors.background)
   ctx.globalAlpha = MENU_BG_BASE_OPACITY
   ctx.drawImage(bgCanvas, 0, 0)
   ctx.globalAlpha = 1
@@ -2070,17 +2119,19 @@ function buildMenuStaticSprite(k) {
   canvas.height = 0
 }
 //
-// Grass tint for the menu horizon: the shared glow grass green scaled by
-// the background fade, so the blades dissolve into black together with the
-// background when an anti-hero is hovered.
+// Grass tint for the menu horizon: the shared glow grass green fading OUT
+// through opacity together with the background when an anti-hero is hovered
+// (never darkening toward black — the blades keep their colour while they
+// dissolve).
 //
 function getMenuGrassTint(inst) {
   const op = inst.bgDefaultOpacity
   if (op <= 0.01) return null
   return {
-    r: Math.round(MENU_GRASS_TINT_R * op),
-    g: Math.round(MENU_GRASS_TINT_G * op),
-    b: Math.round(MENU_GRASS_TINT_B * op)
+    r: MENU_GRASS_TINT_R,
+    g: MENU_GRASS_TINT_G,
+    b: MENU_GRASS_TINT_B,
+    opacity: op
   }
 }
 /**

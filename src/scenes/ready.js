@@ -80,6 +80,13 @@ const READY_STATIC_SPRITE = 'ready-static-bg'
 const READY_BG_DARKEN_ALPHA = 0.5
 const READY_TEXT_SHADOW_OFFSET = 1
 //
+// Full-screen sprites live in a texture atlas: linear sampling at the very
+// edge rows pulls in neighbour texels, which reads as thin horizontal lines
+// at the top/bottom of the canvas. Drawing the sprite overscanned by one
+// pixel pushes those edge rows off-screen.
+//
+const READY_BG_EDGE_OVERSCAN = 1
+//
 // Stars sit BELOW the drifting cloud layer so twinkles never punch
 // through the cloud puffs — clouds read as the nearer sky element.
 //
@@ -167,15 +174,21 @@ const FIREFLY_COLOR_B = 96
 // Grass component (same tufts as the glow level) tinted glow-grass green.
 //
 const GRASS_CENTER_KEEPOUT_HALF = 400
-const GRASS_TUFT_COUNT = 34
+const GRASS_TUFT_COUNT = 44
 const GRASS_EDGE_INSET = 30
 //
 // Density gradient: the further from the screen centre, the more grass. The
-// weight ramps from 0 at the keep-out edge to 1 over this many pixels, so
-// tufts thicken towards both screen edges.
+// weight ramps from 0 at the keep-out edge to 1 at the very screen edge, so
+// the probability keeps growing across the whole strip instead of
+// saturating partway out.
 //
-const GRASS_DENSITY_RAMP = 450
-const [GRASS_TINT_R, GRASS_TINT_G, GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen)
+const GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
+//
+// The blades are dimmed well below the raw glow-grass green — full-bright
+// tufts read as glowing against the dark night backdrop.
+//
+const GRASS_BRIGHTNESS = 0.55
+const [GRASS_TINT_R, GRASS_TINT_G, GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.grassGreen).map(c => Math.round(c * GRASS_BRIGHTNESS))
 const GRASS_TINT = { r: GRASS_TINT_R, g: GRASS_TINT_G, b: GRASS_TINT_B }
 // Cricket + owl ambient sounds — random intervals so the night soundscape
 // stays alive but never feels mechanical. Cricket bursts trigger every
@@ -296,16 +309,18 @@ const HERO_N_SPRITE_PREFIX = `hero_${HERO_TITLE_BODY_COLOR.replace('#', '')}_000
 // Hero-n departure sequence. Once the letters start growing legs AND the
 // mouse stays still for HERO_N_MOUSE_STILL_DELAY seconds, the title hero
 // falls to the black ground line, stands up and runs off-screen right in
-// short bursts (≈3 steps, then a pause). Any mouse movement while he is on
-// the ground freezes him in a closed-eyes idle until the mouse rests again.
+// short bursts (a RANDOM 4–8 steps each, then a stop). Any mouse movement
+// while he is on the ground freezes him in a closed-eyes idle until the
+// mouse rests again.
 //
 const HERO_N_MOUSE_STILL_DELAY = 10
 const HERO_N_FALL_GRAVITY = 1500
 const HERO_N_RUN_SPEED = 42
 const HERO_N_RUN_FRAME_TIME = 0.12
 const HERO_N_RUN_FRAME_COUNT = 3
-const HERO_N_RUN_STEPS_PER_BURST = 3
-const HERO_N_RUN_BURST_DURATION = HERO_N_RUN_FRAME_TIME * HERO_N_RUN_FRAME_COUNT * HERO_N_RUN_STEPS_PER_BURST
+const HERO_N_RUN_STEPS_MIN = 4
+const HERO_N_RUN_STEPS_RANGE = 5
+const HERO_N_STEP_DURATION = HERO_N_RUN_FRAME_TIME * HERO_N_RUN_FRAME_COUNT
 const HERO_N_RUN_PAUSE = 4
 //
 // Wake-up sequence after an idle interruption: the hero first opens ONE eye
@@ -583,6 +598,7 @@ export function sceneReady(k) {
         spider.heroY = 0
         spider.heroRunFrame = 0
         spider.heroRunTimer = 0
+        spider.heroBurstDuration = HERO_N_STEP_DURATION * HERO_N_RUN_STEPS_MIN
         spider.heroFrameTimer = 0
         spider.heroPauseTimer = 0
         spider.heroWakeTimer = 0
@@ -656,8 +672,9 @@ export function sceneReady(k) {
 function onDrawBg(k) {
   k.drawSprite({
     sprite: READY_STATIC_SPRITE,
-    width: k.width(),
-    height: k.height()
+    pos: k.vec2(-READY_BG_EDGE_OVERSCAN, -READY_BG_EDGE_OVERSCAN),
+    width: k.width() + READY_BG_EDGE_OVERSCAN * 2,
+    height: k.height() + READY_BG_EDGE_OVERSCAN * 2
   })
 }
 //
@@ -1499,7 +1516,7 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
       spider.heroGone = true
       return
     }
-    if (spider.heroRunTimer >= HERO_N_RUN_BURST_DURATION) {
+    if (spider.heroRunTimer >= spider.heroBurstDuration) {
       spider.heroPhase = 'pause'
       spider.heroPauseTimer = 0
     }
@@ -1511,13 +1528,15 @@ function updateHeroN(k, spider, state, legsStarted, dt) {
   }
 }
 //
-// Resets the burst timers and switches hero-n into the running phase.
+// Resets the burst timers and switches hero-n into the running phase. Every
+// burst rolls its own length — a random 4–8 steps — so no two runs match.
 //
 function startHeroNBurst(spider) {
   spider.heroPhase = 'run'
   spider.heroRunTimer = 0
   spider.heroFrameTimer = 0
   spider.heroRunFrame = 0
+  spider.heroBurstDuration = HERO_N_STEP_DURATION * (HERO_N_RUN_STEPS_MIN + Math.floor(Math.random() * HERO_N_RUN_STEPS_RANGE))
 }
 //
 // Draws a title hero (hero-n or the flipped hero-u). Inside the title the

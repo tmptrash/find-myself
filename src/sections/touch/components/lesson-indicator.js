@@ -116,8 +116,7 @@ export function create(config) {
     hideScoreboard = false,
     scoreboardGreyLife = false,
     heroOutlineColor = CFG.visual.colors.outline,
-    heroEyeWhiteColor = null,
-    heroLegStrip = false
+    heroEyeWhiteColor = null
   } = config
   const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
@@ -234,7 +233,6 @@ export function create(config) {
     bodyColor: heroBodyColor,
     outlineColor: heroOutlineColor,
     eyeWhiteColor: heroEyeWhiteColor,
-    addLegStrip: heroLegStrip,
     addMouth: isWordComplete,
     addArms: isTouchComplete,
     //

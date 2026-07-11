@@ -2751,11 +2751,9 @@ export function sceneLesson0(k) {
         draw() {
           if (!touchLetterState.gatherActive) return
           //
-          // Show countdown only after bugs have gathered around hero
+          // Countdown starts as soon as gather phase begins (after C+H)
           //
-          const remaining = touchLetterState.gatherBugsArrived
-            ? Math.max(0, Math.ceil(TOUCH_GATHER_POST_ARRIVE_DELAY - touchLetterState.gatherWaitTimer))
-            : TOUCH_GATHER_POST_ARRIVE_DELAY
+          const remaining = Math.max(0, Math.ceil(TOUCH_GATHER_POST_ARRIVE_DELAY - touchLetterState.gatherTimer))
           const displayText = L0_GATHER_PROMPT_BASE + remaining
           const cx = CFG.visual.screen.width / 2
           //
@@ -5325,6 +5323,12 @@ function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicat
       state.gatherSoundTimer = 0
       state.gatherSoundInterval = TOUCH_GATHER_SOUND_INTERVAL_MIN
       //
+      // Monsters keep open white eyes with pupils for the whole countdown
+      //
+      openBugEyes(state.monsterBugs, [])
+      state.gatherHeroIsIdle = false
+      state.gatherHeroIdleTimer = 0
+      //
       // Fireflies orbit hero (follow mode), bugs walk toward hero
       //
       fireflies._mode = 'follow'
@@ -5382,20 +5386,22 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
       }
     }
     //
-    // Detect hero idle: vel.x near zero for a sustained period → all bugs close eyes
+    // Detect hero idle: vel.x near zero for a sustained period → small bugs
+    // close eyes. Long-legged monsters keep white eyes + pupils through the
+    // countdown so they stay readable while gathered around the hero.
     //
     const heroIsMoving = Math.abs(heroVelX) > TOUCH_GATHER_HERO_IDLE_VEL_THRESHOLD
     if (heroIsMoving) {
       state.gatherHeroIdleTimer = 0
       if (state.gatherHeroIsIdle) {
         state.gatherHeroIsIdle = false
-        openBugEyes(state.monsterBugs, allBugsCombined)
+        openBugEyes([], allBugsCombined)
       }
     } else {
       state.gatherHeroIdleTimer += dt
       if (!state.gatherHeroIsIdle && state.gatherHeroIdleTimer >= 0.6) {
         state.gatherHeroIsIdle = true
-        closeBugEyes(state.monsterBugs, allBugsCombined)
+        closeBugEyes([], allBugsCombined)
       }
     }
     //
@@ -5410,14 +5416,11 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     }
   }
   //
-  // Count down 15-second post-arrive delay once all bugs are near.
-  // Also use fallback timer so level never gets permanently stuck.
+  // Count down 15 s from gather start; bugs may still walk in during the wait.
+  // Fallback max wait keeps the level from sticking if something blocks skip.
   //
   const forceTransition = state.gatherTimer >= TOUCH_GATHER_MAX_WAIT
-  if (state.gatherBugsArrived) {
-    state.gatherWaitTimer += dt
-  }
-  const waitDone = state.gatherBugsArrived && state.gatherWaitTimer >= TOUCH_GATHER_POST_ARRIVE_DELAY
+  const waitDone = state.gatherTimer >= TOUCH_GATHER_POST_ARRIVE_DELAY
   if ((waitDone || forceTransition || state.enterSkip) && !state.levelDone) {
     state.levelDone = true
     openBugEyes(state.monsterBugs, allBugsCombined)

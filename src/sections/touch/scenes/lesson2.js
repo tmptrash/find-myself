@@ -437,11 +437,11 @@ const RUB_COUNTER_Z = 30
 //
 const SNOWMAN_C_APPEAR_DELAY = 0.8
 //
-// C drops out of the collapsing snowman a bit to the left, tipped on its side
+// C tips out of the snowman mid-body toward the left and settles in the snow
 //
 const QUEST_LETTER_C_OFFSET_X = -36
 const QUEST_LETTER_C_TILT = -22
-const QUEST_LETTER_C_FALL_FROM_Y = FLOOR_Y - 78
+const QUEST_LETTER_C_START_Y = FLOOR_Y - 66
 const QUEST_LETTER_C_FALL_DURATION = 0.55
 //
 // Snowman rubbing: pass-by zone, counters and reset gap
@@ -3015,8 +3015,21 @@ function onHeroDeath(k, heroInst, levelIndicator, quest) {
   if (heroInst.isDying) return
   k.shake(DEATH_SHAKE_STRENGTH)
   //
-  // Mark the upcoming reload as a death resume so quest progress survives
+  // Mark the upcoming reload as a death resume so quest progress survives.
+  // If H was already collected (or completeQuest already zeroed the flag),
+  // keep progress at 4 so the level restarts on the H hunt — not from T.
   //
+  const storedLetters = get(QUEST_LETTERS_FLAG, 0)
+  const questLetters = quest?.lettersCollected ?? storedLetters
+  const finishedH = questLetters >= 5 ||
+    quest?.stuckHintState?.levelDone ||
+    quest?.levelDone ||
+    storedLetters >= 5
+  if (finishedH) {
+    set(QUEST_LETTERS_FLAG, 4)
+  } else if (questLetters > 0) {
+    set(QUEST_LETTERS_FLAG, questLetters)
+  }
   set(QUEST_RESUME_FLAG, true)
   //
   // Scatter the hero into snowflakes instead of the default body particles
@@ -4161,6 +4174,13 @@ function createQuest(cfg) {
     })
   }
   //
+  // After C (letters >= 4) the snowman stays collapsed for the H hunt
+  //
+  if (quest.lettersCollected >= 4 && quest.snowmanState) {
+    quest.snowmanState.collapsed = true
+    quest.snowmanState.collapseTime = Math.max(quest.snowmanState.collapseTime || 0, 10)
+  }
+  //
   // Spawn the letter the hero is currently hunting (phases without a letter
   // on screen spawn theirs when the phase condition is met)
   //
@@ -4268,19 +4288,27 @@ function animateLetterRise(k, obj) {
   k.tween(0.01, 1, QUEST_LETTER_RISE_DURATION, applyScale, k.easings.easeOutCubic)
 }
 //
-// Drops a letter from startY onto its resting Y (snowman C tip-out)
+// Tips a letter out of the snowman: from (startX, startY) diagonally to
+// its resting spot in the snow (left and down).
 //
-function animateLetterFall(k, obj, startY, endY) {
+function animateLetterFall(k, obj, startX, startY, endX, endY) {
   const oo = QUEST_LETTER_OUTLINE
-  const setAllY = (y) => {
-    obj.main?.exists?.() && (obj.main.pos.y = y)
+  const setAllPos = (x, y) => {
+    if (obj.main?.exists?.()) {
+      obj.main.pos.x = x
+      obj.main.pos.y = y
+    }
     obj.outlines.forEach(o => {
-      o?.exists?.() && (o.pos.y = y + oo)
+      if (!o?.exists?.()) return
+      o.pos.x = x + oo
+      o.pos.y = y + oo
     })
   }
-  setAllY(startY)
+  setAllPos(startX, startY)
   const ease = k.easings?.easeOutCubic ?? ((t) => 1 - Math.pow(1 - t, 3))
-  k.tween(startY, endY, QUEST_LETTER_C_FALL_DURATION, setAllY, ease)
+  k.tween(0, 1, QUEST_LETTER_C_FALL_DURATION, (t) => {
+    setAllPos(startX + (endX - startX) * t, startY + (endY - startY) * t)
+  }, ease)
 }
 //
 // Pulses letter opacity/color between teal and white (L0-style shimmer)
@@ -4408,14 +4436,18 @@ function playLetterAppearSound(quest) {
 function completeQuest(quest) {
   quest.levelDone = true
   //
-  // Reset quest progress so replaying the level starts from T again
+  // Keep letters at 4 until the transition actually leaves — if the hero
+  // dies after the H dialog, death resume must still restart on the H phase.
+  // Cleared when the next level loads or on a fresh menu entry (resume flag).
   //
-  set(QUEST_LETTERS_FLAG, 0)
+  set(QUEST_LETTERS_FLAG, 4)
   const newScore = get('heroScore', 0) + 1
   set('heroScore', newScore)
   quest.levelIndicator?.updateHeroScore?.(newScore)
   quest.sound && Sound.playVictorySound(quest.sound)
   quest.k.wait(QUEST_COMPLETE_TRANSITION_DELAY, () => {
+    set(QUEST_LETTERS_FLAG, 0)
+    set(QUEST_RESUME_FLAG, false)
     Sound.stopAmbient(quest.sound)
     quest.touchMusic.stop()
     createLevelTransition(quest.k, 'lesson-touch.2')
@@ -4438,7 +4470,10 @@ function handleFirTouch(quest, heroX, heroY, justLanded) {
     fir.freed = true
     fir.shakeTimer = FIR_SHAKE_DURATION
     freedAny = true
-    spawnSnowflakeBurst(quest.snowflakes, fir.x, FLOOR_Y - fir.height * 0.45, FIR_BURST_SNOWFLAKE_COUNT)
+    //
+    // Shed snow along the full fir height (not a single mid-tree point)
+    //
+    spawnSnowflakeBurstAlongFir(quest.snowflakes, fir.x, fir.height, FIR_BURST_SNOWFLAKE_COUNT)
   }
   freedAny && quest.sound && Sound.playTreeCreakSound(quest.sound)
   //
@@ -4658,10 +4693,12 @@ function collapseSnowman(quest) {
   spawnSnowflakeBurst(quest.snowflakes, quest.snowmanWorldX, FLOOR_Y - 70, FIR_BURST_SNOWFLAKE_COUNT)
   quest.sound && playIceCreakSound(quest.sound, 1)
   quest.k.wait(SNOWMAN_C_APPEAR_DELAY, () => {
+    const startX = quest.snowmanWorldX
+    const startY = QUEST_LETTER_C_START_Y
     const cX = quest.snowmanWorldX + QUEST_LETTER_C_OFFSET_X
     const cY = FLOOR_Y + QUEST_LETTER_SNOW_SINK
-    quest.letterObjs.C = createPickupLetter(quest.k, 'C', cX, cY, QUEST_LETTER_C_TILT)
-    animateLetterFall(quest.k, quest.letterObjs.C, QUEST_LETTER_C_FALL_FROM_Y, cY)
+    quest.letterObjs.C = createPickupLetter(quest.k, 'C', startX, startY, QUEST_LETTER_C_TILT)
+    animateLetterFall(quest.k, quest.letterObjs.C, startX, startY, cX, cY)
     playLetterAppearSound(quest)
   })
 }
@@ -4762,6 +4799,32 @@ function spawnSnowflakeBurst(pool, x, y, count) {
       y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
+      drift: (Math.random() - 0.5) * 2 * SNOWFLAKE_DRIFT_SPEED,
+      size: SNOWFLAKE_SIZE_MIN + Math.random() * SNOWFLAKE_SIZE_RANGE,
+      life,
+      maxLife: life
+    })
+  }
+}
+//
+// Sheds snow along the full fir height so the burst reads as snow leaving
+// the whole tree, not a single mid-point explosion.
+//
+function spawnSnowflakeBurstAlongFir(pool, firX, firHeight, count) {
+  const topY = FLOOR_Y - firHeight
+  const bottomY = FLOOR_Y - 8
+  for (let i = 0; i < count; i++) {
+    const t = i / Math.max(1, count - 1)
+    const y = topY + (bottomY - topY) * t + (Math.random() - 0.5) * 10
+    const x = firX + (Math.random() - 0.5) * 28
+    const angle = Math.random() * Math.PI * 2
+    const speed = SNOWFLAKE_BURST_SPEED_MIN + Math.random() * SNOWFLAKE_BURST_SPEED_RANGE
+    const life = SNOWFLAKE_LIFETIME_MIN + Math.random() * SNOWFLAKE_LIFETIME_RANGE
+    pool.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed * 0.7 - 20,
       drift: (Math.random() - 0.5) * 2 * SNOWFLAKE_DRIFT_SPEED,
       size: SNOWFLAKE_SIZE_MIN + Math.random() * SNOWFLAKE_SIZE_RANGE,
       life,

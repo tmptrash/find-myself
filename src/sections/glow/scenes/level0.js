@@ -679,6 +679,17 @@ const PLAT_LAND_TRIGGER_PAD = 24
 //
 const LOG_SNAP_TOLERANCE = 2
 //
+// While Kaplay already grounds the hero on a log, ignore shallow foot
+// penetration — fighting it every frame caused constant twitch.
+//
+const LOG_SNAP_STANDING_MAX = 10
+//
+// Anti-tunnel only when feet are clearly inside the log body. Shallow
+// contact (landing / standing) stays pure Kaplay — same as the branch —
+// so snap cannot zero jump velocity or cancel the crouch→jump squash.
+//
+const LOG_SNAP_DEEP_SINK = 14
+//
 // Horizontal slack beyond the log edges where the snap still applies — the
 // hero's collider lets him stand with his centre slightly past the log end.
 //
@@ -695,6 +706,10 @@ const LOG_SNAP_BELOW = LOG_H + 24
 //
 const LOG_SNAP_EMBED = 1
 //
+// After snapping onto a log, lock out a second jump/land crouch briefly
+//
+const POST_LAND_AIR_LOCK_GLOW = 0.18
+//
 // Hover watchdog: a hero suspended above a log with zero vertical velocity
 // and no ground contact for this many consecutive frames gets pulled down
 // onto the log top. Normal jumps never trigger it (velocity is only ~0 for
@@ -702,6 +717,10 @@ const LOG_SNAP_EMBED = 1
 //
 const LOG_HOVER_BAND = 30
 const LOG_HOVER_FRAMES = 3
+//
+// Still falling through a jump arc — do not pin / idle-reset mid-air
+//
+const LOG_SNAP_FALL_VEL = 80
 //
 // Delay before swapping the freshly baked gold hero sprite in (one frame).
 //
@@ -1253,7 +1272,7 @@ function countGlowLettersCollected(zones) {
 function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = false) {
   //
   // The HUD small hero mirrors the playable hero exactly: whitish body with
-  // grey eye whites and leg strip before O, gold inside once the world colours.
+  // grey eye whites before O, gold inside once the world colours.
   //
   return LevelIndicator.create({
     k,
@@ -1265,7 +1284,6 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     heroBodyColor: colorWorld ? GLOW_GOLD_HEX : HERO_BODY_COLOR,
     heroOutlineColor: HERO_OUTLINE_COLOR,
     heroEyeWhiteColor: HERO_EYE_WHITE,
-    heroLegStrip: true,
     topPlatformHeight: TOP_MARGIN,
     sideWallWidth: LEFT_MARGIN,
     sectionLabelCompletedLetters: completedLetters,
@@ -2280,7 +2298,6 @@ function tagGroundPlatform(platform, sound, heroInst) {
 function tagWoodPlatform(platform, sound, heroInst) {
   platform.onCollide('player', () => {
     sound._l2Surface = 'wood'
-    heroInst && Hero.syncPlatformLanding(heroInst)
   })
 }
 //
@@ -2971,7 +2988,7 @@ function buildHeroSpritePrefix(hero) {
   const eyeWhite = hero.eyeWhiteColor ? String(hero.eyeWhiteColor).replace('#', '') : ''
   return `${hero.type}_${body}_${outline}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
-    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${hero.addLegStrip ? '_ls' : ''}`
+    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}`
 }
 //
 // First L reveal step after the dialog closes: the ground darkens and the
@@ -3490,10 +3507,6 @@ function onUpdate(inst) {
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
   inst.sound._glowSurface = surface
   hero.suppressDust = true
-  //
-  // Landing footstep — same timbre as running on every surface.
-  //
-  justLanded && !inst.drowning && !inst.dialogOpen && inst.sound && Sound.playStepSound(inst.sound, 'lesson-glow.0')
   snapHeroToLogPlatforms(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   //
@@ -3606,6 +3619,15 @@ function snapHeroToLogPlatforms(inst, char) {
   // tunnelled into a log during the pickup frame stays sunk until close.
   //
   if (inst.drowning) return
+  const hero = inst.heroInst
+  //
+  // Never interrupt crouch→jump squash — that left the hero unable to leave
+  // the log (jump "broke" after landing on wood).
+  //
+  if (hero?.isSquashing) {
+    inst.logHoverFrames = 0
+    return
+  }
   const velY = char.vel?.y ?? 0
   //
   // Never touch a rising hero — jumps must launch untouched, like on the branch.
@@ -3616,6 +3638,7 @@ function snapHeroToLogPlatforms(inst, char) {
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
+  const grounded = typeof char.isGrounded === 'function' && char.isGrounded()
   const z = inst.zones
   const homes = []
   z.lPlatRevealed && z.gCollected && homes.push(inst.lPlatHome)
@@ -3629,13 +3652,21 @@ function snapHeroToLogPlatforms(inst, char) {
     //
     const platTop = home.y + LOG_COLLISION_DROP_Y
     //
-    // Anti-tunnel: the hero's feet sank INTO the log body — lift him back so
-    // they overlap the top by 1 px and let Kaplay resolve the contact. The
-    // regular physics path then grounds him and plays the normal landing
-    // (velocity zeroing, tuck release, idle sprite) — exactly like the branch.
+    // Standing on the log like on the branch / ground: Kaplay owns the pose.
     //
-    if (footY > platTop + LOG_SNAP_TOLERANCE && footY <= platTop + LOG_SNAP_BELOW) {
-      char.pos.y = platTop - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    if (grounded && footY <= platTop + LOG_SNAP_STANDING_MAX) {
+      inst.logHoverFrames = 0
+      return
+    }
+    //
+    // Anti-tunnel: only deep sinks. Shallow overlap is normal landing contact.
+    //
+    if (footY > platTop + LOG_SNAP_DEEP_SINK && footY <= platTop + LOG_SNAP_BELOW) {
+      //
+      // Still in a real fall — let Kaplay land; pinning mid-fall broke jumps.
+      //
+      if (velY >= LOG_SNAP_FALL_VEL) continue
+      settleHeroOnLog(inst, char, platTop)
       inst.logHoverFrames = 0
       return
     }
@@ -3644,7 +3675,7 @@ function snapHeroToLogPlatforms(inst, char) {
     // contact — counted across frames by the watchdog below.
     //
     const suspended = footY < platTop - LOG_SNAP_TOLERANCE && footY >= platTop - LOG_HOVER_BAND
-    suspended && velY < 1 && !char.isGrounded?.() && (hoverHome = home)
+    suspended && velY < 1 && !grounded && (hoverHome = home)
   }
   //
   // Hover watchdog: only a genuinely stuck hero stays motionless above a log
@@ -3656,12 +3687,30 @@ function snapHeroToLogPlatforms(inst, char) {
   }
   inst.logHoverFrames += 1
   if (inst.logHoverFrames >= LOG_HOVER_FRAMES) {
-    //
-    // Same principle as the anti-tunnel above: embed 1 px into the log and
-    // let Kaplay ground the hero through the regular landing path.
-    //
-    char.pos.y = hoverHome.y + LOG_COLLISION_DROP_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    settleHeroOnLog(inst, char, hoverHome.y + LOG_COLLISION_DROP_Y)
     inst.logHoverFrames = 0
+  }
+}
+//
+// Pins the hero on a log top with a 1 px embed so Kaplay keeps him grounded
+// (exact surface placement left isGrounded false → jump squash never fired).
+// postLandAirLock blocks a snap-induced second crouch.
+//
+function settleHeroOnLog(inst, char, platTop) {
+  const hero = inst.heroInst
+  if (hero?.isSquashing) return
+  char.pos.y = platTop - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+  if (char.vel) char.vel.y = 0
+  if (!hero) return
+  hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+  hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.2)
+  hero.canJump = true
+  //
+  // Only force idle when still marked airborne after a deep snap — never
+  // mid-fall (caller already gated on low velY).
+  //
+  if (hero.jumpPhase === 'jumping') {
+    Hero.syncPlatformLanding(hero)
   }
 }
 //

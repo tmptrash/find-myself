@@ -171,7 +171,7 @@ const FLOOR_STRIPE_H = 3
 //
 const FLOOR_STRIPE_Y_OFFSET = 3
 const END_MUSIC_NAME = 'touch1-end'
-const END_MUSIC_TEXT = 'Press Enter to end the lesson'
+const END_MUSIC_TEXT = 'Press Space or Enter to end the lesson'
 const END_MUSIC_TEXT_FONT = 26
 const END_MUSIC_TEXT_Y = TOP_MARGIN + 62
 //
@@ -3442,7 +3442,8 @@ function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
       set('lifeScore', gameState.initialLifeScore ?? 0)
       fadeOutLesson1(k, SCENE_FADE_OUT_DURATION, () => createLevelTransition(k, 'lesson-touch.1'))
     }
-    const enterCancel = k.onKeyPress('enter', () => {
+    const enterCancel = k.onKeyPress((key) => {
+      if (key !== 'enter' && key !== 'space') return
       enterCancel.cancel()
       goNext()
     })

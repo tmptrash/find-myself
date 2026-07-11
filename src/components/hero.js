@@ -108,21 +108,21 @@ const JUMP_SQUASH_TIME = 0.03
 const JUMP_CEILING_CLEARANCE = 44
 const JUMP_STRETCH_START = 0.1
 //
-// Collision height scale per jump frame — mirrors the vertical body squash
-// (crouch short → air idle → peak shortest → descend → land crouch).
+// Collision at jump peak: bottom rises (tuck) and the whole box lifts with
+// the silhouette. Both ramp smoothly via |vel.y| / takeoff — not a hard snap.
 //
-const JUMP_FRAME_COLLISION_SCALE = [0.62, 1, 0.78, 0.55, 0.78, 1, 0.62]
-//
-// How far to raise the hitbox top with the jump silhouette (sprite px).
-// Matches IDLE_HEAD_Y − JUMP_AIR_TOP_Y for air frames so the box tracks
-// the body instead of hanging below it. Crouch frames stay at 0.
-//
-const JUMP_FRAME_COLLISION_LIFT = [0, 10, 4, 0, 4, 10, 0]
+const JUMP_COLLISION_MAX_TUCK = 0.42
+const JUMP_COLLISION_MAX_LIFT = 20
 //
 // Ignore a second land collide / ring spawn within this window (guards
 // against one-frame grounded flicker from hitbox resize or multi-platform)
 //
 const LAND_FX_COOLDOWN = 0.2
+//
+// After a real land, ignore brief ungrounding (log snap / hitbox settle)
+// so the crouch→idle sequence cannot restart as a second landing.
+//
+const POST_LAND_AIR_LOCK = 0.18
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -226,19 +226,22 @@ const HEAD_CORNER_RADIUS = 12
 const ARM_CORNER_RADIUS = 4
 const LEG_CORNER_RADIUS = 4
 //
-// Airborne jump frames draw the legs as smoothly curved strokes whose feet
-// trail behind the jump arc (reference jump sheet) instead of straight
-// pills that read as "broken". Values are per-frame horizontal foot
-// offsets in sprite px (negative = backward, toward the trailing side).
+// Airborne jump frames: knees tuck slightly forward while the feet stay
+// under the body (human jump tuck). Positive bend = knee forward in sprite
+// px; foot ends near the hip so heels read as pulled under the butt.
 //
-const JUMP_LEG_BEND = [0, -5, -7, -8, -5, -2, 0]
+const JUMP_LEG_BEND = [0, 4, 6, 8, 6, 3, 0]
 //
-// The back leg bends fully; the front leg follows at a reduced ratio so
-// the two legs stay distinguishable mid-air
+// Front leg uses a lighter tuck so the two legs stay distinguishable
 //
-const JUMP_FRONT_LEG_BEND_RATIO = 0.6
+const JUMP_FRONT_LEG_BEND_RATIO = 0.7
 const LEG_FILL_WIDTH = 9
 const LEG_OUTLINE_WIDTH = 11
+//
+// How far bent jump legs start inside the torso so the round hip join is
+// fully covered by the body fill (no outline burr at the crotch).
+//
+const JUMP_LEG_HIP_OVERLAP = 10
 //
 // Character width (head + body have same width, no shoulder bulge in new design)
 //
@@ -306,8 +309,7 @@ export function create(config) {
     ambient = false,       // Decorative background character — no annihilation tag
     ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
-    eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
-    addLegStrip = false    // If true, draw horizontal connecting strip between legs
+    eyeWhiteColor = null   // Override eye fill color (null = use config default white)
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -343,7 +345,6 @@ export function create(config) {
       addWatch,
       outlineOnly,
       eyeWhiteColor,
-      addLegStrip,
       character: null  // Marker to indicate this is an inst-like object
     })
   } catch (error) {
@@ -353,7 +354,7 @@ export function create(config) {
   // Generate sprite prefix based on customization (colors already have # removed)
   //
   const effectiveEyeWhiteKey = eyeWhiteColor ? String(eyeWhiteColor).replace('#', '') : ''
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}${addLegStrip ? '_ls' : ''}`
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -447,7 +448,6 @@ export function create(config) {
     addWatch,
     outlineOnly,
     eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
-    addLegStrip,                          // Leg strip flag persisted for runtime recolour
     spritePrefix,
     dustColor,
     speed: CFG.game.moveSpeed,
@@ -490,10 +490,13 @@ export function create(config) {
     collisionBaseWidth: collisionWidth,
     collisionBaseHeight: collisionHeight,
     jumpCollisionScale: 1,      // Current collision height / base height
-    jumpCollisionLift: 0,       // Current upward hitbox shift (jump body lift)
+    jumpCollisionLift: 0,       // Upward hitbox shift at jump peak (px)
+    jumpCollisionTuck: 0,       // 0..1 how far the feet edge has risen this jump
+    jumpTakeoffSpeed: 0,        // |vel.y| at leave-ground — scales peak tuck
     landFxCooldown: 0,          // Seconds left before another land FX may fire
     airTime: 0,                 // Seconds continuously airborne (filters platform flicker)
     spawnLandGrace: 0,          // After spawn, ignore settle-fall jump/land for this long
+    postLandAirLock: 0,         // After land, ignore brief air flicker (no second crouch)
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
@@ -567,7 +570,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, legStrip
+  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -582,7 +585,6 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     watch = inst.addWatch || false
     hollow = inst.outlineOnly || false
     eyeWhite = inst.eyeWhiteColor || null
-    legStrip = inst.addLegStrip || false
   } else {
     //
     // Called with individual parameters (for preloading)
@@ -596,7 +598,6 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     watch = addWatch
     hollow = false
     eyeWhite = null
-    legStrip = false
   }
   //
   // Use default colors from config if not provided
@@ -622,7 +623,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // Generate unique prefix for this sprite variant
   //
   const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
-  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${legStrip ? '_ls' : ''}`
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}`
   //
   // Skip generation if sprites for this configuration are already in the asset registry.
   //
@@ -634,7 +635,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, legStrip)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
         //
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
@@ -662,7 +663,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // when the hero is calm. Baked once as `${prefix}_closed`.
   //
   try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite, legStrip)
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite)
     if (closedData) {
       try {
         k.loadSprite(`${prefix}_closed`, closedData)
@@ -684,7 +685,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, legStrip)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
       if (spriteData) {
         try {
           k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
@@ -707,7 +708,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, legStrip)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
       if (spriteData) {
         try {
           k.loadSprite(`${prefix}-run-${frame}`, spriteData)
@@ -1277,6 +1278,10 @@ function onUpdate(inst) {
   //
   inst.spawnLandGrace > 0 && (inst.spawnLandGrace = Math.max(0, inst.spawnLandGrace - inst.k.dt()))
   //
+  // Post-land air lock — log snaps / hitbox resize must not restart jump/land
+  //
+  inst.postLandAirLock > 0 && (inst.postLandAirLock = Math.max(0, inst.postLandAirLock - inst.k.dt()))
+  //
   // Forced crouch pose (e.g. bug touch reaction). Holds the hero in the
   // squat sprite for a short duration and blocks the rest of the animation
   // pipeline so running/idle frames don't immediately override it.
@@ -1341,10 +1346,12 @@ function onUpdate(inst) {
       // Squash animation complete - actually jump!
       //
       inst.character.vel.y = -inst.jumpForce
+      inst.jumpTakeoffSpeed = inst.jumpForce
       inst.canJump = false
       inst.isSquashing = false
       inst.squashTimer = 0
       inst.jumpPhase = 'jumping'
+      inst.postLandAirLock = 0
       //
       // Keep frame 1 (stretch) for smooth transition to air
       //
@@ -1378,6 +1385,7 @@ function onUpdate(inst) {
     // cycle instead of entering jump/land-squat (spawn settle + log jitter).
     //
     const groundFlicker = (inst.spawnLandGrace > 0 && inst.jumpPhase !== 'jumping') ||
+      (inst.postLandAirLock > 0 && inst.jumpPhase !== 'jumping') ||
       (inst.airTime < MIN_AIR_TIME_FOR_JUMP &&
         Math.abs(inst.character.vel.y) < 80 &&
         inst.jumpPhase !== 'jumping')
@@ -1440,6 +1448,7 @@ function onUpdate(inst) {
       inst.squashTimer = 0
       if (realJump) {
         inst.landSquashTimer = LAND_SQUASH_TIME
+        inst.postLandAirLock = POST_LAND_AIR_LOCK
         const prefix = inst.spritePrefix || inst.type
         inst.character.use(inst.k.sprite(`${prefix}-jump-6`))
         inst.currentEyeSprite = null
@@ -1538,39 +1547,50 @@ function resetAirborneState(inst) {
   inst.squashTimer = 0
   inst.landSquashTimer = 0
   inst.airTime = 0
+  inst.jumpCollisionTuck = 0
+  inst.jumpCollisionLift = 0
   syncJumpCollision(inst)
 }
 //
-// Scales and lifts the hero collision box to match the jump-frame body.
-// ONLY while airborne — resizing on the ground ejected the hero into a
-// jump loop on touch L2 logs. While jumping the box rises with the
-// silhouette; on restore the character is nudged so the feet edge does
-// not expand down into the platform.
+// 0 at takeoff/landing, 1 at apex — smooth in |vel.y| so the hitbox bottom
+// rises with jump height instead of jumping on a single peak frame.
+//
+function getJumpPeakFactor(inst) {
+  const vy = inst.character?.vel?.y ?? 0
+  const takeoff = Math.max(80, inst.jumpTakeoffSpeed || inst.jumpForce || 1)
+  if (vy < 0) return 1 - Math.min(1, (-vy) / takeoff)
+  return 1 - Math.min(1, vy / takeoff)
+}
+//
+// Raises and shortens the collision box with jump height. ONLY while
+// airborne — resizing on the ground ejected the hero into a jump loop.
+// On restore the character is nudged so the feet edge does not expand
+// down into the platform.
 //
 function syncJumpCollision(inst) {
   const area = inst.character?.area
   if (!area) return
   const ch = inst.character
   const grounded = typeof ch.isGrounded === 'function' && ch.isGrounded()
-  //
-  // Compress + lift only in real airborne jump frames — never while grounded
-  //
   const compressed = !grounded && inst.jumpPhase === 'jumping'
-  const frame = inst.jumpFrame
-  const scale = compressed ? (JUMP_FRAME_COLLISION_SCALE[frame] ?? 1) : 1
-  const lift = compressed ? (JUMP_FRAME_COLLISION_LIFT[frame] ?? 0) : 0
-  if (scale === inst.jumpCollisionScale && lift === inst.jumpCollisionLift) return
-  const prevHeight = Math.max(8, Math.round(inst.collisionBaseHeight * inst.jumpCollisionScale))
-  const prevOffsetY = inst.collisionBaseOffsetY - inst.jumpCollisionLift
+  const peak = compressed ? getJumpPeakFactor(inst) : 0
+  const tuck = peak * JUMP_COLLISION_MAX_TUCK
+  const lift = peak * JUMP_COLLISION_MAX_LIFT
+  const tuckKey = Math.round(tuck * 200) / 200
+  const liftKey = Math.round(lift * 2) / 2
+  if (tuckKey === inst.jumpCollisionTuck && liftKey === inst.jumpCollisionLift) return
+  const prevHeight = Math.max(8, Math.round(inst.collisionBaseHeight * (1 - (inst.jumpCollisionTuck || 0))))
+  const prevOffsetY = inst.collisionBaseOffsetY - (inst.jumpCollisionLift || 0)
   const prevBottom = prevOffsetY + prevHeight
+  const scale = 1 - tuck
   inst.jumpCollisionScale = scale
-  inst.jumpCollisionLift = lift
+  inst.jumpCollisionLift = liftKey
+  inst.jumpCollisionTuck = tuckKey
   const height = Math.max(8, Math.round(inst.collisionBaseHeight * scale))
-  const offsetY = inst.collisionBaseOffsetY - lift
   //
-  // Restoring a taller box while grounded would push the feet into the
-  // platform and eject the hero — lift pos so the world feet stay put.
+  // Lift the whole box with the body; shorter height also raises the feet
   //
+  const offsetY = inst.collisionBaseOffsetY - liftKey
   if (grounded) {
     const sink = (offsetY + height) - prevBottom
     sink > 0 && (ch.pos.y -= sink)
@@ -2991,7 +3011,7 @@ function startAnnihilationExplosion(inst, targetPos) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, addLegStrip = false) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null) {
   //
   // Choose body color - custom or default
   //
@@ -3157,8 +3177,15 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       ctx.fillStyle = OL
       const jumpLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
       if (jumpLegBend !== 0) {
-        strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, legOutlineTop - 1, Math.max(1, legOutlineH + 2), jumpLegBend, LEG_OUTLINE_WIDTH)
-        strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, legOutlineTop - 1, Math.max(1, rightLegHeight - (legOutlineTop - rightLegY) + 2), jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_OUTLINE_WIDTH)
+        //
+        // Black outline on every bent jump frame (body already has OL rim;
+        // legs need the same treatment in air). Fill is painted in step 4.
+        //
+        const hipTop = bodyBottom - JUMP_LEG_HIP_OVERLAP
+        const leftH = Math.max(1, leftLegY + leftLegHeight - hipTop)
+        const rightH = Math.max(1, rightLegY + rightLegHeight - hipTop)
+        strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, hipTop, leftH, jumpLegBend, LEG_OUTLINE_WIDTH)
+        strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, hipTop, rightH, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_OUTLINE_WIDTH)
       } else {
         fillRoundedRectBottom(ctx, leftLegX - 1, legOutlineTop - 1, 11, Math.max(2, legOutlineH + 2), LEG_CORNER_RADIUS + 1)
         fillRoundedRectBottom(ctx, rightLegX - 1, legOutlineTop - 1, 11, Math.max(2, rightLegHeight - (legOutlineTop - rightLegY) + 2), LEG_CORNER_RADIUS + 1)
@@ -3255,26 +3282,32 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       if (!outlineOnly) {
         ctx.fillStyle = BL
         if (jumpLegBend !== 0) {
-          strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, leftLegY, leftLegHeight, jumpLegBend, LEG_FILL_WIDTH)
-          strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, rightLegY, rightLegHeight, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_FILL_WIDTH)
+          const hipTop = bodyBottom - JUMP_LEG_HIP_OVERLAP
+          const leftH = Math.max(1, leftLegY + leftLegHeight - hipTop)
+          const rightH = Math.max(1, rightLegY + rightLegHeight - hipTop)
+          //
+          // Body fill over the OL stroke from step 1 — leaves a 1 px black rim
+          //
+          strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, hipTop, leftH, jumpLegBend, LEG_FILL_WIDTH)
+          strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, hipTop, rightH, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_FILL_WIDTH)
+          //
+          // Cover the hip join with body fill so OL does not peek at the crotch
+          //
+          ctx.fillRect(headX, bodyBottom - LEG_INTO_BODY, CHAR_WIDTH, LEG_INTO_BODY + 3)
         } else {
           fillRoundedRectBottom(ctx, leftLegX, leftLegY, 9, leftLegHeight, LEG_CORNER_RADIUS)
           fillRoundedRectBottom(ctx, rightLegX, rightLegY, 9, rightLegHeight, LEG_CORNER_RADIUS)
-        }
-        //
-        // Outer side seals only (1px black + body fill) — no inner black into torso
-        //
-        const sealTop = bodyBottom - LEG_INTO_BODY
-        const sealH = LEG_INTO_BODY + 2
-        ctx.fillStyle = OL
-        ctx.fillRect(headX - 1, sealTop, 1, sealH)
-        ctx.fillRect(headX + CHAR_WIDTH, sealTop, 1, sealH)
-        ctx.fillStyle = BL
-        ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
-        ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
-        if (addLegStrip && animation === 'idle') {
+          //
+          // Outer side seals only (1px black + body fill) — no inner black into torso
+          //
+          const sealTop = bodyBottom - LEG_INTO_BODY
+          const sealH = LEG_INTO_BODY + 2
           ctx.fillStyle = OL
-          ctx.fillRect(leftLegX + 9, leftLegY, rightLegX - (leftLegX + 9), 2)
+          ctx.fillRect(headX - 1, sealTop, 1, sealH)
+          ctx.fillRect(headX + CHAR_WIDTH, sealTop, 1, sealH)
+          ctx.fillStyle = BL
+          ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
+          ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
         }
       }
     })
@@ -3877,24 +3910,34 @@ function runLegPose(phase) {
 // @param {number} cx - Leg center X at the hip
 // @param {number} topY - Leg top Y (flush with the body bottom)
 // @param {number} h - Total leg length
-// @param {number} bend - Horizontal foot offset (negative = backward)
+// @param {number} bend - Knee forward offset (positive = toward facing direction)
 // @param {number} width - Stroke thickness (fill or outline width)
 //
 function strokeBentLeg(ctx, cx, topY, h, bend, width) {
   const half = width / 2
-  const startY = topY + half
+  //
+  // Butt cap at the hip (body covers this end); round disc only at the foot
+  // so the hip join never sprouts a round-cap burr outside the torso.
+  //
+  const startY = topY
   const endY = Math.max(startY + 1, topY + h - half)
+  const kneeX = cx + bend
+  const footX = cx + bend * 0.12
+  const kneeY = topY + h * 0.42
   ctx.strokeStyle = ctx.fillStyle
   ctx.lineWidth = width
-  ctx.lineCap = 'round'
+  ctx.lineCap = 'butt'
   ctx.lineJoin = 'round'
   ctx.beginPath()
   ctx.moveTo(cx, startY)
-  //
-  // Upper leg stays vertical; the curve eases the foot out near the bottom
-  //
-  ctx.quadraticCurveTo(cx, topY + h * 0.55, cx + bend, endY)
+  ctx.quadraticCurveTo(kneeX, kneeY, footX, endY)
   ctx.stroke()
+  //
+  // Rounded foot tip (same fill colour as the stroke)
+  //
+  ctx.beginPath()
+  ctx.arc(footX, endY, half, 0, Math.PI * 2)
+  ctx.fill()
 }
 function fillRoundedRectBottom(ctx, x, y, w, h, r) {
   const cr = Math.min(r, w / 2, h / 2)

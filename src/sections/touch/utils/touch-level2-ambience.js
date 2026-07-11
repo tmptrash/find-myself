@@ -245,11 +245,24 @@ function addFrozenLake(k, bounds, lakeState) {
 //
 function generateLakeCracks(cx, midY, rx, ry) {
   const cracks = []
+  //
+  // Keep crack tips inside the ice oval (with a small inset so strokes
+  // never spill past the ellipse rim, especially upward).
+  //
+  const inset = 0.92
+  const clampToOval = (px, py) => {
+    const nx = (px - cx) / (rx * inset)
+    const ny = (py - midY) / (ry * inset)
+    const d = nx * nx + ny * ny
+    if (d <= 1 || d < 1e-6) return { x: px, y: py }
+    const s = 1 / Math.sqrt(d)
+    return { x: cx + nx * s * rx * inset, y: midY + ny * s * ry * inset }
+  }
   for (let i = 0; i < L2_CRACK_COUNT; i++) {
     const startAngle = Math.random() * Math.PI * 2
-    const startDist = Math.sqrt(Math.random()) * 0.7
-    let x = cx + Math.cos(startAngle) * rx * startDist
-    let y = midY + Math.sin(startAngle) * ry * startDist * 0.7
+    const startDist = Math.sqrt(Math.random()) * 0.55
+    let x = cx + Math.cos(startAngle) * rx * startDist * inset
+    let y = midY + Math.sin(startAngle) * ry * startDist * inset
     let dir = Math.random() * Math.PI * 2
     const pts = [{ x, y }]
     const segments = L2_CRACK_SEGMENTS_MIN + Math.floor(Math.random() * (L2_CRACK_SEGMENTS_MAX - L2_CRACK_SEGMENTS_MIN + 1))
@@ -260,7 +273,10 @@ function generateLakeCracks(cx, midY, rx, ry) {
       //
       // Vertical spread squashed so cracks follow the flat lake perspective
       //
-      y += Math.sin(dir) * len * 0.22
+      y += Math.sin(dir) * len * 0.18
+      const clamped = clampToOval(x, y)
+      x = clamped.x
+      y = clamped.y
       pts.push({ x, y })
     }
     cracks.push({ pts, threshold: i / L2_CRACK_COUNT })

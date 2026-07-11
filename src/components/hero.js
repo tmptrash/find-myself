@@ -50,6 +50,38 @@ const RUN_LEG_LIFT_RAISE = 9
 const RUN_FOOT_Y = 84
 const RUN_BODY_BOB = 2
 //
+// Forward lean while running: torso rotates around the hips so the head
+// leads. Legs stay unrotated (planted) and clamped to the body side lines
+// so they never trail past the spine (flipX mirrors left runs).
+//
+const RUN_LEAN_RAD = 0.2
+//
+// How far legs tuck up into the torso so there is never a gap at the crotch
+//
+const LEG_INTO_BODY = 2
+//
+// Ignore airborne flicker shorter than this — prevents run↔squat loops when
+// the hitbox briefly loses contact with a platform mid-stride
+//
+const MIN_AIR_TIME_FOR_JUMP = 0.06
+//
+// Idle silhouette totals (head + torso). Jump frames compress toward the
+// peak and expand back to these values on the way down.
+//
+const IDLE_HEAD_HEIGHT = 24
+const IDLE_BODY_HEIGHT = 24
+const IDLE_HEAD_Y = 18
+const IDLE_BODY_Y = 42
+const IDLE_LEG_Y = 66
+const IDLE_LEG_HEIGHT = 18
+//
+// Jump air-body compression (frames 1→3 ascent, 3→5 descent). Peak is the
+// shortest; early ascent / late descent match idle proportions.
+//
+const JUMP_AIR_HEAD_H = [24, 18, 14, 18, 24]
+const JUMP_AIR_BODY_H = [24, 16, 10, 16, 24]
+const JUMP_AIR_TOP_Y = [8, 14, 18, 14, 8]
+//
 // Confusion key set — each control key (kaplay name + physical code) that the
 // word level 4 confusion platform can remap to moveLeft / moveRight / jump.
 // Arrows (left/right/up) and letters (a/d/w) are shuffled independently; space
@@ -76,12 +108,21 @@ const JUMP_SQUASH_TIME = 0.03
 const JUMP_CEILING_CLEARANCE = 44
 const JUMP_STRETCH_START = 0.1
 //
-// While ascending/at peak the hero tucks its legs up, so the collision box is
-// shortened from the bottom by this many pixels. Once the descent velocity
-// passes the release threshold (landing phase) the box is restored to full.
+// Collision height scale per jump frame — mirrors the vertical body squash
+// (crouch short → air idle → peak shortest → descend → land crouch).
 //
-const JUMP_TUCK_AMOUNT = 22
-const JUMP_TUCK_RELEASE_VELOCITY = 200
+const JUMP_FRAME_COLLISION_SCALE = [0.62, 1, 0.78, 0.55, 0.78, 1, 0.62]
+//
+// How far to raise the hitbox top with the jump silhouette (sprite px).
+// Matches IDLE_HEAD_Y − JUMP_AIR_TOP_Y for air frames so the box tracks
+// the body instead of hanging below it. Crouch frames stay at 0.
+//
+const JUMP_FRAME_COLLISION_LIFT = [0, 10, 4, 0, 4, 10, 0]
+//
+// Ignore a second land collide / ring spawn within this window (guards
+// against one-frame grounded flicker from hitbox resize or multi-platform)
+//
+const LAND_FX_COOLDOWN = 0.2
 const EYE_ANIM_MIN_DELAY = 1.5
 const EYE_ANIM_MAX_DELAY = 3.5
 const EYE_LERP_SPEED = 0.1
@@ -184,6 +225,20 @@ const DEATH_PARTICLE_POINTS = 20
 const HEAD_CORNER_RADIUS = 12
 const ARM_CORNER_RADIUS = 4
 const LEG_CORNER_RADIUS = 4
+//
+// Airborne jump frames draw the legs as smoothly curved strokes whose feet
+// trail behind the jump arc (reference jump sheet) instead of straight
+// pills that read as "broken". Values are per-frame horizontal foot
+// offsets in sprite px (negative = backward, toward the trailing side).
+//
+const JUMP_LEG_BEND = [0, -5, -7, -8, -5, -2, 0]
+//
+// The back leg bends fully; the front leg follows at a reduced ratio so
+// the two legs stay distinguishable mid-air
+//
+const JUMP_FRONT_LEG_BEND_RATIO = 0.6
+const LEG_FILL_WIDTH = 9
+const LEG_OUTLINE_WIDTH = 11
 //
 // Character width (head + body have same width, no shoulder bulge in new design)
 //
@@ -434,7 +489,11 @@ export function create(config) {
     collisionBaseOffsetY: collisionOffsetY,
     collisionBaseWidth: collisionWidth,
     collisionBaseHeight: collisionHeight,
-    jumpTucked: false,          // True while the jump leg-tuck shortened the box
+    jumpCollisionScale: 1,      // Current collision height / base height
+    jumpCollisionLift: 0,       // Current upward hitbox shift (jump body lift)
+    landFxCooldown: 0,          // Seconds left before another land FX may fire
+    airTime: 0,                 // Seconds continuously airborne (filters platform flicker)
+    spawnLandGrace: 0,          // After spawn, ignore settle-fall jump/land for this long
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
@@ -862,6 +921,17 @@ export function spawn(inst) {
   //
   character.hidden = true
   //
+  // Freeze physics during assembly — otherwise the hidden body falls, lands,
+  // and leaves jump/land state that stuck the hero until the first real jump.
+  //
+  const prevGravityScale = character.gravityScale
+  character.gravityScale = 0
+  character.vel.x = 0
+  character.vel.y = 0
+  character.pos.x = x
+  character.pos.y = y
+  resetAirborneState(inst)
+  //
   // Determine particle color based on type
   //
   // Use custom bodyColor if provided, otherwise use default from config
@@ -931,6 +1001,13 @@ export function spawn(inst) {
   let soundPlayed = false
 
   const updateHandler = k.onUpdate(() => {
+    //
+    // Keep the body pinned while hidden so gravity can't start a land loop
+    //
+    character.pos.x = x
+    character.pos.y = y
+    character.vel.x = 0
+    character.vel.y = 0
     if (!particlesGathered) {
       let allGathered = true
       let allNearTarget = true
@@ -972,17 +1049,26 @@ export function spawn(inst) {
           if (p.exists()) k.destroy(p)
         })
         //
-        // Restore original position (body may have fallen during assembly)
+        // Reveal at the spawn point with a clean grounded jump state
         //
         character.pos.x = x
         character.pos.y = y
+        character.vel.x = 0
+        character.vel.y = 0
+        character.gravityScale = prevGravityScale ?? 1
         character.hidden = false
+        resetAirborneState(inst)
         //
         // Mark hero as spawned (allow controls) and invulnerable
         //
         inst.isSpawned = true
         inst.isInvulnerable = true
         inst.invulnerabilityTimer = 3.0  // 3 seconds of invulnerability
+        //
+        // Spawn Y sits slightly above the floor — ignore the short settle
+        // fall so it can't start the jump/land crouch hang.
+        //
+        inst.spawnLandGrace = 0.35
         //
         // Cancel update
         //
@@ -1183,6 +1269,14 @@ function onUpdate(inst) {
   //
   const isGrounded = inst.character.isGrounded()
   //
+  // Tick land-FX debounce so a grounded flicker can't double-fire dust/sound
+  //
+  inst.landFxCooldown > 0 && (inst.landFxCooldown = Math.max(0, inst.landFxCooldown - inst.k.dt()))
+  //
+  // Post-spawn floor settle — ignore brief fall before the feet plant
+  //
+  inst.spawnLandGrace > 0 && (inst.spawnLandGrace = Math.max(0, inst.spawnLandGrace - inst.k.dt()))
+  //
   // Forced crouch pose (e.g. bug touch reaction). Holds the hero in the
   // squat sprite for a short duration and blocks the rest of the animation
   // pipeline so running/idle frames don't immediately override it.
@@ -1237,6 +1331,10 @@ function onUpdate(inst) {
         inst.character.use(inst.k.sprite(`${prefix}-jump-1`))
       }
     }
+    //
+    // Squash / pre-stretch frames shrink the hitbox with the body
+    //
+    syncJumpCollision(inst)
 
     if (inst.squashTimer >= JUMP_SQUASH_TIME) {
       //
@@ -1263,118 +1361,98 @@ function onUpdate(inst) {
 
   if (!isGrounded) {
     //
-    // Cancel any squash that was accidentally started while airborne (e.g. when
-    // standing on a dynamic/floating platform that Kaplay doesn't mark as grounded).
-    // Without this, the squash state persists until the hero next touches solid
-    // ground, causing an involuntary jump on landing.
+    // While particles assemble the body still falls under gravity — ignore
+    // air time / jump frames so reveal doesn't inherit a stuck land loop.
     //
-    if (inst.isSquashing) {
-      inst.isSquashing = false
-      inst.squashTimer = 0
-    }
-    //
-    // Jumping - update animation based on velocity (position in jump arc)
-    //
-    const prefix = inst.spritePrefix || inst.type
-    const velocity = inst.character.vel.y
-    //
-    // Tuck the collision box up while rising/at peak (legs pulled in); restore
-    // it once the descent crosses the landing-phase velocity threshold.
-    //
-    setJumpTuck(inst, velocity < JUMP_TUCK_RELEASE_VELOCITY)
-    //
-    // Determine jump frame based on vertical velocity (reference sheet):
-    //
-    // Frame 0: take-off crouch (pre-jump, on ground only)
-    //
-    // Frame 1: stretch (ascending fast) - velocity < -400
-    //
-    // Frame 2: rising - velocity -400 to -150
-    //
-    // Frame 3: peak, legs tucked up - velocity -150 to 100
-    //
-    // Frame 4: early descent, legs extending - velocity 100 to 400
-    //
-    // Frame 5: fast descent, legs fully down bracing for landing
-    //
-    // Frame 6: landing crouch - held briefly after grounding
-    //
-    let targetFrame = inst.jumpFrame
-
-    if (velocity < -400) {
-      //
-      // First half of ascent - stretched (frame 1)
-      //
-      targetFrame = 1
-    } else if (velocity < -150) {
-      //
-      // Rising toward the peak (frame 2)
-      //
-      targetFrame = 2
-    } else if (velocity < 100) {
-      //
-      // At the peak - legs tucked up (frame 3)
-      //
-      targetFrame = 3
-    } else if (velocity < 400) {
-      //
-      // Early descent - legs extending down (frame 4)
-      //
-      targetFrame = 4
+    if (!inst.isSpawned) {
+      inst.airTime = 0
+      inst.wasJumping = false
+      inst.jumpPhase = 'none'
+      inst.landSquashTimer = 0
+      syncJumpCollision(inst)
     } else {
+      inst.airTime += inst.k.dt()
+    }
+    //
+    // Brief platform contact flicker (run or idle) — stay in the current
+    // cycle instead of entering jump/land-squat (spawn settle + log jitter).
+    //
+    const groundFlicker = (inst.spawnLandGrace > 0 && inst.jumpPhase !== 'jumping') ||
+      (inst.airTime < MIN_AIR_TIME_FOR_JUMP &&
+        Math.abs(inst.character.vel.y) < 80 &&
+        inst.jumpPhase !== 'jumping')
+    if (inst.isSpawned && !groundFlicker) {
       //
-      // Descending fast - legs fully extended for landing (frame 5)
+      // Cancel any squash that was accidentally started while airborne (e.g. when
+      // standing on a dynamic/floating platform that Kaplay doesn't mark as grounded).
+      // Without this, the squash state persists until the hero next touches solid
+      // ground, causing an involuntary jump on landing.
       //
-      targetFrame = 5
+      if (inst.isSquashing) {
+        inst.isSquashing = false
+        inst.squashTimer = 0
+      }
+      //
+      // Jumping - update animation based on velocity (position in jump arc)
+      //
+      const prefix = inst.spritePrefix || inst.type
+      const velocity = inst.character.vel.y
+      let targetFrame = inst.jumpFrame
+      if (velocity < -400) {
+        targetFrame = 1
+      } else if (velocity < -150) {
+        targetFrame = 2
+      } else if (velocity < 100) {
+        targetFrame = 3
+      } else if (velocity < 400) {
+        targetFrame = 4
+      } else {
+        targetFrame = 5
+      }
+      if (targetFrame !== inst.jumpFrame) {
+        inst.jumpFrame = targetFrame
+        inst.character.use(inst.k.sprite(`${prefix}-jump-${targetFrame}`))
+      }
+      syncJumpCollision(inst)
+      if (!inst.wasJumping) {
+        inst.runFrame = 0
+        inst.runTimer = 0
+        inst.isRunning = false
+        inst.wasJumping = true
+        inst.jumpPhase = 'jumping'
+      }
+      inst.character.flipX = inst.direction === -1
+      return
     }
-    //
-    // Update sprite only if frame changed
-    //
-    if (targetFrame !== inst.jumpFrame) {
-      inst.jumpFrame = targetFrame
-      inst.character.use(inst.k.sprite(`${prefix}-jump-${targetFrame}`))
-    }
-    //
-    // Mark that we're jumping
-    //
-    if (!inst.wasJumping) {
-      inst.runFrame = 0
-      inst.runTimer = 0
-      inst.isRunning = false
-      inst.wasJumping = true
-      inst.jumpPhase = 'jumping'
-    }
-    //
-    // Update direction while in air
-    //
-    inst.character.flipX = inst.direction === -1
-    //
-    // While in air, don't process any other animations
-    //
-    return
   } else {
     //
     // Kaplay platform onCollide fires on contact enter — refresh canJump every grounded frame.
     //
     !inst.isSquashing && (inst.canJump = true)
     //
-    // Reset jump phase when grounded and flash the landing crouch frame —
-    // the touch-down squat of the reference jump sheet.
+    // Only play the landing crouch after a real jump, not a mid-run flicker
     //
     if (inst.jumpPhase !== 'none') {
+      const realJump = inst.airTime >= MIN_AIR_TIME_FOR_JUMP && inst.spawnLandGrace <= 0
       inst.jumpPhase = 'none'
       inst.jumpFrame = 0
       inst.isSquashing = false
       inst.squashTimer = 0
-      inst.landSquashTimer = LAND_SQUASH_TIME
-      const prefix = inst.spritePrefix || inst.type
-      inst.character.use(inst.k.sprite(`${prefix}-jump-6`))
-      inst.currentEyeSprite = null
+      if (realJump) {
+        inst.landSquashTimer = LAND_SQUASH_TIME
+        const prefix = inst.spritePrefix || inst.type
+        inst.character.use(inst.k.sprite(`${prefix}-jump-6`))
+        inst.currentEyeSprite = null
+      } else {
+        inst.wasJumping = false
+        inst.landSquashTimer = 0
+      }
     }
+    inst.airTime = 0
     //
-    // Restore the full collision box once the hero is back on the ground
+    // Grounded ⇒ full hitbox (syncJumpCollision never compresses on the ground)
     //
-    setJumpTuck(inst, false)
+    syncJumpCollision(inst)
     //
     // Hold the landing crouch for a beat unless the player is already
     // running — the run cycle takes over immediately in that case.
@@ -1386,6 +1464,7 @@ function onUpdate(inst) {
         return
       }
       inst.landSquashTimer = 0
+      inst.wasJumping = false
     }
   }
   //
@@ -1448,18 +1527,54 @@ function onUpdate(inst) {
   inst.character.flipX = inst.direction === -1
 }
 //
-// Shrinks the hero collision box from the bottom while the legs are tucked
-// during a jump, and restores it when grounded/landing. The box top edge stays
-// fixed: height drops by JUMP_TUCK_AMOUNT and the center rises by half of that.
+// Clears jump/land timers and restores the full grounded hitbox. Used after
+// spawn assembly and after manual platform snaps.
 //
-function setJumpTuck(inst, tucked) {
-  if (tucked === inst.jumpTucked) return
-  const area = inst.character.area
+function resetAirborneState(inst) {
+  inst.wasJumping = false
+  inst.jumpFrame = 0
+  inst.jumpPhase = 'none'
+  inst.isSquashing = false
+  inst.squashTimer = 0
+  inst.landSquashTimer = 0
+  inst.airTime = 0
+  syncJumpCollision(inst)
+}
+//
+// Scales and lifts the hero collision box to match the jump-frame body.
+// ONLY while airborne — resizing on the ground ejected the hero into a
+// jump loop on touch L2 logs. While jumping the box rises with the
+// silhouette; on restore the character is nudged so the feet edge does
+// not expand down into the platform.
+//
+function syncJumpCollision(inst) {
+  const area = inst.character?.area
   if (!area) return
-  inst.jumpTucked = tucked
-  const reduce = tucked ? JUMP_TUCK_AMOUNT : 0
-  const height = inst.collisionBaseHeight - reduce
-  const offsetY = inst.collisionBaseOffsetY - reduce / 2
+  const ch = inst.character
+  const grounded = typeof ch.isGrounded === 'function' && ch.isGrounded()
+  //
+  // Compress + lift only in real airborne jump frames — never while grounded
+  //
+  const compressed = !grounded && inst.jumpPhase === 'jumping'
+  const frame = inst.jumpFrame
+  const scale = compressed ? (JUMP_FRAME_COLLISION_SCALE[frame] ?? 1) : 1
+  const lift = compressed ? (JUMP_FRAME_COLLISION_LIFT[frame] ?? 0) : 0
+  if (scale === inst.jumpCollisionScale && lift === inst.jumpCollisionLift) return
+  const prevHeight = Math.max(8, Math.round(inst.collisionBaseHeight * inst.jumpCollisionScale))
+  const prevOffsetY = inst.collisionBaseOffsetY - inst.jumpCollisionLift
+  const prevBottom = prevOffsetY + prevHeight
+  inst.jumpCollisionScale = scale
+  inst.jumpCollisionLift = lift
+  const height = Math.max(8, Math.round(inst.collisionBaseHeight * scale))
+  const offsetY = inst.collisionBaseOffsetY - lift
+  //
+  // Restoring a taller box while grounded would push the feet into the
+  // platform and eject the hero — lift pos so the world feet stay put.
+  //
+  if (grounded) {
+    const sink = (offsetY + height) - prevBottom
+    sink > 0 && (ch.pos.y -= sink)
+  }
   area.shape = new inst.k.Rect(
     inst.k.vec2(inst.collisionBaseOffsetX, offsetY),
     inst.collisionBaseWidth,
@@ -1989,9 +2104,10 @@ function onCollisionPlatform(inst) {
   const wasInAir = !inst.canJump
   inst.canJump = true
   //
-  // Play landing sound and create dust if was in air
+  // Play landing sound and create dust if was in air (once per cooldown)
   //
-  if (wasInAir && inst.wasJumping) {
+  if (wasInAir && inst.wasJumping && inst.landFxCooldown <= 0 && inst.spawnLandGrace <= 0) {
+    inst.landFxCooldown = LAND_FX_COOLDOWN
     inst.sfx && Sound.playLandSound(inst.sfx, inst.currentLevel)
     //
     // Jump sound now plays on landing (not takeoff) — gives a satisfying
@@ -2063,13 +2179,8 @@ export function setArmsHidden(inst, hidden) {
 export function syncPlatformLanding(inst) {
   const char = inst?.character
   if (!char?.exists?.()) return
-  setJumpTuck(inst, false)
-  inst.wasJumping = false
-  inst.jumpFrame = 0
-  inst.jumpPhase = 'none'
+  resetAirborneState(inst)
   inst.canJump = true
-  inst.isSquashing = false
-  inst.squashTimer = 0
   const prefix = inst.spritePrefix || inst.type
   char.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
 }
@@ -2907,21 +3018,21 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   //
   // Base parameters for different animations
   //
-  let headY = 18
-  let bodyY = 42
+  let headY = IDLE_HEAD_Y
+  let bodyY = IDLE_BODY_Y
   let headX = 33
   let bodyX = 33
-  let bodyHeight = 24
-  let headHeight = 24
+  let bodyHeight = IDLE_BODY_HEIGHT
+  let headHeight = IDLE_HEAD_HEIGHT
   let leftArmY = 40
   let rightArmY = 40
-  let leftLegY = 66
-  let rightLegY = 66
+  let leftLegY = IDLE_LEG_Y
+  let rightLegY = IDLE_LEG_Y
   let leftArmX = 25
   let rightArmX = 65
   let leftLegX = 33
   let rightLegX = 54
-  let legHeight = 18
+  let legHeight = IDLE_LEG_HEIGHT
   let leftLegHeight = legHeight
   let rightLegHeight = legHeight
   //
@@ -2951,14 +3062,14 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
     rightArmY += bob
   }
   //
-  // Jump animation - 5 frames with squash and stretch
+  // Jump animation — crouch / air arc / land. Air frames compress the
+  // torso smoothly toward the peak and expand back to idle length on
+  // the way down (symmetric). Outer hip lines stay flush with the legs.
   //
   if (animation === 'jump') {
-    if (frame === 0) {
+    if (frame === 0 || frame === 6) {
       //
-      // Frame 0: Squash (pre-jump, on ground) - hero squats down LOW
-      //
-      // Everything pushed down, legs also SHORT
+      // Ground crouch (take-off anticipation / landing hold)
       //
       headY = 45
       headHeight = 15
@@ -2966,133 +3077,46 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       bodyHeight = 12
       leftArmY = 63
       rightArmY = 63
-      //
-      // Legs SHORT and wide
-      //
       rightLegY = 72
       rightLegX = 54
       leftLegY = 72
       leftLegX = 33
       legHeight = 12
-    } else if (frame === 1) {
+    } else {
       //
-      // Frame 1: Stretch (ascending, in air) - hero elongated UP
+      // Air frames 1..5 map onto JUMP_AIR_* tables (index 0..4).
+      // Body shortens toward the peak (frame 3) and lengthens again.
       //
-      headY = 9
-      headHeight = 24
-      bodyY = 33
-      bodyHeight = 36
-      leftArmY = 39
-      rightArmY = 39
+      const air = frame - 1
+      headHeight = JUMP_AIR_HEAD_H[air]
+      bodyHeight = JUMP_AIR_BODY_H[air]
+      headY = JUMP_AIR_TOP_Y[air]
+      bodyY = headY + headHeight
+      leftArmY = bodyY + 2
+      rightArmY = bodyY + 2
       //
-      // Legs spread wider with gap between them
+      // Legs stay flush with the body sides (no hip dimples) and tuck
+      // shorter near the peak, extending again on descent
       //
-      rightLegY = 69
-      rightLegX = 54
-      leftLegY = 69
+      const peakTuck = air === 2 ? 10 : air === 1 || air === 3 ? 14 : IDLE_LEG_HEIGHT
+      legHeight = peakTuck
       leftLegX = 33
-      legHeight = 15
-    } else if (frame === 2) {
-      //
-      // Frame 2: Normal (near peak) - regular proportions moved to TOP
-      //
-      headY = 6
-      headHeight = 24
-      bodyY = 30
-      bodyHeight = 24
-      leftArmY = 33
-      rightArmY = 33
-      //
-      // Regular legs
-      //
-      rightLegY = 54
       rightLegX = 54
-      leftLegY = 54
-      leftLegX = 33
-      legHeight = 18
-    } else if (frame === 3) {
-      //
-      // Frame 3: Peak — legs TUCKED up under the body (reference pose):
-      // short legs, feet pulled almost into the body silhouette.
-      //
-      headY = 6
-      headHeight = 24
-      bodyY = 30
-      bodyHeight = 24
-      leftArmY = 33
-      rightArmY = 33
-      //
-      // Tucked legs — short, feet raised, slightly spread
-      //
-      rightLegY = 56
-      rightLegX = 52
-      leftLegY = 56
-      leftLegX = 35
-      legHeight = 10
-    } else if (frame === 4) {
-      //
-      // Frame 4: Early descent — the legs start extending back down
-      //
-      headY = 6
-      headHeight = 24
-      bodyY = 30
-      bodyHeight = 24
-      leftArmY = 33
-      rightArmY = 33
-      //
-      // Legs half extended
-      //
-      rightLegY = 58
-      rightLegX = 54
-      leftLegY = 58
-      leftLegX = 33
-      legHeight = 14
-    } else if (frame === 5) {
-      //
-      // Frame 5: Fast descent — legs reach fully DOWN toward the ground
-      //
-      headY = 6
-      headHeight = 24
-      bodyY = 30
-      bodyHeight = 24
-      leftArmY = 33
-      rightArmY = 33
-      //
-      // Fully extended legs bracing for the landing
-      //
-      rightLegY = 60
-      rightLegX = 53
-      leftLegY = 60
-      leftLegX = 34
-      legHeight = 20
-    } else if (frame === 6) {
-      //
-      // Frame 6: Landing crouch — same squat as the take-off crouch,
-      // held briefly right after touching the ground.
-      //
-      headY = 45
-      headHeight = 15
-      bodyY = 60
-      bodyHeight = 12
-      leftArmY = 63
-      rightArmY = 63
-      //
-      // Legs SHORT and wide
-      //
-      rightLegY = 72
-      rightLegX = 54
-      leftLegY = 72
-      leftLegX = 33
-      legHeight = 12
+      leftLegY = bodyY + bodyHeight - 2
+      rightLegY = leftLegY
     }
     leftArmX = 25
     rightArmX = 65
-    //
-    // Sync per-leg heights with the shared legHeight for jump frames
-    //
     leftLegHeight = legHeight
     rightLegHeight = legHeight
   }
+  //
+  // Tuck legs into the torso so the crotch never shows a gap
+  //
+  leftLegY -= LEG_INTO_BODY
+  rightLegY -= LEG_INTO_BODY
+  leftLegHeight += LEG_INTO_BODY
+  rightLegHeight += LEG_INTO_BODY
   //
   // Create sprite using toCanvas
   //
@@ -3107,65 +3131,64 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       //
       const showArms = addArms && animation !== 'run' && animation !== 'jump'
       //
-      // Step 1: draw all outlines in outline color (fill-based, sharp edges)
+      // Flat crotch on every pose: body side lines run straight into the outer
+      // leg edges (no rounded belly / hip dimples).
       //
+      const bodyH = headHeight + bodyHeight + 1
+      //
+      // Run lean: rotate only the torso around the hips. Legs stay planted
+      // (unrotated) and clamped to the body sides so they never trail past
+      // the spine — rotating legs with the body made the run look like a squat.
+      //
+      const leanRad = animation === 'run' ? RUN_LEAN_RAD : 0
+      const leanPivotX = headX + CHAR_WIDTH / 2
+      const leanPivotY = headY + headHeight + bodyHeight
+      if (animation === 'run') {
+        leftLegX = Math.max(headX, Math.min(leftLegX, headX + CHAR_WIDTH - LEG_FILL_WIDTH))
+        rightLegX = Math.max(headX, Math.min(rightLegX, headX + CHAR_WIDTH - LEG_FILL_WIDTH))
+      }
+      //
+      // Step 1: leg outlines — start at the body bottom so inner black edges
+      // never climb into the torso (only a tiny tuck seals the crotch join)
+      //
+      const bodyBottom = headY + headHeight + bodyHeight
+      const legOutlineTop = Math.max(leftLegY, bodyBottom - LEG_INTO_BODY)
+      const legOutlineH = leftLegHeight - (legOutlineTop - leftLegY)
       ctx.fillStyle = OL
+      const jumpLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
+      if (jumpLegBend !== 0) {
+        strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, legOutlineTop - 1, Math.max(1, legOutlineH + 2), jumpLegBend, LEG_OUTLINE_WIDTH)
+        strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, legOutlineTop - 1, Math.max(1, rightLegHeight - (legOutlineTop - rightLegY) + 2), jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_OUTLINE_WIDTH)
+      } else {
+        fillRoundedRectBottom(ctx, leftLegX - 1, legOutlineTop - 1, 11, Math.max(2, legOutlineH + 2), LEG_CORNER_RADIUS + 1)
+        fillRoundedRectBottom(ctx, rightLegX - 1, legOutlineTop - 1, 11, Math.max(2, rightLegHeight - (legOutlineTop - rightLegY) + 2), LEG_CORNER_RADIUS + 1)
+      }
       //
-      // Arm outlines: each arm is half a leg pill (cut vertically). The flat side
-      // is flush against the body outline so the arm emerges seamlessly from the torso.
-      // Left arm: flat right side against body left, rounded outer-left edge.
-      // Right arm: flat left side against body right, rounded outer-right edge.
+      // Step 2: torso + arms (optionally leaned) — painted after legs so the
+      // solid body covers any leftover outline pixels at the hip join
       //
+      if (leanRad) {
+        ctx.save()
+        ctx.translate(leanPivotX, leanPivotY)
+        ctx.rotate(leanRad)
+        ctx.translate(-leanPivotX, -leanPivotY)
+      }
+      ctx.fillStyle = OL
       if (showArms) {
         fillHalfPillLeft(ctx, headX - 1 - ARM_HALF_W, leftArmY - 1, ARM_HALF_W + 1, ARM_H + 2, ARM_CORNER_RADIUS + 1)
         fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY - 1, ARM_HALF_W + 1, ARM_H + 2, ARM_CORNER_RADIUS + 1)
       }
-      //
-      // Leg outlines: flat top so they merge seamlessly into body outline bottom
-      //
-      fillRoundedRectBottom(ctx, leftLegX - 1, leftLegY - 1, 11, leftLegHeight + 2, LEG_CORNER_RADIUS + 1)
-      fillRoundedRectBottom(ctx, rightLegX - 1, rightLegY - 1, 11, rightLegHeight + 2, LEG_CORNER_RADIUS + 1)
-      //
-      // Body outline: always a clean straight-sided rect (same in both arms and no-arms mode).
-      // Arms are drawn separately beside it; there are no shoulder bezier curves.
-      //
       fillRoundedRectTop(ctx, headX - 1, headY - 1, CHAR_WIDTH + 2, headHeight + bodyHeight + 2, HEAD_CORNER_RADIUS + 1)
-      //
-      // Step 2: draw body color fills on top of outlines
-      //
       if (!outlineOnly) {
         ctx.fillStyle = BL
-        //
-        // Arm fills: half-pill bodies, flat side overlapping body so arm merges seamlessly
-        //
         if (showArms) {
           fillHalfPillLeft(ctx, headX - ARM_HALF_W, leftArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
           fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY, ARM_HALF_W, ARM_H, ARM_CORNER_RADIUS)
         }
-        //
-        // Body fill: clean straight rect, identical in both arms and no-arms mode
-        //
-        fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, headHeight + bodyHeight + 1, HEAD_CORNER_RADIUS)
-        //
-        // Leg fills: flat top so they merge seamlessly into body fill bottom
-        //
-        fillRoundedRectBottom(ctx, leftLegX, leftLegY, 9, leftLegHeight, LEG_CORNER_RADIUS)
-        fillRoundedRectBottom(ctx, rightLegX, rightLegY, 9, rightLegHeight, LEG_CORNER_RADIUS)
-        //
-        // Optional horizontal strip connecting the two legs at their base
-        // (where they attach to the body). Drawn in outline color so it is
-        // visible as a gray line across the crotch area.
-        //
-        //
-        // Leg strip is idle-only — on run/jump frames it reads as an extra black line.
-        //
-        if (addLegStrip && animation === 'idle') {
-          ctx.fillStyle = OL
-          ctx.fillRect(leftLegX + 9, leftLegY, rightLegX - (leftLegX + 9), 2)
-        }
+        fillRoundedRectTop(ctx, headX, headY, CHAR_WIDTH, bodyH, HEAD_CORNER_RADIUS)
       }
       //
-      // Step 3: circular eyes (drawn on head fill)
+      // Step 3: eyes + mouth on the torso
       //
       const eyeY = headY + EYE_OFFSET_Y
       ctx.fillStyle = OL
@@ -3181,11 +3204,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.arc(headX + EYE_OFFSET_X_RIGHT, eyeY, EYE_RING_RADIUS, 0, Math.PI * 2)
         ctx.fill()
       }
-      //
-      // Eye whites (filled inside the ring). When the eyes are "closed" (calm),
-      // fill them with the body colour so the eyeballs vanish into the head — a
-      // serene shut look — and the pupils below are skipped entirely.
-      //
       if (!outlineOnly) {
         ctx.fillStyle = eyesClosed ? BL : (eyeWhiteColor ? getHex(eyeWhiteColor) : getHex(CFG.visual.colors[type].eyeWhite))
         if (animation === 'run' || animation === 'jump') {
@@ -3201,9 +3219,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           ctx.fill()
         }
       }
-      //
-      // Pupils (skipped while the eyes are closed)
-      //
       if (!eyesClosed) {
         ctx.fillStyle = OL
         if (animation === 'run' || animation === 'jump') {
@@ -3219,9 +3234,6 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           ctx.fill()
         }
       }
-      //
-      // Mouth (optional, only for idle — small smile arc)
-      //
       if (addMouth && animation === 'idle') {
         ctx.strokeStyle = OL
         ctx.lineWidth = 2
@@ -3230,13 +3242,40 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         ctx.arc(headX + 15, headY + 17, 7, 0.15 * Math.PI, 0.85 * Math.PI)
         ctx.stroke()
       }
-      //
-      // Watch on right wrist — drawn at body arm position
-      //
       if (addWatch && animation === 'idle') {
         const watchY = rightArmY + ARM_H - 6
         ctx.fillStyle = '#FFFFFF'
         ctx.fillRect(headX + CHAR_WIDTH + 1, watchY, 3, 3)
+      }
+      leanRad && ctx.restore()
+      //
+      // Step 4: leg fills (unrotated). Outer hip continuity: 1px outline only
+      // on the outside — never draw outline on the inner crotch side of the body.
+      //
+      if (!outlineOnly) {
+        ctx.fillStyle = BL
+        if (jumpLegBend !== 0) {
+          strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, leftLegY, leftLegHeight, jumpLegBend, LEG_FILL_WIDTH)
+          strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, rightLegY, rightLegHeight, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_FILL_WIDTH)
+        } else {
+          fillRoundedRectBottom(ctx, leftLegX, leftLegY, 9, leftLegHeight, LEG_CORNER_RADIUS)
+          fillRoundedRectBottom(ctx, rightLegX, rightLegY, 9, rightLegHeight, LEG_CORNER_RADIUS)
+        }
+        //
+        // Outer side seals only (1px black + body fill) — no inner black into torso
+        //
+        const sealTop = bodyBottom - LEG_INTO_BODY
+        const sealH = LEG_INTO_BODY + 2
+        ctx.fillStyle = OL
+        ctx.fillRect(headX - 1, sealTop, 1, sealH)
+        ctx.fillRect(headX + CHAR_WIDTH, sealTop, 1, sealH)
+        ctx.fillStyle = BL
+        ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
+        ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
+        if (addLegStrip && animation === 'idle') {
+          ctx.fillStyle = OL
+          ctx.fillRect(leftLegX + 9, leftLegY, rightLegX - (leftLegX + 9), 2)
+        }
       }
     })
   } catch (error) {
@@ -3829,6 +3868,34 @@ function runLegPose(phase) {
 // eliminating the body-to-leg gap visible in all animation frames.
 // Caller sets ctx.fillStyle before calling.
 //
+//
+// Draws one bent jump leg as a thick round-capped stroke along a quadratic
+// curve: the hip stays put while the foot swings sideways by `bend` px, so
+// the leg reads as a smooth rounded knee instead of a broken pill.
+// Uses the current ctx.fillStyle as the stroke colour.
+// @param {CanvasRenderingContext2D} ctx - Canvas context
+// @param {number} cx - Leg center X at the hip
+// @param {number} topY - Leg top Y (flush with the body bottom)
+// @param {number} h - Total leg length
+// @param {number} bend - Horizontal foot offset (negative = backward)
+// @param {number} width - Stroke thickness (fill or outline width)
+//
+function strokeBentLeg(ctx, cx, topY, h, bend, width) {
+  const half = width / 2
+  const startY = topY + half
+  const endY = Math.max(startY + 1, topY + h - half)
+  ctx.strokeStyle = ctx.fillStyle
+  ctx.lineWidth = width
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  ctx.moveTo(cx, startY)
+  //
+  // Upper leg stays vertical; the curve eases the foot out near the bottom
+  //
+  ctx.quadraticCurveTo(cx, topY + h * 0.55, cx + bend, endY)
+  ctx.stroke()
+}
 function fillRoundedRectBottom(ctx, x, y, w, h, r) {
   const cr = Math.min(r, w / 2, h / 2)
   ctx.beginPath()
@@ -3891,21 +3958,6 @@ function fillHalfPillRight(ctx, x, y, w, h, r) {
   ctx.lineTo(x + w, y + h - cr)
   ctx.arcTo(x + w, y + h, x, y + h, cr)
   ctx.lineTo(x, y + h)
-  ctx.closePath()
-  ctx.fill()
-}
-//
-// Draws a filled rounded rectangle using arcTo for smooth corners.
-// Caller sets ctx.fillStyle before calling.
-//
-function fillRoundedRect(ctx, x, y, w, h, r) {
-  const cr = Math.min(r, w / 2, h / 2)
-  ctx.beginPath()
-  ctx.moveTo(x + cr, y)
-  ctx.arcTo(x + w, y, x + w, y + h, cr)
-  ctx.arcTo(x + w, y + h, x, y + h, cr)
-  ctx.arcTo(x, y + h, x, y, cr)
-  ctx.arcTo(x, y, x + w, y, cr)
   ctx.closePath()
   ctx.fill()
 }

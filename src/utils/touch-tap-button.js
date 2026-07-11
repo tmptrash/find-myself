@@ -76,7 +76,7 @@ export function create(cfg) {
     fixed = false
   } = cfg
   //
-  // Build component lists; k.fixed() is opt-in so menu/training buttons
+  // Build component lists; k.fixed() is opt-in so menu buttons
   // can sit in world space like the text they replace.
   //
   const rectComps = [

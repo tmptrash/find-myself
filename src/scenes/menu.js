@@ -17,7 +17,8 @@ import {
   MENU_BG_GROUND_Y,
   MENU_BG_HORIZON_LINE_HEIGHT,
   MENU_BG_CANVAS_W,
-  MENU_BG_CANVAS_H
+  MENU_BG_CANVAS_H,
+  MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
 //
 // Section colors configuration (body color only, outline is always black)
@@ -80,9 +81,13 @@ const MENU_GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - MENU_GRASS_EDGE_INSET
 // palette tree-leaf green pushed toward the warm haze by the combined
 // near-row blend of the glow level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
 //
-const MENU_GRASS_LEAF_HAZE_BLEND = 0.51
-const MENU_GRASS_HAZE_RGB = parseHex(CFG.visual.colors.palette.warmHaze)
-const [MENU_GRASS_TINT_R, MENU_GRASS_TINT_G, MENU_GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.treeColor.leaf).map((c, i) => Math.round(c + (MENU_GRASS_HAZE_RGB[i] - c) * MENU_GRASS_LEAF_HAZE_BLEND))
+//
+// Grass matches the warm yellow-orange foliage of the front-row side trees,
+// at half brightness so it doesn't overpower the night scene
+//
+const MENU_GRASS_TINT_R = Math.round(MENU_BG_FRONT_LEAF_RGB.r / 2)
+const MENU_GRASS_TINT_G = Math.round(MENU_BG_FRONT_LEAF_RGB.g / 2)
+const MENU_GRASS_TINT_B = Math.round(MENU_BG_FRONT_LEAF_RGB.b / 2)
 //
 // Firefly particles target opacity when hovering an anti-hero
 //
@@ -243,6 +248,15 @@ function getSectionPositions(centerX, centerY, radius) {
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
+    //
+    // Clear any leftover pre-level transition handle from a prior scene.
+    // A stale k.transitionCleanup would silently block Space / anti-hero
+    // clicks from starting the current level.
+    //
+    if (k.transitionCleanup) {
+      try { k.transitionCleanup() } catch (_) { /* ignore stale cleanup errors */ }
+      k.transitionCleanup = null
+    }
     //
     // Restore volume to 1 (in case it was muted by transition)
     //
@@ -543,7 +557,7 @@ export function sceneMenu(k) {
           // Ignore the click while a pre-level transition is running — the
           // click is the transition's own skip, not a new section entry.
           //
-          if (k.transitionCleanup) return
+          if (isMenuTransitionBlocking(k)) return
           //
           // Mark that we're leaving the scene
           //
@@ -584,7 +598,7 @@ export function sceneMenu(k) {
           // Ignore the click while a pre-level transition is running — the
           // click is the transition's own skip, not a new section entry.
           //
-          if (k.transitionCleanup) return
+          if (isMenuTransitionBlocking(k)) return
           beginMenuSceneLeave(k, inst)
           Sound.stopAmbient(sound)
           Cursor.setCursor('arrow')
@@ -608,7 +622,7 @@ export function sceneMenu(k) {
           // Ignore the click while a pre-level transition is running — the
           // click is the transition's own skip, not a new section entry.
           //
-          if (k.transitionCleanup) return
+          if (isMenuTransitionBlocking(k)) return
           beginMenuSceneLeave(k, inst)
           
           //
@@ -640,7 +654,7 @@ export function sceneMenu(k) {
           // Ignore the click while a pre-level transition is running — the
           // click is the transition's own skip, not a new section entry.
           //
-          if (k.transitionCleanup) return
+          if (isMenuTransitionBlocking(k)) return
           beginMenuSceneLeave(k, inst)
           
           //
@@ -1198,12 +1212,7 @@ export function sceneMenu(k) {
     //
     const startGame = (forceNew) => {
       if (allCompleted && !forceNew) return
-      //
-      // A pre-level transition is already running (its overlay + phrase are
-      // on screen) — pressing Space again must skip INSIDE the transition,
-      // not restart it (a restart made the phrase blink and fade in again).
-      //
-      if (k.transitionCleanup) return
+      if (isMenuTransitionBlocking(k)) return
       beginMenuSceneLeave(k, inst)
       Sound.stopAmbient(sound)
       menuMusic.stop()
@@ -1237,11 +1246,10 @@ export function sceneMenu(k) {
       // If a level transition overlay is active (pre-level text), let the
       // transition's own Esc handler take care of navigation (it goes to menu).
       //
-      if (k.transitionCleanup) return
+      if (isMenuTransitionBlocking(k)) return
       Sound.stopAmbient(sound)
       menuMusic.stop()
       kidsMusic.stop()
-      k.transitionCleanup?.()
       goAfterPreparingAssets(k, "ready")
     })
     
@@ -1984,6 +1992,17 @@ function drawScene(inst) {
   if (hoveredAntiHero && isAntiHeroLocked(hoveredAntiHero, progress, inst.currentSection)) {
     drawProhibitedSign(k, hoveredAntiHero.character.pos.x, hoveredAntiHero.character.pos.y)
   }
+}
+//
+// True while a live pre-level transition overlay owns input. Clears a
+// stale transitionCleanup handle left behind after a broken leave.
+//
+function isMenuTransitionBlocking(k) {
+  if (!k.transitionCleanup) return false
+  if (k._transitionOverlay?.exists?.()) return true
+  try { k.transitionCleanup() } catch (_) { /* ignore */ }
+  k.transitionCleanup = null
+  return false
 }
 //
 // Hides menu sprites and paints a solid background while assets load for the next scene

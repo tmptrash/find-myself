@@ -102,6 +102,14 @@ const MENU_BG_CLOUD_B = 68
 const MENU_BG_TREE_YELLOW_LEAF_R = 220
 const MENU_BG_TREE_YELLOW_LEAF_G = 128
 const MENU_BG_TREE_YELLOW_LEAF_B = 48
+//
+// Exported so ready/menu grass can reuse the exact front-row foliage tone
+//
+export const MENU_BG_FRONT_LEAF_RGB = {
+  r: MENU_BG_TREE_YELLOW_LEAF_R,
+  g: MENU_BG_TREE_YELLOW_LEAF_G,
+  b: MENU_BG_TREE_YELLOW_LEAF_B
+}
 const MENU_BG_TREE_YELLOW_TRUNK_R = 96
 const MENU_BG_TREE_YELLOW_TRUNK_G = 58
 const MENU_BG_TREE_YELLOW_TRUNK_B = 28

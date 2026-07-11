@@ -119,6 +119,12 @@ const L2_CROW_TOOLTIP_TEXT = 'will you ever calm down?'
 const L2_CROW_TOOLTIP_HOVER_W = 52
 const L2_CROW_TOOLTIP_HOVER_H = 48
 const L2_CROW_TOOLTIP_OFFSET_Y = -52
+//
+// Crow hover zone is raised above perchY: drawCrow raises the body ~30px
+// (BODY_RAISE * scale) above the foot level, so the hover box must be
+// centered on the body, not the feet.
+//
+const L2_CROW_TOOLTIP_HOVER_Y_OFFSET = -34
 const DECOR_LOG_HEIGHT = 30
 //
 // Snowflake hero push (snowflakes fly when hero runs past)
@@ -131,9 +137,6 @@ const SNOW_PUSH_DOWN_BOOST = 10
 //
 const ICICLE_TOOLTIP_TEXT = "I'm an icicle.\nCome closer and lick me"
 const ICICLE_TOOLTIP_Y_OFFSET = -30
-const ANTIHERO_TOOLTIP_TEXT = "I'm here :)"
-const ANTIHERO_TOOLTIP_HOVER_SIZE = 80
-const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const TOUCH_INDICATOR_TOOLTIP_TEXT = "here you see how far you have\ncome in learning touch"
 const TOUCH_INDICATOR_TOOLTIP_WIDTH = 250
 const TOUCH_INDICATOR_TOOLTIP_HEIGHT = 50
@@ -158,9 +161,9 @@ const MOON_HOVER_GLOW_EXTRA = 28
 const MOON_HOVER_GLOW_SPEED = 1.4
 const MOON_AMBIENT_PULSE_SPEED = 0.65
 //
-// Antihero platform tooltip (log where antihero stands)
+// First platform tooltip (topmost always-visible log)
 //
-const ANTIHERO_PLATFORM_TOOLTIP_TEXT = "there are other\nplatforms below..."
+const FIRST_PLATFORM_TOOLTIP_TEXT = "there are other\nplatforms below..."
 //
 // Snowman hover tooltip
 //
@@ -179,14 +182,7 @@ const CENTER_ICICLE_SNOWMAN_CLEARANCE = 80
 //
 const CENTER_ICICLE_GAP_CENTER_X = 1040
 const CENTER_ICICLE_GAP_HALF_WIDTH = 80
-const ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET = 40
-//
-// Antihero timed hint (shown if player hasn't completed level in time)
-//
-const ANTIHERO_HINT_DELAY = 60
-const ANTIHERO_HINT_TEXT = "Use the edges\nof the platforms..."
-const ANTIHERO_HINT_DISPLAY_TIME = 8
-const ANTIHERO_HINT_Y_OFFSET = -140
+const FIRST_PLATFORM_TOOLTIP_Y_OFFSET = 40
 //
 // Stuck-hero hints shown above the hero when the player hasn't finished the level
 //
@@ -218,17 +214,10 @@ const JUMP_RING_COLOR_G = 220
 const JUMP_RING_COLOR_B = 255
 const JUMP_RING_FOOT_OFFSET_Y = 40
 //
-// Speed bonus constants
+// Same window as hero land-FX debounce — blocks a second ring from a
+// one-frame grounded flicker after hitbox resize
 //
-const SPEED_BONUS_FLASH_COUNT = 20
-const SPEED_BONUS_FLASH_INTERVAL = 0.05
-const SPEED_BONUS_PARTICLE_COUNT = 8
-const SPEED_BONUS_PARTICLE_SPEED_MIN = 30
-const SPEED_BONUS_PARTICLE_SPEED_RANGE = 20
-const SPEED_BONUS_PARTICLE_SIZE_MIN = 4
-const SPEED_BONUS_PARTICLE_SIZE_RANGE = 4
-const SPEED_BONUS_PARTICLE_LIFETIME_MIN = 0.8
-const SPEED_BONUS_PARTICLE_LIFETIME_RANGE = 0.4
+const LAND_RING_COOLDOWN = 0.2
 //
 // Log platform visual constants (rounded wooden look)
 //
@@ -336,6 +325,162 @@ const MOON_CRATERS = [
   { x: 0.1, y: -0.45, r: 0.1, dark: 28 },
   { x: 0.3, y: 0.4, r: 0.09, dark: 15 }
 ]
+//
+// TOUCH letter quest: T on the left logs, O after freeing the spruces,
+// U after melting the lake, C after rubbing the snowman, H on the platform.
+// Collected letter count persists so a death mid-quest keeps progress.
+//
+const QUEST_LETTERS_FLAG = 'touch.lesson2Letters'
+//
+// Set right before a death reload so the quest progress survives the death,
+// but a fresh entry into the level (menu, previous level) starts from zero
+//
+const QUEST_RESUME_FLAG = 'touch.lesson2Resume'
+const QUEST_LETTER_SIZE = 68
+const QUEST_LETTER_COLLECT_RADIUS = 58
+const QUEST_LETTER_COLOR_R = 90
+const QUEST_LETTER_COLOR_G = 136
+const QUEST_LETTER_COLOR_B = 152
+const QUEST_LETTER_OUTLINE = 2
+const QUEST_LETTER_TILTS = [-8, 12, 6, -5, 7]
+//
+// Pickup letter draw order: O/C/H sit behind snow drifts; T/U stay in front
+//
+const QUEST_LETTER_Z_BEHIND_SNOW = 10
+const QUEST_LETTER_Z_FRONT = 27
+const QUEST_LETTER_BEHIND_SNOW = new Set(['O', 'C', 'H'])
+//
+// Letter pickup pulse (same look as touch L0 letters)
+//
+const QUEST_LETTER_PULSE_SPEED = 1.8
+const QUEST_LETTER_PULSE_MIN = 0.35
+//
+// T rests ON the top log of the left pile (glyph bottom sinks into the
+// top log barrel so the letter reads as lying on the logs, not above them)
+//
+const QUEST_LETTER_T_Y = FLOOR_Y - 72
+//
+// Ground letters (C) sink a few pixels below the floor line so they
+// read as lying in the snow instead of hovering above it
+//
+const QUEST_LETTER_SNOW_SINK = 10
+//
+// O sits deeper in the snow drift than the other ground letters
+//
+const QUEST_LETTER_O_SINK = 22
+//
+// U sits directly in the water surface and rises from below when it spawns
+//
+const QUEST_LETTER_U_SINK = 14
+const QUEST_LETTER_RISE_DURATION = 1.1
+//
+// Quest dialog panel colors (same style as touch L0 letter dialogs)
+//
+const QUEST_DIALOG_FILL_R = 21
+const QUEST_DIALOG_FILL_G = 37
+const QUEST_DIALOG_FILL_B = 40
+const QUEST_DIALOG_HL_R = 255
+const QUEST_DIALOG_HL_G = 220
+const QUEST_DIALOG_HL_B = 0
+//
+// Quest dialogs shown after each letter pickup
+//
+const QUEST_DIALOG_T = "[hl]T[/hl]ouch can remove even the\nlightest burdens. Touch all\nthe spruces to set them free."
+const QUEST_DIALOG_O = "However hard the ice may be,\nit melts [hl]O[/hl]vertime. Break the\nice and so will you."
+const QUEST_DIALOG_U = "[hl]U[/hl]nfreeze the frozen, reveal\nthe hidden. And who else\nis frozen here?"
+const QUEST_DIALOG_C = "[hl]C[/hl]limb higher to see farther."
+const QUEST_DIALOG_H = "Every touch brings the world\ncloser to [hl]H[/hl]armony."
+//
+// Spruce freeing: hero lands near a white fir — it shakes, sheds
+// snowflakes and fades to green
+//
+const FIR_TOUCH_RADIUS = 60
+const FIR_SHAKE_DURATION = 0.6
+const FIR_SHAKE_AMPLITUDE = 4
+const FIR_WHITE_FADE_SPEED = 2
+const FIR_WHITE_COLOR = [230, 240, 248]
+const FIR_TRUNK_WHITE_BLEND = 0.75
+const FIR_BURST_SNOWFLAKE_COUNT = 26
+//
+// How close the hero's feet must be to the floor line for ground-level
+// quest interactions (firs, ice, snowman)
+//
+const QUEST_FLOOR_TOLERANCE = 20
+//
+// Ice cracking: distance the hero must run on the lake per crack step.
+// A landing on the lake also counts as one crack step. When the hero
+// pauses, the cracks slowly refreeze (progress decays back to zero).
+//
+const ICE_CRACK_DISTANCE_STEP = 60
+const ICE_CRACK_TOTAL_STEPS = 22
+const ICE_CRACK_MOVE_EPSILON = 0.5
+const ICE_CRACK_DECAY_DELAY = 0.6
+const ICE_CRACK_DECAY_PER_SEC = 0.12
+//
+// Melted lake: refreezes back to ice when the hero stops running on the
+// water; running on the water plays splashy step sounds
+//
+const LAKE_REFREEZE_DELAY = 5
+const WATER_STEP_DISTANCE = 32
+const WATER_STEP_VOLUME = 0.32
+const WATER_LAND_VOLUME = 0.5
+//
+// Snowman rub sound (friction noise burst)
+//
+const RUB_SOUND_DURATION = 0.22
+const RUB_SOUND_PEAK = 0.35
+const RUB_SOUND_FREQ_START = 950
+const RUB_SOUND_FREQ_END = 480
+const RUB_COUNTER_Z = 30
+//
+// Delay between the snowman collapsing and the C letter appearing
+//
+const SNOWMAN_C_APPEAR_DELAY = 0.8
+//
+// C drops out of the collapsing snowman a bit to the left, tipped on its side
+//
+const QUEST_LETTER_C_OFFSET_X = -36
+const QUEST_LETTER_C_TILT = -22
+const QUEST_LETTER_C_FALL_FROM_Y = FLOOR_Y - 78
+const QUEST_LETTER_C_FALL_DURATION = 0.55
+//
+// Snowman rubbing: pass-by zone, counters and reset gap
+//
+const RUB_ZONE_HALF_WIDTH = 46
+const RUB_EXIT_HALF_WIDTH = 90
+const RUB_TARGET_COUNT = 10
+const RUB_HINT_THRESHOLD = 3
+const RUB_RESET_GAP = 3
+const RUB_HINT_TEXT = "Mmm, it's getting hot..."
+const RUB_HINT_DISPLAY_TIME = 3
+const RUB_HINT_Y_OFFSET = -150
+const RUB_COUNTER_Y_OFFSET = -160
+const RUB_COUNTER_FONT_SIZE = 36
+//
+// Quest snowflake bursts (fir shake + hero death): particles scatter,
+// then fall down like the ambient snow and fade out
+//
+const SNOWFLAKE_BURST_SPEED_MIN = 50
+const SNOWFLAKE_BURST_SPEED_RANGE = 130
+const SNOWFLAKE_BURST_DAMPING = 2.4
+const SNOWFLAKE_FALL_SPEED = 42
+const SNOWFLAKE_DRIFT_SPEED = 14
+const SNOWFLAKE_LIFETIME_MIN = 1.6
+const SNOWFLAKE_LIFETIME_RANGE = 1.4
+const SNOWFLAKE_SIZE_MIN = 1.4
+const SNOWFLAKE_SIZE_RANGE = 2
+const DEATH_SNOWFLAKE_COUNT = 44
+//
+// Pause between closing the final H dialog and the level transition
+//
+const QUEST_COMPLETE_TRANSITION_DELAY = 2
+//
+// Death restart countdown (same prompt style as touch lesson 1)
+//
+const DEATH_COUNTDOWN_SECONDS = 7
+const DEATH_PROMPT_BASE = 'Press Space or Enter to continue... '
+const DEATH_PROMPT_Y = TOP_MARGIN + 62
+const DEATH_PROMPT_FONT = 22
 /**
  * Level 2 scene for touch section - Simple level without obstacles
  * @param {Object} k - Kaplay instance
@@ -403,10 +548,11 @@ export function sceneLesson2(k) {
     //
     createBackgroundDarkTrees(k)
     //
-    // Create foreground trees; pass lake right edge so trees don't grow on the lake
+    // Create foreground trees; pass lake right edge so trees don't grow on the lake.
+    // Returns the touchable fir list used by the spruce-freeing quest phase.
     //
     const { maxX: lakeMaxX } = TouchLevel2Ambience.getLakeBounds(FLOOR_Y, LEFT_MARGIN)
-    createForegroundTrees(k, DECOR_LOG_PILE_POSITIONS[1], lakeMaxX)
+    const questFirs = createForegroundTrees(k, DECOR_LOG_PILE_POSITIONS[1], lakeMaxX)
     //
     // Create walls
     //
@@ -467,22 +613,43 @@ export function sceneLesson2(k) {
     //
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
     //
-    // Create level indicator (TOUCH letters)
+    // Restore quest progress only when reloading after a death (resume flag
+    // set by onHeroDeath). A fresh entry resets the quest so all TOUCH
+    // letters start gray and the hunt begins from T again.
+    //
+    const questResumed = get(QUEST_RESUME_FLAG, false)
+    set(QUEST_RESUME_FLAG, false)
+    const questLettersCollected = questResumed ? get(QUEST_LETTERS_FLAG, 0) : 0
+    set(QUEST_LETTERS_FLAG, questLettersCollected)
+    //
+    // Shared with LevelHelp Goal button: text of the last quest dialog shown
+    //
+    const questGoalState = { lastDialog: null }
+    //
+    // Restore the last dialog text from already-collected letters on death resume
+    //
+    const questDialogByCount = [null, QUEST_DIALOG_T, QUEST_DIALOG_O, QUEST_DIALOG_U, QUEST_DIALOG_C, QUEST_DIALOG_H]
+    if (questLettersCollected > 0) {
+      questGoalState.lastDialog = stripQuestHlTags(questDialogByCount[questLettersCollected])
+    }
+    //
+    // Create level indicator (TOUCH letters). All letters start gray and
+    // light up one by one as the hero finds them in the level.
     //
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 2,
       //
       // TOUCH letters tint matches the section's steel-teal identity so
-      // the HUD agrees with the in-game anti-hero and the touch-
-      // completed hero progression colour.
+      // the HUD agrees with the touch-completed hero progression colour.
       //
       activeColor: '#5A8898',
       inactiveColor: '#B0B0B0',
       completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
-      sideWallWidth: LEFT_MARGIN
+      sideWallWidth: LEFT_MARGIN,
+      sectionLabelCompletedLetters: questLettersCollected
     })
     LevelHelp.create({
       k,
@@ -491,7 +658,12 @@ export function sceneLesson2(k) {
       floorY: FLOOR_Y,
       levelIndicator,
       sound,
-      sceneBackdropHex: '#1C323A'
+      sceneBackdropHex: '#1C323A',
+      //
+      // Goal shows the most recent quest dialog (last letter collected);
+      // falls back to the static level goal until the first letter is taken
+      //
+      getGoalText: () => questGoalState.lastDialog || LevelHelp.LESSON_GOAL_TEXTS['lesson-touch.2']
     })
     TouchControls.create({
       k,
@@ -558,38 +730,6 @@ export function sceneLesson2(k) {
     const firstPlatform = platformsData.firstPlatform
     const platformStates = platformsData.platformStates
     //
-    // Create anti-hero on first platform (top-left)
-    //
-    const antiHeroInst = Hero.create({
-      k,
-      x: firstPlatform.x,
-      y: firstPlatform.y - 50,  // Above platform
-      type: Hero.HEROES.ANTIHERO,
-      controllable: false,
-      sfx: sound,
-      antiHero: null,
-      addArms: true,
-      //
-      // Steel teal — the touch section's identity colour and the direct
-      // complementary of the silver hero in the teal+orange palette.
-      //
-      bodyColor: CFG.visual.colors.sections.touch.antiHero,
-      //
-      // Winter scene already animates the mouth with cold breath puffs,
-      // so suppress the default idle hum + music notes here.
-      //
-      idleVocalization: null
-    })
-    //
-    // Hide character immediately to prevent double appearance
-    //
-    if (antiHeroInst.character) {
-      antiHeroInst.character.hidden = true
-    }
-    //
-    // Create hero with anti-hero reference for annihilation
-    //
-    //
     // Snow color for dust particles (matching snowdrifts)
     //
     const snowColor = '#FFFFFF' // Pure white in hex
@@ -601,33 +741,13 @@ export function sceneLesson2(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
-      antiHero: antiHeroInst,
+      antiHero: null,
       dustColor: snowColor,
       //
       // Cold breath puffs occupy the mouth in this winter scene, so the
       // default idle hum + music notes are disabled to avoid layering.
       //
       idleVocalization: null,
-      onAnnihilation: () => {
-        //
-        // Check for speed bonus before scoring
-        //
-        const levelTime = FpsCounter.getLevelTime(fpsCounter)
-        const speedBonusEarned = checkSpeedBonus(levelTime)
-        const currentScore = get('heroScore', 0)
-        const pointsToAdd = speedBonusEarned ? 3 : 1
-        const newScore = currentScore + pointsToAdd
-        set('heroScore', newScore)
-        levelIndicator?.updateHeroScore?.(newScore)
-        sound && Sound.playVictorySound(sound)
-        speedBonusEarned && playSpeedBonusEffects(k, levelIndicator)
-        const transitionDelay = speedBonusEarned ? 2.8 : 1.8
-        k.wait(transitionDelay, () => {
-          Sound.stopAmbient(sound)
-          touchMusic.stop()
-        createLevelTransition(k, 'lesson-touch.2')
-        })
-      },
       currentLevel: 'lesson-touch.2',
       jumpForce: CFG.game.jumpForce,
       addMouth: isWordComplete,
@@ -665,6 +785,10 @@ export function sceneLesson2(k) {
         sceneLock,
         sceneBgRgb: { r: L2_SCENE_BG_R, g: L2_SCENE_BG_G, b: L2_SCENE_BG_B },
         textColorRgb: { r: 90, g: 136, b: 152 },
+        noDeduct: true,
+        hideScore: true,
+        introTextOverride: 'Life made corrections.',
+        resultTextOverride: 'Learn this lesson.',
         onComplete: () => {
           if (!iciclesAlreadyActive) {
             //
@@ -694,16 +818,6 @@ export function sceneLesson2(k) {
       }
     })
     //
-    // Spawn anti-hero after delay
-    //
-    let antiHeroSpawned = false
-    k.wait(HERO_SPAWN_DELAY, () => {
-      if (!antiHeroSpawned && antiHeroInst.character) {
-        Hero.spawn(antiHeroInst)
-        antiHeroSpawned = true
-      }
-    })
-    //
     // Create dust particles in game area only
     // Use snow color for particles (same as snow platform)
     //
@@ -725,6 +839,19 @@ export function sceneLesson2(k) {
     // Create blue snow drifts on bottom platform floor
     //
     createSnowDrifts(k, lakeBoundsForSnow)
+    //
+    // Mutable quest states shared with the ambience module: ice cracking /
+    // melting and snowman collapse. Restored from saved letter progress.
+    //
+    const lakeState = {
+      crackProgress: 0,
+      melted: false,
+      meltFade: 0
+    }
+    const snowmanState = {
+      collapsed: questLettersCollected >= 4,
+      collapseTime: questLettersCollected >= 4 ? 10 : 0
+    }
     const touchL2AmbienceInst = TouchLevel2Ambience.setupTouchLevel2Ambience({
       k,
       floorY: FLOOR_Y,
@@ -734,19 +861,22 @@ export function sceneLesson2(k) {
       heroInst,
       sound,
       logPileX: DECOR_LOG_PILE_POSITIONS[0],
-      rightLogPileX: DECOR_LOG_PILE_POSITIONS[1]
+      rightLogPileX: DECOR_LOG_PILE_POSITIONS[1],
+      lakeState,
+      snowmanState
     })
     stopTouchL2Wildlife = touchL2AmbienceInst.stopWildlife
     const snowmanWorldX = touchL2AmbienceInst.snowmanX
     //
-    // Tooltip: hovering over the crow shows "you are a loser"
+    // Tooltip: hovering over the crow. Hover box is raised so it wraps the
+    // crow's body (drawCrow raises the body above the perch level).
     //
     const crowInfo = touchL2AmbienceInst.crowInfo
     crowInfo && Tooltip.create({
       k,
       targets: [{
         x: crowInfo.cx,
-        y: crowInfo.perchY,
+        y: crowInfo.perchY + L2_CROW_TOOLTIP_HOVER_Y_OFFSET,
         width: L2_CROW_TOOLTIP_HOVER_W,
         height: L2_CROW_TOOLTIP_HOVER_H,
         text: L2_CROW_TOOLTIP_TEXT,
@@ -758,8 +888,8 @@ export function sceneLesson2(k) {
     //
     const iceSlideState = { vel: 0 }
     k.onUpdate(() => {
-      onUpdateSurfaceTracker(heroInst, sound, lakeBoundsForSnow)
-      onUpdateIceSlide(k, heroInst, lakeBoundsForSnow, iceSlideState)
+      onUpdateSurfaceTracker(heroInst, sound, lakeBoundsForSnow, lakeState)
+      onUpdateIceSlide(k, heroInst, lakeBoundsForSnow, iceSlideState, lakeState)
     })
     //
     // Hidden bonus hero on left wall, above the icicles.
@@ -785,16 +915,11 @@ export function sceneLesson2(k) {
       heroBodyColor,
       storageKey: 'touch.lesson2BonusCollected',
       //
-      // The visible log is drawn centered on `x` with width 70 plus
-      // ~5.5 px of squashed endcaps on each side, so the on-screen log
-      // spans roughly [x-41, x+41]. The collider must cover that whole
-      // span — earlier xOffset values shifted the collider far right of
-      // the log, leaving the left half of the visible barrel with no
-      // collision underneath and letting the hero fall straight through
-      // unless he landed exactly on the mini hero.
+      // Collider shifted right by half its width so the walkable box
+      // starts at the log center and extends right of it
       //
       collisionWidth: 82,
-      platformCollisionXOffset: 0,
+      platformCollisionXOffset: 41,
       platformCollisionYOffset: 9,
       revealWidth: 120
     })
@@ -921,8 +1046,8 @@ export function sceneLesson2(k) {
       // Check if hero touches icicle spikes (deadly floor barrier)
       //
       if (!heroInst.isDying && heroInst.character?.pos) {
-        checkIcicleCollision(k, heroInst, icicleData, levelIndicator)
-        checkHangingIcicleCollision(k, heroInst, hangingIcicleData, levelIndicator, platformStates)
+        checkIcicleCollision(k, heroInst, icicleData, levelIndicator, quest)
+        checkHangingIcicleCollision(k, heroInst, hangingIcicleData, levelIndicator, platformStates, quest)
       }
       //
       // Check if hero just landed
@@ -966,9 +1091,11 @@ export function sceneLesson2(k) {
       }
       //
       // If hero just landed, reveal nearby platforms
-      // Platforms appear ONLY on landing, not when touching from below
+      // Platforms appear ONLY on landing, not when touching from below.
+      // The jump-reveal system stays dormant until the hero collects the
+      // C letter (final H phase) so no logs appear during earlier phases.
       //
-      if (justLanded) {
+      if (justLanded && quest.lettersCollected >= 4) {
         //
         // Check each platform
         //
@@ -1004,14 +1131,19 @@ export function sceneLesson2(k) {
       //
       platformStates.forEach((state, index) => {
         //
-        // First platform (where anti-hero stands) is always visible
+        // First platform (where the H letter appears) stays hidden until
+        // the H letter itself spawns, then becomes permanently visible
         //
         if (index === 0) {
+          if (!quest.hSpawned) {
+            state.opacity = 0
+            return
+          }
           state.opacity = 1.0
           state.visibilityTimer = VISIBILITY_DURATION
           state.jumpCount = MAX_JUMPS
           //
-          // Always enable collision for first platform
+          // Always enable collision for first platform once visible
           //
           if (!state.hasCollision && state.collisionObject) {
             state.collisionObject.use(k.area())
@@ -1089,11 +1221,11 @@ export function sceneLesson2(k) {
       })
     })
     //
-    // Create FPS counter
+    // Create FPS counter (no level timer in this quest level)
     //
     const fpsCounter = FpsCounter.create({
       k,
-      showTimer: true
+      showTimer: false
     })
     //
     // Update FPS counter
@@ -1138,20 +1270,6 @@ export function sceneLesson2(k) {
         height: HERO_TOOLTIP_HOVER_SIZE,
         text: HERO_TOOLTIP_TEXT,
         offsetY: HERO_TOOLTIP_Y_OFFSET
-      }]
-    })
-    //
-    // Tooltip: anti-hero
-    //
-    Tooltip.create({
-      k,
-      targets: [{
-        x: () => antiHeroInst.character.pos.x,
-        y: () => antiHeroInst.character.pos.y,
-        width: ANTIHERO_TOOLTIP_HOVER_SIZE,
-        height: ANTIHERO_TOOLTIP_HOVER_SIZE,
-        text: ANTIHERO_TOOLTIP_TEXT,
-        offsetY: ANTIHERO_TOOLTIP_Y_OFFSET
       }]
     })
     //
@@ -1216,7 +1334,7 @@ export function sceneLesson2(k) {
       updateMoonHoverGlow(k, moonGlowState)
     })
     //
-    // Tooltip: antihero platform (first platform where antihero stands).
+    // Tooltip: first platform (topmost always-visible log, where H appears).
     // Only visible once at least one lower platform has been revealed so the
     // hint is meaningful (the referenced invisible platforms are already found).
     //
@@ -1227,14 +1345,14 @@ export function sceneLesson2(k) {
         y: firstPlatform.y,
         width: firstPlatform.width,
         height: 30,
-        text: ANTIHERO_PLATFORM_TOOLTIP_TEXT,
-        offsetY: ANTIHERO_PLATFORM_TOOLTIP_Y_OFFSET,
+        text: FIRST_PLATFORM_TOOLTIP_TEXT,
+        offsetY: FIRST_PLATFORM_TOOLTIP_Y_OFFSET,
         forceBelow: true,
         visible: () => platformStates.slice(1).some(ps => ps.opacity > 0.05)
       }]
     })
     //
-    // Tooltip: snowman
+    // Tooltip: snowman (hidden once it collapses into pieces)
     //
     Tooltip.create({
       k,
@@ -1244,7 +1362,8 @@ export function sceneLesson2(k) {
         width: SNOWMAN_TOOLTIP_HOVER_SIZE,
         height: 120,
         text: SNOWMAN_TOOLTIP_TEXT,
-        offsetY: SNOWMAN_TOOLTIP_Y_OFFSET
+        offsetY: SNOWMAN_TOOLTIP_Y_OFFSET,
+        visible: () => !snowmanState.collapsed
       }]
     })
     //
@@ -1252,6 +1371,7 @@ export function sceneLesson2(k) {
     //
     const jumpRings = []
     let prevGroundedForRing = true
+    let landRingCooldown = 0
     const jumpRingColor = k.rgb(JUMP_RING_COLOR_R, JUMP_RING_COLOR_G, JUMP_RING_COLOR_B)
     k.add([
       k.z(CFG.visual.zIndex.player + 2),
@@ -1262,21 +1382,18 @@ export function sceneLesson2(k) {
       }
     ])
     k.onUpdate(() => {
+      landRingCooldown = Math.max(0, landRingCooldown - k.dt())
       const grounded = heroInst.character?.isGrounded?.() ?? true
-      onUpdateLandingRings(k, jumpRings, heroInst, grounded, prevGroundedForRing)
+      if (!prevGroundedForRing && grounded && landRingCooldown <= 0 && heroInst.character?.pos) {
+        landRingCooldown = LAND_RING_COOLDOWN
+        spawnLandingRing(jumpRings, heroInst.character.pos.x, heroInst.character.pos.y + JUMP_RING_FOOT_OFFSET_Y)
+      }
+      onUpdateLandingRings(k, jumpRings)
       prevGroundedForRing = grounded
     })
     //
-    // Antihero hint: after ANTIHERO_HINT_DELAY seconds, show a hint if level not completed
-    //
-    const hintState = {
-      timer: 0,
-      shown: false,
-      currentHint: null
-    }
-    k.onUpdate(() => onUpdateAntiHeroHint(k, hintState, antiHeroInst))
-    //
-    // Stuck-hero hints: show progressive hints above the hero when they haven't finished
+    // Stuck-hero hints: progressive platform hints, only relevant during the
+    // final H phase (jumping across the invisible platforms)
     //
     const stuckHintState = {
       timer: 0,
@@ -1285,11 +1402,42 @@ export function sceneLesson2(k) {
       levelDone: false,
       currentHint: null
     }
-    k.onUpdate(() => onUpdateStuckHeroHint(k, stuckHintState, heroInst))
     //
-    // Mark level as done when hero touches anti-hero so hints stop
+    // TOUCH letter quest: shared context + state machine driving letters,
+    // spruces, ice melting, snowman rubbing and the final transition
     //
-    heroInst.character.onCollide('antiHero', () => { stuckHintState.levelDone = true })
+    const quest = createQuest({
+      k,
+      lettersCollected: questLettersCollected,
+      heroInst,
+      sound,
+      levelIndicator,
+      firstPlatform,
+      snowmanWorldX,
+      lakeBounds: lakeBoundsForSnow,
+      lakeState,
+      snowmanState,
+      firs: questFirs,
+      touchMusic,
+      stuckHintState,
+      wallColorHex: WALL_COLOR_HEX,
+      goalState: questGoalState
+    })
+    k.onUpdate(() => onUpdateQuest(quest))
+    //
+    // Quest snowflake particles (fir bursts + hero death) render above the hero
+    //
+    k.add([
+      k.z(CFG.visual.zIndex.player + 3),
+      {
+        draw() {
+          drawQuestSnowflakes(k, quest.snowflakes)
+        }
+      }
+    ])
+    k.onUpdate(() => {
+      if (quest.lettersCollected >= 4) onUpdateStuckHeroHint(k, stuckHintState, heroInst)
+    })
     //
     // Breath vapor: periodic white puffs from hero's mouth
     //
@@ -1593,7 +1741,7 @@ function createSnowDrifts(k, lakeBounds) {
 /**
  * Creates platforms forming a path from top-left to bottom-right
  * All platforms are arranged so hero can jump from one to another
- * Leading to the final platform near anti-hero position
+ * Leading to the final platform where the H letter appears
  * Platforms are invisible by default and become visible when hero lands nearby
  * @param {Object} k - Kaplay instance
  * @returns {Object} Object with first platform position and platform states array
@@ -1624,19 +1772,20 @@ function createDiagonalPlatforms(k, enableTrap = false) {
   //
   const createSnowPlatform = (x, y, width, index) => {
     //
-    // First platform (where anti-hero stands) is always visible
+    // First platform hosts the H letter later; it gets a snow cap but starts
+    // hidden like the rest — it only appears when the H letter spawns
     //
     const isFirstPlatform = index === 0
     //
-    // Initialize platform state
+    // Initialize platform state (all platforms start invisible)
     //
     const platformState = {
       x,
       y,
       width,
-      opacity: isFirstPlatform ? 1.0 : 0,  // First platform visible, others invisible
-      jumpCount: isFirstPlatform ? MAX_JUMPS : 0,  // First platform fully revealed
-      visibilityTimer: isFirstPlatform ? VISIBILITY_DURATION : 0,  // First platform timer set
+      opacity: 0,
+      jumpCount: 0,
+      visibilityTimer: 0,
       visualObject: null,  // Will store visual object reference
       collisionObject: null,  // Will store collision object reference
       hasCollision: false,  // Track if collision is enabled
@@ -1646,8 +1795,7 @@ function createDiagonalPlatforms(k, enableTrap = false) {
     }
     platformStates.push(platformState)
     //
-    // Create collision platform
-    // First platform has collision enabled immediately
+    // Create collision platform (collision enabled once the platform shows)
     //
     const collisionComponents = [
       k.rect(width, platformHeight),
@@ -1658,14 +1806,6 @@ function createDiagonalPlatforms(k, enableTrap = false) {
       k.z(CFG.visual.zIndex.platforms),
       CFG.game.platformName
     ]
-    //
-    // First platform needs collision enabled from start
-    //
-    if (isFirstPlatform) {
-      collisionComponents.push(k.area())
-      platformState.hasCollision = true
-    }
-    
     const collisionObj = k.add(collisionComponents)
     platformState.collisionObject = collisionObj
     //
@@ -2305,6 +2445,7 @@ function createBackgroundDarkTrees(k) {
  * Both the behind-hero row and the in-front-of-hero overlay trees sway
  * @param {Object} k - Kaplay instance
  * @param {number} crowExcludeX - X position of the crow; trees are cleared around it
+ * @returns {Array} Combined tree data list (front row + overlay) for the spruce quest
  */
 function createForegroundTrees(k, crowExcludeX, lakeMaxX) {
   const screenWidth = CFG.visual.screen.width
@@ -2332,6 +2473,10 @@ function createForegroundTrees(k, crowExcludeX, lakeMaxX) {
       }
     }
   ])
+  //
+  // All near-ground firs are quest targets (frozen white until freed)
+  //
+  return [...foregroundTrees, ...overlayTrees]
 }
 
 /**
@@ -2356,6 +2501,11 @@ function generateForegroundTreeData(crowExcludeX, lakeMaxX) {
     // Skip trees on or left of the frozen lake
     //
     if (lakeMaxX != null && x < lakeMaxX + 20) continue
+    //
+    // Skip trees standing where floor icicles grow (right band + the
+    // center corridor that fills with icicles after a life deduction)
+    //
+    if (isInFloorIcicleZone(x)) continue
     const height = arcY(x, LEFT_MARGIN, w, 200, 280)
     const layerCount = Math.floor(Math.random() * 4 + 4)
     treeDefs.push({
@@ -2379,6 +2529,31 @@ function generateForegroundTreeData(crowExcludeX, lakeMaxX) {
     })
   }
   return treeDefs.map(def => buildTreeLayerData(def))
+}
+//
+// Padding around floor icicle bands where no fir tree may grow
+//
+const FIR_ICICLE_EXCLUDE_PAD = 30
+//
+// True when x falls inside a floor icicle band: the always-present right
+// band or the center corridor (icicles appear there after a life
+// deduction — the safe passage gap in the middle stays tree-friendly)
+//
+function isInFloorIcicleZone(x) {
+  const pad = FIR_ICICLE_EXCLUDE_PAD
+  //
+  // Right-side icicle band (always present)
+  //
+  if (x > RIGHT_ICICLE_START_X - pad && x < RIGHT_ICICLE_END_X + pad) return true
+  //
+  // Center corridor band (post-deduction icicles), minus the walk-through gap
+  //
+  const snowmanX = TouchLevel2Ambience.getSnowmanX(DECOR_LOG_PILE_POSITIONS[0], RIGHT_MARGIN)
+  const centerStart = snowmanX + CENTER_ICICLE_SNOWMAN_CLEARANCE
+  const centerEnd = ICICLE_SAFE_ZONE_X - CENTER_ICICLE_END_MARGIN
+  const inGap = Math.abs(x - CENTER_ICICLE_GAP_CENTER_X) < CENTER_ICICLE_GAP_HALF_WIDTH - pad
+  if (x > centerStart - pad && x < centerEnd + pad && !inGap) return true
+  return false
 }
 
 /**
@@ -2411,7 +2586,14 @@ function buildTreeLayerData(def) {
     layersSharpness: def.layersSharpness,
     layers: def.layers,
     layerData,
-    phase: def.phase
+    phase: def.phase,
+    //
+    // Spruce quest state: firs start frozen white; freeing fades whiteness
+    // to 0 while the tree shakes and sheds snowflakes
+    //
+    whiteness: 1,
+    freed: false,
+    shakeTimer: 0
   }
 }
 
@@ -2469,24 +2651,43 @@ function generateOverlayTreeData(screenWidth, crowExcludeX) {
  */
 function drawOverlayTreesSway(k, trees) {
   const time = k.time()
+  const dt = k.dt()
   for (const tree of trees) {
+    //
+    // Advance quest animations: shake decays, whiteness fades after freeing
+    //
+    if (tree.shakeTimer > 0) tree.shakeTimer = Math.max(0, tree.shakeTimer - dt)
+    if (tree.freed && tree.whiteness > 0) {
+      tree.whiteness = Math.max(0, tree.whiteness - dt * FIR_WHITE_FADE_SPEED)
+    }
     const swayBase = Math.sin(time * TREE_SWAY_SPEED + tree.phase) * TREE_SWAY_AMPLITUDE * (tree.height / 200)
     //
-    // Draw trunk (no sway)
+    // Shake offset: random jitter that fades with the remaining shake time
     //
+    const shakeAmp = FIR_SHAKE_AMPLITUDE * (tree.shakeTimer / FIR_SHAKE_DURATION)
+    const shakeX = tree.shakeTimer > 0 ? (Math.random() - 0.5) * 2 * shakeAmp : 0
+    //
+    // Draw trunk (no sway); trunk also whitens while the fir is frozen
+    //
+    const trunkBlend = tree.whiteness * FIR_TRUNK_WHITE_BLEND
     k.drawRect({
       pos: k.vec2(tree.trunkX, tree.trunkY),
       width: tree.trunkWidth,
       height: tree.trunkHeight,
-      color: k.rgb(74, 46, 31)
+      color: k.rgb(
+        Math.round(74 + (FIR_WHITE_COLOR[0] - 74) * trunkBlend),
+        Math.round(46 + (FIR_WHITE_COLOR[1] - 46) * trunkBlend),
+        Math.round(31 + (FIR_WHITE_COLOR[2] - 31) * trunkBlend)
+      )
     })
     //
-    // Draw each layer with increasing sway
+    // Draw each layer with increasing sway; foliage lerps from snow-white
+    // (whiteness = 1) to the tree's own green (whiteness = 0)
     //
-    const lc = tree.leftColor
-    const rc = tree.rightColor
+    const lc = lerpTreeColor(tree.leftColor, tree.whiteness)
+    const rc = lerpTreeColor(tree.rightColor, tree.whiteness)
     for (const layer of tree.layerData) {
-      const sway = swayBase * (layer.index + 1) / tree.layers
+      const sway = swayBase * (layer.index + 1) / tree.layers + shakeX
       //
       // Left half (darker)
       //
@@ -2511,6 +2712,16 @@ function drawOverlayTreesSway(k, trees) {
       })
     }
   }
+}
+//
+// Lerps a fir foliage color toward snow-white by the given blend (0-1)
+//
+function lerpTreeColor(rgbArr, blend) {
+  return [
+    Math.round(rgbArr[0] + (FIR_WHITE_COLOR[0] - rgbArr[0]) * blend),
+    Math.round(rgbArr[1] + (FIR_WHITE_COLOR[1] - rgbArr[1]) * blend),
+    Math.round(rgbArr[2] + (FIR_WHITE_COLOR[2] - rgbArr[2]) * blend)
+  ]
 }
 
 /**
@@ -2585,7 +2796,7 @@ function drawIcicles(k, icicleData) {
  * @param {Object} heroInst - Hero instance
  * @param {Array} icicleData - Array of icicle objects
  */
-function checkIcicleCollision(k, heroInst, icicleData, levelIndicator) {
+function checkIcicleCollision(k, heroInst, icicleData, levelIndicator, quest) {
   const heroX = heroInst.character.pos.x
   const heroFeetY = heroInst.character.pos.y + HERO_FEET_OFFSET
   for (const icicle of icicleData) {
@@ -2599,7 +2810,7 @@ function checkIcicleCollision(k, heroInst, icicleData, levelIndicator) {
     //
     const icicleTipY = icicle.baseY - icicle.height + ICICLE_KILL_TOLERANCE
     if (heroFeetY > icicleTipY) {
-      onHeroDeath(k, heroInst, levelIndicator)
+      onHeroDeath(k, heroInst, levelIndicator, quest)
       return
     }
   }
@@ -2791,18 +3002,28 @@ const LIFE_PARTICLE_LIFETIME_MIN = 0.8
 const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
 const LIFE_PARTICLE_SIZE_MIN = 4
 const LIFE_PARTICLE_SIZE_EXTRA = 4
-const DEATH_RELOAD_DELAY = 0.8
 
 /**
- * Handles hero death: increments life score, plays laugh sound,
- * flashes life image, creates particles, then reloads the level
+ * Handles hero death: hero scatters into snowflakes that fall like the
+ * ambient snow, life score increments, then the level reloads
  * @param {Object} k - Kaplay instance
  * @param {Object} heroInst - Hero instance
  * @param {Object} levelIndicator - Level indicator with lifeImage and updateLifeScore
+ * @param {Object} [quest] - Quest inst (hosts the snowflake particle pool)
  */
-function onHeroDeath(k, heroInst, levelIndicator) {
+function onHeroDeath(k, heroInst, levelIndicator, quest) {
   if (heroInst.isDying) return
   k.shake(DEATH_SHAKE_STRENGTH)
+  //
+  // Mark the upcoming reload as a death resume so quest progress survives
+  //
+  set(QUEST_RESUME_FLAG, true)
+  //
+  // Scatter the hero into snowflakes instead of the default body particles
+  //
+  if (quest && heroInst.character?.pos) {
+    spawnSnowflakeBurst(quest.snowflakes, heroInst.character.pos.x, heroInst.character.pos.y, DEATH_SNOWFLAKE_COUNT)
+  }
   Hero.death(heroInst, () => {
     const currentScore = get('lifeScore', 0)
     const newScore = currentScore + 1
@@ -2817,7 +3038,62 @@ function onHeroDeath(k, heroInst, levelIndicator) {
       flashLifeImage(k, levelIndicator, originalColor, 0)
       createLifeParticles(k, levelIndicator)
     }
-    k.wait(DEATH_RELOAD_DELAY, () => goAfterPreparingAssets(k, 'lesson-touch.2'))
+    //
+    // 7-second restart pause with the standard countdown prompt on top
+    //
+    startDeathCountdown(k, 'lesson-touch.2')
+  }, { suppressParticles: !!quest })
+}
+//
+// Shows "Press Space or Enter to continue... N" at the top after hero death.
+// The countdown number is inline, same color as the prompt text.
+// Auto-restarts when the countdown reaches 0 (same as touch lesson 1).
+//
+function startDeathCountdown(k, sceneName) {
+  let elapsed = 0
+  const cx = CFG.visual.screen.width / 2
+  const textCfg = { size: DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
+  const initText = DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS
+  //
+  // Drop shadow (single black copy offset right+down), glow-level style
+  //
+  const offs = [[1.5, 1.5]]
+  const outlines = offs.map(([dx, dy]) => k.add([
+    k.text(initText, textCfg),
+    k.pos(cx + dx, DEATH_PROMPT_Y + dy),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.opacity(0.85),
+    k.z(CFG.visual.zIndex.ui + 60)
+  ]))
+  const promptText = k.add([
+    k.text(initText, textCfg),
+    k.pos(cx, DEATH_PROMPT_Y),
+    k.anchor('center'),
+    k.color(k.rgb(220, 220, 220)),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.ui + 60.1)
+  ])
+  const destroyAll = () => {
+    outlines.forEach(o => o?.exists?.() && k.destroy(o))
+    promptText.exists() && k.destroy(promptText)
+  }
+  const doRestart = () => {
+    skipHandler.cancel()
+    updateTimer.cancel()
+    destroyAll()
+    goAfterPreparingAssets(k, sceneName)
+  }
+  const skipHandler = k.onKeyPress((key) => {
+    if (key === 'space' || key === 'enter') doRestart()
+  })
+  const updateTimer = k.onUpdate(() => {
+    elapsed += k.dt()
+    const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)
+    const newText = DEATH_PROMPT_BASE + Math.ceil(remaining)
+    if (promptText.exists()) promptText.text = newText
+    outlines.forEach(o => o?.exists?.() && (o.text = newText))
+    if (elapsed >= DEATH_COUNTDOWN_SECONDS) doRestart()
   })
 }
 
@@ -3228,90 +3504,6 @@ function createRoundedCorners(k) {
 }
 
 /**
- * Checks if the player completed the level faster than the target time
- * @param {number} levelTime - Time in seconds
- * @returns {boolean} True if speed bonus earned
- */
-function checkSpeedBonus(levelTime) {
-  const targetTime = CFG.gameplay.speedBonusTime
-    && CFG.gameplay.speedBonusTime['lesson-touch.2']
-  if (!targetTime) return false
-  return levelTime < targetTime
-}
-
-/**
- * Play speed bonus visual effects on the small hero indicator
- * Flashes hero color/white and creates circle particles flying outward
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator with smallHero
- */
-function playSpeedBonusEffects(k, levelIndicator) {
-  if (!levelIndicator?.smallHero?.character) return
-  const bodyColorHex = levelIndicator.smallHero.bodyColor || CFG.visual.colors.sections.touch.body
-  const heroColor = getRGB(k, bodyColorHex)
-  flashSmallHeroBonus(k, levelIndicator, heroColor, 0)
-  createSpeedBonusParticles(k, levelIndicator, heroColor)
-}
-
-/**
- * Flash small hero between hero color and white for speed bonus
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator with smallHero
- * @param {Object} heroColor - RGB color matching the hero body
- * @param {number} count - Current flash iteration
- */
-function flashSmallHeroBonus(k, levelIndicator, heroColor, count) {
-  if (count >= SPEED_BONUS_FLASH_COUNT) {
-    levelIndicator.smallHero.character.color = k.rgb(255, 255, 255)
-    return
-  }
-  levelIndicator.smallHero.character.color = count % 2 === 0
-    ? heroColor
-    : k.rgb(255, 255, 255)
-  k.wait(SPEED_BONUS_FLASH_INTERVAL, () => flashSmallHeroBonus(k, levelIndicator, heroColor, count + 1))
-}
-
-/**
- * Create circle particles flying outward from small hero on speed bonus
- * @param {Object} k - Kaplay instance
- * @param {Object} levelIndicator - Level indicator with smallHero
- * @param {Object} heroColor - RGB color matching the hero body
- */
-function createSpeedBonusParticles(k, levelIndicator, heroColor) {
-  if (!levelIndicator?.smallHero?.character) return
-  const heroX = levelIndicator.smallHero.character.pos.x
-  const heroY = levelIndicator.smallHero.character.pos.y
-  for (let i = 0; i < SPEED_BONUS_PARTICLE_COUNT; i++) {
-    const angle = (Math.PI * 2 * i) / SPEED_BONUS_PARTICLE_COUNT
-    const speed = SPEED_BONUS_PARTICLE_SPEED_MIN + Math.random() * SPEED_BONUS_PARTICLE_SPEED_RANGE
-    const lifetime = SPEED_BONUS_PARTICLE_LIFETIME_MIN + Math.random() * SPEED_BONUS_PARTICLE_LIFETIME_RANGE
-    const size = SPEED_BONUS_PARTICLE_SIZE_MIN + Math.random() * SPEED_BONUS_PARTICLE_SIZE_RANGE
-    const particle = k.add([
-      k.circle(size),
-      k.pos(heroX, heroY),
-      k.color(heroColor.r, heroColor.g, heroColor.b),
-      k.opacity(1),
-      k.z(CFG.visual.zIndex.ui + 11),
-      k.anchor('center'),
-      k.fixed()
-    ])
-    const velocityX = Math.cos(angle) * speed
-    const velocityY = Math.sin(angle) * speed
-    let age = 0
-    particle.onUpdate(() => {
-      const dt = k.dt()
-      age += dt
-      particle.pos.x += velocityX * dt
-      particle.pos.y += velocityY * dt
-      particle.opacity = 1 - (age / lifetime)
-      if (age >= lifetime && particle.exists?.()) {
-        k.destroy(particle)
-      }
-    })
-  }
-}
-
-/**
  * Draws a full moon with smooth radial glow and craters on the background canvas
  * Uses canvas radial gradient for seamless glow falloff
  * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
@@ -3397,47 +3589,38 @@ function drawMoonHoverGlow(k, state) {
 }
 
 /**
- * Detects hero landing and spawns an expanding ring of particles
- * from under the hero's feet. Uses the existing landing sound from hero.js.
- * @param {Object} k - Kaplay instance
- * @param {Array} rings - Ring array (mutated in place)
- * @param {Object} heroInst - Hero instance
- * @param {boolean} grounded - Whether hero is currently grounded
- * @param {boolean} prevGrounded - Whether hero was grounded on previous frame
+ * Spawns one expanding ring of particles under the hero's feet
+ * @param {Array} rings - Ring array (mutated)
+ * @param {number} hx - Foot world X
+ * @param {number} hy - Foot world Y
  */
-function onUpdateLandingRings(k, rings, heroInst, grounded, prevGrounded) {
-  const dt = k.dt()
-  //
-  // Detect landing: hero transitions from airborne to grounded
-  //
-  if (!prevGrounded && grounded && heroInst.character?.pos) {
-    const hx = heroInst.character.pos.x
-    const hy = heroInst.character.pos.y + JUMP_RING_FOOT_OFFSET_Y
-    //
-    // Create one ring with particles distributed along a circle.
-    // Each particle has a fixed angle and per-particle jitter seed.
-    //
-    const particles = []
-    for (let i = 0; i < JUMP_RING_PARTICLE_COUNT; i++) {
-      const angle = (Math.PI * 2 * i) / JUMP_RING_PARTICLE_COUNT
-      particles.push({
-        angle,
-        jitterX: (Math.random() - 0.5) * JUMP_RING_JITTER,
-        jitterY: (Math.random() - 0.5) * JUMP_RING_JITTER
-      })
-    }
-    rings.push({
-      cx: hx,
-      cy: hy,
-      particles,
-      radius: 0,
-      life: JUMP_RING_LIFETIME,
-      maxLife: JUMP_RING_LIFETIME
+function spawnLandingRing(rings, hx, hy) {
+  const particles = []
+  for (let i = 0; i < JUMP_RING_PARTICLE_COUNT; i++) {
+    const angle = (Math.PI * 2 * i) / JUMP_RING_PARTICLE_COUNT
+    particles.push({
+      angle,
+      jitterX: (Math.random() - 0.5) * JUMP_RING_JITTER,
+      jitterY: (Math.random() - 0.5) * JUMP_RING_JITTER
     })
   }
-  //
-  // Update existing rings: expand radius, decrease lifetime
-  //
+  rings.push({
+    cx: hx,
+    cy: hy,
+    particles,
+    radius: 0,
+    life: JUMP_RING_LIFETIME,
+    maxLife: JUMP_RING_LIFETIME
+  })
+}
+
+/**
+ * Advances existing landing rings (expand + fade). Spawn is handled by the scene.
+ * @param {Object} k - Kaplay instance
+ * @param {Array} rings - Ring array (mutated in place)
+ */
+function onUpdateLandingRings(k, rings) {
+  const dt = k.dt()
   for (let i = rings.length - 1; i >= 0; i--) {
     const ring = rings[i]
     ring.life -= dt
@@ -3446,9 +3629,6 @@ function onUpdateLandingRings(k, rings, heroInst, grounded, prevGrounded) {
       continue
     }
     ring.radius += JUMP_RING_EXPAND_SPEED * dt
-    //
-    // Animate jitter so particles tremble along the ring
-    //
     for (const p of ring.particles) {
       p.jitterX += (Math.random() - 0.5) * JUMP_RING_JITTER * dt * 10
       p.jitterY += (Math.random() - 0.5) * JUMP_RING_JITTER * dt * 10
@@ -3473,44 +3653,6 @@ function drawJumpRings(k, rings, color) {
       })
     }
   }
-}
-
-/**
- * Shows a timed hint from the anti-hero after ANTIHERO_HINT_DELAY seconds.
- * Only triggers once per level load.
- * @param {Object} k - Kaplay instance
- * @param {Object} hintState - Hint state object
- * @param {Object} antiHeroInst - Anti-hero instance
- */
-function onUpdateAntiHeroHint(k, hintState, antiHeroInst) {
-  if (hintState.shown) return
-  hintState.timer += k.dt()
-  if (hintState.timer < ANTIHERO_HINT_DELAY) return
-  hintState.shown = true
-  //
-  // Create a forced-visible tooltip above the anti-hero
-  //
-  const target = {
-    x: () => antiHeroInst.character.pos.x,
-    y: () => antiHeroInst.character.pos.y,
-    width: 0,
-    height: 0,
-    text: ANTIHERO_HINT_TEXT,
-    offsetY: ANTIHERO_HINT_Y_OFFSET
-  }
-  hintState.currentHint = Tooltip.create({
-    k,
-    targets: [target],
-    forceVisible: true
-  })
-  hintState.currentHint.activeTarget = target
-  hintState.currentHint.frozenX = Math.round(antiHeroInst.character.pos.x)
-  hintState.currentHint.frozenY = Math.round(antiHeroInst.character.pos.y)
-  hintState.currentHint.opacity = 1
-  k.wait(ANTIHERO_HINT_DISPLAY_TIME, () => {
-    hintState.currentHint && Tooltip.destroy(hintState.currentHint)
-    hintState.currentHint = null
-  })
 }
 
 /**
@@ -3820,7 +3962,7 @@ function syncTrapPlatformX(state, newX) {
 // Uses hero's head position (center minus offset) for accurate vertical overlap.
 // Only checks icicles whose parent platform is visible.
 //
-function checkHangingIcicleCollision(k, heroInst, data, levelIndicator, platformStates) {
+function checkHangingIcicleCollision(k, heroInst, data, levelIndicator, platformStates, quest) {
   if (data.length === 0) return
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
@@ -3835,7 +3977,7 @@ function checkHangingIcicleCollision(k, heroInst, data, levelIndicator, platform
     // Vertical overlap: hero range [heroTopY, heroBottomY] vs icicle range [topY, topY+height]
     //
     if (heroTopY < ic.topY + ic.height && heroBottomY > ic.topY) {
-      onHeroDeath(k, heroInst, levelIndicator)
+      onHeroDeath(k, heroInst, levelIndicator, quest)
       return
     }
   }
@@ -3886,18 +4028,23 @@ function onUpdateBreathVapor(k, heroInst, state) {
 const SURFACE_FLOOR_THRESHOLD = 80
 //
 // Sets sound._l2Surface based on the surface the hero stands on:
-//   'ice'  — frozen lake (no sounds)
-//   'snow' — ground floor outside the lake
-//   'wood' — elevated log platform
+//   'ice'   — frozen lake (no sounds)
+//   'water' — melted lake (quest handler plays the splashes)
+//   'snow'  — ground floor outside the lake
+//   'wood'  — elevated log platform
 //
-function onUpdateSurfaceTracker(heroInst, sound, lakeBounds) {
+function onUpdateSurfaceTracker(heroInst, sound, lakeBounds, lakeState) {
   if (!heroInst?.character?.exists?.()) return
   const hx = heroInst.character.pos.x
   const hy = heroInst.character.pos.y
   const distFromFloor = Math.abs(hy - FLOOR_Y)
   if (distFromFloor < SURFACE_FLOOR_THRESHOLD) {
-    const onLake = lakeBounds && hx >= lakeBounds.minX && hx <= lakeBounds.maxX
-    sound._l2Surface = onLake ? 'ice' : 'snow'
+    //
+    // Frozen lake mutes steps entirely; melted lake switches to water
+    // (splash sounds are played by the quest water-run handler instead)
+    //
+    const onLakeArea = lakeBounds && hx >= lakeBounds.minX && hx <= lakeBounds.maxX
+    sound._l2Surface = onLakeArea ? (lakeState?.melted ? 'water' : 'ice') : 'snow'
   } else {
     sound._l2Surface = 'wood'
   }
@@ -3911,8 +4058,15 @@ const ICE_SLIDE_MIN_VEL = 2
 // While hero is grounded on the frozen lake, preserve horizontal momentum so the
 // character slides instead of stopping the instant keys are released.
 //
-function onUpdateIceSlide(k, heroInst, lakeBounds, state) {
+function onUpdateIceSlide(k, heroInst, lakeBounds, state, lakeState) {
   if (!heroInst?.character?.exists?.()) return
+  //
+  // No sliding once the ice has melted into open water
+  //
+  if (lakeState?.melted) {
+    state.vel = 0
+    return
+  }
   const hx = heroInst.character.pos.x
   const hy = heroInst.character.pos.y
   const onGround = Math.abs(hy - FLOOR_Y) < SURFACE_FLOOR_THRESHOLD
@@ -3953,6 +4107,698 @@ function drawBreathVapor(k, particles) {
       radius: p.size * 1.8,
       color: k.rgb(200, 210, 220),
       opacity: alpha * 0.3
+    })
+  }
+}
+
+/**
+ * Creates the TOUCH letter quest state and spawns the letter matching the
+ * saved progress (T on left logs at start, H on the first platform late).
+ * @param {Object} cfg - Quest configuration
+ * @param {Object} cfg.k - Kaplay instance
+ * @param {number} cfg.lettersCollected - Restored letter count (0-5)
+ * @param {Object} cfg.heroInst - Hero instance
+ * @param {Object} cfg.sound - Sound instance
+ * @param {Object} cfg.levelIndicator - HUD letter indicator
+ * @param {Object} cfg.firstPlatform - First (always visible) platform data
+ * @param {number} cfg.snowmanWorldX - Snowman world X
+ * @param {Object} cfg.lakeBounds - Frozen lake bounds
+ * @param {Object} cfg.lakeState - Mutable ice state shared with ambience
+ * @param {Object} cfg.snowmanState - Mutable snowman state shared with ambience
+ * @param {Array} cfg.firs - Touchable fir tree data list
+ * @param {Object} cfg.touchMusic - Background music handle
+ * @param {Object} cfg.stuckHintState - Stuck hint state (levelDone flag)
+ * @param {string} cfg.wallColorHex - Scene backdrop hex for dialogs
+ * @returns {Object} Quest inst
+ */
+function createQuest(cfg) {
+  const quest = {
+    ...cfg,
+    dialogOpen: false,
+    levelDone: false,
+    letterObjs: { T: null, O: null, U: null, C: null, H: null },
+    wasGrounded: false,
+    iceRunLastX: null,
+    iceCrackAccum: 0,
+    icePauseTime: 0,
+    waterStillTimer: 0,
+    waterStepAccum: 0,
+    waterRunLastX: null,
+    waterStepLastX: null,
+    rubCount: 0,
+    rubGapTimer: 0,
+    rubLastSide: null,
+    hSpawned: false,
+    snowflakes: []
+  }
+  //
+  // Restore world state for completed phases: firs already freed after O
+  //
+  if (quest.lettersCollected >= 2) {
+    quest.firs.forEach(fir => {
+      fir.freed = true
+      fir.whiteness = 0
+    })
+  }
+  //
+  // Spawn the letter the hero is currently hunting (phases without a letter
+  // on screen spawn theirs when the phase condition is met)
+  //
+  if (quest.lettersCollected === 0) {
+    quest.letterObjs.T = createPickupLetter(quest.k, 'T', DECOR_LOG_PILE_POSITIONS[0], QUEST_LETTER_T_Y, QUEST_LETTER_TILTS[0])
+  } else if (quest.lettersCollected === 4) {
+    spawnQuestLetterH(quest, true)
+  }
+  //
+  // Rub countdown display above the snowman (hidden until 3 rubs)
+  //
+  quest.rubCounter = createRubCounter(quest.k, quest.snowmanWorldX, FLOOR_Y + RUB_COUNTER_Y_OFFSET)
+  return quest
+}
+//
+// Main per-frame quest update: snowflake particles, letter pulsing,
+// pickups and the phase-specific interactions
+//
+function onUpdateQuest(quest) {
+  const k = quest.k
+  updateQuestSnowflakes(k, quest.snowflakes)
+  pulseQuestLetters(k, quest)
+  if (quest.levelDone || quest.dialogOpen) return
+  const hero = quest.heroInst
+  if (!hero?.character?.pos || hero.isDying) return
+  const heroX = hero.character.pos.x
+  const heroY = hero.character.pos.y
+  const grounded = hero.character.isGrounded?.() ?? false
+  const justLanded = grounded && !quest.wasGrounded
+  quest.wasGrounded = grounded
+  //
+  // Splashy water steps only while the lake is open water AND the hero
+  // has not yet collected U (after U the lake freezes on leave)
+  //
+  quest.lakeState.melted && quest.lettersCollected === 2 && handleWaterRun(quest, heroX, heroY, grounded, justLanded)
+  //
+  // After U is collected, leaving the lake freezes it back to ice so the
+  // hero slides again and water sounds stay off
+  //
+  quest.lettersCollected >= 3 && quest.lakeState.melted && freezeLakeIfHeroLeft(quest, heroX, heroY)
+  const n = quest.lettersCollected
+  if (n === 0) {
+    checkQuestPickup(heroX, heroY, quest.letterObjs.T, () => collectLetterT(quest))
+  } else if (n === 1) {
+    handleFirTouch(quest, heroX, heroY, justLanded)
+    checkQuestPickup(heroX, heroY, quest.letterObjs.O, () => collectLetterO(quest))
+  } else if (n === 2) {
+    handleIceCracking(quest, heroX, heroY, grounded, justLanded)
+    checkQuestPickup(heroX, heroY, quest.letterObjs.U, () => collectLetterU(quest))
+  } else if (n === 3) {
+    handleSnowmanRubbing(quest, heroX, heroY, k.dt())
+    checkQuestPickup(heroX, heroY, quest.letterObjs.C, () => collectLetterC(quest))
+  } else if (n === 4) {
+    checkQuestPickup(heroX, heroY, quest.letterObjs.H, () => collectLetterH(quest))
+  }
+}
+//
+// Creates a single pickup letter (outlined teal text with tilt), same
+// visual style as the touch L0 letters
+//
+function createPickupLetter(k, letter, x, y, tiltDeg) {
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const oo = QUEST_LETTER_OUTLINE
+  const behindSnow = QUEST_LETTER_BEHIND_SNOW.has(letter)
+  const zMain = behindSnow ? QUEST_LETTER_Z_BEHIND_SNOW : QUEST_LETTER_Z_FRONT
+  const zOutline = zMain - 1
+  //
+  // Drop shadow (single black copy offset right+down)
+  //
+  const offsets = [[oo, oo]]
+  const outlines = offsets.map(([dx, dy]) => k.add([
+    k.text(letter, { size: QUEST_LETTER_SIZE, font }),
+    k.pos(x + dx, y + dy),
+    k.anchor('bot'),
+    k.rotate(tiltDeg),
+    k.scale(1, 1),
+    k.color(0, 0, 0),
+    k.z(zOutline)
+  ]))
+  const main = k.add([
+    k.text(letter, { size: QUEST_LETTER_SIZE, font }),
+    k.pos(x, y),
+    k.anchor('bot'),
+    k.rotate(tiltDeg),
+    k.scale(1, 1),
+    k.color(QUEST_LETTER_COLOR_R, QUEST_LETTER_COLOR_G, QUEST_LETTER_COLOR_B),
+    k.z(zMain)
+  ])
+  const destroy = () => {
+    main.destroy?.()
+    outlines.forEach(o => o.destroy?.())
+  }
+  return { main, outlines, destroy }
+}
+//
+// Emerge animation: the letter grows upward from its bottom anchor so it
+// reads as rising out of the water instead of fading in
+//
+function animateLetterRise(k, obj) {
+  const applyScale = (v) => {
+    obj.main?.exists?.() && (obj.main.scale = k.vec2(1, v))
+    obj.outlines.forEach(o => o?.exists?.() && (o.scale = k.vec2(1, v)))
+  }
+  applyScale(0.01)
+  k.tween(0.01, 1, QUEST_LETTER_RISE_DURATION, applyScale, k.easings.easeOutCubic)
+}
+//
+// Drops a letter from startY onto its resting Y (snowman C tip-out)
+//
+function animateLetterFall(k, obj, startY, endY) {
+  const oo = QUEST_LETTER_OUTLINE
+  const setAllY = (y) => {
+    obj.main?.exists?.() && (obj.main.pos.y = y)
+    obj.outlines.forEach(o => {
+      o?.exists?.() && (o.pos.y = y + oo)
+    })
+  }
+  setAllY(startY)
+  const ease = k.easings?.easeOutCubic ?? ((t) => 1 - Math.pow(1 - t, 3))
+  k.tween(startY, endY, QUEST_LETTER_C_FALL_DURATION, setAllY, ease)
+}
+//
+// Pulses letter opacity/color between teal and white (L0-style shimmer)
+//
+function pulseQuestLetters(k, quest) {
+  const t = k.time()
+  const pulse = (Math.sin(t * QUEST_LETTER_PULSE_SPEED) + 1) / 2
+  const opacity = QUEST_LETTER_PULSE_MIN + (1 - QUEST_LETTER_PULSE_MIN) * pulse
+  const cr = Math.round(QUEST_LETTER_COLOR_R + (255 - QUEST_LETTER_COLOR_R) * pulse)
+  const cg = Math.round(QUEST_LETTER_COLOR_G + (255 - QUEST_LETTER_COLOR_G) * pulse)
+  const cb = Math.round(QUEST_LETTER_COLOR_B + (255 - QUEST_LETTER_COLOR_B) * pulse)
+  for (const key of Object.keys(quest.letterObjs)) {
+    const obj = quest.letterObjs[key]
+    if (!obj) continue
+    obj.main.opacity = opacity
+    obj.main.color = k.rgb(cr, cg, cb)
+    obj.outlines.forEach(o => { o.opacity = opacity * 0.5 })
+  }
+}
+//
+// Distance check between the hero and a letter's visual center
+//
+function checkQuestPickup(heroX, heroY, obj, onCollect) {
+  if (!obj?.main?.pos) return
+  const dx = heroX - obj.main.pos.x
+  const dy = heroY - (obj.main.pos.y - QUEST_LETTER_SIZE / 2)
+  if (dx * dx + dy * dy < QUEST_LETTER_COLLECT_RADIUS * QUEST_LETTER_COLLECT_RADIUS) {
+    onCollect()
+  }
+}
+//
+// Shared collect logic: destroy the letter, light the HUD letter with a
+// burst, persist progress and open the quest dialog
+//
+function collectQuestLetter(quest, letterKey, dialogText, onDialogClose) {
+  const obj = quest.letterObjs[letterKey]
+  obj?.destroy()
+  quest.letterObjs[letterKey] = null
+  quest.lettersCollected += 1
+  set(QUEST_LETTERS_FLAG, quest.lettersCollected)
+  //
+  // Remember the dialog for the Goal button (plain text, no [hl] tags)
+  //
+  if (quest.goalState) quest.goalState.lastDialog = stripQuestHlTags(dialogText)
+  quest.sound && Sound.playLetterPickupSoft(quest.sound)
+  LevelIndicator.setSectionLabelLetterProgress(quest.levelIndicator, quest.lettersCollected)
+  LevelIndicator.flashLetterBurst(quest.levelIndicator, quest.lettersCollected)
+  quest.dialogOpen = true
+  LevelHelp.openStandalonePanel(quest.k, dialogText, {
+    fillRgb: { r: QUEST_DIALOG_FILL_R, g: QUEST_DIALOG_FILL_G, b: QUEST_DIALOG_FILL_B },
+    textRgb: { r: QUEST_LETTER_COLOR_R, g: QUEST_LETTER_COLOR_G, b: QUEST_LETTER_COLOR_B },
+    borderRgb: { r: QUEST_LETTER_COLOR_R, g: QUEST_LETTER_COLOR_G, b: QUEST_LETTER_COLOR_B },
+    sceneBackdropHex: quest.wallColorHex,
+    //
+    // Yellow highlight for the quest letter via Kaplay inline style tag [hl]
+    //
+    textStyles: { hl: { color: quest.k.rgb(QUEST_DIALOG_HL_R, QUEST_DIALOG_HL_G, QUEST_DIALOG_HL_B), override: true } },
+    onClose: () => {
+      quest.dialogOpen = false
+      onDialogClose?.()
+    }
+  })
+}
+//
+// Strips [hl]…[/hl] markup so Goal panel shows plain dialog copy
+//
+function stripQuestHlTags(text) {
+  return String(text || '').replace(/\[\/?hl\]/g, '')
+}
+//
+// T collected on the left logs — spruce-freeing phase begins
+//
+function collectLetterT(quest) {
+  collectQuestLetter(quest, 'T', QUEST_DIALOG_T)
+}
+//
+// O collected at the hero's start point — ice-breaking phase begins
+//
+function collectLetterO(quest) {
+  collectQuestLetter(quest, 'O', QUEST_DIALOG_O)
+}
+//
+// U collected on the melted lake — snowman-rubbing phase begins
+//
+function collectLetterU(quest) {
+  collectQuestLetter(quest, 'U', QUEST_DIALOG_U)
+}
+//
+// C collected at the collapsed snowman — H appears on the first platform
+//
+function collectLetterC(quest) {
+  collectQuestLetter(quest, 'C', QUEST_DIALOG_C, () => spawnQuestLetterH(quest))
+}
+//
+// H collected on the first platform — level complete
+//
+function collectLetterH(quest) {
+  quest.stuckHintState.levelDone = true
+  collectQuestLetter(quest, 'H', QUEST_DIALOG_H, () => completeQuest(quest))
+}
+//
+// Spawns the final H letter lying on the first platform; the platform
+// itself only becomes visible once this letter exists (hSpawned flag)
+//
+function spawnQuestLetterH(quest, silent = false) {
+  if (quest.letterObjs.H) return
+  //
+  // Glyph bottom sinks slightly below the platform top edge so the letter
+  // rests ON the log instead of hovering above it
+  //
+  const platTopY = quest.firstPlatform.y - 15 + QUEST_LETTER_SNOW_SINK
+  quest.letterObjs.H = createPickupLetter(quest.k, 'H', quest.firstPlatform.x, platTopY, QUEST_LETTER_TILTS[4])
+  quest.hSpawned = true
+  !silent && playLetterAppearSound(quest)
+}
+//
+// Soft chime marking a new quest letter appearing in the world
+//
+function playLetterAppearSound(quest) {
+  quest.sound && Sound.playLetterPickupSoft(quest.sound)
+}
+//
+// Level completion: score, victory sound and transition to the next level
+//
+function completeQuest(quest) {
+  quest.levelDone = true
+  //
+  // Reset quest progress so replaying the level starts from T again
+  //
+  set(QUEST_LETTERS_FLAG, 0)
+  const newScore = get('heroScore', 0) + 1
+  set('heroScore', newScore)
+  quest.levelIndicator?.updateHeroScore?.(newScore)
+  quest.sound && Sound.playVictorySound(quest.sound)
+  quest.k.wait(QUEST_COMPLETE_TRANSITION_DELAY, () => {
+    Sound.stopAmbient(quest.sound)
+    quest.touchMusic.stop()
+    createLevelTransition(quest.k, 'lesson-touch.2')
+  })
+}
+//
+// Spruce freeing: a landing near a frozen fir shakes it, sheds a snowflake
+// burst and fades it to green. When all firs are free, O appears at spawn.
+//
+function handleFirTouch(quest, heroX, heroY, justLanded) {
+  if (!justLanded) return
+  //
+  // Only ground-level landings count (not the log platforms above)
+  //
+  if (Math.abs(heroY + HERO_FEET_OFFSET - FLOOR_Y) > QUEST_FLOOR_TOLERANCE) return
+  let freedAny = false
+  for (const fir of quest.firs) {
+    if (fir.freed) continue
+    if (Math.abs(heroX - fir.x) > FIR_TOUCH_RADIUS) continue
+    fir.freed = true
+    fir.shakeTimer = FIR_SHAKE_DURATION
+    freedAny = true
+    spawnSnowflakeBurst(quest.snowflakes, fir.x, FLOOR_Y - fir.height * 0.45, FIR_BURST_SNOWFLAKE_COUNT)
+  }
+  freedAny && quest.sound && Sound.playTreeCreakSound(quest.sound)
+  //
+  // All firs green — the O letter appears lying in the snow at the start point
+  //
+  if (!quest.letterObjs.O && quest.firs.every(fir => fir.freed)) {
+    quest.letterObjs.O = createPickupLetter(quest.k, 'O', HERO_SPAWN_X, FLOOR_Y + QUEST_LETTER_O_SINK, QUEST_LETTER_TILTS[1])
+    playLetterAppearSound(quest)
+  }
+}
+//
+// Ice cracking: running (and landing from jumps) on the frozen lake
+// accumulates crack progress. Pausing lets the cracks slowly refreeze
+// and fade — the hero has to start over. Once the lake melts, standing
+// still on the water for LAKE_REFREEZE_DELAY freezes it back.
+//
+function handleIceCracking(quest, heroX, heroY, grounded, justLanded) {
+  const lake = quest.lakeState
+  const dt = quest.k.dt()
+  const onLake = Math.abs(heroY + HERO_FEET_OFFSET - FLOOR_Y) < QUEST_FLOOR_TOLERANCE
+    && heroX >= quest.lakeBounds.minX && heroX <= quest.lakeBounds.maxX
+  //
+  // Melted phase: watch for the refreeze (no running on the water)
+  //
+  if (lake.melted) {
+    updateLakeRefreeze(quest, heroX, grounded && onLake, dt)
+    return
+  }
+  //
+  // A jump landing on the ice cracks it just like a running step
+  //
+  if (justLanded && grounded && onLake) {
+    quest.icePauseTime = 0
+    advanceIceCrack(quest)
+  }
+  //
+  // Distance-based cracking while running on the ice
+  //
+  let movedDist = 0
+  if (grounded && onLake) {
+    if (quest.iceRunLastX != null) movedDist = Math.abs(heroX - quest.iceRunLastX)
+    quest.iceRunLastX = heroX
+  } else {
+    quest.iceRunLastX = null
+  }
+  if (movedDist > ICE_CRACK_MOVE_EPSILON) {
+    quest.icePauseTime = 0
+    quest.iceCrackAccum += movedDist
+    if (quest.iceCrackAccum >= ICE_CRACK_DISTANCE_STEP) {
+      quest.iceCrackAccum = 0
+      advanceIceCrack(quest)
+    }
+    return
+  }
+  //
+  // Hero paused (or left the lake): cracks gradually refreeze and vanish
+  //
+  quest.icePauseTime += dt
+  if (quest.icePauseTime > ICE_CRACK_DECAY_DELAY && lake.crackProgress > 0) {
+    lake.crackProgress = Math.max(0, lake.crackProgress - ICE_CRACK_DECAY_PER_SEC * dt)
+    lake.crackProgress === 0 && (quest.iceCrackAccum = 0)
+  }
+}
+//
+// Adds one crack step with a creak sound; at full progress the ice melts
+// into open water and the U letter rises from under the surface
+//
+function advanceIceCrack(quest) {
+  const lake = quest.lakeState
+  lake.crackProgress = Math.min(1, lake.crackProgress + 1 / ICE_CRACK_TOTAL_STEPS)
+  quest.sound && playIceCreakSound(quest.sound, 1)
+  if (lake.crackProgress < 1) return
+  lake.melted = true
+  quest.waterStillTimer = 0
+  quest.waterRunLastX = null
+  //
+  // The U letter surfaces from under the water in the lake center
+  //
+  if (!quest.letterObjs.U) {
+    const lakeCX = (quest.lakeBounds.minX + quest.lakeBounds.maxX) / 2
+    quest.letterObjs.U = createPickupLetter(quest.k, 'U', lakeCX, FLOOR_Y + QUEST_LETTER_U_SINK, QUEST_LETTER_TILTS[2])
+    animateLetterRise(quest.k, quest.letterObjs.U)
+    playLetterAppearSound(quest)
+  }
+}
+//
+// After U is collected: the moment the hero leaves the lake band the water
+// freezes back to ice (no splash sounds, ice slide resumes)
+//
+function freezeLakeIfHeroLeft(quest, heroX, heroY) {
+  const onLake = Math.abs(heroY + HERO_FEET_OFFSET - FLOOR_Y) < QUEST_FLOOR_TOLERANCE
+    && heroX >= quest.lakeBounds.minX && heroX <= quest.lakeBounds.maxX
+  if (onLake) return
+  freezeLakeSolid(quest)
+}
+//
+// Resets the lake to solid ice and clears any U letter still floating there
+//
+function freezeLakeSolid(quest) {
+  const lake = quest.lakeState
+  if (!lake.melted && lake.crackProgress === 0) return
+  lake.melted = false
+  lake.crackProgress = 0
+  quest.iceCrackAccum = 0
+  quest.icePauseTime = 0
+  quest.iceRunLastX = null
+  quest.waterStillTimer = 0
+  quest.waterRunLastX = null
+  quest.waterStepLastX = null
+  quest.waterStepAccum = 0
+  quest.letterObjs.U?.destroy()
+  quest.letterObjs.U = null
+  quest.sound && playIceCreakSound(quest.sound, 1)
+}
+//
+// Refreeze watch: while the lake is open water (U not collected yet), the
+// hero must keep running on it. Standing still for LAKE_REFREEZE_DELAY
+// turns the water back to solid ice and the cracking starts over.
+//
+function updateLakeRefreeze(quest, heroX, onWater, dt) {
+  let moved = false
+  if (onWater) {
+    if (quest.waterRunLastX != null) {
+      moved = Math.abs(heroX - quest.waterRunLastX) > ICE_CRACK_MOVE_EPSILON
+    }
+    quest.waterRunLastX = heroX
+  } else {
+    quest.waterRunLastX = null
+  }
+  if (moved) {
+    quest.waterStillTimer = 0
+    return
+  }
+  quest.waterStillTimer += dt
+  if (quest.waterStillTimer < LAKE_REFREEZE_DELAY) return
+  freezeLakeSolid(quest)
+}
+//
+// Splashy water step sounds while the hero runs on the melted lake
+// (same water sample as the touch L0 puddles); landings splash louder
+//
+function handleWaterRun(quest, heroX, heroY, grounded, justLanded) {
+  const onWater = grounded
+    && Math.abs(heroY + HERO_FEET_OFFSET - FLOOR_Y) < QUEST_FLOOR_TOLERANCE
+    && heroX >= quest.lakeBounds.minX && heroX <= quest.lakeBounds.maxX
+  if (!onWater) {
+    quest.waterStepLastX = null
+    return
+  }
+  justLanded && Sound.playWaterFootstepKaplay?.(quest.k, WATER_LAND_VOLUME)
+  if (quest.waterStepLastX == null) {
+    quest.waterStepLastX = heroX
+    return
+  }
+  quest.waterStepAccum += Math.abs(heroX - quest.waterStepLastX)
+  quest.waterStepLastX = heroX
+  if (quest.waterStepAccum < WATER_STEP_DISTANCE) return
+  quest.waterStepAccum = 0
+  Sound.playWaterFootstepKaplay?.(quest.k, WATER_STEP_VOLUME)
+}
+//
+// Snowman rubbing: every left/right pass across the snowman counts as one
+// rub — the rub triggers on each side change inside the rub zone, so
+// Counts a rub only when the hero crosses the snowman's vertical center.
+// Entering the zone from one side is silent; the next center crossing
+// plays friction audio and advances the counter. Gaps longer than
+// RUB_RESET_GAP reset the streak. At 3 rubs a hint + countdown appear;
+// at 10 the snowman collapses revealing C.
+//
+function handleSnowmanRubbing(quest, heroX, heroY, dt) {
+  if (quest.snowmanState.collapsed) return
+  //
+  // Reset the streak when rubs are spaced too far apart
+  //
+  if (quest.rubCount > 0) {
+    quest.rubGapTimer += dt
+    if (quest.rubGapTimer > RUB_RESET_GAP) {
+      quest.rubCount = 0
+      quest.rubLastSide = null
+      updateRubCounter(quest)
+    }
+  }
+  const onGround = Math.abs(heroY + HERO_FEET_OFFSET - FLOOR_Y) < QUEST_FLOOR_TOLERANCE
+  const dx = heroX - quest.snowmanWorldX
+  if (!onGround || Math.abs(dx) >= RUB_ZONE_HALF_WIDTH) {
+    //
+    // Leaving the wide exit zone clears the side memory so re-entry rubs again
+    //
+    Math.abs(dx) > RUB_EXIT_HALF_WIDTH && (quest.rubLastSide = null)
+    return
+  }
+  //
+  // One rub only when the hero crosses the snowman's center line.
+  // First observation of a side just remembers it — entry alone is silent.
+  //
+  const side = dx >= 0 ? 1 : -1
+  if (quest.rubLastSide == null) {
+    quest.rubLastSide = side
+    return
+  }
+  if (quest.rubLastSide === side) return
+  quest.rubLastSide = side
+  quest.rubCount += 1
+  quest.rubGapTimer = 0
+  playRubSound(quest.sound)
+  quest.rubCount === RUB_HINT_THRESHOLD && showSnowmanHint(quest)
+  updateRubCounter(quest)
+  quest.rubCount >= RUB_TARGET_COUNT && collapseSnowman(quest)
+}
+//
+// Collapses the snowman into head + 2 body pieces and reveals the C letter
+//
+function collapseSnowman(quest) {
+  quest.snowmanState.collapsed = true
+  quest.snowmanState.collapseTime = 0
+  updateRubCounter(quest)
+  spawnSnowflakeBurst(quest.snowflakes, quest.snowmanWorldX, FLOOR_Y - 70, FIR_BURST_SNOWFLAKE_COUNT)
+  quest.sound && playIceCreakSound(quest.sound, 1)
+  quest.k.wait(SNOWMAN_C_APPEAR_DELAY, () => {
+    const cX = quest.snowmanWorldX + QUEST_LETTER_C_OFFSET_X
+    const cY = FLOOR_Y + QUEST_LETTER_SNOW_SINK
+    quest.letterObjs.C = createPickupLetter(quest.k, 'C', cX, cY, QUEST_LETTER_C_TILT)
+    animateLetterFall(quest.k, quest.letterObjs.C, QUEST_LETTER_C_FALL_FROM_Y, cY)
+    playLetterAppearSound(quest)
+  })
+}
+//
+// Forced tooltip above the snowman after the 3rd rub
+//
+function showSnowmanHint(quest) {
+  const k = quest.k
+  const target = {
+    x: quest.snowmanWorldX,
+    y: FLOOR_Y - 60,
+    width: 0,
+    height: 0,
+    text: RUB_HINT_TEXT,
+    offsetY: RUB_HINT_Y_OFFSET
+  }
+  const tip = Tooltip.create({ k, targets: [target], forceVisible: true })
+  tip.activeTarget = target
+  tip.frozenX = Math.round(quest.snowmanWorldX)
+  tip.frozenY = FLOOR_Y - 60
+  tip.opacity = 1
+  k.wait(RUB_HINT_DISPLAY_TIME, () => Tooltip.destroy(tip))
+}
+//
+// Creates the (initially empty) rub countdown text above the snowman
+//
+function createRubCounter(k, x, y) {
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const shadow = k.add([
+    k.text('', { size: RUB_COUNTER_FONT_SIZE, font }),
+    k.pos(x + 2, y + 2),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.z(RUB_COUNTER_Z)
+  ])
+  const main = k.add([
+    k.text('', { size: RUB_COUNTER_FONT_SIZE, font }),
+    k.pos(x, y),
+    k.anchor('center'),
+    k.color(QUEST_LETTER_COLOR_R, QUEST_LETTER_COLOR_G, QUEST_LETTER_COLOR_B),
+    k.z(RUB_COUNTER_Z + 1)
+  ])
+  return { shadow, main }
+}
+//
+// Shows remaining rubs after the hint threshold; hides otherwise
+//
+function updateRubCounter(quest) {
+  const show = quest.rubCount >= RUB_HINT_THRESHOLD && !quest.snowmanState.collapsed
+  const text = show ? String(RUB_TARGET_COUNT - quest.rubCount) : ''
+  quest.rubCounter.main.text = text
+  quest.rubCounter.shadow.text = text
+}
+//
+// Friction noise burst heard when the hero rubs past the snowman
+//
+function playRubSound(instance) {
+  if (!instance?.audioContext) return
+  const ctx = instance.audioContext
+  const now = ctx.currentTime
+  //
+  // White noise through a falling bandpass — reads as a snowy rub/scrape
+  //
+  const bufferSize = ctx.sampleRate * RUB_SOUND_DURATION
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = ctx.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(RUB_SOUND_FREQ_START, now)
+  filter.frequency.linearRampToValueAtTime(RUB_SOUND_FREQ_END, now + RUB_SOUND_DURATION)
+  filter.Q.value = 0.9
+  const envelope = ctx.createGain()
+  envelope.gain.setValueAtTime(0, now)
+  envelope.gain.linearRampToValueAtTime(RUB_SOUND_PEAK, now + 0.02)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + RUB_SOUND_DURATION)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(ctx.destination)
+  noiseSource.start(now)
+  noiseSource.stop(now + RUB_SOUND_DURATION)
+}
+//
+// Adds a burst of snowflakes that scatter outward, then drift down like
+// the ambient snow while fading out
+//
+function spawnSnowflakeBurst(pool, x, y, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = SNOWFLAKE_BURST_SPEED_MIN + Math.random() * SNOWFLAKE_BURST_SPEED_RANGE
+    const life = SNOWFLAKE_LIFETIME_MIN + Math.random() * SNOWFLAKE_LIFETIME_RANGE
+    pool.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      drift: (Math.random() - 0.5) * 2 * SNOWFLAKE_DRIFT_SPEED,
+      size: SNOWFLAKE_SIZE_MIN + Math.random() * SNOWFLAKE_SIZE_RANGE,
+      life,
+      maxLife: life
+    })
+  }
+}
+//
+// Ages burst snowflakes: initial scatter velocity damps toward a gentle
+// snowfall (slow downward drift), particles fade and expire
+//
+function updateQuestSnowflakes(k, flakes) {
+  const dt = k.dt()
+  for (let i = flakes.length - 1; i >= 0; i--) {
+    const p = flakes[i]
+    p.life -= dt
+    if (p.life <= 0) {
+      flakes.splice(i, 1)
+      continue
+    }
+    const damp = Math.max(0, 1 - SNOWFLAKE_BURST_DAMPING * dt)
+    p.vx = p.vx * damp + p.drift * (1 - damp)
+    p.vy = p.vy * damp + SNOWFLAKE_FALL_SPEED * (1 - damp)
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+  }
+}
+//
+// Draws burst snowflakes as fading white dots
+//
+function drawQuestSnowflakes(k, flakes) {
+  for (const p of flakes) {
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: p.size,
+      color: k.rgb(255, 255, 255),
+      opacity: Math.min(1, p.life / p.maxLife) * 0.9
     })
   }
 }

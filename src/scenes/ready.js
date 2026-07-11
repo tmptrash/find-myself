@@ -16,7 +16,8 @@ import {
   MENU_BG_CANVAS_H,
   MENU_BG_MOON_CENTER_X,
   MENU_BG_MOON_CENTER_Y,
-  MENU_BG_MOON_HALO_KEEPOUT
+  MENU_BG_MOON_HALO_KEEPOUT,
+  MENU_BG_FRONT_LEAF_RGB
 } from '../utils/menu-bg-generator.js'
 import * as Grass from '../components/grass.js'
 
@@ -188,10 +189,15 @@ const GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GR
 // palette tree-leaf green pushed toward the warm haze by the combined
 // near-row blend of the glow level (0.3 base + 0.3 leaf-only ⇒ 0.51 total).
 //
-const GRASS_LEAF_HAZE_BLEND = 0.51
-const GRASS_HAZE_RGB = parseHex(CFG.visual.colors.palette.warmHaze)
-const [GRASS_TINT_R, GRASS_TINT_G, GRASS_TINT_B] = parseHex(CFG.visual.colors.palette.treeColor.leaf).map((c, i) => Math.round(c + (GRASS_HAZE_RGB[i] - c) * GRASS_LEAF_HAZE_BLEND))
-const GRASS_TINT = { r: GRASS_TINT_R, g: GRASS_TINT_G, b: GRASS_TINT_B }
+//
+// Grass matches the warm yellow-orange foliage of the front-row side trees,
+// at half brightness so it doesn't overpower the night scene
+//
+const GRASS_TINT = {
+  r: Math.round(MENU_BG_FRONT_LEAF_RGB.r / 2),
+  g: Math.round(MENU_BG_FRONT_LEAF_RGB.g / 2),
+  b: Math.round(MENU_BG_FRONT_LEAF_RGB.b / 2)
+}
 // Cricket + owl ambient sounds — random intervals so the night soundscape
 // stays alive but never feels mechanical. Cricket bursts trigger every
 // few seconds; owl hoots are sparse and atmospheric.

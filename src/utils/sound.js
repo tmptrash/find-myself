@@ -456,7 +456,10 @@ export function playLandSound(instance, currentLevel = null) {
     osc.start(now)
     osc.stop(now + duration)
   } else if (currentLevel === 'lesson-touch.2') {
-    if (instance._l2Surface === 'ice') return
+    //
+    // Ice mutes landings; water splashes are handled by the L2 quest logic
+    //
+    if (instance._l2Surface === 'ice' || instance._l2Surface === 'water') return
     instance._l2Surface === 'wood' ? playWoodKnockLand(instance) : playSnowCrunchLand(instance)
   } else if (currentLevel === 'lesson-touch.3') {
     instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
@@ -987,7 +990,10 @@ export function playStepSound(instance, currentLevel = null) {
     osc.start(now)
     osc.stop(now + duration)
   } else if (currentLevel === 'lesson-touch.2') {
-    if (instance._l2Surface === 'ice') return
+    //
+    // Ice mutes steps; water splashes are handled by the L2 quest logic
+    //
+    if (instance._l2Surface === 'ice' || instance._l2Surface === 'water') return
     instance._l2Surface === 'wood' ? playWoodKnockStep(instance) : playSnowCrunchStep(instance)
   } else if (currentLevel === 'lesson-touch.3') {
     playWoodKnockStep(instance)

@@ -294,6 +294,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     k.z(CFG.visual.zIndex.ui + 100),
     k.fixed()
   ])
+  k._transitionOverlay = overlay
   
   if (needsEarlyAssetLoad) {
     inst.assetPreparePromise = prepareSceneAssets(k, nextLevel).then(() => {
@@ -728,6 +729,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   k.transitionCleanup = () => {
     transitionInterval.cancel()
     overlay.exists() && k.destroy(overlay)
+    if (k._transitionOverlay === overlay) k._transitionOverlay = null
     inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
     inst.hintTextObj && inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)

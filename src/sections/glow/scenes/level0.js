@@ -796,7 +796,6 @@ export function sceneGlowLevel0(k) {
       bodyColor: HERO_BODY_COLOR,
       outlineColor: HERO_OUTLINE_COLOR,
       eyeWhiteColor: HERO_EYE_WHITE,
-      addLegStrip: true,
       currentLevel: 'lesson-glow.0',
       suppressDust: true
     })

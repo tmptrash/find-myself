@@ -10,6 +10,7 @@ import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
+  drawMenuMoon,
   MENU_BG_GROUND_Y,
   MENU_BG_HORIZON_LINE_HEIGHT,
   MENU_BG_CANVAS_W,
@@ -78,6 +79,7 @@ const Z_BG_OVERLAY = CFG.visual.zIndex.background + 1
 // as a single sprite each frame instead of many separate objects.
 //
 const READY_STATIC_SPRITE = 'ready-static-bg'
+const READY_MOON_SPRITE = 'ready-moon'
 const READY_BG_DARKEN_ALPHA = 0.5
 const READY_TEXT_SHADOW_OFFSET = 1
 //
@@ -90,8 +92,10 @@ const READY_BG_EDGE_OVERSCAN = 1
 //
 // Stars sit BELOW the drifting cloud layer so twinkles never punch
 // through the cloud puffs — clouds read as the nearer sky element.
+// Moon sits ABOVE the stars so the disc occludes any twinkles near it.
 //
 const Z_STARS = CFG.visual.zIndex.background + 2
+const Z_MOON = CFG.visual.zIndex.background + 3
 const Z_FIREFLIES = CFG.visual.zIndex.background + 7
 const Z_ILLUSTRATION = CFG.visual.zIndex.background + 6
 const Z_TITLE = 15
@@ -493,6 +497,12 @@ export function sceneReady(k) {
     const starField = createStarField(k)
     k.add([k.pos(0, 0), k.z(Z_STARS), { draw() { drawStarField(k, starField) } }])
     //
+    // Moon above the stars — baked without the moon in the static bg so
+    // the disc and halo sit in front of any nearby twinkles.
+    //
+    buildReadyMoonSprite(k)
+    k.add([k.pos(0, 0), k.z(Z_MOON), { draw() { onDrawMoon(k) } }])
+    //
     // Wandering fireflies — flicker through the lower sky band among
     // the front-layer tree silhouettes, never rising above the canopy.
     //
@@ -715,7 +725,7 @@ function buildReadyStaticSprite(k) {
   //
   ctx.fillStyle = CFG.visual.colors.ready.background
   ctx.fillRect(0, 0, MENU_BG_CANVAS_W, MENU_BG_CANVAS_H)
-  const bgCanvas = generateMenuBackgroundCanvas()
+  const bgCanvas = generateMenuBackgroundCanvas(undefined, { skipMoon: true })
   ctx.globalAlpha = READY_BG_DARKEN_ALPHA
   ctx.drawImage(bgCanvas, 0, 0)
   ctx.globalAlpha = 1
@@ -737,6 +747,20 @@ function buildReadyStaticSprite(k) {
     cursorY += TEXT_LINE_HEIGHT
   }
   k.loadSprite(READY_STATIC_SPRITE, canvas)
+  canvas.width = 0
+  canvas.height = 0
+}
+//
+// Bakes the menu moon onto a transparent full-screen sprite so the ready
+// scene can draw it above the star field (same geometry as the menu bg).
+//
+function buildReadyMoonSprite(k) {
+  const canvas = document.createElement('canvas')
+  canvas.width = MENU_BG_CANVAS_W
+  canvas.height = MENU_BG_CANVAS_H
+  const ctx = canvas.getContext('2d')
+  drawMenuMoon(ctx)
+  k.loadSprite(READY_MOON_SPRITE, canvas)
   canvas.width = 0
   canvas.height = 0
 }
@@ -844,9 +868,22 @@ function drawStarField(k, stars) {
   }
 }
 //
-// The moon glow is baked directly into the menu-bg sprite as a
-// smooth radial gradient (see `menu-bg-generator.js#drawMoon`), so no
-// runtime moon-glow draw layer is needed in the ready scene.
+// Moon overlay — drawn above the star field so the disc occludes twinkles.
+// Full opacity (not READY_BG_DARKEN_ALPHA) so stars cannot show through the disc.
+//
+function onDrawMoon(k) {
+  const over = READY_BG_EDGE_OVERSCAN
+  k.drawSprite({
+    sprite: READY_MOON_SPRITE,
+    pos: k.vec2(-over, -over),
+    width: MENU_BG_CANVAS_W + over * 2,
+    height: MENU_BG_CANVAS_H + over * 2,
+    opacity: 1
+  })
+}
+//
+// The moon glow is baked into READY_MOON_SPRITE (see buildReadyMoonSprite);
+// no extra runtime glow pass is needed.
 //
 //
 // Draws the center illustration: life-ready.png as the creature + hero sprite overlaid in front.

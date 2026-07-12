@@ -438,9 +438,15 @@ const KEY_INTRO_SHOWN = 'glow.introShown'
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = '[hl]G[/hl]round is beneath you. Every\njourney begins with a single step.\nKeep your research.'
-const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades. The\nworld is rarely just black or white'
+const GLOW_DIALOG_G = '[hl]G[/hl]round is beneath you. Every\njourney begins with a single\nstep. Keep your research.'
+const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades. The\nworld is rarely just black or white.\nNot everything reveals itself in motion.'
 const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see . Find [hl]W[/hl] by yourself.'
+//
+// Voice-overs played while the matching letter dialog is open
+//
+const GLOW_DIALOG_SOUND_G = 'glow-g'
+const GLOW_DIALOG_SOUND_L = 'glow-l'
+const GLOW_DIALOG_SOUND_O = 'glow-ow'
 //
 // Speech-bubble hints: two intro lines at spawn (the G letter appears only
 // after both finish), one-shot lines when the right ground / water zones
@@ -913,6 +919,7 @@ export function sceneGlowLevel0(k) {
       k,
       sound,
       birdsMusic,
+      letterDialogMusic: null,
       heroInst,
       zones,
       treeObj,
@@ -1007,6 +1014,7 @@ export function sceneGlowLevel0(k) {
     maybeRevealLPlat(inst, true)
     startGlowIntro(inst)
     createSmallHeroTooltip(inst)
+    k.onSceneLeave(() => stopGlowLetterDialogMusic(inst))
     k.onKeyPress('escape', () => {
       if (inst.dialogOpen) return
       goToMenuAfterAssets(k)
@@ -3019,10 +3027,12 @@ function playSegmentRevealSound(inst) {
   Sound.playLetterPickupSoft(inst.sound)
 }
 //
-// Opens a letter dialog with glow styling.
+// Opens a letter dialog with glow styling. Optional voice-over starts with
+// the panel and stops on any close path (Esc / Space / Enter / click).
 //
-function openGlowLetterDialog(inst, text, onCloseExtra) {
+function openGlowLetterDialog(inst, text, onCloseExtra, dialogSoundName = null) {
   inst.dialogOpen = true
+  playGlowLetterDialogMusic(inst, dialogSoundName)
   //
   // Letterbox bars must match the current level background: gray once the
   // outer frame is revealed, void before it — no stripes around the canvas.
@@ -3034,11 +3044,32 @@ function openGlowLetterDialog(inst, text, onCloseExtra) {
     borderRgb: { r: DECOR_GRAY.r, g: DECOR_GRAY.g, b: DECOR_GRAY.b },
     sceneBackdropHex: backdropHex,
     textStyles: { hl: { color: inst.k.rgb(inst.goldRgb.r, inst.goldRgb.g, inst.goldRgb.b), override: true } },
+    onCloseStart: () => stopGlowLetterDialogMusic(inst),
     onClose: () => {
+      stopGlowLetterDialogMusic(inst)
       inst.dialogOpen = false
       onCloseExtra?.()
     }
   })
+}
+//
+// Starts a letter dialog voice-over (stops any previous one first).
+//
+function playGlowLetterDialogMusic(inst, soundName) {
+  stopGlowLetterDialogMusic(inst)
+  if (!soundName) return
+  inst.letterDialogMusic = Sound.playInScene(
+    inst.k,
+    soundName,
+    CFG.audio.backgroundMusic.glowLetterDialog
+  )
+}
+//
+// Stops the active letter dialog voice-over, if any.
+//
+function stopGlowLetterDialogMusic(inst) {
+  inst.letterDialogMusic?.stop?.()
+  inst.letterDialogMusic = null
 }
 //
 // Hero touches the G pickup letter — dialog, HUD, tree reveal only (no ground/parallax).
@@ -3084,7 +3115,7 @@ function collectLetterG(inst) {
     // three-zone condition is now complete — surface the L platform.
     //
     maybeRevealLPlat(inst)
-  })
+  }, GLOW_DIALOG_SOUND_G)
 }
 //
 // Collects L after landing on the solid L platform.
@@ -3108,7 +3139,7 @@ function collectLetterL(inst) {
   openGlowLetterDialog(inst, GLOW_DIALOG_L, () => {
     revealLLitZone(inst)
     inst.lParallaxTimer = L_PARALLAX_DELAY
-  })
+  }, GLOW_DIALOG_SOUND_L)
 }
 //
 // Collects O after landing on the solid O platform.
@@ -3132,7 +3163,7 @@ function collectLetterO(inst) {
   openGlowLetterDialog(inst, GLOW_DIALOG_O, () => {
     startColorWorldFade(inst)
     startBirdsMusic(inst.birdsMusic)
-  })
+  }, GLOW_DIALOG_SOUND_O)
 }
 //
 // Collects W after landing on the solid W platform.

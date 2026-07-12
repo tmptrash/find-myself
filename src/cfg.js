@@ -379,7 +379,11 @@ export const CFG = {
       touch: MASTER_VOLUME * 0.4,
       word: MASTER_VOLUME * 0.3,
       breath: MASTER_VOLUME * 0.15, // breath.mp3 (parallel with word in word section)
-      birds: MASTER_VOLUME * 0.22   // birds.mp3 ambient for glow level
+      birds: MASTER_VOLUME * 0.22,  // birds.mp3 ambient for glow level
+      //
+      // Letter dialog voice-overs (glow-g / glow-l / glow-ow)
+      //
+      glowLetterDialog: MASTER_VOLUME * 0.85
     },
     //
     // Level sound effects

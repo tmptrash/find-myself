@@ -289,7 +289,8 @@ const PLACEMENT_MAX_ATTEMPTS = 80
  *   composition blend into the scene background (no top/bottom strips)
  * @returns {HTMLCanvasElement}
  */
-export function generateMenuBackgroundCanvas(bgFillHex = DEFAULT_BG_FILL_HEX) {
+export function generateMenuBackgroundCanvas(bgFillHex = DEFAULT_BG_FILL_HEX, opts = {}) {
+  const skipMoon = opts.skipMoon === true
   const [bgFillR, bgFillG, bgFillB] = parseHex(bgFillHex)
   const canvas = document.createElement('canvas')
   canvas.width = CANVAS_W
@@ -406,7 +407,7 @@ export function generateMenuBackgroundCanvas(bgFillHex = DEFAULT_BG_FILL_HEX) {
   // image baked into the sprite.
   //
   drawSky(ctx, bgFillR, bgFillG, bgFillB)
-  drawMoon(ctx)
+  !skipMoon && drawMenuMoon(ctx)
   drawTreeLayer(ctx, backTrees)
   drawTreeLayer(ctx, midTrees)
   drawSoilFill(ctx, bgFillR, bgFillG, bgFillB)
@@ -446,7 +447,13 @@ function drawBlackHorizonLine(ctx) {
   ctx.fillRect(0, GROUND_Y, CANVAS_W, HORIZON_LINE_HEIGHT)
 }
 
-function drawMoon(ctx) {
+/**
+ * Draws the menu / ready moon (wide halo + L3 disc) at its fixed canvas
+ * position. Used by the baked background and by the ready-scene moon
+ * overlay that sits above the twinkling stars.
+ * @param {CanvasRenderingContext2D} ctx
+ */
+export function drawMenuMoon(ctx) {
   //
   // Wide smooth radial-gradient halo painted FIRST so the moon body
   // (drawn below by `drawMoonToCanvas`) overlaps and tops it. Using

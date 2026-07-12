@@ -918,7 +918,7 @@ function calcFittingFontSize(k, text, maxWidth, maxHeight, font) {
  */
 export function openStandalonePanel(k, text, opts = {}) {
   _standaloneOpen = true
-  const { onClose: outerOnClose, ...rest } = opts
+  const { onClose: outerOnClose, onCloseStart: outerOnCloseStart, ...rest } = opts
   Dialog.openDialog(k, text, {
     ...rest,
     //
@@ -927,6 +927,7 @@ export function openStandalonePanel(k, text, opts = {}) {
     //
     onCloseStart: () => {
       _standaloneOpen = false
+      outerOnCloseStart?.()
     },
     onClose: () => {
       outerOnClose?.()

@@ -1,6 +1,6 @@
 # Find Yourself
 
-A philosophical 2D platformer about self-discovery through life's challenges. Navigate through different aspects of existence while searching for yourself.
+A philosophical pixel-art platformer about perception, self-discovery, and growing through interaction with the world.
 
 **[Play online](https://find-myself.netlify.app/)**
 

@@ -1,12 +1,17 @@
 import * as Tooltip from './tooltip.js'
 //
 // Timed hero hints in the shared white speech bubble (same bubble the touch
-// lesson 0 tooltips use). Hints follow the hero, fade in, hold for their
-// duration, fade out, and can be chained into a queue.
+// lesson 0 tooltips use). Hints appear at the hero's position when shown,
+// stay anchored there, fade in/out, and can be chained into a queue. Walking
+// ~30 px away in any direction (Euclidean), or jumping, dismisses early.
 //
 const HINT_FADE_IN = 0.35
 const HINT_FADE_OUT = 0.6
 const HINT_OFFSET_Y = -60
+//
+// How far the hero may walk from the hint's spawn point before it clears
+//
+const HINT_DISMISS_DISTANCE = 30
 
 /**
  * Creates a hero hint controller bound to one hero instance.
@@ -25,7 +30,13 @@ export function create(cfg) {
     timer: 0,
     duration: 0,
     queue: [],
-    onQueueEmpty: null
+    onQueueEmpty: null,
+    //
+    // World position of the hero when the current hint started — used to
+    // dismiss the bubble if he walks away.
+    //
+    spawnX: 0,
+    spawnY: 0
   }
   k.onUpdate(() => onUpdate(inst))
   return inst
@@ -83,9 +94,17 @@ function startHint(inst, text, duration) {
   const { k, heroInst } = inst
   inst.timer = 0
   inst.duration = duration
+  const hx = heroInst.character?.pos?.x ?? 0
+  const hy = heroInst.character?.pos?.y ?? 0
+  inst.spawnX = hx
+  inst.spawnY = hy
+  //
+  // Anchor at the spawn world position — the bubble must stay where it
+  // appeared so walking away reads clearly before the 30 px dismiss.
+  //
   inst.target = {
-    x: () => heroInst.character?.pos?.x ?? 0,
-    y: () => heroInst.character?.pos?.y ?? 0,
+    x: () => inst.spawnX,
+    y: () => inst.spawnY,
     width: 1,
     height: 1,
     text,
@@ -105,11 +124,48 @@ function destroyHint(inst) {
   inst.target = null
 }
 //
-// Advances the fade-in / hold / fade-out envelope, follows the hero and
-// chains queued hints when the current one expires.
+// Clears the current hint (and any queued ones), then fires the queue-empty
+// callback so intro locks / follow-up logic still unlock.
+//
+function dismissEarly(inst) {
+  const done = inst.onQueueEmpty
+  inst.queue = []
+  inst.onQueueEmpty = null
+  destroyHint(inst)
+  done?.()
+}
+//
+// True when the hero has jumped or walked far from the hint spawn point.
+//
+function shouldDismissByMovement(inst) {
+  const hero = inst.heroInst
+  const ch = hero?.character
+  if (!ch?.pos) return false
+  //
+  // Jump / leave-ground while a hero-anchored hint is up
+  //
+  const jumping = hero.isSquashing ||
+    hero.jumpPhase === 'jumping' ||
+    hero.jumpPhase === 'squashing' ||
+    (typeof ch.isGrounded === 'function' && !ch.isGrounded() && (hero.airTime || 0) > 0.05)
+  if (jumping) return true
+  const dx = ch.pos.x - inst.spawnX
+  const dy = ch.pos.y - inst.spawnY
+  //
+  // Euclidean distance so a diagonal walk also clears the bubble at 30 px
+  //
+  return Math.hypot(dx, dy) >= HINT_DISMISS_DISTANCE
+}
+//
+// Advances the fade-in / hold / fade-out envelope and chains queued hints
+// when the current one expires. The bubble stays at spawn (not on the hero).
 //
 function onUpdate(inst) {
   if (!inst.tooltip) return
+  if (shouldDismissByMovement(inst)) {
+    dismissEarly(inst)
+    return
+  }
   inst.timer += inst.k.dt()
   if (inst.timer >= inst.duration) {
     destroyHint(inst)
@@ -130,7 +186,7 @@ function onUpdate(inst) {
     : (inst.timer > fadeOutStart ? Math.max(0, (inst.duration - inst.timer) / HINT_FADE_OUT) : 1)
 }
 //
-// Keeps the frozen bubble anchor glued to the moving hero.
+// Keeps the frozen bubble anchor on the spawn point.
 //
 function syncBubblePosition(inst) {
   if (!inst.tooltip || !inst.target) return

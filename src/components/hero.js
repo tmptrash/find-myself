@@ -5,6 +5,7 @@ import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
 import * as TouchHandHold from '../sections/touch/utils/touch-hand-hold.js'
 import { set } from '../utils/progress.js'
+import { isAnyPanelOpen } from '../utils/lesson-help.js'
 //
 // Sprite rendering: 96x96 at scale 1 for crisp 1px outlines
 //
@@ -48,7 +49,7 @@ const RUN_LEG_HEIGHT = 18
 const RUN_LEG_LIFT_SHORTEN = 7
 const RUN_LEG_LIFT_RAISE = 9
 const RUN_FOOT_Y = 84
-const RUN_BODY_BOB = 2
+const RUN_BODY_BOB = 4
 //
 // Forward lean while running: torso rotates around the hips so the head
 // leads. Legs stay unrotated (planted) and clamped to the body side lines
@@ -207,6 +208,10 @@ export const IDLE_MELODY = [
 export const IDLE_MELODY_BEAT = 0.42          // Seconds per beat
 export const IDLE_MELODY_GAP = 0.1            // Silence inserted between notes
 export const IDLE_MELODY_SUSTAIN = 0.9        // Fraction of the beat the tone rings
+//
+// How fast the per-note lean pulse decays (for mushrooms / other listeners)
+//
+const WHISTLE_PULSE_DECAY = 2.8
 //
 // Module-level kill switch for idle vocalization. Toggled from the scene
 // transition code so the menu hero stops emitting notes while the
@@ -472,6 +477,11 @@ export function create(config) {
     eyeTimer: 0,
     currentEyeSprite: null,
     eyesClosed: false,  // When true, idle uses the closed-eyes sprite (calm)
+    //
+    // When true with eyesClosed: closed eyes only while standing still;
+    // running still uses the normal run cycle (celebration / calm idle look)
+    //
+    eyesClosedIdleOnly: false,
     awakeOverride: false, // When true, idle vocalization is paused (hero forced awake)
     lookAtPos: null,
     isAnnihilating: false,
@@ -497,6 +507,10 @@ export function create(config) {
     airTime: 0,                 // Seconds continuously airborne (filters platform flicker)
     spawnLandGrace: 0,          // After spawn, ignore settle-fall jump/land for this long
     postLandAirLock: 0,         // After land, ignore brief air flicker (no second crouch)
+    //
+    // After a letter dialog closes on Space, ignore jump until jump keys are released
+    //
+    jumpKeyReleaseGate: false,
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
@@ -510,6 +524,8 @@ export function create(config) {
     idleNoteEmitTimer: IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN),
     idleMelodyIndex: 0,
     idleStillTime: 0,
+    whistlePulse: 0,
+    whistleLeanSide: 1,
     ambientWalk,
     ambientRunSpeed: ambientRunSpeed ?? RUN_ANIM_SPEED * 2.4
   }
@@ -801,9 +817,12 @@ export function setAwakeOverride(inst, awake) {
  * shut eyes. Disabling resumes normal eye wander/tracking.
  * @param {Object} inst - Hero instance
  * @param {boolean} closed - True to close the eyes, false to reopen
+ * @param {Object} [opts]
+ * @param {boolean} [opts.idleOnly=false] - Close eyes only while idle (allow run)
  */
-export function setEyesClosed(inst, closed) {
+export function setEyesClosed(inst, closed, opts = {}) {
   inst.eyesClosed = !!closed
+  inst.eyesClosedIdleOnly = closed ? !!opts.idleOnly : false
   //
   // Drop the cached idle sprite name: run/jump frames swap the sprite
   // without touching the cache, so a stale match could skip re-applying the
@@ -816,6 +835,23 @@ export function setEyesClosed(inst, closed) {
   // meditation or a calm pose.
   //
   inst.eyesClosedBySinging = false
+}
+
+/**
+ * Arms a one-shot gate so the next jump waits until jump keys are released.
+ * Used after letter dialogs closed with Space so the same press cannot crouch.
+ * @param {Object} inst - Hero instance
+ */
+export function armJumpKeyReleaseGate(inst) {
+  if (!inst) return
+  inst.jumpKeyReleaseGate = true
+  inst.isSquashing = false
+  inst.squashTimer = 0
+  inst.landSquashTimer = 0
+  inst.jumpPhase = 'none'
+  inst.wasJumping = false
+  syncPlatformLanding(inst)
+  inst.canJump = false
 }
 
 /**
@@ -1282,6 +1318,36 @@ function onUpdate(inst) {
   //
   inst.postLandAirLock > 0 && (inst.postLandAirLock = Math.max(0, inst.postLandAirLock - inst.k.dt()))
   //
+  // Clear dialog Space gate once jump keys are fully released
+  //
+  if (inst.jumpKeyReleaseGate) {
+    if (!inst.k.isKeyDown('space') && !inst.k.isKeyDown('up') && !inst.k.isKeyDown('w')) {
+      inst.jumpKeyReleaseGate = false
+    }
+  }
+  //
+  // Wood platforms: pre-jump squash shrinks the hitbox and can unground the
+  // hero, leaving isSquashing stuck in a crouch↔air loop. Abort whenever the
+  // feet leave the ground mid-squash, or while post-land lock / controls are off.
+  //
+  if (inst.isSquashing && !isGrounded) {
+    cancelJumpSquash(inst)
+    syncJumpCollision(inst)
+  }
+  if (inst.postLandAirLock > 0 || inst.controlsDisabled || !inst.controllable) {
+    if (inst.isSquashing || inst.landSquashTimer > 0 || inst.jumpPhase !== 'none') {
+      cancelJumpSquash(inst)
+      inst.landSquashTimer = 0
+      inst.wasJumping = false
+      syncJumpCollision(inst)
+      if (isGrounded && !isMoving) {
+        updateIdleAnimation(inst)
+        inst.character.flipX = inst.direction === -1
+        return
+      }
+    }
+  }
+  //
   // Forced crouch pose (e.g. bug touch reaction). Holds the hero in the
   // squat sprite for a short duration and blocks the rest of the animation
   // pipeline so running/idle frames don't immediately override it.
@@ -1383,9 +1449,25 @@ function onUpdate(inst) {
     //
     // Brief platform contact flicker (run or idle) — stay in the current
     // cycle instead of entering jump/land-squat (spawn settle + log jitter).
+    // postLandAirLock always wins: sprite/hitbox swaps (glow gold recolour)
+    // can mark jumpPhase='jumping' during a short unground; that must not
+    // start a crouch→land loop on wood platforms.
     //
+    if (inst.postLandAirLock > 0) {
+      inst.airTime = 0
+      inst.jumpPhase = 'none'
+      inst.wasJumping = false
+      inst.landSquashTimer = 0
+      inst.isSquashing = false
+      inst.squashTimer = 0
+      syncJumpCollision(inst)
+      if (!isMoving) {
+        updateIdleAnimation(inst)
+      }
+      inst.character.flipX = inst.direction === -1
+      return
+    }
     const groundFlicker = (inst.spawnLandGrace > 0 && inst.jumpPhase !== 'jumping') ||
-      (inst.postLandAirLock > 0 && inst.jumpPhase !== 'jumping') ||
       (inst.airTime < MIN_AIR_TIME_FOR_JUMP &&
         Math.abs(inst.character.vel.y) < 80 &&
         inst.jumpPhase !== 'jumping')
@@ -1441,7 +1523,12 @@ function onUpdate(inst) {
     // Only play the landing crouch after a real jump, not a mid-run flicker
     //
     if (inst.jumpPhase !== 'none') {
-      const realJump = inst.airTime >= MIN_AIR_TIME_FOR_JUMP && inst.spawnLandGrace <= 0
+      //
+      // Air-lock after log snap / gold sprite swap is not a real jump landing
+      //
+      const realJump = inst.airTime >= MIN_AIR_TIME_FOR_JUMP &&
+        inst.spawnLandGrace <= 0 &&
+        inst.postLandAirLock <= 0
       inst.jumpPhase = 'none'
       inst.jumpFrame = 0
       inst.isSquashing = false
@@ -1465,10 +1552,12 @@ function onUpdate(inst) {
     //
     // Hold the landing crouch for a beat unless the player is already
     // running — the run cycle takes over immediately in that case.
+    // Celebration idleOnly must reach closed-eyes idle after a run, so
+    // land squash must not swallow that transition.
     //
     if (inst.landSquashTimer > 0) {
       inst.landSquashTimer -= inst.k.dt()
-      if (!isMoving && inst.landSquashTimer > 0) {
+      if (!isMoving && inst.landSquashTimer > 0 && !(inst.eyesClosed && inst.eyesClosedIdleOnly)) {
         inst.character.flipX = inst.direction === -1
         return
       }
@@ -1477,13 +1566,31 @@ function onUpdate(inst) {
     }
   }
   //
-  // Calm meditation: always hold the closed-eyes idle frame on the ground,
-  // even while walking on the calm platform (no run/side-view frames).
+  // Celebration / calm idleOnly: keys up on the ground ⇒ always leave the
+  // sideways run frame and return to idle (closed eyes when eyesClosed).
   //
-  if (inst.eyesClosed && isGrounded && inst.jumpPhase === 'none' && !inst.isSquashing) {
+  if (inst.eyesClosedIdleOnly && inst.eyesClosed && isGrounded && !isMoving && !inst.isSquashing) {
+    inst.isRunning = false
+    inst.wasJumping = false
+    inst.landSquashTimer = 0
+    inst.jumpPhase = 'none'
     updateIdleAnimation(inst)
     inst.character.flipX = inst.direction === -1
     return
+  }
+  //
+  // Calm meditation: always hold the closed-eyes idle frame on the ground,
+  // even while walking on the calm platform (no run/side-view frames).
+  // idleOnly (celebration): closed eyes only while standing still — run is OK.
+  //
+  if (inst.eyesClosed && isGrounded && inst.jumpPhase === 'none' && !inst.isSquashing) {
+    if (!inst.eyesClosedIdleOnly || !isMoving) {
+      inst.isRunning = false
+      inst.wasJumping = false
+      updateIdleAnimation(inst)
+      inst.character.flipX = inst.direction === -1
+      return
+    }
   }
 
   if (isMoving) {
@@ -1496,6 +1603,7 @@ function onUpdate(inst) {
     if (!inst.isRunning && !inst.wasJumping) {
       inst.runFrame = 0
       inst.runTimer = 0
+      inst.currentEyeSprite = null
       inst.character.use(inst.k.sprite(`${prefix}-run-0`))
       //
       // Create dust particles when starting to run (skip in water)
@@ -1506,6 +1614,7 @@ function onUpdate(inst) {
       // Just landed - continue with current frame, just update sprite
       //
       inst.wasJumping = false
+      inst.currentEyeSprite = null
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
     }
 
@@ -1513,6 +1622,7 @@ function onUpdate(inst) {
     inst.runTimer += inst.k.dt()
     if (inst.runTimer > RUN_ANIM_SPEED) {
       inst.runFrame = (inst.runFrame + 1) % RUN_FRAME_COUNT
+      inst.currentEyeSprite = null
       inst.character.use(inst.k.sprite(`${prefix}-run-${inst.runFrame}`))
       inst.runTimer = 0
       //
@@ -1615,10 +1725,13 @@ function updateIdleAnimation(inst) {
     inst.wasJumping = false
     const prefix = inst.spritePrefix || inst.type
     const closedName = `${prefix}_closed`
-    if (inst.currentEyeSprite !== closedName) {
-      inst.character.use(inst.k.sprite(closedName))
-      inst.currentEyeSprite = closedName
-    }
+    //
+    // Always re-apply: run frames swap the sprite without clearing
+    // currentEyeSprite, so a stale closedName match left the hero frozen
+    // on a sideways run frame after keys were released (touch L1 end music).
+    //
+    inst.character.use(inst.k.sprite(closedName))
+    inst.currentEyeSprite = closedName
     return
   }
   //
@@ -1706,7 +1819,16 @@ function setupControls(inst) {
   // Core jump execution — shared by all key bindings
   //
   const executeJump = () => {
-    if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled) return
+    //
+    // controllable=false / open letter panels: Space closes the dialog and must
+    // not start a crouch→jump (especially on glow wood platforms after O).
+    //
+    if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || !inst.controllable) return
+    if (isAnyPanelOpen()) return
+    //
+    // Dialog Space must not chain into a jump — wait until jump keys are up
+    //
+    if (inst.jumpKeyReleaseGate) return
     if (isJumpCeilingBlocked(inst)) return
     if (inst.canJump && !inst.isSquashing) {
       inst.isSquashing = true
@@ -1989,6 +2111,7 @@ function canVocalize(inst) {
 //
 function onUpdateIdleNotes(inst) {
   const dt = inst.k.dt()
+  decayWhistlePulse(inst)
   const active = canVocalize(inst)
   //
   // Track how long the hero has been continuously idle. Moving, jumping,
@@ -2043,9 +2166,21 @@ function onUpdateIdleNotes(inst) {
     const [, beats] = IDLE_MELODY[inst.idleMelodyIndex % IDLE_MELODY.length]
     spawnIdleNote(inst)
     playIdleVocalNote(inst)
+    //
+    // Pulse for listeners (e.g. L1 mushrooms leaning with each whistle note)
+    //
+    inst.whistlePulse = 1
+    inst.whistleLeanSide = (inst.idleMelodyIndex % 2 === 0) ? 1 : -1
     inst.idleNoteEmitTimer = beats * IDLE_MELODY_BEAT + IDLE_MELODY_GAP
     inst.idleMelodyIndex = (inst.idleMelodyIndex + 1) % IDLE_MELODY.length
   }
+}
+//
+// Decays the whistle lean pulse each frame (mushrooms / other listeners read it)
+//
+function decayWhistlePulse(inst) {
+  if (!inst.whistlePulse) return
+  inst.whistlePulse = Math.max(0, inst.whistlePulse - inst.k.dt() * WHISTLE_PULSE_DECAY)
 }
 
 //
@@ -3308,6 +3443,18 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           ctx.fillStyle = BL
           ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
           ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
+          //
+          // Run: black crotch seam between the legs (body fill covers the
+          // torso bottom outline; without this the gap reads as missing ink).
+          //
+          if (animation === 'run') {
+            const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
+            const innerR = Math.max(leftLegX, rightLegX)
+            if (innerR > innerL) {
+              ctx.fillStyle = OL
+              ctx.fillRect(innerL, bodyBottom, innerR - innerL, 1)
+            }
+          }
         }
       }
     })

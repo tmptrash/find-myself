@@ -200,8 +200,23 @@ export function create(config) {
       }
     }
   ])
-  k.onUpdate(() => onUpdate(inst))
+  inst.updateCancel = k.onUpdate(() => onUpdate(inst))
   return inst
+}
+
+/**
+ * Stops all worm audio and cancels its update loop (call on scene leave).
+ * @param {Object} inst - Worm instance
+ */
+export function destroy(inst) {
+  if (!inst) return
+  stopFrictionSound(inst, true)
+  stopAlienAmbient(inst)
+  inst.updateCancel?.cancel?.()
+  inst.updateCancel = null
+  inst.phase = 'hidden'
+  inst.riseAmount = 0
+  inst.forceActive = false
 }
 
 /**
@@ -833,16 +848,28 @@ function startFrictionSound(inst) {
 //
 // Stops the friction loop
 //
-function stopFrictionSound(inst) {
+function stopFrictionSound(inst, immediate = false) {
   if (!inst.frictionNode) return
   const ctx = inst.sfx?.audioContext
-  if (!ctx) return
-  const now = ctx.currentTime
-  inst.frictionGain.gain.linearRampToValueAtTime(0.001, now + 0.2)
   const node = inst.frictionNode
-  setTimeout(() => { try { node.stop() } catch (_) {} }, 300)
+  const gain = inst.frictionGain
   inst.frictionNode = null
   inst.frictionGain = null
+  if (!ctx || !gain) {
+    try { node.stop() } catch (_) {}
+    return
+  }
+  const now = ctx.currentTime
+  if (immediate) {
+    try {
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.value = 0.001
+      node.stop()
+    } catch (_) {}
+    return
+  }
+  gain.gain.linearRampToValueAtTime(0.001, now + 0.2)
+  setTimeout(() => { try { node.stop() } catch (_) {} }, 300)
 }
 //
 // Starts sinister alien ambient sounds

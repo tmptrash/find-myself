@@ -19,7 +19,7 @@ const LEVEL_TRANSITIONS = {
   'menu-touch': 'lesson-touch.0',
   'menu-glow': 'lesson-glow.0',
   'lesson-glow.0': 'glow-complete',
-  'glow-complete': 'menu',
+  'glow-complete': 'lesson-touch.0',
   'lesson-word.0': 'lesson-word.1',
   'lesson-word.1': 'lesson-word.2',
   'lesson-word.2': 'lesson-word.3',
@@ -56,9 +56,9 @@ const LEVEL_SUBTITLES = {
   'lesson-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places', 4.2],
   'lesson-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
   'lesson-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
-  'lesson-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 10, 'Find all letters of \'TOUCH\''],
-  'lesson-touch.1': ['Touch the roots in sequence — find the melody that awakens', 'touch1-pre', 8, 'Here you need to figure out how to play the right melody by touching things'],
-  'lesson-touch.2': ['Jump to reveal the path — find what stands nearby', 'touch2-pre', 7, 'Jumping is beautiful. Figure out how to use your legs to activate your path to yourself...'],
+  'lesson-touch.0': '',
+  'lesson-touch.1': '',
+  'lesson-touch.2': '',
   'lesson-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
 }
 
@@ -357,9 +357,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     Sound.unmuteProceduralSounds()
     Sound.resumeGlobalAudio()
     //
-    // Go to next level and add fade-in overlay so new scene doesn't flash
+    // Go to next level — fade-in comes from installLevelFadeIn(k.go)
     //
-    finalizeTransitionToLevel(() => createSceneFadeIn(k, bgR, bgG, bgB))
+    finalizeTransitionToLevel()
   }
   
   const updateTransition = () => {
@@ -717,9 +717,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         Sound.unmuteProceduralSounds()
         Sound.resumeGlobalAudio()
         //
-        // Go to next level and add fade-in overlay so new scene doesn't flash
+        // Go to next level — fade-in comes from installLevelFadeIn(k.go)
         //
-        finalizeTransitionToLevel(() => createSceneFadeIn(k, bgR, bgG, bgB))
+        finalizeTransitionToLevel()
       }
     }
   }
@@ -858,11 +858,11 @@ function wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize) {
  * a visual flash when k.go() destroys the old scene's transition overlay.
  * Must be called immediately after k.go() while still in the same call stack.
  * @param {Object} k - Kaplay instance
- * @param {number} r - Red component of overlay color
- * @param {number} g - Green component of overlay color
- * @param {number} b - Blue component of overlay color
+ * @param {number} [r=0] - Red component of overlay color
+ * @param {number} [g=0] - Green component of overlay color
+ * @param {number} [b=0] - Blue component of overlay color
  */
-function createSceneFadeIn(k, r, g, b) {
+export function createSceneFadeIn(k, r = 0, g = 0, b = 0) {
   const fadeOverlay = k.add([
     k.rect(k.width(), k.height()),
     k.pos(0, 0),
@@ -880,6 +880,30 @@ function createSceneFadeIn(k, r, g, b) {
       k.destroy(fadeOverlay)
     }
   })
+}
+//
+// True for playable section levels (and section-complete screens).
+//
+function isLevelSceneName(name) {
+  return typeof name === 'string' && (
+    name.startsWith('lesson-') ||
+    name.startsWith('level-') ||
+    name.endsWith('-complete')
+  )
+}
+/**
+ * Wraps k.go so every level entry (transitions, death reloads, menu picks)
+ * starts with a short fade-in. Safe to call once after Kaplay init.
+ * @param {Object} k - Kaplay instance
+ */
+export function installLevelFadeIn(k) {
+  if (!k || k._levelFadeInInstalled) return
+  k._levelFadeInInstalled = true
+  const originalGo = k.go.bind(k)
+  k.go = (name, ...args) => {
+    originalGo(name, ...args)
+    isLevelSceneName(name) && createSceneFadeIn(k, 0, 0, 0)
+  }
 }
 //
 // Reverse lookup: find the key that maps to targetLevel in LEVEL_TRANSITIONS.

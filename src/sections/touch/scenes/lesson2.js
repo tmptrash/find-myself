@@ -391,6 +391,14 @@ const QUEST_DIALOG_U = "[hl]U[/hl]nfreeze the frozen, reveal\nthe hidden. And wh
 const QUEST_DIALOG_C = "[hl]C[/hl]limb higher to see farther."
 const QUEST_DIALOG_H = "Every touch brings the world\ncloser to [hl]H[/hl]armony."
 //
+// Letter dialog voice-overs (opened with each letter panel)
+//
+const QUEST_DIALOG_SOUND_T = 'touch2-t'
+const QUEST_DIALOG_SOUND_O = 'touch2-o'
+const QUEST_DIALOG_SOUND_U = 'touch2-u'
+const QUEST_DIALOG_SOUND_C = 'touch2-c'
+const QUEST_DIALOG_SOUND_H = 'touch2-h'
+//
 // Spruce freeing: hero lands near a white fir — it shakes, sheds
 // snowflakes and fades to green
 //
@@ -435,7 +443,7 @@ const RUB_COUNTER_Z = 30
 //
 // Delay between the snowman collapsing and the C letter appearing
 //
-const SNOWMAN_C_APPEAR_DELAY = 0.8
+const SNOWMAN_C_APPEAR_DELAY = 0.08
 //
 // C tips out of the snowman mid-body toward the left and settles in the snow
 //
@@ -478,7 +486,7 @@ const QUEST_COMPLETE_TRANSITION_DELAY = 2
 // Death restart countdown (same prompt style as touch lesson 1)
 //
 const DEATH_COUNTDOWN_SECONDS = 7
-const DEATH_PROMPT_BASE = 'Press Space or Enter to continue... '
+const DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
 const DEATH_PROMPT_Y = TOP_MARGIN + 62
 const DEATH_PROMPT_FONT = 22
 /**
@@ -613,14 +621,11 @@ export function sceneLesson2(k) {
     //
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : isTouchComplete ? "#5A8898" : "#C0C0C0"
     //
-    // Restore quest progress only when reloading after a death (resume flag
-    // set by onHeroDeath). A fresh entry resets the quest so all TOUCH
-    // letters start gray and the hunt begins from T again.
+    // Always restore quest letter progress so re-entering the level continues
+    // from the last collected letter (not only after a death reload).
     //
-    const questResumed = get(QUEST_RESUME_FLAG, false)
+    const questLettersCollected = get(QUEST_LETTERS_FLAG, 0)
     set(QUEST_RESUME_FLAG, false)
-    const questLettersCollected = questResumed ? get(QUEST_LETTERS_FLAG, 0) : 0
-    set(QUEST_LETTERS_FLAG, questLettersCollected)
     //
     // Shared with LevelHelp Goal button: text of the last quest dialog shown
     //
@@ -1423,6 +1428,7 @@ export function sceneLesson2(k) {
       wallColorHex: WALL_COLOR_HEX,
       goalState: questGoalState
     })
+    k.onSceneLeave(() => stopTouch2LetterDialogMusic(quest))
     k.onUpdate(() => onUpdateQuest(quest))
     //
     // Quest snowflake particles (fir bursts + hero death) render above the hero
@@ -2502,6 +2508,10 @@ function generateForegroundTreeData(crowExcludeX, lakeMaxX) {
     //
     if (lakeMaxX != null && x < lakeMaxX + 20) continue
     //
+    // Keep firs off the log piles so they never cover the T letter
+    //
+    if (DECOR_LOG_PILE_POSITIONS.some(logX => Math.abs(x - logX) < DECOR_LOG_WIDTH * 1.5)) continue
+    //
     // Skip trees standing where floor icicles grow (right band + the
     // center corridor that fills with icicles after a life deduction)
     //
@@ -3093,6 +3103,7 @@ function startDeathCountdown(k, sceneName) {
   }
   const doRestart = () => {
     skipHandler.cancel()
+    clickHandler.cancel()
     updateTimer.cancel()
     destroyAll()
     goAfterPreparingAssets(k, sceneName)
@@ -3100,6 +3111,7 @@ function startDeathCountdown(k, sceneName) {
   const skipHandler = k.onKeyPress((key) => {
     if (key === 'space' || key === 'enter') doRestart()
   })
+  const clickHandler = k.onClick(() => doRestart())
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)
@@ -4148,6 +4160,7 @@ function createQuest(cfg) {
   const quest = {
     ...cfg,
     dialogOpen: false,
+    letterDialogMusic: null,
     levelDone: false,
     letterObjs: { T: null, O: null, U: null, C: null, H: null },
     wasGrounded: false,
@@ -4343,7 +4356,7 @@ function checkQuestPickup(heroX, heroY, obj, onCollect) {
 // Shared collect logic: destroy the letter, light the HUD letter with a
 // burst, persist progress and open the quest dialog
 //
-function collectQuestLetter(quest, letterKey, dialogText, onDialogClose) {
+function collectQuestLetter(quest, letterKey, dialogText, dialogSoundName, onDialogClose) {
   const obj = quest.letterObjs[letterKey]
   obj?.destroy()
   quest.letterObjs[letterKey] = null
@@ -4366,11 +4379,35 @@ function collectQuestLetter(quest, letterKey, dialogText, onDialogClose) {
     // Yellow highlight for the quest letter via Kaplay inline style tag [hl]
     //
     textStyles: { hl: { color: quest.k.rgb(QUEST_DIALOG_HL_R, QUEST_DIALOG_HL_G, QUEST_DIALOG_HL_B), override: true } },
+    onCloseStart: () => stopTouch2LetterDialogMusic(quest),
     onClose: () => {
+      stopTouch2LetterDialogMusic(quest)
       quest.dialogOpen = false
       onDialogClose?.()
     }
   })
+  playTouch2LetterDialogMusic(quest, dialogSoundName)
+}
+//
+// Plays a letter dialog voice-over for lesson 2
+//
+function playTouch2LetterDialogMusic(quest, soundName) {
+  stopTouch2LetterDialogMusic(quest)
+  if (!soundName) return
+  Sound.duckBackgroundMusic(quest.touchMusic, GLOBAL_CFG.audio.backgroundMusic.dialogMusicDuck)
+  quest.letterDialogMusic = Sound.playInScene(
+    quest.k,
+    soundName,
+    GLOBAL_CFG.audio.backgroundMusic.glowLetterDialog
+  )
+}
+//
+// Stops the active lesson 2 letter dialog voice-over
+//
+function stopTouch2LetterDialogMusic(quest) {
+  quest.letterDialogMusic?.stop?.()
+  quest.letterDialogMusic = null
+  Sound.unduckBackgroundMusic(quest.touchMusic)
 }
 //
 // Strips [hl]…[/hl] markup so Goal panel shows plain dialog copy
@@ -4382,32 +4419,37 @@ function stripQuestHlTags(text) {
 // T collected on the left logs — spruce-freeing phase begins
 //
 function collectLetterT(quest) {
-  collectQuestLetter(quest, 'T', QUEST_DIALOG_T)
+  collectQuestLetter(quest, 'T', QUEST_DIALOG_T, QUEST_DIALOG_SOUND_T)
 }
 //
 // O collected at the hero's start point — ice-breaking phase begins
 //
 function collectLetterO(quest) {
-  collectQuestLetter(quest, 'O', QUEST_DIALOG_O)
+  collectQuestLetter(quest, 'O', QUEST_DIALOG_O, QUEST_DIALOG_SOUND_O)
 }
 //
 // U collected on the melted lake — snowman-rubbing phase begins
 //
 function collectLetterU(quest) {
-  collectQuestLetter(quest, 'U', QUEST_DIALOG_U)
+  //
+  // Ice returns as soon as U is taken so lake sliding works again without
+  // forcing the hero to leave the water band first.
+  //
+  freezeLakeSolid(quest)
+  collectQuestLetter(quest, 'U', QUEST_DIALOG_U, QUEST_DIALOG_SOUND_U)
 }
 //
 // C collected at the collapsed snowman — H appears on the first platform
 //
 function collectLetterC(quest) {
-  collectQuestLetter(quest, 'C', QUEST_DIALOG_C, () => spawnQuestLetterH(quest))
+  collectQuestLetter(quest, 'C', QUEST_DIALOG_C, QUEST_DIALOG_SOUND_C, () => spawnQuestLetterH(quest))
 }
 //
 // H collected on the first platform — level complete
 //
 function collectLetterH(quest) {
   quest.stuckHintState.levelDone = true
-  collectQuestLetter(quest, 'H', QUEST_DIALOG_H, () => completeQuest(quest))
+  collectQuestLetter(quest, 'H', QUEST_DIALOG_H, QUEST_DIALOG_SOUND_H, () => completeQuest(quest))
 }
 //
 // Spawns the final H letter lying on the first platform; the platform

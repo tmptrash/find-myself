@@ -1107,10 +1107,15 @@ function buildRoots(rng, trunkSegs, trunkBottomY, treeH, rootMaxY) {
     //
     // Positive bias curves LEFT (angle → π), negative bias curves RIGHT (angle → 0).
     //
-    const lateralBias = side * 0.022
+    const lateralBias = side * 0.014
+    //
+    // Left-side roots start deeper and must not climb back toward the water line
+    //
+    const ROOT_LEFT_EXTRA_DROP = 36
+    const startY = trunkBottomY - ROOT_START_LIFT + (side === -1 ? ROOT_LEFT_EXTRA_DROP : 0)
     const rootSegs = growTreeRootSegments({
       x: baseX + xJitter,
-      y: trunkBottomY - ROOT_START_LIFT,
+      y: startY,
       angle: startAngle,
       segments: ROOT_SEGMENTS,
       thickness: ROOT_W_BASE,
@@ -1119,10 +1124,16 @@ function buildRoots(rng, trunkSegs, trunkBottomY, treeH, rootMaxY) {
     })
     for (const seg of rootSegs) {
       //
-      // Clamp roots to [start lift, rootMaxY] so they never creep above
-      // the covered junction band (negative-Y drift from angle wobble).
+      // Left bank: reject upward creep toward the water surface
       //
-      if (seg.startY >= trunkBottomY - ROOT_START_LIFT - 2 && seg.endY >= trunkBottomY - ROOT_START_LIFT - 2 && seg.endY <= rootMaxY) {
+      if (side === -1) {
+        const minY = trunkBottomY + 28
+        if (seg.startY < minY - 4 || seg.endY < minY - 4) continue
+        if (seg.endY < seg.startY - 3) continue
+      } else if (seg.startY < trunkBottomY - ROOT_START_LIFT - 2 || seg.endY < trunkBottomY - ROOT_START_LIFT - 2) {
+        continue
+      }
+      if (seg.endY <= rootMaxY) {
         allSegs.push({ sx: seg.startX, sy: seg.startY, ex: seg.endX, ey: seg.endY, w: seg.width })
       }
     }

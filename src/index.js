@@ -26,6 +26,7 @@ import * as TouchInput from "./utils/touch-input.js"
 import * as Fullscreen from "./utils/fullscreen.js"
 import * as BootLoader from "./utils/boot-loader.js"
 import { prepareSceneAssetsThenEnterScene } from "./utils/lesson-assets.js"
+import { installLevelFadeIn } from "./utils/transition.js"
 //
 // Kaplay init: how many times to retry on transient WebGL failure
 // (Chrome can transiently fail context creation when the GPU process is busy,
@@ -120,6 +121,7 @@ async function boot() {
   TouchInput.initTouchInput(k)
   Fullscreen.createFullscreenButton(k)
   initBlurKeyReset()
+  installLevelFadeIn(k)
   //
   // Core registration only — section-heavy sprites load per level via level-assets helpers
   //
@@ -303,10 +305,20 @@ function buildSoundTasks(k) {
     ['glow-l', './sounds/glow-l.mp3'],
     ['glow-ow', './sounds/glow-ow.mp3'],
     ['touch', './sounds/touch.mp3'],
-    ['touch0-pre', './sounds/touch0-pre.mp3'],
-    ['touch1-pre', './sounds/touch1-pre.mp3'],
+    ['touch0-t', './sounds/touch0-t.mp3'],
+    ['touch0-o', './sounds/touch0-o.mp3'],
+    ['touch0-u', './sounds/touch0-u.mp3'],
+    ['touch0-ch', './sounds/touch0-ch.mp3'],
+    ['touch1-t', './sounds/touch1-t.mp3'],
+    ['touch1-o', './sounds/touch1-o.mp3'],
+    ['touch1-u', './sounds/touch1-u.mp3'],
+    ['touch1-ch', './sounds/touch1-ch.mp3'],
     ['touch1-end', './sounds/touch1-end.mp3'],
-    ['touch2-pre', './sounds/touch2-pre.mp3'],
+    ['touch2-t', './sounds/touch2-t.mp3'],
+    ['touch2-o', './sounds/touch2-o.mp3'],
+    ['touch2-u', './sounds/touch2-u.mp3'],
+    ['touch2-c', './sounds/touch2-c.mp3'],
+    ['touch2-h', './sounds/touch2-h.mp3'],
     ['touch3-pre', './sounds/touch3-pre.mp3'],
     ['crow0', './sounds/crow0.mp3'],
     ['frog', './sounds/frog.mp3'],

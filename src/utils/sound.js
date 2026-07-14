@@ -465,7 +465,7 @@ export function playLandSound(instance, currentLevel = null) {
     instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
   } else if (isGlowSection) {
     if (instance._glowSurface === 'water') return
-    instance._l2Surface === 'wood' ? playGlowWoodKnockLand(instance) : playGlowGroundLand(instance)
+    instance._glowSurface === 'wood' ? playGlowWoodKnockLand(instance) : playGlowGroundLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -999,7 +999,7 @@ export function playStepSound(instance, currentLevel = null) {
     playWoodKnockStep(instance)
   } else if (isGlowSection) {
     if (instance._glowSurface === 'water') return
-    instance._l2Surface === 'wood' ? playGlowWoodKnockStep(instance) : playGlowGroundStep(instance)
+    instance._glowSurface === 'wood' ? playGlowWoodKnockStep(instance) : playGlowGroundStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -1063,7 +1063,7 @@ export function playStepSound(instance, currentLevel = null) {
 export function playSnowCrunchLand(instance) {
   const ctx = instance.audioContext
   const now = ctx.currentTime
-  const duration = 0.09
+  const duration = 0.11
   const bufferSize = Math.floor(ctx.sampleRate * duration)
   const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
@@ -1071,17 +1071,17 @@ export function playSnowCrunchLand(instance) {
   const noiseSource = ctx.createBufferSource()
   noiseSource.buffer = noiseBuffer
   //
-  // Same low-pass upward sweep as playSnowCrunchStep for matching timbre.
+  // Soft low-pass crunch — quieter and mufflier than the icy impact
   //
   const filter = ctx.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(420, now)
-  filter.frequency.linearRampToValueAtTime(650, now + duration)
-  filter.Q.value = 0.5
+  filter.frequency.setValueAtTime(280, now)
+  filter.frequency.linearRampToValueAtTime(420, now + duration)
+  filter.Q.value = 0.4
   const envelope = ctx.createGain()
-  const peak = CFG.audio.sfx.land * 4.2
+  const peak = CFG.audio.sfx.land * 2.0
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.018)
+  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.03)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)
@@ -1093,7 +1093,7 @@ export function playSnowCrunchLand(instance) {
 function playSnowCrunchStep(instance) {
   const ctx = instance.audioContext
   const now = ctx.currentTime
-  const duration = 0.09
+  const duration = 0.1
   const bufferSize = Math.floor(ctx.sampleRate * duration)
   const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
   const noiseData = noiseBuffer.getChannelData(0)
@@ -1101,17 +1101,17 @@ function playSnowCrunchStep(instance) {
   const noiseSource = ctx.createBufferSource()
   noiseSource.buffer = noiseBuffer
   //
-  // Same low-pass / upward-sweep as touch jump sound so both sounds match.
+  // Soft step crunch matching land timbre at lower volume
   //
   const filter = ctx.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(420, now)
-  filter.frequency.linearRampToValueAtTime(650, now + duration)
-  filter.Q.value = 0.5
+  filter.frequency.setValueAtTime(280, now)
+  filter.frequency.linearRampToValueAtTime(420, now + duration)
+  filter.Q.value = 0.4
   const envelope = ctx.createGain()
-  const peak = CFG.audio.sfx.step * 4.2
+  const peak = CFG.audio.sfx.step * 2.0
   envelope.gain.setValueAtTime(0.001, now)
-  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.018)
+  envelope.gain.exponentialRampToValueAtTime(peak, now + 0.028)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)
@@ -1162,23 +1162,22 @@ function playSnowCrunchImpact(instance, destinationGain, peakAmp, duration) {
 
 export function playWoodKnockLand(instance) {
   //
-  // Dry open knock on solid wood: short decay, higher end frequency,
-  // no low-pass muffling. Noise transient adds the click attack.
+  // Deeper thud on wood landing — distinct from the lighter run-step knock
   //
   const ctx = instance.audioContext
   const now = ctx.currentTime
-  const duration = 0.10
-  const peak = CFG.audio.sfx.land * 3.2
+  const duration = 0.14
+  const peak = CFG.audio.sfx.land * 4.8
   //
-  // Tonal body: pitch falls from knock attack down to a medium-low thud.
+  // Tonal body: pitch falls from knock attack down to a low thud.
   //
   const osc = ctx.createOscillator()
   osc.type = 'sine'
-  osc.frequency.setValueAtTime(320 + Math.random() * 80, now)
-  osc.frequency.exponentialRampToValueAtTime(150, now + duration)
+  osc.frequency.setValueAtTime(280 + Math.random() * 60, now)
+  osc.frequency.exponentialRampToValueAtTime(95, now + duration)
   const oscGain = ctx.createGain()
   oscGain.gain.setValueAtTime(0.001, now)
-  oscGain.gain.linearRampToValueAtTime(peak * 0.75, now + 0.006)
+  oscGain.gain.linearRampToValueAtTime(peak * 0.85, now + 0.008)
   oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   osc.connect(oscGain)
   oscGain.connect(instance.landGain)
@@ -2206,6 +2205,28 @@ export function stopBackgroundMusic(instance) {
  */
 export function isBackgroundMusicPlaying(instance) {
   return globalBackgroundMusic && !globalBackgroundMusic.paused
+}
+/**
+ * Lowers a Kaplay music handle while a letter dialog voice-over plays.
+ * Safe to call repeatedly; restores via unduckBackgroundMusic.
+ * @param {Object|null} music - Kaplay sound handle (k.play result)
+ * @param {number} [factor=0.2] - Multiplier applied to the current volume
+ */
+export function duckBackgroundMusic(music, factor = 0.2) {
+  if (!music || music._dialogDuckSaved != null) return
+  const current = typeof music.volume === 'number' ? music.volume : 0
+  if (current <= 0) return
+  music._dialogDuckSaved = current
+  music.volume = current * factor
+}
+/**
+ * Restores volume after duckBackgroundMusic.
+ * @param {Object|null} music - Kaplay sound handle previously ducked
+ */
+export function unduckBackgroundMusic(music) {
+  if (!music || music._dialogDuckSaved == null) return
+  music.volume = music._dialogDuckSaved
+  music._dialogDuckSaved = null
 }
 /**
  * Set background music volume

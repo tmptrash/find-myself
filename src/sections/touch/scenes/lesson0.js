@@ -53,7 +53,7 @@ const L0_END_TEXT_FONT = 26
 // Player can press Space or Enter to restart; auto-restarts after 7 s.
 // Countdown number is appended inline after the three dots, same color as the text.
 //
-const L0_DEATH_PROMPT_BASE = 'Press Space or Enter to continue... '
+const L0_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
 const L0_DEATH_PROMPT_Y = TOP_MARGIN + 62
 const L0_DEATH_PROMPT_FONT = 22
 //
@@ -488,6 +488,10 @@ const L0_ATMOSPHERE_SCREEN_MULT = 1.5
 //
 // TOUCH letter pickup system constants
 //
+// Letter count persists across death/reload (T=1, O=2, U=3, C/CH=4).
+// Cleared when the level transition leaves for the next lesson.
+//
+const TOUCH_L0_LETTERS_FLAG = 'touch.lesson0Letters'
 const TOUCH_LETTER_SIZE = 68
 const TOUCH_LETTER_COLLECT_RADIUS = 58
 const TOUCH_LETTER_T_X_OFFSET = 190
@@ -605,9 +609,33 @@ const TOUCH_GATHER_SOUND_INTERVAL_MAX = 1.1
 //
 const TOUCH_GATHER_POST_ARRIVE_DELAY = 15
 //
+// Tall monsters bob/crouch during the gather countdown (dance)
+//
+const TOUCH_MONSTER_DANCE_DROP = 48
+const TOUCH_MONSTER_DANCE_HZ = 1.4
+//
 // Fallback: force transition after this many seconds even if bugs haven't all arrived
 //
 const TOUCH_GATHER_MAX_WAIT = 40
+//
+// Firefly platform: sync blink flashes when the platform first forms
+//
+const TOUCH_FIREFLY_PLATFORM_BLINK_FLASHES = 5
+const TOUCH_FIREFLY_PLATFORM_BLINK_HALF = 0.14
+//
+// Letter dialog voice-overs (opened with each letter panel)
+//
+const TOUCH0_DIALOG_SOUND_T = 'touch0-t'
+const TOUCH0_DIALOG_SOUND_O = 'touch0-o'
+const TOUCH0_DIALOG_SOUND_U = 'touch0-u'
+const TOUCH0_DIALOG_SOUND_CH = 'touch0-ch'
+//
+// Pickup letter z — above hinged front trees (L0_FRONT_ORGANIC_DYNAMIC_Z = 25)
+//
+const TOUCH_LETTER_Z_OUTLINE = 26
+const TOUCH_LETTER_Z_MAIN = 27
+const TOUCH_LETTER_U_Z_OUTLINE = 30
+const TOUCH_LETTER_U_Z_MAIN = 31
 //
 // How many pixels the O letter's bottom sits below the monster head top edge
 //
@@ -793,6 +821,12 @@ export function sceneLesson0(k) {
     //
     const heroBodyColor = CFG.visual.colors.sections.touch.antiHero
     //
+    // Restore TOUCH letter progress so death/reload continues from the
+    // last collected letter (T=1 … C/CH=4). HUD has 5 glyphs; C+H light together.
+    //
+    const savedLetterCount = Math.max(0, Math.min(4, get(TOUCH_L0_LETTERS_FLAG, 0) | 0))
+    const hudLetterCount = savedLetterCount >= 4 ? 5 : savedLetterCount
+    //
     // Create level indicator (TOUCH letters)
     //
     const levelIndicator = LevelIndicator.create({
@@ -808,7 +842,8 @@ export function sceneLesson0(k) {
       completedColor: '#5A8898',
       heroBodyColor,
       topPlatformHeight: TOP_MARGIN,
-      sideWallWidth: LEFT_MARGIN
+      sideWallWidth: LEFT_MARGIN,
+      sectionLabelCompletedLetters: hudLetterCount
     })
     const levelHelpInst = LevelHelp.create({
       k,
@@ -819,6 +854,11 @@ export function sceneLesson0(k) {
       sound,
       sceneBackdropHex: WALL_COLOR_HEX
     })
+    //
+    // Goal panel shows the last collected letter's text on resume
+    //
+    const l0GoalByCount = [null, TOUCH_GOAL_TEXT_T, TOUCH_GOAL_TEXT_O, TOUCH_GOAL_TEXT_U, TOUCH_GOAL_TEXT_C]
+    savedLetterCount > 0 && (levelHelpInst.goalText = l0GoalByCount[Math.min(savedLetterCount, 4)])
     TouchControls.create({
       k,
       floorY: FLOOR_Y,
@@ -2734,13 +2774,22 @@ export function sceneLesson0(k) {
       touchMusic,
       wallColorHex: WALL_COLOR_HEX,
       levelHelpInst,
-      initialLifeScore
+      initialLifeScore,
+      //
+      // All four tall monsters (including platform bug4) for gather eyes/dance
+      //
+      monsterBugs: [bigBug0Inst, bigBug1Inst, bigBug2Inst, bigBug4Inst],
+      savedLetterCount
     })
     //
     // Connect hero reference to firefly and letter system (heroInst exists by this point)
     //
     fireflyRuntime.fireflies._heroRef = heroInst
     touchLetterState.heroInst = heroInst
+    //
+    // If C/CH was already collected, start the gather phase as if its dialog closed
+    //
+    savedLetterCount >= 4 && startTouchGatherPhase(k, touchLetterState, fireflyRuntime.fireflies, sound)
     //
     // End-of-level hint: shown at the top when gather phase is active.
     // Pressing Enter immediately advances to the next level.
@@ -4318,13 +4367,14 @@ function drawL0Fireflies(k, fireflies) {
   const heroRef = fireflies._heroRef
   const cameraX = heroRef?.character?.pos?.x ?? k.width() / 2
   const screenHalfW = k.width() / 2 + L0_FIREFLY_DRAW_MARGIN
+  const forceAlpha = fireflies._blinkForceAlpha
   for (const f of fireflies) {
     //
     // Skip fireflies that are off-screen (more than half a screen from camera center).
     //
     if (Math.abs(f.x - cameraX) > screenHalfW) continue
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
-    const alpha = 0.15 + glow * 0.7
+    const alpha = forceAlpha != null ? forceAlpha : (0.15 + glow * 0.7)
     if (!touchMode) {
       k.drawCircle({
         pos: k.vec2(f.x, f.y),
@@ -4760,7 +4810,7 @@ function setupTouchLetterSystem(k, cfg) {
     bug4X, bug4BackPlatformY, antiHeroPlatform,
     fireflyRuntime, bugs, allBugsCombined,
     levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst,
-    initialLifeScore, monsterBugs
+    initialLifeScore, monsterBugs, savedLetterCount = 0
   } = cfg
   const fireflies = fireflyRuntime.fireflies
   //
@@ -4782,11 +4832,12 @@ function setupTouchLetterSystem(k, cfg) {
   // TOUCH_LETTER_O_Y_OFFSET px below the platform top so it looks embedded
   //
   const oInitY = (antiHeroPlatform?.pos?.y ?? bug4BackPlatformY) + TOUCH_LETTER_O_Y_OFFSET
+  const count = Math.max(0, Math.min(4, savedLetterCount | 0))
   const state = {
-    tCollected: false,
-    oCollected: false,
-    uCollected: false,
-    cCollected: false,
+    tCollected: count >= 1,
+    oCollected: count >= 2,
+    uCollected: count >= 3,
+    cCollected: count >= 4,
     heroInst: null,
     gatherActive: false,
     gatherBugsArrived: false,
@@ -4808,6 +4859,10 @@ function setupTouchLetterSystem(k, cfg) {
     gatherHeroPrevX: null,
     gatherHeroIdleTimer: 0,
     gatherHeroIsIdle: false,
+    letterDialogMusic: null,
+    touchMusic: touchMusic ?? null,
+    fireflyBlinkT: 0,
+    fireflyBlinkDone: true,
     //
     // Snapshot taken at level entry; restored on completion so deaths this
     // level do not permanently inflate the teacher's score.
@@ -4816,17 +4871,18 @@ function setupTouchLetterSystem(k, cfg) {
     //
     // Letter game objects (teal outlined, tilt, bottom-anchored at floor)
     //
-    tObj: createPickupLetter(k, 'T', tX, tY, TOUCH_LETTER_TILTS[0]),
+    tObj: null,
     //
     // Mask rect drawn above the T letter to clip its below-floor portion
     //
-    tMask: createFloorMask(k, tX, tY),
+    tMask: null,
     //
-    // O is always visible on the monster from the start
+    // O is always visible on the monster from the start (until collected)
     //
-    oObj: createPickupLetter(k, 'O', oInitX, oInitY, TOUCH_LETTER_TILTS[1]),
+    oObj: null,
     uObj: null,
     cObj: null,
+    hObj: null,
     //
     // Firefly platform Kaplay physics object (invisible collision body)
     //
@@ -4866,6 +4922,48 @@ function setupTouchLetterSystem(k, cfg) {
     // onUpdate is called by the runtime every frame
     //
     onUpdate: null
+  }
+  //
+  // Spawn only letters the hero still needs; recreate next-stage objects as if
+  // prior letter dialogs already closed.
+  //
+  if (count < 1) {
+    state.tObj = createPickupLetter(k, 'T', tX, tY, TOUCH_LETTER_TILTS[0])
+    state.tMask = createFloorMask(k, tX, tY)
+  }
+  if (count < 2) {
+    state.oObj = createPickupLetter(k, 'O', oInitX, oInitY, TOUCH_LETTER_TILTS[1])
+  }
+  if (count === 2) {
+    spawnTouchLetterU(k, state)
+  }
+  if (count === 3) {
+    spawnTouchLetterCH(k, state)
+  }
+  //
+  // Firefly mode matches the restored letter stage
+  //
+  if (count >= 4) {
+    fireflies._mode = 'follow'
+    fireflies.forEach(f => { f.collected = true })
+    fireflies._allCollected = true
+  } else if (count >= 3) {
+    fireflies._mode = 'scatter'
+    fireflies._scattered = true
+    fireflies.forEach(f => {
+      f.collected = true
+      f.driftVx = (Math.random() - 0.5) * 90
+      f.driftVy = (Math.random() * 55 + 15) * (Math.random() < 0.5 ? 1 : -1)
+    })
+    fireflies._allCollected = true
+  } else if (count >= 2) {
+    fireflies._mode = 'follow'
+    fireflies.forEach(f => { f.collected = true })
+    fireflies._allCollected = true
+  } else if (count >= 1) {
+    fireflies._mode = 'collect'
+  } else {
+    fireflies._mode = 'flee'
   }
   //
   // Shared pulse updater: all letters fade in and out together
@@ -4908,11 +5006,16 @@ function setupTouchLetterSystem(k, cfg) {
  * @param {number} x - World X position (bottom center)
  * @param {number} y - World Y position (bottom of letter = floor level)
  * @param {number} tiltDeg - Rotation in degrees
+ * @param {Object} [opts]
+ * @param {number} [opts.zOutline] - Outline z-index
+ * @param {number} [opts.zMain] - Main letter z-index
  * @returns {Object} Letter handle with moveTo and destroy
  */
-function createPickupLetter(k, letter, x, y, tiltDeg) {
+function createPickupLetter(k, letter, x, y, tiltDeg, opts = {}) {
   const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
   const oo = TOUCH_LETTER_OUTLINE
+  const zOutline = opts.zOutline ?? TOUCH_LETTER_Z_OUTLINE
+  const zMain = opts.zMain ?? TOUCH_LETTER_Z_MAIN
   //
   // Drop shadow (single black copy offset right+down), glow-level style.
   //
@@ -4923,7 +5026,7 @@ function createPickupLetter(k, letter, x, y, tiltDeg) {
     k.anchor('bot'),
     k.rotate(tiltDeg),
     k.color(0, 0, 0),
-    k.z(26)
+    k.z(zOutline)
   ]))
   const main = k.add([
     k.text(letter, { size: TOUCH_LETTER_SIZE, font }),
@@ -4931,7 +5034,7 @@ function createPickupLetter(k, letter, x, y, tiltDeg) {
     k.anchor('bot'),
     k.rotate(tiltDeg),
     k.color(TOUCH_LETTER_COLOR_R, TOUCH_LETTER_COLOR_G, TOUCH_LETTER_COLOR_B),
-    k.z(27)
+    k.z(zMain)
   ])
   const moveTo = (nx, ny) => {
     main.pos.x = nx
@@ -5084,6 +5187,24 @@ function onUpdateTouchLetterSystem(k, state, fireflies, bug4X, bug4BackPlatformY
           if (!state.fireflyPlatformObj && fireflies._allAtPlatform) {
             state.fireflyPlatformObj = createFireflyPlatform(k, state.fireflyPlatformLockedX, state.fireflyPlatformLockedY)
             state.fireflyPlatformTimer = 0
+            //
+            // All fireflies blink together so the formed platform reads clearly
+            //
+            state.fireflyBlinkT = 0
+            state.fireflyBlinkDone = false
+            fireflies._blinkForceAlpha = 1
+          }
+          //
+          // Synced platform blink: 5 full on/off flashes shared by every firefly
+          //
+          if (!state.fireflyBlinkDone && state.fireflyPlatformObj) {
+            state.fireflyBlinkT += k.dt()
+            const cycle = Math.floor(state.fireflyBlinkT / TOUCH_FIREFLY_PLATFORM_BLINK_HALF)
+            fireflies._blinkForceAlpha = cycle % 2 === 0 ? 1 : 0.08
+            if (cycle >= TOUCH_FIREFLY_PLATFORM_BLINK_FLASHES * 2) {
+              state.fireflyBlinkDone = true
+              fireflies._blinkForceAlpha = null
+            }
           }
           state.fireflyPlatformVisible = true
         }
@@ -5156,6 +5277,7 @@ function checkLetterPickup(heroX, heroY, pos, onCollect) {
 function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex, levelHelpInst) {
   if (state.tCollected) return
   state.tCollected = true
+  set(TOUCH_L0_LETTERS_FLAG, 1)
   state.dialogOpen = true
   state.tObj?.destroy()
   state.tObj = null
@@ -5178,8 +5300,13 @@ function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex
     // Yellow highlight for the T in "Trust" via Kaplay inline style tag [hl]
     //
     textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
-    onClose: () => { state.dialogOpen = false }
+    onCloseStart: () => stopTouchLetterDialogMusic(state),
+    onClose: () => {
+      stopTouchLetterDialogMusic(state)
+      state.dialogOpen = false
+    }
   })
+  playTouchLetterDialogMusic(k, state, TOUCH0_DIALOG_SOUND_T)
 }
 //
 // Hero collects letter O — hidden platform + letter U appear.
@@ -5187,6 +5314,7 @@ function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex
 function collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelpInst) {
   if (state.oCollected) return
   state.oCollected = true
+  set(TOUCH_L0_LETTERS_FLAG, 2)
   state.dialogOpen = true
   state.oObj?.destroy()
   state.oObj = null
@@ -5200,22 +5328,17 @@ function collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelp
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     sceneBackdropHex: wallColorHex,
     textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onCloseStart: () => stopTouchLetterDialogMusic(state),
     onClose: () => {
+      stopTouchLetterDialogMusic(state)
       state.dialogOpen = false
       //
       // Spawn letter U floating in air (no platform beneath it — hero must use bugs to reach)
       //
-      const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-      const uPlatCX = LEFT_MARGIN + playW * 0.48
-      const uFloatY = ANTIHERO_PLATFORM_Y + TOUCH_U_PLATFORM_Y_LOWER
-      state.uObj = createPickupLetter(k, 'U', uPlatCX, uFloatY + TOUCH_U_LETTER_Y_EXTRA, TOUCH_LETTER_TILTS[2])
-      //
-      // U letter is intentionally hard to see — hero must search for it
-      //
-      state.uObj.main.opacity = TOUCH_U_LETTER_OPACITY
-      state.uObj.outlines.forEach(o => { o.opacity = TOUCH_U_LETTER_OPACITY * 0.5 })
+      spawnTouchLetterU(k, state)
     }
   })
+  playTouchLetterDialogMusic(k, state, TOUCH0_DIALOG_SOUND_O)
 }
 //
 // Hero collects letter U — second hidden platform + letter C appear.
@@ -5223,6 +5346,7 @@ function collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelp
 function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelpInst) {
   if (state.uCollected) return
   state.uCollected = true
+  set(TOUCH_L0_LETTERS_FLAG, 3)
   state.dialogOpen = true
   state.uObj?.destroy()
   state.uObj = null
@@ -5236,26 +5360,54 @@ function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelp
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     sceneBackdropHex: wallColorHex,
     textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onCloseStart: () => stopTouchLetterDialogMusic(state),
     onClose: () => {
+      stopTouchLetterDialogMusic(state)
       state.dialogOpen = false
       //
       // Spawn second hidden platform and letter C (fireflies scatter after this)
       //
-      const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
-      //
-      // C platform: same log style and size as U platform, placed slightly right of center
-      //
-      const cPlatCX = LEFT_MARGIN + playW * 0.72
-      const cPlatY = ANTIHERO_PLATFORM_Y + TOUCH_C_PLATFORM_Y_LOWER
-      const cLogHalfW = TOUCH_LOG_PLATFORM_W / 2
-      state.hiddenPlatformC = LogPlatform.create({ k, x: cPlatCX - cLogHalfW, y: cPlatY, width: TOUCH_LOG_PLATFORM_W, height: TOUCH_LOG_PLATFORM_H })
-      //
-      // CH are collected together — C on the left, H on the right, side by side on the platform
-      //
-      state.cObj = createPickupLetter(k, 'C', cPlatCX - TOUCH_CH_SPACING / 2, cPlatY + 12, TOUCH_LETTER_TILTS[3])
-      state.hObj = createPickupLetter(k, 'H', cPlatCX + TOUCH_CH_SPACING / 2, cPlatY + 14, TOUCH_LETTER_TILT_H)
+      spawnTouchLetterCH(k, state)
     }
   })
+  playTouchLetterDialogMusic(k, state, TOUCH0_DIALOG_SOUND_U)
+}
+//
+// Spawns floating U letter after O dialog (or on resume when count === 2)
+//
+function spawnTouchLetterU(k, state) {
+  if (state.uObj) return
+  const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const uPlatCX = LEFT_MARGIN + playW * 0.48
+  const uFloatY = ANTIHERO_PLATFORM_Y + TOUCH_U_PLATFORM_Y_LOWER
+  state.uObj = createPickupLetter(k, 'U', uPlatCX, uFloatY + TOUCH_U_LETTER_Y_EXTRA, TOUCH_LETTER_TILTS[2], {
+    zOutline: TOUCH_LETTER_U_Z_OUTLINE,
+    zMain: TOUCH_LETTER_U_Z_MAIN
+  })
+  //
+  // U letter is intentionally hard to see — hero must search for it
+  //
+  state.uObj.main.opacity = TOUCH_U_LETTER_OPACITY
+  state.uObj.outlines.forEach(o => { o.opacity = TOUCH_U_LETTER_OPACITY * 0.5 })
+}
+//
+// Spawns C/H log platform after U dialog (or on resume when count === 3)
+//
+function spawnTouchLetterCH(k, state) {
+  if (state.cObj || state.hiddenPlatformC) return
+  const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  //
+  // C platform: same log style and size as U platform, placed slightly right of center
+  //
+  const cPlatCX = LEFT_MARGIN + playW * 0.72
+  const cPlatY = ANTIHERO_PLATFORM_Y + TOUCH_C_PLATFORM_Y_LOWER
+  const cLogHalfW = TOUCH_LOG_PLATFORM_W / 2
+  state.hiddenPlatformC = LogPlatform.create({ k, x: cPlatCX - cLogHalfW, y: cPlatY, width: TOUCH_LOG_PLATFORM_W, height: TOUCH_LOG_PLATFORM_H })
+  //
+  // CH are collected together — C on the left, H on the right, side by side on the platform
+  //
+  state.cObj = createPickupLetter(k, 'C', cPlatCX - TOUCH_CH_SPACING / 2, cPlatY + 12, TOUCH_LETTER_TILTS[3])
+  state.hObj = createPickupLetter(k, 'H', cPlatCX + TOUCH_CH_SPACING / 2, cPlatY + 14, TOUCH_LETTER_TILT_H)
 }
 //
 // Hero collects letter C — gather all bugs + fireflies, then transition.
@@ -5263,6 +5415,7 @@ function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelp
 function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicator, sound, touchMusic, wallColorHex, levelHelpInst) {
   if (state.cCollected) return
   state.cCollected = true
+  set(TOUCH_L0_LETTERS_FLAG, 4)
   state.dialogOpen = true
   state.cObj?.destroy()
   state.cObj = null
@@ -5314,29 +5467,43 @@ function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicat
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     sceneBackdropHex: wallColorHex,
     textStyles: { hl: { color: k.rgb(255, 220, 0), override: true } },
+    onCloseStart: () => stopTouchLetterDialogMusic(state),
     onClose: () => {
+      stopTouchLetterDialogMusic(state)
       state.dialogOpen = false
-      state.gatherActive = true
-      state.gatherTimer = 0
-      state.gatherBugsArrived = false
-      state.gatherWaitTimer = 0
-      state.gatherSoundTimer = 0
-      state.gatherSoundInterval = TOUCH_GATHER_SOUND_INTERVAL_MIN
-      //
-      // Monsters keep open white eyes with pupils for the whole countdown
-      //
-      openBugEyes(state.monsterBugs, [])
-      state.gatherHeroIsIdle = false
-      state.gatherHeroIdleTimer = 0
-      //
-      // Fireflies orbit hero (follow mode), bugs walk toward hero
-      //
-      fireflies._mode = 'follow'
-      sound && Sound.playBugScareSound(sound)
-      k.wait(0.4, () => { sound && Sound.playBugScareSound(sound) })
-      k.wait(0.9, () => { sound && Sound.playBugScareSound(sound) })
+      startTouchGatherPhase(k, state, fireflies, sound)
     }
   })
+  playTouchLetterDialogMusic(k, state, TOUCH0_DIALOG_SOUND_CH)
+}
+//
+// Starts the post-C gather phase (bugs walk to hero, countdown, then leave)
+//
+function startTouchGatherPhase(k, state, fireflies, sound) {
+  if (state.gatherActive) return
+  state.gatherActive = true
+  state.gatherTimer = 0
+  state.gatherBugsArrived = false
+  state.gatherWaitTimer = 0
+  state.gatherSoundTimer = 0
+  state.gatherSoundInterval = TOUCH_GATHER_SOUND_INTERVAL_MIN
+  //
+  // Monsters keep open white eyes with pupils for the whole countdown
+  //
+  openBugEyes(state.monsterBugs, [])
+  for (const monsterInst of state.monsterBugs) {
+    monsterInst.closedEyes = false
+    monsterInst.lockDropOffset = true
+  }
+  state.gatherHeroIsIdle = false
+  state.gatherHeroIdleTimer = 0
+  //
+  // Fireflies orbit hero (follow mode), bugs walk toward hero
+  //
+  fireflies._mode = 'follow'
+  sound && Sound.playBugScareSound(sound)
+  k.wait(0.4, () => { sound && Sound.playBugScareSound(sound) })
+  k.wait(0.9, () => { sound && Sound.playBugScareSound(sound) })
 }
 //
 // Updates the post-C "gather" phase: bugs and monsters walk to hero, then 15-second countdown, then transition.
@@ -5372,6 +5539,11 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     // Direct monster bugs (tall long-legged ones) toward hero at higher speed
     //
     for (const monsterInst of state.monsterBugs) {
+      //
+      // Eyes stay open with pupils tracking the hero — never close during gather
+      //
+      monsterInst.closedEyes = false
+      monsterInst.lockDropOffset = true
       const dist = monsterInst.x - heroX
       if (Math.abs(dist) > TOUCH_MONSTER_GATHER_NEAR_DIST) {
         monsterInst.vx = dist > 0 ? -TOUCH_MONSTER_GATHER_SPEED : TOUCH_MONSTER_GATHER_SPEED
@@ -5384,6 +5556,12 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
           monsterInst.bounds.maxX = CFG.visual.screen.width - 40
         }
       }
+      //
+      // Crouch-bob dance for the whole 15 s countdown (phase-offset per monster)
+      //
+      const phase = (monsterInst.x || 0) * 0.02
+      const wave = (Math.sin(state.gatherTimer * Math.PI * 2 * TOUCH_MONSTER_DANCE_HZ + phase) + 1) / 2
+      monsterInst.dropOffset = wave * TOUCH_MONSTER_DANCE_DROP
     }
     //
     // Detect hero idle: vel.x near zero for a sustained period → small bugs
@@ -5395,13 +5573,13 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
       state.gatherHeroIdleTimer = 0
       if (state.gatherHeroIsIdle) {
         state.gatherHeroIsIdle = false
-        openBugEyes([], allBugsCombined)
+        openBugEyes([], getGatherSmallBugs(allBugsCombined))
       }
     } else {
       state.gatherHeroIdleTimer += dt
       if (!state.gatherHeroIsIdle && state.gatherHeroIdleTimer >= 0.6) {
         state.gatherHeroIsIdle = true
-        closeBugEyes([], allBugsCombined)
+        closeBugEyes([], getGatherSmallBugs(allBugsCombined))
       }
     }
     //
@@ -5424,6 +5602,11 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
   if ((waitDone || forceTransition || state.enterSkip) && !state.levelDone) {
     state.levelDone = true
     openBugEyes(state.monsterBugs, allBugsCombined)
+    for (const monsterInst of state.monsterBugs) {
+      monsterInst.lockDropOffset = false
+      monsterInst.dropOffset = 0
+    }
+    stopTouchLetterDialogMusic(state)
     Sound.stopAmbient(sound)
     touchMusic?.stop()
     //
@@ -5431,8 +5614,18 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
     // do not carry over to the next level.
     //
     set('lifeScore', state._initialLifeScore ?? 0)
+    //
+    // Clear letter progress — next entry to this level starts fresh
+    //
+    set(TOUCH_L0_LETTERS_FLAG, 0)
     createLevelTransition(k, 'lesson-touch.0')
   }
+}
+//
+// Small (non-mother) bugs only — tall monsters must keep open eyes in gather.
+//
+function getGatherSmallBugs(allBugsCombined) {
+  return allBugsCombined.filter(b => !b.isMother)
 }
 //
 // Sets closedEyes flag on all bugs — called when hero is idle during gather phase
@@ -5447,6 +5640,27 @@ function closeBugEyes(monsterBugs, allBugsCombined) {
 function openBugEyes(monsterBugs, allBugsCombined) {
   for (const b of monsterBugs) b.closedEyes = false
   for (const b of allBugsCombined) b.closedEyes = false
+}
+//
+// Plays a letter dialog voice-over; stops any previous one first.
+//
+function playTouchLetterDialogMusic(k, state, soundName) {
+  stopTouchLetterDialogMusic(state)
+  if (!soundName) return
+  Sound.duckBackgroundMusic(state.touchMusic, CFG.audio.backgroundMusic.dialogMusicDuck)
+  state.letterDialogMusic = Sound.playInScene(
+    k,
+    soundName,
+    CFG.audio.backgroundMusic.touchLetterDialog
+  )
+}
+//
+// Stops the active letter dialog voice-over, if any.
+//
+function stopTouchLetterDialogMusic(state) {
+  state.letterDialogMusic?.stop?.()
+  state.letterDialogMusic = null
+  Sound.unduckBackgroundMusic(state.touchMusic)
 }
 //
 // Creates an invisible Kaplay platform for fireflies to form.
@@ -5529,6 +5743,8 @@ function destroyFireflyPlatform(state, fireflies) {
   state.fireflyPlatformLockedY = null
   state.fireflyPlatformTimer = 0
   state.fireflyPlatformVisible = false
+  state.fireflyBlinkDone = true
+  fireflies._blinkForceAlpha = null
   fireflies._allAtPlatform = false
   fireflies._mode = 'follow'
 }
@@ -5694,6 +5910,7 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
   }
   const doRestart = () => {
     skipHandler.cancel()
+    clickHandler.cancel()
     updateTimer.cancel()
     destroyAll()
     goAfterPreparingAssets(k, sceneName)
@@ -5701,6 +5918,7 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
   const skipHandler = k.onKeyPress((key) => {
     if (key === 'space' || key === 'enter') doRestart()
   })
+  const clickHandler = k.onClick(() => doRestart())
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS_L0 - elapsed)

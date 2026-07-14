@@ -697,7 +697,12 @@ export function sceneMenu(k) {
       // hover-title floating label instead (see updateTitle).
       //
       const isCurrentSection = Boolean(lastLevel?.startsWith(`lesson-${config.section}.`))
-      const labelVisible = isCompleted || isCurrentSection
+      //
+      // First launch (empty save): glow is the starting section — never show
+      // "unknown" for it; the player must see GLOW as the entry point.
+      //
+      const isFirstPlayGlow = !lastLevel && config.section === 'glow'
+      const labelVisible = isCompleted || isCurrentSection || isFirstPlayGlow
       //
       // Store "unknown" flag on the anti-hero for hover-title lookup
       //
@@ -980,11 +985,11 @@ export function sceneMenu(k) {
       //
       const lastLevel = get('lastLesson', null)
       const isEmptyLS = lastLevel === null
-      const touchAH = antiHeroes.find(ah => ah.section === 'touch')
+      const glowAH = antiHeroes.find(ah => ah.section === 'glow')
       const fireflyAllowed = hoveredInst && (
         hoveredInst.isCompleted ||
         (inst.currentSection && hoveredInst.section === inst.currentSection) ||
-        (isEmptyLS && touchAH && hoveredInst === touchAH)
+        (isEmptyLS && glowAH && hoveredInst === glowAH)
       )
       //
       // Fade firefly particles in when hovering allowed anti-hero, out otherwise
@@ -1045,11 +1050,11 @@ export function sceneMenu(k) {
         }
         
         //
-        // Play heartbeat sound for current section anti-hero OR touch anti-hero when localStorage is empty
+        // Play heartbeat sound for current section anti-hero OR glow when localStorage is empty
         //
-        const isTouchAntiHeroHover = isEmptyLS && touchAH && !touchAH.isCompleted && hoveredInst === touchAH
+        const isGlowAntiHeroHover = isEmptyLS && glowAH && !glowAH.isCompleted && hoveredInst === glowAH
         
-        if (isCurrentSectionHover || isTouchAntiHeroHover) {
+        if (isCurrentSectionHover || isGlowAntiHeroHover) {
           const HEARTBEAT_INTERVAL = 1.0
           if (k.time() - inst.lastHeartbeatTime >= HEARTBEAT_INTERVAL) {
             Sound.playHeartbeatSound(sound)
@@ -1077,20 +1082,18 @@ export function sceneMenu(k) {
         //
         const isCurrentSectionHover = foundHover && hoveredInst && !hoveredInst.isCompleted && inst.currentSection && hoveredInst.section === inst.currentSection
         
-        if (isCurrentSectionHover) {
-          //
-          // Start ambient if hovering over current section and not already playing
-          //
+        //
+        // First launch: glow hover also gets the electric ambient (same as
+        // a current-section hover once lastLesson exists).
+        //
+        const isGlowEmptyHover = isEmptyLS && glowAH && !glowAH.isCompleted &&
+          foundHover && hoveredInst === glowAH
+        if (isCurrentSectionHover || isGlowEmptyHover) {
           if (!Sound.isAmbientPlaying(sound)) {
             Sound.startAmbient(sound)
           }
-        } else {
-          //
-          // Stop ambient if not hovering over current section or section is completed
-          //
-          if (Sound.isAmbientPlaying(sound)) {
-            Sound.stopAmbient(sound)
-          }
+        } else if (Sound.isAmbientPlaying(sound)) {
+          Sound.stopAmbient(sound)
         }
       }
     })
@@ -1941,24 +1944,22 @@ function drawScene(inst) {
   //
   // Draw lightning between hero and hovered anti-hero
   // Only for incomplete sections that match the current section being played
-  // OR if localStorage is empty, show electricity on touch anti-hero when hovered
+  // OR if localStorage is empty, show electricity on glow (first section)
   //
   const lastLevel = get('lastLesson', null)
   const isEmptyLocalStorage = lastLevel === null
   
   if (isEmptyLocalStorage) {
     //
-    // Find touch anti-hero when localStorage is empty (touch is the first section)
-    // Show electricity only when hovering over it
+    // First launch: glow is the entry section — electricity while hovering it
     //
-    const touchAntiHero = antiHeroes.find(ah => ah.section === 'touch')
-    if (touchAntiHero && !touchAntiHero.isCompleted && hoveredAntiHero === touchAntiHero) {
+    const glowAntiHero = antiHeroes.find(ah => ah.section === 'glow')
+    if (glowAntiHero && !glowAntiHero.isCompleted && hoveredAntiHero === glowAntiHero) {
       const heroPos = { x: hero.pos.x, y: hero.pos.y }
       const antiHeroPos = { 
-        x: touchAntiHero.character.pos.x, 
-        y: touchAntiHero.character.pos.y 
+        x: glowAntiHero.character.pos.x, 
+        y: glowAntiHero.character.pos.y 
       }
-      
       //
       // Draw electric connection
       //

@@ -434,7 +434,10 @@ export function onUpdate(inst, dt) {
     // State machine for crawling behavior
     // Also lift body back up when crawling
     //
-    if (inst.surface === 'floor' && inst.dropOffset > 0) {
+    //
+    // Gather-phase crouch dance locks dropOffset; skip the scare lift-back
+    //
+    if (inst.surface === 'floor' && inst.dropOffset > 0 && !inst.lockDropOffset) {
       inst.dropOffset -= dt * 150
       if (inst.dropOffset < 0) inst.dropOffset = 0
     }

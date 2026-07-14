@@ -383,7 +383,15 @@ export const CFG = {
       //
       // Letter dialog voice-overs (glow-g / glow-l / glow-ow)
       //
-      glowLetterDialog: MASTER_VOLUME * 0.85
+      glowLetterDialog: MASTER_VOLUME * 0.85,
+      //
+      // Touch lesson 0 letter dialog voice-overs (louder than glow)
+      //
+      touchLetterDialog: Math.min(1, MASTER_VOLUME * 1.35),
+      //
+      // Volume multiplier applied to level BGM while a letter VO dialog is open
+      //
+      dialogMusicDuck: 0.18
     },
     //
     // Level sound effects

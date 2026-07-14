@@ -63,7 +63,24 @@ const MAX_PUPIL_OFFSET = (EYE_RADIUS - PUPIL_RADIUS) * 0.5
 // How far the body center is raised above perchY so legs clearly extend below.
 // Callers should treat perchY as the foot/perch level.
 //
-const BODY_RAISE = 22
+const BODY_RAISE = 28
+//
+// How far the torso drops toward the perch when crouch=1 (knee bend).
+// Kept modest so knees stay above the toes / ground line.
+//
+const BODY_CROUCH_DROP = 7
+//
+// Lateral knee push while crouching
+//
+const KNEE_OUT_MAX = 7
+//
+// Extra lift for toe tips above the perch line (keeps claws visible)
+//
+const TOE_ABOVE_PERCH = 1.5
+//
+// Minimum gap between knee joint and perchY (knees must stay above toes)
+//
+const KNEE_ABOVE_TOES = 3
 
 /**
  * Draws a cartoon-style crow at (cx, perchY) using Kaplay procedural draw calls.
@@ -77,8 +94,9 @@ const BODY_RAISE = 22
  * @param {Object|null} heroInst - Hero instance for pupil direction (optional)
  * @param {number} [brightnessBoost=0] - Add this value to all feather/body RGB channels
  * @param {number} [wingBrightnessBoost=brightnessBoost] - Separate brightness boost for wings only
+ * @param {number} [crouch=0] - 0..1 knee bend (feet stay on perchY, body drops)
  */
-export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBoost = 0, wingBrightnessBoost = brightnessBoost) {
+export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBoost = 0, wingBrightnessBoost = brightnessBoost, crouch = 0) {
   const b = brightnessBoost
   const wb = wingBrightnessBoost
   const clamp = v => Math.min(255, v + b)
@@ -97,9 +115,10 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBo
   const pup  = k.rgb(PUPIL_R, PUPIL_G, PUPIL_B)
   const feet = k.rgb(clamp(FEET_R), clamp(FEET_G), clamp(FEET_B))
   //
-  // Body center raised above perchY so the legs are clearly visible below
+  // Body center raised above perchY; crouch drops the torso while feet stay planted
   //
-  const vy = perchY - BODY_RAISE * sc
+  const crouchAmt = Math.max(0, Math.min(1, crouch))
+  const vy = perchY - (BODY_RAISE - crouchAmt * BODY_CROUCH_DROP) * sc
   //
   // Tail: wide fan shape pointing down-away from beak, drawn behind body
   //
@@ -264,20 +283,26 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBo
   const lLegX = cx + 3 * sc * s
   const rLegX = cx + 10 * sc * s
   const legTop = vy + 12 * sc
-  const legMid = vy + 18 * sc
+  //
+  // Knee bends outward when crouching — joint stays above the toes/perch
+  //
+  const kneeOut = crouchAmt * KNEE_OUT_MAX * sc
+  const thighLen = (7 - crouchAmt * 1.2) * sc
+  const kneeFloor = perchY - KNEE_ABOVE_TOES * sc
+  const legMid = Math.min(legTop + thighLen, kneeFloor)
   const legBot = perchY
   //
-  // Thigh segment (shorter, slanted)
+  // Thigh segment (slanted outward on crouch)
   //
-  k.drawLine({ p1: k.vec2(lLegX - 2 * sc * s, legTop), p2: k.vec2(lLegX, legMid), width: LEG_WIDTH * 1.4, color: feet, opacity: 1 })
-  k.drawLine({ p1: k.vec2(rLegX - 2 * sc * s, legTop), p2: k.vec2(rLegX, legMid), width: LEG_WIDTH * 1.4, color: feet, opacity: 1 })
+  k.drawLine({ p1: k.vec2(lLegX - 2 * sc * s, legTop), p2: k.vec2(lLegX - kneeOut * s, legMid), width: LEG_WIDTH * 1.4, color: feet, opacity: 1 })
+  k.drawLine({ p1: k.vec2(rLegX - 2 * sc * s, legTop), p2: k.vec2(rLegX + kneeOut * s, legMid), width: LEG_WIDTH * 1.4, color: feet, opacity: 1 })
   //
   // Lower leg (tarsometatarsus)
   //
-  k.drawLine({ p1: k.vec2(lLegX, legMid), p2: k.vec2(lLegX - 1 * sc, legBot), width: LEG_WIDTH, color: feet, opacity: 1 })
-  k.drawLine({ p1: k.vec2(rLegX, legMid), p2: k.vec2(rLegX + 1 * sc, legBot), width: LEG_WIDTH, color: feet, opacity: 1 })
+  k.drawLine({ p1: k.vec2(lLegX - kneeOut * s, legMid), p2: k.vec2(lLegX - 1 * sc, legBot), width: LEG_WIDTH, color: feet, opacity: 1 })
+  k.drawLine({ p1: k.vec2(rLegX + kneeOut * s, legMid), p2: k.vec2(rLegX + 1 * sc, legBot), width: LEG_WIDTH, color: feet, opacity: 1 })
   //
-  // Toes: 3 forward + 1 hallux (rear) per foot
+  // Toes stay on / slightly above the perch line (never sink into the floor)
   //
   drawToes(k, lLegX - 1 * sc, legBot, sc, s, feet)
   drawToes(k, rLegX + 1 * sc, legBot, sc, s, feet)
@@ -302,11 +327,15 @@ function drawFeatherRow(k, startX, startY, sc, s, color, totalW, featherH, count
 // Draws the three-forward + one-rear toe arrangement for one foot.
 //
 function drawToes(k, ankleX, ankleY, sc, s, color) {
-  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX + 9 * sc * s, ankleY + 2 * sc), width: TOE_WIDTH, color, opacity: 1 })
-  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX + 7 * sc * s, ankleY + 5 * sc), width: TOE_WIDTH, color, opacity: 1 })
-  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX + 3 * sc * s, ankleY + 7 * sc), width: TOE_WIDTH, color, opacity: 1 })
+  //
+  // Forward toes rest at/above the perch — tips never drop below ankleY
+  //
+  const tipY = ankleY - TOE_ABOVE_PERCH * sc
+  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX + 9 * sc * s, tipY), width: TOE_WIDTH, color, opacity: 1 })
+  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX + 7 * sc * s, tipY + 0.5 * sc), width: TOE_WIDTH, color, opacity: 1 })
+  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX + 3 * sc * s, tipY + 0.8 * sc), width: TOE_WIDTH, color, opacity: 1 })
   //
   // Hallux (hind digit, points backward)
   //
-  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX - 6 * sc * s, ankleY + 3 * sc), width: TOE_WIDTH, color, opacity: 1 })
+  k.drawLine({ p1: k.vec2(ankleX, ankleY), p2: k.vec2(ankleX - 6 * sc * s, tipY + 0.4 * sc), width: TOE_WIDTH, color, opacity: 1 })
 }

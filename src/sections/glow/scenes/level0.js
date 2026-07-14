@@ -5,6 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 import { initTouchInput } from '../../../utils/touch-input.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { goToMenuAfterAssets } from '../../../utils/lesson-assets.js'
+import { createLevelTransition } from '../../../utils/transition.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import * as LevelHelp from '../../../utils/lesson-help.js'
@@ -193,12 +194,12 @@ const PAR_L1_LEAF_WARM_BLEND = 0.3
 // to a single tone.
 //
 const PAR_L2_BG_BLEND = 0.87
-const PAR_L2_COLOR_BLEND = 0.55
+const PAR_L2_COLOR_BLEND = 0.32
 //
 // Third (farthest) plane — almost dissolved into the backdrop haze.
 //
 const PAR_L3_BG_BLEND = 0.94
-const PAR_L3_COLOR_BLEND = 0.78
+const PAR_L3_COLOR_BLEND = 0.48
 //
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
@@ -439,8 +440,8 @@ const KEY_INTRO_SHOWN = 'glow.introShown'
 // Dialog.
 //
 const GLOW_DIALOG_G = '[hl]G[/hl]round is beneath you. Every\njourney begins with a single\nstep. Keep your research.'
-const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades. The\nworld is rarely just black or white.\nNot everything reveals itself in motion.'
-const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see . Find [hl]W[/hl] by yourself.'
+const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
+const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Find [hl]W[/hl] by\nyourself. Look left...'
 //
 // Voice-overs played while the matching letter dialog is open
 //
@@ -452,7 +453,7 @@ const GLOW_DIALOG_SOUND_O = 'glow-ow'
 // after both finish), one-shot lines when the right ground / water zones
 // first open, and a consolation line on the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'I\'m Yuna. You don\'t need\nanswers yet. Just be curious.'
+const HINT_INTRO_1_TEXT = 'I\'m Yan. You don\'t need\nanswers yet. Just be curious.'
 const HINT_INTRO_1_DURATION = 6
 const HINT_INTRO_2_TEXT = 'To truly see this world, you\'ll\nneed to collect every letter of\nthe word GLOW. Each one will\nreveal another part of what\nyour eyes have yet to discover.\nUse the mouse to learn more\nabout the world around you.'
 const HINT_INTRO_2_DURATION = 13
@@ -495,7 +496,7 @@ const MEDITATION_TIMER_FONT = 22
 // Hero hover tooltip — the line follows how much colour the hero can see:
 // plain gray world, gray shades after L, full colour after O.
 //
-const HERO_TOOLTIP_TEXT_GRAY = "Hi, I'm Yuna"
+const HERO_TOOLTIP_TEXT_GRAY = "Hi, I'm Yan"
 const HERO_TOOLTIP_TEXT_SHADES = 'Wow! So many\ndetails around!'
 const HERO_TOOLTIP_TEXT_COLOR = 'I never thought the world\ncould be this beautiful'
 const HERO_TOOLTIP_HOVER_SIZE = 80
@@ -517,6 +518,13 @@ const L_TOOLTIP_Y_OFFSET = -80
 //
 const TRAMP_TOOLTIP_TEXT = 'Wwhaaat!?'
 const TRAMP_TOOLTIP_Y_OFFSET = -90
+//
+// Buried skeleton hover — sits in the underground root band after L
+//
+const SKELETON_TOOLTIP_TEXT = "I'm tired..."
+const SKELETON_TOOLTIP_WIDTH = 56
+const SKELETON_TOOLTIP_HEIGHT = 90
+const SKELETON_TOOLTIP_Y_OFFSET = -70
 //
 // While the hero stands on the start branch and G is still uncollected his
 // eyes stay locked on the letter (vertical slack around the branch top).
@@ -551,8 +559,6 @@ const BONUS_HINT_DURATION = 6
 //
 const HINT_W_TEXT = 'Now I see everything.\nI\'m ready to move on.'
 const HINT_W_DURATION = 4
-const W_MENU_FADE_DURATION = 1.2
-const W_MENU_FADE_Z = 1000
 //
 // Hint text about the 3 bonus fragments (shown by the bonus-hero component).
 //
@@ -673,6 +679,25 @@ const LAKE_WAVE_AMP = 4
 const LAKE_WAVE_PHASE_SCALE = 8
 const LAKE_Z = 12
 //
+// Water depth grows toward the left: shallow by the tree shore, 60 px at the left edge
+//
+const WATER_DEPTH_LEFT = 60
+const WATER_DEPTH_RIGHT = 8
+//
+// Deterministic bed roughness (seeded by segment index — no Math.random in draw)
+//
+const WATER_BED_CHAOS_A = 7.3
+const WATER_BED_CHAOS_B = 19.1
+const WATER_BED_CHAOS_AMP_A = 9
+const WATER_BED_CHAOS_AMP_B = 5
+const WATER_BED_DEPTH_POWER = 0.62
+//
+// Decor mushrooms lean with the heroine's idle whistle (same pulse as touch L1)
+//
+const GLOW_MUSHROOM_WHISTLE_IDLE = 5
+const GLOW_MUSHROOM_WHISTLE_AMP_DEG = 14
+const GLOW_MUSHROOM_WHISTLE_SMOOTH = 7
+//
 // Hero foot offset — matches COLLISION_HEIGHT/2 + COLLISION_OFFSET_Y in hero.js.
 //
 const SURFACE_DETECT_Y = 38
@@ -714,7 +739,9 @@ const LOG_SNAP_EMBED = 1
 //
 // After snapping onto a log, lock out a second jump/land crouch briefly
 //
-const POST_LAND_AIR_LOCK_GLOW = 0.18
+const POST_LAND_AIR_LOCK_GLOW = 1.1
+const GOLD_RECOLOR_DELAY = 0.55
+const DIALOG_INPUT_GRACE = 0.85
 //
 // Hover watchdog: a hero suspended above a log with zero vertical velocity
 // and no ground contact for this many consecutive frames gets pulled down
@@ -920,6 +947,11 @@ export function sceneGlowLevel0(k) {
       sound,
       birdsMusic,
       letterDialogMusic: null,
+      undergroundSkeleton: undergroundSpec.skeleton,
+      dialogHeroPinned: false,
+      dialogPinY: 0,
+      dialogInputGrace: 0,
+      heroLockedAfterW: false,
       heroInst,
       zones,
       treeObj,
@@ -1160,6 +1192,19 @@ function createSmallHeroTooltip(inst) {
       // The GLOW word only exists in the HUD once the G letter names it.
       //
       visible: () => Boolean(inst.levelIndicator) && inst.zones.gCollected
+    }, {
+      x: () => inst.undergroundSkeleton?.x ?? -1000,
+      y: () => inst.undergroundSkeleton?.y ?? -1000,
+      width: SKELETON_TOOLTIP_WIDTH,
+      height: SKELETON_TOOLTIP_HEIGHT,
+      text: SKELETON_TOOLTIP_TEXT,
+      offsetY: SKELETON_TOOLTIP_Y_OFFSET,
+      //
+      // Skeleton lives in the underground band revealed with the L parallax.
+      //
+      visible: () => Boolean(inst.undergroundSkeleton) &&
+        (inst.zones.lZoneParallax || inst.zones.lCollected) &&
+        !inst.dialogOpen
     }, {
       x: () => inst.gLetter?.x ?? -1000,
       y: () => inst.gLetter?.y ?? -1000,
@@ -2574,13 +2619,25 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, zones) {
     k.loadSprite(spriteName + DECOR_OUTLINE_SUFFIX, mushColorCanvas)
     mushColorCanvas.width = 0
     mushColorCanvas.height = 0
-    const obj = k.add([k.sprite(spriteName), k.pos(posX - totalW / 2, posY), k.z(7)])
+    //
+    // Anchor at the base so whistle lean rotates around the ground, not the cap
+    //
+    const baseX = posX
+    const baseY = FLOOR_Y + MUSHROOM_EXTRA_LOWER
+    const obj = k.add([
+      k.sprite(spriteName),
+      k.pos(baseX, baseY),
+      k.anchor('bot'),
+      k.z(7)
+    ])
     obj._graySprite = spriteName
     obj._outlineSprite = spriteName + DECOR_OUTLINE_SUFFIX
     obj._outlined = false
     obj._side = posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-    obj._homeX = posX - totalW / 2
-    obj._homeY = posY
+    obj._homeX = baseX
+    obj._homeY = baseY
+    obj._glowPhase = Math.random() * Math.PI * 2
+    obj.leanAngle = 0
     obj.hidden = true
     obj.pos.y = PLATFORM_HIDE_Y
     objs.push(obj)
@@ -2603,7 +2660,8 @@ function createMushroomTrampoline(k, trampX, floorY, zones) {
     cooldown: 0,
     x: trampX,
     blinking: false,
-    blinkTimer: TRAMP_BLINK_MIN_INTERVAL + Math.random() * (TRAMP_BLINK_MAX_INTERVAL - TRAMP_BLINK_MIN_INTERVAL)
+    blinkTimer: TRAMP_BLINK_MIN_INTERVAL + Math.random() * (TRAMP_BLINK_MAX_INTERVAL - TRAMP_BLINK_MIN_INTERVAL),
+    leanAngle: 0
   }
   const colliderHome = { x: trampX - TRAMP_CAP_W / 2, y: floorY - TRAMP_TOTAL_H }
   const drawLayer = k.add([
@@ -2621,13 +2679,28 @@ function createMushroomTrampoline(k, trampX, floorY, zones) {
         const sprite = state.blinking ? base + TRAMP_BLINK_SPRITE_SUFFIX : base
         const tint = outlined ? { r: 255, g: 255, b: 255 } : grayDecorTint(zones._sceneRef)
         const color = k.rgb(tint.r, tint.g, tint.b)
+        const angle = state.leanAngle || 0
         if (state.squash > 0.01) {
           const scaleY = 1 - state.squash * 0.35
-          spritePos.y = floorY - TRAMP_TOTAL_H * scaleY + TRAMP_SINK_Y
-          k.drawSprite({ sprite, pos: spritePos, scale: k.vec2(1, scaleY), color })
+          const baseY = floorY - TRAMP_TOTAL_H * scaleY + TRAMP_SINK_Y
+          k.drawSprite({
+            sprite,
+            pos: k.vec2(trampX, floorY + TRAMP_SINK_Y),
+            anchor: 'bot',
+            scale: k.vec2(1, scaleY),
+            angle,
+            color
+          })
+          spritePos.y = baseY
         } else {
           spritePos.y = floorY - TRAMP_TOTAL_H + TRAMP_SINK_Y
-          k.drawSprite({ sprite, pos: spritePos, color })
+          k.drawSprite({
+            sprite,
+            pos: k.vec2(trampX, floorY + TRAMP_SINK_Y),
+            anchor: 'bot',
+            angle,
+            color
+          })
         }
       }
     }
@@ -2676,7 +2749,10 @@ function createWater(k, x1, x2, zones) {
   const waterY = FLOOR_Y - 8
   const p1 = k.vec2(0, 0)
   const p2 = k.vec2(0, 0)
-  const ptsCache = Array.from({ length: LAKE_SEGMENTS + 3 }, () => k.vec2(0, 0))
+  //
+  // Top wave samples + mirrored bottom samples for a sloping lake bed
+  //
+  const ptsCache = Array.from({ length: (LAKE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
   return k.add([
     k.z(LAKE_Z),
     {
@@ -2687,15 +2763,7 @@ function createWater(k, x1, x2, zones) {
         const tint = { r: WATER_COLOR.r, g: WATER_COLOR.g, b: WATER_COLOR.b }
         const c = lerpRgb(gray, tint, fade)
         const time = k.time()
-        for (let i = 0; i <= LAKE_SEGMENTS; i++) {
-          const t = i / LAKE_SEGMENTS
-          ptsCache[i].x = x1 + t * (x2 - x1)
-          ptsCache[i].y = waterY + Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
-        }
-        ptsCache[LAKE_SEGMENTS + 1].x = x2
-        ptsCache[LAKE_SEGMENTS + 1].y = FLOOR_Y
-        ptsCache[LAKE_SEGMENTS + 2].x = x1
-        ptsCache[LAKE_SEGMENTS + 2].y = FLOOR_Y
+        fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, time)
         k.drawPolygon({ pts: ptsCache, color: k.rgb(c.r, c.g, c.b) })
         for (let i = 0; i < LAKE_SEGMENTS; i++) {
           p1.x = ptsCache[i].x
@@ -2709,13 +2777,15 @@ function createWater(k, x1, x2, zones) {
   ])
 }
 //
-// Below-ground mask over the lake band — hides the sinking part of the hero
-// once it crosses the ground line while drowning. Painted in the same colour
-// as the below-ground playfield so it is invisible as a shape.
+// Below-ground mask under the lake bed — hides the hero once he sinks past
+// the water fill. Must follow the same sloping/chaotic bed as createWater so
+// drowning never flattens the visible depth ramp back to a rectangle.
 //
 function createDrownMask(k, x1, x2, zones) {
+  const waterY = FLOOR_Y - 8
+  const bedPts = Array.from({ length: (LAKE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
   return k.add([
-    k.z(LAKE_Z),
+    k.z(LAKE_Z + 1),
     {
       draw() {
         const sc = zones._sceneRef
@@ -2728,19 +2798,64 @@ function createDrownMask(k, x1, x2, zones) {
         //
         const grayGround = zones.lZone && innerGray ? lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN) : (innerGray ? INNER_GRAY : VOID)
         const c = innerGray ? lerpRgb(grayGround, GROUND_DARK, sc.colorFade) : grayGround
+        const color = k.rgb(c.r, c.g, c.b)
         //
-        // The mask extends past the lake's right edge so a hero drowning by
-        // the shore is fully covered below the ground line.
+        // Top edge of the mask = water bed (same depth function as the lake).
+        // Bottom edge = playfield floor. Water polygon stays fully visible.
         //
-        k.drawRect({
-          pos: k.vec2(x1, FLOOR_Y),
-          width: x2 - x1 + DROWN_MASK_RIGHT_PAD,
-          height: PLAYFIELD_BOTTOM_Y - FLOOR_Y,
-          color: k.rgb(c.r, c.g, c.b)
-        })
+        const span = x2 - x1
+        for (let i = 0; i <= LAKE_SEGMENTS; i++) {
+          const t = i / LAKE_SEGMENTS
+          const x = x1 + t * span
+          const depth = waterBedDepthAt(t)
+          bedPts[i].x = x
+          bedPts[i].y = waterY + depth
+          const bi = (LAKE_SEGMENTS + 1) * 2 - 1 - i
+          bedPts[bi].x = x
+          bedPts[bi].y = PLAYFIELD_BOTTOM_Y
+        }
+        k.drawPolygon({ pts: bedPts, color })
+        //
+        // Shore pad past the lake's right edge — flat cover below the ground
+        // line so a drowning hero near the bank stays hidden.
+        //
+        if (DROWN_MASK_RIGHT_PAD > 0) {
+          k.drawRect({
+            pos: k.vec2(x2, FLOOR_Y),
+            width: DROWN_MASK_RIGHT_PAD,
+            height: PLAYFIELD_BOTTOM_Y - FLOOR_Y,
+            color
+          })
+        }
       }
     }
   ])
+}
+//
+// Shared lake bed depth at normalized x (0 = left/deep, 1 = right/shallow)
+//
+function waterBedDepthAt(t) {
+  const u = Math.pow(t, WATER_BED_DEPTH_POWER)
+  const base = WATER_DEPTH_LEFT + (WATER_DEPTH_RIGHT - WATER_DEPTH_LEFT) * u
+  const chaos = Math.sin(t * WATER_BED_CHAOS_A + 0.4) * WATER_BED_CHAOS_AMP_A +
+    Math.sin(t * WATER_BED_CHAOS_B + 1.7) * WATER_BED_CHAOS_AMP_B
+  return Math.max(WATER_DEPTH_RIGHT, base + chaos * (1 - t))
+}
+//
+// Fills surface wave + bed samples into ptsCache (same layout as createWater)
+//
+function fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, time) {
+  const span = x2 - x1
+  for (let i = 0; i <= LAKE_SEGMENTS; i++) {
+    const t = i / LAKE_SEGMENTS
+    const x = x1 + t * span
+    const wave = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
+    ptsCache[i].x = x
+    ptsCache[i].y = waterY + wave
+    const bi = (LAKE_SEGMENTS + 1) * 2 - 1 - i
+    ptsCache[bi].x = x
+    ptsCache[bi].y = waterY + waterBedDepthAt(t)
+  }
 }
 //
 // Detects which surface the hero stands on.
@@ -2858,6 +2973,7 @@ function onDraw(inst) {
     }
   }
   updateMushroomTints(inst)
+  updateMushroomWhistleLean(inst)
 }
 //
 // Tints border walls toward playfield gray as the ground zone opens.
@@ -2905,6 +3021,46 @@ function updateMushroomTints(inst) {
   updateDecorOutlines(inst)
 }
 //
+// Smooth lean toward each whistle note while the heroine sings idle
+//
+function updateMushroomWhistleLean(inst) {
+  const hero = inst.heroInst
+  const dt = inst.k.dt()
+  //
+  // Lean while the idle melody is active — including O-meditation countdown
+  // (setEyesClosed clears eyesClosedBySinging, but the whistle keeps playing).
+  //
+  const singing = (hero?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
+  const pulse = hero?.whistlePulse ?? 0
+  const side = hero?.whistleLeanSide ?? 1
+  inst.mushObjs.forEach(obj => {
+    if (obj.hidden) {
+      obj.leanAngle = 0
+      obj.angle = 0
+      return
+    }
+    const target = singing
+      ? side * GLOW_MUSHROOM_WHISTLE_AMP_DEG * pulse *
+        (0.7 + 0.3 * Math.sin(obj._glowPhase || 0))
+      : 0
+    obj.leanAngle += (target - obj.leanAngle) * Math.min(1, dt * GLOW_MUSHROOM_WHISTLE_SMOOTH)
+    if (!singing && Math.abs(obj.leanAngle) < 0.15) obj.leanAngle = 0
+    obj.angle = obj.leanAngle
+  })
+  //
+  // Trampoline mushroom sways with the same pulse when visible
+  //
+  const tramp = inst.trampState
+  if (tramp && inst.zones.groundDecorRight) {
+    const target = singing
+      ? side * GLOW_MUSHROOM_WHISTLE_AMP_DEG * pulse * 0.85
+      : 0
+    tramp.leanAngle = (tramp.leanAngle ?? 0) +
+      (target - (tramp.leanAngle ?? 0)) * Math.min(1, dt * GLOW_MUSHROOM_WHISTLE_SMOOTH)
+    if (!singing && Math.abs(tramp.leanAngle) < 0.15) tramp.leanAngle = 0
+  }
+}
+//
 // Rocks are baked in DECOR_GRAY, so the after-L darkening is applied as a
 // multiply tint. Outlined (colour-world) rocks always render untinted.
 //
@@ -2946,8 +3102,28 @@ function startColorWorldFade(inst) {
   inst.colorFadeTarget = 1
   CanvasBackdrop.applyCanvasBackdrop(inst.k, OUTER_BG_HEX)
   !inst.zones.water && revealWaterZone(inst, false)
-  applyColorWorldHero(inst)
   applyZoneVisibility(inst)
+  //
+  // Defer gold recolour — immediate sprite/hitbox swap on the O log restarts
+  // the crouch→land loop right after the dialog Space release.
+  //
+  inst.k.wait(GOLD_RECOLOR_DELAY, () => {
+    applyColorWorldHero(inst)
+    const hero = inst.heroInst
+    const char = hero?.character
+    if (hero) {
+      forceHeroIdleOnLog(inst)
+      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+    }
+    char?.pos && forceSettleHeroOnNearestLog(inst, char)
+    //
+    // Gold sprite/hitbox swap can nudge Y — refresh the post-dialog pin
+    //
+    if (inst.dialogInputGrace > 0 && char?.pos) {
+      inst.dialogPinY = char.pos.y
+      inst.dialogHeroPinned = true
+    }
+  })
 }
 //
 // Turns the hero gold when the forest gains colour (menu glow anti-hero tone).
@@ -2971,10 +3147,19 @@ function recolorHeroToGold(k, hero) {
   hero.bodyColor = GLOW_GOLD_HEX.replace('#', '')
   hero.spritePrefix = buildHeroSpritePrefix(hero)
   Hero.loadHeroSprites(hero)
+  Hero.syncPlatformLanding(hero)
+  //
+  // Sprite/hitbox swap briefly ungrounds on wood — lock out jump/land crouch
+  //
+  hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+  hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.25)
   k.wait(GOLD_SWAP_DELAY, () => {
     if (!hero.character?.exists?.()) return
     try {
+      Hero.syncPlatformLanding(hero)
       hero.character.use(k.sprite(`${hero.spritePrefix}_0_0`))
+      hero.currentEyeSprite = `${hero.spritePrefix}_0_0`
+      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
     } catch (error) {
       //
       // Sprite bake may lag one frame — tint still snaps via bodyColor on next load
@@ -3007,16 +3192,18 @@ function revealLLitZone(inst) {
   inst.zones.lZoneLit = true
   inst.zones.lZone = true
   set(KEY_REVEALED_L_LIT, true)
-  playSegmentRevealSound(inst)
+  //
+  // Silent: the lit/sun step and the forest fade-in have no reveal chime
+  //
 }
 //
 // Reveals the combined background forest one second after the first L step.
+// Trees fade in via parallaxFade — no reveal sound.
 //
 function revealLParallaxZone(inst) {
   if (inst.zones.lZoneParallax) return
   inst.zones.lZoneParallax = true
   set(KEY_REVEALED_L, true)
-  playSegmentRevealSound(inst)
   syncGlowCanvasBackdrop(inst.k, inst.zones)
   applyZoneVisibility(inst)
 }
@@ -3032,6 +3219,7 @@ function playSegmentRevealSound(inst) {
 //
 function openGlowLetterDialog(inst, text, onCloseExtra, dialogSoundName = null) {
   inst.dialogOpen = true
+  pinHeroForLetterDialog(inst)
   playGlowLetterDialogMusic(inst, dialogSoundName)
   //
   // Letterbox bars must match the current level background: gray once the
@@ -3044,13 +3232,146 @@ function openGlowLetterDialog(inst, text, onCloseExtra, dialogSoundName = null) 
     borderRgb: { r: DECOR_GRAY.r, g: DECOR_GRAY.g, b: DECOR_GRAY.b },
     sceneBackdropHex: backdropHex,
     textStyles: { hl: { color: inst.k.rgb(inst.goldRgb.r, inst.goldRgb.g, inst.goldRgb.b), override: true } },
-    onCloseStart: () => stopGlowLetterDialogMusic(inst),
+    onCloseStart: () => {
+      stopGlowLetterDialogMusic(inst)
+      //
+      // Kill squash immediately on Space/Esc — do not wait for fade-out,
+      // or the same press can leave jump-0 looping on the wood log.
+      //
+      forceHeroIdleOnLog(inst)
+      Hero.armJumpKeyReleaseGate(inst.heroInst)
+      inst.heroInst.controlsDisabled = true
+      inst.heroInst.controllable = false
+      inst.heroInst.canJump = false
+    },
     onClose: () => {
       stopGlowLetterDialogMusic(inst)
+      unpinHeroAfterLetterDialog(inst)
       inst.dialogOpen = false
       onCloseExtra?.()
     }
   })
+}
+//
+// Settles jump/land squash and pins the hero so wood-platform physics cannot
+// fight the dialog freeze (landing + dialog used to twitch up/down forever).
+//
+function pinHeroForLetterDialog(inst) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.pos) return
+  //
+  // Clear jump tuck / land squash once, then hard-settle on the log under
+  // the hero. Calling syncPlatformLanding every pinned frame fought Kaplay
+  // and made O/L platforms twitch up and down.
+  //
+  forceHeroIdleOnLog(inst)
+  if (char.vel) {
+    char.vel.x = 0
+    char.vel.y = 0
+  }
+  forceSettleHeroOnNearestLog(inst, char)
+  inst.dialogPinY = char.pos.y
+  inst.dialogHeroPinned = true
+  if (typeof char.gravityScale === 'number') {
+    inst._dialogSavedGravityScale = char.gravityScale
+    char.gravityScale = 0
+  }
+}
+//
+// Restores gravity after a letter dialog closes.
+//
+function unpinHeroAfterLetterDialog(inst) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  //
+  // Keep gravity off and Y pinned through the grace window — restoring
+  // gravity on Esc/Space used to drop the hero 1 px onto the log and
+  // trigger a land-crouch (or Space crouch→jump) on wood platforms.
+  //
+  inst.dialogInputGrace = DIALOG_INPUT_GRACE
+  if (hero) {
+    forceHeroIdleOnLog(inst)
+    Hero.armJumpKeyReleaseGate(hero)
+    hero.controlsDisabled = true
+    hero.controllable = false
+    hero.canJump = false
+  }
+  if (char?.pos) {
+    forceSettleHeroOnNearestLog(inst, char)
+    inst.dialogPinY = char.pos.y
+    inst.dialogHeroPinned = true
+  }
+}
+//
+// Restores gravity and releases the post-dialog Y pin once the grace ends.
+//
+function releaseDialogPin(inst) {
+  const hero = inst.heroInst
+  const char = hero?.character
+  inst.dialogHeroPinned = false
+  //
+  // Settle on the log top first (no embed), then restore gravity so Kaplay
+  // does not resolve an overlapping hitbox by pushing the hero through wood.
+  //
+  forceHeroIdleOnLog(inst)
+  char?.pos && forceSettleHeroOnNearestLog(inst, char)
+  if (char && inst._dialogSavedGravityScale !== undefined) {
+    char.gravityScale = inst._dialogSavedGravityScale
+    inst._dialogSavedGravityScale = undefined
+  }
+  if (hero && !inst.heroLockedAfterW) {
+    hero.canJump = true
+  }
+}
+//
+// Clears jump/land squash and forces the idle sprite on the nearest log.
+//
+function forceHeroIdleOnLog(inst) {
+  const hero = inst.heroInst
+  if (!hero) return
+  hero.isSquashing = false
+  hero.squashTimer = 0
+  hero.landSquashTimer = 0
+  hero.isRunning = false
+  hero.wasJumping = false
+  hero.jumpPhase = 'none'
+  hero.jumpFrame = 0
+  hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+  Hero.syncPlatformLanding(hero)
+}
+//
+// Places the hero on the nearest revealed log top, ignoring squash/hover gates
+// used by the normal snap path (dialog open must never leave him mid-land).
+//
+function forceSettleHeroOnNearestLog(inst, char) {
+  const heroX = char.pos.x
+  const z = inst.zones
+  const homes = []
+  z.lPlatRevealed && z.gCollected && homes.push(inst.lPlatHome)
+  z.oZone && z.lCollected && homes.push(inst.oPlatHome)
+  z.wZone && z.oCollected && homes.push(inst.wPlatHome)
+  for (const home of homes) {
+    if (heroX < home.x - LOG_SNAP_X_SLACK || heroX > home.x + LOG_W + LOG_SNAP_X_SLACK) continue
+    const platTop = home.y + LOG_COLLISION_DROP_Y
+    //
+    // Sit on the wood top without embedding. Dialog pin + LOG_SNAP_EMBED used
+    // to leave the hitbox overlapping the thin log; restoring gravity then
+    // ejected the hero downward through the platform.
+    //
+    char.pos.y = platTop - SURFACE_DETECT_Y
+    if (char.vel) {
+      char.vel.x = 0
+      char.vel.y = 0
+    }
+    const hero = inst.heroInst
+    if (hero) {
+      hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+      hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.2)
+      hero.canJump = true
+    }
+    return
+  }
 }
 //
 // Starts a letter dialog voice-over (stops any previous one first).
@@ -3058,6 +3379,7 @@ function openGlowLetterDialog(inst, text, onCloseExtra, dialogSoundName = null) 
 function playGlowLetterDialogMusic(inst, soundName) {
   stopGlowLetterDialogMusic(inst)
   if (!soundName) return
+  Sound.duckBackgroundMusic(inst.birdsMusic, CFG.audio.backgroundMusic.dialogMusicDuck)
   inst.letterDialogMusic = Sound.playInScene(
     inst.k,
     soundName,
@@ -3070,6 +3392,7 @@ function playGlowLetterDialogMusic(inst, soundName) {
 function stopGlowLetterDialogMusic(inst) {
   inst.letterDialogMusic?.stop?.()
   inst.letterDialogMusic = null
+  Sound.unduckBackgroundMusic(inst.birdsMusic)
 }
 //
 // Hero touches the G pickup letter — dialog, HUD, tree reveal only (no ground/parallax).
@@ -3163,6 +3486,13 @@ function collectLetterO(inst) {
   openGlowLetterDialog(inst, GLOW_DIALOG_O, () => {
     startColorWorldFade(inst)
     startBirdsMusic(inst.birdsMusic)
+    forceHeroIdleOnLog(inst)
+    const char = inst.heroInst?.character
+    if (char?.pos) {
+      forceSettleHeroOnNearestLog(inst, char)
+      inst.dialogPinY = char.pos.y
+      inst.dialogHeroPinned = true
+    }
   }, GLOW_DIALOG_SOUND_O)
 }
 //
@@ -3193,42 +3523,31 @@ function collectLetterW(inst) {
   setSectionCompleted('glow')
   set('lastLesson', 'glow-complete')
   //
-  // Closing line above the hero, then the fade toward the menu.
+  // Closing line above the hero, then transition straight into touch lesson 0
+  // (no menu stop, no pre-level phrase).
   //
-  HeroHint.show(inst.heroHint, HINT_W_TEXT, HINT_W_DURATION)
-  inst.k.wait(HINT_W_DURATION, () => startMenuFadeOut(inst))
-}
-//
-// Fades the whole screen to void, then switches to the menu scene.
-//
-function startMenuFadeOut(inst) {
-  const k = inst.k
-  const overlay = k.add([
-    k.rect(k.width(), k.height()),
-    k.pos(0, 0),
-    k.color(VOID.r, VOID.g, VOID.b),
-    k.opacity(0),
-    k.fixed(),
-    k.z(W_MENU_FADE_Z)
-  ])
-  overlay.onUpdate(() => onUpdateMenuFade(inst, overlay))
-}
-//
-// Raises the overlay opacity every frame; jumps to the menu once fully dark.
-//
-function onUpdateMenuFade(inst, overlay) {
-  overlay.opacity = Math.min(1, overlay.opacity + inst.k.dt() / W_MENU_FADE_DURATION)
   //
-  // The page/canvas backdrop (letterbox strips above/below the game area)
-  // darkens in lockstep with the overlay so no bright horizontal bands stay
-  // visible at any point of the fade.
+  // Lock run/jump until the scene transitions — W is the end of glow
   //
-  const from = isOuterFrameVisible(inst.zones) ? OUTER : VOID
-  CanvasBackdrop.applyCanvasBackdrop(inst.k, rgbToHex(lerpRgb(from, VOID, overlay.opacity)))
-  if (overlay.opacity >= 1 && !inst.menuFadeStarted) {
-    inst.menuFadeStarted = true
-    inst.k.go('menu')
+  inst.heroLockedAfterW = true
+  const hero = inst.heroInst
+  if (hero) {
+    hero.controllable = false
+    hero.controlsDisabled = true
+    hero.canJump = false
+    forceHeroIdleOnLog(inst)
   }
+  HeroHint.show(inst.heroHint, HINT_W_TEXT, HINT_W_DURATION)
+  inst.k.wait(HINT_W_DURATION, () => {
+    Sound.stopAmbient(inst.sound)
+    inst.birdsMusic?.stop?.()
+    stopGlowLetterDialogMusic(inst)
+    set('lastLesson', 'lesson-touch.0')
+    //
+    // menu-touch → lesson-touch.0 transition path (no pre-level phrase)
+    //
+    createLevelTransition(inst.k, 'menu-touch')
+  })
 }
 //
 // Converts an { r, g, b } tone to the hex string the backdrop helper expects.
@@ -3484,8 +3803,18 @@ function onUpdate(inst) {
     onUpdateDrowning(inst)
     return
   }
-  if (inst.dialogOpen || inst.introLock) {
+  if (inst.dialogOpen || inst.introLock || inst.heroLockedAfterW) {
     inst.heroInst.controllable = false
+    inst.heroInst.controlsDisabled = true
+  }
+  if (inst.dialogInputGrace > 0) {
+    inst.dialogInputGrace -= k.dt()
+    inst.heroInst.controllable = false
+    inst.heroInst.controlsDisabled = true
+    if (inst.dialogInputGrace <= 0) {
+      inst.dialogInputGrace = 0
+      releaseDialogPin(inst)
+    }
   }
   const t = k.time()
   const pulse = (Math.sin(t * GLOW_LETTER_PULSE_SPEED) + 1) / 2
@@ -3502,8 +3831,29 @@ function onUpdate(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   if (!char?.pos) return
-  if (!inst.dialogOpen && !inst.introLock) {
+  if (!inst.dialogOpen && !inst.introLock && !(inst.dialogInputGrace > 0) && !inst.heroLockedAfterW) {
     hero.controllable = true
+    hero.controlsDisabled = false
+  }
+  //
+  // While a letter dialog is open (or during post-close grace) the hero must
+  // stand still. Continuous log snap fought Kaplay physics and made him twitch
+  // up/down on wood platforms. Pin Y once, then freeze velocity every frame.
+  //
+  if (inst.dialogOpen || inst.dialogInputGrace > 0) {
+    if (char.vel) {
+      char.vel.x = 0
+      char.vel.y = 0
+    }
+    if (inst.dialogOpen && !inst.dialogHeroPinned) {
+      pinHeroForLetterDialog(inst)
+    } else if (inst.dialogHeroPinned) {
+      //
+      // Hold the settled Y only — never re-run syncPlatformLanding here
+      // (it resizes the hitbox and shifts pos.y, fighting the pin).
+      //
+      char.pos.y = inst.dialogPinY
+    }
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
@@ -3538,7 +3888,7 @@ function onUpdate(inst) {
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
   inst.sound._glowSurface = surface
   hero.suppressDust = true
-  snapHeroToLogPlatforms(inst, char)
+  !inst.dialogOpen && !(inst.dialogInputGrace > 0) && snapHeroToLogPlatforms(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   //
   // O-letter meditation: perfect stillness after L summons the countdown.
@@ -3729,7 +4079,11 @@ function snapHeroToLogPlatforms(inst, char) {
 //
 function settleHeroOnLog(inst, char, platTop) {
   const hero = inst.heroInst
-  if (hero?.isSquashing) return
+  //
+  // During letter dialogs always settle — land-squash must not leave the hero
+  // hovering / twitching on wood while controls are locked.
+  //
+  if (hero?.isSquashing && !inst.dialogOpen) return
   char.pos.y = platTop - SURFACE_DETECT_Y + LOG_SNAP_EMBED
   if (char.vel) char.vel.y = 0
   if (!hero) return
@@ -3740,7 +4094,7 @@ function settleHeroOnLog(inst, char, platTop) {
   // Only force idle when still marked airborne after a deep snap — never
   // mid-fall (caller already gated on low velY).
   //
-  if (hero.jumpPhase === 'jumping') {
+  if (hero.jumpPhase === 'jumping' || inst.dialogOpen) {
     Hero.syncPlatformLanding(hero)
   }
 }

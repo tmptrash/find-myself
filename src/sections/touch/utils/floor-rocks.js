@@ -28,11 +28,32 @@ const TOUCH_FLOOR_ROCK_SAT_RADIUS_RATIO_MAX = 0.82
  * @returns {Array<Object>} Rock descriptors (worldX, radius, etc.)
  */
 export function addTouchSectionFloorRocks(k, opts) {
+  const rocks = buildTouchSectionFloorRocks(opts)
+  rocks.forEach(r => loadTouchSprite(k, r.spriteName, r.canvas))
+  k.add([
+    k.z(opts.drawZ),
+    {
+      draw() {
+        for (const rock of rocks) {
+          k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
+        }
+      }
+    }
+  ])
+  return rocks
+}
+/**
+ * Builds floor-rock descriptors without loading sprites or adding a draw layer.
+ * Callers can stamp rock.canvas into a baked background PNG (e.g. touch L1).
+ *
+ * @param {Object} opts - Same placement options as addTouchSectionFloorRocks (no drawZ required)
+ * @returns {Array<Object>} Rock descriptors with canvas, x, y, radius, etc.
+ */
+export function buildTouchSectionFloorRocks(opts) {
   const {
     floorY,
     leftMargin,
     rightMargin,
-    drawZ,
     spritePrefix,
     rockCount = TOUCH_FLOOR_ROCK_COUNT_DEFAULT,
     excludeCenterX,
@@ -61,7 +82,7 @@ export function addTouchSectionFloorRocks(k, opts) {
       posX = leftMargin + 40 + Math.random() * (playableW - 80)
       safety++
     }
-    const mainRock = buildSingleFloorRock(k, floorY, posX, radius, `${spritePrefix}-${spriteIdx++}`)
+    const mainRock = buildSingleFloorRock(floorY, posX, radius, `${spritePrefix}-${spriteIdx++}`)
     rocks.push(mainRock)
     if (Math.random() < TOUCH_FLOOR_ROCK_CLUSTER_CHANCE) {
       const satCount = TOUCH_FLOOR_ROCK_SATELLITES_MIN + Math.floor(Math.random() * (TOUCH_FLOOR_ROCK_SATELLITES_MAX - TOUCH_FLOOR_ROCK_SATELLITES_MIN + 1))
@@ -72,21 +93,10 @@ export function addTouchSectionFloorRocks(k, opts) {
         const horizontalGap = radius * 0.55 + satRadius * 0.4 + Math.random() * 8
         const satX = posX + sign * horizontalGap
         if (isExcluded(satX)) continue
-        rocks.push(buildSingleFloorRock(k, floorY, satX, satRadius, `${spritePrefix}-${spriteIdx++}`))
+        rocks.push(buildSingleFloorRock(floorY, satX, satRadius, `${spritePrefix}-${spriteIdx++}`))
       }
     }
   }
-  rocks.forEach(r => loadTouchSprite(k, r.spriteName, r.dataUrl))
-  k.add([
-    k.z(drawZ),
-    {
-      draw() {
-        for (const rock of rocks) {
-          k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
-        }
-      }
-    }
-  ])
   return rocks
 }
 
@@ -104,9 +114,9 @@ export function addTouchSectionFloorRocks(k, opts) {
  */
 export function addSingleFloorRockAt(k, floorY, posX, spriteName, drawZ, radius, anchorBottom = false) {
   const rockRadius = radius ?? TOUCH_FLOOR_ROCK_RADIUS_MIN + Math.random() * (TOUCH_FLOOR_ROCK_RADIUS_MAX - TOUCH_FLOOR_ROCK_RADIUS_MIN) * 0.45
-  const rock = buildSingleFloorRock(k, floorY, posX, rockRadius, spriteName)
+  const rock = buildSingleFloorRock(floorY, posX, rockRadius, spriteName)
   anchorBottom && (rock.y = floorY - rock.totalH)
-  loadTouchSprite(k, rock.spriteName, rock.dataUrl)
+  loadTouchSprite(k, rock.spriteName, rock.canvas)
   k.add([
     k.z(drawZ),
     {
@@ -117,7 +127,7 @@ export function addSingleFloorRockAt(k, floorY, posX, spriteName, drawZ, radius,
   ])
   return rock
 }
-function buildSingleFloorRock(k, floorY, posX, radius, spriteName) {
+function buildSingleFloorRock(floorY, posX, radius, spriteName) {
   //
   // Rock silhouette + palette come from the shared `draw-rock`
   // primitive (`src/utils/draw-rock.js`) so floor rocks paint identical
@@ -129,7 +139,7 @@ function buildSingleFloorRock(k, floorY, posX, radius, spriteName) {
   const totalH = Math.ceil(radius * 1.9)
   const cx = totalW / 2
   const cy = totalH * 0.56
-  const dataUrl = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
+  const canvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
     drawRockToCanvas(ctx, { cx, cy, radius, verts, palette })
   })
   //
@@ -141,5 +151,5 @@ function buildSingleFloorRock(k, floorY, posX, radius, spriteName) {
   //
   const ROCK_LIFT_FROM_FLOOR = 5
   const posY = floorY - totalH * 0.45 + Math.random() * 6 - ROCK_LIFT_FROM_FLOOR
-  return { spriteName, dataUrl, x: posX, y: posY, totalW, totalH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
+  return { spriteName, canvas, x: posX, y: posY, totalW, totalH, radius, worldX: posX + cx - totalW / 2, worldY: posY + cy }
 }

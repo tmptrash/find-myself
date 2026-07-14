@@ -922,14 +922,14 @@ export function openStandalonePanel(k, text, opts = {}) {
   Dialog.openDialog(k, text, {
     ...rest,
     //
-    // Reset _standaloneOpen the instant the dialog begins closing so subsequent
-    // Esc presses are not blocked by isAnyPanelOpen() during the fade-out animation.
+    // Keep _standaloneOpen true until the panel is fully gone so Space that
+    // closes a letter dialog cannot start a crouch→jump on the same press.
     //
     onCloseStart: () => {
-      _standaloneOpen = false
       outerOnCloseStart?.()
     },
     onClose: () => {
+      _standaloneOpen = false
       outerOnClose?.()
     }
   })

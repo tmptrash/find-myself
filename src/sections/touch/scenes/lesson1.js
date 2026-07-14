@@ -20,7 +20,7 @@ import * as GiantWorm from '../components/giant-worm.js'
 import { drawRealisticBird, buildBirdDrawCache } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { drawCrow } from '../../../utils/crow.js'
-import { addTouchSectionFloorRocks, addSingleFloorRockAt } from '../utils/floor-rocks.js'
+import { buildTouchSectionFloorRocks } from '../utils/floor-rocks.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
@@ -63,6 +63,10 @@ const HERO_SPAWN_Y = FLOOR_Y - 50
 //
 // T letter (right side, on the ground — replaces anti-hero)
 //
+// Letter count persists across death/reload (T=1, O=2, U=3, CH=4).
+// Cleared when leaving for the next lesson after end celebration.
+//
+const TOUCH_L1_LETTERS_FLAG = 'touch.lesson1Letters'
 const T_LETTER_X = CFG.visual.screen.width - RIGHT_MARGIN - 310
 //
 // 'bot' anchor: Y is the bottom edge of the letter — 28px below floor so
@@ -171,6 +175,10 @@ const FLOOR_STRIPE_H = 3
 //
 const FLOOR_STRIPE_Y_OFFSET = 3
 const END_MUSIC_NAME = 'touch1-end'
+//
+// touch1-end.mp3 is ~132 s — auto-advance after the track (plus a short tail)
+//
+const END_MUSIC_DURATION = 133
 const END_MUSIC_TEXT = 'Press Space or Enter to end the lesson'
 const END_MUSIC_TEXT_FONT = 26
 const END_MUSIC_TEXT_Y = TOP_MARGIN + 62
@@ -185,6 +193,19 @@ const L1_DIALOG_T = "Every conversation begins with\na [hl]T[/hl]ouch. Speak wit
 const L1_DIALOG_O = "[hl]O[/hl]bserve. Every voice is\ndifferent."
 const L1_DIALOG_U = "[hl]U[/hl]nderstand. Patterns create\nmeaning. Maybe birds may help\nyou?"
 const L1_DIALOG_CH = "Every [hl]C[/hl]onnection carries\n[hl]H[/hl]armony within it."
+//
+// Letter dialog voice-overs
+//
+const L1_DIALOG_SOUND_T = 'touch1-t'
+const L1_DIALOG_SOUND_O = 'touch1-o'
+const L1_DIALOG_SOUND_U = 'touch1-u'
+const L1_DIALOG_SOUND_CH = 'touch1-ch'
+//
+// How far letter glyphs sink below the log top (anchor = bot)
+//
+const LETTER_SINK_DEFAULT = 10
+const LETTER_SINK_O = 18
+const LETTER_SINK_CH = 17
 //
 // Goal texts matching dialogs (shown when goal button pressed)
 //
@@ -268,6 +289,10 @@ const L1_CROW_TOOLTIP_HOVER_W = 52
 const L1_CROW_TOOLTIP_HOVER_H = 48
 const L1_CROW_TOOLTIP_OFFSET_Y = -52
 //
+// Hover box centred on the body, not the feet (drawCrow raises body ~30px)
+//
+const L1_CROW_TOOLTIP_HOVER_Y_OFFSET = -34
+//
 // Middle parallax layer: same organic autumn trees as touch L0, darkened for depth.
 //
 const L1_MIDDLE_ORGANIC_TREE_COUNT = 6
@@ -315,6 +340,17 @@ const L1_MUSHROOM_CAP_WIDTH_MIN = 14
 const L1_MUSHROOM_CAP_WIDTH_MAX = 26
 const L1_MUSHROOM_STEM_HEIGHT_MIN = 10
 const L1_MUSHROOM_STEM_HEIGHT_MAX = 20
+//
+// Mushrooms sway to the hero's whistle after this idle time (seconds)
+//
+const L1_MUSHROOM_WHISTLE_IDLE = 5
+const L1_MUSHROOM_WHISTLE_AMP_DEG = 16
+const L1_MUSHROOM_WHISTLE_SMOOTH = 7
+//
+// Disco dance while end music plays
+//
+const L1_MUSHROOM_DANCE_AMP_DEG = 12
+const L1_MUSHROOM_DANCE_FREQ = 3.5
 //
 // Soft contour glow around level 1 mushrooms
 //
@@ -410,7 +446,7 @@ const DEATH_COUNTDOWN_SECONDS = 7
 // Player can press Space or Enter to restart; auto-restarts after 7 s.
 // Countdown number is appended inline after the three dots, same color as the text.
 //
-const L1_DEATH_PROMPT_BASE = 'Press Space or Enter to continue... '
+const L1_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
 const L1_DEATH_PROMPT_Y = TOP_MARGIN + 62
 const L1_DEATH_PROMPT_FONT = 22
 const WORM_BASE_Y = FLOOR_Y + 30
@@ -521,8 +557,15 @@ export function sceneLesson1(k) {
     // Async sprite load can outlive a quick re-enter; bail before adding duplicate draw layers.
     //
     let sceneActive = true
+    //
+    // Filled once worms are created — onSceneLeave must stop looping friction
+    // even if the player reloads mid-emergence.
+    //
+    const wormCleanup = { giant: null, trap2: null }
     k.onSceneLeave(() => {
       sceneActive = false
+      GiantWorm.destroy(wormCleanup.giant)
+      GiantWorm.destroy(wormCleanup.trap2)
       CanvasBackdrop.clearCanvasBackdrop(k)
     })
     //
@@ -895,16 +938,37 @@ export function sceneLesson1(k) {
       layers.push({ grassBlades, bushes, trees, name: config.name })
     }
     //
-    // Single merged PNG bakes all three parallax tree layers at once.
-    // This eliminates one extra draw call and one texture sample per frame.
-    // Draw order: back (0) → middle (1) → front (2) — layers compose correctly.
+    // Single merged PNG: all three parallax tree layers + floor rocks.
+    // Rocks bake behind mushrooms (mushrooms draw at z=6; this sheet at z=2).
     //
+    const floorRocks = buildTouchSectionFloorRocks({
+      floorY: FLOOR_Y,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN,
+      spritePrefix: 'rock-l1',
+      rockCount: 5,
+      excludeCenterX: HERO_SPAWN_X,
+      excludeHalfWidth: 125,
+      //
+      // Keep rocks away from the mushroom trampoline area
+      //
+      excludeZones: [{ centerX: MUSHROOM_TRAMP_X, halfWidth: 80 }]
+    })
     const createAllTreesCanvas = () => {
       const bw = CFG.visual.screen.width
       const bh = CFG.visual.screen.height
       return toCanvas({ width: bw, height: bh, pixelRatio: 1 }, (ctx) => {
         for (const layer of layers) {
           drawLayerToCanvas(ctx, layer, 0, null)
+        }
+        //
+        // Stamp rocks after trees so stones sit in front of trunks but still
+        // behind live mushroom sprites drawn later in the scene.
+        //
+        for (const rock of floorRocks) {
+          ctx.drawImage(rock.canvas, rock.x, rock.y)
+          rock.canvas.width = 0
+          rock.canvas.height = 0
         }
       })
     }
@@ -1008,20 +1072,6 @@ export function sceneLesson1(k) {
         }
       }
     ])
-    const l1Rocks = addTouchSectionFloorRocks(k, {
-      floorY: FLOOR_Y,
-      leftMargin: LEFT_MARGIN,
-      rightMargin: RIGHT_MARGIN,
-      drawZ: L1_CROW_ROCK_DRAW_Z,
-      spritePrefix: 'rock-l1',
-      rockCount: 5,
-      excludeCenterX: HERO_SPAWN_X,
-      excludeHalfWidth: 125,
-      //
-      // Keep rocks away from the mushroom trampoline area
-      //
-      excludeZones: [{ centerX: MUSHROOM_TRAMP_X, halfWidth: 80 }]
-    })
     //
     // Create birds flying in the background (same realistic silhouette as Touch L0).
     //
@@ -1102,8 +1152,15 @@ export function sceneLesson1(k) {
       {
         draw() {
           const time = k.time()
-          for (const blade of allGrassBlades) {
-            const sway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
+          //
+          // LOD: every other blade uses a cheaper static bend — halves drawLine
+          // cost while the front layer still sways fully (odd indices).
+          //
+          for (let i = 0; i < allGrassBlades.length; i++) {
+            const blade = allGrassBlades[i]
+            const sway = (i & 1) === 0
+              ? Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
+              : Math.sin(blade.swayOffset) * blade.swayAmount * 0.35
             grassP1.x = blade.x1
             grassP1.y = blade.y1
             grassP2.x = blade.baseX2 + sway
@@ -1183,14 +1240,19 @@ export function sceneLesson1(k) {
     // Upper sections override: word=red, time=orange, otherwise teal always.
     //
     const heroBodyColor = isWordComplete ? "#E74C3C" : isTimeComplete ? "#FF8C00" : CFG.visual.colors.sections.touch.body
+    //
+    // Restore TOUCH letter progress so death/reload continues mid-quest.
+    // HUD has 5 glyphs; CH lights both C and H (count 4 → progress 5).
+    //
+    const savedLetterCount = Math.max(0, Math.min(4, get(TOUCH_L1_LETTERS_FLAG, 0) | 0))
+    const hudLetterCount = savedLetterCount >= 4 ? 5 : savedLetterCount
     const levelIndicator = LevelIndicator.create({
       k,
       levelNumber: 1,
       //
-      // Start all TOUCH letters gray — each letter lights up teal when collected.
-      // setSectionLabelLetterProgress is called in each onXLetterCollect callback.
+      // Start TOUCH letters from saved progress — each new letter lights up teal.
       //
-      sectionLabelCompletedLetters: 0,
+      sectionLabelCompletedLetters: hudLetterCount,
       activeColor: '#5A8898',
       inactiveColor: '#B0B0B0',
       completedColor: '#5A8898',
@@ -1202,7 +1264,12 @@ export function sceneLesson1(k) {
     // Mutable ref updated by letter collection callbacks so the goal button
     // always shows the most recent letter dialog (before gameState exists).
     //
-    const l1GoalRef = { text: LevelHelp.LESSON_GOAL_TEXTS?.['lesson-touch.1'] ?? '' }
+    const l1GoalByCount = [null, L1_GOAL_T, L1_GOAL_O, L1_GOAL_U, L1_GOAL_CH]
+    const l1GoalRef = {
+      text: savedLetterCount > 0
+        ? l1GoalByCount[savedLetterCount]
+        : (LevelHelp.LESSON_GOAL_TEXTS?.['lesson-touch.1'] ?? '')
+    }
     LevelHelp.create({
       k,
       levelName: 'lesson-touch.1',
@@ -1325,6 +1392,15 @@ export function sceneLesson1(k) {
     //
     // Game state for letter-collection phase progression
     //
+    const restoredPhase = savedLetterCount >= 4
+      ? 'end'
+      : savedLetterCount === 3
+        ? 'melody'
+        : savedLetterCount === 2
+          ? 'phase2'
+          : savedLetterCount === 1
+            ? 'phase1'
+            : 'pre_t'
     const gameState = {
       //
       // Progression phases:
@@ -1337,15 +1413,16 @@ export function sceneLesson1(k) {
       //   'wait_ch' — CH platform visible, waiting for hero to collect CH
       //   'end'    — CH collected, playing end music
       //
-      phase: 'pre_t',
-      treesEnabled: false,
+      phase: restoredPhase,
+      treesEnabled: savedLetterCount >= 1,
       treesPhase1Touched: new Set(),
       treesPhase2Touched: new Set(),
-      tCollected: false,
-      oCollected: false,
-      uCollected: false,
-      chCollected: false,
+      tCollected: savedLetterCount >= 1,
+      oCollected: savedLetterCount >= 2,
+      uCollected: savedLetterCount >= 3,
+      chCollected: savedLetterCount >= 4,
       dialogOpen: false,
+      letterDialogMusic: null,
       //
       // Melody puzzle state (phase 'melody')
       //
@@ -1357,7 +1434,7 @@ export function sceneLesson1(k) {
       //
       // Goal text shown when goal button pressed (also synced to l1GoalRef.text)
       //
-      lastDialogText: '',
+      lastDialogText: savedLetterCount > 0 ? l1GoalByCount[savedLetterCount] : '',
       goalRef: l1GoalRef,
       //
       // Touch counter objects
@@ -1514,6 +1591,27 @@ export function sceneLesson1(k) {
     if (!sceneActive) return
     gameState._treeRootsRef = treeRootsInst
     //
+    // Restore tree note modes for already-collected letter stages
+    //
+    if (savedLetterCount >= 2) {
+      TreeRoots.enableUniqueNoteMode && TreeRoots.enableUniqueNoteMode(treeRootsInst)
+    } else if (savedLetterCount >= 1) {
+      TreeRoots.enableSameNoteMode && TreeRoots.enableSameNoteMode(treeRootsInst)
+    }
+    //
+    // Spawn next-letter platforms as if prior stages already finished:
+    // count 1 → O ready, count 2 → U ready, count 3 → CH ready (skip melody redo).
+    // When platforms spawn, phase advances to the matching wait_* state.
+    //
+    if (savedLetterCount === 1) {
+      createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst, true)
+    } else if (savedLetterCount === 2) {
+      createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst, true)
+    } else if (savedLetterCount === 3) {
+      gameState.phase = 'wait_ch'
+      createCHPlatform(k, gameState, sound, levelIndicator, treeRootsInst, true)
+    }
+    //
     // Trampoline mushroom — rendered as canvas sprite matching regular mushrooms style.
     // Positioned so the stem base aligns with FLOOR_Y.
     //
@@ -1625,6 +1723,8 @@ export function sceneLesson1(k) {
     // Repositions randomly between note trees after each retract cycle.
     //
     const trap2WormInst = trap2Active ? createTrap2Worm(k, heroInst, sound, FLOOR_Y) : null
+    wormCleanup.giant = giantWormInst
+    wormCleanup.trap2 = trap2WormInst
     //
     // Tooltip on first tree trunk (note "C")
     //
@@ -1793,18 +1893,30 @@ export function sceneLesson1(k) {
     //
     // T letter: stands on ground at right side (where anti-hero used to be)
     // Blinks brown to signal it's collectable. Removed when collected.
+    // Skipped when T was already collected on a previous visit.
     //
-    const tLetterObjs = createStandingLetter(k, 'T', T_LETTER_X, T_LETTER_Y, T_LETTER_FONT_SIZE, T_LETTER_ANGLE, T_LETTER_FILL_R, T_LETTER_FILL_G, T_LETTER_FILL_B, T_LETTER_Z)
-    const tLetterMask = createTLetterMask(k, T_LETTER_X, T_LETTER_Y)
-    const tBlinkState = { timer: 0, phase: 0 }
-    k.add([
-      k.z(T_LETTER_Z + 0.5),
-      {
-        draw() {
-          animateLetterBlink(k, tLetterObjs, tBlinkState, gameState.tCollected)
+    let tLetterObjs = null
+    let tLetterMask = null
+    if (!gameState.tCollected) {
+      tLetterObjs = createStandingLetter(k, 'T', T_LETTER_X, T_LETTER_Y, T_LETTER_FONT_SIZE, T_LETTER_ANGLE, T_LETTER_FILL_R, T_LETTER_FILL_G, T_LETTER_FILL_B, T_LETTER_Z)
+      tLetterMask = createTLetterMask(k, T_LETTER_X, T_LETTER_Y)
+      const tBlinkState = { timer: 0, phase: 0 }
+      k.add([
+        k.z(T_LETTER_Z + 0.5),
+        {
+          draw() {
+            animateLetterBlink(k, tLetterObjs, tBlinkState, gameState.tCollected)
+          }
         }
-      }
-    ])
+      ])
+    }
+    //
+    // If CH was already collected, jump straight into the end celebration
+    //
+    if (savedLetterCount >= 4) {
+      BonusHero.finalizeCollection(gameState._bonusHeroRef)
+      k.wait(0.15, () => startLesson1EndCelebration(k, gameState, sound))
+    }
     //
     // Tooltip: falling and grounded leaves (separate phrases per state)
     //
@@ -1854,7 +1966,7 @@ export function sceneLesson1(k) {
       k,
       targets: [{
         x: crowPerch.worldX,
-        y: crowPerch.worldY - 9 * sc,
+        y: crowPerch.worldY + L1_CROW_TOOLTIP_HOVER_Y_OFFSET,
         width: L1_CROW_TOOLTIP_HOVER_W,
         height: L1_CROW_TOOLTIP_HOVER_H,
         text: () => gameState.phase === 'end' ? L1_CROW_DISCO_TEXT : gameState.phase === 'melody' ? L1_CROW_SEQUENCE_HINT : L1_CROW_LOSER_TEXT,
@@ -2957,34 +3069,57 @@ function createL1Mushrooms(k, gameState) {
     })
   }
   //
-  // Disco dance constants: mushrooms sway left/right when end music plays
+  // Disco dance / whistle sway: mushrooms lean left-right with the hero tune
   //
-  const MUSHROOM_DANCE_AMP_DEG = 12
-  const MUSHROOM_DANCE_FREQ = 3.5
   mushrooms.forEach(m => loadTouchSprite(k, m.spriteName, m.dataUrl))
   k.add([
     k.z(6),
     {
       draw() {
         const t = k.time()
-        const dancing = gameState?.phase === 'end'
+        const hero = gameState?._heroRef
+        const endDance = gameState?.phase === 'end'
+        const whistleDance = !endDance &&
+          (hero?.idleStillTime ?? 0) >= L1_MUSHROOM_WHISTLE_IDLE &&
+          Boolean(hero?.eyesClosedBySinging)
+        const dancing = endDance || whistleDance
         for (const m of mushrooms) {
           if (dancing) {
             //
-            // Sway around base center: use anchor:'bot' so rotation origin is
-            // the bottom-center of the sprite, then apply sine wave angle.
+            // End disco: steady sway. Whistle idle: lean toward each hummed
+            // note, smoothed so the tilt eases in/out instead of snapping.
             //
-            const angle = Math.sin(t * MUSHROOM_DANCE_FREQ + m.glowPhase) * MUSHROOM_DANCE_AMP_DEG
+            let target
+            if (endDance) {
+              target = Math.sin(t * L1_MUSHROOM_DANCE_FREQ + m.glowPhase) * L1_MUSHROOM_DANCE_AMP_DEG
+            } else {
+              const pulse = hero.whistlePulse ?? 0
+              const side = hero.whistleLeanSide ?? 1
+              target = side * L1_MUSHROOM_WHISTLE_AMP_DEG * pulse *
+                (0.7 + 0.3 * Math.sin(m.glowPhase))
+            }
+            const lean = m.leanAngle ?? 0
+            m.leanAngle = lean + (target - lean) * Math.min(1, k.dt() * L1_MUSHROOM_WHISTLE_SMOOTH)
             k.drawSprite({
               sprite: m.spriteName,
               pos: k.vec2(m.x + m.width * 0.5, m.y + m.height),
-              angle,
+              angle: m.leanAngle,
               anchor: 'bot'
             })
           } else {
-            k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
+            m.leanAngle = (m.leanAngle ?? 0) * Math.max(0, 1 - k.dt() * L1_MUSHROOM_WHISTLE_SMOOTH)
+            if (Math.abs(m.leanAngle) < 0.2) {
+              m.leanAngle = 0
+              k.drawSprite({ sprite: m.spriteName, pos: m.spritePos })
+            } else {
+              k.drawSprite({
+                sprite: m.spriteName,
+                pos: k.vec2(m.x + m.width * 0.5, m.y + m.height),
+                angle: m.leanAngle,
+                anchor: 'bot'
+              })
+            }
           }
-          // FPS_DISABLED: drawL1MushroomContourGlow(k, m, t)
         }
       }
     }
@@ -3074,15 +3209,18 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst, gameState) {
   const sc = 1.35
   const cx = rock.worldX
   //
-  // perchY = foot level; drawCrow raises body BODY_RAISE*sc above this point.
-  // Rock top surface is the landing point for the crow's feet.
+  // perchY = foot level; lift above the floor so toes stay visible.
+  // drawCrow raises the body BODY_RAISE*sc above this point.
   //
-  const perchY = rock.worldY - rock.radius * 0.62
+  const CROW_FOOT_LIFT = 5
+  const perchY = rock.worldY - rock.radius * 0.62 - CROW_FOOT_LIFT
   //
-  // Crow dance: hop up/down at ~2Hz when end music is playing (phase 'end')
+  // Crow dance: mild knee-bend — feet planted, torso drops without
+  // letting knees sink past the toes.
   //
-  const CROW_DANCE_AMP = 6
   const CROW_DANCE_FREQ = 4.0
+  const CROW_DANCE_CROUCH_BASE = 0.2
+  const CROW_DANCE_CROUCH_AMP = 0.45
   k.add([
     k.z(L1_CROW_ROCK_DRAW_Z),
     {
@@ -3090,8 +3228,10 @@ function addCrowOnRock(k, rock, crowMp3State, heroInst, gameState) {
         const heroX = heroInst?.character?.pos?.x ?? cx + 1
         const s = heroX >= cx ? 1 : -1
         const dancing = gameState?.phase === 'end'
-        const bounce = dancing ? Math.abs(Math.sin(k.time() * CROW_DANCE_FREQ)) * CROW_DANCE_AMP : 0
-        drawCrow(k, cx, perchY - bounce, sc, s, crowMp3State.mouthOpen, heroInst)
+        const crouch = dancing
+          ? CROW_DANCE_CROUCH_BASE + CROW_DANCE_CROUCH_AMP * (0.5 + 0.5 * Math.sin(k.time() * CROW_DANCE_FREQ))
+          : 0
+        drawCrow(k, cx, perchY, sc, s, crowMp3State.mouthOpen, heroInst, 0, 0, crouch)
       }
     }
   ])
@@ -3285,10 +3425,11 @@ function onTLetterCollect(k, gameState, tLetterObjs, tLetterMask, sound, levelIn
   gameState.tCollected = true
   gameState.phase = 'phase1'
   gameState.treesEnabled = true
+  set(TOUCH_L1_LETTERS_FLAG, 1)
   //
   // Destroy T letter visuals
   //
-  tLetterObjs.forEach(o => o?.exists?.() && k.destroy(o))
+  tLetterObjs?.forEach(o => o?.exists?.() && k.destroy(o))
   tLetterMask?.exists?.() && k.destroy(tLetterMask)
   //
   // Enable tree glow and same-note mode
@@ -3303,8 +3444,13 @@ function onTLetterCollect(k, gameState, tLetterObjs, tLetterMask, sound, levelIn
   LevelHelp.openStandalonePanel(k, L1_DIALOG_T, {
     textStyles: { hl: { color: k.rgb(255, 200, 60) } },
     sceneBackdropHex: L1_SCENE_BG_HEX,
-    onClose: () => { gameState.dialogOpen = false }
+    onCloseStart: () => stopTouch1LetterDialogMusic(gameState),
+    onClose: () => {
+      stopTouch1LetterDialogMusic(gameState)
+      gameState.dialogOpen = false
+    }
   })
+  playTouch1LetterDialogMusic(k, gameState, L1_DIALOG_SOUND_T)
   //
   // Flash T in TOUCH HUD
   //
@@ -3320,6 +3466,7 @@ function onOLetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
   gameState.oCollected = true
   gameState.phase = 'phase2'
   gameState.treesPhase2Touched = new Set()
+  set(TOUCH_L1_LETTERS_FLAG, 2)
   //
   // Destroy O platform after short delay
   //
@@ -3340,8 +3487,13 @@ function onOLetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
   LevelHelp.openStandalonePanel(k, L1_DIALOG_O, {
     textStyles: { hl: { color: k.rgb(255, 200, 60) } },
     sceneBackdropHex: L1_SCENE_BG_HEX,
-    onClose: () => { gameState.dialogOpen = false }
+    onCloseStart: () => stopTouch1LetterDialogMusic(gameState),
+    onClose: () => {
+      stopTouch1LetterDialogMusic(gameState)
+      gameState.dialogOpen = false
+    }
   })
+  playTouch1LetterDialogMusic(k, gameState, L1_DIALOG_SOUND_O)
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 2)
   LevelIndicator.flashLetterBurst(levelIndicator, 2)
   sound && Sound.playLetterPickupSoft(sound)
@@ -3353,6 +3505,7 @@ function onULetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
   if (gameState.uCollected) return
   gameState.uCollected = true
   gameState.phase = 'melody'
+  set(TOUCH_L1_LETTERS_FLAG, 3)
   //
   // Destroy U platform after short delay
   //
@@ -3369,27 +3522,29 @@ function onULetterCollect(k, gameState, sound, levelIndicator, treeRootsInst) {
   LevelHelp.openStandalonePanel(k, L1_DIALOG_U, {
     textStyles: { hl: { color: k.rgb(255, 200, 60) } },
     sceneBackdropHex: L1_SCENE_BG_HEX,
-    onClose: () => { gameState.dialogOpen = false }
+    onCloseStart: () => stopTouch1LetterDialogMusic(gameState),
+    onClose: () => {
+      stopTouch1LetterDialogMusic(gameState)
+      gameState.dialogOpen = false
+    }
   })
+  playTouch1LetterDialogMusic(k, gameState, L1_DIALOG_SOUND_U)
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 3)
   LevelIndicator.flashLetterBurst(levelIndicator, 3)
   sound && Sound.playLetterPickupSoft(sound)
 }
 //
-// Called when CH letters are collected — plays end music, blocks controls
+// Called when CH letters are collected — dialog + voice-over, then end music
 //
 function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
   if (gameState.chCollected) return
   gameState.chCollected = true
   gameState.phase = 'end'
+  set(TOUCH_L1_LETTERS_FLAG, 4)
   //
   // Level completed — persist bonus fragments so they survive the next session
   //
   BonusHero.finalizeCollection(gameState._bonusHeroRef)
-  //
-  // Hero closes eyes when idle during the celebration (calm, peaceful look)
-  //
-  gameState._heroRef && Hero.setEyesClosed(gameState._heroRef, true)
   //
   // Remove CH platform and letters after a short delay so the hero has time
   // to jump off before the ground disappears beneath them.
@@ -3406,64 +3561,91 @@ function onCHLetterCollect(k, gameState, sound, levelIndicator, transition) {
   LevelIndicator.setSectionLabelLetterProgress(levelIndicator, 5)
   LevelIndicator.flashLetterBurst(levelIndicator, 4)
   k.wait(0.3, () => LevelIndicator.flashLetterBurst(levelIndicator, 5))
-  //
-  // Play victory sound, then start end music + disco effects
-  //
   sound && Sound.playLetterPickupSoft(sound)
-  k.wait(0.8, () => {
-    //
-    // Start visual effects immediately so worm rises and trees cycle color
-    // even if music play is delayed by the browser.
-    //
-    gameState._giantWormRef && GiantWorm.startDancing(gameState._giantWormRef)
-    gameState._treeRootsRef && TreeRoots.startDisco(gameState._treeRootsRef)
-    //
-    // Try playing end music; retry once if k.play returns null (audio context
-    // may be suspended on first attempt after a long pause).
-    //
-    const tryPlayMusic = () => {
-      const m = k.play(END_MUSIC_NAME, { loop: false, volume: 0.8 })
-      if (m) gameState._endMusicRef = m
-      return !!m
-    }
-    if (!tryPlayMusic()) {
-      k.wait(0.4, tryPlayMusic)
-    }
-    //
-    // Fade screen to black over SCENE_FADE_OUT_DURATION, then run transition
-    //
-    const goNext = () => {
-      gameState._endMusicRef?.stop?.()
-      gameState._treeRootsRef && TreeRoots.stopDisco(gameState._treeRootsRef)
-      //
-      // Restore life score to level-entry snapshot so deaths this session
-      // do not carry into the next level.
-      //
-      set('lifeScore', gameState.initialLifeScore ?? 0)
-      fadeOutLesson1(k, SCENE_FADE_OUT_DURATION, () => createLevelTransition(k, 'lesson-touch.1'))
-    }
-    const enterCancel = k.onKeyPress((key) => {
-      if (key !== 'enter' && key !== 'space') return
-      enterCancel.cancel()
-      goNext()
-    })
-    //
-    // Auto-transition when music ends (~60s). enterCancel guarded so goNext
-    // never fires twice if Enter was pressed before the timer fires.
-    //
-    k.wait(62, () => {
-      enterCancel.cancel()
-      goNext()
-    })
-  })
   gameState.lastDialogText = L1_GOAL_CH
   gameState.goalRef && (gameState.goalRef.text = L1_GOAL_CH)
+  gameState.dialogOpen = true
+  LevelHelp.openStandalonePanel(k, L1_DIALOG_CH, {
+    textStyles: { hl: { color: k.rgb(255, 200, 60) } },
+    sceneBackdropHex: L1_SCENE_BG_HEX,
+    onCloseStart: () => stopTouch1LetterDialogMusic(gameState),
+    onClose: () => {
+      stopTouch1LetterDialogMusic(gameState)
+      gameState.dialogOpen = false
+      startLesson1EndCelebration(k, gameState, sound)
+    }
+  })
+  playTouch1LetterDialogMusic(k, gameState, L1_DIALOG_SOUND_CH)
+}
+//
+// After the CH dialog closes: calm eyes, disco, end music, wait for Enter/Space
+//
+function startLesson1EndCelebration(k, gameState, sound) {
+  if (gameState._endCelebrationStarted) return
+  gameState._endCelebrationStarted = true
+  //
+  // Hero closes eyes when idle during the celebration (calm, peaceful look)
+  //
+  gameState._heroRef && Hero.setEyesClosed(gameState._heroRef, true, { idleOnly: true })
+  gameState._giantWormRef && GiantWorm.startDancing(gameState._giantWormRef)
+  gameState._treeRootsRef && TreeRoots.startDisco(gameState._treeRootsRef)
+  const tryPlayMusic = () => {
+    const m = k.play(END_MUSIC_NAME, { loop: false, volume: 0.8 })
+    if (m) gameState._endMusicRef = m
+    return !!m
+  }
+  if (!tryPlayMusic()) {
+    k.wait(0.4, tryPlayMusic)
+  }
+  const goNext = () => {
+    gameState._endMusicRef?.stop?.()
+    gameState._treeRootsRef && TreeRoots.stopDisco(gameState._treeRootsRef)
+    set('lifeScore', gameState.initialLifeScore ?? 0)
+    //
+    // Clear letter progress — next entry to this level starts fresh
+    //
+    set(TOUCH_L1_LETTERS_FLAG, 0)
+    fadeOutLesson1(k, SCENE_FADE_OUT_DURATION, () => createLevelTransition(k, 'lesson-touch.1'))
+  }
+  const enterCancel = k.onKeyPress((key) => {
+    if (key !== 'enter' && key !== 'space') return
+    enterCancel.cancel()
+    goNext()
+  })
+  k.wait(END_MUSIC_DURATION, () => {
+    enterCancel.cancel()
+    goNext()
+  })
+}
+//
+// Plays a letter dialog voice-over for lesson 1
+//
+function playTouch1LetterDialogMusic(k, gameState, soundName) {
+  stopTouch1LetterDialogMusic(gameState)
+  if (!soundName) return
+  //
+  // Lesson 1 has no loop BGM — duck end celebration music if it is already playing
+  //
+  Sound.duckBackgroundMusic(gameState._endMusicRef, CFG.audio.backgroundMusic.dialogMusicDuck)
+  gameState.letterDialogMusic = Sound.playInScene(
+    k,
+    soundName,
+    CFG.audio.backgroundMusic.glowLetterDialog
+  )
+}
+//
+// Stops the active lesson 1 letter dialog voice-over
+//
+function stopTouch1LetterDialogMusic(gameState) {
+  gameState.letterDialogMusic?.stop?.()
+  gameState.letterDialogMusic = null
+  Sound.unduckBackgroundMusic(gameState._endMusicRef)
 }
 //
 // Creates a log platform with a letter label on top of it
 // Returns { platformObj, letterObjs }
 //
-function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0) {
+function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0, sinkPx = LETTER_SINK_DEFAULT) {
   const platformObj = LogPlatform.create({ k, x: platX - w / 2, y: platY, width: w, height: h, opacity: 0 })
   //
   // Fade in platform
@@ -3474,13 +3656,12 @@ function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0) {
     platformObj.opacity = Math.min(1, platformObj.opacity + k.dt() * 1.5)
   })
   //
-  // Letter sinks 10px into the platform: bottom edge = platY + 10.
+  // Letter sinks into the platform: bottom edge = platY + sinkPx.
   // Size matches lesson0 TOUCH letter size (68px).
   // Optional tiltDeg rotates the letter for a casual, hand-placed look.
   //
-  const LETTER_SINK_PX = 10
   const letterX = platX
-  const letterY = platY + LETTER_SINK_PX
+  const letterY = platY + sinkPx
   const oo = T_LETTER_OUTLINE
   //
   // Drop shadow (single black copy offset right+down), glow-level style.
@@ -3520,14 +3701,14 @@ function createLetterLogPlatform(k, letter, platX, platY, w, h, tiltDeg = 0) {
 //
 // Creates the O platform (left side) after 7/7 tree touches in phase 1
 //
-function createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
+function createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst, silent = false) {
   if (gameState.oPlatformObj) return
-  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'O', O_PLATFORM_X, O_PLATFORM_Y, LOG_PLATFORM_W, LOG_PLATFORM_H, -9)
+  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'O', O_PLATFORM_X, O_PLATFORM_Y, LOG_PLATFORM_W, LOG_PLATFORM_H, -9, LETTER_SINK_O)
   gameState.oPlatformObj = platformObj
   gameState.oLetterObjs = letterObjs
   gameState.phase = 'wait_o'
   triggerAllRootsGlow(gameState._treeRootsRef ?? treeRootsInst)
-  sound && Sound.playLetterPickupSoft(sound)
+  !silent && sound && Sound.playLetterPickupSoft(sound)
   //
   // O letter blink state
   //
@@ -3544,14 +3725,14 @@ function createOPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
 //
 // Creates the U platform (right side) after 7/7 tree touches in phase 2
 //
-function createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
+function createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst, silent = false) {
   if (gameState.uPlatformObj) return
   const { platformObj, letterObjs } = createLetterLogPlatform(k, 'U', U_PLATFORM_X, U_PLATFORM_Y, U_PLATFORM_W, LOG_PLATFORM_H, 7)
   gameState.uPlatformObj = platformObj
   gameState.uLetterObjs = letterObjs
   gameState.phase = 'wait_u'
   triggerAllRootsGlow(treeRootsInst)
-  sound && Sound.playLetterPickupSoft(sound)
+  !silent && sound && Sound.playLetterPickupSoft(sound)
   //
   // U letter blink state
   //
@@ -3568,13 +3749,13 @@ function createUPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
 //
 // Creates the CH platform (left side) after melody solved
 //
-function createCHPlatform(k, gameState, sound, levelIndicator, treeRootsInst) {
+function createCHPlatform(k, gameState, sound, levelIndicator, treeRootsInst, silent = false) {
   if (gameState.chPlatformObj) return
-  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'CH', CH_PLATFORM_X, CH_PLATFORM_Y, CH_PLATFORM_W, LOG_PLATFORM_H)
+  const { platformObj, letterObjs } = createLetterLogPlatform(k, 'CH', CH_PLATFORM_X, CH_PLATFORM_Y, CH_PLATFORM_W, LOG_PLATFORM_H, 0, LETTER_SINK_CH)
   gameState.chPlatformObj = platformObj
   gameState.chLetterObjs = letterObjs
   triggerAllRootsGlow(treeRootsInst)
-  sound && Sound.playLetterPickupSoft(sound)
+  !silent && sound && Sound.playLetterPickupSoft(sound)
   const blinkState = { timer: 0, phase: 0 }
   k.add([
     k.z(CFG.visual.zIndex.platforms + 1.5),
@@ -3963,6 +4144,7 @@ function startDeathCountdown(k, sceneName, deathX, deathY) {
   }
   const doRestart = () => {
     skipHandler.cancel()
+    clickHandler.cancel()
     updateTimer.cancel()
     destroyAll()
     goAfterPreparingAssets(k, sceneName)
@@ -3970,6 +4152,7 @@ function startDeathCountdown(k, sceneName, deathX, deathY) {
   const skipHandler = k.onKeyPress((key) => {
     if (key === 'space' || key === 'enter') doRestart()
   })
+  const clickHandler = k.onClick(() => doRestart())
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)

@@ -92,7 +92,7 @@ npm install
 npm run dev
 ```
 
-Development server will start at http://localhost:8000
+Development server will start at http://localhost:3001
 
 ### Building
 ```sh

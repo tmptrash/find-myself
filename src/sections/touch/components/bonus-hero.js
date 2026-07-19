@@ -72,6 +72,14 @@ const BONUS_COLLECT_HINT_TEXT = 'You got 3 fragments.'
 //
 const HINT_DISPLAY_DURATION = 3
 //
+// Collect hint dismisses once the hero leaves this radius from where it appeared
+//
+const COLLECT_HINT_DISMISS_DIST = 30
+//
+// Ignore distance-dismiss while the hero is still settling after the pickup land
+//
+const COLLECT_HINT_SETTLE_GRACE = 0.45
+//
 // Float animation and time-style platform text
 //
 const FLOAT_SPEED = 1.5
@@ -165,6 +173,7 @@ export function create(config) {
     platformCollisionYOffset = 0,
     platformZ = CFG.visual.zIndex.platforms,
     customPlatformDraw = null,
+    disablePlatformBody = false,
     collectHintText = BONUS_COLLECT_HINT_TEXT,
     collectHintDuration = HINT_DISPLAY_DURATION
   } = config
@@ -212,6 +221,13 @@ export function create(config) {
     k.z(platformZ),
     CFG.game.platformName
   ])
+  //
+  // Fragment-only bonuses keep the collider permanently off-screen
+  //
+  if (disablePlatformBody) {
+    platform.pos.x = -5000
+    platform.pos.y = -5000
+  }
   //
   // Small hero on the platform (completely invisible - only sparkle hints).
   // Idle vocalization is disabled so this decorative mini hero never emits
@@ -279,8 +295,12 @@ export function create(config) {
     miniColor,
     offScreenY: OFF_SCREEN_Y,
     customPlatformDraw,
+    disablePlatformBody,
     collectHintText,
     collectHintDuration,
+    collectHintOrigin: null,
+    collectHintGrace: 0,
+    collectTooltip: null,
     logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
     storageKey,
     pulseTimer: 0,
@@ -385,13 +405,14 @@ function onUpdate(inst) {
   // Float animation for time-style platforms (continues after bonus collection)
   //
   inst.platformText && (inst.floatOffset += dt * FLOAT_SPEED)
+  updateCollectHintDistance(inst)
   if (inst.collected) {
     updateCollectParticles(inst, dt)
     updateBonusFlashParticles(inst, dt)
     //
     // Keep platform swaying after the mini-hero is collected
     //
-    if (inst.revealed && inst.platformText) {
+    if (inst.revealed && inst.platformText && !inst.disablePlatformBody) {
       const floatYCollected = inst.y + Math.sin(inst.floatOffset) * FLOAT_AMPLITUDE
       inst.platform.pos.y = floatYCollected + inst.collisionYOffset
       inst.platform.pos.x = inst.x + inst.collisionXOffset
@@ -400,6 +421,13 @@ function onUpdate(inst) {
   }
   const heroPos = inst.heroInst.character?.pos
   if (!heroPos) return
+  //
+  // Body-less fragment: keep collider parked; proximity collect still runs below
+  //
+  if (inst.disablePlatformBody) {
+    inst.platform.pos.x = -5000
+    inst.platform.pos.y = -5000
+  }
   //
   // Current Y with optional float
   //
@@ -440,7 +468,10 @@ function onUpdate(inst) {
   // very close to the surface. The platform must stay off-screen unless the hero
   // is about to land, so it never interferes with upward jumps or side movement.
   //
-  if (inst.revealed) {
+  if (inst.disablePlatformBody) {
+    inst.platform.pos.x = -5000
+    inst.platform.pos.y = -5000
+  } else if (inst.revealed) {
     inst.platform.pos.y = collisionY + inst.collisionYOffset
     inst.platform.pos.x = collisionCenterX
   } else {
@@ -1031,6 +1062,7 @@ function showCollectHint(inst) {
     text: inst.collectHintText,
     offsetY: -60
   }
+  inst.collectTooltip && Tooltip.destroy(inst.collectTooltip)
   const tooltip = Tooltip.create({
     k: inst.k,
     targets: [target],
@@ -1043,7 +1075,56 @@ function showCollectHint(inst) {
   tooltip.frozenX = heroPos.x
   tooltip.frozenY = heroPos.y
   tooltip.opacity = 1
-  inst.k.wait(inst.collectHintDuration, () => tooltip && Tooltip.destroy(tooltip))
+  inst.collectTooltip = tooltip
+  //
+  // Distance origin is locked after land-settle grace (not mid-bounce)
+  //
+  inst.collectHintOrigin = null
+  inst.collectHintGrace = COLLECT_HINT_SETTLE_GRACE
+  inst.k.wait(inst.collectHintDuration, () => {
+    if (inst.collectTooltip !== tooltip) return
+    dismissCollectHint(inst)
+  })
+}
+//
+// After settle grace, lock the appearance point; then dismiss at 30px away.
+// Timer expiry (collectHintDuration) also clears the tip.
+//
+function updateCollectHintDistance(inst) {
+  if (!inst.collectTooltip) return
+  const pos = inst.heroInst?.character?.pos
+  if (!pos) return
+  //
+  // Keep the bubble glued to the hero while it is still showing
+  //
+  inst.collectTooltip.frozenX = pos.x
+  inst.collectTooltip.frozenY = pos.y
+  if (inst.collectHintGrace > 0) {
+    inst.collectHintGrace -= inst.k.dt()
+    if (inst.collectHintGrace <= 0) {
+      inst.collectHintGrace = 0
+      inst.collectHintOrigin = { x: pos.x, y: pos.y }
+    }
+    return
+  }
+  if (!inst.collectHintOrigin) {
+    inst.collectHintOrigin = { x: pos.x, y: pos.y }
+  }
+  const dx = pos.x - inst.collectHintOrigin.x
+  const dy = pos.y - inst.collectHintOrigin.y
+  if (Math.hypot(dx, dy) < COLLECT_HINT_DISMISS_DIST) return
+  dismissCollectHint(inst)
+}
+/**
+ * Hides the active collect hint early (e.g. trampoline bounce away).
+ * @param {Object} inst - Bonus hero instance
+ */
+export function dismissCollectHint(inst) {
+  if (!inst?.collectTooltip) return
+  Tooltip.destroy(inst.collectTooltip)
+  inst.collectTooltip = null
+  inst.collectHintOrigin = null
+  inst.collectHintGrace = 0
 }
 //
 // Plays a short bright chime sound on collection

@@ -508,6 +508,10 @@ export function create(config) {
     spawnLandGrace: 0,          // After spawn, ignore settle-fall jump/land for this long
     postLandAirLock: 0,         // After land, ignore brief air flicker (no second crouch)
     //
+    // Head-bonk: full-height collision for the rest of this jump
+    //
+    jumpCeilingBonk: false,
+    //
     // After a letter dialog closes on Space, ignore jump until jump keys are released
     //
     jumpKeyReleaseGate: false,
@@ -845,11 +849,13 @@ export function setEyesClosed(inst, closed, opts = {}) {
 export function armJumpKeyReleaseGate(inst) {
   if (!inst) return
   inst.jumpKeyReleaseGate = true
+  inst.jumpKeyReleaseHold = 0
   inst.isSquashing = false
   inst.squashTimer = 0
   inst.landSquashTimer = 0
   inst.jumpPhase = 'none'
   inst.wasJumping = false
+  inst.jumpCeilingBonk = false
   syncPlatformLanding(inst)
   inst.canJump = false
 }
@@ -1318,23 +1324,39 @@ function onUpdate(inst) {
   //
   inst.postLandAirLock > 0 && (inst.postLandAirLock = Math.max(0, inst.postLandAirLock - inst.k.dt()))
   //
-  // Clear dialog Space gate once jump keys are fully released
+  // Clear dialog Space gate only after jump keys have been fully released
+  // for a beat — prevents key-repeat / same-frame Space from re-crouching.
   //
   if (inst.jumpKeyReleaseGate) {
-    if (!inst.k.isKeyDown('space') && !inst.k.isKeyDown('up') && !inst.k.isKeyDown('w')) {
-      inst.jumpKeyReleaseGate = false
+    const jumpHeld = inst.k.isKeyDown('space') || inst.k.isKeyDown('up') || inst.k.isKeyDown('w')
+    if (jumpHeld) {
+      inst.jumpKeyReleaseHold = 0
+    } else {
+      inst.jumpKeyReleaseHold = (inst.jumpKeyReleaseHold || 0) + inst.k.dt()
+      //
+      // Hold the gate longer so dialog Space cannot chain into wood jumps
+      //
+      if (inst.jumpKeyReleaseHold >= 0.22) {
+        inst.jumpKeyReleaseGate = false
+        inst.jumpKeyReleaseHold = 0
+        inst.canJump = true
+      }
     }
   }
   //
-  // Wood platforms: pre-jump squash shrinks the hitbox and can unground the
-  // hero, leaving isSquashing stuck in a crouch↔air loop. Abort whenever the
-  // feet leave the ground mid-squash, or while post-land lock / controls are off.
+  // Wood platforms: pre-jump squash can briefly unground — abort only that
+  // orphaned squash so it cannot loop crouch↔air. Never cancel an intentional
+  // grounded squash while postLandAirLock is ticking (that killed jumps after
+  // letter dialogs on glow logs).
   //
   if (inst.isSquashing && !isGrounded) {
     cancelJumpSquash(inst)
     syncJumpCollision(inst)
   }
-  if (inst.postLandAirLock > 0 || inst.controlsDisabled || !inst.controllable) {
+  //
+  // While controls are locked (dialog / intro), freeze jump/land poses to idle
+  //
+  if (inst.controlsDisabled || !inst.controllable) {
     if (inst.isSquashing || inst.landSquashTimer > 0 || inst.jumpPhase !== 'none') {
       cancelJumpSquash(inst)
       inst.landSquashTimer = 0
@@ -1345,6 +1367,16 @@ function onUpdate(inst) {
         inst.character.flipX = inst.direction === -1
         return
       }
+    }
+  } else if (inst.postLandAirLock > 0 && !inst.isSquashing) {
+    //
+    // Air-lock only suppresses false land-crouch — never eat a real jump squash
+    //
+    inst.landSquashTimer = 0
+    if (inst.jumpPhase !== 'none' && isGrounded) {
+      inst.jumpPhase = 'none'
+      inst.wasJumping = false
+      syncJumpCollision(inst)
     }
   }
   //
@@ -1372,6 +1404,15 @@ function onUpdate(inst) {
   // Handle pre-jump squash animation (only when grounded)
   //
   if (inst.isSquashing && isGrounded) {
+    //
+    // Dialog Space must never finish a crouch→launch on wood platforms
+    //
+    if (inst.jumpKeyReleaseGate || inst.controlsDisabled || !inst.controllable) {
+      cancelJumpSquash(inst)
+      updateIdleAnimation(inst)
+      inst.character.flipX = inst.direction === -1
+      return
+    }
     if (isJumpCeilingBlocked(inst)) {
       cancelJumpSquash(inst)
       inst.eyesClosed && updateIdleAnimation(inst)
@@ -1417,6 +1458,7 @@ function onUpdate(inst) {
       inst.isSquashing = false
       inst.squashTimer = 0
       inst.jumpPhase = 'jumping'
+      inst.jumpCeilingBonk = false
       inst.postLandAirLock = 0
       //
       // Keep frame 1 (stretch) for smooth transition to air
@@ -1448,24 +1490,30 @@ function onUpdate(inst) {
     }
     //
     // Brief platform contact flicker (run or idle) — stay in the current
-    // cycle instead of entering jump/land-squat (spawn settle + log jitter).
-    // postLandAirLock always wins: sprite/hitbox swaps (glow gold recolour)
-    // can mark jumpPhase='jumping' during a short unground; that must not
-    // start a crouch→land loop on wood platforms.
+    // cycle instead of entering jump/land-squat (spawn settle + log jitter /
+    // gold sprite swap). Only keep air anim if a real jump was already underway.
     //
     if (inst.postLandAirLock > 0) {
-      inst.airTime = 0
-      inst.jumpPhase = 'none'
-      inst.wasJumping = false
-      inst.landSquashTimer = 0
-      inst.isSquashing = false
-      inst.squashTimer = 0
-      syncJumpCollision(inst)
-      if (!isMoving) {
-        updateIdleAnimation(inst)
+      const intentionalJump = inst.wasJumping && inst.jumpPhase === 'jumping'
+      if (!intentionalJump) {
+        inst.airTime = 0
+        inst.jumpPhase = 'none'
+        inst.wasJumping = false
+        inst.landSquashTimer = 0
+        inst.isSquashing = false
+        inst.squashTimer = 0
+        inst.jumpCeilingBonk = false
+        //
+        // Do not zero vel.y — that pinned the hero inside thin wood / froze
+        // trampoline launches under overhead branches.
+        //
+        syncJumpCollision(inst)
+        if (!isMoving) {
+          updateIdleAnimation(inst)
+        }
+        inst.character.flipX = inst.direction === -1
+        return
       }
-      inst.character.flipX = inst.direction === -1
-      return
     }
     const groundFlicker = (inst.spawnLandGrace > 0 && inst.jumpPhase !== 'jumping') ||
       (inst.airTime < MIN_AIR_TIME_FOR_JUMP &&
@@ -1483,12 +1531,21 @@ function onUpdate(inst) {
         inst.squashTimer = 0
       }
       //
+      // Head into a branch/platform: full standing height and fall (no tucked pose)
+      //
+      resolveJumpCeilingBonk(inst)
+      //
       // Jumping - update animation based on velocity (position in jump arc)
       //
       const prefix = inst.spritePrefix || inst.type
       const velocity = inst.character.vel.y
       let targetFrame = inst.jumpFrame
-      if (velocity < -400) {
+      if (inst.jumpCeilingBonk) {
+        //
+        // After a ceiling hit stay at full-body descent frames
+        //
+        targetFrame = velocity < 200 ? 4 : 5
+      } else if (velocity < -400) {
         targetFrame = 1
       } else if (velocity < -150) {
         targetFrame = 2
@@ -1533,6 +1590,7 @@ function onUpdate(inst) {
       inst.jumpFrame = 0
       inst.isSquashing = false
       inst.squashTimer = 0
+      inst.jumpCeilingBonk = false
       if (realJump) {
         inst.landSquashTimer = LAND_SQUASH_TIME
         inst.postLandAirLock = POST_LAND_AIR_LOCK
@@ -1545,6 +1603,7 @@ function onUpdate(inst) {
       }
     }
     inst.airTime = 0
+    inst.jumpCeilingBonk = false
     //
     // Grounded ⇒ full hitbox (syncJumpCollision never compresses on the ground)
     //
@@ -1657,6 +1716,7 @@ function resetAirborneState(inst) {
   inst.squashTimer = 0
   inst.landSquashTimer = 0
   inst.airTime = 0
+  inst.jumpCeilingBonk = false
   inst.jumpCollisionTuck = 0
   inst.jumpCollisionLift = 0
   syncJumpCollision(inst)
@@ -1682,7 +1742,10 @@ function syncJumpCollision(inst) {
   if (!area) return
   const ch = inst.character
   const grounded = typeof ch.isGrounded === 'function' && ch.isGrounded()
-  const compressed = !grounded && inst.jumpPhase === 'jumping'
+  //
+  // After a head-bonk keep the full standing hitbox while falling
+  //
+  const compressed = !grounded && inst.jumpPhase === 'jumping' && !inst.jumpCeilingBonk
   const peak = compressed ? getJumpPeakFactor(inst) : 0
   const tuck = peak * JUMP_COLLISION_MAX_TUCK
   const lift = peak * JUMP_COLLISION_MAX_LIFT
@@ -2261,14 +2324,23 @@ function onCollisionPlatform(inst) {
   //
   // Play landing sound and create dust if was in air (once per cooldown)
   //
-  if (wasInAir && inst.wasJumping && inst.landFxCooldown <= 0 && inst.spawnLandGrace <= 0) {
+  const isGlow = inst.currentLevel?.startsWith('lesson-glow.')
+  //
+  // Glow: real air time can still land-SFX if wasJumping was cleared by wood
+  // flicker — never treat gold-swap micro-ungrounds as landings.
+  //
+  const mayLandFx = inst.wasJumping ||
+    (isGlow && inst.airTime >= MIN_AIR_TIME_FOR_JUMP)
+  if (wasInAir && mayLandFx && inst.landFxCooldown <= 0 && inst.spawnLandGrace <= 0) {
     inst.landFxCooldown = LAND_FX_COOLDOWN
+    //
+    // Prefer the surface stamped by the platform collide tag this frame
+    //
+    if (isGlow && inst.sfx && !inst.sfx._glowSurface) {
+      inst.sfx._glowSurface = 'ground'
+    }
     inst.sfx && Sound.playLandSound(inst.sfx, inst.currentLevel)
-    //
-    // Jump sound now plays on landing (not takeoff) — gives a satisfying
-    // impact feel instead of a pre-emptive boing at the moment of push-off.
-    //
-    inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
+    !isGlow && inst.wasJumping && inst.sfx && Sound.playJumpSound(inst.sfx, inst.currentLevel)
     //
     // Skip dust particles when suppressDust is set (e.g. landing in water)
     //
@@ -4160,17 +4232,63 @@ function cancelJumpSquash(inst) {
   inst.squashTimer = 0
   inst.jumpFrame = 0
   inst.jumpPhase = 'none'
+  inst.jumpCeilingBonk = false
 }
 //
-// True when a platform sits directly above the hero with too little room to jump.
+// Head hits a branch/platform mid-jump: kill upward velocity, restore full
+// standing hitbox, and keep falling (no tucked peak pose stuck under wood).
 //
-function isJumpCeilingBlocked(inst) {
+function resolveJumpCeilingBonk(inst) {
   const ch = inst.character
+  if (!ch?.exists?.()) return
+  if (inst.jumpCeilingBonk) {
+    //
+    // Kill only upward motion — let gravity pull the hero down after the hit
+    //
+    if (ch.vel && ch.vel.y < 0) ch.vel.y = 80
+    return
+  }
+  if (inst.jumpPhase !== 'jumping' && !inst.wasJumping) return
+  const velY = ch.vel?.y ?? 0
   //
-  // Heroes without a body component (e.g. drowning hero after unuse('body'))
-  // have no isGrounded — treat them as never ceiling-blocked instead of crashing.
+  // Only while rising into a real underside contact (not "near" overhead wood)
   //
-  if (!ch?.exists?.() || typeof ch.isGrounded !== 'function' || !ch.isGrounded()) return false
+  if (velY >= 0) return
+  if (!isHeadAgainstCeiling(inst, true)) return
+  inst.jumpCeilingBonk = true
+  inst.jumpPhase = 'jumping'
+  inst.wasJumping = true
+  //
+  // Stop the rise and start a soft fall from the contact point
+  //
+  if (ch.vel) ch.vel.y = 80
+  //
+  // Force syncJumpCollision to rebuild the full standing box
+  //
+  inst.jumpCollisionTuck = -1
+  inst.jumpCollisionLift = -1
+  syncJumpCollision(inst)
+  const prefix = inst.spritePrefix || inst.type
+  inst.jumpFrame = 5
+  try {
+    ch.use(inst.k.sprite(`${prefix}-jump-5`))
+  } catch (error) {
+    //
+    // Sprite may lag one frame after a gold recolour bake
+    //
+  }
+}
+//
+// True when a platform underside sits against / just above the hero's head.
+// Airborne mode requires actual underside contact — a distant log above the
+// trampoline must not cancel the bounce at takeoff.
+//
+function isHeadAgainstCeiling(inst, airborneOk = false) {
+  const ch = inst.character
+  if (!ch?.exists?.()) return false
+  if (!airborneOk) {
+    if (typeof ch.isGrounded !== 'function' || !ch.isGrounded()) return false
+  }
   const headTop = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) - (inst.collisionBaseHeight ?? 74) / 2
   const heroFeetY = ch.pos.y + (inst.collisionBaseOffsetY ?? -16) + (inst.collisionBaseHeight ?? 74) / 2
   const heroHalfW = (inst.collisionBaseWidth ?? 40) / 2 + 6
@@ -4179,23 +4297,40 @@ function isJumpCeilingBlocked(inst) {
   const platforms = [...inst.k.get(CFG.game.platformName), ...inst.k.get('platform')]
   for (const obj of platforms) {
     if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
-    //
-    // Anti-hero bodies must not count as jump ceilings — only dedicated head colliders do.
-    //
     if (obj.is?.(ANTIHERO_TAG)) continue
+    //
+    // Hidden/off-screen pads must not count as ceilings
+    //
+    if (obj.pos.y > 5000) continue
     const rect = getPlatformWorldRect(obj)
     if (!rect) continue
     const hOverlap = heroRight > rect.left && heroLeft < rect.right
-    const overhead = rect.bottom > headTop + 2 && rect.top < headTop + JUMP_CEILING_CLEARANCE
-    if (!hOverlap || !overhead) continue
-    //
-    // Ignore the surface the hero is standing on (e.g. anti-hero head).
-    //
+    if (!hOverlap) continue
     const standingOn = heroFeetY >= rect.top - 6 && heroFeetY <= rect.bottom + 10
     if (standingOn) continue
-    return true
+    if (airborneOk) {
+      //
+      // Head must actually touch the underside (tight band), not merely be
+      // under a platform somewhere above (trampoline under L log).
+      //
+      const touchingUnderside = rect.bottom >= headTop - 8 && rect.bottom <= headTop + 14
+      if (touchingUnderside) return true
+      continue
+    }
+    const overhead = rect.bottom > headTop + 2 && rect.top < headTop + JUMP_CEILING_CLEARANCE
+    if (overhead) return true
   }
   return false
+}
+//
+// True when a platform sits directly above the hero with too little room to jump.
+//
+function isJumpCeilingBlocked(inst) {
+  //
+  // Heroes without a body component (e.g. drowning hero after unuse('body'))
+  // have no isGrounded — treat them as never ceiling-blocked instead of crashing.
+  //
+  return isHeadAgainstCeiling(inst, false)
 }
 //
 // World-space AABB for a static platform body (supports topleft and center anchors).

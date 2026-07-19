@@ -36,7 +36,15 @@ export function create(cfg) {
     // dismiss the bubble if he walks away.
     //
     spawnX: 0,
-    spawnY: 0
+    spawnY: 0,
+    //
+    // When true, only the hint timer (or an explicit clear) ends the bubble
+    //
+    ignoreMovementDismiss: false,
+    //
+    // When true, the bubble tracks the hero each frame (e.g. drowning)
+    //
+    followHero: false
   }
   k.onUpdate(() => onUpdate(inst))
   return inst
@@ -56,10 +64,20 @@ export function isActive(inst) {
  * @param {Object} inst - Hero hint inst
  * @param {string} text - Hint text (supports \n for multiline)
  * @param {number} duration - Total on-screen time in seconds
+ * @param {Object} [opts] - Show options
+ * @param {boolean} [opts.ignoreMovementDismiss=false] - Keep bubble until timer ends
+ * @param {boolean} [opts.followHero=false] - Track the hero position every frame
+ * @param {number} [opts.anchorX] - Optional world X override for the bubble
+ * @param {number} [opts.anchorY] - Optional world Y override for the bubble
  */
-export function show(inst, text, duration) {
+export function show(inst, text, duration, opts = {}) {
   inst.queue = []
   inst.onQueueEmpty = null
+  inst.ignoreMovementDismiss = Boolean(opts.ignoreMovementDismiss)
+  inst.followHero = Boolean(opts.followHero)
+  inst.anchorOverride = (opts.anchorX != null && opts.anchorY != null)
+    ? { x: opts.anchorX, y: opts.anchorY }
+    : null
   startHint(inst, text, duration)
 }
 
@@ -74,6 +92,7 @@ export function queue(inst, hints, onComplete = null) {
   const first = list.shift()
   inst.queue = list
   inst.onQueueEmpty = onComplete
+  inst.ignoreMovementDismiss = false
   first && startHint(inst, first.text, first.duration)
 }
 
@@ -84,6 +103,8 @@ export function queue(inst, hints, onComplete = null) {
 export function clear(inst) {
   inst.queue = []
   inst.onQueueEmpty = null
+  inst.ignoreMovementDismiss = false
+  inst.followHero = false
   destroyHint(inst)
 }
 //
@@ -94,17 +115,23 @@ function startHint(inst, text, duration) {
   const { k, heroInst } = inst
   inst.timer = 0
   inst.duration = duration
-  const hx = heroInst.character?.pos?.x ?? 0
-  const hy = heroInst.character?.pos?.y ?? 0
+  const hx = inst.anchorOverride?.x ?? heroInst.character?.pos?.x ?? 0
+  const hy = inst.anchorOverride?.y ?? heroInst.character?.pos?.y ?? 0
   inst.spawnX = hx
   inst.spawnY = hy
+  inst.anchorOverride = null
   //
   // Anchor at the spawn world position — the bubble must stay where it
   // appeared so walking away reads clearly before the 30 px dismiss.
+  // followHero mode re-reads the hero each frame instead.
   //
   inst.target = {
-    x: () => inst.spawnX,
-    y: () => inst.spawnY,
+    x: () => inst.followHero
+      ? (inst.heroInst.character?.pos?.x ?? inst.spawnX)
+      : inst.spawnX,
+    y: () => inst.followHero
+      ? (inst.heroInst.character?.pos?.y ?? inst.spawnY)
+      : inst.spawnY,
     width: 1,
     height: 1,
     text,
@@ -142,12 +169,20 @@ function shouldDismissByMovement(inst) {
   const ch = hero?.character
   if (!ch?.pos) return false
   //
-  // Jump / leave-ground while a hero-anchored hint is up
+  // Replay / goal reminders stay until Space/Esc or the timer expires
+  //
+  if (inst.ignoreMovementDismiss) return false
+  //
+  // Intro / dialog locks freeze the hero — spawn settle must not wipe hints
+  //
+  if (hero.controlsDisabled || !hero.controllable) return false
+  //
+  // Only a real jump (crouch→launch) dismisses — brief unground flicker /
+  // spawn plant used to clear intro bubbles before they were readable.
   //
   const jumping = hero.isSquashing ||
     hero.jumpPhase === 'jumping' ||
-    hero.jumpPhase === 'squashing' ||
-    (typeof ch.isGrounded === 'function' && !ch.isGrounded() && (hero.airTime || 0) > 0.05)
+    hero.jumpPhase === 'squashing'
   if (jumping) return true
   const dx = ch.pos.x - inst.spawnX
   const dy = ch.pos.y - inst.spawnY

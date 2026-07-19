@@ -43,9 +43,9 @@ const EYE_RING_B = 14
 const EYE_WHITE_R = 240
 const EYE_WHITE_G = 238
 const EYE_WHITE_B = 242
-const PUPIL_R = 6
-const PUPIL_G = 4
-const PUPIL_B = 8
+const PUPIL_R = 0
+const PUPIL_G = 0
+const PUPIL_B = 0
 const FEET_R = 140
 const FEET_G = 138
 const FEET_B = 150
@@ -55,10 +55,12 @@ const TOE_WIDTH = 1.6
 // Eye geometry — cartoon crow has a big expressive eye
 //
 const EYE_RADIUS = 4.2
-const PUPIL_RADIUS = 1.8
+//
+// Solid black circular pupil (equal axes — never a flat oval)
+//
+const PUPIL_RADIUS = 2.15
 const EYE_RING_RADIUS = 5.0
-const EYE_HIGHLIGHT_RADIUS = 0.7
-const MAX_PUPIL_OFFSET = (EYE_RADIUS - PUPIL_RADIUS) * 0.5
+const MAX_PUPIL_OFFSET = (EYE_RADIUS - PUPIL_RADIUS) * 0.45
 //
 // How far the body center is raised above perchY so legs clearly extend below.
 // Callers should treat perchY as the foot/perch level.
@@ -169,45 +171,7 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBo
     color: hd, opacity: 1
   })
   //
-  // Eye position (on front/beak side of head, upper area)
-  //
-  const eyeCx = cx + 15.5 * sc * s
-  const eyeCy = vy - 16 * sc
-  //
-  // Compute pupil offset toward hero (eye tracking)
-  //
-  const heroPosX = heroInst?.character?.pos?.x ?? (cx + s)
-  const heroPosY = heroInst?.character?.pos?.y ?? eyeCy
-  const eDx = heroPosX - eyeCx
-  const eDy = heroPosY - eyeCy
-  const eDist = Math.sqrt(eDx * eDx + eDy * eDy) || 1
-  const maxOff = MAX_PUPIL_OFFSET * sc
-  const pupilX = eyeCx + (eDx / eDist) * maxOff
-  const pupilY = eyeCy + (eDy / eDist) * maxOff
-  //
-  // Eye ring (outer dark border for definition)
-  //
-  k.drawCircle({ pos: k.vec2(eyeCx, eyeCy), radius: EYE_RING_RADIUS * sc, color: eRing, opacity: 1 })
-  //
-  // Eye sclera (bright white — cartoon crow has expressive big eyes)
-  //
-  k.drawCircle({ pos: k.vec2(eyeCx, eyeCy), radius: EYE_RADIUS * sc, color: eWhi, opacity: 1 })
-  //
-  // Pupil (tracks hero direction)
-  //
-  k.drawCircle({ pos: k.vec2(pupilX, pupilY), radius: PUPIL_RADIUS * sc, color: pup, opacity: 1 })
-  //
-  // Specular highlight dot (top-inner of eye)
-  //
-  k.drawCircle({
-    pos: k.vec2(pupilX - 0.6 * sc * s, pupilY - 0.8 * sc),
-    radius: EYE_HIGHLIGHT_RADIUS * sc,
-    color: k.rgb(255, 255, 255), opacity: 0.9
-  })
-  //
-  // Beak — black hooked shape, prominent and well-defined.
-  // Upper mandible: large, hooks downward at tip.
-  // Lower mandible (when open): short curve below upper.
+  // Beak first — drawn under the eye so black beak geometry never stains the sclera
   //
   const beakBaseX = cx + 14 * sc * s
   const beakBaseY = vy - 13 * sc
@@ -268,14 +232,41 @@ export function drawCrow(k, cx, perchY, sc, s, mouthOpen, heroInst, brightnessBo
       color: bkDk, opacity: 1
     })
     //
-    // Nostril dot on upper mandible base
+    // Nostril sits mid-beak (away from the eye) so it never stains the sclera
     //
     k.drawCircle({
-      pos: k.vec2(beakBaseX + 3 * sc * s, beakBaseY - 2 * sc),
-      radius: 0.9 * sc,
+      pos: k.vec2(beakBaseX + 7 * sc * s, beakBaseY - 1.5 * sc),
+      radius: 0.75 * sc,
       color: bkDk, opacity: 0.8
     })
   }
+  //
+  // Eye drawn last — solid white sclera (no beak bleed) + single black pupil
+  //
+  const eyeCx = cx + 14.2 * sc * s
+  const eyeCy = vy - 17.2 * sc
+  const heroPosX = heroInst?.character?.pos?.x ?? (cx + s)
+  const heroPosY = heroInst?.character?.pos?.y ?? eyeCy
+  const eDx = heroPosX - eyeCx
+  const eDy = heroPosY - eyeCy
+  const eDist = Math.sqrt(eDx * eDx + eDy * eDy) || 1
+  const maxOff = MAX_PUPIL_OFFSET * sc
+  const pupilX = eyeCx + (eDx / eDist) * maxOff
+  const pupilY = eyeCy + (eDy / eDist) * maxOff
+  const pupilR = PUPIL_RADIUS * sc
+  k.drawCircle({ pos: k.vec2(eyeCx, eyeCy), radius: EYE_RING_RADIUS * sc, color: eRing, opacity: 1 })
+  k.drawCircle({ pos: k.vec2(eyeCx, eyeCy), radius: EYE_RADIUS * sc, color: eWhi, opacity: 1 })
+  //
+  // Second white fill guarantees a clean sclera over any beak overlap
+  //
+  k.drawCircle({ pos: k.vec2(eyeCx, eyeCy), radius: EYE_RADIUS * sc * 0.92, color: eWhi, opacity: 1 })
+  k.drawEllipse({
+    pos: k.vec2(pupilX, pupilY),
+    radiusX: pupilR,
+    radiusY: pupilR,
+    color: pup,
+    opacity: 1
+  })
   //
   // Legs: two segments from body bottom down to perchY.
   // legTop is at body bottom (vy + 12*sc), legBot is at perchY = footY.

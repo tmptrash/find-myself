@@ -190,7 +190,7 @@ const SCENE_FADE_OUT_DURATION = 1.5
 // Dialogs for each letter
 //
 const L1_DIALOG_T = "Every conversation begins with\na [hl]T[/hl]ouch. Speak with Trees..."
-const L1_DIALOG_O = "[hl]O[/hl]bserve. Every voice is\ndifferent."
+const L1_DIALOG_O = "[hl]O[/hl]bserve. Learn to notice\nboth yourself and nature."
 const L1_DIALOG_U = "[hl]U[/hl]nderstand. Patterns create\nmeaning. Maybe birds may help\nyou?"
 const L1_DIALOG_CH = "Every [hl]C[/hl]onnection carries\n[hl]H[/hl]armony within it."
 //
@@ -210,7 +210,7 @@ const LETTER_SINK_CH = 17
 // Goal texts matching dialogs (shown when goal button pressed)
 //
 const L1_GOAL_T = "Every conversation begins\nwith a Touch. Speak with\nTrees — touch all of them."
-const L1_GOAL_O = "Observe. Every voice is\ndifferent. Touch all 7\ntrees again."
+const L1_GOAL_O = "Observe. Learn to notice\nboth yourself and nature."
 const L1_GOAL_U = "Understand. Patterns create\nmeaning. Hover the bird to\nhear the sequence."
 const L1_GOAL_CH = "Connection and Harmony.\nYou found yourself."
 //

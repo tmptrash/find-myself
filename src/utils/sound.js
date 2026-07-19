@@ -20,6 +20,10 @@ let globalSubtitleSound = null
 //
 let globalMuteProceduralSounds = false
 //
+// Single active rain loop across all Sound.create() instances (shared AudioContext)
+//
+let globalRainStop = null
+//
 // Master volume ceiling for the calm pad (word level 4 calm platform)
 //
 const CALM_PAD_MASTER = 0.13
@@ -372,6 +376,7 @@ export function isAmbientPlaying(instance) {
  */
 export function playLandSound(instance, currentLevel = null) {
   if (!instance?.audioContext || instance.audioContext.state !== 'running') return
+  if (instance._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section level 3 (monster footstep sound)
@@ -465,6 +470,9 @@ export function playLandSound(instance, currentLevel = null) {
     instance._l2Surface === 'snow' ? playSnowCrunchLand(instance) : playWoodKnockLand(instance)
   } else if (isGlowSection) {
     if (instance._glowSurface === 'water') return
+    //
+    // Dedicated land hits (same family as steps, louder, via landGain)
+    //
     instance._glowSurface === 'wood' ? playGlowWoodKnockLand(instance) : playGlowGroundLand(instance)
   } else if (isTouchSection) {
     //
@@ -799,6 +807,7 @@ export function playTextSlideSound(instance) {
  * @param {string} [currentLevel] - Current level name to determine sound type
  */
 export function playJumpSound(instance, currentLevel = null) {
+  if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section (clock tick jump)
@@ -906,6 +915,7 @@ export function playJumpSound(instance, currentLevel = null) {
  * @param {string} [currentLevel] - Current level name to determine sound type
  */
 export function playStepSound(instance, currentLevel = null) {
+  if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   //
   // Check if we're in time section level 3 (monster footstep sound)
@@ -1497,6 +1507,7 @@ export function playDisappearSound(instance) {
  * @param {Object} instance - Sound instance
  */
 export function playSpawnSweep(instance) {
+  if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   // Quick rise (energy wave)
   const sweep = instance.audioContext.createOscillator()
@@ -1520,6 +1531,7 @@ export function playSpawnSweep(instance) {
  * @param {Object} instance - Sound instance
  */
 export function playSpawnClick(instance) {
+  if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   // Click at spawn moment
   const click = instance.audioContext.createOscillator()
@@ -1613,6 +1625,7 @@ export function playLifeSound(_k) {
  * @param {Object} instance - Sound instance
  */
 export function playGentleLifeSound(instance) {
+  if (instance?._glowSfxMuted) return
   const { audioContext } = instance
   const now = audioContext.currentTime
   //
@@ -1695,6 +1708,7 @@ export function playVictorySound(instance) {
  * @param {Object} instance - Sound instance from create()
  */
 export function playLetterPickupSoft(instance) {
+  if (instance?._glowSfxMuted) return
   const now = instance.audioContext.currentTime
   const duration = 0.55
   //
@@ -2775,7 +2789,7 @@ export function playBugCheerSound(inst, delay = 0, baseFreqOverride = null, volu
  * @param {number} [config.volume=1] - Per-note gain multiplier
  */
 export function playIdleHumNote(inst, config = {}) {
-  if (!inst?.audioContext) return
+  if (!inst?.audioContext || inst._glowSfxMuted) return
   const ctx = inst.audioContext
   if (ctx.state === 'suspended') {
     ctx.resume()
@@ -3883,7 +3897,8 @@ export function playSplashSound(instance, volume = 0.3) {
  * @param {Object} k - Kaplay instance
  * @param {number} [volume=0.4] - Playback volume 0..1
  */
-export function playWaterStepsFootstepKaplay(k, volume = 0.4) {
+export function playWaterStepsFootstepKaplay(k, volume = 0.4, soundInst = null) {
+  if (soundInst?._glowSfxMuted) return
   if (globalMuteProceduralSounds) return
   k?.play?.('water-steps', { volume: Math.min(1, Math.max(0.05, volume)) })
 }
@@ -4009,8 +4024,22 @@ export function playLeafGroundRustle(instance, volume = 0.22) {
   src.stop(now + dur + 0.01)
 }
 /**
+ * Stops the global rain loop (shared across scene reloads / Sound instances).
+ * @param {Object} [instance] - Optional sound instance (kept for call-site compatibility)
+ */
+export function stopRainSound(instance) {
+  if (!globalRainStop) {
+    if (instance) instance._rainStop = null
+    return
+  }
+  const stop = globalRainStop
+  globalRainStop = null
+  if (instance) instance._rainStop = null
+  stop()
+}
+/**
  * Starts a rain drip loop: individual drip sounds at random intervals.
- * Returns a stop function to end the loop.
+ * Always replaces any previous rain globally so reloads never stack layers.
  * @param {Object} instance - Sound instance
  * @param {number} [volume=0.1] - Drip volume
  * @returns {Function} Call to stop the drip loop
@@ -4018,6 +4047,10 @@ export function playLeafGroundRustle(instance, volume = 0.22) {
 export function startRainSound(instance, volume = 0.1) {
   const ctx = instance.audioContext
   if (!ctx || ctx.state !== 'running') return () => {}
+  //
+  // Kill any leftover rain from a previous scene load before starting a new one
+  //
+  stopRainSound(instance)
   //
   // Continuous filtered white noise shaped to sound like quiet rain
   //
@@ -4044,10 +4077,22 @@ export function startRainSound(instance, volume = 0.1) {
   loPass.connect(gain)
   gain.connect(ctx.destination)
   noise.start()
-  return () => {
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
-    setTimeout(() => { try { noise.stop() } catch (_) {} }, 400)
+  let stopped = false
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    try {
+      gain.gain.cancelScheduledValues(ctx.currentTime)
+      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+    } catch (_) {}
+    setTimeout(() => { try { noise.stop() } catch (_) {} }, 200)
+    if (globalRainStop === stop) globalRainStop = null
+    if (instance._rainStop === stop) instance._rainStop = null
   }
+  globalRainStop = stop
+  instance._rainStop = stop
+  return stop
 }
 /**
  * Plays a distant thunder rumble (low-frequency noise burst with reverb tail)

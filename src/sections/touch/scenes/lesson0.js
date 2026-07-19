@@ -607,7 +607,7 @@ const TOUCH_GATHER_SOUND_INTERVAL_MAX = 1.1
 //
 // How long to wait after all bugs have arrived near the hero before transitioning
 //
-const TOUCH_GATHER_POST_ARRIVE_DELAY = 15
+const TOUCH_GATHER_POST_ARRIVE_DELAY = 19
 //
 // Tall monsters bob/crouch during the gather countdown (dance)
 //

@@ -11,11 +11,11 @@ import { GLOW_PAL } from './glow-palette.js'
 const HERO_BODY_W = 48
 const HERO_BODY_H = 96
 //
-// Cave mouth ~2.4 hero-widths so the pit reads as a thick entrance
+// Cave mouth ~3.4 hero-widths — wider entrance extending further left
 //
-const CRACK_ZONE_W = Math.round(HERO_BODY_W * 2.4)
-const PIT_DEPTH = Math.round(HERO_BODY_H * 1.5)
-const PIT_WALL_W = 16
+const CRACK_ZONE_W = Math.round(HERO_BODY_W * 3.4)
+const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
+const PIT_WALL_W = 20
 //
 // 2/3 field midges across the playfield, 1/3 clustered at the cave mouth
 //
@@ -236,7 +236,10 @@ export function createGlowPit(cfg) {
     pitFloor: null,
     pitWalls: [],
     pitBonus: null,
-    collapseArmed: false
+    collapseArmed: false,
+    wasOnBonusPlat: false,
+    leftBonusAirborne: false,
+    wallProfile: null
   }
   if (pit.collapsed) {
     crackFloor.destroy?.()
@@ -279,7 +282,8 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome) {
   const heroX = char.pos.x
   const overCrack = heroX >= zone.x1 && heroX <= zone.x2
   //
-  // Arm only while standing on the upper-right fragment log
+  // Arm only after jumping/falling off the upper-right fragment log — standing
+  // on it must not open the cave; the player must land on the crack entrance.
   //
   let onBonus = false
   if (bonusPlatHome) {
@@ -288,16 +292,23 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome) {
       heroX >= bonusPlatHome.x - 16 &&
       heroX <= bonusPlatHome.x + bw + 16 &&
       char.pos.y < bonusPlatHome.y + 90
-    if (onBonus) pit.collapseArmed = true
   }
-  //
-  // Collapse only on a landing into the crack band after leaving that log.
-  // Landing anywhere else clears the arm so a later hop over the cracks is safe.
-  //
+  if (onBonus && grounded) {
+    pit.wasOnBonusPlat = true
+    pit.leftBonusAirborne = false
+  }
+  if (pit.wasOnBonusPlat && !grounded) {
+    pit.leftBonusAirborne = true
+    pit.collapseArmed = true
+  }
   if (pit.collapseArmed && overCrack && justLanded) {
     collapsePit(pit)
-  } else if (justLanded && !overCrack && !onBonus) {
     pit.collapseArmed = false
+    pit.wasOnBonusPlat = false
+    pit.leftBonusAirborne = false
+  } else if (justLanded && !overCrack) {
+    pit.collapseArmed = false
+    pit.leftBonusAirborne = false
   }
 }
 //
@@ -403,14 +414,14 @@ function drawGlowMidges(k, ctrl) {
 function buildFractalCrackSegs(zone) {
   const segs = []
   //
-  // Compact hairline cracks — short forks, not a wide fracture field
+  // Denser crack field above the cave mouth
   //
-  const roots = 2 + Math.floor(Math.random() * 2)
+  const roots = 6 + Math.floor(Math.random() * 4)
   for (let i = 0; i < roots; i++) {
-    const x0 = zone.x1 + zone.width * (0.18 + Math.random() * 0.64)
+    const x0 = zone.x1 + zone.width * (0.08 + Math.random() * 0.84)
     const y0 = zone.floorY + 1 + Math.random() * 2
-    const ang = (Math.random() - 0.5) * 0.55 + Math.PI * 0.5
-    growCrack(segs, x0, y0, ang, 8 + Math.random() * 7, 2, 1.35)
+    const ang = (Math.random() - 0.5) * 0.65 + Math.PI * 0.5
+    growCrack(segs, x0, y0, ang, 10 + Math.random() * 12, 3, 1.45)
   }
   return segs
 }
@@ -459,28 +470,85 @@ function drawCavePit(k, pit, groundC) {
     Math.max(0, Math.round(groundC.g * 0.82)),
     Math.max(0, Math.round(groundC.b * 0.8))
   )
+  if (!pit.wallProfile) {
+    pit.wallProfile = buildCaveWallProfile(zone, floorY)
+  }
   const pts = []
-  const steps = 28
+  for (const p of pit.wallProfile.left) {
+    pts.push(k.vec2(p.x, p.y))
+  }
+  for (let i = pit.wallProfile.right.length - 1; i >= 0; i--) {
+    pts.push(k.vec2(pit.wallProfile.right[i].x, pit.wallProfile.right[i].y))
+  }
+  k.drawPolygon({ pts, color: voidC })
+  //
+  // Jagged earth rim — short vertical notches along the mouth
+  //
+  const rimC = k.rgb(
+    Math.max(0, groundC.r - 38),
+    Math.max(0, groundC.g - 38),
+    Math.max(0, groundC.b - 35)
+  )
+  for (let i = 0; i < pit.wallProfile.rim.length; i++) {
+    const r = pit.wallProfile.rim[i]
+    k.drawLine({
+      p1: k.vec2(r.x1, r.y1),
+      p2: k.vec2(r.x2, r.y2),
+      width: Math.max(1.2, r.w),
+      color: rimC,
+      opacity: 0.85
+    })
+  }
+}
+//
+// Irregular stepped cave walls — reads as broken earth, not smooth curves
+//
+function buildCaveWallProfile(zone, floorY) {
+  const steps = 38
+  const left = []
+  const right = []
+  const seed = zone.x1 * 0.017 + floorY * 0.003
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
     const y = floorY + t * zone.depth
-    const bulge = shorelineBulge(t, 1) * zone.width * 0.38
-    pts.push(k.vec2(zone.x1 + PIT_WALL_W * 0.35 + bulge, y))
+    const jagL = caveWallJag(t, 1, seed)
+    const jagR = caveWallJag(t, 2, seed)
+    left.push({
+      x: zone.x1 + PIT_WALL_W * 0.15 + jagL,
+      y
+    })
+    right.push({
+      x: zone.x2 - PIT_WALL_W * 0.15 - jagR,
+      y
+    })
   }
-  for (let i = steps; i >= 0; i--) {
-    const t = i / steps
-    const y = floorY + t * zone.depth
-    const bulge = shorelineBulge(t, 2) * zone.width * 0.2
-    pts.push(k.vec2(zone.x2 - PIT_WALL_W * 0.35 - bulge, y))
+  const rim = []
+  const rimSteps = 14 + Math.floor(Math.random() * 6)
+  for (let i = 0; i < rimSteps; i++) {
+    const t = i / rimSteps
+    const x = zone.x1 + t * zone.width
+    const notch = 2 + Math.random() * 7
+    rim.push({
+      x1: x,
+      y1: floorY,
+      x2: x + zone.width / rimSteps * 0.85,
+      y2: floorY + notch,
+      w: 1.1 + Math.random() * 1.4
+    })
   }
-  k.drawPolygon({ pts, color: voidC })
+  return { left, right, rim }
 }
-function shorelineBulge(t, seed) {
-  return 0.35 +
-    0.4 * Math.sin(t * Math.PI * 1.15 + seed) +
-    0.22 * Math.sin(t * Math.PI * 3.4 + seed * 1.7) +
-    0.12 * Math.sin(t * Math.PI * 7.1 + seed * 0.6) +
-    0.08 * Math.sin(t * 21 + seed)
+function caveWallJag(t, side, seed) {
+  const s = side === 1 ? 1 : -1
+  return s * (
+    Math.sin(t * 17.3 + seed) * 12 +
+    Math.sin(t * 43.7 + seed * 1.4) * 8 +
+    Math.sin(t * 89 + seed * 0.6) * 5 +
+    Math.sin(t * 151 + seed * 2.1) * 3
+  ) + Math.sin(t * 31 + seed * side) * zoneBulge(t) * 14
+}
+function zoneBulge(t) {
+  return 0.25 + 0.35 * Math.sin(t * Math.PI * 1.2)
 }
 function drawPitTrampoline(k, pit) {
   const x = pit.trampState.x
@@ -525,7 +593,10 @@ function openPitPhysics(pit) {
     CFG.game.platformName
   ])
   if (!get(KEY_PIT_BONUS, false) && pit.heroInst) {
-    const bonusX = innerX + innerW * 0.32
+    //
+    // Fragment sits left in the widened cave — not under the fall line
+    //
+    const bonusX = innerX + innerW * 0.14
     pit.pitBonus = BonusHero.create({
       k,
       x: bonusX,

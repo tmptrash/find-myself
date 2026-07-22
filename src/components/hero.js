@@ -4298,6 +4298,7 @@ function isHeadAgainstCeiling(inst, airborneOk = false) {
   for (const obj of platforms) {
     if (!obj?.exists?.() || obj === ch || obj.hidden || obj.pos.y < -5000) continue
     if (obj.is?.(ANTIHERO_TAG)) continue
+    if (obj.is?.('startBranch')) continue
     //
     // Hidden/off-screen pads must not count as ceilings
     //

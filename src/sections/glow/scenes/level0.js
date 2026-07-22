@@ -131,8 +131,12 @@ const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-sprite'
 //
 // Horizontal branch platform.
 //
-const HORIZ_PLATFORM_H = 10
+const HORIZ_PLATFORM_H = 16
 const HERO_SPAWN_OFFSET_ABOVE_BRANCH = 80
+//
+// Anti-tunnel band below the start branch — catches falls before lake-floor snap
+//
+const BRANCH_SNAP_BELOW = 88
 const HERO_BRANCH_FRACTION = 0.20
 //
 // Respawn point at the lower-right ground — used after a death once the
@@ -658,16 +662,32 @@ const TRAMP_BLINK_MIN_INTERVAL = 2.5
 const TRAMP_BLINK_MAX_INTERVAL = 6
 const TRAMP_BLINK_DURATION = 0.14
 //
-// Launch velocity tuned so the bounce apex is 30% lower than the original
-// 1350 px/s launch (height scales with velocity squared: 1350 * sqrt(0.7)).
+// Launch velocity — noticeably higher than a normal jump, not a separate physics mode
 //
-const TRAMP_FORCE = 1130
-//
-// Stronger bounce once the mushroom has walked out to the W dock
-//
-const TRAMP_FORCE_DOCKED = 1320
+const TRAMP_BOOST_MULT = 1.85
+const TRAMP_DOCKED_BOOST_MULT = 2.0
 const TRAMP_COOLDOWN = 0.4
 const TRAMP_RADIUS = 38
+//
+// Horizontal slack on the cap for bounce / pad activation (not ground beside)
+//
+const TRAMP_ADJACENT_X = 22
+//
+// Invisible solid pad under the cap — top flush with capTopY
+//
+const TRAMP_PAD_H = 10
+//
+// Feet below this offset from capTop keep the pad hidden (walk through stem)
+//
+const TRAMP_PAD_FEET_BELOW = 20
+//
+// Horizontal reach for pad placement and fall-through guards
+//
+const TRAMP_NEAR_X = TRAMP_RADIUS + 80
+//
+// Anti-tunnel band below the cap when jumping onto the mushroom
+//
+const TRAMP_SNAP_BELOW = 48
 const TRAMP_SQUASH_MAX = 0.35
 const TRAMP_SPRITE = 'glow0-trampoline'
 const TRAMP_OFFSET_FROM_L_PLAT = 50
@@ -678,9 +698,27 @@ const TRAMP_WALK_STILL = 3
 const TRAMP_WALK_COUNTDOWN = 10
 const TRAMP_WALK_SPEED = 52
 const TRAMP_WALK_NEAR = 88
+//
+// Wider stand-still band while the O-meditation countdown ticks (hero sings)
+//
+const TRAMP_WALK_NEAR_SINGING = 148
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
-const TRAMP_CHEEKY_TEXT = 'Getting cheeky, are we?'
+const TRAMP_BAD_SING_TEXT = 'Oh my god, you sing so badly'
+const TRAMP_BAD_SING_DURATION = 4
+//
+// Rotating quips when the hero keeps bouncing without a break
+//
+const TRAMP_CHEEKY_LINES = [
+  'Getting cheeky, are we?',
+  'Boing. Boing. Boing.',
+  'Someone\'s got spring fever.',
+  'The mushroom is judging you.',
+  'Still bouncing? Really?',
+  'You\'re wearing me out.',
+  'This is not a trampoline park.',
+  'Fine. Keep going. See if I care.'
+]
 //
 // Colour-phase outlines for ground decor (appear after O). Each decor object
 // bakes a second "-o" sprite variant with a thin dark rim in a tone derived
@@ -773,6 +811,11 @@ const POST_LAND_AIR_LOCK_GLOW = 0.28
 const GOLD_RECOLOR_DELAY = 0.55
 const DIALOG_INPUT_GRACE = 0.85
 //
+// After dialog pin release, keep gravity off and Y pinned briefly so L/O
+// wood hitboxes register before physics resume (prevents fall-through).
+//
+const DIALOG_POST_SETTLE = 0.42
+//
 // Hover watchdog: a hero suspended above a log with zero vertical velocity
 // and no ground contact for this many consecutive frames gets pulled down
 // onto the log top. Normal jumps never trigger it (velocity is only ~0 for
@@ -847,7 +890,10 @@ export function sceneGlowLevel0(k) {
     const floorPlat = floorBounds.floor
     const cornerObjs = createRoundedCorners(k)
     const { horizBranch } = treeData
-    const branchPlatY = horizBranch.physY + Math.round(HORIZ_PLATFORM_H / 2)
+    //
+    // Platform top aligns with physY — the visible branch walk surface
+    //
+    const branchPlatY = horizBranch.physY
     const branchPlat = k.add([
       k.rect(horizBranch.x2 - horizBranch.x1, HORIZ_PLATFORM_H),
       k.pos(horizBranch.x1, branchPlatY),
@@ -857,9 +903,7 @@ export function sceneGlowLevel0(k) {
       k.opacity(0),
       CFG.game.platformName
     ])
-    //
-    // Home pose for one-way branch collision while the tree sprite is hidden
-    //
+    branchPlat.use('startBranch')
     const branchPlatHome = { x: horizBranch.x1, y: branchPlatY }
     const branchSpawnX = horizBranch.x1 + Math.round((horizBranch.x2 - horizBranch.x1) * HERO_BRANCH_FRACTION)
     //
@@ -1034,7 +1078,7 @@ export function sceneGlowLevel0(k) {
     // through the lake while riding / bouncing on the cap)
     //
     const trampPad = k.add([
-      k.rect(TRAMP_CAP_W, 10),
+      k.rect(TRAMP_CAP_W, TRAMP_PAD_H),
       k.pos(-500, PLATFORM_HIDE_Y),
       k.anchor('center'),
       k.area(),
@@ -1089,6 +1133,9 @@ export function sceneGlowLevel0(k) {
         dockX: trampDockX,
         bounceCount: 0,
         cheekyTimer: 0,
+        cheekyLineIdx: 0,
+        badSingTimer: 0,
+        badSingTooltip: null,
         cheekyTooltip: null
       },
       trampBounceAir: false,
@@ -1109,7 +1156,7 @@ export function sceneGlowLevel0(k) {
       waterX2,
       lastHeroX: heroSpawnX,
       logHoverFrames: 0,
-      wasGrounded: true,
+      wasGrounded: false,
       drowning: false,
       drownPhase: null,
       drownTimer: 0,
@@ -1146,7 +1193,9 @@ export function sceneGlowLevel0(k) {
       //
       meditation: { idleTimer: 0, requiredIdle: MEDITATION_IDLE_BASE, countdown: null },
       meditationBirdsActive: false,
-      pendingTreeReveal: zones.gCollected && !zones.tree,
+      pendingTreeReveal: !zones.tree,
+      branchJumpPending: false,
+      branchJumpAir: false,
       startBranch: { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY },
       branchPlat,
       branchPlatHome,
@@ -3349,7 +3398,27 @@ function shouldDrownInWater(inst, heroX, footY) {
   // Standing / bouncing on the walking trampoline is safe over the lake
   //
   if (isOnTrampolineCap(inst, inst.heroInst?.character)) return false
+  //
+  // Over the start branch above the lake floor — not drowning yet
+  //
+  if (isHeroOverStartBranchX(inst, heroX) && footY < FLOOR_Y - 12) return false
   return isInWaterZone(inst, heroX, footY)
+}
+//
+// True when hero X sits over the invisible start branch span
+//
+function isHeroOverStartBranchX(inst, heroX) {
+  const branch = inst.startBranch
+  if (!branch) return false
+  const w = branch.x2 - branch.x1
+  return heroX >= branch.x1 - LOG_SNAP_X_SLACK && heroX <= branch.x1 + w + LOG_SNAP_X_SLACK
+}
+//
+// True when hero X is close enough that the trampoline pad should stay active
+//
+function isHeroNearTrampolineX(inst, heroX) {
+  if (!inst.zones?.groundDecorRight || !inst.trampState) return false
+  return Math.abs(heroX - inst.trampState.x) < TRAMP_NEAR_X
 }
 //
 // True while the hero's feet sit on the trampoline mushroom cap
@@ -3359,7 +3428,7 @@ function isOnTrampolineCap(inst, char) {
   const mDx = Math.abs(char.pos.x - inst.trampState.x)
   const heroFeet = char.pos.y + SURFACE_DETECT_Y
   const capTopY = FLOOR_Y - TRAMP_TOTAL_H
-  return mDx < TRAMP_RADIUS && heroFeet >= capTopY - 10 && heroFeet <= capTopY + 22
+  return mDx < TRAMP_RADIUS + TRAMP_ADJACENT_X && heroFeet >= capTopY - 10 && heroFeet <= capTopY + 22
 }
 //
 // Keeps the invisible trampoline pad under the mushroom. The pad must NEVER
@@ -3377,56 +3446,36 @@ function syncTrampolinePad(inst) {
     pad.pos.y = PLATFORM_HIDE_Y
     return
   }
-  const onCap = isOnTrampolineCap(inst, char)
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
   const velY = char?.vel?.y ?? 0
-  const nearTramp = char?.pos
-    ? Math.abs(char.pos.x - state.x) < TRAMP_RADIUS + 80
-    : false
+  const onCap = isOnTrampolineCap(inst, char)
+  const heroFeet = char?.pos ? char.pos.y + SURFACE_DETECT_Y : 0
+  const nearX = char?.pos ? isHeroNearTrampolineX(inst, char.pos.x) : false
   //
-  // Bounce ends on a soft land on the cap, or any grounded contact elsewhere
+  // Solid pad only on the cap or during a tramp arc — hide at ground level
+  // so the hero can walk and jump through the mushroom stem.
   //
+  const needsPad = onCap || inst.trampBounceAir ||
+    (nearX && heroFeet < capTop + TRAMP_PAD_FEET_BELOW && velY > -50)
+  pad.pos.x = state.x
+  pad.pos.y = needsPad ? capTop + TRAMP_PAD_H / 2 : PLATFORM_HIDE_Y
   if (inst.trampBounceAir) {
+    const onCap = isOnTrampolineCap(inst, char)
     const groundedNow = typeof char?.isGrounded === 'function' && char.isGrounded()
     if ((onCap && velY >= -40) || (groundedNow && !onCap)) {
       inst.trampBounceAir = false
     }
   }
-  //
-  // Always keep the pad under the cap while the hero is nearby / bouncing —
-  // never drag him off-screen with a hide teleport.
-  //
-  if (onCap || nearTramp || inst.trampBounceAir) {
-    pad.pos.x = state.x
-    pad.pos.y = capTop + 8
-    return
-  }
-  pad.pos.x = state.x
-  pad.pos.y = PLATFORM_HIDE_Y
 }
 //
-// While the tree (branch sprite) is hidden, the branch collider is one-way:
-// solid from above so the hero can stand, but gone when the body is below
-// so jumps from underneath never head-bonk an invisible ledge.
+// Branch collider always stays active — only the tree sprite toggles visibility.
 //
-function syncInvisibleBranchOneWay(inst) {
+function syncBranchPlatHome(inst) {
   const plat = inst.branchPlat
   const home = inst.branchPlatHome
-  const char = inst.heroInst?.character
-  if (!plat || !home || !char?.pos) return
-  if (inst.zones.tree) {
-    plat.pos.x = home.x
-    plat.pos.y = home.y
-    return
-  }
-  const branchTop = home.y
-  //
-  // Standing on the branch puts the body centre well above the top; a climb
-  // from below puts it at/under the top — hide the collider in that case.
-  //
-  const fromBelow = char.pos.y > branchTop - 10
+  if (!plat || !home) return
   plat.pos.x = home.x
-  plat.pos.y = fromBelow ? PLATFORM_HIDE_Y : home.y
+  plat.pos.y = home.y
 }
 //
 // Starts the color-world fade after O dialog closes.
@@ -3623,7 +3672,7 @@ function pinHeroForLetterDialog(inst) {
   // the hero. Calling syncPlatformLanding every pinned frame fought Kaplay
   // and made O/L platforms twitch up and down.
   //
-  forceHeroIdleOnLog(inst)
+  forceHeroIdleOnLog(inst, true)
   if (char.vel) {
     char.vel.x = 0
     char.vel.y = 0
@@ -3649,7 +3698,7 @@ function unpinHeroAfterLetterDialog(inst) {
   //
   inst.dialogInputGrace = DIALOG_INPUT_GRACE
   if (hero) {
-    forceHeroIdleOnLog(inst)
+    forceHeroIdleOnLog(inst, true)
     Hero.armJumpKeyReleaseGate(hero)
     hero.controlsDisabled = true
     hero.controllable = false
@@ -3672,11 +3721,7 @@ function releaseDialogPin(inst) {
   const hero = inst.heroInst
   const char = hero?.character
   inst.dialogHeroPinned = false
-  //
-  // Settle with embed BEFORE gravity returns — otherwise Kaplay resolves an
-  // overlapping thin log by pushing the hero downward through the wood.
-  //
-  forceHeroIdleOnLog(inst)
+  forceHeroIdleOnLog(inst, true)
   char?.pos && forceSettleHeroOnNearestLog(inst, char)
   if (char?.vel) {
     char.vel.x = 0
@@ -3685,24 +3730,16 @@ function releaseDialogPin(inst) {
   if (char?.pos) {
     inst.dialogPinY = char.pos.y
   }
-  if (char && inst._dialogSavedGravityScale !== undefined) {
-    char.gravityScale = inst._dialogSavedGravityScale
-    inst._dialogSavedGravityScale = undefined
+  //
+  // Gravity stays off until post-settle finishes — restoring it immediately
+  // ejected the hero through thin L/O log colliders.
+  //
+  if (char) {
+    char.gravityScale = 0
   }
-  //
-  // Hold the settled Y for a short beat after gravity returns so the wood
-  // contact can register as grounded (L/O dialog Space fall-through).
-  //
-  inst.dialogPostSettle = 0.18
+  inst.dialogPostSettle = DIALOG_POST_SETTLE
   if (hero && !inst.heroLockedAfterW) {
-    //
-    // Stay idle: gate Space until fully released, and hold a longer air-lock
-    // so wood contact cannot restart a crouch→jump loop after the L dialog.
-    //
     Hero.armJumpKeyReleaseGate(hero)
-    //
-    // Longer lock on O (gold recolour follows) and other letter logs
-    //
     hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, 0.85)
     hero.canJump = false
     hero.isSquashing = false
@@ -3715,7 +3752,7 @@ function releaseDialogPin(inst) {
 //
 // Clears jump/land squash and forces the idle sprite on the nearest log.
 //
-function forceHeroIdleOnLog(inst) {
+function forceHeroIdleOnLog(inst, skipHitboxSync = false) {
   const hero = inst.heroInst
   if (!hero) return
   hero.isSquashing = false
@@ -3726,7 +3763,23 @@ function forceHeroIdleOnLog(inst) {
   hero.jumpPhase = 'none'
   hero.jumpFrame = 0
   hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
-  Hero.syncPlatformLanding(hero)
+  !skipHitboxSync && Hero.syncPlatformLanding(hero)
+}
+//
+// True when the hero stands over a revealed L/O/W letter log (not the branch).
+//
+function isHeroOverLetterLog(inst, heroX) {
+  const z = inst.zones
+  const logs = []
+  z.lPlatRevealed && z.gCollected && logs.push(inst.lPlatHome)
+  z.oZone && z.lCollected && logs.push(inst.oPlatHome)
+  z.wZone && z.oCollected && logs.push(inst.wPlatHome)
+  for (const home of logs) {
+    if (heroX >= home.x - LOG_SNAP_X_SLACK && heroX <= home.x + LOG_W + LOG_SNAP_X_SLACK) {
+      return true
+    }
+  }
+  return false
 }
 //
 // Places the hero on the nearest revealed log top, ignoring squash/hover gates
@@ -3737,7 +3790,10 @@ function forceSettleHeroOnNearestLog(inst, char) {
   const heroY = char.pos.y
   const z = inst.zones
   const homes = []
-  if (inst.startBranch) {
+  //
+  // Never snap L/O/W dialog onto the start branch when standing on a letter log
+  //
+  if (inst.startBranch && !isHeroOverLetterLog(inst, heroX)) {
     homes.push({
       x: inst.startBranch.x1,
       y: inst.startBranch.y,
@@ -3749,8 +3805,7 @@ function forceSettleHeroOnNearestLog(inst, char) {
   z.oZone && z.lCollected && homes.push({ ...inst.oPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   z.wZone && z.oCollected && homes.push({ ...inst.wPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   //
-  // Pick the horizontally aligned surface closest in Y — never snap an L/O/W
-  // dialog onto the start branch (that caused an infinite bounce after L).
+  // Pick the horizontally aligned surface closest in Y
   //
   let best = null
   let bestDist = Infinity
@@ -3778,7 +3833,6 @@ function forceSettleHeroOnNearestLog(inst, char) {
   if (hero) {
     hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
     hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.2)
-    Hero.armJumpKeyReleaseGate(hero)
   }
 }
 //
@@ -4279,15 +4333,24 @@ function onUpdate(inst) {
     inst.dialogPostSettle -= k.dt()
     hero.controllable = false
     hero.controlsDisabled = true
+    forceHeroIdleOnLog(inst, true)
     forceSettleHeroOnNearestLog(inst, char)
     if (char.vel) {
       char.vel.x = 0
       char.vel.y = 0
     }
+    char.gravityScale = 0
     inst.dialogPinY = char.pos.y
     if (inst.dialogPostSettle <= 0) {
       inst.dialogPostSettle = 0
       forceSettleHeroOnNearestLog(inst, char)
+      forceHeroIdleOnLog(inst)
+      if (char && inst._dialogSavedGravityScale !== undefined) {
+        char.gravityScale = inst._dialogSavedGravityScale
+        inst._dialogSavedGravityScale = undefined
+      } else if (char) {
+        char.gravityScale = 1
+      }
     }
   }
   if (!inst.dialogOpen && !inst.introLock && !(inst.dialogInputGrace > 0) &&
@@ -4317,6 +4380,7 @@ function onUpdate(inst) {
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
+  const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   //
   // G letter pickup on branch.
   //
@@ -4326,6 +4390,16 @@ function onUpdate(inst) {
     Math.hypot(dx, dy) < GLOW_LETTER_PICKUP_RADIUS && collectLetterG(inst)
   }
   !inst.dialogOpen && tryCollectGlowLetters(inst, char)
+  const grounded = char.isGrounded?.() ?? false
+  const justLanded = grounded && !inst.wasGrounded
+  inst.wasGrounded = grounded
+  updateTrampolineWalk(inst, char, heroMoving, grounded)
+  //
+  // Pad must sit under the cap before bounce / snap — otherwise the hero
+  // tunnels through on the same frame he jumps onto the mushroom.
+  //
+  syncTrampolinePad(inst)
+  snapHeroToTrampolineCap(inst, char, heroX, footY)
   //
   // Trampoline bounce — manual only (no static collider blocking jumps).
   //
@@ -4333,32 +4407,28 @@ function onUpdate(inst) {
     const mDx = Math.abs(heroX - inst.trampState.x)
     const capTopY = FLOOR_Y - TRAMP_TOTAL_H
     const heroFeet = char.pos.y + SURFACE_DETECT_Y
-    const onCap = mDx < TRAMP_RADIUS && heroFeet >= capTopY - 8 && heroFeet <= capTopY + 14
+    const onCap = mDx < TRAMP_RADIUS + TRAMP_ADJACENT_X &&
+      heroFeet >= capTopY - 8 &&
+      heroFeet <= capTopY + 14
     if (onCap && (char.vel?.y ?? 0) >= -40) {
-      const force = inst.trampWalk?.walked ? TRAMP_FORCE_DOCKED : TRAMP_FORCE
-      char.vel.y = -force
+      const walked = inst.trampWalk?.walked
+      const mult = walked ? TRAMP_DOCKED_BOOST_MULT : TRAMP_BOOST_MULT
+      char.vel.y = -Math.round(CFG.game.jumpForce * mult)
       inst.trampState.cooldown = TRAMP_COOLDOWN
       inst.trampState.squash = TRAMP_SQUASH_MAX
       inst.trampBounceAir = true
       //
-      // Real jump state so air-lock / ceiling logic treat this as a launch,
-      // not a wood-settle flicker (hanging under the L branch).
+      // Normal jump arc — just higher launch speed from the cap
       //
       hero.wasJumping = true
       hero.jumpPhase = 'jumping'
       hero.jumpCeilingBonk = false
       hero.postLandAirLock = 0
       hero.canJump = false
-      hero.isSquashing = false
-      hero.squashTimer = 0
-      hero.landSquashTimer = 0
       inst.sound && !inst.sound._glowSfxMuted && Sound.playJumpSound(inst.sound)
       onTrampolineBounce(inst)
     }
   }
-  const grounded = char.isGrounded?.() ?? false
-  const justLanded = grounded && !inst.wasGrounded
-  inst.wasGrounded = grounded
   const surface = detectGlowSurface(inst)
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
   if (surface === 'wood' || surface === 'ground') {
@@ -4374,34 +4444,22 @@ function onUpdate(inst) {
     }
   }
   hero.suppressDust = true
-  syncInvisibleBranchOneWay(inst)
-  //
-  // Never let a trampoline pad teleport leave the hero invisible / off-world.
-  // Only rescue extreme positions (pad hide Y ≈ 9999), not pit/drown falls.
-  //
+  syncBranchPlatHome(inst)
   if (char.hidden) char.hidden = false
   if (typeof char.opacity === 'number' && char.opacity < 1) char.opacity = 1
-  if (char.pos.y > 4000 || char.pos.x < -400 || char.pos.x > SCREEN_W + 400) {
-    const rescueY = (FLOOR_Y - TRAMP_TOTAL_H) - SURFACE_DETECT_Y + 1
-    char.pos.x = inst.trampState?.x ?? Math.max(LEFT_MARGIN + 40, Math.min(SCREEN_W - RIGHT_MARGIN - 40, char.pos.x))
-    char.pos.y = rescueY
-    if (char.vel) {
-      char.vel.x = 0
-      char.vel.y = 0
-    }
-  }
   !inst.dialogOpen && !(inst.dialogInputGrace > 0) && !(inst.dialogPostSettle > 0) &&
     snapHeroToLogPlatforms(inst, char)
-  const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
+  snapHeroToStartBranch(inst, char, heroX, footY)
+  snapHeroToMainGround(inst, char, grounded, heroX, footY)
   //
   // O-letter meditation: perfect stillness after L summons the countdown.
   //
   updateOMeditation(inst, char, heroMoving, grounded)
-  updateTrampolineWalk(inst, char, heroMoving, grounded)
-  syncTrampolinePad(inst)
   updateMeditationCounter(inst)
   updateTrampCheekyHint(inst)
-  tryRevealTreeOnBranchJump(inst, char, grounded)
+  updateTrampBadSingHint(inst)
+  trackBranchJumpFromStart(inst, char, grounded)
+  tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   //
   // L waits for the branch/tree reveal as well as water + right ground
   //
@@ -4510,22 +4568,34 @@ function cancelMeditation(inst, interrupted) {
   m.idleTimer = 0
 }
 //
-// After G, the tree fades in only when the hero jumps FROM the start branch
-// (not when bouncing onto it from the trampoline).
+// Marks a jump FROM the start branch; the tree fades in only after landing.
 //
-function tryRevealTreeOnBranchJump(inst, char, grounded) {
+function trackBranchJumpFromStart(inst, char, grounded) {
   if (!inst.pendingTreeReveal || inst.zones.tree || inst.dialogOpen) return
   const branch = inst.startBranch
-  if (!branch || !char?.pos) return
-  if (isOnTrampolineCap(inst, char)) return
+  if (!branch || !char?.pos || isOnTrampolineCap(inst, char)) return
   const onBranch = char.pos.x >= branch.x1 && char.pos.x <= branch.x2 &&
     Math.abs(char.pos.y - branch.y) < GAZE_BRANCH_Y_TOLERANCE
-  //
-  // Crouch→launch on the branch only (airborne trampoline landings don't count)
-  //
-  const jumping = inst.heroInst.isSquashing || inst.heroInst.jumpPhase === 'squashing'
-  if (!onBranch || !jumping) return
+  const hero = inst.heroInst
+  if (onBranch && hero?.isSquashing) {
+    inst.branchJumpPending = true
+  }
+  if (inst.branchJumpPending && !grounded && hero?.wasJumping) {
+    inst.branchJumpAir = true
+  }
+}
+//
+// Tree / branch appear after the first landing following a start-branch jump
+// (works even before G is collected).
+//
+function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
+  if (!inst.pendingTreeReveal || inst.zones.tree || inst.dialogOpen) return
+  if (!grounded || !justLanded || !char?.pos) return
+  if (isOnTrampolineCap(inst, char)) return
+  if (!inst.branchJumpAir && !inst.branchJumpPending) return
   inst.pendingTreeReveal = false
+  inst.branchJumpAir = false
+  inst.branchJumpPending = false
   set(KEY_REVEALED_TREE, true)
   inst.zones.tree = true
   inst.treeRevealFade = 0
@@ -4535,9 +4605,6 @@ function tryRevealTreeOnBranchJump(inst, char, grounded) {
   inst.treeObj.opacity = 0
   inst.treeColorObj.opacity = 0
   applyZoneVisibility(inst)
-  //
-  // Branch is now a visible world part — L may unlock if water + right ground are open
-  //
   maybeRevealLPlat(inst)
 }
 //
@@ -4573,7 +4640,8 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     return
   }
   if (inst.dialogOpen) return
-  const near = Math.abs(char.pos.x - inst.trampState.x) < TRAMP_WALK_NEAR &&
+  const nearRadius = tw.countdown != null ? TRAMP_WALK_NEAR_SINGING : TRAMP_WALK_NEAR
+  const near = Math.abs(char.pos.x - inst.trampState.x) < nearRadius &&
     grounded &&
     Math.abs(char.pos.y + SURFACE_DETECT_Y - FLOOR_Y) < 28
   const still = near && !heroMoving && Math.abs(char.vel?.y ?? 0) < 1
@@ -4592,6 +4660,7 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   tw.countdown -= dt
   if (tw.countdown <= 0) {
     tw.countdown = null
+    tw.badSingTimer = TRAMP_BAD_SING_DURATION
     tw.walking = true
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
@@ -4611,6 +4680,8 @@ function onTrampolineBounce(inst) {
   tw.bounceCount = (tw.bounceCount || 0) + 1
   if (tw.bounceCount % TRAMP_CHEEKY_EVERY !== 0) return
   tw.cheekyTimer = TRAMP_CHEEKY_DURATION
+  const line = TRAMP_CHEEKY_LINES[tw.cheekyLineIdx % TRAMP_CHEEKY_LINES.length]
+  tw.cheekyLineIdx = (tw.cheekyLineIdx + 1) % TRAMP_CHEEKY_LINES.length
   tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
   tw.cheekyTooltip = Tooltip.create({
     k: inst.k,
@@ -4620,7 +4691,7 @@ function onTrampolineBounce(inst) {
       y: FLOOR_Y - TRAMP_TOTAL_H / 2,
       width: TRAMP_TOTAL_W,
       height: TRAMP_TOTAL_H,
-      text: TRAMP_CHEEKY_TEXT,
+      text: line,
       offsetY: TRAMP_TOOLTIP_Y_OFFSET
     }]
   })
@@ -4643,6 +4714,39 @@ function updateTrampCheekyHint(inst) {
   tw.cheekyTooltip = null
 }
 //
+// Bubble when the sing-to-walk countdown finishes — the mushroom is unimpressed
+//
+function updateTrampBadSingHint(inst) {
+  const tw = inst.trampWalk
+  if (!tw || tw.badSingTimer <= 0) return
+  tw.badSingTimer -= inst.k.dt()
+  if (!tw.badSingTooltip) {
+    tw.badSingTooltip = Tooltip.create({
+      k: inst.k,
+      forceVisible: true,
+      targets: [{
+        x: () => inst.trampState.x,
+        y: FLOOR_Y - TRAMP_TOTAL_H / 2,
+        width: TRAMP_TOTAL_W,
+        height: TRAMP_TOTAL_H,
+        text: TRAMP_BAD_SING_TEXT,
+        offsetY: TRAMP_TOOLTIP_Y_OFFSET
+      }]
+    })
+    tw.badSingTooltip.activeTarget = tw.badSingTooltip.targets[0]
+    tw.badSingTooltip.opacity = 1
+  }
+  if (tw.badSingTooltip) {
+    tw.badSingTooltip.frozenX = Math.round(inst.trampState.x)
+    tw.badSingTooltip.frozenY = Math.round(FLOOR_Y - TRAMP_TOTAL_H / 2)
+  }
+  if (tw.badSingTimer <= 0) {
+    tw.badSingTimer = 0
+    tw.badSingTooltip && Tooltip.destroy(tw.badSingTooltip)
+    tw.badSingTooltip = null
+  }
+}
+//
 // Fades the foreground tree in after collecting G.
 //
 function updateTreeRevealFade(inst, dt) {
@@ -4652,6 +4756,71 @@ function updateTreeRevealFade(inst, dt) {
   inst.treeObj.opacity = op
   inst.treeColorObj.opacity = op
   inst.treeRevealFade >= 1 && (inst.treeRevealActive = false)
+}
+//
+// Catches tunneling onto the mushroom cap before lake-floor / ground snap.
+//
+function snapHeroToTrampolineCap(inst, char, heroX, footY) {
+  if (!inst.zones?.groundDecorRight || inst.drowning || inst.dialogOpen ||
+    inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
+  if (!isHeroNearTrampolineX(inst, heroX)) return
+  if (Math.abs(heroX - inst.trampState.x) >= TRAMP_RADIUS + TRAMP_ADJACENT_X) return
+  const hero = inst.heroInst
+  if (hero?.isSquashing) return
+  const velY = char.vel?.y ?? 0
+  if (velY < 0) return
+  const capTop = FLOOR_Y - TRAMP_TOTAL_H
+  const grounded = char.isGrounded?.() ?? false
+  if (grounded && footY <= capTop + LOG_SNAP_STANDING_MAX) return
+  if (footY >= capTop - LOG_HOVER_BAND && footY <= capTop + TRAMP_SNAP_BELOW) {
+    settleHeroOnLog(inst, char, capTop, true)
+  }
+}
+//
+// Catches tunneling through the thin start-branch collider before lake-floor snap.
+//
+function snapHeroToStartBranch(inst, char, heroX, footY) {
+  if (!inst.startBranch || inst.drowning || inst.dialogOpen ||
+    inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
+  if (!isHeroOverStartBranchX(inst, heroX)) return
+  const hero = inst.heroInst
+  if (hero?.isSquashing) return
+  //
+  // Never pin mid-air during a real branch jump (caused apex hang / dead jump)
+  //
+  if (hero?.jumpPhase === 'jumping' && !(char.isGrounded?.() ?? false)) return
+  const velY = char.vel?.y ?? 0
+  if (velY < 0) return
+  const platTop = inst.startBranch.y
+  const grounded = char.isGrounded?.() ?? false
+  if (grounded && footY <= platTop + LOG_SNAP_STANDING_MAX) return
+  if (footY >= platTop - LOG_HOVER_BAND && footY <= platTop + BRANCH_SNAP_BELOW) {
+    settleHeroOnLog(inst, char, platTop)
+  }
+}
+//
+// Prevents rare fall-through on the main floor (hero sinks below the floor line).
+//
+function snapHeroToMainGround(inst, char, grounded, heroX, footY) {
+  if (inst.drowning || inst.dialogOpen || inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
+  const crack = getCrackZone(SCREEN_W, FLOOR_Y)
+  if (heroX < LEFT_MARGIN + 8 || heroX > crack.x1 - 4) return
+  if (isHeroOverLetterLog(inst, heroX)) return
+  if (isHeroNearTrampolineX(inst, heroX)) return
+  if (isOnTrampolineCap(inst, char)) return
+  const velY = char.vel?.y ?? 0
+  if (velY < 0) return
+  //
+  // Standing on the floor — Kaplay owns the pose; never re-pin (caused bounce loops).
+  //
+  if (footY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) return
+  //
+  // Feet tunnelled below the visible floor — pull back up once
+  //
+  if (footY > FLOOR_Y + LOG_SNAP_DEEP_SINK && footY <= FLOOR_Y + 36) {
+    char.pos.y = FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    if (char.vel && char.vel.y > 0) char.vel.y = 0
+  }
 }
 //
 // Keeps the hero standing on solid log platforms (prevents fall-through).
@@ -4684,16 +4853,38 @@ function snapHeroToLogPlatforms(inst, char) {
   const grounded = typeof char.isGrounded === 'function' && char.isGrounded()
   const z = inst.zones
   const homes = []
+  //
+  // Start branch — always solid even while the tree sprite is hidden
+  //
+  if (inst.startBranch) {
+    homes.push({
+      x: inst.startBranch.x1,
+      y: inst.startBranch.y,
+      w: inst.startBranch.x2 - inst.startBranch.x1,
+      dropY: 0
+    })
+  }
   z.lPlatRevealed && z.gCollected && homes.push(inst.lPlatHome)
   z.oZone && z.lCollected && homes.push(inst.oPlatHome)
   z.wZone && z.oCollected && homes.push(inst.wPlatHome)
   let hoverHome = null
   for (const home of homes) {
-    if (heroX < home.x - LOG_SNAP_X_SLACK || heroX > home.x + LOG_W + LOG_SNAP_X_SLACK) continue
+    const w = home.w ?? LOG_W
+    const dropY = home.dropY ?? LOG_COLLISION_DROP_Y
+    const isStartBranch = inst.startBranch &&
+      home.x === inst.startBranch.x1 &&
+      home.y === inst.startBranch.y
+    //
+    // Mid-air branch jumps must not be pinned at apex (hover / anti-tunnel)
+    //
+    if (isStartBranch && hero?.jumpPhase === 'jumping' && !grounded) {
+      continue
+    }
+    if (heroX < home.x - LOG_SNAP_X_SLACK || heroX > home.x + w + LOG_SNAP_X_SLACK) continue
     //
     // Physics top of the log = sprite top + the collision drop offset.
     //
-    const platTop = home.y + LOG_COLLISION_DROP_Y
+    const platTop = home.y + dropY
     //
     // Standing on the log like on the branch / ground: Kaplay owns the pose.
     //
@@ -4707,8 +4898,9 @@ function snapHeroToLogPlatforms(inst, char) {
     if (footY > platTop + LOG_SNAP_DEEP_SINK && footY <= platTop + LOG_SNAP_BELOW) {
       //
       // Still in a real fall — let Kaplay land; pinning mid-fall broke jumps.
+      // Start branch: always snap — thin collider over the lake must not tunnel.
       //
-      if (velY >= LOG_SNAP_FALL_VEL) continue
+      if (velY >= LOG_SNAP_FALL_VEL && !isStartBranch) continue
       settleHeroOnLog(inst, char, platTop)
       inst.logHoverFrames = 0
       return
@@ -4728,9 +4920,17 @@ function snapHeroToLogPlatforms(inst, char) {
     inst.logHoverFrames = 0
     return
   }
+  const hoverIsStartBranch = inst.startBranch &&
+    hoverHome.x === inst.startBranch.x1 &&
+    hoverHome.y === inst.startBranch.y
+  if (hoverIsStartBranch && (hero?.jumpPhase === 'jumping' || hero?.wasJumping)) {
+    inst.logHoverFrames = 0
+    return
+  }
   inst.logHoverFrames += 1
   if (inst.logHoverFrames >= LOG_HOVER_FRAMES) {
-    settleHeroOnLog(inst, char, hoverHome.y + LOG_COLLISION_DROP_Y)
+    const dropY = hoverHome.dropY ?? LOG_COLLISION_DROP_Y
+    settleHeroOnLog(inst, char, hoverHome.y + dropY)
     inst.logHoverFrames = 0
   }
 }
@@ -4739,7 +4939,7 @@ function snapHeroToLogPlatforms(inst, char) {
 // (exact surface placement left isGrounded false → jump squash never fired).
 // postLandAirLock blocks a snap-induced second crouch.
 //
-function settleHeroOnLog(inst, char, platTop) {
+function settleHeroOnLog(inst, char, platTop, skipPostLandLock = false) {
   const hero = inst.heroInst
   //
   // During letter dialogs always settle — land-squash must not leave the hero
@@ -4749,7 +4949,7 @@ function settleHeroOnLog(inst, char, platTop) {
   char.pos.y = platTop - SURFACE_DETECT_Y + LOG_SNAP_EMBED
   if (char.vel) char.vel.y = 0
   if (!hero) return
-  hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW)
+  !skipPostLandLock && (hero.postLandAirLock = Math.max(hero.postLandAirLock || 0, POST_LAND_AIR_LOCK_GLOW))
   hero.landFxCooldown = Math.max(hero.landFxCooldown || 0, 0.2)
   hero.canJump = true
   //

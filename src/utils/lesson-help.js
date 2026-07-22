@@ -113,19 +113,6 @@ const GOAL_LABEL_TEXT = 'goal'
 const GOAL_GAP = 140
 const GOAL_HIT_HALF_W = 80
 //
-// Button border: rounded-corner rect around buy-help and goal labels.
-// Drawn as outer (border color) + inner (backdrop color) rounded rects,
-// creating a visible ring with rounded corners.
-// Color is derived from sceneBackdropHex (brightened).
-//
-const BTN_BORDER_PAD_X = 18
-const BTN_BORDER_PAD_Y_TOP = 13
-const BTN_BORDER_PAD_Y_BOT = 8
-const BTN_BORDER_RADIUS = 8
-const BTN_BORDER_WIDTH = 2
-const BTN_BORDER_OPACITY = 0.85
-const BTN_BORDER_LIGHTEN = 60
-//
 // Module-level reference to the currently active panel instance.
 // Updated when a panel opens or closes. Used by isAnyPanelOpen().
 //
@@ -304,25 +291,6 @@ export function create(config) {
   k.onMousePress(() => onMousePress(inst))
   k.onMouseRelease(() => onMouseRelease(inst))
   k.onKeyPress('escape', () => inst.panelOpen && closePanel(inst))
-  //
-  // Border = backdrop lightened; inner fill = panel fill color — so the button
-  // background is visually distinct from the scene background (matches the panel
-  // dialog that opens on click).
-  //
-  const backdropRgb = sceneBackdropHex ? parseHex(sceneBackdropHex) : [26, 26, 26]
-  const borderR = Math.min(255, backdropRgb[0] + BTN_BORDER_LIGHTEN)
-  const borderG = Math.min(255, backdropRgb[1] + BTN_BORDER_LIGHTEN)
-  const borderB = Math.min(255, backdropRgb[2] + BTN_BORDER_LIGHTEN)
-  const { fillR: innerFillR, fillG: innerFillG, fillB: innerFillB } = panelColors
-  k.add([
-    k.z(CFG.visual.zIndex.ui + 2),
-    k.fixed(),
-    {
-      draw() {
-        drawButtonBorder(k, inst, borderR, borderG, borderB, innerFillR, innerFillG, innerFillB)
-      }
-    }
-  ])
   return inst
 }
 
@@ -853,43 +821,6 @@ function syncPanelBackdrop(inst, panelOpacity) {
   //
   inst.k.setBackground(inst.k.rgb(dr, dg, db))
   CanvasBackdrop.setCssBackdrop(inst.k.canvas, dr, dg, db)
-}
-//
-// Draws a rounded-corner border ring around a label node.
-// Outer rect uses the border color; inner rect uses the backdrop color
-// to cut out the fill area, leaving only the rounded ring visible.
-//
-function drawLabelBorderRing(k, node, br, bg, bb, bgR, bgG, bgB) {
-  const bw = BTN_BORDER_WIDTH
-  const w = node.width
-  const h = node.height
-  const x = node.pos.x - w / 2 - BTN_BORDER_PAD_X
-  const y = node.pos.y - h / 2 - BTN_BORDER_PAD_Y_TOP
-  const outerW = w + BTN_BORDER_PAD_X * 2
-  const outerH = h + BTN_BORDER_PAD_Y_TOP + BTN_BORDER_PAD_Y_BOT
-  k.drawRect({
-    pos: k.vec2(x, y),
-    width: outerW,
-    height: outerH,
-    radius: BTN_BORDER_RADIUS,
-    color: k.rgb(br, bg, bb),
-    opacity: BTN_BORDER_OPACITY
-  })
-  k.drawRect({
-    pos: k.vec2(x + bw, y + bw),
-    width: outerW - bw * 2,
-    height: outerH - bw * 2,
-    radius: Math.max(0, BTN_BORDER_RADIUS - bw),
-    color: k.rgb(bgR, bgG, bgB),
-    opacity: 1.0
-  })
-}
-//
-// Draws rounded borders around the buy-help label (and goal label if present).
-//
-function drawButtonBorder(k, inst, br, bg, bb, bgR, bgG, bgB) {
-  inst.labelNode?.exists?.() && drawLabelBorderRing(k, inst.labelNode, br, bg, bb, bgR, bgG, bgB)
-  inst.goalLabelNode?.exists?.() && drawLabelBorderRing(k, inst.goalLabelNode, br, bg, bb, bgR, bgG, bgB)
 }
 //
 // Returns the largest font size that makes the text fit within maxHeight.

@@ -48,6 +48,7 @@ import {
   getCrackZone,
   KEY_PIT_COLLAPSED
 } from '../utils/glow-atmosphere.js'
+import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 //
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
@@ -351,11 +352,10 @@ const BUSH_FARTHEST_HEIGHT_SCALE = 1.72
 //
 const BIRD_COUNT = 5
 //
-// Birds glide through the bare-trunk band below the crowns, not at the very
-// top of the screen.
+// Birds glide below the parallax leaf canopy so they stay visible in the sky band
 //
-const BIRD_MIN_Y = TOP_MARGIN + 150
-const BIRD_Y_RANGE = 170
+const BIRD_MIN_Y = PAR_LEAF_MAX_Y + 8
+const BIRD_Y_RANGE = 110
 const BIRD_SPEED_MIN = 22
 const BIRD_SPEED_RANGE = 26
 const BIRD_SIZE_MIN = 5
@@ -534,9 +534,15 @@ const L_TOOLTIP_TEXT = 'Looks like a leg :)'
 const L_TOOLTIP_HOVER_SIZE = 70
 const L_TOOLTIP_Y_OFFSET = -80
 //
+// O letter hover tooltip — playful surprise before the meditation zone opens
+//
+const O_TOOLTIP_TEXT = 'Opa pa, what is this?'
+const O_TOOLTIP_HOVER_SIZE = 70
+const O_TOOLTIP_Y_OFFSET = -80
+//
 // Trampoline mushroom hover tooltip — its own baffled reaction.
 //
-const TRAMP_TOOLTIP_TEXT = 'Wwhaaat!?'
+const TRAMP_TOOLTIP_TEXT = 'Mario, is that you?'
 const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
 // Buried skeleton hover — sits in the underground root band after L
@@ -697,11 +703,11 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 const TRAMP_WALK_STILL = 3
 const TRAMP_WALK_COUNTDOWN = 10
 const TRAMP_WALK_SPEED = 52
-const TRAMP_WALK_NEAR = 88
+const TRAMP_WALK_NEAR = 220
 //
 // Wider stand-still band while the O-meditation countdown ticks (hero sings)
 //
-const TRAMP_WALK_NEAR_SINGING = 148
+const TRAMP_WALK_NEAR_SINGING = 370
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
 const TRAMP_BAD_SING_TEXT = 'Oh my god, you sing so badly'
@@ -1210,9 +1216,6 @@ export function sceneGlowLevel0(k) {
     inst.zones._sceneRef = inst
     zones.colorWorld && applyColorWorldHero(inst)
     zones.wCollected && revealPostWHud(inst)
-    //
-    // Right-edge crack lid + optional already-collapsed pit
-    //
     inst.pit = createGlowPit({
       k,
       floorY: FLOOR_Y,
@@ -1226,6 +1229,7 @@ export function sceneGlowLevel0(k) {
       cracksVisible: zones.groundDecorRight
     })
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
+    inst.footParticles = GlowFootParticles.create({ k })
     syncGlowMidgesZones(inst.midges, zones, inst.pit.collapsed)
     //
     // Permanent fragment log stays in the wood-surface list for step SFX
@@ -1430,6 +1434,18 @@ function createSmallHeroTooltip(inst) {
       // Only while the L letter is visible and not yet collected.
       //
       visible: () => Boolean(inst.lLetter && !inst.lLetter.main.hidden && !inst.zones.lCollected)
+    }, {
+      x: () => inst.oLetter?.x ?? -1000,
+      y: () => inst.oLetter?.y ?? -1000,
+      width: O_TOOLTIP_HOVER_SIZE,
+      height: O_TOOLTIP_HOVER_SIZE,
+      text: O_TOOLTIP_TEXT,
+      offsetY: O_TOOLTIP_Y_OFFSET,
+      //
+      // Only while the O letter is visible and not yet collected.
+      //
+      visible: () => Boolean(inst.oLetter && !inst.oLetter.main.hidden &&
+        inst.zones.oZone && !inst.zones.oCollected)
     }, {
       x: () => inst.trampState?.x ?? -1000,
       y: FLOOR_Y - TRAMP_TOTAL_H / 2,
@@ -4433,6 +4449,7 @@ function onUpdate(inst) {
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
   if (surface === 'wood' || surface === 'ground') {
     inst.sound._glowSurface = surface
+    inst._glowLastFootSurface = surface
   }
   //
   // Landing SFX backup (collide path can miss on wood flicker / air-lock)
@@ -4442,6 +4459,7 @@ function onUpdate(inst) {
       hero.landFxCooldown = 0.2
       Sound.playLandSound(inst.sound, 'lesson-glow.0')
     }
+    hero.wasJumping && spawnGlowFootLanding(inst.footParticles, heroX, footY, surface, inst)
   }
   hero.suppressDust = true
   syncBranchPlatHome(inst)
@@ -4469,7 +4487,12 @@ function onUpdate(inst) {
     x: inst.bonusPlatHome?.x ?? 0,
     y: inst.bonusPlatHome?.y ?? 0,
     w: BONUS_PLAT_W
+  }, {
+    jumpLanding: justLanded && hero.wasJumping,
+    footY,
+    footParticles: inst.footParticles
   })
+  inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
   syncGlowMidgesZones(inst.midges, inst.zones, Boolean(inst.pit?.collapsed))
   //
   // Platform zone reveals — detect descending hero over trigger volumes.
@@ -4593,6 +4616,7 @@ function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (!grounded || !justLanded || !char?.pos) return
   if (isOnTrampolineCap(inst, char)) return
   if (!inst.branchJumpAir && !inst.branchJumpPending) return
+  if (!isHeroOnStartBranch(inst, char)) return
   inst.pendingTreeReveal = false
   inst.branchJumpAir = false
   inst.branchJumpPending = false
@@ -4606,6 +4630,16 @@ function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   inst.treeColorObj.opacity = 0
   applyZoneVisibility(inst)
   maybeRevealLPlat(inst)
+}
+//
+// True when the hero's feet stand on the invisible start-branch collider
+//
+function isHeroOnStartBranch(inst, char) {
+  const branch = inst.startBranch
+  if (!branch || !char?.pos) return false
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  return char.pos.x >= branch.x1 && char.pos.x <= branch.x2 &&
+    footY >= branch.y - 8 && footY <= branch.y + LOG_SNAP_STANDING_MAX + 6
 }
 //
 // After O: stand still near the trampoline → 10s countdown → mushroom walks
@@ -5062,4 +5096,25 @@ function onUpdateDrownLifeParticle(particle, k, vx, vy, lifetime) {
   particle.pos.y += vy * k.dt()
   particle.opacity = 1 - particle._elapsed / lifetime
   particle._elapsed >= lifetime && particle.destroy?.()
+}
+//
+// Spawns a landing dust burst tinted to the surface under the hero's feet
+//
+function spawnGlowFootLanding(inst, footX, footY, surface, sceneInst) {
+  if (!inst || sceneInst?.drowning) return
+  const pit = sceneInst?.pit
+  if (pit?.cracksVisible && !pit.collapsed) {
+    const zone = getCrackZone(SCREEN_W, FLOOR_Y)
+    if (footX >= zone.x1 && footX <= zone.x2 && footY >= FLOOR_Y - 14) return
+  }
+  GlowFootParticles.spawnLanding(inst, footX, footY, footParticleColor(sceneInst, surface))
+}
+//
+// Picks earth or bark tone for foot particles based on the landing surface
+//
+function footParticleColor(sceneInst, surface) {
+  if (surface === 'wood') {
+    return glowRgb(GLOW_PAL.treeGray.trunk)
+  }
+  return lerpRgb(INNER_GRAY, GROUND_DARK, sceneInst?.colorFade || 0)
 }

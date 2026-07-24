@@ -1,6 +1,6 @@
 # Find Yourself
 
-A philosophical pixel-art platformer about perception, self-discovery, and growing through interaction with the world.
+A philosophical hi-bit pixel-art platformer about perception, self-discovery, and growing through interaction with the world.
 
 **[Play online](https://find-myself.netlify.app/)**
 

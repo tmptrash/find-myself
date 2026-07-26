@@ -12,70 +12,133 @@ A philosophical hi-bit pixel-art platformer about perception, self-discovery, an
 
 ![Touch](assets/screenshots/touch1.png)
 
-## About the Game
+# Find Yourself
 
-**Find Yourself** is a minimalist platformer where you journey through abstract worlds representing different forces that shape who you are. Each world presents unique challenges and obstacles that mirror real struggles in life — from cutting words to the relentless passage of time.
+**Find Yourself** is a narrative 2D platformer where gameplay is built around psychological growth instead of traditional progression.
 
-Your goal is to find another "you" — a reflection shaped by the very forces you're learning to face. Reaching them means meeting yourself honestly and understanding yourself a little more.
+Rather than collecting coins or unlocking weapons, the player discovers words, emotions, senses and ways of perceiving the world. Every level represents a small step of self-development, and every mechanic is designed to symbolize an internal change.
 
-Life will confuse you. You will fall. But each fall brings you closer to who you truly are.
+---
 
-## Created with AI
+## Philosophy
 
-This game was **entirely created with the help of an AI agent** (Claude by Anthropic). From the initial concept to the final implementation, every line of code, game mechanic, visual effect, and procedural sound was developed through collaborative AI-assisted programming. The project demonstrates the potential of AI-augmented game development, where human creativity meets AI capabilities to build a complete, playable experience.
+The game asks a simple question:
 
-## Sections
+> **What if a platformer could teach you to understand yourself instead of simply challenging your reflexes?**
 
-The game is divided into 6 sections, each with its own theme, atmosphere, and mechanics. Three sections are currently playable. The player must complete them in order to progress.
+Every section explores one aspect of human development.
 
-- **Touch** — "before words… touch"
-- **Time** — "time doesn't wait"
-- **Word** — "voices in your head"
-- **Feel** — coming soon
-- **Mind** — coming soon
-- **Stress** — coming soon
+Instead of telling the player what to think, the game lets them experience ideas through interaction.
 
-## Design Philosophy
+Examples include:
 
-**Find Yourself** is designed around several core principles:
+* learning to notice details instead of rushing;
+* understanding that the world is full of shades rather than only black and white;
+* curiosity instead of certainty;
+* touch before words;
+* perception before understanding.
 
-1. **Minimalism**: Clean, focused design without unnecessary elements
-2. **Procedural Generation**: Everything is created through code — no external sprite sheets or image assets
-3. **Meaningful Challenge**: Each obstacle represents a real-life concept
-4. **Self-Discovery**: The journey is about understanding yourself through overcoming challenges
-5. **Atmosphere Over Graphics**: Mood and feeling take priority over visual complexity
+There are no explicit lessons.
 
-## Core Mechanics
+The player discovers everything naturally.
 
-### Movement
-- **Arrow Keys / WASD**: Move left and right
-- **Space / W / Up Arrow**: Jump
-- **ESC**: Return to menu
-- **Mouse**: Hover over objects for tooltip hints
+---
 
-### Death & Respawn
-- Contact with hazards causes the hero to disintegrate into particles
-- Instant respawn at the start of the level
-- Life score tracks how many times you've fallen
+## Gameplay
 
-### Speed Bonus
-- Each level has a target completion time (shown as green timer)
-- Complete a level within the target to earn bonus points
-- Flash and particle effects celebrate fast completions
+The gameplay combines exploration, environmental puzzles and classic platforming.
 
-### Progress Tracking
-- Game automatically saves progress in browser localStorage
-- Continue from where you left off
-- Section completion unlocks the next section in the menu
+Each level revolves around collecting the letters of a single meaningful word.
 
-## Technical Details
+The word itself becomes the mechanic.
 
-### Built With
-- [Kaplay.js](https://kaplayjs.com/) — Game engine (canvas rendering, physics, scene management)
-- Vanilla JavaScript (ES6+ modules)
-- Web Audio API for procedural sound synthesis
-- HTML5 Canvas for sprite generation and background baking
-- Vite for development and building
+Examples:
+
+* **GLOW** — discovering curiosity and perception.
+* **TOUCH** — learning connection through interaction with the environment.
+* Future sections introduce new concepts in the same way.
+
+Collecting every letter changes the world around the player.
+
+Colors appear.
+
+Objects become interactive.
+
+Sounds emerge.
+
+New mechanics become available.
+
+The world evolves together with the player.
+
+---
+
+## Psychological design
+
+Every level is built around four questions:
+
+1. What psychological skill is being developed?
+2. What gameplay action symbolizes it?
+3. What discovery does the player make?
+4. What should remain with them after the level?
+
+The goal is not to explain psychology.
+
+The goal is to let players *feel* it.
+
+---
+
+## World
+
+The world begins almost empty.
+
+As curiosity grows, the player slowly discovers:
+
+* colors;
+* sounds;
+* emotions;
+* relationships;
+* language;
+* time.
+
+The environment becomes richer together with the player's perception.
+
+---
+
+## Core principles
+
+* Meaning before mechanics.
+* Discovery before explanation.
+* Show instead of tell.
+* Every mechanic should symbolize an internal change.
+* Minimal UI.
+* Calm atmosphere.
+* No unnecessary dialogue.
+* Every level leaves the player with one small thought to carry into real life.
+
+---
+
+## Technology
+
+The project is built with:
+
+* JavaScript
+* Kaplay.js
+* HTML5 Canvas
+* Vite
+
+Everything is handcrafted, including the gameplay systems, shaders, particles, procedural sounds and visual effects.
+
+---
+
+## Current status
+
+The game is currently in active development.
+
+The first playable section focuses on **GLOW**, introducing curiosity, observation and perception through exploration.
+
+Many mechanics are experimental and continue to evolve as the core philosophy of the project becomes more refined.
+
+---
 
 ## Development
 
@@ -114,4 +177,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Life is the one setting traps. It shifts the ground, twists logic, and pushes you into mistakes — not to harm you, but to teach you.*
+*Sometimes understanding yourself begins with simply noticing what has always been there.*

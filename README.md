@@ -12,7 +12,7 @@ A philosophical hi-bit pixel-art platformer about perception, self-discovery, an
 
 ![Touch](assets/screenshots/touch1.png)
 
-# Find Yourself
+## Description
 
 **Find Yourself** is a narrative 2D platformer where gameplay is built around psychological growth instead of traditional progression.
 

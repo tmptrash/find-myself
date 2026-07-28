@@ -1238,6 +1238,7 @@ function onUpdate(inst) {
   if (!inst.controllable) {
     inst.ambientWalk ? updateAmbientWalkAnimation(inst) : updateIdleAnimation(inst)
     inst.character.flipX = inst.direction === -1
+    snapPosToPixels(inst)
     return
   }
   //
@@ -1703,6 +1704,7 @@ function onUpdate(inst) {
   // Mirror based on direction
   //
   inst.character.flipX = inst.direction === -1
+  snapPosToPixels(inst)
 }
 //
 // Clears jump/land timers and restores the full grounded hitbox. Used after
@@ -2410,6 +2412,17 @@ export function syncPlatformLanding(inst) {
   inst.canJump = true
   const prefix = inst.spritePrefix || inst.type
   char.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
+}
+
+/**
+ * Rounds hero world position to whole pixels for crisp 1:1 rendering before integer zoom.
+ * @param {Object} inst - Hero instance
+ */
+export function snapPosToPixels(inst) {
+  const ch = inst?.character
+  if (!ch?.pos || inst?.isAnnihilating) return
+  ch.pos.x = Math.round(ch.pos.x)
+  ch.pos.y = Math.round(ch.pos.y)
 }
 
 /**

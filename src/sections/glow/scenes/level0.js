@@ -4510,7 +4510,11 @@ function onUpdate(inst) {
   //
   isInWaterZone(inst, heroX, footY) && footY >= FLOOR_Y - 35 && revealWaterZone(inst)
   updateHeroGazeAtG(inst)
-  inst.lastHeroX = heroX
+  //
+  // Snap after scene-level platform snaps so the final draw position is whole-pixel.
+  //
+  Hero.snapPosToPixels(inst.heroInst)
+  inst.lastHeroX = char.pos.x
 }
 //
 // Locks the hero's gaze on the G letter while he stands on the start branch

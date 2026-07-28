@@ -486,6 +486,7 @@ export function create(config) {
     lookAtPos: null,
     isAnnihilating: false,
     isDying: false,
+    isSubmerging: false,  // Glow lake sink — scene drives Y; skip physics/anim pipeline
     isSpawned: false,   // Flag to prevent controls before spawn completes
     invulnerabilityTimer: 0,  // Timer for spawn invulnerability
     isInvulnerable: false,  // Flag for spawn invulnerability
@@ -877,6 +878,27 @@ export function enterCalmPose(inst) {
   inst.wasJumping = false
   inst.runFrame = 0
   inst.runTimer = 0
+  applyCalmIdleSprite(inst)
+}
+
+/**
+ * Forces the closed-eyes idle sprite (used during glow lake drowning).
+ * @param {Object} inst - Hero instance
+ */
+export function applyCalmIdleSprite(inst) {
+  const ch = inst?.character
+  if (!ch?.exists?.()) return
+  inst.isRunning = false
+  inst.wasJumping = false
+  const prefix = inst.spritePrefix || inst.type
+  const closedName = `${prefix}_closed`
+  try {
+    ch.use(inst.k.sprite(closedName))
+    inst.currentEyeSprite = closedName
+  } catch (e) {
+    ch.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
+    inst.currentEyeSprite = null
+  }
 }
 
 /**
@@ -1223,6 +1245,14 @@ function onUpdate(inst) {
   //
   if (inst.isAnnihilating) return
   //
+  // Lake drowning in glow — position/opacity are driven by the scene sink tween.
+  //
+  if (inst.isSubmerging) {
+    applyCalmIdleSprite(inst)
+    snapPosToPixels(inst)
+    return
+  }
+  //
   // Update invulnerability timer
   //
   if (inst.isInvulnerable) {
@@ -1311,7 +1341,7 @@ function onUpdate(inst) {
   //
   // Check if character is grounded (use isGrounded method or check if falling/jumping)
   //
-  const isGrounded = inst.character.isGrounded()
+  const isGrounded = inst.character.isGrounded?.() ?? false
   //
   // Tick land-FX debounce so a grounded flicker can't double-fire dust/sound
   //

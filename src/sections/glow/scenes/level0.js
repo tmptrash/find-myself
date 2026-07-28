@@ -4073,6 +4073,7 @@ function startDrowning(inst) {
   inst.drownSubmergeTimer = 0
   inst.trampBounceAir = false
   inst.heroInst.controllable = false
+  inst.heroInst.isSubmerging = true
   //
   // Block jump/move key handlers entirely — the drowned hero has no body
   // component, and executeJump would crash on the missing isGrounded().
@@ -4085,6 +4086,7 @@ function startDrowning(inst) {
   // on the water surface sideways.
   //
   Hero.enterCalmPose(inst.heroInst)
+  Hero.applyCalmIdleSprite(inst.heroInst)
   //
   // One water splash take marks the fall into the lake.
   //
@@ -4095,10 +4097,23 @@ function startDrowning(inst) {
   // Pin on the water surface in world space BEFORE the hint, so the bubble
   // anchors next to the hero (not a stale mid-air / off-screen point).
   //
-  const drownX = char.pos.x
-  const drownY = WATER_SURFACE_Y - SURFACE_DETECT_Y + DROWN_LANDING_DEPTH
+  const drownX = Math.round(char.pos.x)
+  const drownY = Math.round(WATER_SURFACE_Y - SURFACE_DETECT_Y + DROWN_LANDING_DEPTH)
+  inst.drownSinkY = drownY
   char.pos.x = drownX
   char.pos.y = drownY
+  if (char.vel) {
+    char.vel.x = 0
+    char.vel.y = 0
+  }
+  char.gravityScale = 0
+  //
+  // Drop physics so the floor collider cannot fight the manual sink tween.
+  // Do NOT add fixed() — it freezes world-space Y updates in Kaplay.
+  //
+  char.unuse('body')
+  char.z = LAKE_Z - 1
+  char.opacity = 1
   const firstDrown = !get(KEY_DROWN_HINT_SHOWN, false)
   firstDrown && set(KEY_DROWN_HINT_SHOWN, true)
   const drownHint = firstDrown
@@ -4110,15 +4125,6 @@ function startDrowning(inst) {
     anchorX: drownX,
     anchorY: drownY
   })
-  //
-  // fixed() keeps the sink draw order above the lake fill; keep the same XY
-  //
-  char.unuse('body')
-  char.use(inst.k.fixed())
-  char.z = LAKE_Z - 1
-  char.opacity = 1
-  char.pos.x = drownX
-  char.pos.y = drownY
 }
 //
 // Completes drowning sequence and reloads the scene.
@@ -4500,10 +4506,12 @@ function onUpdate(inst) {
   checkPlatformRevealOnDescent(inst, char, grounded, justLanded)
   checkGroundDecorReveal(inst, heroX, footY, grounded)
   //
-  // Water drowning — full submerge in the lake band.
+  // Water drowning — rest on the surface, then sink slowly beneath the fill.
   //
-  if (!inst.deathHandled && !inst.drowning && shouldDrownInWater(inst, heroX, footY) && grounded) {
-    startDrowning(inst)
+  if (!inst.deathHandled && !inst.drowning && shouldDrownInWater(inst, heroX, footY)) {
+    const velY = char.vel?.y ?? 0
+    const onLakeSurface = grounded || (footY >= FLOOR_Y - 24 && velY >= -40)
+    onLakeSurface && startDrowning(inst)
   }
   //
   // Reveal water visuals the first time the hero enters the lake band.
@@ -5023,17 +5031,28 @@ function checkPlatformRevealOnDescent(inst, char, grounded, justLanded) {
 //
 function onUpdateDrowning(inst) {
   const k = inst.k
-  const char = inst.heroInst.character
+  const hero = inst.heroInst
+  const char = hero?.character
+  if (!char?.pos) return
+  Hero.applyCalmIdleSprite(hero)
   inst.drownTimer += k.dt()
+  const surfaceY = Math.round(WATER_SURFACE_Y - SURFACE_DETECT_Y + DROWN_LANDING_DEPTH)
+  const sinkTargetY = Math.round(DROWN_FULL_SINK_FEET_Y - SURFACE_DETECT_Y)
   if (inst.drownPhase === 'surface') {
-    char.pos.y = WATER_SURFACE_Y - SURFACE_DETECT_Y + DROWN_LANDING_DEPTH
+    inst.drownSinkY = surfaceY
+    char.pos.x = Math.round(char.pos.x)
+    char.pos.y = surfaceY
     inst.drownTimer >= DROWN_SURFACE_HOLD && (inst.drownPhase = 'submerge')
     return
   }
   inst.drownSubmergeTimer += k.dt()
-  const sinkTargetY = DROWN_FULL_SINK_FEET_Y - SURFACE_DETECT_Y
-  char.pos.y = Math.min(sinkTargetY, char.pos.y + DROWN_SUBMERGE_SPEED * k.dt())
-  const fullyUnder = char.pos.y >= sinkTargetY - 4
+  inst.drownSinkY = Math.min(
+    sinkTargetY,
+    (inst.drownSinkY ?? surfaceY) + DROWN_SUBMERGE_SPEED * k.dt()
+  )
+  char.pos.x = Math.round(char.pos.x)
+  char.pos.y = Math.round(inst.drownSinkY)
+  const fullyUnder = inst.drownSinkY >= sinkTargetY - 4
   if (fullyUnder) {
     const opacity = char.opacity ?? 1
     char.opacity = Math.max(0, opacity - DROWN_FADE_OUT_SPEED * k.dt())

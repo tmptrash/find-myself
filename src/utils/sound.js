@@ -47,17 +47,20 @@ export function create() {
   // Create master gains for SFX (reusable)
   //
   const landGain = ctx.createGain()
-  landGain.connect(ctx.destination)
+  const glowSfxGain = ctx.createGain()
+  glowSfxGain.gain.value = 1
+  glowSfxGain.connect(ctx.destination)
+  landGain.connect(glowSfxGain)
 
   const stepGain = ctx.createGain()
-  stepGain.connect(ctx.destination)
+  stepGain.connect(glowSfxGain)
 
   const jumpGain = ctx.createGain()
   jumpGain.gain.value = CFG.audio.sfx.jump
-  jumpGain.connect(ctx.destination)
+  jumpGain.connect(glowSfxGain)
 
   const spawnGain = ctx.createGain()
-  spawnGain.connect(ctx.destination)
+  spawnGain.connect(glowSfxGain)
   //
   // Create master gain for blade sounds (for volume control)
   //
@@ -107,6 +110,7 @@ export function create() {
     bugStepGain,
     clockTickGain,
     clockDestroyGain,
+    glowSfxGain,
     // Ambient music state
     ambientOscillators: [],
     ambientGains: [],
@@ -1731,7 +1735,7 @@ export function playLetterPickupSoft(instance) {
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
   osc.connect(filter)
   filter.connect(gain)
-  gain.connect(instance.audioContext.destination)
+  gain.connect(instance.glowSfxGain || instance.audioContext.destination)
   osc.start(now)
   osc.stop(now + duration)
   //

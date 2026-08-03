@@ -145,7 +145,7 @@ function showDeathMessage(k, hero, bladesInst, levelIndicator = null, sound = nu
   
   skipHandlers.push(k.onKeyPress("space", requestSkip))
   skipHandlers.push(k.onKeyPress("enter", requestSkip))
-  skipHandlers.push(k.onClick(requestSkip))
+  skipHandlers.push(k.onMousePress(requestSkip))
   
   //
   // Show blades and trigger death animation

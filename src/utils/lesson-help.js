@@ -791,8 +791,7 @@ function createSpendParticles(k, levelIndicator, heroColor) {
 //
 function onUpdateSpendParticle(k, particle, vx, vy, lifetime, state) {
   state.elapsed += k.dt()
-  particle.pos.x += vx * k.dt()
-  particle.pos.y += vy * k.dt()
+  particle.moveBy(vx * k.dt(), vy * k.dt())
   particle.opacity = 1 - state.elapsed / lifetime
   state.elapsed >= lifetime && k.destroy(particle)
 }

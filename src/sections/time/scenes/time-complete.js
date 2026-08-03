@@ -78,7 +78,7 @@ export function sceneTimeComplete(k) {
     //
     k.onKeyPress("space", () => skipToMenu(inst))
     k.onKeyPress("enter", () => skipToMenu(inst))
-    k.onClick(() => skipToMenu(inst))
+    k.onMousePress(() => skipToMenu(inst))
   })
 }
 

@@ -90,6 +90,7 @@ export function create(cfg) {
   const drawer = k.add([
     k.pos(0, 0),
     k.z(TOOLTIP_Z_INDEX),
+    k.fixed(),
     { draw() { onDraw(inst) } }
   ])
   //
@@ -124,8 +125,38 @@ export function unsuppressAll() {
   globalSuppressed = false
 }
 //
-// Resolve target position (supports static values and dynamic functions)
+// Resolve pointer position for hit-testing (screen space or world space).
 //
+function pointerForTarget(k, pointerPos, target) {
+  if (target.screenSpace) return pointerPos
+  return k.toWorld(pointerPos)
+}
+//
+// Converts a world position to screen coordinates for fixed UI drawing.
+//
+function worldToScreen(k, wx, wy) {
+  const cam = k.camPos()
+  return {
+    x: wx - cam.x + k.width() / 2,
+    y: wy - cam.y + k.height() / 2
+  }
+}
+//
+// Resolves a target centre to screen space (HUD targets are already screen space).
+//
+function targetScreenPos(k, target) {
+  const tx = getTargetX(target)
+  const ty = getTargetY(target)
+  return target.screenSpace ? { x: tx, y: ty } : worldToScreen(k, tx, ty)
+}
+//
+// Keeps forced-visible bubbles pinned in screen space (moving world targets).
+//
+function syncFrozenScreenPos(inst, target) {
+  const screen = targetScreenPos(inst.k, target)
+  inst.frozenX = Math.round(screen.x)
+  inst.frozenY = Math.round(screen.y)
+}
 function getTargetX(target) {
   return typeof target.x === 'function' ? target.x() : target.x
 }
@@ -167,11 +198,12 @@ function onDraw(inst) {
     lastRegistryFrame = currentFrame
   }
   //
-  // Bubble uses frozen position for stable text rendering (no glyph shimmer).
+  // Bubble uses frozen screen position for stable text rendering (no glyph shimmer).
   // Pointer tracks the live target position so it follows the moving object.
   //
-  const liveX = getTargetX(target)
-  const liveY = getTargetY(target)
+  const liveScreen = targetScreenPos(k, target)
+  const liveX = liveScreen.x
+  const liveY = liveScreen.y
   const bubbleCenterX = inst.frozenX
   const offsetY = target.offsetY ?? TOOLTIP_Y_OFFSET
   const labelText = resolveTargetText(target)
@@ -227,7 +259,7 @@ function onDraw(inst) {
     radius: BUBBLE_CORNER_RADIUS + BUBBLE_BORDER_WIDTH,
     color: borderColor,
     opacity: inst.opacity,
-    fixed: false
+    fixed: true
   })
   //
   // Draw background fill
@@ -239,7 +271,7 @@ function onDraw(inst) {
     radius: BUBBLE_CORNER_RADIUS,
     color: bgColor,
     opacity: inst.opacity * BUBBLE_BG_OPACITY,
-    fixed: false
+    fixed: true
   })
   //
   // Draw triangle pointer tracking live target X, clamped within bubble width.
@@ -284,7 +316,7 @@ function onDraw(inst) {
     anchor: "center",
     color: k.rgb(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B),
     opacity: inst.opacity,
-    fixed: false
+    fixed: true
   })
   //
   // Register this tooltip's bounding box for overlap avoidance
@@ -328,7 +360,7 @@ function drawPointer(k, tipX, baseEdgeY, tipY, borderColor, bgColor, opacity, po
     p3: k.vec2(tipX, pointsUp ? tipY - bw : tipY + bw),
     color: borderColor,
     opacity,
-    fixed: false
+    fixed: true
   })
   //
   // Fill triangle
@@ -339,7 +371,7 @@ function drawPointer(k, tipX, baseEdgeY, tipY, borderColor, bgColor, opacity, po
     p3: k.vec2(tipX, tipY),
     color: bgColor,
     opacity: opacity * BUBBLE_BG_OPACITY,
-    fixed: false
+    fixed: true
   })
 }
 //
@@ -359,7 +391,10 @@ function onUpdate(inst) {
   //
   // Forced-visible tooltips skip hover detection but still respect suppression above
   //
-  if (inst.forceVisible) return
+  if (inst.forceVisible) {
+    inst.activeTarget && syncFrozenScreenPos(inst, inst.activeTarget)
+    return
+  }
   const pointers = TouchInput.getHoverPointers(k)
   const dt = k.dt()
   const touchInstant = TouchInput.isTouchDevice()
@@ -386,11 +421,12 @@ function onUpdate(inst) {
     const halfW = target.width / 2
     const halfH = target.height / 2
     for (const pointerPos of pointers) {
+      const worldPointer = pointerForTarget(k, pointerPos, target)
       if (
-        pointerPos.x >= tx - halfW &&
-        pointerPos.x <= tx + halfW &&
-        pointerPos.y >= ty - halfH &&
-        pointerPos.y <= ty + halfH
+        worldPointer.x >= tx - halfW &&
+        worldPointer.x <= tx + halfW &&
+        worldPointer.y >= ty - halfH &&
+        worldPointer.y <= ty + halfH
       ) {
         hoveredTarget = target
         break
@@ -405,8 +441,9 @@ function onUpdate(inst) {
   if (hoveredTarget) {
     if (inst.activeTarget !== hoveredTarget) {
       inst.activeTarget = hoveredTarget
-      inst.frozenX = Math.round(getTargetX(hoveredTarget))
-      inst.frozenY = Math.round(getTargetY(hoveredTarget))
+      const screen = targetScreenPos(k, hoveredTarget)
+      inst.frozenX = Math.round(screen.x)
+      inst.frozenY = Math.round(screen.y)
       inst.opacity = touchInstant ? TOUCH_INSTANT_OPACITY : 0
     }
     inst.opacity = touchInstant

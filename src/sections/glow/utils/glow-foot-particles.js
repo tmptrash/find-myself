@@ -41,6 +41,12 @@ export function onUpdate(inst, dt) {
   }
 }
 //
+// Clears all live foot burst particles (e.g. water landing before drowning).
+//
+export function clear(inst) {
+  inst && (inst.particles = [])
+}
+//
 // Splash on landing — countMult scales density (crack stomps use a higher mult)
 //
 export function spawnLanding(inst, footX, footY, color, countMult = 1) {

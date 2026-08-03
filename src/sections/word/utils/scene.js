@@ -505,8 +505,7 @@ function createLifeScoreParticlesWord(k, levelIndicator) {
     particle.onUpdate(() => {
       const dt = k.dt()
       age += dt
-      particle.pos.x += velocityX * dt
-      particle.pos.y += velocityY * dt
+      particle.moveBy(velocityX * dt, velocityY * dt)
       particle.opacity = 1 - (age / lifetime)
       if (age >= lifetime && particle.exists && particle.exists()) {
         k.destroy(particle)
@@ -573,8 +572,7 @@ function createSpeedBonusParticles(k, levelIndicator, heroColor) {
     particle.onUpdate(() => {
       const dt = k.dt()
       age += dt
-      particle.pos.x += velocityX * dt
-      particle.pos.y += velocityY * dt
+      particle.moveBy(velocityX * dt, velocityY * dt)
       particle.opacity = 1 - (age / lifetime)
       if (age >= lifetime && particle.exists && particle.exists()) {
         k.destroy(particle)
@@ -788,7 +786,7 @@ function createLevelHeroes(k, sound, currentLevel, heroX, heroY, antiHeroX, anti
     idleVocalization: null
   })
   
-  hero.character.use("player")
+  hero.character.tag("player")
   Hero.spawn(hero)
   
   // Spawn anti-hero with delay

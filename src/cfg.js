@@ -142,6 +142,14 @@ export const CFG = {
       width: 1920,
       height: 1080
     },
+    //
+    // Glow section world — wider than the viewport; the level scrolls a camera
+    // through a fixed on-screen playfield window (see glow-camera.js).
+    //
+    glow: {
+      worldWidth: 3000,
+      worldHeight: 1080
+    },
     fonts: {
       regular: 'jetbrains',
       thin: 'jetbrains-thin',

@@ -189,7 +189,12 @@ export function create(config) {
       }),
       k.pos(dx, dy),
       k.color(0, 0, 0),
-      k.anchor('center')
+      k.anchor('center'),
+      //
+      // z() sorts globally in Kaplay 4000 (not relative to the parent anymore),
+      // so children must repeat the container's intended stacking depth.
+      //
+      k.z(CFG.visual.zIndex.platforms - 1)
     ])
     textObjects.push(outlineText)
   })
@@ -204,7 +209,12 @@ export function create(config) {
     }),
     k.pos(0, 0),
     getColor(k, CFG.visual.colors.blades),
-    k.anchor('center')
+    k.anchor('center'),
+    //
+    // z() sorts globally in Kaplay 4000 (not relative to the parent anymore),
+    // so children must repeat the container's intended stacking depth.
+    //
+    k.z(CFG.visual.zIndex.platforms - 1)
   ])
   textObjects.push(mainText)
   

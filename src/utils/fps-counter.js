@@ -94,6 +94,62 @@ export function onUpdate(inst) {
 export function getLevelTime(inst) {
   return inst.levelTime
 }
+/**
+ * Shows or hides the FPS counter HUD (timer slot follows when present).
+ * @param {Object} inst - FPS counter instance
+ * @param {boolean} visible - Whether the HUD is visible
+ */
+export function setVisible(inst, visible) {
+  if (!inst) return
+  const opacity = visible ? 0.7 : 0
+  inst.fpsText.opacity = opacity
+  inst.fpsTextOutlines.forEach(outline => {
+    outline.exists?.() && (outline.opacity = opacity)
+  })
+  inst.timerText && (inst.timerText.opacity = opacity)
+  inst.timerTextOutlines?.forEach(outline => {
+    outline.exists?.() && (outline.opacity = opacity)
+  })
+}
+/**
+ * Pins FPS HUD nodes to screen space (same as GLOW label / scoreboard).
+ * @param {Object} inst - FPS counter instance
+ */
+export function pinScreenFixed(inst) {
+  if (!inst) return
+  const pin = (obj) => obj?.exists?.() && (obj.fixed = true)
+  pin(inst.fpsText)
+  inst.fpsTextOutlines.forEach(pin)
+  inst.timerText && pin(inst.timerText)
+  inst.timerTextOutlines?.forEach(pin)
+}
+/**
+ * Centers the FPS row at a fixed screen X (between HUD slots).
+ * @param {Object} inst - FPS counter instance
+ * @param {number} centerX - Screen-space anchor X
+ */
+export function layoutAtScreenCenterX(inst, centerX) {
+  if (!inst?.fpsHud) return
+  const topY = inst.topY
+  const outlineOffsets = buildOutlineOffsets(HUD_OUTLINE_OFFSET)
+  inst.fpsHud.main.pos.x = centerX
+  inst.fpsHud.main.pos.y = topY
+  inst.fpsHud.outlineNodes.forEach((outline, oi) => {
+    const [dx, dy] = outlineOffsets[oi]
+    outline.pos.x = centerX + dx
+    outline.pos.y = topY + dy
+  })
+  if (!inst.timerHud) return
+  const gap = HUD_GAP_AFTER_FPS
+  const timerCenterX = centerX + inst.fpsHud.main.width / 2 + gap + inst.timerHud.main.width / 2
+  inst.timerHud.main.pos.x = timerCenterX
+  inst.timerHud.main.pos.y = topY
+  inst.timerHud.outlineNodes.forEach((outline, oi) => {
+    const [dx, dy] = outlineOffsets[oi]
+    outline.pos.x = timerCenterX + dx
+    outline.pos.y = topY + dy
+  })
+}
 //
 // Creates HUD text with a single drop-shadow copy (glow-level style).
 //

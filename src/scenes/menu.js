@@ -33,17 +33,6 @@ const SECTION_COLORS = {
   time: CFG.visual.colors.sections.time
 }
 //
-// Section hover descriptions (shown on floating title when hovering over anti-hero)
-//
-const SECTION_DESCRIPTIONS = {
-  glow: 'color perception',
-  time: 'time sense',
-  word: 'inner voices',
-  touch: 'physical contact',
-  feel: 'emotions',
-  mind: 'intellect'
-}
-//
 // Background fade transition speed (higher = faster)
 //
 const BG_FADE_SPEED = 3.0
@@ -1069,7 +1058,7 @@ export function sceneMenu(k) {
       if (inst.isLeavingScene) {
         hideTitle(inst.title)
         } else {
-        updateTitle(inst.title, k, hoveredInst)
+        updateTitle(inst.title, k, hoveredInst, inst.currentSection)
       }
       
       //
@@ -1121,7 +1110,7 @@ export function sceneMenu(k) {
     //
     k.add([
       k.z(MENU_LEAVE_COVER_Z),
-      k.fixed(),
+      { fixed: true },
       {
         draw() {
           if (!inst.isLeavingScene) return
@@ -1280,9 +1269,7 @@ export function sceneMenu(k) {
       //
       // Destroy title objects
       //
-      inst.title.letters.forEach(letter => {
-        letter.destroy()
-      })
+      hideTitle(inst.title)
       
       hintParts.destroy()
       
@@ -1294,6 +1281,24 @@ export function sceneMenu(k) {
   })
 }
 
+const TITLE_ORBIT_ARC_CHAR_SPACING = 0.075
+const TITLE_ORBIT_SHADOW_DX = 2
+const TITLE_ORBIT_SHADOW_DY = 2
+//
+// Hover label shown while a completed anti-hero is hovered — each section
+// is described by the inner struggle its letters represent.
+//
+const SECTION_DESCRIPTIONS = {
+  glow: 'clarity',
+  word: 'self-doubt',
+  touch: 'connection',
+  time: 'impermanence',
+  feel: 'vulnerability',
+  mind: 'overthinking'
+}
+const TITLE_UNKNOWN_TEXT = 'unknown'
+const TITLE_TEXT_FADE_OUT_SPEED = 5.0
+const TITLE_TEXT_FADE_IN_SPEED = 4.0
 /**
  * Create title with circular motion around anti-heroes
  * @param {Object} k - Kaplay instance
@@ -1305,68 +1310,24 @@ export function sceneMenu(k) {
 function createTitle(k, centerX, centerY, radius) {
   const defaultText = "find"
   const titleSize = 32
-  const amberColor = k.rgb(228, 155, 36)
   const dimColor = k.rgb(120, 120, 120)
   //
-  // Drop shadow (single black copy offset right+down) — the same text
-  // shadow style the glow level uses.
-  //
-  const outlineOffsets = [
-    { dx: 2, dy: 2 }
-  ]
-  //
-  // Pre-allocate letter objects for the longest possible text (section descriptions)
+  // Glyph pool sized for the longest possible label (default word, "unknown"
+  // or any section description) so switching text never needs reallocation.
   //
   const maxTextLength = Math.max(
     defaultText.length,
-    ...Object.values(SECTION_DESCRIPTIONS).map(d => d.length)
+    TITLE_UNKNOWN_TEXT.length,
+    ...Object.values(SECTION_DESCRIPTIONS).map(text => text.length)
   )
-  const letters = []
-  const outlineLetters = []
-  const circleRadius = radius + 100
-  
-  for (let i = 0; i < maxTextLength; i++) {
-    const char = i < defaultText.length ? defaultText[i] : ' '
-    const isVisible = i < defaultText.length
-    //
-    // Drop-shadow copies of the letter (see outlineOffsets above)
-    //
-    const shadows = outlineOffsets.map(offset => k.add([
-      k.text(char, { size: titleSize }),
-      k.pos(offset.dx, offset.dy),
-      k.anchor("center"),
-      k.color(0, 0, 0),
-      k.opacity(0),
-      k.z(CFG.visual.zIndex.ui + 49),
-      k.fixed()
-    ]))
-    
-    const letter = k.add([
-      k.text(char, { size: titleSize }),
-      k.pos(0, 0),
-      k.anchor("center"),
-      k.color(dimColor),
-      k.outline(0, k.rgb(0, 0, 0)),
-      k.z(CFG.visual.zIndex.ui + 50),
-      k.fixed(),
-      k.opacity(isVisible ? 1 : 0)
-    ])
-    
-    letters.push(letter)
-    outlineLetters.push(shadows.map((shadow, index) => ({
-      node: shadow,
-      dx: outlineOffsets[index].dx,
-      dy: outlineOffsets[index].dy
-    })))
-  }
-  
   return {
-    letters,
-    outlineLetters,
-    text: defaultText,
     defaultText,
+    text: defaultText,
     targetText: defaultText,
-    circleRadius,
+    textFadePhase: 1.0,
+    isTextChanging: false,
+    titleSize,
+    circleRadius: radius + 100,
     centerX,
     centerY,
     angle: 0,
@@ -1377,15 +1338,19 @@ function createTitle(k, centerX, centerY, radius) {
     hoverPhase: 0,
     moveSpeed: 0.15,
     snapSpeed: 3.0,
-    amberColor,
-    dimColor,
+    colorR: dimColor.r,
+    colorG: dimColor.g,
+    colorB: dimColor.b,
+    dimColorR: dimColor.r,
+    dimColorG: dimColor.g,
+    dimColorB: dimColor.b,
     isReversed: false,
     targetReversed: false,
     reverseFadePhase: 1.0,
     isReverseChanging: false,
     baseOpacity: 0.3,
-    textFadePhase: 1.0,
-    isTextChanging: false
+    hidden: false,
+    glyphs: Array.from({ length: maxTextLength }, () => ({ x: 0, y: 0, angle: 0, opacity: 0 }))
   }
 }
 
@@ -1395,37 +1360,38 @@ function createTitle(k, centerX, centerY, radius) {
  * @param {Object} k - Kaplay instance
  * @param {Object|null} hoveredAntiHero - Currently hovered anti-hero
  */
-function updateTitle(titleInst, k, hoveredAntiHero) {
+function updateTitle(titleInst, k, hoveredAntiHero, currentSection) {
   const dt = k.dt()
   //
-  // Determine target text based on hover state
+  // Completed sections and the section currently being played show their
+  // description; everything else stays "unknown".
   //
-  //
-  // Unknown sections (never visited) show generic "unknown" in the floating title
-  //
+  const sectionLabelKnown = hoveredAntiHero && (
+    hoveredAntiHero.isCompleted || hoveredAntiHero.section === currentSection
+  )
   const newTargetText = hoveredAntiHero
-    ? (hoveredAntiHero.isUnknown ? 'unknown' : (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText))
+    ? (sectionLabelKnown
+      ? (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText)
+      : TITLE_UNKNOWN_TEXT)
     : titleInst.defaultText
-  //
-  // Start text change fade if target text changed
-  //
   if (newTargetText !== titleInst.targetText) {
     titleInst.targetText = newTargetText
     titleInst.isTextChanging = true
-    titleInst.textFadePhase = 1.0
+    titleInst.textFadePhase = Math.min(titleInst.textFadePhase, 1)
   }
   //
-  // Handle text change fade animation (fade out → swap text → fade in)
+  // Text swap fades the old word out, swaps the string, then fades the new
+  // word back in — mirrors the reversal fade below.
   //
   if (titleInst.isTextChanging) {
-    if (titleInst.textFadePhase > 0 && titleInst.text !== titleInst.targetText) {
-      titleInst.textFadePhase -= dt * 5.0
+    if (titleInst.text !== titleInst.targetText) {
+      titleInst.textFadePhase -= dt * TITLE_TEXT_FADE_OUT_SPEED
       if (titleInst.textFadePhase <= 0) {
         titleInst.textFadePhase = 0
         titleInst.text = titleInst.targetText
       }
     } else if (titleInst.textFadePhase < 1) {
-      titleInst.textFadePhase += dt * 4.0
+      titleInst.textFadePhase += dt * TITLE_TEXT_FADE_IN_SPEED
       if (titleInst.textFadePhase >= 1) {
         titleInst.textFadePhase = 1
         titleInst.isTextChanging = false
@@ -1471,13 +1437,13 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     }
   }
   //
-  // Update hover state
+  // Update hover state — orbit snaps toward the hovered anti-hero
   //
   if (hoveredAntiHero) {
+    const dx = hoveredAntiHero.character.pos.x - titleInst.centerX
+    const dy = hoveredAntiHero.character.pos.y - titleInst.centerY
+    titleInst.hoverAngle = Math.atan2(dy, dx)
     if (!titleInst.isHovering) {
-      const dx = hoveredAntiHero.character.pos.x - titleInst.centerX
-      const dy = hoveredAntiHero.character.pos.y - titleInst.centerY
-      titleInst.hoverAngle = Math.atan2(dy, dx)
       titleInst.isHovering = true
       titleInst.hoverPhase = 0
     }
@@ -1501,12 +1467,9 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
       ? '#FF8C00'
       : hoveredAntiHero.sectionColor
     const sectionRgb = getRGB(k, sectionHex)
-    const targetColor = k.rgb(sectionRgb.r, sectionRgb.g, sectionRgb.b)
-    titleInst.letters.forEach(letter => {
-      letter.color.r += (targetColor.r - letter.color.r) * 5 * dt
-      letter.color.g += (targetColor.g - letter.color.g) * 5 * dt
-      letter.color.b += (targetColor.b - letter.color.b) * 5 * dt
-    })
+    titleInst.colorR += (sectionRgb.r - titleInst.colorR) * 5 * dt
+    titleInst.colorG += (sectionRgb.g - titleInst.colorG) * 5 * dt
+    titleInst.colorB += (sectionRgb.b - titleInst.colorB) * 5 * dt
   } else {
     titleInst.isHovering = false
     //
@@ -1517,93 +1480,76 @@ function updateTitle(titleInst, k, hoveredAntiHero) {
     //
     // Dim letters back to gray
     //
-    titleInst.letters.forEach(letter => {
-      letter.color.r += (titleInst.dimColor.r - letter.color.r) * 3 * dt
-      letter.color.g += (titleInst.dimColor.g - letter.color.g) * 3 * dt
-      letter.color.b += (titleInst.dimColor.b - letter.color.b) * 3 * dt
-    })
+    titleInst.colorR += (titleInst.dimColorR - titleInst.colorR) * 3 * dt
+    titleInst.colorG += (titleInst.dimColorG - titleInst.colorG) * 3 * dt
+    titleInst.colorB += (titleInst.dimColorB - titleInst.colorB) * 3 * dt
   }
   //
   // Position each letter along the arc
-  // Scale arc length based on current text length with constant per-character spacing
   //
   const textLength = titleInst.text.length
-  const arcCharSpacing = 0.075
-  const arcLength = arcCharSpacing * (textLength - 1)
+  const arcLength = TITLE_ORBIT_ARC_CHAR_SPACING * (textLength - 1)
   const angleStep = textLength > 1 ? arcLength / (textLength - 1) : 0
-  
-  titleInst.letters.forEach((letter, index) => {
-    const outlines = titleInst.outlineLetters[index]
+  for (let index = 0; index < titleInst.glyphs.length; index++) {
+    const glyph = titleInst.glyphs[index]
     //
-    // Hide letters beyond current text length
+    // Unused glyph slots (current text shorter than the pool) stay invisible
     //
     if (index >= textLength) {
-      letter.opacity = 0
-      outlines.forEach(outline => {
-        outline.node.opacity = 0
-      })
-      return
+      glyph.opacity = 0
+      continue
     }
-    //
-    // Update letter character if needed
-    //
-    const currentChar = titleInst.text[index]
-    if (letter.text !== currentChar) {
-      letter.text = currentChar
-    }
-    outlines.forEach(outline => {
-      if (outline.node.text !== currentChar) {
-        outline.node.text = currentChar
-      }
-    })
-    //
-    // Determine letter index based on order (reversed or not)
-    //
     const displayIndex = titleInst.isReversed ? (textLength - 1 - index) : index
     const letterAngle = titleInst.angle + (displayIndex - textLength / 2) * angleStep
-    //
-    // Position on circle
-    //
-    const x = titleInst.centerX + Math.cos(letterAngle) * titleInst.circleRadius
-    const y = titleInst.centerY + Math.sin(letterAngle) * titleInst.circleRadius
-    letter.pos.x = x
-    letter.pos.y = y
-    //
-    // Rotate letter to follow arc (tangent to circle)
-    //
-    letter.angle = letterAngle + Math.PI / 2
-    //
-    // Apply opacity combining hover, reversal fade, and text change fade
-    //
+    glyph.x = titleInst.centerX + Math.cos(letterAngle) * titleInst.circleRadius
+    glyph.y = titleInst.centerY + Math.sin(letterAngle) * titleInst.circleRadius
+    glyph.angle = letterAngle + Math.PI / 2
     const baseFinalOpacity = hoveredAntiHero ? 1.0 : titleInst.baseOpacity
-    const finalOpacity = baseFinalOpacity * titleInst.reverseFadePhase * titleInst.textFadePhase
-    letter.opacity = finalOpacity
-    //
-    // Toggle outline: black on hover, hidden when idle
-    //
-    const outlineOpacity = hoveredAntiHero ? finalOpacity : 0
-    outlines.forEach(outline => {
-      outline.node.pos.x = x + outline.dx
-      outline.node.pos.y = y + outline.dy
-      outline.node.angle = letter.angle
-      outline.node.opacity = outlineOpacity
-    })
-    letter.outline.width = 0
-  })
+    glyph.opacity = baseFinalOpacity * titleInst.reverseFadePhase * titleInst.textFadePhase
+  }
 }
-
+//
+// Draws the orbiting "find" title in screen space (Kaplay 4000-safe).
+//
+function drawOrbitingTitle(k, titleInst) {
+  if (titleInst.hidden) return
+  const text = titleInst.text
+  const letterColor = k.rgb(titleInst.colorR, titleInst.colorG, titleInst.colorB)
+  const shadowColor = k.rgb(0, 0, 0)
+  for (let i = 0; i < text.length; i++) {
+    const glyph = titleInst.glyphs[i]
+    if (glyph.opacity <= 0.01) continue
+    const char = text[i]
+    k.pushTransform()
+    k.pushTranslate(k.vec2(glyph.x, glyph.y))
+    k.drawText({
+      text: char,
+      size: titleInst.titleSize,
+      pos: k.vec2(TITLE_ORBIT_SHADOW_DX, TITLE_ORBIT_SHADOW_DY),
+      anchor: 'center',
+      angle: glyph.angle,
+      color: shadowColor,
+      opacity: glyph.opacity,
+      fixed: true
+    })
+    k.drawText({
+      text: char,
+      size: titleInst.titleSize,
+      pos: k.vec2(0, 0),
+      anchor: 'center',
+      angle: glyph.angle,
+      color: letterColor,
+      opacity: glyph.opacity,
+      fixed: true
+    })
+    k.popTransform()
+  }
+}
 //
 // Hide title instantly (used when leaving scene)
 //
 function hideTitle(titleInst) {
-  titleInst.letters.forEach(letter => {
-    letter.opacity = 0
-  })
-  titleInst.outlineLetters.forEach(outlines => {
-    outlines.forEach(outline => {
-      outline.node.opacity = 0
-    })
-  })
+  titleInst.hidden = true
 }
 
 //
@@ -1993,6 +1939,7 @@ function drawScene(inst) {
   if (hoveredAntiHero && isAntiHeroLocked(hoveredAntiHero, progress, inst.currentSection)) {
     drawProhibitedSign(k, hoveredAntiHero.character.pos.x, hoveredAntiHero.character.pos.y)
   }
+  drawOrbitingTitle(k, inst.title)
 }
 //
 // True while a live pre-level transition overlay owns input. Clears a

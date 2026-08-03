@@ -1133,7 +1133,7 @@ export function sceneLesson3(k) {
     //
     // Mouse click on log platform triggers wobble + creak sound
     //
-    k.onClick(() => {
+    k.onMousePress(() => {
       onLogPlatformClick(k, logWobbleState, sound)
     })
     //
@@ -2103,8 +2103,7 @@ function createLifeParticles(k, levelIndicator) {
     let elapsed = 0
     particle.onUpdate(() => {
       elapsed += k.dt()
-      particle.pos.x += vx * k.dt()
-      particle.pos.y += vy * k.dt()
+      particle.moveBy(vx * k.dt(), vy * k.dt())
       particle.opacity = 1 - elapsed / lifetime
       if (elapsed >= lifetime) {
         k.destroy(particle)

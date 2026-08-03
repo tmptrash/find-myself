@@ -3148,8 +3148,7 @@ function createLifeParticlesOnThornDeath(k, levelIndicator) {
     let elapsed = 0
     particle.onUpdate(() => {
       elapsed += k.dt()
-      particle.pos.x += vx * k.dt()
-      particle.pos.y += vy * k.dt()
+      particle.moveBy(vx * k.dt(), vy * k.dt())
       particle.opacity = 1 - elapsed / lifetime
       if (elapsed >= lifetime) {
         k.destroy(particle)
@@ -3634,8 +3633,7 @@ function createSpeedBonusParticles(k, levelIndicator, heroColor) {
     particle.onUpdate(() => {
       const dt = k.dt()
       age += dt
-      particle.pos.x += velocityX * dt
-      particle.pos.y += velocityY * dt
+      particle.moveBy(velocityX * dt, velocityY * dt)
       particle.opacity = 1 - (age / lifetime)
       if (age >= lifetime && particle.exists?.()) {
         k.destroy(particle)
@@ -5074,7 +5072,7 @@ function onUpdateTouchLetterSystem(k, state, fireflies, bug4X, bug4BackPlatformY
       const onPlatY = heroFoot >= platTopY - ANTIHERO_PLATFORM_DETECT_Y_TOL && heroFoot <= platTopY + ANTIHERO_PLATFORM_DETECT_Y_TOL
       const onPlatX = Math.abs(heroX - currentPlatX) < ANTIHERO_PLATFORM_DETECT_HALF_W
       if (onPlatY && onPlatX) {
-        hero.character.pos.x += deltaX
+        hero.character.moveBy(deltaX, 0)
       }
     }
     state.prevPlatX = currentPlatX
@@ -5918,7 +5916,7 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
   const skipHandler = k.onKeyPress((key) => {
     if (key === 'space' || key === 'enter') doRestart()
   })
-  const clickHandler = k.onClick(() => doRestart())
+  const clickHandler = k.onMousePress(() => doRestart())
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS_L0 - elapsed)

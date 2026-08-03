@@ -69,12 +69,16 @@ export function isActive(inst) {
  * @param {boolean} [opts.followHero=false] - Track the hero position every frame
  * @param {number} [opts.anchorX] - Optional world X override for the bubble
  * @param {number} [opts.anchorY] - Optional world Y override for the bubble
+ * @param {number} [opts.dismissDistance] - Walk-away dismiss radius in px (default 30)
+ * @param {boolean} [opts.dismissOnJump=true] - Dismiss when the hero jumps
  */
 export function show(inst, text, duration, opts = {}) {
   inst.queue = []
   inst.onQueueEmpty = null
   inst.ignoreMovementDismiss = Boolean(opts.ignoreMovementDismiss)
   inst.followHero = Boolean(opts.followHero)
+  inst.dismissDistance = opts.dismissDistance ?? HINT_DISMISS_DISTANCE
+  inst.dismissOnJump = opts.dismissOnJump !== false
   inst.anchorOverride = (opts.anchorX != null && opts.anchorY != null)
     ? { x: opts.anchorX, y: opts.anchorY }
     : null
@@ -93,6 +97,8 @@ export function queue(inst, hints, onComplete = null) {
   inst.queue = list
   inst.onQueueEmpty = onComplete
   inst.ignoreMovementDismiss = false
+  inst.dismissDistance = HINT_DISMISS_DISTANCE
+  inst.dismissOnJump = true
   first && startHint(inst, first.text, first.duration)
 }
 
@@ -105,6 +111,8 @@ export function clear(inst) {
   inst.onQueueEmpty = null
   inst.ignoreMovementDismiss = false
   inst.followHero = false
+  inst.dismissDistance = HINT_DISMISS_DISTANCE
+  inst.dismissOnJump = true
   destroyHint(inst)
 }
 //
@@ -115,6 +123,8 @@ function startHint(inst, text, duration) {
   const { k, heroInst } = inst
   inst.timer = 0
   inst.duration = duration
+  inst.dismissDistance = inst.dismissDistance ?? HINT_DISMISS_DISTANCE
+  inst.dismissOnJump = inst.dismissOnJump !== false
   const hx = inst.anchorOverride?.x ?? heroInst.character?.pos?.x ?? 0
   const hy = inst.anchorOverride?.y ?? heroInst.character?.pos?.y ?? 0
   inst.spawnX = hx
@@ -180,16 +190,19 @@ function shouldDismissByMovement(inst) {
   // Only a real jump (crouch→launch) dismisses — brief unground flicker /
   // spawn plant used to clear intro bubbles before they were readable.
   //
-  const jumping = hero.isSquashing ||
+  const jumping = inst.dismissOnJump !== false && (
+    hero.isSquashing ||
     hero.jumpPhase === 'jumping' ||
     hero.jumpPhase === 'squashing'
+  )
   if (jumping) return true
   const dx = ch.pos.x - inst.spawnX
   const dy = ch.pos.y - inst.spawnY
   //
-  // Euclidean distance so a diagonal walk also clears the bubble at 30 px
+  // Euclidean distance so a diagonal walk also clears the bubble
   //
-  return Math.hypot(dx, dy) >= HINT_DISMISS_DISTANCE
+  const dist = inst.dismissDistance ?? HINT_DISMISS_DISTANCE
+  return Math.hypot(dx, dy) >= dist
 }
 //
 // Advances the fade-in / hold / fade-out envelope and chains queued hints
@@ -225,6 +238,12 @@ function onUpdate(inst) {
 //
 function syncBubblePosition(inst) {
   if (!inst.tooltip || !inst.target) return
-  inst.tooltip.frozenX = Math.round(inst.target.x())
-  inst.tooltip.frozenY = Math.round(inst.target.y())
+  const k = inst.k
+  const wx = inst.target.x()
+  const wy = inst.target.y()
+  const cam = k.camPos()
+  const halfW = k.width() / 2
+  const halfH = k.height() / 2
+  inst.tooltip.frozenX = Math.round(wx - cam.x + halfW)
+  inst.tooltip.frozenY = Math.round(wy - cam.y + halfH)
 }

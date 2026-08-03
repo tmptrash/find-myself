@@ -2267,8 +2267,7 @@ function createLifeParticlesOnDeath(k, levelIndicator) {
 //
 function onUpdateDeathParticle(k, particle, pData) {
   pData.elapsed += k.dt()
-  particle.pos.x += pData.vx * k.dt()
-  particle.pos.y += pData.vy * k.dt()
+  particle.moveBy(pData.vx * k.dt(), pData.vy * k.dt())
   particle.opacity = 1 - pData.elapsed / pData.lifetime
   if (pData.elapsed >= pData.lifetime) {
     k.destroy(particle)
@@ -4152,7 +4151,7 @@ function startDeathCountdown(k, sceneName, deathX, deathY) {
   const skipHandler = k.onKeyPress((key) => {
     if (key === 'space' || key === 'enter') doRestart()
   })
-  const clickHandler = k.onClick(() => doRestart())
+  const clickHandler = k.onMousePress(() => doRestart())
   const updateTimer = k.onUpdate(() => {
     elapsed += k.dt()
     const remaining = Math.max(0, DEATH_COUNTDOWN_SECONDS - elapsed)

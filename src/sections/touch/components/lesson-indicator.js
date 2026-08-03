@@ -396,13 +396,23 @@ export function revealSmallHeroHud(inst) {
 export function revealLifeHud(inst, greyLife = true) {
   if (!inst || inst.lifeRevealed) return
   inst.lifeRevealed = true
-  const useGrey = greyLife || inst.scoreboardGreyLife
-  if (useGrey && inst.lifeImage?.sprite) {
-    inst.lifeImage.sprite.color = inst.k.rgb(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B)
-  }
+  syncLifeHudGrey(inst, greyLife)
   inst.lifeImage?.sprite && (inst.lifeImage.sprite.hidden = false)
   inst.lifeScoreText && (inst.lifeScoreText.hidden = false)
   inst.lifeScoreOutlines?.forEach(o => { o.hidden = false })
+}
+
+/**
+ * Keeps the life HUD icon grey or full colour (glow grayscale vs colour world).
+ * @param {Object} inst - Level indicator instance
+ * @param {boolean} [greyLife=true] - When true, tint the life sprite grey
+ */
+export function syncLifeHudGrey(inst, greyLife = true) {
+  if (!inst?.lifeImage?.sprite) return
+  const useGrey = greyLife || inst.scoreboardGreyLife
+  inst.lifeImage.sprite.color = useGrey
+    ? inst.k.rgb(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B)
+    : inst.k.rgb(255, 255, 255)
 }
 
 export function setSectionLabelLetterProgress(inst, completedLetters) {
@@ -505,8 +515,7 @@ function createScoreText(k, score, x, y, fontSize) {
 //
 function onUpdateLetterBurstParticle(k, particle, vx, vy, lifetime, ps) {
   ps.elapsed += k.dt()
-  particle.pos.x += vx * k.dt()
-  particle.pos.y += vy * k.dt()
+  particle.moveBy(vx * k.dt(), vy * k.dt())
   particle.opacity = 1 - ps.elapsed / lifetime
   ps.elapsed >= lifetime && k.destroy(particle)
 }

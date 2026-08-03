@@ -393,7 +393,7 @@ function showDeathMessage(k, hero, bladesInst, bladeArmInst = null, levelIndicat
     updateInterval.cancel()
     restartLevel()
   })
-  k.onClick(() => {
+  k.onMousePress(() => {
     updateInterval.cancel()
     restartLevel()
   })
@@ -857,7 +857,7 @@ function createLetterBullet(k, hero, facingRight, bladeArm) {
   // Move bullet horizontally
   //
   bullet.onUpdate(() => {
-    bullet.pos.x += BULLET_SPEED * direction * k.dt()
+    bullet.moveBy(BULLET_SPEED * direction * k.dt(), 0)
     ;(bullet.pos.x < 0 || bullet.pos.x > k.width()) && k.destroy(bullet)
   })
   //
@@ -1080,8 +1080,7 @@ function createCreatureHitParticles(k, bladeArm) {
       k.z(22)
     ])
     particle.onUpdate(() => {
-      particle.pos.x += vx * k.dt()
-      particle.pos.y += vy * k.dt()
+      particle.moveBy(vx * k.dt(), vy * k.dt())
       particle.opacity -= k.dt() * 2
       if (particle.opacity <= 0) {
         k.destroy(particle)
@@ -1317,8 +1316,7 @@ function spawnConfusionParticles(k, x, y, hero) {
         return
       }
       state.vy += 400 * k.dt()
-      particle.pos.x += state.vx * k.dt()
-      particle.pos.y += state.vy * k.dt()
+      particle.moveBy(state.vx * k.dt(), state.vy * k.dt())
       particle.opacity = state.life / 0.6
     })
   }
@@ -2202,7 +2200,7 @@ function updateMonsterRide(hero, bladeArm, ride) {
   //
   // Carry the hero horizontally with the monster (ignoring the wrap teleport)
   //
-  onBack && Math.abs(dx) <= MONSTER_RIDE_WRAP_GUARD && (hero.character.pos.x += dx)
+  onBack && Math.abs(dx) <= MONSTER_RIDE_WRAP_GUARD && hero.character.moveBy(dx, 0)
 }
 //
 // Grey anti-hero touch: inert until calmed — only shows the calm hint.

@@ -288,6 +288,9 @@ export const HEROES = {
  * @param {string} [config.currentLevel] - Current level name for transition
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
  * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
+ * @param {boolean} [config.isStatic=false] - If true, no physics/gravity is applied
+ * @param {boolean} [config.fixed=config.isStatic] - If true, position is screen-space (HUD indicators); a static
+ *   decorative hero left at its default scrolls with the world instead
  * @returns {Object} Hero instance with character, k, type, controllable, sfx, and animation state
  */
 export function create(config) {
@@ -305,7 +308,8 @@ export function create(config) {
     bodyColor = null,      // Custom body color (hex string)
     outlineColor = null,   // Custom outline color (hex string), defaults to black
     dustColor = null,      // Dust particle color (hex string)
-    isStatic = false,      // If true, no physics (for indicators)
+    isStatic = false,      // If true, no physics (for indicators / decorative heroes)
+    fixed = isStatic,      // If true, position is screen-space (HUD); defaults to isStatic
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
     addArms = false,       // If true, add simple vertical arms
     addWatch = false,      // If true, draw small watch on right wrist (requires addArms)
@@ -429,12 +433,17 @@ export function create(config) {
         collisionHeight
       )
     })] : []),
-    ...(isStatic ? [k.fixed()] : [k.body()]),  // Use fixed() for static, body() for physics
+    //
+    // fixed() pins the character to screen-space (HUD indicators); a static
+    // world hero (e.g. a bonus fragment) skips both fixed() and body() so it
+    // scrolls naturally with the camera without being affected by gravity.
+    //
+    ...(fixed ? [k.fixed()] : (isStatic ? [] : [k.body()])),
     k.anchor("center"),
     k.scale(scale),
     k.z(CFG.visual.zIndex.player),
   ])
-  type === HEROES.ANTIHERO && !ambient && character.use(ANTIHERO_TAG)
+  type === HEROES.ANTIHERO && !ambient && character.tag(ANTIHERO_TAG)
 
   const inst = {
     character,
@@ -442,6 +451,7 @@ export function create(config) {
     type,
     controllable,
     isStatic,
+    fixed,
     sfx,
     antiHero,
     onAnnihilation,
@@ -892,6 +902,11 @@ export function applyCalmIdleSprite(inst) {
   inst.wasJumping = false
   const prefix = inst.spritePrefix || inst.type
   const closedName = `${prefix}_closed`
+  //
+  // Re-applying the sprite every frame (glow drowning) would remount Kaplay
+  // components and fight the scene-driven sink tween.
+  //
+  if (inst.currentEyeSprite === closedName) return
   try {
     ch.use(inst.k.sprite(closedName))
     inst.currentEyeSprite = closedName
@@ -976,11 +991,30 @@ export function crouch(inst, duration = 0.4) {
 /**
  * Spawn hero with assembly effect from particles
  * @param {Object} inst - Hero instance
+ * @param {Object} [opts] - Options
+ * @param {boolean} [opts.instant=false] - Skip the particle assembly effect
+ *   and reveal the hero immediately (e.g. glow's camera-intro moment)
  */
-export function spawn(inst) {
+export function spawn(inst, opts = {}) {
+  const { instant = false } = opts
   const { k, character, type, sfx, bodyColor } = inst
   const x = character.pos.x
   const y = character.pos.y
+  //
+  // Instant spawn: skip the particle assembly entirely and just reveal the
+  // hero already standing there, ready to play.
+  //
+  if (instant) {
+    character.hidden = false
+    character.vel.x = 0
+    character.vel.y = 0
+    resetAirborneState(inst)
+    inst.isSpawned = true
+    inst.isInvulnerable = true
+    inst.invulnerabilityTimer = 3.0
+    inst.spawnLandGrace = 0.35
+    return
+  }
   //
   // Hide character initially
   //
@@ -1044,7 +1078,7 @@ export function spawn(inst) {
     // Assembly uses circles — rotation is irrelevant for a circle
     //
     const particle = createParticleWithOutline(k, startX, startY, particleColor, SPAWN_PARTICLE_SHAPE, 0, particleSize, scale)
-    particle.use("assemblyParticle")
+    particle.tag("assemblyParticle")
     //
     // Assign target point from the outline (cycle through points)
     //
@@ -1087,8 +1121,7 @@ export function spawn(inst) {
         if (dist > 5) {
           allGathered = false
           const moveSpeed = particle.speed * k.dt()
-          particle.pos.x += (dx / dist) * moveSpeed
-          particle.pos.y += (dy / dist) * moveSpeed
+          particle.moveBy((dx / dist) * moveSpeed, (dy / dist) * moveSpeed)
         }
         //
         // Check if particles are close to target (for early sound trigger)
@@ -1194,8 +1227,7 @@ function createBodyPartParticles(inst) {
           k.destroy(outlineParticle)
           return
         }
-        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
-        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
         outlineParticle.opacity = 1 - (elapsed / lifetime)
       })
     })
@@ -1224,8 +1256,7 @@ function createBodyPartParticles(inst) {
         k.destroy(particle)
         return
       }
-      particle.pos.x += Math.cos(angle) * speed * k.dt()
-      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      particle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
       particle.opacity = 1 - (elapsed / lifetime)
     })
   }
@@ -1248,8 +1279,23 @@ function onUpdate(inst) {
   // Lake drowning in glow — position/opacity are driven by the scene sink tween.
   //
   if (inst.isSubmerging) {
-    applyCalmIdleSprite(inst)
-    snapPosToPixels(inst)
+    const ch = inst.character
+    //
+    // moveTo (not direct pos.x/pos.y mutation) so Kaplay marks the transform
+    // dirty and actually redraws the sprite at its new position — a direct
+    // pos write silently skips the render-transform cache invalidation,
+    // leaving the hero visually frozen while sinking.
+    //
+    if (ch?.pos && (inst.drownSinkX != null || inst.drownSinkY != null)) {
+      const x = inst.drownSinkX != null ? Math.round(inst.drownSinkX) : ch.pos.x
+      const y = inst.drownSinkY != null ? inst.drownSinkY : ch.pos.y
+      ch.moveTo(x, y)
+    }
+    inst.drownHeroDrawZ != null && (ch.z = inst.drownHeroDrawZ)
+    //
+    // Body is removed in glow drowning — only scene-driven Y applies.
+    //
+    ch?.vel && (ch.vel.x = 0, ch.vel.y = 0)
     return
   }
   //
@@ -1798,7 +1844,7 @@ function syncJumpCollision(inst) {
   const offsetY = inst.collisionBaseOffsetY - liftKey
   if (grounded) {
     const sink = (offsetY + height) - prevBottom
-    sink > 0 && (ch.pos.y -= sink)
+    sink > 0 && ch.moveBy(0, -sink)
   }
   area.shape = new inst.k.Rect(
     inst.k.vec2(inst.collisionBaseOffsetX, offsetY),
@@ -2091,8 +2137,7 @@ function createDustParticles(inst, footX, footY, type = 'splash', direction = 1)
       //
       // Move particle
       //
-      particle.pos.x += particle.vx * k.dt()
-      particle.pos.y += particle.vy * k.dt()
+      particle.moveBy(particle.vx * k.dt(), particle.vy * k.dt())
       //
       // Apply gravity (particles fall down after initial splash)
       //
@@ -2452,7 +2497,9 @@ export function snapPosToPixels(inst) {
   const ch = inst?.character
   if (!ch?.pos || inst?.isAnnihilating) return
   ch.pos.x = Math.round(ch.pos.x)
-  ch.pos.y = Math.round(ch.pos.y)
+  if (!inst?.isSubmerging) {
+    ch.pos.y = Math.round(ch.pos.y)
+  }
 }
 
 /**
@@ -2613,8 +2660,7 @@ function startAnnihilationExplosion(inst, targetPos) {
       //
       // Move outward (all particles are in scatter phase)
       //
-      p.pos.x += p.vx * k.dt()
-      p.pos.y += p.vy * k.dt()
+      p.moveBy(p.vx * k.dt(), p.vy * k.dt())
       //
       // Update outline position
       //
@@ -2731,8 +2777,7 @@ function startAnnihilationExplosion(inst, targetPos) {
             //
             // Move particle
             //
-            p.pos.x += p.vx * k.dt()
-            p.pos.y += p.vy * k.dt()
+            p.moveBy(p.vx * k.dt(), p.vy * k.dt())
             //
             // Update outline position
             //
@@ -3739,8 +3784,7 @@ function createMouthSparkles(inst) {
       //
       // Move sparkle
       //
-      sparkle.pos.x += sparkle.vx * k.dt()
-      sparkle.pos.y += sparkle.vy * k.dt()
+      sparkle.moveBy(sparkle.vx * k.dt(), sparkle.vy * k.dt())
       //
       // Apply upward drift and slow down
       //
@@ -3836,8 +3880,7 @@ function createColorChangeSparkles(inst, color) {
           k.destroy(outlineParticle)
           return
         }
-        outlineParticle.pos.x += Math.cos(angle) * speed * k.dt()
-        outlineParticle.pos.y += Math.sin(angle) * speed * k.dt()
+        outlineParticle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
         outlineParticle.opacity = 1 - (elapsed / lifetime)
       })
     })
@@ -3861,8 +3904,7 @@ function createColorChangeSparkles(inst, color) {
         k.destroy(particle)
         return
       }
-      particle.pos.x += Math.cos(angle) * speed * k.dt()
-      particle.pos.y += Math.sin(angle) * speed * k.dt()
+      particle.moveBy(Math.cos(angle) * speed * k.dt(), Math.sin(angle) * speed * k.dt())
       particle.opacity = 1 - (elapsed / lifetime)
     })
   }
@@ -4019,7 +4061,11 @@ function createEyeParticles(inst, centerX, centerY) {
       k.pos(0, 0),
       k.color(pupilColor[0], pupilColor[1], pupilColor[2]),
       k.anchor("center"),
-      k.z(CFG.visual.zIndex.eyePupil)
+      //
+      // z() sorts globally in Kaplay 4000 (not relative to the parent anymore),
+      // so the pupil must sit just above the eye's own z, not a fixed constant.
+      //
+      k.z(eyeZ + CFG.visual.zIndex.eyePupil)
     ])
     //
     // Set initial velocity

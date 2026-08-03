@@ -18,6 +18,10 @@ const CRACK_ZONE_W = Math.round(HERO_BODY_W * 3.4)
 const PIT_DEPTH = Math.round(HERO_BODY_H * 1.65)
 const PIT_WALL_W = 20
 //
+// Extra width on the cave floor collider so the hero cannot fall past the sides.
+//
+const PIT_FLOOR_EXTRA_W = 56
+//
 // 2/3 field midges across the playfield, 1/3 clustered at the cave mouth
 //
 const MIDGE_TOTAL = 30
@@ -41,7 +45,7 @@ const CRACK_STOMP_OPENS = 5
 const CRACK_STOMP_FEET_MAX = 14
 const CRACK_STOMP_PARTICLE_MULT = 2.8
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
-const CAVE_LAYOUT_VERSION = 5
+const CAVE_LAYOUT_VERSION = 9
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_PIT_BONUS = 'glow.pitBonusCollected'
 const LEFT_MARGIN = 100
@@ -351,8 +355,8 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
 //
 function clampHeroInCave(pit, char) {
   if (!char?.pos || char.pos.y < pit.floorY - 4) return
-  const minX = pit.zone.x1 + PIT_WALL_W + 6
-  const maxX = pit.zone.x2 - PIT_WALL_W - 6
+  const minX = pit.zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W / 2 + 6
+  const maxX = pit.zone.x2 - PIT_WALL_W + PIT_FLOOR_EXTRA_W / 2 - 6
   if (char.pos.x < minX) char.pos.x = minX
   if (char.pos.x > maxX) char.pos.x = maxX
 }
@@ -506,19 +510,101 @@ function drawCavePit(k, pit, groundC) {
   }
   const layout = pit.wallProfile
   //
-  // Three concentric jagged oval rings — light outside, dark center void
+  // Dark interior only — ragged walls, floor band and mouth glow removed.
   //
-  drawCaveDepthLayers(k, layout.depthLayers, pal, layout.mouth)
-  drawJaggedPebbleBed(k, layout.floorTop, layout.bottomY, pal)
-  for (const p of layout.pebbles) {
+  drawCaveVoidFill(k, layout.mouth, pal)
+}
+//
+// Solid dark void for the cave interior — single fill, no layered portals.
+//
+function drawCaveVoidFill(k, mouth, pal) {
+  if (!mouth?.left?.length || !mouth?.right?.length) return
+  const pts = []
+  pts.push(k.vec2(mouth.left[0].x, mouth.floorY))
+  pts.push(k.vec2(mouth.right[0].x, mouth.floorY))
+  for (let i = 1; i < mouth.right.length; i++) {
+    pts.push(k.vec2(mouth.right[i].x, mouth.right[i].y))
+  }
+  pts.push(k.vec2(mouth.right[mouth.right.length - 1].x, mouth.bottomY))
+  pts.push(k.vec2(mouth.left[mouth.left.length - 1].x, mouth.bottomY))
+  for (let i = mouth.left.length - 1; i >= 1; i--) {
+    pts.push(k.vec2(mouth.left[i].x, mouth.left[i].y))
+  }
+  pts.length >= 3 && k.drawPolygon({
+    pts,
+    color: k.rgb(pal.void.r, pal.void.g, pal.void.b)
+  })
+}
+//
+// Soft daylight glow bleeding through the cave mouth — a few overlapping,
+// low-opacity circles centred on the opening so the entrance reads as lit
+// rock fading to black, not a flat cut-out.
+//
+const CAVE_GLOW_RADII = [76, 50, 26]
+function drawCaveAmbientGlow(k, mouth, pal) {
+  if (!mouth?.left?.length || !mouth?.right?.length) return
+  const cx = (mouth.left[0].x + mouth.right[0].x) * 0.5
+  const topY = mouth.floorY + 4
+  const glow = k.rgb(pal.rim.r, pal.rim.g, pal.rim.b)
+  CAVE_GLOW_RADII.forEach((r, i) => {
     k.drawCircle({
-      pos: k.vec2(p.x, p.y),
-      radius: p.r,
-      color: k.rgb(pal.pebble.r, pal.pebble.g, pal.pebble.b),
-      opacity: 0.88
+      pos: k.vec2(cx, topY + r * 0.35),
+      radius: r,
+      color: glow,
+      opacity: 0.1 + i * 0.06
+    })
+  })
+}
+//
+// Draws one jagged rock wall as stacked blocky slabs along a ragged edge.
+//
+const CAVE_WALL_SLAB_STEPS = 7
+const CAVE_WALL_DEPTH = 22
+function drawRaggedCaveWall(k, edge, pal, outwardSign) {
+  if (!edge?.length) return
+  const rock = k.rgb(pal.depthOuter.r, pal.depthOuter.g, pal.depthOuter.b)
+  const shade = k.rgb(pal.depthMid.r, pal.depthMid.g, pal.depthMid.b)
+  const n = edge.length
+  const step = Math.max(1, Math.floor(n / CAVE_WALL_SLAB_STEPS))
+  for (let i = 0; i < n - 1; i += step) {
+    const a = edge[i]
+    const b = edge[Math.min(n - 1, i + step)]
+    const midY = (a.y + b.y) * 0.5
+    const depth = CAVE_WALL_DEPTH + caveSeed01(a.x * 0.13 + midY * 0.07) * 14
+    const outerX = a.x + outwardSign * depth
+    const pts = [
+      k.vec2(a.x, a.y),
+      k.vec2(b.x, b.y),
+      k.vec2(b.x + outwardSign * depth * 0.85, b.y),
+      k.vec2(outerX, a.y)
+    ]
+    k.drawPolygon({
+      pts,
+      color: i % 2 === 0 ? rock : shade
     })
   }
-  drawJaggedFloorBand(k, layout.floorTop, layout.bottomY, pal)
+  //
+}
+//
+// Thin lit edge along a wall's inner (cave-facing) rim, fading toward the
+// bottom of the mouth — reads as daylight catching the carved rock facets.
+//
+function drawCaveWallRim(k, edge, pal) {
+  if (!edge?.length) return
+  const n = edge.length
+  const fadeEnd = Math.max(2, Math.floor(n * 0.4))
+  for (let i = 0; i < fadeEnd - 1; i++) {
+    const a = edge[i]
+    const b = edge[i + 1]
+    const opacity = 0.5 * (1 - i / fadeEnd)
+    k.drawLine({
+      p1: k.vec2(a.x, a.y),
+      p2: k.vec2(b.x, b.y),
+      width: 2,
+      color: k.rgb(pal.rimEdge.r, pal.rimEdge.g, pal.rimEdge.b),
+      opacity
+    })
+  }
 }
 //
 // Palette derived from the current ground tone (gray or colour world)
@@ -526,12 +612,18 @@ function drawCavePit(k, pit, groundC) {
 function buildCavePalette(groundC) {
   const g = groundC
   return {
-    void: caveClampRgb(g.r * 0.12, g.g * 0.12, g.b * 0.11),
-    depthOuter: caveClampRgb(g.r * 0.68, g.g * 0.64, g.b * 0.58),
-    depthMid: caveClampRgb(g.r * 0.48, g.g * 0.45, g.b * 0.42),
-    depthInner: caveClampRgb(g.r * 0.3, g.g * 0.28, g.b * 0.26),
-    floor: caveClampRgb(Math.min(255, g.r + 32), Math.min(255, g.g + 28), Math.min(255, g.b + 20)),
-    pebble: caveClampRgb(g.r * 0.56, g.g * 0.53, g.b * 0.5)
+    void: caveClampRgb(g.r * 0.08, g.g * 0.08, g.b * 0.07),
+    depthOuter: caveClampRgb(g.r * 0.72, g.g * 0.68, g.b * 0.62),
+    depthMid: caveClampRgb(g.r * 0.42, g.g * 0.4, g.b * 0.37),
+    depthInner: caveClampRgb(g.r * 0.22, g.g * 0.2, g.b * 0.19),
+    floor: caveClampRgb(Math.min(255, g.r + 28), Math.min(255, g.g + 24), Math.min(255, g.b + 18)),
+    pebble: caveClampRgb(g.r * 0.56, g.g * 0.53, g.b * 0.5),
+    //
+    // Warm daylight tone bleeding a short way into the mouth, and a lit rim
+    // catching the inner edge of each rock pillar.
+    //
+    rim: caveClampRgb(g.r * 0.3 + 18, g.g * 0.27 + 14, g.b * 0.2 + 8),
+    rimEdge: caveClampRgb(g.r * 0.92 + 20, g.g * 0.88 + 16, g.b * 0.78 + 10)
   }
 }
 function caveClampRgb(r, g, b) {
@@ -542,7 +634,7 @@ function caveClampRgb(r, g, b) {
   }
 }
 //
-// Builds jagged oval rings and floor pebbles for the open cave mouth
+// Builds ragged mouth edges and floor pebbles — no arch lip above ground.
 //
 function buildCaveSceneLayout(zone, floorY) {
   const bottomY = floorY + zone.depth
@@ -555,8 +647,7 @@ function buildCaveSceneLayout(zone, floorY) {
     floorY,
     bottomY
   )
-  const depthLayers = buildDepthArchLayers(zone, floorY, bottomY, seed, mouth)
-  const pebbleCount = 26 + Math.floor(caveSeed01(seed + 400) * 10)
+  const pebbleCount = 18 + Math.floor(caveSeed01(seed + 400) * 8)
   for (let i = 0; i < pebbleCount; i++) {
     const px = mouth.left[0].x + 4 + caveSeed01(seed + i * 3.1) * (mouth.right[0].x - mouth.left[0].x - 8)
     const surfaceY = sampleProfileY(floorTop, px)
@@ -566,7 +657,7 @@ function buildCaveSceneLayout(zone, floorY) {
       r: 1.8 + caveSeed01(seed + i * 7.3) * 3.5
     })
   }
-  return { version: CAVE_LAYOUT_VERSION, pebbles, floorTop, depthLayers, mouth, bottomY }
+  return { version: CAVE_LAYOUT_VERSION, pebbles, floorTop, mouth, bottomY }
 }
 //
 // Jagged floor horizontal profile
@@ -580,27 +671,13 @@ const FLOOR_BAND_H = 11
 //
 // Shoreline-style left/right cave mouth edges
 //
-const CAVE_MOUTH_EDGE_STEPS = 42
-const CAVE_MOUTH_INSET = 4
-const CAVE_MOUTH_WALK = 10
-const CAVE_MOUTH_WOBBLE_SLOW = 17
-const CAVE_MOUTH_WOBBLE_MID = 11
-const CAVE_MOUTH_WOBBLE_FINE = 6
-const CAVE_MOUTH_NOTCH = 13
-//
-// Three nested depth ovals — equal pixel ring width between each boundary
-//
-const DEPTH_LAYER_COUNT = 3
-const DEPTH_RING_DIVISIONS = 4
-const DEPTH_OVAL_STEPS = 72
-const DEPTH_OVAL_JAG_WALK = 0.1
-const DEPTH_OVAL_JAG_SLOW = 0.17
-const DEPTH_OVAL_JAG_MID = 0.11
-const DEPTH_OVAL_JAG_FINE = 0.06
-const DEPTH_OVAL_BAY_CHANCE = 0.76
-const DEPTH_OVAL_BAY_AMP = 0.22
-const DEPTH_OVAL_SCALE_MIN = 0.74
-const DEPTH_OVAL_SCALE_MAX = 1.16
+const CAVE_MOUTH_EDGE_STEPS = 28
+const CAVE_MOUTH_INSET = 6
+const CAVE_MOUTH_WALK = 14
+const CAVE_MOUTH_WOBBLE_SLOW = 22
+const CAVE_MOUTH_WOBBLE_MID = 14
+const CAVE_MOUTH_WOBBLE_FINE = 8
+const CAVE_MOUTH_NOTCH = 18
 //
 // Jagged walk-surface profile along the pit floor
 //
@@ -626,16 +703,21 @@ function buildCaveMouthEdge(baseX, topY, bottomY, seed, inwardSign) {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
     const y = topY + t * depth
-    walk += (caveSeed01(seed + i * 4.1) - 0.5) * CAVE_MOUTH_WALK
-    walk *= 0.9
-    const bay = caveSeed01(seed + i * 8.6) > 0.78
-      ? (caveSeed01(seed + i * 12.4) - 0.5) * CAVE_MOUTH_NOTCH * 2.2
+    //
+    // Blocky steps: hold X for a few samples then jump (ragged rock slabs).
+    //
+    if (i % 3 === 0) {
+      walk += (caveSeed01(seed + i * 4.1) - 0.5) * CAVE_MOUTH_WALK * 1.6
+      walk *= 0.82
+    }
+    const bay = caveSeed01(seed + i * 8.6) > 0.72
+      ? (caveSeed01(seed + i * 12.4) - 0.5) * CAVE_MOUTH_NOTCH * 2.4
       : 0
     const wobble =
       walk +
-      Math.sin(t * Math.PI * 3.5 + seed * 0.75) * CAVE_MOUTH_WOBBLE_SLOW +
-      Math.sin(t * Math.PI * 10.5 + seed * 1.4) * CAVE_MOUTH_WOBBLE_MID +
-      Math.sin(t * 38 + seed * 2.15) * CAVE_MOUTH_WOBBLE_FINE +
+      Math.sin(t * Math.PI * 2.8 + seed * 0.75) * CAVE_MOUTH_WOBBLE_SLOW +
+      Math.sin(t * Math.PI * 7.5 + seed * 1.4) * CAVE_MOUTH_WOBBLE_MID +
+      Math.sin(t * 28 + seed * 2.15) * CAVE_MOUTH_WOBBLE_FINE +
       bay
     pts.push({ x: baseX + inwardSign * wobble, y })
   }
@@ -679,156 +761,6 @@ function clampHorizProfile(profile, zone, floorY, bottomY) {
     x: Math.max(zone.x1, Math.min(zone.x2, p.x)),
     y: Math.max(floorY, Math.min(bottomY, p.y))
   }))
-}
-//
-// Three nested jagged ovals — portal rings receding into the cave
-//
-function buildDepthArchLayers(zone, floorY, bottomY, seed, mouth) {
-  const leftX = mouth.left[0].x
-  const rightX = mouth.right[0].x
-  const cx = (leftX + rightX) / 2
-  const tunnelTop = floorY + 8
-  const tunnelBottom = bottomY - FLOOR_BAND_H - 8
-  const cy = (tunnelTop + tunnelBottom) / 2
-  const maxRx = (rightX - leftX) * 0.5 - 6
-  const maxRy = (tunnelBottom - tunnelTop) * 0.5
-  const ringRx = maxRx / DEPTH_RING_DIVISIONS
-  const ringRy = maxRy / DEPTH_RING_DIVISIONS
-  const layers = []
-  for (let i = 0; i < DEPTH_LAYER_COUNT; i++) {
-    const rx = maxRx - ringRx * (i + 1)
-    const ry = maxRy - ringRy * (i + 1)
-    const oval = buildJaggedOvalProfile(cx, cy, rx, ry, seed + 800 + i * 137)
-    layers.push(clipOvalToMouth(clipPolygonBelowHoriz(oval, floorY), mouth))
-  }
-  return layers
-}
-//
-// Shoreline-style ragged oval — not a smooth geometric ellipse
-//
-function buildJaggedOvalProfile(cx, cy, rx, ry, seed) {
-  const steps = DEPTH_OVAL_STEPS
-  const pts = []
-  let radWalk = 0
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const ang = t * Math.PI * 2
-    radWalk += (caveSeed01(seed + i * 5.1) - 0.5) * DEPTH_OVAL_JAG_WALK
-    radWalk *= 0.88
-    const bay = caveSeed01(seed + i * 9.7) > DEPTH_OVAL_BAY_CHANCE
-      ? (caveSeed01(seed + i * 13.3) - 0.5) * DEPTH_OVAL_BAY_AMP * 2
-      : 0
-    const rawScale =
-      1 +
-      radWalk +
-      Math.sin(ang * 4.2 + seed * 0.65) * DEPTH_OVAL_JAG_SLOW +
-      Math.sin(ang * 9.5 + seed * 1.35) * DEPTH_OVAL_JAG_MID +
-      Math.sin(ang * 21 + seed * 2.05) * DEPTH_OVAL_JAG_FINE +
-      Math.sin(ang * 43 + seed * 0.45) * (DEPTH_OVAL_JAG_FINE * 0.65) +
-      (caveSeed01(seed + i * 3.3) - 0.5) * (DEPTH_OVAL_JAG_MID * 0.9) +
-      bay
-    const scale = Math.max(DEPTH_OVAL_SCALE_MIN, Math.min(DEPTH_OVAL_SCALE_MAX, rawScale))
-    pts.push({
-      x: cx + Math.cos(ang) * rx * scale,
-      y: cy + Math.sin(ang) * ry * scale
-    })
-  }
-  return pts
-}
-function drawCaveDepthLayers(k, layers, pal, mouth) {
-  if (!layers?.length || !mouth) return
-  const groundY = mouth.floorY
-  //
-  // Outermost ring — flat ground lip, nothing above floorY
-  //
-  const mouthClip = clipPolygonBelowHoriz(buildMouthPolygon(mouth), groundY)
-  mouthClip.length >= 3 && k.drawPolygon({
-    pts: mouthClip.map(p => k.vec2(p.x, p.y)),
-    color: k.rgb(pal.depthOuter.r, pal.depthOuter.g, pal.depthOuter.b)
-  })
-  const fills = [pal.depthMid, pal.depthInner, pal.void]
-  for (let i = 0; i < layers.length; i++) {
-    const layer = clipPolygonBelowHoriz(layers[i], groundY)
-    if (layer.length < 3) continue
-    const c = fills[i] || pal.void
-    k.drawPolygon({
-      pts: layer.map(p => k.vec2(p.x, p.y)),
-      color: k.rgb(c.r, c.g, c.b)
-    })
-  }
-}
-//
-// Closed polygon for the jagged cave mouth opening (top edge at ground level)
-//
-function buildMouthPolygon(mouth) {
-  const pts = []
-  pts.push({ x: mouth.left[0].x, y: mouth.floorY })
-  pts.push({ x: mouth.right[0].x, y: mouth.floorY })
-  for (let i = 1; i < mouth.right.length; i++) pts.push(mouth.right[i])
-  pts.push({
-    x: mouth.right[mouth.right.length - 1].x,
-    y: mouth.bottomY
-  })
-  pts.push({
-    x: mouth.left[mouth.left.length - 1].x,
-    y: mouth.bottomY
-  })
-  for (let i = mouth.left.length - 1; i >= 1; i--) pts.push(mouth.left[i])
-  return pts
-}
-//
-// Keeps oval points inside the wavy left/right mouth walls
-//
-function clipOvalToMouth(oval, mouth) {
-  return oval.map(p => {
-    const leftX = sampleEdgeXAtY(mouth.left, p.y)
-    const rightX = sampleEdgeXAtY(mouth.right, p.y)
-    return {
-      x: Math.max(leftX, Math.min(rightX, p.x)),
-      y: Math.max(mouth.floorY, Math.min(mouth.bottomY, p.y))
-    }
-  })
-}
-//
-// Horizontal ground cut — removes everything above floorY
-//
-function clipPolygonBelowHoriz(polygon, minY) {
-  if (!polygon?.length) return []
-  const out = []
-  const n = polygon.length
-  for (let i = 0; i < n; i++) {
-    const a = polygon[i]
-    const b = polygon[(i + 1) % n]
-    const aIn = a.y >= minY
-    const bIn = b.y >= minY
-    aIn && out.push(a)
-    if (aIn !== bIn) {
-      const t = (minY - a.y) / (b.y - a.y)
-      out.push({
-        x: a.x + (b.x - a.x) * t,
-        y: minY
-      })
-    }
-  }
-  return out
-}
-//
-// Samples X on a vertical {x,y} edge profile
-//
-function sampleEdgeXAtY(edge, y) {
-  if (!edge?.length) return 0
-  if (y <= edge[0].y) return edge[0].x
-  const last = edge[edge.length - 1]
-  if (y >= last.y) return last.x
-  for (let i = 0; i < edge.length - 1; i++) {
-    const a = edge[i]
-    const b = edge[i + 1]
-    if (y >= a.y && y <= b.y) {
-      const t = (y - a.y) / (b.y - a.y)
-      return a.x + (b.x - a.x) * t
-    }
-  }
-  return last.x
 }
 //
 // Linearly samples Y on a jagged {x,y} profile
@@ -907,8 +839,8 @@ function collapsePit(pit) {
 function openPitPhysics(pit) {
   const { k, zone, floorY } = pit
   const bottomY = floorY + zone.depth
-  const innerX = zone.x1 + PIT_WALL_W
-  const innerW = Math.max(24, zone.width - PIT_WALL_W * 2)
+  const innerX = zone.x1 + PIT_WALL_W - PIT_FLOOR_EXTRA_W / 2
+  const innerW = Math.max(24, zone.width - PIT_WALL_W * 2 + PIT_FLOOR_EXTRA_W)
   //
   // Floor only — side bounds are soft clamps (no invisible wall rects)
   //
@@ -950,6 +882,7 @@ function openPitPhysics(pit) {
       pit.pitBonus.revealed = true
       pit.pitBonus.platformOpacity = 0
       pit.pitBonus.miniHero.character.opacity = 0.55
+      pit.pitBonus.miniHero.character.z = CFG.visual.zIndex.player + 5
       pit.pitBonus.miniHero.character.pos.x = bonusX
       pit.pitBonus.miniHero.character.pos.y = bottomY - 18
     }

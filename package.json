@@ -9,7 +9,8 @@
 		"dev": "vite",
 		"electron": "electron .",
 		"preview": "vite preview",
-		"zip": "npm run build && mkdir -p dist && zip -r dist/game.zip dist -x \"**/.DS_Store\""
+		"zip": "npm run build && mkdir -p dist && zip -r dist/game.zip dist -x \"**/.DS_Store\"",
+		"postinstall": "patch-package"
 	},
 	"build": {
 		"appId": "com.findyourself.game",
@@ -27,19 +28,21 @@
 		},
 		"win": {
 			"target": "nsis",
-			"icon": "assets/icon.png" 
+			"icon": "assets/icon.png"
 		},
 		"linux": {
 			"target": "AppImage"
 		}
 	},
 	"dependencies": {
-		"kaplay": "latest"
+		"kaplay": "4000.0.0-alpha.27.1"
 	},
 	"devDependencies": {
 		"@types/node": "^24.7.2",
 		"electron": "^41.3.0",
 		"electron-builder": "^26.8.1",
+		"patch-package": "^8.0.1",
+		"puppeteer": "^25.4.0",
 		"vite": "^8.0.13"
 	}
 }

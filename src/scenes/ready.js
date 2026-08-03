@@ -693,7 +693,7 @@ export function sceneReady(k) {
     }
     CFG.controls.startGame.forEach(key => k.onKeyPress(key, exitToMenu))
     CFG.controls.backToMenu.forEach(key => k.onKeyPress(key, exitToMenu))
-    k.onClick(exitToMenu)
+    k.onMousePress(exitToMenu)
   })
 }
 //
@@ -953,6 +953,9 @@ function createSpider(k, index, sourceInfo) {
     legs,
     distanceTraveled: 0,
     color,
+    letterColorR: color?.r ?? 255,
+    letterColorG: color?.g ?? 150,
+    letterColorB: color?.b ?? 80,
     appearDelay: index * 0.15,
     legAppearDelay: 0,
     legAppearTimer: 0,
@@ -971,6 +974,7 @@ function createSpider(k, index, sourceInfo) {
     startReturnY: undefined,
     targetRotation: 0,
     currentRotation: 0,
+    titleCharRemoved: false,
     legsHidden: false,
     settled: false,
     //
@@ -1057,22 +1061,25 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
     const LEG_GROW_DURATION = 2.0
     spider.legExtendT = Math.min(1, legAppearTimeElapsed / LEG_GROW_DURATION)
   }
+  //
+  // Peel the title letter onto the spider body once legs begin to grow; keep
+  // the pre-baked spider.color (do not copy title textObj.color — Kaplay 4000
+  // title colors break k.drawText and the glyph vanishes when crawling starts).
+  //
+  if (spider.letterInfo && spider.legExtendT > 0 && !spider.titleCharRemoved) {
+    const { textObj, charIndex } = spider.letterInfo
+    const chars = textObj.text.split('')
+    chars[charIndex] = ' '
+    textObj.text = chars.join('')
+    const outlinesToUpdate = textObj.outlines || spider.titleOutlines
+    outlinesToUpdate && outlinesToUpdate.forEach(outline => {
+      outline.text = textObj.text
+    })
+    spider.titleCharRemoved = true
+    spider.charHidden = true
+  }
   if (!spider.isActivated && spider.legExtendT >= 1) {
     spider.isActivated = true
-    if (spider.letterInfo && spider.letterInfo.textObj) {
-      spider.color = spider.letterInfo.textObj.color
-    }
-    if (spider.letterInfo && !spider.charHidden) {
-      const { textObj, charIndex } = spider.letterInfo
-      const chars = textObj.text.split('')
-      chars[charIndex] = ' '
-      textObj.text = chars.join('')
-      const outlinesToUpdate = textObj.outlines || spider.titleOutlines
-      outlinesToUpdate && outlinesToUpdate.forEach(outline => {
-          outline.text = textObj.text
-        })
-      spider.charHidden = true
-    }
   }
   if (!spider.isActivated) return
   //
@@ -1199,9 +1206,17 @@ function drawSpider(k, spider, textOpacity) {
     drawTitleHero(k, spider)
     return
   }
+  const letterBodyActive = spider.legExtendT > 0 && spider.letter
+  const letterBodyOpacity = letterBodyActive
+    ? (spider.titleCharRemoved || spider.isActivated
+      ? SPIDER_MAX_OPACITY
+      : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0))
+    : 0
   if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = k.rgb(12, 10, 14)
-    const legOpacity = spider.charHidden ? SPIDER_MAX_OPACITY : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
+    const legOpacity = letterBodyActive && spider.titleCharRemoved
+      ? SPIDER_MAX_OPACITY
+      : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
     if (legOpacity > 0) {
     spider.legs.forEach(leg => {
         const effFootX = spider.x + (leg.footX - spider.x) * spider.legExtendT
@@ -1210,41 +1225,41 @@ function drawSpider(k, spider, textOpacity) {
           spider.x, spider.y, effFootX, effFootY,
           SPIDER_LEG_LENGTH_1, SPIDER_LEG_LENGTH_2, leg.side
         )
-        k.drawLine({ p1: k.vec2(spider.x, spider.y), p2: k.vec2(jointX, jointY), width: 2, color: legColor, opacity: legOpacity })
-        k.drawLine({ p1: k.vec2(jointX, jointY), p2: k.vec2(effFootX, effFootY), width: 2, color: legColor, opacity: legOpacity })
-        k.drawCircle({ pos: k.vec2(jointX, jointY), radius: 1, color: legColor, opacity: legOpacity })
+        k.drawLine({ p1: k.vec2(spider.x, spider.y), p2: k.vec2(jointX, jointY), width: 2, color: legColor, opacity: legOpacity, fixed: true })
+        k.drawLine({ p1: k.vec2(jointX, jointY), p2: k.vec2(effFootX, effFootY), width: 2, color: legColor, opacity: legOpacity, fixed: true })
+        k.drawCircle({ pos: k.vec2(jointX, jointY), radius: 1, color: legColor, opacity: legOpacity, fixed: true })
       })
     }
   }
-  if (spider.charHidden) {
+  if (letterBodyActive && letterBodyOpacity > 0) {
     const angleDeg = spider.displayAngle
-      spider.currentRotation = angleDeg
+    spider.currentRotation = angleDeg
+    const fillColor = k.rgb(spider.letterColorR, spider.letterColorG, spider.letterColorB)
     k.pushTransform()
-    k.pushTranslate(spider.x, spider.y)
+    k.pushTranslate(k.vec2(spider.x, spider.y))
     k.pushRotate(angleDeg)
     //
     // Drop shadow (single black copy offset right+down), glow-level style.
     //
-    const outlineOffsets = [[2, 2]]
-    outlineOffsets.forEach(([dx, dy]) => {
-      k.drawText({
-        text: spider.letter,
-        size: spider.letterSize,
-        pos: k.vec2(dx, dy),
-        anchor: 'center',
-        color: k.rgb(0, 0, 0),
-        opacity: 1.0,
-        font: spider.letterFont
-      })
+    k.drawText({
+      text: spider.letter,
+      size: spider.letterSize,
+      pos: k.vec2(2, 2),
+      anchor: 'center',
+      color: k.rgb(0, 0, 0),
+      opacity: letterBodyOpacity,
+      font: spider.letterFont,
+      fixed: true
     })
     k.drawText({
       text: spider.letter,
       size: spider.letterSize,
       pos: k.vec2(0, 0),
       anchor: 'center',
-      color: spider.color,
-      opacity: 1.0,
-      font: spider.letterFont
+      color: fillColor,
+      opacity: letterBodyOpacity,
+      font: spider.letterFont,
+      fixed: true
     })
     drawSpiderEyes(k, spider, angleDeg)
     k.popTransform()
@@ -1267,10 +1282,10 @@ function drawSpiderEyes(k, spider, angleDeg) {
   const maxPupilOffset = SPIDER_EYE_RADIUS - SPIDER_PUPIL_RADIUS - 0.5
   const px = Math.cos(localAngle) * maxPupilOffset
   const py = Math.sin(localAngle) * maxPupilOffset
-  k.drawCircle({ pos: k.vec2(lx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity })
-  k.drawCircle({ pos: k.vec2(lx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity })
-  k.drawCircle({ pos: k.vec2(rx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity })
-  k.drawCircle({ pos: k.vec2(rx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity })
+  k.drawCircle({ pos: k.vec2(lx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity, fixed: true })
+  k.drawCircle({ pos: k.vec2(lx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity, fixed: true })
+  k.drawCircle({ pos: k.vec2(rx, ey), radius: SPIDER_EYE_RADIUS, color: scleraColor, opacity: eyeOpacity, fixed: true })
+  k.drawCircle({ pos: k.vec2(rx + px, ey + py), radius: SPIDER_PUPIL_RADIUS, color: pupilColor, opacity: eyeOpacity, fixed: true })
 }
 
 /**

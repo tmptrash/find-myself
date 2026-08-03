@@ -241,6 +241,12 @@ export function create(config) {
     type: Hero.HEROES.HERO,
     controllable: false,
     isStatic: true,
+    //
+    // The bonus fragment lives in world space and must scroll with the
+    // camera like its platform — screen-fixed positioning (the isStatic
+    // default) made it render at the wrong spot in scrolling levels.
+    //
+    fixed: false,
     scale: HERO_SCALE,
     bodyColor: miniColor,
     idleVocalization: null
@@ -341,7 +347,7 @@ export function create(config) {
   //
   // Revealed platforms can be destroyed by clicking on them
   //
-  k.onClick(() => onClickPlatform(inst))
+  k.onMousePress(() => onClickPlatform(inst))
   return inst
 }
 /**

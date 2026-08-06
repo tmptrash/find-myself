@@ -2068,14 +2068,17 @@ function drawMenuBackground(inst) {
   })
 }
 //
-// Bakes the combined static menu background ONCE per session: the black
-// base plus the menu-bg picture (moon, tree layers, rocks, roots,
-// mushrooms) at its darkening alpha, loaded as a single sprite.
+// Bakes the combined static menu background once per live Kaplay instance:
+// the black base plus the menu-bg picture (moon, tree layers, rocks, roots,
+// mushrooms) at its darkening alpha, loaded as a single sprite. Tracks the
+// specific `k` it baked for (not just a boolean) so a fresh engine booted
+// after a resolution swap (see engine-switch.js) re-bakes instead of
+// skipping the load and leaving the sprite registry empty on the new k.
 //
-let menuStaticSpriteBaked = false
+let menuStaticSpriteBakedFor = null
 function buildMenuStaticSprite(k) {
-  if (menuStaticSpriteBaked) return
-  menuStaticSpriteBaked = true
+  if (menuStaticSpriteBakedFor === k) return
+  menuStaticSpriteBakedFor = k
   const canvas = document.createElement('canvas')
   canvas.width = MENU_BG_CANVAS_W
   canvas.height = MENU_BG_CANVAS_H

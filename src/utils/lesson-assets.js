@@ -3,6 +3,7 @@ import * as BootLoader from './boot-loader.js'
 import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
 import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 import { normalizeSceneName } from './progress.js'
+import { ensureEngineForScene } from './engine-switch.js'
 
 //
 // City sprite names used by time levels — tracked so we can compare pack keys.
@@ -252,27 +253,41 @@ export async function prepareSceneAssets(k, sceneName) {
 }
 
 /**
- * Enter the scene. Touch procedural sprites from the previous level are drained
- * from the registry (no GPU free — GC handles memory) so the new scene can
- * re-register the same names without stale tracking state.
+ * Enter the scene. Some scenes (currently only Glow) run on a differently
+ * sized engine than the one passed in — ensureEngineForScene transparently
+ * swaps to it first, tearing down and rebooting the whole Kaplay instance
+ * when needed (see engine-switch.js). Touch procedural sprites from the
+ * previous level are drained from the registry (no GPU free — GC handles
+ * memory) so the new scene can re-register the same names without stale
+ * tracking state.
  * @param {Object} k
  * @param {string} sceneName
  * @param {Function} [afterGo]
  */
-export function enterPreparedScene(k, sceneName, afterGo) {
+export async function enterPreparedScene(k, sceneName, afterGo) {
+  const { k: liveK, switched } = await ensureEngineForScene(sceneName)
+  //
+  // A swapped-in engine starts with nothing beyond its core boot assets
+  // loaded — any pack/registry bookkeeping from the previous engine no
+  // longer describes what is actually resident on the GPU.
+  //
+  if (switched) {
+    activePackKey = null
+    time3SpriteRegistry.clear()
+  }
   //
   // Paint canvas immediately so the previous scene (menu) does not flash for a frame
   //
   if (sceneName.startsWith('lesson-touch')) {
-    k.setBackground(k.rgb(26, 26, 26))
-    k.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
+    liveK.setBackground(liveK.rgb(26, 26, 26))
+    liveK.canvas?.style.setProperty('background-color', 'rgb(26, 26, 26)', 'important')
   }
   //
   // Clear Touch sprite tracking so next scene starts with a clean registry list.
   //
   drainTrackedTouchSpriteNames()
-  k.go(sceneName)
-  afterGo?.()
+  liveK.go(sceneName)
+  afterGo?.(liveK)
 }
 
 /**
@@ -283,7 +298,7 @@ export function enterPreparedScene(k, sceneName, afterGo) {
  */
 export async function prepareSceneAssetsThenEnterScene(k, sceneName, afterGo) {
   await prepareSceneAssets(k, sceneName)
-  enterPreparedScene(k, sceneName, afterGo)
+  await enterPreparedScene(k, sceneName, afterGo)
 }
 
 /**

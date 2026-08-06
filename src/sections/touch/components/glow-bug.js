@@ -53,7 +53,13 @@ const _glowRingCache = new Map()
 // the original per-ring loop where ringRadius = GLOW_AURA_RADIUS * pulse * (1-t).
 //
 function getOrCreateGlowSprite(k, colorHex, r, g, b) {
-  if (_glowRingCache.has(colorHex)) return _glowRingCache.get(colorHex)
+  const cachedName = _glowRingCache.get(colorHex)
+  //
+  // Also confirm the sprite still exists on THIS live k — a resolution swap
+  // (see engine-switch.js) boots a brand new Kaplay instance with an empty
+  // sprite registry, so a name cached from a torn-down engine must be re-baked.
+  //
+  if (cachedName && k.getSprite(cachedName)) return cachedName
   const spriteName = `glow-ring-${colorHex.replace('#', '')}`
   const canvas = toCanvas({ width: GLOW_SPRITE_SIZE, height: GLOW_SPRITE_SIZE }, ctx => {
     const cx = GLOW_SPRITE_HALF

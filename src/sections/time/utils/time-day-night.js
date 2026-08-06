@@ -143,11 +143,15 @@ const SUN_SPRITE_HALF = SUN_SPRITE_SIZE / 2
 const MOON_SPRITE_SIZE = 140
 const MOON_SPRITE_HALF = MOON_SPRITE_SIZE / 2
 //
-// Module-level flags: sprites are shared across all DayNight instances in the session.
+// Sprites are shared across all DayNight instances on the same live Kaplay
+// engine. Each tracks the specific `k` it baked for (not just a boolean) so
+// a fresh engine booted after a resolution swap (see engine-switch.js) —
+// whose sprite registry starts empty — re-bakes instead of skipping the
+// load and leaving day-night-sun/moon-in/moon-out missing on the new k.
 //
-let _sunSpriteBaked = false
-let _moonInSpriteBaked = false
-let _moonOutSpriteBaked = false
+let _sunSpriteBakedFor = null
+let _moonInSpriteBakedFor = null
+let _moonOutSpriteBakedFor = null
 
 /**
  * Returns darkness 0 (full day) → 1 (full night). Pure function of internal timeOfDay.
@@ -268,26 +272,26 @@ export function create(cfg) {
   //
   // Bake sun sprite once per session (shared across all DayNight instances).
   //
-  if (showSun && !_sunSpriteBaked) {
+  if (showSun && _sunSpriteBakedFor !== cfg.k) {
     const sunCanvas = bakeSunCanvas()
     cfg.k.loadSprite('day-night-sun', sunCanvas)
     sunCanvas.width = 0
     sunCanvas.height = 0
-    _sunSpriteBaked = true
+    _sunSpriteBakedFor = cfg.k
   }
   //
-  // Bake moon sprite once per session. Two variants: in-overlay uses the base
+  // Bake moon sprite once per engine. Two variants: in-overlay uses the base
   // moon colour; behind-clouds gets a brightness/color boost.
   //
   if (showMoon) {
-    if (moonInOverlay && !_moonInSpriteBaked) {
+    if (moonInOverlay && _moonInSpriteBakedFor !== cfg.k) {
       const c = bakeMoonCanvas(MOON_COLOR_R, MOON_COLOR_G, MOON_COLOR_B)
       cfg.k.loadSprite('day-night-moon-in', c)
       c.width = 0
       c.height = 0
-      _moonInSpriteBaked = true
+      _moonInSpriteBakedFor = cfg.k
     }
-    if (!moonInOverlay && !_moonOutSpriteBaked) {
+    if (!moonInOverlay && _moonOutSpriteBakedFor !== cfg.k) {
       const boostedR = Math.min(255, MOON_COLOR_R + MOON_BEHIND_CLOUD_COLOR_BOOST)
       const boostedG = Math.min(255, MOON_COLOR_G + MOON_BEHIND_CLOUD_COLOR_BOOST)
       const boostedB = Math.min(255, MOON_COLOR_B + MOON_BEHIND_CLOUD_COLOR_BOOST)
@@ -295,7 +299,7 @@ export function create(cfg) {
       cfg.k.loadSprite('day-night-moon-out', c)
       c.width = 0
       c.height = 0
-      _moonOutSpriteBaked = true
+      _moonOutSpriteBakedFor = cfg.k
     }
   }
   const inst = {

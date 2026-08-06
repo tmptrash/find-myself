@@ -46,6 +46,7 @@ const CRACK_STOMP_OPENS = 5
 const CRACK_STOMP_FEET_MAX = 14
 const CRACK_STOMP_PARTICLE_MULT = 2.8
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
+const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const CAVE_LAYOUT_VERSION = 10
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
@@ -344,7 +345,7 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
       footParticles,
       char.pos.x,
       footY,
-      pit.groundColor,
+      pitCrackStompParticleColor(pit),
       CRACK_STOMP_PARTICLE_MULT
     )
     if (pit.crackStompCount >= CRACK_STOMP_OPENS) {
@@ -423,11 +424,17 @@ function spreadMidgesAfterPit(ctrl) {
   }
 }
 function bakePitMushroomSprite(k) {
-  if (k.getSprite?.(PIT_MUSH_SPRITE)) return
+  if (!k.getSprite?.(PIT_MUSH_SPRITE)) {
+    bakeOnePitMushroomSprite(k, PIT_MUSH_SPRITE, getPitMushroomBakeColors())
+  }
+  if (!k.getSprite?.(PIT_MUSH_OUTLINE_SPRITE)) {
+    bakeOnePitMushroomSprite(k, PIT_MUSH_OUTLINE_SPRITE, GLOW_PAL.cuteMushroom)
+  }
+}
+function bakeOnePitMushroomSprite(k, name, colors) {
   const mushW = PIT_TRAMP_W
   const totalW = mushW + 4
   const totalH = Math.ceil(mushW * CUTE_MUSHROOM_ASPECT) + 4
-  const colors = getPitMushroomBakeColors()
   const canvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
     drawCuteMushroomToCanvas(ctx, {
       cx: totalW / 2,
@@ -437,7 +444,7 @@ function bakePitMushroomSprite(k) {
       withFace: true
     })
   })
-  k.loadSprite(PIT_MUSH_SPRITE, canvas)
+  k.loadSprite(name, canvas)
   canvas.width = 0
   canvas.height = 0
 }
@@ -532,6 +539,17 @@ function drawCaveInteriorRockStyle(k, pit, groundC) {
 //
 function getPitMushroomBakeColors() {
   return getCuteMushroomFlatDecorColors()
+}
+//
+// Gray stomp dust on the flat decor-gray crack entrance.
+//
+function pitCrackStompParticleColor(pit) {
+  const sc = pit.sceneRef
+  if (sc && typeof sc.zones !== 'undefined') {
+    const flat = !sc.zones.lCollected && !sc.zones.colorWorld && (sc.colorFade ?? 0) < 0.5
+    if (flat) return glowRgb(GLOW_PAL.decorGray)
+  }
+  return pit.groundColor
 }
 function caveRockPalette(groundC) {
   const g = groundC
@@ -925,13 +943,17 @@ function drawPitTrampoline(k, pit) {
   const scaleY = 1 - squash * 0.35
   const mushW = PIT_TRAMP_W
   const mushH = mushW * CUTE_MUSHROOM_ASPECT
+  const sc = pit.sceneRef
+  const outlined = sc?.zones?.colorWorld || (sc?.colorFade ?? 0) >= 0.5
+  const sprite = outlined ? PIT_MUSH_OUTLINE_SPRITE : PIT_MUSH_SPRITE
   k.drawSprite({
-    sprite: PIT_MUSH_SPRITE,
+    sprite,
     pos: k.vec2(x, y),
     anchor: 'bot',
     scale: k.vec2(1, scaleY),
     width: mushW + 4,
-    height: mushH + 4
+    height: mushH + 4,
+    color: k.rgb(255, 255, 255)
   })
 }
 function collapsePit(pit) {

@@ -39,6 +39,18 @@ const ROOT_HIGHLIGHT_OFFSET_X = -1.6
 const ROOT_HIGHLIGHT_OFFSET_Y = -1.6
 const ROOT_HIGHLIGHT_MIN_W = 3
 //
+// Trunk-to-root collar — root strands are seeded starting a few px above the
+// trunk base (ROOT_START_LIFT) so the trunk fill overlaps their origin, but
+// individual strands are only ~26px wide and have not yet spread/overlapped
+// enough to look solid right where they leave the trunk, so without this a
+// thin gap at the junction still shows the background through. Extending
+// the trunk's own left/right edges straight down (constant width, no flare)
+// by a SHORT amount right at the ground line closes that sliver without the
+// trunk visibly overrunning the root fan spreading out below it.
+//
+const TRUNK_ROOT_COLLAR_HEIGHT = 10
+const TRUNK_ROOT_COLLAR_TOP_OVERLAP = 2
+//
 // Side shading — the sun sits top-right, so trunk and branches carry a soft
 // dark band along their lower-left side. The band follows each segment (no
 // straight screen-space gradient), so the wobbly silhouette keeps its shape.
@@ -315,11 +327,10 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     ctx.restore()
   }
   //
-  // Wood clip line: the trunk base or the ground line (roots start), whichever
-  // is higher. Trees built with the trunk sunk below ground are cut exactly at
-  // the ground line so the base never floats and never pokes below the floor.
+  // Wood clip line follows the sunk trunk base so the fill reaches the root
+  // junction — clipping at the visible ground line alone left a horizontal seam.
   //
-  const trunkClipY = Math.min(treeData.trunkSegs.length > 0 ? treeData.trunkSegs[0].sy : h, groundY)
+  const trunkClipY = treeData.trunkSegs.length > 0 ? treeData.trunkSegs[0].sy : groundY
   const trunkRgb = { r: trunkR, g: trunkG, b: trunkB }
   const branchRgb = { r: branchR, g: branchG, b: branchB }
   //
@@ -339,6 +350,12 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       drawFilledWoodSegment(ctx, seg, trunkRgb, trunkClipY)
     })
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
+    //
+    // Flat single-tone mode returns before the detailed bark pass below ever
+    // runs, so without this the root-flare gap fix never applied here and
+    // the trunk-to-root gap stayed visible in the pre-L single-colour world.
+    //
+    paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb)
     ctx.globalAlpha = 1
     treeData.leaves.forEach(leaf => {
       const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
@@ -370,7 +387,18 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // centreline, notches, knots and fractal cracks.
   //
   fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-  drawTrunkBark(ctx, treeData.trunkSegs, barkDark, barkHighlight, treeSeed + 557, trunkClipY)
+  paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb)
+  //
+  // Bark texture is clipped to the plain trunk chain, which stops right at
+  // trunkClipY — the root-flare collar painted above is flat solid colour
+  // with no grain, so it used to read as a separate untextured "skirt"
+  // plate glued under the trunk. Extending the chain with one synthetic
+  // segment spanning the collar (tapering from the flare's bottom width
+  // back to the trunk width) lets the same bark pass continue naturally
+  // onto it instead.
+  //
+  const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, groundY)
+  drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
   drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
   //
   // Sun-side shading on branches — soft dark band along the lower-left of
@@ -668,6 +696,41 @@ function expandChainWidths(segs, extra) {
     w: seg.w + extra,
     w2: (seg.w2 ?? seg.w) + extra
   }))
+}
+//
+// Fills the trunk-to-root junction by continuing the trunk's own left/right
+// vertical edges straight down (constant width, no outward flare) by a
+// short amount right at the ground line — just enough that no gap between
+// root strands can show the background through. A flare/taper here used to
+// read as a separate "skirt" plate glued under the trunk, and a tall
+// extension made the trunk visibly overrun the root fan spreading out below
+// it; keeping this short and constant-width makes the trunk flow into the
+// roots exactly at ground level instead.
+//
+function paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb) {
+  const base = treeData.trunkSegs[0]
+  if (!base) return
+  const half = base.w * 0.5
+  const topY = Math.min(groundY, base.sy) - TRUNK_ROOT_COLLAR_TOP_OVERLAP
+  const bottomY = base.sy + TRUNK_ROOT_COLLAR_HEIGHT
+  if (bottomY <= topY) return
+  const cx = base.sx
+  ctx.fillStyle = `rgb(${trunkRgb.r}, ${trunkRgb.g}, ${trunkRgb.b})`
+  ctx.fillRect(cx - half, topY, half * 2, bottomY - topY)
+}
+//
+// Builds a trunk-segment chain with one extra synthetic segment prepended
+// below the real trunk base, at the SAME width as the trunk (no taper) —
+// see paintTrunkRootCollar for why the extension must stay constant-width
+// instead of flaring, and why it needs its own bark coverage rather than
+// staying a flat colour patch.
+//
+function buildTrunkCollarBarkExtension(treeData, groundY) {
+  const base = treeData.trunkSegs[0]
+  if (!base) return { segs: treeData.trunkSegs, clipY: groundY }
+  const bottomY = base.sy + TRUNK_ROOT_COLLAR_HEIGHT
+  const collarSeg = { sx: base.sx, sy: bottomY, ex: base.sx, ey: base.sy, w: base.w, w2: base.w }
+  return { segs: [collarSeg, ...treeData.trunkSegs], clipY: bottomY }
 }
 //
 // Fills a connected wood chain (trunk or thick branch run).

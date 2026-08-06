@@ -274,6 +274,12 @@ export const HEROES = {
   HERO: 'hero',
   ANTIHERO: 'antiHero'
 }
+//
+// Sprite-prefix bundles fully baked on each live Kaplay instance. Kaplay's
+// asset lookup can outlive a torn-down engine (see engine-switch.js), so
+// k.getSprite() alone must not skip loadHeroSprites on a fresh k.
+//
+const heroSpritePrefixesReadyFor = new WeakMap()
 /**
  * Creates hero or anti-hero with full logic setup
  * @param {Object} config - Hero configuration
@@ -528,6 +534,7 @@ export function create(config) {
     jumpKeyReleaseGate: false,
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
+    jumpDisabled: false,      // Flag to block only jumping while movement stays free (e.g. intro hints)
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
     lastFootprintFoot: 1,    // Alternates between -1 (left foot) and +1 (right foot)
     //
@@ -656,9 +663,10 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
   const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}`
   //
-  // Skip generation if sprites for this configuration are already in the asset registry.
+  // Skip only when this exact k already finished baking the full bundle
+  // (idle grid + closed frame + run/jump), not when a stale global name exists.
   //
-  try { if (k.getSprite(`${prefix}_0_0`)) return } catch (e) {}
+  if (isHeroSpritePrefixReadyOnK(k, prefix)) return
   //
   // Load all eye variants (9 positions) for idle animation
   //
@@ -757,6 +765,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
       //
     }
   }
+  isHeroIdleGridPresentOnK(k, prefix) && markHeroSpritePrefixReadyOnK(k, prefix)
 }
 /**
  * Death effect with particle explosion
@@ -907,13 +916,7 @@ export function applyCalmIdleSprite(inst) {
   // components and fight the scene-driven sink tween.
   //
   if (inst.currentEyeSprite === closedName) return
-  try {
-    ch.use(inst.k.sprite(closedName))
-    inst.currentEyeSprite = closedName
-  } catch (e) {
-    ch.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
-    inst.currentEyeSprite = null
-  }
+  useHeroSprite(inst, closedName)
 }
 
 /**
@@ -1471,7 +1474,7 @@ function onUpdate(inst) {
       const prefix = inst.spritePrefix || inst.type
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
-        inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+        useHeroSprite(inst, `${prefix}-jump-0`)
       }
       inst.character.flipX = inst.direction === -1
       return
@@ -1484,7 +1487,7 @@ function onUpdate(inst) {
     //
     // Dialog Space must never finish a crouch→launch on wood platforms
     //
-    if (inst.jumpKeyReleaseGate || inst.controlsDisabled || !inst.controllable) {
+    if (inst.jumpKeyReleaseGate || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) {
       cancelJumpSquash(inst)
       updateIdleAnimation(inst)
       inst.character.flipX = inst.direction === -1
@@ -1507,7 +1510,7 @@ function onUpdate(inst) {
       //
       if (inst.jumpFrame !== 0) {
         inst.jumpFrame = 0
-        inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+        useHeroSprite(inst, `${prefix}-jump-0`)
       }
     } else {
       //
@@ -1517,7 +1520,7 @@ function onUpdate(inst) {
       //
       if (inst.jumpFrame !== 1) {
         inst.jumpFrame = 1
-        inst.character.use(inst.k.sprite(`${prefix}-jump-1`))
+        useHeroSprite(inst, `${prefix}-jump-1`)
       }
     }
     //
@@ -1596,7 +1599,19 @@ function onUpdate(inst) {
       (inst.airTime < MIN_AIR_TIME_FOR_JUMP &&
         Math.abs(inst.character.vel.y) < 80 &&
         inst.jumpPhase !== 'jumping')
-    if (inst.isSpawned && !groundFlicker) {
+    //
+    // Glow keeps a real in-progress jump animating through brief ungrounded
+    // flicker (thin branch/log collision) instead of snapping back to run/idle.
+    // Gating this on raw vel.y thresholds instead of the jump-state flags used
+    // to misfire from ordinary gravity noise (a single frame's downward pull
+    // easily exceeds a low px/s threshold on any fps dip), forcing the hero
+    // into jump frames — and killing the run animation — while just standing
+    // or walking on the branch. wasJumping / jumpPhase alone only turn true
+    // once a real jump has already been recognised, so they can't misfire.
+    //
+    const isGlow = inst.currentLevel?.startsWith('lesson-glow.')
+    const glowAirAnim = isGlow && (inst.wasJumping || inst.jumpPhase === 'jumping')
+    if (inst.isSpawned && (!groundFlicker || glowAirAnim)) {
       //
       // Cancel any squash that was accidentally started while airborne (e.g. when
       // standing on a dynamic/floating platform that Kaplay doesn't mark as grounded).
@@ -1635,7 +1650,7 @@ function onUpdate(inst) {
       }
       if (targetFrame !== inst.jumpFrame) {
         inst.jumpFrame = targetFrame
-        inst.character.use(inst.k.sprite(`${prefix}-jump-${targetFrame}`))
+        useHeroSprite(inst, `${prefix}-jump-${targetFrame}`)
       }
       syncJumpCollision(inst)
       if (!inst.wasJumping) {
@@ -1672,7 +1687,7 @@ function onUpdate(inst) {
         inst.landSquashTimer = LAND_SQUASH_TIME
         inst.postLandAirLock = POST_LAND_AIR_LOCK
         const prefix = inst.spritePrefix || inst.type
-        inst.character.use(inst.k.sprite(`${prefix}-jump-6`))
+        useHeroSprite(inst, `${prefix}-jump-6`)
         inst.currentEyeSprite = null
       } else {
         inst.wasJumping = false
@@ -1871,8 +1886,7 @@ function updateIdleAnimation(inst) {
     // currentEyeSprite, so a stale closedName match left the hero frozen
     // on a sideways run frame after keys were released (touch L1 end music).
     //
-    inst.character.use(inst.k.sprite(closedName))
-    inst.currentEyeSprite = closedName
+    useHeroSprite(inst, closedName)
     return
   }
   //
@@ -1889,8 +1903,7 @@ function updateIdleAnimation(inst) {
     const roundedX = Math.round(inst.eyeOffsetX)
     const roundedY = Math.round(inst.eyeOffsetY)
     const spriteName = getSpriteName(inst, roundedX, roundedY)
-    inst.character.use(inst.k.sprite(spriteName))
-    inst.currentEyeSprite = spriteName
+    useHeroSprite(inst, spriteName)
   }
   //
   // Eye animation: track lookAtPos if set, otherwise random wander
@@ -1929,8 +1942,7 @@ function updateIdleAnimation(inst) {
   // Update sprite only if eye position changed
   //
   if (inst.currentEyeSprite !== spriteName) {
-    inst.character.use(inst.k.sprite(spriteName))
-    inst.currentEyeSprite = spriteName
+    useHeroSprite(inst, spriteName)
   }
 }
 
@@ -1946,8 +1958,7 @@ function updateAmbientWalkAnimation(inst) {
   }
   const runSprite = `${prefix}-run-${inst.runFrame}`
   if (inst.currentEyeSprite !== runSprite) {
-    inst.character.use(inst.k.sprite(runSprite))
-    inst.currentEyeSprite = runSprite
+    useHeroSprite(inst, runSprite)
   }
 }
 
@@ -1964,7 +1975,7 @@ function setupControls(inst) {
     // controllable=false / open letter panels: Space closes the dialog and must
     // not start a crouch→jump (especially on glow wood platforms after O).
     //
-    if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || !inst.controllable) return
+    if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
     if (isAnyPanelOpen()) return
     //
     // Dialog Space must not chain into a jump — wait until jump keys are up
@@ -1976,7 +1987,7 @@ function setupControls(inst) {
       inst.squashTimer = 0
       inst.jumpFrame = 0
       const prefix = inst.spritePrefix || inst.type
-      inst.character.use(inst.k.sprite(`${prefix}-jump-0`))
+      useHeroSprite(inst, `${prefix}-jump-0`)
     }
   }
   //
@@ -2486,7 +2497,7 @@ export function syncPlatformLanding(inst) {
   resetAirborneState(inst)
   inst.canJump = true
   const prefix = inst.spritePrefix || inst.type
-  char.use(inst.k.sprite(getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0)))
+  useHeroSprite(inst, getSpriteName(inst, inst.eyeOffsetX ?? 0, inst.eyeOffsetY ?? 0))
 }
 
 /**
@@ -4359,13 +4370,7 @@ function resolveJumpCeilingBonk(inst) {
   syncJumpCollision(inst)
   const prefix = inst.spritePrefix || inst.type
   inst.jumpFrame = 5
-  try {
-    ch.use(inst.k.sprite(`${prefix}-jump-5`))
-  } catch (error) {
-    //
-    // Sprite may lag one frame after a gold recolour bake
-    //
-  }
+  useHeroSprite(inst, `${prefix}-jump-5`)
 }
 //
 // True when a platform underside sits against / just above the hero's head.
@@ -4442,4 +4447,94 @@ function getPlatformWorldRect(obj) {
     top = obj.pos.y + offY - h / 2
   }
   return { left, top, right: left + w, bottom: top + h }
+}
+//
+// True when every idle eye cell and the closed frame exist on this k.
+//
+function isHeroIdleGridPresentOnK(k, prefix) {
+  try {
+    if (!k.getSprite(`${prefix}_closed`)) return false
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        if (!k.getSprite(`${prefix}_${x}_${y}`)) return false
+      }
+    }
+    return true
+  } catch (_) {
+    return false
+  }
+}
+//
+// Parses the sprite-prefix segment from a baked hero sprite name.
+//
+function parseHeroSpritePrefix(spriteName) {
+  if (!spriteName || typeof spriteName !== 'string') return null
+  if (spriteName.endsWith('_closed')) {
+    return spriteName.slice(0, -'_closed'.length)
+  }
+  const idle = spriteName.match(/^(.+)_-?\d+_-?\d+$/)
+  if (idle) return idle[1]
+  const run = spriteName.match(/^(.+)-run-\d+$/)
+  if (run) return run[1]
+  const jump = spriteName.match(/^(.+)-jump-\d+$/)
+  if (jump) return jump[1]
+  return null
+}
+//
+// True when a sprite name is registered on this Kaplay instance.
+//
+function heroSpriteExistsOnK(k, spriteName) {
+  try {
+    return Boolean(k.getSprite(spriteName))
+  } catch (_) {
+    return false
+  }
+}
+//
+// Rebakes the prefix bundle on the live k when a frame is missing.
+//
+function ensureHeroSpriteOnK(inst, spriteName) {
+  if (heroSpriteExistsOnK(inst.k, spriteName)) return
+  const prefix = parseHeroSpritePrefix(spriteName) || inst.spritePrefix || inst.type
+  heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
+  loadHeroSprites(inst)
+}
+//
+// Applies a hero sprite by name; falls back to the neutral idle cell if missing.
+//
+function useHeroSprite(inst, spriteName) {
+  ensureHeroSpriteOnK(inst, spriteName)
+  const prefix = parseHeroSpritePrefix(spriteName) || inst.spritePrefix || inst.type
+  const fallback = `${prefix}_0_0`
+  try {
+    inst.character.use(inst.k.sprite(spriteName))
+    inst.currentEyeSprite = spriteName
+  } catch (_) {
+    heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
+    loadHeroSprites(inst)
+    try {
+      inst.character.use(inst.k.sprite(spriteName))
+      inst.currentEyeSprite = spriteName
+    } catch (_) {
+      inst.character.use(inst.k.sprite(fallback))
+      inst.currentEyeSprite = fallback
+    }
+  }
+}
+//
+// Records a fully baked prefix bundle for the given Kaplay instance.
+//
+function markHeroSpritePrefixReadyOnK(k, prefix) {
+  let ready = heroSpritePrefixesReadyFor.get(k)
+  if (!ready) {
+    ready = new Set()
+    heroSpritePrefixesReadyFor.set(k, ready)
+  }
+  ready.add(prefix)
+}
+//
+// Whether loadHeroSprites already completed for this k + prefix.
+//
+function isHeroSpritePrefixReadyOnK(k, prefix) {
+  return heroSpritePrefixesReadyFor.get(k)?.has(prefix) ?? false
 }

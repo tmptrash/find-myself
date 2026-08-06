@@ -48,6 +48,9 @@ export function setVisible(visible) {
  * Initializes the DOM overlay cursor that follows the mouse.
  * A fixed-position HTML element renders the SVG cursor shape,
  * completely replacing the system cursor everywhere on screen.
+ * The overlay element and its mouse listeners are independent of any
+ * specific Kaplay instance, so a later call after an engine swap only
+ * needs to re-hide the system cursor on the fresh canvas.
  * @param {Object} k - Kaplay instance
  */
 export function init(k) {
@@ -56,6 +59,7 @@ export function init(k) {
     k.canvas && (k.canvas.style.cursor = 'none')
     return
   }
+  if (cursorEl) return
   cursorEl = document.createElement('div')
   cursorEl.style.position = 'fixed'
   cursorEl.style.pointerEvents = 'none'

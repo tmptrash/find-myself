@@ -3,7 +3,12 @@
 //
 
 let touchPositions = new Map()
-let touchInputInitialized = false
+//
+// Tracks which Kaplay instance the touch hooks are currently registered on —
+// an engine swap (see engine-switch.js) boots a brand new k, so the hooks
+// must be re-registered on it rather than skipped as "already initialized".
+//
+let touchInputInitializedFor = null
 
 /**
  * True when the device likely has no keyboard (phones, tablets)
@@ -41,8 +46,9 @@ export function clientToGame(k, clientX, clientY) {
  * @param {Object} k - Kaplay instance
  */
 export function initTouchInput(k) {
-  if (!isTouchDevice() || touchInputInitialized || !k) return
-  touchInputInitialized = true
+  if (!isTouchDevice() || !k || touchInputInitializedFor === k) return
+  touchInputInitializedFor = k
+  touchPositions.clear()
   k.canvas && (k.canvas.style.touchAction = 'none')
   k.onTouchStart(onKaplayTouchStart)
   k.onTouchMove(onKaplayTouchMove)

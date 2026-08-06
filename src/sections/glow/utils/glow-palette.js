@@ -92,8 +92,16 @@ export function getCuteMushroomFlatDecorColors() {
     capDark: g,
     capLight: g,
     spot: g,
-    outline: g,
-    face: g,
+    //
+    // The pit cave floor/walls are also flat decorGray (see
+    // buildCavePaletteFlat in glow-atmosphere.js) — an outline in the same
+    // tone made the trampoline mushroom fully invisible there. `void` is
+    // the darkest palette swatch already used for every other dark outline
+    // in the level, so this keeps the silhouette readable everywhere this
+    // palette is used without introducing a new hue.
+    //
+    outline: GLOW_PAL.void,
+    face: GLOW_PAL.void,
     blush: g
   }
 }

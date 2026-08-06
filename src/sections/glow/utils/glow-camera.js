@@ -138,21 +138,22 @@ export function getParallaxDrawX(inst, speed, horizBleed = 0) {
 // Nudges the hero onto the screen pixel grid so the 1 px outline stays crisp
 // while idle (camera + body rounding alone can leave a sub-pixel screen offset).
 //
-export function alignHeroToScreenPixels(inst, heroInst) {
+export function alignHeroToScreenPixels(inst, heroInst, screenCfg) {
   const ch = heroInst?.character
   if (!ch?.pos) return
   const k = inst.k
   const cam = k.camPos()
+  const zoom = inst.zoom || 1
   const halfW = k.width() / 2
   const halfH = k.height() / 2
-  const screenY = ch.pos.y - cam.y + halfH
-  const dy = Math.round(screenY) - screenY
-  Math.abs(dy) > 0.001 && ch.moveBy(0, dy)
-  //
-  // Horizontal nudge only while idle — running nudges caused side-to-side jitter.
-  //
-  if (heroInst.isRunning) return
-  const screenXAfterY = ch.pos.x - cam.x + halfW
-  const dx = Math.round(screenXAfterY) - screenXAfterY
-  Math.abs(dx) > 0.001 && ch.moveBy(dx, 0)
+  const centerX = screenCfg?.playfieldCenterX ?? halfW
+  const centerY = screenCfg?.playfieldCenterY ?? halfH
+  const screenX = (ch.pos.x - cam.x) * zoom + centerX
+  const screenY = (ch.pos.y - cam.y) * zoom + centerY
+  const targetScreenX = Math.round(screenX)
+  const targetScreenY = Math.round(screenY)
+  ch.pos.y = cam.y + (targetScreenY - centerY) / zoom
+  if (!heroInst.isRunning) {
+    ch.pos.x = cam.x + (targetScreenX - centerX) / zoom
+  }
 }

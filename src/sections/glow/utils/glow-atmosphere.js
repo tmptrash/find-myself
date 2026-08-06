@@ -4,7 +4,8 @@ import { get, set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toCanvas } from '../../../utils/helper.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT } from './cute-mushroom.js'
-import { GLOW_PAL } from './glow-palette.js'
+import { GLOW_PAL, glowRgb, getCuteMushroomFlatDecorColors } from './glow-palette.js'
+import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
 //
 // Midges + right-edge crack pit for the glow level
@@ -45,7 +46,9 @@ const CRACK_STOMP_OPENS = 5
 const CRACK_STOMP_FEET_MAX = 14
 const CRACK_STOMP_PARTICLE_MULT = 2.8
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
-const CAVE_LAYOUT_VERSION = 9
+const CAVE_LAYOUT_VERSION = 10
+const CAVE_WALL_ROCK_STEP = 3
+const CAVE_WALL_ROCK_LAYERS = 3
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_PIT_BONUS = 'glow.pitBonusCollected'
 const LEFT_MARGIN = 100
@@ -252,6 +255,9 @@ export function createGlowPit(cfg) {
     wasOnBonusPlat: false,
     leftBonusAirborne: false,
     crackStompCount: 0,
+    pitCaveIdleTime: 0,
+    pitCaveHintShown: false,
+    pitCaveHintTooltip: null,
     wallProfile: null
   }
   if (pit.collapsed) {
@@ -366,13 +372,13 @@ function clampHeroInCave(pit, char) {
  * @param {Object} pit - Pit state
  * @param {Object} groundC - Ground fill {r,g,b}
  */
-export function drawGlowPit(k, pit, groundC) {
+export function drawGlowPit(k, pit, groundC, flatDecor = false) {
   if (!pit) return
   if (!pit.collapsed) {
-    pit.cracksVisible && drawSurfaceCracks(k, pit, groundC)
+    pit.cracksVisible && drawSurfaceCracks(k, pit, groundC, flatDecor)
     return
   }
-  drawCavePit(k, pit, groundC)
+  drawCaveInteriorRockStyle(k, pit, groundC)
   drawPitTrampoline(k, pit)
 }
 //
@@ -421,13 +427,14 @@ function bakePitMushroomSprite(k) {
   const mushW = PIT_TRAMP_W
   const totalW = mushW + 4
   const totalH = Math.ceil(mushW * CUTE_MUSHROOM_ASPECT) + 4
+  const colors = getPitMushroomBakeColors()
   const canvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
     drawCuteMushroomToCanvas(ctx, {
       cx: totalW / 2,
       baseY: totalH - 2,
       width: mushW,
-      colors: GLOW_PAL.cuteMushroomGray,
-      withFace: false
+      colors,
+      withFace: true
     })
   })
   k.loadSprite(PIT_MUSH_SPRITE, canvas)
@@ -436,13 +443,15 @@ function bakePitMushroomSprite(k) {
 }
 function drawGlowMidges(k, ctrl) {
   const t = k.time()
+  const base = ctrl.midgeRgb || { r: 28, g: 26, b: 22 }
+  const midgeC = k.rgb(base.r, base.g, base.b)
   for (const m of ctrl.midges) {
     if (!midgeRoleVisible(ctrl, m.role)) continue
     const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 7 + m.phase))
     k.drawCircle({
       pos: k.vec2(m.x, m.y),
       radius: m.radius,
-      color: k.rgb(28, 26, 22),
+      color: midgeC,
       opacity: 0.35 + pulse * 0.45
     })
   }
@@ -486,20 +495,76 @@ function growCrack(segs, x, y, angle, len, depth, width) {
     growCrack(segs, cx, cy, ang - (0.3 + Math.random() * 0.45), len * 0.4, depth - 1, width * 0.65)
   }
 }
-function drawSurfaceCracks(k, pit, groundC) {
-  const deep = k.rgb(
-    Math.max(0, groundC.r - 45),
-    Math.max(0, groundC.g - 45),
-    Math.max(0, groundC.b - 42)
-  )
+function drawSurfaceCracks(k, pit, groundC, flatDecor = false) {
+  const deep = flatDecor
+    ? k.rgb(groundC.r, groundC.g, groundC.b)
+    : k.rgb(
+      Math.max(0, groundC.r - 45),
+      Math.max(0, groundC.g - 45),
+      Math.max(0, groundC.b - 42)
+    )
+  const opacity = flatDecor ? 0.55 : 0.72
   for (const s of pit.crackSegs) {
     k.drawLine({
       p1: k.vec2(s.x1, s.y1),
       p2: k.vec2(s.x2, s.y2),
       width: Math.max(0.85, s.w),
       color: deep,
-      opacity: 0.72
+      opacity
     })
+  }
+}
+function drawCaveInteriorRockStyle(k, pit, groundC) {
+  const { zone, floorY } = pit
+  if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
+    pit.wallProfile = buildCaveSceneLayout(zone, floorY)
+  }
+  const layout = pit.wallProfile
+  const mouth = layout.mouth
+  const grassGray = glowRgb('decorGray')
+  const pal = buildCavePaletteFlat(grassGray)
+  drawCaveVoidFill(k, mouth, pal)
+  drawCaveLayoutRocks(k, layout.wallRocks, pal)
+  drawCaveLayoutRocks(k, layout.pebbles, pal)
+}
+//
+// Pit-floor mushroom — lighter cap so it reads on the decor-gray floor.
+//
+function getPitMushroomBakeColors() {
+  return getCuteMushroomFlatDecorColors()
+}
+function caveRockPalette(groundC) {
+  const g = groundC
+  const hi = caveClampRgb(Math.min(255, g.r + 14), Math.min(255, g.g + 14), Math.min(255, g.b + 14))
+  const lo = caveClampRgb(Math.max(0, g.r - 12), Math.max(0, g.g - 12), Math.max(0, g.b - 12))
+  return {
+    fillR: g.r, fillG: g.g, fillB: g.b,
+    lightR: hi.r, lightG: hi.g, lightB: hi.b,
+    darkR: lo.r, darkG: lo.g, darkB: lo.b
+  }
+}
+function drawCaveLayoutRocks(k, rocks, pal) {
+  if (!rocks?.length) return
+  const tone = caveRockPalette(pal.void)
+  const fill = k.rgb(tone.fillR, tone.fillG, tone.fillB)
+  const shade = k.rgb(tone.darkR, tone.darkG, tone.darkB)
+  rocks.forEach((rock, idx) => {
+    if (!rock.verts?.length) return
+    const pts = rock.verts.map(v => k.vec2(rock.x + v.x, rock.y + v.y))
+    k.drawPolygon({ pts, color: idx % 2 === 0 ? fill : shade })
+  })
+}
+function buildCavePaletteFlat(groundC) {
+  const g = groundC
+  return {
+    void: g,
+    depthOuter: g,
+    depthMid: g,
+    depthInner: g,
+    floor: g,
+    pebble: caveClampRgb(g.r * 0.92, g.g * 0.92, g.b * 0.92),
+    rim: g,
+    rimEdge: g
   }
 }
 function drawCavePit(k, pit, groundC) {
@@ -509,10 +574,25 @@ function drawCavePit(k, pit, groundC) {
     pit.wallProfile = buildCaveSceneLayout(zone, floorY)
   }
   const layout = pit.wallProfile
-  //
-  // Dark interior only — ragged walls, floor band and mouth glow removed.
-  //
   drawCaveVoidFill(k, layout.mouth, pal)
+  drawRaggedCaveWall(k, layout.mouth.left, pal, -1)
+  drawRaggedCaveWall(k, layout.mouth.right, pal, 1)
+  drawCaveWallRim(k, layout.mouth.left, pal)
+  drawCaveWallRim(k, layout.mouth.right, pal)
+  drawCaveFloorPebbles(k, layout, pal)
+}
+//
+// Scattered pebbles along the cave floor profile.
+//
+function drawCaveFloorPebbles(k, layout, pal) {
+  const pebbleC = k.rgb(pal.pebble.r, pal.pebble.g, pal.pebble.b)
+  layout.pebbles?.forEach(p => {
+    k.drawCircle({
+      pos: k.vec2(p.x, p.y),
+      radius: p.r,
+      color: pebbleC
+    })
+  })
 }
 //
 // Solid dark void for the cave interior — single fill, no layered portals.
@@ -647,17 +727,44 @@ function buildCaveSceneLayout(zone, floorY) {
     floorY,
     bottomY
   )
-  const pebbleCount = 18 + Math.floor(caveSeed01(seed + 400) * 8)
+  const pebbleCount = 28 + Math.floor(caveSeed01(seed + 400) * 14)
   for (let i = 0; i < pebbleCount; i++) {
     const px = mouth.left[0].x + 4 + caveSeed01(seed + i * 3.1) * (mouth.right[0].x - mouth.left[0].x - 8)
     const surfaceY = sampleProfileY(floorTop, px)
+    const radius = 2.5 + caveSeed01(seed + i * 7.3) * 6.5
     pebbles.push({
       x: px,
-      y: surfaceY + 3 + caveSeed01(seed + i * 5.7) * 12,
-      r: 1.8 + caveSeed01(seed + i * 7.3) * 3.5
+      y: surfaceY + 2 + caveSeed01(seed + i * 5.7) * 10,
+      radius,
+      verts: buildRockVertices(radius)
     })
   }
-  return { version: CAVE_LAYOUT_VERSION, pebbles, floorTop, mouth, bottomY }
+  const wallRocks = []
+  appendCaveWallRocks(wallRocks, mouth.left, -1, seed + 600, floorY, bottomY)
+  appendCaveWallRocks(wallRocks, mouth.right, 1, seed + 900, floorY, bottomY)
+  return { version: CAVE_LAYOUT_VERSION, pebbles, wallRocks, floorTop, mouth, bottomY }
+}
+//
+// Stacks ground-style rock silhouettes along a ragged cave wall edge.
+//
+function appendCaveWallRocks(wallRocks, edge, outwardSign, seed, floorY, bottomY) {
+  if (!edge?.length) return
+  for (let layer = 0; layer < CAVE_WALL_ROCK_LAYERS; layer++) {
+    const layerSeed = seed + layer * 137
+    for (let i = 0; i < edge.length; i += CAVE_WALL_ROCK_STEP) {
+      const p = edge[i]
+      const radius = 5 + caveSeed01(layerSeed + i * 3.17) * 12
+      const depth = 8 + layer * 9 + caveSeed01(layerSeed + i * 7.9) * 20
+      const yJ = (caveSeed01(layerSeed + i * 11.3) - 0.5) * 14
+      const y = Math.min(bottomY - radius - 2, Math.max(floorY + 2, p.y + yJ))
+      wallRocks.push({
+        x: p.x + outwardSign * depth,
+        y,
+        radius,
+        verts: buildRockVertices(radius)
+      })
+    }
+  }
 }
 //
 // Jagged floor horizontal profile
@@ -673,7 +780,7 @@ const FLOOR_BAND_H = 11
 //
 const CAVE_MOUTH_EDGE_STEPS = 28
 const CAVE_MOUTH_INSET = 6
-const CAVE_MOUTH_WALK = 14
+const CAVE_MOUTH_WALK = 20
 const CAVE_MOUTH_WOBBLE_SLOW = 22
 const CAVE_MOUTH_WOBBLE_MID = 14
 const CAVE_MOUTH_WOBBLE_FINE = 8

@@ -27,6 +27,26 @@ export function glowRgb(keyOrHex) {
 }
 
 /**
+ * Single-tone decor gray for the main tree before L (no trunk/leaf shades).
+ * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ */
+export function getTreePaletteFlatDecor() {
+  const c = glowRgb('decorGray')
+  return {
+    rootR: c.r, rootG: c.g, rootB: c.b,
+    trunkR: c.r, trunkG: c.g, trunkB: c.b,
+    branchR: c.r, branchG: c.g, branchB: c.b,
+    leafR: c.r, leafG: c.g, leafB: c.b,
+    leafOpacity: 1,
+    leafShades: [c, c, c],
+    barkShades: { dark: c, highlight: c },
+    leafVein: c,
+    woodOutline: c,
+    flatSilhouette: true
+  }
+}
+
+/**
  * Gray-phase foreground tree palette.
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
@@ -57,6 +77,33 @@ export function getTreePaletteGray() {
     leafVein: glowRgb('void'),
     woodOutline: glowRgb('void')
   }
+}
+
+/**
+ * Cute mushroom palette — one decor-gray tone (pre-L flat world).
+ * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
+ */
+export function getCuteMushroomFlatDecorColors() {
+  const g = GLOW_PAL.decorGray
+  return {
+    body: g,
+    bodyShade: g,
+    cap: g,
+    capDark: g,
+    capLight: g,
+    spot: g,
+    outline: g,
+    face: g,
+    blush: g
+  }
+}
+
+/**
+ * Trampoline mushroom in the flat pre-L phase — same decor gray as the lake.
+ * @returns {Object} Hex colour map for drawCuteMushroomToCanvas()
+ */
+export function getCuteMushroomFlatWaterColors() {
+  return getCuteMushroomFlatDecorColors()
 }
 
 /**

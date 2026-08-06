@@ -64,6 +64,19 @@ const WEBGL_CONTEXT_OPTS_OVERRIDE = {
   failIfMajorPerformanceCaveat: false
 }
 //
+// Kaplay renders the whole game into a fixed 1920x1080 backing buffer, then
+// letterbox mode stretches that canvas to the actual window size purely via
+// CSS. The browser's default CSS scaling is smooth/anti-aliased, so on any
+// window size where that stretch factor isn't a clean integer (i.e. almost
+// any real monitor resolution) hairline art — most noticeably the hero's
+// 1px black outline — gets blended into its background and can flicker in
+// and out depending on which side of a source pixel the scaled edge lands
+// on. Kaplay's own `crisp` option sets nearest-neighbor CSS scaling on the
+// canvas it creates internally — it must be passed into kaplay() itself
+// (not applied to our own canvas beforehand), since kaplay() overwrites the
+// whole canvas.style.cssText during letterbox setup and would wipe out any
+// style we set on it in advance.
+//
 // Force dark background for all elements
 //
 document.documentElement.style.backgroundColor = '#000000'
@@ -182,6 +195,7 @@ async function initKaplayWithRetry() {
         height: CFG.visual.screen.height,
         font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
         letterbox: true,
+        crisp: true,
         background: [0, 0, 0],
         canvas
       })

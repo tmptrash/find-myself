@@ -35,6 +35,14 @@ export function setCursor(type) {
   //
   cursorEl.style.marginLeft = type === 'pointer' ? `-${POINTER_HOTSPOT_X}px` : '0'
 }
+/**
+ * Shows or hides the custom DOM cursor overlay (system cursor stays hidden).
+ * @param {boolean} visible
+ */
+export function setVisible(visible) {
+  if (!cursorEl) return
+  cursorEl.style.display = visible ? '' : 'none'
+}
 
 /**
  * Initializes the DOM overlay cursor that follows the mouse.

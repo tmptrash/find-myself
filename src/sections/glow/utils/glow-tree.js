@@ -298,23 +298,20 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // Roots are optional — background parallax trees are built without them.
   //
   if (treeData.rootSegs.length) {
-    //
-    // Hard clip: root strokes may only paint below the ground line, so no root
-    // ever pokes above the ground regardless of stroke width or round caps.
-    // Three relief passes inside the clip: dark contour underdraw → base
-    // fill → lit-side highlight streaks, so the roots read as round bending
-    // wood instead of flat lines.
-    //
     ctx.save()
     ctx.beginPath()
     ctx.rect(0, groundY + ROOT_CLIP_BELOW_GROUND, w, h - groundY - ROOT_CLIP_BELOW_GROUND)
     ctx.clip()
     const rootRgb = { r: rootR, g: rootG, b: rootB }
-    const rootContourRgb = scaleRgbBrightness(rootRgb, 1 - ROOT_CONTOUR_DARKEN)
-    const rootHighlightRgb = lightenRgb(rootRgb, ROOT_HIGHLIGHT_LIGHTEN)
-    drawRootStrokes(ctx, treeData, rootContourRgb, h, groundY, trunkBaseX, trunkHalfW, ROOT_CONTOUR_EXTRA_W)
-    drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
-    drawRootHighlights(ctx, treeData, rootHighlightRgb, h, groundY, trunkBaseX, trunkHalfW)
+    if (palette.flatSilhouette) {
+      drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
+    } else {
+      const rootContourRgb = scaleRgbBrightness(rootRgb, 1 - ROOT_CONTOUR_DARKEN)
+      const rootHighlightRgb = lightenRgb(rootRgb, ROOT_HIGHLIGHT_LIGHTEN)
+      drawRootStrokes(ctx, treeData, rootContourRgb, h, groundY, trunkBaseX, trunkHalfW, ROOT_CONTOUR_EXTRA_W)
+      drawRootStrokes(ctx, treeData, rootRgb, h, groundY, trunkBaseX, trunkHalfW)
+      drawRootHighlights(ctx, treeData, rootHighlightRgb, h, groundY, trunkBaseX, trunkHalfW)
+    }
     ctx.restore()
   }
   //
@@ -337,6 +334,18 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // the regular fills painted next leave only the outer rim visible, so no
   // internal seams appear at branch/trunk junctions.
   //
+  if (palette.flatSilhouette) {
+    treeData.branchSegs.forEach(seg => {
+      drawFilledWoodSegment(ctx, seg, trunkRgb, trunkClipY)
+    })
+    fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
+    ctx.globalAlpha = 1
+    treeData.leaves.forEach(leaf => {
+      const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
+      drawLeafToCanvas(ctx, leaf.x, leaf.y, leaf.size, leaf.angle, leafR, leafG, leafB, opacity, null)
+    })
+    return
+  }
   if (palette.woodOutline) {
     const ol = palette.woodOutline
     treeData.branchSegs.forEach(seg => {

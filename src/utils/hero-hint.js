@@ -44,7 +44,11 @@ export function create(cfg) {
     //
     // When true, the bubble tracks the hero each frame (e.g. drowning)
     //
-    followHero: false
+    followHero: false,
+    //
+    // Seconds to wait before showing the next queued hint (optional per item).
+    //
+    queuePauseRemaining: 0
   }
   k.onUpdate(() => onUpdate(inst))
   return inst
@@ -56,7 +60,7 @@ export function create(cfg) {
  * @returns {boolean} Whether a hint is currently active
  */
 export function isActive(inst) {
-  return Boolean(inst && (inst.tooltip || inst.queue.length))
+  return Boolean(inst && (inst.tooltip || inst.queue.length || inst.queuePauseRemaining > 0))
 }
 
 /**
@@ -88,7 +92,7 @@ export function show(inst, text, duration, opts = {}) {
 /**
  * Starts a chain of hints — the first shows immediately, the rest follow.
  * @param {Object} inst - Hero hint inst
- * @param {Array<{text: string, duration: number}>} hints - Hints to chain
+ * @param {Array<{text: string, duration: number, pauseBefore?: number}>} hints - Hints to chain
  * @param {Function} [onComplete] - Called once the whole chain has finished
  */
 export function queue(inst, hints, onComplete = null) {
@@ -99,7 +103,7 @@ export function queue(inst, hints, onComplete = null) {
   inst.ignoreMovementDismiss = false
   inst.dismissDistance = HINT_DISMISS_DISTANCE
   inst.dismissOnJump = true
-  first && startHint(inst, first.text, first.duration)
+  first && startQueuedHint(inst, first)
 }
 
 /**
@@ -109,11 +113,25 @@ export function queue(inst, hints, onComplete = null) {
 export function clear(inst) {
   inst.queue = []
   inst.onQueueEmpty = null
+  inst.queuePauseRemaining = 0
   inst.ignoreMovementDismiss = false
   inst.followHero = false
   inst.dismissDistance = HINT_DISMISS_DISTANCE
   inst.dismissOnJump = true
   destroyHint(inst)
+}
+function applyQueueItemOpts(inst, item = {}) {
+  inst.ignoreMovementDismiss = Boolean(item.ignoreMovementDismiss)
+  inst.followHero = Boolean(item.followHero)
+  inst.dismissDistance = item.dismissDistance ?? HINT_DISMISS_DISTANCE
+  inst.dismissOnJump = item.dismissOnJump !== false
+}
+//
+// Starts a queued hint and applies its per-item options.
+//
+function startQueuedHint(inst, item) {
+  applyQueueItemOpts(inst, item)
+  startHint(inst, item.text, item.duration)
 }
 //
 // Creates the forced-visible tooltip bubble for a new hint text.
@@ -168,6 +186,7 @@ function dismissEarly(inst) {
   const done = inst.onQueueEmpty
   inst.queue = []
   inst.onQueueEmpty = null
+  inst.queuePauseRemaining = 0
   destroyHint(inst)
   done?.()
 }
@@ -209,7 +228,17 @@ function shouldDismissByMovement(inst) {
 // when the current one expires. The bubble stays at spawn (not on the hero).
 //
 function onUpdate(inst) {
-  if (!inst.tooltip) return
+  if (!inst.tooltip) {
+    if (inst.queuePauseRemaining > 0) {
+      inst.queuePauseRemaining -= inst.k.dt()
+      if (inst.queuePauseRemaining <= 0) {
+        inst.queuePauseRemaining = 0
+        const next = inst.queue.shift()
+        next && startQueuedHint(inst, next)
+      }
+    }
+    return
+  }
   if (shouldDismissByMovement(inst)) {
     dismissEarly(inst)
     return
@@ -217,9 +246,15 @@ function onUpdate(inst) {
   inst.timer += inst.k.dt()
   if (inst.timer >= inst.duration) {
     destroyHint(inst)
-    const next = inst.queue.shift()
+    const next = inst.queue[0]
     if (next) {
-      startHint(inst, next.text, next.duration)
+      const pause = next.pauseBefore ?? 0
+      if (pause > 0) {
+        inst.queuePauseRemaining = pause
+        return
+      }
+      inst.queue.shift()
+      startQueuedHint(inst, next)
       return
     }
     const done = inst.onQueueEmpty

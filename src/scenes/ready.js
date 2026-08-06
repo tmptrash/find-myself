@@ -301,13 +301,13 @@ const HERO_N_SPRITE_SIZE = 80
 // Offset applied to hero-n position so it sits visually inside the title word
 //
 const HERO_N_OFFSET_X = 10
-const HERO_N_OFFSET_Y = -6
+const HERO_N_OFFSET_Y = 1
 //
 // Offsets for the flipped hero-u: shifted left of the char cell and mirrored
 // downwards vertically.
 //
-const HERO_U_OFFSET_X = -12
-const HERO_U_OFFSET_Y = -3
+const HERO_U_OFFSET_X = -10
+const HERO_U_OFFSET_Y = 6
 //
 // Title heroes share the exact colour of the title letters so they read
 // as part of the word rather than separate characters.
@@ -479,7 +479,8 @@ export function sceneReady(k) {
     k.get("word-pile-outline").forEach(obj => obj.destroy())
     k.get("flying-word").forEach(obj => obj.destroy())
     k.flyingWordsInstance = null
-    Cursor.setCursor('arrow')
+    Cursor.setVisible(false)
+    k.onSceneLeave(() => Cursor.setVisible(true))
     const centerX = k.width() / 2
     const sound = Sound.create()
     Sound.startAudioContext(sound)
@@ -1000,25 +1001,11 @@ function createSpider(k, index, sourceInfo) {
 function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
   const letterInfos = []
   const charWidth = fontSize * MONO_CHAR_W_RATIO
-  //
-  // titleTextObj uses anchor('center'), so pos.x is the CENTER of the string.
-  // Subtract half the total string width to get the true left edge.
-  // Add extra spread around the hero-n position so i and d breathe.
-  //
   const totalStringWidth = titleString.length * charWidth + HERO_N_EXTRA_SPREAD * 2
   const startX = titleTextObj.pos.x - totalStringWidth / 2
-  //
-  // Pre-activation spider letter tint — a brighter orange than the
-  // title (`#E07020`) so the letters glow a touch hotter just before
-  // they sprout legs. Sits firmly on the warm half of the teal+orange
-  // complementary palette.
-  //
-  const brighterColor = k.rgb(255, 150, 80)
+  const titleColor = getColor(k, CFG.visual.colors.ready.title)
   titleString.split('').forEach((char, charIndex) => {
     if (char.trim().length === 0) return
-    //
-    // Shift letters after the hero-n by extra spread so i and d have breathing room
-    //
     const extraShift = charIndex > HERO_N_CHAR_INDEX ? HERO_N_EXTRA_SPREAD * 2 : 0
     const charX = startX + (charIndex * charWidth) + (charWidth / 2) + extraShift
     const charY = titleTextObj.pos.y
@@ -1034,7 +1021,7 @@ function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily
       char,
       x: charX,
       y: charY,
-      color: brighterColor,
+      color: titleColor,
       fontSize,
       fontFamily,
       isHeroN,
@@ -1061,25 +1048,24 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
     const LEG_GROW_DURATION = 2.0
     spider.legExtendT = Math.min(1, legAppearTimeElapsed / LEG_GROW_DURATION)
   }
-  //
-  // Peel the title letter onto the spider body once legs begin to grow; keep
-  // the pre-baked spider.color (do not copy title textObj.color — Kaplay 4000
-  // title colors break k.drawText and the glyph vanishes when crawling starts).
-  //
-  if (spider.letterInfo && spider.legExtendT > 0 && !spider.titleCharRemoved) {
-    const { textObj, charIndex } = spider.letterInfo
-    const chars = textObj.text.split('')
-    chars[charIndex] = ' '
-    textObj.text = chars.join('')
-    const outlinesToUpdate = textObj.outlines || spider.titleOutlines
-    outlinesToUpdate && outlinesToUpdate.forEach(outline => {
-      outline.text = textObj.text
-    })
-    spider.titleCharRemoved = true
-    spider.charHidden = true
-  }
   if (!spider.isActivated && spider.legExtendT >= 1) {
     spider.isActivated = true
+    if (spider.letterInfo && !spider.titleCharRemoved) {
+      const { textObj, charIndex } = spider.letterInfo
+      const chars = textObj.text.split('')
+      chars[charIndex] = ' '
+      textObj.text = chars.join('')
+      spider.titleOutlines && spider.titleOutlines.forEach(outline => {
+        outline.text = textObj.text
+      })
+      spider.titleCharRemoved = true
+      spider.charHidden = true
+    }
+    spider.vx = 0
+    spider.vy = 0
+    spider.targetVx = 0
+    spider.targetVy = 0
+    spider.displayAngle = 0
   }
   if (!spider.isActivated) return
   //
@@ -1206,16 +1192,12 @@ function drawSpider(k, spider, textOpacity) {
     drawTitleHero(k, spider)
     return
   }
-  const letterBodyActive = spider.legExtendT > 0 && spider.letter
-  const letterBodyOpacity = letterBodyActive
-    ? (spider.titleCharRemoved || spider.isActivated
-      ? SPIDER_MAX_OPACITY
-      : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0))
-    : 0
+  const letterBodyActive = spider.letter && (spider.titleCharRemoved || spider.isActivated)
+  const letterBodyOpacity = letterBodyActive ? 1 : 0
   if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = k.rgb(12, 10, 14)
     const legOpacity = letterBodyActive && spider.titleCharRemoved
-      ? SPIDER_MAX_OPACITY
+      ? 1
       : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
     if (legOpacity > 0) {
     spider.legs.forEach(leg => {

@@ -48,8 +48,11 @@ export function create(cfg) {
  */
 export function update(inst, text, heroX, heroY) {
   const { k } = inst
-  const cx = heroX + COUNTER_X_OFFSET
-  const cy = heroY + COUNTER_Y_OFFSET
+  const cam = k.camPos()
+  const halfW = k.width() / 2
+  const halfH = k.height() / 2
+  const cx = heroX - cam.x + halfW + COUNTER_X_OFFSET
+  const cy = heroY - cam.y + halfH + COUNTER_Y_OFFSET
   !inst.textObj && createObjects(inst, text, cx, cy)
   inst.textObj.text = text
   inst.textObj.pos.x = cx
@@ -97,7 +100,8 @@ function createObjects(inst, text, cx, cy) {
     k.anchor('left'),
     k.color(inst.outlineColor.r, inst.outlineColor.g, inst.outlineColor.b),
     k.opacity(OUTLINE_OPACITY),
-    k.z(CFG.visual.zIndex.ui + COUNTER_Z)
+    k.z(CFG.visual.zIndex.ui + COUNTER_Z),
+    k.fixed()
   ]))
   inst.textObj = k.add([
     k.text(text, textOpts),
@@ -105,6 +109,7 @@ function createObjects(inst, text, cx, cy) {
     k.anchor('left'),
     k.color(inst.color.r, inst.color.g, inst.color.b),
     k.opacity(1),
-    k.z(CFG.visual.zIndex.ui + COUNTER_Z + 0.1)
+    k.z(CFG.visual.zIndex.ui + COUNTER_Z + 0.1),
+    k.fixed()
   ])
 }

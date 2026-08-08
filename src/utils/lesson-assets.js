@@ -152,6 +152,11 @@ async function applyPack(k, packKey, sceneName) {
     await BootLoader.yieldForGpu(2)
     return
   }
+  if (packKey === 'glow') {
+    BootLoader.setLoaderBarPct(85)
+    await BootLoader.yieldForGpu(2)
+    return
+  }
   if (packKey === 'word') {
     BootLoader.setLoaderBarPct(40)
     await BootLoader.yieldForGpu(1)
@@ -196,13 +201,13 @@ async function applyPack(k, packKey, sceneName) {
 
 /**
  * Ensures assets for the target scene are loaded.
- * For time packs (which do synchronous blocking canvas work) the loader is shown
- * immediately and the DOM gets two paint frames before the blocking call.
- * For all other packs the loader only appears if preparation exceeds LOADER_REVEAL_DELAY_MS.
  * @param {Object} k
  * @param {string} sceneName
+ * @param {Object} [opts]
+ * @param {boolean} [opts.retainLoader] - Keep the DOM loader visible after prepare (Glow pre-level)
  */
-export async function prepareSceneAssets(k, sceneName) {
+export async function prepareSceneAssets(k, sceneName, opts = {}) {
+  const retainLoader = opts.retainLoader === true
   const packKey = sceneToPackKey(sceneName)
   //
   // Same pack still active — nothing to load; the existing sprites are valid.
@@ -220,6 +225,7 @@ export async function prepareSceneAssets(k, sceneName) {
   // repaint before we hand the thread to the canvas generator.
   //
   const isTimePack = packKey.startsWith('time-')
+  const isGlowPack = packKey === 'glow'
   let loaderShown = false
   let loaderTimer = null
   if (!quietFirstHub) {
@@ -230,6 +236,11 @@ export async function prepareSceneAssets(k, sceneName) {
       //
       // Two rAF frames so the browser actually paints the loader before the sync block.
       //
+      await BootLoader.yieldForGpu(2)
+      if (nonceAtStart !== prepareCancelNonce) return
+    } else if (isGlowPack) {
+      BootLoader.showLoader()
+      loaderShown = true
       await BootLoader.yieldForGpu(2)
       if (nonceAtStart !== prepareCancelNonce) return
     } else {
@@ -247,9 +258,17 @@ export async function prepareSceneAssets(k, sceneName) {
     activePackKey = packKey
   } finally {
     if (loaderTimer) clearTimeout(loaderTimer)
-    if (loaderShown) BootLoader.hideLoader()
-    if (quietFirstHub) BootLoader.hideLoader()
+    if (loaderShown && !retainLoader) BootLoader.hideLoader()
+    if (quietFirstHub && !retainLoader) BootLoader.hideLoader()
   }
+}
+
+/**
+ * Clears pack bookkeeping after a resolution-mode engine swap.
+ */
+export function onEngineResolutionSwapped() {
+  activePackKey = null
+  time3SpriteRegistry.clear()
 }
 
 /**
@@ -271,10 +290,7 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   // loaded — any pack/registry bookkeeping from the previous engine no
   // longer describes what is actually resident on the GPU.
   //
-  if (switched) {
-    activePackKey = null
-    time3SpriteRegistry.clear()
-  }
+  switched && onEngineResolutionSwapped()
   //
   // Paint canvas immediately so the previous scene (menu) does not flash for a frame
   //

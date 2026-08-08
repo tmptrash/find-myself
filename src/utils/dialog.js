@@ -65,6 +65,8 @@ export function openDialog(k, text, opts = {}) {
     font = CFG.visual.fonts.regularFull.replace(/'/g, ''),
     sceneBackdropHex = null,
     textStyles = null,
+    centerX = CFG.visual.screen.width / 2,
+    centerY = CFG.visual.screen.height / 2,
     onClose,
     onCloseStart
   } = opts
@@ -73,8 +75,6 @@ export function openDialog(k, text, opts = {}) {
   // Styled text is used only for the main visible text layer.
   //
   const plainText = textStyles ? text.replace(/\[[^\]]+\]/g, '') : text
-  const centerX = CFG.visual.screen.width / 2
-  const centerY = CFG.visual.screen.height / 2
   const boxX = centerX - BOX_WIDTH / 2
   const boxY = centerY - BOX_HEIGHT / 2
   const hintY = centerY + TEXT_Y_OFFSET

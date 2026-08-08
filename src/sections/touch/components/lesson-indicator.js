@@ -18,7 +18,10 @@ const TOP_OFFSET = 40
 const SMALL_HERO_Y_ADJUST = 10
 const LIFE_SCALE_FACTOR = 1.3
 const SCORE_OFFSET_X = 5
-const SCORE_OFFSET_Y = 10
+//
+// Vertical offset for score numerals — center-left anchor; keep in sync with icon centers.
+//
+const SCORE_OFFSET_Y = 2
 const SCORE_OUTLINE_THICKNESS = 2
 //
 // Vertical offset for the life icon so it sits a bit below the small hero
@@ -275,13 +278,18 @@ export function create(config) {
   //
   // Hero score outlines (black) and main text (white)
   //
-  const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, smallHeroY + SCORE_OFFSET_Y, fontSize, scoreOffsets)
-  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, smallHeroY + SCORE_OFFSET_Y, fontSize)
+  const heroScoreY = smallHeroY + SCORE_OFFSET_Y
+  const lifeScoreY = smallHeroY + LIFE_IMAGE_Y_OFFSET + SCORE_OFFSET_Y
+  //
+  // Hero score outlines (black) and main text (white)
+  //
+  const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets)
+  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize)
   //
   // Life score outlines (black) and main text (white)
   //
-  const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, smallHeroY + SCORE_OFFSET_Y, fontSize, scoreOffsets)
-  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, smallHeroY + SCORE_OFFSET_Y, fontSize)
+  const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets)
+  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize)
   //
   // Trap count badge with outline (bold red number right of life icon)
   //

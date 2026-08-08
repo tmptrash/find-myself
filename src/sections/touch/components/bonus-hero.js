@@ -175,7 +175,8 @@ export function create(config) {
     customPlatformDraw = null,
     disablePlatformBody = false,
     collectHintText = BONUS_COLLECT_HINT_TEXT,
-    collectHintDuration = HINT_DISPLAY_DURATION
+    collectHintDuration = HINT_DISPLAY_DURATION,
+    persistStorageOnCollect = false
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -309,6 +310,7 @@ export function create(config) {
     collectTooltip: null,
     logDetail: generateLogDetail(width, PLATFORM_HEIGHT),
     storageKey,
+    persistStorageOnCollect,
     pulseTimer: 0,
     platformText,
     platformFontSize,
@@ -939,6 +941,11 @@ function collectBonus(inst) {
   inst.bonusPoints = BONUS_POINTS
   set('heroScore', newScore)
   inst.levelIndicator?.updateHeroScore?.(newScore)
+  //
+  // Glow keeps fragment platforms gone after the first pickup even if the
+  // player leaves before the level's next update tick runs finalizeCollection.
+  //
+  inst.persistStorageOnCollect && inst.storageKey && set(inst.storageKey, true)
   //
   // Play collection sound
   //

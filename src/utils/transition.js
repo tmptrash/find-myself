@@ -6,8 +6,10 @@ import * as Tooltip from './tooltip.js'
 import * as TouchControls from './touch-controls.js'
 import * as Hero from '../components/hero.js'
 import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.js'
-import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce } from './lesson-assets.js'
+import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce, onEngineResolutionSwapped } from './lesson-assets.js'
 import * as CanvasBackdrop from './canvas-backdrop.js'
+import * as BootLoader from './boot-loader.js'
+import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -68,6 +70,7 @@ const BLACK_PAUSE_DURATION = 0.5     // Pause before text appears
 const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level text
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
+const GLOW_PRELEVEL_SCENE = 'lesson-glow.0'
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const SKIP_TEXT_FADE_DURATION = 0.35 // Fast fade out when the player skips the text
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
@@ -143,6 +146,7 @@ export function showTransitionToLevel(k, targetLevel) {
  */
 export function createLevelTransition(k, currentLevel, onComplete) {
   const nextLevel = LEVEL_TRANSITIONS[currentLevel] || null
+  let transitionK = k
   //
   // Check if section is completed (last level of section going to completion screen)
   //
@@ -235,7 +239,12 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const isFromMenuSection = isFromMenuTime || isFromMenuTouch || isFromMenuGlow
   const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
+  const isGlowPrelevel = needsEarlyAssetLoad && nextLevel === GLOW_PRELEVEL_SCENE
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
+  //
+  // Glow: DOM loader covers pack prep + native engine boot before the yellow phrase.
+  //
+  isGlowPrelevel && BootLoader.showLoader()
   
   // Instance object to store text reference
   const inst = {
@@ -279,27 +288,74 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const transitionBgHex = CFG.visual.colors.menu.platformColor
   const [bgR, bgG, bgB] = parseHex(transitionBgHex)
   if (isFromLevel || isFromMenuSection) {
-    CanvasBackdrop.applyCanvasBackdrop(k, transitionBgHex)
+    CanvasBackdrop.applyCanvasBackdrop(transitionK, transitionBgHex)
   }
   //
   // Create overlay matching menu background color
   // Starts fully opaque if from a level or a menu-section entry,
   // transparent otherwise
   //
-  let overlay = k.add([
-    k.rect(k.width(), k.height()),
-    k.pos(0, 0),
-    k.color(bgR, bgG, bgB),
-    k.opacity(isFromLevel || isFromMenuSection ? 1 : (currentLevel === 'menu' ? 1 : 0)),
+  const initialOverlayOpacity = isFromLevel || isFromMenuSection ? 1 : (currentLevel === 'menu' ? 1 : 0)
+  let overlay = transitionK.add([
+    transitionK.rect(transitionK.width(), transitionK.height()),
+    transitionK.pos(0, 0),
+    transitionK.color(bgR, bgG, bgB),
+    k.opacity(initialOverlayOpacity),
     k.z(CFG.visual.zIndex.ui + 100),
     k.fixed()
   ])
-  k._transitionOverlay = overlay
+  transitionK._transitionOverlay = overlay
   
-  if (needsEarlyAssetLoad) {
-    inst.assetPreparePromise = prepareSceneAssets(k, nextLevel).then(() => {
+  let transitionInterval = null
+  
+  const bindTransitionEngine = (liveK) => {
+    transitionInterval?.cancel?.()
+    transitionInterval = liveK.onUpdate(updateTransition)
+    liveK.transitionCleanup = () => {
+      transitionInterval.cancel()
+      overlay.exists() && liveK.destroy(overlay)
+      if (liveK._transitionOverlay === overlay) liveK._transitionOverlay = null
+      inst.textObj && inst.textObj.exists() && liveK.destroy(inst.textObj)
+      inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && liveK.destroy(o))
+      inst.hintTextObj && inst.hintTextObj.exists() && liveK.destroy(inst.hintTextObj)
+      inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && liveK.destroy(o))
+      inst?.textSound?.stop()
+      inst.tooltipSuppressed && Tooltip.unsuppressAll()
+      inst.tooltipSuppressed = false
+      liveK.transitionCleanup = null
+    }
+  }
+  
+  if (isGlowPrelevel) {
+    inst.assetPreparePromise = prepareGlowPrelevelAssets()
+  } else if (needsEarlyAssetLoad) {
+    inst.assetPreparePromise = prepareSceneAssets(transitionK, nextLevel).then(() => {
       inst.assetPrepareDone = true
     })
+  }
+  
+  async function prepareGlowPrelevelAssets() {
+    await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true })
+    if (inst.skipped) return
+    transitionInterval?.cancel?.()
+    overlay.exists() && transitionK.destroy(overlay)
+    transitionK._transitionOverlay = null
+    await ensureEngineForScene(nextLevel, { loaderDuringBoot: true })
+    if (inst.skipped) return
+    onEngineResolutionSwapped()
+    transitionK = getActiveEngine()
+    CanvasBackdrop.applyCanvasBackdrop(transitionK, transitionBgHex)
+    overlay = transitionK.add([
+      transitionK.rect(transitionK.width(), transitionK.height()),
+      transitionK.pos(0, 0),
+      transitionK.color(bgR, bgG, bgB),
+      transitionK.opacity(initialOverlayOpacity),
+      transitionK.z(CFG.visual.zIndex.ui + 100),
+      transitionK.fixed()
+    ])
+    transitionK._transitionOverlay = overlay
+    bindTransitionEngine(transitionK)
+    inst.assetPrepareDone = true
   }
   
   const finalizeTransitionToLevel = (afterGo) => {
@@ -321,8 +377,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       //
       Hero.unsuppressIdleVocalization()
       TouchControls.setVisible(true)
-      overlay.exists() && k.destroy(overlay)
-      enterPreparedScene(k, nextLevel, afterGo)
+      overlay.exists() && transitionK.destroy(overlay)
+      enterPreparedScene(transitionK, nextLevel, afterGo)
     }
     if (needsEarlyAssetLoad && inst.assetPreparePromise && !inst.assetPrepareDone) {
       inst.assetPreparePromise.then(enter)
@@ -349,11 +405,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
     
     // Clean up
-    k.transitionCleanup?.()
+    transitionK.transitionCleanup?.()
     //
     // Restore volume, unmute procedural sounds, and resume AudioContext
     //
-    k.volume(inst.originalVolume)
+    transitionK.volume(inst.originalVolume)
     Sound.unmuteProceduralSounds()
     Sound.resumeGlobalAudio()
     //
@@ -363,6 +419,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   const updateTransition = () => {
+    const k = transitionK
     if (phase === 'asset_prepare') {
       //
       // Allow Esc to cancel loading and return to menu immediately,
@@ -385,6 +442,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         return
       }
       if (inst.assetPrepareDone) {
+        BootLoader.hideLoader()
         phase = inst.postAssetPreparePhase
         timer = 0
       }
@@ -465,6 +523,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       if (timer >= BLACK_PAUSE_DURATION) {
         phase = 'text_fade_in'
         timer = 0
+        BootLoader.hideLoader()
         
         // Create subtitle text for NEXT level (the one we're transitioning TO)
         const subtitleEntry = LEVEL_SUBTITLES[nextLevel]
@@ -724,30 +783,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
   }
   
-  const transitionInterval = k.onUpdate(updateTransition)
-  
-  k.transitionCleanup = () => {
-    transitionInterval.cancel()
-    overlay.exists() && k.destroy(overlay)
-    if (k._transitionOverlay === overlay) k._transitionOverlay = null
-    inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
-    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
-    inst.hintTextObj && inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
-    inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
-    inst?.textSound?.stop()
-    inst.tooltipSuppressed && Tooltip.unsuppressAll()
-    inst.tooltipSuppressed = false
-    k.transitionCleanup = null
-  }
+  bindTransitionEngine(transitionK)
   
   // Return cleanup function
   return () => {
-    transitionInterval.cancel()
-    overlay && overlay.exists() && k.destroy(overlay)
-    inst.textObj && inst.textObj.exists() && k.destroy(inst.textObj)
-    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && k.destroy(o))
-    inst.hintTextObj && inst.hintTextObj.exists() && k.destroy(inst.hintTextObj)
-    inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && k.destroy(o))
+    transitionInterval?.cancel?.()
+    overlay && overlay.exists() && transitionK.destroy(overlay)
+    inst.textObj && inst.textObj.exists() && transitionK.destroy(inst.textObj)
+    inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
+    inst.hintTextObj && inst.hintTextObj.exists() && transitionK.destroy(inst.hintTextObj)
+    inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
     inst?.textSound?.stop()
     inst.tooltipSuppressed && Tooltip.unsuppressAll()
     inst.tooltipSuppressed = false

@@ -50,7 +50,8 @@ import {
   isCrackGrassExcluded,
   isCrackDecorExcluded,
   getCrackZone,
-  KEY_PIT_COLLAPSED
+  KEY_PIT_COLLAPSED,
+  KEY_PIT_BONUS
 } from '../utils/glow-atmosphere.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as GlowCamera from '../utils/glow-camera.js'
@@ -137,8 +138,7 @@ let TREE_X = Math.round(SCREEN_W * 0.5)
 const TREE_TRUNK_SINK = 4
 const TREE_TRUNK_BOTTOM_Y = FLOOR_Y + TREE_TRUNK_SINK
 //
-// Roots attach at the sunk trunk base so the bark silhouette meets the root
-// mass without a horizontal seam at the visible ground line.
+// Roots attach at the sunk trunk base so strands meet the trunk silhouette.
 //
 const TREE_ROOT_START_Y = TREE_TRUNK_BOTTOM_Y
 const TREE_TOP_Y = 30
@@ -624,7 +624,8 @@ const HINT_GROUND_RIGHT_TEXT = 'Curiosity lights the\nway. Keep walking'
 const HINT_WATER_TEXT = 'The unknown isn\'t empty.\nIt simply hasn\'t been\ndiscovered yet'
 const HINT_ZONE_DURATION = 5
 const HINT_ZONE_DISMISS_DISTANCE = 80
-const GLOW_SFX_FADE_DURATION = 5
+const GLOW_SFX_FADE_DURATION = 10
+const GLOW_WORLD_AUDIO_FADE_DURATION = 10
 const HINT_DROWN_TEXT = 'That\'s not bad. Now you\nknow you can\'t go here.'
 const HINT_DROWN_DURATION = 4
 //
@@ -667,9 +668,12 @@ const MEDITATION_TIMER_FONT = 22
 // Hero hover tooltip — the line follows how much colour the hero can see:
 // plain gray world, gray shades after L, full colour after O.
 //
-const HERO_TOOLTIP_TEXT_GRAY = "Hi, I'm Yan"
-const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Hello, I'm Yan. Strange,\nbut it's very quiet here"
-const HERO_TOOLTIP_TEXT_SHADES = 'Wow! So many\ndetails around!'
+const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange, but it's very quiet\nhere. First we need to explore\nthis world."
+const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
+const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
+const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
+const HERO_TOOLTIP_AFTER_O = 'Even mushrooms can\ntalk in this forest.'
+const HERO_TOOLTIP_AFTER_TRAMP_WALK = 'I think we need to jump\nto the left of the mushroom.'
 const HERO_TOOLTIP_TEXT_COLOR = 'I never thought the world\ncould be this beautiful'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
@@ -882,6 +886,12 @@ const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
 const TRAMP_BAD_SING_TEXT = 'Oh my god, you sing so badly'
 const TRAMP_BAD_SING_DURATION = 4
+const BRANCH_TRAMP_WRONG_SING_DELAY = 5
+const BRANCH_TRAMP_WRONG_SING_TEXT = "I'm not that mushroom!"
+const BRANCH_TRAMP_WRONG_SING_DURATION = 5
+const LETTER_ARROW_CORNER_RADIUS = 3
+const LETTER_ARROW_STEM_HEAD_OVERLAP = 14
+const CAVE_ENTRANCE_LANDING_PARTICLE_MULT = 2.4
 //
 // Rotating quips when the hero keeps bouncing without a break
 //
@@ -1050,7 +1060,6 @@ export function sceneGlowLevel0(k) {
       Sound.stopRainSound(sound)
     }
     k.onSceneLeave(stopGlowLoopAudio)
-    registerGlowNativeTeardown(stopGlowLoopAudio)
     const zones = loadGlowZones()
     zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, OUTER_BG_HEX)
     !zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
@@ -1222,8 +1231,10 @@ export function sceneGlowLevel0(k) {
     // in that case only the scoreboard shows, the GLOW word stays hidden.
     //
     const bonusCollected = get(KEY_BONUS_COLLECTED, false)
+    const pitBonusCollected = get(KEY_PIT_BONUS, false)
+    const fragmentsPersisted = bonusCollected || pitBonusCollected
     const lifeShown = get(KEY_LIFE_SHOWN, false)
-    let levelIndicator = completedLetterCount > 0 || bonusCollected || lifeShown
+    let levelIndicator = completedLetterCount > 0 || fragmentsPersisted || lifeShown
       ? createGlowLevelIndicator(k, goldRgb, completedLetterCount, zones.colorWorld)
       : null
     //
@@ -1231,7 +1242,7 @@ export function sceneGlowLevel0(k) {
     //
     levelIndicator && !zones.gCollected && LevelIndicator.setSectionLabelHidden(levelIndicator, true)
     pinGlowHudFixed(levelIndicator)
-    if (levelIndicator && bonusCollected) {
+    if (levelIndicator && fragmentsPersisted) {
       LevelIndicator.revealSmallHeroHud(levelIndicator)
       levelIndicator.updateHeroScore?.(get('heroScore', 0))
     }
@@ -1267,6 +1278,7 @@ export function sceneGlowLevel0(k) {
         approachFromAbove: true,
         heroBodyColor: HERO_BODY_COLOR,
         storageKey: KEY_BONUS_COLLECTED,
+        persistStorageOnCollect: true,
         platformCollisionXOffset: Math.round(BONUS_PLAT_W / 2),
         platformCollisionYOffset: 10,
         customPlatformDraw: bonus => drawBonusPlatformLog(k, bonus, zones, bonusLogDetail),
@@ -1370,6 +1382,8 @@ export function sceneGlowLevel0(k) {
       trampPad,
       branchTrampPad,
       branchTrampBounceAir: false,
+      glowWorldAudioFade: null,
+      treeRevealFromBranchTramp: false,
       trampWalk: {
         stillTimer: 0,
         countdown: null,
@@ -1390,7 +1404,9 @@ export function sceneGlowLevel0(k) {
         cheekyTooltip: null,
         marioEligibleSince: null,
         marioHintCooldown: 0,
-        marioHintTooltip: null
+        marioHintTooltip: null,
+        wrongSingElapsed: 0,
+        wrongSingShown: false
       },
       trampBounceAir: false,
       trampToLApproach: false,
@@ -1500,6 +1516,8 @@ export function sceneGlowLevel0(k) {
     //
     maybeRevealLPlat(inst, true)
     maybeShowGLetter(inst)
+    zones.gCollected && !zones.lCollected && zones.lPlatRevealed &&
+      maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
     zones.oZone && maybeStartLetterOffscreenArrow(inst, inst.oLetter)
     zones.lLetterUnveiled && maybeStartLetterOffscreenArrow(inst, inst.lLetter)
     //
@@ -1511,7 +1529,15 @@ export function sceneGlowLevel0(k) {
     inst.introHintDelayRemaining = 0
     !deferGlowIntro && startGlowIntro(inst)
     createSmallHeroTooltip(inst)
-    k.onSceneLeave(() => stopGlowLetterDialogMusic(inst))
+    k.onSceneLeave(() => {
+      persistGlowFragmentKeysOnLeave(inst)
+      stopGlowLetterDialogMusic(inst)
+    })
+    registerGlowNativeTeardown(() => {
+      persistGlowFragmentKeysOnLeave(inst)
+      stopGlowLoopAudio()
+    })
+    fragmentsPersisted && restoreGlowFragmentHud(inst)
     k.onKeyPress('escape', () => {
       if (inst.dialogOpen) return
       goToMenuAfterAssets(k)
@@ -1718,22 +1744,29 @@ function finishGlowIntro(inst) {
   maybeShowGLetter(inst)
 }
 //
-// True while the world has no gameplay ambience (pre-G or birds still muted).
+// After G: left/right nudge toward the L letter or log platform.
 //
-function isGlowQuietWorld(inst) {
-  if (inst.zones.lCollected || inst.zones.oCollected || inst.zones.colorWorld) return false
-  if (!inst.zones.gCollected) return true
-  const birds = inst.birdsMusic
-  return !(birds && !birds.paused && birds.volume > 0.05)
+function heroTooltipAfterG(inst) {
+  const targetX = inst.lLetter && !inst.lLetter.main.hidden
+    ? inst.lLetter.x
+    : (inst.lPlatHome ? inst.lPlatHome.x + LOG_W * 0.5 : null)
+  const heroX = inst.heroInst?.character?.pos?.x
+  if (targetX == null || heroX == null) return HERO_TOOLTIP_AFTER_G_RIGHT
+  return heroX < targetX ? HERO_TOOLTIP_AFTER_G_RIGHT : HERO_TOOLTIP_AFTER_G_LEFT
 }
 //
 // Picks the hero tooltip line matching how much colour the world shows.
 //
 function heroTooltipText(inst) {
-  if (inst.zones.oCollected || inst.zones.colorWorld) return HERO_TOOLTIP_TEXT_COLOR
-  if (inst.zones.lCollected) return HERO_TOOLTIP_TEXT_SHADES
-  if (isGlowQuietWorld(inst)) return HERO_TOOLTIP_TEXT_GRAY_QUIET
-  return HERO_TOOLTIP_TEXT_GRAY
+  if (inst.zones.colorWorld) return HERO_TOOLTIP_TEXT_COLOR
+  if (inst.trampWalk?.walked) return HERO_TOOLTIP_AFTER_TRAMP_WALK
+  if (inst.zones.oCollected) return HERO_TOOLTIP_AFTER_O
+  if (inst.zones.lCollected) return HERO_TOOLTIP_AFTER_L
+  if (inst.zones.gCollected) return heroTooltipAfterG(inst)
+  if (get(KEY_INTRO_SHOWN, false)) {
+    return HERO_TOOLTIP_TEXT_GRAY_QUIET
+  }
+  return HERO_TOOLTIP_TEXT_GRAY_QUIET
 }
 //
 // Hero hover bubble is allowed during the quiet phase even if a replay hint
@@ -1741,24 +1774,9 @@ function heroTooltipText(inst) {
 //
 function isGlowHeroHoverTooltipVisible(inst) {
   if (inst.drowning || inst.dialogOpen) return false
-  //
-  // Quiet-world line must stay hoverable as soon as the hero itself is
-  // visible — it must not depend on the intro lock or hint bubbles at all.
-  //
-  if (isGlowQuietWorld(inst)) return inst.heroSpawnFade <= 0
-  if (isGlowCameraIntroBusy(inst)) return false
-  return !inst.introLock &&
-    !HeroHint.isActive(inst.heroHint)
-}
-//
-// True while the opening camera zoom or its pre-hint beat is still running.
-//
-function isGlowCameraIntroBusy(inst) {
-  return Boolean(
-    inst.heroSpawnFade > 0 ||
-    inst.pendingGlowIntro ||
-    inst.introHintDelayRemaining > 0
-  )
+  if (inst.heroSpawnFade > 0 || inst.pendingGlowIntro) return false
+  if (inst.introLock) return false
+  return true
 }
 //
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the small
@@ -1962,6 +1980,28 @@ function countGlowLettersCollected(zones) {
   return n
 }
 //
+// True when a glow fragment pickup was saved on a prior visit.
+//
+function hasGlowPersistedFragments() {
+  return get(KEY_BONUS_COLLECTED, false) || get(KEY_PIT_BONUS, false)
+}
+//
+// Reveals the small-hero HUD row and syncs the saved fragment count.
+//
+function restoreGlowFragmentHud(inst) {
+  if (!inst?.levelIndicator || !hasGlowPersistedFragments()) return
+  LevelIndicator.revealSmallHeroHud(inst.levelIndicator)
+  inst.levelIndicator.updateHeroScore?.(get('heroScore', 0))
+  layoutGlowFpsHud(inst)
+}
+//
+// Persists fragment storage keys before scene leave or native engine teardown.
+//
+function persistGlowFragmentKeysOnLeave(inst) {
+  inst.bonusHeroInst?.collected && BonusHero.finalizeCollection(inst.bonusHeroInst)
+  inst.pit?.pitBonus?.collected && BonusHero.finalizeCollection(inst.pit.pitBonus)
+}
+//
 // Pins the GLOW HUD letters to screen space so they stay under the top bar
 // while the world camera scrolls.
 //
@@ -2025,6 +2065,46 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
 function startBirdsMusic(birdsMusic) {
   birdsMusic.paused = false
   birdsMusic.volume = CFG.audio.backgroundMusic.birds
+}
+//
+// After G dialog closes: SFX and birds fade in over GLOW_SFX_FADE_DURATION / GLOW_WORLD_AUDIO_FADE_DURATION.
+//
+function beginGlowPostGWorldAudio(inst) {
+  inst.sound._glowSfxMuted = false
+  if (inst.sound.glowSfxGain) {
+    const now = inst.sound.audioContext.currentTime
+    const gain = inst.sound.glowSfxGain.gain
+    gain.cancelScheduledValues(now)
+    gain.setValueAtTime(0, now)
+    gain.linearRampToValueAtTime(1, now + GLOW_SFX_FADE_DURATION)
+  }
+  startGlowWorldAudioFade(inst)
+}
+//
+// After G: birds and ambience rise from silence over GLOW_WORLD_AUDIO_FADE_DURATION.
+//
+function startGlowWorldAudioFade(inst) {
+  const birds = inst.birdsMusic
+  if (birds) {
+    birds.paused = false
+    birds.volume = 0
+  }
+  inst.glowWorldAudioFade = {
+    elapsed: 0,
+    duration: GLOW_WORLD_AUDIO_FADE_DURATION,
+    targetBirds: CFG.audio.backgroundMusic.birds
+  }
+}
+//
+// Steps the post-G birds volume ramp each frame.
+//
+function updateGlowWorldAudioFade(inst, dt) {
+  const fade = inst.glowWorldAudioFade
+  if (!fade) return
+  fade.elapsed += dt
+  const t = Math.min(1, fade.elapsed / fade.duration)
+  inst.birdsMusic && (inst.birdsMusic.volume = fade.targetBirds * t)
+  t >= 1 && (inst.glowWorldAudioFade = null)
 }
 //
 // Soft birds swell with the O-meditation countdown (0 → full as timer → 0)
@@ -3117,7 +3197,10 @@ function drawUndergroundLayer(inst) {
   //
   // Once fully faded, skip the now-invisible gray sprite entirely — drawing
   // a fully transparent full-screen sprite every frame forever after O still
-  // costs a full draw call and was the main source of the post-O FPS drop.
+  // costs a full draw call. In practice this function itself now only runs
+  // during the brief post-O fade window — see onDraw's parallaxStaticOpaque
+  // check, which skips calling it at all once BG_STATIC_COLOR already bakes
+  // in the same underground decor.
   //
   if (fade >= 1) {
     k.drawSprite({ sprite: UNDERGROUND_COLOR_SPRITE, pos: k.vec2(0, 0), opacity: 1 })
@@ -4043,7 +4126,12 @@ function onDraw(inst) {
       height: FLOOR_Y - TOP_MARGIN,
       color: k.rgb(skyC.r, skyC.g, skyC.b)
     })
-    k.drawRect({
+    //
+    // Once the parallax stack is active, its opaque static ground+underground
+    // sprite (drawn below) fully repaints this exact band on top — this fill
+    // would be immediately hidden and is a wasted full-width draw every frame.
+    //
+    !zones.lZoneParallax && k.drawRect({
       pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
       width: GAME_W,
       height: WORLD_H - FLOOR_Y,
@@ -4100,7 +4188,15 @@ function onDraw(inst) {
   // blend residue, then redraw the underground decor (rocks, burrows,
   // cracks) over it so it still sits correctly on top of the earth band.
   //
-  if (groundFillC) {
+  // Once the parallax fade AND colour fade both reach 1, the static layer
+  // above already drew BG_STATIC_COLOR fully opaque (no cross-fade blending
+  // left to bleed through), and that sprite already bakes in the exact same
+  // ground fill + underground decor. Repainting both here again would just
+  // be two more full-screen draws wasted every frame for the rest of the
+  // level — this was the main source of the FPS drop right after O.
+  //
+  const parallaxStaticOpaque = zones.lZoneParallax && fade >= 1 && inst.parallaxFade >= 1
+  if (groundFillC && !parallaxStaticOpaque) {
     k.drawRect({
       pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
       width: GAME_W,
@@ -4108,7 +4204,7 @@ function onDraw(inst) {
       color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
     })
   }
-  innerGray && drawUndergroundLayer(inst)
+  innerGray && !parallaxStaticOpaque && drawUndergroundLayer(inst)
   if (inst.zones.tree) {
     const showColorTree = fade >= 0.5
     inst.treeObj.hidden = showColorTree
@@ -4634,6 +4730,8 @@ function openGlowLetterDialog(inst, text, onCloseExtra, dialogSoundName = null) 
   const backdropHex = isOuterFrameVisible(inst.zones) ? OUTER_BG_HEX : GLOW_PAL.void
   CanvasBackdrop.applyCanvasBackdrop(inst.k, backdropHex)
   LevelHelp.openStandalonePanel(inst.k, text, {
+    centerX: LEFT_MARGIN + VIEW_W / 2,
+    centerY: inst.k.height() / 2,
     fillRgb: { r: DIALOG_FILL.r, g: DIALOG_FILL.g, b: DIALOG_FILL.b },
     textRgb: { r: LIGHT_GRAY.r, g: LIGHT_GRAY.g, b: LIGHT_GRAY.b },
     borderRgb: { r: DECOR_GRAY.r, g: DECOR_GRAY.g, b: DECOR_GRAY.b },
@@ -4867,17 +4965,6 @@ function collectLetterG(inst) {
   if (!isGLetterCollectable(inst) || inst.dialogOpen) return
   inst.zones.gCollected = true
   set(KEY_COLLECTED_G, true)
-  //
-  // Unlock world SFX
-  //
-  inst.sound._glowSfxMuted = false
-  if (inst.sound.glowSfxGain) {
-    const now = inst.sound.audioContext.currentTime
-    const gain = inst.sound.glowSfxGain.gain
-    gain.cancelScheduledValues(now)
-    gain.setValueAtTime(0, now)
-    gain.linearRampToValueAtTime(1, now + GLOW_SFX_FADE_DURATION)
-  }
   syncGlowMidgesZones(inst.midges, inst.zones, inst.pit?.collapsed)
   //
   // Intro hints end the moment the first letter is taken.
@@ -4899,9 +4986,13 @@ function collectLetterG(inst) {
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 1)
   openGlowLetterDialog(inst, GLOW_DIALOG_G, () => {
     //
-    // Tree waits until the hero lands on the starting branch; birds + humming.
+    // World SFX and birds ramp only after the G dialog closes.
     //
-    startBirdsMusic(inst.birdsMusic)
+    beginGlowPostGWorldAudio(inst)
+    //
+    // Tree waits until the hero lands on the starting branch; humming starts
+    // once world audio has finished fading in after G.
+    //
     inst.heroInst.idleVocalization = 'humming'
     inst.pendingTreeReveal = !inst.zones.tree
     maybeRevealLPlat(inst)
@@ -5214,6 +5305,8 @@ function finishDrowning(inst) {
   //
   !inst.zones.gCollected && LevelIndicator.setSectionLabelHidden(inst.levelIndicator, true)
   LevelIndicator.revealLifeHud(inst.levelIndicator, !inst.zones.colorWorld)
+  hasGlowPersistedFragments() && LevelIndicator.revealSmallHeroHud(inst.levelIndicator)
+  hasGlowPersistedFragments() && inst.levelIndicator.updateHeroScore?.(get('heroScore', 0))
   set(KEY_LIFE_SHOWN, true)
   inst.levelIndicator.updateLifeScore?.(newLife)
   Sound.playGentleLifeSound(inst.sound)
@@ -5370,6 +5463,7 @@ function revealLPlatZone(inst, silent = false) {
   set(KEY_REVEALED_L_PLAT, true)
   !silent && playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
+  maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
 }
 //
 // The L platform appears only after all three world parts are visible:
@@ -5457,6 +5551,7 @@ function onUpdate(inst) {
     inst.introHintDelayRemaining += k.dt()
     if (inst.introHintDelayRemaining >= CAMERA_INTRO_HINT_DELAY) {
       inst.pendingGlowIntro = false
+      inst.introHintDelayRemaining = 0
       startGlowIntro(inst)
     }
   }
@@ -5515,11 +5610,10 @@ function onUpdate(inst) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, countGlowLettersCollected(inst.zones), inst.zones.colorWorld)
     !inst.zones.gCollected && LevelIndicator.setSectionLabelHidden(inst.levelIndicator, true)
     pinGlowHudFixed(inst.levelIndicator)
+    restoreGlowFragmentHud(inst)
   }
   if (inst.pit?.pitBonus?.collected && inst.levelIndicator && !inst.levelIndicator.smallHeroRevealed) {
-    LevelIndicator.revealSmallHeroHud(inst.levelIndicator)
-    inst.levelIndicator.updateHeroScore?.(get('heroScore', 0))
-    layoutGlowFpsHud(inst)
+    restoreGlowFragmentHud(inst)
   }
   syncGlowPitLevelIndicator(inst)
   if (inst.bonusHeroInst?.collected && !inst.levelIndicator) {
@@ -5529,12 +5623,10 @@ function onUpdate(inst) {
     //
     !inst.zones.gCollected && LevelIndicator.setSectionLabelHidden(inst.levelIndicator, true)
     pinGlowHudFixed(inst.levelIndicator)
+    restoreGlowFragmentHud(inst)
   }
   if (inst.bonusHeroInst?.collected && inst.levelIndicator && !inst.levelIndicator.smallHeroRevealed) {
-    LevelIndicator.revealSmallHeroHud(inst.levelIndicator)
-    const score = get('heroScore', 0)
-    inst.levelIndicator.updateHeroScore?.(score)
-    layoutGlowFpsHud(inst)
+    restoreGlowFragmentHud(inst)
   }
   //
   // Fragments are collected once and forever: persist the storage key right
@@ -5719,6 +5811,8 @@ function onUpdate(inst) {
   updateBranchTrampMarioHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
   updateTrampBadSingHint(inst)
+  updateBranchTrampWrongSingHint(inst)
+  updateGlowWorldAudioFade(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   //
@@ -5863,10 +5957,13 @@ function updateTreeRevealArm(inst, char, grounded) {
 //
 function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (!inst.pendingTreeReveal || inst.zones.tree || inst.dialogOpen) return
-  if (!inst.treeBranchLeftOnce) return
+  const fromBranchTramp = inst.treeRevealFromBranchTramp ||
+    (inst.branchTrampBounceAir && grounded && justLanded)
+  if (!fromBranchTramp && !inst.treeBranchLeftOnce) return
   if (!grounded || !justLanded || !char?.pos) return
-  if (isOnBranchTrampolineCap(inst, char)) return
+  if (!fromBranchTramp && isOnBranchTrampolineCap(inst, char)) return
   if (!isHeroOnStartBranch(inst, char)) return
+  inst.treeRevealFromBranchTramp = false
   inst.pendingTreeReveal = false
   set(KEY_REVEALED_TREE, true)
   inst.zones.tree = true
@@ -5988,6 +6085,7 @@ function onTrampolineBounce(inst) {
 // Cheeky bubble on the branch trampoline every Nth bounce (same lines as the walk tramp).
 //
 function onBranchTrampolineBounce(inst) {
+  inst.pendingTreeReveal && !inst.zones.tree && (inst.treeRevealFromBranchTramp = true)
   const tw = inst.branchTrampWalk
   if (!tw || !inst.branchTrampState) return
   tw.bounceCount = (tw.bounceCount || 0) + 1
@@ -6081,6 +6179,32 @@ function updateBranchTrampCheekyHint(inst) {
 }
 //
 // Bubble when the sing-to-walk countdown finishes — the mushroom is unimpressed
+//
+function updateBranchTrampWrongSingHint(inst) {
+  const tw = inst.branchTrampWalk
+  const z = inst.zones
+  if (!tw || !z.oCollected || inst.trampWalk?.walked) return
+  const char = inst.heroInst?.character
+  if (!char?.pos || !inst.branchTrampState) return
+  const branchOpen = z.branchTrampRevealed || z.groundDecorRight
+  if (!branchOpen) return
+  const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
+  const grounded = char.isGrounded?.() ?? false
+  const near = Math.abs(char.pos.x - inst.branchTrampState.x) < TRAMP_WALK_NEAR &&
+    grounded &&
+    Math.abs(char.pos.y + SURFACE_DETECT_Y - FLOOR_Y) < 28
+  if (!singing || !near) {
+    tw.wrongSingElapsed = 0
+    return
+  }
+  if (tw.wrongSingShown) return
+  tw.wrongSingElapsed += inst.k.dt()
+  if (tw.wrongSingElapsed < BRANCH_TRAMP_WRONG_SING_DELAY) return
+  tw.wrongSingShown = true
+  HeroHint.show(inst.heroHint, BRANCH_TRAMP_WRONG_SING_TEXT, BRANCH_TRAMP_WRONG_SING_DURATION)
+}
+//
+// Bubble when the sing-to-walk countdown finishes — the right mushroom is unimpressed
 //
 function updateTrampBadSingHint(inst) {
   const tw = inst.trampWalk
@@ -6477,12 +6601,23 @@ function onUpdateDrownLifeParticle(particle, k, vx, vy, lifetime) {
 //
 function spawnGlowFootLanding(inst, footX, footY, surface, sceneInst) {
   if (!inst || sceneInst?.drowning) return
+  let atCaveEntrance = false
   const pit = sceneInst?.pit
   if (pit?.cracksVisible && !pit.collapsed) {
     const zone = getCrackZone(WORLD_W, FLOOR_Y)
-    if (footX >= zone.x1 && footX <= zone.x2 && footY >= FLOOR_Y - 14) return
+    if (footX >= zone.x1 && footX <= zone.x2 && footY >= FLOOR_Y - 14) {
+      atCaveEntrance = true
+    }
   }
-  GlowFootParticles.spawnLanding(inst, footX, footY, footParticleColor(sceneInst, surface, footX, footY))
+  if (sceneInst && isGlowFlatSingleDecorColor(sceneInst) && !atCaveEntrance) return
+  const countMult = atCaveEntrance ? CAVE_ENTRANCE_LANDING_PARTICLE_MULT : 1
+  GlowFootParticles.spawnLanding(
+    inst,
+    footX,
+    footY,
+    footParticleColor(sceneInst, surface, footX, footY),
+    countMult
+  )
 }
 //
 // Picks earth or bark tone for foot particles based on the landing surface
@@ -6512,14 +6647,41 @@ function isWorldPointOutsideCameraView(inst, worldX, margin = 48) {
   return worldX < camX - half + margin || worldX > camX + half - margin
 }
 //
+// World X the edge arrow should point at (L log, O letter, or L platform after G).
+//
+function getLetterArrowTargetX(inst) {
+  if (inst.lLetter && !inst.lLetter.main.hidden && !inst.zones.lCollected) return inst.lLetter.x
+  if (inst.oLetter && !inst.oLetter.main.hidden && !inst.zones.oCollected && inst.zones.oZone) {
+    return inst.oLetter.x
+  }
+  if (inst.zones.gCollected && !inst.zones.lCollected && inst.zones.lPlatRevealed && inst.lPlatHome) {
+    return inst.lPlatHome.x + LOG_W * 0.5
+  }
+  return null
+}
+//
+// Center of the L log platform — arrow target right after G until L is taken.
+//
+function getLPlatformArrowTargetX(inst) {
+  if (!inst.zones.gCollected || inst.zones.lCollected || !inst.lPlatHome) return null
+  return inst.lPlatHome.x + LOG_W * 0.5
+}
+//
 // Points a menu-style edge arrow at an off-screen L or O letter.
 //
 function maybeStartLetterOffscreenArrow(inst, letter) {
   if (!letter || letter.main.hidden) return
-  if (!isWorldPointOutsideCameraView(inst, letter.x)) return
+  maybeStartLetterOffscreenArrowForTarget(inst, letter.x)
+}
+//
+// Arms the edge arrow when the target world X lies outside the camera view.
+//
+function maybeStartLetterOffscreenArrowForTarget(inst, worldX) {
+  if (worldX == null) return
+  if (!isWorldPointOutsideCameraView(inst, worldX)) return
   const camX = inst.k.camPos().x
   inst.letterOffscreenArrow = {
-    side: letter.x < camX ? 'left' : 'right',
+    side: worldX < camX ? 'left' : 'right',
     phase: 0
   }
 }
@@ -6529,31 +6691,21 @@ function maybeStartLetterOffscreenArrow(inst, letter) {
 function updateLetterOffscreenArrow(inst, dt) {
   const hint = inst.letterOffscreenArrow
   if (!hint) return
-  const letter = getActiveLetterOffscreenTarget(inst)
-  if (!letter || !isWorldPointOutsideCameraView(inst, letter.x)) {
+  const targetX = getLetterArrowTargetX(inst)
+  if (targetX == null || !isWorldPointOutsideCameraView(inst, targetX)) {
     inst.letterOffscreenArrow = null
     return
   }
   const camX = inst.k.camPos().x
-  hint.side = letter.x < camX ? 'left' : 'right'
+  hint.side = targetX < camX ? 'left' : 'right'
   hint.phase += dt * LETTER_OFFSCREEN_ARROW_SWAY_SPEED
-}
-//
-// Returns the visible L or O letter entry, if any.
-//
-function getActiveLetterOffscreenTarget(inst) {
-  if (inst.lLetter && !inst.lLetter.main.hidden && !inst.zones.lCollected) return inst.lLetter
-  if (inst.oLetter && !inst.oLetter.main.hidden && !inst.zones.oCollected && inst.zones.oZone) {
-    return inst.oLetter
-  }
-  return null
 }
 //
 // Draws the swaying off-screen letter hint in fixed screen space.
 //
 function drawLetterOffscreenArrow(inst) {
   const hint = inst.letterOffscreenArrow
-  if (!hint || !getActiveLetterOffscreenTarget(inst)) return
+  if (!hint || getLetterArrowTargetX(inst) == null) return
   const k = inst.k
   const sway = Math.sin(hint.phase) * LETTER_OFFSCREEN_ARROW_SWAY_AMP
   const baseX = hint.side === 'left'
@@ -6571,53 +6723,60 @@ function drawMenuStyleEdgeArrow(k, cx, cy, side) {
   const body = k.rgb(MENU_ARROW_BODY_RGB.r, MENU_ARROW_BODY_RGB.g, MENU_ARROW_BODY_RGB.b)
   const o = MENU_ARROW_OUTLINE_WIDTH
   const op = MENU_ARROW_DRAW_OPACITY
-  //
-  // Tip points off-screen toward the letter (left edge → left, right edge → right).
-  //
   const dir = side === 'left' ? -1 : 1
-  //
-  // Standard arrow silhouette: a rectangular shaft plus a triangular head
-  // sharing one flat vertical edge (headBackX) — no intermediate notch, so
-  // the head reads as a plain triangle instead of a diamond.
-  //
   const stemHalf = LETTER_OFFSCREEN_ARROW_STEM_W * 0.5
   const headHalf = s * 0.5
   const tipX = cx + dir * s * 0.7
   const headBackX = cx - dir * s * 0.3
   const stemBackX = headBackX - dir * LETTER_OFFSCREEN_ARROW_STEM_LEN
-  const bodyPts = [
-    k.vec2(stemBackX, cy - stemHalf),
-    k.vec2(headBackX, cy - stemHalf),
-    k.vec2(headBackX, cy - headHalf),
-    k.vec2(tipX, cy),
-    k.vec2(headBackX, cy + headHalf),
-    k.vec2(headBackX, cy + stemHalf),
-    k.vec2(stemBackX, cy + stemHalf)
+  const stemFrontX = headBackX + dir * LETTER_ARROW_STEM_HEAD_OVERLAP
+  const r = LETTER_ARROW_CORNER_RADIUS
+  const stemLeft = Math.min(stemBackX, stemFrontX)
+  const stemSpan = Math.abs(stemFrontX - stemBackX)
+  k.drawRect({
+    pos: k.vec2(stemLeft - o, cy - stemHalf - o),
+    width: stemSpan + o * 2,
+    height: stemHalf * 2 + o * 2,
+    radius: r + o,
+    color: outline,
+    opacity: op,
+    fixed: true
+  })
+  k.drawRect({
+    pos: k.vec2(stemLeft, cy - stemHalf),
+    width: stemSpan,
+    height: stemHalf * 2,
+    radius: r,
+    color: body,
+    opacity: op,
+    fixed: true
+  })
+  const headPts = buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf, dir, r, false)
+  const headOutlinePts = buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf, dir, r, true, o)
+  k.drawPolygon({ pts: headOutlinePts, color: outline, opacity: op, fixed: true, triangulate: true })
+  k.drawPolygon({ pts: headPts, color: body, opacity: op, fixed: true, triangulate: true })
+}
+//
+// Arrowhead polygon with slightly rounded shoulders and tip (chamfered corners).
+//
+function buildRoundedArrowHeadPolygon(k, headBackX, tipX, cy, headHalf, stemHalf, dir, cornerR, outline, outlinePad = 0) {
+  const pad = outline ? outlinePad : 0
+  const hb = headBackX
+  const tx = tipX + (outline ? dir * pad : 0)
+  const th = headHalf + pad
+  const sh = stemHalf + pad
+  const tipLeadX = tx - dir * cornerR
+  return [
+    k.vec2(hb, cy - sh),
+    k.vec2(hb, cy - th + cornerR),
+    k.vec2(hb + dir * cornerR, cy - th),
+    k.vec2(tipLeadX, cy - cornerR * 0.65),
+    k.vec2(tx, cy),
+    k.vec2(tipLeadX, cy + cornerR * 0.65),
+    k.vec2(hb + dir * cornerR, cy + th),
+    k.vec2(hb, cy + th - cornerR),
+    k.vec2(hb, cy + sh)
   ]
-  //
-  // Each outline point is a clean outward offset of the matching body point
-  // (backward+up/down at the back cap, forward+up/down at the head-base
-  // step, forward at the tip) — no point crosses back into the body
-  // silhouette, so the outline never shows through the fill as a seam.
-  //
-  const outlinePts = [
-    k.vec2(stemBackX - dir * o, cy - stemHalf - o),
-    k.vec2(headBackX, cy - stemHalf - o),
-    k.vec2(headBackX + dir * o, cy - headHalf - o),
-    k.vec2(tipX + dir * o, cy),
-    k.vec2(headBackX + dir * o, cy + headHalf + o),
-    k.vec2(headBackX, cy + stemHalf + o),
-    k.vec2(stemBackX - dir * o, cy + stemHalf + o)
-  ]
-  //
-  // Both point lists are CONCAVE (the rectangle-shaft-to-triangle-head notch
-  // is a reflex vertex) — Kaplay's drawPolygon defaults to a naive fan
-  // triangulation from point 0, which is only correct for convex polygons
-  // and silently renders concave ones as a garbled diamond/pentagon. Passing
-  // triangulate:true switches it to a proper ear-clipping triangulation.
-  //
-  k.drawPolygon({ pts: outlinePts, color: outline, opacity: op, fixed: true, triangulate: true })
-  k.drawPolygon({ pts: bodyPts, color: body, opacity: op, fixed: true, triangulate: true })
 }
 //
 // After a right-tramp bounce, landing on the L log unveils the letter.
@@ -6761,16 +6920,18 @@ function updateOLetterStuckHint(inst, dt) {
   if (elapsed < O_LETTER_STUCK_HINT_DELAY) return
   inst.oStuckHintShown = true
   inst.oStuckHintTooltip && Tooltip.destroy(inst.oStuckHintTooltip)
+  const char = inst.heroInst?.character
+  if (!char?.pos) return
   inst.oStuckHintTooltip = Tooltip.create({
     k: inst.k,
     forceVisible: true,
     targets: [{
-      x: () => inst.oLetter?.x ?? -1000,
-      y: () => inst.oLetter?.y ?? -1000,
-      width: O_TOOLTIP_HOVER_SIZE,
-      height: O_TOOLTIP_HOVER_SIZE,
+      x: () => inst.heroInst?.character?.pos?.x ?? -1000,
+      y: () => inst.heroInst?.character?.pos?.y ?? -1000,
+      width: HERO_TOOLTIP_HOVER_SIZE,
+      height: HERO_TOOLTIP_HOVER_SIZE,
       text: O_LETTER_STUCK_HINT_TEXT,
-      offsetY: O_TOOLTIP_Y_OFFSET
+      offsetY: HERO_TOOLTIP_Y_OFFSET
     }]
   })
   inst.oStuckHintTooltip.activeTarget = inst.oStuckHintTooltip.targets[0]

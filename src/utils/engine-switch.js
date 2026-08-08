@@ -8,6 +8,11 @@ import { bootEngine, teardownEngine, RESOLUTION_MODE } from './game-engine.js'
 //
 const NATIVE_RESOLUTION_SCENE_PREFIX = 'lesson-glow'
 //
+// Avoid flashing the DOM loader on fast engine swaps (e.g. right after the
+// yellow pre-Glow subtitle when boot finishes within this window).
+//
+const ENGINE_SWAP_LOADER_DELAY_MS = 200
+//
 // Currently live Kaplay instance and which resolution mode it was booted in.
 //
 let activeEngine = null
@@ -78,20 +83,40 @@ export function resolutionModeForScene(sceneName) {
  * the duration) and registers it as active. A no-op when already in the
  * right mode.
  * @param {string} sceneName - Scene about to be entered
+ * @param {Object} [opts]
+ * @param {boolean} [opts.loaderDuringBoot] - Keep the DOM loader up for the full swap + boot
  * @returns {Promise<{ k: Object, switched: boolean }>}
  */
-export async function ensureEngineForScene(sceneName) {
+export async function ensureEngineForScene(sceneName, opts = {}) {
   const neededMode = resolutionModeForScene(sceneName)
   if (neededMode === activeResolutionMode && activeEngine) {
     return { k: activeEngine, switched: false }
   }
+  const loaderDuringBoot = opts.loaderDuringBoot === true
   const staleEngine = activeEngine
-  BootLoader.showLoader()
-  BootLoader.setLoaderBarPct(0)
+  const silentSwap = !loaderDuringBoot && neededMode === RESOLUTION_MODE.NATIVE
+  let loaderShown = false
+  let loaderTimer = null
+  if (loaderDuringBoot) {
+    BootLoader.showLoader()
+    BootLoader.setLoaderBarPct(0)
+    loaderShown = true
+  } else if (!silentSwap) {
+    loaderTimer = setTimeout(() => {
+      BootLoader.showLoader()
+      BootLoader.setLoaderBarPct(0)
+      loaderShown = true
+    }, ENGINE_SWAP_LOADER_DELAY_MS)
+  }
   activeResolutionMode === RESOLUTION_MODE.NATIVE && runGlowNativeTeardown()
   staleEngine && teardownEngine(staleEngine)
   const freshEngine = await bootEngine(neededMode)
+  if (loaderDuringBoot) {
+    BootLoader.setLoaderBarPct(100)
+  } else {
+    loaderTimer && clearTimeout(loaderTimer)
+    loaderShown && BootLoader.hideLoader()
+  }
   setActiveEngine(freshEngine, neededMode)
-  BootLoader.hideLoader()
   return { k: freshEngine, switched: true }
 }

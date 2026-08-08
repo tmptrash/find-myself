@@ -998,6 +998,7 @@ function openPitPhysics(pit) {
       approachFromAbove: false,
       heroBodyColor: pit.heroBodyColor,
       storageKey: KEY_PIT_BONUS,
+      persistStorageOnCollect: true,
       platformCollisionYOffset: 6,
       //
       // No log / no solid platform body — only the small bonus fragment

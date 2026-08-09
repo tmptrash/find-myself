@@ -273,24 +273,23 @@ const BONUS_PLAT_W = 90
 // gray; the colour mode blends toward the warm orange haze, so each deeper
 // row reads more orange and brighter — like the reference forest picture.
 //
-const PAR_L1_BG_BLEND = 0.62
-const PAR_L1_COLOR_BLEND = 0.3
+const PAR_L1_BG_BLEND = 0.7
+const PAR_L1_COLOR_BLEND = 0.36
 //
 // Near-row foliage leans extra toward the warm orange haze (leaf-only blend)
 // while green stays the leading colour.
 //
-const PAR_L1_LEAF_WARM_BLEND = 0.3
+const PAR_L1_LEAF_WARM_BLEND = 0.4
 //
-// Second (far) plane behind the near one — dimmer still, foliage collapsed
-// to a single tone.
+// Second (far) plane — clearly darker than the farthest row but still hazy.
 //
-const PAR_L2_BG_BLEND = 0.87
-const PAR_L2_COLOR_BLEND = 0.32
+const PAR_L2_BG_BLEND = 0.91
+const PAR_L2_COLOR_BLEND = 0.54
 //
-// Third (farthest) plane — almost dissolved into the backdrop haze.
+// Third (farthest) plane — nearly the same tone as the warm sky haze.
 //
-const PAR_L3_BG_BLEND = 0.94
-const PAR_L3_COLOR_BLEND = 0.48
+const PAR_L3_BG_BLEND = 0.985
+const PAR_L3_COLOR_BLEND = 0.84
 //
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
@@ -410,11 +409,13 @@ const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
 //
 const BUSH_COLOR_HAZE_BLEND_NEAR = 0.55
 //
-// Colour-world 2nd/3rd bush strips are pushed this much further toward the
-// haze than the trees of their row, so each row's bushes read as a slightly
-// different (warmer) shade than the trunks behind them.
+// Colour-world 2nd bush strip — slight extra push toward the haze vs its trees.
 //
-const BUSH_ROW_TINT_DELTA = 0.14
+const BUSH_FAR_HAZE_BLEND = 0.24
+//
+// Farthest bush strip — extra dissolve into the sky haze (trees use PAR_L3_*).
+//
+const BUSH_FARTHEST_HAZE_BLEND = 0.42
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is ~25% taller than the previous one. Even the
@@ -668,7 +669,7 @@ const MEDITATION_TIMER_FONT = 22
 // Hero hover tooltip — the line follows how much colour the hero can see:
 // plain gray world, gray shades after L, full colour after O.
 //
-const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange, but it's very quiet\nhere. First we need to explore\nthis world."
+const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange... It's very quiet\nhere. We should explore this\nworld first."
 const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
 const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
 const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
@@ -2481,7 +2482,11 @@ function buildParallaxSprites(k, undergroundSpec) {
   bakeParallaxLayerPair(k, BG_PAR_BUSH3_GRAY, BG_PAR_BUSH3_COLOR, PAR_BUSH3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
       grayRgb: { r: grayFarthestPal.trunkR, g: grayFarthestPal.trunkG, b: grayFarthestPal.trunkB },
-      colorRgb: lerpRgb({ r: colorFarthestPal.trunkR, g: colorFarthestPal.trunkG, b: colorFarthestPal.trunkB }, WARM_HAZE, BUSH_ROW_TINT_DELTA),
+      colorRgb: lerpRgb(
+        { r: colorFarthestPal.trunkR, g: colorFarthestPal.trunkG, b: colorFarthestPal.trunkB },
+        WARM_HAZE,
+        BUSH_FARTHEST_HAZE_BLEND
+      ),
       colorFlat: true,
       grayFlat: true,
       heightScale: BUSH_FARTHEST_HEIGHT_SCALE
@@ -2490,7 +2495,11 @@ function buildParallaxSprites(k, undergroundSpec) {
   bakeParallaxLayerPair(k, BG_PAR_BUSH2_GRAY, BG_PAR_BUSH2_COLOR, PAR_BUSH2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
       grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
-      colorRgb: lerpRgb({ r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB }, WARM_HAZE, BUSH_ROW_TINT_DELTA),
+      colorRgb: lerpRgb(
+        { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
+        WARM_HAZE,
+        BUSH_FAR_HAZE_BLEND
+      ),
       colorFlat: true,
       grayFlat: true,
       heightScale: BUSH_FAR_HEIGHT_SCALE

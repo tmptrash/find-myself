@@ -47,8 +47,41 @@ export function create(cfg) {
     introZoomElapsed: 0,
     introHoldDuration: 0,
     introZoomDuration: 0,
-    introZoomFrom: 1
+    introZoomFrom: 1,
+    shakeAmp: 0,
+    shakeDuration: 0,
+    shakeElapsed: 0,
+    shakeOffsetX: 0,
+    shakeOffsetY: 0
   }
+}
+/**
+ * Starts a short screen shake on the playfield camera.
+ * @param {Object} inst - Camera instance
+ * @param {number} amplitude - Peak offset in world pixels
+ * @param {number} durationSec - Fade-out duration in seconds
+ */
+export function triggerShake(inst, amplitude, durationSec) {
+  inst.shakeAmp = amplitude
+  inst.shakeDuration = durationSec
+  inst.shakeElapsed = 0
+}
+/**
+ * Advances shake decay; call once per frame before followHero.
+ * @param {Object} inst - Camera instance
+ * @param {number} dt - Delta time in seconds
+ */
+export function updateShake(inst, dt) {
+  if (!inst.shakeDuration || inst.shakeElapsed >= inst.shakeDuration) {
+    inst.shakeOffsetX = 0
+    inst.shakeOffsetY = 0
+    return
+  }
+  inst.shakeElapsed += dt
+  const t = 1 - inst.shakeElapsed / inst.shakeDuration
+  const amp = inst.shakeAmp * t
+  inst.shakeOffsetX = (Math.random() - 0.5) * 2 * amp
+  inst.shakeOffsetY = (Math.random() - 0.5) * 2 * amp
 }
 /**
  * Starts the opening camera intro: holds a tight hero close-up for
@@ -119,7 +152,9 @@ export function followHero(inst, heroX, heroY) {
       camY = heroY + (inst.fixedCamY - heroY) * eased
     }
   }
-  inst.k.camPos(Math.round(camX), Math.round(camY))
+  const shakeX = inst.shakeOffsetX ?? 0
+  const shakeY = inst.shakeOffsetY ?? 0
+  inst.k.camPos(Math.round(camX + shakeX), Math.round(camY + shakeY))
 }
 export function getParallaxLayerPad(inst, speed, horizBleed = 0) {
   const maxScroll = inst.maxCamX - inst.minCamX

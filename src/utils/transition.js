@@ -9,6 +9,7 @@ import { stopTimeSectionMusic } from '../sections/time/components/scene-helper.j
 import { goAfterPreparingAssets, goToMenuAfterAssets, prepareSceneAssets, enterPreparedScene, bumpPrepareCancelNonce, onEngineResolutionSwapped } from './lesson-assets.js'
 import * as CanvasBackdrop from './canvas-backdrop.js'
 import * as BootLoader from './boot-loader.js'
+import { prewarmGlowLevel0HeavyAssets } from '../sections/glow/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
 
 /**
@@ -355,6 +356,9 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     ])
     transitionK._transitionOverlay = overlay
     bindTransitionEngine(transitionK)
+    BootLoader.setLoaderBarPct(55)
+    prewarmGlowLevel0HeavyAssets(transitionK, pct => BootLoader.setLoaderBarPct(55 + Math.round(pct * 0.4)))
+    BootLoader.setLoaderBarPct(100)
     inst.assetPrepareDone = true
   }
   
@@ -442,7 +446,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         return
       }
       if (inst.assetPrepareDone) {
-        BootLoader.hideLoader()
+        !isGlowPrelevel && BootLoader.hideLoader()
         phase = inst.postAssetPreparePhase
         timer = 0
       }

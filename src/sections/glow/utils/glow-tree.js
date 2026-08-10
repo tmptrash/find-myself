@@ -230,13 +230,24 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     const len = 28 + rng() * 22
     growBranch(rng, trunkTop.ex, trunkTop.ey, angle, Math.round(len), 10, branchSegs, leafEndpoints, 0)
   })
+  const heroBranchSegFrom = branchSegs.length
   //
   // Special horizontal branch in the lower-left: starts horizontal then turns organic.
   // This branch has a physics collision box — the hero starts here.
   //
   const horizBranch = includeHeroBranch ? buildHorizBranch(rng, trunkSegs, branchSegs, leafEndpoints) : null
   const leaves = buildLeaves(rng, leafEndpoints)
-  return { seed, trunkSegs, rootSegs, branchSegs, leaves, horizBranch, rootStartY: rootBaseY }
+  return {
+    seed,
+    trunkSegs,
+    rootSegs,
+    branchSegs,
+    leaves,
+    horizBranch,
+    rootStartY: rootBaseY,
+    heroBranchSegFrom,
+    groundClipY: rootBaseY
+  }
 }
 
 /**
@@ -297,7 +308,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // above the ground line, while segments under the trunk base keep full
   // width — the trunk fill painted afterwards makes the joint seamless.
   //
-  const groundY = treeData.rootStartY ?? (treeData.trunkSegs[0]?.sy ?? h)
+  const groundY = treeData.groundClipY ?? treeData.rootStartY ?? (treeData.trunkSegs[0]?.sy ?? h)
   const trunkBaseX = treeData.trunkSegs[0]?.sx ?? 0
   const trunkHalfW = (treeData.trunkSegs[0]?.w ?? 74) * 0.5
   ctx.lineCap = 'round'
@@ -326,7 +337,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // ends at the floor — the trunk geometry may sit a few px lower for root
   // attachment, but nothing should paint below ground into the root fan.
   //
-  const trunkClipY = treeData.trunkSegs.length > 0 ? treeData.trunkSegs[0].sy : groundY
+  const trunkClipY = groundY
   const trunkRgb = { r: trunkR, g: trunkG, b: trunkB }
   const branchRgb = { r: branchR, g: branchG, b: branchB }
   //
@@ -687,22 +698,18 @@ function paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb) {
   const base = treeData.trunkSegs[0]
   if (!base) return
   const half = base.w * 0.5
-  const topY = Math.min(groundY, base.sy) - TRUNK_ROOT_COLLAR_TOP_OVERLAP
-  const bottomY = base.sy + TRUNK_ROOT_COLLAR_HEIGHT
+  const bottomY = groundY
+  const topY = bottomY - TRUNK_ROOT_COLLAR_TOP_OVERLAP - TRUNK_ROOT_COLLAR_HEIGHT
   if (bottomY <= topY) return
   const cx = base.sx
   ctx.fillStyle = `rgb(${trunkRgb.r}, ${trunkRgb.g}, ${trunkRgb.b})`
   ctx.fillRect(cx - half, topY, half * 2, bottomY - topY)
 }
 //
-// Prepends a synthetic trunk segment for bark over the root collar.
+// Trunk bark uses the real segments only — clip at the ground line.
 //
 function buildTrunkCollarBarkExtension(treeData, groundY) {
-  const base = treeData.trunkSegs[0]
-  if (!base) return { segs: treeData.trunkSegs, clipY: groundY }
-  const bottomY = base.sy + TRUNK_ROOT_COLLAR_HEIGHT
-  const collarSeg = { sx: base.sx, sy: bottomY, ex: base.sx, ey: base.sy, w: base.w, w2: base.w }
-  return { segs: [collarSeg, ...treeData.trunkSegs], clipY: bottomY }
+  return { segs: treeData.trunkSegs, clipY: groundY }
 }
 //
 // Fills a connected wood chain (trunk or thick branch run).

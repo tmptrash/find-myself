@@ -4497,6 +4497,20 @@ function ensureHeroSpriteOnK(inst, spriteName) {
   if (heroSpriteExistsOnK(inst.k, spriteName)) return
   const prefix = parseHeroSpritePrefix(spriteName) || inst.spritePrefix || inst.type
   heroSpritePrefixesReadyFor.get(inst.k)?.delete(prefix)
+  const override = inst.bakeByPrefix?.[prefix]
+  if (override) {
+    loadHeroSprites({
+      k: inst.k,
+      type: inst.type,
+      bodyColor: override.bodyColor,
+      outlineColor: override.outlineColor,
+      addMouth: override.addMouth,
+      addArms: override.addArms,
+      addWatch: override.addWatch,
+      outlineOnly: override.outlineOnly
+    })
+    return
+  }
   loadHeroSprites(inst)
 }
 //

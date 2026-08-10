@@ -500,15 +500,41 @@ export function sceneMenu(k) {
       antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch` : null
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
+      antiHeroInst.bakeByPrefix = {
+        [antiHeroInst.spritePrefixGray]: {
+          bodyColor: grayColor,
+          outlineColor: grayOutlineColor,
+          addMouth: hasMouth,
+          addArms: hasArms,
+          addWatch: hasWatch
+        },
+        [antiHeroInst.spritePrefixBlack]: {
+          bodyColor: grayColor,
+          outlineColor: CFG.visual.colors.outline,
+          addMouth: hasMouth,
+          addArms: hasArms,
+          addWatch: hasWatch
+        },
+        [antiHeroInst.spritePrefixColored]: {
+          bodyColor: config.color.body,
+          outlineColor: CFG.visual.colors.outline,
+          addMouth: hasMouth,
+          addArms: hasArms,
+          addWatch: hasWatch
+        }
+      }
+      antiHeroInst.spritePrefixYellow && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixYellow] = {
+        bodyColor: yellowColor,
+        outlineColor: CFG.visual.colors.outline,
+        addMouth: true,
+        addArms: true,
+        addWatch: true
+      })
       //
       // Switch to colored sprite immediately if section is completed
       // (Hero.create uses gray body, so the actual sprite needs replacing)
       //
-      if (isCompleted) {
-        antiHeroInst.spritePrefix = antiHeroInst.spritePrefixColored
-        antiHeroInst.character.use(k.sprite(`${antiHeroInst.spritePrefixColored}_0_0`))
-        antiHeroInst.character.color = k.rgb(255, 255, 255)
-      }
+      isCompleted && applyMenuAntiHeroSpritePrefix(antiHeroInst, antiHeroInst.spritePrefixColored)
       //
       // Store base position and phase offsets for floating animation
       //
@@ -875,9 +901,7 @@ export function sceneMenu(k) {
         // Switch sprite variant if needed
         //
         if (antiHeroInst.currentPrefix !== desiredPrefix) {
-          antiHeroInst.currentPrefix = desiredPrefix
-          antiHeroInst.spritePrefix = desiredPrefix
-          antiHeroInst.character.use(k.sprite(`${desiredPrefix}_0_0`))
+          applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix)
         }
         //
         // Keep anti-hero at base position; scale breathes gently while hovered
@@ -1980,6 +2004,38 @@ function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
   const prevSection = sectionOrder[idx - 1]
   const isPrevCompleted = progress[prevSection]?.completed || false
   return !isPrevCompleted && !antiHeroInst.isCompleted && antiHeroInst.section !== currentSection
+}
+//
+// Swaps a menu anti-hero to another baked sprite prefix and syncs bake
+// metadata so idle eye frames reload after an engine swap.
+//
+function applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix) {
+  if (!desiredPrefix || antiHeroInst.currentPrefix === desiredPrefix) return
+  const k = antiHeroInst.k
+  const bake = antiHeroInst.bakeByPrefix?.[desiredPrefix]
+  antiHeroInst.currentPrefix = desiredPrefix
+  antiHeroInst.spritePrefix = desiredPrefix
+  if (bake) {
+    antiHeroInst.bodyColor = String(bake.bodyColor).replace('#', '')
+    antiHeroInst.outlineColor = String(bake.outlineColor).replace('#', '')
+    antiHeroInst.addMouth = bake.addMouth
+    antiHeroInst.addArms = bake.addArms
+    antiHeroInst.addWatch = bake.addWatch
+    Hero.loadHeroSprites({
+      k,
+      type: antiHeroInst.type,
+      bodyColor: bake.bodyColor,
+      outlineColor: bake.outlineColor,
+      addMouth: bake.addMouth,
+      addArms: bake.addArms,
+      addWatch: bake.addWatch,
+      outlineOnly: bake.outlineOnly
+    })
+  }
+  const idleName = `${desiredPrefix}_0_0`
+  antiHeroInst.character.use(k.sprite(idleName))
+  antiHeroInst.currentEyeSprite = idleName
+  antiHeroInst.character.color = k.rgb(255, 255, 255)
 }
 //
 // Draws a crimson ⊘ prohibition ring + slash centered on (cx, cy).

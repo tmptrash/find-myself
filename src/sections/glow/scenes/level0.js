@@ -20,6 +20,11 @@ import {
   renderGlowLeafBandIntoContext,
   TREE_SEED
 } from '../utils/glow-tree.js'
+import * as TreeSegments from '../utils/glow-tree-segments.js'
+import {
+  GROUND_RIGHT_STRIP_COUNT,
+  groundRightStripIndexForX
+} from '../utils/glow-ground-reveal.js'
 import {
   GLOW_PAL,
   glowRgb,
@@ -135,12 +140,13 @@ let TREE_X = Math.round(SCREEN_W * 0.5)
 // leave a gap above the floor line; rendering clips it at the roots' start
 // (ground level), so the trunk is cut exactly by the ground.
 //
-const TREE_TRUNK_SINK = 4
-const TREE_TRUNK_BOTTOM_Y = FLOOR_Y + TREE_TRUNK_SINK
+const TREE_TRUNK_SINK = 0
+const TREE_TRUNK_BOTTOM_Y = FLOOR_Y
 //
-// Roots attach at the sunk trunk base so strands meet the trunk silhouette.
+// Roots and trunk clip share the visible ground line — the trunk ends flush
+// with the floor and roots continue below without a sunken trunk gap.
 //
-const TREE_ROOT_START_Y = TREE_TRUNK_BOTTOM_Y
+const TREE_ROOT_START_Y = FLOOR_Y
 const TREE_TOP_Y = 30
 const ROOT_MAX_Y = 1030
 const TREE_SPRITE_NAME = 'glow0-tree-sprite'
@@ -556,6 +562,15 @@ const KEY_REVEALED_GROUND_DECOR = 'glow.revealedGroundDecor'
 const KEY_REVEALED_GROUND_DECOR_RIGHT = 'glow.revealedGroundDecorRight'
 const KEY_REVEALED_GROUND_DECOR_LEFT = 'glow.revealedGroundDecorLeft'
 const KEY_REVEALED_GROUND_BG = 'glow.revealedGroundBg'
+const KEY_TREE_SEGMENTS_REVEALED = 'glow.treeSegmentsRevealed'
+const KEY_GROUND_RIGHT_STRIP_MAX = 'glow.groundRightStripMax'
+const KEY_LEFT_SHORE_ROCK = 'glow.leftShoreRock'
+const KEY_RIGHT_TRAMP_REVEALED = 'glow.rightTrampRevealed'
+//
+// Trampoline mushrooms appear only after the hero lands within this distance.
+//
+const TRAMP_MUSH_LAND_REVEAL_DIST = 80
+const TRAMP_MISSING_HINT_TEXT = 'Something\'s missing here'
 const KEY_BONUS_COLLECTED = 'glow.bonusCollected'
 const KEY_LIFE_SHOWN = 'glow.lifeShown'
 const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
@@ -673,7 +688,8 @@ const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange... It's very quiet\nhere. We shoul
 const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
 const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
 const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
-const HERO_TOOLTIP_AFTER_O = 'Even mushrooms can\ntalk in this forest.'
+const HERO_TOOLTIP_AFTER_O = 'You need to talk\nto the mushroom.'
+const HINT_AFTER_O_MUSH_DURATION = 6
 const HERO_TOOLTIP_AFTER_TRAMP_WALK = 'I think we need to jump\nto the left of the mushroom.'
 const HERO_TOOLTIP_TEXT_COLOR = 'I never thought the world\ncould be this beautiful'
 const HERO_TOOLTIP_HOVER_SIZE = 80
@@ -872,6 +888,8 @@ const CAMERA_INTRO_DURATION = 0.6
 // After the opening zoom-out finishes, wait this long before the first hint.
 //
 const CAMERA_INTRO_HINT_DELAY = 1
+const GLOW_CAMERA_SHAKE_AMP = 5
+const GLOW_CAMERA_SHAKE_DURATION = 0.22
 //
 // After O: stand still near the trampoline → countdown → mushroom walks left
 //
@@ -1046,6 +1064,37 @@ const GOLD_SWAP_DELAY = 0.05
  */
 export function sceneGlowLevel0(k) {
   k.scene('lesson-glow.0', () => {
+    initGlowLevel0Scene(k)
+  })
+}
+/**
+ * Bakes tree + parallax sprites during the menu→Glow transition (single DOM loader).
+ * @param {Object} k - Kaplay instance
+ * @param {Function} [onProgress] - 0–100 bake progress
+ */
+export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
+  recomputeGlowScreenLayout(k)
+  const zones = loadGlowZones()
+  const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, ROOT_MAX_Y, TREE_ROOT_START_Y)
+  const prewarmSegmentSave = get(KEY_TREE_SEGMENTS_REVEALED, [])
+  const prewarmMonolith = zones.tree && !(Array.isArray(prewarmSegmentSave) && prewarmSegmentSave.length > 0)
+  if (prewarmMonolith) {
+    bakeMonolithicGlowTreeSprites(k, treeData)
+    onProgress?.(50)
+  } else {
+    const plan = TreeSegments.buildGlowTreeSegmentPlan(treeData)
+    const ids = TreeSegments.allGlowTreeSegmentIds(treeData, plan)
+    TreeSegments.bakeGlowTreeSegmentSprites(k, treeData, WORLD_W, WORLD_H, ids)
+    onProgress?.(70)
+  }
+  const undergroundSpec = loadUndergroundSprites(k)
+  buildParallaxSprites(k, undergroundSpec)
+  onProgress?.(100)
+}
+//
+// Builds lesson-glow.0 — tree segments, parallax, decor and gameplay hooks.
+//
+function initGlowLevel0Scene(k) {
     recomputeGlowScreenLayout(k)
     set('lastLesson', 'lesson-glow.0')
     set('lastSection', 'glow')
@@ -1062,51 +1111,85 @@ export function sceneGlowLevel0(k) {
     }
     k.onSceneLeave(stopGlowLoopAudio)
     const zones = loadGlowZones()
+    const colorFadeInit = zones.colorWorld ? 1 : 0
+    //
+    // Draw callbacks on decor/tramps read zones._sceneRef before inst exists
+    // (async bootstrap yields to the engine between setup steps).
+    //
+    zones._sceneRef = { zones, colorFade: colorFadeInit }
     zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, OUTER_BG_HEX)
     !zones.outerFrame && CanvasBackdrop.applyCanvasBackdrop(k, GLOW_PAL.void)
     const treeData = buildGlowTree(TREE_SEED, TREE_X, TREE_TRUNK_BOTTOM_Y, TREE_TOP_Y, ROOT_MAX_Y, TREE_ROOT_START_Y)
-    const treeFlatCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecor(), WORLD_W, WORLD_H)
-    k.loadSprite(TREE_FLAT_SPRITE_NAME, treeFlatCanvas)
-    treeFlatCanvas.width = 0
-    treeFlatCanvas.height = 0
-    const treeCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteGray(), WORLD_W, WORLD_H)
-    k.loadSprite(TREE_SPRITE_NAME, treeCanvas)
-    treeCanvas.width = 0
-    treeCanvas.height = 0
-    //
-    // Warm "lit" variant shown after L — the main tree stands out from the forest.
-    //
-    const treeLitCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H)
-    k.loadSprite(TREE_LIT_SPRITE_NAME, treeLitCanvas)
-    treeLitCanvas.width = 0
-    treeLitCanvas.height = 0
-    const treeColorCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteColor(), WORLD_W, WORLD_H)
-    k.loadSprite(TREE_COLOR_SPRITE_NAME, treeColorCanvas)
-    treeColorCanvas.width = 0
-    treeColorCanvas.height = 0
+    const savedTreeSegmentsRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
+    const hasPersistedSegmentReveal = Array.isArray(savedTreeSegmentsRaw) && savedTreeSegmentsRaw.length > 0
+    const treeDrawMonolith = zones.tree && !hasPersistedSegmentReveal
+    let treeSegmentPlan = null
+    let treeSegmentIds = []
+    let treeSegmentEntries = {}
+    const treeSegmentRevealed = new Set()
+    let treeSegmentPending = []
+    if (treeDrawMonolith) {
+      !glowTreeSpritesPrewarmed(k, true, []) && bakeMonolithicGlowTreeSprites(k, treeData)
+    } else {
+      treeSegmentPlan = TreeSegments.buildGlowTreeSegmentPlan(treeData)
+      treeSegmentIds = TreeSegments.allGlowTreeSegmentIds(treeData, treeSegmentPlan)
+      const savedRaw = get(KEY_TREE_SEGMENTS_REVEALED, [])
+      const savedTreeSegments = TreeSegments.normalizePersistedTreeSegmentIds(savedRaw, treeData, treeSegmentPlan)
+      savedTreeSegments.forEach(id => treeSegmentRevealed.add(id))
+      treeSegmentPending = treeSegmentPlan.pendingIds.filter(id => !treeSegmentRevealed.has(id))
+      !glowTreeSpritesPrewarmed(k, false, treeSegmentIds) &&
+        TreeSegments.bakeGlowTreeSegmentSprites(k, treeData, WORLD_W, WORLD_H, treeSegmentIds)
+      treeSegmentEntries = TreeSegments.createGlowTreeSegmentObjects(
+        k,
+        treeSegmentIds,
+        CFG.visual.zIndex.platforms - 2,
+        zones.lCollected
+      )
+      applyPersistedTreeSegmentVisibility(treeSegmentEntries, treeSegmentRevealed)
+      treeSegmentRevealed.size >= treeSegmentIds.length && (zones.tree = true)
+    }
     //
     // Underground decor first: its generated spec is baked both into the
     // standalone sprites (visible before L) and into the combined background.
     //
     const undergroundSpec = loadUndergroundSprites(k)
-    buildParallaxSprites(k, undergroundSpec)
+    !glowParallaxSpritesPrewarmed(k) && buildParallaxSprites(k, undergroundSpec)
+    //
+    // Main tree: one sprite pair when fully explored, else segment sprites.
+    //
     const initialGraySprite = zones.lCollected ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME
-    const treeObj = k.add([
-      k.sprite(initialGraySprite),
-      k.pos(0, 0),
-      k.z(CFG.visual.zIndex.platforms - 2)
-    ])
-    const treeColorObj = k.add([
-      k.sprite(TREE_COLOR_SPRITE_NAME),
-      k.pos(0, 0),
-      k.z(CFG.visual.zIndex.platforms - 2),
-      k.opacity(0)
-    ])
-    treeObj.hidden = !zones.tree
-    treeColorObj.hidden = !zones.tree
-    if (!zones.tree) {
-      treeObj.opacity = 0
-      treeColorObj.opacity = 0
+    let treeObj
+    let treeColorObj
+    if (treeDrawMonolith) {
+      treeObj = k.add([
+        k.sprite(initialGraySprite),
+        k.pos(0, 0),
+        k.z(CFG.visual.zIndex.platforms - 2)
+      ])
+      treeColorObj = k.add([
+        k.sprite(TREE_COLOR_SPRITE_NAME),
+        k.pos(0, 0),
+        k.z(CFG.visual.zIndex.platforms - 2),
+        k.opacity(0)
+      ])
+      const showColorTree = zones.colorWorld
+      treeObj.hidden = showColorTree
+      treeColorObj.hidden = !showColorTree
+      treeObj.opacity = 1
+      treeColorObj.opacity = 1
+    } else {
+      treeObj = k.add([
+        k.pos(-WORLD_W, 0),
+        k.z(CFG.visual.zIndex.platforms - 2),
+        k.opacity(0)
+      ])
+      treeObj.hidden = true
+      treeColorObj = k.add([
+        k.pos(-WORLD_W, 0),
+        k.z(CFG.visual.zIndex.platforms - 2),
+        k.opacity(0)
+      ])
+      treeColorObj.hidden = true
     }
     const floorBounds = createLevelBounds(k)
     const floorPlat = floorBounds.floor
@@ -1356,7 +1439,16 @@ export function sceneGlowLevel0(k) {
       zones,
       treeObj,
       treeColorObj,
-      treeGraySpriteName: initialGraySprite,
+      treeData,
+      treeDrawMonolith,
+      treeDrawColorMode: Boolean(zones.colorWorld),
+      treeSegmentEntries,
+      treeSegmentIds,
+      treeSegmentPending,
+      treeSegmentRevealed,
+      treeRevealLandingCount: 0,
+      treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
+      treeGraySpriteName: zones.lCollected ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME,
       colorFade: zones.colorWorld ? 1 : 0,
       colorFadeTarget: zones.colorWorld ? 1 : 0,
       //
@@ -1409,6 +1501,7 @@ export function sceneGlowLevel0(k) {
         wrongSingElapsed: 0,
         wrongSingShown: false
       },
+      trampMissingHints: { right: null, branch: null },
       trampBounceAir: false,
       trampToLApproach: false,
       lPlat,
@@ -1437,7 +1530,7 @@ export function sceneGlowLevel0(k) {
       levelIndicator,
       goldRgb,
       wTrigger: { x1: wPlatX - PLAT_LAND_TRIGGER_PAD, x2: wPlatX + LOG_W + PLAT_LAND_TRIGGER_PAD, y: wPlatY - 60, y2: wPlatY + LOG_H + 20 },
-      bonusPlatHome: { x: bonusPlatX, y: bonusPlatY },
+      bonusPlatHome: { x: bonusPlatX, y: bonusPlatY, h: LOG_H },
       //
       // Always false at scene start — the colorWorld branch below rebakes the
       // gold hero even on reload (the hero object itself spawns whitish).
@@ -1466,7 +1559,7 @@ export function sceneGlowLevel0(k) {
       //
       meditation: { idleTimer: 0, requiredIdle: MEDITATION_IDLE_BASE, countdown: null },
       meditationBirdsActive: false,
-      pendingTreeReveal: !zones.tree,
+      pendingTreeReveal: !treeDrawMonolith && treeSegmentRevealed.size < treeSegmentIds.length,
       treeBranchLeftOnce: false,
       hasStoodOnStartBranch: false,
       startBranch: { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY },
@@ -1481,6 +1574,11 @@ export function sceneGlowLevel0(k) {
     inst.oZoneRevealTime = zones.oZone ? k.time() : null
     zones._lakeX1 = lakeX1
     zones._lakeX2 = lakeX2
+    zones._groundStripEndX = WORLD_W - RIGHT_MARGIN - 20
+    if (!inst.treeDrawMonolith && isAllTreeSegmentsRevealed(inst)) {
+      inst.zones.tree = true
+      set(KEY_REVEALED_TREE, true)
+    }
     applyZoneVisibility(inst)
     restorePersistedGlowZoneVisuals(inst)
     zones.lCollected && rebakeGlowRockSpritesShaded(inst)
@@ -1501,7 +1599,7 @@ export function sceneGlowLevel0(k) {
       heroBodyColor: HERO_BODY_COLOR,
       groundColor: GROUND_DARK,
       alreadyCollapsed: get(KEY_PIT_COLLAPSED, false),
-      cracksVisible: zones.groundDecorRight
+      cracksVisible: isGlowCaveCracksVisible(zones)
     })
     inst.pit.sceneRef = inst
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
@@ -1511,11 +1609,6 @@ export function sceneGlowLevel0(k) {
     // Permanent fragment log stays in the wood-surface list for step SFX
     //
     inst.bonusPlatAlways && rebuildWoodSurfaces(inst)
-    //
-    // The L platform may already be owed to the player (all three zones
-    // explored on a previous life) — reveal it silently on scene start.
-    //
-    maybeRevealLPlat(inst, true)
     maybeShowGLetter(inst)
     zones.gCollected && !zones.lCollected && zones.lPlatRevealed &&
       maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
@@ -1546,7 +1639,6 @@ export function sceneGlowLevel0(k) {
     k.onDraw(() => onDraw(inst))
     k.onUpdate(() => onUpdate(inst))
     createPlayfieldFrameOverlay(k, inst)
-  })
 }
 //
 // Fixed overlay drawn on top of every world layer so nothing bleeds into the
@@ -1882,9 +1974,9 @@ function createSmallHeroTooltip(inst) {
       text: TRAMP_TOOLTIP_TEXT,
       offsetY: TRAMP_TOOLTIP_Y_OFFSET,
       //
-      // Only once the right ground decor (the trampoline) has been revealed.
+      // Only after the mushroom trampoline has been revealed.
       //
-      visible: () => Boolean(inst.zones.groundDecorRight)
+      visible: () => isRightTrampolineVisible(inst.zones)
     }]
   })
 }
@@ -1925,10 +2017,15 @@ function loadGlowZones() {
   //
   // Explored ground / water persist across deaths and level reloads.
   //
-  const groundDecorRight = get(KEY_REVEALED_GROUND_DECOR_RIGHT, false)
+  const groundDecorRightLegacy = get(KEY_REVEALED_GROUND_DECOR_RIGHT, false)
+  let groundRightStripMax = get(KEY_GROUND_RIGHT_STRIP_MAX, -1)
+  groundDecorRightLegacy && groundRightStripMax < 0 && (groundRightStripMax = GROUND_RIGHT_STRIP_COUNT - 1)
+  const groundDecorRight = groundDecorRightLegacy || groundRightStripMax >= GROUND_RIGHT_STRIP_COUNT - 1
   const waterDiscovered = get(KEY_REVEALED_WATER, false)
   const groundDecorLeft = get(KEY_REVEALED_GROUND_DECOR_LEFT, false)
+  const leftShoreRock = get(KEY_LEFT_SHORE_ROCK, false) || waterDiscovered
   const branchTrampRevealed = get(KEY_BRANCH_TRAMP_REVEALED, false)
+  const rightTrampRevealed = get(KEY_RIGHT_TRAMP_REVEALED, false)
   const lLetterUnveiled = get(KEY_L_LETTER_UNVEILED, false) || lCollected
   const lZoneParallax = oCollected && (get(KEY_REVEALED_L, false) || lCollected)
   const lZoneLit = gCollected && lCollected && (get(KEY_REVEALED_L_LIT, false) || lCollected)
@@ -1953,6 +2050,9 @@ function loadGlowZones() {
     outerFrame: get(KEY_REVEALED_OUTER_FRAME, false) || lCollected,
     groundDecorRight,
     groundDecorLeft,
+    groundRightStripMax,
+    leftShoreRock,
+    rightTrampRevealed,
     groundDecor: groundDecorRight || groundDecorLeft,
     groundBg: get(KEY_REVEALED_GROUND_BG, false) || colorWorld,
     water: false,
@@ -2206,22 +2306,10 @@ function restorePersistedGlowZoneVisuals(inst) {
 //
 function applyZoneVisibility(inst) {
   const z = inst.zones
-  const leftOpen = z.water
-  const rightOpen = z.groundDecorRight
-  inst.treeObj.hidden = !z.tree
-  inst.treeColorObj.hidden = !z.tree
-  if (!z.tree) {
-    inst.treeObj.opacity = 0
-    inst.treeColorObj.opacity = 0
-  }
-  //
-  // After L the gray main tree switches to the warm "lit" palette variant.
-  //
-  const graySpriteName = z.lCollected ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME
-  if (inst.treeGraySpriteName !== graySpriteName) {
-    inst.treeGraySpriteName = graySpriteName
-    inst.treeObj.use(inst.k.sprite(graySpriteName))
-  }
+  const leftGroundOpen = z.groundDecorLeft
+  const rightStripOpen = z.groundRightStripMax >= 0
+  inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
+  inst.treeDrawMonolith ? syncMonolithicTreeColorMode(inst) : syncTreeSegmentsVisibility(inst)
   syncMushroomGraySprites(inst)
   cornerObjsSetHidden(inst.cornerObjs, false)
   refreshPlayfieldCornerSprites(inst)
@@ -2231,8 +2319,8 @@ function applyZoneVisibility(inst) {
   setLetterVisible(inst.lLetter, z.lLetterUnveiled && !z.lCollected)
   setLetterVisible(inst.oLetter, z.oZone && !z.oCollected)
   setLetterVisible(inst.wLetter, z.wZone && !z.wCollected)
-  inst.trampBundle.drawLayer.hidden = !rightOpen
-  inst.branchTrampBundle.drawLayer.hidden = !(z.branchTrampRevealed || rightOpen || z.colorWorld)
+  inst.trampBundle.drawLayer.hidden = !isRightTrampolineVisible(z)
+  inst.branchTrampBundle.drawLayer.hidden = !isBranchTrampolineVisible(z)
   inst.rockObjs.forEach(o => {
     if (o._lakeShoreEnd) {
       //
@@ -2243,14 +2331,19 @@ function applyZoneVisibility(inst) {
       o.pos.y = PLATFORM_HIDE_Y
       return
     }
-    const showLeft = o._waterCluster ? z.water : leftOpen
-    const show = o._side === 'left' ? showLeft : rightOpen
+    const showLeft = o._waterCluster ? z.water : leftGroundOpen
+    const showRight = isRightDecorStripVisible(z, o, inst.treeStripEndX)
+    const show = o._side === 'left' ? showLeft : showRight
     setDecorObjVisible(o, show)
   })
   inst.mushObjs.forEach(o => {
-    setDecorObjVisible(o, o._side === 'left' ? leftOpen : rightOpen)
+    const wx = o._decorWorldX ?? o._homeX ?? 0
+    const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
+    const showLeft = leftGroundOpen && !inLake
+    const showRight = isRightDecorStripVisible(z, o, inst.treeStripEndX)
+    setDecorObjVisible(o, o._side === 'left' ? showLeft : showRight)
   })
-  inst.grassLayer.layer.hidden = !rightOpen && !leftOpen
+  inst.grassLayer.layer.hidden = !rightStripOpen && !leftGroundOpen
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
@@ -2294,23 +2387,31 @@ function setLetterVisible(letterEntry, visible) {
   letterEntry.allObjects.forEach(obj => { obj.hidden = !visible })
 }
 //
-// The G pickup appears only once water, the right ground and the big tree
-// were all revealed in the gray world (intro hints may finish earlier).
+// The G pickup appears once the full tree, both lake cap rocks, left ground
+// decor and at least one right ground strip were revealed in the gray world.
 //
-function glowThreeZonesExplored(z) {
-  return Boolean(z.waterDiscovered && z.groundDecorRight && z.tree)
+function glowThreeZonesExplored(inst) {
+  const z = inst.zones
+  const treeDone = z.tree && (inst.treeDrawMonolith || isAllTreeSegmentsRevealed(inst))
+  return Boolean(
+    treeDone &&
+    z.leftShoreRock &&
+    z.groundDecorLeft &&
+    z.groundRightStripMax >= 0
+  )
 }
 //
 // Shows or hides the G letter from the three-zone exploration gate.
 //
 function maybeShowGLetter(inst) {
   if (!inst.gLetter || inst.zones.gCollected) return
-  setLetterVisible(inst.gLetter, glowThreeZonesExplored(inst.zones))
+  setLetterVisible(inst.gLetter, glowThreeZonesExplored(inst))
 }
 //
 // Flat single decor gray until L — no per-object shades before then.
 //
 function isGlowFlatSingleDecorColor(inst) {
+  if (!inst?.zones) return false
   const z = inst.zones
   if (z.lCollected || z.colorWorld) return false
   if ((inst.colorFade ?? 0) >= 0.5) return false
@@ -2324,7 +2425,7 @@ function isGLetterCollectable(inst) {
     inst.gLetter &&
     !inst.zones.gCollected &&
     !inst.gLetter.main.hidden &&
-    glowThreeZonesExplored(inst.zones)
+    glowThreeZonesExplored(inst)
   )
 }
 //
@@ -2396,6 +2497,7 @@ function grayDecorDarken(sc) {
 // (possibly darkened) gray decor tone. White = no change.
 //
 function grayDecorTint(sc) {
+  if (!sc?.zones) return { r: 255, g: 255, b: 255 }
   if (isGlowFlatSingleDecorColor(sc)) return { r: 255, g: 255, b: 255 }
   const t = grayDecorDarken(sc)
   if (t <= 0) return { r: 255, g: 255, b: 255 }
@@ -3510,12 +3612,15 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones) {
 function glowGrassTint(zones, blade) {
   const lakeX1 = zones._lakeX1
   const lakeX2 = zones._lakeX2
-  if (lakeX1 != null && lakeX2 != null && zones.water && blade.x >= lakeX1 && blade.x <= lakeX2) {
+  if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
     return null
   }
   const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-  if (side === 'left' && !zones.water) return null
-  if (side === 'right' && !zones.groundDecorRight) return null
+  if (side === 'left' && !zones.groundDecorLeft) return null
+  if (side === 'right') {
+    const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
+    if (strip < 0 || strip > zones.groundRightStripMax) return null
+  }
   const sc = zones._sceneRef
   if (sc && isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
   const fade = zones._sceneRef?.colorFade ?? 0
@@ -3547,6 +3652,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   //
   const shoreRockBefore = placeRock(k, waterRightX - WATER_END_ROCK_BEFORE_X, endRockR, `glow0-rock-${spriteIdx++}`, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE)
   shoreRockBefore._lakeShoreEnd = true
+  shoreRockBefore._shoreTreeSide = true
   objs.push(shoreRockBefore)
   const endRockR2 = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN) * 0.75
   const shoreRockAfter = placeRock(k, waterRightX + WATER_END_ROCK_AFTER_X, endRockR2, `glow0-rock-${spriteIdx++}`, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE * 0.9)
@@ -3560,6 +3666,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   // Scatter rocks stay left of the cave mouth (no stone above the entrance)
   //
   const rightEdge = getCrackZone(WORLD_W, FLOOR_Y).x1 - 40
+  const stripStartX = GROUND_REVEAL_TREE_PAST_X
   const nearTramp = (x) => Math.abs(x - trampX) <= TRAMP_ROCK_CLEAR_HALF ||
     Math.abs(x - branchTrampX) <= TRAMP_ROCK_CLEAR_HALF
   const badRock = (x) => nearTramp(x) || isCrackDecorExcluded(x, WORLD_W)
@@ -3573,7 +3680,9 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
       safety++
     }
     if (badRock(cx)) continue
-    objs.push(placeRock(k, cx, radius, `glow0-rock-${spriteIdx++}`, 'right'))
+    const rock = placeRock(k, cx, radius, `glow0-rock-${spriteIdx++}`, 'right')
+    rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
+    objs.push(rock)
   }
   return objs
 }
@@ -3741,6 +3850,10 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
     obj._outlineSprite = spriteName + DECOR_OUTLINE_SUFFIX
     obj._outlined = false
     obj._side = posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
+    obj._decorWorldX = posX
+    obj._rightStrip = obj._side === 'right'
+      ? groundRightStripIndexForX(posX, GROUND_REVEAL_TREE_PAST_X, right)
+      : -1
     obj._homeX = baseX
     obj._homeY = baseY
     obj._glowPhase = Math.random() * Math.PI * 2
@@ -3758,7 +3871,6 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
 //
 function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
   const gateBranchTramp = Boolean(opts.gateBranchTramp)
-  const requireGroundDecor = gateBranchTramp ? false : (opts.requireGroundDecor !== false)
   const trampGrayColors = zones.lCollected
     ? CUTE_MUSH_GRAY_COLORS
     : getCuteMushroomFlatWaterColors()
@@ -3782,10 +3894,9 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     k.z(opts.drawZ ?? 6),
     {
       draw() {
-        const branchOpen = zones.branchTrampRevealed || zones.groundDecorRight || zones.colorWorld
         if (gateBranchTramp) {
-          if (!branchOpen) return
-        } else if (requireGroundDecor && !zones.groundDecorRight) {
+          if (!isBranchTrampolineVisible(zones)) return
+        } else if (!isRightTrampolineVisible(zones)) {
           return
         }
         //
@@ -3819,10 +3930,9 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     }
   ])
   drawLayer.onUpdate(() => onUpdateTrampolineBlink(k, state))
-  const branchTrampInitiallyOpen = zones.branchTrampRevealed || zones.groundDecorRight || zones.colorWorld
   drawLayer.hidden = gateBranchTramp
-    ? !branchTrampInitiallyOpen
-    : !requireGroundDecor
+    ? !isBranchTrampolineVisible(zones)
+    : !isRightTrampolineVisible(zones)
   return { state, drawLayer, colliderHome, gateBranchTramp }
 }
 //
@@ -4214,24 +4324,6 @@ function onDraw(inst) {
     })
   }
   innerGray && !parallaxStaticOpaque && drawUndergroundLayer(inst)
-  if (inst.zones.tree) {
-    const showColorTree = fade >= 0.5
-    inst.treeObj.hidden = showColorTree
-    inst.treeColorObj.hidden = !showColorTree
-    if (!inst.treeRevealActive) {
-      inst.treeObj.opacity = 1
-      inst.treeColorObj.opacity = 1
-    }
-    const twoTone = isGlowFlatSingleDecorColor(inst)
-    const white = k.rgb(255, 255, 255)
-    inst.treeObj.color = white
-    inst.treeColorObj.color = white
-  } else {
-    inst.treeObj.hidden = true
-    inst.treeColorObj.hidden = true
-    inst.treeObj.opacity = 0
-    inst.treeColorObj.opacity = 0
-  }
   //
   // Surface cracks / open cave on the far-right ground strip
   //
@@ -4246,13 +4338,18 @@ function onDraw(inst) {
 // Paints tree-side lake cap rocks when the water zone is open.
 //
 function drawLakeShoreRocksWorld(inst) {
-  if (!inst.zones.water) return
+  const z = inst.zones
+  if (!z.water && !z.leftShoreRock) return
   const k = inst.k
   const flat = isGlowFlatSingleDecorColor(inst)
   const outlined = inst.zones.colorWorld && inst.colorFade > 0.5
   const white = k.rgb(255, 255, 255)
   inst.rockObjs.forEach(o => {
     if (!o._lakeShoreEnd) return
+    //
+    // East cap (right of the lake) stays hidden until the tree-side cap opens.
+    //
+    if (!z.water && !o._shoreTreeSide && !z.leftShoreRock) return
     const spriteName = outlined && o._outlineSprite ? o._outlineSprite : o._graySprite
     spriteName && k.drawSprite({
       sprite: spriteName,
@@ -4392,7 +4489,7 @@ function updateMushroomWhistleLean(inst) {
   // Trampoline mushroom sways with the same pulse when visible
   //
   const tramp = inst.trampState
-  if (tramp && inst.zones.groundDecorRight) {
+  if (tramp && isRightTrampolineVisible(inst.zones)) {
     const target = singing
       ? side * GLOW_MUSHROOM_WHISTLE_AMP_DEG * pulse * 0.85
       : 0
@@ -4503,8 +4600,8 @@ function tryMushroomTrampBounce(inst, state, boostMult, hero, char, heroX, after
 function isHeroNearTrampolineX(inst, heroX, state = inst.trampState) {
   if (!state) return false
   const zoneOpen = state === inst.branchTrampState
-    ? Boolean(inst.zones?.branchTrampRevealed || inst.zones?.groundDecorRight)
-    : Boolean(inst.zones?.groundDecorRight)
+    ? isBranchTrampolineVisible(inst.zones)
+    : isRightTrampolineVisible(inst.zones)
   if (!zoneOpen) return false
   return Math.abs(heroX - state.x) < TRAMP_NEAR_X
 }
@@ -4515,8 +4612,8 @@ function isOnTrampolineCap(inst, char, state = inst.trampState) {
   if (!char?.pos || !state) return false
   const branchPad = state === inst.branchTrampState
   const zoneOpen = branchPad
-    ? Boolean(inst.zones?.branchTrampRevealed || inst.zones?.groundDecorRight)
-    : Boolean(inst.zones?.groundDecorRight)
+    ? isBranchTrampolineVisible(inst.zones)
+    : isRightTrampolineVisible(inst.zones)
   if (!zoneOpen) return false
   const mDx = Math.abs(char.pos.x - state.x)
   const heroFeet = char.pos.y + SURFACE_DETECT_Y
@@ -4547,8 +4644,8 @@ function syncOneTrampolinePad(inst, pad, state, bounceAirKey) {
   state._prevX = state.x
   const branchPad = state === inst.branchTrampState
   const zoneOpen = branchPad
-    ? Boolean(inst.zones?.branchTrampRevealed || inst.zones?.groundDecorRight)
-    : Boolean(inst.zones?.groundDecorRight)
+    ? isBranchTrampolineVisible(inst.zones)
+    : isRightTrampolineVisible(inst.zones)
   const capTop = FLOOR_Y - TRAMP_TOTAL_H
   const velY = char?.vel?.y ?? 0
   const onCap = isOnTrampolineCap(inst, char, state)
@@ -4972,6 +5069,7 @@ function stopGlowLetterDialogMusic(inst) {
 //
 function collectLetterG(inst) {
   if (!isGLetterCollectable(inst) || inst.dialogOpen) return
+  triggerGlowCameraShake(inst)
   inst.zones.gCollected = true
   set(KEY_COLLECTED_G, true)
   syncGlowMidgesZones(inst.midges, inst.zones, inst.pit?.collapsed)
@@ -5004,7 +5102,6 @@ function collectLetterG(inst) {
     //
     inst.heroInst.idleVocalization = 'humming'
     inst.pendingTreeReveal = !inst.zones.tree
-    maybeRevealLPlat(inst)
   }, GLOW_DIALOG_SOUND_G)
 }
 //
@@ -5012,6 +5109,7 @@ function collectLetterG(inst) {
 //
 function collectLetterL(inst) {
   if (inst.zones.lCollected || inst.dialogOpen || !inst.zones.gCollected) return
+  triggerGlowCameraShake(inst)
   inst.zones.lCollected = true
   set(KEY_COLLECTED_L, true)
   inst.zones.outerFrame = true
@@ -5044,6 +5142,7 @@ function collectLetterL(inst) {
 //
 function collectLetterO(inst) {
   if (inst.zones.oCollected || inst.dialogOpen || !inst.zones.lCollected) return
+  triggerGlowCameraShake(inst)
   inst.zones.oCollected = true
   set(KEY_COLLECTED_O, true)
   const entry = inst.oLetter
@@ -5070,6 +5169,7 @@ function collectLetterO(inst) {
       inst.dialogPinY = char.pos.y
       inst.dialogHeroPinned = true
     }
+    HeroHint.show(inst.heroHint, HERO_TOOLTIP_AFTER_O, HINT_AFTER_O_MUSH_DURATION)
   }, GLOW_DIALOG_SOUND_O)
 }
 //
@@ -5077,6 +5177,7 @@ function collectLetterO(inst) {
 //
 function collectLetterW(inst) {
   if (inst.zones.wCollected || inst.dialogOpen || !inst.zones.oCollected) return
+  triggerGlowCameraShake(inst)
   inst.zones.wCollected = true
   set(KEY_COLLECTED_W, true)
   const entry = inst.wLetter
@@ -5380,27 +5481,6 @@ function revealWaterZone(inst, showHint = true) {
   maybeShowGLetter(inst)
 }
 //
-// Reveals ground decor on the right side (past the foreground tree).
-//
-function revealGroundDecorRight(inst) {
-  if (inst.zones.groundDecorRight) return
-  inst.zones.groundDecorRight = true
-  inst.zones.groundDecor = true
-  set(KEY_REVEALED_GROUND_DECOR_RIGHT, true)
-  set(KEY_REVEALED_GROUND_DECOR, true)
-  playSegmentRevealSound(inst)
-  applyZoneVisibility(inst)
-  syncGlowAtmosphereZones(inst)
-  //
-  // First-time discovery message for the lower-right ground.
-  //
-  HeroHint.show(inst.heroHint, HINT_GROUND_RIGHT_TEXT, HINT_ZONE_DURATION, {
-    dismissDistance: HINT_ZONE_DISMISS_DISTANCE,
-    dismissOnJump: false
-  })
-  maybeShowGLetter(inst)
-}
-//
 // Reveals ground decor on the left side (water / branch area).
 //
 function revealGroundDecorLeft(inst, silent = false) {
@@ -5415,8 +5495,13 @@ function revealGroundDecorLeft(inst, silent = false) {
 //
 // Midges + cave cracks follow which sides of the ground the hero has opened
 //
+function isGlowCaveCracksVisible(z) {
+  return Boolean(z.groundDecorRight || z.oZone || z.oCollected || z.lCollected)
+}
+//
 function syncGlowAtmosphereZones(inst) {
-  setGlowPitCracksVisible(inst.pit, Boolean(inst.zones.groundDecorRight))
+  const z = inst.zones
+  setGlowPitCracksVisible(inst.pit, isGlowCaveCracksVisible(z))
   syncGlowMidgesZones(inst.midges, inst.zones, Boolean(inst.pit?.collapsed))
 }
 //
@@ -5425,13 +5510,11 @@ function syncGlowAtmosphereZones(inst) {
 //
 function checkGroundDecorReveal(inst, heroX, footY, grounded, justLanded) {
   if (!grounded || footY < FLOOR_Y - 28) return
-  if (!inst.zones.gCollected) {
-    maybeRevealBranchTrampolineOnGround(inst, heroX, footY, justLanded)
-  }
-  heroX > GROUND_REVEAL_TREE_PAST_X && revealGroundDecorRight(inst)
+  updateGroundRightStripReveal(inst, heroX)
+  maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded)
   const crossedLeft = heroX < TREE_X - TRUNK_EXCLUDE_HALF
-  crossedLeft && revealWaterZone(inst)
-  crossedLeft && revealGroundDecorLeft(inst)
+  crossedLeft && revealGroundDecorLeft(inst, true)
+  crossedLeft && revealLeftShoreRock(inst)
 }
 //
 // Opens the lake when the hero walks left of the main tree on the actual
@@ -5441,18 +5524,8 @@ function checkGroundDecorReveal(inst, heroX, footY, grounded, justLanded) {
 function tryRevealWaterOnLeftSide(inst, heroX, footY, grounded) {
   if (heroX >= TREE_X - TRUNK_EXCLUDE_HALF) return
   if (!grounded || footY < FLOOR_Y - 28) return
-  !inst.zones.water && revealWaterZone(inst)
   !inst.zones.groundDecorLeft && revealGroundDecorLeft(inst, true)
-}
-//
-// Shows the branch trampoline when the hero first lands on the ground right of
-// the main tree (before G unlocks the rest of the right / left world).
-//
-function maybeRevealBranchTrampolineOnGround(inst, heroX, footY, justLanded) {
-  if (inst.zones.branchTrampRevealed || inst.zones.groundDecorRight) return
-  if (!justLanded || footY < FLOOR_Y - 28) return
-  if (heroX < TREE_X + TRUNK_EXCLUDE_HALF) return
-  revealBranchTrampoline(inst)
+  revealLeftShoreRock(inst)
 }
 //
 // Persists the branch-trampoline reveal (independent of full right decor).
@@ -5461,10 +5534,12 @@ function revealBranchTrampoline(inst) {
   if (inst.zones.branchTrampRevealed) return
   inst.zones.branchTrampRevealed = true
   set(KEY_BRANCH_TRAMP_REVEALED, true)
+  clearTrampMissingHint(inst, 'branch')
+  triggerGlowCameraShake(inst)
   applyZoneVisibility(inst)
 }
 //
-// Reveals the L log platform once all three prerequisite zones are open.
+// Reveals the L log platform after the first bounce on the right trampoline.
 //
 function revealLPlatZone(inst, silent = false) {
   if (inst.zones.lPlatRevealed) return
@@ -5475,14 +5550,11 @@ function revealLPlatZone(inst, silent = false) {
   maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
 }
 //
-// The L platform appears only after all three world parts are visible:
-// water, lower-right ground, and the starting branch (tree reveal).
+// Opens the L log once G is collected and the hero has bounced on the right mushroom.
 //
-// The L log platform unlocks after G; the letter waits for a tramp landing.
-//
-function maybeRevealLPlat(inst, silent = false) {
-  if (!inst.zones.gCollected) return
-  revealLPlatZone(inst, silent)
+function maybeRevealLPlatOnRightTrampBounce(inst) {
+  if (!inst.zones.gCollected || inst.zones.lPlatRevealed) return
+  revealLPlatZone(inst)
 }
 //
 // Opens the O platform zone and starts birds.mp3 on first landing from above.
@@ -5494,6 +5566,7 @@ function revealOZone(inst) {
   inst.oZoneRevealTime = inst.k.time()
   playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
+  syncGlowAtmosphereZones(inst)
   maybeStartLetterOffscreenArrow(inst, inst.oLetter)
 }
 //
@@ -5520,6 +5593,7 @@ function syncGlowPitLevelIndicator(inst) {
 function updateGlowCamera(inst) {
   const ch = inst.heroInst?.character
   if (!ch?.pos || !inst.camera) return
+  inst.camera && GlowCamera.updateShake(inst.camera, inst.k.dt())
   if (updateCameraLetterPeek(inst, ch)) return
   GlowCamera.followHero(inst.camera, ch.pos.x, ch.pos.y)
   !inst.heroInst?.isSubmerging &&
@@ -5596,6 +5670,12 @@ function onUpdate(inst) {
   inst.levelIndicator && LevelIndicator.syncLifeHudGrey(inst.levelIndicator, !inst.zones.colorWorld)
   if (inst.colorFade < inst.colorFadeTarget) {
     inst.colorFade = Math.min(inst.colorFadeTarget, inst.colorFade + k.dt() / COLOR_FADE_DURATION)
+    const colorTree = inst.colorFade >= 0.5
+    if (colorTree !== inst.treeDrawColorMode) {
+      inst.treeDrawColorMode = colorTree
+      inst.treeDrawMonolith && syncMonolithicTreeColorMode(inst)
+      !inst.treeDrawMonolith && syncTreeSegmentsVisibility(inst)
+    }
   }
   //
   // Forest fade-in after the L reveal — the plane eases from 0 to opaque.
@@ -5608,7 +5688,6 @@ function onUpdate(inst) {
   //
   inst.zones.colorWorld && inst.colorFade > 0.2 && updateBackgroundBirds(inst, k.dt())
   updateTreeRevealFade(inst, k.dt())
-  syncMainTreeVisibility(inst)
   inst.colorFade >= 0.5 && !inst.heroGoldApplied && inst.zones.colorWorld && applyColorWorldHero(inst)
   updatePlayfieldBorderColors(inst)
   if (inst.lParallaxTimer != null) {
@@ -5760,8 +5839,8 @@ function onUpdate(inst) {
   //
   // Trampoline bounce — manual only (no static collider blocking jumps).
   //
-  const branchTrampActive = inst.zones.branchTrampRevealed || inst.zones.groundDecorRight
-  if (inst.zones.groundDecorRight && inst.trampState.cooldown <= 0) {
+  const branchTrampActive = isBranchTrampolineVisible(inst.zones)
+  if (isRightTrampolineVisible(inst.zones) && inst.trampState.cooldown <= 0) {
     const walked = inst.trampWalk?.walked
     const mult = walked ? TRAMP_DOCKED_BOOST_MULT : TRAMP_BOOST_MULT
     tryMushroomTrampBounce(inst, inst.trampState, mult, hero, char, heroX, () => onTrampolineBounce(inst))
@@ -5824,16 +5903,13 @@ function onUpdate(inst) {
   updateGlowWorldAudioFade(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
-  //
-  // L waits for the branch/tree reveal as well as water + right ground
-  //
-  maybeRevealLPlat(inst, true)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)
   updateGlowMidges(inst.midges, k.dt())
   updateGlowPit(inst.pit, char, grounded, justLanded, {
     x: inst.bonusPlatHome?.x ?? 0,
     y: inst.bonusPlatHome?.y ?? 0,
-    w: BONUS_PLAT_W
+    w: BONUS_PLAT_W,
+    h: inst.bonusPlatHome?.h ?? LOG_H
   }, {
     jumpLanding: justLanded && hero.wasJumping,
     footY,
@@ -5846,12 +5922,8 @@ function onUpdate(inst) {
   //
   checkPlatformRevealOnDescent(inst, char, grounded, justLanded)
   checkGroundDecorReveal(inst, heroX, footY, grounded, justLanded)
+  updateTrampMissingPlaceHints(inst, heroX, footY, grounded)
   tryRevealWaterOnLeftSide(inst, heroX, footY, grounded)
-  //
-  // Reveal water visuals the first time the hero enters the lake band.
-  //
-  isInWaterZone(inst, heroX, footY) && footY >= FLOOR_Y - 35 &&
-    revealWaterZone(inst)
   //
   // Lake drowning — after ground snap so the hero stands on the floor first.
   //
@@ -5956,7 +6028,7 @@ function cancelMeditation(inst, interrupted) {
 // first closes that spawn-drop loophole.
 //
 function updateTreeRevealArm(inst, char, grounded) {
-  if (!inst.pendingTreeReveal || inst.zones.tree || !char?.pos) return
+  if (!inst.pendingTreeReveal || !char?.pos) return
   const onBranch = isHeroOnStartBranch(inst, char)
   if (onBranch && grounded) inst.hasStoodOnStartBranch = true
   inst.hasStoodOnStartBranch && !onBranch && (inst.treeBranchLeftOnce = true)
@@ -5965,7 +6037,7 @@ function updateTreeRevealArm(inst, char, grounded) {
 // Tree fades in on the first landing on the big-tree branch after leaving it.
 //
 function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
-  if (!inst.pendingTreeReveal || inst.zones.tree || inst.dialogOpen) return
+  if (!inst.pendingTreeReveal || inst.dialogOpen) return
   const fromBranchTramp = inst.treeRevealFromBranchTramp ||
     (inst.branchTrampBounceAir && grounded && justLanded)
   if (!fromBranchTramp && !inst.treeBranchLeftOnce) return
@@ -5973,20 +6045,7 @@ function tryRevealTreeOnBranchLand(inst, char, grounded, justLanded) {
   if (!fromBranchTramp && isOnBranchTrampolineCap(inst, char)) return
   if (!isHeroOnStartBranch(inst, char)) return
   inst.treeRevealFromBranchTramp = false
-  inst.pendingTreeReveal = false
-  set(KEY_REVEALED_TREE, true)
-  inst.zones.tree = true
-  inst.treeRevealFade = 0
-  inst.treeRevealActive = true
-  inst.treeObj.hidden = false
-  inst.treeColorObj.hidden = false
-  inst.treeObj.pos.x = 0
-  inst.treeColorObj.pos.x = 0
-  inst.treeObj.opacity = 0
-  inst.treeColorObj.opacity = 0
-  applyZoneVisibility(inst)
-  maybeRevealLPlat(inst)
-  maybeShowGLetter(inst)
+  revealTreeSegmentsOnBranchLanding(inst)
 }
 //
 // True when the hero's feet stand on the invisible start-branch collider
@@ -6061,6 +6120,7 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
 // Counts trampoline bounces; every Nth bounce shows a cheeky bubble on the cap
 //
 function onTrampolineBounce(inst) {
+  maybeRevealLPlatOnRightTrampBounce(inst)
   inst.trampToLApproach = true
   const tw = inst.trampWalk
   if (!tw) return
@@ -6136,9 +6196,15 @@ function updateTrampCheekyHint(inst) {
 function updateBranchTrampMarioHint(inst) {
   const tw = inst.branchTrampWalk
   if (!tw || !inst.branchTrampState) return
+  const heroX = inst.heroInst?.character?.pos?.x ?? 0
+  if (isHeroNearUnrevealedTrampSpot(inst, heroX)) {
+    tw.marioHintTooltip && Tooltip.destroy(tw.marioHintTooltip)
+    tw.marioHintTooltip = null
+    return
+  }
   const z = inst.zones
-  const eligible = !z.tree && z.waterDiscovered && z.groundDecorRight &&
-    (z.branchTrampRevealed || z.groundDecorRight)
+  const eligible = !z.tree && z.groundRightStripMax >= 0 &&
+    isBranchTrampolineVisible(z)
   if (!eligible) {
     tw.marioEligibleSince = null
     tw.marioHintCooldown = 0
@@ -6195,8 +6261,7 @@ function updateBranchTrampWrongSingHint(inst) {
   if (!tw || !z.oCollected || inst.trampWalk?.walked) return
   const char = inst.heroInst?.character
   if (!char?.pos || !inst.branchTrampState) return
-  const branchOpen = z.branchTrampRevealed || z.groundDecorRight
-  if (!branchOpen) return
+  if (!isBranchTrampolineVisible(z)) return
   const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const grounded = char.isGrounded?.() ?? false
   const near = Math.abs(char.pos.x - inst.branchTrampState.x) < TRAMP_WALK_NEAR &&
@@ -6242,41 +6307,335 @@ function updateTrampBadSingHint(inst) {
   }
 }
 //
-// Keeps the foreground tree sprites fully invisible until KEY_REVEALED_TREE.
+// True when tree segment sprites were baked during the pre-level transition.
 //
-function syncMainTreeVisibility(inst) {
+function glowTreeSpritesPrewarmed(k, monolith, segmentIds) {
+  if (monolith) return Boolean(k.getSprite(TREE_FLAT_SPRITE_NAME))
+  const firstId = segmentIds[0]
+  if (!firstId) return false
+  return Boolean(k.getSprite(TreeSegments.segmentGraySpriteName(firstId, false)))
+}
+//
+// True when parallax static layer exists from prewarm.
+//
+function glowParallaxSpritesPrewarmed(k) {
+  return Boolean(k.getSprite(BG_STATIC_GRAY))
+}
+//
+// Bakes full-tree sprites (fast draw path — two objects instead of many segments).
+//
+function bakeMonolithicGlowTreeSprites(k, treeData) {
+  const flatCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecor(), WORLD_W, WORLD_H)
+  k.loadSprite(TREE_FLAT_SPRITE_NAME, flatCanvas)
+  flatCanvas.width = 0
+  flatCanvas.height = 0
+  const litCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H)
+  k.loadSprite(TREE_LIT_SPRITE_NAME, litCanvas)
+  litCanvas.width = 0
+  litCanvas.height = 0
+  const colorCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteColor(), WORLD_W, WORLD_H)
+  k.loadSprite(TREE_COLOR_SPRITE_NAME, colorCanvas)
+  colorCanvas.width = 0
+  colorCanvas.height = 0
+}
+//
+// Swaps the monolithic gray tree sprite after L.
+//
+function syncMonolithicTreeGraySprite(inst) {
+  const lit = Boolean(inst.zones.lCollected)
+  const graySpriteName = lit ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME
+  if (inst.treeGraySpriteName === graySpriteName) return
+  inst.treeGraySpriteName = graySpriteName
+  inst.treeObj?.use(inst.k.sprite(graySpriteName))
+}
+//
+// Toggles gray vs colour monolithic tree sprites from the colour fade.
+//
+function syncMonolithicTreeColorMode(inst) {
   const tree = inst.treeObj
   const treeColor = inst.treeColorObj
-  if (!tree || !treeColor) return
-  if (!inst.zones.tree) {
-    tree.hidden = true
-    treeColor.hidden = true
-    tree.opacity = 0
-    treeColor.opacity = 0
-    tree.pos.x = -WORLD_W
-    treeColor.pos.x = -WORLD_W
-    return
-  }
-  tree.pos.x = 0
-  treeColor.pos.x = 0
-  if (inst.treeRevealActive) return
-  const fade = inst.colorFade ?? 0
-  const showColorTree = fade >= 0.5
+  if (!tree || !treeColor || !inst.treeDrawMonolith) return
+  const showColorTree = inst.treeDrawColorMode
   tree.hidden = showColorTree
   treeColor.hidden = !showColorTree
   tree.opacity = 1
   treeColor.opacity = 1
+  const white = inst.k.rgb(255, 255, 255)
+  tree.color = white
+  treeColor.color = white
 }
 //
-// Fades the foreground tree in after collecting G.
+// Fades newly revealed tree segments in.
 //
 function updateTreeRevealFade(inst, dt) {
-  if (!inst.treeRevealActive) return
-  inst.treeRevealFade = Math.min(1, inst.treeRevealFade + dt / TREE_REVEAL_FADE_DURATION)
-  const op = inst.treeRevealFade
-  inst.treeObj.opacity = op
-  inst.treeColorObj.opacity = op
-  inst.treeRevealFade >= 1 && (inst.treeRevealActive = false)
+}
+//
+// Applies saved segment visibility on scene entry.
+//
+function applyPersistedTreeSegmentVisibility(entries, revealedSet) {
+  revealedSet.forEach(id => {
+    const entry = entries[id]
+    entry && setTreeSegmentRevealedVisual(entry, 1)
+  })
+}
+//
+// True when at least one tree segment is visible.
+//
+function hasAnyTreeSegmentVisible(inst) {
+  return inst.treeSegmentIds?.some(id => inst.treeSegmentEntries?.[id]?.revealed)
+}
+//
+// True when every baked segment has been revealed.
+//
+function isAllTreeSegmentsRevealed(inst) {
+  const ids = inst.treeSegmentIds
+  if (!ids?.length) return Boolean(inst.zones.tree)
+  return ids.every(id => inst.treeSegmentRevealed?.has(id))
+}
+//
+// Right-side decor tied to progressive ground strips.
+//
+function isRightDecorStripVisible(z, obj, stripEndX) {
+  if (z.groundDecorRight) return true
+  if (obj._rightStrip == null || obj._rightStrip < 0) return z.groundRightStripMax >= 0
+  return obj._rightStrip <= z.groundRightStripMax
+}
+//
+// Opens ground strips to the right of the tree based on hero X.
+//
+function updateGroundRightStripReveal(inst, heroX) {
+  const z = inst.zones
+  const idx = groundRightStripIndexForX(heroX, GROUND_REVEAL_TREE_PAST_X, inst.treeStripEndX)
+  if (idx < 0 || idx <= z.groundRightStripMax) return
+  const firstStrip = z.groundRightStripMax < 0
+  z.groundRightStripMax = idx
+  set(KEY_GROUND_RIGHT_STRIP_MAX, idx)
+  if (idx >= GROUND_RIGHT_STRIP_COUNT - 1) {
+    z.groundDecorRight = true
+    set(KEY_REVEALED_GROUND_DECOR_RIGHT, true)
+    set(KEY_REVEALED_GROUND_DECOR, true)
+  }
+  firstStrip && playSegmentRevealSound(inst)
+  firstStrip && HeroHint.show(inst.heroHint, HINT_GROUND_RIGHT_TEXT, HINT_ZONE_DURATION, {
+    dismissDistance: HINT_ZONE_DISMISS_DISTANCE,
+    dismissOnJump: false
+  })
+  applyZoneVisibility(inst)
+  syncGlowAtmosphereZones(inst)
+  maybeShowGLetter(inst)
+}
+//
+// Shows the tree-side lake cap rock when the hero runs left of the trunk.
+//
+function revealLeftShoreRock(inst) {
+  if (inst.zones.leftShoreRock) return
+  inst.zones.leftShoreRock = true
+  set(KEY_LEFT_SHORE_ROCK, true)
+  applyZoneVisibility(inst)
+  maybeShowGLetter(inst)
+}
+//
+// Right trampoline mushroom is visible only after a nearby landing (or colour world).
+//
+function isRightTrampolineVisible(z) {
+  return Boolean(z?.rightTrampRevealed || z?.colorWorld)
+}
+//
+// Branch trampoline mushroom uses the same landing gate (or colour world).
+//
+function isBranchTrampolineVisible(z) {
+  return Boolean(z?.branchTrampRevealed || z?.colorWorld)
+}
+//
+// True when the hero stands in the landing-reveal radius of a hidden trampoline.
+//
+function isHeroNearUnrevealedTrampSpot(inst, heroX) {
+  const z = inst.zones
+  if (z.colorWorld) return false
+  const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
+  if (!z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) return true
+  if (!z.branchTrampRevealed && near(inst.branchTrampState?.x ?? -9999)) return true
+  return false
+}
+//
+// Shows a fixed "missing mushroom" tooltip at each unrevealed trampoline pad.
+//
+function updateTrampMissingPlaceHints(inst, heroX, footY, grounded) {
+  const z = inst.zones
+  inst.trampMissingHints = inst.trampMissingHints ?? { right: null, branch: null }
+  const canShow = grounded && footY >= FLOOR_Y - 28 && !z.colorWorld
+  const sync = (slotKey, trampX, revealed) => {
+    const show = canShow && !revealed && Math.abs(heroX - trampX) <= TRAMP_MUSH_LAND_REVEAL_DIST
+    syncOneTrampMissingHint(inst, slotKey, trampX, show)
+  }
+  sync('right', inst.trampState?.x ?? -9999, z.rightTrampRevealed)
+  sync('branch', inst.branchTrampState?.x ?? -9999, z.branchTrampRevealed)
+}
+//
+// Creates or destroys one trampoline placeholder tooltip.
+//
+function syncOneTrampMissingHint(inst, slotKey, worldX, show) {
+  const existing = inst.trampMissingHints[slotKey]
+  if (!show) {
+    existing && Tooltip.destroy(existing)
+    inst.trampMissingHints[slotKey] = null
+    return
+  }
+  if (existing) return
+  const tip = Tooltip.create({
+    k: inst.k,
+    forceVisible: true,
+    targets: [{
+      x: worldX,
+      y: FLOOR_Y - TRAMP_TOTAL_H / 2,
+      width: TRAMP_TOTAL_W,
+      height: TRAMP_TOTAL_H,
+      text: TRAMP_MISSING_HINT_TEXT,
+      offsetY: TRAMP_TOOLTIP_Y_OFFSET
+    }]
+  })
+  tip.activeTarget = tip.targets[0]
+  tip.opacity = 1
+  inst.trampMissingHints[slotKey] = tip
+}
+//
+// Removes a placeholder tooltip when the mushroom appears.
+//
+function clearTrampMissingHint(inst, slotKey) {
+  const tip = inst.trampMissingHints?.[slotKey]
+  tip && Tooltip.destroy(tip)
+  inst.trampMissingHints && (inst.trampMissingHints[slotKey] = null)
+}
+//
+// Reveals trampoline mushrooms when the hero lands within TRAMP_MUSH_LAND_REVEAL_DIST.
+//
+function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded) {
+  if (!justLanded || !grounded || footY < FLOOR_Y - 28) return
+  const z = inst.zones
+  const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
+  if (!z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) {
+    revealRightTrampoline(inst)
+  }
+  if (!z.branchTrampRevealed && near(inst.branchTrampState?.x ?? -9999)) {
+    revealBranchTrampoline(inst)
+  }
+}
+//
+// Persists the right trampoline mushroom reveal.
+//
+function revealRightTrampoline(inst) {
+  if (inst.zones.rightTrampRevealed) return
+  inst.zones.rightTrampRevealed = true
+  set(KEY_RIGHT_TRAMP_REVEALED, true)
+  clearTrampMissingHint(inst, 'right')
+  triggerGlowCameraShake(inst)
+  applyZoneVisibility(inst)
+}
+//
+// Reveals tree segments on each start-branch landing (hero branch first).
+//
+function revealTreeSegmentsOnBranchLanding(inst) {
+  inst.treeRevealLandingCount = (inst.treeRevealLandingCount ?? 0) + 1
+  inst.treeSegmentPending.length && revealOneTreeSegment(inst, inst.treeSegmentPending.shift())
+  if (isAllTreeSegmentsRevealed(inst)) {
+    finishTreeRevealIfComplete(inst)
+    return
+  }
+  applyZoneVisibility(inst)
+  maybeShowGLetter(inst)
+}
+//
+// Marks one tree segment visible and starts its fade-in.
+//
+function revealOneTreeSegment(inst, segmentId) {
+  if (inst.treeSegmentRevealed.has(segmentId)) return
+  inst.treeSegmentRevealed.add(segmentId)
+  const entry = inst.treeSegmentEntries[segmentId]
+  if (!entry) return
+  setTreeSegmentRevealedVisual(entry, 1)
+  syncTreeSegmentsVisibility(inst)
+  persistTreeSegmentsRevealed(inst)
+  playSegmentRevealSound(inst)
+  triggerGlowCameraShake(inst)
+}
+//
+// Writes revealed segment ids to localStorage.
+//
+function persistTreeSegmentsRevealed(inst) {
+  set(KEY_TREE_SEGMENTS_REVEALED, [...inst.treeSegmentRevealed])
+}
+//
+// When every segment is open, mark the legacy tree zone complete.
+//
+function finishTreeRevealIfComplete(inst) {
+  if (!isAllTreeSegmentsRevealed(inst)) return
+  inst.pendingTreeReveal = false
+  inst.zones.tree = true
+  set(KEY_REVEALED_TREE, true)
+  applyZoneVisibility(inst)
+  maybeShowGLetter(inst)
+}
+//
+// Short camera bump for tree reveals, tramp landings and letter pickups.
+//
+function triggerGlowCameraShake(inst) {
+  inst.camera && GlowCamera.triggerShake(inst.camera, GLOW_CAMERA_SHAKE_AMP, GLOW_CAMERA_SHAKE_DURATION)
+}
+//
+// Sets one segment to a given fade opacity.
+//
+function setTreeSegmentRevealedVisual(entry, opacity) {
+  entry.revealed = true
+  entry.fade = opacity
+  entry.fadeActive = false
+  entry.grayObj.hidden = false
+  entry.colorObj.hidden = false
+  entry.grayObj.opacity = opacity
+  entry.colorObj.opacity = opacity
+  entry.grayObj.pos.x = 0
+  entry.colorObj.pos.x = 0
+}
+//
+// Gray tree segments switch to the warm lit palette after L.
+//
+function syncTreeSegmentGraySprites(inst) {
+  const lit = Boolean(inst.zones.lCollected)
+  const want = lit ? 'lit' : 'flat'
+  if (inst.treeSegmentGrayVariant === want) return
+  inst.treeSegmentGrayVariant = want
+  inst.treeSegmentIds?.forEach(id => {
+    const entry = inst.treeSegmentEntries?.[id]
+    if (!entry) return
+    const name = TreeSegments.segmentGraySpriteName(id, lit)
+    entry.grayObj.use(inst.k.sprite(name))
+  })
+}
+//
+// Hides unrevealed segments; revealed ones respect colour-world cross-fade.
+//
+function syncTreeSegmentsVisibility(inst) {
+  const fade = inst.colorFade ?? 0
+  const showColorTree = fade >= 0.5
+  inst.treeSegmentIds?.forEach(id => {
+    const entry = inst.treeSegmentEntries?.[id]
+    if (!entry) return
+    if (!entry.revealed) {
+      entry.grayObj.hidden = true
+      entry.colorObj.hidden = true
+      entry.grayObj.opacity = 0
+      entry.colorObj.opacity = 0
+      entry.grayObj.pos.x = -WORLD_W
+      entry.colorObj.pos.x = -WORLD_W
+      return
+    }
+    entry.grayObj.pos.x = 0
+    entry.colorObj.pos.x = 0
+    if (entry.fadeActive) return
+    entry.grayObj.hidden = showColorTree
+    entry.colorObj.hidden = !showColorTree
+    entry.grayObj.opacity = 1
+    entry.colorObj.opacity = 1
+  })
 }
 //
 // Catches tunneling onto the mushroom cap before lake-floor / ground snap.
@@ -6284,10 +6643,10 @@ function updateTreeRevealFade(inst, dt) {
 function snapHeroToTrampolineCap(inst, char, heroX, footY) {
   if (inst.drowning || inst.dialogOpen ||
     inst.dialogInputGrace > 0 || inst.dialogPostSettle > 0) return
-  inst.zones?.groundDecorRight &&
+  inst.zones?.rightTrampRevealed &&
     snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.trampState)
-  const branchOpen = inst.zones?.branchTrampRevealed || inst.zones?.groundDecorRight
-  branchOpen && snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.branchTrampState)
+  isBranchTrampolineVisible(inst.zones) &&
+    snapHeroToOneTrampolineCap(inst, char, heroX, footY, inst.branchTrampState)
 }
 //
 // Snaps the hero onto one mushroom cap when feet tunnel through the collider.

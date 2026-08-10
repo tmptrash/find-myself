@@ -45,6 +45,12 @@ const PIT_PARTICLE_COUNT = 28
 const CRACK_STOMP_OPENS = 5
 const CRACK_STOMP_FEET_MAX = 14
 const CRACK_STOMP_PARTICLE_MULT = 2.8
+//
+// Foot tolerance when detecting the hero on the fragment log above the cave.
+//
+const BONUS_PLAT_FOOT_PAD_ABOVE = 10
+const BONUS_PLAT_FOOT_PAD_BELOW = 14
+const BONUS_PLAT_FOOT_X_PAD = 16
 const PIT_MUSH_SPRITE = 'glow0-pit-mush'
 const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const CAVE_LAYOUT_VERSION = 10
@@ -173,7 +179,8 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
 export function syncGlowMidgesZones(ctrl, zones, pitCollapsed) {
   if (!ctrl) return
   ctrl.showLeft = Boolean(zones.groundDecorLeft || zones.water)
-  ctrl.showRight = Boolean(zones.groundDecorRight)
+  const rightOpen = zones.groundRightStripMax >= 0 || Boolean(zones.groundDecorRight)
+  ctrl.showRight = rightOpen
   ctrl.showPit = Boolean(zones.groundDecorRight)
   if (pitCollapsed && !ctrl.spreadAfterPit) {
     spreadMidgesAfterPit(ctrl)
@@ -307,12 +314,15 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   // on it must not open the cave; the player must land on the crack entrance.
   //
   let onBonus = false
-  if (bonusPlatHome) {
+  const footY = opts.footY
+  if (bonusPlatHome && footY != null) {
     const bw = bonusPlatHome.w || 90
+    const platH = bonusPlatHome.h || 28
     onBonus = grounded &&
-      heroX >= bonusPlatHome.x - 16 &&
-      heroX <= bonusPlatHome.x + bw + 16 &&
-      char.pos.y < bonusPlatHome.y + 90
+      heroX >= bonusPlatHome.x - BONUS_PLAT_FOOT_X_PAD &&
+      heroX <= bonusPlatHome.x + bw + BONUS_PLAT_FOOT_X_PAD &&
+      footY >= bonusPlatHome.y - BONUS_PLAT_FOOT_PAD_ABOVE &&
+      footY <= bonusPlatHome.y + platH + BONUS_PLAT_FOOT_PAD_BELOW
   }
   if (onBonus && grounded) {
     pit.wasOnBonusPlat = true
@@ -322,7 +332,11 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
     pit.leftBonusAirborne = true
     pit.collapseArmed = true
   }
-  if (pit.collapseArmed && overCrack && justLanded) {
+  const onCrackFloor = footY != null &&
+    footY >= pit.floorY - CRACK_STOMP_FEET_MAX &&
+    footY <= pit.floorY + 8
+  if (pit.collapseArmed && overCrack && grounded && onCrackFloor &&
+    (justLanded || pit.leftBonusAirborne)) {
     collapsePit(pit)
     pit.collapseArmed = false
     pit.wasOnBonusPlat = false
@@ -336,7 +350,6 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   // Stomp path: five normal jump landings on the crack entrance also collapse it
   //
   const jumpLanding = Boolean(opts.jumpLanding)
-  const footY = opts.footY
   const footParticles = opts.footParticles
   if (jumpLanding && overCrack && grounded && footY != null &&
     footY >= pit.floorY - CRACK_STOMP_FEET_MAX && footY <= pit.floorY + 8) {

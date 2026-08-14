@@ -15,7 +15,7 @@ import { registerNativeTeardown } from '../../../utils/engine-switch.js'
 import * as BootLoader from '../../../utils/boot-loader.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
 import * as GlowCamera from '../../glow/utils/glow-camera.js'
-import { drawRealisticBird } from '../utils/realistic-bird.js'
+import { buildBirdDrawCache } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
@@ -66,6 +66,10 @@ const L0_BG_PAR_BACK = 'bg-touch-l0-par-back'
 const L0_BG_PAR_GREY = 'bg-touch-l0-par-grey'
 const L0_BG_PAR_BLACK = 'bg-touch-l0-par-black'
 const L0_BG_PAR_FRONT = 'bg-touch-l0-front-static'
+const L0_BG_GRASS_STATIC = 'bg-touch-l0-grass-static'
+const L0_GRASS_STATIC_Z = 19
+const L0_GRASS_LIVE_Z = 20
+const L0_PYRAMID_BUG_DRAW_Z = 30
 //
 // End-of-level hint shown at the top during the gather phase (bugs flying to hero).
 // Pressing Space or Enter advances immediately; shows countdown from 15 seconds.
@@ -508,8 +512,8 @@ let ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 165  // Well above hero jump r
 //
 // Decorative culling and atmosphere activation (multiples of viewport width)
 //
-const L0_CULL_SCREEN_MULT = 2
-const L0_ATMOSPHERE_SCREEN_MULT = 1.5
+const L0_CULL_SCREEN_MULT = 0.7
+const L0_ATMOSPHERE_SCREEN_MULT = 0.9
 //
 // TOUCH letter pickup system constants
 //
@@ -1793,6 +1797,15 @@ export function sceneLesson0(k) {
     addTouchParallaxSprite(k, camera, L0_BG_PAR_BLACK, L0_PARALLAX_BLACK_LEAF_ROW_Z, L0_PAR_BLACK_SPEED, L0_PAR_TREE_HORIZ_BLEED, parBlackW)
     addTouchParallaxSprite(k, camera, L0_BG_PAR_FRONT, L0_PARALLAX_FRONT_STATIC_Z, L0_PAR_FRONT_STATIC_SPEED, 0, parFrontW)
     //
+    // Far/mid grass is world-locked (no parallax lag) and baked so the live
+    // drawer only pays for front tufts the hero can push.
+    //
+    const farGrassBlades = []
+    for (let gi = 0; gi < 3; gi++) {
+      layers[gi]?.grassBlades && farGrassBlades.push(...layers[gi].grassBlades)
+    }
+    bakeWorldLockedGrassStrip(k, farGrassBlades)
+    //
     // Create birds flying in the background
     //
     const birds = []
@@ -1839,12 +1852,8 @@ export function sceneLesson0(k) {
         flapTimer: Math.random() * 3,
         flapDuration: 0.8 + Math.random() * 0.4,
         glideDuration: 2.0 + Math.random() * 2.0,
-        //
-        // Smooth crossfade between flap oscillation and glide pose:
-        // 1.0 = pure flapping sine, 0.0 = pure glide pose. Eases over
-        // BIRD_FLAP_GLIDE_BLEND_TIME so wing position never snaps.
-        //
-        modeBlend: initialFlapping ? 1 : 0
+        modeBlend: initialFlapping ? 1 : 0,
+        drawCache: buildBirdDrawCache(k)
       })
     }
     
@@ -1857,12 +1866,10 @@ export function sceneLesson0(k) {
     })
     //
     // Create dynamic grass drawer with hero interaction.
-    // All layers sit on the playfield (camera speed 1) — none ride parallax.
+    // Front-layer + rock tufts only — far/mid grass is the world-locked bake.
     //
     const allGrassBlades = []
-    layers.forEach(layer => {
-      layer.grassBlades && allGrassBlades.push(...layer.grassBlades)
-    })
+    layers[3] && allGrassBlades.push(...layers[3].grassBlades)
     //
     // Grass push interaction constants — hoisted out of draw() so they are
     // not re-declared every frame. HERO_RADIUS_SQ avoids a sqrt per blade.
@@ -1878,7 +1885,7 @@ export function sceneLesson0(k) {
     const grassP1 = k.vec2(0, 0)
     const grassP2 = k.vec2(0, 0)
     const grassDrawer = { heroRef: null }
-    addWorldSpaceDraw(k, 20, () => {
+    addWorldSpaceDraw(k, L0_GRASS_LIVE_Z, () => {
           const time = k.time()
           const heroX = grassDrawer.heroRef ? grassDrawer.heroRef.character.pos.x : -1000
           const heroY = grassDrawer.heroRef ? grassDrawer.heroRef.character.pos.y : -1000
@@ -1932,6 +1939,8 @@ export function sceneLesson0(k) {
         )
         OrganicParallax.prerenderOrganicTreeSprites(k, tree, baseName)
       })
+      const treePos = k.vec2(0, 0)
+      const treeAnchor = k.vec2(0, 0)
       k.add([
         k.z(L0_FRONT_ORGANIC_DARK_BACKDROP_Z),
         k.pos(0, 0),
@@ -1943,9 +1952,12 @@ export function sceneLesson0(k) {
             const treeCull = SCREEN_W / 2 + 220
             for (const tree of dynamicTrees) {
               if (Math.abs(tree.x - camX) > treeCull) continue
-              tree.darkBackdropSpriteName && k.drawSprite({
+              if (!tree.darkBackdropSpriteName) continue
+              treePos.x = tree.darkBackdropX
+              treePos.y = tree.darkBackdropY
+              k.drawSprite({
                 sprite: tree.darkBackdropSpriteName,
-                pos: k.vec2(tree.darkBackdropX, tree.darkBackdropY),
+                pos: treePos,
                 anchor: "topleft"
               })
             }
@@ -1960,38 +1972,35 @@ export function sceneLesson0(k) {
           height: SCREEN_H,
           draw() {
             const time = k.time()
+            const dt = k.dt()
             const camX = k.camPos().x
             const treeCull = SCREEN_W / 2 + 220
+            const swayEase = Math.min(1, dt * OrganicParallax.BRANCH_SWAY_SMOOTH_PER_SEC)
             for (const tree of dynamicTrees) {
               if (!tree.branchClusters) continue
               if (Math.abs(tree.x - camX) > treeCull) continue
-              //
-              // Trunk + roots: drawn first, no sway
-              //
               if (tree.trunkSpriteName) {
+                treePos.x = tree.trunkSpriteX
+                treePos.y = tree.trunkSpriteY
                 k.drawSprite({
                   sprite: tree.trunkSpriteName,
-                  pos: k.vec2(tree.trunkSpriteX, tree.trunkSpriteY)
+                  pos: treePos
                 })
               }
-              //
-              // Each branch cluster rotates around its pivot like a hinge:
-              // the cluster's attachment point stays fixed on the trunk and
-              // the branch + leaves swing together around that point.
-              // angleDeg is small (a few degrees) for a subtle wind effect.
-              //
               for (const cluster of tree.branchClusters) {
                 if (!cluster.spriteName) continue
-                const dt = k.dt()
                 const targetDeg = Math.sin(time * cluster.swaySpeed + cluster.swayPhase) * cluster.swayAmount
-                const ease = Math.min(1, dt * OrganicParallax.BRANCH_SWAY_SMOOTH_PER_SEC)
                 cluster.smoothedAngleDeg = cluster.smoothedAngleDeg == null
                   ? targetDeg
-                  : cluster.smoothedAngleDeg + (targetDeg - cluster.smoothedAngleDeg) * ease
+                  : cluster.smoothedAngleDeg + (targetDeg - cluster.smoothedAngleDeg) * swayEase
+                treePos.x = cluster.worldPivotX
+                treePos.y = cluster.worldPivotY
+                treeAnchor.x = cluster.anchorX
+                treeAnchor.y = cluster.anchorY
                 k.drawSprite({
                   sprite: cluster.spriteName,
-                  pos: k.vec2(cluster.worldPivotX, cluster.worldPivotY),
-                  anchor: k.vec2(cluster.anchorX, cluster.anchorY),
+                  pos: treePos,
+                  anchor: treeAnchor,
                   angle: cluster.smoothedAngleDeg
                 })
               }
@@ -2510,25 +2519,57 @@ export function sceneLesson0(k) {
     const fpsCounter = FpsCounter.create({ k })
     FpsCounter.pinScreenFixed(fpsCounter)
     //
-    // Long-legged floor bugs: legs behind hinged trees; heads on a high layer.
+    // Long-legged floor bugs: one draw pass per z band (not one GameObj per bug).
+    // Legs stay behind hinged trees; pyramid bugs jump to L0_PYRAMID_BUG_DRAW_Z;
+    // heads sit on a high layer above foliage.
     //
-    const bugDrawObjects = []
-    bugs.forEach(bugInst => {
-      const drawObj = addWorldSpaceDraw(k, bugInst.zIndex, () => {
-        if (!isTouchL0WorldXOnScreen(k, bugInst.x)) return
+    addWorldSpaceDraw(k, BIG_BUG_Z_INDEX, () => {
+      const camX = k.camPos().x
+      const half = SCREEN_W / 2 + 160
+      for (const bugInst of bugs) {
+        if (bugInst.zIndex !== BIG_BUG_Z_INDEX || bugInst.state === 'pyramid') continue
+        if (Math.abs(bugInst.x - camX) > half) continue
         Bugs.draw(bugInst, { skipHead: true, skipEyes: true })
-      })
-      bugDrawObjects.push({ bug: bugInst, obj: drawObj })
+      }
+    })
+    addWorldSpaceDraw(k, ANTIHERO_PLATFORM_Z_INDEX, () => {
+      if (Math.abs(bigBug4Inst.x - k.camPos().x) > SCREEN_W / 2 + 160) return
+      Bugs.draw(bigBug4Inst, { skipHead: true, skipEyes: true })
+    })
+    addWorldSpaceDraw(k, FLOOR_SMALL_BUG_DRAW_Z, () => {
+      const camX = k.camPos().x
+      const half = SCREEN_W / 2 + 80
+      for (const bugInst of smallBugs) {
+        if (bugInst.state === 'pyramid') continue
+        if (Math.abs(bugInst.x - camX) > half) continue
+        SmallBugs.draw(bugInst, { skipHead: true, skipEyes: true })
+      }
+    })
+    addWorldSpaceDraw(k, L0_PYRAMID_BUG_DRAW_Z, () => {
+      const camX = k.camPos().x
+      const half = SCREEN_W / 2 + 160
+      for (const bugInst of bugs) {
+        if (bugInst.state !== 'pyramid') continue
+        if (Math.abs(bugInst.x - camX) > half) continue
+        Bugs.draw(bugInst, { skipHead: true, skipEyes: true })
+      }
+      for (const bugInst of smallBugs) {
+        if (bugInst.state !== 'pyramid') continue
+        if (Math.abs(bugInst.x - camX) > half) continue
+        SmallBugs.draw(bugInst, { skipHead: true, skipEyes: true })
+      }
     })
     addWorldSpaceDraw(k, BUG_HEAD_DRAW_Z, () => {
-      bugs.forEach(bugInst => {
-        if (!isTouchL0WorldXOnScreen(k, bugInst.x)) return
+      const camX = k.camPos().x
+      const half = SCREEN_W / 2 + 160
+      for (const bugInst of bugs) {
+        if (Math.abs(bugInst.x - camX) > half) continue
         Bugs.drawEyes(bugInst)
-      })
-      smallBugs.forEach(bugInst => {
-        if (!isTouchL0WorldXOnScreen(k, bugInst.x, 80)) return
+      }
+      for (const bugInst of smallBugs) {
+        if (Math.abs(bugInst.x - camX) > half + 80) continue
         SmallBugs.drawEyes(bugInst)
-      })
+      }
     })
     const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
     //
@@ -2617,18 +2658,6 @@ export function sceneLesson0(k) {
       }))
     })
     //
-    // Draw small bugs (including debug bug)
-    // Bugs in pyramid state should be in front of trees (z=25) and platforms (z=15)
-    //
-    const smallBugDrawObjects = []
-    smallBugs.forEach(bugInst => {
-      const drawObj = addWorldSpaceDraw(k, bugInst.zIndex, () => {
-        if (!isTouchL0WorldXOnScreen(k, bugInst.x, 80)) return
-        SmallBugs.draw(bugInst, { skipHead: true, skipEyes: true })
-      })
-      smallBugDrawObjects.push({ bug: bugInst, obj: drawObj })
-    })
-    //
     // Rain system: depth-layered drops with splashes on objects
     //
     const frontTrees = layers[3] ? layers[3].trees : []
@@ -2636,7 +2665,7 @@ export function sceneLesson0(k) {
     // Touch devices are fillrate-bound; drop rain particle count to roughly a
     // third of desktop so the splash overdraw doesn't tank mobile frames.
     //
-    const rainIntensity = isTouchDevice() ? 0.3 : 1
+    const rainIntensity = isTouchDevice() ? 0.3 : 0.55
     const rainInst = Rain.create({
       k,
       topY: TOP_MARGIN,
@@ -2868,8 +2897,6 @@ export function sceneLesson0(k) {
       activePyramids,
       pyramidRuntime,
       fpsCounter,
-      smallBugDrawObjects,
-      bugDrawObjects,
       rainRef,
       rainInst,
       startRainWhenReady,
@@ -4295,6 +4322,8 @@ function createL0Fireflies(k) {
     minY: FLOOR_Y - TOUCH_FIREFLY_MAX_HEIGHT_ABOVE_FLOOR,
     maxY: FLOOR_Y - 20
   }
+  const ffPos = k.vec2(0, 0)
+  const ffColor = k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B)
   k.add([
     k.pos(0, 0),
     k.z(26),
@@ -4302,7 +4331,7 @@ function createL0Fireflies(k) {
       width: WORLD_W,
       height: SCREEN_H,
       draw() {
-        drawL0Fireflies(k, fireflies)
+        drawL0Fireflies(k, fireflies, ffPos, ffColor)
       }
     }
   ])
@@ -4311,26 +4340,20 @@ function createL0Fireflies(k) {
 //
 // Draw firefly glow dots
 //
-function drawL0Fireflies(k, fireflies) {
+function drawL0Fireflies(k, fireflies, posScratch, color) {
   const t = k.time()
-  //
-  // Cache shared color and camera X once per frame to avoid per-firefly allocations.
-  // Culling uses hero position (camera proxy) with a half-screen margin.
-  //
-  const color = k.rgb(L0_FIREFLY_COLOR_R, L0_FIREFLY_COLOR_G, L0_FIREFLY_COLOR_B)
   const heroRef = fireflies._heroRef
   const cameraX = heroRef?.character?.pos?.x ?? k.width() / 2
   const screenHalfW = k.width() / 2 + L0_FIREFLY_DRAW_MARGIN
   const forceAlpha = fireflies._blinkForceAlpha
   for (const f of fireflies) {
-    //
-    // Skip fireflies that are off-screen (more than half a screen from camera center).
-    //
     if (Math.abs(f.x - cameraX) > screenHalfW) continue
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
     const alpha = forceAlpha != null ? forceAlpha : (0.15 + glow * 0.7)
+    posScratch.x = f.x
+    posScratch.y = f.y
     k.drawCircle({
-      pos: k.vec2(f.x, f.y),
+      pos: posScratch,
       radius: f.radius,
       color,
       opacity: alpha
@@ -5981,10 +6004,53 @@ function addWorldSpaceDraw(k, zIndex, drawFn) {
   ])
 }
 //
-// True when a world X is inside the camera view plus a small side margin.
+// World-locked grass strip (camera speed 1) for far/mid tufts — not a lagging
+// parallax sheet. Live drawer still handles front-layer push/sway.
 //
-function isTouchL0WorldXOnScreen(k, x, margin = 160) {
-  return Math.abs(x - k.camPos().x) < SCREEN_W / 2 + margin
+function bakeWorldLockedGrassStrip(k, blades) {
+  if (!blades?.length) return
+  const y0 = Math.max(0, Math.floor(FLOOR_Y - 80))
+  const h = Math.max(8, Math.ceil(FLOOR_Y + 4 - y0))
+  const dataUrl = toCanvas({ width: WORLD_W, height: h, pixelRatio: 1 }, (ctx) => {
+    ctx.translate(0, -y0)
+    drawGrassBladesToCanvas(ctx, blades)
+  })
+  loadTouchSprite(k, L0_BG_GRASS_STATIC, dataUrl)
+  addWorldSpaceDraw(k, L0_GRASS_STATIC_Z, () => {
+    const pad = 8
+    const camX = k.camPos().x
+    const viewLeft = camX - SCREEN_W / 2 - pad
+    const viewRight = camX + SCREEN_W / 2 + pad
+    const srcLeft = Math.max(0, viewLeft)
+    const srcRight = Math.min(WORLD_W, viewRight)
+    if (srcRight <= srcLeft) return
+    const sliceW = srcRight - srcLeft
+    k.drawSprite({
+      sprite: L0_BG_GRASS_STATIC,
+      pos: k.vec2(srcLeft, y0),
+      width: sliceW,
+      height: h,
+      quad: { x: srcLeft / WORLD_W, y: 0, w: sliceW / WORLD_W, h: 1 },
+      anchor: 'topleft'
+    })
+  })
+}
+//
+// Bakes resting-pose grass blades into a canvas (no per-frame sway).
+//
+function drawGrassBladesToCanvas(ctx, blades) {
+  if (!blades?.length) return
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  for (const blade of blades) {
+    const c = blade.color
+    ctx.strokeStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${blade.opacity})`
+    ctx.lineWidth = blade.width
+    ctx.beginPath()
+    ctx.moveTo(blade.x1, blade.y1)
+    ctx.lineTo(blade.baseX2, blade.y2)
+    ctx.stroke()
+  }
 }
 //
 // Draws a baked parallax sheet at the camera-lagged world X for its speed.

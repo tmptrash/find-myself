@@ -10,6 +10,22 @@ let _sbSemiPtsK = null
 const _sbSemiFillPts = []
 const _sbSemiOutlinePts = []
 //
+// Reused draw primitives — custom draw() runs every frame for every on-screen bug.
+//
+let _sbDrawK = null
+let _sbV1 = null
+let _sbV2 = null
+let _sbPos = null
+let _sbBlack = null
+function ensureSmallBugDrawScratch(k) {
+  if (_sbDrawK === k) return
+  _sbDrawK = k
+  _sbV1 = k.vec2(0, 0)
+  _sbV2 = k.vec2(0, 0)
+  _sbPos = k.vec2(0, 0)
+  _sbBlack = k.rgb(0, 0, 0)
+}
+//
 // Small bug parameters
 //
 const BUG_BODY_SIZE = 6
@@ -791,6 +807,7 @@ function updateLegs(inst, dt) {
  */
 export function draw(inst, opts = {}) {
   const { k, pattern } = inst
+  ensureSmallBugDrawScratch(k)
   //
   // Draw body as semicircle (top half of circle) FIRST
   //
@@ -925,50 +942,59 @@ export function draw(inst, opts = {}) {
     )
     
     const actualLegThickness = LEG_THICKNESS * inst.legThickness
-    //
-    // Draw outline (thicker black line) - only if showOutline is true
-    //
     if (inst.showOutline) {
+      _sbV1.x = attachX
+      _sbV1.y = attachY
+      _sbV2.x = jointX
+      _sbV2.y = jointY
       k.drawLine({
-        p1: k.vec2(attachX, attachY),
-        p2: k.vec2(jointX, jointY),
+        p1: _sbV1,
+        p2: _sbV2,
         width: actualLegThickness + 1,
-        color: k.rgb(0, 0, 0),
+        color: _sbBlack,
         opacity: 1
       })
+      _sbV1.x = jointX
+      _sbV1.y = jointY
+      _sbV2.x = leg.footX
+      _sbV2.y = leg.footY
       k.drawLine({
-        p1: k.vec2(jointX, jointY),
-        p2: k.vec2(leg.footX, leg.footY),
+        p1: _sbV1,
+        p2: _sbV2,
         width: actualLegThickness + 1,
-        color: k.rgb(0, 0, 0),
+        color: _sbBlack,
         opacity: 1
       })
     }
-    //
-    // Draw main leg (using body color)
-    //
+    _sbV1.x = attachX
+    _sbV1.y = attachY
+    _sbV2.x = jointX
+    _sbV2.y = jointY
     k.drawLine({
-      p1: k.vec2(attachX, attachY),
-      p2: k.vec2(jointX, jointY),
+      p1: _sbV1,
+      p2: _sbV2,
       width: actualLegThickness,
-      color: k.rgb(legColor.r, legColor.g, legColor.b),
+      color: legColor,
       opacity: 1
     })
+    _sbV1.x = jointX
+    _sbV1.y = jointY
+    _sbV2.x = leg.footX
+    _sbV2.y = leg.footY
     k.drawLine({
-      p1: k.vec2(jointX, jointY),
-      p2: k.vec2(leg.footX, leg.footY),
+      p1: _sbV1,
+      p2: _sbV2,
       width: actualLegThickness,
-      color: k.rgb(legColor.r, legColor.g, legColor.b),
+      color: legColor,
       opacity: 1
     })
-    //
-    // Draw small circle at joint (knee) - only if showOutline is true
-    //
     if (inst.showOutline) {
+      _sbPos.x = jointX
+      _sbPos.y = jointY
       k.drawCircle({
-        pos: k.vec2(jointX, jointY),
+        pos: _sbPos,
         radius: 1,
-        color: k.rgb(legColor.r, legColor.g, legColor.b),
+        color: legColor,
         opacity: 1
       })
     }
@@ -983,6 +1009,7 @@ export function draw(inst, opts = {}) {
 //
 export function drawEyes(inst) {
   const { k, pattern } = inst
+  ensureSmallBugDrawScratch(k)
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
   const bodyRgb = getRGB(k, pattern.bodyColor)
   const bodyY = inst.y + inst.dropOffset
@@ -1005,36 +1032,39 @@ function smallBugBodyRotation(inst) {
 function drawSmallBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation) {
   const cx = inst.x
   const cy = bodyY
-  //
-  // Pyramid glow halo — drawn before the body so the body sits on top.
-  //
+  _sbPos.x = cx
+  _sbPos.y = cy
   if (inst.pyramidGlow > 0.01) {
     const glow = inst.pyramidGlow
-    const haloColor = k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b)
-    const haloLayers = [
-      { scale: 2.2, alpha: 0.18 },
-      { scale: 1.6, alpha: 0.28 },
-      { scale: 1.25, alpha: 0.42 }
-    ]
-    haloLayers.forEach(layer => {
-      k.drawCircle({
-        pos: k.vec2(cx, cy),
-        radius: radius * layer.scale,
-        color: haloColor,
-        opacity: layer.alpha * glow
-      })
+    k.drawCircle({
+      pos: _sbPos,
+      radius: radius * 2.2,
+      color: bodyRgb,
+      opacity: 0.18 * glow
+    })
+    k.drawCircle({
+      pos: _sbPos,
+      radius: radius * 1.6,
+      color: bodyRgb,
+      opacity: 0.28 * glow
+    })
+    k.drawCircle({
+      pos: _sbPos,
+      radius: radius * 1.25,
+      color: bodyRgb,
+      opacity: 0.42 * glow
     })
   }
   if (inst.bodyShape === 'circle') {
     const outlinePad = inst.showOutline ? LEG_THICKNESS * inst.legThickness + 1 : 0
-    outlinePad > 0 && k.drawCircle({ pos: k.vec2(cx, cy), radius: radius + outlinePad, color: k.rgb(0, 0, 0), opacity: 1 })
-    k.drawCircle({ pos: k.vec2(cx, cy), radius, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+    outlinePad > 0 && k.drawCircle({ pos: _sbPos, radius: radius + outlinePad, color: _sbBlack, opacity: 1 })
+    k.drawCircle({ pos: _sbPos, radius, color: bodyRgb, opacity: 1 })
     return
   }
   const outlinePad = inst.showOutline ? LEG_THICKNESS * inst.legThickness + 1 : 0
   const fillPts = fillSmallBugWorldSemicirclePts(k, cx, cy, radius, outlinePad || 2, bodyRotation)
-  outlinePad > 0 && k.drawPolygon({ pts: fillPts.outlinePts, color: k.rgb(0, 0, 0), opacity: 1 })
-  k.drawPolygon({ pts: fillPts.pts, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+  outlinePad > 0 && k.drawPolygon({ pts: fillPts.outlinePts, color: _sbBlack, opacity: 1 })
+  k.drawPolygon({ pts: fillPts.pts, color: bodyRgb, opacity: 1 })
 }
 //
 // Eyes render after legs so IK limbs never cover the face.
@@ -1056,18 +1086,22 @@ function drawSmallBugEyesOnTop(inst, k, radius) {
       pupilOffsetX = (dx / dist) * maxPupilOffset
       pupilOffsetY = (dy / dist) * maxPupilOffset
     }
-    k.drawCircle({ pos: k.vec2(inst.x, bodyY), radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
-    k.drawCircle({ pos: k.vec2(inst.x + pupilOffsetX, bodyY + pupilOffsetY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
+    _sbPos.x = inst.x
+    _sbPos.y = bodyY
+    k.drawCircle({ pos: _sbPos, radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
+    _sbPos.x = inst.x + pupilOffsetX
+    _sbPos.y = bodyY + pupilOffsetY
+    k.drawCircle({ pos: _sbPos, radius: pupilRadius, color: _sbBlack, opacity: 1 })
     return
   }
   const faceRight = inst.vx > 0 ||
     (inst.vx === 0 && Math.cos(inst.movementAngle ?? 0) >= 0)
   const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale
   const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale
-  const eyeX = inst.x + (faceRight ? radius * 0.6 : -radius * 0.6)
-  const eyeY = bodyY - radius * 0.4
-  k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
-  k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
+  _sbPos.x = inst.x + (faceRight ? radius * 0.6 : -radius * 0.6)
+  _sbPos.y = bodyY - radius * 0.4
+  k.drawCircle({ pos: _sbPos, radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
+  k.drawCircle({ pos: _sbPos, radius: pupilRadius, color: _sbBlack, opacity: 1 })
 }
 
 /**

@@ -14,8 +14,8 @@ import { getCameraCenterX, getDistanceThreshold, isWithinDistance } from './scen
 const L0_BUG_SCARE_HERO_RADIUS = 50
 const L0_PYRAMID_JOIN_RADIUS_SQ = 60 * 60
 const L0_PYRAMID_CHECK_INTERVAL = 0.5
-const L0_CULL_SCREEN_MULT = 2
-const L0_ATMOSPHERE_SCREEN_MULT = 1.5
+const L0_CULL_SCREEN_MULT = 0.7
+const L0_ATMOSPHERE_SCREEN_MULT = 0.9
 //
 // Max fly-in speed (px/s) when fireflies converge to form a platform
 //
@@ -60,51 +60,46 @@ export function onUpdateLesson0GameLoop(k, ctx) {
   //
   FpsCounter.onUpdate(ctx.fpsCounter)
   //
-  // 6. Small-bug pyramid z-index
-  //
-  onUpdateSmallBugZIndex(ctx.smallBugDrawObjects)
-  onUpdateBugZIndex(ctx.bugDrawObjects)
-  //
-  // 7. Rain audio bootstrap
+  // 6. Rain audio bootstrap
   //
   ctx.startRainWhenReady()
   //
-  // 8–11. Atmospheric SFX (only near playfield anchor)
+  // 7. Atmospheric SFX (only near playfield anchor)
   //
   atmosphereActive && ctx.onUpdateThunder?.(k, ctx.thunderState, ctx.sound)
   atmosphereActive && onUpdateCricketTimer(k, ctx.cricketState, ctx.sound)
   atmosphereActive && onUpdateFrogTimer(k, ctx.frogState)
   atmosphereActive && onUpdateOwlTimer(k, ctx.owlState, ctx.sound)
   //
-  // 12. Rain simulation
+  // 8. Rain simulation
   //
   atmosphereActive && ctx.rainInst && Rain.onUpdate(ctx.rainInst)
   //
-  // 13. Trap spikes
+  // 9. Trap spikes
   //
   ctx.trapOnUpdate?.()
   //
-  // 14. Monster conversation
+  // 10. Monster conversation
   //
   ctx.conversationOnUpdate?.()
   //
-  // 15. Small-bug ambient phrases
+  // 11. Small-bug ambient phrases
   //
   ctx.smallBugPhraseOnUpdate?.()
   //
-  // 16. Puddles
+  // 12. Puddles
   //
   ctx.puddleOnUpdate?.()
   //
-  // 17. Fireflies (per-object cull) with behavior mode
+  // 13. Fireflies (per-object cull) with behavior mode
   //
   onUpdateL0FirefliesCulled(k, ctx.fireflies, cameraX, cullDist, ctx.touchLetterState)
   //
-  // 18. TOUCH letter system
+  // 14. TOUCH letter system
   //
   ctx.touchLetterState?.onUpdate?.()
   //
-  // 19. Background birds (per-object cull)
+  // 15. Background birds (per-object cull)
   //
   onUpdateL0Birds(k, ctx.birds, ctx.birdSkyHeight, ctx.birdFlapBlendTime, ctx.birdGlidePose, cameraX, cullDist)
 }
@@ -238,29 +233,6 @@ function onUpdateBugsAndPyramids(k, ctx, cameraX, cullDist) {
   pyramid && activePyramids.push(pyramid)
 }
 //
-// Pyramid-state small bugs render above trees.
-//
-function onUpdateSmallBugZIndex(smallBugDrawObjects) {
-  syncBugLegDrawZ(smallBugDrawObjects)
-}
-//
-// Long-legged floor bugs: legs stay behind hinged trees unless in pyramid state.
-//
-function onUpdateBugZIndex(bugDrawObjects) {
-  syncBugLegDrawZ(bugDrawObjects)
-}
-//
-// Legs follow pyramid z; big-bug heads draw on a fixed high layer in the scene.
-// Small floor bugs render whole-body above hinged trees (FLOOR_SMALL_BUG_DRAW_Z).
-//
-function syncBugLegDrawZ(legDrawObjects) {
-  if (!legDrawObjects?.length) return
-  for (const { bug, obj } of legDrawObjects) {
-    const baseZ = bug.state === 'pyramid' ? 30 : bug.zIndex
-    obj.exists() && (obj.z = baseZ)
-  }
-}
-//
 // Ambient timer helpers (logic extracted from scene inline callbacks).
 //
 function onUpdateCricketTimer(k, state, sound) {
@@ -320,7 +292,7 @@ function onUpdateL0Birds(k, birds, skyHeight, flapBlendTime, glidePose, cameraX,
 export function drawL0Birds(k, birds, cameraX, cullDist) {
   for (const bird of birds) {
     if (!isWithinDistance(bird.x, cameraX, cullDist)) continue
-    drawRealisticBird(k, bird, bird.wingPhase)
+    drawRealisticBird(k, bird, bird.wingPhase, bird.drawCache)
   }
 }
 //

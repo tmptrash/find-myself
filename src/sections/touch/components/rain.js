@@ -41,10 +41,21 @@ const SMALL_BUG_HIT_HALF = 8
 // Fraction of drops that originate from tree canopies instead of screen top
 //
 const TREE_DROP_CHANCE = 0.15
-//
-// Cloud center offset from topY (clouds sit ~60px below the top platform edge)
-//
 const CLOUD_CENTER_OFFSET = 60
+//
+// Reused rain draw primitives.
+//
+let _rainDrawK = null
+let _rainP1 = null
+let _rainP2 = null
+let _rainPos = null
+function ensureRainDrawScratch(k) {
+  if (_rainDrawK === k) return
+  _rainDrawK = k
+  _rainP1 = k.vec2(0, 0)
+  _rainP2 = k.vec2(0, 0)
+  _rainPos = k.vec2(0, 0)
+}
 
 /**
  * Creates the rain system with multiple depth layers, drops and splashes.
@@ -194,36 +205,27 @@ function onUpdateRain(inst) {
       if (!drop.active) continue
       drop.x += WIND_VX * dt
       drop.y += speed * dt
-      //
-      // Check floor collision
-      //
+      const offscreen = drop.x < viewX1 || drop.x > viewX2
       if (drop.y >= floorY) {
-        addSplash(splashes, drop.x, floorY, layer.cfg)
+        !offscreen && addSplash(splashes, drop.x, floorY, layer.cfg)
         resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
         continue
       }
-      //
-      // Check hero collision
-      //
-      //
-      // Hero hitbox centered on the head (25px above anchor center)
-      //
+      if (drop.x > rightX + 20) {
+        resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
+        continue
+      }
+      if (offscreen) continue
       if (heroPos && hitTest(drop, heroPos.x, heroPos.y - 25, HERO_HIT_HALF_W, HERO_HIT_HALF_H)) {
         addSplash(splashes, drop.x, drop.y, layer.cfg)
         resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
         continue
       }
-      //
-      // Check anti-hero collision
-      //
       if (antiPos && hitTest(drop, antiPos.x, antiPos.y - 25, HERO_HIT_HALF_W, HERO_HIT_HALF_H)) {
         addSplash(splashes, drop.x, drop.y, layer.cfg)
         resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
         continue
       }
-      //
-      // Check monster (big bug) collisions — splash on circle edge, not center
-      //
       let hitMonster = false
       for (let m = 0; m < monsterBugs.length; m++) {
         const bug = monsterBugs[m]
@@ -233,18 +235,14 @@ function onUpdateRain(inst) {
           const dx = drop.x - bug.x
           const dy = drop.y - bugCenterY
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const splashX = bug.x + (dx / dist) * bugRadius
-          const splashY = bugCenterY + (dy / dist) * bugRadius
-          addSplash(splashes, splashX, splashY, layer.cfg)
+          addSplash(splashes, bug.x + (dx / dist) * bugRadius, bugCenterY + (dy / dist) * bugRadius, layer.cfg)
           resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
           hitMonster = true
           break
         }
       }
       if (hitMonster) continue
-      //
-      // Check small bug collisions (sampled for performance)
-      //
+      if (li === 0) continue
       for (let s = 0; s < smallBugs.length; s++) {
         const sb = smallBugs[s]
         if (sb.state === 'pyramid') continue
@@ -254,12 +252,6 @@ function onUpdateRain(inst) {
           resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
           break
         }
-      }
-      //
-      // Reset if drop drifts past the right wall
-      //
-      if (drop.x > rightX + 20) {
-        resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
       }
     }
     //
@@ -349,6 +341,7 @@ function resetDrop(drop, leftX, playableW, topY, canopyPoints, spawnX1, spawnW) 
 function onDraw(inst, li) {
   if (inst.logicPaused) return
   const { k, layers } = inst
+  ensureRainDrawScratch(k)
   const layer = layers[li]
   const cfg = layer.cfg
   const color = k.rgb(cfg.r, cfg.g, cfg.b)
@@ -356,28 +349,28 @@ function onDraw(inst, li) {
   const viewHalf = inst.screenW / 2
   const viewX1 = camX - viewHalf - 80
   const viewX2 = camX + viewHalf + 80
-  //
-  // Draw raindrops as short angled lines
-  //
   for (const drop of layer.drops) {
     if (!drop.active) continue
     if (drop.x < viewX1 || drop.x > viewX2) continue
+    _rainP1.x = drop.x
+    _rainP1.y = drop.y
+    _rainP2.x = drop.x + WIND_VX * 0.02
+    _rainP2.y = drop.y + cfg.length
     k.drawLine({
-      p1: k.vec2(drop.x, drop.y),
-      p2: k.vec2(drop.x + WIND_VX * 0.02, drop.y + cfg.length),
+      p1: _rainP1,
+      p2: _rainP2,
       width: cfg.width,
       color,
       opacity: cfg.opacity
     })
   }
-  //
-  // Draw splash particles as tiny fading circles
-  //
   for (const sp of layer.splashes) {
     if (sp.x < viewX1 || sp.x > viewX2) continue
     const alpha = (sp.life / SPLASH_LIFETIME) * sp.opacity
+    _rainPos.x = sp.x
+    _rainPos.y = sp.y
     k.drawCircle({
-      pos: k.vec2(sp.x, sp.y),
+      pos: _rainPos,
       radius: SPLASH_SIZE,
       color,
       opacity: alpha

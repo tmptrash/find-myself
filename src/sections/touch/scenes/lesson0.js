@@ -2024,13 +2024,14 @@ export function sceneLesson0(k) {
     const BIG_BUG_Z_INDEX = 24
     const FLOOR_SMALL_BUG_DRAW_Z = 26
     const BUG_HEAD_DRAW_Z = 32
-    const BIG_BUG_HEAD_RING_OUTLINE = 2
+    const BIG_BUG_HEAD_RING_OUTLINE = 2.75
     const ANTIHERO_PLATFORM_Z_INDEX = 27
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
     const BIG_BUG_CRAWL_SPEED = 12  // Increased speed for tall bugs
     const BIG_BUG_SCALE = 3.0
     const BIG_BUG_EYE_SCALE = 1.18  // Slightly larger eyes on long-legged floor bugs
+    const BIG_BUG_EYE_OUTLINE_MULTIPLIER = 0.5
     //
     // Create bug 4 (platform bug for anti-hero) before creating anti-hero
     // Note: bug4 is created here but hero reference will be set later
@@ -2114,6 +2115,7 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',  // Circle shape like other big bugs
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      eyeOutlineMultiplier: BIG_BUG_EYE_OUTLINE_MULTIPLIER,
       headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
       sfx: sound,
@@ -2309,6 +2311,7 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      eyeOutlineMultiplier: BIG_BUG_EYE_OUTLINE_MULTIPLIER,
       headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
       targetFloorY: bugFloorY,
@@ -2339,6 +2342,7 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      eyeOutlineMultiplier: BIG_BUG_EYE_OUTLINE_MULTIPLIER,
       headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
       targetFloorY: bugFloorY,
@@ -2385,6 +2389,7 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      eyeOutlineMultiplier: BIG_BUG_EYE_OUTLINE_MULTIPLIER,
       headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
       targetFloorY: bugFloorY,

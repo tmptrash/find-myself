@@ -91,6 +91,9 @@ const BUG_PATTERNS = [
  * @param {boolean} [config.showOutline=true] - Whether to show black outline
  * @param {number} [config.legThickness] - Custom leg thickness multiplier
  * @param {string} [config.bodyShape='semicircle'] - Body shape: 'semicircle' or 'circle'
+ * @param {number} [config.eyeScaleMultiplier=1] - Scales circular monster eye size
+ * @param {number} [config.eyeOutlineMultiplier=1] - Scales black rim around circular eyes
+ * @param {number} [config.headRingOutline=0] - Reserved head-ring outline width
  * @param {number} [config.legCount=4] - Number of legs: 2 or 4
  * @returns {Object} Bug instance
  */
@@ -112,6 +115,7 @@ export function create(config) {
     targetFloorY = null,
     isDebugBug = false,
     eyeScaleMultiplier = 1,
+    eyeOutlineMultiplier = 1,
     headRingOutline = 0
   } = config
   //
@@ -354,6 +358,7 @@ export function create(config) {
     targetFloorY,    // Store for target floor Y position
     isDebugBug,      // Store for debug bug flag
     eyeScaleMultiplier,
+    eyeOutlineMultiplier,
     headRingOutline,
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
@@ -1343,10 +1348,12 @@ function bugBodyRotation(inst) {
   return Math.PI / 2
 }
 //
-// Head ring thickness matches the IK leg outline stroke (width + 1).
+// Head ring thickness. Long-legged L0 monsters pass headRingOutline so the
+// black rim around the face/eye is not as thick as the IK leg stroke.
 //
 function bugHeadOutlinePad(inst) {
-  return LEG_THICKNESS * inst.legThickness + 1
+  if (inst.headRingOutline > 0) return inst.headRingOutline
+  return (LEG_THICKNESS * inst.legThickness + 1) * (inst.eyeOutlineMultiplier ?? 1)
 }
 //
 // Head/body silhouette in world coordinates — same space as the IK legs.
@@ -1400,7 +1407,8 @@ function drawBugEyesOnTop(inst, k, bodyRgb, radius) {
   const bodyY = inst.y + inst.dropOffset
   if (inst.bodyShape === 'circle') {
     const em = inst.eyeScaleMultiplier ?? 1
-    const outlineW = LEG_THICKNESS * inst.legThickness + EYE_OUTLINE_EXTRA_PX
+    const outlineMul = inst.eyeOutlineMultiplier ?? 1
+    const outlineW = (LEG_THICKNESS * inst.legThickness + EYE_OUTLINE_EXTRA_PX) * outlineMul
     const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em
     const outerR = scleraR + outlineW
     const pupilRadius = scleraR * 0.34

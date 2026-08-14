@@ -4,7 +4,7 @@ import { getRGB } from '../../../utils/helper.js'
 // Reusable world-space semicircle polygons. Recreated when Kaplay (`k`)
 // changes so native engine swaps never reuse dead vec2 objects.
 //
-const SEMICIRCLE_SEGMENTS = 20
+const SEMICIRCLE_SEGMENTS = 12
 let _semiPtsK = null
 const _semiFillPts = []
 const _semiOutlinePts = []
@@ -18,6 +18,7 @@ let _bugPos = null
 let _bugBlack = null
 let _bugWhite = null
 let _bugGray = null
+const _bugIk = { jointX: 0, jointY: 0 }
 function ensureBugDrawScratch(k) {
   if (_bugDrawK === k) return
   _bugDrawK = k
@@ -27,6 +28,15 @@ function ensureBugDrawScratch(k) {
   _bugBlack = k.rgb(0, 0, 0)
   _bugWhite = k.rgb(255, 255, 255)
   _bugGray = k.rgb(180, 180, 180)
+}
+//
+// Cache pattern.bodyColor as a Kaplay rgb for the live engine instance.
+//
+function bugBodyRgb(inst) {
+  if (inst._bodyRgbK === inst.k) return inst.bodyRgb
+  inst._bodyRgbK = inst.k
+  inst.bodyRgb = getRGB(inst.k, inst.pattern.bodyColor)
+  return inst.bodyRgb
 }
 //
 // Bug parameters
@@ -1148,37 +1158,21 @@ function updateLegs(inst, dt) {
  * @param {boolean} [opts.skipHead] - Skip head pass (use drawEyes for head + eyes on top)
  */
 export function draw(inst, opts = {}) {
-  const { k, pattern } = inst
+  const { k } = inst
   ensureBugDrawScratch(k)
-  //
-  // Draw body as semicircle (top half of circle) FIRST
-  //
-  const bodyRgb = getRGB(k, pattern.bodyColor)
-  //
-  // Calculate body orientation based on surface
-  //
+  const bodyRgb = bugBodyRgb(inst)
   const bodyRotation = bugBodyRotation(inst)
-  //
-  // Radius is used for body drawing, eye positioning, and leg attachment.
-  //
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
-  //
-  // Apply dropOffset to body Y position when drawing
-  //
   const bodyY = inst.y + inst.dropOffset
-  //
-  // Legs first so the head sits on top of the IK strokes.
-  //
-  const legRgb = inst.hasFlatHead
-    ? _bugBlack
-    : getRGB(k, pattern.bodyColor)
+  const legRgb = inst.hasFlatHead ? _bugBlack : bodyRgb
   //
   // Calculate attachment points on body edges
   // For floor: front = left edge, back = right edge (considering body rotation)
   //
   const attachmentOffset = radius * 0.9  // Attach near the edges
-  
-  inst.legs.forEach((leg, i) => {
+  const legs = inst.legs
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i]
     //
     // Calculate leg attachment point (not center, but on edge of body)
     //
@@ -1274,12 +1268,15 @@ export function draw(inst, opts = {}) {
       }
     }
     
-    const { jointX, jointY } = solveIK(
+    solveIK(
       attachX, attachY,
       leg.footX, leg.footY,
       inst.legLength1 * inst.scale, inst.legLength2 * inst.scale,
-      leg.side
+      leg.side,
+      _bugIk
     )
+    const jointX = _bugIk.jointX
+    const jointY = _bugIk.jointY
     
     const actualLegThickness = LEG_THICKNESS * inst.legThickness
     if (inst.showOutline) {
@@ -1353,7 +1350,7 @@ export function draw(inst, opts = {}) {
       color: legRgb,
       opacity: 1
     })
-  })
+  }
   if (!opts.skipHead) {
     drawBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation)
   }
@@ -1363,9 +1360,9 @@ export function draw(inst, opts = {}) {
 // Draws only the face layer (for a separate z-index above foreground trees).
 //
 export function drawEyes(inst) {
-  const { k, pattern } = inst
+  const { k } = inst
   ensureBugDrawScratch(k)
-  const bodyRgb = getRGB(k, pattern.bodyColor)
+  const bodyRgb = bugBodyRgb(inst)
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
   const bodyY = inst.y + inst.dropOffset
   const bodyRotation = bugBodyRotation(inst)
@@ -1553,7 +1550,7 @@ function ensureWorldSemicirclePts(k) {
  * @param {number} side - Side of the leg (-1 left, 1 right)
  * @returns {Object} Joint position { jointX, jointY }
  */
-function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
+function solveIK(baseX, baseY, targetX, targetY, len1, len2, side, out) {
   //
   // Distance from base to target
   //
@@ -1580,8 +1577,6 @@ function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   // Side determines which way the joint bends
   //
   const jointAngle = angleToTarget + angle1 * side
-  const jointX = baseX + Math.cos(jointAngle) * len1
-  const jointY = baseY + Math.sin(jointAngle) * len1
-  
-  return { jointX, jointY }
+  out.jointX = baseX + Math.cos(jointAngle) * len1
+  out.jointY = baseY + Math.sin(jointAngle) * len1
 }

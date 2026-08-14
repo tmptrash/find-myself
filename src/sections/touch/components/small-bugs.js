@@ -5,7 +5,7 @@ import * as Sound from '../../../utils/sound.js'
 // Reusable world-space semicircle polygons. Recreated when Kaplay (`k`)
 // changes so native engine swaps never reuse dead vec2 objects.
 //
-const SEMICIRCLE_SEGMENTS = 20
+const SEMICIRCLE_SEGMENTS = 12
 let _sbSemiPtsK = null
 const _sbSemiFillPts = []
 const _sbSemiOutlinePts = []
@@ -17,6 +17,8 @@ let _sbV1 = null
 let _sbV2 = null
 let _sbPos = null
 let _sbBlack = null
+let _sbGray = null
+const _sbIk = { jointX: 0, jointY: 0 }
 function ensureSmallBugDrawScratch(k) {
   if (_sbDrawK === k) return
   _sbDrawK = k
@@ -24,6 +26,16 @@ function ensureSmallBugDrawScratch(k) {
   _sbV2 = k.vec2(0, 0)
   _sbPos = k.vec2(0, 0)
   _sbBlack = k.rgb(0, 0, 0)
+  _sbGray = k.rgb(180, 180, 180)
+}
+//
+// Cache pattern.bodyColor as a Kaplay rgb for the live engine instance.
+//
+function smallBugBodyRgb(inst) {
+  if (inst._bodyRgbK === inst.k) return inst.bodyRgb
+  inst._bodyRgbK = inst.k
+  inst.bodyRgb = getRGB(inst.k, inst.pattern.bodyColor)
+  return inst.bodyRgb
 }
 //
 // Small bug parameters
@@ -338,6 +350,7 @@ export function create(config) {
     vy: startInCrawling ? Math.sin(angle) * finalCrawlSpeed : 0,
     pattern,
     legs,
+    legDrawOrder: [2, 3, 0, 1],
     state: initialState,  // States: 'crawling', 'stopping', 'scared', 'recovering'
     stateTimer: initialTimer,  // Random time in current state
     distanceTraveled: 0,
@@ -395,19 +408,13 @@ export function onUpdate(inst, dt) {
     const heroPos = hero.character.pos
     const dx = heroPos.x - inst.x
     const dy = heroPos.y - inst.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    
-    //
-    // If bug moved far enough from hero, reset cooldown
-    //
-    if (dist > inst.minDistanceToReset && inst.scaredCooldown > 0) {
-      inst.scaredCooldown = 0  // Reset cooldown, bug can be scared again
+    const distSq = dx * dx + dy * dy
+    const resetSq = inst.minDistanceToReset * inst.minDistanceToReset
+    if (distSq > resetSq && inst.scaredCooldown > 0) {
+      inst.scaredCooldown = 0
     }
-    
-    //
-    // Simple check: if hero is close and no cooldown, get scared
-    //
-    if (dist < inst.touchRadius && inst.scaredCooldown <= 0) {
+    const touchSq = inst.touchRadius * inst.touchRadius
+    if (distSq < touchSq && inst.scaredCooldown <= 0) {
       //
       // Bug gets scared!
       //
@@ -806,52 +813,22 @@ function updateLegs(inst, dt) {
  * @param {boolean} [opts.skipHead] - Skip head pass (use drawEyes for head + eyes on top)
  */
 export function draw(inst, opts = {}) {
-  const { k, pattern } = inst
+  const { k } = inst
   ensureSmallBugDrawScratch(k)
-  //
-  // Draw body as semicircle (top half of circle) FIRST
-  //
-  const bodyRgb = getRGB(k, pattern.bodyColor)
-  //
-  // Calculate body orientation based on surface
-  //
+  const bodyRgb = smallBugBodyRgb(inst)
   const bodyRotation = smallBugBodyRotation(inst)
-  //
-  // Radius is used for glow halo, body drawing, and leg attachment.
-  //
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
-  //
-  // Apply dropOffset to body Y position when drawing
-  //
   const bodyY = inst.y + inst.dropOffset
-  //
-  // Legs first so the semicircle head sits on top of the IK strokes.
-  //
-  const legColor = getRGB(k, pattern.bodyColor)  // Same color as body
+  const legColor = bodyRgb
   //
   // Calculate attachment points on body edges
   // For floor: front = left edge, back = right edge (considering body rotation)
   //
   const attachmentOffset = radius * 0.9  // Attach near the edges
-  //
-  // For 4 legs: draw back legs first, then front legs
-  //
-  let legDrawOrder
-  if (inst.legCount === 4) {
-    //
-    // Draw order: back legs (2, 3) first, then front legs (0, 1)
-    //
-    legDrawOrder = [2, 3, 0, 1]
-  } else {
-    //
-    // For other leg counts, draw in order
-    //
-    legDrawOrder = inst.legs.map((_, i) => i)
-  }
-  
-  legDrawOrder.forEach((legIndex) => {
-    const leg = inst.legs[legIndex]
-    const i = legIndex
+  const legDrawOrder = inst.legDrawOrder
+  for (let li = 0; li < legDrawOrder.length; li++) {
+    const i = legDrawOrder[li]
+    const leg = inst.legs[i]
     //
     // Calculate leg attachment point (not center, but on edge of body)
     //
@@ -934,12 +911,15 @@ export function draw(inst, opts = {}) {
       }
     }
     
-    const { jointX, jointY } = solveIK(
+    solveIK(
       attachX, attachY,
       leg.footX, leg.footY,
       inst.legLength1 * inst.scale, inst.legLength2 * inst.scale,
-      leg.side
+      leg.side,
+      _sbIk
     )
+    const jointX = _sbIk.jointX
+    const jointY = _sbIk.jointY
     
     const actualLegThickness = LEG_THICKNESS * inst.legThickness
     if (inst.showOutline) {
@@ -998,7 +978,7 @@ export function draw(inst, opts = {}) {
         opacity: 1
       })
     }
-  })
+  }
   if (!opts.skipHead) {
     drawSmallBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation)
   }
@@ -1008,10 +988,10 @@ export function draw(inst, opts = {}) {
 // Draws only the face layer (for a separate z-index above foreground trees).
 //
 export function drawEyes(inst) {
-  const { k, pattern } = inst
+  const { k } = inst
   ensureSmallBugDrawScratch(k)
   const radius = BUG_BODY_SIZE * 1.5 * inst.scale
-  const bodyRgb = getRGB(k, pattern.bodyColor)
+  const bodyRgb = smallBugBodyRgb(inst)
   const bodyY = inst.y + inst.dropOffset
   const bodyRotation = smallBugBodyRotation(inst)
   drawSmallBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation)
@@ -1088,7 +1068,7 @@ function drawSmallBugEyesOnTop(inst, k, radius) {
     }
     _sbPos.x = inst.x
     _sbPos.y = bodyY
-    k.drawCircle({ pos: _sbPos, radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
+    k.drawCircle({ pos: _sbPos, radius: eyeRadius, color: _sbGray, opacity: 1 })
     _sbPos.x = inst.x + pupilOffsetX
     _sbPos.y = bodyY + pupilOffsetY
     k.drawCircle({ pos: _sbPos, radius: pupilRadius, color: _sbBlack, opacity: 1 })
@@ -1100,7 +1080,7 @@ function drawSmallBugEyesOnTop(inst, k, radius) {
   const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale
   _sbPos.x = inst.x + (faceRight ? radius * 0.6 : -radius * 0.6)
   _sbPos.y = bodyY - radius * 0.4
-  k.drawCircle({ pos: _sbPos, radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
+  k.drawCircle({ pos: _sbPos, radius: eyeRadius, color: _sbGray, opacity: 1 })
   k.drawCircle({ pos: _sbPos, radius: pupilRadius, color: _sbBlack, opacity: 1 })
 }
 
@@ -1115,7 +1095,7 @@ function drawSmallBugEyesOnTop(inst, k, radius) {
  * @param {number} side - Side of the leg (-1 left, 1 right)
  * @returns {Object} Joint position { jointX, jointY }
  */
-function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
+function solveIK(baseX, baseY, targetX, targetY, len1, len2, side, out) {
   //
   // Distance from base to target
   //
@@ -1142,9 +1122,8 @@ function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   // Side determines which way the joint bends
   //
   const jointAngle = angleToTarget + angle1 * side
-  const jointX = baseX + Math.cos(jointAngle) * len1
-  const jointY = baseY + Math.sin(jointAngle) * len1
-  return { jointX, jointY }
+  out.jointX = baseX + Math.cos(jointAngle) * len1
+  out.jointY = baseY + Math.sin(jointAngle) * len1
 }
 //
 // Fills reusable world-space semicircle polygons (top half, y-down).

@@ -119,16 +119,15 @@ function syncBug4Platform(bigBug4Inst, antiHeroPlatform, _unused, bug4Radius) {
 function onUpdateBugScare(k, ctx) {
   const { heroInst, bugs, sound } = ctx
   if (!heroInst?.character?.pos) return
-  //
-  // In gather phase (after C) bugs walk near the hero without fright
-  //
   if (ctx.touchLetterState?.cCollected) return
   const heroX = heroInst.character.pos.x
   const heroY = heroInst.character.pos.y
   const dt = k.dt()
   const scareRadiusSq = L0_BUG_SCARE_HERO_RADIUS * L0_BUG_SCARE_HERO_RADIUS
+  const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
   for (const bugInst of bugs) {
     if (bugInst.state === 'pyramid' || bugInst.isPlatformBug) continue
+    if (!bugInst.isScared && Math.abs(bugInst.x - heroX) > cullDist) continue
     if (bugInst.justRecovered) {
       if (bugInst.justRecoveredTimer === undefined) bugInst.justRecoveredTimer = 0.5
       bugInst.justRecoveredTimer -= dt

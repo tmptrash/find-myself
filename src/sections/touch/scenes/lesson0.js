@@ -71,6 +71,10 @@ const L0_GRASS_STATIC_Z = 19
 const L0_GRASS_LIVE_Z = 20
 const L0_PYRAMID_BUG_DRAW_Z = 30
 //
+// Reused draw opts so per-bug draw calls do not allocate a new object every frame.
+//
+const L0_BUG_DRAW_LEGS_ONLY = { skipHead: true, skipEyes: true }
+//
 // End-of-level hint shown at the top during the gather phase (bugs flying to hero).
 // Pressing Space or Enter advances immediately; shows countdown from 15 seconds.
 //
@@ -2529,12 +2533,12 @@ export function sceneLesson0(k) {
       for (const bugInst of bugs) {
         if (bugInst.zIndex !== BIG_BUG_Z_INDEX || bugInst.state === 'pyramid') continue
         if (Math.abs(bugInst.x - camX) > half) continue
-        Bugs.draw(bugInst, { skipHead: true, skipEyes: true })
+        Bugs.draw(bugInst, L0_BUG_DRAW_LEGS_ONLY)
       }
     })
     addWorldSpaceDraw(k, ANTIHERO_PLATFORM_Z_INDEX, () => {
       if (Math.abs(bigBug4Inst.x - k.camPos().x) > SCREEN_W / 2 + 160) return
-      Bugs.draw(bigBug4Inst, { skipHead: true, skipEyes: true })
+      Bugs.draw(bigBug4Inst, L0_BUG_DRAW_LEGS_ONLY)
     })
     addWorldSpaceDraw(k, FLOOR_SMALL_BUG_DRAW_Z, () => {
       const camX = k.camPos().x
@@ -2542,7 +2546,7 @@ export function sceneLesson0(k) {
       for (const bugInst of smallBugs) {
         if (bugInst.state === 'pyramid') continue
         if (Math.abs(bugInst.x - camX) > half) continue
-        SmallBugs.draw(bugInst, { skipHead: true, skipEyes: true })
+        SmallBugs.draw(bugInst, L0_BUG_DRAW_LEGS_ONLY)
       }
     })
     addWorldSpaceDraw(k, L0_PYRAMID_BUG_DRAW_Z, () => {
@@ -2551,12 +2555,12 @@ export function sceneLesson0(k) {
       for (const bugInst of bugs) {
         if (bugInst.state !== 'pyramid') continue
         if (Math.abs(bugInst.x - camX) > half) continue
-        Bugs.draw(bugInst, { skipHead: true, skipEyes: true })
+        Bugs.draw(bugInst, L0_BUG_DRAW_LEGS_ONLY)
       }
       for (const bugInst of smallBugs) {
         if (bugInst.state !== 'pyramid') continue
         if (Math.abs(bugInst.x - camX) > half) continue
-        SmallBugs.draw(bugInst, { skipHead: true, skipEyes: true })
+        SmallBugs.draw(bugInst, L0_BUG_DRAW_LEGS_ONLY)
       }
     })
     addWorldSpaceDraw(k, BUG_HEAD_DRAW_Z, () => {
@@ -2881,9 +2885,7 @@ export function sceneLesson0(k) {
     })
     birds._heroRef = heroInst
     const atmosphereAnchorX = LEFT_MARGIN + (WORLD_W - LEFT_MARGIN - RIGHT_MARGIN) / 2
-    k.onUpdate(() => {
-      updateTouchLesson0Camera(camera, heroInst)
-      onUpdateLesson0GameLoop(k, {
+    const lesson0LoopCtx = {
       heroInst,
       checkFloorThorns,
       floorThornData,
@@ -2918,8 +2920,8 @@ export function sceneLesson0(k) {
       onUpdateThunder,
       sound,
       touchLetterState
-    })
-    })
+    }
+    k.onUpdate(() => onUpdateLesson0Frame(k, camera, heroInst, lesson0LoopCtx))
     //
     // Return to menu on ESC
     //
@@ -4074,45 +4076,41 @@ function onUpdatePuddles(k, puddles) {
 // Draw elliptical puddles with expanding ripple rings
 //
 function drawPuddles(k, puddles) {
+  ensureL0DrawScratch(k)
   const camX = k.camPos().x
   const viewHalf = SCREEN_W / 2 + 80
   for (const p of puddles) {
     if (Math.abs(p.x - camX) > viewHalf + p.width / 2) continue
+    _l0SpritePos.x = p.x
+    _l0SpritePos.y = p.y
     k.drawEllipse({
-      pos: k.vec2(p.x, p.y),
+      pos: _l0SpritePos,
       radiusX: p.width / 2,
       radiusY: p.height / 2,
-      color: k.rgb(PUDDLE_COLOR_R, PUDDLE_COLOR_G, PUDDLE_COLOR_B),
+      color: _puddleFill,
       opacity: PUDDLE_OPACITY
     })
     if (p.rippling) {
       const progress = p.rippleT / PUDDLE_RIPPLE_DURATION
-      //
-      // Ripple ring expands from the drip impact point
-      //
       const rippleScale = 0.1 + progress * 0.9
       const rippleOpacity = (1 - progress) * 0.25
-      const rippleRadiusX = p.width * 0.3 * rippleScale
-      const rippleRadiusY = p.height * 0.6 * rippleScale
+      _l0SpritePos.x = p.dripX
+      _l0SpritePos.y = p.dripY
       k.drawEllipse({
-        pos: k.vec2(p.dripX, p.dripY),
-        radiusX: rippleRadiusX,
-        radiusY: rippleRadiusY,
-        color: k.rgb(PUDDLE_COLOR_R + 40, PUDDLE_COLOR_G + 40, PUDDLE_COLOR_B + 40),
+        pos: _l0SpritePos,
+        radiusX: p.width * 0.3 * rippleScale,
+        radiusY: p.height * 0.6 * rippleScale,
+        color: _puddleRipple,
         opacity: rippleOpacity,
         fill: false,
-        outline: { width: 1, color: k.rgb(PUDDLE_COLOR_R + 60, PUDDLE_COLOR_G + 60, PUDDLE_COLOR_B + 60) }
+        outline: { width: 1, color: _puddleRippleOutline }
       })
-      //
-      // Small splash dot at impact point (visible briefly at start)
-      //
       if (p.dripSplashT < 0.15) {
-        const dotAlpha = (1 - p.dripSplashT / 0.15) * 0.5
         k.drawCircle({
-          pos: k.vec2(p.dripX, p.dripY),
+          pos: _l0SpritePos,
           radius: 2,
-          color: k.rgb(PUDDLE_COLOR_R + 80, PUDDLE_COLOR_G + 80, PUDDLE_COLOR_B + 55),
-          opacity: dotAlpha
+          color: _puddleDot,
+          opacity: (1 - p.dripSplashT / 0.15) * 0.5
         })
       }
     }
@@ -4240,13 +4238,16 @@ function onUpdatePuddleSplashes(k, particles) {
 // Draw puddle splash droplets
 //
 function drawPuddleSplashes(k, particles) {
+  if (!particles.length) return
+  ensureL0DrawScratch(k)
   for (const p of particles) {
-    const alpha = Math.max(0, p.life / p.maxLife)
+    _l0SpritePos.x = p.x
+    _l0SpritePos.y = p.y
     k.drawCircle({
-      pos: k.vec2(p.x, p.y),
+      pos: _l0SpritePos,
       radius: PUDDLE_SPLASH_SIZE,
-      color: k.rgb(PUDDLE_COLOR_R + 30, PUDDLE_COLOR_G + 30, PUDDLE_COLOR_B + 30),
-      opacity: alpha * 0.7
+      color: _puddleSplash,
+      opacity: Math.max(0, p.life / p.maxLife) * 0.7
     })
   }
 }
@@ -4468,10 +4469,16 @@ function createMushrooms(k, floorPuddles = []) {
 // Draw mushroom sprites on the floor
 //
 function drawMushrooms(k, mushrooms) {
+  ensureL0DrawScratch(k)
+  const camX = k.camPos().x
+  const viewHalf = SCREEN_W / 2 + 80
   for (const m of mushrooms) {
+    if (Math.abs(m.x - camX) > viewHalf) continue
+    _l0SpritePos.x = m.x
+    _l0SpritePos.y = m.y
     k.drawSprite({
       sprite: m.spriteName,
-      pos: k.vec2(m.x, m.y)
+      pos: _l0SpritePos
     })
   }
 }
@@ -4677,9 +4684,7 @@ function createRocks(k, thornData) {
     k.z(L0_ROCK_Z_BEHIND_COLORFUL_ROW),
     {
       draw() {
-        for (const rock of rocksBehind) {
-          k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
-        }
+        drawRocksLayer(k, rocksBehind)
       }
     }
   ])
@@ -4687,13 +4692,25 @@ function createRocks(k, thornData) {
     k.z(L0_ROCK_Z_IN_FRONT_OF_COLORFUL_ROW),
     {
       draw() {
-        for (const rock of rocksInFront) {
-          k.drawSprite({ sprite: rock.spriteName, pos: k.vec2(rock.x, rock.y) })
-        }
+        drawRocksLayer(k, rocksInFront)
       }
     }
   ])
   return rocks
+}
+//
+// Draws one rock z-band with camera culling and a reused pos vec2.
+//
+function drawRocksLayer(k, rocks) {
+  ensureL0DrawScratch(k)
+  const camX = k.camPos().x
+  const viewHalf = SCREEN_W / 2 + 90
+  for (const rock of rocks) {
+    if (Math.abs(rock.x - camX) > viewHalf + (rock.radius || 40)) continue
+    _l0SpritePos.x = rock.x
+    _l0SpritePos.y = rock.y
+    k.drawSprite({ sprite: rock.spriteName, pos: _l0SpritePos })
+  }
 }
 /**
  * Builds a single rock sprite + world descriptor. Extracted from createRocks
@@ -6004,6 +6021,26 @@ function addWorldSpaceDraw(k, zIndex, drawFn) {
   ])
 }
 //
+// Shared sprite pos for clipped sheets / mushrooms / rocks (native engine swap resets k).
+//
+let _l0DrawK = null
+let _l0SpritePos = null
+let _puddleFill = null
+let _puddleRipple = null
+let _puddleRippleOutline = null
+let _puddleDot = null
+let _puddleSplash = null
+function ensureL0DrawScratch(k) {
+  if (_l0DrawK === k) return
+  _l0DrawK = k
+  _l0SpritePos = k.vec2(0, 0)
+  _puddleFill = k.rgb(PUDDLE_COLOR_R, PUDDLE_COLOR_G, PUDDLE_COLOR_B)
+  _puddleRipple = k.rgb(PUDDLE_COLOR_R + 40, PUDDLE_COLOR_G + 40, PUDDLE_COLOR_B + 40)
+  _puddleRippleOutline = k.rgb(PUDDLE_COLOR_R + 60, PUDDLE_COLOR_G + 60, PUDDLE_COLOR_B + 60)
+  _puddleDot = k.rgb(PUDDLE_COLOR_R + 80, PUDDLE_COLOR_G + 80, PUDDLE_COLOR_B + 55)
+  _puddleSplash = k.rgb(PUDDLE_COLOR_R + 30, PUDDLE_COLOR_G + 30, PUDDLE_COLOR_B + 30)
+}
+//
 // World-locked grass strip (camera speed 1) for far/mid tufts — not a lagging
 // parallax sheet. Live drawer still handles front-layer push/sway.
 //
@@ -6017,6 +6054,7 @@ function bakeWorldLockedGrassStrip(k, blades) {
   })
   loadTouchSprite(k, L0_BG_GRASS_STATIC, dataUrl)
   addWorldSpaceDraw(k, L0_GRASS_STATIC_Z, () => {
+    ensureL0DrawScratch(k)
     const pad = 8
     const camX = k.camPos().x
     const viewLeft = camX - SCREEN_W / 2 - pad
@@ -6025,9 +6063,11 @@ function bakeWorldLockedGrassStrip(k, blades) {
     const srcRight = Math.min(WORLD_W, viewRight)
     if (srcRight <= srcLeft) return
     const sliceW = srcRight - srcLeft
+    _l0SpritePos.x = srcLeft
+    _l0SpritePos.y = y0
     k.drawSprite({
       sprite: L0_BG_GRASS_STATIC,
-      pos: k.vec2(srcLeft, y0),
+      pos: _l0SpritePos,
       width: sliceW,
       height: h,
       quad: { x: srcLeft / WORLD_W, y: 0, w: sliceW / WORLD_W, h: 1 },
@@ -6066,10 +6106,13 @@ function addTouchParallaxSprite(k, camera, spriteName, zIndex, speed, bleed, can
 // thousands of off-screen texels every frame).
 //
 function drawClippedParallaxSprite(k, spriteName, drawX, canvasW) {
+  ensureL0DrawScratch(k)
   if (!canvasW) {
+    _l0SpritePos.x = drawX
+    _l0SpritePos.y = 0
     k.drawSprite({
       sprite: spriteName,
-      pos: k.vec2(drawX, 0),
+      pos: _l0SpritePos,
       anchor: 'topleft'
     })
     return
@@ -6082,9 +6125,11 @@ function drawClippedParallaxSprite(k, spriteName, drawX, canvasW) {
   const srcRight = Math.min(canvasW, viewRight - drawX)
   if (srcRight <= srcLeft) return
   const sliceW = srcRight - srcLeft
+  _l0SpritePos.x = drawX + srcLeft
+  _l0SpritePos.y = 0
   k.drawSprite({
     sprite: spriteName,
-    pos: k.vec2(drawX + srcLeft, 0),
+    pos: _l0SpritePos,
     width: sliceW,
     height: SCREEN_H,
     quad: { x: srcLeft / canvasW, y: 0, w: sliceW / canvasW, h: 1 },
@@ -6102,4 +6147,8 @@ function updateTouchLesson0Camera(camera, heroInst) {
     playfieldCenterX: LEFT_MARGIN + VIEW_W / 2,
     playfieldCenterY: camera.fixedCamY
   })
+}
+function onUpdateLesson0Frame(k, camera, heroInst, ctx) {
+  updateTouchLesson0Camera(camera, heroInst)
+  onUpdateLesson0GameLoop(k, ctx)
 }

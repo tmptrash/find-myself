@@ -49,6 +49,7 @@ let _rainDrawK = null
 let _rainP1 = null
 let _rainP2 = null
 let _rainPos = null
+const _splashPool = []
 function ensureRainDrawScratch(k) {
   if (_rainDrawK === k) return
   _rainDrawK = k
@@ -95,7 +96,8 @@ export function create(cfg) {
       cfg: layerCfg,
       drops,
       splashes: [],
-      zIndex: LAYER_Z[li]
+      zIndex: LAYER_Z[li],
+      color: k.rgb(layerCfg.r, layerCfg.g, layerCfg.b)
     }
   })
   const inst = {
@@ -229,6 +231,7 @@ function onUpdateRain(inst) {
       let hitMonster = false
       for (let m = 0; m < monsterBugs.length; m++) {
         const bug = monsterBugs[m]
+        if (bug.x < viewX1 - 40 || bug.x > viewX2 + 40) continue
         const bugRadius = BUG_BODY_RADIUS_FACTOR * (bug.scale || 1)
         const bugCenterY = bug.y + (bug.dropOffset || 0)
         if (hitTest(drop, bug.x, bugCenterY, BUG_HIT_HALF_W, BUG_HIT_HALF_H)) {
@@ -242,7 +245,7 @@ function onUpdateRain(inst) {
         }
       }
       if (hitMonster) continue
-      if (li === 0) continue
+      if (li < 2) continue
       for (let s = 0; s < smallBugs.length; s++) {
         const sb = smallBugs[s]
         if (sb.state === 'pyramid') continue
@@ -261,7 +264,9 @@ function onUpdateRain(inst) {
       const sp = splashes[s]
       sp.life -= dt
       if (sp.life <= 0) {
-        splashes.splice(s, 1)
+        releaseSplash(sp)
+        splashes[s] = splashes[splashes.length - 1]
+        splashes.pop()
         continue
       }
       sp.x += sp.vx * dt
@@ -296,18 +301,31 @@ function addSplash(splashes, x, y, layerCfg) {
   for (let i = 0; i < count; i++) {
     const angle = -Math.PI * 0.1 - Math.random() * Math.PI * 0.8
     const speed = SPLASH_SPEED_MIN + Math.random() * (SPLASH_SPEED_MAX - SPLASH_SPEED_MIN)
-    splashes.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: SPLASH_LIFETIME * (0.6 + Math.random() * 0.4),
-      r: layerCfg.r,
-      g: layerCfg.g,
-      b: layerCfg.b,
-      opacity: layerCfg.opacity
-    })
+    const sp = _splashPool.pop() || {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      life: 0,
+      r: 0,
+      g: 0,
+      b: 0,
+      opacity: 0
+    }
+    sp.x = x
+    sp.y = y
+    sp.vx = Math.cos(angle) * speed
+    sp.vy = Math.sin(angle) * speed
+    sp.life = SPLASH_LIFETIME * (0.6 + Math.random() * 0.4)
+    sp.r = layerCfg.r
+    sp.g = layerCfg.g
+    sp.b = layerCfg.b
+    sp.opacity = layerCfg.opacity
+    splashes.push(sp)
   }
+}
+function releaseSplash(sp) {
+  _splashPool.push(sp)
 }
 
 /**
@@ -344,7 +362,7 @@ function onDraw(inst, li) {
   ensureRainDrawScratch(k)
   const layer = layers[li]
   const cfg = layer.cfg
-  const color = k.rgb(cfg.r, cfg.g, cfg.b)
+  const color = layer.color
   const camX = k.camPos().x
   const viewHalf = inst.screenW / 2
   const viewX1 = camX - viewHalf - 80

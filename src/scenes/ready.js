@@ -590,7 +590,7 @@ export function sceneReady(k) {
     //
     const letterInfos = pickLettersFromTitle(k, titleText, INSTRUCTIONS_TITLE, TITLE_FONT_SIZE, TITLE_FONT_FAMILY)
     const spiders = []
-    const spiderState = { timer: 0 }
+    const spiderState = { timer: 0, titleFlicker: 1 }
     //
     // "find yourself" has 13 non-space letters.
     // Five waves spread them so they appear far apart.
@@ -680,6 +680,7 @@ export function sceneReady(k) {
       const titleFlicker = TITLE_FLICKER_MIN + (TITLE_FLICKER_MAX - TITLE_FLICKER_MIN) * (0.5 + 0.5 * Math.sin(titleFlickerPhase))
       titleText.opacity = titleFlicker
       titleOutlines.forEach(o => o.opacity = titleFlicker)
+      spiderState.titleFlicker = titleFlicker
     })
     //
     // Spider draw layer — rendered above all text and title (Z_SPIDER)
@@ -914,7 +915,8 @@ function onDrawIllustration(k) {
  * @returns {Object} Spider instance
  */
 function createSpider(k, index, sourceInfo) {
-  const { char, x, y, color, fontSize, fontFamily } = sourceInfo
+  const { char, x, y, fontSize, fontFamily } = sourceInfo
+  const [letterColorR, letterColorG, letterColorB] = parseHex(CFG.visual.colors.ready.title)
   const angle = Math.random() * Math.PI * 2
   const speed = SPIDER_SPEED * (0.5 + Math.random() * 0.5)
   const baseAngleOffset = Math.random() * Math.PI * 2
@@ -953,10 +955,9 @@ function createSpider(k, index, sourceInfo) {
     directionTimer: Math.random() * SPIDER_DIRECTION_CHANGE_INTERVAL,
     legs,
     distanceTraveled: 0,
-    color,
-    letterColorR: color?.r ?? 255,
-    letterColorG: color?.g ?? 150,
-    letterColorB: color?.b ?? 80,
+    letterColorR,
+    letterColorG,
+    letterColorB,
     appearDelay: index * 0.15,
     legAppearDelay: 0,
     legAppearTimer: 0,
@@ -1173,7 +1174,7 @@ function onDrawSpidersLayer(k, spiders, spiderState) {
     if (timer > timeToAppear) {
       spiderOpacity = Math.min(1, (timer - timeToAppear) / SPIDER_FADE_DURATION) * SPIDER_MAX_OPACITY
     }
-    drawSpider(k, spider, spiderOpacity)
+    drawSpider(k, spider, spiderOpacity, spiderState.titleFlicker ?? 1)
   })
 }
 /**
@@ -1182,7 +1183,7 @@ function onDrawSpidersLayer(k, spiders, spiderState) {
  * @param {Object} spider - Spider instance
  * @param {number} textOpacity - Opacity for the spider
  */
-function drawSpider(k, spider, textOpacity) {
+function drawSpider(k, spider, textOpacity, titleFlicker = 1) {
   //
   // Hero letters: always draw as hero sprites regardless of activation state.
   // The underlying characters were already hidden in the title text at spider
@@ -1193,11 +1194,11 @@ function drawSpider(k, spider, textOpacity) {
     return
   }
   const letterBodyActive = spider.letter && (spider.titleCharRemoved || spider.isActivated)
-  const letterBodyOpacity = letterBodyActive ? 1 : 0
+  const letterBodyOpacity = letterBodyActive ? titleFlicker : 0
   if (spider.legExtendT > 0 && !spider.legsHidden) {
     const legColor = k.rgb(12, 10, 14)
     const legOpacity = letterBodyActive && spider.titleCharRemoved
-      ? 1
+      ? titleFlicker
       : (textOpacity > 0 ? Math.min(textOpacity, SPIDER_MAX_OPACITY) : 0)
     if (legOpacity > 0) {
     spider.legs.forEach(leg => {

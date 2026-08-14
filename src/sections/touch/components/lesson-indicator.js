@@ -173,6 +173,7 @@ export function create(config) {
         }),
         k.pos(letterX + dx + (isFallingLetter ? FALLING_LETTER_OFFSET_X : 0), y + dy + (isFallingLetter ? fallingLetterExtraY : 0)),
         k.color(0, 0, 0),
+        k.fixed(),
         k.z(CFG.visual.zIndex.ui)
       ]
       isFallingLetter && outlineComponents.push(k.rotate(FALLING_LETTER_TILT))
@@ -193,6 +194,7 @@ export function create(config) {
       }),
       k.pos(letterX + fallingOffX, y + fallingOffY),
       k.color(r, g, b),
+      k.fixed(),
       k.z(CFG.visual.zIndex.ui)
     ]
     isFallingLetter && mainComponents.push(k.rotate(FALLING_LETTER_TILT))
@@ -226,7 +228,7 @@ export function create(config) {
     type: Hero.HEROES.HERO,
     controllable: false,
     isStatic: true,
-    scale: 2.6 / 3,
+    scale: (2.6 / 3) * 0.8,
     //
     // HUD small hero mirrors the playable hero's body colour — silver
     // by default, then teal / orange / red as the player completes
@@ -249,7 +251,7 @@ export function create(config) {
   //
   // Create life image (sprite pre-loaded in index.js)
   //
-  const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR
+  const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8
   const lifeImageData = {
     sprite: k.add([
       k.sprite('life'),

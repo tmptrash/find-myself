@@ -65,8 +65,8 @@ export function openDialog(k, text, opts = {}) {
     font = CFG.visual.fonts.regularFull.replace(/'/g, ''),
     sceneBackdropHex = null,
     textStyles = null,
-    centerX = CFG.visual.screen.width / 2,
-    centerY = CFG.visual.screen.height / 2,
+    centerX = k.width() / 2,
+    centerY = k.height() / 2,
     onClose,
     onCloseStart
   } = opts

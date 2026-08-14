@@ -2,11 +2,12 @@ import * as BootLoader from './boot-loader.js'
 import { bootEngine, teardownEngine, RESOLUTION_MODE } from './game-engine.js'
 
 //
-// Scene name prefix that runs on the native-resolution engine. Every other
-// scene (menu, ready, word/touch/time lessons, glow-complete) runs on the
-// fixed 1920x1080 engine.
+// Scene name prefixes that run on the native-resolution engine. Every other
+// scene (menu, ready, remaining word/touch/time lessons, glow-complete) runs
+// on the fixed 1920x1080 engine. `lesson-touch.0` is exact-prefix so
+// lesson-touch.1+ stay on the letterboxed canvas.
 //
-const NATIVE_RESOLUTION_SCENE_PREFIX = 'lesson-glow'
+const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-glow', 'lesson-touch.0']
 //
 // Avoid flashing the DOM loader on fast engine swaps (e.g. right after the
 // yellow pre-Glow subtitle when boot finishes within this window).
@@ -18,10 +19,11 @@ const ENGINE_SWAP_LOADER_DELAY_MS = 200
 let activeEngine = null
 let activeResolutionMode = null
 //
-// Glow registers audio teardown here — Kaplay onSceneLeave does not run when
-// the native engine is destroyed during a resolution swap (menu / other levels).
+// Native-resolution scenes register audio teardown here — Kaplay onSceneLeave
+// does not run when the native engine is destroyed during a resolution swap
+// (menu / other levels).
 //
-let glowNativeTeardown = null
+let nativeTeardown = null
 
 /**
  * The currently active Kaplay instance, or null before the first boot.
@@ -50,19 +52,26 @@ export function setActiveEngine(k, mode) {
   activeResolutionMode = mode
 }
 /**
- * Registers a one-shot callback that stops Glow-only loop audio (birds, rain)
- * before the native engine is torn down for a resolution swap.
+ * Registers a one-shot callback that stops native-scene loop audio (music, rain)
+ * before the engine is torn down for a resolution swap.
+ * @param {Function|null} fn
+ */
+export function registerNativeTeardown(fn) {
+  nativeTeardown = fn
+}
+/**
+ * Glow-level alias — same registry as registerNativeTeardown.
  * @param {Function|null} fn
  */
 export function registerGlowNativeTeardown(fn) {
-  glowNativeTeardown = fn
+  registerNativeTeardown(fn)
 }
 //
-// Stops Glow loop audio when leaving the native-resolution engine.
+// Stops native-scene loop audio when leaving the native-resolution engine.
 //
-function runGlowNativeTeardown() {
-  glowNativeTeardown?.()
-  glowNativeTeardown = null
+function runNativeTeardown() {
+  nativeTeardown?.()
+  nativeTeardown = null
 }
 
 /**
@@ -71,7 +80,8 @@ function runGlowNativeTeardown() {
  * @returns {string} One of RESOLUTION_MODE
  */
 export function resolutionModeForScene(sceneName) {
-  return typeof sceneName === 'string' && sceneName.startsWith(NATIVE_RESOLUTION_SCENE_PREFIX)
+  if (typeof sceneName !== 'string') return RESOLUTION_MODE.FIXED
+  return NATIVE_RESOLUTION_SCENE_PREFIXES.some(prefix => sceneName.startsWith(prefix))
     ? RESOLUTION_MODE.NATIVE
     : RESOLUTION_MODE.FIXED
 }
@@ -93,22 +103,27 @@ export async function ensureEngineForScene(sceneName, opts = {}) {
     return { k: activeEngine, switched: false }
   }
   const loaderDuringBoot = opts.loaderDuringBoot === true
+  //
+  // Any resolution swap (into native, out of native, or full reboot) covers
+  // the canvas with our DOM loader so Kaplay's default bar never flashes.
+  //
+  const leavingNative = activeResolutionMode === RESOLUTION_MODE.NATIVE &&
+    neededMode !== RESOLUTION_MODE.NATIVE
   const staleEngine = activeEngine
-  const silentSwap = !loaderDuringBoot && neededMode === RESOLUTION_MODE.NATIVE
   let loaderShown = false
   let loaderTimer = null
-  if (loaderDuringBoot) {
+  if (loaderDuringBoot || leavingNative || neededMode === RESOLUTION_MODE.NATIVE) {
     BootLoader.showLoader()
     BootLoader.setLoaderBarPct(0)
     loaderShown = true
-  } else if (!silentSwap) {
+  } else {
     loaderTimer = setTimeout(() => {
       BootLoader.showLoader()
       BootLoader.setLoaderBarPct(0)
       loaderShown = true
     }, ENGINE_SWAP_LOADER_DELAY_MS)
   }
-  activeResolutionMode === RESOLUTION_MODE.NATIVE && runGlowNativeTeardown()
+  activeResolutionMode === RESOLUTION_MODE.NATIVE && runNativeTeardown()
   staleEngine && teardownEngine(staleEngine)
   const freshEngine = await bootEngine(neededMode)
   if (loaderDuringBoot) {

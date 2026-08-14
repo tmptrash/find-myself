@@ -1,11 +1,13 @@
 import { CFG } from '../cfg.js'
 import { getRGB } from '../../../utils/helper.js'
 //
-// Cache of pre-computed semicircle polygon points indexed by scale.
-// Points are constant (depend only on BUG_BODY_SIZE and scale), so computing
-// them once and reusing eliminates ~42 k.vec2 allocations per semicircle bug per frame.
+// Reusable world-space semicircle polygons. Recreated when Kaplay (`k`)
+// changes so native engine swaps never reuse dead vec2 objects.
 //
-const _semicirclePtsCache = new Map()
+const SEMICIRCLE_SEGMENTS = 20
+let _semiPtsK = null
+const _semiFillPts = []
+const _semiOutlinePts = []
 //
 // Bug parameters
 //
@@ -14,6 +16,10 @@ const LEG_COUNT = 4  // 4 legs (2 per side)
 const LEG_LENGTH_1 = 8  // First segment length
 const LEG_LENGTH_2 = 7  // Second segment length
 const LEG_THICKNESS = 1.5
+//
+// Extra black rim around circular / flat-head monster eyes (on top of leg-thickness outline).
+//
+const EYE_OUTLINE_EXTRA_PX = 2
 const DETECTION_RADIUS = 60  // Detection distance - bugs hide when hero approaches
 const CRAWL_SPEED = 60  // Crawling speed (faster movement)
 const CRAWL_DURATION = 8.0  // Time to crawl before stopping
@@ -105,7 +111,8 @@ export function create(config) {
     hasUpwardLegs = false,
     targetFloorY = null,
     isDebugBug = false,
-    eyeScaleMultiplier = 1
+    eyeScaleMultiplier = 1,
+    headRingOutline = 0
   } = config
   //
   // Ensure debug bugs always have 4 legs
@@ -347,6 +354,7 @@ export function create(config) {
     targetFloorY,    // Store for target floor Y position
     isDebugBug,      // Store for debug bug flag
     eyeScaleMultiplier,
+    headRingOutline,
     crawlSpeed: finalCrawlSpeed,     // Unique speed for this bug
     crawlDuration,  // Unique duration for this bug
     stopDuration,   // Unique duration for this bug
@@ -1110,8 +1118,11 @@ function updateLegs(inst, dt) {
 /**
  * Draw bug with IK legs
  * @param {Object} inst - Bug instance
+ * @param {Object} [opts] - Draw options
+ * @param {boolean} [opts.skipEyes] - Skip eye pass (use drawEyes separately)
+ * @param {boolean} [opts.skipHead] - Skip head pass (use drawEyes for head + eyes on top)
  */
-export function draw(inst) {
+export function draw(inst, opts = {}) {
   const { k, pattern } = inst
   //
   // Draw body as semicircle (top half of circle) FIRST
@@ -1120,14 +1131,7 @@ export function draw(inst) {
   //
   // Calculate body orientation based on surface
   //
-  let bodyRotation
-  if (inst.surface === 'floor') {
-    bodyRotation = 0  // Flat on floor, rounded top
-  } else if (inst.surface === 'leftWall') {
-    bodyRotation = Math.PI / 2  // Against left wall
-  } else {
-    bodyRotation = Math.PI / 2  // Against right wall
-  }
+  const bodyRotation = bugBodyRotation(inst)
   //
   // Radius is used for body drawing, eye positioning, and leg attachment.
   //
@@ -1136,114 +1140,12 @@ export function draw(inst) {
   // Apply dropOffset to body Y position when drawing
   //
   const bodyY = inst.y + inst.dropOffset
-  k.pushTransform()
-  k.pushTranslate(inst.x, bodyY)
-  k.pushRotate(bodyRotation)
   //
-  // Draw body
+  // Legs first so the head sits on top of the IK strokes.
   //
-  if (inst.bodyShape === 'circle') {
-    //
-    // Circle body: full circle or flattened ellipse for flat-head variant
-    //
-    if (inst.hasFlatHead) {
-      const flatHeadWidth = radius * 2
-      const flatHeadHeight = radius * 0.8
-      if (inst.showOutline) {
-        k.drawEllipse({ pos: k.vec2(0, 0), radiusX: flatHeadWidth / 2 + 2, radiusY: flatHeadHeight / 2 + 2, color: k.rgb(0, 0, 0), opacity: 1 })
-      }
-      k.drawEllipse({ pos: k.vec2(0, 0), radiusX: flatHeadWidth / 2, radiusY: flatHeadHeight / 2, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-    } else {
-      if (inst.showOutline) {
-        k.drawCircle({ pos: k.vec2(0, 0), radius: radius + 2, color: k.rgb(0, 0, 0), opacity: 1 })
-      }
-      k.drawCircle({ pos: k.vec2(0, 0), radius, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-    }
-  } else {
-    //
-    // Semicircle body — polygon points cached by scale to avoid 42 vec2 allocations
-    // per bug per frame. Points are constant for a given scale.
-    //
-    const cached = getSemicirclePts(k, inst.scale)
-    if (inst.showOutline) {
-      k.drawPolygon({ pts: cached.outlinePts, color: k.rgb(0, 0, 0), opacity: 1 })
-    }
-    k.drawPolygon({ pts: cached.pts, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-  }
-  //
-  // Draw eye
-  //
-  if (inst.bodyShape === 'circle') {
-    const em = inst.eyeScaleMultiplier ?? 1
-    const outlineW = LEG_THICKNESS * inst.legThickness
-    const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em
-    const outerR = scleraR + outlineW
-    const pupilRadius = scleraR * 0.34
-    //
-    // When hero is idle during gather phase, bugs close their eyes (eyelid line)
-    //
-    if (inst.closedEyes) {
-      k.drawCircle({ pos: k.vec2(0, 0), radius: outerR, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-      const lidW = scleraR * 2
-      const lidH = outlineW * 1.5
-      k.drawRect({ width: lidW, height: lidH, pos: k.vec2(-lidW / 2, -lidH / 2), color: k.rgb(0, 0, 0), opacity: 1 })
-    } else {
-      const maxPupilOffset = scleraR * 0.32
-      const heroX = inst.hero?.character?.pos.x ?? inst.x
-      const heroY = inst.hero?.character?.pos.y ?? inst.y
-      const dx = heroX - inst.x
-      const dy = heroY - (inst.y + inst.dropOffset)
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      let pupilOffsetX = 0
-      let pupilOffsetY = 0
-      if (dist > 0) {
-        pupilOffsetX = (dx / dist) * maxPupilOffset
-        pupilOffsetY = (dy / dist) * maxPupilOffset
-      }
-      if (inst.hasFlatHead) {
-        //
-        // Flat-head: body-colored outer frame, white inner rect, tracked pupil
-        //
-        const eyeWidth = scleraR * 2.2
-        const eyeHeight = scleraR * 0.85
-        const outerW = eyeWidth + outlineW * 2
-        const outerH = eyeHeight + outlineW * 2
-        k.drawRect({ width: outerW, height: outerH, pos: k.vec2(-outerW / 2, -outerH / 2), color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-        k.drawRect({ width: eyeWidth, height: eyeHeight, pos: k.vec2(-eyeWidth / 2, -eyeHeight / 2), color: k.rgb(255, 255, 255), opacity: 1 })
-        const pupilWidth = pupilRadius * 2
-        const pupilHeight = pupilRadius * 1.5
-        k.drawRect({ width: pupilWidth, height: pupilHeight, pos: k.vec2(pupilOffsetX - pupilWidth / 2, pupilOffsetY - pupilHeight / 2), color: k.rgb(0, 0, 0), opacity: 1 })
-      } else {
-        //
-        // Round: outer ring (body color) + white sclera + tracked pupil
-        //
-        k.drawCircle({ pos: k.vec2(0, 0), radius: outerR, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
-        k.drawCircle({ pos: k.vec2(0, 0), radius: scleraR, color: k.rgb(255, 255, 255), opacity: 1 })
-        k.drawCircle({ pos: k.vec2(pupilOffsetX, pupilOffsetY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
-      }
-    }
-  } else {
-    //
-    // Semicircle: side eye on movement direction
-    //
-    const isMovingRight = inst.vx > 0
-    const isMovingLeft = inst.vx < 0
-    if (!inst.closedEyes && (isMovingRight || isMovingLeft)) {
-      const em = inst.eyeScaleMultiplier ?? 1
-      const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale * em
-      const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale * em
-      const eyeX = isMovingRight ? radius * 0.6 : -radius * 0.6
-      const eyeY = -radius * 0.4
-      k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
-      k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
-    }
-  }
-  k.popTransform()
-  //
-  // Draw legs AFTER body (on top of body)
-  // Legs attach to the front and back edges of the semicircle
-  //
-  const legColor = getRGB(k, pattern.bodyColor)  // Same color as body
+  const legRgb = inst.hasFlatHead
+    ? k.rgb(0, 0, 0)
+    : getRGB(k, pattern.bodyColor)
   //
   // Calculate attachment points on body edges
   // For floor: front = left edge, back = right edge (considering body rotation)
@@ -1380,28 +1282,206 @@ export function draw(inst) {
       p1: k.vec2(attachX, attachY),
       p2: k.vec2(jointX, jointY),
       width: actualLegThickness,
-      color: k.rgb(legColor.r, legColor.g, legColor.b),
+      color: k.rgb(legRgb.r, legRgb.g, legRgb.b),
       opacity: 1
     })
     k.drawLine({
       p1: k.vec2(jointX, jointY),
       p2: k.vec2(leg.footX, leg.footY),
       width: actualLegThickness,
-      color: k.rgb(legColor.r, legColor.g, legColor.b),
+      color: k.rgb(legRgb.r, legRgb.g, legRgb.b),
       opacity: 1
     })
     //
-    // Draw small circle at joint (knee) - only if showOutline is true
+    // Solid discs at the knee (and foot) so bent segments never show a gap
+    // between rectangle-capped drawLine strokes.
     //
+    const jointFillR = actualLegThickness / 2
     if (inst.showOutline) {
       k.drawCircle({
         pos: k.vec2(jointX, jointY),
-        radius: 1,
-        color: k.rgb(legColor.r, legColor.g, legColor.b),
+        radius: jointFillR + 0.5,
+        color: k.rgb(0, 0, 0),
         opacity: 1
       })
     }
+    k.drawCircle({
+      pos: k.vec2(jointX, jointY),
+      radius: jointFillR,
+      color: k.rgb(legRgb.r, legRgb.g, legRgb.b),
+      opacity: 1
+    })
+    k.drawCircle({
+      pos: k.vec2(leg.footX, leg.footY),
+      radius: jointFillR,
+      color: k.rgb(legRgb.r, legRgb.g, legRgb.b),
+      opacity: 1
+    })
   })
+  if (!opts.skipHead) {
+    drawBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation)
+  }
+  if (!opts.skipEyes) drawBugEyesOnTop(inst, k, bodyRgb, radius)
+}
+//
+// Draws only the face layer (for a separate z-index above foreground trees).
+//
+export function drawEyes(inst) {
+  const { k, pattern } = inst
+  const bodyRgb = getRGB(k, pattern.bodyColor)
+  const radius = BUG_BODY_SIZE * 1.5 * inst.scale
+  const bodyY = inst.y + inst.dropOffset
+  const bodyRotation = bugBodyRotation(inst)
+  drawBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation)
+  drawBugEyesOnTop(inst, k, bodyRgb, radius)
+}
+//
+// Floor vs wall body orientation for head drawing.
+//
+function bugBodyRotation(inst) {
+  if (inst.surface === 'floor') return 0
+  return Math.PI / 2
+}
+//
+// Head ring thickness matches the IK leg outline stroke (width + 1).
+//
+function bugHeadOutlinePad(inst) {
+  return LEG_THICKNESS * inst.legThickness + 1
+}
+//
+// Head/body silhouette in world coordinates — same space as the IK legs.
+// pushTranslate inside a GameObj custom draw() is screen-space on Kaplay 4000,
+// so heads vanished as soon as the camera left spawn.
+//
+function drawBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation) {
+  const outlinePad = bugHeadOutlinePad(inst)
+  const cx = inst.x
+  const cy = bodyY
+  if (inst.bodyShape === 'circle') {
+    if (inst.hasFlatHead) {
+      const flatHeadWidth = radius * 2
+      const flatHeadHeight = radius * 0.8
+      if (outlinePad > 0) {
+        k.drawEllipse({
+          pos: k.vec2(cx, cy),
+          radiusX: flatHeadWidth / 2 + outlinePad,
+          radiusY: flatHeadHeight / 2 + outlinePad,
+          angle: bodyRotation,
+          color: k.rgb(0, 0, 0),
+          opacity: 1
+        })
+      }
+      k.drawEllipse({
+        pos: k.vec2(cx, cy),
+        radiusX: flatHeadWidth / 2,
+        radiusY: flatHeadHeight / 2,
+        angle: bodyRotation,
+        color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b),
+        opacity: 1
+      })
+    } else {
+      if (inst.showOutline || outlinePad > 0) {
+        k.drawCircle({ pos: k.vec2(cx, cy), radius: radius + outlinePad, color: k.rgb(0, 0, 0), opacity: 1 })
+      }
+      k.drawCircle({ pos: k.vec2(cx, cy), radius, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+    }
+    return
+  }
+  const fillPts = fillWorldSemicirclePts(k, cx, cy, radius, outlinePad, bodyRotation)
+  if (inst.showOutline || outlinePad > 0) {
+    k.drawPolygon({ pts: fillPts.outlinePts, color: k.rgb(0, 0, 0), opacity: 1 })
+  }
+  k.drawPolygon({ pts: fillPts.pts, color: k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b), opacity: 1 })
+}
+//
+// Eyes render after legs so tall IK limbs never cover the face.
+//
+function drawBugEyesOnTop(inst, k, bodyRgb, radius) {
+  const bodyY = inst.y + inst.dropOffset
+  if (inst.bodyShape === 'circle') {
+    const em = inst.eyeScaleMultiplier ?? 1
+    const outlineW = LEG_THICKNESS * inst.legThickness + EYE_OUTLINE_EXTRA_PX
+    const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em
+    const outerR = scleraR + outlineW
+    const pupilRadius = scleraR * 0.34
+    if (inst.closedEyes) {
+      k.drawCircle({ pos: k.vec2(inst.x, bodyY), radius: outerR, color: k.rgb(0, 0, 0), opacity: 1 })
+      const lidW = scleraR * 2
+      const lidH = outlineW * 1.5
+      k.drawRect({ width: lidW, height: lidH, pos: k.vec2(inst.x - lidW / 2, bodyY - lidH / 2), color: k.rgb(0, 0, 0), opacity: 1 })
+      return
+    }
+    const maxPupilOffset = scleraR * 0.32
+    const heroX = inst.hero?.character?.pos.x ?? inst.x
+    const heroY = inst.hero?.character?.pos.y ?? inst.y
+    const dx = heroX - inst.x
+    const dy = heroY - bodyY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    let pupilOffsetX = 0
+    let pupilOffsetY = 0
+    if (dist > 0) {
+      pupilOffsetX = (dx / dist) * maxPupilOffset
+      pupilOffsetY = (dy / dist) * maxPupilOffset
+    }
+    if (inst.hasFlatHead) {
+      const eyeWidth = scleraR * 2.2
+      const eyeHeight = scleraR * 0.85
+      const outerW = eyeWidth + outlineW * 2
+      const outerH = eyeHeight + outlineW * 2
+      k.drawRect({ width: outerW, height: outerH, pos: k.vec2(inst.x - outerW / 2, bodyY - outerH / 2), color: k.rgb(0, 0, 0), opacity: 1 })
+      k.drawRect({ width: eyeWidth, height: eyeHeight, pos: k.vec2(inst.x - eyeWidth / 2, bodyY - eyeHeight / 2), color: k.rgb(255, 255, 255), opacity: 1 })
+      const pupilWidth = pupilRadius * 2
+      const pupilHeight = pupilRadius * 1.5
+      k.drawRect({ width: pupilWidth, height: pupilHeight, pos: k.vec2(inst.x + pupilOffsetX - pupilWidth / 2, bodyY + pupilOffsetY - pupilHeight / 2), color: k.rgb(0, 0, 0), opacity: 1 })
+      return
+    }
+    k.drawCircle({ pos: k.vec2(inst.x, bodyY), radius: outerR, color: k.rgb(0, 0, 0), opacity: 1 })
+    k.drawCircle({ pos: k.vec2(inst.x, bodyY), radius: scleraR, color: k.rgb(255, 255, 255), opacity: 1 })
+    k.drawCircle({ pos: k.vec2(inst.x + pupilOffsetX, bodyY + pupilOffsetY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
+    return
+  }
+  const faceRight = inst.vx > 0 || (inst.vx === 0 && Math.cos(inst.movementAngle ?? 0) >= 0)
+  if (inst.closedEyes) return
+  const em = inst.eyeScaleMultiplier ?? 1
+  const eyeRadius = BUG_BODY_SIZE * 0.3 * inst.scale * em
+  const pupilRadius = BUG_BODY_SIZE * 0.15 * inst.scale * em
+  const eyeX = inst.x + (faceRight ? radius * 0.6 : -radius * 0.6)
+  const eyeY = bodyY - radius * 0.4
+  k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: eyeRadius, color: k.rgb(180, 180, 180), opacity: 1 })
+  k.drawCircle({ pos: k.vec2(eyeX, eyeY), radius: pupilRadius, color: k.rgb(0, 0, 0), opacity: 1 })
+}
+
+//
+// Fills reusable world-space semicircle polygons (top half, y-down).
+//
+function fillWorldSemicirclePts(k, cx, cy, radius, outlinePad, rot) {
+  ensureWorldSemicirclePts(k)
+  const cosR = Math.cos(rot)
+  const sinR = Math.sin(rot)
+  const n = SEMICIRCLE_SEGMENTS + 1
+  for (let i = 0; i < n; i++) {
+    const angle = Math.PI + (Math.PI * i / SEMICIRCLE_SEGMENTS)
+    const lx = Math.cos(angle) * radius
+    const ly = Math.sin(angle) * radius
+    _semiFillPts[i].x = cx + lx * cosR - ly * sinR
+    _semiFillPts[i].y = cy + lx * sinR + ly * cosR
+    const ox = Math.cos(angle) * (radius + outlinePad)
+    const oy = Math.sin(angle) * (radius + outlinePad)
+    _semiOutlinePts[i].x = cx + ox * cosR - oy * sinR
+    _semiOutlinePts[i].y = cy + ox * sinR + oy * cosR
+  }
+  return { pts: _semiFillPts, outlinePts: _semiOutlinePts }
+}
+//
+function ensureWorldSemicirclePts(k) {
+  if (_semiPtsK === k && _semiFillPts.length === SEMICIRCLE_SEGMENTS + 1) return
+  _semiPtsK = k
+  _semiFillPts.length = 0
+  _semiOutlinePts.length = 0
+  for (let i = 0; i <= SEMICIRCLE_SEGMENTS; i++) {
+    _semiFillPts.push(k.vec2(0, 0))
+    _semiOutlinePts.push(k.vec2(0, 0))
+  }
 }
 
 /**
@@ -1415,31 +1495,6 @@ export function draw(inst) {
  * @param {number} side - Side of the leg (-1 left, 1 right)
  * @returns {Object} Joint position { jointX, jointY }
  */
-//
-// Returns cached pre-computed polygon point arrays for a semicircle body of the
-// given scale. Avoids ~42 k.vec2 allocations per semicircle bug per frame.
-// Points are in local (body-centered) coordinates.
-//
-function getSemicirclePts(k, scale) {
-  const key = Math.round(scale * 1000)
-  if (_semicirclePtsCache.has(key)) return _semicirclePtsCache.get(key)
-  const radius = BUG_BODY_SIZE * 1.5 * scale
-  const segments = 20
-  const pts = []
-  const outlinePts = []
-  for (let i = 0; i <= segments; i++) {
-    //
-    // Angles from PI to 2*PI trace the top half of the circle in Kaplay coords
-    //
-    const angle = Math.PI + (Math.PI * i / segments)
-    pts.push(k.vec2(Math.cos(angle) * radius, Math.sin(angle) * radius))
-    outlinePts.push(k.vec2(Math.cos(angle) * (radius + 2), Math.sin(angle) * (radius + 2)))
-  }
-  const result = { pts, outlinePts }
-  _semicirclePtsCache.set(key, result)
-  return result
-}
-//
 function solveIK(baseX, baseY, targetX, targetY, len1, len2, side) {
   //
   // Distance from base to target

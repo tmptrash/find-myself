@@ -61,6 +61,26 @@ const RUN_LEAN_RAD = 0.2
 //
 const LEG_INTO_BODY = 2
 //
+// Leg outline black rim starts this many px below the body bottom edge so the
+// inner vertical stroke never climbs into the torso on single-leg run frames.
+//
+const LEG_OUTLINE_BODY_GAP = 1
+//
+// Run uses the same 1 px gap as idle / jump-0 so side outlines run the full
+// leg height at uniform fill width (an 8 px gap left the hip looking wider
+// and un-outlined).
+//
+const RUN_LEG_OUTLINE_BODY_GAP = LEG_OUTLINE_BODY_GAP
+//
+// Side-view run: nudge the trailing (smaller-X) leg 1 px toward the facing
+// direction so its outline does not peek past the body on the plant frame.
+//
+const RUN_TRAILING_LEG_X_NUDGE = 1
+//
+// Centered single-leg run frames (2 and 6): drop the vertical outline so it
+// does not climb into the leaned torso.
+//
+const RUN_CENTER_LEG_OUTLINE_INSET = 2
 // Ignore airborne flicker shorter than this — prevents run↔squat loops when
 // the hitbox briefly loses contact with a platform mid-stride
 //
@@ -1590,9 +1610,19 @@ function onUpdate(inst) {
         syncJumpCollision(inst)
         if (!isMoving) {
           updateIdleAnimation(inst)
+          inst.character.flipX = inst.direction === -1
+          return
         }
-        inst.character.flipX = inst.direction === -1
-        return
+        //
+        // Glow thin branch/log flicker while walking: keep the run cycle below
+        // instead of freezing on a single run frame (used to return here even
+        // when isMoving).
+        //
+        const isGlowWalkFlicker = inst.currentLevel?.startsWith('lesson-glow.')
+        if (!isGlowWalkFlicker) {
+          inst.character.flipX = inst.direction === -1
+          return
+        }
       }
     }
     const groundFlicker = (inst.spawnLandGrace > 0 && inst.jumpPhase !== 'jumping') ||
@@ -3472,16 +3502,42 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       if (animation === 'run') {
         leftLegX = Math.max(headX, Math.min(leftLegX, headX + CHAR_WIDTH - LEG_FILL_WIDTH))
         rightLegX = Math.max(headX, Math.min(rightLegX, headX + CHAR_WIDTH - LEG_FILL_WIDTH))
+        const maxLegX = headX + CHAR_WIDTH - LEG_FILL_WIDTH
+        //
+        // Trailing leg (the one further back): shift 1 px toward the facing
+        // direction so the outline sits on the body edge, not past it.
+        //
+        if (leftLegX < rightLegX) {
+          leftLegX = Math.min(leftLegX + RUN_TRAILING_LEG_X_NUDGE, maxLegX)
+        } else if (rightLegX < leftLegX) {
+          rightLegX = Math.min(rightLegX + RUN_TRAILING_LEG_X_NUDGE, maxLegX)
+        }
       }
       //
       // Step 1: leg outlines — start at the body bottom so inner black edges
       // never climb into the torso (only a tiny tuck seals the crotch join)
       //
       const bodyBottom = headY + headHeight + bodyHeight
-      const legOutlineTop = Math.max(leftLegY, bodyBottom - LEG_INTO_BODY)
-      const legOutlineH = leftLegHeight - (legOutlineTop - leftLegY)
+      const legOutlineGap = animation === 'run' ? RUN_LEG_OUTLINE_BODY_GAP : LEG_OUTLINE_BODY_GAP
+      const runLegsMerged = animation === 'run' && Math.abs(leftLegX - rightLegX) <= 1
+      const centerOutlineInset = runLegsMerged ? RUN_CENTER_LEG_OUTLINE_INSET : 0
+      const leftLegOutlineTop = Math.max(leftLegY, bodyBottom + legOutlineGap + centerOutlineInset)
+      const rightLegOutlineTop = Math.max(rightLegY, bodyBottom + legOutlineGap + centerOutlineInset)
+      const leftLegOutlineH = leftLegHeight - (leftLegOutlineTop - leftLegY)
+      const rightLegOutlineH = rightLegHeight - (rightLegOutlineTop - rightLegY)
       ctx.fillStyle = OL
       const jumpLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
+      if (jumpLegBend === 0 && animation === 'run') {
+        //
+        // Clip outline to below the unrotated torso so inner black never
+        // climbs into the body, while the visible shaft keeps a 1 px rim
+        // on both sides (same construction as jump frame 0).
+        //
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, bodyBottom, SPRITE_SIZE, SPRITE_SIZE - bodyBottom)
+        ctx.clip()
+      }
       if (jumpLegBend !== 0) {
         //
         // Black outline on every bent jump frame (body already has OL rim;
@@ -3493,9 +3549,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
         strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, hipTop, leftH, jumpLegBend, LEG_OUTLINE_WIDTH)
         strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, hipTop, rightH, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_OUTLINE_WIDTH)
       } else {
-        fillRoundedRectBottom(ctx, leftLegX - 1, legOutlineTop - 1, 11, Math.max(2, legOutlineH + 2), LEG_CORNER_RADIUS + 1)
-        fillRoundedRectBottom(ctx, rightLegX - 1, legOutlineTop - 1, 11, Math.max(2, rightLegHeight - (legOutlineTop - rightLegY) + 2), LEG_CORNER_RADIUS + 1)
+        fillRoundedRectBottom(ctx, leftLegX - 1, leftLegOutlineTop, LEG_OUTLINE_WIDTH, Math.max(2, leftLegOutlineH + 1), LEG_CORNER_RADIUS + 1)
+        fillRoundedRectBottom(ctx, rightLegX - 1, rightLegOutlineTop, LEG_OUTLINE_WIDTH, Math.max(2, rightLegOutlineH + 1), LEG_CORNER_RADIUS + 1)
       }
+      jumpLegBend === 0 && animation === 'run' && ctx.restore()
       //
       // Step 2: torso + arms (optionally leaned) — painted after legs so the
       // solid body covers any leftover outline pixels at the hip join
@@ -3601,8 +3658,8 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           //
           ctx.fillRect(headX, bodyBottom - LEG_INTO_BODY, CHAR_WIDTH, LEG_INTO_BODY + 3)
         } else {
-          fillRoundedRectBottom(ctx, leftLegX, leftLegY, 9, leftLegHeight, LEG_CORNER_RADIUS)
-          fillRoundedRectBottom(ctx, rightLegX, rightLegY, 9, rightLegHeight, LEG_CORNER_RADIUS)
+          fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
+          fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
           //
           // Outer side seals only (1px black + body fill) — no inner black into torso
           //
@@ -3615,10 +3672,19 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
           ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
           //
-          // Run: black crotch seam between the legs (body fill covers the
-          // torso bottom outline; without this the gap reads as missing ink).
+          // Run: cover only the fill column at the hip (not the 1 px rims) so
+          // orange width stays LEG_FILL_WIDTH the whole way down, matching jump-0.
           //
           if (animation === 'run') {
+            const hipCoverH = Math.max(1, leftLegOutlineTop - bodyBottom + 2)
+            ctx.fillRect(leftLegX, bodyBottom - 1, LEG_FILL_WIDTH, hipCoverH)
+            ctx.fillRect(rightLegX, bodyBottom - 1, LEG_FILL_WIDTH, hipCoverH)
+          }
+          //
+          // Idle only: black crotch seam between the legs (run/jump leg spread
+          // leaves a partial line artifact; bent jump legs use hip cover only).
+          //
+          if (animation === 'idle') {
             const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
             const innerR = Math.max(leftLegX, rightLegX)
             if (innerR > innerL) {

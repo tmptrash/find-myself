@@ -335,14 +335,10 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   const onCrackFloor = footY != null &&
     footY >= pit.floorY - CRACK_STOMP_FEET_MAX &&
     footY <= pit.floorY + 8
-  if (pit.collapseArmed && overCrack && grounded && onCrackFloor &&
-    (justLanded || pit.leftBonusAirborne)) {
-    collapsePit(pit)
-    pit.collapseArmed = false
-    pit.wasOnBonusPlat = false
-    pit.leftBonusAirborne = false
-    pit.crackStompCount = 0
-  } else if (justLanded && !overCrack) {
+  if (justLanded && grounded && pit.cracksVisible && overCrack && onCrackFloor) {
+    pit.onCrackLandingShake?.()
+  }
+  if (justLanded && !overCrack) {
     pit.collapseArmed = false
     pit.leftBonusAirborne = false
   }

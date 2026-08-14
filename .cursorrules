@@ -703,14 +703,15 @@ set('level0BonusCollected', true)  // ❌ Missing section prefix
 ## 14. Pixel-Perfect Native-Resolution Levels
 
 ### Why this exists
-Every scene except Glow runs on a **fixed 1920x1080 virtual canvas** that Kaplay
+Every scene except Glow and touch lesson 0 runs on a **fixed 1920x1080 virtual canvas** that Kaplay
 letterboxes (stretches via CSS) to fit the real window. That stretch is smooth/
 anti-aliased, so on any window size where the stretch factor isn't a clean
 integer (almost every real monitor), hairline art — most noticeably the hero's
 1px black outline — blends into its background and flickers depending on which
 side of a source pixel the scaled edge lands on.
 
-The Glow level (`src/sections/glow/scenes/level0.js`) instead boots its own
+The Glow level (`src/sections/glow/scenes/level0.js`) and touch lesson 0
+(`src/sections/touch/scenes/lesson0.js`) instead boot their own
 Kaplay instance in **native resolution**: the canvas (and every
 `k.width()`/`k.height()` read afterwards) matches the real window size 1:1,
 with no internal offscreen buffer and no stretch. This is the pattern to reuse
@@ -738,7 +739,8 @@ for any future level that needs the same pixel-perfect rendering.
 
 ### Rules for writing a native-resolution level
 - Register the scene's name prefix in `resolutionModeForScene()`
-  (`engine-switch.js`) so the engine swap happens automatically on entry.
+  (`engine-switch.js`) so the engine swap happens automatically on entry
+  (Glow: `lesson-glow`, touch lesson 0: `lesson-touch.0`).
 - Never hardcode `CFG.visual.screen.width/height` for layout in a
   native-resolution scene — the real window size is unknown until the scene
   actually starts. Instead:

@@ -3,7 +3,8 @@ import * as BootLoader from './boot-loader.js'
 import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
 import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 import { normalizeSceneName } from './progress.js'
-import { ensureEngineForScene } from './engine-switch.js'
+import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene } from './engine-switch.js'
+import { RESOLUTION_MODE } from './game-engine.js'
 
 //
 // City sprite names used by time levels — tracked so we can compare pack keys.
@@ -272,8 +273,8 @@ export function onEngineResolutionSwapped() {
 }
 
 /**
- * Enter the scene. Some scenes (currently only Glow) run on a differently
- * sized engine than the one passed in — ensureEngineForScene transparently
+ * Enter the scene. Native-resolution scenes (Glow, touch lesson 0) run on a
+ * differently sized engine than the one passed in — ensureEngineForScene transparently
  * swaps to it first, tearing down and rebooting the whole Kaplay instance
  * when needed (see engine-switch.js). Touch procedural sprites from the
  * previous level are drained from the registry (no GPU free — GC handles
@@ -284,7 +285,10 @@ export function onEngineResolutionSwapped() {
  * @param {Function} [afterGo]
  */
 export async function enterPreparedScene(k, sceneName, afterGo) {
-  const { k: liveK, switched } = await ensureEngineForScene(sceneName)
+  const nativeTarget = resolutionModeForScene(sceneName) === RESOLUTION_MODE.NATIVE
+  const { k: liveK, switched } = await ensureEngineForScene(sceneName, {
+    loaderDuringBoot: nativeTarget
+  })
   //
   // A swapped-in engine starts with nothing beyond its core boot assets
   // loaded — any pack/registry bookkeeping from the previous engine no
@@ -311,9 +315,10 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
  * @param {Object} k
  * @param {string} sceneName
  * @param {Function} [afterGo]
+ * @param {Object} [opts] - Forwarded to prepareSceneAssets
  */
-export async function prepareSceneAssetsThenEnterScene(k, sceneName, afterGo) {
-  await prepareSceneAssets(k, sceneName)
+export async function prepareSceneAssetsThenEnterScene(k, sceneName, afterGo, opts = {}) {
+  await prepareSceneAssets(k, sceneName, opts)
   await enterPreparedScene(k, sceneName, afterGo)
 }
 
@@ -332,5 +337,12 @@ export function goAfterPreparingAssets(k, sceneName, afterGo) {
  * @param {Object} k
  */
 export function goToMenuAfterAssets(k) {
-  return goAfterPreparingAssets(k, 'menu')
+  const leavingNative = getActiveResolutionMode() === RESOLUTION_MODE.NATIVE
+  if (leavingNative) {
+    BootLoader.showLoader()
+    BootLoader.setLoaderBarPct(0)
+  }
+  return prepareSceneAssetsThenEnterScene(k, 'menu', undefined, {
+    retainLoader: leavingNative
+  })
 }

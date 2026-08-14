@@ -59,7 +59,7 @@ const LEVEL_SUBTITLES = {
   'lesson-time.1': ['You are growing. You are learning. Numbers begin\nto surround you. Growing up means learning what you\ncan touch — and what you should leave alone. Do not\ntouch the one.', 'time1-pre', 20, null, 'Don\'t forget the fragments of yourself —\nthey can be found in unexpected places', 4.2],
   'lesson-time.2': ['Rules appear. Some protect you, some punish you.\nMistakes are allowed — but not forever. Digits sum\neven safe, sum odd deadly.', 'time2-pre', 21],
   'lesson-time.3': ['Life consumes time while you hesitate. Act too\nslow — and it will catch you. Throw snow. Move\nfast. Everything happens at once.', 'time3-pre', 19],
-  'lesson-touch.0': '',
+  'lesson-touch.0': ['Before words, before understanding\nyou learn the world through touch', 'touch0-pre', 7],
   'lesson-touch.1': '',
   'lesson-touch.2': '',
   'lesson-touch.3': ['When you cannot see… touch to survive', 'touch3-pre', 8, 'Touch the bugs and see what happens...']
@@ -72,6 +72,7 @@ const FADE_TO_BLACK_DURATION = 0.8   // Fade overlay to black before pre-level t
 const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const GLOW_PRELEVEL_SCENE = 'lesson-glow.0'
+const TOUCH_L0_PRELEVEL_SCENE = 'lesson-touch.0'
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const SKIP_TEXT_FADE_DURATION = 0.35 // Fast fade out when the player skips the text
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
@@ -241,11 +242,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   const postAssetPreparePhase = (currentLevel === 'menu' || isFromLevel || isFromMenuSection) ? 'black_pause' : 'fade_to_black'
   const needsEarlyAssetLoad = isLessonScene(nextLevel)
   const isGlowPrelevel = needsEarlyAssetLoad && nextLevel === GLOW_PRELEVEL_SCENE
+  const isNativePrelevel = isGlowPrelevel ||
+    (needsEarlyAssetLoad && nextLevel === TOUCH_L0_PRELEVEL_SCENE)
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   //
-  // Glow: DOM loader covers pack prep + native engine boot before the yellow phrase.
+  // Native-resolution scenes: DOM loader covers pack prep + engine boot
+  // before the pre-level phrase (Kaplay's own bar never flashes).
   //
-  isGlowPrelevel && BootLoader.showLoader()
+  isNativePrelevel && BootLoader.showLoader()
   
   // Instance object to store text reference
   const inst = {
@@ -320,22 +324,22 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && liveK.destroy(o))
       inst.hintTextObj && inst.hintTextObj.exists() && liveK.destroy(inst.hintTextObj)
       inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && liveK.destroy(o))
-      inst?.textSound?.stop()
+      stopTransitionVoiceover(inst)
       inst.tooltipSuppressed && Tooltip.unsuppressAll()
       inst.tooltipSuppressed = false
       liveK.transitionCleanup = null
     }
   }
   
-  if (isGlowPrelevel) {
-    inst.assetPreparePromise = prepareGlowPrelevelAssets()
+  if (isNativePrelevel) {
+    inst.assetPreparePromise = prepareNativePrelevelAssets()
   } else if (needsEarlyAssetLoad) {
     inst.assetPreparePromise = prepareSceneAssets(transitionK, nextLevel).then(() => {
       inst.assetPrepareDone = true
     })
   }
   
-  async function prepareGlowPrelevelAssets() {
+  async function prepareNativePrelevelAssets() {
     await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true })
     if (inst.skipped) return
     transitionInterval?.cancel?.()
@@ -356,8 +360,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     ])
     transitionK._transitionOverlay = overlay
     bindTransitionEngine(transitionK)
-    BootLoader.setLoaderBarPct(55)
-    prewarmGlowLevel0HeavyAssets(transitionK, pct => BootLoader.setLoaderBarPct(55 + Math.round(pct * 0.4)))
+    if (nextLevel === GLOW_PRELEVEL_SCENE) {
+      BootLoader.setLoaderBarPct(55)
+      prewarmGlowLevel0HeavyAssets(transitionK, pct => BootLoader.setLoaderBarPct(55 + Math.round(pct * 0.4)))
+    }
     BootLoader.setLoaderBarPct(100)
     inst.assetPrepareDone = true
   }
@@ -396,11 +402,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     if (inst.skipped) return // Already skipped
     inst.skipped = true
     //
-    // If the pre-level phrase is still on screen, don't cut it off — run a
-    // quick fade-out instead and let the normal phase flow finish the
-    // transition (final pause → level load).
+    // If the pre-level phrase is still on screen, stop the voice-over
+    // immediately and run a quick fade-out into the next scene.
     //
     if (phase === 'text_fade_in' || phase === 'text_hold') {
+      stopTransitionVoiceover(inst)
       inst.fastTextFade = true
       inst.textFadeFrom = inst.textObj ? inst.textObj.opacity : 1
       phase = 'text_fade_out'
@@ -446,7 +452,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         return
       }
       if (inst.assetPrepareDone) {
-        !isGlowPrelevel && BootLoader.hideLoader()
+        !isNativePrelevel && BootLoader.hideLoader()
         phase = inst.postAssetPreparePhase
         timer = 0
       }
@@ -797,7 +803,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
     inst.hintTextObj && inst.hintTextObj.exists() && transitionK.destroy(inst.hintTextObj)
     inst.hintOutlineTexts && inst.hintOutlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
-    inst?.textSound?.stop()
+    stopTransitionVoiceover(inst)
     inst.tooltipSuppressed && Tooltip.unsuppressAll()
     inst.tooltipSuppressed = false
   }
@@ -963,4 +969,12 @@ function getPreviousLevel(targetLevel) {
     if (value === targetLevel) return key
   }
   return null
+}
+//
+// Stops the pre-level voice-over immediately (Space / Enter / Esc skip).
+//
+function stopTransitionVoiceover(inst) {
+  inst?.textSound?.stop()
+  inst && (inst.textSound = null)
+  Sound.stopSubtitleSound()
 }

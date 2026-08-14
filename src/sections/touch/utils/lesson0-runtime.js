@@ -63,6 +63,7 @@ export function onUpdateLesson0GameLoop(k, ctx) {
   // 6. Small-bug pyramid z-index
   //
   onUpdateSmallBugZIndex(ctx.smallBugDrawObjects)
+  onUpdateBugZIndex(ctx.bugDrawObjects)
   //
   // 7. Rain audio bootstrap
   //
@@ -240,9 +241,23 @@ function onUpdateBugsAndPyramids(k, ctx, cameraX, cullDist) {
 // Pyramid-state small bugs render above trees.
 //
 function onUpdateSmallBugZIndex(smallBugDrawObjects) {
-  for (const { bug, obj } of smallBugDrawObjects) {
-    const pyramidZIndex = bug.state === 'pyramid' ? 30 : bug.zIndex
-    obj.exists() && (obj.z = pyramidZIndex)
+  syncBugLegDrawZ(smallBugDrawObjects)
+}
+//
+// Long-legged floor bugs: legs stay behind hinged trees unless in pyramid state.
+//
+function onUpdateBugZIndex(bugDrawObjects) {
+  syncBugLegDrawZ(bugDrawObjects)
+}
+//
+// Legs follow pyramid z; big-bug heads draw on a fixed high layer in the scene.
+// Small floor bugs render whole-body above hinged trees (FLOOR_SMALL_BUG_DRAW_Z).
+//
+function syncBugLegDrawZ(legDrawObjects) {
+  if (!legDrawObjects?.length) return
+  for (const { bug, obj } of legDrawObjects) {
+    const baseZ = bug.state === 'pyramid' ? 30 : bug.zIndex
+    obj.exists() && (obj.z = baseZ)
   }
 }
 //

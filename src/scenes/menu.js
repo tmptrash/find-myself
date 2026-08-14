@@ -418,6 +418,7 @@ export function sceneMenu(k) {
       const grayColor = '#656565'
       const grayOutlineColor = '#1A1A1A'
       const yellowColor = '#FF8C00'  // Anti-hero orange/yellow color (same as hero color in time-complete)
+      const glowGoldColor = CFG.visual.colors.sections.glow.body
       const bodyColor = grayColor  // Always gray for sprite
       const outlineColor = isCompleted ? CFG.visual.colors.outline : grayOutlineColor
       //
@@ -469,6 +470,17 @@ export function sceneMenu(k) {
           addWatch: true
         })
       }
+      if (config.section === 'glow') {
+        Hero.loadHeroSprites({
+          k,
+          type: Hero.HEROES.ANTIHERO,
+          bodyColor: glowGoldColor,
+          outlineColor: CFG.visual.colors.outline,
+          addMouth: false,
+          addArms: false,
+          addWatch: false
+        })
+      }
       //
       // Preload section-colored variant for accurate hover/completed color
       // (avoids dark tinting that occurs when multiplying gray × section color)
@@ -490,6 +502,7 @@ export function sceneMenu(k) {
       const grayOutlineColorNoHash = grayOutlineColor.replace('#', '')
       const outlineColorNoHash = CFG.visual.colors.outline.replace('#', '')
       const yellowColorNoHash = yellowColor.replace('#', '')
+      const glowGoldColorNoHash = glowGoldColor.replace('#', '')
       const sectionColorNoHash = config.color.body.replace('#', '')
       const hasMouth = config.section === 'word' || config.section === 'time'
       const hasArms = config.section === 'touch' || config.section === 'word' || config.section === 'time'
@@ -498,8 +511,11 @@ export function sceneMenu(k) {
       antiHeroInst.spritePrefixGray = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${grayOutlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixBlack = `${Hero.HEROES.ANTIHERO}_${grayColorNoHash}_${outlineColorNoHash}${suffixes}`
       antiHeroInst.spritePrefixYellow = config.section === 'time' ? `${Hero.HEROES.ANTIHERO}_${yellowColorNoHash}_${outlineColorNoHash}_mouth_arms_watch` : null
+      antiHeroInst.spritePrefixGold = config.section === 'glow'
+        ? `${Hero.HEROES.ANTIHERO}_${glowGoldColorNoHash}_${outlineColorNoHash}${suffixes}`
+        : null
       antiHeroInst.spritePrefixColored = `${Hero.HEROES.ANTIHERO}_${sectionColorNoHash}_${outlineColorNoHash}${suffixes}`
-      antiHeroInst.currentPrefix = isCompleted ? antiHeroInst.spritePrefixColored : antiHeroInst.spritePrefixGray
+      antiHeroInst.currentPrefix = antiHeroInst.spritePrefixGray
       antiHeroInst.bakeByPrefix = {
         [antiHeroInst.spritePrefixGray]: {
           bodyColor: grayColor,
@@ -530,11 +546,25 @@ export function sceneMenu(k) {
         addArms: true,
         addWatch: true
       })
+      antiHeroInst.spritePrefixGold && (antiHeroInst.bakeByPrefix[antiHeroInst.spritePrefixGold] = {
+        bodyColor: glowGoldColor,
+        outlineColor: CFG.visual.colors.outline,
+        addMouth: hasMouth,
+        addArms: hasArms,
+        addWatch: hasWatch
+      })
       //
       // Switch to colored sprite immediately if section is completed
       // (Hero.create uses gray body, so the actual sprite needs replacing)
       //
-      isCompleted && applyMenuAntiHeroSpritePrefix(antiHeroInst, antiHeroInst.spritePrefixColored)
+      if (isCompleted) {
+        const completedPrefix = config.section === 'time'
+          ? antiHeroInst.spritePrefixYellow
+          : config.section === 'glow'
+            ? antiHeroInst.spritePrefixGold
+            : antiHeroInst.spritePrefixColored
+        completedPrefix && applyMenuAntiHeroSpritePrefix(antiHeroInst, completedPrefix)
+      }
       //
       // Store base position and phase offsets for floating animation
       //
@@ -552,6 +582,7 @@ export function sceneMenu(k) {
       antiHeroInst.isCompleted = isCompleted
       antiHeroInst.grayColor = grayColor
       antiHeroInst.yellowColor = yellowColor
+      antiHeroInst.glowGoldColor = glowGoldColor
       antiHeroInst.originalBodyColor = bodyColor
       antiHeroInst.baseScale = 1
       
@@ -658,7 +689,7 @@ export function sceneMenu(k) {
           if (lastTouchLevel && lastTouchLevel.startsWith('lesson-touch.')) {
             showTransitionToLevel(k, lastTouchLevel)
           } else {
-            goAfterPreparingAssets(k, 'lesson-touch.0')
+            createLevelTransition(k, 'menu-touch')
           }
         })
       }
@@ -880,6 +911,12 @@ export function sceneMenu(k) {
           //
           targetColor = antiHeroInst.yellowColor
           desiredPrefix = antiHeroInst.spritePrefixYellow
+        } else if (antiHeroInst.section === 'glow' && (antiHeroInst.isCompleted || isCurrentSection)) {
+          targetColor = antiHeroInst.glowGoldColor
+          desiredPrefix = antiHeroInst.spritePrefixGold
+        } else if (antiHeroInst.section === 'glow' && isHovered) {
+          targetColor = antiHeroInst.glowGoldColor
+          desiredPrefix = antiHeroInst.spritePrefixGold
         } else if (shouldUseBlackOutline) {
           //
           // Hovered, completed, or current section: use section-colored sprite
@@ -2010,7 +2047,7 @@ function isAntiHeroLocked(antiHeroInst, progress, currentSection) {
 // metadata so idle eye frames reload after an engine swap.
 //
 function applyMenuAntiHeroSpritePrefix(antiHeroInst, desiredPrefix) {
-  if (!desiredPrefix || antiHeroInst.currentPrefix === desiredPrefix) return
+  if (!desiredPrefix) return
   const k = antiHeroInst.k
   const bake = antiHeroInst.bakeByPrefix?.[desiredPrefix]
   antiHeroInst.currentPrefix = desiredPrefix

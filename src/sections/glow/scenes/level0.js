@@ -99,14 +99,15 @@ const CUTE_MUSH_COLORS = GLOW_PAL.cuteMushroom
 const CUTE_MUSH_GRAY_COLORS = GLOW_PAL.cuteMushroomGray
 //
 // Layout. Glow runs on its own native-resolution engine (see game-engine.js /
-// engine-switch.js) so the playfield always fills the real window: both the
-// top and bottom void strips are a fixed 50 px, whatever the actual screen
-// size turns out to be. SCREEN_W/SCREEN_H and everything derived from them
-// are therefore `let` bindings recomputed from the live k.width()/k.height()
-// at scene start (see recomputeGlowScreenLayout) instead of the fixed
-// CFG.visual.screen design constants every other (1920x1080) scene uses.
+// engine-switch.js) so the playfield always fills the real window: the top
+// void strip (110 px) holds the HUD row above the playfield, and the bottom
+// void strip is a fixed 50 px, whatever the actual screen size turns out to
+// be. SCREEN_W/SCREEN_H and everything derived from them are therefore `let`
+// bindings recomputed from the live k.width()/k.height() at scene start
+// (see recomputeGlowScreenLayout) instead of the fixed CFG.visual.screen
+// design constants every other (1920x1080) scene uses.
 //
-const TOP_MARGIN = 50
+const TOP_MARGIN = 110
 const BOTTOM_MARGIN = 50
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
@@ -199,7 +200,8 @@ const HORIZ_PLATFORM_H = 16
 // Hero branch collision sits slightly below the visible branch surface.
 //
 const BRANCH_PLAT_COLLISION_DROP_Y = 2
-const HERO_SPAWN_OFFSET_ABOVE_BRANCH = 80
+const SPAWN_MODE_BRANCH = 'branch'
+const SPAWN_MODE_GROUND = 'ground'
 //
 // Anti-tunnel band below the start branch — catches falls before lake-floor snap
 //
@@ -373,10 +375,6 @@ const PAR_FARTHEST_BAND_TOP = PAR_FARTHEST_TOP_MIN_Y - PAR_BAND_MARGIN_TOP
 const PAR_FARTHEST_BAND_BOTTOM = PAR_FARTHEST_TOP_MIN_Y + PAR_FARTHEST_TOP_RANGE + PAR_BAND_MARGIN_BOTTOM
 const PAR_FARTHEST_BAND_COUNT = 4200
 //
-// Forest fade-in duration (s) after the L letter reveals the parallax plane.
-//
-const PARALLAX_FADE_DURATION = 1.6
-//
 // Random tree spacing: each next trunk advances by a random fraction of the
 // average cell, so gaps between trees vary irregularly.
 //
@@ -488,9 +486,8 @@ const SHORE_ROCK_WIDTH_SCALE = 2.2
 // Scatter rocks across the lower-right part of the playfield.
 //
 const RIGHT_ROCK_COUNT = 8
-const COLOR_FADE_DURATION = 10
+const COLOR_FADE_DURATION = 2
 const TREE_REVEAL_FADE_DURATION = 0.85
-const L_PARALLAX_DELAY = 1.0
 //
 // GLOW HUD row — FPS sits between the section label and the small hero.
 // The section label's top Y is derived from the FPS row's vertical CENTER
@@ -502,8 +499,11 @@ const GLOW_HUD_LABEL_FONT_SIZE = 48
 const GLOW_HUD_LABEL_LETTER_SPACING = -5
 const GLOW_HUD_LABEL_START_X = LEFT_MARGIN + 40
 const GLOW_HUD_LETTER_COUNT = 4
-const GLOW_HUD_ROW_OFFSET_FROM_PLAYFIELD_TOP = 47
-const GLOW_HUD_FPS_TOP_Y = TOP_MARGIN + GLOW_HUD_ROW_OFFSET_FROM_PLAYFIELD_TOP
+//
+// HUD row lives inside the top void strip (above the playfield). FPS/label
+// share one vertical centre so GLOW, FPS, small hero and life sit on one line.
+//
+const GLOW_HUD_FPS_TOP_Y = 55
 const GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
 const GLOW_HUD_FPS_SLOT_GAP = 24
 const GLOW_HUD_SMALL_HERO_HALF_W = 42
@@ -511,6 +511,7 @@ const GLOW_HUD_SMALL_HERO_HALF_W = 42
 // Lake surface ripple lines — draw every Nth segment to cut post-O cost.
 //
 const WATER_SURFACE_LINE_STRIDE = 2
+const LAKE_SURFACE_CULL_MARGIN = 48
 const BIRD_UPDATE_INTERVAL = 1 / 24
 //
 // Blinking letters — value 6 fill (or gold for G), value 1 offset-outline.
@@ -577,11 +578,20 @@ const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
 const KEY_INTRO_SHOWN = 'glow.introShown'
 const KEY_CAMERA_INTRO_DONE = 'glow.cameraIntroDone'
 const KEY_RESPAWN_NEAR_TREE = 'glow.respawnNearTree'
+const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
+const KEY_LAST_SPAWN_X = 'glow.lastSpawnX'
 const KEY_BRANCH_TRAMP_REVEALED = 'glow.branchTrampRevealed'
-const BRANCH_TRAMP_MARIO_HINT_TEXT = 'Mario would have figured out what to do'
+const BRANCH_TRAMP_MARIO_HINT_TEXT = 'Mario would have figured\nout what to do'
 const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
 const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
-const BRANCH_TRAMP_MARIO_HINT_REPEAT = 15
+const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
+const BRANCH_TRAMP_MARIO_HINT_TEXT_ALT = 'I think Mario would\njump on me'
+const TRAMP_WATER_HINT_TEXT = 'But I\'ve never jumped\nover water before...'
+const TRAMP_WATER_HINT_DURATION = 6
+const TRAMP_WATER_HINT_INTERVAL = 30
+const WRONG_TRAMP_SING_HINT_REPEAT = 20
+const LETTER_PROGRESS_HINT_INTERVAL = 30
+const LETTER_PROGRESS_HINT_DURATION = 6
 const HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X = 88
 const HERO_SPAWN_FADE_DURATION = 0.75
 const PIT_CAVE_HINT_IDLE = 10
@@ -689,9 +699,7 @@ const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
 const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
 const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
 const HERO_TOOLTIP_AFTER_O = 'You need to talk\nto the mushroom.'
-const HINT_AFTER_O_MUSH_DURATION = 6
 const HERO_TOOLTIP_AFTER_TRAMP_WALK = 'I think we need to jump\nto the left of the mushroom.'
-const HERO_TOOLTIP_TEXT_COLOR = 'I never thought the world\ncould be this beautiful'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 //
@@ -874,7 +882,7 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
 //
-const BRANCH_TRAMP_OFFSET_X = 58
+const BRANCH_TRAMP_OFFSET_X = 95
 const BRANCH_TRAMP_BOOST_MULT = 1.68
 const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
@@ -905,7 +913,10 @@ const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
 const TRAMP_BAD_SING_TEXT = 'Oh my god, you sing so badly'
 const TRAMP_BAD_SING_DURATION = 4
-const BRANCH_TRAMP_WRONG_SING_DELAY = 5
+const TRAMP_BAD_SING_BUBBLE_FONT_SIZE = 22
+const TRAMP_BAD_SING_BUBBLE_PAD_X = 12
+const TRAMP_BAD_SING_BUBBLE_PAD_Y = 8
+const TRAMP_BAD_SING_BUBBLE_OFFSET_Y = -18
 const BRANCH_TRAMP_WRONG_SING_TEXT = "I'm not that mushroom!"
 const BRANCH_TRAMP_WRONG_SING_DURATION = 5
 const LETTER_ARROW_CORNER_RADIUS = 3
@@ -957,10 +968,12 @@ const DROWN_MASK_RIGHT_PAD = 120
 // Narrow below-bed cover follows the sinking hero — not a full-lake sheet.
 //
 const DROWN_BELOW_BED_COVER_HALF_W = 44
-const LAKE_SEGMENTS = 70
-const LAKE_WAVE_FREQ = 1.2
-const LAKE_WAVE_AMP = 4
-const LAKE_WAVE_PHASE_SCALE = 8
+const LAKE_SEGMENTS = 120
+const LAKE_WAVE_FREQ = 0.85
+const LAKE_WAVE_AMP = 3
+const LAKE_WAVE_PHASE_SCALE = 4
+const LAKE_WAVE_SECOND_AMP = 1.2
+const LAKE_WAVE_SECOND_FREQ = 1.6
 const LAKE_Z = 12
 //
 // Drowning draw order (back → front): hero, below-surface cover, lake fill.
@@ -1215,15 +1228,35 @@ function initGlowLevel0Scene(k) {
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
     const branchSpawnX = horizBranch.x1 + Math.round((horizBranch.x2 - horizBranch.x1) * HERO_BRANCH_FRACTION)
+    const lastSpawnMode = get(KEY_LAST_SPAWN_MODE, null)
+    const lastSpawnX = get(KEY_LAST_SPAWN_X, null)
+    const clampBranchSpawnX = (x) => Math.max(
+      horizBranch.x1 + LOG_SNAP_X_SLACK,
+      Math.min(horizBranch.x2 - LOG_SNAP_X_SLACK, x)
+    )
     //
     // Ground spawn: right of the branch trampoline (never on its cap). After a
     // drowning death or any revisit with explored right ground — same spot.
+    // Menu exit / death on branch or ground restores the last saved pose.
     //
-    const spawnOnGround = respawnNearTree || zones.groundDecorRight
-    const heroSpawnX = spawnOnGround ? treeGroundSpawnX : branchSpawnX
-    const heroSpawnY = respawnNearTree || spawnOnGround
-      ? FLOOR_Y - HERO_SPAWN_OFFSET_ABOVE_BRANCH
-      : horizBranch.physY - HERO_SPAWN_OFFSET_ABOVE_BRANCH
+    let spawnOnBranch = false
+    let heroSpawnX = branchSpawnX
+    if (respawnNearTree) {
+      heroSpawnX = treeGroundSpawnX
+    } else if (lastSpawnMode === SPAWN_MODE_BRANCH && lastSpawnX != null) {
+      spawnOnBranch = true
+      heroSpawnX = clampBranchSpawnX(lastSpawnX)
+    } else if (lastSpawnMode === SPAWN_MODE_GROUND && lastSpawnX != null) {
+      heroSpawnX = lastSpawnX
+    } else if (zones.groundDecorRight) {
+      heroSpawnX = treeGroundSpawnX
+    } else {
+      spawnOnBranch = true
+      heroSpawnX = branchSpawnX
+    }
+    const heroSpawnY = spawnOnBranch
+      ? branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+      : FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     //
     // Absolute silence until G — only quiet rain ambience (touch L0 style)
     //
@@ -1487,8 +1520,10 @@ function initGlowLevel0Scene(k) {
         cheekyTimer: 0,
         cheekyLineIdx: 0,
         badSingTimer: 0,
-        badSingTooltip: null,
-        cheekyTooltip: null
+        cheekyTooltip: null,
+        wrongSingCooldown: WRONG_TRAMP_SING_HINT_REPEAT,
+        waterHintCooldown: TRAMP_WATER_HINT_INTERVAL,
+        waterHintStarted: false
       },
       branchTrampWalk: {
         bounceCount: 0,
@@ -1498,8 +1533,7 @@ function initGlowLevel0Scene(k) {
         marioEligibleSince: null,
         marioHintCooldown: 0,
         marioHintTooltip: null,
-        wrongSingElapsed: 0,
-        wrongSingShown: false
+        marioHintShowCount: 0
       },
       trampMissingHints: { right: null, branch: null },
       trampBounceAir: false,
@@ -1537,7 +1571,6 @@ function initGlowLevel0Scene(k) {
       //
       heroGoldApplied: false,
       fpsCounter: null,
-      lParallaxTimer: null,
       pendingDialogAction: null,
       treeRevealFade: zones.tree ? 1 : 0,
       treeRevealActive: false,
@@ -1569,7 +1602,13 @@ function initGlowLevel0Scene(k) {
       pit: null,
       woodSurfaces: [
         { x1: horizBranch.x1, x2: horizBranch.x2, y: branchPlatY, h: HORIZ_PLATFORM_H }
-      ]
+      ],
+      letterProgressHintCooldown: LETTER_PROGRESS_HINT_INTERVAL,
+      lastLetterCollectTime: null
+    }
+    if ((zones.gCollected || zones.lCollected || zones.oCollected) && !zones.wCollected) {
+      inst.lastLetterCollectTime = k.time()
+      inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
     }
     inst.oZoneRevealTime = zones.oZone ? k.time() : null
     zones._lakeX1 = lakeX1
@@ -1582,7 +1621,7 @@ function initGlowLevel0Scene(k) {
     applyZoneVisibility(inst)
     restorePersistedGlowZoneVisuals(inst)
     zones.lCollected && rebakeGlowRockSpritesShaded(inst)
-    zones.lCollected && revealGlowFpsCounter(inst)
+    syncGlowFpsHudVisibility(inst)
     maybeStartGlowCameraIntro(inst, zones)
     updateGlowCamera(inst)
     updatePlayfieldBorderColors(inst)
@@ -1602,6 +1641,7 @@ function initGlowLevel0Scene(k) {
       cracksVisible: isGlowCaveCracksVisible(zones)
     })
     inst.pit.sceneRef = inst
+    inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
     inst.pit.crackFloor && tagGroundPlatform(inst.pit.crackFloor, sound, heroInst)
     inst.footParticles = GlowFootParticles.create({ k })
     syncGlowMidgesZones(inst.midges, zones, inst.pit.collapsed)
@@ -1851,9 +1891,8 @@ function heroTooltipAfterG(inst) {
 // Picks the hero tooltip line matching how much colour the world shows.
 //
 function heroTooltipText(inst) {
-  if (inst.zones.colorWorld) return HERO_TOOLTIP_TEXT_COLOR
   if (inst.trampWalk?.walked) return HERO_TOOLTIP_AFTER_TRAMP_WALK
-  if (inst.zones.oCollected) return HERO_TOOLTIP_AFTER_O
+  if (inst.zones.oCollected || inst.zones.colorWorld) return HERO_TOOLTIP_AFTER_O
   if (inst.zones.lCollected) return HERO_TOOLTIP_AFTER_L
   if (inst.zones.gCollected) return heroTooltipAfterG(inst)
   if (get(KEY_INTRO_SHOWN, false)) {
@@ -1870,6 +1909,31 @@ function isGlowHeroHoverTooltipVisible(inst) {
   if (inst.heroSpawnFade > 0 || inst.pendingGlowIntro) return false
   if (inst.introLock) return false
   return true
+}
+//
+// Resets the periodic post-letter hint timer when a letter is picked up.
+//
+function markLetterCollectedForProgressHint(inst) {
+  inst.lastLetterCollectTime = inst.k.time()
+  inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
+}
+//
+// Every 30 s after a letter pickup, bubble the same line as the hero hover
+// tooltip until the next letter is collected (then the line updates).
+//
+function updateLetterProgressHint(inst) {
+  if (inst.drowning || inst.dialogOpen || inst.introLock) return
+  if (inst.pendingGlowIntro || inst.heroSpawnFade > 0) return
+  const z = inst.zones
+  if (!z.gCollected && !z.lCollected && !z.oCollected) return
+  if (z.wCollected || inst.lastLetterCollectTime == null) return
+  inst.letterProgressHintCooldown -= inst.k.dt()
+  if (inst.letterProgressHintCooldown > 0) return
+  inst.letterProgressHintCooldown = LETTER_PROGRESS_HINT_INTERVAL
+  if (HeroHint.isActive(inst.heroHint)) return
+  const text = heroTooltipText(inst)
+  if (!text) return
+  HeroHint.show(inst.heroHint, text, LETTER_PROGRESS_HINT_DURATION, { dismissOnJump: false })
 }
 //
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the small
@@ -2093,14 +2157,35 @@ function restoreGlowFragmentHud(inst) {
   if (!inst?.levelIndicator || !hasGlowPersistedFragments()) return
   LevelIndicator.revealSmallHeroHud(inst.levelIndicator)
   inst.levelIndicator.updateHeroScore?.(get('heroScore', 0))
-  layoutGlowFpsHud(inst)
+  syncGlowFpsHudVisibility(inst)
 }
 //
 // Persists fragment storage keys before scene leave or native engine teardown.
 //
 function persistGlowFragmentKeysOnLeave(inst) {
+  persistGlowLastSpawn(inst)
   inst.bonusHeroInst?.collected && BonusHero.finalizeCollection(inst.bonusHeroInst)
   inst.pit?.pitBonus?.collected && BonusHero.finalizeCollection(inst.pit.pitBonus)
+}
+//
+// Remembers whether the hero was on the start branch or the ground so the
+// next visit can resume at the same place (menu exit or level reload).
+//
+function persistGlowLastSpawn(inst) {
+  const char = inst.heroInst?.character
+  if (!char?.pos || inst.drowning) return
+  const heroX = char.pos.x
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (isHeroOverStartBranchX(inst, heroX) &&
+    footY <= inst.startBranch.y + LOG_SNAP_STANDING_MAX) {
+    set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
+    set(KEY_LAST_SPAWN_X, heroX)
+    return
+  }
+  if (footY <= FLOOR_Y + LOG_SNAP_STANDING_MAX) {
+    set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
+    set(KEY_LAST_SPAWN_X, heroX)
+  }
 }
 //
 // Pins the GLOW HUD letters to screen space so they stay under the top bar
@@ -3926,6 +4011,7 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
           angle,
           color
         })
+        !gateBranchTramp && drawTrampBadSingBubble(k, state, drawX, floorY)
       }
     }
   ])
@@ -3934,6 +4020,44 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     ? !isBranchTrampolineVisible(zones)
     : !isRightTrampolineVisible(zones)
   return { state, drawLayer, colliderHome, gateBranchTramp }
+}
+//
+// Lightweight speech bubble while the walk-trampoline reacts to bad singing.
+// Avoids the full Tooltip path (formatText + fixed UI every frame on a moving cap).
+//
+function drawTrampBadSingBubble(k, state, x, floorY) {
+  if (!state.badSingUntil || k.time() >= state.badSingUntil) return
+  const fmt = state.badSingFmt
+  if (!fmt) return
+  const bubbleW = fmt.width + TRAMP_BAD_SING_BUBBLE_PAD_X * 2
+  const bubbleH = fmt.height + TRAMP_BAD_SING_BUBBLE_PAD_Y * 2
+  const capTop = floorY - TRAMP_TOTAL_H
+  const bubbleX = Math.round(x - bubbleW / 2)
+  const bubbleY = Math.round(capTop + TRAMP_BAD_SING_BUBBLE_OFFSET_Y - bubbleH)
+  k.drawRect({
+    pos: k.vec2(bubbleX - 2, bubbleY - 2),
+    width: bubbleW + 4,
+    height: bubbleH + 4,
+    radius: 10,
+    color: k.rgb(20, 20, 20)
+  })
+  k.drawRect({
+    pos: k.vec2(bubbleX, bubbleY),
+    width: bubbleW,
+    height: bubbleH,
+    radius: 8,
+    color: k.rgb(245, 242, 235),
+    opacity: 0.92
+  })
+  k.drawText({
+    text: TRAMP_BAD_SING_TEXT,
+    pos: k.vec2(x, bubbleY + TRAMP_BAD_SING_BUBBLE_PAD_Y),
+    anchor: 'top',
+    size: TRAMP_BAD_SING_BUBBLE_FONT_SIZE,
+    font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+    align: 'center',
+    color: k.rgb(30, 30, 30)
+  })
 }
 //
 // Walking legs — alternating stride with a short shin kick
@@ -4037,12 +4161,26 @@ function createWater(k, x1, x2, zones) {
         const time = k.time()
         fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, time)
         k.drawPolygon({ pts: ptsCache, color: k.rgb(c.r, c.g, c.b) })
+        const cam = sc?.camera
+        let viewX1 = x1
+        let viewX2 = x2
+        if (cam) {
+          const zoom = cam.zoom || 1
+          const halfW = cam.viewW / (2 * zoom)
+          const camX = k.camPos().x
+          viewX1 = camX - halfW - LAKE_SURFACE_CULL_MARGIN
+          viewX2 = camX + halfW + LAKE_SURFACE_CULL_MARGIN
+        }
+        const lineColor = k.rgb(c.r, c.g, c.b)
         for (let i = 0; i < LAKE_SEGMENTS; i += WATER_SURFACE_LINE_STRIDE) {
-          p1.x = ptsCache[i].x
+          const segX1 = ptsCache[i].x
+          const segX2 = ptsCache[i + 1].x
+          if (segX2 < viewX1 || segX1 > viewX2) continue
+          p1.x = segX1
           p1.y = ptsCache[i].y
-          p2.x = ptsCache[i + 1].x
+          p2.x = segX2
           p2.y = ptsCache[i + 1].y
-          k.drawLine({ p1, p2, width: 2, color: k.rgb(c.r, c.g, c.b) })
+          k.drawLine({ p1, p2, width: 2, color: lineColor })
         }
       }
     }
@@ -4106,7 +4244,9 @@ function fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, time) {
   for (let i = 0; i <= LAKE_SEGMENTS; i++) {
     const t = i / LAKE_SEGMENTS
     const x = x1 + t * span
-    const wave = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
+    const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
+    const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
+    const wave = wavePrimary + waveSecondary
     ptsCache[i].x = x
     ptsCache[i].y = waterY + wave
     const bi = (LAKE_SEGMENTS + 1) * 2 - 1 - i
@@ -4287,35 +4427,21 @@ function onDraw(inst) {
     drawParLayer(skyLayer)
     inst.zones.colorWorld && inst.colorFade > 0.2 && drawBackgroundBirds(inst)
     parLayers.forEach(drawParLayer)
-    if (fade >= 1 && pf >= 1) {
-      k.drawSprite({ sprite: BG_STATIC_COLOR, pos: k.vec2(0, 0), opacity: fade * pf })
-    } else {
-      const staticGrayOp = fade >= 1 ? 0 : (1 - fade) * pf
-      staticGrayOp > 0.02 && k.drawSprite({ sprite: BG_STATIC_GRAY, pos: k.vec2(0, 0), opacity: staticGrayOp })
-      fade > 0.02 && k.drawSprite({ sprite: BG_STATIC_COLOR, pos: k.vec2(0, 0), opacity: fade * pf })
-    }
   } else {
     drawBackgroundBirds(inst)
   }
   //
-  // The sky / tree / bush / static parallax layers above are full-screen
-  // sprites whose art extends below the ground line. While cross-fading
-  // (gray → color) at partial opacity they alpha-blend onto whatever was
-  // already painted, so their own below-ground pixels leaked through as
-  // translucent "ghost" trunk stumps under the ground until the fade
-  // finished — repaint the opaque ground band solidly on top to erase that
-  // blend residue, then redraw the underground decor (rocks, burrows,
-  // cracks) over it so it still sits correctly on top of the earth band.
+  // The sky / tree / bush parallax layers above are full-screen sprites whose
+  // art extends below the ground line. While cross-fading (gray → color) at
+  // partial opacity they alpha-blend onto whatever was already painted, so
+  // their own below-ground pixels leaked through as translucent "ghost"
+  // trunk stumps under the ground until the fade finished — repaint the
+  // opaque ground band solidly on top to erase that blend residue, then
+  // redraw the underground decor (rocks, burrows, cracks) over it so it still
+  // sits correctly on top of the earth band. Underground always uses the
+  // dedicated sprites so nothing jumps when the fade completes.
   //
-  // Once the parallax fade AND colour fade both reach 1, the static layer
-  // above already drew BG_STATIC_COLOR fully opaque (no cross-fade blending
-  // left to bleed through), and that sprite already bakes in the exact same
-  // ground fill + underground decor. Repainting both here again would just
-  // be two more full-screen draws wasted every frame for the rest of the
-  // level — this was the main source of the FPS drop right after O.
-  //
-  const parallaxStaticOpaque = zones.lZoneParallax && fade >= 1 && inst.parallaxFade >= 1
-  if (groundFillC && !parallaxStaticOpaque) {
+  if (groundFillC) {
     k.drawRect({
       pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
       width: GAME_W,
@@ -4323,7 +4449,7 @@ function onDraw(inst) {
       color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
     })
   }
-  innerGray && !parallaxStaticOpaque && drawUndergroundLayer(inst)
+  innerGray && drawUndergroundLayer(inst)
   //
   // Surface cracks / open cave on the far-right ground strip
   //
@@ -4449,8 +4575,7 @@ function updateMushroomTints(inst) {
     // darkening multiply (white = untinted).
     //
     if (obj._outlined) {
-      const t = Math.max(0, (fade - 0.5) * 2)
-      const c = lerpRgb(gray, white, t)
+      const c = lerpRgb(gray, white, fade)
       obj.color = inst.k.rgb(c.r, c.g, c.b)
       return
     }
@@ -4471,7 +4596,8 @@ function updateMushroomWhistleLean(inst) {
   const singing = (hero?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const pulse = hero?.whistlePulse ?? 0
   const side = hero?.whistleLeanSide ?? 1
-  inst.mushObjs.forEach(obj => {
+  const skipDecorLean = Boolean(inst.trampWalk?.walking)
+  !skipDecorLean && inst.mushObjs.forEach(obj => {
     if (obj.hidden) {
       obj.leanAngle = 0
       obj.angle = 0
@@ -4534,7 +4660,7 @@ function syncGlowMidgeDrawColor(inst) {
 // world is at least half faded in (dark rims appear after O).
 //
 function updateDecorOutlines(inst) {
-  const outlined = inst.colorFade >= 0.5
+  const outlined = inst.zones.colorWorld && inst.colorFade > 0
   if (inst._decorOutlineState === outlined) return
   inst._decorOutlineState = outlined
   const swap = obj => {
@@ -4686,6 +4812,8 @@ function startColorWorldFade(inst) {
   inst.zones.groundBg = true
   set(KEY_REVEALED_GROUND_BG, true)
   inst.colorFadeTarget = 1
+  inst.parallaxFade = inst.colorFade
+  revealLParallaxZone(inst)
   CanvasBackdrop.applyCanvasBackdrop(inst.k, OUTER_BG_HEX)
   !inst.zones.water && revealWaterZone(inst, false)
   applyZoneVisibility(inst)
@@ -4810,6 +4938,7 @@ function revealLLitZone(inst) {
 function revealLParallaxZone(inst) {
   if (inst.zones.lZoneParallax) return
   inst.zones.lZoneParallax = true
+  inst.parallaxFade = inst.colorFade ?? 0
   set(KEY_REVEALED_L, true)
   syncGlowCanvasBackdrop(inst.k, inst.zones)
   applyZoneVisibility(inst)
@@ -5077,6 +5206,7 @@ function collectLetterG(inst) {
   // Intro hints end the moment the first letter is taken.
   //
   HeroHint.clear(inst.heroHint)
+  markLetterCollectedForProgressHint(inst)
   inst.gLetter?.allObjects?.forEach(obj => obj.destroy?.())
   inst.gLetter = null
   Sound.playLetterPickupSoft(inst.sound)
@@ -5090,6 +5220,7 @@ function collectLetterG(inst) {
     LevelIndicator.setSectionLabelHidden(inst.levelIndicator, false)
     LevelIndicator.setSectionLabelLetterProgress(inst.levelIndicator, 1)
   }
+  syncGlowFpsHudVisibility(inst)
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 1)
   openGlowLetterDialog(inst, GLOW_DIALOG_G, () => {
     //
@@ -5112,6 +5243,7 @@ function collectLetterL(inst) {
   triggerGlowCameraShake(inst)
   inst.zones.lCollected = true
   set(KEY_COLLECTED_L, true)
+  markLetterCollectedForProgressHint(inst)
   inst.zones.outerFrame = true
   set(KEY_REVEALED_OUTER_FRAME, true)
   syncGlowCanvasBackdrop(inst.k, inst.zones)
@@ -5145,6 +5277,7 @@ function collectLetterO(inst) {
   triggerGlowCameraShake(inst)
   inst.zones.oCollected = true
   set(KEY_COLLECTED_O, true)
+  markLetterCollectedForProgressHint(inst)
   const entry = inst.oLetter
   inst.oLetter = null
   inst.letterOffscreenArrow = null
@@ -5160,7 +5293,6 @@ function collectLetterO(inst) {
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 3)
   applyZoneVisibility(inst)
   openGlowLetterDialog(inst, GLOW_DIALOG_O, () => {
-    inst.lParallaxTimer = L_PARALLAX_DELAY
     startColorWorldFade(inst)
     forceHeroIdleOnLog(inst)
     const char = inst.heroInst?.character
@@ -5169,7 +5301,6 @@ function collectLetterO(inst) {
       inst.dialogPinY = char.pos.y
       inst.dialogHeroPinned = true
     }
-    HeroHint.show(inst.heroHint, HERO_TOOLTIP_AFTER_O, HINT_AFTER_O_MUSH_DURATION)
   }, GLOW_DIALOG_SOUND_O)
 }
 //
@@ -5234,14 +5365,35 @@ function rgbToHex(c) {
   return `#${((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1)}`
 }
 //
-// Shows the top-centre FPS HUD (unlocked when the hero collects L).
+// Shows the top-centre FPS HUD when any top-bar element is visible.
 //
-function revealGlowFpsCounter(inst) {
+function isGlowTopHudElementVisible(inst) {
+  const li = inst.levelIndicator
+  if (!li) return false
+  if (inst.zones.gCollected) return true
+  if (li.smallHeroRevealed) return true
+  if (li.lifeRevealed) return true
+  return false
+}
+//
+// Creates or hides the FPS counter based on visible HUD chrome.
+//
+function syncGlowFpsHudVisibility(inst) {
+  if (!isGlowTopHudElementVisible(inst)) {
+    inst.fpsCounter && FpsCounter.setVisible(inst.fpsCounter, false)
+    return
+  }
   if (!inst.fpsCounter) {
     inst.fpsCounter = FpsCounter.create({ k: inst.k, topY: GLOW_HUD_FPS_TOP_Y })
   }
   FpsCounter.setVisible(inst.fpsCounter, true)
   layoutGlowFpsHud(inst)
+}
+//
+// Legacy alias — keeps call sites that reveal the FPS slot explicit.
+//
+function revealGlowFpsCounter(inst) {
+  syncGlowFpsHudVisibility(inst)
 }
 //
 // Lake shore / water-cluster rocks must appear the moment the lake opens.
@@ -5417,6 +5569,7 @@ function finishDrowning(inst) {
   LevelIndicator.revealLifeHud(inst.levelIndicator, !inst.zones.colorWorld)
   hasGlowPersistedFragments() && LevelIndicator.revealSmallHeroHud(inst.levelIndicator)
   hasGlowPersistedFragments() && inst.levelIndicator.updateHeroScore?.(get('heroScore', 0))
+  syncGlowFpsHudVisibility(inst)
   set(KEY_LIFE_SHOWN, true)
   inst.levelIndicator.updateLifeScore?.(newLife)
   Sound.playGentleLifeSound(inst.sound)
@@ -5678,10 +5831,11 @@ function onUpdate(inst) {
     }
   }
   //
-  // Forest fade-in after the L reveal — the plane eases from 0 to opaque.
+  // Forest and colour world share one 2 s ease — parallax tracks colorFade so
+  // trees, mushrooms and underground decor all appear together.
   //
-  if (inst.zones.lZoneParallax && inst.parallaxFade < 1) {
-    inst.parallaxFade = Math.min(1, inst.parallaxFade + k.dt() / PARALLAX_FADE_DURATION)
+  if (inst.zones.lZoneParallax && inst.parallaxFade < inst.colorFadeTarget) {
+    inst.parallaxFade = inst.colorFade
   }
   //
   // Birds only fly in the colour world (after the O letter).
@@ -5690,10 +5844,6 @@ function onUpdate(inst) {
   updateTreeRevealFade(inst, k.dt())
   inst.colorFade >= 0.5 && !inst.heroGoldApplied && inst.zones.colorWorld && applyColorWorldHero(inst)
   updatePlayfieldBorderColors(inst)
-  if (inst.lParallaxTimer != null) {
-    inst.lParallaxTimer -= k.dt()
-    inst.lParallaxTimer <= 0 && (inst.lParallaxTimer = null, revealLParallaxZone(inst))
-  }
   if (inst.pit?.pitBonus?.collected && !inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, countGlowLettersCollected(inst.zones), inst.zones.colorWorld)
     !inst.zones.gCollected && LevelIndicator.setSectionLabelHidden(inst.levelIndicator, true)
@@ -5897,9 +6047,11 @@ function onUpdate(inst) {
   updateTrampCheekyHint(inst)
   updateBranchTrampCheekyHint(inst)
   updateBranchTrampMarioHint(inst)
+  updateLetterProgressHint(inst)
+  updateTrampWaterHint(inst)
+  updateWrongTrampSingHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
   updateTrampBadSingHint(inst)
-  updateBranchTrampWrongSingHint(inst)
   updateGlowWorldAudioFade(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
@@ -6086,6 +6238,7 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
       tw.walking = false
       tw.walked = true
       inst.trampState.walkDir = -1
+      startTrampWaterHints(inst)
     }
     return
   }
@@ -6114,6 +6267,13 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     tw.walking = true
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
+    inst.trampState.badSingUntil = inst.k.time() + TRAMP_BAD_SING_DURATION
+    inst.trampState.badSingFmt = inst.k.formatText({
+      text: TRAMP_BAD_SING_TEXT,
+      size: TRAMP_BAD_SING_BUBBLE_FONT_SIZE,
+      font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
+      align: 'center'
+    })
   }
 }
 //
@@ -6203,7 +6363,7 @@ function updateBranchTrampMarioHint(inst) {
     return
   }
   const z = inst.zones
-  const eligible = !z.tree && z.groundRightStripMax >= 0 &&
+  const eligible = !inst.zones.gCollected && !glowThreeZonesExplored(inst) &&
     isBranchTrampolineVisible(z)
   if (!eligible) {
     tw.marioEligibleSince = null
@@ -6222,6 +6382,10 @@ function updateBranchTrampMarioHint(inst) {
   tw.marioHintCooldown = (tw.marioHintCooldown ?? 0) - k.dt()
   if (tw.marioHintCooldown > 0) return
   tw.marioHintCooldown = BRANCH_TRAMP_MARIO_HINT_REPEAT
+  tw.marioHintShowCount = (tw.marioHintShowCount ?? 0) + 1
+  const marioText = tw.marioHintShowCount >= 3
+    ? BRANCH_TRAMP_MARIO_HINT_TEXT_ALT
+    : BRANCH_TRAMP_MARIO_HINT_TEXT
   tw.marioHintTooltip = Tooltip.create({
     k: inst.k,
     forceVisible: true,
@@ -6230,7 +6394,7 @@ function updateBranchTrampMarioHint(inst) {
       y: FLOOR_Y - TRAMP_TOTAL_H / 2,
       width: TRAMP_TOTAL_W,
       height: TRAMP_TOTAL_H,
-      text: BRANCH_TRAMP_MARIO_HINT_TEXT,
+      text: marioText,
       offsetY: TRAMP_TOOLTIP_Y_OFFSET
     }]
   })
@@ -6253,58 +6417,70 @@ function updateBranchTrampCheekyHint(inst) {
   tw.cheekyTooltip = null
 }
 //
-// Bubble when the sing-to-walk countdown finishes — the mushroom is unimpressed
+// Bubble when the hero whistles away from the walk-trampoline mushroom.
 //
-function updateBranchTrampWrongSingHint(inst) {
-  const tw = inst.branchTrampWalk
+function updateWrongTrampSingHint(inst) {
+  const tw = inst.trampWalk
   const z = inst.zones
-  if (!tw || !z.oCollected || inst.trampWalk?.walked) return
+  if (!tw || !z.oCollected || tw.walked || tw.walking) return
+  if (inst.dialogOpen) return
   const char = inst.heroInst?.character
-  if (!char?.pos || !inst.branchTrampState) return
-  if (!isBranchTrampolineVisible(z)) return
+  if (!char?.pos || !inst.trampState) return
   const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const grounded = char.isGrounded?.() ?? false
-  const near = Math.abs(char.pos.x - inst.branchTrampState.x) < TRAMP_WALK_NEAR &&
-    grounded &&
-    Math.abs(char.pos.y + SURFACE_DETECT_Y - FLOOR_Y) < 28
-  if (!singing || !near) {
-    tw.wrongSingElapsed = 0
+  const footY = char.pos.y + SURFACE_DETECT_Y
+  if (!singing || !grounded || footY > FLOOR_Y + 28) {
+    tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
     return
   }
-  if (tw.wrongSingShown) return
-  tw.wrongSingElapsed += inst.k.dt()
-  if (tw.wrongSingElapsed < BRANCH_TRAMP_WRONG_SING_DELAY) return
-  tw.wrongSingShown = true
-  HeroHint.show(inst.heroHint, BRANCH_TRAMP_WRONG_SING_TEXT, BRANCH_TRAMP_WRONG_SING_DURATION)
+  const nearCorrect = Math.abs(char.pos.x - inst.trampState.x) < TRAMP_WALK_NEAR_SINGING
+  if (nearCorrect) {
+    tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
+    return
+  }
+  tw.wrongSingCooldown -= inst.k.dt()
+  if (tw.wrongSingCooldown > 0) return
+  if (HeroHint.isActive(inst.heroHint)) return
+  tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
+  HeroHint.show(inst.heroHint, BRANCH_TRAMP_WRONG_SING_TEXT, BRANCH_TRAMP_WRONG_SING_DURATION, {
+    dismissOnJump: false
+  })
+}
+//
+// First hint when the walk-trampoline mushroom reaches the lake; repeats every 30 s.
+//
+function startTrampWaterHints(inst) {
+  const tw = inst.trampWalk
+  if (!tw || tw.waterHintStarted) return
+  tw.waterHintStarted = true
+  tw.waterHintCooldown = TRAMP_WATER_HINT_INTERVAL
+  if (HeroHint.isActive(inst.heroHint)) return
+  HeroHint.show(inst.heroHint, TRAMP_WATER_HINT_TEXT, TRAMP_WATER_HINT_DURATION, { dismissOnJump: false })
+}
+//
+// Repeats the post-walk water hint on the hero every 30 s.
+//
+function updateTrampWaterHint(inst) {
+  const tw = inst.trampWalk
+  if (!tw?.walked || !tw.waterHintStarted) return
+  if (inst.drowning || inst.dialogOpen) return
+  tw.waterHintCooldown -= inst.k.dt()
+  if (tw.waterHintCooldown > 0) return
+  tw.waterHintCooldown = TRAMP_WATER_HINT_INTERVAL
+  if (HeroHint.isActive(inst.heroHint)) return
+  HeroHint.show(inst.heroHint, TRAMP_WATER_HINT_TEXT, TRAMP_WATER_HINT_DURATION, { dismissOnJump: false })
 }
 //
 // Bubble when the sing-to-walk countdown finishes — the right mushroom is unimpressed
 //
 function updateTrampBadSingHint(inst) {
   const tw = inst.trampWalk
-  if (!tw || tw.badSingTimer <= 0) return
-  tw.badSingTimer -= inst.k.dt()
-  if (!tw.badSingTooltip) {
-    tw.badSingTooltip = Tooltip.create({
-      k: inst.k,
-      forceVisible: true,
-      targets: [{
-        x: () => inst.trampState.x,
-        y: FLOOR_Y - TRAMP_TOTAL_H / 2,
-        width: TRAMP_TOTAL_W,
-        height: TRAMP_TOTAL_H,
-        text: TRAMP_BAD_SING_TEXT,
-        offsetY: TRAMP_TOOLTIP_Y_OFFSET
-      }]
-    })
-    tw.badSingTooltip.activeTarget = tw.badSingTooltip.targets[0]
-    tw.badSingTooltip.opacity = 1
-  }
-  if (tw.badSingTimer <= 0) {
-    tw.badSingTimer = 0
-    tw.badSingTooltip && Tooltip.destroy(tw.badSingTooltip)
-    tw.badSingTooltip = null
-  }
+  const state = inst.trampState
+  if (!tw || !state?.badSingUntil) return
+  if (inst.k.time() < state.badSingUntil) return
+  state.badSingUntil = 0
+  state.badSingFmt = null
+  tw.badSingTimer = 0
 }
 //
 // True when tree segment sprites were baked during the pre-level transition.

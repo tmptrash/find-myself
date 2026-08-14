@@ -181,6 +181,7 @@ export async function bootEngine(resolutionMode) {
       resolve()
     })
   })
+  k.canvas && !BootLoader.isLoaderVisible() && (k.canvas.style.visibility = 'visible')
   return k
 }
 
@@ -232,6 +233,7 @@ async function initKaplayWithRetry(resolutionMode) {
     // stays null and kaplay.ts crashes on offsetWidth.
     //
     document.body.appendChild(canvas)
+    canvas.style.visibility = 'hidden'
     try {
       const k = kaplay(buildKaplayOpts(resolutionMode, canvas))
       activeCanvas = canvas
@@ -263,6 +265,7 @@ function buildKaplayOpts(resolutionMode, canvas) {
     font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
     crisp: true,
     background: [0, 0, 0],
+    loadingScreen: false,
     canvas
   }
   if (resolutionMode === RESOLUTION_MODE.NATIVE) {
@@ -400,6 +403,7 @@ function buildSoundTasks(k) {
     ['touch2-u', './sounds/touch2-u.mp3'],
     ['touch2-c', './sounds/touch2-c.mp3'],
     ['touch2-h', './sounds/touch2-h.mp3'],
+    ['touch0-pre', './sounds/touch0-pre.mp3'],
     ['touch3-pre', './sounds/touch3-pre.mp3'],
     ['crow0', './sounds/crow0.mp3'],
     ['frog', './sounds/frog.mp3'],

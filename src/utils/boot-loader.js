@@ -19,12 +19,23 @@ export function showLoader() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   loaderEl.style.display = 'flex'
+  document.querySelectorAll('canvas').forEach(canvas => {
+    canvas.style.visibility = 'hidden'
+  })
+}
+
+export function isLoaderVisible() {
+  const loaderEl = document.getElementById('loader')
+  return Boolean(loaderEl && loaderEl.style.display === 'flex')
 }
 
 export function hideLoader() {
   const loaderEl = document.getElementById('loader')
   if (!loaderEl) return
   loaderEl.style.display = 'none'
+  document.querySelectorAll('canvas').forEach(canvas => {
+    canvas.style.visibility = 'visible'
+  })
 }
 
 export function setLoaderBarPct(pct) {

@@ -5,10 +5,9 @@
 //
 export const TOUCH_LEVEL_KNOWN_SPRITE_IDS = {
   'lesson-touch.0': [
-    'bg-touch-l0-black-back',
-    'bg-touch-l0-back-organic',
-    'bg-touch-l0-grey-leaf-mid',
-    'bg-touch-l0-black-leaf-mid',
+    'bg-touch-l0-par-back',
+    'bg-touch-l0-par-grey',
+    'bg-touch-l0-par-black',
     'bg-touch-l0-front-static',
     'touch0-corner-sprite'
   ],

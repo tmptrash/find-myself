@@ -1,13 +1,11 @@
-import { CFG } from '../cfg.js'
-
 //
 // Rain depth layers: far (faint), mid (medium), near (prominent)
 // Each layer has its own color, speed, size and drop count
 //
 const LAYERS = [
-  { r: 100, g: 120, b: 150, opacity: 0.25, speed: 180, length: 10, width: 1.5, count: 40 },
-  { r: 70, g: 95, b: 130, opacity: 0.4, speed: 280, length: 16, width: 2, count: 30 },
-  { r: 40, g: 65, b: 100, opacity: 0.55, speed: 400, length: 22, width: 2.5, count: 20 }
+  { r: 100, g: 120, b: 150, opacity: 0.25, speed: 180, length: 10, width: 1.5, count: 22 },
+  { r: 70, g: 95, b: 130, opacity: 0.4, speed: 280, length: 16, width: 2, count: 16 },
+  { r: 40, g: 65, b: 100, opacity: 0.55, speed: 400, length: 22, width: 2.5, count: 12 }
 ]
 //
 // Z-indices for each rain layer (interleaved with scene layers)
@@ -65,8 +63,8 @@ const CLOUD_CENTER_OFFSET = 60
  */
 export function create(cfg) {
   const { k, topY, floorY, leftX, rightX, heroInst, antiHeroInst, monsterBugs = [], smallBugs = [], trees = [], intensity = 1 } = cfg
-  const screenW = CFG.visual.screen.width
-  const screenH = CFG.visual.screen.height
+  const screenW = k.width()
+  const screenH = k.height()
   //
   // Build canopy spawn points from tree crown data
   //
@@ -75,11 +73,12 @@ export function create(cfg) {
   // Initialize drop arrays for each layer
   //
   const playableW = rightX - leftX
+  const viewW = Math.min(playableW, screenW)
   const layers = LAYERS.map((layerCfg, li) => {
     const drops = []
     const dropCount = Math.max(1, Math.round(layerCfg.count * intensity))
     for (let i = 0; i < dropCount; i++) {
-      drops.push(spawnDrop(leftX, playableW, topY, floorY, canopyPoints))
+      drops.push(spawnDrop(leftX, playableW, topY, floorY, canopyPoints, leftX, viewW))
     }
     return {
       cfg: layerCfg,
@@ -109,8 +108,11 @@ export function create(cfg) {
   //
   layers.forEach((layer, li) => {
     k.add([
+      k.pos(0, 0),
       k.z(layer.zIndex),
       {
+        width: rightX - leftX + leftX,
+        height: screenH,
         draw() {
           onDraw(inst, li)
         }
@@ -158,9 +160,11 @@ function buildCanopyPoints(trees) {
  * @param {Array<Object>} canopyPoints - Tree canopy spawn points
  * @returns {Object} Drop object
  */
-function spawnDrop(leftX, playableW, topY, floorY, canopyPoints) {
+function spawnDrop(leftX, playableW, topY, floorY, canopyPoints, spawnX1, spawnW) {
   const cloudY = topY + CLOUD_CENTER_OFFSET
-  const x = leftX + Math.random() * playableW
+  const x1 = spawnX1 ?? leftX
+  const w = spawnW ?? playableW
+  const x = x1 + Math.random() * w
   const y = cloudY + Math.random() * (floorY - cloudY)
   return { x, y, active: true }
 }
@@ -173,6 +177,11 @@ function onUpdateRain(inst) {
   const { k, layers, topY, floorY, leftX, rightX, heroInst, antiHeroInst, monsterBugs, smallBugs, canopyPoints } = inst
   const dt = k.dt()
   const playableW = rightX - leftX
+  const camX = k.camPos().x
+  const viewHalf = inst.screenW / 2
+  const viewX1 = camX - viewHalf - 80
+  const viewX2 = camX + viewHalf + 80
+  const viewW = viewX2 - viewX1
   const heroPos = heroInst.character ? heroInst.character.pos : null
   const antiPos = antiHeroInst?.character ? antiHeroInst.character.pos : null
   for (let li = 0; li < layers.length; li++) {
@@ -190,7 +199,7 @@ function onUpdateRain(inst) {
       //
       if (drop.y >= floorY) {
         addSplash(splashes, drop.x, floorY, layer.cfg)
-        resetDrop(drop, leftX, playableW, topY, canopyPoints)
+        resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
         continue
       }
       //
@@ -201,7 +210,7 @@ function onUpdateRain(inst) {
       //
       if (heroPos && hitTest(drop, heroPos.x, heroPos.y - 25, HERO_HIT_HALF_W, HERO_HIT_HALF_H)) {
         addSplash(splashes, drop.x, drop.y, layer.cfg)
-        resetDrop(drop, leftX, playableW, topY, canopyPoints)
+        resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
         continue
       }
       //
@@ -209,7 +218,7 @@ function onUpdateRain(inst) {
       //
       if (antiPos && hitTest(drop, antiPos.x, antiPos.y - 25, HERO_HIT_HALF_W, HERO_HIT_HALF_H)) {
         addSplash(splashes, drop.x, drop.y, layer.cfg)
-        resetDrop(drop, leftX, playableW, topY, canopyPoints)
+        resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
         continue
       }
       //
@@ -227,7 +236,7 @@ function onUpdateRain(inst) {
           const splashX = bug.x + (dx / dist) * bugRadius
           const splashY = bugCenterY + (dy / dist) * bugRadius
           addSplash(splashes, splashX, splashY, layer.cfg)
-          resetDrop(drop, leftX, playableW, topY, canopyPoints)
+          resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
           hitMonster = true
           break
         }
@@ -239,9 +248,10 @@ function onUpdateRain(inst) {
       for (let s = 0; s < smallBugs.length; s++) {
         const sb = smallBugs[s]
         if (sb.state === 'pyramid') continue
+        if (sb.x < viewX1 || sb.x > viewX2) continue
         if (hitTest(drop, sb.x, sb.y, SMALL_BUG_HIT_HALF, SMALL_BUG_HIT_HALF)) {
           addSplash(splashes, drop.x, drop.y, layer.cfg)
-          resetDrop(drop, leftX, playableW, topY, canopyPoints)
+          resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
           break
         }
       }
@@ -249,7 +259,7 @@ function onUpdateRain(inst) {
       // Reset if drop drifts past the right wall
       //
       if (drop.x > rightX + 20) {
-        resetDrop(drop, leftX, playableW, topY, canopyPoints)
+        resetDrop(drop, leftX, playableW, topY, canopyPoints, viewX1, viewW)
       }
     }
     //
@@ -316,18 +326,17 @@ function addSplash(splashes, x, y, layerCfg) {
  * @param {number} topY - Bottom of top platform (cloud spawn line)
  * @param {Array<Object>} canopyPoints - Tree canopy spawn points
  */
-function resetDrop(drop, leftX, playableW, topY, canopyPoints) {
+function resetDrop(drop, leftX, playableW, topY, canopyPoints, spawnX1, spawnW) {
+  const x1 = spawnX1 ?? leftX
+  const w = spawnW ?? playableW
   const fromTree = canopyPoints.length > 0 && Math.random() < TREE_DROP_CHANCE
   if (fromTree) {
     const pt = canopyPoints[Math.floor(Math.random() * canopyPoints.length)]
     drop.x = pt.x + (Math.random() - 0.5) * 20
     drop.y = pt.y + Math.random() * 10
   } else {
-    //
-    // Spawn from cloud center with slight vertical scatter
-    //
     const cloudY = topY + CLOUD_CENTER_OFFSET
-    drop.x = leftX + Math.random() * playableW
+    drop.x = x1 + Math.random() * w
     drop.y = cloudY + (Math.random() - 0.5) * 40
   }
 }
@@ -343,11 +352,16 @@ function onDraw(inst, li) {
   const layer = layers[li]
   const cfg = layer.cfg
   const color = k.rgb(cfg.r, cfg.g, cfg.b)
+  const camX = k.camPos().x
+  const viewHalf = inst.screenW / 2
+  const viewX1 = camX - viewHalf - 80
+  const viewX2 = camX + viewHalf + 80
   //
   // Draw raindrops as short angled lines
   //
   for (const drop of layer.drops) {
     if (!drop.active) continue
+    if (drop.x < viewX1 || drop.x > viewX2) continue
     k.drawLine({
       p1: k.vec2(drop.x, drop.y),
       p2: k.vec2(drop.x + WIND_VX * 0.02, drop.y + cfg.length),
@@ -360,11 +374,12 @@ function onDraw(inst, li) {
   // Draw splash particles as tiny fading circles
   //
   for (const sp of layer.splashes) {
+    if (sp.x < viewX1 || sp.x > viewX2) continue
     const alpha = (sp.life / SPLASH_LIFETIME) * sp.opacity
     k.drawCircle({
       pos: k.vec2(sp.x, sp.y),
       radius: SPLASH_SIZE,
-      color: k.rgb(sp.r, sp.g, sp.b),
+      color,
       opacity: alpha
     })
   }

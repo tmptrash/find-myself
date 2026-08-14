@@ -494,8 +494,8 @@ function openPanel(inst) {
   inst.closeFlickerTime = CLOSE_HINT_FLICKER_DURATION
   inst.closeFlickerDir = -1
   Tooltip.suppressAll()
-  const centerX = CFG.visual.screen.width / 2
-  const centerY = CFG.visual.screen.height / 2
+  const centerX = k.width() / 2
+  const centerY = k.height() / 2
   const hintY = centerY + PANEL_HINT_Y_OFFSET
   const closeY = centerY + CLOSE_HINT_Y_OFFSET
   const boxX = centerX - PANEL_BOX_WIDTH / 2

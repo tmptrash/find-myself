@@ -11,7 +11,10 @@ import * as LevelHelp from '../../../utils/lesson-help.js'
 import * as TouchControls from '../../../utils/touch-controls.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import { goToMenuAfterAssets, goAfterPreparingAssets } from '../../../utils/lesson-assets.js'
+import { registerNativeTeardown } from '../../../utils/engine-switch.js'
+import * as BootLoader from '../../../utils/boot-loader.js'
 import { loadTouchSprite } from '../../../utils/touch-sprite-registry.js'
+import * as GlowCamera from '../../glow/utils/glow-camera.js'
 import { drawRealisticBird } from '../utils/realistic-bird.js'
 import * as OrganicParallax from '../utils/organic-parallax-tree.js'
 import { createHangingSpider, spiderHoverTooltipTarget } from '../utils/hanging-spider.js'
@@ -41,6 +44,28 @@ const PLAY_AREA_BOTTOM_TRIM = 100
 const BOTTOM_MARGIN = CFG.visual.gameArea.bottomMargin + PLAY_AREA_BOTTOM_TRIM
 const LEFT_MARGIN = CFG.visual.gameArea.leftMargin
 const RIGHT_MARGIN = CFG.visual.gameArea.rightMargin
+//
+// Touch lesson 0 runs on the native-resolution engine (see engine-switch.js /
+// .cursorrules §14). SCREEN_W/SCREEN_H and every layout value derived from
+// them are `let` bindings recomputed from k.width()/k.height() at scene start.
+// The playfield world is 3000 px wide; the camera scrolls it horizontally.
+//
+const WORLD_W = 3000
+let SCREEN_W = CFG.visual.screen.width
+let SCREEN_H = CFG.visual.screen.height
+let VIEW_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
+let VIEW_H = SCREEN_H - TOP_MARGIN - BOTTOM_MARGIN
+let PLAYFIELD_BOTTOM_Y = SCREEN_H - BOTTOM_MARGIN
+let TREE_ROOT_ABSOLUTE_MAX_Y = SCREEN_H - 6
+const L0_PAR_BACK_SPEED = 0.14
+const L0_PAR_GREY_SPEED = 0.30
+const L0_PAR_BLACK_SPEED = 0.46
+const L0_PAR_FRONT_STATIC_SPEED = 1
+const L0_PAR_TREE_HORIZ_BLEED = 160
+const L0_BG_PAR_BACK = 'bg-touch-l0-par-back'
+const L0_BG_PAR_GREY = 'bg-touch-l0-par-grey'
+const L0_BG_PAR_BLACK = 'bg-touch-l0-par-black'
+const L0_BG_PAR_FRONT = 'bg-touch-l0-front-static'
 //
 // End-of-level hint shown at the top during the gather phase (bugs flying to hero).
 // Pressing Space or Enter advances immediately; shows countdown from 15 seconds.
@@ -77,7 +102,7 @@ const WALL_COLOR_B = 40
 //
 // Platform dimensions
 //
-const FLOOR_Y = CFG.visual.screen.height - BOTTOM_MARGIN
+let FLOOR_Y = SCREEN_H - BOTTOM_MARGIN
 //
 // Floor thorns on bottom platform: clusters with gaps (same spike style as touch level 3)
 //
@@ -230,7 +255,7 @@ const L0_PARALLAX_FRONT_SCALE = 0.52
 // Hero spawn positions
 //
 const HERO_SPAWN_X = LEFT_MARGIN + 100
-const HERO_SPAWN_Y = FLOOR_Y - 50
+let HERO_SPAWN_Y = FLOOR_Y - 50
 //
 // No grass blades or floor thorns centered on hero start (horizontal band)
 //
@@ -479,7 +504,7 @@ const HERO_HEIGHT = 96  // SPRITE_SIZE (32) * HERO_SCALE (3)
 //
 // Raised so letter O is only reachable via firefly platform (not a normal jump from floor)
 //
-const ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 165  // Well above hero jump reach
+let ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 165  // Well above hero jump reach
 //
 // Decorative culling and atmosphere activation (multiples of viewport width)
 //
@@ -539,7 +564,7 @@ const TOUCH_FIREFLY_PLATFORM_Y_ABOVE_FLOOR = 115
 //
 // Precomputed absolute Y of the firefly platform center
 //
-const TOUCH_FIREFLY_PLATFORM_ACTUAL_Y = FLOOR_Y - TOUCH_FIREFLY_PLATFORM_Y_ABOVE_FLOOR
+let TOUCH_FIREFLY_PLATFORM_ACTUAL_Y = FLOOR_Y - TOUCH_FIREFLY_PLATFORM_Y_ABOVE_FLOOR
 //
 // Side offset of firefly platform from the monster center (in px)
 //
@@ -639,7 +664,7 @@ const TOUCH_LETTER_U_Z_MAIN = 31
 //
 // How many pixels the O letter's bottom sits below the monster head top edge
 //
-const TOUCH_LETTER_O_Y_OFFSET = 17
+const TOUCH_LETTER_O_Y_OFFSET = 8
 //
 // Y tolerance for hero-on-platform detection (hero bottom vs platform top)
 //
@@ -674,6 +699,8 @@ const TOUCH_GOAL_TEXT_C = "The world acts as one whole.\nConnection and Harmony\
  */
 export function sceneLesson0(k) {
   k.scene("lesson-touch.0", () => {
+    BootLoader.showLoader()
+    recomputeTouchLesson0Layout(k)
     //
     // Reset life score when entering from a different section.
     // Uses lastSection key (not lastLevel) so the check survives section-complete pre-routing.
@@ -705,104 +732,49 @@ export function sceneLesson0(k) {
     // visible at the edge of the viewport are drawn with WALL_COLOR).
     //
     CanvasBackdrop.applyCanvasBackdrop(k, WALL_COLOR_HEX)
-    k.onSceneLeave(() => {
-      CanvasBackdrop.clearCanvasBackdrop(k)
-    })
-    //
-    // Set gravity
-    //
     k.setGravity(CFG.game.gravity)
-    //
-    // Create sound instance
-    //
     const sound = Sound.create()
     Sound.startAudioContext(sound)
-    //
-    // Start touch.mp3 background music
-    //
     const touchMusic = k.play('touch', {
       loop: true,
       volume: CFG.audio.backgroundMusic.touch
     })
-    //
-    // Audio references for cleanup on scene leave
-    //
     const rainRef = { stop: null }
-    //
-    // Stop music and ambient sounds when leaving the scene (death, ESC, transition)
-    //
-    k.onSceneLeave(() => {
+    const stopTouchLoopAudio = () => {
       touchMusic.stop()
       rainRef.stop?.()
+    }
+    k.onSceneLeave(() => {
+      CanvasBackdrop.clearCanvasBackdrop(k)
+      stopTouchLoopAudio()
     })
-    //
-    // Draw background
-    //
-    k.onDraw(() => {
-      k.drawRect({
-        width: k.width(),
-        height: k.height(),
-        pos: k.vec2(0, 0),
-        color: k.rgb(L0_PLAYFIELD_BG_R, L0_PLAYFIELD_BG_G, L0_PLAYFIELD_BG_B)
-      })
+    registerNativeTeardown(() => {
+      CanvasBackdrop.clearCanvasBackdrop(k)
+      stopTouchLoopAudio()
     })
-    //
-    // Create dark background clouds in the distance at the top
-    //
+    const camera = GlowCamera.create({
+      k,
+      viewW: VIEW_W,
+      viewH: VIEW_H,
+      worldW: WORLD_W,
+      leftMargin: LEFT_MARGIN,
+      rightMargin: RIGHT_MARGIN
+    })
+    k.setBackground(k.rgb(L0_PLAYFIELD_BG_R, L0_PLAYFIELD_BG_G, L0_PLAYFIELD_BG_B))
+    k.camScale(1)
+    k.camPos(Math.round(camera.minCamX), camera.fixedCamY)
     createScrollingCloudBand(k, {
       areaLeft: LEFT_MARGIN,
-      areaRight: CFG.visual.screen.width - RIGHT_MARGIN,
+      areaRight: WORLD_W - RIGHT_MARGIN,
       cloudTopY: TOP_MARGIN + 20,
       cloudBottomY: TOP_MARGIN + 100,
-      cloudCount: isTouchDevice() ? 14 : 18,
+      cloudCount: isTouchDevice() ? 22 : 30,
       cloudRandomness: 20,
       baseCloudColor: k.rgb(L0_CLOUD_CIRCLE_R, L0_CLOUD_CIRCLE_G, L0_CLOUD_CIRCLE_B)
     })
-    //
-    // Create simple bottom platform
-    //
-    // Left wall (full height)
-    //
-    k.add([
-      k.rect(LEFT_MARGIN, CFG.visual.screen.height),
-      k.pos(LEFT_MARGIN / 2, CFG.visual.screen.height / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Right wall (full height)
-    //
-    k.add([
-      k.rect(RIGHT_MARGIN, CFG.visual.screen.height),
-      k.pos(CFG.visual.screen.width - RIGHT_MARGIN / 2, CFG.visual.screen.height / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Top wall (full width)
-    //
-    k.add([
-      k.rect(CFG.visual.screen.width, TOP_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, TOP_MARGIN / 2),
-      k.anchor("center"),
-      k.area(),
-      k.body({ isStatic: true }),
-      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
-      k.z(CFG.visual.zIndex.platforms),
-      CFG.game.platformName
-    ])
-    //
-    // Create rounded corners at all four game area corners
-    //
+    addTouchLesson0WorldBounds(k)
     createRoundedCorners(k)
+    createTouchLesson0FrameOverlay(k)
     //
     // Check completed sections for hero appearance
     //
@@ -950,13 +922,12 @@ export function sceneLesson0(k) {
     // Bottom platform (full width)
     //
     k.add([
-      k.rect(CFG.visual.screen.width, BOTTOM_MARGIN),
-      k.pos(CFG.visual.screen.width / 2, CFG.visual.screen.height - BOTTOM_MARGIN / 2),
+      k.rect(WORLD_W, BOTTOM_MARGIN),
+      k.pos(WORLD_W / 2, FLOOR_Y + BOTTOM_MARGIN / 2),
       k.anchor("center"),
       k.area(),
       k.body({ isStatic: true }),
-      k.color(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B),
-      k.z(CFG.visual.zIndex.platforms),
+      k.opacity(0),
       CFG.game.platformName
     ])
     //
@@ -964,7 +935,7 @@ export function sceneLesson0(k) {
     //
     const floorThornBaseY = FLOOR_Y - FLOOR_THORN_RAISE_OFFSET
     const floorThornStartX = LEFT_MARGIN + FLOOR_THORN_EDGE_INSET
-    const floorThornEndX = CFG.visual.screen.width - RIGHT_MARGIN - FLOOR_THORN_EDGE_INSET
+    const floorThornEndX = WORLD_W - RIGHT_MARGIN - FLOOR_THORN_EDGE_INSET
     const FLOOR_THORN_MAX_CLUSTERS = 3
     const floorThornExcludeZones = [
       { center: HERO_SPAWN_X, halfWidth: HERO_SPAWN_GRASS_THORN_EXCLUDE_HALF_WIDTH },
@@ -1008,7 +979,7 @@ export function sceneLesson0(k) {
     // Create grass/bushes/trees decoration with parallax depth layers
     //
     const grassY = FLOOR_Y - 2
-    const playableWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const playableWidth = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
     const bgColor = { r: L0_PLAYFIELD_BG_R, g: L0_PLAYFIELD_BG_G, b: L0_PLAYFIELD_BG_B }
     //
     // Same fog tint as Touch level 1 back-row circle trees (trunk + leaf RGB pulled toward scene grey).
@@ -1685,40 +1656,6 @@ export function sceneLesson0(k) {
     // one full-screen draw instead of four. The front static sheet stays
     // separate so birds (z=6) still fly between mid trees and front bushes.
     //
-    const createBackgroundCompositeCanvas = () => {
-      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        //
-        // Darkened ground band sits below the average back-row crown line.
-        //
-        if (layers.length > 0 && layers[0].trees.length > 0) {
-          const backLayer = layers[0]
-          const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
-          ctx.fillStyle = 'rgb(28, 28, 28)'
-          ctx.fillRect(0, avgCrownY, k.width(), FLOOR_Y - avgCrownY)
-        }
-        //
-        // Bake in painter order: back base → back organic → grey mid → black mid.
-        //
-        layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { skipOrganic: true })
-        layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { organicOnly: true })
-        layers[1] && drawLayerToCanvas(ctx, layers[1], 0, { organicOnly: true })
-        layers[2] && drawLayerToCanvas(ctx, layers[2], 0, { organicOnly: true })
-      })
-    }
-    
-    const createFrontStaticCanvas = () => {
-      return toCanvas({ width: k.width(), height: k.height(), pixelRatio: 1 }, (ctx) => {
-        if (!layers[3]) return
-        const staticTrees = layers[3].trees.filter(t => !t.branchClusters)
-        const frontLayerStatic = {
-          trees: staticTrees,
-          bushes: layers[3].bushes,
-          grassBlades: layers[3].grassBlades,
-          name: layers[3].name
-        }
-        drawLayerToCanvas(ctx, frontLayerStatic, 0, {})
-      })
-    }
     //
     // Helper function to draw layer to canvas
     //
@@ -1807,6 +1744,10 @@ export function sceneLesson0(k) {
           }
         }
       }
+      //
+      // Grass is world-locked on the playfield (live drawer), never baked
+      // into a lagging parallax sheet.
+      //
       if (!skipOrganic) {
         for (const tree of layer.trees) {
           if (!tree.branchClusters) continue
@@ -1816,40 +1757,41 @@ export function sceneLesson0(k) {
       }
     }
     
-    const backgroundCompositeDataURL = createBackgroundCompositeCanvas()
-    const frontStaticDataURL = createFrontStaticCanvas()
-    loadTouchSprite(k, 'bg-touch-l0-background', backgroundCompositeDataURL)
-    loadTouchSprite(k, 'bg-touch-l0-front-static', frontStaticDataURL)
-    //
-    // Single composite background sheet (z=2..5 layers baked together).
-    //
-    k.add([
-      k.z(L0_PARALLAX_FAR_CIRCLE_Z),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-l0-background',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
+    const maxParallaxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
+    const parBackW = bakeTouchParallaxLayer(k, L0_BG_PAR_BACK, L0_PAR_BACK_SPEED, maxParallaxScroll, L0_PAR_TREE_HORIZ_BLEED, (ctx) => {
+      if (layers.length > 0 && layers[0].trees.length > 0) {
+        const backLayer = layers[0]
+        const avgCrownY = backLayer.trees.reduce((sum, t) => sum + t.crownCenterY, 0) / backLayer.trees.length
+        ctx.fillStyle = 'rgb(28, 28, 28)'
+        ctx.fillRect(0, avgCrownY, WORLD_W, FLOOR_Y - avgCrownY)
       }
-    ])
-    //
-    // Front bushes / static circles (organic hinge trees drawn later).
-    //
-    k.add([
-      k.z(L0_PARALLAX_FRONT_STATIC_Z),
-      {
-        draw() {
-          k.drawSprite({
-            sprite: 'bg-touch-l0-front-static',
-            pos: k.vec2(0, 0),
-            anchor: "topleft"
-          })
-        }
+      layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { skipOrganic: true })
+      layers[0] && drawLayerToCanvas(ctx, layers[0], 0, { organicOnly: true })
+    })
+    const parGreyW = bakeTouchParallaxLayer(k, L0_BG_PAR_GREY, L0_PAR_GREY_SPEED, maxParallaxScroll, L0_PAR_TREE_HORIZ_BLEED, (ctx) => {
+      layers[1] && drawLayerToCanvas(ctx, layers[1], 0, { organicOnly: true })
+    })
+    const parBlackW = bakeTouchParallaxLayer(k, L0_BG_PAR_BLACK, L0_PAR_BLACK_SPEED, maxParallaxScroll, L0_PAR_TREE_HORIZ_BLEED, (ctx) => {
+      layers[2] && drawLayerToCanvas(ctx, layers[2], 0, { organicOnly: true })
+    })
+    const parFrontW = bakeTouchParallaxLayer(k, L0_BG_PAR_FRONT, L0_PAR_FRONT_STATIC_SPEED, maxParallaxScroll, 0, (ctx) => {
+      if (!layers[3]) return
+      const staticTrees = layers[3].trees.filter(t => !t.branchClusters)
+      const frontLayerStatic = {
+        trees: staticTrees,
+        bushes: layers[3].bushes,
+        grassBlades: [],
+        name: layers[3].name
       }
-    ])
+      drawLayerToCanvas(ctx, frontLayerStatic, 0)
+    })
+    //
+    // Parallax tree sheets — farther rows lag behind the camera (Owlboy-style).
+    //
+    addTouchParallaxSprite(k, camera, L0_BG_PAR_BACK, L0_PARALLAX_FAR_CIRCLE_Z, L0_PAR_BACK_SPEED, L0_PAR_TREE_HORIZ_BLEED, parBackW)
+    addTouchParallaxSprite(k, camera, L0_BG_PAR_GREY, L0_PARALLAX_GREY_LEAF_ROW_Z, L0_PAR_GREY_SPEED, L0_PAR_TREE_HORIZ_BLEED, parGreyW)
+    addTouchParallaxSprite(k, camera, L0_BG_PAR_BLACK, L0_PARALLAX_BLACK_LEAF_ROW_Z, L0_PAR_BLACK_SPEED, L0_PAR_TREE_HORIZ_BLEED, parBlackW)
+    addTouchParallaxSprite(k, camera, L0_BG_PAR_FRONT, L0_PARALLAX_FRONT_STATIC_Z, L0_PAR_FRONT_STATIC_SPEED, 0, parFrontW)
     //
     // Create birds flying in the background
     //
@@ -1908,23 +1850,19 @@ export function sceneLesson0(k) {
     
     birds._topMargin = TOP_MARGIN
     
-    k.add([
-      k.z(L0_BIRD_LAYER_Z),
-      {
-        draw() {
-          const cameraX = getCameraCenterX(k, birds._heroRef)
-          const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
-          drawL0Birds(k, birds, cameraX, cullDist)
-        }
-      }
-    ])
+    addWorldSpaceDraw(k, L0_BIRD_LAYER_Z, () => {
+      const cameraX = getCameraCenterX(k, birds._heroRef)
+      const cullDist = getDistanceThreshold(k, L0_CULL_SCREEN_MULT)
+      drawL0Birds(k, birds, cameraX, cullDist)
+    })
     //
-    // Create dynamic grass drawer with hero interaction
+    // Create dynamic grass drawer with hero interaction.
+    // All layers sit on the playfield (camera speed 1) — none ride parallax.
     //
     const allGrassBlades = []
-    for (const layer of layers) {
-      allGrassBlades.push(...layer.grassBlades)
-    }
+    layers.forEach(layer => {
+      layer.grassBlades && allGrassBlades.push(...layer.grassBlades)
+    })
     //
     // Grass push interaction constants — hoisted out of draw() so they are
     // not re-declared every frame. HERO_RADIUS_SQ avoids a sqrt per blade.
@@ -1932,35 +1870,26 @@ export function sceneLesson0(k) {
     const GRASS_HERO_RADIUS = 50
     const GRASS_PUSH_FORCE = 15
     const GRASS_HERO_RADIUS_SQ = GRASS_HERO_RADIUS * GRASS_HERO_RADIUS
+    const GRASS_CULL_MARGIN = 80
     //
     // Reusable vec2 instances — drawLine requires Vec2 with .sub() method.
     // Mutating them each blade avoids ~640 short-lived allocations/second.
     //
     const grassP1 = k.vec2(0, 0)
     const grassP2 = k.vec2(0, 0)
-    const grassDrawer = k.add([
-      k.z(20),
-      {
-        heroRef: null,
-        draw() {
+    const grassDrawer = { heroRef: null }
+    addWorldSpaceDraw(k, 20, () => {
           const time = k.time()
-          const heroX = this.heroRef ? this.heroRef.character.pos.x : -1000
-          const heroY = this.heroRef ? this.heroRef.character.pos.y : -1000
-          //
-          // Cull grass blades outside ~1 screen width from camera center (hero X).
-          // The level is wider than the viewport so far-away blades waste draw calls.
-          //
-          const cameraX = getCameraCenterX(k, this.heroRef)
-          const grassCullDist = getDistanceThreshold(k, 0.65)
+          const heroX = grassDrawer.heroRef ? grassDrawer.heroRef.character.pos.x : -1000
+          const heroY = grassDrawer.heroRef ? grassDrawer.heroRef.character.pos.y : -1000
+          const cameraX = k.camPos().x
+          const grassCull = SCREEN_W / 2 + GRASS_CULL_MARGIN
           for (const blade of allGrassBlades) {
-            if (!isWithinDistance(blade.x1, cameraX, grassCullDist)) continue
-            const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
-            //
-            // Squared distance check avoids sqrt on every blade every frame.
-            //
+            if (!isWithinDistance(blade.x1, cameraX, grassCull)) continue
             const dx = blade.x1 - heroX
             const dy = blade.y1 - heroY
             const distSq = dx * dx + dy * dy
+            const baseSway = Math.sin(time * blade.swaySpeed + blade.swayOffset) * blade.swayAmount
             let pushSway = 0
             if (distSq < GRASS_HERO_RADIUS_SQ) {
               const distance = Math.sqrt(distSq)
@@ -1979,9 +1908,7 @@ export function sceneLesson0(k) {
               opacity: blade.opacity
             })
           }
-        }
-      }
-    ])
+    })
     //
     // Create dynamic foreground trees drawer (40% of front layer)
     //
@@ -2007,9 +1934,15 @@ export function sceneLesson0(k) {
       })
       k.add([
         k.z(L0_FRONT_ORGANIC_DARK_BACKDROP_Z),
+        k.pos(0, 0),
         {
+          width: WORLD_W,
+          height: SCREEN_H,
           draw() {
+            const camX = k.camPos().x
+            const treeCull = SCREEN_W / 2 + 220
             for (const tree of dynamicTrees) {
+              if (Math.abs(tree.x - camX) > treeCull) continue
               tree.darkBackdropSpriteName && k.drawSprite({
                 sprite: tree.darkBackdropSpriteName,
                 pos: k.vec2(tree.darkBackdropX, tree.darkBackdropY),
@@ -2021,11 +1954,17 @@ export function sceneLesson0(k) {
       ])
       k.add([
         k.z(L0_FRONT_ORGANIC_DYNAMIC_Z),
+        k.pos(0, 0),
         {
+          width: WORLD_W,
+          height: SCREEN_H,
           draw() {
             const time = k.time()
+            const camX = k.camPos().x
+            const treeCull = SCREEN_W / 2 + 220
             for (const tree of dynamicTrees) {
               if (!tree.branchClusters) continue
+              if (Math.abs(tree.x - camX) > treeCull) continue
               //
               // Trunk + roots: drawn first, no sway
               //
@@ -2080,9 +2019,12 @@ export function sceneLesson0(k) {
     //
     // Bug4 (anti-hero monster platform) z is in FRONT of hinged foliage (L0_FRONT_ORGANIC_DYNAMIC_Z)
     // monster + the anti-hero on its head are clearly in front of all foliage.
-    // Other big bugs (1, 2, 3) keep the original z=8 so they hide behind front trees.
+    // Floor bugs sit above the grass drawer (z=20) but still behind hinged trees (z=25).
     //
-    const BIG_BUG_Z_INDEX = 8
+    const BIG_BUG_Z_INDEX = 24
+    const FLOOR_SMALL_BUG_DRAW_Z = 26
+    const BUG_HEAD_DRAW_Z = 32
+    const BIG_BUG_HEAD_RING_OUTLINE = 2
     const ANTIHERO_PLATFORM_Z_INDEX = 27
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
@@ -2101,7 +2043,7 @@ export function sceneLesson0(k) {
     // Place it at about 85% of screen width from left
     // Note: floorWidth is defined later, calculate it here for bug4 positioning
     //
-    const bug4FloorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const bug4FloorWidth = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
     const bug4X = LEFT_MARGIN + bug4FloorWidth * 0.85
     //
     // Calculate bug4 position same way as other big bugs
@@ -2172,11 +2114,12 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',  // Circle shape like other big bugs
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
       sfx: sound,
       bounds: {
         minX: LEFT_MARGIN + bug4Radius,  // Don't go beyond left platform (account for body radius)
-        maxX: CFG.visual.screen.width - RIGHT_MARGIN - bug4Radius,  // Don't go beyond right platform (account for body radius)
+        maxX: WORLD_W - RIGHT_MARGIN - bug4Radius,  // Don't go beyond right platform (account for body radius)
         minY: bug4BodyY,
         maxY: bug4BodyY
       }
@@ -2233,8 +2176,8 @@ export function sceneLesson0(k) {
     //
     const heroInst = Hero.create({
       k,
-      x: HERO_SPAWN_X,
-      y: HERO_SPAWN_Y,
+      x: Math.round(HERO_SPAWN_X),
+      y: Math.round(HERO_SPAWN_Y),
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
@@ -2316,7 +2259,7 @@ export function sceneLesson0(k) {
     const bugFloorY = FLOOR_Y - 4  // Lower by 6 pixels total (was -10)
     const bugs = []  // Big bugs only
     const smallBugs = []  // Small bugs and debug bug
-    const floorWidth = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+    const floorWidth = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
     //
     // Create four big bugs: three crawlers (far left + two) and bug4 (platform)
     // Note: BIG_BUG_* constants are defined earlier before bug4 creation
@@ -2346,7 +2289,7 @@ export function sceneLesson0(k) {
     const bug1MaxX = bug4X - 150  // Stop 150px before bug4
     const bug0MaxX = bug1X - 130
     const bug1MinX = Math.max(LEFT_MARGIN + bug1BodyRadius, bug0X + 100)
-    const bug1MaxXWithPlatform = Math.min(bug1MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug1BodyRadius)  // Don't go beyond right platform
+    const bug1MaxXWithPlatform = Math.min(bug1MaxX, WORLD_W - RIGHT_MARGIN - bug1BodyRadius)  // Don't go beyond right platform
     
     const bigBug0Inst = Bugs.create({
       k,
@@ -2366,11 +2309,13 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
+      targetFloorY: bugFloorY,
       sfx: sound,
       bounds: {
         minX: LEFT_MARGIN + bug0BodyRadius,
-        maxX: Math.min(bug0MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug0BodyRadius),
+        maxX: Math.min(bug0MaxX, WORLD_W - RIGHT_MARGIN - bug0BodyRadius),
         minY: bug0Y,
         maxY: bug0Y
       }
@@ -2394,7 +2339,9 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
+      targetFloorY: bugFloorY,
       sfx: sound,
       bounds: {
         minX: bug1MinX,
@@ -2418,7 +2365,7 @@ export function sceneLesson0(k) {
     const bug2BodyRadius = BUG_BODY_SIZE * 1.5 * BIG_BUG_SCALE * 0.9
     const bug2MaxX = bug4X - 150  // Stop 150px before bug4
     const bug2MinX = LEFT_MARGIN + bug2BodyRadius  // Don't go beyond left platform
-    const bug2MaxXWithPlatform = Math.min(bug2MaxX, CFG.visual.screen.width - RIGHT_MARGIN - bug2BodyRadius)  // Don't go beyond right platform
+    const bug2MaxXWithPlatform = Math.min(bug2MaxX, WORLD_W - RIGHT_MARGIN - bug2BodyRadius)  // Don't go beyond right platform
     
     const bigBug2Inst = Bugs.create({
       k,
@@ -2438,7 +2385,9 @@ export function sceneLesson0(k) {
       legThickness: BIG_BUG_LEG_THICKNESS,
       bodyShape: 'circle',
       eyeScaleMultiplier: BIG_BUG_EYE_SCALE,
+      headRingOutline: BIG_BUG_HEAD_RING_OUTLINE,
       legCount: 2,
+      targetFloorY: bugFloorY,
       sfx: sound,
       bounds: {
         minX: bug2MinX,
@@ -2514,17 +2463,19 @@ export function sceneLesson0(k) {
         hero: heroInst,
         surface: 'floor',
         scale: bugScale,
+        zIndex: FLOOR_SMALL_BUG_DRAW_Z,
         legLength1: smallBugLegLength1,
         legLength2: smallBugLegLength2,
         legDropFactor: smallBugLegDropFactor,
         targetFloorY: bugFloorY,  // Explicitly set floor Y so legs touch platform
         legSpreadFactor: 0.3,  // Keep legs close to body
         legCount: 4,  // Will be converted to 6 legs by component logic
+        bodyShape: 'semicircle',
         sfx: sound,
         touchRadius: 50,  // Increased distance for level 0
         bounds: {
           minX: LEFT_MARGIN + 30,
-          maxX: CFG.visual.screen.width - RIGHT_MARGIN - 30,
+          maxX: WORLD_W - RIGHT_MARGIN - 30,
           minY: bugY,
           maxY: bugY
         }
@@ -2552,21 +2503,27 @@ export function sceneLesson0(k) {
     // Create FPS counter
     //
     const fpsCounter = FpsCounter.create({ k })
+    FpsCounter.pinScreenFixed(fpsCounter)
     //
-    // Draw bugs with individual z-indices
-    // Create drawing objects that check state dynamically
+    // Long-legged floor bugs: legs behind hinged trees; heads on a high layer.
     //
     const bugDrawObjects = []
     bugs.forEach(bugInst => {
-      const drawObj = k.add([
-        k.z(bugInst.zIndex),
-        {
-          draw() {
-            Bugs.draw(bugInst)
-          }
-        }
-      ])
+      const drawObj = addWorldSpaceDraw(k, bugInst.zIndex, () => {
+        if (!isTouchL0WorldXOnScreen(k, bugInst.x)) return
+        Bugs.draw(bugInst, { skipHead: true, skipEyes: true })
+      })
       bugDrawObjects.push({ bug: bugInst, obj: drawObj })
+    })
+    addWorldSpaceDraw(k, BUG_HEAD_DRAW_Z, () => {
+      bugs.forEach(bugInst => {
+        if (!isTouchL0WorldXOnScreen(k, bugInst.x)) return
+        Bugs.drawEyes(bugInst)
+      })
+      smallBugs.forEach(bugInst => {
+        if (!isTouchL0WorldXOnScreen(k, bugInst.x, 80)) return
+        SmallBugs.drawEyes(bugInst)
+      })
     })
     const monsterBugs = [bigBug0Inst, bigBug1Inst, bigBug2Inst]
     //
@@ -2660,14 +2617,10 @@ export function sceneLesson0(k) {
     //
     const smallBugDrawObjects = []
     smallBugs.forEach(bugInst => {
-      const drawObj = k.add([
-        k.z(bugInst.zIndex),
-        {
-          draw() {
-            SmallBugs.draw(bugInst)
-          }
-        }
-      ])
+      const drawObj = addWorldSpaceDraw(k, bugInst.zIndex, () => {
+        if (!isTouchL0WorldXOnScreen(k, bugInst.x, 80)) return
+        SmallBugs.draw(bugInst, { skipHead: true, skipEyes: true })
+      })
       smallBugDrawObjects.push({ bug: bugInst, obj: drawObj })
     })
     //
@@ -2684,7 +2637,7 @@ export function sceneLesson0(k) {
       topY: TOP_MARGIN,
       floorY: FLOOR_Y,
       leftX: LEFT_MARGIN,
-      rightX: CFG.visual.screen.width - RIGHT_MARGIN,
+      rightX: WORLD_W - RIGHT_MARGIN,
       heroInst,
       monsterBugs: [bigBug0Inst, bigBug1Inst, bigBug2Inst],
       smallBugs,
@@ -2720,6 +2673,7 @@ export function sceneLesson0(k) {
     }
     k.add([
       k.z(0),
+      k.fixed(),
       {
         draw() {
           drawLightningFlash(k, thunderState)
@@ -2796,6 +2750,7 @@ export function sceneLesson0(k) {
     //
     k.add([
       k.z(CFG.visual.zIndex.ui + 5),
+      k.fixed(),
       {
         draw() {
           if (!touchLetterState.gatherActive) return
@@ -2804,7 +2759,7 @@ export function sceneLesson0(k) {
           //
           const remaining = Math.max(0, Math.ceil(TOUCH_GATHER_POST_ARRIVE_DELAY - touchLetterState.gatherTimer))
           const displayText = L0_GATHER_PROMPT_BASE + remaining
-          const cx = CFG.visual.screen.width / 2
+          const cx = SCREEN_W / 2
           //
           // Drop shadow (single black copy offset right+down), glow-level style.
           //
@@ -2891,8 +2846,10 @@ export function sceneLesson0(k) {
       targets: [spiderHoverTooltipTarget(spiderL0Inst, L0_SPIDER_TOOLTIP_TEXT)]
     })
     birds._heroRef = heroInst
-    const atmosphereAnchorX = LEFT_MARGIN + (CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN) / 2
-    k.onUpdate(() => onUpdateLesson0GameLoop(k, {
+    const atmosphereAnchorX = LEFT_MARGIN + (WORLD_W - LEFT_MARGIN - RIGHT_MARGIN) / 2
+    k.onUpdate(() => {
+      updateTouchLesson0Camera(camera, heroInst)
+      onUpdateLesson0GameLoop(k, {
       heroInst,
       checkFloorThorns,
       floorThornData,
@@ -2907,6 +2864,7 @@ export function sceneLesson0(k) {
       pyramidRuntime,
       fpsCounter,
       smallBugDrawObjects,
+      bugDrawObjects,
       rainRef,
       rainInst,
       startRainWhenReady,
@@ -2928,7 +2886,8 @@ export function sceneLesson0(k) {
       onUpdateThunder,
       sound,
       touchLetterState
-    }))
+    })
+    })
     //
     // Return to menu on ESC
     //
@@ -2937,6 +2896,7 @@ export function sceneLesson0(k) {
       Sound.stopAmbient(sound)
       goToMenuAfterAssets(k)
     })
+    BootLoader.hideLoader()
   })
 }
 
@@ -3515,43 +3475,32 @@ function createRoundedCornerSprite(radius, color) {
 function createRoundedCorners(k) {
   const cornerDataURL = createRoundedCornerSprite(CORNER_RADIUS, WALL_COLOR_HEX)
   loadTouchSprite(k, CORNER_SPRITE_NAME, cornerDataURL)
-  //
-  // Top-left corner
-  //
+  const BOTTOM_CORNER_Z = 26
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
     k.pos(LEFT_MARGIN, TOP_MARGIN),
+    k.fixed(),
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
-  //
-  // Top-right corner (rotate 90°)
-  //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
-    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, TOP_MARGIN),
+    k.pos(SCREEN_W - RIGHT_MARGIN, TOP_MARGIN),
     k.rotate(90),
+    k.fixed(),
     k.z(CFG.visual.zIndex.platforms + 1)
   ])
-  //
-  // Bottom corners need higher z-index to render above grass (z=20) and trees (z=25)
-  //
-  const BOTTOM_CORNER_Z = 26
-  //
-  // Bottom-left corner (rotate 270°)
-  //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
-    k.pos(LEFT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.pos(LEFT_MARGIN, PLAYFIELD_BOTTOM_Y),
     k.rotate(270),
+    k.fixed(),
     k.z(BOTTOM_CORNER_Z)
   ])
-  //
-  // Bottom-right corner (rotate 180°)
-  //
   k.add([
     k.sprite(CORNER_SPRITE_NAME),
-    k.pos(CFG.visual.screen.width - RIGHT_MARGIN, CFG.visual.screen.height - BOTTOM_MARGIN),
+    k.pos(SCREEN_W - RIGHT_MARGIN, PLAYFIELD_BOTTOM_Y),
     k.rotate(180),
+    k.fixed(),
     k.z(BOTTOM_CORNER_Z)
   ])
 }
@@ -3866,7 +3815,7 @@ const LIGHTNING_FLASH_OPACITY = 0.25
 // Flash Y band: from cloud bottom to back-tree canopy area
 //
 const LIGHTNING_FLASH_TOP_Y = TOP_MARGIN + 100
-const LIGHTNING_FLASH_BOTTOM_Y = FLOOR_Y - 100
+let LIGHTNING_FLASH_BOTTOM_Y = FLOOR_Y - 100
 //
 // Cricket/cicada ambient interval
 //
@@ -3974,7 +3923,7 @@ const PUDDLE_HERO_DETECT_Y = 35
 // thornDescriptors avoids placing puddles under floor thorn spikes.
 //
 function createPuddles(k, heroInst, sound, rockDescriptors = [], thornDescriptors = []) {
-  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const playableW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   const puddles = []
   //
   // Minimum gap between puddle edges so they don't overlap
@@ -4093,7 +4042,10 @@ function onUpdatePuddles(k, puddles) {
 // Draw elliptical puddles with expanding ripple rings
 //
 function drawPuddles(k, puddles) {
+  const camX = k.camPos().x
+  const viewHalf = SCREEN_W / 2 + 80
   for (const p of puddles) {
+    if (Math.abs(p.x - camX) > viewHalf + p.width / 2) continue
     k.drawEllipse({
       pos: k.vec2(p.x, p.y),
       radiusX: p.width / 2,
@@ -4288,7 +4240,7 @@ function drawLightningFlash(k, state) {
   if (state.flashTimer <= 0) return
   const progress = state.flashTimer / LIGHTNING_FLASH_DURATION
   const alpha = progress * LIGHTNING_FLASH_OPACITY
-  const screenW = CFG.visual.screen.width
+const screenW = SCREEN_W
   k.drawRect({
     pos: k.vec2(0, LIGHTNING_FLASH_TOP_Y),
     width: screenW,
@@ -4301,7 +4253,7 @@ function drawLightningFlash(k, state) {
 // Creates small fireflies drifting over the swamp in level 0
 //
 function createL0Fireflies(k) {
-  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const playableW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   const fireflies = []
   //
   // Fireflies stay in the lower third of the play area near the ground
@@ -4334,16 +4286,16 @@ function createL0Fireflies(k) {
   }
   fireflies._bounds = {
     minX: LEFT_MARGIN + 10,
-    maxX: CFG.visual.screen.width - RIGHT_MARGIN - 10,
+    maxX: WORLD_W - RIGHT_MARGIN - 10,
     minY: FLOOR_Y - TOUCH_FIREFLY_MAX_HEIGHT_ABOVE_FLOOR,
     maxY: FLOOR_Y - 20
   }
   k.add([
-    //
-    // z=26 places fireflies in front of trees (z=25) so they're never hidden
-    //
+    k.pos(0, 0),
     k.z(26),
     {
+      width: WORLD_W,
+      height: SCREEN_H,
       draw() {
         drawL0Fireflies(k, fireflies)
       }
@@ -4356,7 +4308,6 @@ function createL0Fireflies(k) {
 //
 function drawL0Fireflies(k, fireflies) {
   const t = k.time()
-  const touchMode = isTouchDevice()
   //
   // Cache shared color and camera X once per frame to avoid per-firefly allocations.
   // Culling uses hero position (camera proxy) with a half-screen margin.
@@ -4373,14 +4324,6 @@ function drawL0Fireflies(k, fireflies) {
     if (Math.abs(f.x - cameraX) > screenHalfW) continue
     const glow = (Math.sin(t * f.glowSpeed + f.phase) + 1) / 2
     const alpha = forceAlpha != null ? forceAlpha : (0.15 + glow * 0.7)
-    if (!touchMode) {
-      k.drawCircle({
-        pos: k.vec2(f.x, f.y),
-        radius: f.radius * 3,
-        color,
-        opacity: alpha * 0.15
-      })
-    }
     k.drawCircle({
       pos: k.vec2(f.x, f.y),
       radius: f.radius,
@@ -4393,7 +4336,7 @@ function drawL0Fireflies(k, fireflies) {
 // Creates small mushrooms on the ground using toCanvas(); skips floor puddle footprints.
 //
 function createMushrooms(k, floorPuddles = []) {
-  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const playableW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   const mushrooms = []
   //
   // Horizontal clearance vs puddle ellipse centers (same convention as puddle width along X).
@@ -4623,7 +4566,7 @@ function addGrassAroundRocks(k, rocks, allBlades, grassY) {
  * @returns {Array} Array of {x, y, radius} for placed rocks
  */
 function createRocks(k, thornData) {
-  const playableW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const playableW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   //
   // Reserve enough room so the rock sprite never extends outside the game area walls.
   // Rock sprite width = radius * 2.6; use the max radius so all rocks are safe.
@@ -4780,16 +4723,8 @@ function jitterL0GreyOrganicRgb(baseR, baseG, baseB) {
   }
 }
 //
-// Absolute bottom Y for any root in the scene. Computed once from screen height
-// and BOTTOM_MARGIN so roots never extend past the visible platform edge.
 //
-const TREE_ROOT_ABSOLUTE_MAX_Y = CFG.visual.screen.height - 6
-//
-// Single earthy brown tint kept for trunk/root palette coherence where descriptors still carry rootColor.
-//
-//
-// Foreground tree roots — burnt umber, the warm complement to the teal
-// world. Replaces the previous olive tone that fought the new palette.
+// Foreground tree roots — burnt umber, the warm complement to the teal world.
 //
 const L0_TREE_ROOT_COLOR_R = 112
 const L0_TREE_ROOT_COLOR_G = 64
@@ -5270,6 +5205,16 @@ function checkLetterPickup(heroX, heroY, pos, onCollect) {
   }
 }
 //
+//
+// Letter dialogs sit on the playfield centre (not the 1920×1080 design canvas).
+//
+function touchL0DialogLayout() {
+  return {
+    centerX: LEFT_MARGIN + VIEW_W / 2,
+    centerY: TOP_MARGIN + VIEW_H / 2
+  }
+}
+//
 // Hero collects letter T — switches to individual collect mode, dialog shown.
 //
 function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex, levelHelpInst) {
@@ -5290,6 +5235,7 @@ function collectLetterT(k, state, fireflies, levelIndicator, sound, wallColorHex
   LevelIndicator.flashLetterBurst(levelIndicator, 1)
   levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_T)
   LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_T, {
+    ...touchL0DialogLayout(),
     fillRgb: { r: 21, g: 37, b: 40 },
     textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
@@ -5321,6 +5267,7 @@ function collectLetterO(k, state, levelIndicator, sound, wallColorHex, levelHelp
   LevelIndicator.flashLetterBurst(levelIndicator, 2)
   levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_O)
   LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_O, {
+    ...touchL0DialogLayout(),
     fillRgb: { r: 21, g: 37, b: 40 },
     textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
@@ -5353,6 +5300,7 @@ function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelp
   LevelIndicator.flashLetterBurst(levelIndicator, 3)
   levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_U)
   LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_U, {
+    ...touchL0DialogLayout(),
     fillRgb: { r: 21, g: 37, b: 40 },
     textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
@@ -5375,7 +5323,7 @@ function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelp
 //
 function spawnTouchLetterU(k, state) {
   if (state.uObj) return
-  const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const playW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   const uPlatCX = LEFT_MARGIN + playW * 0.48
   const uFloatY = ANTIHERO_PLATFORM_Y + TOUCH_U_PLATFORM_Y_LOWER
   state.uObj = createPickupLetter(k, 'U', uPlatCX, uFloatY + TOUCH_U_LETTER_Y_EXTRA, TOUCH_LETTER_TILTS[2], {
@@ -5393,7 +5341,7 @@ function spawnTouchLetterU(k, state) {
 //
 function spawnTouchLetterCH(k, state) {
   if (state.cObj || state.hiddenPlatformC) return
-  const playW = CFG.visual.screen.width - LEFT_MARGIN - RIGHT_MARGIN
+  const playW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   //
   // C platform: same log style and size as U platform, placed slightly right of center
   //
@@ -5460,6 +5408,7 @@ function collectLetterC(k, state, fireflies, bugs, allBugsCombined, levelIndicat
   LevelIndicator.flashLetterBurst(levelIndicator, 5)
   levelHelpInst && (levelHelpInst.goalText = TOUCH_GOAL_TEXT_C)
   LevelHelp.openStandalonePanel(k, TOUCH_DIALOG_C, {
+    ...touchL0DialogLayout(),
     fillRgb: { r: 21, g: 37, b: 40 },
     textRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
     borderRgb: { r: TOUCH_LETTER_COLOR_R, g: TOUCH_LETTER_COLOR_G, b: TOUCH_LETTER_COLOR_B },
@@ -5551,7 +5500,7 @@ function onUpdateGatherPhase(k, state, bugs, allBugsCombined, touchMusic, sound)
         //
         if (monsterInst.bounds) {
           monsterInst.bounds.minX = 40
-          monsterInst.bounds.maxX = CFG.visual.screen.width - 40
+          monsterInst.bounds.maxX = WORLD_W - 40
         }
       }
       //
@@ -5768,7 +5717,7 @@ function destroyFireflyCounter(state) {
 //
 function activateBug4Movement(k, bug4Inst, platform, antiHeroInst, bugRadius) {
   const minX = LEFT_MARGIN + bugRadius + 10
-  const maxX = CFG.visual.screen.width - RIGHT_MARGIN - bugRadius - 10
+  const maxX = WORLD_W - RIGHT_MARGIN - bugRadius - 10
   //
   // Platform walker: always crawl left/right between play-area walls
   //
@@ -5879,7 +5828,7 @@ function spawnFireflyDeathBurst(k, x, y) {
 //
 function startL0DeathCountdown(k, sceneName, deathX, deathY) {
   let elapsed = 0
-  const cx = CFG.visual.screen.width / 2
+  const cx = SCREEN_W / 2
   const textCfg = { size: L0_DEATH_PROMPT_FONT, font: CFG.visual.fonts.regularFull }
   const initText = L0_DEATH_PROMPT_BASE + DEATH_COUNTDOWN_SECONDS_L0
   //
@@ -5892,6 +5841,7 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
     k.anchor('center'),
     k.color(0, 0, 0),
     k.opacity(0.85),
+    k.fixed(),
     k.z(CFG.visual.zIndex.ui + 60)
   ]))
   const promptText = k.add([
@@ -5900,6 +5850,7 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
     k.anchor('center'),
     k.color(k.rgb(220, 220, 220)),
     k.opacity(1),
+    k.fixed(),
     k.z(CFG.visual.zIndex.ui + 60.1)
   ])
   const destroyAll = () => {
@@ -5924,5 +5875,160 @@ function startL0DeathCountdown(k, sceneName, deathX, deathY) {
     if (promptText.exists()) promptText.text = newText
     outlines.forEach(o => o?.exists?.() && (o.text = newText))
     if (elapsed >= DEATH_COUNTDOWN_SECONDS_L0) doRestart()
+  })
+}
+//
+// Touch lesson 0 runs on the native-resolution engine — real window size is
+// only known once that engine is booted. Refresh SCREEN_W/SCREEN_H (and every
+// module-level value derived from them) from k.width()/k.height() at scene start.
+//
+function recomputeTouchLesson0Layout(k) {
+  SCREEN_W = k.width()
+  SCREEN_H = k.height()
+  VIEW_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
+  VIEW_H = SCREEN_H - TOP_MARGIN - BOTTOM_MARGIN
+  PLAYFIELD_BOTTOM_Y = SCREEN_H - BOTTOM_MARGIN
+  FLOOR_Y = SCREEN_H - BOTTOM_MARGIN
+  TREE_ROOT_ABSOLUTE_MAX_Y = SCREEN_H - 6
+  HERO_SPAWN_Y = FLOOR_Y - 50
+  ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 165
+  TOUCH_FIREFLY_PLATFORM_ACTUAL_Y = FLOOR_Y - TOUCH_FIREFLY_PLATFORM_Y_ABOVE_FLOOR
+  LIGHTNING_FLASH_BOTTOM_Y = FLOOR_Y - 100
+}
+//
+// Invisible world-space collision walls for the 3000 px playfield. Visual
+// letterbox chrome is the fixed overlay (createTouchLesson0FrameOverlay).
+//
+function addTouchLesson0WorldBounds(k) {
+  const addBound = (w, h, x, y) => k.add([
+    k.rect(w, h),
+    k.pos(x, y),
+    k.area(),
+    k.body({ isStatic: true }),
+    k.opacity(0),
+    CFG.game.platformName
+  ])
+  addBound(LEFT_MARGIN, SCREEN_H, 0, 0)
+  addBound(RIGHT_MARGIN, SCREEN_H, WORLD_W - RIGHT_MARGIN, 0)
+  addBound(WORLD_W, TOP_MARGIN, 0, 0)
+}
+//
+// Screen-space void bars so world art never bleeds into the HUD / side / bottom strips.
+//
+function createTouchLesson0FrameOverlay(k) {
+  const voidColor = k.rgb(WALL_COLOR_R, WALL_COLOR_G, WALL_COLOR_B)
+  k.add([
+    k.pos(0, 0),
+    k.z(CFG.visual.zIndex.ui - 1),
+    k.fixed(),
+    {
+      draw() {
+        k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: TOP_MARGIN, color: voidColor })
+        k.drawRect({
+          pos: k.vec2(0, PLAYFIELD_BOTTOM_Y),
+          width: SCREEN_W,
+          height: BOTTOM_MARGIN,
+          color: voidColor
+        })
+        k.drawRect({
+          pos: k.vec2(0, TOP_MARGIN),
+          width: LEFT_MARGIN,
+          height: VIEW_H,
+          color: voidColor
+        })
+        k.drawRect({
+          pos: k.vec2(SCREEN_W - RIGHT_MARGIN, TOP_MARGIN),
+          width: RIGHT_MARGIN,
+          height: VIEW_H,
+          color: voidColor
+        })
+      }
+    }
+  ])
+}
+//
+// Bakes one parallax depth layer with horizontal padding so it never gaps at
+// either camera scroll limit.
+//
+function bakeTouchParallaxLayer(k, spriteName, speed, maxScroll, horizBleed, drawFn) {
+  const pad = Math.ceil(maxScroll * (1 - speed)) + horizBleed
+  const canvasW = WORLD_W + pad * 2
+  const dataUrl = toCanvas({ width: canvasW, height: SCREEN_H, pixelRatio: 1 }, (ctx) => {
+    ctx.translate(pad, 0)
+    drawFn(ctx)
+  })
+  loadTouchSprite(k, spriteName, dataUrl)
+  return canvasW
+}
+//
+// Custom world-space draw() layers have no sprite AABB, so Kaplay culls them
+// once the camera leaves the origin. Give them the full world size at (0, 0).
+//
+function addWorldSpaceDraw(k, zIndex, drawFn) {
+  return k.add([
+    k.pos(0, 0),
+    k.z(zIndex),
+    {
+      width: WORLD_W,
+      height: SCREEN_H,
+      draw: drawFn
+    }
+  ])
+}
+//
+// True when a world X is inside the camera view plus a small side margin.
+//
+function isTouchL0WorldXOnScreen(k, x, margin = 160) {
+  return Math.abs(x - k.camPos().x) < SCREEN_W / 2 + margin
+}
+//
+// Draws a baked parallax sheet at the camera-lagged world X for its speed.
+//
+function addTouchParallaxSprite(k, camera, spriteName, zIndex, speed, bleed, canvasW) {
+  addWorldSpaceDraw(k, zIndex, () => {
+    const drawX = GlowCamera.getParallaxDrawX(camera, speed, bleed)
+    drawClippedParallaxSprite(k, spriteName, drawX, canvasW)
+  })
+}
+//
+// Draws only the on-screen slice of a wide parallax sheet (avoids filling
+// thousands of off-screen texels every frame).
+//
+function drawClippedParallaxSprite(k, spriteName, drawX, canvasW) {
+  if (!canvasW) {
+    k.drawSprite({
+      sprite: spriteName,
+      pos: k.vec2(drawX, 0),
+      anchor: 'topleft'
+    })
+    return
+  }
+  const pad = 8
+  const camX = k.camPos().x
+  const viewLeft = camX - SCREEN_W / 2 - pad
+  const viewRight = camX + SCREEN_W / 2 + pad
+  const srcLeft = Math.max(0, viewLeft - drawX)
+  const srcRight = Math.min(canvasW, viewRight - drawX)
+  if (srcRight <= srcLeft) return
+  const sliceW = srcRight - srcLeft
+  k.drawSprite({
+    sprite: spriteName,
+    pos: k.vec2(drawX + srcLeft, 0),
+    width: sliceW,
+    height: SCREEN_H,
+    quad: { x: srcLeft / canvasW, y: 0, w: sliceW / canvasW, h: 1 },
+    anchor: 'topleft'
+  })
+}
+//
+// Horizontal camera follow + idle pixel snap so the 1 px hero outline stays crisp.
+//
+function updateTouchLesson0Camera(camera, heroInst) {
+  const ch = heroInst?.character
+  if (!ch?.pos || !camera) return
+  GlowCamera.followHero(camera, ch.pos.x, ch.pos.y)
+  GlowCamera.alignHeroToScreenPixels(camera, heroInst, {
+    playfieldCenterX: LEFT_MARGIN + VIEW_W / 2,
+    playfieldCenterY: camera.fixedCamY
   })
 }

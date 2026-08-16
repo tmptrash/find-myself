@@ -51,7 +51,8 @@ const LEG_THICKNESS = 1.5
 // Round-headed long-legged L0 monsters subtract EYE_OUTLINE_REDUCE_PX from that rim.
 //
 const EYE_OUTLINE_EXTRA_PX = 2
-const EYE_OUTLINE_REDUCE_PX = 3
+const EYE_OUTLINE_REDUCE_PX = 2
+const EYE_SCLERA_EXPAND_PX = 3
 const DETECTION_RADIUS = 60  // Detection distance - bugs hide when hero approaches
 const CRAWL_SPEED = 60  // Crawling speed (faster movement)
 const CRAWL_DURATION = 8.0  // Time to crawl before stopping
@@ -1383,11 +1384,8 @@ function bugBodyRotation(inst) {
 // black rim around the face/eye is not as thick as the IK leg stroke.
 //
 function bugHeadOutlinePad(inst) {
-  const base = inst.headRingOutline > 0
-    ? inst.headRingOutline
-    : (LEG_THICKNESS * inst.legThickness + 1) * (inst.eyeOutlineMultiplier ?? 1)
-  if (inst.hasFlatHead) return base
-  return Math.max(0, base - EYE_OUTLINE_REDUCE_PX)
+  if (inst.headRingOutline > 0) return inst.headRingOutline
+  return (LEG_THICKNESS * inst.legThickness + 1) * (inst.eyeOutlineMultiplier ?? 1)
 }
 //
 // Head/body silhouette in world coordinates — same space as the IK legs.
@@ -1451,7 +1449,7 @@ function drawBugEyesOnTop(inst, k, bodyRgb, radius) {
       ? rawOutline
       : Math.max(0, rawOutline - EYE_OUTLINE_REDUCE_PX)
     const scleraR = BUG_BODY_SIZE * 0.92 * inst.scale * em +
-      (inst.hasFlatHead ? 0 : EYE_OUTLINE_REDUCE_PX)
+      (inst.hasFlatHead ? 0 : EYE_SCLERA_EXPAND_PX)
     const outerR = scleraR + outlineW
     const pupilRadius = scleraR * 0.34
     if (inst.closedEyes) {

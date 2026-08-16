@@ -285,10 +285,8 @@ const HERO_EYE_MAX_DELAY = 3.5
 const HERO_EYE_LERP_SPEED = 0.1
 //
 // Index of 'n' in "find yourself" — replaced by the hero sprite.
-// Extra pixel spacing added left/right of this position to let i and d breathe.
 //
 const HERO_N_CHAR_INDEX = 2
-const HERO_N_EXTRA_SPREAD = 12
 //
 // Index of 'u' in "yourself" — replaced by an upside-down hero sprite
 //
@@ -430,10 +428,6 @@ const TEXT_LINE_HEIGHT = 50
 const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
 const AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
 const DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
-//
-// Approximate monospace char width multiplier (JetBrains Mono)
-//
-const MONO_CHAR_W_RATIO = 0.6
 //
 // Narrative body copy — cool teal-gray so text reads softly on the
 // deep teal background without competing with the orange title.
@@ -1001,35 +995,43 @@ function createSpider(k, index, sourceInfo) {
  */
 function pickLettersFromTitle(k, titleTextObj, titleString, fontSize, fontFamily) {
   const letterInfos = []
-  const charWidth = fontSize * MONO_CHAR_W_RATIO
-  const totalStringWidth = titleString.length * charWidth + HERO_N_EXTRA_SPREAD * 2
-  const startX = titleTextObj.pos.x - totalStringWidth / 2
   const titleColor = getColor(k, CFG.visual.colors.ready.title)
+  const centers = measureTitleLetterCenters(k, titleTextObj, titleString, fontSize, fontFamily)
   titleString.split('').forEach((char, charIndex) => {
     if (char.trim().length === 0) return
-    const extraShift = charIndex > HERO_N_CHAR_INDEX ? HERO_N_EXTRA_SPREAD * 2 : 0
-    const charX = startX + (charIndex * charWidth) + (charWidth / 2) + extraShift
-    const charY = titleTextObj.pos.y
-    //
-    // Mark the 'n' (hero) and the 'u' in "yourself" (upside-down hero) —
-    // both will be replaced by hero sprites.
-    //
-    const isHeroN = charIndex === HERO_N_CHAR_INDEX
-    const isHeroU = charIndex === HERO_U_CHAR_INDEX
     letterInfos.push({
       textObj: titleTextObj,
       charIndex,
       char,
-      x: charX,
-      y: charY,
+      x: centers[charIndex].x,
+      y: centers[charIndex].y,
       color: titleColor,
       fontSize,
       fontFamily,
-      isHeroN,
-      isHeroU
+      isHeroN: charIndex === HERO_N_CHAR_INDEX,
+      isHeroU: charIndex === HERO_U_CHAR_INDEX
     })
   })
   return letterInfos
+}
+//
+// Centres of every title glyph, matching the on-screen k.text layout so
+// spiders spawn on the letter they replace (no jump when legs grow).
+//
+function measureTitleLetterCenters(k, titleTextObj, titleString, fontSize, fontFamily) {
+  const originY = titleTextObj.pos.y
+  const fmt = k.formatText({
+    text: titleString,
+    size: fontSize,
+    font: fontFamily
+  })
+  const totalW = titleTextObj.width || fmt.width
+  const originX = titleTextObj.pos.x - totalW / 2
+  const charW = totalW / Math.max(1, titleString.length)
+  return titleString.split('').map((_, i) => ({
+    x: originX + i * charW + charW / 2,
+    y: originY
+  }))
 }
 
 /**
@@ -1049,19 +1051,25 @@ function updateSpider(k, spider, dt, opacity, allowFullScreen) {
     const LEG_GROW_DURATION = 2.0
     spider.legExtendT = Math.min(1, legAppearTimeElapsed / LEG_GROW_DURATION)
   }
+  //
+  // Detach the glyph from the title string as soon as legs start growing so
+  // the spider letter stays in the same cell — never a teleport when walking
+  // begins.
+  //
+  if (spider.legExtendT > 0 && spider.letterInfo && !spider.titleCharRemoved &&
+    !spider.isHeroN && !spider.isHeroU) {
+    const { textObj, charIndex } = spider.letterInfo
+    const chars = textObj.text.split('')
+    chars[charIndex] = ' '
+    textObj.text = chars.join('')
+    spider.titleOutlines && spider.titleOutlines.forEach(outline => {
+      outline.text = textObj.text
+    })
+    spider.titleCharRemoved = true
+    spider.charHidden = true
+  }
   if (!spider.isActivated && spider.legExtendT >= 1) {
     spider.isActivated = true
-    if (spider.letterInfo && !spider.titleCharRemoved) {
-      const { textObj, charIndex } = spider.letterInfo
-      const chars = textObj.text.split('')
-      chars[charIndex] = ' '
-      textObj.text = chars.join('')
-      spider.titleOutlines && spider.titleOutlines.forEach(outline => {
-        outline.text = textObj.text
-      })
-      spider.titleCharRemoved = true
-      spider.charHidden = true
-    }
     spider.vx = 0
     spider.vy = 0
     spider.targetVx = 0

@@ -2028,7 +2028,7 @@ export function sceneLesson0(k) {
     const BIG_BUG_Z_INDEX = 24
     const FLOOR_SMALL_BUG_DRAW_Z = 26
     const BUG_HEAD_DRAW_Z = 32
-    const BIG_BUG_HEAD_RING_OUTLINE = 2.75
+    const BIG_BUG_HEAD_RING_OUTLINE = 1
     const ANTIHERO_PLATFORM_Z_INDEX = 27
     const BIG_BUG_LEG_SPREAD_FACTOR = 0.25
     const BIG_BUG_LEG_THICKNESS = 3.0
@@ -2481,7 +2481,8 @@ export function sceneLesson0(k) {
         legCount: 4,  // Will be converted to 6 legs by component logic
         bodyShape: 'semicircle',
         sfx: sound,
-        touchRadius: 50,  // Increased distance for level 0
+        touchRadius: 50,
+        headOutlinePx: 1,
         bounds: {
           minX: LEFT_MARGIN + 30,
           maxX: WORLD_W - RIGHT_MARGIN - 30,

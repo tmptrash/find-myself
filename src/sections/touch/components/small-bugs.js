@@ -111,6 +111,7 @@ const BUG_PATTERNS = [
  * @param {string} [config.customColor] - Custom color for body (hex string like "#123456")
  * @param {number} [config.zIndex] - Z-index for rendering order
  * @param {boolean} [config.showOutline=true] - Whether to show black outline
+ * @param {number} [config.headOutlinePx] - Head rim width in px (overrides showOutline thickness)
  * @param {number} [config.legThickness] - Custom leg thickness multiplier
  * @param {string} [config.bodyShape='semicircle'] - Body shape: 'semicircle' or 'circle'
  * @param {number} [config.legCount=4] - Number of legs: 2 or 4
@@ -130,6 +131,7 @@ export function create(config) {
     customColor = null,
     zIndex = 8,  // Above all trees (trees are z=2 and z=7), below player (z=10)
     showOutline = true,
+    headOutlinePx = null,
     legThickness = 1.0,
     bodyShape = 'semicircle',
     legCount = 4,
@@ -337,6 +339,7 @@ export function create(config) {
     legDropFactor,   // Store for leg positioning
     zIndex,          // Store for rendering order
     showOutline,     // Store for outline display
+    headOutlinePx,   // Optional 1 px head rim (touch lesson 0)
     legThickness,    // Store for leg thickness
     bodyShape,       // Store for body shape
     legCount: finalLegCount,  // Store for number of legs (ensure 4 for debug bugs)
@@ -1036,12 +1039,16 @@ function drawSmallBugHeadOnTop(inst, k, bodyRgb, radius, bodyY, bodyRotation) {
     })
   }
   if (inst.bodyShape === 'circle') {
-    const outlinePad = inst.showOutline ? LEG_THICKNESS * inst.legThickness + 1 : 0
+    const outlinePad = inst.headOutlinePx != null
+      ? inst.headOutlinePx
+      : (inst.showOutline ? LEG_THICKNESS * inst.legThickness + 1 : 0)
     outlinePad > 0 && k.drawCircle({ pos: _sbPos, radius: radius + outlinePad, color: _sbBlack, opacity: 1 })
     k.drawCircle({ pos: _sbPos, radius, color: bodyRgb, opacity: 1 })
     return
   }
-  const outlinePad = inst.showOutline ? LEG_THICKNESS * inst.legThickness + 1 : 0
+  const outlinePad = inst.headOutlinePx != null
+    ? inst.headOutlinePx
+    : (inst.showOutline ? LEG_THICKNESS * inst.legThickness + 1 : 0)
   const fillPts = fillSmallBugWorldSemicirclePts(k, cx, cy, radius, outlinePad || 2, bodyRotation)
   outlinePad > 0 && k.drawPolygon({ pts: fillPts.outlinePts, color: _sbBlack, opacity: 1 })
   k.drawPolygon({ pts: fillPts.pts, color: bodyRgb, opacity: 1 })

@@ -268,6 +268,13 @@ const LEG_OUTLINE_WIDTH = 11
 //
 const JUMP_LEG_HIP_OVERLAP = 10
 //
+// Jump crotch seam: air frames sit 1 px right and 2 px below the body
+// join, then trim 1 px from the left. Crouch frames (0 and 6) stay flush.
+//
+const JUMP_CROTCH_SEAM_DX = 1
+const JUMP_CROTCH_SEAM_DY = 2
+const JUMP_CROTCH_SEAM_LEFT_TRIM = 1
+//
 // Character width (head + body have same width, no shoulder bulge in new design)
 //
 const CHAR_WIDTH = 30
@@ -3657,6 +3664,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           // Cover the hip join with body fill so OL does not peek at the crotch
           //
           ctx.fillRect(headX, bodyBottom - LEG_INTO_BODY, CHAR_WIDTH, LEG_INTO_BODY + 3)
+          drawCrotchSeam(
+            ctx, OL, leftLegX, rightLegX, bodyBottom,
+            JUMP_CROTCH_SEAM_DX, JUMP_CROTCH_SEAM_DY, JUMP_CROTCH_SEAM_LEFT_TRIM
+          )
         } else {
           fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
           fillRoundedRectBottom(ctx, rightLegX, rightLegY, LEG_FILL_WIDTH, rightLegHeight, LEG_CORNER_RADIUS)
@@ -3672,27 +3683,57 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
           ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
           //
-          // Run: cover only the fill column at the hip (not the 1 px rims) so
-          // orange width stays LEG_FILL_WIDTH the whole way down, matching jump-0.
+          // Run: cover the outline pill top at each hip so the flat black cap
+          // cannot stick out of the planted leg.
           //
-          if (animation === 'run') {
+          if (animation === 'run' && !runLegsMerged) {
             const hipCoverH = Math.max(1, leftLegOutlineTop - bodyBottom + 2)
-            ctx.fillRect(leftLegX, bodyBottom - 1, LEG_FILL_WIDTH, hipCoverH)
-            ctx.fillRect(rightLegX, bodyBottom - 1, LEG_FILL_WIDTH, hipCoverH)
+            //
+            // Cover the full outline pill top (not just the fill) so the flat
+            // black cap cannot stick out of the front hip on the plant frame.
+            //
+            ctx.fillRect(leftLegX - 1, bodyBottom - 1, LEG_OUTLINE_WIDTH, hipCoverH)
+            ctx.fillRect(rightLegX - 1, bodyBottom - 1, LEG_OUTLINE_WIDTH, hipCoverH)
+            //
+            // Re-seal outer 1 px rims — hip cover paints over the seals above.
+            //
+            ctx.fillStyle = OL
+            ctx.fillRect(headX - 1, sealTop, 1, sealH)
+            ctx.fillRect(headX + CHAR_WIDTH, sealTop, 1, sealH)
+            ctx.fillStyle = BL
+            ctx.fillRect(headX, sealTop, 1, sealH)
+            ctx.fillRect(headX + CHAR_WIDTH - 1, sealTop, 1, sealH)
           }
           //
-          // Idle only: black crotch seam between the legs (run/jump leg spread
-          // leaves a partial line artifact; bent jump legs use hip cover only).
+          // Black crotch seam: idle and jump crouch sit on the body bottom.
+          // Spread run sits in the gap below the torso.
           //
-          if (animation === 'idle') {
-            const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
-            const innerR = Math.max(leftLegX, rightLegX)
-            if (innerR > innerL) {
+          if (animation === 'idle' || animation === 'jump') {
+            drawCrotchSeam(ctx, OL, leftLegX, rightLegX, bodyBottom)
+          } else if (animation === 'run' && !runLegsMerged) {
+            const backX = Math.min(leftLegX, rightLegX)
+            const frontX = Math.max(leftLegX, rightLegX)
+            const gapL = backX - 1 + LEG_OUTLINE_WIDTH
+            const gapR = frontX - 1
+            if (gapR > gapL) {
               ctx.fillStyle = OL
-              ctx.fillRect(innerL, bodyBottom, innerR - innerL, 1)
+              ctx.fillRect(gapL, leftLegOutlineTop, gapR - gapL, 1)
             }
           }
         }
+      }
+      //
+      // Passing-pose run (frames 3 and 7): left hip shelf stays horizontal,
+      // right shelf follows the torso lean.
+      //
+      if (!outlineOnly && runLegsMerged) {
+        drawMergedRunHipShelves(ctx, OL, headX, leftLegX, rightLegX, bodyBottom + 1, true, false)
+        ctx.save()
+        ctx.translate(leanPivotX, leanPivotY)
+        ctx.rotate(leanRad)
+        ctx.translate(-leanPivotX, -leanPivotY)
+        drawMergedRunHipShelves(ctx, OL, headX, leftLegX, rightLegX, bodyBottom + 1, false, true)
+        ctx.restore()
       }
     })
   } catch (error) {
@@ -4324,6 +4365,34 @@ function strokeBentLeg(ctx, cx, topY, h, bend, width) {
   ctx.arc(footX, endY, half, 0, Math.PI * 2)
   ctx.fill()
 }
+//
+// 1 px black line between the inner thigh edges at the body bottom.
+//
+function drawCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, bodyBottom, offsetX = 0, offsetY = 0, leftTrim = 0) {
+  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH) + offsetX + leftTrim
+  const innerR = Math.max(leftLegX, rightLegX) + offsetX
+  if (innerR <= innerL) return
+  ctx.fillStyle = outlineColor
+  ctx.fillRect(innerL, bodyBottom + offsetY, innerR - innerL, 1)
+}
+//
+// Passing-pose run (frames 3 and 7): body-bottom outline from each hip to
+// the merged legs. Left shelf is unrotated (horizontal); right follows lean.
+//
+function drawMergedRunHipShelves(ctx, outlineColor, headX, leftLegX, rightLegX, y, drawLeft = true, drawRight = true) {
+  const olL = Math.min(leftLegX, rightLegX) - 1
+  const olR = Math.max(leftLegX, rightLegX) - 1 + LEG_OUTLINE_WIDTH
+  const bodyL = headX - 1
+  const bodyR = headX + CHAR_WIDTH + 1
+  ctx.fillStyle = outlineColor
+  if (drawLeft && olL > bodyL) ctx.fillRect(bodyL, y, olL - bodyL, 1)
+  if (drawRight && bodyR > olR) ctx.fillRect(olR, y, bodyR - olR, 1)
+}
+//
+// Flat top connects seamlessly to the flat bottom of body outline/fill,
+// eliminating the body-to-leg gap visible in all animation frames.
+// Caller sets ctx.fillStyle before calling.
+//
 function fillRoundedRectBottom(ctx, x, y, w, h, r) {
   const cr = Math.min(r, w / 2, h / 2)
   ctx.beginPath()

@@ -1926,10 +1926,9 @@ export function sceneLesson0(k) {
     if (layers[3]) {
       const allFrontTrees = layers[3].trees
       //
-      // ALL organic trees sway now (per user request). Each tree is split
-      // into a trunk+roots sprite (static) plus per-cluster sprites that
-      // rotate around their pivot. Cost is bounded since drawSprite is
-      // a single GPU draw call regardless of underlying complexity.
+      // Front trees are static: trunk+roots plus per-cluster sprites with
+      // no hinge rotation. Cost stays bounded because each cluster is one
+      // GPU drawSprite call.
       //
       const dynamicTrees = allFrontTrees.filter(t => t.branchClusters)
       dynamicTrees.forEach((tree, idx) => {
@@ -1975,11 +1974,8 @@ export function sceneLesson0(k) {
           width: WORLD_W,
           height: SCREEN_H,
           draw() {
-            const time = k.time()
-            const dt = k.dt()
             const camX = k.camPos().x
             const treeCull = SCREEN_W / 2 + 220
-            const swayEase = Math.min(1, dt * OrganicParallax.BRANCH_SWAY_SMOOTH_PER_SEC)
             for (const tree of dynamicTrees) {
               if (!tree.branchClusters) continue
               if (Math.abs(tree.x - camX) > treeCull) continue
@@ -1993,10 +1989,6 @@ export function sceneLesson0(k) {
               }
               for (const cluster of tree.branchClusters) {
                 if (!cluster.spriteName) continue
-                const targetDeg = Math.sin(time * cluster.swaySpeed + cluster.swayPhase) * cluster.swayAmount
-                cluster.smoothedAngleDeg = cluster.smoothedAngleDeg == null
-                  ? targetDeg
-                  : cluster.smoothedAngleDeg + (targetDeg - cluster.smoothedAngleDeg) * swayEase
                 treePos.x = cluster.worldPivotX
                 treePos.y = cluster.worldPivotY
                 treeAnchor.x = cluster.anchorX
@@ -2004,8 +1996,7 @@ export function sceneLesson0(k) {
                 k.drawSprite({
                   sprite: cluster.spriteName,
                   pos: treePos,
-                  anchor: treeAnchor,
-                  angle: cluster.smoothedAngleDeg
+                  anchor: treeAnchor
                 })
               }
             }
@@ -4987,6 +4978,7 @@ function setupTouchLetterSystem(k, cfg) {
  * @param {Object} [opts]
  * @param {number} [opts.zOutline] - Outline z-index
  * @param {number} [opts.zMain] - Main letter z-index
+ * @param {boolean} [opts.appearBurst] - Colour burst when the letter first appears
  * @returns {Object} Letter handle with moveTo and destroy
  */
 function createPickupLetter(k, letter, x, y, tiltDeg, opts = {}) {
@@ -5026,6 +5018,12 @@ function createPickupLetter(k, letter, x, y, tiltDeg, opts = {}) {
     main.destroy?.()
     outlines.forEach(o => o.destroy?.())
   }
+  opts.appearBurst && LevelIndicator.flashWorldLetterBurst(
+    k,
+    x,
+    y - TOUCH_LETTER_SIZE / 2,
+    CFG.visual.colors.sections.touch.body
+  )
   return { main, outlines, moveTo, destroy }
 }
 //
@@ -5358,7 +5356,7 @@ function collectLetterU(k, state, levelIndicator, sound, wallColorHex, levelHelp
       //
       // Spawn second hidden platform and letter C (fireflies scatter after this)
       //
-      spawnTouchLetterCH(k, state)
+      spawnTouchLetterCH(k, state, true)
     }
   })
   playTouchLetterDialogMusic(k, state, TOUCH0_DIALOG_SOUND_U)
@@ -5384,7 +5382,7 @@ function spawnTouchLetterU(k, state) {
 //
 // Spawns C/H log platform after U dialog (or on resume when count === 3)
 //
-function spawnTouchLetterCH(k, state) {
+function spawnTouchLetterCH(k, state, appearBurst = false) {
   if (state.cObj || state.hiddenPlatformC) return
   const playW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   //
@@ -5397,8 +5395,12 @@ function spawnTouchLetterCH(k, state) {
   //
   // CH are collected together — C on the left, H on the right, side by side on the platform
   //
-  state.cObj = createPickupLetter(k, 'C', cPlatCX - TOUCH_CH_SPACING / 2, cPlatY + 12, TOUCH_LETTER_TILTS[3])
-  state.hObj = createPickupLetter(k, 'H', cPlatCX + TOUCH_CH_SPACING / 2, cPlatY + 14, TOUCH_LETTER_TILT_H)
+  state.cObj = createPickupLetter(k, 'C', cPlatCX - TOUCH_CH_SPACING / 2, cPlatY + 12, TOUCH_LETTER_TILTS[3], {
+    appearBurst
+  })
+  state.hObj = createPickupLetter(k, 'H', cPlatCX + TOUCH_CH_SPACING / 2, cPlatY + 14, TOUCH_LETTER_TILT_H, {
+    appearBurst
+  })
 }
 //
 // Hero collects letter C — gather all bugs + fireflies, then transition.

@@ -1,6 +1,7 @@
 import { CFG } from '../cfg.js'
 import * as CanvasBackdrop from './canvas-backdrop.js'
-import { parseHex } from './helper.js'
+import { parseHex, onPhysicalKeyPress, isAnyKeyDown } from './helper.js'
+import { bindPointerActivate } from './pointer-activate.js'
 //
 // Dialog box dimensions and styling
 //
@@ -19,7 +20,7 @@ const DIALOG_Z = 620
 //
 // Close hint styling
 //
-const CLOSE_HINT_TEXT = 'Click or Esc to close'
+const CLOSE_HINT_TEXT = 'Click, Space or Esc to close'
 const CLOSE_HINT_FONT_SIZE = 20
 const CLOSE_HINT_FLICKER_DURATION = 1.2
 const CLOSE_HINT_MIN_OPACITY = 0.4
@@ -85,7 +86,7 @@ export function openDialog(k, text, opts = {}) {
   // Dialog texts cast a drop shadow (single black copy offset right+down)
   //
   const outlineOffsets = [[OUTLINE_OFFSET, OUTLINE_OFFSET]]
-  const state = { opacity: 0, phase: 'opening', timer: 0, flickerDir: -1, flickerTime: CLOSE_HINT_FLICKER_DURATION }
+  const state = { opacity: 0, phase: 'opening', timer: 0, flickerDir: -1, flickerTime: CLOSE_HINT_FLICKER_DURATION, spaceReleased: false }
   const overlay = k.add([
     k.z(DIALOG_Z),
     k.opacity(0),
@@ -183,8 +184,10 @@ export function openDialog(k, text, opts = {}) {
     closeOutlines.forEach(n => n.destroy?.())
     escHandler?.cancel?.()
     spaceHandler?.cancel?.()
+    spaceAltHandler?.cancel?.()
     enterHandler?.cancel?.()
     clickHandler?.cancel?.()
+    physSpaceHandler?.cancel?.()
     updateHandler?.cancel?.()
     onClose?.()
   }
@@ -194,8 +197,10 @@ export function openDialog(k, text, opts = {}) {
     state.timer = 0
     escHandler?.cancel?.()
     spaceHandler?.cancel?.()
+    spaceAltHandler?.cancel?.()
     enterHandler?.cancel?.()
     clickHandler?.cancel?.()
+    physSpaceHandler?.cancel?.()
     //
     // Notify immediately so callers can release blocked input (e.g. Esc to menu)
     // without waiting for the full fade-out animation.
@@ -204,10 +209,15 @@ export function openDialog(k, text, opts = {}) {
   }
   const escHandler = k.onKeyPress('escape', close)
   const spaceHandler = k.onKeyPress('space', close)
+  const spaceAltHandler = k.onKeyPress(' ', close)
   const enterHandler = k.onKeyPress('enter', close)
-  const clickHandler = k.onMousePress(close)
+  const physSpaceHandler = onPhysicalKeyPress('Space', close)
+  const clickHandler = bindPointerActivate(k, close)
   const updateHandler = k.onUpdate(() => {
     const dt = k.dt()
+    const spaceDown = isAnyKeyDown(k, ['space'])
+    if (!spaceDown) state.spaceReleased = true
+    else if (state.spaceReleased && state.phase !== 'closing') close()
     if (state.phase === 'opening') {
       state.timer += dt
       state.opacity = Math.min(1, state.timer / FADE_DURATION)

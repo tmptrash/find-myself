@@ -21,6 +21,7 @@ import { sceneLesson2 as sceneTimeLevel2 } from "../sections/time/scenes/lesson2
 import { sceneLesson3 as sceneTimeLevel3 } from "../sections/time/scenes/lesson3.js"
 import { sceneTimeComplete } from "../sections/time/scenes/time-complete.js"
 import { loadHeroSprites, HEROES } from "../components/hero.js"
+import { prepareDesaturatedLifeSprite } from "../sections/touch/components/lesson-indicator.js"
 import * as Cursor from "./cursor.js"
 import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
@@ -181,6 +182,7 @@ export async function bootEngine(resolutionMode) {
       resolve()
     })
   })
+  await prepareDesaturatedLifeSprite(k)
   k.canvas && !BootLoader.isLoaderVisible() && (k.canvas.style.visibility = 'visible')
   return k
 }

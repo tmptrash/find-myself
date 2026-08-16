@@ -340,15 +340,35 @@ function resetDrop(drop, leftX, playableW, topY, canopyPoints, spawnX1, spawnW) 
   const x1 = spawnX1 ?? leftX
   const w = spawnW ?? playableW
   const fromTree = canopyPoints.length > 0 && Math.random() < TREE_DROP_CHANCE
-  if (fromTree) {
-    const pt = canopyPoints[Math.floor(Math.random() * canopyPoints.length)]
-    drop.x = pt.x + (Math.random() - 0.5) * 20
-    drop.y = pt.y + Math.random() * 10
-  } else {
-    const cloudY = topY + CLOUD_CENTER_OFFSET
-    drop.x = x1 + Math.random() * w
-    drop.y = cloudY + (Math.random() - 0.5) * 40
+  const canopy = fromTree ? pickVisibleCanopyPoint(canopyPoints, x1, w) : null
+  if (canopy) {
+    drop.x = canopy.x + (Math.random() - 0.5) * 20
+    drop.y = canopy.y + Math.random() * 10
+    return
   }
+  const cloudY = topY + CLOUD_CENTER_OFFSET
+  drop.x = x1 + Math.random() * w
+  drop.y = cloudY + (Math.random() - 0.5) * 40
+}
+
+/**
+ * Picks a canopy drip origin that currently sits in the spawn window.
+ * @param {Array<{x: number, y: number}>} canopyPoints
+ * @param {number} x1 - Spawn window left
+ * @param {number} w - Spawn window width
+ * @returns {{x: number, y: number}|null}
+ */
+function pickVisibleCanopyPoint(canopyPoints, x1, w) {
+  const x2 = x1 + w
+  let found = null
+  let n = 0
+  for (let i = 0; i < canopyPoints.length; i++) {
+    const pt = canopyPoints[i]
+    if (pt.x < x1 || pt.x > x2) continue
+    n++
+    if (Math.random() < 1 / n) found = pt
+  }
+  return found
 }
 
 /**

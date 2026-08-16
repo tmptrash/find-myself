@@ -2,6 +2,7 @@ import * as BootLoader from "./utils/boot-loader.js"
 import { prepareSceneAssetsThenEnterScene } from "./utils/lesson-assets.js"
 import { bootEngine, RESOLUTION_MODE } from "./utils/game-engine.js"
 import { setActiveEngine } from "./utils/engine-switch.js"
+import { installWindowResizeReboot } from "./utils/window-resize.js"
 //
 // Force dark background for all elements
 //
@@ -24,5 +25,6 @@ async function boot() {
     throw err
   }
   setActiveEngine(k, RESOLUTION_MODE.FIXED)
+  installWindowResizeReboot()
   await prepareSceneAssetsThenEnterScene(k, 'ready')
 }

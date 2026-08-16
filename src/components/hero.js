@@ -115,7 +115,7 @@ const CONFUSION_KEYS = [
   { name: 'a', phys: 'KeyA' },
   { name: 'd', phys: 'KeyD' },
   { name: 'w', phys: 'KeyW' },
-  { name: 'space', phys: null }
+  { name: 'space', phys: 'Space' }
 ]
 const CONFUSION_NORMAL_JUMP_NAMES = ['up', 'w', 'space']
 //

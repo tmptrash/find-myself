@@ -44,6 +44,7 @@ const PIT_PARTICLE_COUNT = 28
 //
 const CRACK_STOMP_OPENS = 5
 const CRACK_STOMP_FEET_MAX = 14
+const CRACK_FALL_OPEN_FEET_MAX = 90
 const CRACK_STOMP_PARTICLE_MULT = 2.8
 //
 // Foot tolerance when detecting the hero on the fragment log above the cave.
@@ -341,6 +342,18 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   if (justLanded && !overCrack) {
     pit.collapseArmed = false
     pit.leftBonusAirborne = false
+  }
+  const fallingOntoCrack = pit.collapseArmed && overCrack && !grounded &&
+    footY != null &&
+    footY >= pit.floorY - CRACK_FALL_OPEN_FEET_MAX &&
+    (char.vel?.y ?? 0) > 0
+  if ((justLanded && grounded && pit.collapseArmed && overCrack && onCrackFloor && !onBonus) || fallingOntoCrack) {
+    collapsePit(pit)
+    pit.crackStompCount = 0
+    pit.collapseArmed = false
+    pit.wasOnBonusPlat = false
+    pit.leftBonusAirborne = false
+    return
   }
   //
   // Stomp path: five normal jump landings on the crack entrance also collapse it

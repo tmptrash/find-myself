@@ -48,7 +48,7 @@ const LEVEL_SUBTITLES = {
   'menu-time': '',
   'menu-touch': '',
   'menu-glow': '',
-  'lesson-glow.0': ['Everything began with nothing... Just as you did.', 'glow0-pre', 4],
+  'lesson-glow.0': ['The world is what it is. But you\ndecide what it becomes to you.', 'glow0-pre', 5],
   'glow-complete': '',
   'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
   'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],

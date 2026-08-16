@@ -18,6 +18,7 @@ const ENGINE_SWAP_LOADER_DELAY_MS = 200
 //
 let activeEngine = null
 let activeResolutionMode = null
+let activeSceneName = null
 //
 // Native-resolution scenes register audio teardown here — Kaplay onSceneLeave
 // does not run when the native engine is destroyed during a resolution swap
@@ -50,6 +51,22 @@ export function getActiveResolutionMode() {
 export function setActiveEngine(k, mode) {
   activeEngine = k
   activeResolutionMode = mode
+}
+
+/**
+ * Scene currently on screen (updated just before k.go).
+ * @returns {string|null}
+ */
+export function getActiveSceneName() {
+  return activeSceneName
+}
+
+/**
+ * Records the scene about to be entered so a mid-run resize can reboot into it.
+ * @param {string|null} sceneName
+ */
+export function setActiveSceneName(sceneName) {
+  activeSceneName = sceneName || null
 }
 /**
  * Registers a one-shot callback that stops native-scene loop audio (music, rain)
@@ -134,4 +151,25 @@ export async function ensureEngineForScene(sceneName, opts = {}) {
   }
   setActiveEngine(freshEngine, neededMode)
   return { k: freshEngine, switched: true }
+}
+
+/**
+ * Tears down the live engine and boots a fresh one in the mode the scene
+ * needs — even when the mode is unchanged. Used on browser resize so native
+ * canvases (and letterboxed ones) match a page reload at the new size.
+ * Caller owns the DOM loader.
+ * @param {string} sceneName
+ * @returns {Promise<Object>} Fresh Kaplay instance
+ */
+export async function rebootEngineForScene(sceneName) {
+  const neededMode = resolutionModeForScene(sceneName)
+  activeResolutionMode === RESOLUTION_MODE.NATIVE && runNativeTeardown()
+  const staleEngine = activeEngine
+  staleEngine && teardownEngine(staleEngine)
+  activeEngine = null
+  activeResolutionMode = null
+  const freshEngine = await bootEngine(neededMode)
+  BootLoader.setLoaderBarPct(100)
+  setActiveEngine(freshEngine, neededMode)
+  return freshEngine
 }

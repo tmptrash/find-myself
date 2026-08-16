@@ -12,6 +12,7 @@ import * as Cursor from "../utils/cursor.js"
 import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { renderHintWithEnter } from "../utils/touch-tap-button.js"
 import * as Grass from '../components/grass.js'
+import { bindPointerActivate } from '../utils/pointer-activate.js'
 import {
   generateMenuBackgroundCanvas,
   MENU_BG_GROUND_Y,
@@ -108,6 +109,7 @@ const PROHIBITED_SIGN_OPACITY = 1.0
 const MENU_ANTIHERO_HOVER_AMP = 0.08
 const MENU_ANTIHERO_PULSE_SPEED = 2.8
 const MENU_ANTIHERO_HOVER_LERP = 8
+const MENU_ANTIHERO_HOVER_RADIUS = 90
 //
 // Green checkmark displayed on completed anti-heroes when hovered
 //
@@ -598,52 +600,27 @@ export function sceneMenu(k) {
       const canAccess = currentIndex === 0 || isPreviousCompleted  // First section is always accessible
       
       if (config.section === 'word' && !isCompleted && canAccess) {
-        antiHeroInst.character.onClick(() => {
-          //
-          // Ignore the click while a pre-level transition is running — the
-          // click is the transition's own skip, not a new section entry.
-          //
+        antiHeroInst.onMenuSelect = () => {
           if (isMenuTransitionBlocking(k)) return
-          //
-          // Mark that we're leaving the scene
-          //
           beginMenuSceneLeave(k, inst)
-          
-          //
-          // Stop ambient sound
-          //
           Sound.stopAmbient(sound)
-          
           Cursor.setCursor('arrow')
-          //
-          // Get last level for word section or start from beginning
-          //
           const isWordLevel = lastLevel && lastLevel.startsWith('lesson-word.')
-          
           if (isWordLevel) {
-            //
-            // Continue from last word level with transition
-            //
             menuMusic.stop()
             kidsMusic.stop()
             showTransitionToLevel(k, lastLevel)
           } else {
-            //
-            // Start word section from beginning with intro phrase
-            //
             menuMusic.stop()
             kidsMusic.stop()
             createLevelTransition(k, 'menu')
           }
-        })
+        }
+        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
       }
       
       if (config.section === 'glow' && !isCompleted && canAccess) {
-        antiHeroInst.character.onClick(() => {
-          //
-          // Ignore the click while a pre-level transition is running — the
-          // click is the transition's own skip, not a new section entry.
-          //
+        antiHeroInst.onMenuSelect = () => {
           if (isMenuTransitionBlocking(k)) return
           beginMenuSceneLeave(k, inst)
           Sound.stopAmbient(sound)
@@ -651,87 +628,48 @@ export function sceneMenu(k) {
           menuMusic.stop()
           kidsMusic.stop()
           const currentLastLevel = get('lastLesson', null)
-          //
-          // Always route through the transition so the pre-level phrase
-          // (with its glow0-pre voice-over) plays before the glow level.
-          //
           if (currentLastLevel && currentLastLevel.startsWith('lesson-glow.')) {
             showTransitionToLevel(k, currentLastLevel)
           } else {
             showTransitionToLevel(k, 'lesson-glow.0')
           }
-        })
+        }
+        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
       }
       if (config.section === 'touch' && !isCompleted && canAccess) {
-        antiHeroInst.character.onClick(() => {
-          //
-          // Ignore the click while a pre-level transition is running — the
-          // click is the transition's own skip, not a new section entry.
-          //
+        antiHeroInst.onMenuSelect = () => {
           if (isMenuTransitionBlocking(k)) return
           beginMenuSceneLeave(k, inst)
-          
-          //
-          // Stop ambient sound
-          //
           Sound.stopAmbient(sound)
           Cursor.setCursor('arrow')
-          //
-          // Stop music
-          //
           menuMusic.stop()
           kidsMusic.stop()
-          //
-          // Determine which level to go to
-          //
           const lastTouchLevel = get('lastLesson', null)
-          
           if (lastTouchLevel && lastTouchLevel.startsWith('lesson-touch.')) {
             showTransitionToLevel(k, lastTouchLevel)
           } else {
             createLevelTransition(k, 'menu-touch')
           }
-        })
+        }
+        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
       }
       
       if (config.section === 'time' && !isCompleted && canAccess) {
-        antiHeroInst.character.onClick(() => {
-          //
-          // Ignore the click while a pre-level transition is running — the
-          // click is the transition's own skip, not a new section entry.
-          //
+        antiHeroInst.onMenuSelect = () => {
           if (isMenuTransitionBlocking(k)) return
           beginMenuSceneLeave(k, inst)
-          
-          //
-          // Stop ambient sound
-          //
           Sound.stopAmbient(sound)
-          
-          //
           Cursor.setCursor('arrow')
-          //
-          // Stop music
-          //
           menuMusic.stop()
           kidsMusic.stop()
-          //
-          // Get last level for time section or start from beginning
-          //
           const isTimeLevel = lastLevel && lastLevel.startsWith('lesson-time.')
-          
           if (isTimeLevel) {
-            //
-            // Continue from last time level with transition
-            //
             showTransitionToLevel(k, lastLevel)
           } else {
-            //
-            // Start time section from beginning
-            //
             createLevelTransition(k, 'menu-time')
           }
-        })
+        }
+        antiHeroInst.character.onClick(() => antiHeroInst.onMenuSelect?.())
       }
       
       antiHeroes.push(antiHeroInst)
@@ -870,7 +808,7 @@ export function sceneMenu(k) {
         const dx = mousePos.x - char.pos.x
         const dy = mousePos.y - char.pos.y
         const distance = Math.sqrt(dx * dx + dy * dy)
-        const hoverRadius = 60  // Hover detection radius (increased for better detection)
+        const hoverRadius = MENU_ANTIHERO_HOVER_RADIUS
         
         if (distance < hoverRadius) {
           hoveredInst = antiHeroInst
@@ -1034,7 +972,7 @@ export function sceneMenu(k) {
       // Fireflies only appear for antiheroes whose section is completed or currently being played
       //
       const lastLevel = get('lastLesson', null)
-      const isEmptyLS = lastLevel === null
+      const isEmptyLS = !lastLevel
       const glowAH = antiHeroes.find(ah => ah.section === 'glow')
       const fireflyAllowed = hoveredInst && (
         hoveredInst.isCompleted ||
@@ -1119,7 +1057,7 @@ export function sceneMenu(k) {
       if (inst.isLeavingScene) {
         hideTitle(inst.title)
         } else {
-        updateTitle(inst.title, k, hoveredInst, inst.currentSection)
+        updateTitle(inst.title, k, hoveredInst)
       }
       
       //
@@ -1286,6 +1224,11 @@ export function sceneMenu(k) {
     }
     k.onKeyPress("space", () => startGame(false))
     k.onKeyPress("enter", () => startGame(true))
+    inst.antiHeroClick = bindPointerActivate(k, () => {
+      if (inst.isLeavingScene) return
+      if (isMenuTransitionBlocking(k)) return
+      activateMenuAntiHeroAtPointer(inst)
+    })
     
     //
     // Back to ready scene (ESC) — guarded to prevent firing from a scene transition
@@ -1310,6 +1253,7 @@ export function sceneMenu(k) {
     // Cleanup when leaving scene
     //
     k.onSceneLeave(() => {
+      inst.antiHeroClick?.cancel()
       CanvasBackdrop.clearCanvasBackdrop(k)
       //
       // Stop menu music
@@ -1350,7 +1294,7 @@ const TITLE_ORBIT_SHADOW_DY = 2
 // is described by the inner struggle its letters represent.
 //
 const SECTION_DESCRIPTIONS = {
-  glow: 'clarity',
+  glow: 'perception',
   word: 'self-doubt',
   touch: 'connection',
   time: 'impermanence',
@@ -1421,15 +1365,14 @@ function createTitle(k, centerX, centerY, radius) {
  * @param {Object} k - Kaplay instance
  * @param {Object|null} hoveredAntiHero - Currently hovered anti-hero
  */
-function updateTitle(titleInst, k, hoveredAntiHero, currentSection) {
+function updateTitle(titleInst, k, hoveredAntiHero) {
   const dt = k.dt()
   //
   // Completed sections and the section currently being played show their
-  // description; everything else stays "unknown".
+  // description; everything else stays "unknown". First launch (empty save)
+  // treats glow as the entry section, so its label is "perception".
   //
-  const sectionLabelKnown = hoveredAntiHero && (
-    hoveredAntiHero.isCompleted || hoveredAntiHero.section === currentSection
-  )
+  const sectionLabelKnown = hoveredAntiHero && !hoveredAntiHero.isUnknown
   const newTargetText = hoveredAntiHero
     ? (sectionLabelKnown
       ? (SECTION_DESCRIPTIONS[hoveredAntiHero.section] || titleInst.defaultText)
@@ -1954,7 +1897,7 @@ function drawScene(inst) {
   // OR if localStorage is empty, show electricity on glow (first section)
   //
   const lastLevel = get('lastLesson', null)
-  const isEmptyLocalStorage = lastLevel === null
+  const isEmptyLocalStorage = !lastLevel
   
   if (isEmptyLocalStorage) {
     //
@@ -2019,6 +1962,7 @@ function isMenuTransitionBlocking(k) {
 function beginMenuSceneLeave(k, inst) {
   if (inst.isLeavingScene) return
   inst.isLeavingScene = true
+  inst.antiHeroClick?.cancel()
   k.setBackground(k.rgb(MENU_LEAVE_BG_R, MENU_LEAVE_BG_G, MENU_LEAVE_BG_B))
   k.canvas?.style.setProperty('background-color', `rgb(${MENU_LEAVE_BG_R}, ${MENU_LEAVE_BG_G}, ${MENU_LEAVE_BG_B})`, 'important')
   inst.heroInst?.character && (inst.heroInst.character.hidden = true)
@@ -2029,6 +1973,28 @@ function beginMenuSceneLeave(k, inst) {
     entry.allObjects.forEach(obj => { obj.hidden = true })
   })
   inst.title && hideTitle(inst.title)
+}
+//
+// Resolves the anti-hero under the cursor and enters its section. Uses
+// distance, not Kaplay onClick — the player sprite's area() would otherwise
+// swallow the press when standing on the current-section anti-hero.
+//
+function activateMenuAntiHeroAtPointer(inst) {
+  const mousePos = inst.k.mousePos()
+  let best = inst.hoveredAntiHero
+  let bestDist = MENU_ANTIHERO_HOVER_RADIUS
+  inst.antiHeroes.forEach(antiHeroInst => {
+    const char = antiHeroInst.character
+    if (!char?.pos) return
+    const dx = mousePos.x - char.pos.x
+    const dy = mousePos.y - char.pos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = antiHeroInst
+    }
+  })
+  best?.onMenuSelect?.()
 }
 //
 // Returns true when the given anti-hero's section cannot be accessed yet:

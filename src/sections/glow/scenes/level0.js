@@ -40,6 +40,7 @@ import {
 import * as Grass from '../../../components/grass.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
 import * as HeroHint from '../../../utils/hero-hint.js'
+import { bindPointerActivate } from '../../../utils/pointer-activate.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as HeroCounter from '../../../utils/hero-counter.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
@@ -586,9 +587,8 @@ const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
 const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
 const BRANCH_TRAMP_MARIO_HINT_TEXT_ALT = 'I think Mario would\njump on me'
-const TRAMP_WATER_HINT_TEXT = 'But I\'ve never jumped\nover water before...'
-const TRAMP_WATER_HINT_DURATION = 6
-const TRAMP_WATER_HINT_INTERVAL = 30
+const TRAMP_SHALLOW_HINT_TEXT = 'It\'s shallow here, you won\'t drown..'
+const TRAMP_SHALLOW_HINT_DURATION = 6
 const WRONG_TRAMP_SING_HINT_REPEAT = 20
 const LETTER_PROGRESS_HINT_INTERVAL = 30
 const LETTER_PROGRESS_HINT_DURATION = 6
@@ -620,7 +620,7 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = 'The forest is always singin[hl]G[/hl].\nYou only need to notice it.'
+const GLOW_DIALOG_G = 'The world was always here, waitin[hl]G[/hl].\nYou just had to see it.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
 const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Speak with\nthe mushrooms.'
 //
@@ -635,10 +635,10 @@ const GLOW_DIALOG_SOUND_O = 'glow-ow'
 // when the right ground / water zones first open, and a consolation line on
 // the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'I\'m Yan. You don\'t need\nanswers yet. Just be curious.'
+const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan.\nYou can only see\nwhat you\'re ready\nto notice.'
 const HINT_INTRO_1_DURATION = 6
-const HINT_INTRO_2_TEXT = 'To truly see this world, you\'ll\nneed to collect every letter of\nthe word GLOW. Each one will\nreveal another part of what\nyour eyes have yet to discover.\nUse the mouse to learn more\nabout the world around you.'
-const HINT_INTRO_2_DURATION = 13
+const HINT_INTRO_2_TEXT = 'This world is here, even when you can\'t see it.\n\nCollect every letter of GLOW. Each one reveals\nsomething your eyes couldn\'t see before. Move\nyour mouse. Look closer. Pay attention.\n\nSometimes, seeing is more than simply looking.'
+const HINT_INTRO_2_DURATION = 15
 //
 // Extra beat between the first and second intro speech bubbles.
 //
@@ -752,7 +752,7 @@ const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
 //
-const GLOW_INDICATOR_TOOLTIP_TEXT = 'Here you can see how far\nyou have come in learning\ncolor perception'
+const GLOW_INDICATOR_TOOLTIP_TEXT = 'Here you can see how far\nyou have come in learning\nvisual perception'
 const GLOW_INDICATOR_TOOLTIP_WIDTH = 200
 const GLOW_INDICATOR_TOOLTIP_HEIGHT = 50
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = -30
@@ -764,8 +764,13 @@ const BONUS_HINT_DURATION = 5
 // After picking up the final W letter the hero shares a closing line for a
 // few seconds, then a full-screen fade-out leads back to the menu.
 //
-const HINT_W_TEXT = 'Now I see everything.\nI\'m ready to move on.'
+const HINT_W_TEXT = 'Gradually you become a witness\nto how the world is made.'
 const HINT_W_DURATION = 4
+//
+// Shown once when the third start-branch jump finishes revealing the tree.
+//
+const HINT_TREE_REVEAL_TEXT = 'Oh. There\'s a tree here.'
+const HINT_TREE_REVEAL_DURATION = 3
 //
 // Hint text about the 3 bonus fragments (shown by the bonus-hero component).
 //
@@ -911,7 +916,7 @@ const TRAMP_WALK_NEAR = 220
 const TRAMP_WALK_NEAR_SINGING = 370
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
-const TRAMP_BAD_SING_TEXT = 'Oh my god, you sing so badly'
+const TRAMP_BAD_SING_TEXT = 'I can\'t listen to this anymore'
 const TRAMP_BAD_SING_DURATION = 4
 const TRAMP_BAD_SING_BUBBLE_FONT_SIZE = 22
 const TRAMP_BAD_SING_BUBBLE_PAD_X = 12
@@ -1102,6 +1107,17 @@ export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   }
   const undergroundSpec = loadUndergroundSprites(k)
   buildParallaxSprites(k, undergroundSpec)
+  //
+  // Gold hero frames are baked here so collecting O does not hitch the
+  // main thread while the colour-world fade is already drawing extra layers.
+  //
+  Hero.loadHeroSprites({
+    k,
+    type: Hero.HEROES.HERO,
+    bodyColor: GLOW_GOLD_HEX,
+    outlineColor: HERO_OUTLINE_COLOR,
+    eyeWhiteColor: HERO_EYE_WHITE
+  })
   onProgress?.(100)
 }
 //
@@ -1522,7 +1538,6 @@ function initGlowLevel0Scene(k) {
         badSingTimer: 0,
         cheekyTooltip: null,
         wrongSingCooldown: WRONG_TRAMP_SING_HINT_REPEAT,
-        waterHintCooldown: TRAMP_WATER_HINT_INTERVAL,
         waterHintStarted: false
       },
       branchTrampWalk: {
@@ -1564,7 +1579,7 @@ function initGlowLevel0Scene(k) {
       levelIndicator,
       goldRgb,
       wTrigger: { x1: wPlatX - PLAT_LAND_TRIGGER_PAD, x2: wPlatX + LOG_W + PLAT_LAND_TRIGGER_PAD, y: wPlatY - 60, y2: wPlatY + LOG_H + 20 },
-      bonusPlatHome: { x: bonusPlatX, y: bonusPlatY, h: LOG_H },
+      bonusPlatHome: { x: bonusPlatX, y: bonusPlatY, w: BONUS_PLAT_W, h: LOG_H },
       //
       // Always false at scene start — the colorWorld branch below rebakes the
       // gold hero even on reload (the hero object itself spawns whitish).
@@ -1663,9 +1678,11 @@ function initGlowLevel0Scene(k) {
     inst.introHintDelayRemaining = 0
     !deferGlowIntro && startGlowIntro(inst)
     createSmallHeroTooltip(inst)
+    inst.letterAppearFxReady = true
     k.onSceneLeave(() => {
       persistGlowFragmentKeysOnLeave(inst)
       stopGlowLetterDialogMusic(inst)
+      inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
     })
     registerGlowNativeTeardown(() => {
       persistGlowFragmentKeysOnLeave(inst)
@@ -1774,10 +1791,12 @@ function startGlowIntro(inst) {
     const dismissReplay = () => {
       if (replayHintDismissed) return
       replayHintDismissed = true
+      replayClick.cancel()
       dismissReplayIntroHint(inst, replayKeys)
     }
     const replayKeys = ['space', ...CFG.controls.backToMenu]
       .map(key => inst.k.onKeyPress(key, dismissReplay))
+    const replayClick = bindPointerActivate(inst.k, dismissReplay)
     return
   }
   inst.introLock = true
@@ -1802,7 +1821,7 @@ function startGlowIntro(inst) {
   //
   const advance = () => advanceGlowIntro(inst, { cancel: cancelIntroInput })
   introCancels.push(inst.k.onKeyPress(advance))
-  introCancels.push(inst.k.onMousePress(advance))
+  introCancels.push(bindPointerActivate(inst.k, advance))
 }
 //
 // Clears the post-death goal reminder as soon as the player starts moving
@@ -1901,13 +1920,13 @@ function heroTooltipText(inst) {
   return HERO_TOOLTIP_TEXT_GRAY_QUIET
 }
 //
-// Hero hover bubble is allowed during the quiet phase even if a replay hint
-// is still on screen — the quiet line must stay discoverable by hover.
+// Hero hover bubble stays off while any other hint is on the hero.
 //
 function isGlowHeroHoverTooltipVisible(inst) {
   if (inst.drowning || inst.dialogOpen) return false
   if (inst.heroSpawnFade > 0 || inst.pendingGlowIntro) return false
   if (inst.introLock) return false
+  if (HeroHint.isActive(inst.heroHint)) return false
   return true
 }
 //
@@ -2230,7 +2249,7 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     levelNumber: -1,
     sectionLabel: 'GLOW',
     activeColor: GLOW_GOLD_HEX,
-    inactiveColor: GLOW_PAL.decorGray,
+    inactiveColor: GLOW_PAL.dialogFill,
     completedColor: GLOW_GOLD_HEX,
     heroBodyColor: colorWorld ? GLOW_GOLD_HEX : HERO_BODY_COLOR,
     heroOutlineColor: HERO_OUTLINE_COLOR,
@@ -2240,9 +2259,13 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     sectionLabelY: GLOW_HUD_LABEL_TOP_Y,
     sectionLabelCompletedLetters: completedLetters,
     hideScoreboard: true,
-    scoreboardGreyLife: true
+    hideInactiveLetterShadow: true,
+    scoreboardGreyLife: false,
+    greyLife: !colorWorld,
+    lifeGreyTintHex: GLOW_PAL.decorGray
   })
   pinGlowHudFixed(indicator)
+  LevelIndicator.syncLifeHudGrey(indicator, !colorWorld)
   return indicator
 }
 //
@@ -2401,9 +2424,9 @@ function applyZoneVisibility(inst) {
   setPlatVisible(inst.lPlat, z.lPlatRevealed, inst.lPlatHome, z.gCollected)
   setPlatVisible(inst.oPlat, z.oZone, inst.oPlatHome, z.lCollected)
   setPlatVisible(inst.wPlat, z.wZone, inst.wPlatHome, z.oCollected)
-  setLetterVisible(inst.lLetter, z.lLetterUnveiled && !z.lCollected)
-  setLetterVisible(inst.oLetter, z.oZone && !z.oCollected)
-  setLetterVisible(inst.wLetter, z.wZone && !z.wCollected)
+  setLetterVisible(inst.lLetter, z.lLetterUnveiled && !z.lCollected, inst.letterAppearFxReady)
+  setLetterVisible(inst.oLetter, z.oZone && !z.oCollected, inst.letterAppearFxReady)
+  setLetterVisible(inst.wLetter, z.wZone && !z.wCollected, inst.letterAppearFxReady)
   inst.trampBundle.drawLayer.hidden = !isRightTrampolineVisible(z)
   inst.branchTrampBundle.drawLayer.hidden = !isBranchTrampolineVisible(z)
   inst.rockObjs.forEach(o => {
@@ -2467,9 +2490,18 @@ function setPlatVisible(plat, visible, home, solid = true) {
 //
 // Toggles pickup letter visibility.
 //
-function setLetterVisible(letterEntry, visible) {
+function setLetterVisible(letterEntry, visible, burst = false) {
   if (!letterEntry) return
+  const wasHidden = letterEntry.main?.hidden !== false
   letterEntry.allObjects.forEach(obj => { obj.hidden = !visible })
+  if (visible && wasHidden && burst) {
+    LevelIndicator.flashWorldLetterBurst(
+      letterEntry.k,
+      letterEntry.x,
+      letterEntry.y,
+      letterEntry.colorHex || GLOW_GOLD_HEX
+    )
+  }
 }
 //
 // The G pickup appears once the full tree, both lake cap rocks, left ground
@@ -2490,7 +2522,18 @@ function glowThreeZonesExplored(inst) {
 //
 function maybeShowGLetter(inst) {
   if (!inst.gLetter || inst.zones.gCollected) return
-  setLetterVisible(inst.gLetter, glowThreeZonesExplored(inst))
+  setLetterVisible(inst.gLetter, glowThreeZonesExplored(inst), inst.letterAppearFxReady)
+}
+//
+// Applies the grayscale teacher tint only when the glow world mode changes.
+//
+function maybeSyncGlowLifeHudGrey(inst) {
+  if (!inst.levelIndicator) return
+  const wantGrey = !inst.zones.colorWorld
+  const needsDesat = wantGrey && inst.levelIndicator._lifeSpriteName !== 'life-desat'
+  if (inst._lifeHudGrey === wantGrey && !needsDesat) return
+  inst._lifeHudGrey = wantGrey
+  LevelIndicator.syncLifeHudGrey(inst.levelIndicator, wantGrey)
 }
 //
 // Flat single decor gray until L — no per-object shades before then.
@@ -3656,7 +3699,7 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill)
     k.z(CFG.visual.zIndex.player - 1)
   ])
   main.hidden = true
-  return { main, outlines, allObjects: [main, ...outlines], char, x, y }
+  return { main, outlines, allObjects: [main, ...outlines], char, x, y, k, colorHex: fillHex }
 }
 //
 // Swaying grass — the shared Grass component, excluding water, trunk and the
@@ -4415,14 +4458,17 @@ function onDraw(inst) {
     ]
     const drawParLayer = layer => {
       const drawX = GlowCamera.getParallaxDrawX(inst.camera, layer.speed, layer.bleed)
-      const colorOnly = fade >= 1 && pf >= 1
-      if (colorOnly) {
-        k.drawSprite({ sprite: layer.color, pos: k.vec2(drawX, 0), opacity: fade * pf })
+      //
+      // Colour world never needs the gray forest — drawing both during the
+      // post-O fade doubled fill-rate (14 full-bleed sprites). Color-only
+      // at fade opacity is the same reveal and about half the GPU work.
+      //
+      if (zones.colorWorld) {
+        const op = fade >= 1 ? pf : fade * pf
+        op > 0.02 && k.drawSprite({ sprite: layer.color, pos: k.vec2(drawX, 0), opacity: op })
         return
       }
-      const grayOp = fade >= 1 ? 0 : (1 - fade) * pf
-      grayOp > 0.02 && k.drawSprite({ sprite: layer.gray, pos: k.vec2(drawX, 0), opacity: grayOp })
-      fade > 0.02 && k.drawSprite({ sprite: layer.color, pos: k.vec2(drawX, 0), opacity: fade * pf })
+      pf > 0.02 && k.drawSprite({ sprite: layer.gray, pos: k.vec2(drawX, 0), opacity: pf })
     }
     drawParLayer(skyLayer)
     inst.zones.colorWorld && inst.colorFade > 0.2 && drawBackgroundBirds(inst)
@@ -4431,25 +4477,39 @@ function onDraw(inst) {
     drawBackgroundBirds(inst)
   }
   //
-  // The sky / tree / bush parallax layers above are full-screen sprites whose
-  // art extends below the ground line. While cross-fading (gray → color) at
-  // partial opacity they alpha-blend onto whatever was already painted, so
-  // their own below-ground pixels leaked through as translucent "ghost"
-  // trunk stumps under the ground until the fade finished — repaint the
-  // opaque ground band solidly on top to erase that blend residue, then
-  // redraw the underground decor (rocks, burrows, cracks) over it so it still
-  // sits correctly on top of the earth band. Underground always uses the
-  // dedicated sprites so nothing jumps when the fade completes.
+  // Parallax tree sprites extend below the ground line. Cover that bleed
+  // with the baked static earth+underground sprite (one draw) instead of a
+  // fill rect plus a second underground sprite.
   //
-  if (groundFillC) {
+  if (zones.lZoneParallax) {
+    if (zones.colorWorld) {
+      if (fade < 1 && groundFillC) {
+        k.drawRect({
+          pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
+          width: GAME_W,
+          height: WORLD_H - FLOOR_Y,
+          color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
+        })
+      }
+      fade > 0.02 && k.drawSprite({
+        sprite: BG_STATIC_COLOR,
+        pos: k.vec2(0, 0),
+        opacity: fade >= 1 ? 1 : fade
+      })
+    } else {
+      k.drawSprite({ sprite: BG_STATIC_GRAY, pos: k.vec2(0, 0), opacity: inst.parallaxFade })
+    }
+  } else if (groundFillC) {
     k.drawRect({
       pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
       width: GAME_W,
       height: WORLD_H - FLOOR_Y,
       color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
     })
+    innerGray && drawUndergroundLayer(inst)
+  } else {
+    innerGray && drawUndergroundLayer(inst)
   }
-  innerGray && drawUndergroundLayer(inst)
   //
   // Surface cracks / open cave on the far-right ground strip
   //
@@ -5574,9 +5634,16 @@ function finishDrowning(inst) {
   inst.levelIndicator.updateLifeScore?.(newLife)
   Sound.playGentleLifeSound(inst.sound)
   if (inst.levelIndicator?.lifeImage?.sprite?.exists?.()) {
-    const originalColor = inst.levelIndicator.lifeImage.sprite.color
-    flashLifeImageOnDrownDeath(inst.k, inst.levelIndicator, originalColor, 0)
-    createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator)
+    const greyLife = !inst.zones.colorWorld
+    LevelIndicator.syncLifeHudGrey(inst.levelIndicator, greyLife)
+    const desatReady = inst.levelIndicator._lifeSpriteName === 'life-desat'
+    const canFlash = !greyLife || desatReady
+    if (canFlash) {
+      inst.levelIndicator._lifeFlashLock = true
+      const originalColor = inst.levelIndicator.lifeImage.sprite.color
+      flashLifeImageOnDrownDeath(inst.k, inst.levelIndicator, originalColor, 0, greyLife)
+    }
+    createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator, greyLife)
   }
   inst.k.wait(DROWN_RESTART_DELAY, () => {
     set(KEY_RESPAWN_NEAR_TREE, true)
@@ -5820,7 +5887,7 @@ function onUpdate(inst) {
     inst._mushroomLeanActive = singing || meditating ||
       inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
   }
-  inst.levelIndicator && LevelIndicator.syncLifeHudGrey(inst.levelIndicator, !inst.zones.colorWorld)
+  maybeSyncGlowLifeHudGrey(inst)
   if (inst.colorFade < inst.colorFadeTarget) {
     inst.colorFade = Math.min(inst.colorFadeTarget, inst.colorFade + k.dt() / COLOR_FADE_DURATION)
     const colorTree = inst.colorFade >= 0.5
@@ -6048,7 +6115,6 @@ function onUpdate(inst) {
   updateBranchTrampCheekyHint(inst)
   updateBranchTrampMarioHint(inst)
   updateLetterProgressHint(inst)
-  updateTrampWaterHint(inst)
   updateWrongTrampSingHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
   updateTrampBadSingHint(inst)
@@ -6453,22 +6519,34 @@ function startTrampWaterHints(inst) {
   const tw = inst.trampWalk
   if (!tw || tw.waterHintStarted) return
   tw.waterHintStarted = true
-  tw.waterHintCooldown = TRAMP_WATER_HINT_INTERVAL
-  if (HeroHint.isActive(inst.heroHint)) return
-  HeroHint.show(inst.heroHint, TRAMP_WATER_HINT_TEXT, TRAMP_WATER_HINT_DURATION, { dismissOnJump: false })
+  showTrampShallowHint(inst)
 }
 //
-// Repeats the post-walk water hint on the hero every 30 s.
+// Tooltip on the docked walk-trampoline: the lake here is too shallow to drown.
 //
-function updateTrampWaterHint(inst) {
-  const tw = inst.trampWalk
-  if (!tw?.walked || !tw.waterHintStarted) return
-  if (inst.drowning || inst.dialogOpen) return
-  tw.waterHintCooldown -= inst.k.dt()
-  if (tw.waterHintCooldown > 0) return
-  tw.waterHintCooldown = TRAMP_WATER_HINT_INTERVAL
-  if (HeroHint.isActive(inst.heroHint)) return
-  HeroHint.show(inst.heroHint, TRAMP_WATER_HINT_TEXT, TRAMP_WATER_HINT_DURATION, { dismissOnJump: false })
+function showTrampShallowHint(inst) {
+  inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
+  const mushH = TRAMP_TOTAL_H
+  const tip = Tooltip.create({
+    k: inst.k,
+    forceVisible: true,
+    targets: [{
+      x: () => inst.trampState?.x ?? -1000,
+      y: FLOOR_Y - mushH / 2,
+      width: TRAMP_TOTAL_W,
+      height: mushH,
+      text: TRAMP_SHALLOW_HINT_TEXT,
+      offsetY: TRAMP_TOOLTIP_Y_OFFSET
+    }]
+  })
+  tip.activeTarget = tip.targets[0]
+  tip.opacity = 1
+  inst.trampShallowHint = tip
+  inst.k.wait(TRAMP_SHALLOW_HINT_DURATION, () => {
+    if (inst.trampShallowHint !== tip) return
+    Tooltip.destroy(tip)
+    inst.trampShallowHint = null
+  })
 }
 //
 // Bubble when the sing-to-walk countdown finishes — the right mushroom is unimpressed
@@ -6745,11 +6823,15 @@ function persistTreeSegmentsRevealed(inst) {
 //
 function finishTreeRevealIfComplete(inst) {
   if (!isAllTreeSegmentsRevealed(inst)) return
+  const justOpened = !inst.zones.tree
   inst.pendingTreeReveal = false
   inst.zones.tree = true
   set(KEY_REVEALED_TREE, true)
   applyZoneVisibility(inst)
   maybeShowGLetter(inst)
+  justOpened && HeroHint.show(inst.heroHint, HINT_TREE_REVEAL_TEXT, HINT_TREE_REVEAL_DURATION, {
+    dismissOnJump: false
+  })
 }
 //
 // Short camera bump for tree reveals, tramp landings and letter pickups.
@@ -7086,32 +7168,33 @@ function beginDrownSinkTween(inst) {
 // Flashes life icon gold/white on drowning death (touch lesson 0 pattern
 // recoloured to the glow gold — perception happens through colour here).
 //
-function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count) {
+function flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count, greyLife = false) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
   if (count >= LIFE_FLASH_COUNT) {
     levelIndicator.lifeImage.sprite.color = originalColor
     levelIndicator.lifeImage.sprite.opacity = 1.0
+    levelIndicator._lifeFlashLock = false
     return
   }
-  const flashGold = glowRgb(GLOW_GOLD_HEX)
-  const flashLight = glowRgb('brightLight')
+  const flashA = greyLife ? glowRgb('decorGray') : glowRgb(GLOW_GOLD_HEX)
+  const flashB = greyLife ? glowRgb('decorGray') : glowRgb('brightLight')
   if (count % 2 === 0) {
-    levelIndicator.lifeImage.sprite.color = k.rgb(flashGold.r, flashGold.g, flashGold.b)
+    levelIndicator.lifeImage.sprite.color = k.rgb(flashA.r, flashA.g, flashA.b)
     levelIndicator.lifeImage.sprite.opacity = 1.0
   } else {
-    levelIndicator.lifeImage.sprite.color = k.rgb(flashLight.r, flashLight.g, flashLight.b)
-    levelIndicator.lifeImage.sprite.opacity = 0.5
+    levelIndicator.lifeImage.sprite.color = k.rgb(flashB.r, flashB.g, flashB.b)
+    levelIndicator.lifeImage.sprite.opacity = greyLife ? 0.35 : 0.5
   }
-  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count + 1))
+  k.wait(LIFE_FLASH_INTERVAL, () => flashLifeImageOnDrownDeath(k, levelIndicator, originalColor, count + 1, greyLife))
 }
 //
 // Gold square particles radiating from life icon on drowning death.
 //
-function createLifeParticlesOnDrownDeath(k, levelIndicator) {
+function createLifeParticlesOnDrownDeath(k, levelIndicator, greyLife = false) {
   if (!levelIndicator?.lifeImage?.sprite?.exists?.()) return
   const lifeX = levelIndicator.lifeImage.sprite.pos.x
   const lifeY = levelIndicator.lifeImage.sprite.pos.y
-  const gold = glowRgb(GLOW_GOLD_HEX)
+  const tone = greyLife ? glowRgb('decorGray') : glowRgb(GLOW_GOLD_HEX)
   for (let i = 0; i < LIFE_PARTICLE_COUNT; i++) {
     const angle = (Math.PI * 2 * i) / LIFE_PARTICLE_COUNT
     const speed = LIFE_PARTICLE_SPEED_MIN + Math.random() * LIFE_PARTICLE_SPEED_EXTRA
@@ -7120,7 +7203,7 @@ function createLifeParticlesOnDrownDeath(k, levelIndicator) {
     const particle = k.add([
       k.rect(size, size),
       k.pos(lifeX, lifeY),
-      k.color(gold.r, gold.g, gold.b),
+      k.color(tone.r, tone.g, tone.b),
       k.opacity(1),
       k.z(CFG.visual.zIndex.ui + 10),
       k.anchor('center'),

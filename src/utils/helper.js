@@ -79,6 +79,7 @@ export function isAnyKeyDown(k, keys) {
     }
     if (key === 'left' && physicalKeysDown.has('ArrowLeft')) return true
     if (key === 'right' && physicalKeysDown.has('ArrowRight')) return true
+    if (key === 'space' && physicalKeysDown.has('Space')) return true
     if (key === 'a' && physicalKeysDown.has('KeyA')) return true
     if (key === 'd' && physicalKeysDown.has('KeyD')) return true
     //

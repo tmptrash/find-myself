@@ -178,19 +178,18 @@ function onUpdateBugScare(k, ctx) {
   }
 }
 //
-// Updates crawlers/pyramids; skips bugs outside cull radius unless mid-scare/pyramid.
+// Always advances bug positions (even off-screen) so they can walk into view;
+// drawing is culled separately in lesson0.js. Pyramid join checks stay near-camera.
 //
 function onUpdateBugsAndPyramids(k, ctx, cameraX, cullDist) {
   const { heroInst, bugs, smallBugs, allBugsCombined, activePyramids, pyramidRuntime } = ctx
   if (heroInst.isAnnihilating) return
   const dt = k.dt()
   for (const bug of bugs) {
-    const active = bug.isScared || bug.state === 'pyramid' || bug.isScattering || isWithinDistance(bug.x, cameraX, cullDist)
-    active && Bugs.onUpdate(bug, dt)
+    Bugs.onUpdate(bug, dt)
   }
   for (const bug of smallBugs) {
-    const active = bug.state === 'pyramid' || bug.isScattering || isWithinDistance(bug.x, cameraX, cullDist)
-    active && SmallBugs.onUpdate(bug, dt)
+    SmallBugs.onUpdate(bug, dt)
   }
   for (let i = activePyramids.length - 1; i >= 0; i--) {
     const pyramid = activePyramids[i]

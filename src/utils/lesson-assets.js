@@ -3,7 +3,7 @@ import * as BootLoader from './boot-loader.js'
 import { drainTrackedTouchSpriteNames } from './touch-sprite-registry.js'
 import { squashSpriteReleaseGpu } from './sprite-gpu.js'
 import { normalizeSceneName } from './progress.js'
-import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene } from './engine-switch.js'
+import { ensureEngineForScene, getActiveResolutionMode, resolutionModeForScene, setActiveSceneName } from './engine-switch.js'
 import { RESOLUTION_MODE } from './game-engine.js'
 
 //
@@ -306,6 +306,7 @@ export async function enterPreparedScene(k, sceneName, afterGo) {
   // Clear Touch sprite tracking so next scene starts with a clean registry list.
   //
   drainTrackedTouchSpriteNames()
+  setActiveSceneName(sceneName)
   liveK.go(sceneName)
   afterGo?.(liveK)
 }

@@ -118,6 +118,9 @@ export function create(config) {
     sectionLabelY = null,
     hideScoreboard = false,
     scoreboardGreyLife = false,
+    greyLife = false,
+    lifeGreyTintHex = null,
+    hideInactiveLetterShadow = false,
     heroOutlineColor = CFG.visual.colors.outline,
     heroEyeWhiteColor = null
   } = config
@@ -180,6 +183,8 @@ export function create(config) {
       const outlineObj = k.add(outlineComponents)
       letterOutlineObjects.push(outlineObj)
       isFallingLetter && fallingLetterObjects.push(outlineObj)
+      hideInactiveLetterShadow && sectionLabelCompletedLetters != null &&
+        i >= sectionLabelCompletedLetters && (outlineObj.hidden = true)
     })
     //
     // Create main letter
@@ -252,22 +257,28 @@ export function create(config) {
   // Create life image (sprite pre-loaded in index.js)
   //
   const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8
+  const wantGreyLife = greyLife || scoreboardGreyLife
+  ensureDesaturatedLifeSprite(k)
+  const lifeSpriteName = wantGreyLife && k._lifeDesatReady === true ? 'life-desat' : 'life'
+  const lifeTintHex = wantGreyLife
+    ? (lifeGreyTintHex || CFG.visual.colors.palette.decorGray)
+    : null
+  const lifeTint = lifeTintHex
+    ? getRGB(k, lifeTintHex)
+    : { r: 255, g: 255, b: 255 }
   const lifeImageData = {
     sprite: k.add([
-      k.sprite('life'),
+      k.sprite(lifeSpriteName),
       k.pos(lifeImageX - 5, smallHeroY + LIFE_IMAGE_Y_OFFSET),
       k.scale(lifeImageScale),
       k.anchor('center'),
       k.fixed(),
-      //
-      // Tint the white "life" PNG to the neutral grey used by the small
-      // hero so both HUD icons share one quiet scoreboard colour.
-      //
-      k.color(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B),
+      k.color(lifeTint.r, lifeTint.g, lifeTint.b),
       k.z(CFG.visual.zIndex.ui)
     ]),
     pos: { x: lifeImageX, y: smallHeroY + LIFE_IMAGE_Y_OFFSET }
   }
+  wantGreyLife && (lifeSpriteName !== 'life-desat') && (lifeImageData.sprite.hidden = true)
   //
   // Get score values from localStorage
   //
@@ -345,8 +356,12 @@ export function create(config) {
     heroScoreOutlines,
     scoreboardNodes,
     scoreboardGreyLife,
+    hideInactiveLetterShadow,
     smallHeroRevealed: !hideScoreboard,
     lifeRevealed: !hideScoreboard,
+    lifeGreyTintHex: lifeGreyTintHex || CFG.visual.colors.palette.decorGray,
+    _lifeSpriteName: lifeSpriteName,
+    _lifeFlashLock: false,
     //
     // Exposed so external flash routines (life-deduct red blink,
     // help-purchase / help-denied flashes) can reset the score numerals
@@ -407,7 +422,6 @@ export function revealLifeHud(inst, greyLife = true) {
   if (!inst || inst.lifeRevealed) return
   inst.lifeRevealed = true
   syncLifeHudGrey(inst, greyLife)
-  inst.lifeImage?.sprite && (inst.lifeImage.sprite.hidden = false)
   inst.lifeScoreText && (inst.lifeScoreText.hidden = false)
   inst.lifeScoreOutlines?.forEach(o => { o.hidden = false })
 }
@@ -418,11 +432,32 @@ export function revealLifeHud(inst, greyLife = true) {
  * @param {boolean} [greyLife=true] - When true, tint the life sprite grey
  */
 export function syncLifeHudGrey(inst, greyLife = true) {
-  if (!inst?.lifeImage?.sprite) return
+  const sprite = inst?.lifeImage?.sprite
+  if (!sprite || inst._lifeFlashLock) return
+  const k = inst.k
   const useGrey = greyLife || inst.scoreboardGreyLife
-  inst.lifeImage.sprite.color = useGrey
-    ? inst.k.rgb(HUD_SCORE_ICON_GREY_R, HUD_SCORE_ICON_GREY_G, HUD_SCORE_ICON_GREY_B)
-    : inst.k.rgb(255, 255, 255)
+  if (useGrey) {
+    ensureDesaturatedLifeSprite(k)
+    if (k._lifeDesatReady !== true) {
+      inst.lifeRevealed && (sprite.hidden = true)
+      return
+    }
+    if (inst._lifeSpriteName !== 'life-desat') {
+      sprite.use(k.sprite('life-desat'))
+      inst._lifeSpriteName = 'life-desat'
+    }
+    const tintHex = inst.lifeGreyTintHex || CFG.visual.colors.palette.decorGray
+    const tintRgb = getRGB(k, tintHex)
+    sprite.color = k.rgb(tintRgb.r, tintRgb.g, tintRgb.b)
+    inst.lifeRevealed && (sprite.hidden = false)
+    return
+  }
+  if (inst._lifeSpriteName === 'life-desat') {
+    sprite.use(k.sprite('life'))
+    inst._lifeSpriteName = 'life'
+  }
+  sprite.color = k.rgb(255, 255, 255)
+  inst.lifeRevealed && (sprite.hidden = false)
 }
 
 export function setSectionLabelLetterProgress(inst, completedLetters) {
@@ -433,6 +468,9 @@ export function setSectionLabelLetterProgress(inst, completedLetters) {
     const colorHex = i < capped ? inst.sectionLabelActiveColor : inst.sectionLabelInactiveColor
     const { r, g, b } = getRGB(inst.k, colorHex)
     letter.color = inst.k.rgb(r, g, b)
+  })
+  inst.hideInactiveLetterShadow && inst.letterOutlineObjects?.forEach((outline, i) => {
+    outline?.exists?.() && (outline.hidden = i >= capped)
   })
 }
 
@@ -445,24 +483,41 @@ export function flashLetterBurst(inst, letterIndex) {
   if (!inst?.letterObjects?.length || !inst.k) return
   const letter = inst.letterObjects[letterIndex - 1]
   if (!letter?.exists?.()) return
-  const k = inst.k
-  const cx = letter.pos.x
-  const cy = letter.pos.y + LETTER_BURST_Y_OFFSET
-  const { r, g, b } = getRGB(k, inst.sectionLabelActiveColor)
+  flashWorldLetterBurst(
+    inst.k,
+    letter.pos.x,
+    letter.pos.y + LETTER_BURST_Y_OFFSET,
+    inst.sectionLabelActiveColor,
+    true
+  )
+}
+
+/**
+ * Colour burst at a world (or HUD) position, tinted to the letter's own colour.
+ * @param {Object} k - Kaplay instance
+ * @param {number} x - Center X
+ * @param {number} y - Center Y
+ * @param {string} colorHex - Particle colour
+ * @param {boolean} [screenFixed=false] - HUD space when true
+ */
+export function flashWorldLetterBurst(k, x, y, colorHex, screenFixed = false) {
+  if (!k || colorHex == null) return
+  const { r, g, b } = getRGB(k, colorHex)
   for (let i = 0; i < LETTER_BURST_PARTICLE_COUNT; i++) {
     const angle = (Math.PI * 2 * i) / LETTER_BURST_PARTICLE_COUNT
     const speed = LETTER_BURST_SPEED_MIN + Math.random() * LETTER_BURST_SPEED_EXTRA
     const lifetime = LETTER_BURST_LIFETIME_MIN + Math.random() * LETTER_BURST_LIFETIME_EXTRA
     const size = LETTER_BURST_SIZE_MIN + Math.random() * LETTER_BURST_SIZE_EXTRA
-    const particle = k.add([
+    const components = [
       k.circle(size),
-      k.pos(cx, cy),
+      k.pos(x, y),
       k.color(r, g, b),
       k.opacity(1),
       k.z(CFG.visual.zIndex.ui + 10),
-      k.anchor('center'),
-      k.fixed()
-    ])
+      k.anchor('center')
+    ]
+    screenFixed && components.push(k.fixed())
+    const particle = k.add(components)
     const vx = Math.cos(angle) * speed
     const vy = Math.sin(angle) * speed
     const ps = { elapsed: 0 }
@@ -528,4 +583,53 @@ function onUpdateLetterBurstParticle(k, particle, vx, vy, lifetime, ps) {
   particle.moveBy(vx * k.dt(), vy * k.dt())
   particle.opacity = 1 - ps.elapsed / lifetime
   ps.elapsed >= lifetime && k.destroy(particle)
+}
+/**
+ * Bakes the grayscale teacher sprite and resolves when it is ready to draw.
+ * @param {Object} k - Kaplay instance
+ * @returns {Promise<void>}
+ */
+export function prepareDesaturatedLifeSprite(k) {
+  ensureDesaturatedLifeSprite(k)
+  if (k._lifeDesatReady === true) return Promise.resolve()
+  return k._lifeDesatPromise || Promise.resolve()
+}
+//
+// Bakes a desaturated copy of life.png so the HUD teacher can go fully
+// one-colour in Glow's gray world (a grey tint on a colour photo still shows hue).
+//
+function ensureDesaturatedLifeSprite(k) {
+  if (k._lifeDesatReady === true || k._lifeDesatReady === 'pending') return
+  k._lifeDesatReady = 'pending'
+  k._lifeDesatPromise = fetch('./life.png')
+    .then(res => {
+      if (!res.ok) throw new Error('life.png')
+      return res.blob()
+    })
+    .then(blob => createImageBitmap(blob))
+    .then(bitmap => {
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      ctx.filter = 'grayscale(100%)'
+      ctx.drawImage(bitmap, 0, 0)
+      ctx.filter = 'none'
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const px = imageData.data
+      for (let i = 0; i < px.length; i += 4) {
+        const y = (px[i] * 30 + px[i + 1] * 59 + px[i + 2] * 11) / 100
+        px[i] = y
+        px[i + 1] = y
+        px[i + 2] = y
+      }
+      ctx.putImageData(imageData, 0, 0)
+      bitmap.close?.()
+      k.loadSprite('life-desat', canvas)
+      k._lifeDesatCanvas = canvas
+      k._lifeDesatReady = true
+    })
+    .catch(() => {
+      k._lifeDesatReady = false
+    })
 }

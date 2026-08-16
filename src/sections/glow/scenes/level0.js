@@ -622,7 +622,7 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 const GLOW_DIALOG_G = 'The world was always here, waitin[hl]G[/hl].\nYou just had to see it.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
-const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Speak with\nthe mushrooms.'
+const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Speak with\nbig mushroom.'
 //
 // Voice-overs played while the matching letter dialog is open
 //

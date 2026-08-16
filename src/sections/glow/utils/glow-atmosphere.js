@@ -223,12 +223,14 @@ export function updateGlowMidges(ctrl, dt) {
 /**
  * Sets up the crack floor lid + optional already-collapsed pit.
  * @param {Object} cfg - Setup config
+ * @param {Object} [cfg.tooltipClampInset] - Playfield inset for pit collect hints
  * @returns {Object} Pit state
  */
 export function createGlowPit(cfg) {
   const {
     k, floorY, screenW, heroInst, sound, levelIndicator,
-    heroBodyColor, groundColor, alreadyCollapsed, cracksVisible = false
+    heroBodyColor, groundColor, alreadyCollapsed, cracksVisible = false,
+    tooltipClampInset = null
   } = cfg
   const zone = getCrackZone(screenW, floorY)
   bakePitMushroomSprite(k)
@@ -267,6 +269,7 @@ export function createGlowPit(cfg) {
     pitCaveIdleTime: 0,
     pitCaveHintShown: false,
     pitCaveHintTooltip: null,
+    tooltipClampInset,
     wallProfile: null
   }
   if (pit.collapsed) {
@@ -1027,8 +1030,9 @@ function openPitPhysics(pit) {
       //
       disablePlatformBody: true,
       customPlatformDraw: () => {},
-      collectHintText: 'Another fragment.\nThe ground keeps secrets.',
-      collectHintDuration: 5
+      collectHintText: 'Three fragments.\nThe ground keeps secrets.',
+      collectHintDuration: 5,
+      tooltipClampInset: pit.tooltipClampInset
     })
     if (pit.pitBonus?.miniHero?.character) {
       pit.pitBonus.revealed = true

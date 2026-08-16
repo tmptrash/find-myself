@@ -66,10 +66,15 @@ let globalSuppressed = false
  * @param {number} [cfg.targets[].offsetY] - Custom Y offset for tooltip (default: TOOLTIP_Y_OFFSET)
  * @param {boolean} [cfg.targets[].forceBelow] - Force tooltip to appear below the target
  * @param {boolean} [cfg.forceVisible] - Skip hover detection, keep tooltip always visible
+ * @param {Object} [cfg.clampInset] - Extra screen inset when clamping the bubble
+ * @param {number} [cfg.clampInset.left] - Left playfield / chrome inset
+ * @param {number} [cfg.clampInset.right] - Right playfield / chrome inset
+ * @param {number} [cfg.clampInset.top] - Top playfield / chrome inset
+ * @param {number} [cfg.clampInset.bottom] - Bottom playfield / chrome inset
  * @returns {Object} Tooltip instance with destroy() method
  */
 export function create(cfg) {
-  const { k, targets, forceVisible = false } = cfg
+  const { k, targets, forceVisible = false, clampInset = null } = cfg
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // Tooltip rendering state
@@ -82,7 +87,8 @@ export function create(cfg) {
     font,
     frozenX: 0,
     frozenY: 0,
-    forceVisible
+    forceVisible,
+    clampInset
   }
   //
   // Game object with high z-index so tooltip renders in front of everything
@@ -214,19 +220,25 @@ function onDraw(inst) {
   const totalH = bubbleH + BUBBLE_BORDER_WIDTH * 2
   const screenW = k.width()
   const screenH = k.height()
+  const inset = inst.clampInset || {}
+  const insetLeft = inset.left ?? 0
+  const insetRight = inset.right ?? 0
+  const insetTop = inset.top ?? 0
+  const insetBottom = inset.bottom ?? 0
   //
   // Decide placement: above or below target.
   // Flips below if the bubble would go off the top edge or forceBelow is set.
   //
   const aboveY = inst.frozenY + offsetY - bubbleH
-  const belowThreshold = SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
+  const belowThreshold = insetTop + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const showBelow = target.forceBelow || aboveY < belowThreshold
   //
-  // Clamp bubble horizontally so it stays within screen edges
+  // Clamp bubble horizontally so it stays within the playfield / screen edges.
+  // Off-screen world targets pin to the left or right playfield edge.
   //
   let bubbleX = Math.round(bubbleCenterX - bubbleW / 2)
-  const minX = SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
-  const maxX = screenW - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleW
+  const minX = insetLeft + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
+  const maxX = screenW - insetRight - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleW
   bubbleX = Math.max(minX, Math.min(maxX, bubbleX))
   //
   // Position bubble above or below the target
@@ -240,8 +252,8 @@ function onDraw(inst) {
   //
   // Clamp vertically within screen
   //
-  const minY = SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
-  const maxY = screenH - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleH
+  const minY = insetTop + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
+  const maxY = screenH - insetBottom - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleH
   bubbleY = Math.max(minY, Math.min(maxY, bubbleY))
   //
   // Shift bubble up if it overlaps with an already-drawn tooltip

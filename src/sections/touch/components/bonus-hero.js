@@ -151,6 +151,7 @@ const BONUS_PARTICLE_SIZE_RANGE = 4
  * @param {Function} [config.customPlatformDraw] - Replaces the built-in revealed
  *   platform drawing. Called as customPlatformDraw(inst) so levels can render the
  *   platform in their own visual style (e.g. glow letter logs).
+ * @param {Object} [config.tooltipClampInset] - Playfield inset for the collect hint
  * @returns {Object} Bonus hero instance
  */
 export function create(config) {
@@ -176,7 +177,8 @@ export function create(config) {
     disablePlatformBody = false,
     collectHintText = BONUS_COLLECT_HINT_TEXT,
     collectHintDuration = HINT_DISPLAY_DURATION,
-    persistStorageOnCollect = false
+    persistStorageOnCollect = false,
+    tooltipClampInset = null
   } = config
   //
   // Skip creation if bonus was already collected in a previous visit
@@ -305,6 +307,7 @@ export function create(config) {
     disablePlatformBody,
     collectHintText,
     collectHintDuration,
+    tooltipClampInset,
     collectHintOrigin: null,
     collectHintGrace: 0,
     collectTooltip: null,
@@ -1079,14 +1082,13 @@ function showCollectHint(inst) {
   const tooltip = Tooltip.create({
     k: inst.k,
     targets: [target],
-    forceVisible: true
+    forceVisible: true,
+    clampInset: inst.tooltipClampInset
   })
   //
-  // forceVisible skips onUpdate, so we must populate the rendering state manually
+  // forceVisible still syncs screen position each frame; pin the target now.
   //
   tooltip.activeTarget = target
-  tooltip.frozenX = heroPos.x
-  tooltip.frozenY = heroPos.y
   tooltip.opacity = 1
   inst.collectTooltip = tooltip
   //
@@ -1107,11 +1109,6 @@ function updateCollectHintDistance(inst) {
   if (!inst.collectTooltip) return
   const pos = inst.heroInst?.character?.pos
   if (!pos) return
-  //
-  // Keep the bubble glued to the hero while it is still showing
-  //
-  inst.collectTooltip.frozenX = pos.x
-  inst.collectTooltip.frozenY = pos.y
   if (inst.collectHintGrace > 0) {
     inst.collectHintGrace -= inst.k.dt()
     if (inst.collectHintGrace <= 0) {

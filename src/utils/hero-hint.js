@@ -18,13 +18,15 @@ const HINT_DISMISS_DISTANCE = 30
  * @param {Object} cfg - Configuration
  * @param {Object} cfg.k - Kaplay instance
  * @param {Object} cfg.heroInst - Hero inst whose position anchors the bubble
+ * @param {Object} [cfg.clampInset] - Playfield inset forwarded to the tooltip
  * @returns {Object} Hero hint inst
  */
 export function create(cfg) {
-  const { k, heroInst } = cfg
+  const { k, heroInst, clampInset = null } = cfg
   const inst = {
     k,
     heroInst,
+    clampInset,
     tooltip: null,
     target: null,
     timer: 0,
@@ -165,7 +167,12 @@ function startHint(inst, text, duration) {
     text,
     offsetY: HINT_OFFSET_Y
   }
-  inst.tooltip = Tooltip.create({ k, targets: [inst.target], forceVisible: true })
+  inst.tooltip = Tooltip.create({
+    k,
+    targets: [inst.target],
+    forceVisible: true,
+    clampInset: inst.clampInset
+  })
   inst.tooltip.activeTarget = inst.target
   syncBubblePosition(inst)
   inst.tooltip.opacity = 0

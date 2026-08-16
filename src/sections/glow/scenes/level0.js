@@ -262,6 +262,10 @@ const O_LETTER_RAISE_Y = 15
 const L_LETTER_RAISE_Y = 17
 const G_LETTER_RAISE_Y = 10
 //
+// The W letter floats 5 px higher above its log than the default placement.
+//
+const W_LETTER_RAISE_Y = 5
+//
 // G letter sits to the right of the hero branch (trunk side), same float height.
 //
 const G_LETTER_RIGHT_OF_BRANCH_GAP = 176
@@ -598,7 +602,7 @@ const PIT_CAVE_HINT_IDLE = 10
 const PIT_CAVE_HINT_TEXT = 'Maybe you want to step on me'
 const PIT_CAVE_HINT_DURATION = 5
 const O_LETTER_STUCK_HINT_DELAY = 90
-const O_LETTER_STUCK_HINT_TEXT = 'In this chaos,\nsometimes you just\nneed to stop'
+const O_LETTER_STUCK_HINT_TEXT = 'In this chaos,\nsometimes I just\nneed to stop'
 const O_LETTER_STUCK_HINT_DURATION = 6
 const L_LETTER_PEEK_TRAVEL = 0.45
 const L_LETTER_PEEK_HOLD = 1
@@ -620,9 +624,9 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = 'The world was always here, waitin[hl]G[/hl].\nYou just had to see it.'
-const GLOW_DIALOG_L = '[hl]L[/hl]ight helps you see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
-const GLOW_DIALOG_O = '[hl]O[/hl]bservation is your new skill.\nSometimes you need to stop before\nyou can truly see. Speak with\nbig mushroom.'
+const GLOW_DIALOG_G = 'The world was always here, waitin[hl]G[/hl].\nI just had to see it.'
+const GLOW_DIALOG_L = '[hl]L[/hl]ight helps me see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
+const GLOW_DIALOG_O = '[hl]O[/hl]bservation is my new skill.\nSometimes I need to stop before\nI can truly see. I should speak with\nbig mushroom.'
 //
 // Voice-overs played while the matching letter dialog is open
 //
@@ -636,9 +640,9 @@ const GLOW_DIALOG_SOUND_O = 'glow-ow'
 // the first drowning.
 //
 const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan.\nYou can only see\nwhat you\'re ready\nto notice.'
-const HINT_INTRO_1_DURATION = 6
-const HINT_INTRO_2_TEXT = 'This world is here, even when you can\'t see it.\n\nCollect every letter of GLOW. Each one reveals\nsomething your eyes couldn\'t see before. Move\nyour mouse. Look closer. Pay attention.\n\nSometimes, seeing is more than simply looking.'
-const HINT_INTRO_2_DURATION = 15
+const HINT_INTRO_1_DURATION = 7
+const HINT_INTRO_2_TEXT = 'This world is here, even when\nyou can\'t see it.\n\nUse AWD, ←, →, ↑, Space keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
+const HINT_INTRO_2_DURATION = 18
 //
 // Extra beat between the first and second intro speech bubbles.
 //
@@ -652,7 +656,7 @@ const HINT_ZONE_DURATION = 5
 const HINT_ZONE_DISMISS_DISTANCE = 80
 const GLOW_SFX_FADE_DURATION = 10
 const GLOW_WORLD_AUDIO_FADE_DURATION = 10
-const HINT_DROWN_TEXT = 'That\'s not bad. Now you\nknow you can\'t go here.'
+const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
 const HINT_DROWN_DURATION = 4
 //
 // Post-death reminder shown while the hero spawns on the lower-right ground —
@@ -698,7 +702,7 @@ const HERO_TOOLTIP_TEXT_GRAY_QUIET = "Strange... It's very quiet\nhere. We shoul
 const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
 const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
 const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
-const HERO_TOOLTIP_AFTER_O = 'You need to talk\nto the mushroom.'
+const HERO_TOOLTIP_AFTER_O = 'I need to talk\nto big mushroom.'
 const HERO_TOOLTIP_AFTER_TRAMP_WALK = 'I think we need to jump\nto the left of the mushroom.'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
@@ -764,7 +768,7 @@ const BONUS_HINT_DURATION = 5
 // After picking up the final W letter the hero shares a closing line for a
 // few seconds, then a full-screen fade-out leads back to the menu.
 //
-const HINT_W_TEXT = 'Gradually you become a witness\nto how the world is made.'
+const HINT_W_TEXT = 'Gradually I become a witness\nto how the world is made.'
 const HINT_W_DURATION = 4
 //
 // Shown once when the third start-branch jump finishes revealing the tree.
@@ -774,7 +778,7 @@ const HINT_TREE_REVEAL_DURATION = 3
 //
 // Hint text about the 3 bonus fragments (shown by the bonus-hero component).
 //
-const BONUS_HINT_TEXT = 'These are 3 Fragments. Every\njourney leaves something behind.\nCollect them. They will help you grow'
+const BONUS_HINT_TEXT = 'These are 3 Fragments. Every\njourney leaves something behind.\nCollect them. They will help me grow'
 //
 // Drowning — land on the lake floor, then sink under the fill with the hint.
 //
@@ -904,7 +908,8 @@ const CAMERA_INTRO_HINT_DELAY = 1
 const GLOW_CAMERA_SHAKE_AMP = 5
 const GLOW_CAMERA_SHAKE_DURATION = 0.22
 //
-// After O: stand still near the trampoline → countdown → mushroom walks left
+// After O: stand still near the trampoline → countdown → mushroom walks left.
+// Three sings: two land steps, then the lake. W appears after the first sing.
 //
 const TRAMP_WALK_STILL = 3
 const TRAMP_WALK_COUNTDOWN = 10
@@ -917,11 +922,12 @@ const TRAMP_WALK_NEAR_SINGING = 370
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
 const TRAMP_BAD_SING_TEXT = 'I can\'t listen to this anymore'
+const TRAMP_BAD_SING_TEXT_2 = 'Oh come on.\nYou again'
+const TRAMP_BAD_SING_TEXT_3 = 'I\'ll go drown myself'
+const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_2, TRAMP_BAD_SING_TEXT_3]
+const TRAMP_WALK_SINGS_TO_WATER = 3
+const TRAMP_WALK_SHORE_PAD = TRAMP_TOTAL_W / 2 + 24
 const TRAMP_BAD_SING_DURATION = 4
-const TRAMP_BAD_SING_BUBBLE_FONT_SIZE = 22
-const TRAMP_BAD_SING_BUBBLE_PAD_X = 12
-const TRAMP_BAD_SING_BUBBLE_PAD_Y = 8
-const TRAMP_BAD_SING_BUBBLE_OFFSET_Y = -18
 const BRANCH_TRAMP_WRONG_SING_TEXT = "I'm not that mushroom!"
 const BRANCH_TRAMP_WRONG_SING_DURATION = 5
 const LETTER_ARROW_CORNER_RADIUS = 3
@@ -1340,7 +1346,7 @@ function initGlowLevel0Scene(k) {
     const lLetterY = rightPlatY - GLOW_LETTER_SIZE * 0.15 - L_LETTER_RAISE_Y
     const lLetter = zones.lCollected ? null : createGlowLetter(k, 'L', lLetterX, lLetterY, -GLOW_LETTER_TILT, GLOW_GOLD_HEX)
     const wLetterX = wPlatX + LOG_W / 2
-    const wLetterY = wPlatY - GLOW_LETTER_SIZE * 0.15
+    const wLetterY = wPlatY - GLOW_LETTER_SIZE * 0.15 - W_LETTER_RAISE_Y
     const wLetter = zones.wCollected ? null : createGlowLetter(k, 'W', wLetterX, wLetterY, GLOW_LETTER_TILT * 0.7, GLOW_GOLD_HEX)
     const oLetterX = oPlatX + LOG_W / 2
     const oLetterY = oPlatY - GLOW_LETTER_SIZE * 0.15 - O_LETTER_RAISE_Y
@@ -1416,7 +1422,8 @@ function initGlowLevel0Scene(k) {
         platformCollisionYOffset: 10,
         customPlatformDraw: bonus => drawBonusPlatformLog(k, bonus, zones, bonusLogDetail),
         collectHintText: BONUS_HINT_TEXT,
-        collectHintDuration: BONUS_HINT_DURATION
+        collectHintDuration: BONUS_HINT_DURATION,
+        tooltipClampInset: glowTooltipClampInset()
       })
     }
     //
@@ -1531,12 +1538,14 @@ function initGlowLevel0Scene(k) {
         countdown: null,
         walking: false,
         walked: false,
+        singCount: 0,
+        walkTargetX: trampDockX,
         dockX: trampDockX,
         bounceCount: 0,
         cheekyTimer: 0,
         cheekyLineIdx: 0,
-        badSingTimer: 0,
         cheekyTooltip: null,
+        badSingTooltip: null,
         wrongSingCooldown: WRONG_TRAMP_SING_HINT_REPEAT,
         waterHintStarted: false
       },
@@ -1592,7 +1601,7 @@ function initGlowLevel0Scene(k) {
       //
       // Speech-bubble hints controller (shared white cloud from utils).
       //
-      heroHint: HeroHint.create({ k, heroInst }),
+      heroHint: HeroHint.create({ k, heroInst, clampInset: glowTooltipClampInset() }),
       //
       // Controls stay locked while the intro hints play; the G letter
       // appears only after both hints finish. introStep tracks which intro
@@ -1653,7 +1662,8 @@ function initGlowLevel0Scene(k) {
       heroBodyColor: HERO_BODY_COLOR,
       groundColor: GROUND_DARK,
       alreadyCollapsed: get(KEY_PIT_COLLAPSED, false),
-      cracksVisible: isGlowCaveCracksVisible(zones)
+      cracksVisible: isGlowCaveCracksVisible(zones),
+      tooltipClampInset: glowTooltipClampInset()
     })
     inst.pit.sceneRef = inst
     inst.pit.onCrackLandingShake = () => triggerGlowCameraShake(inst)
@@ -1669,6 +1679,7 @@ function initGlowLevel0Scene(k) {
       maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
     zones.oZone && maybeStartLetterOffscreenArrow(inst, inst.oLetter)
     zones.lLetterUnveiled && maybeStartLetterOffscreenArrow(inst, inst.lLetter)
+    zones.wZone && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
     //
     // First visit: hold hints until the camera intro zoom-out finishes and a
     // short beat passes so the player sees the full level first.
@@ -1911,6 +1922,7 @@ function heroTooltipAfterG(inst) {
 //
 function heroTooltipText(inst) {
   if (inst.trampWalk?.walked) return HERO_TOOLTIP_AFTER_TRAMP_WALK
+  if (isTrampSingCountdownActive(inst)) return null
   if (inst.zones.oCollected || inst.zones.colorWorld) return HERO_TOOLTIP_AFTER_O
   if (inst.zones.lCollected) return HERO_TOOLTIP_AFTER_L
   if (inst.zones.gCollected) return heroTooltipAfterG(inst)
@@ -1927,7 +1939,15 @@ function isGlowHeroHoverTooltipVisible(inst) {
   if (inst.heroSpawnFade > 0 || inst.pendingGlowIntro) return false
   if (inst.introLock) return false
   if (HeroHint.isActive(inst.heroHint)) return false
+  if (!heroTooltipText(inst)) return false
   return true
+}
+//
+// True while the hero is already singing at the big mushroom (visible countdown).
+//
+function isTrampSingCountdownActive(inst) {
+  const tw = inst.trampWalk
+  return Boolean(tw && !tw.walked && tw.countdown != null)
 }
 //
 // Resets the periodic post-letter hint timer when a letter is picked up.
@@ -1960,7 +1980,7 @@ function updateLetterProgressHint(inst) {
 // Each target only activates once its HUD element has been revealed.
 //
 function createSmallHeroTooltip(inst) {
-  Tooltip.create({
+  createGlowTooltip({
     k: inst.k,
     targets: [{
       x: () => inst.heroInst?.character?.pos?.x ?? -1000,
@@ -4054,7 +4074,6 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
           angle,
           color
         })
-        !gateBranchTramp && drawTrampBadSingBubble(k, state, drawX, floorY)
       }
     }
   ])
@@ -4063,44 +4082,6 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
     ? !isBranchTrampolineVisible(zones)
     : !isRightTrampolineVisible(zones)
   return { state, drawLayer, colliderHome, gateBranchTramp }
-}
-//
-// Lightweight speech bubble while the walk-trampoline reacts to bad singing.
-// Avoids the full Tooltip path (formatText + fixed UI every frame on a moving cap).
-//
-function drawTrampBadSingBubble(k, state, x, floorY) {
-  if (!state.badSingUntil || k.time() >= state.badSingUntil) return
-  const fmt = state.badSingFmt
-  if (!fmt) return
-  const bubbleW = fmt.width + TRAMP_BAD_SING_BUBBLE_PAD_X * 2
-  const bubbleH = fmt.height + TRAMP_BAD_SING_BUBBLE_PAD_Y * 2
-  const capTop = floorY - TRAMP_TOTAL_H
-  const bubbleX = Math.round(x - bubbleW / 2)
-  const bubbleY = Math.round(capTop + TRAMP_BAD_SING_BUBBLE_OFFSET_Y - bubbleH)
-  k.drawRect({
-    pos: k.vec2(bubbleX - 2, bubbleY - 2),
-    width: bubbleW + 4,
-    height: bubbleH + 4,
-    radius: 10,
-    color: k.rgb(20, 20, 20)
-  })
-  k.drawRect({
-    pos: k.vec2(bubbleX, bubbleY),
-    width: bubbleW,
-    height: bubbleH,
-    radius: 8,
-    color: k.rgb(245, 242, 235),
-    opacity: 0.92
-  })
-  k.drawText({
-    text: TRAMP_BAD_SING_TEXT,
-    pos: k.vec2(x, bubbleY + TRAMP_BAD_SING_BUBBLE_PAD_Y),
-    anchor: 'top',
-    size: TRAMP_BAD_SING_BUBBLE_FONT_SIZE,
-    font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
-    align: 'center',
-    color: k.rgb(30, 30, 30)
-  })
 }
 //
 // Walking legs — alternating stride with a short shin kick
@@ -5790,7 +5771,7 @@ function revealOZone(inst) {
   maybeStartLetterOffscreenArrow(inst, inst.oLetter)
 }
 //
-// Opens the W platform zone on first landing from above.
+// Opens the W platform zone (first sing at the big mushroom, or a landing).
 //
 function revealWZone(inst) {
   if (inst.zones.wZone) return
@@ -5798,6 +5779,7 @@ function revealWZone(inst) {
   set(KEY_REVEALED_W, true)
   playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
+  maybeStartLetterOffscreenArrow(inst, inst.wLetter)
 }
 //
 // Pit bonus collection may happen before the HUD exists — keep the live ref.
@@ -6117,7 +6099,6 @@ function onUpdate(inst) {
   updateLetterProgressHint(inst)
   updateWrongTrampSingHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
-  updateTrampBadSingHint(inst)
   updateGlowWorldAudioFade(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
@@ -6277,8 +6258,8 @@ function isHeroOnStartBranch(inst, char) {
 }
 //
 // After O: stand still near the trampoline → 10s countdown → mushroom walks
-// to mid-lake and docks. Once walking starts it always finishes — chasing
-// the hero cannot interrupt the walk.
+// left. The first two sings stay on land; the third docks in the lake.
+// Once a walk starts it always finishes — chasing the hero cannot interrupt it.
 //
 function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   const tw = inst.trampWalk
@@ -6292,19 +6273,25 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   }
   const dt = inst.k.dt()
   //
-  // In-progress walk always continues to the dock (dialog / chase ignored)
+  // In-progress walk always continues to the current stop (dialog / chase ignored)
   //
   if (tw.walking) {
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
     inst.trampState.walkPhase = (inst.trampState.walkPhase || 0) + dt * 9
     inst.trampState.x -= TRAMP_WALK_SPEED * dt
-    if (inst.trampState.x <= tw.dockX) {
-      inst.trampState.x = tw.dockX
+    const targetX = tw.walkTargetX ?? tw.dockX
+    if (inst.trampState.x <= targetX) {
+      inst.trampState.x = targetX
       tw.walking = false
-      tw.walked = true
-      inst.trampState.walkDir = -1
-      startTrampWaterHints(inst)
+      if (tw.singCount >= TRAMP_WALK_SINGS_TO_WATER) {
+        tw.walked = true
+        inst.trampState.walkDir = -1
+        startTrampWaterHints(inst)
+      } else {
+        inst.trampState.hasLegs = false
+        inst.trampState.walkDir = 0
+      }
     }
     return
   }
@@ -6323,23 +6310,22 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
     tw.stillTimer += dt
     if (tw.stillTimer >= TRAMP_WALK_STILL) {
       tw.countdown = TRAMP_WALK_COUNTDOWN
+      dismissTalkToMushroomHint(inst)
     }
     return
   }
   tw.countdown -= dt
   if (tw.countdown <= 0) {
     tw.countdown = null
-    tw.badSingTimer = TRAMP_BAD_SING_DURATION
+    tw.singCount = (tw.singCount || 0) + 1
+    const line = TRAMP_BAD_SING_TEXTS[Math.min(tw.singCount, TRAMP_BAD_SING_TEXTS.length) - 1]
+    tw.walkTargetX = trampWalkStopX(inst, tw.singCount)
     tw.walking = true
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
-    inst.trampState.badSingUntil = inst.k.time() + TRAMP_BAD_SING_DURATION
-    inst.trampState.badSingFmt = inst.k.formatText({
-      text: TRAMP_BAD_SING_TEXT,
-      size: TRAMP_BAD_SING_BUBBLE_FONT_SIZE,
-      font: CFG.visual.fonts.regularFull.replace(/'/g, ''),
-      align: 'center'
-    })
+    showTrampBadSingHint(inst, line)
+    tw.singCount === 1 && revealWZone(inst)
+    tw.singCount === 1 && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
   }
 }
 //
@@ -6361,7 +6347,7 @@ function onTrampolineBounce(inst) {
   const line = TRAMP_CHEEKY_LINES[tw.cheekyLineIdx % TRAMP_CHEEKY_LINES.length]
   tw.cheekyLineIdx = (tw.cheekyLineIdx + 1) % TRAMP_CHEEKY_LINES.length
   tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
-  tw.cheekyTooltip = Tooltip.create({
+  tw.cheekyTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -6389,7 +6375,7 @@ function onBranchTrampolineBounce(inst) {
   const line = BRANCH_TRAMP_CHEEKY_LINES[tw.cheekyLineIdx % BRANCH_TRAMP_CHEEKY_LINES.length]
   tw.cheekyLineIdx = (tw.cheekyLineIdx + 1) % BRANCH_TRAMP_CHEEKY_LINES.length
   tw.cheekyTooltip && Tooltip.destroy(tw.cheekyTooltip)
-  tw.cheekyTooltip = Tooltip.create({
+  tw.cheekyTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -6452,7 +6438,7 @@ function updateBranchTrampMarioHint(inst) {
   const marioText = tw.marioHintShowCount >= 3
     ? BRANCH_TRAMP_MARIO_HINT_TEXT_ALT
     : BRANCH_TRAMP_MARIO_HINT_TEXT
-  tw.marioHintTooltip = Tooltip.create({
+  tw.marioHintTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -6527,7 +6513,7 @@ function startTrampWaterHints(inst) {
 function showTrampShallowHint(inst) {
   inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
   const mushH = TRAMP_TOTAL_H
-  const tip = Tooltip.create({
+  const tip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -6549,16 +6535,39 @@ function showTrampShallowHint(inst) {
   })
 }
 //
-// Bubble when the sing-to-walk countdown finishes — the right mushroom is unimpressed
+// Same shared speech bubble as other Glow hints, pinned to the walking cap.
 //
-function updateTrampBadSingHint(inst) {
+function showTrampBadSingHint(inst, line) {
   const tw = inst.trampWalk
-  const state = inst.trampState
-  if (!tw || !state?.badSingUntil) return
-  if (inst.k.time() < state.badSingUntil) return
-  state.badSingUntil = 0
-  state.badSingFmt = null
-  tw.badSingTimer = 0
+  if (!tw) return
+  tw.badSingTooltip && Tooltip.destroy(tw.badSingTooltip)
+  const mushH = TRAMP_TOTAL_H
+  const tip = createGlowTooltip({
+    k: inst.k,
+    forceVisible: true,
+    targets: [{
+      x: () => inst.trampState?.x ?? -1000,
+      y: FLOOR_Y - mushH / 2,
+      width: TRAMP_TOTAL_W,
+      height: mushH,
+      text: line,
+      offsetY: TRAMP_TOOLTIP_Y_OFFSET
+    }]
+  })
+  tip.activeTarget = tip.targets[0]
+  tip.opacity = 1
+  tw.badSingTooltip = tip
+  inst.k.wait(TRAMP_BAD_SING_DURATION, () => {
+    if (tw.badSingTooltip !== tip) return
+    Tooltip.destroy(tip)
+    tw.badSingTooltip = null
+  })
+}
+//
+// Drops the "talk to the mushroom" line once the hero is already singing there.
+//
+function dismissTalkToMushroomHint(inst) {
+  inst.heroHint?.target?.text === HERO_TOOLTIP_AFTER_O && HeroHint.clear(inst.heroHint)
 }
 //
 // True when tree segment sprites were baked during the pre-level transition.
@@ -6736,7 +6745,7 @@ function syncOneTrampMissingHint(inst, slotKey, worldX, show) {
     return
   }
   if (existing) return
-  const tip = Tooltip.create({
+  const tip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -7274,9 +7283,12 @@ function isWorldPointOutsideCameraView(inst, worldX, margin = 48) {
   return worldX < camX - half + margin || worldX > camX + half - margin
 }
 //
-// World X the edge arrow should point at (L log, O letter, or L platform after G).
+// World X the edge arrow should point at (W log, L log, O letter, or L platform after G).
 //
 function getLetterArrowTargetX(inst) {
+  if (inst.wLetter && !inst.wLetter.main.hidden && !inst.zones.wCollected && inst.zones.wZone) {
+    return inst.wLetter.x
+  }
   if (inst.lLetter && !inst.lLetter.main.hidden && !inst.zones.lCollected) return inst.lLetter.x
   if (inst.oLetter && !inst.oLetter.main.hidden && !inst.zones.oCollected && inst.zones.oZone) {
     return inst.oLetter.x
@@ -7518,7 +7530,7 @@ function updatePitCaveMushroomHint(inst, char, dt) {
   pit.pitCaveHintShown = true
   const mushH = TRAMP_TOTAL_H
   pit.pitCaveHintTooltip && Tooltip.destroy(pit.pitCaveHintTooltip)
-  pit.pitCaveHintTooltip = Tooltip.create({
+  pit.pitCaveHintTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -7549,7 +7561,7 @@ function updateOLetterStuckHint(inst, dt) {
   inst.oStuckHintTooltip && Tooltip.destroy(inst.oStuckHintTooltip)
   const char = inst.heroInst?.character
   if (!char?.pos) return
-  inst.oStuckHintTooltip = Tooltip.create({
+  inst.oStuckHintTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
     targets: [{
@@ -7571,6 +7583,36 @@ function updateOLetterStuckHint(inst, dt) {
 function dismissOLetterStuckHint(inst) {
   inst.oStuckHintTooltip && Tooltip.destroy(inst.oStuckHintTooltip)
   inst.oStuckHintTooltip = null
+}
+//
+// Playfield chrome inset so Glow tooltips pin to the game window, not the void.
+//
+function glowTooltipClampInset() {
+  return {
+    left: LEFT_MARGIN,
+    right: RIGHT_MARGIN,
+    top: TOP_MARGIN,
+    bottom: BOTTOM_MARGIN
+  }
+}
+//
+// Glow tooltips clamp to the playfield so off-screen sources stay readable.
+//
+function createGlowTooltip(cfg) {
+  return Tooltip.create({
+    ...cfg,
+    clampInset: cfg.clampInset ?? glowTooltipClampInset()
+  })
+}
+//
+// Land stops for the first two sings; the third walk docks in the lake.
+//
+function trampWalkStopX(inst, singCount) {
+  if (singCount >= TRAMP_WALK_SINGS_TO_WATER) return inst.trampWalk.dockX
+  const homeX = inst.trampState.homeX
+  const landEndX = inst.lakeX2 + TRAMP_WALK_SHORE_PAD
+  const landSpan = Math.max(1, homeX - landEndX)
+  return homeX - (landSpan * singCount) / TRAMP_WALK_SINGS_TO_WATER
 }
 //
 // Glow runs on its own native-resolution engine, so the real window size is

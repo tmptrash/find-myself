@@ -298,13 +298,13 @@ const HERO_N_SPRITE_SIZE = 80
 //
 // Offset applied to hero-n position so it sits visually inside the title word
 //
-const HERO_N_OFFSET_X = 10
+const HERO_N_OFFSET_X = 0
 const HERO_N_OFFSET_Y = 1
 //
 // Offsets for the flipped hero-u: shifted left of the char cell and mirrored
 // downwards vertically.
 //
-const HERO_U_OFFSET_X = -10
+const HERO_U_OFFSET_X = 0
 const HERO_U_OFFSET_Y = 6
 //
 // Title heroes share the exact colour of the title letters so they read

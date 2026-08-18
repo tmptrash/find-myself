@@ -17,24 +17,27 @@ const HUD_OUTLINE_OFFSET = 1
  * @param {Object} config.k - Kaplay instance
  * @param {boolean} [config.showTimer=false] - Whether to show level elapsed timer
  * @param {number} [config.topY=55] - Vertical position (pixels from top)
+ * @param {Object} [config.textColor] - Optional Kaplay rgb for the numerals
+ * @param {Object} [config.outlineColor] - Optional Kaplay rgb for the drop shadow
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, topY = 55 } = config
+  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // HUD numerals (FPS + timer) share the same neutral grey as the
   // section indicator inactive letters and the top-right scoreboard so
   // every quiet HUD slot reads as one consistent colour.
   //
-  const HUD_TEXT_GREY = k.rgb(176, 176, 176)
-  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, HUD_TEXT_GREY, topY)
+  const HUD_TEXT_GREY = textColor || k.rgb(176, 176, 176)
+  const HUD_OUTLINE = outlineColor || k.rgb(0, 0, 0)
+  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, HUD_TEXT_GREY, topY, HUD_OUTLINE)
   //
   // Optional elapsed level timer
   //
   let timerText = null
   if (showTimer) {
-    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY)
+    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY, HUD_OUTLINE)
   }
   layoutHudRow(k, [fpsText, timerText])
   const inst = {
@@ -153,13 +156,13 @@ export function layoutAtScreenCenterX(inst, centerX) {
 //
 // Creates HUD text with a single drop-shadow copy (glow-level style).
 //
-function createOutlinedHudText(k, text, font, color, topY) {
+function createOutlinedHudText(k, text, font, color, topY, outlineColor) {
   const outlineNodes = buildOutlineOffsets(HUD_OUTLINE_OFFSET).map(([dx, dy]) => k.add([
     k.text(text, { size: HUD_FONT_SIZE, font }),
     k.pos(0, topY + dy),
     k.anchor('center'),
     k.z(CFG.visual.zIndex.ui),
-    k.color(k.rgb(0, 0, 0)),
+    k.color(outlineColor),
     k.opacity(0.7)
   ]))
   const main = k.add([

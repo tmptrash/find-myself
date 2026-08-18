@@ -221,6 +221,7 @@ export const CFG = {
         dialogFill: PALETTE.gray1,
         dialogText: PALETTE.gray6,
         dialogBorder: PALETTE.gray3,
+        hudScore: PALETTE.gray5,
         grassGreen: PALETTE.green2,
         water: PALETTE.cyan2,
         waterDeep: PALETTE.teal0,
@@ -267,7 +268,8 @@ export const CFG = {
           root: PALETTE.brown0,
           trunk: PALETTE.brown1,
           branch: PALETTE.brown2,
-          leaf: PALETTE.green3
+          leaf: PALETTE.green3,
+          leafShades: [PALETTE.green0, PALETTE.green1, PALETTE.green2, PALETTE.green4, PALETTE.green5]
         },
         //
         // Colour-world background forest: warm amber wood dissolving into a
@@ -280,6 +282,15 @@ export const CFG = {
           leaf: PALETTE.green1
         },
         warmHaze: PALETTE.orange4,
+        //
+        // Parallax forest depths — one palette step per row so the farthest
+        // trees stay a different swatch from the sky (gray4 / orange4).
+        //
+        parallaxGrayNear: PALETTE.gray1,
+        parallaxGrayMid: PALETTE.gray2,
+        parallaxGrayFar: PALETTE.gray3,
+        parallaxColorMid: PALETTE.orange2,
+        parallaxColorFar: PALETTE.orange3,
         //
         // Cute chubby mushroom (glow trampoline + decor): cream body, warm
         // orange spotted cap; the gray set mirrors it inside the gray family.

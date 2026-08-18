@@ -4,7 +4,7 @@ import { get, set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toCanvas } from '../../../utils/helper.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from './cute-mushroom.js'
-import { GLOW_PAL, glowRgb, getCuteMushroomFlatDecorColors } from './glow-palette.js'
+import { GLOW_PAL, glowRgb, snapToPalette, getCuteMushroomFlatDecorColors } from './glow-palette.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
 //
@@ -502,7 +502,8 @@ function bakeOnePitMushroomSprite(k, name, colors) {
 }
 function drawGlowMidges(k, ctrl) {
   const t = k.time()
-  const base = ctrl.midgeRgb || { r: 28, g: 26, b: 22 }
+  const voidRgb = glowRgb('void')
+  const base = ctrl.midgeRgb || voidRgb
   const midgeC = k.rgb(base.r, base.g, base.b)
   const camX = k.camPos().x
   const camScale = k.camScale?.()
@@ -562,13 +563,10 @@ function growCrack(segs, x, y, angle, len, depth, width) {
   }
 }
 function drawSurfaceCracks(k, pit, groundC, flatDecor = false) {
+  const voidRgb = glowRgb('void')
   const deep = flatDecor
     ? k.rgb(groundC.r, groundC.g, groundC.b)
-    : k.rgb(
-      Math.max(0, groundC.r - 45),
-      Math.max(0, groundC.g - 45),
-      Math.max(0, groundC.b - 42)
-    )
+    : k.rgb(voidRgb.r, voidRgb.g, voidRgb.b)
   const opacity = flatDecor ? 0.55 : 0.72
   for (const s of pit.crackSegs) {
     k.drawLine({
@@ -688,13 +686,25 @@ function pitCrackStompParticleColor(pit) {
   return pit.groundColor
 }
 function caveRockPalette(groundC) {
-  const g = groundC
-  const hi = caveClampRgb(Math.min(255, g.r + 14), Math.min(255, g.g + 14), Math.min(255, g.b + 14))
-  const lo = caveClampRgb(Math.max(0, g.r - 12), Math.max(0, g.g - 12), Math.max(0, g.b - 12))
+  const fill = snapToPalette(groundC)
+  const shade = glowRgb('void')
   return {
-    fillR: g.r, fillG: g.g, fillB: g.b,
-    lightR: hi.r, lightG: hi.g, lightB: hi.b,
-    darkR: lo.r, darkG: lo.g, darkB: lo.b
+    fillR: fill.r, fillG: fill.g, fillB: fill.b,
+    lightR: fill.r, lightG: fill.g, lightB: fill.b,
+    darkR: shade.r, darkG: shade.g, darkB: shade.b
+  }
+}
+function buildCavePaletteFlat(groundC) {
+  const g = snapToPalette(groundC)
+  return {
+    void: g,
+    depthOuter: g,
+    depthMid: g,
+    depthInner: g,
+    floor: g,
+    pebble: g,
+    rim: g,
+    rimEdge: g
   }
 }
 function drawCaveLayoutRocks(k, rocks, pal) {
@@ -707,19 +717,6 @@ function drawCaveLayoutRocks(k, rocks, pal) {
     const pts = rock.verts.map(v => k.vec2(rock.x + v.x, rock.y + v.y))
     k.drawPolygon({ pts, color: idx % 2 === 0 ? fill : shade })
   })
-}
-function buildCavePaletteFlat(groundC) {
-  const g = groundC
-  return {
-    void: g,
-    depthOuter: g,
-    depthMid: g,
-    depthInner: g,
-    floor: g,
-    pebble: caveClampRgb(g.r * 0.92, g.g * 0.92, g.b * 0.92),
-    rim: g,
-    rimEdge: g
-  }
 }
 function drawCavePit(k, pit, groundC) {
   const { zone, floorY } = pit
@@ -843,28 +840,16 @@ function drawCaveWallRim(k, edge, pal) {
 //
 // Palette derived from the current ground tone (gray or colour world)
 //
-function buildCavePalette(groundC) {
-  const g = groundC
+function buildCavePalette(_groundC) {
   return {
-    void: caveClampRgb(g.r * 0.08, g.g * 0.08, g.b * 0.07),
-    depthOuter: caveClampRgb(g.r * 0.72, g.g * 0.68, g.b * 0.62),
-    depthMid: caveClampRgb(g.r * 0.42, g.g * 0.4, g.b * 0.37),
-    depthInner: caveClampRgb(g.r * 0.22, g.g * 0.2, g.b * 0.19),
-    floor: caveClampRgb(Math.min(255, g.r + 28), Math.min(255, g.g + 24), Math.min(255, g.b + 18)),
-    pebble: caveClampRgb(g.r * 0.56, g.g * 0.53, g.b * 0.5),
-    //
-    // Warm daylight tone bleeding a short way into the mouth, and a lit rim
-    // catching the inner edge of each rock pillar.
-    //
-    rim: caveClampRgb(g.r * 0.3 + 18, g.g * 0.27 + 14, g.b * 0.2 + 8),
-    rimEdge: caveClampRgb(g.r * 0.92 + 20, g.g * 0.88 + 16, g.b * 0.78 + 10)
-  }
-}
-function caveClampRgb(r, g, b) {
-  return {
-    r: Math.max(0, Math.min(255, Math.round(r))),
-    g: Math.max(0, Math.min(255, Math.round(g))),
-    b: Math.max(0, Math.min(255, Math.round(b)))
+    void: glowRgb('void'),
+    depthOuter: glowRgb('playfieldOuter'),
+    depthMid: glowRgb('dialogFill'),
+    depthInner: glowRgb('void'),
+    floor: glowRgb('decorGray'),
+    pebble: glowRgb('midGray'),
+    rim: glowRgb('playfieldOuter'),
+    rimEdge: glowRgb('playfieldGray')
   }
 }
 //
@@ -1174,7 +1159,7 @@ function updatePitTrampoline(pit, char) {
 }
 function spawnPitBurst(pit) {
   const { k, zone, floorY, groundColor } = pit
-  const c = groundColor || { r: 60, g: 50, b: 40 }
+  const c = groundColor || glowRgb('void')
   for (let i = 0; i < PIT_PARTICLE_COUNT; i++) {
     const angle = -Math.PI * 0.15 - Math.random() * Math.PI * 0.7
     const speed = 120 + Math.random() * 220
@@ -1186,9 +1171,9 @@ function spawnPitBurst(pit) {
       life: 0.5 + Math.random() * 0.7,
       age: 0,
       size: 3 + Math.random() * 5,
-      r: c.r + Math.floor((Math.random() - 0.5) * 30),
-      g: c.g + Math.floor((Math.random() - 0.5) * 25),
-      b: c.b + Math.floor((Math.random() - 0.5) * 20)
+      r: c.r,
+      g: c.g,
+      b: c.b
     })
   }
   k.add([

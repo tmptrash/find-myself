@@ -10,7 +10,7 @@ import { createLevelTransition } from '../../../utils/transition.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import * as LevelHelp from '../../../utils/lesson-help.js'
-import { buildRockVertices, drawRockToCanvas, buildRockPalette } from '../../../utils/draw-rock.js'
+import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from '../utils/cute-mushroom.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import {
@@ -28,14 +28,15 @@ import {
 import {
   GLOW_PAL,
   glowRgb,
+  snapToPalette,
   getTreePaletteGray,
   getTreePaletteLit,
   getTreePaletteFlatDecor,
   getCuteMushroomFlatDecorColors,
   getCuteMushroomFlatWaterColors,
   getTreePaletteColor,
-  getTreePaletteAmber,
-  buildDimmedTreePalette
+  buildDimmedTreePalette,
+  getTreePaletteSolid
 } from '../utils/glow-palette.js'
 import * as Grass from '../../../components/grass.js'
 import * as BonusHero from '../../touch/components/bonus-hero.js'
@@ -157,8 +158,8 @@ const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
 const MUSH_FLAT_SPRITE_SUFFIX = '-flat'
 const TRUNK_EXCLUDE_HALF = 50
 //
-// Parallax background — sky + 3 forest planes (trees and bushes baked
-// together) plus a static ground/underground strip at world speed 1.0.
+// Parallax background — sky, 3 tree planes, 3 bush planes (each scrolling
+// at its own speed) plus a static ground/underground strip at world speed 1.0.
 //
 const BG_PAR_SKY_GRAY = 'glow0-bg-par-sky-gray'
 const BG_PAR_SKY_COLOR = 'glow0-bg-par-sky-color'
@@ -168,17 +169,26 @@ const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
 const BG_PAR_TREE1_GRAY = 'glow0-bg-par-tree1-gray'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
+const BG_PAR_BUSH3_GRAY = 'glow0-bg-par-bush3-gray'
+const BG_PAR_BUSH3_COLOR = 'glow0-bg-par-bush3-color'
+const BG_PAR_BUSH2_GRAY = 'glow0-bg-par-bush2-gray'
+const BG_PAR_BUSH2_COLOR = 'glow0-bg-par-bush2-color'
+const BG_PAR_BUSH1_GRAY = 'glow0-bg-par-bush1-gray'
+const BG_PAR_BUSH1_COLOR = 'glow0-bg-par-bush1-color'
 const BG_STATIC_GRAY = 'glow0-bg-static-gray'
 const BG_STATIC_COLOR = 'glow0-bg-static-color'
 //
 // Layer follow speeds — fraction of camera scroll (1.0 = locked to the world).
-// Bushes bake onto the matching tree plane so colour-world fill-rate is 3
-// forest draws instead of 6.
+// Each tree plane and bush strip is its own layer so depth parallax reads
+// as seven stacked scrolls instead of three combined images.
 //
 const PAR_SKY_SPEED = 0.06
 const PAR_TREE3_SPEED = 0.14
+const PAR_BUSH3_SPEED = 0.22
 const PAR_TREE2_SPEED = 0.30
+const PAR_BUSH2_SPEED = 0.38
 const PAR_TREE1_SPEED = 0.46
+const PAR_BUSH1_SPEED = 0.55
 //
 // Extra horizontal bleed baked into parallax canvases so trees extend past the
 // playfield edges and never run out on the right when the camera scrolls.
@@ -222,7 +232,8 @@ const LOG_TREE_LIT_COLORS = {
   barkDark: GLOW_PAL.treeLit.root,
   ring: GLOW_PAL.treeLit.branch,
   ringDark: GLOW_PAL.treeLit.root,
-  core: GLOW_PAL.treeLit.leaf
+  core: GLOW_PAL.treeLit.leaf,
+  shadow: GLOW_PAL.void
 }
 const LOG_TREE_COLOR_COLORS = {
   bark: GLOW_PAL.treeColor.trunk,
@@ -230,7 +241,8 @@ const LOG_TREE_COLOR_COLORS = {
   barkDark: GLOW_PAL.treeColor.root,
   ring: GLOW_PAL.treeLit.trunk,
   ringDark: GLOW_PAL.treeColor.root,
-  core: GLOW_PAL.treeLit.leaf
+  core: GLOW_PAL.treeLit.leaf,
+  shadow: GLOW_PAL.void
 }
 const RIGHT_PLAT_OFFSET_X = 100
 //
@@ -272,28 +284,16 @@ const BONUS_PLAT_OFFSET_Y = 40
 const BONUS_PLAT_W = 90
 //
 // Background forest — three planes of big trees baked and drawn fully
-// OPAQUE. Depth comes from colour only: the tones are pre-blended toward the
-// backdrop before baking. Gray mode blends every row toward the playfield
-// gray; the colour mode blends toward the warm orange haze, so each deeper
-// row reads more orange and brighter — like the reference forest picture.
+// OPAQUE. Depth comes from colour: the far and mid rows sit on their own
+// palette swatches (one step darker than the sky), the near colour-world
+// row keeps green foliage with a light haze blend.
 //
-const PAR_L1_BG_BLEND = 0.7
 const PAR_L1_COLOR_BLEND = 0.36
 //
 // Near-row foliage leans extra toward the warm orange haze (leaf-only blend)
 // while green stays the leading colour.
 //
 const PAR_L1_LEAF_WARM_BLEND = 0.4
-//
-// Second (far) plane — clearly darker than the farthest row but still hazy.
-//
-const PAR_L2_BG_BLEND = 0.91
-const PAR_L2_COLOR_BLEND = 0.54
-//
-// Third (farthest) plane — nearly the same tone as the warm sky haze.
-//
-const PAR_L3_BG_BLEND = 0.985
-const PAR_L3_COLOR_BLEND = 0.84
 //
 // Big trees sink slightly below the ground line (and get clipped at it), so
 // the wobbly trunk base never leaves a gap above the ground — and never
@@ -401,21 +401,9 @@ const BUSH_LEAF_DENSITY = 0.014
 const BUSH_RIM_LEAF_SPACING = 14
 const BUSH_LEAF_DARKEN_STEPS = [0, 0.1, 0.2]
 //
-// Colour-world bush tones: the near (1st) strip leans mostly toward the warm
-// orange haze while keeping a clear green tint; the 2nd and 3rd
-// strips reuse the exact flat orange trunk tone of their tree row (see
-// buildParallaxSprites), so trees and bushes of one row always match. The
-// gray world keeps every bush inside the gray family.
-//
-const BUSH_COLOR_HAZE_BLEND_NEAR = 0.55
-//
-// Colour-world 2nd bush strip — slight extra push toward the haze vs its trees.
-//
-const BUSH_FAR_HAZE_BLEND = 0.24
-//
-// Farthest bush strip — extra dissolve into the sky haze (trees use PAR_L3_*).
-//
-const BUSH_FARTHEST_HAZE_BLEND = 0.42
+// Colour-world bush tones: the near strip uses the tree-leaf green; the 2nd
+// and 3rd strips reuse the flat orange of their tree row so trees and bushes
+// of one depth always match. The gray world keeps every bush in the gray family.
 //
 // Bush heights run OPPOSITE to the tree rows: the near (1st) strip is the
 // lowest, each deeper strip is ~25% taller than the previous one. Even the
@@ -482,7 +470,7 @@ const SHORE_ROCK_WIDTH_SCALE = 2.2
 // Scatter rocks across the lower-right part of the playfield.
 //
 const RIGHT_ROCK_COUNT = 8
-const COLOR_FADE_DURATION = 2
+const COLOR_FADE_DURATION = 0.5
 const TREE_REVEAL_FADE_DURATION = 0.85
 //
 // GLOW HUD row — FPS sits between the section label and the small hero.
@@ -515,9 +503,9 @@ const GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
 const GLOW_HUD_FPS_SLOT_GAP = 24
 const GLOW_HUD_SMALL_HERO_HALF_W = 42
 //
-// Neutral HUD grey after the world colours — matches lesson-indicator #B0B0B0.
+// Neutral HUD grey after the world colours — palette gray5.
 //
-const HUD_SCORE_COLOR_SETTLED = { r: 176, g: 176, b: 176 }
+const HUD_SCORE_COLOR_SETTLED = glowRgb('hudScore')
 //
 // Lake surface ripple lines — draw every Nth segment to cut post-O cost.
 //
@@ -628,8 +616,8 @@ const LETTER_OFFSCREEN_ARROW_SWAY_AMP = 10
 const LETTER_OFFSCREEN_ARROW_SWAY_SPEED = 5.5
 const LETTER_OFFSCREEN_ARROW_EDGE_INSET = 52
 const LETTER_OFFSCREEN_ARROW_Y = TOP_MARGIN + 120
-const MENU_ARROW_BODY_RGB = { r: 128, g: 130, b: 136 }
-const MENU_ARROW_OUTLINE_RGB = { r: 0, g: 0, b: 0 }
+const MENU_ARROW_BODY_RGB = glowRgb('midGray')
+const MENU_ARROW_OUTLINE_RGB = glowRgb('void')
 const MENU_ARROW_OUTLINE_WIDTH = 2
 const MENU_ARROW_DRAW_OPACITY = 1
 //
@@ -2482,36 +2470,34 @@ function hudLetterInkBox(ch) {
   return box
 }
 //
-// Gold overlay clipped to the bottom n/parts of the live HUD glyph.
-// The range runs from canvas ink-top to the font cell bottom so Kaplay's
-// glyph foot is included (canvas ink-box alone left the last band empty).
+// Gold overlay clipped to the bottom n/parts of the HUD letter cell.
+// Bands are equal slices of the live glyph box so fill grows from the
+// visual foot of the letter upward — the last band is the top, not the base.
 //
 function drawHudLetterGoldFill(k, letter, ch, n, parts) {
   if (!letter?.exists?.() || n <= 0) return
   const gold = glowRgb('gold')
   const ink = hudLetterInkBox(ch)
-  const size = GLOW_HUD_LABEL_FONT_SIZE
-  const rangeTop = letter.pos.y + ink.y
-  const rangeBottom = letter.pos.y + size + GLOW_HUD_FILL_CLIP_PAD
-  const rangeH = Math.max(1, rangeBottom - rangeTop)
-  const fillH = rangeH * n / parts
+  const letterH = letter.height || GLOW_HUD_LABEL_FONT_SIZE
+  const fillH = Math.max(1, Math.round(letterH * n / parts))
   k.drawMasked(() => {
     k.drawText({
       text: ch,
       pos: k.vec2(letter.pos.x, letter.pos.y),
-      size,
+      size: GLOW_HUD_LABEL_FONT_SIZE,
       font: GLOW_HUD_LABEL_FONT,
       color: k.rgb(gold.r, gold.g, gold.b),
-      align: 'left'
+      align: 'left',
+      anchor: 'topleft'
     })
   }, () => {
     k.drawRect({
       pos: k.vec2(
         letter.pos.x + ink.x - GLOW_HUD_FILL_CLIP_PAD,
-        rangeBottom - fillH
+        letter.pos.y + letterH - fillH
       ),
       width: ink.w + GLOW_HUD_FILL_CLIP_PAD * 2,
-      height: fillH + GLOW_HUD_FILL_CLIP_PAD
+      height: fillH
     })
   })
 }
@@ -2743,18 +2729,18 @@ function rebakeTrampolineGraySprites(k) {
 //
 function rebakeGlowRockSpritesShaded(inst) {
   const k = inst.k
-  const palette = buildRockPalette({
-    baseR: DECOR_GRAY.r,
-    baseG: DECOR_GRAY.g,
-    baseB: DECOR_GRAY.b
-  })
+  const palette = {
+    fillR: DECOR_GRAY.r, fillG: DECOR_GRAY.g, fillB: DECOR_GRAY.b,
+    lightR: INNER_GRAY.r, lightG: INNER_GRAY.g, lightB: INNER_GRAY.b,
+    darkR: DECOR_OUTLINE_RGB.r, darkG: DECOR_OUTLINE_RGB.g, darkB: DECOR_OUTLINE_RGB.b
+  }
   inst.rockObjs.forEach(obj => {
     const bake = obj._rockBake
     if (!bake) return
     const { spriteName, cx, cy, radius, verts, widthScale, totalW, croppedH } = bake
     const rockCanvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
       ctx.scale(widthScale, 1)
-      drawRockToCanvas(ctx, { cx, cy, radius, verts, palette, skipOutline: true })
+      drawRockToCanvas(ctx, { cx, cy, radius, verts, palette, skipOutline: true, skipShadow: true, skipTexture: true })
     })
     k.loadSprite(spriteName, rockCanvas)
     rockCanvas.width = 0
@@ -2764,7 +2750,9 @@ function rebakeGlowRockSpritesShaded(inst) {
       drawRockToCanvas(ctx, {
         cx, cy, radius, verts, palette,
         outlineColor: `rgb(${DECOR_OUTLINE_RGB.r}, ${DECOR_OUTLINE_RGB.g}, ${DECOR_OUTLINE_RGB.b})`,
-        outlineWidth: DECOR_OUTLINE_WIDTH
+        outlineWidth: DECOR_OUTLINE_WIDTH,
+        skipShadow: true,
+        skipTexture: true
       })
     })
     k.loadSprite(spriteName + DECOR_OUTLINE_SUFFIX, rockOutlineCanvas)
@@ -2980,11 +2968,20 @@ function buildParallaxTreeXs(count, gameLeft, gameRight) {
 //
 function lerpRgb(a, b, t) {
   const u = Math.max(0, Math.min(1, t))
-  return {
+  const mixed = {
     r: Math.round(a.r + (b.r - a.r) * u),
     g: Math.round(a.g + (b.g - a.g) * u),
     b: Math.round(a.b + (b.b - a.b) * u)
   }
+  //
+  // Identity-white multiply tints must stay unsnapped — white is "no tint"
+  // on an already-baked sprite, not a painted fill.
+  //
+  if (isIdentityWhite(a) || isIdentityWhite(b)) return mixed
+  return snapToPalette(mixed)
+}
+function isIdentityWhite(c) {
+  return c.r === 255 && c.g === 255 && c.b === 255
 }
 //
 // Amount the gray-phase ground decor darkens toward void after L. The push
@@ -3011,22 +3008,17 @@ function grayDecorTint(sc) {
   }
 }
 //
-// Builds the combined background — ONE full-screen canvas per mode (gray +
-// colour) holding all three tree planes interleaved with all three bush
-// strips, plus the dark earth band and the underground decor of the root
-// zone. Everything is baked once and drawn as a single opaque image per
-// mode, so the whole backdrop costs at most two draw calls per frame. Each
-// deeper plane is dimmer and lower; in the colour world the near row keeps
-// the green foreground foliage while the deeper rows dissolve into the warm
-// amber haze, so each farther row reads more orange and brighter.
+// Bakes each parallax tree plane and bush strip as its own sprite pair
+// (gray + colour). Depth comes from scroll speed and palette steps:
+// gray3/orange3 farthest, gray2/orange2 mid, gray1 + green foliage nearest.
 //
 function buildParallaxSprites(k, undergroundSpec) {
-  const bushColorBase = glowRgb(GLOW_PAL.treeColor.leaf)
-  const grayNearPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L1_BG_BLEND)
-  const grayFarPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L2_BG_BLEND, true, 0, true)
-  const grayFarthestPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, PAR_L3_BG_BLEND, true, 0, true)
-  const colorFarPal = buildDimmedTreePalette(getTreePaletteAmber(), WARM_HAZE, PAR_L2_COLOR_BLEND, true, 0, true)
-  const colorFarthestPal = buildDimmedTreePalette(getTreePaletteAmber(), WARM_HAZE, PAR_L3_COLOR_BLEND, true, 0, true)
+  const grayNearPal = getTreePaletteSolid('parallaxGrayNear')
+  const grayMidPal = getTreePaletteSolid('parallaxGrayMid')
+  const grayFarPal = getTreePaletteSolid('parallaxGrayFar')
+  const colorMidPal = getTreePaletteSolid('parallaxColorMid')
+  const colorFarPal = getTreePaletteSolid('parallaxColorFar')
+  const colorNearBush = glowRgb(GLOW_PAL.treeColor.leaf)
   const maxScroll = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN - VIEW_W
   bakeParallaxLayerPair(k, BG_PAR_SKY_GRAY, BG_PAR_SKY_COLOR, PAR_SKY_SPEED, maxScroll, 0, (grayCtx, colorCtx) => {
     renderSkyBand(grayCtx, colorCtx, INNER_GRAY, WARM_HAZE)
@@ -3037,9 +3029,8 @@ function buildParallaxSprites(k, undergroundSpec) {
       seedBase: PAR_FARTHEST_SEED_BASE,
       topMinY: PAR_FARTHEST_TOP_MIN_Y,
       topRange: PAR_FARTHEST_TOP_RANGE,
-      grayBlend: PAR_L3_BG_BLEND,
-      colorBase: getTreePaletteAmber(),
-      colorBlend: PAR_L3_COLOR_BLEND,
+      grayPal: grayFarPal,
+      colorPal: colorFarPal,
       flatLeaves: true,
       leafDarken: 0,
       uniformWood: true,
@@ -3047,13 +3038,11 @@ function buildParallaxSprites(k, undergroundSpec) {
       bandBottom: PAR_FARTHEST_BAND_BOTTOM,
       bandCount: PAR_FARTHEST_BAND_COUNT
     })
+  })
+  bakeParallaxLayerPair(k, BG_PAR_BUSH3_GRAY, BG_PAR_BUSH3_COLOR, PAR_BUSH3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
-      grayRgb: { r: grayFarthestPal.trunkR, g: grayFarthestPal.trunkG, b: grayFarthestPal.trunkB },
-      colorRgb: lerpRgb(
-        { r: colorFarthestPal.trunkR, g: colorFarthestPal.trunkG, b: colorFarthestPal.trunkB },
-        WARM_HAZE,
-        BUSH_FARTHEST_HAZE_BLEND
-      ),
+      grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
+      colorRgb: { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
       colorFlat: true,
       grayFlat: true,
       heightScale: BUSH_FARTHEST_HEIGHT_SCALE
@@ -3065,9 +3054,8 @@ function buildParallaxSprites(k, undergroundSpec) {
       seedBase: PAR_FAR_SEED_BASE,
       topMinY: PAR_FAR_TOP_MIN_Y,
       topRange: PAR_FAR_TOP_RANGE,
-      grayBlend: PAR_L2_BG_BLEND,
-      colorBase: getTreePaletteAmber(),
-      colorBlend: PAR_L2_COLOR_BLEND,
+      grayPal: grayMidPal,
+      colorPal: colorMidPal,
       flatLeaves: true,
       leafDarken: 0,
       uniformWood: true,
@@ -3075,13 +3063,11 @@ function buildParallaxSprites(k, undergroundSpec) {
       bandBottom: PAR_FAR_BAND_BOTTOM,
       bandCount: PAR_FAR_BAND_COUNT
     })
+  })
+  bakeParallaxLayerPair(k, BG_PAR_BUSH2_GRAY, BG_PAR_BUSH2_COLOR, PAR_BUSH2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
-      grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
-      colorRgb: lerpRgb(
-        { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
-        WARM_HAZE,
-        BUSH_FAR_HAZE_BLEND
-      ),
+      grayRgb: { r: grayMidPal.trunkR, g: grayMidPal.trunkG, b: grayMidPal.trunkB },
+      colorRgb: { r: colorMidPal.trunkR, g: colorMidPal.trunkG, b: colorMidPal.trunkB },
       colorFlat: true,
       grayFlat: true,
       heightScale: BUSH_FAR_HEIGHT_SCALE
@@ -3093,7 +3079,7 @@ function buildParallaxSprites(k, undergroundSpec) {
       seedBase: PAR_BIG_SEED_BASE,
       topMinY: PAR_BIG_TOP_MIN_Y,
       topRange: PAR_BIG_TOP_RANGE,
-      grayBlend: PAR_L1_BG_BLEND,
+      grayPal: grayNearPal,
       colorBase: getTreePaletteColor(),
       colorBlend: PAR_L1_COLOR_BLEND,
       flatLeaves: false,
@@ -3104,9 +3090,11 @@ function buildParallaxSprites(k, undergroundSpec) {
       bandBottom: PAR_BIG_BAND_BOTTOM,
       bandCount: PAR_BIG_BAND_COUNT
     })
+  })
+  bakeParallaxLayerPair(k, BG_PAR_BUSH1_GRAY, BG_PAR_BUSH1_COLOR, PAR_BUSH1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
       grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
-      colorRgb: lerpRgb(bushColorBase, WARM_HAZE, BUSH_COLOR_HAZE_BLEND_NEAR),
+      colorRgb: colorNearBush,
       colorFlat: false,
       grayFlat: false,
       heightScale: 1
@@ -3212,20 +3200,19 @@ function renderGlowTreePlane(grayCtx, colorCtx, planeCfg) {
     count, seedBase, topMinY, topRange,
     grayBlend, colorBase, colorBlend, flatLeaves, leafDarken, uniformWood,
     leafWarmBlend = 0,
+    grayPal: grayPalOverride,
+    colorPal: colorPalOverride,
     bandTop, bandBottom, bandCount,
     treeX1 = LEFT_MARGIN,
     treeX2 = WORLD_W - RIGHT_MARGIN,
     bandX2 = WORLD_W
   } = planeCfg
   //
-  // Gray mode keeps the forest gray; the colour mode (after O) paints the
-  // given colour base blended toward the warm haze, so deeper rows read
-  // more orange and brighter, like the reference forest picture. From the
-  // 2nd row on BOTH palettes collapse to uniform wood: leaves, wood and
-  // bark all share the exact trunk tone — one flat silhouette per row.
+  // A ready-made palette skips the haze blend so a row can sit on its own
+  // palette swatch instead of disappearing into the sky.
   //
-  const grayPal = buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
-  const colorPal = buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformWood, leafWarmBlend)
+  const grayPal = grayPalOverride || buildDimmedTreePalette(getTreePaletteGray(), INNER_GRAY, grayBlend, flatLeaves, leafDarken, uniformWood)
+  const colorPal = colorPalOverride || buildDimmedTreePalette(colorBase, WARM_HAZE, colorBlend, flatLeaves, leafDarken, uniformWood, leafWarmBlend)
   const treeXs = buildParallaxTreeXs(count, treeX1, treeX2)
   treeXs.forEach((treeX, i) => {
     const trunkTopY = topMinY + Math.random() * topRange
@@ -4465,16 +4452,8 @@ function drawTrampolineLegs(k, state, floorY, color, flatTone = false) {
   const phase = state.walkPhase || 0
   const stride = Math.sin(phase)
   const stride2 = Math.sin(phase + Math.PI)
-  const legC = flatTone ? color : k.rgb(
-    Math.max(0, color.r - 35),
-    Math.max(0, color.g - 35),
-    Math.max(0, color.b - 30)
-  )
-  const footC = flatTone ? color : k.rgb(
-    Math.max(0, color.r - 50),
-    Math.max(0, color.g - 50),
-    Math.max(0, color.b - 40)
-  )
+  const legC = flatTone ? color : k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b)
+  const footC = flatTone ? color : k.rgb(VOID.r, VOID.g, VOID.b)
   drawOneTrampLeg(k, state.x - 9, floorY, stride, legC, footC)
   drawOneTrampLeg(k, state.x + 9, floorY, stride2, legC, footC)
 }
@@ -4792,16 +4771,19 @@ function onDraw(inst) {
   }
   if (inst.zones.lZoneParallax) {
     //
-    // Back-to-front: sky → birds → 3 forest planes (trees+bushes baked
-    // together), then static ground. The sky layer is an opaque fill, so
-    // birds must be drawn right after it or the sky repaint hides them.
+    // Back-to-front: sky → birds → tree 3 / bush 3 / tree 2 / bush 2 /
+    // tree 1 / bush 1, then static ground. The sky layer is an opaque fill,
+    // so birds must be drawn right after it or the sky repaint hides them.
     //
     const pf = inst.parallaxFade
     const skyLayer = { gray: BG_PAR_SKY_GRAY, color: BG_PAR_SKY_COLOR, speed: PAR_SKY_SPEED, bleed: 0 }
     const parLayers = [
       { gray: BG_PAR_TREE3_GRAY, color: BG_PAR_TREE3_COLOR, speed: PAR_TREE3_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
+      { gray: BG_PAR_BUSH3_GRAY, color: BG_PAR_BUSH3_COLOR, speed: PAR_BUSH3_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
       { gray: BG_PAR_TREE2_GRAY, color: BG_PAR_TREE2_COLOR, speed: PAR_TREE2_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
-      { gray: BG_PAR_TREE1_GRAY, color: BG_PAR_TREE1_COLOR, speed: PAR_TREE1_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
+      { gray: BG_PAR_BUSH2_GRAY, color: BG_PAR_BUSH2_COLOR, speed: PAR_BUSH2_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
+      { gray: BG_PAR_TREE1_GRAY, color: BG_PAR_TREE1_COLOR, speed: PAR_TREE1_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
+      { gray: BG_PAR_BUSH1_GRAY, color: BG_PAR_BUSH1_COLOR, speed: PAR_BUSH1_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     ]
     const drawParLayer = layer => {
       const drawX = GlowCamera.getParallaxDrawX(inst.camera, layer.speed, layer.bleed)
@@ -5793,7 +5775,12 @@ function syncGlowFpsHudVisibility(inst) {
     return
   }
   if (!inst.fpsCounter) {
-    inst.fpsCounter = FpsCounter.create({ k: inst.k, topY: GLOW_HUD_FPS_TOP_Y })
+    inst.fpsCounter = FpsCounter.create({
+      k: inst.k,
+      topY: GLOW_HUD_FPS_TOP_Y,
+      textColor: inst.k.rgb(HUD_SCORE_COLOR_SETTLED.r, HUD_SCORE_COLOR_SETTLED.g, HUD_SCORE_COLOR_SETTLED.b),
+      outlineColor: inst.k.rgb(VOID.r, VOID.g, VOID.b)
+    })
   }
   FpsCounter.setVisible(inst.fpsCounter, true)
   layoutGlowFpsHud(inst)
@@ -6253,7 +6240,7 @@ function onUpdate(inst) {
     }
   }
   //
-  // Forest and colour world share one 2 s ease — parallax tracks colorFade so
+  // Forest and colour world share one ease — parallax tracks colorFade so
   // trees, mushrooms and underground decor all appear together.
   //
   if (inst.zones.lZoneParallax && inst.parallaxFade < inst.colorFadeTarget) {
@@ -7041,7 +7028,7 @@ function glowTreeSpritesPrewarmed(k, monolith, segmentIds) {
 // True when parallax static layer exists from prewarm.
 //
 function glowParallaxSpritesPrewarmed(k) {
-  return Boolean(k.getSprite(BG_STATIC_GRAY))
+  return Boolean(k.getSprite(BG_STATIC_GRAY) && k.getSprite(BG_PAR_BUSH1_GRAY))
 }
 //
 // Bakes full-tree sprites (fast draw path — two objects instead of many segments).

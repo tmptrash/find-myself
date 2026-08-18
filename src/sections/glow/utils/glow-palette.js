@@ -5,11 +5,6 @@ import { CFG } from '../../../cfg.js'
 // game-wide palette aliases (CFG.visual.colors.palette).
 //
 export const GLOW_PAL = CFG.visual.colors.palette
-//
-// Roots read darker than the trunk: every root tone is pushed toward the
-// darkest palette swatch (void) by this amount.
-//
-const ROOT_DARKEN = 0.35
 
 /**
  * Parses a palette hex key or raw hex string into an RGB triplet.
@@ -24,6 +19,33 @@ export function glowRgb(keyOrHex) {
     g: parseInt(h.slice(2, 4), 16),
     b: parseInt(h.slice(4, 6), 16)
   }
+}
+//
+// Parsed swatches for nearest-neighbour snaps so mixed/dimmed fills never
+// leave the game-wide palette.
+//
+const PALETTE_RGBS = GLOW_PAL.swatches.map(hex => glowRgb(hex))
+
+/**
+ * Snaps an RGB triplet onto the nearest game-wide palette swatch.
+ * @param {{ r: number, g: number, b: number }} c
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function snapToPalette(c) {
+  let best = PALETTE_RGBS[0]
+  let bestD = Infinity
+  for (let i = 0; i < PALETTE_RGBS.length; i++) {
+    const s = PALETTE_RGBS[i]
+    const dr = c.r - s.r
+    const dg = c.g - s.g
+    const db = c.b - s.b
+    const d = dr * dr + dg * dg + db * db
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  return { r: best.r, g: best.g, b: best.b }
 }
 
 /**
@@ -52,7 +74,7 @@ export function getTreePaletteFlatDecor() {
  */
 export function getTreePaletteGray() {
   const t = GLOW_PAL.treeGray
-  const root = darkenRgb(glowRgb(t.root), ROOT_DARKEN)
+  const root = glowRgb('void')
   const trunk = glowRgb(t.trunk)
   const branch = glowRgb(t.branch)
   const leaf = glowRgb(t.leaf)
@@ -121,7 +143,7 @@ export function getCuteMushroomFlatWaterColors() {
  */
 export function getTreePaletteLit() {
   const t = GLOW_PAL.treeLit
-  const root = darkenRgb(glowRgb(t.root), ROOT_DARKEN)
+  const root = glowRgb(t.root)
   const trunk = glowRgb(t.trunk)
   const branch = glowRgb(t.branch)
   const leaf = glowRgb(t.leaf)
@@ -151,7 +173,7 @@ export function getTreePaletteLit() {
  */
 export function getTreePaletteColor() {
   const t = GLOW_PAL.treeColor
-  const root = darkenRgb(glowRgb(t.root), ROOT_DARKEN)
+  const root = glowRgb(t.root)
   const trunk = glowRgb(t.trunk)
   const branch = glowRgb(t.branch)
   const leaf = glowRgb(t.leaf)
@@ -161,13 +183,7 @@ export function getTreePaletteColor() {
     branchR: branch.r, branchG: branch.g, branchB: branch.b,
     leafR: leaf.r, leafG: leaf.g, leafB: leaf.b,
     leafOpacity: 1,
-    leafShades: [
-      glowRgb('#2d5b16'),
-      glowRgb('#41761f'),
-      glowRgb('#569229'),
-      glowRgb('#93c653'),
-      glowRgb('#c0dc82')
-    ],
+    leafShades: (t.leafShades || [t.leaf]).map(h => glowRgb(h)),
     //
     // Colour-phase bark crack tones come from the palette bark set.
     //
@@ -175,7 +191,7 @@ export function getTreePaletteColor() {
       dark: glowRgb(GLOW_PAL.bark.dark),
       highlight: glowRgb(GLOW_PAL.bark.highlight)
     },
-    leafVein: glowRgb('#2d5b16'),
+    leafVein: glowRgb((t.leafShades && t.leafShades[0]) || t.leaf),
     woodOutline: glowRgb('void')
   }
 }
@@ -188,7 +204,7 @@ export function getTreePaletteColor() {
  */
 export function getTreePaletteAmber() {
   const t = GLOW_PAL.treeAmber
-  const root = darkenRgb(glowRgb(t.root), ROOT_DARKEN)
+  const root = glowRgb(t.root)
   const trunk = glowRgb(t.trunk)
   const branch = glowRgb(t.branch)
   const leaf = glowRgb(t.leaf)
@@ -213,6 +229,27 @@ export function getTreePaletteAmber() {
 }
 
 /**
+ * One-tone silhouette palette for a parallax tree/bush row.
+ * @param {string} keyOrHex - Palette key or '#rrggbb'
+ * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
+ */
+export function getTreePaletteSolid(keyOrHex) {
+  const c = glowRgb(keyOrHex)
+  return {
+    rootR: c.r, rootG: c.g, rootB: c.b,
+    trunkR: c.r, trunkG: c.g, trunkB: c.b,
+    branchR: c.r, branchG: c.g, branchB: c.b,
+    leafR: c.r, leafG: c.g, leafB: c.b,
+    leafOpacity: 1,
+    leafShades: [c],
+    barkShades: { dark: c, highlight: c },
+    leafVein: c,
+    noLeafDetails: true,
+    flatSilhouette: true
+  }
+}
+
+/**
  * Builds a dimmed background variant of a tree palette: every tone is blended
  * toward the given backdrop colour. Distant trees painted with this palette
  * stay fully OPAQUE — reduced brightness comes from the colours themselves,
@@ -232,7 +269,7 @@ export function getTreePaletteAmber() {
  * @returns {Object} Canvas RGB palette for renderGlowTreeToCanvas()
  */
 export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leafDarken = 0, uniformWood = false, leafWarmBlend = 0) {
-  const mix = (r, g, b) => ({
+  const mix = (r, g, b) => snapToPalette({
     r: Math.round(r + (bg.r - r) * blend),
     g: Math.round(g + (bg.g - g) * blend),
     b: Math.round(b + (bg.b - b) * blend)
@@ -242,7 +279,7 @@ export function buildDimmedTreePalette(base, bg, blend, flatLeaves = false, leaf
   // Extra leaf-only push toward the backdrop tone (orange haze warms the
   // foliage while green stays the leading colour).
   //
-  const warmRgb = (c) => ({
+  const warmRgb = (c) => snapToPalette({
     r: Math.round(c.r + (bg.r - c.r) * leafWarmBlend),
     g: Math.round(c.g + (bg.g - c.g) * leafWarmBlend),
     b: Math.round(c.b + (bg.b - c.b) * leafWarmBlend)
@@ -292,14 +329,15 @@ export function getTreeBarkPalette() {
   }
 }
 //
-// Blends a palette tone toward the darkest swatch (void) — brightness-only
-// variation of a palette colour, allowed by the palette rule.
+// Blends a palette tone toward the darkest swatch (void), then snaps back
+// onto a real palette entry so the fill never invents a new colour.
 //
 function darkenRgb(c, t) {
+  if (t <= 0) return c
   const v = glowRgb('void')
-  return {
+  return snapToPalette({
     r: Math.round(c.r + (v.r - c.r) * t),
     g: Math.round(c.g + (v.g - c.g) * t),
     b: Math.round(c.b + (v.b - c.b) * t)
-  }
+  })
 }

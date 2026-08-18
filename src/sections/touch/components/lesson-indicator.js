@@ -121,6 +121,7 @@ export function create(config) {
     greyLife = false,
     lifeGreyTintHex = null,
     hideInactiveLetterShadow = false,
+    letterShadowColor = null,
     heroOutlineColor = CFG.visual.colors.outline,
     heroEyeWhiteColor = null
   } = config
@@ -168,6 +169,7 @@ export function create(config) {
     // Create drop shadow (single black copy offset right+down)
     //
     const offsets = [[outlineThickness, outlineThickness]]
+    const shadowRgb = letterShadowColor ? getRGB(k, letterShadowColor) : { r: 0, g: 0, b: 0 }
     offsets.forEach(([dx, dy]) => {
       const outlineComponents = [
         k.text(letter, {
@@ -175,7 +177,7 @@ export function create(config) {
           font: CFG.visual.fonts.thinFull.replace(/'/g, '')
         }),
         k.pos(letterX + dx + (isFallingLetter ? FALLING_LETTER_OFFSET_X : 0), y + dy + (isFallingLetter ? fallingLetterExtraY : 0)),
-        k.color(0, 0, 0),
+        k.color(shadowRgb.r, shadowRgb.g, shadowRgb.b),
         k.fixed(),
         k.z(CFG.visual.zIndex.ui)
       ]
@@ -357,6 +359,7 @@ export function create(config) {
     scoreboardNodes,
     scoreboardGreyLife,
     hideInactiveLetterShadow,
+    sectionLabelCompletedLetters: sectionLabelCompletedLetters ?? 0,
     smallHeroRevealed: !hideScoreboard,
     lifeRevealed: !hideScoreboard,
     lifeGreyTintHex: lifeGreyTintHex || CFG.visual.colors.palette.decorGray,
@@ -398,7 +401,14 @@ export function create(config) {
 export function setSectionLabelHidden(inst, hidden) {
   if (!inst) return
   inst.letterObjects?.forEach(obj => { obj.exists?.() && (obj.hidden = hidden) })
-  inst.letterOutlineObjects?.forEach(obj => { obj.exists?.() && (obj.hidden = hidden) })
+  inst.letterOutlineObjects?.forEach((obj, i) => {
+    if (!obj?.exists?.()) return
+    if (hidden) {
+      obj.hidden = true
+      return
+    }
+    obj.hidden = inst.hideInactiveLetterShadow && i >= (inst.sectionLabelCompletedLetters ?? 0)
+  })
 }
 
 /**
@@ -472,6 +482,7 @@ export function setSectionLabelLetterProgress(inst, completedLetters) {
   inst.hideInactiveLetterShadow && inst.letterOutlineObjects?.forEach((outline, i) => {
     outline?.exists?.() && (outline.hidden = i >= capped)
   })
+  inst.sectionLabelCompletedLetters = capped
 }
 
 /**

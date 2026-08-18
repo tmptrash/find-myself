@@ -1,3 +1,4 @@
+import { glowRgb } from './glow-palette.js'
 //
 // Foot burst particles for glow level landings
 //
@@ -63,7 +64,7 @@ function pushParticle(inst, footX, footY, color, speedMin, speedRange, splash) {
   const side = splash ? (Math.random() < 0.5 ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1)
   const angle = (5 + Math.random() * 28) * (Math.PI / 180)
   const speed = speedMin + Math.random() * speedRange
-  const c = color || { r: 70, g: 58, b: 48 }
+  const c = color || glowRgb('void')
   inst.particles.push({
     x: footX + side * (4 + Math.random() * 14),
     y: footY - 2 + Math.random() * 4,
@@ -72,9 +73,9 @@ function pushParticle(inst, footX, footY, color, speedMin, speedRange, splash) {
     life: 0.35 + Math.random() * 0.45,
     age: 0,
     size: 2 + Math.random() * 4,
-    r: clampChannel(c.r + Math.floor((Math.random() - 0.5) * 24)),
-    g: clampChannel(c.g + Math.floor((Math.random() - 0.5) * 20)),
-    b: clampChannel(c.b + Math.floor((Math.random() - 0.5) * 18))
+    r: c.r,
+    g: c.g,
+    b: c.b
   })
 }
 function drawParticles(inst) {
@@ -88,7 +89,4 @@ function drawParticles(inst) {
       opacity: Math.max(0, 1 - p.age / p.life)
     })
   }
-}
-function clampChannel(v) {
-  return Math.max(0, Math.min(255, v))
 }

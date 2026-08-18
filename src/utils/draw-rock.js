@@ -107,9 +107,10 @@ export function buildRockPalette(opts = {}) {
  * @param {{ fillR: number, fillG: number, fillB: number,
  *           lightR: number, lightG: number, lightB: number,
  *           darkR: number, darkG: number, darkB: number }} opts.palette
+ * @param {boolean} [opts.skipTexture=false] - Skip white/black mottle, cracks and sheen
  */
 export function drawRockToCanvas(ctx, opts) {
-  const { cx, cy, radius, verts, palette, skipOutline = false, skipShadow = false, flatFill = false, outlineAlpha = OUTLINE_ALPHA, outlineWidth = OUTLINE_WIDTH, outlineColor = null } = opts
+  const { cx, cy, radius, verts, palette, skipOutline = false, skipShadow = false, skipTexture = false, flatFill = false, outlineAlpha = OUTLINE_ALPHA, outlineWidth = OUTLINE_WIDTH, outlineColor = null } = opts
   const { fillR, fillG, fillB, lightR, lightG, lightB, darkR, darkG, darkB } = palette
   //
   // Quadratic-Bezier outline: each segment uses the current vertex as the
@@ -158,70 +159,57 @@ export function drawRockToCanvas(ctx, opts) {
     traceOutline()
     ctx.fill()
     //
-    // Mottled texture: random subtle dark/light blotches clipped to the
-    // rock silhouette so the surface doesn't look flat. Counts are bounded
-    // so the rock never reads as noise.
+    // Palette-locked callers skip the white/black mottle, cracks and sheen.
     //
-    ctx.save()
-    traceOutline()
-    ctx.clip()
-    const blotchCount = BLOTCH_COUNT_MIN + Math.floor(Math.random() * BLOTCH_COUNT_RANGE)
-    for (let b = 0; b < blotchCount; b++) {
-      const bx = cx + (Math.random() - 0.5) * radius * 1.4
-      const by = cy + (Math.random() - 0.5) * radius * 0.9
-      const br = radius * (0.08 + Math.random() * 0.18)
-      const lighter = Math.random() < 0.5
-      const a = 0.06 + Math.random() * 0.08
-      ctx.fillStyle = lighter
-        ? `rgba(255, 255, 255, ${a})`
-        : `rgba(0, 0, 0, ${a + 0.02})`
-      ctx.beginPath()
-      ctx.ellipse(bx, by, br, br * (0.6 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    //
-    // A couple of fine crack lines for stone texture: each crack is a few
-    // wiggly segments started at a random point on the rock interior.
-    //
-    const crackCount = 1 + Math.floor(Math.random() * CRACK_COUNT_RANGE)
-    for (let c = 0; c < crackCount; c++) {
-      const startA = Math.random() * Math.PI * 2
-      const startR = radius * (0.1 + Math.random() * 0.5)
-      let cxp = cx + Math.cos(startA) * startR
-      let cyp = cy + Math.sin(startA) * startR * 0.5
-      ctx.strokeStyle = `rgba(0, 0, 0, ${0.18 + Math.random() * 0.18})`
-      ctx.lineWidth = 0.8 + Math.random() * 0.7
-      ctx.beginPath()
-      ctx.moveTo(cxp, cyp)
-      const segs = 2 + Math.floor(Math.random() * 3)
-      let ang = Math.random() * Math.PI * 2
-      for (let s = 0; s < segs; s++) {
-        ang += (Math.random() - 0.5) * 1.2
-        cxp += Math.cos(ang) * radius * (0.18 + Math.random() * 0.18)
-        cyp += Math.sin(ang) * radius * 0.12
-        ctx.lineTo(cxp, cyp)
+    if (!skipTexture) {
+      ctx.save()
+      traceOutline()
+      ctx.clip()
+      const blotchCount = BLOTCH_COUNT_MIN + Math.floor(Math.random() * BLOTCH_COUNT_RANGE)
+      for (let b = 0; b < blotchCount; b++) {
+        const bx = cx + (Math.random() - 0.5) * radius * 1.4
+        const by = cy + (Math.random() - 0.5) * radius * 0.9
+        const br = radius * (0.08 + Math.random() * 0.18)
+        const lighter = Math.random() < 0.5
+        const a = 0.06 + Math.random() * 0.08
+        ctx.fillStyle = lighter
+          ? `rgba(255, 255, 255, ${a})`
+          : `rgba(0, 0, 0, ${a + 0.02})`
+        ctx.beginPath()
+        ctx.ellipse(bx, by, br, br * (0.6 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2)
+        ctx.fill()
       }
-      ctx.stroke()
-    }
-    ctx.restore()
-    //
-    // Top-left sheen highlight (key light) — small lighter ellipse near
-    // the upper-left curve of the rock so the body looks dimensional.
-    //
-    ctx.fillStyle = `rgba(255, 255, 255, ${SHEEN_ALPHA})`
-    ctx.beginPath()
-    ctx.ellipse(cx - radius * 0.32, cy - radius * 0.28, radius * 0.55, radius * 0.18, -0.45, 0, Math.PI * 2)
-    ctx.fill()
-    //
-    // Bottom-rim contact shadow — small dark arc where the rock meets the
-    // ground, giving the impression of weight pressing down. Skipped for
-    // buried rocks together with the ground drop shadow.
-    //
-    if (!skipShadow) {
-      ctx.fillStyle = `rgba(0, 0, 0, ${SHADOW_CONTACT_ALPHA})`
+      const crackCount = 1 + Math.floor(Math.random() * CRACK_COUNT_RANGE)
+      for (let c = 0; c < crackCount; c++) {
+        const startA = Math.random() * Math.PI * 2
+        const startR = radius * (0.1 + Math.random() * 0.5)
+        let cxp = cx + Math.cos(startA) * startR
+        let cyp = cy + Math.sin(startA) * startR * 0.5
+        ctx.strokeStyle = `rgba(0, 0, 0, ${0.18 + Math.random() * 0.18})`
+        ctx.lineWidth = 0.8 + Math.random() * 0.7
+        ctx.beginPath()
+        ctx.moveTo(cxp, cyp)
+        const segs = 2 + Math.floor(Math.random() * 3)
+        let ang = Math.random() * Math.PI * 2
+        for (let s = 0; s < segs; s++) {
+          ang += (Math.random() - 0.5) * 1.2
+          cxp += Math.cos(ang) * radius * (0.18 + Math.random() * 0.18)
+          cyp += Math.sin(ang) * radius * 0.12
+          ctx.lineTo(cxp, cyp)
+        }
+        ctx.stroke()
+      }
+      ctx.restore()
+      ctx.fillStyle = `rgba(255, 255, 255, ${SHEEN_ALPHA})`
       ctx.beginPath()
-      ctx.ellipse(cx, cy + radius * 0.34, radius * 0.78, radius * 0.18, 0, 0, Math.PI)
+      ctx.ellipse(cx - radius * 0.32, cy - radius * 0.28, radius * 0.55, radius * 0.18, -0.45, 0, Math.PI * 2)
       ctx.fill()
+      if (!skipShadow) {
+        ctx.fillStyle = `rgba(0, 0, 0, ${SHADOW_CONTACT_ALPHA})`
+        ctx.beginPath()
+        ctx.ellipse(cx, cy + radius * 0.34, radius * 0.78, radius * 0.18, 0, 0, Math.PI)
+        ctx.fill()
+      }
     }
   }
   if (!skipOutline) {

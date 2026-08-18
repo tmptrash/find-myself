@@ -157,6 +157,7 @@ export function drawLogPlatform(k, w, h, ox, oy, opacity, detail, colors = null)
   const ringColor = getRGB(k, colors?.ring ?? LOG_RING_COLOR_HEX)
   const ringDark = getRGB(k, colors?.ringDark ?? LOG_RING_DARK_HEX)
   const coreColor = getRGB(k, colors?.core ?? LOG_CORE_COLOR_HEX)
+  const shadowColor = colors?.shadow ? getRGB(k, colors.shadow) : k.rgb(0, 0, 0)
   const bodyPts = []
   for (let i = 0; i <= LOG_END_STEPS; i++) {
     const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
@@ -166,7 +167,7 @@ export function drawLogPlatform(k, w, h, ox, oy, opacity, detail, colors = null)
     const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
     bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
   }
-  k.drawPolygon({ pts: bodyPts.map(p => k.vec2(p.x, p.y + 2)), color: k.rgb(0, 0, 0), opacity: 0.4 * opacity })
+  k.drawPolygon({ pts: bodyPts.map(p => k.vec2(p.x, p.y + 2)), color: shadowColor, opacity: 0.4 * opacity })
   k.drawPolygon({ pts: bodyPts, color: barkColor, opacity })
   const topPts = []
   for (let i = 0; i <= LOG_END_STEPS; i++) {

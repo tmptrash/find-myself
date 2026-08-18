@@ -23,7 +23,8 @@ import {
 import * as TreeSegments from '../utils/glow-tree-segments.js'
 import {
   GROUND_RIGHT_STRIP_COUNT,
-  groundRightStripIndexForX
+  groundRightStripIndexForX,
+  groundRightAppearOpacity
 } from '../utils/glow-ground-reveal.js'
 import {
   GLOW_PAL,
@@ -73,6 +74,8 @@ const LIGHT_GRAY = glowRgb('lightGray')
 const DECOR_GRAY = glowRgb('decorGray')
 const GRASS_GREEN = glowRgb('grassGreen')
 const WATER_COLOR = glowRgb('water')
+const SKY_TOP_GRAY = glowRgb('parallaxSkyTopGray')
+const SKY_TOP_COLOR = glowRgb('parallaxSkyTopColor')
 const GLOW_GOLD_HEX = GLOW_PAL.gold
 const DIALOG_FILL = glowRgb('dialogFill')
 //
@@ -169,26 +172,23 @@ const BG_PAR_TREE2_GRAY = 'glow0-bg-par-tree2-gray'
 const BG_PAR_TREE2_COLOR = 'glow0-bg-par-tree2-color'
 const BG_PAR_TREE1_GRAY = 'glow0-bg-par-tree1-gray'
 const BG_PAR_TREE1_COLOR = 'glow0-bg-par-tree1-color'
-const BG_PAR_BUSH3_GRAY = 'glow0-bg-par-bush3-gray'
-const BG_PAR_BUSH3_COLOR = 'glow0-bg-par-bush3-color'
-const BG_PAR_BUSH2_GRAY = 'glow0-bg-par-bush2-gray'
-const BG_PAR_BUSH2_COLOR = 'glow0-bg-par-bush2-color'
-const BG_PAR_BUSH1_GRAY = 'glow0-bg-par-bush1-gray'
-const BG_PAR_BUSH1_COLOR = 'glow0-bg-par-bush1-color'
 const BG_STATIC_GRAY = 'glow0-bg-static-gray'
 const BG_STATIC_COLOR = 'glow0-bg-static-color'
 //
 // Layer follow speeds — fraction of camera scroll (1.0 = locked to the world).
-// Each tree plane and bush strip is its own layer so depth parallax reads
-// as seven stacked scrolls instead of three combined images.
+// Bushes bake onto the matching tree plane so post-O colour world draws
+// three forest sprites instead of six full-bleed canvases.
 //
 const PAR_SKY_SPEED = 0.06
-const PAR_TREE3_SPEED = 0.14
-const PAR_BUSH3_SPEED = 0.22
-const PAR_TREE2_SPEED = 0.30
-const PAR_BUSH2_SPEED = 0.38
-const PAR_TREE1_SPEED = 0.46
-const PAR_BUSH1_SPEED = 0.55
+const PAR_TREE3_SPEED = 0.12
+const PAR_TREE2_SPEED = 0.26
+const PAR_TREE1_SPEED = 0.40
+//
+// Soft sky-coloured veils between forest rows — atmospheric perspective
+// without inventing new tones (opacity only).
+//
+const HAZE_FAR_OPACITY = 0.2
+const HAZE_MID_OPACITY = 0.1
 //
 // Extra horizontal bleed baked into parallax canvases so trees extend past the
 // playfield edges and never run out on the right when the camera scrolls.
@@ -436,6 +436,7 @@ const BIRD_BOB_AMP = 9
 const BIRD_WRAP_PAD = 40
 const BIRD_LINE_WIDTH = 2
 const BIRD_HAZE_BLEND = 0.72
+const BIRD_UPDATE_INTERVAL = 1 / 24
 //
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
 // hanging rootlets, a fossil spiral and one buried skeleton (no burrows or
@@ -507,7 +508,7 @@ const GLOW_HUD_SMALL_HERO_HALF_W = 42
 //
 const HUD_SCORE_COLOR_SETTLED = glowRgb('hudScore')
 //
-// Lake surface ripple lines — draw every Nth segment to cut post-O cost.
+// Skip lake fill when the camera is well off the water span.
 //
 const LAKE_SURFACE_CULL_MARGIN = 48
 //
@@ -817,6 +818,30 @@ let GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 const GRASS_Z = 20
 const GRASS_TUFT_COUNT = 28
 //
+// Right-ground discovery fades into the unknown instead of cutting on a strip.
+//
+const GROUND_REVEAL_FADE_WIDTH = 220
+const GROUND_REVEAL_LOOKAHEAD = 80
+const GROUND_DETAIL_LOOKAHEAD = 28
+const LEFT_DECOR_FADE_DURATION = 0.7
+//
+// Quiet drifting motes — few, slow, never competing with the hero.
+//
+const MOTE_COUNT = 14
+const MOTE_SPEED_MIN = 4
+const MOTE_SPEED_RANGE = 8
+const MOTE_SIZE_MIN = 1.2
+const MOTE_SIZE_RANGE = 1.6
+const MOTE_OPACITY_MIN = 0.12
+const MOTE_OPACITY_RANGE = 0.18
+//
+// Visual ground lip — height variation only, collision stays on FLOOR_Y.
+//
+const GROUND_LIP_AMP = 4
+const GROUND_LIP_STEPS = 36
+const GROUND_LIP_FREQ_A = 0.012
+const GROUND_LIP_FREQ_B = 0.031
+//
 // Rocks.
 //
 const CLUSTER_ROCK_RADIUS_MIN = 26
@@ -932,7 +957,7 @@ const TRAMP_WALK_NEAR = 220
 const TRAMP_WALK_NEAR_SINGING = 370
 const TRAMP_CHEEKY_EVERY = 5
 const TRAMP_CHEEKY_DURATION = 3
-const TRAMP_BAD_SING_TEXT = 'I can\'t listen to this anymore'
+const TRAMP_BAD_SING_TEXT = 'I can\'t listen\nto this anymore'
 const TRAMP_BAD_SING_TEXT_2 = 'Oh come on.\nYou again'
 const TRAMP_BAD_SING_TEXT_3 = 'I\'ll go drown myself'
 const TRAMP_BAD_SING_TEXTS = [TRAMP_BAD_SING_TEXT, TRAMP_BAD_SING_TEXT_2, TRAMP_BAD_SING_TEXT_3]
@@ -1541,6 +1566,8 @@ function initGlowLevel0Scene(k) {
       rockObjs,
       mushObjs,
       waterLayer,
+      atmosphereMotes: createAtmosphereMotes(),
+      leftDecorFade: zones.groundDecorLeft ? 1 : 0,
       bonusHeroInst,
       bonusPlatAlways,
       trampBundle,
@@ -2535,6 +2562,7 @@ function tintGlowHudLoaderLetters(inst) {
 // Complete fill is the letter's own gold tint from tintGlowHudLoaderLetters.
 //
 function drawGlowHudLetterFills(inst) {
+  if (inst.hudLetterFillDrawer?.hidden) return
   const indicator = inst.levelIndicator
   if (!indicator) return
   const k = inst.k
@@ -2551,6 +2579,19 @@ function drawGlowHudLetterFills(inst) {
     drawHudLetterGoldFill(k, letters?.[2], 'O', oParts, GLOW_HUD_O_FILL_PARTS)
   !inst.zones.wCollected && wParts > 0 && wParts < GLOW_HUD_W_FILL_PARTS &&
     drawHudLetterGoldFill(k, letters?.[3], 'W', wParts, GLOW_HUD_W_FILL_PARTS)
+}
+//
+// Hides the gold-band HUD drawer once every letter is fully filled or collected.
+//
+function syncGlowHudLetterFillDrawerHidden(inst) {
+  const drawer = inst.hudLetterFillDrawer
+  if (!drawer) return
+  const z = inst.zones
+  const g = !z.gCollected && (inst._hudGFillParts || 0) > 0 && (inst._hudGFillParts || 0) < GLOW_HUD_G_FILL_PARTS
+  const l = !z.lCollected && (inst._hudLFillParts || 0) > 0 && (inst._hudLFillParts || 0) < GLOW_HUD_L_FILL_PARTS
+  const o = !z.oCollected && (inst._hudOFillParts || 0) > 0 && (inst._hudOFillParts || 0) < GLOW_HUD_O_FILL_PARTS
+  const w = !z.wCollected && (inst._hudWFillParts || 0) > 0 && (inst._hudWFillParts || 0) < GLOW_HUD_W_FILL_PARTS
+  drawer.hidden = !(g || l || o || w)
 }
 //
 // Keeps a screen-space drawer above the HUD letters.
@@ -2594,6 +2635,7 @@ function syncGlowHudOFill(inst, burst = true) {
   tintGlowHudLoaderLetters(inst)
   burst && prevO != null && oParts > prevO &&
     LevelIndicator.flashLetterBurst(indicator, 3)
+  syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
 // Updates G/L/W fill counts and flashes a HUD letter when a new band opens.
@@ -2626,6 +2668,7 @@ function syncGlowHudLetterFills(inst, burst = true) {
     LevelIndicator.flashLetterBurst(indicator, 2)
   burst && prevW != null && wParts > prevW &&
     LevelIndicator.flashLetterBurst(indicator, 4)
+  syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
 // Starts birds ambient once the O zone opens.
@@ -2776,7 +2819,6 @@ function restorePersistedGlowZoneVisuals(inst) {
 function applyZoneVisibility(inst) {
   const z = inst.zones
   const leftGroundOpen = z.groundDecorLeft
-  const rightStripOpen = z.groundRightStripMax >= 0
   inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
   inst.treeDrawMonolith ? syncMonolithicTreeColorMode(inst) : syncTreeSegmentsVisibility(inst)
   syncMushroomGraySprites(inst)
@@ -2800,19 +2842,28 @@ function applyZoneVisibility(inst) {
       o.pos.y = PLATFORM_HIDE_Y
       return
     }
-    const showLeft = o._waterCluster ? z.water : leftGroundOpen
-    const showRight = isRightDecorStripVisible(z, o, inst.treeStripEndX)
-    const show = o._side === 'left' ? showLeft : showRight
-    setDecorObjVisible(o, show)
+    if (o._side === 'left') {
+      const showLeft = o._waterCluster ? z.water : leftGroundOpen
+      setDecorObjVisible(o, showLeft, inst.leftDecorFade ?? 1)
+      return
+    }
+    const rightOp = glowRightDecorOpacity(inst, o)
+    setDecorObjVisible(o, rightOp > 0.04, rightOp)
   })
   inst.mushObjs.forEach(o => {
     const wx = o._decorWorldX ?? o._homeX ?? 0
     const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
-    const showLeft = leftGroundOpen && !inLake
-    const showRight = isRightDecorStripVisible(z, o, inst.treeStripEndX)
-    setDecorObjVisible(o, o._side === 'left' ? showLeft : showRight)
+    if (o._side === 'left') {
+      setDecorObjVisible(o, leftGroundOpen && !inLake, inst.leftDecorFade ?? 1)
+      return
+    }
+    const rightOp = glowRightDecorOpacity(inst, o)
+    setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
-  inst.grassLayer.layer.hidden = !rightStripOpen && !leftGroundOpen
+  const heroX = inst.heroInst?.character?.pos.x ?? 0
+  inst.grassLayer.layer.hidden = !leftGroundOpen && z.groundRightStripMax < 0 &&
+    heroX < GROUND_REVEAL_TREE_PAST_X - GROUND_REVEAL_LOOKAHEAD
+  inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
   syncGlowMidgeDrawColor(inst)
@@ -2821,12 +2872,14 @@ function applyZoneVisibility(inst) {
 // Shows or hides a floor decor sprite — moves off-screen when hidden so nothing
 // peeks into the viewport before the zone is revealed.
 //
-function setDecorObjVisible(obj, visible) {
-  obj.hidden = !visible
+function setDecorObjVisible(obj, visible, opacity = 1) {
+  const show = visible && opacity > 0.04
+  obj.hidden = !show
   if (obj._homeY != null) {
-    obj.pos.y = visible ? obj._homeY : PLATFORM_HIDE_Y
+    obj.pos.y = show ? obj._homeY : PLATFORM_HIDE_Y
   }
-  obj._homeX != null && visible && (obj.pos.x = obj._homeX)
+  obj._homeX != null && show && (obj.pos.x = obj._homeX)
+  obj.opacity = show ? opacity : 1
 }
 //
 // Toggles corner sprite visibility.
@@ -3008,9 +3061,9 @@ function grayDecorTint(sc) {
   }
 }
 //
-// Bakes each parallax tree plane and bush strip as its own sprite pair
-// (gray + colour). Depth comes from scroll speed and palette steps:
-// gray3/orange3 farthest, gray2/orange2 mid, gray1 + green foliage nearest.
+// Bakes three forest planes (trees + bushes on the same canvas) plus sky
+// and the static ground band. Depth comes from scroll speed and palette
+// steps: gray3/orange3 farthest, gray2/orange2 mid, gray1 + green nearest.
 //
 function buildParallaxSprites(k, undergroundSpec) {
   const grayNearPal = getTreePaletteSolid('parallaxGrayNear')
@@ -3038,8 +3091,6 @@ function buildParallaxSprites(k, undergroundSpec) {
       bandBottom: PAR_FARTHEST_BAND_BOTTOM,
       bandCount: PAR_FARTHEST_BAND_COUNT
     })
-  })
-  bakeParallaxLayerPair(k, BG_PAR_BUSH3_GRAY, BG_PAR_BUSH3_COLOR, PAR_BUSH3_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
       grayRgb: { r: grayFarPal.trunkR, g: grayFarPal.trunkG, b: grayFarPal.trunkB },
       colorRgb: { r: colorFarPal.trunkR, g: colorFarPal.trunkG, b: colorFarPal.trunkB },
@@ -3063,8 +3114,6 @@ function buildParallaxSprites(k, undergroundSpec) {
       bandBottom: PAR_FAR_BAND_BOTTOM,
       bandCount: PAR_FAR_BAND_COUNT
     })
-  })
-  bakeParallaxLayerPair(k, BG_PAR_BUSH2_GRAY, BG_PAR_BUSH2_COLOR, PAR_BUSH2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
       grayRgb: { r: grayMidPal.trunkR, g: grayMidPal.trunkG, b: grayMidPal.trunkB },
       colorRgb: { r: colorMidPal.trunkR, g: colorMidPal.trunkG, b: colorMidPal.trunkB },
@@ -3090,8 +3139,6 @@ function buildParallaxSprites(k, undergroundSpec) {
       bandBottom: PAR_BIG_BAND_BOTTOM,
       bandCount: PAR_BIG_BAND_COUNT
     })
-  })
-  bakeParallaxLayerPair(k, BG_PAR_BUSH1_GRAY, BG_PAR_BUSH1_COLOR, PAR_BUSH1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxBushes(grayCtx, colorCtx, pad, {
       grayRgb: { r: grayNearPal.trunkR, g: grayNearPal.trunkG, b: grayNearPal.trunkB },
       colorRgb: colorNearBush,
@@ -3121,13 +3168,20 @@ function buildParallaxSprites(k, undergroundSpec) {
   staticColor.height = 0
 }
 //
-// Paints the sky band into both parallax canvases (gray inner tone + warm haze).
+// Paints the sky band into both parallax canvases as a vertical gradient
+// (lighter zenith, horizon tone at the ground line).
 //
 function renderSkyBand(grayCtx, colorCtx, grayRgb, colorRgb) {
-  grayCtx.fillStyle = `rgb(${grayRgb.r}, ${grayRgb.g}, ${grayRgb.b})`
-  grayCtx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, FLOOR_Y - TOP_MARGIN)
-  colorCtx.fillStyle = `rgb(${colorRgb.r}, ${colorRgb.g}, ${colorRgb.b})`
-  colorCtx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, FLOOR_Y - TOP_MARGIN)
+  const h = FLOOR_Y - TOP_MARGIN
+  paintSkyGradient(grayCtx, grayRgb, SKY_TOP_GRAY, h)
+  paintSkyGradient(colorCtx, colorRgb, SKY_TOP_COLOR, h)
+}
+function paintSkyGradient(ctx, horizonRgb, topRgb, h) {
+  const grad = ctx.createLinearGradient(0, TOP_MARGIN, 0, FLOOR_Y)
+  grad.addColorStop(0, `rgb(${topRgb.r}, ${topRgb.g}, ${topRgb.b})`)
+  grad.addColorStop(1, `rgb(${horizonRgb.r}, ${horizonRgb.g}, ${horizonRgb.b})`)
+  ctx.fillStyle = grad
+  ctx.fillRect(LEFT_MARGIN, TOP_MARGIN, GAME_W, h)
 }
 //
 // Renders one tree row into a parallax canvas with horizontal bleed.
@@ -3397,17 +3451,22 @@ function createBackgroundBirds() {
 // Moves birds along their lanes, wrapping around the playfield edges.
 //
 function updateBackgroundBirds(inst, dt) {
-  inst.birdTime += dt
-  const left = LEFT_MARGIN - BIRD_WRAP_PAD
-  const right = WORLD_W - RIGHT_MARGIN + BIRD_WRAP_PAD
   const camX = inst.k.camPos().x
   const prevCamX = inst.birdCamX ?? camX
   const camDelta = camX - prevCamX
   inst.birdCamX = camX
   const parallaxDrift = camDelta * (1 - BIRD_PARALLAX_SPEED)
+  inst.birds.forEach(bird => { bird.x += parallaxDrift })
+  inst._birdUpdateAcc = (inst._birdUpdateAcc ?? 0) + dt
+  if (inst._birdUpdateAcc < BIRD_UPDATE_INTERVAL) return
+  const step = inst._birdUpdateAcc
+  inst._birdUpdateAcc = 0
+  inst.birdTime += step
+  const left = LEFT_MARGIN - BIRD_WRAP_PAD
+  const right = WORLD_W - RIGHT_MARGIN + BIRD_WRAP_PAD
   inst.birds.forEach(bird => {
-    bird.flap += bird.flapSpeed * dt
-    bird.x += bird.dir * bird.speed * dt + parallaxDrift
+    bird.flap += bird.flapSpeed * step
+    bird.x += bird.dir * bird.speed * step
     bird.x < left && (bird.x = right)
     bird.x > right && (bird.x = left)
   })
@@ -3421,8 +3480,11 @@ function drawBackgroundBirds(inst) {
   const fade = inst.colorFade
   if (!inst.zones.colorWorld || fade <= 0.01) return
   const k = inst.k
-  const c = lerpRgb(VOID, WARM_HAZE, BIRD_HAZE_BLEND)
-  const color = k.rgb(c.r, c.g, c.b)
+  if (!inst._birdDrawColor) {
+    const c = lerpRgb(VOID, WARM_HAZE, BIRD_HAZE_BLEND)
+    inst._birdDrawColor = k.rgb(c.r, c.g, c.b)
+  }
+  const color = inst._birdDrawColor
   const camX = k.camPos().x
   const zoom = inst.camera?.zoom || 1
   const half = VIEW_W / (2 * zoom) + 80
@@ -3446,6 +3508,117 @@ function drawBackgroundBirds(inst) {
       cap: 'round'
     })
   })
+}
+//
+// Sky-coloured veil over a forest row so farther planes lose contrast.
+//
+function drawAtmosphereHaze(inst, opacity) {
+  if (opacity < 0.01) return
+  const k = inst.k
+  const c = lerpRgb(INNER_GRAY, WARM_HAZE, inst.colorFade ?? 0)
+  k.drawRect({
+    pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
+    width: GAME_W,
+    height: FLOOR_Y - TOP_MARGIN,
+    color: k.rgb(c.r, c.g, c.b),
+    opacity
+  })
+}
+//
+// Quiet specks that drift through the revealed forest air.
+//
+function createAtmosphereMotes() {
+  const motes = []
+  for (let i = 0; i < MOTE_COUNT; i++) {
+    motes.push({
+      x: LEFT_MARGIN + Math.random() * GAME_W,
+      y: TOP_MARGIN + 40 + Math.random() * Math.max(80, FLOOR_Y - TOP_MARGIN - 120),
+      vx: (Math.random() - 0.5) * MOTE_SPEED_RANGE,
+      vy: -(MOTE_SPEED_MIN + Math.random() * MOTE_SPEED_RANGE),
+      size: MOTE_SIZE_MIN + Math.random() * MOTE_SIZE_RANGE,
+      phase: Math.random() * Math.PI * 2,
+      opacity: MOTE_OPACITY_MIN + Math.random() * MOTE_OPACITY_RANGE
+    })
+  }
+  return motes
+}
+//
+// Wraps motes inside the playfield so the drift never runs off-world.
+//
+function updateAtmosphereMotes(inst, dt) {
+  const motes = inst.atmosphereMotes
+  if (!motes) return
+  const top = TOP_MARGIN + 20
+  const bot = FLOOR_Y - 30
+  const left = LEFT_MARGIN
+  const right = WORLD_W - RIGHT_MARGIN
+  motes.forEach(mote => {
+    mote.phase += dt * 0.6
+    mote.x += mote.vx * dt + Math.sin(mote.phase) * 4 * dt
+    mote.y += mote.vy * dt
+    mote.y < top && (mote.y = bot)
+    mote.y > bot && (mote.y = top)
+    mote.x < left && (mote.x = right)
+    mote.x > right && (mote.x = left)
+  })
+}
+//
+// Specks stay behind the hero; skipped in the single-tone explore phase.
+//
+function drawAtmosphereMotes(inst) {
+  if (!inst.zones.lZoneParallax) return
+  if (isGlowFlatSingleDecorColor(inst)) return
+  const k = inst.k
+  const c = inst.zones.colorWorld ? lerpRgb(WARM_HAZE, LIGHT_GRAY, 0.35) : HUD_SCORE_COLOR_SETTLED
+  const color = k.rgb(c.r, c.g, c.b)
+  const camX = k.camPos().x
+  const zoom = inst.camera?.zoom || 1
+  const half = VIEW_W / (2 * zoom) + 40
+  const fade = Math.max(inst.parallaxFade ?? 0, inst.colorFade ?? 0)
+  inst.atmosphereMotes?.forEach(mote => {
+    if (mote.x < camX - half || mote.x > camX + half) return
+    k.drawCircle({
+      pos: k.vec2(mote.x, mote.y),
+      radius: mote.size,
+      color,
+      opacity: mote.opacity * fade
+    })
+  })
+}
+//
+// Visual ground relief only — collision stays on FLOOR_Y. Hidden while the
+// world is still a single decor gray.
+//
+function drawExploredGroundLip(inst) {
+  if (isGlowFlatSingleDecorColor(inst)) return
+  const z = inst.zones
+  if (!z.groundDecorLeft && z.groundRightStripMax < 0 && !z.water) return
+  const k = inst.k
+  const c = DECOR_OUTLINE_RGB
+  const color = k.rgb(c.r, c.g, c.b)
+  const x0 = LEFT_MARGIN
+  const x1 = WORLD_W - RIGHT_MARGIN
+  const step = (x1 - x0) / GROUND_LIP_STEPS
+  const lakeX1 = inst.lakeX1
+  const lakeX2 = inst.lakeX2
+  for (let i = 0; i < GROUND_LIP_STEPS; i++) {
+    const x = x0 + i * step
+    if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
+    if (isCrackDecorExcluded(x, WORLD_W)) continue
+    const op = x >= TREE_X + TRUNK_EXCLUDE_HALF
+      ? glowRightWorldOpacity(inst, x, 'large')
+      : (z.groundDecorLeft ? (inst.leftDecorFade ?? 1) : 0)
+    if (op < 0.12) continue
+    const lip = (Math.sin(x * GROUND_LIP_FREQ_A) + Math.sin(x * GROUND_LIP_FREQ_B) * 0.5) * GROUND_LIP_AMP
+    const h = Math.max(2, 3 + lip)
+    k.drawRect({
+      pos: k.vec2(x, FLOOR_Y - h + 2),
+      width: step + 1,
+      height: h,
+      color,
+      opacity: 0.4 * op
+    })
+  }
 }
 //
 // Bakes the underground decor sprites (gray + colour-world variants) that
@@ -4098,6 +4271,16 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones) {
 //
 function glowGrassTint(zones, blade) {
   const sc = zones._sceneRef
+  const lakeX1 = zones._lakeX1
+  const lakeX2 = zones._lakeX2
+  if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
+    return null
+  }
+  if (sc && (sc.colorFade ?? 0) >= 1 && zones.groundDecorRight && (sc.leftDecorFade ?? 1) >= 1) {
+    if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+    return sc._grassColorSettled
+  }
   if (sc?.k) {
     if (sc._grassCullFrame !== sc.k.time()) {
       sc._grassCullFrame = sc.k.time()
@@ -4109,18 +4292,27 @@ function glowGrassTint(zones, blade) {
     }
     if (blade.x < sc._grassCullMinX || blade.x > sc._grassCullMaxX) return null
   }
-  const lakeX1 = zones._lakeX1
-  const lakeX2 = zones._lakeX2
-  if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
-    return null
-  }
   const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
-  if (side === 'left' && !zones.groundDecorLeft) return null
-  if (side === 'right') {
-    const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
-    if (strip < 0 || strip > zones.groundRightStripMax) return null
+  if (side === 'left') {
+    if (!zones.groundDecorLeft) return null
+    const leftFade = sc?.leftDecorFade ?? 1
+    if (leftFade < 0.04) return null
+    if (sc && isGlowFlatSingleDecorColor(sc)) return leftFade >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: leftFade }
+    const fade = sc?.colorFade ?? 0
+    if (fade >= 1 && leftFade >= 1) {
+      sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+      return sc._grassColorSettled
+    }
+    const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
+    const rgb = fade >= 1
+      ? (sc._grassColorSettled ??= lerpRgb(gray, GRASS_GREEN, 1))
+      : lerpRgb(gray, GRASS_GREEN, fade)
+    return { ...rgb, opacity: leftFade }
   }
-  if (sc && isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+  const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
+  const op = glowRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
+  if (op < 0.04) return null
+  if (sc && isGlowFlatSingleDecorColor(sc)) return op >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: op }
   const fade = sc?.colorFade ?? 0
   if (fade >= 1) {
     sc._grassColorSettled ??= lerpRgb(
@@ -4128,10 +4320,13 @@ function glowGrassTint(zones, blade) {
       GRASS_GREEN,
       1
     )
-    return sc._grassColorSettled
+    if (op >= 1) return sc._grassColorSettled
+    const settled = sc._grassColorSettled
+    return { r: settled.r, g: settled.g, b: settled.b, opacity: op }
   }
   const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc))
-  return lerpRgb(gray, GRASS_GREEN, fade)
+  const rgb = lerpRgb(gray, GRASS_GREEN, fade)
+  return op >= 1 ? rgb : { ...rgb, opacity: op }
 }
 //
 // Rocks — flat value 5 silhouettes.
@@ -4241,6 +4436,8 @@ function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z 
   obj._waterCluster = waterCluster
   obj._homeX = worldX - totalW / 2
   obj._homeY = posY
+  obj._decorWorldX = worldX
+  obj._detailRank = radius < 16 ? 'small' : 'large'
   obj._rockBake = {
     spriteName,
     cx,
@@ -4362,6 +4559,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
       : -1
     obj._homeX = baseX
     obj._homeY = baseY
+    obj._detailRank = capW < 28 ? 'small' : 'large'
     obj._glowPhase = Math.random() * Math.PI * 2
     obj.leanAngle = 0
     obj.hidden = true
@@ -4524,11 +4722,8 @@ function onUpdateTrampolineBlink(k, state) {
 //
 function createWater(k, x1, x2, zones) {
   const waterY = WATER_SURFACE_Y
-  //
-  // Top wave samples + mirrored bottom samples for a sloping lake bed
-  //
   const ptsCache = Array.from({ length: (LAKE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
-  return k.add([
+  const layer = k.add([
     k.z(LAKE_Z),
     {
       draw() {
@@ -4553,10 +4748,19 @@ function createWater(k, x1, x2, zones) {
           fade >= 1 && sc && (sc._lakeColorSettled = c)
         }
         fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, k.time())
-        k.drawPolygon({ pts: ptsCache, color: k.rgb(c.r, c.g, c.b) })
+        const rgb = sc?._lakeDrawRgb
+        if (!rgb || rgb.r !== c.r || rgb.g !== c.g || rgb.b !== c.b) {
+          sc && (sc._lakeDrawRgb = k.rgb(c.r, c.g, c.b))
+        }
+        k.drawPolygon({ pts: ptsCache, color: (sc && sc._lakeDrawRgb) || k.rgb(c.r, c.g, c.b) })
       }
     }
   ])
+  //
+  // Stay off the draw list until the left-of-tree water zone opens.
+  //
+  layer.hidden = !zones.water
+  return layer
 }
 //
 // Draws lake cap rocks above grass and the water fill (sprites stay off-screen).
@@ -4771,20 +4975,14 @@ function onDraw(inst) {
   }
   if (inst.zones.lZoneParallax) {
     //
-    // Back-to-front: sky → birds → tree 3 / bush 3 / tree 2 / bush 2 /
-    // tree 1 / bush 1, then static ground. The sky layer is an opaque fill,
-    // so birds must be drawn right after it or the sky repaint hides them.
+    // Back-to-front: sky → far/mid/near forest (bushes baked onto trees),
+    // then static ground. Birds sit right after the opaque sky fill.
     //
     const pf = inst.parallaxFade
     const skyLayer = { gray: BG_PAR_SKY_GRAY, color: BG_PAR_SKY_COLOR, speed: PAR_SKY_SPEED, bleed: 0 }
-    const parLayers = [
-      { gray: BG_PAR_TREE3_GRAY, color: BG_PAR_TREE3_COLOR, speed: PAR_TREE3_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
-      { gray: BG_PAR_BUSH3_GRAY, color: BG_PAR_BUSH3_COLOR, speed: PAR_BUSH3_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
-      { gray: BG_PAR_TREE2_GRAY, color: BG_PAR_TREE2_COLOR, speed: PAR_TREE2_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
-      { gray: BG_PAR_BUSH2_GRAY, color: BG_PAR_BUSH2_COLOR, speed: PAR_BUSH2_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
-      { gray: BG_PAR_TREE1_GRAY, color: BG_PAR_TREE1_COLOR, speed: PAR_TREE1_SPEED, bleed: PAR_TREE_HORIZ_BLEED },
-      { gray: BG_PAR_BUSH1_GRAY, color: BG_PAR_BUSH1_COLOR, speed: PAR_BUSH1_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
-    ]
+    const parFar = { gray: BG_PAR_TREE3_GRAY, color: BG_PAR_TREE3_COLOR, speed: PAR_TREE3_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
+    const parMid = { gray: BG_PAR_TREE2_GRAY, color: BG_PAR_TREE2_COLOR, speed: PAR_TREE2_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
+    const parNear = { gray: BG_PAR_TREE1_GRAY, color: BG_PAR_TREE1_COLOR, speed: PAR_TREE1_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     const drawParLayer = layer => {
       const drawX = GlowCamera.getParallaxDrawX(inst.camera, layer.speed, layer.bleed)
       //
@@ -4804,7 +5002,12 @@ function onDraw(inst) {
     }
     drawParLayer(skyLayer)
     inst.zones.colorWorld && inst.colorFade > 0.2 && drawBackgroundBirds(inst)
-    parLayers.forEach(drawParLayer)
+    drawParLayer(parFar)
+    fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
+    drawParLayer(parMid)
+    fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
+    drawParLayer(parNear)
+    fade < 1 && drawAtmosphereMotes(inst)
   } else {
     drawBackgroundBirds(inst)
   }
@@ -4851,28 +5054,24 @@ function onDraw(inst) {
       ? lerpRgb(lerpRgb(INNER_GRAY, VOID, GROUND_L_DARKEN), GROUND_DARK, fade)
       : (innerGray ? lerpRgb(INNER_GRAY, GROUND_DARK, fade) : VOID))
   drawGlowPit(k, inst.pit, groundC, flatExplore && !innerGray)
+  fade < 1 && drawExploredGroundLip(inst)
 }
 //
 // Paints tree-side lake cap rocks when the water zone is open.
 //
 function drawLakeShoreRocksWorld(inst) {
   const z = inst.zones
-  if (!z.water && !z.leftShoreRock) return
+  if (!z.water) return
   const k = inst.k
-  const flat = isGlowFlatSingleDecorColor(inst)
   const outlined = inst.zones.colorWorld && inst.colorFade > 0.5
   const white = k.rgb(255, 255, 255)
   inst.rockObjs.forEach(o => {
     if (!o._lakeShoreEnd) return
-    //
-    // East cap (right of the lake) stays hidden until the tree-side cap opens.
-    //
-    if (!z.water && !o._shoreTreeSide && !z.leftShoreRock) return
     const spriteName = outlined && o._outlineSprite ? o._outlineSprite : o._graySprite
     spriteName && k.drawSprite({
       sprite: spriteName,
       pos: k.vec2(o._homeX, o._homeY),
-      color: flat && !outlined ? white : white
+      color: white
     })
   })
 }
@@ -6251,6 +6450,7 @@ function onUpdate(inst) {
   //
   inst.zones.colorWorld && inst.colorFade > 0.2 && updateBackgroundBirds(inst, k.dt())
   updateTreeRevealFade(inst, k.dt())
+  updateExploreFades(inst, k.dt())
   inst.colorFade >= 0.5 && !inst.heroGoldApplied && inst.zones.colorWorld && applyColorWorldHero(inst)
   updatePlayfieldBorderColors(inst)
   if (inst.pit?.pitBonus?.collected && !inst.levelIndicator) {
@@ -7028,7 +7228,7 @@ function glowTreeSpritesPrewarmed(k, monolith, segmentIds) {
 // True when parallax static layer exists from prewarm.
 //
 function glowParallaxSpritesPrewarmed(k) {
-  return Boolean(k.getSprite(BG_STATIC_GRAY) && k.getSprite(BG_PAR_BUSH1_GRAY))
+  return Boolean(k.getSprite(BG_STATIC_GRAY) && k.getSprite(BG_PAR_TREE1_GRAY))
 }
 //
 // Bakes full-tree sprites (fast draw path — two objects instead of many segments).
@@ -7077,6 +7277,21 @@ function syncMonolithicTreeColorMode(inst) {
 // Fades newly revealed tree segments in.
 //
 function updateTreeRevealFade(inst, dt) {
+  const ids = inst.treeSegmentIds
+  if (!ids?.length) return
+  const showColor = (inst.colorFade ?? 0) >= 0.5
+  ids.forEach(id => {
+    const entry = inst.treeSegmentEntries?.[id]
+    if (!entry?.fadeActive) return
+    entry.fade = Math.min(1, entry.fade + dt / TREE_REVEAL_FADE_DURATION)
+    entry.grayObj.hidden = showColor
+    entry.colorObj.hidden = !showColor
+    entry.grayObj.opacity = showColor ? 0 : entry.fade
+    entry.colorObj.opacity = showColor ? entry.fade : 0
+    entry.grayObj.pos.x = 0
+    entry.colorObj.pos.x = 0
+    entry.fade >= 1 && (entry.fadeActive = false)
+  })
 }
 //
 // Applies saved segment visibility on scene entry.
@@ -7102,12 +7317,69 @@ function isAllTreeSegmentsRevealed(inst) {
   return ids.every(id => inst.treeSegmentRevealed?.has(id))
 }
 //
-// Right-side decor tied to progressive ground strips.
+// Soft right-ground opacity: opened land is solid, the unknown fades out.
 //
-function isRightDecorStripVisible(z, obj, stripEndX) {
-  if (z.groundDecorRight) return true
-  if (obj._rightStrip == null || obj._rightStrip < 0) return z.groundRightStripMax >= 0
-  return obj._rightStrip <= z.groundRightStripMax
+function glowRightWorldOpacity(sc, x, rank) {
+  if (!sc?.zones) return 0
+  if (sc.zones.groundDecorRight) return 1
+  const lookahead = rank === 'small' ? GROUND_DETAIL_LOOKAHEAD : GROUND_REVEAL_LOOKAHEAD
+  return groundRightAppearOpacity(x, {
+    stripStartX: GROUND_REVEAL_TREE_PAST_X,
+    stripEndX: sc.treeStripEndX ?? sc.zones._groundStripEndX ?? WORLD_W,
+    stripMax: sc.zones.groundRightStripMax ?? -1,
+    heroX: sc.heroInst?.character?.pos.x ?? GROUND_REVEAL_TREE_PAST_X,
+    fadeWidth: GROUND_REVEAL_FADE_WIDTH,
+    lookahead
+  })
+}
+function glowRightDecorOpacity(inst, obj) {
+  const x = obj._decorWorldX ?? obj._homeX ?? 0
+  return glowRightWorldOpacity(inst, x, obj._detailRank === 'small' ? 'small' : 'large')
+}
+//
+// Fades left-shore decor in and keeps the right-side discovery edge soft.
+//
+function updateExploreFades(inst, dt) {
+  const z = inst.zones
+  const colorSettled = z.colorWorld && (inst.colorFade ?? 0) >= 1
+  const exploreSettled = z.groundDecorRight && (inst.leftDecorFade >= 1 || !z.groundDecorLeft)
+  if (exploreSettled && colorSettled) return
+  if (z.groundDecorLeft && inst.leftDecorFade < 1) {
+    inst.leftDecorFade = Math.min(1, inst.leftDecorFade + dt / LEFT_DECOR_FADE_DURATION)
+  }
+  const heroX = inst.heroInst?.character?.pos.x ?? 0
+  if (inst.grassLayer?.layer) {
+    inst.grassLayer.layer.hidden = !z.groundDecorLeft && z.groundRightStripMax < 0 &&
+      heroX < GROUND_REVEAL_TREE_PAST_X - GROUND_REVEAL_LOOKAHEAD
+  }
+  if (!exploreSettled && !z.groundDecorRight) {
+    inst.rockObjs?.forEach(o => {
+      if (o._side !== 'right' || o._lakeShoreEnd) return
+      const op = glowRightDecorOpacity(inst, o)
+      setDecorObjVisible(o, op > 0.04, op)
+    })
+    inst.mushObjs?.forEach(o => {
+      if (o._side !== 'right') return
+      const wx = o._decorWorldX ?? o._homeX ?? 0
+      const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
+      const op = glowRightDecorOpacity(inst, o)
+      setDecorObjVisible(o, op > 0.04 && !inLake, op)
+    })
+  }
+  if (!exploreSettled && z.groundDecorLeft && inst.leftDecorFade < 1) {
+    inst.rockObjs?.forEach(o => {
+      if (o._side !== 'left' || o._lakeShoreEnd) return
+      const show = o._waterCluster ? z.water : true
+      setDecorObjVisible(o, show, inst.leftDecorFade)
+    })
+    inst.mushObjs?.forEach(o => {
+      if (o._side !== 'left') return
+      const wx = o._decorWorldX ?? o._homeX ?? 0
+      const inLake = z._lakeX1 != null && z._lakeX2 != null && wx >= z._lakeX1 && wx <= z._lakeX2
+      setDecorObjVisible(o, !inLake, inst.leftDecorFade)
+    })
+  }
+  !colorSettled && updateAtmosphereMotes(inst, dt)
 }
 //
 // Opens ground strips to the right of the tree based on hero X.
@@ -7264,7 +7536,8 @@ function revealOneTreeSegment(inst, segmentId) {
   inst.treeSegmentRevealed.add(segmentId)
   const entry = inst.treeSegmentEntries[segmentId]
   if (!entry) return
-  setTreeSegmentRevealedVisual(entry, 1)
+  setTreeSegmentRevealedVisual(entry, 0)
+  entry.fadeActive = true
   syncTreeSegmentsVisibility(inst)
   persistTreeSegmentsRevealed(inst)
   playSegmentRevealSound(inst)

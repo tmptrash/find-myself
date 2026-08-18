@@ -224,7 +224,6 @@ export const CFG = {
         hudScore: PALETTE.gray5,
         grassGreen: PALETTE.green2,
         water: PALETTE.cyan2,
-        waterDeep: PALETTE.teal0,
         //
         // Colour-world backdrop: the bright warm haze above the ground line
         // (warmHaze below) and a dark earth band under it (root zone).
@@ -282,6 +281,12 @@ export const CFG = {
           leaf: PALETTE.green1
         },
         warmHaze: PALETTE.orange4,
+        //
+        // Upper sky band — one step lighter than the horizon haze so the
+        // backdrop reads as atmospheric perspective, not a flat fill.
+        //
+        parallaxSkyTopGray: PALETTE.gray5,
+        parallaxSkyTopColor: PALETTE.orange5,
         //
         // Parallax forest depths — one palette step per row so the farthest
         // trees stay a different swatch from the sky (gray4 / orange4).

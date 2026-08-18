@@ -24,6 +24,9 @@ const LEGACY_BRANCH_GROUP_PREFIX = 'branchGroup-'
 const LEAF_NEAR_BRANCH_PX = 72
 const HERO_BRANCH_LEAF_PAD_X = 48
 const HERO_BRANCH_LEAF_PAD_Y = 90
+const NEAR_BRANCH_PAD_X = 150
+const NEAR_BRANCH_PAD_Y = 170
+const NEAR_BRANCH_MIN_COUNT = 4
 const SEGMENT_SPRITE_PREFIX = 'glow0-tree-seg-'
 //
 // Builds the reveal queue: three equal tree parts, one per branch landing.
@@ -178,26 +181,61 @@ export function allGlowTreeSegmentIds(treeData, plan) {
   return [...plan.pendingIds]
 }
 //
-// Splits an array into equal-length slices for each reveal step.
-//
-function sliceArrayIntoRevealParts(arr, partIndex, partCount) {
-  const len = arr.length
-  if (len === 0) return []
-  const start = Math.floor(partIndex * len / partCount)
-  const end = Math.floor((partIndex + 1) * len / partCount)
-  return arr.slice(start, end)
-}
-//
-// Fills one of three equal tree slices (trunk, roots, branches, leaves).
+// Story order across the three landings: neighbouring branches (and the
+// start branch itself), then the trunk, then roots and the remaining canopy.
 //
 function applyTreeRevealPartGeometry(treeData, base, partIndex) {
-  const n = TREE_REVEAL_PART_COUNT
-  base.trunkSegs = sliceArrayIntoRevealParts(treeData.trunkSegs, partIndex, n)
-  base.rootSegs = sliceArrayIntoRevealParts(treeData.rootSegs, partIndex, n)
-  base.branchSegs = sliceArrayIntoRevealParts(treeData.branchSegs, partIndex, n)
-  const branchLeaves = leavesForBranchGroup(treeData, base.branchSegs)
-  const leafSlice = sliceArrayIntoRevealParts(treeData.leaves, partIndex, n)
-  base.leaves = mergeUniqueLeaves(branchLeaves, leafSlice)
+  const heroFrom = treeData.heroBranchSegFrom ?? treeData.branchSegs.length
+  const heroSegs = treeData.branchSegs.slice(heroFrom)
+  const otherSegs = treeData.branchSegs.slice(0, heroFrom)
+  const nearSegs = nearbyBranchSegs(treeData, otherSegs)
+  const farSegs = otherSegs.filter(seg => !nearSegs.includes(seg))
+  if (partIndex === 0) {
+    base.branchSegs = [...nearSegs, ...heroSegs]
+    base.leaves = leavesForBranchGroup(treeData, base.branchSegs)
+    return
+  }
+  if (partIndex === 1) {
+    base.trunkSegs = treeData.trunkSegs
+    return
+  }
+  base.rootSegs = treeData.rootSegs
+  base.branchSegs = farSegs
+  const claimed = new Set(leavesForBranchGroup(treeData, [...nearSegs, ...heroSegs]).map(leaf => `${leaf.x}|${leaf.y}`))
+  const farLeaves = treeData.leaves.filter(leaf => !claimed.has(`${leaf.x}|${leaf.y}`))
+  base.leaves = mergeUniqueLeaves(leavesForBranchGroup(treeData, farSegs), farLeaves)
+}
+//
+// Branches that sit next to the start platform — they appear with it so the
+// tree grows outward from the hero instead of in random thirds.
+//
+function nearbyBranchSegs(treeData, segs) {
+  const hb = treeData.horizBranch
+  if (!hb || !segs.length) return segs.slice(0, Math.min(NEAR_BRANCH_MIN_COUNT, segs.length))
+  const x1 = Math.min(hb.x1, hb.x2) - NEAR_BRANCH_PAD_X
+  const x2 = Math.max(hb.x1, hb.x2) + NEAR_BRANCH_PAD_X
+  const y1 = hb.y - NEAR_BRANCH_PAD_Y
+  const y2 = hb.y + NEAR_BRANCH_PAD_Y
+  const near = segs.filter(seg => {
+    const mx = (seg.sx + seg.ex) * 0.5
+    const my = (seg.sy + seg.ey) * 0.5
+    return mx >= x1 && mx <= x2 && my >= y1 && my <= y2
+  })
+  if (near.length >= NEAR_BRANCH_MIN_COUNT) return near
+  const ranked = [...segs].sort((a, b) => {
+    const da = branchDistToHero(a, hb)
+    const db = branchDistToHero(b, hb)
+    return da - db
+  })
+  return ranked.slice(0, Math.min(NEAR_BRANCH_MIN_COUNT, ranked.length))
+}
+function branchDistToHero(seg, hb) {
+  const mx = (seg.sx + seg.ex) * 0.5
+  const my = (seg.sy + seg.ey) * 0.5
+  const cx = (hb.x1 + hb.x2) * 0.5
+  const dx = mx - cx
+  const dy = my - hb.y
+  return dx * dx + dy * dy
 }
 //
 // Dedupes leaf entries by position key.

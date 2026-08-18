@@ -3,7 +3,7 @@ import * as BonusHero from '../../touch/components/bonus-hero.js'
 import { get, set } from '../../../utils/progress.js'
 import * as Sound from '../../../utils/sound.js'
 import { toCanvas } from '../../../utils/helper.js'
-import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT } from './cute-mushroom.js'
+import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from './cute-mushroom.js'
 import { GLOW_PAL, glowRgb, getCuteMushroomFlatDecorColors } from './glow-palette.js'
 import { buildRockVertices } from '../../../utils/draw-rock.js'
 import * as GlowFootParticles from './glow-foot-particles.js'
@@ -33,11 +33,16 @@ const MIDGE_SPEED_MAX = 22
 const MIDGE_RADIUS_MIN = 1.2
 const MIDGE_RADIUS_MAX = 2.4
 const MIDGE_Z = 14
+//
+// Skip midge circles that sit well outside the current camera window.
+//
+const MIDGE_DRAW_CULL_PAD = 48
 const MIDGE_PIT_SPREAD_X = 36
 const MIDGE_PIT_SPREAD_Y = 26
 const PIT_TRAMP_FORCE = 920
 const PIT_TRAMP_COOLDOWN = 0.55
 const PIT_TRAMP_W = 36
+const PIT_DRAW_CULL_MARGIN = 80
 const PIT_PARTICLE_COUNT = 28
 //
 // Five jump landings on the crack mouth also open the cave (stomp path)
@@ -57,6 +62,8 @@ const PIT_MUSH_OUTLINE_SPRITE = 'glow0-pit-mush-outline'
 const CAVE_LAYOUT_VERSION = 10
 const CAVE_WALL_ROCK_STEP = 3
 const CAVE_WALL_ROCK_LAYERS = 3
+const CAVE_INTERIOR_SPRITE = 'glow0-cave-interior'
+const CAVE_BAKE_PAD = 40
 const KEY_PIT_COLLAPSED = 'glow.pitCollapsed'
 const KEY_PIT_BONUS = 'glow.pitBonusCollected'
 const LEFT_MARGIN = 100
@@ -179,13 +186,17 @@ export function createGlowMidges(k, floorY, screenW, opts = {}) {
  */
 export function syncGlowMidgesZones(ctrl, zones, pitCollapsed) {
   if (!ctrl) return
-  ctrl.showLeft = Boolean(zones.groundDecorLeft || zones.water)
+  const showLeft = Boolean(zones.groundDecorLeft || zones.water)
   const rightOpen = zones.groundRightStripMax >= 0 || Boolean(zones.groundDecorRight)
-  ctrl.showRight = rightOpen
-  ctrl.showPit = Boolean(zones.groundDecorRight)
-  if (pitCollapsed && !ctrl.spreadAfterPit) {
-    spreadMidgesAfterPit(ctrl)
-  }
+  const showRight = rightOpen
+  const showPit = Boolean(zones.groundDecorRight)
+  const spread = Boolean(pitCollapsed && !ctrl.spreadAfterPit)
+  if (!spread && ctrl.showLeft === showLeft && ctrl.showRight === showRight &&
+    ctrl.showPit === showPit) return
+  ctrl.showLeft = showLeft
+  ctrl.showRight = showRight
+  ctrl.showPit = showPit
+  spread && spreadMidgesAfterPit(ctrl)
 }
 /**
  * @deprecated Use syncGlowMidgesZones
@@ -342,21 +353,29 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
   if (justLanded && grounded && pit.cracksVisible && overCrack && onCrackFloor) {
     pit.onCrackLandingShake?.()
   }
-  if (justLanded && !overCrack) {
-    pit.collapseArmed = false
-    pit.leftBonusAirborne = false
-  }
   const fallingOntoCrack = pit.collapseArmed && overCrack && !grounded &&
     footY != null &&
     footY >= pit.floorY - CRACK_FALL_OPEN_FEET_MAX &&
     (char.vel?.y ?? 0) > 0
-  if ((justLanded && grounded && pit.collapseArmed && overCrack && onCrackFloor && !onBonus) || fallingOntoCrack) {
+  const dropFromBonus = justLanded && grounded && pit.collapseArmed &&
+    overCrack && onCrackFloor && !onBonus
+  if (dropFromBonus || fallingOntoCrack) {
     collapsePit(pit)
     pit.crackStompCount = 0
     pit.collapseArmed = false
     pit.wasOnBonusPlat = false
     pit.leftBonusAirborne = false
     return
+  }
+  //
+  // Landing anywhere else ends the fall-from-log window. Jumping from the
+  // ground onto the cracks after that uses the five-stomp path, not a
+  // leftover arm from an earlier visit to the fragment log.
+  //
+  if (justLanded && grounded && !onBonus) {
+    pit.collapseArmed = false
+    pit.wasOnBonusPlat = false
+    pit.leftBonusAirborne = false
   }
   //
   // Stomp path: five normal jump landings on the crack entrance also collapse it
@@ -400,11 +419,18 @@ function clampHeroInCave(pit, char) {
  */
 export function drawGlowPit(k, pit, groundC, flatDecor = false) {
   if (!pit) return
+  const sc = pit.sceneRef
+  if (sc?.k && pit.zone && sc.camera?.viewW) {
+    const camX = sc.k.camPos().x
+    const zoom = sc.camera.zoom || 1
+    const half = sc.camera.viewW / (2 * zoom) + PIT_DRAW_CULL_MARGIN
+    if (pit.zone.x2 < camX - half || pit.zone.x1 > camX + half) return
+  }
   if (!pit.collapsed) {
     pit.cracksVisible && drawSurfaceCracks(k, pit, groundC, flatDecor)
     return
   }
-  drawCaveInteriorRockStyle(k, pit, groundC)
+  drawCaveInteriorRockStyle(k, pit)
   drawPitTrampoline(k, pit)
 }
 //
@@ -466,7 +492,8 @@ function bakeOnePitMushroomSprite(k, name, colors) {
       baseY: totalH - 2,
       width: mushW,
       colors,
-      withFace: true
+      withFace: true,
+      eyeScale: TRAMP_FACE_EYE_SCALE
     })
   })
   k.loadSprite(name, canvas)
@@ -477,8 +504,15 @@ function drawGlowMidges(k, ctrl) {
   const t = k.time()
   const base = ctrl.midgeRgb || { r: 28, g: 26, b: 22 }
   const midgeC = k.rgb(base.r, base.g, base.b)
+  const camX = k.camPos().x
+  const camScale = k.camScale?.()
+  const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
+  const half = k.width() / (2 * zoom) + MIDGE_DRAW_CULL_PAD
+  const minX = camX - half
+  const maxX = camX + half
   for (const m of ctrl.midges) {
     if (!midgeRoleVisible(ctrl, m.role)) continue
+    if (m.x < minX || m.x > maxX) continue
     const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 7 + m.phase))
     k.drawCircle({
       pos: k.vec2(m.x, m.y),
@@ -546,10 +580,19 @@ function drawSurfaceCracks(k, pit, groundC, flatDecor = false) {
     })
   }
 }
-function drawCaveInteriorRockStyle(k, pit, groundC) {
+function drawCaveInteriorRockStyle(k, pit) {
   const { zone, floorY } = pit
   if (!pit.wallProfile || pit.wallProfile.version !== CAVE_LAYOUT_VERSION) {
     pit.wallProfile = buildCaveSceneLayout(zone, floorY)
+    pit._caveSpriteReady = false
+  }
+  bakeCaveInteriorSprite(k, pit)
+  if (pit._caveSpriteReady) {
+    k.drawSprite({
+      sprite: CAVE_INTERIOR_SPRITE,
+      pos: k.vec2(pit._caveSpriteX, pit._caveSpriteY)
+    })
+    return
   }
   const layout = pit.wallProfile
   const mouth = layout.mouth
@@ -558,6 +601,74 @@ function drawCaveInteriorRockStyle(k, pit, groundC) {
   drawCaveVoidFill(k, mouth, pal)
   drawCaveLayoutRocks(k, layout.wallRocks, pal)
   drawCaveLayoutRocks(k, layout.pebbles, pal)
+}
+//
+// Bakes the static cave interior once — wall rocks are dozens of polygons
+// per frame otherwise, and the palette is a fixed decor gray.
+//
+function bakeCaveInteriorSprite(k, pit) {
+  const zone = pit.zone
+  const ox = zone.x1 - CAVE_BAKE_PAD
+  const oy = pit.floorY - 8
+  pit._caveSpriteX = ox
+  pit._caveSpriteY = oy
+  if (pit._caveSpriteReady) return
+  if (k.getSprite?.(CAVE_INTERIOR_SPRITE)) {
+    pit._caveSpriteReady = true
+    return
+  }
+  const layout = pit.wallProfile
+  if (!layout?.mouth) return
+  const w = Math.ceil(zone.width + CAVE_BAKE_PAD * 2)
+  const h = Math.ceil(zone.depth + CAVE_BAKE_PAD * 2)
+  const pal = buildCavePaletteFlat(glowRgb('decorGray'))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.translate(-ox, -oy)
+  fillCanvasPoly(ctx, caveMouthPts(layout.mouth), pal.void)
+  paintCanvasRocks(ctx, layout.wallRocks, pal)
+  paintCanvasRocks(ctx, layout.pebbles, pal)
+  k.loadSprite(CAVE_INTERIOR_SPRITE, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  pit._caveSpriteReady = true
+}
+function caveMouthPts(mouth) {
+  if (!mouth?.left?.length || !mouth?.right?.length) return []
+  const pts = []
+  pts.push({ x: mouth.left[0].x, y: mouth.floorY })
+  pts.push({ x: mouth.right[0].x, y: mouth.floorY })
+  for (let i = 1; i < mouth.right.length; i++) {
+    pts.push({ x: mouth.right[i].x, y: mouth.right[i].y })
+  }
+  pts.push({ x: mouth.right[mouth.right.length - 1].x, y: mouth.bottomY })
+  pts.push({ x: mouth.left[mouth.left.length - 1].x, y: mouth.bottomY })
+  for (let i = mouth.left.length - 1; i >= 1; i--) {
+    pts.push({ x: mouth.left[i].x, y: mouth.left[i].y })
+  }
+  return pts
+}
+function paintCanvasRocks(ctx, rocks, pal) {
+  if (!rocks?.length) return
+  const tone = caveRockPalette(pal.void)
+  const fill = { r: tone.fillR, g: tone.fillG, b: tone.fillB }
+  const shade = { r: tone.darkR, g: tone.darkG, b: tone.darkB }
+  rocks.forEach((rock, idx) => {
+    if (!rock.verts?.length) return
+    const pts = rock.verts.map(v => ({ x: rock.x + v.x, y: rock.y + v.y }))
+    fillCanvasPoly(ctx, pts, idx % 2 === 0 ? fill : shade)
+  })
+}
+function fillCanvasPoly(ctx, pts, rgb) {
+  if (!pts || pts.length < 3) return
+  ctx.fillStyle = `rgb(${rgb.r},${rgb.g},${rgb.b})`
+  ctx.beginPath()
+  ctx.moveTo(pts[0].x, pts[0].y)
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
+  ctx.closePath()
+  ctx.fill()
 }
 //
 // Pit-floor mushroom — lighter cap so it reads on the decor-gray floor.
@@ -969,7 +1080,7 @@ function drawPitTrampoline(k, pit) {
   const mushW = PIT_TRAMP_W
   const mushH = mushW * CUTE_MUSHROOM_ASPECT
   const sc = pit.sceneRef
-  const outlined = sc?.zones?.colorWorld || (sc?.colorFade ?? 0) >= 0.5
+  const outlined = sc?.zones?.oCollected || sc?.zones?.colorWorld || (sc?.colorFade ?? 0) >= 0.5
   const sprite = outlined ? PIT_MUSH_OUTLINE_SPRITE : PIT_MUSH_SPRITE
   k.drawSprite({
     sprite,

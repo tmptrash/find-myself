@@ -9,6 +9,7 @@ const FADE_SPEED = 6
 const TOUCH_INSTANT_OPACITY = 1
 const TOOLTIP_Y_OFFSET = -50
 const TOOLTIP_Z_INDEX = 500
+const TOOLTIP_Z_STACK_SPAN = 12
 const SCREEN_EDGE_MARGIN = 6
 const LINE_SPACING = 6
 //
@@ -65,6 +66,7 @@ let globalSuppressed = false
  * @param {string} cfg.targets[].text - Tooltip text (supports \n for multiline)
  * @param {number} [cfg.targets[].offsetY] - Custom Y offset for tooltip (default: TOOLTIP_Y_OFFSET)
  * @param {boolean} [cfg.targets[].forceBelow] - Force tooltip to appear below the target
+ * @param {boolean} [cfg.targets[].forceAbove] - Keep the bubble above the target even if it overlaps the HUD
  * @param {boolean} [cfg.forceVisible] - Skip hover detection, keep tooltip always visible
  * @param {Object} [cfg.clampInset] - Extra screen inset when clamping the bubble
  * @param {number} [cfg.clampInset.left] - Left playfield / chrome inset
@@ -91,7 +93,9 @@ export function create(cfg) {
     clampInset
   }
   //
-  // Game object with high z-index so tooltip renders in front of everything
+  // One drawer: bubble then pointer then text so the ear sits on its own
+  // cloud. Stack z puts an earlier (lower) tooltip above a later one, so a
+  // downward ear that crosses a neighbour is covered by that neighbour.
   //
   const drawer = k.add([
     k.pos(0, 0),
@@ -186,27 +190,72 @@ function measureText(k, text, font) {
   return { width: fmt.width, height: fmt.height }
 }
 //
-// Draw the speech bubble with background, border, pointer, and text.
-// Uses frozen position (snapshotted on hover start) so text never shifts
-// sub-pixel while visible, eliminating glyph shimmer.
-// Automatically flips below the target if the bubble would go off the top edge.
+// Ear sits on its own bubble; a neighbour with higher z covers this ear
+// when the triangle stretches into that other cloud.
 //
 function onDraw(inst) {
-  if (inst.opacity <= 0.01 || !inst.activeTarget || (!inst.frozenX && !inst.frozenY)) return
+  const layout = inst._layout
+  if (!layout) return
+  const { k } = inst
+  k.drawRect({
+    pos: k.vec2(layout.bubbleX - BUBBLE_BORDER_WIDTH, layout.bubbleY - BUBBLE_BORDER_WIDTH),
+    width: layout.totalW,
+    height: layout.totalH,
+    radius: BUBBLE_CORNER_RADIUS + BUBBLE_BORDER_WIDTH,
+    color: layout.borderColor,
+    opacity: inst.opacity,
+    fixed: true
+  })
+  k.drawRect({
+    pos: k.vec2(layout.bubbleX, layout.bubbleY),
+    width: layout.bubbleW,
+    height: layout.bubbleH,
+    radius: BUBBLE_CORNER_RADIUS,
+    color: layout.bgColor,
+    opacity: inst.opacity * BUBBLE_BG_OPACITY,
+    fixed: true
+  })
+  drawPointer(
+    k,
+    layout.clampedPointerX,
+    layout.pointerBaseEdge,
+    layout.pointerTipY,
+    layout.borderColor,
+    layout.bgColor,
+    inst.opacity,
+    layout.showBelow
+  )
+  k.drawText({
+    text: layout.labelText,
+    size: FONT_SIZE,
+    font: inst.font,
+    align: "center",
+    lineSpacing: LINE_SPACING,
+    pos: k.vec2(
+      Math.round(layout.bubbleX + layout.bubbleW / 2),
+      Math.round(layout.bubbleY + layout.bubbleH / 2)
+    ),
+    anchor: "center",
+    color: k.rgb(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B),
+    opacity: inst.opacity,
+    fixed: true
+  })
+}
+//
+// Resolves bubble geometry for this frame and registers it for stacking.
+//
+function refreshLayout(inst) {
+  if (inst.opacity <= 0.01 || !inst.activeTarget || (!inst.frozenX && !inst.frozenY)) {
+    inst._layout = null
+    return
+  }
   const { k } = inst
   const target = inst.activeTarget
-  //
-  // Clear registry at the start of each frame
-  //
   const currentFrame = k.time()
   if (currentFrame !== lastRegistryFrame) {
     activeTooltipRects.length = 0
     lastRegistryFrame = currentFrame
   }
-  //
-  // Bubble uses frozen screen position for stable text rendering (no glyph shimmer).
-  // Pointer tracks the live target position so it follows the moving object.
-  //
   const liveScreen = targetScreenPos(k, target)
   const liveX = liveScreen.x
   const liveY = liveScreen.y
@@ -225,120 +274,67 @@ function onDraw(inst) {
   const insetRight = inset.right ?? 0
   const insetTop = inset.top ?? 0
   const insetBottom = inset.bottom ?? 0
-  //
-  // Decide placement: above or below target.
-  // Flips below if the bubble would go off the top edge or forceBelow is set.
-  //
   const aboveY = inst.frozenY + offsetY - bubbleH
   const belowThreshold = insetTop + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
-  const showBelow = target.forceBelow || aboveY < belowThreshold
-  //
-  // Clamp bubble horizontally so it stays within the playfield / screen edges.
-  // Off-screen world targets pin to the left or right playfield edge.
-  //
+  const showBelow = !target.forceAbove && (target.forceBelow || aboveY < belowThreshold)
   let bubbleX = Math.round(bubbleCenterX - bubbleW / 2)
   const minX = insetLeft + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const maxX = screenW - insetRight - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleW
   bubbleX = Math.max(minX, Math.min(maxX, bubbleX))
-  //
-  // Position bubble above or below the target
-  //
-  let bubbleY
-  if (showBelow) {
-    bubbleY = inst.frozenY + Math.abs(offsetY)
-  } else {
-    bubbleY = aboveY
-  }
-  //
-  // Clamp vertically within screen
-  //
-  const minY = insetTop + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
+  let bubbleY = showBelow ? inst.frozenY + Math.abs(offsetY) : aboveY
+  const minY = (target.forceAbove ? 0 : insetTop) + SCREEN_EDGE_MARGIN + BUBBLE_BORDER_WIDTH
   const maxY = screenH - insetBottom - SCREEN_EDGE_MARGIN - BUBBLE_BORDER_WIDTH - bubbleH
   bubbleY = Math.max(minY, Math.min(maxY, bubbleY))
-  //
-  // Shift bubble up if it overlaps with an already-drawn tooltip
-  //
   bubbleY = avoidOverlap(bubbleX, bubbleY, totalW, totalH, minY)
   const borderColor = k.rgb(BUBBLE_BORDER_R, BUBBLE_BORDER_G, BUBBLE_BORDER_B)
   const bgColor = k.rgb(BUBBLE_BG_R, BUBBLE_BG_G, BUBBLE_BG_B)
-  //
-  // Draw border (slightly larger rounded rect behind the background)
-  //
-  k.drawRect({
-    pos: k.vec2(bubbleX - BUBBLE_BORDER_WIDTH, bubbleY - BUBBLE_BORDER_WIDTH),
-    width: totalW,
-    height: totalH,
-    radius: BUBBLE_CORNER_RADIUS + BUBBLE_BORDER_WIDTH,
-    color: borderColor,
-    opacity: inst.opacity,
-    fixed: true
-  })
-  //
-  // Draw background fill
-  //
-  k.drawRect({
-    pos: k.vec2(bubbleX, bubbleY),
-    width: bubbleW,
-    height: bubbleH,
-    radius: BUBBLE_CORNER_RADIUS,
-    color: bgColor,
-    opacity: inst.opacity * BUBBLE_BG_OPACITY,
-    fixed: true
-  })
-  //
-  // Draw triangle pointer tracking live target X, clamped within bubble width.
-  // Pointer points downward (below bubble) when above, upward (above bubble) when below.
-  //
   const clampedPointerX = Math.max(
     bubbleX + POINTER_WIDTH,
     Math.min(bubbleX + bubbleW - POINTER_WIDTH, liveX)
   )
   const liveOffsetY = target.offsetY ?? TOOLTIP_Y_OFFSET
+  let pointerTipY
+  let pointerBaseEdge
   if (showBelow) {
-    //
-    // Pointer above bubble, pointing up toward target
-    //
-    const pointerTipY = Math.max(
+    pointerTipY = Math.max(
       liveY + Math.abs(liveOffsetY) - POINTER_HEIGHT,
       SCREEN_EDGE_MARGIN
     )
-    const pointerBaseEdge = bubbleY + BUBBLE_BORDER_WIDTH + 1
-    drawPointer(k, clampedPointerX, pointerBaseEdge, pointerTipY, borderColor, bgColor, inst.opacity, true)
+    pointerBaseEdge = bubbleY + BUBBLE_BORDER_WIDTH + 1
   } else {
-    //
-    // Pointer below bubble, pointing down toward target
-    //
-    const pointerTipY = Math.min(
+    pointerTipY = Math.min(
       liveY + liveOffsetY + POINTER_HEIGHT,
       screenH - SCREEN_EDGE_MARGIN
     )
-    const pointerBaseEdge = bubbleY + bubbleH - BUBBLE_BORDER_WIDTH - 1
-    drawPointer(k, clampedPointerX, pointerBaseEdge, pointerTipY, borderColor, bgColor, inst.opacity, false)
+    pointerBaseEdge = bubbleY + bubbleH - BUBBLE_BORDER_WIDTH - 1
   }
-  //
-  // Draw text centered inside the bubble
-  //
-  k.drawText({
-    text: labelText,
-    size: FONT_SIZE,
-    font: inst.font,
-    align: "center",
-    lineSpacing: LINE_SPACING,
-    pos: k.vec2(Math.round(bubbleX + bubbleW / 2), Math.round(bubbleY + bubbleH / 2)),
-    anchor: "center",
-    color: k.rgb(TEXT_COLOR_R, TEXT_COLOR_G, TEXT_COLOR_B),
-    opacity: inst.opacity,
-    fixed: true
-  })
-  //
-  // Register this tooltip's bounding box for overlap avoidance
-  //
   activeTooltipRects.push({
     x: bubbleX - BUBBLE_BORDER_WIDTH,
     y: bubbleY - BUBBLE_BORDER_WIDTH,
     w: totalW,
     h: totalH
   })
+  //
+  // Earlier tooltips sit lower after stacking and keep a higher z, so their
+  // cloud covers a later tooltip's downward ear when the two overlap.
+  //
+  const stackIndex = activeTooltipRects.length - 1
+  inst.drawer && (inst.drawer.z = TOOLTIP_Z_INDEX + (TOOLTIP_Z_STACK_SPAN - stackIndex))
+  inst._layout = {
+    bubbleX,
+    bubbleY,
+    bubbleW,
+    bubbleH,
+    totalW,
+    totalH,
+    labelText,
+    borderColor,
+    bgColor,
+    showBelow,
+    clampedPointerX,
+    pointerBaseEdge,
+    pointerTipY
+  }
 }
 //
 // Shift bubbleY upward until it no longer overlaps with any registered tooltip
@@ -398,6 +394,7 @@ function onUpdate(inst) {
   if (globalSuppressed) {
     inst.opacity = Math.max(0, inst.opacity - k.dt() * FADE_SPEED)
     if (inst.opacity <= 0) inst.activeTarget = null
+    refreshLayout(inst)
     return
   }
   //
@@ -405,6 +402,7 @@ function onUpdate(inst) {
   //
   if (inst.forceVisible) {
     inst.activeTarget && syncFrozenScreenPos(inst, inst.activeTarget)
+    refreshLayout(inst)
     return
   }
   const pointers = TouchInput.getHoverPointers(k)
@@ -416,6 +414,7 @@ function onUpdate(inst) {
   if (touchInstant && !TouchInput.hasActiveTouch()) {
     inst.opacity = 0
     inst.activeTarget = null
+    refreshLayout(inst)
     return
   }
   //
@@ -469,6 +468,7 @@ function onUpdate(inst) {
     inst.opacity = 0
     inst.activeTarget = null
   }
+  refreshLayout(inst)
 }
 //
 // Resolves tooltip label (supports dynamic getter functions)

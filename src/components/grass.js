@@ -21,6 +21,13 @@ const TUFT_SPREAD = 14
 //
 const TUFT_PLACE_ATTEMPTS = 24
 const SPRITE_PREFIX = 'grass-blade-'
+const CULL_PAD = 48
+//
+// Reused draw colour so settled fields do not allocate k.rgb per blade.
+//
+let lastTintRef = null
+let lastTintRgb = null
+let lastTintK = null
 
 /**
  * Creates a swaying grass field along a ground line
@@ -101,6 +108,7 @@ function buildBlades(left, right, tuftCount, excluded, density) {
       })
     }
   }
+  blades.sort((a, b) => a.x - b.x)
   return blades
 }
 //
@@ -148,9 +156,20 @@ function drawBladeShape(ctx, baseX, baseY, height) {
 function onDraw(inst) {
   const k = inst.k
   const time = k.time()
-  for (const blade of inst.blades) {
+  const blades = inst.blades
+  const camX = k.camPos().x
+  const camScale = k.camScale?.()
+  const zoom = (typeof camScale === 'object' ? camScale.x : camScale) || 1
+  const half = k.width() / (2 * zoom) + CULL_PAD
+  const minX = camX - half
+  const maxX = camX + half
+  const start = firstBladeAtOrAfter(blades, minX)
+  for (let i = start; i < blades.length; i++) {
+    const blade = blades[i]
+    if (blade.x > maxX) break
     const tint = inst.getTint(blade)
     if (!tint) continue
+    const color = grassTintRgb(k, tint)
     const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG
     k.drawSprite({
       sprite: SPRITE_PREFIX + blade.variant,
@@ -160,8 +179,31 @@ function onDraw(inst) {
       height: BLADE_H * blade.scale,
       angle,
       flipX: blade.flipX,
-      color: k.rgb(tint.r, tint.g, tint.b),
+      color,
       opacity: tint.opacity ?? 1
     })
   }
+}
+//
+// Reuses the last k.rgb when getTint returns the same object (settled colour world).
+//
+function grassTintRgb(k, tint) {
+  if (lastTintK === k && lastTintRef === tint && lastTintRgb) return lastTintRgb
+  lastTintK = k
+  lastTintRef = tint
+  lastTintRgb = k.rgb(tint.r, tint.g, tint.b)
+  return lastTintRgb
+}
+//
+// First blade whose x is >= minX in the sorted blade list.
+//
+function firstBladeAtOrAfter(blades, minX) {
+  let lo = 0
+  let hi = blades.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (blades[mid].x < minX) lo = mid + 1
+    else hi = mid
+  }
+  return lo
 }

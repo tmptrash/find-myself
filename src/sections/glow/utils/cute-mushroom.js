@@ -31,6 +31,10 @@ const MOUTH_LINE_WIDTH = 3.4
 const CLOSED_EYE_LINE_WIDTH = 3
 const MIN_LINE_WIDTH = 1
 //
+// Trampoline mushrooms use larger eyes than the reference sketch.
+//
+export const TRAMP_FACE_EYE_SCALE = 1.55
+//
 // White cap spots: [refX, refY, refRadius].
 //
 const SPOTS = [
@@ -54,13 +58,15 @@ export const CUTE_MUSHROOM_ASPECT = REF_HEIGHT / REF_WIDTH
  * @param {Object} opts.colors - Palette hex set: body, bodyShade, cap, capDark, capLight, spot, outline, face, blush
  * @param {boolean} [opts.withFace=false] - Draw the eyes/smile/blush face
  * @param {boolean} [opts.eyesOpen=true] - Face variant: open pupils or closed-arc eyelids
+ * @param {number} [opts.eyeScale=1] - Multiplier for trampoline eye size
  */
 export function drawCuteMushroomToCanvas(ctx, opts) {
-  const { cx, baseY, width, colors, withFace = false, eyesOpen = true } = opts
+  const { cx, baseY, width, colors, withFace = false, eyesOpen = true, eyeScale = 1 } = opts
   const s = width / REF_WIDTH
   const inst = {
     ctx,
     s,
+    eyeScale,
     //
     // Reference-to-canvas coordinate mappers.
     //
@@ -154,15 +160,16 @@ function drawSpots(inst) {
 // smiling eyelid arcs), a small smile and blush cheeks.
 //
 function drawFace(inst, eyesOpen) {
-  const { ctx, s, x, y, colors } = inst
+  const { ctx, s, x, y, colors, eyeScale } = inst
+  const e = s * (eyeScale || 1)
   for (const ex of [REF_CX - 24, REF_CX + 24]) {
     if (eyesOpen) {
       ctx.beginPath()
-      ctx.ellipse(x(ex), y(312), 5.5 * s, 7 * s, 0, 0, Math.PI * 2)
+      ctx.ellipse(x(ex), y(312), 5.5 * e, 7 * e, 0, 0, Math.PI * 2)
       ctx.fillStyle = css(colors.face)
       ctx.fill()
       ctx.beginPath()
-      ctx.arc(x(ex + 1.6), y(309.5), 1.8 * s, 0, Math.PI * 2)
+      ctx.arc(x(ex + 1.6), y(309.5), 1.8 * e, 0, Math.PI * 2)
       ctx.fillStyle = css(colors.spot)
       ctx.fill()
     } else {
@@ -170,8 +177,8 @@ function drawFace(inst, eyesOpen) {
       // Closed eye: a downward eyelid arc in the face tone.
       //
       ctx.beginPath()
-      ctx.arc(x(ex), y(308), 6 * s, 0.2 * Math.PI, 0.8 * Math.PI)
-      ctx.lineWidth = Math.max(MIN_LINE_WIDTH, CLOSED_EYE_LINE_WIDTH * s)
+      ctx.arc(x(ex), y(308), 6 * e, 0.2 * Math.PI, 0.8 * Math.PI)
+      ctx.lineWidth = Math.max(MIN_LINE_WIDTH, CLOSED_EYE_LINE_WIDTH * e)
       ctx.strokeStyle = css(colors.face)
       ctx.stroke()
     }

@@ -3956,6 +3956,69 @@ export function stopWaterStepsLoop(instance) {
   instance._waterStepsLoopActive = false
 }
 //
+// Glow trampoline lake wading: the clip is 1 s; chain with a short pause
+// or, sometimes, an overlap just before the take ends.
+//
+const TRAMP_WATER_STEPS_DURATION = 1
+const TRAMP_WATER_STEPS_PAUSE_MAX = 0.5
+const TRAMP_WATER_STEPS_OVERLAP_CHANCE = 0.4
+const TRAMP_WATER_STEPS_OVERLAP_MIN = 0.12
+const TRAMP_WATER_STEPS_OVERLAP_RANGE = 0.22
+const TRAMP_WATER_STEPS_VOLUME = 0.42
+/**
+ * Loops water-steps.mp3 while the glow trampoline mushroom wades the lake.
+ * After each take: a 0–500 ms pause, or sometimes an overlap before the clip ends.
+ * @param {Object} instance - Sound instance (must have _k Kaplay reference)
+ * @param {boolean} inWater - Whether the mushroom is currently in the lake
+ */
+export function updateTrampWaterStepsPlayback(instance, inWater) {
+  if (!instance?._k) return
+  instance._trampWaterStepsWanted = inWater
+  if (!inWater) return
+  if (instance._trampWaterStepsBusy) return
+  playTrampWaterStepsOnce(instance)
+}
+/**
+ * Stops the trampoline lake water-steps chain.
+ * @param {Object} instance - Sound instance
+ */
+export function stopTrampWaterStepsLoop(instance) {
+  if (!instance) return
+  instance._trampWaterStepsWanted = false
+  instance._trampWaterStepsBusy = false
+  instance._trampWaterStepsGen = (instance._trampWaterStepsGen || 0) + 1
+  try {
+    instance._trampWaterStepsHandle?.stop?.()
+  } catch (error) {
+    //
+    // Already stopped
+    //
+  }
+  instance._trampWaterStepsHandle = null
+}
+//
+// Plays one 1 s water-steps take and schedules the next with a pause or overlap.
+//
+function playTrampWaterStepsOnce(instance) {
+  if (!instance._trampWaterStepsWanted || globalMuteProceduralSounds || !instance._k) return
+  const k = instance._k
+  const handle = k.play('water-steps', { loop: false, volume: TRAMP_WATER_STEPS_VOLUME })
+  if (!handle) return
+  instance._trampWaterStepsHandle = handle
+  instance._trampWaterStepsBusy = true
+  const gen = (instance._trampWaterStepsGen = (instance._trampWaterStepsGen || 0) + 1)
+  const overlap = Math.random() < TRAMP_WATER_STEPS_OVERLAP_CHANCE
+  const delay = overlap
+    ? TRAMP_WATER_STEPS_DURATION -
+      (TRAMP_WATER_STEPS_OVERLAP_MIN + Math.random() * TRAMP_WATER_STEPS_OVERLAP_RANGE)
+    : TRAMP_WATER_STEPS_DURATION + Math.random() * TRAMP_WATER_STEPS_PAUSE_MAX
+  k.wait(delay, () => {
+    if (instance._trampWaterStepsGen !== gen) return
+    instance._trampWaterStepsBusy = false
+    instance._trampWaterStepsWanted && playTrampWaterStepsOnce(instance)
+  })
+}
+//
 // Plays one water-steps track and schedules the next if still wading.
 //
 function playWaterStepsLoopOnce(instance, volume) {

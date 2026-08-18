@@ -595,8 +595,8 @@ export function prepareDesaturatedLifeSprite(k) {
   return k._lifeDesatPromise || Promise.resolve()
 }
 //
-// Bakes a desaturated copy of life.png so the HUD teacher can go fully
-// one-colour in Glow's gray world (a grey tint on a colour photo still shows hue).
+// Bakes a flat white silhouette of life.png so Glow's gray-world tint
+// paints the HUD teacher as one solid decor-gray shape.
 //
 function ensureDesaturatedLifeSprite(k) {
   if (k._lifeDesatReady === true || k._lifeDesatReady === 'pending') return
@@ -612,16 +612,14 @@ function ensureDesaturatedLifeSprite(k) {
       canvas.width = bitmap.width
       canvas.height = bitmap.height
       const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      ctx.filter = 'grayscale(100%)'
       ctx.drawImage(bitmap, 0, 0)
-      ctx.filter = 'none'
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const px = imageData.data
       for (let i = 0; i < px.length; i += 4) {
-        const y = (px[i] * 30 + px[i + 1] * 59 + px[i + 2] * 11) / 100
-        px[i] = y
-        px[i + 1] = y
-        px[i + 2] = y
+        if (px[i + 3] === 0) continue
+        px[i] = 255
+        px[i + 1] = 255
+        px[i + 2] = 255
       }
       ctx.putImageData(imageData, 0, 0)
       bitmap.close?.()

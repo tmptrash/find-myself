@@ -47,6 +47,7 @@ export function create(cfg) {
     // When true, the bubble tracks the hero each frame (e.g. drowning)
     //
     followHero: false,
+    forceAbove: false,
     //
     // Seconds to wait before showing the next queued hint (optional per item).
     //
@@ -77,12 +78,14 @@ export function isActive(inst) {
  * @param {number} [opts.anchorY] - Optional world Y override for the bubble
  * @param {number} [opts.dismissDistance] - Walk-away dismiss radius in px (default 30)
  * @param {boolean} [opts.dismissOnJump=true] - Dismiss when the hero jumps
+ * @param {boolean} [opts.forceAbove=false] - Keep the bubble above the hero
  */
 export function show(inst, text, duration, opts = {}) {
   inst.queue = []
   inst.onQueueEmpty = null
   inst.ignoreMovementDismiss = Boolean(opts.ignoreMovementDismiss)
   inst.followHero = Boolean(opts.followHero)
+  inst.forceAbove = Boolean(opts.forceAbove)
   inst.dismissDistance = opts.dismissDistance ?? HINT_DISMISS_DISTANCE
   inst.dismissOnJump = opts.dismissOnJump !== false
   inst.anchorOverride = (opts.anchorX != null && opts.anchorY != null)
@@ -118,6 +121,7 @@ export function clear(inst) {
   inst.queuePauseRemaining = 0
   inst.ignoreMovementDismiss = false
   inst.followHero = false
+  inst.forceAbove = false
   inst.dismissDistance = HINT_DISMISS_DISTANCE
   inst.dismissOnJump = true
   destroyHint(inst)
@@ -165,7 +169,8 @@ function startHint(inst, text, duration) {
     width: 1,
     height: 1,
     text,
-    offsetY: HINT_OFFSET_Y
+    offsetY: HINT_OFFSET_Y,
+    forceAbove: Boolean(inst.forceAbove)
   }
   inst.tooltip = Tooltip.create({
     k,

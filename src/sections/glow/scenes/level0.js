@@ -583,7 +583,7 @@ const KEY_TRAMP_WALKED = 'glow.trampWalked'
 //
 const TRAMP_MUSH_LAND_REVEAL_DIST = 80
 const TRAMP_MISSING_HINT_TEXT = 'Something\'s\nmissing here'
-const TRAMP_FIRST_REVEAL_HINT_TEXT = 'It\'s so big. Is\nthat really a mushroom?'
+const TRAMP_FIRST_REVEAL_HINT_TEXT = 'It\'s so big. Is that\nreally a mushroom?'
 const TRAMP_SECOND_REVEAL_HINT_TEXT = 'Oh, another one'
 const TRAMP_REVEAL_HINT_DURATION = 5
 const KEY_BONUS_COLLECTED = 'glow.bonusCollected'
@@ -647,8 +647,8 @@ const GLOW_DIALOG_SOUND_O = 'glow-ow'
 // when the right ground / water zones first open, and a consolation line on
 // the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan.\nI found myself in a world\nI cannot fully perceive.\nTo understand where I am\nand what\'s happening to me,\nI need to learn to see it.'
-const HINT_INTRO_1_DURATION = 11
+const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself\nin a world I cannot fully\nperceive. To understand where\nI am and what\'s happening to me,\nI need to learn to see it.'
+const HINT_INTRO_1_DURATION = 16
 const HINT_INTRO_2_TEXT = 'Use AWD, ←, →, ↑, Space keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
 const HINT_INTRO_2_DURATION = 18
 //
@@ -664,7 +664,7 @@ const HINT_ZONE_DURATION = 5
 //
 // Walking this far from a Glow speech bubble dismisses it early.
 //
-const GLOW_HINT_DISMISS_DISTANCE = 40
+const GLOW_HINT_DISMISS_DISTANCE = 60
 const GLOW_SFX_FADE_DURATION = 10
 const GLOW_WORLD_AUDIO_FADE_DURATION = 10
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
@@ -734,7 +734,7 @@ const O_TOOLTIP_Y_OFFSET = -80
 //
 const TRAMP_TOOLTIP_Y_OFFSET = -90
 //
-// Buried skeleton hover — sits in the underground root band after L
+// Buried skeleton hover — visible once the left underground band is open
 //
 const SKELETON_TOOLTIP_TEXT = "I'm tired..."
 const SKELETON_TOOLTIP_WIDTH = 56
@@ -760,9 +760,9 @@ const LIFE_TOOLTIP_Y_OFFSET = 50
 //
 // GLOW word (top-left HUD) hover tooltip — same style as touch lesson 0.
 //
-const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'I started noticing\nthe world around me'
-const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'The world has shades'
-const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'I never thought the world\ncould be so beautiful'
+const GLOW_INDICATOR_TOOLTIP_AFTER_G = 'Explore'
+const GLOW_INDICATOR_TOOLTIP_AFTER_L = 'Learn to see the nuances'
+const GLOW_INDICATOR_TOOLTIP_AFTER_O = 'Stop and pay attention'
 const GLOW_INDICATOR_TOOLTIP_HEIGHT = 50
 const GLOW_INDICATOR_TOOLTIP_Y_OFFSET = -30
 //
@@ -778,7 +778,7 @@ const HINT_W_DURATION = 4
 //
 // Shown once when the third start-branch jump finishes revealing the tree.
 //
-const HINT_TREE_REVEAL_TEXT = 'Oh. There\'s a tree here.'
+const HINT_TREE_REVEAL_TEXT = 'Oh. There\'s\na tree here.'
 const HINT_TREE_REVEAL_DURATION = 3
 //
 // Hint text about the 3 bonus fragments (shown by the bonus-hero component).
@@ -1604,9 +1604,11 @@ function initGlowLevel0Scene(k) {
         cheekyTooltip: null,
         marioEligibleSince: null,
         marioHintCooldown: 0,
-        marioHintTooltip: null
+        marioHintTooltip: null,
+        marioHintSpawnX: null,
+        marioHintSpawnY: null
       },
-      trampMissingHints: { right: null, branch: null },
+      trampMissingHints: { right: null, branch: null, cave: null },
       trampBounceAir: false,
       trampToLApproach: false,
       lPlat,
@@ -1848,7 +1850,7 @@ function startGlowIntro(inst) {
   if (get(KEY_INTRO_SHOWN, false)) {
     finishGlowIntro(inst)
     //
-    // Post-death reminder: timer, Space/Esc, or walking 40 px away. Jump
+    // Post-death reminder: timer, Space/Esc, or walking 60 px away. Jump
     // dismissal stays off so the respawn landing itself can't wipe it instantly.
     //
     HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
@@ -2115,10 +2117,11 @@ function createSmallHeroTooltip(inst) {
       text: SKELETON_TOOLTIP_TEXT,
       offsetY: SKELETON_TOOLTIP_Y_OFFSET,
       //
-      // Skeleton lives in the underground band revealed with the L parallax.
+      // Skeleton sits in the left underground band, which opens with the
+      // left ground — not only after the L parallax / letter.
       //
       visible: () => Boolean(inst.undergroundSkeleton) &&
-        (inst.zones.lZoneParallax || inst.zones.lCollected) &&
+        (inst.zones.groundDecorLeft || inst.zones.lZoneParallax || inst.zones.lCollected) &&
         !inst.dialogOpen
     }, {
       x: () => inst.gLetter?.x ?? -1000,
@@ -3738,11 +3741,14 @@ function buildUndergroundSpec() {
     pebbles.push(stones)
   }
   //
-  // Rootlets — thin hair-roots hanging down from the ground line.
+  // Rootlets — thin hair-roots hanging down from dry ground only. The whole
+  // left field is the lake, so nothing hangs under the water.
   //
+  const dryX1 = TREE_X + TRUNK_EXCLUDE_HALF
+  const randRootX = () => dryX1 + Math.random() * Math.max(1, areaX2 - dryX1)
   const rootlets = []
   for (let i = 0; i < UG_ROOTLET_COUNT; i++) {
-    const rx = randX()
+    const rx = randRootX()
     const pts = [{ x: rx, y: FLOOR_Y + 4 }]
     let px = rx
     let py = FLOOR_Y + 4
@@ -3835,7 +3841,10 @@ function renderUndergroundSpec(ctx, spec, tones) {
   ctx.strokeStyle = deepCss
   ctx.globalAlpha = 0.6
   ctx.lineWidth = 1.6
-  spec.rootlets.forEach(pts => strokePolyline(ctx, pts))
+  spec.rootlets.forEach(pts => {
+    if ((pts[0]?.x ?? 0) < TREE_X - TRUNK_EXCLUDE_HALF) return
+    strokePolyline(ctx, pts)
+  })
   ctx.globalAlpha = 1
   //
   // Fossil spiral — a small two-turn ammonite drawn in the light tone.
@@ -7149,6 +7158,8 @@ function clearBranchTrampMarioHint(inst) {
   if (!tw?.marioHintTooltip) return
   Tooltip.destroy(tw.marioHintTooltip)
   tw.marioHintTooltip = null
+  tw.marioHintSpawnX = null
+  tw.marioHintSpawnY = null
 }
 //
 // One-shot nudge on the branch trampoline when water and the right ground
@@ -7178,7 +7189,11 @@ function updateBranchTrampMarioHint(inst) {
   }
   const k = inst.k
   if (tw.marioHintTooltip) {
-    Math.abs(heroX - inst.branchTrampState.x) >= GLOW_HINT_DISMISS_DISTANCE &&
+    const ch = inst.heroInst?.character
+    const sx = tw.marioHintSpawnX
+    const sy = tw.marioHintSpawnY
+    ch?.pos && sx != null && sy != null &&
+      Math.hypot(ch.pos.x - sx, ch.pos.y - sy) >= GLOW_HINT_DISMISS_DISTANCE &&
       clearBranchTrampMarioHint(inst)
     return
   }
@@ -7188,6 +7203,9 @@ function updateBranchTrampMarioHint(inst) {
   tw.marioHintCooldown = (tw.marioHintCooldown ?? 0) - k.dt()
   if (tw.marioHintCooldown > 0) return
   tw.marioHintCooldown = BRANCH_TRAMP_MARIO_HINT_REPEAT
+  const ch = inst.heroInst?.character
+  tw.marioHintSpawnX = ch?.pos?.x ?? heroX
+  tw.marioHintSpawnY = ch?.pos?.y ?? FLOOR_Y
   tw.marioHintTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
@@ -7203,8 +7221,11 @@ function updateBranchTrampMarioHint(inst) {
   tw.marioHintTooltip.activeTarget = tw.marioHintTooltip.targets[0]
   tw.marioHintTooltip.opacity = 1
   k.wait(BRANCH_TRAMP_MARIO_HINT_DURATION, () => {
-    tw.marioHintTooltip && Tooltip.destroy(tw.marioHintTooltip)
+    if (!tw.marioHintTooltip) return
+    Tooltip.destroy(tw.marioHintTooltip)
     tw.marioHintTooltip = null
+    tw.marioHintSpawnX = null
+    tw.marioHintSpawnY = null
   })
 }
 //
@@ -7544,7 +7565,7 @@ function isHeroNearUnrevealedTrampSpot(inst, heroX) {
   const z = inst.zones
   if (z.colorWorld) return false
   const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
-  if (!z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) return true
+  if (z.gCollected && !z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) return true
   if (!z.branchTrampRevealed && near(inst.branchTrampState?.x ?? -9999)) return true
   return false
 }
@@ -7553,17 +7574,32 @@ function isHeroNearUnrevealedTrampSpot(inst, heroX) {
 //
 function updateTrampMissingPlaceHints(inst, heroX, footY, grounded) {
   const z = inst.zones
-  inst.trampMissingHints = inst.trampMissingHints ?? { right: null, branch: null }
+  inst.trampMissingHints = inst.trampMissingHints ?? { right: null, branch: null, cave: null }
   const canShow = grounded && footY >= FLOOR_Y - 28 && !z.colorWorld
-  const sync = (slotKey, trampX, revealed) => {
-    const show = canShow && !revealed && Math.abs(heroX - trampX) <= TRAMP_MUSH_LAND_REVEAL_DIST
-    syncOneTrampMissingHint(inst, slotKey, trampX, show)
-  }
-  sync('right', inst.trampState?.x ?? -9999, z.rightTrampRevealed)
-  sync('branch', inst.branchTrampState?.x ?? -9999, z.branchTrampRevealed)
+  const rightHere = trampMissingPadHere(inst, inst.trampState?.x ?? -9999, z.rightTrampRevealed || !z.gCollected)
+  const branchHere = trampMissingPadHere(inst, inst.branchTrampState?.x ?? -9999, z.branchTrampRevealed)
+  syncOneTrampMissingHint(inst, 'right', inst.trampState?.x ?? -9999, canShow && rightHere)
+  syncOneTrampMissingHint(inst, 'branch', inst.branchTrampState?.x ?? -9999, canShow && branchHere)
+  const cave = getCrackZone(WORLD_W, FLOOR_Y)
+  const caveMid = (cave.x1 + cave.x2) * 0.5
+  const overCave = heroX >= cave.x1 && heroX <= cave.x2 &&
+    footY <= FLOOR_Y + 20 &&
+    !inst.pit?.collapsed &&
+    !z.colorWorld
+  syncOneTrampMissingHint(inst, 'cave', caveMid, grounded && overCave)
 }
 //
-// Creates or destroys one trampoline placeholder tooltip.
+// True while the hero stands in the hidden mushroom's landing area.
+//
+function trampMissingPadHere(inst, trampX, revealed) {
+  if (revealed || inst.zones.colorWorld) return false
+  const heroX = inst.heroInst?.character?.pos?.x ?? 0
+  return Math.abs(heroX - trampX) <= TRAMP_MUSH_LAND_REVEAL_DIST
+}
+//
+// Creates or destroys one trampoline placeholder tooltip. These stay up for
+// as long as the hero remains in the mushroom / cave area — they do not use
+// the walk-away dismiss radius of other Glow speech bubbles.
 //
 function syncOneTrampMissingHint(inst, slotKey, worldX, show) {
   const existing = inst.trampMissingHints[slotKey]
@@ -7617,7 +7653,7 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
   if (!justLanded || !grounded || footY < FLOOR_Y - 28) return
   const z = inst.zones
   const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
-  if (!z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) {
+  if (z.gCollected && !z.rightTrampRevealed && near(inst.trampState?.x ?? -9999)) {
     revealRightTrampoline(inst)
   }
   if (!z.branchTrampRevealed && near(inst.branchTrampState?.x ?? -9999)) {
@@ -7629,6 +7665,7 @@ function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justL
 //
 function revealRightTrampoline(inst) {
   if (inst.zones.rightTrampRevealed) return
+  if (!inst.zones.gCollected && !inst.zones.colorWorld) return
   inst.zones.rightTrampRevealed = true
   set(KEY_RIGHT_TRAMP_REVEALED, true)
   clearTrampMissingHint(inst, 'right')

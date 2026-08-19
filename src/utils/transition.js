@@ -48,7 +48,7 @@ const LEVEL_SUBTITLES = {
   'menu-time': '',
   'menu-touch': '',
   'menu-glow': '',
-  'lesson-glow.0': ['The world is what it is. But you\ndecide what it becomes to you.', 'glow0-pre', 5],
+  'lesson-glow.0': ['The world is what it is. But you\ndecide what it becomes to you.', null, 5],
   'glow-complete': '',
   'lesson-word.0': ['You are inside your own head now. These words\nare your thoughts — the voices within you.\nSome of them cut deeper than blades.', 'word0-pre', 16, null, 'Find yourself and accept that the voices\nin your head won\'t go away'],
   'lesson-word.1': ['Sharp words don\'t cut — they make you fall', 'word1-pre', 6.5, null, 'The task is the same — find and accept yourself', 2.2],
@@ -354,7 +354,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       transitionK.rect(transitionK.width(), transitionK.height()),
       transitionK.pos(0, 0),
       transitionK.color(bgR, bgG, bgB),
-      transitionK.opacity(initialOverlayOpacity),
+      transitionK.opacity(1),
       transitionK.z(CFG.visual.zIndex.ui + 100),
       transitionK.fixed()
     ])
@@ -387,7 +387,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       //
       Hero.unsuppressIdleVocalization()
       TouchControls.setVisible(true)
-      overlay.exists() && transitionK.destroy(overlay)
+      //
+      // Leave the hold overlay up — k.go in enterPreparedScene destroys it
+      // in the same turn as the level fade-in, so the previous scene cannot flash.
+      //
       enterPreparedScene(transitionK, nextLevel, afterGo)
     }
     if (needsEarlyAssetLoad && inst.assetPreparePromise && !inst.assetPrepareDone) {
@@ -415,7 +418,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     }
     
     // Clean up
-    transitionK.transitionCleanup?.()
+    transitionInterval?.cancel?.()
+    stopTransitionVoiceover(inst)
+    inst.tooltipSuppressed && Tooltip.unsuppressAll()
+    inst.tooltipSuppressed = false
     //
     // Restore volume, unmute procedural sounds, and resume AudioContext
     //
@@ -423,7 +429,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     Sound.unmuteProceduralSounds()
     Sound.resumeGlobalAudio()
     //
-    // Go to next level — fade-in comes from installLevelFadeIn(k.go)
+    // Go to next level — fade-in comes from installLevelFadeIn(k.go).
+    // Keep the hold overlay until k.go so the previous scene cannot flash.
     //
     finalizeTransitionToLevel()
   }
@@ -678,7 +685,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           }
         } else {
           // No subtitle, go to next level immediately
-          k.transitionCleanup?.()
+          transitionInterval?.cancel?.()
+          stopTransitionVoiceover(inst)
+          inst.tooltipSuppressed && Tooltip.unsuppressAll()
+          inst.tooltipSuppressed = false
           //
           // Restore volume and unmute procedural sounds before going to next level
           //
@@ -778,7 +788,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     } else if (phase === 'final_pause') {
       // Short pause after text fades out before loading new level
       if (timer >= FINAL_PAUSE_DURATION) {
-        k.transitionCleanup?.()
+        transitionInterval?.cancel?.()
+        stopTransitionVoiceover(inst)
+        inst.tooltipSuppressed && Tooltip.unsuppressAll()
+        inst.tooltipSuppressed = false
         //
         // Restore volume and unmute procedural sounds before going to next level
         //

@@ -1211,7 +1211,7 @@ export function sceneMenu(k) {
       Cursor.setCursor('arrow')
       //
       // The first glow level always enters through the transition, so the
-      // pre-level phrase (with its glow0-pre voice-over) is shown.
+      // pre-level phrase is shown.
       //
       if (forceNew) {
         resetProgress()

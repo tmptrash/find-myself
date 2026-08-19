@@ -270,8 +270,9 @@ const G_LETTER_RAISE_Y = 10
 const W_LETTER_RAISE_Y = 8
 //
 // G letter sits to the right of the hero branch (trunk side), same float height.
+// Kept in step with BRANCH_TRAMP_OFFSET_X so the pickup stays above the pad.
 //
-const G_LETTER_RIGHT_OF_BRANCH_GAP = 176
+const G_LETTER_RIGHT_OF_BRANCH_GAP = 256
 //
 // L letter sits left of its log platform once unveiled.
 //
@@ -580,6 +581,9 @@ const KEY_TRAMP_WALKED = 'glow.trampWalked'
 //
 const TRAMP_MUSH_LAND_REVEAL_DIST = 80
 const TRAMP_MISSING_HINT_TEXT = 'Something\'s\nmissing here'
+const TRAMP_FIRST_REVEAL_HINT_TEXT = 'It\'s so big.\nIs that really a mushroom?'
+const TRAMP_SECOND_REVEAL_HINT_TEXT = 'Oh, another one'
+const TRAMP_REVEAL_HINT_DURATION = 5
 const KEY_BONUS_COLLECTED = 'glow.bonusCollected'
 const KEY_LIFE_SHOWN = 'glow.lifeShown'
 const KEY_DROWN_HINT_SHOWN = 'glow.drownHintShown'
@@ -627,7 +631,7 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = 'The world was always here, waitin[hl]G[/hl].\nI just had to see it.'
+const GLOW_DIALOG_G = 'The world was always here,\nwaitin[hl]G[/hl]. I just had to see it.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps me see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
 const GLOW_DIALOG_O = '[hl]O[/hl]bservation is my new skill.\nSometimes I need to stop before\nI can truly see. I should speak with\nbig mushroom.'
 //
@@ -918,7 +922,7 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
 //
-const BRANCH_TRAMP_OFFSET_X = 95
+const BRANCH_TRAMP_OFFSET_X = 175
 const BRANCH_TRAMP_BOOST_MULT = 1.68
 const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
@@ -1405,7 +1409,8 @@ function initGlowLevel0Scene(k) {
     const goldRgb = getRGB(k, GLOW_GOLD_HEX)
     const completedLetterCount = countGlowLettersCollected(zones)
     //
-    // GLOW stays visible from the first visit: G fills as the gray map opens.
+    // GLOW stays hidden until the first yellow G fill (branch landing or
+    // a ground side opening). Returning visits restore it with saved fill.
     //
     const bonusCollected = get(KEY_BONUS_COLLECTED, false)
     const pitBonusCollected = get(KEY_PIT_BONUS, false)
@@ -1413,6 +1418,7 @@ function initGlowLevel0Scene(k) {
     const lifeShown = get(KEY_LIFE_SHOWN, false)
     const levelIndicator = createGlowLevelIndicator(k, goldRgb, completedLetterCount, zones.colorWorld)
     pinGlowHudFixed(levelIndicator)
+    LevelIndicator.setSectionLabelHidden(levelIndicator, true)
     if (levelIndicator && fragmentsPersisted) {
       LevelIndicator.revealSmallHeroHud(levelIndicator)
       levelIndicator.updateHeroScore?.(get('heroScore', 0))
@@ -1973,7 +1979,12 @@ function heroTooltipAfterG(inst) {
     : (inst.lPlatHome ? inst.lPlatHome.x + LOG_W * 0.5 : null)
   const heroX = inst.heroInst?.character?.pos?.x
   if (targetX == null || heroX == null) return HERO_TOOLTIP_AFTER_G_RIGHT
-  return heroX < targetX ? HERO_TOOLTIP_AFTER_G_RIGHT : HERO_TOOLTIP_AFTER_G_LEFT
+  if (heroX < targetX) return HERO_TOOLTIP_AFTER_G_RIGHT
+  //
+  // Once the L letter is on screen the left nudge is no longer needed.
+  //
+  if (inst.zones.lLetterUnveiled) return null
+  return HERO_TOOLTIP_AFTER_G_LEFT
 }
 //
 // Picks the hero tooltip line matching how much colour the world shows.
@@ -2205,7 +2216,7 @@ function loadGlowZones() {
   const lLetterUnveiled = get(KEY_L_LETTER_UNVEILED, false) || lCollected
   const lZoneParallax = oCollected && (get(KEY_REVEALED_L, false) || lCollected)
   const lZoneLit = gCollected && lCollected && (get(KEY_REVEALED_L_LIT, false) || lCollected)
-  const lPlatRevealed = gCollected && (get(KEY_REVEALED_L_PLAT, false) || lCollected)
+  const lPlatRevealed = get(KEY_REVEALED_L_PLAT, false) || lCollected
   const oZone = gCollected && lCollected && (get(KEY_REVEALED_O, false) || oCollected)
   const wZone = gCollected && lCollected && oCollected && (get(KEY_REVEALED_W, false) || wCollected)
   const colorWorld = oCollected
@@ -2638,6 +2649,15 @@ function syncGlowHudOFill(inst, burst = true) {
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
+// GLOW HUD word appears with the first yellow G fill, or once G is collected.
+//
+function syncGlowHudLabelVisibility(inst) {
+  const indicator = inst.levelIndicator
+  if (!indicator) return
+  const show = inst.zones.gCollected || (inst._hudGFillParts || 0) > 0
+  LevelIndicator.setSectionLabelHidden(indicator, !show)
+}
+//
 // Updates G/L/W fill counts and flashes a HUD letter when a new band opens.
 //
 function syncGlowHudLetterFills(inst, burst = true) {
@@ -2662,6 +2682,7 @@ function syncGlowHudLetterFills(inst, burst = true) {
   persistHudLetterFills(inst)
   syncGlowHudOFill(inst, burst)
   tintGlowHudLoaderLetters(inst)
+  syncGlowHudLabelVisibility(inst)
   burst && prevG != null && gParts > prevG &&
     LevelIndicator.flashLetterBurst(indicator, 1)
   burst && prevL != null && lParts > prevL &&
@@ -2824,7 +2845,7 @@ function applyZoneVisibility(inst) {
   syncMushroomGraySprites(inst)
   cornerObjsSetHidden(inst.cornerObjs, false)
   refreshPlayfieldCornerSprites(inst)
-  setPlatVisible(inst.lPlat, z.lPlatRevealed && !z.lCollected, inst.lPlatHome, z.gCollected)
+  setPlatVisible(inst.lPlat, z.lPlatRevealed && !z.lCollected, inst.lPlatHome)
   setPlatVisible(inst.oPlat, z.oZone, inst.oPlatHome, z.lCollected)
   setPlatVisible(inst.wPlat, z.wZone, inst.wPlatHome, z.oCollected)
   setLetterVisible(inst.lLetter, z.lLetterUnveiled && !z.lCollected, inst.letterAppearFxReady)
@@ -2860,9 +2881,7 @@ function applyZoneVisibility(inst) {
     const rightOp = glowRightDecorOpacity(inst, o)
     setDecorObjVisible(o, rightOp > 0.04 && !inLake, rightOp)
   })
-  const heroX = inst.heroInst?.character?.pos.x ?? 0
-  inst.grassLayer.layer.hidden = !leftGroundOpen && z.groundRightStripMax < 0 &&
-    heroX < GROUND_REVEAL_TREE_PAST_X - GROUND_REVEAL_LOOKAHEAD
+  inst.grassLayer.layer.hidden = !leftGroundOpen && z.groundRightStripMax < 0
   inst.waterLayer && (inst.waterLayer.hidden = !z.water)
   rebuildWoodSurfaces(inst)
   z.water && ensureLakeShoreRocksVisible(inst)
@@ -2978,7 +2997,7 @@ function rebuildWoodSurfaces(inst) {
   const branch = inst.woodSurfaces[0]
   const list = branch ? [branch] : []
   const z = inst.zones
-  z.lPlatRevealed && z.gCollected && !z.lCollected && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
+  z.lPlatRevealed && !z.lCollected && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
   z.oZone && z.lCollected && list.push({ x1: inst.oPlatHome.x, x2: inst.oPlatHome.x + LOG_W, y: inst.oPlatHome.y, h: LOG_H })
   z.wZone && z.oCollected && list.push({ x1: inst.wPlatHome.x, x2: inst.wPlatHome.x + LOG_W, y: inst.wPlatHome.y, h: LOG_H })
   //
@@ -5694,7 +5713,7 @@ function forceHeroIdleOnLog(inst, skipHitboxSync = false) {
 function isHeroOverLetterLog(inst, heroX) {
   const z = inst.zones
   const logs = []
-  z.lPlatRevealed && z.gCollected && !z.lCollected && logs.push(inst.lPlatHome)
+  z.lPlatRevealed && !z.lCollected && logs.push(inst.lPlatHome)
   z.oZone && z.lCollected && logs.push(inst.oPlatHome)
   z.wZone && z.oCollected && logs.push(inst.wPlatHome)
   for (const home of logs) {
@@ -5724,7 +5743,7 @@ function forceSettleHeroOnNearestLog(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && z.gCollected && !z.lCollected && homes.push({ ...inst.lPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
+  z.lPlatRevealed && !z.lCollected && homes.push({ ...inst.lPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   z.oZone && z.lCollected && homes.push({ ...inst.oPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   z.wZone && z.oCollected && homes.push({ ...inst.wPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   //
@@ -6289,6 +6308,7 @@ function revealBranchTrampoline(inst) {
   clearTrampMissingHint(inst, 'branch')
   triggerGlowCameraShake(inst)
   applyZoneVisibility(inst)
+  showTrampolineRevealHint(inst)
 }
 //
 // Reveals the L log platform after the first bounce on the right trampoline.
@@ -6302,11 +6322,19 @@ function revealLPlatZone(inst, silent = false) {
   maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
 }
 //
-// Opens the L log once G is collected and the hero has bounced on the right mushroom.
+// Opens the L log after a bounce (or jump-land) on the right mushroom.
 //
 function maybeRevealLPlatOnRightTrampBounce(inst) {
-  if (!inst.zones.gCollected || inst.zones.lPlatRevealed) return
+  if (inst.zones.lPlatRevealed) return
   revealLPlatZone(inst)
+}
+//
+// Jump-landing on the right cap also opens the L log if the bounce path missed.
+//
+function maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded) {
+  if (!justLanded || !grounded) return
+  if (!isOnTrampolineCap(inst, inst.heroInst?.character, inst.trampState)) return
+  maybeRevealLPlatOnRightTrampBounce(inst)
 }
 //
 // Opens the O platform zone and starts birds.mp3 on first landing from above.
@@ -6596,6 +6624,10 @@ function onUpdate(inst) {
   syncTrampolinePad(inst)
   snapHeroToTrampolineCap(inst, char, heroX, footY)
   //
+  // Reveal the pad before bounce so a landing on the mushroom can launch.
+  //
+  maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded)
+  //
   // Trampoline bounce — manual only (no static collider blocking jumps).
   //
   const branchTrampActive = isBranchTrampolineVisible(inst.zones)
@@ -6616,6 +6648,10 @@ function onUpdate(inst) {
       'branchTrampBounceAir'
     )
   }
+  //
+  // Bounce is the main L-log trigger; a jump-land on the cap is the backup.
+  //
+  maybeRevealLPlatOnRightTrampLand(inst, justLanded, grounded)
   const surface = detectGlowSurface(inst)
   inst.sound._l2Surface = surface === 'wood' ? 'wood' : null
   if (surface === 'wood' || surface === 'ground') {
@@ -7322,11 +7358,17 @@ function isAllTreeSegmentsRevealed(inst) {
 function glowRightWorldOpacity(sc, x, rank) {
   if (!sc?.zones) return 0
   if (sc.zones.groundDecorRight) return 1
+  const stripMax = sc.zones.groundRightStripMax ?? -1
+  //
+  // Nothing on the right ground peeks in from the start branch. The first
+  // landing past the tree opens strip 0 and the fade/lookahead can begin.
+  //
+  if (stripMax < 0) return 0
   const lookahead = rank === 'small' ? GROUND_DETAIL_LOOKAHEAD : GROUND_REVEAL_LOOKAHEAD
   return groundRightAppearOpacity(x, {
     stripStartX: GROUND_REVEAL_TREE_PAST_X,
     stripEndX: sc.treeStripEndX ?? sc.zones._groundStripEndX ?? WORLD_W,
-    stripMax: sc.zones.groundRightStripMax ?? -1,
+    stripMax,
     heroX: sc.heroInst?.character?.pos.x ?? GROUND_REVEAL_TREE_PAST_X,
     fadeWidth: GROUND_REVEAL_FADE_WIDTH,
     lookahead
@@ -7347,10 +7389,8 @@ function updateExploreFades(inst, dt) {
   if (z.groundDecorLeft && inst.leftDecorFade < 1) {
     inst.leftDecorFade = Math.min(1, inst.leftDecorFade + dt / LEFT_DECOR_FADE_DURATION)
   }
-  const heroX = inst.heroInst?.character?.pos.x ?? 0
   if (inst.grassLayer?.layer) {
-    inst.grassLayer.layer.hidden = !z.groundDecorLeft && z.groundRightStripMax < 0 &&
-      heroX < GROUND_REVEAL_TREE_PAST_X - GROUND_REVEAL_LOOKAHEAD
+    inst.grassLayer.layer.hidden = !z.groundDecorLeft && z.groundRightStripMax < 0
   }
   if (!exploreSettled && !z.groundDecorRight) {
     inst.rockObjs?.forEach(o => {
@@ -7489,6 +7529,16 @@ function clearTrampMissingHint(inst, slotKey) {
   inst.trampMissingHints && (inst.trampMissingHints[slotKey] = null)
 }
 //
+// First mushroom: wonder at its size. Second: recognition that another exists.
+//
+function showTrampolineRevealHint(inst) {
+  if (inst.zones.colorWorld) return
+  const z = inst.zones
+  const n = (z.rightTrampRevealed ? 1 : 0) + (z.branchTrampRevealed ? 1 : 0)
+  const text = n >= 2 ? TRAMP_SECOND_REVEAL_HINT_TEXT : TRAMP_FIRST_REVEAL_HINT_TEXT
+  HeroHint.show(inst.heroHint, text, TRAMP_REVEAL_HINT_DURATION, { dismissOnJump: false })
+}
+//
 // Reveals trampoline mushrooms when the hero lands within TRAMP_MUSH_LAND_REVEAL_DIST.
 //
 function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded) {
@@ -7513,6 +7563,7 @@ function revealRightTrampoline(inst) {
   triggerGlowCameraShake(inst)
   applyZoneVisibility(inst)
   syncGlowHudLetterFills(inst)
+  showTrampolineRevealHint(inst)
 }
 //
 // Reveals tree segments on each start-branch landing (hero branch first).
@@ -7743,7 +7794,7 @@ function snapHeroToLogPlatforms(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && z.gCollected && !z.lCollected && homes.push(inst.lPlatHome)
+  z.lPlatRevealed && !z.lCollected && homes.push(inst.lPlatHome)
   z.oZone && z.lCollected && homes.push(inst.oPlatHome)
   z.wZone && z.oCollected && homes.push(inst.wPlatHome)
   let hoverHome = null

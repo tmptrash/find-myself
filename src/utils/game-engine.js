@@ -386,7 +386,6 @@ function buildSoundTasks(k) {
     ['menu', './sounds/menu.mp3'],
     ['kids', './sounds/kids.mp3'],
     ['clock', './sounds/clock.mp3'],
-    ['glow0-pre', './sounds/glow0-pre.mp3'],
     ['glow-g', './sounds/glow-g.mp3'],
     ['glow-l', './sounds/glow-l.mp3'],
     ['glow-ow', './sounds/glow-ow.mp3'],

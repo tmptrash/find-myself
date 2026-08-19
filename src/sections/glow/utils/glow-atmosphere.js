@@ -563,11 +563,9 @@ function growCrack(segs, x, y, angle, len, depth, width) {
   }
 }
 function drawSurfaceCracks(k, pit, groundC, flatDecor = false) {
-  const voidRgb = glowRgb('void')
-  const deep = flatDecor
-    ? k.rgb(groundC.r, groundC.g, groundC.b)
-    : k.rgb(voidRgb.r, voidRgb.g, voidRgb.b)
-  const opacity = flatDecor ? 0.55 : 0.72
+  const deepRgb = flatDecor ? glowRgb('playfieldOuter') : glowRgb('void')
+  const deep = k.rgb(deepRgb.r, deepRgb.g, deepRgb.b)
+  const opacity = 0.72
   for (const s of pit.crackSegs) {
     k.drawLine({
       p1: k.vec2(s.x1, s.y1),

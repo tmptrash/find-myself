@@ -24,7 +24,8 @@ import * as TreeSegments from '../utils/glow-tree-segments.js'
 import {
   GROUND_RIGHT_STRIP_COUNT,
   groundRightStripIndexForX,
-  groundRightAppearOpacity
+  groundRightAppearOpacity,
+  groundRightExploredEdgeX
 } from '../utils/glow-ground-reveal.js'
 import {
   GLOW_PAL,
@@ -451,6 +452,7 @@ const UG_ROCK_COUNT = 6
 const UG_CRACK_COUNT = 9
 const UG_PEBBLE_CLUSTER_COUNT = 6
 const UG_ROOTLET_COUNT = 10
+const UG_CAVE_ROOTLET_COUNT = 6
 const OUTER_BG_R = OUTER.r
 const OUTER_BG_G = OUTER.g
 const OUTER_BG_B = OUTER.b
@@ -581,7 +583,7 @@ const KEY_TRAMP_WALKED = 'glow.trampWalked'
 //
 const TRAMP_MUSH_LAND_REVEAL_DIST = 80
 const TRAMP_MISSING_HINT_TEXT = 'Something\'s\nmissing here'
-const TRAMP_FIRST_REVEAL_HINT_TEXT = 'It\'s so big.\nIs that really a mushroom?'
+const TRAMP_FIRST_REVEAL_HINT_TEXT = 'It\'s so big. Is\nthat really a mushroom?'
 const TRAMP_SECOND_REVEAL_HINT_TEXT = 'Oh, another one'
 const TRAMP_REVEAL_HINT_DURATION = 5
 const KEY_BONUS_COLLECTED = 'glow.bonusCollected'
@@ -593,11 +595,10 @@ const KEY_RESPAWN_NEAR_TREE = 'glow.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'glow.lastSpawnX'
 const KEY_BRANCH_TRAMP_REVEALED = 'glow.branchTrampRevealed'
-const BRANCH_TRAMP_MARIO_HINT_TEXT = 'Mario would have figured\nout what to do'
+const BRANCH_TRAMP_MARIO_HINT_TEXT = 'The tree is easier\nto see from me.'
 const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
 const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
-const BRANCH_TRAMP_MARIO_HINT_TEXT_ALT = 'I think Mario would\njump on me'
 const TRAMP_SHALLOW_HINT_TEXT = 'I can\'t drown.\nIt\'s shallow here.'
 const TRAMP_SHALLOW_HINT_DURATION = 6
 const WRONG_TRAMP_SING_HINT_REPEAT = 20
@@ -631,7 +632,7 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 // Dialog.
 //
-const GLOW_DIALOG_G = 'The world was always here,\nwaitin[hl]G[/hl]. I just had to see it.'
+const GLOW_DIALOG_G = 'Now I have [hl]G[/hl]round under my feet.\nI have somewhere to start.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps me see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
 const GLOW_DIALOG_O = '[hl]O[/hl]bservation is my new skill.\nSometimes I need to stop before\nI can truly see. I should speak with\nbig mushroom.'
 //
@@ -646,9 +647,9 @@ const GLOW_DIALOG_SOUND_O = 'glow-ow'
 // when the right ground / water zones first open, and a consolation line on
 // the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan.\nYou can only see\nwhat you\'re ready\nto notice.'
-const HINT_INTRO_1_DURATION = 7
-const HINT_INTRO_2_TEXT = 'This world is here, even when\nyou can\'t see it.\n\nUse AWD, ←, →, ↑, Space keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
+const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan.\nI found myself in a world\nI cannot fully perceive.\nTo understand where I am\nand what\'s happening to me,\nI need to learn to see it.'
+const HINT_INTRO_1_DURATION = 11
+const HINT_INTRO_2_TEXT = 'Use AWD, ←, →, ↑, Space keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
 const HINT_INTRO_2_DURATION = 18
 //
 // Extra beat between the first and second intro speech bubbles.
@@ -660,17 +661,14 @@ const INTRO_HINT_PHASE_TWO = 'two'
 const HINT_GROUND_RIGHT_TEXT = 'Curiosity lights the\nway. Keep walking'
 const HINT_WATER_TEXT = 'The unknown isn\'t empty.\nIt simply hasn\'t been\ndiscovered yet'
 const HINT_ZONE_DURATION = 5
-const HINT_ZONE_DISMISS_DISTANCE = 80
+//
+// Walking this far from a Glow speech bubble dismisses it early.
+//
+const GLOW_HINT_DISMISS_DISTANCE = 40
 const GLOW_SFX_FADE_DURATION = 10
 const GLOW_WORLD_AUDIO_FADE_DURATION = 10
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
 const HINT_DROWN_DURATION = 4
-//
-// Post-death reminder shown while the hero spawns on the lower-right ground —
-// walking this far away clears it early (jump alone must not, since the
-// respawn landing itself briefly triggers the jump-phase check).
-//
-const HINT_GROUND_SPAWN_DISMISS_DISTANCE = 50
 //
 // Repeat drownings get a random self-ironic joke over the sinking hero.
 //
@@ -922,7 +920,7 @@ const TRAMP_OFFSET_FROM_L_PLAT = 50
 //
 // Static branch trampoline — right of the main tree (jump onto the start branch).
 //
-const BRANCH_TRAMP_OFFSET_X = 175
+const BRANCH_TRAMP_OFFSET_X = 145
 const BRANCH_TRAMP_BOOST_MULT = 1.68
 const BRANCH_TRAMP_CHEEKY_EVERY = 6
 //
@@ -1606,8 +1604,7 @@ function initGlowLevel0Scene(k) {
         cheekyTooltip: null,
         marioEligibleSince: null,
         marioHintCooldown: 0,
-        marioHintTooltip: null,
-        marioHintShowCount: 0
+        marioHintTooltip: null
       },
       trampMissingHints: { right: null, branch: null },
       trampBounceAir: false,
@@ -1851,14 +1848,12 @@ function startGlowIntro(inst) {
   if (get(KEY_INTRO_SHOWN, false)) {
     finishGlowIntro(inst)
     //
-    // Post-death reminder: timer, Space/Esc, or walking away. Spawning on the
-    // lower-right ground clears it after a real walk (50 px); jump dismissal
-    // stays off so the respawn landing itself can't wipe it instantly.
+    // Post-death reminder: timer, Space/Esc, or walking 40 px away. Jump
+    // dismissal stays off so the respawn landing itself can't wipe it instantly.
     //
     HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
       dismissOnJump: false,
-      dismissDistance: inst.zones.groundDecorRight ? HINT_GROUND_SPAWN_DISMISS_DISTANCE : undefined,
-      ignoreMovementDismiss: !inst.zones.groundDecorRight,
+      dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
       forceAbove: true
     })
     let replayHintDismissed = false
@@ -1883,7 +1878,8 @@ function startGlowIntro(inst) {
     introCancels.length = 0
   }
   HeroHint.show(inst.heroHint, HINT_INTRO_1_TEXT, HINT_INTRO_1_DURATION, {
-    ignoreMovementDismiss: true
+    ignoreMovementDismiss: true,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
   const finishIntroChain = () => {
     cancelIntroInput()
@@ -1950,7 +1946,8 @@ function showGlowIntroSecondHint(inst) {
   inst.introHintPause = 0
   HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
     ignoreMovementDismiss: true,
-    forceAbove: true
+    forceAbove: true,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
 }
 //
@@ -2042,7 +2039,10 @@ function updateLetterProgressHint(inst) {
   if (HeroHint.isActive(inst.heroHint)) return
   const text = heroTooltipText(inst)
   if (!text) return
-  HeroHint.show(inst.heroHint, text, LETTER_PROGRESS_HINT_DURATION, { dismissOnJump: false })
+  HeroHint.show(inst.heroHint, text, LETTER_PROGRESS_HINT_DURATION, {
+    dismissOnJump: false,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
 }
 //
 // Hover tooltips over the HUD (same bubbles as touch lesson 0): the small
@@ -3620,10 +3620,13 @@ function drawExploredGroundLip(inst) {
   const step = (x1 - x0) / GROUND_LIP_STEPS
   const lakeX1 = inst.lakeX1
   const lakeX2 = inst.lakeX2
+  const crack = getCrackZone(WORLD_W, FLOOR_Y)
+  const caveKeepL = crack.x1 - 36
+  const caveKeepR = crack.x2 + 8
   for (let i = 0; i < GROUND_LIP_STEPS; i++) {
     const x = x0 + i * step
     if (lakeX1 != null && x >= lakeX1 && x <= lakeX2) continue
-    if (isCrackDecorExcluded(x, WORLD_W)) continue
+    if (x + step > caveKeepL && x < caveKeepR) continue
     const op = x >= TREE_X + TRUNK_EXCLUDE_HALF
       ? glowRightWorldOpacity(inst, x, 'large')
       : (z.groundDecorLeft ? (inst.leftDecorFade ?? 1) : 0)
@@ -3740,6 +3743,24 @@ function buildUndergroundSpec() {
   const rootlets = []
   for (let i = 0; i < UG_ROOTLET_COUNT; i++) {
     const rx = randX()
+    const pts = [{ x: rx, y: FLOOR_Y + 4 }]
+    let px = rx
+    let py = FLOOR_Y + 4
+    const segs = 2 + Math.floor(Math.random() * 2)
+    for (let s = 0; s < segs; s++) {
+      px += (Math.random() - 0.5) * 14
+      py += 10 + Math.random() * 16
+      pts.push({ x: px, y: py })
+    }
+    rootlets.push(pts)
+  }
+  //
+  // Extra hair-roots under the cave mouth so the entrance is dressed in
+  // both the flat gray world and the shaded/colour earth band.
+  //
+  const cave = getCrackZone(WORLD_W, FLOOR_Y)
+  for (let i = 0; i < UG_CAVE_ROOTLET_COUNT; i++) {
+    const rx = cave.x1 - 24 + Math.random() * (cave.width + 16)
     const pts = [{ x: rx, y: FLOOR_Y + 4 }]
     let px = rx
     let py = FLOOR_Y + 4
@@ -3979,9 +4000,13 @@ function strokePolyline(ctx, pts) {
 // Draws the baked underground decor with the gray↔colour crossfade.
 //
 function drawUndergroundLayer(inst) {
-  const k = inst.k
+  const z = inst.zones
+  const leftOpen = Boolean(z?.groundDecorLeft)
+  const rightOpen = (z?.groundRightStripMax ?? -1) >= 0
+  if (!leftOpen && !rightOpen) return
   const fade = inst.colorFade
   if (isGlowFlatSingleDecorColor(inst)) {
+    drawUndergroundSpriteClipped(inst, UNDERGROUND_GRAY_SPRITE, 1)
     return
   }
   //
@@ -3993,12 +4018,47 @@ function drawUndergroundLayer(inst) {
   // in the same underground decor.
   //
   if (fade >= 1) {
-    k.drawSprite({ sprite: UNDERGROUND_COLOR_SPRITE, pos: k.vec2(0, 0), opacity: 1 })
+    drawUndergroundSpriteClipped(inst, UNDERGROUND_COLOR_SPRITE, 1)
     return
   }
   const grayOp = 1 - fade
-  grayOp > 0.02 && k.drawSprite({ sprite: UNDERGROUND_GRAY_SPRITE, pos: k.vec2(0, 0), opacity: grayOp })
-  fade > 0.02 && k.drawSprite({ sprite: UNDERGROUND_COLOR_SPRITE, pos: k.vec2(0, 0), opacity: fade })
+  grayOp > 0.02 && drawUndergroundSpriteClipped(inst, UNDERGROUND_GRAY_SPRITE, grayOp)
+  fade > 0.02 && drawUndergroundSpriteClipped(inst, UNDERGROUND_COLOR_SPRITE, fade)
+}
+//
+// Paints only the underground under opened ground: left shore, and the
+// explored right strips. Hidden on the start branch before either side opens.
+//
+function drawUndergroundSpriteClipped(inst, sprite, opacity) {
+  const z = inst.zones
+  z.groundDecorLeft &&
+    drawUndergroundSpriteBand(inst.k, sprite, opacity, LEFT_MARGIN, TREE_X)
+  if ((z.groundRightStripMax ?? -1) < 0) return
+  const stripEnd = inst.treeStripEndX ?? z._groundStripEndX ?? WORLD_W
+  const edge = groundRightExploredEdgeX(
+    z.groundRightStripMax,
+    GROUND_REVEAL_TREE_PAST_X,
+    stripEnd
+  )
+  const x1 = GROUND_REVEAL_TREE_PAST_X
+  const x2 = Math.min(WORLD_W - RIGHT_MARGIN, Math.max(x1, edge))
+  x2 > x1 && drawUndergroundSpriteBand(inst.k, sprite, opacity, x1, x2)
+}
+//
+// One horizontal slice of a full-world underground sprite.
+//
+function drawUndergroundSpriteBand(k, sprite, opacity, x1, x2) {
+  const w = x2 - x1
+  if (w <= 1) return
+  k.drawSprite({
+    sprite,
+    pos: k.vec2(x1, 0),
+    width: w,
+    height: WORLD_H,
+    quad: { x: x1 / WORLD_W, y: 0, w: w / WORLD_W, h: 1 },
+    opacity,
+    anchor: 'topleft'
+  })
 }
 //
 // Physics boundary walls, ceiling, and floor.
@@ -5060,9 +5120,9 @@ function onDraw(inst) {
       height: WORLD_H - FLOOR_Y,
       color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
     })
-    innerGray && drawUndergroundLayer(inst)
+    drawUndergroundLayer(inst)
   } else {
-    innerGray && drawUndergroundLayer(inst)
+    drawUndergroundLayer(inst)
   }
   //
   // Surface cracks / open cave on the far-right ground strip
@@ -5955,7 +6015,9 @@ function collectLetterW(inst) {
     hero.canJump = false
     forceHeroIdleOnLog(inst)
   }
-  HeroHint.show(inst.heroHint, HINT_W_TEXT, HINT_W_DURATION)
+  HeroHint.show(inst.heroHint, HINT_W_TEXT, HINT_W_DURATION, {
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
   inst.k.wait(HINT_W_DURATION, () => {
     Sound.stopAmbient(inst.sound)
     inst.birdsMusic?.stop?.()
@@ -6153,7 +6215,8 @@ function startDrowning(inst) {
     ignoreMovementDismiss: true,
     followHero: true,
     anchorX: drownX,
-    anchorY: drownY
+    anchorY: drownY,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
 }
 //
@@ -6218,7 +6281,7 @@ function showWaterZoneDiscoveryHint(inst) {
   forceWaterEdgeRocksVisible(inst)
   applyZoneVisibility(inst)
   HeroHint.show(inst.heroHint, HINT_WATER_TEXT, HINT_ZONE_DURATION, {
-    dismissDistance: HINT_ZONE_DISMISS_DISTANCE,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
     dismissOnJump: false
   })
 }
@@ -7079,6 +7142,15 @@ function updateTrampCheekyHint(inst) {
   tw.cheekyTooltip = null
 }
 //
+// Drops the branch-tramp "see the tree" bubble if it is on screen.
+//
+function clearBranchTrampMarioHint(inst) {
+  const tw = inst.branchTrampWalk
+  if (!tw?.marioHintTooltip) return
+  Tooltip.destroy(tw.marioHintTooltip)
+  tw.marioHintTooltip = null
+}
+//
 // One-shot nudge on the branch trampoline when water and the right ground
 // are open but the big tree is still hidden.
 //
@@ -7087,39 +7159,35 @@ function updateBranchTrampMarioHint(inst) {
   if (!tw || !inst.branchTrampState) return
   const heroX = inst.heroInst?.character?.pos?.x ?? 0
   if (isHeroNearUnrevealedTrampSpot(inst, heroX)) {
-    tw.marioHintTooltip && Tooltip.destroy(tw.marioHintTooltip)
-    tw.marioHintTooltip = null
+    clearBranchTrampMarioHint(inst)
     return
   }
   if (inst.worldHoverTooltip?.activeTarget?.hoverId === 'branchTrampMario') {
-    tw.marioHintTooltip && Tooltip.destroy(tw.marioHintTooltip)
-    tw.marioHintTooltip = null
+    clearBranchTrampMarioHint(inst)
     return
   }
   const z = inst.zones
-  const eligible = !inst.zones.gCollected && !glowThreeZonesExplored(inst) &&
+  const treeOpen = z.tree || (inst.treeSegmentRevealed?.size > 0)
+  const eligible = !treeOpen && !inst.zones.gCollected && !glowThreeZonesExplored(inst) &&
     isBranchTrampolineVisible(z)
   if (!eligible) {
     tw.marioEligibleSince = null
     tw.marioHintCooldown = 0
-    if (tw.marioHintTooltip) {
-      Tooltip.destroy(tw.marioHintTooltip)
-      tw.marioHintTooltip = null
-    }
+    clearBranchTrampMarioHint(inst)
     return
   }
   const k = inst.k
+  if (tw.marioHintTooltip) {
+    Math.abs(heroX - inst.branchTrampState.x) >= GLOW_HINT_DISMISS_DISTANCE &&
+      clearBranchTrampMarioHint(inst)
+    return
+  }
   tw.marioEligibleSince == null && (tw.marioEligibleSince = k.time())
-  if (tw.marioHintTooltip) return
   const since = k.time() - tw.marioEligibleSince
   if (since < BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY) return
   tw.marioHintCooldown = (tw.marioHintCooldown ?? 0) - k.dt()
   if (tw.marioHintCooldown > 0) return
   tw.marioHintCooldown = BRANCH_TRAMP_MARIO_HINT_REPEAT
-  tw.marioHintShowCount = (tw.marioHintShowCount ?? 0) + 1
-  const marioText = tw.marioHintShowCount >= 3
-    ? BRANCH_TRAMP_MARIO_HINT_TEXT_ALT
-    : BRANCH_TRAMP_MARIO_HINT_TEXT
   tw.marioHintTooltip = createGlowTooltip({
     k: inst.k,
     forceVisible: true,
@@ -7128,7 +7196,7 @@ function updateBranchTrampMarioHint(inst) {
       y: FLOOR_Y - TRAMP_TOTAL_H / 2,
       width: TRAMP_TOTAL_W,
       height: TRAMP_TOTAL_H,
-      text: marioText,
+      text: BRANCH_TRAMP_MARIO_HINT_TEXT,
       offsetY: TRAMP_TOOLTIP_Y_OFFSET
     }]
   })
@@ -7177,7 +7245,8 @@ function updateWrongTrampSingHint(inst) {
   if (HeroHint.isActive(inst.heroHint)) return
   tw.wrongSingCooldown = WRONG_TRAMP_SING_HINT_REPEAT
   HeroHint.show(inst.heroHint, BRANCH_TRAMP_WRONG_SING_TEXT, BRANCH_TRAMP_WRONG_SING_DURATION, {
-    dismissOnJump: false
+    dismissOnJump: false,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
 }
 //
@@ -7438,7 +7507,7 @@ function updateGroundRightStripReveal(inst, heroX) {
   }
   firstStrip && playSegmentRevealSound(inst)
   firstStrip && HeroHint.show(inst.heroHint, HINT_GROUND_RIGHT_TEXT, HINT_ZONE_DURATION, {
-    dismissDistance: HINT_ZONE_DISMISS_DISTANCE,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
     dismissOnJump: false
   })
   applyZoneVisibility(inst)
@@ -7536,7 +7605,10 @@ function showTrampolineRevealHint(inst) {
   const z = inst.zones
   const n = (z.rightTrampRevealed ? 1 : 0) + (z.branchTrampRevealed ? 1 : 0)
   const text = n >= 2 ? TRAMP_SECOND_REVEAL_HINT_TEXT : TRAMP_FIRST_REVEAL_HINT_TEXT
-  HeroHint.show(inst.heroHint, text, TRAMP_REVEAL_HINT_DURATION, { dismissOnJump: false })
+  HeroHint.show(inst.heroHint, text, TRAMP_REVEAL_HINT_DURATION, {
+    dismissOnJump: false,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
 }
 //
 // Reveals trampoline mushrooms when the hero lands within TRAMP_MUSH_LAND_REVEAL_DIST.
@@ -7612,7 +7684,8 @@ function finishTreeRevealIfComplete(inst) {
   applyZoneVisibility(inst)
   maybeShowGLetter(inst)
   justOpened && HeroHint.show(inst.heroHint, HINT_TREE_REVEAL_TEXT, HINT_TREE_REVEAL_DURATION, {
-    dismissOnJump: false
+    dismissOnJump: false,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
   syncGlowHudLetterFills(inst)
 }

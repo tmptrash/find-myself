@@ -19,7 +19,14 @@ export const TREE_SEED = 3712
 //
 const ROOT_BOTTOM_TAPER_ZONE = 38
 const ROOT_GROUND_TAPER_ZONE = 42
-const ROOT_TRUNK_BOOST_FALLOFF = 44
+//
+// Right at the trunk base every root's drawn width is pulled toward the
+// trunk's own local cross-section width (see rootSegWidth) instead of its
+// thin natural stroke width, so the roots begin exactly as wide as the trunk
+// with no separate connector shape — this merge fades out over this many px
+// of depth, after which each strand only shows its own tapering width.
+//
+const ROOT_TRUNK_MERGE_DEPTH = 40
 //
 // Roots are hard-clipped this many px BELOW the ground line — no root stroke
 // (taper aside) can ever poke above the ground surface.
@@ -38,13 +45,6 @@ const ROOT_HIGHLIGHT_ALPHA = 0.5
 const ROOT_HIGHLIGHT_OFFSET_X = -1.6
 const ROOT_HIGHLIGHT_OFFSET_Y = -1.6
 const ROOT_HIGHLIGHT_MIN_W = 3
-//
-// Trunk-to-root collar — root strands seed above the trunk base, but narrow
-// strands leave a sliver at the junction until the trunk edges continue
-// straight down at constant width to the visible ground line.
-//
-const TRUNK_ROOT_COLLAR_HEIGHT = 10
-const TRUNK_ROOT_COLLAR_TOP_OVERLAP = 2
 //
 // Side shading — the sun sits top-right, so trunk and branches carry a soft
 // dark band along their lower-left side. The band follows each segment (no
@@ -309,8 +309,9 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // width — the trunk fill painted afterwards makes the joint seamless.
   //
   const groundY = treeData.groundClipY ?? treeData.rootStartY ?? (treeData.trunkSegs[0]?.sy ?? h)
-  const trunkBaseX = treeData.trunkSegs[0]?.sx ?? 0
-  const trunkHalfW = (treeData.trunkSegs[0]?.w ?? 74) * 0.5
+  const trunkBase = treeData.trunkBase ?? treeData.trunkSegs[0]
+  const trunkBaseX = trunkBase?.sx ?? 0
+  const trunkHalfW = (trunkBase?.w ?? 74) * 0.5
   ctx.lineCap = 'round'
   //
   // Roots are optional — background parallax trees are built without them.
@@ -357,7 +358,6 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
       drawFilledWoodSegment(ctx, seg, trunkRgb, trunkClipY)
     })
     fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-    paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb)
     ctx.globalAlpha = 1
     treeData.leaves.forEach(leaf => {
       const opacity = (leaf.opacity ?? 1) * (palette.leafOpacity ?? 1)
@@ -389,7 +389,6 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // centreline, notches, knots and fractal cracks.
   //
   fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-  paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb)
   const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, groundY)
   drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
   drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
@@ -611,8 +610,11 @@ function drawWoodShading(ctx, segs, rgb, maxY) {
   ctx.fill()
 }
 //
-// Resolves the drawn width of one root segment: taper with proximity to the
-// canvas bottom and the ground surface, full width under the trunk base.
+// Resolves the drawn width of one root segment: its own natural taper near
+// the canvas bottom and the ground surface, merged with the trunk's local
+// cross-section width right at the trunk base so the roots begin exactly as
+// wide as the trunk itself (no separate connector shape needed) and only
+// show their own thinner width once they clear the merge zone below ground.
 //
 function rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW) {
   const segBottomY = Math.max(seg.sy, seg.ey)
@@ -622,14 +624,20 @@ function rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW) {
   // Thinner the closer the segment is to the ground surface.
   //
   const groundTaper = Math.max(0, Math.min(1, (segTopY - groundY) / ROOT_GROUND_TAPER_ZONE))
+  const naturalW = Math.max(0.6, seg.w * Math.max(0.08, groundTaper) * Math.max(0.35, bottomTaper))
   //
-  // Full width under the trunk base (falls off with horizontal distance)
-  // so the root mass matches the trunk width right at the junction.
+  // Widest a stroke centred at this X offset can be WITHOUT poking past
+  // either trunk edge: the remaining room to the trunk edge on the near
+  // side, mirrored — so at the trunk centre this equals the full trunk
+  // width, and it shrinks to zero exactly at the trunk edge. Several roots
+  // starting across the base width then tile it without ever reading wider
+  // than the trunk itself.
   //
   const midX = (seg.sx + seg.ex) * 0.5
-  const trunkProximity = Math.max(0, Math.min(1, 1 - (Math.abs(midX - trunkBaseX) - trunkHalfW) / ROOT_TRUNK_BOOST_FALLOFF))
-  const surfaceTaper = Math.max(groundTaper, trunkProximity)
-  return Math.max(0.6, seg.w * Math.max(0.08, surfaceTaper) * Math.max(0.35, bottomTaper))
+  const offset = Math.min(trunkHalfW, Math.abs(midX - trunkBaseX))
+  const trunkLocalW = 2 * (trunkHalfW - offset)
+  const mergeT = Math.max(0, 1 - (segTopY - groundY) / ROOT_TRUNK_MERGE_DEPTH)
+  return Math.min(trunkHalfW * 2, Math.max(naturalW, trunkLocalW * mergeT))
 }
 //
 // Strokes all root segments with the ground/trunk-proximity taper applied.
@@ -689,21 +697,6 @@ function expandChainWidths(segs, extra) {
     w: seg.w + extra,
     w2: (seg.w2 ?? seg.w) + extra
   }))
-}
-//
-// Fills the trunk-to-root junction by continuing the trunk edges straight down
-// at constant width to the ground line — closes gaps between root strands.
-//
-function paintTrunkRootCollar(ctx, treeData, groundY, trunkRgb) {
-  const base = treeData.trunkSegs[0]
-  if (!base) return
-  const half = base.w * 0.5
-  const bottomY = groundY
-  const topY = bottomY - TRUNK_ROOT_COLLAR_TOP_OVERLAP - TRUNK_ROOT_COLLAR_HEIGHT
-  if (bottomY <= topY) return
-  const cx = base.sx
-  ctx.fillStyle = `rgb(${trunkRgb.r}, ${trunkRgb.g}, ${trunkRgb.b})`
-  ctx.fillRect(cx - half, topY, half * 2, bottomY - topY)
 }
 //
 // Trunk bark uses the real segments only — clip at the ground line.

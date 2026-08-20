@@ -1124,7 +1124,7 @@ function openPitPhysics(pit) {
       //
       disablePlatformBody: true,
       customPlatformDraw: () => {},
-      collectHintText: 'Three fragments.\nThe ground keeps secrets.',
+      collectHintText: 'Three fragments. The\nground keeps secrets.',
       collectHintDuration: 5,
       tooltipClampInset: pit.tooltipClampInset
     })

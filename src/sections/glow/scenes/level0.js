@@ -595,7 +595,7 @@ const KEY_RESPAWN_NEAR_TREE = 'glow.respawnNearTree'
 const KEY_LAST_SPAWN_MODE = 'glow.lastSpawnMode'
 const KEY_LAST_SPAWN_X = 'glow.lastSpawnX'
 const KEY_BRANCH_TRAMP_REVEALED = 'glow.branchTrampRevealed'
-const BRANCH_TRAMP_MARIO_HINT_TEXT = 'The tree is easier\nto see from me.'
+const BRANCH_TRAMP_MARIO_HINT_TEXT = 'I\'m not an ordinary\nmushroom'
 const BRANCH_TRAMP_MARIO_HINT_DURATION = 6
 const BRANCH_TRAMP_MARIO_HINT_INITIAL_DELAY = 10
 const BRANCH_TRAMP_MARIO_HINT_REPEAT = 20
@@ -647,9 +647,9 @@ const GLOW_DIALOG_SOUND_O = 'glow-ow'
 // when the right ground / water zones first open, and a consolation line on
 // the first drowning.
 //
-const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself\nin a world I cannot fully\nperceive. To understand where\nI am and what\'s happening to me,\nI need to learn to see it.'
+const HINT_INTRO_1_TEXT = 'Hello, I\'m Yan. I found myself in a\nworld I cannot fully perceive. To\nunderstand where I am and what\'s\nhappening to me, I need to learn\nto see it.'
 const HINT_INTRO_1_DURATION = 16
-const HINT_INTRO_2_TEXT = 'Use AWD, ←, →, ↑, Space keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
+const HINT_INTRO_2_TEXT = 'Use \'awd, ←, →, ↑, space\' keys to\nmove and jump. Use the Mouse to\ninteract with the world.\n\nLook closely. Pay attention.\nSometimes, seeing is more\nthan looking.'
 const HINT_INTRO_2_DURATION = 18
 //
 // Extra beat between the first and second intro speech bubbles.
@@ -8235,15 +8235,16 @@ function drawLetterOffscreenArrow(inst) {
     ? LEFT_MARGIN + LETTER_OFFSCREEN_ARROW_EDGE_INSET
     : SCREEN_W - RIGHT_MARGIN - LETTER_OFFSCREEN_ARROW_EDGE_INSET
   const cx = baseX + (hint.side === 'left' ? sway : -sway)
-  drawMenuStyleEdgeArrow(k, cx, LETTER_OFFSCREEN_ARROW_Y, hint.side)
+  drawMenuStyleEdgeArrow(k, cx, LETTER_OFFSCREEN_ARROW_Y, hint.side, inst.zones.colorWorld)
 }
 //
 // Menu-style metal chevron (body + outline) pointing left or right.
 //
-function drawMenuStyleEdgeArrow(k, cx, cy, side) {
+function drawMenuStyleEdgeArrow(k, cx, cy, side, colorWorld = false) {
   const s = LETTER_OFFSCREEN_ARROW_SIZE
   const outline = k.rgb(MENU_ARROW_OUTLINE_RGB.r, MENU_ARROW_OUTLINE_RGB.g, MENU_ARROW_OUTLINE_RGB.b)
-  const body = k.rgb(MENU_ARROW_BODY_RGB.r, MENU_ARROW_BODY_RGB.g, MENU_ARROW_BODY_RGB.b)
+  const bodyRgb = colorWorld ? glowRgb(GLOW_GOLD_HEX) : MENU_ARROW_BODY_RGB
+  const body = k.rgb(bodyRgb.r, bodyRgb.g, bodyRgb.b)
   const o = MENU_ARROW_OUTLINE_WIDTH
   const op = MENU_ARROW_DRAW_OPACITY
   const dir = side === 'left' ? -1 : 1

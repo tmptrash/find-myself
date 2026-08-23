@@ -2082,8 +2082,12 @@ export function playAnnihilationSound(instance) {
 /**
  * Play heartbeat sound effect
  * @param {Object} instance - Sound instance from create()
+ * @param {number} [volume=1] - Volume multiplier
  */
-export function playHeartbeatSound(instance) {
+export function playHeartbeatSound(instance, volume = 1) {
+  if (!instance?.audioContext) return
+  instance.audioContext.state === 'suspended' && instance.audioContext.resume().catch(() => {})
+  const safeVolume = Math.max(0, Math.min(1, volume))
   const now = instance.audioContext.currentTime
   //
   // First beat (same as second beat, without filter artifacts)
@@ -2098,7 +2102,7 @@ export function playHeartbeatSound(instance) {
   // Smooth attack to avoid click artifacts
   //
   bassGain1.gain.setValueAtTime(0, now)
-  bassGain1.gain.linearRampToValueAtTime(1.2, now + 0.01)
+  bassGain1.gain.linearRampToValueAtTime(1.2 * safeVolume, now + 0.01)
   bassGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
   
   bass1.connect(bassGain1)
@@ -2115,7 +2119,7 @@ export function playHeartbeatSound(instance) {
   sub1.frequency.setValueAtTime(30, now)
   
   subGain1.gain.setValueAtTime(0, now)
-  subGain1.gain.linearRampToValueAtTime(0.9, now + 0.01)
+  subGain1.gain.linearRampToValueAtTime(0.9 * safeVolume, now + 0.01)
   subGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
   
   sub1.connect(subGain1)
@@ -2136,7 +2140,7 @@ export function playHeartbeatSound(instance) {
   // Sharp attack, slower decay
   //
   bassGain2.gain.setValueAtTime(0, now + 0.20)
-  bassGain2.gain.linearRampToValueAtTime(1.2, now + 0.205)
+  bassGain2.gain.linearRampToValueAtTime(1.2 * safeVolume, now + 0.205)
   bassGain2.gain.exponentialRampToValueAtTime(0.001, now + 0.32)
   //
   // Low-pass filter for muffled/dull sound
@@ -2160,7 +2164,7 @@ export function playHeartbeatSound(instance) {
   sub2.frequency.setValueAtTime(30, now + 0.20)
   
   subGain2.gain.setValueAtTime(0, now + 0.20)
-  subGain2.gain.linearRampToValueAtTime(0.9, now + 0.208)
+  subGain2.gain.linearRampToValueAtTime(0.9 * safeVolume, now + 0.208)
   subGain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
   
   sub2.connect(subGain2)

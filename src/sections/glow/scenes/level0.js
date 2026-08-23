@@ -665,8 +665,8 @@ const HINT_ZONE_DURATION = 5
 // Walking this far from a Glow speech bubble dismisses it early.
 //
 const GLOW_HINT_DISMISS_DISTANCE = 60
-const GLOW_SFX_FADE_DURATION = 10
-const GLOW_WORLD_AUDIO_FADE_DURATION = 10
+const GLOW_PROXIMITY_SOUND_RADIUS = 120
+const GLOW_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
 const HINT_DROWN_DURATION = 4
 //
@@ -737,8 +737,9 @@ const TRAMP_TOOLTIP_Y_OFFSET = -90
 // Buried skeleton hover — visible once the left underground band is open
 //
 const SKELETON_TOOLTIP_TEXT = "I'm tired..."
-const SKELETON_TOOLTIP_WIDTH = 56
-const SKELETON_TOOLTIP_HEIGHT = 90
+const SKELETON_TOOLTIP_WIDTH = 72
+const SKELETON_TOOLTIP_HEIGHT = 104
+const SKELETON_TOOLTIP_BODY_CENTER_R = 2.3
 const SKELETON_TOOLTIP_Y_OFFSET = -70
 //
 // While the hero stands on the start branch and G is still uncollected his
@@ -773,7 +774,7 @@ const BONUS_HINT_DURATION = 5
 // After picking up the final W letter the hero shares a closing line for a
 // few seconds, then a full-screen fade-out leads back to the menu.
 //
-const HINT_W_TEXT = 'Gradually I become a witness\nto how the world is made.'
+const HINT_W_TEXT = 'Gradually I become a witness\nto how the world is made.\nLet\'s move on'
 const HINT_W_DURATION = 4
 //
 // Shown once when the third start-branch jump finishes revealing the tree.
@@ -1320,13 +1321,15 @@ function initGlowLevel0Scene(k) {
       ? branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
       : FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
     //
-    // Absolute silence until G — only quiet rain ambience (touch L0 style)
+    // Glow sound effects and the ambient birds are audible from the first
+    // frame; collecting G no longer acts as an audio gate.
     //
-    sound._glowSfxMuted = !zones.gCollected
-    sound.glowSfxGain && (sound.glowSfxGain.gain.value = zones.gCollected ? 1 : 0)
+    sound._glowSfxMuted = false
+    sound.glowSfxGain && (sound.glowSfxGain.gain.value = 1)
     Sound.stopRainSound(sound)
     k.onSceneLeave(() => {
       Sound.stopRainSound(sound)
+      Sound.stopAmbient(sound)
       k.camScale(1)
     })
     const heroInst = Hero.create({
@@ -1342,9 +1345,9 @@ function initGlowLevel0Scene(k) {
       currentLevel: 'lesson-glow.0',
       suppressDust: true,
       //
-      // Quiet until G — no closed-eyes whistle before the first letter
+      // The hero's quiet humming is available from the start of Glow.
       //
-      idleVocalization: zones.gCollected ? 'humming' : null
+      idleVocalization: 'humming'
     })
     //
     // No footprint trail in the glow level — the ground stays clean.
@@ -1425,7 +1428,7 @@ function initGlowLevel0Scene(k) {
       LevelIndicator.revealLifeHud(levelIndicator, !zones.colorWorld)
       levelIndicator.updateLifeScore?.(get('lifeScore', 0))
     }
-    zones.gCollected && startBirdsMusic(birdsMusic)
+    startBirdsMusic(birdsMusic)
     //
     // Hidden bonus platform draws in the same style as the O/L letter logs:
     // flat environment-toned barrel in gray mode, detailed wood after O.
@@ -1579,7 +1582,6 @@ function initGlowLevel0Scene(k) {
       trampPad,
       branchTrampPad,
       branchTrampBounceAir: false,
-      glowWorldAudioFade: null,
       treeRevealFromBranchTramp: false,
       trampWalk: {
         stillTimer: 0,
@@ -1633,6 +1635,8 @@ function initGlowLevel0Scene(k) {
       drowning: false,
       drownTimer: 0,
       deathHandled: false,
+      wasOnStartBranch: false,
+      drownFromStartBranch: false,
       dialogOpen: false,
       levelIndicator,
       goldRgb,
@@ -2111,7 +2115,7 @@ function createSmallHeroTooltip(inst) {
       screenSpace: true
     }, {
       x: () => inst.undergroundSkeleton?.x ?? -1000,
-      y: () => inst.undergroundSkeleton?.y ?? -1000,
+      y: () => skeletonTooltipBodyCenterY(inst),
       width: SKELETON_TOOLTIP_WIDTH,
       height: SKELETON_TOOLTIP_HEIGHT,
       text: SKELETON_TOOLTIP_TEXT,
@@ -2695,51 +2699,67 @@ function syncGlowHudLetterFills(inst, burst = true) {
   syncGlowHudLetterFillDrawerHidden(inst)
 }
 //
-// Starts birds ambient once the O zone opens.
+// Starts the Glow birds ambient at level entry.
 //
 function startBirdsMusic(birdsMusic) {
   birdsMusic.paused = false
   birdsMusic.volume = CFG.audio.backgroundMusic.birds
 }
 //
-// After G dialog closes: SFX and birds fade in over GLOW_SFX_FADE_DURATION / GLOW_WORLD_AUDIO_FADE_DURATION.
+// Emits the same continuous background ambience the menu scene plays while
+// hovering an anti-hero (Sound.startAmbient's drone + noise pad) near still-
+// hidden discovery spots. Only the horizontal distance to the nearest spot's
+// centre matters: within GLOW_PROXIMITY_SOUND_RADIUS px to either side the
+// current grows into a steady stream the closer the hero walks to the centre
+// X, and fades back to silence outside that band. The right mushroom's spot
+// is excluded from the target list until G is collected.
 //
-function beginGlowPostGWorldAudio(inst) {
-  inst.sound._glowSfxMuted = false
-  if (inst.sound.glowSfxGain) {
-    const now = inst.sound.audioContext.currentTime
-    const gain = inst.sound.glowSfxGain.gain
-    gain.cancelScheduledValues(now)
-    gain.setValueAtTime(0, now)
-    gain.linearRampToValueAtTime(1, now + GLOW_SFX_FADE_DURATION)
+function updateGlowProximitySound(inst, char) {
+  if (inst.dialogOpen || inst.drowning || inst.sound?._glowSfxMuted || !char?.pos) {
+    Sound.stopAmbient(inst.sound)
+    return
   }
-  startGlowWorldAudioFade(inst)
+  const targetXs = []
+  //
+  // The right mushroom stays silent until G is collected — before that its
+  // spot isn't a discoverable secret yet, it's just empty ground.
+  //
+  inst.zones.gCollected && !inst.zones.rightTrampRevealed &&
+    appendGlowProximityTarget(targetXs, inst.trampState?.x)
+  !inst.zones.branchTrampRevealed && appendGlowProximityTarget(targetXs, inst.branchTrampState?.x)
+  if (!inst.pit?.collapsed) {
+    const cave = getCrackZone(WORLD_W, FLOOR_Y)
+    appendGlowProximityTarget(targetXs, (cave.x1 + cave.x2) * 0.5)
+  }
+  if (!targetXs.length) {
+    Sound.stopAmbient(inst.sound)
+    return
+  }
+  let nearestDistance = Infinity
+  for (const targetX of targetXs) {
+    nearestDistance = Math.min(nearestDistance, Math.abs(char.pos.x - targetX))
+  }
+  if (nearestDistance >= GLOW_PROXIMITY_SOUND_RADIUS) {
+    Sound.stopAmbient(inst.sound)
+    return
+  }
+  const proximity = 1 - nearestDistance / GLOW_PROXIMITY_SOUND_RADIUS
+  !Sound.isAmbientPlaying(inst.sound) && Sound.startAmbient(inst.sound)
+  Sound.setAmbientVolume(inst.sound, GLOW_PROXIMITY_SOUND_MAX_VOLUME * proximity)
 }
 //
-// After G: birds and ambience rise from silence over GLOW_WORLD_AUDIO_FADE_DURATION.
+// Adds a valid hidden discovery point's centre X to the proximity-sound
+// target list.
 //
-function startGlowWorldAudioFade(inst) {
-  const birds = inst.birdsMusic
-  if (birds) {
-    birds.paused = false
-    birds.volume = 0
-  }
-  inst.glowWorldAudioFade = {
-    elapsed: 0,
-    duration: GLOW_WORLD_AUDIO_FADE_DURATION,
-    targetBirds: CFG.audio.backgroundMusic.birds
-  }
+function appendGlowProximityTarget(targetXs, x) {
+  x != null && targetXs.push(x)
 }
 //
-// Steps the post-G birds volume ramp each frame.
+// Returns the visual centre of the buried skeleton body, not the skull pivot.
 //
-function updateGlowWorldAudioFade(inst, dt) {
-  const fade = inst.glowWorldAudioFade
-  if (!fade) return
-  fade.elapsed += dt
-  const t = Math.min(1, fade.elapsed / fade.duration)
-  inst.birdsMusic && (inst.birdsMusic.volume = fade.targetBirds * t)
-  t >= 1 && (inst.glowWorldAudioFade = null)
+function skeletonTooltipBodyCenterY(inst) {
+  const skeleton = inst.undergroundSkeleton
+  return skeleton ? skeleton.y + skeleton.skullR * SKELETON_TOOLTIP_BODY_CENTER_R : -1000
 }
 //
 // Soft birds swell with the O-meditation countdown (0 → full as timer → 0)
@@ -5899,14 +5919,8 @@ function collectLetterG(inst) {
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 1)
   openGlowLetterDialog(inst, GLOW_DIALOG_G, () => {
     //
-    // World SFX and birds ramp only after the G dialog closes.
+    // Tree waits until the hero lands on the starting branch.
     //
-    beginGlowPostGWorldAudio(inst)
-    //
-    // Tree waits until the hero lands on the starting branch; humming starts
-    // once world audio has finished fading in after G.
-    //
-    inst.heroInst.idleVocalization = 'humming'
     inst.pendingTreeReveal = !inst.zones.tree
   }, GLOW_DIALOG_SOUND_G)
 }
@@ -6167,6 +6181,7 @@ function registerDrownLateSink(inst) {
 //
 function startDrowning(inst) {
   if (inst.drowning) return
+  inst.drownFromStartBranch = Boolean(inst.wasOnStartBranch)
   inst.drowning = true
   inst.drownTimer = 0
   inst.trampBounceAir = false
@@ -6268,7 +6283,17 @@ function finishDrowning(inst) {
     createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator, greyLife)
   }
   inst.k.wait(DROWN_RESTART_DELAY, () => {
-    set(KEY_RESPAWN_NEAR_TREE, true)
+    //
+    // A fall straight from the start branch always returns the hero to that
+    // branch, no matter how much of the lower-right tree ground has already
+    // been discovered. Spawning near the tree ground instead is reserved for
+    // the Esc-to-menu resume flow (KEY_LAST_SPAWN_MODE / KEY_LAST_SPAWN_X set
+    // on scene leave), never for a drowning death.
+    //
+    const resumeBranch = inst.drownFromStartBranch
+    set(KEY_RESPAWN_NEAR_TREE, !resumeBranch)
+    resumeBranch && set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
+    resumeBranch && set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
     inst.k.go('lesson-glow.0')
   })
 }
@@ -6672,6 +6697,7 @@ function onUpdate(inst) {
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
+  updateGlowProximitySound(inst, char)
   const heroMoving = Math.abs(heroX - inst.lastHeroX) > 0.5
   updateBranchSpawnLook(inst, hero, heroMoving)
   //
@@ -6685,6 +6711,23 @@ function onUpdate(inst) {
   !inst.dialogOpen && tryCollectGlowLetters(inst, char)
   const grounded = char.isGrounded?.() ?? false
   const justLanded = grounded && !inst.wasGrounded
+  const inStartBranchBand = isHeroOverStartBranchX(inst, heroX) &&
+    footY >= inst.startBranch.y - LOG_HOVER_BAND &&
+    footY <= inst.startBranch.y + BRANCH_SNAP_BELOW
+  //
+  // Only a real landing back on the main ground level clears the "fell from
+  // the branch" flag — bouncing on the branch trampoline cap on the way down
+  // is still mid-air transit, not settling on solid ground, and landing on
+  // the lake floor is the drowning trigger itself (must survive to be read
+  // by startDrowning() later this same frame).
+  //
+  const onMainGroundLevel = grounded && !isInWaterZone(inst, heroX, footY) &&
+    footY >= FLOOR_Y - LOG_SNAP_STANDING_MAX
+  if (inStartBranchBand) {
+    inst.wasOnStartBranch = true
+  } else if (onMainGroundLevel) {
+    inst.wasOnStartBranch = false
+  }
   inst.wasGrounded = grounded
   updateTrampolineWalk(inst, char, heroMoving, grounded)
   updateTrampEndure(inst)
@@ -6769,7 +6812,6 @@ function onUpdate(inst) {
   updateLetterProgressHint(inst)
   updateWrongTrampSingHint(inst)
   updateLetterOffscreenArrow(inst, k.dt())
-  updateGlowWorldAudioFade(inst, k.dt())
   updateTreeRevealArm(inst, char, grounded)
   tryRevealTreeOnBranchLand(inst, char, grounded, justLanded)
   tryUnveilLLetterAfterTramp(inst, heroX, footY, grounded, justLanded)

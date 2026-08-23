@@ -36,16 +36,19 @@ import { buildRockVertices, buildRockPalette, drawRockToCanvas } from './draw-ro
 import { drawMoonToCanvas } from './draw-moon.js'
 import { growTreeRootSegments, drawTreeRootSegmentsToCanvas } from './grow-tree-root.js'
 //
-// Canvas matches the kaplay logical viewport so the sprite needs no
-// stretching when drawn full-screen.
+// Canvas matches the live kaplay viewport (native window resolution) so the
+// sprite needs no stretching when drawn full-screen. These start out at the
+// design reference size and are reassigned by recomputeMenuBgLayout() once
+// the real k.width()/k.height() are known — every value derived from them
+// below is declared `let` for the same reason and updated by that function.
 //
-const CANVAS_W = CFG.visual.screen.width
-const CANVAS_H = CFG.visual.screen.height
+let CANVAS_W = CFG.visual.screen.width
+let CANVAS_H = CFG.visual.screen.height
 //
 // Ground line — matches the proportion of the legacy menu.png (black
 // horizon at ≈ 66% from the top). Sky lives above, soil below.
 //
-const GROUND_Y = Math.round(CANVAS_H * 0.66)
+let GROUND_Y = Math.round(CANVAS_H * 0.66)
 const HORIZON_LINE_HEIGHT = 3
 //
 // Sky and underground fills default to the exact `ready` scene backdrop
@@ -63,10 +66,10 @@ const HORIZON_LINE_B = 0
 // (grass at the strip, fireflies under the tree canopy, clouds in the
 // upper sky) against the exact same horizon used by this baked image.
 //
-export const MENU_BG_GROUND_Y = GROUND_Y
+export let MENU_BG_GROUND_Y = GROUND_Y
 export const MENU_BG_HORIZON_LINE_HEIGHT = HORIZON_LINE_HEIGHT
-export const MENU_BG_CANVAS_W = CANVAS_W
-export const MENU_BG_CANVAS_H = CANVAS_H
+export let MENU_BG_CANVAS_W = CANVAS_W
+export let MENU_BG_CANVAS_H = CANVAS_H
 //
 // Central UI keep-out zone (half-width). Trees never spawn inside it
 // and rocks / mushrooms are excluded from it too. Measured from the
@@ -78,7 +81,7 @@ export const MENU_BG_CANVAS_H = CANVAS_H
 // Keeps trees, rocks and mushrooms from sprouting under the monster.
 //
 const CENTER_KEEPOUT_HALF = 400
-const CENTER_X = Math.round(CANVAS_W / 2)
+let CENTER_X = Math.round(CANVAS_W / 2)
 //
 // Side tree clusters. Trees frame the composition on the far left and
 // far right; heights taper toward the centre forming a gentle V that
@@ -248,9 +251,14 @@ const ROCK_EDGE_BIAS = 2.5
 //
 // Moon — uses the shared L3 moon primitive (`draw-moon.js`) so the
 // celestial body is visually identical to the touch L3 night-sky moon.
+// Anchored to the top-right corner by a FIXED pixel margin (not a ratio of
+// CANVAS_W/H) so it sits the same distance from the corner at any
+// resolution, per the side-decoration rule below.
 //
-const MOON_CENTER_X = CANVAS_W - 220
-const MOON_CENTER_Y = 220
+const MOON_MARGIN_RIGHT = 220
+const MOON_MARGIN_TOP = 220
+let MOON_CENTER_X = CANVAS_W - MOON_MARGIN_RIGHT
+let MOON_CENTER_Y = MOON_MARGIN_TOP
 const MOON_RADIUS = 72
 const MOON_GLOW_RADIUS = 42
 //
@@ -270,14 +278,41 @@ const MOON_HALO_COLOR_B = 140
 // Exported so the `ready` scene can keep its animated overlays
 // (fireflies, twinkling stars) clear of the moon's halo.
 //
-export const MENU_BG_MOON_CENTER_X = MOON_CENTER_X
-export const MENU_BG_MOON_CENTER_Y = MOON_CENTER_Y
+export let MENU_BG_MOON_CENTER_X = MOON_CENTER_X
+export let MENU_BG_MOON_CENTER_Y = MOON_CENTER_Y
 export const MENU_BG_MOON_HALO_KEEPOUT = MOON_RADIUS + MOON_HALO_RADIUS
 //
 // pickXAvoiding retry budget — generous so the placement loop has a
 // real chance to find a slot inside the constrained left/right bands.
 //
 const PLACEMENT_MAX_ATTEMPTS = 80
+
+/**
+ * Recomputes every resolution-derived layout value from the live kaplay
+ * viewport. Must be called before generateMenuBackgroundCanvas() (and before
+ * any caller reads the MENU_BG_* exports) whenever the canvas/window size is
+ * known — `ready` and `menu` both call this first, mirroring Glow's
+ * recomputeGlowScreenLayout() pattern. Side decoration (tree clusters, rocks,
+ * mushrooms) keeps its fixed pixel margin from each edge, so the clusters sit
+ * closer together on a smaller window and farther apart on a larger one; the
+ * moon keeps a fixed pixel margin from the top-right corner instead, so it
+ * never drifts with the window size the way a ratio-based position would.
+ * @param {number} width - Current k.width()
+ * @param {number} height - Current k.height()
+ */
+export function recomputeMenuBgLayout(width, height) {
+  CANVAS_W = Math.round(width)
+  CANVAS_H = Math.round(height)
+  GROUND_Y = Math.round(CANVAS_H * 0.66)
+  CENTER_X = Math.round(CANVAS_W / 2)
+  MOON_CENTER_X = CANVAS_W - MOON_MARGIN_RIGHT
+  MOON_CENTER_Y = MOON_MARGIN_TOP
+  MENU_BG_GROUND_Y = GROUND_Y
+  MENU_BG_CANVAS_W = CANVAS_W
+  MENU_BG_CANVAS_H = CANVAS_H
+  MENU_BG_MOON_CENTER_X = MOON_CENTER_X
+  MENU_BG_MOON_CENTER_Y = MOON_CENTER_Y
+}
 
 /**
  * Generates the procedural ready/menu background image and returns the

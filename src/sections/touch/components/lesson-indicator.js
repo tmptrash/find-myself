@@ -626,8 +626,17 @@ function ensureDesaturatedLifeSprite(k) {
       ctx.drawImage(bitmap, 0, 0)
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const px = imageData.data
+      //
+      // RGB is forced to white on EVERY pixel, including fully transparent
+      // ones — not just the visible ones. life.png stores un-premultiplied
+      // colour in its fully-transparent regions (e.g. between the eye
+      // pupils and the surrounding fur), and the GPU's bilinear texture
+      // filtering blends that hidden colour into nearby semi-transparent
+      // edge texels regardless of its alpha. Leaving any non-white texel
+      // anywhere in the source leaked exactly that fringe — a stray hue
+      // showing through the middle of an otherwise grey icon.
+      //
       for (let i = 0; i < px.length; i += 4) {
-        if (px[i + 3] === 0) continue
         px[i] = 255
         px[i + 1] = 255
         px[i + 2] = 255

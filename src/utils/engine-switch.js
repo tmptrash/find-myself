@@ -1,13 +1,18 @@
 import * as BootLoader from './boot-loader.js'
 import { bootEngine, teardownEngine, RESOLUTION_MODE } from './game-engine.js'
+import { runEngineTeardown } from './engine-teardown.js'
 
 //
-// Scene name prefixes that run on the native-resolution engine. Every other
-// scene (menu, ready, remaining word/touch/time lessons, glow-complete) runs
-// on the fixed 1920x1080 engine. `lesson-touch.0` is exact-prefix so
-// lesson-touch.1+ stay on the letterboxed canvas.
+// Scene name prefixes that run on the native-resolution engine. `ready` and
+// `menu` join Glow and touch lesson 0 here so the hub flow (ready → menu →
+// glow) never needs an engine swap — their background/layout code recomputes
+// itself from the live k.width()/k.height() instead of assuming a fixed
+// 1920x1080 canvas (see menu-bg-generator.js's recomputeMenuBgLayout and each
+// scene's own recomputeLayout()). Every remaining lesson (word/touch 1+/time,
+// glow-complete) still runs on the fixed 1920x1080 engine. `lesson-touch.0`
+// is exact-prefix so lesson-touch.1+ stay on the letterboxed canvas.
 //
-const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-glow', 'lesson-touch.0']
+const NATIVE_RESOLUTION_SCENE_PREFIXES = ['lesson-glow', 'lesson-touch.0', 'ready', 'menu']
 //
 // Avoid flashing the DOM loader on fast engine swaps (e.g. right after the
 // yellow pre-Glow subtitle when boot finishes within this window).
@@ -140,6 +145,7 @@ export async function ensureEngineForScene(sceneName, opts = {}) {
       loaderShown = true
     }, ENGINE_SWAP_LOADER_DELAY_MS)
   }
+  runEngineTeardown()
   activeResolutionMode === RESOLUTION_MODE.NATIVE && runNativeTeardown()
   staleEngine && teardownEngine(staleEngine)
   const freshEngine = await bootEngine(neededMode)
@@ -163,6 +169,7 @@ export async function ensureEngineForScene(sceneName, opts = {}) {
  */
 export async function rebootEngineForScene(sceneName) {
   const neededMode = resolutionModeForScene(sceneName)
+  runEngineTeardown()
   activeResolutionMode === RESOLUTION_MODE.NATIVE && runNativeTeardown()
   const staleEngine = activeEngine
   staleEngine && teardownEngine(staleEngine)

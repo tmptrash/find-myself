@@ -30,6 +30,7 @@ import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Rain from '../components/rain.js'
 import * as BonusHero from '../components/bonus-hero.js'
 import * as LogPlatform from '../components/log-platform.js'
+import * as HeroHint from '../../../utils/hero-hint.js'
 import { getCameraCenterX, getDistanceThreshold, isWithinDistance } from '../utils/scene-perf.js'
 import { onUpdateLesson0GameLoop, drawL0Birds } from '../utils/lesson0-runtime.js'
 //
@@ -170,7 +171,7 @@ const L0_FLOOR_THORN_DRAW_Z = 27
 //
 // Parallax ladder (Kaplay z, larger draws above): far circles, far grey organics, grey-leaf mid band,
 // black-leaf mid band, birds, baked front bushes/static circles z=7, grass z=20,
-// dim duplicate organics z=23 under hinged sway z=25.
+// static foreground organics z=25.
 //
 const L0_PARALLAX_FAR_CIRCLE_Z = 2
 const L0_PARALLAX_FAR_ORGANIC_Z = 3
@@ -179,11 +180,7 @@ const L0_PARALLAX_BLACK_LEAF_ROW_Z = 5
 const L0_BIRD_LAYER_Z = 6
 const L0_PARALLAX_FRONT_STATIC_Z = 7
 //
-const L0_FRONT_ORGANIC_DARK_BACKDROP_Z = 23
 const L0_FRONT_ORGANIC_DYNAMIC_Z = 25
-//
-const L0_FRONT_ORGANIC_DARK_DIM_RGB = 0.38
-const L0_FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE = 0.88
 //
 // Dark static organic silhouettes on back parallax — tinted like Touch L1 back row (far/near fog).
 //
@@ -401,6 +398,9 @@ const ANTIHERO_TOOLTIP_Y_OFFSET = -60
 const HERO_TOOLTIP_TEXT = "I must find myself..."
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
+const TOUCH_START_HINT_TEXT = 'Now that I know there is a\nworld around me, I need to\nlearn how to interact\nwith it.'
+const TOUCH_START_HINT_DURATION = 10
+const TOUCH_START_HINT_DISMISS_DISTANCE = 60
 //
 // Small hero and life icon tooltips (appear below)
 //
@@ -518,6 +518,16 @@ let ANTIHERO_PLATFORM_Y = FLOOR_Y - HERO_HEIGHT - 165  // Well above hero jump r
 //
 const L0_CULL_SCREEN_MULT = 0.7
 const L0_ATMOSPHERE_SCREEN_MULT = 0.9
+//
+// Desktop quality budget — the level is draw/fill-rate bound, so the
+// interactive scene keeps fewer ambient objects while preserving the main
+// monsters, platforms and letter path.
+//
+const L0_DESKTOP_CLOUD_COUNT = 18
+const L0_DESKTOP_BIRD_COUNT = 3
+const L0_DESKTOP_SMALL_BUG_COUNT = 8
+const L0_DESKTOP_RAIN_INTENSITY = 0.3
+const L0_DESKTOP_FIREFLY_SCALE = 0.6
 //
 // TOUCH letter pickup system constants
 //
@@ -776,7 +786,7 @@ export function sceneLesson0(k) {
       areaRight: WORLD_W - RIGHT_MARGIN,
       cloudTopY: TOP_MARGIN + 20,
       cloudBottomY: TOP_MARGIN + 100,
-      cloudCount: isTouchDevice() ? 22 : 30,
+      cloudCount: isTouchDevice() ? 22 : L0_DESKTOP_CLOUD_COUNT,
       cloudRandomness: 20,
       baseCloudColor: k.rgb(L0_CLOUD_CIRCLE_R, L0_CLOUD_CIRCLE_G, L0_CLOUD_CIRCLE_B)
     })
@@ -1090,7 +1100,7 @@ export function sceneLesson0(k) {
         const touchMode = isTouchDevice()
         const clusterCount = touchMode
           ? 2 + Math.floor(Math.random() * 2)
-          : 6 + Math.floor(Math.random() * 4)
+          : 4 + Math.floor(Math.random() * 3)
         for (let c = 0; c < clusterCount; c++) {
           let centerX = LEFT_MARGIN + 80 + Math.random() * (playableWidth - 160)
           let safety = 0
@@ -1104,7 +1114,7 @@ export function sceneLesson0(k) {
           const clusterRadius = 30 + Math.random() * 60
           const bladesInCluster = touchMode
             ? 1 + Math.floor(Math.random() * 3)
-            : 4 + Math.floor(Math.random() * 8)
+            : 3 + Math.floor(Math.random() * 4)
           for (let b = 0; b < bladesInCluster; b++) {
             //
             // Place blades with falloff distribution near the cluster center
@@ -1813,7 +1823,7 @@ export function sceneLesson0(k) {
     // Create birds flying in the background
     //
     const birds = []
-    const BIRD_COUNT = 5
+    const BIRD_COUNT = isTouchDevice() ? 5 : L0_DESKTOP_BIRD_COUNT
     const SKY_HEIGHT = 400
     //
     // How long the wing eases between flapping motion and the gliding pose.
@@ -1921,14 +1931,14 @@ export function sceneLesson0(k) {
           }
     })
     //
-    // Create dynamic foreground trees drawer (40% of front layer)
+    // Create a single-sprite foreground tree drawer for the costly organic row.
     //
     if (layers[3]) {
       const allFrontTrees = layers[3].trees
       //
-      // Front trees are static: trunk+roots plus per-cluster sprites with
-      // no hinge rotation. Cost stays bounded because each cluster is one
-      // GPU drawSprite call.
+      // Front trees do not need per-frame hinge animation in lesson 0. Bake
+      // each complete tree into one sprite so the frame pays one draw per
+      // visible tree instead of one draw for the trunk plus every cluster.
       //
       const dynamicTrees = allFrontTrees.filter(t => t.branchClusters)
       dynamicTrees.forEach((tree, idx) => {
@@ -1937,15 +1947,13 @@ export function sceneLesson0(k) {
           k,
           tree,
           baseName,
-          L0_FRONT_ORGANIC_DARK_DIM_RGB,
-          L0_FRONT_ORGANIC_DARK_BACKDROP_OPACITY_SCALE
+          1,
+          1
         )
-        OrganicParallax.prerenderOrganicTreeSprites(k, tree, baseName)
       })
       const treePos = k.vec2(0, 0)
-      const treeAnchor = k.vec2(0, 0)
       k.add([
-        k.z(L0_FRONT_ORGANIC_DARK_BACKDROP_Z),
+        k.z(L0_FRONT_ORGANIC_DYNAMIC_Z),
         k.pos(0, 0),
         {
           width: WORLD_W,
@@ -1963,42 +1971,6 @@ export function sceneLesson0(k) {
                 pos: treePos,
                 anchor: "topleft"
               })
-            }
-          }
-        }
-      ])
-      k.add([
-        k.z(L0_FRONT_ORGANIC_DYNAMIC_Z),
-        k.pos(0, 0),
-        {
-          width: WORLD_W,
-          height: SCREEN_H,
-          draw() {
-            const camX = k.camPos().x
-            const treeCull = SCREEN_W / 2 + 220
-            for (const tree of dynamicTrees) {
-              if (!tree.branchClusters) continue
-              if (Math.abs(tree.x - camX) > treeCull) continue
-              if (tree.trunkSpriteName) {
-                treePos.x = tree.trunkSpriteX
-                treePos.y = tree.trunkSpriteY
-                k.drawSprite({
-                  sprite: tree.trunkSpriteName,
-                  pos: treePos
-                })
-              }
-              for (const cluster of tree.branchClusters) {
-                if (!cluster.spriteName) continue
-                treePos.x = cluster.worldPivotX
-                treePos.y = cluster.worldPivotY
-                treeAnchor.x = cluster.anchorX
-                treeAnchor.y = cluster.anchorY
-                k.drawSprite({
-                  sprite: cluster.spriteName,
-                  pos: treePos,
-                  anchor: treeAnchor
-                })
-              }
             }
           }
         }
@@ -2195,6 +2167,16 @@ export function sceneLesson0(k) {
       bodyColor: heroBodyColor,
       idleVocalization: 'childSinging'
     })
+    const touchStartHint = HeroHint.create({
+      k,
+      heroInst,
+      clampInset: {
+        left: LEFT_MARGIN,
+        right: RIGHT_MARGIN,
+        top: TOP_MARGIN,
+        bottom: BOTTOM_MARGIN
+      }
+    })
     //
     // Lock hero controls while life deduction animation plays
     //
@@ -2222,10 +2204,16 @@ export function sceneLesson0(k) {
     k.wait(HERO_SPAWN_DELAY, () => {
       if (!heroSpawned && heroInst.character) {
         Hero.spawn(heroInst)
+        HeroHint.show(touchStartHint, TOUCH_START_HINT_TEXT, TOUCH_START_HINT_DURATION, {
+          dismissOnJump: false,
+          dismissDistance: TOUCH_START_HINT_DISMISS_DISTANCE,
+          forceAbove: true
+        })
         grassDrawer.heroRef = heroInst
         heroSpawned = true
       }
     })
+    k.onSceneLeave(() => HeroHint.clear(touchStartHint))
     //
     // Hero vs floor thorns (death + reload level) — merged into main game loop below
     //
@@ -2433,9 +2421,8 @@ export function sceneLesson0(k) {
     // Create regular bugs. Touch devices use a reduced count to keep the
     // per-frame IK leg computation light enough to hit 60 FPS on mobile.
     //
-    const SMALL_BUG_COUNT_DESKTOP = 12
     const SMALL_BUG_COUNT_TOUCH = 6
-    const smallBugCount = isTouchDevice() ? SMALL_BUG_COUNT_TOUCH : SMALL_BUG_COUNT_DESKTOP
+    const smallBugCount = isTouchDevice() ? SMALL_BUG_COUNT_TOUCH : L0_DESKTOP_SMALL_BUG_COUNT
     for (let i = 0; i < smallBugCount; i++) {
       //
       // Distribute bugs across the floor (keep the original 11-step spacing
@@ -2661,7 +2648,7 @@ export function sceneLesson0(k) {
     // Touch devices are fillrate-bound; drop rain particle count to roughly a
     // third of desktop so the splash overdraw doesn't tank mobile frames.
     //
-    const rainIntensity = isTouchDevice() ? 0.3 : 0.55
+    const rainIntensity = isTouchDevice() ? 0.3 : L0_DESKTOP_RAIN_INTENSITY
     const rainInst = Rain.create({
       k,
       topY: TOP_MARGIN,
@@ -2693,7 +2680,14 @@ export function sceneLesson0(k) {
     //
     // Puddles on the floor: small ellipses with occasional ripple
     //
-    const puddleRuntime = createPuddles(k, heroInst, sound, rocks, floorThornData)
+    const puddleRuntime = createPuddles(
+      k,
+      heroInst,
+      sound,
+      rocks,
+      floorThornData,
+      isTouchDevice() ? PUDDLE_COUNT : 5
+    )
     //
     // Distant thunder rumble with lightning flash at random intervals
     //
@@ -3948,7 +3942,7 @@ const PUDDLE_HERO_DETECT_Y = 35
 // rockDescriptors avoids placing ellipses over rocks.
 // thornDescriptors avoids placing puddles under floor thorn spikes.
 //
-function createPuddles(k, heroInst, sound, rockDescriptors = [], thornDescriptors = []) {
+function createPuddles(k, heroInst, sound, rockDescriptors = [], thornDescriptors = [], puddleCount = PUDDLE_COUNT) {
   const playableW = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
   const puddles = []
   //
@@ -3978,7 +3972,7 @@ function createPuddles(k, heroInst, sound, rockDescriptors = [], thornDescriptor
     }
     return false
   }
-  for (let i = 0; i < PUDDLE_COUNT; i++) {
+  for (let i = 0; i < puddleCount; i++) {
     const w = PUDDLE_WIDTH_MIN + Math.random() * (PUDDLE_WIDTH_MAX - PUDDLE_WIDTH_MIN)
     let x = 0
     let placed = false
@@ -4290,10 +4284,12 @@ function createL0Fireflies(k) {
   const fireflyMaxY = FLOOR_Y - 20
   //
   // Mobile devices use a much smaller swarm so we cut both the per-firefly
-  // glow draws and the onUpdate wander math. ~30% of the desktop count keeps
-  // the atmosphere readable while saving lots of overdraw.
+  // glow draws and the onUpdate wander math. The desktop budget keeps the
+  // atmosphere readable while saving substantial overdraw.
   //
-  const fireflyCount = isTouchDevice() ? Math.max(6, Math.round(L0_FIREFLY_COUNT * 0.3)) : L0_FIREFLY_COUNT
+  const fireflyCount = isTouchDevice()
+    ? Math.max(6, Math.round(L0_FIREFLY_COUNT * 0.3))
+    : Math.round(L0_FIREFLY_COUNT * L0_DESKTOP_FIREFLY_SCALE)
   for (let i = 0; i < fireflyCount; i++) {
     //
     // Distribute starting positions evenly across the width

@@ -334,11 +334,12 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
     ctx.restore()
   }
   //
-  // Wood clip line follows the visible ground line so the trunk silhouette
-  // ends at the floor — the trunk geometry may sit a few px lower for root
-  // attachment, but nothing should paint below ground into the root fan.
+  // Wood clip line extends ROOT_CLIP_BELOW_GROUND px past the visible ground
+  // line — exactly matching where the root clip rect starts (see above) — so
+  // the trunk fill and the root fan share one continuous boundary with no
+  // unpainted seam between them.
   //
-  const trunkClipY = groundY
+  const trunkClipY = groundY + ROOT_CLIP_BELOW_GROUND
   const trunkRgb = { r: trunkR, g: trunkG, b: trunkB }
   const branchRgb = { r: branchR, g: branchG, b: branchB }
   //
@@ -389,7 +390,7 @@ export function renderGlowTreeIntoContext(ctx, treeData, palette, w, h) {
   // centreline, notches, knots and fractal cracks.
   //
   fillWoodChain(ctx, treeData.trunkSegs, trunkRgb, trunkClipY)
-  const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, groundY)
+  const { segs: barkSegs, clipY: barkClipY } = buildTrunkCollarBarkExtension(treeData, trunkClipY)
   drawTrunkBark(ctx, barkSegs, barkDark, barkHighlight, treeSeed + 557, barkClipY)
   drawTrunkCracks(ctx, treeData.trunkSegs, barkDark, treeSeed + 991, trunkClipY)
   //
@@ -546,6 +547,13 @@ function buildChainOutline(segs, maxY) {
     seg.ny = dx / len
   })
   const joints = [{ x: clipped[0].sx, y: clipped[0].sy, nx: clipped[0].nx, ny: clipped[0].ny, hw: clipped[0].w * 0.5 }]
+  //
+  // The base joint can sit exactly at the ground line while maxY allows a
+  // few extra px below it (see ROOT_CLIP_BELOW_GROUND) — push it straight
+  // down to maxY so the trunk fill and the root clip rect share one border
+  // with no unpainted seam between them.
+  //
+  joints[0].y < maxY - 0.5 && (joints[0].y = maxY)
   clipped.forEach((seg, i) => {
     const next = clipped[i + 1]
     //

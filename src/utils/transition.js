@@ -73,6 +73,13 @@ const TEXT_FADE_IN_DURATION = 1.0    // Duration of text fade in
 const DEFAULT_TEXT_HOLD_DURATION = 3.0  // Default duration if not specified in subtitle
 const GLOW_PRELEVEL_SCENE = 'lesson-glow.0'
 const TOUCH_L0_PRELEVEL_SCENE = 'lesson-touch.0'
+//
+// Native-prelevel pack prep + heavy prewarm (see prepareNativePrelevelAssets)
+// usually finishes well under this window — the DOM loader only reveals
+// itself if loading actually runs longer, so a fast load just shows the
+// plain opaque (near-black) transition overlay instead of a loader flash.
+//
+const NATIVE_PRELEVEL_LOADER_DELAY_MS = 2000
 const TEXT_FADE_OUT_DURATION = 1.0   // Duration of text fade out
 const SKIP_TEXT_FADE_DURATION = 0.35 // Fast fade out when the player skips the text
 const FINAL_PAUSE_DURATION = 0.3     // Pause after text fades out before level load
@@ -246,10 +253,27 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     (needsEarlyAssetLoad && nextLevel === TOUCH_L0_PRELEVEL_SCENE)
   let phase = needsEarlyAssetLoad ? 'asset_prepare' : postAssetPreparePhase
   //
-  // Native-resolution scenes: DOM loader covers pack prep + engine boot
-  // before the pre-level phrase (Kaplay's own bar never flashes).
+  // Native-resolution scenes: pack prep + heavy prewarm run behind the
+  // already-opaque overlay below with no subtitle yet. Reveal the DOM loader
+  // only if that work is still running after NATIVE_PRELEVEL_LOADER_DELAY_MS
+  // — cancelNativePrelevelLoaderTimer() below stops this before it fires
+  // whenever the load finishes first, so fast loads stay a plain black
+  // screen instead of flashing the loader.
   //
-  isNativePrelevel && BootLoader.showLoader()
+  let nativePrelevelLoaderTimer = null
+  if (isNativePrelevel) {
+    nativePrelevelLoaderTimer = setTimeout(() => {
+      nativePrelevelLoaderTimer = null
+      BootLoader.showLoader()
+      BootLoader.setLoaderBarPct(0)
+    }, NATIVE_PRELEVEL_LOADER_DELAY_MS)
+  }
+  const cancelNativePrelevelLoaderTimer = () => {
+    if (nativePrelevelLoaderTimer) {
+      clearTimeout(nativePrelevelLoaderTimer)
+      nativePrelevelLoaderTimer = null
+    }
+  }
   
   // Instance object to store text reference
   const inst = {
@@ -340,7 +364,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   }
   
   async function prepareNativePrelevelAssets() {
-    await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true })
+    await prepareSceneAssets(transitionK, nextLevel, { retainLoader: true, deferLoaderReveal: true })
     if (inst.skipped) return
     transitionInterval?.cancel?.()
     overlay.exists() && transitionK.destroy(overlay)
@@ -447,6 +471,15 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           inst.skipped = true
           bumpPrepareCancelNonce()
           k.transitionCleanup?.()
+          //
+          // Bail out before the loader ever had a chance to auto-hide
+          // itself further down — cancel the pending reveal and make sure
+          // it isn't left on screen if it had already fired.
+          //
+          if (isNativePrelevel) {
+            cancelNativePrelevelLoaderTimer()
+            BootLoader.hideLoader()
+          }
           k.volume(inst.originalVolume)
           Sound.unmuteProceduralSounds()
           Sound.resumeGlobalAudio()
@@ -459,7 +492,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         return
       }
       if (inst.assetPrepareDone) {
-        !isNativePrelevel && BootLoader.hideLoader()
+        if (isNativePrelevel) {
+          cancelNativePrelevelLoaderTimer()
+        } else {
+          BootLoader.hideLoader()
+        }
         phase = inst.postAssetPreparePhase
         timer = 0
       }

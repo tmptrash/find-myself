@@ -13,18 +13,20 @@ document.body.style.backgroundColor = '#000000'
 //
 boot()
 /**
- * Top-level boot sequence: boots the standard fixed-resolution engine (every
- * scene except Glow lives here — see game-engine.js and engine-switch.js for
- * the Glow-specific native-resolution engine swap), then enters "ready".
+ * Top-level boot sequence: boots the native-resolution engine that "ready",
+ * "menu" and Glow/touch lesson 0 all share (see game-engine.js and
+ * engine-switch.js), then enters "ready" directly with no engine swap.
+ * Every remaining lesson still runs on the fixed 1920x1080 engine and swaps
+ * into it on demand.
  */
 async function boot() {
   let k
   try {
-    k = await bootEngine(RESOLUTION_MODE.FIXED)
+    k = await bootEngine(RESOLUTION_MODE.NATIVE)
   } catch (err) {
     throw err
   }
-  setActiveEngine(k, RESOLUTION_MODE.FIXED)
+  setActiveEngine(k, RESOLUTION_MODE.NATIVE)
   installWindowResizeReboot()
   await prepareSceneAssetsThenEnterScene(k, 'ready')
 }

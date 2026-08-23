@@ -10,6 +10,7 @@ import { loadHeroSprites, HEROES, IDLE_MELODY, IDLE_MELODY_BEAT, IDLE_MELODY_GAP
 import { renderHintWithEnter } from '../utils/touch-tap-button.js'
 import {
   generateMenuBackgroundCanvas,
+  recomputeMenuBgLayout,
   drawMenuMoon,
   MENU_BG_GROUND_Y,
   MENU_BG_HORIZON_LINE_HEIGHT,
@@ -31,7 +32,15 @@ const HINT_FLICKER_DURATION = 1.2
 const HINT_MIN_OPACITY = 0.4
 const HINT_MAX_OPACITY = 0.75
 const HINT_FONT_SIZE = 20
-const HINT_Y = 1045
+//
+// Fixed pixel margin from the bottom edge (matches the moon's fixed-margin
+// corner anchoring) so the hint sits the same distance off the bottom at
+// any resolution. Recomputed by recomputeReadyLayout() from the live
+// k.height() — every `let` below this comment is resolution-derived and
+// updated the same way, mirroring Glow's recomputeGlowScreenLayout pattern.
+//
+const HINT_BOTTOM_MARGIN = 35
+let HINT_Y = CFG.visual.screen.height - HINT_BOTTOM_MARGIN
 //
 // Crawling letter title — centred at the very top of the canvas,
 // well above the central monster illustration.
@@ -137,14 +146,13 @@ const STAR_AREA_LEFT_RATIO = 0.03
 const STAR_AREA_RIGHT_RATIO = 0.97
 //
 // Moon zone (in the baked menu-bg). Stars are repelled from this circle so
-// none of them ever twinkles over the moon disc or its halo. Ratios come
-// straight from the exported moon geometry of the bg generator, plus a
-// safety margin, so the zone always matches the actual baked moon.
+// none of them ever twinkles over the moon disc or its halo. Reads the
+// exported moon geometry directly (both are already absolute pixel
+// coordinates the bg generator keeps in sync with the live resolution via
+// recomputeMenuBgLayout — see recomputeReadyLayout()), plus a flat safety
+// margin.
 //
 const MOON_ZONE_MARGIN = 40
-const MOON_ZONE_CENTER_X_RATIO = MENU_BG_MOON_CENTER_X / MENU_BG_CANVAS_W
-const MOON_ZONE_CENTER_Y_RATIO = MENU_BG_MOON_CENTER_Y / MENU_BG_CANVAS_H
-const MOON_ZONE_RADIUS_RATIO = (MENU_BG_MOON_HALO_KEEPOUT + MOON_ZONE_MARGIN) / MENU_BG_CANVAS_W
 //
 // Wandering fireflies — never higher than the front-layer tree
 // canopy so they read as flying AMONG the trees rather than across
@@ -153,10 +161,17 @@ const MOON_ZONE_RADIUS_RATIO = (MENU_BG_MOON_HALO_KEEPOUT + MOON_ZONE_MARGIN) / 
 // front-tree silhouette top from menu-bg-generator (`FIREFLY_MIN_Y`).
 //
 const FIREFLY_COUNT = 14
-const FIREFLY_MIN_Y = 450
-const FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
-const FIREFLY_MIN_X = 80
-const FIREFLY_MAX_X = MENU_BG_CANVAS_W - 80
+//
+// Design-reference top of the sky band (front-tree canopy). Kept as a ratio
+// of the reference screen height so it scales with GROUND_Y the same way at
+// any resolution instead of clipping the firefly band on shorter windows.
+//
+const FIREFLY_MIN_Y_RATIO = 450 / CFG.visual.screen.height
+const FIREFLY_EDGE_INSET = 80
+let FIREFLY_MIN_Y = FIREFLY_MIN_Y_RATIO * CFG.visual.screen.height
+let FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
+let FIREFLY_MIN_X = FIREFLY_EDGE_INSET
+let FIREFLY_MAX_X = MENU_BG_CANVAS_W - FIREFLY_EDGE_INSET
 const FIREFLY_SPEED_MIN = 12
 const FIREFLY_SPEED_RANGE = 14
 const FIREFLY_DIR_CHANGE_INTERVAL_MIN = 2.5
@@ -185,9 +200,10 @@ const GRASS_EDGE_INSET = 30
 // Density gradient: the further from the screen centre, the more grass. The
 // weight ramps from 0 at the keep-out edge to 1 at the very screen edge, so
 // the probability keeps growing across the whole strip instead of
-// saturating partway out.
+// saturating partway out. Computed from the live canvas width inside
+// recomputeReadyLayout() rather than frozen at import time.
 //
-const GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
+let GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
 //
 // The blades take the SAME tone as the near-row glow-forest foliage: the
 // palette tree-leaf green pushed toward the warm haze by the combined
@@ -220,14 +236,14 @@ const AMBIENT_FIRST_DELAY_RANGE = 2.0
 //
 const LIFE_WIDTH = 767
 const LIFE_HEIGHT = 512
-const LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
+let LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
 //
 // life-ready.png has transparent padding below the visible creature body.
 // LIFE_Y_SINK pushes the sprite down so the visible bottom rests on the
 // black horizon strip rather than floating above it.
 //
 const LIFE_Y_SINK = 79
-const LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
+let LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
 const LIFE_OPACITY = 1.0
 //
 // Hero offset preserved from the original layout (hero stood ~83 px
@@ -369,7 +385,7 @@ const HERO_EYE_PUPIL_SHIFT = 2
 // centre must sink below the ground line for the feet to rest ON the strip.
 //
 const HERO_N_FEET_PADDING = 14
-const HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
+let HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
 //
 // Fade-out duration for the upside-down hero-u once the letters grow legs.
 //
@@ -399,8 +415,12 @@ const HERO_N_VOCAL_DELAY = 2.0
 // monster + hero illustration. Each text line uses anchor 'center'
 // pinned at the canvas centre column.
 //
-const CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
-const TITLE_TEXT_X = CENTER_X
+let CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
+let TITLE_TEXT_X = CENTER_X
+//
+// Fixed pixel margin from the top edge — the title stays top-centre at any
+// resolution without stretching toward a taller window.
+//
 const TITLE_TEXT_Y = 130
 //
 // Description block geometry. Three-line narrative block vertically
@@ -426,16 +446,47 @@ const TEXT_LINE_HEIGHT = 50
 // visual bottom so the formula creates equal top/bottom gaps.
 //
 const BLOCK_HEIGHT = (BLOCK_LINE_COUNT - 1) * TEXT_LINE_HEIGHT + TEXT_FONT_SIZE
-const AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
-const DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
+let AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
+let DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
 //
 // Narrative body copy — cool teal-gray so text reads softly on the
 // deep teal background without competing with the orange title.
 //
 const COLOR_TEXT_GRAY = '#9AB5C4'
+/**
+ * Recomputes every resolution-derived ready-scene layout value from the
+ * live kaplay viewport. Must run before recomputeMenuBgLayout()'s exports
+ * are read, and before any of the sprite baking / field creation calls
+ * below it — mirrors Glow's recomputeGlowScreenLayout() pattern, since
+ * "ready" now shares the native-resolution engine with menu/Glow/touch
+ * lesson 0 (see engine-switch.js) instead of a fixed 1920x1080 canvas.
+ * @param {Object} k - Kaplay inst
+ */
+function recomputeReadyLayout(k) {
+  recomputeMenuBgLayout(k.width(), k.height())
+  HINT_Y = k.height() - HINT_BOTTOM_MARGIN
+  FIREFLY_MIN_Y = FIREFLY_MIN_Y_RATIO * k.height()
+  FIREFLY_MAX_Y = MENU_BG_GROUND_Y - 8
+  FIREFLY_MIN_X = FIREFLY_EDGE_INSET
+  FIREFLY_MAX_X = MENU_BG_CANVAS_W - FIREFLY_EDGE_INSET
+  GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - GRASS_CENTER_KEEPOUT_HALF - GRASS_EDGE_INSET
+  LIFE_X = Math.round(MENU_BG_CANVAS_W / 2 - LIFE_WIDTH / 2)
+  LIFE_Y = MENU_BG_GROUND_Y - LIFE_HEIGHT + LIFE_Y_SINK
+  HERO_N_GROUND_CENTER_Y = MENU_BG_GROUND_Y + HERO_N_FEET_PADDING - HERO_N_SPRITE_SIZE / 2
+  CENTER_X = Math.round(MENU_BG_CANVAS_W / 2)
+  TITLE_TEXT_X = CENTER_X
+  AVAILABLE_H = HINT_Y - MENU_BG_GROUND_Y
+  DESCRIPTION_START_Y = Math.round(MENU_BG_GROUND_Y + (AVAILABLE_H - BLOCK_HEIGHT) / 2) + 20
+}
 
 export function sceneReady(k) {
   k.scene('ready', async () => {
+    //
+    // Ready now shares the native-resolution engine with menu, Glow and
+    // touch lesson 0 — recompute the whole baked-background + layout state
+    // from the live window size before anything below reads it.
+    //
+    recomputeReadyLayout(k)
     //
     // Wait for @font-face fonts to finish loading before any canvas text sampling.
     //
@@ -773,12 +824,12 @@ function createStarField(k) {
   const stars = []
   //
   // Moon-zone repulsion: stars whose centre falls within
-  // `MOON_ZONE_RADIUS_RATIO * w` of the moon centre get re-rolled up to
-  // a few times. Avoids visual clutter around the moon's halo.
+  // `MENU_BG_MOON_HALO_KEEPOUT + MOON_ZONE_MARGIN` of the moon centre get
+  // re-rolled up to a few times. Avoids visual clutter around the moon's halo.
   //
-  const moonCx = MOON_ZONE_CENTER_X_RATIO * w
-  const moonCy = MOON_ZONE_CENTER_Y_RATIO * h
-  const moonRadius = MOON_ZONE_RADIUS_RATIO * w
+  const moonCx = MENU_BG_MOON_CENTER_X
+  const moonCy = MENU_BG_MOON_CENTER_Y
+  const moonRadius = MENU_BG_MOON_HALO_KEEPOUT + MOON_ZONE_MARGIN
   const xMin = STAR_AREA_LEFT_RATIO * w
   const xMax = STAR_AREA_RIGHT_RATIO * w
   const yMin = STAR_AREA_TOP_RATIO * h

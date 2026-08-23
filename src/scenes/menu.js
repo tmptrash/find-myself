@@ -13,8 +13,10 @@ import * as CanvasBackdrop from "../utils/canvas-backdrop.js"
 import { renderHintWithEnter } from "../utils/touch-tap-button.js"
 import * as Grass from '../components/grass.js'
 import { bindPointerActivate } from '../utils/pointer-activate.js'
+import { registerEngineTeardown } from '../utils/engine-teardown.js'
 import {
   generateMenuBackgroundCanvas,
+  recomputeMenuBgLayout,
   MENU_BG_GROUND_Y,
   MENU_BG_HORIZON_LINE_HEIGHT,
   MENU_BG_CANVAS_W,
@@ -60,12 +62,6 @@ const MENU_BG_EDGE_OVERSCAN = 1
 //
 const MENU_GRASS_TUFT_COUNT = 44
 const MENU_GRASS_EDGE_INSET = 30
-//
-// The density ramp spans the FULL half-width of the canvas, so the tuft
-// probability keeps growing all the way to the screen edges instead of
-// saturating partway out.
-//
-const MENU_GRASS_DENSITY_RAMP = MENU_BG_CANVAS_W / 2 - MENU_GRASS_EDGE_INSET
 //
 // The blades take the SAME tone as the near-row glow-forest foliage: the
 // palette tree-leaf green pushed toward the warm haze by the combined
@@ -116,8 +112,12 @@ const MENU_ANTIHERO_HOVER_RADIUS = 90
 const CHECKMARK_COLOR_R = 90
 const CHECKMARK_COLOR_G = 210
 const CHECKMARK_COLOR_B = 100
+const CHECKMARK_OUTLINE_COLOR_R = 18
+const CHECKMARK_OUTLINE_COLOR_G = 24
+const CHECKMARK_OUTLINE_COLOR_B = 18
 const CHECKMARK_SIZE = 28
 const CHECKMARK_WIDTH = 6
+const CHECKMARK_OUTLINE_WIDTH = 8
 const CHECKMARK_OPACITY = 1.0
 const CHECKMARK_PULSE_SPEED = 1.8
 //
@@ -200,6 +200,32 @@ function getSectionActiveLetterIndex(section, lastLevel, progress) {
   }
   return -1
 }
+//
+// Hero/anti-hero circle — design reference values at the reference
+// 1920x1080 canvas (see CFG.visual.screen). The circle always stays
+// centred on the live window; its radius scales uniformly with the window
+// (never stretched into an oval) and is clamped so the whole composition —
+// anti-hero sprites, their hover glow, the section labels below them and
+// the orbiting title above — always fits inside the window at any
+// resolution.
+//
+const CIRCLE_DESIGN_CENTER_Y = 500
+const CIRCLE_DESIGN_RADIUS = 302
+const CIRCLE_OUTER_MARGIN = 170
+const CIRCLE_MIN_RADIUS = 150
+/**
+ * Computes the hero/anti-hero circle centre + radius for the live window.
+ * @param {Object} k - Kaplay inst
+ * @returns {{centerX: number, centerY: number, radius: number}}
+ */
+function computeMenuCircleLayout(k) {
+  const centerX = k.width() / 2
+  const centerY = k.height() * (CIRCLE_DESIGN_CENTER_Y / CFG.visual.screen.height)
+  const scale = Math.min(k.width() / CFG.visual.screen.width, k.height() / CFG.visual.screen.height)
+  const maxRadius = Math.min(centerX, k.width() - centerX, centerY, k.height() - centerY) - CIRCLE_OUTER_MARGIN
+  const radius = Math.max(CIRCLE_MIN_RADIUS, Math.min(CIRCLE_DESIGN_RADIUS * scale, maxRadius))
+  return { centerX, centerY, radius }
+}
 /**
  * Get section label positions (arranged in circle)
  * @param {number} centerX - Center X position
@@ -239,6 +265,14 @@ function getSectionPositions(centerX, centerY, radius) {
  */
 export function sceneMenu(k) {
   k.scene("menu", () => {
+    //
+    // Menu now shares the native-resolution engine with "ready", Glow and
+    // touch lesson 0 (see engine-switch.js) — the baked background and every
+    // resolution-derived layout constant must be recomputed from the live
+    // window size before anything below reads them, mirroring Glow's
+    // recomputeGlowScreenLayout() pattern.
+    //
+    recomputeMenuBgLayout(k.width(), k.height())
     //
     // Clear any leftover pre-level transition handle from a prior scene.
     // A stale k.transitionCleanup would silently block Space / anti-hero
@@ -286,9 +320,7 @@ export function sceneMenu(k) {
     //
     k.setGravity(0)
     
-    const centerX = CFG.visual.screen.width / 2
-    const centerY = 500
-    const radius = 302
+    const { centerX, centerY, radius } = computeMenuCircleLayout(k)
     //
     // Create stars for background
     //
@@ -363,6 +395,7 @@ export function sceneMenu(k) {
     const KIDS_MUSIC_CURRENT_SECTION_VOLUME = MENU_AUDIO.kidsMusicHover * 0.5  // Even quieter when hovering current section
     const KIDS_MUSIC_FADE_IN_DURATION = MENU_AUDIO.kidsMusicFadeInDuration
     let kidsMusicFadeTimer = 0
+    registerEngineTeardown(() => stopMenuMusic(menuMusic, kidsMusic))
 
     //
     // Create hero in center (using HERO type)
@@ -733,13 +766,21 @@ export function sceneMenu(k) {
     // manual-draw mode (no z given): drawScene renders it between the
     // background and the stars, fading it together with the background.
     //
+    //
+    // The density ramp spans the FULL half-width of the current canvas, so
+    // the tuft probability keeps growing all the way to the screen edges
+    // instead of saturating partway out. Computed here (after this scene's
+    // recomputeMenuBgLayout() call above) rather than as a module constant
+    // so it tracks the live resolution instead of freezing at import time.
+    //
+    const menuGrassDensityRamp = MENU_BG_CANVAS_W / 2 - MENU_GRASS_EDGE_INSET
     const grassField = Grass.create({
       k,
       floorY: MENU_BG_GROUND_Y + MENU_BG_HORIZON_LINE_HEIGHT,
       left: MENU_GRASS_EDGE_INSET,
       right: MENU_BG_CANVAS_W - MENU_GRASS_EDGE_INSET,
       tuftCount: MENU_GRASS_TUFT_COUNT,
-      density: (x) => Math.min(1, Math.abs(x - centerX) / MENU_GRASS_DENSITY_RAMP),
+      density: (x) => Math.min(1, Math.abs(x - centerX) / menuGrassDensityRamp),
       getTint: () => getMenuGrassTint(inst)
     })
     //
@@ -1148,8 +1189,9 @@ export function sceneMenu(k) {
     //
     const allCompleted = progress.word?.completed && progress.touch?.completed
     const HINT_FONT_SIZE = 20
-    const HINT_CENTER_X = 960
-    const HINT_Y = 1030
+    const HINT_BOTTOM_MARGIN = 50
+    const HINT_CENTER_X = centerX
+    const HINT_Y = k.height() - HINT_BOTTOM_MARGIN
     let hintPrefix
     let hintSuffix
     if (allCompleted) {
@@ -2098,15 +2140,28 @@ function drawCompletedCheckmarkFront(k, inst) {
   const pulse = 0.9 + 0.1 * Math.sin(k.time() * CHECKMARK_PULSE_SPEED)
   const s = CHECKMARK_SIZE * pulse
   const color = k.rgb(CHECKMARK_COLOR_R, CHECKMARK_COLOR_G, CHECKMARK_COLOR_B)
+  const outlineColor = k.rgb(
+    CHECKMARK_OUTLINE_COLOR_R,
+    CHECKMARK_OUTLINE_COLOR_G,
+    CHECKMARK_OUTLINE_COLOR_B
+  )
   const op = CHECKMARK_OPACITY
   //
   // Two lines forming a ✓: short down-right stroke, then long up-right stroke.
   // A filled circle at the junction ensures no gap appears when the pulse animates.
   //
+  const startX = cx - s * 0.55
+  const endX = cx + s * 0.65
   const jx = cx - s * 0.1
   const jy = cy + s * 0.45
-  k.drawLine({ p1: k.vec2(cx - s * 0.55, cy), p2: k.vec2(jx, jy), width: CHECKMARK_WIDTH, color, opacity: op })
-  k.drawLine({ p1: k.vec2(jx, jy), p2: k.vec2(cx + s * 0.65, cy - s * 0.45), width: CHECKMARK_WIDTH, color, opacity: op })
+  const endY = cy - s * 0.45
+  k.drawLine({ p1: k.vec2(startX, cy), p2: k.vec2(jx, jy), width: CHECKMARK_OUTLINE_WIDTH, color: outlineColor, opacity: op })
+  k.drawLine({ p1: k.vec2(jx, jy), p2: k.vec2(endX, endY), width: CHECKMARK_OUTLINE_WIDTH, color: outlineColor, opacity: op })
+  k.drawCircle({ pos: k.vec2(startX, cy), radius: CHECKMARK_OUTLINE_WIDTH / 2, color: outlineColor, opacity: op })
+  k.drawCircle({ pos: k.vec2(jx, jy), radius: CHECKMARK_OUTLINE_WIDTH / 2, color: outlineColor, opacity: op })
+  k.drawCircle({ pos: k.vec2(endX, endY), radius: CHECKMARK_OUTLINE_WIDTH / 2, color: outlineColor, opacity: op })
+  k.drawLine({ p1: k.vec2(startX, cy), p2: k.vec2(jx, jy), width: CHECKMARK_WIDTH, color, opacity: op })
+  k.drawLine({ p1: k.vec2(jx, jy), p2: k.vec2(endX, endY), width: CHECKMARK_WIDTH, color, opacity: op })
   k.drawCircle({ pos: k.vec2(jx, jy), radius: CHECKMARK_WIDTH / 2, color, opacity: op })
 }
 //
@@ -2288,5 +2343,12 @@ function createSectionProgressLabel(k, config, progress, lastLevel, grayColor, v
     isCompleted: progress[section]?.completed || false,
     labelVisible: true
   }
+}
+//
+// Stops menu-owned music before the old Kaplay engine is destroyed directly.
+//
+function stopMenuMusic(menuMusic, kidsMusic) {
+  menuMusic?.stop?.()
+  kidsMusic?.stop?.()
 }
 

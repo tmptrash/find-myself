@@ -206,9 +206,13 @@ async function applyPack(k, packKey, sceneName) {
  * @param {string} sceneName
  * @param {Object} [opts]
  * @param {boolean} [opts.retainLoader] - Keep the DOM loader visible after prepare (Glow pre-level)
+ * @param {boolean} [opts.deferLoaderReveal] - Skip this function's own show/hide/delay logic
+ *   entirely because the caller already owns a single loader-reveal timer spanning this
+ *   pack-prep step plus additional work of its own (see native-prelevel handling in transition.js)
  */
 export async function prepareSceneAssets(k, sceneName, opts = {}) {
   const retainLoader = opts.retainLoader === true
+  const deferLoaderReveal = opts.deferLoaderReveal === true
   const packKey = sceneToPackKey(sceneName)
   //
   // Same pack still active — nothing to load; the existing sprites are valid.
@@ -229,7 +233,7 @@ export async function prepareSceneAssets(k, sceneName, opts = {}) {
   const isGlowPack = packKey === 'glow'
   let loaderShown = false
   let loaderTimer = null
-  if (!quietFirstHub) {
+  if (!quietFirstHub && !deferLoaderReveal) {
     BootLoader.setLoaderBarPct(5)
     if (isTimePack) {
       BootLoader.showLoader()
@@ -338,12 +342,20 @@ export function goAfterPreparingAssets(k, sceneName, afterGo) {
  * @param {Object} k
  */
 export function goToMenuAfterAssets(k) {
-  const leavingNative = getActiveResolutionMode() === RESOLUTION_MODE.NATIVE
-  if (leavingNative) {
+  //
+  // Only pre-show the loader when an actual engine swap is coming — menu now
+  // shares the native engine with Glow/touch lesson 0, so leaving one of
+  // those straight into menu needs no swap at all. Checking the CURRENT mode
+  // alone (rather than whether it differs from menu's target mode) used to
+  // retain a loader that ensureEngineForScene's same-mode early return would
+  // then never hide, freezing the screen.
+  //
+  const modeChanging = resolutionModeForScene('menu') !== getActiveResolutionMode()
+  if (modeChanging) {
     BootLoader.showLoader()
     BootLoader.setLoaderBarPct(0)
   }
   return prepareSceneAssetsThenEnterScene(k, 'menu', undefined, {
-    retainLoader: leavingNative
+    retainLoader: modeChanging
   })
 }

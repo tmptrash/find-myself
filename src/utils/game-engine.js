@@ -31,12 +31,15 @@ import { installLevelFadeIn } from "./transition.js"
 //
 // The engine can boot in two resolution modes:
 // - FIXED: legacy virtual canvas at CFG.visual.screen (1920x1080), stretched
-//   to fit the window via Kaplay's letterbox. Used by every scene except Glow.
+//   to fit the window via Kaplay's letterbox. Used by the remaining lessons
+//   (word/touch 1+/time, glow-complete) whose baked art assumes that exact
+//   aspect ratio.
 // - NATIVE: canvas (and Kaplay's internal coordinate space) matches the real
 //   window resolution 1:1 — no internal offscreen buffer, no stretch, so
 //   hairline art (the hero's 1px outline) never aliases regardless of the
-//   user's monitor. Used only by the Glow level, whose own layout adapts to
-//   whatever width/height that turns out to be (see level0.js).
+//   user's monitor. Used by "ready", "menu", the Glow level and touch lesson
+//   0 — the whole hub flow shares one engine with no swap between them —
+//   whose own layout adapts to whatever width/height that turns out to be.
 //
 export const RESOLUTION_MODE = {
   FIXED: 'fixed',

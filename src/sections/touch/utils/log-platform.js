@@ -75,13 +75,28 @@ export function generateLogDetail(w, h, withSnow) {
   const halfW = w / 2
   const halfH = h / 2
   const sq = LOG_END_SQUASH
-  const innerLeft = -halfW + halfH * sq
+  //
+  // Only the right end ever gets a rounded cap drawn over it (see
+  // drawLogPlatform / drawLOutlineLogPlatform) — the left side is always
+  // bare outline/cut wood, so cracks and grain there should run all the
+  // way out to the true left edge instead of stopping short by the same
+  // cap-radius inset the right side needs.
+  //
+  const innerLeft = -halfW
   const innerRight = halfW - halfH * sq
   const innerW = innerRight - innerLeft
+  //
+  // Stratified along X (one crack per evenly-spaced slot, jittered within
+  // it) rather than pure uniform random — a handful of independent random
+  // draws can easily cluster away from one end by chance, leaving that
+  // end of the log looking bare. Slots guarantee cracks reach both edges
+  // of the usable (non-cap) width every time.
+  //
   const crackCount = LOG_CRACK_COUNT_MIN + Math.floor(Math.random() * (LOG_CRACK_COUNT_MAX - LOG_CRACK_COUNT_MIN + 1))
   const cracks = []
+  const slotW = innerW / crackCount
   for (let i = 0; i < crackCount; i++) {
-    const cx = innerLeft + Math.random() * innerW
+    const cx = innerLeft + slotW * (i + 0.5) + (Math.random() - 0.5) * slotW * 0.7
     const cy = -halfH * 0.7 + Math.random() * h * 0.7
     const len = LOG_CRACK_LENGTH_MIN + Math.random() * (LOG_CRACK_LENGTH_MAX - LOG_CRACK_LENGTH_MIN)
     const angle = -0.4 + Math.random() * 0.8

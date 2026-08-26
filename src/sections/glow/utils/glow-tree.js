@@ -547,13 +547,6 @@ function buildChainOutline(segs, maxY) {
     seg.ny = dx / len
   })
   const joints = [{ x: clipped[0].sx, y: clipped[0].sy, nx: clipped[0].nx, ny: clipped[0].ny, hw: clipped[0].w * 0.5 }]
-  //
-  // The base joint can sit exactly at the ground line while maxY allows a
-  // few extra px below it (see ROOT_CLIP_BELOW_GROUND) — push it straight
-  // down to maxY so the trunk fill and the root clip rect share one border
-  // with no unpainted seam between them.
-  //
-  joints[0].y < maxY - 0.5 && (joints[0].y = maxY)
   clipped.forEach((seg, i) => {
     const next = clipped[i + 1]
     //
@@ -575,6 +568,19 @@ function buildChainOutline(segs, maxY) {
     right.push({ x: j.x - j.nx * j.hw, y: j.y - j.ny * j.hw })
     spine.push(j)
   })
+  //
+  // Force the base edge flush against maxY on BOTH sides. The base joint's
+  // own y can sit above maxY (a short trunk run), and its normal offset can
+  // also push one side lower than the other (a tilted base) — either one
+  // would leave an unpainted gap between the trunk polygon and the root
+  // clip rect below it. Snapping both edge points to the exact same y
+  // guarantees a flat, gap-free seam on both sides at once.
+  //
+  if (left.length) {
+    left[0].y = maxY
+    right[0].y = maxY
+    spine[0].y = maxY
+  }
   return { left, right, spine }
 }
 //
@@ -634,18 +640,31 @@ function rootSegWidth(seg, h, groundY, trunkBaseX, trunkHalfW) {
   const groundTaper = Math.max(0, Math.min(1, (segTopY - groundY) / ROOT_GROUND_TAPER_ZONE))
   const naturalW = Math.max(0.6, seg.w * Math.max(0.08, groundTaper) * Math.max(0.35, bottomTaper))
   //
-  // Widest a stroke centred at this X offset can be WITHOUT poking past
-  // either trunk edge: the remaining room to the trunk edge on the near
-  // side, mirrored — so at the trunk centre this equals the full trunk
-  // width, and it shrinks to zero exactly at the trunk edge. Several roots
-  // starting across the base width then tile it without ever reading wider
-  // than the trunk itself.
+  // Widest a stroke centred at this X can be WITHOUT poking past either
+  // trunk edge: the remaining room to the trunk edge on the near side,
+  // mirrored — so at the trunk centre this equals the full trunk width, and
+  // it shrinks to zero exactly at the trunk edge. Several roots starting
+  // across the base width then tile it without ever reading wider than the
+  // trunk itself. Measured at the segment's shallowest (top) endpoint —
+  // the point that actually sits against the trunk cross-section — instead
+  // of the segment midpoint, so a sloped first segment doesn't throw the
+  // merge width off right where it matters most.
   //
-  const midX = (seg.sx + seg.ex) * 0.5
-  const offset = Math.min(trunkHalfW, Math.abs(midX - trunkBaseX))
+  const topX = seg.sy <= seg.ey ? seg.sx : seg.ex
+  const offset = Math.min(trunkHalfW, Math.abs(topX - trunkBaseX))
   const trunkLocalW = 2 * (trunkHalfW - offset)
-  const mergeT = Math.max(0, 1 - (segTopY - groundY) / ROOT_TRUNK_MERGE_DEPTH)
-  return Math.min(trunkHalfW * 2, Math.max(naturalW, trunkLocalW * mergeT))
+  const mergeT = Math.max(0, Math.min(1, 1 - (segTopY - groundY) / ROOT_TRUNK_MERGE_DEPTH))
+  //
+  // Blended (not maxed) between the trunk-contained width right at the seam
+  // (mergeT 1) and the root's own natural taper once fully clear of the
+  // trunk (mergeT 0). Math.max(naturalW, trunkLocalW * mergeT) let a chunky
+  // root's own natural width win over the trunk-contained width even a few
+  // px below ground — before mergeT had faded enough — which is exactly
+  // what let roots balloon past the trunk's actual edge right at the
+  // visible seam instead of matching it pixel for pixel.
+  //
+  const blended = trunkLocalW + (naturalW - trunkLocalW) * (1 - mergeT)
+  return Math.min(trunkHalfW * 2, Math.max(0.6, blended))
 }
 //
 // Strokes all root segments with the ground/trunk-proximity taper applied.

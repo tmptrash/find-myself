@@ -9,9 +9,9 @@ import { registerGlowNativeTeardown } from '../../../utils/engine-switch.js'
 import { createLevelTransition } from '../../../utils/transition.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
-import * as LevelHelp from '../../../utils/lesson-help.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from '../utils/cute-mushroom.js'
+import * as Hedgehog from '../components/hedgehog.js'
 import { toCanvas, getRGB } from '../../../utils/helper.js'
 import {
   buildGlowTree,
@@ -78,7 +78,6 @@ const WATER_COLOR = glowRgb('water')
 const SKY_TOP_GRAY = glowRgb('parallaxSkyTopGray')
 const SKY_TOP_COLOR = glowRgb('parallaxSkyTopColor')
 const GLOW_GOLD_HEX = GLOW_PAL.gold
-const DIALOG_FILL = glowRgb('dialogFill')
 //
 // Colour-world backdrop split: sky above the ground line, dark earth below.
 //
@@ -161,6 +160,74 @@ const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-sprite'
 const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
 const MUSH_FLAT_SPRITE_SUFFIX = '-flat'
 const TRUNK_EXCLUDE_HALF = 50
+//
+// The left hedgehog stays hidden until the hero runs a stretch past the
+// branch trampoline, then pops out abruptly right in his path — at a
+// normal run speed there's no time to react before colliding, so the only
+// reliable way past it is creeping forward slowly (see
+// maybeSpawnLeftHedgehogAmbush): that leaves enough real time between the
+// pop and actual contact to spot it and jump. TRIGGER_GAP keeps the pop
+// well clear of the branch-tramp ground respawn spot (see
+// treeGroundSpawnX) so a fresh respawn there can never insta-trigger it.
+//
+const HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP = 170
+const HEDGEHOG_LEFT_AMBUSH_POP_LEAD = 70
+const HEDGEHOG_LEFT_AMBUSH_WANDER_LEASH = 100
+const HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN = 40
+//
+// Running covers the extra pop-lead distance in less real time than
+// walking does, so a hero sprinting through gets a slightly longer lead
+// added on top of the base one — a bit more of a fighting chance to react
+// before the hitboxes actually overlap.
+//
+const HEDGEHOG_LEFT_AMBUSH_RUN_SPEED_THRESHOLD = 200
+const HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS = 35
+const HEDGEHOG_SCALE = 1.4
+const HEDGEHOG_GROUND_RAISE = 4
+const HERO_HEDGEHOG_SPAWN_CLEARANCE = 20
+const HEDGEHOG_WANDER_RIGHT_MARGIN = 40
+//
+// A second, ambush hedgehog waits hidden at the far edge of the L-log
+// platform and pops out just before the hero actually lands there (see
+// maybeSpawnHedgehogAmbushPreLand), so the reveal reads as a sudden ambush
+// instead of appearing only once the hero has already touched down.
+//
+const HEDGEHOG_AMBUSH_SCALE = 1.4
+const HEDGEHOG_AMBUSH_GROUND_RAISE = HEDGEHOG_GROUND_RAISE
+const HEDGEHOG_AMBUSH_EDGE_GAP = 18
+//
+// If the ambush hedgehog pops out but the hero never lands on the L
+// platform to trigger it, it gives up and crawls off the edge on its own
+// after this many seconds of standing there unused.
+//
+const HEDGEHOG_AMBUSH_ABANDON_TIMEOUT = 6
+const HEDGEHOG_AMBUSH_POP_LEAD_Y = 90
+//
+// Once dead (ambush kill or death while still standing on the log), the
+// hedgehog first walks to whichever platform edge is closer before it
+// actually drops, so the tumble reads as stepping off the end of the log
+// instead of sinking straight through its middle.
+//
+const HEDGEHOG_AMBUSH_FALL_EDGE_PAD = 14
+//
+// Touching either hedgehog is fatal — same disintegration flow as any
+// other level's death, then a standard press-any-key countdown reload.
+//
+const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
+const HEDGEHOG_DEATH_HINT_TEXT = 'Life is a complicated thing'
+const HEDGEHOG_DEATH_HINT_RAISE = 46
+const HEDGEHOG_DEATH_COUNTDOWN_SECONDS = 7
+const HEDGEHOG_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
+const HEDGEHOG_DEATH_PROMPT_FONT = 22
+const HEDGEHOG_DEATH_PROMPT_Y = TOP_MARGIN + 62
+//
+// Ground respawn after a hedgehog kill lands just past the wandering
+// hedgehog's own leash, so reloading the level never drops the hero right
+// back into its path. Kept modest — the leash already runs right up to
+// the right trampoline mushroom, so a bigger margin would spawn the hero
+// on top of it instead.
+//
+const HEDGEHOG_DEATH_RESPAWN_MARGIN = 12
 //
 // Parallax background — sky, 3 tree planes, 3 bush planes (each scrolling
 // at its own speed) plus a static ground/underground strip at world speed 1.0.
@@ -245,6 +312,15 @@ const LOG_TREE_COLOR_COLORS = {
   core: GLOW_PAL.treeLit.leaf,
   shadow: GLOW_PAL.void
 }
+//
+// The L-log platform stands out from the plain W/O logs: a bare outline
+// silhouette with no fill, only its cracks, rounded end cap and grain
+// stripes painted in one single accent tone.
+//
+const L_PLAT_OUTLINE_WIDTH = 2
+const L_PLAT_END_STEPS = 16
+const L_PLAT_END_SQUASH = 0.55
+const L_PLAT_STRIPE_COUNT = 5
 const RIGHT_PLAT_OFFSET_X = 100
 //
 // W platform sits further left so the walking trampoline can dock beside it.
@@ -252,9 +328,12 @@ const RIGHT_PLAT_OFFSET_X = 100
 const W_PLAT_X_BASE = LEFT_MARGIN + 100
 const W_PLAT_Y_BELOW = 90
 //
-// O platform sits half a log length further right than its original spot.
+// O platform sits half a log length further right than its original spot,
+// pulled 80px back to the left of that spot so the jump from the L platform
+// area is shorter. The bonus/fragments platform is anchored to oPlatX, so it
+// shifts left by the same amount automatically.
 //
-const O_PLAT_OFFSET_X = 210 + LOG_W / 2
+const O_PLAT_OFFSET_X = 130 + LOG_W / 2
 const O_PLAT_OFFSET_Y = 105
 //
 // The O letter floats 11 px higher above its log than the default placement.
@@ -518,7 +597,18 @@ const LAKE_SURFACE_CULL_MARGIN = 48
 // Blinking letters — value 6 fill (or gold for G), value 1 offset-outline.
 //
 const GLOW_LETTER_FONT = 'JetBrains Mono'
-const GLOW_LETTER_SIZE = 68
+//
+// Same size before pickup and inside the pickup caption — one glyph size for
+// every letter (G, L, O, W) throughout its whole lifetime.
+//
+const GLOW_LETTER_SIZE = 54
+//
+// The world letter sits noticeably bigger than its pickup-caption size
+// while still uncollected — a scale-only boost (never touches font size,
+// so the glyph stays crisp) that gets reset to 1 the moment its caption
+// opens, matching the caption's own already-tuned letter size exactly.
+//
+const GLOW_LETTER_PRE_PICKUP_SCALE = 1.15
 //
 // Pure black drop shadow behind every pickup letter (G, L, O, W): a single
 // copy of the glyph offset right+down, like classic pixel-text shadows.
@@ -528,8 +618,6 @@ const GLOW_LETTER_SHADOW_R = 0
 const GLOW_LETTER_SHADOW_G = 0
 const GLOW_LETTER_SHADOW_B = 0
 const GLOW_LETTER_TILT = 12
-const GLOW_LETTER_PULSE_SPEED = 1.8
-const GLOW_LETTER_PULSE_MIN = 0.35
 const GLOW_LETTER_GAP = 70
 const GLOW_LETTER_PICKUP_RADIUS = 52
 //
@@ -634,13 +722,37 @@ const MENU_ARROW_DRAW_OPACITY = 1
 //
 const GLOW_DIALOG_G = 'Now I have [hl]G[/hl]round under my feet.\nI have somewhere to start.'
 const GLOW_DIALOG_L = '[hl]L[/hl]ight helps me see the shades.\nThe world is rarely just black\nor white. Not everything reveals\nitself in motion.'
-const GLOW_DIALOG_O = '[hl]O[/hl]bservation is my new skill.\nSometimes I need to stop before\nI can truly see. I should speak with\nbig mushroom.'
+const GLOW_DIALOG_O = 'My new skill is [hl]O[/hl]bservation.\nSometimes I need to stop before\nI can truly see. I should speak with\nthe big mushroom.'
 //
 // Voice-overs played while the matching letter dialog is open
 //
 const GLOW_DIALOG_SOUND_G = 'glow-g'
 const GLOW_DIALOG_SOUND_L = 'glow-l'
 const GLOW_DIALOG_SOUND_O = 'glow-ow'
+//
+// Inline letter pickup caption — the dialog phrase now grows straight down
+// from the picked-up letter (tilted to match it) instead of a modal panel.
+// See openGlowLetterCaption().
+//
+const GLOW_LETTER_CAPTION_LINE_SPACING = 8
+const GLOW_LETTER_CAPTION_SHADOW_OFFSET = 2
+//
+// 8-direction outline used instead of the drop shadow while the world is
+// monochrome — matches the "void" outline every mushroom uses in the same
+// flat/gray decor mode, so the caption reads as one consistent art style.
+//
+const GLOW_LETTER_CAPTION_OUTLINE_PAD = 1.6
+const GLOW_LETTER_CAPTION_OUTLINE_OFFSETS = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1]
+]
+const GLOW_LETTER_CAPTION_FADE_IN = 0.4
+const GLOW_LETTER_CAPTION_FADE_OUT = 0.7
+const GLOW_LETTER_CAPTION_DURATION_G = 6
+const GLOW_LETTER_CAPTION_DURATION_L = 9
+const GLOW_LETTER_CAPTION_DURATION_O = 9
+const GLOW_LETTER_CAPTION_Z = CFG.visual.zIndex.player + 20
 //
 // Speech-bubble hints: two intro lines at spawn (the G letter appears only
 // after both finish and all three gray zones were explored), one-shot lines
@@ -1287,6 +1399,18 @@ function initGlowLevel0Scene(k) {
     branchPlat.tag('startBranch')
     const branchPlatHome = { x: horizBranch.x1, y: branchPlatY }
     const branchTrampX = TREE_X + TRUNK_EXCLUDE_HALF + BRANCH_TRAMP_OFFSET_X
+    //
+    // Left hedgehog ambush spot — see HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP.
+    //
+    const hedgehogAmbushTriggerX = branchTrampX + HEDGEHOG_LEFT_AMBUSH_TRIGGER_GAP
+    const hedgehogAmbushPopX = hedgehogAmbushTriggerX + HEDGEHOG_LEFT_AMBUSH_POP_LEAD
+    //
+    // Right ambush hedgehog's home spot on the L-log — computed early (it
+    // only depends on TREE_X and fixed offsets, not on anything laid out
+    // further below) so the spawn-clearance check right after can see it.
+    //
+    const rightZoneBaseX = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
+    const lPlatX = rightZoneBaseX - L_PLAT_SHIFT_LEFT
     const treeGroundSpawnX = branchTrampX + HERO_DEATH_RESPAWN_PAST_BRANCH_TRAMP_X
     const respawnNearTree = get(KEY_RESPAWN_NEAR_TREE, false)
     respawnNearTree && set(KEY_RESPAWN_NEAR_TREE, false)
@@ -1320,6 +1444,34 @@ function initGlowLevel0Scene(k) {
     const heroSpawnY = spawnOnBranch
       ? branchPlatY - SURFACE_DETECT_Y + LOG_SNAP_EMBED
       : FLOOR_Y - SURFACE_DETECT_Y + LOG_SNAP_EMBED
+    //
+    // A saved/derived ground spawn landing inside the left hedgehog's
+    // ambush danger zone (trigger..pop, plus its touch radius) would pop
+    // and kill it the instant the level loads. Pull the spawn back to just
+    // before the trigger instead whenever that would happen — landing past
+    // the whole zone (already-explored ground further right) is left as is.
+    //
+    if (!spawnOnBranch) {
+      const dangerEndX = hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_DANGER_MARGIN
+      if (heroSpawnX >= hedgehogAmbushTriggerX && heroSpawnX <= dangerEndX) {
+        heroSpawnX = hedgehogAmbushTriggerX - HERO_HEDGEHOG_SPAWN_CLEARANCE
+      }
+    }
+    //
+    // Second check: the right (L-log) ambush hedgehog. Once L has already
+    // been collected in an earlier session it starts already popped and
+    // wandering the ground across the log's own footprint (see its
+    // minX/maxX below) instead of waiting hidden — landing right on top of
+    // it at level load would be an instant, unavoidable death. Same pull-
+    // back treatment as the left hedgehog's danger zone above.
+    //
+    if (!spawnOnBranch && zones.lCollected) {
+      const rHogDangerStartX = lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN
+      const rHogDangerEndX = lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN
+      if (heroSpawnX >= rHogDangerStartX && heroSpawnX <= rHogDangerEndX) {
+        heroSpawnX = rHogDangerEndX + HERO_HEDGEHOG_SPAWN_CLEARANCE
+      }
+    }
     //
     // Glow sound effects and the ambient birds are audible from the first
     // frame; collecting G no longer acts as an audio gate.
@@ -1363,8 +1515,6 @@ function initGlowLevel0Scene(k) {
     tagGroundPlatform(floorPlat, sound, heroInst)
     floorBounds.postCaveFloor && tagGroundPlatform(floorBounds.postCaveFloor, sound, heroInst)
     const rightPlatY = horizBranch.physY
-    const rightZoneBaseX = TREE_X + RIGHT_PLAT_OFFSET_X + RIGHT_ZONE_SHIFT_X
-    const lPlatX = rightZoneBaseX - L_PLAT_SHIFT_LEFT
     const wPlatY = Math.min(horizBranch.physY + W_PLAT_Y_BELOW, FLOOR_Y - 50)
     const wPlatX = W_PLAT_X_BASE
     const clusterCenterX = horizBranch.x1 + 40
@@ -1373,9 +1523,9 @@ function initGlowLevel0Scene(k) {
     const oPlatY = rightPlatY - O_PLAT_OFFSET_Y
     const bonusPlatX = oPlatX + LOG_W + BONUS_PLAT_OFFSET_X
     const bonusPlatY = oPlatY - BONUS_PLAT_OFFSET_Y
-    const lPlat = createGrayLogPlatform(k, lPlatX, rightPlatY, LOG_W, LOG_H, sound, heroInst, zones)
+    const lPlat = createGrayLogPlatform(k, lPlatX, rightPlatY, LOG_W, LOG_H, sound, heroInst, zones, true)
     const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones)
-    const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones)
+    const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, true)
     const trampX = rightZoneBaseX + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1
@@ -1387,6 +1537,13 @@ function initGlowLevel0Scene(k) {
     const gLetterX = horizBranch.x2 + G_LETTER_RIGHT_OF_BRANCH_GAP + GLOW_LETTER_SIZE / 2
     const gLetterY = horizBranch.physY - GLOW_LETTER_SIZE * 0.15 - G_LETTER_RAISE_Y
     const gLetter = zones.gCollected ? null : createGlowLetter(k, 'G', gLetterX, gLetterY, GLOW_LETTER_TILT, GLOW_GOLD_HEX)
+    //
+    // G sits right against the big tree's canopy — createGlowLetter's
+    // default z is below the tree's monolithic sprite (trunk+branches+
+    // leaves as one image), so without this it would draw behind the
+    // leaves instead of in front of them, same fix already applied to O.
+    //
+    gLetter?.allObjects?.forEach(obj => { obj.z = CFG.visual.zIndex.platforms - 1 })
     const lLetterX = lPlatX - L_LETTER_LEFT_OF_PLAT_GAP - GLOW_LETTER_SIZE / 2
     const lLetterY = rightPlatY - GLOW_LETTER_SIZE * 0.15 - L_LETTER_RAISE_Y
     const lLetter = zones.lCollected ? null : createGlowLetter(k, 'L', lLetterX, lLetterY, -GLOW_LETTER_TILT, GLOW_GOLD_HEX)
@@ -1402,6 +1559,37 @@ function initGlowLevel0Scene(k) {
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones)
     const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones)
     const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones)
+    const hedgehog = Hedgehog.create({
+      k,
+      x: hedgehogAmbushPopX,
+      y: FLOOR_Y - HEDGEHOG_GROUND_RAISE,
+      scale: HEDGEHOG_SCALE,
+      facing: 'left',
+      hero: heroInst,
+      zones,
+      hiddenUntilPopOut: true,
+      minX: hedgehogAmbushPopX - HEDGEHOG_LEFT_AMBUSH_WANDER_LEASH,
+      maxX: Math.min(hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_WANDER_LEASH, trampX - HEDGEHOG_WANDER_RIGHT_MARGIN)
+    })
+    //
+    // Ambush hedgehog waits hidden at the far edge of the L-log platform and
+    // pops into view the moment the hero first lands there (see
+    // maybeMarkLPlatStepped). Once L was already collected in an earlier
+    // life/session there's no ambush left to spring — it starts already
+    // popped and wandering the ground beside the log instead.
+    //
+    const ambushHedgehog = Hedgehog.create({
+      k,
+      x: zones.lCollected ? lPlatX + LOG_W / 2 : lPlatX + LOG_W - HEDGEHOG_AMBUSH_EDGE_GAP,
+      y: (zones.lCollected ? FLOOR_Y : rightPlatY) - HEDGEHOG_AMBUSH_GROUND_RAISE,
+      scale: HEDGEHOG_AMBUSH_SCALE,
+      facing: 'left',
+      hero: heroInst,
+      zones,
+      hiddenUntilPopOut: !zones.lCollected,
+      minX: zones.lCollected ? lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX,
+      maxX: zones.lCollected ? lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX + LOG_W
+    })
     const waterLayer = createWater(k, lakeX1, waterX2, zones)
     createLakeShoreRockLayer(k, zones)
     createDrownMask(k, lakeX1, lakeX2, zones)
@@ -1572,6 +1760,14 @@ function initGlowLevel0Scene(k) {
       grassLayer,
       rockObjs,
       mushObjs,
+      hedgehog,
+      hedgehogAmbushTriggerX,
+      hedgehogAmbushPopX,
+      ambushHedgehog,
+      ambushHedgehogIdleTimer: 0,
+      lPlatCaptionHiding: false,
+      oPlatCaptionHiding: false,
+      hedgehogDeathHandled: false,
       waterLayer,
       atmosphereMotes: createAtmosphereMotes(),
       leftDecorFade: zones.groundDecorLeft ? 1 : 0,
@@ -1632,6 +1828,7 @@ function initGlowLevel0Scene(k) {
       lastHeroX: heroSpawnX,
       logHoverFrames: 0,
       wasGrounded: false,
+      wasHeroRunning: false,
       drowning: false,
       drownTimer: 0,
       deathHandled: false,
@@ -2868,8 +3065,17 @@ function applyZoneVisibility(inst) {
   syncMushroomGraySprites(inst)
   cornerObjsSetHidden(inst.cornerObjs, false)
   refreshPlayfieldCornerSprites(inst)
-  setPlatVisible(inst.lPlat, z.lPlatRevealed && !z.lCollected, inst.lPlatHome)
-  setPlatVisible(inst.oPlat, z.oZone, inst.oPlatHome, z.lCollected)
+  //
+  // Stay visible/solid forever once revealed, same as W — only hidden for
+  // the caption's own duration (lPlatCaptionHiding/oPlatCaptionHiding, set/
+  // cleared by collectLetterL/collectLetterO) instead of for good. Gated by
+  // their own flags rather than a one-off override so any other
+  // applyZoneVisibility() call firing mid-caption (hero wandering into
+  // another zone trigger, etc.) can't prematurely bring the log back while
+  // the caption is still up.
+  //
+  setPlatVisible(inst.lPlat, z.lPlatRevealed && !inst.lPlatCaptionHiding, inst.lPlatHome)
+  setPlatVisible(inst.oPlat, z.oZone && !inst.oPlatCaptionHiding, inst.oPlatHome, z.lCollected)
   setPlatVisible(inst.wPlat, z.wZone, inst.wPlatHome, z.oCollected)
   setLetterVisible(inst.lLetter, z.lLetterUnveiled && !z.lCollected, inst.letterAppearFxReady)
   setLetterVisible(inst.oLetter, z.oZone && !z.oCollected, inst.letterAppearFxReady)
@@ -2947,7 +3153,7 @@ function setPlatVisible(plat, visible, home, solid = true) {
 // Toggles pickup letter visibility.
 //
 function setLetterVisible(letterEntry, visible, burst = false) {
-  if (!letterEntry) return
+  if (!letterEntry || letterEntry.forceVisible) return
   const wasHidden = letterEntry.main?.hidden !== false
   letterEntry.allObjects.forEach(obj => { obj.hidden = !visible })
   if (visible && wasHidden && burst) {
@@ -3020,7 +3226,7 @@ function rebuildWoodSurfaces(inst) {
   const branch = inst.woodSurfaces[0]
   const list = branch ? [branch] : []
   const z = inst.zones
-  z.lPlatRevealed && !z.lCollected && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
+  z.lPlatRevealed && list.push({ x1: inst.lPlatHome.x, x2: inst.lPlatHome.x + LOG_W, y: inst.lPlatHome.y, h: LOG_H })
   z.oZone && z.lCollected && list.push({ x1: inst.oPlatHome.x, x2: inst.oPlatHome.x + LOG_W, y: inst.oPlatHome.y, h: LOG_H })
   z.wZone && z.oCollected && list.push({ x1: inst.wPlatHome.x, x2: inst.wPlatHome.x + LOG_W, y: inst.wPlatHome.y, h: LOG_H })
   //
@@ -4206,17 +4412,26 @@ function makeRoundedCornerCanvas(radius, color) {
 //
 // Log-style platform — value 5 environment silhouette (same shape as touch logs).
 //
-function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones) {
+function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineStyle = false) {
   //
   // Log platforms match the main tree's gray trunk tone before L; after L
-  // they switch to the fully detailed wood barrel.
+  // they switch to the fully detailed wood barrel. The L platform itself
+  // always uses the bare outline+single-accent style instead (outlineStyle).
   //
   const envColorGray = getRGB(k, GLOW_PAL.treeGray.trunk)
   const logDetail = generateLogDetail(w, h)
   const cx = x + w / 2
   const cy = y + h / 2
   const plat = k.add([
-    k.rect(w, h),
+    //
+    // fill:false — this rect only supplies the collision shape; every pixel
+    // is painted by the custom draw() below. Without it, rect()'s own draw
+    // hook still runs alongside draw() and fills the full box white first —
+    // invisible once L/O/W's own opaque wood fill covers it completely, but
+    // the L platform's bare-outline style leaves most of that box unpainted
+    // by design, so the white default showed straight through.
+    //
+    k.rect(w, h, { fill: false }),
     k.pos(cx, cy),
     k.anchor('center'),
     //
@@ -4239,6 +4454,37 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones) {
         const ox = this._ghostDraw ? (homeCx - this.pos.x) : 0
         const oy = this._ghostDraw ? (homeCy - this.pos.y) : 0
         const fade = zones._sceneRef?.colorFade ?? 0
+        if (outlineStyle) {
+          //
+          // Same muted gray rim used for every other gray-phase ground decor
+          // piece (rocks, trampoline mushrooms, letter captions — see
+          // DECOR_OUTLINE_RGB) instead of plain black, which read as a
+          // mismatched stray colour once everything else on screen settled
+          // on this softer tone. Void itself would be invisible here — the
+          // playfield backdrop during this phase is painted that exact
+          // colour, so an outline that dark would vanish into it.
+          //
+          const outlineRgb = k.rgb(DECOR_OUTLINE_RGB.r, DECOR_OUTLINE_RGB.g, DECOR_OUTLINE_RGB.b)
+          //
+          // Stays true neutral gray while the world is still flat, same as
+          // the other log platforms below — glowLogColors() returns the
+          // warm "lit" sand bark tone unconditionally, which read as a
+          // stray second colour on top of the black outline while
+          // everything else on screen was still strict grayscale.
+          //
+          const detailHex = (fade > 0.01 || zones.lCollected) ? glowLogColors(zones).bark : GLOW_PAL.treeGray.trunk
+          const detailRgb = getRGB(k, detailHex)
+          //
+          // Crossfades from the bare outline+accent silhouette into a fully
+          // filled, coloured barrel as the world turns colourful — same
+          // "outline in gray, filled in colour" progression the main tree
+          // itself goes through (see getTreePaletteColor()), instead of
+          // staying a hollow outline forever once every colour has appeared.
+          //
+          fade < 0.98 && drawLOutlineLogPlatform(k, w, h, ox, oy, this._logDetail, outlineRgb, detailRgb)
+          fade > 0.02 && drawLogPlatform(k, w, h, ox, oy, fade, this._logDetail, glowLogColors(zones))
+          return
+        }
         //
         // Detailed wood (rings, bark lines) appears once L is collected;
         // before that the log is a flat gray environment silhouette.
@@ -4290,6 +4536,66 @@ function drawFlatLog(k, ox, oy, w, h, color) {
   k.drawPolygon({ pts: bodyPts, color })
 }
 //
+// Hollow outline barrel for the L platform: the body is a bare stroked
+// silhouette with no fill, while its cracks, rounded end cap and grain
+// stripes are all painted in one single accent tone.
+//
+function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailColor) {
+  const halfW = w / 2
+  const halfH = h / 2
+  const endR = halfH
+  const sq = L_PLAT_END_SQUASH
+  const bodyPts = []
+  for (let i = 0; i <= L_PLAT_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / L_PLAT_END_STEPS
+    bodyPts.push(k.vec2(-halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
+  }
+  for (let i = 0; i <= L_PLAT_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / L_PLAT_END_STEPS
+    bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
+  }
+  k.drawLines({ pts: [...bodyPts, bodyPts[0]], width: L_PLAT_OUTLINE_WIDTH, color: outlineColor })
+  //
+  // Rounded end-cap detail only on the right, same convention as the
+  // standard filled log style (drawLogPlatform) — the left side stays bare
+  // outline, with its own cracks/grain running all the way out to that
+  // edge below instead of stopping short at a cap that isn't there.
+  //
+  drawFilledOvalOutline(k, halfW + ox, oy, endR * 0.82, sq, detailColor)
+  for (let i = 0; i < L_PLAT_STRIPE_COUNT; i++) {
+    const ly = -halfH + (h / (L_PLAT_STRIPE_COUNT + 1)) * (i + 1) + oy
+    k.drawRect({
+      pos: k.vec2(-halfW + ox, ly),
+      width: w - endR * sq,
+      height: 1,
+      color: detailColor,
+      opacity: 0.7
+    })
+  }
+  for (const crack of detail.cracks) {
+    const dx = Math.cos(crack.angle) * crack.len * 0.5
+    const dy = Math.sin(crack.angle) * crack.len * 0.5
+    k.drawLines({
+      pts: [k.vec2(crack.x - dx + ox, crack.y - dy + oy), k.vec2(crack.x + dx + ox, crack.y + dy + oy)],
+      width: 1,
+      color: detailColor,
+      opacity: 0.8
+    })
+  }
+}
+//
+// Fills a squashed oval using polygon approximation (the L platform's
+// single-tone rounded end cap).
+//
+function drawFilledOvalOutline(k, cx, cy, r, squash, color) {
+  const pts = []
+  for (let i = 0; i <= L_PLAT_END_STEPS; i++) {
+    const a = Math.PI * 2 * i / L_PLAT_END_STEPS
+    pts.push(k.vec2(cx + Math.cos(a) * r * squash, cy + Math.sin(a) * r))
+  }
+  k.drawPolygon({ pts, color })
+}
+//
 // Draws the revealed hidden bonus platform in the letter-log style: flat
 // environment-toned barrel before L, detailed wood once L is collected.
 //
@@ -4324,6 +4630,7 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill)
       k.pos(x + dx, y + dy),
       k.anchor('center'),
       k.rotate(tiltDeg),
+      k.scale(GLOW_LETTER_PRE_PICKUP_SCALE),
       k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
       k.z(CFG.visual.zIndex.player - 2)
     ])
@@ -4335,11 +4642,29 @@ function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill)
     k.pos(x, y),
     k.anchor('center'),
     k.rotate(tiltDeg),
+    k.scale(GLOW_LETTER_PRE_PICKUP_SCALE),
     k.color(fill.r, fill.g, fill.b),
     k.z(CFG.visual.zIndex.player - 1)
   ])
   main.hidden = true
-  return { main, outlines, allObjects: [main, ...outlines], char, x, y, k, colorHex: fillHex }
+  return {
+    main,
+    outlines,
+    allObjects: [main, ...outlines],
+    char,
+    x,
+    y,
+    k,
+    colorHex: fillHex,
+    tiltDeg,
+    //
+    // Held true while the inline pickup caption (openGlowLetterCaption) is
+    // showing this same letter — blocks the zone-visibility sync and the
+    // idle pulse animation from touching hidden/opacity so the caption's
+    // own fade timeline is the only thing driving them.
+    //
+    forceVisible: false
+  }
 }
 //
 // Swaying grass — the shared Grass component, excluding water, trunk and the
@@ -5645,99 +5970,188 @@ function playSegmentRevealSound(inst) {
   Sound.playLetterPickupSoft(inst.sound)
 }
 //
-// Opens a letter dialog with glow styling. Optional voice-over starts with
-// the panel and stops on any close path (Esc / Space / Enter / click).
+// Rotates a local (dx, dy) offset by tiltDeg — used to keep the caption
+// growing "downward" along the letter's own tilted axis instead of straight
+// down on screen.
 //
-function openGlowLetterDialog(inst, text, onCloseExtra, dialogSoundName = null) {
+function rotateGlowOffset(dx, dy, tiltDeg) {
+  const rad = tiltDeg * Math.PI / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return { x: dx * cos - dy * sin, y: dx * sin + dy * cos }
+}
+//
+// Splits a "before[hl]X[/hl]after" caption string into its plain-text parts.
+// Falls back to putting everything in "after" if no [hl] marker is found.
+//
+function splitGlowCaptionText(text) {
+  const match = text.match(/^([\s\S]*?)\[hl\](.)\[\/hl\]([\s\S]*)$/)
+  return match ? { before: match[1], after: match[3] } : { before: '', after: text }
+}
+//
+// Replaces the old modal letter dialog: the picked-up letter stays exactly
+// where it was collected and becomes part of the caption word itself (e.g.
+// the collected "G" becomes the "G" of "Ground"), with the rest of the
+// sentence built to its left and right on the same tilted baseline. Any
+// further wrapped lines grow centered below that first line. Everything
+// fades in, holds for holdDuration, then fades out and is destroyed
+// together. The pickup voice-over plays exactly as before. The hero keeps
+// full control the whole time (runs, jumps, falls normally) — the caption
+// never freezes him. The letter itself always keeps its usual gold fill,
+// matching how it looked before pickup, in both flat and colour world modes.
+//
+function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExtra, dialogSoundName = null) {
+  const k = inst.k
   inst.dialogOpen = true
-  pinHeroForLetterDialog(inst)
   playGlowLetterDialogMusic(inst, dialogSoundName)
+  letterEntry && (letterEntry.forceVisible = true)
   //
-  // Letterbox must match the current chrome (void before G, outer after) so
-  // dimming never creates a different-coloured stripe above/below the canvas.
+  // Drop the pre-pickup size boost — the caption layout below measures and
+  // positions everything assuming the letter is at its native, unscaled
+  // GLOW_LETTER_SIZE.
   //
-  const backdropHex = isOuterFrameVisible(inst.zones) ? OUTER_BG_HEX : GLOW_PAL.void
-  CanvasBackdrop.applyCanvasBackdrop(inst.k, backdropHex)
-  LevelHelp.openStandalonePanel(inst.k, text, {
-    centerX: LEFT_MARGIN + VIEW_W / 2,
-    centerY: inst.k.height() / 2,
-    fillRgb: { r: DIALOG_FILL.r, g: DIALOG_FILL.g, b: DIALOG_FILL.b },
-    textRgb: { r: LIGHT_GRAY.r, g: LIGHT_GRAY.g, b: LIGHT_GRAY.b },
-    borderRgb: { r: DECOR_GRAY.r, g: DECOR_GRAY.g, b: DECOR_GRAY.b },
-    sceneBackdropHex: backdropHex,
-    textStyles: { hl: { color: inst.k.rgb(inst.goldRgb.r, inst.goldRgb.g, inst.goldRgb.b), override: true } },
-    onCloseStart: () => {
-      stopGlowLetterDialogMusic(inst)
-      //
-      // Kill squash immediately on Space/Esc — do not wait for fade-out,
-      // or the same press can leave jump-0 looping on the wood log.
-      //
-      forceHeroIdleOnLog(inst)
-      Hero.armJumpKeyReleaseGate(inst.heroInst)
-      inst.heroInst.controlsDisabled = true
-      inst.heroInst.controllable = false
-      inst.heroInst.canJump = false
-    },
-    onClose: () => {
-      stopGlowLetterDialogMusic(inst)
-      unpinHeroAfterLetterDialog(inst)
-      inst.dialogOpen = false
-      onCloseExtra?.()
+  letterEntry?.allObjects?.forEach(obj => { obj.scale = k.vec2(1) })
+  const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  //
+  // Matches the rest of the world's own gray/colour state — plain gray
+  // while everything else is still gray-lit, back to the usual light tone
+  // once the world turns colourful.
+  //
+  const worldFade = inst.zones?._sceneRef?.colorFade ?? (inst.zones?.colorWorld ? 1 : 0)
+  const captionTextRgb = worldFade < 0.5 ? DECOR_GRAY : LIGHT_GRAY
+  const tiltDeg = letterEntry?.tiltDeg ?? 0
+  const { before, after } = splitGlowCaptionText(text)
+  const afterLines = after.split('\n')
+  const afterFirst = afterLines[0] || ''
+  const restText = afterLines.slice(1).join('\n')
+  //
+  // Caption text matches the letter's own size (unchanged from before pickup)
+  // so it reads as one continuous, uniformly sized piece of text.
+  //
+  const fontSize = GLOW_LETTER_SIZE
+  const letterMeasure = k.formatText({ text: letterEntry?.char || '', size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT })
+  const letterHalfW = letterMeasure.width / 2
+  const beforeWidth = before ? k.formatText({ text: before, size: fontSize, font }).width : 0
+  const afterFirstWidth = afterFirst ? k.formatText({ text: afterFirst, size: fontSize, font }).width : 0
+  const firstRowCenterX = (afterFirstWidth - beforeWidth) / 2
+  const originX = letterEntry?.x ?? 0
+  const originY = letterEntry?.y ?? 0
+  //
+  // One consistent row-to-row step for the whole caption: the natural
+  // height of a plain text row at this font size plus the same gap
+  // k.text's own lineSpacing uses between restText's wrapped lines — so
+  // row 1 (the oversized embedded letter + its first line) sits above
+  // row 2 at exactly the same rhythm as row 2 sits above row 3, etc. The
+  // embedded letter's own taller glyph box is intentionally ignored here.
+  //
+  // Row 1's pieces (before/afterFirst) are vertically centered on originY,
+  // so only half of oneLineHeight sits below the origin — using the full
+  // height here would double-count that half and push row 2 needlessly far
+  // down. restText itself is top-anchored, so its own internal line-to-line
+  // rhythm further down still uses the full oneLineHeight + gap, unaffected.
+  //
+  const oneLineHeight = k.formatText({ text: afterFirst || before || 'A', size: fontSize, font }).height
+  const rowStep = oneLineHeight / 2 + GLOW_LETTER_CAPTION_LINE_SPACING
+  const pieces = []
+  before && pieces.push({ text: before, anchor: 'right', localX: -letterHalfW, localY: 0 })
+  afterFirst && pieces.push({ text: afterFirst, anchor: 'left', localX: letterHalfW, localY: 0 })
+  restText && pieces.push({
+    text: restText,
+    anchor: 'top',
+    align: 'center',
+    localX: firstRowCenterX,
+    localY: rowStep
+  })
+  const shadowObjs = []
+  const outlineObjs = []
+  const mainObjs = []
+  //
+  // Flat text shadow reads as a stray dark smudge once the world has gone
+  // monochrome — the colourful world gets the usual drop shadow, the
+  // monochrome world gets a "void" outline instead, matching how every
+  // mushroom is outlined in the same flat/gray decor mode.
+  //
+  const withShadow = worldFade >= 0.5
+  const withOutline = !withShadow
+  pieces.forEach(piece => {
+    const localOffset = rotateGlowOffset(piece.localX, piece.localY, tiltDeg)
+    const shadowOffset = rotateGlowOffset(
+      piece.localX + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      tiltDeg
+    )
+    withShadow && shadowObjs.push(k.add([
+      k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
+      k.pos(originX + shadowOffset.x, originY + shadowOffset.y),
+      k.anchor(piece.anchor),
+      k.rotate(tiltDeg),
+      k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
+      k.opacity(0),
+      k.z(GLOW_LETTER_CAPTION_Z)
+    ]))
+    withOutline && GLOW_LETTER_CAPTION_OUTLINE_OFFSETS.forEach(([odx, ody]) => {
+      const outlineOffset = rotateGlowOffset(
+        piece.localX + odx * GLOW_LETTER_CAPTION_OUTLINE_PAD,
+        piece.localY + ody * GLOW_LETTER_CAPTION_OUTLINE_PAD,
+        tiltDeg
+      )
+      outlineObjs.push(k.add([
+        k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
+        k.pos(originX + outlineOffset.x, originY + outlineOffset.y),
+        k.anchor(piece.anchor),
+        k.rotate(tiltDeg),
+        k.color(VOID.r, VOID.g, VOID.b),
+        k.opacity(0),
+        k.z(GLOW_LETTER_CAPTION_Z)
+      ]))
+    })
+    mainObjs.push(k.add([
+      k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
+      k.pos(originX + localOffset.x, originY + localOffset.y),
+      k.anchor(piece.anchor),
+      k.rotate(tiltDeg),
+      k.color(captionTextRgb.r, captionTextRgb.g, captionTextRgb.b),
+      k.opacity(0),
+      k.z(GLOW_LETTER_CAPTION_Z + 1)
+    ]))
+  })
+  const state = { timer: 0 }
+  const fadeOutStart = GLOW_LETTER_CAPTION_FADE_IN + holdDuration
+  const total = fadeOutStart + GLOW_LETTER_CAPTION_FADE_OUT
+  const updateHandler = k.onUpdate(() => {
+    state.timer += k.dt()
+    let opacity = 1
+    if (state.timer < GLOW_LETTER_CAPTION_FADE_IN) {
+      opacity = state.timer / GLOW_LETTER_CAPTION_FADE_IN
+    } else if (state.timer >= fadeOutStart) {
+      opacity = Math.max(0, 1 - (state.timer - fadeOutStart) / GLOW_LETTER_CAPTION_FADE_OUT)
     }
+    shadowObjs.forEach(obj => { obj.opacity = opacity })
+    outlineObjs.forEach(obj => { obj.opacity = opacity })
+    mainObjs.forEach(obj => { obj.opacity = opacity })
+    letterEntry?.allObjects?.forEach(obj => { obj.opacity = opacity })
+    if (state.timer < total) return
+    updateHandler.cancel()
+    shadowObjs.forEach(obj => obj.destroy())
+    outlineObjs.forEach(obj => obj.destroy())
+    mainObjs.forEach(obj => obj.destroy())
+    letterEntry?.allObjects?.forEach(obj => obj.destroy?.())
+    stopGlowLetterDialogMusic(inst)
+    unpinHeroAfterLetterDialog(inst)
+    inst.dialogOpen = false
+    onCloseExtra?.()
   })
 }
 //
-// Settles jump/land squash and pins the hero so wood-platform physics cannot
-// fight the dialog freeze (landing + dialog used to twitch up/down forever).
-//
-function pinHeroForLetterDialog(inst) {
-  const hero = inst.heroInst
-  const char = hero?.character
-  if (!char?.pos) return
-  //
-  // Clear jump tuck / land squash once, then hard-settle on the log under
-  // the hero. Calling syncPlatformLanding every pinned frame fought Kaplay
-  // and made O/L platforms twitch up and down.
-  //
-  forceHeroIdleOnLog(inst, true)
-  if (char.vel) {
-    char.vel.x = 0
-    char.vel.y = 0
-  }
-  forceSettleHeroOnNearestLog(inst, char)
-  inst.dialogPinY = char.pos.y
-  inst.dialogHeroPinned = true
-  if (typeof char.gravityScale === 'number') {
-    inst._dialogSavedGravityScale = char.gravityScale
-    char.gravityScale = 0
-  }
-}
-//
-// Restores gravity after a letter dialog closes.
+// Resets the dialog bookkeeping flags after a letter caption closes. The
+// hero was never pinned or stripped of control while it played, so this is
+// just cleanup — no position/gravity/control restoration needed.
 //
 function unpinHeroAfterLetterDialog(inst) {
   const hero = inst.heroInst
-  const char = hero?.character
-  //
-  // Release controls immediately — no input-grace pause after the panel closes.
-  //
-  if (hero) {
-    forceHeroIdleOnLog(inst, true)
-    Hero.armJumpKeyReleaseGate(hero)
-  }
-  if (char?.pos) {
-    forceSettleHeroOnNearestLog(inst, char)
-    inst.dialogPinY = char.pos.y
-  }
   inst.dialogHeroPinned = false
   inst.dialogInputGrace = 0
   inst.dialogPostSettle = 0
-  if (char && inst._dialogSavedGravityScale !== undefined) {
-    char.gravityScale = inst._dialogSavedGravityScale
-    inst._dialogSavedGravityScale = undefined
-  } else if (char) {
-    char.gravityScale = 1
-  }
   if (hero) {
     hero.controlsDisabled = false
     hero.controllable = true
@@ -5802,7 +6216,7 @@ function forceHeroIdleOnLog(inst, skipHitboxSync = false) {
 function isHeroOverLetterLog(inst, heroX) {
   const z = inst.zones
   const logs = []
-  z.lPlatRevealed && !z.lCollected && logs.push(inst.lPlatHome)
+  z.lPlatRevealed && logs.push(inst.lPlatHome)
   z.oZone && z.lCollected && logs.push(inst.oPlatHome)
   z.wZone && z.oCollected && logs.push(inst.wPlatHome)
   for (const home of logs) {
@@ -5832,7 +6246,7 @@ function forceSettleHeroOnNearestLog(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && !z.lCollected && homes.push({ ...inst.lPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
+  z.lPlatRevealed && homes.push({ ...inst.lPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   z.oZone && z.lCollected && homes.push({ ...inst.oPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   z.wZone && z.oCollected && homes.push({ ...inst.wPlatHome, w: LOG_W, dropY: LOG_COLLISION_DROP_Y })
   //
@@ -5901,8 +6315,8 @@ function collectLetterG(inst) {
   //
   HeroHint.clear(inst.heroHint)
   markLetterCollectedForProgressHint(inst)
-  inst.gLetter?.allObjects?.forEach(obj => obj.destroy?.())
-  inst.gLetter = null
+  const entry = inst.gLetter
+  entry && (entry.forceVisible = true)
   Sound.playLetterPickupSoft(inst.sound)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 1, inst.zones.colorWorld)
@@ -5917,7 +6331,8 @@ function collectLetterG(inst) {
   syncGlowHudLetterFills(inst, false)
   syncGlowFpsHudVisibility(inst)
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 1)
-  openGlowLetterDialog(inst, GLOW_DIALOG_G, () => {
+  openGlowLetterCaption(inst, entry, GLOW_DIALOG_G, GLOW_LETTER_CAPTION_DURATION_G, () => {
+    inst.gLetter = null
     //
     // Tree waits until the hero lands on the starting branch.
     //
@@ -5939,10 +6354,8 @@ function collectLetterL(inst) {
   refreshPlayfieldCornerSprites(inst)
   updatePlayfieldBorderColors(inst)
   const entry = inst.lLetter
-  inst.lLetter = null
+  entry && (entry.forceVisible = true)
   inst.letterOffscreenArrow = null
-  entry?.allObjects?.forEach(obj => obj.destroy?.())
-  inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
   Sound.playLetterPickupSoft(inst.sound)
   if (!inst.levelIndicator) {
     inst.levelIndicator = createGlowLevelIndicator(inst.k, inst.goldRgb, 2, inst.zones.colorWorld)
@@ -5953,9 +6366,24 @@ function collectLetterL(inst) {
   syncGlowHudLetterFills(inst, false)
   rebakeTrampolineGraySprites(inst.k)
   rebakeGlowRockSpritesShaded(inst)
+  //
+  // The L-log vanishes for the length of the caption only, same as O —
+  // restored once the caption closes below. Gated by its own flag (rather
+  // than a one-off setPlatVisible override) so it stays hidden even if some
+  // other applyZoneVisibility() call fires while the caption is still up.
+  // If the ambush hedgehog is still standing on it and hasn't fallen/walked
+  // off yet, send it down now too, otherwise it would be left hovering over
+  // empty air where the platform used to be.
+  //
+  inst.lPlatCaptionHiding = true
   applyZoneVisibility(inst)
-  openGlowLetterDialog(inst, GLOW_DIALOG_L, () => {
+  dropAmbushHedgehogIfStrandedOnLPlat(inst)
+  openGlowLetterCaption(inst, entry, GLOW_DIALOG_L, GLOW_LETTER_CAPTION_DURATION_L, () => {
+    inst.lLetter = null
+    inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
     revealLLitZone(inst)
+    inst.lPlatCaptionHiding = false
+    applyZoneVisibility(inst)
   }, GLOW_DIALOG_SOUND_L)
   revealGlowFpsCounter(inst)
 }
@@ -5969,10 +6397,8 @@ function collectLetterO(inst) {
   set(KEY_COLLECTED_O, true)
   markLetterCollectedForProgressHint(inst)
   const entry = inst.oLetter
-  inst.oLetter = null
+  entry && (entry.forceVisible = true)
   inst.letterOffscreenArrow = null
-  entry?.allObjects?.forEach(obj => obj.destroy?.())
-  inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
   dismissOLetterStuckHint(inst)
   Sound.playLetterPickupSoft(inst.sound)
   if (!inst.levelIndicator) {
@@ -5982,16 +6408,25 @@ function collectLetterO(inst) {
   }
   syncGlowHudLetterFills(inst, false)
   LevelIndicator.flashLetterBurst(inst.levelIndicator, 3)
+  //
+  // The log the hero just collected O from vanishes for the length of the
+  // caption only, same as L — he keeps falling/moving normally through
+  // where it used to be, exactly like collecting a letter mid-air never
+  // freezes him. No forced snap-back on close: the old pin-to-nearest-log
+  // logic used to teleport him back onto this same spot several seconds
+  // later no matter where he'd actually ended up by then, which is what
+  // made him vanish. Gated by its own flag (rather than a one-off
+  // setPlatVisible override) so it stays hidden even if some other
+  // applyZoneVisibility() call fires while the caption is still up.
+  //
+  inst.oPlatCaptionHiding = true
   applyZoneVisibility(inst)
-  openGlowLetterDialog(inst, GLOW_DIALOG_O, () => {
+  openGlowLetterCaption(inst, entry, GLOW_DIALOG_O, GLOW_LETTER_CAPTION_DURATION_O, () => {
+    inst.oLetter = null
+    inst.glowLetters = inst.glowLetters.filter(e => e !== entry)
     startColorWorldFade(inst)
-    forceHeroIdleOnLog(inst)
-    const char = inst.heroInst?.character
-    if (char?.pos) {
-      forceSettleHeroOnNearestLog(inst, char)
-      inst.dialogPinY = char.pos.y
-      inst.dialogHeroPinned = true
-    }
+    inst.oPlatCaptionHiding = false
+    applyZoneVisibility(inst)
   }, GLOW_DIALOG_SOUND_O)
 }
 //
@@ -6257,6 +6692,28 @@ function finishDrowning(inst) {
   inst.drownCharSink = null
   const char = inst.heroInst?.character
   char && (char.hidden = true)
+  bumpGlowLifeHudOnDeath(inst)
+  inst.k.wait(DROWN_RESTART_DELAY, () => {
+    //
+    // A fall straight from the start branch always returns the hero to that
+    // branch, no matter how much of the lower-right tree ground has already
+    // been discovered. Spawning near the tree ground instead is reserved for
+    // the Esc-to-menu resume flow (KEY_LAST_SPAWN_MODE / KEY_LAST_SPAWN_X set
+    // on scene leave), never for a drowning death.
+    //
+    const resumeBranch = inst.drownFromStartBranch
+    set(KEY_RESPAWN_NEAR_TREE, !resumeBranch)
+    resumeBranch && set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
+    resumeBranch && set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
+    inst.k.go('lesson-glow.0')
+  })
+}
+//
+// Shared life-HUD bump for any death: +1 lifeScore, reveal/flash/re-tint the
+// life icon and its particle burst, gentle chime. Shared by drowning and the
+// hedgehog touch-death.
+//
+function bumpGlowLifeHudOnDeath(inst) {
   const newLife = get('lifeScore', 0) + 1
   set('lifeScore', newLife)
   if (!inst.levelIndicator) {
@@ -6282,19 +6739,153 @@ function finishDrowning(inst) {
     }
     createLifeParticlesOnDrownDeath(inst.k, inst.levelIndicator, greyLife)
   }
-  inst.k.wait(DROWN_RESTART_DELAY, () => {
-    //
-    // A fall straight from the start branch always returns the hero to that
-    // branch, no matter how much of the lower-right tree ground has already
-    // been discovered. Spawning near the tree ground instead is reserved for
-    // the Esc-to-menu resume flow (KEY_LAST_SPAWN_MODE / KEY_LAST_SPAWN_X set
-    // on scene leave), never for a drowning death.
-    //
-    const resumeBranch = inst.drownFromStartBranch
-    set(KEY_RESPAWN_NEAR_TREE, !resumeBranch)
-    resumeBranch && set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_BRANCH)
-    resumeBranch && set(KEY_LAST_SPAWN_X, inst.startBranch.x1 + (inst.startBranch.x2 - inst.startBranch.x1) * HERO_BRANCH_FRACTION)
+}
+//
+// True once either hedgehog's silhouette overlaps the hero's feet.
+//
+function checkHedgehogTouchDeath(inst, heroX, heroFootY) {
+  if (inst.deathHandled) return
+  if (Hedgehog.isTouchingHero(inst.hedgehog, heroX, heroFootY)) {
+    triggerHedgehogDeath(inst, false)
+    return
+  }
+  Hedgehog.isTouchingHero(inst.ambushHedgehog, heroX, heroFootY) && triggerHedgehogDeath(inst, true)
+}
+//
+// Touching either hedgehog is fatal — the hero shatters exactly like in any
+// other level (Hero.death), but with the level's own dusty ground-burst
+// (bigger, and spread upward too) instead of the generic body-square
+// explosion. The ambush hedgehog additionally tumbles off its platform and
+// keeps crawling while the death countdown runs.
+//
+function triggerHedgehogDeath(inst, isAmbush) {
+  if (inst.deathHandled) return
+  inst.deathHandled = true
+  inst.hedgehogDeathHandled = true
+  const hero = inst.heroInst
+  const char = hero.character
+  const deathX = char.pos.x
+  const deathY = char.pos.y
+  hero.controllable = false
+  hero.controlsDisabled = true
+  triggerGlowCameraShake(inst)
+  spawnHedgehogDeathBurst(inst, deathX, deathY)
+  isAmbush && Hedgehog.fallAndCrawlAway(inst.ambushHedgehog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE, computeAmbushHedgehogFallEdgeX(inst))
+  Hero.death(hero, () => finishHedgehogDeath(inst, isAmbush), { suppressParticles: true })
+}
+//
+// The edge the ambush hedgehog should walk to before dropping off the
+// L-log — whichever end (left/right) it's already closer to — so it
+// visibly steps off the platform instead of sinking through its middle.
+//
+function computeAmbushHedgehogFallEdgeX(inst) {
+  const home = inst.lPlatHome
+  const hog = inst.ambushHedgehog
+  if (!home || !hog) return null
+  const platCenterX = home.x + LOG_W / 2
+  return hog.x >= platCenterX
+    ? home.x + LOG_W + HEDGEHOG_AMBUSH_FALL_EDGE_PAD
+    : home.x - HEDGEHOG_AMBUSH_FALL_EDGE_PAD
+}
+//
+// Leaf-shaped radial burst at the death spot — green leaf tones in the
+// colour world, a few gray shades while the level is flat/monochrome —
+// instead of the hero's generic body-square explosion.
+//
+function spawnHedgehogDeathBurst(inst, x, y) {
+  if (!inst.footParticles) return
+  const palette = hedgehogDeathLeafPalette(inst)
+  const groundY = Math.max(y, FLOOR_Y)
+  GlowFootParticles.spawnLeafBurst(inst.footParticles, x, y, palette, HEDGEHOG_DEATH_PARTICLE_COUNT, groundY)
+}
+//
+// Mono world: a few gray shades already used for the level's own decor;
+// colour world: the main tree's own green foliage tones, so the burst
+// reads as real leaves rather than generic dust.
+//
+function hedgehogDeathLeafPalette(inst) {
+  if (isGlowFlatSingleDecorColor(inst)) return [DECOR_GRAY, MID_GRAY, LIGHT_GRAY]
+  return (GLOW_PAL.treeColor.leafShades || [GLOW_PAL.treeColor.leaf]).map(hex => glowRgb(hex))
+}
+//
+// Same life-HUD bump as drowning, then a standard press-any-key countdown
+// instead of a silent timed reload. The ambush kill also leaves a hint
+// pinned on the culprit hedgehog once the hero is gone.
+//
+function finishHedgehogDeath(inst, isAmbush) {
+  bumpGlowLifeHudOnDeath(inst)
+  isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
+    anchorX: inst.ambushHedgehog.x,
+    anchorY: inst.ambushHedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+    ignoreMovementDismiss: true,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
+  markSafeGroundRespawnAwayFromHedgehog(inst)
+  startGlowHedgehogDeathCountdown(inst)
+}
+//
+// Forces the next level reload to spawn the hero on dry ground clearly
+// past the main wandering hedgehog's leash — otherwise a ground respawn
+// could land right back in its path and kill the hero again immediately.
+//
+function markSafeGroundRespawnAwayFromHedgehog(inst) {
+  const safeX = (inst.hedgehog?.maxX ?? inst.lastHeroX ?? 0) + HEDGEHOG_DEATH_RESPAWN_MARGIN
+  set(KEY_RESPAWN_NEAR_TREE, false)
+  set(KEY_LAST_SPAWN_MODE, SPAWN_MODE_GROUND)
+  set(KEY_LAST_SPAWN_X, safeX)
+}
+//
+// Standard press-any-key countdown reload, same UX as the touch-lesson
+// death screens: Space/Enter/click restarts immediately, otherwise it
+// auto-restarts once the countdown reaches zero.
+//
+function startGlowHedgehogDeathCountdown(inst) {
+  const k = inst.k
+  const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  const cx = SCREEN_W / 2
+  const textCfg = { size: HEDGEHOG_DEATH_PROMPT_FONT, font }
+  const initText = HEDGEHOG_DEATH_PROMPT_BASE + HEDGEHOG_DEATH_COUNTDOWN_SECONDS
+  const shadow = k.add([
+    k.text(initText, textCfg),
+    k.pos(cx + 1.5, HEDGEHOG_DEATH_PROMPT_Y + 1.5),
+    k.anchor('center'),
+    k.color(0, 0, 0),
+    k.opacity(0.85),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 60)
+  ])
+  const promptText = k.add([
+    k.text(initText, textCfg),
+    k.pos(cx, HEDGEHOG_DEATH_PROMPT_Y),
+    k.anchor('center'),
+    k.color(k.rgb(220, 220, 220)),
+    k.opacity(1),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 60.1)
+  ])
+  let elapsed = 0
+  const destroyAll = () => {
+    shadow.exists() && k.destroy(shadow)
+    promptText.exists() && k.destroy(promptText)
+  }
+  const doRestart = () => {
+    skipHandler.cancel()
+    clickHandler.cancel()
+    updateTimer.cancel()
+    destroyAll()
     inst.k.go('lesson-glow.0')
+  }
+  const skipHandler = k.onKeyPress((key) => {
+    (key === 'space' || key === 'enter') && doRestart()
+  })
+  const clickHandler = k.onMousePress(() => doRestart())
+  const updateTimer = k.onUpdate(() => {
+    elapsed += k.dt()
+    const remaining = Math.max(0, HEDGEHOG_DEATH_COUNTDOWN_SECONDS - elapsed)
+    const newText = HEDGEHOG_DEATH_PROMPT_BASE + Math.ceil(remaining)
+    shadow.exists() && (shadow.text = newText)
+    promptText.exists() && (promptText.text = newText)
+    elapsed >= HEDGEHOG_DEATH_COUNTDOWN_SECONDS && doRestart()
   })
 }
 function ensureLakeShoreRocksVisible(inst) {
@@ -6501,6 +7092,10 @@ function onUpdate(inst) {
     updateGlowCamera(inst)
     return
   }
+  if (inst.hedgehogDeathHandled) {
+    inst.footParticles && GlowFootParticles.onUpdate(inst.footParticles, k.dt())
+    return
+  }
   inst.fpsCounter && FpsCounter.onUpdate(inst.fpsCounter)
   if (inst.heroSpawnFade > 0 && inst.heroInst?.character) {
     inst.heroSpawnFade -= k.dt()
@@ -6610,7 +7205,11 @@ function onUpdate(inst) {
     inst.pitBonusFinalized = true
     BonusHero.finalizeCollection(inst.pit.pitBonus)
   }
-  if (inst.dialogOpen || inst.heroLockedAfterW) {
+  //
+  // A letter caption never takes control away from the hero — only the
+  // final post-W lock does.
+  //
+  if (inst.heroLockedAfterW) {
     inst.heroInst.controllable = false
     inst.heroInst.controlsDisabled = true
   }
@@ -6622,16 +7221,6 @@ function onUpdate(inst) {
       inst.dialogInputGrace = 0
       releaseDialogPin(inst)
     }
-  }
-  const t = k.time()
-  const pulse = (Math.sin(t * GLOW_LETTER_PULSE_SPEED) + 1) / 2
-  const opacity = GLOW_LETTER_PULSE_MIN + (1 - GLOW_LETTER_PULSE_MIN) * pulse
-  inst.glowLetters.forEach(entry => {
-    if (entry.main.hidden) return
-    entry.allObjects.forEach(obj => { obj.opacity = opacity })
-  })
-  if (inst.gLetter && !inst.gLetter.main.hidden) {
-    inst.gLetter.allObjects.forEach(obj => { obj.opacity = opacity })
   }
   inst.trampState.cooldown > 0 && (inst.trampState.cooldown = Math.max(0, inst.trampState.cooldown - k.dt()))
   inst.branchTrampState?.cooldown > 0 &&
@@ -6674,26 +7263,6 @@ function onUpdate(inst) {
     hero.controllable = true
     hero.controlsDisabled = false
     hero.jumpDisabled = false
-  }
-  //
-  // While a letter dialog is open (or during post-close grace) the hero must
-  // stand still. Continuous log snap fought Kaplay physics and made him twitch
-  // up/down on wood platforms. Pin Y once, then freeze velocity every frame.
-  //
-  if (inst.dialogOpen || inst.dialogInputGrace > 0) {
-    if (char.vel) {
-      char.vel.x = 0
-      char.vel.y = 0
-    }
-    if (inst.dialogOpen && !inst.dialogHeroPinned) {
-      pinHeroForLetterDialog(inst)
-    } else if (inst.dialogHeroPinned) {
-      //
-      // Hold the settled Y only — never re-run syncPlatformLanding here
-      // (it resizes the hitbox and shifts pos.y, fighting the pin).
-      //
-      char.pos.y = inst.dialogPinY
-    }
   }
   const heroX = char.pos.x
   const footY = char.pos.y + SURFACE_DETECT_Y
@@ -6789,6 +7358,16 @@ function onUpdate(inst) {
     hero.wasJumping && !lakeFloorLand &&
       spawnGlowFootLanding(inst.footParticles, heroX, footY, surface, inst)
   }
+  //
+  // A small puff also kicks up right as the hero starts running from a
+  // standstill, not just on landing — hero.js's own run-start dust is
+  // suppressed for glow (suppressDust), so it needs its own trigger here.
+  //
+  const startedRunning = grounded && hero.isRunning && !inst.wasHeroRunning
+  inst.wasHeroRunning = hero.isRunning
+  if (startedRunning && (surface === 'wood' || surface === 'ground') && !isInWaterZone(inst, heroX, footY)) {
+    spawnGlowFootLanding(inst.footParticles, heroX, footY, surface, inst)
+  }
   hero.suppressDust = true
   syncBranchPlatHome(inst)
   if (char.hidden) char.hidden = false
@@ -6799,7 +7378,10 @@ function onUpdate(inst) {
     snapHeroToLogPlatforms(inst, char)
   snapHeroToStartBranch(inst, char, heroX, footY)
   snapHeroToMainGround(inst, char, grounded, heroX, footY)
+  maybeSpawnLeftHedgehogAmbush(inst, heroX, char.vel?.x ?? 0)
+  maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded)
   maybeMarkLPlatStepped(inst, char, grounded)
+  maybeAbandonStrandedAmbushHedgehog(inst)
   //
   // O-letter meditation: perfect stillness after L summons the countdown.
   //
@@ -6849,6 +7431,11 @@ function onUpdate(inst) {
   syncHeroTrampDrawOrder(inst)
   updateGlowCamera(inst)
   inst.lastHeroX = char.pos.x
+  //
+  // Hedgehog touch death — last check of the frame since it may destroy
+  // the hero's character outright.
+  //
+  !inst.deathHandled && checkHedgehogTouchDeath(inst, heroX, footY)
 }
 //
 // Locks the hero's gaze on the G letter while he stands on the start branch
@@ -7022,9 +7609,14 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   }
   const dt = inst.k.dt()
   //
-  // In-progress walk always continues to the current stop (dialog / chase ignored)
+  // In-progress walk always continues to the current stop (dialog / chase
+  // ignored) — except while the hero is mid-flight from a bounce on this
+  // same mushroom. Letting the solid invisible pad slide sideways under an
+  // airborne body makes Kaplay shove him out of the way (looks like he
+  // vanishes), so the walk simply pauses until he lands.
   //
   if (tw.walking) {
+    if (inst.trampBounceAir) return
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
     inst.trampState.walkPhase = (inst.trampState.walkPhase || 0) + dt * 9
@@ -7946,7 +8538,7 @@ function snapHeroToLogPlatforms(inst, char) {
       dropY: 0
     })
   }
-  z.lPlatRevealed && !z.lCollected && homes.push(inst.lPlatHome)
+  z.lPlatRevealed && homes.push(inst.lPlatHome)
   z.oZone && z.lCollected && homes.push(inst.oPlatHome)
   z.wZone && z.oCollected && homes.push(inst.wPlatHome)
   let hoverHome = null
@@ -8159,7 +8751,10 @@ function onUpdateDrownLifeParticle(particle, k, vx, vy, lifetime) {
   particle._elapsed >= lifetime && particle.destroy?.()
 }
 //
-// Spawns a landing dust burst tinted to the surface under the hero's feet
+// Spawns a landing/run-start dust burst tinted to the surface under the
+// hero's feet — gray while the world is flat/monochrome, earthy colour once
+// it isn't (footParticleColor already carries that split), so the puff
+// always shows, just recoloured to match the current world state.
 //
 function spawnGlowFootLanding(inst, footX, footY, surface, sceneInst) {
   if (!inst || sceneInst?.drowning) return
@@ -8171,7 +8766,6 @@ function spawnGlowFootLanding(inst, footX, footY, surface, sceneInst) {
       atCaveEntrance = true
     }
   }
-  if (sceneInst && isGlowFlatSingleDecorColor(sceneInst) && !atCaveEntrance) return
   const countMult = atCaveEntrance ? CAVE_ENTRANCE_LANDING_PARTICLE_MULT : 1
   GlowFootParticles.spawnLanding(
     inst,
@@ -8379,6 +8973,88 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
     footY >= home.y - LOG_SNAP_STANDING_MAX &&
     footY <= home.y + LOG_SNAP_BELOW
   onLLog && markLPlatStepped(inst)
+  onLLog && maybeSpawnHedgehogAmbush(inst)
+}
+//
+// Left hedgehog ambush: stays hidden until the hero has run a stretch past
+// the branch trampoline, then pops out at a fixed spot a bit further
+// ahead of him — at running speed there's normally no time to react before
+// the hitbox overlaps (a small bonus lead is added while actually
+// sprinting so it isn't quite instant-death), but creeping forward slowly
+// leaves a real gap between the pop and actual contact, long enough to
+// spot it and jump.
+//
+function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
+  if (!inst.hedgehog || inst.hedgehog.popped) return
+  if (heroX < inst.hedgehogAmbushTriggerX) return
+  const running = Math.abs(heroVelX) > HEDGEHOG_LEFT_AMBUSH_RUN_SPEED_THRESHOLD
+  const popX = inst.hedgehogAmbushPopX + (running ? HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS : 0)
+  Hedgehog.popOut(inst.hedgehog, popX, FLOOR_Y - HEDGEHOG_GROUND_RAISE, 'left')
+}
+//
+// Fallback: if the hero somehow reaches the L-log without tripping the
+// pre-land pop below (e.g. walked onto it instead of bouncing there), the
+// hidden ambush hedgehog still pops out the moment he actually lands. Once
+// L has been collected the ambush no longer makes sense — landing on the
+// (now permanently revealed) log again should never surprise-pop it.
+//
+function maybeSpawnHedgehogAmbush(inst) {
+  if (!inst.ambushHedgehog || inst.ambushHedgehog.popped || inst.zones.lCollected) return
+  Hedgehog.popOut(inst.ambushHedgehog, null, null, 'left')
+}
+//
+// Primary ambush trigger: while still airborne and falling toward the
+// L-log after a tramp bounce, the hidden hedgehog pops out an instant
+// before the hero's feet actually reach the wood, so it reads as a sudden
+// ambush rather than something that only appears after landing.
+//
+function maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded) {
+  if (grounded) return
+  if (!inst.ambushHedgehog || inst.ambushHedgehog.popped) return
+  if (!inst.trampToLApproach || inst.zones.lCollected) return
+  const home = inst.lPlatHome
+  if (!home || !inst.zones.lPlatRevealed) return
+  const onLLog = heroX >= home.x - LOG_SNAP_X_SLACK && heroX <= home.x + LOG_W + LOG_SNAP_X_SLACK
+  const aboutToLand = footY >= home.y - HEDGEHOG_AMBUSH_POP_LEAD_Y && footY <= home.y + LOG_SNAP_BELOW
+  if (!onLLog || !aboutToLand) return
+  Hedgehog.popOut(inst.ambushHedgehog, null, null, 'left')
+}
+//
+// If the L-log disappears (letter collected) while the ambush hedgehog is
+// still standing on it and hasn't already been sent tumbling by a death,
+// drop it to the ground instead of leaving it stranded over empty air.
+//
+function dropAmbushHedgehogIfStrandedOnLPlat(inst) {
+  const hog = inst.ambushHedgehog
+  if (!hog?.popped || hog.falling) return
+  //
+  // The log vanishes instantly the moment the letter is collected (see
+  // collectLetterL), so there is no edge left to walk to any more — even
+  // if the hedgehog was already mid-walk toward one (e.g. the abandon
+  // timer in maybeAbandonStrandedAmbushHedgehog kicked in earlier while
+  // the hero lingered nearby without landing). Cancel any in-progress
+  // walk-to-edge and drop it straight down now, or it would otherwise
+  // keep pacing across empty air above the spot the log used to occupy.
+  //
+  hog.walkingToEdge = false
+  Hedgehog.fallAndCrawlAway(hog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE)
+}
+//
+// The ambush only makes sense while the hero might still land on the log —
+// once L is collected the platform's own visibility handles it. If the hero
+// never lands at all, the popped hedgehog would otherwise just pace back
+// and forth on the log forever; this abandons the ambush and sends it
+// crawling off the nearest edge after a while unused.
+//
+function maybeAbandonStrandedAmbushHedgehog(inst) {
+  const hog = inst.ambushHedgehog
+  if (!hog?.popped || hog.falling || hog.walkingToEdge || inst.zones.lCollected) {
+    inst.ambushHedgehogIdleTimer = 0
+    return
+  }
+  inst.ambushHedgehogIdleTimer += inst.k.dt()
+  if (inst.ambushHedgehogIdleTimer < HEDGEHOG_AMBUSH_ABANDON_TIMEOUT) return
+  Hedgehog.fallAndCrawlAway(hog, FLOOR_Y - HEDGEHOG_AMBUSH_GROUND_RAISE, computeAmbushHedgehogFallEdgeX(inst))
 }
 //
 // Persists the L-log step so the HUD letter stays fully gold after leaving.

@@ -142,13 +142,17 @@ const CURL_SCALE = 0.62
 //
 // Random idle/walk wander — the hedgehog paces a short leash around its
 // spawn spot, occasionally turning around mid-walk by curling into a ball.
+// Walk segments are long and random; most of the time it keeps going in the
+// same direction without stopping. Turning is much rarer than walking — at
+// least a 5:1 ratio by time spent moving vs. turning around.
 //
-const WANDER_IDLE_MIN = 1.5
-const WANDER_IDLE_MAX = 4
-const WANDER_WALK_MIN = 2.5
-const WANDER_WALK_MAX = 5.5
+const WANDER_IDLE_MIN = 0.4
+const WANDER_IDLE_MAX = 1.4
+const WANDER_WALK_MIN = 4.5
+const WANDER_WALK_MAX = 11
 const WANDER_WALK_SPEED = 14
-const WANDER_REVERSE_CHANCE = 0.15
+const WANDER_CONTINUE_WALK_CHANCE = 5 / 6
+const WANDER_REVERSE_CHANCE = 1 / 6
 const WANDER_TURN_DURATION = 0.5
 const WANDER_TURN_OUT_FRAC = 0.3
 const WANDER_TURN_IN_FRAC = 0.3
@@ -511,14 +515,23 @@ function updateWanderWalk(inst, dt) {
     return
   }
   inst.x = nextX
-  if (inst.wanderTimer <= 0) {
-    inst.wanderState = 'idle'
-    inst.wanderTimer = randRange(WANDER_IDLE_MIN, WANDER_IDLE_MAX)
+  if (inst.wanderTimer > 0) return
+  //
+  // Most walk segments just roll into another random-length stroll in the
+  // same direction — only occasionally pause (idle) and consider turning.
+  // That keeps the walk:turn time ratio well above 5:1.
+  //
+  if (Math.random() < WANDER_CONTINUE_WALK_CHANCE) {
+    inst.wanderTimer = randRange(WANDER_WALK_MIN, WANDER_WALK_MAX)
+    return
   }
+  inst.wanderState = 'idle'
+  inst.wanderTimer = randRange(WANDER_IDLE_MIN, WANDER_IDLE_MAX)
 }
 //
 // While idle, waits out the timer then either resumes walking the same way
-// or turns around and walks the other way.
+// or turns around and walks the other way. Turning is deliberately rare
+// (1/6 chance) so pacing dominates over flip-flopping.
 //
 function updateWanderIdle(inst) {
   if (inst.wanderTimer > 0) return

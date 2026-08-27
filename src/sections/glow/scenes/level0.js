@@ -215,6 +215,7 @@ const HEDGEHOG_AMBUSH_FALL_EDGE_PAD = 14
 //
 const HEDGEHOG_DEATH_PARTICLE_COUNT = 34
 const HEDGEHOG_DEATH_HINT_TEXT = 'Life is a complicated thing'
+const HEDGEHOG_LEFT_DEATH_HINT_TEXT = 'Shit happens'
 const HEDGEHOG_DEATH_HINT_RAISE = 46
 const HEDGEHOG_DEATH_COUNTDOWN_SECONDS = 7
 const HEDGEHOG_DEATH_PROMPT_BASE = 'Press Space, Enter, or click to continue... '
@@ -338,7 +339,7 @@ const O_PLAT_OFFSET_Y = 105
 //
 // The O letter floats 11 px higher above its log than the default placement.
 //
-const O_LETTER_RAISE_Y = 15
+const O_LETTER_RAISE_Y = 18
 //
 // The L letter floats 13 px higher above its log than the default placement.
 //
@@ -657,6 +658,8 @@ const KEY_GROUND_RIGHT_STRIP_MAX = 'glow.groundRightStripMax'
 const KEY_LEFT_SHORE_ROCK = 'glow.leftShoreRock'
 const KEY_RIGHT_TRAMP_REVEALED = 'glow.rightTrampRevealed'
 const KEY_L_PLAT_STEPPED = 'glow.lPlatStepped'
+const KEY_LEFT_HEDGEHOG_REVEALED = 'glow.leftHedgehogRevealed'
+const KEY_AMBUSH_HEDGEHOG_REVEALED = 'glow.ambushHedgehogRevealed'
 const KEY_HUD_G_FILL = 'glow.hudGFillParts'
 const KEY_HUD_L_FILL = 'glow.hudLFillParts'
 const KEY_HUD_W_FILL = 'glow.hudWFillParts'
@@ -1559,6 +1562,8 @@ function initGlowLevel0Scene(k) {
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones)
     const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones)
     const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones)
+    const leftHedgehogRevealed = get(KEY_LEFT_HEDGEHOG_REVEALED, false)
+    const ambushHedgehogRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
     const hedgehog = Hedgehog.create({
       k,
       x: hedgehogAmbushPopX,
@@ -1567,7 +1572,7 @@ function initGlowLevel0Scene(k) {
       facing: 'left',
       hero: heroInst,
       zones,
-      hiddenUntilPopOut: true,
+      hiddenUntilPopOut: !leftHedgehogRevealed,
       minX: hedgehogAmbushPopX - HEDGEHOG_LEFT_AMBUSH_WANDER_LEASH,
       maxX: Math.min(hedgehogAmbushPopX + HEDGEHOG_LEFT_AMBUSH_WANDER_LEASH, trampX - HEDGEHOG_WANDER_RIGHT_MARGIN)
     })
@@ -1576,7 +1581,9 @@ function initGlowLevel0Scene(k) {
     // pops into view the moment the hero first lands there (see
     // maybeMarkLPlatStepped). Once L was already collected in an earlier
     // life/session there's no ambush left to spring — it starts already
-    // popped and wandering the ground beside the log instead.
+    // popped and wandering the ground beside the log instead. If it already
+    // popped in a prior life (even before L was taken) it stays visible on
+    // reload too.
     //
     const ambushHedgehog = Hedgehog.create({
       k,
@@ -1586,7 +1593,7 @@ function initGlowLevel0Scene(k) {
       facing: 'left',
       hero: heroInst,
       zones,
-      hiddenUntilPopOut: !zones.lCollected,
+      hiddenUntilPopOut: !(zones.lCollected || ambushHedgehogRevealed),
       minX: zones.lCollected ? lPlatX - HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX,
       maxX: zones.lCollected ? lPlatX + LOG_W + HEDGEHOG_WANDER_RIGHT_MARGIN : lPlatX + LOG_W
     })
@@ -6820,6 +6827,12 @@ function finishHedgehogDeath(inst, isAmbush) {
     ignoreMovementDismiss: true,
     dismissDistance: GLOW_HINT_DISMISS_DISTANCE
   })
+  !isAmbush && HeroHint.show(inst.heroHint, HEDGEHOG_LEFT_DEATH_HINT_TEXT, HEDGEHOG_DEATH_COUNTDOWN_SECONDS, {
+    anchorX: inst.hedgehog.x,
+    anchorY: inst.hedgehog.y - HEDGEHOG_DEATH_HINT_RAISE,
+    ignoreMovementDismiss: true,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+  })
   markSafeGroundRespawnAwayFromHedgehog(inst)
   startGlowHedgehogDeathCountdown(inst)
 }
@@ -8976,6 +8989,19 @@ function maybeMarkLPlatStepped(inst, char, grounded) {
   onLLog && maybeSpawnHedgehogAmbush(inst)
 }
 //
+// Persists that the left ambush hedgehog has already popped — the next
+// level load must show it visible instead of hiding it again.
+//
+function markLeftHedgehogRevealed() {
+  set(KEY_LEFT_HEDGEHOG_REVEALED, true)
+}
+//
+// Same for the L-log ambush hedgehog (independent of whether L was taken).
+//
+function markAmbushHedgehogRevealed() {
+  set(KEY_AMBUSH_HEDGEHOG_REVEALED, true)
+}
+//
 // Left hedgehog ambush: stays hidden until the hero has run a stretch past
 // the branch trampoline, then pops out at a fixed spot a bit further
 // ahead of him — at running speed there's normally no time to react before
@@ -8990,6 +9016,7 @@ function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
   const running = Math.abs(heroVelX) > HEDGEHOG_LEFT_AMBUSH_RUN_SPEED_THRESHOLD
   const popX = inst.hedgehogAmbushPopX + (running ? HEDGEHOG_LEFT_AMBUSH_RUN_POP_LEAD_BONUS : 0)
   Hedgehog.popOut(inst.hedgehog, popX, FLOOR_Y - HEDGEHOG_GROUND_RAISE, 'left')
+  markLeftHedgehogRevealed()
 }
 //
 // Fallback: if the hero somehow reaches the L-log without tripping the
@@ -9001,6 +9028,7 @@ function maybeSpawnLeftHedgehogAmbush(inst, heroX, heroVelX) {
 function maybeSpawnHedgehogAmbush(inst) {
   if (!inst.ambushHedgehog || inst.ambushHedgehog.popped || inst.zones.lCollected) return
   Hedgehog.popOut(inst.ambushHedgehog, null, null, 'left')
+  markAmbushHedgehogRevealed()
 }
 //
 // Primary ambush trigger: while still airborne and falling toward the
@@ -9018,6 +9046,7 @@ function maybeSpawnHedgehogAmbushPreLand(inst, heroX, footY, grounded) {
   const aboutToLand = footY >= home.y - HEDGEHOG_AMBUSH_POP_LEAD_Y && footY <= home.y + LOG_SNAP_BELOW
   if (!onLLog || !aboutToLand) return
   Hedgehog.popOut(inst.ambushHedgehog, null, null, 'left')
+  markAmbushHedgehogRevealed()
 }
 //
 // If the L-log disappears (letter collected) while the ambush hedgehog is

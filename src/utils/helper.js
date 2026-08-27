@@ -153,6 +153,66 @@ export function toCanvas({ width, height, pixelRatio = 1, softwareRendering = fa
   drawFn(ctx, canvas)
   return canvas
 }
+//
+// Counter for unique canvas-atlas sprite names (one per createCanvasAtlasBuilder
+// build() call — e.g. the initial decor bake and any later rebake each get
+// their own texture).
+//
+let canvasAtlasBakeId = 0
+/**
+ * Collects several small pre-baked canvases (e.g. one per decor instance —
+ * a rock, a mushroom, in both its gray and outline colour variants) and
+ * packs them side by side into one shared sprite. register() returns a
+ * mutable placeholder ({ name, tileW, tileH, quad }) that stays empty until
+ * build() runs (once every instance has registered), so it can be drawn
+ * later via k.drawSprite({ sprite: placeholder.name, quad: placeholder.quad,
+ * ... }) — every instance then shares one GPU texture instead of needing
+ * its own bindTexture/useProgram state change every time it draws, which is
+ * what actually costs FPS once dozens of individually-baked decor sprites
+ * are on screen at once.
+ * @returns {{ register: (canvas: HTMLCanvasElement) => { name: string|null, tileW: number, tileH: number, quad: Object|null }, build: (k: Object) => void }}
+ */
+export function createCanvasAtlasBuilder() {
+  const entries = []
+  const register = (canvas) => {
+    const placeholder = { name: null, tileW: canvas.width, tileH: canvas.height, quad: null }
+    entries.push({ canvas, placeholder })
+    return placeholder
+  }
+  const build = (k) => {
+    if (!entries.length) return
+    const pad = 1
+    let atlasW = pad
+    let atlasH = 0
+    entries.forEach(e => {
+      atlasW += e.canvas.width + pad
+      atlasH = Math.max(atlasH, e.canvas.height)
+    })
+    const atlasCanvas = document.createElement('canvas')
+    atlasCanvas.width = atlasW
+    atlasCanvas.height = atlasH
+    const ctx = atlasCanvas.getContext('2d')
+    const atlasName = `canvas-atlas-${canvasAtlasBakeId++}`
+    let cursorX = pad
+    entries.forEach(e => {
+      const w = e.canvas.width
+      const h = e.canvas.height
+      ctx.drawImage(e.canvas, cursorX, 0)
+      Object.assign(e.placeholder, {
+        name: atlasName,
+        tileW: w,
+        tileH: h,
+        quad: { x: cursorX / atlasW, y: 0, w: w / atlasW, h: h / atlasH }
+      })
+      cursorX += w + pad
+    })
+    k.loadSprite(atlasName, atlasCanvas)
+    entries.forEach(e => { e.canvas.width = 0; e.canvas.height = 0 })
+    atlasCanvas.width = 0
+    atlasCanvas.height = 0
+  }
+  return { register, build }
+}
 
 export const prop = (path, root = {}) => path.split(".").reduce(
   (o, key) => (o == null ? undefined : o[key]),

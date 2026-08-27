@@ -1,5 +1,5 @@
 import { CFG } from '../../../cfg.js'
-import { getRGB } from '../../../utils/helper.js'
+import { getRGB, toCanvas } from '../../../utils/helper.js'
 
 //
 // Log platform visual constants (shared with touch level 2).
@@ -241,6 +241,64 @@ export function drawLogPlatform(k, w, h, ox, oy, opacity, detail, colors = null)
   k.drawPolygon({ pts: snowPts, color: k.rgb(255, 255, 255), opacity: 0.9 * opacity })
 }
 
+/**
+ * Pre-renders the fully filled, coloured log barrel (drawLogPlatform's
+ * steady-state look, opacity 1, no snow) to an offscreen canvas once. The
+ * wood shape, cracks and knots never change after generation — only which
+ * fixed colour palette applies — so baking removes dozens of polygon/oval
+ * redraws (with fresh trig per point, every frame) from the hot path for
+ * every log platform on screen at once.
+ * @param {Object} k - Kaplay instance (only used for colour lookup)
+ * @param {number} w - Platform width
+ * @param {number} h - Platform height
+ * @param {Object} detail - Pre-generated log detail (see generateLogDetail)
+ * @param {Object} [colors] - Optional hex tone overrides (same shape as drawLogPlatform)
+ * @returns {{ canvas: HTMLCanvasElement, offsetX: number, offsetY: number }}
+ */
+export function bakeLogPlatformCanvas(k, w, h, detail, colors = null) {
+  const halfH = h / 2
+  const pad = 4
+  const capMargin = halfH * LOG_END_SQUASH + pad
+  const canvasW = Math.ceil(w + capMargin * 2)
+  const canvasH = Math.ceil(h + pad * 2 + 4)
+  const offsetX = canvasW / 2
+  const offsetY = canvasH / 2
+  const canvas = toCanvas({ width: canvasW, height: canvasH }, (ctx) => {
+    drawLogPlatformToCtx(ctx, k, w, h, offsetX, offsetY, detail, colors)
+  })
+  return { canvas, offsetX, offsetY }
+}
+/**
+ * Packs several pre-baked log canvases side by side into one shared atlas
+ * canvas. Every log platform variant can then be drawn from a single loaded
+ * sprite via a UV sub-rect (quad) instead of its own texture — on real GPUs
+ * the per-platform bindTexture/useProgram state changes (one bake per
+ * platform per colour variant) cost far more than the actual fill rate, so
+ * sharing one texture across every platform on screen is the real win.
+ * @param {Array<{canvas: HTMLCanvasElement, offsetX: number, offsetY: number}>} entries
+ * @returns {{ canvas: HTMLCanvasElement, tiles: Array<{x: number, y: number, w: number, h: number, offsetX: number, offsetY: number}> }}
+ */
+export function packLogPlatformAtlas(entries) {
+  const pad = 2
+  let atlasW = pad
+  let atlasH = 0
+  entries.forEach(e => {
+    atlasW += e.canvas.width + pad
+    atlasH = Math.max(atlasH, e.canvas.height)
+  })
+  const atlasCanvas = document.createElement('canvas')
+  atlasCanvas.width = atlasW
+  atlasCanvas.height = atlasH
+  const ctx = atlasCanvas.getContext('2d')
+  const tiles = []
+  let cursorX = pad
+  entries.forEach(e => {
+    ctx.drawImage(e.canvas, cursorX, 0)
+    tiles.push({ x: cursorX, y: 0, w: e.canvas.width, h: e.canvas.height, offsetX: e.offsetX, offsetY: e.offsetY })
+    cursorX += e.canvas.width + pad
+  })
+  return { canvas: atlasCanvas, tiles }
+}
 //
 // Draws a filled oval using polygon approximation
 //
@@ -251,4 +309,101 @@ function drawOvalRing(k, cx, cy, r, squash, color, opacity) {
     pts.push(k.vec2(cx + Math.cos(a) * r * squash, cy + Math.sin(a) * r))
   }
   k.drawPolygon({ pts, color, opacity })
+}
+//
+// Canvas2D mirror of drawLogPlatform, used only for one-time baking (see
+// bakeLogPlatformCanvas). Snow is intentionally left out — no baked caller
+// ever passes withSnow detail.
+//
+function drawLogPlatformToCtx(ctx, k, w, h, ox, oy, detail, colors) {
+  const halfW = w / 2
+  const halfH = h / 2
+  const endR = halfH
+  const sq = LOG_END_SQUASH
+  const barkColor = getRGB(k, colors?.bark ?? LOG_BARK_COLOR_HEX)
+  const barkLight = getRGB(k, colors?.barkLight ?? LOG_BARK_LIGHT_HEX)
+  const barkDark = getRGB(k, colors?.barkDark ?? LOG_BARK_DARK_HEX)
+  const ringColor = getRGB(k, colors?.ring ?? LOG_RING_COLOR_HEX)
+  const ringDark = getRGB(k, colors?.ringDark ?? LOG_RING_DARK_HEX)
+  const coreColor = getRGB(k, colors?.core ?? LOG_CORE_COLOR_HEX)
+  const shadowColor = colors?.shadow ? getRGB(k, colors.shadow) : { r: 0, g: 0, b: 0 }
+  const bodyPts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    bodyPts.push({ x: -halfW + endR * Math.cos(a) * sq + ox, y: endR * Math.sin(a) + oy })
+  }
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    bodyPts.push({ x: halfW + endR * Math.cos(a) * sq + ox, y: endR * Math.sin(a) + oy })
+  }
+  ctxFillPoly(ctx, bodyPts.map(p => ({ x: p.x, y: p.y + 2 })), ctxRgba(shadowColor, 0.4))
+  ctxFillPoly(ctx, bodyPts, ctxRgba(barkColor, 1))
+  const topPts = []
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    const r = endR * 0.85
+    topPts.push({ x: -halfW + r * Math.cos(a) * sq + ox, y: r * Math.sin(a) * 0.45 - halfH * 0.2 + oy })
+  }
+  for (let i = 0; i <= LOG_END_STEPS; i++) {
+    const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
+    const r = endR * 0.85
+    topPts.push({ x: halfW + r * Math.cos(a) * sq + ox, y: r * Math.sin(a) * 0.45 - halfH * 0.2 + oy })
+  }
+  ctxFillPoly(ctx, topPts, ctxRgba(barkLight, 0.5))
+  ctx.fillStyle = ctxRgba(barkDark, 0.3)
+  for (let i = 0; i < LOG_BARK_LINE_COUNT; i++) {
+    const ly = -halfH + (h / (LOG_BARK_LINE_COUNT + 1)) * (i + 1) + oy
+    ctx.fillRect(-halfW + endR * sq + ox, ly, w - endR * sq * 2, 1)
+  }
+  for (const crack of detail.cracks) {
+    const dx = Math.cos(crack.angle) * crack.len * 0.5
+    const dy = Math.sin(crack.angle) * crack.len * 0.5
+    ctxStrokeLine(ctx, crack.x - dx + ox, crack.y - dy + oy, crack.x + dx + ox, crack.y + dy + oy, 1, ctxRgba(barkDark, 0.5))
+  }
+  for (const knot of detail.knots) {
+    ctxFillOval(ctx, knot.x + ox, knot.y + oy, knot.r, 0.7, ctxRgba(barkDark, 0.45))
+    ctxFillOval(ctx, knot.x + ox, knot.y + oy, knot.r * 0.5, 0.7, ctxRgba(barkLight, 0.25))
+  }
+  const endCX = halfW + ox
+  const endCY = oy
+  ctxFillOval(ctx, endCX, endCY, endR, sq, ctxRgba(ringColor, 1))
+  ctxFillOval(ctx, endCX, endCY, endR * 0.75, sq, ctxRgba(coreColor, 1))
+  ctxFillOval(ctx, endCX, endCY, endR * 0.5, sq, ctxRgba(ringDark, 0.3))
+  ctxFillOval(ctx, endCX, endCY, endR * 0.2, sq, ctxRgba(barkDark, 0.5))
+}
+//
+// Formats an {r,g,b} colour as a canvas rgba() string
+//
+function ctxRgba(rgb, opacity) {
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`
+}
+//
+// Fills a closed polygon on a 2D context
+//
+function ctxFillPoly(ctx, pts, style) {
+  ctx.beginPath()
+  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.closePath()
+  ctx.fillStyle = style
+  ctx.fill()
+}
+//
+// Fills a squashed oval (ellipse) on a 2D context
+//
+function ctxFillOval(ctx, cx, cy, r, squash, style) {
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, r * squash, r, 0, 0, Math.PI * 2)
+  ctx.fillStyle = style
+  ctx.fill()
+}
+//
+// Strokes a single line segment on a 2D context
+//
+function ctxStrokeLine(ctx, x1, y1, x2, y2, width, style) {
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.lineWidth = width
+  ctx.strokeStyle = style
+  ctx.stroke()
 }

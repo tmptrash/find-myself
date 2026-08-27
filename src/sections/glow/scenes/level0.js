@@ -12,7 +12,7 @@ import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from '../utils/cute-mushroom.js'
 import * as Hedgehog from '../components/hedgehog.js'
-import { toCanvas, getRGB } from '../../../utils/helper.js'
+import { toCanvas, getRGB, createCanvasAtlasBuilder } from '../../../utils/helper.js'
 import {
   buildGlowTree,
   renderGlowTreeToCanvas,
@@ -47,7 +47,7 @@ import { bindPointerActivate } from '../../../utils/pointer-activate.js'
 import * as Tooltip from '../../../utils/tooltip.js'
 import * as HeroCounter from '../../../utils/hero-counter.js'
 import * as FpsCounter from '../../../utils/fps-counter.js'
-import { generateLogDetail, drawLogPlatform } from '../../touch/utils/log-platform.js'
+import { generateLogDetail, drawLogPlatform, bakeLogPlatformCanvas, packLogPlatformAtlas } from '../../touch/utils/log-platform.js'
 import {
   createGlowMidges,
   updateGlowMidges,
@@ -158,7 +158,6 @@ const ROOT_MAX_Y = 1030
 const TREE_SPRITE_NAME = 'glow0-tree-sprite'
 const TREE_FLAT_SPRITE_NAME = 'glow0-tree-flat-sprite'
 const TREE_LIT_SPRITE_NAME = 'glow0-tree-lit-sprite'
-const MUSH_FLAT_SPRITE_SUFFIX = '-flat'
 const TRUNK_EXCLUDE_HALF = 50
 //
 // The left hedgehog stays hidden until the hero runs a stretch past the
@@ -1526,9 +1525,10 @@ function initGlowLevel0Scene(k) {
     const oPlatY = rightPlatY - O_PLAT_OFFSET_Y
     const bonusPlatX = oPlatX + LOG_W + BONUS_PLAT_OFFSET_X
     const bonusPlatY = oPlatY - BONUS_PLAT_OFFSET_Y
-    const lPlat = createGrayLogPlatform(k, lPlatX, rightPlatY, LOG_W, LOG_H, sound, heroInst, zones, true)
-    const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones)
-    const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, true)
+    const logAtlas = createLogAtlasCollector()
+    const lPlat = createGrayLogPlatform(k, lPlatX, rightPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas)
+    const wPlat = createGrayLogPlatform(k, wPlatX, wPlatY, LOG_W, LOG_H, sound, heroInst, zones, false, logAtlas)
+    const oPlat = createGrayLogPlatform(k, oPlatX, oPlatY, LOG_W, LOG_H, sound, heroInst, zones, true, logAtlas)
     const trampX = rightZoneBaseX + LOG_W + TRAMP_OFFSET_FROM_L_PLAT
     const trampBundle = createMushroomTrampoline(k, trampX, FLOOR_Y, zones, {
       drawZ: CFG.visual.zIndex.player + 1
@@ -1560,8 +1560,18 @@ function initGlowLevel0Scene(k) {
     const lakeX1 = LEFT_MARGIN
     const lakeX2 = waterX2
     const grassLayer = createGlowGrass(k, lakeX1, waterX2, trampX, branchTrampX, zones)
-    const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones)
-    const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones)
+    //
+    // Rocks and mushrooms each bake 2-3 gray/outline canvas variants per
+    // instance (dozens of decor pieces total). Registering them all into one
+    // shared atlas (built right after both are placed) means every decor
+    // sprite on screen shares a single texture bind instead of each piece
+    // forcing its own bindTexture/useProgram GPU state change — this is what
+    // actually tanks FPS once O opens up the whole level's decor at once.
+    //
+    const decorAtlas = createCanvasAtlasBuilder()
+    const rockObjs = createGlowRocks(k, horizBranch.x1, lakeX2, rightZoneBaseX, trampX, branchTrampX, zones, decorAtlas)
+    const mushObjs = createGlowMushrooms(k, lakeX1, waterX2, trampX, branchTrampX, zones, decorAtlas)
+    decorAtlas.build(k)
     const leftHedgehogRevealed = get(KEY_LEFT_HEDGEHOG_REVEALED, false)
     const ambushHedgehogRevealed = get(KEY_AMBUSH_HEDGEHOG_REVEALED, false)
     const hedgehog = Hedgehog.create({
@@ -1635,11 +1645,13 @@ function initGlowLevel0Scene(k) {
     let bonusHeroInst = null
     let bonusPlatAlways = null
     if (bonusCollected) {
-      bonusPlatAlways = createGrayLogPlatform(k, bonusPlatX, bonusPlatY, BONUS_PLAT_W, LOG_H, sound, heroInst, zones)
+      bonusPlatAlways = createGrayLogPlatform(k, bonusPlatX, bonusPlatY, BONUS_PLAT_W, LOG_H, sound, heroInst, zones, false, logAtlas)
       bonusPlatAlways.hidden = false
       bonusPlatAlways.pos.x = bonusPlatX + BONUS_PLAT_W / 2
       bonusPlatAlways.pos.y = bonusPlatY + LOG_H / 2
     } else {
+      const bonusBakedLit = logAtlas.register(BONUS_PLAT_W, LOG_H, bonusLogDetail, LOG_TREE_LIT_COLORS)
+      const bonusBakedColor = logAtlas.register(BONUS_PLAT_W, LOG_H, bonusLogDetail, LOG_TREE_COLOR_COLORS)
       bonusHeroInst = BonusHero.create({
         k,
         x: bonusPlatX + BONUS_PLAT_W / 2,
@@ -1654,12 +1666,17 @@ function initGlowLevel0Scene(k) {
         persistStorageOnCollect: true,
         platformCollisionXOffset: Math.round(BONUS_PLAT_W / 2),
         platformCollisionYOffset: 10,
-        customPlatformDraw: bonus => drawBonusPlatformLog(k, bonus, zones, bonusLogDetail),
+        customPlatformDraw: bonus => drawBonusPlatformLog(k, bonus, zones, bonusBakedLit, bonusBakedColor),
         collectHintText: BONUS_HINT_TEXT,
         collectHintDuration: BONUS_HINT_DURATION,
         tooltipClampInset: glowTooltipClampInset()
       })
     }
+    //
+    // Build the shared log-platform atlas once every platform (L, W, O, the
+    // hidden bonus log) has registered its bake request above.
+    //
+    logAtlas.build(k)
     //
     // Dock target is mid-lake so the last walk always crosses open water.
     // Walk progress (x, sing count, docked) is restored from storage.
@@ -2998,17 +3015,6 @@ function stopMeditationBirds(inst) {
   birds.paused = true
 }
 //
-// Swaps decor mushrooms between flat pre-L gray and shaded gray-phase art.
-//
-function syncMushroomGraySprites(inst) {
-  const shaded = inst.zones.lCollected
-  inst.mushObjs.forEach(obj => {
-    if (obj._outlined || !obj._flatGraySprite) return
-    const name = shaded ? obj._graySprite : obj._flatGraySprite
-    obj.use(inst.k.sprite(name))
-  })
-}
-//
 // Rebakes the walking trampoline gray sprites after L (shaded gray caps).
 //
 function rebakeTrampolineGraySprites(k) {
@@ -3025,17 +3031,24 @@ function rebakeGlowRockSpritesShaded(inst) {
     lightR: INNER_GRAY.r, lightG: INNER_GRAY.g, lightB: INNER_GRAY.b,
     darkR: DECOR_OUTLINE_RGB.r, darkG: DECOR_OUTLINE_RGB.g, darkB: DECOR_OUTLINE_RGB.b
   }
+  //
+  // Rebaked into a fresh shared atlas (same trick as the initial bake in
+  // createGlowRocks) instead of one loadSprite per rock — otherwise every
+  // rock would fall back to its own individual texture the moment L is
+  // collected, undoing the shared-atlas GPU win right before the color
+  // world (and its full decor reveal) even needs it most.
+  //
+  const rebakeAtlas = createCanvasAtlasBuilder()
+  const toSwap = []
   inst.rockObjs.forEach(obj => {
     const bake = obj._rockBake
     if (!bake) return
-    const { spriteName, cx, cy, radius, verts, widthScale, totalW, croppedH } = bake
+    const { cx, cy, radius, verts, widthScale, totalW, croppedH } = bake
     const rockCanvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
       ctx.scale(widthScale, 1)
       drawRockToCanvas(ctx, { cx, cy, radius, verts, palette, skipOutline: true, skipShadow: true, skipTexture: true })
     })
-    k.loadSprite(spriteName, rockCanvas)
-    rockCanvas.width = 0
-    rockCanvas.height = 0
+    const bakedGray = rebakeAtlas.register(rockCanvas)
     const rockOutlineCanvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
       ctx.scale(widthScale, 1)
       drawRockToCanvas(ctx, {
@@ -3046,12 +3059,13 @@ function rebakeGlowRockSpritesShaded(inst) {
         skipTexture: true
       })
     })
-    k.loadSprite(spriteName + DECOR_OUTLINE_SUFFIX, rockOutlineCanvas)
-    rockOutlineCanvas.width = 0
-    rockOutlineCanvas.height = 0
-    if (!obj._outlined) {
-      obj.use(k.sprite(spriteName))
-    }
+    const bakedOutline = rebakeAtlas.register(rockOutlineCanvas)
+    toSwap.push({ obj, bakedGray, bakedOutline })
+  })
+  rebakeAtlas.build(k)
+  toSwap.forEach(({ obj, bakedGray, bakedOutline }) => {
+    obj._bakedGray = bakedGray
+    obj._bakedOutline = bakedOutline
     obj.color = k.rgb(255, 255, 255)
   })
 }
@@ -3069,7 +3083,6 @@ function applyZoneVisibility(inst) {
   const leftGroundOpen = z.groundDecorLeft
   inst.treeDrawMonolith ? syncMonolithicTreeGraySprite(inst) : syncTreeSegmentGraySprites(inst)
   inst.treeDrawMonolith ? syncMonolithicTreeColorMode(inst) : syncTreeSegmentsVisibility(inst)
-  syncMushroomGraySprites(inst)
   cornerObjsSetHidden(inst.cornerObjs, false)
   refreshPlayfieldCornerSprites(inst)
   //
@@ -4419,7 +4432,7 @@ function makeRoundedCornerCanvas(radius, color) {
 //
 // Log-style platform — value 5 environment silhouette (same shape as touch logs).
 //
-function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineStyle = false) {
+function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineStyle = false, logAtlas) {
   //
   // Log platforms match the main tree's gray trunk tone before L; after L
   // they switch to the fully detailed wood barrel. The L platform itself
@@ -4427,6 +4440,8 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
   //
   const envColorGray = getRGB(k, GLOW_PAL.treeGray.trunk)
   const logDetail = generateLogDetail(w, h)
+  const bakedLit = logAtlas.register(w, h, logDetail, LOG_TREE_LIT_COLORS)
+  const bakedColor = logAtlas.register(w, h, logDetail, LOG_TREE_COLOR_COLORS)
   const cx = x + w / 2
   const cy = y + h / 2
   const plat = k.add([
@@ -4487,24 +4502,111 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
           // "outline in gray, filled in colour" progression the main tree
           // itself goes through (see getTreePaletteColor()), instead of
           // staying a hollow outline forever once every colour has appeared.
+          // Once the crossfade settles (fade >= 0.98) draw a pre-baked
+          // sprite instead of the full vector barrel — this steady state
+          // holds forever once the world is coloured, and re-drawing dozens
+          // of polygons/ovals with fresh trig every frame for every log
+          // platform on screen was the main FPS cost after O.
           //
+          if (fade >= 0.98) {
+            drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy)
+            return
+          }
           fade < 0.98 && drawLOutlineLogPlatform(k, w, h, ox, oy, this._logDetail, outlineRgb, detailRgb)
           fade > 0.02 && drawLogPlatform(k, w, h, ox, oy, fade, this._logDetail, glowLogColors(zones))
           return
         }
         //
         // Detailed wood (rings, bark lines) appears once L is collected;
-        // before that the log is a flat gray environment silhouette.
+        // before that the log is a flat gray environment silhouette. The
+        // filled state never animates its own opacity, so it can always use
+        // the pre-baked sprite straight away (see outlineStyle branch above).
         //
-        fade > 0.01 || zones.lCollected
-          ? drawLogPlatform(k, w, h, ox, oy, 1, this._logDetail, glowLogColors(zones))
-          : drawFlatLog(k, ox, oy, w, h, envColorGray)
+        if (fade > 0.01 || zones.lCollected) {
+          drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy)
+          return
+        }
+        drawFlatLog(k, ox, oy, w, h, envColorGray)
       }
     }
   ])
   plat.hidden = true
   tagWoodPlatform(plat, sound, heroInst)
   return plat
+}
+//
+// Collects filled-log bake requests from every log platform (L, O, W, the
+// hidden bonus log) so all of them can be packed into ONE shared atlas
+// texture and built once, right after every platform on the level has
+// registered — sharing a single sprite means drawing any number of log
+// platforms costs one bindTexture/useProgram GPU state change instead of
+// one per platform per colour variant, which is what actually tanked FPS
+// once O opens up the whole level's decor at once (confirmed by counting
+// WebGL draw/texture calls per frame, not just JS self time).
+//
+function createLogAtlasCollector() {
+  const requests = []
+  const register = (w, h, detail, colors) => {
+    const placeholder = { name: null, offsetX: 0, offsetY: 0, tileW: 0, tileH: 0, quad: null }
+    requests.push({ w, h, detail, colors, placeholder })
+    return placeholder
+  }
+  const build = (k) => {
+    if (!requests.length) return
+    const baked = requests.map(r => bakeLogPlatformCanvas(k, r.w, r.h, r.detail, r.colors))
+    const { canvas, tiles } = packLogPlatformAtlas(baked)
+    const atlasW = canvas.width
+    const atlasH = canvas.height
+    const name = 'glow0-logplat-atlas'
+    k.loadSprite(name, canvas)
+    canvas.width = 0
+    canvas.height = 0
+    requests.forEach((r, i) => {
+      const tile = tiles[i]
+      Object.assign(r.placeholder, {
+        name,
+        offsetX: tile.offsetX,
+        offsetY: tile.offsetY,
+        tileW: tile.w,
+        tileH: tile.h,
+        quad: { x: tile.x / atlasW, y: tile.y / atlasH, w: tile.w / atlasW, h: tile.h / atlasH }
+      })
+    })
+  }
+  return { register, build }
+}
+//
+// Draws a pre-baked filled-log atlas tile centred at the local (ox, oy) offset.
+//
+function drawBakedFilledLog(k, baked, ox, oy, opacity = 1) {
+  if (!baked.name) return
+  k.drawSprite({
+    sprite: baked.name,
+    pos: k.vec2(ox - baked.offsetX, oy - baked.offsetY),
+    width: baked.tileW,
+    height: baked.tileH,
+    quad: baked.quad,
+    opacity
+  })
+}
+//
+// Draws one shared-atlas decor tile (a rock or mushroom variant) at a live
+// game object's own pos/angle/opacity/color — used instead of a plain
+// k.sprite() component so many small decor pieces can share one texture.
+//
+function drawDecorAtlasSprite(k, baked, pos, anchor, angle, opacity, color) {
+  if (!baked?.name) return
+  k.drawSprite({
+    sprite: baked.name,
+    pos,
+    anchor,
+    angle,
+    opacity,
+    color,
+    width: baked.tileW,
+    height: baked.tileH,
+    quad: baked.quad
+  })
 }
 function tagGroundPlatform(platform, sound, heroInst) {
   platform.onCollide('player', () => {
@@ -4606,12 +4708,12 @@ function drawFilledOvalOutline(k, cx, cy, r, squash, color) {
 // Draws the revealed hidden bonus platform in the letter-log style: flat
 // environment-toned barrel before L, detailed wood once L is collected.
 //
-function drawBonusPlatformLog(k, bonus, zones, logDetail) {
+function drawBonusPlatformLog(k, bonus, zones, bakedLit, bakedColor) {
   const cx = bonus.x + bonus.shakeOffsetX
   const cy = bonus.y
   const fade = zones._sceneRef?.colorFade ?? 0
   if (fade > 0.01 || zones.lCollected) {
-    drawLogPlatform(k, BONUS_PLAT_W, LOG_H, cx, cy, bonus.platformOpacity, logDetail, glowLogColors(zones))
+    drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, cx, cy, bonus.platformOpacity)
     return
   }
   drawFlatLog(k, cx, cy, BONUS_PLAT_W, LOG_H, getRGB(k, GLOW_PAL.treeGray.trunk))
@@ -4771,16 +4873,15 @@ function glowGrassTint(zones, blade) {
 //
 // Rocks — flat value 5 silhouettes.
 //
-function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones) {
+function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, branchTrampX, zones, decorAtlas) {
   const objs = []
-  let spriteIdx = 0
   const clusterCenterX = treeBaseLeftX + 40
   for (let i = 0; i < 6; i++) {
     const radius = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN)
     const angle = (Math.PI / 5) * i
     const spread = 35 + Math.random() * 25
     const cx = clusterCenterX + Math.cos(angle) * spread * 0.5
-    objs.push(placeRock(k, cx, radius, `glow0-rock-${spriteIdx++}`, 'left', true))
+    objs.push(placeRock(k, cx, radius, 'left', true, 7, 1, decorAtlas))
   }
   //
   // Tree-side end of the lake — two rocks with the water edge between them.
@@ -4791,12 +4892,12 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   // full-world canvas (z = platforms - 2) guarantees it always renders on
   // top, regardless of scene-graph insertion order at equal z values.
   //
-  const shoreRockBefore = placeRock(k, waterRightX - WATER_END_ROCK_BEFORE_X, endRockR, `glow0-rock-${spriteIdx++}`, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE)
+  const shoreRockBefore = placeRock(k, waterRightX - WATER_END_ROCK_BEFORE_X, endRockR, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE, decorAtlas)
   shoreRockBefore._lakeShoreEnd = true
   shoreRockBefore._shoreTreeSide = true
   objs.push(shoreRockBefore)
   const endRockR2 = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN) * 0.75
-  const shoreRockAfter = placeRock(k, waterRightX + WATER_END_ROCK_AFTER_X, endRockR2, `glow0-rock-${spriteIdx++}`, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE * 0.9)
+  const shoreRockAfter = placeRock(k, waterRightX + WATER_END_ROCK_AFTER_X, endRockR2, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE * 0.9, decorAtlas)
   shoreRockAfter._lakeShoreEnd = true
   objs.push(shoreRockAfter)
   //
@@ -4821,7 +4922,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
       safety++
     }
     if (badRock(cx)) continue
-    const rock = placeRock(k, cx, radius, `glow0-rock-${spriteIdx++}`, 'right')
+    const rock = placeRock(k, cx, radius, 'right', false, 7, 1, decorAtlas)
     rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
     objs.push(rock)
   }
@@ -4830,7 +4931,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
 //
 // Pre-renders a flat rock sprite.
 //
-function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z = 7, widthScale = 1) {
+function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthScale = 1, decorAtlas) {
   const totalW = Math.ceil(radius * 2.6 * widthScale)
   const totalH = Math.ceil(radius * 1.9)
   const cx = totalW / (2 * widthScale)
@@ -4848,9 +4949,7 @@ function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z 
     ctx.scale(widthScale, 1)
     drawRockToCanvas(ctx, { cx, cy, radius, verts, palette: flatPalette, skipOutline: true, flatFill: true, skipShadow: true })
   })
-  k.loadSprite(spriteName, rockCanvas)
-  rockCanvas.width = 0
-  rockCanvas.height = 0
+  const bakedGray = decorAtlas.register(rockCanvas)
   //
   // Outlined variant for the colour world — same silhouette with a thin rim
   // in the dark palette neighbour of the rock's gray fill.
@@ -4865,13 +4964,22 @@ function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z 
       outlineWidth: DECOR_OUTLINE_WIDTH
     })
   })
-  k.loadSprite(spriteName + DECOR_OUTLINE_SUFFIX, rockOutlineCanvas)
-  rockOutlineCanvas.width = 0
-  rockOutlineCanvas.height = 0
-  const obj = k.add([k.sprite(spriteName), k.pos(worldX - totalW / 2, posY), k.z(z)])
-  obj._graySprite = spriteName
-  obj._outlineSprite = spriteName + DECOR_OUTLINE_SUFFIX
-  obj._outlined = false
+  const bakedOutline = decorAtlas.register(rockOutlineCanvas)
+  const obj = k.add([
+    k.pos(worldX - totalW / 2, posY),
+    k.z(z),
+    {
+      opacity: 1,
+      color: k.rgb(255, 255, 255),
+      _bakedGray: bakedGray,
+      _bakedOutline: bakedOutline,
+      _outlined: false,
+      draw() {
+        if (this.hidden) return
+        drawDecorAtlasSprite(k, this._outlined ? this._bakedOutline : this._bakedGray, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
+      }
+    }
+  ])
   obj._side = side
   obj._waterCluster = waterCluster
   obj._homeX = worldX - totalW / 2
@@ -4879,7 +4987,6 @@ function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z 
   obj._decorWorldX = worldX
   obj._detailRank = radius < 16 ? 'small' : 'large'
   obj._rockBake = {
-    spriteName,
     cx,
     cy,
     radius,
@@ -4895,7 +5002,7 @@ function placeRock(k, worldX, radius, spriteName, side, waterCluster = false, z 
 //
 // Mushrooms — value 5, excluded from water zone.
 //
-function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
+function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, decorAtlas) {
   const objs = []
   const left = LEFT_MARGIN + 60
   //
@@ -4924,7 +5031,6 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
     }
     if (isBadSpot(posX)) continue
     const posY = FLOOR_Y - totalH + MUSHROOM_EXTRA_LOWER
-    const spriteName = `glow0-mush-${i}`
     //
     // Gray-phase variant — the same cute mushroom painted entirely inside the
     // gray palette family (no face on the small decor mushrooms).
@@ -4938,9 +5044,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
         withFace: false
       })
     })
-    k.loadSprite(spriteName, mushCanvas)
-    mushCanvas.width = 0
-    mushCanvas.height = 0
+    const bakedGray = decorAtlas.register(mushCanvas)
     const flatMushColors = getCuteMushroomFlatDecorColors()
     const mushFlatCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
       drawCuteMushroomToCanvas(ctx, {
@@ -4951,10 +5055,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
         withFace: false
       })
     })
-    const flatSpriteName = spriteName + MUSH_FLAT_SPRITE_SUFFIX
-    k.loadSprite(flatSpriteName, mushFlatCanvas)
-    mushFlatCanvas.width = 0
-    mushFlatCanvas.height = 0
+    const bakedFlat = decorAtlas.register(mushFlatCanvas)
     //
     // Colour-world variant — cap tones from this mushroom's colour family,
     // cream body shared with the trampoline mushroom.
@@ -4974,24 +5075,30 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones) {
         withFace: false
       })
     })
-    k.loadSprite(spriteName + DECOR_OUTLINE_SUFFIX, mushColorCanvas)
-    mushColorCanvas.width = 0
-    mushColorCanvas.height = 0
+    const bakedOutline = decorAtlas.register(mushColorCanvas)
     //
     // Anchor at the base so whistle lean rotates around the ground, not the cap
     //
     const baseX = posX
     const baseY = FLOOR_Y + MUSHROOM_EXTRA_LOWER
     const obj = k.add([
-      k.sprite(zones.lCollected ? spriteName : flatSpriteName),
       k.pos(baseX, baseY),
-      k.anchor('bot'),
-      k.z(7)
+      k.z(7),
+      {
+        opacity: 1,
+        color: k.rgb(255, 255, 255),
+        angle: 0,
+        _bakedGray: bakedGray,
+        _bakedFlat: bakedFlat,
+        _bakedOutline: bakedOutline,
+        _outlined: false,
+        draw() {
+          if (this.hidden) return
+          const baked = this._outlined ? this._bakedOutline : (zones.lCollected ? this._bakedGray : this._bakedFlat)
+          drawDecorAtlasSprite(k, baked, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
+        }
+      }
     ])
-    obj._graySprite = spriteName
-    obj._flatGraySprite = flatSpriteName
-    obj._outlineSprite = spriteName + DECOR_OUTLINE_SUFFIX
-    obj._outlined = false
     obj._side = posX >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
     obj._decorWorldX = posX
     obj._rightStrip = obj._side === 'right'
@@ -5507,12 +5614,8 @@ function drawLakeShoreRocksWorld(inst) {
   const white = k.rgb(255, 255, 255)
   inst.rockObjs.forEach(o => {
     if (!o._lakeShoreEnd) return
-    const spriteName = outlined && o._outlineSprite ? o._outlineSprite : o._graySprite
-    spriteName && k.drawSprite({
-      sprite: spriteName,
-      pos: k.vec2(o._homeX, o._homeY),
-      color: white
-    })
+    const baked = outlined && o._bakedOutline ? o._bakedOutline : o._bakedGray
+    drawDecorAtlasSprite(k, baked, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
   })
 }
 //
@@ -5690,9 +5793,8 @@ function updateDecorOutlines(inst) {
   if (inst._decorOutlineState === outlined) return
   inst._decorOutlineState = outlined
   const swap = obj => {
-    if (!obj._outlineSprite || obj._outlined === outlined) return
+    if (!obj._bakedOutline || obj._outlined === outlined) return
     obj._outlined = outlined
-    obj.use(inst.k.sprite(outlined ? obj._outlineSprite : obj._graySprite))
   }
   inst.mushObjs.forEach(swap)
   inst.rockObjs.forEach(swap)
@@ -7623,13 +7725,15 @@ function updateTrampolineWalk(inst, char, heroMoving, grounded) {
   const dt = inst.k.dt()
   //
   // In-progress walk always continues to the current stop (dialog / chase
-  // ignored) — except while the hero is mid-flight from a bounce on this
-  // same mushroom. Letting the solid invisible pad slide sideways under an
-  // airborne body makes Kaplay shove him out of the way (looks like he
-  // vanishes), so the walk simply pauses until he lands.
+  // ignored) — except while the hero is riding this same mushroom, either
+  // mid-flight from a bounce (trampBounceAir) or simply standing grounded
+  // on its cap (e.g. having jumped onto it normally rather than bouncing).
+  // Letting the solid invisible pad slide sideways under a body resting on
+  // top of it makes Kaplay shove him along/off unpredictably (looks like
+  // he vanishes), so the walk simply pauses until he's clear of the cap.
   //
   if (tw.walking) {
-    if (inst.trampBounceAir) return
+    if (inst.trampBounceAir || (grounded && isOnTrampolineCap(inst, char, inst.trampState))) return
     inst.trampState.hasLegs = true
     inst.trampState.walkDir = -1
     inst.trampState.walkPhase = (inst.trampState.walkPhase || 0) + dt * 9

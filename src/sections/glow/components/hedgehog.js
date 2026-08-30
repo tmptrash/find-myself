@@ -76,9 +76,9 @@ const EYE_PUPIL_TRAVEL = EYE_WHITE_R - PUPIL_R - 0.4
 // Small closed-mouth line on the underside of the snout, just behind the
 // nose tip.
 //
-const MOUTH_P1 = [15, -3]
-const MOUTH_CTRL = [17.5, -1.7]
-const MOUTH_P2 = [20, -3.5]
+const MOUTH_P1 = [15, -2]
+const MOUTH_CTRL = [18.7, -0.5]
+const MOUTH_P2 = [24.8, -4.9]
 const MOUTH_WIDTH = 0.9
 //
 // Stub legs peeking out from under the body. Drawn live (cheap — a
@@ -310,6 +310,14 @@ export function fallAndCrawlAway(inst, groundY, edgeX) {
 //
 function onUpdate(inst) {
   if (!inst.popped) return
+  const scene = inst.zones?._sceneRef
+  const frozen = !scene?.zones?.oZone && !scene?.zones?.oCollected &&
+    (scene?.meditation?.countdown == null || (scene?.meditationWorldLife ?? 0) < 0.02)
+  //
+  // Stillness freezes wander/gaze, but a platform vanishing mid-ambush must
+  // keep gravity + walk-to-edge so the hedgehog tumbles off the L-log.
+  //
+  if (frozen && !inst.falling && !inst.walkingToEdge) return
   const dt = inst.k.dt()
   inst.idleTime += dt
   if (inst.walkingToEdge) {

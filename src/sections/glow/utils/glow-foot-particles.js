@@ -26,11 +26,9 @@ const BURST_ANGLE_RANGE_DEG = 150
 //
 const LEAF_SIZE_MIN = 10
 const LEAF_SIZE_RANGE = 9
-const LEAF_LIFE_MIN = 2.2
-const LEAF_LIFE_RANGE = 1.6
 const LEAF_ROT_SPEED_RANGE = 420
 const LEAF_BEZIER_STEPS = 6
-const LEAF_GRAVITY_SCALE = 0.28
+const LEAF_GRAVITY_SCALE = 0.55
 //
 // Once past the initial outward burst, leaves settle into a gentle
 // wind-blown flutter down to the ground instead of continuing to
@@ -39,7 +37,7 @@ const LEAF_GRAVITY_SCALE = 0.28
 // sine sway, so they visibly drift down and land rather than just hanging
 // mid-air fading out on a timer.
 //
-const LEAF_MAX_FALL_SPEED = 65
+const LEAF_MAX_FALL_SPEED = 135
 const LEAF_FLUTTER_SPEED_MIN = 1.5
 const LEAF_FLUTTER_SPEED_RANGE = 2
 const LEAF_FLUTTER_AMPLITUDE = 26
@@ -50,11 +48,13 @@ const LEAF_FLUTTER_AMPLITUDE = 26
 //
 const LEAF_HORIZONTAL_DRAG_PER_SEC = 0.15
 //
-// Once a leaf reaches the ground it lingers briefly (still gently
-// spinning down) then fades out, instead of floating there until its full
-// burst lifespan expires.
+// Once a leaf reaches the ground it rests there (still gently spinning
+// down) for LEAF_GROUND_LINGER seconds and only then fades out over
+// LEAF_GROUND_FADE — the hero visibly scatters into leaves that settle on
+// the floor before disappearing.
 //
-const LEAF_GROUND_LINGER = 0.6
+const LEAF_GROUND_LINGER = 1.4
+const LEAF_GROUND_FADE = 0.55
 const LEAF_GROUND_SPIN_DECAY = 0.9
 //
 // Cache of pre-built leaf polygon point sets, keyed by rounded size —
@@ -104,6 +104,9 @@ export function clear(inst) {
 //
 export function spawnLanding(inst, footX, footY, color, countMult = 1) {
   if (!inst) return
+  if (import.meta.env.DEV) {
+    window.__glowFootSpawnTotal = (window.__glowFootSpawnTotal || 0) + 1
+  }
   const count = Math.round(LANDING_COUNT * countMult)
   for (let i = 0; i < count; i++) {
     pushParticle(inst, footX, footY, color, LANDING_SPEED_MIN, LANDING_SPEED_RANGE, true)
@@ -184,8 +187,9 @@ function pushLeafBurstParticle(inst, x, y, color, groundY) {
     y: y - 4 + Math.random() * 8,
     vx: Math.cos(angle) * speed * side,
     vy: -Math.sin(angle) * speed,
-    life: LEAF_LIFE_MIN + Math.random() * LEAF_LIFE_RANGE,
+    life: Infinity,
     age: 0,
+    fadeFrom: null,
     size,
     r: c.r,
     g: c.g,
@@ -218,8 +222,10 @@ function updateDustParticle(p, dt) {
 //
 function updateLeafParticle(p, dt) {
   if (p.landed) {
+    p.groundLinger = (p.groundLinger ?? 0) + dt
     p.rotSpeed *= LEAF_GROUND_SPIN_DECAY
     p.angle += p.rotSpeed * dt
+    p.groundLinger >= LEAF_GROUND_LINGER && startLeafFade(p)
     return
   }
   p.vy += GRAVITY * LEAF_GRAVITY_SCALE * dt
@@ -233,7 +239,9 @@ function updateLeafParticle(p, dt) {
   if (p.groundY != null && p.y >= p.groundY) {
     p.y = p.groundY
     p.landed = true
-    p.life = Math.min(p.life, p.age + LEAF_GROUND_LINGER)
+    p.groundLinger = 0
+    p.vx = 0
+    p.vy = 0
   }
 }
 //
@@ -264,11 +272,11 @@ function buildLeafPoints(k, size) {
 function drawParticles(inst) {
   const k = inst.k
   for (const p of inst.particles) {
-    const opacity = Math.max(0, 1 - p.age / p.life)
     if (p.shape === 'leaf') {
-      drawLeafParticle(k, p, opacity)
+      drawLeafParticle(k, p, leafOpacity(p))
       continue
     }
+    const opacity = Math.max(0, 1 - p.age / p.life)
     k.drawRect({
       pos: k.vec2(p.x, p.y),
       width: p.size,
@@ -285,6 +293,23 @@ function drawParticles(inst) {
 // applied to drawPolygon() in this Kaplay build, which silently drew every
 // leaf at the wrong (invisible) spot.
 //
+//
+// Arms the fade-out: from here on the leaf has LEAF_GROUND_FADE seconds
+// left, after which onUpdate() drops it from the pool.
+//
+function startLeafFade(p) {
+  if (p.fadeFrom != null) return
+  p.fadeFrom = p.age
+  p.life = p.age + LEAF_GROUND_FADE
+}
+//
+// Leaves stay fully opaque all the way down and only dissolve once resting
+// on the ground, unlike dust which fades across its whole lifespan.
+//
+function leafOpacity(p) {
+  if (p.fadeFrom == null) return 1
+  return Math.max(0, 1 - (p.age - p.fadeFrom) / LEAF_GROUND_FADE)
+}
 function drawLeafParticle(k, p, opacity) {
   const rad = p.angle * Math.PI / 180
   const cos = Math.cos(rad)

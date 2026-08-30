@@ -46,10 +46,12 @@ let lastTintK = null
  * @param {Function} cfg.getTint - (blade) => {r,g,b[,opacity]} tint or null
  *   to hide the blade this frame; opacity (0..1) fades the blade without
  *   darkening its colour
+ * @param {Function} [cfg.getSwayScale] - () => 0..1 multiplier for blade
+ *   sway; omit for full sway
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
-  const { k, floorY, left, right, tuftCount, z, excluded, density, getTint } = cfg
+  const { k, floorY, left, right, tuftCount, z, excluded, density, getTint, getSwayScale } = cfg
   loadBladeSprites(k)
   const blades = buildBlades(left, right, tuftCount, excluded, density)
   const inst = {
@@ -57,6 +59,7 @@ export function create(cfg) {
     floorY,
     blades,
     getTint,
+    getSwayScale,
     layer: null
   }
   z !== undefined && (inst.layer = k.add([
@@ -164,13 +167,14 @@ function onDraw(inst) {
   const minX = camX - half
   const maxX = camX + half
   const start = firstBladeAtOrAfter(blades, minX)
+  const swayScale = inst.getSwayScale?.() ?? 1
   for (let i = start; i < blades.length; i++) {
     const blade = blades[i]
     if (blade.x > maxX) break
     const tint = inst.getTint(blade)
     if (!tint) continue
     const color = grassTintRgb(k, tint)
-    const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG
+    const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG * swayScale
     k.drawSprite({
       sprite: SPRITE_PREFIX + blade.variant,
       pos: k.vec2(blade.x, inst.floorY),

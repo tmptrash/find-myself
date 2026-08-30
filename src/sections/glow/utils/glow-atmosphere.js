@@ -211,20 +211,24 @@ export function setGlowMidgesVisible(ctrl, visible) {
  * Advances midge wander inside each role's bounds.
  * @param {Object} ctrl - Midges controller
  * @param {number} dt - Delta time
+ * @param {number} [worldLife=1] - Post-L meditation fade (0 = frozen/hidden)
  */
-export function updateGlowMidges(ctrl, dt) {
+export function updateGlowMidges(ctrl, dt, worldLife = 0) {
   if (!ctrl?.midges) return
+  ctrl.worldLife = worldLife
+  if (worldLife < 0.02) return
   const t = performance.now() * 0.001
+  const move = worldLife
   for (const m of ctrl.midges) {
     if (!midgeRoleVisible(ctrl, m.role)) continue
     const bounds = boundsForRole(ctrl, m.role)
-    m.driftVx += Math.sin(t * 2.1 + m.phase) * 18 * dt
-    m.driftVy += Math.cos(t * 2.7 + m.phase * 1.3) * 14 * dt
+    m.driftVx += Math.sin(t * 2.1 + m.phase) * 18 * dt * move
+    m.driftVy += Math.cos(t * 2.7 + m.phase * 1.3) * 14 * dt * move
     m.driftVx *= 0.98
     m.driftVy *= 0.98
-    const sp = m.speed * dt
-    m.x += m.driftVx * dt + Math.sin(t * 3.2 + m.phase) * sp
-    m.y += m.driftVy * dt + Math.cos(t * 2.4 + m.phase) * sp * 0.7
+    const sp = m.speed * dt * move
+    m.x += m.driftVx * dt * move + Math.sin(t * 3.2 + m.phase) * sp
+    m.y += m.driftVy * dt * move + Math.cos(t * 2.4 + m.phase) * sp * 0.7
     if (m.x < bounds.minX) { m.x = bounds.minX; m.driftVx = Math.abs(m.driftVx) }
     if (m.x > bounds.maxX) { m.x = bounds.maxX; m.driftVx = -Math.abs(m.driftVx) }
     if (m.y < bounds.minY) { m.y = bounds.minY; m.driftVy = Math.abs(m.driftVy) }
@@ -501,6 +505,8 @@ function bakeOnePitMushroomSprite(k, name, colors) {
   canvas.height = 0
 }
 function drawGlowMidges(k, ctrl) {
+  const life = ctrl.worldLife ?? 0
+  if (life < 0.02) return
   const t = k.time()
   const voidRgb = glowRgb('void')
   const base = ctrl.midgeRgb || voidRgb
@@ -519,7 +525,7 @@ function drawGlowMidges(k, ctrl) {
       pos: k.vec2(m.x, m.y),
       radius: m.radius,
       color: midgeC,
-      opacity: 0.35 + pulse * 0.45
+      opacity: (0.35 + pulse * 0.45) * life
     })
   }
 }

@@ -320,6 +320,7 @@ const heroSpritePrefixesReadyFor = new WeakMap()
  * @param {Function} [config.onAnnihilation] - Callback when hero meets anti-hero
  * @param {string} [config.currentLevel] - Current level name for transition
  * @param {string} [config.dustColor] - Dust particle color (hex string), defaults to gray
+ * @param {boolean} [config.suppressDust=false] - Disable landing and run-start dust
  * @param {boolean} [config.hitboxPadding=0] - Additional padding around collision box (for menu hover/click)
  * @param {boolean} [config.isStatic=false] - If true, no physics/gravity is applied
  * @param {boolean} [config.fixed=config.isStatic] - If true, position is screen-space (HUD indicators); a static
@@ -341,6 +342,7 @@ export function create(config) {
     bodyColor = null,      // Custom body color (hex string)
     outlineColor = null,   // Custom outline color (hex string), defaults to black
     dustColor = null,      // Dust particle color (hex string)
+    suppressDust = false,  // Disable landing and run-start dust for this hero
     isStatic = false,      // If true, no physics (for indicators / decorative heroes)
     fixed = isStatic,      // If true, position is screen-space (HUD); defaults to isStatic
     addMouth = false,      // If true, add black horizontal mouth line (only for idle)
@@ -498,6 +500,7 @@ export function create(config) {
     eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
     spritePrefix,
     dustColor,
+    suppressDust,
     speed: CFG.game.moveSpeed,
     jumpForce: config.jumpForce ?? CFG.game.jumpForce,
     direction: 1,
@@ -2062,6 +2065,10 @@ function setupControls(inst) {
  * @param {Object} inst - Hero instance
  */
 function createLandingDust(inst) {
+  //
+  // Glow level uses its own foot-burst system on the main ground only.
+  //
+  if (inst.currentLevel?.startsWith('lesson-glow.')) return
   const { k, character } = inst
   //
   // Calculate foot position (bottom of collision box)
@@ -2078,6 +2085,10 @@ function createLandingDust(inst) {
  * @param {number} direction - Movement direction (-1 = left, 1 = right)
  */
 function createRunStartDust(inst, direction) {
+  //
+  // Glow level uses its own foot-burst system on the main ground only.
+  //
+  if (inst.currentLevel?.startsWith('lesson-glow.')) return
   const { k, character } = inst
   //
   // Calculate foot position (bottom of collision box)
@@ -2097,10 +2108,17 @@ function createRunStartDust(inst, direction) {
  * @param {number} direction - Movement direction (for run type)
  */
 function createDustParticles(inst, footX, footY, type = 'splash', direction = 1) {
+  //
+  // Glow level never uses hero.js dust — foot bursts are scene-owned.
+  //
+  if (inst.currentLevel?.startsWith('lesson-glow.')) return
   const { k } = inst
   //
   // Create dust particles at feet position
   //
+  if (import.meta.env.DEV) {
+    window.__heroDustSpawns = (window.__heroDustSpawns || 0) + 1
+  }
   for (let i = 0; i < DUST_PARTICLE_COUNT; i++) {
     //
     // Determine particle direction based on type

@@ -222,7 +222,13 @@ export const CFG = {
         dialogText: PALETTE.gray6,
         dialogBorder: PALETTE.gray3,
         hudScore: PALETTE.gray5,
-        grassGreen: PALETTE.green2,
+        //
+        // Foreground grass blades — warm straw gold, a different hue family
+        // from the near bush layer's leaf green (treeColor.leaf), so the
+        // blades never blend into the bushes standing right behind them and
+        // read as dry autumn grass under the amber canopy.
+        //
+        grassGreen: PALETTE.teal4,
         water: PALETTE.cyan2,
         //
         // Colour-world backdrop: the bright warm haze above the ground line

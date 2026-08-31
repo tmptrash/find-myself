@@ -54,7 +54,7 @@ export function treeDataForSegment(treeData, segmentId) {
     branchSegs: [],
     leaves: [],
     horizBranch: treeData.horizBranch,
-    trunkBase: treeData.trunkSegs[0],
+    trunkBase: treeData.trunkBase ?? treeData.trunkSegs[0],
     rootStartY: treeData.rootStartY,
     groundClipY: treeData.groundClipY,
     heroBranchSegFrom: treeData.heroBranchSegFrom

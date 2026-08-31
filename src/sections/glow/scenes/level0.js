@@ -233,6 +233,14 @@ const HEDGEHOG_DEATH_PROMPT_FONT = 22
 // bottom edge, so backing off by this much lands the line inside the leaves.
 //
 const HEDGEHOG_DEATH_PROMPT_LEAF_RISE = 165
+const HEDGEHOG_DEATH_PROMPT_TEXT_GRAY = { r: 220, g: 220, b: 220 }
+const HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY = { r: 0, g: 0, b: 0 }
+//
+// Dark void text + warm cream shadow reads clearly over the orange haze and
+// amber parallax foliage in the colour world.
+//
+const HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD = VOID
+const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = { r: 255, g: 248, b: 230 }
 const PAR_LEAF_MAX_Y_FRACTION = 0.43
 let HEDGEHOG_DEATH_PROMPT_Y = Math.round(SCREEN_H * PAR_LEAF_MAX_Y_FRACTION) -
   HEDGEHOG_DEATH_PROMPT_LEAF_RISE
@@ -526,7 +534,7 @@ const BUSH_FARTHEST_HEIGHT_SCALE = 1.72
 // appear with the colour world (after O). Their tone is blended almost all
 // the way into the warm haze backdrop so they read as faint specks.
 //
-const BIRD_COUNT = 8
+const BIRD_COUNT = 6
 //
 // Birds glide below the parallax leaf canopy so they stay visible in the sky band
 //
@@ -546,7 +554,16 @@ const BIRD_BOB_AMP = 9
 const BIRD_WRAP_PAD = 40
 const BIRD_LINE_WIDTH = 2
 const BIRD_HAZE_BLEND = 0.72
+const BIRD_VISIBLE_FADE_MIN = 0.02
 const BIRD_UPDATE_INTERVAL = 1 / 24
+//
+// After the colour world settles, birds update less often (draw every frame).
+//
+const COLOR_WORLD_BIRD_UPDATE_INTERVAL = 1 / 12
+//
+// Minimum opacity before skipping a crossfade layer (avoids pops, not steps).
+//
+const COLOR_CROSSFADE_EPS = 0.001
 //
 // Underground decor in the root zone: buried rocks, cracks, pebble clusters,
 // hanging rootlets, a fossil spiral and one buried skeleton (no burrows or
@@ -584,6 +601,12 @@ const SHORE_ROCK_WIDTH_SCALE = 2.2
 const RIGHT_ROCK_COUNT = 8
 const COLOR_FADE_DURATION = 0.5
 const TREE_REVEAL_FADE_DURATION = 0.85
+//
+// Any element that snaps from hidden to visible (log platforms, pickup
+// letters) fades its opacity in over this long instead of popping at full
+// strength, so nothing appears to materialize out of nowhere mid-transition.
+//
+const POP_REVEAL_FADE_DURATION = 0.35
 //
 // GLOW HUD row — FPS sits between the section label and the small hero.
 // The section label's top Y is derived from the FPS row's vertical CENTER
@@ -632,17 +655,8 @@ const GLOW_LETTER_FONT = 'JetBrains Mono'
 //
 const GLOW_LETTER_SIZE = 54
 //
-// The world letter sits noticeably bigger than its pickup-caption size
-// while still uncollected — a scale-only boost (never touches font size,
-// so the glyph stays crisp) that gets reset to 1 the moment its caption
-// opens, matching the caption's own already-tuned letter size exactly.
+// Pure black drop shadow behind pickup letters in the colour world.
 //
-const GLOW_LETTER_PRE_PICKUP_SCALE = 1.15
-//
-// Pure black drop shadow behind every pickup letter (G, L, O, W): a single
-// copy of the glyph offset right+down, like classic pixel-text shadows.
-//
-const GLOW_LETTER_SHADOW = 2
 const GLOW_LETTER_SHADOW_R = 0
 const GLOW_LETTER_SHADOW_G = 0
 const GLOW_LETTER_SHADOW_B = 0
@@ -807,7 +821,17 @@ const HINT_ZONE_DURATION = 5
 //
 // Walking this far from a Glow speech bubble dismisses it early.
 //
-const GLOW_HINT_DISMISS_DISTANCE = 60
+const GLOW_HINT_DISMISS_DISTANCE = 80
+//
+// Intro / replay hints ignore the first moments of movement so spawn settle
+// and camera snap never clear the bubble before the player walks 80 px away.
+//
+const GLOW_HINT_MOVEMENT_DISMISS_GRACE = 0.45
+//
+// Intro advances on deliberate confirm keys — not movement bindings.
+//
+const INTRO_ADVANCE_KEY_NAMES = ['space', 'enter']
+const PARALLAX_DRAW_CULL_PAD = 48
 const GLOW_PROXIMITY_SOUND_RADIUS = 120
 const GLOW_PROXIMITY_SOUND_MAX_VOLUME = CFG.audio.ambient.volume
 const HINT_DROWN_TEXT = 'That\'s not bad. Now I\nknow I can\'t go here.'
@@ -962,7 +986,7 @@ let GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 // even spread across the ground.
 //
 const GRASS_Z = 20
-const GRASS_TUFT_COUNT = 28
+const GRASS_TUFT_COUNT = 22
 //
 // Right-ground discovery fades into the unknown instead of cutting on a strip.
 //
@@ -1803,13 +1827,15 @@ function initGlowLevel0Scene(k) {
       treeRevealLandingCount: 0,
       treeStripEndX: WORLD_W - RIGHT_MARGIN - 20,
       treeGraySpriteName: zones.lCollected ? TREE_LIT_SPRITE_NAME : TREE_FLAT_SPRITE_NAME,
-      colorFade: zones.colorWorld ? 1 : 0,
-      colorFadeTarget: zones.colorWorld ? 1 : 0,
+      colorFade: zones.colorWorld || zones.oZone ? 1 : 0,
+      colorFadeTarget: zones.colorWorld || zones.oZone ? 1 : 0,
       //
       // Forest fade-in: already-revealed worlds start fully visible; a fresh
       // L pickup starts at 0 and the update loop fades the plane in.
       //
-      parallaxFade: zones.lZoneParallax ? 1 : 0,
+      parallaxFade: zones.lZoneParallax || zones.oZone ? 1 : 0,
+      _meditationParallaxPreview: false,
+      _meditationPreviewFadingOut: false,
       //
       // Background birds gliding behind the forest (colour world only).
       //
@@ -1890,8 +1916,6 @@ function initGlowLevel0Scene(k) {
       logHoverFrames: 0,
       wasGrounded: false,
       wasHeroRunning: false,
-      _wasNearRightTrampSpot: false,
-      _wasNearBranchTrampSpot: false,
       drowning: false,
       drownTimer: 0,
       deathHandled: false,
@@ -2001,6 +2025,7 @@ function initGlowLevel0Scene(k) {
     maybeShowGLetter(inst)
     zones.gCollected && !zones.lCollected && zones.lPlatRevealed &&
       maybeStartLetterOffscreenArrowForTarget(inst, getLPlatformArrowTargetX(inst))
+    zones.oZone && !zones.lZoneParallax && revealLParallaxZone(inst)
     zones.oZone && maybeStartLetterOffscreenArrow(inst, inst.oLetter)
     zones.lLetterUnveiled && maybeStartLetterOffscreenArrow(inst, inst.lLetter)
     zones.wZone && maybeStartLetterOffscreenArrow(inst, inst.wLetter)
@@ -2140,12 +2165,14 @@ function startGlowIntro(inst) {
   if (get(KEY_INTRO_SHOWN, false)) {
     finishGlowIntro(inst)
     //
-    // Post-death reminder: timer, Space/Esc, or walking 60 px away. Jump
+    // Post-death reminder: timer, Space/Esc, or walking 80 px away. Jump
     // dismissal stays off so the respawn landing itself can't wipe it instantly.
     //
     HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
       dismissOnJump: false,
       dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
+      dismissHorizontalOnly: true,
+      movementDismissGrace: GLOW_HINT_MOVEMENT_DISMISS_GRACE,
       forceAbove: true
     })
     let replayHintDismissed = false
@@ -2170,8 +2197,11 @@ function startGlowIntro(inst) {
     introCancels.length = 0
   }
   HeroHint.show(inst.heroHint, HINT_INTRO_1_TEXT, HINT_INTRO_1_DURATION, {
-    ignoreMovementDismiss: true,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+    dismissOnJump: false,
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
+    dismissHorizontalOnly: true,
+    movementDismissGrace: GLOW_HINT_MOVEMENT_DISMISS_GRACE,
+    forceAbove: true
   })
   const finishIntroChain = () => {
     cancelIntroInput()
@@ -2179,9 +2209,11 @@ function startGlowIntro(inst) {
   }
   inst.introHintOnComplete = finishIntroChain
   //
-  // Any key or click advances: 1st → hint 2, 2nd → unlock (timers still work)
+  // Space / Enter or click advances: 1st → hint 2, 2nd → unlock (timers still work)
   //
-  const advance = () => advanceGlowIntro(inst, { cancel: cancelIntroInput })
+  const advance = (key) => {
+    INTRO_ADVANCE_KEY_NAMES.includes(key) && advanceGlowIntro(inst, { cancel: cancelIntroInput })
+  }
   introCancels.push(inst.k.onKeyPress(advance))
   introCancels.push(bindPointerActivate(inst.k, advance))
 }
@@ -2237,9 +2269,11 @@ function showGlowIntroSecondHint(inst) {
   inst.introHintPhase = INTRO_HINT_PHASE_TWO
   inst.introHintPause = 0
   HeroHint.show(inst.heroHint, HINT_INTRO_2_TEXT, HINT_INTRO_2_DURATION, {
-    ignoreMovementDismiss: true,
+    dismissOnJump: false,
     forceAbove: true,
-    dismissDistance: GLOW_HINT_DISMISS_DISTANCE
+    dismissDistance: GLOW_HINT_DISMISS_DISTANCE,
+    dismissHorizontalOnly: true,
+    movementDismissGrace: GLOW_HINT_MOVEMENT_DISMISS_GRACE
   })
 }
 //
@@ -2507,7 +2541,8 @@ function loadGlowZones() {
   const branchTrampRevealed = get(KEY_BRANCH_TRAMP_REVEALED, false)
   const rightTrampRevealed = get(KEY_RIGHT_TRAMP_REVEALED, false)
   const lLetterUnveiled = get(KEY_L_LETTER_UNVEILED, false) || lCollected
-  const lZoneParallax = oCollected && (get(KEY_REVEALED_L, false) || lCollected)
+  const lZoneParallax = (oCollected || get(KEY_REVEALED_O, false)) &&
+    (get(KEY_REVEALED_L, false) || lCollected)
   const lZoneLit = gCollected && lCollected && (get(KEY_REVEALED_L_LIT, false) || lCollected)
   const lPlatRevealed = get(KEY_REVEALED_L_PLAT, false) || lCollected
   const oZone = gCollected && lCollected && (get(KEY_REVEALED_O, false) || oCollected)
@@ -3086,23 +3121,149 @@ function stopMeditationBirds(inst) {
   birds.paused = true
 }
 //
+// True once the permanent colour world has finished fading in.
+//
+function isColorWorldSettled(inst) {
+  const z = inst.zones
+  return Boolean(z.colorWorld && (inst.colorFade ?? 0) >= 1 && (inst.parallaxFade ?? 0) >= 1)
+}
+//
+// Hermite ease for meditation colour preview (0 at start, 1 at timer zero).
+//
+function smoothstep01(t) {
+  const x = Math.max(0, Math.min(1, t))
+  return x * x * (3 - 2 * x)
+}
+//
+// Linear countdown progress while the post-L stillness timer runs.
+//
+function meditationCountdownLinear(inst) {
+  const remaining = inst.meditation?.countdown
+  if (remaining == null) return 0
+  return 1 - Math.max(0, remaining) / MEDITATION_COUNTDOWN
+}
+//
+// Colour preview progress while the post-L stillness countdown runs (0 at
+// start, 1 when the timer hits zero).
+//
+function meditationCountdownFade(inst) {
+  return smoothstep01(meditationCountdownLinear(inst))
+}
+//
+// Clamped colour-fade value shared by every gray↔colour crossfade.
+//
+function glowDecorFade(inst) {
+  return Math.max(0, Math.min(1, inst?.colorFade ?? 0))
+}
+//
+// True while the post-L stillness countdown drives the colour preview.
+//
+function isGlowMeditationColorPreview(inst) {
+  const z = inst?.zones
+  if (!z) return false
+  return Boolean(inst.meditation?.countdown != null && !z.colorWorld && !z.oCollected)
+}
+//
+// True while any decor/backdrop layer is still lerping toward full colour.
+//
+function isGlowColorTransitionActive(inst) {
+  if (!inst?.zones) return false
+  const fade = glowDecorFade(inst)
+  if (fade <= COLOR_CROSSFADE_EPS) return false
+  if (inst.zones.colorWorld && fade >= 1 - COLOR_CROSSFADE_EPS) return false
+  return isGlowMeditationColorPreview(inst) || Boolean(inst._meditationPreviewFadingOut) ||
+    (inst.zones.colorWorld && fade < 1)
+}
+//
+// Drives parallax + warm haze from the live meditation countdown.
+//
+function syncMeditationColorFade(inst) {
+  const z = inst.zones
+  if (z.colorWorld || z.oCollected) return
+  inst._meditationPreviewFadingOut = false
+  const fade = meditationCountdownLinear(inst)
+  inst.colorFade = fade
+  inst.parallaxFade = fade
+  inst.colorFadeTarget = fade
+  inst._meditationParallaxPreview = fade > 0.001
+  z.lZoneParallax = fade > 0.001 || z.oZone
+  syncTreeColorCrossfade(inst)
+}
+//
+// Eases the meditation colour preview back to gray when stillness breaks.
+//
+function resetMeditationColorPreview(inst) {
+  const z = inst.zones
+  if (z.colorWorld || z.oCollected) return
+  if ((inst.colorFade ?? 0) <= 0.001 && (inst.parallaxFade ?? 0) <= 0.001) {
+    finishMeditationColorPreviewReset(inst)
+    return
+  }
+  inst._meditationPreviewFadingOut = true
+  stopMeditationBirds(inst)
+}
+//
+// Finishes the meditation preview fade-out and restores the static gray world.
+//
+function finishMeditationColorPreviewReset(inst) {
+  const z = inst.zones
+  inst._meditationParallaxPreview = false
+  inst._meditationPreviewFadingOut = false
+  inst.colorFade = 0
+  inst.parallaxFade = 0
+  inst.colorFadeTarget = 0
+  if (!z.oZone) {
+    z.lZoneParallax = false
+  }
+  inst.meditationWorldLife = 0
+  stopMeditationBirds(inst)
+  inst.treeDrawColorMode = false
+  syncTreeColorCrossfade(inst)
+}
+//
+// Steps the preview fade-out after a broken meditation countdown.
+//
+function updateMeditationPreviewFadeOut(inst, dt) {
+  if (!inst._meditationPreviewFadingOut) return
+  const z = inst.zones
+  if (z.colorWorld || z.oCollected || inst.meditation?.countdown != null) {
+    inst._meditationPreviewFadingOut = false
+    return
+  }
+  const next = Math.max(0, (inst.colorFade ?? 0) - dt * MEDITATION_WORLD_SLEEP_SPEED)
+  inst.colorFade = next
+  inst.parallaxFade = next
+  inst.colorFadeTarget = next
+  syncTreeColorCrossfade(inst)
+  next <= 0.001 && finishMeditationColorPreviewReset(inst)
+}
+//
 // After L the world stays frozen until the hero's stillness countdown
 // starts; once O opens it stays alive for the rest of the level.
 //
 function updateMeditationWorldLife(inst) {
   const z = inst.zones
+  const m = inst.meditation
   //
-  // The countdown itself is the trigger: the world eases fully awake as soon
-  // as it starts (the fade is the WAKE_SPEED easing below, not the remaining
-  // seconds) and eases back to frozen the moment stillness breaks. Before L,
-  // after L stillness, and any interrupted countdown all stay at 0; O zone
-  // opening locks the world alive for the rest of the level.
+  // O zone or the permanent colour world lock the world fully awake.
   //
-  const running = inst.meditation?.countdown != null
-  const target = z.oZone || z.oCollected ? 1 : (running ? 1 : 0)
-  const speed = target > inst.meditationWorldLife
-    ? MEDITATION_WORLD_WAKE_SPEED
-    : MEDITATION_WORLD_SLEEP_SPEED
+  if (z.oZone || z.oCollected) {
+    inst.meditationWorldLife = 1
+    return
+  }
+  //
+  // Countdown progress drives birds, grass sway and midges in lockstep with
+  // the colour fade — no separate easing curve.
+  //
+  if (m?.countdown != null) {
+    inst.meditationWorldLife = meditationCountdownLinear(inst)
+    return
+  }
+  //
+  // Interrupted or idle before the countdown: snap back to frozen stillness.
+  //
+  const target = 0
+  const speed = MEDITATION_WORLD_SLEEP_SPEED
   const next = inst.meditationWorldLife + (target - inst.meditationWorldLife) *
     Math.min(1, inst.k.dt() * speed)
   inst.meditationWorldLife = Math.max(0, Math.min(1, next))
@@ -3255,6 +3416,7 @@ function cornerObjsSetHidden(cornerObjs, hidden) {
 // Toggles platform visibility; ghost platforms draw at home but collider stays off-screen.
 //
 function setPlatVisible(plat, visible, home, solid = true) {
+  const wasHidden = plat.hidden
   plat.hidden = !visible
   plat._ghostDraw = visible && !solid
   plat._homeX = home.x
@@ -3264,6 +3426,14 @@ function setPlatVisible(plat, visible, home, solid = true) {
   const cy = home.y + LOG_H / 2
   plat.pos.x = collidable ? cx : -500
   plat.pos.y = collidable ? cy : PLATFORM_HIDE_Y
+  visible && wasHidden && (plat._revealFade = 0)
+}
+//
+// Steps a freshly revealed platform's fade-in (see setPlatVisible).
+//
+function updatePlatformRevealFade(plat, dt) {
+  if (!plat || plat._revealFade == null || plat._revealFade >= 1) return
+  plat._revealFade = Math.min(1, plat._revealFade + dt / POP_REVEAL_FADE_DURATION)
 }
 //
 // Toggles pickup letter visibility.
@@ -3272,6 +3442,10 @@ function setLetterVisible(letterEntry, visible, burst = false) {
   if (!letterEntry || letterEntry.forceVisible) return
   const wasHidden = letterEntry.main?.hidden !== false
   letterEntry.allObjects.forEach(obj => { obj.hidden = !visible })
+  if (visible && wasHidden) {
+    letterEntry._popFade = 0
+    letterEntry.allObjects.forEach(obj => { obj.opacity = 0 })
+  }
   if (visible && wasHidden && burst) {
     LevelIndicator.flashWorldLetterBurst(
       letterEntry.k,
@@ -3280,6 +3454,23 @@ function setLetterVisible(letterEntry, visible, burst = false) {
       letterEntry.colorHex || GLOW_GOLD_HEX
     )
   }
+}
+//
+// Steps a freshly revealed pickup letter's fade-in (see setLetterVisible).
+//
+function updateLetterPopFade(letterEntry, dt) {
+  if (!letterEntry || letterEntry._popFade == null || letterEntry._popFade >= 1) return
+  letterEntry._popFade = Math.min(1, letterEntry._popFade + dt / POP_REVEAL_FADE_DURATION)
+  letterEntry.allObjects.forEach(obj => { obj.opacity = letterEntry._popFade })
+}
+//
+// Steps every glow pickup letter's pop-in fade.
+//
+function updateGlowLetterPopFades(inst, dt) {
+  updateLetterPopFade(inst.gLetter, dt)
+  updateLetterPopFade(inst.lLetter, dt)
+  updateLetterPopFade(inst.oLetter, dt)
+  updateLetterPopFade(inst.wLetter, dt)
 }
 //
 // The G pickup appears once the full tree, both lake cap rocks, left ground
@@ -3822,7 +4013,10 @@ function updateBackgroundBirds(inst, dt) {
   const parallaxDrift = camDelta * (1 - BIRD_PARALLAX_SPEED)
   inst.birds.forEach(bird => { bird.x += parallaxDrift })
   inst._birdUpdateAcc = (inst._birdUpdateAcc ?? 0) + dt
-  if (inst._birdUpdateAcc < BIRD_UPDATE_INTERVAL) return
+  const birdInterval = isColorWorldSettled(inst)
+    ? COLOR_WORLD_BIRD_UPDATE_INTERVAL
+    : BIRD_UPDATE_INTERVAL
+  if (inst._birdUpdateAcc < birdInterval) return
   const step = inst._birdUpdateAcc
   inst._birdUpdateAcc = 0
   inst.birdTime += step
@@ -3842,13 +4036,14 @@ function updateBackgroundBirds(inst, dt) {
 //
 function drawBackgroundBirds(inst) {
   const fade = inst.colorFade
-  if (!inst.zones.colorWorld || fade <= 0.01) return
+  if (fade <= 0.01) return
   const k = inst.k
   if (!inst._birdDrawColor) {
     const c = lerpRgb(VOID, WARM_HAZE, BIRD_HAZE_BLEND)
     inst._birdDrawColor = k.rgb(c.r, c.g, c.b)
   }
   const color = inst._birdDrawColor
+  const birdOpacity = fade >= 1 ? 1 : fade
   const camX = k.camPos().x
   const zoom = inst.camera?.zoom || 1
   const half = VIEW_W / (2 * zoom) + 80
@@ -3867,7 +4062,7 @@ function drawBackgroundBirds(inst) {
       pts,
       width: BIRD_LINE_WIDTH,
       color,
-      opacity: fade,
+      opacity: birdOpacity,
       join: 'round',
       cap: 'round'
     })
@@ -3933,19 +4128,22 @@ function drawAtmosphereMotes(inst) {
   if (!inst.zones.lZoneParallax) return
   if (isGlowFlatSingleDecorColor(inst)) return
   const k = inst.k
-  const c = inst.zones.colorWorld ? lerpRgb(WARM_HAZE, LIGHT_GRAY, 0.35) : HUD_SCORE_COLOR_SETTLED
+  const colorFade = glowDecorFade(inst)
+  const gray = HUD_SCORE_COLOR_SETTLED
+  const warm = lerpRgb(WARM_HAZE, LIGHT_GRAY, 0.35)
+  const c = inst.zones.colorWorld || colorFade > COLOR_CROSSFADE_EPS ? lerpRgb(gray, warm, colorFade) : gray
   const color = k.rgb(c.r, c.g, c.b)
   const camX = k.camPos().x
   const zoom = inst.camera?.zoom || 1
   const half = VIEW_W / (2 * zoom) + 40
-  const fade = Math.max(inst.parallaxFade ?? 0, inst.colorFade ?? 0)
+  const moteFade = Math.max(inst.parallaxFade ?? 0, colorFade)
   inst.atmosphereMotes?.forEach(mote => {
     if (mote.x < camX - half || mote.x > camX + half) return
     k.drawCircle({
       pos: k.vec2(mote.x, mote.y),
       radius: mote.size,
       color,
-      opacity: mote.opacity * fade
+      opacity: mote.opacity * moteFade
     })
   })
 }
@@ -4373,8 +4571,8 @@ function drawUndergroundLayer(inst) {
     return
   }
   const grayOp = 1 - fade
-  grayOp > 0.02 && drawUndergroundSpriteClipped(inst, UNDERGROUND_GRAY_SPRITE, grayOp)
-  fade > 0.02 && drawUndergroundSpriteClipped(inst, UNDERGROUND_COLOR_SPRITE, fade)
+  grayOp > COLOR_CROSSFADE_EPS && drawUndergroundSpriteClipped(inst, UNDERGROUND_GRAY_SPRITE, grayOp)
+  fade > COLOR_CROSSFADE_EPS && drawUndergroundSpriteClipped(inst, UNDERGROUND_COLOR_SPRITE, fade)
 }
 //
 // Paints only the underground under opened ground: left shore, and the
@@ -4572,6 +4770,11 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
         const ox = this._ghostDraw ? (homeCx - this.pos.x) : 0
         const oy = this._ghostDraw ? (homeCy - this.pos.y) : 0
         const fade = zones._sceneRef?.colorFade ?? 0
+        //
+        // Freshly revealed platforms fade their own opacity in from 0
+        // instead of popping in already fully drawn (see setPlatVisible).
+        //
+        const reveal = this._revealFade ?? 1
         if (outlineStyle) {
           //
           // Same muted gray rim used for every other gray-phase ground decor
@@ -4604,12 +4807,12 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
           // of polygons/ovals with fresh trig every frame for every log
           // platform on screen was the main FPS cost after O.
           //
-          if (fade >= 0.98) {
-            drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy)
+          if (fade >= 0.98 && zones.colorWorld) {
+            drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy, reveal)
             return
           }
-          fade < 0.98 && drawLOutlineLogPlatform(k, w, h, ox, oy, this._logDetail, outlineRgb, detailRgb)
-          fade > 0.02 && drawLogPlatform(k, w, h, ox, oy, fade, this._logDetail, glowLogColors(zones))
+          fade < 0.98 && drawLOutlineLogPlatform(k, w, h, ox, oy, this._logDetail, outlineRgb, detailRgb, reveal)
+          fade > COLOR_CROSSFADE_EPS && drawLogPlatform(k, w, h, ox, oy, fade * reveal, this._logDetail, glowLogColors(zones))
           return
         }
         //
@@ -4618,11 +4821,18 @@ function createGrayLogPlatform(k, x, y, w, h, sound, heroInst, zones, outlineSty
         // filled state never animates its own opacity, so it can always use
         // the pre-baked sprite straight away (see outlineStyle branch above).
         //
-        if (fade > 0.01 || zones.lCollected) {
-          drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy)
+        if (fade > COLOR_CROSSFADE_EPS || zones.lCollected) {
+          const sc = zones._sceneRef
+          if (sc && isGlowColorTransitionActive(sc)) {
+            const grayOp = 1 - fade
+            grayOp > COLOR_CROSSFADE_EPS && drawBakedFilledLog(k, bakedLit, ox, oy, grayOp * reveal)
+            fade > COLOR_CROSSFADE_EPS && drawBakedFilledLog(k, bakedColor, ox, oy, fade * reveal)
+            return
+          }
+          drawBakedFilledLog(k, fade > 0.5 ? bakedColor : bakedLit, ox, oy, reveal)
           return
         }
-        drawFlatLog(k, ox, oy, w, h, envColorGray)
+        drawFlatLog(k, ox, oy, w, h, envColorGray, reveal)
       }
     }
   ])
@@ -4704,6 +4914,15 @@ function drawDecorAtlasSprite(k, baked, pos, anchor, angle, opacity, color) {
     quad: baked.quad
   })
 }
+//
+// Crossfades gray and colour atlas tiles during the meditation preview.
+//
+function drawDecorAtlasCrossfade(k, grayBaked, colorBaked, pos, anchor, angle, fade, grayColor, colorColor) {
+  const f = Math.max(0, Math.min(1, fade))
+  const grayOp = 1 - f
+  grayOp > COLOR_CROSSFADE_EPS && drawDecorAtlasSprite(k, grayBaked, pos, anchor, angle, grayOp, grayColor)
+  f > COLOR_CROSSFADE_EPS && colorBaked && drawDecorAtlasSprite(k, colorBaked, pos, anchor, angle, f, colorColor)
+}
 function tagGroundPlatform(platform, sound, heroInst) {
   platform.onCollide('player', () => {
     sound._l2Surface = null
@@ -4722,7 +4941,7 @@ function tagWoodPlatform(platform, sound, heroInst) {
 //
 // Flat log barrel — one environment tone, no shading.
 //
-function drawFlatLog(k, ox, oy, w, h, color) {
+function drawFlatLog(k, ox, oy, w, h, color, opacity = 1) {
   const LOG_END_STEPS = 16
   const LOG_END_SQUASH = 0.55
   const halfW = w / 2
@@ -4738,14 +4957,14 @@ function drawFlatLog(k, ox, oy, w, h, color) {
     const a = -Math.PI / 2 + Math.PI * i / LOG_END_STEPS
     bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
   }
-  k.drawPolygon({ pts: bodyPts, color })
+  k.drawPolygon({ pts: bodyPts, color, opacity })
 }
 //
 // Hollow outline barrel for the L platform: the body is a bare stroked
 // silhouette with no fill, while its cracks, rounded end cap and grain
 // stripes are all painted in one single accent tone.
 //
-function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailColor) {
+function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailColor, opacity = 1) {
   const halfW = w / 2
   const halfH = h / 2
   const endR = halfH
@@ -4759,14 +4978,14 @@ function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailCo
     const a = -Math.PI / 2 + Math.PI * i / L_PLAT_END_STEPS
     bodyPts.push(k.vec2(halfW + endR * Math.cos(a) * sq + ox, endR * Math.sin(a) + oy))
   }
-  k.drawLines({ pts: [...bodyPts, bodyPts[0]], width: L_PLAT_OUTLINE_WIDTH, color: outlineColor })
+  k.drawLines({ pts: [...bodyPts, bodyPts[0]], width: L_PLAT_OUTLINE_WIDTH, color: outlineColor, opacity })
   //
   // Rounded end-cap detail only on the right, same convention as the
   // standard filled log style (drawLogPlatform) — the left side stays bare
   // outline, with its own cracks/grain running all the way out to that
   // edge below instead of stopping short at a cap that isn't there.
   //
-  drawFilledOvalOutline(k, halfW + ox, oy, endR * 0.82, sq, detailColor)
+  drawFilledOvalOutline(k, halfW + ox, oy, endR * 0.82, sq, detailColor, opacity)
   for (let i = 0; i < L_PLAT_STRIPE_COUNT; i++) {
     const ly = -halfH + (h / (L_PLAT_STRIPE_COUNT + 1)) * (i + 1) + oy
     k.drawRect({
@@ -4774,7 +4993,7 @@ function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailCo
       width: w - endR * sq,
       height: 1,
       color: detailColor,
-      opacity: 0.7
+      opacity: 0.7 * opacity
     })
   }
   for (const crack of detail.cracks) {
@@ -4784,7 +5003,7 @@ function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailCo
       pts: [k.vec2(crack.x - dx + ox, crack.y - dy + oy), k.vec2(crack.x + dx + ox, crack.y + dy + oy)],
       width: 1,
       color: detailColor,
-      opacity: 0.8
+      opacity: 0.8 * opacity
     })
   }
 }
@@ -4792,13 +5011,13 @@ function drawLOutlineLogPlatform(k, w, h, ox, oy, detail, outlineColor, detailCo
 // Fills a squashed oval using polygon approximation (the L platform's
 // single-tone rounded end cap).
 //
-function drawFilledOvalOutline(k, cx, cy, r, squash, color) {
+function drawFilledOvalOutline(k, cx, cy, r, squash, color, opacity = 1) {
   const pts = []
   for (let i = 0; i <= L_PLAT_END_STEPS; i++) {
     const a = Math.PI * 2 * i / L_PLAT_END_STEPS
     pts.push(k.vec2(cx + Math.cos(a) * r * squash, cy + Math.sin(a) * r))
   }
-  k.drawPolygon({ pts, color })
+  k.drawPolygon({ pts, color, opacity })
 }
 //
 // Draws the revealed hidden bonus platform in the letter-log style: flat
@@ -4823,39 +5042,105 @@ function glowLogColors(zones) {
   return fade > 0.5 ? LOG_TREE_COLOR_COLORS : LOG_TREE_LIT_COLORS
 }
 //
-// Blinking letter — optional gold fill for G, with a hard drop shadow (one
-// black copy offset right+down) instead of a full outline.
+// World-space position for a pickup-letter outline / shadow layer.
+//
+function glowLetterLayerPos(x, y, dx, dy, tiltDeg) {
+  const rad = tiltDeg * Math.PI / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return { x: x + dx * cos - dy * sin, y: y + dx * sin + dy * cos }
+}
+//
+// Gray-world void outline vs colour-world drop shadow — shared by world
+// letters and their pickup captions.
+//
+function glowLetterVisualStyle(inst) {
+  const worldFade = inst?.zones?._sceneRef?.colorFade ?? (inst?.zones?.colorWorld ? 1 : 0)
+  const withShadow = worldFade >= 0.5
+  return {
+    withShadow,
+    withOutline: !withShadow,
+    captionTextRgb: worldFade < 0.5 ? DECOR_GRAY : LIGHT_GRAY
+  }
+}
+//
+// Toggles void-outline vs drop-shadow layers on a world pickup letter.
+//
+function syncGlowPickupLetterVisual(entry, style) {
+  if (!entry || entry.forceVisible) return
+  const visible = !entry.main?.hidden
+  entry.outlineObjs?.forEach(obj => { obj.hidden = !visible || !style.withOutline })
+  entry.shadowObjs?.forEach(obj => { obj.hidden = !visible || !style.withShadow })
+}
+//
+// Keeps every uncollected pickup letter styled like its caption text.
+//
+function syncGlowPickupLetterVisuals(inst) {
+  const style = glowLetterVisualStyle(inst)
+  syncGlowPickupLetterVisual(inst.gLetter, style)
+  syncGlowPickupLetterVisual(inst.lLetter, style)
+  syncGlowPickupLetterVisual(inst.oLetter, style)
+  syncGlowPickupLetterVisual(inst.wLetter, style)
+}
+//
+// Blinking letter — optional gold fill for G, void outline in gray world
+// and a drop shadow in the colour world (same rules as the caption).
 //
 function createGlowLetter(k, char, x, y, tiltDeg, fillHex = GLOW_PAL.letterFill) {
   const fill = getRGB(k, fillHex)
-  const offsets = [[GLOW_LETTER_SHADOW, GLOW_LETTER_SHADOW]]
-  const outlines = offsets.map(([dx, dy]) => {
+  const outlineObjs = GLOW_LETTER_CAPTION_OUTLINE_OFFSETS.map(([odx, ody]) => {
+    const pos = glowLetterLayerPos(
+      x,
+      y,
+      odx * GLOW_LETTER_CAPTION_OUTLINE_PAD,
+      ody * GLOW_LETTER_CAPTION_OUTLINE_PAD,
+      tiltDeg
+    )
     const obj = k.add([
       k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
-      k.pos(x + dx, y + dy),
+      k.pos(pos.x, pos.y),
       k.anchor('center'),
       k.rotate(tiltDeg),
-      k.scale(GLOW_LETTER_PRE_PICKUP_SCALE),
-      k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
+      k.color(VOID.r, VOID.g, VOID.b),
+      k.opacity(1),
       k.z(CFG.visual.zIndex.player - 2)
     ])
     obj.hidden = true
     return obj
   })
+  const shadowPos = glowLetterLayerPos(
+    x,
+    y,
+    GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+    GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+    tiltDeg
+  )
+  const shadowObj = k.add([
+    k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
+    k.pos(shadowPos.x, shadowPos.y),
+    k.anchor('center'),
+    k.rotate(tiltDeg),
+    k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
+    k.opacity(1),
+    k.z(CFG.visual.zIndex.player - 2)
+  ])
+  shadowObj.hidden = true
+  const shadowObjs = [shadowObj]
   const main = k.add([
     k.text(char, { size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT }),
     k.pos(x, y),
     k.anchor('center'),
     k.rotate(tiltDeg),
-    k.scale(GLOW_LETTER_PRE_PICKUP_SCALE),
     k.color(fill.r, fill.g, fill.b),
+    k.opacity(1),
     k.z(CFG.visual.zIndex.player - 1)
   ])
   main.hidden = true
   return {
     main,
-    outlines,
-    allObjects: [main, ...outlines],
+    outlineObjs,
+    shadowObjs,
+    allObjects: [main, ...outlineObjs, ...shadowObjs],
     char,
     x,
     y,
@@ -4915,11 +5200,6 @@ function glowGrassTint(zones, blade) {
   if (lakeX1 != null && lakeX2 != null && blade.x >= lakeX1 && blade.x <= lakeX2) {
     return null
   }
-  if (sc && (sc.colorFade ?? 0) >= 1 && zones.groundDecorRight && (sc.leftDecorFade ?? 1) >= 1) {
-    if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
-    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
-    return sc._grassColorSettled
-  }
   if (sc?.k) {
     if (sc._grassCullFrame !== sc.k.time()) {
       sc._grassCullFrame = sc.k.time()
@@ -4930,6 +5210,34 @@ function glowGrassTint(zones, blade) {
       sc._grassCullMaxX = camX + half
     }
     if (blade.x < sc._grassCullMinX || blade.x > sc._grassCullMaxX) return null
+  }
+  //
+  // Settled colour world: one cached tint — skip per-blade lerp work.
+  //
+  if (sc && zones.colorWorld && (sc.colorFade ?? 0) >= 1) {
+    if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+    if (sc.zones.groundDecorRight) return sc._grassColorSettled
+    const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
+    if (side === 'left') {
+      if (!zones.groundDecorLeft) return null
+      const leftFade = sc.leftDecorFade ?? 1
+      if (leftFade < 0.04) return null
+      return leftFade >= 1
+        ? sc._grassColorSettled
+        : { ...sc._grassColorSettled, opacity: leftFade }
+    }
+    const strip = groundRightStripIndexForX(blade.x, GROUND_REVEAL_TREE_PAST_X, zones._groundStripEndX ?? WORLD_W)
+    const op = glowRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
+    if (op < 0.04) return null
+    return op >= 1
+      ? sc._grassColorSettled
+      : { ...sc._grassColorSettled, opacity: op }
+  }
+  if (sc && (sc.colorFade ?? 0) >= 1 && zones.groundDecorRight && (sc.leftDecorFade ?? 1) >= 1) {
+    if (isGlowFlatSingleDecorColor(sc)) return DECOR_GRAY
+    sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
+    return sc._grassColorSettled
   }
   const side = blade.x >= TREE_X + TRUNK_EXCLUDE_HALF ? 'right' : 'left'
   if (side === 'left') {
@@ -4999,7 +5307,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
     const angle = (Math.PI / 5) * i
     const spread = 35 + Math.random() * 25
     const cx = clusterCenterX + Math.cos(angle) * spread * 0.5
-    objs.push(placeRock(k, cx, radius, 'left', true, 7, 1, decorAtlas))
+    objs.push(placeRock(k, cx, radius, 'left', true, 7, 1, decorAtlas, zones))
   }
   //
   // Tree-side end of the lake — two rocks with the water edge between them.
@@ -5010,12 +5318,12 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
   // full-world canvas (z = platforms - 2) guarantees it always renders on
   // top, regardless of scene-graph insertion order at equal z values.
   //
-  const shoreRockBefore = placeRock(k, waterRightX - WATER_END_ROCK_BEFORE_X, endRockR, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE, decorAtlas)
+  const shoreRockBefore = placeRock(k, waterRightX - WATER_END_ROCK_BEFORE_X, endRockR, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE, decorAtlas, zones)
   shoreRockBefore._lakeShoreEnd = true
   shoreRockBefore._shoreTreeSide = true
   objs.push(shoreRockBefore)
   const endRockR2 = CLUSTER_ROCK_RADIUS_MIN + Math.random() * (CLUSTER_ROCK_RADIUS_MAX - CLUSTER_ROCK_RADIUS_MIN) * 0.75
-  const shoreRockAfter = placeRock(k, waterRightX + WATER_END_ROCK_AFTER_X, endRockR2, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE * 0.9, decorAtlas)
+  const shoreRockAfter = placeRock(k, waterRightX + WATER_END_ROCK_AFTER_X, endRockR2, 'left', false, SHORE_END_ROCK_Z, SHORE_ROCK_WIDTH_SCALE * 0.9, decorAtlas, zones)
   shoreRockAfter._lakeShoreEnd = true
   objs.push(shoreRockAfter)
   //
@@ -5040,7 +5348,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
       safety++
     }
     if (badRock(cx)) continue
-    const rock = placeRock(k, cx, radius, 'right', false, 7, 1, decorAtlas)
+    const rock = placeRock(k, cx, radius, 'right', false, 7, 1, decorAtlas, zones)
     rock._rightStrip = groundRightStripIndexForX(cx, stripStartX, rightEdge)
     objs.push(rock)
   }
@@ -5049,7 +5357,7 @@ function createGlowRocks(k, treeBaseLeftX, waterRightX, rightPlatX, trampX, bran
 //
 // Pre-renders a flat rock sprite.
 //
-function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthScale = 1, decorAtlas) {
+function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthScale = 1, decorAtlas, zones) {
   const totalW = Math.ceil(radius * 2.6 * widthScale)
   const totalH = Math.ceil(radius * 1.9)
   const cx = totalW / (2 * widthScale)
@@ -5093,7 +5401,15 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
       _outlined: false,
       draw() {
         if (this.hidden) return
-        drawDecorAtlasSprite(k, this._outlined ? this._bakedOutline : this._bakedGray, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
+        const sc = zones._sceneRef
+        const fade = glowDecorFade(sc)
+        const grayBaked = this._bakedGray
+        const white = k.rgb(255, 255, 255)
+        if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
+          drawDecorAtlasCrossfade(k, grayBaked, this._bakedOutline, k.vec2(0, 0), 'topleft', 0, fade, this.color, white)
+          return
+        }
+        drawDecorAtlasSprite(k, this._outlined ? this._bakedOutline : grayBaked, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
       }
     }
   ])
@@ -5211,7 +5527,15 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
         _outlined: false,
         draw() {
           if (this.hidden) return
-          const baked = this._outlined ? this._bakedOutline : (zones.lCollected ? this._bakedGray : this._bakedFlat)
+          const sc = zones._sceneRef
+          const fade = glowDecorFade(sc)
+          const grayBaked = zones.lCollected ? this._bakedGray : this._bakedFlat
+          const white = k.rgb(255, 255, 255)
+          if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
+            drawDecorAtlasCrossfade(k, grayBaked, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, fade, this.color, white)
+            return
+          }
+          const baked = this._outlined ? this._bakedOutline : grayBaked
           drawDecorAtlasSprite(k, baked, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
         }
       }
@@ -5272,15 +5596,17 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
         // applies the after-L darkening tint (white = untinted). A blink
         // swaps to the closed-eyes variant of the current set.
         //
-        const outlined = zones.colorWorld || (zones._sceneRef?.colorFade ?? 0) >= 0.5
-        const base = outlined ? TRAMP_OUTLINE_SPRITE : TRAMP_SPRITE
+        const previewFade = zones.colorWorld ? 1 : glowDecorFade(zones._sceneRef)
+        const graySprite = TRAMP_SPRITE
+        const colorSprite = TRAMP_OUTLINE_SPRITE
         const sc = zones._sceneRef
         const flatDecor = sc && isGlowFlatSingleDecorColor(sc)
-        const tint = outlined ? { r: 255, g: 255, b: 255 } : grayDecorTint(sc)
+        const grayTint = grayDecorTint(sc)
+        const white = { r: 255, g: 255, b: 255 }
         const untinted = k.rgb(255, 255, 255)
-        const color = flatDecor && !outlined
-          ? untinted
-          : k.rgb(tint.r, tint.g, tint.b)
+        const grayColor = flatDecor ? untinted : k.rgb(grayTint.r, grayTint.g, grayTint.b)
+        const colorTint = lerpRgb(grayTint, white, previewFade)
+        const colorColor = flatDecor ? untinted : k.rgb(colorTint.r, colorTint.g, colorTint.b)
         const enduring = Boolean(state.enduring)
         const angle = enduring ? 0 : (state.leanAngle || 0)
         const drawX = state.x + (state.endureShakeX || 0)
@@ -5288,16 +5614,29 @@ function createMushroomTrampoline(k, trampX, floorY, zones, opts = {}) {
           ? (state.endureScaleY || 1)
           : (state.squash > 0.01 ? 1 - state.squash * 0.35 : 1)
         const eyesClosed = enduring || state.blinking
-        const sprite = eyesClosed ? base + TRAMP_BLINK_SPRITE_SUFFIX : base
-        state.hasLegs && drawTrampolineLegs(k, state, floorY, color, flatDecor)
-        k.drawSprite({
-          sprite,
-          pos: k.vec2(drawX, floorY + TRAMP_SINK_Y),
-          anchor: 'bot',
-          scale: k.vec2(1, scaleY),
-          angle,
-          color
-        })
+        const grayEyes = eyesClosed ? graySprite + TRAMP_BLINK_SPRITE_SUFFIX : graySprite
+        const colorEyes = eyesClosed ? colorSprite + TRAMP_BLINK_SPRITE_SUFFIX : colorSprite
+        state.hasLegs && drawTrampolineLegs(k, state, floorY, grayColor, flatDecor)
+        const drawTrampSprite = (sprite, opacity, color) => {
+          k.drawSprite({
+            sprite,
+            pos: k.vec2(drawX, floorY + TRAMP_SINK_Y),
+            anchor: 'bot',
+            scale: k.vec2(1, scaleY),
+            angle,
+            color,
+            opacity
+          })
+        }
+        if (!zones.colorWorld && isGlowColorTransitionActive(sc)) {
+          const grayOp = 1 - previewFade
+          grayOp > COLOR_CROSSFADE_EPS && drawTrampSprite(grayEyes, grayOp, grayColor)
+          previewFade > COLOR_CROSSFADE_EPS && drawTrampSprite(colorEyes, previewFade, colorColor)
+          return
+        }
+        const sprite = (zones.colorWorld || previewFade >= 1 - COLOR_CROSSFADE_EPS) ? colorEyes : grayEyes
+        const color = (zones.colorWorld || previewFade >= 1 - COLOR_CROSSFADE_EPS) ? colorColor : grayColor
+        drawTrampSprite(sprite, 1, color)
       }
     }
   ])
@@ -5586,13 +5925,67 @@ function isOuterFrameVisible(zones) {
 // Inner playfield gray — parallax after L or colour world after O.
 //
 function isPlayfieldInnerGrayVisible(zones, fade) {
-  return zones.lZoneParallax || zones.groundBg || fade > 0
+  return zones.groundBg || zones.lZoneParallax || fade > 0 || zones.lCollected || zones.oZone
 }
 //
 // Keeps Kaplay clear colour and page chrome aligned with the outer frame.
 //
 function syncGlowCanvasBackdrop(k, zones) {
   CanvasBackdrop.applyCanvasBackdrop(k, isOuterFrameVisible(zones) ? OUTER_BG_HEX : GLOW_PAL.void)
+}
+//
+// Visible world X span for culling full-width baked layers to the viewport.
+//
+function visibleWorldXRange(inst, extraPad = PARALLAX_DRAW_CULL_PAD) {
+  const k = inst.k
+  const camX = k.camPos().x
+  const zoom = inst.camera?.zoom || 1
+  const half = (inst.camera?.viewW || VIEW_W) / (2 * zoom) + extraPad
+  return { left: camX - half, right: camX + half }
+}
+//
+// Draws only the on-screen slice of a world-anchored sprite (0..WORLD_W).
+//
+function drawWorldSpriteClipped(k, inst, sprite, opacity = 1) {
+  const { left: visLeft, right: visRight } = visibleWorldXRange(inst)
+  const clipLeft = Math.max(0, visLeft)
+  const clipRight = Math.min(WORLD_W, visRight)
+  if (clipRight <= clipLeft + 1) return
+  const w = clipRight - clipLeft
+  const opts = {
+    sprite,
+    pos: k.vec2(clipLeft, 0),
+    width: w,
+    height: WORLD_H,
+    quad: { x: clipLeft / WORLD_W, y: 0, w: w / WORLD_W, h: 1 },
+    anchor: 'topleft'
+  }
+  opacity < 0.999 && (opts.opacity = opacity)
+  k.drawSprite(opts)
+}
+//
+// Draws only the on-screen slice of one parallax layer sprite.
+//
+function drawParallaxSpriteClipped(k, inst, spriteName, speed, horizBleed, opacity = 1) {
+  const camera = inst.camera
+  const drawX = GlowCamera.getParallaxDrawX(camera, speed, horizBleed)
+  const pad = GlowCamera.getParallaxLayerPad(camera, speed, horizBleed)
+  const spriteW = WORLD_W + pad * 2
+  const { left: visLeft, right: visRight } = visibleWorldXRange(inst, horizBleed + PARALLAX_DRAW_CULL_PAD)
+  const clipLeft = Math.max(visLeft, drawX)
+  const clipRight = Math.min(visRight, drawX + spriteW)
+  if (clipRight <= clipLeft + 1) return
+  const w = clipRight - clipLeft
+  const opts = {
+    sprite: spriteName,
+    pos: k.vec2(clipLeft, 0),
+    width: w,
+    height: WORLD_H,
+    quad: { x: (clipLeft - drawX) / spriteW, y: 0, w: w / spriteW, h: 1 },
+    anchor: 'topleft'
+  }
+  opacity < 0.999 && (opts.opacity = opacity)
+  k.drawSprite(opts)
 }
 //
 // Main draw — void until G opens the outer frame; inner gray after L/O.
@@ -5628,23 +6021,28 @@ function onDraw(inst) {
     groundFillC = groundC
     //
     // Sky scrolls on its own parallax layer once the forest is revealed.
+    // Crossfade flat rects out as parallaxFade rises so the preview never pops.
     //
-    !zones.lZoneParallax && k.drawRect({
+    const parallaxMix = zones.lZoneParallax ? (inst.parallaxFade ?? 0) : 0
+    const fallbackOp = zones.lZoneParallax ? Math.max(0, 1 - parallaxMix) : 1
+    fallbackOp > COLOR_CROSSFADE_EPS && k.drawRect({
       pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
       width: GAME_W,
       height: FLOOR_Y - TOP_MARGIN,
-      color: k.rgb(skyC.r, skyC.g, skyC.b)
+      color: k.rgb(skyC.r, skyC.g, skyC.b),
+      opacity: fallbackOp
     })
     //
     // Once the parallax stack is active, its opaque static ground+underground
     // sprite (drawn below) fully repaints this exact band on top — this fill
     // would be immediately hidden and is a wasted full-width draw every frame.
     //
-    !zones.lZoneParallax && k.drawRect({
+    fallbackOp > COLOR_CROSSFADE_EPS && k.drawRect({
       pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
       width: GAME_W,
       height: WORLD_H - FLOOR_Y,
-      color: k.rgb(groundC.r, groundC.g, groundC.b)
+      color: k.rgb(groundC.r, groundC.g, groundC.b),
+      opacity: fallbackOp
     })
   }
   if (inst.zones.lZoneParallax) {
@@ -5658,25 +6056,37 @@ function onDraw(inst) {
     const parMid = { gray: BG_PAR_TREE2_GRAY, color: BG_PAR_TREE2_COLOR, speed: PAR_TREE2_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     const parNear = { gray: BG_PAR_TREE1_GRAY, color: BG_PAR_TREE1_COLOR, speed: PAR_TREE1_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     const drawParLayer = layer => {
-      const drawX = GlowCamera.getParallaxDrawX(inst.camera, layer.speed, layer.bleed)
+      const colorForest = zones.colorWorld || isGlowMeditationColorPreview(inst) || fade > COLOR_CROSSFADE_EPS
       //
-      // Colour world never needs the gray forest. Once the fade settles,
-      // skip the opacity multiply — a full-bleed 5k sprite is cheaper opaque.
+      // Permanent colour world: opaque viewport slices only.
       //
       if (zones.colorWorld) {
         if (fade >= 1 && pf >= 1) {
-          k.drawSprite({ sprite: layer.color, pos: k.vec2(drawX, 0) })
+          drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed)
           return
         }
         const op = fade * pf
-        op > 0.02 && k.drawSprite({ sprite: layer.color, pos: k.vec2(drawX, 0), opacity: op })
+        op > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, op)
         return
       }
-      pf > 0.02 && k.drawSprite({ sprite: layer.gray, pos: k.vec2(drawX, 0), opacity: pf })
+      //
+      // Meditation preview: crossfade gray forest → colour forest with the
+      // hero's stillness countdown.
+      //
+      if (colorForest) {
+        const grayOp = (1 - fade) * pf
+        grayOp > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.gray, layer.speed, layer.bleed, grayOp)
+        fade > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, fade * pf)
+        return
+      }
+      pf > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.gray, layer.speed, layer.bleed, pf)
     }
     drawParLayer(skyLayer)
-    inst.zones.colorWorld && inst.colorFade > 0.2 && drawBackgroundBirds(inst)
-    drawParLayer(parFar)
+    const showBirds = fade > BIRD_VISIBLE_FADE_MIN &&
+      (zones.colorWorld || zones.oZone || inst.meditation?.countdown != null)
+    showBirds && drawBackgroundBirds(inst)
+    const skipFarParallax = isColorWorldSettled(inst)
+    !skipFarParallax && drawParLayer(parFar)
     fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
     drawParLayer(parMid)
     fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
@@ -5691,22 +6101,22 @@ function onDraw(inst) {
   // fill rect plus a second underground sprite.
   //
   if (zones.lZoneParallax) {
-    if (zones.colorWorld) {
-      if (fade < 1 && groundFillC) {
-        k.drawRect({
-          pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
-          width: GAME_W,
-          height: WORLD_H - FLOOR_Y,
-          color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b)
-        })
-      }
-      if (fade >= 1) {
-        k.drawSprite({ sprite: BG_STATIC_COLOR, pos: k.vec2(0, 0) })
-      } else if (fade > 0.02) {
-        k.drawSprite({ sprite: BG_STATIC_COLOR, pos: k.vec2(0, 0), opacity: fade })
-      }
+    const pf = inst.parallaxFade ?? 0
+    const groundFallbackOp = Math.max(0, 1 - pf)
+    groundFallbackOp > COLOR_CROSSFADE_EPS && groundFillC && k.drawRect({
+      pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
+      width: GAME_W,
+      height: WORLD_H - FLOOR_Y,
+      color: k.rgb(groundFillC.r, groundFillC.g, groundFillC.b),
+      opacity: groundFallbackOp
+    })
+    const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
+    if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
+      const grayOp = (1 - fade) * pf
+      grayOp > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, grayOp)
+      fade > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, fade * pf)
     } else {
-      k.drawSprite({ sprite: BG_STATIC_GRAY, pos: k.vec2(0, 0), opacity: inst.parallaxFade })
+      pf > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, pf)
     }
   } else if (groundFillC) {
     k.drawRect({
@@ -5737,11 +6147,17 @@ function drawLakeShoreRocksWorld(inst) {
   const z = inst.zones
   if (!z.water) return
   const k = inst.k
-  const outlined = inst.zones.colorWorld && inst.colorFade > 0.5
+  const fade = glowDecorFade(inst)
   const white = k.rgb(255, 255, 255)
+  const grayTint = grayDecorTint(inst)
+  const grayColor = k.rgb(grayTint.r, grayTint.g, grayTint.b)
   inst.rockObjs.forEach(o => {
     if (!o._lakeShoreEnd) return
-    const baked = outlined && o._bakedOutline ? o._bakedOutline : o._bakedGray
+    if (isGlowColorTransitionActive(inst) && o._bakedOutline) {
+      drawDecorAtlasCrossfade(k, o._bakedGray, o._bakedOutline, k.vec2(o._homeX, o._homeY), 'topleft', 0, fade, grayColor, white)
+      return
+    }
+    const baked = (z.colorWorld && fade > COLOR_CROSSFADE_EPS) && o._bakedOutline ? o._bakedOutline : o._bakedGray
     drawDecorAtlasSprite(k, baked, k.vec2(o._homeX, o._homeY), 'topleft', 0, 1, white)
   })
 }
@@ -5895,29 +6311,44 @@ function updateMushroomWhistleLean(inst) {
 // multiply tint. Outlined (colour-world) rocks always render untinted.
 //
 function updateRockTints(inst) {
+  const fade = glowDecorFade(inst)
   const flat = isGlowFlatSingleDecorColor(inst)
   const white = inst.k.rgb(255, 255, 255)
+  const gray = lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(inst))
   const tint = grayDecorTint(inst)
   inst.rockObjs.forEach(obj => {
     if (obj.hidden) return
-    const c = flat || obj._outlined ? white : tint
+    if (flat || !obj._outlined) {
+      obj.color = inst.k.rgb(tint.r, tint.g, tint.b)
+      return
+    }
+    const c = lerpRgb(gray, white, fade)
     obj.color = inst.k.rgb(c.r, c.g, c.b)
   })
 }
 //
-// Flat explore phase: midges match the grass / decor gray.
+// Midge colour follows the same gray→warm fade as the sky haze.
 //
 function syncGlowMidgeDrawColor(inst) {
   if (!inst.midges) return
-  const flat = isGlowFlatSingleDecorColor(inst)
-  inst.midges.midgeRgb = flat ? DECOR_GRAY : null
+  const fade = glowDecorFade(inst)
+  if (isGlowFlatSingleDecorColor(inst)) {
+    inst.midges.midgeRgb = DECOR_GRAY
+    return
+  }
+  if (fade <= COLOR_CROSSFADE_EPS) {
+    inst.midges.midgeRgb = glowRgb('void')
+    return
+  }
+  inst.midges.midgeRgb = lerpRgb(glowRgb('void'), WARM_HAZE, fade)
 }
 //
 // Swaps mushrooms and rocks to their outlined sprite variants once the colour
 // world is at least half faded in (dark rims appear after O).
 //
 function updateDecorOutlines(inst) {
-  const outlined = inst.zones.colorWorld && inst.colorFade > 0
+  const fade = glowDecorFade(inst)
+  const outlined = (inst.zones.colorWorld || isGlowMeditationColorPreview(inst)) && fade > COLOR_CROSSFADE_EPS
   if (inst._decorOutlineState === outlined) return
   inst._decorOutlineState = outlined
   const swap = obj => {
@@ -6083,7 +6514,9 @@ function startColorWorldFade(inst) {
   inst.zones.groundBg = true
   set(KEY_REVEALED_GROUND_BG, true)
   inst.colorFadeTarget = 1
+  inst.colorFade = Math.max(inst.colorFade ?? 0, inst.colorFadeTarget)
   inst.parallaxFade = inst.colorFade
+  inst._meditationParallaxPreview = false
   revealLParallaxZone(inst)
   CanvasBackdrop.applyCanvasBackdrop(inst.k, OUTER_BG_HEX)
   !inst.zones.water && revealWaterZone(inst, false)
@@ -6258,19 +6691,14 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   playGlowLetterDialogMusic(inst, dialogSoundName)
   letterEntry && (letterEntry.forceVisible = true)
   //
-  // Drop the pre-pickup size boost — the caption layout below measures and
-  // positions everything assuming the letter is at its native, unscaled
-  // GLOW_LETTER_SIZE.
+  // The picked-up glyph is painted through the same k.text path as the
+  // caption phrase so size and font metrics stay identical — the world
+  // letter objects stay hidden for the caption's lifetime.
   //
-  letterEntry?.allObjects?.forEach(obj => { obj.scale = k.vec2(1) })
-  const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
-  //
-  // Matches the rest of the world's own gray/colour state — plain gray
-  // while everything else is still gray-lit, back to the usual light tone
-  // once the world turns colourful.
-  //
-  const worldFade = inst.zones?._sceneRef?.colorFade ?? (inst.zones?.colorWorld ? 1 : 0)
-  const captionTextRgb = worldFade < 0.5 ? DECOR_GRAY : LIGHT_GRAY
+  letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
+  const font = GLOW_LETTER_FONT
+  const letterFillRgb = letterEntry ? getRGB(k, letterEntry.colorHex || GLOW_GOLD_HEX) : null
+  const { withShadow, withOutline, captionTextRgb } = glowLetterVisualStyle(inst)
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
   const afterLines = after.split('\n')
@@ -6281,7 +6709,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   // so it reads as one continuous, uniformly sized piece of text.
   //
   const fontSize = GLOW_LETTER_SIZE
-  const letterMeasure = k.formatText({ text: letterEntry?.char || '', size: GLOW_LETTER_SIZE, font: GLOW_LETTER_FONT })
+  const letterMeasure = k.formatText({ text: letterEntry?.char || '', size: fontSize, font })
   const letterHalfW = letterMeasure.width / 2
   const beforeWidth = before ? k.formatText({ text: before, size: fontSize, font }).width : 0
   const afterFirstWidth = afterFirst ? k.formatText({ text: afterFirst, size: fontSize, font }).width : 0
@@ -6306,6 +6734,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const rowStep = oneLineHeight / 2 + GLOW_LETTER_CAPTION_LINE_SPACING
   const pieces = []
   before && pieces.push({ text: before, anchor: 'right', localX: -letterHalfW, localY: 0 })
+  letterEntry && pieces.push({ text: letterEntry.char, anchor: 'center', localX: 0, localY: 0, letterFill: true })
   afterFirst && pieces.push({ text: afterFirst, anchor: 'left', localX: letterHalfW, localY: 0 })
   restText && pieces.push({
     text: restText,
@@ -6317,16 +6746,9 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const shadowObjs = []
   const outlineObjs = []
   const mainObjs = []
-  //
-  // Flat text shadow reads as a stray dark smudge once the world has gone
-  // monochrome — the colourful world gets the usual drop shadow, the
-  // monochrome world gets a "void" outline instead, matching how every
-  // mushroom is outlined in the same flat/gray decor mode.
-  //
-  const withShadow = worldFade >= 0.5
-  const withOutline = !withShadow
   pieces.forEach(piece => {
     const localOffset = rotateGlowOffset(piece.localX, piece.localY, tiltDeg)
+    const textRgb = piece.letterFill ? letterFillRgb : captionTextRgb
     const shadowOffset = rotateGlowOffset(
       piece.localX + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
       piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
@@ -6362,7 +6784,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
       k.pos(originX + localOffset.x, originY + localOffset.y),
       k.anchor(piece.anchor),
       k.rotate(tiltDeg),
-      k.color(captionTextRgb.r, captionTextRgb.g, captionTextRgb.b),
+      k.color(textRgb.r, textRgb.g, textRgb.b),
       k.opacity(0),
       k.z(GLOW_LETTER_CAPTION_Z + 1)
     ]))
@@ -6381,7 +6803,6 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
     shadowObjs.forEach(obj => { obj.opacity = opacity })
     outlineObjs.forEach(obj => { obj.opacity = opacity })
     mainObjs.forEach(obj => { obj.opacity = opacity })
-    letterEntry?.allObjects?.forEach(obj => { obj.opacity = opacity })
     if (state.timer < total) return
     updateHandler.cancel()
     shadowObjs.forEach(obj => obj.destroy())
@@ -7105,12 +7526,16 @@ function startGlowHedgehogDeathCountdown(inst) {
   const promptY = HEDGEHOG_DEATH_PROMPT_Y
   const textCfg = { size: HEDGEHOG_DEATH_PROMPT_FONT, font }
   const initText = HEDGEHOG_DEATH_PROMPT_BASE + HEDGEHOG_DEATH_COUNTDOWN_SECONDS
+  const colorWorld = inst.zones.colorWorld
+  const textRgb = colorWorld ? HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_TEXT_GRAY
+  const shadowRgb = colorWorld ? HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY
+  const shadowOpacity = colorWorld ? 0.72 : 0.85
   const shadow = k.add([
     k.text(initText, textCfg),
     k.pos(cx + 1.5, promptY + 1.5),
     k.anchor('center'),
-    k.color(0, 0, 0),
-    k.opacity(0.85),
+    k.color(shadowRgb.r, shadowRgb.g, shadowRgb.b),
+    k.opacity(shadowOpacity),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui + 60)
   ])
@@ -7118,7 +7543,7 @@ function startGlowHedgehogDeathCountdown(inst) {
     k.text(initText, textCfg),
     k.pos(cx, promptY),
     k.anchor('center'),
-    k.color(k.rgb(220, 220, 220)),
+    k.color(textRgb.r, textRgb.g, textRgb.b),
     k.opacity(1),
     k.fixed(),
     k.z(CFG.visual.zIndex.ui + 60.1)
@@ -7312,6 +7737,14 @@ function revealOZone(inst) {
   inst.zones.oZone = true
   set(KEY_REVEALED_O, true)
   inst.oZoneRevealTime = inst.k.time()
+  inst._meditationParallaxPreview = false
+  inst.colorFade = 1
+  inst.parallaxFade = 1
+  inst.colorFadeTarget = 1
+  inst.meditationWorldLife = 1
+  revealLParallaxZone(inst)
+  inst.treeDrawColorMode = true
+  syncTreeColorCrossfade(inst)
   playSegmentRevealSound(inst)
   applyZoneVisibility(inst)
   syncGlowAtmosphereZones(inst)
@@ -7416,11 +7849,13 @@ function onUpdate(inst) {
   }
   const fadingWorldVisuals = inst.colorFade < inst.colorFadeTarget || inst.parallaxFade < 1
   const twoToneWorld = isGlowFlatSingleDecorColor(inst)
-  if (fadingWorldVisuals || twoToneWorld) {
+  const colorTransition = isGlowColorTransitionActive(inst)
+  if (fadingWorldVisuals || twoToneWorld || colorTransition) {
     updateMushroomTints(inst)
     updateDecorOutlines(inst)
     syncGlowMidgeDrawColor(inst)
   }
+  syncGlowPickupLetterVisuals(inst)
   const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const meditating = inst.meditation?.countdown != null
   if (singing || meditating || inst._mushroomLeanActive) {
@@ -7429,28 +7864,32 @@ function onUpdate(inst) {
       inst.mushObjs.some(obj => !obj.hidden && Math.abs(obj.leanAngle ?? 0) > 0.2)
   }
   maybeSyncGlowLifeHudGrey(inst)
-  if (inst.colorFade < inst.colorFadeTarget) {
+  const meditationDrivingFade = inst.meditation?.countdown != null && !inst.zones.colorWorld
+  if (!meditationDrivingFade && inst.colorFade < inst.colorFadeTarget) {
     inst.colorFade = Math.min(inst.colorFadeTarget, inst.colorFade + k.dt() / COLOR_FADE_DURATION)
-    const colorTree = inst.colorFade >= 0.5
-    if (colorTree !== inst.treeDrawColorMode) {
-      inst.treeDrawColorMode = colorTree
-      inst.treeDrawMonolith && syncMonolithicTreeColorMode(inst)
-      !inst.treeDrawMonolith && syncTreeSegmentsVisibility(inst)
-    }
+    syncTreeColorCrossfade(inst)
   }
+  updateMeditationPreviewFadeOut(inst, k.dt())
   //
   // Forest and colour world share one ease — parallax tracks colorFade so
   // trees, mushrooms and underground decor all appear together.
   //
-  if (inst.zones.lZoneParallax && inst.parallaxFade < inst.colorFadeTarget) {
+  if (!meditationDrivingFade && inst.zones.lZoneParallax && inst.parallaxFade < inst.colorFadeTarget) {
     inst.parallaxFade = inst.colorFade
   }
   //
-  // Birds only fly in the colour world (after the O letter).
+  // Birds glide once the meditation preview or colour world is visible.
   //
-  inst.zones.colorWorld && inst.colorFade > 0.2 && updateBackgroundBirds(inst, k.dt())
+  const birdFade = inst.colorFade ?? 0
+  birdFade > BIRD_VISIBLE_FADE_MIN &&
+    (inst.zones.colorWorld || inst.zones.oZone || inst.meditation?.countdown != null) &&
+    updateBackgroundBirds(inst, k.dt())
   updateTreeRevealFade(inst, k.dt())
   updateExploreFades(inst, k.dt())
+  updateGlowLetterPopFades(inst, k.dt())
+  updatePlatformRevealFade(inst.lPlat, k.dt())
+  updatePlatformRevealFade(inst.oPlat, k.dt())
+  updatePlatformRevealFade(inst.wPlat, k.dt())
   inst.colorFade >= 0.5 && !inst.heroGoldApplied && inst.zones.colorWorld && applyColorWorldHero(inst)
   updatePlayfieldBorderColors(inst)
   if (inst.pit?.pitBonus?.collected && !inst.levelIndicator) {
@@ -7542,7 +7981,7 @@ function onUpdate(inst) {
       }
     }
   }
-  if (!inst.dialogOpen && !inst.introLock && !(inst.dialogInputGrace > 0) &&
+  if (!inst.dialogOpen && !(inst.dialogInputGrace > 0) &&
     !(inst.dialogPostSettle > 0) && !inst.heroLockedAfterW) {
     hero.controllable = true
     hero.controlsDisabled = false
@@ -7829,10 +8268,12 @@ function updateOMeditation(inst, char, heroMoving, grounded) {
     if (m.idleTimer >= m.requiredIdle) {
       m.countdown = MEDITATION_COUNTDOWN
       Hero.setEyesClosed(inst.heroInst, true)
+      syncMeditationColorFade(inst)
     }
     updateMeditationBirds(inst)
     return
   }
+  syncMeditationColorFade(inst)
   m.countdown -= inst.k.dt()
   updateMeditationBirds(inst)
   if (m.countdown <= 0) {
@@ -7859,7 +8300,7 @@ function cancelMeditation(inst, interrupted) {
     interrupted && (m.requiredIdle += MEDITATION_IDLE_PENALTY)
     m.countdown = null
     Hero.setEyesClosed(inst.heroInst, false)
-    stopMeditationBirds(inst)
+    resetMeditationColorPreview(inst)
   }
   m.idleTimer = 0
 }
@@ -8389,20 +8830,45 @@ function syncMonolithicTreeGraySprite(inst) {
   inst.treeObj?.use(inst.k.sprite(graySpriteName))
 }
 //
-// Toggles gray vs colour monolithic tree sprites from the colour fade.
+// Crossfades gray vs colour monolithic tree sprites from the colour fade.
 //
-function syncMonolithicTreeColorMode(inst) {
+function syncMonolithicTreeColorMode(inst, fade) {
   const tree = inst.treeObj
   const treeColor = inst.treeColorObj
   if (!tree || !treeColor || !inst.treeDrawMonolith) return
-  const showColorTree = inst.treeDrawColorMode
-  tree.hidden = showColorTree
-  treeColor.hidden = !showColorTree
-  tree.opacity = 1
-  treeColor.opacity = 1
+  const f = fade ?? glowDecorFade(inst)
+  tree.hidden = false
+  treeColor.hidden = false
+  tree.opacity = 1 - f
+  treeColor.opacity = f
   const white = inst.k.rgb(255, 255, 255)
   tree.color = white
   treeColor.color = white
+}
+//
+// Crossfades revealed tree segments between gray and colour palettes.
+//
+function syncTreeSegmentsColorCrossfade(inst, fade) {
+  const f = fade ?? glowDecorFade(inst)
+  inst.treeSegmentIds?.forEach(id => {
+    const entry = inst.treeSegmentEntries?.[id]
+    if (!entry?.revealed || entry.fadeActive) return
+    entry.grayObj.pos.x = 0
+    entry.colorObj.pos.x = 0
+    entry.grayObj.hidden = false
+    entry.colorObj.hidden = false
+    entry.grayObj.opacity = 1 - f
+    entry.colorObj.opacity = f
+  })
+}
+//
+// Applies gray→colour tree crossfade for monolith or segmented draw paths.
+//
+function syncTreeColorCrossfade(inst) {
+  const fade = glowDecorFade(inst)
+  inst.treeDrawColorMode = fade >= 0.5
+  inst.treeDrawMonolith && syncMonolithicTreeColorMode(inst, fade)
+  !inst.treeDrawMonolith && syncTreeSegmentsColorCrossfade(inst, fade)
 }
 //
 // Fades newly revealed tree segments in.
@@ -8410,19 +8876,23 @@ function syncMonolithicTreeColorMode(inst) {
 function updateTreeRevealFade(inst, dt) {
   const ids = inst.treeSegmentIds
   if (!ids?.length) return
-  const showColor = (inst.colorFade ?? 0) >= 0.5
+  if (!inst._treeRevealFadePending && !ids.some(id => inst.treeSegmentEntries?.[id]?.fadeActive)) return
+  const fade = glowDecorFade(inst)
+  let anyPending = false
   ids.forEach(id => {
     const entry = inst.treeSegmentEntries?.[id]
     if (!entry?.fadeActive) return
+    anyPending = true
     entry.fade = Math.min(1, entry.fade + dt / TREE_REVEAL_FADE_DURATION)
-    entry.grayObj.hidden = showColor
-    entry.colorObj.hidden = !showColor
-    entry.grayObj.opacity = showColor ? 0 : entry.fade
-    entry.colorObj.opacity = showColor ? entry.fade : 0
+    entry.grayObj.hidden = false
+    entry.colorObj.hidden = false
+    entry.grayObj.opacity = (1 - fade) * entry.fade
+    entry.colorObj.opacity = fade * entry.fade
     entry.grayObj.pos.x = 0
     entry.colorObj.pos.x = 0
     entry.fade >= 1 && (entry.fadeActive = false)
   })
+  inst._treeRevealFadePending = anyPending
 }
 //
 // Applies saved segment visibility on scene entry.
@@ -8666,25 +9136,15 @@ function showTrampolineRevealHint(inst) {
 // Reveals trampoline mushrooms when the hero first touches their landing zone.
 //
 function maybeRevealTrampolineMushroomOnLand(inst, heroX, footY, grounded, justLanded) {
-  if (!grounded) {
-    inst._wasNearRightTrampSpot = false
-    inst._wasNearBranchTrampSpot = false
-    return
-  }
+  if (!grounded || !justLanded) return
   const z = inst.zones
   const near = (x) => Math.abs(heroX - x) <= TRAMP_MUSH_LAND_REVEAL_DIST
   const nearRight = Boolean(z.gCollected && near(inst.trampState?.x ?? -9999))
   const nearBranch = near(inst.branchTrampState?.x ?? -9999)
-  const enteredRight = nearRight && !inst._wasNearRightTrampSpot
-  const enteredBranch = nearBranch && !inst._wasNearBranchTrampSpot
-  inst._wasNearRightTrampSpot = nearRight
-  inst._wasNearBranchTrampSpot = nearBranch
-  const touchRight = justLanded || enteredRight
-  const touchBranch = justLanded || enteredBranch
-  if (!z.rightTrampRevealed && nearRight && touchRight) {
+  if (!z.rightTrampRevealed && nearRight) {
     revealRightTrampoline(inst)
   }
-  if (!z.branchTrampRevealed && nearBranch && touchBranch) {
+  if (!z.branchTrampRevealed && nearBranch) {
     revealBranchTrampoline(inst)
   }
 }

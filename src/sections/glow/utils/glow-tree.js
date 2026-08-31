@@ -214,7 +214,9 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
   const rootBaseY = rootStartY !== undefined ? rootStartY : trunkBottomY
   const maxRootY = rootMaxY !== undefined ? rootMaxY : rootBaseY + 80
   const trunkSegs = buildTrunk(rng, trunkX, trunkBottomY, trunkTopY)
-  const rootSegs = includeRoots ? buildRoots(rng, trunkSegs, rootBaseY, treeH, maxRootY) : []
+  const groundClipY = rootBaseY + ROOT_CLIP_BELOW_GROUND
+  const trunkBase = computeTrunkBaseAtClip(trunkSegs, groundClipY)
+  const rootSegs = includeRoots ? buildRoots(rng, trunkBase, trunkBottomY, treeH, maxRootY) : []
   const branchSegs = []
   const leafEndpoints = []
   //
@@ -246,7 +248,8 @@ export function buildGlowTree(seed, trunkX, trunkBottomY, trunkTopY, rootMaxY, r
     horizBranch,
     rootStartY: rootBaseY,
     heroBranchSegFrom,
-    groundClipY: rootBaseY
+    groundClipY: rootBaseY,
+    trunkBase
   }
 }
 
@@ -582,6 +585,28 @@ function buildChainOutline(segs, maxY) {
     spine[0].y = maxY
   }
   return { left, right, spine }
+}
+//
+// Trunk centre and width at the ground clip line — matches the filled trunk
+// silhouette exactly so roots merge flush with the trunk base, not with the
+// raw first segment centre (which drifts and tilts away from the clip edge).
+//
+function computeTrunkBaseAtClip(trunkSegs, clipY) {
+  const { left, right } = buildChainOutline(trunkSegs, clipY)
+  if (!left.length) {
+    return {
+      sx: trunkSegs[0]?.sx ?? 0,
+      sy: clipY,
+      w: trunkSegs[0]?.w ?? 74
+    }
+  }
+  const leftX = left[0].x
+  const rightX = right[0].x
+  return {
+    sx: (leftX + rightX) * 0.5,
+    sy: clipY,
+    w: Math.abs(rightX - leftX)
+  }
 }
 //
 // Paints the shadow-side band on wood segments (trunk + branches). All capsules
@@ -1150,7 +1175,7 @@ function glowHexToRgb(hex) {
 // Each root starts nearly vertical and gradually curls outward (left or right)
 // via a lateral bias, just like menu trees curl toward the canvas centre.
 //
-function buildRoots(rng, trunkSegs, trunkBottomY, treeH, rootMaxY) {
+function buildRoots(rng, trunkBase, trunkBottomY, treeH, rootMaxY) {
   const ROOT_COUNT = 5 + Math.floor(rng() * 3)
   const ROOT_W_BASE = 26
   const ROOT_SEGMENTS = 22
@@ -1159,13 +1184,13 @@ function buildRoots(rng, trunkSegs, trunkBottomY, treeH, rootMaxY) {
   // base width, so the trunk fill painted after them hides every junction.
   //
   const ROOT_START_LIFT = 6
-  const baseSpread = (trunkSegs[0]?.w ?? 74) * 0.32
+  const baseSpread = (trunkBase?.w ?? 74) * 0.32
   //
   // Inject seeded random so the main root directions are deterministic.
   // growTreeRootSegments branching calls use Math.random for micro-details.
   //
   const rand = (min, max) => min + rng() * (max - min)
-  const baseX = trunkSegs[0].sx
+  const baseX = trunkBase.sx
   const allSegs = []
   for (let r = 0; r < ROOT_COUNT; r++) {
     //

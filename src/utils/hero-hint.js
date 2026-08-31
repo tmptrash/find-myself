@@ -78,6 +78,8 @@ export function isActive(inst) {
  * @param {number} [opts.anchorY] - Optional world Y override for the bubble
  * @param {number} [opts.dismissDistance] - Walk-away dismiss radius in px (default 30)
  * @param {boolean} [opts.dismissOnJump=true] - Dismiss when the hero jumps
+ * @param {boolean} [opts.dismissHorizontalOnly=false] - Ignore vertical offset for walk dismiss
+ * @param {number} [opts.movementDismissGrace=0] - Seconds after spawn before walk dismiss counts
  * @param {boolean} [opts.forceAbove=false] - Keep the bubble above the hero
  */
 export function show(inst, text, duration, opts = {}) {
@@ -88,6 +90,8 @@ export function show(inst, text, duration, opts = {}) {
   inst.forceAbove = Boolean(opts.forceAbove)
   inst.dismissDistance = opts.dismissDistance ?? HINT_DISMISS_DISTANCE
   inst.dismissOnJump = opts.dismissOnJump !== false
+  inst.dismissHorizontalOnly = Boolean(opts.dismissHorizontalOnly)
+  inst.movementDismissGrace = opts.movementDismissGrace ?? 0
   inst.anchorOverride = (opts.anchorX != null && opts.anchorY != null)
     ? { x: opts.anchorX, y: opts.anchorY }
     : null
@@ -124,6 +128,8 @@ export function clear(inst) {
   inst.forceAbove = false
   inst.dismissDistance = HINT_DISMISS_DISTANCE
   inst.dismissOnJump = true
+  inst.dismissHorizontalOnly = false
+  inst.movementDismissGrace = 0
   destroyHint(inst)
 }
 function applyQueueItemOpts(inst, item = {}) {
@@ -131,6 +137,8 @@ function applyQueueItemOpts(inst, item = {}) {
   inst.followHero = Boolean(item.followHero)
   inst.dismissDistance = item.dismissDistance ?? HINT_DISMISS_DISTANCE
   inst.dismissOnJump = item.dismissOnJump !== false
+  inst.dismissHorizontalOnly = Boolean(item.dismissHorizontalOnly)
+  inst.movementDismissGrace = item.movementDismissGrace ?? 0
 }
 //
 // Starts a queued hint and applies its per-item options.
@@ -214,26 +222,31 @@ function shouldDismissByMovement(inst) {
   //
   if (inst.ignoreMovementDismiss) return false
   //
-  // Intro / dialog locks freeze the hero — spawn settle must not wipe hints
-  //
-  if (hero.controlsDisabled || !hero.controllable) return false
-  //
   // Only a real jump (crouch→launch) dismisses — brief unground flicker /
   // spawn plant used to clear intro bubbles before they were readable.
+  // Jump dismiss is skipped while controls are locked (dialogs, etc.).
   //
   const jumping = inst.dismissOnJump !== false && (
     hero.isSquashing ||
     hero.jumpPhase === 'jumping' ||
     hero.jumpPhase === 'squashing'
   )
-  if (jumping) return true
+  if (jumping && !hero.controlsDisabled && hero.controllable) return true
+  //
+  // Brief grace after spawn so settle / camera snap never clears the bubble
+  // before the player has actually walked away.
+  //
+  if (inst.movementDismissGrace > 0 && inst.timer < inst.movementDismissGrace) return false
   const dx = ch.pos.x - inst.spawnX
   const dy = ch.pos.y - inst.spawnY
-  //
-  // Euclidean distance so a diagonal walk also clears the bubble
-  //
   const dist = inst.dismissDistance ?? HINT_DISMISS_DISTANCE
-  return Math.hypot(dx, dy) >= dist
+  //
+  // Glow intro hints only count horizontal walk — vertical settle must not
+  // read as "walking away".
+  //
+  return inst.dismissHorizontalOnly
+    ? Math.abs(dx) >= dist
+    : Math.hypot(dx, dy) >= dist
 }
 //
 // Advances the fade-in / hold / fade-out envelope and chains queued hints

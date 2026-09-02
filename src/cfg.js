@@ -223,6 +223,18 @@ export const CFG = {
         dialogBorder: PALETTE.gray3,
         hudScore: PALETTE.gray5,
         //
+        // Warm cream — soft highlight/shadow tone reused wherever a warm
+        // near-white reads better than a cold gray (e.g. glow hedgehog
+        // death-prompt shadow in the colour world).
+        //
+        warmCream: PALETTE.sand5,
+        //
+        // Glow hedgehog creature — warm dark mane/quills and a lighter warm
+        // tan snout/leg tone, kept distinct from the tree/decor hues.
+        //
+        hedgehogMane: PALETTE.sand0,
+        hedgehogFace: PALETTE.orange4,
+        //
         // Foreground grass blades — warm straw gold, a different hue family
         // from the near bush layer's leaf green (treeColor.leaf), so the
         // blades never blend into the bushes standing right behind them and

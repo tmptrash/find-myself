@@ -259,14 +259,14 @@ const HEDGEHOG_DEATH_PROMPT_FONT = 22
 // bottom edge, so backing off by this much lands the line inside the leaves.
 //
 const HEDGEHOG_DEATH_PROMPT_LEAF_RISE = 165
-const HEDGEHOG_DEATH_PROMPT_TEXT_GRAY = { r: 220, g: 220, b: 220 }
-const HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY = { r: 0, g: 0, b: 0 }
+const HEDGEHOG_DEATH_PROMPT_TEXT_GRAY = glowRgb('lightGray')
+const HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY = glowRgb('void')
 //
 // Dark void text + warm cream shadow reads clearly over the orange haze and
 // amber parallax foliage in the colour world.
 //
 const HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD = VOID
-const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = { r: 255, g: 248, b: 230 }
+const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = glowRgb('warmCream')
 const PAR_LEAF_MAX_Y_FRACTION = 0.43
 //
 // Screen-space HUD/prompt Y — starts at the design value and gets
@@ -283,11 +283,11 @@ let HEDGEHOG_DEATH_PROMPT_Y = Math.round(DESIGN_SCREEN_H * PAR_LEAF_MAX_Y_FRACTI
 const MEDITATION_WORLD_WAKE_SPEED = 1.1
 const MEDITATION_WORLD_SLEEP_SPEED = 3.2
 //
-// Darker, thicker rim on glow floor rocks so they read more clearly against
-// the ground and never poke a stray pixel below FLOOR_Y.
+// Dark rim on glow floor rocks so they read clearly against the ground
+// without a heavy outline stroke.
 //
 const ROCK_OUTLINE_RGB = glowRgb('void')
-const ROCK_OUTLINE_WIDTH = 2
+const ROCK_OUTLINE_WIDTH = 1
 //
 // Ground respawn after a hedgehog kill lands just past the wandering
 // hedgehog's own leash, so reloading the level never drops the hero right

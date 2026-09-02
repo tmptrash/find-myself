@@ -10,11 +10,11 @@ import { GLOW_PAL } from '../utils/glow-palette.js'
 // back to full colour once the world turns colourful — exactly like the
 // tree/mushroom decor elsewhere in this level.
 //
-const MANE_HEX = '#3a2a22'
+const MANE_HEX = GLOW_PAL.hedgehogMane
 const MANE_GRAY_HEX = GLOW_PAL.decorGray
-const FACE_HEX = '#d9a876'
+const FACE_HEX = GLOW_PAL.hedgehogFace
 const FACE_GRAY_HEX = GLOW_PAL.lightGray
-const EYE_HEX = '#1a1210'
+const EYE_HEX = GLOW_PAL.void
 //
 // Black silhouette rim, same convention as every other character in the
 // game (CFG.visual.colors.outline) — drawn as a slightly larger copy of
@@ -64,7 +64,7 @@ const SNOUT_ARC_END = 320
 // (cheap — 3 small ellipses) on top of the baked body so it can track the
 // hero; the body itself never needs a live redraw.
 //
-const EYE_WHITE_HEX = '#ffffff'
+const EYE_WHITE_HEX = GLOW_PAL.brightLight
 const EYE_CX = 16
 const EYE_CY = -8
 const EYE_WHITE_R = 3.6

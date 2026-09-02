@@ -112,31 +112,55 @@ const CUTE_MUSH_COLORS = GLOW_PAL.cuteMushroom
 const CUTE_MUSH_GRAY_COLORS = GLOW_PAL.cuteMushroomGray
 //
 // Layout. Glow runs on its own native-resolution engine (see game-engine.js /
-// engine-switch.js) so the playfield always fills the real window: the top
-// void strip (110 px) holds the HUD row above the playfield, and the bottom
-// void strip is a fixed 50 px, whatever the actual screen size turns out to
-// be. SCREEN_W/SCREEN_H and everything derived from them are therefore `let`
-// bindings recomputed from the live k.width()/k.height() at scene start
-// (see recomputeGlowScreenLayout) instead of the fixed CFG.visual.screen
-// design constants every other (1920x1080) scene uses.
+// engine-switch.js) so the playfield always fills the real window horizontally
+// (the world scrolls under a camera, see WORLD_W) — but every element's own
+// position is still laid out against the fixed CFG.visual.screen /
+// CFG.visual.glow design resolution (1920x1080 view / 3000x1080 world),
+// exactly like the other (letterboxed, 1920x1080) scenes: laying elements out
+// against the live window size would drift them apart on any monitor wider
+// or taller than the design resolution. SCREEN_W/SCREEN_H (the real, live
+// window size) and the handful of values that genuinely need to track it —
+// the camera viewport width, the HUD row's vertical offset when the window
+// is taller than design, and screen-space chrome that must reach the true
+// edges of the window — are `let` bindings recomputed from the live
+// k.width()/k.height() at scene start (see recomputeGlowScreenLayout).
 //
 const TOP_MARGIN = 110
 const BOTTOM_MARGIN = 50
 const LEFT_MARGIN = 100
 const RIGHT_MARGIN = 100
 const FLOOR_PHYS_H = 20
-let SCREEN_W = CFG.visual.screen.width
-let SCREEN_H = CFG.visual.screen.height
+const DESIGN_SCREEN_W = CFG.visual.screen.width
+const DESIGN_SCREEN_H = CFG.visual.screen.height
+let SCREEN_W = DESIGN_SCREEN_W
+let SCREEN_H = DESIGN_SCREEN_H
 const WORLD_W = CFG.visual.glow.worldWidth
 const WORLD_H = CFG.visual.glow.worldHeight
 let VIEW_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
-let VIEW_H = SCREEN_H - TOP_MARGIN - BOTTOM_MARGIN
+//
+// Vertical view height stays pinned to the design height — on a taller-
+// than-design window the extra height becomes void letterbox padding
+// (VOID_PAD_Y) above and below instead of stretching the playfield.
+//
+const VIEW_H = DESIGN_SCREEN_H - TOP_MARGIN - BOTTOM_MARGIN
 const GAME_W = WORLD_W - LEFT_MARGIN - RIGHT_MARGIN
 const FLOOR_Y = 680
 //
-// Playfield bottom on screen — 50 px void strip below the rounded window.
+// Half the extra height (window taller than the 1080 design) added above
+// and below the playfield so it stays vertically centred instead of
+// hugging the top of a tall window. Zero at (or below) the design height.
 //
-let PLAYFIELD_BOTTOM_Y = SCREEN_H - BOTTOM_MARGIN
+let VOID_PAD_Y = 0
+//
+// Screen Y where the top void/HUD strip begins — VOID_PAD_Y on a tall
+// window, 0 at (or below) design height.
+//
+let PLAYFIELD_TOP_Y = 0
+//
+// Playfield bottom on screen — 50 px void strip below the rounded window,
+// pushed down by VOID_PAD_Y so the whole playfield stays centred.
+//
+let PLAYFIELD_BOTTOM_Y = DESIGN_SCREEN_H - BOTTOM_MARGIN
 //
 // Original 1920-wide layout; right-side gameplay shifts by this amount into
 // the extended 3000 px world (lake + main tree stay on the left).
@@ -146,9 +170,11 @@ const CORNER_RADIUS = 20
 const CORNER_SPRITE_NAME = 'glow0-corner-sprite'
 const PLATFORM_HIDE_Y = 9999
 //
-// Tree.
+// Tree. Fixed to the design viewport's own centre (not the live window
+// width) so every element positioned off it — branch, hedgehogs, L/O/W
+// platforms, mushrooms — lines up identically on any monitor.
 //
-let TREE_X = Math.round(SCREEN_W * 0.5)
+const TREE_X = Math.round(DESIGN_SCREEN_W * 0.5)
 //
 // The trunk geometry extends a few px below the ground so its base cannot
 // leave a gap above the floor line; rendering clips it at the roots' start
@@ -242,7 +268,12 @@ const HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY = { r: 0, g: 0, b: 0 }
 const HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD = VOID
 const HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD = { r: 255, g: 248, b: 230 }
 const PAR_LEAF_MAX_Y_FRACTION = 0.43
-let HEDGEHOG_DEATH_PROMPT_Y = Math.round(SCREEN_H * PAR_LEAF_MAX_Y_FRACTION) -
+//
+// Screen-space HUD/prompt Y — starts at the design value and gets
+// VOID_PAD_Y added in recomputeGlowScreenLayout so it stays visually
+// aligned with the (world-space, camera-shifted) leaf band it sits on.
+//
+let HEDGEHOG_DEATH_PROMPT_Y = Math.round(DESIGN_SCREEN_H * PAR_LEAF_MAX_Y_FRACTION) -
   HEDGEHOG_DEATH_PROMPT_LEAF_RISE
 //
 // How fast the post-L world wakes up (grass sway, hedgehog wander, birds,
@@ -462,7 +493,7 @@ const PAR_BRANCH_FRAC_MAX = 0.97
 // ever paint below this line — the horizontal middle band of the screen
 // stays trunk-only in every row and every mode.
 //
-let PAR_LEAF_MAX_Y = Math.round(SCREEN_H * PAR_LEAF_MAX_Y_FRACTION)
+const PAR_LEAF_MAX_Y = Math.round(DESIGN_SCREEN_H * PAR_LEAF_MAX_Y_FRACTION)
 //
 // Row foliage = ONE dense full-width horizontal band per row: every leaf of
 // a row sits at roughly the same vertical level with a small random step up
@@ -538,7 +569,7 @@ const BIRD_COUNT = 6
 //
 // Birds glide below the parallax leaf canopy so they stay visible in the sky band
 //
-let BIRD_MIN_Y = PAR_LEAF_MAX_Y + 8
+const BIRD_MIN_Y = PAR_LEAF_MAX_Y + 8
 const BIRD_Y_RANGE = 110
 const BIRD_SPEED_MIN = 22
 const BIRD_SPEED_RANGE = 26
@@ -632,9 +663,11 @@ const hudLetterInkBoxCache = {}
 //
 // HUD row lives inside the top void strip (above the playfield). FPS/label
 // share one vertical centre so GLOW, FPS, small hero and life sit on one line.
+// Screen-space, so both get VOID_PAD_Y added in recomputeGlowScreenLayout to
+// stay inside the (possibly pushed-down) top void strip on a tall window.
 //
-const GLOW_HUD_FPS_TOP_Y = 55
-const GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
+let GLOW_HUD_FPS_TOP_Y = 55
+let GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
 const GLOW_HUD_FPS_SLOT_GAP = 24
 const GLOW_HUD_SMALL_HERO_HALF_W = 42
 //
@@ -754,7 +787,10 @@ const LETTER_OFFSCREEN_ARROW_STEM_LEN = 30
 const LETTER_OFFSCREEN_ARROW_SWAY_AMP = 10
 const LETTER_OFFSCREEN_ARROW_SWAY_SPEED = 5.5
 const LETTER_OFFSCREEN_ARROW_EDGE_INSET = 52
-const LETTER_OFFSCREEN_ARROW_Y = TOP_MARGIN + 120
+//
+// Screen-space HUD arrow — VOID_PAD_Y added in recomputeGlowScreenLayout.
+//
+let LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
 const MENU_ARROW_BODY_RGB = glowRgb('midGray')
 const MENU_ARROW_OUTLINE_RGB = glowRgb('void')
 const MENU_ARROW_OUTLINE_WIDTH = 2
@@ -979,7 +1015,7 @@ const LIFE_PARTICLE_LIFETIME_MIN = 0.8
 const LIFE_PARTICLE_LIFETIME_EXTRA = 0.4
 const LIFE_PARTICLE_SIZE_MIN = 4
 const LIFE_PARTICLE_SIZE_EXTRA = 4
-let GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
+const GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
 //
 // Grass grows in tufts: baked blade sprites (several silhouette variants,
 // tinted at draw time) clustered around random tuft centres instead of an
@@ -1789,7 +1825,14 @@ function initGlowLevel0Scene(k) {
       leftMargin: LEFT_MARGIN,
       rightMargin: RIGHT_MARGIN,
       topMargin: TOP_MARGIN,
-      playfieldBottomY: PLAYFIELD_BOTTOM_Y
+      playfieldBottomY: PLAYFIELD_BOTTOM_Y,
+      //
+      // Pinned to the design height's own centre (not the live window's) so
+      // the world stays laid out at its design position — a taller window
+      // grows as letterbox padding above/below instead of revealing more
+      // world vertically. See recomputeGlowScreenLayout / VOID_PAD_Y.
+      //
+      fixedCamY: Math.round(DESIGN_SCREEN_H / 2)
     })
     const inst = {
       k,
@@ -2130,18 +2173,20 @@ function createPlayfieldFrameOverlay(k, inst) {
 function drawPlayfieldVoidTopBar(inst) {
   const k = inst.k
   const voidColor = k.rgb(VOID.r, VOID.g, VOID.b)
-  k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: TOP_MARGIN, color: voidColor, fixed: true })
+  k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: PLAYFIELD_TOP_Y + TOP_MARGIN, color: voidColor, fixed: true })
 }
 //
-// Void side and bottom pillarbox before the outer frame is revealed.
+// Void side and bottom pillarbox before the outer frame is revealed. Both
+// the top and bottom bars reach all the way to their real screen edge so a
+// taller-than-design window's extra letterbox padding is covered too.
 //
 function drawPlayfieldVoidSideChrome(inst) {
   const k = inst.k
   const voidColor = k.rgb(VOID.r, VOID.g, VOID.b)
-  k.drawRect({ pos: k.vec2(0, PLAYFIELD_BOTTOM_Y), width: SCREEN_W, height: BOTTOM_MARGIN, color: voidColor, fixed: true })
-  k.drawRect({ pos: k.vec2(0, TOP_MARGIN), width: LEFT_MARGIN, height: VIEW_H, color: voidColor, fixed: true })
+  k.drawRect({ pos: k.vec2(0, PLAYFIELD_BOTTOM_Y), width: SCREEN_W, height: SCREEN_H - PLAYFIELD_BOTTOM_Y, color: voidColor, fixed: true })
+  k.drawRect({ pos: k.vec2(0, PLAYFIELD_TOP_Y + TOP_MARGIN), width: LEFT_MARGIN, height: VIEW_H, color: voidColor, fixed: true })
   k.drawRect({
-    pos: k.vec2(SCREEN_W - RIGHT_MARGIN, TOP_MARGIN),
+    pos: k.vec2(SCREEN_W - RIGHT_MARGIN, PLAYFIELD_TOP_Y + TOP_MARGIN),
     width: RIGHT_MARGIN,
     height: VIEW_H,
     color: voidColor,
@@ -4683,8 +4728,8 @@ function createRoundedCorners(k, zones) {
   const Z = CFG.visual.zIndex.ui + 30
   const halfRadius = CORNER_RADIUS / 2
   const corners = [
-    k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(LEFT_MARGIN + halfRadius, TOP_MARGIN + halfRadius), k.anchor('center'), k.z(Z), { fixed: true }]),
-    k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(SCREEN_W - RIGHT_MARGIN - halfRadius, TOP_MARGIN + halfRadius), k.rotate(90), k.anchor('center'), k.z(Z), { fixed: true }]),
+    k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(LEFT_MARGIN + halfRadius, PLAYFIELD_TOP_Y + TOP_MARGIN + halfRadius), k.anchor('center'), k.z(Z), { fixed: true }]),
+    k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(SCREEN_W - RIGHT_MARGIN - halfRadius, PLAYFIELD_TOP_Y + TOP_MARGIN + halfRadius), k.rotate(90), k.anchor('center'), k.z(Z), { fixed: true }]),
     k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(LEFT_MARGIN + halfRadius, PLAYFIELD_BOTTOM_Y - halfRadius), k.rotate(270), k.anchor('center'), k.z(Z), { fixed: true }]),
     k.add([k.sprite(CORNER_SPRITE_NAME), k.pos(SCREEN_W - RIGHT_MARGIN - halfRadius, PLAYFIELD_BOTTOM_Y - halfRadius), k.rotate(180), k.anchor('center'), k.z(Z), { fixed: true }])
   ]
@@ -5863,7 +5908,14 @@ function drawDrownBelowBedHeroCover(inst, k, x1, x2, waterY) {
   if (heroX < x1 - 8 || heroX > lakeRight + 8) return
   const footY = char.pos.y + SURFACE_DETECT_Y
   const bedY = waterBedYAtX(heroX, x1, x2, waterY)
-  if (footY <= bedY + 1) return
+  //
+  // The bed's shallow-end chaos wiggle can sit above the hero's own starting
+  // stand line (most visible falling into the shore-side shallow water off
+  // the tree branch) — clamping the trigger to whichever line is lower stops
+  // the cover from snapping in instantly on landing, before any real sink.
+  //
+  const coverLine = Math.max(bedY, inst.drownCoverStartFootY ?? bedY)
+  if (footY <= coverLine + 1) return
   const ground = getDrownCoverGroundRgb(inst)
   const color = k.rgb(ground.r, ground.g, ground.b)
   const halfW = DROWN_BELOW_BED_COVER_HALF_W
@@ -6085,8 +6137,7 @@ function onDraw(inst) {
     const showBirds = fade > BIRD_VISIBLE_FADE_MIN &&
       (zones.colorWorld || zones.oZone || inst.meditation?.countdown != null)
     showBirds && drawBackgroundBirds(inst)
-    const skipFarParallax = isColorWorldSettled(inst)
-    !skipFarParallax && drawParLayer(parFar)
+    drawParLayer(parFar)
     fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
     drawParLayer(parMid)
     fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
@@ -6186,10 +6237,12 @@ function drawFixedPlayfieldChrome(inst, outerFrame) {
 function drawPlayfieldTopBar(inst) {
   const k = inst.k
   const outerColor = k.rgb(OUTER.r, OUTER.g, OUTER.b)
-  k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: TOP_MARGIN, color: outerColor, fixed: true })
+  k.drawRect({ pos: k.vec2(0, 0), width: SCREEN_W, height: PLAYFIELD_TOP_Y + TOP_MARGIN, color: outerColor, fixed: true })
 }
 //
 // Side and bottom pillarbox — masks world bleeding past the rounded window.
+// Both bars reach their real screen edge, covering the letterbox padding
+// too on a taller-than-design window.
 //
 function drawPlayfieldSideChrome(inst) {
   const k = inst.k
@@ -6197,19 +6250,19 @@ function drawPlayfieldSideChrome(inst) {
   k.drawRect({
     pos: k.vec2(0, PLAYFIELD_BOTTOM_Y),
     width: SCREEN_W,
-    height: BOTTOM_MARGIN,
+    height: SCREEN_H - PLAYFIELD_BOTTOM_Y,
     color: outerColor,
     fixed: true
   })
   k.drawRect({
-    pos: k.vec2(0, TOP_MARGIN),
+    pos: k.vec2(0, PLAYFIELD_TOP_Y + TOP_MARGIN),
     width: LEFT_MARGIN,
     height: VIEW_H,
     color: outerColor,
     fixed: true
   })
   k.drawRect({
-    pos: k.vec2(SCREEN_W - RIGHT_MARGIN, TOP_MARGIN),
+    pos: k.vec2(SCREEN_W - RIGHT_MARGIN, PLAYFIELD_TOP_Y + TOP_MARGIN),
     width: RIGHT_MARGIN,
     height: VIEW_H,
     color: outerColor,
@@ -7335,6 +7388,12 @@ function startDrowning(inst) {
   inst.drownSinkY = startY
   inst.heroInst.drownSinkX = drownX
   inst.heroInst.drownSinkY = startY
+  //
+  // The shallow shore end of the lake bed curve can sit above this starting
+  // foot line (see drawDrownBelowBedHeroCover) — recorded so the below-bed
+  // cover never triggers before he has actually sunk any distance at all.
+  //
+  inst.drownCoverStartFootY = startY + SURFACE_DETECT_Y
   char.opacity = 1
   applyDrownSinkPose(inst)
   beginDrownSinkTween(inst)
@@ -10098,8 +10157,8 @@ function glowTooltipClampInset() {
   return {
     left: LEFT_MARGIN,
     right: RIGHT_MARGIN,
-    top: TOP_MARGIN,
-    bottom: BOTTOM_MARGIN
+    top: PLAYFIELD_TOP_Y + TOP_MARGIN,
+    bottom: SCREEN_H - PLAYFIELD_BOTTOM_Y
   }
 }
 //
@@ -10123,20 +10182,24 @@ function trampWalkStopX(inst, singCount) {
 }
 //
 // Glow runs on its own native-resolution engine, so the real window size is
-// only known once that engine is booted — refreshes SCREEN_W/SCREEN_H (and
-// every module-level constant derived from them) from the live k.width()/
-// k.height() right at scene start, before any layout math runs.
+// only known once that engine is booted — refreshes SCREEN_W/SCREEN_H and the
+// handful of values that legitimately track the live window (camera viewport
+// width, vertical letterbox padding on a taller-than-design window, and the
+// screen-space HUD/chrome Y's that ride on that padding) right at scene
+// start, before any layout math runs. Every element's own world position
+// (TREE_X and everything derived from it) stays pinned to the fixed design
+// resolution instead — see the Layout comment near TOP_MARGIN/SCREEN_W above.
 //
 function recomputeGlowScreenLayout(k) {
   SCREEN_W = k.width()
   SCREEN_H = k.height()
   VIEW_W = SCREEN_W - LEFT_MARGIN - RIGHT_MARGIN
-  VIEW_H = SCREEN_H - TOP_MARGIN - BOTTOM_MARGIN
-  PLAYFIELD_BOTTOM_Y = SCREEN_H - BOTTOM_MARGIN
-  TREE_X = Math.round(SCREEN_W * 0.5)
-  PAR_LEAF_MAX_Y = Math.round(SCREEN_H * PAR_LEAF_MAX_Y_FRACTION)
-  BIRD_MIN_Y = PAR_LEAF_MAX_Y + 8
-  HEDGEHOG_DEATH_PROMPT_Y = PAR_LEAF_MAX_Y - HEDGEHOG_DEATH_PROMPT_LEAF_RISE
-  GROUND_REVEAL_TREE_PAST_X = TREE_X + TRUNK_EXCLUDE_HALF
+  VOID_PAD_Y = Math.max(0, Math.round((SCREEN_H - DESIGN_SCREEN_H) / 2))
+  PLAYFIELD_TOP_Y = VOID_PAD_Y
+  PLAYFIELD_BOTTOM_Y = VOID_PAD_Y + DESIGN_SCREEN_H - BOTTOM_MARGIN
+  GLOW_HUD_FPS_TOP_Y = 55 + VOID_PAD_Y
+  GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
+  LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
+  HEDGEHOG_DEATH_PROMPT_Y = PAR_LEAF_MAX_Y - HEDGEHOG_DEATH_PROMPT_LEAF_RISE + VOID_PAD_Y
   CAMERA_INTRO_ZOOM_START = VIEW_W / CAMERA_INTRO_HERO_WIDTH
 }

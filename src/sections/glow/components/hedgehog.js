@@ -313,12 +313,18 @@ function onUpdate(inst) {
   const scene = inst.zones?._sceneRef
   const frozen = !scene?.zones?.oZone && !scene?.zones?.oCollected &&
     (scene?.meditation?.countdown == null || (scene?.meditationWorldLife ?? 0) < 0.02)
+  const dt = inst.k.dt()
   //
   // Stillness freezes wander/gaze, but a platform vanishing mid-ambush must
-  // keep gravity + walk-to-edge so the hedgehog tumbles off the L-log.
+  // keep gravity + walk-to-edge so the hedgehog tumbles off the L-log. The
+  // body stays put, but the eyes still track the hero directly while he's
+  // the only thing moving in a fully static world — the old distance/facing
+  // -gated gaze (updateGaze) resumes the instant it starts wandering again.
   //
-  if (frozen && !inst.falling && !inst.walkingToEdge) return
-  const dt = inst.k.dt()
+  if (frozen && !inst.falling && !inst.walkingToEdge) {
+    updateFrozenGaze(inst, dt)
+    return
+  }
   inst.idleTime += dt
   if (inst.walkingToEdge) {
     updateWalkToEdge(inst, dt)
@@ -562,6 +568,28 @@ function startWanderTurn(inst, pendingDir) {
   inst.turnPhase = 'body'
   inst.turnPendingDir = pendingDir
   inst.turnFlipped = false
+}
+//
+// While the world is fully static (frozen, pre-meditation) the hedgehog
+// stands still but its eyes keep tracking the hero directly, ignoring the
+// facing-side/distance gate the normal wander gaze uses (see updateGaze) —
+// looks wherever he actually is, even from behind.
+//
+function updateFrozenGaze(inst, dt) {
+  const dir = inst.facing === 'left' ? -1 : 1
+  const heroPos = inst.hero?.character?.pos
+  let targetX = inst.pupilX
+  let targetY = inst.pupilY
+  if (heroPos) {
+    const localDx = dir * (heroPos.x - inst.x)
+    const dy = heroPos.y - inst.y
+    const len = Math.hypot(localDx, dy) || 1
+    targetX = (localDx / len) * EYE_PUPIL_TRAVEL
+    targetY = (dy / len) * EYE_PUPIL_TRAVEL
+  }
+  const lerp = Math.min(1, GAZE_LERP_SPEED * dt)
+  inst.pupilX += (targetX - inst.pupilX) * lerp
+  inst.pupilY += (targetY - inst.pupilY) * lerp
 }
 //
 // Eases the pupil toward the hero (if he's in front of the face and close

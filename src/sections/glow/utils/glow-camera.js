@@ -17,16 +17,21 @@
  * @param {number} cfg.worldW - Full world width
  * @param {number} cfg.leftMargin - World/playfield inset on the left
  * @param {number} cfg.rightMargin - World/playfield inset on the right
+ * @param {number} [cfg.fixedCamY] - World Y drawn at screen vertical centre.
+ *   Defaults to the live screen's own centre (world height fills whatever
+ *   window height there is); pass a fixed design-resolution half-height
+ *   instead to keep the world pinned to its design layout and let a
+ *   taller-than-design window grow as pure letterbox padding above/below.
  * @returns {Object} Camera instance
  */
 export function create(cfg) {
-  const { k, viewW, viewH, worldW, leftMargin, rightMargin } = cfg
+  const { k, viewW, viewH, worldW, leftMargin, rightMargin, fixedCamY: fixedCamYOverride } = cfg
   //
   // Keep the world origin aligned with the screen origin: screen centre is
   // the fixed vertical camera anchor since the world height already matches
   // the playfield window (top HUD bar + bottom strip are screen-space only).
   //
-  const fixedCamY = Math.round(k.height() / 2)
+  const fixedCamY = fixedCamYOverride ?? Math.round(k.height() / 2)
   const halfViewW = viewW / 2
   return {
     k,

@@ -22,7 +22,7 @@ const HUD_OUTLINE_OFFSET = 1
  * @returns {Object} FPS counter instance
  */
 export function create(config) {
-  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null } = config
+  const { k, showTimer = false, topY = 55, textColor = null, outlineColor = null, postBakeCanvas = null } = config
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // HUD numerals (FPS + timer) share the same neutral grey as the
@@ -31,13 +31,13 @@ export function create(config) {
   //
   const HUD_TEXT_GREY = textColor || k.rgb(176, 176, 176)
   const HUD_OUTLINE = outlineColor || k.rgb(0, 0, 0)
-  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, HUD_TEXT_GREY, topY, HUD_OUTLINE)
+  const fpsText = createOutlinedHudText(k, 'FPS: 30', font, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   //
   // Optional elapsed level timer
   //
   let timerText = null
   if (showTimer) {
-    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY, HUD_OUTLINE)
+    timerText = createOutlinedHudText(k, 'time: 00:00', font, HUD_TEXT_GREY, topY, HUD_OUTLINE, postBakeCanvas)
   }
   layoutHudRow(k, [fpsText, timerText])
   const inst = {
@@ -49,6 +49,7 @@ export function create(config) {
     fpsTextOutlines: fpsText.outlineNodes,
     timerText: timerText?.main ?? null,
     timerTextOutlines: timerText?.outlineNodes ?? [],
+    postBakeCanvas,
     updateTimer: 0,
     fpsSum: 0,
     fpsCount: 0,
@@ -61,29 +62,33 @@ export function create(config) {
  * @param {Object} inst - FPS counter instance
  */
 export function onUpdate(inst) {
-  const { k, fpsText, fpsTextOutlines, timerText, timerTextOutlines } = inst
+  const { k, fpsHud, timerHud } = inst
+  const frameDt = k.dt()
   //
-  // Calculate FPS from delta time
+  // Kaplay's dt() is the fixed/sim timestep — rawFPS() is the real display
+  // refresh rate (e.g. 120 Hz monitors). Fall back to 1/dt when unavailable.
   //
-  const currentFps = 1 / k.dt()
+  const currentFps = typeof k.rawFPS === 'function'
+    ? k.rawFPS()
+    : (frameDt > 0 ? 1 / frameDt : 0)
   inst.fpsSum += currentFps
   inst.fpsCount++
-  inst.updateTimer += k.dt()
+  inst.updateTimer += frameDt
   //
   // Track level time and update elapsed timer
   //
-  if (timerText) {
-    inst.levelTime += k.dt()
+  if (timerHud) {
+    inst.levelTime += frameDt
     const minutes = Math.floor(inst.levelTime / 60)
     const seconds = Math.floor(inst.levelTime % 60)
-    setOutlinedHudText({ main: timerText, outlineNodes: timerTextOutlines }, `time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+    setOutlinedHudText(timerHud, `time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
   }
   //
   // Update display once per second
   //
   if (inst.updateTimer >= 1.0) {
     const averageFps = Math.round(inst.fpsSum / inst.fpsCount)
-    setOutlinedHudText({ main: fpsText, outlineNodes: fpsTextOutlines }, `FPS: ${averageFps.toString().padStart(2, ' ')}`)
+    setOutlinedHudText(fpsHud, `FPS: ${averageFps.toString().padStart(2, ' ')}`)
     inst.updateTimer = 0
     inst.fpsSum = 0
     inst.fpsCount = 0
@@ -156,7 +161,10 @@ export function layoutAtScreenCenterX(inst, centerX) {
 //
 // Creates HUD text with a single drop-shadow copy (glow-level style).
 //
-function createOutlinedHudText(k, text, font, color, topY, outlineColor) {
+function createOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas = null) {
+  if (postBakeCanvas) {
+    return createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas)
+  }
   const outlineNodes = buildOutlineOffsets(HUD_OUTLINE_OFFSET).map(([dx, dy]) => k.add([
     k.text(text, { size: HUD_FONT_SIZE, font }),
     k.pos(0, topY + dy),
@@ -179,10 +187,14 @@ function createOutlinedHudText(k, text, font, color, topY, outlineColor) {
 // Updates outlined HUD label text on main and outline nodes.
 //
 function setOutlinedHudText(node, text) {
-  node.main.text = text
-  node.outlineNodes.forEach(outline => {
-    outline.exists?.() && (outline.text = text)
-  })
+  node.bakedHolder
+    ? syncBakedHudText(node, text)
+    : (() => {
+      node.main.text = text
+      node.outlineNodes.forEach(outline => {
+        outline.exists?.() && (outline.text = text)
+      })
+    })()
 }
 //
 // Eight-direction outline offset pairs
@@ -220,4 +232,103 @@ function layoutHudRow(k, texts) {
     })
     cursorX += t.main.width + (i === 0 ? HUD_GAP_AFTER_FPS : HUD_GAP)
   })
+}
+//
+// Baked HUD text path — shadow + fill on one canvas, then postBakeCanvas grain.
+//
+function createBakedOutlinedHudText(k, text, font, color, topY, outlineColor, postBakeCanvas) {
+  const node = {
+    k,
+    main: null,
+    outlineNodes: [],
+    bakedHolder: true,
+    postBakeCanvas,
+    font,
+    color,
+    outlineColor,
+    topY,
+    measuredW: 0,
+    lastText: null
+  }
+  rebuildBakedHudTextNode(node, text, k.width() / 2)
+  return node
+}
+//
+// Rebakes the FPS HUD sprite when the label string changes.
+//
+function syncBakedHudText(node, text) {
+  if (node.lastText === text) return
+  rebuildBakedHudTextNode(node, text, node.main?.pos?.x ?? node.k.width() / 2)
+}
+//
+// Draws outlined HUD text to a canvas and loads it as a Kaplay sprite.
+//
+function rebuildBakedHudTextNode(node, text, centerX) {
+  const { k, font, color, outlineColor, topY, postBakeCanvas } = node
+  node.lastText = text
+  const canvas = bakeFpsHudTextCanvas(text, font, color, outlineColor)
+  postBakeCanvas?.(canvas, fpsHudTextHash(text))
+  const spriteName = 'fps-hud-bake-' + fpsHudTextHash(text)
+  k.loadSprite(spriteName, canvas)
+  node.measuredW = canvas.width
+  canvas.width = 0
+  canvas.height = 0
+  const prevMain = node.main
+  const wasFixed = prevMain?.fixed
+  const wasOpacity = prevMain?.opacity ?? 0.7
+  prevMain?.exists?.() && k.destroy(prevMain)
+  node.main = k.add([
+    k.sprite(spriteName),
+    k.pos(centerX, topY),
+    k.anchor('center'),
+    k.color(k.rgb(255, 255, 255)),
+    k.opacity(wasOpacity),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ])
+  wasFixed && (node.main.fixed = true)
+  node.main.width = node.measuredW
+}
+//
+// Renders FPS HUD label with a single drop-shadow copy onto a canvas.
+//
+function bakeFpsHudTextCanvas(text, fontFamily, fillColor, outlineColor) {
+  const pad = 4
+  const off = HUD_OUTLINE_OFFSET
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${HUD_FONT_SIZE}px ${fontFamily}`
+  const w = Math.ceil(probe.measureText(text).width + pad * 2 + off)
+  const h = Math.ceil(HUD_FONT_SIZE * 1.2 + pad * 2 + off)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, w)
+  canvas.height = Math.max(1, h)
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${HUD_FONT_SIZE}px ${fontFamily}`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'center'
+  const cx = canvas.width / 2
+  const cy = canvas.height / 2
+  ctx.fillStyle = rgbToCss(outlineColor)
+  ctx.fillText(text, cx + off, cy + off)
+  ctx.fillStyle = rgbToCss(fillColor)
+  ctx.fillText(text, cx, cy)
+  return canvas
+}
+//
+// Stable hash for FPS HUD sprite names.
+//
+function fpsHudTextHash(text) {
+  let h = 0
+  for (let i = 0; i < text.length; i++) {
+    h = (h * 31 + text.charCodeAt(i)) | 0
+  }
+  return h >>> 0
+}
+//
+// Converts Kaplay rgb to a CSS colour string.
+//
+function rgbToCss(rgb) {
+  const r = rgb.r ?? rgb[0] ?? 0
+  const g = rgb.g ?? rgb[1] ?? 0
+  const b = rgb.b ?? rgb[2] ?? 0
+  return `rgb(${r | 0},${g | 0},${b | 0})`
 }

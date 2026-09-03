@@ -76,7 +76,7 @@ let globalSuppressed = false
  * @returns {Object} Tooltip instance with destroy() method
  */
 export function create(cfg) {
-  const { k, targets, forceVisible = false, clampInset = null } = cfg
+  const { k, targets, forceVisible = false, clampInset = null, customDraw = null } = cfg
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   //
   // Tooltip rendering state
@@ -90,7 +90,8 @@ export function create(cfg) {
     frozenX: 0,
     frozenY: 0,
     forceVisible,
-    clampInset
+    clampInset,
+    customDraw
   }
   //
   // One drawer: bubble then pointer then text so the ear sits on its own
@@ -196,6 +197,10 @@ function measureText(k, text, font) {
 function onDraw(inst) {
   const layout = inst._layout
   if (!layout) return
+  if (inst.customDraw) {
+    inst.customDraw(inst, layout)
+    return
+  }
   const { k } = inst
   k.drawRect({
     pos: k.vec2(layout.bubbleX - BUBBLE_BORDER_WIDTH, layout.bubbleY - BUBBLE_BORDER_WIDTH),

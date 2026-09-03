@@ -4,6 +4,7 @@ import {
   getTreePaletteColor,
   getTreePaletteFlatDecor
 } from './glow-palette.js'
+import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 
 //
 // Segment ids persisted in localStorage under glow.treeSegmentsRevealed.
@@ -286,9 +287,18 @@ function bakeOneGlowTreeSegment(k, treeData, w, h, id, palettes) {
   const flatName = SEGMENT_SPRITE_PREFIX + id + '-flat'
   const litName = SEGMENT_SPRITE_PREFIX + id + '-lit'
   const colorName = SEGMENT_SPRITE_PREFIX + id + '-color'
-  k.loadSprite(flatName, renderGlowTreeToCanvas(partial, palettes.flat, w, h))
-  k.loadSprite(litName, renderGlowTreeToCanvas(partial, palettes.lit, w, h))
-  k.loadSprite(colorName, renderGlowTreeToCanvas(partial, palettes.color, w, h))
+  loadGlowTreeSegmentSprite(k, flatName, renderGlowTreeToCanvas(partial, palettes.flat, w, h), 0)
+  loadGlowTreeSegmentSprite(k, litName, renderGlowTreeToCanvas(partial, palettes.lit, w, h), 1)
+  loadGlowTreeSegmentSprite(k, colorName, renderGlowTreeToCanvas(partial, palettes.color, w, h), 2)
+}
+//
+// Loads one tree-segment canvas with the shared glow film grain baked in.
+//
+function loadGlowTreeSegmentSprite(k, name, canvas, seedOffset) {
+  applyGlowFilmGrainToCanvas(canvas, name.length * 31 + seedOffset)
+  k.loadSprite(name, canvas)
+  canvas.width = 0
+  canvas.height = 0
 }
 //
 // Leaves that belong to the hero start branch platform band.

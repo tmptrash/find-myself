@@ -19,7 +19,8 @@ const SMALL_HERO_Y_ADJUST = 10
 const LIFE_SCALE_FACTOR = 1.3
 const SCORE_OFFSET_X = 5
 //
-// Vertical offset for score numerals — center-left anchor; keep in sync with icon centers.
+// Vertical offset for score numerals — left anchor; life icon sits below the
+// small hero, so both scores share LIFE_IMAGE_Y_OFFSET for one baseline.
 //
 const SCORE_OFFSET_Y = 2
 const SCORE_OUTLINE_THICKNESS = 2
@@ -123,7 +124,9 @@ export function create(config) {
     hideInactiveLetterShadow = false,
     letterShadowColor = null,
     heroOutlineColor = CFG.visual.colors.outline,
-    heroEyeWhiteColor = null
+    heroEyeWhiteColor = null,
+    heroPostBakeCanvas = null,
+    hudPostBakeCanvas = null
   } = config
   const letters = sectionLabel ? sectionLabel.split('') : ['T', 'O', 'U', 'C', 'H']
   const fontSize = 48
@@ -165,6 +168,40 @@ export function create(config) {
     // Calculate x position for this letter
     //
     const letterX = startX + i * (fontSize + letterSpacing)
+    const thinFont = CFG.visual.fonts.thinFull.replace(/'/g, '')
+    if (hudPostBakeCanvas) {
+      const fallingOffX = isFallingLetter ? FALLING_LETTER_OFFSET_X : 0
+      const fallingOffY = isFallingLetter ? fallingLetterExtraY : 0
+      const outlineObj = addBakedHudLetterSprite(k, {
+        letter,
+        fontSize,
+        font: thinFont,
+        x: letterX + outlineThickness + fallingOffX,
+        y: y + outlineThickness + fallingOffY,
+        colorHex: letterShadowColor || '#000000',
+        rotate: isFallingLetter ? FALLING_LETTER_TILT : 0,
+        seed: i * 2,
+        postBake: hudPostBakeCanvas
+      })
+      letterOutlineObjects.push(outlineObj)
+      isFallingLetter && fallingLetterObjects.push(outlineObj)
+      hideInactiveLetterShadow && sectionLabelCompletedLetters != null &&
+        i >= sectionLabelCompletedLetters && (outlineObj.hidden = true)
+      const mainLetter = addBakedHudLetterSprite(k, {
+        letter,
+        fontSize,
+        font: thinFont,
+        x: letterX + fallingOffX,
+        y: y + fallingOffY,
+        colorHex,
+        rotate: isFallingLetter ? FALLING_LETTER_TILT : 0,
+        seed: i * 2 + 1,
+        postBake: hudPostBakeCanvas
+      })
+      isFallingLetter && fallingLetterObjects.push(mainLetter)
+      letterObjects.push(mainLetter)
+      return
+    }
     //
     // Create drop shadow (single black copy offset right+down)
     //
@@ -245,6 +282,7 @@ export function create(config) {
     bodyColor: heroBodyColor,
     outlineColor: heroOutlineColor,
     eyeWhiteColor: heroEyeWhiteColor,
+    postBakeCanvas: heroPostBakeCanvas,
     addMouth: isWordComplete,
     addArms: isTouchComplete,
     //
@@ -260,6 +298,7 @@ export function create(config) {
   //
   const lifeImageScale = (LIFE_IMAGE_HEIGHT / LIFE_IMAGE_ORIGINAL_HEIGHT) * LIFE_SCALE_FACTOR * 0.8
   const wantGreyLife = greyLife || scoreboardGreyLife
+  hudPostBakeCanvas && (k._lifeDesatPostBake = hudPostBakeCanvas)
   ensureDesaturatedLifeSprite(k)
   const lifeSpriteName = wantGreyLife && k._lifeDesatReady === true ? 'life-desat' : 'life'
   const lifeTintHex = wantGreyLife
@@ -293,18 +332,22 @@ export function create(config) {
   //
   // Hero score outlines (black) and main text (white)
   //
-  const heroScoreY = smallHeroY + SCORE_OFFSET_Y
+  //
+  // Hero score sits on the same baseline as the life score — the life icon is
+  // offset below the small hero, so the hero numeral needs the same Y bump.
+  //
+  const heroScoreY = smallHeroY + LIFE_IMAGE_Y_OFFSET + SCORE_OFFSET_Y
   const lifeScoreY = smallHeroY + LIFE_IMAGE_Y_OFFSET + SCORE_OFFSET_Y
   //
   // Hero score outlines (black) and main text (white)
   //
-  const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets)
-  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize)
+  const heroScoreOutlines = createScoreOutlines(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
+  const heroScoreText = createScoreText(k, heroScore, smallHeroX + SMALL_HERO_SIZE / 2 + SCORE_OFFSET_X, heroScoreY, fontSize, hudPostBakeCanvas)
   //
   // Life score outlines (black) and main text (white)
   //
-  const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets)
-  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize)
+  const lifeScoreOutlines = createScoreOutlines(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, scoreOffsets, hudPostBakeCanvas)
+  const lifeScoreText = createScoreText(k, lifeScore, lifeImageX + LIFE_IMAGE_HEIGHT / 2 + SCORE_OFFSET_X, lifeScoreY, fontSize, hudPostBakeCanvas)
   //
   // Trap count badge with outline (bold red number right of life icon)
   //
@@ -373,12 +416,22 @@ export function create(config) {
     //
     scoreColorHex: HUD_SCORE_ICON_GREY_HEX,
     updateHeroScore: (newScore) => {
+      if (hudPostBakeCanvas) {
+        heroScoreText._scoreBake.score = newScore
+        rebakeHudScoreSprite(heroScoreText)
+        return
+      }
       heroScoreText.text = newScore.toString()
       heroScoreOutlines.forEach(outline => {
         outline.exists?.() && (outline.text = newScore.toString())
       })
     },
     updateLifeScore: (newScore) => {
+      if (hudPostBakeCanvas) {
+        lifeScoreText._scoreBake.score = newScore
+        rebakeHudScoreSprite(lifeScoreText)
+        return
+      }
       lifeScoreText.text = newScore.toString()
       lifeScoreOutlines.forEach(outline => {
         outline.exists?.() && (outline.text = newScore.toString())
@@ -476,13 +529,19 @@ export function setSectionLabelLetterProgress(inst, completedLetters) {
   inst.letterObjects.forEach((letter, i) => {
     if (!letter?.exists?.()) return
     const colorHex = i < capped ? inst.sectionLabelActiveColor : inst.sectionLabelInactiveColor
-    const { r, g, b } = getRGB(inst.k, colorHex)
-    letter.color = inst.k.rgb(r, g, b)
+    setHudLetterColor(letter, colorHex)
   })
   inst.hideInactiveLetterShadow && inst.letterOutlineObjects?.forEach((outline, i) => {
     outline?.exists?.() && (outline.hidden = i >= capped)
   })
   inst.sectionLabelCompletedLetters = capped
+}
+//
+// Rebakes one baked HUD section-label glyph when its fill colour changes.
+//
+export function setHudLetterColor(letterObj, colorHex) {
+  if (!letterObj?._hudLetterBake) return
+  rebakeHudLetterSprite(letterObj, colorHex)
 }
 
 /**
@@ -545,7 +604,8 @@ export function flashWorldLetterBurst(k, x, y, colorHex, screenFixed = false) {
  * @param {Array} offsets - Array of [dx, dy] offset pairs for outline directions
  * @returns {Array} Array of outline text game objects
  */
-function createScoreOutlines(k, score, x, y, fontSize, offsets) {
+function createScoreOutlines(k, score, x, y, fontSize, offsets, hudPostBakeCanvas = null) {
+  if (hudPostBakeCanvas) return []
   return offsets.map(([dx, dy]) => k.add([
     k.text(score.toString(), {
       size: fontSize,
@@ -568,7 +628,10 @@ function createScoreOutlines(k, score, x, y, fontSize, offsets) {
  * @param {number} fontSize - Font size in pixels
  * @returns {Object} Score text game object
  */
-function createScoreText(k, score, x, y, fontSize) {
+function createScoreText(k, score, x, y, fontSize, hudPostBakeCanvas = null) {
+  if (hudPostBakeCanvas) {
+    return addBakedHudScoreSprite(k, score, x, y, fontSize, hudPostBakeCanvas, 3100)
+  }
   return k.add([
     k.text(score.toString(), {
       size: fontSize,
@@ -612,6 +675,7 @@ export function prepareDesaturatedLifeSprite(k) {
 function ensureDesaturatedLifeSprite(k) {
   if (k._lifeDesatReady === true || k._lifeDesatReady === 'pending') return
   k._lifeDesatReady = 'pending'
+  const postBake = k._lifeDesatPostBake || null
   k._lifeDesatPromise = fetch('./life.png')
     .then(res => {
       if (!res.ok) throw new Error('life.png')
@@ -642,6 +706,7 @@ function ensureDesaturatedLifeSprite(k) {
         px[i + 2] = 255
       }
       ctx.putImageData(imageData, 0, 0)
+      postBake?.(canvas, 3200)
       bitmap.close?.()
       k.loadSprite('life-desat', canvas)
       k._lifeDesatCanvas = canvas
@@ -650,4 +715,144 @@ function ensureDesaturatedLifeSprite(k) {
     .catch(() => {
       k._lifeDesatReady = false
     })
+}
+//
+// Bakes one HUD section-label letter with optional grain post-pass.
+//
+function addBakedHudLetterSprite(k, cfg) {
+  const { letter, fontSize, font, x, y, colorHex, rotate, seed, postBake } = cfg
+  const { r, g, b } = getRGB(k, colorHex)
+  const canvas = bakeHudLetterCanvas(letter, fontSize, font, `rgb(${r},${g},${b})`)
+  const bakedW = canvas.width
+  const bakedH = canvas.height
+  postBake?.(canvas, 3300 + seed)
+  const spriteName = `hud-letter-${seed}-${letter.charCodeAt(0)}`
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  const components = [
+    k.sprite(spriteName),
+    //
+    // x/y are the top-left cell origin (same as the live k.text path); center
+    // the baked glyph within that cell.
+    //
+    k.pos(x + bakedW / 2, y + bakedH / 2),
+    k.anchor('center'),
+    k.color(k.rgb(255, 255, 255)),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui + 1)
+  ]
+  rotate && components.push(k.rotate(rotate))
+  const obj = k.add(components)
+  obj._hudLetterBake = {
+    k,
+    letter,
+    fontSize,
+    font,
+    x,
+    y,
+    colorHex,
+    rotate,
+    seed,
+    postBake,
+    bakedW,
+    bakedH
+  }
+  return obj
+}
+//
+// Rebakes a HUD letter sprite when its fill colour changes.
+//
+function rebakeHudLetterSprite(obj, colorHex) {
+  const bake = obj._hudLetterBake
+  if (!bake || bake.colorHex === colorHex) return
+  const { k, letter, fontSize, font, x, y, rotate, seed, postBake, bakedW, bakedH } = bake
+  bake.colorHex = colorHex
+  const { r, g, b } = getRGB(k, colorHex)
+  const canvas = bakeHudLetterCanvas(letter, fontSize, font, `rgb(${r},${g},${b})`)
+  postBake?.(canvas, 3300 + seed)
+  const spriteName = `hud-letter-${seed}-${letter.charCodeAt(0)}-${colorHex.replace('#', '')}`
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  obj.use(k.sprite(spriteName))
+  obj.pos.x = x + bakedW / 2
+  obj.pos.y = y + bakedH / 2
+  rotate && (obj.angle = rotate)
+}
+//
+// Bakes a score numeral with drop shadow for the HUD scoreboard.
+//
+function addBakedHudScoreSprite(k, score, x, y, fontSize, postBake, seedBase) {
+  const obj = k.add([
+    k.pos(x, y),
+    k.anchor('left'),
+    k.color(k.rgb(255, 255, 255)),
+    k.fixed(),
+    k.z(CFG.visual.zIndex.ui)
+  ])
+  obj._scoreBake = { k, score, x, y, fontSize, postBake, seedBase }
+  rebakeHudScoreSprite(obj)
+  return obj
+}
+//
+// Rebakes one HUD score sprite after the value changes.
+//
+function rebakeHudScoreSprite(obj) {
+  const bake = obj._scoreBake
+  if (!bake) return
+  const { k, score, fontSize, postBake, seedBase } = bake
+  const text = String(score)
+  const font = CFG.visual.fonts.thinFull.replace(/'/g, '')
+  const canvas = bakeHudScoreCanvas(text, fontSize, font)
+  postBake?.(canvas, seedBase + text.length)
+  const spriteName = `hud-score-${seedBase}-${text}`
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  obj.use(k.sprite(spriteName))
+}
+//
+// Draws one letter glyph centred on a small canvas.
+//
+function bakeHudLetterCanvas(letter, fontSize, fontFamily, fillStyle) {
+  const pad = 4
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${fontSize}px ${fontFamily}`
+  const w = Math.ceil(probe.measureText(letter).width + pad * 2)
+  const h = Math.ceil(fontSize * 1.2 + pad * 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, w)
+  canvas.height = Math.max(1, h)
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${fontSize}px ${fontFamily}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = fillStyle
+  ctx.fillText(letter, canvas.width / 2, canvas.height / 2)
+  return canvas
+}
+//
+// Draws a score numeral with a single drop shadow on one canvas.
+//
+function bakeHudScoreCanvas(text, fontSize, fontFamily) {
+  const pad = 3
+  const off = SCORE_OUTLINE_THICKNESS
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${fontSize}px ${fontFamily}`
+  const w = Math.ceil(probe.measureText(text).width + pad * 2 + off)
+  const h = Math.ceil(fontSize * 1.15 + pad * 2 + off)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, w)
+  canvas.height = Math.max(1, h)
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${fontSize}px ${fontFamily}`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  const cy = canvas.height / 2
+  ctx.fillStyle = '#000000'
+  ctx.fillText(text, pad + off, cy + off)
+  ctx.fillStyle = `rgb(${HUD_SCORE_ICON_GREY_R},${HUD_SCORE_ICON_GREY_G},${HUD_SCORE_ICON_GREY_B})`
+  ctx.fillText(text, pad, cy)
+  return canvas
 }

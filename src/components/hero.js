@@ -353,7 +353,9 @@ export function create(config) {
     ambient = false,       // Decorative background character — no annihilation tag
     ambientWalk = false,   // Decorative walker — run cycle instead of idle eye sprites
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
-    eyeWhiteColor = null   // Override eye fill color (null = use config default white)
+    eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
+    postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
+    idleNotePostBake = null // Optional grain pass for baked mouth-note glyphs
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -389,6 +391,7 @@ export function create(config) {
       addWatch,
       outlineOnly,
       eyeWhiteColor,
+      postBakeCanvas,
       character: null  // Marker to indicate this is an inst-like object
     })
   } catch (error) {
@@ -426,7 +429,9 @@ export function create(config) {
         addMouth,
         addArms,
         addWatch,
-        outlineOnly
+        outlineOnly,
+        eyeWhiteColor,
+        postBakeCanvas
       })
       //
       // Try to use the sprite (it should be loaded now)
@@ -498,6 +503,8 @@ export function create(config) {
     addWatch,
     outlineOnly,
     eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
+    postBakeCanvas,                       // Glow film grain on baked hero frames
+    idleNotePostBake,                     // Glow film grain on baked mouth-note glyphs
     spritePrefix,
     dustColor,
     suppressDust,
@@ -572,6 +579,7 @@ export function create(config) {
     // humming/whistling sound plays while the hero stands still.
     //
     idleVocalization,
+    idleNotePostBake,
     idleNotes: [],
     idleNoteEmitTimer: IDLE_NOTE_EMIT_MIN + Math.random() * (IDLE_NOTE_EMIT_MAX - IDLE_NOTE_EMIT_MIN),
     idleMelodyIndex: 0,
@@ -581,6 +589,7 @@ export function create(config) {
     ambientWalk,
     ambientRunSpeed: ambientRunSpeed ?? RUN_ANIM_SPEED * 2.4
   }
+  idleNotePostBake && ensureIdleNoteGlyphSprites(k, idleNotePostBake)
   //
   // Collision handlers require k.area() — skipped for ambient decorative characters
   //
@@ -638,7 +647,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite
+  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, postBakeCanvas, bakeSeed
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -653,6 +662,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     watch = inst.addWatch || false
     hollow = inst.outlineOnly || false
     eyeWhite = inst.eyeWhiteColor || null
+    postBakeCanvas = inst.postBakeCanvas || null
   } else {
     //
     // Called with individual parameters (for preloading)
@@ -666,7 +676,9 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     watch = addWatch
     hollow = false
     eyeWhite = null
+    postBakeCanvas = null
   }
+  bakeSeed = 0
   //
   // Use default colors from config if not provided
   //
@@ -709,17 +721,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
         //
-        if (spriteData) {
-          try {
-            k.loadSprite(spriteName, spriteData)
-            spriteData.width = 0
-            spriteData.height = 0
-          } catch (loadError) {
-            //
-            // Skip this sprite if loading fails
-            //
-          }
-        }
+        spriteData && commitHeroBakedSprite(k, spriteName, spriteData, postBakeCanvas, bakeSeed++)
       } catch (error) {
         //
         // Skip this sprite if there's an error creating it
@@ -733,17 +735,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   try {
     const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite)
-    if (closedData) {
-      try {
-        k.loadSprite(`${prefix}_closed`, closedData)
-        closedData.width = 0
-        closedData.height = 0
-      } catch (loadError) {
-        //
-        // Skip this sprite if loading fails
-        //
-      }
-    }
+    closedData && commitHeroBakedSprite(k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++)
   } catch (error) {
     //
     // Skip this sprite if there's an error creating it
@@ -755,17 +747,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
       const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
-      if (spriteData) {
-        try {
-          k.loadSprite(`${prefix}-jump-${frame}`, spriteData)
-          spriteData.width = 0
-          spriteData.height = 0
-        } catch (loadError) {
-          //
-          // Skip this sprite if loading fails
-          //
-        }
-      }
+      spriteData && commitHeroBakedSprite(k, `${prefix}-jump-${frame}`, spriteData, postBakeCanvas, bakeSeed++)
     } catch (error) {
       //
       // Skip this sprite if there's an error creating it
@@ -778,17 +760,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
       const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
-      if (spriteData) {
-        try {
-          k.loadSprite(`${prefix}-run-${frame}`, spriteData)
-          spriteData.width = 0
-          spriteData.height = 0
-        } catch (loadError) {
-          //
-          // Skip this sprite if loading fails
-          //
-        }
-      }
+      spriteData && commitHeroBakedSprite(k, `${prefix}-run-${frame}`, spriteData, postBakeCanvas, bakeSeed++)
     } catch (error) {
       //
       // Skip this sprite if there's an error creating it
@@ -2439,19 +2411,35 @@ function playIdleVocalNote(inst) {
 function drawIdleNotes(k, inst) {
   if (!inst.idleNotes?.length) return
   const fontName = CFG?.visual?.fonts?.regularFull
+  const useSprites = Boolean(inst.idleNotePostBake && k._idleNoteGlyphMap)
   for (const note of inst.idleNotes) {
     const fade = 1 - note.age / IDLE_NOTE_LIFETIME
     const alpha = Math.max(0, Math.min(1, fade))
-    k.drawText({
-      text: note.glyph,
-      pos: k.vec2(note.x, note.y),
-      size: IDLE_NOTE_FONT_SIZE,
-      anchor: 'center',
-      color: k.rgb(255, 255, 255),
-      opacity: alpha * 0.85,
-      angle: note.angle,
-      font: fontName
-    })
+    const opacity = alpha * 0.85
+    if (useSprites) {
+      const spriteName = k._idleNoteGlyphMap[note.glyph]
+      spriteName && k.drawSprite({
+        sprite: spriteName,
+        pos: k.vec2(note.x, note.y),
+        anchor: 'center',
+        angle: note.angle,
+        color: k.rgb(255, 255, 255),
+        opacity,
+        width: IDLE_NOTE_FONT_SIZE * 1.4,
+        height: IDLE_NOTE_FONT_SIZE * 1.4
+      })
+    } else {
+      k.drawText({
+        text: note.glyph,
+        pos: k.vec2(note.x, note.y),
+        size: IDLE_NOTE_FONT_SIZE,
+        anchor: 'center',
+        color: k.rgb(255, 255, 255),
+        opacity,
+        angle: note.angle,
+        font: fontName
+      })
+    }
   }
 }
 /**
@@ -4689,6 +4677,22 @@ function useHeroSprite(inst, spriteName) {
   }
 }
 //
+// Loads one baked hero frame, optionally running a scene post-bake pass first.
+//
+function commitHeroBakedSprite(k, spriteName, canvas, postBake, seedOffset) {
+  if (!canvas) return
+  try {
+    postBake?.(canvas, seedOffset)
+    k.loadSprite(spriteName, canvas)
+    canvas.width = 0
+    canvas.height = 0
+  } catch (loadError) {
+    //
+    // Skip this sprite if loading fails
+    //
+  }
+}
+//
 // Records a fully baked prefix bundle for the given Kaplay instance.
 //
 function markHeroSpritePrefixReadyOnK(k, prefix) {
@@ -4704,4 +4708,46 @@ function markHeroSpritePrefixReadyOnK(k, prefix) {
 //
 function isHeroSpritePrefixReadyOnK(k, prefix) {
   return heroSpritePrefixesReadyFor.get(k)?.has(prefix) ?? false
+}
+//
+// Bakes mouth-note glyphs once per Kaplay instance for glow grain.
+//
+function ensureIdleNoteGlyphSprites(k, postBake) {
+  if (k._idleNoteGlyphMap) return
+  k._idleNoteGlyphMap = {}
+  const glyphs = new Set()
+  Object.values(IDLE_NOTE_GLYPHS).forEach(arr => arr.forEach(g => glyphs.add(g)))
+  const fontFamily = CFG.visual.fonts.regularFull.replace(/'/g, '')
+  let i = 0
+  glyphs.forEach(glyph => {
+    const canvas = bakeIdleNoteGlyphCanvas(glyph, fontFamily)
+    postBake?.(canvas, 7400 + i)
+    const name = 'idle-note-glyph-' + i
+    k.loadSprite(name, canvas)
+    canvas.width = 0
+    canvas.height = 0
+    k._idleNoteGlyphMap[glyph] = name
+    i++
+  })
+}
+//
+// Draws one note glyph centred on a small white canvas.
+//
+function bakeIdleNoteGlyphCanvas(glyph, fontFamily) {
+  const pad = 4
+  const size = IDLE_NOTE_FONT_SIZE
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${size}px ${fontFamily}`
+  const w = Math.ceil(probe.measureText(glyph).width + pad * 2)
+  const h = Math.ceil(size * 1.3 + pad * 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, w)
+  canvas.height = Math.max(1, h)
+  const ctx = canvas.getContext('2d')
+  ctx.font = `${size}px ${fontFamily}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(glyph, canvas.width / 2, canvas.height / 2)
+  return canvas
 }

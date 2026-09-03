@@ -1,6 +1,7 @@
 import { CFG } from '../../../cfg.js'
 import { getRGB, toCanvas } from '../../../utils/helper.js'
 import { GLOW_PAL } from '../utils/glow-palette.js'
+import { applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
 
 //
 // Pixel-art hedgehog colours. Kept local to this component (not routed
@@ -658,11 +659,13 @@ function bakeVariant(k, baseName, pixelRatio, drawFn) {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
     drawFn(ctx, MANE_GRAY_HEX, FACE_GRAY_HEX)
   })
+  applyGlowFilmGrainToCanvas(grayCanvas, baseName.length * 17)
   k.loadSprite(baseName + GRAY_SUFFIX, grayCanvas)
   const colorCanvas = toCanvas({ width: BAKE_W, height: BAKE_H, pixelRatio }, (ctx) => {
     ctx.translate(BAKE_HALF_W, -BAKE_Y_MIN)
     drawFn(ctx, MANE_HEX, FACE_HEX)
   })
+  applyGlowFilmGrainToCanvas(colorCanvas, baseName.length * 17 + 1)
   k.loadSprite(baseName + COLOR_SUFFIX, colorCanvas)
 }
 //

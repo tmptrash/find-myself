@@ -1,3 +1,4 @@
+import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
 import { glowRgb } from './glow-palette.js'
 //
 // Foot burst particles for glow level landings
@@ -61,6 +62,8 @@ const LEAF_GROUND_SPIN_DECAY = 0.9
 // avoids rebuilding the same small point array for every particle.
 //
 const leafPointsCache = new Map()
+const GLOW_LEAF_SPRITE_PREFIX = 'glow-leaf-'
+const glowLeafSpriteMeta = new Map()
 //
 // Creates the foot-particle pool and a single draw pass for the level scene
 //
@@ -311,9 +314,67 @@ function leafOpacity(p) {
   return Math.max(0, 1 - (p.age - p.fadeFrom) / LEAF_GROUND_FADE)
 }
 function drawLeafParticle(k, p, opacity) {
+  const baked = ensureGlowLeafSprite(k, p.size, p.r, p.g, p.b)
+  if (baked) {
+    k.drawSprite({
+      sprite: baked.name,
+      pos: k.vec2(p.x, p.y),
+      anchor: 'center',
+      angle: p.angle,
+      width: baked.w,
+      height: baked.h,
+      color: k.rgb(255, 255, 255),
+      opacity
+    })
+    return
+  }
   const rad = p.angle * Math.PI / 180
   const cos = Math.cos(rad)
   const sin = Math.sin(rad)
   const pts = p.pts.map(pt => k.vec2(p.x + pt.x * cos - pt.y * sin, p.y + pt.x * sin + pt.y * cos))
   k.drawPolygon({ pts, color: k.rgb(p.r, p.g, p.b), opacity })
+}
+//
+// Bakes a coloured leaf sprite with grain for one size + RGB key — same bake
+// pattern as other glow decor (colour on canvas, grain once, white-tint blit).
+//
+function ensureGlowLeafSprite(k, size, r, g, b) {
+  const sizeKey = Math.round(size * 2) / 2
+  const name = GLOW_LEAF_SPRITE_PREFIX +
+    String(sizeKey).replace('.', '_') + '_' + r + '_' + g + '_' + b
+  if (glowLeafSpriteMeta.has(name)) return glowLeafSpriteMeta.get(name)
+  const pts = buildLeafPoints(k, size)
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  pts.forEach(pt => {
+    minX = Math.min(minX, pt.x)
+    minY = Math.min(minY, pt.y)
+    maxX = Math.max(maxX, pt.x)
+    maxY = Math.max(maxY, pt.y)
+  })
+  const pad = 2
+  const w = Math.ceil(maxX - minX + pad * 2)
+  const h = Math.ceil(maxY - minY + pad * 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, w)
+  canvas.height = Math.max(1, h)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`
+  ctx.beginPath()
+  pts.forEach((pt, i) => {
+    const x = pt.x - minX + pad
+    const y = pt.y - minY + pad
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  })
+  ctx.closePath()
+  ctx.fill()
+  applyGlowFilmGrainToCanvas(canvas, 7500 + (sizeKey * 10) + (r * 3 + g * 5 + b * 7) | 0)
+  k.loadSprite(name, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  const meta = { name, w, h }
+  glowLeafSpriteMeta.set(name, meta)
+  return meta
 }

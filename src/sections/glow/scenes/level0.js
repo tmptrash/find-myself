@@ -65,6 +65,18 @@ import {
 } from '../utils/glow-atmosphere.js'
 import * as GlowFootParticles from '../utils/glow-foot-particles.js'
 import * as GlowCamera from '../utils/glow-camera.js'
+import { applyParallaxPostFxToContext, applyGlowFilmGrainToCanvas } from '../utils/glow-parallax-grain.js'
+import {
+  bakeGlowBirdFlapSprites,
+  bakeGlowTooltipCanvas,
+  bakeGlowCaptionPieceCanvas,
+  GLOW_BIRD_SPRITE_PREFIX,
+  BIRD_FLAP_FRAME_COUNT,
+  glowUiHash,
+  createGlowBakedTextHolder,
+  syncGlowBakedTextHolder,
+  destroyGlowBakedTextHolder
+} from '../utils/glow-ui-bake.js'
 //
 // Palette-derived tones — every colour comes from CFG.visual.colors.palette.
 //
@@ -330,6 +342,13 @@ const HAZE_MID_OPACITY = 0.1
 // playfield edges and never run out on the right when the camera scrolls.
 //
 const PAR_TREE_HORIZ_BLEED = 320
+//
+// Depth blur baked into each parallax forest row at sprite creation time.
+// Film grain uses the shared GLOW_FILM_GRAIN preset on every row.
+//
+const PAR_BLUR_RADIUS_FAR = 2.5
+const PAR_BLUR_RADIUS_MID = 1.5
+const PAR_BLUR_RADIUS_NEAR = 0.8
 const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-sprite'
 //
 // Horizontal branch platform.
@@ -657,6 +676,13 @@ const GLOW_HUD_L_FILL_PARTS = 2
 const GLOW_HUD_O_FILL_PARTS = 10
 const GLOW_HUD_W_FILL_PARTS = 3
 const GLOW_HUD_LABEL_FONT = CFG.visual.fonts.thinFull.replace(/'/g, '')
+//
+// Baked GLOW letters use the same canvas metrics as lesson-indicator's
+// bakeHudLetterCanvas (fontSize * 1.2 + pad * 2 tall).
+//
+const GLOW_HUD_LABEL_CANVAS_PAD = 4
+const GLOW_HUD_LABEL_BAKED_HALF_H =
+  (GLOW_HUD_LABEL_FONT_SIZE * 1.2 + GLOW_HUD_LABEL_CANVAS_PAD * 2) / 2
 const GLOW_HUD_INK_ALPHA_MIN = 20
 const GLOW_HUD_FILL_CLIP_PAD = 4
 const hudLetterInkBoxCache = {}
@@ -667,7 +693,7 @@ const hudLetterInkBoxCache = {}
 // stay inside the (possibly pushed-down) top void strip on a tall window.
 //
 let GLOW_HUD_FPS_TOP_Y = 55
-let GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
+let GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
 const GLOW_HUD_FPS_SLOT_GAP = 24
 const GLOW_HUD_SMALL_HERO_HALF_W = 42
 //
@@ -1229,6 +1255,12 @@ const LAKE_WAVE_SECOND_AMP = 1.2
 const LAKE_WAVE_SECOND_FREQ = 1.6
 const LAKE_Z = 12
 //
+// Baked lake surface frames (white mask + grain) — tinted at draw time.
+//
+const LAKE_BAKE_SPRITE_PREFIX = 'glow0-lake-bake-'
+const LAKE_BAKE_FRAME_COUNT = 24
+const LAKE_BAKE_CYCLE = (Math.PI * 2) / LAKE_WAVE_FREQ
+//
 // Drowning draw order (back → front): hero, below-surface cover, lake fill.
 //
 const DROWN_HERO_DRAW_Z = LAKE_Z - 2
@@ -1372,7 +1404,8 @@ export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
     type: Hero.HEROES.HERO,
     bodyColor: GLOW_GOLD_HEX,
     outlineColor: HERO_OUTLINE_COLOR,
-    eyeWhiteColor: HERO_EYE_WHITE
+    eyeWhiteColor: HERO_EYE_WHITE,
+    postBakeCanvas: applyGlowFilmGrainToCanvas
   })
   onProgress?.(100)
 }
@@ -1595,10 +1628,12 @@ function initGlowLevel0Scene(k) {
       eyeWhiteColor: HERO_EYE_WHITE,
       currentLevel: 'lesson-glow.0',
       suppressDust: true,
+      postBakeCanvas: applyGlowFilmGrainToCanvas,
       //
       // The hero's quiet humming is available from the start of Glow.
       //
-      idleVocalization: 'humming'
+      idleVocalization: 'humming',
+      idleNotePostBake: applyGlowFilmGrainToCanvas
     })
     //
     // No footprint trail in the glow level — the ground stays clean.
@@ -2747,6 +2782,8 @@ function createGlowLevelIndicator(k, goldRgb, completedLetters, colorWorld = fal
     heroBodyColor: colorWorld ? GLOW_GOLD_HEX : HERO_BODY_COLOR,
     heroOutlineColor: HERO_OUTLINE_COLOR,
     heroEyeWhiteColor: HERO_EYE_WHITE,
+    heroPostBakeCanvas: applyGlowFilmGrainToCanvas,
+    hudPostBakeCanvas: applyGlowFilmGrainToCanvas,
     topPlatformHeight: TOP_MARGIN,
     sideWallWidth: LEFT_MARGIN,
     sectionLabelY: GLOW_HUD_LABEL_TOP_Y,
@@ -2913,33 +2950,23 @@ function drawHudLetterGoldFill(k, letter, ch, n, parts) {
   })
 }
 //
-// Full loader: paint the live HUD glyph gold so every ink pixel fills.
-// Partial loader: keep it gray — the gold bands are the clipped overlay.
+// Rebakes every GLOW HUD glyph — collected letters gold, the rest gray.
 //
-function tintHudLetterByFill(k, letter, n, parts) {
-  if (!letter?.exists?.()) return
-  const fill = n >= parts ? glowRgb('gold') : glowRgb('decorGray')
-  letter.color = k.rgb(fill.r, fill.g, fill.b)
+function syncGlowHudLetterColors(inst) {
+  const letters = inst.levelIndicator?.letterObjects
+  if (!letters?.length) return
+  const z = inst.zones
+  const collected = [z.gCollected, z.lCollected, z.oCollected, z.wCollected]
+  letters.forEach((letter, i) => {
+    const colorHex = collected[i] ? GLOW_GOLD_HEX : GLOW_PAL.decorGray
+    LevelIndicator.setHudLetterColor(letter, colorHex)
+  })
 }
 //
 // Applies G/L/O/W loader tints during update, before the HUD letters draw.
 //
 function tintGlowHudLoaderLetters(inst) {
-  const letters = inst.levelIndicator?.letterObjects
-  const k = inst.k
-  if (!letters || !k) return
-  !inst.zones.gCollected && tintHudLetterByFill(
-    k, letters[0], inst._hudGFillParts || 0, GLOW_HUD_G_FILL_PARTS
-  )
-  !inst.zones.lCollected && tintHudLetterByFill(
-    k, letters[1], inst._hudLFillParts || 0, GLOW_HUD_L_FILL_PARTS
-  )
-  !inst.zones.oCollected && tintHudLetterByFill(
-    k, letters[2], inst._hudOFillParts || 0, GLOW_HUD_O_FILL_PARTS
-  )
-  !inst.zones.wCollected && tintHudLetterByFill(
-    k, letters[3], inst._hudWFillParts || 0, GLOW_HUD_W_FILL_PARTS
-  )
+  syncGlowHudLetterColors(inst)
 }
 //
 // Paints partial G, L, O and W gold bands over the gray HUD letters.
@@ -3195,6 +3222,43 @@ function meditationCountdownFade(inst) {
   return smoothstep01(meditationCountdownLinear(inst))
 }
 //
+// 0→1 while the post-L stillness countdown runs; 0 before it starts so the
+// shaded decor / colour preview eases in with the timer instead of popping.
+//
+function glowPostLRevealFade(inst) {
+  const z = inst?.zones
+  if (!z?.lCollected || z.oZone || z.oCollected) return 1
+  return inst.meditation?.countdown != null ? meditationCountdownFade(inst) : 0
+}
+//
+// Colour preview only advances while the post-L countdown runs.
+//
+function glowGrassColorFade(sc, zones) {
+  if (!sc) return 0
+  const fade = sc.colorFade ?? 0
+  if (!zones.lCollected || zones.oZone || zones.oCollected) return fade
+  if (sc.meditation?.countdown == null) return 0
+  return fade * glowPostLRevealFade(sc)
+}
+//
+// Crossfades flat pre-L decor sprites into their shaded post-L variants.
+//
+function drawPostLGrayDecorBaked(k, sc, flatBaked, shadedBaked, pos, anchor, angle, opacity, color) {
+  const reveal = glowPostLRevealFade(sc)
+  const z = sc?.zones
+  if (!z?.lCollected || reveal >= 1) {
+    const baked = z?.lCollected ? shadedBaked : flatBaked
+    drawDecorAtlasSprite(k, baked, pos, anchor, angle, opacity, color)
+    return
+  }
+  if (reveal <= 0) {
+    drawDecorAtlasSprite(k, flatBaked, pos, anchor, angle, opacity, color)
+    return
+  }
+  drawDecorAtlasSprite(k, flatBaked, pos, anchor, angle, opacity * (1 - reveal), color)
+  drawDecorAtlasSprite(k, shadedBaked, pos, anchor, angle, opacity * reveal, color)
+}
+//
 // Clamped colour-fade value shared by every gray↔colour crossfade.
 //
 function glowDecorFade(inst) {
@@ -3226,7 +3290,7 @@ function syncMeditationColorFade(inst) {
   const z = inst.zones
   if (z.colorWorld || z.oCollected) return
   inst._meditationPreviewFadingOut = false
-  const fade = meditationCountdownLinear(inst)
+  const fade = meditationCountdownFade(inst)
   inst.colorFade = fade
   inst.parallaxFade = fade
   inst.colorFadeTarget = fade
@@ -3301,7 +3365,7 @@ function updateMeditationWorldLife(inst) {
   // the colour fade — no separate easing curve.
   //
   if (m?.countdown != null) {
-    inst.meditationWorldLife = meditationCountdownLinear(inst)
+    inst.meditationWorldLife = meditationCountdownFade(inst)
     return
   }
   //
@@ -3350,18 +3414,22 @@ function rebakeGlowRockSpritesShaded(inst) {
     const bake = obj._rockBake
     if (!bake) return
     const { cx, cy, radius, verts, widthScale, totalW, croppedH } = bake
-    const bakeShaded = () => toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
-      ctx.scale(widthScale, 1)
-      drawRockToCanvas(ctx, {
-        cx, cy, radius, verts, palette,
-        skipShadow: true, skipTexture: true,
-        outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
-        outlineWidth: ROCK_OUTLINE_WIDTH,
-        outlineAlpha: 1
+    const bakeShaded = (seedOffset) => {
+      const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
+        ctx.scale(widthScale, 1)
+        drawRockToCanvas(ctx, {
+          cx, cy, radius, verts, palette,
+          skipShadow: true, skipTexture: true,
+          outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
+          outlineWidth: ROCK_OUTLINE_WIDTH,
+          outlineAlpha: 1
+        })
       })
-    })
-    const bakedGray = rebakeAtlas.register(bakeShaded())
-    const bakedOutline = rebakeAtlas.register(bakeShaded())
+      applyGlowFilmGrainToCanvas(canvas, seedOffset)
+      return canvas
+    }
+    const bakedGray = rebakeAtlas.register(bakeShaded(obj._decorWorldX * 3 | 0))
+    const bakedOutline = rebakeAtlas.register(bakeShaded(obj._decorWorldX * 3 + 1 | 0))
     toSwap.push({ obj, bakedGray, bakedOutline })
   })
   rebakeAtlas.build(k)
@@ -3642,7 +3710,9 @@ function isIdentityWhite(c) {
 //
 function grayDecorDarken(sc) {
   if (!sc?.zones?.lCollected) return 0
-  return L_DECOR_DARKEN * (1 - (sc.colorFade ?? 0))
+  const reveal = glowPostLRevealFade(sc)
+  if (reveal <= 0) return 0
+  return L_DECOR_DARKEN * (1 - (sc.colorFade ?? 0)) * reveal
 }
 //
 // Multiply-tint that turns a sprite baked in DECOR_GRAY into the current
@@ -3698,7 +3768,7 @@ function buildParallaxSprites(k, undergroundSpec) {
       grayFlat: true,
       heightScale: BUSH_FARTHEST_HEIGHT_SCALE
     })
-  })
+  }, { blurRadius: PAR_BLUR_RADIUS_FAR })
   bakeParallaxLayerPair(k, BG_PAR_TREE2_GRAY, BG_PAR_TREE2_COLOR, PAR_TREE2_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxTrees(grayCtx, colorCtx, pad, {
       count: PAR_FAR_TREE_COUNT,
@@ -3721,7 +3791,7 @@ function buildParallaxSprites(k, undergroundSpec) {
       grayFlat: true,
       heightScale: BUSH_FAR_HEIGHT_SCALE
     })
-  })
+  }, { blurRadius: PAR_BLUR_RADIUS_MID })
   bakeParallaxLayerPair(k, BG_PAR_TREE1_GRAY, BG_PAR_TREE1_COLOR, PAR_TREE1_SPEED, maxScroll, PAR_TREE_HORIZ_BLEED, (grayCtx, colorCtx, pad) => {
     bakeParallaxTrees(grayCtx, colorCtx, pad, {
       count: PAR_BIG_TREE_COUNT,
@@ -3746,7 +3816,7 @@ function buildParallaxSprites(k, undergroundSpec) {
       grayFlat: false,
       heightScale: 1
     })
-  })
+  }, { blurRadius: PAR_BLUR_RADIUS_NEAR })
   const staticGray = document.createElement('canvas')
   staticGray.width = WORLD_W
   staticGray.height = WORLD_H
@@ -3806,9 +3876,10 @@ function bakeParallaxBushes(grayCtx, colorCtx, pad, stripCfg) {
 }
 //
 // Bakes one parallax depth layer with horizontal padding so it never gaps at
-// either scroll limit.
+// either scroll limit. Optional postFxCfg bakes depth blur and film grain into
+// both gray and colour canvases after trees and bushes are painted.
 //
-function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBleed, drawFn) {
+function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBleed, drawFn, postFxCfg = null) {
   const pad = Math.ceil(maxScroll * (1 - speed)) + horizBleed
   const canvasW = WORLD_W + pad * 2
   const grayCanvas = document.createElement('canvas')
@@ -3822,6 +3893,8 @@ function bakeParallaxLayerPair(k, grayName, colorName, speed, maxScroll, horizBl
   const colorCtx = colorCanvas.getContext('2d')
   colorCtx.translate(pad, 0)
   drawFn(grayCtx, colorCtx, pad)
+  postFxCfg && applyParallaxPostFxToContext(grayCtx, canvasW, WORLD_H, postFxCfg)
+  postFxCfg && applyParallaxPostFxToContext(colorCtx, canvasW, WORLD_H, postFxCfg)
   k.loadSprite(grayName, grayCanvas)
   k.loadSprite(colorName, colorCanvas)
   grayCanvas.width = 0
@@ -4083,6 +4156,7 @@ function drawBackgroundBirds(inst) {
   const fade = inst.colorFade
   if (fade <= 0.01) return
   const k = inst.k
+  bakeGlowBirdFlapSprites(k)
   if (!inst._birdDrawColor) {
     const c = lerpRgb(VOID, WARM_HAZE, BIRD_HAZE_BLEND)
     inst._birdDrawColor = k.rgb(c.r, c.g, c.b)
@@ -4092,24 +4166,18 @@ function drawBackgroundBirds(inst) {
   const camX = k.camPos().x
   const zoom = inst.camera?.zoom || 1
   const half = VIEW_W / (2 * zoom) + 80
-  const pts = inst._birdPts || (inst._birdPts = [k.vec2(0, 0), k.vec2(0, 0), k.vec2(0, 0)])
   inst.birds.forEach(bird => {
     if (bird.x < camX - half || bird.x > camX + half) return
     const y = bird.baseY + Math.sin(inst.birdTime * 0.7 + bird.bobPhase) * BIRD_BOB_AMP
-    const wingTipY = y + Math.sin(bird.flap) * bird.size * 0.7
-    pts[0].x = bird.x - bird.size
-    pts[0].y = wingTipY
-    pts[1].x = bird.x
-    pts[1].y = y
-    pts[2].x = bird.x + bird.size
-    pts[2].y = wingTipY
-    k.drawLines({
-      pts,
-      width: BIRD_LINE_WIDTH,
+    const frame = ((bird.flap / (Math.PI * 2)) * BIRD_FLAP_FRAME_COUNT) % BIRD_FLAP_FRAME_COUNT | 0
+    k.drawSprite({
+      sprite: GLOW_BIRD_SPRITE_PREFIX + frame,
+      pos: k.vec2(bird.x, y),
+      anchor: 'center',
+      width: bird.size * 2.8,
+      height: bird.size * 1.9,
       color,
-      opacity: birdOpacity,
-      join: 'round',
-      cap: 'round'
+      opacity: birdOpacity
     })
   })
 }
@@ -4248,6 +4316,7 @@ function loadUndergroundSprites(k) {
     canvas.height = WORLD_H
     const ctx = canvas.getContext('2d')
     renderUndergroundSpec(ctx, spec, entry)
+    applyGlowFilmGrainToCanvas(canvas, entry.name.length * 41)
     k.loadSprite(entry.name, canvas)
     canvas.width = 0
     canvas.height = 0
@@ -4904,7 +4973,11 @@ function createLogAtlasCollector() {
   }
   const build = (k) => {
     if (!requests.length) return
-    const baked = requests.map(r => bakeLogPlatformCanvas(k, r.w, r.h, r.detail, r.colors))
+    const baked = requests.map((r, i) => {
+      const canvas = bakeLogPlatformCanvas(k, r.w, r.h, r.detail, r.colors)
+      applyGlowFilmGrainToCanvas(canvas, 8000 + i)
+      return canvas
+    })
     const { canvas, tiles } = packLogPlatformAtlas(baked)
     const atlasW = canvas.width
     const atlasH = canvas.height
@@ -5226,6 +5299,7 @@ function createGlowGrass(k, waterX1, waterX2, trampX, branchTrampX, zones) {
     tuftCount: GRASS_TUFT_COUNT,
     z: GRASS_Z,
     excluded,
+    postBakeCanvas: applyGlowFilmGrainToCanvas,
     getTint: (blade) => glowGrassTint(zones, blade),
     getSwayScale: () => glowGrassSwayScale(zones)
   })
@@ -5290,7 +5364,7 @@ function glowGrassTint(zones, blade) {
     const leftFade = sc?.leftDecorFade ?? 1
     if (leftFade < 0.04) return null
     if (sc && isGlowFlatSingleDecorColor(sc)) return leftFade >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: leftFade }
-    const fade = sc?.colorFade ?? 0
+    const fade = glowGrassColorFade(sc, zones)
     if (fade >= 1 && leftFade >= 1) {
       sc._grassColorSettled ??= lerpRgb(lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)), GRASS_GREEN, 1)
       return sc._grassColorSettled
@@ -5305,7 +5379,7 @@ function glowGrassTint(zones, blade) {
   const op = glowRightWorldOpacity(sc, blade.x, strip >= 3 ? 'small' : 'large')
   if (op < 0.04) return null
   if (sc && isGlowFlatSingleDecorColor(sc)) return op >= 1 ? DECOR_GRAY : { ...DECOR_GRAY, opacity: op }
-  const fade = sc?.colorFade ?? 0
+  const fade = glowGrassColorFade(sc, zones)
   if (fade >= 1) {
     sc._grassColorSettled ??= lerpRgb(
       lerpRgb(DECOR_GRAY, VOID, grayDecorDarken(sc)),
@@ -5422,25 +5496,30 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
     lightR: DECOR_GRAY.r, lightG: DECOR_GRAY.g, lightB: DECOR_GRAY.b,
     darkR: DECOR_GRAY.r, darkG: DECOR_GRAY.g, darkB: DECOR_GRAY.b
   }
-  const bakeRock = () => toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
-    ctx.scale(widthScale, 1)
-    drawRockToCanvas(ctx, {
-      cx, cy, radius, verts, palette: flatPalette,
-      flatFill: true,
-      skipShadow: true,
-      outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
-      outlineWidth: ROCK_OUTLINE_WIDTH,
-      outlineAlpha: 1
+  const bakeRock = (seedOffset) => {
+    const canvas = toCanvas({ width: totalW, height: croppedH, pixelRatio: 1 }, (ctx) => {
+      ctx.scale(widthScale, 1)
+      drawRockToCanvas(ctx, {
+        cx, cy, radius, verts, palette: flatPalette,
+        flatFill: true,
+        skipShadow: true,
+        outlineColor: `rgb(${ROCK_OUTLINE_RGB.r}, ${ROCK_OUTLINE_RGB.g}, ${ROCK_OUTLINE_RGB.b})`,
+        outlineWidth: ROCK_OUTLINE_WIDTH,
+        outlineAlpha: 1
+      })
     })
-  })
-  const bakedGray = decorAtlas.register(bakeRock())
-  const bakedOutline = decorAtlas.register(bakeRock())
+    applyGlowFilmGrainToCanvas(canvas, seedOffset)
+    return canvas
+  }
+  const bakedGray = decorAtlas.register(bakeRock(worldX * 3 | 0))
+  const bakedOutline = decorAtlas.register(bakeRock(worldX * 3 + 1 | 0))
   const obj = k.add([
     k.pos(worldX - totalW / 2, posY),
     k.z(z),
     {
       opacity: 1,
       color: k.rgb(255, 255, 255),
+      _bakedFlat: bakedGray,
       _bakedGray: bakedGray,
       _bakedOutline: bakedOutline,
       _outlined: false,
@@ -5448,13 +5527,16 @@ function placeRock(k, worldX, radius, side, waterCluster = false, z = 7, widthSc
         if (this.hidden) return
         const sc = zones._sceneRef
         const fade = glowDecorFade(sc)
-        const grayBaked = this._bakedGray
         const white = k.rgb(255, 255, 255)
         if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
-          drawDecorAtlasCrossfade(k, grayBaked, this._bakedOutline, k.vec2(0, 0), 'topleft', 0, fade, this.color, white)
+          drawDecorAtlasCrossfade(k, this._bakedGray, this._bakedOutline, k.vec2(0, 0), 'topleft', 0, fade, this.color, white)
           return
         }
-        drawDecorAtlasSprite(k, this._outlined ? this._bakedOutline : grayBaked, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
+        if (sc?.zones?.lCollected && this._bakedFlat) {
+          drawPostLGrayDecorBaked(k, sc, this._bakedFlat, this._bakedGray, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
+          return
+        }
+        drawDecorAtlasSprite(k, this._outlined ? this._bakedOutline : this._bakedGray, k.vec2(0, 0), 'topleft', 0, this.opacity, this.color)
       }
     }
   ])
@@ -5522,6 +5604,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
         withFace: false
       })
     })
+    applyGlowFilmGrainToCanvas(mushCanvas, posX * 2 | 0)
     const bakedGray = decorAtlas.register(mushCanvas)
     const flatMushColors = getCuteMushroomFlatDecorColors()
     const mushFlatCanvas = toCanvas({ width: totalW, height: totalH, pixelRatio: 1 }, (ctx) => {
@@ -5533,6 +5616,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
         withFace: false
       })
     })
+    applyGlowFilmGrainToCanvas(mushFlatCanvas, posX * 2 + 1 | 0)
     const bakedFlat = decorAtlas.register(mushFlatCanvas)
     //
     // Colour-world variant — cap tones from this mushroom's colour family,
@@ -5553,6 +5637,7 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
         withFace: false
       })
     })
+    applyGlowFilmGrainToCanvas(mushColorCanvas, posX * 2 + 2 | 0)
     const bakedOutline = decorAtlas.register(mushColorCanvas)
     //
     // Anchor at the base so whistle lean rotates around the ground, not the cap
@@ -5574,13 +5659,16 @@ function createGlowMushrooms(k, waterX1, waterX2, trampX, branchTrampX, zones, d
           if (this.hidden) return
           const sc = zones._sceneRef
           const fade = glowDecorFade(sc)
-          const grayBaked = zones.lCollected ? this._bakedGray : this._bakedFlat
           const white = k.rgb(255, 255, 255)
           if (sc && isGlowColorTransitionActive(sc) && this._bakedOutline) {
-            drawDecorAtlasCrossfade(k, grayBaked, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, fade, this.color, white)
+            drawDecorAtlasCrossfade(k, this._bakedGray, this._bakedOutline, k.vec2(0, 0), 'bot', this.angle, fade, this.color, white)
             return
           }
-          const baked = this._outlined ? this._bakedOutline : grayBaked
+          if (sc?.zones?.lCollected) {
+            drawPostLGrayDecorBaked(k, sc, this._bakedFlat, this._bakedGray, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
+            return
+          }
+          const baked = this._outlined ? this._bakedOutline : this._bakedFlat
           drawDecorAtlasSprite(k, baked, k.vec2(0, 0), 'bot', this.angle, this.opacity, this.color)
         }
       }
@@ -5742,6 +5830,7 @@ function bakeTrampolineVariant(k, name, colors, eyesOpen) {
       eyeScale: TRAMP_FACE_EYE_SCALE
     })
   })
+  applyGlowFilmGrainToCanvas(canvas, name.length * 13)
   k.loadSprite(name, canvas)
   canvas.width = 0
   canvas.height = 0
@@ -5768,9 +5857,53 @@ function onUpdateTrampolineBlink(k, state) {
 //
 // Water — value 5 fill bounded by wave polygon.
 //
+function bakeLakeWaterSprites(k, x1, x2) {
+  const span = x2 - x1
+  const canvasW = Math.ceil(span)
+  const topMargin = LAKE_WAVE_AMP + LAKE_WAVE_SECOND_AMP + 2
+  const maxDepth = WATER_DEPTH_LEFT + WATER_BED_CHAOS_AMP_A + WATER_BED_CHAOS_AMP_B + 2
+  const canvasH = Math.ceil(maxDepth + topMargin)
+  const originY = WATER_SURFACE_Y - topMargin
+  for (let f = 0; f < LAKE_BAKE_FRAME_COUNT; f++) {
+    const time = (f / LAKE_BAKE_FRAME_COUNT) * LAKE_BAKE_CYCLE
+    const canvas = document.createElement('canvas')
+    canvas.width = canvasW
+    canvas.height = canvasH
+    const ctx = canvas.getContext('2d')
+    const pts = []
+    for (let i = 0; i <= LAKE_SEGMENTS; i++) {
+      const t = i / LAKE_SEGMENTS
+      const x = t * span
+      const wavePrimary = Math.sin(time * LAKE_WAVE_FREQ + t * LAKE_WAVE_PHASE_SCALE) * LAKE_WAVE_AMP
+      const waveSecondary = Math.sin(time * LAKE_WAVE_SECOND_FREQ + t * LAKE_WAVE_PHASE_SCALE * 2.3) * LAKE_WAVE_SECOND_AMP
+      const wave = wavePrimary + waveSecondary
+      pts.push([x, topMargin + wave])
+    }
+    for (let i = LAKE_SEGMENTS; i >= 0; i--) {
+      const t = i / LAKE_SEGMENTS
+      const x = t * span
+      pts.push([x, topMargin + waterBedDepthAt(t)])
+    }
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.moveTo(pts[0][0], pts[0][1])
+    for (let p = 1; p < pts.length; p++) {
+      ctx.lineTo(pts[p][0], pts[p][1])
+    }
+    ctx.closePath()
+    ctx.fill()
+    applyGlowFilmGrainToCanvas(canvas, 5000 + f)
+    k.loadSprite(LAKE_BAKE_SPRITE_PREFIX + f, canvas)
+    canvas.width = 0
+    canvas.height = 0
+  }
+  return { x1, originY, canvasW, canvasH }
+}
+//
+// Water — value 5 fill bounded by wave polygon.
+//
 function createWater(k, x1, x2, zones) {
-  const waterY = WATER_SURFACE_Y
-  const ptsCache = Array.from({ length: (LAKE_SEGMENTS + 1) * 2 }, () => k.vec2(0, 0))
+  const lakeBake = bakeLakeWaterSprites(k, x1, x2)
   const layer = k.add([
     k.z(LAKE_Z),
     {
@@ -5795,12 +5928,18 @@ function createWater(k, x1, x2, zones) {
           c = twoTone ? DECOR_GRAY : lerpRgb(gray, tint, fade)
           fade >= 1 && sc && (sc._lakeColorSettled = c)
         }
-        fillLakeSurfaceAndBed(ptsCache, x1, x2, waterY, k.time())
         const rgb = sc?._lakeDrawRgb
         if (!rgb || rgb.r !== c.r || rgb.g !== c.g || rgb.b !== c.b) {
           sc && (sc._lakeDrawRgb = k.rgb(c.r, c.g, c.b))
         }
-        k.drawPolygon({ pts: ptsCache, color: (sc && sc._lakeDrawRgb) || k.rgb(c.r, c.g, c.b) })
+        const frame = Math.floor((k.time() % LAKE_BAKE_CYCLE) / LAKE_BAKE_CYCLE * LAKE_BAKE_FRAME_COUNT) % LAKE_BAKE_FRAME_COUNT
+        k.drawSprite({
+          sprite: LAKE_BAKE_SPRITE_PREFIX + frame,
+          pos: k.vec2(lakeBake.x1, lakeBake.originY),
+          width: lakeBake.canvasW,
+          height: lakeBake.canvasH,
+          color: (sc && sc._lakeDrawRgb) || k.rgb(c.r, c.g, c.b)
+        })
       }
     }
   ])
@@ -6796,51 +6935,38 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
     localX: firstRowCenterX,
     localY: rowStep
   })
-  const shadowObjs = []
-  const outlineObjs = []
-  const mainObjs = []
-  pieces.forEach(piece => {
+  const captionObjs = []
+  pieces.forEach((piece, pieceIdx) => {
     const localOffset = rotateGlowOffset(piece.localX, piece.localY, tiltDeg)
     const textRgb = piece.letterFill ? letterFillRgb : captionTextRgb
-    const shadowOffset = rotateGlowOffset(
-      piece.localX + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-      piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-      tiltDeg
-    )
-    withShadow && shadowObjs.push(k.add([
-      k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
-      k.pos(originX + shadowOffset.x, originY + shadowOffset.y),
-      k.anchor(piece.anchor),
-      k.rotate(tiltDeg),
-      k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
-      k.opacity(0),
-      k.z(GLOW_LETTER_CAPTION_Z)
-    ]))
-    withOutline && GLOW_LETTER_CAPTION_OUTLINE_OFFSETS.forEach(([odx, ody]) => {
-      const outlineOffset = rotateGlowOffset(
-        piece.localX + odx * GLOW_LETTER_CAPTION_OUTLINE_PAD,
-        piece.localY + ody * GLOW_LETTER_CAPTION_OUTLINE_PAD,
-        tiltDeg
-      )
-      outlineObjs.push(k.add([
-        k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
-        k.pos(originX + outlineOffset.x, originY + outlineOffset.y),
-        k.anchor(piece.anchor),
-        k.rotate(tiltDeg),
-        k.color(VOID.r, VOID.g, VOID.b),
-        k.opacity(0),
-        k.z(GLOW_LETTER_CAPTION_Z)
-      ]))
+    const fillStyle = `rgb(${textRgb.r},${textRgb.g},${textRgb.b})`
+    const canvas = bakeGlowCaptionPieceCanvas(piece.text, {
+      fontFamily: font,
+      fontSize,
+      fillStyle,
+      shadowStyle: withShadow ? `rgb(${GLOW_LETTER_SHADOW_R},${GLOW_LETTER_SHADOW_G},${GLOW_LETTER_SHADOW_B})` : null,
+      shadowOffsetX: GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      shadowOffsetY: GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      outlineStyle: withOutline ? `rgb(${VOID.r},${VOID.g},${VOID.b})` : null,
+      outlineOffsets: GLOW_LETTER_CAPTION_OUTLINE_OFFSETS,
+      outlinePad: GLOW_LETTER_CAPTION_OUTLINE_PAD,
+      align: piece.align || 'left',
+      lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING
     })
-    mainObjs.push(k.add([
-      k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
+    const spriteName = `glow-cap-${pieceIdx}-${glowUiHash(piece.text)}`
+    k.loadSprite(spriteName, canvas)
+    canvas.width = 0
+    canvas.height = 0
+    const obj = k.add([
+      k.sprite(spriteName),
       k.pos(originX + localOffset.x, originY + localOffset.y),
       k.anchor(piece.anchor),
       k.rotate(tiltDeg),
-      k.color(textRgb.r, textRgb.g, textRgb.b),
+      k.color(k.rgb(255, 255, 255)),
       k.opacity(0),
       k.z(GLOW_LETTER_CAPTION_Z + 1)
-    ]))
+    ])
+    captionObjs.push(obj)
   })
   const state = { timer: 0 }
   const fadeOutStart = GLOW_LETTER_CAPTION_FADE_IN + holdDuration
@@ -6853,14 +6979,10 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
     } else if (state.timer >= fadeOutStart) {
       opacity = Math.max(0, 1 - (state.timer - fadeOutStart) / GLOW_LETTER_CAPTION_FADE_OUT)
     }
-    shadowObjs.forEach(obj => { obj.opacity = opacity })
-    outlineObjs.forEach(obj => { obj.opacity = opacity })
-    mainObjs.forEach(obj => { obj.opacity = opacity })
+    captionObjs.forEach(obj => { obj.opacity = opacity })
     if (state.timer < total) return
     updateHandler.cancel()
-    shadowObjs.forEach(obj => obj.destroy())
-    outlineObjs.forEach(obj => obj.destroy())
-    mainObjs.forEach(obj => obj.destroy())
+    captionObjs.forEach(obj => obj.destroy())
     letterEntry?.allObjects?.forEach(obj => obj.destroy?.())
     stopGlowLetterDialogMusic(inst)
     unpinHeroAfterLetterDialog(inst)
@@ -7245,7 +7367,8 @@ function syncGlowFpsHudVisibility(inst) {
       k: inst.k,
       topY: GLOW_HUD_FPS_TOP_Y,
       textColor: inst.k.rgb(HUD_SCORE_COLOR_SETTLED.r, HUD_SCORE_COLOR_SETTLED.g, HUD_SCORE_COLOR_SETTLED.b),
-      outlineColor: inst.k.rgb(VOID.r, VOID.g, VOID.b)
+      outlineColor: inst.k.rgb(VOID.r, VOID.g, VOID.b),
+      postBakeCanvas: applyGlowFilmGrainToCanvas
     })
   }
   FpsCounter.setVisible(inst.fpsCounter, true)
@@ -7583,34 +7706,32 @@ function startGlowHedgehogDeathCountdown(inst) {
   const font = CFG.visual.fonts.regularFull.replace(/'/g, '')
   const cx = SCREEN_W / 2
   const promptY = HEDGEHOG_DEATH_PROMPT_Y
-  const textCfg = { size: HEDGEHOG_DEATH_PROMPT_FONT, font }
   const initText = HEDGEHOG_DEATH_PROMPT_BASE + HEDGEHOG_DEATH_COUNTDOWN_SECONDS
   const colorWorld = inst.zones.colorWorld
   const textRgb = colorWorld ? HEDGEHOG_DEATH_PROMPT_TEXT_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_TEXT_GRAY
   const shadowRgb = colorWorld ? HEDGEHOG_DEATH_PROMPT_SHADOW_COLOR_WORLD : HEDGEHOG_DEATH_PROMPT_SHADOW_GRAY
   const shadowOpacity = colorWorld ? 0.72 : 0.85
-  const shadow = k.add([
-    k.text(initText, textCfg),
-    k.pos(cx + 1.5, promptY + 1.5),
-    k.anchor('center'),
-    k.color(shadowRgb.r, shadowRgb.g, shadowRgb.b),
-    k.opacity(shadowOpacity),
-    k.fixed(),
-    k.z(CFG.visual.zIndex.ui + 60)
-  ])
-  const promptText = k.add([
-    k.text(initText, textCfg),
-    k.pos(cx, promptY),
-    k.anchor('center'),
-    k.color(textRgb.r, textRgb.g, textRgb.b),
-    k.opacity(1),
-    k.fixed(),
-    k.z(CFG.visual.zIndex.ui + 60.1)
-  ])
+  const fillHex = `rgb(${textRgb.r},${textRgb.g},${textRgb.b})`
+  const shadowHex = `rgb(${shadowRgb.r},${shadowRgb.g},${shadowRgb.b})`
+  const deathPromptHolder = createGlowBakedTextHolder(k, {
+    prefix: 'glow-death-prompt',
+    fontFamily: font,
+    fontSize: HEDGEHOG_DEATH_PROMPT_FONT,
+    fillStyle: fillHex,
+    shadowStyle: shadowHex,
+    shadowOffsetX: 1.5,
+    shadowOffsetY: 1.5,
+    align: 'center',
+    anchor: 'center',
+    z: CFG.visual.zIndex.ui + 60.1,
+    fixed: true,
+    seedBase: 7600
+  })
+  deathPromptHolder.shadowOpacity = shadowOpacity
+  syncGlowBakedTextHolder(deathPromptHolder, initText, cx, promptY, 1)
   let elapsed = 0
   const destroyAll = () => {
-    shadow.exists() && k.destroy(shadow)
-    promptText.exists() && k.destroy(promptText)
+    destroyGlowBakedTextHolder(deathPromptHolder)
   }
   const doRestart = () => {
     skipHandler.cancel()
@@ -7627,8 +7748,7 @@ function startGlowHedgehogDeathCountdown(inst) {
     elapsed += k.dt()
     const remaining = Math.max(0, HEDGEHOG_DEATH_COUNTDOWN_SECONDS - elapsed)
     const newText = HEDGEHOG_DEATH_PROMPT_BASE + Math.ceil(remaining)
-    shadow.exists() && (shadow.text = newText)
-    promptText.exists() && (promptText.text = newText)
+    syncGlowBakedTextHolder(deathPromptHolder, newText, cx, promptY, 1)
     elapsed >= HEDGEHOG_DEATH_COUNTDOWN_SECONDS && doRestart()
   })
 }
@@ -8866,14 +8986,17 @@ function glowParallaxSpritesPrewarmed(k) {
 //
 function bakeMonolithicGlowTreeSprites(k, treeData) {
   const flatCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteFlatDecor(), WORLD_W, WORLD_H)
+  applyGlowFilmGrainToCanvas(flatCanvas, 6000)
   k.loadSprite(TREE_FLAT_SPRITE_NAME, flatCanvas)
   flatCanvas.width = 0
   flatCanvas.height = 0
   const litCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteLit(), WORLD_W, WORLD_H)
+  applyGlowFilmGrainToCanvas(litCanvas, 6001)
   k.loadSprite(TREE_LIT_SPRITE_NAME, litCanvas)
   litCanvas.width = 0
   litCanvas.height = 0
   const colorCanvas = renderGlowTreeToCanvas(treeData, getTreePaletteColor(), WORLD_W, WORLD_H)
+  applyGlowFilmGrainToCanvas(colorCanvas, 6002)
   k.loadSprite(TREE_COLOR_SPRITE_NAME, colorCanvas)
   colorCanvas.width = 0
   colorCanvas.height = 0
@@ -10167,8 +10290,57 @@ function glowTooltipClampInset() {
 function createGlowTooltip(cfg) {
   return Tooltip.create({
     ...cfg,
-    clampInset: cfg.clampInset ?? glowTooltipClampInset()
+    clampInset: cfg.clampInset ?? glowTooltipClampInset(),
+    customDraw: drawGlowBakedTooltip
   })
+}
+//
+// Draws a tooltip from a grain-baked canvas sprite (re-bakes when layout changes).
+//
+function drawGlowBakedTooltip(inst, layout) {
+  const k = inst.k
+  const key = `${layout.labelText}|${layout.bubbleX}|${layout.bubbleY}|${layout.showBelow}`
+  if (inst._glowTipKey !== key) {
+    inst._glowTipKey = key
+    inst._glowTipSprite = `glow-tip-${glowUiHash(key)}`
+    const canvas = bakeGlowTooltipCanvas(layout, inst.font, 26, 6)
+    k.loadSprite(inst._glowTipSprite, canvas)
+    const bounds = glowTooltipBakeBounds(layout)
+    inst._glowTipDrawX = bounds.minX
+    inst._glowTipDrawY = bounds.minY
+    inst._glowTipDrawW = bounds.w
+    inst._glowTipDrawH = bounds.h
+    canvas.width = 0
+    canvas.height = 0
+  }
+  k.drawSprite({
+    sprite: inst._glowTipSprite,
+    pos: k.vec2(inst._glowTipDrawX, inst._glowTipDrawY),
+    width: inst._glowTipDrawW,
+    height: inst._glowTipDrawH,
+    opacity: inst.opacity,
+    fixed: true
+  })
+  return true
+}
+//
+// Tight bounds for a baked tooltip canvas (bubble + pointer).
+//
+function glowTooltipBakeBounds(layout) {
+  const BUBBLE_BORDER_WIDTH = 3
+  const POINTER_WIDTH = 12
+  const halfW = POINTER_WIDTH / 2
+  const bx = layout.bubbleX - BUBBLE_BORDER_WIDTH
+  const by = layout.bubbleY - BUBBLE_BORDER_WIDTH
+  const px = layout.clampedPointerX
+  const tipY = layout.pointerTipY
+  const baseY = layout.pointerBaseEdge
+  let minX = Math.min(bx, px - halfW - BUBBLE_BORDER_WIDTH)
+  let maxX = Math.max(bx + layout.totalW, px + halfW + BUBBLE_BORDER_WIDTH)
+  let minY = Math.min(by, tipY, baseY)
+  let maxY = Math.max(by + layout.totalH, tipY, baseY)
+  const pad = 4
+  return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 }
 }
 //
 // Land stops for the first two sings; the third walk docks in the lake.
@@ -10198,7 +10370,7 @@ function recomputeGlowScreenLayout(k) {
   PLAYFIELD_TOP_Y = VOID_PAD_Y
   PLAYFIELD_BOTTOM_Y = VOID_PAD_Y + DESIGN_SCREEN_H - BOTTOM_MARGIN
   GLOW_HUD_FPS_TOP_Y = 55 + VOID_PAD_Y
-  GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_FONT_SIZE / 2
+  GLOW_HUD_LABEL_TOP_Y = GLOW_HUD_FPS_TOP_Y - GLOW_HUD_LABEL_BAKED_HALF_H
   LETTER_OFFSCREEN_ARROW_Y = PLAYFIELD_TOP_Y + TOP_MARGIN + 120
   HEDGEHOG_DEATH_PROMPT_Y = PAR_LEAF_MAX_Y - HEDGEHOG_DEATH_PROMPT_LEAF_RISE + VOID_PAD_Y
   CAMERA_INTRO_ZOOM_START = VIEW_W / CAMERA_INTRO_HERO_WIDTH

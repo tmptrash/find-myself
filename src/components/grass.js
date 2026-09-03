@@ -48,11 +48,12 @@ let lastTintK = null
  *   darkening its colour
  * @param {Function} [cfg.getSwayScale] - () => 0..1 multiplier for blade
  *   sway; omit for full sway
+ * @param {Function} [cfg.postBakeCanvas] - (canvas, seedOffset) => void after each blade bake
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
-  const { k, floorY, left, right, tuftCount, z, excluded, density, getTint, getSwayScale } = cfg
-  loadBladeSprites(k)
+  const { k, floorY, left, right, tuftCount, z, excluded, density, getTint, getSwayScale, postBakeCanvas } = cfg
+  loadBladeSprites(k, postBakeCanvas)
   const blades = buildBlades(left, right, tuftCount, excluded, density)
   const inst = {
     k,
@@ -118,7 +119,7 @@ function buildBlades(left, right, tuftCount, excluded, density) {
 // Bakes the white grass-blade sprite variants (tapered curved silhouettes,
 // some with a shorter side leaf) used by the tuft renderer.
 //
-function loadBladeSprites(k) {
+function loadBladeSprites(k, postBakeCanvas) {
   for (let i = 0; i < BLADE_VARIANTS; i++) {
     const canvas = document.createElement('canvas')
     canvas.width = BLADE_W
@@ -129,6 +130,7 @@ function loadBladeSprites(k) {
     // Roughly half the variants carry a shorter side leaf for variety.
     //
     Math.random() < 0.5 && drawBladeShape(ctx, BLADE_W / 2 + (Math.random() < 0.5 ? -3 : 3), BLADE_H, BLADE_H * (0.45 + Math.random() * 0.2))
+    postBakeCanvas?.(canvas, 2000 + i)
     k.loadSprite(SPRITE_PREFIX + i, canvas)
     canvas.width = 0
     canvas.height = 0

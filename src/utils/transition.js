@@ -11,6 +11,7 @@ import * as CanvasBackdrop from './canvas-backdrop.js'
 import * as BootLoader from './boot-loader.js'
 import { prewarmGlowLevel0HeavyAssets } from '../sections/glow/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
+import { loadGlowTextSprite, glowUiHash } from '../sections/glow/utils/glow-ui-bake.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -628,18 +629,41 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           // Get color based on section (matches anti-hero hover color in menu)
           //
           const levelColorHex = getSectionSubtitleColor(nextLevel)
-          
+          const useGlowGrain = nextLevel === GLOW_PRELEVEL_SCENE
           const [r, g, b] = parseHex(levelColorHex)
           const textSize = k.height() * 0.04
           const textX = k.width() / 2
           const textY = k.height() / 2
+          const outlineOffsets = [
+            [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
+          ]
+          if (useGlowGrain) {
+            const mainName = `glow-trans-main-${glowUiHash(subtitle)}`
+            loadGlowTextSprite(k, mainName, subtitle, {
+              fontFamily: TRANSITION_FONT,
+              fontSize: textSize,
+              fillStyle: `rgb(${r},${g},${b})`,
+              shadowStyle: '#000000',
+              shadowOffsetX: TEXT_OUTLINE_OFFSET,
+              shadowOffsetY: TEXT_OUTLINE_OFFSET,
+              align: 'center',
+              lineSpacing: SUBTITLE_LINE_SPACING
+            }, 7700)
+            inst.textObj = k.add([
+              k.sprite(mainName),
+              k.pos(textX, textY),
+              k.anchor('center'),
+              k.color(k.rgb(255, 255, 255)),
+              k.opacity(0),
+              k.z(TRANSITION_SUBTITLE_Z + 1),
+              k.fixed()
+            ])
+            inst.outlineTexts = []
+          } else {
           //
           // Drop shadow (single black copy offset right+down) — the same
           // text shadow style the glow level uses.
           //
-          const outlineOffsets = [
-            [TEXT_OUTLINE_OFFSET, TEXT_OUTLINE_OFFSET]
-          ]
           const outlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
             k.text(subtitle, { size: textSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING, font: TRANSITION_FONT }),
             k.pos(textX + dx, textY + dy),
@@ -663,6 +687,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           ])
           inst.textObj = textObj
           inst.outlineTexts = outlineTexts
+          }
           //
           // Optional small hint text below the main subtitle
           //
@@ -671,6 +696,29 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             const hintYOffset = nextLevel === 'lesson-touch.0' ? textSize * 2.35 : textSize * 1.9
             const hintY = textY + hintYOffset
             const wrappedHint = wrapHintToSubtitleWidth(hintText, subtitle, hintSize, textSize)
+            if (useGlowGrain) {
+              const hintName = `glow-trans-hint-${glowUiHash(wrappedHint)}`
+              loadGlowTextSprite(k, hintName, wrappedHint, {
+                fontFamily: TRANSITION_FONT,
+                fontSize: hintSize,
+                fillStyle: 'rgb(140,140,140)',
+                shadowStyle: '#000000',
+                shadowOffsetX: TEXT_OUTLINE_OFFSET,
+                shadowOffsetY: TEXT_OUTLINE_OFFSET,
+                align: 'center',
+                lineSpacing: SUBTITLE_LINE_SPACING * 0.5
+              }, 7701)
+              inst.hintTextObj = k.add([
+                k.sprite(hintName),
+                k.pos(textX, hintY),
+                k.anchor('center'),
+                k.color(k.rgb(255, 255, 255)),
+                k.opacity(0),
+                k.z(TRANSITION_SUBTITLE_Z + 1),
+                k.fixed()
+              ])
+              inst.hintOutlineTexts = []
+            } else {
             const hintOutlineTexts = outlineOffsets.map(([dx, dy]) => k.add([
               k.text(wrappedHint, { size: hintSize, align: "center", lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
               k.pos(textX + dx, hintY + dy),
@@ -691,6 +739,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             ])
             inst.hintTextObj = hintTextObj
             inst.hintOutlineTexts = hintOutlineTexts
+            }
           }
           //
           // Optional gray pre-text shown BELOW the main subtitle.
@@ -699,6 +748,29 @@ export function createLevelTransition(k, currentLevel, onComplete) {
           if (preText) {
             const preTextSize = textSize * 0.62
             const preTextY = textY + textSize * preTextYMult
+            if (useGlowGrain) {
+              const preName = `glow-trans-pre-${glowUiHash(preText)}`
+              loadGlowTextSprite(k, preName, preText, {
+                fontFamily: TRANSITION_FONT,
+                fontSize: preTextSize,
+                fillStyle: 'rgb(140,140,140)',
+                shadowStyle: '#000000',
+                shadowOffsetX: TEXT_OUTLINE_OFFSET,
+                shadowOffsetY: TEXT_OUTLINE_OFFSET,
+                align: 'center',
+                lineSpacing: SUBTITLE_LINE_SPACING * 0.5
+              }, 7702)
+              inst.preTextObj = k.add([
+                k.sprite(preName),
+                k.pos(textX, preTextY),
+                k.anchor('center'),
+                k.color(k.rgb(255, 255, 255)),
+                k.opacity(0),
+                k.z(TRANSITION_SUBTITLE_Z + 1),
+                k.fixed()
+              ])
+              inst.preTextOutlines = []
+            } else {
             const preTextOutlines = outlineOffsets.map(([dx, dy]) => k.add([
               k.text(preText, { size: preTextSize, align: 'center', lineSpacing: SUBTITLE_LINE_SPACING * 0.5, font: TRANSITION_FONT }),
               k.pos(textX + dx, preTextY + dy),
@@ -719,6 +791,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             ])
             inst.preTextObj = preTextObj
             inst.preTextOutlines = preTextOutlines
+            }
           }
         } else {
           // No subtitle, go to next level immediately

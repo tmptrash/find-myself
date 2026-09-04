@@ -63,7 +63,12 @@ const LEAF_GROUND_SPIN_DECAY = 0.9
 //
 const leafPointsCache = new Map()
 const GLOW_LEAF_SPRITE_PREFIX = 'glow-leaf-'
-const glowLeafSpriteMeta = new Map()
+//
+// Baked leaf sprite metadata keyed by the live Kaplay instance — resolution
+// swaps tear the engine down and empty the sprite registry, so a plain Map
+// would hand stale names to a fresh k and drawSprite() would throw.
+//
+const glowLeafSpriteMetaByK = new WeakMap()
 //
 // Creates the foot-particle pool and a single draw pass for the level scene
 //
@@ -185,6 +190,7 @@ function pushLeafBurstParticle(inst, x, y, color, groundY) {
   const speed = BURST_SPEED_MIN + Math.random() * BURST_SPEED_RANGE
   const c = color || glowRgb('void')
   const size = LEAF_SIZE_MIN + Math.random() * LEAF_SIZE_RANGE
+  ensureGlowLeafSprite(inst.k, size, c.r, c.g, c.b)
   inst.particles.push({
     x: x + side * (2 + Math.random() * 10),
     y: y - 4 + Math.random() * 8,
@@ -315,7 +321,7 @@ function leafOpacity(p) {
 }
 function drawLeafParticle(k, p, opacity) {
   const baked = ensureGlowLeafSprite(k, p.size, p.r, p.g, p.b)
-  if (baked) {
+  if (baked && k.getSprite(baked.name)) {
     k.drawSprite({
       sprite: baked.name,
       pos: k.vec2(p.x, p.y),
@@ -338,11 +344,21 @@ function drawLeafParticle(k, p, opacity) {
 // Bakes a coloured leaf sprite with grain for one size + RGB key — same bake
 // pattern as other glow decor (colour on canvas, grain once, white-tint blit).
 //
+function glowLeafSpriteCache(k) {
+  let cache = glowLeafSpriteMetaByK.get(k)
+  if (!cache) {
+    cache = new Map()
+    glowLeafSpriteMetaByK.set(k, cache)
+  }
+  return cache
+}
 function ensureGlowLeafSprite(k, size, r, g, b) {
   const sizeKey = Math.round(size * 2) / 2
   const name = GLOW_LEAF_SPRITE_PREFIX +
     String(sizeKey).replace('.', '_') + '_' + r + '_' + g + '_' + b
-  if (glowLeafSpriteMeta.has(name)) return glowLeafSpriteMeta.get(name)
+  const cache = glowLeafSpriteCache(k)
+  const cached = cache.get(name)
+  if (cached && k.getSprite(name)) return cached
   const pts = buildLeafPoints(k, size)
   let minX = Infinity
   let minY = Infinity
@@ -375,6 +391,6 @@ function ensureGlowLeafSprite(k, size, r, g, b) {
   canvas.width = 0
   canvas.height = 0
   const meta = { name, w, h }
-  glowLeafSpriteMeta.set(name, meta)
+  cache.set(name, meta)
   return meta
 }

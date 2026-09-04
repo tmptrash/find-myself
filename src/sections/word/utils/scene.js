@@ -1,5 +1,5 @@
 import { CFG, getLevelColors } from '../cfg.js'
-import { getColor, getRGB, parseHex, toCanvas } from '../../../utils/helper.js'
+import { getColor, getRGB, parseHex, toCanvas, bindBackToMenuKeys } from '../../../utils/helper.js'
 import * as CanvasBackdrop from '../../../utils/canvas-backdrop.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
@@ -374,14 +374,13 @@ export function initScene(config) {
   //
   // Setup back to menu
   //
-  CFG.controls.backToMenu.forEach(key => {
-    k.onKeyPress(key, () => {
-      if (LevelHelp.isAnyPanelOpen()) return
-      Sound.stopBackgroundMusic(sound)
-      if (breathMusic && breathMusic.stop) breathMusic.stop()
-      goToMenuAfterAssets(k)
-    })
+  const backToMenuCancel = bindBackToMenuKeys(k, () => {
+    if (LevelHelp.isAnyPanelOpen()) return
+    Sound.stopBackgroundMusic(sound)
+    if (breathMusic && breathMusic.stop) breathMusic.stop()
+    goToMenuAfterAssets(k)
   })
+  k.onSceneLeave(() => backToMenuCancel.cancel())
   
   let hero = null
   let antiHero = null

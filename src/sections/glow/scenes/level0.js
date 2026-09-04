@@ -13,7 +13,7 @@ import * as LevelIndicator from '../../touch/components/lesson-indicator.js'
 import { buildRockVertices, drawRockToCanvas } from '../../../utils/draw-rock.js'
 import { drawCuteMushroomToCanvas, CUTE_MUSHROOM_ASPECT, TRAMP_FACE_EYE_SCALE } from '../utils/cute-mushroom.js'
 import * as Hedgehog from '../components/hedgehog.js'
-import { toCanvas, getRGB, createCanvasAtlasBuilder } from '../../../utils/helper.js'
+import { toCanvas, getRGB, createCanvasAtlasBuilder, bindBackToMenuKeys } from '../../../utils/helper.js'
 import {
   buildGlowTree,
   renderGlowTreeToCanvas,
@@ -2284,21 +2284,22 @@ function initGlowLevel0Scene(k) {
     createSmallHeroTooltip(inst)
     syncGlowHudLetterFills(inst, false)
     inst.letterAppearFxReady = true
-    k.onSceneLeave(() => {
-      persistGlowFragmentKeysOnLeave(inst)
-      stopGlowLetterDialogMusic(inst)
-      inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
-      inst._dialogAudioRestoreRaf && cancelAnimationFrame(inst._dialogAudioRestoreRaf)
-      inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
-    })
     registerGlowNativeTeardown(() => {
       persistGlowFragmentKeysOnLeave(inst)
       stopGlowLoopAudio()
     })
     fragmentsPersisted && restoreGlowFragmentHud(inst)
-    k.onKeyPress('escape', () => {
+    const backToMenuCancel = bindBackToMenuKeys(k, () => {
       if (inst.dialogOpen) return
       goToMenuAfterAssets(k)
+    })
+    k.onSceneLeave(() => {
+      backToMenuCancel.cancel()
+      persistGlowFragmentKeysOnLeave(inst)
+      stopGlowLetterDialogMusic(inst)
+      inst._dialogCaptionRaf && cancelAnimationFrame(inst._dialogCaptionRaf)
+      inst._dialogAudioRestoreRaf && cancelAnimationFrame(inst._dialogAudioRestoreRaf)
+      inst.trampShallowHint && Tooltip.destroy(inst.trampShallowHint)
     })
     k.onDraw(() => onDraw(inst))
     k.onUpdate(() => onUpdate(inst))

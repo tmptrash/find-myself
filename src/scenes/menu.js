@@ -1,6 +1,6 @@
 import * as Sound from "../utils/sound.js"
 import { CFG } from "../cfg.js"
-import { getRGB, parseHex } from "../utils/helper.js"
+import { getRGB, parseHex, bindBackToMenuKeys } from "../utils/helper.js"
 import * as Hero from "../components/hero.js"
 import { createLevelTransition, showTransitionToLevel } from "../utils/transition.js"
 import { normalizeSceneName } from "../utils/progress.js"
@@ -1278,7 +1278,7 @@ export function sceneMenu(k) {
     const SCENE_GUARD_DELAY = 0.2
     let sceneReady = false
     k.wait(SCENE_GUARD_DELAY, () => { sceneReady = true })
-    k.onKeyPress("escape", () => {
+    const backToMenuCancel = bindBackToMenuKeys(k, () => {
       if (!sceneReady) return
       //
       // If a level transition overlay is active (pre-level text), let the
@@ -1295,6 +1295,7 @@ export function sceneMenu(k) {
     // Cleanup when leaving scene
     //
     k.onSceneLeave(() => {
+      backToMenuCancel.cancel()
       inst.antiHeroClick?.cancel()
       CanvasBackdrop.clearCanvasBackdrop(k)
       //

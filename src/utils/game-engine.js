@@ -150,6 +150,22 @@ export async function bootEngine(resolutionMode) {
   TouchInput.initTouchInput(k)
   Fullscreen.createFullscreenButton(k)
   initBlurKeyReset()
+  //
+  // Focus the canvas on boot so Kaplay onKeyPress works without an extra click.
+  // Physical window listeners (bindBackToMenuKeys, etc.) still cover unfocused cases.
+  //
+  if (k.canvas) {
+    k.canvas.tabIndex = 0
+    requestAnimationFrame(() => {
+      try {
+        k.canvas.focus({ preventScroll: true })
+      } catch (_) {
+        //
+        // Some browsers reject focus on a hidden canvas during boot
+        //
+      }
+    })
+  }
   installLevelFadeIn(k)
   const setupTasks = buildSetupTasks(k)
   const soundTasks = buildSoundTasks(k)

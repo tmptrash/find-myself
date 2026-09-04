@@ -173,6 +173,30 @@ export function onPhysicalKeyPress(code, fn) {
     idx >= 0 && physicalKeyPressCallbacks.splice(idx, 1)
   }}
 }
+//
+// KeyboardEvent.code for each CFG.controls.backToMenu Kaplay key name.
+//
+const BACK_TO_MENU_PHYSICAL_CODE = {
+  escape: 'Escape'
+}
+//
+// Registers Esc/backToMenu on window (physical keydown) and on the live
+// Kaplay instance (backup when the canvas has focus). The window listener
+// keeps Esc working before the player clicks the canvas — Kaplay onKeyPress
+// alone only receives keys after the canvas is focused.
+//
+export function bindBackToMenuKeys(k, fn) {
+  const cancels = []
+  CFG.controls.backToMenu.forEach(key => {
+    const code = BACK_TO_MENU_PHYSICAL_CODE[key]
+    code && cancels.push(onPhysicalKeyPress(code, fn))
+    const kaplayCancel = k.onKeyPress(key, fn)
+    kaplayCancel && cancels.push(kaplayCancel)
+  })
+  return {
+    cancel: () => cancels.forEach(c => c.cancel?.())
+  }
+}
 
 /**
  * Render a procedural image into a canvas and return the canvas itself.

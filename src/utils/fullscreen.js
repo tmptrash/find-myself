@@ -161,14 +161,16 @@ function toggleFullscreen() {
 }
 
 //
-// Fires synthetic Escape key events on the Kaplay canvas so scene-level
-// onKeyPress('escape') handlers run as if the user pressed Esc on a keyboard.
+// Fires synthetic Escape on window so scene handlers registered via
+// onPhysicalKeyPress / bindBackToMenuKeys run without canvas focus.
 //
 function dispatchEscape(k) {
-  const canvas = k?.canvas
-  if (!canvas) return
   const down = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })
   const up = new KeyboardEvent('keyup', { key: 'Escape', code: 'Escape', bubbles: true })
+  window.dispatchEvent(down)
+  window.dispatchEvent(up)
+  const canvas = k?.canvas
+  if (!canvas) return
   canvas.dispatchEvent(down)
   canvas.dispatchEvent(up)
 }

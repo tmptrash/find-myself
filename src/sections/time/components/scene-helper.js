@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getColor } from '../../../utils/helper.js'
+import { getColor, bindBackToMenuKeys } from '../../../utils/helper.js'
 import * as Sound from '../../../utils/sound.js'
 import * as Hero from '../../../components/hero.js'
 import * as LevelIndicator from '../components/lesson-indicator.js'
@@ -292,25 +292,24 @@ export function initScene(config) {
   //
   // Setup back to menu
   //
-  CFG.controls.backToMenu.forEach(key => {
-    k.onKeyPress(key, () => {
-      //
-      // If a help panel is open, Esc closes only the panel (handled inside
-      // level-help.js). Do not also navigate to the menu.
-      //
-      if (LevelHelp.isAnyPanelOpen()) return
-      //
-      // Stop time section music when leaving section
-      //
-      stopTimeSectionMusic()
-      //
-      // Restore volume to 1 and unmute procedural sounds when going to menu
-      //
-      k.volume(1)
-      Sound.unmuteProceduralSounds()
-      goToMenuAfterAssets(k)
-    })
+  const backToMenuCancel = bindBackToMenuKeys(k, () => {
+    //
+    // If a help panel is open, Esc closes only the panel (handled inside
+    // level-help.js). Do not also navigate to the menu.
+    //
+    if (LevelHelp.isAnyPanelOpen()) return
+    //
+    // Stop time section music when leaving section
+    //
+    stopTimeSectionMusic()
+    //
+    // Restore volume to 1 and unmute procedural sounds when going to menu
+    //
+    k.volume(1)
+    Sound.unmuteProceduralSounds()
+    goToMenuAfterAssets(k)
   })
+  k.onSceneLeave(() => backToMenuCancel.cancel())
   
   let hero = null
   let antiHero = null

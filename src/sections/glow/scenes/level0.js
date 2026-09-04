@@ -69,8 +69,6 @@ import { applyParallaxPostFxToContext, applyGlowFilmGrainToCanvas } from '../uti
 import {
   bakeGlowBirdFlapSprites,
   bakeGlowTooltipCanvas,
-  bakeGlowCaptionPieceCanvas,
-  bakeGlowCaptionFirstRowCanvas,
   GLOW_BIRD_SPRITE_PREFIX,
   BIRD_FLAP_FRAME_COUNT,
   glowUiHash,
@@ -5208,21 +5206,6 @@ function glowCaptionTextRgb() {
   return LIGHT_GRAY
 }
 //
-// One caption style for both worlds: light gray glyphs lifted off the
-// backdrop by a single void drop shadow. A multi-direction outline made the
-// text bold and mushy at this font size, so it is deliberately not used here.
-//
-function glowCaptionBakeStyle() {
-  return {
-    outlineStyle: null,
-    outlineOffsets: [],
-    outlinePad: 0,
-    shadowStyle: `rgb(${VOID.r},${VOID.g},${VOID.b})`,
-    shadowOffsetX: GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-    shadowOffsetY: GLOW_LETTER_CAPTION_SHADOW_OFFSET
-  }
-}
-//
 // Gray-world void outline vs colour-world drop shadow — shared by world
 // letters (not baked pickup captions).
 //
@@ -6798,15 +6781,10 @@ function startColorWorldFade(inst) {
   inst.k.wait(GOLD_RECOLOR_DELAY, () => {
     applyColorWorldHero(inst)
     const hero = inst.heroInst
-    const char = hero?.character
-    if (char?.vel) {
-      char.vel.x = 0
-      char.vel.y = 0
-    }
     if (hero) {
       //
-      // O log: gold bake briefly ungrounds — keep idle + Space gate so the
-      // crouch→jump loop cannot restart on the wood after dialog.
+      // Gold bake briefly ungrounds on wood — keep idle + Space gate so the
+      // crouch→jump loop cannot restart after the sprite swap.
       //
       forceHeroIdleOnLog(inst)
       Hero.armJumpKeyReleaseGate(hero)
@@ -6815,14 +6793,6 @@ function startColorWorldFade(inst) {
       hero.wasJumping = false
       hero.jumpPhase = 'none'
       hero.jumpCeilingBonk = false
-    }
-    char?.pos && forceSettleHeroOnNearestLog(inst, char)
-    //
-    // Gold sprite/hitbox swap can nudge Y — refresh the post-dialog pin
-    //
-    if (inst.dialogInputGrace > 0 && char?.pos) {
-      inst.dialogPinY = char.pos.y
-      inst.dialogHeroPinned = true
     }
   })
 }
@@ -6970,9 +6940,6 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   const font = GLOW_LETTER_FONT
   const captionTextRgb = glowCaptionTextRgb()
   const goldCaptionRgb = glowRgb('gold')
-  const bakeStyle = glowCaptionBakeStyle()
-  const bodyFillStyle = `rgb(${captionTextRgb.r},${captionTextRgb.g},${captionTextRgb.b})`
-  const hlFillStyle = `rgb(${goldCaptionRgb.r},${goldCaptionRgb.g},${goldCaptionRgb.b})`
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
   const afterLines = after.split('\n')
@@ -6983,7 +6950,11 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   // so it reads as one continuous, uniformly sized piece of text.
   //
   const fontSize = GLOW_LETTER_SIZE
-  const hlChar = letterEntry?.char || ''
+  const letterMeasure = k.formatText({ text: letterEntry?.char || '', size: fontSize, font })
+  const letterHalfW = letterMeasure.width / 2
+  const beforeWidth = before ? k.formatText({ text: before, size: fontSize, font }).width : 0
+  const afterFirstWidth = afterFirst ? k.formatText({ text: afterFirst, size: fontSize, font }).width : 0
+  const firstRowCenterX = (afterFirstWidth - beforeWidth) / 2
   const originX = letterEntry?.x ?? 0
   const originY = letterEntry?.y ?? 0
   //
@@ -7002,72 +6973,52 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   //
   const oneLineHeight = k.formatText({ text: afterFirst || before || 'A', size: fontSize, font }).height
   const rowStep = oneLineHeight / 2 + GLOW_LETTER_CAPTION_LINE_SPACING
-  const captionObjs = []
-  let firstRowCenterX = 0
-  if (hlChar || before || afterFirst) {
-    const { canvas, hlAnchorX, hlAnchorY, rowCenterDx } = bakeGlowCaptionFirstRowCanvas({
-      before,
-      hlChar,
-      afterFirst,
-      fontFamily: font,
-      fontSize,
-      bodyFillStyle,
-      hlFillStyle,
-      hlApplyGrain: true,
-      seed: glowUiHash(text),
-      ...bakeStyle
-    })
-    const bakedW = canvas.width
-    const bakedH = canvas.height
-    firstRowCenterX = rowCenterDx
-    const spriteName = `glow-cap-row0-${glowUiHash(text)}`
-    k.loadSprite(spriteName, canvas)
-    canvas.width = 0
-    canvas.height = 0
-    const localOffset = rotateGlowOffset(0, 0, tiltDeg)
-    //
-    // Kaplay's vec2 anchor space runs -1..1 (top-left .. bottom-right), so the
-    // baked pixel coordinates of the highlighted letter have to be remapped
-    // into it — feeding raw 0..1 values pins the sprite by a point far right
-    // of the letter and drags the whole row leftwards.
-    //
-    const obj = k.add([
-      k.sprite(spriteName),
-      k.pos(Math.round(originX + localOffset.x), Math.round(originY + localOffset.y)),
-      k.anchor(k.vec2(hlAnchorX / bakedW * 2 - 1, hlAnchorY / bakedH * 2 - 1)),
+  const pieces = []
+  before && pieces.push({ text: before, anchor: 'right', localX: -letterHalfW, localY: 0 })
+  letterEntry && pieces.push({ text: letterEntry.char, anchor: 'center', localX: 0, localY: 0, letterFill: true })
+  afterFirst && pieces.push({ text: afterFirst, anchor: 'left', localX: letterHalfW, localY: 0 })
+  restText && pieces.push({
+    text: restText,
+    anchor: 'top',
+    align: 'center',
+    localX: firstRowCenterX,
+    localY: rowStep
+  })
+  const shadowObjs = []
+  const mainObjs = []
+  //
+  // Live k.text (not a rotated bitmap bake) keeps every glyph edge sharp at
+  // the caption's tilt angle — baking to a sprite and rotating it re-samples
+  // the pixels and leaves the stair-stepped, rubbed look on curves.
+  //
+  pieces.forEach(piece => {
+    const localOffset = rotateGlowOffset(piece.localX, piece.localY, tiltDeg)
+    const textRgb = piece.letterFill ? goldCaptionRgb : captionTextRgb
+    const shadowOffset = rotateGlowOffset(
+      piece.localX + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      piece.localY + GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+      tiltDeg
+    )
+    shadowObjs.push(k.add([
+      k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
+      k.pos(originX + shadowOffset.x, originY + shadowOffset.y),
+      k.anchor(piece.anchor),
       k.rotate(tiltDeg),
-      k.color(k.rgb(255, 255, 255)),
+      k.color(GLOW_LETTER_SHADOW_R, GLOW_LETTER_SHADOW_G, GLOW_LETTER_SHADOW_B),
+      k.opacity(0),
+      k.z(GLOW_LETTER_CAPTION_Z)
+    ]))
+    mainObjs.push(k.add([
+      k.text(piece.text, { size: fontSize, font, align: piece.align, lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING }),
+      k.pos(originX + localOffset.x, originY + localOffset.y),
+      k.anchor(piece.anchor),
+      k.rotate(tiltDeg),
+      k.color(textRgb.r, textRgb.g, textRgb.b),
       k.opacity(0),
       k.z(GLOW_LETTER_CAPTION_Z + 1)
-    ])
-    captionObjs.push(obj)
-  }
-  if (restText) {
-    const localOffset = rotateGlowOffset(firstRowCenterX, rowStep, tiltDeg)
-    const canvas = bakeGlowCaptionPieceCanvas(restText, {
-      fontFamily: font,
-      fontSize,
-      fillStyle: bodyFillStyle,
-      applyGrain: false,
-      align: 'center',
-      lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING,
-      ...bakeStyle
-    })
-    const spriteName = `glow-cap-rest-${glowUiHash(text)}`
-    k.loadSprite(spriteName, canvas)
-    canvas.width = 0
-    canvas.height = 0
-    const obj = k.add([
-      k.sprite(spriteName),
-      k.pos(Math.round(originX + localOffset.x), Math.round(originY + localOffset.y)),
-      k.anchor('top'),
-      k.rotate(tiltDeg),
-      k.color(k.rgb(255, 255, 255)),
-      k.opacity(0),
-      k.z(GLOW_LETTER_CAPTION_Z + 1)
-    ])
-    captionObjs.push(obj)
-  }
+    ]))
+  })
+  const captionObjs = [...shadowObjs, ...mainObjs]
   const state = { timer: 0 }
   const fadeOutStart = GLOW_LETTER_CAPTION_FADE_IN + holdDuration
   const total = fadeOutStart + GLOW_LETTER_CAPTION_FADE_OUT

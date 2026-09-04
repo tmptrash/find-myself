@@ -2437,8 +2437,8 @@ function drawIdleNotes(k, inst) {
         angle: note.angle,
         color: k.rgb(255, 255, 255),
         opacity,
-        width: IDLE_NOTE_FONT_SIZE * 1.4,
-        height: IDLE_NOTE_FONT_SIZE * 1.4
+        width: IDLE_NOTE_FONT_SIZE,
+        height: IDLE_NOTE_FONT_SIZE
       })
     } else {
       k.drawText({

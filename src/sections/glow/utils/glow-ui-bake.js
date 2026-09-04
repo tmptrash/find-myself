@@ -336,7 +336,8 @@ export function bakeGlowCaptionPieceCanvas(text, cfg) {
     outlinePad = 1,
     align = 'left',
     lineSpacing = 0,
-    pad = 6
+    pad = 6,
+    applyGrain = false
   } = cfg
   const lines = String(text).split('\n')
   const probe = document.createElement('canvas').getContext('2d')
@@ -352,28 +353,160 @@ export function bakeGlowCaptionPieceCanvas(text, cfg) {
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.ceil(maxW + pad * 2 + outlinePad * 4))
   canvas.height = Math.max(1, Math.ceil(totalH + pad * 2 + outlinePad * 4))
-  const ctx = canvas.getContext('2d')
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textBaseline = 'top'
-  const drawLines = (style, ox, oy) => {
-    ctx.fillStyle = style
+  const makeLayer = () => {
+    const layer = document.createElement('canvas')
+    layer.width = canvas.width
+    layer.height = canvas.height
+    return layer
+  }
+  const drawLinesOn = (layerCtx, style, ox, oy) => {
+    layerCtx.font = `${fontSize}px ${fontFamily}`
+    layerCtx.textBaseline = 'top'
+    layerCtx.fillStyle = style
     let y = pad + oy
     lines.forEach((line, i) => {
       let x = pad + ox
-      const lineW = ctx.measureText(line).width
+      const lineW = layerCtx.measureText(line).width
       align === 'center' && (x = (canvas.width - lineW) / 2 + ox)
       align === 'right' && (x = canvas.width - pad - lineW + ox)
-      ctx.fillText(line, x, y)
+      layerCtx.fillText(line, x, y)
       y += lineH + (i < lines.length - 1 ? lineSpacing : 0)
     })
   }
-  shadowStyle && drawLines(shadowStyle, shadowOffsetX, shadowOffsetY)
+  const shadowLayer = shadowStyle ? makeLayer() : null
+  const fillLayer = makeLayer()
+  const outlineLayer = outlineStyle ? makeLayer() : null
+  shadowStyle && drawLinesOn(shadowLayer.getContext('2d'), shadowStyle, shadowOffsetX, shadowOffsetY)
+  const fillCtx = fillLayer.getContext('2d')
+  fillCtx.imageSmoothingEnabled = false
+  drawLinesOn(fillCtx, fillStyle, 0, 0)
+  applyGrain && finishGlowCaptionCanvas(fillLayer, glowUiHash(text + fontSize))
   outlineStyle && outlineOffsets.forEach(([odx, ody]) => {
-    drawLines(outlineStyle, odx * outlinePad, ody * outlinePad)
+    const outlineCtx = outlineLayer.getContext('2d')
+    outlineCtx.imageSmoothingEnabled = false
+    drawLinesOn(outlineCtx, outlineStyle, odx * outlinePad, ody * outlinePad)
   })
-  drawLines(fillStyle, 0, 0)
-  finishGlowCaptionCanvas(canvas, glowUiHash(text + fontSize))
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = false
+  shadowLayer && ctx.drawImage(shadowLayer, 0, 0)
+  //
+  // Outline sits under the fill — its 8 offset copies overlap the glyph body,
+  // so drawing them on top would repaint most of the fill and turn the text
+  // into a thick, blurry blob.
+  //
+  outlineLayer && ctx.drawImage(outlineLayer, 0, 0)
+  ctx.drawImage(fillLayer, 0, 0)
   return canvas
+}
+
+/**
+ * Bakes the pickup caption first row (before + highlighted letter + after) on
+ * one canvas so every glyph shares the same baseline and the collected
+ * letter cannot drift or disappear between separate sprites.
+ * @param {Object} cfg
+ * @returns {{ canvas: HTMLCanvasElement, hlAnchorX: number, hlAnchorY: number, rowCenterDx: number }}
+ */
+export function bakeGlowCaptionFirstRowCanvas(cfg) {
+  const {
+    before = '',
+    hlChar = '',
+    afterFirst = '',
+    fontFamily,
+    fontSize,
+    bodyFillStyle,
+    hlFillStyle,
+    shadowStyle,
+    shadowOffsetX = 2,
+    shadowOffsetY = 2,
+    outlineStyle,
+    outlineOffsets = [],
+    outlinePad = 1,
+    hlApplyGrain = true,
+    pad = 6,
+    seed = 0
+  } = cfg
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${fontSize}px ${fontFamily}`
+  const beforeW = before ? probe.measureText(before).width : 0
+  const hlW = hlChar ? probe.measureText(hlChar).width : 0
+  const afterW = afterFirst ? probe.measureText(afterFirst).width : 0
+  const textW = beforeW + hlW + afterW
+  const lineH = Math.ceil(fontSize * 1.15)
+  const outlineExpand = outlineStyle ? Math.ceil(outlinePad * 2) : 0
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(textW + pad * 2 + outlineExpand * 2))
+  canvas.height = Math.max(1, Math.ceil(lineH + pad * 2 + outlineExpand * 2))
+  const textX0 = pad + outlineExpand
+  const textY = pad + outlineExpand
+  const segments = []
+  let x = textX0
+  before && segments.push({ text: before, x, grain: false, fillStyle: bodyFillStyle })
+  before && (x += beforeW)
+  hlChar && segments.push({ text: hlChar, x, grain: hlApplyGrain, fillStyle: hlFillStyle })
+  hlChar && (x += hlW)
+  afterFirst && segments.push({ text: afterFirst, x, grain: false, fillStyle: bodyFillStyle })
+  const hlAnchorX = textX0 + beforeW + hlW / 2
+  const hlAnchorY = textY + lineH / 2
+  //
+  // Horizontal distance from the highlighted letter (the row's anchor point)
+  // to the row's own visual centre. The caller places the following lines at
+  // this offset so every line shares one centre axis — measured here with the
+  // same canvas metrics that laid the row out, not re-measured by the caller.
+  //
+  const rowCenterDx = (afterW - beforeW) / 2
+  const makeLayer = () => {
+    const layer = document.createElement('canvas')
+    layer.width = canvas.width
+    layer.height = canvas.height
+    return layer
+  }
+  const drawSegmentsOn = (layerCtx, style, ox, oy, perSegmentFill = false) => {
+    layerCtx.font = `${fontSize}px ${fontFamily}`
+    layerCtx.textBaseline = 'top'
+    layerCtx.imageSmoothingEnabled = false
+    segments.forEach(seg => {
+      layerCtx.fillStyle = perSegmentFill ? seg.fillStyle : style
+      layerCtx.fillText(seg.text, seg.x + ox, textY + oy)
+    })
+  }
+  const shadowLayer = shadowStyle ? makeLayer() : null
+  const bodyFillLayer = makeLayer()
+  const hlFillLayer = hlChar ? makeLayer() : null
+  const outlineLayer = outlineStyle ? makeLayer() : null
+  shadowStyle && drawSegmentsOn(shadowLayer.getContext('2d'), shadowStyle, shadowOffsetX, shadowOffsetY)
+  const bodyCtx = bodyFillLayer.getContext('2d')
+  segments.forEach(seg => {
+    if (seg.grain) return
+    bodyCtx.font = `${fontSize}px ${fontFamily}`
+    bodyCtx.textBaseline = 'top'
+    bodyCtx.imageSmoothingEnabled = false
+    bodyCtx.fillStyle = seg.fillStyle
+    bodyCtx.fillText(seg.text, seg.x, textY)
+  })
+  if (hlFillLayer) {
+    const hlSeg = segments.find(seg => seg.grain)
+    const hlCtx = hlFillLayer.getContext('2d')
+    hlCtx.imageSmoothingEnabled = false
+    hlCtx.font = `${fontSize}px ${fontFamily}`
+    hlCtx.textBaseline = 'top'
+    hlCtx.fillStyle = hlSeg.fillStyle
+    hlCtx.fillText(hlSeg.text, hlSeg.x, textY)
+    hlApplyGrain && finishGlowCaptionCanvas(hlFillLayer, glowUiHash(hlChar + fontSize + seed))
+  }
+  outlineStyle && outlineOffsets.forEach(([odx, ody]) => {
+    drawSegmentsOn(outlineLayer.getContext('2d'), outlineStyle, odx * outlinePad, ody * outlinePad)
+  })
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = false
+  shadowLayer && ctx.drawImage(shadowLayer, 0, 0)
+  //
+  // Outline first, both fills on top — see bakeGlowCaptionPieceCanvas(): an
+  // outline painted last would swallow the highlighted letter's gold.
+  //
+  outlineLayer && ctx.drawImage(outlineLayer, 0, 0)
+  ctx.drawImage(bodyFillLayer, 0, 0)
+  hlFillLayer && ctx.drawImage(hlFillLayer, 0, 0)
+  return { canvas, hlAnchorX, hlAnchorY, rowCenterDx }
 }
 
 /**

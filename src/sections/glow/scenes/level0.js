@@ -70,6 +70,7 @@ import {
   bakeGlowBirdFlapSprites,
   bakeGlowTooltipCanvas,
   bakeGlowCaptionPieceCanvas,
+  bakeGlowCaptionFirstRowCanvas,
   GLOW_BIRD_SPRITE_PREFIX,
   BIRD_FLAP_FRAME_COUNT,
   glowUiHash,
@@ -346,9 +347,9 @@ const PAR_TREE_HORIZ_BLEED = 320
 // Depth blur baked into each parallax forest row at sprite creation time.
 // Film grain uses the shared GLOW_FILM_GRAIN preset on every row.
 //
-const PAR_BLUR_RADIUS_FAR = 2.5
-const PAR_BLUR_RADIUS_MID = 1.5
-const PAR_BLUR_RADIUS_NEAR = 0.8
+const PAR_BLUR_RADIUS_FAR = 3.5
+const PAR_BLUR_RADIUS_MID = 2.2
+const PAR_BLUR_RADIUS_NEAR = 1.2
 const TREE_COLOR_SPRITE_NAME = 'glow0-tree-color-sprite'
 //
 // Horizontal branch platform.
@@ -728,6 +729,8 @@ const GLOW_LETTER_PICKUP_RADIUS = 52
 const HERO_OUTLINE_COLOR = GLOW_PAL.heroOutline
 const HERO_BODY_COLOR = GLOW_PAL.heroBodyGray
 const HERO_EYE_WHITE = GLOW_PAL.heroBodyGray
+const GLOW_HERO_SCALE = 1.2
+const GLOW_HERO_OUTLINE_RIM = 2
 //
 // Zone persistence keys (glow.* prefix).
 //
@@ -849,6 +852,7 @@ const GLOW_LETTER_CAPTION_SHADOW_OFFSET = 2
 // flat/gray decor mode, so the caption reads as one consistent art style.
 //
 const GLOW_LETTER_CAPTION_OUTLINE_PAD = 1.6
+const GLOW_LETTER_CAPTION_OUTLINE_PAD_MONO = 2.4
 const GLOW_LETTER_CAPTION_OUTLINE_OFFSETS = [
   [-1, -1], [0, -1], [1, -1],
   [-1, 0], [1, 0],
@@ -1396,15 +1400,25 @@ export function prewarmGlowLevel0HeavyAssets(k, onProgress) {
   const undergroundSpec = loadUndergroundSprites(k)
   buildParallaxSprites(k, undergroundSpec)
   //
-  // Gold hero frames are baked here so collecting O does not hitch the
-  // main thread while the colour-world fade is already drawing extra layers.
+  // Gray and gold hero frames bake here so spawn / colour-world fade
+  // never hitch the main thread mid-gameplay.
   //
+  Hero.loadHeroSprites({
+    k,
+    type: Hero.HEROES.HERO,
+    bodyColor: HERO_BODY_COLOR,
+    outlineColor: HERO_OUTLINE_COLOR,
+    eyeWhiteColor: HERO_EYE_WHITE,
+    outlineRimPx: GLOW_HERO_OUTLINE_RIM,
+    postBakeCanvas: applyGlowFilmGrainToCanvas
+  })
   Hero.loadHeroSprites({
     k,
     type: Hero.HEROES.HERO,
     bodyColor: GLOW_GOLD_HEX,
     outlineColor: HERO_OUTLINE_COLOR,
     eyeWhiteColor: HERO_EYE_WHITE,
+    outlineRimPx: GLOW_HERO_OUTLINE_RIM,
     postBakeCanvas: applyGlowFilmGrainToCanvas
   })
   onProgress?.(100)
@@ -1623,9 +1637,11 @@ function initGlowLevel0Scene(k) {
       type: Hero.HEROES.HERO,
       controllable: true,
       sfx: sound,
+      scale: GLOW_HERO_SCALE,
       bodyColor: HERO_BODY_COLOR,
       outlineColor: HERO_OUTLINE_COLOR,
       eyeWhiteColor: HERO_EYE_WHITE,
+      outlineRimPx: GLOW_HERO_OUTLINE_RIM,
       currentLevel: 'lesson-glow.0',
       suppressDust: true,
       postBakeCanvas: applyGlowFilmGrainToCanvas,
@@ -2885,24 +2901,29 @@ function countGlowHudWFillParts(inst) {
 //
 function hudLetterInkBox(ch) {
   if (hudLetterInkBoxCache[ch]) return hudLetterInkBoxCache[ch]
-  const size = GLOW_HUD_LABEL_FONT_SIZE
-  const canvas = toCanvas({ width: size, height: size, pixelRatio: 1 }, (ctx) => {
-    ctx.font = `${size}px ${CFG.visual.fonts.thinFull}`
-    ctx.textBaseline = 'top'
-    ctx.textAlign = 'left'
+  const fontSize = GLOW_HUD_LABEL_FONT_SIZE
+  const pad = 4
+  const probe = document.createElement('canvas').getContext('2d')
+  probe.font = `${fontSize}px ${CFG.visual.fonts.thinFull}`
+  const bakedW = Math.ceil(probe.measureText(ch).width + pad * 2)
+  const bakedH = Math.ceil(fontSize * 1.2 + pad * 2)
+  const canvas = toCanvas({ width: bakedW, height: bakedH, pixelRatio: 1 }, (ctx) => {
+    ctx.font = `${fontSize}px ${CFG.visual.fonts.thinFull}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
     ctx.fillStyle = '#ffffff'
-    ctx.fillText(ch, 0, 0)
+    ctx.fillText(ch, bakedW / 2, bakedH / 2)
   })
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  const image = ctx.getImageData(0, 0, size, size)
+  const image = ctx.getImageData(0, 0, bakedW, bakedH)
   const px = image.data
-  let minX = size
-  let minY = size
+  let minX = bakedW
+  let minY = bakedH
   let maxX = 0
   let maxY = 0
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (px[(y * size + x) * 4 + 3] < GLOW_HUD_INK_ALPHA_MIN) continue
+  for (let y = 0; y < bakedH; y++) {
+    for (let x = 0; x < bakedW; x++) {
+      if (px[(y * bakedW + x) * 4 + 3] < GLOW_HUD_INK_ALPHA_MIN) continue
       x < minX && (minX = x)
       y < minY && (minY = y)
       x > maxX && (maxX = x)
@@ -2913,7 +2934,7 @@ function hudLetterInkBox(ch) {
   canvas.height = 0
   const box = maxX >= minX
     ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }
-    : { x: 0, y: 0, w: size * 0.55, h: size * 0.72 }
+    : { x: 0, y: 0, w: bakedW * 0.55, h: bakedH * 0.72 }
   hudLetterInkBoxCache[ch] = box
   return box
 }
@@ -2924,27 +2945,33 @@ function hudLetterInkBox(ch) {
 //
 function drawHudLetterGoldFill(k, letter, ch, n, parts) {
   if (!letter?.exists?.() || n <= 0) return
-  const gold = glowRgb('gold')
+  const bake = letter._hudLetterBake
+  if (!bake) return
   const ink = hudLetterInkBox(ch)
-  const letterH = letter.height || GLOW_HUD_LABEL_FONT_SIZE
-  const fillH = Math.max(1, Math.round(letterH * n / parts))
+  const fillH = Math.max(1, Math.round(ink.h * n / parts))
+  const clipX = bake.x + ink.x - GLOW_HUD_FILL_CLIP_PAD
+  const clipY = bake.y + ink.y + ink.h - fillH
+  const clipW = ink.w + GLOW_HUD_FILL_CLIP_PAD * 2
+  const goldSprite = LevelIndicator.ensureHudLetterGoldFillSprite(
+    k,
+    ch,
+    GLOW_HUD_LABEL_FONT_SIZE,
+    GLOW_HUD_LABEL_FONT,
+    GLOW_GOLD_HEX,
+    applyGlowFilmGrainToCanvas
+  )
   k.drawMasked(() => {
-    k.drawText({
-      text: ch,
-      pos: k.vec2(letter.pos.x, letter.pos.y),
-      size: GLOW_HUD_LABEL_FONT_SIZE,
-      font: GLOW_HUD_LABEL_FONT,
-      color: k.rgb(gold.r, gold.g, gold.b),
-      align: 'left',
-      anchor: 'topleft'
+    k.drawSprite({
+      sprite: goldSprite,
+      pos: letter.pos,
+      anchor: 'center',
+      width: bake.bakedW,
+      height: bake.bakedH
     })
   }, () => {
     k.drawRect({
-      pos: k.vec2(
-        letter.pos.x + ink.x - GLOW_HUD_FILL_CLIP_PAD,
-        letter.pos.y + letterH - fillH
-      ),
-      width: ink.w + GLOW_HUD_FILL_CLIP_PAD * 2,
+      pos: k.vec2(clipX, clipY),
+      width: clipW,
       height: fillH
     })
   })
@@ -5172,13 +5199,43 @@ function glowLetterLayerPos(x, y, dx, dy, tiltDeg) {
 // Gray-world void outline vs colour-world drop shadow — shared by world
 // letters and their pickup captions.
 //
-function glowLetterVisualStyle(inst) {
-  const worldFade = inst?.zones?._sceneRef?.colorFade ?? (inst?.zones?.colorWorld ? 1 : 0)
-  const withShadow = worldFade >= 0.5
+function glowCaptionTextRgb() {
+  //
+  // Same light gray the world letters and every dialog use, in both worlds:
+  // the darker tree-trunk gray sank into the monochrome backdrop and left the
+  // caption unreadable.
+  //
+  return LIGHT_GRAY
+}
+//
+// One caption style for both worlds: light gray glyphs lifted off the
+// backdrop by a single void drop shadow. A multi-direction outline made the
+// text bold and mushy at this font size, so it is deliberately not used here.
+//
+function glowCaptionBakeStyle() {
   return {
-    withShadow,
-    withOutline: !withShadow,
-    captionTextRgb: worldFade < 0.5 ? DECOR_GRAY : LIGHT_GRAY
+    outlineStyle: null,
+    outlineOffsets: [],
+    outlinePad: 0,
+    shadowStyle: `rgb(${VOID.r},${VOID.g},${VOID.b})`,
+    shadowOffsetX: GLOW_LETTER_CAPTION_SHADOW_OFFSET,
+    shadowOffsetY: GLOW_LETTER_CAPTION_SHADOW_OFFSET
+  }
+}
+//
+// Gray-world void outline vs colour-world drop shadow — shared by world
+// letters (not baked pickup captions).
+//
+function glowLetterVisualStyle(inst) {
+  const zones = inst?.zones
+  const sc = zones?._sceneRef
+  const colorWorld = Boolean(zones?.colorWorld)
+  const colorFade = sc?.colorFade ?? (colorWorld ? 1 : 0)
+  const useColorCaptionStyle = colorWorld && colorFade >= 0.85
+  return {
+    withShadow: useColorCaptionStyle,
+    withOutline: !useColorCaptionStyle,
+    outlinePad: useColorCaptionStyle ? GLOW_LETTER_CAPTION_OUTLINE_PAD : GLOW_LETTER_CAPTION_OUTLINE_PAD_MONO
   }
 }
 //
@@ -6157,12 +6214,13 @@ function drawWorldSpriteClipped(k, inst, sprite, opacity = 1) {
 //
 // Draws only the on-screen slice of one parallax layer sprite.
 //
-function drawParallaxSpriteClipped(k, inst, spriteName, speed, horizBleed, opacity = 1) {
+function drawParallaxSpriteClipped(k, inst, spriteName, speed, horizBleed, opacity = 1, visRange = null) {
   const camera = inst.camera
   const drawX = GlowCamera.getParallaxDrawX(camera, speed, horizBleed)
   const pad = GlowCamera.getParallaxLayerPad(camera, speed, horizBleed)
   const spriteW = WORLD_W + pad * 2
-  const { left: visLeft, right: visRight } = visibleWorldXRange(inst, horizBleed + PARALLAX_DRAW_CULL_PAD)
+  const range = visRange || visibleWorldXRange(inst, horizBleed + PARALLAX_DRAW_CULL_PAD)
+  const { left: visLeft, right: visRight } = range
   const clipLeft = Math.max(visLeft, drawX)
   const clipRight = Math.min(visRight, drawX + spriteW)
   if (clipRight <= clipLeft + 1) return
@@ -6179,12 +6237,25 @@ function drawParallaxSpriteClipped(k, inst, spriteName, speed, horizBleed, opaci
   k.drawSprite(opts)
 }
 //
+// True when the colour forest and parallax stack are fully opaque.
+//
+function isGlowFullParallaxStable(inst) {
+  const z = inst.zones
+  return Boolean(
+    z.colorWorld &&
+    z.lZoneParallax &&
+    (inst.colorFade ?? 0) >= 1 &&
+    (inst.parallaxFade ?? 0) >= 1
+  )
+}
+//
 // Main draw — void until G opens the outer frame; inner gray after L/O.
 //
 function onDraw(inst) {
   const k = inst.k
   const fade = inst.colorFade
   const zones = inst.zones
+  const parallaxStable = isGlowFullParallaxStable(inst)
   const outerFrame = isOuterFrameVisible(zones)
   const innerGray = isPlayfieldInnerGrayVisible(zones, fade)
   const flatExplore = isGlowFlatSingleDecorColor(inst)
@@ -6215,7 +6286,7 @@ function onDraw(inst) {
     // Crossfade flat rects out as parallaxFade rises so the preview never pops.
     //
     const parallaxMix = zones.lZoneParallax ? (inst.parallaxFade ?? 0) : 0
-    const fallbackOp = zones.lZoneParallax ? Math.max(0, 1 - parallaxMix) : 1
+    const fallbackOp = parallaxStable ? 0 : (zones.lZoneParallax ? Math.max(0, 1 - parallaxMix) : 1)
     fallbackOp > COLOR_CROSSFADE_EPS && k.drawRect({
       pos: k.vec2(LEFT_MARGIN, TOP_MARGIN),
       width: GAME_W,
@@ -6242,22 +6313,27 @@ function onDraw(inst) {
     // then static ground. Birds sit right after the opaque sky fill.
     //
     const pf = inst.parallaxFade
+    const parVisRange = visibleWorldXRange(inst, PAR_TREE_HORIZ_BLEED + PARALLAX_DRAW_CULL_PAD)
     const skyLayer = { gray: BG_PAR_SKY_GRAY, color: BG_PAR_SKY_COLOR, speed: PAR_SKY_SPEED, bleed: 0 }
     const parFar = { gray: BG_PAR_TREE3_GRAY, color: BG_PAR_TREE3_COLOR, speed: PAR_TREE3_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     const parMid = { gray: BG_PAR_TREE2_GRAY, color: BG_PAR_TREE2_COLOR, speed: PAR_TREE2_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     const parNear = { gray: BG_PAR_TREE1_GRAY, color: BG_PAR_TREE1_COLOR, speed: PAR_TREE1_SPEED, bleed: PAR_TREE_HORIZ_BLEED }
     const drawParLayer = layer => {
+      if (parallaxStable) {
+        drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, 1, parVisRange)
+        return
+      }
       const colorForest = zones.colorWorld || isGlowMeditationColorPreview(inst) || fade > COLOR_CROSSFADE_EPS
       //
       // Permanent colour world: opaque viewport slices only.
       //
       if (zones.colorWorld) {
         if (fade >= 1 && pf >= 1) {
-          drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed)
+          drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, 1, parVisRange)
           return
         }
         const op = fade * pf
-        op > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, op)
+        op > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, op, parVisRange)
         return
       }
       //
@@ -6266,22 +6342,22 @@ function onDraw(inst) {
       //
       if (colorForest) {
         const grayOp = (1 - fade) * pf
-        grayOp > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.gray, layer.speed, layer.bleed, grayOp)
-        fade > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, fade * pf)
+        grayOp > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.gray, layer.speed, layer.bleed, grayOp, parVisRange)
+        fade > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.color, layer.speed, layer.bleed, fade * pf, parVisRange)
         return
       }
-      pf > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.gray, layer.speed, layer.bleed, pf)
+      pf > COLOR_CROSSFADE_EPS && drawParallaxSpriteClipped(k, inst, layer.gray, layer.speed, layer.bleed, pf, parVisRange)
     }
     drawParLayer(skyLayer)
     const showBirds = fade > BIRD_VISIBLE_FADE_MIN &&
       (zones.colorWorld || zones.oZone || inst.meditation?.countdown != null)
     showBirds && drawBackgroundBirds(inst)
     drawParLayer(parFar)
-    fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
+    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_FAR_OPACITY * pf)
     drawParLayer(parMid)
-    fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
+    !parallaxStable && fade < 1 && drawAtmosphereHaze(inst, HAZE_MID_OPACITY * pf)
     drawParLayer(parNear)
-    fade < 1 && drawAtmosphereMotes(inst)
+    !parallaxStable && fade < 1 && drawAtmosphereMotes(inst)
   } else {
     drawBackgroundBirds(inst)
   }
@@ -6292,7 +6368,7 @@ function onDraw(inst) {
   //
   if (zones.lZoneParallax) {
     const pf = inst.parallaxFade ?? 0
-    const groundFallbackOp = Math.max(0, 1 - pf)
+    const groundFallbackOp = parallaxStable ? 0 : Math.max(0, 1 - pf)
     groundFallbackOp > COLOR_CROSSFADE_EPS && groundFillC && k.drawRect({
       pos: k.vec2(LEFT_MARGIN, FLOOR_Y),
       width: GAME_W,
@@ -6301,7 +6377,9 @@ function onDraw(inst) {
       opacity: groundFallbackOp
     })
     const preview = isGlowMeditationColorPreview(inst) || isGlowColorTransitionActive(inst)
-    if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
+    if (parallaxStable) {
+      drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, 1)
+    } else if (zones.colorWorld || preview || fade > COLOR_CROSSFADE_EPS) {
       const grayOp = (1 - fade) * pf
       grayOp > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_GRAY, grayOp)
       fade > COLOR_CROSSFADE_EPS && drawWorldSpriteClipped(k, inst, BG_STATIC_COLOR, fade * pf)
@@ -6810,9 +6888,10 @@ function buildHeroSpritePrefix(hero) {
   const body = String(hero.bodyColor || CFG.visual.colors.hero.body).replace('#', '')
   const outline = String(hero.outlineColor || CFG.visual.colors.outline).replace('#', '')
   const eyeWhite = hero.eyeWhiteColor ? String(hero.eyeWhiteColor).replace('#', '') : ''
+  const rimSuffix = (hero.outlineRimPx || 1) > 1 ? `_or${hero.outlineRimPx}` : ''
   return `${hero.type}_${body}_${outline}`
     + `${hero.addMouth ? '_mouth' : ''}${hero.addArms ? '_arms' : ''}${hero.addWatch ? '_watch' : ''}`
-    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}`
+    + `${hero.outlineOnly ? '_outline' : ''}${eyeWhite ? '_ew' + eyeWhite : ''}${rimSuffix}`
 }
 //
 // First L reveal step after the dialog closes: the ground darkens and the
@@ -6889,8 +6968,11 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   //
   letterEntry?.allObjects?.forEach(obj => { obj.hidden = true })
   const font = GLOW_LETTER_FONT
-  const letterFillRgb = letterEntry ? getRGB(k, letterEntry.colorHex || GLOW_GOLD_HEX) : null
-  const { withShadow, withOutline, captionTextRgb } = glowLetterVisualStyle(inst)
+  const captionTextRgb = glowCaptionTextRgb()
+  const goldCaptionRgb = glowRgb('gold')
+  const bakeStyle = glowCaptionBakeStyle()
+  const bodyFillStyle = `rgb(${captionTextRgb.r},${captionTextRgb.g},${captionTextRgb.b})`
+  const hlFillStyle = `rgb(${goldCaptionRgb.r},${goldCaptionRgb.g},${goldCaptionRgb.b})`
   const tiltDeg = letterEntry?.tiltDeg ?? 0
   const { before, after } = splitGlowCaptionText(text)
   const afterLines = after.split('\n')
@@ -6901,11 +6983,7 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   // so it reads as one continuous, uniformly sized piece of text.
   //
   const fontSize = GLOW_LETTER_SIZE
-  const letterMeasure = k.formatText({ text: letterEntry?.char || '', size: fontSize, font })
-  const letterHalfW = letterMeasure.width / 2
-  const beforeWidth = before ? k.formatText({ text: before, size: fontSize, font }).width : 0
-  const afterFirstWidth = afterFirst ? k.formatText({ text: afterFirst, size: fontSize, font }).width : 0
-  const firstRowCenterX = (afterFirstWidth - beforeWidth) / 2
+  const hlChar = letterEntry?.char || ''
   const originX = letterEntry?.x ?? 0
   const originY = letterEntry?.y ?? 0
   //
@@ -6924,50 +7002,72 @@ function openGlowLetterCaption(inst, letterEntry, text, holdDuration, onCloseExt
   //
   const oneLineHeight = k.formatText({ text: afterFirst || before || 'A', size: fontSize, font }).height
   const rowStep = oneLineHeight / 2 + GLOW_LETTER_CAPTION_LINE_SPACING
-  const pieces = []
-  before && pieces.push({ text: before, anchor: 'right', localX: -letterHalfW, localY: 0 })
-  letterEntry && pieces.push({ text: letterEntry.char, anchor: 'center', localX: 0, localY: 0, letterFill: true })
-  afterFirst && pieces.push({ text: afterFirst, anchor: 'left', localX: letterHalfW, localY: 0 })
-  restText && pieces.push({
-    text: restText,
-    anchor: 'top',
-    align: 'center',
-    localX: firstRowCenterX,
-    localY: rowStep
-  })
   const captionObjs = []
-  pieces.forEach((piece, pieceIdx) => {
-    const localOffset = rotateGlowOffset(piece.localX, piece.localY, tiltDeg)
-    const textRgb = piece.letterFill ? letterFillRgb : captionTextRgb
-    const fillStyle = `rgb(${textRgb.r},${textRgb.g},${textRgb.b})`
-    const canvas = bakeGlowCaptionPieceCanvas(piece.text, {
+  let firstRowCenterX = 0
+  if (hlChar || before || afterFirst) {
+    const { canvas, hlAnchorX, hlAnchorY, rowCenterDx } = bakeGlowCaptionFirstRowCanvas({
+      before,
+      hlChar,
+      afterFirst,
       fontFamily: font,
       fontSize,
-      fillStyle,
-      shadowStyle: withShadow ? `rgb(${GLOW_LETTER_SHADOW_R},${GLOW_LETTER_SHADOW_G},${GLOW_LETTER_SHADOW_B})` : null,
-      shadowOffsetX: GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-      shadowOffsetY: GLOW_LETTER_CAPTION_SHADOW_OFFSET,
-      outlineStyle: withOutline ? `rgb(${VOID.r},${VOID.g},${VOID.b})` : null,
-      outlineOffsets: GLOW_LETTER_CAPTION_OUTLINE_OFFSETS,
-      outlinePad: GLOW_LETTER_CAPTION_OUTLINE_PAD,
-      align: piece.align || 'left',
-      lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING
+      bodyFillStyle,
+      hlFillStyle,
+      hlApplyGrain: true,
+      seed: glowUiHash(text),
+      ...bakeStyle
     })
-    const spriteName = `glow-cap-${pieceIdx}-${glowUiHash(piece.text)}`
+    const bakedW = canvas.width
+    const bakedH = canvas.height
+    firstRowCenterX = rowCenterDx
+    const spriteName = `glow-cap-row0-${glowUiHash(text)}`
     k.loadSprite(spriteName, canvas)
     canvas.width = 0
     canvas.height = 0
+    const localOffset = rotateGlowOffset(0, 0, tiltDeg)
+    //
+    // Kaplay's vec2 anchor space runs -1..1 (top-left .. bottom-right), so the
+    // baked pixel coordinates of the highlighted letter have to be remapped
+    // into it — feeding raw 0..1 values pins the sprite by a point far right
+    // of the letter and drags the whole row leftwards.
+    //
     const obj = k.add([
       k.sprite(spriteName),
-      k.pos(originX + localOffset.x, originY + localOffset.y),
-      k.anchor(piece.anchor),
+      k.pos(Math.round(originX + localOffset.x), Math.round(originY + localOffset.y)),
+      k.anchor(k.vec2(hlAnchorX / bakedW * 2 - 1, hlAnchorY / bakedH * 2 - 1)),
       k.rotate(tiltDeg),
       k.color(k.rgb(255, 255, 255)),
       k.opacity(0),
       k.z(GLOW_LETTER_CAPTION_Z + 1)
     ])
     captionObjs.push(obj)
-  })
+  }
+  if (restText) {
+    const localOffset = rotateGlowOffset(firstRowCenterX, rowStep, tiltDeg)
+    const canvas = bakeGlowCaptionPieceCanvas(restText, {
+      fontFamily: font,
+      fontSize,
+      fillStyle: bodyFillStyle,
+      applyGrain: false,
+      align: 'center',
+      lineSpacing: GLOW_LETTER_CAPTION_LINE_SPACING,
+      ...bakeStyle
+    })
+    const spriteName = `glow-cap-rest-${glowUiHash(text)}`
+    k.loadSprite(spriteName, canvas)
+    canvas.width = 0
+    canvas.height = 0
+    const obj = k.add([
+      k.sprite(spriteName),
+      k.pos(Math.round(originX + localOffset.x), Math.round(originY + localOffset.y)),
+      k.anchor('top'),
+      k.rotate(tiltDeg),
+      k.color(k.rgb(255, 255, 255)),
+      k.opacity(0),
+      k.z(GLOW_LETTER_CAPTION_Z + 1)
+    ])
+    captionObjs.push(obj)
+  }
   const state = { timer: 0 }
   const fadeOutStart = GLOW_LETTER_CAPTION_FADE_IN + holdDuration
   const total = fadeOutStart + GLOW_LETTER_CAPTION_FADE_OUT
@@ -8029,12 +8129,13 @@ function onUpdate(inst) {
   const fadingWorldVisuals = inst.colorFade < inst.colorFadeTarget || inst.parallaxFade < 1
   const twoToneWorld = isGlowFlatSingleDecorColor(inst)
   const colorTransition = isGlowColorTransitionActive(inst)
-  if (fadingWorldVisuals || twoToneWorld || colorTransition) {
+  const parallaxStable = isGlowFullParallaxStable(inst)
+  if (!parallaxStable && (fadingWorldVisuals || twoToneWorld || colorTransition)) {
     updateMushroomTints(inst)
     updateDecorOutlines(inst)
     syncGlowMidgeDrawColor(inst)
   }
-  syncGlowPickupLetterVisuals(inst)
+  inst.glowLetters?.length && syncGlowPickupLetterVisuals(inst)
   const singing = (inst.heroInst?.idleStillTime ?? 0) >= GLOW_MUSHROOM_WHISTLE_IDLE
   const meditating = inst.meditation?.countdown != null
   if (singing || meditating || inst._mushroomLeanActive) {

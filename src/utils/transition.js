@@ -262,7 +262,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // screen instead of flashing the loader.
   //
   let nativePrelevelLoaderTimer = null
-  if (isNativePrelevel) {
+  if (isGlowPrelevel) {
+    BootLoader.showLoader()
+    BootLoader.setLoaderBarPct(0)
+  } else if (isNativePrelevel) {
     nativePrelevelLoaderTimer = setTimeout(() => {
       nativePrelevelLoaderTimer = null
       BootLoader.showLoader()
@@ -575,7 +578,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       }
     } else if (phase === 'black_pause') {
       // Pause with black screen before text appears
-      if (timer >= BLACK_PAUSE_DURATION) {
+      const pauseDur = nextLevel === GLOW_PRELEVEL_SCENE ? 0 : BLACK_PAUSE_DURATION
+      if (timer >= pauseDur) {
         phase = 'text_fade_in'
         timer = 0
         BootLoader.hideLoader()

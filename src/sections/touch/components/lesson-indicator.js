@@ -543,6 +543,20 @@ export function setHudLetterColor(letterObj, colorHex) {
   if (!letterObj?._hudLetterBake) return
   rebakeHudLetterSprite(letterObj, colorHex)
 }
+//
+// Bakes a gold HUD glyph used for the partial G/L/O/W fill overlay.
+//
+export function ensureHudLetterGoldFillSprite(k, ch, fontSize, font, goldHex, postBake) {
+  const spriteName = `glow-hud-gold-fill-${ch}-${fontSize}`
+  if (k.getSprite(spriteName)) return spriteName
+  const { r, g, b } = getRGB(k, goldHex)
+  const canvas = bakeHudLetterCanvas(ch, fontSize, font, `rgb(${r},${g},${b})`)
+  postBake?.(canvas, 3500 + ch.charCodeAt(0))
+  k.loadSprite(spriteName, canvas)
+  canvas.width = 0
+  canvas.height = 0
+  return spriteName
+}
 
 /**
  * Spawns burst particles radiating from the newly lit HUD letter at the given 1-based index.

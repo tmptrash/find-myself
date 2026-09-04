@@ -13,8 +13,9 @@ export const GLOW_FILM_GRAIN = {
   seed: 43011
 }
 //
-// Softer grain for letter-pickup caption phrases only.
+// Weaker film grain for large letter captions after pickup.
 //
+const CAPTION_GRAIN_INK_ALPHA_MIN = 200
 export const GLOW_CAPTION_FILM_GRAIN = {
   strength: 4,
   blockSize: 1,
@@ -40,7 +41,8 @@ export function applyGlowCaptionGrainToCanvas(canvas, seedOffset = 0) {
   applyFilmGrainToContext(ctx, canvas.width, canvas.height, {
     strength: GLOW_CAPTION_FILM_GRAIN.strength,
     blockSize: GLOW_CAPTION_FILM_GRAIN.blockSize,
-    seed: GLOW_CAPTION_FILM_GRAIN.seed + (seedOffset | 0)
+    seed: GLOW_CAPTION_FILM_GRAIN.seed + (seedOffset | 0),
+    inkAlphaMin: CAPTION_GRAIN_INK_ALPHA_MIN
   })
 }
 
@@ -83,7 +85,7 @@ function applyBlurToContext(ctx, width, height, radiusPx) {
 // Adds luminance film grain to every opaque pixel on a baked canvas.
 //
 function applyFilmGrainToContext(ctx, width, height, cfg) {
-  const { strength, blockSize, seed } = cfg
+  const { strength, blockSize, seed, inkAlphaMin = GRAIN_ALPHA_MIN } = cfg
   if (!strength || strength <= 0) return
   const block = Math.max(1, blockSize | 0)
   const imageData = ctx.getImageData(0, 0, width, height)
@@ -92,7 +94,7 @@ function applyFilmGrainToContext(ctx, width, height, cfg) {
     const by = (y / block) | 0
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4
-      if (px[i + 3] < GRAIN_ALPHA_MIN) continue
+      if (px[i + 3] < inkAlphaMin) continue
       const bx = (x / block) | 0
       const n = grainNoise(seed, bx, by) * strength
       px[i] = clamp255(px[i] + n)

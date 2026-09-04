@@ -26,6 +26,7 @@ const COLLISION_OFFSET_Y = 3
 // Hero parameters — scale 1 since sprites are already at display resolution
 //
 const HERO_SCALE = 1
+const DEFAULT_OUTLINE_RIM = 1
 const RUN_ANIM_SPEED = 0.03333
 const PARTICLE_SHAPES = ['square', 'rect_h', 'rect_v', 'small_square']
 //
@@ -80,7 +81,7 @@ const RUN_TRAILING_LEG_X_NUDGE = 1
 // Centered single-leg run frames (2 and 6): drop the vertical outline so it
 // does not climb into the leaned torso.
 //
-const RUN_CENTER_LEG_OUTLINE_INSET = 2
+const RUN_CENTER_LEG_OUTLINE_INSET = 1
 // Ignore airborne flicker shorter than this — prevents run↔squat loops when
 // the hitbox briefly loses contact with a platform mid-stride
 //
@@ -251,6 +252,11 @@ const HEAD_CORNER_RADIUS = 12
 const ARM_CORNER_RADIUS = 4
 const LEG_CORNER_RADIUS = 4
 //
+// Fillet that softens the 90 degree corner where the horizontal crotch seam
+// meets the vertical inner leg outlines.
+//
+const CROTCH_SEAM_FILLET_R = 3
+//
 // Airborne jump frames: knees tuck slightly forward while the feet stay
 // under the body (human jump tuck). Positive bend = knee forward in sprite
 // px; foot ends near the hip so heels read as pulled under the butt.
@@ -261,19 +267,18 @@ const JUMP_LEG_BEND = [0, 4, 6, 8, 6, 3, 0]
 //
 const JUMP_FRONT_LEG_BEND_RATIO = 0.7
 const LEG_FILL_WIDTH = 9
-const LEG_OUTLINE_WIDTH = 11
 //
 // How far bent jump legs start inside the torso so the round hip join is
 // fully covered by the body fill (no outline burr at the crotch).
 //
 const JUMP_LEG_HIP_OVERLAP = 10
 //
-// Jump crotch seam: air frames sit 1 px right and 2 px below the body
-// join, then trim 1 px from the left. Crouch frames (0 and 6) stay flush.
+// Bent leg curve shape: knee sits at 42% of the leg length and the foot keeps
+// 12% of the knee offset. Shared by the stroke and the hip shelf solver.
 //
-const JUMP_CROTCH_SEAM_DX = 1
-const JUMP_CROTCH_SEAM_DY = 2
-const JUMP_CROTCH_SEAM_LEFT_TRIM = 1
+const BENT_LEG_KNEE_T = 0.42
+const BENT_LEG_FOOT_T = 0.12
+const BENT_LEG_SOLVE_EPS = 1e-6
 //
 // Character width (head + body have same width, no shoulder bulge in new design)
 //
@@ -355,7 +360,8 @@ export function create(config) {
     ambientRunSpeed = null, // Seconds per run frame when ambientWalk is true
     eyeWhiteColor = null,  // Override eye fill color (null = use config default white)
     postBakeCanvas = null,  // Optional (canvas, seedOffset) => void after each baked frame
-    idleNotePostBake = null // Optional grain pass for baked mouth-note glyphs
+    idleNotePostBake = null, // Optional grain pass for baked mouth-note glyphs
+    outlineRimPx = DEFAULT_OUTLINE_RIM // Black rim width around baked silhouette (px)
   } = config
   //
   // Idle vocalization defaults: the hero whistles a soft tune ('humming'),
@@ -392,6 +398,7 @@ export function create(config) {
       outlineOnly,
       eyeWhiteColor,
       postBakeCanvas,
+      outlineRimPx,
       character: null  // Marker to indicate this is an inst-like object
     })
   } catch (error) {
@@ -401,7 +408,8 @@ export function create(config) {
   // Generate sprite prefix based on customization (colors already have # removed)
   //
   const effectiveEyeWhiteKey = eyeWhiteColor ? String(eyeWhiteColor).replace('#', '') : ''
-  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}`
+  const rimSuffix = heroSpriteRimSuffix(outlineRimPx)
+  const spritePrefix = `${type}_${effectiveBodyColor}_${effectiveOutlineColor}${addMouth ? '_mouth' : ''}${addArms ? '_arms' : ''}${addWatch ? '_watch' : ''}${outlineOnly ? '_outline' : ''}${effectiveEyeWhiteKey ? '_ew' + effectiveEyeWhiteKey : ''}${rimSuffix}`
   const spriteName = `${spritePrefix}_0_0`
 
   const collisionOffsetX = COLLISION_OFFSET_X - hitboxPadding
@@ -430,9 +438,10 @@ export function create(config) {
         addArms,
         addWatch,
         outlineOnly,
-        eyeWhiteColor,
-        postBakeCanvas
-      })
+      eyeWhiteColor,
+      postBakeCanvas,
+      outlineRimPx
+    })
       //
       // Try to use the sprite (it should be loaded now)
       //
@@ -505,6 +514,7 @@ export function create(config) {
     eyeWhiteColor,                        // Eye-white override persisted for runtime recolour
     postBakeCanvas,                       // Glow film grain on baked hero frames
     idleNotePostBake,                     // Glow film grain on baked mouth-note glyphs
+    outlineRimPx,                         // Baked silhouette rim width (px)
     spritePrefix,
     dustColor,
     suppressDust,
@@ -647,7 +657,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   // Determine if called with inst or individual parameters
   //
-  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, postBakeCanvas, bakeSeed
+  let k, heroType, color, outline, mouth, arms, watch, hollow, eyeWhite, postBakeCanvas, outlineRimPx, bakeSeed
 
   if (inst.k && inst.type !== undefined) {
     //
@@ -663,6 +673,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     hollow = inst.outlineOnly || false
     eyeWhite = inst.eyeWhiteColor || null
     postBakeCanvas = inst.postBakeCanvas || null
+    outlineRimPx = inst.outlineRimPx || DEFAULT_OUTLINE_RIM
   } else {
     //
     // Called with individual parameters (for preloading)
@@ -677,6 +688,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     hollow = false
     eyeWhite = null
     postBakeCanvas = null
+    outlineRimPx = DEFAULT_OUTLINE_RIM
   }
   bakeSeed = 0
   //
@@ -703,7 +715,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // Generate unique prefix for this sprite variant
   //
   const eyeWhiteKey = eyeWhite ? String(eyeWhite).replace('#', '') : ''
-  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}`
+  const prefix = `${heroType}_${bodyColorForPrefix}_${outlineColorForPrefix}${mouth ? '_mouth' : ''}${arms ? '_arms' : ''}${watch ? '_watch' : ''}${hollow ? '_outline' : ''}${eyeWhiteKey ? '_ew' + eyeWhiteKey : ''}${heroSpriteRimSuffix(outlineRimPx)}`
   //
   // Skip only when this exact k already finished baking the full bundle
   // (idle grid + closed frame + run/jump), not when a stale global name exists.
@@ -716,7 +728,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
     for (let y = -1; y <= 1; y++) {
       const spriteName = `${prefix}_${x}_${y}`
       try {
-        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
+        const spriteData = createFrame(heroType, 'idle', 0, x, y, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx)
         //
         // createFrame now returns an HTMLCanvasElement (was a data URL string).
         // Ensure we got a valid sprite source before passing to loadSprite.
@@ -734,7 +746,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   // when the hero is calm. Baked once as `${prefix}_closed`.
   //
   try {
-    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite)
+    const closedData = createFrame(heroType, 'idle', 0, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, true, eyeWhite, outlineRimPx)
     closedData && commitHeroBakedSprite(k, `${prefix}_closed`, closedData, postBakeCanvas, bakeSeed++)
   } catch (error) {
     //
@@ -746,7 +758,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < JUMP_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
+      const spriteData = createFrame(heroType, 'jump', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx)
       spriteData && commitHeroBakedSprite(k, `${prefix}-jump-${frame}`, spriteData, postBakeCanvas, bakeSeed++)
     } catch (error) {
       //
@@ -759,7 +771,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
   //
   for (let frame = 0; frame < RUN_FRAME_COUNT; frame++) {
     try {
-      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite)
+      const spriteData = createFrame(heroType, 'run', frame, 0, 0, effectiveBodyColor, effectiveOutlineColor, mouth, arms, hollow, watch, false, eyeWhite, outlineRimPx)
       spriteData && commitHeroBakedSprite(k, `${prefix}-run-${frame}`, spriteData, postBakeCanvas, bakeSeed++)
     } catch (error) {
       //
@@ -3360,7 +3372,7 @@ function startAnnihilationExplosion(inst, targetPos) {
  * @param {boolean} [addWatch=false] - Draw small watch on right wrist (requires addArms)
  * @returns {string} Base64 encoded sprite data
  */
-function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null) {
+function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffsetX = 0, eyeOffsetY = 0, customBodyColor = null, customOutlineColor = null, addMouth = false, addArms = false, outlineOnly = false, addWatch = false, eyesClosed = false, eyeWhiteColor = null, outlineRimPx = DEFAULT_OUTLINE_RIM) {
   //
   // Choose body color - custom or default
   //
@@ -3487,6 +3499,21 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
   leftLegHeight += LEG_INTO_BODY
   rightLegHeight += LEG_INTO_BODY
   //
+  // Bent air legs curve toward the facing direction, so both hips move back by
+  // that drift: without it the front leg outline bulges past the body side at
+  // the hip instead of flowing into it.
+  //
+  const airLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
+  if (airLegBend !== 0) {
+    const airBodyBottom = headY + headHeight + bodyHeight
+    const airHipTop = airBodyBottom - JUMP_LEG_HIP_OVERLAP
+    const airFrontH = Math.max(1, rightLegY + rightLegHeight - airHipTop)
+    const airStrokeW = LEG_FILL_WIDTH + outlineRimPx * 2
+    const airDrift = bentLegCenterXAtY(0, airHipTop, airFrontH, airLegBend * JUMP_FRONT_LEG_BEND_RATIO, airStrokeW, airBodyBottom)
+    leftLegX -= Math.round(airDrift)
+    rightLegX -= Math.round(airDrift)
+  }
+  //
   // Create sprite using toCanvas
   //
   try {
@@ -3494,6 +3521,8 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       ctx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
       const OL = getHex(outlineColor)
       const BL = getHex(bodyColor)
+      const rim = outlineRimPx
+      const legOlW = LEG_FILL_WIDTH + rim * 2
       //
       // Arms are drawn only in idle mode (hidden during run and jump).
       // Fully rounded (pill) shape — shoulder top mirrors the arm bottom curvature.
@@ -3540,32 +3569,50 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       const rightLegOutlineH = rightLegHeight - (rightLegOutlineTop - rightLegY)
       ctx.fillStyle = OL
       const jumpLegBend = animation === 'jump' ? (JUMP_LEG_BEND[frame] ?? 0) : 0
-      if (jumpLegBend === 0 && animation === 'run') {
-        //
-        // Clip outline to below the unrotated torso so inner black never
-        // climbs into the body, while the visible shaft keeps a 1 px rim
-        // on both sides (same construction as jump frame 0).
-        //
+      //
+      // Bent jump legs: hip anchor, lengths, bends and the X where each stroke
+      // crosses the body bottom — shared by the outline stroke, the fill
+      // stroke, the crotch cover and the hip shelves.
+      //
+      const jumpHipTop = bodyBottom - JUMP_LEG_HIP_OVERLAP
+      const jumpBackBend = jumpLegBend
+      const jumpFrontBend = jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO
+      const jumpBackH = Math.max(1, leftLegY + leftLegHeight - jumpHipTop)
+      const jumpFrontH = Math.max(1, rightLegY + rightLegHeight - jumpHipTop)
+      const jumpBackHipX = leftLegX + LEG_FILL_WIDTH / 2
+      const jumpFrontHipX = rightLegX + LEG_FILL_WIDTH / 2
+      const jumpBackBottomX = bentLegCenterXAtY(jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW, bodyBottom)
+      const jumpFrontBottomX = bentLegCenterXAtY(jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW, bodyBottom)
+      //
+      // Hip shelf line: bent air legs meet the torso rim right on the body
+      // bottom, every other pose meets it on the leg outline top.
+      //
+      const hipShelfY = jumpLegBend !== 0 ? bodyBottom : Math.min(leftLegOutlineTop, rightLegOutlineTop)
+      const hipShelfH = jumpLegBend !== 0 ? rim : 1
+      //
+      // Clip outlines to below the unrotated torso so inner black never climbs
+      // into the body, while the visible shaft keeps its rim on both sides.
+      // Bent air legs clip to the torso sides as well: their swinging stroke
+      // crosses the body lines around the hip, which reads as a burr on the
+      // back and a thickened edge in front.
+      //
+      const clipLegsUnderBody = animation === 'run' || jumpLegBend !== 0
+      if (clipLegsUnderBody) {
         ctx.save()
-        ctx.beginPath()
-        ctx.rect(0, bodyBottom, SPRITE_SIZE, SPRITE_SIZE - bodyBottom)
-        ctx.clip()
+        clipBentLegBox(ctx, headX, bodyBottom, rim, jumpLegBend !== 0)
       }
       if (jumpLegBend !== 0) {
         //
         // Black outline on every bent jump frame (body already has OL rim;
         // legs need the same treatment in air). Fill is painted in step 4.
         //
-        const hipTop = bodyBottom - JUMP_LEG_HIP_OVERLAP
-        const leftH = Math.max(1, leftLegY + leftLegHeight - hipTop)
-        const rightH = Math.max(1, rightLegY + rightLegHeight - hipTop)
-        strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, hipTop, leftH, jumpLegBend, LEG_OUTLINE_WIDTH)
-        strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, hipTop, rightH, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_OUTLINE_WIDTH)
+        strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW)
+        strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW)
       } else {
-        fillRoundedRectBottom(ctx, leftLegX - 1, leftLegOutlineTop, LEG_OUTLINE_WIDTH, Math.max(2, leftLegOutlineH + 1), LEG_CORNER_RADIUS + 1)
-        fillRoundedRectBottom(ctx, rightLegX - 1, rightLegOutlineTop, LEG_OUTLINE_WIDTH, Math.max(2, rightLegOutlineH + 1), LEG_CORNER_RADIUS + 1)
+        fillRoundedRectBottom(ctx, leftLegX - rim, leftLegOutlineTop, legOlW, Math.max(2, leftLegOutlineH + rim), LEG_CORNER_RADIUS + rim)
+        fillRoundedRectBottom(ctx, rightLegX - rim, rightLegOutlineTop, legOlW, Math.max(2, rightLegOutlineH + rim), LEG_CORNER_RADIUS + rim)
       }
-      jumpLegBend === 0 && animation === 'run' && ctx.restore()
+      clipLegsUnderBody && ctx.restore()
       //
       // Step 2: torso + arms (optionally leaned) — painted after legs so the
       // solid body covers any leftover outline pixels at the hip join
@@ -3578,10 +3625,10 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       }
       ctx.fillStyle = OL
       if (showArms) {
-        fillHalfPillLeft(ctx, headX - 1 - ARM_HALF_W, leftArmY - 1, ARM_HALF_W + 1, ARM_H + 2, ARM_CORNER_RADIUS + 1)
-        fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY - 1, ARM_HALF_W + 1, ARM_H + 2, ARM_CORNER_RADIUS + 1)
+        fillHalfPillLeft(ctx, headX - rim - ARM_HALF_W, leftArmY - rim, ARM_HALF_W + rim, ARM_H + rim * 2, ARM_CORNER_RADIUS + rim)
+        fillHalfPillRight(ctx, headX + CHAR_WIDTH, rightArmY - rim, ARM_HALF_W + rim, ARM_H + rim * 2, ARM_CORNER_RADIUS + rim)
       }
-      fillRoundedRectTop(ctx, headX - 1, headY - 1, CHAR_WIDTH + 2, headHeight + bodyHeight + 2, HEAD_CORNER_RADIUS + 1)
+      fillRoundedRectTop(ctx, headX - rim, headY - rim, CHAR_WIDTH + rim * 2, headHeight + bodyHeight + rim * 2, HEAD_CORNER_RADIUS + rim)
       if (!outlineOnly) {
         ctx.fillStyle = BL
         if (showArms) {
@@ -3658,21 +3705,32 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
       if (!outlineOnly) {
         ctx.fillStyle = BL
         if (jumpLegBend !== 0) {
-          const hipTop = bodyBottom - JUMP_LEG_HIP_OVERLAP
-          const leftH = Math.max(1, leftLegY + leftLegHeight - hipTop)
-          const rightH = Math.max(1, rightLegY + rightLegHeight - hipTop)
           //
-          // Body fill over the OL stroke from step 1 — leaves a 1 px black rim
+          // Repaint both strokes below the body line — step 2 covered the hip
+          // overlap with the torso, so the leg rims would be missing there.
+          // The fill stops `rim` px short of the outline so the sole keeps the
+          // same crisp black rim the sides have, as in crouch and run frames.
           //
-          strokeBentLeg(ctx, leftLegX + LEG_FILL_WIDTH / 2, hipTop, leftH, jumpLegBend, LEG_FILL_WIDTH)
-          strokeBentLeg(ctx, rightLegX + LEG_FILL_WIDTH / 2, hipTop, rightH, jumpLegBend * JUMP_FRONT_LEG_BEND_RATIO, LEG_FILL_WIDTH)
+          ctx.save()
+          clipBentLegBox(ctx, headX, bodyBottom, rim, true)
+          ctx.fillStyle = OL
+          strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, jumpBackH, jumpBackBend, legOlW)
+          strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, jumpFrontH, jumpFrontBend, legOlW)
+          ctx.fillStyle = BL
+          strokeBentLeg(ctx, jumpBackHipX, jumpHipTop, Math.max(1, jumpBackH - rim), jumpBackBend, LEG_FILL_WIDTH)
+          strokeBentLeg(ctx, jumpFrontHipX, jumpHipTop, Math.max(1, jumpFrontH - rim), jumpFrontBend, LEG_FILL_WIDTH)
+          ctx.restore()
           //
-          // Cover the hip join with body fill so OL does not peek at the crotch
+          // Crotch seam sits on the body bottom, where the inner leg rims start,
+          // so it closes them end to end exactly like the crouch frames. Its
+          // span follows the drifted strokes, not the static hip positions.
           //
-          ctx.fillRect(headX, bodyBottom - LEG_INTO_BODY, CHAR_WIDTH, LEG_INTO_BODY + 3)
-          drawCrotchSeam(
-            ctx, OL, leftLegX, rightLegX, bodyBottom,
-            JUMP_CROTCH_SEAM_DX, JUMP_CROTCH_SEAM_DY, JUMP_CROTCH_SEAM_LEFT_TRIM
+          const crotchBackX = Math.min(jumpBackBottomX, jumpFrontBottomX)
+          const crotchFrontX = Math.max(jumpBackBottomX, jumpFrontBottomX)
+          drawSeamBetweenLegs(
+            ctx, OL,
+            crotchBackX + LEG_FILL_WIDTH / 2, crotchFrontX - LEG_FILL_WIDTH / 2, bodyBottom,
+            crotchBackX + legOlW / 2, crotchFrontX - legOlW / 2
           )
         } else {
           fillRoundedRectBottom(ctx, leftLegX, leftLegY, LEG_FILL_WIDTH, leftLegHeight, LEG_CORNER_RADIUS)
@@ -3682,12 +3740,24 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
           //
           const sealTop = bodyBottom - LEG_INTO_BODY
           const sealH = LEG_INTO_BODY + 2
+          //
+          // The side rims run down to the hip shelf and no further — any deeper
+          // and they hang below it as a stray tail off the silhouette.
+          //
+          const sealOlH = Math.max(sealH, hipShelfY + hipShelfH - sealTop)
+          //
+          // Fill seals stretch all the way to the leg fills: the leaned torso
+          // keeps its bottom rim inside the hip, and any strip left uncovered
+          // between a seal and a leg shows up as a black spur in the body.
+          //
+          const sealLeftW = Math.max(LEG_FILL_WIDTH, Math.min(leftLegX, rightLegX) - headX)
+          const sealRightW = Math.max(LEG_FILL_WIDTH, headX + CHAR_WIDTH - Math.max(leftLegX, rightLegX) - LEG_FILL_WIDTH)
           ctx.fillStyle = OL
-          ctx.fillRect(headX - 1, sealTop, 1, sealH)
-          ctx.fillRect(headX + CHAR_WIDTH, sealTop, 1, sealH)
+          ctx.fillRect(headX - rim, sealTop, rim, sealOlH)
+          ctx.fillRect(headX + CHAR_WIDTH, sealTop, rim, sealOlH)
           ctx.fillStyle = BL
-          ctx.fillRect(headX, sealTop, LEG_FILL_WIDTH, sealH)
-          ctx.fillRect(headX + CHAR_WIDTH - LEG_FILL_WIDTH, sealTop, LEG_FILL_WIDTH, sealH)
+          ctx.fillRect(headX, sealTop, sealLeftW, sealH)
+          ctx.fillRect(headX + CHAR_WIDTH - sealRightW, sealTop, sealRightW, sealH)
           //
           // Run: cover the outline pill top at each hip so the flat black cap
           // cannot stick out of the planted leg.
@@ -3698,47 +3768,57 @@ function createFrame(type = HEROES.HERO, animation = 'idle', frame = 0, eyeOffse
             // Cover the full outline pill top (not just the fill) so the flat
             // black cap cannot stick out of the front hip on the plant frame.
             //
-            ctx.fillRect(leftLegX - 1, bodyBottom - 1, LEG_OUTLINE_WIDTH, hipCoverH)
-            ctx.fillRect(rightLegX - 1, bodyBottom - 1, LEG_OUTLINE_WIDTH, hipCoverH)
+            ctx.fillRect(leftLegX - rim, bodyBottom - rim, legOlW, hipCoverH)
+            ctx.fillRect(rightLegX - rim, bodyBottom - rim, legOlW, hipCoverH)
             //
-            // Re-seal outer 1 px rims — hip cover paints over the seals above.
+            // Re-seal outer rims — hip cover paints over the seals above.
             //
             ctx.fillStyle = OL
-            ctx.fillRect(headX - 1, sealTop, 1, sealH)
-            ctx.fillRect(headX + CHAR_WIDTH, sealTop, 1, sealH)
+            ctx.fillRect(headX - rim, sealTop, rim, sealOlH)
+            ctx.fillRect(headX + CHAR_WIDTH, sealTop, rim, sealOlH)
             ctx.fillStyle = BL
-            ctx.fillRect(headX, sealTop, 1, sealH)
-            ctx.fillRect(headX + CHAR_WIDTH - 1, sealTop, 1, sealH)
+            ctx.fillRect(headX, sealTop, rim, sealH)
+            ctx.fillRect(headX + CHAR_WIDTH - rim, sealTop, rim, sealH)
           }
           //
           // Black crotch seam: idle and jump crouch sit on the body bottom.
           // Spread run sits in the gap below the torso.
           //
           if (animation === 'idle' || animation === 'jump') {
-            drawCrotchSeam(ctx, OL, leftLegX, rightLegX, bodyBottom)
+            drawCrotchSeam(ctx, OL, leftLegX, rightLegX, bodyBottom, rim)
           } else if (animation === 'run' && !runLegsMerged) {
             const backX = Math.min(leftLegX, rightLegX)
             const frontX = Math.max(leftLegX, rightLegX)
-            const gapL = backX - 1 + LEG_OUTLINE_WIDTH
-            const gapR = frontX - 1
-            if (gapR > gapL) {
-              ctx.fillStyle = OL
-              ctx.fillRect(gapL, leftLegOutlineTop, gapR - gapL, 1)
-            }
+            const gapL = backX - rim + legOlW
+            const gapR = frontX - rim
+            drawSeamBetweenLegs(ctx, OL, gapL, gapR, leftLegOutlineTop, gapL, gapR)
           }
         }
       }
       //
-      // Passing-pose run (frames 3 and 7): left hip shelf stays horizontal,
-      // right shelf follows the torso lean.
+      // Hip shelves close the body bottom between each torso side and the
+      // nearest leg edge: the run lean lifts the back corner off the leg and
+      // the jump hip cover paints over the torso rim, both leaving the
+      // silhouette open without them. Back shelf stays horizontal, front one
+      // follows the lean.
       //
-      if (!outlineOnly && runLegsMerged) {
-        drawMergedRunHipShelves(ctx, OL, headX, leftLegX, rightLegX, bodyBottom + 1, true, false)
+      if (!outlineOnly && (animation === 'run' || jumpLegBend !== 0)) {
+        //
+        // Bent jump legs drift toward the facing direction, so the shelf must
+        // reach the stroke where it actually crosses the body bottom.
+        //
+        const shelfL = jumpLegBend !== 0
+          ? Math.min(jumpBackBottomX, jumpFrontBottomX) - legOlW / 2
+          : Math.min(leftLegX, rightLegX) - rim
+        const shelfR = jumpLegBend !== 0
+          ? Math.max(jumpBackBottomX, jumpFrontBottomX) + legOlW / 2
+          : Math.max(leftLegX, rightLegX) - rim + legOlW
+        drawHipShelves(ctx, OL, headX, hipShelfY, hipShelfH, shelfL, shelfR, rim, true, false)
         ctx.save()
         ctx.translate(leanPivotX, leanPivotY)
         ctx.rotate(leanRad)
         ctx.translate(-leanPivotX, -leanPivotY)
-        drawMergedRunHipShelves(ctx, OL, headX, leftLegX, rightLegX, bodyBottom + 1, false, true)
+        drawHipShelves(ctx, OL, headX, hipShelfY, hipShelfH, shelfL, shelfR, rim, false, true)
         ctx.restore()
       }
     })
@@ -4354,8 +4434,8 @@ function strokeBentLeg(ctx, cx, topY, h, bend, width) {
   const startY = topY
   const endY = Math.max(startY + 1, topY + h - half)
   const kneeX = cx + bend
-  const footX = cx + bend * 0.12
-  const kneeY = topY + h * 0.42
+  const footX = cx + bend * BENT_LEG_FOOT_T
+  const kneeY = topY + h * BENT_LEG_KNEE_T
   ctx.strokeStyle = ctx.fillStyle
   ctx.lineWidth = width
   ctx.lineCap = 'butt'
@@ -4372,27 +4452,99 @@ function strokeBentLeg(ctx, cx, topY, h, bend, width) {
   ctx.fill()
 }
 //
-// 1 px black line between the inner thigh edges at the body bottom.
+// 1 px black line between the inner thigh edges at the body bottom, filleted
+// into the leg outlines on both ends.
 //
-function drawCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, bodyBottom, offsetX = 0, offsetY = 0, leftTrim = 0) {
-  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH) + offsetX + leftTrim
-  const innerR = Math.max(leftLegX, rightLegX) + offsetX
-  if (innerR <= innerL) return
-  ctx.fillStyle = outlineColor
-  ctx.fillRect(innerL, bodyBottom + offsetY, innerR - innerL, 1)
+function drawCrotchSeam(ctx, outlineColor, leftLegX, rightLegX, bodyBottom, rim = DEFAULT_OUTLINE_RIM) {
+  const innerL = Math.min(leftLegX + LEG_FILL_WIDTH, rightLegX + LEG_FILL_WIDTH)
+  const innerR = Math.max(leftLegX, rightLegX)
+  //
+  // The seam spans the fill edges, but it must round into the outline edges —
+  // those sit `rim` px further into the gap on both sides.
+  //
+  drawSeamBetweenLegs(ctx, outlineColor, innerL, innerR, bodyBottom, innerL + rim, innerR - rim)
 }
 //
-// Passing-pose run (frames 3 and 7): body-bottom outline from each hip to
-// the merged legs. Left shelf is unrotated (horizontal); right follows lean.
+// Horizontal seam between the two legs plus a fillet at each end, so the seam
+// curves into the vertical inner leg outlines instead of meeting them at a
+// hard right angle.
 //
-function drawMergedRunHipShelves(ctx, outlineColor, headX, leftLegX, rightLegX, y, drawLeft = true, drawRight = true) {
-  const olL = Math.min(leftLegX, rightLegX) - 1
-  const olR = Math.max(leftLegX, rightLegX) - 1 + LEG_OUTLINE_WIDTH
-  const bodyL = headX - 1
-  const bodyR = headX + CHAR_WIDTH + 1
+function drawSeamBetweenLegs(ctx, outlineColor, seamL, seamR, y, filletL, filletR) {
+  if (seamR <= seamL) return
   ctx.fillStyle = outlineColor
-  if (drawLeft && olL > bodyL) ctx.fillRect(bodyL, y, olL - bodyL, 1)
-  if (drawRight && bodyR > olR) ctx.fillRect(olR, y, bodyR - olR, 1)
+  ctx.fillRect(seamL, y, seamR - seamL, 1)
+  const r = Math.min(CROTCH_SEAM_FILLET_R, Math.max(0, (filletR - filletL) / 2))
+  fillConcaveCorner(ctx, filletL, y + 1, r, 1, 1)
+  fillConcaveCorner(ctx, filletR, y + 1, r, -1, 1)
+}
+//
+// Fills the concave corner at (x, y) whose arms run along +sx and +sy, minus
+// the quarter disc of radius r — the classic fillet that rounds an inner
+// right angle. Caller sets ctx.fillStyle.
+//
+function fillConcaveCorner(ctx, x, y, r, sx, sy) {
+  if (r <= 0) return
+  const arcX = x + sx * r
+  const arcY = y + sy * r
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(arcX, y)
+  ctx.arc(arcX, arcY, r, sy > 0 ? -Math.PI / 2 : Math.PI / 2, sx > 0 ? Math.PI : 0, sx * sy > 0)
+  ctx.closePath()
+  ctx.fill()
+}
+//
+// Clips drawing to the area under the body line. Bent air legs are also boxed
+// into the torso side lines so a swinging leg never sticks out of the hips.
+//
+function clipBentLegBox(ctx, headX, bodyBottom, rim, boxedToBodySides) {
+  const x = boxedToBodySides ? headX - rim : 0
+  const w = boxedToBodySides ? CHAR_WIDTH + rim * 2 : SPRITE_SIZE
+  ctx.beginPath()
+  ctx.rect(x, bodyBottom, w, SPRITE_SIZE - bodyBottom)
+  ctx.clip()
+}
+//
+// Body-bottom outline from a torso side to the nearest leg outline edge.
+// Back shelf is drawn unrotated, front shelf under the torso lean transform.
+//
+function drawHipShelves(ctx, outlineColor, headX, y, thickness, legLeftEdge, legRightEdge, rim, drawLeft, drawRight) {
+  const bodyL = headX - rim
+  const bodyR = headX + CHAR_WIDTH + rim
+  //
+  // Snap to whole pixels: a sub-pixel wide shelf renders as an antialiased
+  // smear that bleeds one column outside the silhouette.
+  //
+  const legL = Math.round(legLeftEdge)
+  const legR = Math.round(legRightEdge)
+  ctx.fillStyle = outlineColor
+  drawLeft && legL > bodyL && ctx.fillRect(bodyL, y, legL - bodyL, thickness)
+  drawRight && bodyR > legR && ctx.fillRect(legR, y, bodyR - legR, thickness)
+}
+//
+// X centre of a bent jump leg stroke at a given Y — solves the same quadratic
+// the stroke follows, so hip shelves meet the drifted leg exactly.
+//
+function bentLegCenterXAtY(cx, topY, h, bend, width, y) {
+  const y0 = topY
+  const y1 = topY + h * BENT_LEG_KNEE_T
+  const y2 = Math.max(topY + 1, topY + h - width / 2)
+  const a = y0 - 2 * y1 + y2
+  const b = 2 * (y1 - y0)
+  const c = y0 - y
+  let t = 0
+  if (Math.abs(a) < BENT_LEG_SOLVE_EPS) {
+    t = b === 0 ? 0 : -c / b
+  } else {
+    const disc = b * b - 4 * a * c
+    if (disc < 0) return cx
+    const root = Math.sqrt(disc)
+    const t1 = (-b + root) / (2 * a)
+    const t2 = (-b - root) / (2 * a)
+    t = t1 >= 0 && t1 <= 1 ? t1 : t2
+  }
+  t = Math.max(0, Math.min(1, t))
+  return cx + bend * (2 * (1 - t) * t + BENT_LEG_FOOT_T * t * t)
 }
 //
 // Flat top connects seamlessly to the flat bottom of body outline/fill,
@@ -4691,6 +4843,12 @@ function commitHeroBakedSprite(k, spriteName, canvas, postBake, seedOffset) {
     // Skip this sprite if loading fails
     //
   }
+}
+//
+// Sprite-prefix suffix for non-default baked outline rim widths.
+//
+function heroSpriteRimSuffix(outlineRimPx = DEFAULT_OUTLINE_RIM) {
+  return outlineRimPx > DEFAULT_OUTLINE_RIM ? `_or${outlineRimPx}` : ''
 }
 //
 // Records a fully baked prefix bundle for the given Kaplay instance.

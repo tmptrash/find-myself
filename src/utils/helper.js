@@ -62,32 +62,95 @@ const physicalKeyPressCallbacks = []
 window.addEventListener('keydown', (e) => {
   if (!physicalKeysDown.has(e.code)) {
     physicalKeysDown.add(e.code)
-    physicalKeyPressCallbacks.forEach(cb => cb.code === e.code && cb.fn())
+    physicalKeyPressCallbacks.forEach(cb => {
+      if (cb.code !== e.code) return
+      try {
+        cb.fn()
+      } catch (_) {
+        //
+        // A handler from a destroyed scene (menu hero after k.go) can throw;
+        // one bad entry must not block every other listener on the same key.
+        //
+      }
+    })
   }
 })
 window.addEventListener('keyup', (e) => {
   physicalKeysDown.delete(e.code)
 })
 //
-// Check if any of the keys is pressed (down), supports both Kaplay key names and physical codes
+// KeyboardEvent.code values for every in-game action key. Used to clear a
+// stuck "held" flag after menu / transition / engine swap — if Space stays in
+// physicalKeysDown, onPhysicalKeyPress never fires again and jump appears dead.
+//
+export const GAME_PHYSICAL_KEY_CODES = [
+  'Space',
+  'Enter',
+  'Escape',
+  'ArrowUp',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowDown',
+  'KeyW',
+  'KeyA',
+  'KeyD'
+]
+//
+// Drops specific keys from the physical held set (does not remove listeners).
+//
+export function releasePhysicalKeys(codes) {
+  codes.forEach(code => physicalKeysDown.delete(code))
+}
+//
+// Clears every game action key from the physical held set.
+//
+export function releaseGamePhysicalKeys() {
+  releasePhysicalKeys(GAME_PHYSICAL_KEY_CODES)
+}
+//
+// Wipes physical held state and every onPhysicalKeyPress callback. Called when
+// a Kaplay engine is torn down — otherwise menu-hero listeners survive on the
+// window and stack on top of the level hero's handlers after a resolution swap.
+//
+export function resetPhysicalInputLayer() {
+  physicalKeysDown.clear()
+  physicalKeyPressCallbacks.length = 0
+}
+//
+// Kaplay key names mapped to the physical KeyboardEvent.code tracked above.
+// Every key name ever passed to isAnyKeyDown() must have an entry here.
+//
+const KAPLAY_KEY_TO_PHYSICAL_CODE = {
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  space: 'Space',
+  w: 'KeyW',
+  a: 'KeyA',
+  s: 'KeyS',
+  d: 'KeyD'
+}
+//
+// Check if any of the keys is pressed (down), supports both Kaplay key names and
+// physical KeyboardEvent.code values (e.g. 'KeyW'). Reads exclusively from our
+// own window-level physicalKeysDown tracking rather than Kaplay's internal key
+// state — the latter can end up stuck after a scene switch or engine reboot
+// (its own listeners survive on a torn-down instance), which silently broke
+// jump/skip input in the past. Our tracking is reset explicitly on every
+// engine boot/teardown (see resetPhysicalInputLayer) so it stays reliable
+// across transitions.
 //
 export function isAnyKeyDown(k, keys) {
   return keys.some(key => {
     if (TouchControls.isVirtualKeyDown(key)) return true
-    if (key.length > 1 && key.startsWith('Key')) {
-      return physicalKeysDown.has(key)
-    }
-    if (key === 'left' && physicalKeysDown.has('ArrowLeft')) return true
-    if (key === 'right' && physicalKeysDown.has('ArrowRight')) return true
-    if (key === 'space' && physicalKeysDown.has('Space')) return true
-    if (key === 'a' && physicalKeysDown.has('KeyA')) return true
-    if (key === 'd' && physicalKeysDown.has('KeyD')) return true
     //
     // On touch devices Kaplay maps touches to arrow keys — ignore synthetic
-    // emulated keys but still allow physical keyboard input above.
+    // emulated keys but still allow physical keyboard input below.
     //
     if (TouchControls.needsTouchControls() && isKaplayTouchEmulatedKey(key)) return false
-    return k.isKeyDown(key)
+    const code = key.length > 1 && key.startsWith('Key') ? key : KAPLAY_KEY_TO_PHYSICAL_CODE[key]
+    return code ? physicalKeysDown.has(code) : k.isKeyDown(key)
   })
 }
 

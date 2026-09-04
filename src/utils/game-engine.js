@@ -27,6 +27,7 @@ import * as TouchInput from "./touch-input.js"
 import * as Fullscreen from "./fullscreen.js"
 import * as BootLoader from "./boot-loader.js"
 import { installLevelFadeIn } from "./transition.js"
+import { resetPhysicalInputLayer } from "./helper.js"
 
 //
 // The engine can boot in two resolution modes:
@@ -198,6 +199,7 @@ export async function bootEngine(resolutionMode) {
  */
 export function teardownEngine(k) {
   if (!k) return
+  resetPhysicalInputLayer()
   const canvas = k.canvas
   if (canvas) {
     canvas.removeEventListener('webglcontextlost', onWebGLContextLost, false)

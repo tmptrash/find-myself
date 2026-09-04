@@ -341,6 +341,18 @@ export function setAmbientVolume(instance, volume) {
     instance.ambientMasterGain.gain.value = volume
   }
 }
+//
+// Current proximity-ambient master gain (0 when not playing).
+//
+export function getAmbientVolume(instance) {
+  return instance?.ambientMasterGain?.gain?.value ?? 0
+}
+//
+// Current Kaplay k.play() music handle volume.
+//
+export function getKaplaySoundVolume(sound) {
+  return typeof sound?.volume === 'number' ? sound.volume : 0
+}
 /**
  * Check if ambient music is actually playing
  * @param {Object} instance - Sound instance
@@ -477,7 +489,11 @@ export function playLandSound(instance, currentLevel = null) {
     //
     // Dedicated land hits (same family as steps, louder, via landGain)
     //
-    instance._glowSurface === 'wood' ? playGlowWoodKnockLand(instance) : playGlowGroundLand(instance)
+    instance._glowSurface === 'wood'
+      ? playGlowWoodKnockLand(instance)
+      : instance._glowSurface === 'mud'
+        ? playGlowMudLand(instance)
+        : playGlowGroundLand(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled landing on wet ground: very low-passed noise thud
@@ -1013,7 +1029,11 @@ export function playStepSound(instance, currentLevel = null) {
     playWoodKnockStep(instance)
   } else if (isGlowSection) {
     if (instance._glowSurface === 'water') return
-    instance._glowSurface === 'wood' ? playGlowWoodKnockStep(instance) : playGlowGroundStep(instance)
+    instance._glowSurface === 'wood'
+      ? playGlowWoodKnockStep(instance)
+      : instance._glowSurface === 'mud'
+        ? playGlowMudStep(instance)
+        : playGlowGroundStep(instance)
   } else if (isTouchSection) {
     //
     // Damp, muffled step on wet ground: very low-passed noise
@@ -1278,6 +1298,64 @@ function playGlowGroundLand(instance) {
   const envelope = instance.audioContext.createGain()
   envelope.gain.setValueAtTime(0.001, now)
   envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.land * 2.0, now + 0.012)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.landGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+//
+// Glow muddy band: wet squelch step (lower, softer than dry ground).
+//
+function playGlowMudStep(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.1
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(140, now)
+  filter.frequency.linearRampToValueAtTime(70, now + duration)
+  filter.Q.value = 0.35
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.step * 1.35, now + 0.014)
+  envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
+  noiseSource.connect(filter)
+  filter.connect(envelope)
+  envelope.connect(instance.stepGain)
+  noiseSource.start(now)
+  noiseSource.stop(now + duration)
+}
+//
+// Glow muddy band: wet squelch landing (same timbre as mud step, louder).
+//
+function playGlowMudLand(instance) {
+  const now = instance.audioContext.currentTime
+  const duration = 0.13
+  const bufferSize = instance.audioContext.sampleRate * duration
+  const noiseBuffer = instance.audioContext.createBuffer(1, bufferSize, instance.audioContext.sampleRate)
+  const noiseData = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    noiseData[i] = Math.random() * 2 - 1
+  }
+  const noiseSource = instance.audioContext.createBufferSource()
+  noiseSource.buffer = noiseBuffer
+  const filter = instance.audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(150, now)
+  filter.frequency.linearRampToValueAtTime(65, now + duration)
+  filter.Q.value = 0.35
+  const envelope = instance.audioContext.createGain()
+  envelope.gain.setValueAtTime(0.001, now)
+  envelope.gain.linearRampToValueAtTime(CFG.audio.sfx.land * 1.75, now + 0.014)
   envelope.gain.exponentialRampToValueAtTime(0.001, now + duration)
   noiseSource.connect(filter)
   filter.connect(envelope)

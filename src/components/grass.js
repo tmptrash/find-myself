@@ -20,8 +20,34 @@ const TUFT_SPREAD = 14
 // candidate positions, so the sampler needs room to keep the tuft count.
 //
 const TUFT_PLACE_ATTEMPTS = 24
-const SPRITE_PREFIX = 'grass-blade-'
 const CULL_PAD = 48
+//
+// Every blade shape lives in ONE atlas sprite instead of a sprite per
+// variant. A dense field draws dozens of blades per frame, and with one
+// texture per variant the renderer had to break its batch on almost every
+// blade (the field is sorted by x, so variants alternate constantly).
+// Sharing a single texture lets the whole field go out as one batch.
+//
+const BLADE_ATLAS_SPRITE = 'grass-blade-atlas'
+//
+// Each variant is baked twice — upright and mirrored — so a blade picks its
+// flip by atlas cell instead of the flipX draw flag, which would mirror the
+// quad's UV window and sample a neighbouring cell.
+//
+const BLADE_ATLAS_CELLS = BLADE_VARIANTS * 2
+//
+// Transparent gutter around each cell so bilinear filtering at the quad
+// edges can never pull pixels out of the cell next door.
+//
+const BLADE_ATLAS_PAD = 2
+const BLADE_CELL_W = BLADE_W + BLADE_ATLAS_PAD * 2
+const BLADE_CELL_H = BLADE_H + BLADE_ATLAS_PAD * 2
+const BLADE_ATLAS_W = BLADE_CELL_W * BLADE_ATLAS_CELLS
+const BLADE_ATLAS_H = BLADE_CELL_H
+//
+// One shared UV window per atlas cell (see bladeAtlasQuad).
+//
+const bladeQuadCache = []
 //
 // Reused draw colour so settled fields do not allocate k.rgb per blade.
 //
@@ -48,7 +74,8 @@ let lastTintK = null
  *   darkening its colour
  * @param {Function} [cfg.getSwayScale] - () => 0..1 multiplier for blade
  *   sway; omit for full sway
- * @param {Function} [cfg.postBakeCanvas] - (canvas, seedOffset) => void after each blade bake
+ * @param {Function} [cfg.postBakeCanvas] - (canvas, seedOffset) => void on the
+ *   finished blade atlas (e.g. a film-grain pass)
  * @returns {Object} Grass inst with the blades and the Kaplay layer
  */
 export function create(cfg) {
@@ -102,11 +129,14 @@ function buildBlades(left, right, tuftCount, excluded, density) {
     for (let b = 0; b < count; b++) {
       const x = centerX + (Math.random() - 0.5) * 2 * TUFT_SPREAD
       if (excluded?.(x)) continue
+      const variant = Math.floor(Math.random() * BLADE_VARIANTS)
+      const flipX = Math.random() < 0.5
+      const scale = BLADE_SCALE_MIN + Math.random() * BLADE_SCALE_RANGE
       blades.push({
         x,
-        variant: Math.floor(Math.random() * BLADE_VARIANTS),
-        scale: BLADE_SCALE_MIN + Math.random() * BLADE_SCALE_RANGE,
-        flipX: Math.random() < 0.5,
+        quad: bladeAtlasQuad(variant, flipX),
+        width: BLADE_W * scale,
+        height: BLADE_H * scale,
         swaySpeed: SWAY_SPEED_MIN + Math.random() * SWAY_SPEED_RANGE,
         swayPhase: Math.random() * Math.PI * 2
       })
@@ -116,25 +146,73 @@ function buildBlades(left, right, tuftCount, excluded, density) {
   return blades
 }
 //
-// Bakes the white grass-blade sprite variants (tapered curved silhouettes,
-// some with a shorter side leaf) used by the tuft renderer.
+// Bakes the white grass-blade shapes (tapered curved silhouettes, some with a
+// shorter side leaf) into one atlas: every variant upright, then every
+// variant mirrored. Blades are tinted at draw time, so the atlas stays white.
 //
 function loadBladeSprites(k, postBakeCanvas) {
+  const atlas = document.createElement('canvas')
+  atlas.width = BLADE_ATLAS_W
+  atlas.height = BLADE_ATLAS_H
+  const atlasCtx = atlas.getContext('2d')
   for (let i = 0; i < BLADE_VARIANTS; i++) {
-    const canvas = document.createElement('canvas')
-    canvas.width = BLADE_W
-    canvas.height = BLADE_H
-    const ctx = canvas.getContext('2d')
-    drawBladeShape(ctx, BLADE_W / 2, BLADE_H, BLADE_H)
-    //
-    // Roughly half the variants carry a shorter side leaf for variety.
-    //
-    Math.random() < 0.5 && drawBladeShape(ctx, BLADE_W / 2 + (Math.random() < 0.5 ? -3 : 3), BLADE_H, BLADE_H * (0.45 + Math.random() * 0.2))
-    postBakeCanvas?.(canvas, 2000 + i)
-    k.loadSprite(SPRITE_PREFIX + i, canvas)
-    canvas.width = 0
-    canvas.height = 0
+    const cell = bakeOneBladeCell()
+    drawBladeCellIntoAtlas(atlasCtx, cell, i, false)
+    drawBladeCellIntoAtlas(atlasCtx, cell, i + BLADE_VARIANTS, true)
+    cell.width = 0
+    cell.height = 0
   }
+  postBakeCanvas?.(atlas, 2000)
+  k.loadSprite(BLADE_ATLAS_SPRITE, atlas)
+  atlas.width = 0
+  atlas.height = 0
+}
+//
+// Paints one blade variant onto its own scratch canvas.
+//
+function bakeOneBladeCell() {
+  const canvas = document.createElement('canvas')
+  canvas.width = BLADE_W
+  canvas.height = BLADE_H
+  const ctx = canvas.getContext('2d')
+  drawBladeShape(ctx, BLADE_W / 2, BLADE_H, BLADE_H)
+  //
+  // Roughly half the variants carry a shorter side leaf for variety.
+  //
+  Math.random() < 0.5 && drawBladeShape(ctx, BLADE_W / 2 + (Math.random() < 0.5 ? -3 : 3), BLADE_H, BLADE_H * (0.45 + Math.random() * 0.2))
+  return canvas
+}
+//
+// Blits one baked blade into its atlas cell, optionally mirrored, leaving the
+// transparent gutter around it untouched.
+//
+function drawBladeCellIntoAtlas(atlasCtx, cell, cellIndex, mirrored) {
+  const x = cellIndex * BLADE_CELL_W + BLADE_ATLAS_PAD
+  atlasCtx.save()
+  if (mirrored) {
+    atlasCtx.translate(x + BLADE_W, BLADE_ATLAS_PAD)
+    atlasCtx.scale(-1, 1)
+    atlasCtx.drawImage(cell, 0, 0)
+  } else {
+    atlasCtx.drawImage(cell, x, BLADE_ATLAS_PAD)
+  }
+  atlasCtx.restore()
+}
+//
+// UV window of one blade's atlas cell. Every blade of the same variant and
+// flip shares one immutable quad object, resolved at placement time so the
+// per-frame draw never recomputes it. Kaplay's Quad.scale() only reads the
+// quad and returns a new one, so sharing it across blades is safe.
+//
+function bladeAtlasQuad(variant, flipX) {
+  const cellIndex = flipX ? variant + BLADE_VARIANTS : variant
+  bladeQuadCache[cellIndex] ??= {
+    x: (cellIndex * BLADE_CELL_W + BLADE_ATLAS_PAD) / BLADE_ATLAS_W,
+    y: BLADE_ATLAS_PAD / BLADE_ATLAS_H,
+    w: BLADE_W / BLADE_ATLAS_W,
+    h: BLADE_H / BLADE_ATLAS_H
+  }
+  return bladeQuadCache[cellIndex]
 }
 //
 // Draws one tapered blade silhouette in white: wide at the base, curving to
@@ -178,13 +256,13 @@ function onDraw(inst) {
     const color = grassTintRgb(k, tint)
     const angle = Math.sin(time * blade.swaySpeed + blade.swayPhase) * SWAY_DEG * swayScale
     k.drawSprite({
-      sprite: SPRITE_PREFIX + blade.variant,
+      sprite: BLADE_ATLAS_SPRITE,
       pos: k.vec2(blade.x, inst.floorY),
       anchor: 'bot',
-      width: BLADE_W * blade.scale,
-      height: BLADE_H * blade.scale,
+      width: blade.width,
+      height: blade.height,
+      quad: blade.quad,
       angle,
-      flipX: blade.flipX,
       color,
       opacity: tint.opacity ?? 1
     })

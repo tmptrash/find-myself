@@ -55,10 +55,18 @@ const SNOUT_CX = 13
 const SNOUT_CY = -6
 const SNOUT_RX = 8
 const SNOUT_RY = 6
-const SNOUT_NOSE_LEN = 5
+const SNOUT_NOSE_LEN = 4
 const SNOUT_ARC_STEPS = 10
 const SNOUT_ARC_START = 40
 const SNOUT_ARC_END = 320
+//
+// Small rectangular nose block at the snout tip — black pixel-art wedge
+// like the reference hedgehog (drawn in the baked body pass).
+//
+const NOSE_TIP_X = SNOUT_CX + SNOUT_RX + SNOUT_NOSE_LEN - 0.4
+const NOSE_RECT_W = 1.6
+const NOSE_RECT_H = 1.1
+const NOSE_RECT_Y = SNOUT_CY + 0.15
 //
 // Eye sat high on the snout — big white ball with a dark pupil shifted
 // toward the nose, like the hero's own eyes. Drawn live every frame
@@ -68,11 +76,11 @@ const SNOUT_ARC_END = 320
 const EYE_WHITE_HEX = GLOW_PAL.brightLight
 const EYE_CX = 16
 const EYE_CY = -8
-const EYE_WHITE_R = 3.6
-const PUPIL_R = 1.9
-const PUPIL_OFFSET_X = 0.9
-const PUPIL_OFFSET_Y = 0.3
-const EYE_PUPIL_TRAVEL = EYE_WHITE_R - PUPIL_R - 0.4
+const EYE_WHITE_R = 4.4
+const PUPIL_R = 2.3
+const PUPIL_OFFSET_X = 1
+const PUPIL_OFFSET_Y = 0.35
+const EYE_PUPIL_TRAVEL = EYE_WHITE_R - PUPIL_R - 0.35
 //
 // Small closed-mouth line on the underside of the snout, just behind the
 // nose tip.
@@ -166,8 +174,9 @@ const WANDER_LEASH = 90
 // sniffing the ground. Always eased toward its target for a smooth,
 // slightly lagging, organic motion instead of snapping.
 //
-const GAZE_MAX_HERO_DIST = 260
-const GAZE_LERP_SPEED = 6
+const GAZE_MAX_HERO_DIST = 480
+const GAZE_LERP_SPEED = 9
+const GAZE_SIDE_SLACK = 28
 const GAZE_WANDER_INTERVAL_MIN = 1.2
 const GAZE_WANDER_INTERVAL_MAX = 2.6
 //
@@ -607,7 +616,7 @@ function updateGaze(inst, dt) {
     const dx = heroPos.x - inst.x
     const dy = heroPos.y - inst.y
     const dist = Math.hypot(dx, dy)
-    heroInFront = dist < GAZE_MAX_HERO_DIST && dx * dir > 0
+    heroInFront = dist < GAZE_MAX_HERO_DIST && dx * dir > -GAZE_SIDE_SLACK
     if (heroInFront) {
       const localDx = dir * dx
       const len = Math.hypot(localDx, dy) || 1
@@ -681,6 +690,7 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, faceHex) {
   const snoutCy = SNOUT_CY + breathe
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX + OUTLINE_PAD, SNOUT_RY + OUTLINE_PAD, SNOUT_NOSE_LEN + OUTLINE_PAD), CFG.visual.colors.outline)
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX, SNOUT_RY, SNOUT_NOSE_LEN), faceHex)
+  drawSnoutNoseTip(ctx, snoutCy)
   strokeQuadCtx(
     ctx,
     MOUTH_P1[0], MOUTH_P1[1] + breathe,
@@ -765,6 +775,22 @@ function buildSnoutPoints(cx, cy, rx, ry, noseLen) {
   }
   pts.push([cx + rx + noseLen, cy])
   return pts
+}
+//
+// Small black nose rectangle at the snout tip.
+//
+function drawSnoutNoseTip(ctx, snoutCy) {
+  const rectY = NOSE_RECT_Y + (snoutCy - SNOUT_CY)
+  const pad = OUTLINE_PAD
+  fillRectCtx(ctx, NOSE_TIP_X - pad, rectY - pad, NOSE_RECT_W + pad * 2, NOSE_RECT_H + pad * 2, CFG.visual.colors.outline)
+  fillRectCtx(ctx, NOSE_TIP_X, rectY, NOSE_RECT_W, NOSE_RECT_H, EYE_HEX)
+}
+//
+// Fills a rectangle directly on a raw 2D canvas context (bake pass only).
+//
+function fillRectCtx(ctx, x, y, w, h, colorHex) {
+  ctx.fillStyle = colorHex
+  ctx.fillRect(x, y, w, h)
 }
 //
 // Fills an ellipse directly on a raw 2D canvas context (bake pass only).

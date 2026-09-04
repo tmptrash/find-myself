@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { parseHex } from './helper.js'
+import { parseHex, onPhysicalKeyPress, releasePhysicalKeys, resetPhysicalInputLayer } from './helper.js'
 import { setSectionCompleted, set, normalizeSceneName } from './progress.js'
 import * as Sound from './sound.js'
 import * as Tooltip from './tooltip.js'
@@ -12,6 +12,7 @@ import * as BootLoader from './boot-loader.js'
 import { prewarmGlowLevel0HeavyAssets } from '../sections/glow/scenes/level0.js'
 import { ensureEngineForScene, getActiveEngine } from './engine-switch.js'
 import { loadGlowTextSprite, glowUiHash } from '../sections/glow/utils/glow-ui-bake.js'
+import { bindPointerActivate } from './pointer-activate.js'
 
 /**
  * Level transition configuration - maps current level to next level
@@ -191,6 +192,11 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     return
   }
   //
+  // Menu-hero jump handlers live on window, not on the Kaplay instance — they
+  // survive k.go unless cleared here before the transition registers its own.
+  //
+  resetPhysicalInputLayer()
+  //
   // IMMEDIATELY stop all background sounds when transition starts
   // This prevents sounds from playing during transition text
   //
@@ -290,6 +296,17 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     skipped: false,
     skipEnabled: false,
     skipEnableTimer: 0,
+    //
+    // True only while the subtitle is on screen and the player may skip it
+    // (text_fade_in / text_hold). Prevents Space/click from the menu
+    // button from dismissing the phrase before it appears.
+    //
+    subtitleSkipOpen: false,
+    //
+    // Pointer skip arms only once the subtitle has finished fading in, so a
+    // mouse-up from the menu button cannot dismiss the phrase immediately.
+    //
+    subtitleClickOpen: false,
     textHoldDuration: DEFAULT_TEXT_HOLD_DURATION,
     soundName: null,
     textSound: null,
@@ -299,7 +316,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
     assetPrepareDone: !needsEarlyAssetLoad,
     assetPreparePromise: null,
     tooltipSuppressed: false,
-    entered: false
+    entered: false,
+    skipInputCancels: []
   }
   //
   // Hide all in-game tooltips for the entire pre-level transition. We also
@@ -341,11 +359,53 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   let transitionInterval = null
   
+  const endTransitionInput = (k, opts = {}) => {
+    transitionInterval?.cancel?.()
+    transitionInterval = null
+    cancelTransitionSkipInput(inst)
+    resetPhysicalInputLayer()
+    if (opts.keepOverlay) {
+      k.transitionCleanup = null
+      return
+    }
+    if (k.transitionCleanup) {
+      const cleanup = k.transitionCleanup
+      k.transitionCleanup = null
+      cleanup()
+      return
+    }
+    overlay?.exists?.() && k.destroy(overlay)
+    k._transitionOverlay === overlay && (k._transitionOverlay = null)
+  }
+  
+  const escapeToMenu = () => {
+    if (inst.skipped) return
+    if (phase !== 'asset_prepare' && !inst.skipEnabled) return
+    inst.skipped = true
+    bumpPrepareCancelNonce()
+    endTransitionInput(transitionK)
+    if (isNativePrelevel) {
+      cancelNativePrelevelLoaderTimer()
+      BootLoader.hideLoader()
+    }
+    transitionK.volume(inst.originalVolume)
+    Sound.unmuteProceduralSounds()
+    Sound.resumeGlobalAudio()
+    stopTimeSectionMusic()
+    inst.tooltipSuppressed && Tooltip.unsuppressAll()
+    inst.tooltipSuppressed = false
+    Hero.unsuppressIdleVocalization()
+    goToMenuAfterAssets(transitionK)
+  }
+  
   const bindTransitionEngine = (liveK) => {
     transitionInterval?.cancel?.()
+    cancelTransitionSkipInput(inst)
     transitionInterval = liveK.onUpdate(updateTransition)
+    installTransitionSkipInput(liveK, inst, skipTransition, escapeToMenu)
     liveK.transitionCleanup = () => {
       transitionInterval.cancel()
+      cancelTransitionSkipInput(inst)
       overlay.exists() && liveK.destroy(overlay)
       if (liveK._transitionOverlay === overlay) liveK._transitionOverlay = null
       inst.textObj && inst.textObj.exists() && liveK.destroy(inst.textObj)
@@ -416,9 +476,10 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       Hero.unsuppressIdleVocalization()
       TouchControls.setVisible(true)
       //
-      // Leave the hold overlay up — k.go in enterPreparedScene destroys it
-      // in the same turn as the level fade-in, so the previous scene cannot flash.
+      // Drop transition skip listeners and any stuck menu keys before the
+      // level hero registers its own — keep the hold overlay until k.go.
       //
+      endTransitionInput(transitionK, { keepOverlay: true })
       enterPreparedScene(transitionK, nextLevel, afterGo)
     }
     if (needsEarlyAssetLoad && inst.assetPreparePromise && !inst.assetPrepareDone) {
@@ -430,8 +491,15 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   // Function to skip transition and go directly to next level
   const skipTransition = () => {
-    if (inst.skipped) return // Already skipped
+    if (inst.skipped) return
+    //
+    // Only the visible subtitle may be skipped — never the black pause or
+    // fade-to-black that precedes it.
+    //
+    if (phase !== 'text_fade_in' && phase !== 'text_hold') return
     inst.skipped = true
+    inst.subtitleSkipOpen = false
+    inst.subtitleClickOpen = false
     //
     // If the pre-level phrase is still on screen, stop the voice-over
     // immediately and run a quick fade-out into the next scene.
@@ -465,36 +533,16 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   
   const updateTransition = () => {
     const k = transitionK
-    if (phase === 'asset_prepare') {
-      //
-      // Allow Esc to cancel loading and return to menu immediately,
-      // even while the asset_prepare phase is running.
-      //
-      if (k.isKeyPressed("escape")) {
-        if (!inst.skipped) {
-          inst.skipped = true
-          bumpPrepareCancelNonce()
-          k.transitionCleanup?.()
-          //
-          // Bail out before the loader ever had a chance to auto-hide
-          // itself further down — cancel the pending reveal and make sure
-          // it isn't left on screen if it had already fired.
-          //
-          if (isNativePrelevel) {
-            cancelNativePrelevelLoaderTimer()
-            BootLoader.hideLoader()
-          }
-          k.volume(inst.originalVolume)
-          Sound.unmuteProceduralSounds()
-          Sound.resumeGlobalAudio()
-          stopTimeSectionMusic()
-          inst.tooltipSuppressed && Tooltip.unsuppressAll()
-          inst.tooltipSuppressed = false
-          Hero.unsuppressIdleVocalization()
-          goToMenuAfterAssets(k)
-        }
-        return
+    //
+    // Brief arm delay for Esc only (not subtitle skip).
+    //
+    if (!inst.skipEnabled) {
+      inst.skipEnableTimer += k.dt()
+      if (inst.skipEnableTimer >= 0.3) {
+        inst.skipEnabled = true
       }
+    }
+    if (phase === 'asset_prepare') {
       if (inst.assetPrepareDone) {
         if (isNativePrelevel) {
           cancelNativePrelevelLoaderTimer()
@@ -504,46 +552,6 @@ export function createLevelTransition(k, currentLevel, onComplete) {
         phase = inst.postAssetPreparePhase
         timer = 0
       }
-      return
-    }
-    // Enable skip after 0.3 seconds to prevent accidental skip from menu button press
-    if (!inst.skipEnabled) {
-      inst.skipEnableTimer += k.dt()
-      if (inst.skipEnableTimer >= 0.3) {
-        inst.skipEnabled = true
-      }
-    }
-    
-    //
-    // Esc during transition goes directly to menu
-    //
-    if (inst.skipEnabled && k.isKeyPressed("escape")) {
-      if (inst.skipped) return
-      inst.skipped = true
-      bumpPrepareCancelNonce()
-      k.transitionCleanup?.()
-      k.volume(inst.originalVolume)
-      Sound.unmuteProceduralSounds()
-      Sound.resumeGlobalAudio()
-      stopTimeSectionMusic()
-      inst.tooltipSuppressed && Tooltip.unsuppressAll()
-      inst.tooltipSuppressed = false
-      Hero.unsuppressIdleVocalization()
-      goToMenuAfterAssets(k)
-      return
-    }
-    //
-    // Check for skip keys (space or enter) in update loop for better reliability
-    //
-    if (inst.skipEnabled && (k.isKeyPressed("space") || k.isKeyPressed("enter"))) {
-      skipTransition()
-      return
-    }
-    //
-    // Check for mouse click to skip (same as space/enter)
-    //
-    if (inst.skipEnabled && k.isMousePressed()) {
-      skipTransition()
       return
     }
     
@@ -797,6 +805,8 @@ export function createLevelTransition(k, currentLevel, onComplete) {
             inst.preTextOutlines = preTextOutlines
             }
           }
+          inst.subtitleSkipOpen = true
+          releasePhysicalKeys(['Space', 'Enter'])
         } else {
           // No subtitle, go to next level immediately
           transitionInterval?.cancel?.()
@@ -839,11 +849,14 @@ export function createLevelTransition(k, currentLevel, onComplete) {
       
       if (progress >= 1) {
         phase = 'text_hold'
+        inst.subtitleClickOpen = true
         timer = 0
       }
     } else if (phase === 'text_hold') {
       // Hold text visible
       if (timer >= inst.textHoldDuration) {
+        inst.subtitleSkipOpen = false
+        inst.subtitleClickOpen = false
         phase = 'text_fade_out'
         timer = 0
       }
@@ -925,6 +938,7 @@ export function createLevelTransition(k, currentLevel, onComplete) {
   // Return cleanup function
   return () => {
     transitionInterval?.cancel?.()
+    cancelTransitionSkipInput(inst)
     overlay && overlay.exists() && transitionK.destroy(overlay)
     inst.textObj && inst.textObj.exists() && transitionK.destroy(inst.textObj)
     inst.outlineTexts && inst.outlineTexts.forEach(o => o.exists() && transitionK.destroy(o))
@@ -1104,4 +1118,39 @@ function stopTransitionVoiceover(inst) {
   inst?.textSound?.stop()
   inst && (inst.textSound = null)
   Sound.stopSubtitleSound()
+}
+//
+// Drops every skip-input listener registered for one transition run.
+//
+function cancelTransitionSkipInput(inst) {
+  inst?.skipInputCancels?.forEach(c => c.cancel?.())
+  inst && (inst.skipInputCancels = [])
+}
+//
+// Space/Enter/Esc skip and pointer activate — rebound on every engine swap
+// (Glow pre-level reboots Kaplay mid-transition). Physical key listeners sit
+// on window so they keep working even when the canvas never received focus;
+// Kaplay onKeyPress is kept as a backup on the live instance.
+//
+function installTransitionSkipInput(k, inst, onSkip, onEscape) {
+  cancelTransitionSkipInput(inst)
+  const trySkipKey = () => {
+    if (!inst.subtitleSkipOpen || inst.skipped) return
+    onSkip()
+  }
+  const trySkipClick = () => {
+    if (!inst.subtitleClickOpen || inst.skipped) return
+    onSkip()
+  }
+  const tryEscape = () => {
+    onEscape()
+  }
+  inst.skipInputCancels.push(onPhysicalKeyPress('Space', trySkipKey))
+  inst.skipInputCancels.push(onPhysicalKeyPress('Enter', trySkipKey))
+  inst.skipInputCancels.push(onPhysicalKeyPress('Escape', tryEscape))
+  inst.skipInputCancels.push(k.onKeyPress('space', trySkipKey))
+  inst.skipInputCancels.push(k.onKeyPress(' ', trySkipKey))
+  inst.skipInputCancels.push(k.onKeyPress('enter', trySkipKey))
+  inst.skipInputCancels.push(k.onKeyPress('escape', tryEscape))
+  inst.skipInputCancels.push(bindPointerActivate(k, trySkipClick))
 }

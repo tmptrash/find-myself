@@ -1,5 +1,5 @@
 import { CFG } from '../cfg.js'
-import { getHex, isAnyKeyDown, onPhysicalKeyPress, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
+import { getHex, isAnyKeyDown, getColor, parseHex, getRGB, toCanvas } from '../utils/helper.js'
 import * as TouchControls from '../utils/touch-controls.js'
 import * as Sound from '../utils/sound.js'
 import { createLevelTransition, getNextLevel } from '../utils/transition.js'
@@ -118,7 +118,6 @@ const CONFUSION_KEYS = [
   { name: 'w', phys: 'KeyW' },
   { name: 'space', phys: 'Space' }
 ]
-const CONFUSION_NORMAL_JUMP_NAMES = ['up', 'w', 'space']
 //
 // Jump — 7 frames like the reference sheet: crouch, stretch take-off,
 // rising, peak with the legs tucked up, early descent, full-leg descent and
@@ -582,6 +581,10 @@ export function create(config) {
     confusionMap: null,        // Random key-remap set by word level 4 confusion platform
     controlsDisabled: false,  // Flag to temporarily disable controls during zone transitions
     jumpDisabled: false,      // Flag to block only jumping while movement stays free (e.g. intro hints)
+    jumpForceMult: 1,         // Per-zone jump multiplier (e.g. glow mud band = 0.5)
+    moveSpeedMult: 1,         // Per-zone horizontal speed multiplier (e.g. glow mud = 0.5)
+    jumpSquashTimeMult: 1,    // Pre-jump squash duration multiplier (glow mud = 1)
+    mudJumpActive: false,     // True for the whole arc of a jump launched from mud
     footprints: [],          // Trail of footprints left by walking, fade out over FOOTPRINT_LIFETIME
     lastFootprintFoot: 1,    // Alternates between -1 (left foot) and +1 (right foot)
     //
@@ -787,6 +790,7 @@ export function loadHeroSprites(inst, type = null, bodyColor = null, outlineColo
  * @param {Function} onComplete - Callback when death animation completes
  * @param {Object} [opts] - Options
  * @param {boolean} [opts.suppressParticles] - Skip body/eye particles (scene provides custom ones)
+ * @param {boolean} [opts.skipSlowMotion] - Skip death slow-motion (e.g. glow hedgehog leaf burst)
  */
 export function death(inst, onComplete, opts = {}) {
   if (inst.isDying) return
@@ -797,7 +801,7 @@ export function death(inst, onComplete, opts = {}) {
   //
   // Apply slow motion effect
   //
-  applySlowMotion(inst)
+  !opts.skipSlowMotion && applySlowMotion(inst)
   //
   // Stop control and play sound
   //
@@ -1376,10 +1380,10 @@ function onUpdate(inst) {
     // Apply movement only once per frame, prioritizing last pressed direction
     //
     if (isMovingLeft && !isMovingRight) {
-      inst.character.move(-inst.speed, 0)
+      inst.character.move(-inst.speed * (inst.moveSpeedMult ?? 1), 0)
       inst.direction = -1
     } else if (isMovingRight && !isMovingLeft) {
-      inst.character.move(inst.speed, 0)
+      inst.character.move(inst.speed * (inst.moveSpeedMult ?? 1), 0)
       inst.direction = 1
     }
     //
@@ -1387,6 +1391,7 @@ function onUpdate(inst) {
     // confused remapping routes non-standard keys (up/down/space) into movement
     //
     inst._effectivelyMoving = isMovingLeft || isMovingRight
+    pollJumpInput(inst)
   }
   //
   // Determine movement state; requires spawn so keys don't trigger sounds before hero appears.
@@ -1422,7 +1427,7 @@ function onUpdate(inst) {
   // for a beat — prevents key-repeat / same-frame Space from re-crouching.
   //
   if (inst.jumpKeyReleaseGate) {
-    const jumpHeld = inst.k.isKeyDown('space') || inst.k.isKeyDown('up') || inst.k.isKeyDown('w')
+    const jumpHeld = isAnyKeyDown(inst.k, CFG.controls.jump)
     if (jumpHeld) {
       inst.jumpKeyReleaseHold = 0
     } else {
@@ -1518,7 +1523,7 @@ function onUpdate(inst) {
     //
     // Switch between frame 0 (squash) and frame 1 (stretch) while on ground
     //
-    if (inst.squashTimer < JUMP_STRETCH_START) {
+    if (inst.squashTimer < JUMP_STRETCH_START * (inst.jumpSquashTimeMult ?? 1)) {
       //
       // First part: squash (frame 0)
       //
@@ -1542,12 +1547,12 @@ function onUpdate(inst) {
     //
     syncJumpCollision(inst)
 
-    if (inst.squashTimer >= JUMP_SQUASH_TIME) {
+    if (inst.squashTimer >= JUMP_SQUASH_TIME * (inst.jumpSquashTimeMult ?? 1)) {
       //
       // Squash animation complete - actually jump!
       //
-      inst.character.vel.y = -inst.jumpForce
-      inst.jumpTakeoffSpeed = inst.jumpForce
+      inst.character.vel.y = -inst.jumpForce * (inst.jumpForceMult ?? 1)
+      inst.jumpTakeoffSpeed = inst.jumpForce * (inst.jumpForceMult ?? 1)
       inst.canJump = false
       inst.isSquashing = false
       inst.squashTimer = 0
@@ -1992,56 +1997,9 @@ function updateAmbientWalkAnimation(inst) {
  */
 function setupControls(inst) {
   //
-  // Core jump execution — shared by all key bindings
-  //
-  const executeJump = () => {
-    //
-    // controllable=false / open letter panels: Space closes the dialog and must
-    // not start a crouch→jump (especially on glow wood platforms after O).
-    //
-    if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
-    if (isAnyPanelOpen()) return
-    //
-    // Dialog Space must not chain into a jump — wait until jump keys are up
-    //
-    if (inst.jumpKeyReleaseGate) return
-    if (isJumpCeilingBlocked(inst)) return
-    if (inst.canJump && !inst.isSquashing) {
-      inst.isSquashing = true
-      inst.squashTimer = 0
-      inst.jumpFrame = 0
-      const prefix = inst.spritePrefix || inst.type
-      useHeroSprite(inst, `${prefix}-jump-0`)
-    }
-  }
-  //
-  // Resolve whether a confusion key (by kaplay name) is currently mapped to jump
-  //
-  const confusionJumps = (name) => inst.confusionMap && inst.confusionMap.keyMap[name] === 'jump'
-  //
-  // Unified jump handler for a single control key. When confused, the key only
-  // jumps if its remap resolves to jump; otherwise only the normal jump keys jump.
-  //
-  const jumpHandlerFor = (name) => () => {
-    if (inst.confusionMap) {
-      confusionJumps(name) && executeJump()
-    } else if (CONFUSION_NORMAL_JUMP_NAMES.includes(name)) {
-      executeJump()
-    }
-  }
-  //
-  // Register a jump handler on every confusion key (kaplay name + physical code)
-  // so any key the confusion map reassigns to jump can trigger a jump.
-  //
-  CONFUSION_KEYS.forEach(entry => {
-    const handler = jumpHandlerFor(entry.name)
-    inst.k.onKeyPress(entry.name, handler)
-    entry.phys && onPhysicalKeyPress(entry.phys, handler)
-  })
-  //
   // Virtual jump button always jumps (touch controls are never confused)
   //
-  TouchControls.registerVirtualJumpHandler(executeJump)
+  TouchControls.registerVirtualJumpHandler(() => attemptHeroJump(inst))
 }
 
 /**
@@ -4719,6 +4677,54 @@ function isJumpCeilingBlocked(inst) {
   // have no isGrounded — treat them as never ceiling-blocked instead of crashing.
   //
   return isHeadAgainstCeiling(inst, false)
+}
+//
+// Polls jump keys every frame (same path as movement). Edge-triggered
+// onKeyPress / onPhysicalKeyPress broke after menu→level transitions because
+// stale window listeners threw before the level hero handler ran; polling only
+// needs isAnyKeyDown, which already drives left/right reliably.
+//
+function pollJumpInput(inst) {
+  if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || !inst.controllable) {
+    inst.jumpPollHeld = false
+    return
+  }
+  let jumpDown = false
+  if (inst.confusionMap) {
+    const km = inst.confusionMap.keyMap
+    jumpDown = CONFUSION_KEYS.some(entry => {
+      if (km[entry.name] !== 'jump') return false
+      const keys = entry.phys ? [entry.name, entry.phys] : [entry.name]
+      return isAnyKeyDown(inst.k, keys)
+    })
+  } else {
+    jumpDown = isAnyKeyDown(inst.k, CFG.controls.jump)
+  }
+  jumpDown && !inst.jumpPollHeld && attemptHeroJump(inst)
+  inst.jumpPollHeld = jumpDown
+}
+//
+// Starts the pre-jump squash when jump keys are pressed and every guard passes.
+//
+function attemptHeroJump(inst) {
+  //
+  // controllable=false / open letter panels: Space closes the dialog and must
+  // not start a crouch→jump (especially on glow wood platforms after O).
+  //
+  if (!inst.isSpawned || inst.isAnnihilating || inst.controlsDisabled || inst.jumpDisabled || !inst.controllable) return
+  if (isAnyPanelOpen()) return
+  //
+  // Dialog Space must not chain into a jump — wait until jump keys are up
+  //
+  if (inst.jumpKeyReleaseGate) return
+  if (isJumpCeilingBlocked(inst)) return
+  if (inst.canJump && !inst.isSquashing) {
+    inst.isSquashing = true
+    inst.squashTimer = 0
+    inst.jumpFrame = 0
+    const prefix = inst.spritePrefix || inst.type
+    useHeroSprite(inst, `${prefix}-jump-0`)
+  }
 }
 //
 // World-space AABB for a static platform body (supports topleft and center anchors).

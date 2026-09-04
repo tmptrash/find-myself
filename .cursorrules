@@ -146,6 +146,13 @@ export const cfg = {
 - Always use hex strings: `"FF8C00"` (not arrays or objects)
 - Include descriptive comments
 
+### Fixed palette (Otterisk 96)
+- **Every colour in the game must come from the fixed [Otterisk 96](https://lospec.com/palette-list/otterisk-96) palette** — no ad-hoc RGB, no colours outside the set
+- The canonical list lives in `src/cfg.js` as `PALETTE` (96 swatches, row-major hue families)
+- Semantic aliases in `CFG.visual.colors.palette` must reference `PALETTE.*` keys only — never raw hex literals
+- Brightness / fade may use opacity on a palette colour; do not invent new hex values by lerping unless the result is snapped back to the nearest palette swatch (see `snapToPalette()` in `glow-palette.js`)
+- New colours: pick the closest existing swatch or add a named alias in `cfg.js` that points at an existing `PALETTE` entry — do not add colours that are not in Otterisk 96
+
 ### Color Configuration Rules
 - **Global colors** (hero, platform, UI elements) → `src/cfg.js`
 - **Section-specific colors** (blades, killer letters, section backgrounds) → `src/sections/{section}/cfg.js`

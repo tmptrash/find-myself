@@ -5,6 +5,11 @@ import {
   getTreePaletteFlatDecor
 } from './glow-palette.js'
 import { applyGlowFilmGrainToCanvas } from './glow-parallax-grain.js'
+import {
+  measureCanvasContentBounds,
+  cropCanvasToBounds,
+  releaseCanvas
+} from './glow-canvas-crop.js'
 
 //
 // Segment ids persisted in localStorage under glow.treeSegmentsRevealed.
@@ -29,6 +34,24 @@ const NEAR_BRANCH_PAD_X = 150
 const NEAR_BRANCH_PAD_Y = 170
 const NEAR_BRANCH_MIN_COUNT = 4
 const SEGMENT_SPRITE_PREFIX = 'glow0-tree-seg-'
+//
+// Segment sprites are painted in world space but cropped to their own
+// artwork before upload, so each one has to be drawn back at its crop
+// offset. Keyed by the live Kaplay instance: swapping resolution mode tears
+// the engine down and rebakes into an empty sprite registry, so a plain
+// module object would hand stale offsets to the fresh engine.
+//
+const segmentBakeOffsets = new WeakMap()
+//
+// Kept around each segment's artwork so the baked film grain never lands on
+// the very edge pixel row of the sprite.
+//
+const SEGMENT_CROP_PAD = 2
+//
+// Parking spot for an unrevealed segment — far enough left of the world that
+// no crop offset can pull it back into the viewport.
+//
+const SEGMENT_PARK_X = -1e5
 //
 // Builds the reveal queue: three equal tree parts, one per branch landing.
 //
@@ -153,25 +176,50 @@ export function segmentGraySpriteName(segmentId, lit) {
  */
 export function createGlowTreeSegmentObjects(k, segmentIds, z, litGray = false) {
   const entries = {}
+  const offsets = segmentBakeOffsets.get(k) || {}
   segmentIds.forEach(id => {
+    const homeX = offsets[id]?.x ?? 0
+    const homeY = offsets[id]?.y ?? 0
     const grayName = segmentGraySpriteName(id, litGray)
     const grayObj = k.add([
       k.sprite(grayName),
-      k.pos(0, 0),
+      k.pos(homeX, homeY),
       k.z(z),
       k.opacity(0)
     ])
     grayObj.hidden = true
     const colorObj = k.add([
       k.sprite(SEGMENT_SPRITE_PREFIX + id + '-color'),
-      k.pos(0, 0),
+      k.pos(homeX, homeY),
       k.z(z),
       k.opacity(0)
     ])
     colorObj.hidden = true
-    entries[id] = { grayObj, colorObj, fade: 0, revealed: false }
+    entries[id] = { grayObj, colorObj, fade: 0, revealed: false, homeX, homeY }
   })
   return entries
+}
+
+/**
+ * Puts both sprites of a segment back on their baked world position
+ * @param {Object} entry - Segment entry from createGlowTreeSegmentObjects()
+ */
+export function restoreSegmentHomePos(entry) {
+  if (!entry) return
+  entry.grayObj.pos.x = entry.homeX
+  entry.grayObj.pos.y = entry.homeY
+  entry.colorObj.pos.x = entry.homeX
+  entry.colorObj.pos.y = entry.homeY
+}
+
+/**
+ * Moves an unrevealed segment far out of the world so it can never peek in
+ * @param {Object} entry - Segment entry from createGlowTreeSegmentObjects()
+ */
+export function parkSegmentOffscreen(entry) {
+  if (!entry) return
+  entry.grayObj.pos.x = SEGMENT_PARK_X
+  entry.colorObj.pos.x = SEGMENT_PARK_X
 }
 /**
  * All segment ids for a tree (hero + pending plan).
@@ -287,18 +335,42 @@ function bakeOneGlowTreeSegment(k, treeData, w, h, id, palettes) {
   const flatName = SEGMENT_SPRITE_PREFIX + id + '-flat'
   const litName = SEGMENT_SPRITE_PREFIX + id + '-lit'
   const colorName = SEGMENT_SPRITE_PREFIX + id + '-color'
-  loadGlowTreeSegmentSprite(k, flatName, renderGlowTreeToCanvas(partial, palettes.flat, w, h), 0)
-  loadGlowTreeSegmentSprite(k, litName, renderGlowTreeToCanvas(partial, palettes.lit, w, h), 1)
-  loadGlowTreeSegmentSprite(k, colorName, renderGlowTreeToCanvas(partial, palettes.color, w, h), 2)
+  //
+  // All three palettes render the SAME geometry, so one measured bounding
+  // box crops every variant — that keeps the sprites pixel-aligned, which is
+  // what lets the flat/lit gray swap and the gray↔colour crossfade happen
+  // without the segment shifting on screen.
+  //
+  const flatCanvas = renderGlowTreeToCanvas(partial, palettes.flat, w, h)
+  const bounds = measureCanvasContentBounds(flatCanvas, SEGMENT_CROP_PAD)
+  storeSegmentBakeOffset(k, id, bounds)
+  loadGlowTreeSegmentSprite(k, flatName, flatCanvas, bounds, 0)
+  loadGlowTreeSegmentSprite(k, litName, renderGlowTreeToCanvas(partial, palettes.lit, w, h), bounds, 1)
+  loadGlowTreeSegmentSprite(k, colorName, renderGlowTreeToCanvas(partial, palettes.color, w, h), bounds, 2)
 }
 //
-// Loads one tree-segment canvas with the shared glow film grain baked in.
+// Records where a cropped segment sprite has to be drawn to land back on its
+// original world position. A blank segment keeps a zero offset.
 //
-function loadGlowTreeSegmentSprite(k, name, canvas, seedOffset) {
-  applyGlowFilmGrainToCanvas(canvas, name.length * 31 + seedOffset)
-  k.loadSprite(name, canvas)
-  canvas.width = 0
-  canvas.height = 0
+function storeSegmentBakeOffset(k, id, bounds) {
+  let offsets = segmentBakeOffsets.get(k)
+  if (!offsets) {
+    offsets = {}
+    segmentBakeOffsets.set(k, offsets)
+  }
+  offsets[id] = { x: bounds?.x ?? 0, y: bounds?.y ?? 0 }
+}
+//
+// Loads one tree-segment canvas cropped to its artwork, with the shared glow
+// film grain baked in. Grain runs after the crop: it only touches opaque
+// pixels, so the result is identical while the scan covers far fewer pixels.
+//
+function loadGlowTreeSegmentSprite(k, name, canvas, bounds, seedOffset) {
+  const cropped = bounds ? cropCanvasToBounds(canvas, bounds) : canvas
+  bounds && releaseCanvas(canvas)
+  applyGlowFilmGrainToCanvas(cropped, name.length * 31 + seedOffset)
+  k.loadSprite(name, cropped)
+  releaseCanvas(cropped)
 }
 //
 // Leaves that belong to the hero start branch platform band.

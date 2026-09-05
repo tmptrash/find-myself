@@ -434,7 +434,8 @@ export function updateGlowPit(pit, char, grounded, justLanded, bonusPlatHome, op
 function clampHeroInCave(pit, char) {
   if (!char?.pos) return
   const bottomY = pit.floorY + pit.zone.depth
-  const feetY = char.pos.y + 38
+  const heroFeetOffset = 38
+  const feetY = char.pos.y + heroFeetOffset
   //
   // Only clamp on the pit floor — not while the hero is still dropping through
   // the mouth (that horizontal snap felt like tripping on an invisible lip).
@@ -445,6 +446,24 @@ function clampHeroInCave(pit, char) {
   const maxX = innerX + innerW - 6
   if (char.pos.x < minX) char.pos.x = minX
   if (char.pos.x > maxX) char.pos.x = maxX
+  //
+  // Pit mushroom uses its own cap snap — skip floor pin while standing on it.
+  //
+  const mushH = PIT_TRAMP_W * CUTE_MUSHROOM_ASPECT
+  const capTop = bottomY - mushH
+  const onMushCap = isPitMushroomBouncy(pit) &&
+    Math.abs(char.pos.x - pit.trampState.x) < PIT_TRAMP_W * 0.55 &&
+    feetY >= capTop - 10 && feetY <= capTop + 16
+  if (onMushCap) return
+  //
+  // Pull the hero up only after the static floor collider was tunneled — never
+  // while the fall is still in progress (that froze the jump animation mid-air).
+  //
+  const standY = getGlowPitHeroStandY(pit)
+  if (char.pos.y > standY) {
+    char.pos.y = standY
+    char.vel && char.vel.y > 0 && (char.vel.y = 0)
+  }
 }
 /**
  * Draws surface cracks or the open cave pit.

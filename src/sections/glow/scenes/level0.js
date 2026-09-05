@@ -1085,7 +1085,6 @@ const HERO_TOOLTIP_AFTER_G_RIGHT = 'I think we need\nto go right...'
 const HERO_TOOLTIP_AFTER_G_LEFT = 'I think we need\nto go left...'
 const HERO_TOOLTIP_AFTER_L = "Don't rush.\nJust stop."
 const HERO_TOOLTIP_AFTER_O = 'I need to talk\nto big mushroom.'
-const HERO_TOOLTIP_AFTER_TRAMP_WALK = 'I think we need to jump\nto the left of the mushroom.'
 const HERO_TOOLTIP_HOVER_SIZE = 80
 const HERO_TOOLTIP_Y_OFFSET = -100
 const MUD_TOOLTIP_TEXT = 'Ew. Mud!'
@@ -2516,7 +2515,6 @@ function heroTooltipAfterG(inst) {
 //
 function heroTooltipText(inst) {
   if (!isGlowEyesGameplayUnlocked(inst.zones)) return HERO_TOOLTIP_EYELESS_TEXT
-  if (inst.trampWalk?.walked) return HERO_TOOLTIP_AFTER_TRAMP_WALK
   if (isTrampSingCountdownActive(inst)) return null
   if (inst.zones.oCollected || inst.zones.colorWorld) return HERO_TOOLTIP_AFTER_O
   if (inst.zones.lCollected) return inst.meditation?.countdown != null ? null : HERO_TOOLTIP_AFTER_L
@@ -6901,7 +6899,7 @@ function drawMudGroundZone(inst, groundC) {
   const k = inst.k
   k.drawSprite({
     sprite: band.sprite,
-    pos: k.vec2(band.drawX, FLOOR_Y),
+    pos: k.vec2(band.drawX, FLOOR_Y + 1),
     width: band.width,
     height: band.height,
     anchor: 'botleft'

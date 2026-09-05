@@ -33,6 +33,17 @@ const MANE_CY = -12
 const MANE_RX = 16
 const MANE_RY = 12
 //
+// Light belly patch — same tan as the face/head, painted over the lower
+// slice of the mane's own silhouette (clipped to its exact ellipse, no
+// separate outline) so it never pokes out past the legs and never adds a
+// seam of its own. The dividing line sits low near the front (close to
+// the front legs) and curves down further still toward the back, so it
+// hugs the body's own curve down to the hind legs instead of running flat.
+//
+const BELLY_FRONT_FRAC = 0.45
+const BELLY_CURVE_CONTROL_X_FRAC = 0.15
+const BELLY_BACK_OVERSHOOT_FRAC = 1.4
+//
 // Spikes fan almost all the way around the dome — from low on the back,
 // up over the crown, to just short of the face — so only the front/snout
 // side of the silhouette stays smooth. Length tapers to zero at both arc
@@ -60,13 +71,14 @@ const SNOUT_ARC_STEPS = 10
 const SNOUT_ARC_START = 40
 const SNOUT_ARC_END = 320
 //
-// Small rectangular nose block at the snout tip — black pixel-art wedge
-// like the reference hedgehog (drawn in the baked body pass).
+// Small round black nose at the snout tip — same footprint as before, just
+// an oval instead of a rectangle, with a thin outline so it stays neat.
 //
 const NOSE_TIP_X = SNOUT_CX + SNOUT_RX + SNOUT_NOSE_LEN - 0.4
-const NOSE_RECT_W = 1.6
-const NOSE_RECT_H = 1.1
-const NOSE_RECT_Y = SNOUT_CY + 0.15
+const NOSE_TIP_RX = 0.8
+const NOSE_TIP_RY = 0.55
+const NOSE_TIP_Y = SNOUT_CY + 0.15
+const NOSE_OUTLINE_PAD = 0.35
 //
 // Eye sat high on the snout — big white ball with a dark pupil shifted
 // toward the nose, like the hero's own eyes. Drawn live every frame
@@ -691,6 +703,13 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, faceHex) {
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX + OUTLINE_PAD, SNOUT_RY + OUTLINE_PAD, SNOUT_NOSE_LEN + OUTLINE_PAD), CFG.visual.colors.outline)
   fillPolyCtx(ctx, buildSnoutPoints(SNOUT_CX, snoutCy, SNOUT_RX, SNOUT_RY, SNOUT_NOSE_LEN), faceHex)
   drawSnoutNoseTip(ctx, snoutCy)
+  //
+  // Belly patch painted last (on top of the snout's own back outline) so
+  // it erases any seam between head and body instead of being covered by
+  // it — clipped strictly to the mane's plain ellipse, so it never spills
+  // past the real silhouette or below the legs.
+  //
+  drawBellyPatch(ctx, maneCy, faceHex)
   strokeQuadCtx(
     ctx,
     MOUTH_P1[0], MOUTH_P1[1] + breathe,
@@ -698,6 +717,35 @@ function drawIdleBodyFrame(ctx, breathe, swayPhase, maneHex, faceHex) {
     MOUTH_P2[0], MOUTH_P2[1] + breathe,
     MOUTH_WIDTH, CFG.visual.colors.outline
   )
+}
+//
+// Fills the lower slice of the mane's own ellipse with the light face
+// colour, clipped so it can never draw outside that exact silhouette. The
+// dividing line starts low near the front leg, stays close to that height
+// through the middle, then curves down past the mane's own bottom edge
+// near the back — the ellipse clip then naturally traces that curve down
+// along the body's own silhouette to the hind legs.
+//
+function drawBellyPatch(ctx, maneCy, faceHex) {
+  const frontX = MANE_CX + MANE_RX + 1
+  const backX = MANE_CX - MANE_RX - 1
+  const frontY = maneCy + MANE_RY * BELLY_FRONT_FRAC
+  const controlX = MANE_CX + MANE_RX * BELLY_CURVE_CONTROL_X_FRAC
+  const backOvershootY = maneCy + MANE_RY * BELLY_BACK_OVERSHOOT_FRAC
+  const bottomY = maneCy + MANE_RY + 1
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(MANE_CX, maneCy, MANE_RX, MANE_RY, 0, 0, Math.PI * 2)
+  ctx.clip()
+  ctx.beginPath()
+  ctx.moveTo(frontX, frontY)
+  ctx.quadraticCurveTo(controlX, frontY, backX, backOvershootY)
+  ctx.lineTo(backX, bottomY)
+  ctx.lineTo(frontX, bottomY)
+  ctx.closePath()
+  ctx.fillStyle = faceHex
+  ctx.fill()
+  ctx.restore()
 }
 //
 // Draws the curled-ball defensive pose onto a raw 2D canvas context — a
@@ -777,20 +825,12 @@ function buildSnoutPoints(cx, cy, rx, ry, noseLen) {
   return pts
 }
 //
-// Small black nose rectangle at the snout tip.
+// Small round black nose at the snout tip.
 //
 function drawSnoutNoseTip(ctx, snoutCy) {
-  const rectY = NOSE_RECT_Y + (snoutCy - SNOUT_CY)
-  const pad = OUTLINE_PAD
-  fillRectCtx(ctx, NOSE_TIP_X - pad, rectY - pad, NOSE_RECT_W + pad * 2, NOSE_RECT_H + pad * 2, CFG.visual.colors.outline)
-  fillRectCtx(ctx, NOSE_TIP_X, rectY, NOSE_RECT_W, NOSE_RECT_H, EYE_HEX)
-}
-//
-// Fills a rectangle directly on a raw 2D canvas context (bake pass only).
-//
-function fillRectCtx(ctx, x, y, w, h, colorHex) {
-  ctx.fillStyle = colorHex
-  ctx.fillRect(x, y, w, h)
+  const tipY = NOSE_TIP_Y + (snoutCy - SNOUT_CY)
+  fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX + NOSE_OUTLINE_PAD, NOSE_TIP_RY + NOSE_OUTLINE_PAD, CFG.visual.colors.outline)
+  fillEllipseCtx(ctx, NOSE_TIP_X, tipY, NOSE_TIP_RX, NOSE_TIP_RY, EYE_HEX)
 }
 //
 // Fills an ellipse directly on a raw 2D canvas context (bake pass only).

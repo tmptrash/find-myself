@@ -284,8 +284,8 @@ function finishGlowEyeAttachSequence(inst, heroInst) {
   if (!heroInst) return
   snapGlowHeroToPitFloor(inst, heroInst)
   Hero.setEyesClosed(heroInst, false)
-  snapGlowHeroToPitFloor(inst, heroInst)
   endGlowEyeAttachFreeze(inst, heroInst)
+  snapGlowHeroToPitFloor(inst, heroInst)
   heroInst.controlsDisabled = false
   heroInst.controllable = true
 }
